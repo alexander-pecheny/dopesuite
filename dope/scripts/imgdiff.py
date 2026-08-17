@@ -13,13 +13,12 @@ def main(a_path: str, b_path: str) -> int:
     if a.size != b.size:
         print(f"size differs: {a.size} vs {b.size}")
         return 1
-    diff = ImageChops.difference(a, b)
-    box = diff.getbbox()
+    mask = ImageChops.difference(a, b).point(lambda p: 255 if p else 0).convert("L").point(lambda p: 255 if p else 0)
+    box = mask.getbbox()
     if box is None:
         print("identical")
         return 0
-    changed = sum(1 for px in diff.convert("L").getdata() if px)
-    print(f"{changed} px differ, bbox {box}")
+    print(f"{mask.histogram()[255]} px differ, bbox {box}")
     return 1
 
 

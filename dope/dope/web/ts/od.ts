@@ -2672,41 +2672,6 @@ function lastEnteredQuestion(): number {
   return 0;
 }
 
-// resultsTeamCell builds the .results-team cell (name + optional city + the
-// hover popover) shared by the Итог table and the Экран board. opts lets the
-// Экран board tailor it: opts.showCity=false drops the city line, opts.flag
-// prepends a country flag (or globe) emoji to the name. Defaults keep the Итог
-// behaviour untouched.
-function resultsTeamCell(index: number, opts: {showCity?: boolean; flag?: string} = {}): HTMLTableCellElement {
-  const showCity = opts.showCity !== false;
-  const flag = opts.flag || "";
-  const team = state.teams[index];
-  const nameTd = document.createElement("td");
-  nameTd.className = "results-team";
-  const teamLabelText = team.name || `Команда ${index + 1}`;
-  const displayText = flag ? `${flag} ${teamLabelText}` : teamLabelText;
-  const nameWrap = document.createElement("span");
-  nameWrap.className = "results-team-name-wrap";
-  const nameSpan = document.createElement("span");
-  nameSpan.className = "results-team-name";
-  nameSpan.textContent = displayText;
-  nameSpan.tabIndex = 0;
-  nameSpan.setAttribute("aria-label", teamLabelText);
-  nameWrap.appendChild(nameSpan);
-  if (showCity && team.city) {
-    const citySpan = document.createElement("span");
-    citySpan.className = "results-team-city";
-    citySpan.textContent = team.city;
-    nameWrap.appendChild(citySpan);
-  }
-  nameTd.appendChild(nameWrap);
-  const fullName = document.createElement("span");
-  fullName.className = "popover popover-inline results-team-name-popover";
-  fullName.textContent = displayText;
-  nameTd.appendChild(fullName);
-  return nameTd;
-}
-
 // === Экран (проекторное табло) ===
 //
 // A pared-down Итог for projection: it reuses the .results-table styling but
@@ -3115,8 +3080,8 @@ function populateScreenRows(wrapper: ScreenWrapper): void {
       if (rowIdx === keys.length - 1) classes.push("results-group-last");
       tr.className = classes.join(" ");
       tr.appendChild(td(placeText, "results-place"));
-      tr.appendChild(resultsTeamCell(index, {
-        showCity: screenSettings.showCity,
+      tr.appendChild(gameTable.resultsTeamCell(teamLabel(index), {
+        city: screenSettings.showCity ? state.teams[index].city : "",
         flag: screenSettings.showCountry ? teamFlagEmoji(index) : "",
       }));
       tr.appendChild(td(total, "results-num total-cell results-total"));
@@ -3375,7 +3340,7 @@ function buildResultsTableInner(): HTMLTableElement {
       if (rowIdx === group.rows.length - 1) classes.push("results-group-last");
       tr.className = classes.join(" ");
       tr.appendChild(td(group.placeText, "results-place"));
-      tr.appendChild(resultsTeamCell(index));
+      tr.appendChild(gameTable.resultsTeamCell(teamLabel(index), {city: state.teams[index].city}));
       tr.appendChild(td(total, "results-num total-cell results-total"));
       for (let t = 0; t < tourLengths.length; t++) {
         if (tourStarted[t]) tr.appendChild(td(tourTotals[index][t], "results-tour"));

@@ -219,19 +219,53 @@ A change to a table skin, the Сетка or a game page is not verified until it
 has been looked at in every cell of this matrix, and the report to the user
 names the cells that were looked at:
 
-| | iPhone 16 (`set device "iPhone 16"`) | desktop (`set viewport 1280 800 1`) |
+| | phone (393 px, DPR 3) | desktop (1280 × 800) |
 |---|---|---|
 | light | screenshot | screenshot |
 | dark | screenshot | screenshot |
 
 …for every game type the change touches — ЭК, Личная СИ, ТПШ (both on the
 ЭК page), КИнСБФ, ОД, КСИ — as spectator (`/fest/…`) and, where it edits, as
-host (`/host/fest/…`). Dark is `localStorage.setItem("dope-theme","dark")`
-before `open` (the kit's menu.ts reads it at boot), or the ☰ → Оформление
-segment. Compare against the deployed page (dopetest for a release, prod
-otherwise) with `uv run --with pillow dope/scripts/imgdiff.py before.png
-after.png` — a bounding box under the topbar is the live viewer count and
-can be ignored; anything in the table body is a finding. The three Сетка
-bugs of 16 Aug 2026 (columns stretched, group rows drifting off the бой rows,
-two font sizes) were all phone-only and all invisible on the desktop the
-change was checked on.
+host (`/host/fest/…`).
+
+**Run it, do not hand-drive it: `cd dope && just matrix`.** That is
+`scripts/matrix.py run`: it checks HEAD out into `.tmp/verify/head-wt`,
+builds it and the working tree, serves both on a copy of
+`.tmp/verify/fest.db` (a dopetest snapshot — see the dopetest memory note;
+HEAD on 9783, the tree on 9782), shoots 22 pages × the four cells on each
+through eight workers on one Chrome, pixel-diffs the pairs and prints a
+table; about 2.5 minutes, of which the two builds are most. Two runs of the
+same tree are 88/88 identical, so a differing pair is a finding. The first
+page is `/gallery` (dev mode only): every shared table and the Сетка from
+fixtures on one page — a table-skin change is judged there first, four
+shots instead of 84. `scripts/matrix.py shoot --label X --host URL` shoots
+any host (dopetest, prod) and `diff A B` re-diffs; `--pages file` takes a
+`name|/path` list for another fest.
+
+What the tool knows that a hand-driven run learns the hard way:
+
+- The baseline is HEAD built locally, never dopetest: dopetest lags the
+  branch, and every unrelated commit shows up as a diff.
+- Eight workers on one Chrome (`agent-browser connect` to a hub's CDP URL)
+  cost tabs, not browsers; more workers than cores buys only CDP timeouts —
+  rendering is software GL at DPR 3. Leaked Chromes from old sessions swap
+  the box (7 GB RSS was seen); the tool kills the hub by pid at the end.
+- Every page opens in a fresh tab. Over plain HTTP/1.1 (a local server) the
+  previous page's SSE stream outlives an in-place navigation and starves the
+  next one of Chrome's six connections per host — `Page.navigate` times out
+  on the same three transitions every run. dopetest is h2 and never shows it.
+- No `screenshot --full`: it resizes the viewport under CDP and the Сетка
+  re-lays out on resize, so captures never settle. The tool sets the viewport
+  to the page height, waits for the page to be quiet again, and takes a plain
+  capture; a shot counts only when two captures 300 ms apart agree.
+- `content-visibility: auto` boxes can capture blank; the tool forces
+  `visible` for the shot. Readiness is fonts loaded + a content node + no DOM
+  mutation for 400 ms + two painted frames — not a per-page selector.
+- The header (viewer count, tab strip scroll) is cropped off: it changes
+  between two shots of one page and is never the subject.
+
+Dark by hand is `localStorage.setItem("dope-theme","dark")` before `open`
+(the kit's menu.ts reads it at boot), or the ☰ → Оформление segment. The
+three Сетка bugs of 16 Aug 2026 (columns stretched, group rows drifting off
+the бой rows, two font sizes) were all phone-only and all invisible on the
+desktop the change was checked on.

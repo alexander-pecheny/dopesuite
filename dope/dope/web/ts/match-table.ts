@@ -780,24 +780,93 @@ export interface GroupStandingsGroup {
   rows: Array<{name: string; points: number; rounds: number[]}>;
 }
 
-// resultsTeamCell is the canonical name cell of a results table: the name
-// clips into a fade with the full text on a popover, never an ellipsis.
-export function resultsTeamCell(name: string, className = "results-team"): HTMLElement {
-  const cell = td("", className);
+export interface TeamCellOptions {
+  className?: string;
+  city?: string;
+  flag?: string;
+  href?: string;
+}
+
+// resultsTeamCell is the one name cell of a results table: the name clips into
+// a fade with the full text on a popover, never an ellipsis. A flag is
+// decoration: the label and the popover carry it, the aria-label does not.
+export function resultsTeamCell(name: string, options: TeamCellOptions = {}): HTMLElement {
+  const cell = td("", classNames("results-team", options.className));
+  const label = options.flag ? `${options.flag} ${name}` : name;
   const wrap = document.createElement("span");
   wrap.className = "results-team-name-wrap";
-  const label = document.createElement("span");
-  label.className = "results-team-name";
-  label.textContent = name;
-  label.tabIndex = 0;
-  label.setAttribute("aria-label", name);
-  wrap.appendChild(label);
+  const node = nameNode(label, options.href || "", "results-team-name");
+  node.tabIndex = 0;
+  node.setAttribute("aria-label", name);
+  wrap.appendChild(node);
+  if (options.city) {
+    const city = document.createElement("span");
+    city.className = "results-team-city";
+    city.textContent = options.city;
+    wrap.appendChild(city);
+  }
   cell.appendChild(wrap);
   const popover = document.createElement("span");
   popover.className = "popover popover-inline results-team-name-popover";
-  popover.textContent = name;
+  popover.textContent = label;
   cell.appendChild(popover);
   return cell;
+}
+
+// A column's kind is its role in the results-table skin: the place, the fading
+// name, a number. className is what its head and cells share beyond that.
+export interface StandingsColumn {
+  label: CellContent;
+  kind?: "place" | "name" | "num";
+  className?: string;
+}
+
+export interface StandingsSpec {
+  className?: string;
+  columns: StandingsColumn[];
+  // A cell is text, or a cell the caller built when it needs more than text.
+  rows: CellContentItem[][];
+}
+
+const STANDINGS_KIND_CLASSES: Record<NonNullable<StandingsColumn["kind"]>, {head: string; cell: string}> = {
+  place: {head: "results-place-head", cell: "results-place"},
+  name: {head: "results-team-head", cell: "results-team"},
+  num: {head: "results-num", cell: "results-num"},
+};
+
+// standingsTable is the one builder for every standings-shaped table — a
+// place, a name, numbers — so no table restates the results-table skin.
+export function standingsTable({className, columns, rows}: StandingsSpec): HTMLTableElement {
+  const table = document.createElement("table");
+  table.className = classNames("results-table", className);
+  const head = document.createElement("tr");
+  for (const column of columns) {
+    head.appendChild(th(column.label, classNames(column.kind && STANDINGS_KIND_CLASSES[column.kind].head, column.className)));
+  }
+  table.appendChild(document.createElement("thead")).appendChild(head);
+  const body = table.appendChild(document.createElement("tbody"));
+  rows.forEach((row, index) => {
+    const tr = document.createElement("tr");
+    tr.className = classNames("results-row", index === 0 && "results-group-first", index === rows.length - 1 && "results-group-last");
+    columns.forEach((column, i) => tr.appendChild(standingsCell(column, row[i])));
+    body.appendChild(tr);
+  });
+  return table;
+}
+
+function standingsCell(column: StandingsColumn, value: CellContentItem): HTMLElement {
+  const own = column.kind ? STANDINGS_KIND_CLASSES[column.kind].cell : "";
+  if (value instanceof Object) {
+    const cell = value as HTMLElement;
+    cell.className = classNames(cell.className, own, column.className);
+    return cell;
+  }
+  if (column.kind === "name") return resultsTeamCell(formatDisplayText(value), {className: column.className});
+  return td(value, classNames(own, column.className));
+}
+
+function classNames(...names: Array<string | false | null | undefined>): string {
+  return names.filter(Boolean).join(" ");
 }
 
 // buildGroupStandingsView is the sheets' «Группы» view: all групп on one tab,
@@ -807,6 +876,7 @@ export function buildGroupStandingsView(groups: GroupStandingsGroup[]): HTMLElem
   const wrap = document.createElement("div");
   wrap.className = "group-standings";
   const score = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1));
+  const rounds = (group: GroupStandingsGroup) => Array.from({length: group.roundCount}, (_, round) => round);
   for (const group of groups) {
     const item = document.createElement("section");
     item.className = "group-standings-item";
@@ -816,31 +886,21 @@ export function buildGroupStandingsView(groups: GroupStandingsGroup[]): HTMLElem
     item.appendChild(head);
     const wrapper = document.createElement("div");
     wrapper.className = "results-wrapper";
-    const table = document.createElement("table");
-    table.className = "results-table group-standings-table";
-    const thead = document.createElement("thead");
-    const header = document.createElement("tr");
-    header.appendChild(th("М", "results-place-head"));
-    header.appendChild(th("Игрок", "results-team-head"));
-    header.appendChild(th("Очки", "number"));
-    for (let round = 1; round <= group.roundCount; round++) {
-      header.appendChild(th(`Круг ${round}`, "number"));
-    }
-    thead.appendChild(header);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    group.rows.forEach((row, index) => {
-      const tr = document.createElement("tr");
-      tr.appendChild(td(index + 1, "results-place results-num"));
-      tr.appendChild(resultsTeamCell(row.name));
-      tr.appendChild(td(score(row.points), "number"));
-      for (let round = 0; round < group.roundCount; round++) {
-        tr.appendChild(td(score(row.rounds[round] || 0), "number"));
-      }
-      tbody.appendChild(tr);
-    });
-    table.appendChild(tbody);
-    wrapper.appendChild(table);
+    wrapper.appendChild(standingsTable({
+      className: "group-standings-table",
+      columns: [
+        {label: "М", kind: "place"},
+        {label: "Игрок", kind: "name"},
+        {label: "Очки", kind: "num"},
+        ...rounds(group).map((round) => ({label: `Круг ${round + 1}`, kind: "num" as const})),
+      ],
+      rows: group.rows.map((row, index) => [
+        index + 1,
+        row.name,
+        score(row.points),
+        ...rounds(group).map((round) => score(row.rounds[round] || 0)),
+      ]),
+    }));
     item.appendChild(wrapper);
     wrap.appendChild(item);
   }
@@ -1031,49 +1091,29 @@ export function buildVenuesTable(venues: Venue[] | null | undefined, options: Ve
   const wrapper = document.createElement("div");
   wrapper.className = "results-wrapper venues-results-wrapper";
 
-  const table = document.createElement("table");
-  table.className = "results-table venues-results-table";
-  const thead = document.createElement("thead");
-  const header = document.createElement("tr");
-  header.appendChild(th("№", "results-place-head"));
-  header.appendChild(th("Название", "results-team-head venues-title-head"));
-  thead.appendChild(header);
-  table.appendChild(thead);
-
-  const tbody = document.createElement("tbody");
-  const list = venues || [];
-  list.forEach((venue, index) => {
-    const row = document.createElement("tr");
-    row.className = "results-row";
-    if (index === 0) row.classList.add("results-group-first");
-    if (index === list.length - 1) row.classList.add("results-group-last");
-    row.appendChild(td(venue.number, "results-place venues-number"));
-    const titleCell = document.createElement("td");
-    titleCell.className = "results-team";
-    if (editable && onTitleChange) {
-      const input = document.createElement("input");
-      input.className = "venue-input";
-      input.value = venue.title;
-      input.dataset.committedTitle = venue.title;
-      input.addEventListener("change", () => {
-        const title = input.value.trim();
-        if (!title) {
-          input.value = input.dataset.committedTitle ?? "";
-          return;
-        }
-        if (title === input.dataset.committedTitle) return;
-        input.dataset.committedTitle = title;
-        onTitleChange(venue.number, title);
-      });
-      titleCell.appendChild(input);
-    } else {
-      titleCell.textContent = venue.title;
-    }
-    row.appendChild(titleCell);
-    tbody.appendChild(row);
-  });
-  table.appendChild(tbody);
-  wrapper.appendChild(table);
+  const title = (venue: Venue) => {
+    if (!editable || !onTitleChange) return venue.title;
+    const input = document.createElement("input");
+    input.className = "venue-input";
+    input.value = venue.title;
+    input.dataset.committedTitle = venue.title;
+    input.addEventListener("change", () => {
+      const title = input.value.trim();
+      if (!title) {
+        input.value = input.dataset.committedTitle ?? "";
+        return;
+      }
+      if (title === input.dataset.committedTitle) return;
+      input.dataset.committedTitle = title;
+      onTitleChange(venue.number, title);
+    });
+    return td(input);
+  };
+  wrapper.appendChild(standingsTable({
+    className: "venues-results-table",
+    columns: [{label: "№", kind: "place"}, {label: "Название", kind: "name"}],
+    rows: (venues || []).map((venue) => [venue.number, title(venue)]),
+  }));
   return wrapper;
 }
 
@@ -1130,10 +1170,9 @@ function nonBreakingName(name: string | undefined): string {
   return (name || "").replace(/ /g, " ");
 }
 
-// rosterNameNode returns a link to `href` (an external rating page) when one is
-// given, otherwise a plain span — both carrying `className` so styling is the
-// same whether or not a rating id was available.
-function rosterNameNode(text: string, href: string, className: string): HTMLElement {
+// nameNode is a link to `href` (an external rating page) when one is given,
+// otherwise a plain span — both carrying `className` so styling is the same.
+function nameNode(text: string, href: string, className: string): HTMLElement {
   if (href) {
     const a = document.createElement("a");
     a.className = `${className} quiet-link`;
@@ -1165,79 +1204,44 @@ export function buildRosterTable(teams: RosterTeam[] | null | undefined): HTMLEl
   }
 
   const hasNumbers = list.some((team) => Number(team.number) > 0);
-  const table = document.createElement("table");
-  table.className = "results-table roster-results-table";
-
-  const thead = document.createElement("thead");
-  const header = document.createElement("tr");
-  if (hasNumbers) header.appendChild(th("№", "results-place-head"));
-  header.appendChild(th("Команда", "results-team-head"));
-  header.appendChild(th("Игроки", "roster-players-head"));
-  thead.appendChild(header);
-  table.appendChild(thead);
-
-  const tbody = document.createElement("tbody");
-  list.forEach((team, index) => {
-    const row = document.createElement("tr");
-    row.className = "results-row";
-    if (index === 0) row.classList.add("results-group-first");
-    if (index === list.length - 1) row.classList.add("results-group-last");
-
-    if (hasNumbers) {
-      row.appendChild(td(Number(team.number) > 0 ? team.number : "", "results-place"));
+  const players = (team: RosterTeam) => {
+    const cell = td("");
+    const members = Array.isArray(team.players) ? team.players : [];
+    if (members.length === 0) {
+      cell.classList.add("empty");
+      cell.textContent = "—";
+      return cell;
     }
-
-    const teamCell = document.createElement("td");
-    teamCell.className = "results-team";
-    teamCell.dataset.rosterTeamCell = "";
-    const teamHref = Number(team.ratingID) > 0 ? `${RATING_TEAM_URL}${team.ratingID}` : "";
-    // Same DOM shape as buildEKStatsTable's name cell, so the shared
-    // fade-on-overflow + hover/focus popover (results-team styling) applies to
-    // clipped team names — markNameOverflow toggles .results-team-truncated.
-    const nameWrap = document.createElement("span");
-    nameWrap.className = "results-team-name-wrap";
-    const nameEl = rosterNameNode(team.name || "", teamHref, "results-team-name roster-team-name");
-    nameEl.tabIndex = 0;
-    nameEl.setAttribute("aria-label", team.name || "");
-    nameWrap.appendChild(nameEl);
-    teamCell.appendChild(nameWrap);
-    const namePopover = document.createElement("span");
-    namePopover.className = "popover popover-inline results-team-name-popover";
-    namePopover.textContent = team.name || "";
-    teamCell.appendChild(namePopover);
-    if (team.city) {
-      const city = document.createElement("span");
-      city.className = "roster-team-city";
-      city.textContent = team.city;
-      teamCell.appendChild(city);
+    for (const player of members) {
+      // Tolerate both the current {name, ratingID} shape and a bare string.
+      const info: RosterPlayer = typeof player === "string" ? {name: player} : (player || {});
+      const chip = document.createElement("span");
+      chip.className = "roster-player";
+      const href = Number(info.ratingID) > 0 ? `${RATING_PLAYER_URL}${info.ratingID}` : "";
+      // Non-breaking spaces inside the name so the column wraps between
+      // players, never through one — the cell itself is free to wrap, which
+      // is what keeps the roster on screen instead of scrolling sideways.
+      chip.appendChild(nameNode(nonBreakingName(info.name), href, "roster-player-name"));
+      cell.appendChild(chip);
     }
-    row.appendChild(teamCell);
-
-    const playersCell = document.createElement("td");
-    playersCell.className = "roster-players-cell";
-    const players = Array.isArray(team.players) ? team.players : [];
-    if (players.length === 0) {
-      playersCell.classList.add("empty");
-      playersCell.textContent = "—";
-    } else {
-      players.forEach((player) => {
-        // Tolerate both the current {name, ratingID} shape and a bare string.
-        const info: RosterPlayer = typeof player === "string" ? {name: player} : (player || {});
-        const chip = document.createElement("span");
-        chip.className = "roster-player";
-        const href = Number(info.ratingID) > 0 ? `${RATING_PLAYER_URL}${info.ratingID}` : "";
-        // Non-breaking spaces inside the name so the column wraps between
-        // players, never through one — the cell itself is free to wrap, which
-        // is what keeps the roster on screen instead of scrolling sideways.
-        chip.appendChild(rosterNameNode(nonBreakingName(info.name), href, "roster-player-name"));
-        playersCell.appendChild(chip);
-      });
-    }
-    row.appendChild(playersCell);
-    tbody.appendChild(row);
-  });
-  table.appendChild(tbody);
-  wrapper.appendChild(table);
+    return cell;
+  };
+  wrapper.appendChild(standingsTable({
+    className: "roster-results-table",
+    columns: [
+      ...(hasNumbers ? [{label: "№", kind: "place" as const}] : []),
+      {label: "Команда", kind: "name"},
+      {label: "Игроки", className: "roster-players"},
+    ],
+    rows: list.map((team) => [
+      ...(hasNumbers ? [Number(team.number) > 0 ? team.number : ""] : []),
+      resultsTeamCell(team.name || "", {
+        href: Number(team.ratingID) > 0 ? `${RATING_TEAM_URL}${team.ratingID}` : "",
+        city: team.city,
+      }),
+      players(team),
+    ]),
+  }));
   return wrapper;
 }
 
@@ -1260,7 +1264,7 @@ export function buildRosterView(festID: string | number | null | undefined): HTM
       // The popover itself is already handled: the CSS-only variant on OD/KSI,
       // and the page-bound floating popover on the EK host/viewer roots.
       const remeasure = () => markNameOverflow(container, {
-        cellSelector: "[data-roster-team-cell]",
+        cellSelector: ".results-team",
         nameSelector: ".results-team-name",
         truncatedClass: "results-team-truncated",
       });
@@ -1446,6 +1450,11 @@ export function computeIndividualPlayerStats(stages: EKStage[] | null | undefine
   return rows;
 }
 
+// The ЭК nominals, high to low — the order the stats tables list them; the
+// stat rows count them by answer position, 10 first.
+const EK_VALUES = [50, 40, 30, 20, 10];
+const byNominal = (counts: number[]) => EK_VALUES.map((value) => counts[value / 10 - 1] || 0);
+
 // buildIndividualStatsTable renders computeIndividualPlayerStats rows — the
 // source's Статистика columns: Игрок, Счёт, Σ+, Бои, takens per value.
 export function buildIndividualStatsTable(rows: IndividualStatsRow[] | null | undefined): HTMLElement {
@@ -1458,47 +1467,17 @@ export function buildIndividualStatsTable(rows: IndividualStatsRow[] | null | un
     wrapper.appendChild(empty);
     return wrapper;
   }
-  const table = document.createElement("table");
-  table.className = "results-table ek-stats-table";
-  const thead = document.createElement("thead");
-  const head = document.createElement("tr");
-  head.appendChild(th("Игрок", "results-team-head ek-stats-name-head ek-stats-player-head"));
-  head.appendChild(th("Σ", "number ek-stats-sum-head"));
-  head.appendChild(th("Σ+", "number"));
-  head.appendChild(th("Бои", "number"));
-  for (const value of [50, 40, 30, 20, 10]) {
-    head.appendChild(th(`+${value}`, "number narrow"));
-  }
-  thead.appendChild(head);
-  table.appendChild(thead);
-  const tbody = document.createElement("tbody");
-  for (const row of rows) {
-    const tr = document.createElement("tr");
-    const cell = td("", "results-team ek-stats-name ek-stats-player");
-    const wrap = document.createElement("span");
-    wrap.className = "results-team-name-wrap";
-    const label = document.createElement("span");
-    label.className = "results-team-name";
-    label.textContent = row.player;
-    label.tabIndex = 0;
-    label.setAttribute("aria-label", row.player);
-    wrap.appendChild(label);
-    cell.appendChild(wrap);
-    const popover = document.createElement("span");
-    popover.className = "popover popover-inline results-team-name-popover";
-    popover.textContent = row.player;
-    cell.appendChild(popover);
-    tr.appendChild(cell);
-    tr.appendChild(td(row.sum, "number ek-stats-sum"));
-    tr.appendChild(td(row.plus, "number"));
-    tr.appendChild(td(row.battles, "number"));
-    for (let i = 4; i >= 0; i--) {
-      tr.appendChild(td(row.right[i] || 0, "number narrow"));
-    }
-    tbody.appendChild(tr);
-  }
-  table.appendChild(tbody);
-  wrapper.appendChild(table);
+  wrapper.appendChild(standingsTable({
+    className: "ek-stats-table",
+    columns: [
+      {label: "Игрок", kind: "name", className: "ek-stats-name ek-stats-player"},
+      {label: "Σ", kind: "num", className: "ek-stats-sum"},
+      {label: "Σ+", kind: "num"},
+      {label: "Бои", kind: "num"},
+      ...EK_VALUES.map((value) => ({label: `+${value}`, kind: "num" as const, className: "narrow"})),
+    ],
+    rows: rows.map((row) => [row.player, row.sum, row.plus, row.battles, ...byNominal(row.right)]),
+  }));
   return wrapper;
 }
 
@@ -1519,65 +1498,29 @@ export function buildEKStatsTable(rows: EKPlayerStatsRow[] | null | undefined): 
     return wrapper;
   }
 
-  const table = document.createElement("table");
-  table.className = "results-table ek-stats-table";
-  const thead = document.createElement("thead");
-  const head = document.createElement("tr");
-  head.appendChild(th("Игрок", "results-team-head ek-stats-name-head ek-stats-player-head"));
-  head.appendChild(th("Команда", "results-team-head ek-stats-name-head ek-stats-team-head"));
-  head.appendChild(th("Σ", "number ek-stats-sum-head"));
-  head.appendChild(th("Σ+", "number"));
-  head.appendChild(th("Бои", "number"));
-  for (const value of [50, 40, 30, 20, 10]) {
-    head.appendChild(th(value, "number narrow"));
-  }
-  for (const value of [50, 40, 30, 20, 10]) {
-    head.appendChild(th(`-${value}`, "number narrow ek-stats-wrong-head"));
-  }
-  head.appendChild(th("% от команды", "number ek-stats-share-head"));
-  thead.appendChild(head);
-  table.appendChild(thead);
-
-  const tbody = document.createElement("tbody");
-  const nameCell = (text: string, className: string) => {
-    const cell = document.createElement("td");
-    cell.className = `results-team ek-stats-name ${className}`;
-    const wrap = document.createElement("span");
-    wrap.className = "results-team-name-wrap";
-    const name = document.createElement("span");
-    name.className = "results-team-name";
-    name.textContent = text;
-    name.tabIndex = 0;
-    name.setAttribute("aria-label", text);
-    wrap.appendChild(name);
-    cell.appendChild(wrap);
-    const popover = document.createElement("span");
-    popover.className = "popover popover-inline results-team-name-popover";
-    popover.textContent = text;
-    cell.appendChild(popover);
-    return cell;
-  };
-  rows.forEach((row, index) => {
-    const tr = document.createElement("tr");
-    tr.className = "results-row";
-    if (index === 0) tr.classList.add("results-group-first");
-    if (index === rows.length - 1) tr.classList.add("results-group-last");
-    tr.appendChild(nameCell(row.player, "ek-stats-player"));
-    tr.appendChild(nameCell(row.team, "ek-stats-team"));
-    tr.appendChild(td(row.sum, "number ek-stats-sum"));
-    tr.appendChild(td(row.plus, "number"));
-    tr.appendChild(td(row.battles, "number"));
-    for (let i = 4; i >= 0; i--) {
-      tr.appendChild(td(row.right[i] || 0, "number narrow"));
-    }
-    for (let i = 4; i >= 0; i--) {
-      tr.appendChild(td(row.wrong[i] || 0, "number narrow ek-stats-wrong"));
-    }
-    tr.appendChild(td(`${Math.round(row.share * 100)}%`, "number ek-stats-share"));
-    tbody.appendChild(tr);
-  });
-  table.appendChild(tbody);
-  wrapper.appendChild(table);
+  wrapper.appendChild(standingsTable({
+    className: "ek-stats-table",
+    columns: [
+      {label: "Игрок", kind: "name", className: "ek-stats-name ek-stats-player"},
+      {label: "Команда", kind: "name", className: "ek-stats-name"},
+      {label: "Σ", kind: "num", className: "ek-stats-sum"},
+      {label: "Σ+", kind: "num"},
+      {label: "Бои", kind: "num"},
+      ...EK_VALUES.map((value) => ({label: value, kind: "num" as const, className: "narrow"})),
+      ...EK_VALUES.map((value) => ({label: `-${value}`, kind: "num" as const, className: "narrow ek-stats-wrong"})),
+      {label: "% от команды", kind: "num", className: "ek-stats-share"},
+    ],
+    rows: rows.map((row) => [
+      row.player,
+      row.team,
+      row.sum,
+      row.plus,
+      row.battles,
+      ...byNominal(row.right),
+      ...byNominal(row.wrong),
+      `${Math.round(row.share * 100)}%`,
+    ]),
+  }));
   return wrapper;
 }
 
@@ -1585,6 +1528,7 @@ export const DopeTable = {
   th,
   td,
   resultsTeamCell,
+  standingsTable,
   groupLabel,
   option,
   applyDeltaOps,

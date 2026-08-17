@@ -159,7 +159,7 @@ func targets() []target {
 		{"dope", func() []api.BuildOptions {
 			return []api.BuildOptions{
 				{
-					EntryPointsAdvanced: entries("dope/dope/web/ts/pages/", "od", "si", "brain", "ek"),
+					EntryPointsAdvanced: entries("dope/dope/web/ts/pages/", "od", "si", "brain", "ek", "gallery"),
 					Bundle:              true,
 					Format:              api.FormatIIFE,
 					Outdir:              "dope/dope/web/assets/static/dist",

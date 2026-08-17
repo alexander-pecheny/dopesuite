@@ -162,6 +162,9 @@ func Main() {
 		http.Redirect(w, r, "/login", http.StatusMovedPermanently)
 	})
 	mux.HandleFunc("/login", srv.serveCompiledPage("static/login.html"))
+	if srv.assets.NoCache {
+		mux.HandleFunc("/gallery", srv.serveCompiledPage("static/gallery.html"))
+	}
 	mux.HandleFunc("/profile", srv.hostPageServer().HandleProfilePage)
 	mux.HandleFunc("/profile/logout", srv.hostPageServer().HandleProfileLogout)
 	mux.HandleFunc("/api/import", srv.handleImport)

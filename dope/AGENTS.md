@@ -73,16 +73,17 @@ queries, view/scheme types, pure scoring), `storage/journal` (forward journal),
 | `pageforms.ts` | ~60 | Shared behaviour for the server-rendered builder pages, replacing the inline `on*` handlers they used to carry (CSP-friendly, data-attribute driven: `[data-confirm]`, `[data-select-all]`, `[data-autosubmit]`, `[data-dialog-open="id"]`, `[data-dialog-close]`) |
 | `ek.ts` | ~3500 | The ЭК page, host and spectator alike — match score editing, undo/redo, stage tabs, SSE sync; a `viewer` flag from the URL prefix gates every control. imports `match-table.ts` + `stage-cache.ts` |
 | `od.ts` | ~3800 | OD/KVRM host/viewer — tabbed results/input sheets, entry cell navigation, SSE sync. imports `match-table.ts` |
-| `match-table.ts` | ~1300 | **Core shared library** (exported `DopeTable`) — table builders, cell helpers, venues/roster/EK-stats tables; re-exports `state-sync.ts` + `game-page.ts` + `widgets.ts` so consumers keep one import. Used by all game pages |
+| `match-table.ts` | ~1500 | **Core shared library** (exported `DopeTable`) — table builders, cell helpers, `standingsTable` (the one builder behind every standings-shaped table: пересев, группы, статистика, площадки, составы, the брейн crosstab) and `resultsTeamCell` (the one fading name cell); re-exports `state-sync.ts` + `game-page.ts` + `widgets.ts` so consumers keep one import. Used by all game pages |
 | `game-page.ts` | ~330 | Page plumbing — window-globals contract (init payloads, menu chrome), route parsing, the header breadcrumb trail (🏠 / [Мои фесты] / фест / игра / раздел, mirroring the URL; the Мои фесты crumb only on the /host tree), menu jump/download mounts, localStorage snapshot cache, init/cache/fetch game-data loader |
 | `widgets.ts` | ~860 | Interaction widgets — cell nav bar, virtual keypad, floating popovers, sync-status dot, name overflow, cell range selection, viewer counter |
 | `state-sync.ts` | ~1450 | **The SSE engine** — scoped event protocol (seq-chained deltas, epoch resets), durable pending ops, stream lifecycle + iOS-wake recovery, client recorder, host presence; `createStateSync` (od/si) and `createLiveEvents` (ek), both stream-injectable for tests |
 | `si.ts` | ~1750 | KSI (team jeopardy) page — question/answer tables, team/player rows, detailed/results/refusals tabs. imports `match-table.ts` |
-| `fest-grid.ts` | 489 | Festival grid visualization — renders multiple stages horizontally, reseed panels, truncated team names |
+| `fest-grid.ts` | ~880 | The Сетка — a column per stage, бой boxes and Group tables built of the same `.grid-slot-cell` cells in one `.grid-box`, reseed panels, truncated team names |
 | `menu.ts` (kit) | — | Site-wide chrome (`window.dopeMenu`) — theme/contrast toggle, hamburger menu, account links. Lives in dopeuikit (`assets/ts/`), served at `/static/menu.js`, loaded on every page |
 | `stage-cache.ts` | 289 | Shared pane cache (`createStageCache`) for EK — per-stage match state, deduped prefetch, SSE routing. Used by `ek.ts` |
 | `login.ts` (kit) | — | Multi-step auth UI — username → password/code branch, redirect on success (dopeuikit `assets/ts/`) |
 | `profile.ts` | 49 | Password change form (new password vs change password modes) |
+| `gallery.ts` | ~140 | The gallery (`/gallery`, dev mode only): every shared table and the Сетка from fixtures on one page — the skin sheet `scripts/matrix.py` (`just matrix`, the verify skill's hand-over matrix) shoots first |
 
 **Module seam (ADR-0003, amended by root ADR-0001)**: each game page loads ONE `dist/<page>.js` bundle built from `dope/web/ts/pages/<page>.ts` — the init-payload boot, then the self-booting page module. The SSE engine is `state-sync.ts` (one implementation: `createStateSync` for od/si state blobs, `createLiveEvents` for ЭК scoped dispatch; both take an injectable stream adapter for tests), re-exported through `match-table.ts` so consumers keep one import. Cross-file wiring is ES imports (`DopeTable` from `match-table.ts`, `createStageCache`, fest-grid exports); the only published globals are `window.dopeMenu`/`window.dopeMenuConfig` (typed in dopeuikit's `globals.d.ts`) and the server-inlined init payloads. Frontend tests import per-file ESM emitted to `web/jstest/dist/`.
 
@@ -119,7 +120,9 @@ Server listens on port **9672** by default (override with `$PORT`). Database def
 ## Testing UI Changes
 Use the `verify` skill (repo root `.claude/skills/verify/`): `agent-browser`
 drives a persistent headless Chrome from the shell (login/flow/screenshot/mobile
-emulation all documented there).
+emulation all documented there). `just matrix` is the skill's hand-over matrix
+as a tool: HEAD against the working tree, 22 pages × phone/desktop × light/dark,
+pixel-diffed, in ~2.5 minutes (`scripts/matrix.py`).
 
 ## UI markup (DopeUIKit)
 No hand-written HTML anywhere. **DopeUIKit** (`pecheny.me/dopeuikit`, vendored via

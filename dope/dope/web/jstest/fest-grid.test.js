@@ -37,6 +37,7 @@ globalThis.window = {addEventListener() {}};
 globalThis.requestAnimationFrame = () => 0;
 globalThis.document = {createElement: node};
 globalThis.HTMLAnchorElement = class {};
+globalThis.Node = class {}; // match-table's cell helpers ask `instanceof Node`; text never is one
 
 const {buildFestGrid, buildReseedStagePanel} = await import("./dist/fest-grid.js");
 
@@ -47,6 +48,17 @@ function walk(root, out = []) {
 }
 
 const withClass = (root, name) => walk(root).filter((n) => String(n.className || "").split(" ").includes(name));
+const texts = (root, name) => withClass(root, name).map((n) => n.textContent);
+// column reads a бой box column top to bottom: its head cell, then its cells.
+const headText = (cell) => texts(cell, "grid-head-metric")[0] ?? cell.textContent;
+const column = (root, name) => [...withClass(root, `slot-${name}-head`).map(headText), ...texts(root, `slot-${name}`)];
+// tableColumn reads a results table's column under the head that says `label`,
+// or null when no head does.
+function tableColumn(root, label) {
+  const [head, ...rows] = walk(root).filter((n) => n.tag === "tr");
+  const index = head.children.findIndex((th) => th.textContent === label);
+  return index < 0 ? null : rows.map((tr) => tr.children[index].textContent);
+}
 
 // A группа of nine plays twelve бои. Twelve boxes say less about who is winning
 // than nine rows do, and the source sheets draw the rows — so a stage that ranks
@@ -75,17 +87,41 @@ test("a Group renders as a table of place against team", () => {
   // Names lead and wear the box treatment — fade + popover, never «…» —
   // and the rows sit in seating order, not place order: a live группа must
   // not reshuffle under the reader with every закрытый бой.
-  const names = withClass(grid, "standings-name").map((cell) =>
-    walk(cell).find((n) => String(n.className || "").includes("grid-slot-team-name"))?.textContent ?? cell.textContent);
-  assert.deepEqual(names, ["", "ВШЭстером", "Ктулху"]);
-  const popovers = withClass(grid, "grid-slot-team-popover").map((n) => n.textContent);
-  assert.deepEqual(popovers, ["ВШЭстером", "Ктулху"]);
+  assert.deepEqual(texts(grid, "grid-slot-team-name"), ["ВШЭстером", "Ктулху"]);
+  assert.deepEqual(texts(grid, "grid-slot-team-popover"), ["ВШЭстером", "Ктулху"]);
   // One metric column, then М last — команда, очки, место: the first of the
   // Ranker's sort rules the server sent, never guessed from the numbers.
-  const heads = withClass(grid, "standings-metric").map((cell) => cell.textContent);
-  assert.deepEqual(heads, ["О", "6", "9"], "колонка — то, по чему блок ранжирует первым");
-  const places = withClass(grid, "standings-place").map((cell) => cell.textContent);
-  assert.deepEqual(places, ["М", "2", "1"]);
+  assert.deepEqual(column(grid, "total"), ["О", "6", "9"], "колонка — то, по чему блок ранжирует первым");
+  assert.deepEqual(column(grid, "place"), ["М", "2", "1"]);
+});
+
+// The group table is a бой box: the same article, the same cells, the same
+// head — only its metric and place columns are wider. One cell class, so the
+// phone's tokens reach both by construction and neither can restate the skin.
+test("a Group's table is built of the бой box's cells", () => {
+  const grid = buildFestGrid({
+    stages: [
+      {
+        code: "s1-g1", title: "Группа 1", stage_type: "matches", grain: {block: "s1", group: "1"},
+        sort: [{metric: "points", dir: "desc"}],
+        standings: [{rank: 1, name: "Ктулху", metrics: {place: 1, points: 9}}],
+        matches: [],
+      },
+      {
+        code: "s2-r1", title: "Финал", stage_type: "matches",
+        matches: [{code: "s2-r1-m1", participantCount: 2, slots: [{label: "Ктулху"}, {label: "ВШЭстером"}]}],
+      },
+    ],
+  }, {stageHeaderLink: false});
+  const [table] = withClass(grid, "grid-standings");
+  const [bout] = withClass(grid, "grid-match");
+  assert.equal(table.tag, bout.tag);
+  assert.ok(withClass(grid, "grid-box").includes(table) && withClass(grid, "grid-box").includes(bout), "одна кожа");
+  const cells = (box) => walk(box).filter((n) => String(n.className).split(" ").includes("grid-slot-cell"));
+  assert.equal(cells(table).length, 6, "заголовок и одна строка, по три ячейки");
+  assert.equal(cells(bout).length, 9);
+  assert.equal(withClass(table, "grid-slot-grid").length, 1);
+  assert.equal(withClass(table, "grid-standings-bare").length, 0, "у таблицы есть колонка метрики");
 });
 
 // A stage that ranks nothing — an elimination round — keeps its бои.
@@ -129,8 +165,7 @@ test("a Block's groups share one column", () => {
   const blockHeads = withClass(grid, "grid-stage-head");
   assert.equal(blockHeads.length, 1, "у колонки один заголовок блока");
   assert.equal(walk(blockHeads[0]).find((n) => n.tag === "h2").textContent, "Групповой этап");
-  const groupHeads = withClass(grid, "grid-standings").map((table) =>
-    walk(withClass(table, "standings-name")[0]).find((n) => String(n.className).includes("grid-match-title")).textContent);
+  const groupHeads = withClass(grid, "grid-standings").map((table) => texts(table, "grid-match-title")[0]);
   assert.deepEqual(groupHeads, ["Группа 1", "Группа 2", "Группа 3"]);
 });
 
@@ -157,13 +192,11 @@ test("a Block of pods draws место against team, not бои", () => {
   assert.equal(withClass(grid, "grid-stage").length, 1);
   assert.equal(withClass(grid, "grid-match").length, 0, "бои в Сетке не рисуются");
   assert.equal(withClass(grid, "grid-standings").length, 1);
-  const names = withClass(grid, "standings-name").map((cell) =>
-    walk(cell).find((n) => String(n.className || "").includes("grid-slot-team-name"))?.textContent ?? cell.textContent);
-  assert.deepEqual(names, ["", "А", "Б", "В", "Г"], "ряды в порядке посева, не мест");
-  const places = withClass(grid, "standings-place").map((cell) => cell.textContent);
-  assert.deepEqual(places, ["М", "1", "3", "2", "4"]);
+  assert.deepEqual(texts(grid, "grid-slot-team-name"), ["А", "Б", "В", "Г"], "ряды в порядке посева, не мест");
+  assert.deepEqual(column(grid, "place"), ["М", "1", "3", "2", "4"]);
   // A pod's table is М alone: its Ranker sends no sort rules.
-  assert.equal(withClass(grid, "standings-metric").length, 0);
+  assert.deepEqual(column(grid, "total"), []);
+  assert.equal(withClass(grid, "grid-standings-bare").length, 1);
 });
 
 // A Group whose Ranker has not written a table yet — nothing finished — draws
@@ -176,8 +209,7 @@ test("a Group without a table yet draws placeless rows", () => {
     matches: [{code: "s2-g1-m1", participantCount: 2, slots: [{label: "А"}, {label: "Б"}]}],
   };
   const grid = buildFestGrid({stages: [pod]}, {stageHeaderLink: false});
-  const places = withClass(grid, "standings-place").map((cell) => cell.textContent);
-  assert.deepEqual(places, ["М", "", ""]);
+  assert.deepEqual(column(grid, "place"), ["М", "", ""]);
 });
 
 // A stage the compiler never grained — a code that merely looks grouped,
@@ -239,7 +271,7 @@ test("a Group's table head names the группа and its table", () => {
   const grid = buildFestGrid({stages: [group(1), group(2)]}, {stageHeaderLink: false});
   assert.equal(withClass(grid, "grid-stage-subhead").length, 0, "подзаголовков больше нет");
   const heads = withClass(grid, "grid-standings").map((table) => {
-    const head = withClass(table, "standings-name")[0];
+    const head = withClass(table, "grid-match-head-cell")[0];
     return walk(head).filter((n) => n.tag === "span" && n.textContent).map((n) => n.textContent);
   });
   assert.deepEqual(heads, [["Группа 1", "пл. 3"], ["Группа 2", "пл. 4"]]);
@@ -255,7 +287,7 @@ test("a lone table's head carries the Block title", () => {
       matches: [{code: "s1-m1", slots: [], participants: [{name: "Ктулху"}]}],
     }],
   }, {stageHeaderLink: false});
-  const head = withClass(grid, "standings-name")[0];
+  const head = withClass(grid, "grid-match-head-cell")[0];
   const spans = walk(head).filter((n) => n.tag === "span" && n.textContent).map((n) => n.textContent);
   assert.deepEqual(spans, ["Письменный отбор"]);
 });
@@ -316,11 +348,10 @@ test("the Пересев names source бои by буква and drops a column th
     {rank: 1, name: "Пётр", metrics: {match: "s1-g5-2+s1-g5-6", total: 600}},
     {rank: 2, name: "Олег", metrics: {match: "s1-g5-6", total: 290}},
   ]), {letters});
-  assert.deepEqual(withClass(many, "reseed-source").map((n) => n.textContent), ["AB, AF", "AF"]);
+  assert.deepEqual(tableColumn(many, "Бой"), ["AB, AF", "AF"]);
   const same = buildReseedStagePanel(stage([
     {rank: 1, name: "Пётр", metrics: {match: "s1-m1", total: 600}},
     {rank: 2, name: "Олег", metrics: {match: "s1-m1", total: 290}},
   ]), {letters});
-  assert.equal(withClass(same, "reseed-source").length, 0);
-  assert.equal(withClass(same, "reseed-source-head").length, 0);
+  assert.deepEqual(tableColumn(same, "Бой"), null);
 });

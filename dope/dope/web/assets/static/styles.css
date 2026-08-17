@@ -1208,7 +1208,8 @@
   width: 100%;
 }
 
-.grid-match {
+/* The Сетка's one box: a бой's or a Group's, one skin. */
+.grid-box {
   border: var(--cell-gap) solid var(--structure);
   border-radius: var(--radius-md);
   background: var(--structure);
@@ -1216,85 +1217,19 @@
 }
 
 /* A Group is drawn as its standings — место against team — the way the source
-   sheets draw it, so it wears the same skin as a бой box rather than a table of
-   its own. */
-.grid-standings {
-  width: 100%;
-  /* Fixed layout so a long name fades instead of widening the column: the
-     Сетка's columns are sized by the grid, not by the longest team. One skin
-     with the бой boxes — same font, same cell height, same paper. */
-  table-layout: fixed;
-  /* Separate borders so the rows measure exactly what a бой box's do — the
-     table must be as tall as the бой it stands beside. */
-  border-collapse: separate;
-  border-spacing: 0;
-  border: var(--cell-gap) solid var(--structure);
-  border-radius: var(--radius-md);
-  background: var(--structure);
-  overflow: hidden;
-  font-size: var(--grid-cell-text);
+   sheets draw it, in the бой box's own cells. Only its columns differ: a metric
+   and a shared place («10.5») need more room than a Σ does. */
+.grid-standings .grid-slot-grid {
+  grid-template-columns: minmax(0, 1fr) var(--grid-metric-col) var(--grid-place-col);
 }
 
-.grid-standings th,
-.grid-standings td {
-  height: var(--grid-row);
-  box-sizing: border-box;
-  padding: var(--grid-cell-pad);
-  background: var(--paper);
-  border-bottom: var(--cell-gap) solid var(--structure);
-  font-weight: inherit;
-  text-align: left;
-  white-space: nowrap;
-  overflow: hidden;
+/* A pod's table, or a Group before its Ranker wrote one: М alone. */
+.grid-standings-bare .grid-slot-grid {
+  grid-template-columns: minmax(0, 1fr) var(--grid-place-col);
 }
 
-/* The head row wears the бой box's head: «Группа 1 · пл. 1» on the paper's
-   structure colour, and the metrics beside it. Tight leading, or the head
-   outgrows the row and every row under it sits a pixel low. */
-.grid-standings th {
-  background: var(--structure);
-  color: var(--text);
-  font-size: var(--grid-head-text);
-  line-height: var(--leading-tight);
-}
-
-/* The paper block rounds its own corners, as a бой box's cells do — on the
-   dark ground the table's outer edge is invisible, so only the cells' corners
-   are seen. */
-.grid-standings tbody tr:first-child td:first-child { border-top-left-radius: var(--radius-md); }
-.grid-standings tbody tr:first-child td:last-child { border-top-right-radius: var(--radius-md); }
-.grid-standings tbody tr:last-child td:first-child { border-bottom-left-radius: var(--radius-md); }
-.grid-standings tbody tr:last-child td:last-child { border-bottom-right-radius: var(--radius-md); }
-
-.grid-standings tbody tr:last-child td {
-  border-bottom: 0;
-}
-
-.grid-standings .standings-place {
-  /* Wide enough for a shared place («10.5») — «1…» said nothing. */
-  width: var(--grid-place-col);
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.grid-standings td.standings-place {
+.grid-standings .slot-place {
   color: var(--text-muted);
-}
-
-/* No width: under a fixed layout the unsized column takes whatever the sized
-   ones leave, and its content fades inside that. */
-.grid-standings .standings-name {
-  min-width: 0;
-}
-
-.grid-standings td.standings-name {
-  position: relative;
-}
-
-.grid-standings .standings-metric {
-  width: var(--grid-metric-col);
-  text-align: right;
-  font-variant-numeric: tabular-nums;
 }
 
 body:not(.embedded-match) .grid-match {
@@ -2554,7 +2489,6 @@ body:not(.embedded-match) .grid-match {
   width: max-content;
 }
 
-.ek-stats-table thead th.ek-stats-name-head,
 .ek-stats-table .ek-stats-name {
   text-align: left;
   padding-left: var(--results-team-pad);
@@ -2570,7 +2504,7 @@ body:not(.embedded-match) .grid-match {
   position: static;
 }
 
-.ek-stats-table thead th.ek-stats-name-head,
+.ek-stats-table thead th.ek-stats-name,
 .ek-stats-table td.ek-stats-name {
   left: auto;
 }
@@ -2582,13 +2516,8 @@ body:not(.embedded-match) .grid-match {
   max-width: var(--ek-stats-name-col);
 }
 
-.ek-stats-table .number {
-  text-align: center;
-}
-
 /* Many numeric columns — keep them compact so more fits before scrolling. */
-.ek-stats-table thead th.number,
-.ek-stats-table td.number {
+.ek-stats-table .results-num {
   padding-left: var(--space-1);
   padding-right: var(--space-1);
 }
@@ -2598,15 +2527,12 @@ body:not(.embedded-match) .grid-match {
   min-width: 30px;
 }
 
-.ek-stats-table thead th.ek-stats-sum-head,
 .ek-stats-table .ek-stats-sum {
   font-weight: var(--fw-semibold);
 }
 
-.ek-stats-table thead th.ek-stats-wrong-head,
 .ek-stats-table .ek-stats-wrong,
-.ek-stats-table .ek-stats-share,
-.ek-stats-table thead th.ek-stats-share-head {
+.ek-stats-table .ek-stats-share {
   color: var(--muted);
 }
 
@@ -3462,7 +3388,7 @@ body:not(.embedded-match) .grid-match {
      while Команда and the counts scroll under it. */
   .ek-stats-table { --ek-stats-name-col: 132px; }
 
-  .ek-stats-table thead th.ek-stats-player-head,
+  .ek-stats-table thead th.ek-stats-player,
   .ek-stats-table td.ek-stats-player {
     position: sticky;
     left: 0;
@@ -3470,13 +3396,13 @@ body:not(.embedded-match) .grid-match {
 
   .ek-stats-table td.ek-stats-player { z-index: 1; --ek-stats-fade-from: var(--paper); --ek-stats-fade-to: var(--paper-transparent); }
 
-  .ek-stats-table thead th.ek-stats-player-head { z-index: 4; --ek-stats-fade-from: var(--structure); --ek-stats-fade-to: var(--structure-transparent); }
+  .ek-stats-table thead th.ek-stats-player { z-index: 4; --ek-stats-fade-from: var(--structure); --ek-stats-fade-to: var(--structure-transparent); }
 
   /* Scrolled-under fade off the frozen player column's right edge, drawn once
      the rest has scrolled — same cue as the OD/KSI results tables. The scroll
      frame toggles .stage-scroll-left (ek.js). */
   .sheet-frame.stage-scroll-left .ek-stats-table td.ek-stats-player::after,
-  .sheet-frame.stage-scroll-left .ek-stats-table thead th.ek-stats-player-head::after {
+  .sheet-frame.stage-scroll-left .ek-stats-table thead th.ek-stats-player::after {
     content: "";
     position: absolute;
     top: 0;
@@ -4058,7 +3984,7 @@ body:not(.embedded-match) .grid-match {
   width: max-content;
 }
 
-.brain-crosstable .number {
+.brain-crosstable .results-num {
   width: 40px;
   min-width: 40px;
   padding-left: var(--space-1);
@@ -4410,22 +4336,15 @@ body.is-fullscreen.od-page .match-main {
   width: var(--results-team-col);
 }
 
-/* The team name reuses .results-team-name (clip + fade + popover from the shared
-   results-table styling); we only add the roster's bold weight on top. */
-.roster-team-name {
+/* The team name is the shared name cell (clip + fade + popover); the roster
+   only adds its bold weight on top. */
+.roster-results-table .results-team-name {
   font-weight: var(--fw-semibold);
 }
 
-.roster-team-city {
-  display: block;
-  color: var(--muted);
-  font-size: var(--text-xs);
-}
-
-/* Left-align the Игроки header (the shared thead th centers by default, and its
+/* Left-align the Игроки column (the shared thead th centers by default, and its
    `.results-table thead th` selector out-specifies a bare class). */
-.roster-results-table .roster-players-head,
-.roster-results-table .roster-players-cell {
+.roster-results-table .roster-players {
   text-align: left;
 }
 
@@ -4435,15 +4354,10 @@ body.is-fullscreen.od-page .match-main {
    unusually long name, a browser that inflates text) those frozen columns
    would paint over the players text while the Игроки header slid away alone.
    Freeze the header with them so the columns stay legible and aligned. */
-.roster-results-table thead .roster-players-head {
+.roster-results-table thead .roster-players {
   position: sticky;
   left: calc(var(--results-place-col) + var(--results-team-col));
   z-index: 3;
-}
-
-.roster-players-cell {
-  padding: var(--space-2) var(--results-team-pad);
-  white-space: normal;
 }
 
 /* Keep each full name intact — the space inside a name is rendered non-breaking
@@ -4635,4 +4549,22 @@ body.is-fullscreen.od-page .match-main {
   /* Dim KSI stickers a shade on dark theme — full-bright colors read as
      over-contrasty against the dark cells. */
   --ksi-sticker-dim: brightness(0.85);
+}
+
+/* The gallery (/gallery, dev mode): every shared table and the Сетка from
+   fixtures on one page, each in the host its page gives it. */
+.gallery-main {
+  max-width: none;
+  padding: 0;
+  gap: 0;
+}
+
+.gallery-section {
+  padding: var(--space-3) var(--space-4);
+  overflow-x: auto;
+}
+
+.gallery-head {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-md);
 }

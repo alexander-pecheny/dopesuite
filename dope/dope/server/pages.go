@@ -37,6 +37,9 @@ var pageSources = map[string]string{
 	"static/od.html":    "ui/od.dopeui",
 	"static/si.html":    "ui/si.dopeui",
 	"static/brain.html": "ui/brain.dopeui",
+	// The gallery renders every shared table and the Сетка from fixtures —
+	// the skin sheet the verify matrix shoots. Dev mode only (see main.go).
+	"static/gallery.html": "ui/gallery.dopeui",
 }
 
 // pageBytes returns the HTML for a shell path: the compiled .dopeui page for the

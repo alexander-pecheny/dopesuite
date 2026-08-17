@@ -1,5 +1,5 @@
 import { markNameOverflow } from "./widgets.js";
-import { festLetters, letteredTitle, type StageRef } from "./match-table.js";
+import { festLetters, letteredTitle, standingsTable, type StageRef } from "./match-table.js";
 
 export interface FestGridVenueObject {
   number?: unknown;
@@ -338,35 +338,21 @@ export function buildReseedStagePanel(
     .map((code) => letters?.get(code) || code).join(", "));
   const hasSourceMatch = sources.some(Boolean) && new Set(sources).size > 1;
 
-  const table = document.createElement("table");
-  table.className = "results-table reseed-results-table";
-  const thead = document.createElement("thead");
-  const header = document.createElement("tr");
-  header.appendChild(tableCell("th", "Место", "results-place-head"));
-  header.appendChild(tableCell("th", "Команда", "results-team-head reseed-team-head"));
-  if (hasSourceMatch) header.appendChild(tableCell("th", "Бой", "results-num reseed-source-head"));
-  metricColumns.forEach((metric) => {
-    header.appendChild(tableCell("th", reseedMetricHeader(metric, sortRules), "results-num reseed-metric-head"));
-  });
-  thead.appendChild(header);
-  table.appendChild(thead);
-
-  const tbody = document.createElement("tbody");
-  entries.forEach((entry, index) => {
-    const row = document.createElement("tr");
-    row.className = "results-row";
-    if (index === 0) row.classList.add("results-group-first");
-    if (index === entries.length - 1) row.classList.add("results-group-last");
-    row.appendChild(tableCell("td", entry.rank || index + 1, "results-place results-num"));
-    row.appendChild(reseedTeamCell(entry.name || ""));
-    if (hasSourceMatch) row.appendChild(tableCell("td", sources[index], "results-num reseed-source"));
-    metricColumns.forEach((metric) => {
-      row.appendChild(tableCell("td", reseedMetricValue(metric, entry.metrics?.[metric]), "results-num reseed-metric"));
-    });
-    tbody.appendChild(row);
-  });
-  table.appendChild(tbody);
-  wrapper.appendChild(table);
+  wrapper.appendChild(standingsTable({
+    className: "reseed-results-table",
+    columns: [
+      {label: "Место", kind: "place"},
+      {label: "Команда", kind: "name"},
+      ...(hasSourceMatch ? [{label: "Бой", kind: "num" as const}] : []),
+      ...metricColumns.map((metric) => ({label: reseedMetricHeader(metric, sortRules), kind: "num" as const})),
+    ],
+    rows: entries.map((entry, index) => [
+      entry.rank || index + 1,
+      entry.name || "",
+      ...(hasSourceMatch ? [sources[index]] : []),
+      ...metricColumns.map((metric) => reseedMetricValue(metric, entry.metrics?.[metric])),
+    ]),
+  }));
 
   if (options.editable && !options.canCalculate && blockedMessage) {
     const empty = document.createElement("p");
@@ -491,39 +477,34 @@ function ungradedStandings(stage: FestGridStage, order: string[]): ReseedEntry[]
   return order.map((name) => ({name, metrics: {}}));
 }
 
+// A Group's table is a бой box: the same article and cells the бой boxes
+// beside it wear, so one skin covers both by construction. The rows sit in
+// seating order; the columns are the name, М, and the one number the Block
+// ranks by first — a second number costs forty pixels the names need, and
+// everything else belongs on the stage's own page.
 function buildStandingsTable(standings: ReseedEntry[], order: string[], head: TableHead, sort?: SortRule[] | null): HTMLElement {
-  const metrics = (sort || []).slice(0, STANDINGS_COLUMNS).map((rule) => rule.metric);
-  const table = document.createElement("table");
-  table.className = "grid-standings";
-  const headRow = document.createElement("tr");
-  const title = el("th", "standings-name", "");
+  const metric = sort?.[0]?.metric;
+  const box = el("article", `grid-box grid-standings${metric ? "" : " grid-standings-bare"}`, "");
+  const grid = el("div", "grid-slot-grid", "");
+  const title = gridCell("grid-slot-head grid-match-head-cell", "");
   title.appendChild(headLayout(el("span", "grid-match-title", head.title), head.venue));
-  headRow.appendChild(title);
-  metrics.forEach((metric) => headRow.appendChild(el("th", "standings-metric", standingsMetricLabel(metric))));
-  headRow.appendChild(el("th", "standings-place", "М"));
-  table.appendChild(document.createElement("thead")).appendChild(headRow);
-  const body = table.appendChild(document.createElement("tbody"));
+  grid.appendChild(title);
+  if (metric) grid.appendChild(gridHeadCell("slot-total-head", standingsMetricLabel(metric)));
+  grid.appendChild(gridHeadCell("slot-place-head", "М"));
   const rows = order.length
     ? standings.slice().sort((a, b) => slotIndex(order, a) - slotIndex(order, b))
     : standings;
-  placeOnRows(table, 1 + rows.length);
-  rows.forEach((entry) => {
-    const row = document.createElement("tr");
-    const name = el("td", "standings-name grid-slot-team", "");
-    const label = String(entry.name || "");
-    const inner = el("span", "grid-slot-team-name", label);
-    inner.tabIndex = 0;
-    inner.setAttribute("aria-label", label);
-    name.appendChild(inner);
-    name.appendChild(el("span", "popover popover-inline grid-slot-team-popover", label));
-    row.appendChild(name);
-    metrics.forEach((metric) => {
-      row.appendChild(el("td", "standings-metric", reseedMetricValue(metric, entry.metrics?.[metric])));
-    });
-    row.appendChild(el("td", "standings-place", placeText(Number(entry.metrics?.place ?? entry.rank) || null)));
-    body.appendChild(row);
+  placeOnRows(box, 1 + rows.length);
+  const realRows = rows.map((entry) => {
+    const cells = [slotTeamCell(String(entry.name || ""))];
+    if (metric) cells.push(gridCell("slot-total", reseedMetricValue(metric, entry.metrics?.[metric])));
+    cells.push(gridCell("slot-place", placeText(Number(entry.metrics?.place ?? entry.rank) || null)));
+    cells.forEach((cell) => grid.appendChild(cell));
+    return cells;
   });
-  return table;
+  decorateGridSlotRows(realRows);
+  box.appendChild(grid);
+  return box;
 }
 
 // slotIndex finds an entry's seat in the slot order; a name the schedule never
@@ -532,12 +513,6 @@ function slotIndex(order: string[], entry: ReseedEntry): number {
   const index = order.indexOf(String(entry.name || ""));
   return index < 0 ? order.length + Number(entry.rank || 0) : index;
 }
-
-// The Сетка is a glance, not a report: место, who, and the one number the
-// Block ranks by first — the first of the Ranker's sort rules the server sent.
-// A second number costs forty pixels the names need, and everything else
-// belongs on the stage's own page.
-const STANDINGS_COLUMNS = 1;
 
 // The Сетка's columns are a glance wide, and it already writes М and Σ rather
 // than «место» and «сумма». The few metrics whose names do not fit get the same
@@ -604,7 +579,7 @@ function settleRows(root: HTMLElement): void {
 
 function buildMatchBox(match: FestGridMatch, liveMatch: FestGridMatch | undefined, options: FestGridOptions = {}): HTMLElement {
   const box = document.createElement("article");
-  box.className = `grid-match ${liveMatch?.status || "pending"}`;
+  box.className = `grid-box grid-match ${liveMatch?.status || "pending"}`;
   box.dataset.matchCode = match.code || "";
 
   const venue = firstVenue(liveMatch?.venue, match.venue);
@@ -667,12 +642,13 @@ function phantomSlotCells(): HTMLElement[] {
 
 function decorateGridSlotRows(rows: HTMLElement[][]): void {
   if (rows.length === 0) return;
-  rows[0][0].classList.add("grid-slot-top-left");
-  rows[0][2].classList.add("grid-slot-top-right");
+  const first = rows[0];
   const last = rows[rows.length - 1];
+  first[0].classList.add("grid-slot-top-left");
+  first[first.length - 1].classList.add("grid-slot-top-right");
   last.forEach((cell) => cell.classList.add("grid-slot-row-last"));
   last[0].classList.add("grid-slot-bottom-left");
-  last[2].classList.add("grid-slot-bottom-right");
+  last[last.length - 1].classList.add("grid-slot-bottom-right");
 }
 
 function matchHeadCell(match: FestGridMatch, venue: Venue | null, options: FestGridOptions = {}): HTMLElement {
@@ -753,31 +729,6 @@ function reseedMetricValue(metric: string, value: unknown): string {
   if (!Number.isFinite(number) || String(value).trim() === "") return String(value);
   if (metric.endsWith("_share")) return `${scoreText(Math.round(number * 1000) / 10)}%`;
   return scoreText(number);
-}
-
-function reseedTeamCell(name: string): HTMLElement {
-  const cell = tableCell("td", "", "results-team reseed-team");
-  const wrap = document.createElement("span");
-  wrap.className = "results-team-name-wrap";
-  const label = document.createElement("span");
-  label.className = "results-team-name";
-  label.textContent = name;
-  label.tabIndex = 0;
-  label.setAttribute("aria-label", name);
-  wrap.appendChild(label);
-  cell.appendChild(wrap);
-  const popover = document.createElement("span");
-  popover.className = "popover popover-inline results-team-name-popover";
-  popover.textContent = name;
-  cell.appendChild(popover);
-  return cell;
-}
-
-function tableCell(tagName: "td" | "th", text: unknown, className?: string): HTMLTableCellElement {
-  const node = document.createElement(tagName);
-  if (className) node.className = className;
-  node.textContent = text == null ? "" : String(text).replace(/^-/, "−");
-  return node;
 }
 
 function preferredColumns(count: number): number {
