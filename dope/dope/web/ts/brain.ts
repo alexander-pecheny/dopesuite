@@ -12,6 +12,8 @@ import {computeBrainPlayerStats} from "./brain-stats.js";
 import type {StatsBout} from "./brain-stats.js";
 import {buildFestGrid, buildReseedStagePanel} from "./fest-grid.js";
 import type {FestGridStage, ReseedEntry} from "./fest-grid.js";
+import {gameTabs, canonicalKey, groupLabel} from "./game-tabs.js";
+import type {GameTab} from "./game-tabs.js";
 
 interface PageGlobals {
   __GAME_INIT__?: GameInitLike | null;
@@ -147,8 +149,6 @@ function scheduleBrainNameOverflowUpdate(): void {
 }
 window.addEventListener("resize", scheduleBrainNameOverflowUpdate);
 
-const SEED_TAB = {key: "seed", label: "Посев"};
-
 const route = gameTable.parseGameRoute();
 const viewer = Boolean(route.viewer);
 const init = pageWindow.__GAME_INIT__ || null;
@@ -171,84 +171,16 @@ let rosterView: HTMLElement | null = null;
 let activeTab = tabFromHash() || "grid";
 let resyncScheduled = false;
 
-// BlockBucket is one scheme Block's stages, in scheme order: the unit the
-// tabs think in — one crosstab tab (when the Block ranks) plus one протоколы
-// tab per Block, mirroring the source workbook's tab pairs.
-interface BlockBucket {
-  block: string;
-  label: string;
-  stages: BrainSchemeStage[];
-  ranks: boolean;
+function tabs(): GameTab[] {
+  return gameTabs((scheme.stages || []) as StageRef[], {game: "brain", viewer, seeded: Boolean(scheme.seeding?.source)});
 }
 
-function blockBuckets(): BlockBucket[] {
-  const buckets: BlockBucket[] = [];
-  let current: BlockBucket | null = null;
-  for (const stage of scheme.stages || []) {
-    if (stageKind(stage) === "reseed") {
-      current = null;
-      continue;
-    }
-    const block = stage.grain?.block || "";
-    if (!current || current.block !== block) {
-      current = {block, label: "", stages: [], ranks: false};
-      buckets.push(current);
-    }
-    current.stages.push(stage);
-    if (stageKind(stage) === "rr") current.ranks = true;
-  }
-  for (const bucket of buckets) bucket.label = blockLabel(bucket);
-  return buckets;
-}
-
-// blockLabel names a Block's tabs: the групп's common prefix («1-й групповой
-// этап. Группа 1» → «1-й групповой этап», «DE 1» → «DE»), or for a bracket of
-// titled rounds their common prefix, else «Плей-офф».
-function blockLabel(bucket: BlockBucket): string {
-  const first = String(bucket.stages[0]?.title || "");
-  const grouped = bucket.stages.some((stage) => stage.grain?.group);
-  if (grouped) {
-    const named = first.replace(/\.?\s*Группа\s*\S+$/, "");
-    if (named !== first) return named;
-    return first.replace(/\s*\d+$/, "") || first;
-  }
-  if (bucket.stages.length === 1) return first;
-  const prefix = first.split(". ")[0];
-  if (prefix !== first && bucket.stages.every((stage) => String(stage.title || "").startsWith(prefix + ". "))) {
-    return prefix;
-  }
-  return "Плей-офф";
-}
-
-function reseedStages(): BrainSchemeStage[] {
-  return (scheme.stages || []).filter((stage) => stageKind(stage) === "reseed");
-}
-
-// The tab set mirrors the source workbook: the Сетка first, then per Block its
-// crosstabs and its протоколы, the one folded Пересев, the player stats and
-// the составы. The Посев tab appears only for the host of a game whose scheme
-// declares an [init] seed source.
-function visibleTabs(): Array<{key: string; label: string}> {
-  const tabs = [{key: "grid", label: "Сетка"}];
-  for (const bucket of blockBuckets()) {
-    if (bucket.ranks || podBucket(bucket)) tabs.push({key: `block:${bucket.block}`, label: bucket.label});
-    tabs.push({key: `protocol:${bucket.block}`, label: `${bucket.label} (протоколы)`});
-  }
-  if (reseedStages().length) tabs.push({key: "reseed", label: "Пересев"});
-  tabs.push({key: "stats", label: "Индивидуальная статистика"});
-  tabs.push({key: "roster", label: "Составы"});
-  if (!viewer && scheme.seeding?.source) tabs.push(SEED_TAB);
-  return tabs;
+function tabStages(tab: GameTab): BrainSchemeStage[] {
+  return (scheme.stages || []).filter((stage) => tab.stages.includes(stage.code || ""));
 }
 
 function stageKind(stage: BrainSchemeStage): string {
   return stage.kind || stage.stage_type || "";
-}
-
-// podBucket is a Block of pods (Double Elimination). Its detail tab lays the
-// бои out per round, since a crosstab has nothing to cross.
-function podBucket(bucket: BlockBucket): boolean {
-  return !bucket.ranks && bucket.stages.some((stage) => stage.grain?.group);
 }
 
 // Every бой of the game carries a буква — the sheets' A..Z, AA.. handle —
@@ -290,14 +222,9 @@ function questionsFor(code: string): number {
 }
 
 function tabFromHash(): string | null {
-  let key = (window.location.hash || "").replace(/^#/, "");
-  // The pre-Block tabs: one crosstable, one протоколы. Old bookmarks land on
-  // the first Block's pair rather than silently falling back to the Сетка.
-  if (key === "table" || key === "protocol") {
-    const first = blockBuckets().find((bucket) => key === "table" ? bucket.ranks : true);
-    key = first ? (key === "table" ? `block:${first.block}` : `protocol:${first.block}`) : "grid";
-  }
-  return visibleTabs().some((t) => t.key === key) ? key : null;
+  const all = tabs();
+  const key = canonicalKey(all, (window.location.hash || "").replace(/^#/, ""));
+  return all.some((t) => t.key === key) ? key : null;
 }
 
 window.addEventListener("hashchange", () => {
@@ -510,20 +437,7 @@ function render(options: {preserveScroll?: boolean} = {}): void {
   renderTabs();
   const frame = brainRoot.closest(".sheet-frame");
   const scrollTop = frame?.scrollTop || 0;
-  const bucket = blockBuckets().find((b) => activeTab === `block:${b.block}` || activeTab === `protocol:${b.block}`);
-  const node = activeTab === "roster"
-    ? (rosterView ||= gameTable.buildRosterView(route.festID))
-    : activeTab === "seed"
-      ? buildSeedView()
-      : activeTab === "stats"
-        ? buildStatsView()
-        : activeTab === "reseed"
-          ? buildReseedTab()
-          : bucket && activeTab.startsWith("block:")
-            ? (bucket.ranks ? buildCrosstable(bucket) : buildPodBoard(bucket))
-            : bucket
-              ? buildProtocols(bucket)
-              : buildGrid();
+  const node = buildTab(tabs().find((tab) => tab.key === activeTab));
   brainRoot.replaceChildren(node);
   brainRoot.classList.toggle("fits-frame", activeTab === "roster");
   // A Сетка fits the frame's width like ЭК's, so its columns measure the same.
@@ -533,10 +447,31 @@ function render(options: {preserveScroll?: boolean} = {}): void {
   restoreSelection();
 }
 
+function buildTab(tab: GameTab | undefined): HTMLElement {
+  switch (tab?.kind) {
+  case "roster":
+    return (rosterView ||= gameTable.buildRosterView(route.festID));
+  case "seed":
+    return buildSeedView();
+  case "stats":
+    return buildStatsView();
+  case "reseed":
+    return buildReseedTab(tabStages(tab));
+  case "block":
+    return buildCrosstable(tabStages(tab));
+  case "pods":
+    return buildPodBoard(tabStages(tab));
+  case "protocol":
+    return buildProtocols(tabStages(tab));
+  default:
+    return buildGrid();
+  }
+}
+
 function renderTabs(): void {
   if (!brainTabsRoot) return;
   brainTabsRoot.hidden = false;
-  gameTable.renderTabBar(brainTabsRoot, visibleTabs(), activeTab, (key) => {
+  gameTable.renderTabBar(brainTabsRoot, tabs(), activeTab, (key) => {
     activeTab = key;
     if (window.location.hash.replace(/^#/, "") !== key) {
       history.replaceState(null, "", `#${key}`);
@@ -612,12 +547,12 @@ function buildBrainReseedPanel(stage: BrainSchemeStage): HTMLElement {
 
 // buildProtocols lays one Block's бої out the way the sheet's протоколы tab
 // does: a section per stage (группа, pod, round), its бої side by side.
-function buildProtocols(bucket: BlockBucket): HTMLElement {
+function buildProtocols(stages: BrainSchemeStage[]): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "brain-protocol";
-  const multi = bucket.stages.length > 1;
+  const multi = stages.length > 1;
   let rendered = 0;
-  for (const stage of bucket.stages) {
+  for (const stage of stages) {
     const bouts = stageBouts(stage);
     if (!bouts.length) continue;
     rendered++;
@@ -659,12 +594,12 @@ function buildGrid(): HTMLElement {
 // same boxes the Сетка once carried — moved where detail belongs. A pod is a
 // row band: its бои of every round sit in the band, so a round with one бой
 // per pod leaves the pod's other slot blank and the columns read across.
-function buildPodBoard(bucket: BlockBucket): HTMLElement {
+function buildPodBoard(pods: BrainSchemeStage[]): HTMLElement {
   type GridMatch = NonNullable<FestGridStage["matches"]>[number];
   const byRound = new Map<number, GridMatch[]>();
   const roundOf = (planned: BrainSchemeMatch) => Number((planned as {round?: number}).round || 1);
   // slots[pod][i] is the бой's slot within its pod's round; podRows the widest.
-  const slots = bucket.stages.map((stage) => {
+  const slots = pods.map((stage) => {
     const seen = new Map<number, number>();
     return (stage.matches || []).map((planned) => {
       const slot = seen.get(roundOf(planned)) || 0;
@@ -673,7 +608,7 @@ function buildPodBoard(bucket: BlockBucket): HTMLElement {
     });
   });
   const podRows = Math.max(0, ...slots.flat()) + 1;
-  bucket.stages.forEach((stage, pod) => {
+  pods.forEach((stage, pod) => {
     const live = new Map((festStages.get(stage.code || "")?.matches || []).map((m) => [m.code, m]));
     (stage.matches || []).forEach((planned, i) => {
       const round = roundOf(planned);
@@ -684,7 +619,7 @@ function buildPodBoard(bucket: BlockBucket): HTMLElement {
     });
   });
   const stages = Array.from(byRound.keys()).sort((a, b) => a - b).map((round): FestGridStage => ({
-    code: `${bucket.block}-round-${round}`,
+    code: `round-${round}`,
     title: `Раунд ${round}`,
     stage_type: "matches",
     matches: byRound.get(round),
@@ -694,11 +629,10 @@ function buildPodBoard(bucket: BlockBucket): HTMLElement {
 
 // buildReseedTab stacks every reseed's panel, each under the name of the
 // stage it seats.
-function buildReseedTab(): HTMLElement {
+function buildReseedTab(reseeds: BrainSchemeStage[]): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "reseed-fold";
   const stages = scheme.stages || [];
-  const reseeds = reseedStages();
   for (const stage of reseeds) {
     if (reseeds.length > 1) {
       const index = stages.indexOf(stage);
@@ -970,10 +904,10 @@ function slotKey(slot: SchemeSlotRef | null | undefined): string {
 // score cells vs each opponent — live, from the бой views — beside the
 // Group's own table from the server: О, +, −, +/− and М as its Ranker wrote
 // them, so очки move when a бой is finished and never disagree with the Сетка.
-function buildCrosstable(bucket: BlockBucket): HTMLElement {
+function buildCrosstable(stages: BrainSchemeStage[]): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "group-standings brain-groups";
-  const groups = bucket.stages.filter((stage) => stageKind(stage) === "rr");
+  const groups = stages.filter((stage) => stageKind(stage) === "rr");
   if (!groups.length) {
     const empty = document.createElement("p");
     empty.className = "roster-empty";
@@ -986,7 +920,7 @@ function buildCrosstable(bucket: BlockBucket): HTMLElement {
     item.className = "group-standings-item";
     const head = document.createElement("h3");
     head.className = "group-standings-head";
-    head.textContent = gameTable.groupLabel(stage as StageRef);
+    head.textContent = groupLabel(stage as StageRef);
     item.appendChild(head);
     const wrapper = document.createElement("div");
     wrapper.className = "results-wrapper";
