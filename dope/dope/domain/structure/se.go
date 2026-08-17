@@ -16,13 +16,6 @@ type singleElim struct{}
 
 func (singleElim) Code() string { return "se" }
 
-type seConfig struct {
-	Code     string             `json:"code"`
-	Venue    int                `json:"venue"`
-	Bronze   bool               `json:"bronze"`
-	Entrants []store.SchemeSlot `json:"entrants"`
-}
-
 // BracketOrder returns 1-based entrant ranks in standard bracket layout: the
 // classic recursive fold that keeps top seeds apart until the late rounds
 // (for 8: 1,8,4,5,3,6,2,7).
@@ -40,7 +33,7 @@ func BracketOrder(n int) []int {
 }
 
 func (singleElim) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
-	var conf seConfig
+	var conf SEConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil, fmt.Errorf("se config: %w", err)
 	}
@@ -111,8 +104,8 @@ func (singleElim) Metrics() []string { return nil }
 // Standings ranks by progression: the champion first, then losers by the round
 // they fell in, late rounds ranking higher. Participants still alive share the
 // top band; a finished bronze бой splits its two semifinal losers.
-func (singleElim) Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEntry, error) {
-	var conf seConfig
+func (singleElim) Standings(cfg json.RawMessage, results []MatchOutcome, _ Inputs) ([]RankedEntry, error) {
+	var conf SEConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil, fmt.Errorf("se standings config: %w", err)
 	}

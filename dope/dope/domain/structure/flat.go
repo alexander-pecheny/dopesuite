@@ -18,17 +18,8 @@ type flat struct{}
 
 func (flat) Code() string { return "flat" }
 
-type flatConfig struct {
-	Code     string             `json:"code"`
-	Title    string             `json:"title"`
-	Venue    int                `json:"venue"`
-	Entrants []store.SchemeSlot `json:"entrants"`
-	Order    []string           `json:"order"`
-	Rules    Rules              `json:"rules"`
-}
-
 func (flat) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
-	var conf flatConfig
+	var conf FlatConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil, fmt.Errorf("flat config: %w", err)
 	}
@@ -55,8 +46,8 @@ func (flat) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 
 // Standings ranks by the Protocol's own places — a flat game's Match already
 // ranked everyone — with any scoring rules the scheme added on top.
-func (flat) Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEntry, error) {
-	var conf flatConfig
+func (flat) Standings(cfg json.RawMessage, results []MatchOutcome, _ Inputs) ([]RankedEntry, error) {
+	var conf FlatConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil, fmt.Errorf("flat standings config: %w", err)
 	}
@@ -109,7 +100,7 @@ func (flat) Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEntr
 	return ranked, nil
 }
 
-func flatOrder(conf flatConfig) []string {
+func flatOrder(conf FlatConfig) []string {
 	if conf.Order == nil {
 		return []string{"place"}
 	}
@@ -119,7 +110,7 @@ func flatOrder(conf flatConfig) []string {
 func (flat) Metrics() []string { return []string{"place"} }
 
 func (flat) Order(cfg json.RawMessage) []SortRule {
-	var conf flatConfig
+	var conf FlatConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil
 	}

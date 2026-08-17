@@ -189,7 +189,7 @@ func recomputeKindStandingsTx(ctx context.Context, tx *sql.Tx, stage resolverSta
 	if err != nil {
 		return err
 	}
-	ranked, err := ranker.Standings(kindStageConfig(stage.config, seed, nil), outcomes)
+	ranked, err := ranker.Standings(KindConfig(stage.config), outcomes, structure.Inputs{Seed: seed})
 	if err != nil {
 		return fmt.Errorf("stage %s standings: %w", stage.code, err)
 	}
@@ -221,35 +221,21 @@ values(?, ?, ?, ?)`, stageID, seat+1, entry.Participant, util.MustJSON(metrics))
 	return nil
 }
 
-// kindStageConfig unwraps the persisted stage config (storeutil nests the
-// scheme's config under "config") and injects the game's deterministic seed
-// for tie lots.
-// KindConfig is a stage's config as its Kind reads it — unwrapped from the
-// "config" envelope scheme-imported stages carry — for a caller that only asks
-// the Ranker its Order.
-func KindConfig(raw []byte) json.RawMessage { return kindStageConfig(raw, "", nil) }
-
-// kindStageConfig is what a Ranker reads: the stage's own config (nested under
-// "config" for scheme-imported stages) plus the game's random seed and, for a
-// reseed, the contenders the resolver named.
-func kindStageConfig(raw []byte, seed string, contenders []reseedContender) json.RawMessage {
+// KindConfig is a stage's config as its Kind reads it: the stage's own config,
+// unwrapped from the "config" envelope storeutil.StageConfigJSON nests it in,
+// or the envelope itself for a Kind whose config is written there (a reseed's
+// sort). A caller that only asks the Ranker its Order reads it too.
+func KindConfig(raw []byte) json.RawMessage {
 	var outer struct {
-		Config map[string]any `json:"config"`
+		Config json.RawMessage `json:"config"`
 	}
-	cfg := map[string]any{}
-	if err := json.Unmarshal(raw, &outer); err == nil && outer.Config != nil {
-		cfg = outer.Config
-	} else {
-		_ = json.Unmarshal(raw, &cfg)
+	if err := json.Unmarshal(raw, &outer); err == nil && len(outer.Config) > 0 && string(outer.Config) != "null" {
+		return outer.Config
 	}
-	if cfg == nil {
-		cfg = map[string]any{}
+	if len(raw) == 0 {
+		return json.RawMessage("{}")
 	}
-	cfg["seed"] = seed
-	if contenders != nil {
-		cfg["contenders"] = contenders
-	}
-	return json.RawMessage(util.MustJSON(cfg))
+	return raw
 }
 
 // stageMatchOutcomesTx loads a stage's matches as structure.MatchOutcome (slot
@@ -492,13 +478,6 @@ type reseedConfig struct {
 	Sources []string           `json:"sources"`
 }
 
-// reseedContender is one Participant the reseed ranks and the band (Losses so
-// far) it ranks in — what the resolver hands the reseed Ranker.
-type reseedContender struct {
-	Participant int64 `json:"participant"`
-	Band        int   `json:"band"`
-}
-
 func syncReseedReadinessTx(ctx context.Context, tx *sql.Tx, stage resolverStage, gameID int64) error {
 	state, err := ReseedPrerequisites(ctx, tx, stage.config, gameID)
 	if err != nil {
@@ -643,7 +622,7 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 		_, err := tx.ExecContext(ctx, `delete from stage_standings where stage_id = ?`, stageID)
 		return err
 	}
-	contenders := make([]reseedContender, 0, len(cfg.Teams))
+	contenders := make([]structure.Contender, 0, len(cfg.Teams))
 	for index, slot := range cfg.Teams {
 		teamID, source, err := eligibleTeam(ctx, tx, gameID, slot)
 		if err != nil {
@@ -659,7 +638,7 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 		if index < len(cfg.Bands) {
 			band = cfg.Bands[index]
 		}
-		contenders = append(contenders, reseedContender{Participant: teamID, Band: band})
+		contenders = append(contenders, structure.Contender{Participant: teamID, Band: band})
 	}
 	if len(contenders) == 0 {
 		return clear()
@@ -683,7 +662,7 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 		return err
 	}
 	ranker, _ := structure.RankerFor("reseed")
-	ranked, err := ranker.Standings(kindStageConfig(config, seed, contenders), outcomes)
+	ranked, err := ranker.Standings(KindConfig(config), outcomes, structure.Inputs{Seed: seed, Contenders: contenders})
 	if err != nil {
 		return err
 	}

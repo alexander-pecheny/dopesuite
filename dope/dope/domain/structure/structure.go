@@ -82,8 +82,81 @@ type Expander interface {
 type Ranker interface {
 	Code() string
 	Metrics() []string
-	Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEntry, error)
+	Standings(cfg json.RawMessage, results []MatchOutcome, in Inputs) ([]RankedEntry, error)
 	Order(cfg json.RawMessage) []SortRule
+}
+
+// Inputs is what the resolver knows at ranking time that no config holds: the
+// game's fixed random seed for tie lots, and, for a reseed, the Contenders it
+// ranks — who advances is a matter of resolved slots.
+type Inputs struct {
+	Seed       string
+	Contenders []Contender
+}
+
+// Contender is one Participant a reseed ranks and the band (Losses so far)
+// the ranking runs inside.
+type Contender struct {
+	Participant int64
+	Band        int
+}
+
+// One config type per Kind: the compiler writes it, the Kind reads it back,
+// and a renamed field is a compile error on both sides. The JSON tags are the
+// wire, which the client reads too.
+
+// RRConfig is a round-robin Group: its schedule and its cross-table rule.
+type RRConfig struct {
+	Code      string             `json:"code,omitempty"`
+	Label     string             `json:"label,omitempty"`
+	Title     string             `json:"title,omitempty"`
+	Venue     int                `json:"venue,omitempty"`
+	Entrants  []store.SchemeSlot `json:"entrants,omitempty"`
+	Pairings  [][][]int          `json:"pairings,omitempty"`
+	MatchSize int                `json:"matchSize,omitempty"`
+	Rounds    int                `json:"rounds,omitempty"`
+	Points    *RRPoints          `json:"points,omitempty"`
+	Metric    string             `json:"metric,omitempty"`
+	Order     []string           `json:"order,omitempty"`
+	Rules     *Rules             `json:"rules,omitempty"`
+}
+
+type RRPoints struct {
+	Win  float64 `json:"win"`
+	Draw float64 `json:"draw"`
+	Loss float64 `json:"loss"`
+}
+
+// FlatConfig is a flat game: one бой of every entrant.
+type FlatConfig struct {
+	Code     string             `json:"code,omitempty"`
+	Title    string             `json:"title,omitempty"`
+	Venue    int                `json:"venue,omitempty"`
+	Entrants []store.SchemeSlot `json:"entrants,omitempty"`
+	Order    []string           `json:"order,omitempty"`
+	Rules    *Rules             `json:"rules,omitempty"`
+}
+
+type SEConfig struct {
+	Code     string             `json:"code,omitempty"`
+	Venue    int                `json:"venue,omitempty"`
+	Bronze   bool               `json:"bronze,omitempty"`
+	Entrants []store.SchemeSlot `json:"entrants,omitempty"`
+}
+
+type PodConfig struct {
+	Lives         int `json:"lives,omitempty"`
+	WinningPlaces int `json:"winning_places,omitempty"`
+}
+
+// ReseedConfig is a reseed's order; the compiler writes it on the stage's own
+// Sort, which the store keeps at the envelope's top level.
+type ReseedConfig struct {
+	Sort []SortRule `json:"sort,omitempty"`
+}
+
+type ManualConfig struct {
+	Matches []store.SchemeMatch `json:"matches"`
 }
 
 // MetricTakenBase is the Protocol metric a reseed's shares are built on —

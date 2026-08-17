@@ -21,23 +21,6 @@ func (roundRobin) Metrics() []string {
 	return []string{"points", "h2h", "taken", "conceded", "diff", "place_sum", "bouts"}
 }
 
-// rrConfig is the rr stage config. Entrants are ordinary scheme slot sources
-// (seed / fromMatch / stageRank / reseed refs), so the same group works over a
-// fest seed draw or over qualifiers from a previous stage. Pairings, when set,
-// override the built-in schedule: rounds of 1-based entrant-position tuples —
-// partial round-robins are schedule data, not a new kind. MatchSize seats more
-// than two per бой: личная СИ plays its group of nine three at a table.
-type rrConfig struct {
-	Code      string             `json:"code"`
-	Label     string             `json:"label"`
-	Title     string             `json:"title"`
-	Venue     int                `json:"venue"`
-	Entrants  []store.SchemeSlot `json:"entrants"`
-	Pairings  [][][]int          `json:"pairings"`
-	MatchSize int                `json:"matchSize"`
-	Rounds    int                `json:"rounds"`
-}
-
 // rrCanonRounds are the community's canonical KINSBF group schedules, retained
 // verbatim so existing sheets and dope groups agree bout-for-bout.
 var rrCanonRounds = map[int][][][]int{
@@ -61,7 +44,7 @@ var rrCanonTables = map[[2]int][][][]int{
 }
 
 func (roundRobin) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
-	var conf rrConfig
+	var conf RRConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil, fmt.Errorf("rr config: %w", err)
 	}
@@ -122,7 +105,7 @@ func (roundRobin) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 // rrRounds picks the group's schedule: the config's explicit pairings, the
 // canon for its shape, else a construction — the circle method for бои of two,
 // the affine plane for bigger tables.
-func rrRounds(n, size int, conf rrConfig) ([][][]int, error) {
+func rrRounds(n, size int, conf RRConfig) ([][][]int, error) {
 	if conf.Pairings != nil {
 		return conf.Pairings, nil
 	}
@@ -216,26 +199,10 @@ func circleRounds(n int) [][][]int {
 	return rounds
 }
 
-// rrStandingsConfig tunes the cross-table: the head-to-head points rule, the
-// protocol metric acting as the score, and the ranking key order. Defaults are
-// the КИНСБФ canon (§4.2): 2/1/0 over "taken", ranked очки → личная встреча
-// among the tied ("h2h") → taken → diff.
-type rrStandingsConfig struct {
-	Points *struct {
-		Win  float64 `json:"win"`
-		Draw float64 `json:"draw"`
-		Loss float64 `json:"loss"`
-	} `json:"points"`
-	Metric    string   `json:"metric"`
-	Order     []string `json:"order"`
-	MatchSize int      `json:"matchSize"`
-	Rules     Rules    `json:"rules"`
-}
-
 // multiSeatStandings ranks a group whose бои seat more than two. There is no
 // личная встреча — a бой of three is not a duel — and no разница, so очки come
 // from the block's scoring rule and every Protocol metric simply sums.
-func multiSeatStandings(conf rrStandingsConfig, results []MatchOutcome) ([]RankedEntry, error) {
+func multiSeatStandings(conf RRConfig, results []MatchOutcome) ([]RankedEntry, error) {
 	rules, err := compileRules(conf.Rules)
 	if err != nil {
 		return nil, err
@@ -244,7 +211,7 @@ func multiSeatStandings(conf rrStandingsConfig, results []MatchOutcome) ([]Ranke
 		// «4 − место» generalised: a бой of k seats pays (k + 1) − место, so a
 		// win at three seats is 3, and a shared place pays the mean of the
 		// places it shares without anyone spelling that out.
-		if rules, err = compileRules(Rules{Bout: map[string]string{"points": "seats + 1 - place"}}); err != nil {
+		if rules, err = compileRules(&Rules{Bout: map[string]string{"points": "seats + 1 - place"}}); err != nil {
 			return nil, err
 		}
 	}
@@ -316,11 +283,11 @@ func multiSeatStandings(conf rrStandingsConfig, results []MatchOutcome) ([]Ranke
 
 // rrOrder is the group's ranking keys: the scheme's, else the two-seat
 // default with личная встреча or the multi-seat one without.
-func rrOrder(conf rrStandingsConfig) []string {
+func rrOrder(conf RRConfig) []string {
 	if conf.Order != nil {
 		return conf.Order
 	}
-	if conf.MatchSize > 2 || len(conf.Rules.Bout)+len(conf.Rules.Standings) > 0 {
+	if conf.MatchSize > 2 || !conf.Rules.Empty() {
 		return []string{"points", "total", "plus"}
 	}
 	return []string{"points", "h2h", "taken", "diff"}
@@ -329,7 +296,7 @@ func rrOrder(conf rrStandingsConfig) []string {
 // Order lists the group's keys as columns; личная встреча is a comparator
 // over the tied, not a number a row carries, so it is not one.
 func (roundRobin) Order(cfg json.RawMessage) []SortRule {
-	var conf rrStandingsConfig
+	var conf RRConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil
 	}
@@ -343,12 +310,14 @@ func (roundRobin) Order(cfg json.RawMessage) []SortRule {
 	return out
 }
 
-func (roundRobin) Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEntry, error) {
-	var conf rrStandingsConfig
+// Standings is the cross-table. Defaults are the КИНСБФ canon (§4.2): 2/1/0
+// over "taken", ranked очки → личная встреча among the tied → taken → diff.
+func (roundRobin) Standings(cfg json.RawMessage, results []MatchOutcome, _ Inputs) ([]RankedEntry, error) {
+	var conf RRConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil, fmt.Errorf("rr standings config: %w", err)
 	}
-	if conf.MatchSize > 2 || len(conf.Rules.Bout)+len(conf.Rules.Standings) > 0 {
+	if conf.MatchSize > 2 || !conf.Rules.Empty() {
 		return multiSeatStandings(conf, results)
 	}
 	win, draw, loss := 2.0, 1.0, 0.0

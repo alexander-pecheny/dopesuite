@@ -422,6 +422,22 @@ func paramBool(defaults, blk Section, key string, rounds []string) (bool, bool) 
 	return false, false
 }
 
+// stageConfig is a stage's config on the wire: the Kind's typed config (nil
+// for a hand-drawn stage) with the Protocol's params beside it.
+func (c *compiler) stageConfig(cfg any, blk Section, rounds []string) (json.RawMessage, error) {
+	config := c.protocolConfig(blk, rounds)
+	if cfg != nil {
+		data, err := json.Marshal(cfg)
+		if err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(data, &config); err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(config)
+}
+
 // protocolConfig collects the game's protocol params for one stage (rounds
 // empty means the block default).
 func (c *compiler) protocolConfig(blk Section, rounds []string) map[string]any {
@@ -444,8 +460,8 @@ func (c *compiler) protocolConfig(blk Section, rounds []string) map[string]any {
 // blockRules reads the block's scoring rules — bout.<name> is evaluated per бой
 // and summed, standings.<name> once over the sums (ADR-0008). Whatever they
 // define becomes rankable, so `sorting:` may name it.
-func (c *compiler) blockRules(blk Section) (structure.Rules, error) {
-	rules := structure.Rules{}
+func (c *compiler) blockRules(blk Section) (*structure.Rules, error) {
+	rules := &structure.Rules{}
 	for key, value := range blk.Values {
 		grain, name, dotted := strings.Cut(key, ".")
 		if !dotted || name == "" {
@@ -466,9 +482,12 @@ func (c *compiler) blockRules(blk Section) (structure.Rules, error) {
 			continue
 		}
 		if _, err := expr.Parse(value.Raw); err != nil {
-			return structure.Rules{}, errAt(value.Line, "%s: %s", key, err)
+			return nil, errAt(value.Line, "%s: %s", key, err)
 		}
 		c.ruleMetrics = append(c.ruleMetrics, name)
+	}
+	if rules.Empty() {
+		return nil, nil
 	}
 	return rules, nil
 }
@@ -880,29 +899,20 @@ func (c *compiler) expandFlat(index int, blk Section) (*blockOutputs, error) {
 	if err != nil {
 		return nil, err
 	}
-	config := c.protocolConfig(blk, nil)
-	config["code"] = code
-	config["entrants"] = entrants[0]
-	config["title"] = blockTitle(blk, "Игра")
-	config["venue"] = c.venuePick(venues, 1)
-	if len(rules.Bout)+len(rules.Standings) > 0 {
-		config["rules"] = rules
-	}
+	cfg := structure.FlatConfig{Code: code, Entrants: entrants[0], Title: blockTitle(blk, "Игра"), Venue: c.venuePick(venues, 1), Rules: rules}
 	if order, ok, err := blk.Sorting("sorting"); err != nil {
 		return nil, err
 	} else if ok {
 		known := c.rankable("flat")
-		names := make([]string, len(order))
-		for i, rule := range order {
+		for _, rule := range order {
 			if !known[rule.Metric] {
 				return nil, errAt(blk.Line, "sorting: %s не считается — ни протокол, ни правила подсчёта такой метрики не дают (есть %s)",
 					rule.Metric, strings.Join(sortedNames(known), ", "))
 			}
-			names[i] = rule.Metric
+			cfg.Order = append(cfg.Order, rule.Metric)
 		}
-		config["order"] = names
 	}
-	configJSON, err := json.Marshal(config)
+	configJSON, err := c.stageConfig(cfg, blk, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1039,22 +1049,19 @@ func (c *compiler) expandRoundRobin(index int, blk Section) (*blockOutputs, erro
 	blockCode := fmt.Sprintf("s%d", index+1)
 	for g := 1; g <= groups; g++ {
 		code := fmt.Sprintf("%s-g%d", blockCode, g)
-		config := c.protocolConfig(blk, nil)
-		config["code"] = code
-		config["entrants"] = entrants[g-1]
-		config["order"] = order
-		config["points"] = map[string]int{"win": points[0], "draw": points[1], "loss": points[2]}
-		config["venue"] = c.venuePick(venues, g)
+		cfg := structure.RRConfig{
+			Code:     code,
+			Entrants: entrants[g-1],
+			Order:    order,
+			Points:   &structure.RRPoints{Win: float64(points[0]), Draw: float64(points[1]), Loss: float64(points[2])},
+			Venue:    c.venuePick(venues, g),
+			Rules:    rules,
+		}
 		if matchSize > 2 {
-			config["matchSize"] = matchSize
+			cfg.MatchSize = matchSize
 		}
-		if rounds, ok := blk.Int("rounds"); ok {
-			config["rounds"] = rounds
-		}
-		if len(rules.Bout)+len(rules.Standings) > 0 {
-			config["rules"] = rules
-		}
-		configJSON, err := json.Marshal(config)
+		cfg.Rounds, _ = blk.Int("rounds")
+		configJSON, err := c.stageConfig(cfg, blk, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -1779,9 +1786,20 @@ func (a at) grain() store.SchemeGrain {
 	return store.SchemeGrain{Block: a.block, Wave: wave, Group: a.group}
 }
 
+// appendManualStage adds a hand-drawn stage: its бои as the compiler laid
+// them out, no Kind config of its own.
 func (c *compiler) appendManualStage(blk Section, code, title string, rounds []string, where at, matches []store.SchemeMatch) {
-	config := c.protocolConfig(blk, rounds)
-	configJSON, _ := json.Marshal(config)
+	c.appendDrawnStage("matches", nil, blk, code, title, rounds, where, matches)
+}
+
+// appendPodStage is a hand-drawn stage that ranks itself: Kind "de", whose
+// config says what the Ranker counts a Loss by.
+func (c *compiler) appendPodStage(blk Section, code, title string, plan *dePlan, where at, matches []store.SchemeMatch) {
+	c.appendDrawnStage("de", structure.PodConfig{Lives: plan.lives, WinningPlaces: plan.winning}, blk, code, title, nil, where, matches)
+}
+
+func (c *compiler) appendDrawnStage(kind string, cfg any, blk Section, code, title string, rounds []string, where at, matches []store.SchemeMatch) {
+	configJSON, _ := c.stageConfig(cfg, blk, rounds)
 	if where.round > 0 {
 		for i := range matches {
 			if matches[i].Round == 0 {
@@ -1794,26 +1812,12 @@ func (c *compiler) appendManualStage(blk Section, code, title string, rounds []s
 		Code:      code,
 		Title:     title,
 		StageType: "matches",
-		Kind:      "matches",
+		Kind:      kind,
 		Position:  c.position,
 		Grain:     where.grain(),
 		Matches:   matches,
 		Config:    configJSON,
 	})
-}
-
-// appendPodStage is appendManualStage for a pod: the same hand-drawn бои, but
-// the stage ranks itself — Kind "de" — so its config carries what the Ranker
-// counts a Loss by, its lives and winning places.
-func (c *compiler) appendPodStage(blk Section, code, title string, plan *dePlan, where at, matches []store.SchemeMatch) {
-	c.appendManualStage(blk, code, title, nil, where, matches)
-	stage := &c.scheme.Stages[len(c.scheme.Stages)-1]
-	stage.Kind = "de"
-	config := map[string]any{}
-	_ = json.Unmarshal(stage.Config, &config)
-	config["lives"] = plan.lives
-	config["winning_places"] = plan.winning
-	stage.Config, _ = json.Marshal(config)
 }
 
 // rejectRoundKeys fails on dotted overrides whose suffix names no round of

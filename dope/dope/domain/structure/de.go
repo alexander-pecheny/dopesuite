@@ -19,18 +19,13 @@ type pod struct{}
 
 func (pod) Code() string { return "de" }
 
-type podConfig struct {
-	Lives         int `json:"lives"`
-	WinningPlaces int `json:"winning_places"`
-}
-
 // A pod's table shows М alone; Losses are how it ranks, not a column.
 func (pod) Order(cfg json.RawMessage) []SortRule { return nil }
 
 func (pod) Metrics() []string { return []string{"losses"} }
 
-func (pod) Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEntry, error) {
-	var conf podConfig
+func (pod) Standings(cfg json.RawMessage, results []MatchOutcome, _ Inputs) ([]RankedEntry, error) {
+	var conf PodConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil, fmt.Errorf("de config: %w", err)
 	}

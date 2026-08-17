@@ -21,20 +21,7 @@ type reseed struct{}
 
 func (reseed) Code() string { return "reseed" }
 
-// reseedContender is who the reseed ranks: the resolver names them, since who
-// advances is a matter of resolved slots, and their band — Losses so far.
-type reseedContender struct {
-	Participant int64 `json:"participant"`
-	Band        int   `json:"band"`
-}
-
-type reseedKindConfig struct {
-	Seed       string            `json:"seed"`
-	Sort       []SortRule        `json:"sort"`
-	Contenders []reseedContender `json:"contenders"`
-}
-
-func reseedOrder(conf reseedKindConfig) []SortRule {
+func reseedOrder(conf ReseedConfig) []SortRule {
 	if len(conf.Sort) == 0 {
 		return []SortRule{{Metric: "place_sum", Dir: "asc"}}
 	}
@@ -46,15 +33,15 @@ func (reseed) Metrics() []string {
 }
 
 func (reseed) Order(cfg json.RawMessage) []SortRule {
-	var conf reseedKindConfig
+	var conf ReseedConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil
 	}
 	return reseedOrder(conf)
 }
 
-func (reseed) Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEntry, error) {
-	var conf reseedKindConfig
+func (reseed) Standings(cfg json.RawMessage, results []MatchOutcome, in Inputs) ([]RankedEntry, error) {
+	var conf ReseedConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil, fmt.Errorf("reseed config: %w", err)
 	}
@@ -63,7 +50,7 @@ func (reseed) Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEn
 	// Without contenders everyone in the sources is ranked, in band 0.
 	band := map[int64]int{}
 	var order []int64
-	for _, c := range conf.Contenders {
+	for _, c := range in.Contenders {
 		if _, seen := band[c.Participant]; !seen {
 			order = append(order, c.Participant)
 		}
@@ -165,7 +152,7 @@ func (reseed) Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEn
 		}
 		if j-i >= 2 {
 			for k := i; k < j; k++ {
-				entries[k].Metrics["draw"] = float64(deterministicLot(conf.Seed, entries[k].Participant))
+				entries[k].Metrics["draw"] = float64(deterministicLot(in.Seed, entries[k].Participant))
 			}
 		}
 		i = j

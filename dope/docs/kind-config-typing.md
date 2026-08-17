@@ -1,9 +1,7 @@
 # The Kind config as a type (#9)
 
-Status: open. Strength: speculative on 15 Aug; #1 did half of it (the
-`Schedule(cfg, results)` interface split into `Expander.Schedule(cfg)` and
-`Ranker.Standings(cfg, results)` / `Order(cfg)`), so what is left is the
-typing alone. Best done together with [protocol-seam.md](protocol-seam.md).
+Status: done 17 Aug 2026 (see «What was done» at the end). Written earlier as
+the hand-off note; #1 had done half of it, #5 typed the Protocol's side.
 
 ## The problem
 
@@ -54,3 +52,39 @@ Rename `matchSize` in one place and nothing fails until a tournament.
   same way).
 - The reseed's config is assembled at resolve time (`seed`, `contenders`),
   not at compile time; keep that split.
+
+## What was done (17 Aug 2026, branch `dope-refactor`)
+
+- `structure` owns one exported type per Kind — `RRConfig` (schedule and
+  cross-table rule in one struct; `RRPoints`), `FlatConfig`, `SEConfig`,
+  `PodConfig`, `ReseedConfig`, `ManualConfig` — with the JSON tags that were
+  on the wire. The compiler builds the struct and marshals it; the Kind
+  unmarshals into the same one; a renamed field is a compile error on both
+  sides. `Rules` rides as `*Rules` so an empty rule set stays off the wire.
+- What the resolver adds at ranking time is not config any more:
+  `Ranker.Standings(cfg, results, structure.Inputs{Seed, Contenders})`;
+  `structure.Contender` replaces the two `reseedContender` copies.
+  `resolver.KindConfig(raw)` only unwraps the `"config"` envelope
+  (`storeutil.StageConfigJSON`) or hands back the envelope for a Kind whose
+  config sits there (a reseed's `sort`), so both stored shapes still read.
+- The Protocol's params stay a map — they are what `Protocol.Params()`
+  declares, key by key — and one `compiler.stageConfig(kind, blk, rounds)`
+  puts them beside the Kind's struct; the JSON round-trips through a map, so
+  the wire is key-sorted exactly as before. The four production DSLs compile
+  to the same scheme JSON before and after (parsed equality, all stages).
+  `store.SchemeSortRule` is an alias of `store.SortRule`.
+- `structure_test.go`'s `mustSchedule` and every `Standings` call build
+  configs from the types (`seeds(1, 2, 3)` for entrants).
+- Still crossing the seam untyped, on the client: `brain.ts` reads
+  `entrants`, `order`, `points`, `questions`, `tiebreakQuestions` from the
+  stage config for the crosstab's planned rows and the бой's row count;
+  `ek.ts` reads `rules.bout.points` and `entrants` to draw the sheets'
+  per-круг group table (`group-stats.ts` recomputes it, since the server's
+  standings carry no per-круг split). Moving those onto the view is a
+  server-side feature (per-круг standings, planned seats on `StageView`),
+  not a typing change; a rename there still fails only at a tournament.
+- One deliberate change: a block whose `sorting:` is an empty list used to
+  write `"order":[]`, which the Group read as "sort by nothing"; the field is
+  `omitempty` now, so it falls back to the canon order.
+- Gates: `go test ./...` with `TestReplayStudchr*` unchanged;
+  `TestKindConfigReadsBothStoredShapes`.
