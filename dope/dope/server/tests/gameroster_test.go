@@ -26,7 +26,7 @@ func TestGameSeatsItsOwnEntrants(t *testing.T) {
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
 	all := seedParticipants(t, db, festID, 6)
-	dsl := "[scheme]\ntype: roundrobin\nteams_in_group: 4\nquestions: 5\n"
+	dsl := "[scheme]\nkind: roundrobin\ngroup_size: 4\nquestions: 5\n"
 	first := createSchemeGameFor(t, db, festID, "brain", "Первая", dsl, all[:4])
 	second := createSchemeGameFor(t, db, festID, "brain", "Вторая", dsl, all[2:6])
 
@@ -62,7 +62,7 @@ func TestGameWithoutSelectionSeatsTheFest(t *testing.T) {
 	seedFestTeams(t, db, festID, 4)
 
 	gameID := createSchemeGame(t, db, festID, "brain", "Брейн",
-		"[scheme]\ntype: roundrobin\nteams_in_group: 4\nquestions: 5\n")
+		"[scheme]\nkind: roundrobin\ngroup_size: 4\nquestions: 5\n")
 	if got := len(gameEntrants(t, db, gameID)); got != 4 {
 		t.Fatalf("участников = %d, want 4", got)
 	}
@@ -267,7 +267,7 @@ func TestRecompileKeepsGameEntrants(t *testing.T) {
 	db := srv.Eng().DB
 	all := seedParticipants(t, db, festID, 6)
 
-	dsl := "[scheme]\ntype: roundrobin\nteams_in_group: 4\nquestions: 5\n"
+	dsl := "[scheme]\nkind: roundrobin\ngroup_size: 4\nquestions: 5\n"
 	gameID := createSchemeGameFor(t, db, festID, "brain", "Брейн", dsl, all[1:5])
 
 	tx, err := db.Begin()
@@ -296,7 +296,7 @@ func TestGameKeepsItsGivenTitle(t *testing.T) {
 	db := srv.Eng().DB
 	seedFestPlayers(t, db, festID, 4)
 
-	dsl := "[scheme]\ntype: roundrobin\nteams_in_group: 4\nthemes: 2\n"
+	dsl := "[scheme]\nkind: roundrobin\ngroup_size: 4\nthemes: 2\n"
 	for _, want := range []string{"СИ", "ТПШ", "СИ 2"} {
 		base := want
 		if want == "СИ 2" {
@@ -332,7 +332,7 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, 'Не и
 	}
 
 	gameID := createSchemeGameFor(t, db, festID, "brain", "Брейн",
-		"[scheme]\ntype: roundrobin\nteams_in_group: 4\nquestions: 5\n", all)
+		"[scheme]\nkind: roundrobin\ngroup_size: 4\nquestions: 5\n", all)
 	code := firstMatchCode(t, db, gameID)
 
 	resp := scopedAPIRequest(t, srv, http.MethodPatch,
@@ -358,7 +358,7 @@ func TestCreateGameFormPicksEntrants(t *testing.T) {
 	token := createTestSession(t, srv, systemUserID(t, db))
 	form := url.Values{}
 	form.Set("game_type", "brain")
-	form.Set("brain_dsl", "[scheme]\ntype: roundrobin\nteams_in_group: 4\nquestions: 5\n")
+	form.Set("brain_dsl", "[scheme]\nkind: roundrobin\ngroup_size: 4\nquestions: 5\n")
 	for _, id := range all[1:5] {
 		form.Add("entrant_id", itoa(id))
 	}
@@ -395,7 +395,7 @@ func TestGameRefusesTheWrongKindOfEntrant(t *testing.T) {
 	}
 	defer tx.Rollback()
 	_, err = gamebuild.Create(context.Background(), tx, gamebuild.Spec{FestID: festID, Type: "si", Label: "Личная СИ",
-		DSL: "[scheme]\ntype: roundrobin\nteams_in_group: 4\nthemes: 2\n", Entrants: teams})
+		DSL: "[scheme]\nkind: roundrobin\ngroup_size: 4\nthemes: 2\n", Entrants: teams})
 	if err == nil {
 		t.Fatal("личная игра приняла команды")
 	}

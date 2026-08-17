@@ -25,8 +25,8 @@ seed: xlsx
 
 [scheme]
 title: Плей-офф
-type: single_elimination
-teams: 48
+kind: single_elimination
+participants: 48
 match_size: 4
 winning_places: 2
 match_size.r3: 3
@@ -51,19 +51,19 @@ seed: xlsx
 
 [scheme]
 title: Групповой этап
-type: roundrobin
+kind: roundrobin
 slug: group-stage
 groups: 6
-teams_in_group: 9
+group_size: 9
 match_size: 3
 themes: 6
 bout.points: seats + 1 - place
 sorting: [points, total, plus]
-proceeding_teams: 4
+proceeding_participants: 4
 ---
 title: Плей-офф
-type: double_elimination
-teams: 24
+kind: double_elimination
+participants: 24
 match_size: 4
 winning_places: 2
 themes: 8
@@ -88,16 +88,16 @@ venues: 6
 
 [scheme]
 title: Письменный отбор
-type: flat
+kind: flat
 letters: false
-teams: 91
+participants: 91
 themes: 10
-proceeding_teams: 24
+proceeding_participants: 24
 sorting: [total, plus, taken50, taken40, taken30, taken20, taken10]
 ---
 title: Плей-офф
-type: single_elimination
-teams: 24
+kind: single_elimination
+participants: 24
 match_size: 4
 winning_places: 2
 rounds: 2
@@ -142,8 +142,8 @@ func TestStudchrTPSh(t *testing.T) {
 const studchrODSrc = `
 [scheme]
 title: КВРМ
-type: flat
-teams: 65
+kind: flat
+participants: 65
 tour_comp: [15, 15, 15, 15, 15, 15]
 `
 
@@ -151,8 +151,8 @@ tour_comp: [15, 15, 15, 15, 15, 15]
 const studchrKSISrc = `
 [scheme]
 title: КСИ
-type: flat
-teams: 40
+kind: flat
+participants: 40
 themes: 20
 `
 

@@ -39,7 +39,7 @@ def entrants(data, registry):
     """Who actually played ЭК, in fest-registration order.
 
     The roster is derived from the бои rather than copied from the fest, because
-    ЭК seated 48 of the fest's 65 teams and a scheme that says `teams: 48`
+    ЭК seated 48 of the fest's 65 teams and a scheme that says `participants: 48`
     rightly refuses 65. Numbers are the fest's registration numbers — the ЭК
     sheet's own numbering was not transcribed, and inventing one would be worse
     than reusing a real one.

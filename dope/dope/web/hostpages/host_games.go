@@ -156,7 +156,7 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 		gameSettings("brain", sel,
 			dopeui.Field(dopeui.Label("Схема"),
 				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("14"), dopeui.Spellcheck("false"), dopeui.Text(data.BrainDSL))),
-			dopeui.Hint(dopeui.Text("Формат описан в docs/scheme-dsl.md: блоки [scheme] через ---, типы roundrobin / single_elimination / double_elimination.")),
+			dopeui.Hint(dopeui.Text("Формат описан в docs/scheme-dsl.md: блоки [scheme] через ---, kind: roundrobin / single_elimination / double_elimination.")),
 		),
 		gameSettings("si", sel,
 			dopeui.Field(dopeui.Label("Схема"),
@@ -165,7 +165,7 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 		),
 		gameSettings("ek", sel,
 			dopeui.Field(dopeui.Label("Схема"),
-				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("10"), dopeui.Spellcheck("false"), dopeui.Placeholder("[scheme]\ntype: single_elimination\nteams: 48\nmatch_size: 4\nwinning_places: 2"))),
+				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("10"), dopeui.Spellcheck("false"), dopeui.Placeholder("[scheme]\nkind: single_elimination\nparticipants: 48\nmatch_size: 4\nwinning_places: 2"))),
 			dopeui.Hint(dopeui.Text("Либо схемой, либо готовым JSON ниже — что заполнено, то и используется.")),
 			dopeui.Field(dopeui.Label("JSON-схема"),
 				dopeui.Editor(dopeui.Name("ek_scheme"), dopeui.Rows("14"), dopeui.Placeholder(`{"slug":"...","title":"...","gameType":"ek","stages":[...]}`))),
@@ -765,7 +765,7 @@ func defaultBrainDSL(teams, questions int) string {
 	if questions <= 0 {
 		questions = 5
 	}
-	return fmt.Sprintf("[defaults]\nquestions: %d\n\n[scheme]\ntype: roundrobin\nteams_in_group: %d\n", questions, teams)
+	return fmt.Sprintf("[defaults]\nquestions: %d\n\n[scheme]\nkind: roundrobin\ngroup_size: %d\n", questions, teams)
 }
 
 // defaultSIDSL is личная СИ's shape at its smallest: one table, everyone at it,
@@ -774,7 +774,7 @@ func defaultSIDSL(players int) string {
 	if players < 3 {
 		players = 3
 	}
-	return fmt.Sprintf("[scheme]\ntype: roundrobin\nteams_in_group: %d\nmatch_size: 3\nthemes: 8\nbout.points: seats + 1 - place\nsorting: [points, total, plus]\n", players)
+	return fmt.Sprintf("[scheme]\nkind: roundrobin\ngroup_size: %d\nmatch_size: 3\nthemes: 8\nbout.points: seats + 1 - place\nsorting: [points, total, plus]\n", players)
 }
 
 // ksiStickersGameType is the creation-form value for the "KSI with stickers"

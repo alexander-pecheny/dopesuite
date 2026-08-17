@@ -37,7 +37,7 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?
 		return resp
 	}
 
-	dsl5 := "[defaults]\nquestions: 5\n\n[scheme]\ntype: roundrobin\nteams_in_group: 4\n"
+	dsl5 := "[defaults]\nquestions: 5\n\n[scheme]\nkind: roundrobin\ngroup_size: 4\n"
 	if resp := post(fmt.Sprintf("/host/fest/%d/game/new", festID), url.Values{"game_type": {"brain"}, "brain_dsl": {dsl5}}); resp.Code != http.StatusSeeOther {
 		t.Fatalf("create status = %d, body %s", resp.Code, resp.Body.String())
 	}
@@ -55,7 +55,7 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?
 	}
 
 	settingsPath := fmt.Sprintf("/host/fest/%d/game/%d/settings", festID, gameID)
-	dsl7 := "[defaults]\nquestions: 7\n\n[scheme]\ntype: roundrobin\nteams_in_group: 4\n"
+	dsl7 := "[defaults]\nquestions: 7\n\n[scheme]\nkind: roundrobin\ngroup_size: 4\n"
 	if resp := post(settingsPath, url.Values{"title": {"Брейн"}, "brain_dsl": {dsl7}}); resp.Code != http.StatusSeeOther {
 		t.Fatalf("recompile status = %d, body %s", resp.Code, resp.Body.String())
 	}
@@ -85,7 +85,7 @@ select state_json ->> '$.teams[0].rows[0].mark' from matches where game_id = ? a
 
 	// Splitting into two groups reuses code s1-g1-1 but reseats it (seed 1 vs
 	// seed 4 instead of 1 vs 2) — the started бой must block the edit.
-	dslShrink := "[defaults]\nquestions: 5\n\n[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 2\n"
+	dslShrink := "[defaults]\nquestions: 5\n\n[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 2\n"
 	resp := post(settingsPath, url.Values{"title": {"Брейн"}, "brain_dsl": {dslShrink}})
 	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), "s1-g1-1") {
 		t.Fatalf("shrink status = %d, want error page naming s1-g1-1; body head: %.200s", resp.Code, resp.Body.String())

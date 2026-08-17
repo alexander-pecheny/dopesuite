@@ -55,7 +55,7 @@ update matches set state_json = ? where game_id = ?`, odState, odGameID); err !=
 		t.Fatalf("seed od state: %v", err)
 	}
 
-	dsl := fmt.Sprintf("[defaults]\nquestions: 5\n\n[init]\nseed: %s\n\n[scheme]\ntype: roundrobin\nteams_in_group: 4\n", odCode)
+	dsl := fmt.Sprintf("[defaults]\nquestions: 5\n\n[init]\nseed: %s\n\n[scheme]\nkind: roundrobin\ngroup_size: 4\n", odCode)
 	createGame(url.Values{"game_type": {"brain"}, "brain_dsl": {dsl}})
 	var brainID int64
 	if err := srv.Eng().DB.QueryRow(`select id from games where fest_id = ? and game_type = 'brain'`, festID).Scan(&brainID); err != nil {

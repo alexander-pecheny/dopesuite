@@ -69,7 +69,7 @@ func TestStageGrainOfGroups(t *testing.T) {
 	festID, _ := scopedAPITestIDs(t, srv)
 	seedFestPlayers(t, srv.Eng().DB, festID, 18)
 
-	dsl := "[defaults]\nvenues: 2\n\n[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 9\nmatch_size: 3\nthemes: 2\n"
+	dsl := "[defaults]\nvenues: 2\n\n[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 9\nmatch_size: 3\nthemes: 2\n"
 	gameID := createSchemeGame(t, srv.Eng().DB, festID, "si", "Личная СИ", dsl)
 
 	stages := stageRows(t, srv.Eng().DB, gameID)
@@ -113,7 +113,7 @@ func TestStageGrainOfWaves(t *testing.T) {
 	festID, _ := scopedAPITestIDs(t, srv)
 	seedFestTeams(t, srv.Eng().DB, festID, 16)
 
-	dsl := "[defaults]\nvenues: 2\n\n[scheme]\ntype: single_elimination\nteams: 16\nmatch_size: 4\nwinning_places: 2\ntitle.r1: 1/4 финала\n"
+	dsl := "[defaults]\nvenues: 2\n\n[scheme]\nkind: single_elimination\nparticipants: 16\nmatch_size: 4\nwinning_places: 2\ntitle.r1: 1/4 финала\n"
 	gameID := createSchemeGame(t, srv.Eng().DB, festID, "ek", "ЭК", dsl)
 
 	stages := stageRows(t, srv.Eng().DB, gameID)
@@ -152,7 +152,7 @@ func TestRecompileRefreshesGrain(t *testing.T) {
 	db := srv.Eng().DB
 	seedFestTeams(t, db, festID, 16)
 
-	dsl := "[defaults]\nvenues: 4\n\n[scheme]\ntype: single_elimination\nteams: 16\nmatch_size: 4\nwinning_places: 2\n"
+	dsl := "[defaults]\nvenues: 4\n\n[scheme]\nkind: single_elimination\nparticipants: 16\nmatch_size: 4\nwinning_places: 2\n"
 	gameID := createSchemeGame(t, db, festID, "ek", "ЭК", dsl)
 
 	// Blank the coordinates the way a pre-v21 game carries them.

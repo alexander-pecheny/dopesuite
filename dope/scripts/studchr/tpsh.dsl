@@ -3,16 +3,16 @@ venues: 6
 
 [scheme]
 title: Письменный отбор
-type: flat
+kind: flat
 letters: false
-teams: 91
+participants: 91
 themes: 10
-proceeding_teams: 24
+proceeding_participants: 24
 sorting: [total, plus, taken50, taken40, taken30, taken20, taken10]
 ---
 title: Плей-офф
-type: single_elimination
-teams: 24
+kind: single_elimination
+participants: 24
 match_size: 4
 winning_places: 2
 rounds: 2

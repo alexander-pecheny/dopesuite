@@ -95,21 +95,12 @@ const (
 
 var canonOrder = []string{"points", "h2h", "taken", "diff"}
 
-// Спеллинги, которые DSL принимал раньше и продолжает принимать.
-var rrMetricAliases = map[string]string{"head2head": "h2h"}
-
-// На пересеве points исторически значит «сумма мест по возрастанию» — это
-// алиас, а не метрика, поэтому он разворачивается в правило целиком.
-var reseedMetricAliases = map[string]store.SchemeSortRule{
-	"points": {Metric: "place_sum", Dir: "asc"},
-}
-
-// Метрики, которые всегда меньше-лучше: место и жребий.
+// Metrics where less is better: a place, a lot, a loss.
 var ascendingMetrics = map[string]bool{"place_sum": true, "draw": true, "place": true, "losses": true}
 
-// rankable — всё, по чему в этой игре можно сортировать этап данного Kind: что
-// объявил Протокол, что добавляет Ranker этого Kind, и что определили правила
-// подсчёта самой схемы.
+// rankable is everything a stage of this Kind may sort by in this game: what
+// the Protocol declares, what the Kind's Ranker adds, and what the scheme's own
+// scoring rules define.
 func (c *compiler) rankable(kind string) map[string]bool {
 	names := map[string]bool{}
 	for _, name := range protocol.Metrics(c.in.GameType) {
@@ -226,15 +217,33 @@ func BoutLetter(n int) string {
 
 // --- vocabulary ------------------------------------------------------------
 
-var blockKeys = map[string]bool{
-	"type": true, "title": true, "slug": true, "groups": true, "teams_in_group": true, "teams": true,
-	"proceeding_teams": true, "reseed": true, "sorting": true, "points": true,
-	"venues": true, "bronze": true, "stats_from": true, "best_of": true,
-	"match_size": true, "winning_places": true, "rounds": true, "letters": true,
+// Every block takes these; each Kind adds its own below. A key a Kind does not
+// read is refused, so nothing is dropped on the floor.
+var commonKeys = []string{"kind", "title", "venues", "sorting", "reseed", "stats_from", "letters", "proceeding_participants"}
+
+var kindKeys = map[string][]string{
+	kindFlat: {"participants"},
+	kindRR:   {"groups", "group_size", "match_size", "rounds", "points", "slug"},
+	kindSE:   {"participants", "match_size", "winning_places", "rounds", "bronze", "best_of"},
+	kindDE:   {"groups", "group_size", "participants", "match_size", "winning_places"},
 }
+
+// roundKeys take a round suffix (`title.final`, `venues.r2`); a Protocol
+// param does too. bout./standings. suffixes are metric names (scoring rules).
+var roundKeys = []string{"venues", "best_of", "match_size", "title", "bout", "standings"}
 
 var defaultsKeys = map[string]bool{"venues": true, "sorting": true, "points": true}
 var initKeys = map[string]bool{"seed": true, "sorting": true}
+
+func keySet(lists ...[]string) map[string]bool {
+	set := map[string]bool{}
+	for _, list := range lists {
+		for _, key := range list {
+			set[key] = true
+		}
+	}
+	return set
+}
 
 func (c *compiler) protocolConfigKey(base string) (string, bool) {
 	for _, param := range protocol.Params(c.in.GameType) {
@@ -246,35 +255,37 @@ func (c *compiler) protocolConfigKey(base string) (string, bool) {
 }
 
 func (c *compiler) checkKeys() error {
+	params := map[string]bool{}
+	for _, param := range protocol.Params(c.in.GameType) {
+		params[param.Key] = true
+	}
 	for key, v := range c.doc.Defaults.Values {
-		if _, isParam := c.protocolConfigKey(key); !defaultsKeys[key] && !isParam {
-			return errAt(v.Line, "неизвестный ключ %s в [defaults]", key)
+		if !defaultsKeys[key] && !params[key] {
+			return errAt(v.Line, "неизвестный ключ %s в [defaults] (есть %s)", key, strings.Join(sortedNames(keySet(sortedNames(defaultsKeys), sortedNames(params))), ", "))
 		}
 	}
 	for key, v := range c.doc.Init.Values {
 		if !initKeys[key] {
-			return errAt(v.Line, "неизвестный ключ %s в [init]", key)
+			return errAt(v.Line, "неизвестный ключ %s в [init] (есть %s)", key, strings.Join(sortedNames(initKeys), ", "))
 		}
 	}
 	for _, blk := range c.doc.Blocks {
+		kind, _ := blk.Str("kind")
+		if _, ok := kindKeys[kind]; !ok {
+			continue // expandBlock names the kind it does not know
+		}
+		known := keySet(commonKeys, kindKeys[kind], sortedNames(params))
+		dotted := keySet(roundKeys, sortedNames(params))
 		for key, v := range blk.Values {
-			base, _, dotted := strings.Cut(key, ".")
-			if dotted {
-				if _, isParam := c.protocolConfigKey(base); !isParam && base != "venues" && base != "best_of" &&
-					base != "match_size" && base != "title" && base != "bout" && base != "standings" {
-					return errAt(v.Line, "неизвестный ключ %s", key)
+			base, _, isDotted := strings.Cut(key, ".")
+			if isDotted {
+				if !dotted[base] {
+					return errAt(v.Line, "неизвестный ключ %s (раунд дописывают к %s)", key, strings.Join(sortedNames(dotted), ", "))
 				}
 				continue // round suffixes are validated by the block's kind
 			}
-			if _, isParam := c.protocolConfigKey(key); !blockKeys[key] && !isParam {
-				return errAt(v.Line, "неизвестный ключ %s", key)
-			}
-			// Only roundrobin reads it; anywhere else it would be silently
-			// dropped and the author would meet the s2-… URLs in production.
-			if key == "slug" {
-				if kind, _ := blk.Str("type"); kind != kindRR {
-					return errAt(v.Line, "slug умеет только roundrobin — у блока %s его вкладки кода не поменяют", kind)
-				}
+			if !known[key] {
+				return errAt(v.Line, "неизвестный ключ %s (есть %s)", key, strings.Join(sortedNames(known), ", "))
 			}
 		}
 	}
@@ -327,7 +338,7 @@ func (c *compiler) readVenues() error {
 		if groups, ok := blk.Int("groups"); ok && groups > need {
 			need = groups
 		}
-		if teams, ok := blk.Int("teams"); ok && teams/2 > need {
+		if teams, ok := blk.Int("participants"); ok && teams/2 > need {
 			need = teams / 2
 		}
 	}
@@ -544,9 +555,6 @@ func (c *compiler) rrOrder(blk Section) ([]string, error) {
 	order := make([]string, len(rules))
 	for i, rule := range rules {
 		metric := rule.Metric
-		if alias, ok := rrMetricAliases[metric]; ok {
-			metric = alias
-		}
 		if !known[metric] {
 			return nil, errAt(blk.Line, "sorting: %s не считается — ни протокол, ни правила подсчёта такой метрики не дают (есть %s)",
 				rule.Metric, strings.Join(sortedNames(known), ", "))
@@ -610,17 +618,17 @@ func (c *compiler) blockEntrants(index int, blk Section, groups, size int) ([][]
 	total := groups * size
 	if index == 0 {
 		if len(c.in.Entrants) > 0 && len(c.in.Entrants) != total {
-			return nil, errAt(blk.Line, "схеме нужно %d команд, а посеяно %d", total, len(c.in.Entrants))
+			return nil, errAt(blk.Line, "схеме нужно %d участников, а посеяно %d", total, len(c.in.Entrants))
 		}
 		return c.dealSeeds(groups, size), nil
 	}
 	prev := c.prev
 	if prev.proceeding <= 0 {
-		return nil, errAt(blk.Line, "предыдущему блоку нужен proceeding_teams, чтобы продолжить схему")
+		return nil, errAt(blk.Line, "предыдущему блоку нужен proceeding_participants, чтобы продолжить схему")
 	}
 	supply := len(prev.groups) * prev.proceeding
 	if supply != total {
-		return nil, errAt(blk.Line, "из предыдущего блока выходят %d команд, а блоку нужно %d", supply, total)
+		return nil, errAt(blk.Line, "из предыдущего блока выходят %d участников, а блоку нужно %d", supply, total)
 	}
 	if incoming, _ := blockReseedSpec(blk); incoming {
 		return c.dealReseed(index, blk, groups, size)
@@ -673,10 +681,6 @@ func (c *compiler) reseedSortRules(blk Section) ([]store.SchemeSortRule, error) 
 	}
 	known := c.rankable("reseed")
 	for _, token := range tokens {
-		if alias, ok := reseedMetricAliases[token.Metric]; ok {
-			rules = append(rules, alias)
-			continue
-		}
 		if !known[token.Metric] {
 			return nil, errAt(blk.Line, "sorting: %s не считается на пересеве — ни протокол, ни правила подсчёта такой метрики не дают (есть %s)",
 				token.Metric, strings.Join(sortedNames(known), ", "))
@@ -755,8 +759,12 @@ func (c *compiler) reseedSources(index int, blk Section, otherwise, self []strin
 	var sources []string
 	for _, token := range tokens {
 		var n int
-		if _, err := fmt.Sscanf(token, "s%d", &n); err != nil || n < 1 || n > index+1 || (n == index+1 && self == nil) {
-			return nil, errAt(blk.Values["stats_from"].Line, "stats_from: %s — доступны блоки s1..s%d", token, index)
+		last := index
+		if self != nil {
+			last++
+		}
+		if _, err := fmt.Sscanf(token, "s%d", &n); err != nil || n < 1 || n > last {
+			return nil, errAt(blk.Values["stats_from"].Line, "stats_from: %s — доступны блоки s1..s%d", token, last)
 		}
 		if n == index+1 {
 			sources = append(sources, self...)
@@ -766,7 +774,6 @@ func (c *compiler) reseedSources(index int, blk Section, otherwise, self []strin
 	}
 	return sources, nil
 }
-
 
 // prevPlaceSlots is the reseed's eligibility set: the previous block's
 // proceeding places.
@@ -791,7 +798,7 @@ func reseedRankSlot(stage string, rank int) store.SchemeSlot {
 // previous group, then a snake deal of its ranks.
 func (c *compiler) dealReseed(index int, blk Section, groups, size int) ([][]store.SchemeSlot, error) {
 	if supply := len(c.prev.groups) * c.prev.proceeding; supply != groups*size {
-		return nil, errAt(blk.Line, "из предыдущего блока выходят %d команд, а блоку нужно %d", supply, groups*size)
+		return nil, errAt(blk.Line, "из предыдущего блока выходят %d участников, а блоку нужно %d", supply, groups*size)
 	}
 	sources, err := c.reseedSources(index, blk, c.prevStageCodes(), nil)
 	if err != nil {
@@ -821,7 +828,7 @@ func (c *compiler) dealDeterministic(blk Section, groups, size int) ([][]store.S
 		return errAt(blk.Line, "%s — добавьте reseed: true", why)
 	}
 	if prev.proceeding != 2 {
-		return nil, needsReseed("детерминированная рассадка определена для proceeding_teams: 2")
+		return nil, needsReseed("детерминированная рассадка определена для proceeding_participants: 2")
 	}
 	if rows*groups != sourceGroups || groups%2 != 0 {
 		return nil, needsReseed("нет шаблона рассадки из этих групп")
@@ -861,7 +868,7 @@ func (c *compiler) expandBlock(index int) error {
 			return errAt(v.Line, "stats_from работает только вместе с reseed")
 		}
 	}
-	kind, _ := blk.Str("type")
+	kind, _ := blk.Str("kind")
 	firstStage := len(c.scheme.Stages)
 	var out *blockOutputs
 	var err error
@@ -879,7 +886,11 @@ func (c *compiler) expandBlock(index int) error {
 	case "":
 		return errAt(blk.Line, "блоку нужен type")
 	default:
-		return errAt(blk.Line, "неизвестный type %s", kind)
+		kinds := make(map[string]bool, len(kindKeys))
+		for name := range kindKeys {
+			kinds[name] = true
+		}
+		return errAt(blk.Line, "неизвестный kind %s (есть %s)", kind, strings.Join(sortedNames(kinds), ", "))
 	}
 	if err != nil {
 		return err
@@ -891,7 +902,7 @@ func (c *compiler) expandBlock(index int) error {
 		}
 	}
 	c.blockStages = append(c.blockStages, emitted)
-	if proceeding, ok := blk.Int("proceeding_teams"); ok {
+	if proceeding, ok := blk.Int("proceeding_participants"); ok {
 		out.proceeding = proceeding
 	}
 	c.prev = out
@@ -902,10 +913,10 @@ func (c *compiler) expandBlock(index int) error {
 // ОД and КСИ have always been this shape in the database; the Kind only lets a
 // scheme say so.
 func (c *compiler) expandFlat(index int, blk Section) (*blockOutputs, error) {
-	teams, ok := blk.Int("teams")
+	teams, ok := blk.Int("participants")
 	if !ok {
 		if len(c.in.Entrants) == 0 {
-			return nil, errAt(blk.Line, "flat: нужен teams")
+			return nil, errAt(blk.Line, "flat: нужен participants")
 		}
 		teams = len(c.in.Entrants)
 	}
@@ -915,7 +926,7 @@ func (c *compiler) expandFlat(index int, blk Section) (*blockOutputs, error) {
 	if err := rejectRoundReseed(blk); err != nil {
 		return nil, err
 	}
-	proceeding, _ := blk.Int("proceeding_teams")
+	proceeding, _ := blk.Int("proceeding_participants")
 	venues, err := c.blockVenues(blk, nil)
 	if err != nil {
 		return nil, err
@@ -1034,16 +1045,16 @@ func (c *compiler) groupTitle(blk Section, group, groups int) string {
 }
 
 func (c *compiler) expandRoundRobin(index int, blk Section) (*blockOutputs, error) {
-	size, ok := blk.Int("teams_in_group")
+	size, ok := blk.Int("group_size")
 	if !ok {
-		return nil, errAt(blk.Line, "roundrobin: нужен teams_in_group")
+		return nil, errAt(blk.Line, "roundrobin: нужен group_size")
 	}
 	groups, ok := blk.Int("groups")
 	if !ok {
 		groups = 1
 	}
 	if groups < 1 || size < 2 {
-		return nil, errAt(blk.Line, "roundrobin: groups ≥ 1, teams_in_group ≥ 2")
+		return nil, errAt(blk.Line, "roundrobin: groups ≥ 1, group_size ≥ 2")
 	}
 	if err := c.rejectRoundKeys(blk, nil); err != nil {
 		return nil, err
@@ -1135,26 +1146,6 @@ func (c *compiler) expandRoundRobin(index int, blk Section) (*blockOutputs, erro
 	return out, nil
 }
 
-func seRoundCode(remaining int) string {
-	switch remaining {
-	case 2:
-		return "final"
-	case 4:
-		return "semifinal"
-	}
-	return fmt.Sprintf("r%d", remaining)
-}
-
-// seRoundNames is the round's canonical code plus its r{N} alias — both are
-// accepted in every round-addressing key (questions.r4 ≡ questions.semifinal).
-func seRoundNames(remaining int) []string {
-	code := seRoundCode(remaining)
-	if remaining == 2 || remaining == 4 {
-		return []string{code, fmt.Sprintf("r%d", remaining)}
-	}
-	return []string{code}
-}
-
 func seRoundTitle(remaining int) string {
 	switch remaining {
 	case 2:
@@ -1166,9 +1157,9 @@ func seRoundTitle(remaining int) string {
 }
 
 func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, error) {
-	teams, ok := blk.Int("teams")
+	teams, ok := blk.Int("participants")
 	if !ok {
-		return nil, errAt(blk.Line, "single_elimination: нужен teams")
+		return nil, errAt(blk.Line, "single_elimination: нужен participants")
 	}
 	winning := 1
 	if v, ok := blk.Int("winning_places"); ok {
@@ -1429,7 +1420,7 @@ func (c *compiler) seFirstRound(index int, blk Section, opening elimRound, winni
 	teams, count := opening.entering, opening.bouts
 	if index == 0 {
 		if len(c.in.Entrants) > 0 && len(c.in.Entrants) != teams {
-			return nil, errAt(blk.Line, "схеме нужно %d команд, а посеяно %d", teams, len(c.in.Entrants))
+			return nil, errAt(blk.Line, "схеме нужно %d участников, а посеяно %d", teams, len(c.in.Entrants))
 		}
 		draw := elimDraw(teams, count, opening.size, winning)
 		first := make([][]store.SchemeSlot, count)
@@ -1442,7 +1433,7 @@ func (c *compiler) seFirstRound(index int, blk Section, opening elimRound, winni
 	}
 	prev := c.prev
 	if prev.proceeding <= 0 {
-		return nil, errAt(blk.Line, "предыдущему блоку нужен proceeding_teams, чтобы продолжить схему")
+		return nil, errAt(blk.Line, "предыдущему блоку нужен proceeding_participants, чтобы продолжить схему")
 	}
 	// A пересев makes the бой's size irrelevant: it hands over a ranking, and the
 	// snake deals that ranking into бои of any size — ТПШ opens on four seats.
@@ -1519,8 +1510,8 @@ func (c *compiler) expandDoubleElim(index int, blk Section) (*blockOutputs, erro
 		size = v
 	}
 	groups, hasGroups := blk.Int("groups")
-	perGroup, hasSize := blk.Int("teams_in_group")
-	teams, hasTeams := blk.Int("teams")
+	perGroup, hasSize := blk.Int("group_size")
+	teams, hasTeams := blk.Int("participants")
 	switch {
 	case hasGroups && hasSize:
 	case hasGroups && hasTeams:
@@ -1530,7 +1521,7 @@ func (c *compiler) expandDoubleElim(index int, blk Section) (*blockOutputs, erro
 	case hasTeams && size == 2 && winning == 1:
 		// The classic pod: four to a group unless the scheme says otherwise.
 		if teams%4 != 0 {
-			return nil, errAt(blk.Line, "double_elimination: нужен groups (или teams, кратный 4)")
+			return nil, errAt(blk.Line, "double_elimination: нужен groups (или participants, кратный 4)")
 		}
 		groups, perGroup = teams/4, 4
 	case hasGroups && !hasTeams && !hasSize && size == 2 && winning == 1:
@@ -1538,13 +1529,13 @@ func (c *compiler) expandDoubleElim(index int, blk Section) (*blockOutputs, erro
 	case hasTeams:
 		groups, perGroup = 1, teams
 	default:
-		return nil, errAt(blk.Line, "double_elimination: нужен teams (или groups и teams_in_group)")
+		return nil, errAt(blk.Line, "double_elimination: нужен participants (или groups и group_size)")
 	}
 	if groups < 1 || perGroup < 2 {
 		return nil, errAt(blk.Line, "double_elimination: %d групп по %d — так не бывает", groups, perGroup)
 	}
 	proceeding := 1
-	if v, ok := blk.Int("proceeding_teams"); ok {
+	if v, ok := blk.Int("proceeding_participants"); ok {
 		proceeding = v
 	}
 	// A пересев hands the block a ranking, so its opening round deals that
@@ -1866,7 +1857,10 @@ func (c *compiler) rejectRoundKeys(blk Section, rounds []string) error {
 			continue // a scoring rule's suffix is a metric name, not a round
 		}
 		if !known[suffix] {
-			return errAt(v.Line, "%s: в этом блоке нет раунда %s", key, suffix)
+			return errAt(v.Line, "%s: в этом блоке нет раунда %s (есть %s)", key, suffix, strings.Join(sortedNames(known), ", "))
+		}
+		if prefix == "match_size" && !strings.HasPrefix(suffix, "r") {
+			return errAt(v.Line, "%s: размер боя задаётся по номеру раунда, match_size.r%s", key, "N")
 		}
 	}
 	return nil
