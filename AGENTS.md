@@ -25,6 +25,11 @@ dope/        tournament management (EK/OD/KSI) + realtime web UI
   `vps2day-ee`. Each app's `just deploy` calls it with its own targets.
   If you are already on the target production host, do **not** `ssh` to it —
   run the commands directly.
+- **Production deploys come from `main` only. NEVER deploy a branch to prod.**
+  Merge first, then deploy from `main`. A branch may go to the staging targets
+  (`xytest`, `dopetest`; `just deploy-staging`) to live-test a feature. On
+  2026-08-16 a branch deploy overwrote a fix that lived only on another branch
+  and put a fixed bug back into xy prod.
 - Full pre-merge history is preserved under each subdirectory (git log/blame
   work with subdir paths).
 - Plan of record: when the DSL engine matures, `dopeuikit/ui` (engine only,
