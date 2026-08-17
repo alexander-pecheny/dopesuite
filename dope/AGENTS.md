@@ -194,8 +194,8 @@ Always reuse existing functions and classes before creating new ones
 
 ## Deployment Config
 Run `just deploy` to deploy, it already handles everything that's needed.
-Prod deploys come from `main` ONLY — merge the branch first, never deploy a
-branch to prod. A branch may go to staging (`just deploy-staging` → dopetest)
+Prod deploys come from `main` ONLY — merge the branch, push `main` to origin,
+then deploy; never deploy a branch to prod. A branch may go to staging (`just deploy-staging` → dopetest)
 for a live test.
 
 ## Production Server

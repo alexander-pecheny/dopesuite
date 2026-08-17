@@ -407,8 +407,8 @@ just test           # go test + deno frontend tests
 #   run xy — only to run those tests.
 just pre-commit     # fmt + vet + tidy-check + test
 just deploy-staging # a branch may go to xytest.pecheny.me for a live test
-just deploy         # prod: from `main` ONLY, after the branch is merged — never
-                    #   from a branch (a branch deploy once undid another's fix)
+just deploy         # prod: from `main` ONLY, merged AND pushed to origin first —
+                    #   never from a branch (a branch deploy once undid another's fix)
 ```
 Server listens on `$PORT` (default 9673); DB at `$XY_DB` (default xy.db).
 Config via `.env` (see `.env.example`). Telegram register/login needs

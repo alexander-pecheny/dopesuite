@@ -25,8 +25,9 @@ dope/        tournament management (EK/OD/KSI) + realtime web UI
   `vps2day-ee`. Each app's `just deploy` calls it with its own targets.
   If you are already on the target production host, do **not** `ssh` to it —
   run the commands directly.
-- **Production deploys come from `main` only. NEVER deploy a branch to prod.**
-  Merge first, then deploy from `main`. A branch may go to the staging targets
+- **Production deploys come from `main` only, and from a `main` that is
+  pushed. NEVER deploy a branch to prod.** Merge, `git push origin main`, then
+  deploy from `main`. A branch may go to the staging targets
   (`xytest`, `dopetest`; `just deploy-staging`) to live-test a feature. On
   2026-08-16 a branch deploy overwrote a fix that lived only on another branch
   and put a fixed bug back into xy prod.
