@@ -222,8 +222,10 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        session): drag-reorder, card detail, timeline, labels,
                        the card editor's tools row (under the Просмотр/Поля/Текст tabs):
                        ударение types a stress accent (U+0301) into whichever field the
-                       caret was last in — a button steals focus on mousedown, so the field
-                       is remembered on focusin, not read at click time; типограф (typo.ts, in
+                       caret was last in — the tools row swallows mousedown so the field
+                       keeps focus (the Автор tag input commits on blur, issue #63), and the
+                       field is still remembered on focusin for a card opened with nothing
+                       focused; типограф (typo.ts, in
                        the browser — every version of the card, offline-capable, nothing posted)
                        and, on Текст only, →.4s (/api/import/text) rewrite the WHOLE draft,
                        so they need no caret — in Текст the result is typed back into the
