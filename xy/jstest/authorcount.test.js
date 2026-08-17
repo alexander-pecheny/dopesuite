@@ -56,9 +56,10 @@ test("only the first version's authors count", () => {
   assert.deepEqual(countAuthors([two], "1", false).rows.map((x) => x.name), ["Вася"]);
 });
 
-test("formatShare keeps one decimal", () => {
-  assert.equal(formatShare(2), "2");
-  assert.equal(formatShare(2.5), "2.5");
-  assert.equal(formatShare(1 / 3), "0.3");
-  assert.equal(formatShare(2 / 3 + 1), "1.7");
+test("formatShare is a percentage of the questions counted, one decimal", () => {
+  assert.equal(formatShare(15, 15), "100%");
+  assert.equal(formatShare(2.5, 6), "41.7%");
+  assert.equal(formatShare(0.5, 4), "12.5%");
+  assert.equal(formatShare(1 / 3, 3), "11.1%");
+  assert.equal(formatShare(0, 0), "");
 });

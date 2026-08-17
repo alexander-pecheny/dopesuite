@@ -40,7 +40,7 @@ The record that a question was played at a Test Session. A Card's own link to a 
 _Avoid_: mark, test mark, session tag
 
 **Author Share (Доля)**:
-An author's 1/n split of a co-authored question, summed over the questions of a tour up to a chosen number — what a fee is divided by. Sits beside the plain count (one per question an author is on); the two differ only where a question has more than one author. Two spellings are one author when they fold like a search does (stress marks, spaces, case, ё/е). Нулевые are left out unless asked for: they are played, but usually not paid.
+An author's 1/n split of a co-authored question, summed over the questions of a tour up to a chosen number and shown as a percentage of them — what a fee is divided by. Sits beside the plain count (one per question an author is on); the two differ only where a question has more than one author. Two spellings are one author when they fold like a search does (stress marks, spaces, case, ё/е). Нулевые are left out unless asked for: they are played, but usually not paid.
 _Avoid_: counting a co-authored question once per author and calling that a share
 
 **Tester List**:

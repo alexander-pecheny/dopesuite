@@ -1,6 +1,7 @@
 // authorcount.ts — «Счётчик авторов»: per author, how many of a tour's questions
 // up to a chosen number carry their name (count) and their 1/n split of
-// co-authored ones (share) — the share is what a fee is divided by.
+// co-authored ones (share, shown as a percentage of the tour) — the share is
+// what a fee is divided by.
 
 import { xyChgk, type ChgkCard } from "./chgk.js";
 import { xyFind } from "./find.js";
@@ -64,8 +65,8 @@ export function countAuthors(cards: ReadonlyArray<ChgkCard>, upTo: string, inclu
   return { rows, unauthored: unauthored.count ? unauthored : null, questions: picked.length, hasZero, cutoffFound: end >= 0 };
 }
 
-export function formatShare(share: number): string {
-  return String(Math.round(share * 10) / 10);
+export function formatShare(share: number, questions: number): string {
+  return questions ? `${Math.round((share / questions) * 1000) / 10}%` : "";
 }
 
 export const xyAuthorCount = { countAuthors, formatShare };

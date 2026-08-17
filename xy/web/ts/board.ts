@@ -3649,8 +3649,8 @@ function openAuthorCount(list: BoardList): void {
     if (!r.cutoffFound) { box.append(el("p", { class: "label-empty", text: "Нет такого вопроса." })); return; }
     const rows = r.unauthored ? [...r.rows, r.unauthored] : r.rows;
     const cells = (row: { name: string; count: number; share: number; numbers: string[] }): string[] =>
-      [row.name, String(row.count), xyAuthorCount.formatShare(row.share), row.numbers.join(", ")];
-    const total = ["Всего", String(rows.reduce((n, row) => n + row.count, 0)), String(r.questions), ""];
+      [row.name, String(row.count), xyAuthorCount.formatShare(row.share, r.questions), row.numbers.join(", ")];
+    const total = ["Всего", String(rows.reduce((n, row) => n + row.count, 0)), xyAuthorCount.formatShare(r.questions, r.questions), ""];
     const tr = (vals: string[], tag: "th" | "td", cls?: string): HTMLElement =>
       el("tr", cls ? { class: cls } : {}, ...vals.map((v) => el(tag, { text: v })));
     box.append(el("table", { class: "data-table author-count-table" },
