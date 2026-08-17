@@ -846,10 +846,15 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   byId("cardPreviewBody").addEventListener("dblclick", () => setCardView(lastEditView));
 
   // ---- edit tools (the row under the tabs) ----
-  // ударение types into the field the user was editing, which by the time the click
-  // lands is no longer the focused one (a button takes focus on mousedown) — so
-  // remember the last field the caret was in. The Поля view rebuilds its inputs on
-  // every view switch, hence the isConnected check when using it.
+  // A button takes focus on mousedown, and the Автор tag input commits what is
+  // typed on blur — so «Ва» + ударение became a chip and a lone accent (issue
+  // #63). The tools keep the caret where it is; the phone keyboard stays up too.
+  for (const id of ["cardInsStress", "cardTypo", "cardTo4s"]) {
+    byId(id).addEventListener("mousedown", (e) => e.preventDefault());
+  }
+  // Still remember the last field the caret was in: the card may have just
+  // opened with nothing focused. The Поля view rebuilds its inputs on every view
+  // switch, hence the isConnected check when using it.
   let lastEditField: HTMLTextAreaElement | HTMLInputElement | null = null;
   for (const panel of ["cardViewFields", "cardViewText"]) {
     byId(panel).addEventListener("focusin", (e) => {

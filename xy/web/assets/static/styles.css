@@ -1837,6 +1837,15 @@ body {
 /* «Найти и заменить» → the occurrence review: a card heading with its own tick,
    then one row per occurrence with the context that makes it a decision. */
 .replace-hits { display: flex; flex-direction: column; gap: var(--space-1); max-height: 50vh; overflow-y: auto; }
+
+/* «Счётчик авторов»: a phone-wide table (the kit's 420px floor would overflow
+   the modal), the numbers column carrying the wrap. */
+.author-count { overflow-x: auto; }
+.author-count-table { min-width: 0; }
+.author-count-table th:nth-child(2), .author-count-table th:nth-child(3),
+.author-count-table td:nth-child(2), .author-count-table td:nth-child(3) { text-align: right; white-space: nowrap; }
+.author-count-total td { font-weight: var(--fw-semibold); border-bottom: 0; }
+#authorCountUpTo { width: 6em; }
 .replace-card {
   display: flex;
   align-items: baseline;

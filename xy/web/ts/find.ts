@@ -187,4 +187,10 @@ export function snippet(text: string, spans: ReadonlyArray<Span>, radius = 40): 
   };
 }
 
-export const xyFind = { prepare, searchIn, searchSpans, replaceSpans, applySpans, snippet };
+// foldSearch is the search's forgiving comparison as a key: what two strings
+// must agree on to be the same to an editor (accents, quotes, dashes, ё, case).
+export function foldSearch(text: string): string {
+  return foldQuery(text, SEARCH_FOLD);
+}
+
+export const xyFind = { prepare, searchIn, searchSpans, replaceSpans, applySpans, snippet, foldSearch };

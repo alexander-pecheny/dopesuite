@@ -472,6 +472,7 @@ var IconArrowLeftRight = Attr{Name: "icon", Value: "arrow-left-right"}
 var IconArrowUp = Attr{Name: "icon", Value: "arrow-up"}
 var IconArrowUpDown = Attr{Name: "icon", Value: "arrow-up-down"}
 var IconBell = Attr{Name: "icon", Value: "bell"}
+var IconCalculator = Attr{Name: "icon", Value: "calculator"}
 var IconCheck = Attr{Name: "icon", Value: "check"}
 var IconClipboard = Attr{Name: "icon", Value: "clipboard"}
 var IconCloudDownload = Attr{Name: "icon", Value: "cloud-download"}

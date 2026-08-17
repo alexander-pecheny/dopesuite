@@ -27,6 +27,7 @@ import { type MassAction, plural, xyMass } from "./massaction.js";
 import { namedUrl, revokeNamedUrl } from "./namedurl.js";
 import { xySearchIndex } from "./searchindex.js";
 import { xyFind } from "./find.js";
+import { xyAuthorCount } from "./authorcount.js";
 import type { Span as FindSpan } from "./find.js";
 import type { DataKey } from "./crypto.js";
 import type { SyncStatus } from "./sync.js";
@@ -936,6 +937,7 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
     }
     items.push(
       { icon: icon("users"), label: "Список тестеров", onClick: () => openTesterList(list) },
+      { icon: icon("calculator"), label: "Счётчик авторов", onClick: () => openAuthorCount(list) },
       { icon: icon("arrow-left-right"), label: "Переместить список…", onClick: () => openMoveList(list) },
       { icon: icon("pencil"), label: "Переименовать список", onClick: () => { void renameList(list); } },
     );
@@ -3626,6 +3628,51 @@ function openTesterList(list: BoardList): void {
 const testerListOverlay = byId("testerListOverlay");
 byId("testerListClose").addEventListener("click", () => { overlayStack.pop(); });
 testerListOverlay.addEventListener("pointerdown", (e) => { if (e.target === testerListOverlay) overlayStack.pop(); });
+
+// ---- «Счётчик авторов» ----
+
+function openAuthorCount(list: BoardList): void {
+  const overlay = byId("authorCountOverlay");
+  const box = byId("authorCount");
+  const upTo = byId<HTMLInputElement>("authorCountUpTo");
+  const zero = byId<HTMLInputElement>("authorCountZero");
+  const zeroRow = zero.closest("label") as HTMLElement;
+  const cards = exportScope(list).cards;
+  const numbers = xyChgk.numberQuestionCards(cards).filter((n): n is string => n != null);
+  upTo.value = numbers[numbers.length - 1] || "";
+  zero.checked = false;
+
+  const redraw = (): void => {
+    const r = xyAuthorCount.countAuthors(cards, upTo.value, zero.checked);
+    zeroRow.hidden = !r.hasZero;
+    box.replaceChildren();
+    if (!r.cutoffFound) { box.append(el("p", { class: "label-empty", text: "Нет такого вопроса." })); return; }
+    const rows = r.unauthored ? [...r.rows, r.unauthored] : r.rows;
+    const cells = (row: { name: string; count: number; share: number; numbers: string[] }): string[] =>
+      [row.name, String(row.count), xyAuthorCount.formatShare(row.share, r.questions), row.numbers.join(", ")];
+    const total = ["Всего", String(rows.reduce((n, row) => n + row.count, 0)), xyAuthorCount.formatShare(r.questions, r.questions), ""];
+    const tr = (vals: string[], tag: "th" | "td", cls?: string): HTMLElement =>
+      el("tr", cls ? { class: cls } : {}, ...vals.map((v) => el(tag, { text: v })));
+    box.append(el("table", { class: "data-table author-count-table" },
+      el("thead", {}, tr(["Автор", "Вопросов", "Доля", "Номера"], "th")),
+      el("tbody", {}, ...rows.map((row) => tr(cells(row), "td")), tr(total, "td", "author-count-total"))));
+    const copy = el("button", { class: "input", type: "button", onclick: () => {
+      void cardDetail.copyPlain([...rows.map(cells), total].map((v) => v.join("\t")).join("\n"));
+    } }, ...iconed("clipboard", "Скопировать"));
+    box.append(el("div", { class: "sess-invite-box" }, copy));
+  };
+  upTo.oninput = redraw;
+  zero.onchange = redraw;
+  redraw();
+
+  byId("authorCountMessage").textContent = "";
+  overlay.hidden = false;
+  overlayStack.open({ el: overlay, close: () => { overlay.hidden = true; } });
+}
+
+const authorCountOverlay = byId("authorCountOverlay");
+byId("authorCountClose").addEventListener("click", () => { overlayStack.pop(); });
+authorCountOverlay.addEventListener("pointerdown", (e) => { if (e.target === authorCountOverlay) overlayStack.pop(); });
 
 // ---- the Тесты panel + the label editor ----
 
