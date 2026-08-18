@@ -14,6 +14,13 @@ export interface RankedCard extends Ranked { id: number }
 export const byRank = (a: Ranked, b: Ranked): number =>
   a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0;
 
+// boardOrder walks lists in board order and cards by rank within them — the
+// order the reader sees, which a preview, an index or a bulk move must keep.
+export function boardOrder<C extends Ranked & { listId: number }>(lists: ReadonlyArray<Ranked & { id: number }>, cards: ReadonlyArray<C>): C[] {
+  const order = new Map([...lists].sort(byRank).map((l, i) => [l.id, i]));
+  return [...cards].sort((a, b) => (order.get(a.listId) ?? 0) - (order.get(b.listId) ?? 0) || byRank(a, b));
+}
+
 export interface VExtent { top: number; height: number }
 export interface HExtent { left: number; width: number }
 

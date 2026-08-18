@@ -325,21 +325,11 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
 
   -- «Вопросы тестировали» for ONE tour: each session with how much of the tour
   -- it saw, so the custom (name those who tested most of it) can be applied
-  modal id="testerListOverlay" icon="users" label="Список тестеров" title="Список тестеров" variant="lists" done="Готово" doneid="testerListClose"
-    hint "По умолчанию отмечены те, кто видел больше половины вопросов из списка."
-    mount id="testerList" kind="tester-list"
-    message id="testerListMessage"
-
-  -- «Счётчик авторов»: who wrote how much of a tour up to a question — the 1/n
-  -- split is what a fee is divided by, and нулевые are usually not paid
-  modal id="authorCountOverlay" icon="users" label="Счётчик авторов" title="Счётчик авторов" variant="lists" done="Готово" doneid="authorCountClose"
-    row gap="sm" align="center" wrap
-      muted "До вопроса"
-      textfield id="authorCountUpTo" placeholder="номер" inputmode="numeric" autocomplete="off" spellcheck="false"
-      muted "включительно"
-      checkbox id="authorCountZero" hidden " считать нулевые"
-    mount id="authorCount" kind="author-count"
-    message id="authorCountMessage"
+  -- the panel shell: one modal for the panels that build their body in TS
+  -- (Список тестеров, Счётчик авторов) — panels.ts sets the title and the body
+  modal id="panelOverlay" label="Панель" title="Панель" variant="lists" done="Готово" doneid="panelClose"
+    mount id="panelBody" kind="panel-body"
+    message id="panelMessage"
 
   -- members / sharing overlay
   modal id="membersOverlay" label="Участники доски" title="Участники доски" done="Готово" doneid="membersClose"

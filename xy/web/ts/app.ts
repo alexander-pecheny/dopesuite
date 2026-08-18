@@ -66,6 +66,16 @@ function byId<T extends HTMLElement = HTMLElement>(id: string): T {
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
+// downloadBlob hands the browser a file to save under `filename`.
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = el("a", { href: url, download: filename });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
 // The header's sync badge combines a transient per-write state (saving/error)
 // with the persistent sync state (offline / queued edits), the latter first.
 export type WriteState = "saved" | "saving" | "error";
@@ -236,4 +246,4 @@ function wireGenPassphrase(button: HTMLElement, input: HTMLInputElement, generat
 
 export const xySizes = { DEFAULT: SIZES_DEFAULT, ...SIZES_RANGE, sanitize: sanitizeSizes, apply: applySizes };
 
-export const xyApp = { fetchJSON, fetchVoid, jpost, jpatch, jput, jdelete, escapeHtml, el, byId, errMsg, syncBadge, deriveTitle, requireLogin, onCmdEnter, wireGenPassphrase };
+export const xyApp = { fetchJSON, fetchVoid, jpost, jpatch, jput, jdelete, escapeHtml, el, byId, errMsg, downloadBlob, syncBadge, deriveTitle, requireLogin, onCmdEnter, wireGenPassphrase };

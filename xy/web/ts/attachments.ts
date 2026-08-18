@@ -519,10 +519,33 @@ async function removeAttachment(att: NamedAttachment, name: string): Promise<voi
 }
 
 
+  // appendImages resolves each wanted image to its decrypted bytes and appends it
+  // to fd as an "img" part — the export pack's and the handouts' upload. The
+  // cards' attachment lists are fetched in parallel, and the matched image
+  // bodies too. Returns the set of resolved names so the caller can prompt about
+  // any still missing.
+  async function appendImages(fd: FormData, cards: ReadonlyArray<{ id: number }>, wanted: Set<string>): Promise<Set<string>> {
+    const found = new Set<string>();
+    if (!wanted.size) return found;
+    const lists = await Promise.all(cards.map((c) => cardAttachments(c.id)));
+    const targets = gatherTargets(lists, wanted);
+    await Promise.all([...targets].map(async ([name, att]) => {
+      try {
+        const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
+        if (!res.ok) return;
+        const plain = await xyCrypto.decBytes(deps.mustDK(), new Uint8Array(await res.arrayBuffer()));
+        fd.append("img", new Blob([plain], { type: att.mime }), name);
+        found.add(name);
+      } catch (_) {}
+    }));
+    return found;
+  }
+
   return {
     cardAttachments,
     attachmentUrl,
     resolveImages,
+    appendImages,
     imageBlob,
     load: loadAttachments,
     imageNames: (): string[] => cardImageNames,

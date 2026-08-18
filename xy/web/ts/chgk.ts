@@ -1206,12 +1206,30 @@ function rawLine(b: Block): string {
   return b.text ? marker + " " + b.text : marker;
 }
 
+// imgName extracts the referenced filename from an (img …) run value: like
+// chgksuite's parseimg, the filename is the last whitespace token (the rest are
+// w=/h=/big/inline options).
+function imgName(val: unknown): string {
+  const toks = String(val).trim().split(/\s+/).filter(Boolean);
+  return toks.length ? toks[toks.length - 1] : "";
+}
+
 // imgInText returns the (img …) filename referenced in a string, or null.
 function imgInText(s: string | null | undefined): string | null {
   const m = /\(img\b([^)]*)\)/.exec(s || "");
-  if (!m) return null;
-  const toks = m[1].trim().split(/\s+/).filter(Boolean);
-  return toks.length ? toks[toks.length - 1] : "";
+  return m ? imgName(m[1]) : null;
+}
+
+// imageRefs collects every (img …) filename referenced across the cards.
+function imageRefs(cards: ReadonlyArray<{ desc: string }>): Set<string> {
+  const wanted = new Set<string>();
+  for (const c of cards) {
+    for (const m of (c.desc || "").matchAll(/\(img\b([^)]*)\)/g)) {
+      const name = imgName(m[1]);
+      if (name) wanted.add(name);
+    }
+  }
+  return wanted;
 }
 
 // parseHandoutBlock classifies a "> …" handout block as an image (a single
@@ -1657,7 +1675,7 @@ function testerCopyText(testers: ReadonlyArray<TesterLike> | null | undefined): 
 }
 
 export const xyChgk = {
-  parseBlocks, splitMarker, numberDirective, questionText, answerText, blockText, previewText,
+  parseBlocks, splitMarker, numberDirective, questionText, answerText, blockText, previewText, imgName, imageRefs,
   isZeroNumber, numberQuestionCards,
   removeAccents, removeSquareBrackets, screenText, parse4sElem,
   printRuns, renderRuns, splitList, applyOverride, replaceNoBreak,

@@ -21,10 +21,11 @@ Russian-language UI.
   design system, embedded in the binary. Sources in `web/ts/*.ts`; the
   shared root toolchain (`just build-web`, esbuild per-file transform + native
   tsc) emits same-named ESM into the gitignored `web/assets/static/dist/`,
-  which the pages load and the SW precaches. board.ts is a thin orchestrator
-  over extracted kernels (unlock.ts, dragrank.ts, carddetail.ts, carddraft.ts,
-  timeline.ts, boardmembers.ts, handoutsession.ts, attachments.ts, overlaystack.ts
-  — each a `create(deps)` factory with jstest coverage).
+  which the pages load and the SW precaches. board.ts (≈1700 lines) is the
+  board page's boot, render loop, drag, list preview and card pickers; every
+  feature the ☰ and the list ⋯ menus offer is its own module registered in the
+  panel registry (panels.ts), and the card, the лента, attachments, unlock and
+  the rest are `create(deps)` kernels with jstest coverage. Its map is below.
 - **Crypto**: scrypt KEK (vendored `@noble/hashes`, pure JS, **no WASM** → runs
   under iOS Lockdown Mode) + native AES-256-GCM via WebCrypto.
 - **Tests**: Go (`go test`) + frontend (`deno test --parallel jstest/`).
@@ -222,75 +223,79 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        the search box over both grids — the top grid filters to boards the
                        query can NAME (names are plaintext), the grid below shows the cards
                        it can quote, so a board appears in exactly one place
-    board.ts           kanban orchestrator over the extracted kernels (unlock.ts =
-                       boot/unlock/snapshot-load, dragrank.ts, carddetail.ts,
-                       carddraft.ts = draft/dirty rules, timeline.ts,
-                       boardmembers.ts, attachments.ts = attachment kernel (caches, upload/replace/delete, paste-to-attach, lightbox), handoutsession.ts = handout image staging
-                       session): drag-reorder, card detail, timeline, labels,
-                       the card editor's tools row (under the Просмотр/Поля/Текст tabs):
-                       ударение types a stress accent (U+0301) into whichever field the
-                       caret was last in — the tools row swallows mousedown so the field
-                       keeps focus (the Автор tag input commits on blur, issue #63), and the
-                       field is still remembered on focusin for a card opened with nothing
-                       focused; типограф (typo.ts, in
-                       the browser — every version of the card, offline-capable, nothing posted)
-                       and, on Текст only, →.4s (/api/import/text) rewrite the WHOLE draft,
-                       so they need no caret — in Текст the result is typed back into the
-                       editor, in Поля the fields are re-rendered from the new draft. Every
-                       edit goes through execCommand("insertText"), the only path that keeps
-                       the browser's undo stack (a spliced .value makes Ctrl-Z drop everything);
-                       move/copy (by board name + list + position; a copy/cross-board
-                       move carries the card's labels + comments + attachments via
-                       copyCardExtras — online-only for the extras), list ⋯ menu
-                       (incl. rename/delete list), board ☰ menu (incl. rename/delete
-                       board, owner-only delete), the «📤 Экспорт» modal (tick any of
-                       .4s / .docx / .pdf / .pdf для телефона / раздатки, `runExport`
-                       → /api/export/pack; a bare .4s with no images is written in the
-                       browser, the only export that works offline; the modal is on the
-                       overlay stack, so back closes it); direct links to a card
-                       (?card=) and a comment (&comment=, copied from the timeline 🔗);
-                       ← / → walk the open card's list — its whole group when it is in one —
-                       stopping at both ends, and firing only when the caret is outside a
-                       field; leaving a dirty card by ANY route (↩️, Escape, back, backdrop,
-                       the arrows) raises the Save / Discard prompt instead of discarding;
-                       «Найти и заменить» (☰ menu) replaces one literal string across the
-                       board, one list or one group: every occurrence is ticked with its
-                       context (100 per page), markers and version separators are
-                       unmatchable, and the write is the same collectDescChanges /
-                       applyDescChanges pair the typography pass uses, so each card gets its
-                       desc_edit diff and it works offline;
-                       «Управление списками» modal groups consecutive lists into a
-                       list_of_lists (☰ menu); all mutations via sync.ts (offline-capable);
-                       display sizes (users.sizes, edited on /profile — see profile.ts) are
-                       delivered in the board snapshot and applied as CSS vars on <html>:
-                       --kanban-max-w (the board is a centred column, so a wide monitor
-                       doesn't strand the reader at the screen edge), --klist-w,
-                       --kcard-lines. Cards hold their FULL text; --kcard-lines line-clamps
-                       it (no clamp = whole question). Don't reintroduce a char cap in
-                       cardBody — that's what made a card stop at 80 chars no matter how
-                       much room the reader gave it. What a card previews is
-                       alias → (question text | answer). The alias is the card's own short
-                       label (cards.alias_enc, migrateV12 — its OWN encrypted column, NOT a
-                       4s marker: the 4s markers mirror chgksuite byte-for-byte, so a marker
-                       of ours would break import/export parity or leak into exports). Being
-                       no part of the 4s, its input sits BELOW the view panels, between Метки
-                       and Вложения (#cardAlias) rather than inside Поля, and it wins on every
-                       card kind whenever set. It has no save button: a second after the typing
-                       stops it PATCHes its own column, and every exit route flushes what is
-                       pending (saveAlias). The question/
-                       answer fallback is the reader's own choice (users.card_title,
-                       migrateV13, edited on /profile); an answerless question falls back to
-                       its text rather than previewing blank. The snapshot also carries the caller's
-                       default_author, pre-filled into new question cards (the Поля Автор
-                       field and the Текст stub's "@" line — an untouched stub saves as a
-                       card with just that, deliberately). Автор/Источник inputs
-                       autocomplete from the board's existing values via suggestWrap, a
-                       hand-drawn dropdown (<datalist> never opens on iOS Safari);
-                       «📥 Импорт» (☰ menu) uploads a .4s/.zip/.docx to /api/import/parse and
-                       turns the returned 4s into a new list — one card per blank-line block,
-                       each (img …) attached to the card that references it. A .docx (a lossy
-                       heuristic parse) first opens the verification screen: editable 4s on the
-                       left, the live list preview on the right. .4s/.zip import straight.
+    board.ts           the board page: boot (unlock.ts), the render loop (lists,
+                       cards, the group numbering, the Search Index write), list and
+                       card drag (dragrank.ts), the card detail + timeline wiring
+                       (carddetail.ts, timeline.ts, attachments.ts), the list preview
+                       (docx-style, client-side), the card's «Метки»/«Тесты» pickers,
+                       and the Board seam + panel registration (panels.ts): one
+                       registerPanel(...) call lists every ☰ and ⋯ entry in menu order,
+                       and both menus render from it. Board-level actions that are not
+                       panels (rename/delete board, forget password, add/rename/delete
+                       list, preview) are registered inline. Display sizes
+                       (users.sizes, edited on /profile) arrive in the snapshot and become
+                       CSS vars on <html>: --kanban-max-w, --klist-w, --kcard-lines (a
+                       line clamp — don't reintroduce a char cap in cardBody). A card
+                       previews alias → (question text | answer): the alias is the card's
+                       own encrypted column (cards.alias_enc, NOT a 4s marker — parity),
+                       its input sits below the view panels and PATCHes itself a second
+                       after typing stops; the fallback is users.card_title. The card
+                       editor's tools row: ударение types U+0301 into the field the caret
+                       was last in (the row swallows mousedown so the field keeps focus);
+                       типограф (typo.ts, in the browser, every version) and →.4s rewrite
+                       the whole draft; every edit goes through execCommand("insertText")
+                       so Ctrl-Z survives. ← / → walk the open card's list (its whole
+                       group when in one); leaving a dirty card by any route raises the
+                       Save / Discard prompt. Автор/Источник inputs autocomplete via
+                       suggestWrap (<datalist> never opens on iOS Safari)
+    panels.ts          the panel registry and the Board seam. Board = the live state,
+                       the read helpers (cardsOf, listsInGroup, sessionName…), the four
+                       mutation verbs, render, setStatus, reload. registerPanel(...) takes
+                       {id, menu: "board"|"list", icon, label | label(scope), title?,
+                       offered?(scope), open(scope)}; boardMenu() / listMenu(scope) return
+                       the two menus as data; listScope(board, list) is what a per-list
+                       panel works on (the list or its whole group, cards concatenated in
+                       board order, the title). createPanelShell is one generic modal
+                       (board.dopeui's panelOverlay) for panels that build their body with
+                       el() — a new such panel touches no .dopeui, vocab or Go
+    rewrites.ts        board-wide description rewrites: collect(transform) / apply(changes)
+                       — each changed card patched with a desc_edit entry, so the rewrite
+                       is auditable — behind «Исправить оформление Trello», «Типографить
+                       всю доску» (with the stress-mark review modal) and the legacy
+                       Version conversion on load. replace.ts borrows apply
+    replace.ts         «Найти и заменить»: one literal replacement across the board, one
+                       list or one group; every occurrence ticked with its context (100 per
+                       page), markers and version heads unmatchable (find.ts), a card whose
+                       text moved between plan and run is skipped and named
+    listsmanage.ts     «Управление списками»: reorder lists and groups by drag or by
+                       position, link consecutive lists into a list_of_lists; unitsOf folds
+                       lists into orderable units and applyUnitOrder writes an order — the
+                       board's column drag uses both
+    movelist.ts        «Переместить список…»: move/copy a whole list within the board or
+                       to another (client-side re-encryption of the title, every card, its
+                       labels and playings, via carddetail's copy machinery)
+    importpack.ts      «Импорт»: a .4s/.zip/.docx to /api/import/parse, the returned 4s
+                       into a new list (or a group of lists, one per «## …» tour), each
+                       (img …) attached to the card that references it; a .docx first opens
+                       the verification screen (editable 4s left, live preview right)
+    export.ts          «Экспорт»: exportSource (the cards' 4s, versions folded) + the
+                       referenced images to /api/export/pack for .docx/.pdf/.pdf для
+                       телефона/раздатки; a bare .4s with no images is written in the
+                       browser, the one export that works offline
+    handouts.ts        «Генерация раздаток»: 4s2hndt (chgk.ts) → editable .hndt →
+                       /api/handouts/{pdf,split_fit}; images staged once per open
+                       (handoutsession.ts); per-question layout settings persisted to
+                       handout_meta on close
+    masspanel.ts       «Массовое действие»: the mode, the bar, the tick state the render
+                       loop paints, the one dialog with its pickers, and the per-card writes
+                       (rules in massaction.ts)
+    labelsedit.ts      «Метки»: the label editor (rename/recolour/delete/create; Готово
+                       commits the lot); sortLabels is the board's one ordering of labels
+    testerlist.ts      «Список тестеров»: who tested a tour and how much of it; the tour's
+                       Declaration (tour_testers) or, undeclared, the custom — everyone who
+                       saw more than half (tourPicked, shared with the card's «кроме общих
+                       тестеров» line). Renders into the panel shell
+    authorcount.ts     «Счётчик авторов»: countAuthors (pure) and its panel in the shell
     pwa.ts             PWA boot on every page: manifest/install <head> tags + sw
                        registration + zoom lockdown (theme boot + ☰ menu come from
                        the kit's shared menu module)

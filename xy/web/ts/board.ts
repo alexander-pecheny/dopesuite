@@ -2,18 +2,27 @@
 // drag-reorder with fractional ranks, card detail + timeline + labels.
 import { overlayStack } from "./overlaystack.js";
 import { modal } from "./modal.js";
+import { type Board, boardMenu, createPanelShell, listMenu, listScope, registerPanel } from "./panels.js";
+import { createRewrites } from "./rewrites.js";
+import { createReplacePanel } from "./replace.js";
+import { createMoveListPanel } from "./movelist.js";
+import { createListsManage, unitsOf } from "./listsmanage.js";
+import { createImportPanel } from "./importpack.js";
+import { createExportPanel } from "./export.js";
+import { createHandoutsPanel } from "./handouts.js";
+import { createMassPanel } from "./masspanel.js";
+import { createLabelsEditor, sortLabels } from "./labelsedit.js";
+import { createTesterList } from "./testerlist.js";
+import { createAuthorCountPanel } from "./authorcount.js";
 import { xyApp, xySizes } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xyRank } from "./rank.js";
 import { type Tester, xyChgk } from "./chgk.js";
-import { xyTypo } from "./typo.js";
 import { xySync } from "./sync.js";
-import { xyHandoutSession } from "./handoutsession.js";
 import { createBoardMembers } from "./boardmembers.js";
 import { create as createAttachments } from "./attachments.js";
-import { gatherTargets } from "./attachments.js";
 import { createUnlock } from "./unlock.js";
-import { byRank, dragAfterIn, dragAfterInX, rankAfterMove, rankForSlot } from "./dragrank.js";
+import { boardOrder, byRank, dragAfterIn, dragAfterInX, rankAfterMove } from "./dragrank.js";
 import { createTimeline, decodeCommentPayload, eventAuthor } from "./timeline.js";
 import { createCardDetail, nowStamp } from "./carddetail.js";
 import {
@@ -22,21 +31,17 @@ import {
 } from "./sessions.js";
 import * as people from "./people.js";
 import { createSessionsPanel } from "./sessionspanel.js";
-import { type ColorField, colorField, labelFill, labelInk, LABEL_COLORS } from "./colorpick.js";
+import { colorField, labelFill, labelInk, LABEL_COLORS } from "./colorpick.js";
 import { anchorPopup } from "./popup.js";
-import { type MassAction, plural, xyMass } from "./massaction.js";
-import { namedUrl, revokeNamedUrl } from "./namedurl.js";
+import { plural, xyMass } from "./massaction.js";
 import { xySearchIndex } from "./searchindex.js";
-import { xyFind } from "./find.js";
-import { xyAuthorCount } from "./authorcount.js";
-import type { Span as FindSpan } from "./find.js";
 import type { DataKey } from "./crypto.js";
 import type { OpBody } from "./store.js";
 import type { ScreenValue } from "./chgk.js";
 import type { BoardCard, BoardLabel, BoardList, BoardState, CardLabel } from "./unlock.js";
 import type { MembersState } from "./boardmembers.js";
 import type { MenuItem, Timeline } from "./timeline.js";
-import type { MoveCtx, PreviewCardLike } from "./carddetail.js";
+import type { PreviewCardLike } from "./carddetail.js";
 import { icon, iconed } from "./icons_gen.js";
 
 const { fetchJSON, jpost, jpatch, jput, jdelete, el, byId, errMsg, deriveTitle, onCmdEnter } = xyApp;
@@ -119,7 +124,7 @@ const unlock = createUnlock({
     render();
     renderNotifBadge();
     void boardMembers.load(); // best-effort: populate the author-name map for timelines (online only)
-    void convertLegacyVersionsBoard();
+    void rewrites.convertLegacyVersions();
     if (dk) void xySearchIndex.refreshComments(boardId, dk);
     cardDetail.maybeOpenDeepLink(); // open a ?card=… / &comment=… deep link on first load
   },
@@ -138,82 +143,6 @@ const unlock = createUnlock({
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && dk) void unlock.load();
 });
-
-// Board-level actions live in the burger (☰) menu — sharing (rarely opened) and
-// "forget password" (rarely needed) don't warrant header buttons.
-// dopeMenu.setExtras renders them as actions.
-window.dopeMenu?.setExtras([{
-  icon: "pencil",
-  label: "Переименовать доску",
-  title: "Изменить название доски",
-  onClick: () => { void renameBoard(); },
-}, {
-  icon: "columns-3",
-  label: "Управление списками",
-  title: "Переупорядочить списки и связать их в группы (списки списков)",
-  onClick: () => openListsManage(),
-}, {
-  icon: "list-checks",
-  label: "Массовое действие",
-  title: "Отметить карточки на всей доске и сделать с ними одно действие",
-  onClick: () => setMassMode(!massMode),
-}, {
-  icon: "file-up",
-  label: "Импорт",
-  title: "Импортировать пакет вопросов (.4s, .zip или .docx)",
-  onClick: () => openImportPick(),
-}, {
-  icon: "flask-conical",
-  label: "Тесты",
-  title: "Тест-сессии доски: кто когда играл, приглашение со временем начала",
-  onClick: () => sessionsPanel.open(),
-}, {
-  icon: "tags",
-  label: "Метки",
-  title: "Переименовать, перекрасить или удалить метки доски",
-  onClick: () => openLabelsEditor(),
-}, {
-  icon: "users",
-  label: "Участники доски",
-  title: "Поделиться доской: добавить или убрать участников",
-  onClick: () => boardMembers.open(),
-}, {
-  icon: "wand-sparkles",
-  label: "Исправить оформление Trello",
-  title: "Убрать артефакты Trello (двойные переносы, экранирование, смарт-ссылки) во всех карточках",
-  onClick: () => { void fixTrelloFormattingBoard(); },
-}, {
-  icon: "replace",
-  label: "Найти и заменить",
-  title: "Заменить один и тот же текст во всех карточках доски, списка или группы",
-  onClick: () => openReplace(),
-}, {
-  // wand-sparkles twice over: the vendored lucide set has no «type» glyph, and
-  // both items are the same kind of act — rewrite the text of every card at once.
-  icon: "wand-sparkles",
-  label: "Типографить всю доску",
-  title: "Кавычки-ёлочки, тире, неразрывные пробелы и раскодированные ссылки — во всех карточках и всех версиях",
-  onClick: () => { void typographBoard(); },
-}, {
-  icon: "lock",
-  label: "Забыть пароль доски",
-  title: "Забыть пароль доски на этом устройстве",
-  onClick: async () => {
-    await xyCrypto.forgetDK(boardId);
-    // The names this board contributed to the person directory outlive nothing:
-    // once the DK is gone its content is ciphertext with no key on this device.
-    // Its Search Index goes the same way, and for a sharper reason (ADR-0008):
-    // plaintext that outlived its key would keep the board readable with none.
-    people.forget(boardId);
-    await xySearchIndex.forget(boardId);
-    location.reload();
-  },
-}, {
-  icon: "trash-2",
-  label: "Удалить доску",
-  title: "Удалить доску со всеми списками и карточками (только владелец)",
-  onClick: () => { void deleteBoard(); },
-}]);
 
 // ---- board sizes (workspace width / list width / card height) ----
 // A per-user display preference, edited on /profile (see profile.js) and
@@ -258,332 +187,6 @@ async function deleteBoard(): Promise<void> {
     await xySearchIndex.forget(boardId);
     location.href = "/";
   } catch (err) { alert("Не удалось удалить: " + errMsg(err)); }
-}
-
-// ---- board-wide description rewrites ----
-// Two things rewrite every card's 4s at once: the Trello clean-up and the version
-// conversion. Both are the same walk — collect what a transform changes, then
-// patch each changed card with a desc_edit timeline entry so the rewrite is
-// auditable and reversible — so they share it. A transform returns null for
-// «nothing to do here».
-
-interface DescChange { card: BoardCard; desc: string }
-
-function collectDescChanges(next: (c: BoardCard) => string | null): DescChange[] {
-  const out: DescChange[] = [];
-  for (const c of state.cards) {
-    const desc = next(c);
-    if (desc !== null && desc !== c.desc) out.push({ card: c, desc });
-  }
-  return out;
-}
-
-async function applyDescChanges(changes: ReadonlyArray<DescChange>): Promise<void> {
-  const key = mustDK();
-  for (const ch of changes) {
-    await patch("patchCard", `/api/cards/${ch.card.id}`, {
-      description_enc: await xyCrypto.encField(key, ch.desc),
-      desc_event_enc: await xyCrypto.encField(key, JSON.stringify({ before: ch.card.desc, after: ch.desc })),
-    });
-    ch.card.desc = ch.desc;
-  }
-  render();
-}
-
-// fixTrelloFormattingBoard re-applies chgksuite's Trello clean-up (the same fix
-// the importer runs) to every already-imported card whose description still
-// carries Trello artefacts.
-async function fixTrelloFormattingBoard(): Promise<void> {
-  const changes = collectDescChanges((c) => xyChgk.fixTrelloFormatting(c.desc));
-  if (!changes.length) { alert("Нечего исправлять — оформление уже в порядке."); return; }
-  if (!confirm(`Исправить оформление Trello в ${changes.length} карточк(ах)? Описания будут изменены.`)) return;
-  setStatus("saving");
-  try {
-    await applyDescChanges(changes);
-    setStatus("saved");
-    alert(`Исправлено карточек: ${changes.length}.`);
-  } catch (err) {
-    setStatus("error");
-    alert("Ошибка при исправлении: " + errMsg(err));
-  }
-}
-
-// typographBoard runs the typography pass over every card on the board, every
-// version of it. It runs in the browser, so a whole package's question text is
-// never posted anywhere and this works offline like any other board edit.
-// Stress marks are the one part of the pass that guesses. chgk writes stress by
-// capitalising the vowel («брАзер»), and a camel-cased compound («ГазпромИнвест»)
-// is exactly the same shape, so a board-wide press asks first — one tick per
-// distinct word, however many cards it appears in. Everything else the pass does
-// (quotes, dashes, spaces, percent-escapes) is not a guess and is not asked about.
-async function typographBoard(): Promise<void> {
-  const picks = xyTypo.accentPicks(state.cards.map((c) => c.desc));
-  if (!picks.length) { await runTypographBoard(null); return; }
-  openAccentReview(picks, (allow) => { void runTypographBoard(allow); });
-}
-
-async function runTypographBoard(allow: Set<string> | null): Promise<void> {
-  const opts = allow ? { allow } : {};
-  const changes = collectDescChanges((c) => xyTypo.passVersions(c.desc, opts));
-  const total = state.cards.length;
-  if (!changes.length) { alert("Нечего типографить — вся доска уже в порядке."); return; }
-  // «N из M», because the rest were already right: the pass only rewrites a card
-  // whose text it actually changes, and a bare count reads like it skipped some.
-  if (!allow && !confirm(`Типографить ${changes.length} из ${total}? В остальных карточках менять нечего.`)) return;
-  setStatus("saving");
-  try {
-    await applyDescChanges(changes);
-    setStatus("saved");
-    alert(`Оттипографлено карточек: ${changes.length} из ${total}.`);
-  } catch (err) {
-    setStatus("error");
-    alert("Ошибка при типографике: " + errMsg(err));
-  }
-}
-
-// ---- найти и заменить ----
-// One replacement over the whole board, one list or one group. The matching is
-// literal (find.ts) and the structure is out of its reach, so what is left to
-// judge is context: the same needle in two places can want two different
-// answers, which is why the preview ticks Occurrences and not cards.
-const replaceModal = modal("replace");
-const replaceScope = byId<HTMLSelectElement>("replaceScope");
-const replaceFrom = byId<HTMLInputElement>("replaceFrom");
-const replaceTo = byId<HTMLInputElement>("replaceTo");
-const replaceCase = byId<HTMLInputElement>("replaceCase");
-
-interface Occurrence { i: number; card: BoardCard; span: FindSpan }
-
-// Rendering thousands of rows with a checkbox each freezes the tab; a page holds
-// a hundred. Ticks live over ALL occurrences, so what is off-screen is still
-// replaced and still counted.
-const REPLACE_PAGE = 100;
-let occurrences: Occurrence[] = [];
-let perCard = new Map<number, number[]>();
-// The text each card had when the plan was drawn, BY VALUE. A card object is
-// mutated in place by the editor and swapped wholesale by a snapshot reload, so
-// neither the reference nor its current .desc can say whether the spans still
-// point where the preview said they did.
-let plannedDesc = new Map<number, string>();
-let replacePicked = new Set<number>();
-let replacePageNo = 0;
-
-// cardsInBoardOrder walks lists in board order and cards by rank within them, so
-// the preview reads down the board rather than in whatever order the state is in.
-function cardsInBoardOrder(cards: readonly BoardCard[]): BoardCard[] {
-  const order = new Map([...state.lists].sort(byRank).map((l, i) => [l.id, i]));
-  return [...cards].sort((a, b) => (order.get(a.listId) ?? 0) - (order.get(b.listId) ?? 0) || byRank(a, b));
-}
-
-function scopeCards(): BoardCard[] {
-  const v = replaceScope.value;
-  if (v.startsWith("list:")) {
-    const id = Number(v.slice(5));
-    return cardsInBoardOrder(state.cards.filter((c) => c.listId === id));
-  }
-  if (v.startsWith("group:")) {
-    const id = Number(v.slice(6));
-    const ids = new Set(state.lists.filter((l) => l.groupId === id).map((l) => l.id));
-    return cardsInBoardOrder(state.cards.filter((c) => ids.has(c.listId)));
-  }
-  return cardsInBoardOrder(state.cards);
-}
-
-function planReplace(): void {
-  const from = replaceFrom.value;
-  occurrences = [];
-  perCard = new Map();
-  plannedDesc = new Map();
-  if (from) {
-    for (const card of scopeCards()) {
-      for (const span of xyFind.replaceSpans(card.desc, from, replaceCase.checked)) {
-        const o = { i: occurrences.length, card, span };
-        occurrences.push(o);
-        const ids = perCard.get(card.id);
-        if (ids) ids.push(o.i); else perCard.set(card.id, [o.i]);
-        plannedDesc.set(card.id, card.desc);
-      }
-    }
-  }
-  // A fresh plan is a fresh set of occurrences, so everything starts ticked —
-  // which is why only the three inputs that CHANGE what was found re-plan; the
-  // «Заменить на» field merely redraws (see the wiring below), or an editor's
-  // unticking would be undone by fixing a typo in it.
-  replacePicked = new Set(occurrences.map((o) => o.i));
-  replacePageNo = 0;
-  renderReplace();
-}
-
-function renderReplace(): void {
-  const box = byId("replaceHits");
-  const pages = Math.max(1, Math.ceil(occurrences.length / REPLACE_PAGE));
-  replacePageNo = Math.min(replacePageNo, pages - 1);
-  const slice = occurrences.slice(replacePageNo * REPLACE_PAGE, (replacePageNo + 1) * REPLACE_PAGE);
-  const to = replaceTo.value;
-  const rows: HTMLElement[] = [];
-  // null, not -1: a card created offline HAS the id -1 (the first temp id), and
-  // would then never get its heading row.
-  let shownCard: number | null = null;
-  for (const o of slice) {
-    if (o.card.id !== shownCard) {
-      shownCard = o.card.id;
-      const ids = perCard.get(o.card.id) || [];
-      const head = el("input", { type: "checkbox" }) as HTMLInputElement;
-      head.checked = xyMass.allSelected(replacePicked, ids);
-      head.addEventListener("change", () => {
-        replacePicked = xyMass.toggleAll(replacePicked, ids);
-        renderReplace();
-      });
-      rows.push(el("label", { class: "replace-card" }, head,
-        el("span", { class: "replace-card-name", text: xySearchIndex.cardTitle(o.card, state.cardTitle, "(пустая карточка)") }),
-        el("span", { class: "replace-card-count", text: `${ids.length}` })));
-    }
-    const snip = xyFind.snippet(o.card.desc, [o.span], 60);
-    const cb = el("input", { type: "checkbox" }) as HTMLInputElement;
-    cb.checked = replacePicked.has(o.i);
-    cb.addEventListener("change", () => {
-      replacePicked = xyMass.toggleOne(replacePicked, o.i);
-      renderReplace();
-    });
-    // One occurrence, one window: the mark is this occurrence's own span.
-    const at = snip.marks[0];
-    rows.push(el("label", { class: "replace-hit" }, cb,
-      el("span", { class: "replace-hit-text" },
-        snip.text.slice(0, at.start),
-        el("del", { text: snip.text.slice(at.start, at.end) }),
-        ...(to ? [el("ins", { text: to })] : []),
-        snip.text.slice(at.end))));
-  }
-  box.replaceChildren(...rows);
-  byId("replacePage").textContent = occurrences.length ? `Страница ${replacePageNo + 1} из ${pages}` : "";
-  byId<HTMLButtonElement>("replacePrev").disabled = replacePageNo === 0;
-  byId<HTMLButtonElement>("replaceNext").disabled = replacePageNo >= pages - 1;
-  const picked = occurrences.filter((o) => replacePicked.has(o.i));
-  const cards = new Set(picked.map((o) => o.card.id)).size;
-  const run = byId<HTMLButtonElement>("replaceRun");
-  run.disabled = picked.length === 0;
-  // An empty «на» deletes, and the button says so rather than promising a
-  // replacement with nothing.
-  const verb = replaceTo.value ? "Заменить" : "Удалить";
-  run.textContent = picked.length ? `${verb} ${picked.length} в ${xyMass.cardCount(cards)}` : verb;
-  replaceModal.message(replaceFrom.value && !occurrences.length ? "Ничего не найдено." : "");
-}
-
-async function runReplace(): Promise<void> {
-  const to = replaceTo.value;
-  const byCard = new Map<number, { card: BoardCard; spans: FindSpan[] }>();
-  for (const o of occurrences) {
-    if (!replacePicked.has(o.i)) continue;
-    const entry = byCard.get(o.card.id) || { card: o.card, spans: [] };
-    entry.spans.push(o.span);
-    byCard.set(o.card.id, entry);
-  }
-  // Spans are offsets into the text as it was when the preview was drawn. If that
-  // text has moved since — a co-author's edit arriving with a snapshot reload, or
-  // this editor's own save — applying them would corrupt the card and record a
-  // desc_edit whose «before» never existed. Such a card is left out and said out
-  // loud rather than rewritten blind.
-  const changes: DescChange[] = [];
-  let stale = 0;
-  for (const x of byCard.values()) {
-    const live = state.cards.find((c) => c.id === x.card.id);
-    if (!live || live.desc !== plannedDesc.get(x.card.id)) { stale++; continue; }
-    changes.push({ card: live, desc: xyFind.applySpans(live.desc, x.spans, to) });
-  }
-  if (!changes.length && !stale) return;
-  setStatus("saving");
-  try {
-    await applyDescChanges(changes);
-    setStatus("saved");
-    // Re-plan first: what is left to replace has changed, and renderReplace owns
-    // the message line, so the report has to be written after it.
-    planReplace();
-    replaceModal.message(`Готово: ${xyMass.cardCount(changes.length)}.` +
-      (stale ? ` ${xyMass.cardCount(stale)} изменились, пока шёл просмотр — они пропущены, найдите заново.` : ""));
-  } catch (err) {
-    setStatus("error");
-    replaceModal.message("Ошибка при замене: " + errMsg(err));
-  }
-}
-
-function openReplace(): void {
-  // The scope list is built on open, so a list renamed or grouped since last time
-  // is named correctly.
-  const groups = new Map(state.groups.map((g) => [g.id, g.name]));
-  const seen = new Set<number>();
-  const opts = [el("option", { value: "board", text: "Вся доска" })];
-  for (const l of [...state.lists].sort(byRank)) {
-    if (l.groupId != null && !seen.has(l.groupId)) {
-      seen.add(l.groupId);
-      opts.push(el("option", { value: `group:${l.groupId}`, text: `Группа: ${groups.get(l.groupId) || ""}` }));
-    }
-    opts.push(el("option", { value: `list:${l.id}`, text: l.title }));
-  }
-  replaceScope.replaceChildren(...opts);
-  planReplace();
-  replaceModal.open();
-  replaceFrom.focus();
-}
-
-// Typing re-scans every card in scope, so it waits for a pause; the case toggle
-// and the scope select change the answer at once and re-plan immediately.
-let planTimer = 0;
-replaceFrom.addEventListener("input", () => {
-  clearTimeout(planTimer);
-  planTimer = setTimeout(planReplace, 200);
-});
-for (const node of [replaceCase, replaceScope]) node.addEventListener("input", () => planReplace());
-// What is replaced has not changed — only what the preview shows it becoming.
-replaceTo.addEventListener("input", () => renderReplace());
-byId("replacePrev").addEventListener("click", () => { replacePageNo--; renderReplace(); });
-byId("replaceNext").addEventListener("click", () => { replacePageNo++; renderReplace(); });
-byId("replaceRun").addEventListener("click", () => { void runReplace(); });
-
-// ---- the stress-mark review ----
-const accentModal = modal("accent");
-let accentApply: ((allow: Set<string>) => void) | null = null;
-
-function openAccentReview(picks: ReadonlyArray<{ from: string; to: string }>, apply: (allow: Set<string>) => void): void {
-  const box = byId("accentPicks");
-  box.replaceChildren(...picks.map((p) => {
-    const cb = el("input", { type: "checkbox", checked: "checked" }) as HTMLInputElement;
-    cb.dataset.word = p.from;
-    return el("label", { class: "accent-pick" }, cb,
-      el("span", { class: "accent-from", text: p.from }),
-      el("span", { class: "accent-arrow", text: "→" }),
-      el("span", { class: "accent-to", text: p.to }));
-  }));
-  accentApply = apply;
-  accentModal.open({ onClose: () => { accentApply = null; } });
-}
-
-byId("accentRun").addEventListener("click", () => {
-  const allow = new Set<string>();
-  for (const cb of byId("accentPicks").querySelectorAll<HTMLInputElement>("input:checked")) {
-    if (cb.dataset.word) allow.add(cb.dataset.word);
-  }
-  const apply = accentApply;
-  accentModal.close();
-  apply?.(allow);
-});
-
-// convertLegacyVersionsBoard rewrites the cards written under the old scheme,
-// where a Version was a run of question text between (PAGEBREAK) directives and
-// every other field was shared. They become whole bodies the first time their
-// board is opened after this release. Idempotent — a converted card offers
-// nothing left to find — so the cost of running it on every load is one pass over
-// the descriptions. Each rewrite carries a desc_edit entry, like any other edit.
-async function convertLegacyVersionsBoard(): Promise<void> {
-  if (!xySync.isOnline()) return;
-  const changes = collectDescChanges((c) => (c.kind === "question" ? xyChgk.convertLegacyVersions(c.desc) : null));
-  if (!changes.length) return;
-  try {
-    await applyDescChanges(changes);
-  } catch (err) {
-    // Nothing is lost by failing: the cards keep their old spelling and the next
-    // load tries again.
-    console.error("не удалось перевести версии карточек", err);
-  }
 }
 
 // ---- members / sharing ----
@@ -782,6 +385,24 @@ function listsInGroup(groupId: number): BoardList[] {
   return state.lists.filter((l) => l.groupId === groupId).sort(byRank);
 }
 
+// The seam every panel works through (panels.ts).
+const board: Board = {
+  id: boardId,
+  state,
+  dk: mustDK,
+  cardsOf,
+  listsInGroup,
+  groupById,
+  assignmentsOf,
+  playingsOf,
+  sessionMeta,
+  sessionName,
+  verbs: { create, post, patch, put, del },
+  render,
+  setStatus,
+  reload: () => unlock.load(),
+};
+
 // groupNumbering computes question numbers continuously across a group's lists:
 // the cards of every member list are concatenated in order, numbered as one run
 // (so list 2 picks up where list 1 left off, № / №№ directives included), then
@@ -819,7 +440,7 @@ function scheduleReindex(): void {
   clearTimeout(reindexTimer);
   reindexTimer = setTimeout(() => {
     const lists = [...state.lists].sort(byRank);
-    const cards = cardsInBoardOrder(state.cards);
+    const cards = boardOrder(state.lists, state.cards);
     void xySearchIndex.putCards(
       boardId,
       state.name,
@@ -864,10 +485,10 @@ function render(): void {
   }
   kanban.append(renderAddList());
   paintLabels();
-  // Unconditional: renderMassBar is also what HIDES the bar, so guarding it on
-  // massMode left «Готово» with nothing to close.
-  if (massMode) massSelected = xyMass.prune(massSelected, state.cards);
-  renderMassBar();
+  // Unconditional: renderBar is also what HIDES the bar, so guarding it on
+  // mass.mode left «Готово» with nothing to close.
+  mass.prune();
+  mass.renderBar();
   kanban.scrollLeft = scrollLeft;
   for (const b of kanban.querySelectorAll<HTMLElement>(".kcards")) {
     const top = listScroll.get(b.dataset.listId);
@@ -885,28 +506,7 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   const menuBtn = el("button", { class: "kadd", title: "Меню списка", "aria-haspopup": "true" }, icon("ellipsis"));
   menuBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    const items: MenuItem[] = [{ icon: icon("plus"), label: "Добавить карточку", onClick: () => { void cardDetail.addCard(list); } }];
-    if (list.groupId != null) {
-      items.push(
-        { icon: icon("eye"), label: "Предпросмотр списка", onClick: () => { void previewList(list); } },
-        { icon: icon("eye"), label: "Предпросмотр всей группы", onClick: () => { void previewList(list, true); } },
-      );
-    } else {
-      items.push({ icon: icon("eye"), label: "Предпросмотр", onClick: () => { void previewList(list); } });
-    }
-    items.push(
-      { icon: icon("users"), label: "Список тестеров", onClick: () => openTesterList(list) },
-      { icon: icon("calculator"), label: "Счётчик авторов", onClick: () => openAuthorCount(list) },
-      { icon: icon("arrow-left-right"), label: "Переместить список…", onClick: () => openMoveList(list) },
-      { icon: icon("pencil"), label: "Переименовать список", onClick: () => { void renameList(list); } },
-    );
-    const grouped = list.groupId != null;
-    const suffix = grouped ? " группы" : "";
-    items.push(
-      { icon: icon("file-down"), label: `Экспорт${suffix}`, onClick: () => openExport(list) },
-      { icon: icon("file-text"), label: grouped ? "Генерация раздаток (вся группа)" : "Генерация раздаток", onClick: () => openHandouts(list) },
-    );
-    items.push({ icon: icon("trash-2"), label: "Удалить список", onClick: () => { void deleteList(list); } });
+    const items: MenuItem[] = listMenu(listScope(board, list)).map((it) => ({ icon: icon(it.icon), label: it.label, onClick: it.onClick }));
     popupMenu(menuWrap, items);
   });
   menuWrap.append(menuBtn);
@@ -916,16 +516,12 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   const qCount = cards.filter((c) => c.kind === "question").length;
   if (qCount) headMain.append(el("span", { class: "klist-count", text: questionCountLabel(qCount) }));
   const headKids: HTMLElement[] = [];
-  if (massMode) {
+  if (mass.mode) {
     const ids = cards.map((c) => c.id);
     const all = el("input", { type: "checkbox", "aria-label": "Отметить весь список" }) as HTMLInputElement;
     all.dataset.listId = String(list.id);
-    all.checked = xyMass.allSelected(massSelected, ids);
-    all.addEventListener("change", () => {
-      massSelected = xyMass.toggleAll(massSelected, ids);
-      renderMassBar();
-      paintMassChecks();
-    });
+    all.checked = xyMass.allSelected(mass.selected, ids);
+    all.addEventListener("change", () => mass.toggleAll(ids));
     headKids.push(el("label", { class: "klist-check" }, all));
   }
   col.append(el("div", { class: "klist-head" }, ...headKids, headMain, addCardBtn, menuWrap));
@@ -1098,13 +694,13 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
   const node = el("div", { class: "kcard kcard-" + (card.kind || "normal"), draggable: "true", dataset: { cardId: card.id }, onclick: () => { void cardDetail.openCard(card); } });
   // In массовое действие a card is something you pick, not something you open:
   // the tickbox swallows the click so ticking a run never opens one by accident.
-  if (massMode) {
+  if (mass.mode) {
     const box = el("input", { type: "checkbox", "aria-label": "Отметить карточку" }) as HTMLInputElement;
     box.dataset.cardId = String(card.id);
-    box.checked = massSelected.has(card.id);
+    box.checked = mass.selected.has(card.id);
     const wrap = el("label", { class: "kcard-check" }, box);
     wrap.addEventListener("click", (e) => { e.stopPropagation(); });
-    box.addEventListener("change", () => massToggle(card.id));
+    box.addEventListener("change", () => mass.toggle(card.id));
     node.append(wrap);
   }
   const labelRow = el("div", { class: "kcard-labels" });
@@ -1246,20 +842,7 @@ kanban.addEventListener("drop", (e) => {
   const order = [...kanban.querySelectorAll<HTMLElement>(".klist[data-list-id]")]
     .map((n) => listByIdNum(Number(n.dataset.listId)))
     .filter((l): l is BoardList => !!l);
-  const units: Unit[] = [];
-  let i = 0;
-  while (i < order.length) {
-    const l = order[i];
-    if (l.groupId != null) {
-      const run: BoardList[] = [];
-      while (i < order.length && order[i].groupId === l.groupId) { run.push(order[i]); i++; }
-      units.push({ kind: "group", id: l.groupId, key: "g" + l.groupId, lists: run });
-    } else {
-      units.push({ kind: "list", id: l.id, key: "l" + l.id, lists: [l] });
-      i++;
-    }
-  }
-  void applyUnitOrder(units);
+  void listsManage.applyUnitOrder(unitsOf(order));
 });
 
 // ---- add list / card ----
@@ -1340,1150 +923,6 @@ function popupMenu(anchor: HTMLElement, items: MenuItem[]): void {
   openListMenu = { anchor, close };
 }
 
-// ---- move / copy a whole list (within board → re-rank/duplicate; other board →
-// client-side re-encryption of the list title + every card + label reconcile,
-// mirroring the per-card move/copy below). The destination board is chosen by its
-// (decrypted) name and the insertion position among its lists is selectable. ----
-
-interface MoveBoardItem { id: number; name?: string; name_enc?: string | null; schema_version?: number }
-
-let listMoveSrc: BoardList | null = null;  // the list being moved/copied
-let listMoveCtx: MoveCtx | null = null;  // destination board ctx (from loadMoveBoard)
-
-const moveListModal = modal("moveList");
-
-function openMoveList(list: BoardList): void {
-  listMoveSrc = list;
-  moveListModal.open();
-  void populateMoveListBoards();
-}
-
-// populateMoveListBoards fills the board <select> with decrypted board names
-// (current board first/default), then loads the chosen board's list positions.
-async function populateMoveListBoards(): Promise<void> {
-  const sel = byId<HTMLSelectElement>("moveListBoard");
-  sel.replaceChildren();
-  let boards: MoveBoardItem[] = [];
-  try { boards = (await fetchJSON("/api/boards")) as MoveBoardItem[]; } catch (_) {}
-  if (!boards.some((b) => b.id === boardId)) boards.unshift({ id: boardId, name_enc: null });
-  for (const b of boards) {
-    let label = "доска #" + b.id;
-    if (b.id === boardId) label = (state.name || label) + " (эта доска)";
-    else if ((b.schema_version ?? 0) >= 2) label = b.name || label; // plaintext name, no key needed
-    else {
-      try { const cdk = await xyCrypto.loadCachedDK(b.id); if (cdk) label = await xyCrypto.decField(cdk, b.name_enc || ""); }
-      catch (_) {}
-    }
-    sel.append(el("option", { value: b.id, text: label }));
-  }
-  sel.value = String(boardId);
-  await onMoveListBoardChange();
-}
-
-// onMoveListBoardChange loads the destination board (prompting for its password
-// when it isn't unlocked — see loadMoveBoard→ensureDK) and rebuilds the position
-// <select> with one slot per existing list ("в конец" appends).
-async function onMoveListBoardChange(): Promise<void> {
-  const posSel = byId<HTMLSelectElement>("moveListPos");
-  const bid = Number(byId<HTMLSelectElement>("moveListBoard").value);
-  posSel.replaceChildren(el("option", { value: "", text: "загрузка…" }));
-  try { listMoveCtx = await cardDetail.loadMoveBoard(bid); }
-  catch (err) {
-    listMoveCtx = null;
-    posSel.replaceChildren(el("option", { value: "", text: errMsg(err) }));
-    return;
-  }
-  const ctx = listMoveCtx, src = listMoveSrc;
-  const lists = ctx.lists.filter((l) => !(ctx.boardId === boardId && src && l.id === src.id));
-  posSel.replaceChildren(el("option", { value: "end", text: "в конец" }));
-  for (let i = 1; i <= lists.length; i++) posSel.append(el("option", { value: String(i), text: `позиция ${i}` }));
-  posSel.value = "end";
-}
-
-async function doMoveListCopy(remove: boolean): Promise<void> {
-  const src = listMoveSrc, ctx = listMoveCtx;
-  if (!src || !ctx) return;
-  // A cross-board copy re-encrypts every card, comment and attachment — seconds
-  // during which the modal stays open; a second click used to start a second
-  // copy and leave a duplicated list on the target board.
-  const copyBtn = byId<HTMLButtonElement>("moveListCopyBtn");
-  const moveBtn = byId<HTMLButtonElement>("moveListMoveBtn");
-  if (copyBtn.disabled) return;
-  copyBtn.disabled = moveBtn.disabled = true;
-  try {
-    await moveListCopyLocked(remove, src, ctx);
-  } finally {
-    copyBtn.disabled = moveBtn.disabled = false;
-  }
-}
-
-async function moveListCopyLocked(remove: boolean, src: BoardList, ctx: MoveCtx): Promise<void> {
-  const targetBid = ctx.boardId;
-  const sameBoard = targetBid === boardId;
-  const msg = byId("moveListMessage");
-  const rank = rankForSlot(ctx.lists, byId<HTMLSelectElement>("moveListPos").value, sameBoard ? src.id : undefined);
-  const srcCards = cardsOf(src.id);
-  const type = src.type || "normal";
-
-  // A grouped list must stay consecutive with its group, so reordering it on the
-  // same board goes through «Управление списками» (which moves the whole group as
-  // a unit). Copying it, or moving it to another board, is still fine.
-  if (sameBoard && remove && src.groupId != null) {
-    msg.textContent = "Список входит в группу — измените порядок через «Управление списками».";
-    return;
-  }
-
-  // Same-board move is just a re-rank (no re-encryption needed).
-  if (sameBoard && remove) {
-    src.rank = rank;
-    setStatus("saving");
-    try {
-      await patch("patchList", `/api/lists/${src.id}`, { rank });
-      setStatus("saved"); render(); moveListModal.close();
-    } catch (err) { setStatus("error"); msg.textContent = errMsg(err); void unlock.load(); }
-    return;
-  }
-
-  // Copying a list (it carries every card's comments/attachments) and any
-  // cross-board op are online-only; only the intra-board move above works offline.
-  if (!xySync.requireOnline("Копирование и перенос между досками доступны только онлайн.", msg)) return;
-  msg.textContent = sameBoard ? "Копирование…" : "Перешифровка…";
-  try {
-    if (sameBoard) {
-      // Duplicate the list and its cards on this board.
-      const key = mustDK();
-      const lres = (await jpost(`/api/boards/${boardId}/lists`, {
-        title_enc: await xyCrypto.encField(key, src.title), rank, type,
-      })) as { id: number };
-      state.lists.push({ id: lres.id, type, rank, groupId: null, title: src.title });
-      let cr: string | null = null;
-      for (const c of srcCards) {
-        cr = keyBetween(cr, null);
-        const cres = (await jpost(`/api/lists/${lres.id}/cards`, await cardDetail.cardCopyBody(c, cr, key))) as { id: number };
-        state.cards.push({ id: cres.id, listId: lres.id, kind: c.kind, rank: cr, desc: c.desc, handoutMeta: c.handoutMeta || null, alias: c.alias || null, createdAt: nowStamp() });
-        const own = assignmentsOf(c.id, null);
-        if (own.length) {
-          await jput(`/api/cards/${cres.id}/labels`, { labels: own.map((a) => ({ label_id: a.labelId, session_id: null })) });
-          state.cardLabels.push(...own.map((a) => ({ cardId: cres.id, labelId: a.labelId, sessionId: null })));
-        }
-        await cardDetail.copyCardExtras(c.id, key, cres.id);
-      }
-    } else {
-      // Cross-board: re-encrypt under the target board's key, reconcile labels by
-      // decrypted name+color (same as the per-card path).
-      const tdk = ctx.dk;
-      const lres = (await jpost(`/api/boards/${targetBid}/lists`, {
-        title_enc: await xyCrypto.encField(tdk, src.title), rank, type,
-      })) as { id: number };
-      let cr: string | null = null;
-      for (const c of srcCards) {
-        cr = keyBetween(cr, null);
-        const cres = (await jpost(`/api/lists/${lres.id}/cards`, await cardDetail.cardCopyBody(c, cr, tdk))) as { id: number };
-        const plays = await cardDetail.reconcilePlayings(c.id, targetBid, tdk, ctx);
-        if (plays.length) await jput(`/api/cards/${cres.id}/sessions`, { session_ids: plays });
-        const assignments = await cardDetail.reconcileLabels(c.id, targetBid, tdk, ctx);
-        if (assignments.length) await jput(`/api/cards/${cres.id}/labels`, { labels: assignments });
-        await cardDetail.copyCardExtras(c.id, tdk, cres.id);
-      }
-      if (remove) {
-        await jdelete(`/api/lists/${src.id}`);
-        state.lists = state.lists.filter((l) => l.id !== src.id);
-        state.cards = state.cards.filter((c) => c.listId !== src.id);
-      }
-    }
-    render();
-    msg.textContent = remove ? "Перемещено." : "Скопировано.";
-    setTimeout(moveListModal.close, 700);
-  } catch (err) { msg.textContent = errMsg(err); }
-}
-
-byId("moveListBoard").addEventListener("change", () => { void onMoveListBoardChange(); });
-byId("moveListCopyBtn").addEventListener("click", () => { void doMoveListCopy(false); });
-byId("moveListMoveBtn").addEventListener("click", () => { void doMoveListCopy(true); });
-
-// ---- lists management (reorder + group into list_of_lists) ----
-// The «Управление списками» modal shows one row per list (and a bordered block
-// per group). Lists can be reordered by dragging a row or by entering a target
-// position; checking several rows lets you move them together or — when the
-// checked rows are consecutive, ungrouped lists — link them into a group.
-// Orderable units are standalone lists and whole groups; a group always moves as
-// one block, keeping its members consecutive (the invariant the board relies on).
-interface Unit { kind: "group" | "list"; id: number; key: string; lists: BoardList[] }
-
-const listsManageModal = modal("listsManage");
-const listsManageRows = byId("listsManageRows");
-let manageSelected = new Set<string>();       // selected unit keys ("l"+listId / "g"+groupId)
-let manageUnitByKey = new Map<string, Unit>();      // key → unit (rebuilt each render)
-let manageDragKey: string | null = null;
-let manageDragCommitted = false;
-// Dragging a member row *inside* its group (reorder within, never across):
-// the group id whose members container owns the gesture.
-let memberDragGid: number | null = null;
-let memberDragCommitted = false;
-
-// computeUnits walks the rank-sorted lists, folding each maximal run of lists
-// sharing a group_id into one group unit; ungrouped lists are singleton units.
-function computeUnits(): Unit[] {
-  const sorted = [...state.lists].sort(byRank);
-  const units: Unit[] = [];
-  let i = 0;
-  while (i < sorted.length) {
-    const l = sorted[i];
-    if (l.groupId != null) {
-      const gid = l.groupId, run: BoardList[] = [];
-      while (i < sorted.length && sorted[i].groupId === gid) { run.push(sorted[i]); i++; }
-      units.push({ kind: "group", id: gid, key: "g" + gid, lists: run });
-    } else {
-      units.push({ kind: "list", id: l.id, key: "l" + l.id, lists: [l] });
-      i++;
-    }
-  }
-  return units;
-}
-
-function openListsManage(): void {
-  manageSelected = new Set();
-  byId<HTMLInputElement>("listsMovePos").value = "";
-  listsManageModal.open();
-  renderManage();
-}
-
-function renderManage(): void {
-  const units = computeUnits();
-  manageUnitByKey = new Map(units.map((u) => [u.key, u]));
-  // Drop selections whose units no longer exist (e.g. after a group dissolved).
-  for (const k of [...manageSelected]) if (!manageUnitByKey.has(k)) manageSelected.delete(k);
-  listsManageRows.replaceChildren();
-  units.forEach((u, idx) => listsManageRows.append(renderManageUnit(u, idx + 1)));
-  updateManageToolbar(units);
-}
-
-function manageCheckbox(unit: Unit): HTMLElement {
-  const cb = el("input", { type: "checkbox" }) as HTMLInputElement;
-  cb.checked = manageSelected.has(unit.key);
-  cb.addEventListener("change", () => {
-    if (cb.checked) manageSelected.add(unit.key); else manageSelected.delete(unit.key);
-    updateManageToolbar(computeUnits());
-  });
-  return el("label", { class: "lm-check" }, cb);
-}
-
-function manageMoveControl(unit: Unit): HTMLElement {
-  const inp = el("input", { class: "input lm-move-pos", type: "number", min: "1", placeholder: "№" }) as HTMLInputElement;
-  const btn = el("button", { class: "btn btn-small btn-ghost lm-move-btn", type: "button", title: "Переместить на эту позицию" }, icon("arrow-up-down"));
-  const go = (): void => { const n = parseInt(inp.value, 10); if (n >= 1) void moveUnitsTo(new Set([unit.key]), n); };
-  btn.addEventListener("click", go);
-  inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); go(); } });
-  return el("div", { class: "lm-move" }, inp, btn);
-}
-
-function manageTitle(list: BoardList): string {
-  return list.title || "(без названия)";
-}
-
-function renderManageUnit(unit: Unit, pos: number): HTMLElement {
-  const node = el("div", { class: "lm-unit lm-" + unit.kind, draggable: "true", dataset: { unitKey: unit.key } });
-  if (unit.kind === "group") {
-    const g = groupById(unit.id);
-    node.append(el("div", { class: "lm-row lm-grouphead" },
-      manageCheckbox(unit),
-      el("span", { class: "lm-pos", text: "#" + pos }),
-      el("span", { class: "lm-handle", text: "≡", title: "Перетащить" }),
-      el("span", { class: "lm-title lm-group-title" }, ...iconed("link", (g && g.name) || "Связанные списки")),
-      el("button", { class: "lm-icon", type: "button", title: "Переименовать группу", onclick: () => { void renameGroup(unit.id); } }, icon("pencil")),
-      el("button", { class: "lm-icon", type: "button", title: "Разъединить группу", onclick: () => { void unlinkGroup(unit.id); } }, icon("unlink")),
-      manageMoveControl(unit),
-    ));
-    // Members are draggable within their own group (the whole group is still
-    // the unit that moves among lists — a member can't be dragged out of it,
-    // that would break the group's consecutiveness).
-    const members = el("div", { class: "lm-members" });
-    for (const l of unit.lists) {
-      const row = el("div", { class: "lm-member", draggable: "true", dataset: { listId: l.id } },
-        el("span", { class: "lm-handle", text: "≡", title: "Перетащить внутри группы" }),
-        el("span", { class: "lm-title", text: manageTitle(l) }));
-      row.addEventListener("dragstart", (e) => {
-        e.stopPropagation(); // the unit node is draggable too — don't start both
-        memberDragGid = unit.id;
-        memberDragCommitted = false;
-        row.classList.add("dragging");
-        if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
-        try { e.dataTransfer?.setData("text/plain", "m" + l.id); } catch (_) {}
-      });
-      row.addEventListener("dragend", () => {
-        row.classList.remove("dragging");
-        memberDragGid = null;
-        if (!memberDragCommitted) renderManage(); // aborted drag — resync DOM from state
-      });
-      members.append(row);
-    }
-    members.addEventListener("dragover", (e) => {
-      if (memberDragGid !== unit.id) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const dragging = members.querySelector(".lm-member.dragging");
-      if (!dragging) return;
-      const after = dragAfterIn([...members.querySelectorAll(".lm-member:not(.dragging)")], e.clientY);
-      if (after == null) members.append(dragging);
-      else members.insertBefore(dragging, after);
-    });
-    members.addEventListener("drop", (e) => {
-      if (memberDragGid !== unit.id) return;
-      e.preventDefault();
-      e.stopPropagation();
-      memberDragCommitted = true;
-      const byId = new Map(unit.lists.map((l): [string, BoardList] => [String(l.id), l]));
-      const order = [...members.querySelectorAll<HTMLElement>(".lm-member")]
-        .map((n) => byId.get(n.dataset.listId || ""))
-        .filter((l): l is BoardList => !!l);
-      if (order.length === unit.lists.length) void applyMemberOrder(unit.key, order);
-    });
-    node.append(members);
-  } else {
-    node.append(el("div", { class: "lm-row" },
-      manageCheckbox(unit),
-      el("span", { class: "lm-pos", text: "#" + pos }),
-      el("span", { class: "lm-handle", text: "≡", title: "Перетащить" }),
-      el("span", { class: "lm-title", text: manageTitle(unit.lists[0]) }),
-      manageMoveControl(unit),
-    ));
-  }
-  node.addEventListener("dragstart", (e) => {
-    manageDragKey = unit.key;
-    manageDragCommitted = false;
-    node.classList.add("dragging");
-    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
-    try { e.dataTransfer?.setData("text/plain", unit.key); } catch (_) {}
-  });
-  node.addEventListener("dragend", () => {
-    node.classList.remove("dragging");
-    manageDragKey = null;
-    if (!manageDragCommitted) renderManage(); // aborted drag — resync DOM from state
-  });
-  return node;
-}
-
-function manageDragAfter(y: number): Element | null {
-  return dragAfterIn([...listsManageRows.querySelectorAll(".lm-unit:not(.dragging)")], y);
-}
-
-listsManageRows.addEventListener("dragover", (e) => {
-  if (manageDragKey == null) return;
-  e.preventDefault();
-  const dragging = listsManageRows.querySelector(".lm-unit.dragging");
-  if (!dragging) return;
-  const after = manageDragAfter(e.clientY);
-  if (after == null) listsManageRows.append(dragging);
-  else listsManageRows.insertBefore(dragging, after);
-});
-listsManageRows.addEventListener("drop", (e) => {
-  if (manageDragKey == null) return;
-  e.preventDefault();
-  manageDragCommitted = true;
-  const order = [...listsManageRows.querySelectorAll<HTMLElement>(".lm-unit")]
-    .map((n) => manageUnitByKey.get(n.dataset.unitKey || ""))
-    .filter((u): u is Unit => !!u);
-  void applyUnitOrder(order);
-});
-
-function updateManageToolbar(units: Unit[]): void {
-  const linkBtn = byId<HTMLButtonElement>("listsLinkBtn");
-  const moveBtn = byId<HTMLButtonElement>("listsMoveBtn");
-  const selected = units.filter((u) => manageSelected.has(u.key));
-  moveBtn.disabled = selected.length === 0;
-  // Linking needs ≥2 selected, all ungrouped single lists, consecutive in order.
-  let canLink = selected.length >= 2 && selected.every((u) => u.kind === "list");
-  if (canLink) {
-    const idxs = selected.map((u) => units.indexOf(u)).sort((a, b) => a - b);
-    canLink = idxs.every((v, i) => i === 0 || v === idxs[i - 1] + 1);
-  }
-  linkBtn.disabled = !canLink;
-}
-
-// applyUnitOrder rewrites list ranks to match the given unit order (groups stay
-// contiguous because their member lists are emitted together). Only changed
-// ranks are patched. Offline-capable (rank patches flow through the sync engine).
-async function applyUnitOrder(orderedUnits: Unit[]): Promise<void> {
-  const msg = byId("listsManageMessage");
-  const flat = orderedUnits.flatMap((u) => u.lists);
-  let r: string | null = null;
-  const patches: Array<[BoardList, string]> = [];
-  for (const l of flat) { r = keyBetween(r, null); if (l.rank !== r) patches.push([l, r]); }
-  if (!patches.length) { renderManage(); return; }
-  setStatus("saving");
-  try {
-    for (const [l, rank] of patches) { l.rank = rank; await patch("patchList", `/api/lists/${l.id}`, { rank }); }
-    setStatus("saved");
-    render();
-    renderManage();
-  } catch (err) { setStatus("error"); msg.textContent = errMsg(err); void unlock.load(); }
-}
-
-// applyMemberOrder reorders the lists INSIDE one group: the group keeps its
-// place among the units, only its members' ranks are rewritten.
-function applyMemberOrder(unitKey: string, order: BoardList[]): Promise<void> {
-  const units = computeUnits();
-  const target = units.find((u) => u.key === unitKey);
-  if (!target) return Promise.resolve();
-  target.lists = order;
-  return applyUnitOrder(units);
-}
-
-// moveUnitsTo relocates the selected units, preserving their relative order, so
-// the first lands at 1-based position posN among all units.
-function moveUnitsTo(keys: Set<string>, posN: number): Promise<void> {
-  const units = computeUnits();
-  const selected = units.filter((u) => keys.has(u.key));
-  if (!selected.length) return Promise.resolve();
-  const remaining = units.filter((u) => !keys.has(u.key));
-  const idx = Math.max(0, Math.min(posN - 1, remaining.length));
-  remaining.splice(idx, 0, ...selected);
-  return applyUnitOrder(remaining);
-}
-
-async function linkSelected(): Promise<void> {
-  const units = computeUnits();
-  const selected = units.filter((u) => manageSelected.has(u.key));
-  if (selected.length < 2 || selected.some((u) => u.kind !== "list")) return;
-  const msg = byId("listsManageMessage");
-  if (!xySync.requireOnline("Связывание списков доступно только онлайн.", msg)) return;
-  const name = (prompt("Название списка списков:", "") || "").trim();
-  if (!name) return;
-  // Preserve board order (units are rank-sorted).
-  const listIds = selected.sort((a, b) => units.indexOf(a) - units.indexOf(b)).flatMap((u) => u.lists.map((l) => l.id));
-  try {
-    await jpost(`/api/boards/${boardId}/list-groups`, { name_enc: await xyCrypto.encField(mustDK(), name), list_ids: listIds });
-    manageSelected = new Set();
-    await unlock.load();
-    renderManage();
-  } catch (err) { msg.textContent = errMsg(err); }
-}
-
-async function renameGroup(gid: number): Promise<void> {
-  const g = groupById(gid);
-  const name = (prompt("Новое название группы:", g ? g.name : "") || "").trim();
-  if (!name) return;
-  const msg = byId("listsManageMessage");
-  if (!xySync.requireOnline("Переименование доступно только онлайн.", msg)) return;
-  try {
-    await jpatch(`/api/list-groups/${gid}`, { name_enc: await xyCrypto.encField(mustDK(), name) });
-    await unlock.load();
-    renderManage();
-  } catch (err) { msg.textContent = errMsg(err); }
-}
-
-async function unlinkGroup(gid: number): Promise<void> {
-  if (!confirm("Разъединить группу? Списки останутся, но нумерация снова станет раздельной.")) return;
-  const msg = byId("listsManageMessage");
-  if (!xySync.requireOnline("Разъединение доступно только онлайн.", msg)) return;
-  try {
-    await jdelete(`/api/list-groups/${gid}`);
-    await unlock.load();
-    renderManage();
-  } catch (err) { msg.textContent = errMsg(err); }
-}
-
-byId("listsLinkBtn").addEventListener("click", () => { void linkSelected(); });
-byId("listsMoveBtn").addEventListener("click", () => {
-  const n = parseInt(byId<HTMLInputElement>("listsMovePos").value, 10);
-  if (!(n >= 1)) { byId("listsManageMessage").textContent = "Укажите позицию."; return; }
-  void moveUnitsTo(new Set(manageSelected), n);
-});
-
-// ---- import a package (.4s / .zip / .docx) into a new list ----
-// The server parses the upload with the Go port of chgksuite's parser
-// (internal/chgk/chgkimport) and hands back 4s source plus the images it
-// references. Everything below happens client-side under the board key: the list,
-// its cards and the image attachments are all encrypted before they go back up.
-//
-// A .4s (or a .zip of one plus its images) is already in our own format, so it
-// imports straight away. A .docx has been through a lossy heuristic parse, so it
-// goes to the verification screen first.
-
-interface ImportImage { name: string; data: string; mime: string }
-interface ImportCard { id: number; kind: string; desc: string }
-interface ImportPkg { name: string; source: string; images?: ImportImage[] }
-
-// importCtx holds the package awaiting confirmation on the verification screen.
-let importCtx: { name: string; images: ImportImage[]; imgMap: Map<string, string>; splitTours: boolean } | null = null;
-
-const importPickModal = modal("importPick");
-
-function openImportPick(): void {
-  byId<HTMLFormElement>("importPickForm").reset();
-  importPickModal.open();
-}
-
-byId("importPickForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const files = byId<HTMLInputElement>("importFile").files;
-  const file = files && files[0];
-  if (!file) return;
-  const splitTours = byId<HTMLInputElement>("importSplitTours").checked;
-  importPickModal.close();
-  await importFile(file, splitTours);
-});
-
-async function importFile(file: File, splitTours: boolean): Promise<void> {
-  if (!xySync.requireOnline("Импорт доступен только онлайн.")) return;
-  setStatus("saving");
-  try {
-    const fd = new FormData();
-    fd.append("file", file, file.name);
-    const res = await fetch("/api/import/parse", { method: "POST", credentials: "same-origin", body: fd });
-    if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
-    const pkg = (await res.json()) as ImportPkg;
-    setStatus("saved");
-    // A .docx parse is a guess; let the user check it before it becomes a list.
-    if (/\.docx$/i.test(file.name)) openImportVerify(pkg, splitTours);
-    else await commitImport(pkg.name, pkg.source, pkg.images, splitTours);
-  } catch (err) {
-    setStatus("error");
-    alert("Не удалось разобрать файл: " + errMsg(err));
-  }
-}
-
-// ---- verification screen (docx) ----
-
-const importModal = modal("import");
-
-// importCards splits 4s source the way the export path joins it: one card per
-// blank-line-separated block. Each card's kind comes from its leading marker.
-function importCards(source: string): ImportCard[] {
-  return source
-    .split(/\n[ \t]*\n/)
-    .map((b) => b.trim())
-    .filter(Boolean)
-    .map((desc, i) => ({ id: -(i + 1), kind: importKind(desc), desc }));
-}
-
-// importKind maps a 4s block to an xy card kind. A question is recognised by its
-// fields, not by its first line: compose_4s puts the "№ N" directive ahead of the
-// "? …" marker, and an unmarked block ("pre") is question text whose author
-// didn't prefix it.
-function importKind(desc: string): string {
-  const blocks = xyChgk.parseBlocks(desc);
-  if (blocks.some((b) => b.type === "question" || b.type === "answer" || b.type === "pre")) return "question";
-  if (blocks.some((b) => b.type === "heading" || b.type === "ljheading")) return "heading";
-  return "meta";
-}
-
-// importImgMap turns the package's base64 images into object URLs so the preview
-// can show handouts exactly as the list will once imported.
-function importImgMap(images: ImportImage[] | undefined): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const img of images || []) {
-    const bytes = Uint8Array.from(atob(img.data), (c) => c.charCodeAt(0));
-    map.set(img.name, URL.createObjectURL(new Blob([bytes], { type: img.mime })));
-  }
-  return map;
-}
-
-function openImportVerify(pkg: ImportPkg, splitTours: boolean): void {
-  importModal.close();
-  importCtx = { name: pkg.name, images: pkg.images || [], imgMap: importImgMap(pkg.images), splitTours };
-  byId("importTitle").textContent = "Проверка импорта: " + pkg.name;
-  const src = byId<HTMLTextAreaElement>("importSource");
-  src.value = pkg.source;
-  importModal.open({ onClose: hideImportVerify });
-  renderImportPreview();
-  src.focus();
-  // Focusing puts the caret at the end; the user wants to read from the top.
-  src.setSelectionRange(0, 0);
-  src.scrollTop = 0;
-}
-
-// renderImportPreview re-renders the right pane from whatever is in the editor,
-// using the same renderer the list preview uses — so what you check is what you get.
-function renderImportPreview(): void {
-  const ctx = importCtx;
-  if (!ctx) return;
-  const body = byId("importPreview");
-  const cards = importCards(byId<HTMLTextAreaElement>("importSource").value);
-  const numbers = xyChgk.numberQuestionCards(cards);
-  body.replaceChildren();
-  cards.forEach((card, i) => body.append(renderPreviewCard(card, numbers[i], ctx.imgMap, false, false)));
-  const qs = cards.filter((c) => c.kind === "question").length;
-  byId("importCount").textContent = `${cards.length} блоков, ${qs} вопросов`;
-}
-
-function hideImportVerify(): void {
-  if (importCtx) for (const url of importCtx.imgMap.values()) URL.revokeObjectURL(url);
-  importCtx = null;
-  byId("importPreview").replaceChildren();
-}
-
-byId("importSource").addEventListener("input", debounceImportPreview());
-byId("importCommit").addEventListener("click", async () => {
-  if (!importCtx) return;
-  const { name, images, splitTours } = importCtx;
-  const source = byId<HTMLTextAreaElement>("importSource").value;
-  importModal.close();
-  await commitImport(name, source, images, splitTours);
-});
-
-// Re-rendering the whole preview on every keystroke is wasteful on a big package.
-function debounceImportPreview(): () => void {
-  let t: ReturnType<typeof setTimeout> | null = null;
-  return () => {
-    if (t) clearTimeout(t);
-    t = setTimeout(() => { if (importCtx) renderImportPreview(); }, 200);
-  };
-}
-
-// ---- commit: 4s source + images → a new encrypted list (or a group of them) ----
-
-// splitCardsByTours groups the blocks into tours: a "## …" section block starts
-// a new tour and names its list (the section card itself is kept, so the 4s
-// source survives export intact). Blocks before the first section — usually the
-// editors/date preamble — become their own leading list.
-function splitCardsByTours(cards: ImportCard[]): Array<{ title: string; cards: ImportCard[] }> {
-  const tours: Array<{ title: string; cards: ImportCard[] }> = [];
-  let cur: { title: string; cards: ImportCard[] } | null = null;
-  for (const c of cards) {
-    const sec = xyChgk.parseBlocks(c.desc).find((b) => b.type === "section");
-    if (sec) {
-      cur = { title: sec.text.split("\n")[0].trim() || `Тур ${tours.length + 1}`, cards: [] };
-      tours.push(cur);
-    } else if (!cur) {
-      cur = { title: "Преамбула", cards: [] };
-      tours.push(cur);
-    }
-    cur.cards.push(c);
-  }
-  return tours;
-}
-
-// commitImport creates the list(s), one card per 4s block, and attaches each
-// image to the card whose text references it via an `(img …)` directive. With
-// splitTours on, each tour becomes its own list and the lists are linked into a
-// list group — continuous numbering and combined export across tours.
-//
-// The lists and cards are posted directly (jpost), not through the sync
-// outbox: an import is online-only anyway, and mutate() hands back a negative
-// temp id whenever the queue is non-empty — which the attachment upload, a plain
-// POST to /api/cards/{id}/attachments, cannot use. Going direct keeps every id real.
-async function commitImport(name: string, source: string, images: ImportImage[] | undefined, splitTours: boolean): Promise<void> {
-  const cards = importCards(source);
-  if (!cards.length) { alert("В файле не найдено вопросов."); return; }
-  if (!xySync.requireOnline("Импорт доступен только онлайн.")) return;
-  const tours = splitTours ? splitCardsByTours(cards) : [];
-  // The server refuses a group of one, and a group of one is pointless anyway.
-  const grouped = tours.length >= 2;
-  const title = (prompt(grouped ? "Название группы списков:" : "Название нового списка:", name || "Импорт") || "").trim();
-  if (!title) return;
-  const parts = grouped ? tours : [{ title, cards }];
-
-  setStatus("saving");
-  const byName = new Map((images || []).map((i): [string, ImportImage] => [i.name, i]));
-  let done = 0, attached = 0;
-  const failed: string[] = []; // images the server refused — the card would keep a dead (img …)
-  try {
-    const key = mustDK();
-    const ranks = [...state.lists].sort(byRank);
-    let rank: string | null = ranks.length ? ranks[ranks.length - 1].rank : null;
-    const listIds: number[] = [];
-    for (const part of parts) {
-      rank = keyBetween(rank, null);
-      const lres = (await jpost(`/api/boards/${boardId}/lists`, {
-        title_enc: await xyCrypto.encField(key, part.title), rank, type: "normal",
-      })) as { id: number };
-      listIds.push(lres.id);
-      state.lists.push({ id: lres.id, type: "normal", rank, groupId: null, title: part.title });
-
-      let cardRank: string | null = null;
-      for (const c of part.cards) {
-        cardRank = keyBetween(cardRank, null);
-        const res = (await jpost(`/api/lists/${lres.id}/cards`, {
-          description_enc: await xyCrypto.encField(key, c.desc), rank: cardRank, kind: c.kind,
-        })) as { id: number };
-        state.cards.push({ id: res.id, listId: lres.id, kind: c.kind, rank: cardRank, desc: c.desc, handoutMeta: null, alias: null, createdAt: nowStamp() });
-        done++;
-        // Attach only the images this card actually references, so a handout lands
-        // on the question that uses it (which is where the preview/export look).
-        const refs = new Set<string>();
-        for (const m of c.desc.matchAll(/\(img\b([^)]*)\)/g)) refs.add(imgName(m[1]));
-        for (const ref of refs) {
-          const img = byName.get(ref);
-          if (!img) continue;
-          if (await attachImported(res.id, img)) attached++;
-          else failed.push(ref);
-        }
-      }
-    }
-    if (grouped) {
-      await jpost(`/api/boards/${boardId}/list-groups`, { name_enc: await xyCrypto.encField(key, title), list_ids: listIds });
-      // Reload rather than mirror group_id/groups[] locally — import is online-only.
-      await unlock.load();
-    } else render();
-    setStatus("saved");
-    let msg = grouped
-      ? `Импортировано: ${parts.length} списков (по турам), ${done} карточек, ${attached} изображений.`
-      : `Импортировано: ${done} карточек, ${attached} изображений.`;
-    if (splitTours && !grouped) msg += "\nТуры («## …») в файле не найдены — создан один список.";
-    // A dropped image is invisible otherwise: the card keeps its (img …) directive
-    // but the picture is gone, and the parse response is not kept to retry from.
-    if (failed.length) msg += `\n\nНе удалось загрузить изображения (${failed.length}): ${failed.join(", ")}`;
-    alert(msg);
-  } catch (err) {
-    // The lists and the cards created so far are already on the server — show them
-    // rather than leaving the board looking as if nothing happened.
-    render();
-    setStatus("error");
-    alert(`Импорт прерван после ${done} карточек: ${errMsg(err)}\n\nЧастично импортированный список остался на доске — удалите его перед повторным импортом.`);
-  }
-}
-
-// attachImported encrypts one imported image and posts it as an attachment of
-// `cardId`, under the same filename the (img …) directive refers to. Lossless:
-// re-encoding would change nothing but could degrade a handout. Returns false (and
-// lets the caller report it) if the server rejects it — e.g. an oversized scan.
-async function attachImported(cardId: number, img: ImportImage): Promise<boolean> {
-  try {
-    const key = mustDK();
-    const bytes = Uint8Array.from(atob(img.data), (c) => c.charCodeAt(0));
-    const cipher = await xyCrypto.encBytes(key, bytes);
-    const fd = new FormData();
-    fd.append("meta", JSON.stringify({
-      filename_enc: await xyCrypto.encField(key, img.name),
-      mime: img.mime, lossless: true,
-      event_payload_enc: await xyCrypto.encField(key, JSON.stringify({ file: img.name })),
-    }));
-    fd.append("blob", new Blob([cipher], { type: "application/octet-stream" }), "blob");
-    const res = await fetch(`/api/cards/${cardId}/attachments`, {
-      method: "POST", credentials: "same-origin", body: fd,
-    });
-    return res.ok;
-  } catch (_) { return false; }
-}
-
-// ---- export a list ----
-// Concatenate the list's card descriptions (in board order) into a chgksuite
-// "4s" document, gather any images referenced by `(img ...)` directives from the
-// cards' attachments, and hand both to the server, which composes the requested
-// formats in memory and streams back one file — or a zip of all of them.
-// The .docx and the .pdf render the same document: the PDF is typeset by typst
-// to look like the docx (same layout, same non-breaking spaces/hyphens, same
-// keep-together questions). See internal/server/exportpack.go.
-// exportScope resolves which lists a per-list action (export / handouts) covers:
-// a standalone list is just itself; a grouped list pulls in every list of its
-// group, in board order, so the whole list_of_lists exports as one file.
-// Returns { cards (concatenated, in order), title }.
-function exportScope(list: BoardList): { cards: BoardCard[]; title: string } {
-  let lists = [list], title = list.title || "export";
-  if (list.groupId != null) {
-    lists = listsInGroup(list.groupId);
-    const g = groupById(list.groupId);
-    if (g && g.name) title = g.name;
-  }
-  return { cards: lists.flatMap((l) => cardsOf(l.id)), title };
-}
-
-// exportSource is the 4s document a list exports as: its cards' descriptions in
-// board order, blank-line separated. Every format is rendered from this one
-// string, which is why the versions are folded back into one question block here
-// and nowhere else — a versioned card is still one numbered question.
-function exportSource(cards: ReadonlyArray<BoardCard>): string {
-  return cards.map((c) => xyChgk.composeVersions(c.desc).trim()).filter(Boolean).join("\n\n") + "\n";
-}
-
-// The export modal's five formats, in the order they are offered. `server` marks
-// the ones that need the server to render, so offline can disable exactly those.
-const EXPORT_FORMATS = [
-  { key: "4s", box: "exportFmt4s", server: false },
-  { key: "docx", box: "exportFmtDocx", server: true },
-  { key: "pdf", box: "exportFmtPdf", server: true },
-  { key: "pdf_mobile", box: "exportFmtPdfMobile", server: true },
-  { key: "handouts", box: "exportFmtHandouts", server: true },
-] as const;
-
-const exportModal = modal("export");
-let exportCtx: { cards: BoardCard[]; title: string; hndt: string } | null = null;
-
-function exportBox(box: string): HTMLInputElement { return byId<HTMLInputElement>(box); }
-function exportChosen(): string[] {
-  return EXPORT_FORMATS.filter((f) => exportBox(f.box).checked && !exportBox(f.box).disabled).map((f) => f.key);
-}
-
-// syncExportForm keeps the button row honest: nothing ticked is nothing to do,
-// and the toggle-all label says which way it will go.
-function syncExportForm(): void {
-  const chosen = exportChosen();
-  byId<HTMLButtonElement>("exportRun").disabled = chosen.length === 0;
-  const available = EXPORT_FORMATS.filter((f) => !exportBox(f.box).disabled);
-  const allOn = available.length > 0 && chosen.length === available.length;
-  byId("exportToggleAll").textContent = allOn ? "Снять выделение" : "Выбрать все";
-}
-
-function openExport(list: BoardList): void {
-  const scope = exportScope(list);
-  if (!scope.cards.length) { alert("В списке нет карточек."); return; }
-  const numbers = xyChgk.numberQuestionCards(scope.cards);
-  const metas: Record<number, string> = {};
-  for (const c of scope.cards) if (c.handoutMeta) metas[c.id] = c.handoutMeta;
-  const hndt = xyChgk.generateHndt(scope.cards, numbers, metas);
-  exportCtx = { cards: scope.cards, title: scope.title, hndt };
-
-  // Offline everything but the .4s is unreachable: the other formats render
-  // server-side, and even the .4s ships without its images (they are fetched).
-  const offline = !xySync.isOnline();
-  for (const f of EXPORT_FORMATS) {
-    const box = exportBox(f.box);
-    box.disabled = (offline && f.server) || (f.key === "handouts" && !hndt.trim());
-    if (box.disabled) box.checked = false;
-  }
-  const notes: string[] = [];
-  if (offline) notes.push("Офлайн: доступен только .4s, без изображений.");
-  if (!hndt.trim()) notes.push("В списке нет вопросов с раздаточным материалом.");
-  syncExportForm();
-  exportModal.open({ onClose: () => { exportCtx = null; } });
-  exportModal.message(notes.join(" "));
-}
-
-// runExport renders the ticked formats. A bare .4s with no images never touches
-// the network — it is the one export that works offline.
-async function runExport(): Promise<void> {
-  if (!exportCtx) return;
-  const { cards, title, hndt } = exportCtx;
-  const formats = exportChosen();
-  if (!formats.length) return;
-  const source = exportSource(cards);
-  // Images are fetched (and decrypted) from the server, so offline there are
-  // none to be had — the .4s then goes out as bare text rather than not at all.
-  const wanted = xySync.isOnline() ? imageRefs(cards) : new Set<string>();
-  const wantsImages = formats.includes("4s") && wanted.size > 0;
-
-  if (formats.length === 1 && formats[0] === "4s" && !wantsImages) {
-    downloadBlob(new Blob([source], { type: "text/plain;charset=utf-8" }), `${title}.4s`);
-    exportModal.close();
-    return;
-  }
-
-  const msg = byId("exportMessage");
-  if (!xySync.requireOnline("Эти форматы доступны только онлайн.", msg)) return;
-  const btn = byId<HTMLButtonElement>("exportRun");
-  btn.disabled = true;
-  msg.textContent = formats.includes("handouts") ? "Экспорт… (вёрстка раздаток может занять время)" : "Экспорт…";
-  setStatus("saving");
-  try {
-    const fd = new FormData();
-    fd.append("source", source);
-    fd.append("filename", title);
-    fd.append("formats", formats.join(","));
-    if (formats.includes("handouts")) fd.append("hndt", hndt);
-
-    // Images are only shipped for the .4s (which references them by name);
-    // docx and pdf embed their own copies, so nothing else needs the upload.
-    const needed = new Set<string>();
-    if (formats.some((f) => f !== "4s") || wantsImages) for (const n of wanted) needed.add(n);
-    const found = await appendImages(fd, cards, needed);
-    const missing = [...needed].filter((n) => !found.has(n));
-    if (missing.length && !confirm(`Не найдены изображения: ${missing.join(", ")}. Продолжить?`)) {
-      setStatus("saved");
-      msg.textContent = "";
-      return;
-    }
-    const res = await fetch("/api/export/pack", { method: "POST", credentials: "same-origin", body: fd });
-    if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
-    downloadBlob(await res.blob(), filenameFromResponse(res) || `${title}.zip`);
-    setStatus("saved");
-    exportModal.close();
-  } catch (err) {
-    setStatus("error");
-    msg.textContent = "Экспорт не удался: " + errMsg(err);
-  } finally {
-    btn.disabled = false;
-    syncExportForm();
-  }
-}
-
-// filenameFromResponse reads the name the server chose, so a single-format pack
-// arrives as foo.docx rather than foo.zip.
-function filenameFromResponse(res: Response): string {
-  const m = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "");
-  return m ? m[1] : "";
-}
-
-function downloadBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = el("a", { href: url, download: filename });
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
-}
-
-byId("exportForm").addEventListener("submit", (e) => { e.preventDefault(); void runExport(); });
-byId("exportToggleAll").addEventListener("click", () => {
-  const target = byId("exportToggleAll").textContent === "Выбрать все";
-  for (const f of EXPORT_FORMATS) {
-    const box = exportBox(f.box);
-    if (!box.disabled) box.checked = target;
-  }
-  syncExportForm();
-});
-for (const f of EXPORT_FORMATS) exportBox(f.box).addEventListener("change", syncExportForm);
-
-// ---- handouts generation (chgksuite .hndt → PDF) ----
-// "Генерация раздаток": port of `chgksuite handouts 4s2hndt` (in chgk.js) builds
-// an editable .hndt source from the list's questions, merging each question's
-// saved layout settings (handout_meta) with its live handout text. "Сгенерировать
-// PDF" posts the source + referenced images to the server, which runs
-// `chgksuite handouts hndt2pdf` (tectonic) and streams an ephemeral PDF. On close
-// the per-question settings (everything but the handout text) are persisted back.
-const handoutsModal = modal("handouts");
-let handoutsCtx: { list: BoardList; cards: BoardCard[]; numbers: Array<string | null>; title: string } | null = null;   // { list, cards, numbers }
-let handoutsPdfUrl: string | null = null;
-let handoutsDlUrl: string | null = null;
-
-function openHandouts(list: BoardList): void {
-  // Grouped lists generate one set of handouts for the whole list_of_lists, with
-  // question numbers continuous across the group (numberQuestionCards over the
-  // concatenated cards), matching the board + docx export.
-  const scope = exportScope(list);
-  const cards = scope.cards;
-  const numbers = xyChgk.numberQuestionCards(cards);
-  const metas: Record<number, string> = {};
-  for (const c of cards) if (c.handoutMeta) metas[c.id] = c.handoutMeta;
-  const source = xyChgk.generateHndt(cards, numbers, metas);
-  handoutsCtx = { list, cards, numbers, title: scope.title };
-  byId<HTMLTextAreaElement>("handoutsSource").value = source;
-  clearHandoutsPdf();
-  handoutsModal.open({ onClose: hideHandouts });
-  handoutsModal.message(source.trim() ? "" : "В списке нет вопросов с раздаточным материалом.");
-  // Pre-stage the referenced images now (in the background) so the first PDF /
-  // split_fit generation doesn't pay the gather+upload, and start heartbeating.
-  handoutSession.ensure(source).catch(() => {});
-  handoutSession.startHeartbeat();
-}
-
-// WebKit won't render a PDF inside an <iframe> in a standalone web app (macOS
-// Dock app / iOS home-screen PWA — the preview pane comes up blank), and on
-// iOS even the in-browser iframe shows at most a flat first page. No Safari
-// setting changes this; the working path there is a top-level navigation, so
-// those contexts get an «Открыть PDF» button instead of the inline preview.
-function pdfInlinePreviewBroken(): boolean {
-  const ua = navigator.userAgent;
-  const ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  const webkitOnly = /AppleWebKit/.test(ua) && !/Chrome|CriOS|EdgiOS|FxiOS|Android/.test(ua);
-  const standalone = (navigator as { standalone?: boolean }).standalone === true || (typeof matchMedia === "function" && matchMedia("(display-mode: standalone)").matches);
-  return ios || (webkitOnly && standalone);
-}
-
-function pdfPreviewNode(url: string): HTMLElement {
-  if (!pdfInlinePreviewBroken()) return el("iframe", { class: "handouts-pdf-frame", src: url, title: "PDF" });
-  return el("div", { class: "handouts-pdf-fallback" },
-    el("div", { class: "handouts-pdf-note", text: "Safari не показывает PDF внутри приложения." }),
-    el("a", { class: "btn", href: url, target: "_blank", rel: "noopener", text: "Открыть PDF" }));
-}
-
-function clearHandoutsPdf(): void {
-  const pane = byId("handoutsPdf");
-  pane.replaceChildren();
-  const dl = byId<HTMLAnchorElement>("handoutsDownload");
-  dl.hidden = true;
-  if (handoutsPdfUrl) { revokeNamedUrl(handoutsPdfUrl); handoutsPdfUrl = null; }
-  if (handoutsDlUrl) { URL.revokeObjectURL(handoutsDlUrl); handoutsDlUrl = null; }
-}
-
-// handoutFileBase names a generated раздатка after the board and the list it came
-// from — «Моя_доска_Тур_1_handouts» — rather than after nothing in particular
-// (issue #43). Only path separators and whitespace are folded away: the name is
-// the one the editor typed, Cyrillic included, and every download it rides on
-// spells it in UTF-8.
-function handoutFileBase(): string {
-  const clean = (s: string): string => s.trim().replace(/[\\/\s]+/g, "_");
-  const list = (handoutsCtx && (handoutsCtx.title || handoutsCtx.list.title)) || "";
-  return [clean(state.name), clean(list), "handouts"].filter(Boolean).join("_");
-}
-
-// persistHandoutMeta writes the edited per-question settings back onto the cards
-// (everything in each .hndt block except the live handout text/image), so the
-// layout is restored next time the modal opens.
-async function persistHandoutMeta(): Promise<void> {
-  if (!handoutsCtx) return;
-  const source = byId<HTMLTextAreaElement>("handoutsSource").value;
-  const byNumber = xyChgk.parseHndtMetaByQuestion(source);
-  const { cards, numbers } = handoutsCtx;
-  for (let i = 0; i < cards.length; i++) {
-    const c = cards[i];
-    if (c.kind !== "question") continue;
-    const num = numbers[i];
-    if (num == null || !(String(num) in byNumber)) continue;
-    const meta = byNumber[String(num)] || null;
-    const norm = meta && meta.trim() ? meta : null;
-    if (norm === (c.handoutMeta || null)) continue;
-    try {
-      const body: OpBody = { handout_meta_enc: norm ? await xyCrypto.encField(mustDK(), norm) : "" };
-      await patch("patchCard", `/api/cards/${c.id}`, body);
-      c.handoutMeta = norm;
-    } catch (_) { /* best-effort: keep editing even if a write fails */ }
-  }
-}
-
-async function hideHandouts(): Promise<void> {
-  void handoutSession.close(); // stop heartbeat + delete the staged images server-side
-  await persistHandoutMeta();
-  clearHandoutsPdf();
-  handoutsCtx = null;
-}
-
-async function generateHandoutsPdf(): Promise<void> {
-  if (!handoutsCtx) return;
-  if (!xySync.requireOnline("Генерация PDF доступна только онлайн.", byId("handoutsMessage"))) return;
-  const source = byId<HTMLTextAreaElement>("handoutsSource").value;
-  const msg = byId("handoutsMessage");
-  if (!source.trim()) { msg.textContent = "Пустой источник."; return; }
-  const btn = byId<HTMLButtonElement>("handoutsGenerate");
-  btn.disabled = true;
-  msg.textContent = "Генерация…";
-  clearHandoutsPdf();
-  try {
-    const fd = await handoutsBody(source);
-    const res = await fetch("/api/handouts/pdf", { method: "POST", credentials: "same-origin", body: fd });
-    if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
-    const name = handoutFileBase() + ".pdf";
-    const blob = await res.blob();
-    handoutsPdfUrl = await namedUrl(blob, name);
-    byId("handoutsPdf").replaceChildren(pdfPreviewNode(handoutsPdfUrl));
-    // Only the preview needs /dl/ (the viewer's Save name); Chromium re-issues a
-    // download outside the worker, where that path 404s — so the button gets a blob.
-    handoutsDlUrl = URL.createObjectURL(blob);
-    const dl = byId<HTMLAnchorElement>("handoutsDownload");
-    dl.href = handoutsDlUrl;
-    dl.setAttribute("download", name);
-    dl.hidden = false;
-    msg.textContent = "Готово.";
-  } catch (err) {
-    msg.textContent = "Не удалось сгенерировать: " + errMsg(err);
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-// ---- handout image staging (server-side cache) ----
-// Opening the modal uploads the referenced images to the server once; every PDF
-// / split_fit generation then just references the session id, so the images
-// aren't re-decrypted + re-uploaded each time (which dominated the latency). A 5s
-// heartbeat keeps the session alive; the server reaps it after ~1 min of silence
-// (tab closed / backgrounded), and we re-stage on demand if it lapsed.
-function wantedImages(source: string): Set<string> {
-  const wanted = new Set<string>();
-  for (const m of source.matchAll(/^\s*image:\s*(.+?)\s*$/gm)) wanted.add(m[1]);
-  for (const m of source.matchAll(/\(img\b([^)]*)\)/g)) { const n = imgName(m[1]); if (n) wanted.add(n); }
-  return wanted;
-}
-
-// stageImages gathers + decrypts the referenced images and uploads them to a new
-// server session, returning { session, names } (null when there are none / on
-// error). The session lifecycle around it lives in handoutSession.
-async function stageImages(source: string): Promise<{ session: string; names: Set<string> } | null> {
-  if (!handoutsCtx) return null;
-  const wanted = wantedImages(source);
-  if (!wanted.size) return null;
-  const fd = new FormData();
-  const found = await appendImages(fd, handoutsCtx.cards, wanted);
-  try {
-    const res = await fetch("/api/handouts/stage", { method: "POST", credentials: "same-origin", body: fd });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const { session } = (await res.json()) as { session: string };
-    return { session, names: found };
-  } catch (_) { return null; }
-}
-
-async function heartbeatPing(sessionId: string): Promise<boolean> {
-  try {
-    const fd = new FormData();
-    fd.append("session", sessionId);
-    const res = await fetch("/api/handouts/heartbeat", { method: "POST", credentials: "same-origin", body: fd });
-    return res.ok;
-  } catch (_) { return false; }
-}
-
-async function unstageSession(sessionId: string): Promise<void> {
-  try { await fetch(`/api/handouts/stage?session=${encodeURIComponent(sessionId)}`, { method: "DELETE", credentials: "same-origin" }); } catch (_) {}
-}
-
-// handoutSession owns the stage-once/heartbeat/reap/cleanup lifecycle (see
-// handoutsession.js); the callbacks above are the board-specific network ops.
-const handoutSession = xyHandoutSession.create({
-  wantedNames: wantedImages,
-  stage: stageImages,
-  heartbeat: heartbeatPing,
-  unstage: unstageSession,
-});
-
-// handoutsBody builds the generate request body: the source + (when there are
-// images) the staged session id, so images aren't re-sent each generate.
-async function handoutsBody(source: string): Promise<FormData> {
-  const fd = new FormData();
-  fd.append("source", source);
-  fd.append("filename", (handoutsCtx && (handoutsCtx.title || handoutsCtx.list.title)) || "handouts");
-  const sid = await handoutSession.ensure(source);
-  if (sid) fd.append("session", sid);
-  return fd;
-}
-
-// Revive the staged session when the user returns to a backgrounded tab (its
-// heartbeats may have lapsed and the server reaped it).
-document.addEventListener("visibilitychange", async () => {
-  if (document.visibilityState !== "visible" || !handoutsModal.isOpen || !handoutsCtx) return;
-  if (!(await handoutSession.beat())) handoutSession.ensure(byId<HTMLTextAreaElement>("handoutsSource").value).catch(() => {});
-});
-
-// appendImages resolves each wanted image to its decrypted bytes and appends it
-// to fd as an "img" part. The cards' attachment lists are fetched in parallel
-// (the old per-card sequential scan dominated handout/export latency), and the
-// matched image bodies are fetched in parallel too. Returns the set of resolved
-// names so the caller can prompt about any still missing.
-async function appendImages(fd: FormData, cards: ReadonlyArray<{ id: number }>, wanted: Set<string>): Promise<Set<string>> {
-  const found = new Set<string>();
-  if (!wanted.size) return found;
-  const lists = await Promise.all(cards.map((c) => attachments.cardAttachments(c.id)));
-  const targets = gatherTargets(lists, wanted);
-  await Promise.all([...targets].map(async ([name, att]) => {
-    try {
-      const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
-      if (!res.ok) return;
-      const plain = await xyCrypto.decBytes(mustDK(), new Uint8Array(await res.arrayBuffer()));
-      fd.append("img", new Blob([plain], { type: att.mime }), name);
-      found.add(name);
-    } catch (_) {}
-  }));
-  return found;
-}
-
-// generateSplitFitZip runs chgksuite's split_fit on the current .hndt (pages each
-// handout to fit, one fitted PDF per question + an all-questions PDF) and hands
-// the user a zip of all the PDFs. Online-only (shells out server-side).
-async function generateSplitFitZip(): Promise<void> {
-  if (!handoutsCtx) return;
-  const msg = byId("handoutsMessage");
-  if (!xySync.requireOnline("Split-fit доступен только онлайн.", msg)) return;
-  const source = byId<HTMLTextAreaElement>("handoutsSource").value;
-  if (!source.trim()) { msg.textContent = "Пустой источник."; return; }
-  const btn = byId<HTMLButtonElement>("handoutsSplitFit");
-  btn.disabled = true;
-  msg.textContent = "Split-fit… (подбор раскладки может занять время)";
-  try {
-    const fd = await handoutsBody(source);
-    const res = await fetch("/api/handouts/split_fit", { method: "POST", credentials: "same-origin", body: fd });
-    if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
-    downloadBlob(await res.blob(), handoutFileBase() + ".zip");
-    msg.textContent = "Готово — zip со всеми PDF скачан.";
-  } catch (err) {
-    msg.textContent = "Split-fit не удался: " + errMsg(err);
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-byId("handoutsGenerate").addEventListener("click", () => { void generateHandoutsPdf(); });
-// Edit the .hndt, regenerate, look: Cmd/Ctrl-Enter is that loop without the trip
-// to the button.
-onCmdEnter(byId("handoutsSource"), () => byId("handoutsGenerate").click());
-byId("handoutsSplitFit").addEventListener("click", () => { void generateSplitFitZip(); });
-
 // ---- list preview (docx-style HTML render, entirely client-side) ----
 // Renders a whole list the way chgksuite's docx export would — questions with
 // numbered labels and Ответ/Зачёт/Комментарий/etc. fields, plus meta, headings
@@ -2497,26 +936,6 @@ interface PvCard { id: number; kind: string; desc: string; listId?: number }
 
 const PV_LABELS = xyChgk.QUESTION_LABELS;
 const previewOverlay = byId("previewOverlay");
-
-// imgName extracts the referenced filename from an (img …) run value: like
-// chgksuite's parseimg, the filename is the last whitespace token (the rest are
-// w=/h=/big/inline options).
-function imgName(val: unknown): string {
-  const toks = String(val).trim().split(/\s+/).filter(Boolean);
-  return toks.length ? toks[toks.length - 1] : "";
-}
-
-// imageRefs collects every (img …) filename referenced across the list's cards.
-function imageRefs(cards: ReadonlyArray<{ desc: string }>): Set<string> {
-  const wanted = new Set<string>();
-  for (const c of cards) {
-    for (const m of (c.desc || "").matchAll(/\(img\b([^)]*)\)/g)) {
-      const name = imgName(m[1]);
-      if (name) wanted.add(name);
-    }
-  }
-  return wanted;
-}
 
 // (attachment caches live in attachments.ts)
 
@@ -2560,7 +979,7 @@ function renderRich(text: string, imgMap: Map<string, string>, opts: RichOpts = 
     if (type === "linebreak") { frag.append(el("br")); continue; }
     if (type === "pagebreak") { frag.append(el("hr", { class: "pv-pagebreak" })); continue; }
     if (type === "img") {
-      const name = imgName(val);
+      const name = xyChgk.imgName(val);
       const url = imgMap.get(name);
       if (url) frag.append(el("img", { class: "pv-img", src: url, alt: name }));
       else frag.append(el("span", { class: "pv-img-missing", dataset: { img: name }, text: `[изображение: ${name}]` }));
@@ -2767,7 +1186,7 @@ async function previewList(list: BoardList, wholeGroup = false): Promise<void> {
   const ctx = { cards, numbers, imgMap };
   previewCtx = ctx;
   renderPreviewBody(byId<HTMLInputElement>("previewScreen").checked);
-  await attachments.resolveImages(cards, imageRefs(cards), (name, url) => {
+  await attachments.resolveImages(cards, xyChgk.imageRefs(cards), (name, url) => {
     imgMap.set(name, url);
     // Ignore a close (or another list's preview) that happened during the await.
     if (previewCtx === ctx && !previewOverlay.hidden) fillPreviewImages(body, imgMap);
@@ -2843,7 +1262,7 @@ const cardDetail = createCardDetail({
   paintLabels,
   questionNumberFor,
   forgetCardLabels,
-  preview: { renderPreviewCard, resolveImages: attachments.resolveImages, imageRefs, fillPreviewImages, previewList },
+  preview: { renderPreviewCard, resolveImages: attachments.resolveImages, imageRefs: xyChgk.imageRefs, fillPreviewImages, previewList },
   attachments,
   popupMenu,
   readMarkers: { refreshCardUnreadDot, renderNotifBadge },
@@ -2874,266 +1293,12 @@ timeline = createTimeline({
   attachments: { url: attachments.attachmentUrl, download: attachments.download },
 });
 
-// ---- массовое действие ----
-// Ticking cards across the whole board, then doing one thing to all of them.
-// The rules (what a select-all covers, board order, how a partly-failed run
-// reads) live in massaction.js; this is the DOM, the pickers and the writes.
-let massMode = false;
-let massSelected: Set<number> = new Set();
-let massAction: MassAction | null = null;
-
-function massCards(): BoardCard[] {
-  return xyMass.ordered(massSelected, boardCardsInOrder());
-}
-
-// boardCardsInOrder flattens the board the way the reader sees it: lists by
-// rank, cards by rank inside each. A bulk move must land its cards in that
-// order, not in whatever order they were ticked.
-function boardCardsInOrder(): BoardCard[] {
-  return [...state.lists].sort(byRank).flatMap((l) => cardsOf(l.id));
-}
-
-function setMassMode(on: boolean): void {
-  massMode = on;
-  if (!on) massSelected = new Set();
-  document.body.classList.toggle("mass-mode", on);
-  render();
-}
-
-function massToggle(id: number): void {
-  massSelected = xyMass.toggleOne(massSelected, id);
-  renderMassBar();
-  paintMassChecks();
-}
-
-// paintMassChecks syncs every checkbox to the selection without rebuilding the
-// board — a full render on each tick would lose the scroll position and make
-// ticking a run of cards feel like it was fighting back.
-function paintMassChecks(): void {
-  for (const box of kanban.querySelectorAll<HTMLInputElement>(".kcard-check input")) {
-    box.checked = massSelected.has(Number(box.dataset.cardId));
-  }
-  for (const box of kanban.querySelectorAll<HTMLInputElement>(".klist-check input")) {
-    const ids = cardsOf(Number(box.dataset.listId)).map((c) => c.id);
-    box.checked = xyMass.allSelected(massSelected, ids);
-  }
-}
-
-function renderMassBar(): void {
-  const bar = byId("massBar");
-  bar.hidden = !massMode;
-  if (!massMode) return;
-  const n = massSelected.size;
-  const actions = n
-    ? xyMass.MASS_ACTIONS.map((a) => {
-        const b = el("button", { class: "input mass-act" + (a.danger ? " mass-act-danger" : ""), type: "button", title: a.title, text: a.label });
-        b.addEventListener("click", () => { void openMass(a); });
-        return b;
-      })
-    : [el("span", { class: "mass-hint", text: "Отметьте карточки" })];
-  const done = el("button", { class: "input", type: "button", text: "Готово" });
-  done.addEventListener("click", () => setMassMode(false));
-  bar.replaceChildren(
-    el("span", { class: "mass-count", text: n ? `Выбрано: ${xyMass.cardCount(n)}` : "Массовое действие" }),
-    el("div", { class: "mass-acts" }, ...actions),
-    done,
-  );
-}
-
-// ---- the one dialog ----
-const massModal = modal("mass");
-let massTarget: { listId: number; ctx: MoveCtx } | null = null;
-let massPick: number | null = null;
-
-function hideMass(): void { massAction = null; massTarget = null; massPick = null; }
-
-async function openMass(action: MassAction): Promise<void> {
-  massAction = action;
-  massPick = null;
-  massTarget = null;
-  const n = massSelected.size;
-  massModal.el.querySelector<HTMLElement>(".appearance-modal-title")!.textContent = `${action.label}: ${xyMass.cardCount(n)}`;
-  const run = byId<HTMLButtonElement>("massRun");
-  run.textContent = `${action.verb} (${n})`;
-  run.disabled = action.needs !== "none";
-  run.classList.toggle("btn-danger", !!action.danger);
-  const body = byId("massBody");
-  body.replaceChildren();
-  if (action.needs === "label") buildMassLabelPick(body, run);
-  else if (action.needs === "session") buildMassSessionPick(body, run);
-  else if (action.needs === "target") await buildMassTargetPick(body, run);
-  else body.append(el("p", { class: "label-empty", text: "Карточки будут удалены. Их можно восстановить в течение 14 дней." }));
-  massModal.open({ onClose: hideMass });
-}
-
-// The label picker is the board's own label list, same chips as the card's —
-// reusing the vocabulary rather than inventing a bulk-only one.
-function buildMassLabelPick(body: HTMLElement, run: HTMLButtonElement): void {
-  if (!state.labels.length) { body.append(el("p", { class: "label-empty", text: "На доске нет меток." })); return; }
-  const row = el("div", { class: "label-picker" });
-  for (const l of [...state.labels].sort((a, b) => a.name.localeCompare(b.name))) {
-    const chip = el("button", { class: "label-pick", type: "button", dataset: { c: l.color }, text: l.name });
-    chip.addEventListener("click", () => {
-      massPick = l.id;
-      for (const other of row.querySelectorAll(".label-pick")) other.classList.remove("active");
-      chip.classList.add("active");
-      run.disabled = false;
-    });
-    row.append(chip);
-  }
-  body.append(row);
-  paintLabels();
-}
-
-function buildMassSessionPick(body: HTMLElement, run: HTMLButtonElement): void {
-  if (!state.sessions.length) { body.append(el("p", { class: "label-empty", text: "На доске нет тестов." })); return; }
-  const sel = el("select", { class: "input" }) as HTMLSelectElement;
-  sel.append(el("option", { value: "", text: "— выберите тест —" }));
-  for (const s of state.sessions) sel.append(el("option", { value: String(s.id), text: sessionName(s.id) }));
-  sel.addEventListener("change", () => { massPick = Number(sel.value) || null; run.disabled = !massPick; });
-  body.append(sel);
-}
-
-// Move/copy reuses the card's own destination machinery (loadMoveBoard →
-// MoveCtx), so a bulk move offers exactly the boards, lists and positions a
-// single card's does.
-async function buildMassTargetPick(body: HTMLElement, run: HTMLButtonElement): Promise<void> {
-  const boardSel = el("select", { class: "input" }) as HTMLSelectElement;
-  const listSel = el("select", { class: "input" }) as HTMLSelectElement;
-  body.append(el("label", { class: "section-label", text: "Доска" }), boardSel,
-              el("label", { class: "section-label", text: "Список" }), listSel);
-  const boards = await cardDetail.moveBoardOptions();
-  for (const b of boards) boardSel.append(el("option", { value: String(b.id), text: b.label }));
-  boardSel.value = String(boardId);
-  const fillLists = async (): Promise<void> => {
-    listSel.replaceChildren();
-    run.disabled = true;
-    massTarget = null;
-    const ctx = await cardDetail.loadMoveBoard(Number(boardSel.value));
-    if (!ctx) { listSel.append(el("option", { value: "", text: "— пароль доски неизвестен —" })); return; }
-    for (const l of ctx.lists) listSel.append(el("option", { value: String(l.id), text: l.title || "(без названия)" }));
-    const pick = (): void => {
-      const listId = Number(listSel.value);
-      massTarget = listId ? { listId, ctx } : null;
-      run.disabled = !massTarget;
-    };
-    listSel.addEventListener("change", pick);
-    pick();
-  };
-  boardSel.addEventListener("change", () => { void fillLists(); });
-  await fillLists();
-}
-
-// runMass performs the action card by card, reporting as it goes. It is not a
-// transaction on purpose: one card failing (a lost connection, a card someone
-// else deleted) must not undo the ones that worked. Failures stay selected, so
-// «try again» means clicking the same button.
-async function runMass(): Promise<void> {
-  const action = massAction;
-  if (!action) return;
-  const cards = massCards();
-  const msg = byId("massMessage");
-  const run = byId<HTMLButtonElement>("massRun");
-  // Copying, and anything touching another board, re-encrypts and carries
-  // attachments — online-only, like the single-card path. Saying so once beats
-  // letting every card fail with the same message.
-  const online = action.key === "copy" || (action.key === "move" && massTarget && massTarget.ctx.boardId !== boardId);
-  if (online && !xySync.requireOnline("Копирование и перенос между досками доступны только онлайн.", msg)) return;
-  run.disabled = true;
-  const failed = new Set<number>();
-  let ok = 0;
-  for (const [i, card] of cards.entries()) {
-    msg.textContent = `${i + 1} из ${cards.length}…`;
-    try {
-      await applyMass(action, card);
-      ok++;
-    } catch (_) {
-      failed.add(card.id);
-    }
-  }
-  massSelected = failed;
-  render();
-  msg.textContent = xyMass.runSummary(ok, failed.size);
-  run.disabled = false;
-  if (!failed.size) setTimeout(massModal.close, 900);
-}
-
-async function applyMass(action: MassAction, card: BoardCard): Promise<void> {
-  switch (action.key) {
-    case "delete":
-      await del("deleteCard", `/api/cards/${card.id}`);
-      state.cards = state.cards.filter((c) => c.id !== card.id);
-      forgetCardLabels([card]);
-      return;
-    case "label-add":
-    case "label-del": {
-      if (massPick == null) throw new Error("не выбрана метка");
-      const own = state.cardLabels.filter((a) => a.cardId === card.id);
-      const keep = action.key === "label-del"
-        ? own.filter((a) => !(a.labelId === massPick && a.sessionId == null))
-        : own.some((a) => a.labelId === massPick && a.sessionId == null) ? own : [...own, { cardId: card.id, labelId: massPick, sessionId: null }];
-      await jput(`/api/cards/${card.id}/labels`, { labels: keep.map((a) => ({ label_id: a.labelId, session_id: a.sessionId })) });
-      state.cardLabels = state.cardLabels.filter((a) => a.cardId !== card.id).concat(keep);
-      return;
-    }
-    case "session-add":
-    case "session-del": {
-      if (massPick == null) throw new Error("не выбран тест");
-      const plays = playingsOf(card.id);
-      const next = action.key === "session-del"
-        ? plays.filter((id) => id !== massPick)
-        : plays.includes(massPick) ? plays : [...plays, massPick];
-      await jput(`/api/cards/${card.id}/sessions`, { session_ids: next });
-      state.cardSessions = state.cardSessions.filter((p) => p.cardId !== card.id)
-        .concat(next.map((sessionId) => ({ cardId: card.id, sessionId })));
-      // A playing that is gone takes its scoped labels with it (ADR-0004).
-      if (action.key === "session-del") {
-        state.cardLabels = state.cardLabels.filter((a) => !(a.cardId === card.id && a.sessionId === massPick));
-      }
-      return;
-    }
-    case "move":
-    case "copy": {
-      if (!massTarget) throw new Error("не выбран список");
-      await cardDetail.transferCard(card, massTarget.listId, massTarget.ctx, action.key === "move");
-      return;
-    }
-  }
-}
-
-byId("massRun").addEventListener("click", () => { void runMass(); });
-
 // ---- labels ----
 // The card's «Метки» and «Тесты» are two separate pickers (ADR-0004): a label is
 // the author's view of the question, a Playing is where it was tested, and a
 // label scoped to a Playing is what the testers thought there. Mixing them into
 // one list was what made «взяли» multiply by the number of tests.
 
-// labelLastUsage maps label id → the highest card id currently carrying it.
-// Card ids grow monotonically, so the max id is a recency proxy for "last used"
-// without scanning per-card timelines. Labels absent from the map were never
-// used (or imported with no assignments).
-function labelLastUsage(): Map<number, number> {
-  const usage = new Map<number, number>();
-  for (const a of state.cardLabels) {
-    const prev = usage.get(a.labelId);
-    if (prev === undefined || a.cardId > prev) usage.set(a.labelId, a.cardId);
-  }
-  return usage;
-}
-
-// sortLabels orders by last usage descending; labels with no usage data fall to
-// the bottom, ordered alphabetically descending.
-function sortLabels(labels: BoardLabel[]): BoardLabel[] {
-  const usage = labelLastUsage();
-  return labels.slice().sort((a, b) => {
-    const ua = usage.get(a.id), ub = usage.get(b.id);
-    const ha = ua !== undefined, hb = ub !== undefined;
-    if (ha && hb) return (ub as number) - (ua as number);
-    if (ha !== hb) return ha ? -1 : 1;
-    return b.name.localeCompare(a.name, "ru");
-  });
-}
 
 function labelChip(lbl: BoardLabel, onRemove: () => void, title: string): HTMLElement {
   return el("span", { class: "label-pick is-on", dataset: { c: lbl.color }, title: lbl.name },
@@ -3202,7 +1367,7 @@ function renderSeen(card: BoardCard): void {
   if (!mine.length) { node.hidden = true; return; }
 
   const list = state.lists.find((l) => l.id === card.listId);
-  const named = list ? tourPicked(list) : new Set<number>();
+  const named = list ? testerList.tourPicked(list) : new Set<number>();
   const common = new Set<string>();
   for (const sid of named) {
     const m = sessionMeta(sid);
@@ -3376,7 +1541,7 @@ function openLabelAddPopup(sessionId: number | null, anchorEl?: HTMLElement): vo
   const card = state.cards.find((c) => c.id === cardDetail.openCardId());
   if (!card) return;
   const taken = new Set(assignmentsOf(card.id, sessionId).map((a) => a.labelId));
-  const pool = sortLabels(state.labels.filter((l) => !taken.has(l.id)));
+  const pool = sortLabels(state.labels.filter((l) => !taken.has(l.id)), state.cardLabels);
   filteredPopup({
     anchor: anchorEl || byId("labelAddRow"),
     items: pool.map((l) => ({ id: l.id, name: l.name, color: l.color })),
@@ -3413,171 +1578,6 @@ function openPlayingAddPopup(): void {
 }
 
 byId("playingAddBtn").addEventListener("click", openPlayingAddPopup);
-
-// ---- «Вопросы тестировали» for one tour ----
-//
-// The test list used to BE this list, one per tour. A board-level Тесты panel
-// can only say who tested at all, so a tour compiles its own: each session with
-// how many of the tour's questions it saw. The ЧГК custom names those who tested
-// MOST of a tour (they should not play it); someone who saw one or two questions
-// still may, skipping what they know — so a flat list cannot serve.
-interface TourTester { id: number; name: string; seen: number }
-
-function tourCoverage(list: BoardList): { cards: BoardCard[]; rows: TourTester[] } {
-  const cards = exportScope(list).cards.filter((c) => c.kind === "question");
-  const seen = new Map<number, number>();
-  for (const c of cards) {
-    for (const sid of playingsOf(c.id)) seen.set(sid, (seen.get(sid) || 0) + 1);
-  }
-  const rows = [...seen.entries()]
-    .map(([id, n]): TourTester => ({ id, name: sessionName(id), seen: n }))
-    .sort((a, b) => b.seen - a.seen || a.name.localeCompare(b.name, "ru"));
-  return { cards, rows };
-}
-
-// Which sessions were ticked last time, per tour. A personal working state on
-// the way to a document, so it lives beside the other display prefs rather than
-// on the server.
-// A tour's Declaration lives on the board, not in this browser: the preamble
-// ships with the package, so two editors preparing it see one answer. The ticks
-// used to sit in localStorage, where they outlived the sessions they named.
-function tourScope(list: BoardList): { listId: number | null; groupId: number | null } {
-  return list.groupId != null ? { listId: null, groupId: list.groupId } : { listId: list.id, groupId: null };
-}
-
-// null = this tour has no Declaration and falls back to the custom. An empty
-// array = it declared, and names nobody.
-function declaredFor(list: BoardList): number[] | null {
-  const s = tourScope(list);
-  const rows = state.tourTesters.filter((d) => d.listId === s.listId && d.groupId === s.groupId);
-  if (!rows.length) return null;
-  return rows.filter((d) => d.sessionId != null).map((d) => d.sessionId as number);
-}
-
-async function declare(list: BoardList, ids: number[]): Promise<void> {
-  const s = tourScope(list);
-  await put("setTourTesters", `/api/boards/${boardId}/tour-testers`, {
-    list_id: s.listId, group_id: s.groupId, session_ids: ids,
-  });
-  const rest = state.tourTesters.filter((d) => d.listId !== s.listId || d.groupId !== s.groupId);
-  state.tourTesters = ids.length
-    ? rest.concat(ids.map((sessionId) => ({ ...s, sessionId })))
-    : rest.concat([{ ...s, sessionId: null }]);
-}
-
-// Undeclared, a tour falls back to the custom: everyone who saw MORE than half
-// its questions. Shared with the card's «кроме общих тестеров» line.
-function tourPicked(list: BoardList): Set<number> {
-  const { cards, rows } = tourCoverage(list);
-  const declared = declaredFor(list);
-  return new Set(declared ?? rows.filter((r) => r.seen * 2 > cards.length).map((r) => r.id));
-}
-
-// Numbering runs over the whole export scope (a group numbers across its member
-// lists) and is not always 1..n — a № directive can set a number outright.
-function seenQuestions(list: BoardList): SeenQuestion[] {
-  const scope = exportScope(list).cards;
-  const numbers = xyChgk.numberQuestionCards(scope);
-  const out: SeenQuestion[] = [];
-  scope.forEach((card, i) => {
-    const num = numbers[i];
-    if (!num) return;
-    const testers = playingsOf(card.id).flatMap((sid) => (sessionMeta(sid) || { testers: [] }).testers || []);
-    if (testers.length) out.push({ num, testers });
-  });
-  return out;
-}
-
-const testerListModal = modal("testerList");
-
-function openTesterList(list: BoardList): void {
-  const box = byId("testerList");
-  const { cards, rows } = tourCoverage(list);
-  const total = cards.length;
-  const picked = tourPicked(list);
-
-  const line = el("p", { class: "sess-invite" });
-  const partial = el("p", { class: "sess-invite" });
-  const redraw = (): void => {
-    const testers: Tester[] = [];
-    for (const r of rows) {
-      if (!picked.has(r.id)) continue;
-      const m = sessionMeta(r.id);
-      if (m) testers.push(...m.testers);
-    }
-    const names = whoSaw(testers.length ? [{ testers } as SessionMeta] : []);
-    line.textContent = names ? `Вопросы тестировали: ${names}.` : "Никто не отмечен.";
-    partial.textContent = partialSeen(seenQuestions(list), new Set(testers.map((t) => (t.text || "").trim())));
-    partial.hidden = !partial.textContent;
-  };
-
-  box.replaceChildren();
-  if (!rows.length) box.append(el("p", { class: "label-empty", text: "Вопросы этого тура никто не тестировал." }));
-  for (const r of rows) {
-    const cb = el("input", { class: "input", type: "checkbox" }) as HTMLInputElement;
-    cb.checked = picked.has(r.id);
-    cb.addEventListener("change", () => {
-      if (cb.checked) picked.add(r.id); else picked.delete(r.id);
-      void declare(list, [...picked]).catch((err) => {
-        testerListModal.message(errMsg(err));
-      });
-      redraw();
-    });
-    box.append(el("label", { class: "sess-row" },
-      el("div", { class: "sess-head" }, cb, el("span", { class: "sess-title", text: r.name })),
-      el("span", { class: "sess-meta", text: `${r.seen} из ${total}` })));
-  }
-  const copy = el("button", {
-    class: "input", type: "button",
-    onclick: () => {
-      const text = [line.textContent, partial.textContent].filter(Boolean).join("\n");
-      void cardDetail.copyPlain(text);
-    },
-  }, ...iconed("clipboard", "Скопировать"));
-  box.append(el("div", { class: "sess-invite-box" },
-    el("div", { class: "sess-invite-lines" }, line, partial), copy));
-  redraw();
-  testerListModal.open();
-}
-
-// ---- «Счётчик авторов» ----
-
-const authorCountModal = modal("authorCount");
-
-function openAuthorCount(list: BoardList): void {
-  const box = byId("authorCount");
-  const upTo = byId<HTMLInputElement>("authorCountUpTo");
-  const zero = byId<HTMLInputElement>("authorCountZero");
-  const zeroRow = zero.closest("label") as HTMLElement;
-  const cards = exportScope(list).cards;
-  const numbers = xyChgk.numberQuestionCards(cards).filter((n): n is string => n != null);
-  upTo.value = numbers[numbers.length - 1] || "";
-  zero.checked = false;
-
-  const redraw = (): void => {
-    const r = xyAuthorCount.countAuthors(cards, upTo.value, zero.checked);
-    zeroRow.hidden = !r.hasZero;
-    box.replaceChildren();
-    if (!r.cutoffFound) { box.append(el("p", { class: "label-empty", text: "Нет такого вопроса." })); return; }
-    const rows = r.unauthored ? [...r.rows, r.unauthored] : r.rows;
-    const cells = (row: { name: string; count: number; share: number; numbers: string[] }): string[] =>
-      [row.name, String(row.count), xyAuthorCount.formatShare(row.share, r.questions), row.numbers.join(", ")];
-    const total = ["Всего", String(rows.reduce((n, row) => n + row.count, 0)), xyAuthorCount.formatShare(r.questions, r.questions), ""];
-    const tr = (vals: string[], tag: "th" | "td", cls?: string): HTMLElement =>
-      el("tr", cls ? { class: cls } : {}, ...vals.map((v) => el(tag, { text: v })));
-    box.append(el("table", { class: "data-table author-count-table" },
-      el("thead", {}, tr(["Автор", "Вопросов", "Доля", "Номера"], "th")),
-      el("tbody", {}, ...rows.map((row) => tr(cells(row), "td")), tr(total, "td", "author-count-total"))));
-    const copy = el("button", { class: "input", type: "button", onclick: () => {
-      void cardDetail.copyPlain([...rows.map(cells), total].map((v) => v.join("\t")).join("\n"));
-    } }, ...iconed("clipboard", "Скопировать"));
-    box.append(el("div", { class: "sess-invite-box" }, copy));
-  };
-  upTo.oninput = redraw;
-  zero.onchange = redraw;
-  redraw();
-  authorCountModal.open();
-}
 
 // ---- the Тесты panel + the label editor ----
 
@@ -3643,135 +1643,6 @@ const sessionsPanel = createSessionsPanel({
   render,
 });
 
-// Every label is editable (issue #25) — there is no such thing as a test label
-// whose name comes from somewhere else (ADR-0004). Like the session form, the
-// editor has no per-row Сохранить: Готово commits the lot.
-interface LabelRow { lbl: BoardLabel; name: HTMLInputElement; color: ColorField }
-let labelRows: LabelRow[] = [];
-let labelDraft: { name: HTMLInputElement; color: ColorField } | null = null;
-
-// flushLabelsEditor writes whatever the editor is holding — renamed or
-// recoloured rows first, then a name left in the create row. It throws, so the
-// leave gate can keep the modal open on a failure instead of eating the edit.
-async function flushLabelsEditor(): Promise<void> {
-  for (const row of labelRows) {
-    const name = row.name.value.trim();
-    const color = row.color.value();
-    // A blanked name is a slip, not a rename: a nameless label is unusable.
-    if (!name || (name === row.lbl.name && color === row.lbl.color)) continue;
-    await patch("patchLabel", `/api/labels/${row.lbl.id}`, {
-      name_enc: await xyCrypto.encField(mustDK(), name),
-      color_enc: await xyCrypto.encField(mustDK(), color),
-    });
-    row.lbl.name = name;
-    row.lbl.color = color;
-  }
-  if (labelDraft && labelDraft.name.value.trim()) {
-    await createLabel(labelDraft.name.value.trim(), labelDraft.color.value());
-    labelDraft.name.value = "";
-  }
-}
-
-function renderLabelsEditor(focusNew = false): void {
-  const box = byId("labelsEditor");
-  const usage = labelUsageCounts();
-  box.replaceChildren();
-  labelRows = [];
-
-  // The card's add-label popup was the only way to make one, so you had to open
-  // a card first — and managing labels is what this modal is for.
-  const newName = el("input", { class: "input", type: "text", placeholder: "Новая метка" }) as HTMLInputElement;
-  const newColor = colorField(el("div"), LABEL_COLORS[0]);
-  labelDraft = { name: newName, color: newColor };
-  const add = el("button", { class: "input", type: "button", text: "Добавить" });
-  // Добавить is the create affordance, not a save — it commits now so you can
-  // type the next one. Leaving with a name still in the box creates it too.
-  const submit = async (): Promise<void> => {
-    if (!newName.value.trim()) return;
-    try {
-      await flushLabelsEditor();
-      render();
-      renderLabelsEditor(true);
-    } catch (err) { labelsEditModal.message(errMsg(err)); }
-  };
-  add.addEventListener("click", () => { void submit(); });
-  newName.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter") return;
-    e.preventDefault();
-    void submit();
-  });
-  box.append(el("div", { class: "sess-row" },
-    el("div", { class: "sess-head" }, newName),
-    el("div", { class: "sess-actions" }, newColor.node, add)));
-
-  if (!state.labels.length) box.append(el("p", { class: "label-empty", text: "Меток нет." }));
-  for (const lbl of sortLabels(state.labels.slice())) {
-    const name = el("input", { class: "input", type: "text", value: lbl.name }) as HTMLInputElement;
-    const color = colorField(el("div"), lbl.color);
-    const count = el("span", { class: "sess-meta", text: `${usage.get(lbl.id) || 0} карт.` });
-    labelRows.push({ lbl, name, color });
-    const drop = el("button", { class: "btn btn-danger", type: "button" }, icon("trash-2"));
-    drop.addEventListener("click", async () => {
-      if (!confirm(`Удалить метку «${lbl.name}»? Она исчезнет со всех карточек.`)) return;
-      try {
-        // Commit the other rows first — this re-renders, and their edits would
-        // go with the old DOM.
-        await flushLabelsEditor();
-        await del("deleteLabel", `/api/labels/${lbl.id}`);
-        state.labels = state.labels.filter((l) => l.id !== lbl.id);
-        state.cardLabels = state.cardLabels.filter((a) => a.labelId !== lbl.id);
-        render();
-        renderLabelsEditor();
-      } catch (err) { labelsEditModal.message(errMsg(err)); }
-    });
-    box.append(el("div", { class: "sess-row" },
-      el("div", { class: "sess-head" }, name, count),
-      el("div", { class: "sess-actions" }, color.node, drop)));
-  }
-  if (focusNew) newName.focus();
-}
-
-async function leaveLabelsEditor(): Promise<boolean> {
-  try {
-    await flushLabelsEditor();
-    render();
-    return true;
-  } catch (err) {
-    labelsEditModal.message(errMsg(err));
-    return false;
-  }
-}
-
-const labelsEditModal = modal("labelsEdit");
-
-function openLabelsEditor(): void {
-  renderLabelsEditor();
-  labelsEditModal.open({
-    onClose: () => { labelRows = []; labelDraft = null; },
-    confirm: leaveLabelsEditor,
-  });
-}
-
-// labelUsageCounts: label id → how many live cards carry it, either way.
-function labelUsageCounts(): Map<number, number> {
-  const counts = new Map<number, number>();
-  const live = new Set(state.cards.map((c) => c.id));
-  for (const a of state.cardLabels) {
-    if (!live.has(a.cardId)) continue;
-    counts.set(a.labelId, (counts.get(a.labelId) || 0) + 1);
-  }
-  return counts;
-}
-
-async function createLabel(name: string, color: string): Promise<BoardLabel> {
-  const res = await create("createLabel", `/api/boards/${boardId}/labels`, {
-    name_enc: await xyCrypto.encField(mustDK(), name),
-    color_enc: await xyCrypto.encField(mustDK(), color),
-  });
-  const lbl: BoardLabel = { id: res.id as number, name, color };
-  state.labels.push(lbl);
-  return lbl;
-}
 
 // NB: `newLabelForm` (the retained node), not getElementById — the form is
 // detached from the document above and lives inside the popup while it is open.
@@ -3780,7 +1651,7 @@ newLabelForm.addEventListener("submit", async (e) => {
   const name = byId<HTMLInputElement>("newLabelName").value.trim();
   if (!name) return;
   try {
-    const lbl = await createLabel(name, newLabelColor.value());
+    const lbl = await labelsEditor.createLabel(name, newLabelColor.value());
     byId<HTMLInputElement>("newLabelName").value = "";
     const card = state.cards.find((c) => c.id === cardDetail.openCardId());
     // The form is reachable only from inside the add-label popup, so naming a
@@ -3790,4 +1661,56 @@ newLabelForm.addEventListener("submit", async (e) => {
   } catch (err) { byId("cardMessage").textContent = errMsg(err); }
 });
 
+// ---- the panels ----
+// Every feature the ☰ and the list ⋯ menus offer lives in its own module and
+// registers here, in menu order (panels.ts). The two menus render the registry.
+const shell = createPanelShell(modal("panel"), { title: q("#panelOverlay .appearance-modal-title"), body: byId("panelBody") });
+const rewrites = createRewrites(board);
+const labelsEditor = createLabelsEditor(board);
+const testerList = createTesterList(board, shell, cardDetail);
+const listsManage = createListsManage(board);
+const mass = createMassPanel(board, { kanban, cardDetail, forgetCardLabels, paintLabels });
+
+registerPanel(
+  { id: "rename-board", menu: "board", icon: "pencil", label: "Переименовать доску", title: "Изменить название доски", open: () => { void renameBoard(); } },
+  listsManage.panel,
+  mass.panel,
+  createImportPanel(board, renderPreviewCard),
+  { id: "sessions", menu: "board", icon: "flask-conical", label: "Тесты", title: "Тест-сессии доски: кто когда играл, приглашение со временем начала", open: () => sessionsPanel.open() },
+  labelsEditor.panel,
+  { id: "members", menu: "board", icon: "users", label: "Участники доски", title: "Поделиться доской: добавить или убрать участников", open: () => boardMembers.open() },
+  rewrites.panels[0],
+  createReplacePanel(board, rewrites),
+  rewrites.panels[1],
+  {
+    id: "forget-password", menu: "board", icon: "lock", label: "Забыть пароль доски", title: "Забыть пароль доски на этом устройстве",
+    open: async () => {
+      await xyCrypto.forgetDK(boardId);
+      // The names this board contributed to the person directory outlive nothing:
+      // once the DK is gone its content is ciphertext with no key on this device.
+      // Its Search Index goes the same way, and for a sharper reason (ADR-0008):
+      // plaintext that outlived its key would keep the board readable with none.
+      people.forget(boardId);
+      await xySearchIndex.forget(boardId);
+      location.reload();
+    },
+  },
+  { id: "delete-board", menu: "board", icon: "trash-2", label: "Удалить доску", title: "Удалить доску со всеми списками и карточками (только владелец)", open: () => { void deleteBoard(); } },
+
+  { id: "add-card", menu: "list", icon: "plus", label: "Добавить карточку", open: (s) => { void cardDetail.addCard(s.list); } },
+  { id: "preview", menu: "list", icon: "eye", label: (s) => s.group ? "Предпросмотр списка" : "Предпросмотр", open: (s) => { void previewList(s.list); } },
+  { id: "preview-group", menu: "list", icon: "eye", label: "Предпросмотр всей группы", offered: (s) => !!s.group, open: (s) => { void previewList(s.list, true); } },
+  testerList.panel,
+  createAuthorCountPanel(shell, cardDetail),
+  createMoveListPanel(board, cardDetail),
+  { id: "rename-list", menu: "list", icon: "pencil", label: "Переименовать список", open: (s) => { void renameList(s.list); } },
+  createExportPanel(board, attachments),
+  createHandoutsPanel(board, attachments),
+  { id: "delete-list", menu: "list", icon: "trash-2", label: "Удалить список", open: (s) => { void deleteList(s.list); } },
+);
+// Board-level actions live in the burger (☰) menu — sharing (rarely opened) and
+// "forget password" (rarely needed) don't warrant header buttons.
+window.dopeMenu?.setExtras(boardMenu().map((it) => ({ icon: it.icon, label: it.label, title: it.title, onClick: it.onClick })));
+
 void unlock.boot();
+

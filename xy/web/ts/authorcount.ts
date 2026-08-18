@@ -5,6 +5,11 @@
 
 import { xyChgk, type ChgkCard } from "./chgk.js";
 import { xyFind } from "./find.js";
+import { xyApp } from "./app.js";
+import { iconed } from "./icons_gen.js";
+import type { ListPanel, PanelShell } from "./panels.js";
+
+const { el } = xyApp;
 
 export interface AuthorRow { name: string; count: number; share: number; numbers: string[] }
 export interface AuthorCount {
@@ -70,3 +75,50 @@ export function formatShare(share: number, questions: number): string {
 }
 
 export const xyAuthorCount = { countAuthors, formatShare };
+
+// The panel: a cutoff field, a «считать нулевые» toggle shown only when there
+// are нулевые, and the table — the 1/n split is what a fee is divided by, and
+// нулевые are usually not paid.
+export function createAuthorCountPanel(shell: PanelShell, deps: { copyPlain(text: string): Promise<void> }): ListPanel {
+  return {
+    id: "author-count", menu: "list", icon: "calculator",
+    label: "Счётчик авторов",
+    open(scope) {
+      const cards = scope.cards;
+      const numbers = xyChgk.numberQuestionCards(cards).filter((n): n is string => n != null);
+      const upTo = el("input", { class: "input", type: "text", placeholder: "номер", inputmode: "numeric", autocomplete: "off", spellcheck: "false", value: numbers[numbers.length - 1] || "" }) as HTMLInputElement;
+      const zero = el("input", { type: "checkbox" }) as HTMLInputElement;
+      const zeroRow = el("label", { class: "attach-lossless" }, zero, " считать нулевые");
+      const box = el("div", { class: "author-count" });
+
+      const redraw = (): void => {
+        const r = countAuthors(cards, upTo.value, zero.checked);
+        zeroRow.hidden = !r.hasZero;
+        box.replaceChildren();
+        if (!r.cutoffFound) { box.append(el("p", { class: "label-empty", text: "Нет такого вопроса." })); return; }
+        const rows = r.unauthored ? [...r.rows, r.unauthored] : r.rows;
+        const cells = (row: AuthorRow): string[] =>
+          [row.name, String(row.count), formatShare(row.share, r.questions), row.numbers.join(", ")];
+        const total = ["Всего", String(rows.reduce((n, row) => n + row.count, 0)), formatShare(r.questions, r.questions), ""];
+        const tr = (vals: string[], tag: "th" | "td", cls?: string): HTMLElement =>
+          el("tr", cls ? { class: cls } : {}, ...vals.map((v) => el(tag, { text: v })));
+        box.append(el("table", { class: "data-table author-count-table" },
+          el("thead", {}, tr(["Автор", "Вопросов", "Доля", "Номера"], "th")),
+          el("tbody", {}, ...rows.map((row) => tr(cells(row), "td")), tr(total, "td", "author-count-total"))));
+        const copy = el("button", { class: "input", type: "button", onclick: () => {
+          void deps.copyPlain([...rows.map(cells), total].map((v) => v.join("\t")).join("\n"));
+        } }, ...iconed("clipboard", "Скопировать"));
+        box.append(el("div", { class: "sess-invite-box" }, copy));
+      };
+      upTo.oninput = redraw;
+      zero.onchange = redraw;
+      redraw();
+
+      shell.open({ icon: "users", title: "Счётчик авторов", body: el("div", {},
+        el("div", { class: "u-row u-gap-sm u-align-center u-wrap" },
+          el("span", { class: "muted", text: "До вопроса" }), upTo,
+          el("span", { class: "muted", text: "включительно" }), zeroRow),
+        box) });
+    },
+  };
+}
