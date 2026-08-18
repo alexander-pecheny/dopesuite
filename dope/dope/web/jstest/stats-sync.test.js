@@ -15,17 +15,13 @@ function fakeClock() {
 }
 
 function harness(over = {}) {
-  const calls = {rerender: 0, applied: [], prefetch: 0};
+  const calls = {rerender: 0, prefetch: 0};
   const clock = fakeClock();
   const stageCache = {
-    _state: over.baseState || null,
-    matchState: () => stageCache._state,
-    applyMatchUpdate: (v) => { calls.applied.push(v); stageCache._state = v; },
     prefetchAllStages: () => { calls.prefetch++; return Promise.resolve(); },
   };
   const sync = DopeStatsSync.create({
     stageCache,
-    matchCodeFromScope: (s) => s,
     isActive: over.isActive || (() => true),
     rerender: () => { calls.rerender++; },
     setTimeout: clock.setTimeout,
@@ -34,50 +30,20 @@ function harness(over = {}) {
   return {sync, calls, clock, stageCache};
 }
 
-test("a chainable delta applies to the cache and rerenders", () => {
-  const {sync, calls} = harness({baseState: {code: "m", seq: 1}});
-  sync.applyMatchEvent({scope: "m", ops: [{op: "set", path: ["x"], value: 1}], prevSeq: 1, seq: 2});
-  assert.equal(calls.applied.length, 1);
-  assert.equal(calls.applied[0].seq, 2);
-  assert.equal(calls.rerender, 1); // leading edge
-});
-
-test("a full snapshot applies and rerenders", () => {
-  const {sync, calls} = harness({baseState: {code: "m", seq: 1}});
-  sync.applyMatchEvent({scope: "m", data: {code: "m"}, seq: 7});
-  assert.equal(calls.applied.length, 1);
-  assert.equal(calls.applied[0].seq, 7);
-  assert.equal(calls.rerender, 1);
-});
-
-test("an already-applied delta is ignored", () => {
-  const {sync, calls} = harness({baseState: {code: "m", seq: 5}});
-  sync.applyMatchEvent({scope: "m", ops: [{op: "set", path: ["x"], value: 1}], prevSeq: 4, seq: 3});
-  assert.equal(calls.applied.length, 0);
-  assert.equal(calls.rerender, 0);
-});
-
-test("a seq gap schedules exactly one debounced resync", async () => {
-  const {sync, calls, clock} = harness({baseState: {code: "m", seq: 5}});
-  sync.applyMatchEvent({scope: "m", ops: [{op: "set", path: ["x"], value: 1}], prevSeq: 2, seq: 6}); // gap: base seq 5 != prev 2
-  sync.applyMatchEvent({scope: "m", ops: [{op: "set", path: ["x"], value: 1}], prevSeq: 2, seq: 6}); // second gap, still debounced
-  assert.equal(calls.applied.length, 0);
+test("two gaps schedule exactly one debounced resync", async () => {
+  const {sync, calls, clock} = harness();
+  sync.scheduleResync();
+  sync.scheduleResync();
   assert.equal(clock.pending(), 1);
   await clock.runAll();
   assert.equal(calls.prefetch, 1);
-});
-
-test("a gap with no base state resyncs", () => {
-  const {sync, calls, clock} = harness({baseState: null});
-  sync.applyMatchEvent({scope: "m", ops: [{op: "set", path: ["x"], value: 1}], prevSeq: 0, seq: 1});
-  assert.equal(calls.applied.length, 0);
-  assert.equal(clock.pending(), 1);
+  assert.equal(calls.rerender, 1, "the refetched bracket is recomputed once");
 });
 
 test("a burst of deltas throttles to leading + trailing rerenders", async () => {
-  const {sync, calls, clock} = harness({baseState: {code: "m", seq: 1}});
-  sync.applyMatchEvent({scope: "m", ops: [{op: "set", path: ["x"], value: 1}], prevSeq: 1, seq: 2}); // leading: rerender 1, timer armed
-  sync.applyMatchEvent({scope: "m", ops: [{op: "set", path: ["x"], value: 1}], prevSeq: 2, seq: 3}); // coalesced: pending, no rerender
+  const {sync, calls, clock} = harness();
+  sync.scheduleRerender(); // leading: rerender 1, timer armed
+  sync.scheduleRerender(); // coalesced: pending, no rerender
   assert.equal(calls.rerender, 1);
   await clock.runAll(); // trailing tick fires
   assert.equal(calls.rerender, 2);
@@ -85,9 +51,8 @@ test("a burst of deltas throttles to leading + trailing rerenders", async () => 
   assert.equal(calls.rerender, 2);
 });
 
-test("inactive stats view suppresses rerender but still applies", () => {
-  const {sync, calls} = harness({baseState: {code: "m", seq: 1}, isActive: () => false});
-  sync.applyMatchEvent({scope: "m", ops: [{op: "set", path: ["x"], value: 1}], prevSeq: 1, seq: 2});
-  assert.equal(calls.applied.length, 1); // cache stays current off-screen
-  assert.equal(calls.rerender, 0);        // but no visible rerender
+test("an inactive stats view does not rerender", () => {
+  const {sync, calls} = harness({isActive: () => false});
+  sync.scheduleRerender();
+  assert.equal(calls.rerender, 0);
 });

@@ -7,8 +7,8 @@ import {buildFlatScoreTable, computePlaces, createScoreTableIndex, setMarkClass,
 import type {NodeIndex} from "./score-table.js";
 import {resultsTeamCell} from "./standings.js";
 import {buildRosterView} from "./fest-roster.js";
-import {createHostPresence, createStateSync, gameEventsURL, installClientRecorder, scheduleStaticReload} from "./state-sync.js";
-import type {ClientRecorder, HostPresence, StateSync} from "./state-sync.js";
+import {createHostPresence, createLiveEvents, createScopedWriter, createSyncIndicator, gameEventsURL, installClientRecorder, scheduleStaticReload} from "./state-sync.js";
+import type {ClientRecorder, HostPresence, LiveEvents, ScopedWriter} from "./state-sync.js";
 import {createGameDataLoader, fetchGameData, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, parseGameRoute, renderGameBreadcrumbs} from "./game-page.js";
 import type {AdoptedGameSnapshot, GameInitLike} from "./game-page.js";
 import {bindScrollEdges, clamp, createCellRangeSelection, createStatusReporter, createTeamNameOverflowController, createViewerCounter, fitScrollFade, renderTabBar} from "./widgets.js";
@@ -81,7 +81,7 @@ const statusNode = document.getElementById("status");
 const pageHeading = document.querySelector<HTMLElement>(".host-top h1");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
-const setStatus = createStatusReporter(statusNode);
+const indicator = createSyncIndicator(createStatusReporter(statusNode));
 const viewerCounter = createViewerCounter(statusNode);
 const teamNameOverflow = createTeamNameOverflowController({
   root: siRoot,
@@ -146,8 +146,8 @@ mountGameDownloads({apiBase: route.apiBase, canEdit});
 let scheme: KSIScheme | null = null;
 let state: KSIState | null = null;
 let fest: FestInfo | null = null;
-let initialStateSeq = 0; // game-state scope seq at page render; seeds the SSE client's lastSeq
-let initialStateEpoch = ""; // server epoch at page render; seeds the SSE client's epoch baseline
+let stateSeq = 0; // the game-state scope seq `state` is at; seeded at page render, moved by the engine
+let initialStateEpoch = ""; // server epoch at page render; seeds the engine's epoch baseline
 let participants: string[] = [];
 let themesCount = 8;
 // Sticker configuration for the "KSI with stickers" variant, parsed from
@@ -165,7 +165,8 @@ let detailedOrderCache: number[] | null = null;
 let detailedSort: "name" | "number" = "name";
 let activeAnswerNode: HTMLElement | null = null;
 let activePlayerRows: HTMLElement[] = [];
-let stateSync: StateSync | null = null;
+let live: LiveEvents | null = null;
+let writer: ScopedWriter | null = null;
 let recorder: ClientRecorder | null = null;
 let presence: HostPresence | null = null;
 let cellSelection: CellRangeSelection | null = null;
@@ -210,7 +211,7 @@ const gameLoader = createGameDataLoader({
 function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest, init}: AdoptedGameSnapshot): void {
   if (init) {
     if (init.gameID != null) scopeGameID = String(init.gameID);
-    if (init.seq != null) initialStateSeq = Number(init.seq) || 0;
+    if (init.seq != null) stateSeq = Number(init.seq) || 0;
     if (init.epoch != null) initialStateEpoch = String(init.epoch);
     if (init.teamsUnnumbered && !viewer) mountUnnumberedBanner(route.festID);
   }
@@ -1531,17 +1532,17 @@ function normalizeActiveCell(): void {
 }
 
 function saveState(path: Array<string | number>, value: unknown): void {
-  if (Array.isArray(path)) {
-    syncState().patch(path, value);
-    // Mark the just-edited answer cell as pending right away; it clears when the
-    // server confirms the edit (refreshPendingMarkers, driven from
-    // applyRemoteState on the PATCH ack / any remote update).
-    if (path.length === 5 && path[0] === "themes" && path[2] === "answers") {
-      answerCellNode(path[3], path[1], path[4])?.classList.add("pending");
-    }
-    return;
+  sync().writer.patch(stateScope(), path, value);
+  // Mark the just-edited answer cell as pending right away; it clears when the
+  // server confirms the edit (refreshPendingMarkers, driven from
+  // applyRemoteState on the PATCH ack / any remote update).
+  if (path.length === 5 && path[0] === "themes" && path[2] === "answers") {
+    answerCellNode(path[3], path[1], path[4])?.classList.add("pending");
   }
-  syncState().save();
+}
+
+function stateScope(): string {
+  return `game-state:${scopeGameID}`;
 }
 
 function answerCellNode(player: string | number, theme: string | number, answer: string | number): HTMLElement | null | undefined {
@@ -1554,12 +1555,12 @@ function answerCellNode(player: string | number, theme: string | number, answer:
 // confirmed, then clears. Called after any remote update / ack and after a full
 // re-render (which rebuilds cells without the class).
 function refreshPendingMarkers(): void {
-  if (viewer || !stateSync?.isPending) return;
+  if (viewer || !writer) return;
   siRoot.querySelectorAll<HTMLElement>(".answer-cell").forEach((cell) => {
     const player = Number(cell.dataset.player);
     const theme = Number(cell.dataset.theme);
     const answer = Number(cell.dataset.answer);
-    cell.classList.toggle("pending", stateSync!.isPending(["themes", theme, "answers", player, answer]));
+    cell.classList.toggle("pending", writer!.isPending(stateScope(), ["themes", theme, "answers", player, answer]));
   });
 }
 
@@ -1579,38 +1580,50 @@ function renderBreadcrumbs(gameTitle: string): void {
 }
 
 function connectEvents(): void {
-  if (staticMode) {
-    scheduleStaticReload();
-    return;
-  }
-  syncState().connect();
+  const {live, writer} = sync();
+  live.connect();
+  // Un-acked edits a previous load persisted (a refresh mid-sync): show them
+  // overlaid, with their pending spinner, and let the writer re-send them.
+  if (writer.recover(stateScope()) > 0) applyRemoteState(state);
 }
 
-function syncState(): StateSync {
-  if (stateSync) return stateSync;
+function sync(): {live: LiveEvents; writer: ScopedWriter} {
+  if (live && writer) return {live, writer};
   recorder = installClientRecorder({
-    scope: `game-state:${scopeGameID}`,
+    scope: stateScope(),
     getState: () => state,
     // Editors always get the download button; spectators only when they add
     // ?log to the URL, so the diagnostic UI stays off the public view.
     showButton: !viewer || /[?&]log\b/.test(location.search),
   });
-  stateSync = createStateSync({
+  writer = createScopedWriter({
     readonly: viewer,
-    stateURL: `${route.apiBase}/state`,
-    eventsURL: gameEventsURL(route.festID!, route.gameID),
-    scope: `game-state:${scopeGameID}`,
-    getState: () => state,
-    getInitialSeq: () => initialStateSeq,
-    getInitialEpoch: () => initialStateEpoch,
-    setStatus,
-    onRemoteState: applyRemoteState,
+    urlOf: () => `${route.apiBase}/state`,
+    adopt: (_scope, response) => applyRemoteState(response),
+    indicator,
+    recorder: () => recorder,
+    onRejected: (info) => recorder?.event("write-rejected", info),
+  });
+  live = createLiveEvents({
+    eventsURL: () => gameEventsURL(route.festID!, route.gameID),
+    gameID: scopeGameID,
+    epoch: initialStateEpoch,
+    scopes: [{
+      prefix: stateScope(),
+      base: () => ({data: state, seq: stateSeq}),
+      adopt: (_scope, view) => {
+        stateSeq = view.seq;
+        applyRemoteState(view.data);
+      },
+      stateURL: () => `${route.apiBase}/state`,
+    }],
+    indicator,
     onViewers: (count) => viewerCounter.setCount(count),
     onLockdown: scheduleStaticReload,
-    recorder,
-    onWriteError: (info) => recorder?.event("write-rejected", info),
+    staticMode: () => staticMode,
+    recorder: () => recorder,
   });
-  return stateSync;
+  return {live, writer};
 }
 
 function connectPresence(): void {
@@ -1684,7 +1697,7 @@ function findSIPresenceTarget(cursor: SIPresenceCursor | null | undefined): Elem
 
 function applyRemoteState(nextState: unknown): void {
   const previous = state;
-  state = nextState as KSIState;
+  state = (writer ? writer.overlay(stateScope(), nextState) : nextState) as KSIState;
   ensureState();
   if (canPatchState(previous, state) && patchTable(previous)) {
     refreshPendingMarkers();
@@ -1698,12 +1711,12 @@ document.addEventListener("keydown", handleKeydown);
 
 gameLoader.load()
   .then(() => {
-    setStatus("saved");
+    indicator.touch();
     connectEvents();
     connectPresence();
   })
   .catch((error: unknown) => {
-    setStatus("error");
+    indicator.fail();
     console.error(error);
   });
 

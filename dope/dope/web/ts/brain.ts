@@ -11,8 +11,7 @@ import {festLetters, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
 import {buildRosterView, fetchFestRoster} from "./fest-roster.js";
 import type {RosterTeam} from "./fest-roster.js";
-import {applyDeltaOps, createLiveEvents, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
-import type {ScopedEventMessage} from "./state-sync.js";
+import {createLiveEvents, createScopedWriter, createSyncIndicator, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
 import {mountEditorLink, mountUnnumberedBanner, mountViewerLink, parseGameRoute, renderGameBreadcrumbs} from "./game-page.js";
 import type {GameInitLike} from "./game-page.js";
 import {clamp, createCellRangeSelection, createFloatingPopover, createStatusReporter, createViewerCounter, fitScrollFade, markNameOverflow, renderTabBar} from "./widgets.js";
@@ -127,7 +126,7 @@ const brainTabsRoot = document.getElementById("brainTabs");
 const statusNode = document.getElementById("status");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
-const setStatus = createStatusReporter(statusNode);
+const indicator = createSyncIndicator(createStatusReporter(statusNode));
 const viewerCounter = createViewerCounter(statusNode);
 
 // Long team names fade at their fixed width and carry a popover — the same
@@ -263,13 +262,22 @@ function normalizeState(view: BrainMatchView): void {
   });
 }
 
+// adoptMatchView takes a бой's view from wherever it arrives — the fetch, a
+// write's response, the stream — with this page's un-acked edits overlaid, so
+// a slow write never visibly regresses.
 function adoptMatchView(view: BrainMatchView | null | undefined): boolean {
-  if (!view?.code) return false;
-  const cached = matches.get(view.code);
+  const code = view?.code;
+  if (!view || !code) return false;
+  const cached = matches.get(code);
   if (cached && Number(view.seq || 0) < Number(cached.seq || 0)) return false;
+  view = writer.overlay(matchScope(code), view);
   normalizeState(view);
-  matches.set(view.code, view);
+  matches.set(code, view);
   return true;
+}
+
+function matchScope(code: string): string {
+  return `match:${scopeGameID}:${code}`;
 }
 
 async function fetchMatches(): Promise<void> {
@@ -287,7 +295,7 @@ function scheduleResync(): void {
   resyncScheduled = true;
   setTimeout(() => {
     resyncScheduled = false;
-    fetchMatches().catch(() => setStatus("error"));
+    fetchMatches().catch(() => indicator.fail());
   }, 250);
 }
 
@@ -300,84 +308,65 @@ function loadFestRoster(): void {
     .catch(() => {});
 }
 
-function handleScopedMessage(message: ScopedEventMessage): void {
-  // The server broadcasts the whole fest view after every write; the tables
-  // in it — every Ranker's standings — are the page's, not recomputed here.
-  if (message.scope?.startsWith("fest:")) {
-    const fresh = message.data as FestInfo | null;
-    if (fresh?.stages) {
-      adoptFestStages(fresh);
-      render({preserveScroll: true});
-    }
-    return;
-  }
-  const prefix = `match:${scopeGameID}:`;
-  if (!message.scope?.startsWith(prefix)) return;
-  const code = message.scope.slice(prefix.length);
-  const cached = matches.get(code);
-  const seq = Number(message.seq) || 0;
-  if (cached && seq <= Number(cached.seq || 0)) return;
-  if (Array.isArray(message.ops)) {
-    if (!cached || Number(message.prevSeq) !== Number(cached.seq || 0)) {
-      scheduleResync();
-      return;
-    }
-    const next = applyDeltaOps(cached, message.ops) as BrainMatchView;
-    next.seq = seq;
-    adoptMatchView(next);
-  } else {
-    const view = message.data as BrainMatchView | null;
-    if (!view?.code) {
-      scheduleResync();
-      return;
-    }
-    view.seq = seq;
-    adoptMatchView(view);
-  }
-  render({preserveScroll: true});
-  setStatus("saved");
-}
-
 const live = createLiveEvents({
   eventsURL: () => gameEventsURL(route.festID!, route.gameID),
-  onMessage: handleScopedMessage,
+  gameID: scopeGameID,
+  scopes: [{
+    // The server broadcasts the whole fest view after every write; the tables
+    // in it — every Ranker's standings — are the page's, not recomputed here.
+    prefix: "fest:",
+    adopt: (_scope, view) => {
+      const fresh = view.data as FestInfo | null;
+      if (!fresh?.stages) return;
+      adoptFestStages(fresh);
+      render({preserveScroll: true});
+    },
+  }, {
+    prefix: `match:${scopeGameID}:`,
+    base: (scope) => {
+      const cached = matches.get(scope.slice(`match:${scopeGameID}:`.length));
+      return cached ? {data: cached, seq: Number(cached.seq || 0)} : null;
+    },
+    adopt: (_scope, view) => {
+      const next = view.data as BrainMatchView | null;
+      if (!next?.code) {
+        scheduleResync();
+        return;
+      }
+      next.seq = view.seq;
+      adoptMatchView(next);
+      render({preserveScroll: true});
+    },
+    gap: () => scheduleResync(),
+  }],
+  indicator,
   onViewers: (count) => viewerCounter.setCount(count),
   onLockdown: scheduleStaticReload,
   reload: fetchMatches,
   staticMode: () => staticMode,
 });
 
-
-async function postMatch(code: string, suffix: string, method: string, body: unknown): Promise<void> {
-  setStatus("saving");
-  const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(code)}/${suffix}`, {
-    method,
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) throw new Error(await response.text());
-  const updated = await response.json() as BrainMatchView;
-  adoptMatchView(updated);
-  render({preserveScroll: true});
-  setStatus("saved");
-}
+const writer = createScopedWriter({
+  readonly: viewer,
+  urlOf: (scope) => `${route.apiBase}/matches/${encodeURIComponent(scope.slice(`match:${scopeGameID}:`.length))}/state`,
+  // Ops address the бой's Protocol document, which the view carries as `state`.
+  docPath: ["state"],
+  adopt: (scope, response) => {
+    if (scope.startsWith("stage:")) adoptFestStages(response as FestInfo);
+    else adoptMatchView(response as BrainMatchView);
+    render({preserveScroll: true});
+  },
+  indicator,
+  onRejected: () => scheduleResync(),
+});
 
 function sendOps(code: string, ops: Array<{path: Array<string | number>; value: unknown}>): void {
-  postMatch(code, "state", "PATCH", {ops}).catch((error: unknown) => {
-    console.error(error);
-    setStatus("error");
-    scheduleResync();
-  });
+  for (const op of ops) writer.patch(matchScope(code), op.path, op.value);
 }
 
 function sendFinish(code: string, finished: boolean): void {
-  postMatch(code, "finish", "POST", {finished}).catch((error: unknown) => {
-    console.error(error);
-    setStatus("error");
-    scheduleResync();
-  });
+  void writer.send(matchScope(code), {url: `${route.apiBase}/matches/${encodeURIComponent(code)}/finish`, body: {finished}}, {path: ["finished"], value: finished});
 }
-
 
 function matchRows(view: BrainMatchView, side: number): BrainRow[] {
   return (view.state?.teams?.[side]?.rows || []) as BrainRow[];
@@ -516,17 +505,9 @@ function reseedPendingBouts(stage: BrainSchemeStage): string[] {
 }
 
 async function calculateReseed(code: string): Promise<void> {
-  setStatus("saving");
-  try {
-    const response = await fetch(`${route.apiBase}/stages/${encodeURIComponent(code)}/reseed`, {method: "POST"});
-    if (!response.ok) throw new Error((await response.text()).trim() || "Не удалось рассчитать пересев");
-    adoptFestStages(await response.json() as FestInfo);
-    reseedError.delete(code);
-    setStatus("saved");
-  } catch (error) {
-    reseedError.set(code, error instanceof Error ? error.message : String(error));
-    setStatus("error");
-  }
+  const sent = await writer.send(`stage:${code}`, {url: `${route.apiBase}/stages/${encodeURIComponent(code)}/reseed`});
+  if (sent.ok) reseedError.delete(code);
+  else reseedError.set(code, sent.error || "Не удалось рассчитать пересев");
   render({preserveScroll: true});
 }
 
@@ -1309,11 +1290,11 @@ fitScrollFade(brainRoot.closest(".sheet-frame"));
 loadFestRoster();
 fetchMatches()
   .then(() => {
-    setStatus("saved");
+    indicator.touch();
     live.connect();
   })
   .catch((error: unknown) => {
-    setStatus("error");
+    indicator.fail();
     console.error(error);
   });
 

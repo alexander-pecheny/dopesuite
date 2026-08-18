@@ -1,12 +1,15 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {createStateSync, createLiveEvents, applyDeltaOps, createPendingOps, createClientRecorder, createEpochTracker, gameEventsURL} from "./dist/state-sync.js";
+import {createLiveEvents, createScopedWriter, createSyncIndicator, applyDeltaOps, createPendingOps, createClientRecorder, createEpochTracker, gameEventsURL} from "./dist/state-sync.js";
 
-// The engine reads window/document lazily. Sub-second waits (the resync jitter,
-// the save debounce) fire straight away so no test ever waits; the wake-recovery
-// backoff is queued instead, for runTimers() to release deliberately.
+// The engine reads window/document lazily. By default sub-second waits (the
+// resync jitter, the write debounce) fire straight away so no test ever waits,
+// and the wake-recovery backoff is queued for runTimers() to release
+// deliberately. holdShort() queues the short ones too, for the tests that
+// assert on coalescing under the debounce window.
 const timers = new Map();
 let nextTimer = 0;
+let holdShortTimers = false;
 const lifecycle = new Map();
 
 function bindLifecycle(type, fn) {
@@ -16,7 +19,7 @@ function bindLifecycle(type, fn) {
 
 globalThis.window = {
   setTimeout: (fn, ms) => {
-    if (!ms || ms < 1000) {
+    if (!holdShortTimers && (!ms || ms < 1000)) {
       fn();
       return 0;
     }
@@ -29,7 +32,7 @@ globalThis.window = {
 };
 globalThis.document = {addEventListener: bindLifecycle, visibilityState: "visible"};
 
-// runTimers releases the queued timers, awaiting the async recovery they start.
+// runTimers releases the queued timers, awaiting the async work they start.
 async function runTimers() {
   const due = [...timers.values()];
   timers.clear();
@@ -45,6 +48,7 @@ async function fire(type) {
 function resetEnv() {
   timers.clear();
   lifecycle.clear();
+  holdShortTimers = false;
   globalThis.document.visibilityState = "visible";
 }
 
@@ -69,38 +73,44 @@ function fakeStream(readyState = 1) {
 }
 
 // Answers each call from `responses` in order (an exhausted list keeps answering
-// with an empty 200). A null entry rejects, standing in for an offline attempt.
+// with an empty 200). A null entry rejects, standing in for an offline attempt;
+// {status: 400} answers a rejection.
 function fakeFetch(responses) {
   const calls = [];
   globalThis.fetch = (url, init) => {
-    calls.push({url, init});
+    calls.push({url, init, body: init?.body ? JSON.parse(init.body) : null});
     const r = responses.length ? responses.shift() : {};
     if (r === null) return Promise.reject(new Error("offline"));
+    const status = r.status ?? 200;
     return Promise.resolve({
-      ok: true,
+      ok: status < 300,
+      status,
       headers: {get: (name) => r.headers?.[name] ?? null},
       json: () => Promise.resolve(r.body ?? {}),
-      text: () => Promise.resolve(""),
+      text: () => Promise.resolve(r.text ?? ""),
     });
   };
   return calls;
 }
 
-function connectSync(overrides = {}) {
+// A game-state page: one scope, one blob, resyncable through /state.
+function connectGame(overrides = {}) {
   resetEnv();
   const streams = [];
   const states = [];
   const statuses = [];
-  const sync = createStateSync({
-    scope: "game-state:1",
-    stateURL: "/state",
-    eventsURL: "/events",
-    readonly: true,
-    getState: () => (states.length ? states[states.length - 1] : {v: 0}),
-    getInitialSeq: () => 5,
-    getInitialEpoch: () => "e1",
-    onRemoteState: (state) => states.push(state),
-    setStatus: (state) => statuses.push(state),
+  let seq = 5;
+  const live = createLiveEvents({
+    eventsURL: () => "/events",
+    gameID: 1,
+    epoch: "e1",
+    scopes: [{
+      prefix: "game-state:1",
+      base: () => ({data: states.length ? states[states.length - 1] : {v: 0}, seq}),
+      adopt: (_scope, view) => { seq = view.seq; states.push(view.data); },
+      stateURL: () => "/state",
+    }],
+    indicator: createSyncIndicator((state) => statuses.push(state)),
     newEventSource: () => {
       const s = fakeStream();
       streams.push(s);
@@ -108,27 +118,28 @@ function connectSync(overrides = {}) {
     },
     ...overrides,
   });
-  sync.connect();
-  return {stream: streams[0], streams, states, statuses, sync};
+  live.connect();
+  return {stream: streams[0], streams, states, statuses, live, seqOf: () => seq};
 }
 
 test("delta chaining onto the seeded seq applies ops", () => {
   fakeFetch([]);
-  const {stream, states} = connectSync();
+  const {stream, states, seqOf} = connectGame();
   stream.emit("state", {scope: "game-state:1", ops: [{op: "set", path: ["v"], value: 7}], seq: 6, prevSeq: 5, epoch: "e1"});
   assert.deepEqual(states, [{v: 7}]);
+  assert.equal(seqOf(), 6);
 });
 
 test("stale delta (seq <= applied) is ignored", () => {
   fakeFetch([]);
-  const {stream, states} = connectSync();
+  const {stream, states} = connectGame();
   stream.emit("state", {scope: "game-state:1", ops: [{op: "set", path: ["v"], value: 9}], seq: 5, prevSeq: 4, epoch: "e1"});
   assert.deepEqual(states, []);
 });
 
 test("seq gap triggers a full resync and realigns from headers", async () => {
   const calls = fakeFetch([{headers: {"X-State-Seq": "9", "X-State-Epoch": "e1"}, body: {v: 42}}]);
-  const {stream, states} = connectSync();
+  const {stream, states} = connectGame();
   stream.emit("state", {scope: "game-state:1", ops: [{op: "set", path: ["v"], value: 1}], seq: 8, prevSeq: 7, epoch: "e1"});
   await new Promise((r) => setTimeout(r, 0));
   assert.equal(calls.length, 1);
@@ -139,34 +150,42 @@ test("seq gap triggers a full resync and realigns from headers", async () => {
   assert.deepEqual(states[1], {v: 2});
 });
 
-test("changed epoch resyncs instead of dropping post-restart deltas", async () => {
+test("changed epoch resyncs a game-state page instead of dropping post-restart deltas", async () => {
   const calls = fakeFetch([{headers: {"X-State-Seq": "1", "X-State-Epoch": "e2"}, body: {v: 100}}]);
-  const {stream, states} = connectSync();
+  const {stream, states} = connectGame();
   stream.emit("state", {scope: "game-state:1", ops: [{op: "set", path: ["v"], value: 1}], seq: 1, prevSeq: 0, epoch: "e2"});
   await new Promise((r) => setTimeout(r, 0));
   assert.equal(calls.length, 1);
   assert.deepEqual(states, [{v: 100}]);
+  // Post-resync deltas chain in the new epoch without another resync.
+  stream.emit("state", {scope: "game-state:1", ops: [{op: "set", path: ["v"], value: 2}], seq: 2, prevSeq: 1, epoch: "e2"});
+  assert.deepEqual(states[1], {v: 2});
+  assert.equal(calls.length, 1);
 });
 
 test("snapshot re-baselines unconditionally, even across an epoch change", () => {
-  fakeFetch([]);
-  const {stream, states} = connectSync();
-  stream.emit("state", {scope: "game-state:1", data: {v: 3}, seq: 2, epoch: "e2"});
+  const calls = fakeFetch([]);
+  const {stream, states} = connectGame();
+  stream.emit("state", {scope: "game-state:1", data: {v: 3}, seq: 7, epoch: "e2"});
   assert.deepEqual(states, [{v: 3}]);
-  stream.emit("state", {scope: "game-state:1", ops: [{op: "set", path: ["v"], value: 4}], seq: 3, prevSeq: 2, epoch: "e2"});
+  stream.emit("state", {scope: "game-state:1", ops: [{op: "set", path: ["v"], value: 4}], seq: 8, prevSeq: 7, epoch: "e2"});
   assert.deepEqual(states[1], {v: 4});
+  assert.equal(calls.length, 0, "no resync: the snapshot carried the new epoch");
 });
 
-test("foreign-scope events are ignored", () => {
+test("sibling-game and foreign-scope events are ignored", () => {
   fakeFetch([]);
-  const {stream, states} = connectSync();
+  const unhandled = [];
+  const {stream, states} = connectGame({onUnhandled: (m) => unhandled.push(m.scope)});
   stream.emit("state", {scope: "game-state:2", ops: [{op: "set", path: ["v"], value: 8}], seq: 6, prevSeq: 5, epoch: "e1"});
+  stream.emit("state", {scope: "fest:1", data: {}, seq: 1, epoch: "e1"});
   assert.deepEqual(states, []);
+  assert.deepEqual(unhandled, ["fest:1"], "a sibling game's state is dropped silently; anything else is the page's call");
 });
 
 test("a dead stream is re-opened and re-seeded when the tab returns", async () => {
   const calls = fakeFetch([{headers: {"X-State-Seq": "9"}, body: {v: 42}}]);
-  const {stream, streams, states, statuses} = connectSync();
+  const {stream, streams, states, statuses} = connectGame();
   stream.close();
   await fire("visibilitychange");
   assert.equal(streams.length, 2);
@@ -177,7 +196,7 @@ test("a dead stream is re-opened and re-seeded when the tab returns", async () =
 
 test("a live stream is left alone when the tab returns", async () => {
   const calls = fakeFetch([]);
-  const {streams} = connectSync();
+  const {streams} = connectGame();
   await fire("visibilitychange");
   assert.equal(streams.length, 1);
   assert.equal(calls.length, 0);
@@ -187,11 +206,12 @@ test("recovery keeps retrying until the state is re-seeded", async () => {
   // The iOS case: the tab wakes with the radio still down, so the first attempts
   // fail and no further visibility event is coming to trigger another.
   const calls = fakeFetch([null, null, {headers: {"X-State-Seq": "9"}, body: {v: 42}}]);
-  const {stream, states, statuses} = connectSync();
+  const {stream, states, statuses} = connectGame();
   stream.close();
   await fire("visibilitychange");
   assert.equal(calls.length, 1);
   assert.deepEqual(states, []);
+  assert.equal(statuses.at(-1), "reconnecting");
   await runTimers();
   assert.equal(calls.length, 2);
   await runTimers();
@@ -204,7 +224,7 @@ test("recovery keeps retrying until the state is re-seeded", async () => {
 
 test("a stream that reconnects on its own is still re-seeded", async () => {
   const calls = fakeFetch([null, {headers: {"X-State-Seq": "9"}, body: {v: 42}}]);
-  const {stream, streams, states} = connectSync();
+  const {stream, streams, states} = connectGame();
   stream.close();
   await fire("visibilitychange");
   // Native EventSource retry brings the socket back mid-chain. It looks live,
@@ -217,7 +237,7 @@ test("a stream that reconnects on its own is still re-seeded", async () => {
 
 test("recovery stays off while the tab is hidden", async () => {
   const calls = fakeFetch([]);
-  const {stream, streams} = connectSync();
+  const {stream, streams} = connectGame();
   stream.close();
   globalThis.document.visibilityState = "hidden";
   await fire("visibilitychange");
@@ -227,32 +247,59 @@ test("recovery stays off while the tab is hidden", async () => {
 
 test("recovery stays off after the server locks down", async () => {
   const calls = fakeFetch([]);
-  const {stream, streams} = connectSync({onLockdown: () => {}});
+  let locked = 0;
+  const {stream, streams} = connectGame({onLockdown: () => locked++});
   stream.emit("lockdown", {});
+  assert.equal(locked, 1);
+  assert.equal(stream.readyState, 2);
   await fire("visibilitychange");
   assert.equal(streams.length, 1);
   assert.equal(calls.length, 0);
 });
 
-test("createLiveEvents dispatches after the epoch guard and latches on reset", async () => {
+// A multi-view page: one scope family per бой, views cached by code, no
+// state endpoint — a gap evicts, an epoch reset reloads the page.
+function connectMatches(overrides = {}) {
   resetEnv();
   const stream = fakeStream();
-  const seen = [];
-  let reloads = 0;
-  globalThis.window.location = {reload: () => reloads++};
+  const cache = new Map();
+  const gaps = [];
   const live = createLiveEvents({
     eventsURL: () => "/events",
-    onMessage: (message) => seen.push(message.scope),
+    gameID: 1,
+    scopes: [{
+      prefix: "match:1:",
+      base: (scope) => { const v = cache.get(scope); return v ? {data: v, seq: v.seq} : null; },
+      adopt: (scope, view) => cache.set(scope, {...view.data, seq: view.seq}),
+      gap: (scope) => gaps.push(scope),
+    }],
     reload: () => Promise.resolve(),
     newEventSource: () => stream,
+    ...overrides,
   });
   live.connect();
-  stream.emit("state", {scope: "match:1:a", data: {}, epoch: "e1"});
-  stream.emit("state", {scope: "match:1:b", data: {}, epoch: "e1"});
-  assert.deepEqual(seen, ["match:1:a", "match:1:b"]);
-  // Epoch flip: a jittered reload is scheduled, and nothing more is dispatched.
-  stream.emit("state", {scope: "match:1:c", data: {}, epoch: "e2"});
-  assert.deepEqual(seen, ["match:1:a", "match:1:b"]);
+  return {stream, cache, gaps, live};
+}
+
+test("a delta whose prevSeq does not chain reports a gap for that scope only", () => {
+  const {stream, cache, gaps} = connectMatches();
+  stream.emit("state", {scope: "match:1:a", data: {code: "a", x: 1}, seq: 3, epoch: "e1"});
+  stream.emit("state", {scope: "match:1:b", data: {code: "b", x: 1}, seq: 3, epoch: "e1"});
+  stream.emit("state", {scope: "match:1:a", ops: [{path: ["x"], value: 2}], seq: 4, prevSeq: 3, epoch: "e1"});
+  stream.emit("state", {scope: "match:1:b", ops: [{path: ["x"], value: 9}], seq: 6, prevSeq: 5, epoch: "e1"});
+  stream.emit("state", {scope: "match:1:c", ops: [{path: ["x"], value: 1}], seq: 1, prevSeq: 0, epoch: "e1"});
+  assert.deepEqual(cache.get("match:1:a"), {code: "a", x: 2, seq: 4});
+  assert.deepEqual(cache.get("match:1:b"), {code: "b", x: 1, seq: 3}, "the gapped бой is left for the page to refetch");
+  assert.deepEqual(gaps, ["match:1:b", "match:1:c"], "no base is a gap too");
+});
+
+test("a multi-view page reloads on an epoch reset and dispatches nothing more", async () => {
+  let reloads = 0;
+  globalThis.window.location = {reload: () => reloads++};
+  const {stream, cache} = connectMatches();
+  stream.emit("state", {scope: "match:1:a", data: {code: "a"}, seq: 1, epoch: "e1"});
+  stream.emit("state", {scope: "match:1:b", data: {code: "b"}, seq: 1, epoch: "e2"});
+  assert.equal(cache.has("match:1:b"), false);
   await runTimers();
   assert.equal(reloads, 1);
 });
@@ -261,13 +308,13 @@ test("createLiveEvents retries a reload that failed on wake", async () => {
   resetEnv();
   const streams = [];
   let fail = true;
-  let ups = 0;
   let errors = 0;
+  const statuses = [];
   const live = createLiveEvents({
     eventsURL: () => "/events",
-    onMessage: () => {},
-    onUp: () => ups++,
+    scopes: [],
     onRecoverError: () => errors++,
+    indicator: createSyncIndicator((s) => statuses.push(s)),
     reload: () => (fail ? Promise.reject(new Error("offline")) : Promise.resolve()),
     // The tab wakes on a stream that is still connecting; the re-opened one is live.
     newEventSource: () => {
@@ -280,29 +327,179 @@ test("createLiveEvents retries a reload that failed on wake", async () => {
   await fire("visibilitychange");
   assert.equal(errors, 1);
   assert.equal(streams.length, 1, "a failed reload opens no stream");
+  assert.equal(statuses.at(-1), "reconnecting");
   fail = false;
   await runTimers();
-  assert.equal(ups, 1);
   assert.equal(streams.length, 2);
+  assert.equal(statuses.at(-1), "saved");
   await runTimers();
   assert.equal(streams.length, 2, "a re-seeded page ends the retry chain");
 });
 
-test("createLiveEvents lockdown closes the stream and notifies", () => {
+// ---- the writer -----------------------------------------------------------
+
+function writer(overrides = {}) {
   resetEnv();
-  const stream = fakeStream();
-  let locked = 0;
-  const live = createLiveEvents({
-    eventsURL: () => "/events",
-    onMessage: () => {},
-    onLockdown: () => locked++,
-    reload: () => Promise.resolve(),
-    newEventSource: () => stream,
+  holdShortTimers = true;
+  const adopted = [];
+  const statuses = [];
+  const w = createScopedWriter({
+    urlOf: (scope) => `/api/${scope}/state`,
+    adopt: (scope, response) => adopted.push({scope, response}),
+    indicator: createSyncIndicator((s) => statuses.push(s)),
+    ...overrides,
   });
-  live.connect();
-  stream.emit("lockdown", {});
-  assert.equal(locked, 1);
-  assert.equal(stream.readyState, 2);
+  return {w, adopted, statuses};
+}
+
+test("edits to one scope coalesce into one PATCH per debounce window, last write per path wins", async () => {
+  const calls = fakeFetch([{body: {v: "b", w: 1}}]);
+  const {w, adopted, statuses} = writer();
+  w.patch("match:1:a", ["v"], "a");
+  w.patch("match:1:a", ["w"], 1);
+  w.patch("match:1:a", ["v"], "b");
+  assert.equal(calls.length, 0, "nothing sent inside the window");
+  assert.equal(statuses.at(-1), "saving");
+  assert.equal(w.isPending("match:1:a", ["v"]), true);
+  await runTimers();
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "/api/match:1:a/state");
+  assert.equal(calls[0].init.method, "PATCH");
+  assert.deepEqual(calls[0].body.ops, [{path: ["v"], value: "b"}, {path: ["w"], value: 1}]);
+  assert.deepEqual(adopted, [{scope: "match:1:a", response: {v: "b", w: 1}}]);
+  assert.equal(w.isPending("match:1:a", ["v"]), false);
+  assert.equal(statuses.at(-1), "saved");
+});
+
+test("two scopes flush independently", async () => {
+  const calls = fakeFetch([]);
+  const {w} = writer();
+  w.patch("match:1:a", ["v"], 1);
+  w.patch("match:1:b", ["v"], 2);
+  await runTimers();
+  assert.deepEqual(calls.map((c) => c.url).sort(), ["/api/match:1:a/state", "/api/match:1:b/state"]);
+});
+
+test("un-acked edits overlay every view until confirmed; a 5xx retries them", async () => {
+  const calls = fakeFetch([{status: 500}, {body: {v: 1}}]);
+  const {w, statuses} = writer();
+  w.patch("game-state:1", ["v"], 1);
+  assert.deepEqual(w.overlay("game-state:1", {v: 0, other: true}), {v: 1, other: true});
+  await runTimers(); // first flush: 500
+  assert.equal(calls.length, 1);
+  assert.equal(statuses.at(-1), "error");
+  assert.deepEqual(w.overlay("game-state:1", {v: 0}), {v: 1}, "still overlaid while retrying");
+  assert.equal(w.isPending("game-state:1", ["v"]), true);
+  await runTimers(); // the 2s retry
+  assert.equal(calls.length, 2);
+  assert.equal(statuses.at(-1), "saved");
+  assert.deepEqual(w.overlay("game-state:1", {v: 0}), {v: 0}, "acked: nothing to overlay");
+});
+
+test("a 4xx drops the ops loudly instead of retrying forever", async () => {
+  const calls = fakeFetch([{status: 400, text: "nope"}]);
+  const rejected = [];
+  const {w, statuses} = writer({onRejected: (info) => rejected.push(info)});
+  w.patch("game-state:1", ["v"], 1);
+  await runTimers();
+  await runTimers();
+  assert.equal(calls.length, 1);
+  assert.equal(rejected.length, 1);
+  assert.equal(rejected[0].scope, "game-state:1");
+  assert.equal(statuses.at(-1), "error");
+  assert.equal(w.hasPending(), false);
+});
+
+test("encode translates queued ops to the wire and can hold them for a base", async () => {
+  const calls = fakeFetch([{body: {}}]);
+  let base = null;
+  const {w} = writer({
+    encode: (_scope, ops) => (base ? ops.map((op) => ({path: ["participants", base[op.path[1]], ...op.path.slice(2)], value: op.value})) : null),
+  });
+  w.patch("match:1:a", ["participants", 0, "place"], 2);
+  await runTimers();
+  assert.equal(calls.length, 0, "no base yet: held, not sent");
+  assert.equal(w.isPending("match:1:a", ["participants", 0, "place"]), true);
+  base = {0: "17"};
+  w.recover("match:1:a");
+  await runTimers();
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].body.ops, [{path: ["participants", "17", "place"], value: 2}]);
+});
+
+test("docPath overlays ops inside the adopted view (брейн edits view.state)", () => {
+  const {w} = writer({docPath: ["state"]});
+  w.patch("match:1:a", ["teams", 0, "rows", 1, "mark"], "+");
+  assert.deepEqual(w.overlay("match:1:a", {code: "a", state: {teams: [{rows: [{}, {}]}]}}),
+    {code: "a", state: {teams: [{rows: [{}, {mark: "+"}]}]}});
+});
+
+test("a structural send overlays its intent until its own write settles; a newer intent wins", async () => {
+  const gate = [];
+  globalThis.fetch = () => new Promise((resolve) => gate.push(resolve));
+  const {w, adopted, statuses} = writer();
+  const first = w.send("match:1:a", {url: "/api/a/finish", body: {finished: true}}, {path: ["finished"], value: true});
+  assert.equal(statuses.at(-1), "saving");
+  assert.deepEqual(w.overlay("match:1:a", {finished: false}), {finished: true});
+  assert.equal(w.isPending("match:1:a", ["finished"]), true);
+  const second = w.send("match:1:a", {url: "/api/a/finish", body: {finished: false}}, {path: ["finished"], value: false});
+  assert.deepEqual(w.overlay("match:1:a", {finished: true}), {finished: false}, "the newer toggle's intent");
+  // The first write settles late: it must not clear the newer intent.
+  gate[0]({ok: true, status: 200, json: () => Promise.resolve({finished: true}), text: () => Promise.resolve("")});
+  await first;
+  assert.deepEqual(w.overlay("match:1:a", {finished: true}), {finished: false});
+  gate[1]({ok: true, status: 200, json: () => Promise.resolve({finished: false}), text: () => Promise.resolve("")});
+  await second;
+  assert.deepEqual(w.overlay("match:1:a", {finished: true}), {finished: true}, "settled: nothing overlaid");
+  assert.equal(adopted.length, 2);
+  assert.equal(statuses.at(-1), "saved");
+});
+
+test("persisted edits recover on the next load and re-send", async () => {
+  window.localStorage = fakeLocalStorage();
+  const calls = fakeFetch([{body: {}}]);
+  const {w} = writer();
+  w.patch("game-state:3", ["v"], 1); // never flushed: the page reloads
+  const {w: fresh, statuses} = writer();
+  assert.equal(fresh.recover("game-state:3"), 1);
+  assert.equal(statuses.at(-1), "saving");
+  assert.deepEqual(fresh.overlay("game-state:3", {}), {v: 1});
+  await runTimers();
+  assert.equal(calls.length, 1);
+  assert.equal(fresh.hasPending(), false);
+  window.localStorage = undefined;
+});
+
+test("hiding the tab flushes what the debounce window holds", async () => {
+  const calls = fakeFetch([{body: {}}]);
+  const {w} = writer();
+  w.patch("game-state:1", ["v"], 1);
+  globalThis.document.visibilityState = "hidden";
+  await fire("visibilitychange");
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].init.keepalive, true);
+});
+
+test("a viewer's writer writes nothing", async () => {
+  const calls = fakeFetch([]);
+  const {w} = writer({readonly: true});
+  w.patch("game-state:1", ["v"], 1);
+  await w.send("game-state:1", {url: "/x"});
+  await runTimers();
+  assert.equal(calls.length, 0);
+  assert.equal(w.hasPending(), false);
+});
+
+test("the indicator: reconnecting beats error beats saving beats saved", () => {
+  const seen = [];
+  const ind = createSyncIndicator((s) => seen.push(s));
+  ind.busy("a");
+  ind.fail();
+  ind.idle("a", false);
+  ind.offline();
+  ind.online();
+  ind.touch();
+  assert.deepEqual(seen, ["saving", "error", "error", "reconnecting", "error", "saved"]);
 });
 
 // fakeLocalStorage is an in-memory Storage stand-in for testing persistence;

@@ -6,8 +6,8 @@ import {buildFlatScoreTable, computePlaces} from "./score-table.js";
 import type {ScoreTableRow, ScoreTableTheme, ScoreTableThemeRow} from "./score-table.js";
 import {resultsTeamCell} from "./standings.js";
 import {buildRosterView} from "./fest-roster.js";
-import {createHostPresence, createStateSync, gameEventsURL, installClientRecorder, scheduleStaticReload} from "./state-sync.js";
-import type {ClientRecorder, HostPresence, PatchPath, StateSync} from "./state-sync.js";
+import {createHostPresence, createLiveEvents, createScopedWriter, createSyncIndicator, gameEventsURL, installClientRecorder, scheduleStaticReload} from "./state-sync.js";
+import type {ClientRecorder, HostPresence, LiveEvents, PatchPath, ScopedWriter} from "./state-sync.js";
 import {createGameDataLoader, fetchGameData, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, parseGameRoute, renderGameBreadcrumbs} from "./game-page.js";
 import type {AdoptedGameSnapshot, GameInitLike} from "./game-page.js";
 import {bindScrollEdges, clamp, createStatusReporter, createTeamNameOverflowController, createViewerCounter, fitScrollFade, installVirtualKeypad, renderTabBar} from "./widgets.js";
@@ -123,7 +123,7 @@ const progressNode = document.getElementById("odProgress");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
 const entryModel = DopeEntryModel;
-const setStatus = createStatusReporter(statusNode);
+const indicator = createSyncIndicator(createStatusReporter(statusNode));
 const viewerCounter = createViewerCounter(statusNode);
 const teamNameOverflow = createTeamNameOverflowController({
   root: odRoot,
@@ -169,15 +169,16 @@ mountGameDownloads({apiBase: route.apiBase, canEdit});
 let scheme!: ODScheme;
 let state!: ODState;
 let fest: FestInfo | null = null;
-let initialStateSeq = 0; // game-state scope seq at page render; seeds the SSE client's lastSeq
-let initialStateEpoch = ""; // server epoch at page render; seeds the SSE client's epoch baseline
+let stateSeq = 0; // the game-state scope seq `state` is at; seeded at page render, moved by the engine
+let initialStateEpoch = ""; // server epoch at page render; seeds the engine's epoch baseline
 let tourLengths: number[] = [];
 let totalQuestions = 0;
 let renderedTab: string | null = null;
 let questionStatsCache: QuestionStat[] | null = null;
 let activeEntryEditor: {cell: HTMLElement; input: HTMLInputElement} | null = null;
 let activeEntryRows: Element[] = [];
-let stateSync: StateSync | null = null;
+let live: LiveEvents | null = null;
+let writer: ScopedWriter | null = null;
 let recorder: ClientRecorder | null = null;
 let presence: HostPresence | null = null;
 const tabCache = new Map<string, HTMLElement>();
@@ -288,7 +289,7 @@ const gameLoader = createGameDataLoader({
 function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest, init}: AdoptedGameSnapshot): void {
   if (init) {
     if (init.gameID != null) scopeGameID = String(init.gameID);
-    if (init.seq != null) initialStateSeq = Number(init.seq) || 0;
+    if (init.seq != null) stateSeq = Number(init.seq) || 0;
     if (init.epoch != null) initialStateEpoch = String(init.epoch);
     if (init.teamsUnnumbered && !viewer) mountUnnumberedBanner(route.festID);
   }
@@ -3588,12 +3589,12 @@ function placesFor(totals: number[]): string[] {
 // === persistence ===
 
 function saveState(path: PatchPath, value: unknown): void {
-  if (Array.isArray(path)) {
-    syncState().patch(path, value);
-    refreshPendingMarkers();
-    return;
-  }
-  syncState().save();
+  sync().writer.patch(stateScope(), path, value);
+  refreshPendingMarkers();
+}
+
+function stateScope(): string {
+  return `game-state:${scopeGameID}`;
 }
 
 // refreshPendingMarkers reconciles the per-cell "pending" spinner with the sync
@@ -3602,15 +3603,15 @@ function saveState(path: PatchPath, value: unknown): void {
 // whole-grid patch marks the cells under it too). Driven from saveState (edit)
 // and applyRemoteState (ack / any remote update, incl. after a full rebuild).
 function refreshPendingMarkers(): void {
-  if (viewer || !stateSync || !stateSync.isPending) return;
+  if (viewer || !writer) return;
   odRoot.querySelectorAll<HTMLElement>(".entry-cell").forEach((cell) => {
     const q = Number(cell.dataset.q);
     const row = Number(cell.dataset.row);
     const pending = Number.isInteger(q) && Number.isInteger(row) &&
-      stateSync!.isPending(["entries", q, row]);
+      writer!.isPending(stateScope(), ["entries", q, row]);
     cell.classList.toggle("pending", Boolean(pending));
   });
-  const shootoutPending = stateSync.isPending(["shootoutRounds"]);
+  const shootoutPending = writer.isPending(stateScope(), ["shootoutRounds"]);
   odRoot.querySelectorAll(".od-shootout-cell").forEach((cell) => {
     cell.classList.toggle("pending", shootoutPending);
   });
@@ -3632,36 +3633,48 @@ function renderBreadcrumbs(gameTitle: string): void {
 }
 
 function connectEvents(): void {
-  if (staticMode) {
-    scheduleStaticReload();
-    return;
-  }
-  syncState().connect();
+  const {live, writer} = sync();
+  live.connect();
+  // Un-acked edits a previous load persisted (a refresh mid-sync): show them
+  // overlaid, with their pending spinner, and let the writer re-send them.
+  if (writer.recover(stateScope()) > 0) applyRemoteState(state);
 }
 
-function syncState(): StateSync {
-  if (stateSync) return stateSync;
+function sync(): {live: LiveEvents; writer: ScopedWriter} {
+  if (live && writer) return {live, writer};
   recorder = installClientRecorder({
-    scope: `game-state:${scopeGameID}`,
+    scope: stateScope(),
     getState: () => state,
     showButton: !viewer || /[?&]log\b/.test(location.search),
   });
-  stateSync = createStateSync({
+  writer = createScopedWriter({
     readonly: viewer,
-    stateURL: `${route.apiBase}/state`,
-    eventsURL: gameEventsURL(route.festID!, route.gameID),
-    scope: `game-state:${scopeGameID}`,
-    getState: () => state,
-    getInitialSeq: () => initialStateSeq,
-    getInitialEpoch: () => initialStateEpoch,
-    setStatus,
-    onRemoteState: applyRemoteState,
+    urlOf: () => `${route.apiBase}/state`,
+    adopt: (_scope, response) => applyRemoteState(response),
+    indicator,
+    recorder: () => recorder,
+    onRejected: (info) => recorder?.event("write-rejected", info),
+  });
+  live = createLiveEvents({
+    eventsURL: () => gameEventsURL(route.festID!, route.gameID),
+    gameID: scopeGameID,
+    epoch: initialStateEpoch,
+    scopes: [{
+      prefix: stateScope(),
+      base: () => ({data: state, seq: stateSeq}),
+      adopt: (_scope, view) => {
+        stateSeq = view.seq;
+        applyRemoteState(view.data);
+      },
+      stateURL: () => `${route.apiBase}/state`,
+    }],
+    indicator,
     onViewers: (count) => viewerCounter.setCount(count),
     onLockdown: scheduleStaticReload,
-    recorder,
-    onWriteError: (info) => recorder?.event("write-rejected", info),
+    staticMode: () => staticMode,
+    recorder: () => recorder,
   });
-  return stateSync;
+  return {live, writer};
 }
 
 function connectPresence(): void {
@@ -3748,7 +3761,7 @@ function applyRemoteState(nextState: unknown): void {
   // replaces its node, so re-focus the cursor afterwards (else arrow keys, which
   // are handled on the focused cell, stop working after a remote update).
   const focusedCell = Boolean(active && active.classList.contains("entry-cell") && !isShootoutEntryCell(active));
-  state = nextState as ODState;
+  state = (writer ? writer.overlay(stateScope(), nextState) : nextState) as ODState;
   ensureState();
   updateHeaderProgress();
   if (editingInput || editingShootout || focusedLockCol) {
@@ -3766,11 +3779,11 @@ function applyRemoteState(nextState: unknown): void {
 
 gameLoader.load()
   .then(() => {
-    setStatus("saved");
+    indicator.touch();
     connectEvents();
     connectPresence();
   })
   .catch((error: unknown) => {
-    setStatus("error");
+    indicator.fail();
     console.error(error);
   });

@@ -11,15 +11,14 @@ import {buildGroupStandingsView, festLetters, letteredTitle, resultsTeamCell, st
 import type {StageRef} from "./standings.js";
 import {buildRosterView} from "./fest-roster.js";
 import {buildEKStatsTable, buildIndividualStatsTable, computeEKPlayerStats, computeIndividualPlayerStats} from "./ek-stats.js";
-import {applyDeltaOps, createHostPresence, createLiveEvents, createPendingOps, gameEventsURL, installClientRecorder, scheduleStaticReload} from "./state-sync.js";
-import type {ClientRecorder, HostPresence, PendingOp, PendingOps, ScopedEventMessage} from "./state-sync.js";
+import {createHostPresence, createLiveEvents, createScopedWriter, createSyncIndicator, gameEventsURL, installClientRecorder, scheduleStaticReload} from "./state-sync.js";
+import type {ClientRecorder, HostPresence, PendingOp, WireOp} from "./state-sync.js";
 import {createLocalCache, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, notifyEmbeddedResize, renderGameBreadcrumbs} from "./game-page.js";
 import {bindScrollEdges, clamp, createCellRangeSelection, createFloatingPopover, createStatusReporter, createViewerCounter, fitEKStageTeamName, fitScrollFade, installCellNavBar, isClipped, markNameOverflow} from "./widgets.js";
 import type {CellCoord, CellEdit, CellNavBar, CellRangeSelection, ScrollEdgeBinding} from "./widgets.js";
 import { createStageCache } from "./stage-cache.js";
 import type { MatchDescriptor, MatchView as CachedMatchView, StageData } from "./stage-cache.js";
 import { create as createStatsSync } from "./stats-sync.js";
-import type { StatsMatchEvent } from "./stats-sync.js";
 import { buildFestGrid, buildReseedStagePanel, parseScheme } from "./fest-grid.js";
 import { computeGroupRounds } from "./group-stats.js";
 import { gameTabs, canonicalKey, groupLabel, RESEED_TAB_CODE } from "./game-tabs.js";
@@ -161,7 +160,6 @@ type EKCellPayload = {
 // is a pin — the server resolves nothing by name (ADR-0005).
 type BlobOp = {op?: "set" | "remove"; path: Array<string | number>; value?: unknown};
 
-type EKPendingEntry = {ops: PendingOps; inFlight: boolean; timer: number | null};
 
 type UndoEditItem = {team: number; theme: number; answer: number; shootout: boolean; previous: string};
 type UndoGroup = {matchCode: string; items: UndoEditItem[]};
@@ -189,7 +187,7 @@ const statusNode = document.getElementById("status") as HTMLElement;
 const ekTabsRoot = document.getElementById("ekTabs");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
-const setStatus = createStatusReporter(statusNode);
+const indicator = createSyncIndicator(createStatusReporter(statusNode));
 const viewerCounter = createViewerCounter(statusNode);
 let route = currentRoute();
 // A spectator reads what a ведущий edits: the same page, with every control
@@ -280,7 +278,6 @@ const stageCache = createStageCache({
 let renderMatchCode: string | null = null;
 let activeCell: ActiveCell = {matchCode: "", team: 0, shootout: false, theme: 0, answer: 0};
 let reloadTimer: number | null = null;
-const localMatchEchoes = new Set<string>();
 let matchTableIndex: NodeIndex | null = null;
 let activeAnswerNode: HTMLElement | null = null;
 let recorder: ClientRecorder | null = null;
@@ -596,83 +593,88 @@ async function loadSeedImportPage(): Promise<void> {
   renderSeedImport();
 }
 
-// SSE lifecycle — stream, epoch-reload latch, iOS wake recovery — lives in
-// createLiveEvents (state-sync.ts); this page only dispatches scoped messages.
-// Un-acked edits survive the epoch reload via durable pending storage.
+// SSE lifecycle — stream, seq chaining, epoch-reload latch, iOS wake recovery
+// — lives in createLiveEvents (state-sync.ts); this page says what each scope
+// chains onto and adopts what the engine hands back. Un-acked edits survive the
+// epoch reload via the writer's durable pending storage.
 const liveEvents = createLiveEvents({
   eventsURL: () => gameEventsURL(route.festID, route.gameID),
-  onMessage: dispatchStateMessage,
+  gameID: scopeGameID,
+  scopes: [{
+    // Match-scoped events always route into the cached stage data, whatever
+    // page we're on, so a later tab switch sees fresh data without a fetch. On
+    // the stats page they fold into the cache in place and the table recomputes
+    // from memory — no refetch.
+    prefix: matchScopeFor(""),
+    base: (scope) => {
+      const view = matchBase(matchCodeFromScope(scope));
+      return view ? {data: view, seq: Number(view.seq) || 0} : null;
+    },
+    adopt: (scope, view) => {
+      const code = matchCodeFromScope(scope);
+      const next = view.data as HostMatchView | null | undefined;
+      if (!next?.code) {
+        if (route.mode === "stats") statsSync.scheduleResync();
+        else scheduleReload();
+        return;
+      }
+      next.seq = view.seq;
+      const result = stageCache.applyMatchUpdate(next);
+      if (route.mode === "stats") {
+        statsSync.scheduleRerender();
+        return;
+      }
+      if (route.mode === "match" && code === route.matchCode) applyUpdatedMatch(next, code);
+      if (!result.found && route.mode === "stage") scheduleReload();
+    },
+    // A delta we can't apply only needs a reload when it would change what
+    // the user is looking at; otherwise evicting the stale cache entry is
+    // enough — never repaint the placeholder skeleton for an off-screen stage.
+    gap: (scope) => {
+      const code = matchCodeFromScope(scope);
+      if (route.mode === "stats") {
+        statsSync.scheduleResync();
+        return;
+      }
+      stageCache.invalidateMatch(code);
+      if (matchVisible(code)) scheduleReload();
+    },
+  }, {
+    prefix: `venues:${route.festID}`,
+    adopt: (_scope, view) => {
+      if (route.mode !== "venues") {
+        reloadUnlessStats();
+        return;
+      }
+      venues = venueList(view.data);
+      renderVenues();
+    },
+  }, {
+    prefix: "fest:",
+    adopt: (_scope, view) => {
+      const festView = view.data as HostFestView | null | undefined;
+      if (festView?.stages) applyFestViewEvent(festView);
+      else reloadUnlessStats();
+    },
+  }],
+  // Anything else on the fest stream — this game's own state, an event shape
+  // we don't know — may have moved what's on screen; sibling games are dropped
+  // by the engine, and the stats page needs only match events.
+  onUnhandled: reloadUnlessStats,
+  indicator,
   onViewers: (count) => viewerCounter.setCount(count),
   onLockdown: () => scheduleStaticReload(),
   reload: () => loadCurrent(),
-  onDown: () => setStatus("reconnecting"),
-  onUp: () => setStatus("saved"),
   onRecoverError: (error) => {
-    setStatus("error");
+    indicator.fail();
     console.error(error);
   },
-  onStreamError: () => setStatus("reconnecting"),
   staticMode: () => staticMode,
   recorder: () => recorder,
-  recorderTags: () => ({mode: route.mode, matchCode: route.matchCode}),
 });
 
-function dispatchStateMessage(message: ScopedEventMessage): void {
-  // On the stats page, fold match edits into the cache in place and recompute
-  // from memory — no refetch. Other scopes don't affect the aggregate.
-  if (route.mode === "stats") {
-    if (message.scope?.startsWith("match:")) statsSync.applyMatchEvent(message as StatsMatchEvent);
-    return;
-  }
-  if (consumeLocalMatchEcho(message)) {
-    setStatus("saved");
-    return;
-  }
-  const matchScope = matchScopeFor(route.matchCode || "");
-  const venuesScope = `venues:${route.festID}`;
-  // Match-scoped events: always route into cached stage data, regardless of
-  // which page we're on. Keeps cached panes for other stages live so a later
-  // tab switch sees fresh data without a fetch. Events arrive either as a
-  // scoped delta (ops) — the common case since EK broadcasts deltas — or as a
-  // full-state snapshot.
-  if (message.scope?.startsWith("match:")) {
-    if (Array.isArray(message.ops)) {
-      applyMatchDelta(message, matchScope);
-      return;
-    }
-    const view = message.data as HostMatchView | null | undefined;
-    if (view?.code) {
-      view.seq = Number(message.seq) || 0;
-      const result = stageCache.applyMatchUpdate(view);
-      if (route.mode === "match" && message.scope === matchScope) {
-        applyUpdatedMatch(view, route.matchCode);
-      }
-      if (!result.found && route.mode === "stage") scheduleReload();
-      setStatus("saved");
-      return;
-    }
-    scheduleReload();
-    return;
-  }
-  if (route.mode === "venues" && message.scope === venuesScope) {
-    venues = venueList(message.data);
-    renderVenues();
-    setStatus("saved");
-    return;
-  }
-  const festView = message.data as HostFestView | null | undefined;
-  if (message.scope?.startsWith("fest:") && festView?.stages) {
-    applyFestViewEvent(festView);
-    setStatus("saved");
-    return;
-  }
-  // Sibling games (OD, КСИ) share this fest's SSE stream and emit
-  // game-state:<theirID> events that don't affect the ЭК view. Ignore them —
-  // otherwise editing a sibling game reloads (and flashes) the whole bracket.
-  if (message.scope?.startsWith("game-state:") && message.scope !== `game-state:${scopeGameID}`) {
-    return;
-  }
-  scheduleReload();
+function reloadUnlessStats(): void {
+  if (route.mode !== "stats") scheduleReload();
 }
 
 function applyFestViewEvent(view: HostFestView): void {
@@ -711,40 +713,6 @@ function matchVisible(code: string): boolean {
   if (route.mode === "match") return code === route.matchCode;
   if (route.mode === "stage") return stageCache.stageCodeForMatch(code) === route.stageCode;
   return false;
-}
-
-// applyMatchDelta reconstructs the full match view from a scoped delta by
-// applying its ops to the cached base, but only when the delta chains
-// (prevSeq === the base's seq). A missing base or a seq gap can't be applied
-// safely, so we evict the cache entry (forcing a fresh fetch) and reload only
-// when the affected match is on screen — never repainting the placeholder
-// skeleton for an off-screen stage. This is the host-side mirror of viewer.js's
-// handleMatchEvent: without it, delta events (the default for EK) fall through
-// to a full reload, flashing the stage skeleton on every edit.
-function applyMatchDelta(message: ScopedEventMessage, matchScope: string): void {
-  const code = matchCodeFromScope(message.scope);
-  const base = matchBase(code);
-  const prev = Number(message.prevSeq) || 0;
-  // Already applied: a coalesced viewer delta whose range this view was fetched
-  // past arrives with seq <= base.seq. Ignore it rather than treat the older
-  // prevSeq as a gap (which would force a needless reload).
-  if (base && (Number(message.seq) || 0) <= (Number(base.seq) || 0)) {
-    setStatus("saved");
-    return;
-  }
-  if (!base || (Number(base.seq) || 0) !== prev) {
-    stageCache.invalidateMatch(code);
-    if (matchVisible(code)) scheduleReload();
-    setStatus("saved");
-    return;
-  }
-  const next = applyDeltaOps(base, message.ops) as HostMatchView;
-  next.seq = Number(message.seq) || prev;
-  stageCache.applyMatchUpdate(next);
-  if (route.mode === "match" && message.scope === matchScope) {
-    applyUpdatedMatch(next, route.matchCode);
-  }
-  setStatus("saved");
 }
 
 // SPA navigation for the EK tab strip: intercept same-origin clicks within
@@ -788,26 +756,27 @@ function navigateTo(target: string): void {
 
 function runCurrentRoute(): void {
   route = currentRoute();
-  setStatus("saving");
   editorLink?.refresh();
-  loadCurrent()
-    .then(() => setStatus("saved"))
-    .catch((error) => {
-      setStatus("error");
-      console.error(error);
-    });
+  void tracked("route", loadCurrent());
 }
 
 function scheduleReload(): void {
   window.clearTimeout(reloadTimer ?? undefined);
-  reloadTimer = window.setTimeout(() => {
-    loadCurrent()
-      .then(() => setStatus("saved"))
-      .catch((error) => {
-        setStatus("error");
-        console.error(error);
-      });
-  }, 120);
+  reloadTimer = window.setTimeout(() => void tracked("reload", loadCurrent()), 120);
+}
+
+// tracked shows a load on the status dot the way a write shows: saving while it
+// runs, error if it fails.
+async function tracked(key: string, work: Promise<unknown>): Promise<void> {
+  indicator.busy(key);
+  try {
+    await work;
+    indicator.idle(key, true);
+  } catch (error) {
+    indicator.idle(key, false);
+    indicator.fail();
+    console.error(error);
+  }
 }
 
 // statsSync keeps the stats page live off the same SSE stream the bracket uses:
@@ -817,7 +786,6 @@ function scheduleReload(): void {
 // and unit-tested; this file supplies the page-specific pieces.
 const statsSync = createStatsSync({
   stageCache,
-  matchCodeFromScope,
   isActive: () => route.mode === "stats",
   rerender: rerenderStatsTable,
 });
@@ -826,40 +794,31 @@ function matchScopeFor(matchCode: string): string {
   return `match:${scopeGameID}:${matchCode}`;
 }
 
-function matchEchoKey(scope: string, revision: number | undefined): string {
-  return `${scope}:${revision || 0}`;
-}
+// The one write discipline (state-sync.ts): cell edits are applied to the DOM
+// and match state instantly (ekApplyValues), queued per бой, coalesced into ONE
+// PATCH per бой per debounce window, re-overlaid on every MatchView the page
+// renders until the server confirms them, retried, and persisted per бой so a
+// mid-sync refresh recovers them. Structural writes (finish, venue, a shootout
+// theme) go out on their own; a finish carries its intent so a slow write plus
+// a co-incident broadcast can't visually revert the tick.
+const writer = createScopedWriter({
+  readonly: viewer,
+  urlOf: (scope) => `${route.apiBase}/matches/${encodeURIComponent(matchCodeFromScope(scope))}/state`,
+  encode: (scope, ops) => {
+    const view = matchBase(matchCodeFromScope(scope));
+    if (!view) return null; // no base to resolve team/player ids against; retry on reload
+    return ops.map((op) => opToBlobOp(op, view)).filter((op): op is WireOp => op !== null);
+  },
+  adopt: (scope, response) => {
+    if (scope.startsWith(matchScopeFor(""))) applyUpdatedMatch(response as HostMatchView, matchCodeFromScope(scope));
+  },
+  indicator,
+  recorder: () => recorder,
+  onRejected: (info) => recorder?.event("write-rejected", info),
+});
 
-function rememberLocalMatchEcho(matchCode: string, updated: HostMatchView): void {
-  if (!updated?.revision) return;
-  localMatchEchoes.add(matchEchoKey(matchScopeFor(matchCode), updated.revision));
-}
-
-function consumeLocalMatchEcho(message: ScopedEventMessage): boolean {
-  if (!message?.scope?.startsWith("match:")) return false;
-  const key = matchEchoKey(message.scope, message.revision);
-  if (!localMatchEchoes.has(key)) return false;
-  localMatchEchoes.delete(key);
-  return true;
-}
-
-// postMatch drives one of the match's write endpoints. Protocol edits go to
-// /state as blob-path set-ops; the two Structure transitions keep their own
-// endpoints. All three land in the same server-side batching window.
-async function postMatch(matchCode: string, suffix: string, method: string, body: unknown): Promise<HostMatchView> {
-  const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(matchCode)}/${suffix}`, {
-    method,
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) throw new Error(await response.text());
-  const updated = await response.json() as HostMatchView;
-  rememberLocalMatchEcho(matchCode, updated);
-  return updated;
-}
-
-function sendMatchOps(matchCode: string, ops: BlobOp[]): Promise<HostMatchView> {
-  return postMatch(matchCode, "state", "PATCH", {ops});
+function matchURL(matchCode: string, suffix: string): string {
+  return `${route.apiBase}/matches/${encodeURIComponent(matchCode)}/${suffix}`;
 }
 
 // shootoutThemeOps builds the ops that add or drop one shootout theme across
@@ -879,136 +838,61 @@ function shootoutThemeOps(matchCode: string, themeIndex: number, remove: boolean
 // sendStructuralOps applies ops that aren't tracked cell edits (adding or
 // dropping a shootout theme) — they have no optimistic overlay, so they go out
 // on their own rather than through the pending queue.
-async function sendStructuralOps(matchCode: string, ops: BlobOp[]): Promise<void> {
+function sendStructuralOps(matchCode: string, ops: BlobOp[]): void {
   if (ops.length === 0) return;
-  setStatus("saving");
-  try {
-    applyUpdatedMatch(await sendMatchOps(matchCode, ops), matchCode);
-    setStatus("saved");
-  } catch (error) {
-    setStatus("error");
-    console.error(error);
-  }
+  void writer.send(matchScopeFor(matchCode), {url: matchURL(matchCode, "state"), method: "PATCH", body: {ops}});
 }
 
-// setMatchFinished toggles a match's finished flag. Unlike a plain edit it
-// (a) applies the new value optimistically so the tick reflects intent at once,
-// and (b) records it in ekPendingFinished so overlayPendingMatch re-asserts it on
-// every MatchView that lands while the write is in flight — without this, a slow
-// finish-write plus an incoming broadcast reverts the checkbox and the operator
-// re-clicks, producing the finished/active flapping seen under load. The pending
-// intent is cleared only when its OWN write settles and no newer toggle has since
-// superseded it (token check), so rapid re-toggles converge to the last intent.
-async function setMatchFinished(matchCode: string, value: boolean): Promise<void> {
-  const scope = matchScopeFor(matchCode);
-  const token = ++ekFinishedToken;
-  recorder?.event("ek-finished", {matchCode, value, token});
-  ekPendingFinished.set(scope, {value, token});
+// setMatchFinished toggles a match's finished flag: the new value shows at once
+// and the writer holds it as the бой's intent until this write settles.
+function setMatchFinished(matchCode: string, value: boolean): void {
+  recorder?.event("ek-finished", {matchCode, value});
   if (state && state.code === matchCode) {
     state.finished = value;
     render();
   }
-  setStatus("saving");
-  try {
-    applyUpdatedMatch(await postMatch(matchCode, "finish", "POST", {finished: value}), matchCode);
-    setStatus("saved");
-  } catch (error) {
-    setStatus("error");
-    console.error(error);
-  } finally {
-    const pending = ekPendingFinished.get(scope);
-    if (pending && pending.token === token) ekPendingFinished.delete(scope);
-  }
-}
-
-// ---- EK optimistic edit durability + batching --------------------------------
-// EK edits are applied to the DOM + match state instantly (see ekApplyValues),
-// then queued here as scoped set-ops per match. Two guarantees, shared with how
-// OD/KSI behave via createStateSync:
-//   - durability: un-acked ops are re-overlaid on top of any MatchView we render
-//     (POST response, SSE delta, or full refetch) via overlayPendingMatch, so an
-//     optimistically-marked cell never regresses before the server confirms it —
-//     even when a slow server makes the write take seconds.
-//   - batching: rapid edits coalesce into ONE atomic /state PATCH per match per
-//     debounce window (one DB write, one broadcast) instead of one per cell.
-// Ops to the same cell coalesce (last write wins). Structural edits (finished /
-// add/removeShootoutTheme) aren't cell edits and are sent on their own.
-const EK_EDIT_DEBOUNCE_MS = 150;
-const ekPending = new Map<string, EKPendingEntry>(); // matchScope -> {ops, inFlight, timer}
-
-// ekPendingFinished tracks an un-acked finish/unfinish per match so it survives
-// incoming MatchViews until the server confirms it. The finished flag is sent
-// immediately (it's not a queued cell op) and was otherwise NOT overlay-tracked,
-// so under load a slow finish-write plus a co-incident broadcast would visually
-// revert the tick — which is what made operators re-click it repeatedly. Tokened
-// so an older write completing late never clears a newer toggle's intent.
-const ekPendingFinished = new Map<string, {value: boolean; token: number}>(); // matchScope -> {value: boolean, token: number}
-let ekFinishedToken = 0;
-
-function ekEntry(matchCode: string): EKPendingEntry {
-  const scope = matchScopeFor(matchCode);
-  let entry = ekPending.get(scope);
-  if (!entry) {
-    // Persist per-match so a mid-sync refresh recovers un-acked EK edits
-    // (recoverMatchPendingEdits re-overlays + re-sends them on the next load).
-    entry = {ops: createPendingOps({storageKey: `dope.pending.v2:${scope}`}), inFlight: false, timer: null};
-    ekPending.set(scope, entry);
-  }
-  return entry;
+  void writer.send(matchScopeFor(matchCode), {url: matchURL(matchCode, "finish"), body: {finished: value}}, {path: ["finished"], value});
 }
 
 // overlayPendingMatch re-applies a match's un-acked local edits on top of a
 // MatchView. Used everywhere a MatchView enters the render pipeline.
 function overlayPendingMatch(matchCode: string | undefined, view: HostMatchView): HostMatchView {
   if (!view || !matchCode) return view;
-  const scope = matchScopeFor(matchCode);
-  const entry = ekPending.get(scope);
-  const pendingFinished = ekPendingFinished.get(scope);
-  const hasCellOps = entry && entry.ops.size() > 0;
-  if (!hasCellOps && !pendingFinished) return view;
-  const out = hasCellOps ? entry!.ops.overlay(view) as HostMatchView : {...view};
-  if (pendingFinished) out.finished = pendingFinished.value;
-  return out;
+  return writer.overlay(matchScopeFor(matchCode), view);
 }
 
 // refreshMatchPendingMarkers toggles the per-cell pending spinner on the focused
-// match's answer cells from that match's un-acked edits — the EK analogue of
-// si.js/od.js refreshPendingMarkers. Called after a match renders and after an
-// edit/ack so a cell stays marked until the server confirms it.
+// match's answer cells from that match's un-acked edits. Called after a match
+// renders and after an edit/ack so a cell stays marked until the server
+// confirms it.
 function refreshMatchPendingMarkers(matchCode: string | undefined): void {
   if (!matchCode) return;
-  const entry = ekPending.get(matchScopeFor(matchCode));
+  const scope = matchScopeFor(matchCode);
   // Scope to THIS match's cells: in a stage view many battles are on screen at
   // once and every battle has cells at the same (team-slot, theme, answer)
   // coordinates, so an unscoped selector would mark — and never clear — the
   // same-positioned cells in every other battle.
   ekRoot.querySelectorAll<HTMLElement>(`.answer-cell[data-match-code="${cssEscape(matchCode)}"]`).forEach((cell) => {
+    const team = Number(cell.dataset.team);
+    const theme = Number(cell.dataset.theme);
+    const answer = Number(cell.dataset.answer);
     let pending = false;
-    if (entry) {
-      const team = Number(cell.dataset.team);
-      const theme = Number(cell.dataset.theme);
-      const answer = Number(cell.dataset.answer);
-      if (Number.isInteger(team) && Number.isInteger(theme) && Number.isInteger(answer)) {
-        const themeKey = cell.dataset.shootout === "1" ? "shootoutThemes" : "themes";
-        pending = entry.ops.has(["participants", team, themeKey, theme, "answers", answer]);
-      }
+    if (Number.isInteger(team) && Number.isInteger(theme) && Number.isInteger(answer)) {
+      const themeKey = cell.dataset.shootout === "1" ? "shootoutThemes" : "themes";
+      pending = writer.isPending(scope, ["participants", team, themeKey, theme, "answers", answer]);
     }
     cell.classList.toggle("pending", pending);
   });
 }
 
-// recoverMatchPendingEdits, after a (re)load of the focused match, rehydrates any
-// un-acked edits persisted by a previous page load (ekEntry reads them from
-// localStorage), re-renders the match with them overlaid — showing their pending
-// spinner — and re-sends them. No-op when there is nothing to recover.
+// recoverMatchPendingEdits, after a (re)load of the focused match, re-renders
+// it with any un-acked edits a previous page load persisted overlaid — showing
+// their pending spinner — while the writer re-sends them. No-op when there is
+// nothing to recover.
 function recoverMatchPendingEdits(): void {
   if (route.mode !== "match" || !state || !state.code) return;
-  const entry = ekEntry(state.code); // creates + rehydrates persisted ops
-  if (entry.ops.size() === 0) return;
-  recorder?.event("recovered-pending", {scope: matchScopeFor(state.code), count: entry.ops.size()});
+  if (writer.recover(matchScopeFor(state.code)) === 0) return;
   applyUpdatedMatch(state, state.code); // overlays pending → re-renders with them
-  setStatus("saving");
-  scheduleEKFlush(state.code, 0);
 }
 
 // payloadToOpPath maps an /update cell payload to its MatchView path (matching
@@ -1053,125 +937,37 @@ function opToBlobOp(op: PendingOp, view: HostMatchView): BlobOp | null {
   return {path: ["participants", teamKey, key as string, theme as number, "answers", answer as number], value: op.value};
 }
 
-// queueEKEdits records cell edits as pending ops and schedules a batched flush.
+// queueEKEdits records cell edits as pending ops; the writer batches the flush.
 function queueEKEdits(matchCode: string, payloads: EKCellPayload[]): void {
-  const entry = ekEntry(matchCode);
+  const scope = matchScopeFor(matchCode);
   let queued = false;
   for (const payload of payloads) {
     const path = payloadToOpPath(payload);
     if (!path) continue;
-    entry.ops.add(path, payloadToOpValue(payload));
+    writer.patch(scope, path, payloadToOpValue(payload));
     queued = true;
   }
-  if (queued) {
-    setStatus("saving");
-    refreshMatchPendingMarkers(matchCode);
-    scheduleEKFlush(matchCode, EK_EDIT_DEBOUNCE_MS);
-  }
+  if (queued) refreshMatchPendingMarkers(matchCode);
 }
 
-function scheduleEKFlush(matchCode: string, delay: number): void {
-  const entry = ekEntry(matchCode);
-  window.clearTimeout(entry.timer ?? undefined);
-  entry.timer = window.setTimeout(() => {
-    entry.timer = null;
-    void flushEKEdits(matchCode);
-  }, delay);
-}
-
-async function flushEKEdits(matchCode: string): Promise<void> {
-  const entry = ekEntry(matchCode);
-  if (entry.inFlight || entry.ops.queued() === 0) return;
-  const view = matchBase(matchCode);
-  if (!view) return; // no base to resolve team/player ids against; retry on reload
-  const ops = entry.ops.take();
-  const blobOps = ops.map((op) => opToBlobOp(op, view)).filter((op): op is BlobOp => op !== null);
-  if (blobOps.length === 0) {
-    // Nothing addressable survived (the slot lost its team, or a player left the
-    // roster): drop these rather than retry an op the server can never accept.
-    entry.ops.ack(ops);
-    refreshMatchPendingMarkers(matchCode);
-    setStatus("saved");
-    return;
-  }
-  entry.inFlight = true;
-  let saved = false;
-  try {
-    const updated = await sendMatchOps(matchCode, blobOps);
-    entry.ops.ack(ops);
-    applyUpdatedMatch(updated, matchCode);
-    saved = true;
-  } catch (error) {
-    // Re-queue for retry (set-ops are idempotent, so re-sending is safe). The
-    // overlay keeps the optimistic value on screen meanwhile.
-    entry.ops.ack(ops);
-    entry.ops.requeue(ops);
-    console.error(error);
-    setStatus("error");
-  } finally {
-    entry.inFlight = false;
-    if (entry.ops.queued() > 0) {
-      if (!entry.timer) scheduleEKFlush(matchCode, saved ? 0 : 2000);
-    } else if (saved) {
-      setStatus("saved");
-    }
-  }
-}
-
-async function sendVenueChange(number: number, matchCode: string = currentMatchCode()): Promise<void> {
-  setStatus("saving");
-  try {
-    const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(matchCode)}/venue`, {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({number}),
-    });
-    if (!response.ok) throw new Error(await response.text());
-    const updated = await response.json() as HostMatchView;
-    rememberLocalMatchEcho(matchCode, updated);
-    applyUpdatedMatch(updated, matchCode);
-    setStatus("saved");
-  } catch (error) {
-    setStatus("error");
-    console.error(error);
-  }
+function sendVenueChange(number: number, matchCode: string = currentMatchCode()): void {
+  void writer.send(matchScopeFor(matchCode), {url: matchURL(matchCode, "venue"), body: {number}});
 }
 
 async function updateVenueTitle(number: number, title: string): Promise<void> {
-  setStatus("saving");
-  try {
-    const response = await fetch(`${route.festApi}/venues/${encodeURIComponent(number)}`, {
-      method: "PUT",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({title}),
-    });
-    if (!response.ok) throw new Error(await response.text());
-    venues = await response.json() as Venue[];
-    renderVenues();
-    setStatus("saved");
-  } catch (error) {
-    setStatus("error");
-    console.error(error);
-  }
+  const sent = await writer.send(`venues:${route.festID}`, {url: `${route.festApi}/venues/${encodeURIComponent(number)}`, method: "PUT", body: {title}});
+  if (!sent.ok) return;
+  venues = sent.response as Venue[];
+  renderVenues();
 }
 
 async function calculateReseed(stageCode: string | undefined): Promise<void> {
   if (!stageCode) return;
-  setStatus("saving");
-  try {
-    const response = await fetch(`${route.apiBase}/stages/${encodeURIComponent(stageCode)}/reseed`, {
-      method: "POST",
-    });
-    if (!response.ok) throw new Error((await response.text()).trim() || "Не удалось рассчитать пересев");
-    const fresh = await response.json() as HostFestView;
-    adoptFestView(fresh);
-    writeFestCache(fest);
-    renderStage();
-    setStatus("saved");
-  } catch (error) {
-    setStatus("error");
-    console.error(error);
-  }
+  const sent = await writer.send(`stage:${stageCode}`, {url: `${route.apiBase}/stages/${encodeURIComponent(stageCode)}/reseed`});
+  if (!sent.ok) return;
+  adoptFestView(sent.response as HostFestView);
+  writeFestCache(fest);
+  renderStage();
 }
 
 function reseedStagePanel(stage: HostStage): HTMLElement {
@@ -1720,42 +1516,23 @@ function buildSeedImportPanel(): HTMLElement {
 }
 
 async function importSeedsFromKSI(): Promise<void> {
-  setStatus("saving");
   seedImportNotice = "";
-  try {
-    const response = await fetch(`${route.apiBase}/seed-import/ksi`, {method: "POST"});
-    if (!response.ok) throw new Error((await response.text()).trim() || "Не удалось импортировать команды");
-    seedImport = await response.json() as SeedImportView;
+  const sent = await writer.send("seed-import", {url: `${route.apiBase}/seed-import/ksi`});
+  if (sent.ok) {
+    seedImport = sent.response as SeedImportView;
     seedImportNotice = `Импортировано команд: ${seedImport.rows?.length || 0}.`;
-    renderSeedImport();
-    setStatus("saved");
-  } catch (error) {
-    seedImportNotice = `Ошибка: ${(error as Error).message}`;
-    renderSeedImport();
-    setStatus("error");
-    throw error;
+  } else {
+    seedImportNotice = `Ошибка: ${sent.error || "Не удалось импортировать команды"}`;
   }
+  renderSeedImport();
 }
 
 async function setSeedDeclined(teamID: number | undefined, declined: boolean): Promise<void> {
-  setStatus("saving");
   seedImportNotice = "";
-  try {
-    const response = await fetch(`${route.apiBase}/seed-import/decline`, {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({teamID, declined}),
-    });
-    if (!response.ok) throw new Error((await response.text()).trim() || "Не удалось сохранить отказ");
-    seedImport = await response.json() as SeedImportView;
-    renderSeedImport();
-    setStatus("saved");
-  } catch (error) {
-    seedImportNotice = `Ошибка: ${(error as Error).message}`;
-    renderSeedImport();
-    setStatus("error");
-    throw error;
-  }
+  const sent = await writer.send("seed-import", {url: `${route.apiBase}/seed-import/decline`, body: {teamID, declined}});
+  if (sent.ok) seedImport = sent.response as SeedImportView;
+  else seedImportNotice = `Ошибка: ${sent.error || "Не удалось сохранить отказ"}`;
+  renderSeedImport();
 }
 
 function buildStageTableStack(data: StageData | undefined): HTMLElement {
@@ -3434,11 +3211,11 @@ recorder = installClientRecorder({
 });
 loadCurrent()
   .then(() => {
-    setStatus("saved");
+    indicator.touch();
     liveEvents.connect();
     connectPresence();
   })
   .catch((error) => {
-    setStatus("error");
+    indicator.fail();
     console.error(error);
   });

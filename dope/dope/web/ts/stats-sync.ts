@@ -1,38 +1,21 @@
-// stats-sync.ts — the live stats-page resync loop (DopeStatsSync),
-// factored out of ek.js, whose host and viewer halves once held byte-identical copies.
+// stats-sync.ts — the live stats-page recompute loop (DopeStatsSync).
 //
-// The EK stats table stays live off the same SSE stream the bracket uses: each
-// match-scoped event folds into the shared stage cache in place (a chained
-// delta, or a full snapshot) and the table recomputes from memory — no refetch.
-// A delta that can't chain (missing base / seq gap) means a dropped event, so
-// the bracket resyncs once. The recompute is throttled and the resync debounced.
+// The EK stats table stays live off the same SSE stream the bracket uses: the
+// engine folds each бой's events into the shared stage cache and the table
+// recomputes from memory — no refetch — throttled to a few times a second. A
+// delta that couldn't chain means a dropped event, so the bracket resyncs once,
+// debounced so a fleet that all gap together doesn't stampede the bulk endpoint.
 //
-// It is a create(deps) factory like DopeStageCache: every page-specific piece —
-// the stage cache, whether the stats view is currently
-// active, and how to rerender it — is injected, so the throttle/coalesce/gap
-// logic is unit-testable with fake timers.
-
-import type { MatchView } from "./stage-cache.js";
-import {applyDeltaOps} from "./state-sync.js";
-import type {StateDeltaOp} from "./state-sync.js";
+// It is a create(deps) factory like DopeStageCache: the stage cache, whether the
+// stats view is currently active, and how to rerender it are injected, so the
+// throttle and the debounce are unit-testable with fake timers.
 
 export interface StatsSyncStageCache {
-  matchState(code: string): MatchView | null;
-  applyMatchUpdate(view: MatchView): unknown;
   prefetchAllStages(): Promise<unknown>;
-}
-
-export interface StatsMatchEvent {
-  scope?: unknown;
-  seq?: unknown;
-  prevSeq?: unknown;
-  ops?: unknown;
-  data?: MatchView | null;
 }
 
 export interface StatsSyncDeps {
   stageCache: StatsSyncStageCache;
-  matchCodeFromScope: (scope: unknown) => string;
   isActive: () => boolean;
   rerender: () => void;
   setTimeout?: (handler: () => void, timeoutMs: number) => unknown;
@@ -41,21 +24,17 @@ export interface StatsSyncDeps {
 }
 
 export interface StatsSync {
-  applyMatchEvent(message: StatsMatchEvent): void;
   scheduleRerender(): void;
   scheduleResync(): void;
 }
 
-// create(deps): { stageCache, matchCodeFromScope, isActive, rerender,
-//   setTimeout?, throttleMs?, resyncMs? } → { applyMatchEvent, scheduleRerender,
-//   scheduleResync }. isActive() gates work to when the stats view is shown;
-//   rerender() recomputes and swaps in the table.
+// isActive() gates work to when the stats view is shown; rerender() recomputes
+// and swaps in the table.
 export function create(deps: StatsSyncDeps): StatsSync {
   const setTimeoutFn = deps.setTimeout || window.setTimeout.bind(window);
   const throttleMs = deps.throttleMs != null ? deps.throttleMs : 400;
   const resyncMs = deps.resyncMs != null ? deps.resyncMs : 400;
   const stageCache = deps.stageCache;
-  const matchCodeFromScope = deps.matchCodeFromScope;
   const isActive = deps.isActive;
   const rerender = deps.rerender;
 
@@ -97,31 +76,7 @@ export function create(deps: StatsSyncDeps): StatsSync {
     }, resyncMs);
   }
 
-  function applyMatchEvent(message: StatsMatchEvent): void {
-    const code = matchCodeFromScope(message.scope);
-    if (Array.isArray(message.ops)) {
-      const base = stageCache.matchState(code);
-      const prev = Number(message.prevSeq) || 0;
-      if (base && (Number(message.seq) || 0) <= (Number(base.seq) || 0)) return; // already applied
-      if (!base || (Number(base.seq) || 0) !== prev) {
-        scheduleResync();
-        return;
-      }
-      const next = applyDeltaOps(base, message.ops as StateDeltaOp[]) as MatchView;
-      next.seq = Number(message.seq) || prev;
-      stageCache.applyMatchUpdate(next);
-    } else if (message.data && message.data.code) {
-      const view = message.data;
-      view.seq = Number(message.seq) || 0;
-      stageCache.applyMatchUpdate(view);
-    } else {
-      scheduleResync();
-      return;
-    }
-    scheduleRerender();
-  }
-
-  return { applyMatchEvent, scheduleRerender, scheduleResync };
+  return { scheduleRerender, scheduleResync };
 }
 
 export const DopeStatsSync = { create };

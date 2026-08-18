@@ -1,9 +1,11 @@
 // dope's SSE state-sync engine: the scoped event protocol (deltas chained by
 // seq, re-baselined by snapshot/resync, reset by server epoch), the durable
 // pending-ops overlay, stream lifecycle with iOS-wake recovery, and the client
-// recorder that captures its timeline. One implementation for every game page:
-// od/si edit through createStateSync, host/viewer dispatch scoped events via
-// createLiveEvents.
+// recorder that captures its timeline. Two primitives, one implementation for
+// every game page: createLiveEvents reads (a scope map of what a delta chains
+// onto and who adopts the result), createScopedWriter writes (patches
+// coalesced per scope, structural writes with an intent, both overlaid until
+// acked). ОД and КСИ register one game-state scope; ЭК and брейн one per бой.
 
 // EventSource.OPEN, spelled numerically so fake streams need no global.
 const SSE_OPEN = 1;
@@ -206,8 +208,7 @@ export interface PendingOps {
 // (a) batched into one request and (b) re-overlaid on top of any server state
 // we render before the edit is confirmed — so an optimistically-applied cell
 // never regresses while its write is in flight, even across a full resync /
-// refetch. Shared by createStateSync (OD/KSI whole-game state) and ek.js (EK
-// per-match edits) so all three editors get identical durability.
+// refetch. createScopedWriter keeps one per scope.
 //
 // Ops to the same path coalesce, last-write-wins. take() moves the queued batch
 // to "in flight"; ack() drops them once the server confirms; requeue() returns
@@ -218,7 +219,7 @@ export interface PendingOps {
 // rehydrated on the next page load, so a refresh/crash mid-sync — exactly when
 // edits "don't apply" and the operator reloads — doesn't silently drop edits
 // the server never confirmed: they reappear (overlaid + spinner) and re-send.
-// Persistence is opt-in (ek.js EK pending passes no key) and TTL-bounded so a
+// Persistence is opt-in (viewers pass no key) and TTL-bounded so a
 // long-abandoned session can't resurrect ancient edits.
 export function createPendingOps(opts?: PendingOpsOptions | null): PendingOps {
   opts = opts || {};
@@ -337,214 +338,195 @@ function pendingTimestamp(): number {
 
 export type SyncStatus = "saved" | "saving" | "reconnecting" | "error";
 
-// The second argument createStateSync hands to onRemoteState: either the SSE
-// message that carried the state (delta or snapshot), or a local marker
-// ({local: true} after an own confirmed patch, plus {recovered: true} when
-// replaying pending edits after a reload), or {resync: true} after a refetch.
-export interface StateSyncMeta {
-  scope?: string;
-  revision?: number;
-  seq?: number;
-  prevSeq?: number;
-  epoch?: string;
-  emitMs?: number;
-  ops?: StateDeltaOp[];
-  data?: unknown;
-  local?: boolean;
-  recovered?: boolean;
-  resync?: boolean;
+// A SyncIndicator turns what the engine and the writer know into the one
+// status dot a page shows: offline beats everything, then a failed write
+// nothing has superseded, then any write in flight, else saved.
+export interface SyncIndicator {
+  busy(key: string): void;
+  idle(key: string, ok: boolean): void;
+  fail(): void;
+  offline(): void;
+  online(): void;
+  // touch reports a remote update landing while nothing is pending: a stale
+  // "error" from an earlier write gives way to "saved".
+  touch(): void;
+  readonly state: SyncStatus;
 }
 
-export interface StateSyncWriteError {
-  kind: string;
+export function createSyncIndicator(set: (state: SyncStatus) => void = () => {}): SyncIndicator {
+  const pending = new Set<string>();
+  let failed = false;
+  let down = false;
+  let state: SyncStatus = "saved";
+  function show(): void {
+    state = down ? "reconnecting" : failed ? "error" : pending.size > 0 ? "saving" : "saved";
+    set(state);
+  }
+  return {
+    busy(key) { pending.add(key); show(); },
+    idle(key, ok) { pending.delete(key); if (ok) failed = false; show(); },
+    fail() { failed = true; show(); },
+    offline() { down = true; show(); },
+    online() { down = false; show(); },
+    touch() { if (pending.size === 0) failed = false; show(); },
+    get state() { return state; },
+  };
+}
+
+// The wire shape of one op sent to a scope's PATCH endpoint. Cell edits are
+// set-ops; a page's encode() may also emit remove-ops.
+export interface WireOp {
+  op?: "set" | "remove";
+  path: Array<string | number>;
+  value?: unknown;
+}
+
+export interface WriteRequest {
+  url: string;
+  method?: string;
+  body?: unknown;
+}
+
+// A structural write's intent: the value the scope's views must show at `path`
+// (view-relative) until the write settles (a finish tick), so an incoming
+// broadcast can never revert it meanwhile.
+export interface WriteIntent {
+  path: PatchPath;
+  value: unknown;
+}
+
+export type SendResult = {ok: true; response: unknown} | {ok: false; error: string};
+
+export interface WriteRejected {
+  scope: string;
   ops: PendingOp[];
   error: string;
 }
 
-export interface StateSyncOptions {
-  scope: string;
-  stateURL: string;
-  eventsURL: string;
+export interface ScopedWriterOptions {
+  // Editors persist un-acked edits per scope; viewers never write.
   readonly?: boolean;
+  // Where a scope's queued cell ops PATCH to.
+  urlOf: (scope: string) => string;
+  // A page whose views are keyed differently from its wire (ЭК: a team's slot
+  // on screen, its id on the wire) translates here. null means the scope has
+  // no base to translate against yet — the ops stay queued for a later flush.
+  // Ops that translate to nothing are dropped as unsendable, not retried.
+  encode?: (scope: string, ops: PendingOp[]) => WireOp[] | null;
+  // The server's post-write view of the scope, to adopt.
+  adopt: (scope: string, response: unknown) => void;
+  // Where the edited document sits inside an adopted view (брейн's ops address
+  // view.state); queued ops overlay relative to it, intents at the view root.
+  docPath?: PatchPath;
+  indicator?: SyncIndicator;
   debounceMs?: number;
-  maxEchoes?: number;
-  setStatus?: (state: SyncStatus) => void;
-  getState?: () => unknown;
-  getInitialSeq?: () => number | string | null | undefined;
-  getInitialEpoch?: () => string | null | undefined;
-  onRemoteState?: (state: unknown, meta: StateSyncMeta) => void;
-  onViewers?: (count: number | undefined) => void;
-  onLockdown?: () => void;
-  onWriteError?: (info: StateSyncWriteError) => void;
-  recorder?: ClientRecorder | null;
-  // Test seam: substitute a fake stream for the real EventSource.
-  newEventSource?: (url: string) => EventSource;
+  recorder?: () => ClientRecorder | null | undefined;
+  onRejected?: (info: WriteRejected) => void;
+  storagePrefix?: string;
 }
 
-export interface StateSync {
-  connect(): EventSource | null;
-  flushSave(): Promise<void>;
-  flushPatch(): Promise<void>;
-  hasPendingSave(): boolean;
-  save(): void;
-  patch(path: PatchPath, value: unknown): void;
-  isPending(path: PatchPath): boolean;
+export interface ScopedWriter {
+  // Queue one cell edit; it coalesces with others to the same scope and goes
+  // out as one PATCH after the debounce window.
+  patch(scope: string, path: PatchPath, value: unknown): void;
+  // A structural write (finish, venue, add a shootout theme): not coalesced,
+  // sent at once; with an intent it stays overlaid on the scope's views until
+  // its own write settles and no newer intent for that path has superseded it.
+  send(scope: string, request: WriteRequest, intent?: WriteIntent): Promise<SendResult>;
+  // Re-apply the scope's un-acked edits and intents onto a view about to render.
+  overlay<T>(scope: string, view: T): T;
+  isPending(scope: string, path: PatchPath): boolean;
+  hasPending(): boolean;
+  // Un-acked edits a previous page load persisted for this scope: how many;
+  // they re-send. Call once the scope has a base to render them onto.
+  recover(scope: string): number;
+  flush(): Promise<void>;
 }
 
-export function createStateSync(options: StateSyncOptions): StateSync {
-  const debounceMs = typeof options.debounceMs === "number" && Number.isFinite(options.debounceMs) ? options.debounceMs : 250;
-  const maxEchoes = typeof options.maxEchoes === "number" && Number.isFinite(options.maxEchoes) ? options.maxEchoes : 12;
-  const setSyncStatus = options.setStatus || (() => {});
-  const echoSet = new Set<string>();
-  const echoOrder: string[] = [];
-  let saveTimer: number | null = null;
-  let saveQueued = false;
-  let saveInFlight = false;
-  let patchTimer: number | null = null;
-  let patchInFlight = false;
-  // Editors persist un-acked edits per scope so a mid-sync refresh recovers
-  // them; viewers never edit, so they don't (and can't resurrect stray ops).
-  const pending = createPendingOps({
-    storageKey: !options.readonly && options.scope ? `dope.pending:${options.scope}` : null,
-  });
-  // Unified SSE protocol: lastSeq is the per-scope position we have applied.
-  // A delta applies only if its prevSeq === lastSeq; otherwise a drop / late
-  // join / restart left a gap and we resync the full state. Seeded once from
-  // the server-rendered initial seq so the first remote edit chains cleanly.
-  let lastSeq = 0;
-  let lastSeqSeeded = false;
-  let resyncing = false;
-  // Active SSE stream, plus guards so connect()'s lifecycle listeners bind
-  // once and so recovery never re-opens a stream the server locked down.
-  let stream: EventSource | null = null;
+// createScopedWriter is the one write discipline for every game page: an edit
+// is applied to the screen at once, queued as a set-op per scope, coalesced
+// with its neighbours into ONE PATCH per scope per debounce window, re-overlaid
+// on every view the page renders until the server confirms it (so a slow write
+// never visibly regresses), retried on 5xx/offline, dropped loudly on 4xx,
+// mirrored to localStorage so a reload mid-sync recovers it, and flushed when
+// the tab hides (keepalive lets the request finish during unload).
+export function createScopedWriter(options: ScopedWriterOptions): ScopedWriter {
+  const debounceMs = options.debounceMs ?? 150;
+  const indicator = options.indicator || createSyncIndicator();
+  const storagePrefix = options.storagePrefix ?? "dope.pending.v2";
+  const docPath = options.docPath || [];
+  interface Entry { ops: PendingOps; inFlight: boolean; timer: number | null }
+  const entries = new Map<string, Entry>();
+  const intents = new Map<string, {scope: string; path: PatchPath; value: unknown; token: number}>();
+  let token = 0;
   let lifecycleBound = false;
-  let lockedDown = false;
-  // lastEpoch is the server's per-process token (see server.epoch). The server
-  // resets its per-scope seq to 0 on restart, so without this a long-lived
-  // client holding a high lastSeq would read every post-restart delta as
-  // "seq <= lastSeq" (already applied) and silently stop syncing — the
-  // data-loss incident's amplifier. A changed epoch means the seq space reset,
-  // so we resync to adopt the new epoch+seq instead of ignoring the deltas.
-  let lastEpoch = "";
-  let lastEpochSeeded = false;
-  const wake = createWakeRecovery({
-    live: () => stream !== null && stream.readyState === SSE_OPEN,
-    paused: () => lockedDown,
-    recover: () => recoverStream(),
-  });
 
-  // epochReset adopts the first epoch we see as the baseline and reports a
-  // reset only on a genuine change. An empty epoch (older server build) is
-  // ignored so the protocol degrades gracefully.
-  function epochReset(epoch: string | undefined): boolean {
-    if (!epoch) return false;
-    if (!lastEpochSeeded) {
-      lastEpoch = epoch;
-      lastEpochSeeded = true;
-      return false;
+  const monoNow = () => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now());
+
+  function entry(scope: string): Entry {
+    let e = entries.get(scope);
+    if (!e) {
+      e = {ops: createPendingOps({storageKey: options.readonly ? null : `${storagePrefix}:${scope}`}), inFlight: false, timer: null};
+      entries.set(scope, e);
     }
-    return epoch !== lastEpoch;
+    return e;
   }
 
-  // Felt-latency instrumentation. Every sample goes into the client recorder
-  // ring (downloadable via the log button), and is mirrored to the console when
-  // localStorage["dope.editmetrics"] === "1" so a tester with devtools sees it
-  // live. monoNow uses the monotonic clock for the own-edit round-trip (immune
-  // to wall-clock jumps); delivery latency necessarily uses Date.now() against
-  // the server's emit stamp, so it carries clock skew (rough gauge, not exact).
-  const feltConsole = (() => {
-    try { return window.localStorage.getItem("dope.editmetrics") === "1"; }
-    catch (_e) { return false; }
-  })();
-  const monoNow = () => (typeof performance !== "undefined" && performance.now
-    ? performance.now() : Date.now());
-  function feltMetric(type: string, data: Record<string, unknown>): void {
-    options.recorder?.event(type, data);
-    if (feltConsole) {
-      try { console.debug(`editmetric ${type} scope=${options.scope}`, data); } catch (_e) {}
-    }
+  function bindLifecycle(): void {
+    if (lifecycleBound) return;
+    lifecycleBound = true;
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") void flush();
+    });
   }
 
-  function save(): void {
-    if (options.readonly) return;
-    saveQueued = true;
-    setSyncStatus("saving");
-    scheduleSave(debounceMs);
-  }
-
-  function patch(path: PatchPath, value: unknown): void {
+  function patch(scope: string, path: PatchPath, value: unknown): void {
     if (options.readonly) return;
     try {
-      pending.add(path, value);
+      entry(scope).ops.add(path, value);
     } catch (error) {
       console.error(error);
-      setSyncStatus("error");
+      indicator.fail();
       return;
     }
-    setSyncStatus("saving");
-    schedulePatch(debounceMs);
+    indicator.busy(scope);
+    schedule(scope, debounceMs);
+    bindLifecycle();
   }
 
-  function scheduleSave(delay: number): void {
-    window.clearTimeout(saveTimer ?? undefined);
-    saveTimer = window.setTimeout(() => {
-      saveTimer = null;
-      void flushSave();
+  function schedule(scope: string, delay: number): void {
+    const e = entry(scope);
+    window.clearTimeout(e.timer ?? undefined);
+    e.timer = window.setTimeout(() => {
+      e.timer = null;
+      void flushScope(scope);
     }, delay);
   }
 
-  function schedulePatch(delay: number): void {
-    window.clearTimeout(patchTimer ?? undefined);
-    patchTimer = window.setTimeout(() => {
-      patchTimer = null;
-      void flushPatch();
-    }, delay);
-  }
-
-  async function flushSave(): Promise<void> {
-    if (options.readonly || saveInFlight || !saveQueued) return;
-    saveQueued = false;
-    saveInFlight = true;
-    let saved = false;
-    try {
-      const raw = JSON.stringify(options.getState!());
-      rememberLocalEcho(raw);
-      const response = await fetch(options.stateURL, {
-        method: "PUT",
-        headers: {"Content-Type": "application/json"},
-        body: raw,
-      });
-      if (!response.ok) throw new Error(await response.text());
-      saved = true;
-    } catch (error) {
-      console.error(error);
-      setSyncStatus("error");
-    } finally {
-      saveInFlight = false;
-      if (saveQueued) {
-        if (!saveTimer) scheduleSave(0);
-      } else if (saved) {
-        setSyncStatus("saved");
-      }
+  async function flushScope(scope: string): Promise<void> {
+    const e = entry(scope);
+    if (options.readonly || e.inFlight || e.ops.queued() === 0) return;
+    const ops = e.ops.take();
+    const wire = options.encode ? options.encode(scope, ops) : ops.map((op) => ({path: op.path, value: op.value}));
+    if (wire === null) {
+      e.ops.ack(ops);
+      e.ops.requeue(ops);
+      return;
     }
-  }
-
-  async function flushPatch(): Promise<void> {
-    if (options.readonly || patchInFlight || pending.queued() === 0) return;
-    const ops = pending.take();
-    patchInFlight = true;
+    if (wire.length === 0) {
+      e.ops.ack(ops);
+      indicator.idle(scope, true);
+      return;
+    }
+    e.inFlight = true;
     let saved = false;
     let retry = true;
     const tSend = monoNow();
     try {
-      const response = await fetch(options.stateURL, {
+      const response = await fetch(options.urlOf(scope), {
         method: "PATCH",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ops}),
-        // keepalive lets the request complete even if the page is navigating
-        // or being backgrounded — without it, edits debounced/in-flight at the
-        // moment of a reload are silently dropped. Ops are tiny, well under the
-        // 64KB keepalive cap.
+        body: JSON.stringify({ops: wire}),
         keepalive: true,
       });
       if (!response.ok) {
@@ -552,264 +534,104 @@ export function createStateSync(options: StateSyncOptions): StateSync {
         throw new Error(await response.text());
       }
       const updated: unknown = await response.json();
-      // Own-edit felt latency: keystroke-batch send to server-confirmed (the
-      // moment the optimistic cell stops being "pending"). Single clock.
-      feltMetric("patch-rtt", {rtt_ms: Math.round(monoNow() - tSend), ops: ops.length, status: response.status});
-      pending.ack(ops);
-      rememberLocalEcho(JSON.stringify(updated));
-      options.onRemoteState?.(pending.overlay(updated), {local: true});
+      options.recorder?.()?.event("patch-rtt", {scope, rtt_ms: Math.round(monoNow() - tSend), ops: wire.length, status: response.status});
+      e.ops.ack(ops);
+      options.adopt(scope, updated);
       saved = true;
     } catch (error) {
-      pending.ack(ops);
+      e.ops.ack(ops);
       if (retry) {
-        pending.requeue(ops);
+        e.ops.requeue(ops);
       } else {
-        // A 4xx means the server rejected these ops and a retry won't help, so
-        // they are dropped — but never silently: log them and notify so the
-        // loss is visible (in the console, the client recorder, and the sync
-        // status) instead of a cell quietly reverting on the next render.
-        console.error("dropped rejected patch ops", {error: String(error), ops});
-        options.onWriteError?.({kind: "rejected", ops, error: String(error)});
+        console.error("dropped rejected patch ops", {scope, error: String(error), ops});
+        options.onRejected?.({scope, ops, error: String(error)});
       }
-      setSyncStatus("error");
+      indicator.fail();
     } finally {
-      patchInFlight = false;
-      if (pending.queued() > 0) {
-        if (!patchTimer) schedulePatch(saved ? 0 : 2000);
-      } else if (saved && !hasPendingSave()) {
-        setSyncStatus("saved");
+      e.inFlight = false;
+      if (e.ops.queued() > 0) {
+        if (!e.timer) schedule(scope, saved ? 0 : 2000);
+      } else {
+        indicator.idle(scope, saved);
       }
     }
   }
 
-  function rememberLocalEcho(raw: string): void {
-    echoSet.add(raw);
-    echoOrder.push(raw);
-    while (echoOrder.length > maxEchoes) {
-      const oldest = echoOrder.shift();
-      if (oldest !== undefined) echoSet.delete(oldest);
-    }
-  }
-
-  function consumeLocalEcho(raw: string): boolean {
-    if (!echoSet.has(raw)) return false;
-    echoSet.delete(raw);
-    const index = echoOrder.indexOf(raw);
-    if (index >= 0) echoOrder.splice(index, 1);
-    return true;
-  }
-
-  function hasPendingSave(): boolean {
-    return saveQueued ||
-      saveInFlight ||
-      saveTimer !== null ||
-      patchInFlight ||
-      patchTimer !== null ||
-      pending.size() > 0;
-  }
-
-  function connect(): EventSource | null {
-    if (!lastSeqSeeded) {
-      lastSeq = Number(options.getInitialSeq?.()) || 0;
-      lastSeqSeeded = true;
-    }
-    if (!lastEpochSeeded) {
-      const seededEpoch = options.getInitialEpoch?.();
-      if (seededEpoch) {
-        lastEpoch = String(seededEpoch);
-        lastEpochSeeded = true;
-      }
-    }
-    // Un-acked edits recovered from localStorage by createPendingOps (a previous
-    // load refreshed mid-sync): show them overlaid on the seeded state right
-    // away — with their pending spinner — then re-send (idempotent set-ops).
-    if (!options.readonly && pending.queued() > 0) {
-      options.recorder?.event("recovered-pending", {scope: options.scope, count: pending.queued()});
-      options.onRemoteState?.(pending.overlay(options.getState ? options.getState() : {}), {local: true, recovered: true});
-      setSyncStatus("saving");
-      schedulePatch(0);
-    }
-    openStream();
-    bindLifecycle();
-    return stream;
-  }
-
-  // openStream (re)creates the EventSource, closing any prior one. Split from
-  // connect() so recovery can re-open the stream without re-seeding seq/epoch,
-  // re-running pending recovery, or re-binding lifecycle listeners.
-  function openStream(): void {
-    if (stream) {
-      try { stream.close(); } catch (_err) { /* already closed */ }
-    }
-    const events = (options.newEventSource || defaultEventSource)(options.eventsURL);
-    stream = events;
-    const onViewers = options.onViewers;
-    if (onViewers) {
-      events.addEventListener("viewers", (event) => {
-        try {
-          onViewers((JSON.parse((event as MessageEvent<string>).data) as {count?: number} | null)?.count);
-        } catch (_error) {
-          // ignore malformed viewer-count payloads
-        }
-      });
-    }
-    events.addEventListener("state", (event) => {
-      let message: ScopedEventMessage;
-      try {
-        message = parseScopedEvent((event as MessageEvent<string>).data);
-      } catch (_error) {
-        return;
-      }
-      if (message.scope !== options.scope) return;
-
-      if (Array.isArray(message.ops)) {
-        // Scoped delta: apply the ops in place, but only if they chain onto
-        // what we have. A gap means we missed an event, so refetch instead of
-        // misapplying. Drop deltas mid-resync; the refetch supersedes them.
-        if (resyncing) return;
-        // Epoch changed → the server restarted and its seq reset to a low
-        // number. Our lastSeq belongs to the dead seq space, so the seq<=lastSeq
-        // guard below would silently drop every post-restart delta forever.
-        // Resync to adopt the new epoch+seq instead. MUST precede the seq guard.
-        if (epochReset(message.epoch)) {
-          options.recorder?.event("epoch-change", {scope: options.scope, from: lastEpoch, to: String(message.epoch || ""), seq: Number(message.seq) || 0});
-          void resync();
-          return;
-        }
-        // Already applied: a coalesced viewer delta whose seq range we fetched
-        // past on connect arrives with seq <= lastSeq. The state already
-        // reflects it, so ignore it rather than read the older prevSeq as a gap.
-        if ((Number(message.seq) || 0) <= lastSeq) {
-          if (!hasPendingSave()) setSyncStatus("saved");
-          return;
-        }
-        if ((Number(message.prevSeq) || 0) !== lastSeq) {
-          options.recorder?.event("gap", {scope: options.scope, have: lastSeq, prevSeq: Number(message.prevSeq) || 0, seq: Number(message.seq) || 0});
-          void resync();
-          return;
-        }
-        let next = cloneJSON(options.getState ? options.getState() : {});
-        for (const op of message.ops) {
-          if (op.op && op.op !== "set") continue;
-          next = setAtDeltaPath(next, op.path, op.value);
-        }
-        lastSeq = Number(message.seq) || lastSeq;
-        options.recorder?.event("delta", {scope: options.scope, seq: lastSeq, prevSeq: Number(message.prevSeq) || 0, ops: message.ops.length});
-        // Delivery leg: server emit (message.emitMs) to this client rendering
-        // the delta — the latency a watching co-editor/viewer feels. Carries
-        // client/server clock skew; read as a rough gauge.
-        if (message.emitMs) {
-          feltMetric("delta-latency", {delivery_ms: Date.now() - Number(message.emitMs), seq: lastSeq, ops: message.ops.length});
-        }
-        options.onRemoteState?.(pending.overlay(next), message);
-        if (!hasPendingSave()) setSyncStatus("saved");
-        return;
-      }
-
-      // Full-state snapshot (initial / wholesale PUT / non-PATCH mutation). It
-      // carries the whole state plus its own seq+epoch, so it re-baselines us
-      // unconditionally — even across a server restart (changed epoch) there's
-      // nothing to resync; we just adopt it.
-      const raw = JSON.stringify(message.data);
-      if (message.seq) lastSeq = Number(message.seq) || lastSeq;
-      if (message.epoch) {
-        lastEpoch = String(message.epoch);
-        lastEpochSeeded = true;
-      }
-      options.recorder?.event("snapshot", {scope: options.scope, seq: lastSeq});
-      if (consumeLocalEcho(raw)) {
-        if (!hasPendingSave()) setSyncStatus("saved");
-        return;
-      }
-      options.onRemoteState?.(pending.overlay(message.data), message);
-      if (!hasPendingSave()) setSyncStatus("saved");
-    });
-    events.addEventListener("lockdown", () => {
-      // Server entered static mode: drop the stream so the page reloads into
-      // the static snapshot, instead of letting EventSource auto-reconnect.
-      // Latch lockedDown so visibility recovery doesn't re-open it meanwhile.
-      lockedDown = true;
-      events.close();
-      options.onLockdown?.();
-    });
-    events.addEventListener("open", () => options.recorder?.event("sse-open", {scope: options.scope, have: lastSeq}));
-    events.onerror = () => {
-      setSyncStatus("reconnecting");
-      options.recorder?.event("sse-error", {scope: options.scope, have: lastSeq});
-    };
-  }
-
-  // bindLifecycle wires tab/network listeners exactly once. connect() runs it
-  // on first connect; recovery re-opens the stream without touching listeners.
-  function bindLifecycle(): void {
-    if (lifecycleBound) return;
-    lifecycleBound = true;
-    document.addEventListener("visibilitychange", () => {
-      // Flush debounced edits the moment the tab is hidden or the page is
-      // being navigated away from, so the 250ms debounce window can't swallow
-      // the operator's last edits on reload. Paired with keepalive on the
-      // PATCH, the flushed request still completes during unload.
-      if (document.visibilityState !== "hidden") return;
-      if (patchTimer) { window.clearTimeout(patchTimer); patchTimer = null; }
-      if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = null; }
-      void flushPatch();
-      void flushSave();
-    });
-    wake.bind();
-  }
-
-  // recoverStream re-opens a dead stream and re-seeds from a fresh fetch; the
-  // wake helper decides when to run it and how often to retry.
-  async function recoverStream(): Promise<boolean> {
-    options.recorder?.event("sse-recover", {scope: options.scope, readyState: stream?.readyState ?? null});
-    openStream();
-    return resync();
-  }
-
-  // resync refetches the full state after a gap and realigns lastSeq from the
-  // X-State-Seq header so the next delta chains. Jittered so a fleet of viewers
-  // that all gap on the same dropped event don't refetch in lockstep. Reports
-  // whether the state was re-seeded, which is what wake recovery retries on.
-  async function resync(): Promise<boolean> {
-    if (resyncing || !options.stateURL) return true;
-    resyncing = true;
-    // A frozen tab can leave this fetch hanging with no reply and no error; the
-    // deadline matters because deltas are dropped while resyncing, so a stuck
-    // refetch would wedge the page for good.
-    const abort = new AbortController();
-    const deadline = window.setTimeout(() => abort.abort(), 20000);
+  async function send(scope: string, request: WriteRequest, intent?: WriteIntent): Promise<SendResult> {
+    if (options.readonly) return {ok: false, error: "readonly"};
+    const own = ++token;
+    const key = `${scope} ${own}`;
+    const intentKey = intent ? `${scope} ${JSON.stringify(normalizePatchPath(intent.path))}` : null;
+    if (intentKey && intent) intents.set(intentKey, {scope, path: intent.path, value: intent.value, token: own});
+    indicator.busy(key);
+    let result: SendResult;
     try {
-      await new Promise((r) => window.setTimeout(r, Math.floor(Math.random() * 400)));
-      const response = await fetch(options.stateURL, {signal: abort.signal});
-      if (!response.ok) return false;
-      const seqHeader = response.headers.get("X-State-Seq");
-      const epochHeader = response.headers.get("X-State-Epoch");
-      const data: unknown = await response.json();
-      if (seqHeader != null) lastSeq = Number(seqHeader) || 0;
-      // Adopt the server's current epoch so post-resync deltas chain instead of
-      // re-triggering an epoch reset every event.
-      if (epochHeader) {
-        lastEpoch = epochHeader;
-        lastEpochSeeded = true;
-      }
-      options.recorder?.event("resync", {scope: options.scope, seq: lastSeq, epoch: lastEpoch});
-      options.onRemoteState?.(pending.overlay(data), {scope: options.scope, resync: true});
-      if (!hasPendingSave()) setSyncStatus("saved");
-      return true;
+      const response = await fetch(request.url, {
+        method: request.method || "POST",
+        headers: {"Content-Type": "application/json"},
+        body: request.body === undefined ? undefined : JSON.stringify(request.body),
+      });
+      if (!response.ok) throw new Error((await response.text()).trim());
+      const body: unknown = await response.json();
+      options.adopt(scope, body);
+      result = {ok: true, response: body};
     } catch (error) {
       console.error(error);
-      return false;
+      indicator.fail();
+      result = {ok: false, error: error instanceof Error ? error.message : String(error)};
     } finally {
-      window.clearTimeout(deadline);
-      resyncing = false;
+      if (intentKey && intents.get(intentKey)?.token === own) intents.delete(intentKey);
     }
+    indicator.idle(key, result.ok);
+    return result;
   }
 
-  return {connect, flushSave, flushPatch, hasPendingSave, save, patch, isPending: (path) => pending.has(path)};
+  function overlay<T>(scope: string, view: T): T {
+    const e = entries.get(scope);
+    const own = [...intents.values()].filter((intent) => intent.scope === scope);
+    if (!(e && e.ops.size() > 0) && own.length === 0) return view;
+    let out: unknown = cloneJSON(view);
+    if (e) for (const op of e.ops.all()) out = setAtDeltaPath(out, [...docPath, ...op.path], op.value);
+    for (const intent of own) out = setAtDeltaPath(out, intent.path, intent.value);
+    return out as T;
+  }
+
+  function isPending(scope: string, path: PatchPath): boolean {
+    const e = entries.get(scope);
+    if (e && e.ops.has(path)) return true;
+    return intents.has(`${scope} ${JSON.stringify(normalizePatchPath(path))}`);
+  }
+
+  function hasPending(): boolean {
+    for (const e of entries.values()) if (e.inFlight || e.timer !== null || e.ops.size() > 0) return true;
+    return intents.size > 0;
+  }
+
+  function recover(scope: string): number {
+    if (options.readonly) return 0;
+    const count = entry(scope).ops.queued();
+    if (count === 0) return 0;
+    options.recorder?.()?.event("recovered-pending", {scope, count});
+    indicator.busy(scope);
+    schedule(scope, 0);
+    bindLifecycle();
+    return count;
+  }
+
+  async function flush(): Promise<void> {
+    for (const e of entries.values()) {
+      if (e.timer !== null) { window.clearTimeout(e.timer); e.timer = null; }
+    }
+    await Promise.all([...entries.keys()].map((scope) => flushScope(scope)));
+  }
+
+  return {patch, send, overlay, isPending, hasPending, recover, flush};
 }
 
 export interface EpochTracker {
   changed(message: {epoch?: unknown} | null | undefined): boolean;
+  // adopt takes a token a full state carried (snapshot, resync) as the baseline.
+  adopt(epoch: string): void;
   readonly epoch: string;
 }
 
@@ -832,6 +654,9 @@ export function createEpochTracker(): EpochTracker {
         return false;
       }
       return epoch !== lastEpoch;
+    },
+    adopt(epoch) {
+      if (epoch) lastEpoch = epoch;
     },
     get epoch() {
       return lastEpoch;
@@ -1049,7 +874,7 @@ export interface InstallClientRecorderOptions {
 
 // installClientRecorder wires a recorder for a page: periodic state snapshots,
 // lifecycle markers, and (when showButton) a small floating "download log"
-// button. Returns the recorder — pass it to createStateSync so its SSE timeline
+// button. Returns the recorder — pass it to the engine so its SSE timeline
 // is captured too — or null when localStorage is unavailable.
 export function installClientRecorder(options?: InstallClientRecorderOptions | null): ClientRecorder | null {
   const opts = options || {};
@@ -1100,43 +925,175 @@ function mountRecorderButton(recorder: ClientRecorder, label?: string): void {
   document.body.appendChild(btn);
 }
 
+// A scope's view as the engine sees it: the data a delta applies onto and the
+// seq that data is at.
+export interface Versioned<T = unknown> {
+  data: T;
+  seq: number;
+}
+
+// One family of scopes a page listens to. `prefix` matches the scope string
+// exactly or as a prefix ("game-state:7", "match:7:", "fest:").
+export interface ScopeSpec<T = unknown> {
+  prefix: string;
+  // What a delta for `scope` chains onto; null when the page holds no view for
+  // it. Omit for scopes that only ever arrive as snapshots.
+  base?: (scope: string) => Versioned<T> | null;
+  // A full view for `scope`: a snapshot, a delta the engine applied, or a resync.
+  adopt: (scope: string, view: Versioned<T>, message: ScopedEventMessage | null) => void;
+  // A delta that cannot chain (no base, or a seq gap): the page evicts and
+  // refetches what it shows. Default: resync via stateURL when set, else the
+  // engine's reload().
+  gap?: (scope: string, message: ScopedEventMessage) => void;
+  // GET endpoint whose body is the scope's state and whose X-State-Seq /
+  // X-State-Epoch headers realign the engine — the game-state protocol.
+  stateURL?: (scope: string) => string;
+}
+
 export interface LiveEventsOptions {
   eventsURL: () => string;
-  // Scoped-message dispatch, called after the epoch guard has passed.
-  onMessage: (message: ScopedEventMessage) => void;
+  scopes: ScopeSpec[];
+  // The engine's own game: game-state events of sibling games sharing the fest
+  // stream are dropped, everything else unregistered goes to onUnhandled.
+  gameID?: string | number | null;
+  onUnhandled?: (message: ScopedEventMessage) => void;
+  // The server epoch the page rendered under, so a restart between render and
+  // the first event still reads as a reset.
+  epoch?: string | null;
+  indicator?: SyncIndicator;
   onViewers?: (count: number | undefined) => void;
   onLockdown?: () => void;
-  // Wake recovery re-seeds from a fresh fetch before reopening the stream.
-  reload: () => Promise<void>;
-  onDown?: () => void;
-  onUp?: () => void;
+  // Wake recovery re-seeds the page from a fresh fetch before reopening the
+  // stream. Default: resync every scope that has a stateURL.
+  reload?: () => Promise<void>;
   onRecoverError?: (error: unknown) => void;
-  onStreamError?: () => void;
   // Static snapshot pages don't stream; connect() schedules the jittered
   // reload instead and wake recovery stays off.
   staticMode?: () => boolean;
   recorder?: () => ClientRecorder | null | undefined;
-  recorderTags?: () => Record<string, unknown>;
   newEventSource?: (url: string) => EventSource;
 }
 
 export interface LiveEvents {
   connect(): void;
+  // Refetch one scope's state (or every stateURL scope) and adopt it, realigned
+  // to the server's seq and epoch. Resolves whether the state was re-seeded.
+  resync(scope?: string): Promise<boolean>;
 }
 
-// createLiveEvents owns the read-side SSE lifecycle for pages that dispatch
-// scoped events across stages/venues/fests (host, viewer) rather than sync one
-// state blob (createStateSync). It carries the shared invariants: a changed
-// server epoch means the seq space reset, so the page reloads to re-seed
-// (jittered, latched — cached views merge monotonically by seq and can't adopt
-// the lower fresh seqs); and any non-OPEN stream is dropped and re-seeded from a
-// fresh fetch by the shared wake recovery (see createWakeRecovery).
+// createLiveEvents owns the read side of the scoped SSE protocol for every game
+// page: it opens the stream, drops what was already applied (seq <= have),
+// applies a delta that chains (prevSeq === have) onto the page's base and hands
+// the page the full view, reports a gap for the page to refetch, adopts
+// snapshots as they come, and carries the shared invariants — a changed server
+// epoch means the seq space reset (a game-state page resyncs from its state
+// endpoint; a multi-view page reloads, since its caches merge monotonically by
+// seq and cannot adopt the lower fresh seqs), a lockdown drops the stream, and
+// any non-OPEN stream is dropped and re-seeded by the shared wake recovery.
 export function createLiveEvents(options: LiveEventsOptions): LiveEvents {
   const epochTracker = createEpochTracker();
+  if (options.epoch) epochTracker.changed({epoch: options.epoch});
+  const indicator = options.indicator || createSyncIndicator();
   const recorder = () => options.recorder?.();
-  const tags = () => options.recorderTags?.() || {};
+  const resyncable = options.scopes.length > 0 && options.scopes.every((s) => s.stateURL);
   let stream: EventSource | null = null;
   let epochReloadScheduled = false;
+  const resyncing = new Set<string>();
+
+  function specFor(scope: string): ScopeSpec | null {
+    let best: ScopeSpec | null = null;
+    for (const spec of options.scopes) {
+      if (scope === spec.prefix || scope.startsWith(spec.prefix)) {
+        if (!best || spec.prefix.length > best.prefix.length) best = spec;
+      }
+    }
+    return best;
+  }
+
+  function dispatch(message: ScopedEventMessage): void {
+    const scope = message.scope;
+    const spec = specFor(scope);
+    if (!spec) {
+      const sibling = scope.startsWith("game-state:") && options.gameID != null && scope !== `game-state:${options.gameID}`;
+      if (!sibling) options.onUnhandled?.(message);
+      return;
+    }
+    if (resyncing.has(scope)) return;
+    const seq = Number(message.seq) || 0;
+    const base = spec.base ? spec.base(scope) : null;
+    if (Array.isArray(message.ops)) {
+      if (base && seq <= base.seq) {
+        indicator.touch();
+        return;
+      }
+      const prev = Number(message.prevSeq) || 0;
+      if (!base || base.seq !== prev) {
+        recorder()?.event("gap", {scope, have: base?.seq ?? null, prevSeq: prev, seq});
+        gap(spec, scope, message);
+        return;
+      }
+      const data = applyDeltaOps(base.data, message.ops);
+      recorder()?.event("delta", {scope, seq, prevSeq: prev, ops: message.ops.length});
+      if (message.emitMs) recorder()?.event("delta-latency", {scope, delivery_ms: Date.now() - Number(message.emitMs), seq});
+      spec.adopt(scope, {data, seq: seq || prev}, message);
+      indicator.touch();
+      return;
+    }
+    if (base && seq && seq <= base.seq) {
+      indicator.touch();
+      return;
+    }
+    recorder()?.event("snapshot", {scope, seq});
+    spec.adopt(scope, {data: message.data, seq: seq || base?.seq || 0}, message);
+    indicator.touch();
+  }
+
+  function gap(spec: ScopeSpec, scope: string, message: ScopedEventMessage): void {
+    if (spec.gap) spec.gap(scope, message);
+    else if (spec.stateURL) void resync(scope);
+    else void reload();
+  }
+
+  async function reload(): Promise<void> {
+    if (options.reload) return options.reload();
+    if (!(await resync())) throw new Error("resync failed");
+  }
+
+  // resync refetches a scope's full state and realigns seq/epoch from the
+  // headers so the next delta chains. Jittered so a fleet of viewers that all
+  // gap on the same dropped event don't refetch in lockstep; deadlined because
+  // a frozen tab can leave the fetch hanging, and deltas are dropped meanwhile.
+  async function resync(scope?: string): Promise<boolean> {
+    if (scope === undefined) {
+      const results = await Promise.all(options.scopes.filter((s) => s.stateURL).map((s) => resync(s.prefix)));
+      return results.every(Boolean);
+    }
+    const spec = specFor(scope);
+    if (!spec?.stateURL) return false;
+    if (resyncing.has(scope)) return true;
+    resyncing.add(scope);
+    const abort = new AbortController();
+    const deadline = window.setTimeout(() => abort.abort(), 20000);
+    try {
+      await new Promise((r) => window.setTimeout(r, Math.floor(Math.random() * 400)));
+      const response = await fetch(spec.stateURL(scope), {signal: abort.signal});
+      if (!response.ok) return false;
+      const seq = Number(response.headers.get("X-State-Seq")) || 0;
+      const epoch = response.headers.get("X-State-Epoch");
+      const data: unknown = await response.json();
+      if (epoch) epochTracker.adopt(epoch);
+      recorder()?.event("resync", {scope, seq, epoch: epochTracker.epoch});
+      spec.adopt(scope, {data, seq}, null);
+      indicator.touch();
+      return true;
+    } catch (error) {
+      console.error(error);
+      return false;
+    } finally {
+      window.clearTimeout(deadline);
+      resyncing.delete(scope);
+    }
+  }
 
   function connect(): void {
     if (options.staticMode?.()) {
@@ -1148,25 +1105,38 @@ export function createLiveEvents(options: LiveEventsOptions): LiveEvents {
     }
     const events = (options.newEventSource || defaultEventSource)(options.eventsURL());
     stream = events;
-    if (options.onLockdown) {
-      events.addEventListener("lockdown", () => {
-        // Server entered static mode: drop the stream and reload into the
-        // static page (otherwise native EventSource would just auto-reconnect).
-        events.close();
-        options.onLockdown!();
-      });
-    }
+    events.addEventListener("lockdown", () => {
+      // Server entered static mode: drop the stream and reload into the static
+      // page (otherwise native EventSource would just auto-reconnect).
+      events.close();
+      epochReloadScheduled = true;
+      options.onLockdown?.();
+    });
     events.addEventListener("state", (event) => {
-      const message = parseScopedEvent((event as MessageEvent<string>).data);
+      let message: ScopedEventMessage;
+      try {
+        message = parseScopedEvent((event as MessageEvent<string>).data);
+      } catch (_error) {
+        return;
+      }
+      // A snapshot carries its own seq and epoch and re-baselines a game-state
+      // page on its own; a delta from a new epoch cannot chain, so resync. A
+      // multi-view page reloads on either.
+      if (resyncable && !Array.isArray(message.ops)) epochTracker.adopt(String(message.epoch || ""));
       if (epochTracker.changed(message)) {
+        if (resyncable) {
+          recorder()?.event("epoch-change", {from: epochTracker.epoch, to: String(message.epoch || "")});
+          void resync();
+          return;
+        }
         if (!epochReloadScheduled) {
           epochReloadScheduled = true;
-          recorder()?.event("epoch-reload", {...tags(), from: epochTracker.epoch});
+          recorder()?.event("epoch-reload", {from: epochTracker.epoch});
           scheduleStaticReload();
         }
         return;
       }
-      options.onMessage(message);
+      dispatch(message);
     });
     events.addEventListener("viewers", (event) => {
       const onViewers = options.onViewers;
@@ -1177,23 +1147,26 @@ export function createLiveEvents(options: LiveEventsOptions): LiveEvents {
         // ignore malformed viewer-count payloads
       }
     });
-    events.addEventListener("open", () => recorder()?.event("sse-open", {...tags(), have: epochTracker.epoch}));
+    events.addEventListener("open", () => {
+      indicator.online();
+      recorder()?.event("sse-open", {epoch: epochTracker.epoch});
+    });
     events.onerror = () => {
-      options.onStreamError?.();
-      recorder()?.event("sse-error", tags());
+      indicator.offline();
+      recorder()?.event("sse-error", {});
     };
   }
 
   async function recover(): Promise<boolean> {
-    recorder()?.event("sse-recover", {...tags(), readyState: stream?.readyState ?? null});
-    options.onDown?.();
+    recorder()?.event("sse-recover", {readyState: stream?.readyState ?? null});
+    indicator.offline();
     try {
-      await options.reload();
+      await reload();
     } catch (error: unknown) {
       options.onRecoverError?.(error);
       return false;
     }
-    options.onUp?.();
+    indicator.online();
     connect();
     return true;
   }
@@ -1204,7 +1177,7 @@ export function createLiveEvents(options: LiveEventsOptions): LiveEvents {
     recover,
   }).bind();
 
-  return {connect};
+  return {connect, resync};
 }
 
 export interface HostPresenceOptions {

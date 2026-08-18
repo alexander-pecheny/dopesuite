@@ -35,7 +35,7 @@ pass — decided 2026-07-24.
 StateSync) never gained a call site — every page imported it for side effect
 only while re-implementing SSE/epoch/reconnect by hand, three times. The shim
 is deleted. The load-bearing seam this ADR wanted now exists as `state-sync.ts`:
-one sync engine (`createStateSync` for flat-game state, `createLiveEvents` for
-host/viewer scoped dispatch) with an injectable stream adapter, tested through
-that interface. A future protocol page builds on state-sync + the shared page
+one sync engine (since 18 Aug 2026 two primitives every page composes:
+`createLiveEvents` reads by scope, `createScopedWriter` writes by scope) with an
+injectable stream adapter, tested through that interface. A future protocol page builds on state-sync + the shared page
 modules rather than a renderer registry.
