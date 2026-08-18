@@ -51,6 +51,20 @@ func (ksi) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 	return stateJSON, nil
 }
 
+func (ksi) Seats(stateJSON json.RawMessage) []Seat {
+	var state struct {
+		Participants json.RawMessage `json:"participants"`
+		Declined     map[string]bool `json:"declined"`
+	}
+	_ = json.Unmarshal(stateJSON, &state)
+	participants := games.ParseKSIParticipants(state.Participants)
+	seats := make([]Seat, len(participants))
+	for i, p := range participants {
+		seats[i] = Seat{Number: int64(p.Number), Name: p.Name, Declined: games.KSIParticipantDeclined(state.Declined, p)}
+	}
+	return seats
+}
+
 func (ksi) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error) {
 	var state games.KSIState
 	if err := json.Unmarshal(stateJSON, &state); err != nil {

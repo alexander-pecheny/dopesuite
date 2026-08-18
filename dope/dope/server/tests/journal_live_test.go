@@ -42,7 +42,7 @@ func TestJournalRecordsLiveEdits(t *testing.T) {
 	// Attribute the edit to a user via the audit context, as the middleware does.
 	ctx := festwrite.WithAuditRequestID(festwrite.WithAuditActor(context.Background(), 42), "req-test")
 	scope := dopeserver.FestScope{FestID: festID, GameID: ekGameID}
-	if _, _, _, err := imports.ImportSeedsFromKSI(srv.Eng(), ctx, scope); err != nil {
+	if _, _, _, err := imports.ImportSeeds(srv.Eng(), ctx, scope, imports.FromKSI()); err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
 

@@ -28,7 +28,7 @@ func TestSnapshotReadsDecoupledFromWriteLock(t *testing.T) {
 		e.RT = realtime.NewManager()
 	})
 	scope := dopeserver.FestScope{FestID: festID, GameID: gameID}
-	if _, _, _, err := imports.ImportSeedsFromKSI(srv.Eng(), t.Context(), scope); err != nil {
+	if _, _, _, err := imports.ImportSeeds(srv.Eng(), t.Context(), scope, imports.FromKSI()); err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
 

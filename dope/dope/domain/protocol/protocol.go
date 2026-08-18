@@ -42,6 +42,39 @@ type Protocol interface {
 	Score(cfg, state json.RawMessage) ([]structure.SlotOutcome, error)
 }
 
+// Seat is one Participant a flat document lists: its number in the Game and
+// the name and city the document knows it by.
+type Seat struct {
+	Number int64
+	Name   string
+	City   string
+	// Declined marks a team that refused to play on — КСИ's «Отказы» tab —
+	// so a seeding drawn from this game skips it.
+	Declined bool
+}
+
+// Seater is the Protocol of a flat format — one Block, one бой, the whole
+// document on it — declaring who sits at that бой: the Participants its
+// document lists, in the order Score returns their outcomes. The Structure
+// seats them from this, so a flat game ranks like every other.
+type Seater interface {
+	Seats(state json.RawMessage) []Seat
+}
+
+// Seats returns the seats a flat document lists, and whether the Protocol is
+// a flat one at all.
+func Seats(code string, state json.RawMessage) ([]Seat, bool) {
+	p, ok := Get(code)
+	if !ok {
+		return nil, false
+	}
+	seater, ok := p.(Seater)
+	if !ok {
+		return nil, false
+	}
+	return seater.Seats(state), true
+}
+
 // Param is one DSL key a Protocol accepts and the stage-config field it
 // compiles to: true/false when Bool, a bracketed list of counts when List,
 // else a count, written as Default when the scheme is silent and Default is

@@ -30,7 +30,7 @@ func TestSeedImportFromKSIResolvesGenericSeedsAndDeclines(t *testing.T) {
 	})
 	scope := dopeserver.FestScope{FestID: festID, GameID: ekGameID}
 
-	view, _, _, err := imports.ImportSeedsFromKSI(srv.Eng(), t.Context(), scope)
+	view, _, _, err := imports.ImportSeeds(srv.Eng(), t.Context(), scope, imports.FromKSI())
 	if err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
@@ -82,9 +82,8 @@ func TestSeedImportFromKSIPropagatesDeclines(t *testing.T) {
 	defer db.Close()
 
 	festID, ekGameID := createSeedImportFixture(t, db)
-	// Mark team "B" (the KSI top seed) as refused-to-play. The fixture uses legacy
-	// number-less participants, so the identity key is "s"+lowercased name.
-	declineKSIParticipant(t, db, festID, "sb")
+	// Mark team "B" (the KSI top seed, number 2) as refused-to-play.
+	declineKSIParticipant(t, db, festID, "n2")
 
 	srv := dopeserver.NewTestServer(func(e *core.Engine) {
 		e.DB = db
@@ -92,7 +91,7 @@ func TestSeedImportFromKSIPropagatesDeclines(t *testing.T) {
 	})
 	scope := dopeserver.FestScope{FestID: festID, GameID: ekGameID}
 
-	view, _, _, err := imports.ImportSeedsFromKSI(srv.Eng(), t.Context(), scope)
+	view, _, _, err := imports.ImportSeeds(srv.Eng(), t.Context(), scope, imports.FromKSI())
 	if err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
@@ -177,7 +176,7 @@ func TestFinishAssignsPlaces(t *testing.T) {
 		e.RT = realtime.NewManager()
 	})
 	scopeBase := dopeserver.FestScope{FestID: festID, GameID: ekGameID}
-	if _, _, _, err := imports.ImportSeedsFromKSI(srv.Eng(), t.Context(), scopeBase); err != nil {
+	if _, _, _, err := imports.ImportSeeds(srv.Eng(), t.Context(), scopeBase, imports.FromKSI()); err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
 	scope, err := srv.VerifyMatchInScope(t.Context(), scopeBase, "A")
@@ -231,11 +230,11 @@ values(?, ?, 'creator', ?)`, festID, systemID, now); err != nil {
 			"schemaVersion": 2,
 			"title":         "КСИ",
 			"gameType":      "ksi",
-			"participants":  []string{"A", "B", "C", "D", "E"},
+			"participants":  []map[string]any{{"number": 1, "name": "A"}, {"number": 2, "name": "B"}, {"number": 3, "name": "C"}, {"number": 4, "name": "D"}, {"number": 5, "name": "E"}},
 			"themes":        1,
 		},
 		map[string]any{
-			"participants": []string{"A", "B", "C", "D", "E"},
+			"participants": []map[string]any{{"number": 1, "name": "A"}, {"number": 2, "name": "B"}, {"number": 3, "name": "C"}, {"number": 4, "name": "D"}, {"number": 5, "name": "E"}},
 			"themes":       []map[string]any{{"answers": answers}},
 			"finished":     true,
 		}); err != nil {

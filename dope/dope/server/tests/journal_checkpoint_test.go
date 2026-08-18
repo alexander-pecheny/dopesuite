@@ -36,7 +36,7 @@ func TestGameCheckpointRoundTrip(t *testing.T) {
 
 	// Mutate: import seeds (writes match_slots, themes, results, state).
 	scope := dopeserver.FestScope{FestID: mustFestOfGame(t, db, ekGameID), GameID: ekGameID}
-	if _, _, _, err := imports.ImportSeedsFromKSI(srv.Eng(), ctx, scope); err != nil {
+	if _, _, _, err := imports.ImportSeeds(srv.Eng(), ctx, scope, imports.FromKSI()); err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
 	cp1 := mustCapture(t, db, ekGameID)

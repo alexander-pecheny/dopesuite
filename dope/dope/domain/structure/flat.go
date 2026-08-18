@@ -84,7 +84,9 @@ func (flat) Standings(cfg json.RawMessage, results []MatchOutcome, _ Inputs) ([]
 				continue
 			}
 			if key == "place" || key == "place_sum" {
-				return a < b
+				// A seat the Protocol left unplaced — a КСИ team that declined,
+				// a бой not scored — ranks after everyone it did place.
+				return (a != 0 && a < b) || b == 0
 			}
 			return a > b
 		}

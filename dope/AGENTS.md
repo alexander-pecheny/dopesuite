@@ -27,7 +27,7 @@ dope/                    # module root (go.mod: module "dope")
     cmd/                 # entry points: dope-server (thin main), telegram-bot
     server/              # package dopeserver — the orchestration trunk + server/tests/ (integration)
     web/                 # HTTP/UI: pages, hostpages, editbatch, telegrambridge, assets (embed), jstest
-    domain/              # game/fest logic: games, core, resolver, roster, overrides, imports, numbering, edit, view
+    domain/              # game/fest logic: games, core, gamebuild, flatgame, resolver, roster, overrides, imports, numbering, edit, view
     storage/             # persistence: store, journal, migrate, festwrite, festaccess, auditmw, storeutil, sqlitez
     export/              # output: xlsxexport, gameexport
     platform/            # cross-cutting leaves: realtime, roles, markdown, session, metrics, util

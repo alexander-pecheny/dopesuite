@@ -29,7 +29,7 @@ func TestMatchEditJournalsAsMatchPatch(t *testing.T) {
 		e.RT = realtime.NewManager()
 	})
 	scopeBase := dopeserver.FestScope{FestID: festID, GameID: gameID}
-	if _, _, _, err := imports.ImportSeedsFromKSI(srv.Eng(), t.Context(), scopeBase); err != nil {
+	if _, _, _, err := imports.ImportSeeds(srv.Eng(), t.Context(), scopeBase, imports.FromKSI()); err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
 

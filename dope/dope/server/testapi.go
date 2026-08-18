@@ -45,7 +45,7 @@ func NewTestServer(configure func(*core.Engine)) *Server {
 // ----- field accessors -----
 
 // Eng returns a pointer to the embedded engine (tests both read it and pass its
-// address into leaf packages, e.g. imports.ImportSeedsFromKSI(srv.Eng(), ...)).
+// address into leaf packages, e.g. imports.ImportSeeds(srv.Eng(), ..., imports.FromKSI())).
 func (s *Server) Eng() *core.Engine { return &s.eng }
 
 // Metrics returns a pointer to the edit-metrics recorder.

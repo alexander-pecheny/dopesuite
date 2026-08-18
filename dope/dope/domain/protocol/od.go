@@ -34,6 +34,16 @@ func (od) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 	return stateJSON, nil
 }
 
+func (od) Seats(stateJSON json.RawMessage) []Seat {
+	var state games.ODState
+	_ = json.Unmarshal(stateJSON, &state)
+	seats := make([]Seat, len(state.Teams))
+	for i, team := range state.Teams {
+		seats[i] = Seat{Number: team.Number, Name: team.Name, City: team.City}
+	}
+	return seats
+}
+
 func (od) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error) {
 	results, err := games.ComputeODResults(string(cfg), string(stateJSON))
 	if err != nil {

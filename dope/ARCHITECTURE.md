@@ -90,7 +90,14 @@ metadata.
 - `core` — the `Engine`: shared in-memory state, write-tx plumbing, journal
   service, broadcast, revert. Embedded by `*server`.
 - `resolver` — bracket/reseed resolution. `roster` — roster + seeding.
-- `overrides` — player-name overrides. `imports` — EK/seed/rating bulk import.
+- `gamebuild` — where a Game comes to exist: `Create`, `Recompile`, `Rebuild`,
+  `Materialise` (a pasted scheme), `Clear`; the one writer of stages, matches
+  and slots. `flatgame` — a flat game (ОД, КСИ) as a Structure: its document's
+  two writers (`SetStateTx`, `PatchStateTx`) seat the бой from the team list,
+  score it and rank its Block, so `stage_standings` is live for it too.
+- `overrides` — player-name overrides. `imports` — EK/seed/rating bulk import;
+  a seed source is `ImportSeeds(FromKSI()|FromScheme()|FromXLSX())`, and the
+  `game` source reads the source Game's one table.
 - `numbering` — team-number assignment. `edit` — match-edit value types.
 - `view` — shared presentation DTOs (e.g. `HostFest`) kept in a leaf so the
   server and the web handlers can name them without importing each other.

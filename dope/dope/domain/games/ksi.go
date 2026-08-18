@@ -186,3 +186,25 @@ func SIEmptyGameJSON(slug, title string, themesCount, participants int) ([]byte,
 	}))
 	return schemeJSON, stateJSON
 }
+
+// ParseKSIParticipants decodes a participants array tolerating both the current
+// [{number,name}] shape and the legacy ["name", ...] shape (so existing game
+// states keep loading during/after the migration).
+func ParseKSIParticipants(raw json.RawMessage) []KSIParticipant {
+	if len(raw) == 0 {
+		return nil
+	}
+	var objs []KSIParticipant
+	if err := json.Unmarshal(raw, &objs); err == nil {
+		return objs
+	}
+	var names []string
+	if err := json.Unmarshal(raw, &names); err == nil {
+		out := make([]KSIParticipant, len(names))
+		for i, name := range names {
+			out[i] = KSIParticipant{Name: name}
+		}
+		return out
+	}
+	return nil
+}

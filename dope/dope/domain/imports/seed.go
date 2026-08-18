@@ -6,7 +6,6 @@ import (
 	"github.com/xuri/excelize/v2"
 
 	"dope/dope/domain/core"
-	"dope/dope/domain/games"
 	"dope/dope/domain/overrides"
 	"dope/dope/domain/protocol"
 	rosterpkg "dope/dope/domain/roster"
@@ -65,21 +64,6 @@ type SeedDeclineRequest struct {
 	Declined bool  `json:"declined"`
 }
 
-type ksiSeedCandidate struct {
-	SourceIndex int
-	SourceRank  int
-	Name        string
-	Number      int  // team number (universal identity); 0 for legacy number-less KSI state
-	Declined    bool // marked refused-to-play in the KSI «Отказы» tab
-	Metrics     ksiSeedMetrics
-}
-
-type ksiSeedMetrics struct {
-	Total   int
-	Plus    int
-	Correct [5]int
-}
-
 type seedRosterTeam struct {
 	Number  int64
 	Name    string
@@ -112,43 +96,86 @@ type seedCandidate struct {
 	Declined   bool
 }
 
-func ImportSeedsFromKSI(eng *core.Engine, ctx context.Context, scope core.FestScope) (SeedImportView, int64, []byte, error) {
-	eng.Mu.Lock()
-	defer eng.Mu.Unlock()
-
-	tx, err := eng.BeginWriteTx(ctx)
-	if err != nil {
-		return SeedImportView{}, 0, nil, err
-	}
-	defer tx.Rollback()
-
-	gameType, rawState, err := loadSeedImportGame(ctx, tx, scope)
-	if err != nil {
-		return SeedImportView{}, 0, nil, err
-	}
-	sourceGameID, ksiCandidates, err := loadKSISeedCandidates(ctx, tx, scope.FestID)
-	if err != nil {
-		return SeedImportView{}, 0, nil, err
-	}
-	candidates := make([]seedCandidate, len(ksiCandidates))
-	for i, c := range ksiCandidates {
-		candidates[i] = seedCandidate{SourceRank: c.SourceRank, Name: c.Name, Number: c.Number, Declined: c.Declined}
-	}
-	view, revision, stateJSON, err := importCandidatesTx(ctx, tx, scope, gameType, rawState, seedSourceKSI, "КСИ", sourceGameID, candidates)
-	if err != nil {
-		return SeedImportView{}, 0, nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return SeedImportView{}, 0, nil, err
-	}
-	return view, revision, stateJSON, nil
+// A SeedSource ranks the фест's Participants for a Game's seeding: the
+// фест's first КСИ (the ЭК page's button), whatever the Game's [init]
+// declares — a lot for random, else the named Game's current table — or an
+// uploaded sheet. Each is resolved inside the import's transaction.
+type SeedSource interface {
+	resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope) (seeding, error)
 }
 
-// ImportSeedsFromScheme resolves the target game's [init] declaration
-// (scheme `seeding`): a lot for `random`, else the named fest game's CURRENT
-// standings — partial results mid-fest are a normal seed source. xlsx seeding
-// arrives through its own upload call.
-func ImportSeedsFromScheme(eng *core.Engine, ctx context.Context, scope core.FestScope) (SeedImportView, int64, []byte, error) {
+// seeding is what a source resolved to: the source's stored name and its
+// label for messages, the Game it read (0 for a lot or a sheet), and the
+// candidates in seed order.
+type seeding struct {
+	source, label string
+	sourceGameID  int64
+	candidates    []seedCandidate
+}
+
+// FromKSI is the ЭК page's «Импорт из КСИ»: the фест's first КСИ, ranked.
+func FromKSI() SeedSource { return fromKSI{} }
+
+// FromScheme is what the Game's [init] declares.
+func FromScheme() SeedSource { return fromScheme{} }
+
+// FromXLSX is an uploaded seeding sheet (docs/scheme-dsl.md): column A a team
+// number or name, optional column B a basket. With baskets, teams band by
+// basket and draw a deterministic lot within each; without, the row order IS
+// the seeding.
+func FromXLSX(file io.Reader) SeedSource { return fromXLSX{file} }
+
+type fromKSI struct{}
+
+func (fromKSI) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope) (seeding, error) {
+	var code string
+	err := tx.QueryRowContext(ctx, `
+select code from games where fest_id = ? and game_type = 'ksi' order by position, id limit 1`, scope.FestID).Scan(&code)
+	if errors.Is(err, sql.ErrNoRows) {
+		return seeding{}, errors.New("в фесте нет игры КСИ")
+	}
+	if err != nil {
+		return seeding{}, err
+	}
+	gameID, candidates, err := standingsCandidates(ctx, tx, scope.FestID, code, nil)
+	return seeding{source: seedSourceKSI, label: "КСИ", sourceGameID: gameID, candidates: candidates}, err
+}
+
+type fromScheme struct{}
+
+func (fromScheme) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope) (seeding, error) {
+	declared, err := loadSchemeSeeding(ctx, tx, scope)
+	if err != nil {
+		return seeding{}, err
+	}
+	switch declared.Source {
+	case "":
+		return seeding{}, errors.New("схема игры не объявляет посев ([init] seed)")
+	case "xlsx":
+		return seeding{}, errors.New("посев из xlsx: загрузите файл на вкладке посева")
+	case "random":
+		candidates, err := randomSeedCandidates(ctx, tx, scope)
+		return seeding{source: "random", label: "жребий", candidates: candidates}, err
+	}
+	gameID, candidates, err := standingsCandidates(ctx, tx, scope.FestID, declared.Source, declared.Sort)
+	return seeding{source: declared.Source, label: declared.Source, sourceGameID: gameID, candidates: candidates}, err
+}
+
+type fromXLSX struct{ file io.Reader }
+
+func (f fromXLSX) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope) (seeding, error) {
+	roster, err := loadSeedRosterTeams(ctx, tx, scope.FestID)
+	if err != nil {
+		return seeding{}, err
+	}
+	candidates, err := parseSeedXLSX(f.file, scope.GameID, roster)
+	return seeding{source: "xlsx", label: "xlsx", candidates: candidates}, err
+}
+
+// ImportSeeds seeds the Game from the source: the source's current order is
+// snapshotted into the seed ladder (partial results mid-фест are a normal
+// source), previous declines survive, and every seed slot is reseated.
+func ImportSeeds(eng *core.Engine, ctx context.Context, scope core.FestScope, src SeedSource) (SeedImportView, int64, []byte, error) {
 	var view SeedImportView
 	var revision int64
 	var stateJSON []byte
@@ -157,60 +184,11 @@ func ImportSeedsFromScheme(eng *core.Engine, ctx context.Context, scope core.Fes
 		if err != nil {
 			return err
 		}
-		seeding, err := loadSchemeSeeding(ctx, tx, scope)
+		resolved, err := src.resolve(ctx, tx, scope)
 		if err != nil {
 			return err
 		}
-		var candidates []seedCandidate
-		var sourceGameID int64
-		label := seeding.Source
-		switch seeding.Source {
-		case "":
-			return errors.New("схема игры не объявляет посев ([init] seed)")
-		case "xlsx":
-			return errors.New("посев из xlsx: загрузите файл на вкладке посева")
-		case "random":
-			label = "жребий"
-			if candidates, err = randomSeedCandidates(ctx, tx, scope); err != nil {
-				return err
-			}
-		default:
-			sourceGameID, candidates, err = gameSeedCandidates(ctx, tx, scope.FestID, seeding)
-			if err != nil {
-				return err
-			}
-		}
-		view, revision, stateJSON, err = importCandidatesTx(ctx, tx, scope, gameType, rawState, seeding.Source, label, sourceGameID, candidates)
-		return err
-	})
-	if err != nil {
-		return SeedImportView{}, 0, nil, err
-	}
-	return view, revision, stateJSON, nil
-}
-
-// ImportSeedsFromXLSX imports an uploaded seeding sheet: column A a team
-// number or name, optional column B a basket. With baskets, teams band by
-// basket and draw a deterministic lot within each; without, the row order IS
-// the seeding (docs/scheme-dsl.md).
-func ImportSeedsFromXLSX(eng *core.Engine, ctx context.Context, scope core.FestScope, file io.Reader) (SeedImportView, int64, []byte, error) {
-	var view SeedImportView
-	var revision int64
-	var stateJSON []byte
-	err := eng.WithWriteTx(ctx, scope.FestID, "seed-import-xlsx", func(ctx context.Context, tx *sql.Tx) error {
-		gameType, rawState, err := loadSeedImportGame(ctx, tx, scope)
-		if err != nil {
-			return err
-		}
-		roster, err := loadSeedRosterTeams(ctx, tx, scope.FestID)
-		if err != nil {
-			return err
-		}
-		candidates, err := parseSeedXLSX(file, scope.GameID, roster)
-		if err != nil {
-			return err
-		}
-		view, revision, stateJSON, err = importCandidatesTx(ctx, tx, scope, gameType, rawState, "xlsx", "xlsx", 0, candidates)
+		view, revision, stateJSON, err = importCandidatesTx(ctx, tx, scope, gameType, rawState, resolved.source, resolved.label, resolved.sourceGameID, resolved.candidates)
 		return err
 	})
 	if err != nil {
@@ -735,87 +713,110 @@ func seedRefKey(sourceRef string) (int, int) {
 	return basket, number
 }
 
-// gameSeedCandidates ranks a source game's current standings, dispatched by
-// its type. The seeding's sort rules apply where the type exposes metrics.
-func gameSeedCandidates(ctx context.Context, q store.Queryer, festID int64, seeding store.SchemeSeeding) (int64, []seedCandidate, error) {
+// standingsCandidates reads a source Game's table — the one Block's
+// stage_standings the server ranked (ADR-0011) — as seed candidates: in
+// rank order, ties within a shared place broken by the Protocol's own
+// Metrics, or re-sorted by the [init] sorting rules when the scheme names
+// some. A team the source document marks as declined comes pre-declined. A
+// Game of more than one table is refused: which of them seeds is not defined.
+func standingsCandidates(ctx context.Context, q store.Queryer, festID int64, gameCode string, rules []store.SchemeSortRule) (int64, []seedCandidate, error) {
 	var gameID int64
-	var gameType, schemeJSON, stateJSON string
+	var gameType, document string
 	err := q.QueryRowContext(ctx, `
-select id, game_type, coalesce(scheme_json, '{}'),
-       coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), '{}')
-from games
-where fest_id = ? and code = ?`, festID, seeding.Source).Scan(&gameID, &gameType, &schemeJSON, &stateJSON)
+select id, game_type,
+       coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), coalesce(state_json, '{}'))
+from games where fest_id = ? and code = ?`, festID, gameCode).Scan(&gameID, &gameType, &document)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, nil, fmt.Errorf("в фесте нет игры с кодом %s", seeding.Source)
+		return 0, nil, fmt.Errorf("в фесте нет игры с кодом %s", gameCode)
 	}
 	if err != nil {
 		return 0, nil, err
 	}
-	switch gameType {
-	case "ksi":
-		candidates, err := ksiSeedCandidatesFrom(schemeJSON, stateJSON)
-		if err != nil {
-			return 0, nil, err
-		}
-		out := make([]seedCandidate, len(candidates))
-		for i, c := range candidates {
-			out[i] = seedCandidate{SourceRank: c.SourceRank, Name: c.Name, Number: c.Number, Declined: c.Declined}
-		}
-		return gameID, out, nil
-	case "od":
-		candidates, err := odSeedCandidates(schemeJSON, stateJSON, seeding.Sort)
-		return gameID, candidates, err
-	default:
-		return 0, nil, fmt.Errorf("посев из игры типа %s пока не поддерживается", gameType)
-	}
-}
-
-// odSeedCandidates ranks an ОД game's teams by its computed standings —
-// total desc, then the R rating — reordered by the declared [init] sorting
-// when one names the points/rating metrics.
-func odSeedCandidates(schemeJSON, stateJSON string, rules []store.SchemeSortRule) ([]seedCandidate, error) {
-	results, err := games.ComputeODResults(schemeJSON, stateJSON)
-	if err != nil {
-		return nil, err
-	}
-	if len(results.Teams) == 0 {
-		return nil, errors.New("в игре-источнике нет команд")
-	}
-	teams := append([]games.ODResultsTeam(nil), results.Teams...)
-	if len(rules) > 0 {
-		metric := func(team games.ODResultsTeam, name string) (int, bool) {
-			switch name {
-			case "points", "taken", "total":
-				return team.Total, true
-			case "rating":
-				return team.Rating, true
-			}
-			return 0, false
-		}
-		sort.SliceStable(teams, func(i, j int) bool {
-			for _, rule := range rules {
-				a, aok := metric(teams[i], rule.Metric)
-				b, bok := metric(teams[j], rule.Metric)
-				if !aok || !bok || a == b {
-					continue
-				}
-				if rule.Dir == "asc" {
-					return a < b
-				}
-				return a > b
-			}
-			return false
+	stages, err := store.CollectRows(ctx, q, `
+select distinct stage_id from stage_standings st join stages s on s.id = st.stage_id where s.game_id = ?`, []any{gameID},
+		func(rows *sql.Rows) (int64, error) {
+			var id int64
+			err := rows.Scan(&id)
+			return id, err
 		})
+	if err != nil {
+		return 0, nil, err
 	}
-	candidates := make([]seedCandidate, len(teams))
-	for i, team := range teams {
-		candidates[i] = seedCandidate{
-			SourceRank: i + 1,
-			Name:       team.Name,
-			Number:     int(team.Number),
+	switch {
+	case len(stages) == 0:
+		return 0, nil, fmt.Errorf("у игры %s ещё нет таблицы", gameCode)
+	case len(stages) > 1:
+		return 0, nil, fmt.Errorf("у игры %s %d таблиц — посев берётся из игры с одной", gameCode, len(stages))
+	}
+	type row struct {
+		rank    int
+		name    string
+		number  int
+		metrics map[string]float64
+	}
+	rows, err := store.CollectRows(ctx, q, `
+select st.rank, p.name, coalesce(p.number, 0), st.metrics_json
+from stage_standings st join participants p on p.id = st.participant_id
+where st.stage_id = ? order by st.rank`, []any{stages[0]}, func(rs *sql.Rows) (row, error) {
+		var r row
+		var metrics string
+		if err := rs.Scan(&r.rank, &r.name, &r.number, &metrics); err != nil {
+			return r, err
+		}
+		_ = json.Unmarshal([]byte(metrics), &r.metrics)
+		return r, nil
+	})
+	if err != nil {
+		return 0, nil, err
+	}
+	if len(rows) == 0 {
+		return 0, nil, errors.New("в игре-источнике нет команд")
+	}
+	order := rules
+	if len(order) == 0 {
+		order = []store.SchemeSortRule{{Metric: "place", Dir: "asc"}}
+		for _, metric := range protocol.Metrics(gameType) {
+			order = append(order, store.SchemeSortRule{Metric: metric, Dir: "desc"})
 		}
 	}
-	return candidates, nil
+	for _, rule := range rules {
+		known := false
+		for _, r := range rows {
+			_, known = r.metrics[rule.Metric]
+			if known {
+				break
+			}
+		}
+		if !known {
+			return 0, nil, fmt.Errorf("sorting: %s — игра %s такой метрики не считает", rule.Metric, gameCode)
+		}
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		for _, rule := range order {
+			a, b := rows[i].metrics[rule.Metric], rows[j].metrics[rule.Metric]
+			if a == b {
+				continue
+			}
+			if rule.Dir == "asc" {
+				return a < b
+			}
+			return a > b
+		}
+		return rows[i].rank < rows[j].rank
+	})
+	declined := map[int64]bool{}
+	if seats, ok := protocol.Seats(gameType, json.RawMessage(document)); ok {
+		for _, seat := range seats {
+			if seat.Declined {
+				declined[seat.Number] = true
+			}
+		}
+	}
+	candidates := make([]seedCandidate, len(rows))
+	for i, r := range rows {
+		candidates[i] = seedCandidate{SourceRank: i + 1, Name: r.name, Number: r.number, Declined: declined[int64(r.number)]}
+	}
+	return gameID, candidates, nil
 }
 
 // randomSeedCandidates orders the fest's numbered teams by a deterministic
@@ -845,165 +846,6 @@ func randomSeedCandidates(ctx context.Context, q store.Queryer, scope core.FestS
 		candidates[i] = seedCandidate{SourceRank: i + 1, Name: entry.team.Name, Number: int(entry.team.Number)}
 	}
 	return candidates, nil
-}
-
-func loadKSISeedCandidates(ctx context.Context, q store.Queryer, festID int64) (int64, []ksiSeedCandidate, error) {
-	var sourceGameID int64
-	var schemeJSON, stateJSON string
-	if err := q.QueryRowContext(ctx, `
-select id, coalesce(scheme_json, '{}'),
-       coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), '{}')
-from games
-where fest_id = ? and game_type = 'ksi'
-order by position, id
-limit 1`, festID).Scan(&sourceGameID, &schemeJSON, &stateJSON); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return 0, nil, errors.New("в фесте нет игры КСИ")
-		}
-		return 0, nil, err
-	}
-	candidates, err := ksiSeedCandidatesFrom(schemeJSON, stateJSON)
-	return sourceGameID, candidates, err
-}
-
-func ksiSeedCandidatesFrom(schemeJSON, stateJSON string) ([]ksiSeedCandidate, error) {
-	participants, ksiState, declined, err := decodeKSIStateForSeed(schemeJSON, stateJSON)
-	if err != nil {
-		return nil, err
-	}
-	if len(participants) == 0 {
-		return nil, errors.New("в КСИ нет команд")
-	}
-	candidates := make([]ksiSeedCandidate, 0, len(participants))
-	for index, p := range participants {
-		name := strings.TrimSpace(p.Name)
-		if name == "" {
-			name = fmt.Sprintf("Команда %d", index+1)
-		}
-		candidates = append(candidates, ksiSeedCandidate{
-			SourceIndex: index,
-			Name:        name,
-			Number:      p.Number,
-			Declined:    games.KSIParticipantDeclined(declined, p),
-			Metrics:     ksiMetricsForParticipant(ksiState, index),
-		})
-	}
-	sort.SliceStable(candidates, func(i, j int) bool {
-		return compareKSISeedCandidates(candidates[i], candidates[j]) < 0
-	})
-	for i := range candidates {
-		candidates[i].SourceRank = i + 1
-	}
-	return candidates, nil
-}
-
-// ksiSeedState bundles the per-theme answer grid with the optional sticker grid
-// (and a flag for the stickers variant) so seed scoring can apply the sticker
-// rules consistently with the UI and the xlsx export.
-type ksiSeedState struct {
-	themes       [][][]string
-	stickers     [][]string
-	stickersMode bool
-}
-
-func decodeKSIStateForSeed(schemeJSON, stateJSON string) ([]games.KSIParticipant, ksiSeedState, map[string]bool, error) {
-	var state struct {
-		Participants json.RawMessage `json:"participants"`
-		Declined     map[string]bool `json:"declined"`
-		Stickers     [][]string      `json:"stickers"`
-		Themes       []struct {
-			Answers [][]string `json:"answers"`
-		} `json:"themes"`
-	}
-	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
-		return nil, ksiSeedState{}, nil, fmt.Errorf("не удалось разобрать состояние КСИ: %w", err)
-	}
-	// Participants may be the current [{number,name}] objects or legacy names.
-	participants := rosterpkg.ParseKSIParticipants(state.Participants)
-	var scheme struct {
-		Participants json.RawMessage        `json:"participants"`
-		Stickers     games.KSIStickerConfig `json:"stickers"`
-	}
-	schemeErr := json.Unmarshal([]byte(schemeJSON), &scheme)
-	if len(participants) == 0 {
-		if schemeErr != nil {
-			return nil, ksiSeedState{}, nil, fmt.Errorf("не удалось разобрать схему КСИ: %w", schemeErr)
-		}
-		participants = rosterpkg.ParseKSIParticipants(scheme.Participants)
-	}
-	themes := make([][][]string, 0, len(state.Themes))
-	for _, theme := range state.Themes {
-		themes = append(themes, theme.Answers)
-	}
-	seedState := ksiSeedState{
-		themes:       themes,
-		stickers:     state.Stickers,
-		stickersMode: schemeErr == nil && len(scheme.Stickers.Types) > 0,
-	}
-	return participants, seedState, state.Declined, nil
-}
-
-func ksiMetricsForParticipant(state ksiSeedState, participantIndex int) ksiSeedMetrics {
-	var metrics ksiSeedMetrics
-	for themeIndex, answers := range state.themes {
-		if participantIndex >= len(answers) {
-			continue
-		}
-		sticker, scored := ksiSeedThemeSticker(state, themeIndex, participantIndex)
-		if !scored {
-			continue
-		}
-		row := answers[participantIndex]
-		for answerIndex, mark := range row {
-			if answerIndex >= len(store.QuestionValues) {
-				break
-			}
-			value := store.QuestionValues[answerIndex]
-			mark = store.NormalizeMark(mark)
-			cv := games.KSIStickerMarkValue(sticker, mark, value)
-			metrics.Total += cv
-			if cv > 0 {
-				metrics.Plus += cv
-			}
-			if mark == "right" {
-				metrics.Correct[answerIndex]++
-			}
-		}
-	}
-	return metrics
-}
-
-// ksiSeedThemeSticker mirrors the export's ksiThemeSticker: plain KSI games score
-// every theme under neutral rules; stickers games leave a theme unscored until
-// its (team, theme) sticker is set.
-func ksiSeedThemeSticker(state ksiSeedState, theme, player int) (string, bool) {
-	if !state.stickersMode {
-		return games.KSIStickerNeutral, true
-	}
-	if theme < len(state.stickers) && player < len(state.stickers[theme]) {
-		if id := state.stickers[theme][player]; id != "" {
-			return id, true
-		}
-	}
-	return "", false
-}
-
-func compareKSISeedCandidates(a, b ksiSeedCandidate) int {
-	if a.Metrics.Total != b.Metrics.Total {
-		return b.Metrics.Total - a.Metrics.Total
-	}
-	if a.Metrics.Plus != b.Metrics.Plus {
-		return b.Metrics.Plus - a.Metrics.Plus
-	}
-	for index := len(store.QuestionValues) - 1; index >= 0; index-- {
-		if a.Metrics.Correct[index] != b.Metrics.Correct[index] {
-			return b.Metrics.Correct[index] - a.Metrics.Correct[index]
-		}
-	}
-	if cmp := util.CompareAlpha(a.Name, b.Name); cmp != 0 {
-		return cmp
-	}
-	return a.SourceIndex - b.SourceIndex
 }
 
 func loadSeedRosterTeams(ctx context.Context, q store.Queryer, festID int64) ([]seedRosterTeam, error) {
@@ -1078,42 +920,19 @@ func EnsureSeedTeamByNumber(ctx context.Context, tx *sql.Tx, festID, number int6
 	if name == "" {
 		return 0, "", errors.New("empty team name")
 	}
-	var teamID int64
-	var existingName, existingCity string
-	err := tx.QueryRowContext(ctx, `
-select id, name, city from participants
-where fest_id = ? and roster = 'team' and number = ? limit 1`, festID, number).Scan(&teamID, &existingName, &existingCity)
-	if errors.Is(err, sql.ErrNoRows) {
-		teamID, err = store.InsertReturningID(ctx, tx, `
-insert into participants(fest_id, roster, name, city, number) values(?, 'team', ?, ?, ?)`, festID, name, city, number)
-		if err != nil {
-			return 0, "", err
-		}
-		existingCity = city
-	} else if err != nil {
+	teamID, err := store.EnsureParticipantByNumber(ctx, tx, festID, "team", number, name, city)
+	if err != nil {
 		return 0, "", err
-	} else {
-		// Keep the display name/city in step with the current rosterpkg.
-		newName, newCity := existingName, existingCity
-		if name != "" {
-			newName = name
-		}
-		if city != "" {
-			newCity = city
-		}
-		if newName != existingName || newCity != existingCity {
-			if _, err := tx.ExecContext(ctx, `update participants set name = ?, city = ? where id = ?`, newName, newCity, teamID); err != nil {
-				return 0, "", err
-			}
-			existingCity = newCity
-		}
+	}
+	if err := tx.QueryRowContext(ctx, `select city from participants where id = ?`, teamID).Scan(&city); err != nil {
+		return 0, "", err
 	}
 	if len(players) > 0 {
 		if err := rosterpkg.ReplaceSeedTeamRoster(ctx, tx, festID, teamID, players); err != nil {
 			return 0, "", err
 		}
 	}
-	return teamID, existingCity, nil
+	return teamID, city, nil
 }
 
 // EnsureSeedPlayerByNumber is EnsureSeedTeamByNumber for an individual format:

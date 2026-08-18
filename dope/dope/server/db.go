@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"dope/dope/domain/flatgame"
 	"pecheny.me/dopecore/sqlitex"
 
 	_ "modernc.org/sqlite"
@@ -865,7 +866,51 @@ where kind = 'rr' and block_code = '' and code glob 's[0-9]*-g[0-9]*'`); err != 
 			return err
 		}
 	}
+	// v26: a flat game is a Structure like every other — its 'main' Block is
+	// the flat Kind, its бой seats the document's teams, the Protocol scores
+	// it and the Block ranks into stage_standings (flatgame). Every ОД and
+	// КСИ from before is settled once.
+	var hasV26 int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 26`).Scan(&hasV26); err != nil {
+		return err
+	}
+	if hasV26 == 0 {
+		if err := settleFlatGamesBackfill(db); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(26, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func settleFlatGamesBackfill(db *sql.DB) error {
+	if _, err := db.Exec(`update stages set kind = 'flat' where code = 'main' and kind = 'matches'`); err != nil {
+		return err
+	}
+	type flat struct{ festID, gameID int64 }
+	games, err := store.CollectRows(context.Background(), db, `
+select g.fest_id, g.id from games g join matches m on m.game_id = g.id and m.code = 'main' order by g.id`, nil,
+		func(rows *sql.Rows) (flat, error) {
+			var f flat
+			err := rows.Scan(&f.festID, &f.gameID)
+			return f, err
+		})
+	if err != nil {
+		return err
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, f := range games {
+		if err := flatgame.SettleTx(context.Background(), tx, f.festID, f.gameID); err != nil {
+			return fmt.Errorf("game %d: %w", f.gameID, err)
+		}
+	}
+	return tx.Commit()
 }
 
 // pastedKindsBackfill gives a pasted scheme's stages the Kind their JSON

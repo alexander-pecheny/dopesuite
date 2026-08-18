@@ -47,12 +47,14 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?
 	if err := srv.Eng().DB.QueryRow(`select id, code from games where fest_id = ? and game_type = 'od'`, festID).Scan(&odGameID, &odCode); err != nil {
 		t.Fatalf("od game: %v", err)
 	}
-	// Partial ОД standings: Гинкго 3, Берёза 2, Астра 1, Вяз 0.
-	odState := `{"teams":[{"name":"Астра","number":1},{"name":"Берёза","number":2},{"name":"Вяз","number":3},{"name":"Гинкго","number":4}],` +
-		`"entries":[[4,2,1],[4,2],[4]],"completed":[true,true,true]}`
-	if _, err := srv.Eng().DB.Exec(`
-update matches set state_json = ? where game_id = ?`, odState, odGameID); err != nil {
-		t.Fatalf("seed od state: %v", err)
+	// Partial ОД standings: Гинкго 3, Берёза 2, Астра 1, Вяз 0 — entered the
+	// way the page enters them, so the game is scored and ranked.
+	if resp := scopedAPIRequest(t, srv, http.MethodPatch, fmt.Sprintf("/api/fest/%d/games/%d/state", festID, odGameID),
+		map[string]any{"ops": []map[string]any{
+			{"path": []any{"entries"}, "value": [][]int{{4, 2, 1}, {4, 2}, {4}}},
+			{"path": []any{"completed"}, "value": []bool{true, true, true}},
+		}}, token); resp.Code != http.StatusOK {
+		t.Fatalf("seed od state: %d %s", resp.Code, resp.Body.String())
 	}
 
 	dsl := fmt.Sprintf("[defaults]\nquestions: 5\n\n[init]\nseed: %s\n\n[scheme]\nkind: roundrobin\ngroup_size: 4\n", odCode)

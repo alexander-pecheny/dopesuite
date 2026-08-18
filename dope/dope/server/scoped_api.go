@@ -15,6 +15,7 @@ import (
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/edit"
+	"dope/dope/domain/flatgame"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/numbering"
 	"dope/dope/domain/protocol"
@@ -651,12 +652,7 @@ where g.fest_id = ? and g.id = ?`,
 			return err
 		}
 		if matchID.Valid {
-			if err := festwrite.SetFlatGameStateTx(ctx, tx, matchID.Int64, string(raw)); err != nil {
-				return err
-			}
-			if _, err := tx.ExecContext(ctx, `
-update games set updated_at = ? where fest_id = ? and id = ?`,
-				util.UtcNow(), scope.FestID, scope.GameID); err != nil {
+			if err := flatgame.SetStateTx(ctx, tx, scope.FestID, scope.GameID, string(raw)); err != nil {
 				return err
 			}
 		} else if _, err := tx.ExecContext(ctx, `
@@ -1262,7 +1258,7 @@ func (s *server) handleScopedSeedImport(w http.ResponseWriter, r *http.Request, 
 		if !s.requireNumberedEntrants(w, r, scope.FestID, scope.GameID) {
 			return
 		}
-		view, revision, stateJSON, err := imports.ImportSeedsFromKSI(&s.eng, r.Context(), scope)
+		view, revision, stateJSON, err := imports.ImportSeeds(&s.eng, r.Context(), scope, imports.FromKSI())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1277,7 +1273,7 @@ func (s *server) handleScopedSeedImport(w http.ResponseWriter, r *http.Request, 
 		if !s.requireNumberedEntrants(w, r, scope.FestID, scope.GameID) {
 			return
 		}
-		view, revision, stateJSON, err := imports.ImportSeedsFromScheme(&s.eng, r.Context(), scope)
+		view, revision, stateJSON, err := imports.ImportSeeds(&s.eng, r.Context(), scope, imports.FromScheme())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1303,7 +1299,7 @@ func (s *server) handleScopedSeedImport(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 		defer file.Close()
-		view, revision, stateJSON, err := imports.ImportSeedsFromXLSX(&s.eng, r.Context(), scope, file)
+		view, revision, stateJSON, err := imports.ImportSeeds(&s.eng, r.Context(), scope, imports.FromXLSX(file))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

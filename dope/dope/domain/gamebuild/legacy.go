@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 
+	"dope/dope/domain/flatgame"
 	"dope/dope/domain/games"
 	"dope/dope/domain/roster"
 	"dope/dope/platform/util"
@@ -96,25 +97,25 @@ values(?, ?, ?, ?, ?, ?, ?, '{}', 'active', 'fest', 'fest', 1, ?, ?)`,
 	if err != nil {
 		return 0, err
 	}
-	if err := insertFlatMatchTx(ctx, tx, festID, gameID, identity.Title, string(stateJSON), now); err != nil {
-		return 0, err
-	}
-	return gameID, nil
+	return gameID, insertFlatMatchTx(ctx, tx, festID, gameID, identity.Title, string(stateJSON), now)
 }
 
-// insertFlatMatchTx creates a flat game's unified structure: one 'main' stage
-// (kind matches) holding one 'main' match that carries the whole game state.
+// insertFlatMatchTx writes a flat game's Structure — one flat Block holding
+// one 'main' бой that carries the whole document — and settles it: seats
+// from the document, scored, ranked (flatgame).
 func insertFlatMatchTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, title, stateJSON, now string) error {
 	stageID, err := store.InsertReturningID(ctx, tx, `
 insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json, block_code, wave_index)
-values(?, ?, 'main', '', 'matches', 'matches', 1, 'active', '{}', 'main', 1)`, festID, gameID)
+values(?, ?, 'main', '', 'matches', 'flat', 1, 'active', '{}', 'main', 1)`, festID, gameID)
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, `
 insert into matches(fest_id, game_id, stage_id, code, title, position, round, wave, participant_count, status, revision, state_json)
-values(?, ?, ?, 'main', ?, 1, 1, 1, 0, 'active', 0, ?)`, festID, gameID, stageID, title, stateJSON)
-	return err
+values(?, ?, ?, 'main', ?, 1, 1, 1, 0, 'active', 0, ?)`, festID, gameID, stageID, title, stateJSON); err != nil {
+		return err
+	}
+	return flatgame.SettleTx(ctx, tx, festID, gameID)
 }
 
 // upsertVenuesTx makes the фест's столы the scheme names and returns them by

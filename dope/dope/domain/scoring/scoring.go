@@ -8,6 +8,7 @@ package scoring
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"dope/dope/domain/protocol"
@@ -18,16 +19,18 @@ import (
 // RecalculateMatchResultsTx scores a match through its game's registered
 // Protocol and upserts match_results for every occupied slot, honouring pins.
 func RecalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, match store.DBMatchState) error {
-	var protocolCode string
+	// The Game's scheme is what a flat Protocol reads its shape from — ОД's
+	// tour composition, КСИ's stickers; the бой Protocols read nothing.
+	var protocolCode, schemeJSON string
 	if err := tx.QueryRowContext(ctx,
-		`select game_type from games where id = ?`, match.GameID).Scan(&protocolCode); err != nil {
+		`select game_type, coalesce(scheme_json, '') from games where id = ?`, match.GameID).Scan(&protocolCode, &schemeJSON); err != nil {
 		return err
 	}
 	p, ok := protocol.Get(protocolCode)
 	if !ok {
 		return fmt.Errorf("scoring: no protocol %q", protocolCode)
 	}
-	outcomes, err := p.Score(nil, match.ProtocolState())
+	outcomes, err := p.Score(json.RawMessage(schemeJSON), match.ProtocolState())
 	if err != nil {
 		return err
 	}

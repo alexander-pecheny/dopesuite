@@ -13,9 +13,9 @@ import (
 	"sort"
 	"strings"
 
+	"dope/dope/domain/flatgame"
 	"dope/dope/domain/games"
 	"dope/dope/platform/util"
-	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
 )
 
@@ -112,11 +112,7 @@ update games set scheme_json = ?, updated_at = ?
 where id = ? and fest_id = ?`, string(schemeJSON), util.UtcNow(), game.ID, festID); err != nil {
 			return nil, err
 		}
-		matchID, err := store.FlatMatchID(ctx, tx, game.ID)
-		if err != nil {
-			return nil, err
-		}
-		if err := festwrite.SetFlatGameStateTx(ctx, tx, matchID, string(stateJSON)); err != nil {
+		if err := flatgame.SetStateTx(ctx, tx, festID, game.ID, string(stateJSON)); err != nil {
 			return nil, err
 		}
 		updates = append(updates, GameStateBroadcast{GameID: game.ID, StateJSON: stateJSON})
@@ -171,11 +167,7 @@ update games set scheme_json = ?, updated_at = ?
 where id = ? and fest_id = ?`, string(schemeJSON), util.UtcNow(), game.ID, festID); err != nil {
 			return nil, err
 		}
-		matchID, err := store.FlatMatchID(ctx, tx, game.ID)
-		if err != nil {
-			return nil, err
-		}
-		if err := festwrite.SetFlatGameStateTx(ctx, tx, matchID, string(stateJSON)); err != nil {
+		if err := flatgame.SetStateTx(ctx, tx, festID, game.ID, string(stateJSON)); err != nil {
 			return nil, err
 		}
 		updates = append(updates, GameStateBroadcast{GameID: game.ID, StateJSON: stateJSON})
@@ -311,7 +303,7 @@ func ApplyRosterToKSIState(raw string, teams []FestRosterImportTeam, targetTheme
 	// across roster reorders/additions/removals instead of staying at its old
 	// index. Read tolerantly: new states store [{number,name}], legacy states a
 	// bare name array (matched by name for that one transition).
-	oldParticipants := ParseKSIParticipants(obj["participants"])
+	oldParticipants := games.ParseKSIParticipants(obj["participants"])
 	participants := teamParticipantsFromRoster(teams)
 	participantsJSON, err := json.Marshal(participants)
 	if err != nil {
@@ -387,28 +379,6 @@ func teamParticipantsFromRoster(teams []FestRosterImportTeam) []games.KSIPartici
 		out = append(out, games.KSIParticipant{Number: int(team.Number), Name: team.Name})
 	}
 	return out
-}
-
-// ParseKSIParticipants decodes a participants array tolerating both the current
-// [{number,name}] shape and the legacy ["name", ...] shape (so existing game
-// states keep loading during/after the migration).
-func ParseKSIParticipants(raw json.RawMessage) []games.KSIParticipant {
-	if len(raw) == 0 {
-		return nil
-	}
-	var objs []games.KSIParticipant
-	if err := json.Unmarshal(raw, &objs); err == nil {
-		return objs
-	}
-	var names []string
-	if err := json.Unmarshal(raw, &names); err == nil {
-		out := make([]games.KSIParticipant, len(names))
-		for i, name := range names {
-			out[i] = games.KSIParticipant{Name: name}
-		}
-		return out
-	}
-	return nil
 }
 
 func resizeIntSlice(values []int, size int) []int {

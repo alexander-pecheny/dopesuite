@@ -35,7 +35,7 @@ func TestResolverPropagatesBracket(t *testing.T) {
 		e.RT = realtime.NewManager()
 	})
 	scopeBase := dopeserver.FestScope{FestID: festID, GameID: gameID}
-	if _, _, _, err := imports.ImportSeedsFromKSI(srv.Eng(), t.Context(), scopeBase); err != nil {
+	if _, _, _, err := imports.ImportSeeds(srv.Eng(), t.Context(), scopeBase, imports.FromKSI()); err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
 	assertReseedState(t, loadReseedStageView(t, srv, festID, gameID, "rs"), false, []string{"A", "B"}, "Бои A, B не закончены")
@@ -173,7 +173,7 @@ func TestMatchUpdateBroadcastsCascade(t *testing.T) {
 		e.RT = realtime.NewManager()
 	})
 	scopeBase := dopeserver.FestScope{FestID: festID, GameID: gameID}
-	if _, _, _, err := imports.ImportSeedsFromKSI(srv.Eng(), t.Context(), scopeBase); err != nil {
+	if _, _, _, err := imports.ImportSeeds(srv.Eng(), t.Context(), scopeBase, imports.FromKSI()); err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
 
@@ -373,7 +373,7 @@ func TestUntickEditRetickPreservesDownstream(t *testing.T) {
 		e.RT = realtime.NewManager()
 	})
 	scopeBase := dopeserver.FestScope{FestID: festID, GameID: gameID}
-	if _, _, _, err := imports.ImportSeedsFromKSI(srv.Eng(), t.Context(), scopeBase); err != nil {
+	if _, _, _, err := imports.ImportSeeds(srv.Eng(), t.Context(), scopeBase, imports.FromKSI()); err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
 
@@ -457,10 +457,10 @@ values(?, ?, 'creator', ?)`, festID, systemID, now); err != nil {
 	if _, err := insertJSONGameFixture(ctx, tx, festID, "ksi", "КСИ", "ksi", 1,
 		map[string]any{
 			"schemaVersion": 2, "title": "КСИ", "gameType": "ksi",
-			"participants": []string{"A", "B", "C", "D"}, "themes": 1,
+			"participants": []map[string]any{{"number": 1, "name": "A"}, {"number": 2, "name": "B"}, {"number": 3, "name": "C"}, {"number": 4, "name": "D"}}, "themes": 1,
 		},
 		map[string]any{
-			"participants": []string{"A", "B", "C", "D"},
+			"participants": []map[string]any{{"number": 1, "name": "A"}, {"number": 2, "name": "B"}, {"number": 3, "name": "C"}, {"number": 4, "name": "D"}},
 			"themes":       []map[string]any{{"answers": answers}},
 			"finished":     true,
 		}); err != nil {

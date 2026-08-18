@@ -30,7 +30,7 @@ func TestDerivedRevertReproducesGameState(t *testing.T) {
 		e.RT = realtime.NewManager()
 	})
 	scopeBase := dopeserver.FestScope{FestID: festID, GameID: gameID}
-	if _, _, _, err := imports.ImportSeedsFromKSI(srv.Eng(), ctx, scopeBase); err != nil {
+	if _, _, _, err := imports.ImportSeeds(srv.Eng(), ctx, scopeBase, imports.FromKSI()); err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
 

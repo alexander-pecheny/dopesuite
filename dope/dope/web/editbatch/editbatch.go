@@ -44,6 +44,7 @@ import (
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/edit"
+	"dope/dope/domain/flatgame"
 	"dope/dope/domain/matchops"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/scoring"
@@ -823,16 +824,7 @@ where g.fest_id = ? and g.id = ?`,
 	}
 	tDB := metrics.NowIf(metricsOn)
 	if matchID.Valid {
-		if _, err := tx.ExecContext(ctx, `
-update matches set state_json = ? where id = ?`, string(next), matchID.Int64); err != nil {
-			return nil, 0, nil, err
-		}
-		if _, err := tx.ExecContext(ctx, `
-update games set updated_at = ? where fest_id = ? and id = ?`,
-			util.UtcNow(), scope.FestID, scope.GameID); err != nil {
-			return nil, 0, nil, err
-		}
-		if err := festwrite.JournalMatchPatchTx(ctx, tx, matchID.Int64, blobOps); err != nil {
+		if err := flatgame.PatchStateTx(ctx, tx, scope.FestID, scope.GameID, matchID.Int64, string(next), blobOps); err != nil {
 			return nil, 0, nil, err
 		}
 	} else {

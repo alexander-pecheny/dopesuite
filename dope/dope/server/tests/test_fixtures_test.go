@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"database/sql"
+	"dope/dope/domain/flatgame"
 	"dope/dope/domain/games"
 	"dope/dope/platform/util"
 	dopeserver "dope/dope/server"
@@ -259,7 +260,7 @@ values(?, ?, ?, ?, ?, ?, ?, '{}', 'active', 'game', 'game', 1, ?, ?)`,
 	}
 	stageID, err := store.InsertReturningID(ctx, tx, `
 insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json)
-values(?, ?, 'main', '', 'matches', 'matches', 1, 'active', '{}')`, festID, gameID)
+values(?, ?, 'main', '', 'matches', 'flat', 1, 'active', '{}')`, festID, gameID)
 	if err != nil {
 		return 0, err
 	}
@@ -268,5 +269,7 @@ insert into matches(fest_id, game_id, stage_id, code, title, position, participa
 values(?, ?, ?, 'main', ?, 1, 0, 'active', 0, ?)`, festID, gameID, stageID, title, stateJSON); err != nil {
 		return 0, err
 	}
-	return gameID, nil
+	// A flat game is seated, scored and ranked from its document, as the
+	// write path leaves it.
+	return gameID, flatgame.SettleTx(ctx, tx, festID, gameID)
 }

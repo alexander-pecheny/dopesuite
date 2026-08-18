@@ -593,8 +593,10 @@ func TestImportFestRosterPropagatesToChGKAndKSI(t *testing.T) {
 	if teamsCount != 2 || playersCount != 3 {
 		t.Fatalf("roster counts = %d/%d, want 2/3", teamsCount, playersCount)
 	}
-	if ekTeamsCount != 4 {
-		t.Fatalf("game teams count = %d, want existing EK teams preserved", ekTeamsCount)
+	// The four ЭК teams stay, and the roster's two are seated in ОД and КСИ
+	// as Participants of their own.
+	if ekTeamsCount != 6 {
+		t.Fatalf("participants = %d, want the 4 ЭК teams kept and 2 seated", ekTeamsCount)
 	}
 	var firstTeam, firstPlayer string
 	if err := db.QueryRow(`
