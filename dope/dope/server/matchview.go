@@ -122,7 +122,7 @@ func (s *server) loadScopedMatchViewSnapshot(scope matchScope) (store.MatchView,
 }
 
 func loadDBMatchStateByScope(ctx context.Context, q store.Queryer, scope matchScope) (store.DBMatchState, error) {
-	return store.LoadDBMatchStateWhere(ctx, q, `m.id = ? and m.fest_id = ? and m.game_id = ?`, scope.MatchID, scope.FestID, scope.GameID)
+	return store.LoadMatchState(ctx, q, store.MatchSelector{FestID: scope.FestID, GameID: scope.GameID, MatchID: scope.MatchID})
 }
 
 // loadMatchViewByIDLocked loads a match view by its numeric id (used to render
@@ -133,7 +133,7 @@ func (s *server) loadMatchViewByIDLocked(festID, gameID, matchID int64) (store.M
 	}
 	ctx, cancel := festwrite.BoundedReadContext()
 	defer cancel()
-	match, err := store.LoadDBMatchStateWhere(ctx, s.eng.DB, `m.id = ? and m.fest_id = ? and m.game_id = ?`, matchID, festID, gameID)
+	match, err := store.LoadMatchState(ctx, s.eng.DB, store.MatchSelector{FestID: festID, GameID: gameID, MatchID: matchID})
 	if err != nil {
 		return store.MatchView{}, err
 	}

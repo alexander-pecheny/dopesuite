@@ -532,8 +532,7 @@ func postImages(ctx context.Context, q store.Queryer, scope core.FestScope, orde
 }
 
 func loadMatchView(ctx context.Context, q store.Queryer, scope core.FestScope, matchID int64) (store.MatchView, error) {
-	match, err := store.LoadDBMatchStateWhere(ctx, q,
-		`m.id = ? and m.fest_id = ? and m.game_id = ?`, matchID, scope.FestID, scope.GameID)
+	match, err := store.LoadMatchState(ctx, q, store.MatchSelector{FestID: scope.FestID, GameID: scope.GameID, MatchID: matchID})
 	if err != nil {
 		return store.MatchView{}, err
 	}
@@ -649,8 +648,7 @@ select id from venues where fest_id = ? and number = ?`, job.scope.FestID, job.v
 }
 
 func loadMatchTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, matchID int64) (store.DBMatchState, error) {
-	return store.LoadDBMatchStateWhere(ctx, tx,
-		`m.id = ? and m.fest_id = ? and m.game_id = ?`, matchID, scope.FestID, scope.GameID)
+	return store.LoadMatchState(ctx, tx, store.MatchSelector{FestID: scope.FestID, GameID: scope.GameID, MatchID: matchID})
 }
 
 // RecomputeMatchTx rescores one match after a window's edits — computed places

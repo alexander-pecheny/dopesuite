@@ -986,58 +986,20 @@ func (s *server) handleScopedStages(w http.ResponseWriter, r *http.Request, scop
 
 // loadAllStageMatchViews returns every stage's full match views for the game in
 // one pass, stages ordered by position, matches ordered within each. Empty
-// stages (e.g. reseed) are omitted. Takes the read lock once for the whole set.
+// stages (e.g. reseed) are omitted.
 func (s *server) loadAllStageMatchViews(ctx context.Context, scope festScope) ([]store.StageMatches, error) {
-	rows, err := s.eng.DB.QueryContext(ctx, `
-select st.code, m.code
-from matches m
-join stages st on st.id = m.stage_id
-where m.fest_id = ? and m.game_id = ?
-order by st.position, st.id, m.position, m.id`, scope.FestID, scope.GameID)
+	views, err := s.loadMatchViews(ctx, scope, "")
 	if err != nil {
-		return nil, err
-	}
-	type pair struct{ stageCode, matchCode string }
-	var pairs []pair
-	for rows.Next() {
-		var p pair
-		if err := rows.Scan(&p.stageCode, &p.matchCode); err != nil {
-			_ = rows.Close()
-			return nil, err
-		}
-		pairs = append(pairs, p)
-	}
-	if err := rows.Close(); err != nil {
 		return nil, err
 	}
 	out := make([]store.StageMatches, 0)
 	byCode := map[string]int{} // stage code -> index in out, preserving order
-	// Read every match view on ONE read-only snapshot, off the write lock: the
-	// whole bracket is a consistent point-in-time and a busy editor never stalls
-	// this fetch (the old global RLock queued behind any pending writer).
-	tx, err := s.eng.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-	for _, p := range pairs {
-		mscope, err := s.verifyMatchInScope(ctx, scope, p.matchCode)
-		if err != nil {
-			if errors.Is(err, errMatchNotFound) {
-				continue
-			}
-			return nil, err
-		}
-		view, err := s.loadScopedMatchViewUsing(tx, mscope)
-		if err != nil {
-			return nil, err
-		}
-		view.Seq = s.eng.CurrentStateSeq(matchScopeKey(mscope))
-		idx, ok := byCode[p.stageCode]
+	for _, view := range views {
+		idx, ok := byCode[view.StageCode]
 		if !ok {
 			idx = len(out)
-			byCode[p.stageCode] = idx
-			out = append(out, store.StageMatches{Code: p.stageCode})
+			byCode[view.StageCode] = idx
+			out = append(out, store.StageMatches{Code: view.StageCode})
 		}
 		out[idx].Matches = append(out[idx].Matches, view)
 	}
@@ -1045,52 +1007,30 @@ order by st.position, st.id, m.position, m.id`, scope.FestID, scope.GameID)
 }
 
 func (s *server) loadStageMatchViews(ctx context.Context, scope festScope, stageCode string) ([]store.MatchView, error) {
-	rows, err := s.eng.DB.QueryContext(ctx, `
-select m.code
-from matches m
-join stages st on st.id = m.stage_id
-where m.fest_id = ? and m.game_id = ? and st.code = ?
-order by m.position, m.id`, scope.FestID, scope.GameID, stageCode)
-	if err != nil {
-		return nil, err
-	}
-	var codes []string
-	for rows.Next() {
-		var code string
-		if err := rows.Scan(&code); err != nil {
-			_ = rows.Close()
-			return nil, err
-		}
-		codes = append(codes, code)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if len(codes) == 0 {
-		// Empty stage or unknown stage code; let the caller distinguish via
-		// the more specific error from verifyMatchInScope if needed. An empty
-		// result is fine: client renders no tables.
-		return []store.MatchView{}, nil
-	}
-	views := make([]store.MatchView, 0, len(codes))
+	// An unknown stage code reads as an empty stage: the client renders no tables.
+	return s.loadMatchViews(ctx, scope, stageCode)
+}
+
+// loadMatchViews reads a game's бои — one stage's, or all — on ONE read-only
+// snapshot, off the write lock: the whole bracket is a consistent point in
+// time and a busy editor never stalls this fetch. Four statements however many
+// бои (store.LoadMatchStates).
+func (s *server) loadMatchViews(ctx context.Context, scope festScope, stageCode string) ([]store.MatchView, error) {
 	tx, err := s.eng.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
-	for _, code := range codes {
-		mscope, err := s.verifyMatchInScope(ctx, scope, code)
-		if err != nil {
-			if errors.Is(err, errMatchNotFound) {
-				continue
-			}
-			return nil, err
-		}
-		view, err := s.loadScopedMatchViewUsing(tx, mscope)
-		if err != nil {
-			return nil, err
-		}
-		view.Seq = s.eng.CurrentStateSeq(matchScopeKey(mscope))
+	ctx, cancel := festwrite.BoundedReadContext()
+	defer cancel()
+	matches, err := store.LoadMatchStates(ctx, tx, store.MatchSelector{FestID: scope.FestID, GameID: scope.GameID, StageCode: stageCode})
+	if err != nil {
+		return nil, err
+	}
+	views := make([]store.MatchView, 0, len(matches))
+	for _, match := range matches {
+		view := store.MatchViewFrom(match)
+		view.Seq = s.eng.CurrentStateSeq(matchScopeKey(matchScope{festScope: scope, MatchID: match.MatchID, Code: match.Code}))
 		views = append(views, view)
 	}
 	return views, nil

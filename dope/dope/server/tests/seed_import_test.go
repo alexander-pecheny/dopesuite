@@ -304,7 +304,7 @@ order by ms.slot_index`, gameID)
 
 func seedImportRegularThemeCount(t *testing.T, db *sql.DB, gameID int64) int {
 	t.Helper()
-	match, err := store.LoadDBMatchStateWhere(context.Background(), db, `m.game_id = ? and m.code = 'A'`, gameID)
+	match, err := store.LoadMatchState(context.Background(), db, store.MatchSelector{GameID: gameID, Code: "A"})
 	if err != nil {
 		t.Fatalf("load match state: %v", err)
 	}
@@ -321,7 +321,7 @@ func seedImportRegularThemeCount(t *testing.T, db *sql.DB, gameID int64) int {
 // have a seat in the match — the pruning invariant after a decline reshuffle.
 func seedImportExtraThemeCount(t *testing.T, db *sql.DB, gameID int64) int {
 	t.Helper()
-	match, err := store.LoadDBMatchStateWhere(context.Background(), db, `m.game_id = ? and m.code = 'A'`, gameID)
+	match, err := store.LoadMatchState(context.Background(), db, store.MatchSelector{GameID: gameID, Code: "A"})
 	if err != nil {
 		t.Fatalf("load match state: %v", err)
 	}

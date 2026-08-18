@@ -327,7 +327,7 @@ order by ms.slot_index`, gameID, matchCode)
 
 func regularThemeCount(t *testing.T, db *sql.DB, gameID int64, matchCode string, teamID int64) int {
 	t.Helper()
-	match, err := store.LoadDBMatchStateWhere(context.Background(), db, `m.game_id = ? and m.code = ?`, gameID, matchCode)
+	match, err := store.LoadMatchState(context.Background(), db, store.MatchSelector{GameID: gameID, Code: matchCode})
 	if err != nil {
 		t.Fatalf("load match state: %v", err)
 	}
