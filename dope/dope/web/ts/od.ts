@@ -1,7 +1,7 @@
 // od.ts — the ОД/ЧГК game page (host + viewer): tabbed results/input sheets,
 // entry-cell navigation, shootout rounds, the Экран projector board, SSE state
 // sync. Converted from the legacy od.js; boots itself on import (ADR-0001).
-import {cssEscape, option, td, th} from "./cells.js";
+import {cssEscape, td, th} from "./cells.js";
 import {buildFlatScoreTable, computePlaces} from "./score-table.js";
 import type {ScoreTableRow, ScoreTableTheme, ScoreTableThemeRow} from "./score-table.js";
 import {resultsTeamCell} from "./standings.js";
@@ -11,7 +11,7 @@ import type {LiveEvents, PatchPath, ScopedWriter} from "./state-sync.js";
 import {mountGamePage} from "./game-shell.js";
 import {createGameDataLoader, fetchGameData, parseGameRoute} from "./game-page.js";
 import type {AdoptedGameSnapshot, GameInitLike} from "./game-page.js";
-import {bindScrollEdges, clamp, createTeamNameOverflowController, fitScrollFade, installVirtualKeypad, renderTabBar} from "./widgets.js";
+import {bindScrollEdges, createTeamNameOverflowController, fitScrollFade, installVirtualKeypad, renderTabBar} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {VirtualKeypad} from "./widgets.js";
 import { gameTabs } from "./game-tabs.js";
@@ -642,10 +642,6 @@ function renderTabs(): void {
 
 function countValidEntries(qIndex: number, stats: QuestionStat[] = questionStats()): number {
   return stats[qIndex]?.validCount || 0;
-}
-
-function questionCounts(qIndex: number): number {
-  return state.completed[qIndex] ? countValidEntries(qIndex) : 0;
 }
 
 function buildInputView(): HTMLElement {
@@ -3327,12 +3323,6 @@ function shootoutRoundTotalForTeam(teamIndex: number, roundIndex: number): numbe
     if (normalizeShootoutMark(round.answers[questionIndex]?.[participantIndex]) === "right") total++;
   }
   return total;
-}
-
-function teamHasShootoutRound(teamIndex: number): boolean {
-  const number = teamNumber(teamIndex);
-  if (!number) return false;
-  return (state.shootoutRounds || []).some((round) => round.teams.includes(number));
 }
 
 function anyShootoutMarked(): boolean {

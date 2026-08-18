@@ -2,7 +2,7 @@
 // rows, detailed/results/refusals tabs. Converted from the legacy si.js; a
 // self-booting side-effect module bundled by pages/si.ts.
 
-import {cssEscape, formatDisplayText, isFormControl, td, th} from "./cells.js";
+import {cssEscape, formatDisplayText, td, th} from "./cells.js";
 import {buildFlatScoreTable, computePlaces, createScoreTableIndex, setMarkClass, setNodeText} from "./score-table.js";
 import type {NodeIndex} from "./score-table.js";
 import {resultsTeamCell} from "./standings.js";

@@ -214,7 +214,7 @@ const shell = mountGamePage({
   activeCursorElement: () => sheet.activeCell,
   recorderState: () => ({mode: route.mode, matchCode: route.matchCode, stageCode: route.stageCode, state}),
 });
-const {viewer, canEdit, staticMode, scopeGameID, indicator, viewerCounter, recorder} = shell;
+const {viewer, staticMode, scopeGameID, indicator, viewerCounter, recorder} = shell;
 let state: HostMatchView | null = null;
 let fest: HostFestView | null = null;
 let venues: Venue[] = [];
