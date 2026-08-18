@@ -8,20 +8,18 @@
 // the bracket resyncs once. The recompute is throttled and the resync debounced.
 //
 // It is a create(deps) factory like DopeStageCache: every page-specific piece —
-// the stage cache, the table library, whether the stats view is currently
+// the stage cache, whether the stats view is currently
 // active, and how to rerender it — is injected, so the throttle/coalesce/gap
 // logic is unit-testable with fake timers.
 
 import type { MatchView } from "./stage-cache.js";
+import {applyDeltaOps} from "./state-sync.js";
+import type {StateDeltaOp} from "./state-sync.js";
 
 export interface StatsSyncStageCache {
   matchState(code: string): MatchView | null;
   applyMatchUpdate(view: MatchView): unknown;
   prefetchAllStages(): Promise<unknown>;
-}
-
-export interface StatsSyncGameTable {
-  applyDeltaOps(base: MatchView, ops: readonly unknown[]): MatchView;
 }
 
 export interface StatsMatchEvent {
@@ -34,7 +32,6 @@ export interface StatsMatchEvent {
 
 export interface StatsSyncDeps {
   stageCache: StatsSyncStageCache;
-  gameTable: StatsSyncGameTable;
   matchCodeFromScope: (scope: unknown) => string;
   isActive: () => boolean;
   rerender: () => void;
@@ -49,7 +46,7 @@ export interface StatsSync {
   scheduleResync(): void;
 }
 
-// create(deps): { stageCache, gameTable, matchCodeFromScope, isActive, rerender,
+// create(deps): { stageCache, matchCodeFromScope, isActive, rerender,
 //   setTimeout?, throttleMs?, resyncMs? } → { applyMatchEvent, scheduleRerender,
 //   scheduleResync }. isActive() gates work to when the stats view is shown;
 //   rerender() recomputes and swaps in the table.
@@ -58,7 +55,6 @@ export function create(deps: StatsSyncDeps): StatsSync {
   const throttleMs = deps.throttleMs != null ? deps.throttleMs : 400;
   const resyncMs = deps.resyncMs != null ? deps.resyncMs : 400;
   const stageCache = deps.stageCache;
-  const gameTable = deps.gameTable;
   const matchCodeFromScope = deps.matchCodeFromScope;
   const isActive = deps.isActive;
   const rerender = deps.rerender;
@@ -111,7 +107,7 @@ export function create(deps: StatsSyncDeps): StatsSync {
         scheduleResync();
         return;
       }
-      const next = gameTable.applyDeltaOps(base, message.ops);
+      const next = applyDeltaOps(base, message.ops as StateDeltaOp[]) as MatchView;
       next.seq = Number(message.seq) || prev;
       stageCache.applyMatchUpdate(next);
     } else if (message.data && message.data.code) {

@@ -29,9 +29,9 @@ function node(tag) {
 
 globalThis.window = {};
 globalThis.document = {createElement: node, activeElement: null};
-globalThis.Node = class {}; // match-table's cell helpers ask `instanceof Node`; text never is one
+globalThis.Node = class {}; // cells.ts asks `instanceof Node`; text never is one
 
-const {standingsTable, resultsTeamCell} = await import("./dist/match-table.js");
+const {standingsTable, resultsTeamCell, festLetters, letteredTitle} = await import("./dist/standings.js");
 
 const walk = (root, out = []) => {
   out.push(root);
@@ -108,4 +108,26 @@ test("resultsTeamCell carries the city, the flag and the link", () => {
   const plain = resultsTeamCell("Ктулху");
   assert.equal(withClass(plain, "results-team-name")[0].tag, "span");
   assert.equal(withClass(plain, "results-team-city").length, 0);
+});
+
+// A бой's буква is the compiler's, carried on the fest view; the page reads
+// it off by code and never counts. A бой the scheme left letterless (ТПШ's
+// письменный отбор) has none.
+test("festLetters reads each бой's letter off the fest view", () => {
+  const letters = festLetters([
+    {code: "s1", matches: [{code: "s1-m1", title: "Письменный отбор"}]},
+    null,
+    {code: "s2-r1", matches: [{code: "s2-r1-m1", letter: "A"}, {code: "s2-r1-m2", letter: "B"}]},
+  ]);
+  assert.equal(letters.get("s1-m1"), undefined);
+  assert.equal(letters.get("s2-r1-m1"), "A");
+  assert.equal(letters.get("s2-r1-m2"), "B");
+});
+
+test("letteredTitle rewrites the «Бой N» part and leaves the rest", () => {
+  assert.equal(letteredTitle("Бой 3", "C"), "Бой C");
+  assert.equal(letteredTitle("Группа 1. Бой 3", "C"), "Группа 1. Бой C");
+  assert.equal(letteredTitle("Финал. Бой 2", "EA"), "Финал. Бой EA");
+  assert.equal(letteredTitle("Письменный отбор", "A"), "Письменный отбор");
+  assert.equal(letteredTitle("Бой 3", undefined), "Бой 3");
 });

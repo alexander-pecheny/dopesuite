@@ -2,22 +2,21 @@
 // rows, detailed/results/refusals tabs. Converted from the legacy si.js; a
 // self-booting side-effect module bundled by pages/si.ts.
 
-import {DopeTable} from "./match-table.js";
+import {cssEscape, formatDisplayText, isFormControl, td, th} from "./cells.js";
+import {buildFlatScoreTable, computePlaces, createScoreTableIndex, setMarkClass, setNodeText} from "./score-table.js";
+import type {NodeIndex} from "./score-table.js";
+import {resultsTeamCell} from "./standings.js";
+import {buildRosterView} from "./fest-roster.js";
+import {createHostPresence, createStateSync, gameEventsURL, installClientRecorder, scheduleStaticReload} from "./state-sync.js";
+import type {ClientRecorder, HostPresence, StateSync} from "./state-sync.js";
+import {createGameDataLoader, fetchGameData, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, parseGameRoute, renderGameBreadcrumbs} from "./game-page.js";
+import type {AdoptedGameSnapshot, GameInitLike} from "./game-page.js";
+import {bindScrollEdges, clamp, createCellRangeSelection, createStatusReporter, createTeamNameOverflowController, createViewerCounter, fitScrollFade, renderTabBar} from "./widgets.js";
+import type {CellCoord, CellEdit, CellRangeSelection} from "./widgets.js";
 import {gameTabs} from "./game-tabs.js";
-import type {
-  AdoptedGameSnapshot,
-  CellCoord,
-  CellEdit,
-  CellRangeSelection,
-  ClientRecorder,
-  GameInitLike,
-  HostPresence,
-  NodeIndex,
-  StateSync,
-} from "./match-table.js";
 
 // Page globals the bundle environment provides (the server-inlined
-// __GAME_INIT__). Accessed via a structural cast, same as match-table.ts.
+// __GAME_INIT__). Accessed via a structural cast, same as game-page.ts.
 interface PageGlobals {
   __GAME_INIT__?: GameInitLike | null;
 }
@@ -82,10 +81,9 @@ const statusNode = document.getElementById("status");
 const pageHeading = document.querySelector<HTMLElement>(".host-top h1");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
-const gameTable = DopeTable;
-const setStatus = gameTable.createStatusReporter(statusNode);
-const viewerCounter = gameTable.createViewerCounter(statusNode);
-const teamNameOverflow = gameTable.createTeamNameOverflowController({
+const setStatus = createStatusReporter(statusNode);
+const viewerCounter = createViewerCounter(statusNode);
+const teamNameOverflow = createTeamNameOverflowController({
   root: siRoot,
   detailed: {
     cellSelector: "[data-ksi-team-cell]",
@@ -127,7 +125,7 @@ function darkenHex(hex: string, factor: number): string {
 }
 const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
 
-const route = gameTable.parseGameRoute();
+const route = parseGameRoute();
 const viewer = Boolean(route.viewer);
 // The URL carries the game slug, but the server broadcasts SSE state under the
 // numeric game id (`game-state:<id>`). Default to the slug and upgrade to the
@@ -140,11 +138,11 @@ const staticMode = Boolean(pageWindow.__GAME_INIT__?.static);
 const canEdit = Boolean(pageWindow.__GAME_INIT__?.canEdit);
 document.body.classList.toggle("viewer-readonly", viewer);
 if (viewer) {
-  if (canEdit) gameTable.mountEditorLink();
+  if (canEdit) mountEditorLink();
 } else {
-  gameTable.mountViewerLink();
+  mountViewerLink();
 }
-gameTable.mountGameDownloads({apiBase: route.apiBase, canEdit});
+mountGameDownloads({apiBase: route.apiBase, canEdit});
 let scheme: KSIScheme | null = null;
 let state: KSIState | null = null;
 let fest: FestInfo | null = null;
@@ -198,7 +196,7 @@ window.addEventListener("resize", () => {
   updateResultsScrollState();
 });
 
-const gameLoader = gameTable.createGameDataLoader({
+const gameLoader = createGameDataLoader({
   route,
   cachePrefix: "si",
   adopt: adoptGameSnapshot,
@@ -214,7 +212,7 @@ function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest
     if (init.gameID != null) scopeGameID = String(init.gameID);
     if (init.seq != null) initialStateSeq = Number(init.seq) || 0;
     if (init.epoch != null) initialStateEpoch = String(init.epoch);
-    if (init.teamsUnnumbered && !viewer) gameTable.mountUnnumberedBanner(route.festID);
+    if (init.teamsUnnumbered && !viewer) mountUnnumberedBanner(route.festID);
   }
   scheme = nextScheme as KSIScheme;
   state = nextState as KSIState;
@@ -228,7 +226,7 @@ async function revalidateAll(): Promise<void> {
   const prevSchemeJSON = JSON.stringify(scheme);
   const prevStateJSON = JSON.stringify(state);
   const prevFestJSON = JSON.stringify(fest);
-  const fresh = await gameTable.fetchGameData(route);
+  const fresh = await fetchGameData(route);
   const freshSchemeJSON = JSON.stringify(fresh.scheme);
   const freshStateJSON = JSON.stringify(fresh.state);
   const freshFestJSON = JSON.stringify(fresh.fest);
@@ -412,7 +410,7 @@ function buildTable(): HTMLTableElement {
     })),
   }));
 
-  const table = gameTable.buildFlatScoreTable({
+  const table = buildFlatScoreTable({
     className: "match-table compact-score-table si-table od-detailed ksi-detailed",
     rowMarkerColumn: true,
     rowMarkerHeaderClassName: "sticky row-marker row-marker-head active-row-marker",
@@ -428,7 +426,7 @@ function buildTable(): HTMLTableElement {
     },
   });
   table.classList.toggle("match-finished", state!.finished);
-  tableIndex = gameTable.createScoreTableIndex(table, {entity: "player"});
+  tableIndex = createScoreTableIndex(table, {entity: "player"});
   activeAnswerNode = state!.finished || viewer ? null : tableIndex.get("answer", activeCell);
   attachKSISelection(table);
   return table;
@@ -440,7 +438,7 @@ function attachKSISelection(table: HTMLTableElement): void {
     cellSelection = null;
   }
   if (viewer) return;
-  cellSelection = gameTable.createCellRangeSelection({
+  cellSelection = createCellRangeSelection({
     root: table,
     cellSelector: ".answer-cell",
     readonly: () => Boolean(state?.finished),
@@ -483,7 +481,7 @@ function ksiCellAtCoord(coord: CellCoord | null): HTMLElement | null {
   const answer = coord.col % answers;
   return tableIndex?.get("answer", {player, theme, answer})
     || siRoot.querySelector<HTMLElement>(
-      `.answer-cell[data-player="${gameTable.cssEscape(String(player))}"][data-theme="${gameTable.cssEscape(String(theme))}"][data-answer="${gameTable.cssEscape(String(answer))}"]`,
+      `.answer-cell[data-player="${cssEscape(String(player))}"][data-theme="${cssEscape(String(theme))}"][data-answer="${cssEscape(String(answer))}"]`,
     );
 }
 
@@ -542,7 +540,7 @@ function buildResultsTable(): HTMLElement {
 // delta while this tab is open.
 let siRosterView: HTMLElement | null = null;
 function rosterView(): HTMLElement {
-  if (!siRosterView) siRosterView = gameTable.buildRosterView(route.festID);
+  if (!siRosterView) siRosterView = buildRosterView(route.festID);
   return siRosterView;
 }
 
@@ -560,9 +558,9 @@ function buildRefusalsTable(): HTMLElement {
 
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
-  head.appendChild(gameTable.th("№", "results-place-head seed-number-head"));
-  head.appendChild(gameTable.th("Команда", "results-team-head seed-team-head"));
-  head.appendChild(gameTable.th("Отказалась", "seed-declined-head"));
+  head.appendChild(th("№", "results-place-head seed-number-head"));
+  head.appendChild(th("Команда", "results-team-head seed-team-head"));
+  head.appendChild(th("Отказалась", "seed-declined-head"));
   thead.appendChild(head);
   table.appendChild(thead);
 
@@ -577,10 +575,10 @@ function buildRefusalsTable(): HTMLElement {
     tr.className = classes.join(" ");
 
     const number = participantNumber(index);
-    tr.appendChild(gameTable.td(number > 0 ? number : "", "results-place seed-number-cell"));
+    tr.appendChild(td(number > 0 ? number : "", "results-place seed-number-cell"));
 
     const label = participantLabel(index);
-    tr.appendChild(gameTable.resultsTeamCell(label));
+    tr.appendChild(resultsTeamCell(label));
 
     const declinedCell = document.createElement("td");
     declinedCell.className = "results-num seed-declined-cell";
@@ -607,12 +605,12 @@ function buildResultsTableInner(): HTMLTableElement {
 
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
-  head.appendChild(gameTable.th("Место", "results-place-head"));
-  head.appendChild(gameTable.th("Команда", "results-team-head"));
-  head.appendChild(gameTable.th("Σ", "results-num-head results-total-head"));
-  head.appendChild(gameTable.th("Σ+", "results-num-head"));
+  head.appendChild(th("Место", "results-place-head"));
+  head.appendChild(th("Команда", "results-team-head"));
+  head.appendChild(th("Σ", "results-num-head results-total-head"));
+  head.appendChild(th("Σ+", "results-num-head"));
   for (const value of RESULT_VALUES) {
-    head.appendChild(gameTable.th(value, "results-num-head"));
+    head.appendChild(th(value, "results-num-head"));
   }
   thead.appendChild(head);
   table.appendChild(thead);
@@ -624,12 +622,12 @@ function buildResultsTableInner(): HTMLTableElement {
     if (rowIdx === 0) classes.push("results-group-first");
     if (rowIdx === rows.length - 1) classes.push("results-group-last");
     tr.className = classes.join(" ");
-    tr.appendChild(gameTable.td(row.placeText, "results-place"));
-    tr.appendChild(gameTable.resultsTeamCell(row.name));
-    tr.appendChild(gameTable.td(row.metrics.total, "results-num total-cell results-total"));
-    tr.appendChild(gameTable.td(row.metrics.plus, "results-num"));
+    tr.appendChild(td(row.placeText, "results-place"));
+    tr.appendChild(resultsTeamCell(row.name));
+    tr.appendChild(td(row.metrics.total, "results-num total-cell results-total"));
+    tr.appendChild(td(row.metrics.plus, "results-num"));
     for (const value of RESULT_VALUES) {
-      tr.appendChild(gameTable.td(row.metrics.correct[value] || 0, "results-num"));
+      tr.appendChild(td(row.metrics.correct[value] || 0, "results-num"));
     }
     tbody.appendChild(tr);
   });
@@ -724,7 +722,7 @@ function renderTabs(): void {
     return;
   }
   siTabsRoot.hidden = false;
-  gameTable.renderTabBar(siTabsRoot, TABS, activeTab, (key) => {
+  renderTabBar(siTabsRoot, TABS, activeTab, (key) => {
     activeTab = key;
     if (window.location.hash.replace(/^#/, "") !== key) {
       history.replaceState(null, "", `#${key}`);
@@ -751,8 +749,8 @@ function restoreTabScroll(tab: string): void {
   frame.scrollLeft = pos.left;
 }
 
-DopeTable.fitScrollFade(siRoot.closest(".sheet-frame"));
-const resultsScroll = DopeTable.bindScrollEdges(siRoot.closest(".sheet-frame"), ({left}, frame) => {
+fitScrollFade(siRoot.closest(".sheet-frame"));
+const resultsScroll = bindScrollEdges(siRoot.closest(".sheet-frame"), ({left}, frame) => {
   frame.classList.toggle("results-scroll-left", isTeamMode() && activeTab === "results" && left);
   frame.classList.toggle("detailed-scroll-left", isTeamMode() && activeTab === "detailed" && left);
 });
@@ -903,7 +901,7 @@ function nameCell(name: string, playerIndex: number): HTMLElement {
 function indexedCell(content: unknown, className: string, dataset: Record<string, string | number> = {}): HTMLElement {
   const cell = document.createElement("td");
   cell.className = className;
-  cell.textContent = gameTable.formatDisplayText(content);
+  cell.textContent = formatDisplayText(content);
   for (const [key, value] of Object.entries(dataset)) {
     cell.dataset[key] = String(value);
   }
@@ -999,8 +997,8 @@ function setSticker(player: number, theme: number, rawId: string): void {
   state!.stickers![theme][player] = id;
   recomputeTheme(player, theme);
   const scores = getScoreCache();
-  gameTable.setNodeText(scoreNode("themeScore", {player, theme}), themeScoreDisplay(scores, player, theme));
-  gameTable.setNodeText(scoreNode("total", {player}), scores.totals[player]);
+  setNodeText(scoreNode("themeScore", {player, theme}), themeScoreDisplay(scores, player, theme));
+  setNodeText(scoreNode("total", {player}), scores.totals[player]);
   refreshPlaces(scores.places);
   const select = stickerSelectNode(player, theme);
   if (select) {
@@ -1013,13 +1011,13 @@ function setSticker(player: number, theme: number, rawId: string): void {
 
 function stickerCellNode(player: number, theme: number): HTMLElement | null {
   return siRoot.querySelector<HTMLElement>(
-    `.ksi-sticker-cell[data-player="${gameTable.cssEscape(String(player))}"][data-theme="${gameTable.cssEscape(String(theme))}"]`,
+    `.ksi-sticker-cell[data-player="${cssEscape(String(player))}"][data-theme="${cssEscape(String(theme))}"]`,
   );
 }
 
 function stickerSelectNode(player: number, theme: number): HTMLSelectElement | null {
   return siRoot.querySelector<HTMLSelectElement>(
-    `.ksi-sticker-select[data-player="${gameTable.cssEscape(String(player))}"][data-theme="${gameTable.cssEscape(String(theme))}"]`,
+    `.ksi-sticker-select[data-player="${cssEscape(String(player))}"][data-theme="${cssEscape(String(theme))}"]`,
   );
 }
 
@@ -1167,7 +1165,7 @@ function getScoreCache(): ScoreCache {
       if (scored) totals[playerIndex] += value;
     }
   }
-  scoreCache = {themeScores, themeScored, totals, places: gameTable.computePlaces(totals)};
+  scoreCache = {themeScores, themeScored, totals, places: computePlaces(totals)};
   return scoreCache;
 }
 
@@ -1232,7 +1230,7 @@ function recomputeTheme(player: number, theme: number): void {
   const contribution = scored ? value : 0;
   if (contribution !== prevContribution) {
     scores.totals[player] += contribution - prevContribution;
-    scores.places = gameTable.computePlaces(scores.totals);
+    scores.places = computePlaces(scores.totals);
   }
 }
 
@@ -1291,7 +1289,7 @@ function findActive(): HTMLElement | null {
   const indexed = tableIndex?.get("answer", activeCell);
   if (indexed) return indexed;
   return siRoot.querySelector<HTMLElement>(
-    `.answer-cell[data-player="${gameTable.cssEscape(String(activeCell.player))}"][data-theme="${gameTable.cssEscape(String(activeCell.theme))}"][data-answer="${gameTable.cssEscape(String(activeCell.answer))}"]`,
+    `.answer-cell[data-player="${cssEscape(String(activeCell.player))}"][data-theme="${cssEscape(String(activeCell.theme))}"][data-answer="${cssEscape(String(activeCell.answer))}"]`,
   );
 }
 
@@ -1314,9 +1312,9 @@ function setMark(mark: string): void {
 
 function updateAnswerCell(player: number, theme: number, answer: number, mark: string): void {
   const cell = tableIndex?.get("answer", {player, theme, answer}) ||
-    siRoot.querySelector<HTMLElement>(`.answer-cell[data-player="${gameTable.cssEscape(String(player))}"][data-theme="${gameTable.cssEscape(String(theme))}"][data-answer="${gameTable.cssEscape(String(answer))}"]`);
+    siRoot.querySelector<HTMLElement>(`.answer-cell[data-player="${cssEscape(String(player))}"][data-theme="${cssEscape(String(theme))}"][data-answer="${cssEscape(String(answer))}"]`);
   if (!cell) return;
-  gameTable.setMarkClass(cell, mark);
+  setMarkClass(cell, mark);
   cell.title = answerTitle(player, theme, answer);
 }
 
@@ -1324,10 +1322,10 @@ function refreshScores(): void {
   if (!state?.participants) return;
   const scores = getScoreCache();
   state.participants.forEach((_, playerIndex) => {
-    gameTable.setNodeText(scoreNode("total", {player: playerIndex}), scores.totals[playerIndex]);
-    gameTable.setNodeText(scoreNode("place", {player: playerIndex}), scores.places[playerIndex] || "");
+    setNodeText(scoreNode("total", {player: playerIndex}), scores.totals[playerIndex]);
+    setNodeText(scoreNode("place", {player: playerIndex}), scores.places[playerIndex] || "");
     for (let themeIndex = 0; themeIndex < themesCount; themeIndex++) {
-      gameTable.setNodeText(
+      setNodeText(
         scoreNode("themeScore", {player: playerIndex, theme: themeIndex}),
         themeScoreDisplay(scores, playerIndex, themeIndex),
       );
@@ -1337,8 +1335,8 @@ function refreshScores(): void {
 
 function refreshChangedScores(player: number, theme: number): void {
   const scores = getScoreCache();
-  gameTable.setNodeText(scoreNode("total", {player}), scores.totals[player]);
-  gameTable.setNodeText(scoreNode("themeScore", {player, theme}), themeScoreDisplay(scores, player, theme));
+  setNodeText(scoreNode("total", {player}), scores.totals[player]);
+  setNodeText(scoreNode("themeScore", {player, theme}), themeScoreDisplay(scores, player, theme));
   refreshPlaces(scores.places);
 }
 
@@ -1346,9 +1344,9 @@ function refreshChangedScoreSet(changedThemes: Map<number, Set<number>>): void {
   if (!changedThemes || changedThemes.size === 0) return;
   const scores = getScoreCache();
   for (const [player, themes] of changedThemes.entries()) {
-    gameTable.setNodeText(scoreNode("total", {player}), scores.totals[player]);
+    setNodeText(scoreNode("total", {player}), scores.totals[player]);
     for (const theme of themes) {
-      gameTable.setNodeText(scoreNode("themeScore", {player, theme}), themeScoreDisplay(scores, player, theme));
+      setNodeText(scoreNode("themeScore", {player, theme}), themeScoreDisplay(scores, player, theme));
     }
   }
   refreshPlaces(scores.places);
@@ -1356,7 +1354,7 @@ function refreshChangedScoreSet(changedThemes: Map<number, Set<number>>): void {
 
 function refreshPlaces(places: string[]): void {
   state!.participants.forEach((_, playerIndex) => {
-    gameTable.setNodeText(scoreNode("place", {player: playerIndex}), places[playerIndex] || "");
+    setNodeText(scoreNode("place", {player: playerIndex}), places[playerIndex] || "");
   });
 }
 
@@ -1456,7 +1454,7 @@ function participantFallback(index: number): string {
 function handleKeydown(event: KeyboardEvent): void {
   if (viewer) return;
   if (!isDetailedTabActive()) return;
-  if (gameTable.isFormControl(event.target)) return;
+  if (isFormControl(event.target)) return;
   const key = event.key.toLowerCase();
   if (event.key === "ArrowLeft") {
     event.preventDefault();
@@ -1497,9 +1495,9 @@ function moveCell(dPlayer: number, dAnswer: number, extend = false): void {
   const players = playerOrder.length;
   const totalCols = themesCount * QUESTION_VALUES.length;
   let column = activeCell.theme * QUESTION_VALUES.length + activeCell.answer;
-  column = gameTable.clamp(column + dAnswer, 0, totalCols - 1);
+  column = clamp(column + dAnswer, 0, totalCols - 1);
   const currentPosition = Math.max(0, playerOrder.indexOf(activeCell.player));
-  const nextPosition = gameTable.clamp(currentPosition + dPlayer, 0, players - 1);
+  const nextPosition = clamp(currentPosition + dPlayer, 0, players - 1);
   const player = playerOrder[nextPosition];
   const nextTheme = Math.floor(column / QUESTION_VALUES.length);
   const nextAnswer = column % QUESTION_VALUES.length;
@@ -1524,9 +1522,9 @@ function ksiCoordForActive(): CellCoord {
 function normalizeActiveCell(): void {
   if (!state?.participants?.length || themesCount <= 0) return;
   const maxColumn = themesCount * QUESTION_VALUES.length - 1;
-  const column = gameTable.clamp(activeCell.theme * QUESTION_VALUES.length + activeCell.answer, 0, maxColumn);
+  const column = clamp(activeCell.theme * QUESTION_VALUES.length + activeCell.answer, 0, maxColumn);
   activeCell = {
-    player: gameTable.clamp(activeCell.player, 0, state.participants.length - 1),
+    player: clamp(activeCell.player, 0, state.participants.length - 1),
     theme: Math.floor(column / QUESTION_VALUES.length),
     answer: column % QUESTION_VALUES.length,
   };
@@ -1548,7 +1546,7 @@ function saveState(path: Array<string | number>, value: unknown): void {
 
 function answerCellNode(player: string | number, theme: string | number, answer: string | number): HTMLElement | null | undefined {
   return tableIndex?.get("answer", {player, theme, answer}) ||
-    siRoot.querySelector<HTMLElement>(`.answer-cell[data-player="${gameTable.cssEscape(String(player))}"][data-theme="${gameTable.cssEscape(String(theme))}"][data-answer="${gameTable.cssEscape(String(answer))}"]`);
+    siRoot.querySelector<HTMLElement>(`.answer-cell[data-player="${cssEscape(String(player))}"][data-theme="${cssEscape(String(theme))}"][data-answer="${cssEscape(String(answer))}"]`);
 }
 
 // refreshPendingMarkers reconciles the per-cell "pending" highlight with the
@@ -1567,12 +1565,12 @@ function refreshPendingMarkers(): void {
 
 function setHeading(text: string): void {
   if (pageHeading) pageHeading.textContent = text;
-  renderGameBreadcrumbs(text);
+  renderBreadcrumbs(text);
 }
 
-function renderGameBreadcrumbs(gameTitle: string): void {
+function renderBreadcrumbs(gameTitle: string): void {
   if (!breadcrumbsNode || !route.festID) return;
-  gameTable.renderGameBreadcrumbs(breadcrumbsNode, {
+  renderGameBreadcrumbs(breadcrumbsNode, {
     host: !viewer,
     festHref: viewer ? `/fest/${route.festID}` : `/host/fest/${route.festID}`,
     festTitle: fest?.title || "Фест",
@@ -1582,7 +1580,7 @@ function renderGameBreadcrumbs(gameTitle: string): void {
 
 function connectEvents(): void {
   if (staticMode) {
-    gameTable.scheduleStaticReload();
+    scheduleStaticReload();
     return;
   }
   syncState().connect();
@@ -1590,17 +1588,17 @@ function connectEvents(): void {
 
 function syncState(): StateSync {
   if (stateSync) return stateSync;
-  recorder = gameTable.installClientRecorder({
+  recorder = installClientRecorder({
     scope: `game-state:${scopeGameID}`,
     getState: () => state,
     // Editors always get the download button; spectators only when they add
     // ?log to the URL, so the diagnostic UI stays off the public view.
     showButton: !viewer || /[?&]log\b/.test(location.search),
   });
-  stateSync = gameTable.createStateSync({
+  stateSync = createStateSync({
     readonly: viewer,
     stateURL: `${route.apiBase}/state`,
-    eventsURL: gameTable.gameEventsURL(route.festID!, route.gameID),
+    eventsURL: gameEventsURL(route.festID!, route.gameID),
     scope: `game-state:${scopeGameID}`,
     getState: () => state,
     getInitialSeq: () => initialStateSeq,
@@ -1608,7 +1606,7 @@ function syncState(): StateSync {
     setStatus,
     onRemoteState: applyRemoteState,
     onViewers: (count) => viewerCounter.setCount(count),
-    onLockdown: gameTable.scheduleStaticReload,
+    onLockdown: scheduleStaticReload,
     recorder,
     onWriteError: (info) => recorder?.event("write-rejected", info),
   });
@@ -1617,7 +1615,7 @@ function syncState(): StateSync {
 
 function connectPresence(): void {
   if (viewer || presence || !route.festID) return;
-  presence = gameTable.createHostPresence({
+  presence = createHostPresence({
     root: siRoot,
     eventsURL: `/host-events?fest_id=${encodeURIComponent(route.festID)}`,
     presenceURL: `/api/fest/${route.festID}/presence`,
@@ -1672,11 +1670,11 @@ function findSIPresenceTarget(cursor: SIPresenceCursor | null | undefined): Elem
   if (!cursor || cursor.app !== "si" || String(cursor.gameID) !== String(route.gameID)) return null;
   if (cursor.kind === "answer") {
     return siRoot.querySelector(
-      `.answer-cell[data-player="${gameTable.cssEscape(String(cursor.player))}"][data-theme="${gameTable.cssEscape(String(cursor.theme))}"][data-answer="${gameTable.cssEscape(String(cursor.answer))}"]`,
+      `.answer-cell[data-player="${cssEscape(String(cursor.player))}"][data-theme="${cssEscape(String(cursor.theme))}"][data-answer="${cssEscape(String(cursor.answer))}"]`,
     );
   }
   if (cursor.kind === "participant") {
-    return siRoot.querySelector(`.venue-input[data-player="${gameTable.cssEscape(String(cursor.player))}"]`);
+    return siRoot.querySelector(`.venue-input[data-player="${cssEscape(String(cursor.player))}"]`);
   }
   if (cursor.kind === "finish") {
     return siRoot.querySelector(".finish-toggle");

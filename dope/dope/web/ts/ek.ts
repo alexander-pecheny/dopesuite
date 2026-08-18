@@ -2,28 +2,24 @@
 // stage tabs, SSE sync. A /host/… URL edits and a /fest/… URL reads (the
 // `viewer` flag), the way brain.ts serves both. Bundled by pages/ek.ts.
 
-import { DopeTable } from "./match-table.js";
-import type {
-  CellCoord,
-  CellEdit,
-  CellNavBar,
-  CellRangeSelection,
-  ClientRecorder,
-  HostPresence,
-  NodeIndex,
-  PendingOp,
-  PendingOps,
-  ScopedEventMessage,
-  ScrollEdgeBinding,
-  StageRef,
-  ParticipantView,
-  ThemeView,
-  Venue,
-} from "./match-table.js";
+import {cssEscape, formatNumber, formatPlace, isFormControl, option, td, th} from "./cells.js";
+import {buildFlatScoreTable, buildTwoRowScoreTable, canPatchScoreShape, createScoreTableIndex, patchScoreTable, setMarkClass} from "./score-table.js";
+import type {NodeIndex, ParticipantView, ThemeView} from "./score-table.js";
+import {buildVenuesTable, formatBattleVenue, formatBattleVenueShort, formatVenue} from "./venue.js";
+import type {Venue} from "./venue.js";
+import {buildGroupStandingsView, festLetters, letteredTitle, resultsTeamCell, stageType} from "./standings.js";
+import type {StageRef} from "./standings.js";
+import {buildRosterView} from "./fest-roster.js";
+import {buildEKStatsTable, buildIndividualStatsTable, computeEKPlayerStats, computeIndividualPlayerStats} from "./ek-stats.js";
+import {applyDeltaOps, createHostPresence, createLiveEvents, createPendingOps, gameEventsURL, installClientRecorder, scheduleStaticReload} from "./state-sync.js";
+import type {ClientRecorder, HostPresence, PendingOp, PendingOps, ScopedEventMessage} from "./state-sync.js";
+import {createLocalCache, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, notifyEmbeddedResize, renderGameBreadcrumbs} from "./game-page.js";
+import {bindScrollEdges, clamp, createCellRangeSelection, createFloatingPopover, createStatusReporter, createViewerCounter, fitEKStageTeamName, fitScrollFade, installCellNavBar, isClipped, markNameOverflow} from "./widgets.js";
+import type {CellCoord, CellEdit, CellNavBar, CellRangeSelection, ScrollEdgeBinding} from "./widgets.js";
 import { createStageCache } from "./stage-cache.js";
 import type { MatchDescriptor, MatchView as CachedMatchView, StageData } from "./stage-cache.js";
 import { create as createStatsSync } from "./stats-sync.js";
-import type { StatsMatchEvent, StatsSyncGameTable } from "./stats-sync.js";
+import type { StatsMatchEvent } from "./stats-sync.js";
 import { buildFestGrid, buildReseedStagePanel, parseScheme } from "./fest-grid.js";
 import { computeGroupRounds } from "./group-stats.js";
 import { gameTabs, canonicalKey, groupLabel, RESEED_TAB_CODE } from "./game-tabs.js";
@@ -188,15 +184,13 @@ type HostPresenceCursor = {
 };
 
 const ekRoot = document.getElementById("ekTable") as HTMLElement;
-DopeTable.fitScrollFade(ekRoot.closest(".sheet-frame"));
+fitScrollFade(ekRoot.closest(".sheet-frame"));
 const statusNode = document.getElementById("status") as HTMLElement;
 const ekTabsRoot = document.getElementById("ekTabs");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
-const gameTable = DopeTable;
-const {formatVenue, formatBattleVenue, formatBattleVenueShort, formatNumber, formatPlace, clamp, cssEscape, th, td, resultsTeamCell} = gameTable;
-const setStatus = gameTable.createStatusReporter(statusNode);
-const viewerCounter = gameTable.createViewerCounter(statusNode);
+const setStatus = createStatusReporter(statusNode);
+const viewerCounter = createViewerCounter(statusNode);
 let route = currentRoute();
 // A spectator reads what a ведущий edits: the same page, with every control
 // and every write path gated on this one flag.
@@ -214,8 +208,8 @@ const scopeGameID = pageWindow.__EK_INIT__?.route?.gameID != null
   ? String(pageWindow.__EK_INIT__.route.gameID)
   : route.gameID;
 document.body.classList.toggle("viewer-readonly", viewer);
-const editorLink = viewer && canEdit && !embedded ? gameTable.mountEditorLink() : null;
-if (!embedded && route.apiBase) gameTable.mountGameDownloads({apiBase: route.apiBase, canEdit});
+const editorLink = viewer && canEdit && !embedded ? mountEditorLink() : null;
+if (!embedded && route.apiBase) mountGameDownloads({apiBase: route.apiBase, canEdit});
 let state: HostMatchView | null = null;
 let fest: HostFestView | null = null;
 let venues: Venue[] = [];
@@ -255,7 +249,7 @@ const stageCache = createStageCache({
       pane.appendChild(buildReseedPanes(stageCode));
       return;
     }
-    if (gameTable.stageType(stage as StageRef) === "standings") {
+    if (stageType(stage as StageRef) === "standings") {
       pane.appendChild(buildGroupStandingsPane(stage as HostStage));
       return;
     }
@@ -344,7 +338,7 @@ const floatingPopoverSpecs = [
 
 document.body.classList.toggle("embedded-match", embedded);
 if (!viewer) document.addEventListener("keydown", handleGlobalKeydown);
-const floatingPopover = gameTable.createFloatingPopover({root: ekRoot, specs: floatingPopoverSpecs});
+const floatingPopover = createFloatingPopover({root: ekRoot, specs: floatingPopoverSpecs});
 floatingPopover.bind();
 window.addEventListener("resize", () => {
   if (route.mode === "grid") scheduleGridNameOverflowUpdate();
@@ -383,7 +377,7 @@ async function loadCurrent(): Promise<void> {
 // quota, disabled cookies).
 // The cache slot is keyed off the current route, which changes as the host
 // navigates between games client-side, so resolve it lazily per call.
-const festCache = () => gameTable.createLocalCache(`ek:fest:${route.festID}:${route.gameID}`);
+const festCache = () => createLocalCache(`ek:fest:${route.festID}:${route.gameID}`);
 const readFestCache = () => festCache().read();
 const writeFestCache = (view: HostFestView | null) => festCache().write(view);
 
@@ -424,7 +418,7 @@ function consumeInit(): boolean {
   // it just served — trust the route mode + resource codes.
   if (route.mode === "match" && init.route.matchCode !== route.matchCode) return false;
   if (route.mode === "stage" && init.route.stageCode !== route.stageCode) return false;
-  if (init.teamsUnnumbered && !viewer) gameTable.mountUnnumberedBanner(route.festID);
+  if (init.teamsUnnumbered && !viewer) mountUnnumberedBanner(route.festID);
   pageWindow.__EK_INIT__ = null;
 
   adoptFestView(init.fest);
@@ -605,11 +599,11 @@ async function loadSeedImportPage(): Promise<void> {
 // SSE lifecycle — stream, epoch-reload latch, iOS wake recovery — lives in
 // createLiveEvents (state-sync.ts); this page only dispatches scoped messages.
 // Un-acked edits survive the epoch reload via durable pending storage.
-const liveEvents = gameTable.createLiveEvents({
-  eventsURL: () => gameTable.gameEventsURL(route.festID, route.gameID),
+const liveEvents = createLiveEvents({
+  eventsURL: () => gameEventsURL(route.festID, route.gameID),
   onMessage: dispatchStateMessage,
   onViewers: (count) => viewerCounter.setCount(count),
-  onLockdown: () => gameTable.scheduleStaticReload(),
+  onLockdown: () => scheduleStaticReload(),
   reload: () => loadCurrent(),
   onDown: () => setStatus("reconnecting"),
   onUp: () => setStatus("saved"),
@@ -744,7 +738,7 @@ function applyMatchDelta(message: ScopedEventMessage, matchScope: string): void 
     setStatus("saved");
     return;
   }
-  const next = gameTable.applyDeltaOps(base, message.ops) as HostMatchView;
+  const next = applyDeltaOps(base, message.ops) as HostMatchView;
   next.seq = Number(message.seq) || prev;
   stageCache.applyMatchUpdate(next);
   if (route.mode === "match" && message.scope === matchScope) {
@@ -823,7 +817,6 @@ function scheduleReload(): void {
 // and unit-tested; this file supplies the page-specific pieces.
 const statsSync = createStatsSync({
   stageCache,
-  gameTable: gameTable as StatsSyncGameTable,
   matchCodeFromScope,
   isActive: () => route.mode === "stats",
   rerender: rerenderStatsTable,
@@ -958,7 +951,7 @@ function ekEntry(matchCode: string): EKPendingEntry {
   if (!entry) {
     // Persist per-match so a mid-sync refresh recovers un-acked EK edits
     // (recoverMatchPendingEdits re-overlays + re-sends them on the next load).
-    entry = {ops: gameTable.createPendingOps({storageKey: `dope.pending.v2:${scope}`}), inFlight: false, timer: null};
+    entry = {ops: createPendingOps({storageKey: `dope.pending.v2:${scope}`}), inFlight: false, timer: null};
     ekPending.set(scope, entry);
   }
   return entry;
@@ -1194,7 +1187,7 @@ function renderFest(): void {
   if (!fest) return;
   resetMatchTableIndex();
   setPageMode("grid");
-  renderGameBreadcrumbs();
+  renderBreadcrumbs();
   setViewerLink(route.viewerBase + "/", "Открыть зрительскую сетку");
   document.title = pageTitle();
   renderEKTabs();
@@ -1210,7 +1203,7 @@ function renderStage(): void {
   const stageCode = route.stageCode!;
   const stage = ekSchemeStages().find((s) => s.code === stageCode) || mergedStage(fest, stageCode);
   setPageMode("grid");
-  renderGameBreadcrumbs();
+  renderBreadcrumbs();
   setViewerLink(`${route.viewerBase}/stage/${encodeURIComponent(stageCode)}`, "Открыть этап для зрителя");
   document.title = pageTitle();
   renderEKTabs();
@@ -1228,29 +1221,29 @@ function renderStage(): void {
 function renderVenues(): void {
   resetMatchTableIndex();
   setPageMode("grid");
-  renderGameBreadcrumbs();
+  renderBreadcrumbs();
   setViewerLink(`${route.viewerBase}/venues`, "Открыть площадки для зрителя");
   document.title = pageTitle("Площадки");
   renderEKTabs();
-  ekRoot.replaceChildren(gameTable.buildVenuesTable(venues, {editable: !viewer, onTitleChange: updateVenueTitle}));
+  ekRoot.replaceChildren(buildVenuesTable(venues, {editable: !viewer, onTitleChange: updateVenueTitle}));
   refreshPresence();
 }
 
 function renderRoster(): void {
   resetMatchTableIndex();
   setPageMode("grid");
-  renderGameBreadcrumbs();
+  renderBreadcrumbs();
   setViewerLink(`${route.viewerBase}/roster`, "Открыть составы для зрителя");
   document.title = pageTitle("Составы");
   renderEKTabs();
-  ekRoot.replaceChildren(gameTable.buildRosterView(route.festID));
+  ekRoot.replaceChildren(buildRosterView(route.festID));
   refreshPresence();
 }
 
 function renderStats(): void {
   resetMatchTableIndex();
   setPageMode("grid");
-  renderGameBreadcrumbs();
+  renderBreadcrumbs();
   setViewerLink(`${route.viewerBase}/stats`, "Открыть статистику для зрителя");
   document.title = pageTitle("Статистика");
   renderEKTabs();
@@ -1266,8 +1259,8 @@ function rerenderStatsTable(): void {
   // A personal game has no per-theme players — the participant is the player,
   // so the aggregate is per seat.
   const node = individualGame()
-    ? gameTable.buildIndividualStatsTable(gameTable.computeIndividualPlayerStats(statsStagesFromCache()))
-    : gameTable.buildEKStatsTable(gameTable.computeEKPlayerStats(statsStagesFromCache()));
+    ? buildIndividualStatsTable(computeIndividualPlayerStats(statsStagesFromCache()))
+    : buildEKStatsTable(computeEKPlayerStats(statsStagesFromCache()));
   ekRoot.replaceChildren(node);
   scheduleResultsTeamNameOverflowUpdate();
 }
@@ -1275,7 +1268,7 @@ function rerenderStatsTable(): void {
 function renderSeedImport(): void {
   resetMatchTableIndex();
   setPageMode("grid");
-  renderGameBreadcrumbs();
+  renderBreadcrumbs();
   setViewerLink(route.viewerBase + "/", "Открыть зрительскую сетку");
   document.title = pageTitle("Импорт команд");
   renderEKTabs();
@@ -1288,7 +1281,7 @@ function render(): void {
   if (!state) return;
   setPageMode("match");
   normalizeActiveCell();
-  renderGameBreadcrumbs();
+  renderBreadcrumbs();
   setViewerLink(`${route.viewerBase}/matches/${encodeURIComponent(state.code || route.matchCode!)}`, "Открыть зрительский бой");
   document.title = pageTitle();
   renderEKTabs();
@@ -1296,9 +1289,9 @@ function render(): void {
   const focusedPlaceTeam = focusedPlaceTeamIndex();
   const finishToggleFocused = isFinishToggleFocused();
   const table = buildTable();
-  matchTableIndex = gameTable.createScoreTableIndex(table, {entity: "team", shootout: true});
+  matchTableIndex = createScoreTableIndex(table, {entity: "team", shootout: true});
   ekRoot.replaceChildren(table);
-  gameTable.notifyEmbeddedResize(embedded);
+  notifyEmbeddedResize(embedded);
   scheduleEKTeamNameOverflowUpdate();
   if (viewer) {
     // The spectator's бой is a stage-skinned table with a frozen column, so
@@ -1375,7 +1368,7 @@ function scrollActiveTabIntoView(activeLink: HTMLAnchorElement | null): void {
 function bindEKTabsScrollFade(): void {
   if (!ekTabsRoot || embedded) return;
   if (!ekTabsScroll) {
-    ekTabsScroll = DopeTable.bindScrollEdges(ekTabsRoot, ({left, right}, tabs) => {
+    ekTabsScroll = bindScrollEdges(ekTabsRoot, ({left, right}, tabs) => {
       tabs.classList.toggle("tabs-scroll-left", left);
       tabs.classList.toggle("tabs-scroll-right", right);
     });
@@ -1441,7 +1434,7 @@ function buildGroupStandingsPane(stage: HostStage): HTMLElement {
     const title = schemeStage ? groupLabel(schemeStage as StageRef) : code;
     return {title, roundCount, rows};
   });
-  return gameTable.buildGroupStandingsView(groups);
+  return buildGroupStandingsView(groups);
 }
 
 // buildReseedPanes fills a reseed pane: the folded «Пересев» tab stacks every
@@ -1457,7 +1450,7 @@ function buildReseedPanes(stageCode: string): HTMLElement {
   for (const code of members) {
     if (members.length > 1) {
       const index = raw.findIndex((stage) => stage.code === code);
-      const next = raw.slice(index + 1).find((stage) => gameTable.stageType(stage as StageRef) !== "reseed");
+      const next = raw.slice(index + 1).find((stage) => stageType(stage as StageRef) !== "reseed");
       const head = document.createElement("h3");
       head.className = "reseed-fold-head";
       head.textContent = String(next?.title || "");
@@ -1477,11 +1470,11 @@ function rawSchemeStages(): HostStage[] {
 // once per fest view over the scheme's schedule order.
 let boutLetters: Map<string, string> | null = null;
 function letterMap(): Map<string, string> {
-  if (!boutLetters) boutLetters = gameTable.festLetters(fest?.stages as StageRef[] | undefined);
+  if (!boutLetters) boutLetters = festLetters(fest?.stages as StageRef[] | undefined);
   return boutLetters;
 }
 function letteredBoutTitle(matchCode: string | undefined, title: string): string {
-  return gameTable.letteredTitle(title, letterMap().get(matchCode || ""));
+  return letteredTitle(title, letterMap().get(matchCode || ""));
 }
 
 function scheduleGridNameOverflowUpdate(root: ParentNode = ekRoot): void {
@@ -1493,7 +1486,7 @@ function scheduleGridNameOverflowUpdate(root: ParentNode = ekRoot): void {
 }
 
 function updateGridNameOverflow(root: ParentNode = ekRoot): void {
-  gameTable.markNameOverflow(root, {
+  markNameOverflow(root, {
     cellSelector: ".grid-slot-team",
     nameSelector: ".grid-slot-team-name",
     truncatedClass: "grid-slot-team-truncated",
@@ -1510,7 +1503,7 @@ function scheduleEKTeamNameOverflowUpdate(root: ParentNode = ekRoot): void {
 
 function updateEKTeamNameOverflow(root: ParentNode = ekRoot): void {
   updatePlayerSelectOverflow(root);
-  gameTable.markNameOverflow(root, {
+  markNameOverflow(root, {
     cellSelector: ".readonly-player",
     nameSelector: ".readonly-player-text",
     truncatedClass: "readonly-player-cell-truncated",
@@ -1530,13 +1523,13 @@ function updateEKTeamNameOverflow(root: ParentNode = ekRoot): void {
       continue;
     }
     detailedCells.push(cell);
-    detailedReadings.push(gameTable.isClipped(name));
+    detailedReadings.push(isClipped(name));
   }
   for (let i = 0; i < detailedCells.length; i++) {
     detailedCells[i].classList.toggle("od-detailed-team-cell-truncated", detailedReadings[i]);
   }
   for (let i = 0; i < stageCells.length; i++) {
-    fitEKStageTeamName(stageCells[i], stageNames[i]);
+    markStageTeamNameTruncated(stageCells[i], stageNames[i]);
   }
 }
 
@@ -1586,7 +1579,7 @@ function bindStageOverflowScroll(): void {
     return;
   }
   unbindStageOverflowScroll();
-  stageScroll = DopeTable.bindScrollEdges(scrollFrame, ({left}, frame) => {
+  stageScroll = bindScrollEdges(scrollFrame, ({left}, frame) => {
     scheduleEKTeamNameOverflowUpdate(ekRoot);
     frame.classList.toggle("stage-scroll-left", left);
   });
@@ -1614,8 +1607,8 @@ function isVisibleInScrollFrame(element: Element): boolean {
   return rect.bottom >= frameRect.top && rect.top <= frameRect.bottom;
 }
 
-function fitEKStageTeamName(cell: HTMLElement, name: HTMLElement | null): void {
-  const truncated = gameTable.fitEKStageTeamName(cell, name);
+function markStageTeamNameTruncated(cell: HTMLElement, name: HTMLElement | null): void {
+  const truncated = fitEKStageTeamName(cell, name);
   cell.classList.toggle("od-detailed-team-cell-truncated", truncated);
 }
 
@@ -1628,7 +1621,7 @@ function scheduleResultsTeamNameOverflowUpdate(root: ParentNode = ekRoot): void 
 }
 
 function updateResultsTeamNameOverflow(root: ParentNode = ekRoot): void {
-  gameTable.markNameOverflow(root, {
+  markNameOverflow(root, {
     cellSelector: ".results-team",
     nameSelector: ".results-team-name",
     truncatedClass: "results-team-truncated",
@@ -1870,7 +1863,7 @@ function renderStageMatchFrame(frame: StageFrame, matchState: HostMatchView, opt
   // Per-frame score index + last state, so a later same-shape update patches
   // this frame's cells in place (updateStageFrame) instead of rebuilding it —
   // the rebuild is what flickered the cell being edited.
-  frame.__scoreIndex = gameTable.createScoreTableIndex(stageTable, {entity: "team", shootout: true});
+  frame.__scoreIndex = createScoreTableIndex(stageTable, {entity: "team", shootout: true});
   frame.__matchState = matchState;
   stageSelection?.refresh();
   if (hadFocus && activeCell.matchCode === matchState.code) {
@@ -1985,7 +1978,7 @@ function canPatchMatchShape(previous: HostMatchView | null | undefined, next: Ho
   if (formatVenue(previous.venue) !== formatVenue(next.venue)) return false;
   // The host's place is an input the patch fills; the spectator's is text.
   if (viewer && next.participants.some((team, i) => formatPlace(team.place) !== formatPlace(previous.participants[i]?.place))) return false;
-  return gameTable.canPatchScoreShape(previous, next);
+  return canPatchScoreShape(previous, next);
 }
 
 // patchHostScoreTable patches a built editable score table in place from a
@@ -1994,7 +1987,7 @@ function canPatchMatchShape(previous: HostMatchView | null | undefined, next: Ho
 // — lives in the shared scoreCellSpecs; the host only injects the callback that
 // refreshes a synced select's overflow chrome.
 function patchHostScoreTable(index: NodeIndex | null | undefined, matchState: HostMatchView): void {
-  gameTable.patchScoreTable(index, matchState, {
+  patchScoreTable(index, matchState, {
     formatNumber,
     onPlayerSelectSynced: (select) =>
       updatePlayerSelectOverflow(select?.closest(".player-select-wrap") || ekRoot),
@@ -2112,7 +2105,7 @@ function stageApplyValues(edits: CellEdit[]): void {
 
 function attachStageSelection(container: HTMLElement | null): CellRangeSelection | null {
   if (!container || viewer) return null;
-  const helper = gameTable.createCellRangeSelection({
+  const helper = createCellRangeSelection({
     root: container,
     cellSelector: ".answer-cell",
     readonly: () => false,
@@ -2208,7 +2201,7 @@ function ekApplyValues(matchCode: string, matchState: HostMatchView, edits: Cell
   const payloads: EKCellPayload[] = [];
   for (const {cell, value} of edits) {
     const mark = value === "right" ? "right" : value === "wrong" ? "wrong" : "";
-    gameTable.setMarkClass(cell, mark);
+    setMarkClass(cell, mark);
     const team = Number((cell as HTMLElement).dataset.team);
     const theme = Number((cell as HTMLElement).dataset.theme);
     const answer = Number((cell as HTMLElement).dataset.answer);
@@ -2326,7 +2319,7 @@ function attachMatchSelection(table: HTMLTableElement, matchState: HostMatchView
     matchSelections.get(matchCode)!.unbind();
     matchSelections.delete(matchCode);
   }
-  const helper = gameTable.createCellRangeSelection({
+  const helper = createCellRangeSelection({
     root: table,
     cellSelector: ".answer-cell",
     readonly: () => Boolean(matchState.finished),
@@ -2412,7 +2405,7 @@ function buildTable(options: {compact?: boolean} = {}): HTMLTableElement {
     };
   });
 
-  const build = individualGame() ? gameTable.buildFlatScoreTable : gameTable.buildTwoRowScoreTable;
+  const build = individualGame() ? buildFlatScoreTable : buildTwoRowScoreTable;
   const individual = individualGame() ? " individual-blank" : "";
   // A spectator sees every бой in the compact stage skin, focused or not.
   const compact = options.compact || viewer;
@@ -2915,10 +2908,6 @@ function setMarkForSelection(mark: string): void {
   setActiveMark(mark);
 }
 
-function isFormControl(target: unknown): boolean {
-  return gameTable.isFormControl(target);
-}
-
 function selectAnswerCell(team: number, shootout: boolean, theme: number, answer: number, options: {matchCode?: string; focus?: boolean; syncSelection?: boolean} = {}): void {
   activeCell = {matchCode: options.matchCode || currentMatchCode(), team, shootout, theme, answer};
   markActiveCell();
@@ -3076,7 +3065,7 @@ function focusPlaceInput(team: number, options: {select?: boolean; preventScroll
 let ekNavBar: CellNavBar | null = null;
 function ensureEKNavBar(): CellNavBar {
   if (ekNavBar) return ekNavBar;
-  ekNavBar = gameTable.installCellNavBar({
+  ekNavBar = installCellNavBar({
     onPrev: () => advanceActivePlaceInput(-1),
     onNext: () => advanceActivePlaceInput(1),
   });
@@ -3268,12 +3257,10 @@ function mergedStage(data: HostFestView | null, code: string): HostStage {
   };
 }
 
-const stageType = gameTable.stageType;
-
-function renderGameBreadcrumbs(): void {
+function renderBreadcrumbs(): void {
   if (!breadcrumbsNode || !route.festID) return;
   const gameTitle = fest?.gameName || currentGameTitle() || "ЭК";
-  gameTable.renderGameBreadcrumbs(breadcrumbsNode, {
+  renderGameBreadcrumbs(breadcrumbsNode, {
     host: !viewer,
     festHref: viewer ? `/fest/${route.festID}` : `/host/fest/${route.festID}`,
     festTitle: fest?.title || "Фест",
@@ -3340,7 +3327,7 @@ function parsePlace(value: string): number | null {
 
 function connectPresence(): void {
   if (presence || viewer || embedded || !route.festID) return;
-  presence = gameTable.createHostPresence({
+  presence = createHostPresence({
     root: ekRoot,
     eventsURL: `/host-events?fest_id=${encodeURIComponent(route.festID)}`,
     presenceURL: `${route.festApi}/presence`,
@@ -3438,12 +3425,8 @@ function findHostPresenceTarget(cursorValue: unknown): Element | null {
   }
 }
 
-function option(value: string | number, label: unknown): HTMLOptionElement {
-  return gameTable.option(value, label);
-}
-
 bindSPANavigation();
-recorder = gameTable.installClientRecorder({
+recorder = installClientRecorder({
   scope: `ek:${route.festID}:${route.gameID}`,
   getState: () => ({mode: route.mode, matchCode: route.matchCode, stageCode: route.stageCode, state}),
   // Spectators only get the download button when they opt in with ?log.

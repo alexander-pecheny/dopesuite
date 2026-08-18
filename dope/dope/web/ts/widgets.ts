@@ -992,3 +992,23 @@ export function fitScrollFade(frame: Element | null | undefined): void {
   observeChildren();
   apply();
 }
+
+export function fitEKStageTeamName(cell: HTMLElement | null | undefined, nameNode: HTMLElement | null | undefined): boolean {
+  if (!cell || !nameNode) return false;
+  const name = nameNode;
+  const baseSize = parseFloat(getComputedStyle(name).fontSize) || 13;
+  const minSize = 9;
+  const vertOverflows = () => name.scrollHeight > name.clientHeight + 1;
+  const horizOverflows = () => isClipped(name);
+  name.style.fontSize = "";
+  if (vertOverflows()) {
+    let size = Math.floor(baseSize) - 1;
+    while (size >= minSize) {
+      name.style.fontSize = `${size}px`;
+      if (!vertOverflows()) break;
+      size -= 1;
+    }
+    if (size < minSize) name.style.fontSize = `${minSize}px`;
+  }
+  return vertOverflows() || horizOverflows();
+}

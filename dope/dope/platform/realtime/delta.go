@@ -6,7 +6,7 @@ import (
 )
 
 // setOp is one "set value at path" operation in a scoped delta. It matches the
-// shape the client applies (static/match-table.js applySetPatch): path segments
+// shape the client applies (state-sync.ts applyDeltaOps): path segments
 // are object keys (string) or array indices (number), and value is the new JSON
 // subtree to assign there.
 type setOp struct {

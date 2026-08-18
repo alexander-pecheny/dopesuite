@@ -72,13 +72,18 @@ queries, view/scheme types, pure scoring), `storage/journal` (forward journal),
 |------|-------|---------|
 | `styles.css` | ~4500 | dope's **app CSS layer** only (tournament tables/grids/screen/stickers + dope vars + dark overrides). The shared design system — tokens, controls, buttons, chrome, utilities, themes — lives in DopeUIKit's `assets/core.css` (~1030 lines); the server serves `/static/styles.css` as core + this layer concatenated (`dope/server/css.go`). The tournament domain used to live in `core.css`; it was moved down here, so **do not add tournament-specific rules to the kit** — they belong in this file. |
 | `pageforms.ts` | ~60 | Shared behaviour for the server-rendered builder pages, replacing the inline `on*` handlers they used to carry (CSP-friendly, data-attribute driven: `[data-confirm]`, `[data-select-all]`, `[data-autosubmit]`, `[data-dialog-open="id"]`, `[data-dialog-close]`) |
-| `ek.ts` | ~3500 | The ЭК page, host and spectator alike — match score editing, undo/redo, stage panes, SSE sync; a `viewer` flag from the URL prefix gates every control. imports `match-table.ts` + `stage-cache.ts` + `game-tabs.ts` |
-| `od.ts` | ~3800 | OD/KVRM host/viewer — tabbed results/input sheets, entry cell navigation, SSE sync. imports `match-table.ts` |
-| `match-table.ts` | ~1500 | **Core shared library** (exported `DopeTable`) — table builders, cell helpers, `standingsTable` (the one builder behind every standings-shaped table: пересев, группы, статистика, площадки, составы, the брейн crosstab) and `resultsTeamCell` (the one fading name cell); re-exports `state-sync.ts` + `game-page.ts` + `widgets.ts` so consumers keep one import. Used by all game pages |
+| `ek.ts` | ~3450 | The ЭК page, host and spectator alike — match score editing, undo/redo, stage panes, SSE sync; a `viewer` flag from the URL prefix gates every control. imports the shared modules below + `stage-cache.ts` + `game-tabs.ts` |
+| `od.ts` | ~3800 | OD/KVRM host/viewer — tabbed results/input sheets, entry cell navigation, SSE sync |
+| `cells.ts` | ~140 | Cell primitives every table is built from — `th`/`td` with the CellSpec grammar, display formatting (U+2212 minus), `nameNode`, the small DOM helpers (`setText`, `cssEscape`, `isFormControl`) |
+| `score-table.ts` | ~530 | A бой's score table — `buildFlatScoreTable`/`buildTwoRowScoreTable`, `computePlaces`, and the node index + `patchScoreTable` that update it in place from a MatchView |
+| `standings.ts` | ~190 | The server's tables as the pages draw them (ADR-0011): `standingsTable` (the one builder behind every standings-shaped table: пересев, группы, статистика, площадки, составы, the брейн crosstab), `resultsTeamCell` (the one fading name cell), `buildGroupStandingsView`, and the fest-view stage refs (`festLetters`, `letteredTitle`, `stageType`) |
+| `venue.ts` | ~75 | Площадка — `normalizeVenue`/`formatVenue*` and `buildVenuesTable`; fest-grid imports it too |
+| `fest-roster.ts` | ~170 | Составы — `fetchFestRoster` (cached per fest), `buildRosterTable`, `buildRosterView` |
+| `ek-stats.ts` | ~225 | ЭК's Статистика folds (`computeEKPlayerStats`, `computeIndividualPlayerStats`) and their tables; the sibling of `brain-stats.ts` and `group-stats.ts` |
 | `game-page.ts` | ~330 | Page plumbing — window-globals contract (init payloads, menu chrome), route parsing, the header breadcrumb trail (🏠 / [Мои фесты] / фест / игра / раздел, mirroring the URL; the Мои фесты crumb only on the /host tree), menu jump/download mounts, localStorage snapshot cache, init/cache/fetch game-data loader |
 | `widgets.ts` | ~860 | Interaction widgets — cell nav bar, virtual keypad, floating popovers, sync-status dot, name overflow, cell range selection, viewer counter |
 | `state-sync.ts` | ~1450 | **The SSE engine** — scoped event protocol (seq-chained deltas, epoch resets), durable pending ops, stream lifecycle + iOS-wake recovery, client recorder, host presence; `createStateSync` (od/si) and `createLiveEvents` (ek), both stream-injectable for tests |
-| `si.ts` | ~1750 | KSI (team jeopardy) page — question/answer tables, team/player rows, detailed/results/refusals tabs. imports `match-table.ts` |
+| `si.ts` | ~1750 | KSI (team jeopardy) page — question/answer tables, team/player rows, detailed/results/refusals tabs |
 | `game-tabs.ts` | ~240 | The one place tabs come from: `gameTabs(stages, {game, viewer, seeded})` — Blocks off `grain`, круг tabs across a Block's Groups, reseeds folded into one «Пересев», Block/Group labels (`blockLabel`, `groupLabel`), legacy hashes (`canonicalKey`). ЭК, брейн, КСИ, ЧГК and the Сетка's column titles render it and derive nothing |
 | `fest-grid.ts` | ~920 | The Сетка — `planGrid` first (pure: what each column is, the shared row unit, each box's span, a Block's packing via `packBlock`), then the painters read the plan: бой boxes and Group tables built of the same `.grid-slot-cell` cells in one `.grid-box`, reseed panels, truncated team names. No module state: each drawn grid keeps its own Blocks and letters, so two on a page coexist |
 | `menu.ts` (kit) | — | Site-wide chrome (`window.dopeMenu`) — theme/contrast toggle, hamburger menu, account links. Lives in dopeuikit (`assets/ts/`), served at `/static/menu.js`, loaded on every page |
@@ -87,7 +92,7 @@ queries, view/scheme types, pure scoring), `storage/journal` (forward journal),
 | `profile.ts` | 49 | Password change form (new password vs change password modes) |
 | `gallery.ts` | ~140 | The gallery (`/gallery`, dev mode only): every shared table and the Сетка from fixtures on one page — the skin sheet `scripts/matrix.py` (`just matrix`, the verify skill's hand-over matrix) shoots first |
 
-**Module seam (ADR-0003, amended by root ADR-0001)**: each game page loads ONE `dist/<page>.js` bundle built from `dope/web/ts/pages/<page>.ts` — the init-payload boot, then the self-booting page module. The SSE engine is `state-sync.ts` (one implementation: `createStateSync` for od/si state blobs, `createLiveEvents` for ЭК scoped dispatch; both take an injectable stream adapter for tests), re-exported through `match-table.ts` so consumers keep one import. Cross-file wiring is ES imports (`DopeTable` from `match-table.ts`, `createStageCache`, fest-grid exports); the only published globals are `window.dopeMenu`/`window.dopeMenuConfig` (typed in dopeuikit's `globals.d.ts`) and the server-inlined init payloads. Frontend tests import per-file ESM emitted to `web/jstest/dist/`.
+**Module seam (ADR-0003, amended by root ADR-0001)**: each game page loads ONE `dist/<page>.js` bundle built from `dope/web/ts/pages/<page>.ts` — the init-payload boot, then the self-booting page module. The SSE engine is `state-sync.ts` (one implementation: `createStateSync` for od/si state blobs, `createLiveEvents` for ЭК scoped dispatch; both take an injectable stream adapter for tests). Cross-file wiring is named ES imports from the module that owns a symbol — there is no re-export desk; the only published globals are `window.dopeMenu`/`window.dopeMenuConfig` (typed in dopeuikit's `globals.d.ts`) and the server-inlined init payloads. Frontend tests import per-file ESM emitted to `web/jstest/dist/`.
 
 ## How to Run / Build / Test
 ```bash
@@ -170,7 +175,7 @@ When building a new page or UI component, you MUST use the existing design syste
 DopeUIKit's `assets/core.css` (shared tokens/controls/buttons/chrome/utilities/
 themes) plus dope's `styles.css` layer (tournament-specific classes) — its CSS
 variables (colors, spacing, typography), layout grids, table styles, and component
-classes, and the shared JS building blocks (`DopeTable` from `match-table.ts`,
+classes, and the shared JS building blocks (`cells.ts`, `standings.ts`, `score-table.ts`,
 `window.dopeMenu` from the kit's `menu.ts`, etc.). Do not introduce bespoke one-off styles or
 hand-rolled widgets when a design-system equivalent exists.
 

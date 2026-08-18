@@ -6,8 +6,17 @@
 // (PATCH /matches/{code}/state) and sync over match: scopes. A self-booting
 // side-effect module bundled by pages/brain.ts.
 
-import {DopeTable} from "./match-table.js";
-import type {CellCoord, CellEdit, CellRangeSelection, GameInitLike, RosterTeam, ScopedEventMessage, StageRef} from "./match-table.js";
+import {cssEscape, formatDisplayText, td} from "./cells.js";
+import {festLetters, standingsTable} from "./standings.js";
+import type {StageRef} from "./standings.js";
+import {buildRosterView, fetchFestRoster} from "./fest-roster.js";
+import type {RosterTeam} from "./fest-roster.js";
+import {applyDeltaOps, createLiveEvents, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
+import type {ScopedEventMessage} from "./state-sync.js";
+import {mountEditorLink, mountUnnumberedBanner, mountViewerLink, parseGameRoute, renderGameBreadcrumbs} from "./game-page.js";
+import type {GameInitLike} from "./game-page.js";
+import {clamp, createCellRangeSelection, createFloatingPopover, createStatusReporter, createViewerCounter, fitScrollFade, markNameOverflow, renderTabBar} from "./widgets.js";
+import type {CellCoord, CellEdit, CellRangeSelection} from "./widgets.js";
 import {computeBrainPlayerStats} from "./brain-stats.js";
 import type {StatsBout} from "./brain-stats.js";
 import {buildFestGrid, buildReseedStagePanel} from "./fest-grid.js";
@@ -118,13 +127,12 @@ const brainTabsRoot = document.getElementById("brainTabs");
 const statusNode = document.getElementById("status");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
-const gameTable = DopeTable;
-const setStatus = gameTable.createStatusReporter(statusNode);
-const viewerCounter = gameTable.createViewerCounter(statusNode);
+const setStatus = createStatusReporter(statusNode);
+const viewerCounter = createViewerCounter(statusNode);
 
 // Long team names fade at their fixed width and carry a popover — the same
 // treatment the ЭК tables give theirs.
-const floatingPopover = gameTable.createFloatingPopover({root: brainRoot, specs: [
+const floatingPopover = createFloatingPopover({root: brainRoot, specs: [
   {trigger: ".brain-name-head.brain-name-truncated", popover: ".brain-name-popover", anchor: ".brain-name-wrap"},
   {trigger: ".results-team-truncated", popover: ".results-team-name-popover", anchor: ".results-team-name"},
 ]});
@@ -135,12 +143,12 @@ function scheduleBrainNameOverflowUpdate(): void {
   if (brainNameOverflowFrame) cancelAnimationFrame(brainNameOverflowFrame);
   brainNameOverflowFrame = requestAnimationFrame(() => {
     brainNameOverflowFrame = 0;
-    gameTable.markNameOverflow(brainRoot, {
+    markNameOverflow(brainRoot, {
       cellSelector: ".brain-name-head",
       nameSelector: ".brain-name",
       truncatedClass: "brain-name-truncated",
     });
-    gameTable.markNameOverflow(brainRoot, {
+    markNameOverflow(brainRoot, {
       cellSelector: ".results-team",
       nameSelector: ".results-team-name",
       truncatedClass: "results-team-truncated",
@@ -149,7 +157,7 @@ function scheduleBrainNameOverflowUpdate(): void {
 }
 window.addEventListener("resize", scheduleBrainNameOverflowUpdate);
 
-const route = gameTable.parseGameRoute();
+const route = parseGameRoute();
 const viewer = Boolean(route.viewer);
 const init = pageWindow.__GAME_INIT__ || null;
 const staticMode = Boolean(init?.static);
@@ -157,10 +165,10 @@ const canEdit = Boolean(init?.canEdit);
 const scopeGameID = init?.gameID != null ? String(init.gameID) : route.gameID;
 document.body.classList.toggle("viewer-readonly", viewer);
 if (viewer) {
-  if (canEdit) gameTable.mountEditorLink();
+  if (canEdit) mountEditorLink();
 } else {
-  gameTable.mountViewerLink();
-  if (init?.teamsUnnumbered) gameTable.mountUnnumberedBanner(route.festID);
+  mountViewerLink();
+  if (init?.teamsUnnumbered) mountUnnumberedBanner(route.festID);
 }
 
 const scheme = (init?.scheme || {}) as BrainScheme;
@@ -185,7 +193,7 @@ function stageKind(stage: BrainSchemeStage): string {
 
 // Every бой of the game carries a буква — the sheets' A..Z, AA.. handle —
 // dealt by the compiler and carried on the fest view.
-const boutLetters = DopeTable.festLetters(fest?.stages as StageRef[] | undefined);
+const boutLetters = festLetters(fest?.stages as StageRef[] | undefined);
 
 // protocolStages are the stages whose бої the page draws — everything except
 // reseed edges, in scheme order.
@@ -284,7 +292,7 @@ function scheduleResync(): void {
 }
 
 function loadFestRoster(): void {
-  gameTable.fetchFestRoster(route.festID)
+  fetchFestRoster(route.festID)
     .then((teams) => {
       festRoster = teams;
       if (activeTab === "protocol") render({preserveScroll: true});
@@ -314,7 +322,7 @@ function handleScopedMessage(message: ScopedEventMessage): void {
       scheduleResync();
       return;
     }
-    const next = gameTable.applyDeltaOps(cached, message.ops) as BrainMatchView;
+    const next = applyDeltaOps(cached, message.ops) as BrainMatchView;
     next.seq = seq;
     adoptMatchView(next);
   } else {
@@ -330,11 +338,11 @@ function handleScopedMessage(message: ScopedEventMessage): void {
   setStatus("saved");
 }
 
-const live = gameTable.createLiveEvents({
-  eventsURL: () => gameTable.gameEventsURL(route.festID!, route.gameID),
+const live = createLiveEvents({
+  eventsURL: () => gameEventsURL(route.festID!, route.gameID),
   onMessage: handleScopedMessage,
   onViewers: (count) => viewerCounter.setCount(count),
-  onLockdown: gameTable.scheduleStaticReload,
+  onLockdown: scheduleStaticReload,
   reload: fetchMatches,
   staticMode: () => staticMode,
 });
@@ -428,7 +436,7 @@ function render(options: {preserveScroll?: boolean} = {}): void {
   const title = fest?.gameName || scheme.title || "Брейн";
   document.title = `${title} · dope`;
   if (breadcrumbsNode && route.festID) {
-    gameTable.renderGameBreadcrumbs(breadcrumbsNode, {
+    renderGameBreadcrumbs(breadcrumbsNode, {
       festHref: viewer ? `/fest/${route.festID}` : `/host/fest/${route.festID}`,
       festTitle: fest?.title || "Фест",
       gameTitle: title,
@@ -450,7 +458,7 @@ function render(options: {preserveScroll?: boolean} = {}): void {
 function buildTab(tab: GameTab | undefined): HTMLElement {
   switch (tab?.kind) {
   case "roster":
-    return (rosterView ||= gameTable.buildRosterView(route.festID));
+    return (rosterView ||= buildRosterView(route.festID));
   case "seed":
     return buildSeedView();
   case "stats":
@@ -471,7 +479,7 @@ function buildTab(tab: GameTab | undefined): HTMLElement {
 function renderTabs(): void {
   if (!brainTabsRoot) return;
   brainTabsRoot.hidden = false;
-  gameTable.renderTabBar(brainTabsRoot, tabs(), activeTab, (key) => {
+  renderTabBar(brainTabsRoot, tabs(), activeTab, (key) => {
     activeTab = key;
     if (window.location.hash.replace(/^#/, "") !== key) {
       history.replaceState(null, "", `#${key}`);
@@ -671,7 +679,7 @@ function buildStatsView(): HTMLElement {
   }
   // The same table ЭК's Статистика is — its name columns size to content and
   // its numbers sit tight — with the buzzer's columns in place of the themes'.
-  wrapper.appendChild(gameTable.standingsTable({
+  wrapper.appendChild(standingsTable({
     className: "ek-stats-table",
     columns: [
       {label: "Игрок", kind: "name", className: "ek-stats-name ek-stats-player"},
@@ -965,16 +973,16 @@ function buildGroupTable(stage: BrainSchemeStage): HTMLElement {
   }
   const stat = (row: CrossRow, metric: string): string => {
     const value = standing.get(row.id)?.metrics?.[metric];
-    return typeof value === "number" ? gameTable.formatDisplayText(value) : "";
+    return typeof value === "number" ? formatDisplayText(value) : "";
   };
 
   const cross = (i: number, j: number) => {
-    const cell = gameTable.td(i === j ? "×" : cellText[i][j]);
+    const cell = td(i === j ? "×" : cellText[i][j]);
     if (i === j) cell.classList.add("brain-cross-diag");
     else cell.classList.toggle("brain-cross-live", cellMuted[i][j]);
     return cell;
   };
-  return gameTable.standingsTable({
+  return standingsTable({
     className: "group-standings-table brain-crosstable",
     columns: [
       {label: "№", kind: "place"},
@@ -1174,7 +1182,7 @@ function cellContext(el: HTMLElement): {code: string; view: BrainMatchView; side
 
 function cellNode(code: string, side: number, q: number): HTMLElement | null {
   return brainRoot.querySelector<HTMLElement>(
-    `.answer-cell[data-match="${gameTable.cssEscape(code)}"][data-side="${side}"][data-q="${q}"]`,
+    `.answer-cell[data-match="${cssEscape(code)}"][data-side="${side}"][data-q="${q}"]`,
   );
 }
 
@@ -1235,7 +1243,7 @@ function cellAt(coord: CellCoord | null): HTMLElement | null {
   return at ? cellNode(at.code, at.side, coord.row) : null;
 }
 
-const cellSelection: CellRangeSelection = gameTable.createCellRangeSelection({
+const cellSelection: CellRangeSelection = createCellRangeSelection({
   root: brainRoot,
   cellSelector: ".answer-cell",
   readonly: () => viewer,
@@ -1264,9 +1272,9 @@ function restoreSelection(): void {
 function moveActive(dRow: number, dCol: number, extend: boolean): void {
   const from = cellSelection.focus;
   if (!from) return;
-  const col = gameTable.clamp(from.col + dCol, 0, totalCols() - 1);
+  const col = clamp(from.col + dCol, 0, totalCols() - 1);
   const rows = matchRows(boutAtCol(col)!.view, 0).length;
-  const next = {row: gameTable.clamp(from.row + dRow, 0, rows - 1), col};
+  const next = {row: clamp(from.row + dRow, 0, rows - 1), col};
   cellSelection.setSelection(extend ? cellSelection.anchor || from : next, next);
 }
 
@@ -1297,7 +1305,7 @@ document.addEventListener("keydown", handleKeydown);
 
 
 render();
-gameTable.fitScrollFade(brainRoot.closest(".sheet-frame"));
+fitScrollFade(brainRoot.closest(".sheet-frame"));
 loadFestRoster();
 fetchMatches()
   .then(() => {

@@ -1,22 +1,20 @@
 // od.ts — the ОД/ЧГК game page (host + viewer): tabbed results/input sheets,
 // entry-cell navigation, shootout rounds, the Экран projector board, SSE state
 // sync. Converted from the legacy od.js; boots itself on import (ADR-0001).
-import { DopeTable } from "./match-table.js";
+import {cssEscape, option, td, th} from "./cells.js";
+import {buildFlatScoreTable, computePlaces} from "./score-table.js";
+import type {ScoreTableRow, ScoreTableTheme, ScoreTableThemeRow} from "./score-table.js";
+import {resultsTeamCell} from "./standings.js";
+import {buildRosterView} from "./fest-roster.js";
+import {createHostPresence, createStateSync, gameEventsURL, installClientRecorder, scheduleStaticReload} from "./state-sync.js";
+import type {ClientRecorder, HostPresence, PatchPath, StateSync} from "./state-sync.js";
+import {createGameDataLoader, fetchGameData, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, parseGameRoute, renderGameBreadcrumbs} from "./game-page.js";
+import type {AdoptedGameSnapshot, GameInitLike} from "./game-page.js";
+import {bindScrollEdges, clamp, createStatusReporter, createTeamNameOverflowController, createViewerCounter, fitScrollFade, installVirtualKeypad, renderTabBar} from "./widgets.js";
+import type {VirtualKeypad} from "./widgets.js";
 import { gameTabs } from "./game-tabs.js";
 import { DopeEntryModel } from "./entry-model.js";
 import { icon } from "./icons_gen.js";
-import type {
-  AdoptedGameSnapshot,
-  ClientRecorder,
-  GameInitLike,
-  HostPresence,
-  PatchPath,
-  ScoreTableRow,
-  ScoreTableTheme,
-  ScoreTableThemeRow,
-  StateSync,
-  VirtualKeypad,
-} from "./match-table.js";
 
 interface ODPageGlobals {
   __GAME_INIT__?: GameInitLike | null;
@@ -124,12 +122,10 @@ const pageHeading = document.querySelector(".host-top h1");
 const progressNode = document.getElementById("odProgress");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
-const gameTable = DopeTable;
 const entryModel = DopeEntryModel;
-const {th, td, option} = gameTable;
-const setStatus = gameTable.createStatusReporter(statusNode);
-const viewerCounter = gameTable.createViewerCounter(statusNode);
-const teamNameOverflow = gameTable.createTeamNameOverflowController({
+const setStatus = createStatusReporter(statusNode);
+const viewerCounter = createViewerCounter(statusNode);
+const teamNameOverflow = createTeamNameOverflowController({
   root: odRoot,
   detailed: {
     cellSelector: ".od-detailed-team-cell",
@@ -145,7 +141,7 @@ const teamNameOverflow = gameTable.createTeamNameOverflowController({
   },
 });
 const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
-const route = gameTable.parseGameRoute();
+const route = parseGameRoute();
 const viewer = Boolean(route.viewer);
 // The URL carries the game slug, but the server broadcasts SSE state under the
 // numeric game id (`game-state:<id>`). Default to the slug and upgrade to the
@@ -165,11 +161,11 @@ const initScreenSettings: unknown = (gameInit?.screenSettings &&
   : {};
 document.body.classList.toggle("viewer-readonly", viewer);
 if (viewer) {
-  if (canEdit) gameTable.mountEditorLink();
+  if (canEdit) mountEditorLink();
 } else {
-  gameTable.mountViewerLink();
+  mountViewerLink();
 }
-gameTable.mountGameDownloads({apiBase: route.apiBase, canEdit});
+mountGameDownloads({apiBase: route.apiBase, canEdit});
 let scheme!: ODScheme;
 let state!: ODState;
 let fest: FestInfo | null = null;
@@ -278,7 +274,7 @@ document.addEventListener("fullscreenchange", () => {
   if (!document.fullscreenElement && chromeHidden) setChromeHidden(false);
 });
 
-const gameLoader = gameTable.createGameDataLoader({
+const gameLoader = createGameDataLoader({
   route,
   cachePrefix: "od",
   adopt: adoptGameSnapshot,
@@ -294,7 +290,7 @@ function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest
     if (init.gameID != null) scopeGameID = String(init.gameID);
     if (init.seq != null) initialStateSeq = Number(init.seq) || 0;
     if (init.epoch != null) initialStateEpoch = String(init.epoch);
-    if (init.teamsUnnumbered && !viewer) gameTable.mountUnnumberedBanner(route.festID);
+    if (init.teamsUnnumbered && !viewer) mountUnnumberedBanner(route.festID);
   }
   scheme = nextScheme as ODScheme;
   state = nextState as ODState;
@@ -308,7 +304,7 @@ function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest
 async function revalidateAll(): Promise<void> {
   const prevSchemeJSON = JSON.stringify(scheme);
   const prevStateJSON = JSON.stringify(state);
-  const fresh = await gameTable.fetchGameData(route);
+  const fresh = await fetchGameData(route);
   const freshSchemeJSON = JSON.stringify(fresh.scheme);
   const freshStateJSON = JSON.stringify(fresh.state);
   scheme = fresh.scheme as ODScheme;
@@ -594,7 +590,7 @@ function getTabPane(tab: string): HTMLElement {
   let node;
   if (tab === "input") node = buildInputView();
   else if (tab === "detailed") node = buildDetailedTable();
-  else if (tab === "roster") node = gameTable.buildRosterView(route.festID);
+  else if (tab === "roster") node = buildRosterView(route.festID);
   else if (tab === "screen") node = buildScreenView();
   else node = buildResultsTable();
   const pane = document.createElement("div");
@@ -623,8 +619,8 @@ function restoreTabScroll(tab: string): void {
   frame.scrollLeft = pos.left;
 }
 
-DopeTable.fitScrollFade(document.querySelector(".sheet-frame"));
-const resultsScroll = DopeTable.bindScrollEdges(document.querySelector(".sheet-frame"), ({left}, frame) => {
+fitScrollFade(document.querySelector(".sheet-frame"));
+const resultsScroll = bindScrollEdges(document.querySelector(".sheet-frame"), ({left}, frame) => {
   frame.classList.toggle("results-scroll-left", activeTab === "results" && left);
   frame.classList.toggle("detailed-scroll-left", activeTab === "detailed" && left);
 });
@@ -662,7 +658,7 @@ function updateHeaderProgress(): void {
 }
 
 function renderTabs(): void {
-  DopeTable.renderTabBar(odTabsRoot, TABS, activeTab, (key) => {
+  renderTabBar(odTabsRoot, TABS, activeTab, (key) => {
     activeTab = key;
     if (window.location.hash.replace(/^#/, "") !== key) {
       history.replaceState(null, "", `#${key}`);
@@ -765,7 +761,7 @@ function positionInvertOverlay(): void {
   const q = entrySelection.focusQ;
   if (!Number.isInteger(q) || q < 0 || q >= totalQuestions || state.completed[q]) return hide();
   const head = odRoot.querySelector<HTMLElement>(
-    `.entry-table:not(.od-shootout-entry-table) thead tr:first-child th[data-q="${gameTable.cssEscape(String(q))}"]`);
+    `.entry-table:not(.od-shootout-entry-table) thead tr:first-child th[data-q="${cssEscape(String(q))}"]`);
   const frame = scrollFrame();
   if (!head || !frame) return hide();
   const r = head.getBoundingClientRect();
@@ -793,7 +789,7 @@ function positionInvertOverlay(): void {
 // so the keypad and a hardware keyboard stay interchangeable.
 function ensureEntryKeypad(): VirtualKeypad {
   if (entryKeypad) return entryKeypad;
-  entryKeypad = gameTable.installVirtualKeypad({
+  entryKeypad = installVirtualKeypad({
     onDigit: typeIntoActiveEditor,
     onBackspace: backspaceActiveEditor,
     onNav: navigateActiveEntryEditor,
@@ -865,10 +861,10 @@ function normalizedEntrySelection(): {qStart: number; qEnd: number; rowStart: nu
 
 function setEntrySelection(anchorQ: number, anchorRow: number, focusQ: number = anchorQ, focusRow: number = anchorRow, options: {focus?: boolean; preventScroll?: boolean} = {}): void {
   if (viewer) return;
-  anchorQ = gameTable.clamp(Number(anchorQ), 0, totalQuestions - 1);
-  focusQ = gameTable.clamp(Number(focusQ), 0, totalQuestions - 1);
-  anchorRow = gameTable.clamp(Number(anchorRow), 0, state.teams.length - 1);
-  focusRow = gameTable.clamp(Number(focusRow), 0, state.teams.length - 1);
+  anchorQ = clamp(Number(anchorQ), 0, totalQuestions - 1);
+  focusQ = clamp(Number(focusQ), 0, totalQuestions - 1);
+  anchorRow = clamp(Number(anchorRow), 0, state.teams.length - 1);
+  focusRow = clamp(Number(focusRow), 0, state.teams.length - 1);
   entrySelection = {anchorQ, anchorRow, focusQ, focusRow};
   updateEntrySelectionUI();
   const focusCell = entryCellNode(focusQ, focusRow);
@@ -879,7 +875,7 @@ function setEntrySelection(anchorQ: number, anchorRow: number, focusQ: number = 
 }
 
 function entryCellNode(qIndex: number, rowIndex: number): HTMLElement | null {
-  return odRoot.querySelector<HTMLElement>(`.entry-cell[data-q="${gameTable.cssEscape(String(qIndex))}"][data-row="${gameTable.cssEscape(String(rowIndex))}"]:not([data-entry-kind="shootout"])`);
+  return odRoot.querySelector<HTMLElement>(`.entry-cell[data-q="${cssEscape(String(qIndex))}"][data-row="${cssEscape(String(rowIndex))}"]:not([data-entry-kind="shootout"])`);
 }
 
 function entryCellPosition(cell: HTMLElement | null | undefined): {q: number; row: number} | null {
@@ -1057,8 +1053,8 @@ function moveEntrySelection(dRow: number, dQ: number, extend: boolean): void {
     setEntrySelection(0, 0);
     return;
   }
-  const nextQ = gameTable.clamp(entrySelection.focusQ + dQ, 0, totalQuestions - 1);
-  const nextRow = gameTable.clamp(entrySelection.focusRow + dRow, 0, state.teams.length - 1);
+  const nextQ = clamp(entrySelection.focusQ + dQ, 0, totalQuestions - 1);
+  const nextRow = clamp(entrySelection.focusRow + dRow, 0, state.teams.length - 1);
   if (extend) setEntrySelection(entrySelection.anchorQ, entrySelection.anchorRow, nextQ, nextRow);
   else setEntrySelection(nextQ, nextRow);
 }
@@ -1191,7 +1187,7 @@ function applyEntryQuestionHeadContent(cell: HTMLElement, displayNumber: number,
 // pane is cached and not rebuilt when a column is ticked or its entries change).
 function refreshEntryQuestionHead(qIndex: number): void {
   if (!Number.isInteger(qIndex)) return;
-  const cell = odRoot.querySelector<HTMLElement>(`.entry-q-head[data-q="${gameTable.cssEscape(String(qIndex))}"]`);
+  const cell = odRoot.querySelector<HTMLElement>(`.entry-q-head[data-q="${cssEscape(String(qIndex))}"]`);
   if (!cell) return;
   applyEntryQuestionHeadContent(cell, qIndex + 1, questionStats()[qIndex]);
 }
@@ -1765,7 +1761,7 @@ function updateInputValidity(qIndex: number | null = null): void {
 }
 
 function updateShootoutInputValidity(roundIndex: number, questionIndex: number): void {
-  const selector = `.entry-cell[data-entry-kind="shootout"][data-round="${gameTable.cssEscape(String(roundIndex))}"][data-question="${gameTable.cssEscape(String(questionIndex))}"]`;
+  const selector = `.entry-cell[data-entry-kind="shootout"][data-round="${cssEscape(String(roundIndex))}"][data-question="${cssEscape(String(questionIndex))}"]`;
   const counts = shootoutInputValidationCounts(roundIndex, questionIndex);
   for (const cell of odRoot.querySelectorAll<HTMLElement>(selector)) {
     markShootoutEntryCellValidity(cell, counts);
@@ -1893,7 +1889,7 @@ function handleEntryKeydown(event: KeyboardEvent): void {
     // letting the browser tab-focus the next cell on top of the lingering one.
     event.preventDefault();
     closeEntryEditor();
-    const nextQ = gameTable.clamp(qIndex + (event.shiftKey ? -1 : 1), 0, totalQuestions - 1);
+    const nextQ = clamp(qIndex + (event.shiftKey ? -1 : 1), 0, totalQuestions - 1);
     setEntrySelection(nextQ, rowIndex, nextQ, rowIndex);
   } else if (event.key === "Enter" || event.key === "ArrowDown") {
     event.preventDefault();
@@ -1942,7 +1938,7 @@ function handleEntryLockKeydown(event: KeyboardEvent, checkbox: HTMLInputElement
 // focusLockCheckbox moves keyboard focus to a (non-shootout) column's tickbox.
 function focusLockCheckbox(qIndex: number): boolean {
   const cb = odRoot.querySelector<HTMLInputElement>(
-    `.entry-lock-checkbox[data-q="${gameTable.cssEscape(String(qIndex))}"]:not([data-entry-kind="shootout"])`);
+    `.entry-lock-checkbox[data-q="${cssEscape(String(qIndex))}"]:not([data-entry-kind="shootout"])`);
   if (!cb) return false;
   // Moving onto the tickbox is a move, not a copy: drop the cell cursor so it
   // doesn't stay highlighted on the row below.
@@ -2287,7 +2283,7 @@ function focusShootoutInput(roundIndex: number, questionIndex: number, rowIndex:
   }
   if (questionIndex < 0 || questionIndex >= round.entries.length) return;
   if (rowIndex < 0 || rowIndex >= round.teams.length) return;
-  const sel = `.entry-cell[data-entry-kind="shootout"][data-round="${gameTable.cssEscape(String(roundIndex))}"][data-question="${gameTable.cssEscape(String(questionIndex))}"][data-row="${gameTable.cssEscape(String(rowIndex))}"]`;
+  const sel = `.entry-cell[data-entry-kind="shootout"][data-round="${cssEscape(String(roundIndex))}"][data-question="${cssEscape(String(questionIndex))}"][data-row="${cssEscape(String(rowIndex))}"]`;
   const cell = odRoot.querySelector<HTMLElement>(sel);
   const checkbox = cell?.querySelector<HTMLElement>(".shootout-entry-checkbox");
   if (checkbox && !viewer) checkbox.focus();
@@ -2352,7 +2348,7 @@ function buildDetailedScoreTable(): HTMLTableElement {
   themes.push(...shootoutThemeHeaders());
 
   const totals = state.teams.map((_, i) => sumRow(i, stats));
-  const placeMap = computePlaces(totals);
+  const placeMap = placesFor(totals);
   const rows = detailedTeamOrder().map((teamIndex): ScoreTableRow => {
     const team = state.teams[teamIndex];
     let qIndex = 0;
@@ -2392,7 +2388,7 @@ function buildDetailedScoreTable(): HTMLTableElement {
     };
   });
 
-  return gameTable.buildFlatScoreTable({
+  return buildFlatScoreTable({
     className: "match-table compact-score-table od-detailed",
     nameHeader: {
       content: detailedNameHeader(),
@@ -3053,7 +3049,7 @@ function populateScreenRows(wrapper: ScreenWrapper): void {
 
   const sortKeys = rankedTeamOrder(totals, tiebreaks);
 
-  const placeMap = computePlaces(totals);
+  const placeMap = placesFor(totals);
 
   // Group consecutive teams that share a place, like buildResultsTableInner.
   const placeGroups: Array<{placeText: string; keys: RankKey[]}> = [];
@@ -3075,7 +3071,7 @@ function populateScreenRows(wrapper: ScreenWrapper): void {
       if (rowIdx === keys.length - 1) classes.push("results-group-last");
       tr.className = classes.join(" ");
       tr.appendChild(td(placeText, "results-place"));
-      tr.appendChild(gameTable.resultsTeamCell(teamLabel(index), {
+      tr.appendChild(resultsTeamCell(teamLabel(index), {
         city: screenSettings.showCity ? state.teams[index].city : "",
         flag: screenSettings.showCountry ? teamFlagEmoji(index) : "",
       }));
@@ -3279,7 +3275,7 @@ function buildResultsTableInner(): HTMLTableElement {
 
   const sortKeys = rankedTeamOrder(totals, tiebreaks);
 
-  const placeMap = computePlaces(totals);
+  const placeMap = placesFor(totals);
 
   const table = document.createElement("table");
   table.className = "results-table od-results-table";
@@ -3335,7 +3331,7 @@ function buildResultsTableInner(): HTMLTableElement {
       if (rowIdx === group.rows.length - 1) classes.push("results-group-last");
       tr.className = classes.join(" ");
       tr.appendChild(td(group.placeText, "results-place"));
-      tr.appendChild(gameTable.resultsTeamCell(teamLabel(index), {city: state.teams[index].city}));
+      tr.appendChild(resultsTeamCell(teamLabel(index), {city: state.teams[index].city}));
       tr.appendChild(td(total, "results-num total-cell results-total"));
       for (let t = 0; t < tourLengths.length; t++) {
         if (tourStarted[t]) tr.appendChild(td(tourTotals[index][t], "results-tour"));
@@ -3580,10 +3576,10 @@ function anyQuestionCompleted(stats: QuestionStat[] = questionStats()): boolean 
 // OD ranks on game total, breaking ties on the shootout result. Before any
 // question or shootout is marked there's nothing to rank, so the board stays
 // blank; otherwise defer to the shared placer with the shootout tiebreak.
-function computePlaces(totals: number[]): string[] {
+function placesFor(totals: number[]): string[] {
   if (!anyQuestionCompleted() && !anyShootoutMarked()) return new Array<string>(totals.length).fill("");
   const tiebreaks = state.teams.map((_, index) => shootoutTiebreakForTeam(index));
-  return gameTable.computePlaces(totals, {
+  return computePlaces(totals, {
     tiebreaks,
     compareTiebreak: (a, b) => compareShootoutTiebreaks(a as number[], b as number[]),
   });
@@ -3622,12 +3618,12 @@ function refreshPendingMarkers(): void {
 
 function setHeading(text: string): void {
   if (pageHeading) pageHeading.textContent = text;
-  renderGameBreadcrumbs(text);
+  renderBreadcrumbs(text);
 }
 
-function renderGameBreadcrumbs(gameTitle: string): void {
+function renderBreadcrumbs(gameTitle: string): void {
   if (!breadcrumbsNode || !route.festID) return;
-  gameTable.renderGameBreadcrumbs(breadcrumbsNode, {
+  renderGameBreadcrumbs(breadcrumbsNode, {
     host: !viewer,
     festHref: viewer ? `/fest/${route.festID}` : `/host/fest/${route.festID}`,
     festTitle: fest?.title || "Фест",
@@ -3637,7 +3633,7 @@ function renderGameBreadcrumbs(gameTitle: string): void {
 
 function connectEvents(): void {
   if (staticMode) {
-    gameTable.scheduleStaticReload();
+    scheduleStaticReload();
     return;
   }
   syncState().connect();
@@ -3645,15 +3641,15 @@ function connectEvents(): void {
 
 function syncState(): StateSync {
   if (stateSync) return stateSync;
-  recorder = gameTable.installClientRecorder({
+  recorder = installClientRecorder({
     scope: `game-state:${scopeGameID}`,
     getState: () => state,
     showButton: !viewer || /[?&]log\b/.test(location.search),
   });
-  stateSync = gameTable.createStateSync({
+  stateSync = createStateSync({
     readonly: viewer,
     stateURL: `${route.apiBase}/state`,
-    eventsURL: gameTable.gameEventsURL(route.festID!, route.gameID),
+    eventsURL: gameEventsURL(route.festID!, route.gameID),
     scope: `game-state:${scopeGameID}`,
     getState: () => state,
     getInitialSeq: () => initialStateSeq,
@@ -3661,7 +3657,7 @@ function syncState(): StateSync {
     setStatus,
     onRemoteState: applyRemoteState,
     onViewers: (count) => viewerCounter.setCount(count),
-    onLockdown: gameTable.scheduleStaticReload,
+    onLockdown: scheduleStaticReload,
     recorder,
     onWriteError: (info) => recorder?.event("write-rejected", info),
   });
@@ -3670,7 +3666,7 @@ function syncState(): StateSync {
 
 function connectPresence(): void {
   if (viewer || presence || !route.festID) return;
-  presence = gameTable.createHostPresence({
+  presence = createHostPresence({
     root: odRoot,
     eventsURL: `/host-events?fest_id=${encodeURIComponent(route.festID)}`,
     presenceURL: `/api/fest/${route.festID}/presence`,
@@ -3723,15 +3719,15 @@ function findODPresenceTarget(cursor: unknown): Element | null {
   const c = cursor as {app?: unknown; gameID?: unknown; kind?: unknown; q?: unknown; row?: unknown; round?: unknown; question?: unknown; team?: unknown} | null;
   if (!c || c.app !== "od" || String(c.gameID) !== String(route.gameID)) return null;
   if (c.kind === "entry") {
-    return odRoot.querySelector(`.entry-cell[data-q="${gameTable.cssEscape(String(c.q))}"][data-row="${gameTable.cssEscape(String(c.row))}"]`);
+    return odRoot.querySelector(`.entry-cell[data-q="${cssEscape(String(c.q))}"][data-row="${cssEscape(String(c.row))}"]`);
   }
   if (c.kind === "shootout-entry") {
     return odRoot.querySelector(
-      `.entry-cell[data-entry-kind="shootout"][data-round="${gameTable.cssEscape(String(c.round))}"][data-question="${gameTable.cssEscape(String(c.question))}"][data-row="${gameTable.cssEscape(String(c.row))}"]`,
+      `.entry-cell[data-entry-kind="shootout"][data-round="${cssEscape(String(c.round))}"][data-question="${cssEscape(String(c.question))}"][data-row="${cssEscape(String(c.row))}"]`,
     );
   }
   if (c.kind === "team-name") {
-    return odRoot.querySelector(`.venue-input[data-team="${gameTable.cssEscape(String(c.team))}"]`);
+    return odRoot.querySelector(`.venue-input[data-team="${cssEscape(String(c.team))}"]`);
   }
   return null;
 }

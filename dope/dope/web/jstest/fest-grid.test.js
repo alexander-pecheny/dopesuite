@@ -37,7 +37,7 @@ globalThis.window = {addEventListener() {}};
 globalThis.requestAnimationFrame = () => 0;
 globalThis.document = {createElement: node};
 globalThis.HTMLAnchorElement = class {};
-globalThis.Node = class {}; // match-table's cell helpers ask `instanceof Node`; text never is one
+globalThis.Node = class {}; // cells.ts asks `instanceof Node`; text never is one
 
 const {buildFestGrid, buildReseedStagePanel, planGrid, packBlock} = await import("./dist/fest-grid.js");
 

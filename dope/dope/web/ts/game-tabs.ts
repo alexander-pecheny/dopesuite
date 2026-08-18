@@ -1,7 +1,7 @@
+import {stageType} from "./standings.js";
+import type {StageRef, StageRefMatch} from "./standings.js";
 // Which tabs a Game page shows is Block / Round / Group knowledge, held here
 // once; pages render the array and derive nothing of their own.
-import { stageType } from "./match-table.js";
-import type { StageRef, StageRefMatch } from "./match-table.js";
 
 export type GameKind = "ek" | "si" | "brain" | "ksi" | "od";
 

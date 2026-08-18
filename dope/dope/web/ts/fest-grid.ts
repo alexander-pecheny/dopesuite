@@ -1,5 +1,8 @@
+import {festLetters, letteredTitle, standingsTable} from "./standings.js";
+import type {StageRef} from "./standings.js";
+import {normalizeVenue} from "./venue.js";
+import type {Venue} from "./venue.js";
 import { markNameOverflow } from "./widgets.js";
-import { festLetters, letteredTitle, standingsTable, type StageRef } from "./match-table.js";
 import { blockLabel, groupLabel } from "./game-tabs.js";
 
 export interface FestGridVenueObject {
@@ -856,8 +859,6 @@ function reseedLabel(reseed: { rank?: number | string }): string {
   return Number.isFinite(rank) && rank > 0 ? `Пересев-${rank}` : "Пересев";
 }
 
-type Venue = {number: number; title: string};
-
 function venueText(venue: FestGridVenue | Venue | null): string {
   const normalized = normalizeVenue(venue);
   if (!normalized) return "";
@@ -870,18 +871,6 @@ function firstVenue(...venues: FestGridVenue[]): Venue | null {
     if (normalized) return normalized;
   }
   return null;
-}
-
-function normalizeVenue(venue: FestGridVenue): Venue | null {
-  if (!venue) return null;
-  if (typeof venue === "number" || typeof venue === "string") {
-    const number = Number(venue);
-    return Number.isFinite(number) && number > 0 ? {number, title: ""} : null;
-  }
-  const number = Number(venue.number ?? venue.Number);
-  if (!Number.isFinite(number) || number <= 0) return null;
-  const title = String(venue.title ?? venue.Title ?? "").trim();
-  return {number, title};
 }
 
 function stageClassSuffix(code: string): string {

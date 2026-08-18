@@ -3,12 +3,18 @@
 // (phone × desktop × light × dark) cover what 84 live pages did, with no live
 // data, no viewer count and no tab strip to move between two shots. Served at
 // /gallery in dev mode only.
-import { DopeTable } from "./match-table.js";
-import type { GroupStandingsGroup, EKPlayerStatsRow, IndividualStatsRow, RosterTeam, Venue } from "./match-table.js";
+import {buildVenuesTable} from "./venue.js";
+import type {Venue} from "./venue.js";
+import {buildGroupStandingsView} from "./standings.js";
+import type {GroupStandingsGroup} from "./standings.js";
+import {buildRosterTable} from "./fest-roster.js";
+import type {RosterTeam} from "./fest-roster.js";
+import {buildEKStatsTable, buildIndividualStatsTable} from "./ek-stats.js";
+import type {EKPlayerStatsRow, IndividualStatsRow} from "./ek-stats.js";
+import {markNameOverflow} from "./widgets.js";
 import { buildFestGrid, buildReseedStagePanel } from "./fest-grid.js";
 import type { FestGridMatch, FestGridStage } from "./fest-grid.js";
 
-const T = DopeTable;
 const LONG = "Команда с названием длиннее любой колонки, которую ей отвели";
 
 function bout(code: string, letter: string, venue: number, teams: Array<[string, number, number]>, status = "finished"): FestGridMatch[] {
@@ -123,14 +129,14 @@ function render(root: HTMLElement): void {
   root.replaceChildren(
     section("Сетка", "table-host grid-host", buildFestGrid({stages: festStages}, {stageHeaderLink: false, matchTitleLink: false})),
     section("Пересев", "table-host fits-frame", buildReseedStagePanel(reseedStage, {letters: new Map([["s1-g1-1", "A"], ["s1-g1-2", "B"]])})),
-    section("Групповой этап", "table-host fits-frame", T.buildGroupStandingsView(groups)),
-    section("Статистика ЭК", "table-host", T.buildEKStatsTable(ekStats)),
-    section("Статистика личной СИ", "table-host", T.buildIndividualStatsTable(individualStats)),
-    section("Площадки", "table-host", T.buildVenuesTable(venues)),
-    section("Площадки, ведущий", "table-host", T.buildVenuesTable(venues, {editable: true, onTitleChange: () => {}})),
-    section("Составы", "table-host fits-frame", T.buildRosterTable(roster)),
+    section("Групповой этап", "table-host fits-frame", buildGroupStandingsView(groups)),
+    section("Статистика ЭК", "table-host", buildEKStatsTable(ekStats)),
+    section("Статистика личной СИ", "table-host", buildIndividualStatsTable(individualStats)),
+    section("Площадки", "table-host", buildVenuesTable(venues)),
+    section("Площадки, ведущий", "table-host", buildVenuesTable(venues, {editable: true, onTitleChange: () => {}})),
+    section("Составы", "table-host fits-frame", buildRosterTable(roster)),
   );
-  requestAnimationFrame(() => T.markNameOverflow(root, {
+  requestAnimationFrame(() => markNameOverflow(root, {
     cellSelector: ".results-team",
     nameSelector: ".results-team-name",
     truncatedClass: "results-team-truncated",
