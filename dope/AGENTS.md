@@ -50,7 +50,8 @@ files, each one concern:
 |------|-------|---------|
 | `server/main.go` | ~1000 | Entry point, mux wiring, HTTP server, SSE event handlers |
 | `server/scoped_api.go` | ~1200 | Tournament-scoped API endpoints |
-| `server/db.go` | ~1180 | DB bootstrap, schema migration/backfill, id resolution |
+| `server/db.go` | ~110 | DB open (`openFestDB`), active context, id resolution |
+| `server/migrations.go` | ~1400 | The schema as a list: `[]schema.Migration` (`storage/schema` applies them once each, in order) and the backfills they call; a new step takes the next number and goes at the end. `server/tests/testdata/schema.sql` pins what the list makes of an empty file (`DOPE_UPDATE_SCHEMA=1` regenerates); `DOPE_REHEARSE_DB=<snapshot>` walks a prod copy through them |
 | `server/auth.go` | ~930 | Sessions, auth, Telegram login bridge |
 | `server/matchview.go` | ~815 | Fest/match view loading + match-update application |
 | `server/import_scheme.go` | ~110 | The pasted-scheme importer (`/api/import`, the host form): clears the fest, calls `gamebuild.Materialise` |

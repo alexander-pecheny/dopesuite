@@ -48,7 +48,8 @@ files, each owning one concern:
 | File | Concern |
 |------|---------|
 | `main.go` | entry point, mux wiring, HTTP server, SSE event handlers |
-| `db.go` | DB bootstrap, schema migration/backfill, id resolution |
+| `db.go` | DB open, active context, id resolution |
+| `migrations.go` | the schema as a `[]schema.Migration` list, and the backfills it calls |
 | `serve_html.go` | host/viewer/game HTML init payloads + asset versioning |
 | `import_scheme.go` | the pasted-scheme importer (`/api/import`, the host form): clears the fest, calls `gamebuild.Materialise` |
 | `matchview.go` | fest/match view loading + match-update application |
@@ -110,6 +111,9 @@ metadata.
 - `journal` — the forward-journal subsystem: on-disk codec, replay/checkpoint
   engines, hot→cold archiver, live append/read path.
 - `migrate` — audit/history *data* conversion + maintenance subcommands.
+- `schema` — the migration mechanism: `Apply(db, list)` runs each `Migration`
+  once, in order, and records it in `schema_versions`. The list itself is the
+  server's (`server/migrations.go`), since some steps call domain code.
 - `festwrite` — the attribution-aware write/append facade.
 - `festaccess` — per-fest access/role persistence (DB-backed authz).
 - `auditmw` — audit-log write middleware. `storeutil` — scheme/query helpers.
