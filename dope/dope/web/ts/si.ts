@@ -7,11 +7,12 @@ import {buildFlatScoreTable, computePlaces, createScoreTableIndex, setMarkClass,
 import type {NodeIndex} from "./score-table.js";
 import {resultsTeamCell} from "./standings.js";
 import {buildRosterView} from "./fest-roster.js";
-import {createHostPresence, createLiveEvents, createScopedWriter, createSyncIndicator, gameEventsURL, installClientRecorder, scheduleStaticReload} from "./state-sync.js";
-import type {ClientRecorder, HostPresence, LiveEvents, ScopedWriter} from "./state-sync.js";
-import {createGameDataLoader, fetchGameData, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, parseGameRoute, renderGameBreadcrumbs} from "./game-page.js";
+import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
+import type {LiveEvents, ScopedWriter} from "./state-sync.js";
+import {mountGamePage} from "./game-shell.js";
+import {createGameDataLoader, fetchGameData, parseGameRoute} from "./game-page.js";
 import type {AdoptedGameSnapshot, GameInitLike} from "./game-page.js";
-import {bindScrollEdges, clamp, createStatusReporter, createTeamNameOverflowController, createViewerCounter, fitScrollFade, renderTabBar} from "./widgets.js";
+import {bindScrollEdges, clamp, createTeamNameOverflowController, fitScrollFade, renderTabBar} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {gameTabs} from "./game-tabs.js";
@@ -67,23 +68,12 @@ interface ScoreCache {
 
 type ActiveCell = {player: number; theme: number; answer: number};
 
-type SIPresenceCursor = {
-  app: string;
-  kind: string;
-  gameID?: string;
-  player?: number;
-  theme?: number;
-  answer?: number;
-};
-
 const siRoot = document.getElementById("siTable")!;
 const siTabsRoot = document.getElementById("siTabs");
 const statusNode = document.getElementById("status");
 const pageHeading = document.querySelector<HTMLElement>(".host-top h1");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
-const indicator = createSyncIndicator(createStatusReporter(statusNode));
-const viewerCounter = createViewerCounter(statusNode);
 const teamNameOverflow = createTeamNameOverflowController({
   root: siRoot,
   detailed: {
@@ -127,23 +117,26 @@ function darkenHex(hex: string, factor: number): string {
 const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
 
 const route = parseGameRoute();
-const viewer = Boolean(route.viewer);
-// The URL carries the game slug, but the server broadcasts SSE state under the
-// numeric game id (`game-state:<id>`). Default to the slug and upgrade to the
-// numeric id from __GAME_INIT__ so the scope matches and remote edits apply.
-let scopeGameID = route.gameID;
-// staticMode: served as a precomputed snapshot under DDoS lockdown. Skip the SSE
-// connection and refresh by reloading on a jitter. Captured before the loader
-// nulls window.__GAME_INIT__.
-const staticMode = Boolean(pageWindow.__GAME_INIT__?.static);
-const canEdit = Boolean(pageWindow.__GAME_INIT__?.canEdit);
-document.body.classList.toggle("viewer-readonly", viewer);
-if (viewer) {
-  if (canEdit) mountEditorLink();
-} else {
-  mountViewerLink();
-}
-mountGameDownloads({apiBase: route.apiBase, canEdit});
+const shell = mountGamePage({
+  app: "ksi",
+  root: siRoot,
+  statusNode,
+  breadcrumbsNode,
+  festID: route.festID,
+  gameID: route.gameID,
+  viewer: Boolean(route.viewer),
+  apiBase: route.apiBase,
+  init: pageWindow.__GAME_INIT__,
+  chrome: () => ({festTitle: fest?.title || "", gameTitle: fest?.gameName || scheme?.title || gameTitleFallback()}),
+  cursorKinds: {
+    answer: {selector: ".answer-cell", keys: ["player", "theme", "answer"]},
+    participant: {selector: ".venue-input", keys: ["player"]},
+    finish: {selector: ".finish-toggle", keys: []},
+  },
+  activeCursorElement: () => sheet.activeCell,
+  recorderState: () => state,
+});
+const {viewer, staticMode, scopeGameID, indicator, viewerCounter, recorder} = shell;
 let scheme: KSIScheme | null = null;
 let state: KSIState | null = null;
 let fest: FestInfo | null = null;
@@ -166,8 +159,6 @@ let detailedOrderCache: number[] | null = null;
 let detailedSort: "name" | "number" = "name";
 let live: LiveEvents | null = null;
 let writer: ScopedWriter | null = null;
-let recorder: ClientRecorder | null = null;
-let presence: HostPresence | null = null;
 const tabScroll = new Map<string, {top: number; left: number}>();
 
 // The «Отказы» tab is a host-only control surface; its effect — declined teams
@@ -204,14 +195,11 @@ const gameLoader = createGameDataLoader({
 
 // adoptGameSnapshot assigns the page's scheme/state/fest from a loader snapshot
 // and renders the first frame. On the "init" path the snapshot also carries the
-// raw __GAME_INIT__ payload, the only source with the SSE seq/epoch baseline and
-// the unnumbered-teams flag.
+// raw __GAME_INIT__ payload, the only source with the SSE seq/epoch baseline.
 function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest, init}: AdoptedGameSnapshot): void {
   if (init) {
-    if (init.gameID != null) scopeGameID = String(init.gameID);
     if (init.seq != null) stateSeq = Number(init.seq) || 0;
     if (init.epoch != null) initialStateEpoch = String(init.epoch);
-    if (init.teamsUnnumbered && !viewer) mountUnnumberedBanner(route.festID);
   }
   scheme = nextScheme as KSIScheme;
   state = nextState as KSIState;
@@ -339,7 +327,6 @@ function render(options: {preserveScroll?: boolean} = {}): void {
   const defaultTitle = gameTitleFallback();
   normalizeActiveCell();
   setHeading(scheme.title || defaultTitle);
-  document.title = pageTitle();
   if (isTeamMode()) {
     rememberTabScroll(renderedTab);
     if (!TABS.some((t) => t.key === activeTab)) activeTab = "detailed";
@@ -378,7 +365,7 @@ function render(options: {preserveScroll?: boolean} = {}): void {
     updateResultsScrollState();
     restoreCursor();
   }
-  refreshPresence();
+  shell.presence.refresh();
 }
 
 // restoreCursor re-points the sheet cursor at the active cell after a rebuild;
@@ -1356,12 +1343,6 @@ function gameTitleFallback(): string {
   return isTeamMode() ? "КСИ" : "СИ";
 }
 
-function pageTitle(): string {
-  const gameTitle = String(scheme?.title || gameTitleFallback()).trim() || gameTitleFallback();
-  const festTitle = String(fest?.title || "").trim();
-  return festTitle ? `${gameTitle} · ${festTitle}` : gameTitle;
-}
-
 function participantFallback(index: number): string {
   return `${isTeamMode() ? "Команда" : "Игрок"} ${index + 1}`;
 }
@@ -1418,17 +1399,7 @@ function refreshPendingMarkers(): void {
 
 function setHeading(text: string): void {
   if (pageHeading) pageHeading.textContent = text;
-  renderBreadcrumbs(text);
-}
-
-function renderBreadcrumbs(gameTitle: string): void {
-  if (!breadcrumbsNode || !route.festID) return;
-  renderGameBreadcrumbs(breadcrumbsNode, {
-    host: !viewer,
-    festHref: viewer ? `/fest/${route.festID}` : `/host/fest/${route.festID}`,
-    festTitle: fest?.title || "Фест",
-    gameTitle: fest?.gameName || gameTitle || scheme?.title || gameTitleFallback(),
-  });
+  shell.renderChrome();
 }
 
 function connectEvents(): void {
@@ -1441,13 +1412,6 @@ function connectEvents(): void {
 
 function sync(): {live: LiveEvents; writer: ScopedWriter} {
   if (live && writer) return {live, writer};
-  recorder = installClientRecorder({
-    scope: stateScope(),
-    getState: () => state,
-    // Editors always get the download button; spectators only when they add
-    // ?log to the URL, so the diagnostic UI stays off the public view.
-    showButton: !viewer || /[?&]log\b/.test(location.search),
-  });
   writer = createScopedWriter({
     readonly: viewer,
     urlOf: () => `${route.apiBase}/state`,
@@ -1478,75 +1442,6 @@ function sync(): {live: LiveEvents; writer: ScopedWriter} {
   return {live, writer};
 }
 
-function connectPresence(): void {
-  if (viewer || presence || !route.festID) return;
-  presence = createHostPresence({
-    root: siRoot,
-    eventsURL: `/host-events?fest_id=${encodeURIComponent(route.festID)}`,
-    presenceURL: `/api/fest/${route.festID}/presence`,
-    cursorFromElement: siPresenceCursorFromElement,
-    getCursor: currentSIPresenceCursor,
-    findTarget: findSIPresenceTarget as (cursor: unknown) => Element | null,
-  });
-  presence.connect();
-}
-
-function refreshPresence(): void {
-  presence?.refresh();
-}
-
-function currentSIPresenceCursor(): SIPresenceCursor | null {
-  const focused = siPresenceCursorFromElement(document.activeElement);
-  if (focused) return focused;
-  if (!isDetailedTabActive()) return null;
-  return {
-    app: "si",
-    kind: "answer",
-    gameID: route.gameID,
-    player: activeCell.player,
-    theme: activeCell.theme,
-    answer: activeCell.answer,
-  };
-}
-
-function siPresenceCursorFromElement(element: Element | EventTarget | null): SIPresenceCursor | null {
-  const target = (element as HTMLElement | null)?.closest?.<HTMLElement>(".answer-cell,.venue-input,.finish-toggle");
-  if (!target || !siRoot.contains(target)) return null;
-  if (target.classList.contains("answer-cell")) {
-    return {
-      app: "si",
-      kind: "answer",
-      gameID: route.gameID,
-      player: Number(target.dataset.player),
-      theme: Number(target.dataset.theme),
-      answer: Number(target.dataset.answer),
-    };
-  }
-  if (target.classList.contains("venue-input")) {
-    return {app: "si", kind: "participant", gameID: route.gameID, player: Number(target.dataset.player)};
-  }
-  if (target.classList.contains("finish-toggle")) {
-    return {app: "si", kind: "finish", gameID: route.gameID};
-  }
-  return null;
-}
-
-function findSIPresenceTarget(cursor: SIPresenceCursor | null | undefined): Element | null {
-  if (!cursor || cursor.app !== "si" || String(cursor.gameID) !== String(route.gameID)) return null;
-  if (cursor.kind === "answer") {
-    return siRoot.querySelector(
-      `.answer-cell[data-player="${cssEscape(String(cursor.player))}"][data-theme="${cssEscape(String(cursor.theme))}"][data-answer="${cssEscape(String(cursor.answer))}"]`,
-    );
-  }
-  if (cursor.kind === "participant") {
-    return siRoot.querySelector(`.venue-input[data-player="${cssEscape(String(cursor.player))}"]`);
-  }
-  if (cursor.kind === "finish") {
-    return siRoot.querySelector(".finish-toggle");
-  }
-  return null;
-}
-
 function applyRemoteState(nextState: unknown): void {
   const previous = state;
   state = (writer ? writer.overlay(stateScope(), nextState) : nextState) as KSIState;
@@ -1563,7 +1458,7 @@ gameLoader.load()
   .then(() => {
     indicator.touch();
     connectEvents();
-    connectPresence();
+    shell.presence.connect();
   })
   .catch((error: unknown) => {
     indicator.fail();

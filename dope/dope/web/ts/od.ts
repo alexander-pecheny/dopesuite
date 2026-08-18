@@ -6,11 +6,12 @@ import {buildFlatScoreTable, computePlaces} from "./score-table.js";
 import type {ScoreTableRow, ScoreTableTheme, ScoreTableThemeRow} from "./score-table.js";
 import {resultsTeamCell} from "./standings.js";
 import {buildRosterView} from "./fest-roster.js";
-import {createHostPresence, createLiveEvents, createScopedWriter, createSyncIndicator, gameEventsURL, installClientRecorder, scheduleStaticReload} from "./state-sync.js";
-import type {ClientRecorder, HostPresence, LiveEvents, PatchPath, ScopedWriter} from "./state-sync.js";
-import {createGameDataLoader, fetchGameData, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, parseGameRoute, renderGameBreadcrumbs} from "./game-page.js";
+import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
+import type {LiveEvents, PatchPath, ScopedWriter} from "./state-sync.js";
+import {mountGamePage} from "./game-shell.js";
+import {createGameDataLoader, fetchGameData, parseGameRoute} from "./game-page.js";
 import type {AdoptedGameSnapshot, GameInitLike} from "./game-page.js";
-import {bindScrollEdges, clamp, createStatusReporter, createTeamNameOverflowController, createViewerCounter, fitScrollFade, installVirtualKeypad, renderTabBar} from "./widgets.js";
+import {bindScrollEdges, clamp, createTeamNameOverflowController, fitScrollFade, installVirtualKeypad, renderTabBar} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {VirtualKeypad} from "./widgets.js";
 import { gameTabs } from "./game-tabs.js";
@@ -113,8 +114,6 @@ const progressNode = document.getElementById("odProgress");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
 const entryModel = DopeEntryModel;
-const indicator = createSyncIndicator(createStatusReporter(statusNode));
-const viewerCounter = createViewerCounter(statusNode);
 const teamNameOverflow = createTeamNameOverflowController({
   root: odRoot,
   detailed: {
@@ -132,30 +131,33 @@ const teamNameOverflow = createTeamNameOverflowController({
 });
 const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
 const route = parseGameRoute();
-const viewer = Boolean(route.viewer);
-// The URL carries the game slug, but the server broadcasts SSE state under the
-// numeric game id (`game-state:<id>`). Default to the slug and upgrade to the
-// numeric id from __GAME_INIT__ so the scope matches and remote edits apply.
-let scopeGameID = route.gameID;
-// staticMode: served as a precomputed snapshot under DDoS lockdown. Skip the SSE
-// connection and refresh by reloading on a jitter. Captured before the loader
-// nulls window.__GAME_INIT__.
 const gameInit = (window as Window & ODPageGlobals).__GAME_INIT__;
-const staticMode = Boolean(gameInit?.static);
-const canEdit = Boolean(gameInit?.canEdit);
 // Экран (projector board) settings ship in the init payload (shared per game so
 // every host sees the same board). Capture before the loader nulls __GAME_INIT__.
 const initScreenSettings: unknown = (gameInit?.screenSettings &&
   typeof gameInit.screenSettings === "object")
   ? gameInit.screenSettings
   : {};
-document.body.classList.toggle("viewer-readonly", viewer);
-if (viewer) {
-  if (canEdit) mountEditorLink();
-} else {
-  mountViewerLink();
-}
-mountGameDownloads({apiBase: route.apiBase, canEdit});
+const shell = mountGamePage({
+  app: "od",
+  root: odRoot,
+  statusNode,
+  breadcrumbsNode,
+  festID: route.festID,
+  gameID: route.gameID,
+  viewer: Boolean(route.viewer),
+  apiBase: route.apiBase,
+  init: gameInit,
+  chrome: () => ({festTitle: fest?.title || "", gameTitle: fest?.gameName || scheme?.title || "ОД"}),
+  cursorKinds: {
+    "shootout-entry": {selector: '.entry-cell[data-entry-kind="shootout"], .shootout-entry-checkbox', keys: ["round", "question", "row"]},
+    entry: {selector: '.entry-cell:not([data-entry-kind]), .entry-input', keys: ["q", "row"]},
+    "team-name": {selector: ".venue-input", keys: ["team"]},
+  },
+  activeCursorElement: () => sheet.activeCell,
+  recorderState: () => state,
+});
+const {viewer, staticMode, scopeGameID, indicator, viewerCounter, recorder} = shell;
 let scheme!: ODScheme;
 let state!: ODState;
 let fest: FestInfo | null = null;
@@ -169,8 +171,6 @@ let activeEntryEditor: {cell: HTMLElement; input: HTMLInputElement} | null = nul
 let activeEntryRows: Element[] = [];
 let live: LiveEvents | null = null;
 let writer: ScopedWriter | null = null;
-let recorder: ClientRecorder | null = null;
-let presence: HostPresence | null = null;
 const tabCache = new Map<string, HTMLElement>();
 const tabScroll = new Map<string, {top: number; left: number}>();
 const resultsExpandedTours = new Set<number>();
@@ -267,10 +267,8 @@ const gameLoader = createGameDataLoader({
 // the unnumbered-teams flag.
 function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest, init}: AdoptedGameSnapshot): void {
   if (init) {
-    if (init.gameID != null) scopeGameID = String(init.gameID);
     if (init.seq != null) stateSeq = Number(init.seq) || 0;
     if (init.epoch != null) initialStateEpoch = String(init.epoch);
-    if (init.teamsUnnumbered && !viewer) mountUnnumberedBanner(route.festID);
   }
   scheme = nextScheme as ODScheme;
   state = nextState as ODState;
@@ -540,7 +538,6 @@ function render(): void {
   const renderedPane = renderedTab === null ? undefined : tabCache.get(renderedTab);
   if (renderedPane?.isConnected) rememberTabScroll(renderedTab);
   setHeading(scheme.title || "ОД");
-  document.title = pageTitle();
   if (!TABS.some((t) => t.key === activeTab)) activeTab = TABS[0].key;
   renderTabs();
   updateHeaderProgress();
@@ -561,7 +558,7 @@ function render(): void {
   if (activeTab === "detailed" || activeTab === "results") teamNameOverflow.schedule(activePane);
   if (activeTab === "screen") scheduleScreenFit();
   positionInvertOverlay();
-  refreshPresence();
+  shell.presence.refresh();
 }
 
 function getTabPane(tab: string): HTMLElement {
@@ -607,12 +604,6 @@ const resultsScroll = bindScrollEdges(document.querySelector(".sheet-frame"), ({
 
 function updateResultsScrollState(): void {
   resultsScroll.refresh();
-}
-
-function pageTitle(): string {
-  const gameTitle = String(fest?.gameName || scheme?.title || "ОД").trim() || "ОД";
-  const festTitle = String(fest?.title || "").trim();
-  return festTitle ? `${gameTitle} · ${festTitle}` : gameTitle;
 }
 
 function toggleResultsTour(tourIndex: number): void {
@@ -3406,17 +3397,7 @@ function refreshPendingMarkers(): void {
 
 function setHeading(text: string): void {
   if (pageHeading) pageHeading.textContent = text;
-  renderBreadcrumbs(text);
-}
-
-function renderBreadcrumbs(gameTitle: string): void {
-  if (!breadcrumbsNode || !route.festID) return;
-  renderGameBreadcrumbs(breadcrumbsNode, {
-    host: !viewer,
-    festHref: viewer ? `/fest/${route.festID}` : `/host/fest/${route.festID}`,
-    festTitle: fest?.title || "Фест",
-    gameTitle: fest?.gameName || gameTitle || scheme?.title || "ОД",
-  });
+  shell.renderChrome();
 }
 
 function connectEvents(): void {
@@ -3429,11 +3410,6 @@ function connectEvents(): void {
 
 function sync(): {live: LiveEvents; writer: ScopedWriter} {
   if (live && writer) return {live, writer};
-  recorder = installClientRecorder({
-    scope: stateScope(),
-    getState: () => state,
-    showButton: !viewer || /[?&]log\b/.test(location.search),
-  });
   writer = createScopedWriter({
     readonly: viewer,
     urlOf: () => `${route.apiBase}/state`,
@@ -3462,74 +3438,6 @@ function sync(): {live: LiveEvents; writer: ScopedWriter} {
     recorder: () => recorder,
   });
   return {live, writer};
-}
-
-function connectPresence(): void {
-  if (viewer || presence || !route.festID) return;
-  presence = createHostPresence({
-    root: odRoot,
-    eventsURL: `/host-events?fest_id=${encodeURIComponent(route.festID)}`,
-    presenceURL: `/api/fest/${route.festID}/presence`,
-    cursorFromElement: odPresenceCursorFromElement,
-    getCursor: currentODPresenceCursor,
-    findTarget: findODPresenceTarget,
-  });
-  presence.connect();
-}
-
-function refreshPresence(): void {
-  presence?.refresh();
-}
-
-function currentODPresenceCursor(): Record<string, unknown> | null {
-  const focused = odPresenceCursorFromElement(document.activeElement);
-  if (focused) return focused;
-  return null;
-}
-
-function odPresenceCursorFromElement(element: Element | EventTarget | null): Record<string, unknown> | null {
-  const entry = closestFromTarget(element, ".entry-input,.entry-cell,.shootout-entry-checkbox");
-  if (entry && odRoot.contains(entry)) {
-    if (entry.dataset.entryKind === "shootout") {
-      return {
-        app: "od",
-        kind: "shootout-entry",
-        gameID: route.gameID,
-        round: Number(entry.dataset.round),
-        question: Number(entry.dataset.question),
-        row: Number(entry.dataset.row),
-      };
-    }
-    return {
-      app: "od",
-      kind: "entry",
-      gameID: route.gameID,
-      q: Number(entry.dataset.q),
-      row: Number(entry.dataset.row),
-    };
-  }
-  const teamName = closestFromTarget(element, ".venue-input");
-  if (teamName && odRoot.contains(teamName)) {
-    return {app: "od", kind: "team-name", gameID: route.gameID, team: Number(teamName.dataset.team)};
-  }
-  return null;
-}
-
-function findODPresenceTarget(cursor: unknown): Element | null {
-  const c = cursor as {app?: unknown; gameID?: unknown; kind?: unknown; q?: unknown; row?: unknown; round?: unknown; question?: unknown; team?: unknown} | null;
-  if (!c || c.app !== "od" || String(c.gameID) !== String(route.gameID)) return null;
-  if (c.kind === "entry") {
-    return odRoot.querySelector(`.entry-cell[data-q="${cssEscape(String(c.q))}"][data-row="${cssEscape(String(c.row))}"]`);
-  }
-  if (c.kind === "shootout-entry") {
-    return odRoot.querySelector(
-      `.entry-cell[data-entry-kind="shootout"][data-round="${cssEscape(String(c.round))}"][data-question="${cssEscape(String(c.question))}"][data-row="${cssEscape(String(c.row))}"]`,
-    );
-  }
-  if (c.kind === "team-name") {
-    return odRoot.querySelector(`.venue-input[data-team="${cssEscape(String(c.team))}"]`);
-  }
-  return null;
 }
 
 function applyRemoteState(nextState: unknown): void {
@@ -3568,7 +3476,7 @@ gameLoader.load()
   .then(() => {
     indicator.touch();
     connectEvents();
-    connectPresence();
+    shell.presence.connect();
   })
   .catch((error: unknown) => {
     indicator.fail();

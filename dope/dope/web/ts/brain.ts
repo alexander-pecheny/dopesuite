@@ -11,10 +11,11 @@ import {festLetters, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
 import {buildRosterView, fetchFestRoster} from "./fest-roster.js";
 import type {RosterTeam} from "./fest-roster.js";
-import {createLiveEvents, createScopedWriter, createSyncIndicator, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
-import {mountEditorLink, mountUnnumberedBanner, mountViewerLink, parseGameRoute, renderGameBreadcrumbs} from "./game-page.js";
+import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
+import {mountGamePage} from "./game-shell.js";
+import {parseGameRoute} from "./game-page.js";
 import type {GameInitLike} from "./game-page.js";
-import {createFloatingPopover, createStatusReporter, createViewerCounter, fitScrollFade, markNameOverflow, renderTabBar} from "./widgets.js";
+import {createFloatingPopover, fitScrollFade, markNameOverflow, renderTabBar} from "./widgets.js";
 import {createSheetCursor, parseMark} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {computeBrainPlayerStats} from "./brain-stats.js";
@@ -127,8 +128,6 @@ const brainTabsRoot = document.getElementById("brainTabs");
 const statusNode = document.getElementById("status");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
-const indicator = createSyncIndicator(createStatusReporter(statusNode));
-const viewerCounter = createViewerCounter(statusNode);
 
 // Long team names fade at their fixed width and carry a popover — the same
 // treatment the ЭК tables give theirs.
@@ -158,21 +157,29 @@ function scheduleBrainNameOverflowUpdate(): void {
 window.addEventListener("resize", scheduleBrainNameOverflowUpdate);
 
 const route = parseGameRoute();
-const viewer = Boolean(route.viewer);
 const init = pageWindow.__GAME_INIT__ || null;
-const staticMode = Boolean(init?.static);
-const canEdit = Boolean(init?.canEdit);
-const scopeGameID = init?.gameID != null ? String(init.gameID) : route.gameID;
-document.body.classList.toggle("viewer-readonly", viewer);
-if (viewer) {
-  if (canEdit) mountEditorLink();
-} else {
-  mountViewerLink();
-  if (init?.teamsUnnumbered) mountUnnumberedBanner(route.festID);
-}
-
 const scheme = (init?.scheme || {}) as BrainScheme;
 const fest = (init?.fest || null) as FestInfo | null;
+const shell = mountGamePage({
+  app: "brain",
+  root: brainRoot,
+  statusNode,
+  breadcrumbsNode,
+  festID: route.festID,
+  gameID: route.gameID,
+  viewer: Boolean(route.viewer),
+  apiBase: route.apiBase,
+  init,
+  downloads: false,
+  chrome: () => ({festTitle: fest?.title || "", gameTitle: fest?.gameName || scheme.title || "Брейн"}),
+  cursorKinds: {
+    answer: {selector: ".answer-cell", keys: ["match", "side", "q"]},
+    player: {selector: ".brain-player-select", keys: ["match", "side", "q"]},
+    finish: {selector: ".finish-toggle", keys: ["match"]},
+  },
+  activeCursorElement: () => cursor.activeCell,
+});
+const {viewer, staticMode, scopeGameID, indicator, viewerCounter} = shell;
 const matches = new Map<string, BrainMatchView>();
 let festRoster: RosterTeam[] = [];
 let rosterView: HTMLElement | null = null;
@@ -429,15 +436,7 @@ function allBouts(): BoutEntry[] {
 
 
 function render(options: {preserveScroll?: boolean} = {}): void {
-  const title = fest?.gameName || scheme.title || "Брейн";
-  document.title = `${title} · dope`;
-  if (breadcrumbsNode && route.festID) {
-    renderGameBreadcrumbs(breadcrumbsNode, {
-      festHref: viewer ? `/fest/${route.festID}` : `/host/fest/${route.festID}`,
-      festTitle: fest?.title || "Фест",
-      gameTitle: title,
-    });
-  }
+  shell.renderChrome();
   renderTabs();
   const frame = brainRoot.closest(".sheet-frame");
   const scrollTop = frame?.scrollTop || 0;
@@ -1254,6 +1253,7 @@ fetchMatches()
   .then(() => {
     indicator.touch();
     live.connect();
+    shell.presence.connect();
   })
   .catch((error: unknown) => {
     indicator.fail();
