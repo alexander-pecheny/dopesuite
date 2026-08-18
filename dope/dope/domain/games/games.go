@@ -29,14 +29,35 @@ const Default = EK
 type Definition struct {
 	Code  string // canonical game_type value
 	Label string // short display label (Russian)
-	// ChGK reports whether the format is part of the ЧГК family rendered as a
-	// single flat grid (OD, KSI, SI) as opposed to EK's per-match bracket. Used
-	// to collapse viewer/snapshot routing for those types.
-	ChGK bool
 	// Individual reports whether a Participant of this format is one player
 	// rather than a team (личная СИ). It decides what the game draws its
 	// Participants from and how the UI names them.
 	Individual bool
+	// Page is the compiled page a Game of this type is served on, and Init the
+	// payload it boots from. Личная СИ borrows ЭК's page for its bracket —
+	// stage tabs, пересевы, бои — not КСИ's blank: a seat of one player has no
+	// per-theme player cell, so the page draws it as one row where a team's
+	// takes two.
+	Page string
+	Init InitKind
+}
+
+// InitKind names the init payload a page boots from: the flat game init
+// (ЧГК, КСИ, брейн) or ЭК's bracket init.
+type InitKind int
+
+const (
+	InitGame InitKind = iota
+	InitEK
+)
+
+// Get returns the Definition of a game type; an unknown or empty type reads as
+// the Default format, the way every page route treated it.
+func Get(code string) Definition {
+	if d, ok := registry[code]; ok {
+		return d
+	}
+	return registry[Default]
 }
 
 // IsIndividual reports whether the format seats players rather than teams.
@@ -48,11 +69,11 @@ func IsIndividual(code string) bool {
 // registry is the single source of truth for known game types. Iteration order
 // is never relied upon; look-ups go through the helpers below.
 var registry = map[string]Definition{
-	EK:    {Code: EK, Label: "ЭК"},
-	OD:    {Code: OD, Label: "ЧГК", ChGK: true},
-	KSI:   {Code: KSI, Label: "КСИ", ChGK: true},
-	SI:    {Code: SI, Label: "Личная СИ", ChGK: true, Individual: true},
-	Brain: {Code: Brain, Label: "Брейн", ChGK: true},
+	EK:    {Code: EK, Label: "ЭК", Page: "static/ek.html", Init: InitEK},
+	OD:    {Code: OD, Label: "ЧГК", Page: "static/od.html"},
+	KSI:   {Code: KSI, Label: "КСИ", Page: "static/si.html"},
+	SI:    {Code: SI, Label: "Личная СИ", Individual: true, Page: "static/ek.html", Init: InitEK},
+	Brain: {Code: Brain, Label: "Брейн", Page: "static/brain.html"},
 }
 
 // Label returns the short display label for a game type, falling back to the
@@ -62,12 +83,6 @@ func Label(code string) string {
 		return d.Label
 	}
 	return code
-}
-
-// IsChGK reports whether code is a ЧГК-family flat-grid game (OD, KSI, SI).
-func IsChGK(code string) bool {
-	d, ok := registry[code]
-	return ok && d.ChGK
 }
 
 // mustJSON marshals value to a JSON string, returning "{}" on the (impossible

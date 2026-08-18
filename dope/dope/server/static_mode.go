@@ -207,41 +207,30 @@ func (s *server) buildStaticEntry(ctx context.Context, route ekInitRoute) (*stat
 	var gameType string
 	_ = s.eng.DB.QueryRowContext(ctx, `select game_type from games where id = ? and fest_id = ?`, route.GameID, route.FestID).Scan(&gameType)
 
-	var htmlPath, marker string
-	var data []byte
-	if games.IsChGK(gameType) {
-		htmlPath, marker = "static/od.html", gameInitMarker
-		switch gameType {
-		case games.OD:
-		case games.Brain:
-			htmlPath = "static/brain.html"
-		default:
-			htmlPath = "static/si.html"
-		}
-		payload, err := s.buildGameInit(ctx, festScope{FestID: route.FestID, GameID: route.GameID})
+	def := games.Get(gameType)
+	htmlPath, marker := def.Page, gameInitMarker
+	var payload any
+	if def.Init == games.InitEK {
+		marker = ekInitMarker
+		p, err := s.buildEKInit(ctx, route)
 		if err != nil {
 			return nil, err
 		}
-		payload.Static = true
-		payload.CanEdit = false
-		b, err := json.Marshal(payload)
-		if err != nil {
-			return nil, err
-		}
-		data = b
+		p.Static = true
+		p.CanEdit = false
+		payload = p
 	} else {
-		htmlPath, marker = "static/ek.html", ekInitMarker
-		payload, err := s.buildEKInit(ctx, route)
+		p, err := s.buildGameInit(ctx, festScope{FestID: route.FestID, GameID: route.GameID})
 		if err != nil {
 			return nil, err
 		}
-		payload.Static = true
-		payload.CanEdit = false
-		b, err := json.Marshal(payload)
-		if err != nil {
-			return nil, err
-		}
-		data = b
+		p.Static = true
+		p.CanEdit = false
+		payload = p
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
 	}
 
 	html, err := s.renderInjectedBytes(htmlPath, marker, data)

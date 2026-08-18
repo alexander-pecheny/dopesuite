@@ -3,6 +3,7 @@ package hostpages
 import (
 	"database/sql"
 	"dope/dope/domain/core"
+	"dope/dope/domain/games"
 	"dope/dope/platform/roles"
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/store"
@@ -594,21 +595,10 @@ func (s *Server) serveHostGamePage(w http.ResponseWriter, r *http.Request, festI
 		return
 	}
 	scope := core.FestScope{FestID: festID, GameID: gameID}
-	switch gameType {
-	case "od":
-		s.h.ServeGameHTMLWithInit(w, r, "static/od.html", scope)
-	case "ksi":
-		s.h.ServeGameHTMLWithInit(w, r, "static/si.html", scope)
-	case "si":
-		// Личная СИ borrows ЭК's page for its bracket — stage tabs, пересевы,
-		// бои — not for its blank: a seat of one player has no per-theme player
-		// cell, so the page draws it as one row (КСИ-shaped) where a team's
-		// takes two.
+	if def := games.Get(gameType); def.Init == games.InitEK {
 		s.h.ServeEKHTMLWithInit(w, r, scope, parts)
-	case "brain":
-		s.h.ServeGameHTMLWithInit(w, r, "static/brain.html", scope)
-	default:
-		s.h.ServeEKHTMLWithInit(w, r, scope, parts)
+	} else {
+		s.h.ServeGameHTMLWithInit(w, r, def.Page, scope)
 	}
 }
 
