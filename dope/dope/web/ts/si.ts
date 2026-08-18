@@ -11,8 +11,9 @@ import {createHostPresence, createLiveEvents, createScopedWriter, createSyncIndi
 import type {ClientRecorder, HostPresence, LiveEvents, ScopedWriter} from "./state-sync.js";
 import {createGameDataLoader, fetchGameData, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, parseGameRoute, renderGameBreadcrumbs} from "./game-page.js";
 import type {AdoptedGameSnapshot, GameInitLike} from "./game-page.js";
-import {bindScrollEdges, clamp, createCellRangeSelection, createStatusReporter, createTeamNameOverflowController, createViewerCounter, fitScrollFade, renderTabBar} from "./widgets.js";
-import type {CellCoord, CellEdit, CellRangeSelection} from "./widgets.js";
+import {bindScrollEdges, clamp, createStatusReporter, createTeamNameOverflowController, createViewerCounter, fitScrollFade, renderTabBar} from "./widgets.js";
+import {createSheetCursor} from "./sheet-cursor.js";
+import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {gameTabs} from "./game-tabs.js";
 
 // Page globals the bundle environment provides (the server-inlined
@@ -163,13 +164,10 @@ let detailedOrderCache: number[] | null = null;
 // Client-local row order for the «Подробно» sheet: "name" (default) or "number".
 // Editors pick whichever identity they read off the floor; never synced.
 let detailedSort: "name" | "number" = "name";
-let activeAnswerNode: HTMLElement | null = null;
-let activePlayerRows: HTMLElement[] = [];
 let live: LiveEvents | null = null;
 let writer: ScopedWriter | null = null;
 let recorder: ClientRecorder | null = null;
 let presence: HostPresence | null = null;
-let cellSelection: CellRangeSelection | null = null;
 const tabScroll = new Map<string, {top: number; left: number}>();
 
 // The «Отказы» tab is a host-only control surface; its effect — declined teams
@@ -364,6 +362,7 @@ function render(options: {preserveScroll?: boolean} = {}): void {
     updateResultsScrollState();
     if (activeTab === "detailed" || activeTab === "results") teamNameOverflow.schedule();
     if (activeTab === "detailed") refreshAllStickerLimits();
+    if (activeTab === "detailed") restoreCursor();
   } else {
     renderTabs();
     const frame = scrollFrame();
@@ -377,8 +376,16 @@ function render(options: {preserveScroll?: boolean} = {}): void {
       frame.scrollLeft = scrollLeft;
     }
     updateResultsScrollState();
+    restoreCursor();
   }
   refreshPresence();
+}
+
+// restoreCursor re-points the sheet cursor at the active cell after a rebuild;
+// a range does not survive it (the cells are new), the active cell does.
+function restoreCursor(): void {
+  const coord = ksiCoordForActive();
+  sheet.select(coord, coord, {focus: false});
 }
 
 function buildTable(): HTMLTableElement {
@@ -421,44 +428,13 @@ function buildTable(): HTMLTableElement {
     themes,
     rows,
     events: {
-      click: handleTableClick,
       focusin: handleTableFocusIn,
       change: handleTableChange,
     },
   });
   table.classList.toggle("match-finished", state!.finished);
   tableIndex = createScoreTableIndex(table, {entity: "player"});
-  activeAnswerNode = state!.finished || viewer ? null : tableIndex.get("answer", activeCell);
-  attachKSISelection(table);
   return table;
-}
-
-function attachKSISelection(table: HTMLTableElement): void {
-  if (cellSelection) {
-    cellSelection.unbind();
-    cellSelection = null;
-  }
-  if (viewer) return;
-  cellSelection = createCellRangeSelection({
-    root: table,
-    cellSelector: ".answer-cell",
-    readonly: () => Boolean(state?.finished),
-    coordOf: ksiCoordOf,
-    cellAtCoord: ksiCellAtCoord,
-    serialize: ksiSerializeMark as (cell: Element | null | undefined) => string,
-    parse: parseKSIMarkText,
-    cycle: ksiCycleMark,
-    applyValues: applyKSIEdits,
-    onActiveChange: (cell) => {
-      if (!cell) return;
-      const player = Number(cell.dataset.player);
-      const theme = Number(cell.dataset.theme);
-      const answer = Number(cell.dataset.answer);
-      activeCell = {player, theme, answer};
-      markActive();
-    },
-  });
-  cellSelection.bind();
 }
 
 function ksiCoordOf(cell: Element): CellCoord | null {
@@ -486,26 +462,28 @@ function ksiCellAtCoord(coord: CellCoord | null): HTMLElement | null {
     );
 }
 
-function ksiSerializeMark(cell: Element): string {
-  if (cell.classList.contains("right")) return "+";
-  if (cell.classList.contains("wrong")) return "-";
-  return "";
-}
-
-// Touch tap cycle: empty → right → wrong → empty.
-function ksiCycleMark(cell: Element): string {
-  if (cell.classList.contains("right")) return "wrong";
-  if (cell.classList.contains("wrong")) return "";
-  return "right";
-}
-
-function parseKSIMarkText(text: string): string {
-  const value = String(text || "").trim().toLowerCase();
-  if (value === "") return "";
-  if (["+", "1", "right", "y", "yes", "✓", "v", "да"].includes(value)) return "right";
-  if (["-", "−", "0", "wrong", "n", "no", "x", "✗", "нет"].includes(value)) return "wrong";
-  return "";
-}
+// The detailed table as one sheet: row = the player in the current sort order,
+// col = theme × 5 + answer. Live only on the detailed tab; a finished game or a
+// spectator reads it.
+const sheet = createSheetCursor({
+  root: siRoot,
+  rows: () => detailedPlayerOrder().length,
+  cols: () => themesCount * QUESTION_VALUES.length,
+  readonly: () => viewer || Boolean(state?.finished),
+  active: () => !viewer && isDetailedTabActive(),
+  coordOf: ksiCoordOf,
+  cellAt: ksiCellAtCoord,
+  values: "marks",
+  applyValues: applyKSIEdits,
+  onActive: (cell) => {
+    if (!cell) return;
+    const player = Number(cell.dataset.player);
+    const theme = Number(cell.dataset.theme);
+    const answer = Number(cell.dataset.answer);
+    if (Number.isInteger(player) && Number.isInteger(theme) && Number.isInteger(answer)) activeCell = {player, theme, answer};
+  },
+});
+sheet.bind();
 
 function applyKSIEdits(edits: CellEdit[]): void {
   if (state?.finished || viewer) return;
@@ -1101,15 +1079,9 @@ function detailedNameHeader(): HTMLElement {
   return layout;
 }
 
-function handleTableClick(event: Event): void {
-  const cell = (event.target as HTMLElement | null)?.closest?.<HTMLElement>(".answer-cell");
-  if (!cell || state!.finished || viewer) return;
-  selectCellFromNode(cell);
-}
-
 function handleTableFocusIn(event: Event): void {
   const cell = (event.target as HTMLElement | null)?.closest?.<HTMLElement>(".answer-cell");
-  if (!cell || state!.finished || viewer) return;
+  if (!cell || state!.finished || viewer || sheet.activeCell === cell) return;
   selectCellFromNode(cell, {focus: false});
 }
 
@@ -1180,8 +1152,6 @@ function invalidateDetailedOrder(): void {
 
 function resetTableIndex(): void {
   tableIndex = null;
-  activeAnswerNode = null;
-  clearActivePlayerRows();
 }
 
 // markContribution is the signed value of one answer mark under a sticker. It
@@ -1243,72 +1213,16 @@ function themeScoreDisplay(scores: ScoreCache, player: number, theme: number): n
 
 function selectCell(player: number, theme: number, answer: number, options: {focus?: boolean} = {}): void {
   activeCell = {player, theme, answer};
-  markActive();
-  if (options.focus !== false) {
-    findActive()?.focus();
-  }
-}
-
-function markActive(): void {
-  clearActivePlayerRows();
-  if (activeAnswerNode) {
-    activeAnswerNode.classList.remove("active");
-    activeAnswerNode = null;
-  }
-  if (state!.finished || viewer || !isDetailedTabActive()) return;
-  activeAnswerNode = findActive();
-  if (activeAnswerNode) {
-    activeAnswerNode.classList.add("active");
-    markActivePlayerRows(activeAnswerNode);
-  }
-}
-
-function isActivePlayerRow(playerIndex: number): boolean {
-  return !state!.finished &&
-    !viewer &&
-    isDetailedTabActive() &&
-    activeCell.player === playerIndex;
-}
-
-function clearActivePlayerRows(): void {
-  if (activePlayerRows.length > 0) {
-    activePlayerRows.forEach((row) => row.classList.remove("active-team-row"));
-    activePlayerRows = [];
-    return;
-  }
-  siRoot.querySelectorAll(".active-team-row").forEach((row) => row.classList.remove("active-team-row"));
-}
-
-function markActivePlayerRows(cell: HTMLElement | null): void {
-  const row = cell?.closest?.("tr");
-  if (!row) return;
-  row.classList.add("active-team-row");
-  activePlayerRows = [row];
-}
-
-function findActive(): HTMLElement | null {
-  const indexed = tableIndex?.get("answer", activeCell);
-  if (indexed) return indexed;
-  return siRoot.querySelector<HTMLElement>(
-    `.answer-cell[data-player="${cssEscape(String(activeCell.player))}"][data-theme="${cssEscape(String(activeCell.theme))}"][data-answer="${cssEscape(String(activeCell.answer))}"]`,
-  );
+  const coord = ksiCoordForActive();
+  sheet.select(coord, coord, {focus: options.focus});
 }
 
 function isActive(p: number, t: number, a: number): boolean {
   return activeCell.player === p && activeCell.theme === t && activeCell.answer === a;
 }
 
-function setMark(mark: string): void {
-  if (state!.finished || viewer || !isDetailedTabActive()) return;
-  const row = state!.themes[activeCell.theme].answers[activeCell.player];
-  const previousMark = row[activeCell.answer];
-  if (previousMark === mark) return;
-  getScoreCache();
-  row[activeCell.answer] = mark;
-  recomputeTheme(activeCell.player, activeCell.theme);
-  updateAnswerCell(activeCell.player, activeCell.theme, activeCell.answer, mark);
-  refreshChangedScores(activeCell.player, activeCell.theme);
-  saveState(["themes", activeCell.theme, "answers", activeCell.player, activeCell.answer], mark);
+function isActivePlayerRow(playerIndex: number): boolean {
+  return !state!.finished && !viewer && isDetailedTabActive() && activeCell.player === playerIndex;
 }
 
 function updateAnswerCell(player: number, theme: number, answer: number, mark: string): void {
@@ -1388,7 +1302,7 @@ function patchTable(previous: KSIState | null = null): boolean {
   });
   if (previous) refreshChangedScoreSet(changedThemes);
   else refreshScores();
-  markActive();
+  sheet.refresh();
   return true;
 }
 
@@ -1450,68 +1364,6 @@ function pageTitle(): string {
 
 function participantFallback(index: number): string {
   return `${isTeamMode() ? "Команда" : "Игрок"} ${index + 1}`;
-}
-
-function handleKeydown(event: KeyboardEvent): void {
-  if (viewer) return;
-  if (!isDetailedTabActive()) return;
-  if (isFormControl(event.target)) return;
-  const key = event.key.toLowerCase();
-  if (event.key === "ArrowLeft") {
-    event.preventDefault();
-    moveCell(0, -1, event.shiftKey);
-  } else if (event.key === "ArrowRight") {
-    event.preventDefault();
-    moveCell(0, 1, event.shiftKey);
-  } else if (event.key === "ArrowUp") {
-    event.preventDefault();
-    moveCell(-1, 0, event.shiftKey);
-  } else if (event.key === "ArrowDown") {
-    event.preventDefault();
-    moveCell(1, 0, event.shiftKey);
-  } else if (key === "q" || key === "й" || key === "+" || key === "1" || event.code === "NumpadAdd") {
-    event.preventDefault();
-    setMarkForSelection("right");
-  } else if (key === "w" || key === "ц" || key === "-" || key === "2" || event.code === "NumpadSubtract") {
-    event.preventDefault();
-    setMarkForSelection("wrong");
-  } else if (key === "backspace" || key === "delete" || event.key === " ") {
-    event.preventDefault();
-    setMarkForSelection("");
-  }
-}
-
-function setMarkForSelection(mark: string): void {
-  if (state?.finished || viewer || !isDetailedTabActive()) return;
-  const cells = cellSelection?.selectedCells() || [];
-  if (cells.length > 1) {
-    applyKSIEdits(cells.map((cell) => ({cell, value: mark})));
-    return;
-  }
-  setMark(mark);
-}
-
-function moveCell(dPlayer: number, dAnswer: number, extend = false): void {
-  const playerOrder = detailedPlayerOrder();
-  const players = playerOrder.length;
-  const totalCols = themesCount * QUESTION_VALUES.length;
-  let column = activeCell.theme * QUESTION_VALUES.length + activeCell.answer;
-  column = clamp(column + dAnswer, 0, totalCols - 1);
-  const currentPosition = Math.max(0, playerOrder.indexOf(activeCell.player));
-  const nextPosition = clamp(currentPosition + dPlayer, 0, players - 1);
-  const player = playerOrder[nextPosition];
-  const nextTheme = Math.floor(column / QUESTION_VALUES.length);
-  const nextAnswer = column % QUESTION_VALUES.length;
-  if (extend && cellSelection) {
-    const anchor = cellSelection.anchor || ksiCoordForActive();
-    const focusCoord = {row: nextPosition, col: column};
-    cellSelection.setSelection(anchor, focusCoord, {focus: true});
-    activeCell = {player, theme: nextTheme, answer: nextAnswer};
-    markActive();
-    return;
-  }
-  selectCell(player, nextTheme, nextAnswer);
-  if (cellSelection) cellSelection.setSelection({row: nextPosition, col: column}, {row: nextPosition, col: column}, {focus: false});
 }
 
 function ksiCoordForActive(): CellCoord {
@@ -1706,8 +1558,6 @@ function applyRemoteState(nextState: unknown): void {
   render({preserveScroll: true});
   refreshPendingMarkers();
 }
-
-document.addEventListener("keydown", handleKeydown);
 
 gameLoader.load()
   .then(() => {

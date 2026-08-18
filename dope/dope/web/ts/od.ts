@@ -11,6 +11,7 @@ import type {ClientRecorder, HostPresence, LiveEvents, PatchPath, ScopedWriter} 
 import {createGameDataLoader, fetchGameData, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, parseGameRoute, renderGameBreadcrumbs} from "./game-page.js";
 import type {AdoptedGameSnapshot, GameInitLike} from "./game-page.js";
 import {bindScrollEdges, clamp, createStatusReporter, createTeamNameOverflowController, createViewerCounter, fitScrollFade, installVirtualKeypad, renderTabBar} from "./widgets.js";
+import {createSheetCursor} from "./sheet-cursor.js";
 import type {VirtualKeypad} from "./widgets.js";
 import { gameTabs } from "./game-tabs.js";
 import { DopeEntryModel } from "./entry-model.js";
@@ -62,17 +63,6 @@ interface QuestionStat {
   completed: boolean;
   counts: Map<number, number>;
   validCount: number;
-}
-
-interface EntrySelection {
-  anchorQ: number;
-  anchorRow: number;
-  focusQ: number;
-  focusRow: number;
-}
-
-interface EntryDragSelection extends EntrySelection {
-  moved: boolean;
 }
 
 interface EntrySuggestOption {
@@ -187,9 +177,6 @@ const resultsExpandedTours = new Set<number>();
 const resultsExpandedShootouts = new Set<number>();
 let numberToIndexCache: Map<number, number> | null = null;
 let entrySuggest: EntrySuggestState | null = null;
-let entrySelection: EntrySelection | null = null;
-let entryDragSelection: EntryDragSelection | null = null;
-let entrySuppressClickSelection = false;
 let invertOverlay: HTMLButtonElement | null = null; // floating yin-yang "Инвертировать" button, positioned over the active column
 let entryKeypad: VirtualKeypad | null = null; // floating virtual numeric keypad shown for cell entry on touch devices
 const coarsePointer = typeof window.matchMedia === "function" &&
@@ -206,14 +193,6 @@ const YINYANG_SVG = '<svg viewBox="0 0 100 100" aria-hidden="true" focusable="fa
   + '<circle class="yy-dark" cx="50" cy="74" r="6"/>'
   + '</svg>';
 const UNDO_LIMIT = 100;
-
-const ENTRY_SELECTION_CLASSES = [
-  "entry-selected",
-  "entry-selection-top",
-  "entry-selection-bottom",
-  "entry-selection-left",
-  "entry-selection-right",
-];
 
 // Экран (проекторное табло) is a host-only tab; tabFromHash() filters against
 // TABS, so a viewer can't reach it by hash either.
@@ -698,27 +677,13 @@ function buildInputView(): HTMLElement {
 }
 
 function updateEntrySelectionSoon(): void {
-  window.requestAnimationFrame(updateEntrySelectionUI);
+  window.requestAnimationFrame(refreshEntrySelection);
 }
 
-function updateEntrySelectionUI(): void {
-  odRoot.querySelectorAll(".entry-cell.entry-selected, .entry-cell.entry-selection-top, .entry-cell.entry-selection-bottom, .entry-cell.entry-selection-left, .entry-cell.entry-selection-right").forEach((cell) => {
-    cell.classList.remove(...ENTRY_SELECTION_CLASSES);
-  });
-  const selection = normalizedEntrySelection();
-  if (selection) {
-    for (let row = selection.rowStart; row <= selection.rowEnd; row++) {
-      for (let q = selection.qStart; q <= selection.qEnd; q++) {
-        const cell = entryCellNode(q, row);
-        if (!cell) continue;
-        cell.classList.add("entry-selected");
-        if (row === selection.rowStart) cell.classList.add("entry-selection-top");
-        if (row === selection.rowEnd) cell.classList.add("entry-selection-bottom");
-        if (q === selection.qStart) cell.classList.add("entry-selection-left");
-        if (q === selection.qEnd) cell.classList.add("entry-selection-right");
-      }
-    }
-  }
+// refreshEntrySelection repaints the cursor after the input table was rebuilt
+// and re-seats the invert button over its column.
+function refreshEntrySelection(): void {
+  sheet.refresh();
   positionInvertOverlay();
 }
 
@@ -758,8 +723,8 @@ function positionInvertOverlay(): void {
   const overlay = invertOverlay;
   if (!overlay) return;
   const hide = () => { overlay.hidden = true; };
-  if (viewer || activeTab !== "input" || !entrySelection) return hide();
-  const q = entrySelection.focusQ;
+  if (viewer || activeTab !== "input" || !sheet.focus) return hide();
+  const q = sheet.focus.col;
   if (!Number.isInteger(q) || q < 0 || q >= totalQuestions || state.completed[q]) return hide();
   const head = odRoot.querySelector<HTMLElement>(
     `.entry-table:not(.od-shootout-entry-table) thead tr:first-child th[data-q="${cssEscape(String(q))}"]`);
@@ -850,30 +815,48 @@ function attachInvertListeners(): void {
   window.addEventListener("resize", positionInvertOverlay);
 }
 
-function normalizedEntrySelection(): {qStart: number; qEnd: number; rowStart: number; rowEnd: number} | null {
-  if (!entrySelection) return null;
-  const qStart = Math.max(0, Math.min(entrySelection.anchorQ, entrySelection.focusQ));
-  const qEnd = Math.min(totalQuestions - 1, Math.max(entrySelection.anchorQ, entrySelection.focusQ));
-  const rowStart = Math.max(0, Math.min(entrySelection.anchorRow, entrySelection.focusRow));
-  const rowEnd = Math.min(state.teams.length - 1, Math.max(entrySelection.anchorRow, entrySelection.focusRow));
-  if (qStart > qEnd || rowStart > rowEnd) return null;
-  return {qStart, qEnd, rowStart, rowEnd};
-}
-
-function setEntrySelection(anchorQ: number, anchorRow: number, focusQ: number = anchorQ, focusRow: number = anchorRow, options: {focus?: boolean; preventScroll?: boolean} = {}): void {
-  if (viewer) return;
-  anchorQ = clamp(Number(anchorQ), 0, totalQuestions - 1);
-  focusQ = clamp(Number(focusQ), 0, totalQuestions - 1);
-  anchorRow = clamp(Number(anchorRow), 0, state.teams.length - 1);
-  focusRow = clamp(Number(focusRow), 0, state.teams.length - 1);
-  entrySelection = {anchorQ, anchorRow, focusQ, focusRow};
-  updateEntrySelectionUI();
-  const focusCell = entryCellNode(focusQ, focusRow);
-  if (focusCell && options.focus !== false) {
-    focusCell.focus({preventScroll: options.preventScroll});
-    markActiveEntryRow(focusCell);
-  }
-}
+// The Ввод grid as one sheet: row = the team, col = the question. Shootout
+// cells sit in their own tables and are not part of it. Values are team
+// numbers typed into an inline editor: a printable key opens it with that
+// character, Enter/F2 open it, Delete/Space clear the selection, a paste is
+// coerced cell by cell (a bare number, or a team's label).
+const sheet = createSheetCursor({
+  root: odRoot,
+  cellSelector: '.entry-cell:not([data-entry-kind="shootout"])',
+  rows: () => state?.teams.length || 0,
+  cols: () => totalQuestions,
+  readonly: () => viewer,
+  active: () => !viewer && activeTab === "input",
+  coordOf: (cell) => {
+    const pos = entryCellPosition(cell as HTMLElement);
+    return pos ? {row: pos.row, col: pos.q} : null;
+  },
+  cellAt: (coord) => entryCellNode(coord.col, coord.row),
+  values: "text",
+  serialize: (cell) => {
+    const pos = entryCellPosition(cell as HTMLElement);
+    const value = pos ? state.entries[pos.q]?.[pos.row] || 0 : 0;
+    return value ? String(value) : "";
+  },
+  parse: (text) => entryModel.coerceValue(text, state.teams.map((_, i) => ({label: teamLabel(i), number: teamNumber(i)}))),
+  applyValues: applyEntryEdits,
+  onEdit: (cell, text) => {
+    if (text === null) openEntryEditor(cell);
+    else startEntryEditWithText(cell, text);
+  },
+  // From the top row, ArrowUp steps onto the column's tickbox so the operator
+  // can lock it without reaching for the mouse.
+  onKey: (event, focus) => event.key === "ArrowUp" && !event.shiftKey && focus.row === 0 && focusLockCheckbox(focus.col),
+  // Moving the cursor ends an edit in progress (the click's default is
+  // prevented, so no focusout would).
+  onSelectionChange: () => {
+    closeEntryEditor();
+    positionInvertOverlay();
+  },
+  onActive: (cell) => markActiveEntryRow(cell),
+  classes: {selected: "entry-selected", anchor: "", top: "entry-selection-top", bottom: "entry-selection-bottom", left: "entry-selection-left", right: "entry-selection-right", active: "", row: ""},
+});
+sheet.bind();
 
 function entryCellNode(qIndex: number, rowIndex: number): HTMLElement | null {
   return odRoot.querySelector<HTMLElement>(`.entry-cell[data-q="${cssEscape(String(qIndex))}"][data-row="${cssEscape(String(rowIndex))}"]:not([data-entry-kind="shootout"])`);
@@ -887,19 +870,27 @@ function entryCellPosition(cell: HTMLElement | null | undefined): {q: number; ro
   return {q, row};
 }
 
-function selectedEntryText(): string {
-  const selection = normalizedEntrySelection();
-  if (!selection) return "";
-  const lines: string[] = [];
-  for (let row = selection.rowStart; row <= selection.rowEnd; row++) {
-    const cols: string[] = [];
-    for (let q = selection.qStart; q <= selection.qEnd; q++) {
-      const value = state.entries[q]?.[row] || 0;
-      cols.push(value ? String(value) : "");
-    }
-    lines.push(cols.join("\t"));
+// applyEntryEdits writes a batch of cell values (a paste, a clear) into the
+// state, one PATCH per changed cell so only those show the pending spinner,
+// then re-renders and re-focuses the cursor.
+function applyEntryEdits(edits: Array<{cell: Element; value: unknown}>): void {
+  if (viewer) return;
+  closeEntryEditor();
+  const changed: Array<[number, number, number]> = [];
+  for (const {cell, value} of edits) {
+    const pos = entryCellPosition(cell as HTMLElement);
+    if (!pos) continue;
+    const next = Number(value) || 0;
+    if ((state.entries[pos.q]?.[pos.row] || 0) === next) continue;
+    state.entries[pos.q][pos.row] = next;
+    changed.push([pos.q, pos.row, next]);
   }
-  return lines.join("\n");
+  if (changed.length === 0) return;
+  invalidateScoreCaches();
+  invalidateTabCache("input");
+  for (const [q, row, value] of changed) saveState(["entries", q, row], value);
+  render();
+  focusEntrySelection();
 }
 
 // invertEntryColumn replaces a column's teams with their complement among all
@@ -957,85 +948,22 @@ function performUndo(): boolean {
       }
     }
     render();
-    setEntrySelection(qIndex, 0, qIndex, Math.max(0, state.teams.length - 1), {focus: true});
+    sheet.select({row: 0, col: qIndex}, {row: Math.max(0, state.teams.length - 1), col: qIndex}, {focus: true});
     return true;
   }
   return false;
 }
 
-function clearSelectedEntryCells(): void {
-  const selection = normalizedEntrySelection();
-  if (!selection || viewer) return;
-  closeEntryEditor();
-  const cleared: Array<[number, number]> = [];
-  for (let q = selection.qStart; q <= selection.qEnd; q++) {
-    for (let row = selection.rowStart; row <= selection.rowEnd; row++) {
-      if (state.entries[q]?.[row]) {
-        state.entries[q][row] = 0;
-        cleared.push([q, row]);
-      }
-    }
-  }
-  if (cleared.length === 0) return;
-  invalidateScoreCaches();
-  invalidateTabCache("input");
-  // Patch each cleared cell individually rather than the whole ["entries"] array:
-  // a coarse whole-array patch marks every cell pending (isPending is
-  // ancestor-aware), flashing the spinner across the entire grid.
-  for (const [q, row] of cleared) saveState(["entries", q, row], 0);
-  render();
-  focusEntrySelection();
-}
-
 function focusEntrySelection(): void {
-  if (!entrySelection) return;
+  if (!sheet.focus) return;
   window.requestAnimationFrame(() => {
-    const cell = entryCellNode(entrySelection!.focusQ, entrySelection!.focusRow);
+    const cell = entryCellNode(sheet.focus!.col, sheet.focus!.row);
     if (cell) {
       cell.focus({preventScroll: true});
       markActiveEntryRow(cell);
     }
-    updateEntrySelectionUI();
+    refreshEntrySelection();
   });
-}
-
-function pasteEntryClipboard(text: string): void {
-  const selection = normalizedEntrySelection();
-  if (!selection || viewer) return;
-  const rows = entryModel.parseClipboard(text);
-  if (rows.length === 0) return;
-  closeEntryEditor();
-  const teams = state.teams.map((_, i) => ({label: teamLabel(i), number: teamNumber(i)}));
-  const startQ = selection.qStart;
-  const startRow = selection.rowStart;
-  const changedCells: Array<[number, number, number]> = [];
-  let lastQ = startQ;
-  let lastRow = startRow;
-  for (let rowOffset = 0; rowOffset < rows.length; rowOffset++) {
-    const rowIndex = startRow + rowOffset;
-    if (rowIndex >= state.teams.length) break;
-    const cols = rows[rowOffset];
-    for (let colOffset = 0; colOffset < cols.length; colOffset++) {
-      const qIndex = startQ + colOffset;
-      if (qIndex >= totalQuestions) break;
-      const value = entryModel.coerceValue(cols[colOffset], teams);
-      if (state.entries[qIndex][rowIndex] !== value) {
-        state.entries[qIndex][rowIndex] = value;
-        changedCells.push([qIndex, rowIndex, value]);
-      }
-      lastQ = qIndex;
-      lastRow = rowIndex;
-    }
-  }
-  if (changedCells.length === 0) return;
-  setEntrySelection(startQ, startRow, lastQ, lastRow, {focus: false});
-  invalidateScoreCaches();
-  invalidateTabCache("input");
-  // Patch per cell so only the pasted cells show the pending spinner, not the
-  // whole grid (a coarse ["entries"] patch marks every descendant pending).
-  for (const [q, row, value] of changedCells) saveState(["entries", q, row], value);
-  render();
-  focusEntrySelection();
 }
 
 function startEntryEditWithText(cell: HTMLElement, text: string): void {
@@ -1047,120 +975,6 @@ function startEntryEditWithText(cell: HTMLElement, text: string): void {
   activeEntryEditor.input.dispatchEvent(new Event("input", {bubbles: true}));
   activeEntryEditor.input.focus();
   activeEntryEditor.input.setSelectionRange(activeEntryEditor.input.value.length, activeEntryEditor.input.value.length);
-}
-
-function moveEntrySelection(dRow: number, dQ: number, extend: boolean): void {
-  if (!entrySelection) {
-    setEntrySelection(0, 0);
-    return;
-  }
-  const nextQ = clamp(entrySelection.focusQ + dQ, 0, totalQuestions - 1);
-  const nextRow = clamp(entrySelection.focusRow + dRow, 0, state.teams.length - 1);
-  if (extend) setEntrySelection(entrySelection.anchorQ, entrySelection.anchorRow, nextQ, nextRow);
-  else setEntrySelection(nextQ, nextRow);
-}
-
-function handleEntryMouseDown(event: MouseEvent): void {
-  if (viewer || event.button !== 0) return;
-  if (event.target instanceof HTMLInputElement) return;
-  const cell = closestFromTarget(event.target, ".entry-cell");
-  const pos = entryCellPosition(cell);
-  if (!pos) return;
-  event.preventDefault();
-  closeEntryEditor();
-  entrySuppressClickSelection = Boolean(event.shiftKey && entrySelection);
-  const anchor = event.shiftKey && entrySelection
-    ? {q: entrySelection.anchorQ, row: entrySelection.anchorRow}
-    : pos;
-  setEntrySelection(anchor.q, anchor.row, pos.q, pos.row, {preventScroll: true});
-  entryDragSelection = {anchorQ: anchor.q, anchorRow: anchor.row, focusQ: pos.q, focusRow: pos.row, moved: false};
-  document.addEventListener("mouseup", handleEntryMouseUp, {once: true});
-}
-
-function handleEntryMouseOver(event: MouseEvent): void {
-  if (!entryDragSelection || viewer) return;
-  const pos = entryCellPosition(closestFromTarget(event.target, ".entry-cell"));
-  if (!pos) return;
-  if (pos.q !== entryDragSelection.focusQ || pos.row !== entryDragSelection.focusRow) {
-    entryDragSelection.moved = true;
-    entryDragSelection.focusQ = pos.q;
-    entryDragSelection.focusRow = pos.row;
-    setEntrySelection(entryDragSelection.anchorQ, entryDragSelection.anchorRow, pos.q, pos.row, {focus: false});
-  }
-}
-
-function handleEntryMouseUp(): void {
-  entryDragSelection = null;
-}
-
-function handleEntryDoubleClick(event: MouseEvent): void {
-  if (viewer) return;
-  const cell = closestFromTarget(event.target, ".entry-cell");
-  if (!cell || !entryCellPosition(cell)) return;
-  openEntryEditor(cell);
-}
-
-function handleEntryCopy(event: ClipboardEvent): void {
-  if (viewer) return;
-  if (event.target instanceof HTMLInputElement) return;
-  const text = selectedEntryText();
-  if (!text) return;
-  event.preventDefault();
-  event.clipboardData?.setData("text/plain", text);
-}
-
-function handleEntryPaste(event: ClipboardEvent): void {
-  if (viewer) return;
-  if (event.target instanceof HTMLInputElement) return;
-  const text = event.clipboardData?.getData("text/plain") || "";
-  if (!text) return;
-  event.preventDefault();
-  pasteEntryClipboard(text);
-}
-
-function handleEntryCellKeydown(event: KeyboardEvent, cell: HTMLElement): void {
-  if (viewer) return;
-  if (!entryCellPosition(cell)) return;
-  if (event.key === "ArrowLeft") {
-    event.preventDefault();
-    moveEntrySelection(0, -1, event.shiftKey);
-  } else if (event.key === "ArrowRight") {
-    event.preventDefault();
-    moveEntrySelection(0, 1, event.shiftKey);
-  } else if (event.key === "ArrowUp") {
-    event.preventDefault();
-    const pos = entryCellPosition(cell);
-    if (pos && pos.row === 0 && !event.shiftKey && focusLockCheckbox(pos.q)) return;
-    moveEntrySelection(-1, 0, event.shiftKey);
-  } else if (event.key === "ArrowDown") {
-    event.preventDefault();
-    moveEntrySelection(1, 0, event.shiftKey);
-  } else if (event.key === "Tab") {
-    // Move the cursor one column over (collapsing the selection) instead of
-    // letting the browser tab-focus the next cell while the highlight lingers.
-    event.preventDefault();
-    moveEntrySelection(0, event.shiftKey ? -1 : 1, false);
-  } else if (event.key === "Home") {
-    // Jump to the top cell of the current column (scrolling into view).
-    event.preventDefault();
-    moveEntrySelection(-state.teams.length, 0, event.shiftKey);
-  } else if (event.key === "End") {
-    // Jump to the bottom cell of the current column (scrolling into view).
-    event.preventDefault();
-    moveEntrySelection(state.teams.length, 0, event.shiftKey);
-  } else if (event.key === "Enter" || event.key === "F2") {
-    event.preventDefault();
-    openEntryEditor(cell);
-  } else if (event.key === "Backspace" || event.key === "Delete" || event.key === " ") {
-    event.preventDefault();
-    clearSelectedEntryCells();
-  } else if (!event.metaKey && !event.ctrlKey && !event.altKey && event.key.length === 1) {
-    // Any single character (including "a"/"а") just starts editing the cell;
-    // column inversion lives on the yin-yang header button, not a key, so it no
-    // longer clashes with typing team names.
-    event.preventDefault();
-    startEntryEditWithText(cell, event.key);
-  }
 }
 
 // entryQuestionHeadCell renders a question-number header tagged with its column
@@ -1204,10 +1018,6 @@ function buildInputTable(): HTMLTableElement {
   table.className = "entry-table" + (viewer ? " entry-readonly" : "");
   table.addEventListener("click", handleEntryClick);
   table.addEventListener("dblclick", handleEntryDoubleClick);
-  table.addEventListener("mousedown", handleEntryMouseDown);
-  table.addEventListener("mouseover", handleEntryMouseOver);
-  table.addEventListener("copy", handleEntryCopy);
-  table.addEventListener("paste", handleEntryPaste);
   table.addEventListener("input", handleEntryInput);
   table.addEventListener("keydown", handleEntryKeydown);
   table.addEventListener("focusin", handleEntryFocus);
@@ -1789,21 +1599,18 @@ function shootoutQuestionCompleted(roundIndex: number, questionIndex: number): b
   return Boolean(state.shootoutRounds[roundIndex]?.completed?.[questionIndex]);
 }
 
-function handleEntryClick(event: MouseEvent): void {
-  if (event.target instanceof HTMLInputElement && event.target.classList.contains("entry-input")) return;
-  if (event.target instanceof HTMLInputElement && event.target.classList.contains("shootout-entry-checkbox")) return;
+function handleEntryDoubleClick(event: MouseEvent): void {
+  if (viewer) return;
   const cell = closestFromTarget(event.target, ".entry-cell");
-  if (!cell || viewer) return;
-  if (entrySuppressClickSelection) {
-    entrySuppressClickSelection = false;
-    return;
-  }
-  if (isShootoutEntryCell(cell)) {
-    cell.querySelector<HTMLElement>(".shootout-entry-checkbox")?.focus();
-    return;
-  }
-  const pos = entryCellPosition(cell);
-  if (pos) setEntrySelection(pos.q, pos.row, pos.q, pos.row, {preventScroll: true});
+  if (!cell || !entryCellPosition(cell)) return;
+  openEntryEditor(cell);
+}
+
+function handleEntryClick(event: MouseEvent): void {
+  if (event.target instanceof HTMLInputElement) return;
+  const cell = closestFromTarget(event.target, ".entry-cell");
+  if (!cell || viewer || !isShootoutEntryCell(cell)) return;
+  cell.querySelector<HTMLElement>(".shootout-entry-checkbox")?.focus();
 }
 
 function handleEntryInput(event: Event): void {
@@ -1850,10 +1657,7 @@ function handleEntryKeydown(event: KeyboardEvent): void {
     return;
   }
   const cell = closestFromTarget(event.target, ".entry-cell");
-  if (!(input instanceof HTMLInputElement) && cell) {
-    handleEntryCellKeydown(event, cell);
-    return;
-  }
+  // A key on a cell itself is the sheet cursor's (sheet-cursor.ts).
   if (!(input instanceof HTMLInputElement) || !input.classList.contains("entry-input")) return;
   if (handleEntrySuggestKeydown(event, input)) return;
   // Escape leaves edit mode: drop the inline input and return to the cell's
@@ -1890,8 +1694,7 @@ function handleEntryKeydown(event: KeyboardEvent): void {
     // letting the browser tab-focus the next cell on top of the lingering one.
     event.preventDefault();
     closeEntryEditor();
-    const nextQ = clamp(qIndex + (event.shiftKey ? -1 : 1), 0, totalQuestions - 1);
-    setEntrySelection(nextQ, rowIndex, nextQ, rowIndex);
+    sheet.select({row: rowIndex, col: qIndex + (event.shiftKey ? -1 : 1)});
   } else if (event.key === "Enter" || event.key === "ArrowDown") {
     event.preventDefault();
     focusInput(qIndex, rowIndex + 1);
@@ -1931,7 +1734,7 @@ function handleEntryLockKeydown(event: KeyboardEvent, checkbox: HTMLInputElement
       focusShootoutInput(Number(checkbox.dataset.round), Number(checkbox.dataset.question), 0);
     } else {
       const qIndex = Number(checkbox.dataset.q);
-      if (Number.isInteger(qIndex)) setEntrySelection(qIndex, 0, qIndex, 0);
+      if (Number.isInteger(qIndex)) sheet.select({row: 0, col: qIndex});
     }
   }
 }
@@ -1943,29 +1746,13 @@ function focusLockCheckbox(qIndex: number): boolean {
   if (!cb) return false;
   // Moving onto the tickbox is a move, not a copy: drop the cell cursor so it
   // doesn't stay highlighted on the row below.
-  entrySelection = null;
-  updateEntrySelectionUI();
+  sheet.clear();
+  positionInvertOverlay();
   clearActiveEntryRows();
   cb.focus();
   return true;
 }
 
-function handleEntryDocumentKeydown(event: KeyboardEvent): void {
-  if (viewer || event.defaultPrevented || activeTab !== "input" || !entrySelection) return;
-  if (event.metaKey || event.ctrlKey || event.altKey) return;
-  if (event.key !== "Backspace" && event.key !== "Delete" && event.key !== " ") return;
-  const target = event.target;
-  const editable = target instanceof HTMLInputElement
-    || target instanceof HTMLTextAreaElement
-    || target instanceof HTMLSelectElement
-    || Boolean(target instanceof HTMLElement && target.isContentEditable);
-  if (editable) return;
-  if (target !== document.body && target !== document.documentElement && !(target instanceof Node && odRoot.contains(target))) return;
-  event.preventDefault();
-  clearSelectedEntryCells();
-}
-
-document.addEventListener("keydown", handleEntryDocumentKeydown);
 document.addEventListener("keydown", handleUndoKeydown);
 
 function handleUndoKeydown(event: KeyboardEvent): void {
@@ -1997,7 +1784,7 @@ function handleEntryFocus(event: FocusEvent): void {
   if (cell && !viewer) {
     markActiveEntryRow(cell);
     const pos = entryCellPosition(cell);
-    if (pos && !entrySelection) setEntrySelection(pos.q, pos.row, pos.q, pos.row, {focus: false});
+    if (pos && !sheet.focus) sheet.select({row: pos.row, col: pos.q}, undefined, {focus: false});
   }
 }
 
@@ -2021,7 +1808,7 @@ function openEntryEditor(cell: HTMLElement): void {
   const rowIndex = Number(cell.dataset.row);
   if (!Number.isInteger(rowIndex) || (!shootout && !Number.isInteger(qIndex))) return;
   markActiveEntryRow(cell);
-  if (!shootout) setEntrySelection(qIndex, rowIndex, qIndex, rowIndex, {focus: false});
+  if (!shootout) sheet.select({row: rowIndex, col: qIndex}, undefined, {focus: false});
   const input = document.createElement("input");
   input.type = "text";
   // On touch devices suppress the native keyboard (inputmode="none") and drive

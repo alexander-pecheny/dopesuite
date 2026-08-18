@@ -14,8 +14,10 @@ import {buildEKStatsTable, buildIndividualStatsTable, computeEKPlayerStats, comp
 import {createHostPresence, createLiveEvents, createScopedWriter, createSyncIndicator, gameEventsURL, installClientRecorder, scheduleStaticReload} from "./state-sync.js";
 import type {ClientRecorder, HostPresence, PendingOp, WireOp} from "./state-sync.js";
 import {createLocalCache, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, notifyEmbeddedResize, renderGameBreadcrumbs} from "./game-page.js";
-import {bindScrollEdges, clamp, createCellRangeSelection, createFloatingPopover, createStatusReporter, createViewerCounter, fitEKStageTeamName, fitScrollFade, installCellNavBar, isClipped, markNameOverflow} from "./widgets.js";
-import type {CellCoord, CellEdit, CellNavBar, CellRangeSelection, ScrollEdgeBinding} from "./widgets.js";
+import {bindScrollEdges, clamp, createFloatingPopover, createStatusReporter, createViewerCounter, fitEKStageTeamName, fitScrollFade, installCellNavBar, isClipped, markNameOverflow} from "./widgets.js";
+import type {CellNavBar, ScrollEdgeBinding} from "./widgets.js";
+import {createSheetCursor} from "./sheet-cursor.js";
+import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import { createStageCache } from "./stage-cache.js";
 import type { MatchDescriptor, MatchView as CachedMatchView, StageData } from "./stage-cache.js";
 import { create as createStatsSync } from "./stats-sync.js";
@@ -136,7 +138,6 @@ type ActiveCell = {matchCode: string; team: number; shootout: boolean; theme: nu
 
 type StagePane = HTMLElement & {
   _stageObserver?: IntersectionObserver | null;
-  _stageSelection?: CellRangeSelection | null;
 };
 
 type StageFrame = HTMLElement & {
@@ -229,7 +230,6 @@ function seatRowSpan(): number {
 function venueList(raw: unknown): Venue[] {
   return Array.isArray(raw) ? raw as Venue[] : [];
 }
-let stageSelection: CellRangeSelection | null = null;            // points at the active pane's selection helper
 const stageCache = createStageCache({
   container: ekRoot,
   apiBase: () => route.apiBase,
@@ -253,7 +253,6 @@ const stageCache = createStageCache({
     }
     pane.appendChild(buildStageTableStack(data));
     setupStageTableObserver(pane);
-    (pane as StagePane)._stageSelection = attachStageSelection(pane.querySelector<HTMLElement>(".stage-table-stack"));
   },
   onStageDataChanged: ({pane, stageCode, data}) => {
     refreshPaneFrames(pane, data);
@@ -264,27 +263,23 @@ const stageCache = createStageCache({
     }
   },
   onPaneShown: ({pane, stageCode}) => {
-    stageSelection = (pane as StagePane)._stageSelection || null;
+    // The cursor follows the active cell into the pane, or has nothing there.
+    seatCursor({focus: false});
     bindStageOverflowScroll();
     scheduleEKTeamNameOverflowUpdate(pane);
   },
   cleanupPane: ({pane}) => {
     (pane as StagePane)._stageObserver?.disconnect();
     (pane as StagePane)._stageObserver = null;
-    (pane as StagePane)._stageSelection?.unbind();
-    (pane as StagePane)._stageSelection = null;
   },
 });
 let renderMatchCode: string | null = null;
 let activeCell: ActiveCell = {matchCode: "", team: 0, shootout: false, theme: 0, answer: 0};
 let reloadTimer: number | null = null;
 let matchTableIndex: NodeIndex | null = null;
-let activeAnswerNode: HTMLElement | null = null;
 let recorder: ClientRecorder | null = null;
 // Live SSE stream, kept at module scope so the visibility/online recovery below
 // can tear down a dead connection and re-establish it. null while disconnected.
-let activeTeamRows: HTMLElement[] = [];
-const matchSelections = new Map<string, CellRangeSelection>();
 const undoStack: UndoEntry[] = [];
 const UNDO_LIMIT = 200;
 let undoStackContext: UndoContext | null = null;
@@ -1095,9 +1090,7 @@ function render(): void {
     bindStageOverflowScroll();
     return;
   }
-  activeAnswerNode = state.finished ? null : matchTableIndex.get("answer", activeCell);
-  markActiveTeamRows(activeAnswerNode);
-  attachMatchSelection(table, state, state.code || route.matchCode!);
+  seatCursor({focus: false});
   refreshMatchPendingMarkers(state.code || route.matchCode);
   refreshPresence();
   if (finishToggleFocused) {
@@ -1642,7 +1635,7 @@ function renderStageMatchFrame(frame: StageFrame, matchState: HostMatchView, opt
   // the rebuild is what flickered the cell being edited.
   frame.__scoreIndex = createScoreTableIndex(stageTable, {entity: "team", shootout: true});
   frame.__matchState = matchState;
-  stageSelection?.refresh();
+  sheet.refresh();
   if (hadFocus && activeCell.matchCode === matchState.code) {
     focusActiveCell({preventScroll: true});
   }
@@ -1740,7 +1733,7 @@ function applyUpdatedMatch(updated: HostMatchView, matchCode: string | undefined
   if (matchTableIndex && canPatchMatchShape(previous, updated)) {
     normalizeActiveCell();
     patchHostScoreTable(matchTableIndex, updated);
-    markActiveCell();
+    sheet.refresh();
     refreshMatchPendingMarkers(matchCode);
     return;
   }
@@ -1779,14 +1772,8 @@ function indexedNode(name: string, values: Record<string, unknown>): HTMLElement
 
 function resetMatchTableIndex(): void {
   matchTableIndex = null;
-  activeAnswerNode = null;
-  clearActiveTeamRows();
-  for (const helper of matchSelections.values()) helper.unbind();
-  matchSelections.clear();
-  // Stage selections live on cached panes — cleared by cleanupPane when the
-  // cache invalidates a pane, not on every render. unbindStageOverflowScroll
-  // only matters when leaving stage mode (renderFest/renderVenues/etc).
-  stageSelection = null;
+  // unbindStageOverflowScroll only matters when leaving stage mode
+  // (renderFest/renderVenues/etc).
   if (route.mode !== "stage") unbindStageOverflowScroll();
 }
 
@@ -1819,31 +1806,48 @@ function stageCoordOf(cell: Element): CellCoord | null {
   return {row: stageRowOffset(matchIndex) + team, col: themeOrder * answers + answer};
 }
 
-function stageCellAtCoord(coord: CellCoord | null): HTMLElement | null {
-  if (!coord) return null;
-  let remaining = coord.row;
+// stageMatchAtRow finds the бой a stage-sheet row falls in: the бои stack, so
+// row r is team r − (teams above) of the first бой whose teams reach it.
+function stageMatchAtRow(row: number): {code: string; matchState: HostMatchView; team: number} | null {
+  let remaining = row;
   const byCode = currentStageStateByCode();
   for (const match of currentStageMatches()) {
     const matchState = byCode?.get(match.code ?? "");
     if (!matchState) continue;
     const teamCount = matchState.participants?.length || 0;
-    if (remaining < teamCount) {
-      const team = remaining;
-      const answers = answerCountFor(matchState);
-      if (answers <= 0) return null;
-      const regular = regularThemeCountFor(matchState);
-      const themeOrder = Math.floor(coord.col / answers);
-      const answer = coord.col % answers;
-      const shootout = themeOrder >= regular;
-      const theme = shootout ? themeOrder - regular : themeOrder;
-      const frame = stageMatchFrame(match.code ?? "");
-      return frame?.querySelector<HTMLElement>(
-        `.answer-cell[data-team="${cssEscape(String(team))}"][data-shootout="${shootout ? "1" : "0"}"][data-theme="${cssEscape(String(theme))}"][data-answer="${cssEscape(String(answer))}"]`,
-      ) || null;
-    }
+    if (remaining < teamCount) return {code: match.code ?? "", matchState, team: remaining};
     remaining -= teamCount;
   }
   return null;
+}
+
+function stageRowCount(): number {
+  const byCode = currentStageStateByCode();
+  let rows = 0;
+  for (const match of currentStageMatches()) rows += byCode?.get(match.code ?? "")?.participants?.length || 0;
+  return rows;
+}
+
+function columnCount(matchState: HostMatchView | null | undefined): number {
+  const answers = answerCountFor(matchState);
+  const shootout = matchState?.participants?.[0]?.shootoutThemes?.length || 0;
+  return answers * (regularThemeCountFor(matchState) + shootout);
+}
+
+function stageCellAtCoord(coord: CellCoord | null): HTMLElement | null {
+  if (!coord) return null;
+  const at = stageMatchAtRow(coord.row);
+  if (!at) return null;
+  const answers = answerCountFor(at.matchState);
+  if (answers <= 0) return null;
+  const regular = regularThemeCountFor(at.matchState);
+  const themeOrder = Math.floor(coord.col / answers);
+  const answer = coord.col % answers;
+  const shootout = themeOrder >= regular;
+  const theme = shootout ? themeOrder - regular : themeOrder;
+  return stageMatchFrame(at.code)?.querySelector<HTMLElement>(
+    `.answer-cell[data-team="${cssEscape(String(at.team))}"][data-shootout="${shootout ? "1" : "0"}"][data-theme="${cssEscape(String(theme))}"][data-answer="${cssEscape(String(answer))}"]`,
+  ) || null;
 }
 
 function stageApplyValues(edits: CellEdit[]): void {
@@ -1871,7 +1875,7 @@ function stageApplyValues(edits: CellEdit[]): void {
       pushUndoEntry({
         kind: "match-edits",
         groups,
-        selection: captureSelectionFromHelper(stageSelection),
+        selection: captureSelection(),
       });
     }
   }
@@ -1880,32 +1884,49 @@ function stageApplyValues(edits: CellEdit[]): void {
   }
 }
 
-function attachStageSelection(container: HTMLElement | null): CellRangeSelection | null {
-  if (!container || viewer) return null;
-  const helper = createCellRangeSelection({
-    root: container,
-    cellSelector: ".answer-cell",
-    readonly: () => false,
-    coordOf: stageCoordOf,
-    cellAtCoord: stageCellAtCoord,
-    serialize: ekSerializeMark,
-    parse: parseMarkText,
-    cycle: ekCycleMark,
-    applyValues: stageApplyValues,
-    onActiveChange: (cell) => {
-      if (!cell) return;
-      const team = Number(cell.dataset.team);
-      const theme = Number(cell.dataset.theme);
-      const answer = Number(cell.dataset.answer);
-      const shootout = cell.dataset.shootout === "1";
-      const matchCode = cell.dataset.matchCode || activeCell.matchCode;
-      activeCell = {matchCode, team, shootout, theme, answer};
-      markActiveCell();
-      publishPresence();
-    },
+// The one sheet cursor for the бой view and the stage view alike. In the бой
+// view the sheet is the focused бой: row = team slot, col = theme × answers +
+// answer, shootout themes after the regular ones. In the stage view the бои
+// stack into one ragged sheet (stageMatchAtRow), so moving down from a бой's
+// last team lands on the next бой's first — the spill hosts navigate by.
+const sheet = createSheetCursor({
+  root: ekRoot,
+  rows: () => (route.mode === "stage" ? stageRowCount() : state?.participants?.length || 0),
+  cols: (row) => (route.mode === "stage" ? columnCount(stageMatchAtRow(row)?.matchState) : columnCount(state)),
+  readonly: () => viewer || (route.mode === "match" && Boolean(state?.finished)),
+  active: () => !viewer && (route.mode === "match" || route.mode === "stage"),
+  coordOf: (cell) => (route.mode === "stage" ? stageCoordOf(cell) : state ? ekCoordOf(cell as HTMLElement, state) : null),
+  cellAt: (coord) => (route.mode === "stage" ? stageCellAtCoord(coord) : state ? ekCellAtCoord(ekRoot, coord, state) : null),
+  values: "marks",
+  applyValues: (edits) => {
+    if (route.mode === "stage") stageApplyValues(edits);
+    else if (state) ekApplyValues(state.code || currentMatchCode(), state, edits);
+  },
+  rowsOf: teamRowsOf,
+  onActive: (cell) => {
+    if (!cell) return;
+    const team = Number(cell.dataset.team);
+    const theme = Number(cell.dataset.theme);
+    const answer = Number(cell.dataset.answer);
+    if (!Number.isInteger(team) || !Number.isInteger(theme) || !Number.isInteger(answer)) return;
+    activeCell = {matchCode: cell.dataset.matchCode || activeCell.matchCode || currentMatchCode(), team, shootout: cell.dataset.shootout === "1", theme, answer};
+    publishPresence();
+  },
+});
+sheet.bind();
+
+// A team's rows: both <tr>s of the two-row table (the name row and the
+// player row), found by the data-team the cells share.
+function teamRowsOf(cell: HTMLElement): Element[] {
+  const table = cell.closest(".match-table");
+  const team = cell.dataset.team;
+  if (!table || team == null) return [];
+  const rows = new Set<Element>();
+  table.querySelectorAll(`[data-team="${cssEscape(team)}"]`).forEach((node) => {
+    const row = node.closest("tr");
+    if (row?.parentElement?.tagName === "TBODY") rows.add(row);
   });
-  helper.bind();
-  return helper;
+  return Array.from(rows);
 }
 
 function answerCountFor(matchState: HostMatchView | null | undefined): number {
@@ -1942,36 +1963,14 @@ function ekCellAtCoord(table: HTMLElement, coord: CellCoord | null, matchState: 
   );
 }
 
-function ekSerializeMark(cell: Element | null | undefined): string {
-  if (cell!.classList.contains("right")) return "+";
-  if (cell!.classList.contains("wrong")) return "-";
-  return "";
-}
-
-// Touch tap cycle: empty → right → wrong → empty.
-function ekCycleMark(cell: Element): string {
-  if (cell.classList.contains("right")) return "wrong";
-  if (cell.classList.contains("wrong")) return "";
-  return "right";
-}
-
-function parseMarkText(text: string): string {
-  const value = String(text || "").trim().toLowerCase();
-  if (value === "") return "";
-  if (["+", "1", "right", "y", "yes", "✓", "v", "да", "п", "п."].includes(value)) return "right";
-  if (["-", "−", "0", "wrong", "n", "no", "x", "✗", "нет", "м", "м."].includes(value)) return "wrong";
-  return "";
-}
-
 function ekApplyValues(matchCode: string, matchState: HostMatchView, edits: CellEdit[], options: {recordUndo?: boolean} = {}): void {
   if (options.recordUndo !== false && !undoApplying) {
     const reverse = snapshotMatchEdits(matchCode, edits);
     if (reverse.length > 0) {
-      const helper = activeMatchSelection();
       pushUndoEntry({
         kind: "match-edits",
         groups: [{matchCode, items: reverse}],
-        selection: captureSelectionFromHelper(helper),
+        selection: captureSelection(),
       });
     }
   }
@@ -2009,10 +2008,9 @@ function snapshotMatchEdits(matchCode: string, edits: CellEdit[]): UndoEditItem[
   return out;
 }
 
-function captureSelectionFromHelper(helper: CellRangeSelection | null): {anchor: CellCoord; focus: CellCoord} | null {
-  if (!helper) return null;
-  const anchor = helper.anchor;
-  const focus = helper.focus;
+function captureSelection(): {anchor: CellCoord; focus: CellCoord} | null {
+  const anchor = sheet.anchor;
+  const focus = sheet.focus;
   if (!anchor || !focus) return null;
   return {
     anchor: {row: anchor.row, col: anchor.col},
@@ -2085,46 +2083,7 @@ function findAnswerCell(matchCode: string, {team, theme, answer, shootout}: Undo
 
 function restoreSelectionFromUndoEntry(entry: UndoEntry): void {
   if (!entry.selection) return;
-  const helper = route.mode === "stage" ? stageSelection : matchSelections.get(undoStackContext?.matchCode || currentMatchCode());
-  if (!helper) return;
-  helper.setSelection(entry.selection.anchor, entry.selection.focus, {focus: true});
-}
-
-function attachMatchSelection(table: HTMLTableElement, matchState: HostMatchView, matchCode: string): CellRangeSelection | undefined {
-  if (!table || !matchState) return;
-  if (matchSelections.has(matchCode)) {
-    matchSelections.get(matchCode)!.unbind();
-    matchSelections.delete(matchCode);
-  }
-  const helper = createCellRangeSelection({
-    root: table,
-    cellSelector: ".answer-cell",
-    readonly: () => Boolean(matchState.finished),
-    coordOf: (cell) => ekCoordOf(cell as HTMLElement, matchState),
-    cellAtCoord: (coord) => ekCellAtCoord(table, coord, matchState),
-    serialize: ekSerializeMark,
-    parse: parseMarkText,
-    cycle: ekCycleMark,
-    applyValues: (edits) => ekApplyValues(matchCode, matchState, edits),
-    onActiveChange: (cell) => {
-      if (!cell) return;
-      const team = Number(cell.dataset.team);
-      const theme = Number(cell.dataset.theme);
-      const answer = Number(cell.dataset.answer);
-      const shootout = cell.dataset.shootout === "1";
-      activeCell = {matchCode, team, shootout, theme, answer};
-      markActiveCell();
-      publishPresence();
-    },
-  });
-  helper.bind();
-  matchSelections.set(matchCode, helper);
-  return helper;
-}
-
-function activeMatchSelection(): CellRangeSelection | null {
-  if (route.mode === "stage") return stageSelection;
-  return matchSelections.get(activeCell.matchCode || currentMatchCode()) || null;
+  sheet.select(entry.selection.anchor, entry.selection.focus, {focus: true});
 }
 
 function activeSelectionCoord(): CellCoord | null {
@@ -2149,14 +2108,6 @@ function activeSelectionCoord(): CellCoord | null {
       shootout: activeCell.shootout ? "1" : "0",
     },
   }, matchState);
-}
-
-function syncSelectionToActiveCell(): void {
-  const helper = activeMatchSelection();
-  if (!helper) return;
-  const coord = activeSelectionCoord();
-  if (!coord) return;
-  helper.setSelection(coord, coord, {focus: false});
 }
 
 function buildTable(options: {compact?: boolean} = {}): HTMLTableElement {
@@ -2351,11 +2302,9 @@ function themeCells(team: HostParticipantView, teamIndex: number, theme: HostThe
     cell.dataset.answer = String(answerIndex);
     cell.title = `${team.name}, ${isShootout ? "П" : "Т"}${themeIndex + 1}, ${state!.questionValues[answerIndex]}`;
     if (editable) {
-      cell.addEventListener("click", () => {
-        selectAnswerCell(teamIndex, isShootout, themeIndex, answerIndex, {matchCode});
-      });
+      // A click is the sheet cursor's; a focus arriving otherwise (Tab) seats it.
       cell.addEventListener("focus", () => {
-        selectAnswerCell(teamIndex, isShootout, themeIndex, answerIndex, {focus: false, matchCode});
+        if (sheet.activeCell !== cell) selectAnswerCell(teamIndex, isShootout, themeIndex, answerIndex, {focus: false, matchCode});
       });
     }
     return cell;
@@ -2636,189 +2585,26 @@ function handleGlobalKeydown(event: KeyboardEvent): void {
   const isUndoKey = event.code === "KeyZ" || event.key.toLowerCase() === "z" || event.key === "я" || event.key === "Я";
   if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && isUndoKey) {
     if (performUndo()) event.preventDefault();
-    return;
   }
-  const matchState = activeMatchState();
-  if (!matchState) return;
-
-  withMatchState(matchState, () => {
-    const key = event.key.toLowerCase();
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      moveActiveCell(0, -1, event.shiftKey);
-    } else if (event.key === "ArrowRight") {
-      event.preventDefault();
-      moveActiveCell(0, 1, event.shiftKey);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      moveActiveCell(-1, 0, event.shiftKey);
-    } else if (event.key === "ArrowDown") {
-      event.preventDefault();
-      moveActiveCell(1, 0, event.shiftKey);
-    } else if (key === "q" || key === "й" || key === "+" || key === "1" || event.code === "NumpadAdd") {
-      event.preventDefault();
-      setMarkForSelection("right");
-    } else if (key === "w" || key === "ц" || key === "-" || key === "2" || event.code === "NumpadSubtract") {
-      event.preventDefault();
-      setMarkForSelection("wrong");
-    } else if (key === "backspace" || key === "delete" || event.key === " ") {
-      event.preventDefault();
-      setMarkForSelection("");
-    }
-  });
 }
 
-function setMarkForSelection(mark: string): void {
-  if (state?.finished && route.mode === "match") return;
-  const helper = activeMatchSelection();
-  const cells = helper?.selectedCells() || [];
-  if (cells.length > 1) {
-    if (route.mode === "stage") {
-      stageApplyValues(cells.map((cell) => ({cell, value: mark})));
-      return;
-    }
-    const matchState = activeMatchState();
-    if (!matchState || matchState.finished) return;
-    ekApplyValues(activeCell.matchCode || currentMatchCode(), matchState, cells.map((cell) => ({cell, value: mark})));
-    return;
-  }
-  setActiveMark(mark);
-}
-
-function selectAnswerCell(team: number, shootout: boolean, theme: number, answer: number, options: {matchCode?: string; focus?: boolean; syncSelection?: boolean} = {}): void {
+function selectAnswerCell(team: number, shootout: boolean, theme: number, answer: number, options: {matchCode?: string; focus?: boolean} = {}): void {
   activeCell = {matchCode: options.matchCode || currentMatchCode(), team, shootout, theme, answer};
-  markActiveCell();
-  publishPresence();
-  if (options.focus !== false) {
-    focusActiveCell();
-  }
-  if (options.syncSelection) syncSelectionToActiveCell();
+  seatCursor({focus: options.focus !== false});
 }
 
-function moveActiveCell(teamDelta: number, answerDelta: number, extend = false): void {
-  const maxTeam = state!.participants.length - 1;
-  const maxColumn = totalThemeCount() * state!.questionValues.length - 1;
-  const column = activeCellColumn();
-  let nextTeam = activeCell.team + teamDelta;
-  let nextColumn = column + answerDelta;
-  let nextMatchCode = activeCell.matchCode || currentMatchCode();
-  if (route.mode === "stage" && (nextTeam < 0 || nextTeam > maxTeam)) {
-    const sibling = adjacentStageMatch(nextMatchCode, nextTeam < 0 ? -1 : 1);
-    if (sibling) {
-      nextMatchCode = sibling.code;
-      const siblingMaxTeam = (sibling.state?.participants?.length || 1) - 1;
-      nextTeam = nextTeam < 0 ? siblingMaxTeam : 0;
-    } else {
-      nextTeam = clamp(nextTeam, 0, maxTeam);
-    }
-  } else {
-    nextTeam = clamp(nextTeam, 0, maxTeam);
-  }
-  nextColumn = clamp(nextColumn, 0, maxColumn);
-  const previousMatchCode = activeCell.matchCode || currentMatchCode();
-  if (nextMatchCode !== previousMatchCode) {
-    const siblingState = currentStageStateByCode()?.get(nextMatchCode);
-    if (siblingState) {
-      withMatchState(siblingState, () => {
-        activeCell = {...cellFromColumn(nextTeam, nextColumn), matchCode: nextMatchCode};
-      });
-    }
-  } else {
-    activeCell = cellFromColumn(nextTeam, nextColumn);
-  }
-  markActiveCell();
-  focusActiveCell();
-  if (extend) {
-    extendSelectionToActiveCell();
-  } else {
-    syncSelectionToActiveCell();
-  }
-}
-
-function adjacentStageMatch(matchCode: string, direction: number): {code: string; state: HostMatchView} | null {
-  if (route.mode !== "stage") return null;
-  const matches = currentStageMatches();
-  const index = matches.findIndex((match) => match.code === matchCode);
-  if (index < 0) return null;
-  const targetMatch = matches[index + direction];
-  if (!targetMatch) return null;
-  const targetState = currentStageStateByCode()?.get(targetMatch.code ?? "");
-  if (!targetState) return null;
-  return {code: targetMatch.code!, state: targetState};
-}
-
-function extendSelectionToActiveCell(): void {
-  const helper = activeMatchSelection();
-  if (!helper) return;
+// seatCursor points the sheet cursor at the active cell — after a rebuild, a
+// pane switch, or a page-side move — collapsing any range.
+function seatCursor(options: {focus: boolean}): void {
   const coord = activeSelectionCoord();
-  if (!coord) return;
-  const currentAnchor = helper.anchor || coord;
-  helper.setSelection(currentAnchor, coord, {focus: false});
-}
-
-function setActiveMark(mark: string): void {
-  if (state!.finished) return;
-  const matchCode = currentMatchCode();
-  const matchState = matchStateFor(matchCode);
-  const cell = findActiveCell();
-  if (matchState && cell) {
-    ekApplyValues(matchCode, matchState, [{cell, value: mark}]);
-    return;
-  }
-  const payload: EKCellPayload = {
-    team: activeCell.team,
-    theme: activeCell.theme,
-    answer: activeCell.answer,
-    mark,
-  };
-  if (activeCell.shootout) payload.shootout = true;
-  queueEKEdits(matchCode, [payload]);
-}
-
-function markActiveCell(): void {
-  clearActiveTeamRows();
-  if (route.mode === "match" && activeAnswerNode) {
-    activeAnswerNode.classList.remove("active");
-    activeAnswerNode = null;
-  } else {
-    document.querySelectorAll(".answer-cell.active").forEach((cell) => cell.classList.remove("active"));
-  }
-  const cell = findActiveCell();
-  if (cell) {
-    cell.classList.add("active");
-    markActiveTeamRows(cell);
-    if (route.mode === "match") activeAnswerNode = cell;
-  }
+  if (coord) sheet.select(coord, coord, {focus: options.focus, preventScroll: true});
+  else sheet.clear();
 }
 
 function isActiveMatchRow(matchCode: string, teamIndex: number): boolean {
   return !state!.finished &&
     activeCell.matchCode === matchCode &&
     activeCell.team === teamIndex;
-}
-
-function clearActiveTeamRows(): void {
-  if (activeTeamRows.length > 0) {
-    activeTeamRows.forEach((row) => row.classList.remove("active-team-row"));
-    activeTeamRows = [];
-    return;
-  }
-  ekRoot.querySelectorAll(".active-team-row").forEach((row) => row.classList.remove("active-team-row"));
-}
-
-function markActiveTeamRows(cell: HTMLElement | null): void {
-  clearActiveTeamRows();
-  if (!cell) return;
-  const table = cell.closest(".match-table");
-  const team = cell.dataset.team;
-  if (!table || team == null) return;
-  const rows = new Set<HTMLTableRowElement>();
-  table.querySelectorAll(`[data-team="${cssEscape(team)}"]`).forEach((node) => {
-    const row = node.closest("tr");
-    if (row?.parentElement?.tagName === "TBODY") rows.add(row);
-  });
-  activeTeamRows = Array.from(rows);
-  activeTeamRows.forEach((row) => row.classList.add("active-team-row"));
 }
 
 function focusActiveCell(options: FocusOptions = {}): void {

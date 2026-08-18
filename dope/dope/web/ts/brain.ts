@@ -14,8 +14,9 @@ import type {RosterTeam} from "./fest-roster.js";
 import {createLiveEvents, createScopedWriter, createSyncIndicator, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
 import {mountEditorLink, mountUnnumberedBanner, mountViewerLink, parseGameRoute, renderGameBreadcrumbs} from "./game-page.js";
 import type {GameInitLike} from "./game-page.js";
-import {clamp, createCellRangeSelection, createFloatingPopover, createStatusReporter, createViewerCounter, fitScrollFade, markNameOverflow, renderTabBar} from "./widgets.js";
-import type {CellCoord, CellEdit, CellRangeSelection} from "./widgets.js";
+import {createFloatingPopover, createStatusReporter, createViewerCounter, fitScrollFade, markNameOverflow, renderTabBar} from "./widgets.js";
+import {createSheetCursor, parseMark} from "./sheet-cursor.js";
+import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {computeBrainPlayerStats} from "./brain-stats.js";
 import type {StatsBout} from "./brain-stats.js";
 import {buildFestGrid, buildReseedStagePanel} from "./fest-grid.js";
@@ -228,6 +229,12 @@ function questionsFor(code: string): number {
   return Number.isInteger(n) && n > 0 ? n : schemeQuestions();
 }
 
+// onProtocolTab reports a «протоколы» tab in front — the tab keys are
+// `protocol:<block>`, one per Block, never the bare word.
+function onProtocolTab(): boolean {
+  return tabs().find((t) => t.key === activeTab)?.kind === "protocol";
+}
+
 function tabFromHash(): string | null {
   const all = tabs();
   const key = canonicalKey(all, (window.location.hash || "").replace(/^#/, ""));
@@ -303,7 +310,7 @@ function loadFestRoster(): void {
   fetchFestRoster(route.festID)
     .then((teams) => {
       festRoster = teams;
-      if (activeTab === "protocol") render({preserveScroll: true});
+      if (onProtocolTab()) render({preserveScroll: true});
     })
     .catch(() => {});
 }
@@ -1149,8 +1156,6 @@ function handleTableChange(event: Event): void {
   }
 }
 
-const MARK_CYCLE: Record<string, string> = {"": "right", right: "wrong", wrong: ""};
-
 function cellContext(el: HTMLElement): {code: string; view: BrainMatchView; side: number; q: number} | null {
   const code = el.dataset.match || "";
   const view = matches.get(code);
@@ -1184,18 +1189,6 @@ function totalCols(): number {
   return allBouts().length * 2;
 }
 
-function serializeMark(cell: Element | null | undefined): string {
-  const el = cell as HTMLElement | null;
-  return el?.classList.contains("right") ? "1" : el?.classList.contains("wrong") ? "0" : "";
-}
-
-function parseMarkText(text: string): string {
-  const value = String(text || "").trim().toLowerCase();
-  if (["1", "+", "q", "й", "right"].includes(value)) return "right";
-  if (["0", "-", "\u2212", "w", "ц", "wrong"].includes(value)) return "wrong";
-  return "";
-}
-
 // applyMarkEdits updates the local views and DOM, then sends one PATCH per бой.
 function applyMarkEdits(edits: CellEdit[]): void {
   const opsByCode = new Map<string, Array<{path: Array<string | number>; value: unknown}>>();
@@ -1203,7 +1196,7 @@ function applyMarkEdits(edits: CellEdit[]): void {
     const cell = edit.cell as HTMLElement;
     const ctx = cellContext(cell);
     if (!ctx || viewer || ctx.view.finished) continue;
-    const mark = parseMarkText(String(edit.value ?? ""));
+    const mark = parseMark(edit.value);
     const row = matchRows(ctx.view, ctx.side)[ctx.q];
     if (row.mark === mark) continue;
     row.mark = mark;
@@ -1224,65 +1217,34 @@ function cellAt(coord: CellCoord | null): HTMLElement | null {
   return at ? cellNode(at.code, at.side, coord.row) : null;
 }
 
-const cellSelection: CellRangeSelection = createCellRangeSelection({
+// The бои laid side by side are one sheet: row = the question, col = бой × 2 +
+// side; a бой with tiebreak questions is taller than its neighbours.
+const cursor = createSheetCursor({
   root: brainRoot,
-  cellSelector: ".answer-cell",
+  rows: (col) => {
+    const at = boutAtCol(col);
+    return at ? matchRows(at.view, 0).length : 0;
+  },
+  cols: () => totalCols(),
   readonly: () => viewer,
+  active: onProtocolTab,
   coordOf: (cell) => {
     const ctx = cellContext(cell as HTMLElement);
     return ctx ? cellCoord(ctx.code, ctx.side, ctx.q) : null;
   },
-  cellAtCoord: cellAt,
-  serialize: serializeMark,
-  parse: parseMarkText,
-  cycle: (cell) => MARK_CYCLE[parseMarkText(serializeMark(cell))] ?? "right",
+  cellAt,
+  values: "marks",
   applyValues: applyMarkEdits,
-  onActiveChange: (cell) => {
-    brainRoot.querySelector(".answer-cell.active")?.classList.remove("active");
-    cell?.classList.add("active");
-  },
+  classes: {row: ""},
 });
-cellSelection.bind();
+cursor.bind();
 
 // restoreSelection re-applies the cursor after a re-render rebuilt the cells.
 function restoreSelection(): void {
-  if (activeTab !== "protocol" || !cellSelection.anchor) return;
-  cellSelection.setSelection(cellSelection.anchor, cellSelection.focus, {focus: false});
+  if (!onProtocolTab() || !cursor.anchor) return;
+  cursor.select(cursor.anchor, cursor.focus, {focus: false});
 }
 
-function moveActive(dRow: number, dCol: number, extend: boolean): void {
-  const from = cellSelection.focus;
-  if (!from) return;
-  const col = clamp(from.col + dCol, 0, totalCols() - 1);
-  const rows = matchRows(boutAtCol(col)!.view, 0).length;
-  const next = {row: clamp(from.row + dRow, 0, rows - 1), col};
-  cellSelection.setSelection(extend ? cellSelection.anchor || from : next, next);
-}
-
-function setMarkForSelection(mark: string): void {
-  const cells = cellSelection.selectedCells();
-  const active = cellAt(cellSelection.focus);
-  const targets = cells.length > 1 ? cells : active ? [active] : [];
-  applyMarkEdits(targets.map((cell) => ({cell, value: mark})));
-}
-
-function handleKeydown(event: KeyboardEvent): void {
-  if (viewer || activeTab !== "protocol" || !cellSelection.focus) return;
-  const target = event.target as HTMLElement | null;
-  if (target && (target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
-  const key = event.key.toLowerCase();
-  if (event.key === "ArrowUp") moveActive(-1, 0, event.shiftKey);
-  else if (event.key === "ArrowDown") moveActive(1, 0, event.shiftKey);
-  else if (event.key === "ArrowLeft") moveActive(0, -1, event.shiftKey);
-  else if (event.key === "ArrowRight") moveActive(0, 1, event.shiftKey);
-  else if (key === "q" || key === "й" || key === "+" || key === "1" || event.code === "NumpadAdd") setMarkForSelection("right");
-  else if (key === "w" || key === "ц" || key === "-" || key === "0" || event.code === "NumpadSubtract") setMarkForSelection("wrong");
-  else if (key === "backspace" || key === "delete" || event.key === " ") setMarkForSelection("");
-  else return;
-  event.preventDefault();
-}
-
-document.addEventListener("keydown", handleKeydown);
 
 
 render();
