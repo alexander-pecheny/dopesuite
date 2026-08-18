@@ -50,11 +50,13 @@ var loadBearingClasses = map[string][]string{
 
 var (
 	idGetRe = regexp.MustCompile(`getElementById\("([^"]+)"\)`)
-	// wireModal(overlayId, openBtnId, cancelBtnId, …) hands its ids in as STRING
-	// ARGUMENTS, so idGetRe never sees them — a whole family of /profile buttons
-	// was invisible to this contract until a missing one bricked the page at
-	// module load (byId throws, so nothing after it binds, incl. «Выйти»).
-	wireModalRe = regexp.MustCompile(`wireModal\("([A-Za-z0-9_-]+)",\s*"([A-Za-z0-9_-]+)"(?:,\s*"([A-Za-z0-9_-]+)")?`)
+	// modal("stem") (modal.ts) and profile's wireModal("stem", openBtnId) hand
+	// their ids in as STRING ARGUMENTS, so idGetRe never sees them — a whole
+	// family of /profile buttons was invisible to this contract until a missing
+	// one bricked the page at module load (byId throws, so nothing after it
+	// binds, incl. «Выйти»). A stem names the <stem>Overlay element.
+	modalRe     = regexp.MustCompile(`\bmodal\("([A-Za-z0-9_-]+)"`)
+	wireModalRe = regexp.MustCompile(`wireModal\("([A-Za-z0-9_-]+)",\s*"([A-Za-z0-9_-]+)"`)
 	idQueryRe   = regexp.MustCompile(`querySelector(?:All)?\("#([A-Za-z0-9_-]+)"[^"]*"?\)`)
 	importReJS  = regexp.MustCompile(`from\s+"\./([a-z0-9_-]+\.js)"|import\s+"\./([a-z0-9_-]+\.js)"`)
 	// The built ESM lives under /static/dist/, so a pattern without the optional
@@ -120,12 +122,12 @@ func wantedIDs(t *testing.T, page string) []string {
 		for _, m := range idQueryRe.FindAllStringSubmatch(text, -1) {
 			set[m[1]] = true
 		}
+		for _, m := range modalRe.FindAllStringSubmatch(text, -1) {
+			set[m[1]+"Overlay"] = true
+		}
 		for _, m := range wireModalRe.FindAllStringSubmatch(text, -1) {
-			for _, id := range m[1:] {
-				if id != "" {
-					set[id] = true
-				}
-			}
+			set[m[1]+"Overlay"] = true
+			set[m[2]] = true
 		}
 	}
 	ids := make([]string, 0, len(set))

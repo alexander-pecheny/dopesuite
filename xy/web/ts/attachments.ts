@@ -5,6 +5,7 @@
 // kernels; board.ts supplies the popup menu, the open-card accessor and the
 // timeline surface, and wires the result into carddetail's seams.
 import { overlayStack } from "./overlaystack.js";
+import { modal } from "./modal.js";
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
@@ -12,14 +13,7 @@ import type { DataKey } from "./crypto.js";
 import type { MenuItem } from "./timeline.js";
 import { icon, iconed } from "./icons_gen.js";
 
-const { fetchJSON, jpatch, jdelete, el } = xyApp;
-const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
-
-function byId<T extends HTMLElement = HTMLElement>(id: string): T {
-  const node = document.getElementById(id);
-  if (!node) throw new Error(`missing #${id}`);
-  return node as T;
-}
+const { fetchJSON, jpatch, jdelete, el, byId, errMsg } = xyApp;
 
 // ---- attachment caches (preview image resolution) ----
 // A card's attachment list changes on upload/delete, so it's cached per card and
@@ -340,13 +334,8 @@ byId("attachUpload").addEventListener("click", async () => {
 // before encrypting and uploading it as an attachment.
 let pastedFile: File | null = null;
 let pasteForComment = false;
-const pasteOverlay = byId("pasteOverlay");
+const pasteModal = modal("paste");
 const cardOverlay = byId("cardOverlay");
-
-
-
-function hidePasteModal(): void { pasteOverlay.hidden = true; pastedFile = null; }
-function closePasteModal(): void { overlayStack.pop(); }
 
 document.addEventListener("paste", (e) => {
   // Only intercept image pastes while a persisted card is open (attachments need
@@ -367,8 +356,7 @@ document.addEventListener("paste", (e) => {
   // default the user can overwrite.
   nameInput.value = (file.name && file.name !== "image.png") ? file.name : `вставка.${extFromMime(file.type)}`;
   byId<HTMLInputElement>("pasteCompress").checked = false;
-  pasteOverlay.hidden = false;
-  overlayStack.open({ el: pasteOverlay, close: hidePasteModal });
+  pasteModal.open({ onClose: () => { pastedFile = null; } });
   nameInput.focus();
   nameInput.select();
 });
@@ -381,16 +369,13 @@ byId("pasteForm").addEventListener("submit", async (e) => {
   const forComment = pasteForComment;
   const compress = byId<HTMLInputElement>("pasteCompress").checked;
   const name = withExt(byId<HTMLInputElement>("pasteName").value, compress ? "webp" : extFromMime(file.type));
-  closePasteModal();
+  pasteModal.close();
   if (!xySync.requireOnline("Загрузка вложений доступна только онлайн.", msg)) return;
   try {
     const id = await uploadAttachment(file, !compress, name);
     if (forComment && id != null) deps.onCommentImage?.(id);
   } catch (err) { msg.textContent = errMsg(err); }
 });
-
-byId("pasteCancel").addEventListener("click", closePasteModal);
-pasteOverlay.addEventListener("pointerdown", (e) => { if (e.target === pasteOverlay) closePasteModal(); });
 
 // viewAttachment shows an image attachment in an in-page lightbox (zoom/pan,
 // right-click → save still works since it's a real <img> on the blob URL).

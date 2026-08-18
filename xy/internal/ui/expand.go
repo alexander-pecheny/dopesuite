@@ -131,34 +131,15 @@ func paneClass(p *base.Element) string {
 	return "handouts-src"
 }
 
-// xyMounts maps each board mount kind to the empty JS-owned container it renders.
+// xyMounts maps the board mount kinds whose container is not the kit's default
+// (a <div> classed by the kind name) to what they render as.
 var xyMounts = map[string]base.MountSpec{
-	"kanban":            {Tag: "div", Classes: []string{"kanban"}},
-	"board-grid":        {Tag: "div", Classes: []string{"board-grid"}},
-	"timeline":          {Tag: "div", Classes: []string{"timeline"}},
-	"label-picker":      {Tag: "div", Classes: []string{"label-picker"}},
-	"label-add-row":     {Tag: "div", Classes: []string{"label-add-row"}},
-	"attachments":       {Tag: "div", Classes: []string{"attachments"}},
-	"card-fields":       {Tag: "div", Classes: []string{"card-fields"}},
-	"preview-body":      {Tag: "div", Classes: []string{"preview-body"}},
 	"card-preview-body": {Tag: "div", Classes: []string{"preview-body", "card-preview-body"}},
-	"handouts-pdf":      {Tag: "div", Classes: []string{"handouts-pdf"}},
 	"import-preview":    {Tag: "div", Classes: []string{"handouts-pane", "import-preview"}},
-	"lists-manage-rows": {Tag: "div", Classes: []string{"lists-manage-rows"}},
-	"accent-picks":      {Tag: "div", Classes: []string{"accent-picks"}},
-	"replace-hits":      {Tag: "div", Classes: []string{"replace-hits"}},
-	"members-list":      {Tag: "div", Classes: []string{"members-list"}},
 	"token-list":        {Tag: "ul", Classes: []string{"token-list"}},
 	"token-value":       {Tag: "code", Classes: []string{"token-value"}},
-	"card-copy-msg":     {Tag: "div", Classes: []string{"card-copy-msg"}},
 	"card-versions":     {Tag: "div", Classes: []string{"seg", "seg-grow", "card-versions"}},
-	"mass-bar":          {Tag: "div", Classes: []string{"mass-bar"}},
-	"mass-body":         {Tag: "div", Classes: []string{"mass-body"}},
 	"import-count":      {Tag: "span", Classes: []string{"import-count"}},
 	"card-title":        {Tag: "h2", Classes: []string{"card-detail-title"}},
-	"sizes-preview":     {Tag: "div", Classes: []string{"sizes-preview"}},
-	"excerpts":          {Tag: "div", Classes: []string{"excerpts"}},
 	"excerpt-count":     {Tag: "span", Classes: []string{"excerpt-count"}},
-	"thread":            {Tag: "div", Classes: []string{"thread"}},
-	"feed-grid":         {Tag: "div", Classes: []string{"feed-grid"}},
 }

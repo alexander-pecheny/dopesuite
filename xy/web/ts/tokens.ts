@@ -14,13 +14,7 @@ interface ApiToken {
   last_used_at?: string | null;
 }
 
-function byId<T extends HTMLElement>(id: string): T {
-  const node = document.getElementById(id);
-  if (!node) throw new Error(`page is missing #${id}`);
-  return node as T;
-}
-
-const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+const { byId, errMsg } = xyApp;
 
 const createForm = byId<HTMLFormElement>("createForm");
 const createMessage = byId("createMessage");

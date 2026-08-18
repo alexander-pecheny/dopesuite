@@ -6,7 +6,7 @@
 // outbox `post` verb, popupMenu, plural, attachment access); the card-detail
 // module is reached through the `card` seam (open-card id + comment-link copy),
 // which the orchestrator wires back to the carddetail factory's API.
-import { overlayStack } from "./overlaystack.js";
+import { modal } from "./modal.js";
 import { anchorPopup } from "./popup.js";
 import { decodeCommentPayload, encodeCommentPayload } from "./commentpayload.js";
 export { decodeCommentPayload, encodeCommentPayload } from "./commentpayload.js";
@@ -394,9 +394,9 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   const myName = (): string | null => state().me?.username || null;
   const mentionBody = (text: string): HTMLElement => commentBody(text, rosterNames(), myName());
 
-  const feedOverlay = byId("feedOverlay");
-  const threadOverlay = byId("threadOverlay");
-  const excerptsOverlay = byId("excerptsOverlay");
+  const feedModal = modal("feed");
+  const threadModal = modal("thread");
+  const excerptsModal = modal("excerpts");
 
   const author = (ev: { author_user_id?: number | null }): string => {
     const st = state();
@@ -714,7 +714,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     for (const id of ["feedDiffView", "feedDiffViewFull"]) byId<HTMLSelectElement>(id).value = diffView();
     const oc = deps.card.openCardId();
     if (oc) await load(oc);
-    if (!feedOverlay.hidden) await renderFeedGrid();
+    if (feedModal.isOpen) await renderFeedGrid();
   }
 
   for (const id of ["feedDiffView", "feedDiffViewFull"]) {
@@ -734,7 +734,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     if (!reload) return;
     const oc = deps.card.openCardId();
     if (oc) await load(oc);
-    if (!feedOverlay.hidden) await renderFeedGrid();
+    if (feedModal.isOpen) await renderFeedGrid();
   }
 
   for (const id of ["feedFilter", "feedFilterFull"]) {
@@ -746,9 +746,6 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // The card panel gives the лента ~320px of height; on a long discussion that is
   // a keyhole. Развернуть re-renders the same events full-screen, flowed into
   // columns so as much as possible is readable at once.
-  function hideFeed(): void { feedOverlay.hidden = true; }
-  function closeFeed(): void { overlayStack.pop(); }
-
   // Reading order in the expanded лента. The panel's feed is always newest-first
   // (you go there for what just happened); reading a whole discussion end to end
   // is the other job, and that one wants oldest-first.
@@ -787,15 +784,13 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   feedOrderSel.value = feedOrder();
   feedOrderSel.addEventListener("change", async () => {
     localStorage.setItem(FEED_ORDER_KEY, feedOrderSel.value === "old" ? "old" : "new");
-    if (!feedOverlay.hidden) await renderFeedGrid();
+    if (feedModal.isOpen) await renderFeedGrid();
   });
 
   byId("feedExpand").addEventListener("click", async () => {
-    feedOverlay.hidden = false;
-    overlayStack.open({ el: feedOverlay, close: hideFeed });
+    feedModal.open();
     await renderFeedGrid();
   });
-  byId("feedClose").addEventListener("click", closeFeed);
 
   // ---- reply threads ----
   // Threads are one level deep and live in a modal: the лента stays flat and
@@ -808,9 +803,6 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       onclick: () => { void openThread(ev.id); },
     }, ...iconed("message-circle", `${n} ${deps.plural(n, "ответ", "ответа", "ответов")}`));
   }
-
-  function hideThread(): void { threadOverlay.hidden = true; threadRootId = null; }
-  function closeThread(): void { overlayStack.pop(); }
 
   // openThread renders the root comment and its replies, oldest first, from the
   // events already loaded for the open card — no extra round trip.
@@ -841,9 +833,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       frag.append(node);
     }
     body.replaceChildren(frag);
-    byId("threadMessage").textContent = "";
-    threadOverlay.hidden = false;
-    overlayStack.open({ el: threadOverlay, close: hideThread });
+    threadModal.open({ onClose: () => { threadRootId = null; } });
   }
 
   submitOnCmdEnter("threadInput", "threadForm");
@@ -866,8 +856,6 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     } catch (err) { msg.textContent = err instanceof Error ? err.message : String(err); }
   });
 
-  byId("threadClose").addEventListener("click", closeThread);
-  threadOverlay.addEventListener("pointerdown", (e) => { if (e.target === threadOverlay) closeThread(); });
 
   function mustDK(): DataKey {
     const dk = deps.getDK();
@@ -935,7 +923,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   async function refreshFeeds(): Promise<void> {
     const oc = deps.card.openCardId();
     if (oc != null) await load(oc);
-    if (!feedOverlay.hidden) await renderFeedGrid();
+    if (feedModal.isOpen) await renderFeedGrid();
   }
 
   function deleteComment(ev: CardEvent): void {
@@ -1093,9 +1081,6 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     byId<HTMLButtonElement>("excerptsView").disabled = n === 0;
   }
 
-  const hideExcerpts = (): void => { excerptsOverlay.hidden = true; };
-  const closeExcerpts = (): void => { overlayStack.pop(); };
-
   async function openExcerpts(): Promise<void> {
     const body = byId("excerptsBody");
     body.replaceChildren();
@@ -1122,13 +1107,10 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       }
       body.append(box);
     }
-    excerptsOverlay.hidden = false;
-    overlayStack.open({ el: excerptsOverlay, close: hideExcerpts });
+    excerptsModal.open();
   }
 
   byId("excerptsView").addEventListener("click", () => { void openExcerpts(); });
-  byId("excerptsClose").addEventListener("click", closeExcerpts);
-  excerptsOverlay.addEventListener("pointerdown", (e) => { if (e.target === excerptsOverlay) closeExcerpts(); });
 
   return {
     load,

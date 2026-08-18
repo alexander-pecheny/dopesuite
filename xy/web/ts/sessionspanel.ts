@@ -18,6 +18,7 @@ import type { Tester } from "./chgk.js";
 import * as people from "./people.js";
 import { icon, iconed } from "./icons_gen.js";
 import { commentBody, decodeCommentPayload } from "./timeline.js";
+import type { Modal } from "./modal.js";
 
 export interface SessionsPanelDeps {
   boardId: number;
@@ -36,9 +37,8 @@ export interface SessionsPanelDeps {
   // the notes about the test itself. Decrypted by the caller, which owns the DK.
   loadNotes(sessionId: number): Promise<Array<{ text: string; card: number | null; when: string; author: string }>>;
   addNote(sessionId: number, text: string): Promise<void>;
-  overlayOpen(el: HTMLElement, close: () => void, confirm?: () => Promise<boolean>): void;
-  // Dismisses the topmost overlay, which is always the one this panel opened.
-  overlayClose(): void;
+  // The panel's two dialogs, the list and the form (modal.ts).
+  modal(stem: "sessions" | "sessionEdit"): Modal;
   render(): void;
 }
 
@@ -49,8 +49,8 @@ export interface SessionsPanel {
 
 export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
   const { el, byId } = deps;
-  const overlay = byId("sessionsOverlay");
-  const editOverlay = byId("sessionEditOverlay");
+  const listModal = deps.modal("sessions");
+  const editModal = deps.modal("sessionEdit");
   let editing: number | null = null;
   let testerRows: (() => Tester[]) | null = null;
 
@@ -62,12 +62,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
 
   function open(): void {
     renderList();
-    overlay.hidden = false;
-    deps.overlayOpen(overlay, close);
-  }
-
-  function close(): void {
-    overlay.hidden = true;
+    listModal.open();
   }
 
   function sorted(): Array<{ s: BoardSession; m: SessionMeta }> {
@@ -123,8 +118,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     if (!s) return;
     editing = id;
     renderForm(parseSession(s.meta));
-    editOverlay.hidden = false;
-    deps.overlayOpen(editOverlay, closeEdit, saveOnLeave);
+    editModal.open({ onClose: closeEdit, confirm: saveOnLeave });
   }
 
   async function addSession(): Promise<void> {
@@ -142,7 +136,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       renderList();
       openSession(id);
     } catch (_) {
-      byId("sessionsMessage").textContent = "Не удалось создать тест.";
+      listModal.message("Не удалось создать тест.");
     }
   }
 
@@ -328,7 +322,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       input.value = "";
       if (notesBox) await drawNotes(notesBox);
     } catch (_) {
-      byId("sessionEditMessage").textContent = "Не удалось добавить заметку.";
+      editModal.message("Не удалось добавить заметку.");
     }
   }
 
@@ -385,7 +379,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       await formSave();
       return true;
     } catch (_) {
-      byId("sessionEditMessage").textContent = "Не удалось сохранить.";
+      editModal.message("Не удалось сохранить.");
       return false;
     }
   }
@@ -396,36 +390,27 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     try {
       await deps.deleteSession(editing);
       editing = null; // nothing left to save on the way out
-      dismiss();
+      editModal.close();
       renderList();
       deps.render();
     } catch (_) {
-      byId("sessionEditMessage").textContent = "Не удалось удалить.";
+      editModal.message("Не удалось удалить.");
     }
   }
 
-  // The teardown the stack runs; `dismiss` is the ask. One function doing both
-  // popped the stack twice and took the Тесты panel down with the form.
   function closeEdit(): void {
-    editOverlay.hidden = true;
     editing = null;
     testerRows = null;
     formRead = null;
     formSave = null;
   }
 
-  const dismiss = (): void => deps.overlayClose();
-
   // The form has no submit button — leaving it is what saves (saveOnLeave). So
   // Cmd/Ctrl-Enter means the same thing every other editor's does here: commit
   // and get out.
-  xyApp.onCmdEnter(byId("sessionForm"), dismiss);
+  xyApp.onCmdEnter(byId("sessionForm"), editModal.close);
 
   byId("sessionAddBtn").addEventListener("click", () => { void addSession(); });
-  byId("sessionsClose").addEventListener("click", dismiss);
-  byId("sessionEditClose").addEventListener("click", dismiss);
-  overlay.addEventListener("pointerdown", (e) => { if (e.target === overlay) dismiss(); });
-  editOverlay.addEventListener("pointerdown", (e) => { if (e.target === editOverlay) dismiss(); });
 
   return { open, openSession };
 }

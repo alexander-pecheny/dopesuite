@@ -57,6 +57,50 @@ function escapeHtml(s: unknown): string {
 export type ElChild = Node | string | number | boolean | null | undefined | ElChild[];
 export type ElProps = Record<string, unknown>;
 
+// byId is the page's node lookup: a missing id is a page bug, so it throws.
+function byId<T extends HTMLElement = HTMLElement>(id: string): T {
+  const node = document.getElementById(id);
+  if (!node) throw new Error(`page is missing #${id}`);
+  return node as T;
+}
+
+const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+// The header's sync badge combines a transient per-write state (saving/error)
+// with the persistent sync state (offline / queued edits), the latter first.
+export type WriteState = "saved" | "saving" | "error";
+export interface SyncBadge {
+  set(op: WriteState): void;
+  onSync(st: { online: boolean; pending: number; syncing: boolean }): void;
+}
+function syncBadge(node: HTMLElement): SyncBadge {
+  let lastOp: WriteState = "saved";
+  let sync = { online: true, pending: 0, syncing: false };
+  function paint(): void {
+    let state: string, title: string;
+    if (!sync.online) {
+      state = "offline";
+      title = sync.pending ? `Офлайн · ${sync.pending} изм. ждут отправки` : "Офлайн";
+    } else if (sync.syncing || sync.pending > 0) {
+      state = "pending";
+      title = sync.pending ? `Синхронизация · осталось ${sync.pending}` : "Синхронизация…";
+    } else if (lastOp === "error") {
+      state = "error"; title = "Ошибка";
+    } else if (lastOp === "saving") {
+      state = "saving"; title = "Подождите";
+    } else {
+      state = "saved"; title = "Готово";
+    }
+    node.dataset.state = state;
+    node.title = title;
+  }
+  paint();
+  return {
+    set: (op) => { lastOp = op; paint(); },
+    onSync: (st) => { sync = st; paint(); },
+  };
+}
+
 // el(tag, props, ...children) — minimal DOM builder. props.class, props.text,
 // event handlers as on*, everything else set as attribute/property.
 function el(tag: string, props: ElProps = {}, ...children: ElChild[]): HTMLElement {
@@ -192,4 +236,4 @@ function wireGenPassphrase(button: HTMLElement, input: HTMLInputElement, generat
 
 export const xySizes = { DEFAULT: SIZES_DEFAULT, ...SIZES_RANGE, sanitize: sanitizeSizes, apply: applySizes };
 
-export const xyApp = { fetchJSON, fetchVoid, jpost, jpatch, jput, jdelete, escapeHtml, el, deriveTitle, requireLogin, onCmdEnter, wireGenPassphrase };
+export const xyApp = { fetchJSON, fetchVoid, jpost, jpatch, jput, jdelete, escapeHtml, el, byId, errMsg, syncBadge, deriveTitle, requireLogin, onCmdEnter, wireGenPassphrase };

@@ -1,6 +1,7 @@
 // board.ts — kanban board: unlock, render lists/cards (derived titles),
 // drag-reorder with fractional ranks, card detail + timeline + labels.
 import { overlayStack } from "./overlaystack.js";
+import { modal } from "./modal.js";
 import { xyApp, xySizes } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xyRank } from "./rank.js";
@@ -30,7 +31,6 @@ import { xyFind } from "./find.js";
 import { xyAuthorCount } from "./authorcount.js";
 import type { Span as FindSpan } from "./find.js";
 import type { DataKey } from "./crypto.js";
-import type { SyncStatus } from "./sync.js";
 import type { OpBody } from "./store.js";
 import type { ScreenValue } from "./chgk.js";
 import type { BoardCard, BoardLabel, BoardList, BoardState, CardLabel } from "./unlock.js";
@@ -39,20 +39,14 @@ import type { MenuItem, Timeline } from "./timeline.js";
 import type { MoveCtx, PreviewCardLike } from "./carddetail.js";
 import { icon, iconed } from "./icons_gen.js";
 
-const { fetchJSON, jpost, jpatch, jput, jdelete, el, deriveTitle, onCmdEnter } = xyApp;
+const { fetchJSON, jpost, jpatch, jput, jdelete, el, byId, errMsg, deriveTitle, onCmdEnter } = xyApp;
 const { keyBetween } = xyRank;
 
-function byId<T extends HTMLElement = HTMLElement>(id: string): T {
-  const node = document.getElementById(id);
-  if (!node) throw new Error(`page is missing #${id}`);
-  return node as T;
-}
 function q(sel: string): HTMLElement {
   const node = document.querySelector<HTMLElement>(sel);
   if (!node) throw new Error(`page is missing ${sel}`);
   return node;
 }
-const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 // Mutation wrappers — every board mutation flows through the sync engine, which
 // sends it immediately when online or queues it (returning a negative temp id
@@ -95,30 +89,8 @@ let cardDragCommitted = false;
 let listDragId: number | null = null;
 let listDragCommitted = false;
 
-// The header badge combines a transient per-action state (saving/error) with the
-// persistent sync state (offline / queued edits), the latter taking precedence.
-let lastOp: "saved" | "saving" | "error" = "saved";
-let syncState: Pick<SyncStatus, "online" | "pending" | "syncing"> = { online: true, pending: 0, syncing: false };
-
-function refreshBadge(): void {
-  let state: string, title: string;
-  if (!syncState.online) {
-    state = "offline";
-    title = syncState.pending ? `Офлайн · ${syncState.pending} изм. ждут отправки` : "Офлайн";
-  } else if (syncState.syncing || syncState.pending > 0) {
-    state = "pending";
-    title = syncState.pending ? `Синхронизация · осталось ${syncState.pending}` : "Синхронизация…";
-  } else if (lastOp === "error") {
-    state = "error"; title = "Ошибка";
-  } else if (lastOp === "saving") {
-    state = "saving"; title = "Подождите";
-  } else {
-    state = "saved"; title = "Готово";
-  }
-  statusNode.dataset.state = state;
-  statusNode.title = title;
-}
-function setStatus(s: "saved" | "saving" | "error"): void { lastOp = s; refreshBadge(); }
+const badge = xyApp.syncBadge(statusNode);
+const setStatus = badge.set;
 
 // ---- boot + unlock ----
 // The whole boot → unlock → snapshot-load flow lives in unlock.js; the board
@@ -134,7 +106,7 @@ const unlock = createUnlock({
   crypto: xyCrypto,
   sync: xySync,
   net: xyApp,
-  status: { set: setStatus, onSync: (st) => { syncState = st; refreshBadge(); } },
+  status: badge,
   applySizes: xySizes.apply,
   onDK: (k) => { dk = k; },
   onState: (s) => {
@@ -374,12 +346,11 @@ async function runTypographBoard(allow: Set<string> | null): Promise<void> {
 // literal (find.ts) and the structure is out of its reach, so what is left to
 // judge is context: the same needle in two places can want two different
 // answers, which is why the preview ticks Occurrences and not cards.
-const replaceOverlay = byId("replaceOverlay");
+const replaceModal = modal("replace");
 const replaceScope = byId<HTMLSelectElement>("replaceScope");
 const replaceFrom = byId<HTMLInputElement>("replaceFrom");
 const replaceTo = byId<HTMLInputElement>("replaceTo");
 const replaceCase = byId<HTMLInputElement>("replaceCase");
-const replaceMessage = byId("replaceMessage");
 
 interface Occurrence { i: number; card: BoardCard; span: FindSpan }
 
@@ -495,7 +466,7 @@ function renderReplace(): void {
   // replacement with nothing.
   const verb = replaceTo.value ? "Заменить" : "Удалить";
   run.textContent = picked.length ? `${verb} ${picked.length} в ${xyMass.cardCount(cards)}` : verb;
-  replaceMessage.textContent = replaceFrom.value && !occurrences.length ? "Ничего не найдено." : "";
+  replaceModal.message(replaceFrom.value && !occurrences.length ? "Ничего не найдено." : "");
 }
 
 async function runReplace(): Promise<void> {
@@ -527,11 +498,11 @@ async function runReplace(): Promise<void> {
     // Re-plan first: what is left to replace has changed, and renderReplace owns
     // the message line, so the report has to be written after it.
     planReplace();
-    replaceMessage.textContent = `Готово: ${xyMass.cardCount(changes.length)}.` +
-      (stale ? ` ${xyMass.cardCount(stale)} изменились, пока шёл просмотр — они пропущены, найдите заново.` : "");
+    replaceModal.message(`Готово: ${xyMass.cardCount(changes.length)}.` +
+      (stale ? ` ${xyMass.cardCount(stale)} изменились, пока шёл просмотр — они пропущены, найдите заново.` : ""));
   } catch (err) {
     setStatus("error");
-    replaceMessage.textContent = "Ошибка при замене: " + errMsg(err);
+    replaceModal.message("Ошибка при замене: " + errMsg(err));
   }
 }
 
@@ -549,10 +520,8 @@ function openReplace(): void {
     opts.push(el("option", { value: `list:${l.id}`, text: l.title }));
   }
   replaceScope.replaceChildren(...opts);
-  replaceMessage.textContent = "";
   planReplace();
-  replaceOverlay.hidden = false;
-  overlayStack.open({ el: replaceOverlay, close: () => { replaceOverlay.hidden = true; } });
+  replaceModal.open();
   replaceFrom.focus();
 }
 
@@ -569,18 +538,10 @@ replaceTo.addEventListener("input", () => renderReplace());
 byId("replacePrev").addEventListener("click", () => { replacePageNo--; renderReplace(); });
 byId("replaceNext").addEventListener("click", () => { replacePageNo++; renderReplace(); });
 byId("replaceRun").addEventListener("click", () => { void runReplace(); });
-byId("replaceClose").addEventListener("click", () => overlayStack.pop());
 
 // ---- the stress-mark review ----
-const accentOverlay = byId("accentOverlay");
+const accentModal = modal("accent");
 let accentApply: ((allow: Set<string>) => void) | null = null;
-
-function hideAccentReview(): void {
-  accentOverlay.hidden = true;
-  accentApply = null;
-}
-
-function closeAccentReview(): void { overlayStack.pop(); }
 
 function openAccentReview(picks: ReadonlyArray<{ from: string; to: string }>, apply: (allow: Set<string>) => void): void {
   const box = byId("accentPicks");
@@ -593,18 +554,16 @@ function openAccentReview(picks: ReadonlyArray<{ from: string; to: string }>, ap
       el("span", { class: "accent-to", text: p.to }));
   }));
   accentApply = apply;
-  accentOverlay.hidden = false;
-  overlayStack.open({ el: accentOverlay, close: hideAccentReview });
+  accentModal.open({ onClose: () => { accentApply = null; } });
 }
 
-byId("accentCancel").addEventListener("click", closeAccentReview);
 byId("accentRun").addEventListener("click", () => {
   const allow = new Set<string>();
   for (const cb of byId("accentPicks").querySelectorAll<HTMLInputElement>("input:checked")) {
     if (cb.dataset.word) allow.add(cb.dataset.word);
   }
   const apply = accentApply;
-  closeAccentReview();
+  accentModal.close();
   apply?.(allow);
 });
 
@@ -1391,15 +1350,13 @@ interface MoveBoardItem { id: number; name?: string; name_enc?: string | null; s
 let listMoveSrc: BoardList | null = null;  // the list being moved/copied
 let listMoveCtx: MoveCtx | null = null;  // destination board ctx (from loadMoveBoard)
 
+const moveListModal = modal("moveList");
+
 function openMoveList(list: BoardList): void {
   listMoveSrc = list;
-  byId("moveListMessage").textContent = "";
-  byId("moveListOverlay").hidden = false;
-  overlayStack.open({ el: byId("moveListOverlay"), close: hideMoveList });
+  moveListModal.open();
   void populateMoveListBoards();
 }
-function hideMoveList(): void { byId("moveListOverlay").hidden = true; }
-function closeMoveList(): void { overlayStack.pop(); }
 
 // populateMoveListBoards fills the board <select> with decrypted board names
 // (current board first/default), then loads the chosen board's list positions.
@@ -1482,7 +1439,7 @@ async function moveListCopyLocked(remove: boolean, src: BoardList, ctx: MoveCtx)
     setStatus("saving");
     try {
       await patch("patchList", `/api/lists/${src.id}`, { rank });
-      setStatus("saved"); render(); closeMoveList();
+      setStatus("saved"); render(); moveListModal.close();
     } catch (err) { setStatus("error"); msg.textContent = errMsg(err); void unlock.load(); }
     return;
   }
@@ -1536,17 +1493,13 @@ async function moveListCopyLocked(remove: boolean, src: BoardList, ctx: MoveCtx)
     }
     render();
     msg.textContent = remove ? "Перемещено." : "Скопировано.";
-    setTimeout(closeMoveList, 700);
+    setTimeout(moveListModal.close, 700);
   } catch (err) { msg.textContent = errMsg(err); }
 }
 
 byId("moveListBoard").addEventListener("change", () => { void onMoveListBoardChange(); });
 byId("moveListCopyBtn").addEventListener("click", () => { void doMoveListCopy(false); });
 byId("moveListMoveBtn").addEventListener("click", () => { void doMoveListCopy(true); });
-byId("moveListClose").addEventListener("click", closeMoveList);
-byId("moveListOverlay").addEventListener("pointerdown", (e) => {
-  if (e.target instanceof Element && e.target.id === "moveListOverlay") closeMoveList();
-});
 
 // ---- lists management (reorder + group into list_of_lists) ----
 // The «Управление списками» modal shows one row per list (and a bordered block
@@ -1557,7 +1510,7 @@ byId("moveListOverlay").addEventListener("pointerdown", (e) => {
 // one block, keeping its members consecutive (the invariant the board relies on).
 interface Unit { kind: "group" | "list"; id: number; key: string; lists: BoardList[] }
 
-const listsManageOverlay = byId("listsManageOverlay");
+const listsManageModal = modal("listsManage");
 const listsManageRows = byId("listsManageRows");
 let manageSelected = new Set<string>();       // selected unit keys ("l"+listId / "g"+groupId)
 let manageUnitByKey = new Map<string, Unit>();      // key → unit (rebuilt each render)
@@ -1590,14 +1543,10 @@ function computeUnits(): Unit[] {
 
 function openListsManage(): void {
   manageSelected = new Set();
-  byId("listsManageMessage").textContent = "";
   byId<HTMLInputElement>("listsMovePos").value = "";
-  listsManageOverlay.hidden = false;
-  overlayStack.open({ el: listsManageOverlay, close: hideListsManage });
+  listsManageModal.open();
   renderManage();
 }
-function hideListsManage(): void { listsManageOverlay.hidden = true; }
-function closeListsManage(): void { overlayStack.pop(); }
 
 function renderManage(): void {
   const units = computeUnits();
@@ -1840,8 +1789,6 @@ byId("listsMoveBtn").addEventListener("click", () => {
   if (!(n >= 1)) { byId("listsManageMessage").textContent = "Укажите позицию."; return; }
   void moveUnitsTo(new Set(manageSelected), n);
 });
-byId("listsManageClose").addEventListener("click", closeListsManage);
-listsManageOverlay.addEventListener("pointerdown", (e) => { if (e.target === listsManageOverlay) closeListsManage(); });
 
 // ---- import a package (.4s / .zip / .docx) into a new list ----
 // The server parses the upload with the Go port of chgksuite's parser
@@ -1860,15 +1807,12 @@ interface ImportPkg { name: string; source: string; images?: ImportImage[] }
 // importCtx holds the package awaiting confirmation on the verification screen.
 let importCtx: { name: string; images: ImportImage[]; imgMap: Map<string, string>; splitTours: boolean } | null = null;
 
-const importPickOverlay = byId("importPickOverlay");
+const importPickModal = modal("importPick");
 
 function openImportPick(): void {
   byId<HTMLFormElement>("importPickForm").reset();
-  importPickOverlay.hidden = false;
-  overlayStack.open({ el: importPickOverlay, close: hideImportPick });
+  importPickModal.open();
 }
-function hideImportPick(): void { importPickOverlay.hidden = true; }
-function closeImportPick(): void { overlayStack.pop(); }
 
 byId("importPickForm").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -1876,11 +1820,9 @@ byId("importPickForm").addEventListener("submit", async (e) => {
   const file = files && files[0];
   if (!file) return;
   const splitTours = byId<HTMLInputElement>("importSplitTours").checked;
-  closeImportPick();
+  importPickModal.close();
   await importFile(file, splitTours);
 });
-byId("importPickCancel").addEventListener("click", closeImportPick);
-importPickOverlay.addEventListener("pointerdown", (e) => { if (e.target === importPickOverlay) closeImportPick(); });
 
 async function importFile(file: File, splitTours: boolean): Promise<void> {
   if (!xySync.requireOnline("Импорт доступен только онлайн.")) return;
@@ -1903,7 +1845,7 @@ async function importFile(file: File, splitTours: boolean): Promise<void> {
 
 // ---- verification screen (docx) ----
 
-const importOverlay = byId("importOverlay");
+const importModal = modal("import");
 
 // importCards splits 4s source the way the export path joins it: one card per
 // blank-line-separated block. Each card's kind comes from its leading marker.
@@ -1938,13 +1880,12 @@ function importImgMap(images: ImportImage[] | undefined): Map<string, string> {
 }
 
 function openImportVerify(pkg: ImportPkg, splitTours: boolean): void {
-  closeImportVerify();
+  importModal.close();
   importCtx = { name: pkg.name, images: pkg.images || [], imgMap: importImgMap(pkg.images), splitTours };
   byId("importTitle").textContent = "Проверка импорта: " + pkg.name;
   const src = byId<HTMLTextAreaElement>("importSource");
   src.value = pkg.source;
-  importOverlay.hidden = false;
-  overlayStack.open({ el: importOverlay, close: hideImportVerify });
+  importModal.open({ onClose: hideImportVerify });
   renderImportPreview();
   src.focus();
   // Focusing puts the caret at the end; the user wants to read from the top.
@@ -1967,23 +1908,19 @@ function renderImportPreview(): void {
 }
 
 function hideImportVerify(): void {
-  importOverlay.hidden = true;
   if (importCtx) for (const url of importCtx.imgMap.values()) URL.revokeObjectURL(url);
   importCtx = null;
   byId("importPreview").replaceChildren();
 }
-function closeImportVerify(): void { overlayStack.pop(); }
 
 byId("importSource").addEventListener("input", debounceImportPreview());
-byId("importClose").addEventListener("click", closeImportVerify);
 byId("importCommit").addEventListener("click", async () => {
   if (!importCtx) return;
   const { name, images, splitTours } = importCtx;
   const source = byId<HTMLTextAreaElement>("importSource").value;
-  closeImportVerify();
+  importModal.close();
   await commitImport(name, source, images, splitTours);
 });
-importOverlay.addEventListener("pointerdown", (e) => { if (e.target === importOverlay) closeImportVerify(); });
 
 // Re-rendering the whole preview on every keystroke is wasteful on a big package.
 function debounceImportPreview(): () => void {
@@ -2160,7 +2097,7 @@ const EXPORT_FORMATS = [
   { key: "handouts", box: "exportFmtHandouts", server: true },
 ] as const;
 
-const exportOverlay = byId("exportOverlay");
+const exportModal = modal("export");
 let exportCtx: { cards: BoardCard[]; title: string; hndt: string } | null = null;
 
 function exportBox(box: string): HTMLInputElement { return byId<HTMLInputElement>(box); }
@@ -2198,17 +2135,9 @@ function openExport(list: BoardList): void {
   const notes: string[] = [];
   if (offline) notes.push("Офлайн: доступен только .4s, без изображений.");
   if (!hndt.trim()) notes.push("В списке нет вопросов с раздаточным материалом.");
-  byId("exportMessage").textContent = notes.join(" ");
   syncExportForm();
-  exportOverlay.hidden = false;
-  overlayStack.open({ el: exportOverlay, close: hideExport });
-}
-
-function closeExport(): void { overlayStack.pop(); }
-
-function hideExport(): void {
-  exportOverlay.hidden = true;
-  exportCtx = null;
+  exportModal.open({ onClose: () => { exportCtx = null; } });
+  exportModal.message(notes.join(" "));
 }
 
 // runExport renders the ticked formats. A bare .4s with no images never touches
@@ -2226,7 +2155,7 @@ async function runExport(): Promise<void> {
 
   if (formats.length === 1 && formats[0] === "4s" && !wantsImages) {
     downloadBlob(new Blob([source], { type: "text/plain;charset=utf-8" }), `${title}.4s`);
-    closeExport();
+    exportModal.close();
     return;
   }
 
@@ -2258,7 +2187,7 @@ async function runExport(): Promise<void> {
     if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
     downloadBlob(await res.blob(), filenameFromResponse(res) || `${title}.zip`);
     setStatus("saved");
-    closeExport();
+    exportModal.close();
   } catch (err) {
     setStatus("error");
     msg.textContent = "Экспорт не удался: " + errMsg(err);
@@ -2294,8 +2223,6 @@ byId("exportToggleAll").addEventListener("click", () => {
   syncExportForm();
 });
 for (const f of EXPORT_FORMATS) exportBox(f.box).addEventListener("change", syncExportForm);
-byId("exportCancel").addEventListener("click", closeExport);
-exportOverlay.addEventListener("pointerdown", (e) => { if (e.target === exportOverlay) closeExport(); });
 
 // ---- handouts generation (chgksuite .hndt → PDF) ----
 // "Генерация раздаток": port of `chgksuite handouts 4s2hndt` (in chgk.js) builds
@@ -2304,7 +2231,7 @@ exportOverlay.addEventListener("pointerdown", (e) => { if (e.target === exportOv
 // PDF" posts the source + referenced images to the server, which runs
 // `chgksuite handouts hndt2pdf` (tectonic) and streams an ephemeral PDF. On close
 // the per-question settings (everything but the handout text) are persisted back.
-const handoutsOverlay = byId("handoutsOverlay");
+const handoutsModal = modal("handouts");
 let handoutsCtx: { list: BoardList; cards: BoardCard[]; numbers: Array<string | null>; title: string } | null = null;   // { list, cards, numbers }
 let handoutsPdfUrl: string | null = null;
 let handoutsDlUrl: string | null = null;
@@ -2321,10 +2248,9 @@ function openHandouts(list: BoardList): void {
   const source = xyChgk.generateHndt(cards, numbers, metas);
   handoutsCtx = { list, cards, numbers, title: scope.title };
   byId<HTMLTextAreaElement>("handoutsSource").value = source;
-  byId("handoutsMessage").textContent = source.trim() ? "" : "В списке нет вопросов с раздаточным материалом.";
   clearHandoutsPdf();
-  handoutsOverlay.hidden = false;
-  overlayStack.open({ el: handoutsOverlay, close: hideHandouts });
+  handoutsModal.open({ onClose: hideHandouts });
+  handoutsModal.message(source.trim() ? "" : "В списке нет вопросов с раздаточным материалом.");
   // Pre-stage the referenced images now (in the background) so the first PDF /
   // split_fit generation doesn't pay the gather+upload, and start heartbeating.
   handoutSession.ensure(source).catch(() => {});
@@ -2395,10 +2321,7 @@ async function persistHandoutMeta(): Promise<void> {
   }
 }
 
-function closeHandouts(): void { overlayStack.pop(); }
-
 async function hideHandouts(): Promise<void> {
-  handoutsOverlay.hidden = true;
   void handoutSession.close(); // stop heartbeat + delete the staged images server-side
   await persistHandoutMeta();
   clearHandoutsPdf();
@@ -2504,7 +2427,7 @@ async function handoutsBody(source: string): Promise<FormData> {
 // Revive the staged session when the user returns to a backgrounded tab (its
 // heartbeats may have lapsed and the server reaped it).
 document.addEventListener("visibilitychange", async () => {
-  if (document.visibilityState !== "visible" || handoutsOverlay.hidden || !handoutsCtx) return;
+  if (document.visibilityState !== "visible" || !handoutsModal.isOpen || !handoutsCtx) return;
   if (!(await handoutSession.beat())) handoutSession.ensure(byId<HTMLTextAreaElement>("handoutsSource").value).catch(() => {});
 });
 
@@ -2560,8 +2483,6 @@ byId("handoutsGenerate").addEventListener("click", () => { void generateHandouts
 // to the button.
 onCmdEnter(byId("handoutsSource"), () => byId("handoutsGenerate").click());
 byId("handoutsSplitFit").addEventListener("click", () => { void generateSplitFitZip(); });
-byId("handoutsClose").addEventListener("click", () => { void closeHandouts(); });
-handoutsOverlay.addEventListener("pointerdown", (e) => { if (e.target === handoutsOverlay) void closeHandouts(); });
 
 // ---- list preview (docx-style HTML render, entirely client-side) ----
 // Renders a whole list the way chgksuite's docx export would — questions with
@@ -3020,20 +2941,18 @@ function renderMassBar(): void {
 }
 
 // ---- the one dialog ----
-const massOverlay = byId("massOverlay");
+const massModal = modal("mass");
 let massTarget: { listId: number; ctx: MoveCtx } | null = null;
 let massPick: number | null = null;
 
-function closeMass(): void { overlayStack.pop(); }
-function hideMass(): void { massOverlay.hidden = true; massAction = null; massTarget = null; massPick = null; }
+function hideMass(): void { massAction = null; massTarget = null; massPick = null; }
 
 async function openMass(action: MassAction): Promise<void> {
   massAction = action;
   massPick = null;
   massTarget = null;
   const n = massSelected.size;
-  massOverlay.querySelector<HTMLElement>(".appearance-modal-title")!.textContent = `${action.label}: ${xyMass.cardCount(n)}`;
-  byId("massMessage").textContent = "";
+  massModal.el.querySelector<HTMLElement>(".appearance-modal-title")!.textContent = `${action.label}: ${xyMass.cardCount(n)}`;
   const run = byId<HTMLButtonElement>("massRun");
   run.textContent = `${action.verb} (${n})`;
   run.disabled = action.needs !== "none";
@@ -3044,8 +2963,7 @@ async function openMass(action: MassAction): Promise<void> {
   else if (action.needs === "session") buildMassSessionPick(body, run);
   else if (action.needs === "target") await buildMassTargetPick(body, run);
   else body.append(el("p", { class: "label-empty", text: "Карточки будут удалены. Их можно восстановить в течение 14 дней." }));
-  massOverlay.hidden = false;
-  overlayStack.open({ el: massOverlay, close: hideMass });
+  massModal.open({ onClose: hideMass });
 }
 
 // The label picker is the board's own label list, same chips as the card's —
@@ -3137,7 +3055,7 @@ async function runMass(): Promise<void> {
   render();
   msg.textContent = xyMass.runSummary(ok, failed.size);
   run.disabled = false;
-  if (!failed.size) setTimeout(closeMass, 900);
+  if (!failed.size) setTimeout(massModal.close, 900);
 }
 
 async function applyMass(action: MassAction, card: BoardCard): Promise<void> {
@@ -3184,7 +3102,6 @@ async function applyMass(action: MassAction, card: BoardCard): Promise<void> {
 }
 
 byId("massRun").addEventListener("click", () => { void runMass(); });
-byId("massClose").addEventListener("click", closeMass);
 
 // ---- labels ----
 // The card's «Метки» and «Тесты» are two separate pickers (ADR-0004): a label is
@@ -3571,8 +3488,9 @@ function seenQuestions(list: BoardList): SeenQuestion[] {
   return out;
 }
 
+const testerListModal = modal("testerList");
+
 function openTesterList(list: BoardList): void {
-  const overlay = byId("testerListOverlay");
   const box = byId("testerList");
   const { cards, rows } = tourCoverage(list);
   const total = cards.length;
@@ -3601,7 +3519,7 @@ function openTesterList(list: BoardList): void {
     cb.addEventListener("change", () => {
       if (cb.checked) picked.add(r.id); else picked.delete(r.id);
       void declare(list, [...picked]).catch((err) => {
-        byId("testerListMessage").textContent = errMsg(err);
+        testerListModal.message(errMsg(err));
       });
       redraw();
     });
@@ -3619,20 +3537,14 @@ function openTesterList(list: BoardList): void {
   box.append(el("div", { class: "sess-invite-box" },
     el("div", { class: "sess-invite-lines" }, line, partial), copy));
   redraw();
-
-  byId("testerListMessage").textContent = "";
-  overlay.hidden = false;
-  overlayStack.open({ el: overlay, close: () => { overlay.hidden = true; } });
+  testerListModal.open();
 }
-
-const testerListOverlay = byId("testerListOverlay");
-byId("testerListClose").addEventListener("click", () => { overlayStack.pop(); });
-testerListOverlay.addEventListener("pointerdown", (e) => { if (e.target === testerListOverlay) overlayStack.pop(); });
 
 // ---- «Счётчик авторов» ----
 
+const authorCountModal = modal("authorCount");
+
 function openAuthorCount(list: BoardList): void {
-  const overlay = byId("authorCountOverlay");
   const box = byId("authorCount");
   const upTo = byId<HTMLInputElement>("authorCountUpTo");
   const zero = byId<HTMLInputElement>("authorCountZero");
@@ -3664,15 +3576,8 @@ function openAuthorCount(list: BoardList): void {
   upTo.oninput = redraw;
   zero.onchange = redraw;
   redraw();
-
-  byId("authorCountMessage").textContent = "";
-  overlay.hidden = false;
-  overlayStack.open({ el: overlay, close: () => { overlay.hidden = true; } });
+  authorCountModal.open();
 }
-
-const authorCountOverlay = byId("authorCountOverlay");
-byId("authorCountClose").addEventListener("click", () => { overlayStack.pop(); });
-authorCountOverlay.addEventListener("pointerdown", (e) => { if (e.target === authorCountOverlay) overlayStack.pop(); });
 
 // ---- the Тесты panel + the label editor ----
 
@@ -3734,9 +3639,7 @@ const sessionsPanel = createSessionsPanel({
       payload_enc: await xyCrypto.encField(mustDK(), text),
     });
   },
-  overlayOpen: (node: HTMLElement, close: () => void, confirm?: () => Promise<boolean>) =>
-    overlayStack.open({ el: node, close, confirm }),
-  overlayClose: () => overlayStack.pop(),
+  modal,
   render,
 });
 
@@ -3789,7 +3692,7 @@ function renderLabelsEditor(focusNew = false): void {
       await flushLabelsEditor();
       render();
       renderLabelsEditor(true);
-    } catch (err) { byId("labelsEditMessage").textContent = errMsg(err); }
+    } catch (err) { labelsEditModal.message(errMsg(err)); }
   };
   add.addEventListener("click", () => { void submit(); });
   newName.addEventListener("keydown", (e) => {
@@ -3819,7 +3722,7 @@ function renderLabelsEditor(focusNew = false): void {
         state.cardLabels = state.cardLabels.filter((a) => a.labelId !== lbl.id);
         render();
         renderLabelsEditor();
-      } catch (err) { byId("labelsEditMessage").textContent = errMsg(err); }
+      } catch (err) { labelsEditModal.message(errMsg(err)); }
     });
     box.append(el("div", { class: "sess-row" },
       el("div", { class: "sess-head" }, name, count),
@@ -3834,20 +3737,17 @@ async function leaveLabelsEditor(): Promise<boolean> {
     render();
     return true;
   } catch (err) {
-    byId("labelsEditMessage").textContent = errMsg(err);
+    labelsEditModal.message(errMsg(err));
     return false;
   }
 }
 
-const labelsEditOverlay = byId("labelsEditOverlay");
+const labelsEditModal = modal("labelsEdit");
 
 function openLabelsEditor(): void {
   renderLabelsEditor();
-  byId("labelsEditMessage").textContent = "";
-  labelsEditOverlay.hidden = false;
-  overlayStack.open({
-    el: labelsEditOverlay,
-    close: () => { labelsEditOverlay.hidden = true; labelRows = []; labelDraft = null; },
+  labelsEditModal.open({
+    onClose: () => { labelRows = []; labelDraft = null; },
     confirm: leaveLabelsEditor,
   });
 }
@@ -3862,9 +3762,6 @@ function labelUsageCounts(): Map<number, number> {
   }
   return counts;
 }
-
-byId("labelsEditClose").addEventListener("click", () => { overlayStack.pop(); });
-labelsEditOverlay.addEventListener("pointerdown", (e) => { if (e.target === labelsEditOverlay) overlayStack.pop(); });
 
 async function createLabel(name: string, color: string): Promise<BoardLabel> {
   const res = await create("createLabel", `/api/boards/${boardId}/labels`, {

@@ -1,11 +1,11 @@
 // index.ts — board list + create-board flow.
 import { xyApp } from "./app.js";
+import { modal } from "./modal.js";
 import { xyCrypto } from "./crypto.js";
 import { xyFind } from "./find.js";
 import { xySearchIndex } from "./searchindex.js";
 import type { BoardIndex, Hit } from "./searchindex.js";
 import { xySync } from "./sync.js";
-import type { SyncStatus } from "./sync.js";
 import { iconed } from "./icons_gen.js";
 
 const { fetchJSON, jpost, el, escapeHtml } = xyApp;
@@ -20,13 +20,7 @@ interface BoardListItem {
   unread_mentions?: boolean;
 }
 
-function byId<T extends HTMLElement>(id: string): T {
-  const node = document.getElementById(id);
-  if (!node) throw new Error(`page is missing #${id}`);
-  return node as T;
-}
-
-const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+const { byId, errMsg } = xyApp;
 
 const statusNode = byId("status");
 const listNode = byId("boardList");
@@ -38,28 +32,17 @@ const commentNote = byId("commentNote");
 const moreQuestions = byId("moreQuestions");
 const moreComments = byId("moreComments");
 const message = byId("message");
-const overlay = byId("createOverlay");
+const createModal = modal("create");
 const createForm = byId<HTMLFormElement>("createForm");
 const createMessage = byId("createMessage");
 
-let lastOp: "saved" | "saving" | "error" = "saved";
-let syncState: Pick<SyncStatus, "online" | "pending" | "syncing"> = { online: true, pending: 0, syncing: false };
-function refreshBadge(): void {
-  let state: string, title: string;
-  if (!syncState.online) { state = "offline"; title = syncState.pending ? `Офлайн · ${syncState.pending} изм. ждут отправки` : "Офлайн"; }
-  else if (syncState.syncing || syncState.pending > 0) { state = "pending"; title = syncState.pending ? `Синхронизация · осталось ${syncState.pending}` : "Синхронизация…"; }
-  else if (lastOp === "error") { state = "error"; title = "Ошибка"; }
-  else if (lastOp === "saving") { state = "saving"; title = "Подождите"; }
-  else { state = "saved"; title = "Готово"; }
-  statusNode.dataset.state = state;
-  statusNode.title = title;
-}
-function setStatus(state: "saved" | "saving" | "error"): void { lastOp = state; refreshBadge(); }
+const badge = xyApp.syncBadge(statusNode);
+const setStatus = badge.set;
 
 async function boot(): Promise<void> {
   if (!(await xyApp.requireLogin())) return;
   xySync.start();
-  xySync.onStatus((st) => { syncState = st; refreshBadge(); });
+  xySync.onStatus(badge.onSync);
   await refresh();
 }
 
@@ -369,9 +352,8 @@ async function migrateName(id: number, name: string): Promise<void> {
 
 // ---- create board ----
 byId("newBoardBtn").addEventListener("click", () => {
-  createMessage.textContent = "";
   createForm.reset();
-  overlay.hidden = false;
+  createModal.open();
   byId("boardName").focus();
 });
 // «🎲»: fill the field with a fresh xkcd-style passphrase and copy it, so the one
@@ -379,9 +361,6 @@ byId("newBoardBtn").addEventListener("click", () => {
 // it somewhere safe.
 const boardPass = byId<HTMLInputElement>("boardPass");
 xyApp.wireGenPassphrase(byId("genPassBtn"), boardPass, xyCrypto.generatePassphrase);
-
-byId("createCancel").addEventListener("click", () => { overlay.hidden = true; });
-overlay.addEventListener("pointerdown", (e) => { if (e.target === overlay) overlay.hidden = true; });
 
 createForm.addEventListener("submit", async (e) => {
   e.preventDefault();

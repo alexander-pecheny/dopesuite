@@ -7,7 +7,7 @@
 // the card timeline (member user_id → username), so it is cached on board load.
 // The module writes members/memberNames/me onto the shared board `state` object
 // board.js passes in, and owns the members overlay's DOM + listeners.
-import { overlayStack } from "./overlaystack.js";
+import { modal } from "./modal.js";
 import { xyApp } from "./app.js";
 import type { AuthMe } from "./app.js";
 import { xySync } from "./sync.js";
@@ -69,11 +69,9 @@ export function createBoardMembers(state: MembersState, boardId: number | string
   // Everyone I share any board with, most-shared first — the hint under the
   // add-member field for the co-author whose nick I forgot (issue #64).
   let collaborators: string[] = [];
+  const membersModal = modal("members");
   function open(): void {
-    const el = document.getElementById("membersOverlay")!;
-    document.getElementById("membersMessage")!.textContent = "";
-    el.hidden = false;
-    overlayStack.open({ el, close: hide });
+    membersModal.open();
     render();
     fetchJSON(`/api/collaborators`).then((names) => { collaborators = names as string[]; }).catch(() => {});
   }
@@ -85,9 +83,6 @@ export function createBoardMembers(state: MembersState, boardId: number | string
       .slice(0, 8)
       .map((n) => ({ value: n, label: n }));
   });
-
-  function hide(): void { document.getElementById("membersOverlay")!.hidden = true; }
-  function close(): void { overlayStack.pop(); }
 
   async function render(): Promise<void> {
     const listNode = document.getElementById("membersList")!;
@@ -143,11 +138,6 @@ export function createBoardMembers(state: MembersState, boardId: number | string
     } catch (err) {
       msg.textContent = err instanceof Error ? err.message : String(err);
     }
-  });
-
-  document.getElementById("membersClose")!.addEventListener("click", close);
-  document.getElementById("membersOverlay")!.addEventListener("pointerdown", (e) => {
-    if (e.target instanceof Element && e.target.id === "membersOverlay") close();
   });
 
   return { load, open };

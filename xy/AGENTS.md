@@ -208,8 +208,15 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        hand-off (list preview → card) rather than a dismissal. Transient
                        popups (⋯ menu, label picker, 🔔 panel) stay OFF the stack and claim
                        Escape in the CAPTURE phase, so they close before the card does
+    modal.ts           the one lifecycle for a plain `modal` block: modal(stem) finds
+                       <stem>Overlay/Close/Cancel/Message, owns `hidden`, the stack
+                       registration, the close buttons and the backdrop; open({onClose,
+                       confirm}) / close() / message(). Every plain modal on every page
+                       (board, its kernels, profile, index) is one of these; the card
+                       docoverlay, the list preview and the lightbox are not
     rank.ts            fractional indexing (LexoRank-style keyBetween)
-    app.ts             shared fetch/DOM helpers, derived titles, offline-tolerant requireLogin
+    app.ts             shared fetch/DOM helpers (byId, errMsg, el, the sync badge), derived
+                       titles, offline-tolerant requireLogin
     diff.ts            word-level token diff for desc_edit timeline highlighting
     index.ts           board list + create-board (passphrase) flow; offline board-list cache;
                        the search box over both grids — the top grid filters to boards the

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { xyApp } from "../web/assets/static/dist/app.js";
+import { fakeNode } from "./dom.js";
 
 const { deriveTitle } = xyApp;
 
@@ -65,4 +66,27 @@ test("onCmdEnter ignores a bare Enter and other modified keys", () => {
   press(node, "s", { ctrlKey: true });
   press(node, "Escape", { metaKey: true });
   assert.equal(runs, 0);
+});
+
+// ---- the sync badge ----
+
+test("the sync badge: offline beats pending beats the last write's state", () => {
+  const node = fakeNode("span");
+  const badge = xyApp.syncBadge(node);
+  assert.equal(node.dataset.state, "saved");
+  badge.set("saving");
+  assert.equal(node.dataset.state, "saving");
+  assert.equal(node.title, "Подождите");
+  badge.set("error");
+  assert.equal(node.dataset.state, "error");
+  badge.onSync({ online: true, pending: 2, syncing: false });
+  assert.equal(node.dataset.state, "pending");
+  assert.equal(node.title, "Синхронизация · осталось 2");
+  badge.onSync({ online: false, pending: 2, syncing: false });
+  assert.equal(node.dataset.state, "offline");
+  assert.equal(node.title, "Офлайн · 2 изм. ждут отправки");
+  badge.onSync({ online: true, pending: 0, syncing: false });
+  assert.equal(node.dataset.state, "error", "the failed write is still the latest word");
+  badge.set("saved");
+  assert.equal(node.title, "Готово");
 });

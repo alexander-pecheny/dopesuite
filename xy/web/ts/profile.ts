@@ -2,19 +2,12 @@
 // password, board sizes (with a pseudo-board preview), default author, card
 // title, timezone, and which kind of entry an opened card's лента shows.
 import { xyApp, xySizes } from "./app.js";
+import { type Modal, modal } from "./modal.js";
 import { COMMON_CITIES, guessZone } from "./sessions.js";
 import { autocomplete, townChoices, zoneChoices } from "./suggest.js";
 import type { AuthMe, Sizes } from "./app.js";
 
-const { fetchJSON, jpost, fetchVoid, el } = xyApp;
-
-function byId<T extends HTMLElement>(id: string): T {
-  const node = document.getElementById(id);
-  if (!node) throw new Error(`page is missing #${id}`);
-  return node as T;
-}
-
-const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+const { fetchJSON, jpost, fetchVoid, el, byId, errMsg } = xyApp;
 
 const whoami = byId("whoami");
 const usernameSection = byId("usernameSection");
@@ -25,20 +18,16 @@ const passwordMessage = byId("passwordMessage");
 
 function setText(node: HTMLElement, t: string): void { node.textContent = t; }
 
-// ---- modal plumbing (openBtn → overlay; close on Отмена, backdrop, Escape) ----
+// ---- modal plumbing (openBtn → the dialog) ----
 // onOpen runs after the overlay unhides (it may need layout — the sizes preview
 // measures itself) and may await the /api/auth/me load.
-function wireModal(overlayId: string, openBtnId: string, cancelBtnId: string | null, onOpen?: () => void | Promise<void>): { overlay: HTMLElement; close: () => void } {
-  const overlay = byId(overlayId);
+function wireModal(stem: string, openBtnId: string, onOpen?: () => void | Promise<void>): Modal {
+  const m = modal(stem);
   byId(openBtnId).addEventListener("click", async () => {
-    overlay.hidden = false;
+    m.open();
     if (onOpen) await onOpen();
   });
-  const close = (): void => { overlay.hidden = true; };
-  if (cancelBtnId) byId(cancelBtnId).addEventListener("click", close);
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !overlay.hidden) close(); });
-  return { overlay, close };
+  return m;
 }
 
 // ---- state loaded from /api/auth/me ----
@@ -94,7 +83,7 @@ usernameForm.addEventListener("submit", async (e) => {
 });
 
 // ---- change password ----
-wireModal("passwordOverlay", "passwordBtn", "passwordCancel", () => {
+wireModal("password", "passwordBtn", () => {
   passwordForm.reset();
   setText(passwordMessage, "");
 });
@@ -209,16 +198,15 @@ byId("sizesReset").addEventListener("click", () => {
   scheduleSizesSave();
 });
 
-const sizesModal = wireModal("sizesOverlay", "sizesBtn", null, async () => {
+wireModal("sizes", "sizesBtn", async () => {
   await booted;
   syncSizesUI();
 });
-byId("sizesClose").addEventListener("click", sizesModal.close);
 
 // ---- default author ----
 const authorForm = byId<HTMLFormElement>("authorForm");
 const authorMessage = byId("authorMessage");
-const authorModal = wireModal("authorOverlay", "authorBtn", "authorCancel", async () => {
+const authorModal = wireModal("author", "authorBtn", async () => {
   await booted;
   byId<HTMLInputElement>("authorValue").value = defaultAuthor;
   setText(authorMessage, "");
@@ -244,7 +232,7 @@ authorForm.addEventListener("submit", async (e) => {
 // invited changes from test to test.
 const tzForm = byId<HTMLFormElement>("tzForm");
 const tzMessage = byId("tzMessage");
-const tzModal = wireModal("tzOverlay", "tzBtn", "tzCancel", async () => {
+const tzModal = wireModal("tz", "tzBtn", async () => {
   await booted;
   byId<HTMLInputElement>("tzValue").value = timezone || guessZone();
   byId<HTMLInputElement>("tzCities").value = announceCities.map((c) => c.name).join(", ");
@@ -294,7 +282,7 @@ tzForm.addEventListener("submit", async (e) => {
 const cardTitleForm = byId<HTMLFormElement>("cardTitleForm");
 const cardTitleMessage = byId("cardTitleMessage");
 const cardTitleRadios = () => cardTitleForm.querySelectorAll<HTMLInputElement>('input[name="cardTitle"]');
-const cardTitleModal = wireModal("cardTitleOverlay", "cardTitleBtn", "cardTitleCancel", async () => {
+const cardTitleModal = wireModal("cardTitle", "cardTitleBtn", async () => {
   await booted;
   for (const r of cardTitleRadios()) r.checked = r.value === cardTitle;
   setText(cardTitleMessage, "");
@@ -318,7 +306,7 @@ cardTitleForm.addEventListener("submit", async (e) => {
 const feedDefaultForm = byId<HTMLFormElement>("feedDefaultForm");
 const feedDefaultMessage = byId("feedDefaultMessage");
 const feedDefaultRadios = () => feedDefaultForm.querySelectorAll<HTMLInputElement>('input[name="feedDefault"]');
-const feedDefaultModal = wireModal("feedDefaultOverlay", "feedDefaultBtn", "feedDefaultCancel", async () => {
+const feedDefaultModal = wireModal("feedDefault", "feedDefaultBtn", async () => {
   await booted;
   for (const r of feedDefaultRadios()) r.checked = r.value === feedDefault;
   setText(feedDefaultMessage, "");
