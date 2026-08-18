@@ -146,7 +146,8 @@ generate-check: build-web
     for target in "dopeuikit ./kit kit/tags_gen.go" \
                   "dopeuikit ./palette assets/core.css palette/sets_gen.go ../dope/dope/web/assets/static/styles.css ../xy/web/ts/palette_gen.ts" \
                   "dope ./dope/web/ui dope/web/ui/tags_gen.go" \
-                  "xy ./internal/ui internal/ui/tags_gen.go"; do
+                  "xy ./internal/ui internal/ui/tags_gen.go" \
+                  "xy ./internal/chgk/fsource web/ts/markers_gen.ts"; do
       set -- $target
       module=$1 gentarget=$2
       shift 2

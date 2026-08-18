@@ -1099,7 +1099,7 @@ function renderPreviewCard(card: PvCard, number: string | null, imgMap: Map<stri
   // Non-question card: render each block by type (never screen-transformed).
   const wrap = el("div", { class: "pv-block", dataset: { cardId: card.id } });
   for (const b of blocks) {
-    if (b.type === "num" || b.type === "numnum") continue; // numbering directive only
+    if (b.type === "number" || b.type === "setcounter") continue; // numbering directive only
     if (b.type === "heading" || b.type === "ljheading") {
       const h = el("h2", { class: "pv-heading" });
       h.append(renderRich(b.text, imgMap, { nbsp: true }));

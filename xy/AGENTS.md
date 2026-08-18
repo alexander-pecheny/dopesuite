@@ -116,7 +116,13 @@ internal/server/       package server — the whole HTTP server
   debug.go             [timing] logs on export/handout endpoints, gated by XY_DEBUG_TIMING
 internal/chgk/         Go port of chgksuite's core (xy no longer shells out to Python for docx/handouts)
   fsource/             the "4s" format, both ways: parse.go = parse_4s (oracle-tested vs
-                       chgksuite --debug), compose.go = compose_4s (structure → 4s text)
+                       chgksuite --debug), compose.go = compose_4s (structure → 4s text).
+                       testdata/parity.json is the Go/TS corpus: every fixture line split
+                       at its marker, (img …) references, one .hndt the browser writes and
+                       Go parses; parity_test.go is the oracle (regenerate with
+                       `go test ./internal/chgk/fsource -run TestParity -update`),
+                       jstest/fsource_parity.test.js the other reader. markerMapping is the
+                       one marker table: `go generate` writes web/ts/markers_gen.ts
   typo/                typotools.py: the typography pass (quotes/dashes/stress accents/
                        %-decoding) + URL-aware underscore escaping
   typoedit/            the typography pass: typo (quotes/dashes/%-decoding — every knob but
@@ -302,7 +308,15 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
     timer.ts           floating ЧГК play timer (⏰ in the board header): question
                        minute + 10s answer countdown, WebAudio bell cues
     chgk.ts            client-side 4s parser for card previews (display-only,
-                       never rewrites the source)
+                       never rewrites the source); its marker table is
+                       markers_gen.ts, and imgRefs (the (img …) references of a text,
+                       through the inline tokenizer's bracket matching) is the one
+                       image finder — export, handouts, import and the preview all
+                       call it
+    markers_gen.ts     GENERATED from fsource's markerMapping (`go generate
+                       ./internal/chgk/fsource`, guarded by generate-check): the 4s line
+                       markers and their element types, longest first. Go and TS cannot
+                       drift on what a marker is
     typo.ts            the typography pass, ported from internal/chgk/{typo,typoedit}:
                        quotes/dashes/%-decoding + nbsp gluing over 4s source, per version.
                        In the browser so no question text is posted and it works offline;

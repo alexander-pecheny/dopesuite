@@ -6,12 +6,11 @@
 //
 // ES module.
 
+import { MARKERS, type MarkerType } from "./markers_gen.js";
+export type { MarkerType };
+
 // The block types produced by the line-leading markers, plus "pre" for leading
 // lines before any marker.
-export type MarkerType =
-  | "numnum" | "num" | "ljheading" | "heading" | "section" | "editor" | "date"
-  | "meta" | "question" | "nezachet" | "answer" | "zachet" | "source"
-  | "comment" | "author" | "handout";
 export type BlockType = MarkerType | "pre";
 
 export interface Block { type: BlockType; text: string }
@@ -19,28 +18,9 @@ export interface Block { type: BlockType; text: string }
 // A card as this module needs to see it: its kind + raw 4s description.
 export interface ChgkCard { kind: string; desc: string }
 
-// Line-leading markers, longest/most-specific first so e.g. "№№" wins over "№"
-// and "###" over "#". A marker matches a line that equals it or starts with
-// "<marker> ".
-const MARKERS: Array<[string, MarkerType]> = [
-  ["№№", "numnum"],
-  ["№", "num"],
-  ["###LJ", "ljheading"],
-  ["###", "heading"],
-  ["##", "section"],
-  ["#EDITOR", "editor"],
-  ["#DATE", "date"],
-  ["#", "meta"],
-  ["?", "question"],
-  ["!=", "nezachet"],
-  ["!", "answer"],
-  ["=", "zachet"],
-  ["^", "source"],
-  ["/", "comment"],
-  ["@", "author"],
-  [">", "handout"],
-];
-
+// The line-leading markers are fsource's table (markers_gen.ts), longest first
+// so "№№" wins over "№" and "###" over "#". A marker matches a line that equals
+// it or starts with "<marker> ".
 function matchMarker(line: string): { type: MarkerType; rest: string } | null {
   for (const [marker, type] of MARKERS) {
     if (line === marker) return { type, rest: "" };
@@ -49,11 +29,7 @@ function matchMarker(line: string): { type: MarkerType; rest: string } | null {
   return null;
 }
 
-// The markers SplitMarker knows, which is fsource.markerMapping — a superset of
-// MARKERS: battle/round/theme are chgksuite's and this parser has never modelled
-// them, but a line starting with one is still a marked line, and the typography
-// pass must leave the marker alone rather than turning «#B - раз» into an em dash.
-const MARKER_SET = new Set([...MARKERS.map(([m]) => m), "#B", "#R", "#T"]);
+const MARKER_SET = new Set<string>(MARKERS.map(([m]) => m));
 
 // splitMarker cuts a 4s line into its leading marker (with the whitespace that
 // follows it) and the text after — the port of fsource.SplitMarker, and the
@@ -110,8 +86,8 @@ function parseBlocks(desc: string | null | undefined, keepVersionLines = false):
 // false for a plain "№".
 function numberDirective(blocks: Block[]): { value: string; base: boolean } | null {
   for (const b of blocks) {
-    if (b.type === "numnum") return { value: b.text, base: true };
-    if (b.type === "num") return { value: b.text, base: false };
+    if (b.type === "setcounter") return { value: b.text, base: true };
+    if (b.type === "number") return { value: b.text, base: false };
   }
   return null;
 }
@@ -1196,7 +1172,7 @@ const TYPE_MARKER: Partial<Record<BlockType, string>> = (() => {
 
 // Block types that, when they precede the question, are "pre-markup" (numbering
 // directives / meta / headings hosted before the question — field #1).
-const PRE_TYPES = new Set<BlockType>(["numnum", "num", "meta", "section", "heading", "ljheading", "editor", "date"]);
+const PRE_TYPES = new Set<BlockType>(["setcounter", "number", "meta", "section", "heading", "ljheading", "editor", "date"]);
 
 // rawLine reconstructs the 4s source of a parsed block (marker + text). A block's
 // continuation lines are plain, so a multi-line text round-trips verbatim.
@@ -1214,22 +1190,29 @@ function imgName(val: unknown): string {
   return toks.length ? toks[toks.length - 1] : "";
 }
 
-// imgInText returns the (img …) filename referenced in a string, or null.
+// imgInText returns the first (img …) filename referenced in a string, or null.
 function imgInText(s: string | null | undefined): string | null {
-  const m = /\(img\b([^)]*)\)/.exec(s || "");
-  return m ? imgName(m[1]) : null;
+  return imgRefs(s)[0] ?? null;
 }
 
-// imageRefs collects every (img …) filename referenced across the cards.
-function imageRefs(cards: ReadonlyArray<{ desc: string }>): Set<string> {
-  const wanted = new Set<string>();
-  for (const c of cards) {
-    for (const m of (c.desc || "").matchAll(/\(img\b([^)]*)\)/g)) {
-      const name = imgName(m[1]);
-      if (name) wanted.add(name);
-    }
+// imgRefs collects every (img …) filename a 4s text references, in order of
+// first appearance. It reads through the inline tokenizer — the same bracket
+// matching fsource uses — so a ")" inside a filename does not end the directive
+// early, and an image inside a hidden comment is not a reference (it is not
+// rendered).
+function imgRefs(source: string | null | undefined): string[] {
+  const out: string[] = [];
+  for (const [type, val] of parse4sElem(source || "")) {
+    if (type !== "img") continue;
+    const name = imgName(val);
+    if (name && !out.includes(name)) out.push(name);
   }
-  return wanted;
+  return out;
+}
+
+// imageRefs collects the (img …) filenames referenced across the cards.
+function imageRefs(cards: ReadonlyArray<{ desc: string }>): Set<string> {
+  return new Set(cards.flatMap((c) => imgRefs(c.desc)));
 }
 
 // parseHandoutBlock classifies a "> …" handout block as an image (a single
@@ -1675,7 +1658,7 @@ function testerCopyText(testers: ReadonlyArray<TesterLike> | null | undefined): 
 }
 
 export const xyChgk = {
-  parseBlocks, splitMarker, numberDirective, questionText, answerText, blockText, previewText, imgName, imageRefs,
+  parseBlocks, splitMarker, numberDirective, questionText, answerText, blockText, previewText, imgName, imgRefs, imageRefs,
   isZeroNumber, numberQuestionCards,
   removeAccents, removeSquareBrackets, screenText, parse4sElem,
   printRuns, renderRuns, splitList, applyOverride, replaceNoBreak,

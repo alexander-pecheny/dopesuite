@@ -13,7 +13,7 @@ export interface DescEdit { before: string; after: string; date: string; author:
 // compose_4s puts "№ N" ahead of "? …", and an answer/zachet/source is as much
 // a question's field as the question line itself.
 const QUESTION_BLOCKS = new Set<string>([
-  "question", "answer", "zachet", "nezachet", "comment", "source", "author", "handout", "num", "numnum",
+  "question", "answer", "zachet", "nezachet", "comment", "source", "author", "handout", "number", "setcounter",
 ]);
 const HEADING_BLOCKS = new Set<string>(["heading", "ljheading", "section"]);
 const META_BLOCKS = new Set<string>(["meta", "editor", "date"]);

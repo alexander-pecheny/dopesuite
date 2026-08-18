@@ -1,0 +1,424 @@
+{
+  "_": "The Go/TS 4s parity corpus. Go (fsource/parity_test.go) is the oracle for lines, imgRefs.refs and hndt.blocks — regenerate with `go test ./internal/chgk/fsource -run TestParity -update`; hndt.text is what chgk.ts's generateHndt writes for hndt.cards, checked byte-for-byte by jstest/fsource_parity.test.js.",
+  "extraLines": [
+    "#B Раунд - первый",
+    "#R 2",
+    "#T Тема",
+    "- первый источник",
+    "  - второй",
+    "   ? с отступом",
+    "?без пробела",
+    "! ",
+    "!",
+    "",
+    "   ",
+    "№№5",
+    "№ 3",
+    "###LJ Заголовок",
+    "#EDITOR Редактор",
+    "#DATE 2026-08-18",
+    "просто строка"
+  ],
+  "lines": [
+    {
+      "line": "### Чемпионат",
+      "prefix": "### ",
+      "rest": "Чемпионат"
+    },
+    {
+      "line": "",
+      "prefix": "",
+      "rest": ""
+    },
+    {
+      "line": "## Тур 1",
+      "prefix": "## ",
+      "rest": "Тур 1"
+    },
+    {
+      "line": "? Сколько будет 2+2?",
+      "prefix": "? ",
+      "rest": "Сколько будет 2+2?"
+    },
+    {
+      "line": "! 4",
+      "prefix": "! ",
+      "rest": "4"
+    },
+    {
+      "line": "= четыре",
+      "prefix": "= ",
+      "rest": "четыре"
+    },
+    {
+      "line": "^ Арифметика",
+      "prefix": "^ ",
+      "rest": "Арифметика"
+    },
+    {
+      "line": "@ Иванов",
+      "prefix": "@ ",
+      "rest": "Иванов"
+    },
+    {
+      "line": "? Вопрос с раздаткой",
+      "prefix": "? ",
+      "rest": "Вопрос с раздаткой"
+    },
+    {
+      "line": "\u003e Ро-шам-бо",
+      "prefix": "\u003e ",
+      "rest": "Ро-шам-бо"
+    },
+    {
+      "line": "! Камень",
+      "prefix": "! ",
+      "rest": "Камень"
+    },
+    {
+      "line": "/ Комментарий",
+      "prefix": "/ ",
+      "rest": "Комментарий"
+    },
+    {
+      "line": "- первый",
+      "prefix": "- ",
+      "rest": "первый"
+    },
+    {
+      "line": "- второй",
+      "prefix": "- ",
+      "rest": "второй"
+    },
+    {
+      "line": "? Блиц:",
+      "prefix": "? ",
+      "rest": "Блиц:"
+    },
+    {
+      "line": "- Первый вопрос?",
+      "prefix": "- ",
+      "rest": "Первый вопрос?"
+    },
+    {
+      "line": "- Второй вопрос?",
+      "prefix": "- ",
+      "rest": "Второй вопрос?"
+    },
+    {
+      "line": "! ",
+      "prefix": "! ",
+      "rest": ""
+    },
+    {
+      "line": "- ответ один",
+      "prefix": "- ",
+      "rest": "ответ один"
+    },
+    {
+      "line": "- ответ два",
+      "prefix": "- ",
+      "rest": "ответ два"
+    },
+    {
+      "line": "^ источник",
+      "prefix": "^ ",
+      "rest": "источник"
+    },
+    {
+      "line": "@ Петров",
+      "prefix": "@ ",
+      "rest": "Петров"
+    },
+    {
+      "line": "№№ 5",
+      "prefix": "№№ ",
+      "rest": "5"
+    },
+    {
+      "line": "? Первый?",
+      "prefix": "? ",
+      "rest": "Первый?"
+    },
+    {
+      "line": "! да",
+      "prefix": "! ",
+      "rest": "да"
+    },
+    {
+      "line": "? Второй?",
+      "prefix": "? ",
+      "rest": "Второй?"
+    },
+    {
+      "line": "! нет",
+      "prefix": "! ",
+      "rest": "нет"
+    },
+    {
+      "line": "№ 0",
+      "prefix": "№ ",
+      "rest": "0"
+    },
+    {
+      "line": "? Разминочный?",
+      "prefix": "? ",
+      "rest": "Разминочный?"
+    },
+    {
+      "line": "! может быть",
+      "prefix": "! ",
+      "rest": "может быть"
+    },
+    {
+      "line": "### Заголовок турнира",
+      "prefix": "### ",
+      "rest": "Заголовок турнира"
+    },
+    {
+      "line": "#EDITOR Редактор Имя",
+      "prefix": "#EDITOR ",
+      "rest": "Редактор Имя"
+    },
+    {
+      "line": "#DATE 2026-01-01",
+      "prefix": "#DATE ",
+      "rest": "2026-01-01"
+    },
+    {
+      "line": "# Просто метаинформация",
+      "prefix": "# ",
+      "rest": "Просто метаинформация"
+    },
+    {
+      "line": "## Тур",
+      "prefix": "## ",
+      "rest": "Тур"
+    },
+    {
+      "line": "? Вопрос?",
+      "prefix": "? ",
+      "rest": "Вопрос?"
+    },
+    {
+      "line": "! Ответ",
+      "prefix": "! ",
+      "rest": "Ответ"
+    },
+    {
+      "line": "? Длинный вопрос",
+      "prefix": "? ",
+      "rest": "Длинный вопрос"
+    },
+    {
+      "line": "с переносом строки.",
+      "prefix": "",
+      "rest": "с переносом строки."
+    },
+    {
+      "line": "с комментарием",
+      "prefix": "",
+      "rest": "с комментарием"
+    },
+    {
+      "line": "^ Источник 1",
+      "prefix": "^ ",
+      "rest": "Источник 1"
+    },
+    {
+      "line": "Источник 2",
+      "prefix": "",
+      "rest": "Источник 2"
+    },
+    {
+      "line": "@ Автор",
+      "prefix": "@ ",
+      "rest": "Автор"
+    },
+    {
+      "line": "? !!Вопрос~для~разминки Что это?",
+      "prefix": "? ",
+      "rest": "!!Вопрос~для~разминки Что это?"
+    },
+    {
+      "line": "= !!Также~принимается синоним",
+      "prefix": "= ",
+      "rest": "!!Также~принимается синоним"
+    },
+    {
+      "line": "@ Сидоров",
+      "prefix": "@ ",
+      "rest": "Сидоров"
+    },
+    {
+      "line": "#B Раунд - первый",
+      "prefix": "#B ",
+      "rest": "Раунд - первый"
+    },
+    {
+      "line": "#R 2",
+      "prefix": "#R ",
+      "rest": "2"
+    },
+    {
+      "line": "#T Тема",
+      "prefix": "#T ",
+      "rest": "Тема"
+    },
+    {
+      "line": "- первый источник",
+      "prefix": "- ",
+      "rest": "первый источник"
+    },
+    {
+      "line": "  - второй",
+      "prefix": "  - ",
+      "rest": "второй"
+    },
+    {
+      "line": "   ? с отступом",
+      "prefix": "   ? ",
+      "rest": "с отступом"
+    },
+    {
+      "line": "?без пробела",
+      "prefix": "",
+      "rest": "?без пробела"
+    },
+    {
+      "line": "!",
+      "prefix": "!",
+      "rest": ""
+    },
+    {
+      "line": "   ",
+      "prefix": "",
+      "rest": "   "
+    },
+    {
+      "line": "№№5",
+      "prefix": "",
+      "rest": "№№5"
+    },
+    {
+      "line": "№ 3",
+      "prefix": "№ ",
+      "rest": "3"
+    },
+    {
+      "line": "###LJ Заголовок",
+      "prefix": "###LJ ",
+      "rest": "Заголовок"
+    },
+    {
+      "line": "#EDITOR Редактор",
+      "prefix": "#EDITOR ",
+      "rest": "Редактор"
+    },
+    {
+      "line": "#DATE 2026-08-18",
+      "prefix": "#DATE ",
+      "rest": "2026-08-18"
+    },
+    {
+      "line": "просто строка",
+      "prefix": "",
+      "rest": "просто строка"
+    }
+  ],
+  "imgRefs": [
+    {
+      "source": "? Что это? (img w=3 pic.png)\n! Ответ",
+      "refs": [
+        "pic.png"
+      ]
+    },
+    {
+      "source": "? Раздатка: (img big two words.png) и ещё (img a.png)\n! (img a.png)",
+      "refs": [
+        "words.png",
+        "a.png"
+      ]
+    },
+    {
+      "source": "? Скобка в имени (img file (1).png)",
+      "refs": [
+        "(1).png"
+      ]
+    },
+    {
+      "source": "? Спрятано (hidden-comment (img secret.png)) и видно (img shown.png)",
+      "refs": [
+        "shown.png"
+      ]
+    },
+    {
+      "source": "? Без картинок _курсив_ и (screen a|b)",
+      "refs": []
+    },
+    {
+      "source": "? Незакрытая (img open.png",
+      "refs": [
+        "open.png"
+      ]
+    }
+  ],
+  "hndt": {
+    "cards": [
+      {
+        "id": 1,
+        "kind": "question",
+        "desc": "? [Раздаточный материал: (img pic.png)]\nЧто это?\n! Ответ"
+      },
+      {
+        "id": 2,
+        "kind": "question",
+        "desc": "? Без раздатки\n! Ответ"
+      },
+      {
+        "id": 3,
+        "kind": "question",
+        "desc": "? [Раздаточный материал: Первая строка\nВторая строка]\nВопрос\n! Ответ"
+      },
+      {
+        "id": 4,
+        "kind": "meta",
+        "desc": "# просто мета"
+      },
+      {
+        "id": 5,
+        "kind": "question",
+        "desc": "\u003e старый блок раздатки\n? Вопрос\n! Ответ"
+      }
+    ],
+    "numbers": [
+      "1",
+      "2",
+      "3",
+      null,
+      "4"
+    ],
+    "metas": {
+      "3": "columns: 2\nfont_size: 14"
+    },
+    "text": "for_question: 1\ncolumns: 3\n\nimage: pic.png\n---\nfor_question: 3\ncolumns: 2\nfont_size: 14\n\nПервая строка\nВторая строка\n---\nfor_question: 4\ncolumns: 3\n\nстарый блок раздатки",
+    "blocks": [
+      {
+        "columns": 3,
+        "for_question": "1",
+        "image": "pic.png"
+      },
+      {
+        "columns": 2,
+        "font_size": 14,
+        "for_question": "3",
+        "text": "Первая строка\\\nВторая строка"
+      },
+      {
+        "columns": 3,
+        "for_question": "4",
+        "text": "старый блок раздатки"
+      }
+    ]
+  }
+}

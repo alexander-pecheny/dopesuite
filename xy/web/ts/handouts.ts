@@ -160,7 +160,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
   function wantedImages(source: string): Set<string> {
     const wanted = new Set<string>();
     for (const m of source.matchAll(/^\s*image:\s*(.+?)\s*$/gm)) wanted.add(m[1]);
-    for (const m of source.matchAll(/\(img\b([^)]*)\)/g)) { const n = xyChgk.imgName(m[1]); if (n) wanted.add(n); }
+    for (const n of xyChgk.imgRefs(source)) wanted.add(n);
     return wanted;
   }
 

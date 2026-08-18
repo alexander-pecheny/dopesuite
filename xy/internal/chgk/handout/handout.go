@@ -160,6 +160,18 @@ func wrapVal(key, val string) any {
 	return strings.TrimSpace(val)
 }
 
+// Blocks parses a .hndt document into its blocks — the reserved keys typed
+// (ints, floats, strings) and the free text under "text" — for callers that
+// need to see what the generator wrote (the TS/Go parity corpus).
+func Blocks(contents string) []map[string]any {
+	blocks := parseHandouts(contents)
+	out := make([]map[string]any, len(blocks))
+	for i, b := range blocks {
+		out[i] = b
+	}
+	return out
+}
+
 func parseHandouts(contents string) []block {
 	var result []block
 	for _, raw := range splitBlocks(contents) {

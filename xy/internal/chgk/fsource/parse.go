@@ -105,7 +105,10 @@ func (q *Question) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// markerMapping mirrors the prefix→type table in parse_4s.
+// markerMapping mirrors the prefix→type table in parse_4s. It is the one
+// marker table on both sides: `go generate` writes it into web/ts/markers_gen.ts.
+//
+//go:generate go run ./genmarkers
 var markerMapping = map[string]string{
 	"#":       "meta",
 	"##":      "section",
@@ -126,6 +129,15 @@ var markerMapping = map[string]string{
 	"/":       "comment",
 	"@":       "author",
 	">":       "handout",
+}
+
+// MarkerTypes returns the marker → element type table, a copy.
+func MarkerTypes() map[string]string {
+	out := make(map[string]string, len(markerMapping))
+	for k, v := range markerMapping {
+		out[k] = v
+	}
+	return out
 }
 
 // questionLabels mirrors common.QUESTION_LABELS.
