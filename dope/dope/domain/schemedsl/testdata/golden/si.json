@@ -1,0 +1,5061 @@
+{
+ "schemaVersion": 2,
+ "slug": "si",
+ "title": "si",
+ "gameType": "si",
+ "questionValues": null,
+ "regularThemeCount": 0,
+ "venues": [
+  {
+   "number": 1,
+   "title": "Стол 1"
+  },
+  {
+   "number": 2,
+   "title": "Стол 2"
+  },
+  {
+   "number": 3,
+   "title": "Стол 3"
+  },
+  {
+   "number": 4,
+   "title": "Стол 4"
+  },
+  {
+   "number": 5,
+   "title": "Стол 5"
+  },
+  {
+   "number": 6,
+   "title": "Стол 6"
+  }
+ ],
+ "stages": [
+  {
+   "code": "s1-g1",
+   "title": "Групповой этап. Группа 1",
+   "stage_type": "matches",
+   "kind": "rr",
+   "slug": "group-stage",
+   "position": 1,
+   "grain": {
+    "block": "s1",
+    "wave": 1,
+    "group": "1"
+   },
+   "matches": [
+    {
+     "code": "s1-g1-1",
+     "title": "Бой 1",
+     "letter": "A",
+     "venue": 1,
+     "round": 1,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 1
+       },
+       "label": "Посев 1"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 12
+       },
+       "label": "Посев 12"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 13
+       },
+       "label": "Посев 13"
+      }
+     ]
+    },
+    {
+     "code": "s1-g1-2",
+     "title": "Бой 2",
+     "letter": "B",
+     "venue": 1,
+     "round": 1,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 24
+       },
+       "label": "Посев 24"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 25
+       },
+       "label": "Посев 25"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 36
+       },
+       "label": "Посев 36"
+      }
+     ]
+    },
+    {
+     "code": "s1-g1-3",
+     "title": "Бой 3",
+     "letter": "C",
+     "venue": 1,
+     "round": 1,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 37
+       },
+       "label": "Посев 37"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 48
+       },
+       "label": "Посев 48"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 49
+       },
+       "label": "Посев 49"
+      }
+     ]
+    },
+    {
+     "code": "s1-g1-4",
+     "title": "Бой 4",
+     "letter": "D",
+     "venue": 1,
+     "round": 2,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 1
+       },
+       "label": "Посев 1"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 24
+       },
+       "label": "Посев 24"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 37
+       },
+       "label": "Посев 37"
+      }
+     ]
+    },
+    {
+     "code": "s1-g1-5",
+     "title": "Бой 5",
+     "letter": "E",
+     "venue": 1,
+     "round": 2,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 12
+       },
+       "label": "Посев 12"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 25
+       },
+       "label": "Посев 25"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 48
+       },
+       "label": "Посев 48"
+      }
+     ]
+    },
+    {
+     "code": "s1-g1-6",
+     "title": "Бой 6",
+     "letter": "F",
+     "venue": 1,
+     "round": 2,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 13
+       },
+       "label": "Посев 13"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 36
+       },
+       "label": "Посев 36"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 49
+       },
+       "label": "Посев 49"
+      }
+     ]
+    },
+    {
+     "code": "s1-g1-7",
+     "title": "Бой 7",
+     "letter": "G",
+     "venue": 1,
+     "round": 3,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 13
+       },
+       "label": "Посев 13"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 25
+       },
+       "label": "Посев 25"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 37
+       },
+       "label": "Посев 37"
+      }
+     ]
+    },
+    {
+     "code": "s1-g1-8",
+     "title": "Бой 8",
+     "letter": "H",
+     "venue": 1,
+     "round": 3,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 1
+       },
+       "label": "Посев 1"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 36
+       },
+       "label": "Посев 36"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 48
+       },
+       "label": "Посев 48"
+      }
+     ]
+    },
+    {
+     "code": "s1-g1-9",
+     "title": "Бой 9",
+     "letter": "I",
+     "venue": 1,
+     "round": 3,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 12
+       },
+       "label": "Посев 12"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 24
+       },
+       "label": "Посев 24"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 49
+       },
+       "label": "Посев 49"
+      }
+     ]
+    },
+    {
+     "code": "s1-g1-10",
+     "title": "Бой 10",
+     "letter": "J",
+     "venue": 1,
+     "round": 4,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 1
+       },
+       "label": "Посев 1"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 25
+       },
+       "label": "Посев 25"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 49
+       },
+       "label": "Посев 49"
+      }
+     ]
+    },
+    {
+     "code": "s1-g1-11",
+     "title": "Бой 11",
+     "letter": "K",
+     "venue": 1,
+     "round": 4,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 12
+       },
+       "label": "Посев 12"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 36
+       },
+       "label": "Посев 36"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 37
+       },
+       "label": "Посев 37"
+      }
+     ]
+    },
+    {
+     "code": "s1-g1-12",
+     "title": "Бой 12",
+     "letter": "L",
+     "venue": 1,
+     "round": 4,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 13
+       },
+       "label": "Посев 13"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 24
+       },
+       "label": "Посев 24"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 48
+       },
+       "label": "Посев 48"
+      }
+     ]
+    }
+   ],
+   "teams": null,
+   "sources": null,
+   "sort": null,
+   "config": {
+    "code": "s1-g1",
+    "entrants": [
+     {
+      "label": "Посев 1",
+      "seed": {
+       "basket": 1,
+       "position": 1
+      }
+     },
+     {
+      "label": "Посев 12",
+      "seed": {
+       "basket": 1,
+       "position": 12
+      }
+     },
+     {
+      "label": "Посев 13",
+      "seed": {
+       "basket": 1,
+       "position": 13
+      }
+     },
+     {
+      "label": "Посев 24",
+      "seed": {
+       "basket": 1,
+       "position": 24
+      }
+     },
+     {
+      "label": "Посев 25",
+      "seed": {
+       "basket": 1,
+       "position": 25
+      }
+     },
+     {
+      "label": "Посев 36",
+      "seed": {
+       "basket": 1,
+       "position": 36
+      }
+     },
+     {
+      "label": "Посев 37",
+      "seed": {
+       "basket": 1,
+       "position": 37
+      }
+     },
+     {
+      "label": "Посев 48",
+      "seed": {
+       "basket": 1,
+       "position": 48
+      }
+     },
+     {
+      "label": "Посев 49",
+      "seed": {
+       "basket": 1,
+       "position": 49
+      }
+     }
+    ],
+    "matchSize": 3,
+    "order": [
+     "points",
+     "total",
+     "plus"
+    ],
+    "points": {
+     "draw": 1,
+     "loss": 0,
+     "win": 2
+    },
+    "rules": {
+     "bout": {
+      "points": "seats + 1 - place"
+     },
+     "standings": null
+    },
+    "themes": 6,
+    "venue": 1
+   },
+   "layout": null
+  },
+  {
+   "code": "s1-g2",
+   "title": "Групповой этап. Группа 2",
+   "stage_type": "matches",
+   "kind": "rr",
+   "slug": "group-stage",
+   "position": 2,
+   "grain": {
+    "block": "s1",
+    "wave": 1,
+    "group": "2"
+   },
+   "matches": [
+    {
+     "code": "s1-g2-1",
+     "title": "Бой 1",
+     "letter": "M",
+     "venue": 2,
+     "round": 1,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 2
+       },
+       "label": "Посев 2"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 11
+       },
+       "label": "Посев 11"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 14
+       },
+       "label": "Посев 14"
+      }
+     ]
+    },
+    {
+     "code": "s1-g2-2",
+     "title": "Бой 2",
+     "letter": "N",
+     "venue": 2,
+     "round": 1,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 23
+       },
+       "label": "Посев 23"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 26
+       },
+       "label": "Посев 26"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 35
+       },
+       "label": "Посев 35"
+      }
+     ]
+    },
+    {
+     "code": "s1-g2-3",
+     "title": "Бой 3",
+     "letter": "O",
+     "venue": 2,
+     "round": 1,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 38
+       },
+       "label": "Посев 38"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 47
+       },
+       "label": "Посев 47"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 50
+       },
+       "label": "Посев 50"
+      }
+     ]
+    },
+    {
+     "code": "s1-g2-4",
+     "title": "Бой 4",
+     "letter": "P",
+     "venue": 2,
+     "round": 2,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 2
+       },
+       "label": "Посев 2"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 23
+       },
+       "label": "Посев 23"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 38
+       },
+       "label": "Посев 38"
+      }
+     ]
+    },
+    {
+     "code": "s1-g2-5",
+     "title": "Бой 5",
+     "letter": "Q",
+     "venue": 2,
+     "round": 2,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 11
+       },
+       "label": "Посев 11"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 26
+       },
+       "label": "Посев 26"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 47
+       },
+       "label": "Посев 47"
+      }
+     ]
+    },
+    {
+     "code": "s1-g2-6",
+     "title": "Бой 6",
+     "letter": "R",
+     "venue": 2,
+     "round": 2,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 14
+       },
+       "label": "Посев 14"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 35
+       },
+       "label": "Посев 35"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 50
+       },
+       "label": "Посев 50"
+      }
+     ]
+    },
+    {
+     "code": "s1-g2-7",
+     "title": "Бой 7",
+     "letter": "S",
+     "venue": 2,
+     "round": 3,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 14
+       },
+       "label": "Посев 14"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 26
+       },
+       "label": "Посев 26"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 38
+       },
+       "label": "Посев 38"
+      }
+     ]
+    },
+    {
+     "code": "s1-g2-8",
+     "title": "Бой 8",
+     "letter": "T",
+     "venue": 2,
+     "round": 3,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 2
+       },
+       "label": "Посев 2"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 35
+       },
+       "label": "Посев 35"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 47
+       },
+       "label": "Посев 47"
+      }
+     ]
+    },
+    {
+     "code": "s1-g2-9",
+     "title": "Бой 9",
+     "letter": "U",
+     "venue": 2,
+     "round": 3,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 11
+       },
+       "label": "Посев 11"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 23
+       },
+       "label": "Посев 23"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 50
+       },
+       "label": "Посев 50"
+      }
+     ]
+    },
+    {
+     "code": "s1-g2-10",
+     "title": "Бой 10",
+     "letter": "V",
+     "venue": 2,
+     "round": 4,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 2
+       },
+       "label": "Посев 2"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 26
+       },
+       "label": "Посев 26"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 50
+       },
+       "label": "Посев 50"
+      }
+     ]
+    },
+    {
+     "code": "s1-g2-11",
+     "title": "Бой 11",
+     "letter": "W",
+     "venue": 2,
+     "round": 4,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 11
+       },
+       "label": "Посев 11"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 35
+       },
+       "label": "Посев 35"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 38
+       },
+       "label": "Посев 38"
+      }
+     ]
+    },
+    {
+     "code": "s1-g2-12",
+     "title": "Бой 12",
+     "letter": "X",
+     "venue": 2,
+     "round": 4,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 14
+       },
+       "label": "Посев 14"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 23
+       },
+       "label": "Посев 23"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 47
+       },
+       "label": "Посев 47"
+      }
+     ]
+    }
+   ],
+   "teams": null,
+   "sources": null,
+   "sort": null,
+   "config": {
+    "code": "s1-g2",
+    "entrants": [
+     {
+      "label": "Посев 2",
+      "seed": {
+       "basket": 1,
+       "position": 2
+      }
+     },
+     {
+      "label": "Посев 11",
+      "seed": {
+       "basket": 1,
+       "position": 11
+      }
+     },
+     {
+      "label": "Посев 14",
+      "seed": {
+       "basket": 1,
+       "position": 14
+      }
+     },
+     {
+      "label": "Посев 23",
+      "seed": {
+       "basket": 1,
+       "position": 23
+      }
+     },
+     {
+      "label": "Посев 26",
+      "seed": {
+       "basket": 1,
+       "position": 26
+      }
+     },
+     {
+      "label": "Посев 35",
+      "seed": {
+       "basket": 1,
+       "position": 35
+      }
+     },
+     {
+      "label": "Посев 38",
+      "seed": {
+       "basket": 1,
+       "position": 38
+      }
+     },
+     {
+      "label": "Посев 47",
+      "seed": {
+       "basket": 1,
+       "position": 47
+      }
+     },
+     {
+      "label": "Посев 50",
+      "seed": {
+       "basket": 1,
+       "position": 50
+      }
+     }
+    ],
+    "matchSize": 3,
+    "order": [
+     "points",
+     "total",
+     "plus"
+    ],
+    "points": {
+     "draw": 1,
+     "loss": 0,
+     "win": 2
+    },
+    "rules": {
+     "bout": {
+      "points": "seats + 1 - place"
+     },
+     "standings": null
+    },
+    "themes": 6,
+    "venue": 2
+   },
+   "layout": null
+  },
+  {
+   "code": "s1-g3",
+   "title": "Групповой этап. Группа 3",
+   "stage_type": "matches",
+   "kind": "rr",
+   "slug": "group-stage",
+   "position": 3,
+   "grain": {
+    "block": "s1",
+    "wave": 1,
+    "group": "3"
+   },
+   "matches": [
+    {
+     "code": "s1-g3-1",
+     "title": "Бой 1",
+     "letter": "Y",
+     "venue": 3,
+     "round": 1,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 3
+       },
+       "label": "Посев 3"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 10
+       },
+       "label": "Посев 10"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 15
+       },
+       "label": "Посев 15"
+      }
+     ]
+    },
+    {
+     "code": "s1-g3-2",
+     "title": "Бой 2",
+     "letter": "Z",
+     "venue": 3,
+     "round": 1,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 22
+       },
+       "label": "Посев 22"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 27
+       },
+       "label": "Посев 27"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 34
+       },
+       "label": "Посев 34"
+      }
+     ]
+    },
+    {
+     "code": "s1-g3-3",
+     "title": "Бой 3",
+     "letter": "AA",
+     "venue": 3,
+     "round": 1,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 39
+       },
+       "label": "Посев 39"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 46
+       },
+       "label": "Посев 46"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 51
+       },
+       "label": "Посев 51"
+      }
+     ]
+    },
+    {
+     "code": "s1-g3-4",
+     "title": "Бой 4",
+     "letter": "AB",
+     "venue": 3,
+     "round": 2,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 3
+       },
+       "label": "Посев 3"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 22
+       },
+       "label": "Посев 22"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 39
+       },
+       "label": "Посев 39"
+      }
+     ]
+    },
+    {
+     "code": "s1-g3-5",
+     "title": "Бой 5",
+     "letter": "AC",
+     "venue": 3,
+     "round": 2,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 10
+       },
+       "label": "Посев 10"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 27
+       },
+       "label": "Посев 27"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 46
+       },
+       "label": "Посев 46"
+      }
+     ]
+    },
+    {
+     "code": "s1-g3-6",
+     "title": "Бой 6",
+     "letter": "AD",
+     "venue": 3,
+     "round": 2,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 15
+       },
+       "label": "Посев 15"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 34
+       },
+       "label": "Посев 34"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 51
+       },
+       "label": "Посев 51"
+      }
+     ]
+    },
+    {
+     "code": "s1-g3-7",
+     "title": "Бой 7",
+     "letter": "AE",
+     "venue": 3,
+     "round": 3,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 15
+       },
+       "label": "Посев 15"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 27
+       },
+       "label": "Посев 27"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 39
+       },
+       "label": "Посев 39"
+      }
+     ]
+    },
+    {
+     "code": "s1-g3-8",
+     "title": "Бой 8",
+     "letter": "AF",
+     "venue": 3,
+     "round": 3,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 3
+       },
+       "label": "Посев 3"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 34
+       },
+       "label": "Посев 34"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 46
+       },
+       "label": "Посев 46"
+      }
+     ]
+    },
+    {
+     "code": "s1-g3-9",
+     "title": "Бой 9",
+     "letter": "AG",
+     "venue": 3,
+     "round": 3,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 10
+       },
+       "label": "Посев 10"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 22
+       },
+       "label": "Посев 22"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 51
+       },
+       "label": "Посев 51"
+      }
+     ]
+    },
+    {
+     "code": "s1-g3-10",
+     "title": "Бой 10",
+     "letter": "AH",
+     "venue": 3,
+     "round": 4,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 3
+       },
+       "label": "Посев 3"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 27
+       },
+       "label": "Посев 27"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 51
+       },
+       "label": "Посев 51"
+      }
+     ]
+    },
+    {
+     "code": "s1-g3-11",
+     "title": "Бой 11",
+     "letter": "AI",
+     "venue": 3,
+     "round": 4,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 10
+       },
+       "label": "Посев 10"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 34
+       },
+       "label": "Посев 34"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 39
+       },
+       "label": "Посев 39"
+      }
+     ]
+    },
+    {
+     "code": "s1-g3-12",
+     "title": "Бой 12",
+     "letter": "AJ",
+     "venue": 3,
+     "round": 4,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 15
+       },
+       "label": "Посев 15"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 22
+       },
+       "label": "Посев 22"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 46
+       },
+       "label": "Посев 46"
+      }
+     ]
+    }
+   ],
+   "teams": null,
+   "sources": null,
+   "sort": null,
+   "config": {
+    "code": "s1-g3",
+    "entrants": [
+     {
+      "label": "Посев 3",
+      "seed": {
+       "basket": 1,
+       "position": 3
+      }
+     },
+     {
+      "label": "Посев 10",
+      "seed": {
+       "basket": 1,
+       "position": 10
+      }
+     },
+     {
+      "label": "Посев 15",
+      "seed": {
+       "basket": 1,
+       "position": 15
+      }
+     },
+     {
+      "label": "Посев 22",
+      "seed": {
+       "basket": 1,
+       "position": 22
+      }
+     },
+     {
+      "label": "Посев 27",
+      "seed": {
+       "basket": 1,
+       "position": 27
+      }
+     },
+     {
+      "label": "Посев 34",
+      "seed": {
+       "basket": 1,
+       "position": 34
+      }
+     },
+     {
+      "label": "Посев 39",
+      "seed": {
+       "basket": 1,
+       "position": 39
+      }
+     },
+     {
+      "label": "Посев 46",
+      "seed": {
+       "basket": 1,
+       "position": 46
+      }
+     },
+     {
+      "label": "Посев 51",
+      "seed": {
+       "basket": 1,
+       "position": 51
+      }
+     }
+    ],
+    "matchSize": 3,
+    "order": [
+     "points",
+     "total",
+     "plus"
+    ],
+    "points": {
+     "draw": 1,
+     "loss": 0,
+     "win": 2
+    },
+    "rules": {
+     "bout": {
+      "points": "seats + 1 - place"
+     },
+     "standings": null
+    },
+    "themes": 6,
+    "venue": 3
+   },
+   "layout": null
+  },
+  {
+   "code": "s1-g4",
+   "title": "Групповой этап. Группа 4",
+   "stage_type": "matches",
+   "kind": "rr",
+   "slug": "group-stage",
+   "position": 4,
+   "grain": {
+    "block": "s1",
+    "wave": 1,
+    "group": "4"
+   },
+   "matches": [
+    {
+     "code": "s1-g4-1",
+     "title": "Бой 1",
+     "letter": "AK",
+     "venue": 4,
+     "round": 1,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 4
+       },
+       "label": "Посев 4"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 9
+       },
+       "label": "Посев 9"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 16
+       },
+       "label": "Посев 16"
+      }
+     ]
+    },
+    {
+     "code": "s1-g4-2",
+     "title": "Бой 2",
+     "letter": "AL",
+     "venue": 4,
+     "round": 1,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 21
+       },
+       "label": "Посев 21"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 28
+       },
+       "label": "Посев 28"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 33
+       },
+       "label": "Посев 33"
+      }
+     ]
+    },
+    {
+     "code": "s1-g4-3",
+     "title": "Бой 3",
+     "letter": "AM",
+     "venue": 4,
+     "round": 1,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 40
+       },
+       "label": "Посев 40"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 45
+       },
+       "label": "Посев 45"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 52
+       },
+       "label": "Посев 52"
+      }
+     ]
+    },
+    {
+     "code": "s1-g4-4",
+     "title": "Бой 4",
+     "letter": "AN",
+     "venue": 4,
+     "round": 2,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 4
+       },
+       "label": "Посев 4"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 21
+       },
+       "label": "Посев 21"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 40
+       },
+       "label": "Посев 40"
+      }
+     ]
+    },
+    {
+     "code": "s1-g4-5",
+     "title": "Бой 5",
+     "letter": "AO",
+     "venue": 4,
+     "round": 2,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 9
+       },
+       "label": "Посев 9"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 28
+       },
+       "label": "Посев 28"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 45
+       },
+       "label": "Посев 45"
+      }
+     ]
+    },
+    {
+     "code": "s1-g4-6",
+     "title": "Бой 6",
+     "letter": "AP",
+     "venue": 4,
+     "round": 2,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 16
+       },
+       "label": "Посев 16"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 33
+       },
+       "label": "Посев 33"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 52
+       },
+       "label": "Посев 52"
+      }
+     ]
+    },
+    {
+     "code": "s1-g4-7",
+     "title": "Бой 7",
+     "letter": "AQ",
+     "venue": 4,
+     "round": 3,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 16
+       },
+       "label": "Посев 16"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 28
+       },
+       "label": "Посев 28"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 40
+       },
+       "label": "Посев 40"
+      }
+     ]
+    },
+    {
+     "code": "s1-g4-8",
+     "title": "Бой 8",
+     "letter": "AR",
+     "venue": 4,
+     "round": 3,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 4
+       },
+       "label": "Посев 4"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 33
+       },
+       "label": "Посев 33"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 45
+       },
+       "label": "Посев 45"
+      }
+     ]
+    },
+    {
+     "code": "s1-g4-9",
+     "title": "Бой 9",
+     "letter": "AS",
+     "venue": 4,
+     "round": 3,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 9
+       },
+       "label": "Посев 9"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 21
+       },
+       "label": "Посев 21"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 52
+       },
+       "label": "Посев 52"
+      }
+     ]
+    },
+    {
+     "code": "s1-g4-10",
+     "title": "Бой 10",
+     "letter": "AT",
+     "venue": 4,
+     "round": 4,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 4
+       },
+       "label": "Посев 4"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 28
+       },
+       "label": "Посев 28"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 52
+       },
+       "label": "Посев 52"
+      }
+     ]
+    },
+    {
+     "code": "s1-g4-11",
+     "title": "Бой 11",
+     "letter": "AU",
+     "venue": 4,
+     "round": 4,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 9
+       },
+       "label": "Посев 9"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 33
+       },
+       "label": "Посев 33"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 40
+       },
+       "label": "Посев 40"
+      }
+     ]
+    },
+    {
+     "code": "s1-g4-12",
+     "title": "Бой 12",
+     "letter": "AV",
+     "venue": 4,
+     "round": 4,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 16
+       },
+       "label": "Посев 16"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 21
+       },
+       "label": "Посев 21"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 45
+       },
+       "label": "Посев 45"
+      }
+     ]
+    }
+   ],
+   "teams": null,
+   "sources": null,
+   "sort": null,
+   "config": {
+    "code": "s1-g4",
+    "entrants": [
+     {
+      "label": "Посев 4",
+      "seed": {
+       "basket": 1,
+       "position": 4
+      }
+     },
+     {
+      "label": "Посев 9",
+      "seed": {
+       "basket": 1,
+       "position": 9
+      }
+     },
+     {
+      "label": "Посев 16",
+      "seed": {
+       "basket": 1,
+       "position": 16
+      }
+     },
+     {
+      "label": "Посев 21",
+      "seed": {
+       "basket": 1,
+       "position": 21
+      }
+     },
+     {
+      "label": "Посев 28",
+      "seed": {
+       "basket": 1,
+       "position": 28
+      }
+     },
+     {
+      "label": "Посев 33",
+      "seed": {
+       "basket": 1,
+       "position": 33
+      }
+     },
+     {
+      "label": "Посев 40",
+      "seed": {
+       "basket": 1,
+       "position": 40
+      }
+     },
+     {
+      "label": "Посев 45",
+      "seed": {
+       "basket": 1,
+       "position": 45
+      }
+     },
+     {
+      "label": "Посев 52",
+      "seed": {
+       "basket": 1,
+       "position": 52
+      }
+     }
+    ],
+    "matchSize": 3,
+    "order": [
+     "points",
+     "total",
+     "plus"
+    ],
+    "points": {
+     "draw": 1,
+     "loss": 0,
+     "win": 2
+    },
+    "rules": {
+     "bout": {
+      "points": "seats + 1 - place"
+     },
+     "standings": null
+    },
+    "themes": 6,
+    "venue": 4
+   },
+   "layout": null
+  },
+  {
+   "code": "s1-g5",
+   "title": "Групповой этап. Группа 5",
+   "stage_type": "matches",
+   "kind": "rr",
+   "slug": "group-stage",
+   "position": 5,
+   "grain": {
+    "block": "s1",
+    "wave": 1,
+    "group": "5"
+   },
+   "matches": [
+    {
+     "code": "s1-g5-1",
+     "title": "Бой 1",
+     "letter": "AW",
+     "venue": 5,
+     "round": 1,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 5
+       },
+       "label": "Посев 5"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 8
+       },
+       "label": "Посев 8"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 17
+       },
+       "label": "Посев 17"
+      }
+     ]
+    },
+    {
+     "code": "s1-g5-2",
+     "title": "Бой 2",
+     "letter": "AX",
+     "venue": 5,
+     "round": 1,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 20
+       },
+       "label": "Посев 20"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 29
+       },
+       "label": "Посев 29"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 32
+       },
+       "label": "Посев 32"
+      }
+     ]
+    },
+    {
+     "code": "s1-g5-3",
+     "title": "Бой 3",
+     "letter": "AY",
+     "venue": 5,
+     "round": 1,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 41
+       },
+       "label": "Посев 41"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 44
+       },
+       "label": "Посев 44"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 53
+       },
+       "label": "Посев 53"
+      }
+     ]
+    },
+    {
+     "code": "s1-g5-4",
+     "title": "Бой 4",
+     "letter": "AZ",
+     "venue": 5,
+     "round": 2,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 5
+       },
+       "label": "Посев 5"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 20
+       },
+       "label": "Посев 20"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 41
+       },
+       "label": "Посев 41"
+      }
+     ]
+    },
+    {
+     "code": "s1-g5-5",
+     "title": "Бой 5",
+     "letter": "BA",
+     "venue": 5,
+     "round": 2,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 8
+       },
+       "label": "Посев 8"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 29
+       },
+       "label": "Посев 29"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 44
+       },
+       "label": "Посев 44"
+      }
+     ]
+    },
+    {
+     "code": "s1-g5-6",
+     "title": "Бой 6",
+     "letter": "BB",
+     "venue": 5,
+     "round": 2,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 17
+       },
+       "label": "Посев 17"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 32
+       },
+       "label": "Посев 32"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 53
+       },
+       "label": "Посев 53"
+      }
+     ]
+    },
+    {
+     "code": "s1-g5-7",
+     "title": "Бой 7",
+     "letter": "BC",
+     "venue": 5,
+     "round": 3,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 17
+       },
+       "label": "Посев 17"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 29
+       },
+       "label": "Посев 29"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 41
+       },
+       "label": "Посев 41"
+      }
+     ]
+    },
+    {
+     "code": "s1-g5-8",
+     "title": "Бой 8",
+     "letter": "BD",
+     "venue": 5,
+     "round": 3,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 5
+       },
+       "label": "Посев 5"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 32
+       },
+       "label": "Посев 32"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 44
+       },
+       "label": "Посев 44"
+      }
+     ]
+    },
+    {
+     "code": "s1-g5-9",
+     "title": "Бой 9",
+     "letter": "BE",
+     "venue": 5,
+     "round": 3,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 8
+       },
+       "label": "Посев 8"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 20
+       },
+       "label": "Посев 20"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 53
+       },
+       "label": "Посев 53"
+      }
+     ]
+    },
+    {
+     "code": "s1-g5-10",
+     "title": "Бой 10",
+     "letter": "BF",
+     "venue": 5,
+     "round": 4,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 5
+       },
+       "label": "Посев 5"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 29
+       },
+       "label": "Посев 29"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 53
+       },
+       "label": "Посев 53"
+      }
+     ]
+    },
+    {
+     "code": "s1-g5-11",
+     "title": "Бой 11",
+     "letter": "BG",
+     "venue": 5,
+     "round": 4,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 8
+       },
+       "label": "Посев 8"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 32
+       },
+       "label": "Посев 32"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 41
+       },
+       "label": "Посев 41"
+      }
+     ]
+    },
+    {
+     "code": "s1-g5-12",
+     "title": "Бой 12",
+     "letter": "BH",
+     "venue": 5,
+     "round": 4,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 17
+       },
+       "label": "Посев 17"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 20
+       },
+       "label": "Посев 20"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 44
+       },
+       "label": "Посев 44"
+      }
+     ]
+    }
+   ],
+   "teams": null,
+   "sources": null,
+   "sort": null,
+   "config": {
+    "code": "s1-g5",
+    "entrants": [
+     {
+      "label": "Посев 5",
+      "seed": {
+       "basket": 1,
+       "position": 5
+      }
+     },
+     {
+      "label": "Посев 8",
+      "seed": {
+       "basket": 1,
+       "position": 8
+      }
+     },
+     {
+      "label": "Посев 17",
+      "seed": {
+       "basket": 1,
+       "position": 17
+      }
+     },
+     {
+      "label": "Посев 20",
+      "seed": {
+       "basket": 1,
+       "position": 20
+      }
+     },
+     {
+      "label": "Посев 29",
+      "seed": {
+       "basket": 1,
+       "position": 29
+      }
+     },
+     {
+      "label": "Посев 32",
+      "seed": {
+       "basket": 1,
+       "position": 32
+      }
+     },
+     {
+      "label": "Посев 41",
+      "seed": {
+       "basket": 1,
+       "position": 41
+      }
+     },
+     {
+      "label": "Посев 44",
+      "seed": {
+       "basket": 1,
+       "position": 44
+      }
+     },
+     {
+      "label": "Посев 53",
+      "seed": {
+       "basket": 1,
+       "position": 53
+      }
+     }
+    ],
+    "matchSize": 3,
+    "order": [
+     "points",
+     "total",
+     "plus"
+    ],
+    "points": {
+     "draw": 1,
+     "loss": 0,
+     "win": 2
+    },
+    "rules": {
+     "bout": {
+      "points": "seats + 1 - place"
+     },
+     "standings": null
+    },
+    "themes": 6,
+    "venue": 5
+   },
+   "layout": null
+  },
+  {
+   "code": "s1-g6",
+   "title": "Групповой этап. Группа 6",
+   "stage_type": "matches",
+   "kind": "rr",
+   "slug": "group-stage",
+   "position": 6,
+   "grain": {
+    "block": "s1",
+    "wave": 1,
+    "group": "6"
+   },
+   "matches": [
+    {
+     "code": "s1-g6-1",
+     "title": "Бой 1",
+     "letter": "BI",
+     "venue": 6,
+     "round": 1,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 6
+       },
+       "label": "Посев 6"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 7
+       },
+       "label": "Посев 7"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 18
+       },
+       "label": "Посев 18"
+      }
+     ]
+    },
+    {
+     "code": "s1-g6-2",
+     "title": "Бой 2",
+     "letter": "BJ",
+     "venue": 6,
+     "round": 1,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 19
+       },
+       "label": "Посев 19"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 30
+       },
+       "label": "Посев 30"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 31
+       },
+       "label": "Посев 31"
+      }
+     ]
+    },
+    {
+     "code": "s1-g6-3",
+     "title": "Бой 3",
+     "letter": "BK",
+     "venue": 6,
+     "round": 1,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 42
+       },
+       "label": "Посев 42"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 43
+       },
+       "label": "Посев 43"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 54
+       },
+       "label": "Посев 54"
+      }
+     ]
+    },
+    {
+     "code": "s1-g6-4",
+     "title": "Бой 4",
+     "letter": "BL",
+     "venue": 6,
+     "round": 2,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 6
+       },
+       "label": "Посев 6"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 19
+       },
+       "label": "Посев 19"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 42
+       },
+       "label": "Посев 42"
+      }
+     ]
+    },
+    {
+     "code": "s1-g6-5",
+     "title": "Бой 5",
+     "letter": "BM",
+     "venue": 6,
+     "round": 2,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 7
+       },
+       "label": "Посев 7"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 30
+       },
+       "label": "Посев 30"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 43
+       },
+       "label": "Посев 43"
+      }
+     ]
+    },
+    {
+     "code": "s1-g6-6",
+     "title": "Бой 6",
+     "letter": "BN",
+     "venue": 6,
+     "round": 2,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 18
+       },
+       "label": "Посев 18"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 31
+       },
+       "label": "Посев 31"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 54
+       },
+       "label": "Посев 54"
+      }
+     ]
+    },
+    {
+     "code": "s1-g6-7",
+     "title": "Бой 7",
+     "letter": "BO",
+     "venue": 6,
+     "round": 3,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 18
+       },
+       "label": "Посев 18"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 30
+       },
+       "label": "Посев 30"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 42
+       },
+       "label": "Посев 42"
+      }
+     ]
+    },
+    {
+     "code": "s1-g6-8",
+     "title": "Бой 8",
+     "letter": "BP",
+     "venue": 6,
+     "round": 3,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 6
+       },
+       "label": "Посев 6"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 31
+       },
+       "label": "Посев 31"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 43
+       },
+       "label": "Посев 43"
+      }
+     ]
+    },
+    {
+     "code": "s1-g6-9",
+     "title": "Бой 9",
+     "letter": "BQ",
+     "venue": 6,
+     "round": 3,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 7
+       },
+       "label": "Посев 7"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 19
+       },
+       "label": "Посев 19"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 54
+       },
+       "label": "Посев 54"
+      }
+     ]
+    },
+    {
+     "code": "s1-g6-10",
+     "title": "Бой 10",
+     "letter": "BR",
+     "venue": 6,
+     "round": 4,
+     "wave": 1,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 6
+       },
+       "label": "Посев 6"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 30
+       },
+       "label": "Посев 30"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 54
+       },
+       "label": "Посев 54"
+      }
+     ]
+    },
+    {
+     "code": "s1-g6-11",
+     "title": "Бой 11",
+     "letter": "BS",
+     "venue": 6,
+     "round": 4,
+     "wave": 2,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 7
+       },
+       "label": "Посев 7"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 31
+       },
+       "label": "Посев 31"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 42
+       },
+       "label": "Посев 42"
+      }
+     ]
+    },
+    {
+     "code": "s1-g6-12",
+     "title": "Бой 12",
+     "letter": "BT",
+     "venue": 6,
+     "round": 4,
+     "wave": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 18
+       },
+       "label": "Посев 18"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 19
+       },
+       "label": "Посев 19"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 43
+       },
+       "label": "Посев 43"
+      }
+     ]
+    }
+   ],
+   "teams": null,
+   "sources": null,
+   "sort": null,
+   "config": {
+    "code": "s1-g6",
+    "entrants": [
+     {
+      "label": "Посев 6",
+      "seed": {
+       "basket": 1,
+       "position": 6
+      }
+     },
+     {
+      "label": "Посев 7",
+      "seed": {
+       "basket": 1,
+       "position": 7
+      }
+     },
+     {
+      "label": "Посев 18",
+      "seed": {
+       "basket": 1,
+       "position": 18
+      }
+     },
+     {
+      "label": "Посев 19",
+      "seed": {
+       "basket": 1,
+       "position": 19
+      }
+     },
+     {
+      "label": "Посев 30",
+      "seed": {
+       "basket": 1,
+       "position": 30
+      }
+     },
+     {
+      "label": "Посев 31",
+      "seed": {
+       "basket": 1,
+       "position": 31
+      }
+     },
+     {
+      "label": "Посев 42",
+      "seed": {
+       "basket": 1,
+       "position": 42
+      }
+     },
+     {
+      "label": "Посев 43",
+      "seed": {
+       "basket": 1,
+       "position": 43
+      }
+     },
+     {
+      "label": "Посев 54",
+      "seed": {
+       "basket": 1,
+       "position": 54
+      }
+     }
+    ],
+    "matchSize": 3,
+    "order": [
+     "points",
+     "total",
+     "plus"
+    ],
+    "points": {
+     "draw": 1,
+     "loss": 0,
+     "win": 2
+    },
+    "rules": {
+     "bout": {
+      "points": "seats + 1 - place"
+     },
+     "standings": null
+    },
+    "themes": 6,
+    "venue": 6
+   },
+   "layout": null
+  },
+  {
+   "code": "s2-reseed",
+   "title": "Пересев",
+   "stage_type": "reseed",
+   "kind": "reseed",
+   "position": 7,
+   "grain": {
+    "block": "s2",
+    "wave": 1
+   },
+   "matches": null,
+   "teams": [
+    {
+     "reseed": {
+      "stage": "s1-g1",
+      "rank": 1
+     },
+     "label": "Гр. 1-1"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g1",
+      "rank": 2
+     },
+     "label": "Гр. 1-2"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g1",
+      "rank": 3
+     },
+     "label": "Гр. 1-3"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g1",
+      "rank": 4
+     },
+     "label": "Гр. 1-4"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g2",
+      "rank": 1
+     },
+     "label": "Гр. 2-1"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g2",
+      "rank": 2
+     },
+     "label": "Гр. 2-2"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g2",
+      "rank": 3
+     },
+     "label": "Гр. 2-3"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g2",
+      "rank": 4
+     },
+     "label": "Гр. 2-4"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g3",
+      "rank": 1
+     },
+     "label": "Гр. 3-1"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g3",
+      "rank": 2
+     },
+     "label": "Гр. 3-2"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g3",
+      "rank": 3
+     },
+     "label": "Гр. 3-3"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g3",
+      "rank": 4
+     },
+     "label": "Гр. 3-4"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g4",
+      "rank": 1
+     },
+     "label": "Гр. 4-1"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g4",
+      "rank": 2
+     },
+     "label": "Гр. 4-2"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g4",
+      "rank": 3
+     },
+     "label": "Гр. 4-3"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g4",
+      "rank": 4
+     },
+     "label": "Гр. 4-4"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g5",
+      "rank": 1
+     },
+     "label": "Гр. 5-1"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g5",
+      "rank": 2
+     },
+     "label": "Гр. 5-2"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g5",
+      "rank": 3
+     },
+     "label": "Гр. 5-3"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g5",
+      "rank": 4
+     },
+     "label": "Гр. 5-4"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g6",
+      "rank": 1
+     },
+     "label": "Гр. 6-1"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g6",
+      "rank": 2
+     },
+     "label": "Гр. 6-2"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g6",
+      "rank": 3
+     },
+     "label": "Гр. 6-3"
+    },
+    {
+     "reseed": {
+      "stage": "s1-g6",
+      "rank": 4
+     },
+     "label": "Гр. 6-4"
+    }
+   ],
+   "sources": [
+    "s1-g1",
+    "s1-g2",
+    "s1-g3",
+    "s1-g4",
+    "s1-g5",
+    "s1-g6"
+   ],
+   "sort": [
+    {
+     "metric": "place_sum",
+     "dir": "asc"
+    },
+    {
+     "metric": "total",
+     "dir": "desc"
+    },
+    {
+     "metric": "plus",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken50",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken40",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken30",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken20",
+     "dir": "desc"
+    },
+    {
+     "metric": "draw",
+     "dir": "asc"
+    }
+   ],
+   "config": null,
+   "layout": null
+  },
+  {
+   "code": "s2-r1",
+   "title": "Плей-офф. 1 этап",
+   "stage_type": "matches",
+   "kind": "matches",
+   "position": 8,
+   "grain": {
+    "block": "s2",
+    "wave": 1
+   },
+   "matches": [
+    {
+     "code": "s2-r1-m1",
+     "title": "Бой 1",
+     "letter": "BU",
+     "venue": 1,
+     "round": 1,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 1
+       },
+       "label": "Пересев-1"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 12
+       },
+       "label": "Пересев-12"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 13
+       },
+       "label": "Пересев-13"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 24
+       },
+       "label": "Пересев-24"
+      }
+     ]
+    },
+    {
+     "code": "s2-r1-m2",
+     "title": "Бой 2",
+     "letter": "BV",
+     "venue": 2,
+     "round": 1,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 2
+       },
+       "label": "Пересев-2"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 11
+       },
+       "label": "Пересев-11"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 14
+       },
+       "label": "Пересев-14"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 23
+       },
+       "label": "Пересев-23"
+      }
+     ]
+    },
+    {
+     "code": "s2-r1-m3",
+     "title": "Бой 3",
+     "letter": "BW",
+     "venue": 3,
+     "round": 1,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 3
+       },
+       "label": "Пересев-3"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 10
+       },
+       "label": "Пересев-10"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 15
+       },
+       "label": "Пересев-15"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 22
+       },
+       "label": "Пересев-22"
+      }
+     ]
+    },
+    {
+     "code": "s2-r1-m4",
+     "title": "Бой 4",
+     "letter": "BX",
+     "venue": 4,
+     "round": 1,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 4
+       },
+       "label": "Пересев-4"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 9
+       },
+       "label": "Пересев-9"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 16
+       },
+       "label": "Пересев-16"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 21
+       },
+       "label": "Пересев-21"
+      }
+     ]
+    },
+    {
+     "code": "s2-r1-m5",
+     "title": "Бой 5",
+     "letter": "BY",
+     "venue": 5,
+     "round": 1,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 5
+       },
+       "label": "Пересев-5"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 8
+       },
+       "label": "Пересев-8"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 17
+       },
+       "label": "Пересев-17"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 20
+       },
+       "label": "Пересев-20"
+      }
+     ]
+    },
+    {
+     "code": "s2-r1-m6",
+     "title": "Бой 6",
+     "letter": "BZ",
+     "venue": 6,
+     "round": 1,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 6
+       },
+       "label": "Пересев-6"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 7
+       },
+       "label": "Пересев-7"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 18
+       },
+       "label": "Пересев-18"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 19
+       },
+       "label": "Пересев-19"
+      }
+     ]
+    }
+   ],
+   "teams": null,
+   "sources": null,
+   "sort": null,
+   "config": {
+    "themes": 8
+   },
+   "layout": null
+  },
+  {
+   "code": "s2-r2-reseed",
+   "title": "Пересев",
+   "stage_type": "reseed",
+   "kind": "reseed",
+   "position": 9,
+   "grain": {
+    "block": "s2",
+    "wave": 1
+   },
+   "matches": null,
+   "teams": [
+    {
+     "fromMatch": {
+      "match": "s2-r1-m1",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m1",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m2",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m2",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m3",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m3",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m4",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m4",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m5",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m5",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m6",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m6",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m1",
+      "place": 3
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m1",
+      "place": 4
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m2",
+      "place": 3
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m2",
+      "place": 4
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m3",
+      "place": 3
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m3",
+      "place": 4
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m4",
+      "place": 3
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m4",
+      "place": 4
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m5",
+      "place": 3
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m5",
+      "place": 4
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m6",
+      "place": 3
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m6",
+      "place": 4
+     }
+    }
+   ],
+   "bands": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "sources": [
+    "s2-r1"
+   ],
+   "sort": [
+    {
+     "metric": "place_sum",
+     "dir": "asc"
+    },
+    {
+     "metric": "total",
+     "dir": "desc"
+    },
+    {
+     "metric": "plus",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken50",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken40",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken30",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken20",
+     "dir": "desc"
+    },
+    {
+     "metric": "draw",
+     "dir": "asc"
+    }
+   ],
+   "config": null,
+   "layout": null
+  },
+  {
+   "code": "s2-r2",
+   "title": "Плей-офф. 2 этап",
+   "stage_type": "matches",
+   "kind": "matches",
+   "position": 10,
+   "grain": {
+    "block": "s2",
+    "wave": 1
+   },
+   "matches": [
+    {
+     "code": "s2-r2-m1",
+     "title": "Бой 1",
+     "letter": "CA",
+     "venue": 1,
+     "round": 2,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 1
+       },
+       "label": "Пересев-1"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 6
+       },
+       "label": "Пересев-6"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 7
+       },
+       "label": "Пересев-7"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 12
+       },
+       "label": "Пересев-12"
+      }
+     ]
+    },
+    {
+     "code": "s2-r2-m2",
+     "title": "Бой 2",
+     "letter": "CB",
+     "venue": 2,
+     "round": 2,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 2
+       },
+       "label": "Пересев-2"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 5
+       },
+       "label": "Пересев-5"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 8
+       },
+       "label": "Пересев-8"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 11
+       },
+       "label": "Пересев-11"
+      }
+     ]
+    },
+    {
+     "code": "s2-r2-m3",
+     "title": "Бой 3",
+     "letter": "CC",
+     "venue": 3,
+     "round": 2,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 3
+       },
+       "label": "Пересев-3"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 4
+       },
+       "label": "Пересев-4"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 9
+       },
+       "label": "Пересев-9"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 10
+       },
+       "label": "Пересев-10"
+      }
+     ]
+    },
+    {
+     "code": "s2-r2-m4",
+     "title": "Бой 4",
+     "letter": "CD",
+     "venue": 4,
+     "round": 2,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 13
+       },
+       "label": "Пересев-13"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 18
+       },
+       "label": "Пересев-18"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 19
+       },
+       "label": "Пересев-19"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 24
+       },
+       "label": "Пересев-24"
+      }
+     ]
+    },
+    {
+     "code": "s2-r2-m5",
+     "title": "Бой 5",
+     "letter": "CE",
+     "venue": 5,
+     "round": 2,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 14
+       },
+       "label": "Пересев-14"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 17
+       },
+       "label": "Пересев-17"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 20
+       },
+       "label": "Пересев-20"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 23
+       },
+       "label": "Пересев-23"
+      }
+     ]
+    },
+    {
+     "code": "s2-r2-m6",
+     "title": "Бой 6",
+     "letter": "CF",
+     "venue": 6,
+     "round": 2,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 15
+       },
+       "label": "Пересев-15"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 16
+       },
+       "label": "Пересев-16"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 21
+       },
+       "label": "Пересев-21"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 22
+       },
+       "label": "Пересев-22"
+      }
+     ]
+    }
+   ],
+   "teams": null,
+   "sources": null,
+   "sort": null,
+   "config": {
+    "themes": 8
+   },
+   "layout": null
+  },
+  {
+   "code": "s2-r3-reseed",
+   "title": "Пересев",
+   "stage_type": "reseed",
+   "kind": "reseed",
+   "position": 11,
+   "grain": {
+    "block": "s2",
+    "wave": 1
+   },
+   "matches": null,
+   "teams": [
+    {
+     "fromMatch": {
+      "match": "s2-r2-m1",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r2-m1",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r2-m2",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r2-m2",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r2-m3",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r2-m3",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r2-m1",
+      "place": 3
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r2-m1",
+      "place": 4
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r2-m2",
+      "place": 3
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r2-m2",
+      "place": 4
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r2-m3",
+      "place": 3
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r2-m3",
+      "place": 4
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r2-m4",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r2-m4",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r2-m5",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r2-m5",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r2-m6",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r2-m6",
+      "place": 2
+     }
+    }
+   ],
+   "bands": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2
+   ],
+   "sources": [
+    "s2-r2"
+   ],
+   "sort": [
+    {
+     "metric": "place_sum",
+     "dir": "asc"
+    },
+    {
+     "metric": "total",
+     "dir": "desc"
+    },
+    {
+     "metric": "plus",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken50",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken40",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken30",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken20",
+     "dir": "desc"
+    },
+    {
+     "metric": "draw",
+     "dir": "asc"
+    }
+   ],
+   "config": null,
+   "layout": null
+  },
+  {
+   "code": "s2-r3",
+   "title": "Плей-офф. 3 этап",
+   "stage_type": "matches",
+   "kind": "matches",
+   "position": 12,
+   "grain": {
+    "block": "s2",
+    "wave": 1
+   },
+   "matches": [
+    {
+     "code": "s2-r3-m1",
+     "title": "Бой 1",
+     "letter": "CG",
+     "venue": 1,
+     "round": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r3-reseed",
+        "rank": 1
+       },
+       "label": "Пересев-1"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r3-reseed",
+        "rank": 4
+       },
+       "label": "Пересев-4"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r3-reseed",
+        "rank": 5
+       },
+       "label": "Пересев-5"
+      }
+     ]
+    },
+    {
+     "code": "s2-r3-m2",
+     "title": "Бой 2",
+     "letter": "CH",
+     "venue": 2,
+     "round": 3,
+     "participantCount": 3,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r3-reseed",
+        "rank": 2
+       },
+       "label": "Пересев-2"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r3-reseed",
+        "rank": 3
+       },
+       "label": "Пересев-3"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r3-reseed",
+        "rank": 6
+       },
+       "label": "Пересев-6"
+      }
+     ]
+    },
+    {
+     "code": "s2-r3-m3",
+     "title": "Бой 3",
+     "letter": "CI",
+     "venue": 3,
+     "round": 3,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r3-reseed",
+        "rank": 7
+       },
+       "label": "Пересев-7"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r3-reseed",
+        "rank": 12
+       },
+       "label": "Пересев-12"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r3-reseed",
+        "rank": 13
+       },
+       "label": "Пересев-13"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r3-reseed",
+        "rank": 18
+       },
+       "label": "Пересев-18"
+      }
+     ]
+    },
+    {
+     "code": "s2-r3-m4",
+     "title": "Бой 4",
+     "letter": "CJ",
+     "venue": 4,
+     "round": 3,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r3-reseed",
+        "rank": 8
+       },
+       "label": "Пересев-8"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r3-reseed",
+        "rank": 11
+       },
+       "label": "Пересев-11"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r3-reseed",
+        "rank": 14
+       },
+       "label": "Пересев-14"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r3-reseed",
+        "rank": 17
+       },
+       "label": "Пересев-17"
+      }
+     ]
+    },
+    {
+     "code": "s2-r3-m5",
+     "title": "Бой 5",
+     "letter": "CK",
+     "venue": 5,
+     "round": 3,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r3-reseed",
+        "rank": 9
+       },
+       "label": "Пересев-9"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r3-reseed",
+        "rank": 10
+       },
+       "label": "Пересев-10"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r3-reseed",
+        "rank": 15
+       },
+       "label": "Пересев-15"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r3-reseed",
+        "rank": 16
+       },
+       "label": "Пересев-16"
+      }
+     ]
+    }
+   ],
+   "teams": null,
+   "sources": null,
+   "sort": null,
+   "config": {
+    "themes": 8
+   },
+   "layout": null
+  },
+  {
+   "code": "s2-r4-reseed",
+   "title": "Пересев",
+   "stage_type": "reseed",
+   "kind": "reseed",
+   "position": 13,
+   "grain": {
+    "block": "s2",
+    "wave": 1
+   },
+   "matches": null,
+   "teams": [
+    {
+     "fromMatch": {
+      "match": "s2-r3-m1",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r3-m1",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r3-m2",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r3-m2",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r3-m1",
+      "place": 3
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r3-m2",
+      "place": 3
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r3-m3",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r3-m3",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r3-m4",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r3-m4",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r3-m5",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r3-m5",
+      "place": 2
+     }
+    }
+   ],
+   "bands": [
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2
+   ],
+   "sources": [
+    "s2-r3"
+   ],
+   "sort": [
+    {
+     "metric": "place_sum",
+     "dir": "asc"
+    },
+    {
+     "metric": "total",
+     "dir": "desc"
+    },
+    {
+     "metric": "plus",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken50",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken40",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken30",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken20",
+     "dir": "desc"
+    },
+    {
+     "metric": "draw",
+     "dir": "asc"
+    }
+   ],
+   "config": null,
+   "layout": null
+  },
+  {
+   "code": "s2-r4",
+   "title": "Плей-офф. 4 этап",
+   "stage_type": "matches",
+   "kind": "matches",
+   "position": 14,
+   "grain": {
+    "block": "s2",
+    "wave": 1
+   },
+   "matches": [
+    {
+     "code": "s2-r4-m1",
+     "title": "Бой 1",
+     "letter": "CL",
+     "venue": 6,
+     "round": 4,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r4-reseed",
+        "rank": 1
+       },
+       "label": "Пересев-1"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r4-reseed",
+        "rank": 2
+       },
+       "label": "Пересев-2"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r4-reseed",
+        "rank": 3
+       },
+       "label": "Пересев-3"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r4-reseed",
+        "rank": 4
+       },
+       "label": "Пересев-4"
+      }
+     ]
+    },
+    {
+     "code": "s2-r4-m2",
+     "title": "Бой 2",
+     "letter": "CM",
+     "venue": 1,
+     "round": 4,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r4-reseed",
+        "rank": 5
+       },
+       "label": "Пересев-5"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r4-reseed",
+        "rank": 8
+       },
+       "label": "Пересев-8"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r4-reseed",
+        "rank": 9
+       },
+       "label": "Пересев-9"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r4-reseed",
+        "rank": 12
+       },
+       "label": "Пересев-12"
+      }
+     ]
+    },
+    {
+     "code": "s2-r4-m3",
+     "title": "Бой 3",
+     "letter": "CN",
+     "venue": 2,
+     "round": 4,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r4-reseed",
+        "rank": 6
+       },
+       "label": "Пересев-6"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r4-reseed",
+        "rank": 7
+       },
+       "label": "Пересев-7"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r4-reseed",
+        "rank": 10
+       },
+       "label": "Пересев-10"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r4-reseed",
+        "rank": 11
+       },
+       "label": "Пересев-11"
+      }
+     ]
+    }
+   ],
+   "teams": null,
+   "sources": null,
+   "sort": null,
+   "config": {
+    "themes": 8
+   },
+   "layout": null
+  },
+  {
+   "code": "s2-r5-reseed",
+   "title": "Пересев",
+   "stage_type": "reseed",
+   "kind": "reseed",
+   "position": 15,
+   "grain": {
+    "block": "s2",
+    "wave": 1
+   },
+   "matches": null,
+   "teams": [
+    {
+     "fromMatch": {
+      "match": "s2-r4-m1",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r4-m1",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r4-m1",
+      "place": 3
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r4-m1",
+      "place": 4
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r4-m2",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r4-m2",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r4-m3",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r4-m3",
+      "place": 2
+     }
+    }
+   ],
+   "bands": [
+    0,
+    0,
+    1,
+    1,
+    2,
+    2,
+    2,
+    2
+   ],
+   "sources": [
+    "s2-r4"
+   ],
+   "sort": [
+    {
+     "metric": "place_sum",
+     "dir": "asc"
+    },
+    {
+     "metric": "total",
+     "dir": "desc"
+    },
+    {
+     "metric": "plus",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken50",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken40",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken30",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken20",
+     "dir": "desc"
+    },
+    {
+     "metric": "draw",
+     "dir": "asc"
+    }
+   ],
+   "config": null,
+   "layout": null
+  },
+  {
+   "code": "s2-r5",
+   "title": "Плей-офф. 5 этап",
+   "stage_type": "matches",
+   "kind": "matches",
+   "position": 16,
+   "grain": {
+    "block": "s2",
+    "wave": 1
+   },
+   "matches": [
+    {
+     "code": "s2-r5-m1",
+     "title": "Бой 1",
+     "letter": "CO",
+     "venue": 3,
+     "round": 5,
+     "participantCount": 3,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r5-reseed",
+        "rank": 3
+       },
+       "label": "Пересев-3"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r5-reseed",
+        "rank": 6
+       },
+       "label": "Пересев-6"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r5-reseed",
+        "rank": 7
+       },
+       "label": "Пересев-7"
+      }
+     ]
+    },
+    {
+     "code": "s2-r5-m2",
+     "title": "Бой 2",
+     "letter": "CP",
+     "venue": 4,
+     "round": 5,
+     "participantCount": 3,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r5-reseed",
+        "rank": 4
+       },
+       "label": "Пересев-4"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r5-reseed",
+        "rank": 5
+       },
+       "label": "Пересев-5"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r5-reseed",
+        "rank": 8
+       },
+       "label": "Пересев-8"
+      }
+     ]
+    }
+   ],
+   "teams": null,
+   "sources": null,
+   "sort": null,
+   "config": {
+    "themes": 8
+   },
+   "layout": null
+  },
+  {
+   "code": "s2-r6-reseed",
+   "title": "Пересев",
+   "stage_type": "reseed",
+   "kind": "reseed",
+   "position": 17,
+   "grain": {
+    "block": "s2",
+    "wave": 1
+   },
+   "matches": null,
+   "teams": [
+    {
+     "fromMatch": {
+      "match": "s2-r4-m1",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r4-m1",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r5-m1",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r5-m1",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r5-m2",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r5-m2",
+      "place": 2
+     }
+    }
+   ],
+   "bands": [
+    0,
+    0,
+    1,
+    1,
+    1,
+    1
+   ],
+   "sources": [
+    "s2-r5"
+   ],
+   "sort": [
+    {
+     "metric": "place_sum",
+     "dir": "asc"
+    },
+    {
+     "metric": "total",
+     "dir": "desc"
+    },
+    {
+     "metric": "plus",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken50",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken40",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken30",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken20",
+     "dir": "desc"
+    },
+    {
+     "metric": "draw",
+     "dir": "asc"
+    }
+   ],
+   "config": null,
+   "layout": null
+  },
+  {
+   "code": "s2-r6",
+   "title": "Плей-офф. Финал нижней сетки",
+   "stage_type": "matches",
+   "kind": "matches",
+   "position": 18,
+   "grain": {
+    "block": "s2",
+    "wave": 1
+   },
+   "matches": [
+    {
+     "code": "s2-r6-m1",
+     "title": "Бой 1",
+     "letter": "CQ",
+     "venue": 5,
+     "round": 6,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r6-reseed",
+        "rank": 3
+       },
+       "label": "Пересев-3"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r6-reseed",
+        "rank": 4
+       },
+       "label": "Пересев-4"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r6-reseed",
+        "rank": 5
+       },
+       "label": "Пересев-5"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r6-reseed",
+        "rank": 6
+       },
+       "label": "Пересев-6"
+      }
+     ]
+    }
+   ],
+   "teams": null,
+   "sources": null,
+   "sort": null,
+   "config": {
+    "themes": 8
+   },
+   "layout": null
+  },
+  {
+   "code": "s2-r7-reseed",
+   "title": "Пересев",
+   "stage_type": "reseed",
+   "kind": "reseed",
+   "position": 19,
+   "grain": {
+    "block": "s2",
+    "wave": 1
+   },
+   "matches": null,
+   "teams": [
+    {
+     "fromMatch": {
+      "match": "s2-r4-m1",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r4-m1",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r6-m1",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r6-m1",
+      "place": 2
+     }
+    }
+   ],
+   "bands": [
+    0,
+    0,
+    1,
+    1
+   ],
+   "sources": [
+    "s2-r6"
+   ],
+   "sort": [
+    {
+     "metric": "place_sum",
+     "dir": "asc"
+    },
+    {
+     "metric": "total",
+     "dir": "desc"
+    },
+    {
+     "metric": "plus",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken50",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken40",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken30",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken20",
+     "dir": "desc"
+    },
+    {
+     "metric": "draw",
+     "dir": "asc"
+    }
+   ],
+   "config": null,
+   "layout": null
+  },
+  {
+   "code": "s2-r7",
+   "title": "Плей-офф. Грандфинал",
+   "stage_type": "matches",
+   "kind": "matches",
+   "position": 20,
+   "grain": {
+    "block": "s2",
+    "wave": 1
+   },
+   "matches": [
+    {
+     "code": "s2-r7-m1",
+     "title": "Бой 1",
+     "letter": "CR",
+     "venue": 6,
+     "round": 7,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r7-reseed",
+        "rank": 1
+       },
+       "label": "Пересев-1"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r7-reseed",
+        "rank": 2
+       },
+       "label": "Пересев-2"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r7-reseed",
+        "rank": 3
+       },
+       "label": "Пересев-3"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r7-reseed",
+        "rank": 4
+       },
+       "label": "Пересев-4"
+      }
+     ]
+    }
+   ],
+   "teams": null,
+   "sources": null,
+   "sort": null,
+   "config": {
+    "themes": 12
+   },
+   "layout": null
+  }
+ ],
+ "teams": null
+}

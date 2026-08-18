@@ -1,4 +1,4 @@
-package schemedsl
+package structure
 
 import (
 	"fmt"

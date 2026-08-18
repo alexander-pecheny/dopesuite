@@ -2,6 +2,7 @@ package structure
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -16,6 +17,132 @@ func init() { Register(roundRobin{}) }
 type roundRobin struct{}
 
 func (roundRobin) Code() string { return "rr" }
+func (roundRobin) Word() string { return "roundrobin" }
+func (roundRobin) Keys() []Key {
+	return []Key{{Name: "groups"}, {Name: "group_size"}, {Name: "match_size"}, {Name: "rounds"}, {Name: "points", Cascade: true}, {Name: "slug"}}
+}
+
+// canonOrder is the round-robin comparator chain when a scheme names none:
+// КИНСБФ's очки, then личная встреча, взятые, разница.
+var canonOrder = []string{"points", "h2h", "taken", "diff"}
+
+// Expand is a Block of Groups, one rr stage each, seated from the incoming
+// Edge and ranked by the block's comparators.
+func (roundRobin) Expand(b Block) (Outputs, error) {
+	size, ok := b.Int("group_size")
+	if !ok {
+		return Outputs{}, errors.New("roundrobin: нужен group_size")
+	}
+	groups, ok := b.Int("groups")
+	if !ok {
+		groups = 1
+	}
+	if groups < 1 || size < 2 {
+		return Outputs{}, errors.New("roundrobin: groups ≥ 1, group_size ≥ 2")
+	}
+	if err := b.Rounds(nil); err != nil {
+		return Outputs{}, err
+	}
+	lanes, err := b.Venues()
+	if err != nil {
+		return Outputs{}, err
+	}
+	entrants, err := b.Entrants(groups, size)
+	if err != nil {
+		return Outputs{}, err
+	}
+	matchSize := 2
+	if v, ok := b.Int("match_size"); ok {
+		matchSize = v
+	}
+	order, err := blockOrder(b)
+	if err != nil {
+		return Outputs{}, err
+	}
+	points, err := rrPoints(b)
+	if err != nil {
+		return Outputs{}, err
+	}
+	slug, _ := b.Str("slug")
+	out := Outputs{}
+	for g := 1; g <= groups; g++ {
+		code := fmt.Sprintf("%s-g%d", b.Code(), g)
+		cfg := RRConfig{
+			Code:     code,
+			Entrants: entrants[g-1],
+			Order:    order,
+			Points:   &RRPoints{Win: float64(points[0]), Draw: float64(points[1]), Loss: float64(points[2])},
+			Venue:    lanes.Pick(g),
+			Rules:    b.Rules(),
+		}
+		if matchSize > 2 {
+			cfg.MatchSize = matchSize
+		}
+		cfg.Rounds, _ = b.Int("rounds")
+		if _, err := b.Emit(Stage{Code: code, Title: b.GroupTitle(g, groups), Kind: "rr", Slug: slug,
+			At: At{Group: GroupCode(groups, g)}, Config: cfg}); err != nil {
+			return Outputs{}, err
+		}
+		stageCode := code
+		label := fmt.Sprintf("Гр. %d", g)
+		out.Groups = append(out.Groups, Feed{
+			Stage: stageCode,
+			Label: label,
+			Place: func(p int) store.SchemeSlot {
+				return store.SchemeSlot{
+					Reseed: &store.SchemeReseedRef{Stage: stageCode, Rank: p},
+					Label:  fmt.Sprintf("%s-%d", label, p),
+				}
+			},
+		})
+	}
+	return out, nil
+}
+
+// blockOrder resolves the groups' comparator order. On a block with an incoming
+// reseed the sorting key describes the Edge, so the groups fall back to
+// [defaults] or the canon.
+func blockOrder(b Block) ([]string, error) {
+	var rules []store.SortRule
+	var ok bool
+	var err error
+	if incoming, _ := b.Reseed(); !incoming {
+		if rules, ok, err = b.Sorting(); err != nil {
+			return nil, err
+		}
+	}
+	if !ok {
+		if rules, ok, err = b.DefaultSorting(); err != nil {
+			return nil, err
+		}
+	}
+	if !ok {
+		return canonOrder, nil
+	}
+	known := b.Rankable("rr")
+	order := make([]string, len(rules))
+	for i, rule := range rules {
+		if !known[rule.Metric] {
+			return nil, UnrankableMetric(rule.Metric, known)
+		}
+		order[i] = rule.Metric
+	}
+	return order, nil
+}
+
+func rrPoints(b Block) ([]int, error) {
+	points, ok, err := b.IntList("points")
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return []int{2, 1, 0}, nil
+	}
+	if len(points) != 3 {
+		return nil, Keyf("points", "points: жду [победа, ничья, поражение]")
+	}
+	return points, nil
+}
 
 func (roundRobin) Metrics() []string {
 	return []string{"points", "h2h", "taken", "conceded", "diff", "place_sum", "bouts"}

@@ -1,9 +1,7 @@
-package schemedsl
+package structure
 
 import (
 	"fmt"
-
-	"dope/dope/domain/structure"
 )
 
 // The elimination rounds, for both Kinds.
@@ -147,7 +145,7 @@ func straightChunks(n, bouts int) [][]int {
 // the СтудЧР sheets do.
 func elimDraw(remaining, bouts, size, winning int) [][]int {
 	if size == 2 && winning == 1 {
-		order := structure.BracketOrder(remaining)
+		order := BracketOrder(remaining)
 		out := make([][]int, bouts)
 		for i := 0; i < bouts; i++ {
 			out[i] = []int{order[2*i], order[2*i+1]}

@@ -1,13 +1,16 @@
 // Package structure holds the Structure half of the unified model
 // (docs/unified-model.md, ADR-0001): the registry of Stage Kinds — the
 // composable tournament primitives (round-robin groups, elimination brackets,
-// pods, reseeds) every game type builds its bracket from. A Kind has two
-// separable roles, registered separately: an Expander produces a stage's
-// match schedule at compile time, a Ranker ranks the stage's participants
-// from match outcomes at resolve time. Most Kinds are both; a pod is only a
-// Ranker (the DSL expands it), the hand-authored kind only an Expander. The
-// package never knows Protocol rules; it only consumes per-slot outcomes
-// (place + metrics) the Protocol scorer produced.
+// pods, reseeds) every game type builds its bracket from. A Kind has three
+// separable roles, registered together: a Macro expands one Block of the
+// scheme DSL into stages at compile time (macro.go — the Kind declares its
+// keys and emits through the Block it is handed), an Expander produces a
+// scheduled stage's бои from its typed config, a Ranker ranks a stage's
+// participants from match outcomes at resolve time. Most Kinds are all
+// three; the reseed is only a Ranker, the hand-authored kind only an
+// Expander. The package never knows Protocol rules or DSL text; it consumes
+// typed values and per-slot outcomes (place + metrics) the Protocol scorer
+// produced.
 //
 // This package is a leaf next to domain/games: it may import storage/store for
 // the scheme vocabulary but never the server, HTTP or DB layers.
@@ -171,10 +174,18 @@ var (
 	rankers   = map[string]Ranker{}
 )
 
-// Register adds a stage kind under whichever roles it implements; a duplicate
-// code, or a kind with neither role, is a programming error.
+// Register adds a stage kind under whichever roles it implements — Expander,
+// Ranker, and Macro under its DSL word; a duplicate code or word, or a kind
+// with no role, is a programming error.
 func Register(kind interface{ Code() string }) {
 	registered := false
+	if macro, ok := kind.(Macro); ok {
+		if _, dup := macros[macro.Word()]; dup {
+			panic("structure: duplicate kind word " + macro.Word())
+		}
+		macros[macro.Word()] = macro
+		registered = true
+	}
 	if expander, ok := kind.(Expander); ok {
 		if _, dup := expanders[kind.Code()]; dup {
 			panic("structure: duplicate stage kind " + kind.Code())

@@ -1,0 +1,2090 @@
+{
+ "schemaVersion": 2,
+ "slug": "tpsh",
+ "title": "tpsh",
+ "gameType": "si",
+ "questionValues": null,
+ "regularThemeCount": 0,
+ "venues": [
+  {
+   "number": 1,
+   "title": "Стол 1"
+  },
+  {
+   "number": 2,
+   "title": "Стол 2"
+  },
+  {
+   "number": 3,
+   "title": "Стол 3"
+  },
+  {
+   "number": 4,
+   "title": "Стол 4"
+  },
+  {
+   "number": 5,
+   "title": "Стол 5"
+  },
+  {
+   "number": 6,
+   "title": "Стол 6"
+  }
+ ],
+ "stages": [
+  {
+   "code": "s1",
+   "title": "Письменный отбор",
+   "stage_type": "matches",
+   "kind": "flat",
+   "position": 1,
+   "grain": {
+    "block": "s1",
+    "wave": 1
+   },
+   "matches": [
+    {
+     "code": "s1-m1",
+     "title": "Письменный отбор",
+     "venue": 1,
+     "round": 1,
+     "participantCount": 91,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 1
+       },
+       "label": "Посев 1"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 2
+       },
+       "label": "Посев 2"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 3
+       },
+       "label": "Посев 3"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 4
+       },
+       "label": "Посев 4"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 5
+       },
+       "label": "Посев 5"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 6
+       },
+       "label": "Посев 6"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 7
+       },
+       "label": "Посев 7"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 8
+       },
+       "label": "Посев 8"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 9
+       },
+       "label": "Посев 9"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 10
+       },
+       "label": "Посев 10"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 11
+       },
+       "label": "Посев 11"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 12
+       },
+       "label": "Посев 12"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 13
+       },
+       "label": "Посев 13"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 14
+       },
+       "label": "Посев 14"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 15
+       },
+       "label": "Посев 15"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 16
+       },
+       "label": "Посев 16"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 17
+       },
+       "label": "Посев 17"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 18
+       },
+       "label": "Посев 18"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 19
+       },
+       "label": "Посев 19"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 20
+       },
+       "label": "Посев 20"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 21
+       },
+       "label": "Посев 21"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 22
+       },
+       "label": "Посев 22"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 23
+       },
+       "label": "Посев 23"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 24
+       },
+       "label": "Посев 24"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 25
+       },
+       "label": "Посев 25"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 26
+       },
+       "label": "Посев 26"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 27
+       },
+       "label": "Посев 27"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 28
+       },
+       "label": "Посев 28"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 29
+       },
+       "label": "Посев 29"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 30
+       },
+       "label": "Посев 30"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 31
+       },
+       "label": "Посев 31"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 32
+       },
+       "label": "Посев 32"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 33
+       },
+       "label": "Посев 33"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 34
+       },
+       "label": "Посев 34"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 35
+       },
+       "label": "Посев 35"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 36
+       },
+       "label": "Посев 36"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 37
+       },
+       "label": "Посев 37"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 38
+       },
+       "label": "Посев 38"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 39
+       },
+       "label": "Посев 39"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 40
+       },
+       "label": "Посев 40"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 41
+       },
+       "label": "Посев 41"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 42
+       },
+       "label": "Посев 42"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 43
+       },
+       "label": "Посев 43"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 44
+       },
+       "label": "Посев 44"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 45
+       },
+       "label": "Посев 45"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 46
+       },
+       "label": "Посев 46"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 47
+       },
+       "label": "Посев 47"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 48
+       },
+       "label": "Посев 48"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 49
+       },
+       "label": "Посев 49"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 50
+       },
+       "label": "Посев 50"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 51
+       },
+       "label": "Посев 51"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 52
+       },
+       "label": "Посев 52"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 53
+       },
+       "label": "Посев 53"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 54
+       },
+       "label": "Посев 54"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 55
+       },
+       "label": "Посев 55"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 56
+       },
+       "label": "Посев 56"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 57
+       },
+       "label": "Посев 57"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 58
+       },
+       "label": "Посев 58"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 59
+       },
+       "label": "Посев 59"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 60
+       },
+       "label": "Посев 60"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 61
+       },
+       "label": "Посев 61"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 62
+       },
+       "label": "Посев 62"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 63
+       },
+       "label": "Посев 63"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 64
+       },
+       "label": "Посев 64"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 65
+       },
+       "label": "Посев 65"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 66
+       },
+       "label": "Посев 66"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 67
+       },
+       "label": "Посев 67"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 68
+       },
+       "label": "Посев 68"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 69
+       },
+       "label": "Посев 69"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 70
+       },
+       "label": "Посев 70"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 71
+       },
+       "label": "Посев 71"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 72
+       },
+       "label": "Посев 72"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 73
+       },
+       "label": "Посев 73"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 74
+       },
+       "label": "Посев 74"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 75
+       },
+       "label": "Посев 75"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 76
+       },
+       "label": "Посев 76"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 77
+       },
+       "label": "Посев 77"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 78
+       },
+       "label": "Посев 78"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 79
+       },
+       "label": "Посев 79"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 80
+       },
+       "label": "Посев 80"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 81
+       },
+       "label": "Посев 81"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 82
+       },
+       "label": "Посев 82"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 83
+       },
+       "label": "Посев 83"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 84
+       },
+       "label": "Посев 84"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 85
+       },
+       "label": "Посев 85"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 86
+       },
+       "label": "Посев 86"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 87
+       },
+       "label": "Посев 87"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 88
+       },
+       "label": "Посев 88"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 89
+       },
+       "label": "Посев 89"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 90
+       },
+       "label": "Посев 90"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 91
+       },
+       "label": "Посев 91"
+      }
+     ]
+    }
+   ],
+   "teams": null,
+   "sources": null,
+   "sort": null,
+   "config": {
+    "code": "s1",
+    "entrants": [
+     {
+      "label": "Посев 1",
+      "seed": {
+       "basket": 1,
+       "position": 1
+      }
+     },
+     {
+      "label": "Посев 2",
+      "seed": {
+       "basket": 1,
+       "position": 2
+      }
+     },
+     {
+      "label": "Посев 3",
+      "seed": {
+       "basket": 1,
+       "position": 3
+      }
+     },
+     {
+      "label": "Посев 4",
+      "seed": {
+       "basket": 1,
+       "position": 4
+      }
+     },
+     {
+      "label": "Посев 5",
+      "seed": {
+       "basket": 1,
+       "position": 5
+      }
+     },
+     {
+      "label": "Посев 6",
+      "seed": {
+       "basket": 1,
+       "position": 6
+      }
+     },
+     {
+      "label": "Посев 7",
+      "seed": {
+       "basket": 1,
+       "position": 7
+      }
+     },
+     {
+      "label": "Посев 8",
+      "seed": {
+       "basket": 1,
+       "position": 8
+      }
+     },
+     {
+      "label": "Посев 9",
+      "seed": {
+       "basket": 1,
+       "position": 9
+      }
+     },
+     {
+      "label": "Посев 10",
+      "seed": {
+       "basket": 1,
+       "position": 10
+      }
+     },
+     {
+      "label": "Посев 11",
+      "seed": {
+       "basket": 1,
+       "position": 11
+      }
+     },
+     {
+      "label": "Посев 12",
+      "seed": {
+       "basket": 1,
+       "position": 12
+      }
+     },
+     {
+      "label": "Посев 13",
+      "seed": {
+       "basket": 1,
+       "position": 13
+      }
+     },
+     {
+      "label": "Посев 14",
+      "seed": {
+       "basket": 1,
+       "position": 14
+      }
+     },
+     {
+      "label": "Посев 15",
+      "seed": {
+       "basket": 1,
+       "position": 15
+      }
+     },
+     {
+      "label": "Посев 16",
+      "seed": {
+       "basket": 1,
+       "position": 16
+      }
+     },
+     {
+      "label": "Посев 17",
+      "seed": {
+       "basket": 1,
+       "position": 17
+      }
+     },
+     {
+      "label": "Посев 18",
+      "seed": {
+       "basket": 1,
+       "position": 18
+      }
+     },
+     {
+      "label": "Посев 19",
+      "seed": {
+       "basket": 1,
+       "position": 19
+      }
+     },
+     {
+      "label": "Посев 20",
+      "seed": {
+       "basket": 1,
+       "position": 20
+      }
+     },
+     {
+      "label": "Посев 21",
+      "seed": {
+       "basket": 1,
+       "position": 21
+      }
+     },
+     {
+      "label": "Посев 22",
+      "seed": {
+       "basket": 1,
+       "position": 22
+      }
+     },
+     {
+      "label": "Посев 23",
+      "seed": {
+       "basket": 1,
+       "position": 23
+      }
+     },
+     {
+      "label": "Посев 24",
+      "seed": {
+       "basket": 1,
+       "position": 24
+      }
+     },
+     {
+      "label": "Посев 25",
+      "seed": {
+       "basket": 1,
+       "position": 25
+      }
+     },
+     {
+      "label": "Посев 26",
+      "seed": {
+       "basket": 1,
+       "position": 26
+      }
+     },
+     {
+      "label": "Посев 27",
+      "seed": {
+       "basket": 1,
+       "position": 27
+      }
+     },
+     {
+      "label": "Посев 28",
+      "seed": {
+       "basket": 1,
+       "position": 28
+      }
+     },
+     {
+      "label": "Посев 29",
+      "seed": {
+       "basket": 1,
+       "position": 29
+      }
+     },
+     {
+      "label": "Посев 30",
+      "seed": {
+       "basket": 1,
+       "position": 30
+      }
+     },
+     {
+      "label": "Посев 31",
+      "seed": {
+       "basket": 1,
+       "position": 31
+      }
+     },
+     {
+      "label": "Посев 32",
+      "seed": {
+       "basket": 1,
+       "position": 32
+      }
+     },
+     {
+      "label": "Посев 33",
+      "seed": {
+       "basket": 1,
+       "position": 33
+      }
+     },
+     {
+      "label": "Посев 34",
+      "seed": {
+       "basket": 1,
+       "position": 34
+      }
+     },
+     {
+      "label": "Посев 35",
+      "seed": {
+       "basket": 1,
+       "position": 35
+      }
+     },
+     {
+      "label": "Посев 36",
+      "seed": {
+       "basket": 1,
+       "position": 36
+      }
+     },
+     {
+      "label": "Посев 37",
+      "seed": {
+       "basket": 1,
+       "position": 37
+      }
+     },
+     {
+      "label": "Посев 38",
+      "seed": {
+       "basket": 1,
+       "position": 38
+      }
+     },
+     {
+      "label": "Посев 39",
+      "seed": {
+       "basket": 1,
+       "position": 39
+      }
+     },
+     {
+      "label": "Посев 40",
+      "seed": {
+       "basket": 1,
+       "position": 40
+      }
+     },
+     {
+      "label": "Посев 41",
+      "seed": {
+       "basket": 1,
+       "position": 41
+      }
+     },
+     {
+      "label": "Посев 42",
+      "seed": {
+       "basket": 1,
+       "position": 42
+      }
+     },
+     {
+      "label": "Посев 43",
+      "seed": {
+       "basket": 1,
+       "position": 43
+      }
+     },
+     {
+      "label": "Посев 44",
+      "seed": {
+       "basket": 1,
+       "position": 44
+      }
+     },
+     {
+      "label": "Посев 45",
+      "seed": {
+       "basket": 1,
+       "position": 45
+      }
+     },
+     {
+      "label": "Посев 46",
+      "seed": {
+       "basket": 1,
+       "position": 46
+      }
+     },
+     {
+      "label": "Посев 47",
+      "seed": {
+       "basket": 1,
+       "position": 47
+      }
+     },
+     {
+      "label": "Посев 48",
+      "seed": {
+       "basket": 1,
+       "position": 48
+      }
+     },
+     {
+      "label": "Посев 49",
+      "seed": {
+       "basket": 1,
+       "position": 49
+      }
+     },
+     {
+      "label": "Посев 50",
+      "seed": {
+       "basket": 1,
+       "position": 50
+      }
+     },
+     {
+      "label": "Посев 51",
+      "seed": {
+       "basket": 1,
+       "position": 51
+      }
+     },
+     {
+      "label": "Посев 52",
+      "seed": {
+       "basket": 1,
+       "position": 52
+      }
+     },
+     {
+      "label": "Посев 53",
+      "seed": {
+       "basket": 1,
+       "position": 53
+      }
+     },
+     {
+      "label": "Посев 54",
+      "seed": {
+       "basket": 1,
+       "position": 54
+      }
+     },
+     {
+      "label": "Посев 55",
+      "seed": {
+       "basket": 1,
+       "position": 55
+      }
+     },
+     {
+      "label": "Посев 56",
+      "seed": {
+       "basket": 1,
+       "position": 56
+      }
+     },
+     {
+      "label": "Посев 57",
+      "seed": {
+       "basket": 1,
+       "position": 57
+      }
+     },
+     {
+      "label": "Посев 58",
+      "seed": {
+       "basket": 1,
+       "position": 58
+      }
+     },
+     {
+      "label": "Посев 59",
+      "seed": {
+       "basket": 1,
+       "position": 59
+      }
+     },
+     {
+      "label": "Посев 60",
+      "seed": {
+       "basket": 1,
+       "position": 60
+      }
+     },
+     {
+      "label": "Посев 61",
+      "seed": {
+       "basket": 1,
+       "position": 61
+      }
+     },
+     {
+      "label": "Посев 62",
+      "seed": {
+       "basket": 1,
+       "position": 62
+      }
+     },
+     {
+      "label": "Посев 63",
+      "seed": {
+       "basket": 1,
+       "position": 63
+      }
+     },
+     {
+      "label": "Посев 64",
+      "seed": {
+       "basket": 1,
+       "position": 64
+      }
+     },
+     {
+      "label": "Посев 65",
+      "seed": {
+       "basket": 1,
+       "position": 65
+      }
+     },
+     {
+      "label": "Посев 66",
+      "seed": {
+       "basket": 1,
+       "position": 66
+      }
+     },
+     {
+      "label": "Посев 67",
+      "seed": {
+       "basket": 1,
+       "position": 67
+      }
+     },
+     {
+      "label": "Посев 68",
+      "seed": {
+       "basket": 1,
+       "position": 68
+      }
+     },
+     {
+      "label": "Посев 69",
+      "seed": {
+       "basket": 1,
+       "position": 69
+      }
+     },
+     {
+      "label": "Посев 70",
+      "seed": {
+       "basket": 1,
+       "position": 70
+      }
+     },
+     {
+      "label": "Посев 71",
+      "seed": {
+       "basket": 1,
+       "position": 71
+      }
+     },
+     {
+      "label": "Посев 72",
+      "seed": {
+       "basket": 1,
+       "position": 72
+      }
+     },
+     {
+      "label": "Посев 73",
+      "seed": {
+       "basket": 1,
+       "position": 73
+      }
+     },
+     {
+      "label": "Посев 74",
+      "seed": {
+       "basket": 1,
+       "position": 74
+      }
+     },
+     {
+      "label": "Посев 75",
+      "seed": {
+       "basket": 1,
+       "position": 75
+      }
+     },
+     {
+      "label": "Посев 76",
+      "seed": {
+       "basket": 1,
+       "position": 76
+      }
+     },
+     {
+      "label": "Посев 77",
+      "seed": {
+       "basket": 1,
+       "position": 77
+      }
+     },
+     {
+      "label": "Посев 78",
+      "seed": {
+       "basket": 1,
+       "position": 78
+      }
+     },
+     {
+      "label": "Посев 79",
+      "seed": {
+       "basket": 1,
+       "position": 79
+      }
+     },
+     {
+      "label": "Посев 80",
+      "seed": {
+       "basket": 1,
+       "position": 80
+      }
+     },
+     {
+      "label": "Посев 81",
+      "seed": {
+       "basket": 1,
+       "position": 81
+      }
+     },
+     {
+      "label": "Посев 82",
+      "seed": {
+       "basket": 1,
+       "position": 82
+      }
+     },
+     {
+      "label": "Посев 83",
+      "seed": {
+       "basket": 1,
+       "position": 83
+      }
+     },
+     {
+      "label": "Посев 84",
+      "seed": {
+       "basket": 1,
+       "position": 84
+      }
+     },
+     {
+      "label": "Посев 85",
+      "seed": {
+       "basket": 1,
+       "position": 85
+      }
+     },
+     {
+      "label": "Посев 86",
+      "seed": {
+       "basket": 1,
+       "position": 86
+      }
+     },
+     {
+      "label": "Посев 87",
+      "seed": {
+       "basket": 1,
+       "position": 87
+      }
+     },
+     {
+      "label": "Посев 88",
+      "seed": {
+       "basket": 1,
+       "position": 88
+      }
+     },
+     {
+      "label": "Посев 89",
+      "seed": {
+       "basket": 1,
+       "position": 89
+      }
+     },
+     {
+      "label": "Посев 90",
+      "seed": {
+       "basket": 1,
+       "position": 90
+      }
+     },
+     {
+      "label": "Посев 91",
+      "seed": {
+       "basket": 1,
+       "position": 91
+      }
+     }
+    ],
+    "order": [
+     "total",
+     "plus",
+     "taken50",
+     "taken40",
+     "taken30",
+     "taken20",
+     "taken10"
+    ],
+    "themes": 10,
+    "title": "Письменный отбор",
+    "venue": 1
+   },
+   "layout": null
+  },
+  {
+   "code": "s2-reseed",
+   "title": "Пересев",
+   "stage_type": "reseed",
+   "kind": "reseed",
+   "position": 2,
+   "grain": {
+    "block": "s2",
+    "wave": 1
+   },
+   "matches": null,
+   "teams": [
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 1
+     },
+     "label": "Письменный отбор-1"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 2
+     },
+     "label": "Письменный отбор-2"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 3
+     },
+     "label": "Письменный отбор-3"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 4
+     },
+     "label": "Письменный отбор-4"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 5
+     },
+     "label": "Письменный отбор-5"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 6
+     },
+     "label": "Письменный отбор-6"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 7
+     },
+     "label": "Письменный отбор-7"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 8
+     },
+     "label": "Письменный отбор-8"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 9
+     },
+     "label": "Письменный отбор-9"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 10
+     },
+     "label": "Письменный отбор-10"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 11
+     },
+     "label": "Письменный отбор-11"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 12
+     },
+     "label": "Письменный отбор-12"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 13
+     },
+     "label": "Письменный отбор-13"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 14
+     },
+     "label": "Письменный отбор-14"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 15
+     },
+     "label": "Письменный отбор-15"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 16
+     },
+     "label": "Письменный отбор-16"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 17
+     },
+     "label": "Письменный отбор-17"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 18
+     },
+     "label": "Письменный отбор-18"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 19
+     },
+     "label": "Письменный отбор-19"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 20
+     },
+     "label": "Письменный отбор-20"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 21
+     },
+     "label": "Письменный отбор-21"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 22
+     },
+     "label": "Письменный отбор-22"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 23
+     },
+     "label": "Письменный отбор-23"
+    },
+    {
+     "reseed": {
+      "stage": "s1",
+      "rank": 24
+     },
+     "label": "Письменный отбор-24"
+    }
+   ],
+   "sources": [
+    "s1"
+   ],
+   "sort": [
+    {
+     "metric": "place_sum",
+     "dir": "asc"
+    },
+    {
+     "metric": "total",
+     "dir": "desc"
+    },
+    {
+     "metric": "plus",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken50",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken40",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken30",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken20",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken10",
+     "dir": "desc"
+    },
+    {
+     "metric": "draw",
+     "dir": "asc"
+    }
+   ],
+   "config": null,
+   "layout": null
+  },
+  {
+   "code": "s2-r1",
+   "title": "Плей-офф. 1 этап",
+   "stage_type": "matches",
+   "kind": "matches",
+   "position": 3,
+   "grain": {
+    "block": "s2",
+    "wave": 1
+   },
+   "matches": [
+    {
+     "code": "s2-r1-m1",
+     "title": "Бой 1",
+     "letter": "A",
+     "venue": 1,
+     "round": 1,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 1
+       },
+       "label": "Пересев-1"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 12
+       },
+       "label": "Пересев-12"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 13
+       },
+       "label": "Пересев-13"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 24
+       },
+       "label": "Пересев-24"
+      }
+     ]
+    },
+    {
+     "code": "s2-r1-m2",
+     "title": "Бой 2",
+     "letter": "B",
+     "venue": 2,
+     "round": 1,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 2
+       },
+       "label": "Пересев-2"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 11
+       },
+       "label": "Пересев-11"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 14
+       },
+       "label": "Пересев-14"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 23
+       },
+       "label": "Пересев-23"
+      }
+     ]
+    },
+    {
+     "code": "s2-r1-m3",
+     "title": "Бой 3",
+     "letter": "C",
+     "venue": 3,
+     "round": 1,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 3
+       },
+       "label": "Пересев-3"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 10
+       },
+       "label": "Пересев-10"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 15
+       },
+       "label": "Пересев-15"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 22
+       },
+       "label": "Пересев-22"
+      }
+     ]
+    },
+    {
+     "code": "s2-r1-m4",
+     "title": "Бой 4",
+     "letter": "D",
+     "venue": 4,
+     "round": 1,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 4
+       },
+       "label": "Пересев-4"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 9
+       },
+       "label": "Пересев-9"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 16
+       },
+       "label": "Пересев-16"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 21
+       },
+       "label": "Пересев-21"
+      }
+     ]
+    },
+    {
+     "code": "s2-r1-m5",
+     "title": "Бой 5",
+     "letter": "E",
+     "venue": 5,
+     "round": 1,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 5
+       },
+       "label": "Пересев-5"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 8
+       },
+       "label": "Пересев-8"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 17
+       },
+       "label": "Пересев-17"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 20
+       },
+       "label": "Пересев-20"
+      }
+     ]
+    },
+    {
+     "code": "s2-r1-m6",
+     "title": "Бой 6",
+     "letter": "F",
+     "venue": 6,
+     "round": 1,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 6
+       },
+       "label": "Пересев-6"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 7
+       },
+       "label": "Пересев-7"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 18
+       },
+       "label": "Пересев-18"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 19
+       },
+       "label": "Пересев-19"
+      }
+     ]
+    }
+   ],
+   "teams": null,
+   "sources": null,
+   "sort": null,
+   "config": {
+    "themes": 9
+   },
+   "layout": null
+  },
+  {
+   "code": "s2-r2-reseed",
+   "title": "Пересев",
+   "stage_type": "reseed",
+   "kind": "reseed",
+   "position": 4,
+   "grain": {
+    "block": "s2",
+    "wave": 1
+   },
+   "matches": null,
+   "teams": [
+    {
+     "fromMatch": {
+      "match": "s2-r1-m1",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m1",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m2",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m2",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m3",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m3",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m4",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m4",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m5",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m5",
+      "place": 2
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m6",
+      "place": 1
+     }
+    },
+    {
+     "fromMatch": {
+      "match": "s2-r1-m6",
+      "place": 2
+     }
+    }
+   ],
+   "sources": [
+    "s2-r1"
+   ],
+   "sort": [
+    {
+     "metric": "place_sum",
+     "dir": "asc"
+    },
+    {
+     "metric": "total",
+     "dir": "desc"
+    },
+    {
+     "metric": "plus",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken50",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken40",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken30",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken20",
+     "dir": "desc"
+    },
+    {
+     "metric": "taken10",
+     "dir": "desc"
+    },
+    {
+     "metric": "draw",
+     "dir": "asc"
+    }
+   ],
+   "config": null,
+   "layout": null
+  },
+  {
+   "code": "s2-r2",
+   "title": "Плей-офф. 2 этап",
+   "stage_type": "matches",
+   "kind": "matches",
+   "position": 5,
+   "grain": {
+    "block": "s2",
+    "wave": 1
+   },
+   "matches": [
+    {
+     "code": "s2-r2-m1",
+     "title": "Бой 1",
+     "letter": "G",
+     "venue": 1,
+     "round": 2,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 1
+       },
+       "label": "Пересев-1"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 6
+       },
+       "label": "Пересев-6"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 7
+       },
+       "label": "Пересев-7"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 12
+       },
+       "label": "Пересев-12"
+      }
+     ]
+    },
+    {
+     "code": "s2-r2-m2",
+     "title": "Бой 2",
+     "letter": "H",
+     "venue": 2,
+     "round": 2,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 2
+       },
+       "label": "Пересев-2"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 5
+       },
+       "label": "Пересев-5"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 8
+       },
+       "label": "Пересев-8"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 11
+       },
+       "label": "Пересев-11"
+      }
+     ]
+    },
+    {
+     "code": "s2-r2-m3",
+     "title": "Бой 3",
+     "letter": "I",
+     "venue": 3,
+     "round": 2,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 3
+       },
+       "label": "Пересев-3"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 4
+       },
+       "label": "Пересев-4"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 9
+       },
+       "label": "Пересев-9"
+      },
+      {
+       "reseed": {
+        "stage": "s2-r2-reseed",
+        "rank": 10
+       },
+       "label": "Пересев-10"
+      }
+     ]
+    }
+   ],
+   "teams": null,
+   "sources": null,
+   "sort": null,
+   "config": {
+    "themes": 9
+   },
+   "layout": null
+  }
+ ],
+ "teams": null
+}

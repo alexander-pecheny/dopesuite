@@ -90,6 +90,12 @@ metadata.
   format by registering a `Definition` — not by adding another `switch gameType`.
 - `core` — the `Engine`: shared in-memory state, write-tx plumbing, journal
   service, broadcast, revert. Embedded by `*server`.
+- `structure` — the Kind registry: a Kind is one type with three roles — a
+  `Macro` (expands one DSL Block through the `Block` it is handed, declaring
+  its keys), an `Expander` (schedules a stage from typed config), a `Ranker`.
+  `schemedsl` is the DSL's parser and compiler: it reads the text, adapts each
+  Block to `structure.Block` (столы, entrants, the Protocol cascade, reseed
+  stages, letters) and asks the registry to expand it — no `switch kind`.
 - `resolver` — bracket/reseed resolution. `roster` — roster + seeding.
 - `gamebuild` — where a Game comes to exist: `Create`, `Recompile`, `Rebuild`,
   `Materialise` (a pasted scheme), `Clear`; the one writer of stages, matches

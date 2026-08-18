@@ -2,6 +2,7 @@ package structure
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -17,6 +18,63 @@ func init() { Register(flat{}) }
 type flat struct{}
 
 func (flat) Code() string { return "flat" }
+func (flat) Word() string { return "flat" }
+func (flat) Keys() []Key  { return []Key{{Name: "participants"}} }
+
+// Expand is the whole bracket of a flat game: one Match seating everyone. ОД
+// and КСИ have always been this shape in the database; the Kind only lets a
+// scheme say so.
+func (flat) Expand(b Block) (Outputs, error) {
+	teams, ok := b.Int("participants")
+	if !ok {
+		if b.Seeded() == 0 {
+			return Outputs{}, errors.New("flat: нужен participants")
+		}
+		teams = b.Seeded()
+	}
+	if err := b.Rounds(nil); err != nil {
+		return Outputs{}, err
+	}
+	proceeding, _ := b.Proceeding()
+	lanes, err := b.Venues()
+	if err != nil {
+		return Outputs{}, err
+	}
+	entrants, err := b.Entrants(1, teams)
+	if err != nil {
+		return Outputs{}, err
+	}
+	code, title := b.Code(), b.Title("Игра")
+	cfg := FlatConfig{Code: code, Entrants: entrants[0], Title: title, Venue: lanes.Pick(1), Rules: b.Rules()}
+	if order, ok, err := b.Sorting(); err != nil {
+		return Outputs{}, err
+	} else if ok {
+		known := b.Rankable("flat")
+		for _, rule := range order {
+			if !known[rule.Metric] {
+				return Outputs{}, UnrankableMetric(rule.Metric, known)
+			}
+			cfg.Order = append(cfg.Order, rule.Metric)
+		}
+	}
+	if _, err := b.Emit(Stage{Code: code, Title: title, Kind: "flat", Config: cfg}); err != nil {
+		return Outputs{}, err
+	}
+	return Outputs{Proceeding: proceeding, Groups: []Feed{{
+		Stage: code,
+		Label: title,
+		// The block's standings rank, not the бой's место. A бой shares a place
+		// between seats that tie, and a shared place names nobody — ТПШ's отбор
+		// has ties inside its top 24, and «место 10.5» cannot seat anyone. The
+		// standings apply the block's whole sorting chain and rank distinctly.
+		Place: func(p int) store.SchemeSlot {
+			return store.SchemeSlot{
+				Reseed: &store.SchemeReseedRef{Stage: code, Rank: p},
+				Label:  fmt.Sprintf("%s-%d", title, p),
+			}
+		},
+	}}}, nil
+}
 
 func (flat) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 	var conf FlatConfig

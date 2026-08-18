@@ -1,0 +1,1093 @@
+{
+ "schemaVersion": 2,
+ "slug": "od",
+ "title": "od",
+ "gameType": "od",
+ "questionValues": null,
+ "regularThemeCount": 0,
+ "venues": [
+  {
+   "number": 1,
+   "title": "Стол 1"
+  },
+  {
+   "number": 2,
+   "title": "Стол 2"
+  },
+  {
+   "number": 3,
+   "title": "Стол 3"
+  },
+  {
+   "number": 4,
+   "title": "Стол 4"
+  },
+  {
+   "number": 5,
+   "title": "Стол 5"
+  },
+  {
+   "number": 6,
+   "title": "Стол 6"
+  },
+  {
+   "number": 7,
+   "title": "Стол 7"
+  },
+  {
+   "number": 8,
+   "title": "Стол 8"
+  },
+  {
+   "number": 9,
+   "title": "Стол 9"
+  },
+  {
+   "number": 10,
+   "title": "Стол 10"
+  },
+  {
+   "number": 11,
+   "title": "Стол 11"
+  },
+  {
+   "number": 12,
+   "title": "Стол 12"
+  },
+  {
+   "number": 13,
+   "title": "Стол 13"
+  },
+  {
+   "number": 14,
+   "title": "Стол 14"
+  },
+  {
+   "number": 15,
+   "title": "Стол 15"
+  },
+  {
+   "number": 16,
+   "title": "Стол 16"
+  },
+  {
+   "number": 17,
+   "title": "Стол 17"
+  },
+  {
+   "number": 18,
+   "title": "Стол 18"
+  },
+  {
+   "number": 19,
+   "title": "Стол 19"
+  },
+  {
+   "number": 20,
+   "title": "Стол 20"
+  },
+  {
+   "number": 21,
+   "title": "Стол 21"
+  },
+  {
+   "number": 22,
+   "title": "Стол 22"
+  },
+  {
+   "number": 23,
+   "title": "Стол 23"
+  },
+  {
+   "number": 24,
+   "title": "Стол 24"
+  },
+  {
+   "number": 25,
+   "title": "Стол 25"
+  },
+  {
+   "number": 26,
+   "title": "Стол 26"
+  },
+  {
+   "number": 27,
+   "title": "Стол 27"
+  },
+  {
+   "number": 28,
+   "title": "Стол 28"
+  },
+  {
+   "number": 29,
+   "title": "Стол 29"
+  },
+  {
+   "number": 30,
+   "title": "Стол 30"
+  },
+  {
+   "number": 31,
+   "title": "Стол 31"
+  },
+  {
+   "number": 32,
+   "title": "Стол 32"
+  }
+ ],
+ "stages": [
+  {
+   "code": "s1",
+   "title": "КВРМ",
+   "stage_type": "matches",
+   "kind": "flat",
+   "position": 1,
+   "grain": {
+    "block": "s1",
+    "wave": 1
+   },
+   "matches": [
+    {
+     "code": "s1-m1",
+     "title": "КВРМ",
+     "letter": "A",
+     "venue": 1,
+     "round": 1,
+     "participantCount": 65,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 1
+       },
+       "label": "Посев 1"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 2
+       },
+       "label": "Посев 2"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 3
+       },
+       "label": "Посев 3"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 4
+       },
+       "label": "Посев 4"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 5
+       },
+       "label": "Посев 5"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 6
+       },
+       "label": "Посев 6"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 7
+       },
+       "label": "Посев 7"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 8
+       },
+       "label": "Посев 8"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 9
+       },
+       "label": "Посев 9"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 10
+       },
+       "label": "Посев 10"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 11
+       },
+       "label": "Посев 11"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 12
+       },
+       "label": "Посев 12"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 13
+       },
+       "label": "Посев 13"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 14
+       },
+       "label": "Посев 14"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 15
+       },
+       "label": "Посев 15"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 16
+       },
+       "label": "Посев 16"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 17
+       },
+       "label": "Посев 17"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 18
+       },
+       "label": "Посев 18"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 19
+       },
+       "label": "Посев 19"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 20
+       },
+       "label": "Посев 20"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 21
+       },
+       "label": "Посев 21"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 22
+       },
+       "label": "Посев 22"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 23
+       },
+       "label": "Посев 23"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 24
+       },
+       "label": "Посев 24"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 25
+       },
+       "label": "Посев 25"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 26
+       },
+       "label": "Посев 26"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 27
+       },
+       "label": "Посев 27"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 28
+       },
+       "label": "Посев 28"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 29
+       },
+       "label": "Посев 29"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 30
+       },
+       "label": "Посев 30"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 31
+       },
+       "label": "Посев 31"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 32
+       },
+       "label": "Посев 32"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 33
+       },
+       "label": "Посев 33"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 34
+       },
+       "label": "Посев 34"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 35
+       },
+       "label": "Посев 35"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 36
+       },
+       "label": "Посев 36"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 37
+       },
+       "label": "Посев 37"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 38
+       },
+       "label": "Посев 38"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 39
+       },
+       "label": "Посев 39"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 40
+       },
+       "label": "Посев 40"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 41
+       },
+       "label": "Посев 41"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 42
+       },
+       "label": "Посев 42"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 43
+       },
+       "label": "Посев 43"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 44
+       },
+       "label": "Посев 44"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 45
+       },
+       "label": "Посев 45"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 46
+       },
+       "label": "Посев 46"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 47
+       },
+       "label": "Посев 47"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 48
+       },
+       "label": "Посев 48"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 49
+       },
+       "label": "Посев 49"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 50
+       },
+       "label": "Посев 50"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 51
+       },
+       "label": "Посев 51"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 52
+       },
+       "label": "Посев 52"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 53
+       },
+       "label": "Посев 53"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 54
+       },
+       "label": "Посев 54"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 55
+       },
+       "label": "Посев 55"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 56
+       },
+       "label": "Посев 56"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 57
+       },
+       "label": "Посев 57"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 58
+       },
+       "label": "Посев 58"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 59
+       },
+       "label": "Посев 59"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 60
+       },
+       "label": "Посев 60"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 61
+       },
+       "label": "Посев 61"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 62
+       },
+       "label": "Посев 62"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 63
+       },
+       "label": "Посев 63"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 64
+       },
+       "label": "Посев 64"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 65
+       },
+       "label": "Посев 65"
+      }
+     ]
+    }
+   ],
+   "teams": null,
+   "sources": null,
+   "sort": null,
+   "config": {
+    "code": "s1",
+    "entrants": [
+     {
+      "label": "Посев 1",
+      "seed": {
+       "basket": 1,
+       "position": 1
+      }
+     },
+     {
+      "label": "Посев 2",
+      "seed": {
+       "basket": 1,
+       "position": 2
+      }
+     },
+     {
+      "label": "Посев 3",
+      "seed": {
+       "basket": 1,
+       "position": 3
+      }
+     },
+     {
+      "label": "Посев 4",
+      "seed": {
+       "basket": 1,
+       "position": 4
+      }
+     },
+     {
+      "label": "Посев 5",
+      "seed": {
+       "basket": 1,
+       "position": 5
+      }
+     },
+     {
+      "label": "Посев 6",
+      "seed": {
+       "basket": 1,
+       "position": 6
+      }
+     },
+     {
+      "label": "Посев 7",
+      "seed": {
+       "basket": 1,
+       "position": 7
+      }
+     },
+     {
+      "label": "Посев 8",
+      "seed": {
+       "basket": 1,
+       "position": 8
+      }
+     },
+     {
+      "label": "Посев 9",
+      "seed": {
+       "basket": 1,
+       "position": 9
+      }
+     },
+     {
+      "label": "Посев 10",
+      "seed": {
+       "basket": 1,
+       "position": 10
+      }
+     },
+     {
+      "label": "Посев 11",
+      "seed": {
+       "basket": 1,
+       "position": 11
+      }
+     },
+     {
+      "label": "Посев 12",
+      "seed": {
+       "basket": 1,
+       "position": 12
+      }
+     },
+     {
+      "label": "Посев 13",
+      "seed": {
+       "basket": 1,
+       "position": 13
+      }
+     },
+     {
+      "label": "Посев 14",
+      "seed": {
+       "basket": 1,
+       "position": 14
+      }
+     },
+     {
+      "label": "Посев 15",
+      "seed": {
+       "basket": 1,
+       "position": 15
+      }
+     },
+     {
+      "label": "Посев 16",
+      "seed": {
+       "basket": 1,
+       "position": 16
+      }
+     },
+     {
+      "label": "Посев 17",
+      "seed": {
+       "basket": 1,
+       "position": 17
+      }
+     },
+     {
+      "label": "Посев 18",
+      "seed": {
+       "basket": 1,
+       "position": 18
+      }
+     },
+     {
+      "label": "Посев 19",
+      "seed": {
+       "basket": 1,
+       "position": 19
+      }
+     },
+     {
+      "label": "Посев 20",
+      "seed": {
+       "basket": 1,
+       "position": 20
+      }
+     },
+     {
+      "label": "Посев 21",
+      "seed": {
+       "basket": 1,
+       "position": 21
+      }
+     },
+     {
+      "label": "Посев 22",
+      "seed": {
+       "basket": 1,
+       "position": 22
+      }
+     },
+     {
+      "label": "Посев 23",
+      "seed": {
+       "basket": 1,
+       "position": 23
+      }
+     },
+     {
+      "label": "Посев 24",
+      "seed": {
+       "basket": 1,
+       "position": 24
+      }
+     },
+     {
+      "label": "Посев 25",
+      "seed": {
+       "basket": 1,
+       "position": 25
+      }
+     },
+     {
+      "label": "Посев 26",
+      "seed": {
+       "basket": 1,
+       "position": 26
+      }
+     },
+     {
+      "label": "Посев 27",
+      "seed": {
+       "basket": 1,
+       "position": 27
+      }
+     },
+     {
+      "label": "Посев 28",
+      "seed": {
+       "basket": 1,
+       "position": 28
+      }
+     },
+     {
+      "label": "Посев 29",
+      "seed": {
+       "basket": 1,
+       "position": 29
+      }
+     },
+     {
+      "label": "Посев 30",
+      "seed": {
+       "basket": 1,
+       "position": 30
+      }
+     },
+     {
+      "label": "Посев 31",
+      "seed": {
+       "basket": 1,
+       "position": 31
+      }
+     },
+     {
+      "label": "Посев 32",
+      "seed": {
+       "basket": 1,
+       "position": 32
+      }
+     },
+     {
+      "label": "Посев 33",
+      "seed": {
+       "basket": 1,
+       "position": 33
+      }
+     },
+     {
+      "label": "Посев 34",
+      "seed": {
+       "basket": 1,
+       "position": 34
+      }
+     },
+     {
+      "label": "Посев 35",
+      "seed": {
+       "basket": 1,
+       "position": 35
+      }
+     },
+     {
+      "label": "Посев 36",
+      "seed": {
+       "basket": 1,
+       "position": 36
+      }
+     },
+     {
+      "label": "Посев 37",
+      "seed": {
+       "basket": 1,
+       "position": 37
+      }
+     },
+     {
+      "label": "Посев 38",
+      "seed": {
+       "basket": 1,
+       "position": 38
+      }
+     },
+     {
+      "label": "Посев 39",
+      "seed": {
+       "basket": 1,
+       "position": 39
+      }
+     },
+     {
+      "label": "Посев 40",
+      "seed": {
+       "basket": 1,
+       "position": 40
+      }
+     },
+     {
+      "label": "Посев 41",
+      "seed": {
+       "basket": 1,
+       "position": 41
+      }
+     },
+     {
+      "label": "Посев 42",
+      "seed": {
+       "basket": 1,
+       "position": 42
+      }
+     },
+     {
+      "label": "Посев 43",
+      "seed": {
+       "basket": 1,
+       "position": 43
+      }
+     },
+     {
+      "label": "Посев 44",
+      "seed": {
+       "basket": 1,
+       "position": 44
+      }
+     },
+     {
+      "label": "Посев 45",
+      "seed": {
+       "basket": 1,
+       "position": 45
+      }
+     },
+     {
+      "label": "Посев 46",
+      "seed": {
+       "basket": 1,
+       "position": 46
+      }
+     },
+     {
+      "label": "Посев 47",
+      "seed": {
+       "basket": 1,
+       "position": 47
+      }
+     },
+     {
+      "label": "Посев 48",
+      "seed": {
+       "basket": 1,
+       "position": 48
+      }
+     },
+     {
+      "label": "Посев 49",
+      "seed": {
+       "basket": 1,
+       "position": 49
+      }
+     },
+     {
+      "label": "Посев 50",
+      "seed": {
+       "basket": 1,
+       "position": 50
+      }
+     },
+     {
+      "label": "Посев 51",
+      "seed": {
+       "basket": 1,
+       "position": 51
+      }
+     },
+     {
+      "label": "Посев 52",
+      "seed": {
+       "basket": 1,
+       "position": 52
+      }
+     },
+     {
+      "label": "Посев 53",
+      "seed": {
+       "basket": 1,
+       "position": 53
+      }
+     },
+     {
+      "label": "Посев 54",
+      "seed": {
+       "basket": 1,
+       "position": 54
+      }
+     },
+     {
+      "label": "Посев 55",
+      "seed": {
+       "basket": 1,
+       "position": 55
+      }
+     },
+     {
+      "label": "Посев 56",
+      "seed": {
+       "basket": 1,
+       "position": 56
+      }
+     },
+     {
+      "label": "Посев 57",
+      "seed": {
+       "basket": 1,
+       "position": 57
+      }
+     },
+     {
+      "label": "Посев 58",
+      "seed": {
+       "basket": 1,
+       "position": 58
+      }
+     },
+     {
+      "label": "Посев 59",
+      "seed": {
+       "basket": 1,
+       "position": 59
+      }
+     },
+     {
+      "label": "Посев 60",
+      "seed": {
+       "basket": 1,
+       "position": 60
+      }
+     },
+     {
+      "label": "Посев 61",
+      "seed": {
+       "basket": 1,
+       "position": 61
+      }
+     },
+     {
+      "label": "Посев 62",
+      "seed": {
+       "basket": 1,
+       "position": 62
+      }
+     },
+     {
+      "label": "Посев 63",
+      "seed": {
+       "basket": 1,
+       "position": 63
+      }
+     },
+     {
+      "label": "Посев 64",
+      "seed": {
+       "basket": 1,
+       "position": 64
+      }
+     },
+     {
+      "label": "Посев 65",
+      "seed": {
+       "basket": 1,
+       "position": 65
+      }
+     }
+    ],
+    "title": "КВРМ",
+    "tourComp": [
+     15,
+     15,
+     15,
+     15,
+     15,
+     15
+    ],
+    "venue": 1
+   },
+   "layout": null
+  }
+ ],
+ "teams": null
+}
