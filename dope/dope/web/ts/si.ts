@@ -159,7 +159,6 @@ let stickerById = new Map<string, StickerType>();
 let activeCell: ActiveCell = {player: 0, theme: 0, answer: 0};
 let renderedTable: HTMLElement | null = null;
 let renderedTab: string | null = null;
-let activeTab = tabFromHash() || "detailed";
 let tableIndex: NodeIndex | null = null;
 let scoreCache: ScoreCache | null = null;
 let detailedOrderCache: number[] | null = null;
@@ -177,6 +176,7 @@ const tabScroll = new Map<string, {top: number; left: number}>();
 // The «Отказы» tab is a host-only control surface; its effect — declined teams
 // dropping out of the «Итог» ranking — is visible to spectators in that tab.
 const TABS = gameTabs([], {game: "ksi", viewer});
+let activeTab = tabFromHash() || "detailed";
 
 function tabFromHash(): string | null {
   const key = (window.location.hash || "").replace(/^#/, "");
