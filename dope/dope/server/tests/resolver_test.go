@@ -505,7 +505,7 @@ values(?, ?, 'creator', ?)`, festID, systemID, now); err != nil {
 	if err := json.Unmarshal([]byte(rawScheme), &scheme); err != nil {
 		t.Fatalf("decode ek scheme: %v", err)
 	}
-	gameID, err := gamebuild.Create(ctx, tx, gamebuild.Spec{FestID: festID, Type: "ek", EKScheme: &scheme})
+	gameID, err := gamebuild.Create(ctx, tx, gamebuild.Spec{FestID: festID, Type: "ek", Pasted: &scheme})
 	if err != nil {
 		t.Fatalf("create ek: %v", err)
 	}

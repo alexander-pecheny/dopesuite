@@ -160,10 +160,6 @@ func (s *Server) HandleFestRouter(w http.ResponseWriter, r *http.Request) { s.ha
 func (s *Server) HandleImport(w http.ResponseWriter, r *http.Request)     { s.handleImport(w, r) }
 func (s *Server) HandleScopedAPI(w http.ResponseWriter, r *http.Request)  { s.handleScopedAPI(w, r) }
 
-func (s *Server) ImportScheme(scheme store.FestScheme) (store.FestView, error) {
-	return s.importScheme(scheme)
-}
-
 func (s *Server) LoadFestViewLocked(festID, gameID int64) (store.FestView, error) {
 	return s.loadFestViewLocked(festID, gameID)
 }

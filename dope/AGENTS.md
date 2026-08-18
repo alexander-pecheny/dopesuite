@@ -53,7 +53,7 @@ files, each one concern:
 | `server/db.go` | ~1180 | DB bootstrap, schema migration/backfill, id resolution |
 | `server/auth.go` | ~930 | Sessions, auth, Telegram login bridge |
 | `server/matchview.go` | ~815 | Fest/match view loading + match-update application |
-| `server/import_scheme.go` | ~480 | Fest-scheme import handlers |
+| `server/import_scheme.go` | ~110 | The pasted-scheme importer (`/api/import`, the host form): clears the fest, calls `gamebuild.Materialise` |
 | `server/static_mode.go` | ~425 | "DDoS lockdown" static-snapshot degradation layer |
 | `server/serve_html.go` | ~365 | Host/viewer/game HTML init payloads + asset versioning |
 | `server/host_accessors.go` | ~190 | Dependency-inversion adapter (`*server` → leaf `Host` interfaces) |

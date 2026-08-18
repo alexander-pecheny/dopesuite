@@ -3,6 +3,7 @@ package dopeserver
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -845,15 +846,77 @@ where kind = 'rr' and block_code = '' and code glob 's[0-9]*-g[0-9]*'`); err != 
 			return err
 		}
 	}
+	// v25: a pasted scheme's stages carry their Kind and its бои their буквы
+	// now that gamebuild writes them (Materialise). Games imported before then
+	// read their Kinds back from scheme_json once, and a game without a single
+	// буква is dealt them the way v24 dealt everyone's.
+	var hasV25 int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 25`).Scan(&hasV25); err != nil {
+		return err
+	}
+	if hasV25 == 0 {
+		if err := pastedKindsBackfill(db); err != nil {
+			return err
+		}
+		if err := dealLettersBackfill(db); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(25, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-// dealLettersBackfill deals every existing game's бои their буквы the way the
-// browser used to: A.. in stage order then match order, skipping a бой whose
-// title is not «Бой N».
+// pastedKindsBackfill gives a pasted scheme's stages the Kind their JSON
+// declares; the importer used to drop it, leaving them «matches».
+func pastedKindsBackfill(db *sql.DB) error {
+	rows, err := db.Query(`select id, coalesce(scheme_json, '{}') from games where coalesce(scheme_dsl, '') = ''`)
+	if err != nil {
+		return err
+	}
+	type kind struct {
+		gameID int64
+		code   string
+		kind   string
+	}
+	var kinds []kind
+	for rows.Next() {
+		var gameID int64
+		var schemeJSON string
+		if err := rows.Scan(&gameID, &schemeJSON); err != nil {
+			rows.Close()
+			return err
+		}
+		var scheme store.FestScheme
+		if err := json.Unmarshal([]byte(schemeJSON), &scheme); err != nil {
+			continue
+		}
+		for _, stage := range scheme.Stages {
+			if stage.Kind != "" {
+				kinds = append(kinds, kind{gameID, stage.Code, stage.Kind})
+			}
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, k := range kinds {
+		if _, err := db.Exec(`update stages set kind = ? where game_id = ? and code = ? and kind <> ?`, k.kind, k.gameID, k.code, k.kind); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// dealLettersBackfill deals the бои of every game that has none their буквы
+// the way the browser used to: A.. in stage order then match order, skipping
+// a бой whose title is not «Бой N».
 func dealLettersBackfill(db *sql.DB) error {
 	rows, err := db.Query(`
 select m.id, m.game_id, m.title from matches m join stages s on s.id = m.stage_id
+where not exists (select 1 from matches x where x.game_id = m.game_id and x.letter <> '')
 order by m.game_id, s.position, s.id, m.position, m.id`)
 	if err != nil {
 		return err

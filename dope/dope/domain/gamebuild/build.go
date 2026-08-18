@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -79,11 +80,12 @@ type Spec struct {
 	DSL      string
 	Entrants []int64
 	// The pre-DSL formats. ОД: tours of so many questions; КСИ: themes and an
-	// optional stickers block; ЭК: a pasted detailed scheme.
+	// optional stickers block; ЭК: a pasted detailed scheme — the ADR-0006
+	// escape hatch, and the one road to the manual Kind.
 	ODTours, ODQuestions int
 	KSIThemes            int
 	KSIStickers          json.RawMessage
-	EKScheme             *store.FestScheme
+	Pasted               *store.FestScheme
 }
 
 // Create makes the Game the Spec describes and returns its id. A фест's Games
@@ -95,19 +97,111 @@ func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 	if strings.TrimSpace(spec.DSL) != "" {
 		return createSchemeGame(ctx, tx, spec.FestID, spec.Type, spec.Label, spec.DSL, spec.Entrants)
 	}
+	if spec.Pasted != nil {
+		scheme := *spec.Pasted
+		if scheme.GameType == "" {
+			scheme.GameType = spec.Type
+		}
+		if scheme.GameType != spec.Type {
+			return 0, fmt.Errorf("JSON-схема описывает игру %s, а создаётся %s", games.Label(scheme.GameType), games.Label(spec.Type))
+		}
+		return Materialise(ctx, tx, spec.FestID, scheme)
+	}
 	switch spec.Type {
 	case games.OD:
 		return createODGameTx(ctx, tx, spec.FestID, spec.ODTours, spec.ODQuestions)
 	case games.KSI:
 		return createKSIGameTx(ctx, tx, spec.FestID, spec.KSIThemes, spec.KSIStickers)
 	case games.EK:
-		if spec.EKScheme == nil {
-			return 0, errors.New("Вставьте JSON-схему ЭК или опишите её схемой")
-		}
-		return createEKGameTx(ctx, tx, spec.FestID, *spec.EKScheme)
+		return 0, errors.New("Вставьте JSON-схему ЭК или опишите её схемой")
 	}
 	return 0, errors.New("опишите схему игры")
 }
+
+// Materialise makes a Game from a pasted detailed scheme, in the фест given:
+// the scheme row, the game row, its столы, and the Structure — stages with
+// their Kind, бои with their буква (dealt here when the JSON brought none),
+// slots left for a seed import to fill. It returns the game id. Teams travel
+// by that import, never inside the JSON.
+func Materialise(ctx context.Context, tx *sql.Tx, festID int64, scheme store.FestScheme) (int64, error) {
+	if scheme.GameType == "" {
+		scheme.GameType = games.Default
+	}
+	if err := storeutil.ValidateScheme(scheme); err != nil {
+		return 0, err
+	}
+	if len(scheme.Teams) > 0 {
+		return 0, errors.New("команды загружаются отдельным импортом посева; уберите teams из JSON-схемы")
+	}
+	title := strings.TrimSpace(scheme.Title)
+	if title == "" {
+		title = games.Label(scheme.GameType)
+	}
+	identity, err := nextGameIdentityTx(ctx, tx, festID, scheme.GameType, title)
+	if err != nil {
+		return 0, err
+	}
+	dealLetters(&scheme)
+	schemaJSON, err := json.Marshal(scheme)
+	if err != nil {
+		return 0, err
+	}
+	now := util.UtcNow()
+	schemeID, err := store.InsertReturningID(ctx, tx, `
+insert into schemes(slug, title, version, schema_json, created_at)
+values(?, ?, ?, ?, ?)`, uniqueSchemeSlug(scheme.Slug), title, util.MaxInt(scheme.SchemaVersion, 2), string(schemaJSON), now)
+	if err != nil {
+		return 0, err
+	}
+	gameID, err := store.InsertReturningID(ctx, tx, `
+insert into games(fest_id, code, title, game_type, position, scheme_id, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
+values(?, ?, ?, ?, ?, ?, ?, '{}', 'pending', 'fest', 'fest', 1, ?, ?)`,
+		festID, identity.Code, title, scheme.GameType, identity.Position, schemeID, string(schemaJSON), now, now)
+	if err != nil {
+		return 0, err
+	}
+	return gameID, writePastedStructureTx(ctx, tx, festID, gameID, scheme)
+}
+
+// writePastedStructureTx writes a pasted scheme's столы and Structure with no
+// seat resolved: its Participants arrive by seed import, and the resolver
+// seats them then.
+func writePastedStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, scheme store.FestScheme) error {
+	venues, err := upsertVenuesTx(ctx, tx, festID, scheme.Venues)
+	if err != nil {
+		return err
+	}
+	return writeStructureTx(ctx, tx, festID, gameID, scheme.GameType, scheme, venues, unseated)
+}
+
+func unseated(store.SchemeSlot) any { return nil }
+
+// dealLetters gives a pasted scheme's бои their буквы the way the sheets do —
+// A.. in stage order, then бой order — when the JSON brought none. A sitting
+// not called «Бой N» (the письменный отбор) is skipped, as the compiler skips a
+// Block that declined letters.
+func dealLetters(scheme *store.FestScheme) {
+	for _, stage := range scheme.Stages {
+		for _, match := range stage.Matches {
+			if match.Letter != "" {
+				return
+			}
+		}
+	}
+	dealt := 0
+	for i := range scheme.Stages {
+		for m := range scheme.Stages[i].Matches {
+			match := &scheme.Stages[i].Matches[m]
+			if !boutTitle.MatchString(match.Title) {
+				continue
+			}
+			match.Letter = schemedsl.BoutLetter(dealt)
+			dealt++
+		}
+	}
+}
+
+var boutTitle = regexp.MustCompile(`Бой\s+\d+`)
 
 // createSchemeGame creates a game of any type from a scheme DSL: compile,
 // store the scheme with its source, seat the entrants and materialise the
@@ -145,7 +239,7 @@ values(?, ?, ?, ?, ?, ?, ?, ?, '{}', 'active', 'fest', 'fest', 1, ?, ?)`,
 			return 0, err
 		}
 	}
-	if err := buildSchemeStructureTx(ctx, tx, festID, gameID, gameType, scheme); err != nil {
+	if err := writeCompiledStructureTx(ctx, tx, festID, gameID, gameType, scheme); err != nil {
 		return 0, err
 	}
 	if err := recordGameEntrantsTx(ctx, tx, gameID); err != nil {
@@ -214,14 +308,12 @@ func stageEmptyState(gameType string, stage store.SchemeStage, seats, fallbackQu
 	return string(state)
 }
 
-// buildSchemeStructureTx materialises a compiled scheme into stages, matches
-// and slots for any game type — the plumbing used to be брейн's alone, and the
-// only thing that was ever брейн-specific about it was the empty state.
-func buildSchemeStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string, scheme store.FestScheme) error {
-	// A declared seed source owns game_assignments — «Import seed» writes them
-	// by seed rank, so creation must not pre-fill them by number. Nor may it when
-	// the Game already named its entrants: seating the фест's registry on top
-	// would add the teams this Game does not play.
+// writeCompiledStructureTx writes a compiled scheme's Structure, seating the
+// фест's registry first unless a seed source owns the seats — «Import seed»
+// writes game_assignments by seed rank, so creation must not pre-fill them by
+// number — or the Game already named its entrants: seating the registry on
+// top would add the teams this Game does not play.
+func writeCompiledStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string, scheme store.FestScheme) error {
 	seated, err := hasAssignmentsTx(ctx, tx, gameID)
 	if err != nil {
 		return err
@@ -235,26 +327,51 @@ func buildSchemeStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int6
 	if err != nil {
 		return err
 	}
+	return writeStructureTx(ctx, tx, festID, gameID, gameType, scheme, nil, seat)
+}
+
+// writeStructureTx is the one writer of a Game's stages, matches and slots —
+// compiled or pasted, created, rebuilt or imported. A stage carries its Kind
+// (its stage_type when the scheme names none), a бой its буква, its стол when
+// the caller resolved the scheme's столы to rows, and the pristine Protocol
+// document its Protocol asks for; seat says who sits in a seed slot.
+func writeStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string, scheme store.FestScheme, venues map[int]int64, seat func(store.SchemeSlot) any) error {
 	for stageIndex, stage := range scheme.Stages {
 		position := stage.Position
 		if position == 0 {
 			position = stageIndex + 1
 		}
+		stageType := stage.StageType
+		if stageType == "" {
+			stageType = "matches"
+		}
+		kind := stage.Kind
+		if kind == "" {
+			kind = stageType
+		}
 		grain := stage.Grain.Normalized()
 		stageID, err := store.InsertReturningID(ctx, tx, `
 insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json, block_code, wave_index, group_code)
 values(?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
-			festID, gameID, stage.Code, stage.Title, stage.StageType, stage.Kind, position, storeutil.StageConfigJSON(stage),
+			festID, gameID, stage.Code, stage.Title, stageType, kind, position, storeutil.StageConfigJSON(stage),
 			grain.Block, grain.Wave, grain.Group)
 		if err != nil {
 			return err
 		}
 		for matchIndex, match := range stage.Matches {
+			seats := match.ParticipantCount
+			if seats == 0 {
+				seats = len(match.Slots)
+			}
+			var venueID any
+			if id, ok := venues[match.Venue]; ok {
+				venueID = id
+			}
 			emptyState := stageEmptyState(gameType, stage, len(match.Slots), scheme.Questions)
 			matchID, err := store.InsertReturningID(ctx, tx, `
-insert into matches(fest_id, game_id, stage_id, code, title, letter, position, round, wave, participant_count, status, revision, state_json)
-values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
-				festID, gameID, stageID, match.Code, match.Title, match.Letter, matchIndex+1, match.Round, match.Wave, len(match.Slots), emptyState)
+insert into matches(fest_id, game_id, stage_id, code, title, letter, position, round, wave, participant_count, venue_id, status, revision, state_json)
+values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
+				festID, gameID, stageID, match.Code, match.Title, match.Letter, matchIndex+1, match.Round, match.Wave, seats, venueID, emptyState)
 			if err != nil {
 				return err
 			}
@@ -525,32 +642,30 @@ func uniqueSchemeSlug(base string) string {
 	return fmt.Sprintf("%s-%d", base, time.Now().UnixNano())
 }
 
-// Rebuild materialises a Game's Structure afresh from what the Game already
-// holds — its DSL (compiled against its own entrants) or, for a pasted ЭК
-// scheme, that JSON with its seeded teams dropped — and returns the scheme it
-// built. The «Очистить» action deletes the old rows first and calls this.
-func Rebuild(ctx context.Context, tx *sql.Tx, festID, gameID int64) ([]byte, error) {
-	var gameType, dsl, schemeJSON string
-	if err := tx.QueryRowContext(ctx, `
-select game_type, coalesce(scheme_dsl, ''), coalesce(scheme_json, '{}') from games where id = ? and fest_id = ?`,
-		gameID, festID).Scan(&gameType, &dsl, &schemeJSON); err != nil {
-		return nil, err
-	}
+// rebuildTx materialises a Game's Structure afresh from what the Game already
+// holds — its DSL, compiled against its own entrants and seating them again,
+// or its pasted scheme with its столы — and returns the scheme it built.
+// Clear deletes the old rows first and calls this.
+func rebuildTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType, dsl, schemeJSON string, entrants []int64) ([]byte, error) {
 	if strings.TrimSpace(dsl) != "" {
 		var meta struct {
 			Slug  string `json:"slug"`
 			Title string `json:"title"`
 		}
 		_ = json.Unmarshal([]byte(schemeJSON), &meta)
-		entrants, err := gameEntrantsTx(ctx, tx, gameID)
-		if err != nil {
-			return nil, err
-		}
 		scheme, err := schemeForEntrantsTx(ctx, tx, festID, gameType, meta.Slug, meta.Title, dsl, entrants)
 		if err != nil {
 			return nil, err
 		}
-		if err := buildSchemeStructureTx(ctx, tx, festID, gameID, gameType, scheme); err != nil {
+		if len(entrants) > 0 {
+			if err := seatChosenTx(ctx, tx, gameID, entrants); err != nil {
+				return nil, err
+			}
+		}
+		if err := writeCompiledStructureTx(ctx, tx, festID, gameID, gameType, scheme); err != nil {
+			return nil, err
+		}
+		if err := recordGameEntrantsTx(ctx, tx, gameID); err != nil {
 			return nil, err
 		}
 		return json.Marshal(scheme)
@@ -560,7 +675,11 @@ select game_type, coalesce(scheme_dsl, ''), coalesce(scheme_json, '{}') from gam
 		return nil, fmt.Errorf("не удалось разобрать схему ЭК: %w", err)
 	}
 	scheme.Teams = nil // seeded teams come from a fresh import, not the scheme
-	if err := buildEKStructureTx(ctx, tx, festID, gameID, scheme, util.UtcNow()); err != nil {
+	if scheme.GameType == "" {
+		scheme.GameType = gameType
+	}
+	dealLetters(&scheme)
+	if err := writePastedStructureTx(ctx, tx, festID, gameID, scheme); err != nil {
 		return nil, err
 	}
 	return json.Marshal(scheme)

@@ -50,7 +50,7 @@ files, each owning one concern:
 | `main.go` | entry point, mux wiring, HTTP server, SSE event handlers |
 | `db.go` | DB bootstrap, schema migration/backfill, id resolution |
 | `serve_html.go` | host/viewer/game HTML init payloads + asset versioning |
-| `import_scheme.go` | fest-scheme import handlers |
+| `import_scheme.go` | the pasted-scheme importer (`/api/import`, the host form): clears the fest, calls `gamebuild.Materialise` |
 | `matchview.go` | fest/match view loading + match-update application |
 | `scoped_api.go` | tournament-scoped API endpoints |
 | `auth.go` | sessions, auth, Telegram login bridge |
@@ -182,6 +182,6 @@ their connection under `s.mu` and should be migrated to `withWriteTx`/the trio
 when next touched. They are deliberately deferred because they run pre-fest,
 rarely, or off the viewer-load path, so the freeze window barely applies:
 `handleHostClearGame` and `handleHostDeleteFest` (destructive, not run mid-play),
-`importScheme` / `importSchemeIntoFest` / `importSeedsFromKSI` /
+`importSchemeIntoFest` / `importSeedsFromKSI` /
 `setSeedImportDeclined` (pre-fest seeding, no concurrent viewer load), and the
 telegram-bridge login/register writes (tiny single statements on the bot path).

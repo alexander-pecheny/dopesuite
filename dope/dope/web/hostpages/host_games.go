@@ -14,7 +14,6 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/games"
-	"dope/dope/domain/roster"
 	"dope/dope/domain/view"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
@@ -421,162 +420,13 @@ func (s *Server) handleHostClearGame(w http.ResponseWriter, r *http.Request, fes
 		return
 	}
 	defer tx.Rollback()
-
-	var gameType, title, schemeJSON, schemeDSL string
-	if err := tx.QueryRowContext(r.Context(), `
-select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') from games where id = ? and fest_id = ?`,
-		gameID, festID).Scan(&gameType, &title, &schemeJSON, &schemeDSL); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			http.NotFound(w, r)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	firstMatchCode, err := gamebuild.Clear(r.Context(), tx, festID, gameID)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.NotFound(w, r)
 		return
 	}
-
-	// Drop all game-scoped derived rows. matches/stages cascade to their slots,
-	// themes, answers, results and reseed entries (FKs are ON). Fest-scoped
-	// teams/players are shared across games and intentionally left alone.
-	for _, q := range []string{
-		`delete from matches where game_id = ?`,
-		`delete from stages where game_id = ?`,
-		`delete from game_assignments where game_id = ?`,
-		`delete from game_participants where game_id = ?`,
-		`delete from game_team_players where game_id = ?`,
-		`delete from game_player_team_overrides where game_id = ?`,
-	} {
-		if _, err := tx.ExecContext(r.Context(), q, gameID); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
-
-	// Preserve the game's display slug/title from its current scheme.
-	var meta struct {
-		Slug  string `json:"slug"`
-		Title string `json:"title"`
-	}
-	_ = json.Unmarshal([]byte(schemeJSON), &meta)
-	if strings.TrimSpace(meta.Title) == "" {
-		meta.Title = title
-	}
-
-	now := util.UtcNow()
-	status := "active"
-	var newScheme, newState []byte
-
-	switch gameType {
-	case "od":
-		tourComp := games.ParseTourComp(schemeJSON)
-		if len(tourComp) == 0 {
-			tourComp = []int{15}
-		}
-		newScheme, newState = games.ODEmptyGameJSON(meta.Slug, meta.Title, tourComp)
-		teams, err := roster.LoadFestRosterImportTeamsTx(r.Context(), tx, festID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if len(teams) > 0 {
-			if newScheme, err = roster.ApplyRosterToChGKScheme(string(newScheme), teams); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			if newState, err = roster.ApplyRosterToChGKState(string(newState), teams, nil); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-		}
-	case "ksi":
-		var sc struct {
-			Themes   int             `json:"themes"`
-			Stickers json.RawMessage `json:"stickers"`
-		}
-		_ = json.Unmarshal([]byte(schemeJSON), &sc)
-		if sc.Themes <= 0 {
-			sc.Themes = 20
-		}
-		// Preserve the sticker configuration across a clear-to-pristine so a
-		// stickers game stays a stickers game (only the answers/choices reset).
-		newScheme, newState = games.KSIStickersEmptyGameJSON(meta.Slug, meta.Title, sc.Themes, sc.Stickers)
-		teams, err := roster.LoadFestRosterImportTeamsTx(r.Context(), tx, festID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if len(teams) > 0 {
-			if newScheme, err = roster.ApplyRosterToKSIScheme(string(newScheme), teams); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			if newState, err = roster.ApplyRosterToKSIState(string(newState), teams, sc.Themes); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-		}
-	case "brain":
-		// Pre-DSL games get their shortcut scheme re-expressed in the DSL, so a
-		// clear upgrades them onto the one authoring path.
-		if strings.TrimSpace(schemeDSL) == "" {
-			var count int
-			if err := tx.QueryRowContext(r.Context(), `select count(*) from fest_teams where fest_id = ?`, festID).Scan(&count); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			schemeDSL = defaultBrainDSL(count, games.BrainQuestions(schemeJSON))
-			if _, err := tx.ExecContext(r.Context(), `update games set scheme_dsl = ? where id = ?`, schemeDSL, gameID); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-		}
-		if newScheme, err = gamebuild.Rebuild(r.Context(), tx, festID, gameID); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		newState = []byte("{}")
-	case "ek":
-		status = "pending"
-		if newScheme, err = gamebuild.Rebuild(r.Context(), tx, festID, gameID); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		newState = []byte("{}")
-	default:
-		http.Error(w, "очистка не поддерживается для этого типа игры", http.StatusBadRequest)
-		return
-	}
-
-	if _, err := tx.ExecContext(r.Context(), `
-update games set scheme_json = ?, state_json = '{}', status = ?,
-  team_list_source = 'fest', roster_source = 'fest', revision = revision + 1, updated_at = ?
-where id = ? and fest_id = ?`, string(newScheme), status, now, gameID, festID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if gameType != "ek" && gameType != "brain" {
-		matchID, err := store.FlatMatchID(r.Context(), tx, gameID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := festwrite.SetFlatGameStateTx(r.Context(), tx, matchID, string(newState)); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
-
-	var nextMatchCode sql.NullString
-	if err := tx.QueryRowContext(r.Context(), `
-select coalesce((select code from matches where game_id = ? order by position, id limit 1), '')`,
-		gameID).Scan(&nextMatchCode); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if _, err := festwrite.BumpFestRevisionTx(r.Context(), tx, festID, "game:clear", util.MustJSON(map[string]any{
-		"gameID": gameID,
-		"title":  title,
-	})); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if err := tx.Commit(); err != nil {
@@ -584,7 +434,7 @@ select coalesce((select code from matches where game_id = ? order by position, i
 		return
 	}
 	if s.h.Engine().FestID == festID && s.h.Engine().ActiveGameID == gameID {
-		s.h.Engine().ActiveMatchCode = nextMatchCode.String
+		s.h.Engine().ActiveMatchCode = firstMatchCode
 	}
 	s.h.Engine().InvalidateFestViewCache(festID)
 	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s", s.festRefOrID(r.Context(), festID)), http.StatusSeeOther)
@@ -604,7 +454,7 @@ func (s *Server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request
 	if brainDSL == "" {
 		var count int
 		_ = s.h.Engine().DB.QueryRowContext(r.Context(), `select count(*) from fest_teams where fest_id = ?`, festID).Scan(&count)
-		brainDSL = defaultBrainDSL(count, 5)
+		brainDSL = gamebuild.DefaultBrainDSL(count, 5)
 	}
 	var teamCount int
 	_ = s.h.Engine().DB.QueryRowContext(r.Context(), `select count(*) from fest_teams where fest_id = ?`, festID).Scan(&teamCount)
@@ -710,7 +560,7 @@ func gameSpecFromForm(festID int64, gameType string, form url.Values) (gamebuild
 			if err := json.Unmarshal([]byte(raw), &scheme); err != nil {
 				return spec, fmt.Errorf("Не удалось разобрать JSON: %w", err)
 			}
-			spec.EKScheme = &scheme
+			spec.Pasted = &scheme
 		}
 	}
 	return spec, nil
@@ -758,16 +608,6 @@ func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType s
 
 // defaultBrainDSL is the creation form's prefill: today's shortcut — one group
 // over the whole fest — written in the DSL so the host sees something editable.
-func defaultBrainDSL(teams, questions int) string {
-	if teams < 2 {
-		teams = 4
-	}
-	if questions <= 0 {
-		questions = 5
-	}
-	return fmt.Sprintf("[defaults]\nquestions: %d\n\n[scheme]\nkind: roundrobin\ngroup_size: %d\n", questions, teams)
-}
-
 // defaultSIDSL is личная СИ's shape at its smallest: one table, everyone at it,
 // eight themes. A real tournament edits it into groups and a play-off.
 func defaultSIDSL(players int) string {

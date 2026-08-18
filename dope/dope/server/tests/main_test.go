@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"bytes"
 	"database/sql"
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
@@ -19,13 +20,13 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"pecheny.me/dopecore/session"
 	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
 
 	"pecheny.me/dopecore/authcred"
-	"pecheny.me/dopecore/session"
 )
 
 func TestDefaultMatchScores(t *testing.T) {
@@ -314,13 +315,14 @@ func insertTestPlayer(db *sql.DB, festID int64) (int64, error) {
 	return result.LastInsertId()
 }
 
+// A pasted multi-stage scheme lands as one Game with its Blocks, бои and
+// slot sources — and, since gamebuild writes it, each stage carries its Kind
+// and each бой its буква, so the pasted bracket ranks and links like a
+// compiled one.
 func TestImportMultiStageScheme(t *testing.T) {
-	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	defer db.Close()
-
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))
 	scheme := store.FestScheme{
 		SchemaVersion:     2,
 		Slug:              "multi-stage",
@@ -328,22 +330,17 @@ func TestImportMultiStageScheme(t *testing.T) {
 		GameType:          "ek",
 		RegularThemeCount: store.ThemeCount,
 		Venues:            []store.SchemeVenue{{Number: 1, Title: "Main"}},
-		Teams: []store.SchemeTeam{
-			{Name: "Alpha", Basket: 1, Number: 1},
-			{Name: "Beta", Basket: 1, Number: 2},
-			{Name: "Gamma", Basket: 1, Number: 3},
-			{Name: "Delta", Basket: 1, Number: 4},
-		},
 		Stages: []store.SchemeStage{
 			{
 				Code:      "r1",
 				Title:     "Round 1",
 				StageType: "matches",
+				Kind:      "rr",
 				Position:  1,
 				Matches: []store.SchemeMatch{
 					{
 						Code:             "A",
-						Title:            "A",
+						Title:            "Бой 1",
 						Venue:            1,
 						ParticipantCount: 2,
 						Slots: []store.SchemeSlot{
@@ -353,7 +350,7 @@ func TestImportMultiStageScheme(t *testing.T) {
 					},
 					{
 						Code:             "B",
-						Title:            "B",
+						Title:            "Бой 2",
 						Venue:            1,
 						ParticipantCount: 2,
 						Slots: []store.SchemeSlot{
@@ -370,7 +367,7 @@ func TestImportMultiStageScheme(t *testing.T) {
 				Position:  2,
 				Matches: []store.SchemeMatch{{
 					Code:             "C",
-					Title:            "C",
+					Title:            "Бой 3",
 					Venue:            1,
 					ParticipantCount: 2,
 					Slots: []store.SchemeSlot{
@@ -381,18 +378,13 @@ func TestImportMultiStageScheme(t *testing.T) {
 			},
 		},
 	}
-
-	srv := dopeserver.NewTestServer(func(e *core.Engine) {
-		e.DB = db
-		e.ActiveMatchCode = dopeserver.DefaultMatchCode
-		e.RT = realtime.NewManager()
-	})
-	view, err := srv.ImportScheme(scheme)
-	if err != nil {
-		t.Fatalf("import scheme: %v", err)
+	resp := importScheme(t, srv, festID, scheme, token)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("import: %d %s", resp.Code, resp.Body.String())
 	}
-	if view.Slug != "multi-stage" {
-		t.Fatalf("slug = %q, want multi-stage", view.Slug)
+	var view store.FestView
+	if err := json.Unmarshal(resp.Body.Bytes(), &view); err != nil {
+		t.Fatal(err)
 	}
 	if len(view.Stages) != 2 {
 		t.Fatalf("stages = %d, want 2", len(view.Stages))
@@ -400,13 +392,24 @@ func TestImportMultiStageScheme(t *testing.T) {
 	if len(view.Stages[0].Matches) != 2 || len(view.Stages[1].Matches) != 1 {
 		t.Fatalf("matches = %d/%d, want 2/1", len(view.Stages[0].Matches), len(view.Stages[1].Matches))
 	}
-	if view.Stages[0].Matches[0].Participants[0].Name != "Alpha" {
-		t.Fatalf("first team = %q, want Alpha", view.Stages[0].Matches[0].Participants[0].Name)
+	if view.Stages[0].Kind != "rr" {
+		t.Errorf("stage kind = %q, want rr", view.Stages[0].Kind)
 	}
 	final := view.Stages[1].Matches[0]
-	if final.Code != "C" || final.Participants[0].SourceType != "from_match" || final.Participants[1].SourceType != "from_match" {
-		t.Fatalf("final = %#v, want match C with fromMatch slots", final)
+	if final.Code != "C" || final.Letter != "C" || final.Participants[0].SourceType != "from_match" || final.Participants[1].SourceType != "from_match" {
+		t.Fatalf("final = %#v, want match C, буква C, fromMatch slots", final)
 	}
+}
+
+func importScheme(t *testing.T, srv *dopeserver.Server, festID int64, scheme store.FestScheme, token string) *httptest.ResponseRecorder {
+	t.Helper()
+	body, _ := json.Marshal(scheme)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/import?fest_id=%d", festID), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: session.CookieName, Value: token})
+	resp := httptest.NewRecorder()
+	srv.HandleImport(resp, req)
+	return resp
 }
 
 func TestEmptyDatabaseHasNoFest(t *testing.T) {
@@ -510,15 +513,9 @@ values(7, 'next', 'Next', 'ek', 2, '{}', '{}', 'pending', 'fest', 'fest', 1, 'no
 }
 
 func TestImportRejectsTeamSlot(t *testing.T) {
-	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	defer db.Close()
-	srv := dopeserver.NewTestServer(func(e *core.Engine) {
-		e.DB = db
-		e.RT = realtime.NewManager()
-	})
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))
 	scheme := store.FestScheme{
 		SchemaVersion: 2,
 		Slug:          "with-team-slot",
@@ -538,127 +535,9 @@ func TestImportRejectsTeamSlot(t *testing.T) {
 			}},
 		}},
 	}
-	if _, err := srv.ImportScheme(scheme); err == nil {
-		t.Fatal("expected error for slot.team, got nil")
-	} else if !strings.Contains(err.Error(), "removed source") {
-		t.Fatalf("error = %v, want mention of removed source", err)
-	}
-}
-
-func TestImportSeedSlotsResolveViaAssignments(t *testing.T) {
-	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	defer db.Close()
-	srv := dopeserver.NewTestServer(func(e *core.Engine) {
-		e.DB = db
-		e.RT = realtime.NewManager()
-	})
-	scheme := store.FestScheme{
-		SchemaVersion: 2,
-		Slug:          "symbolic",
-		Title:         "symbolic",
-		GameType:      "ek",
-		Stages: []store.SchemeStage{{
-			Code:      "r1",
-			Title:     "r1",
-			StageType: "matches",
-			Position:  1,
-			Matches: []store.SchemeMatch{{
-				Code:             "A",
-				Title:            "A",
-				ParticipantCount: 2,
-				Slots: []store.SchemeSlot{
-					{Seed: &store.SchemeSeedRef{Basket: 1, Number: 1}},
-					{Seed: &store.SchemeSeedRef{Basket: 1, Number: 2}},
-				},
-			}},
-		}},
-		Teams: []store.SchemeTeam{
-			{Name: "Alpha", Basket: 1, Number: 1},
-			{Name: "Beta", Basket: 1, Number: 2},
-		},
-	}
-	view, err := srv.ImportScheme(scheme)
-	if err != nil {
-		t.Fatalf("import: %v", err)
-	}
-	match := view.Stages[0].Matches[0]
-	if match.Participants[0].Name != "Alpha" || match.Participants[1].Name != "Beta" {
-		t.Fatalf("slot teams = %q/%q, want Alpha/Beta", match.Participants[0].Name, match.Participants[1].Name)
-	}
-	for _, team := range match.Participants {
-		if team.SourceType != "seed" {
-			t.Fatalf("source type = %q, want seed", team.SourceType)
-		}
-	}
-
-	var assignments int
-	if err := db.QueryRow(`select count(*) from game_assignments`).Scan(&assignments); err != nil {
-		t.Fatalf("count assignments: %v", err)
-	}
-	if assignments != 2 {
-		t.Fatalf("game_assignments rows = %d, want 2", assignments)
-	}
-
-	var sourceTeamRows int
-	if err := db.QueryRow(`select count(*) from match_slots where source_type = 'team'`).Scan(&sourceTeamRows); err != nil {
-		t.Fatalf("count team-source slots: %v", err)
-	}
-	if sourceTeamRows != 0 {
-		t.Fatalf("legacy team-source slots = %d, want 0", sourceTeamRows)
-	}
-}
-
-func TestSystemUserIsCreatedOnImport(t *testing.T) {
-	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	defer db.Close()
-	srv := dopeserver.NewTestServer(func(e *core.Engine) {
-		e.DB = db
-		e.RT = realtime.NewManager()
-	})
-	scheme := store.FestScheme{
-		SchemaVersion: 2,
-		Slug:          "minimal",
-		Title:         "minimal",
-		Stages: []store.SchemeStage{{
-			Code:      "r1",
-			Title:     "r1",
-			StageType: "matches",
-			Position:  1,
-			Matches: []store.SchemeMatch{{
-				Code: "A", Title: "A", ParticipantCount: 0,
-				Slots: []store.SchemeSlot{{Placeholder: "TBD"}},
-			}},
-		}},
-	}
-	if _, err := srv.ImportScheme(scheme); err != nil {
-		t.Fatalf("import: %v", err)
-	}
-	var systemUsers int
-	if err := db.QueryRow(`select count(*) from users where is_system = 1`).Scan(&systemUsers); err != nil {
-		t.Fatalf("count system users: %v", err)
-	}
-	if systemUsers != 1 {
-		t.Fatalf("system users = %d, want 1", systemUsers)
-	}
-	var organizers int
-	if err := db.QueryRow(`select count(*) from fest_organizers`).Scan(&organizers); err != nil {
-		t.Fatalf("count organizers: %v", err)
-	}
-	if organizers != 1 {
-		t.Fatalf("fest_organizers = %d, want 1", organizers)
-	}
-	var games int
-	if err := db.QueryRow(`select count(*) from games`).Scan(&games); err != nil {
-		t.Fatalf("count games: %v", err)
-	}
-	if games != 1 {
-		t.Fatalf("games = %d, want 1", games)
+	resp := importScheme(t, srv, festID, scheme, token)
+	if resp.Code != http.StatusBadRequest || !strings.Contains(resp.Body.String(), "removed source") {
+		t.Fatalf("import = %d %s, want 400 mentioning the removed source", resp.Code, resp.Body.String())
 	}
 }
 
