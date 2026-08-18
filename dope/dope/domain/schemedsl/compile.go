@@ -3,7 +3,6 @@ package schemedsl
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 
 	"dope/dope/domain/expr"
@@ -215,21 +214,12 @@ func keySet(lists ...[]string) map[string]bool {
 	return set
 }
 
-func (c *compiler) protocolConfigKey(base string) (string, bool) {
-	for _, param := range protocol.Params(c.in.GameType) {
-		if param.Key == base {
-			return param.Config, true
-		}
-	}
-	return "", false
-}
-
 func (c *compiler) checkKeys() error {
 	params := map[string]bool{}
 	for _, param := range protocol.Params(c.in.GameType) {
 		params[param.Key] = true
 	}
-	inDefaults := keySet(sortedNames(defaultsKeys), sortedNames(params))
+	inDefaults := keySet(structure.SortedNames(defaultsKeys), structure.SortedNames(params))
 	for _, word := range structure.Words() {
 		macro, _ := structure.MacroFor(word)
 		for _, key := range macro.Keys() {
@@ -240,12 +230,12 @@ func (c *compiler) checkKeys() error {
 	}
 	for key, v := range c.doc.Defaults.Values {
 		if !inDefaults[key] {
-			return errAt(v.Line, "неизвестный ключ %s в [defaults] (есть %s)", key, strings.Join(sortedNames(inDefaults), ", "))
+			return errAt(v.Line, "неизвестный ключ %s в [defaults] (есть %s)", key, strings.Join(structure.SortedNames(inDefaults), ", "))
 		}
 	}
 	for key, v := range c.doc.Init.Values {
 		if !initKeys[key] {
-			return errAt(v.Line, "неизвестный ключ %s в [init] (есть %s)", key, strings.Join(sortedNames(initKeys), ", "))
+			return errAt(v.Line, "неизвестный ключ %s в [init] (есть %s)", key, strings.Join(structure.SortedNames(initKeys), ", "))
 		}
 	}
 	for _, blk := range c.doc.Blocks {
@@ -254,8 +244,8 @@ func (c *compiler) checkKeys() error {
 		if !ok {
 			continue // expandBlock names the kind it does not know
 		}
-		known := keySet(commonKeys, sortedNames(params))
-		dotted := keySet(dottedKeys, sortedNames(params))
+		known := keySet(commonKeys, structure.SortedNames(params))
+		dotted := keySet(dottedKeys, structure.SortedNames(params))
 		for _, key := range macro.Keys() {
 			known[key.Name] = true
 			if key.Round {
@@ -266,12 +256,12 @@ func (c *compiler) checkKeys() error {
 			base, _, isDotted := strings.Cut(key, ".")
 			if isDotted {
 				if !dotted[base] {
-					return errAt(v.Line, "неизвестный ключ %s (раунд дописывают к %s)", key, strings.Join(sortedNames(dotted), ", "))
+					return errAt(v.Line, "неизвестный ключ %s (раунд дописывают к %s)", key, strings.Join(structure.SortedNames(dotted), ", "))
 				}
 				continue // round suffixes are validated by the block's kind
 			}
 			if !known[key] {
-				return errAt(v.Line, "неизвестный ключ %s (есть %s)", key, strings.Join(sortedNames(known), ", "))
+				return errAt(v.Line, "неизвестный ключ %s (есть %s)", key, strings.Join(structure.SortedNames(known), ", "))
 			}
 		}
 	}
@@ -335,10 +325,6 @@ func (c *compiler) readVenues() error {
 	return nil
 }
 
-func (c *compiler) venueFor(index int) int {
-	return (index-1)%c.venueCount + 1
-}
-
 // blockVenues resolves a block's (or, dotted, one round's) `venues` subset to
 // venue numbers, by title or number; nil = no restriction.
 func (c *compiler) blockVenues(blk Section, rounds []string) ([]int, error) {
@@ -374,15 +360,6 @@ func (c *compiler) blockVenues(blk Section, rounds []string) ([]int, error) {
 		return nums, nil
 	}
 	return nil, nil
-}
-
-// venuePick assigns the i-th lane a venue, cycling the restricted subset when
-// one is declared.
-func (c *compiler) venuePick(restricted []int, i int) int {
-	if len(restricted) == 0 {
-		return c.venueFor(i)
-	}
-	return restricted[(i-1)%len(restricted)]
 }
 
 // --- cascade ---------------------------------------------------------------
@@ -606,7 +583,7 @@ func (c *compiler) reseedSortRules(blk Section) ([]store.SchemeSortRule, error) 
 	for _, token := range tokens {
 		if !known[token.Metric] {
 			return nil, errAt(blk.Line, "sorting: %s не считается на пересеве — ни протокол, ни правила подсчёта такой метрики не дают (есть %s)",
-				token.Metric, strings.Join(sortedNames(known), ", "))
+				token.Metric, strings.Join(structure.SortedNames(known), ", "))
 		}
 		rules = append(rules, store.SchemeSortRule{Metric: token.Metric, Dir: sortDir(token)})
 	}
@@ -924,22 +901,11 @@ func (c *compiler) rejectRoundKeys(blk Section, rounds []string) error {
 			continue // a scoring rule's suffix is a metric name, not a round
 		}
 		if !known[suffix] {
-			return errAt(v.Line, "%s: в этом блоке нет раунда %s (есть %s)", key, suffix, strings.Join(sortedNames(known), ", "))
+			return errAt(v.Line, "%s: в этом блоке нет раунда %s (есть %s)", key, suffix, strings.Join(structure.SortedNames(known), ", "))
 		}
 		if prefix == "match_size" && !strings.HasPrefix(suffix, "r") {
 			return errAt(v.Line, "%s: размер боя задаётся по номеру раунда, match_size.r%s", key, "N")
 		}
 	}
 	return nil
-}
-
-// sortedNames renders a name set for an error message, so a typo is answered
-// with the list the author could have meant.
-func sortedNames(set map[string]bool) []string {
-	names := make([]string, 0, len(set))
-	for name := range set {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
 }

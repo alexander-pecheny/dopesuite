@@ -801,7 +801,11 @@ select g.fest_id, g.id from games g join matches m on m.game_id = g.id and m.cod
 	}
 	defer tx.Rollback()
 	for _, f := range games {
-		if err := flatgame.SettleTx(context.Background(), tx, f.festID, f.gameID); err != nil {
+		err := flatgame.SettleTx(context.Background(), tx, f.festID, f.gameID)
+		if errors.Is(err, flatgame.ErrNotFlat) {
+			continue
+		}
+		if err != nil {
 			return fmt.Errorf("game %d: %w", f.gameID, err)
 		}
 	}

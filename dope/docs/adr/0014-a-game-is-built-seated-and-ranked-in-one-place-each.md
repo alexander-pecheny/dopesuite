@@ -62,4 +62,12 @@ server's.
 - `structure.Block` has one adapter, the compiler's; a fake for
   `structure`'s own Kind tests is the second the seam is waiting for.
 - A migration is a value: a new step takes the next number, goes at the end
-  of the list, and is rehearsed on a prod snapshot before it ships.
+  of the list, and is rehearsed on a prod snapshot before it ships. The base
+  schema is version 2, the number prod recorded for it; 1, 6, 7 and 20 have
+  no step.
+- A flat seat without a number stays empty and unranked; a КСИ document that
+  still lists names alone gets no table and cannot seed. Prod's flat games
+  are all numbered (rehearsed 18 Aug 2026).
+- Without `[init] sorting:` a seed source is read in rank order, a shared
+  place broken by the source Protocol's own Metrics — ОД's rating after
+  взятые, as the old comparator did.

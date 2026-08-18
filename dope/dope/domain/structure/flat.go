@@ -25,12 +25,12 @@ func (flat) Keys() []Key  { return []Key{{Name: "participants"}} }
 // and КСИ have always been this shape in the database; the Kind only lets a
 // scheme say so.
 func (flat) Expand(b Block) (Outputs, error) {
-	teams, ok := b.Int("participants")
+	participants, ok := b.Int("participants")
 	if !ok {
 		if b.Seeded() == 0 {
 			return Outputs{}, errors.New("flat: нужен participants")
 		}
-		teams = b.Seeded()
+		participants = b.Seeded()
 	}
 	if err := b.Rounds(nil); err != nil {
 		return Outputs{}, err
@@ -40,7 +40,7 @@ func (flat) Expand(b Block) (Outputs, error) {
 	if err != nil {
 		return Outputs{}, err
 	}
-	entrants, err := b.Entrants(1, teams)
+	entrants, err := b.Entrants(1, participants)
 	if err != nil {
 		return Outputs{}, err
 	}

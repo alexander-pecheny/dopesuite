@@ -22,7 +22,6 @@ type blockHandle struct {
 }
 
 func (b *blockHandle) Code() string { return fmt.Sprintf("s%d", b.index+1) }
-func (b *blockHandle) Only() bool   { return len(b.c.doc.Blocks) == 1 }
 func (b *blockHandle) First() bool  { return b.index == 0 }
 func (b *blockHandle) Seeded() int  { return len(b.c.in.Entrants) }
 
@@ -38,7 +37,6 @@ func (b *blockHandle) Int(key string) (int, bool) {
 
 func (b *blockHandle) Bool(key string) (bool, bool)  { return b.blk.Bool(key) }
 func (b *blockHandle) Str(key string) (string, bool) { return b.blk.Str(key) }
-func (b *blockHandle) Has(key string) bool           { _, ok := b.blk.Values[key]; return ok }
 
 func (b *blockHandle) IntList(key string) ([]int, bool, error) {
 	sections := []Section{b.blk}
@@ -54,17 +52,8 @@ func (b *blockHandle) IntList(key string) ([]int, bool, error) {
 	return nil, false, nil
 }
 
-func (b *blockHandle) RoundInt(key string, names []string) (int, bool) {
-	for _, name := range names {
-		if v, ok := b.blk.Int(key + "." + name); ok {
-			return v, true
-		}
-	}
-	return b.blk.Int(key)
-}
-
 func (b *blockHandle) Rounds(names []string) error {
-	if names == nil {
+	if len(names) == 0 {
 		if _, round := blockReseedSpec(b.blk); round != "" {
 			return errAt(b.blk.Values["reseed"].Line, "reseed: в этом блоке нет раунда %s — только true/false", round)
 		}
@@ -146,7 +135,7 @@ func (b *blockHandle) Emit(s structure.Stage) ([]string, error) {
 			return nil, errAt(b.blk.Line, "slug — латиница, цифры и дефис, а не %q", s.Slug)
 		}
 	}
-	where := at{block: b.Code(), round: s.At.Round, group: s.At.Group}
+	where := b.at(s.At)
 	if s.Matches == nil {
 		expander, ok := structure.ExpanderFor(s.Kind)
 		if !ok {
@@ -181,8 +170,15 @@ func (b *blockHandle) Emit(s structure.Stage) ([]string, error) {
 	return []string{s.Code}, nil
 }
 
-func (b *blockHandle) EmitReseed(code string, where structure.At, teams []store.SchemeSlot, bands []int, sources []string) (string, error) {
-	return b.c.reseedStageBanded(code, at{block: b.Code(), round: where.Round, group: where.Group}, b.blk, sources, teams, bands)
+func (b *blockHandle) EmitReseed(code string, where structure.At, contenders []store.SchemeSlot, bands []int, sources []string) (string, error) {
+	if !strings.HasPrefix(code, b.Code()+"-") {
+		return "", fmt.Errorf("reseed %s outside block %s", code, b.Code())
+	}
+	return b.c.reseedStageBanded(code, b.at(where), b.blk, sources, contenders, bands)
+}
+
+func (b *blockHandle) at(where structure.At) at {
+	return at{block: b.Code(), round: where.Round, group: where.Group}
 }
 
 // pin turns a Kind's complaint into a DSL error at the right line: a KeyError

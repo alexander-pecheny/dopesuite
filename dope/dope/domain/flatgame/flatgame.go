@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"dope/dope/domain/protocol"
 	"dope/dope/domain/resolver"
@@ -19,6 +20,9 @@ import (
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
 )
+
+// ErrNotFlat is a game whose Protocol keeps no document on one бой.
+var ErrNotFlat = errors.New("flatgame: not a flat format")
 
 // SetStateTx replaces the whole document, journalled as one replace op.
 func SetStateTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, raw string) error {
@@ -64,7 +68,7 @@ select g.game_type, m.state_json from matches m join games g on g.id = m.game_id
 	}
 	seats, ok := protocol.Seats(gameType, json.RawMessage(state))
 	if !ok {
-		return errors.New("flatgame: " + gameType + " keeps no document on a бой")
+		return fmt.Errorf("%w: %s", ErrNotFlat, gameType)
 	}
 	if err := seatTx(ctx, tx, festID, gameID, matchID, seats); err != nil {
 		return err

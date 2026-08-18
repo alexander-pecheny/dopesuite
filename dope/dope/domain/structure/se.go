@@ -35,7 +35,7 @@ func seRoundTitle(remaining int) string {
 // carried forward, with an optional reseed at a Round boundary, a bronze бой
 // and a best-of series in the final.
 func (singleElim) Expand(b Block) (Outputs, error) {
-	teams, ok := b.Int("participants")
+	participants, ok := b.Int("participants")
 	if !ok {
 		return Outputs{}, errors.New("single_elimination: нужен participants")
 	}
@@ -56,7 +56,7 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 		return size
 	}
 	maxRounds, _ := b.Int("rounds")
-	plan, err := planElimRounds(teams, winning, maxRounds, sizeFor)
+	plan, err := planElimRounds(participants, winning, maxRounds, sizeFor)
 	if err != nil {
 		return Outputs{}, fmt.Errorf("single_elimination: %s", err)
 	}
@@ -65,7 +65,7 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 	for i, r := range plan {
 		rounds = append(rounds, elimRoundNames(r, i, winning)...)
 	}
-	if bronze && teams >= 4 {
+	if bronze && participants >= 4 {
 		rounds = append(rounds, "bronze")
 	}
 	if err := b.Rounds(rounds); err != nil {
@@ -85,7 +85,7 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 		if boundaryAt == 0 {
 			return Outputs{}, Keyf("reseed", "reseed: в этом блоке нет раунда %s", boundary)
 		}
-		if boundaryAt == teams {
+		if boundaryAt == participants {
 			return Outputs{}, Keyf("reseed", "reseed: %s — первый раунд, пишите reseed: true", boundary)
 		}
 	}
@@ -270,13 +270,13 @@ func appendBronze(b Block, semifinalCodes []string, round int) error {
 // seFirstRound seats the opening round: bracket order over seeds, or the
 // winner-meets-runner-up template over the previous block's paired groups.
 func seFirstRound(b Block, opening elimRound, winning int) ([][]store.SchemeSlot, error) {
-	teams, count := opening.entering, opening.bouts
+	participants, count := opening.entering, opening.bouts
 	if b.First() {
-		seeds, err := b.Seeds(teams)
+		seeds, err := b.Seeds(participants)
 		if err != nil {
 			return nil, err
 		}
-		draw := elimDraw(teams, count, opening.size, winning)
+		draw := elimDraw(participants, count, opening.size, winning)
 		first := make([][]store.SchemeSlot, count)
 		for i := 0; i < count; i++ {
 			for _, rank := range draw[i] {
@@ -302,7 +302,7 @@ func seFirstRound(b Block, opening elimRound, winning int) ([][]store.SchemeSlot
 	if opening.size != 2 || winning != 1 {
 		return nil, fmt.Errorf("нет шаблона рассадки в бои по %d из предыдущего блока — добавьте reseed: true", opening.size)
 	}
-	if prev.Proceeding != 2 || len(prev.Groups)%2 != 0 || len(prev.Groups)*2 != teams {
+	if prev.Proceeding != 2 || len(prev.Groups)%2 != 0 || len(prev.Groups)*2 != participants {
 		return nil, errors.New("нет шаблона рассадки из этих групп — добавьте reseed: true")
 	}
 	// Pods (paired groups) fill opposite bracket halves: winners' matches

@@ -45,23 +45,23 @@ func (pod) Expand(b Block) (Outputs, error) {
 	}
 	groups, hasGroups := b.Int("groups")
 	perGroup, hasSize := b.Int("group_size")
-	teams, hasTeams := b.Int("participants")
+	participants, hasTeams := b.Int("participants")
 	switch {
 	case hasGroups && hasSize:
 	case hasGroups && hasTeams:
-		perGroup = teams / groups
+		perGroup = participants / groups
 	case hasSize && hasTeams:
-		groups = teams / perGroup
+		groups = participants / perGroup
 	case hasTeams && size == 2 && winning == 1:
 		// The classic pod: four to a group unless the scheme says otherwise.
-		if teams%4 != 0 {
+		if participants%4 != 0 {
 			return Outputs{}, errors.New("double_elimination: нужен groups (или participants, кратный 4)")
 		}
-		groups, perGroup = teams/4, 4
+		groups, perGroup = participants/4, 4
 	case hasGroups && !hasTeams && !hasSize && size == 2 && winning == 1:
 		perGroup = 4
 	case hasTeams:
-		groups, perGroup = 1, teams
+		groups, perGroup = 1, participants
 	default:
 		return Outputs{}, errors.New("double_elimination: нужен participants (или groups и group_size)")
 	}
@@ -69,7 +69,7 @@ func (pod) Expand(b Block) (Outputs, error) {
 		return Outputs{}, fmt.Errorf("double_elimination: %d групп по %d — так не бывает", groups, perGroup)
 	}
 	proceeding := 1
-	if v, ok := b.Int("proceeding_participants"); ok {
+	if v, ok := b.Proceeding(); ok {
 		proceeding = v
 	}
 	// A пересев hands the block a ranking, so its opening round deals that

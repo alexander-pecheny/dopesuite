@@ -38,7 +38,6 @@ type Key struct {
 // schedule order: it decides Position and the буквы.
 type Block interface {
 	Code() string // «s2» — every code the Kind emits starts with it
-	Only() bool   // the scheme has this one Block: titles stay bare
 	First() bool  // no Block before it: seats come from the seed
 	Seeded() int  // how many entrants the caller seeded; 0 = positional Посев placeholders
 
@@ -46,9 +45,7 @@ type Block interface {
 	Bool(key string) (bool, bool)
 	Str(key string) (string, bool)
 	IntList(key string) ([]int, bool, error)
-	RoundInt(key string, names []string) (int, bool) // key.<name> for the first name set, else key
-	Has(key string) bool
-	Rounds(names []string) error // the Round names the Kind generates; a dotted key naming another is refused
+	Rounds(names []string) error // the Round names the Kind generates (none: it has no addressable Rounds); a dotted key naming another is refused
 
 	Sorting() ([]store.SortRule, bool, error)
 	DefaultSorting() ([]store.SortRule, bool, error)
@@ -69,7 +66,7 @@ type Block interface {
 	Sources(otherwise, self []string) ([]string, error)      // what a reseed sums over, stats_from applied
 
 	Emit(s Stage) ([]string, error)
-	EmitReseed(code string, at At, teams []store.SchemeSlot, bands []int, sources []string) (string, error)
+	EmitReseed(code string, at At, contenders []store.SchemeSlot, bands []int, sources []string) (string, error)
 }
 
 // Stage is one stage a Kind emits: a scheduled one (Kind rr or flat, its typed
@@ -114,7 +111,6 @@ type Lanes struct {
 	Total      int
 }
 
-// Pick assigns the i-th бой its стол, cycling the subset or the whole.
 func (l Lanes) Pick(i int) int {
 	if len(l.Restricted) == 0 {
 		return (i-1)%l.Total + 1
@@ -122,7 +118,6 @@ func (l Lanes) Pick(i int) int {
 	return l.Restricted[(i-1)%len(l.Restricted)]
 }
 
-// PerWave is how many бои play at once.
 func (l Lanes) PerWave() int {
 	if len(l.Restricted) == 0 {
 		return l.Total
@@ -150,13 +145,11 @@ func Keyf(key, format string, args ...any) error {
 
 var macros = map[string]Macro{}
 
-// MacroFor looks up the Kind the DSL word names.
 func MacroFor(word string) (Macro, bool) {
 	m, ok := macros[word]
 	return m, ok
 }
 
-// Words lists the registered DSL words, sorted, for an error to offer.
 func Words() []string {
 	words := make([]string, 0, len(macros))
 	for w := range macros {
@@ -166,7 +159,6 @@ func Words() []string {
 	return words
 }
 
-// FromMatch is a seat taken by place p of a бой.
 func FromMatch(matchCode string, place int) store.SchemeSlot {
 	return store.SchemeSlot{FromMatch: &store.SchemeFromMatchRef{Match: matchCode, Place: place}}
 }
@@ -179,7 +171,6 @@ func LabelledFromMatch(matchCode, boutLabel string, place int) store.SchemeSlot 
 	return slot
 }
 
-// ReseedRank is a seat taken by rank r of a reseed stage.
 func ReseedRank(stage string, rank int) store.SchemeSlot {
 	return store.SchemeSlot{
 		Reseed: &store.SchemeReseedRef{Stage: stage, Rank: rank},

@@ -130,12 +130,12 @@ select code from matches where game_id = ? order by position, id limit 1`, gameI
 // DefaultBrainDSL is a брейн at its plainest: one round-robin of everybody,
 // so many questions a бой. The creation form offers it and Clear upgrades a
 // pre-DSL брейн onto it.
-func DefaultBrainDSL(teams, questions int) string {
-	if teams < 2 {
-		teams = 4
+func DefaultBrainDSL(participants, questions int) string {
+	if participants < 2 {
+		participants = 4
 	}
 	if questions <= 0 {
 		questions = 5
 	}
-	return fmt.Sprintf("[defaults]\nquestions: %d\n\n[scheme]\nkind: roundrobin\ngroup_size: %d\n", questions, teams)
+	return fmt.Sprintf("[defaults]\nquestions: %d\n\n[scheme]\nkind: roundrobin\ngroup_size: %d\n", questions, participants)
 }

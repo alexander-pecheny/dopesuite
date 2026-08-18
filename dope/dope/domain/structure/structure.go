@@ -201,7 +201,7 @@ func Register(kind interface{ Code() string }) {
 		registered = true
 	}
 	if !registered {
-		panic("structure: kind " + kind.Code() + " is neither an Expander nor a Ranker")
+		panic("structure: kind " + kind.Code() + " has no role — Macro, Expander or Ranker")
 	}
 }
 
