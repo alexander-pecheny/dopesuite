@@ -102,29 +102,11 @@ func (s *server) handleListBoards(w http.ResponseWriter, r *http.Request) {
 	// predicate (see the board snapshot / activity feed) across the whole board.
 	rows, err := s.db.QueryContext(r.Context(), `
 select b.id, b.name, b.name_enc, b.schema_version, m.role, b.created_at, b.updated_at, m.last_visited_at,
-  exists(
-    select 1 from timeline_events e
-    join cards c on c.id = e.card_id and c.deleted_at is null
-    left join card_reads cr on cr.card_id = e.card_id and cr.user_id = m.user_id
-    where e.board_id = b.id and e.author_user_id is not null and e.author_user_id <> m.user_id
-      and (((e.type = 'comment' or (e.type = 'reaction' and e.reply_to_id is not null))
-              and e.id > coalesce(cr.comment_read_id,0))
-        or (not (e.type = 'comment' or (e.type = 'reaction' and e.reply_to_id is not null))
-              and e.id > coalesce(cr.content_read_id,0)))
-  ) as unread,
-  exists(
-    select 1 from timeline_events e
-    join cards c on c.id = e.card_id and c.deleted_at is null
-    left join card_reads cr on cr.card_id = e.card_id and cr.user_id = m.user_id
-    where e.board_id = b.id and e.deleted_at is null
-      and e.author_user_id is not null and e.author_user_id <> m.user_id
-      and e.type = 'comment' and e.id > coalesce(cr.comment_read_id,0)
-      and (exists(select 1 from event_mentions em where em.event_id = e.id and em.user_id = m.user_id)
-        or exists(select 1 from timeline_events p where p.id = e.reply_to_id and p.author_user_id = m.user_id))
-  ) as unread_mentions
+  exists(select 1 `+sqlEventsOfOthers+` and e.board_id = b.id and `+sqlUnread+`) as unread,
+  exists(select 1 `+sqlEventsOfOthers+` and e.board_id = b.id and `+sqlUnreadComment+` and `+sqlMention("m.user_id")+`) as unread_mentions
 from boards b join board_members m on m.board_id = b.id
 where m.user_id = ? and b.deleted_at is null
-order by m.last_visited_at is null, m.last_visited_at desc, b.updated_at desc`, u.UserID)
+order by m.last_visited_at is null, m.last_visited_at desc, b.updated_at desc`, u.UserID, u.UserID, u.UserID, u.UserID, u.UserID)
 	if handleErr(w, err) {
 		return
 	}
@@ -409,19 +391,11 @@ where c.board_id = ? and c.deleted_at is null`, bid)
 	// cards are omitted entirely to keep the payload small.
 	unreadRows, err := s.db.QueryContext(ctx, `
 select e.card_id,
-  max(case when (e.type = 'comment' or (e.type = 'reaction' and e.reply_to_id is not null))
-        and e.id > coalesce(cr.comment_read_id,0) then 1 else 0 end),
-  max(case when not (e.type = 'comment' or (e.type = 'reaction' and e.reply_to_id is not null))
-        and e.id > coalesce(cr.content_read_id,0) then 1 else 0 end),
-  max(case when e.type = 'comment' and e.id > coalesce(cr.comment_read_id,0)
-        and (exists(select 1 from event_mentions em where em.event_id = e.id and em.user_id = ?)
-          or exists(select 1 from timeline_events p where p.id = e.reply_to_id and p.author_user_id = ?))
-      then 1 else 0 end)
-from timeline_events e
-join cards c on c.id = e.card_id and c.deleted_at is null
-left join card_reads cr on cr.card_id = e.card_id and cr.user_id = ?
-where e.board_id = ? and e.deleted_at is null and e.author_user_id is not null and e.author_user_id <> ?
-group by e.card_id`, uid, uid, uid, bid, uid)
+  max(case when `+sqlUnreadComment+` then 1 else 0 end),
+  max(case when `+sqlUnreadContent+` then 1 else 0 end),
+  max(case when `+sqlUnreadComment+` and `+sqlMention("?")+` then 1 else 0 end)
+`+sqlEventsOfOthers+` and e.board_id = ?
+group by e.card_id`, uid, uid, uid, uid, bid)
 	if handleErr(w, err) {
 		return
 	}

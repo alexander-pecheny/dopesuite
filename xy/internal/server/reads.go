@@ -90,24 +90,12 @@ func (s *server) handleBoardActivity(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := s.db.QueryContext(r.Context(), `
 select e.id, e.card_id, e.type, e.author_user_id, e.created_at, e.payload_enc, e.reply_to_id,
-  case
-    when (e.type = 'comment' or (e.type = 'reaction' and e.reply_to_id is not null))
-      and e.id > coalesce(cr.comment_read_id,0) then 1
-    when not (e.type = 'comment' or (e.type = 'reaction' and e.reply_to_id is not null))
-      and e.id > coalesce(cr.content_read_id,0) then 1
-    else 0 end as unread,
-  case when e.type = 'comment'
-    and exists(select 1 from event_mentions em where em.event_id = e.id and em.user_id = ?)
-    then 1 else 0 end as mention_explicit,
-  case when e.type = 'comment'
-    and exists(select 1 from timeline_events p where p.id = e.reply_to_id and p.author_user_id = ?)
-    then 1 else 0 end as mention_reply
-from timeline_events e
-join cards c on c.id = e.card_id and c.deleted_at is null
-left join card_reads cr on cr.card_id = e.card_id and cr.user_id = ?
-where e.board_id = ? and e.deleted_at is null and e.author_user_id is not null and e.author_user_id <> ?
+  case when `+sqlUnread+` then 1 else 0 end as unread,
+  case when `+sqlMentionExplicit("?")+` then 1 else 0 end as mention_explicit,
+  case when `+sqlMentionReply("?")+` then 1 else 0 end as mention_reply
+`+sqlEventsOfOthers+` and e.board_id = ?
 order by e.id desc
-limit ?`, uid, uid, uid, bid, uid, limit)
+limit ?`, uid, uid, uid, uid, bid, limit)
 	if handleErr(w, err) {
 		return
 	}
@@ -148,8 +136,8 @@ func (s *server) handleBoardReadAll(w http.ResponseWriter, r *http.Request) {
 		_, err := tx.ExecContext(ctx, `
 insert into card_reads(user_id, card_id, content_read_id, comment_read_id, updated_at)
 select ?, c.id,
-  coalesce(max(case when not (e.type = 'comment' or (e.type = 'reaction' and e.reply_to_id is not null)) then e.id end), 0),
-  coalesce(max(case when e.type = 'comment' or (e.type = 'reaction' and e.reply_to_id is not null) then e.id end), 0),
+  coalesce(max(case when not `+sqlCommentBucket+` then e.id end), 0),
+  coalesce(max(case when `+sqlCommentBucket+` then e.id end), 0),
   ?
 from cards c left join timeline_events e on e.card_id = c.id
 where c.board_id = ? and c.deleted_at is null

@@ -217,12 +217,31 @@ func TestBoardListVisitOrdering(t *testing.T) {
 	a.decode(resp, &cc)
 	mustStatus(t, b.do("POST", "/api/cards/"+itoa(cc.ID)+"/comments", map[string]string{"payload_enc": enc("hi")}), 204)
 
-	for _, bs := range list() {
-		if itoa(bs.ID) == board2 && !bs.Unread {
-			t.Fatalf("board2 not flagged unread after B's comment")
+	unreadOf := func(board string) bool {
+		for _, bs := range list() {
+			if itoa(bs.ID) == board {
+				return bs.Unread
+			}
 		}
-		if itoa(bs.ID) == board1 && bs.Unread {
-			t.Fatalf("board1 flagged unread with no foreign events")
-		}
+		t.Fatalf("board %s missing from the list", board)
+		return false
+	}
+	if !unreadOf(board2) {
+		t.Fatalf("board2 not flagged unread after B's comment")
+	}
+	if unreadOf(board1) {
+		t.Fatalf("board1 flagged unread with no foreign events")
+	}
+
+	// B deletes the comment: a tombstoned event badges nothing — the board
+	// list reads the same rule as the snapshot and the feed.
+	var activity []activityEventDTO
+	a.decode(a.do("GET", "/api/boards/"+board2+"/activity", nil), &activity)
+	if len(activity) != 1 {
+		t.Fatalf("activity = %+v, want the one comment", activity)
+	}
+	mustStatus(t, b.do("DELETE", "/api/comments/"+itoa(activity[0].ID), nil), 204)
+	if unreadOf(board2) {
+		t.Fatalf("board2 still flagged unread after the comment was deleted")
 	}
 }
