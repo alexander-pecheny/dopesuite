@@ -12,7 +12,8 @@ import { xyRank } from "./rank.js";
 import { rankForSlot } from "./dragrank.js";
 import { nowStamp } from "./carddetail.js";
 import { modal } from "./modal.js";
-import type { CardDetail, MoveCtx } from "./carddetail.js";
+import type { MoveCtx } from "./carddetail.js";
+import type { Transfer } from "./transfer.js";
 import type { Board, ListPanel } from "./panels.js";
 import type { BoardList } from "./unlock.js";
 
@@ -21,7 +22,7 @@ const { keyBetween } = xyRank;
 
 interface MoveBoardItem { id: number; name?: string; name_enc?: string | null; schema_version?: number }
 
-export function createMoveListPanel(board: Board, cardDetail: Pick<CardDetail, "loadMoveBoard" | "cardCopyBody" | "copyCardExtras" | "reconcilePlayings" | "reconcileLabels">): ListPanel {
+export function createMoveListPanel(board: Board, transfer: Pick<Transfer, "loadMoveBoard" | "transferCard">): ListPanel {
 
   let listMoveSrc: BoardList | null = null;  // the list being moved/copied
   let listMoveCtx: MoveCtx | null = null;  // destination board ctx (from loadMoveBoard)
@@ -63,7 +64,7 @@ export function createMoveListPanel(board: Board, cardDetail: Pick<CardDetail, "
     const posSel = byId<HTMLSelectElement>("moveListPos");
     const bid = Number(byId<HTMLSelectElement>("moveListBoard").value);
     posSel.replaceChildren(el("option", { value: "", text: "загрузка…" }));
-    try { listMoveCtx = await cardDetail.loadMoveBoard(bid); }
+    try { listMoveCtx = await transfer.loadMoveBoard(bid); }
     catch (err) {
       listMoveCtx = null;
       posSel.replaceChildren(el("option", { value: "", text: errMsg(err) }));
@@ -125,47 +126,18 @@ export function createMoveListPanel(board: Board, cardDetail: Pick<CardDetail, "
     if (!xySync.requireOnline("Копирование и перенос между досками доступны только онлайн.", msg)) return;
     msg.textContent = sameBoard ? "Копирование…" : "Перешифровка…";
     try {
-      if (sameBoard) {
-        // Duplicate the list and its cards on this board.
-        const key = board.dk();
-        const lres = (await jpost(`/api/boards/${board.id}/lists`, {
-          title_enc: await xyCrypto.encField(key, src.title), rank, type,
-        })) as { id: number };
-        board.state.lists.push({ id: lres.id, type, rank, groupId: null, title: src.title });
-        let cr: string | null = null;
-        for (const c of srcCards) {
-          cr = keyBetween(cr, null);
-          const cres = (await jpost(`/api/lists/${lres.id}/cards`, await cardDetail.cardCopyBody(c, cr, key))) as { id: number };
-          board.state.cards.push({ id: cres.id, listId: lres.id, kind: c.kind, rank: cr, desc: c.desc, handoutMeta: c.handoutMeta || null, alias: c.alias || null, createdAt: nowStamp() });
-          const own = board.assignmentsOf(c.id, null);
-          if (own.length) {
-            await jput(`/api/cards/${cres.id}/labels`, { labels: own.map((a) => ({ label_id: a.labelId, session_id: null })) });
-            board.state.cardLabels.push(...own.map((a) => ({ cardId: cres.id, labelId: a.labelId, sessionId: null })));
-          }
-          await cardDetail.copyCardExtras(c.id, key, cres.id);
-        }
-      } else {
-        // Cross-board: re-encrypt under the target board's key, reconcile labels by
-        // decrypted name+color (same as the per-card path).
-        const tdk = ctx.dk;
-        const lres = (await jpost(`/api/boards/${targetBid}/lists`, {
-          title_enc: await xyCrypto.encField(tdk, src.title), rank, type,
-        })) as { id: number };
-        let cr: string | null = null;
-        for (const c of srcCards) {
-          cr = keyBetween(cr, null);
-          const cres = (await jpost(`/api/lists/${lres.id}/cards`, await cardDetail.cardCopyBody(c, cr, tdk))) as { id: number };
-          const plays = await cardDetail.reconcilePlayings(c.id, targetBid, tdk, ctx);
-          if (plays.length) await jput(`/api/cards/${cres.id}/sessions`, { session_ids: plays });
-          const assignments = await cardDetail.reconcileLabels(c.id, targetBid, tdk, ctx);
-          if (assignments.length) await jput(`/api/cards/${cres.id}/labels`, { labels: assignments });
-          await cardDetail.copyCardExtras(c.id, tdk, cres.id);
-        }
-        if (remove) {
-          await jdelete(`/api/lists/${src.id}`);
-          board.state.lists = board.state.lists.filter((l) => l.id !== src.id);
-          board.state.cards = board.state.cards.filter((c) => c.listId !== src.id);
-        }
+      // The new list, then every card through the one transfer path — a copy
+      // on this board, a re-encryption onto another — in order.
+      const key = sameBoard ? board.dk() : ctx.dk;
+      const lres = (await jpost(`/api/boards/${targetBid}/lists`, {
+        title_enc: await xyCrypto.encField(key, src.title), rank, type,
+      })) as { id: number };
+      if (sameBoard) board.state.lists.push({ id: lres.id, type, rank, groupId: null, title: src.title });
+      for (const c of srcCards) await transfer.transferCard(c, lres.id, ctx, false);
+      if (!sameBoard && remove) {
+        await jdelete(`/api/lists/${src.id}`);
+        board.state.lists = board.state.lists.filter((l) => l.id !== src.id);
+        board.state.cards = board.state.cards.filter((c) => c.listId !== src.id);
       }
       board.render();
       msg.textContent = remove ? "Перемещено." : "Скопировано.";

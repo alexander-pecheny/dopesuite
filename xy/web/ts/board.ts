@@ -27,6 +27,7 @@ import { createUnlock } from "./unlock.js";
 import { boardOrder, byRank, dragAfterIn, dragAfterInX, rankAfterMove } from "./dragrank.js";
 import { createTimeline, decodeCommentPayload, eventAuthor } from "./timeline.js";
 import { createCardDetail, nowStamp } from "./carddetail.js";
+import { createTransfer } from "./transfer.js";
 import { type AnnounceCity, parseSession, type SessionMeta, sessionLabel, type TitleMode, whoSaw } from "./sessions.js";
 import * as people from "./people.js";
 import { createSessionsPanel } from "./sessionspanel.js";
@@ -1248,8 +1249,13 @@ const attachments = createAttachments({
   onCommentImage: (attId) => timeline.addDraftImage(attId),
 });
 
+// transfer moves and copies cards within and across boards; the card editor,
+// «Массовое действие» and «Переместить список…» share it.
+const transfer = createTransfer({ boardId, getState: () => state, getDK: () => dk, verbs: { patch }, cardsOf, labelById });
+
 const cardDetail = createCardDetail({
   boardId,
+  transfer,
   ui: {
     addVersion: byId("cardAddVersion"),
     alias: byId<HTMLInputElement>("cardAlias"),
@@ -1740,7 +1746,7 @@ const rewrites = createRewrites(board);
 const labelsEditor = createLabelsEditor(board);
 const testerList = createTesterList(board, shell, cardDetail);
 const listsManage = createListsManage(board);
-const mass = createMassPanel(board, { kanban, cardDetail, forgetCardLabels, paintLabels });
+const mass = createMassPanel(board, { kanban, transfer, forgetCardLabels, paintLabels });
 
 registerPanel(
   { id: "rename-board", menu: "board", icon: "pencil", label: "Переименовать доску", title: "Изменить название доски", open: () => { void renameBoard(); } },
@@ -1773,7 +1779,7 @@ registerPanel(
   { id: "preview-group", menu: "list", icon: "eye", label: "Предпросмотр всей группы", offered: (s) => s.grouped, open: (s) => { void previewList(s.list, true); } },
   testerList.panel,
   createAuthorCountPanel(shell, cardDetail),
-  createMoveListPanel(board, cardDetail),
+  createMoveListPanel(board, transfer),
   { id: "rename-list", menu: "list", icon: "pencil", label: "Переименовать список", open: (s) => { void renameList(s.list); } },
   createExportPanel(board, attachments),
   createHandoutsPanel(board, attachments),

@@ -18,7 +18,7 @@ function setup() {
   const forgotten = [];
   const mass = createMassPanel(board, {
     kanban: fakeNode("div"),
-    cardDetail: { moveBoardOptions: async () => [], loadMoveBoard: async () => null, transferCard: async () => {} },
+    transfer: { moveBoardOptions: async () => [], loadMoveBoard: async () => null, transferCard: async () => 0 },
     forgetCardLabels: (cards) => forgotten.push(...cards.map((c) => c.id)),
     paintLabels() {},
   });

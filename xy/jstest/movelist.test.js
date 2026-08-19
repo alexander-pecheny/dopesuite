@@ -19,7 +19,7 @@ function setup() {
   const ctxOf = (bid) => ({ boardId: bid, dk: { key: "K" }, lists: bid === 7 ? board.state.lists : [{ id: 20, title: "Чужой", rank: "a0" }], cardsByList: new Map(), labels: [], sessions: [], name: "" });
   const panel = createMoveListPanel(board, {
     loadMoveBoard: async (bid) => ctxOf(bid),
-    cardCopyBody: async () => ({}), copyCardExtras: async () => {}, reconcilePlayings: async () => [], reconcileLabels: async () => [],
+    transferCard: async () => 0,
   });
   return { board, panel };
 }

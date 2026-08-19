@@ -8,7 +8,8 @@ import { xySync } from "./sync.js";
 import { type MassAction, xyMass } from "./massaction.js";
 import { boardOrder } from "./dragrank.js";
 import { modal } from "./modal.js";
-import type { CardDetail, MoveCtx } from "./carddetail.js";
+import type { MoveCtx } from "./carddetail.js";
+import type { Transfer } from "./transfer.js";
 import type { Board, BoardPanel } from "./panels.js";
 import type { BoardCard } from "./unlock.js";
 
@@ -16,7 +17,7 @@ const { jput, el, byId } = xyApp;
 
 export interface MassPanelDeps {
   kanban: HTMLElement;
-  cardDetail: Pick<CardDetail, "moveBoardOptions" | "loadMoveBoard" | "transferCard">;
+  transfer: Pick<Transfer, "moveBoardOptions" | "loadMoveBoard" | "transferCard">;
   forgetCardLabels(cards: BoardCard[]): void;
   paintLabels(): void;
 }
@@ -158,14 +159,14 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
     const listSel = el("select", { class: "input" }) as HTMLSelectElement;
     body.append(el("label", { class: "section-label", text: "Доска" }), boardSel,
                 el("label", { class: "section-label", text: "Список" }), listSel);
-    const boards = await deps.cardDetail.moveBoardOptions();
+    const boards = await deps.transfer.moveBoardOptions();
     for (const b of boards) boardSel.append(el("option", { value: String(b.id), text: b.label }));
     boardSel.value = String(board.id);
     const fillLists = async (): Promise<void> => {
       listSel.replaceChildren();
       run.disabled = true;
       massTarget = null;
-      const ctx = await deps.cardDetail.loadMoveBoard(Number(boardSel.value));
+      const ctx = await deps.transfer.loadMoveBoard(Number(boardSel.value));
       if (!ctx) { listSel.append(el("option", { value: "", text: "— пароль доски неизвестен —" })); return; }
       for (const l of ctx.lists) listSel.append(el("option", { value: String(l.id), text: l.title || "(без названия)" }));
       const pick = (): void => {
@@ -251,7 +252,7 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
       case "move":
       case "copy": {
         if (!massTarget) throw new Error("не выбран список");
-        await deps.cardDetail.transferCard(card, massTarget.listId, massTarget.ctx, action.key === "move");
+        await deps.transfer.transferCard(card, massTarget.listId, massTarget.ctx, action.key === "move");
         return;
       }
     }

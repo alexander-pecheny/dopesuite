@@ -61,6 +61,7 @@ function setup() {
     attachments: { load: async () => {}, imageNames: () => [], clearImageNames() {}, cardAttachments: async () => [], resolveImages: async () => new Map(), attachmentUrl: async () => "", download: async () => {}, imageBlob: async () => null },
     readMarkers: { refreshCardUnreadDot() {}, renderNotifBadge() {} },
     timeline: { load: async () => {}, events: () => [], resetFilter() {}, readBuckets: () => ({}), ensureVisible() {}, commentDraft: () => "", postComment: async () => {}, clearCommentDraft() {} },
+    transfer: { moveBoardOptions: async () => [], loadMoveBoard: async () => ({ boardId: 1, dk: {}, lists: [], cardsByList: new Map(), labels: [], sessions: [], name: "" }), transferCard: async () => 0 },
   });
   return { cd, card, state, log };
 }

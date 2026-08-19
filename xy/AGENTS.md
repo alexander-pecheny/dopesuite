@@ -262,8 +262,8 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        suggestWrap (<datalist> never opens on iOS Safari)
     carddetail.ts      the card kernel: open/close, the draft (carddraft.ts) and its
                        dirty gate, the three views (Просмотр / Поля / Текст) and the tools
-                       row, versions, alias, move/copy across boards (loadMoveBoard,
-                       transferCard, copyCardExtras), read tracking. Its nodes come in as
+                       row, versions, alias, the move/copy dialog (over transfer.ts), read
+                       tracking. Its nodes come in as
                        a CardDetailUI record from board.ts (document remains for the
                        clipboard, execCommand and the page-wide keydown listeners), so it
                        runs under the DOM shim (carddetail_ui.test.js). Its unsaved-changes
@@ -295,9 +295,15 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        position, link consecutive lists into a list_of_lists; unitsOf folds
                        lists into orderable units and applyUnitOrder writes an order — the
                        board's column drag uses both
+    transfer.ts        moving or copying a Card out of its List: a re-rank or a duplicate on
+                       the board, a client-side re-encryption onto another (description,
+                       alias, handout settings, comments, attachments; labels reconciled by
+                       name+colour, Playings by the Session's key). createTransfer(deps) →
+                       loadMoveBoard / moveBoardOptions / transferCard(card, list, ctx,
+                       remove, rank?); the card editor, «Массовое действие» and
+                       «Переместить список…» all go through it (transfer.test.js, real keys)
     movelist.ts        «Переместить список…»: move/copy a whole list within the board or
-                       to another (client-side re-encryption of the title, every card, its
-                       labels and playings, via carddetail's copy machinery)
+                       to another: a re-rank, or the new list and one transferCard per card
     importpack.ts      «Импорт»: a .4s/.zip/.docx to /api/import/parse, the returned 4s
                        into a new list (or a group of lists, one per «## …» tour), each
                        (img …) attached to the card that references it; a .docx first opens
