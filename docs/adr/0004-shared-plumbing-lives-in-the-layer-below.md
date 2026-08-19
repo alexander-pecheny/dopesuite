@@ -38,9 +38,15 @@ knowledge and app-facing behaviour had nowhere to go but into each app.
 - The divergences were reconciled on purpose, not preserved: both apps now
   normalise the code (trim, uppercase), retry a code collision on mint,
   refresh `telegram_username` and `telegram_name` on a known telegram's login,
-  and prove a password through `authcred.VerifyPasswordUpgrading` (identical
-  for bcrypt rows; xy has no legacy rows). The eight-state expiry/replay
-  matrix is tested once, on an in-memory SQLite, in `tglogin`.
+  prove a password through `authcred.VerifyPasswordUpgrading` (identical for
+  bcrypt rows; xy has no legacy rows), treat an unparsable `expires_at` as
+  expired, name the account's username in every answer (else the telegram
+  username on a poll, the claimed one on a claim — `username_taken` and
+  `password_required` now carry it in dope too; the page ignores it), and
+  mint the session inside the module (both apps' minters were one-line
+  delegates to `authcred.CreateSession`). The expiry/replay matrix is tested
+  once, on an in-memory SQLite with a map-backed `Users`; the adapters' SQL
+  stays under each app's HTTP tests.
 
 ## Consequences
 
@@ -50,9 +56,9 @@ knowledge and app-facing behaviour had nowhere to go but into each app.
   in one place.
 - `dopecore` gained `modernc.org/sqlite` as a test dependency; both apps
   already carried it.
-- `/admin/create_users` looks the same in both apps (xy's copy gained the
-  `data-select-all` attribute dope's had; it is inert without dope's
-  `pageforms.js`).
+- `/admin/create_users` looks the same in both apps: the body is dope's
+  (`empty` rows for skipped/errors where xy had `hint`, and the
+  `data-select-all` attribute, inert without dope's `pageforms.js`).
 - The `Users` interface is as wide as the two tables' differences (dope's
   `is_system`, `password_salt`). A third app would implement the same four
   methods; a schema the interface cannot express is the signal to widen the

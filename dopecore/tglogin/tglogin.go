@@ -1,10 +1,9 @@
 // Package tglogin is the server side of the Telegram login handshake the
 // shared login page drives (dopeuikit login-model.ts): Start mints a code the
 // visitor forwards to the bot, Resolve polls it once the bot has filled in who
-// sent it (tgbridge.ConsumeRegisterSQL), and Claim settles a brand-new telegram
-// account on a username. The state machine, its SQL on telegram_login_codes
-// and the closed status set live here once; each app brings its write
-// transaction, its users table and its error text.
+// sent it (tgbridge.ConsumeRegisterSQL), Claim settles a brand-new telegram on
+// a username. Each app brings its write transaction, its users table and its
+// error text; the state machine and the SQL on telegram_login_codes live here.
 package tglogin
 
 import (
@@ -37,7 +36,6 @@ var (
 	ErrTelegramLinked = errors.New("telegram already linked to another account")
 )
 
-// Tx is what the handshake needs from the app's write transaction.
 type Tx interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
@@ -59,41 +57,36 @@ type Account struct {
 	PasswordSalt sql.NullString
 }
 
-// Users is the app's users table. The handshake writes no SQL against it: the
-// two apps' tables differ (dope has is_system and password_salt), and an app
-// may refuse a username Create would otherwise hand out by returning its own
-// error, which Claim passes through unchanged.
+// Users is the app's users table; the handshake writes no SQL against it
+// because the two apps' tables differ (dope has is_system and password_salt).
+// Create's unique violation reads as UsernameTaken; any other error it returns
+// — an app refusing a reserved name — passes through Claim unchanged. Attach
+// writes the identity onto an existing account, on login and on a password proof.
 type Users interface {
 	ByTelegram(ctx context.Context, tx Tx, telegramUserID int64) (Account, bool, error)
 	ByUsername(ctx context.Context, tx Tx, username string) (Account, bool, error)
 	Create(ctx context.Context, tx Tx, id Identity, username string, now time.Time) (int64, error)
-	// Attach writes the telegram identity onto an existing account — on a
-	// known telegram's login to keep the display fields current, on a password
-	// proof to link it.
 	Attach(ctx context.Context, tx Tx, userID int64, id Identity, now time.Time) error
 }
 
-// Outcome is one poll or claim's answer: a status, the username it settled on,
-// and — when Status is Ready — the session token the app sets as its cookie.
+// Outcome is one poll or claim's answer; Token is set with Ready, for the cookie.
 type Outcome struct {
 	Status   string
 	Username *string
 	Token    string
 }
 
-// StartResult is a minted code and when it lapses.
 type StartResult struct {
 	Code      string
 	ExpiresAt time.Time
 }
 
-// Handshake is the state machine over one app's users table.
 type Handshake struct{ Users Users }
 
 func rfc3339(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
-// Start mints a register code valid for session.TelegramAuthLifetime, reaping
-// lapsed codes first so consumed-but-abandoned rows don't linger as replay fodder.
+// Start mints a register code, reaping lapsed codes first so consumed-but-
+// abandoned rows don't linger as replay fodder.
 func (h Handshake) Start(ctx context.Context, tx Tx, now time.Time) (StartResult, error) {
 	if _, err := tx.ExecContext(ctx, `delete from telegram_login_codes where expires_at < ?`, rfc3339(now)); err != nil {
 		return StartResult{}, err
@@ -117,11 +110,9 @@ values(?, 'register', ?, ?)`, code, rfc3339(now), rfc3339(expires))
 	return StartResult{}, errors.New("could not allocate code")
 }
 
-// Resolve polls a code. A known telegram logs straight in (Ready, with the code
-// burned so it can't mint a second session); a brand-new one answers
-// ChooseUsername for Claim to finish. Expiry bounds the whole handshake,
-// consumed or not, so a code leaked via the status URL can't be replayed into a
-// session once it lapses.
+// Resolve polls a code: a known telegram logs straight in, a new one answers
+// ChooseUsername for Claim. Expiry bounds the handshake consumed or not, so a
+// code leaked via the status URL can't be replayed into a session once it lapses.
 func (h Handshake) Resolve(ctx context.Context, tx Tx, code string, now time.Time) (Outcome, error) {
 	code = normalise(code)
 	var (
@@ -157,14 +148,12 @@ from telegram_login_codes where code = ? and kind = 'register'`, code).
 	if err := h.Users.Attach(ctx, tx, acct.ID, id, now); err != nil {
 		return Outcome{}, err
 	}
-	return h.login(ctx, tx, acct.ID, code, firstNonNull(acct.Username, id.Username), now)
+	return h.login(ctx, tx, acct.ID, code, nameOf(acct, id.Username.String), now)
 }
 
-// Claim finishes a brand-new telegram account: the visitor picks a username.
-// Free → create and log in. An existing password account → link it once they
-// prove the password (PasswordRequired until they do; ErrWrongPassword when
-// they fail). Held by a passwordless account → UsernameTaken. The caller has
-// already validated the username's shape.
+// Claim settles a new telegram on a username the caller has validated: free →
+// create and log in; a password account → link once the password is proven;
+// a passwordless account → UsernameTaken.
 func (h Handshake) Claim(ctx context.Context, tx Tx, code, username, password string, now time.Time) (Outcome, error) {
 	code = normalise(code)
 	var (
@@ -184,11 +173,11 @@ where code = ? and kind = 'register' and consumed_at is not null and expires_at 
 	}
 	id.TelegramUserID = tgUserID.Int64
 
-	// This telegram may already resolve to an account (double-submit / race).
+	// A double-submit: this telegram already resolved to an account.
 	if acct, found, err := h.Users.ByTelegram(ctx, tx, id.TelegramUserID); err != nil {
 		return Outcome{}, err
 	} else if found {
-		return h.login(ctx, tx, acct.ID, code, firstNonNull(acct.Username, sql.NullString{String: username, Valid: true}), now)
+		return h.login(ctx, tx, acct.ID, code, nameOf(acct, username), now)
 	}
 
 	acct, found, err := h.Users.ByUsername(ctx, tx, username)
@@ -228,7 +217,7 @@ where code = ? and kind = 'register' and consumed_at is not null and expires_at 
 	}
 }
 
-// login mints the session and burns the code so it can't be replayed.
+// login mints the session and burns the code.
 func (h Handshake) login(ctx context.Context, tx Tx, userID int64, code string, username *string, now time.Time) (Outcome, error) {
 	token, err := authcred.CreateSession(ctx, tx, userID, now)
 	if err != nil {
@@ -242,12 +231,14 @@ func (h Handshake) login(ctx context.Context, tx Tx, userID int64, code string, 
 
 func normalise(code string) string { return strings.ToUpper(strings.TrimSpace(code)) }
 
-func firstNonNull(vals ...sql.NullString) *string {
-	for _, v := range vals {
-		if v.Valid && v.String != "" {
-			s := v.String
-			return &s
-		}
+// nameOf is the account's username, else fallback, else nil.
+func nameOf(acct Account, fallback string) *string {
+	name := fallback
+	if acct.Username.Valid && acct.Username.String != "" {
+		name = acct.Username.String
 	}
-	return nil
+	if name == "" {
+		return nil
+	}
+	return &name
 }

@@ -49,6 +49,8 @@ type meResponse struct {
 
 type telegramSender func(ctx context.Context, chatID int64, text string) error
 
+func rfc3339(t time.Time) string { return t.UTC().Format(time.RFC3339) }
+
 // The Telegram handshake (start → status poll → claim) is dopecore/tglogin's
 // state machine over dope's users table; these handlers keep dope's write
 // transaction, its validation and its error text.
@@ -84,7 +86,7 @@ func (s *server) handleAuthTgStart(w http.ResponseWriter, r *http.Request) {
 		writeAuthError(w, err)
 		return
 	}
-	writeJSONValue(w, session.StartRegisterResponse{Code: res.Code, ExpiresAt: res.ExpiresAt.UTC().Format(time.RFC3339), BotUsername: botUsername()})
+	writeJSONValue(w, session.StartRegisterResponse{Code: res.Code, ExpiresAt: rfc3339(res.ExpiresAt), BotUsername: botUsername()})
 }
 
 // botUsername is the login bot's @handle, used to build the t.me deep link the
@@ -190,7 +192,7 @@ func scanAccount(row *sql.Row) (tglogin.Account, bool, error) {
 func (dopeUsers) Create(ctx context.Context, tx tglogin.Tx, id tglogin.Identity, username string, now time.Time) (int64, error) {
 	res, err := tx.ExecContext(ctx, `
 insert into users(telegram_user_id, telegram_username, telegram_name, username, is_system, created_at, updated_at)
-values(?, ?, ?, ?, 0, ?, ?)`, id.TelegramUserID, id.Username, id.Name, username, now.UTC().Format(time.RFC3339), now.UTC().Format(time.RFC3339))
+values(?, ?, ?, ?, 0, ?, ?)`, id.TelegramUserID, id.Username, id.Name, username, rfc3339(now), rfc3339(now))
 	if err != nil {
 		return 0, err
 	}
@@ -200,7 +202,7 @@ values(?, ?, ?, ?, 0, ?, ?)`, id.TelegramUserID, id.Username, id.Name, username,
 func (dopeUsers) Attach(ctx context.Context, tx tglogin.Tx, userID int64, id tglogin.Identity, now time.Time) error {
 	_, err := tx.ExecContext(ctx, `
 update users set telegram_user_id = ?, telegram_username = ?, telegram_name = ?, updated_at = ? where id = ?`,
-		id.TelegramUserID, id.Username, id.Name, now.UTC().Format(time.RFC3339), userID)
+		id.TelegramUserID, id.Username, id.Name, rfc3339(now), userID)
 	return err
 }
 

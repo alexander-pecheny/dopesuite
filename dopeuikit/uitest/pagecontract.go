@@ -1,8 +1,6 @@
-// Package uitest holds the test the two apps run over their real pages: a
-// PageContract says every .dopeui page compiles, and every element id and
-// load-bearing markup that a page's scripts look up on static markup exists in
-// the compiled page. The regexes, the dist/ handling and the modal("stem")
-// knowledge live here once; each app keeps its allow-lists.
+// Package uitest holds the test both apps run over their real pages: every
+// .dopeui page compiles, and every id and load-bearing markup a page's scripts
+// look up on static markup exists in the compiled page.
 package uitest
 
 import (
@@ -15,47 +13,35 @@ import (
 	"testing"
 )
 
-// PageContract is one app's page set and the allowances its scripts need.
+// PageContract is one app's page set and the allowances its scripts need:
+// Pages is the count PagesDir must hold (fewer means a moved directory, not a
+// pass); IDsCreatedByJS are ids scripts build at runtime; LoadBearing maps a
+// page name ("" = every page) to markup substrings its scripts bind to.
 type PageContract struct {
-	// Compile is the app's ui.Compile, carrying its vocabulary overlay.
-	Compile func(name string, src []byte) ([]byte, error)
-	// PagesDir holds the app's *.dopeui sources; StaticDir the served static
-	// tree (page scripts under it, built ESM under its dist/).
+	Compile             func(name string, src []byte) ([]byte, error)
 	PagesDir, StaticDir string
-	// Pages is how many pages PagesDir must hold — a glob that finds fewer is a
-	// moved directory, not a passing test.
-	Pages int
-	// IDsCreatedByJS are ids scripts create at runtime rather than find in the
-	// static page, so the contract does not require them.
-	IDsCreatedByJS map[string]bool
-	// LoadBearing maps a page name ("" = every page) to markup substrings its
-	// scripts bind to — classes, tags — that must survive in the compiled page.
-	LoadBearing map[string][]string
+	Pages               int
+	IDsCreatedByJS      map[string]bool
+	LoadBearing         map[string][]string
 }
 
 var (
 	idGetRe = regexp.MustCompile(`getElementById\("([^"]+)"\)`)
-	// modal("stem") (xy's modal.ts) and wireModal("stem", openBtnId) hand their
-	// ids in as STRING ARGUMENTS, so idGetRe never sees them — a whole family of
-	// /profile buttons was invisible to this contract until a missing one bricked
-	// the page at module load. A stem names the <stem>Overlay element.
+	// modal("stem") and wireModal("stem", openBtnId) (xy) hand ids in as string
+	// arguments idGetRe never sees; a stem names the <stem>Overlay element.
 	modalRe     = regexp.MustCompile(`\bmodal\("([A-Za-z0-9_-]+)"`)
 	wireModalRe = regexp.MustCompile(`wireModal\("([A-Za-z0-9_-]+)",\s*"([A-Za-z0-9_-]+)"`)
 	idQueryRe   = regexp.MustCompile(`querySelector(?:All)?\("#([A-Za-z0-9_-]+)"[^"]*"?\)`)
 	importReJS  = regexp.MustCompile(`from\s+"\./([a-z0-9_-]+\.js)"|import\s+"\./([a-z0-9_-]+\.js)"`)
-	// The built ESM lives under /static/dist/; without the optional segment the
-	// contract silently covers only the kit's /static/menu.js.
-	scriptSrc = regexp.MustCompile(`src="/static/((?:dist/)?[a-z0-9_-]+\.js)"`)
+	scriptSrc   = regexp.MustCompile(`src="/static/((?:dist/)?[a-z0-9_-]+\.js)"`)
 )
 
-// kitDist is the kit's built scripts (login.js, menu.js), served by the apps
-// under /static/ but living here — found from this file, whatever the app's depth.
+// kitDist holds the kit's login.js/menu.js, served under /static/ but living here.
 var kitDist = func() string {
 	_, file, _, _ := runtime.Caller(0)
 	return filepath.Join(filepath.Dir(file), "..", "assets", "dist")
 }()
 
-// Run compiles every page and checks the selector contract of each.
 func (c PageContract) Run(t *testing.T) {
 	t.Helper()
 	pages, err := filepath.Glob(filepath.Join(c.PagesDir, "*.dopeui"))
@@ -91,7 +77,6 @@ func (c PageContract) Run(t *testing.T) {
 	}
 }
 
-// wantedIDs collects the ids the page's script closure looks up.
 func (c PageContract) wantedIDs(t *testing.T, page string) []string {
 	set := map[string]bool{}
 	for _, file := range c.closure(t, scriptSrc.FindAllStringSubmatch(page, -1)) {
@@ -118,9 +103,8 @@ func (c PageContract) wantedIDs(t *testing.T, page string) []string {
 	return ids
 }
 
-// closure is the page's entry scripts plus every relative module they import,
-// transitively. A relative import resolves against the IMPORTER's directory:
-// `from "./app.js"` inside dist/profile.js means dist/app.js.
+// closure follows relative imports transitively; each resolves against the
+// importer's directory, so `from "./app.js"` in dist/profile.js is dist/app.js.
 func (c PageContract) closure(t *testing.T, entries [][]string) []string {
 	seen := map[string]bool{}
 	var order []string

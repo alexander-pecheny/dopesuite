@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -192,7 +193,7 @@ func TestResolveStates(t *testing.T) {
 	want(t, f.resolve("NOPE"), NotFound, "")
 	code := f.start()
 	want(t, f.resolve(code), Pending, "")
-	want(t, f.resolve(" "+code+" "), Pending, "") // the page may send it unnormalised
+	want(t, f.resolve(" "+strings.ToLower(code)+" "), Pending, "") // the page may send it unnormalised
 
 	f.bot(code, 555, "tg_alice")
 	want(t, f.resolve(code), ChooseUsername, "")
@@ -215,6 +216,32 @@ func TestResolveStates(t *testing.T) {
 		f.now = f.now.Add(2 * time.Minute)
 		want(t, f.resolve(code), Expired, "")
 		f.now = f.now.Add(-2 * time.Minute)
+	}
+}
+
+func TestResolveTreatsAConsumedRowWithoutATelegramAsPending(t *testing.T) {
+	f := newFixture(t)
+	code := f.start()
+	f.tx(func(tx *sql.Tx) error {
+		_, err := tx.Exec(`update telegram_login_codes set consumed_at = ? where code = ?`, rfc3339(f.now), code)
+		return err
+	})
+	want(t, f.resolve(code), Pending, "")
+	if _, err := f.claim(code, "x", ""); !errors.Is(err, ErrCodeNotFound) {
+		t.Fatalf("claim: %v", err)
+	}
+}
+
+func TestClaimRefusesAnExpiredConsumedCode(t *testing.T) {
+	f := newFixture(t)
+	code := f.start()
+	f.bot(code, 710, "tg")
+	f.now = f.now.Add(2 * time.Minute)
+	if _, err := f.claim(strings.ToLower(code), "late", ""); !errors.Is(err, ErrCodeNotFound) {
+		t.Fatalf("err = %v", err)
+	}
+	if f.sessions() != 0 {
+		t.Fatal("a session was minted")
 	}
 }
 

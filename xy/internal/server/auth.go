@@ -317,7 +317,7 @@ func (s *server) handleTgStatus(w http.ResponseWriter, r *http.Request) {
 		out, err = s.handshake().Resolve(ctx, tx, code, time.Now())
 		return err
 	})
-	s.writeOutcome(w, out, err)
+	writeOutcome(w, out, err)
 }
 
 func (s *server) handleTgClaim(w http.ResponseWriter, r *http.Request) {
@@ -347,10 +347,10 @@ func (s *server) handleTgClaim(w http.ResponseWriter, r *http.Request) {
 		}
 		return err
 	})
-	s.writeOutcome(w, out, err)
+	writeOutcome(w, out, err)
 }
 
-func (s *server) writeOutcome(w http.ResponseWriter, out tglogin.Outcome, err error) {
+func writeOutcome(w http.ResponseWriter, out tglogin.Outcome, err error) {
 	if handleErr(w, err) {
 		return
 	}
