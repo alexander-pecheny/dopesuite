@@ -188,8 +188,8 @@ export function createReplacePanel(board: Board, rewrites: Pick<Rewrites, "apply
       opts.push(el("option", { value: `list:${l.id}`, text: l.title }));
     }
     replaceScope.replaceChildren(...opts);
-    planReplace();
     replaceModal.open();
+    planReplace();
     replaceFrom.focus();
   }
 

@@ -18,7 +18,6 @@ import { xyApp, xySizes } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xyRank } from "./rank.js";
 import { xyChgk } from "./chgk.js";
-import type { Tester } from "./sessions.js";
 import { xyVersions } from "./versions.js";
 import { xyHndt } from "./hndt.js";
 import { xySync } from "./sync.js";
@@ -28,10 +27,7 @@ import { createUnlock } from "./unlock.js";
 import { boardOrder, byRank, dragAfterIn, dragAfterInX, rankAfterMove } from "./dragrank.js";
 import { createTimeline, decodeCommentPayload, eventAuthor } from "./timeline.js";
 import { createCardDetail, nowStamp } from "./carddetail.js";
-import {
-  type AnnounceCity, parseSession, partialSeen, type SeenQuestion, type SessionMeta,
-  sessionLabel, type TitleMode, whoSaw,
-} from "./sessions.js";
+import { type AnnounceCity, parseSession, type SessionMeta, sessionLabel, type TitleMode, whoSaw } from "./sessions.js";
 import * as people from "./people.js";
 import { createSessionsPanel } from "./sessionspanel.js";
 import { colorField, labelFill, labelInk, LABEL_COLORS } from "./colorpick.js";
@@ -1236,10 +1232,10 @@ function questionNumberFor(card: PreviewCardLike): string | null {
 }
 
 // ---- card detail + timeline ----
-// Both live in their own modules (carddetail.js / timeline.js), wired to what
+// Both live in their own modules (carddetail.ts / timeline.ts), wired to what
 // the board owns. The card module is created first so its document-level
-// listeners (the Escape handler) register in the same order board.js had; the
-// timeline seam it needs binds lazily through arrow closures.
+// listeners (the Escape handler) register before the timeline's; the timeline
+// seam it needs binds lazily through arrow closures.
 let timeline: Timeline;
 const attachments = createAttachments({
   mustDK,
@@ -1266,7 +1262,6 @@ const cardDetail = createCardDetail({
     del: byId("cardDelete"),
     desc: byId<HTMLTextAreaElement>("cardDesc"),
     descLabel: byId("cardDescLabel"),
-    detail: q(".card-detail"),
     editTools: byId("cardEditTools"),
     fields: byId("cardFields"),
     insStress: byId("cardInsStress"),
@@ -1755,9 +1750,9 @@ registerPanel(
   { id: "sessions", menu: "board", icon: "flask-conical", label: "Тесты", title: "Тест-сессии доски: кто когда играл, приглашение со временем начала", open: () => sessionsPanel.open() },
   labelsEditor.panel,
   { id: "members", menu: "board", icon: "users", label: "Участники доски", title: "Поделиться доской: добавить или убрать участников", open: () => boardMembers.open() },
-  rewrites.panels[0],
+  rewrites.fixTrello,
   createReplacePanel(board, rewrites),
-  rewrites.panels[1],
+  rewrites.typograph,
   {
     id: "forget-password", menu: "board", icon: "lock", label: "Забыть пароль доски", title: "Забыть пароль доски на этом устройстве",
     open: async () => {
@@ -1774,8 +1769,8 @@ registerPanel(
   { id: "delete-board", menu: "board", icon: "trash-2", label: "Удалить доску", title: "Удалить доску со всеми списками и карточками (только владелец)", open: () => { void deleteBoard(); } },
 
   { id: "add-card", menu: "list", icon: "plus", label: "Добавить карточку", open: (s) => { void cardDetail.addCard(s.list); } },
-  { id: "preview", menu: "list", icon: "eye", label: (s) => s.group ? "Предпросмотр списка" : "Предпросмотр", open: (s) => { void previewList(s.list); } },
-  { id: "preview-group", menu: "list", icon: "eye", label: "Предпросмотр всей группы", offered: (s) => !!s.group, open: (s) => { void previewList(s.list, true); } },
+  { id: "preview", menu: "list", icon: "eye", label: (s) => s.grouped ? "Предпросмотр списка" : "Предпросмотр", open: (s) => { void previewList(s.list); } },
+  { id: "preview-group", menu: "list", icon: "eye", label: "Предпросмотр всей группы", offered: (s) => s.grouped, open: (s) => { void previewList(s.list, true); } },
   testerList.panel,
   createAuthorCountPanel(shell, cardDetail),
   createMoveListPanel(board, cardDetail),
@@ -1786,7 +1781,7 @@ registerPanel(
 );
 // Board-level actions live in the burger (☰) menu — sharing (rarely opened) and
 // "forget password" (rarely needed) don't warrant header buttons.
-window.dopeMenu?.setExtras(boardMenu().map((it) => ({ icon: it.icon, label: it.label, title: it.title, onClick: it.onClick })));
+window.dopeMenu?.setExtras(boardMenu());
 
 void unlock.boot();
 

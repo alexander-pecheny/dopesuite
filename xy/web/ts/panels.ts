@@ -42,6 +42,7 @@ export interface Board {
 // with the cards concatenated in board order and the title the file will carry.
 export interface ListScope {
   list: BoardList;
+  grouped: boolean;
   group: BoardGroup | null;
   lists: BoardList[];
   cards: BoardCard[];
@@ -55,7 +56,7 @@ export function listScope(board: Board, list: BoardList): ListScope {
     group = board.groupById(list.groupId) || null;
     if (group && group.name) title = group.name;
   }
-  return { list, group, lists, cards: lists.flatMap((l) => board.cardsOf(l.id)), title };
+  return { list, grouped: list.groupId != null, group, lists, cards: lists.flatMap((l) => board.cardsOf(l.id)), title };
 }
 
 interface Entry<S> {
@@ -113,7 +114,6 @@ export function resetPanels(): void { registry.length = 0; }
 export interface PanelShell {
   open(spec: { icon: IconName; title: string; body: Node; onClose?(): void }): void;
   message(text: string): void;
-  close(): void;
 }
 
 export function createPanelShell(m: Modal, nodes: { title: HTMLElement; body: HTMLElement }): PanelShell {
@@ -127,6 +127,5 @@ export function createPanelShell(m: Modal, nodes: { title: HTMLElement; body: HT
       m.open({ onClose });
     },
     message: (text) => m.message(text),
-    close: () => m.close(),
   };
 }

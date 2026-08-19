@@ -25,7 +25,7 @@ const cards = [
   { id: 2, listId: 1, kind: "question", rank: "b", desc: "? Два\n! Б\n@ Иван Иванов, Пётр Петров" },
   { id: 3, listId: 1, kind: "question", rank: "c", desc: "? Три\n! В\n@ Пётр Петров" },
 ];
-const scope = { list: { id: 1, title: "Тур 1", rank: "a", groupId: null }, group: null, lists: [], cards, title: "Тур 1" };
+const scope = { list: { id: 1, title: "Тур 1", rank: "a", groupId: null }, grouped: false, group: null, lists: [], cards, title: "Тур 1" };
 
 test("the author count renders one row per author with the 1/n share, into the shell", () => {
   const panel = createAuthorCountPanel(shell, { copyPlain });

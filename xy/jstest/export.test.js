@@ -20,7 +20,7 @@ const cards = [
   { id: 2, listId: 1, kind: "question", rank: "b", desc: "  " },
   { id: 3, listId: 1, kind: "question", rank: "c", desc: "? Два (img pic.png)\n! Б" },
 ];
-const scope = { list: { id: 1, title: "Тур 1", rank: "a", groupId: null }, group: null, lists: [], cards, title: "Тур 1" };
+const scope = { list: { id: 1, title: "Тур 1", rank: "a", groupId: null }, grouped: false, group: null, lists: [], cards, title: "Тур 1" };
 
 test("exportSource is the cards' 4s in order, blank-line separated, empty cards dropped", () => {
   assert.equal(exportSource(cards), "? Раз\n! А\n\n? Два (img pic.png)\n! Б\n");
@@ -46,7 +46,7 @@ test("offline, only the .4s is offered and it downloads without the network", as
 test("the export label says «группы» for a grouped list, and an empty list is refused", () => {
   const panel = createExportPanel(fakeBoard(), { appendImages: async () => new Set() });
   assert.equal(panel.label(scope), "Экспорт");
-  assert.equal(panel.label({ ...scope, group: { id: 5, name: "Пакет" } }), "Экспорт группы");
+  assert.equal(panel.label({ ...scope, grouped: true, group: { id: 5, name: "Пакет" } }), "Экспорт группы");
   panel.open({ ...scope, cards: [] });
   assert.deepEqual(globalThis.__alerts, ["В списке нет карточек."]);
 });

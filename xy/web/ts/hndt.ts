@@ -3,7 +3,7 @@
 // internal/chgk/fsource/testdata/parity.json holds one document this writes
 // and the Go side parses.
 
-import { blockText, bracketSpans, dropHidden, imgInText, isHandoutBody, parseBlocks, questionText } from "./chgk.js";
+import { blockText, bracketSpans, dropHidden, imgInText, isHandoutBody, numberQuestionCards, parseBlocks, questionText } from "./chgk.js";
 import type { ChgkCard, Handout } from "./chgk.js";
 
 // chgksuite/handouter/utils.RESERVED_WORDS: keys treated as block settings (vs
@@ -125,4 +125,14 @@ function parseHndtMetaByQuestion(text: string | null | undefined): Record<string
 }
 
 
-export const xyHndt = { generateHndt, handoutForCard, parseHndtMetaByQuestion, HNDT_DEFAULT_META };
+// hndtOf is what a list's cards generate: their display numbers and the .hndt
+// document with each card's saved settings — export and «Генерация раздаток»
+// both start here.
+function hndtOf(cards: ReadonlyArray<ChgkCard & { id: number; handoutMeta?: string | null }>): { numbers: Array<string | null>; source: string } {
+  const numbers = numberQuestionCards(cards);
+  const metas: Record<number, string> = {};
+  for (const c of cards) if (c.handoutMeta) metas[c.id] = c.handoutMeta;
+  return { numbers, source: generateHndt(cards, numbers, metas) };
+}
+
+export const xyHndt = { generateHndt, hndtOf, handoutForCard, parseHndtMetaByQuestion, HNDT_DEFAULT_META };

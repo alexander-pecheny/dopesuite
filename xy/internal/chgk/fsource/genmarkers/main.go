@@ -39,15 +39,10 @@ func main() {
 	}
 	b.WriteString("] as const;\n\n")
 	b.WriteString("export type MarkerType = (typeof MARKERS)[number][1];\n")
-	out := "web/ts/markers_gen.ts"
-	if len(os.Args) > 1 {
-		out = os.Args[1]
+	if len(os.Args) != 2 {
+		log.Fatal("usage: genmarkers <path of markers_gen.ts>")
 	}
-	// go generate runs in the package directory; the file lives at the repo root.
-	if _, err := os.Stat(out); err != nil {
-		out = "../../../" + out
-	}
-	if err := os.WriteFile(out, []byte(b.String()), 0o644); err != nil {
+	if err := os.WriteFile(os.Args[1], []byte(b.String()), 0o644); err != nil {
 		log.Fatal(err)
 	}
 }

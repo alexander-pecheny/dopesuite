@@ -158,7 +158,7 @@ function isZeroNumber(value: string | number): boolean {
 // carry no number of their own, but a standalone "№№ N" on them resets the base
 // for the questions that follow (chgksuite's setcounter). "Other" and test cards
 // are ignored entirely. Returns an array aligned with `cards`.
-function numberQuestionCards(cards: ReadonlyArray<ChgkCard>): Array<string | null> {
+export function numberQuestionCards(cards: ReadonlyArray<ChgkCard>): Array<string | null> {
   let next = 1;
   const out: Array<string | null> = [];
   for (const c of cards) {

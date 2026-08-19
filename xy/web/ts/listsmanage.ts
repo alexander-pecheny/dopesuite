@@ -305,7 +305,7 @@ export function createListsManage(board: Board): ListsManage {
   byId("listsLinkBtn").addEventListener("click", () => { void linkSelected(); });
   byId("listsMoveBtn").addEventListener("click", () => {
     const n = parseInt(byId<HTMLInputElement>("listsMovePos").value, 10);
-    if (!(n >= 1)) { byId("listsManageMessage").textContent = "Укажите позицию."; return; }
+    if (!(n >= 1)) { listsManageModal.message("Укажите позицию."); return; }
     void moveUnitsTo(new Set(manageSelected), n);
   });
 

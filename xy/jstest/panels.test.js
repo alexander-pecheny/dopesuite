@@ -17,6 +17,8 @@ test("a list scope is the list, or its whole group in board order, under the gro
   const solo = listScope(board, lists[2]);
   assert.equal(solo.title, "Разное");
   assert.equal(solo.group, null);
+  assert.equal(solo.grouped, false);
+  assert.equal(listScope(board, lists[1]).grouped, true);
   assert.deepEqual(solo.cards.map((c) => c.id), [30, 31]);
   const grouped = listScope(board, lists[1]);
   assert.equal(grouped.title, "Пакет");
@@ -28,9 +30,9 @@ test("the menus render the registry as data, in registration order, gated by off
   resetPanels();
   const log = [];
   registerPanel(
-    { id: "export", menu: "list", icon: "file-down", label: (s) => `Экспорт${s.group ? " группы" : ""}`, open: (s) => log.push("export:" + s.title) },
+    { id: "export", menu: "list", icon: "file-down", label: (s) => `Экспорт${s.grouped ? " группы" : ""}`, open: (s) => log.push("export:" + s.title) },
     { id: "rename", menu: "board", icon: "pencil", label: "Переименовать доску", title: "Изменить название", open: () => log.push("rename") },
-    { id: "preview-group", menu: "list", icon: "eye", label: "Предпросмотр всей группы", offered: (s) => !!s.group, open: () => log.push("pg") },
+    { id: "preview-group", menu: "list", icon: "eye", label: "Предпросмотр всей группы", offered: (s) => s.grouped, open: () => log.push("pg") },
   );
   assert.deepEqual(boardMenu().map((i) => [i.id, i.label, i.title]), [["rename", "Переименовать доску", "Изменить название"]]);
   const solo = listMenu(listScope(board, lists[2]));

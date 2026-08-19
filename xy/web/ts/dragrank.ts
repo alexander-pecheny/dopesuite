@@ -89,5 +89,5 @@ export function rankForSlot(cards: readonly RankedCard[], posValue: string, excl
 }
 
 export const xyDragRank = {
-  byRank, dragAfterIndex, dragAfterIndexX, dragAfterIn, dragAfterInX, rankAfterMove, rankForSlot,
+  byRank, boardOrder, dragAfterIndex, dragAfterIndexX, dragAfterIn, dragAfterInX, rankAfterMove, rankForSlot,
 };

@@ -3,8 +3,8 @@
 //
 // Board-wide rather than per-list, because the chore that wants it — «собрать
 // все забракованные вопросы из трёх туров в Запас» — spans lists. The DOM, the
-// pickers and the writes stay in board.ts, which already owns them; everything
-// here is pure so jstest can exercise the rules without a board.
+// pickers and the writes are masspanel.ts; everything here is pure so jstest
+// can exercise the rules without a board.
 
 // One selectable thing, as this module needs to see it.
 export interface SelectableCard { id: number }

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { xyDragRank } from "../web/assets/static/dist/dragrank.js";
 import { xyRank } from "../web/assets/static/dist/rank.js";
 
-const { byRank, dragAfterIndex, dragAfterIndexX, dragAfterIn, dragAfterInX, rankAfterMove, rankForSlot } = xyDragRank;
+const { byRank, boardOrder, dragAfterIndex, dragAfterIndexX, dragAfterIn, dragAfterInX, rankAfterMove, rankForSlot } = xyDragRank;
 const { keyBetween } = xyRank;
 
 // ---- byRank ----
@@ -175,4 +175,10 @@ test("rankForSlot: duplicate neighbour ranks fall back to append-after-prev", ()
   const cards = [{ id: 1, rank: "a1" }, { id: 2, rank: "a1" }];
   const rank = rankForSlot(cards, "2");
   assert.ok(rank > "a1", `${rank} > a1`);
+});
+
+test("boardOrder reads down the board: lists by rank, cards by rank within", () => {
+  const lists = [{ id: 1, rank: "b" }, { id: 2, rank: "a" }];
+  const cards = [{ id: 10, listId: 1, rank: "b" }, { id: 11, listId: 1, rank: "a" }, { id: 20, listId: 2, rank: "z" }];
+  assert.deepEqual(boardOrder(lists, cards).map((c) => c.id), [20, 11, 10]);
 });

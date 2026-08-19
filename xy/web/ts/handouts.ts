@@ -1,5 +1,5 @@
 // handouts.ts — «Генерация раздаток» (chgksuite .hndt → PDF): the port of
-// `chgksuite handouts 4s2hndt` (chgk.ts) builds an editable .hndt source from
+// `chgksuite handouts 4s2hndt` (hndt.ts) builds an editable .hndt source from
 // the list's questions, merging each question's saved layout settings
 // (handout_meta) with its live handout text. «Сгенерировать PDF» posts the
 // source + referenced images to the server, which typesets and streams an
@@ -16,14 +16,14 @@ import { namedUrl, revokeNamedUrl } from "./namedurl.js";
 import { modal } from "./modal.js";
 import type { Attachments } from "./attachments.js";
 import type { Board, ListPanel, ListScope } from "./panels.js";
-import type { BoardCard, BoardList } from "./unlock.js";
+import type { BoardCard } from "./unlock.js";
 import type { OpBody } from "./store.js";
 
 const { el, byId, errMsg, downloadBlob, onCmdEnter } = xyApp;
 
 export function createHandoutsPanel(board: Board, attachments: Pick<Attachments, "appendImages">): ListPanel {
   const handoutsModal = modal("handouts");
-  let handoutsCtx: { list: BoardList; cards: BoardCard[]; numbers: Array<string | null>; title: string } | null = null;   // { list, cards, numbers }
+  let handoutsCtx: { cards: BoardCard[]; numbers: Array<string | null>; title: string } | null = null;
   let handoutsPdfUrl: string | null = null;
   let handoutsDlUrl: string | null = null;
 
@@ -31,13 +31,9 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     // Grouped lists generate one set of handouts for the whole list_of_lists, with
     // question numbers continuous across the group (numberQuestionCards over the
     // concatenated cards), matching the board + docx export.
-    const list = scope.list;
     const cards = scope.cards;
-    const numbers = xyChgk.numberQuestionCards(cards);
-    const metas: Record<number, string> = {};
-    for (const c of cards) if (c.handoutMeta) metas[c.id] = c.handoutMeta;
-    const source = xyHndt.generateHndt(cards, numbers, metas);
-    handoutsCtx = { list, cards, numbers, title: scope.title };
+    const { numbers, source } = xyHndt.hndtOf(cards);
+    handoutsCtx = { cards, numbers, title: scope.title };
     byId<HTMLTextAreaElement>("handoutsSource").value = source;
     clearHandoutsPdf();
     handoutsModal.open({ onClose: hideHandouts });
@@ -84,8 +80,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
   // spells it in UTF-8.
   function handoutFileBase(): string {
     const clean = (s: string): string => s.trim().replace(/[\\/\s]+/g, "_");
-    const list = (handoutsCtx && (handoutsCtx.title || handoutsCtx.list.title)) || "";
-    return [clean(board.state.name), clean(list), "handouts"].filter(Boolean).join("_");
+    return [clean(board.state.name), clean(handoutsCtx?.title || ""), "handouts"].filter(Boolean).join("_");
   }
 
   // persistHandoutMeta writes the edited per-question settings back onto the cards
@@ -196,7 +191,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
   }
 
   // handoutSession owns the stage-once/heartbeat/reap/cleanup lifecycle (see
-  // handoutsession.js); the callbacks above are the board-specific network ops.
+  // handoutsession.ts); the callbacks above are the board-specific network ops.
   const handoutSession = xyHandoutSession.create({
     wantedNames: wantedImages,
     stage: stageImages,
@@ -209,7 +204,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
   async function handoutsBody(source: string): Promise<FormData> {
     const fd = new FormData();
     fd.append("source", source);
-    fd.append("filename", (handoutsCtx && (handoutsCtx.title || handoutsCtx.list.title)) || "handouts");
+    fd.append("filename", handoutsCtx?.title || "handouts");
     const sid = await handoutSession.ensure(source);
     if (sid) fd.append("session", sid);
     return fd;
@@ -257,7 +252,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
 
   return {
     id: "handouts", menu: "list", icon: "file-text",
-    label: (scope) => scope.group ? "Генерация раздаток (вся группа)" : "Генерация раздаток",
+    label: (scope) => scope.grouped ? "Генерация раздаток (вся группа)" : "Генерация раздаток",
     open: openHandouts,
   };
 }

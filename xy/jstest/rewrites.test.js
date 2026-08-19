@@ -24,5 +24,5 @@ test("collect keeps only cards a transform changes; apply patches each with a de
 
 test("the ☰ offers the two rewrites, Trello clean-up first", () => {
   const rw = createRewrites(fakeBoard());
-  assert.deepEqual(rw.panels.map((p) => [p.menu, p.id]), [["board", "fix-trello"], ["board", "typograph"]]);
+  assert.deepEqual([rw.fixTrello, rw.typograph].map((p) => [p.menu, p.id]), [["board", "fix-trello"], ["board", "typograph"]]);
 });

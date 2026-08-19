@@ -58,10 +58,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
 
   function openExport(scope: ListScope): void {
     if (!scope.cards.length) { alert("В списке нет карточек."); return; }
-    const numbers = xyChgk.numberQuestionCards(scope.cards);
-    const metas: Record<number, string> = {};
-    for (const c of scope.cards) if (c.handoutMeta) metas[c.id] = c.handoutMeta;
-    const hndt = xyHndt.generateHndt(scope.cards, numbers, metas);
+    const hndt = xyHndt.hndtOf(scope.cards).source;
     exportCtx = { cards: scope.cards, title: scope.title, hndt };
 
     // Offline everything but the .4s is unreachable: the other formats render
@@ -159,7 +156,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
 
   return {
     id: "export", menu: "list", icon: "file-down",
-    label: (scope) => `Экспорт${scope.group ? " группы" : ""}`,
+    label: (scope) => `Экспорт${scope.grouped ? " группы" : ""}`,
     open: openExport,
   };
 }

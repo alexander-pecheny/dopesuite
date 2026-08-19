@@ -23,7 +23,6 @@ import { xyRank } from "./rank.js";
 import { byRank, rankForSlot } from "./dragrank.js";
 import type { BoardKeymeta, DataKey } from "./crypto.js";
 import type { CardFields, CopyTarget, Handout } from "./chgk.js";
-import type { Tester, TesterLike } from "./sessions.js";
 import type { BoardCard, BoardLabel, BoardList, BoardSession, CardLabel, Playing, Snapshot, UnreadFlags } from "./unlock.js";
 import type { OpBody } from "./store.js";
 import type { CardEvent } from "./timeline.js";
@@ -62,7 +61,7 @@ export interface CardDetailState {
   defaultAuthor: string;
 }
 
-// The board's mutation wrappers (board.js:20-24) — every board mutation flows
+// The board's mutation wrappers (board.ts) — every board mutation flows
 // through the sync engine. `create` mints an id; the rest return { id: null }.
 export interface MutationVerbs {
   create(kind: string, path: string, body: OpBody): Promise<{ id: number | null }>;
@@ -121,57 +120,56 @@ export interface TimelineSeam {
   clearCommentDraft(): void;
 }
 
-// The nodes the card detail works on, resolved once by the page (board.ts):
-// document appears nowhere below it. Names follow the ids, without the card prefix.
+// The nodes the card detail works on, resolved once by the page (board.ts).
+// Names follow the ids, without the card prefix.
 export interface CardDetailUI {
-  addVersion: HTMLElement; // #cardAddVersion
-  alias: HTMLInputElement; // #cardAlias
-  close: HTMLButtonElement; // #cardClose
-  commentsUnreadDot: HTMLElement; // #commentsUnreadDot
-  contentUnreadDot: HTMLElement; // #contentUnreadDot
-  copy: HTMLElement; // #cardCopy
-  copyBtn: HTMLElement; // #copyBtn
-  copyMsg: HTMLElement; // #cardCopyMsg
-  del: HTMLElement; // #cardDelete
-  desc: HTMLTextAreaElement; // #cardDesc
-  descLabel: HTMLElement; // #cardDescLabel
-  detail: HTMLElement; // .card-detail
-  editTools: HTMLElement; // #cardEditTools
-  fields: HTMLElement; // #cardFields
-  insStress: HTMLElement; // #cardInsStress
-  kind: HTMLSelectElement; // #cardKind
-  link: HTMLElement; // #cardLink
-  message: HTMLElement; // #cardMessage
-  overlay: HTMLElement; // #cardOverlay
-  previewBody: HTMLElement; // #cardPreviewBody
-  previewScreen: HTMLInputElement; // #cardPreviewScreen
-  save: HTMLButtonElement; // #cardSave
-  timeline: HTMLElement; // #timeline
-  title: HTMLElement; // #cardDetailTitle
+  addVersion: HTMLElement;
+  alias: HTMLInputElement;
+  close: HTMLButtonElement;
+  commentsUnreadDot: HTMLElement;
+  contentUnreadDot: HTMLElement;
+  copy: HTMLElement;
+  copyBtn: HTMLElement;
+  copyMsg: HTMLElement;
+  del: HTMLElement;
+  desc: HTMLTextAreaElement;
+  descLabel: HTMLElement;
+  editTools: HTMLElement;
+  fields: HTMLElement;
+  insStress: HTMLElement;
+  kind: HTMLSelectElement;
+  link: HTMLElement;
+  message: HTMLElement;
+  overlay: HTMLElement;
+  previewBody: HTMLElement;
+  previewScreen: HTMLInputElement;
+  save: HTMLButtonElement;
+  timeline: HTMLElement;
+  title: HTMLElement;
   to4s: HTMLElement; // #cardTo4s
-  tabs: { preview: HTMLButtonElement; fields: HTMLButtonElement; text: HTMLButtonElement }; // #cardTabPreview…
-  typo: HTMLElement; // #cardTypo
-  versions: HTMLElement; // #cardVersions
-  viewFields: HTMLElement; // #cardViewFields
-  viewPreview: HTMLElement; // #cardViewPreview
-  viewTabs: HTMLElement; // #cardViewTabs
-  viewText: HTMLElement; // #cardViewText
+  tabs: { preview: HTMLButtonElement; fields: HTMLButtonElement; text: HTMLButtonElement };
+  typo: HTMLElement;
+  versions: HTMLElement;
+  viewFields: HTMLElement;
+  viewPreview: HTMLElement;
+  viewTabs: HTMLElement;
+  viewText: HTMLElement;
   dirty: {
-    cancel: HTMLElement; // #dirtyCancel
-    discard: HTMLElement; // #dirtyDiscard
-    message: HTMLElement; // #dirtyMessage
-    overlay: HTMLElement; // #dirtyOverlay
-    save: HTMLElement; // #dirtySave
+    cancel: HTMLElement;
+    discard: HTMLElement;
+    message: HTMLElement;
+    overlay: HTMLElement;
+    save: HTMLElement;
   };
   move: {
-    board: HTMLSelectElement; // #moveBoard
-    btn: HTMLElement; // #moveBtn
-    list: HTMLSelectElement; // #moveList
-    pos: HTMLSelectElement; // #movePos
+    board: HTMLSelectElement;
+    btn: HTMLElement;
+    list: HTMLSelectElement;
+    pos: HTMLSelectElement;
   };
   listPreview: {
-    body: HTMLElement; // #previewBody
-    overlay: HTMLElement; // #previewOverlay
+    body: HTMLElement;
+    overlay: HTMLElement;
   };
 }
 
@@ -188,7 +186,7 @@ export interface CardDetailDeps {
   renderLabelPicker(card: BoardCard): void;
   paintLabels(): void;
   questionNumberFor(card: PreviewCardLike): string | null;
-  // The board's shared transient popup (see board.js#popupMenu) — the copy
+  // The board's shared transient popup (board.ts popupMenu) — the copy
   // button opens one when a card has more than one thing worth copying.
   popupMenu(anchor: HTMLElement, items: Array<{ label: string; onClick: () => void }>): void;
   forgetCardLabels(cards: BoardCard[]): void;
@@ -233,7 +231,7 @@ export interface CardDetail {
   // The clipboard write, with its insecure-context fallback — the Тесты panel
   // copies invite and tester lines through the same path.
   copyPlain(text: string): Promise<void>;
-  // Reused by the board's list move/copy (board.js's «Переместить список…»).
+  // Reused by «Переместить список…» (movelist.ts).
   loadMoveBoard(bid: number): Promise<MoveCtx>;
   moveBoardOptions(): Promise<Array<{ id: number; label: string }>>;
   transferCard(card: BoardCard, targetListId: number, ctx: MoveCtx, remove: boolean): Promise<void>;
@@ -293,7 +291,6 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   const moveBoardSel = ui.move.board;
   const moveListSel = ui.move.list;
   const movePosSel = ui.move.pos;
-  const cardDetailBox = ui.detail;
   const previewOverlay = ui.listPreview.overlay;
 
   // ---- card detail state ----
@@ -1029,7 +1026,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // comments at all, which is what ensureVisible settles first.
   async function highlightComment(eventId: number): Promise<void> {
     await deps.timeline.ensureVisible("comment");
-    const node = document.getElementById("tlev-" + eventId);
+    const node = ui.timeline.querySelector<HTMLElement>(`#tlev-${eventId}`);
     if (!node) return;
     node.scrollIntoView({ block: "center" });
     node.classList.add("tl-highlight");

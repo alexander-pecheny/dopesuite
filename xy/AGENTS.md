@@ -220,7 +220,8 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        registration, the close buttons and the backdrop; open({onClose,
                        confirm}) / close() / message(). Every plain modal on every page
                        (board, its kernels, profile, index) is one of these; the card
-                       docoverlay, the list preview and the lightbox are not
+                       docoverlay, the list preview, the lightbox and the card's dirty
+                       prompt are not
     rank.ts            fractional indexing (LexoRank-style keyBetween)
     app.ts             shared fetch/DOM helpers (byId, errMsg, el, the sync badge), derived
                        titles, offline-tolerant requireLogin
@@ -258,9 +259,11 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        dirty gate, the three views (Просмотр / Поля / Текст) and the tools
                        row, versions, alias, move/copy across boards (loadMoveBoard,
                        transferCard, copyCardExtras), read tracking. Its nodes come in as
-                       a CardDetailUI record from board.ts (document appears only for the
-                       clipboard, execCommand and the page-wide keydown), so it runs under
-                       the DOM shim (carddetail_ui.test.js)
+                       a CardDetailUI record from board.ts (document remains for the
+                       clipboard, execCommand and the page-wide keydown listeners), so it
+                       runs under the DOM shim (carddetail_ui.test.js). Its unsaved-changes
+                       prompt (dirtyOverlay) toggles hidden itself: it opens from inside the
+                       stack's confirm gate, which is what modal.ts would register on
     timeline.ts        the card's лента kernel: load/render, comments (drafts with images,
                        replies, выписки), edit diffs, the expanded feed, filters and view
                        prefs; nodes as a TimelineUI record
@@ -298,7 +301,7 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        referenced images to /api/export/pack for .docx/.pdf/.pdf для
                        телефона/раздатки; a bare .4s with no images is written in the
                        browser, the one export that works offline
-    handouts.ts        «Генерация раздаток»: 4s2hndt (chgk.ts) → editable .hndt →
+    handouts.ts        «Генерация раздаток»: hndtOf (hndt.ts) → editable .hndt →
                        /api/handouts/{pdf,split_fit}; images staged once per open
                        (handoutsession.ts); per-question layout settings persisted to
                        handout_meta on close
@@ -327,8 +330,8 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        version separator rule (versionLineName); its marker table is
                        markers_gen.ts, and imgRefs (the (img …) references of a text,
                        through the inline tokenizer's bracket matching) is the one
-                       image finder — export, handouts, import and the preview all
-                       call it
+                       image finder — imageRefs(cards) is its set over cards; export,
+                       handouts, import and the preview call one or the other
     versions.ts        the Version algebra (ADR-0007): split/count/body/name, add/
                        remove/promote, composeVersions (the export's one question with
                        every wording page-broken) and the legacy (PAGEBREAK) conversion

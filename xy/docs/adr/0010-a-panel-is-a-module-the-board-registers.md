@@ -74,6 +74,14 @@ and code on the other is two tables.
   by hand in a browser (local, then xytest) before prod.
 - The TS block types `number` and `setcounter` replaced `num` and `numnum`,
   and `battle`/`round`/`theme` are marked lines now, as in chgksuite.
+- imgRefs reads what the renderers read: an image named only inside a
+  `(hidden-comment …)` is no longer bundled into a .4s export or staged for
+  раздатки (no renderer shows it), and a `)` inside a filename no longer ends
+  the directive early — both as fsource has always read them.
+- The panels moved verbatim keep the two write paths they had: the outbox
+  verbs on Board for offline-capable edits, and direct `jpost/jput/jdelete`
+  where an operation is online-only and needs real ids (import, cross-board
+  copies, list groups).
 - profile.html and index.html modals gained the board's back-button
   dismissal, which they never had; every plain dialog now also dismisses on a
   backdrop tap.

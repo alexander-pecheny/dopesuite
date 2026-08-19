@@ -120,7 +120,7 @@ export function createBoardMembers(state: MembersState, boardId: number | string
       await jdelete(`/api/boards/${boardId}/members/${m.user_id}`);
       await render();
     } catch (e) {
-      document.getElementById("membersMessage")!.textContent = e instanceof Error ? e.message : String(e);
+      membersModal.message(e instanceof Error ? e.message : String(e));
     }
   }
 

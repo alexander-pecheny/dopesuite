@@ -24,7 +24,9 @@ export interface Rewrites {
   // The cards written under the old scheme (ADR-0005) become whole bodies the
   // first time their board is opened after that release. Idempotent.
   convertLegacyVersions(): Promise<void>;
-  panels: BoardPanel[];
+  // The two ☰ entries, in the order the menu lists them.
+  fixTrello: BoardPanel;
+  typograph: BoardPanel;
 }
 
 export function createRewrites(board: Board): Rewrites {
@@ -145,18 +147,19 @@ export function createRewrites(board: Board): Rewrites {
     collect,
     apply,
     convertLegacyVersions,
-    panels: [{
+    fixTrello: {
       id: "fix-trello", menu: "board", icon: "wand-sparkles",
       label: "Исправить оформление Trello",
       title: "Убрать артефакты Trello (двойные переносы, экранирование, смарт-ссылки) во всех карточках",
       open: () => { void fixTrelloFormatting(); },
-    }, {
+    },
+    typograph: {
       // wand-sparkles twice over: the vendored lucide set has no «type» glyph, and
       // both items are the same kind of act — rewrite the text of every card at once.
       id: "typograph", menu: "board", icon: "wand-sparkles",
       label: "Типографить всю доску",
       title: "Кавычки-ёлочки, тире, неразрывные пробелы и раскодированные ссылки — во всех карточках и всех версиях",
       open: () => { void typograph(); },
-    }],
+    },
   };
 }
