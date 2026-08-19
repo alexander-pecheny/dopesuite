@@ -90,7 +90,7 @@ order by position, id`, stageArgs...)
 	for _, record := range stageRecords {
 		record.Stage.Kind = record.Kind
 		if ranker, ok := structure.RankerFor(record.Kind); ok {
-			record.Stage.Sort = ranker.Order(resolver.KindConfig(record.Stage.Config))
+			record.Stage.Sort = ranker.Order(store.ParseStageConfig(string(record.Stage.Config)).KindConfig())
 		}
 		if record.Stage.Type == "reseed" {
 			entries, err := store.LoadReseedEntries(ctx, q, record.ID)

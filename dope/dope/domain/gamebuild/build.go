@@ -353,7 +353,7 @@ func writeStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gam
 		stageID, err := store.InsertReturningID(ctx, tx, `
 insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json, block_code, wave_index, group_code)
 values(?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
-			festID, gameID, stage.Code, stage.Title, stageType, kind, position, storeutil.StageConfigJSON(stage),
+			festID, gameID, stage.Code, stage.Title, stageType, kind, position, store.StageConfigOf(stage).JSON(),
 			grain.Block, grain.Wave, grain.Group)
 		if err != nil {
 			return err
@@ -497,7 +497,7 @@ select id, stage_id, code, status, coalesce(state_json, '{}') from matches where
 			if _, err := tx.ExecContext(ctx, `
 update stages set title = ?, stage_type = ?, kind = ?, position = ?, config_json = ?,
   block_code = ?, wave_index = ?, group_code = ? where id = ?`,
-				stage.Title, stage.StageType, stage.Kind, position, storeutil.StageConfigJSON(stage),
+				stage.Title, stage.StageType, stage.Kind, position, store.StageConfigOf(stage).JSON(),
 				grain.Block, grain.Wave, grain.Group, stageID); err != nil {
 				return err
 			}
@@ -506,7 +506,7 @@ update stages set title = ?, stage_type = ?, kind = ?, position = ?, config_json
 			if stageID, err = store.InsertReturningID(ctx, tx, `
 insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json, block_code, wave_index, group_code)
 values(?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
-				festID, gameID, stage.Code, stage.Title, stage.StageType, stage.Kind, position, storeutil.StageConfigJSON(stage),
+				festID, gameID, stage.Code, stage.Title, stage.StageType, stage.Kind, position, store.StageConfigOf(stage).JSON(),
 				grain.Block, grain.Wave, grain.Group); err != nil {
 				return err
 			}
@@ -594,42 +594,23 @@ select source_type, source_ref_json from match_slots where match_id = ? order by
 		if err := rows.Scan(&sourceType, &refJSON); err != nil {
 			return false
 		}
-		current = append(current, slotIdentity(sourceType, refJSON))
+		current = append(current, store.ParseSlotRef(sourceType, refJSON).Identity())
 	}
 	if rows.Err() != nil || len(current) != len(planned) {
 		return false
 	}
 	for i, slot := range planned {
-		sourceType, refJSON := storeutil.SlotSource(slot)
-		if slotIdentity(sourceType, refJSON) != current[i] {
+		if store.SlotRefOf(slot).Identity() != current[i] {
 			return false
 		}
 	}
 	return true
 }
 
-func slotIdentity(sourceType, refJSON string) string {
-	var ref map[string]any
-	_ = json.Unmarshal([]byte(refJSON), &ref)
-	switch sourceType {
-	case "seed":
-		return fmt.Sprintf("seed:%d:%d", store.IntFromMap(ref, "basket"), store.IntFromMap(ref, "number"))
-	case "from_match":
-		return fmt.Sprintf("from_match:%v:%d", ref["match"], store.IntFromMap(ref, "place"))
-	case "reseed":
-		return fmt.Sprintf("reseed:%v:%d", ref["stage"], store.IntFromMap(ref, "rank"))
-	}
-	return sourceType
-}
-
-// stageQuestions reads a stage's questions override from its kind config,
-// falling back to the scheme-wide count.
+// stageQuestions is a stage's questions override, else the scheme-wide count.
 func stageQuestions(stage store.SchemeStage, fallback int) int {
-	var config struct {
-		Questions int `json:"questions"`
-	}
-	if err := json.Unmarshal(stage.Config, &config); err == nil && config.Questions > 0 {
-		return config.Questions
+	if q := store.StageConfigOf(stage).Questions(); q > 0 {
+		return q
 	}
 	return fallback
 }

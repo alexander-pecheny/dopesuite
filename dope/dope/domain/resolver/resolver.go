@@ -221,22 +221,8 @@ values(?, ?, ?, ?)`, stageID, seat+1, entry.Participant, util.MustJSON(metrics))
 	return nil
 }
 
-// KindConfig is a stage's config as its Kind reads it: the stage's own config,
-// unwrapped from the "config" envelope storeutil.StageConfigJSON nests it in,
-// or the envelope itself for a Kind whose config is written there (a reseed's
-// sort). A caller that only asks the Ranker its Order reads it too.
-func KindConfig(raw []byte) json.RawMessage {
-	var outer struct {
-		Config json.RawMessage `json:"config"`
-	}
-	if err := json.Unmarshal(raw, &outer); err == nil && len(outer.Config) > 0 && string(outer.Config) != "null" {
-		return outer.Config
-	}
-	if len(raw) == 0 {
-		return json.RawMessage("{}")
-	}
-	return raw
-}
+// KindConfig is a stage's config as its Kind reads it (store.StageConfig).
+func KindConfig(raw []byte) json.RawMessage { return store.ParseStageConfig(string(raw)).KindConfig() }
 
 // stageMatchOutcomesTx loads a stage's matches as structure.MatchOutcome (slot
 // results in slot order) and reports whether every match is finished.
@@ -349,15 +335,13 @@ order by ms.match_id, ms.slot_index`,
 
 	var affected []int64
 	for _, slot := range slots {
-		var ref map[string]any
-		_ = json.Unmarshal([]byte(slot.sourceRef), &ref)
-
+		ref := store.ParseSlotRef(slot.sourceType, slot.sourceRef)
 		var desired int64
-		switch slot.sourceType {
-		case "from_match":
-			desired, err = teamAtMatchPlace(ctx, tx, gameID, store.StringFromMap(ref, "match"), store.IntFromMap(ref, "place"))
-		case "reseed":
-			desired, err = teamAtReseedRank(ctx, tx, gameID, store.StringFromMap(ref, "stage"), store.IntFromMap(ref, "rank"))
+		switch ref.Type {
+		case store.SlotFromMatch:
+			desired, err = teamAtMatchPlace(ctx, tx, gameID, ref.Match, ref.Place)
+		case store.SlotReseed:
+			desired, err = teamAtReseedRank(ctx, tx, gameID, ref.Stage, ref.Rank)
 		}
 		if err != nil {
 			return nil, err
@@ -472,11 +456,7 @@ func applyResolvedSlotTx(ctx context.Context, tx *sql.Tx, slotID, matchID, curre
 
 // --- reseed computation --------------------------------------------------
 
-type reseedConfig struct {
-	Teams   []store.SchemeSlot `json:"teams"`
-	Bands   []int              `json:"bands"`
-	Sources []string           `json:"sources"`
-}
+type reseedConfig = store.StageConfig
 
 func syncReseedReadinessTx(ctx context.Context, tx *sql.Tx, stage resolverStage, gameID int64) error {
 	state, err := ReseedPrerequisites(ctx, tx, stage.config, gameID)
@@ -539,10 +519,7 @@ type reseedPrerequisiteState struct {
 // finished, listing the source bout ids and the codes of any still-pending ones.
 func ReseedPrerequisites(ctx context.Context, q store.Queryer, config []byte, gameID int64) (reseedPrerequisiteState, error) {
 	var state reseedPrerequisiteState
-	var cfg reseedConfig
-	if err := json.Unmarshal(config, &cfg); err != nil {
-		return state, err
-	}
+	cfg := store.ParseStageConfig(string(config))
 
 	sourceMatchIDs, sourcePending, err := reseedSourceMatches(ctx, q, gameID, cfg)
 	if err != nil {
@@ -614,10 +591,7 @@ func ReseedNotReadyMessage(pending []string) string {
 // cleared until every source бой is finished, so downstream reseed slots stay
 // unresolved until then.
 func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, config []byte, gameID int64) error {
-	var cfg reseedConfig
-	if err := json.Unmarshal(config, &cfg); err != nil {
-		return err
-	}
+	cfg := store.ParseStageConfig(string(config))
 	clear := func() error {
 		_, err := tx.ExecContext(ctx, `delete from stage_standings where stage_id = ?`, stageID)
 		return err
@@ -773,20 +747,6 @@ func eligibleTeam(ctx context.Context, q store.Queryer, gameID int64, slot store
 	return 0, "", nil
 }
 
-// stageConfigQuestions reads a stage's per-bout base question count from its
-// persisted config (nested under "config" for scheme-imported stages).
 func stageConfigQuestions(raw string) float64 {
-	var outer struct {
-		Questions float64 `json:"questions"`
-		Config    struct {
-			Questions float64 `json:"questions"`
-		} `json:"config"`
-	}
-	if json.Unmarshal([]byte(raw), &outer) != nil {
-		return 0
-	}
-	if outer.Config.Questions > 0 {
-		return outer.Config.Questions
-	}
-	return outer.Questions
+	return float64(store.ParseStageConfig(raw).Questions())
 }

@@ -1,12 +1,10 @@
 package storeutil
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
-	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 )
 
@@ -91,82 +89,4 @@ func ValidateScheme(scheme store.FestScheme) error {
 		assignmentKeys[key] = team.Name
 	}
 	return nil
-}
-
-// StageConfigJSON serialises the optional, type-specific configuration of a
-// scheme stage (teams, sources, sort, config, layout) into the compact JSON
-// stored in stages.config_json.
-func StageConfigJSON(stage store.SchemeStage) string {
-	config := map[string]json.RawMessage{}
-	if len(stage.Teams) > 0 {
-		data, _ := json.Marshal(stage.Teams)
-		config["teams"] = data
-	}
-	if len(stage.Bands) > 0 {
-		data, _ := json.Marshal(stage.Bands)
-		config["bands"] = data
-	}
-	if len(stage.Sources) > 0 {
-		data, _ := json.Marshal(stage.Sources)
-		config["sources"] = data
-	}
-	if len(stage.Sort) > 0 {
-		config["sort"] = stage.Sort
-	}
-	if len(stage.Config) > 0 {
-		config["config"] = stage.Config
-	}
-	if len(stage.Layout) > 0 {
-		config["layout"] = stage.Layout
-	}
-	return util.MustJSON(config)
-}
-
-// SlotSource derives the (source_type, source_ref_json) pair persisted for a
-// match slot from its scheme description (seed, from_match, reseed or a bare
-// placeholder/label).
-func SlotSource(slot store.SchemeSlot) (string, string) {
-	if slot.Seed != nil {
-		number := slot.Seed.Number
-		if number == 0 {
-			number = slot.Seed.Position
-		}
-		basket := slot.Seed.Basket
-		if basket <= 0 {
-			basket = 1
-		}
-		label := slot.Label
-		if label == "" && slot.Seed.Basket <= 0 {
-			label = fmt.Sprintf("Посев-%d", number)
-		}
-		return "seed", util.MustJSON(map[string]any{
-			"basket": basket,
-			"number": number,
-			"label":  label,
-		})
-	}
-	if slot.FromMatch != nil {
-		return "from_match", util.MustJSON(map[string]any{
-			"match": slot.FromMatch.Match,
-			"place": slot.FromMatch.Place,
-			"label": slot.Label,
-		})
-	}
-	if slot.Reseed != nil {
-		return "reseed", util.MustJSON(map[string]any{
-			"stage": slot.Reseed.Stage,
-			"rank":  slot.Reseed.Rank,
-			"label": slot.Label,
-		})
-	}
-	if slot.Placeholder != "" {
-		return "placeholder", util.MustJSON(map[string]string{
-			"placeholder": slot.Placeholder,
-			"label":       slot.Label,
-		})
-	}
-	if slot.Label != "" {
-		return "placeholder", util.MustJSON(map[string]string{"label": slot.Label})
-	}
-	return "placeholder", "{}"
 }

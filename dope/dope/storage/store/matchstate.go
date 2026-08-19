@@ -319,7 +319,7 @@ order by s.position, s.id, m.position, m.id`, args...)
 			if !TeamBlobShaped(match.GameType) {
 				name := slot.Name
 				if !slot.ParticipantID.Valid {
-					name = SlotSourceLabel(slot.SourceType, slot.SourceRef)
+					name = ParseSlotRef(slot.SourceType, slot.SourceRef).DisplayLabel()
 				} else {
 					match.ParticipantIDs[slot.Index] = slot.ParticipantID.Int64
 				}
@@ -328,7 +328,7 @@ order by s.position, s.id, m.position, m.id`, args...)
 			}
 			if !slot.ParticipantID.Valid {
 				match.State.Participants[slot.Index] = ParticipantState{
-					Name:   SlotSourceLabel(slot.SourceType, slot.SourceRef),
+					Name:   ParseSlotRef(slot.SourceType, slot.SourceRef).DisplayLabel(),
 					Themes: make([]ThemeEntry, ThemeCount),
 				}
 				continue
@@ -463,22 +463,7 @@ order by gtp.participant_id, gtp.roster_order`
 	return rosters, nil
 }
 
-// stageThemeCount reads how many themes a stage's бои play. The scheme writes it
-// under the stage's protocol config; anything else means the default.
-func stageThemeCount(configJSON string) int {
-	if strings.TrimSpace(configJSON) == "" {
-		return 0
-	}
-	var wrapper struct {
-		Config struct {
-			Themes int `json:"themes"`
-		} `json:"config"`
-	}
-	if err := json.Unmarshal([]byte(configJSON), &wrapper); err != nil {
-		return 0
-	}
-	return wrapper.Config.Themes
-}
+func stageThemeCount(configJSON string) int { return ParseStageConfig(configJSON).Themes() }
 
 // blobPlayerNames resolves every player id the бои's blobs mention to a
 // display name, in one statement.

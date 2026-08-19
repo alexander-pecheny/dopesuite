@@ -14,7 +14,6 @@ import (
 	"dope/dope/domain/imports"
 	"dope/dope/domain/roster"
 	"dope/dope/storage/store"
-	"dope/dope/storage/storeutil"
 )
 
 // hasAssignmentsTx reports whether the Game's seats are already claimed.
@@ -255,10 +254,10 @@ where game_id = ? and basket = 1 and participant_id is not null`, gameID)
 
 func insertMatchSlots(ctx context.Context, tx *sql.Tx, matchID int64, slots []store.SchemeSlot, seat func(store.SchemeSlot) any) error {
 	for slotIndex, slot := range slots {
-		sourceType, sourceRef := storeutil.SlotSource(slot)
+		ref := store.SlotRefOf(slot)
 		if _, err := tx.ExecContext(ctx, `
 insert into match_slots(match_id, slot_index, source_type, source_ref_json, participant_id, locked)
-values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, seat(slot)); err != nil {
+values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, ref.Type, ref.JSON(), seat(slot)); err != nil {
 			return err
 		}
 	}

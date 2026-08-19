@@ -139,7 +139,7 @@ select coalesce(participant_id, 0) from match_slots where match_id = ? order by 
 		}
 	}
 	for i, seat := range seats {
-		ref := util.MustJSON(map[string]any{"basket": 1, "number": seat.Number})
+		ref := store.SeedRef(int(seat.Number)).JSON()
 		if _, err := tx.ExecContext(ctx, `
 insert into match_slots(match_id, slot_index, source_type, source_ref_json, participant_id, locked)
 values(?, ?, 'seed', ?, ?, 0)`, matchID, i, ref, util.NullableInt64(wanted[i])); err != nil {

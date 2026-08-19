@@ -55,38 +55,6 @@ func TestValidateScheme(t *testing.T) {
 	}
 }
 
-func TestSlotSource(t *testing.T) {
-	cases := []struct {
-		slot     store.SchemeSlot
-		wantType string
-		wantJSON string
-	}{
-		{seed(3), "seed", `{"basket":1,"label":"Посев-3","number":3}`},
-		{store.SchemeSlot{Seed: &store.SchemeSeedRef{Basket: 2, Position: 4}}, "seed", `{"basket":2,"label":"","number":4}`},
-		{store.SchemeSlot{FromMatch: &store.SchemeFromMatchRef{Match: "m1", Place: 2}, Label: "2-е из m1"}, "from_match", `{"label":"2-е из m1","match":"m1","place":2}`},
-		{store.SchemeSlot{Reseed: &store.SchemeReseedRef{Stage: "s1", Rank: 5}}, "reseed", `{"label":"","rank":5,"stage":"s1"}`},
-		{store.SchemeSlot{Placeholder: "tbd", Label: "?"}, "placeholder", `{"label":"?","placeholder":"tbd"}`},
-		{store.SchemeSlot{Label: "free"}, "placeholder", `{"label":"free"}`},
-		{store.SchemeSlot{}, "placeholder", `{}`},
-	}
-	for _, c := range cases {
-		typ, ref := SlotSource(c.slot)
-		if typ != c.wantType || ref != c.wantJSON {
-			t.Errorf("SlotSource(%+v) = %s %s", c.slot, typ, ref)
-		}
-	}
-}
-
-func TestStageConfigJSONKeepsOnlyWhatIsSet(t *testing.T) {
-	if got := StageConfigJSON(store.SchemeStage{}); got != "{}" {
-		t.Fatalf("empty stage: %s", got)
-	}
-	got := StageConfigJSON(store.SchemeStage{Sources: []string{"s0"}, Sort: json.RawMessage(`["pts"]`), Bands: []int{1, 2}})
-	if got != `{"bands":[1,2],"sort":["pts"],"sources":["s0"]}` {
-		t.Fatalf("got %s", got)
-	}
-}
-
 func TestPKWhere(t *testing.T) {
 	where, args, err := PKWhere([]string{"fest_id", `we"ird`}, map[string]any{"fest_id": 1, `we"ird`: "x", "other": 2})
 	if err != nil || where != `"fest_id" = ? and "we""ird" = ?` || len(args) != 2 || args[0] != 1 || args[1] != "x" {

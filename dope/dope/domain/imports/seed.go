@@ -3,6 +3,7 @@ package imports
 import (
 	"context"
 	"database/sql"
+
 	"github.com/xuri/excelize/v2"
 
 	"dope/dope/domain/core"
@@ -700,17 +701,8 @@ where m.game_id = ? and ms.source_type = 'seed'`, gameID)
 }
 
 func seedRefKey(sourceRef string) (int, int) {
-	var ref map[string]any
-	_ = json.Unmarshal([]byte(sourceRef), &ref)
-	basket := store.IntFromMap(ref, "basket")
-	if basket <= 0 {
-		basket = 1
-	}
-	number := store.IntFromMap(ref, "number")
-	if number == 0 {
-		number = store.IntFromMap(ref, "position")
-	}
-	return basket, number
+	ref := store.ParseSlotRef(store.SlotSeed, sourceRef)
+	return ref.Basket, ref.Number
 }
 
 // standingsCandidates reads a source Game's table — the one Block's

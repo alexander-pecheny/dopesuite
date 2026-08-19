@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"strings"
 )
 
@@ -119,7 +118,7 @@ order by ms.slot_index`, []any{matchID}, func(rows *sql.Rows) (MatchParticipantS
 		if err := rows.Scan(&name, &team.SourceType, &sourceRef, &team.Place, &team.Total, &team.Plus, &team.Tiebreak); err != nil {
 			return team, err
 		}
-		team.Source = SlotSourceLabel(team.SourceType, sourceRef)
+		team.Source = ParseSlotRef(team.SourceType, sourceRef).DisplayLabel()
 		if name.Valid && name.String != "" {
 			team.Name = name.String
 		} else {
@@ -136,59 +135,4 @@ func NonEmptyJSON(value string) string {
 		return "{}"
 	}
 	return value
-}
-
-// SlotSourceLabel renders a match slot's human label from its source type and
-// the JSON source reference.
-func SlotSourceLabel(sourceType, sourceRef string) string {
-	var ref map[string]any
-	_ = json.Unmarshal([]byte(sourceRef), &ref)
-	if label, ok := ref["label"].(string); ok && label != "" {
-		// Legacy schemes baked the English token "seed-N" as the display label;
-		// surface the Russian "Посев-N" without a data migration.
-		if rest, found := strings.CutPrefix(label, "seed-"); found {
-			return "Посев-" + rest
-		}
-		return label
-	}
-	switch sourceType {
-	case "seed":
-		number := IntFromMap(ref, "number")
-		if number == 0 {
-			number = IntFromMap(ref, "position")
-		}
-		return fmt.Sprintf("К%d-%d", IntFromMap(ref, "basket"), number)
-	case "from_match":
-		return fmt.Sprintf("%s%d", StringFromMap(ref, "match"), IntFromMap(ref, "place"))
-	case "reseed":
-		return fmt.Sprintf("Пересев-%d", IntFromMap(ref, "rank"))
-	case "placeholder":
-		if placeholder := StringFromMap(ref, "placeholder"); placeholder != "" {
-			return placeholder
-		}
-	}
-	return "Ожидает команды"
-}
-
-// StringFromMap returns the string at key, or "" if absent or not a string.
-func StringFromMap(values map[string]any, key string) string {
-	if value, ok := values[key].(string); ok {
-		return value
-	}
-	return ""
-}
-
-// IntFromMap returns the int at key, tolerating float64/int/json.Number.
-func IntFromMap(values map[string]any, key string) int {
-	switch value := values[key].(type) {
-	case float64:
-		return int(value)
-	case int:
-		return value
-	case json.Number:
-		number, _ := value.Int64()
-		return int(number)
-	default:
-		return 0
-	}
 }
