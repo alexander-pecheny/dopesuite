@@ -25,44 +25,35 @@ func rfc3339(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
 // ---- session lookup / middleware ----
 
-// lookupSession resolves the session cookie to a user, refreshing the sliding
-// expiry at most once a minute. Returns ok=false if no valid session.
+// xySessions is authcred's session store over xy's users table.
+var xySessions = authcred.Sessions{
+	UserColumns: "u.username, u.telegram_username",
+	UserDest:    func(u *session.User) ([]any, func()) { return []any{&u.Username, &u.Telegram}, nil },
+}
+
+// lookupSession resolves the session cookie to a user; an expired session is
+// deleted, a live one slides — with the browser cookie's MaxAge, else the
+// cookie dies 30 days after login however active the user is.
 func (s *server) lookupSession(w http.ResponseWriter, r *http.Request) (session.User, bool) {
 	c, err := r.Cookie(session.CookieName)
 	if err != nil || c.Value == "" {
 		return session.User{}, false
 	}
-	hash := authcred.HashSessionToken(c.Value)
-	var (
-		u           session.User
-		expiresStr  string
-		lastSeenStr string
-	)
-	row := s.db.QueryRowContext(r.Context(), `
-select s.id, s.user_id, s.expires_at, s.last_seen_at, u.username, u.telegram_username
-from sessions s join users u on u.id = s.user_id
-where s.token_hash = ?`, hash)
-	if err := row.Scan(&u.SessionID, &u.UserID, &expiresStr, &lastSeenStr, &u.Username, &u.Telegram); err != nil {
-		return session.User{}, false
-	}
 	now := time.Now()
-	expires, _ := time.Parse(time.RFC3339, expiresStr)
-	if now.After(expires) {
+	u, state, slide := xySessions.Lookup(r.Context(), s.db, c.Value, now)
+	switch state {
+	case authcred.NoSession:
+		return session.User{}, false
+	case authcred.Expired:
 		_ = s.withWriteTx(r.Context(), "session-expire", func(ctx context.Context, tx *sql.Tx) error {
-			_, err := tx.ExecContext(ctx, `delete from sessions where id = ?`, u.SessionID)
-			return err
+			return authcred.DeleteSession(ctx, tx, u.SessionID)
 		})
 		return session.User{}, false
 	}
-	lastSeen, _ := time.Parse(time.RFC3339, lastSeenStr)
-	if authcred.NeedsRefresh(lastSeen, expires, now) {
+	if slide {
 		_ = s.withWriteTx(r.Context(), "session-refresh", func(ctx context.Context, tx *sql.Tx) error {
-			_, err := tx.ExecContext(ctx, `update sessions set last_seen_at = ?, expires_at = ? where id = ?`,
-				rfc3339(now), rfc3339(now.Add(session.Lifetime)), u.SessionID)
-			return err
+			return authcred.SlideSession(ctx, tx, u.SessionID, now)
 		})
-		// Slide the browser cookie's MaxAge with the server session, else the
-		// cookie dies 30 days after login however active the user is.
 		session.SetCookie(w, c.Value)
 	}
 	return u, true
@@ -434,7 +425,7 @@ func (s *server) handleLoginPassword(w http.ResponseWriter, r *http.Request) {
 			}
 			return err
 		}
-		if !authcred.VerifyPassword(pwHash.String, req.Password) {
+		if ok, _, _ := authcred.VerifyPasswordUpgrading(pwHash.String, "", req.Password); !ok {
 			return errBadRequest("неверный логин или пароль")
 		}
 		var err error
@@ -526,7 +517,7 @@ func (s *server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		if cur.Valid && cur.String != "" {
-			if !authcred.VerifyPassword(cur.String, req.CurrentPassword) {
+			if ok, _, _ := authcred.VerifyPasswordUpgrading(cur.String, "", req.CurrentPassword); !ok {
 				return errBadRequest("неверный текущий пароль")
 			}
 		}

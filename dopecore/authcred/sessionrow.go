@@ -58,3 +58,65 @@ func NeedsRefresh(lastSeen, expiry, now time.Time) bool {
 	}
 	return !expiry.IsZero() && expiry.Sub(now) < session.Lifetime-SessionRefreshInterval
 }
+
+// Queryer is the read side of a session store.
+type Queryer interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// SessionState is what a token resolves to.
+type SessionState int
+
+const (
+	NoSession SessionState = iota // unknown token
+	Expired                       // a row past its expiry — the caller deletes it
+	Live
+)
+
+// Sessions resolves cookies over an app's users table. The session columns are
+// the same in both apps; the user columns differ (dope reads is_system), so
+// the app names the ones the join selects — prefixed "u." — and says where
+// they scan: UserDest answers the destinations in column order and a step to
+// run once scanned (an int column into a bool), or nil.
+type Sessions struct {
+	UserColumns string
+	UserDest    func(u *session.User) (dest []any, done func())
+}
+
+// Lookup resolves a raw session token in one statement: the user, the state,
+// and whether the sliding expiry is due (NeedsRefresh) — the caller slides it
+// with SlideSession under its own write discipline, as it deletes an Expired
+// row. A scan error reads as NoSession, like a missing row.
+func (s Sessions) Lookup(ctx context.Context, q Queryer, token string, now time.Time) (u session.User, state SessionState, slide bool) {
+	var expiresAt, lastSeenAt string
+	row := q.QueryRowContext(ctx, `
+select s.id, s.user_id, s.expires_at, s.last_seen_at, `+s.UserColumns+`
+from sessions s join users u on u.id = s.user_id
+where s.token_hash = ?`, HashSessionToken(token))
+	userDest, done := s.UserDest(&u)
+	if err := row.Scan(append([]any{&u.SessionID, &u.UserID, &expiresAt, &lastSeenAt}, userDest...)...); err != nil {
+		return session.User{}, NoSession, false
+	}
+	if done != nil {
+		done()
+	}
+	expiry, _ := time.Parse(time.RFC3339, expiresAt)
+	if !expiry.IsZero() && now.After(expiry) {
+		return u, Expired, false
+	}
+	lastSeen, _ := time.Parse(time.RFC3339, lastSeenAt)
+	return u, Live, NeedsRefresh(lastSeen, expiry, now)
+}
+
+// SlideSession extends a live session by the full Lifetime from now.
+func SlideSession(ctx context.Context, ex Execer, sessionID int64, now time.Time) error {
+	_, err := ex.ExecContext(ctx, `update sessions set last_seen_at = ?, expires_at = ? where id = ?`,
+		rfc3339(now), rfc3339(now.Add(session.Lifetime)), sessionID)
+	return err
+}
+
+// DeleteSession forgets one session (an expired one, a logout).
+func DeleteSession(ctx context.Context, ex Execer, sessionID int64) error {
+	_, err := ex.ExecContext(ctx, `delete from sessions where id = ?`, sessionID)
+	return err
+}

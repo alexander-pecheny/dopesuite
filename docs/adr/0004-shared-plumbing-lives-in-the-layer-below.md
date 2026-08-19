@@ -63,3 +63,17 @@ knowledge and app-facing behaviour had nowhere to go but into each app.
   `is_system`, `password_salt`). A third app would implement the same four
   methods; a schema the interface cannot express is the signal to widen the
   interface, not to copy the state machine back out.
+
+## Addendum (19 Aug 2026, second review, K1)
+
+The session read was the other half of what `tglogin` settled: `authcred`
+owned `CreateSession` and `NeedsRefresh`, the apps each kept the 40–57-line
+cookie-to-user lookup (same join, same expire-and-delete, same slide), and
+xy still proved a password with `VerifyPassword` where dope used
+`VerifyPasswordUpgrading`. `authcred.Sessions{UserColumns, UserDest}.Lookup`
+is now the one statement — the app names the users columns its table has
+(dope's `is_system`) and where they scan — answering the user, a state
+(`NoSession`, `Expired`, `Live`) and whether the slide is due; `SlideSession`
+and `DeleteSession` are the two writes, run by the app under its own write
+discipline (xy's `withWriteTx`, dope's direct exec). Both apps prove a
+password through `VerifyPasswordUpgrading` (xy passes an empty salt).
