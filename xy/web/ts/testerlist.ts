@@ -12,7 +12,7 @@ import { partialSeen, type SeenQuestion, type SessionMeta, whoSaw } from "./sess
 import { iconed } from "./icons_gen.js";
 import { type Board, type ListPanel, listScope, type PanelShell } from "./panels.js";
 import type { BoardCard, BoardList } from "./unlock.js";
-import type { Tester } from "./chgk.js";
+import type { Tester } from "./sessions.js";
 
 const { el, errMsg } = xyApp;
 

@@ -17,7 +17,10 @@ import { createAuthorCountPanel } from "./authorcount.js";
 import { xyApp, xySizes } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xyRank } from "./rank.js";
-import { type Tester, xyChgk } from "./chgk.js";
+import { xyChgk } from "./chgk.js";
+import type { Tester } from "./sessions.js";
+import { xyVersions } from "./versions.js";
+import { xyHndt } from "./hndt.js";
 import { xySync } from "./sync.js";
 import { createBoardMembers } from "./boardmembers.js";
 import { create as createAttachments } from "./attachments.js";
@@ -706,12 +709,12 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
   const labelRow = el("div", { class: "kcard-labels" });
   // Derived from the text, so it leads the row: nobody put it there and nobody
   // can take it off, unlike everything after it.
-  if (card.kind === "question" && xyChgk.handoutForCard(card.desc)) {
+  if (card.kind === "question" && xyHndt.handoutForCard(card.desc)) {
     labelRow.append(el("span", { class: "kcard-handout", title: "Раздаточный материал" }, icon("file-text")));
   }
   // Which questions the group has not settled on yet — the card itself shows
   // version 1, and this is the only sign the others exist.
-  const versions = xyChgk.versionCount(card.desc);
+  const versions = xyVersions.versionCount(card.desc);
   if (card.kind === "question" && versions > 1) {
     labelRow.append(el("span", { class: "kcard-versions", title: `Версий: ${versions}` }, ...iconed("copy", String(versions))));
   }
@@ -1158,7 +1161,7 @@ async function previewList(list: BoardList, wholeGroup = false): Promise<void> {
   // (The card editor's Просмотр is the other thing: there you are reading ONE
   // version, so it renders the body it is handed.)
   const cards = scopeLists.flatMap((l) => cardsOf(l.id))
-    .map((c) => (xyChgk.versionCount(c.desc) > 1 ? { ...c, desc: xyChgk.composeVersions(c.desc) } : c));
+    .map((c) => (xyVersions.versionCount(c.desc) > 1 ? { ...c, desc: xyVersions.composeVersions(c.desc) } : c));
   const title = byId("previewTitle");
   if (group) title.replaceChildren(...iconed("link", group.name || "связанные списки"));
   else title.textContent = list.title || "Предпросмотр";

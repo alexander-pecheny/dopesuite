@@ -14,7 +14,7 @@ import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
 import { xyDiff } from "./diff.js";
-import { xyChgk } from "./chgk.js";
+import { xyVersions } from "./versions.js";
 import type { AuthMe } from "./app.js";
 import type { DataKey } from "./crypto.js";
 import type { DiffOp } from "./diff.js";
@@ -658,7 +658,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // version 1's and reports a change nobody made. Versions are paired by
   // position, so an added version reads as one addition.
   function renderDescDiff(before: string, after: string): HTMLElement {
-    const b = xyChgk.splitVersions(before), a = xyChgk.splitVersions(after);
+    const b = xyVersions.splitVersions(before), a = xyVersions.splitVersions(after);
     const one = (x: string, y: string): HTMLElement => {
       const ops = xyDiff.diffTokens(x, y);
       return diffView() === "brief" ? renderBriefDiff(ops) : renderFullDiff(ops);
@@ -666,7 +666,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     if (b.length <= 1 && a.length <= 1) return one(before, after);
     const box = el("div", { class: "tl-versions" });
     for (let i = 0; i < Math.max(b.length, a.length); i++) {
-      const name = xyChgk.versionName(after, i) ?? xyChgk.versionName(before, i);
+      const name = xyVersions.versionName(after, i) ?? xyVersions.versionName(before, i);
       box.append(
         el("div", { class: "tl-vname", text: name || `Версия ${i + 1}` }),
         one(b[i] ?? "", a[i] ?? ""),

@@ -3,9 +3,123 @@
 // list — see docs/labels-redesign.md and ADR-0003.
 //
 // Everything here is pure: parsing meta_enc, deriving a label's display name,
-// and writing the invite line. The DOM lives in board.ts.
+// writing the invite line, and the tester lists (players / teams) of the test
+// cards the sessions grew out of. The DOM lives in board.ts and sessionspanel.ts.
 
-import { type Tester, type TesterLike, xyChgk } from "./chgk.js";
+// ---- test cards: tester lists (players / teams) ----
+// A test card's description is JSON {datetime, title, testers:[{text,type}]},
+// where type is "player" or "team". The first iteration stored {players:[ids]}
+// (integer rating.chgk.info ids that were never resolvable client-side);
+// parseTestCard folds that legacy shape forward, turning each id into a
+// player-typed string so nothing is silently dropped on migration.
+
+export type TesterType = "player" | "team";
+export interface Tester { text: string; type: TesterType }
+export interface TestCardModel { datetime: string; title: string; testers: Tester[] }
+
+// The lax shape serializeTestCard/testersToText/testerCopyText accept: anything
+// tester-ish, normalized on the way through.
+export interface TesterLike { text?: string | null; type?: string | null }
+export interface TestCardDraft {
+  datetime?: string | null;
+  title?: string | null;
+  testers?: ReadonlyArray<TesterLike> | null;
+}
+
+// parseTestCard: JSON desc → {datetime, title, testers:[{text,type}]}.
+export function parseTestCard(desc: string): TestCardModel {
+  let m: unknown;
+  try {
+    m = JSON.parse(desc);
+  } catch (_) {
+    m = null;
+  }
+  const obj: Record<string, unknown> = m && typeof m === "object" ? (m as Record<string, unknown>) : {};
+  let testers: unknown[] | null = Array.isArray(obj.testers) ? (obj.testers as unknown[]) : null;
+  if (!testers) {
+    // legacy {players:[ids]} → player-typed strings (see note above).
+    const legacy: unknown[] = Array.isArray(obj.players) ? (obj.players as unknown[]) : [];
+    testers = legacy.map((p) => ({ text: String(p == null ? "" : p), type: "player" }));
+  }
+  const clean = testers
+    .filter((t): t is Record<string, unknown> => Boolean(t) && typeof t === "object")
+    .map((t): Tester => ({ text: String(t.text == null ? "" : t.text), type: t.type === "team" ? "team" : "player" }));
+  return {
+    datetime: typeof obj.datetime === "string" ? obj.datetime : "",
+    title: typeof obj.title === "string" ? obj.title : "",
+    testers: clean,
+  };
+}
+
+// serializeTestCard: {datetime, title, testers} → JSON desc, dropping blank rows.
+export function serializeTestCard(m: TestCardDraft): string {
+  const testers = (m.testers || [])
+    .map((t): Tester => ({ text: (t.text || "").trim(), type: t.type === "team" ? "team" : "player" }))
+    .filter((t) => t.text);
+  return JSON.stringify({ datetime: m.datetime || "", title: m.title || "", testers });
+}
+
+// testersToText: testers[] → plaintext, "- name" (player) / "-T name" (team).
+export function testersToText(testers: ReadonlyArray<TesterLike> | null | undefined): string {
+  return (testers || []).map((t) => (t.type === "team" ? "-T " : "- ") + (t.text || "")).join("\n");
+}
+
+// testersFromText: plaintext → testers[]. A "-T" prefix (Latin or Cyrillic T,
+// followed by whitespace) marks a team; any other leading dash marks a player.
+export function testersFromText(text: string | null | undefined): Tester[] {
+  const out: Tester[] = [];
+  for (const raw of String(text == null ? "" : text).split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    let type: TesterType = "player", body = line;
+    if (/^-[TtТт](?=\s|$)/.test(line)) { type = "team"; body = line.slice(2); }
+    else if (line[0] === "-") { body = line.slice(1); }
+    body = body.trim();
+    if (body) out.push({ text: body, type });
+  }
+  return out;
+}
+
+// testerSortKey returns the [surname, given] comparison key for a player name:
+// the last whitespace-separated word is the surname, the rest the given name(s),
+// so "Александр Иванов" sorts under "Иванов", then "Александр".
+function testerSortKey(name: string | null | undefined): [string, string] {
+  const words = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return ["", ""];
+  const surname = words[words.length - 1];
+  return [surname, words.slice(0, -1).join(" ")];
+}
+
+// testerNames dedupes and orders testers: players by surname-then-given, teams
+// alphabetically. Split out of testerCopyText because the «Видели» line on a
+// card wants the names WITHOUT the «Вопросы тестировали:» framing.
+export function testerNames(testers: ReadonlyArray<TesterLike> | null | undefined): { players: string[]; teams: string[] } {
+  const seen: Record<TesterType, Set<string>> = { player: new Set(), team: new Set() };
+  const players: string[] = [], teams: string[] = [];
+  for (const t of testers || []) {
+    const text = ((t && t.text) || "").trim();
+    if (!text) continue;
+    const type: TesterType = t.type === "team" ? "team" : "player";
+    if (seen[type].has(text)) continue;
+    seen[type].add(text);
+    (type === "team" ? teams : players).push(text);
+  }
+  players.sort((a, b) => {
+    const ka = testerSortKey(a), kb = testerSortKey(b);
+    return ka[0].localeCompare(kb[0], "ru") || ka[1].localeCompare(kb[1], "ru");
+  });
+  teams.sort((a, b) => a.localeCompare(b, "ru"));
+  return { players, teams };
+}
+
+// testerCopyText flattens testers into the shareable line. "" when there are none.
+export function testerCopyText(testers: ReadonlyArray<TesterLike> | null | undefined): string {
+  const { players, teams } = testerNames(testers);
+  let s = "";
+  if (players.length) s = "Вопросы тестировали: " + players.join(", ");
+  if (teams.length) s += (s ? ", а также команды: " : "Вопросы тестировали команды: ") + teams.join(", ");
+  return s;
+}
 
 // A session's decrypted meta. `time`/`tz` are optional because most tests only
 // ever get a date (issue #33). `key` identifies the SITTING, not the row: a
@@ -99,7 +213,7 @@ export function parseSession(raw: string): SessionMeta {
     time,
     tz: str(obj.tz),
     title: str(obj.title),
-    testers: xyChgk.parseTestCard(raw).testers,
+    testers: parseTestCard(raw).testers,
     cities,
     key: str(obj.key),
     ...(origin && origin.board ? { origin } : {}),
@@ -285,7 +399,7 @@ export function inviteLine(m: SessionMeta): string {
 export function whoSaw(sessions: ReadonlyArray<SessionMeta>): string {
   const all: Tester[] = [];
   for (const s of sessions) all.push(...(s.testers || []));
-  const { players, teams } = xyChgk.testerNames(all);
+  const { players, teams } = testerNames(all);
   return [...players, ...teams].join(", ");
 }
 

@@ -8,7 +8,7 @@
 // password purges its entry (forget below) — that is the one case where the
 // cache would outlive the key that justified it.
 
-import type { Tester } from "./chgk.js";
+import type { Tester } from "./sessions.js";
 
 const KEY = "xy.people";
 

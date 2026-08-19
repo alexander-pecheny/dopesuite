@@ -14,7 +14,7 @@ import { xyApp } from "./app.js";
 import { TOWNS } from "./towns.js";
 import { autocomplete, type Choice, townChoices, zoneChoices } from "./suggest.js";
 import type { BoardSession } from "./unlock.js";
-import type { Tester } from "./chgk.js";
+import type { Tester } from "./sessions.js";
 import * as people from "./people.js";
 import { icon, iconed } from "./icons_gen.js";
 import { commentBody, decodeCommentPayload } from "./timeline.js";

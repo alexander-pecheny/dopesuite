@@ -4,6 +4,7 @@
 // what a fee is divided by.
 
 import { xyChgk, type ChgkCard } from "./chgk.js";
+import { xyVersions } from "./versions.js";
 import { xyFind } from "./find.js";
 import { xyApp } from "./app.js";
 import { iconed } from "./icons_gen.js";
@@ -30,7 +31,7 @@ function displayName(name: string): string {
 }
 
 function authorsOf(card: ChgkCard): string[] {
-  const names = xyChgk.splitFields(xyChgk.versionBody(card.desc, 0)).authors || [];
+  const names = xyChgk.splitFields(xyVersions.versionBody(card.desc, 0)).authors || [];
   return names.filter((n) => authorKey(n));
 }
 

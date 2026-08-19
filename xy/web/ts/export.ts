@@ -9,6 +9,8 @@
 import { xyApp } from "./app.js";
 import { xySync } from "./sync.js";
 import { xyChgk } from "./chgk.js";
+import { xyVersions } from "./versions.js";
+import { xyHndt } from "./hndt.js";
 import { modal } from "./modal.js";
 import type { Attachments } from "./attachments.js";
 import type { Board, ListPanel, ListScope } from "./panels.js";
@@ -21,7 +23,7 @@ const { byId, errMsg, downloadBlob } = xyApp;
 // string, which is why the versions are folded back into one question block here
 // and nowhere else — a versioned card is still one numbered question.
 export function exportSource(cards: ReadonlyArray<BoardCard>): string {
-  return cards.map((c) => xyChgk.composeVersions(c.desc).trim()).filter(Boolean).join("\n\n") + "\n";
+  return cards.map((c) => xyVersions.composeVersions(c.desc).trim()).filter(Boolean).join("\n\n") + "\n";
 }
 
 export function createExportPanel(board: Board, attachments: Pick<Attachments, "appendImages">): ListPanel {
@@ -59,7 +61,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     const numbers = xyChgk.numberQuestionCards(scope.cards);
     const metas: Record<number, string> = {};
     for (const c of scope.cards) if (c.handoutMeta) metas[c.id] = c.handoutMeta;
-    const hndt = xyChgk.generateHndt(scope.cards, numbers, metas);
+    const hndt = xyHndt.generateHndt(scope.cards, numbers, metas);
     exportCtx = { cards: scope.cards, title: scope.title, hndt };
 
     // Offline everything but the .4s is unreachable: the other formats render

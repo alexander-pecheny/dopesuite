@@ -15,13 +15,15 @@ import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
 import { xyChgk } from "./chgk.js";
+import { xyVersions } from "./versions.js";
 import { xyTypo } from "./typo.js";
 import { parseSession, serializeSession } from "./sessions.js";
 import { normalizeAlias, xyCardDraft } from "./carddraft.js";
 import { xyRank } from "./rank.js";
 import { byRank, rankForSlot } from "./dragrank.js";
 import type { BoardKeymeta, DataKey } from "./crypto.js";
-import type { CardFields, CopyTarget, Handout, Tester, TesterLike } from "./chgk.js";
+import type { CardFields, CopyTarget, Handout } from "./chgk.js";
+import type { Tester, TesterLike } from "./sessions.js";
 import type { BoardCard, BoardLabel, BoardList, BoardSession, CardLabel, Playing, Snapshot, UnreadFlags } from "./unlock.js";
 import type { OpBody } from "./store.js";
 import type { CardEvent } from "./timeline.js";
@@ -715,15 +717,15 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // they write back through. Both go through the draft rather than the editor,
   // which is what keeps the versions you cannot see from being dropped on save.
   function versionDesc(): string {
-    return xyChgk.versionBody(draft.desc, versionIdx);
+    return xyVersions.versionBody(draft.desc, versionIdx);
   }
 
   function writeVersionDesc(body: string): void {
-    draft.desc = xyChgk.setVersionBody(draft.desc, versionIdx, body);
+    draft.desc = xyVersions.setVersionBody(draft.desc, versionIdx, body);
   }
 
   function versionCount(): number {
-    return xyChgk.versionCount(draft.desc);
+    return xyVersions.versionCount(draft.desc);
   }
 
   // applyVersions reshapes the card's versions and re-renders. Every version edit
@@ -774,32 +776,32 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     if (!show) { box.replaceChildren(); return; }
     const nodes: HTMLElement[] = [];
     for (let i = 0; i < n; i++) {
-      const name = xyChgk.versionName(draft.desc, i);
+      const name = xyVersions.versionName(draft.desc, i);
       const btn = el("button", { class: "seg-btn" + (i === versionIdx ? " active" : ""), type: "button", role: "tab", text: name || `Версия ${i + 1}` });
       btn.addEventListener("click", () => { captureDraft(); selectVersion(i); });
       nodes.push(btn);
       if (i !== versionIdx) continue;
       if (i > 0) {
         const up = el("button", { class: "vtab-act", type: "button", title: "Сделать первой — первая версия и есть та, которую видно на доске", "aria-label": "Сделать первой" }, icon("arrow-up"));
-        up.addEventListener("click", () => applyVersions((d) => xyChgk.promoteVersion(d, i)));
+        up.addEventListener("click", () => applyVersions((d) => xyVersions.promoteVersion(d, i)));
         nodes.push(up);
       }
       const ren = el("button", { class: "vtab-act", type: "button", title: "Назвать версию — название видно только здесь, ни в один экспорт оно не попадёт", "aria-label": "Назвать версию" }, icon("pencil"));
       ren.addEventListener("click", () => {
         const typed = prompt("Название версии:", name || "");
         if (typed === null) return;
-        applyVersions((d) => ({ desc: xyChgk.setVersionName(d, i, typed), index: i }));
+        applyVersions((d) => ({ desc: xyVersions.setVersionName(d, i, typed), index: i }));
       });
       nodes.push(ren);
       const rm = el("button", { class: "vtab-act", type: "button", title: "Удалить эту версию целиком", "aria-label": "Удалить версию" }, icon("trash-2"));
-      rm.addEventListener("click", () => applyVersions((d) => xyChgk.removeVersion(d, i)));
+      rm.addEventListener("click", () => applyVersions((d) => xyVersions.removeVersion(d, i)));
       nodes.push(rm);
     }
     box.replaceChildren(...nodes);
   }
 
   byId("cardAddVersion").addEventListener("click", () => {
-    applyVersions((d) => xyChgk.addVersion(d, versionIdx));
+    applyVersions((d) => xyVersions.addVersion(d, versionIdx));
   });
 
   // readCardFields collapses the Поля editor back into a 4s description + handout
@@ -1013,7 +1015,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     draft.open(card.desc, openMeta, openAlias);
     cancelAliasSave(); // the previous card's pending write is its own to make
     cardAliasEl.value = openAlias || "";
-    cardDescEl.value = xyChgk.versionBody(card.desc, 0);
+    cardDescEl.value = xyVersions.versionBody(card.desc, 0);
     cardMessageEl.textContent = "";
     cardKindEl.hidden = false;
     cardKindEl.value = card.kind || "question";

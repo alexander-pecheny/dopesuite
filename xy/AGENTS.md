@@ -308,11 +308,19 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
     timer.ts           floating ЧГК play timer (⏰ in the board header): question
                        minute + 10s answer countdown, WebAudio bell cues
     chgk.ts            client-side 4s parser for card previews (display-only,
-                       never rewrites the source); its marker table is
+                       never rewrites the source): blocks, numbering, the inline
+                       tokenizer and renderer, structured fields, copy targets, the
+                       version separator rule (versionLineName); its marker table is
                        markers_gen.ts, and imgRefs (the (img …) references of a text,
                        through the inline tokenizer's bracket matching) is the one
                        image finder — export, handouts, import and the preview all
                        call it
+    versions.ts        the Version algebra (ADR-0007): split/count/body/name, add/
+                       remove/promote, composeVersions (the export's one question with
+                       every wording page-broken) and the legacy (PAGEBREAK) conversion
+    hndt.ts            раздатки's .hndt side: generateHndt (the 4s2hndt port),
+                       handoutForCard, parseHndtMetaByQuestion — one document of it is in
+                       the Go/TS parity corpus
     markers_gen.ts     GENERATED from fsource's markerMapping (`go generate
                        ./internal/chgk/fsource`, guarded by generate-check): the 4s line
                        markers and their element types, longest first. Go and TS cannot
@@ -332,7 +340,9 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        24h parsing (native date/time inputs render in the BROWSER's locale,
                        not the page's), zone offsets and the IANA list off Intl, and the
                        invite line — «20 июля, 19:00 (Берлин) / 21:00 (Москва)» — computed
-                       from wall clock + zone, so DST applies for the session's own date
+                       from wall clock + zone, so DST applies for the session's own date;
+                       and the tester lists of the test cards the sessions grew out of
+                       (parseTestCard, testersToText…, the Tester type)
     sessionspanel.ts   the «🧪 Тесты» panel that replaced the тест-список: one row per
                        session, the session form (towns/timezone/tester autocompletes), the
                        invite and tester-summary copies, and the session's лента. The form

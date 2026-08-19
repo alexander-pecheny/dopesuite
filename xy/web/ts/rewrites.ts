@@ -8,6 +8,7 @@ import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
 import { xyChgk } from "./chgk.js";
+import { xyVersions } from "./versions.js";
 import { xyTypo } from "./typo.js";
 import { modal } from "./modal.js";
 import type { Board, BoardPanel } from "./panels.js";
@@ -129,7 +130,7 @@ export function createRewrites(board: Board): Rewrites {
 
   async function convertLegacyVersions(): Promise<void> {
     if (!xySync.isOnline()) return;
-    const changes = collect((c) => (c.kind === "question" ? xyChgk.convertLegacyVersions(c.desc) : null));
+    const changes = collect((c) => (c.kind === "question" ? xyVersions.convertLegacyVersions(c.desc) : null));
     if (!changes.length) return;
     try {
       await apply(changes);

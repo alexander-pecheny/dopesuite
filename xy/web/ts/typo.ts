@@ -30,6 +30,7 @@
 // ES module.
 
 import { xyChgk } from "./chgk.js";
+import { xyVersions } from "./versions.js";
 
 // ── quotes ──────────────────────────────────────────────────────────────────
 
@@ -303,8 +304,8 @@ export function accentPicks(texts: ReadonlyArray<string>): AccentPick[] {
 // much as the one it is.
 export function passVersions(desc: string | null | undefined, o: AccentOpts = {}): string {
   let out = desc || "";
-  xyChgk.splitVersions(out).forEach((body, i) => {
-    out = xyChgk.setVersionBody(out, i, passAccents(body, o));
+  xyVersions.splitVersions(out).forEach((body, i) => {
+    out = xyVersions.setVersionBody(out, i, passAccents(body, o));
   });
   return out;
 }

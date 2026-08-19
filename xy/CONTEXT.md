@@ -20,7 +20,7 @@ A Card's own short display label, stored as its own encrypted column — deliber
 A named, ordered run of **consecutive** Lists sharing one question-numbering sequence and a combined export. A group always moves as one block. (Schema name: `list_of_lists`.)
 
 **Version**:
-One candidate form of a Card, kept alongside its siblings so the editors can weigh them before choosing. It is the whole question — wording, ответ, зачёт, раздатка, автор — because a rewording answers to its own зачёт and may carry its own picture. Versions live in the Card's own content, one after another, so they cost no column; the first is the one the board shows and every export merges the rest back into that single numbered question. A Version may carry a **Name** — «полегче», «посложнее» — so it says in one word what «Версия 2» cannot; the Name is the editors' alone and reaches no export. It has nothing else: no author and no date.
+One candidate form of a Card, kept alongside its siblings so the editors can weigh them before choosing. It is the whole question — wording, ответ, зачёт, раздатка, автор — because a rewording answers to its own зачёт and may carry its own picture. Versions live in the Card's own content, one after another, so they cost no column; the first is the one the board shows and every export merges the rest back into that single numbered question. A Version may carry a **Name** — «полегче», «посложнее» — so it says in one word what «Версия 2» cannot; the Name is the editors' alone and reaches no export. It has nothing else: no author and no date. Its rules live in `web/ts/versions.ts` (ADR-0007).
 _Avoid_: draft, variant, revision (a Version is a live alternative, not a superseded past state — that is what the Timeline records)
 
 **Hidden Comment**:

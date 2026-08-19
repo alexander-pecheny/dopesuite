@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { xyChgk } from "../web/assets/static/dist/chgk.js";
+import { xyVersions } from "../web/assets/static/dist/versions.js";
+import { xyHndt } from "../web/assets/static/dist/hndt.js";
 
 const { questionText, blockText, numberQuestionCards, parseBlocks, numberDirective,
   removeAccents, removeSquareBrackets, screenText, parse4sElem } = xyChgk;
@@ -272,7 +274,7 @@ test("fixTrelloFormatting strips code fences", () => {
 });
 
 // ── structured fields ────────────────────────────────────────────────────────
-const { splitFields, composeFields, generateHndt, parseHndtMetaByQuestion } = xyChgk;
+const { splitFields, composeFields } = xyChgk;
 
 test("splitFields separates known question fields", () => {
   const desc = "№№ 5\n> (img map.png)\n? Что на схеме?\n! круг\n= окружность\n!= квадрат\n/ комментарий\n^ книга\n@ Иванов, Пётр";
@@ -377,106 +379,6 @@ test("unmodelled blocks survive as extra", () => {
   assert.equal(composeFields(f), "? Q\n! A\n## секция");
 });
 
-// ── handout generation ───────────────────────────────────────────────────────
-test("generateHndt emits a block per question with a handout", () => {
-  const cards = [
-    { id: 1, kind: "question", desc: "> Текст раздатки\n? Вопрос 1\n! ответ" },
-    { id: 2, kind: "question", desc: "? Без раздатки\n! ответ" },
-    { id: 3, kind: "question", desc: "> (img foto.png)\n? Что тут?\n! х" },
-  ];
-  const numbers = ["1", "2", "3"];
-  const out = generateHndt(cards, numbers, {});
-  const blocks = out.split("\n---\n");
-  assert.equal(blocks.length, 2);
-  assert.equal(blocks[0], "for_question: 1\ncolumns: 3\n\nТекст раздатки");
-  assert.equal(blocks[1], "for_question: 3\ncolumns: 3\n\nimage: foto.png");
-});
-
-test("generateHndt uses saved per-question settings", () => {
-  const cards = [{ id: 7, kind: "question", desc: "> Раздатка\n? Q\n! a" }];
-  const out = generateHndt(cards, ["4"], { 7: "columns: 2\nrows: 5" });
-  assert.equal(out, "for_question: 4\ncolumns: 2\nrows: 5\n\nРаздатка");
-});
-
-test("generateHndt reads a legacy inline handout bracket", () => {
-  const cards = [{ id: 1, kind: "question", desc: "? Текст [Раздаточный материал: листок] вопроса\n! a" }];
-  const out = generateHndt(cards, ["1"], {});
-  assert.equal(out, "for_question: 1\ncolumns: 3\n\nлисток");
-});
-
-test("parseHndtMetaByQuestion strips content, keeps settings by question", () => {
-  const hndt = "for_question: 1\ncolumns: 2\nrows: 3\n\nтекст\n---\nfor_question: 4\ncolumns: 3\n\nimage: a.png";
-  const m = parseHndtMetaByQuestion(hndt);
-  assert.equal(m["1"], "columns: 2\nrows: 3");
-  assert.equal(m["4"], "columns: 3");
-});
-
-// ---- test cards: tester lists ----
-const { parseTestCard, serializeTestCard, testersToText, testersFromText, testerCopyText } = xyChgk;
-
-test("parseTestCard reads the new {testers} shape", () => {
-  const desc = JSON.stringify({ datetime: "2026-06-29 12:00", title: "Иван Иванов", testers: [
-    { text: "Александр Иванов", type: "player" }, { text: "Ромашка", type: "team" }] });
-  const m = parseTestCard(desc);
-  assert.equal(m.datetime, "2026-06-29 12:00");
-  assert.equal(m.title, "Иван Иванов");
-  assert.deepEqual(m.testers, [
-    { text: "Александр Иванов", type: "player" }, { text: "Ромашка", type: "team" }]);
-});
-
-test("parseTestCard migrates legacy {players:[ids]} to player strings", () => {
-  const m = parseTestCard(JSON.stringify({ datetime: "d", players: [12, 34] }));
-  assert.deepEqual(m.testers, [
-    { text: "12", type: "player" }, { text: "34", type: "player" }]);
-});
-
-test("parseTestCard tolerates garbage and bad types", () => {
-  assert.deepEqual(parseTestCard("not json").testers, []);
-  const m = parseTestCard(JSON.stringify({ testers: [{ text: "X", type: "weird" }, null, { text: 5 }] }));
-  assert.deepEqual(m.testers, [{ text: "X", type: "player" }, { text: "5", type: "player" }]);
-});
-
-test("testersToText / testersFromText round-trip", () => {
-  const testers = [{ text: "Александр Иванов", type: "player" }, { text: "Ромашка", type: "team" }];
-  assert.equal(testersToText(testers), "- Александр Иванов\n-T Ромашка");
-  assert.deepEqual(testersFromText("- Александр Иванов\n-T Ромашка"), testers);
-});
-
-test("testersFromText skips blank lines and trims, tolerates missing space", () => {
-  assert.deepEqual(testersFromText("\n-  Имя  \n\n-T  Тим \n"), [
-    { text: "Имя", type: "player" }, { text: "Тим", type: "team" }]);
-  // a name starting with T is still a player (the -T marker needs no inner letter)
-  assert.deepEqual(testersFromText("- Tom"), [{ text: "Tom", type: "player" }]);
-});
-
-test("serializeTestCard drops blank rows and keeps datetime/title", () => {
-  const json = serializeTestCard({ datetime: "d", title: "t", testers: [
-    { text: " A ", type: "player" }, { text: "", type: "team" }] });
-  assert.deepEqual(JSON.parse(json), { datetime: "d", title: "t", testers: [{ text: "A", type: "player" }] });
-});
-
-test("testerCopyText sorts players by surname then given, teams alphabetically", () => {
-  const testers = [
-    { text: "Борис Иванов", type: "player" },
-    { text: "Александр Иванов", type: "player" },
-    { text: "Яна Архипова", type: "player" },
-    { text: "Ромашка", type: "team" },
-    { text: "Авангард", type: "team" },
-  ];
-  assert.equal(testerCopyText(testers),
-    "Вопросы тестировали: Яна Архипова, Александр Иванов, Борис Иванов" +
-    ", а также команды: Авангард, Ромашка");
-});
-
-test("testerCopyText dedupes and handles players-only / teams-only / empty", () => {
-  assert.equal(testerCopyText([
-    { text: "Иван Иванов", type: "player" }, { text: "Иван Иванов", type: "player" }]),
-    "Вопросы тестировали: Иван Иванов");
-  assert.equal(testerCopyText([{ text: "Альфа", type: "team" }]),
-    "Вопросы тестировали команды: Альфа");
-  assert.equal(testerCopyText([]), "");
-});
-
 // ---- card-preview modes (users.card_title) ----
 
 test("answerText returns the '! ' block, or '' when there is none", () => {
@@ -499,209 +401,6 @@ test("an answerless question falls back to its text rather than previewing blank
 test("answer mode does not touch non-question cards", () => {
   assert.equal(xyChgk.previewText("heading", "### Тур 1", "answer"), "Тур 1");
   assert.equal(xyChgk.previewText("meta", "# Дата", "answer"), "Дата");
-});
-
-// ---- question versions (issue #47) ----
-// A Version is a WHOLE 4s body — question, ответ, зачёт, раздатка and all —
-// stored in the card's own description, each body introduced by a standalone
-// (hidden-comment xy-version: имя) line. The export merges them back into one
-// question block, so a versioned card is still one numbered question.
-const {
-  splitVersions, versionBody, versionName, setVersionBody, setVersionName,
-  addVersion, removeVersion, promoteVersion, convertLegacyVersions, composeVersions,
-} = xyChgk;
-
-const TWO = [
-  "(hidden-comment xy-version:)",
-  "? Первая?",
-  "! Ответ раз",
-  "(hidden-comment xy-version: полегче)",
-  "? Вторая?",
-  "! Ответ два",
-].join("\n");
-
-test("a card with no separator line is one version, and that version is the card", () => {
-  assert.deepEqual(splitVersions("? Один вопрос?\n! Ответ"), ["? Один вопрос?\n! Ответ"]);
-  assert.equal(versionName("? Один вопрос?", 0), null);
-});
-
-test("a version is a whole body, so every field belongs to the version it sits in", () => {
-  assert.deepEqual(splitVersions(TWO), ["? Первая?\n! Ответ раз", "? Вторая?\n! Ответ два"]);
-  assert.equal(versionBody(TWO, 1), "? Вторая?\n! Ответ два");
-  assert.equal(versionName(TWO, 0), null);
-  assert.equal(versionName(TWO, 1), "полегче");
-});
-
-test("editing one version leaves its siblings alone — answer included", () => {
-  const w = setVersionBody(TWO, 1, "? Вторая?\n! Другой ответ");
-  assert.equal(versionBody(w, 0), "? Первая?\n! Ответ раз");
-  assert.equal(versionBody(w, 1), "? Вторая?\n! Другой ответ");
-  assert.equal(versionName(w, 1), "полегче");
-});
-
-test("setVersionBody ignores an index that is not there", () => {
-  assert.equal(setVersionBody("? Одна?", 3, "нет"), "? Одна?");
-});
-
-test("a body cannot smuggle in a version of its own", () => {
-  // Pasted or typed under the old scheme: the separator inside would otherwise
-  // split into another version on the next read, and the card would grow one
-  // every time it was saved.
-  const pasted = "(hidden-comment xy-version: полегче)\n? Чужая?";
-  const w = setVersionBody(TWO, 0, pasted);
-  assert.equal(splitVersions(w).length, 2);
-  assert.equal(versionBody(w, 0), "? Чужая?");
-  assert.equal(versionName(w, 0), null);
-});
-
-test("adding a version clones the whole body, unnamed, and selects the copy", () => {
-  const r = addVersion("? Первая?\n! Ответ", 0);
-  assert.equal(r.index, 1);
-  assert.deepEqual(splitVersions(r.desc), ["? Первая?\n! Ответ", "? Первая?\n! Ответ"]);
-  assert.equal(versionName(r.desc, 1), null);
-  // independent from the next edit on
-  assert.equal(versionBody(setVersionBody(r.desc, 1, "? Другая?"), 0), "? Первая?\n! Ответ");
-});
-
-test("deleting a version drops it and steps back", () => {
-  const r = removeVersion(TWO, 1);
-  assert.equal(r.index, 0);
-  assert.deepEqual(splitVersions(r.desc), ["? Первая?\n! Ответ раз"]);
-});
-
-test("the last version cannot be deleted", () => {
-  assert.deepEqual(removeVersion("? Одна?", 0), { desc: "? Одна?", index: 0 });
-});
-
-test("promoting a version moves it to the front with its name", () => {
-  const r = promoteVersion(TWO, 1);
-  assert.equal(r.index, 0);
-  assert.equal(versionBody(r.desc, 0), "? Вторая?\n! Ответ два");
-  assert.equal(versionName(r.desc, 0), "полегче");
-  assert.deepEqual(promoteVersion(TWO, 0), { desc: TWO, index: 0 });
-});
-
-test("naming and unnaming a version rewrites only its own separator line", () => {
-  const named = setVersionName(TWO, 0, "посложнее");
-  assert.equal(versionName(named, 0), "посложнее");
-  assert.equal(versionBody(named, 0), "? Первая?\n! Ответ раз");
-  assert.equal(versionName(setVersionName(named, 0, ""), 0), null);
-});
-
-test("a name cannot break out of its own directive", () => {
-  const w = setVersionName("? Первая?", 0, "смайл :) и\nперенос");
-  assert.equal(versionName(w, 0), "смайл : и перенос");
-  assert.equal(versionBody(w, 0), "? Первая?");
-});
-
-// ---- what the rest of the app sees ----
-// Only the card editor knows about versions. Everything else reads the card's
-// description as it always did and gets version 1, because the separator line
-// is xy's own metadata and parseBlocks drops it.
-
-test("the board previews version 1 and never the separator", () => {
-  assert.equal(xyChgk.previewText("question", TWO, null), "Первая?");
-  assert.equal(xyChgk.questionText(TWO), "Первая?");
-  assert.equal(splitFields(TWO).question, "Первая?");
-  assert.equal(splitFields(TWO).answer, "Ответ раз");
-});
-
-test("a note is still a note — only xy-version lines separate", () => {
-  const desc = "? Вопрос?\n(hidden-comment спросить Аню)\n! Ответ";
-  assert.equal(splitVersions(desc).length, 1);
-});
-
-// ---- the export merges the versions back into one question ----
-
-test("a single version composes to itself", () => {
-  assert.equal(composeVersions("? Вопрос?\n! Ответ"), "? Вопрос?\n! Ответ");
-});
-
-test("the question carries every version, page-broken and numbered", () => {
-  assert.equal(composeVersions(TWO), [
-    "? Версия 1: Первая?",
-    "(PAGEBREAK)",
-    "Версия 2: Вторая?",
-    "! версия 1: Ответ раз",
-    "версия 2: Ответ два",
-  ].join("\n"));
-});
-
-test("a field every version agrees on prints once", () => {
-  const desc = [
-    "(hidden-comment xy-version:)", "? Первая?", "! Один ответ", "/ Общий комментарий",
-    "(hidden-comment xy-version:)", "? Вторая?", "! Один ответ", "/ Общий комментарий",
-  ].join("\n");
-  const out = composeVersions(desc);
-  assert.ok(out.includes("! Один ответ"));
-  assert.ok(out.includes("/ Общий комментарий"));
-});
-
-test("a field one version simply lacks counts as differing", () => {
-  const desc = [
-    "(hidden-comment xy-version:)", "? Первая?", "/ Есть комментарий",
-    "(hidden-comment xy-version:)", "? Вторая?",
-  ].join("\n");
-  assert.ok(composeVersions(desc).includes("/ версия 1: Есть комментарий"));
-});
-
-test("each version takes its own раздатка into the export", () => {
-  const desc = [
-    "(hidden-comment xy-version:)", "? [Раздаточный материал: схема] Первая?",
-    "(hidden-comment xy-version:)", "? [Раздаточный материал: другая схема] Вторая?",
-  ].join("\n");
-  const out = composeVersions(desc);
-  assert.ok(out.includes("? Версия 1: [Раздаточный материал: схема] Первая?"));
-  assert.ok(out.includes("Версия 2: [Раздаточный материал: другая схема] Вторая?"));
-});
-
-test("authors may differ per version, and are labelled like any other field", () => {
-  const desc = [
-    "(hidden-comment xy-version:)", "? Первая?", "@ Иванов, Петров",
-    "(hidden-comment xy-version:)", "? Вторая?", "@ Иванов",
-  ].join("\n");
-  assert.ok(composeVersions(desc).includes("@ версия 1: Иванов, Петров\nверсия 2: Иванов"));
-});
-
-test("a version's name reaches no export — the label is always the number", () => {
-  const out = composeVersions(TWO);
-  assert.ok(!out.includes("полегче"));
-  assert.ok(!out.includes("xy-version"));
-});
-
-// ---- the cards written under the old (PAGEBREAK) scheme ----
-
-test("a page-broken question converts to whole bodies that clone the shared fields", () => {
-  const old = "? Первая?\n(PAGEBREAK)\nВторая?\n! Общий ответ";
-  const desc = convertLegacyVersions(old);
-  assert.deepEqual(splitVersions(desc), [
-    "? Первая?\n! Общий ответ",
-    "? Вторая?\n! Общий ответ",
-  ]);
-});
-
-test("conversion carries the old inline name up to the separator", () => {
-  const old = "? Первая?\n(PAGEBREAK)\n(hidden-comment xy-version: полегче)\nВторая?";
-  const desc = convertLegacyVersions(old);
-  assert.equal(versionName(desc, 1), "полегче");
-  assert.equal(versionBody(desc, 1), "? Вторая?");
-});
-
-test("the shared раздатка reaches every converted version", () => {
-  const old = "? [Раздаточный материал: схема] Первая?\n(PAGEBREAK)\nВторая?\n! Общий ответ";
-  const bodies = splitVersions(convertLegacyVersions(old));
-  assert.ok(bodies[0].includes("[Раздаточный материал: схема]"));
-  assert.ok(bodies[1].includes("[Раздаточный материал: схема]"));
-});
-
-test("a lone version's name never reaches the export", () => {
-  const named = setVersionName("? Одна?\n! Ответ", 0, "полегче");
-  assert.equal(composeVersions(named), "? Одна?\n! Ответ");
-});
-
-test("nothing to convert leaves the card untouched", () => {
-  assert.equal(convertLegacyVersions("? Вопрос?\n! Ответ"), null);
-  assert.equal(convertLegacyVersions(TWO), null);
 });
 
 // ---- what a card offers to copy (issue #45) ----
@@ -805,9 +504,10 @@ test("a field that is a bare marker prints nothing rather than an empty caption"
 });
 
 test("copying takes the version you are looking at", () => {
+  const two = "(hidden-comment xy-version:)\n? Первая?\n! Ответ раз\n(hidden-comment xy-version: полегче)\n? Вторая?\n! Ответ два";
   const q = (desc) => copyTargets(desc, 5).find((x) => x.label === "Вопрос").text;
-  assert.equal(q(versionBody(TWO, 0)), "Вопрос 5. Первая?");
-  assert.equal(q(versionBody(TWO, 1)), "Вопрос 5. Вторая?");
+  assert.equal(q(xyVersions.versionBody(two, 0)), "Вопрос 5. Первая?");
+  assert.equal(q(xyVersions.versionBody(two, 1)), "Вопрос 5. Вторая?");
 });
 
 test("screen mode still applies — host notes and accents are not sent to testers", () => {
@@ -887,5 +587,5 @@ test("a card on the board shows no hidden comment in its title", () => {
 
 test("a раздатка carries no hidden comment to the print", () => {
   const desc = "? [Раздаточный материал: текст (hidden-comment вырезать)] Вопрос?\n! Ответ";
-  assert.deepEqual(xyChgk.handoutForCard(desc), { kind: "text", text: "текст" });
+  assert.deepEqual(xyHndt.handoutForCard(desc), { kind: "text", text: "текст" });
 });

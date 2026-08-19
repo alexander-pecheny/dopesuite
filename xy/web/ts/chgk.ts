@@ -57,7 +57,7 @@ function splitMarker(line: string): { prefix: string; rest: string } {
 // didn't prefix "? ").
 // `keepVersionLines` is for the legacy converter alone, which has to read a name
 // that the old scheme wrote inside the question text.
-function parseBlocks(desc: string | null | undefined, keepVersionLines = false): Block[] {
+export function parseBlocks(desc: string | null | undefined, keepVersionLines = false): Block[] {
   const lines = (desc || "").split(/\r?\n/);
   const blocks: Block[] = [];
   let cur: Block | null = null;
@@ -94,7 +94,7 @@ function numberDirective(blocks: Block[]): { value: string; base: boolean } | nu
 
 // questionText returns the displayable question text (the "? " block, or the
 // preamble, or the whole description) — never including the "? " marker.
-function questionText(desc: string | null | undefined): string {
+export function questionText(desc: string | null | undefined): string {
   const blocks = parseBlocks(desc);
   const q = blocks.find((b) => b.type === "question");
   if (q) return q.text;
@@ -105,7 +105,7 @@ function questionText(desc: string | null | undefined): string {
 
 // blockText returns the first block of `type`, falling back to preamble / whole
 // text. Used for meta (# ) and heading (### ) cards.
-function blockText(desc: string | null | undefined, type: BlockType): string {
+export function blockText(desc: string | null | undefined, type: BlockType): string {
   const blocks = parseBlocks(desc);
   const b = blocks.find((x) => x.type === type);
   if (b) return b.text;
@@ -224,7 +224,7 @@ function findMatchingBracket(s: string, i: number): number {
 
 // bracketSpans yields [start, endExclusive, body] for each top-level "[...]"
 // span, skipping escaped brackets (\[ \]).
-function* bracketSpans(s: string): Generator<[number, number, string]> {
+export function* bracketSpans(s: string): Generator<[number, number, string]> {
   let i = 0;
   while (i < s.length) {
     if (isEscapedBracket(s, i)) { i += 2; continue; }
@@ -236,7 +236,7 @@ function* bracketSpans(s: string): Generator<[number, number, string]> {
   }
 }
 
-const isHandoutBody = (body: string): boolean => HANDOUT_SHORT.test(body);
+export const isHandoutBody = (body: string): boolean => HANDOUT_SHORT.test(body);
 
 // removeAccents strips combining stress marks everywhere except inside handout
 // brackets (which are shown verbatim to players).
@@ -373,7 +373,7 @@ export interface HiddenSpan { start: number; end: number; body: string }
 // must cut at, plus where the hidden comments are. The two callers need the same
 // walk: parse4sElem builds runs from it, and the version-name helpers edit the
 // raw source with it — a second scanner would be a second set of bugs.
-function scanDirectives(s: string): { topart: number[]; hidden: HiddenSpan[] } {
+export function scanDirectives(s: string): { topart: number[]; hidden: HiddenSpan[] } {
   const topart: number[] = [];
   const hidden: HiddenSpan[] = [];
   let i = 0;
@@ -550,7 +550,7 @@ function parse4sElemKeep(s: string): Run[] {
 // dropHidden removes every hidden comment from raw 4s, markup and all. The
 // renderers get this for free from the tokenizer; this is for the places that
 // show a card's source text unrendered, like the board's card titles.
-function dropHidden(s: string | null | undefined): string {
+export function dropHidden(s: string | null | undefined): string {
   const src = s || "";
   let out = "", last = 0;
   for (const h of scanDirectives(src).hidden) { out += src.slice(last, h.start); last = h.end; }
@@ -759,264 +759,19 @@ function fixTrelloLinks(desc: string): string {
 }
 
 
-// ── versions ────────────────────────────────────────────────────────────────
-// A Version is a WHOLE 4s body — question, ответ, зачёт, раздатка, автор, all of
-// it. A card's description holds its versions concatenated, each introduced by a
-// standalone (hidden-comment xy-version: имя) line; the name is optional and the
-// line is xy's own metadata, dropped by parseBlocks, so every reader but the card
-// editor sees version 1 and never knows the rest are there. A card with one
-// version carries no such line at all — a plain question is stored exactly as it
-// always was.
-//
-// The export merges the versions back into ONE question block (composeVersions),
-// so a versioned card is still one numbered question: the `?` field carries every
-// wording page-broken, and any other field the versions disagree on prints each
-// value labelled by its version's NUMBER (never its name — a name is shorthand
-// between editors, and «полегче» above a question tells a tester how hard it is
-// meant to be before they have tried it).
-const PAGEBREAK = "(PAGEBREAK)";
-const VERSION_TAG = "xy-version:";
+// ── the version separator ──────────────────────────────────────────────────
+// A Version (versions.ts, ADR-0007) is introduced by a standalone
+// (hidden-comment xy-version: имя) line. That line is xy's own metadata: every
+// reader but the card editor drops it, so parseBlocks sees version 1 only.
 const VERSION_LINE = /^\(hidden-comment\s+xy-version:([^()]*)\)$/;
 
 // versionLineName reads a separator line's name: "" when it is the unnamed form,
 // null when the line is no separator at all. An ordinary hidden comment is a
 // note, and a note never splits a card.
-function versionLineName(line: string): string | null {
+export function versionLineName(line: string): string | null {
   const m = VERSION_LINE.exec(line.trim());
   return m ? m[1].trim() : null;
 }
-
-// A name is typed into a prompt, and a stray bracket there would close the
-// directive early and spill into the card — so it can hold neither brackets nor
-// line breaks.
-function cleanName(name: string | null | undefined): string | null {
-  return (name || "").replace(/[()]/g, "").replace(/\s+/g, " ").trim() || null;
-}
-
-function composeVersionLine(name: string | null): string {
-  const clean = cleanName(name);
-  return clean ? `(hidden-comment ${VERSION_TAG} ${clean})` : `(hidden-comment ${VERSION_TAG})`;
-}
-
-interface Versions { bodies: string[]; names: Array<string | null> }
-
-// readVersions is the one parse: bodies and names, always at least one version.
-// Text sitting before the first separator is a version too — a hand-edited card
-// must not lose it.
-function readVersions(desc: string | null | undefined): Versions {
-  const bodies: string[] = [], names: Array<string | null> = [];
-  let cur: string[] = [], curName: string | null = null, seen = false;
-  const flush = (): void => {
-    const body = cur.join("\n").trim();
-    if (body !== "" || seen) { bodies.push(body); names.push(curName); }
-    cur = [];
-  };
-  for (const line of (desc || "").split(/\r?\n/)) {
-    const name = versionLineName(line);
-    if (name === null) { cur.push(line); continue; }
-    if (cur.join("\n").trim() !== "" || seen) flush();
-    else cur = [];
-    curName = name === "" ? null : name;
-    seen = true;
-  }
-  flush();
-  if (!bodies.length) { bodies.push(""); names.push(null); }
-  return { bodies, names };
-}
-
-// joinVersions is the canonical spelling. One unnamed version is written bare, so
-// a card that never grew a second wording is byte-identical to what it was.
-function joinVersions(v: Versions): string {
-  if (v.bodies.length === 1 && !v.names[0]) return v.bodies[0].trim();
-  return v.bodies.map((b, i) => composeVersionLine(v.names[i]) + "\n" + b.trim()).join("\n");
-}
-
-function splitVersions(desc: string | null | undefined): string[] {
-  return readVersions(desc).bodies;
-}
-
-function versionCount(desc: string | null | undefined): number {
-  return readVersions(desc).bodies.length;
-}
-
-function versionBody(desc: string | null | undefined, i: number): string {
-  return readVersions(desc).bodies[i] ?? "";
-}
-
-function versionName(desc: string | null | undefined, i: number): string | null {
-  return readVersions(desc).names[i] ?? null;
-}
-
-// A body may not carry a separator of its own: it is ONE version, and a
-// separator inside it would split into more the next time the card is read —
-// which is how a card grew a version every time it was saved. The editor never
-// shows a separator, so one can only arrive by paste or from text written under
-// the old scheme, and dropping it is what those meant anyway.
-function stripVersionLines(body: string): string {
-  return body.split(/\r?\n/).filter((l) => versionLineName(l) === null).join("\n");
-}
-
-function setVersionBody(desc: string | null | undefined, i: number, body: string): string {
-  const v = readVersions(desc);
-  if (i < 0 || i >= v.bodies.length) return desc || "";
-  v.bodies[i] = stripVersionLines(body);
-  return joinVersions(v);
-}
-
-// setVersionName renames one version, or clears the name when given an empty
-// string.
-function setVersionName(desc: string | null | undefined, i: number, name: string): string {
-  const v = readVersions(desc);
-  if (i < 0 || i >= v.bodies.length) return desc || "";
-  v.names[i] = cleanName(name);
-  return joinVersions(v);
-}
-
-// addVersion clones version `i` whole and inserts the copy after it. Cloning
-// rather than starting blank is what «Добавить версию» is for: a version is a
-// rewording of what is already there. The copy is unnamed — two tabs reading
-// «полегче» tell the editor nothing.
-function addVersion(desc: string | null | undefined, i: number): { desc: string; index: number } {
-  const v = readVersions(desc);
-  const at = Math.min(Math.max(i, 0), v.bodies.length - 1);
-  v.bodies.splice(at + 1, 0, v.bodies[at]);
-  v.names.splice(at + 1, 0, null);
-  return { desc: joinVersions(v), index: at + 1 };
-}
-
-// removeVersion drops one version. The last one cannot go — a card with no
-// version is not a card — so it is returned unchanged.
-function removeVersion(desc: string | null | undefined, i: number): { desc: string; index: number } {
-  const v = readVersions(desc);
-  if (v.bodies.length < 2 || i < 0 || i >= v.bodies.length) return { desc: desc || "", index: i };
-  v.bodies.splice(i, 1);
-  v.names.splice(i, 1);
-  return { desc: joinVersions(v), index: Math.max(0, i - 1) };
-}
-
-// promoteVersion moves one version to the front, name and all. Order is what the
-// board previews and what the export numbers, so «the good one goes first» is a
-// real edit, not a display preference.
-function promoteVersion(desc: string | null | undefined, i: number): { desc: string; index: number } {
-  const v = readVersions(desc);
-  if (i <= 0 || i >= v.bodies.length) return { desc: desc || "", index: i };
-  v.bodies.unshift(v.bodies.splice(i, 1)[0]);
-  v.names.unshift(v.names.splice(i, 1)[0]);
-  return { desc: joinVersions(v), index: 0 };
-}
-
-// ── the export: many bodies, one question ───────────────────────────────────
-
-// rawQuestion is the question block as written, handout bracket included —
-// splitFields lifts the bracket out into its own field, and for the merge each
-// version has to keep its own.
-function rawQuestion(desc: string | null | undefined, keepVersionLines = false): string {
-  const b = parseBlocks(desc, keepVersionLines).find((x) => x.type === "question" || x.type === "pre");
-  return b ? b.text : "";
-}
-
-const versionLabel = (i: number): string => `версия ${i + 1}: `;
-
-// mergeField prints one value when every version agrees and one labelled value
-// per version when they do not. A field one version simply lacks counts as
-// disagreement — inheriting it silently would put words in that version's mouth.
-function mergeField(values: Array<string | null>): string | null {
-  if (values.every((v) => v === values[0])) return values[0];
-  const out: string[] = [];
-  values.forEach((v, i) => { if (v !== null) out.push(versionLabel(i) + v); });
-  return out.length ? out.join("\n") : null;
-}
-
-const listKey = (v: ReadonlyArray<string> | null): string => JSON.stringify(v);
-
-function mergeSources(values: Array<string[] | null>): string[] | null {
-  if (values.every((v) => listKey(v) === listKey(values[0]))) return values[0];
-  const out: string[] = [];
-  values.forEach((v, i) => { if (v) out.push(versionLabel(i) + v.filter((s) => s !== "").join("; ")); });
-  return out.length ? out : null;
-}
-
-// Authors merge into ONE "@" block: a second marker would be a second author
-// line, and chgksuite reads that as a different question's author.
-function mergeAuthors(values: Array<string[] | null>): string[] | null {
-  if (values.every((v) => listKey(v) === listKey(values[0]))) return values[0];
-  const out: string[] = [];
-  values.forEach((v, i) => { if (v) out.push(versionLabel(i) + v.join(", ")); });
-  return out.length ? [out.join("\n")] : null;
-}
-
-// composeVersions is what every export renders: the versions folded back into a
-// single question block. Structural leftovers (a "№" directive, anything the
-// field editor does not model) come from version 1 — they belong to the question,
-// not to a wording of it.
-function composeVersions(desc: string | null | undefined): string {
-  const bodies = splitVersions(desc);
-  // The BODY, not the description: a lone version keeps its separator line when
-  // it was named (delete one of a named pair and the survivor still carries its
-  // name), and a name reaches no export.
-  if (bodies.length < 2) return bodies[0] ?? "";
-  const fs = bodies.map((b) => splitFields(b));
-  const f0 = fs[0];
-  return composeFields({
-    preMarkup: f0.preMarkup,
-    handout: null, // each version's own bracket rides inside its question text
-    question: bodies
-      .map((b, i) => `Версия ${i + 1}: ${rawQuestion(b).trim()}`)
-      .join("\n" + PAGEBREAK + "\n"),
-    answer: mergeField(fs.map((f) => f.answer)),
-    zachet: mergeField(fs.map((f) => f.zachet)),
-    nezachet: mergeField(fs.map((f) => f.nezachet)),
-    comment: mergeField(fs.map((f) => f.comment)),
-    sources: mergeSources(fs.map((f) => f.sources)),
-    authors: mergeAuthors(fs.map((f) => f.authors)),
-    authorLabel: f0.authorLabel,
-    extra: f0.extra,
-  });
-}
-
-// ── the cards written under the old scheme (ADR-0005) ───────────────────────
-// A version used to be a run of question text between (PAGEBREAK) directives,
-// with everything else shared. convertLegacyVersions turns one into whole bodies
-// that clone the shared fields, and returns null when there is nothing to do.
-
-function legacyNameSpans(segment: string): HiddenSpan[] {
-  return scanDirectives(segment).hidden.filter((h) => h.body.startsWith(VERSION_TAG));
-}
-
-function stripLegacyName(segment: string): string {
-  let out = segment;
-  for (const h of legacyNameSpans(segment).reverse()) out = out.slice(0, h.start) + out.slice(h.end);
-  return out;
-}
-
-function convertLegacyVersions(desc: string | null | undefined): string | null {
-  // A card in the new form always OPENS with a separator, so that first line is
-  // what tells the two apart. Anything else that looks like one is the old
-  // scheme's name, written inside the question text — and a (PAGEBREAK) in a card
-  // that opens with a separator is a genuine page break, which is the whole point
-  // of not overloading the directive any more.
-  const first = (desc || "").split(/\r?\n/).find((l) => l.trim() !== "");
-  if (first !== undefined && versionLineName(first) !== null) return null;
-  const q = rawQuestion(desc, true);
-  if (!q.includes(PAGEBREAK)) return null;
-  const f = splitFields(desc);
-  // The раздатка was shared, and it physically sat in the first version's text —
-  // so it is lifted out here and composed back into EVERY body. Leave it in the
-  // text and versions 2+ lose the picture their question asks about.
-  const inline = extractInlineHandout(q);
-  const v: Versions = { bodies: [], names: [] };
-  for (const part of (inline ? inline.rest : q).split(PAGEBREAK)) {
-    const named = legacyNameSpans(part)[0];
-    v.names.push(named ? cleanName(named.body.slice(VERSION_TAG.length)) : null);
-    v.bodies.push(composeFields({
-      ...f,
-      handout: inline ? inline.handout : f.handout,
-      question: stripLegacyName(part).trim(),
-    }));
-  }
-  return joinVersions(v);
-}
-
 // ── what a card offers to copy ──────────────────────────────────────────────
 // One button used to copy handout-and-question together, which is not how a
 // tester receives them: the раздатка goes out first, on its own, and a
@@ -1191,7 +946,7 @@ function imgName(val: unknown): string {
 }
 
 // imgInText returns the first (img …) filename referenced in a string, or null.
-function imgInText(s: string | null | undefined): string | null {
+export function imgInText(s: string | null | undefined): string | null {
   return imgRefs(s)[0] ?? null;
 }
 
@@ -1239,7 +994,7 @@ const HANDOUT_ANCHOR = "[Раздаточный материал]";
 // text) is removed outright; a mid-question bracket is replaced by the bare
 // [Раздаточный материал] anchor, so the spot survives question edits and the
 // compose side can put the handout back exactly where the author had it.
-function extractInlineHandout(q: string | null | undefined): { handout: Handout; rest: string } | null {
+export function extractInlineHandout(q: string | null | undefined): { handout: Handout; rest: string } | null {
   const t = q || "";
   let cursor = 0, leading = true;
   for (const [start, end, body] of bracketSpans(t)) {
@@ -1349,7 +1104,7 @@ function composeAuthors(names: ReadonlyArray<string>, label: string | null): str
   return body ? `@ ${body}` : "@";
 }
 
-function splitFields(desc: string | null | undefined): CardFields {
+export function splitFields(desc: string | null | undefined): CardFields {
   const blocks = parseBlocks(desc);
   const res: CardFields = {
     preMarkup: null, handout: null, question: null, answer: null, zachet: null,
@@ -1399,7 +1154,7 @@ function composeSources(arr: ReadonlyArray<string> | null | undefined): string {
 // Fields whose value is null are omitted; present-but-empty fields keep their
 // bare marker. Unrecognized content captured in `extra` is appended verbatim so
 // the round-trip is lossless for anything the structured editor doesn't model.
-function composeFields(f: Partial<CardFields>): string {
+export function composeFields(f: Partial<CardFields>): string {
   const out: string[] = [];
   const marker = (m: string, v: string): void => { out.push(v ? `${m} ${v}` : m); };
   if (f.preMarkup && f.preMarkup.trim()) out.push(f.preMarkup.trim());
@@ -1423,240 +1178,6 @@ function composeFields(f: Partial<CardFields>): string {
   return out.join("\n");
 }
 
-// ── handout (.hndt) generation — port of chgksuite handouts 4s2hndt ──────────
-// chgksuite/handouter/utils.RESERVED_WORDS: keys treated as block settings (vs
-// free handout text) in the .hndt format.
-const HNDT_RESERVED = new Set([
-  "image", "for_question", "columns", "rows", "resize_image", "font_size",
-  "font_family", "no_center", "raw_tex", "color", "handouts_per_team",
-  "grouping", "rotate", "tikz_mm", "hspace", "vspace", "max_width",
-]);
-const HNDT_DEFAULT_META = "columns: 3";
-
-function postprocessHandout(s: string | null | undefined): string {
-  return dropHidden(s).replace(/\\_/g, "_").trim();
-}
-
-// handoutForCard extracts a question card's handout: the inline
-// "[Раздаточный материал: …]" bracket in the question (chgksuite-native, what
-// 4s2hndt scans, and what the Поля editor composes) or a legacy standalone
-// "> …" block. Returns {kind:'image',name} | {kind:'text',text} | null.
-function handoutForCard(desc: string | null | undefined): Handout | null {
-  const blocks = parseBlocks(desc);
-  const h = blocks.find((b) => b.type === "handout");
-  if (h) {
-    const name = imgInText(h.text);
-    if (name) return { kind: "image", name };
-    return { kind: "text", text: postprocessHandout(h.text) };
-  }
-  const q = questionText(desc);
-  for (const [s, e, body] of bracketSpans(q)) {
-    void s; void e;
-    if (!isHandoutBody(body)) continue;
-    const idx = body.indexOf(":");
-    const text = idx >= 0 ? body.slice(idx + 1).trim() : body;
-    const name = imgInText(text);
-    if (name) return { kind: "image", name };
-    return { kind: "text", text: postprocessHandout(text) };
-  }
-  return null;
-}
-
-// hndtBlock formats one .hndt block: a for_question header, the saved per-question
-// settings (or the default), a blank line, then the live handout content (text or
-// an `image: file` line).
-function hndtBlock(number: string | number, handout: Handout, metaText: string | null | undefined): string {
-  const meta = (metaText && metaText.trim()) ? metaText.trim() : HNDT_DEFAULT_META;
-  const header = `for_question: ${number}\n${meta}`;
-  const content = handout.kind === "image" ? `image: ${handout.name}` : handout.text;
-  return `${header}\n\n${content}`;
-}
-
-// generateHndt builds the full .hndt document for a list. `cards` are the list's
-// cards in order, `numbers` the parallel display numbers (numberQuestionCards),
-// `metas` a map cardId → saved handout settings text. Only question cards that
-// actually carry a handout produce a block; blocks are joined with "\n---\n"
-// (chgksuite's delimiter).
-function generateHndt(
-  cards: ReadonlyArray<ChgkCard & { id: number }>,
-  numbers: ReadonlyArray<string | null>,
-  metas: Record<number, string> = {},
-): string {
-  const blocks: string[] = [];
-  cards.forEach((c, i) => {
-    if (c.kind !== "question") return;
-    // Version 1's раздатка, like every other reader outside the card editor. A
-    // block per version would print two раздатки under one question number, and
-    // split-fit names its output by that number — the second would overwrite the
-    // first in the zip.
-    const handout = handoutForCard(c.desc);
-    if (!handout) return;
-    const n = numbers[i];
-    const number = n != null ? n : i + 1;
-    blocks.push(hndtBlock(number, handout, metas[c.id]));
-  });
-  return blocks.join("\n---\n");
-}
-
-// splitHndtBlocks splits a .hndt document on lines that are exactly "---"
-// (chgksuite split_blocks).
-function splitHndtBlocks(text: string | null | undefined): string[] {
-  const parts: string[] = [];
-  let cur: string[] = [];
-  for (const line of String(text || "").split(/\r?\n/)) {
-    if (line.trim() === "---") { parts.push(cur.join("\n")); cur = []; }
-    else cur.push(line);
-  }
-  parts.push(cur.join("\n"));
-  return parts;
-}
-
-// parseHndtBlock pulls {forQuestion, meta} out of one .hndt block: the
-// for_question target plus the persistable settings (reserved keys other than
-// for_question and the image content line), as `key: value` lines.
-function parseHndtBlock(blockText: string | null | undefined): { forQuestion: string | null; meta: string } {
-  let forQuestion: string | null = null;
-  const meta: string[] = [];
-  for (const line of String(blockText || "").split("\n")) {
-    const i = line.indexOf(":");
-    if (i < 0) continue;
-    const key = line.slice(0, i).trim();
-    if (!HNDT_RESERVED.has(key)) continue;
-    const val = line.slice(i + 1).trim();
-    if (key === "for_question") { forQuestion = val; continue; }
-    if (key === "image") continue; // content, derived from the card
-    meta.push(`${key}: ${val}`);
-  }
-  return { forQuestion, meta: meta.join("\n") };
-}
-
-// parseHndtMetaByQuestion maps each block's for_question number → its settings
-// text, so the modal can persist edited settings back onto the matching cards.
-function parseHndtMetaByQuestion(text: string | null | undefined): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const block of splitHndtBlocks(text)) {
-    if (!block.trim()) continue;
-    const { forQuestion, meta } = parseHndtBlock(block);
-    if (forQuestion != null && forQuestion !== "") out[forQuestion] = meta;
-  }
-  return out;
-}
-
-// ---- test cards: tester lists (players / teams) ----
-// A test card's description is JSON {datetime, title, testers:[{text,type}]},
-// where type is "player" or "team". The first iteration stored {players:[ids]}
-// (integer rating.chgk.info ids that were never resolvable client-side);
-// parseTestCard folds that legacy shape forward, turning each id into a
-// player-typed string so nothing is silently dropped on migration.
-
-export type TesterType = "player" | "team";
-export interface Tester { text: string; type: TesterType }
-export interface TestCardModel { datetime: string; title: string; testers: Tester[] }
-
-// The lax shape serializeTestCard/testersToText/testerCopyText accept: anything
-// tester-ish, normalized on the way through.
-export interface TesterLike { text?: string | null; type?: string | null }
-export interface TestCardDraft {
-  datetime?: string | null;
-  title?: string | null;
-  testers?: ReadonlyArray<TesterLike> | null;
-}
-
-// parseTestCard: JSON desc → {datetime, title, testers:[{text,type}]}.
-function parseTestCard(desc: string): TestCardModel {
-  let m: unknown;
-  try {
-    m = JSON.parse(desc);
-  } catch (_) {
-    m = null;
-  }
-  const obj: Record<string, unknown> = m && typeof m === "object" ? (m as Record<string, unknown>) : {};
-  let testers: unknown[] | null = Array.isArray(obj.testers) ? (obj.testers as unknown[]) : null;
-  if (!testers) {
-    // legacy {players:[ids]} → player-typed strings (see note above).
-    const legacy: unknown[] = Array.isArray(obj.players) ? (obj.players as unknown[]) : [];
-    testers = legacy.map((p) => ({ text: String(p == null ? "" : p), type: "player" }));
-  }
-  const clean = testers
-    .filter((t): t is Record<string, unknown> => Boolean(t) && typeof t === "object")
-    .map((t): Tester => ({ text: String(t.text == null ? "" : t.text), type: t.type === "team" ? "team" : "player" }));
-  return {
-    datetime: typeof obj.datetime === "string" ? obj.datetime : "",
-    title: typeof obj.title === "string" ? obj.title : "",
-    testers: clean,
-  };
-}
-
-// serializeTestCard: {datetime, title, testers} → JSON desc, dropping blank rows.
-function serializeTestCard(m: TestCardDraft): string {
-  const testers = (m.testers || [])
-    .map((t): Tester => ({ text: (t.text || "").trim(), type: t.type === "team" ? "team" : "player" }))
-    .filter((t) => t.text);
-  return JSON.stringify({ datetime: m.datetime || "", title: m.title || "", testers });
-}
-
-// testersToText: testers[] → plaintext, "- name" (player) / "-T name" (team).
-function testersToText(testers: ReadonlyArray<TesterLike> | null | undefined): string {
-  return (testers || []).map((t) => (t.type === "team" ? "-T " : "- ") + (t.text || "")).join("\n");
-}
-
-// testersFromText: plaintext → testers[]. A "-T" prefix (Latin or Cyrillic T,
-// followed by whitespace) marks a team; any other leading dash marks a player.
-function testersFromText(text: string | null | undefined): Tester[] {
-  const out: Tester[] = [];
-  for (const raw of String(text == null ? "" : text).split("\n")) {
-    const line = raw.trim();
-    if (!line) continue;
-    let type: TesterType = "player", body = line;
-    if (/^-[TtТт](?=\s|$)/.test(line)) { type = "team"; body = line.slice(2); }
-    else if (line[0] === "-") { body = line.slice(1); }
-    body = body.trim();
-    if (body) out.push({ text: body, type });
-  }
-  return out;
-}
-
-// testerSortKey returns the [surname, given] comparison key for a player name:
-// the last whitespace-separated word is the surname, the rest the given name(s),
-// so "Александр Иванов" sorts under "Иванов", then "Александр".
-function testerSortKey(name: string | null | undefined): [string, string] {
-  const words = String(name || "").trim().split(/\s+/).filter(Boolean);
-  if (!words.length) return ["", ""];
-  const surname = words[words.length - 1];
-  return [surname, words.slice(0, -1).join(" ")];
-}
-
-// testerNames dedupes and orders testers: players by surname-then-given, teams
-// alphabetically. Split out of testerCopyText because the «Видели» line on a
-// card wants the names WITHOUT the «Вопросы тестировали:» framing.
-function testerNames(testers: ReadonlyArray<TesterLike> | null | undefined): { players: string[]; teams: string[] } {
-  const seen: Record<TesterType, Set<string>> = { player: new Set(), team: new Set() };
-  const players: string[] = [], teams: string[] = [];
-  for (const t of testers || []) {
-    const text = ((t && t.text) || "").trim();
-    if (!text) continue;
-    const type: TesterType = t.type === "team" ? "team" : "player";
-    if (seen[type].has(text)) continue;
-    seen[type].add(text);
-    (type === "team" ? teams : players).push(text);
-  }
-  players.sort((a, b) => {
-    const ka = testerSortKey(a), kb = testerSortKey(b);
-    return ka[0].localeCompare(kb[0], "ru") || ka[1].localeCompare(kb[1], "ru");
-  });
-  teams.sort((a, b) => a.localeCompare(b, "ru"));
-  return { players, teams };
-}
-
-// testerCopyText flattens testers into the shareable line. "" when there are none.
-function testerCopyText(testers: ReadonlyArray<TesterLike> | null | undefined): string {
-  const { players, teams } = testerNames(testers);
-  let s = "";
-  if (players.length) s = "Вопросы тестировали: " + players.join(", ");
-  if (teams.length) s += (s ? ", а также команды: " : "Вопросы тестировали команды: ") + teams.join(", ");
-  return s;
-}
-
 export const xyChgk = {
   parseBlocks, splitMarker, numberDirective, questionText, answerText, blockText, previewText, imgName, imgRefs, imageRefs,
   isZeroNumber, numberQuestionCards,
@@ -1664,9 +1185,5 @@ export const xyChgk = {
   printRuns, renderRuns, splitList, applyOverride, replaceNoBreak,
   fixTrelloFormatting,
   splitFields, composeFields, parseHandoutBlock, authorBlock, composeAuthors, AUTHOR_LABELS,
-  splitVersions, versionCount, versionBody, versionName, setVersionBody, setVersionName,
-  addVersion, removeVersion, promoteVersion, composeVersions, convertLegacyVersions,
   copyTargets, QUESTION_LABELS, fieldCaption, fieldKeepsBrackets,
-  generateHndt, handoutForCard, parseHndtMetaByQuestion, HNDT_DEFAULT_META,
-  parseTestCard, serializeTestCard, testersToText, testersFromText, testerCopyText, testerNames,
 };

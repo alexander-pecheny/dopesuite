@@ -10,6 +10,7 @@ import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
 import { xyChgk } from "./chgk.js";
+import { xyHndt } from "./hndt.js";
 import { xyHandoutSession } from "./handoutsession.js";
 import { namedUrl, revokeNamedUrl } from "./namedurl.js";
 import { modal } from "./modal.js";
@@ -35,7 +36,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     const numbers = xyChgk.numberQuestionCards(cards);
     const metas: Record<number, string> = {};
     for (const c of cards) if (c.handoutMeta) metas[c.id] = c.handoutMeta;
-    const source = xyChgk.generateHndt(cards, numbers, metas);
+    const source = xyHndt.generateHndt(cards, numbers, metas);
     handoutsCtx = { list, cards, numbers, title: scope.title };
     byId<HTMLTextAreaElement>("handoutsSource").value = source;
     clearHandoutsPdf();
@@ -93,7 +94,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
   async function persistHandoutMeta(): Promise<void> {
     if (!handoutsCtx) return;
     const source = byId<HTMLTextAreaElement>("handoutsSource").value;
-    const byNumber = xyChgk.parseHndtMetaByQuestion(source);
+    const byNumber = xyHndt.parseHndtMetaByQuestion(source);
     const { cards, numbers } = handoutsCtx;
     for (let i = 0; i < cards.length; i++) {
       const c = cards[i];
