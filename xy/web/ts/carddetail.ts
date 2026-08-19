@@ -121,8 +121,63 @@ export interface TimelineSeam {
   clearCommentDraft(): void;
 }
 
+// The nodes the card detail works on, resolved once by the page (board.ts):
+// document appears nowhere below it. Names follow the ids, without the card prefix.
+export interface CardDetailUI {
+  addVersion: HTMLElement; // #cardAddVersion
+  alias: HTMLInputElement; // #cardAlias
+  close: HTMLButtonElement; // #cardClose
+  commentsUnreadDot: HTMLElement; // #commentsUnreadDot
+  contentUnreadDot: HTMLElement; // #contentUnreadDot
+  copy: HTMLElement; // #cardCopy
+  copyBtn: HTMLElement; // #copyBtn
+  copyMsg: HTMLElement; // #cardCopyMsg
+  del: HTMLElement; // #cardDelete
+  desc: HTMLTextAreaElement; // #cardDesc
+  descLabel: HTMLElement; // #cardDescLabel
+  detail: HTMLElement; // .card-detail
+  editTools: HTMLElement; // #cardEditTools
+  fields: HTMLElement; // #cardFields
+  insStress: HTMLElement; // #cardInsStress
+  kind: HTMLSelectElement; // #cardKind
+  link: HTMLElement; // #cardLink
+  message: HTMLElement; // #cardMessage
+  overlay: HTMLElement; // #cardOverlay
+  previewBody: HTMLElement; // #cardPreviewBody
+  previewScreen: HTMLInputElement; // #cardPreviewScreen
+  save: HTMLButtonElement; // #cardSave
+  timeline: HTMLElement; // #timeline
+  title: HTMLElement; // #cardDetailTitle
+  to4s: HTMLElement; // #cardTo4s
+  tabs: { preview: HTMLButtonElement; fields: HTMLButtonElement; text: HTMLButtonElement }; // #cardTabPreview…
+  typo: HTMLElement; // #cardTypo
+  versions: HTMLElement; // #cardVersions
+  viewFields: HTMLElement; // #cardViewFields
+  viewPreview: HTMLElement; // #cardViewPreview
+  viewTabs: HTMLElement; // #cardViewTabs
+  viewText: HTMLElement; // #cardViewText
+  dirty: {
+    cancel: HTMLElement; // #dirtyCancel
+    discard: HTMLElement; // #dirtyDiscard
+    message: HTMLElement; // #dirtyMessage
+    overlay: HTMLElement; // #dirtyOverlay
+    save: HTMLElement; // #dirtySave
+  };
+  move: {
+    board: HTMLSelectElement; // #moveBoard
+    btn: HTMLElement; // #moveBtn
+    list: HTMLSelectElement; // #moveList
+    pos: HTMLSelectElement; // #movePos
+  };
+  listPreview: {
+    body: HTMLElement; // #previewBody
+    overlay: HTMLElement; // #previewOverlay
+  };
+}
+
 export interface CardDetailDeps {
   boardId: number;
+  ui: CardDetailUI;
   getState(): CardDetailState;
   getDK(): DataKey | null;
   verbs: MutationVerbs;
@@ -216,16 +271,7 @@ interface AttachmentDTO {
 }
 
 export function createCardDetail(deps: CardDetailDeps): CardDetail {
-  function byId<T extends HTMLElement = HTMLElement>(id: string): T {
-    const node = document.getElementById(id);
-    if (!node) throw new Error(`page is missing #${id}`);
-    return node as T;
-  }
-  function q(sel: string): HTMLElement {
-    const node = document.querySelector<HTMLElement>(sel);
-    if (!node) throw new Error(`page is missing ${sel}`);
-    return node;
-  }
+  const ui = deps.ui;
   const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
   const { boardId, verbs, setStatus } = deps;
@@ -236,19 +282,19 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     return dk;
   }
 
-  const cardOverlay = byId("cardOverlay");
-  const cardDescEl = byId<HTMLTextAreaElement>("cardDesc");
-  const cardAliasEl = byId<HTMLInputElement>("cardAlias");
-  const cardKindEl = byId<HTMLSelectElement>("cardKind");
-  const cardMessageEl = byId("cardMessage");
-  const cardFieldsEl = byId("cardFields");
-  const cardSaveBtn = byId<HTMLButtonElement>("cardSave");
-  const cardCloseBtn = byId<HTMLButtonElement>("cardClose");
-  const moveBoardSel = byId<HTMLSelectElement>("moveBoard");
-  const moveListSel = byId<HTMLSelectElement>("moveList");
-  const movePosSel = byId<HTMLSelectElement>("movePos");
-  const cardDetailBox = q(".card-detail");
-  const previewOverlay = byId("previewOverlay");
+  const cardOverlay = ui.overlay;
+  const cardDescEl = ui.desc;
+  const cardAliasEl = ui.alias;
+  const cardKindEl = ui.kind;
+  const cardMessageEl = ui.message;
+  const cardFieldsEl = ui.fields;
+  const cardSaveBtn = ui.save;
+  const cardCloseBtn = ui.close;
+  const moveBoardSel = ui.move.board;
+  const moveListSel = ui.move.list;
+  const movePosSel = ui.move.pos;
+  const cardDetailBox = ui.detail;
+  const previewOverlay = ui.listPreview.overlay;
 
   // ---- card detail state ----
   let openCardId: number | null = null;
@@ -294,7 +340,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   let cardFieldsExtra: string | null = null;
 
   const CARD_TABS = ["preview", "fields", "text"] as const;
-  const tabBtn = (v: string): HTMLButtonElement => byId<HTMLButtonElement>("cardTab" + v[0].toUpperCase() + v.slice(1));
+  const tabBtn = (v: string): HTMLButtonElement => ui.tabs[v as (typeof CARD_TABS)[number]];
 
   // ---- add card ----
   // addCard persists a blank card and opens it. It used to stay unsaved until you
@@ -454,26 +500,26 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     if (view === "fields" && !fieldsAvailable()) view = "text";
     cardView = view;
     if (view !== "preview") lastEditView = view;
-    byId("cardViewPreview").hidden = view !== "preview";
-    byId("cardViewFields").hidden = view !== "fields";
-    byId("cardViewText").hidden = view !== "text";
+    ui.viewPreview.hidden = view !== "preview";
+    ui.viewFields.hidden = view !== "fields";
+    ui.viewText.hidden = view !== "text";
     for (const t of CARD_TABS) tabBtn(t).classList.toggle("active", t === view);
     tabBtn("text").textContent = "Формат 4s";
     tabBtn("fields").hidden = !fieldsAvailable();
     // Nothing to preview until the card has content; the tab appears as soon as
     // it does, so the flag needs no clearing.
     tabBtn("preview").hidden = freshCard && !draft.desc.trim();
-    byId("cardViewTabs").hidden = false;
+    ui.viewTabs.hidden = false;
     // (the save button's visibility is refreshSaveState's alone — see the end of
     // this function — because it depends on more than the view)
     // The tools edit text, so they follow the two edit views. →.4s additionally
     // needs the raw 4s editor it types into.
-    byId("cardEditTools").hidden = view === "preview";
-    byId("cardAddVersion").hidden = !fieldsAvailable();
+    ui.editTools.hidden = view === "preview";
+    ui.addVersion.hidden = !fieldsAvailable();
     renderVersionTabs();
-    byId("cardTypo").hidden = false;
-    byId("cardTo4s").hidden = view !== "text" || !fieldsAvailable();
-    byId("cardDescLabel").textContent = "Описание";
+    ui.typo.hidden = false;
+    ui.to4s.hidden = view !== "text" || !fieldsAvailable();
+    ui.descLabel.textContent = "Описание";
     if (view === "text") {
       const ta = cardDescEl;
       ta.value = versionDesc();
@@ -766,7 +812,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // controls per version is a lot on a phone, and all of them act on what you are
   // looking at.
   function renderVersionTabs(): void {
-    const box = byId("cardVersions");
+    const box = ui.versions;
     const n = versionCount();
     if (versionIdx >= n) versionIdx = n - 1;
     // All three views are scoped to one version now, Текст included, so the strip
@@ -800,7 +846,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     box.replaceChildren(...nodes);
   }
 
-  byId("cardAddVersion").addEventListener("click", () => {
+  ui.addVersion.addEventListener("click", () => {
     applyVersions((d) => xyVersions.addVersion(d, versionIdx));
   });
 
@@ -827,13 +873,13 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // renderCardPreview renders the open card's draft the docx way (single-card
   // version of the list preview). Read-only; double-click jumps back to editing.
   async function renderCardPreview(): Promise<void> {
-    const body = byId("cardPreviewBody");
+    const body = ui.previewBody;
     if (!draft.desc.trim()) { body.replaceChildren(el("p", { class: "pv-empty", text: "Пусто." })); return; }
     const c = openCardCard();
     const card: PreviewCardLike = { id: c ? c.id : 0, kind: draftKind(), desc: versionDesc(), listId: c ? c.listId : 0 };
     const number = card.kind === "question" ? deps.questionNumberFor(card) : null;
     const reqId = openCardId;
-    const screen = byId<HTMLInputElement>("cardPreviewScreen").checked;
+    const screen = ui.previewScreen.checked;
     const imgMap = new Map<string, string>();
     body.replaceChildren(deps.preview.renderPreviewCard(card, number, imgMap, screen));
     await deps.preview.resolveImages([card], deps.preview.imageRefs([card]), (name, url) => {
@@ -844,22 +890,22 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
 
   // Tab clicks + the preview screen toggle + double-click-to-edit.
   for (const v of CARD_TABS) tabBtn(v).addEventListener("click", () => setCardView(v));
-  byId("cardPreviewScreen").addEventListener("change", () => { if (cardView === "preview") void renderCardPreview(); });
-  byId("cardPreviewBody").addEventListener("dblclick", () => setCardView(lastEditView));
+  ui.previewScreen.addEventListener("change", () => { if (cardView === "preview") void renderCardPreview(); });
+  ui.previewBody.addEventListener("dblclick", () => setCardView(lastEditView));
 
   // ---- edit tools (the row under the tabs) ----
   // A button takes focus on mousedown, and the Автор tag input commits what is
   // typed on blur — so «Ва» + ударение became a chip and a lone accent (issue
   // #63). The tools keep the caret where it is; the phone keyboard stays up too.
-  for (const id of ["cardInsStress", "cardTypo", "cardTo4s"]) {
-    byId(id).addEventListener("mousedown", (e) => e.preventDefault());
+  for (const node of [ui.insStress, ui.typo, ui.to4s]) {
+    node.addEventListener("mousedown", (e) => e.preventDefault());
   }
   // Still remember the last field the caret was in: the card may have just
   // opened with nothing focused. The Поля view rebuilds its inputs on every view
   // switch, hence the isConnected check when using it.
   let lastEditField: HTMLTextAreaElement | HTMLInputElement | null = null;
-  for (const panel of ["cardViewFields", "cardViewText"]) {
-    byId(panel).addEventListener("focusin", (e) => {
+  for (const panel of [ui.viewFields, ui.viewText]) {
+    panel.addEventListener("focusin", (e) => {
       const t = e.target;
       if (t instanceof HTMLElement && t.matches("textarea, input[type=text]")) lastEditField = t as HTMLTextAreaElement | HTMLInputElement;
     });
@@ -897,7 +943,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
 
   // The combining acute (U+0301) attaches to the character left of the caret, which
   // is the chgk convention for marking stress ("зАмок" → "зам́ок" as typed).
-  byId("cardInsStress").addEventListener("click", () => {
+  ui.insStress.addEventListener("click", () => {
     const f = editField();
     if (f) insertAtCaret(f, "́");
   });
@@ -908,7 +954,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // pasted wiki link stands for). It runs in the browser (typo.ts), so it works
   // offline and no question text is posted anywhere; the draft is 4s either way,
   // so Поля and Текст feed it the same thing and only the landing differs.
-  byId("cardTypo").addEventListener("click", () => {
+  ui.typo.addEventListener("click", () => {
     captureDraft();
     if (!draft.desc.trim()) return;
     // EVERY version, not just the one on screen: the button says «типограф», and
@@ -930,7 +976,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // ("Вопрос 1: … Ответ: … Автор: …") becomes marked-up 4s. The parse is a guess, so
   // it lands back in the editor for the user to check; nothing is saved until Save.
   // Online-only: the parser is the Go port on the server (it never keeps the text).
-  byId("cardTo4s").addEventListener("click", async () => {
+  ui.to4s.addEventListener("click", async () => {
     const ta = cardDescEl;
     const text = ta.value.trim();
     if (!text) return;
@@ -1019,11 +1065,11 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     cardMessageEl.textContent = "";
     cardKindEl.hidden = false;
     cardKindEl.value = card.kind || "question";
-    byId("cardDetailTitle").hidden = true;
+    ui.title.hidden = true;
     // The "copy for testing" action only makes sense for question cards (it shares
     // the numbered, screen-mode question text); hide it otherwise.
-    byId("cardCopy").hidden = card.kind !== "question";
-    byId("cardCopyMsg").hidden = true;
+    ui.copy.hidden = card.kind !== "question";
+    ui.copyMsg.hidden = true;
     // The exit says what it does: opened from a list preview, closing lands back
     // in that preview, so it is ← Назад; opened from the board, it is × Закрыть.
     const back = !!cardReturn;
@@ -1071,9 +1117,9 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // filter-aware: that dwell is on the new text, which is the edit's result.
   function armReadTracking(card: BoardCard): void {
     const u = state().unread[card.id] || {};
-    byId("contentUnreadDot").hidden = !u.content;
-    byId("commentsUnreadDot").hidden = !u.comments;
-    byId("commentsUnreadDot").classList.toggle("unread-dot-mention", !!u.mentions);
+    ui.contentUnreadDot.hidden = !u.content;
+    ui.commentsUnreadDot.hidden = !u.comments;
+    ui.commentsUnreadDot.classList.toggle("unread-dot-mention", !!u.mentions);
 
     if (u.content) {
       contentReadTimer = setTimeout(() => {
@@ -1083,7 +1129,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     }
 
     if (u.content || u.comments) {
-      const timeline = byId("timeline");
+      const timeline = ui.timeline;
       let dwellTimer: ReturnType<typeof setTimeout> | null = null;
       commentsObserver = new IntersectionObserver((entries) => {
         for (const entry of entries) {
@@ -1129,8 +1175,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     if (comments) { u.comments = false; u.mentions = false; }
     if (u.content || u.comments) st.unread[cardId] = u;
     else delete st.unread[cardId];
-    if (content) byId("contentUnreadDot").hidden = true;
-    if (comments) byId("commentsUnreadDot").hidden = true;
+    if (content) ui.contentUnreadDot.hidden = true;
+    if (comments) ui.commentsUnreadDot.hidden = true;
     deps.readMarkers.refreshCardUnreadDot(cardId);
     deps.readMarkers.renderNotifBadge();
   }
@@ -1505,8 +1551,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
 
   moveBoardSel.addEventListener("change", () => { void onMoveBoardChange(); });
   moveListSel.addEventListener("change", onMoveListChange);
-  byId("copyBtn").addEventListener("click", () => { void doMoveCopy(false); });
-  byId("moveBtn").addEventListener("click", () => { void doMoveCopy(true); });
+  ui.copyBtn.addEventListener("click", () => { void doMoveCopy(false); });
+  ui.move.btn.addEventListener("click", () => { void doMoveCopy(true); });
 
   // Change card kind after creation (edit mode only; create mode uses the same
   // selector but the value is applied on first save). Test cards never reach here
@@ -1552,7 +1598,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // feedback is next to the action, not buried at the bottom of the panel.
   let copyMsgTimer: ReturnType<typeof setTimeout> | null = null;
   function showCopyMsg(text: string, isErr: boolean): void {
-    const node = byId("cardCopyMsg");
+    const node = ui.copyMsg;
     node.textContent = text;
     if (isErr) node.setAttribute("data-err", ""); else node.removeAttribute("data-err");
     node.hidden = false;
@@ -1607,13 +1653,13 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // One button, because a card usually has exactly one thing worth copying. When
   // it has more — a раздатка, or the legs of a блиц — they are separate pastes
   // (issue #45), so the button opens the list instead of guessing.
-  byId("cardCopy").addEventListener("click", () => {
+  ui.copy.addEventListener("click", () => {
     const card = openCardCard();
     if (!card) return;
     captureDraft(); // copy what is on screen, not what was last saved
     const targets = xyChgk.copyTargets(versionDesc(), deps.questionNumberFor(card));
     if (targets.length === 1) { copyAndReport(targets[0]); return; }
-    deps.popupMenu(byId("cardCopy"), targets.map((t) => ({ label: t.label, onClick: () => copyAndReport(t) })));
+    deps.popupMenu(ui.copy, targets.map((t) => ({ label: t.label, onClick: () => copyAndReport(t) })));
   });
 
   // hideCard is the card's teardown, run by the overlay stack when the card is
@@ -1635,7 +1681,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     if (!list) return;
     await deps.preview.previewList(list, ret.group);
     if (previewOverlay.hidden) return; // guard against a close during the await
-    const node = byId("previewBody").querySelector(`[data-card-id="${ret.cardId}"]`);
+    const node = ui.listPreview.body.querySelector(`[data-card-id="${ret.cardId}"]`);
     if (node) node.scrollIntoView({ block: "center" });
   }
 
@@ -1656,7 +1702,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // Escape, Android back, the backdrop, and the ← / → walk — asks first. The
   // prompt is deliberately NOT on the overlay stack: it runs *during* the
   // stack's dismissal, and pushing it there would recurse.
-  const dirtyOverlay = byId("dirtyOverlay");
+  const dirtyOverlay = ui.dirty.overlay;
   let dirtyAnswer: ((leave: boolean) => void) | null = null;
 
   function settleDirty(leave: boolean): void {
@@ -1678,24 +1724,24 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // A typed-but-unsent comment is unsaved work too: leaving raises the same
     // prompt, where Сохранить posts it.
     if (!draft.contentDirty(false) && !deps.timeline.commentDraft()) return Promise.resolve(true);
-    byId("dirtyMessage").textContent = "";
+    ui.dirty.message.textContent = "";
     dirtyOverlay.hidden = false;
     return new Promise<boolean>((resolve) => { dirtyAnswer = resolve; });
   }
 
-  byId("dirtySave").addEventListener("click", async () => {
+  ui.dirty.save.addEventListener("click", async () => {
     if (draft.contentDirty(false)) {
       const saved = await saveCard();
-      if (!saved) { byId("dirtyMessage").textContent = "Не удалось сохранить — карточка осталась открытой."; return; }
+      if (!saved) { ui.dirty.message.textContent = "Не удалось сохранить — карточка осталась открытой."; return; }
     }
     if (deps.timeline.commentDraft() && !(await deps.timeline.postComment())) {
-      byId("dirtyMessage").textContent = "Не удалось отправить комментарий — карточка осталась открытой.";
+      ui.dirty.message.textContent = "Не удалось отправить комментарий — карточка осталась открытой.";
       return;
     }
     settleDirty(true);
   });
-  byId("dirtyDiscard").addEventListener("click", () => { deps.timeline.clearCommentDraft(); settleDirty(true); });
-  byId("dirtyCancel").addEventListener("click", () => { settleDirty(false); });
+  ui.dirty.discard.addEventListener("click", () => { deps.timeline.clearCommentDraft(); settleDirty(true); });
+  ui.dirty.cancel.addEventListener("click", () => { settleDirty(false); });
   dirtyOverlay.addEventListener("pointerdown", (e) => { if (e.target === dirtyOverlay) settleDirty(false); });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && dirtyAnswer) { e.stopPropagation(); settleDirty(false); }
@@ -1742,7 +1788,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   });
 
   cardCloseBtn.addEventListener("click", closeCard);
-  byId("cardLink").addEventListener("click", () => { void copyCardLink(); });
+  ui.link.addEventListener("click", () => { void copyCardLink(); });
   cardOverlay.addEventListener("pointerdown", (e) => { if (e.target === cardOverlay) closeCard(); });
 
   cardSaveBtn.addEventListener("click", () => { void saveCard(); });
@@ -1789,8 +1835,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // Re-evaluate the save button on every edit. Typing fires "input"; the Поля
   // view's +/× field pills and the tool buttons change the draft via clicks, which
   // bubble here after their own handlers have run.
-  for (const id of ["cardDesc", "cardFields"]) {
-    const node = byId(id);
+  for (const node of [ui.desc, ui.fields]) {
     node.addEventListener("input", refreshSaveState);
     node.addEventListener("click", refreshSaveState);
   }
@@ -1838,7 +1883,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     cardAliasEl.blur(); // saves via blur, and drops the on-screen keyboard
   });
 
-  byId("cardDelete").addEventListener("click", async () => {
+  ui.del.addEventListener("click", async () => {
     const card = state().cards.find((c) => c.id === openCardId);
     if (!card || !confirm("Удалить карточку?")) return;
     try {

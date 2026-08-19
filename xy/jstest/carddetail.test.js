@@ -1,7 +1,7 @@
 // Tests for carddetail.js's pure exports — the test-card derived title, the
 // 4s question stub and the tester summary line. The createCardDetail factory
-// binds to the card modal's ~30 compiled-page nodes, so it is exercised in the
-// browser, not here.
+// takes its nodes as a ui record and runs under the DOM shim in
+// carddetail_ui.test.js.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { questionStub, nowStamp } from "../web/assets/static/dist/carddetail.js";

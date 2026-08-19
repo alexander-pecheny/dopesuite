@@ -25,10 +25,8 @@ const { fetchJSON, jpost, jpatch, jdelete, el, onCmdEnter, deriveTitle } = xyApp
 
 // requestSubmit, not submit(): the form's own submit listener is what posts the
 // comment, and a raw .submit() bypasses every listener and navigates the page.
-function submitOnCmdEnter(inputId: string, formId: string): void {
-  const form = document.getElementById(formId) as HTMLFormElement | null;
-  const input = document.getElementById(inputId);
-  if (form && input) onCmdEnter(input, () => form.requestSubmit());
+function submitOnCmdEnter(input: HTMLElement, form: HTMLFormElement): void {
+  onCmdEnter(input, () => form.requestSubmit());
 }
 
 // A timeline event as this module reads it: the synced/pending DTO plus the
@@ -76,7 +74,32 @@ export interface TimelineState {
   feedDefault?: string;
 }
 
+// The nodes the лента works on, resolved once by the page (board.ts).
+export interface TimelineUI {
+  timeline: HTMLElement;
+  cardMessage: HTMLElement;
+  commentForm: HTMLFormElement;
+  commentInput: HTMLTextAreaElement;
+  threadForm: HTMLFormElement;
+  threadInput: HTMLTextAreaElement;
+  threadBody: HTMLElement;
+  threadMessage: HTMLElement;
+  feedExpand: HTMLElement;
+  feedGrid: HTMLElement;
+  feedOrder: HTMLSelectElement;
+  feedFilter: HTMLSelectElement;
+  feedFilterFull: HTMLSelectElement;
+  feedDiffViewRow: HTMLElement;
+  feedDiffViewFullRow: HTMLElement;
+  feedDiffView: HTMLSelectElement;
+  feedDiffViewFull: HTMLSelectElement;
+  excerptsView: HTMLButtonElement;
+  excerptsCount: HTMLElement;
+  excerptsBody: HTMLElement;
+}
+
 export interface TimelineDeps {
+  ui: TimelineUI;
   getState(): TimelineState;
   getDK(): DataKey | null;
   // The board's outbox `post` verb (see board.js's mutate wrappers) — comments
@@ -357,11 +380,7 @@ export function fullDiffSides(ops: readonly DiffOp[]): { before: DiffSideRun[]; 
 }
 
 export function createTimeline(deps: TimelineDeps): Timeline {
-  function byId<T extends HTMLElement = HTMLElement>(id: string): T {
-    const node = document.getElementById(id);
-    if (!node) throw new Error(`page is missing #${id}`);
-    return node as T;
-  }
+  const ui = deps.ui;
 
   const state = deps.getState;
 
@@ -410,7 +429,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // and the view jumped up — every marked выписка threw the reader back to
   // «Выписок: N». The container must never be shorter than its content.
   async function load(cardId: number): Promise<void> {
-    const tl = byId("timeline");
+    const tl = ui.timeline;
     if (composerCard !== cardId) { composerCard = cardId; clearCommentDraft(); }
     // Refresh the cached server timeline when online, then merge any pending
     // (un-synced) events synthesized from the outbox so offline edits/comments show.
@@ -463,7 +482,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   async function toggleReaction(targetId: number | null, emoji: string): Promise<void> {
     const oc = deps.card.openCardId();
     if (!oc) return;
-    const msg = byId("cardMessage");
+    const msg = ui.cardMessage;
     if (!xySync.requireOnline("Реакции доступны только онлайн.", msg)) return;
     const mine = (openChips.get(targetId ?? 0) || []).find((c) => c.emoji === emoji)?.mineId;
     try {
@@ -711,14 +730,13 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // re-renders whichever feeds are on screen.
   async function setDiffView(v: string): Promise<void> {
     localStorage.setItem(DIFF_VIEW_KEY, v === "full" ? "full" : "brief");
-    for (const id of ["feedDiffView", "feedDiffViewFull"]) byId<HTMLSelectElement>(id).value = diffView();
+    for (const sel of [ui.feedDiffView, ui.feedDiffViewFull]) sel.value = diffView();
     const oc = deps.card.openCardId();
     if (oc) await load(oc);
     if (feedModal.isOpen) await renderFeedGrid();
   }
 
-  for (const id of ["feedDiffView", "feedDiffViewFull"]) {
-    const sel = byId<HTMLSelectElement>(id);
+  for (const sel of [ui.feedDiffView, ui.feedDiffViewFull]) {
     sel.value = diffView();
     sel.addEventListener("change", () => { void setDiffView(sel.value); });
   }
@@ -728,17 +746,16 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // control governs nothing when no правки are on screen.
   async function setFilter(v: string, reload: boolean): Promise<void> {
     filter = feedFilterOf(v);
-    for (const id of ["feedFilter", "feedFilterFull"]) byId<HTMLSelectElement>(id).value = filter;
+    for (const sel of [ui.feedFilter, ui.feedFilterFull]) sel.value = filter;
     const showsEdits = feedFilterKeeps("desc_edit", filter);
-    for (const id of ["feedDiffViewRow", "feedDiffViewFullRow"]) byId(id).hidden = !showsEdits;
+    for (const row of [ui.feedDiffViewRow, ui.feedDiffViewFullRow]) row.hidden = !showsEdits;
     if (!reload) return;
     const oc = deps.card.openCardId();
     if (oc) await load(oc);
     if (feedModal.isOpen) await renderFeedGrid();
   }
 
-  for (const id of ["feedFilter", "feedFilterFull"]) {
-    const sel = byId<HTMLSelectElement>(id);
+  for (const sel of [ui.feedFilter, ui.feedFilterFull]) {
     sel.addEventListener("change", () => { void setFilter(sel.value, true); });
   }
 
@@ -755,7 +772,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   }
 
   async function renderFeedGrid(): Promise<void> {
-    const grid = byId("feedGrid");
+    const grid = ui.feedGrid;
     const frag = document.createDocumentFragment();
     // openCardEvents is oldest→newest (by id), so "сначала новое" is the reverse.
     const ordered = orderFeedEvents(shown(openCardEvents || []), feedOrder());
@@ -780,14 +797,14 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     grid.replaceChildren(frag);
   }
 
-  const feedOrderSel = byId<HTMLSelectElement>("feedOrder");
+  const feedOrderSel = ui.feedOrder;
   feedOrderSel.value = feedOrder();
   feedOrderSel.addEventListener("change", async () => {
     localStorage.setItem(FEED_ORDER_KEY, feedOrderSel.value === "old" ? "old" : "new");
     if (feedModal.isOpen) await renderFeedGrid();
   });
 
-  byId("feedExpand").addEventListener("click", async () => {
+  ui.feedExpand.addEventListener("click", async () => {
     feedModal.open();
     await renderFeedGrid();
   });
@@ -811,7 +828,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     const events = openCardEvents || [];
     const root = events.find((e) => e.id === rootId);
     const replies = orderThreadReplies(events, rootId);
-    const body = byId("threadBody");
+    const body = ui.threadBody;
     const frag = document.createDocumentFragment();
     for (const ev of [root, ...replies]) {
       if (!ev) continue;
@@ -836,14 +853,14 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     threadModal.open({ onClose: () => { threadRootId = null; } });
   }
 
-  submitOnCmdEnter("threadInput", "threadForm");
-  byId("threadForm").addEventListener("submit", async (e) => {
+  submitOnCmdEnter(ui.threadInput, ui.threadForm);
+  ui.threadForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const input = byId<HTMLInputElement>("threadInput");
+    const input = ui.threadInput;
     const text = input.value.trim();
     const oc = deps.card.openCardId();
     if (!text || !oc || !threadRootId) return;
-    const msg = byId("threadMessage");
+    const msg = ui.threadMessage;
     try {
       const dk = mustDK();
       await deps.post("comment", `/api/cards/${oc}/comments`, {
@@ -909,7 +926,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // commentAction runs one comment mutation and re-renders the лента (which also
   // refreshes the выписки counter), reporting failures in the card's message line.
   async function commentAction(fn: () => Promise<unknown>): Promise<void> {
-    const msg = byId("cardMessage");
+    const msg = ui.cardMessage;
     if (!xySync.requireOnline("Правка комментариев доступна только онлайн.", msg)) return;
     try {
       await fn();
@@ -966,7 +983,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // the payload; the chips row under the box is the pending list.
   let draftImages: number[] = [];
   const draftImagesRow = el("div", { class: "tl-draft-imgs", hidden: true });
-  byId("commentInput").insertAdjacentElement("afterend", draftImagesRow);
+  ui.commentInput.insertAdjacentElement("afterend", draftImagesRow);
 
   function renderDraftImages(): void {
     draftImagesRow.replaceChildren();
@@ -989,20 +1006,19 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   }
 
   function clearCommentDraft(): void {
-    const input = document.getElementById("commentInput") as HTMLInputElement | null;
-    if (input) input.value = "";
+    ui.commentInput.value = "";
     draftImages = [];
     renderDraftImages();
   }
 
   function commentDraft(): string {
-    return byId<HTMLInputElement>("commentInput").value.trim() || (draftImages.length ? "картинка" : "");
+    return ui.commentInput.value.trim() || (draftImages.length ? "картинка" : "");
   }
 
   // postComment is the one write path: the submit handler and the card's
   // Save-on-leave prompt both land here.
   async function postComment(): Promise<boolean> {
-    const input = byId<HTMLInputElement>("commentInput");
+    const input = ui.commentInput;
     const text = input.value.trim();
     const oc = deps.card.openCardId();
     if ((!text && !draftImages.length) || !oc) return false;
@@ -1019,13 +1035,13 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       await load(oc);
       return true;
     } catch (err) {
-      byId("cardMessage").textContent = err instanceof Error ? err.message : String(err);
+      ui.cardMessage.textContent = err instanceof Error ? err.message : String(err);
       return false;
     }
   }
 
-  submitOnCmdEnter("commentInput", "commentForm");
-  byId("commentForm").addEventListener("submit", (e) => {
+  submitOnCmdEnter(ui.commentInput, ui.commentForm);
+  ui.commentForm.addEventListener("submit", (e) => {
     e.preventDefault();
     void postComment();
   });
@@ -1067,8 +1083,8 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       popup = anchorPopup(list, input, { align: "start", onClose: () => { popup = null; } });
     });
   }
-  attachMentionPicker(byId<HTMLTextAreaElement>("commentInput"));
-  attachMentionPicker(byId<HTMLTextAreaElement>("threadInput"));
+  attachMentionPicker(ui.commentInput);
+  attachMentionPicker(ui.threadInput);
 
   // ---- выписки ----
   // A выписка is an excerpt from a source — a comment or an attachment flagged as
@@ -1077,12 +1093,12 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // The flag is a plaintext column server-side (migrateV14); the content is not.
   function renderExcerptCount(): void {
     const n = excerptComments(openCardEvents || []).length + openCardExcerptAtts.length;
-    byId("excerptsCount").textContent = `Выписок: ${n}`;
-    byId<HTMLButtonElement>("excerptsView").disabled = n === 0;
+    ui.excerptsCount.textContent = `Выписок: ${n}`;
+    ui.excerptsView.disabled = n === 0;
   }
 
   async function openExcerpts(): Promise<void> {
-    const body = byId("excerptsBody");
+    const body = ui.excerptsBody;
     body.replaceChildren();
     for (const ev of excerptComments(openCardEvents || [])) {
       let text = "";
@@ -1110,7 +1126,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     excerptsModal.open();
   }
 
-  byId("excerptsView").addEventListener("click", () => { void openExcerpts(); });
+  ui.excerptsView.addEventListener("click", () => { void openExcerpts(); });
 
   return {
     load,

@@ -17,6 +17,10 @@ export class FakeNode {
     this.handlers = {};
     this.classes = new Set();
     this.parentElement = null;
+    this.style = {};
+    this.scrollHeight = 0;
+    this.offsetWidth = 0;
+    this.offsetHeight = 0;
     Object.assign(this, props);
   }
   get classList() {
@@ -50,6 +54,9 @@ export class FakeNode {
   replaceWith(n) { const p = this.parentElement; if (p) p.kids = p.kids.map((k) => (k === this ? p._adopt(n) : k)); }
   remove() { const p = this.parentElement; if (p) p.kids = p.kids.filter((k) => k !== this); }
   focus() { this.focused = (this.focused || 0) + 1; }
+  blur() {}
+  getBoundingClientRect() { return { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 }; }
+  scrollIntoView() {}
   select() {}
   click() { this.fire("click"); }
   closest(sel) { const cls = sel.startsWith(".") ? sel.slice(1) : null; let n = this; while (n) { if (cls ? n.classes.has(cls) : n.tag === sel) return n; n = n.parentElement; } return null; }

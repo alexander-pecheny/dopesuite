@@ -254,6 +254,16 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        group when in one); leaving a dirty card by any route raises the
                        Save / Discard prompt. Автор/Источник inputs autocomplete via
                        suggestWrap (<datalist> never opens on iOS Safari)
+    carddetail.ts      the card kernel: open/close, the draft (carddraft.ts) and its
+                       dirty gate, the three views (Просмотр / Поля / Текст) and the tools
+                       row, versions, alias, move/copy across boards (loadMoveBoard,
+                       transferCard, copyCardExtras), read tracking. Its nodes come in as
+                       a CardDetailUI record from board.ts (document appears only for the
+                       clipboard, execCommand and the page-wide keydown), so it runs under
+                       the DOM shim (carddetail_ui.test.js)
+    timeline.ts        the card's лента kernel: load/render, comments (drafts with images,
+                       replies, выписки), edit diffs, the expanded feed, filters and view
+                       prefs; nodes as a TimelineUI record
     panels.ts          the panel registry and the Board seam. Board = the live state,
                        the read helpers (cardsOf, listsInGroup, sessionName…), the four
                        mutation verbs, render, setStatus, reload. registerPanel(...) takes
@@ -306,7 +316,11 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        registration + zoom lockdown (theme boot + ☰ menu come from
                        the kit's shared menu module)
     timer.ts           floating ЧГК play timer (⏰ in the board header): question
-                       minute + 10s answer countdown, WebAudio bell cues
+                       minute + 10s answer countdown, WebAudio bell cues. createTimer is
+                       the kernel (presets, phase machine, cue schedule) over an injected
+                       clock, bell and view — jstest drives it on a fake clock and a
+                       recording bell; mountTimer is the page adapter (the box, WebAudio,
+                       the toggle)
     chgk.ts            client-side 4s parser for card previews (display-only,
                        never rewrites the source): blocks, numbering, the inline
                        tokenizer and renderer, structured fields, copy targets, the

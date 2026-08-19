@@ -1,7 +1,7 @@
 // Tests for timeline.js's pure decision helpers — author resolution, reply
 // counting/ordering, feed ordering, the stored display preferences, the выписки
-// filter and the full-diff pane split. The createTimeline factory itself binds
-// to ~20 compiled-page nodes, so it is exercised in the browser, not here.
+// filter and the full-diff pane split. The createTimeline factory takes its
+// nodes as a ui record (TimelineUI); its rendering is exercised in the browser.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {

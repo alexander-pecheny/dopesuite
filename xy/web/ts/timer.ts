@@ -1,11 +1,14 @@
 // timer.ts — a ЧГК (trivia) play timer that floats bottom-right of the board.
 // Toggled by the ⏰ button in the header. Counts a question's minute (or its
 // duplet/blitz sub-segments) down to zero with audible cues, then runs the
-// 10-second answer-writing countdown. The cues are one shipped bell sample
-// (/static/ding.mp3, same-origin so CSP-fine) played through WebAudio at
-// different rates to stay distinguishable by ear; until it's decoded the old
-// synthesised oscillator beeps sound instead. Every cue is put on the audio
-// clock when a countdown starts, so a background tab still rings on time.
+// 10-second answer-writing countdown.
+//
+// createTimer is the kernel: presets, the phase machine and the cue schedule,
+// over an injected clock, bell and view — so a cue booked at the wrong time is
+// a unit test. mountTimer is the page adapter: the floating box, WebAudio (one
+// shipped bell sample played at different rates; synthesised beeps until it is
+// decoded; every cue put on the audio clock when a countdown starts, so a
+// background tab still rings on time) and the ⏰ toggle.
 import { xyApp } from "./app.js";
 const { el } = xyApp;
 
@@ -28,6 +31,214 @@ const PRESETS: Record<string, TimerPreset> = {
 };
 const ANSWER_SEC = 10; // post-question window to write the answer down
 const WARN_AT = 10; // seconds-left at which the single warning beep fires
+
+export type CueKind = "warn" | "tick" | "long";
+
+// cueTimes lists the bells of a countdown that has `rem` seconds left, each as
+// seconds from now. Only the last segment gets the warning, the ten answer
+// ticks and the final bell; an earlier duplet/blitz segment just ends long.
+function cueTimes(phase: "running" | "answer", last: boolean, rem: number): Array<[CueKind, number]> {
+  const out: Array<[CueKind, number]> = [];
+  if (phase === "answer") {
+    for (let d = 1; d < rem - 1e-3; d++) out.push(["tick", rem - d]);
+    out.push(["long", rem]);
+    return out;
+  }
+  if (!last) return [["long", rem]];
+  if (rem - WARN_AT > 1e-3) out.push(["warn", rem - WARN_AT]);
+  for (let j = 0; j < ANSWER_SEC; j++) out.push(["tick", rem + j]);
+  out.push(["long", rem + ANSWER_SEC]);
+  return out;
+}
+
+// parseCustom reads a plus-separated list of positive integers ("40+20" →
+// [40,20]); falls back to a single 60s segment when nothing usable is entered.
+function parseCustom(raw: string | null | undefined): number[] {
+  const parts = String(raw || "")
+    .split("+")
+    .map((s) => parseInt(s.trim(), 10))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  return parts.length ? parts : [60];
+}
+
+// ---- the kernel -------------------------------------------------------------
+// phase: ready    → press Start to run the current segment
+//        running  → counting the current question segment down
+//        paused   → frozen (resumePhase remembers what to resume into)
+//        answer   → counting the 10s answer window (last segment only)
+//        done     → whole preset finished; Reset to play again
+export type Phase = "ready" | "running" | "paused" | "answer" | "done";
+
+export interface TimerClock {
+  now(): number; // ms, monotonic (performance.now)
+  setInterval(fn: () => void, ms: number): number;
+  clearInterval(id: number): void;
+}
+export interface TimerBell {
+  // Book a cue `inSec` seconds from now; cancel forgets every booked cue.
+  play(kind: CueKind, inSec: number): void;
+  cancel(): void;
+  // A user gesture is the moment to warm the audio path (iOS keeps it
+  // suspended otherwise); called on every Start.
+  warm(): void;
+}
+// What the box shows: computed here, painted by the view.
+export interface TimerVM {
+  shown: number;
+  phase: Phase;
+  answer: boolean;
+  urgent: boolean;
+  label: string;
+  canStart: boolean;
+  canPause: boolean;
+  startWord: string;
+}
+export interface TimerDeps {
+  clock: TimerClock;
+  bell: TimerBell;
+  view: { render(vm: TimerVM): void };
+}
+export interface Timer {
+  start(): void;
+  pause(): void;
+  reset(): void;
+  // A preset key, or "custom" with the typed durations.
+  selectPreset(key: string, custom?: string | null): void;
+  readonly phase: Phase;
+  readonly segments: ReadonlyArray<number>;
+  readonly segIdx: number;
+}
+
+export function createTimer(deps: TimerDeps): Timer {
+  const { clock, bell } = deps;
+  const m = {
+    presetKey: "regular",
+    segments: PRESETS.regular.segments.slice(),
+    segIdx: 0,
+    phase: "ready" as Phase,
+    resumePhase: "running" as "running" | "answer",
+    remaining: 60, // frozen seconds for the current/paused countdown
+    deadline: 0, // clock.now() target while running/answer
+    shown: 60, // last integer shown
+    timer: 0, // interval handle while running/answer
+  };
+  const isLast = (): boolean => m.segIdx === m.segments.length - 1;
+
+  function render(): void {
+    const answer = m.phase === "answer" || (m.phase === "paused" && m.resumePhase === "answer");
+    let label = "";
+    if (answer) label = "Ответ";
+    else if (m.phase === "done") label = "Готово";
+    else if (m.segments.length > 1) label = `Вопрос ${m.segIdx + 1} / ${m.segments.length}`;
+    deps.view.render({
+      shown: m.shown,
+      phase: m.phase,
+      answer,
+      urgent: !answer && m.phase === "running" && m.shown <= WARN_AT,
+      label,
+      canStart: m.phase === "ready" || m.phase === "paused",
+      canPause: m.phase === "running" || m.phase === "answer",
+      startWord: m.phase === "paused" ? "Продолжить" : "Старт",
+    });
+  }
+
+  // The loop only paints and moves the phase along; the bells are already on the
+  // audio clock, so a throttled or paused loop delays the display, not the sound.
+  function stopLoop(): void {
+    if (m.timer) clock.clearInterval(m.timer);
+    m.timer = 0;
+  }
+  function startLoop(): void {
+    stopLoop();
+    m.timer = clock.setInterval(loop, 100);
+  }
+  function loop(): void {
+    const rem = (m.deadline - clock.now()) / 1000;
+    const disp = Math.max(0, Math.ceil(rem - 1e-3));
+    if (disp !== m.shown) {
+      m.shown = disp;
+      render();
+    }
+    if (rem <= 0) endCountdown();
+  }
+
+  // endCountdown handles a countdown reaching zero, branching on phase/segment.
+  function endCountdown(): void {
+    if (m.phase === "running") {
+      if (isLast()) {
+        // Question's up → roll straight into the answer-writing window, measured
+        // from the question's deadline so a late frame does not stretch it.
+        m.phase = "answer";
+        m.deadline += ANSWER_SEC * 1000;
+        m.shown = ANSWER_SEC;
+        render();
+        return;
+      }
+      // A non-final duplet/blitz segment: queue up the next segment and wait for
+      // the player to press Start again.
+      stopLoop();
+      m.segIdx += 1;
+      m.remaining = m.segments[m.segIdx];
+      m.shown = m.remaining;
+      m.phase = "ready";
+    } else if (m.phase === "answer") {
+      stopLoop();
+      m.phase = "done";
+      m.remaining = 0;
+      m.shown = 0;
+    }
+    render();
+  }
+
+  function beginRun(kind: "running" | "answer"): void {
+    m.phase = kind;
+    m.deadline = clock.now() + m.remaining * 1000;
+    m.shown = Math.max(0, Math.ceil(m.remaining - 1e-3));
+    bell.cancel();
+    for (const [cue, at] of cueTimes(kind, isLast(), m.remaining)) bell.play(cue, at);
+    render();
+    startLoop();
+  }
+  function start(): void {
+    bell.warm(); // inside this user gesture
+    if (m.phase === "ready") beginRun("running");
+    else if (m.phase === "paused") beginRun(m.resumePhase);
+    // running / answer / done → no-op
+  }
+  function pause(): void {
+    if (m.phase !== "running" && m.phase !== "answer") return;
+    stopLoop();
+    bell.cancel();
+    m.remaining = Math.max(0, (m.deadline - clock.now()) / 1000);
+    m.resumePhase = m.phase;
+    m.phase = "paused";
+    render();
+  }
+  function reset(): void {
+    stopLoop();
+    bell.cancel();
+    m.segIdx = 0;
+    m.remaining = m.segments[0] || 0;
+    m.shown = m.remaining;
+    m.phase = "ready";
+    render();
+  }
+  function selectPreset(key: string, custom?: string | null): void {
+    m.presetKey = key;
+    m.segments = key !== "custom" && PRESETS[key] ? PRESETS[key].segments.slice() : parseCustom(custom);
+    reset();
+  }
+
+  render();
+  return {
+    start, pause, reset, selectPreset,
+    get phase() { return m.phase; },
+    get segments() { return m.segments; },
+    get segIdx() { return m.segIdx; },
+  };
+}
+
+// ---- the page adapter -------------------------------------------------------
 
 // ---- WebAudio bell ----------------------------------------------------------
 let audioCtx: AudioContext | null = null;
@@ -59,7 +270,6 @@ function loadDing(ac: AudioContext): void {
 // The three cues. `rate` shifts the bell's pitch and length together (2 = the
 // answer ticks an octave up and half as long, 0.5 = the end an octave down);
 // the rest shapes the oscillator that stands in until the bell is decoded.
-type CueKind = "warn" | "tick" | "long";
 interface Cue { rate: number; gain: number; freq: number; dur: number; wave: OscillatorType; toneGain: number }
 const CUES: Record<CueKind, Cue> = {
   warn: { rate: 1, gain: 0.7, freq: 880, dur: 0.22, wave: "square", toneGain: 0.18 }, // "10 seconds left"
@@ -108,160 +318,15 @@ function cancelCues(): void {
   scheduled = [];
 }
 
-// cueTimes lists the bells of a countdown that has `rem` seconds left, each as
-// seconds from now. Only the last segment gets the warning, the ten answer
-// ticks and the final bell; an earlier duplet/blitz segment just ends long.
-function cueTimes(phase: "running" | "answer", last: boolean, rem: number): Array<[CueKind, number]> {
-  const out: Array<[CueKind, number]> = [];
-  if (phase === "answer") {
-    for (let d = 1; d < rem - 1e-3; d++) out.push(["tick", rem - d]);
-    out.push(["long", rem]);
-    return out;
-  }
-  if (!last) return [["long", rem]];
-  if (rem - WARN_AT > 1e-3) out.push(["warn", rem - WARN_AT]);
-  for (let j = 0; j < ANSWER_SEC; j++) out.push(["tick", rem + j]);
-  out.push(["long", rem + ANSWER_SEC]);
-  return out;
-}
-
-// ---- state machine ----------------------------------------------------------
-// phase: ready    → press Start to run the current segment
-//        running  → counting the current question segment down
-//        paused   → frozen (resumePhase remembers what to resume into)
-//        answer   → counting the 10s answer window (last segment only)
-//        done     → whole preset finished; Reset to play again
-type Phase = "ready" | "running" | "paused" | "answer" | "done";
-interface TimerState {
-  presetKey: string;
-  segments: number[];
-  segIdx: number;
-  phase: Phase;
-  resumePhase: "running" | "answer";
-  remaining: number;
-  deadline: number;
-  shown: number;
-  timer: number;
-}
-const m: TimerState = {
-  presetKey: "regular",
-  segments: PRESETS.regular.segments.slice(),
-  segIdx: 0,
-  phase: "ready",
-  resumePhase: "running",
-  remaining: 60, // frozen seconds for the current/paused countdown
-  deadline: 0, // performance.now() target while running/answer
-  shown: 60, // last integer shown
-  timer: 0, // setInterval handle while running/answer
-};
-const isLast = (): boolean => m.segIdx === m.segments.length - 1;
-
-// The loop only paints and moves the phase along; the bells are already on the
-// audio clock, so a throttled or paused loop delays the display, not the sound.
-function stopLoop(): void {
-  if (m.timer) clearInterval(m.timer);
-  m.timer = 0;
-}
-function startLoop(): void {
-  stopLoop();
-  m.timer = window.setInterval(loop, 100);
-}
-function loop(): void {
-  const rem = (m.deadline - performance.now()) / 1000;
-  const disp = Math.max(0, Math.ceil(rem - 1e-3));
-  if (disp !== m.shown) {
-    m.shown = disp;
-    renderTime();
-  }
-  if (rem <= 0) endCountdown();
-}
-
-// endCountdown handles a countdown reaching zero, branching on phase/segment.
-function endCountdown(): void {
-  if (m.phase === "running") {
-    if (isLast()) {
-      // Question's up → roll straight into the answer-writing window, measured
-      // from the question's deadline so a late frame does not stretch it.
-      m.phase = "answer";
-      m.deadline += ANSWER_SEC * 1000;
-      m.shown = ANSWER_SEC;
-      renderTime();
-      renderControls();
-      return;
-    }
-    // A non-final duplet/blitz segment: queue up the next segment and wait for
-    // the player to press Start again.
-    stopLoop();
-    m.segIdx += 1;
-    m.remaining = m.segments[m.segIdx];
-    m.shown = m.remaining;
-    m.phase = "ready";
-  } else if (m.phase === "answer") {
-    stopLoop();
-    m.phase = "done";
-    m.remaining = 0;
-    m.shown = 0;
-  }
-  renderTime();
-  renderControls();
-}
-
-// ---- controls ---------------------------------------------------------------
-function beginRun(kind: "running" | "answer"): void {
-  m.phase = kind;
-  m.deadline = performance.now() + m.remaining * 1000;
-  m.shown = Math.max(0, Math.ceil(m.remaining - 1e-3));
-  cancelCues();
-  for (const [cue, at] of cueTimes(kind, isLast(), m.remaining)) playAt(cue, at);
-  renderTime();
-  renderControls();
-  startLoop();
-}
-function start(): void {
-  ensureAudio(); // warm/resume the context inside this user gesture
-  if (m.phase === "ready") beginRun("running");
-  else if (m.phase === "paused") beginRun(m.resumePhase);
-  // running / answer / done → no-op
-}
-function pause(): void {
-  if (m.phase !== "running" && m.phase !== "answer") return;
-  stopLoop();
-  cancelCues();
-  m.remaining = Math.max(0, (m.deadline - performance.now()) / 1000);
-  m.resumePhase = m.phase;
-  m.phase = "paused";
-  renderControls();
-}
-function reset(): void {
-  stopLoop();
-  cancelCues();
-  m.segIdx = 0;
-  m.remaining = m.segments[0] || 0;
-  m.shown = m.remaining;
-  m.phase = "ready";
-  renderTime();
-  renderControls();
-}
-function selectPreset(key: string): void {
-  m.presetKey = key;
-  if (key !== "custom") m.segments = PRESETS[key].segments.slice();
-  else m.segments = parseCustom(customInput && customInput.value);
-  reset();
-}
-// parseCustom reads a plus-separated list of positive integers ("40+20" →
-// [40,20]); falls back to a single 60s segment when nothing usable is entered.
-function parseCustom(raw: string | null | undefined): number[] {
-  const parts = String(raw || "")
-    .split("+")
-    .map((s) => parseInt(s.trim(), 10))
-    .filter((n) => Number.isFinite(n) && n > 0);
-  return parts.length ? parts : [60];
+function webAudioBell(): TimerBell {
+  return { play: playAt, cancel: cancelCues, warm: () => { ensureAudio(); } };
 }
 
 // ---- DOM --------------------------------------------------------------------
 let overlay!: HTMLElement, timeNode!: HTMLElement, labelNode!: HTMLElement,
   startBtn!: HTMLButtonElement, pauseBtn!: HTMLButtonElement,
   presetSel!: HTMLSelectElement, customWrap!: HTMLElement, customInput!: HTMLInputElement;
+let timer: Timer | null = null;
 
 // Inline SVG button icons (Feather shapes, currentColor). Font glyphs were the
 // first take, but ↺ renders half the size of ▶/⏸ and varies per platform —
@@ -291,12 +356,24 @@ const resetIcon = (): SVGSVGElement => icon(
   ["path", stroked({ d: "M3.8 15a9 9 0 1 0 2.1-9.4L1.5 10" })],
 );
 
+function paint(vm: TimerVM): void {
+  if (!timeNode) return;
+  timeNode.textContent = String(vm.shown);
+  timeNode.classList.toggle("timer-answer", vm.answer);
+  timeNode.classList.toggle("timer-urgent", vm.urgent);
+  labelNode.textContent = vm.label;
+  startBtn.disabled = !vm.canStart;
+  pauseBtn.disabled = !vm.canPause;
+  startBtn.title = vm.startWord;
+  startBtn.setAttribute("aria-label", vm.startWord);
+}
+
 function build(): void {
   presetSel = el("select", { class: "input timer-preset", "aria-label": "Режим таймера" }) as HTMLSelectElement;
   for (const [key, p] of Object.entries(PRESETS)) presetSel.append(el("option", { value: key, text: p.label }));
   presetSel.addEventListener("change", () => {
     customWrap.hidden = presetSel.value !== "custom";
-    selectPreset(presetSel.value);
+    timer!.selectPreset(presetSel.value, customInput.value);
   });
 
   customInput = el("input", {
@@ -306,7 +383,7 @@ function build(): void {
     placeholder: "напр. 40+20",
     "aria-label": "Свои длительности, через +",
   }) as HTMLInputElement;
-  const applyCustom = (): void => { if (m.presetKey === "custom") selectPreset("custom"); };
+  const applyCustom = (): void => { if (presetSel.value === "custom") timer!.selectPreset("custom", customInput.value); };
   customInput.addEventListener("change", applyCustom);
   customInput.addEventListener("input", applyCustom);
   customWrap = el("div", { class: "timer-custom", hidden: true }, customInput);
@@ -316,9 +393,9 @@ function build(): void {
 
   // Icons, not captions — three worded buttons overflowed the 240px box
   // («Продолжить» alone nearly filled it). The word lives in title/aria-label.
-  startBtn = el("button", { class: "btn btn-small", type: "button", title: "Старт", "aria-label": "Старт", onclick: start }, playIcon()) as HTMLButtonElement;
-  pauseBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", title: "Пауза", "aria-label": "Пауза", onclick: pause }, pauseIcon()) as HTMLButtonElement;
-  const resetBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", title: "Сброс", "aria-label": "Сброс", onclick: reset }, resetIcon());
+  startBtn = el("button", { class: "btn btn-small", type: "button", title: "Старт", "aria-label": "Старт", onclick: () => timer!.start() }, playIcon()) as HTMLButtonElement;
+  pauseBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", title: "Пауза", "aria-label": "Пауза", onclick: () => timer!.pause() }, pauseIcon()) as HTMLButtonElement;
+  const resetBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", title: "Сброс", "aria-label": "Сброс", onclick: () => timer!.reset() }, resetIcon());
 
   overlay = el(
     "div",
@@ -330,8 +407,15 @@ function build(): void {
   );
   document.body.append(overlay);
   wireDrag();
-  renderTime();
-  renderControls();
+  timer = createTimer({
+    clock: {
+      now: () => performance.now(),
+      setInterval: (fn, ms) => window.setInterval(fn, ms),
+      clearInterval: (id) => clearInterval(id),
+    },
+    bell: webAudioBell(),
+    view: { render: paint },
+  });
 }
 
 // ---- drag anywhere + remembered position ------------------------------------
@@ -387,31 +471,6 @@ function wireDrag(): void {
   });
 }
 
-function renderTime(): void {
-  if (!timeNode) return;
-  timeNode.textContent = String(m.shown);
-  const answer = m.phase === "answer" || (m.phase === "paused" && m.resumePhase === "answer");
-  timeNode.classList.toggle("timer-answer", answer);
-  timeNode.classList.toggle("timer-urgent", !answer && m.phase === "running" && m.shown <= WARN_AT);
-  // sub-label: answer window, multi-segment progress, or completion
-  let label = "";
-  if (answer) label = "Ответ";
-  else if (m.phase === "done") label = "Готово";
-  else if (m.segments.length > 1) label = `Вопрос ${m.segIdx + 1} / ${m.segments.length}`;
-  labelNode.textContent = label;
-}
-
-function renderControls(): void {
-  if (!startBtn) return;
-  const canStart = m.phase === "ready" || m.phase === "paused";
-  const canPause = m.phase === "running" || m.phase === "answer";
-  startBtn.disabled = !canStart;
-  pauseBtn.disabled = !canPause;
-  const startWord = m.phase === "paused" ? "Продолжить" : "Старт";
-  startBtn.title = startWord;
-  startBtn.setAttribute("aria-label", startWord);
-}
-
 // ---- toggle wiring ----------------------------------------------------------
 function toggle(): void {
   if (!overlay) build();
@@ -435,4 +494,4 @@ if (typeof document !== "undefined") {
   else init();
 }
 
-export const xyTimer = { _presets: PRESETS, _parseCustom: parseCustom, _cueTimes: cueTimes };
+export const xyTimer = { PRESETS, parseCustom, cueTimes, createTimer };
