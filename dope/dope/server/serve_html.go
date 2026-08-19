@@ -1,7 +1,6 @@
 package dopeserver
 
 import (
-	"bytes"
 	"context"
 	"dope/dope/domain/core"
 	"dope/dope/domain/imports"
@@ -149,11 +148,15 @@ func (s *server) versionAssetRefs(body []byte) []byte {
 	return webassets.VersionRefs(s.eng.AssetETags, body)
 }
 
-// writeAppHTML cache-busts the body's asset URLs, marks the shell no-cache (it
-// embeds per-request init JSON and deploy-specific version pointers, so it must
-// never be served stale), and writes it. HEAD returns headers only.
+// writeAppHTML cache-busts the body's asset URLs and writes it as a shell.
 func (s *server) writeAppHTML(w http.ResponseWriter, r *http.Request, body []byte) {
-	body = s.versionAssetRefs(body)
+	s.writeShell(w, r, s.versionAssetRefs(body))
+}
+
+// writeShell marks a shell no-cache (it embeds per-request init JSON and
+// deploy-specific version pointers, so it must never be served stale) and
+// writes it. HEAD returns headers only.
+func (s *server) writeShell(w http.ResponseWriter, r *http.Request, body []byte) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
@@ -164,28 +167,16 @@ func (s *server) writeAppHTML(w http.ResponseWriter, r *http.Request, body []byt
 	_, _ = w.Write(body)
 }
 
-// serveInjectedHTML reads an HTML file from the embedded asset FS, splices
-// the JSON payload over the marker token, and writes it as the response. The
-// caller is responsible for pre-marshaling and for ensuring the marker is
-// present in the HTML. On any I/O or marker-mismatch error the function
-// silently falls back to serving the file unchanged.
+// serveInjectedHTML writes a shell with the init JSON spliced over its marker.
+// On a missing page or marker it falls back to the file unchanged, so a
+// payload bug never breaks the page.
 func (s *server) serveInjectedHTML(w http.ResponseWriter, r *http.Request, htmlPath, marker string, payload []byte) {
-	body, err := s.pageBytes(htmlPath)
+	body, err := s.renderInjectedBytes(htmlPath, marker, payload)
 	if err != nil {
 		s.serveAppHTML(w, r, htmlPath)
 		return
 	}
-	markerBytes := []byte(marker)
-	idx := bytes.Index(body, markerBytes)
-	if idx < 0 {
-		s.serveAppHTML(w, r, htmlPath)
-		return
-	}
-	out := make([]byte, 0, len(body)+len(payload))
-	out = append(out, body[:idx]...)
-	out = append(out, payload...)
-	out = append(out, body[idx+len(markerBytes):]...)
-	s.writeAppHTML(w, r, out)
+	s.writeShell(w, r, body)
 }
 
 func (s *server) buildGameInit(ctx context.Context, scope festScope) (gameInitPayload, error) {

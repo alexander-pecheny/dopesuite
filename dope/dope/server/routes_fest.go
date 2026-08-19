@@ -77,21 +77,8 @@ func (s *server) viewerGamePage(w http.ResponseWriter, r *http.Request, sc route
 		// sub-route, so collapse to one snapshot cache key.
 		initRoute = ekInitRoute{Mode: "grid", FestID: sc.FestID, GameID: gameID}
 	}
-	// Serve the static snapshot when forced or, under load, for cookie-less
-	// viewers. Cookie-bearing requests fall through to the live path so editors
-	// keep working — but only up to a small concurrency budget, so a flood of
-	// forged session cookies can't pierce the shield.
-	serveStatic := forceStatic
-	if !serveStatic && s.eng.StaticMode.Load() {
-		if session.HasCookie(r) {
-			if s.eng.LiveFallthrough.Add(1) > liveFallthroughCap {
-				serveStatic = true
-			}
-			defer s.eng.LiveFallthrough.Add(-1)
-		} else {
-			serveStatic = true
-		}
-	}
+	serveStatic, release := lockdownServes(forceStatic, s.eng.StaticMode.Load(), session.HasCookie(r), &s.eng.LiveFallthrough)
+	defer release()
 	if serveStatic {
 		s.serveStaticSnapshot(w, r, initRoute)
 		return nil

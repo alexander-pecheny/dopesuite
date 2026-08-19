@@ -60,7 +60,7 @@ files, each one concern:
 | `server/auth.go` | ~600 | Sessions, password login, the Telegram handshake's adapter (the state machine is `dopecore/tglogin`; dope brings its write tx, its users table with `is_system`, its error text) |
 | `server/matchview.go` | ~815 | Fest/match view loading + match-update application |
 | `server/import_scheme.go` | ~110 | The pasted-scheme importer (`/api/import`, the host form): clears the fest, calls `gamebuild.Materialise` |
-| `server/static_mode.go` | ~425 | "DDoS lockdown" static-snapshot degradation layer |
+| `server/static_mode.go` | ~440 | "DDoS lockdown": `staticGovernor.step` (the hysteresis, pure), `lockdownServes` (per-request decision), `spliceInit` (the one init splice), snapshot cache |
 | `server/serve_html.go` | ~360 | Host/viewer/game HTML init payloads + asset versioning; `canEdit` is the one place the init payload asks the role |
 | `server/host_accessors.go` | ~190 | Dependency-inversion adapter (`*server` → leaf `Host` interfaces) |
 | `server/testapi.go` | ~185 | The single exported test seam for `server/tests/` |

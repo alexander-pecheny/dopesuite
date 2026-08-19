@@ -93,55 +93,78 @@ func (s *server) initStaticMode() {
 	}
 }
 
-// runStaticEval drives staticMode from the load gauges once per second, honouring
-// the manual override and applying hysteresis so the mode doesn't flap.
+// staticGovernor is the lockdown control loop's state: hysteresis counters
+// over one-second ticks. step is pure, so the loop is tested without a clock.
+type staticGovernor struct {
+	cfg                          staticConfig
+	overTicks, underTicks, dwell int
+}
+
+// step takes one tick's gauges and the current mode and returns the mode to
+// be in. Manual 1/2 pins on/off. Entry needs ~2s over rateHigh or sseMax, so a
+// blip doesn't trip it. Exit is NOT keyed on sseConns: new SSE is shed in static
+// mode so the gauge sits near zero, which would make it flap. Exit needs a
+// minimum dwell AND a sustained-low request rate; reqRate counts the static
+// pages' own self-reloads, so genuinely heavy traffic keeps the shield up.
+func (g *staticGovernor) step(manual int32, on bool, rate, sse int64) bool {
+	switch manual {
+	case 1:
+		return true
+	case 2:
+		return false
+	}
+	if on {
+		g.dwell++
+		if rate < g.cfg.rateLow {
+			g.underTicks++
+		} else {
+			g.underTicks = 0
+		}
+		if g.dwell >= g.cfg.cooldown && g.underTicks >= g.cfg.cooldown {
+			g.overTicks, g.underTicks, g.dwell = 0, 0, 0
+			return false
+		}
+		return true
+	}
+	if rate > g.cfg.rateHigh || sse > g.cfg.sseMax {
+		g.overTicks++
+	} else {
+		g.overTicks = 0
+	}
+	if g.overTicks >= 2 {
+		g.overTicks, g.underTicks, g.dwell = 0, 0, 0
+		return true
+	}
+	return false
+}
+
+// runStaticEval feeds the governor from the load gauges once per second.
 func (s *server) runStaticEval() {
-	cfg := s.staticCfg
+	g := &staticGovernor{cfg: s.staticCfg}
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
-	var overTicks, underTicks, dwell int
 	for range ticker.C {
 		rate := s.eng.ReqRate.Swap(0) // requests in the last second
 		s.eng.LastRate.Store(rate)
-		sse := s.eng.SseConns.Load()
-
-		switch s.eng.StaticManual.Load() {
-		case 1:
-			s.setStatic(true)
-			continue
-		case 2:
-			s.setStatic(false)
-			continue
-		}
-
-		if s.eng.StaticMode.Load() {
-			dwell++
-			if rate < cfg.rateLow {
-				underTicks++
-			} else {
-				underTicks = 0
-			}
-			// Auto-exit is NOT keyed on sseConns: new SSE is shed in static mode so
-			// the gauge sits near zero, which would make it flap on/off. Exit only
-			// after a minimum dwell AND a sustained-low request rate. reqRate counts
-			// the static pages' own self-reloads, so genuinely heavy traffic keeps
-			// the shield up.
-			if dwell >= cfg.cooldown && underTicks >= cfg.cooldown {
-				s.setStatic(false)
-				overTicks, underTicks, dwell = 0, 0, 0
-			}
-		} else {
-			if rate > cfg.rateHigh || sse > cfg.sseMax {
-				overTicks++
-			} else {
-				overTicks = 0
-			}
-			if overTicks >= 2 { // ~2s sustained, so a single blip doesn't trip it
-				s.setStatic(true)
-				overTicks, underTicks, dwell = 0, 0, 0
-			}
-		}
+		s.setStatic(g.step(s.eng.StaticManual.Load(), s.eng.StaticMode.Load(), rate, s.eng.SseConns.Load()))
 	}
+}
+
+// lockdownServes decides one viewer request: the snapshot when forced, or
+// under lockdown for a cookie-less viewer, or for a cookie-bearing one once
+// more than liveFallthroughCap of them already hold the live path — so a flood
+// of forged session cookies can't pierce the shield. release gives the live
+// slot back; the handler defers it.
+func lockdownServes(forced, locked, hasCookie bool, live *atomic.Int64) (snapshot bool, release func()) {
+	release = func() {}
+	if forced || !locked {
+		return forced, release
+	}
+	if !hasCookie {
+		return true, release
+	}
+	n := live.Add(1)
+	return n > liveFallthroughCap, func() { live.Add(-1) }
 }
 
 // setStatic flips the effective mode and, on entry, sheds connected viewers via
@@ -240,22 +263,30 @@ func (s *server) buildStaticEntry(ctx context.Context, route ekInitRoute) (*stat
 	return &staticEntry{raw: html, gz: webassets.GzipBytes(html)}, nil
 }
 
-// renderInjectedBytes splices payload over the marker in an HTML shell and
-// applies the asset cache-buster, returning the bytes (the no-ResponseWriter
-// twin of serveInjectedHTML, so snapshots can be cached).
+// spliceInit puts the init JSON where the page's marker stands. The live
+// viewer path and the lockdown snapshot both go through it.
+func spliceInit(page []byte, marker string, payload []byte) ([]byte, error) {
+	idx := bytes.Index(page, []byte(marker))
+	if idx < 0 {
+		return nil, fmt.Errorf("marker %q not found", marker)
+	}
+	out := make([]byte, 0, len(page)+len(payload))
+	out = append(out, page[:idx]...)
+	out = append(out, payload...)
+	return append(out, page[idx+len(marker):]...), nil
+}
+
+// renderInjectedBytes is a shell page with its init spliced in and its asset
+// refs cache-busted — the bytes the live path writes and the snapshot caches.
 func (s *server) renderInjectedBytes(htmlPath, marker string, payload []byte) ([]byte, error) {
 	body, err := s.pageBytes(htmlPath)
 	if err != nil {
 		return nil, err
 	}
-	idx := bytes.Index(body, []byte(marker))
-	if idx < 0 {
-		return nil, fmt.Errorf("static: marker %q not found in %s", marker, htmlPath)
+	out, err := spliceInit(body, marker, payload)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", htmlPath, err)
 	}
-	out := make([]byte, 0, len(body)+len(payload))
-	out = append(out, body[:idx]...)
-	out = append(out, payload...)
-	out = append(out, body[idx+len(marker):]...)
 	return s.versionAssetRefs(out), nil
 }
 
