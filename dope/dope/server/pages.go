@@ -56,7 +56,10 @@ func (s *server) pageBytes(path string) ([]byte, error) {
 // pageSet is built on first use from the engine's asset source, so a test that
 // only sets eng.Assets compiles pages the same way the server does.
 func (s *server) pageSet() *kit.PageSet {
-	s.pagesOnce.Do(func() { s.pages = kit.NewPageSet(s.eng.Assets, s.eng.AssetNoCache, dopeui.Compile) })
+	s.pagesOnce.Do(func() {
+		s.pages = kit.NewPageSet(s.eng.Assets, s.eng.AssetNoCache, dopeui.Compile).
+			Provide("ui/login.dopeui", kit.LoginPage("Вход · Фест", "/host"))
+	})
 	return s.pages
 }
 

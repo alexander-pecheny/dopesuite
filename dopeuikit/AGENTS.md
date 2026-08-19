@@ -13,17 +13,24 @@ typed-builder machinery, codegen) and knows no CSS class names or vocabulary.
 - Apps import `kit`, **never** `ui` directly. Each app adds a thin overlay
   (`xy/internal/ui`, `dope/dope/web/ui`) with its own primitives and mount kinds.
 - Design opinions belong in `kit/`, never in `ui/` — the engine is slated to split
-  into its own module.
+  into its own module. The page Chrome (`kit.Chrome`, `PageKind`, `SyncSpec`,
+  `HeadLink`) is a kit type the engine carries opaquely as `Options.Env`;
+  expanders read it back with `kit.ChromeOf(ctx)`. An app states its Chrome as
+  `kit.CoreChrome().With(delta)`. `ui/engine_test.go` is the engine's own
+  contract over a two-primitive vocabulary.
 - Both apps consume this module via `replace pecheny.me/dopeuikit => ../dopeuikit`,
   so a change here lands in xy and dope on their next build. Check both.
 - The kit imports `dopecore`; dopecore imports neither the kit nor `ui`. So
   app-facing plumbing that needs kit knowledge lives in `kit/` rather than
   being copied into both apps (root `docs/adr/0004`): `kit.Assets` (the
   webassets config with core.css, fonts, login.js, menu.js wired in),
-  `kit.PageSet` (compile-once-or-per-request for `.dopeui` pages),
-  `kit.AdminCreateUsers` (the /admin/create_users body), and `uitest.PageContract`
-  (the test each app runs over its real pages: compiles, ids and load-bearing
-  markup its scripts look up).
+  `kit.PageSet` (compile-once-or-per-request for `.dopeui` pages; `Provide`
+  registers a source that is not a file), `kit.LoginPage(title, redirect)` (the
+  login page source, `assets/ui/login.dopeui`, beside the `login.ts` whose ids
+  it must carry — both apps serve it at /login), `kit.AdminCreateUsers`,
+  `kit.SortHeader` and `kit.AdminTime` (the /admin pages' shared pieces), and
+  `uitest.PageContract` (the test each app runs over its real pages plus the
+  `Provided` ones: compiles, ids and load-bearing markup its scripts look up).
 
 ## Codegen
 

@@ -3,10 +3,11 @@ package ui
 import (
 	"testing"
 
+	kit "pecheny.me/dopeuikit/kit"
 	"pecheny.me/dopeuikit/uitest"
 )
 
-// TestRealPages runs the kit's page contract over dope's six pages: every
+// TestRealPages runs the kit's page contract over dope's pages: every
 // web/assets/ui/*.dopeui compiles, and every id and load-bearing markup the
 // page's scripts look up exists in the compiled page (see DOPE-INVENTORY §JS
 // contract: the game pages measure .sheet-frame and mount into .table-host;
@@ -16,7 +17,8 @@ func TestRealPages(t *testing.T) {
 		Compile:   Compile,
 		PagesDir:  "../assets/ui",
 		StaticDir: "../assets/static",
-		Pages:     6,
+		Pages:     5,
+		Provided:  map[string][]byte{"login": kit.LoginPage("Вход · Фест", "/host")},
 		LoadBearing: map[string][]string{
 			"":      {"host-actions"},
 			"login": {"host-top", "<h1>"},

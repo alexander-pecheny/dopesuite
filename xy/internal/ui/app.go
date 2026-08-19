@@ -39,22 +39,16 @@ func mustApp() *base.App {
 			"pane":        expandPane,
 		},
 		Mounts: xyMounts,
-		Chrome: base.Chrome{
-			Lang:              "ru",
+		Chrome: base.CoreChrome().With(base.Chrome{
 			Viewport:          viewportContent,
-			Stylesheets:       []string{"/static/styles.css"},
-			FontPreloads:      []string{"/static/fonts/noto-sans-var.woff2"},
-			BootScripts:       []string{"/static/menu.js"},
 			ModuleBootScripts: []string{"/static/dist/pwa.js", "/static/dist/firstrun.js"},
-			DefaultKind:       "sheet",
 			PageKinds: map[string]base.PageKind{
 				"sheet": {Body: []string{"host", "import-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "import-frame"}},
 				"full":  {Body: []string{"host", "list-page"}, Main: []string{"match-main"}},
 				"wide":  {Body: []string{"host"}, Main: []string{"board-main"}, Frame: []string{"import-form"}},
 				"board": {Body: []string{"host", "host-compact", "board-page"}, Main: []string{"board-main"}},
 			},
-			TopbarSync: base.SyncSpec{ID: "status", Class: "sync-status", State: "saved", Label: "Готово"},
-		},
+		}),
 	})
 	if err != nil {
 		panic(err)

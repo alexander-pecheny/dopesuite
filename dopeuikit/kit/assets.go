@@ -3,6 +3,7 @@ package kit
 import (
 	"fmt"
 	"io/fs"
+	"strings"
 	"sync"
 
 	"pecheny.me/dopecore/webassets"
@@ -51,16 +52,33 @@ func Assets(embedded fs.FS, diskRoots ...string) *webassets.Assets {
 // PageSet compiles an app's .dopeui pages: once in embed mode (Warm does them
 // all at startup so a broken page fails there), per call in disk mode.
 type PageSet struct {
-	source  fs.FS
-	noCache bool
-	compile func(name string, src []byte) ([]byte, error)
-	mu      sync.Mutex
-	cache   map[string][]byte
+	source   fs.FS
+	noCache  bool
+	compile  func(name string, src []byte) ([]byte, error)
+	mu       sync.Mutex
+	cache    map[string][]byte
+	provided map[string][]byte
+}
+
+// Provide registers a page source that does not come from the app's asset FS
+// — the kit's own LoginPage. It wins over a file of the same name.
+func (p *PageSet) Provide(name string, src []byte) *PageSet {
+	p.mu.Lock()
+	p.provided[name] = src
+	delete(p.cache, name)
+	p.mu.Unlock()
+	return p
+}
+
+// LoginPage is the shared login page for an app: its tab title and where a
+// fresh login lands. Every app serves it at /login through its own compiler.
+func LoginPage(title, redirect string) []byte {
+	return []byte(strings.NewReplacer("{{title}}", title, "{{redirect}}", redirect).Replace(string(assets.LoginPage)))
 }
 
 // NewPageSet takes the app's ui.Compile, which carries its vocabulary overlay.
 func NewPageSet(source fs.FS, noCache bool, compile func(name string, src []byte) ([]byte, error)) *PageSet {
-	return &PageSet{source: source, noCache: noCache, compile: compile, cache: map[string][]byte{}}
+	return &PageSet{source: source, noCache: noCache, compile: compile, cache: map[string][]byte{}, provided: map[string][]byte{}}
 }
 
 // Bytes is the compiled HTML of the page at name ("ui/login.dopeui").
@@ -73,9 +91,14 @@ func (p *PageSet) Bytes(name string) ([]byte, error) {
 			return body, nil
 		}
 	}
-	src, err := fs.ReadFile(p.source, name)
-	if err != nil {
-		return nil, err
+	p.mu.Lock()
+	src, ok := p.provided[name]
+	p.mu.Unlock()
+	if !ok {
+		var err error
+		if src, err = fs.ReadFile(p.source, name); err != nil {
+			return nil, err
+		}
 	}
 	body, err := p.compile(name, src)
 	if err != nil {

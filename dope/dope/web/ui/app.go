@@ -16,9 +16,6 @@ import (
 //go:embed vocab.json
 var overlayVocab []byte
 
-// viewportContent is dope's plain (non-PWA) viewport.
-const viewportContent = "width=device-width, initial-scale=1"
-
 // iconLinks point the launchers at the icon set design/icon/gen-icon.py renders.
 // /favicon.ico needs no link (browsers ask for it anyway); iOS ignores the
 // manifest and reads only apple-touch-icon. The manifest is there for the icons,
@@ -65,14 +62,9 @@ func mustApp() *base.App {
 			"link": inlineLink,
 		},
 		Mounts: dopeMounts,
-		Chrome: base.Chrome{
-			Lang:         "ru",
-			Viewport:     viewportContent,
-			Stylesheets:  []string{"/static/styles.css"},
-			FontPreloads: []string{"/static/fonts/noto-sans-var.woff2"},
-			HeadLinks:    iconLinks,
-			BootScripts:  []string{"/static/dist/menu-config.js", "/static/menu.js"},
-			DefaultKind:  "sheet",
+		Chrome: base.CoreChrome().With(base.Chrome{
+			HeadLinks:   iconLinks,
+			BootScripts: []string{"/static/dist/menu-config.js", "/static/menu.js"},
 			PageKinds: map[string]base.PageKind{
 				"public": {Body: []string{"public"}, Main: []string{"public-main"}},
 				// The gallery scrolls like a public page but takes the whole width;
@@ -84,9 +76,8 @@ func mustApp() *base.App {
 				"si":      {Body: []string{"host", "host-compact", "si-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
 				"brain":   {Body: []string{"host", "host-compact", "brain-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
 			},
-			TopbarSync: base.SyncSpec{ID: "status", Class: "sync-status", State: "saved", Label: "Готово"},
-			HeadHook:   headHook,
-		},
+			HeadHook: headHook,
+		}),
 	})
 	if err != nil {
 		panic(err)

@@ -15,12 +15,15 @@ import (
 
 // PageContract is one app's page set and the allowances its scripts need:
 // Pages is the count PagesDir must hold (fewer means a moved directory, not a
-// pass); IDsCreatedByJS are ids scripts build at runtime; LoadBearing maps a
-// page name ("" = every page) to markup substrings its scripts bind to.
+// pass); Provided are the pages the app registers from code (kit.LoginPage)
+// rather than files; IDsCreatedByJS are ids scripts build at runtime;
+// LoadBearing maps a page name ("" = every page) to markup substrings its
+// scripts bind to.
 type PageContract struct {
 	Compile             func(name string, src []byte) ([]byte, error)
 	PagesDir, StaticDir string
 	Pages               int
+	Provided            map[string][]byte
 	IDsCreatedByJS      map[string]bool
 	LoadBearing         map[string][]string
 }
@@ -51,14 +54,20 @@ func (c PageContract) Run(t *testing.T) {
 	if len(pages) != c.Pages {
 		t.Fatalf("expected %d pages in %s, found %d: %v", c.Pages, c.PagesDir, len(pages), pages)
 	}
+	sources := map[string][]byte{}
 	for _, path := range pages {
-		name := strings.TrimSuffix(filepath.Base(path), ".dopeui")
+		src, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sources[strings.TrimSuffix(filepath.Base(path), ".dopeui")] = src
+	}
+	for name, src := range c.Provided {
+		sources[name] = src
+	}
+	for name, src := range sources {
 		t.Run(name, func(t *testing.T) {
-			src, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			html, err := c.Compile(filepath.Base(path), src)
+			html, err := c.Compile(name+".dopeui", src)
 			if err != nil {
 				t.Fatalf("compile: %v", err)
 			}

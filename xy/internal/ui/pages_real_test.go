@@ -3,10 +3,11 @@ package ui
 import (
 	"testing"
 
+	kit "pecheny.me/dopeuikit/kit"
 	"pecheny.me/dopeuikit/uitest"
 )
 
-// TestRealPages runs the kit's page contract over xy's six pages: every
+// TestRealPages runs the kit's page contract over xy's pages: every
 // web/assets/ui/*.dopeui compiles, and every id and load-bearing class the
 // page's script closure looks up exists in the compiled page.
 func TestRealPages(t *testing.T) {
@@ -14,7 +15,8 @@ func TestRealPages(t *testing.T) {
 		Compile:   Compile,
 		PagesDir:  "../../web/assets/ui",
 		StaticDir: "../../web/assets/static",
-		Pages:     6,
+		Pages:     5,
+		Provided:  map[string][]byte{"login": kit.LoginPage("Вход · xy", "/")},
 		// authorsDatalist is built by the board script itself.
 		IDsCreatedByJS: map[string]bool{"authorsDatalist": true},
 		// host-actions is on every page (the topbar emits it); the rest are

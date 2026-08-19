@@ -17,7 +17,7 @@ import (
 // with the kit's files wired in, and the page set that compiles ui/*.dopeui.
 func newAssets() (*webassets.Assets, *kit.PageSet) {
 	a := kit.Assets(assets.FS, ".", "web/assets")
-	return a, kit.NewPageSet(a.Source, a.NoCache, ui.Compile)
+	return a, kit.NewPageSet(a.Source, a.NoCache, ui.Compile).Provide("ui/login.dopeui", kit.LoginPage("Вход · xy", "/"))
 }
 
 // pagePaths are the ui/*.dopeui sources servePage compiles; warmed up front in

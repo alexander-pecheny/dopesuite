@@ -44,3 +44,21 @@ func TestPageSetCachesOnlyInEmbedMode(t *testing.T) {
 		t.Fatal("missing page compiled")
 	}
 }
+
+func TestLoginPageCompilesUnderCoreAndIsProvided(t *testing.T) {
+	src := LoginPage("Вход · test", "/host")
+	html, err := Compile("ui/login.dopeui", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"<title>Вход · test</title>", `data-login-redirect="/host"`, `id="step-password"`, "/static/login.js"} {
+		if !strings.Contains(string(html), want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	ps := NewPageSet(fstest.MapFS{"ui/login.dopeui": {Data: []byte("page title=\"app copy\"\n")}}, false, Compile).Provide("ui/login.dopeui", src)
+	body, err := ps.Bytes("ui/login.dopeui")
+	if err != nil || !strings.Contains(string(body), "Вход · test") {
+		t.Fatalf("provided source lost: %v\n%s", err, body)
+	}
+}
