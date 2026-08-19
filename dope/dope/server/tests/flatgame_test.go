@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	dopeserver "dope/dope/server"
+
 	"pecheny.me/dopecore/session"
 )
 

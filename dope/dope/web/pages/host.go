@@ -11,47 +11,25 @@ package pages
 
 import (
 	"context"
-	"database/sql"
 	"net/http"
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/view"
 	"dope/dope/storage/store"
-
-	"pecheny.me/dopecore/session"
 )
 
-// Host is the slice of service-core capabilities the page handlers need. *server
-// (package dopeserver) satisfies it via exported accessors (pages_host.go).
+// Host is what the page handlers need of the server: the Engine (the DB, the
+// write discipline, sessions, broadcasts — reached directly, not through
+// shims) and the few things only the server knows how to do.
 type Host interface {
-	// DB returns the shared database handle.
-	DB() *sql.DB
 	// BroadcastFestView invalidates and re-broadcasts a fest/game's FestView
 	// after a mutation (used by the journal revert).
 	BroadcastFestView(festID, gameID, revision int64)
 	// RevertGameToPoint reverts a game's journal to the given entry id and
 	// returns the new revision.
 	RevertGameToPoint(reqCtx context.Context, festID, gameID, targetID int64) (int64, error)
-	// BeginWriteTx begins a bounded write transaction.
-	BeginWriteTx(ctx context.Context) (*sql.Tx, error)
-	// LookupSession resolves the request's session identity.
-	LookupSession(r *http.Request) (session.User, bool)
-	// HashPassword hashes a plaintext password for storage.
-	HashPassword(password string) (string, error)
-	// RequireSameOrigin enforces the CSRF same-origin check on unsafe methods,
-	// writing 403 and returning false when it fails.
-	RequireSameOrigin(w http.ResponseWriter, r *http.Request) bool
-	// WriteExec runs a single audited write statement in an implicit transaction.
-	WriteExec(ctx context.Context, query string, args ...any) (sql.Result, error)
-	// WithWriteTx runs fn inside a bounded, audited write transaction (conn
-	// acquired off-lock, then the global write lock).
-	WithWriteTx(reqCtx context.Context, festID int64, label string, fn func(ctx context.Context, tx *sql.Tx) error) error
 	// LoadHostFestHeader loads the fest-header view model for the host pages.
 	LoadHostFestHeader(ctx context.Context, festID int64) (view.HostFest, error)
-	// BroadcastState fans out a full-state snapshot for a fest/scope after a commit.
-	BroadcastState(festID int64, scope string, revision int64, payload []byte) uint64
-	// WriteJSONValue marshals value and writes it as a JSON response.
-	WriteJSONValue(w http.ResponseWriter, value any)
 	// Engine returns the shared server runtime (DB handle, write lock, active
 	// fest/game pointers, broadcast and write-tx helpers). The host pages reach
 	// the runtime through this single accessor rather than dozens of shims.

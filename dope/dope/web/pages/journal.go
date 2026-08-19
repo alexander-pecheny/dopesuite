@@ -43,10 +43,10 @@ type journalOpRow struct {
 }
 
 func (s *Server) loadGameJournalGroups(ctx context.Context, festID, gameID int64) ([]journalChange, error) {
-	doc, _ := store.LoadGameDoc(ctx, s.h.DB(), festID, gameID)
+	doc, _ := store.LoadGameDoc(ctx, s.h.Engine().DB, festID, gameID)
 	gameType, stateJSON := doc.GameType, doc.State
 
-	rows, err := s.h.DB().QueryContext(ctx, `
+	rows, err := s.h.Engine().DB.QueryContext(ctx, `
 select j.id, j.ts, j.op, j.payload, coalesce(j.request_id, ''), coalesce(u.username, '')
 from journal j
 left join users u on u.id = j.actor_user_id
@@ -106,7 +106,7 @@ order by j.id`, gameID)
 		for _, g := range groups {
 			allOps = append(allOps, g.ops)
 		}
-		res.prepareEK(ctx, s.h.DB(), allOps)
+		res.prepareEK(ctx, s.h.Engine().DB, allOps)
 	}
 
 	out := make([]journalChange, 0, len(order))
@@ -777,7 +777,7 @@ func journalRow(festID, gameID int64, g journalChange) *ui.Element {
 
 func (s *Server) RenderGameJournal(w http.ResponseWriter, r *http.Request, festID, gameID int64, errMsg, notice string) {
 	var title string
-	_ = s.h.DB().QueryRowContext(r.Context(), `select coalesce(title, code) from games where id = ? and fest_id = ?`, gameID, festID).Scan(&title)
+	_ = s.h.Engine().DB.QueryRowContext(r.Context(), `select coalesce(title, code) from games where id = ? and fest_id = ?`, gameID, festID).Scan(&title)
 	if title == "" {
 		title = fmt.Sprintf("игра %d", gameID)
 	}
@@ -786,7 +786,7 @@ func (s *Server) RenderGameJournal(w http.ResponseWriter, r *http.Request, festI
 		http.Error(w, "journal: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	RenderDoc(w, s.h.Engine().AssetETags, journalDoc(festID, gameID, title, FestTitle(r.Context(), s.h.DB(), festID), errMsg, notice, groups))
+	RenderDoc(w, s.h.Engine().AssetETags, journalDoc(festID, gameID, title, FestTitle(r.Context(), s.h.Engine().DB, festID), errMsg, notice, groups))
 }
 
 func (s *Server) HandleGameRevert(w http.ResponseWriter, r *http.Request, festID, gameID int64) {

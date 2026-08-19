@@ -9,6 +9,7 @@ import (
 
 	"dope/dope/domain/numbering"
 	"dope/dope/platform/util"
+	"dope/dope/web/route"
 )
 
 // Mass import of team numbers from an external source (e.g. printed answer
@@ -208,7 +209,7 @@ func (s *Server) HandleHostFestNumbersImportMatch(w http.ResponseWriter, r *http
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	teams, err := numbering.LoadFestTeams(r.Context(), s.h.DB(), festID)
+	teams, err := numbering.LoadFestTeams(r.Context(), s.h.Engine().DB, festID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -233,7 +234,9 @@ func (s *Server) HandleHostFestNumbersImportMatch(w http.ResponseWriter, r *http
 	if errs == nil {
 		errs = []string{}
 	}
-	s.h.WriteJSONValue(w, importMatchResponse{Teams: options, Matches: matches, Errors: errs})
+	if err := route.JSON(w, importMatchResponse{Teams: options, Matches: matches, Errors: errs}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 type importApplyRequest struct {
@@ -252,10 +255,12 @@ type importApplyResponse struct {
 func (s *Server) HandleHostFestNumbersImportApply(w http.ResponseWriter, r *http.Request, festID int64) {
 	var req importApplyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.h.WriteJSONValue(w, importApplyResponse{Error: "Не удалось прочитать данные."})
+		if err := route.JSON(w, importApplyResponse{Error: "Не удалось прочитать данные."}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
-	teams, err := numbering.LoadFestTeams(r.Context(), s.h.DB(), festID)
+	teams, err := numbering.LoadFestTeams(r.Context(), s.h.Engine().DB, festID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -275,15 +280,21 @@ func (s *Server) HandleHostFestNumbersImportApply(w http.ResponseWriter, r *http
 	seenTeam := make(map[int64]bool, len(req.Assignments))
 	for _, a := range req.Assignments {
 		if !validIDs[a.TeamID] {
-			s.h.WriteJSONValue(w, importApplyResponse{Error: "Команда не из этого феста."})
+			if err := route.JSON(w, importApplyResponse{Error: "Команда не из этого феста."}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
 			return
 		}
 		if a.Number <= 0 || a.Number > numbering.MaxNumber {
-			s.h.WriteJSONValue(w, importApplyResponse{Error: "Номер должен быть целым от 1 до " + strconv.Itoa(numbering.MaxNumber) + "."})
+			if err := route.JSON(w, importApplyResponse{Error: "Номер должен быть целым от 1 до " + strconv.Itoa(numbering.MaxNumber) + "."}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
 			return
 		}
 		if seenTeam[a.TeamID] {
-			s.h.WriteJSONValue(w, importApplyResponse{Error: "Команда выбрана несколько раз."})
+			if err := route.JSON(w, importApplyResponse{Error: "Команда выбрана несколько раз."}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
 			return
 		}
 		seenTeam[a.TeamID] = true
@@ -297,8 +308,12 @@ func (s *Server) HandleHostFestNumbersImportApply(w http.ResponseWriter, r *http
 		final[a.TeamID] = a.Number
 	}
 	if err := s.SaveFestNumbers(r.Context(), festID, final); err != nil {
-		s.h.WriteJSONValue(w, importApplyResponse{Error: err.Error()})
+		if err := route.JSON(w, importApplyResponse{Error: err.Error()}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
-	s.h.WriteJSONValue(w, importApplyResponse{OK: true, Assigned: len(req.Assignments)})
+	if err := route.JSON(w, importApplyResponse{OK: true, Assigned: len(req.Assignments)}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }

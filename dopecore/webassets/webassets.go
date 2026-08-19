@@ -270,14 +270,18 @@ var assetRefRe = regexp.MustCompile(`(src|href)="(/static/[^"?]+\.(?:js|css))"`)
 
 // VersionRefs rewrites /static/*.js|css refs in an HTML body to carry
 // ?v=<hash>, so those requests can be cached immutably.
-func (a *Assets) VersionRefs(body []byte) []byte {
-	if len(a.ETags) == 0 {
+func (a *Assets) VersionRefs(body []byte) []byte { return VersionRefs(a.ETags, body) }
+
+// VersionRefs is the same over any ETag map — a page rendered by something
+// other than the Assets that served it.
+func VersionRefs(etags map[string]string, body []byte) []byte {
+	if len(etags) == 0 {
 		return body
 	}
 	return assetRefRe.ReplaceAllFunc(body, func(m []byte) []byte {
 		sub := assetRefRe.FindSubmatch(m)
 		path := string(sub[2])
-		tag := strings.Trim(a.ETags[path], `"`)
+		tag := strings.Trim(etags[path], `"`)
 		if tag == "" {
 			return m
 		}

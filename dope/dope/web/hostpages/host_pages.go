@@ -3,6 +3,7 @@ package hostpages
 import (
 	"database/sql"
 	"dope/dope/web/pages"
+	"dope/dope/web/route"
 	ui "dope/dope/web/ui"
 	"fmt"
 	"net/http"
@@ -214,7 +215,7 @@ func (s *Server) HandleProfileLogout(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !s.h.RequireSameOrigin(w, r) {
+	if !route.SameOriginUnsafe(w, r) {
 		return
 	}
 	s.h.LogoutSession(r)

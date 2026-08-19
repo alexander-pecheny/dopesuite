@@ -79,7 +79,7 @@ func (s *server) gameexportRoute(h func(gameexport.Host, http.ResponseWriter, *h
 }
 
 // gameStateScopeKey is the SSE scope a Game's whole document is broadcast on.
-func gameStateScopeKey(gameID int64) string { return fmt.Sprintf("game-state:%d", gameID) }
+func gameStateScopeKey(gameID int64) string { return core.GameStateScope(gameID) }
 
 func (s *server) scopedFest(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	gameID, err := defaultGameID(r.Context(), s.eng.DB, sc.FestID)

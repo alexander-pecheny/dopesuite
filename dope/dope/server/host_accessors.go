@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"net/http"
 
-	"pecheny.me/dopecore/authcred"
-
 	"dope/dope/domain/core"
 	"dope/dope/domain/view"
 	"dope/dope/export/gameexport"
@@ -15,8 +13,6 @@ import (
 	"dope/dope/web/hostpages"
 	"dope/dope/web/pages"
 	"dope/dope/web/telegrambridge"
-
-	"pecheny.me/dopecore/session"
 )
 
 // host_accessors.go consolidates the thin exported accessors that adapt *server
@@ -74,40 +70,9 @@ func (s *server) RevertGameToPoint(reqCtx context.Context, festID, gameID, targe
 	return s.eng.RevertGameToPoint(reqCtx, festID, gameID, targetID)
 }
 
-// BeginWriteTx begins a bounded write transaction.
-func (s *server) BeginWriteTx(ctx context.Context) (*sql.Tx, error) { return s.eng.BeginWriteTx(ctx) }
-
-// LookupSession resolves the request's session identity.
-func (s *server) LookupSession(r *http.Request) (session.User, bool) { return s.eng.LookupSession(r) }
-
-// HashPassword hashes a plaintext password for storage.
-func (s *server) HashPassword(password string) (string, error) {
-	return authcred.HashPassword(password)
-}
-
-// RequireSameOrigin enforces the CSRF same-origin check on unsafe methods.
-func (s *server) RequireSameOrigin(w http.ResponseWriter, r *http.Request) bool {
-	return RequireSameOriginUnsafe(w, r)
-}
-
-// WriteExec runs a single audited write statement in an implicit transaction.
-func (s *server) WriteExec(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	return s.eng.WriteExec(ctx, query, args...)
-}
-
-// WithWriteTx runs fn inside a bounded, audited write transaction.
-func (s *server) WithWriteTx(reqCtx context.Context, festID int64, label string, fn func(ctx context.Context, tx *sql.Tx) error) error {
-	return s.eng.WithWriteTx(reqCtx, festID, label, fn)
-}
-
 // LoadHostFestHeader loads the fest-header view model for the host pages.
 func (s *server) LoadHostFestHeader(ctx context.Context, festID int64) (view.HostFest, error) {
 	return s.loadHostFestHeader(ctx, festID)
-}
-
-// BroadcastState fans out a full-state snapshot for a fest/scope after a commit.
-func (s *server) BroadcastState(festID int64, scope string, revision int64, payload []byte) uint64 {
-	return s.eng.BroadcastState(festID, scope, revision, payload)
 }
 
 // WriteJSONValue marshals value and writes it as a JSON response.

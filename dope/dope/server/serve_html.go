@@ -3,17 +3,17 @@ package dopeserver
 import (
 	"bytes"
 	"context"
+	"dope/dope/domain/core"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/numbering"
 	"dope/dope/platform/roles"
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/store"
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"regexp"
 	"strconv"
-	"strings"
+
+	"pecheny.me/dopecore/webassets"
 )
 
 func (s *server) serveEKHTML(w http.ResponseWriter, r *http.Request) {
@@ -142,30 +142,11 @@ func (s *server) serveGameHTMLWithInit(w http.ResponseWriter, r *http.Request, h
 	s.serveInjectedHTML(w, r, htmlPath, gameInitMarker, data)
 }
 
-// assetRefRe matches a local /static .js/.css reference in an HTML attribute
-// (src=/href=), capturing the attribute name and the path. The [^"?]+ guard
-// skips URLs that already carry a query string.
-var assetRefRe = regexp.MustCompile(`(src|href)="(/static/[^"?]+\.(?:js|css))"`)
-
-// versionAssetRefs appends a "?v=<content-hash>" cache-buster to every local
-// /static .js/.css URL in an HTML body. The hash changes when the file's bytes
-// change, so a deploy busts the browser cache the instant the (no-cache) HTML
-// shell is re-fetched — without it the stable URL keeps serving the cached copy
-// until its max-age expires. URLs whose asset has no known hash (disk/dev mode,
-// where assets are already served no-cache) are left untouched.
+// versionAssetRefs appends "?v=<content-hash>" to every local /static .js/.css
+// URL (webassets.VersionRefs), so a deploy busts the browser cache the instant
+// the no-cache HTML shell is re-fetched.
 func (s *server) versionAssetRefs(body []byte) []byte {
-	if len(s.eng.AssetETags) == 0 {
-		return body
-	}
-	return assetRefRe.ReplaceAllFunc(body, func(m []byte) []byte {
-		sub := assetRefRe.FindSubmatch(m)
-		path := string(sub[2])
-		tag := strings.Trim(s.eng.AssetETags[path], `"`)
-		if tag == "" {
-			return m
-		}
-		return []byte(fmt.Sprintf(`%s="%s?v=%s"`, sub[1], path, tag))
-	})
+	return webassets.VersionRefs(s.eng.AssetETags, body)
 }
 
 // writeAppHTML cache-busts the body's asset URLs, marks the shell no-cache (it
@@ -220,7 +201,7 @@ func (s *server) buildGameInit(ctx context.Context, scope festScope) (gameInitPa
 	payload.Scheme = json.RawMessage(schemeJSON)
 	payload.State = json.RawMessage(stateJSON)
 	payload.ScreenSettings = json.RawMessage(screenSettingsJSON)
-	payload.Seq = s.eng.CurrentStateSeq(fmt.Sprintf("game-state:%d", scope.GameID))
+	payload.Seq = s.eng.CurrentStateSeq(core.GameStateScope(scope.GameID))
 	payload.Epoch = s.eng.Epoch
 	if festBytes, err := s.festViewBytes(scope.FestID, scope.GameID); err == nil {
 		payload.Fest = festBytes

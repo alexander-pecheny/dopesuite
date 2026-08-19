@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
+	"dope/dope/web/route"
 	ui "dope/dope/web/ui"
 	"errors"
 	"net/http"
@@ -22,7 +23,7 @@ const adminUserEnv = "DOPE_ADMIN_USER"
 
 func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (session.User, bool) {
 	return adminusers.RequireAdmin(w, r, adminUserEnv, func() (session.User, bool) {
-		return s.h.LookupSession(r)
+		return s.h.Engine().LookupSession(r)
 	})
 }
 
@@ -159,7 +160,7 @@ func (s *Server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) loadAdminUsers(ctx context.Context) ([]adminUserRow, error) {
-	return store.CollectRows(ctx, s.h.DB(), `
+	return store.CollectRows(ctx, s.h.Engine().DB, `
 select u.id, coalesce(u.username, ''), coalesce(u.telegram_username, ''), u.is_system, u.created_at,
        coalesce((select max(s.last_seen_at) from sessions s where s.user_id = u.id), '')
 from users u
@@ -208,7 +209,7 @@ func (s *Server) HandleAdminCreateUsers(w http.ResponseWriter, r *http.Request) 
 		if _, ok := s.requireAdmin(w, r); !ok {
 			return
 		}
-		if !s.h.RequireSameOrigin(w, r) {
+		if !route.SameOriginUnsafe(w, r) {
 			return
 		}
 		s.handleAdminCreateUsersSubmit(w, r)
@@ -259,7 +260,7 @@ func (s *Server) handleAdminCreateUsersSubmit(w http.ResponseWriter, r *http.Req
 	usernames := adminusers.ParseUsernameLines(r.PostForm.Get("usernames"))
 
 	ctx := r.Context()
-	tx, err := s.h.BeginWriteTx(ctx)
+	tx, err := s.h.Engine().BeginWriteTx(ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

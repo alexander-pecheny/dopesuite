@@ -937,7 +937,7 @@ func TestImportFestRosterPreservesPlayerTeamOverrides(t *testing.T) {
 	if err := db.QueryRow(`select id from fest_teams where fest_id = ? and rating_id = 102`, festID).Scan(&overrideTeamID); err != nil {
 		t.Fatalf("load override team: %v", err)
 	}
-	if _, _, err := overrides.SavePlayerTeamOverride(srv, t.Context(), festID, playerID, overrideTeamID, []int64{ksiGameID}); err != nil {
+	if _, _, err := overrides.SavePlayerTeamOverride(srv.Eng(), t.Context(), festID, playerID, overrideTeamID, []int64{ksiGameID}); err != nil {
 		t.Fatalf("save override: %v", err)
 	}
 
@@ -1041,7 +1041,7 @@ values(?, ?, ?, ?, ?, ?, ?)`,
 		t.Fatalf("row game ids = %#v, want both games", rows[0].GameIDs)
 	}
 
-	if _, _, err := overrides.ReplacePlayerTeamOverride(srv, t.Context(), festID, playerID, sourceTeamID, overrideTeamID, []int64{ekGameID}); err != nil {
+	if _, _, err := overrides.ReplacePlayerTeamOverride(srv.Eng(), t.Context(), festID, playerID, sourceTeamID, overrideTeamID, []int64{ekGameID}); err != nil {
 		t.Fatalf("replace override games: %v", err)
 	}
 	rows, err = overrides.LoadHostPlayerOverrideRows(t.Context(), db, festID)
@@ -1052,7 +1052,7 @@ values(?, ?, ?, ?, ?, ?, ?)`,
 		t.Fatalf("rows after replace = %#v, want only ЭК", rows)
 	}
 
-	if _, _, err := overrides.ReplacePlayerTeamOverride(srv, t.Context(), festID, playerID, sourceTeamID, overrideTeamID, nil); err != nil {
+	if _, _, err := overrides.ReplacePlayerTeamOverride(srv.Eng(), t.Context(), festID, playerID, sourceTeamID, overrideTeamID, nil); err != nil {
 		t.Fatalf("delete override games: %v", err)
 	}
 	rows, err = overrides.LoadHostPlayerOverrideRows(t.Context(), db, festID)

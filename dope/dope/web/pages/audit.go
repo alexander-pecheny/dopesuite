@@ -49,7 +49,7 @@ func festAuditIndexDoc(festID int64, festTitle string, games []auditGameRow) *ui
 
 // RenderHostFestAudit renders the fest's per-game history index page.
 func (s *Server) RenderHostFestAudit(w http.ResponseWriter, r *http.Request, festID int64, errMsg, notice string) {
-	rows, err := s.h.DB().QueryContext(r.Context(),
+	rows, err := s.h.Engine().DB.QueryContext(r.Context(),
 		`select id, code, coalesce(title, code) from games where fest_id = ? order by position, id`, festID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -65,5 +65,5 @@ func (s *Server) RenderHostFestAudit(w http.ResponseWriter, r *http.Request, fes
 		}
 		games = append(games, g)
 	}
-	RenderDoc(w, s.h.Engine().AssetETags, festAuditIndexDoc(festID, FestTitle(r.Context(), s.h.DB(), festID), games))
+	RenderDoc(w, s.h.Engine().AssetETags, festAuditIndexDoc(festID, FestTitle(r.Context(), s.h.Engine().DB, festID), games))
 }

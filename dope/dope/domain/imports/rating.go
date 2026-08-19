@@ -295,7 +295,7 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 	}
 
 	for _, update := range updates {
-		eng.BroadcastState(festID, fmt.Sprintf("game-state:%d", update.GameID), revision, update.StateJSON)
+		eng.BroadcastState(festID, core.GameStateScope(update.GameID), revision, update.StateJSON)
 	}
 	for _, gameID := range ekOverrideGameIDs {
 		eng.BroadcastState(festID, fmt.Sprintf("game-roster:%d", gameID), revision, []byte(`{}`))

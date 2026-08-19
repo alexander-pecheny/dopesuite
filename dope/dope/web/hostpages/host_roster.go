@@ -273,21 +273,13 @@ func importMessages(errMsg, notice string) []dopeui.Item {
 }
 
 func (s *Server) renderHostFestTeams(w http.ResponseWriter, r *http.Request, festID int64) {
-	fest, err := s.h.LoadHostFestHeader(r.Context(), festID)
-	if errors.Is(err, sql.ErrNoRows) {
-		http.NotFound(w, r)
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	teams, err := s.loadHostFestTeams(r.Context(), festID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	pages.RenderDoc(w, s.h.Engine().AssetETags, hostTeamsDoc(hostFestRosterData{Fest: fest, Teams: teams}))
+	s.festPage(w, r, festID, func(fest view.HostFest) (*dopeui.Doc, error) {
+		teams, err := s.loadHostFestTeams(r.Context(), festID)
+		if err != nil {
+			return nil, err
+		}
+		return hostTeamsDoc(hostFestRosterData{Fest: fest, Teams: teams}), nil
+	})
 }
 
 func (s *Server) renderHostFestPlayers(w http.ResponseWriter, r *http.Request, festID int64) {
@@ -295,35 +287,26 @@ func (s *Server) renderHostFestPlayers(w http.ResponseWriter, r *http.Request, f
 }
 
 func (s *Server) renderHostFestPlayersWithMessage(w http.ResponseWriter, r *http.Request, festID int64, errMsg, notice string) {
-	fest, err := s.h.LoadHostFestHeader(r.Context(), festID)
-	if errors.Is(err, sql.ErrNoRows) {
-		http.NotFound(w, r)
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	players, err := s.loadHostFestPlayers(r.Context(), festID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	overridePlayers, overrideTeams, overrideGames, overrides, err := overrides.LoadHostPlayerOverrideOptions(r.Context(), s.h.Engine().DB, festID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	pages.RenderDoc(w, s.h.Engine().AssetETags, hostPlayersDoc(hostFestRosterData{
-		Fest:            fest,
-		Players:         players,
-		OverridePlayers: overridePlayers,
-		OverrideTeams:   overrideTeams,
-		OverrideGames:   overrideGames,
-		Overrides:       overrides,
-		Error:           errMsg,
-		Notice:          notice,
-	}))
+	s.festPage(w, r, festID, func(fest view.HostFest) (*dopeui.Doc, error) {
+		players, err := s.loadHostFestPlayers(r.Context(), festID)
+		if err != nil {
+			return nil, err
+		}
+		overridePlayers, overrideTeams, overrideGames, overrides, err := overrides.LoadHostPlayerOverrideOptions(r.Context(), s.h.Engine().DB, festID)
+		if err != nil {
+			return nil, err
+		}
+		return hostPlayersDoc(hostFestRosterData{
+			Fest:            fest,
+			Players:         players,
+			OverridePlayers: overridePlayers,
+			OverrideTeams:   overrideTeams,
+			OverrideGames:   overrideGames,
+			Overrides:       overrides,
+			Error:           errMsg,
+			Notice:          notice,
+		}), nil
+	})
 }
 
 func (s *Server) handleHostAddPlayerOverride(w http.ResponseWriter, r *http.Request, festID int64) {
@@ -350,7 +333,7 @@ func (s *Server) handleHostAddPlayerOverride(w http.ResponseWriter, r *http.Requ
 		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
 		return
 	}
-	revision, ekGameIDs, err := overrides.SavePlayerTeamOverride(s.h, r.Context(), festID, playerID, teamID, gameIDs)
+	revision, ekGameIDs, err := overrides.SavePlayerTeamOverride(s.h.Engine(), r.Context(), festID, playerID, teamID, gameIDs)
 	if err != nil {
 		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
 		return
@@ -385,7 +368,7 @@ func (s *Server) handleHostEditPlayerOverride(w http.ResponseWriter, r *http.Req
 			return
 		}
 	}
-	revision, ekGameIDs, err := overrides.ReplacePlayerTeamOverride(s.h, r.Context(), festID, playerID, sourceTeamID, teamID, gameIDs)
+	revision, ekGameIDs, err := overrides.ReplacePlayerTeamOverride(s.h.Engine(), r.Context(), festID, playerID, sourceTeamID, teamID, gameIDs)
 	if err != nil {
 		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
 		return
@@ -397,47 +380,19 @@ func (s *Server) handleHostEditPlayerOverride(w http.ResponseWriter, r *http.Req
 }
 
 func (s *Server) renderHostRatingImportPage(w http.ResponseWriter, r *http.Request, festID int64, errMsg, notice string) {
-	fest, err := s.h.LoadHostFestHeader(r.Context(), festID)
-	if errors.Is(err, sql.ErrNoRows) {
-		http.NotFound(w, r)
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	ratingID, err := s.loadFestRatingID(r.Context(), festID)
-	if errors.Is(err, sql.ErrNoRows) {
-		http.NotFound(w, r)
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	pages.RenderDoc(w, s.h.Engine().AssetETags, hostRatingImportDoc(hostFestImportData{
-		Fest:     fest,
-		RatingID: ratingID,
-		Error:    errMsg,
-		Notice:   notice,
-	}))
+	s.festPage(w, r, festID, func(fest view.HostFest) (*dopeui.Doc, error) {
+		ratingID, err := s.loadFestRatingID(r.Context(), festID)
+		if err != nil {
+			return nil, err
+		}
+		return hostRatingImportDoc(hostFestImportData{Fest: fest, RatingID: ratingID, Error: errMsg, Notice: notice}), nil
+	})
 }
 
 func (s *Server) renderHostSchemeImportPage(w http.ResponseWriter, r *http.Request, festID int64, errMsg, notice string) {
-	fest, err := s.h.LoadHostFestHeader(r.Context(), festID)
-	if errors.Is(err, sql.ErrNoRows) {
-		http.NotFound(w, r)
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	pages.RenderDoc(w, s.h.Engine().AssetETags, hostSchemeImportDoc(hostFestImportData{
-		Fest:   fest,
-		Error:  errMsg,
-		Notice: notice,
-	}))
+	s.festPage(w, r, festID, func(fest view.HostFest) (*dopeui.Doc, error) {
+		return hostSchemeImportDoc(hostFestImportData{Fest: fest, Error: errMsg, Notice: notice}), nil
+	})
 }
 
 func (s *Server) loadHostFestTeams(ctx context.Context, festID int64) ([]hostFestTeam, error) {

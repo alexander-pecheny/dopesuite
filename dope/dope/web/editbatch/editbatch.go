@@ -441,7 +441,7 @@ func (b *Batcher) applyEditBatch(batch *editBatch) {
 	}
 	// One merged broadcast for the flat game's whole window — the batching already
 	// provided the coalescing window, so editors and viewers get it immediately.
-	scopeKey := fmt.Sprintf("game-state:%d", scope.GameID)
+	scopeKey := core.GameStateScope(scope.GameID)
 	if needSnapshot {
 		b.Eng.BroadcastState(scope.FestID, scopeKey, lastRevision, finalNext)
 	} else {

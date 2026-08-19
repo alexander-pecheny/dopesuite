@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"dope/dope/domain/core"
 	"dope/dope/domain/games"
 	"dope/dope/storage/store"
 )
@@ -22,7 +23,7 @@ import (
 func HandleScopedGameResults(s Host, w http.ResponseWriter, r *http.Request, festID, gameID int64) {
 	// Read seq before the row (same ordering rationale as handleScopedGameState)
 	// so the X-State-Seq we report is never ahead of the state we scored.
-	seq := s.CurrentStateSeq(fmt.Sprintf("game-state:%d", gameID))
+	seq := s.CurrentStateSeq(core.GameStateScope(gameID))
 	doc, err := store.LoadGameDoc(r.Context(), s.DB(), festID, gameID)
 	gameType, schemeJSON, stateJSON := doc.GameType, doc.SchemeJSON, doc.State
 	if errors.Is(err, sql.ErrNoRows) {

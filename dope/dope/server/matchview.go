@@ -148,24 +148,6 @@ func recalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, festID int64, co
 	return scoring.RecalculateMatchResultsTx(ctx, tx, match)
 }
 
-func bumpMatchRevisionTx(ctx context.Context, tx *sql.Tx, festID, matchID int64, eventType, payload string) (int64, error) {
-	now := util.UtcNow()
-	if _, err := tx.ExecContext(ctx, `update matches set revision = revision + 1 where id = ?`, matchID); err != nil {
-		return 0, err
-	}
-	if _, err := tx.ExecContext(ctx, `update fests set revision = revision + 1, updated_at = ? where id = ?`, now, festID); err != nil {
-		return 0, err
-	}
-	var revision int64
-	if err := tx.QueryRowContext(ctx, `select revision from fests where id = ?`, festID).Scan(&revision); err != nil {
-		return 0, err
-	}
-	if err := festwrite.AppendJournalTx(ctx, tx, festID, revision, eventType, []byte(payload)); err != nil {
-		return 0, err
-	}
-	return revision, nil
-}
-
 func (s *server) updateVenue(reqCtx context.Context, festID int64, number int, title string) ([]store.VenueView, int64, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {

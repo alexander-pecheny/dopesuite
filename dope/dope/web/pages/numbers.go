@@ -3,6 +3,7 @@ package pages
 import (
 	"context"
 	"database/sql"
+	"dope/dope/domain/core"
 	"dope/dope/domain/numbering"
 	"dope/dope/domain/roster"
 	"dope/dope/domain/view"
@@ -119,7 +120,7 @@ func (s *Server) RenderHostFestNumbers(w http.ResponseWriter, r *http.Request, f
 }
 
 func (s *Server) buildHostFestNumbersData(ctx context.Context, festID int64, errMsg, notice string, override []hostFestNumberRow) (hostFestNumbersData, error) {
-	teams, err := numbering.LoadFestTeams(ctx, s.h.DB(), festID)
+	teams, err := numbering.LoadFestTeams(ctx, s.h.Engine().DB, festID)
 	if err != nil {
 		return hostFestNumbersData{}, err
 	}
@@ -230,7 +231,7 @@ func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	teams, err := numbering.LoadFestTeams(r.Context(), s.h.DB(), festID)
+	teams, err := numbering.LoadFestTeams(r.Context(), s.h.Engine().DB, festID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -303,7 +304,7 @@ func (s *Server) HandleHostAutoFestNumbers(w http.ResponseWriter, r *http.Reques
 		s.RenderHostFestNumbers(w, r, festID, err.Error(), "", nil)
 		return
 	}
-	teams, err := numbering.LoadFestTeams(r.Context(), s.h.DB(), festID)
+	teams, err := numbering.LoadFestTeams(r.Context(), s.h.Engine().DB, festID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -350,7 +351,7 @@ func (s *Server) HandleHostClearFestNumbers(w http.ResponseWriter, r *http.Reque
 // has explicitly confirmed as destructive resets — archived numbers from participants
 // that left the roster must not block reuse of those numbers.
 func (s *Server) purgeFestSoftDeletedTeams(reqCtx context.Context, festID int64) error {
-	return s.h.WithWriteTx(reqCtx, festID, "purge-soft-deleted-teams", func(ctx context.Context, tx *sql.Tx) error {
+	return s.h.Engine().WithWriteTx(reqCtx, festID, "purge-soft-deleted-teams", func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `delete from fest_teams where fest_id = ? and deleted = 1`, festID)
 		return err
 	})
@@ -359,7 +360,7 @@ func (s *Server) purgeFestSoftDeletedTeams(reqCtx context.Context, festID int64)
 func (s *Server) SaveFestNumbers(reqCtx context.Context, festID int64, assignments map[int64]int) error {
 	var updates []roster.GameStateBroadcast
 	var revision int64
-	err := s.h.WithWriteTx(reqCtx, festID, "fest-numbers", func(ctx context.Context, tx *sql.Tx) error {
+	err := s.h.Engine().WithWriteTx(reqCtx, festID, "fest-numbers", func(ctx context.Context, tx *sql.Tx) error {
 		oldTeams, err := numbering.LoadFestTeams(ctx, tx, festID)
 		if err != nil {
 			return err
@@ -406,7 +407,7 @@ func (s *Server) SaveFestNumbers(reqCtx context.Context, festID int64, assignmen
 		return err
 	}
 	for _, update := range updates {
-		s.h.BroadcastState(festID, fmt.Sprintf("game-state:%d", update.GameID), revision, update.StateJSON)
+		s.h.Engine().BroadcastState(festID, core.GameStateScope(update.GameID), revision, update.StateJSON)
 	}
 	return nil
 }

@@ -224,48 +224,36 @@ func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
 }
 
 func (s *Server) renderHostGameSettings(w http.ResponseWriter, r *http.Request, festID, gameID int64, errMsg string) {
-	fest, err := s.h.LoadHostFestHeader(r.Context(), festID)
-	if errors.Is(err, sql.ErrNoRows) {
-		http.NotFound(w, r)
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	var (
-		code      string
-		title     string
-		gameType  string
-		slug      sql.NullString
-		schemeDSL string
-	)
-	if err := s.h.Engine().DB.QueryRowContext(r.Context(), `
+	s.festPage(w, r, festID, func(fest view.HostFest) (*dopeui.Doc, error) {
+		var (
+			code      string
+			title     string
+			gameType  string
+			slug      sql.NullString
+			schemeDSL string
+		)
+		if err := s.h.Engine().DB.QueryRowContext(r.Context(), `
 select code, title, game_type, slug, coalesce(scheme_dsl, '') from games where id = ? and fest_id = ?`, gameID, festID).Scan(&code, &title, &gameType, &slug, &schemeDSL); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			http.NotFound(w, r)
-			return
+			return nil, err
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if submitted := strings.TrimSpace(r.Form.Get("brain_dsl")); submitted != "" && errMsg != "" {
-		schemeDSL = r.Form.Get("brain_dsl")
-	}
-	pages.RenderDoc(w, s.h.Engine().AssetETags, hostGameSettingsDoc(hostGameSettingsData{
-		Fest: fest,
-		Game: PublicFestGame{
-			ID:    gameID,
-			Slug:  slug.String,
-			Code:  code,
-			Title: title,
-			Type:  games.Label(gameType),
-		},
-		Slug:      slug.String,
-		Error:     errMsg,
-		SchemeDSL: schemeDSL,
-		HasDSL:    gameType == games.Brain && schemeDSL != "",
-	}))
+		if submitted := strings.TrimSpace(r.Form.Get("brain_dsl")); submitted != "" && errMsg != "" {
+			schemeDSL = r.Form.Get("brain_dsl")
+		}
+		return hostGameSettingsDoc(hostGameSettingsData{
+			Fest: fest,
+			Game: PublicFestGame{
+				ID:    gameID,
+				Slug:  slug.String,
+				Code:  code,
+				Title: title,
+				Type:  games.Label(gameType),
+			},
+			Slug:      slug.String,
+			Error:     errMsg,
+			SchemeDSL: schemeDSL,
+			HasDSL:    gameType == games.Brain && schemeDSL != "",
+		}), nil
+	})
 }
 
 func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
@@ -441,32 +429,22 @@ func (s *Server) handleHostClearGame(w http.ResponseWriter, r *http.Request, fes
 }
 
 func (s *Server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request, festID int64, errMsg string, selectedType string) {
-	fest, err := s.h.LoadHostFestHeader(r.Context(), festID)
-	if errors.Is(err, sql.ErrNoRows) {
-		http.NotFound(w, r)
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	brainDSL := strings.TrimSpace(r.Form.Get("brain_dsl"))
-	if brainDSL == "" {
-		var count int
-		_ = s.h.Engine().DB.QueryRowContext(r.Context(), `select count(*) from fest_teams where fest_id = ?`, festID).Scan(&count)
-		brainDSL = gamebuild.DefaultBrainDSL(count, 5)
-	}
-	var teamCount int
-	_ = s.h.Engine().DB.QueryRowContext(r.Context(), `select count(*) from fest_teams where fest_id = ?`, festID).Scan(&teamCount)
-	entrants, err := festEntrantOptions(r.Context(), s.h.Engine().DB, festID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	pages.RenderDoc(w, s.h.Engine().AssetETags, hostGameCreateDoc(hostGameCreateData{
-		Fest: fest, Error: errMsg, SelectedType: selectedType,
-		BrainDSL: brainDSL, SIDSL: defaultSIDSL(teamCount), Entrants: entrants,
-	}))
+	s.festPage(w, r, festID, func(fest view.HostFest) (*dopeui.Doc, error) {
+		var teamCount int
+		_ = s.h.Engine().DB.QueryRowContext(r.Context(), `select count(*) from fest_teams where fest_id = ?`, festID).Scan(&teamCount)
+		brainDSL := strings.TrimSpace(r.Form.Get("brain_dsl"))
+		if brainDSL == "" {
+			brainDSL = gamebuild.DefaultBrainDSL(teamCount, 5)
+		}
+		entrants, err := festEntrantOptions(r.Context(), s.h.Engine().DB, festID)
+		if err != nil {
+			return nil, err
+		}
+		return hostGameCreateDoc(hostGameCreateData{
+			Fest: fest, Error: errMsg, SelectedType: selectedType,
+			BrainDSL: brainDSL, SIDSL: defaultSIDSL(teamCount), Entrants: entrants,
+		}), nil
+	})
 }
 
 // festEntrantOptions lists the фест's Participants a Game may seat, teams and
