@@ -283,8 +283,6 @@ func applyResolvedSlotTx(ctx context.Context, tx *sql.Tx, slotID, matchID, curre
 
 // --- reseed computation --------------------------------------------------
 
-type reseedConfig = store.StageConfig
-
 func syncReseedReadinessTx(ctx context.Context, tx *sql.Tx, stage resolverStage, gameID int64) error {
 	state, err := ReseedPrerequisites(ctx, tx, stage.config, gameID)
 	if err != nil {
@@ -426,7 +424,7 @@ func gameRandomSeed(ctx context.Context, q store.Queryer, gameID int64) (string,
 
 // reseedSourceBouts returns the бои that contribute to a reseed: the `sources`
 // stages' бои when named, else the бой each team advances from.
-func reseedSourceBouts(ctx context.Context, q store.Queryer, gameID int64, cfg reseedConfig) ([]Bout, error) {
+func reseedSourceBouts(ctx context.Context, q store.Queryer, gameID int64, cfg store.StageConfig) ([]Bout, error) {
 	scan := func(rows *sql.Rows) (Bout, error) {
 		var b Bout
 		return b, rows.Scan(&b.ID, &b.Code, &b.Status)
