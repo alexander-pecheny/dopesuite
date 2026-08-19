@@ -99,7 +99,6 @@
    bites only when the content reaches the edge, so long text fades where an
    «…» used to sit. Table names get the full fade+popover treatment instead. */
 .battle-title,
-.teams-cell span,
 .grid-head-truncated .grid-match-title,
 .readonly-battle-venue,
 .numbers-import-raw,
@@ -1006,14 +1005,6 @@
   min-width: var(--narrow-col);
 }
 
-.teams-cell span {
-  display: block;
-  max-width: 320px;
-  overflow: hidden;
-  text-overflow: clip;
-  white-space: nowrap;
-}
-
 .seed-import-panel {
   align-items: flex-start;
 }
@@ -1605,10 +1596,6 @@ body:not(.embedded-match) .grid-match {
   .match-table .narrow {
     width: 20px;
     min-width: 20px;
-  }
-
-  .teams-cell span {
-    max-width: 220px;
   }
 
   /* The phone's Сетка: the same rules, narrower values. */

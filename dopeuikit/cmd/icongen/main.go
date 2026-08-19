@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"go/format"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -68,7 +69,9 @@ func main() {
 	sort.Strings(names)
 
 	if *goPath != "" {
-		must(os.WriteFile(*goPath, []byte(renderGo(names, bodies)), 0o644))
+		src, err := format.Source([]byte(renderGo(names, bodies)))
+		must(err)
+		must(os.WriteFile(*goPath, src, 0o644))
 	}
 	for _, p := range tsPaths {
 		must(os.WriteFile(p, []byte(renderTS(names, bodies)), 0o644))
