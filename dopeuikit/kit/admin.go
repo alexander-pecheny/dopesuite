@@ -3,9 +3,30 @@ package kit
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"pecheny.me/dopecore/adminusers"
 )
+
+// SortHeader is a sortable column heading of the /admin/users table: a small
+// ghost button carrying the direction this column would sort in next, and an
+// arrow when it is the active one.
+func SortHeader(key, label string, s adminusers.Sort) *Element {
+	dir, arrow := s.Header(key)
+	return Hcell(Button(Ghost, Small(),
+		Href("/admin/users?sort="+key+"&dir="+dir), Text(label+arrow),
+	))
+}
+
+// AdminTime renders a stored RFC3339 timestamp for the admin tables; a missing
+// or unparsable value becomes a dash.
+func AdminTime(ts string) string {
+	t, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		return "—"
+	}
+	return t.Local().Format("2006-01-02 15:04")
+}
 
 // AdminCreateUsers is the body of the /admin/create_users page both apps serve
 // over dopecore/adminusers: the bulk-create form, plus (after a submit) the

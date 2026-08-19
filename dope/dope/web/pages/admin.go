@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
-	"time"
 
 	"pecheny.me/dopecore/adminusers"
 	"pecheny.me/dopecore/session"
@@ -80,26 +79,6 @@ func sortAdminUsers(users []adminUserRow, s adminusers.Sort) {
 	})
 }
 
-// sortHeader is a sortable column heading: a small ghost button carrying the
-// direction this column would sort in next, and an arrow when it is the active
-// one.
-func sortHeader(key, label string, s adminusers.Sort) *ui.Element {
-	dir, arrow := s.Header(key)
-	return ui.Hcell(ui.Button(ui.Ghost, ui.Small(),
-		ui.Href("/admin/users?sort="+key+"&dir="+dir), ui.Text(label+arrow),
-	))
-}
-
-// adminTime renders a stored RFC3339 timestamp for the admin table; a missing
-// or unparsable value becomes a dash.
-func adminTime(ts string) string {
-	t, err := time.Parse(time.RFC3339, ts)
-	if err != nil {
-		return "—"
-	}
-	return t.Local().Format("2006-01-02 15:04")
-}
-
 // adminUsersDoc builds the /admin/users page: a table of all users, or an empty
 // note. System accounts are tagged "(система)".
 func adminUsersDoc(data adminUsersData) *ui.Doc {
@@ -107,7 +86,7 @@ func adminUsersDoc(data adminUsersData) *ui.Doc {
 	if len(data.Users) > 0 {
 		rows := []ui.Item{ui.Scroll(), ui.Trow(
 			ui.Hcell(ui.Text("ID")), ui.Hcell(ui.Text("Логин")), ui.Hcell(ui.Text("Telegram")),
-			sortHeader("last", "Активность", data.Sort), ui.Hcell(ui.Text("Создан")),
+			kit.SortHeader("last", "Активность", data.Sort), ui.Hcell(ui.Text("Создан")),
 		)}
 		for _, u := range data.Users {
 			nameCell := ui.Cell(ui.Text(u.Username))
@@ -118,7 +97,7 @@ func adminUsersDoc(data adminUsersData) *ui.Doc {
 				ui.Cell(ui.Text(strconv.FormatInt(u.ID, 10))),
 				nameCell,
 				ui.Cell(ui.Text(u.Telegram)),
-				ui.Cell(ui.Text(adminTime(u.LastSeenAt))),
+				ui.Cell(ui.Text(kit.AdminTime(u.LastSeenAt))),
 				ui.Cell(ui.Text(u.CreatedAt)),
 			))
 		}
@@ -171,7 +150,7 @@ order by u.created_at desc, u.id desc`, nil, func(rows *sql.Rows) (adminUserRow,
 			return u, err
 		}
 		u.IsSystem = isSystem == 1
-		u.CreatedAt = adminTime(u.CreatedAt)
+		u.CreatedAt = kit.AdminTime(u.CreatedAt)
 		return u, nil
 	})
 }

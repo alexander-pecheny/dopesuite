@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"pecheny.me/dopecore/buildinfo"
 	"pecheny.me/dopecore/tgbot"
 )
 
@@ -59,7 +60,11 @@ func main() {
 	})
 	bridge := tgbot.NewBridge(serverURL, secret, client.HTTP())
 
-	log.Printf("telegram bot polling, server=%s", bridge.ServerURL())
+	// Loopback "am I working?" for the host's monitoring; its own default port,
+	// since a staging box may run xy's bot on tgbridge.DefaultHealthAddr.
+	go tgbot.ServeHealth(ctx, getenvDefault("DOPE_BOT_HEALTH_ADDR", "127.0.0.1:9677"), client)
+
+	log.Printf("telegram bot %s polling, server=%s", buildinfo.Version(), bridge.ServerURL())
 	if err := client.Run(ctx, handler(bridge)); err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatalf("bot: %v", err)
 	}

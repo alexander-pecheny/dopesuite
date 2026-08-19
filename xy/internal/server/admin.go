@@ -91,16 +91,6 @@ type adminUserRow struct {
 	LastSeenAt string // raw RFC3339 of the newest session's last_seen_at; empty when there is none
 }
 
-// adminTime renders a stored RFC3339 timestamp for the admin tables; a missing
-// or unparsable value becomes a dash.
-func adminTime(ts string) string {
-	t, err := time.Parse(time.RFC3339, ts)
-	if err != nil {
-		return "—"
-	}
-	return t.Local().Format("2006-01-02 15:04")
-}
-
 // sortAdminUsers reorders in place. Storage can't be an ORDER BY — it is summed
 // per user after the query — so both keys are sorted here.
 func sortAdminUsers(users []adminUserRow, s adminusers.Sort) {
@@ -121,16 +111,6 @@ func sortAdminUsers(users []adminUserRow, s adminusers.Sort) {
 	})
 }
 
-// sortHeader is a sortable column heading: a small ghost button carrying the
-// direction this column would sort in next, and an arrow when it is the active
-// one.
-func sortHeader(key, label string, s adminusers.Sort) *ui.Element {
-	dir, arrow := s.Header(key)
-	return ui.Hcell(ui.Button(ui.Ghost, ui.Small(),
-		ui.Href("/admin/users?sort="+key+"&dir="+dir), ui.Text(label+arrow),
-	))
-}
-
 // storageCell reads "0.16 / 25 МБ" — the unit is stated once, and the admin's
 // own uncapped account says so instead of naming a limit.
 func storageCell(u adminUserRow) string {
@@ -149,8 +129,8 @@ func adminUsersDoc(users []adminUserRow, s adminusers.Sort) *ui.Doc {
 	if len(users) > 0 {
 		rows := []ui.Item{ui.Scroll(), ui.ID("adminUsers"), ui.Trow(
 			ui.Hcell(ui.Text("Пользователь")),
-			sortHeader("last", "Активность", s),
-			sortHeader("used", "Хранилище", s),
+			kit.SortHeader("last", "Активность", s),
+			kit.SortHeader("used", "Хранилище", s),
 		)}
 		for _, u := range users {
 			who := ui.Cell(ui.Text(u.Username))
@@ -159,7 +139,7 @@ func adminUsersDoc(users []adminUserRow, s adminusers.Sort) *ui.Doc {
 			}
 			rows = append(rows, ui.Trow(
 				who,
-				ui.Cell(ui.Text(adminTime(u.LastSeenAt))),
+				ui.Cell(ui.Text(kit.AdminTime(u.LastSeenAt))),
 				ui.Cell(ui.Text(storageCell(u))),
 			))
 		}
