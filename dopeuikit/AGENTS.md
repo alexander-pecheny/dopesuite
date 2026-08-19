@@ -50,6 +50,12 @@ go generate ./palette      # ramps -> core.css, sets -> Go + TS + dope's layer
 go test ./palette          # the ladder's invariants, read back out of core.css
 ```
 
+The generator writes into both app trees by relative path (the `//go:generate`
+line in `palette/palette.go` names `dope/dope/web/assets/static/styles.css`,
+`xy/web/assets/static/styles.css` and `xy/web/ts/palette_gen.ts`), so it only
+runs inside this monorepo layout. Anything that moves `dopeuikit` out of the
+repo has to move those app-side outputs behind per-app `go:generate` lines first.
+
 `palette_test.go` is the design's test surface: monotone ladder per theme, ΔL
 0.03 between adjacent surfaces, AA for every ink-on-fill pair, high contrast
 never compressing. If a colour change fails it, the change is wrong — the

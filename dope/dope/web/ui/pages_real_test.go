@@ -58,7 +58,7 @@ var loadBearingSubstrings = map[string][]string{
 var (
 	idGetRe   = regexp.MustCompile(`getElementById\("([^"]+)"\)`)
 	idQueryRe = regexp.MustCompile(`querySelector(?:All)?\("#([A-Za-z0-9_-]+)"`)
-	scriptSrc = regexp.MustCompile(`src="/static/([a-z0-9_-]+\.js)"`)
+	scriptSrc = regexp.MustCompile(`src="/static/((?:dist/)?[a-z0-9_-]+\.js)"`)
 )
 
 // TestPageSelectorContract asserts every element id and load-bearing markup that
