@@ -1,9 +1,10 @@
 package dopeserver
 
 import (
-	"fmt"
 	"io/fs"
 	"net/http"
+
+	kit "pecheny.me/dopeuikit/kit"
 
 	dopeui "dope/dope/web/ui"
 )
@@ -46,47 +47,25 @@ var pageSources = map[string]string{
 // DSL-authored shells (cached in embed mode, recompiled per request in disk
 // mode), else the raw asset bytes.
 func (s *server) pageBytes(path string) ([]byte, error) {
-	src, ok := pageSources[path]
-	if !ok {
-		return fs.ReadFile(s.eng.Assets, path)
+	if src, ok := pageSources[path]; ok {
+		return s.pageSet().Bytes(src)
 	}
-	if !s.eng.AssetNoCache {
-		s.pageMu.Lock()
-		body, hit := s.pageCache[path]
-		s.pageMu.Unlock()
-		if hit {
-			return body, nil
-		}
-	}
-	raw, err := fs.ReadFile(s.eng.Assets, src)
-	if err != nil {
-		return nil, err
-	}
-	body, err := dopeui.Compile(src, raw)
-	if err != nil {
-		return nil, err
-	}
-	if !s.eng.AssetNoCache {
-		s.pageMu.Lock()
-		if s.pageCache == nil {
-			s.pageCache = map[string][]byte{}
-		}
-		s.pageCache[path] = body
-		s.pageMu.Unlock()
-	}
-	return body, nil
+	return fs.ReadFile(s.eng.Assets, path)
+}
+
+// pageSet is built on first use from the engine's asset source, so a test that
+// only sets eng.Assets compiles pages the same way the server does.
+func (s *server) pageSet() *kit.PageSet {
+	s.pagesOnce.Do(func() { s.pages = kit.NewPageSet(s.eng.Assets, s.eng.AssetNoCache, dopeui.Compile) })
+	return s.pages
 }
 
 // warmPageCache compiles every DSL page up front in embed mode so a broken page
 // fails at startup, not on a request. No-op in disk mode (recompiles per request).
 func (s *server) warmPageCache() error {
-	if s.eng.AssetNoCache {
-		return nil
+	srcs := make([]string, 0, len(pageSources))
+	for _, src := range pageSources {
+		srcs = append(srcs, src)
 	}
-	for path := range pageSources {
-		if _, err := s.pageBytes(path); err != nil {
-			return fmt.Errorf("compile %s: %w", path, err)
-		}
-	}
-	return nil
+	return s.pageSet().Warm(srcs...)
 }

@@ -11,11 +11,11 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"pecheny.me/dopecore/adminusers"
 	"pecheny.me/dopecore/session"
+	kit "pecheny.me/dopeuikit/kit"
 )
 
 const adminUserEnv = "DOPE_ADMIN_USER"
@@ -39,78 +39,14 @@ func adminIndexDoc() *ui.Doc {
 	}}
 }
 
-// createdSection renders the one-time credentials table + copy-paste textarea
-// shown after a create_users submit that created at least one account.
-func createdSection(data adminusers.CreateUsersData) *ui.Element {
-	tableRows := []ui.Item{ui.Trow(ui.Hcell(ui.Text("Логин")), ui.Hcell(ui.Text("Пароль")))}
-	for _, u := range data.Created {
-		tableRows = append(tableRows, ui.Trow(
-			ui.Cell(ui.Text(u.Username)),
-			ui.Cell(ui.Code(ui.Text(u.Password))),
-		))
-	}
-	return ui.Section(
-		ui.Hint(ui.Text("Пароли показаны один раз. Скопируйте и разошлите — пользователи сменят их сами.")),
-		ui.Table(tableRows...),
-		ui.Field(ui.Label("Для копирования (логин ⇥ пароль)"),
-			ui.Editor(ui.Rows(strconv.Itoa(len(data.Created))), ui.Readonly(), ui.Data("select-all", ""), ui.Text(data.Copyable())),
-		),
-	)
-}
-
-// skippedSection lists usernames that already existed and were left alone.
-func skippedSection(skipped []string) *ui.Element {
-	return ui.Section(ui.Empty(ui.Text("Уже существуют (пропущены): " + strings.Join(skipped, ", "))))
-}
-
-// errorsSection lists usernames rejected as invalid.
-func errorsSection(errs []adminusers.UserError) *ui.Element {
-	rows := make([]ui.Item, len(errs))
-	for i, e := range errs {
-		rows[i] = ui.Listrow(ui.Listtitle(ui.Text(e.Username)), ui.Muted(ui.Text(e.Reason)))
-	}
-	return ui.Section(ui.Empty(ui.Text("Ошибки:")), ui.List(rows...))
-}
-
-// createUsersFormSection is the bulk-create form, always shown.
-func createUsersFormSection() *ui.Element {
-	return ui.Section(
-		ui.Form(ui.DirCol, ui.SpaceMD, ui.Method("post"), ui.Action("/admin/create_users"), ui.Autocomplete("off"),
-			ui.Field(ui.Label("Логины (по одному в строке)"),
-				ui.Editor(ui.Name("usernames"), ui.Rows("10"), ui.Placeholder("ivanov\npetrova\nsidorov"), ui.Required()),
-			),
-			ui.Row(ui.Button(ui.Submit(), ui.Text("Создать"))),
-		),
-	)
-}
-
-// adminCreateUsersDoc builds the /admin/create_users page: the bulk-create form,
-// plus (after a submit) the outcome — created credentials, skipped usernames, and
-// validation errors. pageforms.js drives the copy-textarea select-on-click.
+// adminCreateUsersDoc wraps the kit's create-users body in dope's public
+// chrome; pageforms.js drives the copy-textarea select-on-click.
 func adminCreateUsersDoc(data adminusers.CreateUsersData) *ui.Doc {
-	var main []ui.Item
-	if data.Submitted {
-		if len(data.Created) > 0 {
-			main = append(main, createdSection(data))
-		}
-		if len(data.Skipped) > 0 {
-			main = append(main, skippedSection(data.Skipped))
-		}
-		if len(data.Errors) > 0 {
-			main = append(main, errorsSection(data.Errors))
-		}
-		if len(data.Created) == 0 && len(data.Skipped) == 0 && len(data.Errors) == 0 {
-			main = append(main, ui.Empty(ui.Text("Не указано ни одного логина.")))
-		}
-	}
-	main = append(main, createUsersFormSection())
-
 	page := []ui.Item{
 		ui.Title("Создать пользователей · Админка"), ui.PagePublic, ui.Classicscripts("dist/pageforms.js"),
 		ui.Publictopbar(Trail(AdminCrumbs(), "Создать пользователей")),
 	}
-	page = append(page, main...)
-	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
+	return &ui.Doc{Nodes: []ui.Node{ui.Page(append(page, kit.AdminCreateUsers(data)...)...)}}
 }
 
 type adminUserRow struct {

@@ -17,6 +17,7 @@ import (
 
 	"pecheny.me/dopecore/sqlitex"
 	"pecheny.me/dopecore/webassets"
+	kit "pecheny.me/dopeuikit/kit"
 
 	"xy/internal/blobstore"
 
@@ -37,8 +38,7 @@ type server struct {
 
 	assets *webassets.Assets
 
-	pageMu    sync.Mutex
-	pageCache map[string][]byte // compiled ui/*.dopeui pages (embed mode only; see assets.go)
+	pages *kit.PageSet // compiled ui/*.dopeui pages (see assets.go)
 
 	staging *handoutStaging // staged handout images (see staging.go)
 

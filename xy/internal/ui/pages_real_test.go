@@ -1,183 +1,27 @@
 package ui
 
 import (
-	"os"
-	"path/filepath"
-	"regexp"
-	"sort"
-	"strings"
 	"testing"
+
+	"pecheny.me/dopeuikit/uitest"
 )
 
-const (
-	realPagesDir = "../../web/assets/ui"
-	staticDir    = "../../web/assets/static"
-	// kit-owned scripts (login.js) are served under /static/ but live in the kit
-	kitAssetsDir = "../../../dopeuikit/assets/dist"
-)
-
-// TestRealPagesCompile compiles every real app page (web/assets/ui/*.dopeui) — the
-// same sources servePage serves — so a broken page fails here, not at runtime.
-func TestRealPagesCompile(t *testing.T) {
-	pages, err := filepath.Glob(filepath.Join(realPagesDir, "*.dopeui"))
-	if err != nil {
-		t.Fatalf("glob: %v", err)
-	}
-	if len(pages) != 6 {
-		t.Fatalf("expected 6 app pages, found %d: %v", len(pages), pages)
-	}
-	for _, path := range pages {
-		src, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		if _, err := Compile(filepath.Base(path), src); err != nil {
-			t.Errorf("compile %s: %v", filepath.Base(path), err)
-		}
-	}
-}
-
-// idsCreatedByJS are element ids that scripts create at runtime rather than
-// find in the static page, so the selector contract does not require them.
-var idsCreatedByJS = map[string]bool{"authorsDatalist": true}
-
-// loadBearingClasses lists CSS classes JS selects on static markup. host-actions
-// is on every page (the topbar emits it); the rest are board-only widgets.
-var loadBearingClasses = map[string][]string{
-	"":      {"host-actions"},
-	"board": {"card-detail", "preview-screen-toggle"},
-}
-
-var (
-	idGetRe = regexp.MustCompile(`getElementById\("([^"]+)"\)`)
-	// modal("stem") (modal.ts) and profile's wireModal("stem", openBtnId) hand
-	// their ids in as STRING ARGUMENTS, so idGetRe never sees them — a whole
-	// family of /profile buttons was invisible to this contract until a missing
-	// one bricked the page at module load (byId throws, so nothing after it
-	// binds, incl. «Выйти»). A stem names the <stem>Overlay element.
-	modalRe     = regexp.MustCompile(`\bmodal\("([A-Za-z0-9_-]+)"`)
-	wireModalRe = regexp.MustCompile(`wireModal\("([A-Za-z0-9_-]+)",\s*"([A-Za-z0-9_-]+)"`)
-	idQueryRe   = regexp.MustCompile(`querySelector(?:All)?\("#([A-Za-z0-9_-]+)"[^"]*"?\)`)
-	importReJS  = regexp.MustCompile(`from\s+"\./([a-z0-9_-]+\.js)"|import\s+"\./([a-z0-9_-]+\.js)"`)
-	// The built ESM lives under /static/dist/, so a pattern without the optional
-	// path segment matched only the kit's /static/menu.js — i.e. this contract
-	// silently covered none of xy's own page scripts.
-	scriptSrc = regexp.MustCompile(`src="/static/((?:dist/)?[a-z0-9_-]+\.js)"`)
-)
-
-// TestPageSelectorContract asserts every element id and load-bearing class that
-// a page's JS closure looks up on static markup exists in the compiled page.
-// The closure is the page's declared scripts + menu.js, transitively following
-// relative ES-module imports.
-func TestPageSelectorContract(t *testing.T) {
-	pages, err := filepath.Glob(filepath.Join(realPagesDir, "*.dopeui"))
-	if err != nil {
-		t.Fatalf("glob: %v", err)
-	}
-	for _, path := range pages {
-		name := strings.TrimSuffix(filepath.Base(path), ".dopeui")
-		src, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		html, err := Compile(filepath.Base(path), src)
-		if err != nil {
-			t.Fatalf("compile %s: %v", name, err)
-		}
-		page := string(html)
-
-		for _, id := range wantedIDs(t, page) {
-			if idsCreatedByJS[id] {
-				continue
-			}
-			if !strings.Contains(page, `id="`+id+`"`) {
-				t.Errorf("%s: JS looks up #%s but the compiled page has no such id", name, id)
-			}
-		}
-		for _, cls := range append(loadBearingClasses[""], loadBearingClasses[name]...) {
-			if !strings.Contains(page, cls) {
-				t.Errorf("%s: compiled page is missing load-bearing class %q", name, cls)
-			}
-		}
-	}
-}
-
-// wantedIDs collects the ids the page's JS closure looks up via
-// getElementById / querySelector("#id").
-func wantedIDs(t *testing.T, page string) []string {
-	closure := jsClosure(t, entryScripts(page))
-	set := map[string]bool{}
-	for _, file := range closure {
-		body, err := os.ReadFile(filepath.Join(staticDir, file))
-		if os.IsNotExist(err) {
-			body, err = os.ReadFile(filepath.Join(kitAssetsDir, file))
-		}
-		if err != nil {
-			t.Fatalf("read %s: %v", file, err)
-		}
-		text := string(body)
-		for _, m := range idGetRe.FindAllStringSubmatch(text, -1) {
-			set[m[1]] = true
-		}
-		for _, m := range idQueryRe.FindAllStringSubmatch(text, -1) {
-			set[m[1]] = true
-		}
-		for _, m := range modalRe.FindAllStringSubmatch(text, -1) {
-			set[m[1]+"Overlay"] = true
-		}
-		for _, m := range wireModalRe.FindAllStringSubmatch(text, -1) {
-			set[m[1]+"Overlay"] = true
-			set[m[2]] = true
-		}
-	}
-	ids := make([]string, 0, len(set))
-	for id := range set {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	return ids
-}
-
-func entryScripts(page string) []string {
-	var out []string
-	for _, m := range scriptSrc.FindAllStringSubmatch(page, -1) {
-		out = append(out, m[1])
-	}
-	return out
-}
-
-// jsClosure returns the entry scripts plus every relative module they import,
-// transitively.
-func jsClosure(t *testing.T, entries []string) []string {
-	seen := map[string]bool{}
-	var order []string
-	var visit func(string)
-	visit = func(file string) {
-		if seen[file] {
-			return
-		}
-		seen[file] = true
-		order = append(order, file)
-		body, err := os.ReadFile(filepath.Join(staticDir, file))
-		if os.IsNotExist(err) {
-			body, err = os.ReadFile(filepath.Join(kitAssetsDir, file))
-		}
-		if err != nil {
-			t.Fatalf("read %s: %v", file, err)
-		}
-		for _, m := range importReJS.FindAllStringSubmatch(string(body), -1) {
-			dep := m[1]
-			if dep == "" {
-				dep = m[2]
-			}
-			// A relative import resolves against the IMPORTER's directory: the
-			// built ESM lives in dist/, so `from "./app.js"` inside
-			// dist/profile.js means dist/app.js, not app.js.
-			visit(filepath.Join(filepath.Dir(file), dep))
-		}
-	}
-	for _, e := range entries {
-		visit(e)
-	}
-	return order
+// TestRealPages runs the kit's page contract over xy's six pages: every
+// web/assets/ui/*.dopeui compiles, and every id and load-bearing class the
+// page's script closure looks up exists in the compiled page.
+func TestRealPages(t *testing.T) {
+	uitest.PageContract{
+		Compile:   Compile,
+		PagesDir:  "../../web/assets/ui",
+		StaticDir: "../../web/assets/static",
+		Pages:     6,
+		// authorsDatalist is built by the board script itself.
+		IDsCreatedByJS: map[string]bool{"authorsDatalist": true},
+		// host-actions is on every page (the topbar emits it); the rest are
+		// board-only widgets.
+		LoadBearing: map[string][]string{
+			"":      {"host-actions"},
+			"board": {"card-detail", "preview-screen-toggle"},
+		},
+	}.Run(t)
 }

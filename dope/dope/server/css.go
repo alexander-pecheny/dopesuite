@@ -8,26 +8,5 @@ import (
 )
 
 // newAssets resolves dope's asset source (live disk in dev, else the embedded
-// FS) and everything derived from it: ETags, the core+dope stylesheet, the
-// fonts.
-func newAssets() *webassets.Assets {
-	return webassets.New(webassets.Config{
-		Embedded:        assets.FS,
-		DiskRoots:       []string{".", "dope/web/assets"},
-		CoreCSS:         kit.CoreCSS,
-		CoreCSSDiskPath: "../dopeuikit/assets/core.css",
-		Fonts:           kit.Fonts,
-		FontsDiskRoot:   "../dopeuikit/assets",
-		Shared: []webassets.SharedFile{{
-			Path:        "/static/login.js",
-			Bytes:       kit.LoginJS,
-			DiskPath:    "../dopeuikit/assets/dist/login.js",
-			ContentType: "text/javascript; charset=utf-8",
-		}, {
-			Path:        "/static/menu.js",
-			Bytes:       kit.MenuJS,
-			DiskPath:    "../dopeuikit/assets/dist/menu.js",
-			ContentType: "text/javascript; charset=utf-8",
-		}},
-	})
-}
+// FS) with the kit's files wired in: ETags, the core+dope stylesheet, the fonts.
+func newAssets() *webassets.Assets { return kit.Assets(assets.FS, ".", "dope/web/assets") }

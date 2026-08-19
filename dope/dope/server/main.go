@@ -21,6 +21,7 @@ import (
 	"pecheny.me/dopecore/authcred"
 
 	"pecheny.me/dopecore/webassets"
+	kit "pecheny.me/dopeuikit/kit"
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/imports"
@@ -73,11 +74,9 @@ type server struct {
 	editBatcher     *editbatch.Batcher
 	editBatcherOnce sync.Once
 
-	// pageCache holds the compiled HTML for the .dopeui-authored shells (see
-	// pages.go). Populated at startup in embed mode; disk/dev mode recompiles per
-	// request for hot reload and never touches this map.
-	pageMu    sync.Mutex
-	pageCache map[string][]byte
+	// pages holds the compiled .dopeui-authored shells (see pages.go).
+	pages     *kit.PageSet
+	pagesOnce sync.Once
 
 	// assets is the static-asset layer: source FS, ETags, the core+dope
 	// stylesheet, fonts (see css.go).

@@ -32,8 +32,10 @@ func newTestServer(t *testing.T) (*httptest.Server, *server) {
 		t.Fatalf("blobstore: %v", err)
 	}
 	srv := &server{db: db, blobs: blobs, staging: newHandoutStaging()}
-	srv.assets = newAssets()
-	srv.warmPageCache()
+	srv.assets, srv.pages = newAssets()
+	if err := srv.pages.Warm(pagePaths...); err != nil {
+		t.Fatal(err)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", srv.handleIndex)

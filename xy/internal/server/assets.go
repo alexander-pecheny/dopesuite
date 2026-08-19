@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"io/fs"
 	"net/http"
 	"strconv"
@@ -15,31 +14,14 @@ import (
 )
 
 // newAssets resolves xy's asset source (live disk in dev, else the embedded FS)
-// and everything derived from it: ETags, the core+xy stylesheet, the fonts.
-func newAssets() *webassets.Assets {
-	return webassets.New(webassets.Config{
-		Embedded:        assets.FS,
-		DiskRoots:       []string{".", "web/assets"},
-		CoreCSS:         kit.CoreCSS,
-		CoreCSSDiskPath: "../dopeuikit/assets/core.css",
-		Fonts:           kit.Fonts,
-		FontsDiskRoot:   "../dopeuikit/assets",
-		Shared: []webassets.SharedFile{{
-			Path:        "/static/login.js",
-			Bytes:       kit.LoginJS,
-			DiskPath:    "../dopeuikit/assets/dist/login.js",
-			ContentType: "text/javascript; charset=utf-8",
-		}, {
-			Path:        "/static/menu.js",
-			Bytes:       kit.MenuJS,
-			DiskPath:    "../dopeuikit/assets/dist/menu.js",
-			ContentType: "text/javascript; charset=utf-8",
-		}},
-	})
+// with the kit's files wired in, and the page set that compiles ui/*.dopeui.
+func newAssets() (*webassets.Assets, *kit.PageSet) {
+	a := kit.Assets(assets.FS, ".", "web/assets")
+	return a, kit.NewPageSet(a.Source, a.NoCache, ui.Compile)
 }
 
-// pagePaths are the ui/*.dopeui sources servePage compiles; warmPageCache
-// compiles them all up front in embed mode.
+// pagePaths are the ui/*.dopeui sources servePage compiles; warmed up front in
+// embed mode so a broken page fails at startup rather than on a request.
 var pagePaths = []string{
 	"ui/login.dopeui",
 	"ui/profile.dopeui",
@@ -49,59 +31,12 @@ var pagePaths = []string{
 	"ui/index.dopeui",
 }
 
-// warmPageCache compiles every page in embed mode so a broken page fails fast
-// at startup rather than surfacing on a request. No-op in disk mode, which
-// recompiles per request for hot reload.
-func (s *server) warmPageCache() {
-	if s.assets.NoCache {
-		return
-	}
-	for _, name := range pagePaths {
-		if _, err := s.compiledPage(name); err != nil {
-			panic(fmt.Sprintf("compile %s: %v", name, err))
-		}
-	}
-}
-
-// compiledPage returns the rendered HTML for a ui/*.dopeui page. In embed mode it
-// serves from pageCache (populated by warmPageCache, or lazily on first miss);
-// in disk mode it recompiles from disk on every call for hot reload.
-func (s *server) compiledPage(name string) ([]byte, error) {
-	if !s.assets.NoCache {
-		s.pageMu.Lock()
-		body, ok := s.pageCache[name]
-		s.pageMu.Unlock()
-		if ok {
-			return body, nil
-		}
-	}
-
-	src, err := fs.ReadFile(s.assets.Source, name)
-	if err != nil {
-		return nil, err
-	}
-	body, err := ui.Compile(name, src)
-	if err != nil {
-		return nil, err
-	}
-
-	if !s.assets.NoCache {
-		s.pageMu.Lock()
-		if s.pageCache == nil {
-			s.pageCache = map[string][]byte{}
-		}
-		s.pageCache[name] = body
-		s.pageMu.Unlock()
-	}
-	return body, nil
-}
-
 // servePage compiles and serves a ui/*.dopeui page with asset-ref versioning and
 // a strict Content-Security-Policy (XSS = total client compromise, so all
 // crypto-bearing pages get a locked-down CSP).
 func (s *server) servePage(name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		body, err := s.compiledPage(name)
+		body, err := s.pages.Bytes(name)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

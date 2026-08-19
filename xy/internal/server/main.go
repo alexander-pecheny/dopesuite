@@ -52,8 +52,10 @@ func Main() {
 		log.Fatal(err)
 	}
 
-	srv.assets = newAssets()
-	srv.warmPageCache()
+	srv.assets, srv.pages = newAssets()
+	if err := srv.pages.Warm(pagePaths...); err != nil {
+		log.Fatal(err)
+	}
 
 	mux := http.NewServeMux()
 
