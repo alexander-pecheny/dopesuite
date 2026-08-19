@@ -2,7 +2,7 @@
 // drag-reorder with fractional ranks, card detail + timeline + labels.
 import { overlayStack } from "./overlaystack.js";
 import { modal } from "./modal.js";
-import { type Board, boardMenu, createPanelShell, listMenu, listScope, registerPanel } from "./panels.js";
+import { type Board, boardMenu, createPanelShell, listMenu, listNumbers, listScope, registerPanel } from "./panels.js";
 import { createRewrites } from "./rewrites.js";
 import { createReplacePanel } from "./replace.js";
 import { createMoveListPanel } from "./movelist.js";
@@ -303,19 +303,6 @@ const bell = createBell(board, { toggle: byId("notifToggle"), badge: byId("notif
 });
 const renderNotifBadge = (): void => bell.renderBadge();
 
-// groupNumbering computes question numbers continuously across a group's lists:
-// the cards of every member list are concatenated in order, numbered as one run
-// (so list 2 picks up where list 1 left off, № / №№ directives included), then
-// sliced back per list. Returns Map(listId → numbers[]).
-function groupNumbering(lists: BoardList[]): Map<number, Array<string | null>> {
-  const arrays = lists.map((l) => cardsOf(l.id));
-  const numbers = xyChgk.numberQuestionCards(arrays.flat());
-  const map = new Map<number, Array<string | null>>();
-  let off = 0;
-  arrays.forEach((arr, i) => { map.set(lists[i].id, numbers.slice(off, off + arr.length)); off += arr.length; });
-  return map;
-}
-
 // plural picks the Russian declension for n: 1 вопрос, 2 вопроса, 12 вопросов.
 function questionCountLabel(n: number): string {
   return `${n} ${plural(n, "вопрос", "вопроса", "вопросов")}`;
@@ -376,8 +363,7 @@ function render(): void {
     if (l.groupId != null) {
       const run: BoardList[] = [];
       while (i < sorted.length && sorted[i].groupId === l.groupId) { run.push(sorted[i]); i++; }
-      const numbering = groupNumbering(run);
-      for (const list of run) kanban.append(renderList(list, numbering.get(list.id)));
+      for (const list of run) kanban.append(renderList(list, listNumbers(board, list)));
     } else {
       kanban.append(renderList(l));
       i++;
@@ -911,9 +897,7 @@ async function previewList(list: BoardList, wholeGroup = false): Promise<void> {
   // arrive, so a long list is readable immediately.
   // Match the board: a grouped list numbers continuously across its group. In
   // whole-group mode the cards ARE the concatenated group, so number them flat.
-  const numbers = !group && list.groupId != null
-    ? (groupNumbering(listsInGroup(list.groupId)).get(list.id) || [])
-    : xyChgk.numberQuestionCards(cards);
+  const numbers = !group && list.groupId != null ? listNumbers(board, list) : xyChgk.numberQuestionCards(cards);
   const imgMap = new Map<string, string>();
   const ctx = { cards, numbers, imgMap };
   previewCtx = ctx;
@@ -952,16 +936,9 @@ async function commitCardMove(cardId: number, targetListId: number, body: HTMLEl
 function questionNumberFor(card: PreviewCardLike): string | null {
   if (!card || card.kind !== "question") return null;
   const list = state.lists.find((l) => l.id === card.listId);
-  // Match the board: a grouped list numbers continuously across its group.
-  if (list && list.groupId != null) {
-    const nums = groupNumbering(listsInGroup(list.groupId)).get(list.id) || [];
-    const idx = cardsOf(card.listId).findIndex((c) => c.id === card.id);
-    return idx >= 0 ? nums[idx] : null;
-  }
-  const cards = cardsOf(card.listId);
-  const numbers = xyChgk.numberQuestionCards(cards);
-  const idx = cards.findIndex((c) => c.id === card.id);
-  return idx >= 0 ? numbers[idx] : null;
+  if (!list) return null;
+  const idx = cardsOf(list.id).findIndex((c) => c.id === card.id);
+  return idx >= 0 ? listNumbers(board, list)[idx] : null;
 }
 
 // ---- card detail + timeline ----
@@ -971,6 +948,12 @@ function questionNumberFor(card: PreviewCardLike): string | null {
 // seam it needs binds lazily through arrow closures.
 let timeline: Timeline;
 const attachments = createAttachments({
+  ui: {
+    message: byId("cardMessage"), list: byId("attachments"), upload: byId("attachUpload"),
+    file: byId<HTMLInputElement>("attachFile"), compress: byId<HTMLInputElement>("attachCompress"),
+    cardOverlay: byId("cardOverlay"), pasteForm: byId("pasteForm"),
+    pasteName: byId<HTMLInputElement>("pasteName"), pasteCompress: byId<HTMLInputElement>("pasteCompress"),
+  },
   mustDK,
   openCardId: () => cardDetail.openCardId(),
   popupMenu,

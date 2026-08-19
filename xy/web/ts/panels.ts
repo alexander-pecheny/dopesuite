@@ -18,6 +18,7 @@ import type { IconName } from "./icons_gen.js";
 import type { WriteState } from "./app.js";
 import type { Modal } from "./modal.js";
 import { icon } from "./icons_gen.js";
+import { xyChgk } from "./chgk.js";
 
 export interface Board {
   readonly id: number;
@@ -39,13 +40,16 @@ export interface Board {
 }
 
 // What a per-list panel works on: the list, or its whole group when it has one,
-// with the cards concatenated in board order and the title the file will carry.
+// with the cards concatenated in board order, their display numbers (one run
+// across the group, so list 2 picks up where list 1 left off, № directives
+// included) and the title the file will carry.
 export interface ListScope {
   list: BoardList;
   grouped: boolean;
   group: BoardGroup | null;
   lists: BoardList[];
   cards: BoardCard[];
+  numbers: Array<string | null>;
   title: string;
 }
 
@@ -56,7 +60,21 @@ export function listScope(board: Board, list: BoardList): ListScope {
     group = board.groupById(list.groupId) || null;
     if (group && group.name) title = group.name;
   }
-  return { list, grouped: list.groupId != null, group, lists, cards: lists.flatMap((l) => board.cardsOf(l.id)), title };
+  const cards = lists.flatMap((l) => board.cardsOf(l.id));
+  return { list, grouped: list.groupId != null, group, lists, cards, numbers: xyChgk.numberQuestionCards(cards), title };
+}
+
+// listNumbers is one list's slice of its scope's numbering, parallel to
+// board.cardsOf(list.id) — what the kanban column and the card editor show.
+export function listNumbers(board: Board, list: BoardList): Array<string | null> {
+  const scope = listScope(board, list);
+  let off = 0;
+  for (const l of scope.lists) {
+    const n = board.cardsOf(l.id).length;
+    if (l.id === list.id) return scope.numbers.slice(off, off + n);
+    off += n;
+  }
+  return [];
 }
 
 interface Entry<S> {

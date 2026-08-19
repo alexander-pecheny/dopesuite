@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { boardMenu, listMenu, listScope, registerPanel, resetPanels } from "../web/assets/static/dist/panels.js";
+import { boardMenu, listMenu, listNumbers, listScope, registerPanel, resetPanels } from "../web/assets/static/dist/panels.js";
 
 const lists = [
   { id: 1, title: "Тур 1", rank: "a", groupId: 5 },
@@ -8,7 +8,7 @@ const lists = [
   { id: 3, title: "Разное", rank: "c", groupId: null },
 ];
 const board = {
-  cardsOf: (id) => [{ id: id * 10, listId: id }, { id: id * 10 + 1, listId: id }],
+  cardsOf: (id) => [{ id: id * 10, listId: id, kind: "question", desc: "" }, { id: id * 10 + 1, listId: id, kind: id === 3 ? "note" : "question", desc: "" }],
   listsInGroup: (gid) => lists.filter((l) => l.groupId === gid),
   groupById: (gid) => (gid === 5 ? { id: 5, name: "Пакет" } : undefined),
 };
@@ -24,6 +24,14 @@ test("a list scope is the list, or its whole group in board order, under the gro
   assert.equal(grouped.title, "Пакет");
   assert.deepEqual(grouped.lists.map((l) => l.id), [1, 2]);
   assert.deepEqual(grouped.cards.map((c) => c.id), [10, 11, 20, 21]);
+});
+
+test("a group numbers its questions as one run; listNumbers is a list's slice of it", () => {
+  assert.deepEqual(listScope(board, lists[1]).numbers, ["1", "2", "3", "4"]);
+  assert.deepEqual(listNumbers(board, lists[1]), ["3", "4"]);
+  assert.deepEqual(listNumbers(board, lists[0]), ["1", "2"]);
+  assert.deepEqual(listScope(board, lists[2]).numbers, ["1", null]);
+  assert.deepEqual(listNumbers(board, lists[2]), ["1", null]);
 });
 
 test("the menus render the registry as data, in registration order, gated by offered()", () => {

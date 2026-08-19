@@ -284,6 +284,11 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
     timeline.ts        the card's лента kernel: load/render, comments (drafts with images,
                        replies, выписки), edit diffs, the expanded feed, filters and view
                        prefs; nodes as a TimelineUI record
+    attachments.ts     the attachment kernel: the per-card list cache and the decrypted
+                       bytes/URL LRU keyed id:rev, upload (opt-in WebP), replace, delete,
+                       paste-to-attach, download with the offline mirror, the lightbox;
+                       the editor's nodes come in as an AttachmentsUI record
+                       (attachments.test.js drives it on the DOM shim)
     panels.ts          the panel registry and the Board seam. Board = the live state,
                        the read helpers (cardsOf, listsInGroup, sessionName…), the four
                        mutation verbs, render, setStatus, reload. registerPanel(...) takes
@@ -291,7 +296,10 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        offered?(scope), open(scope)}; boardMenu() / listMenu(scope) return
                        the two menus as data; listScope(board, list) is what a per-list
                        panel works on (the list or its whole group, cards concatenated in
-                       board order, the title). createPanelShell is one generic modal
+                       board order, their display numbers as one run across the group,
+                       the title); listNumbers(board, list) is one list's slice of that
+                       run — the kanban column and the card editor read it, so a panel
+                       never re-derives numbering. createPanelShell is one generic modal
                        (board.dopeui's panelOverlay) for panels that build their body with
                        el() — a new such panel touches no .dopeui, vocab or Go
     rewrites.ts        board-wide description rewrites: collect(transform) / apply(changes)

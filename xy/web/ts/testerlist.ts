@@ -7,7 +7,6 @@
 // rule, shared with the card's «кроме общих тестеров» line.
 
 import { xyApp } from "./app.js";
-import { xyChgk } from "./chgk.js";
 import { partialSeen, type SeenQuestion, type SessionMeta, whoSaw } from "./sessions.js";
 import { iconed } from "./icons_gen.js";
 import { type Board, type ListPanel, listScope, type PanelShell } from "./panels.js";
@@ -79,10 +78,9 @@ export function createTesterList(board: Board, shell: PanelShell, deps: { copyPl
   // Numbering runs over the whole export scope (a group numbers across its member
   // lists) and is not always 1..n — a № directive can set a number outright.
   function seenQuestions(list: BoardList): SeenQuestion[] {
-    const scope = listScope(board, list).cards;
-    const numbers = xyChgk.numberQuestionCards(scope);
+    const { cards, numbers } = listScope(board, list);
     const out: SeenQuestion[] = [];
-    scope.forEach((card, i) => {
+    cards.forEach((card, i) => {
       const num = numbers[i];
       if (!num) return;
       const testers = board.playingsOf(card.id).flatMap((sid) => (board.sessionMeta(sid) || { testers: [] }).testers || []);

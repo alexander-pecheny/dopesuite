@@ -86,7 +86,7 @@ export function createAuthorCountPanel(shell: PanelShell, deps: { copyPlain(text
     label: "Счётчик авторов",
     open(scope) {
       const cards = scope.cards;
-      const numbers = xyChgk.numberQuestionCards(cards).filter((n): n is string => n != null);
+      const numbers = scope.numbers.filter((n): n is string => n != null);
       const upTo = el("input", { class: "input", type: "text", placeholder: "номер", inputmode: "numeric", autocomplete: "off", spellcheck: "false", value: numbers[numbers.length - 1] || "" }) as HTMLInputElement;
       const zero = el("input", { type: "checkbox" }) as HTMLInputElement;
       const zeroRow = el("label", { class: "attach-lossless" }, zero, " считать нулевые");

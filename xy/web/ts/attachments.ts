@@ -13,7 +13,7 @@ import type { DataKey } from "./crypto.js";
 import type { MenuItem } from "./timeline.js";
 import { icon, iconed } from "./icons_gen.js";
 
-const { fetchJSON, jpatch, jdelete, el, byId, errMsg } = xyApp;
+const { fetchJSON, jpatch, jdelete, el, errMsg } = xyApp;
 
 // ---- attachment caches (preview image resolution) ----
 // A card's attachment list changes on upload/delete, so it's cached per card and
@@ -70,7 +70,21 @@ function withExt(name: string, ext: string): string {
   return `${base || "вставка"}.${ext}`;
 }
 
+// The card editor's static elements the kernel writes to and listens on.
+export interface AttachmentsUI {
+  message: HTMLElement;
+  list: HTMLElement;
+  upload: HTMLElement;
+  file: HTMLInputElement;
+  compress: HTMLInputElement;
+  cardOverlay: HTMLElement;
+  pasteForm: HTMLElement;
+  pasteName: HTMLInputElement;
+  pasteCompress: HTMLInputElement;
+}
+
 export interface AttachmentsDeps {
+  ui: AttachmentsUI;
   mustDK(): DataKey;
   openCardId(): number | null;
   popupMenu(anchor: HTMLElement, items: MenuItem[]): void;
@@ -85,6 +99,7 @@ export interface AttachmentsDeps {
 }
 
 export function create(deps: AttachmentsDeps) {
+const ui = deps.ui;
 
 const attListCache = new Map<number, NamedAttachment[]>(); // cardId → [{ ...att, name }]
 const attBlobCache = new Map<string, Blob>();   // id:rev → decrypted bytes
@@ -184,7 +199,7 @@ async function resolveImages(cards: ReadonlyArray<{ id: number }>, wanted: Set<s
 let cardImageNames: string[] = [];
 
 async function loadAttachments(cardId: number): Promise<void> {
-  const box = byId("attachments");
+  const box = ui.list;
   cardImageNames = [];
   // Always refetch: this runs on card open and after every upload/delete, so it
   // doubles as the invalidation point for the preview's attachment-list cache.
@@ -225,7 +240,7 @@ function attachMenu(anchor: HTMLElement, att: NamedAttachment, name: string): vo
 }
 
 async function attachAction(fn: () => Promise<unknown>): Promise<void> {
-  const msg = byId("cardMessage");
+  const msg = ui.message;
   if (!xySync.requireOnline("Правка вложений доступна только онлайн.", msg)) return;
   try {
     await fn();
@@ -247,7 +262,7 @@ function pickReplacement(att: NamedAttachment, name: string): void {
     const file = picker.files && picker.files[0];
     if (!file) return;
     void attachAction(async () => {
-      const msg = byId("cardMessage");
+      const msg = ui.message;
       msg.textContent = "Шифрование…";
       const lossless = !!att.lossless;
       let bytes: Uint8Array<ArrayBuffer>, mime: string;
@@ -292,7 +307,7 @@ async function recompressToWebp(file: File): Promise<{ bytes: Uint8Array<ArrayBu
 async function uploadAttachment(file: File, lossless: boolean, name: string): Promise<number | null> {
   const oc = deps.openCardId();
   if (!file || oc == null) return null;
-  const msg = byId("cardMessage");
+  const msg = ui.message;
   msg.textContent = "Шифрование…";
   let bytes: Uint8Array<ArrayBuffer>, mime: string;
   if (lossless) { bytes = new Uint8Array(await file.arrayBuffer()); mime = file.type || "application/octet-stream"; }
@@ -315,17 +330,17 @@ async function uploadAttachment(file: File, lossless: boolean, name: string): Pr
   return made?.id ?? null;
 }
 
-byId("attachUpload").addEventListener("click", async () => {
-  const input = byId<HTMLInputElement>("attachFile");
+ui.upload.addEventListener("click", async () => {
+  const input = ui.file;
   const file = input.files && input.files[0];
   if (!file || deps.openCardId() == null) return;
-  if (!xySync.requireOnline("Загрузка вложений доступна только онлайн.", byId("cardMessage"))) return;
-  const compress = byId<HTMLInputElement>("attachCompress").checked;
+  if (!xySync.requireOnline("Загрузка вложений доступна только онлайн.", ui.message)) return;
+  const compress = ui.compress.checked;
   try {
     await uploadAttachment(file, !compress, file.name);
     input.value = "";
-    byId<HTMLInputElement>("attachCompress").checked = false;
-  } catch (err) { byId("cardMessage").textContent = errMsg(err); }
+    ui.compress.checked = false;
+  } catch (err) { ui.message.textContent = errMsg(err); }
 });
 
 // ---- paste-to-attach ----
@@ -335,12 +350,11 @@ byId("attachUpload").addEventListener("click", async () => {
 let pastedFile: File | null = null;
 let pasteForComment = false;
 const pasteModal = modal("paste");
-const cardOverlay = byId("cardOverlay");
 
 document.addEventListener("paste", (e) => {
   // Only intercept image pastes while a persisted card is open (attachments need
   // a real card id); leave plain-text paste into the editor/comment box alone.
-  if (deps.openCardId() == null || cardOverlay.hidden) return;
+  if (deps.openCardId() == null || ui.cardOverlay.hidden) return;
   const items = e.clipboardData && e.clipboardData.items;
   if (!items) return;
   let file: File | null = null;
@@ -351,24 +365,24 @@ document.addEventListener("paste", (e) => {
   e.preventDefault();
   pastedFile = file;
   pasteForComment = document.activeElement?.id === "commentInput";
-  const nameInput = byId<HTMLInputElement>("pasteName");
+  const nameInput = ui.pasteName;
   // Clipboard images usually arrive as the generic "image.png"; offer a friendlier
   // default the user can overwrite.
   nameInput.value = (file.name && file.name !== "image.png") ? file.name : `вставка.${extFromMime(file.type)}`;
-  byId<HTMLInputElement>("pasteCompress").checked = false;
+  ui.pasteCompress.checked = false;
   pasteModal.open({ onClose: () => { pastedFile = null; } });
   nameInput.focus();
   nameInput.select();
 });
 
-byId("pasteForm").addEventListener("submit", async (e) => {
+ui.pasteForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!pastedFile) return;
-  const msg = byId("cardMessage");
+  const msg = ui.message;
   const file = pastedFile;
   const forComment = pasteForComment;
-  const compress = byId<HTMLInputElement>("pasteCompress").checked;
-  const name = withExt(byId<HTMLInputElement>("pasteName").value, compress ? "webp" : extFromMime(file.type));
+  const compress = ui.pasteCompress.checked;
+  const name = withExt(ui.pasteName.value, compress ? "webp" : extFromMime(file.type));
   pasteModal.close();
   if (!xySync.requireOnline("Загрузка вложений доступна только онлайн.", msg)) return;
   try {
@@ -384,7 +398,7 @@ byId("pasteForm").addEventListener("submit", async (e) => {
 async function viewAttachment(att: NamedAttachment, name: string): Promise<void> {
   try {
     openLightbox(await attachmentUrl(att), name || att.name || "");
-  } catch (err) { byId("cardMessage").textContent = errMsg(err); }
+  } catch (err) { ui.message.textContent = errMsg(err); }
 }
 
 // ---- image lightbox ----------------------------------------------------------
@@ -501,12 +515,12 @@ async function download(att: NamedAttachment, name: string): Promise<void> {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
-  } catch (err) { byId("cardMessage").textContent = errMsg(err); }
+  } catch (err) { ui.message.textContent = errMsg(err); }
 }
 
 async function removeAttachment(att: NamedAttachment, name: string): Promise<void> {
   if (!confirm(`Удалить вложение «${name}»?`)) return;
-  if (!xySync.requireOnline("Удаление вложений доступно только онлайн.", byId("cardMessage"))) return;
+  if (!xySync.requireOnline("Удаление вложений доступно только онлайн.", ui.message)) return;
   try {
     const ev = await xyCrypto.encField(deps.mustDK(), JSON.stringify({ file: name }));
     await jdelete(`/api/attachments/${att.id}?event_payload_enc=${encodeURIComponent(ev)}`);
@@ -515,7 +529,7 @@ async function removeAttachment(att: NamedAttachment, name: string): Promise<voi
       await loadAttachments(oc);
       await deps.timeline.load(oc);
     }
-  } catch (err) { byId("cardMessage").textContent = errMsg(err); }
+  } catch (err) { ui.message.textContent = errMsg(err); }
 }
 
 
