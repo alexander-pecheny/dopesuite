@@ -18,6 +18,7 @@ import (
 	"pecheny.me/dopecore/authcred"
 
 	"pecheny.me/dopecore/session"
+	"pecheny.me/dopecore/tglogin"
 )
 
 func rfc3339(t time.Time) string { return t.UTC().Format(time.RFC3339) }
@@ -278,34 +279,21 @@ func (s *server) handleLoginMethods(w http.ResponseWriter, r *http.Request) {
 // login page offers. Required for telegram login — see telegramConfigured.
 func botUsername() string { return strings.TrimSpace(os.Getenv("XY_BOT_NAME")) }
 
-// handleTgStart mints a bot code for the telegram handshake. The visitor sends it
-// to the bot; handleTgStatus then resolves who they are — no username needed up
-// front (that comes later, and only for a brand-new telegram account).
+// The Telegram handshake (start → status poll → claim) is dopecore/tglogin's
+// state machine over xy's users table; these handlers keep xy's write
+// transaction, its validation and its error text.
+func (s *server) handshake() tglogin.Handshake { return tglogin.Handshake{Users: xyUsers{}} }
+
 func (s *server) handleTgStart(w http.ResponseWriter, r *http.Request) {
 	if !telegramBridgeConfigured() {
 		httpError(w, http.StatusServiceUnavailable, "telegram login is not configured")
 		return
 	}
 	var out tgStartResponse
-	now := time.Now()
 	err := s.withWriteTx(r.Context(), "tg-start", func(ctx context.Context, tx *sql.Tx) error {
-		// Opportunistically reap lapsed codes so consumed-but-abandoned rows don't
-		// linger as replay fodder.
-		if _, err := tx.ExecContext(ctx, `delete from telegram_login_codes where expires_at < ?`, rfc3339(now)); err != nil {
-			return err
-		}
-		code, err := authcred.NewTelegramAuthCode()
-		if err != nil {
-			return err
-		}
-		expiresAt := now.Add(session.TelegramAuthLifetime)
-		if _, err := tx.ExecContext(ctx, `
-insert into telegram_login_codes(code, kind, created_at, expires_at)
-values(?, 'register', ?, ?)`, code, rfc3339(now), rfc3339(expiresAt)); err != nil {
-			return err
-		}
-		out = tgStartResponse{Code: code, ExpiresAt: rfc3339(expiresAt), BotUsername: botUsername()}
-		return nil
+		res, err := s.handshake().Start(ctx, tx, time.Now())
+		out = tgStartResponse{Code: res.Code, ExpiresAt: rfc3339(res.ExpiresAt), BotUsername: botUsername()}
+		return err
 	})
 	if handleErr(w, err) {
 		return
@@ -318,84 +306,20 @@ type tgStatusResponse struct {
 	Username *string `json:"username,omitempty"`
 }
 
-// handleTgStatus polls the handshake. Once the bot fills in the telegram identity,
-// a known telegram account logs straight in (ready); a brand-new one returns
-// choose_username, and its account is created later by handleTgClaim.
 func (s *server) handleTgStatus(w http.ResponseWriter, r *http.Request) {
 	code := strings.TrimSpace(r.URL.Query().Get("code"))
 	if code == "" {
 		httpError(w, http.StatusBadRequest, "code required")
 		return
 	}
-	now := time.Now()
-	var (
-		status   = "pending"
-		username *string
-		token    string
-	)
-	err := s.withWriteTx(r.Context(), "tg-status", func(ctx context.Context, tx *sql.Tx) error {
-		var (
-			tgUserID    sql.NullInt64
-			tgUsername  sql.NullString
-			tgName      sql.NullString
-			expiresStr  string
-			consumedStr sql.NullString
-		)
-		row := tx.QueryRowContext(ctx, `
-select telegram_user_id, telegram_username, telegram_name, expires_at, consumed_at
-from telegram_login_codes where code = ? and kind = 'register'`, code)
-		if err := row.Scan(&tgUserID, &tgUsername, &tgName, &expiresStr, &consumedStr); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				status = "not_found"
-				return nil
-			}
-			return err
-		}
-		// Expiry bounds the whole handshake, consumed or not — so a code leaked
-		// via the status URL can't be replayed into a session once it lapses.
-		if expires, _ := time.Parse(time.RFC3339, expiresStr); now.After(expires) {
-			status = "expired"
-			return nil
-		}
-		if !consumedStr.Valid || !tgUserID.Valid {
-			return nil // pending
-		}
-		var euid int64
-		var euname sql.NullString
-		switch err := tx.QueryRowContext(ctx, `select id, username from users where telegram_user_id = ?`, tgUserID.Int64).Scan(&euid, &euname); {
-		case err == nil:
-			if _, err := tx.ExecContext(ctx, `update users set telegram_username = ?, telegram_name = ?, updated_at = ? where id = ?`,
-				tgUsername, tgName, rfc3339(now), euid); err != nil {
-				return err
-			}
-			var terr error
-			if token, terr = s.createSessionTx(ctx, tx, euid, now); terr != nil {
-				return terr
-			}
-			if _, err := tx.ExecContext(ctx, `delete from telegram_login_codes where code = ?`, code); err != nil {
-				return err
-			}
-			status, username = "ready", firstNonNull(euname, tgUsername)
-		case errors.Is(err, sql.ErrNoRows):
-			status = "choose_username"
-		default:
-			return err
-		}
-		return nil
+	var out tglogin.Outcome
+	err := s.withWriteTx(r.Context(), "tg-status", func(ctx context.Context, tx *sql.Tx) (err error) {
+		out, err = s.handshake().Resolve(ctx, tx, code, time.Now())
+		return err
 	})
-	if handleErr(w, err) {
-		return
-	}
-	if token != "" {
-		session.SetCookie(w, token)
-	}
-	writeJSON(w, tgStatusResponse{Status: status, Username: username})
+	s.writeOutcome(w, out, err)
 }
 
-// handleTgClaim finishes a brand-new telegram account: the visitor picks a
-// username. Free → create + log in. An existing password account → link it once
-// they prove the password (password_required until they do). Taken by another
-// telegram account → username_taken.
 func (s *server) handleTgClaim(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Code     string `json:"code"`
@@ -405,132 +329,77 @@ func (s *server) handleTgClaim(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	code := strings.TrimSpace(req.Code)
 	uname := strings.TrimSpace(req.Username)
 	if !validNewUsername(uname) {
 		httpError(w, http.StatusBadRequest, "логин: 3–64 символа, латиница, цифры, . _ -")
 		return
 	}
-	now := time.Now()
-	var (
-		status   string
-		username *string
-		token    string
-	)
-	err := s.withWriteTx(r.Context(), "tg-claim", func(ctx context.Context, tx *sql.Tx) error {
-		var (
-			tgUserID   sql.NullInt64
-			tgUsername sql.NullString
-			tgName     sql.NullString
-		)
-		row := tx.QueryRowContext(ctx, `
-select telegram_user_id, telegram_username, telegram_name
-from telegram_login_codes
-where code = ? and kind = 'register' and consumed_at is not null and expires_at > ?`, code, rfc3339(now))
-		if err := row.Scan(&tgUserID, &tgUsername, &tgName); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return errBadRequest("код не найден, начните заново")
-			}
-			return err
-		}
-		if !tgUserID.Valid {
+	var out tglogin.Outcome
+	err := s.withWriteTx(r.Context(), "tg-claim", func(ctx context.Context, tx *sql.Tx) (err error) {
+		out, err = s.handshake().Claim(ctx, tx, req.Code, uname, req.Password, time.Now())
+		switch {
+		case errors.Is(err, tglogin.ErrCodeNotFound):
 			return errBadRequest("код не найден, начните заново")
+		case errors.Is(err, tglogin.ErrWrongPassword):
+			return errBadRequest("неверный пароль")
+		case errors.Is(err, tglogin.ErrTelegramLinked):
+			return errBadRequest("этот телеграм уже привязан к другому аккаунту")
 		}
-		// delCode burns the code on any successful login/link so it can't be replayed.
-		delCode := func() error {
-			_, e := tx.ExecContext(ctx, `delete from telegram_login_codes where code = ?`, code)
-			return e
-		}
-		// This telegram may already resolve to an account (double-submit / race).
-		var euid int64
-		var euname sql.NullString
-		switch err := tx.QueryRowContext(ctx, `select id, username from users where telegram_user_id = ?`, tgUserID.Int64).Scan(&euid, &euname); {
-		case err == nil:
-			if token, err = s.createSessionTx(ctx, tx, euid, now); err != nil {
-				return err
-			}
-			if err := delCode(); err != nil {
-				return err
-			}
-			status, username = "ready", firstNonNull(euname, tgUsername)
-			return nil
-		case !errors.Is(err, sql.ErrNoRows):
-			return err
-		}
-		var uid int64
-		var pwHash sql.NullString
-		switch err := tx.QueryRowContext(ctx, `select id, password_hash from users where username = ?`, uname).Scan(&uid, &pwHash); {
-		case errors.Is(err, sql.ErrNoRows):
-			if isAdminUsername(uname) {
-				return errForbidden("этот логин зарезервирован")
-			}
-			res, ierr := tx.ExecContext(ctx, `
-insert into users(telegram_user_id, telegram_username, telegram_name, username, created_at, updated_at)
-values(?, ?, ?, ?, ?, ?)`, tgUserID.Int64, tgUsername, tgName, uname, rfc3339(now), rfc3339(now))
-			if sqlitex.IsUniqueViolation(ierr) {
-				status, username = "username_taken", &uname
-				return nil
-			}
-			if ierr != nil {
-				return ierr
-			}
-			nid, _ := res.LastInsertId()
-			if token, ierr = s.createSessionTx(ctx, tx, nid, now); ierr != nil {
-				return ierr
-			}
-			if ierr := delCode(); ierr != nil {
-				return ierr
-			}
-			status, username = "ready", &uname
-		case err != nil:
-			return err
-		case pwHash.Valid && pwHash.String != "":
-			// Existing password account: link only once the password is proven.
-			if req.Password == "" {
-				status, username = "password_required", &uname
-				return nil
-			}
-			if !authcred.VerifyPassword(pwHash.String, req.Password) {
-				return errBadRequest("неверный пароль")
-			}
-			if _, err := tx.ExecContext(ctx, `
-update users set telegram_user_id = ?, telegram_username = ?, telegram_name = ?, updated_at = ? where id = ?`,
-				tgUserID.Int64, tgUsername, tgName, rfc3339(now), uid); err != nil {
-				if sqlitex.IsUniqueViolation(err) {
-					return errBadRequest("этот телеграм уже привязан к другому аккаунту")
-				}
-				return err
-			}
-			if token, err = s.createSessionTx(ctx, tx, uid, now); err != nil {
-				return err
-			}
-			if err := delCode(); err != nil {
-				return err
-			}
-			status, username = "ready", &uname
-		default:
-			status, username = "username_taken", &uname
-		}
-		return nil
+		return err
 	})
+	s.writeOutcome(w, out, err)
+}
+
+func (s *server) writeOutcome(w http.ResponseWriter, out tglogin.Outcome, err error) {
 	if handleErr(w, err) {
 		return
 	}
-	if token != "" {
-		session.SetCookie(w, token)
+	if out.Token != "" {
+		session.SetCookie(w, out.Token)
 	}
-	writeJSON(w, tgStatusResponse{Status: status, Username: username})
+	writeJSON(w, tgStatusResponse{Status: out.Status, Username: out.Username})
 }
 
-// firstNonNull returns a pointer to the first valid string, else nil.
-func firstNonNull(vals ...sql.NullString) *string {
-	for _, v := range vals {
-		if v.Valid && v.String != "" {
-			s := v.String
-			return &s
-		}
+// xyUsers is xy's users table as the handshake needs it.
+type xyUsers struct{}
+
+func (xyUsers) ByTelegram(ctx context.Context, tx tglogin.Tx, tg int64) (tglogin.Account, bool, error) {
+	return scanAccount(tx.QueryRowContext(ctx, `select id, username, password_hash from users where telegram_user_id = ?`, tg))
+}
+
+func (xyUsers) ByUsername(ctx context.Context, tx tglogin.Tx, username string) (tglogin.Account, bool, error) {
+	return scanAccount(tx.QueryRowContext(ctx, `select id, username, password_hash from users where username = ?`, username))
+}
+
+func scanAccount(row *sql.Row) (tglogin.Account, bool, error) {
+	var a tglogin.Account
+	switch err := row.Scan(&a.ID, &a.Username, &a.PasswordHash); {
+	case errors.Is(err, sql.ErrNoRows):
+		return a, false, nil
+	case err != nil:
+		return a, false, err
 	}
-	return nil
+	return a, true, nil
+}
+
+func (xyUsers) Create(ctx context.Context, tx tglogin.Tx, id tglogin.Identity, username string, now time.Time) (int64, error) {
+	if isAdminUsername(username) {
+		return 0, errForbidden("этот логин зарезервирован")
+	}
+	res, err := tx.ExecContext(ctx, `
+insert into users(telegram_user_id, telegram_username, telegram_name, username, created_at, updated_at)
+values(?, ?, ?, ?, ?, ?)`, id.TelegramUserID, id.Username, id.Name, username, rfc3339(now), rfc3339(now))
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (xyUsers) Attach(ctx context.Context, tx tglogin.Tx, userID int64, id tglogin.Identity, now time.Time) error {
+	_, err := tx.ExecContext(ctx, `
+update users set telegram_user_id = ?, telegram_username = ?, telegram_name = ?, updated_at = ? where id = ?`,
+		id.TelegramUserID, id.Username, id.Name, rfc3339(now), userID)
+	return err
 }
 
 // ---- login (password; telegram login goes through the tg handshake above) ----

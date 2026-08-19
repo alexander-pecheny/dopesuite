@@ -16,6 +16,14 @@ typed-builder machinery, codegen) and knows no CSS class names or vocabulary.
   into its own module.
 - Both apps consume this module via `replace pecheny.me/dopeuikit => ../dopeuikit`,
   so a change here lands in xy and dope on their next build. Check both.
+- The kit imports `dopecore`; dopecore imports neither the kit nor `ui`. So
+  app-facing plumbing that needs kit knowledge lives in `kit/` rather than
+  being copied into both apps (root `docs/adr/0004`): `kit.Assets` (the
+  webassets config with core.css, fonts, login.js, menu.js wired in),
+  `kit.PageSet` (compile-once-or-per-request for `.dopeui` pages),
+  `kit.AdminCreateUsers` (the /admin/create_users body), and `uitest.PageContract`
+  (the test each app runs over its real pages: compiles, ids and load-bearing
+  markup its scripts look up).
 
 ## Codegen
 

@@ -2,12 +2,13 @@
 // login/registration handshake: the wire protocol the bot speaks, the
 // shared-secret gate, and the two SQL statements that back it.
 //
-// It deliberately does NOT own the handlers. The two apps drive these writes
-// through genuinely different disciplines — xy wraps every write in a bounded
-// transaction under its global write lock, dope holds its global write mutex
-// across a direct DB exec — and their user-facing reply text differs. Wrapping
-// that in a shared handler would cost more adapter than it saves. What must not
-// drift is the protocol and the SQL, and that is what lives here.
+// It deliberately does NOT own the bot-facing handlers: the two apps drive
+// these writes through different disciplines — xy wraps every write in a
+// bounded transaction under its global write lock, dope holds its global write
+// mutex across a direct DB exec — and their reply text differs. What must not
+// drift is the protocol and the SQL, and that is what lives here. The
+// visitor-facing side of the same handshake (start, status poll, claim) is the
+// state machine in package tglogin.
 //
 // Background: the bot used to open the database directly, which made it a second
 // long-lived writer on the live file. It now holds no database handle and calls

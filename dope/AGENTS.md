@@ -52,7 +52,7 @@ files, each one concern:
 | `server/scoped_api.go` | ~1200 | Tournament-scoped API endpoints |
 | `server/db.go` | ~110 | DB open (`openFestDB`), active context, id resolution |
 | `server/migrations.go` | ~1400 | The schema as a list: `[]schema.Migration` (`storage/schema` applies them once each, in order) and the backfills they call; a new step takes the next number and goes at the end. `server/tests/testdata/schema.sql` pins what the list makes of an empty file (`DOPE_UPDATE_SCHEMA=1` regenerates); `DOPE_REHEARSE_DB=<snapshot>` walks a prod copy through them |
-| `server/auth.go` | ~930 | Sessions, auth, Telegram login bridge |
+| `server/auth.go` | ~600 | Sessions, password login, the Telegram handshake's adapter (the state machine is `dopecore/tglogin`; dope brings its write tx, its users table with `is_system`, its error text) |
 | `server/matchview.go` | ~815 | Fest/match view loading + match-update application |
 | `server/import_scheme.go` | ~110 | The pasted-scheme importer (`/api/import`, the host form): clears the fest, calls `gamebuild.Materialise` |
 | `server/static_mode.go` | ~425 | "DDoS lockdown" static-snapshot degradation layer |
@@ -70,7 +70,7 @@ queries, view/scheme types, pure scoring), `storage/journal` (forward journal),
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `styles.css` | ~4500 | dope's **app CSS layer** only (tournament tables/grids/screen/stickers + dope vars + dark overrides). The shared design system — tokens, controls, buttons, chrome, utilities, themes — lives in DopeUIKit's `assets/core.css` (~1030 lines); the server serves `/static/styles.css` as core + this layer concatenated (`dope/server/css.go`). The tournament domain used to live in `core.css`; it was moved down here, so **do not add tournament-specific rules to the kit** — they belong in this file. |
+| `styles.css` | ~4500 | dope's **app CSS layer** only (tournament tables/grids/screen/stickers + dope vars + dark overrides). The shared design system — tokens, controls, buttons, chrome, utilities, themes — lives in DopeUIKit's `assets/core.css` (~1030 lines); the server serves `/static/styles.css` as core + this layer concatenated (`kit.Assets`, called from `dope/server/css.go`). The tournament domain used to live in `core.css`; it was moved down here, so **do not add tournament-specific rules to the kit** — they belong in this file. |
 | `pageforms.ts` | ~60 | Shared behaviour for the server-rendered builder pages, replacing the inline `on*` handlers they used to carry (CSP-friendly, data-attribute driven: `[data-confirm]`, `[data-select-all]`, `[data-autosubmit]`, `[data-dialog-open="id"]`, `[data-dialog-close]`) |
 | `ek.ts` | ~3450 | The ЭК page, host and spectator alike — match score editing, undo/redo, stage panes, SSE sync; a `viewer` flag from the URL prefix gates every control. imports the shared modules below + `stage-cache.ts` + `game-tabs.ts` |
 | `od.ts` | ~3800 | OD/KVRM host/viewer — tabbed results/input sheets, entry cell navigation, SSE sync |

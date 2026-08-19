@@ -8,14 +8,17 @@ dopeuikit/   pecheny.me/dopeuikit — the shared UI system:
              ui/ = generic DSL engine (no design opinions), kit/ = the design
              system (core vocabulary + expansions + core.css + fonts)
 dopecore/    pecheny.me/dopecore — the shared platform layer extracted out of
-             xy and dope (no AGENTS/CONTEXT of its own)
+             xy and dope (no AGENTS/CONTEXT of its own): sessions, credentials,
+             the SQLite pool conventions, webassets, the admin bulk-create,
+             the Telegram bot and the login handshake (tglogin)
 xy/          ЧГК question-editing boards (encrypted, Trello-style)
 dope/        tournament management (EK/OD/KSI) + realtime web UI
 ```
 
 - xy and dope consume the shared layers via `replace pecheny.me/dopeuikit =>
   ../dopeuikit` and `replace pecheny.me/dopecore => ../dopecore` — the monorepo
-  preserves the sibling layout, so builds need nothing extra.
+  preserves the sibling layout, so builds need nothing extra. The kit imports
+  dopecore the same way; dopecore imports no other module (`docs/adr/0004`).
 - xy and dope each keep a `justfile` (`just dev`, `just test`, `just pre-commit`);
   dopeuikit and dopecore have none — their recipes live in the root `justfile`,
   which also fans `test`/`fmt`/`vet`/`pre-commit` out across all four.

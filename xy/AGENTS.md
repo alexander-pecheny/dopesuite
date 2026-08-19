@@ -74,10 +74,11 @@ internal/server/       package server — the whole HTTP server
   server.go            DB open (BuildDSN/WAL), write-tx discipline (conn-before-lock)
   db.go                full schema + migration runner (schema_versions)
   main.go              mux wiring (Go 1.22 method+pattern routes), invite subcmd
-  assets.go            embed/disk asset serving, ETag cache-busting, gzip, CSP, page serve
+  assets.go            kit.Assets + kit.PageSet wiring (embed/disk source, ETags, core+xy css), CSP, page serve
   http.go              writeJSON/readJSON/httpError
   errors.go            appError → status mapping
-  auth.go              sessions, login/register/password, telegram bridge
+  auth.go              sessions, password login, the Telegram handshake's adapter (state machine in dopecore/tglogin:
+                       xy brings its write tx, its users table, its error text), the bot bridge
   boards.go            boards CRUD, keymeta (passphrase re-wrap), members, /api/collaborators (who I share boards with), ACL helpers
   lists_cards.go       lists/cards/labels/timeline + list-group handlers, DTOs/scanners.
                        GET /api/boards/{id}/comments returns every live comment on a board in
@@ -88,7 +89,7 @@ internal/server/       package server — the whole HTTP server
   trello_compat.go     Trello-compatible API for chgksuite (token-authed via key+token)
   rank.go              server-side fractional-index keyAfter (Trello card upload)
   invite.go            invite minting (subcommand)
-  admin.go             /admin + /admin/create_users (gated on XY_ADMIN_USER, default "pecheny"); pages built with the typed ui builder
+  admin.go             /admin + /admin/create_users (gated on XY_ADMIN_USER, default "pecheny"); the create-users body is kit.AdminCreateUsers, xy wraps its chrome
   export.go            POST /api/export/{docx,pdf} — one 4s source + images, exported two ways, both fully
                        in-process (chgk/docx, chgk/typstdoc), images included; no Python. The PDF goes through
                        the shared typst (wasm) pool (typst.go), so it too writes nothing anywhere
