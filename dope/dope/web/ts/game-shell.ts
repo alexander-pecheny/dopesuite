@@ -7,10 +7,11 @@
 // element kinds, the same data-* keys the sheet cursor addresses cells by.
 // `host` is never passed: it is the route's.
 
-import {createSyncIndicator, createHostPresence, installClientRecorder} from "./state-sync.js";
-import type {ClientRecorder, HostPresence, SyncIndicator} from "./state-sync.js";
+import {createLiveEvents, createScopedWriter, createSyncIndicator, createHostPresence, gameEventsURL, installClientRecorder, scheduleStaticReload} from "./state-sync.js";
+import type {ClientRecorder, HostPresence, LiveEvents, PatchPath, ScopedWriter, SyncIndicator} from "./state-sync.js";
 import {createStatusReporter, createViewerCounter} from "./widgets.js";
-import {mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, renderGameBreadcrumbs} from "./game-page.js";
+import {createGameDataLoader, fetchGameData, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, renderGameBreadcrumbs} from "./game-page.js";
+import type {GameDataSnapshot, GameRoute} from "./game-page.js";
 import {cssEscape} from "./cells.js";
 
 // One kind of element a host's cursor can rest on: the selector that finds it
@@ -173,5 +174,134 @@ export function mountGamePage(spec: GameShellSpec): GameShell {
       publish: () => presence?.publishCurrent(),
       fromElement: (element) => presence?.publishFromElement(element),
     },
+  };
+}
+
+// ---- the game document ----
+
+// A page whose whole Protocol document is one state blob (ОД, КСИ) lives
+// through one lifecycle: the snapshot (init payload, then the cache, then the
+// API) is adopted; the live events and the scoped writer are built on the
+// game-state scope; a remote state arrives overlaid with this page's un-acked
+// edits; a revalidation re-fetches and re-adopts only what changed. The pages
+// used to spell this out each (byte for byte); mountGameDocument is that
+// composition over the ADR-0015 primitives, and the page keeps two callbacks:
+// adopt a fresh document, apply a remote state.
+export interface GameDocumentSpec {
+  route: GameRoute;
+  cachePrefix: string;
+  shell: GameShell;
+  // A fresh document: assign scheme/state/fest, derive, render.
+  adopt: (snapshot: GameDataSnapshot) => void;
+  // A remote state, already overlaid with the page's un-acked edits.
+  apply: (state: unknown) => void;
+  // What the page holds now — the revalidation's baseline, the live base.
+  current: () => GameDataSnapshot;
+  // Test seam: the stream constructor the engine opens (an EventSource).
+  newEventSource?: (url: string) => EventSource;
+}
+
+export interface GameDocument {
+  // The SSE scope key of the whole document.
+  readonly scope: string;
+  // Adopt the first snapshot, connect the events and the host presence.
+  load(): Promise<void>;
+  // One patch of the document, coalesced and retried by the writer.
+  save(path: PatchPath, value: unknown): void;
+  // A remote state with the page's pending edits overlaid.
+  overlay(state: unknown): unknown;
+  // Re-send the un-acked edits of a previous load; true when there were any.
+  recover(): boolean;
+  // Whether an edit at (or above) path is still un-acked.
+  isPending(path: PatchPath): boolean;
+  sync(): {live: LiveEvents; writer: ScopedWriter};
+}
+
+export function mountGameDocument(spec: GameDocumentSpec): GameDocument {
+  const {route, shell} = spec;
+  const scope = `game-state:${shell.scopeGameID}`;
+  let stateSeq = 0; // the scope seq the page's state is at; seeded by the init payload, moved by the engine
+  let epoch = ""; // the server epoch at page render; the engine's baseline
+  let live: LiveEvents | null = null;
+  let writer: ScopedWriter | null = null;
+
+  const loader = createGameDataLoader({
+    route,
+    cachePrefix: spec.cachePrefix,
+    adopt: (snapshot) => {
+      if (snapshot.init) {
+        if (snapshot.init.seq != null) stateSeq = Number(snapshot.init.seq) || 0;
+        if (snapshot.init.epoch != null) epoch = String(snapshot.init.epoch);
+      }
+      spec.adopt(snapshot);
+    },
+    revalidate: async () => {
+      const before = JSON.stringify(spec.current());
+      const fresh = await fetchGameData(route);
+      loader.writeSnapshot(fresh);
+      if (JSON.stringify({scheme: fresh.scheme, state: fresh.state, fest: fresh.fest ?? null}) === before) return;
+      spec.adopt(fresh);
+    },
+  });
+
+  function sync(): {live: LiveEvents; writer: ScopedWriter} {
+    if (live && writer) return {live, writer};
+    writer = createScopedWriter({
+      readonly: shell.viewer,
+      urlOf: () => `${route.apiBase}/state`,
+      adopt: (_scope, response) => spec.apply(overlay(response)),
+      indicator: shell.indicator,
+      recorder: () => shell.recorder,
+      onRejected: (info) => shell.recorder?.event("write-rejected", info),
+    });
+    live = createLiveEvents({
+      eventsURL: () => gameEventsURL(route.festID!, route.gameID),
+      gameID: shell.scopeGameID,
+      epoch,
+      scopes: [{
+        prefix: scope,
+        base: () => ({data: spec.current().state, seq: stateSeq}),
+        adopt: (_scope, view) => {
+          stateSeq = view.seq;
+          spec.apply(overlay(view.data));
+        },
+        stateURL: () => `${route.apiBase}/state`,
+      }],
+      indicator: shell.indicator,
+      onViewers: (count) => shell.viewerCounter.setCount(count),
+      onLockdown: scheduleStaticReload,
+      staticMode: () => shell.staticMode,
+      recorder: () => shell.recorder,
+      newEventSource: spec.newEventSource,
+    });
+    return {live, writer};
+  }
+
+  function overlay(state: unknown): unknown {
+    return writer ? writer.overlay(scope, state) : state;
+  }
+
+  function recover(): boolean {
+    return sync().writer.recover(scope) > 0;
+  }
+
+  async function load(): Promise<void> {
+    await loader.load();
+    shell.indicator.touch();
+    sync().live.connect();
+    // Un-acked edits a previous load persisted (a refresh mid-sync): show them
+    // overlaid, with their pending spinner, and let the writer re-send them.
+    if (recover()) spec.apply(overlay(spec.current().state));
+    shell.presence.connect();
+  }
+
+  return {
+    scope,
+    load,
+    save: (path, value) => sync().writer.patch(scope, path, value),
+    overlay,
+    recover,
+    isPending: (path) => Boolean(writer?.isPending(scope, path)),
+    sync,
   };
 }

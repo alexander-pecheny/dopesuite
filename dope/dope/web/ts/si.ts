@@ -7,11 +7,9 @@ import {buildFlatScoreTable, computePlaces, createScoreTableIndex, setMarkClass,
 import type {NodeIndex} from "./score-table.js";
 import {resultsTeamCell} from "./standings.js";
 import {buildRosterView} from "./fest-roster.js";
-import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
-import type {LiveEvents, ScopedWriter} from "./state-sync.js";
-import {mountGamePage} from "./game-shell.js";
-import {createGameDataLoader, fetchGameData, parseGameRoute} from "./game-page.js";
-import type {AdoptedGameSnapshot, GameInitLike} from "./game-page.js";
+import {mountGameDocument, mountGamePage} from "./game-shell.js";
+import {parseGameRoute} from "./game-page.js";
+import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
 import {bindScrollEdges, clamp, createTeamNameOverflowController, fitScrollFade, renderTabBar} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
@@ -98,12 +96,10 @@ const shell = mountGamePage({
   activeCursorElement: () => sheet.activeCell,
   recorderState: () => state,
 });
-const {viewer, staticMode, scopeGameID, indicator, viewerCounter, recorder} = shell;
+const {viewer, indicator} = shell;
 let scheme: KSIScheme | null = null;
 let state: KSIState | null = null;
 let fest: FestInfo | null = null;
-let stateSeq = 0; // the game-state scope seq `state` is at; seeded at page render, moved by the engine
-let initialStateEpoch = ""; // server epoch at page render; seeds the engine's epoch baseline
 let participants: string[] = [];
 let themesCount = 8;
 // Sticker configuration for the "KSI with stickers" variant, parsed from
@@ -118,8 +114,6 @@ let detailedOrderCache: number[] | null = null;
 // Client-local row order for the «Подробно» sheet: "name" (default) or "number".
 // Editors pick whichever identity they read off the floor; never synced.
 let detailedSort: "name" | "number" = "name";
-let live: LiveEvents | null = null;
-let writer: ScopedWriter | null = null;
 const tabScroll = new Map<string, {top: number; left: number}>();
 
 // The «Отказы» tab is a host-only control surface; its effect — declined teams
@@ -147,21 +141,18 @@ window.addEventListener("resize", () => {
   updateResultsScrollState();
 });
 
-const gameLoader = createGameDataLoader({
+const doc = mountGameDocument({
   route,
   cachePrefix: "si",
+  shell,
   adopt: adoptGameSnapshot,
-  revalidate: revalidateAll,
+  apply: applyRemoteState,
+  current: () => ({scheme, state, fest}),
 });
 
-// adoptGameSnapshot assigns the page's scheme/state/fest from a loader snapshot
-// and renders the first frame. On the "init" path the snapshot also carries the
-// raw __GAME_INIT__ payload, the only source with the SSE seq/epoch baseline.
-function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest, init}: AdoptedGameSnapshot): void {
-  if (init) {
-    if (init.seq != null) stateSeq = Number(init.seq) || 0;
-    if (init.epoch != null) initialStateEpoch = String(init.epoch);
-  }
+// adoptGameSnapshot takes a fresh document — the first snapshot, or a
+// revalidation that found a change — and renders it.
+function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest}: GameDataSnapshot): void {
   scheme = nextScheme as KSIScheme;
   state = nextState as KSIState;
   fest = (nextFest as FestInfo | null) || null;
@@ -170,23 +161,6 @@ function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest
   render();
 }
 
-async function revalidateAll(): Promise<void> {
-  const prevSchemeJSON = JSON.stringify(scheme);
-  const prevStateJSON = JSON.stringify(state);
-  const prevFestJSON = JSON.stringify(fest);
-  const fresh = await fetchGameData(route);
-  const freshSchemeJSON = JSON.stringify(fresh.scheme);
-  const freshStateJSON = JSON.stringify(fresh.state);
-  const freshFestJSON = JSON.stringify(fresh.fest);
-  scheme = fresh.scheme as KSIScheme;
-  state = fresh.state as KSIState;
-  fest = fresh.fest as FestInfo | null;
-  gameLoader.writeSnapshot(fresh);
-  if (freshSchemeJSON === prevSchemeJSON && freshStateJSON === prevStateJSON && freshFestJSON === prevFestJSON) return;
-  initFromScheme();
-  ensureState();
-  render();
-}
 
 function initFromScheme(): void {
   rules = ksi.rulesOf(scheme!);
@@ -1102,7 +1076,7 @@ function normalizeActiveCell(): void {
 }
 
 function saveState(path: Array<string | number>, value: unknown): void {
-  sync().writer.patch(stateScope(), path, value);
+  doc.save(path, value);
   // Mark the just-edited answer cell as pending right away; it clears when the
   // server confirms the edit (refreshPendingMarkers, driven from
   // applyRemoteState on the PATCH ack / any remote update).
@@ -1111,9 +1085,6 @@ function saveState(path: Array<string | number>, value: unknown): void {
   }
 }
 
-function stateScope(): string {
-  return `game-state:${scopeGameID}`;
-}
 
 function answerCellNode(player: string | number, theme: string | number, answer: string | number): HTMLElement | null | undefined {
   return tableIndex?.get("answer", {player, theme, answer}) ||
@@ -1125,12 +1096,12 @@ function answerCellNode(player: string | number, theme: string | number, answer:
 // confirmed, then clears. Called after any remote update / ack and after a full
 // re-render (which rebuilds cells without the class).
 function refreshPendingMarkers(): void {
-  if (viewer || !writer) return;
+  if (viewer) return;
   siRoot.querySelectorAll<HTMLElement>(".answer-cell").forEach((cell) => {
     const player = Number(cell.dataset.player);
     const theme = Number(cell.dataset.theme);
     const answer = Number(cell.dataset.answer);
-    cell.classList.toggle("pending", writer!.isPending(stateScope(), ["themes", theme, "answers", player, answer]));
+    cell.classList.toggle("pending", doc.isPending(["themes", theme, "answers", player, answer]));
   });
 }
 
@@ -1139,49 +1110,11 @@ function setHeading(text: string): void {
   shell.renderChrome();
 }
 
-function connectEvents(): void {
-  const {live, writer} = sync();
-  live.connect();
-  // Un-acked edits a previous load persisted (a refresh mid-sync): show them
-  // overlaid, with their pending spinner, and let the writer re-send them.
-  if (writer.recover(stateScope()) > 0) applyRemoteState(state);
-}
 
-function sync(): {live: LiveEvents; writer: ScopedWriter} {
-  if (live && writer) return {live, writer};
-  writer = createScopedWriter({
-    readonly: viewer,
-    urlOf: () => `${route.apiBase}/state`,
-    adopt: (_scope, response) => applyRemoteState(response),
-    indicator,
-    recorder: () => recorder,
-    onRejected: (info) => recorder?.event("write-rejected", info),
-  });
-  live = createLiveEvents({
-    eventsURL: () => gameEventsURL(route.festID!, route.gameID),
-    gameID: scopeGameID,
-    epoch: initialStateEpoch,
-    scopes: [{
-      prefix: stateScope(),
-      base: () => ({data: state, seq: stateSeq}),
-      adopt: (_scope, view) => {
-        stateSeq = view.seq;
-        applyRemoteState(view.data);
-      },
-      stateURL: () => `${route.apiBase}/state`,
-    }],
-    indicator,
-    onViewers: (count) => viewerCounter.setCount(count),
-    onLockdown: scheduleStaticReload,
-    staticMode: () => staticMode,
-    recorder: () => recorder,
-  });
-  return {live, writer};
-}
 
 function applyRemoteState(nextState: unknown): void {
   const previous = state;
-  state = (writer ? writer.overlay(stateScope(), nextState) : nextState) as KSIState;
+  state = nextState as KSIState;
   ensureState();
   if (canPatchState(previous, state) && patchTable(previous)) {
     refreshPendingMarkers();
@@ -1191,15 +1124,9 @@ function applyRemoteState(nextState: unknown): void {
   refreshPendingMarkers();
 }
 
-gameLoader.load()
-  .then(() => {
-    indicator.touch();
-    connectEvents();
-    shell.presence.connect();
-  })
-  .catch((error: unknown) => {
-    indicator.fail();
-    console.error(error);
-  });
+doc.load().catch((error: unknown) => {
+  indicator.fail();
+  console.error(error);
+});
 
 export {};

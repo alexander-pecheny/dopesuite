@@ -6,11 +6,10 @@ import {buildFlatScoreTable, computePlaces} from "./score-table.js";
 import type {ScoreTableRow, ScoreTableTheme, ScoreTableThemeRow} from "./score-table.js";
 import {resultsTeamCell} from "./standings.js";
 import {buildRosterView} from "./fest-roster.js";
-import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
-import type {LiveEvents, PatchPath, ScopedWriter} from "./state-sync.js";
-import {mountGamePage} from "./game-shell.js";
-import {createGameDataLoader, fetchGameData, parseGameRoute} from "./game-page.js";
-import type {AdoptedGameSnapshot, GameInitLike} from "./game-page.js";
+import type {PatchPath} from "./state-sync.js";
+import {mountGameDocument, mountGamePage} from "./game-shell.js";
+import {parseGameRoute} from "./game-page.js";
+import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
 import {bindScrollEdges, createTeamNameOverflowController, fitScrollFade, installVirtualKeypad, renderTabBar} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {VirtualKeypad} from "./widgets.js";
@@ -114,20 +113,16 @@ const shell = mountGamePage({
   activeCursorElement: () => sheet.activeCell,
   recorderState: () => state,
 });
-const {viewer, staticMode, scopeGameID, indicator, viewerCounter, recorder} = shell;
+const {viewer, indicator} = shell;
 let scheme!: ODScheme;
 let state!: ODState;
 let fest: FestInfo | null = null;
-let stateSeq = 0; // the game-state scope seq `state` is at; seeded at page render, moved by the engine
-let initialStateEpoch = ""; // server epoch at page render; seeds the engine's epoch baseline
 let tourLengths: number[] = [];
 let totalQuestions = 0;
 let renderedTab: string | null = null;
 let questionStatsCache: QuestionStat[] | null = null;
 let activeEntryEditor: {cell: HTMLElement; input: HTMLInputElement} | null = null;
 let activeEntryRows: Element[] = [];
-let live: LiveEvents | null = null;
-let writer: ScopedWriter | null = null;
 const tabCache = new Map<string, HTMLElement>();
 const tabScroll = new Map<string, {top: number; left: number}>();
 const resultsExpandedTours = new Set<number>();
@@ -211,22 +206,18 @@ document.addEventListener("fullscreenchange", () => {
   if (!document.fullscreenElement && chromeHidden) setChromeHidden(false);
 });
 
-const gameLoader = createGameDataLoader({
+const doc = mountGameDocument({
   route,
   cachePrefix: "od",
+  shell,
   adopt: adoptGameSnapshot,
-  revalidate: revalidateAll,
+  apply: applyRemoteState,
+  current: () => ({scheme, state, fest}),
 });
 
-// adoptGameSnapshot assigns the page's scheme/state/fest from a loader snapshot
-// and renders the first frame. On the "init" path the snapshot also carries the
-// raw __GAME_INIT__ payload, the only source with the SSE seq/epoch baseline and
-// the unnumbered-teams flag.
-function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest, init}: AdoptedGameSnapshot): void {
-  if (init) {
-    if (init.seq != null) stateSeq = Number(init.seq) || 0;
-    if (init.epoch != null) initialStateEpoch = String(init.epoch);
-  }
+// adoptGameSnapshot takes a fresh document — the first snapshot, or a
+// revalidation that found a change — and renders it.
+function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest}: GameDataSnapshot): void {
   scheme = nextScheme as ODScheme;
   state = nextState as ODState;
   fest = (nextFest as FestInfo | null) || null;
@@ -236,22 +227,6 @@ function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest
   render();
 }
 
-async function revalidateAll(): Promise<void> {
-  const prevSchemeJSON = JSON.stringify(scheme);
-  const prevStateJSON = JSON.stringify(state);
-  const fresh = await fetchGameData(route);
-  const freshSchemeJSON = JSON.stringify(fresh.scheme);
-  const freshStateJSON = JSON.stringify(fresh.state);
-  scheme = fresh.scheme as ODScheme;
-  state = fresh.state as ODState;
-  fest = (fresh.fest as FestInfo | null) || null;
-  gameLoader.writeSnapshot(fresh);
-  if (freshSchemeJSON === prevSchemeJSON && freshStateJSON === prevStateJSON) return;
-  initFromScheme();
-  ensureState();
-  invalidateAllCaches();
-  render();
-}
 
 function initFromScheme(): void {
   tourLengths = od.tourLengthsOf(scheme);
@@ -3049,13 +3024,10 @@ function shootoutQuestionNumber(roundIndex: number, questionIndex: number): numb
 // === persistence ===
 
 function saveState(path: PatchPath, value: unknown): void {
-  sync().writer.patch(stateScope(), path, value);
+  doc.save(path, value);
   refreshPendingMarkers();
 }
 
-function stateScope(): string {
-  return `game-state:${scopeGameID}`;
-}
 
 // refreshPendingMarkers reconciles the per-cell "pending" spinner with the sync
 // controller's un-acked edits: an entry cell stays marked until the edit
@@ -3063,15 +3035,15 @@ function stateScope(): string {
 // whole-grid patch marks the cells under it too). Driven from saveState (edit)
 // and applyRemoteState (ack / any remote update, incl. after a full rebuild).
 function refreshPendingMarkers(): void {
-  if (viewer || !writer) return;
+  if (viewer) return;
   odRoot.querySelectorAll<HTMLElement>(".entry-cell").forEach((cell) => {
     const q = Number(cell.dataset.q);
     const row = Number(cell.dataset.row);
     const pending = Number.isInteger(q) && Number.isInteger(row) &&
-      writer!.isPending(stateScope(), ["entries", q, row]);
+      doc.isPending(["entries", q, row]);
     cell.classList.toggle("pending", Boolean(pending));
   });
-  const shootoutPending = writer.isPending(stateScope(), ["shootoutRounds"]);
+  const shootoutPending = doc.isPending(["shootoutRounds"]);
   odRoot.querySelectorAll(".od-shootout-cell").forEach((cell) => {
     cell.classList.toggle("pending", shootoutPending);
   });
@@ -3082,45 +3054,7 @@ function setHeading(text: string): void {
   shell.renderChrome();
 }
 
-function connectEvents(): void {
-  const {live, writer} = sync();
-  live.connect();
-  // Un-acked edits a previous load persisted (a refresh mid-sync): show them
-  // overlaid, with their pending spinner, and let the writer re-send them.
-  if (writer.recover(stateScope()) > 0) applyRemoteState(state);
-}
 
-function sync(): {live: LiveEvents; writer: ScopedWriter} {
-  if (live && writer) return {live, writer};
-  writer = createScopedWriter({
-    readonly: viewer,
-    urlOf: () => `${route.apiBase}/state`,
-    adopt: (_scope, response) => applyRemoteState(response),
-    indicator,
-    recorder: () => recorder,
-    onRejected: (info) => recorder?.event("write-rejected", info),
-  });
-  live = createLiveEvents({
-    eventsURL: () => gameEventsURL(route.festID!, route.gameID),
-    gameID: scopeGameID,
-    epoch: initialStateEpoch,
-    scopes: [{
-      prefix: stateScope(),
-      base: () => ({data: state, seq: stateSeq}),
-      adopt: (_scope, view) => {
-        stateSeq = view.seq;
-        applyRemoteState(view.data);
-      },
-      stateURL: () => `${route.apiBase}/state`,
-    }],
-    indicator,
-    onViewers: (count) => viewerCounter.setCount(count),
-    onLockdown: scheduleStaticReload,
-    staticMode: () => staticMode,
-    recorder: () => recorder,
-  });
-  return {live, writer};
-}
 
 function applyRemoteState(nextState: unknown): void {
   const active = document.activeElement as HTMLElement | null;
@@ -3138,7 +3072,7 @@ function applyRemoteState(nextState: unknown): void {
   // replaces its node, so re-focus the cursor afterwards (else arrow keys, which
   // are handled on the focused cell, stop working after a remote update).
   const focusedCell = Boolean(active && active.classList.contains("entry-cell") && !isShootoutEntryCell(active));
-  state = (writer ? writer.overlay(stateScope(), nextState) : nextState) as ODState;
+  state = nextState as ODState;
   ensureState();
   updateHeaderProgress();
   if (editingInput || editingShootout || focusedLockCol) {
@@ -3154,13 +3088,7 @@ function applyRemoteState(nextState: unknown): void {
   if (focusedCell) focusEntrySelection();
 }
 
-gameLoader.load()
-  .then(() => {
-    indicator.touch();
-    connectEvents();
-    shell.presence.connect();
-  })
-  .catch((error: unknown) => {
-    indicator.fail();
-    console.error(error);
-  });
+doc.load().catch((error: unknown) => {
+  indicator.fail();
+  console.error(error);
+});
