@@ -239,8 +239,9 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        cards, the group numbering, the Search Index write), list and
                        card drag (dragrank.ts), the card detail + timeline wiring
                        (carddetail.ts, timeline.ts, attachments.ts), the list preview
-                       (docx-style, client-side), the card's «Метки»/«Тесты» pickers,
-                       and the Board seam + panel registration (panels.ts): one
+                       overlay (drawn by preview.ts), the wiring of cardlabels.ts,
+                       bell.ts and transfer.ts, and the Board seam + panel registration
+                       (panels.ts): one
                        registerPanel(...) call lists every ☰ and ⋯ entry in menu order,
                        and both menus render from it. Board-level actions that are not
                        panels (rename/delete board, forget password, add/rename/delete
@@ -269,6 +270,17 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        runs under the DOM shim (carddetail_ui.test.js). Its unsaved-changes
                        prompt (dirtyOverlay) toggles hidden itself: it opens from inside the
                        stack's confirm gate, which is what modal.ts would register on
+    preview.ts         xy's one screen rendering of a question: renderPreviewCard(card,
+                       number, imgMap, screen, edit?) as the docx export would set it, over
+                       renderRich (chgk's inline runs → DOM, print/screen mode); the list
+                       preview, the card's Просмотр and the import preview draw through it
+                       (preview.test.js)
+    cardlabels.ts      the open card's «Метки», «Тесты» and «Видели» (ADR-0004): two
+                       pickers over one filtered popup, the create-label form mounted at
+                       its foot, every write as the card's whole set through the verbs
+                       (cardlabels.test.js over fakeBoard)
+    bell.ts            the 🔔: the badge and the panel of recent other-authored activity,
+                       wording each event with timeline.eventVerb (one verbs map)
     timeline.ts        the card's лента kernel: load/render, comments (drafts with images,
                        replies, выписки), edit diffs, the expanded feed, filters and view
                        prefs; nodes as a TimelineUI record

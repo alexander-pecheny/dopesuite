@@ -24,7 +24,7 @@ const { keyBetween } = xyRank;
 
 // The verification screen renders the parsed blocks the way the list preview
 // does; the renderer is the board's.
-export type PreviewRenderer = (card: { id: number; kind: string; desc: string }, number: string | null, imgMap: Map<string, string>, screen: boolean, edit?: boolean) => HTMLElement;
+export type PreviewRenderer = (card: { id: number; kind: string; desc: string }, number: string | null, imgMap: Map<string, string>, screen: boolean) => HTMLElement;
 
 export function createImportPanel(board: Board, renderPreviewCard: PreviewRenderer): BoardPanel {
   interface ImportImage { name: string; data: string; mime: string }
@@ -129,7 +129,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     const cards = importCards(byId<HTMLTextAreaElement>("importSource").value);
     const numbers = xyChgk.numberQuestionCards(cards);
     body.replaceChildren();
-    cards.forEach((card, i) => body.append(renderPreviewCard(card, numbers[i], ctx.imgMap, false, false)));
+    cards.forEach((card, i) => body.append(renderPreviewCard(card, numbers[i], ctx.imgMap, false)));
     const qs = cards.filter((c) => c.kind === "question").length;
     byId("importCount").textContent = `${cards.length} блоков, ${qs} вопросов`;
   }

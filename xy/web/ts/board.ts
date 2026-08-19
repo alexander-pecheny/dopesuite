@@ -18,6 +18,9 @@ import { xyApp, xySizes } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xyRank } from "./rank.js";
 import { xyChgk } from "./chgk.js";
+import { fillPreviewImages, renderPreviewCard } from "./preview.js";
+import { createCardLabels } from "./cardlabels.js";
+import { createBell } from "./bell.js";
 import { xyVersions } from "./versions.js";
 import { xyHndt } from "./hndt.js";
 import { xySync } from "./sync.js";
@@ -37,7 +40,6 @@ import { plural, xyMass } from "./massaction.js";
 import { xySearchIndex } from "./searchindex.js";
 import type { DataKey } from "./crypto.js";
 import type { OpBody } from "./store.js";
-import type { ScreenValue } from "./chgk.js";
 import type { BoardCard, BoardLabel, BoardList, BoardState, CardLabel } from "./unlock.js";
 import type { MembersState } from "./boardmembers.js";
 import type { MenuItem, Timeline } from "./timeline.js";
@@ -198,17 +200,6 @@ const boardMembers = createBoardMembers(state, boardId);
 // Every user wants to read every OTHER user's changes; own edits never count.
 // Read-tracking is online-only best-effort (like the members roster load): it never
 // goes through the sync outbox, so it's simply skipped offline.
-const notifToggle = byId("notifToggle");
-const notifBadge = byId("notifBadge");
-
-// renderNotifBadge shows the 🔔 badge iff any card has an unread bucket — red
-// when any of it mentions me.
-function renderNotifBadge(): void {
-  const flags = Object.values(state.unread);
-  notifBadge.hidden = !flags.some((u) => u.content || u.comments);
-  notifBadge.classList.toggle("unread-dot-mention", flags.some((u) => u.mentions));
-}
-
 // unreadDotFor builds a card's dot: red for a mention, blue otherwise.
 function unreadDotFor(u: { mentions?: boolean }, extra: string): HTMLElement {
   const mention = u.mentions ? " unread-dot-mention" : "";
@@ -228,106 +219,6 @@ function refreshCardUnreadDot(cardId: number): void {
   if (wantDot) node.append(unreadDotFor(u, "unread-dot-corner kcard-unread"));
 }
 
-// ---- 🔔 bell panel: recent other-authored activity, newest first ----
-interface ActivityEvent {
-  id: number;
-  card_id: number;
-  type: string;
-  created_at: string;
-  unread?: boolean;
-  mention?: boolean;
-  mention_reply?: boolean;
-  reply_to_id?: number | null;
-  payload_enc?: string;
-  author_user_id?: number | null;
-}
-
-let notifPanelEl: HTMLElement | null = null;
-
-function closeNotifPanel(): void {
-  if (!notifPanelEl) return;
-  notifPanelEl.remove();
-  notifPanelEl = null;
-  notifToggle.setAttribute("aria-expanded", "false");
-  document.removeEventListener("pointerdown", onNotifOutside, true);
-  document.removeEventListener("keydown", onNotifKey, true);
-}
-function onNotifOutside(e: PointerEvent): void {
-  if (notifPanelEl && e.target instanceof Node && !notifPanelEl.contains(e.target) && e.target !== notifToggle) closeNotifPanel();
-}
-// Transient popups (this panel, the ⋯ menu, the label picker) claim Escape in
-// the CAPTURE phase and stop it there. They are not on the overlay stack — no
-// history entry, nothing to go back to — but they are the innermost dismissible
-// thing on screen, so Escape must close them without also closing the card
-// underneath. Capture is what puts them ahead of the stack's own listener.
-function onNotifKey(e: KeyboardEvent): void {
-  if (e.key !== "Escape") return;
-  e.stopImmediatePropagation();
-  closeNotifPanel();
-}
-
-async function openNotifPanel(): Promise<void> {
-  if (notifPanelEl) { closeNotifPanel(); return; }
-  const panel = el("div", { class: "popover notif-panel" });
-  const head = el("div", { class: "notif-panel-head" },
-    el("span", { text: "События" }),
-    el("button", {
-      class: "btn btn-small", type: "button", text: "Прочитать всё",
-      onclick: async () => {
-        try { await jpost(`/api/boards/${boardId}/read-all`, {}); } catch (_) { return; }
-        state.unread = {};
-        render();
-        renderNotifBadge();
-        closeNotifPanel();
-      },
-    }));
-  panel.append(head);
-  const body = el("div", { class: "notif-panel-body" }, el("div", { class: "notif-empty", text: "Загрузка…" }));
-  panel.append(body);
-  notifToggle.setAttribute("aria-expanded", "true");
-  notifToggle.parentElement?.append(panel);
-  notifPanelEl = panel;
-  document.addEventListener("pointerdown", onNotifOutside, true);
-  document.addEventListener("keydown", onNotifKey, true);
-
-  let events: ActivityEvent[] = [];
-  try { events = (await fetchJSON(`/api/boards/${boardId}/activity`)) as ActivityEvent[]; } catch (_) {}
-  if (notifPanelEl !== panel) return; // closed while loading
-  body.replaceChildren();
-  if (!events.length) { body.append(el("div", { class: "notif-empty", text: "Нет новых событий" })); return; }
-  for (const ev of events) {
-    const card = state.cards.find((c) => c.id === ev.card_id);
-    if (!card) continue; // card deleted/moved away since the event was recorded
-    const row = el("button", { class: "notif-row", type: "button" });
-    if (ev.unread) row.append(el("span", { class: "unread-dot" + (ev.mention ? " unread-dot-mention" : "") }));
-    // Neutral noun-phrase wording (mirrors renderEvent's own verbs map, gender-
-    // agnostic since we don't know the author's grammatical gender).
-    const verbs: Record<string, string> = {
-      comment: "комментарий", desc_edit: "правка описания",
-      label_add: "добавлена метка", label_remove: "снята метка",
-      attach_add: "вложение добавлено", attach_remove: "вложение удалено", attach_replace: "вложение заменено",
-      reaction: "реакция",
-    };
-    const verb = ev.mention ? (ev.mention_reply ? "ответ вам" : "упомянул(а) вас") : (verbs[ev.type] || ev.type);
-    const when = new Date(ev.created_at).toLocaleString("ru-RU");
-    const bodyWrap = el("div", { class: "notif-row-body" },
-      el("div", { class: "notif-row-meta", text: `${eventAuthor(ev, state.me, state.memberNames)} ${verb} · ${cardTitle(card)} · ${when}` }));
-    if (ev.type === "comment" || ev.type === "reaction") {
-      let preview = "";
-      try { preview = await xyCrypto.decField(mustDK(), ev.payload_enc || ""); } catch (_) {}
-      if (ev.type === "comment") preview = decodeCommentPayload(preview).text;
-      bodyWrap.append(el("div", { class: "notif-row-preview", text: deriveTitle(preview, 120) }));
-    }
-    row.append(bodyWrap);
-    row.addEventListener("click", () => {
-      closeNotifPanel();
-      void cardDetail.openCard(card).then(() => { if (ev.type === "comment") void cardDetail.highlightComment(ev.id); });
-    });
-    body.append(row);
-  }
-}
-
-notifToggle.addEventListener("click", () => { if (notifPanelEl) closeNotifPanel(); else void openNotifPanel(); });
 
 const cardsOf = (listId: number): BoardCard[] => state.cards.filter((c) => c.listId === listId).sort(byRank);
 const labelById = (id: number) => state.labels.find((l) => l.id === id);
@@ -402,6 +293,15 @@ const board: Board = {
   setStatus,
   reload: () => unlock.load(),
 };
+
+// ---- 🔔 bell: the badge and the panel of recent other-authored activity ----
+const bell = createBell(board, { toggle: byId("notifToggle"), badge: byId("notifBadge") }, {
+  mustDK,
+  cardTitle,
+  openCard: (card) => cardDetail.openCard(card),
+  highlightComment: (id) => cardDetail.highlightComment(id),
+});
+const renderNotifBadge = (): void => bell.renderBadge();
 
 // groupNumbering computes question numbers continuously across a group's lists:
 // the cards of every member list are concatenated in order, numbered as one run
@@ -932,121 +832,7 @@ function popupMenu(anchor: HTMLElement, items: MenuItem[]): void {
 
 // The card shape the preview renders: a persisted board card, the card detail's
 // transient draft card, or an import-verify block (which has no list yet).
-interface PvCard { id: number; kind: string; desc: string; listId?: number }
-
-const PV_LABELS = xyChgk.QUESTION_LABELS;
 const previewOverlay = byId("previewOverlay");
-
-// (attachment caches live in attachments.ts)
-
-// fillPreviewImages swaps the "[изображение: …]" placeholders inside an already
-// rendered preview for the images that have since resolved.
-function fillPreviewImages(root: ParentNode, imgMap: Map<string, string>): void {
-  for (const ph of root.querySelectorAll<HTMLElement>(".pv-img-missing[data-img]")) {
-    const url = imgMap.get(ph.dataset.img || "");
-    if (url) ph.replaceWith(el("img", { class: "pv-img", src: url, alt: ph.dataset.img }));
-  }
-}
-
-// fieldOpts returns the render options for a field given the screen-mode toggle.
-// Meta/headings are never screen-transformed. `nbsp` (non-breaking spaces/
-// hyphens) applies everywhere except sources and handouts, like docx.
-interface RichOpts { accents?: boolean; brackets?: boolean; nbsp?: boolean }
-function fieldOpts(field: string, screen: boolean): RichOpts {
-  const nbsp = field !== "source" && field !== "handout";
-  if (!screen) return { accents: false, brackets: false, nbsp };
-  return { accents: true, brackets: !xyChgk.fieldKeepsBrackets(field), nbsp };
-}
-
-// renderRich turns a 4s text element into DOM, mirroring the docx render: inline
-// bold/italic/underline/strike/small-caps, links, (screen …), explicit
-// (LINEBREAK)/(PAGEBREAK), and (img …) handouts (shown inline). opts.{accents,
-// brackets} select print vs. screen mode; opts.nbsp glues non-breaking
-// spaces/hyphens into plain text. Styling is applied via the CSSOM (.style.*) to
-// stay within the strict CSP.
-function renderRich(text: string, imgMap: Map<string, string>, opts: RichOpts = {}): DocumentFragment {
-  const screenSide = !!(opts.accents || opts.brackets);
-  const nb = (t: string): string => (opts.nbsp ? xyChgk.replaceNoBreak(t) : t);
-  const frag = document.createDocumentFragment();
-  // An image renders as a block, so it already ends its line; under pre-wrap the
-  // source's own newline right after "(img …)" would add a second, empty one.
-  let afterImg = false;
-  for (let [type, val] of xyChgk.renderRuns(text, opts)) {
-    if (afterImg) {
-      afterImg = false;
-      if (!type && typeof val === "string" && val.startsWith("\n")) val = val.slice(1);
-    }
-    if (type === "linebreak") { frag.append(el("br")); continue; }
-    if (type === "pagebreak") { frag.append(el("hr", { class: "pv-pagebreak" })); continue; }
-    if (type === "img") {
-      const name = xyChgk.imgName(val);
-      const url = imgMap.get(name);
-      if (url) frag.append(el("img", { class: "pv-img", src: url, alt: name }));
-      else frag.append(el("span", { class: "pv-img-missing", dataset: { img: name }, text: `[изображение: ${name}]` }));
-      afterImg = true;
-      continue;
-    }
-    if (type === "screen") {
-      const sv = val as ScreenValue;
-      frag.append(document.createTextNode(nb((screenSide ? sv.for_screen : sv.for_print) || "")));
-      continue;
-    }
-    if (type === "hyperlink") {
-      frag.append(el("a", { class: "pv-link", href: val, target: "_blank", rel: "noopener noreferrer", text: val }));
-      continue;
-    }
-    if (!type) { frag.append(document.createTextNode(nb(val as string))); continue; }
-    const span = el("span", { text: nb(val as string) });
-    if (type.includes("italic")) span.style.fontStyle = "italic";
-    if (type.includes("bold")) span.style.fontWeight = "bold";
-    if (type.includes("underline")) span.style.textDecoration = "underline";
-    if (type === "strike") span.style.textDecoration = "line-through";
-    if (type === "sc") span.classList.add("pv-sc");
-    frag.append(span);
-  }
-  return frag;
-}
-
-// renderFieldBody renders a field value, turning a chgksuite "- …" list into a
-// numbered 1./2./… list (with an optional preamble) — this is also how blitz /
-// duplet questions and multi-part answers render. Otherwise a plain rich run.
-// Works for every field (question, answer, source, comment, …), not just sources.
-function renderFieldBody(text: string, imgMap: Map<string, string>, opts: RichOpts): DocumentFragment {
-  const frag = document.createDocumentFragment();
-  const lst = xyChgk.splitList(text);
-  if (lst.items) {
-    if (lst.preamble.trim()) frag.append(renderRich(lst.preamble, imgMap, opts));
-    const box = el("div", { class: "pv-list" });
-    lst.items.forEach((it, i) => {
-      const li = el("div", { class: "pv-list-item" }, el("span", { class: "pv-list-num", text: `${i + 1}.` }));
-      const body = el("div", { class: "pv-list-body" });
-      body.append(renderRich(it, imgMap, opts));
-      li.append(body);
-      box.append(li);
-    });
-    frag.append(box);
-  } else {
-    frag.append(renderRich(lst.preamble, imgMap, opts));
-  }
-  return frag;
-}
-
-// pvSmallCls: sources and authors are set smaller, like the docx/PDF exports
-// (12pt body → 10pt).
-function pvSmallCls(field: string): string {
-  return field === "source" || field === "author" ? "pv-small" : "";
-}
-
-// pvField renders a "Label: value" line, numbering any "- …" list. The caption
-// rules (a "!!Label" override, the plural source label) are xyChgk's, shared with
-// the copy targets.
-function pvField(field: string, text: string, imgMap: Map<string, string>, screen: boolean, cls: string): HTMLElement {
-  const cap = xyChgk.fieldCaption(field, text);
-  const node = el("div", { class: "pv-field" + (cls ? " " + cls : "") },
-    el("strong", { class: "pv-label", text: cap.label + ": " }));
-  node.append(renderFieldBody(cap.text, imgMap, fieldOpts(field, screen)));
-  return node;
-}
 
 // pvEditBtn builds the small inline ✏️ button rendered just before each preview
 // block's leading label (e.g. "✏️Вопрос 1."): it hides the preview and drops
@@ -1067,60 +853,6 @@ function pvEditBtn(card: BoardCard): HTMLElement {
   }, icon("pencil"));
 }
 
-// renderPreviewCard renders one card the way the docx export would: a question
-// card becomes a numbered question with its answer/zachet/etc.; meta/heading/
-// section/editor/date cards become their corresponding paragraphs/headings.
-// `edit` adds the ✏️ jump-to-editor button — only the list preview passes it; the
-// card-detail preview (already inside the editor) leaves it off.
-function renderPreviewCard(card: PvCard, number: string | null, imgMap: Map<string, string>, screen: boolean, edit = false): HTMLElement {
-  const blocks = xyChgk.parseBlocks(card.desc);
-  const find = (t: string) => blocks.find((b) => b.type === t);
-
-  if (card.kind === "question" || find("question")) {
-    const wrap = el("article", { class: "pv-q", dataset: { cardId: card.id } });
-    const handout = find("handout");
-    if (handout) wrap.append(pvField("handout", handout.text, imgMap, screen, "pv-handout"));
-    // Question line: small inline ✏️ (edit lists only) + bold "Вопрос N." label
-    // (overridable) + question text (which may itself be a blitz/duplet list).
-    const qov = xyChgk.applyOverride(xyChgk.questionText(card.desc));
-    const qLabel = qov.label || "Вопрос";
-    const qline = el("div", { class: "pv-q-text" });
-    if (edit) qline.append(pvEditBtn(card as BoardCard));
-    qline.append(el("strong", { class: "pv-label", text: `${qLabel}${number ? " " + number : ""}. ` }));
-    qline.append(renderFieldBody(qov.text, imgMap, fieldOpts("question", screen)));
-    wrap.append(qline);
-    for (const f of ["answer", "zachet", "nezachet", "comment", "source", "author"]) {
-      const b = find(f);
-      if (b) wrap.append(pvField(f, b.text, imgMap, screen, pvSmallCls(f)));
-    }
-    return wrap;
-  }
-
-  // Non-question card: render each block by type (never screen-transformed).
-  const wrap = el("div", { class: "pv-block", dataset: { cardId: card.id } });
-  for (const b of blocks) {
-    if (b.type === "number" || b.type === "setcounter") continue; // numbering directive only
-    if (b.type === "heading" || b.type === "ljheading") {
-      const h = el("h2", { class: "pv-heading" });
-      h.append(renderRich(b.text, imgMap, { nbsp: true }));
-      wrap.append(h);
-    } else if (b.type === "section") {
-      const h = el("h3", { class: "pv-section" });
-      h.append(renderRich(b.text, imgMap, { nbsp: true }));
-      wrap.append(h);
-    } else if (PV_LABELS[b.type]) {
-      wrap.append(pvField(b.type, b.text, imgMap, false, pvSmallCls(b.type)));
-    } else {
-      const p = el("p", { class: "pv-meta" });
-      p.append(renderRich(b.text, imgMap, { nbsp: true }));
-      wrap.append(p);
-    }
-  }
-  // Inline ✏️ tucked in front of the block's first line (edit lists only).
-  if (edit) (wrap.firstElementChild || wrap).prepend(pvEditBtn(card as BoardCard));
-  return wrap;
-}
-
 // previewCtx holds the resolved cards/numbers/images for the open preview so the
 // screen-mode toggle can re-render without refetching attachments.
 let previewCtx: { cards: BoardCard[]; numbers: Array<string | null>; imgMap: Map<string, string> } | null = null;
@@ -1132,7 +864,7 @@ function renderPreviewBody(screen: boolean): void {
   body.replaceChildren();
   if (!previewCtx) return;
   const { cards, numbers, imgMap } = previewCtx;
-  cards.forEach((card, i) => body.append(renderPreviewCard(card, numbers[i], imgMap, screen, true)));
+  cards.forEach((card, i) => body.append(renderPreviewCard(card, numbers[i], imgMap, screen, pvEditBtn)));
 }
 
 function closePreview(): void { overlayStack.pop(); }
@@ -1313,7 +1045,7 @@ const cardDetail = createCardDetail({
   render,
   cardsOf,
   labelById,
-  renderLabelPicker,
+  renderLabelPicker: (card) => cardLabels.render(card),
   paintLabels,
   questionNumberFor,
   forgetCardLabels,
@@ -1370,292 +1102,22 @@ timeline = createTimeline({
   attachments: { url: attachments.attachmentUrl, download: attachments.download },
 });
 
-// ---- labels ----
-// The card's «Метки» and «Тесты» are two separate pickers (ADR-0004): a label is
-// the author's view of the question, a Playing is where it was tested, and a
-// label scoped to a Playing is what the testers thought there. Mixing them into
-// one list was what made «взяли» multiply by the number of tests.
-
-
-function labelChip(lbl: BoardLabel, onRemove: () => void, title: string): HTMLElement {
-  return el("span", { class: "label-pick is-on", dataset: { c: lbl.color }, title: lbl.name },
-    el("span", { class: "label-pick-name", text: lbl.name }),
-    el("button", {
-      class: "label-pick-x", type: "button", text: "×",
-      title, "aria-label": `${title}: ${lbl.name}`,
-      onclick: onRemove,
-    }));
-}
-
-function renderLabelPicker(card: BoardCard): void {
-  const picker = byId("labelPicker");
-  picker.replaceChildren();
-  const own = assignmentsOf(card.id, null);
-  for (const a of own) {
-    const lbl = labelById(a.labelId);
-    if (lbl) picker.append(labelChip(lbl, () => { void setLabel(card, lbl, null, false); }, "Снять метку"));
-  }
-  if (!own.length) picker.append(el("span", { class: "label-empty", text: "меток нет" }));
-
-  renderPlayings(card);
-  renderSeen(card);
-  closeLabelAddPopup();
-  paintLabels();
-}
-
-function renderPlayings(card: BoardCard): void {
-  const box = byId("cardPlayings");
-  box.replaceChildren();
-  const ids = playingsOf(card.id);
-  if (!ids.length) {
-    box.append(el("span", { class: "label-empty", text: "тестов нет" }));
-    return;
-  }
-  for (const sid of ids) {
-    const head = el("div", { class: "playing-head" },
-      el("span", { class: "playing-name", text: sessionName(sid) }),
-      el("button", {
-        class: "label-pick-x", type: "button", text: "×",
-        title: "Убрать тест с вопроса", "aria-label": `Убрать тест ${sessionName(sid)}`,
-        onclick: () => { void removePlaying(card, sid); },
-      }));
-    const chips = el("div", { class: "playing-labels" });
-    for (const a of assignmentsOf(card.id, sid)) {
-      const lbl = labelById(a.labelId);
-      if (lbl) chips.append(labelChip(lbl, () => { void setLabel(card, lbl, sid, false); }, "Снять отметку теста"));
-    }
-    chips.append(el("button", {
-      class: "input playing-add", type: "button", text: "＋",
-      title: "Добавить метку этого теста",
-      onclick: (e: Event) => { openLabelAddPopup(sid, (e.currentTarget as HTMLElement).parentElement as HTMLElement); },
-    }));
-    box.append(el("div", { class: "playing" }, head, chips));
-  }
-}
-
-// renderSeen writes who saw THIS question beyond the people the tour already
-// names. A tour's preamble lists whoever tested most of it, and those people
-// know not to play; the ones who matter here are the extras — a question moved
-// in from another tournament, seen by three people nobody has warned. Showing
-// the full list again would bury them.
-function renderSeen(card: BoardCard): void {
-  const node = byId("cardSeen");
-  const mine = sessionsOfCard(card.id);
-  if (!mine.length) { node.hidden = true; return; }
-
-  const list = state.lists.find((l) => l.id === card.listId);
-  const named = list ? testerList.tourPicked(list) : new Set<number>();
-  const common = new Set<string>();
-  for (const sid of named) {
-    const m = sessionMeta(sid);
-    for (const t of (m && m.testers) || []) common.add((t.text || "").trim());
-  }
-
-  const extras = mine.map((m) => ({
-    ...m,
-    testers: (m.testers || []).filter((t) => !common.has((t.text || "").trim())),
-  }));
-  const line = whoSaw(common.size ? extras : mine);
-  node.hidden = !line;
-  if (!line) return;
-
-  const label = common.size ? "Видели вопрос, кроме общих тестеров списка: " : "Видели: ";
-  node.replaceChildren(
-    el("span", { class: "seen-label", text: label }),
-    el("span", { class: "seen-names", text: line }),
-    el("button", {
-      class: "input seen-copy", type: "button",
-      title: "Скопировать",
-      onclick: () => { void cardDetail.copyPlain(label + line); },
-    }, icon("clipboard")),
-  );
-}
-
-function closeLabelAddPopup(): void {
-  for (const popup of document.querySelectorAll(".label-add-popup")) popup.remove();
-}
-
-// The "create a new label" form is authored in board.dopeui but does NOT belong
-// in the card body: it used to sit there permanently as a third stacked row under
-// «Метки», duplicating the popup's job. Detach it once at boot and keep the node;
-// openLabelAddPopup mounts it at the foot of the popup, where "create a label"
-// actually belongs. Handlers bound to the element survive the move.
-const newLabelForm = byId<HTMLFormElement>("newLabelForm");
-const newLabelColor = colorField(byId("newLabelColor"), LABEL_COLORS[0]);
-newLabelForm.remove();
-
-// The compiled pages spell "+" as the ➕ emoji; swap it for the SVG plus.
-
-// setLabel adds or removes ONE assignment. The card's whole set goes up together
-// because the endpoint replaces it — cheap, and it keeps the offline mirror's
-// view of a card in a single op.
-async function setLabel(card: BoardCard, lbl: BoardLabel, sessionId: number | null, adding: boolean): Promise<void> {
-  const rest = state.cardLabels.filter((a) =>
-    a.cardId !== card.id || a.labelId !== lbl.id || a.sessionId !== sessionId);
-  const next = adding ? [...rest, { cardId: card.id, labelId: lbl.id, sessionId }] : rest;
-  try {
-    const events = [{
-      type: adding ? "label_add" : "label_remove",
-      payload_enc: await xyCrypto.encField(mustDK(), JSON.stringify({ label: lbl.name, label_id: lbl.id })),
-    }];
-    await put("setCardLabels", `/api/cards/${card.id}/labels`, {
-      labels: next.filter((a) => a.cardId === card.id).map((a) => ({ label_id: a.labelId, session_id: a.sessionId })),
-      events,
-    });
-    state.cardLabels = next;
-    renderLabelPicker(card);
-    render();
-    await timeline.load(card.id);
-  } catch (err) { byId("cardMessage").textContent = errMsg(err); }
-}
-
-async function addPlaying(card: BoardCard, sessionId: number): Promise<void> {
-  await writePlayings(card, [...new Set([...playingsOf(card.id), sessionId])]);
-}
-
-// removePlaying takes the labels scoped to it — a label scoped to a playing that
-// no longer exists cannot be read (ADR-0004) — so the confirmation names how many.
-async function removePlaying(card: BoardCard, sessionId: number): Promise<void> {
-  const scoped = assignmentsOf(card.id, sessionId).length;
-  const what = scoped
-    ? `Снять тест «${sessionName(sessionId)}» и ${scoped} ${plural(scoped, "метку", "метки", "меток")} на нём?`
-    : `Снять тест «${sessionName(sessionId)}» с вопроса?`;
-  if (!confirm(what)) return;
-  await writePlayings(card, playingsOf(card.id).filter((id) => id !== sessionId));
-}
-
-async function writePlayings(card: BoardCard, ids: number[]): Promise<void> {
-  try {
-    await put("setCardSessions", `/api/cards/${card.id}/sessions`, { session_ids: ids });
-    state.cardSessions = state.cardSessions.filter((p) => p.cardId !== card.id)
-      .concat(ids.map((sessionId) => ({ cardId: card.id, sessionId })));
-    const keep = new Set(ids);
-    state.cardLabels = state.cardLabels.filter((a) =>
-      a.cardId !== card.id || a.sessionId == null || keep.has(a.sessionId));
-    renderLabelPicker(card);
-    render();
-  } catch (err) { byId("cardMessage").textContent = errMsg(err); }
-}
-
-// filteredPopup is the one dropdown shape this card uses three ways: a filter
-// field over a scrollable list, dismissed by Escape, an outside click, or a
-// second click on its trigger. A native <select> can host neither the filter nor
-// the swatches, hence the hand-rolled popup (it shares .menu-dropdown with the
-// list ⋯ menu).
-interface PopupItem { id: number; name: string; color?: string }
-
-function filteredPopup(opts: {
-  anchor: HTMLElement;
-  items: PopupItem[];
-  placeholder: string;
-  empty: string;
-  extra?: HTMLElement;
-  onPick(item: PopupItem): void;
-}): void {
-  const already = opts.anchor.querySelector(".label-add-popup");
-  closeLabelAddPopup();
-  if (already) return; // a second click on the trigger closes it
-
-  const filter = el("input", {
-    class: "input label-add-filter", type: "text",
-    placeholder: opts.placeholder, autocomplete: "off",
-  }) as HTMLInputElement;
-  const listBox = el("div", { class: "label-add-list" });
-  const kids = opts.extra ? [filter, listBox, opts.extra] : [filter, listBox];
-  const popup = el("div", { class: "menu-dropdown label-add-popup", role: "menu" }, ...kids);
-
-  function fill(): void {
-    const q = filter.value.trim().toLowerCase();
-    const shown = q ? opts.items.filter((i) => i.name.toLowerCase().includes(q)) : opts.items;
-    listBox.replaceChildren();
-    if (!shown.length) {
-      listBox.append(el("span", { class: "label-empty", text: opts.items.length ? "ничего не найдено" : opts.empty }));
-      return;
-    }
-    for (const item of shown) {
-      listBox.append(el("button", {
-        class: "menu-item label-add-item", type: "button", role: "menuitem",
-        onclick: () => { close(); opts.onPick(item); },
-      },
-        item.color ? el("span", { class: "label-swatch", dataset: { c: item.color } }) : el("span"),
-        el("span", { class: "label-add-name", text: item.name }),
-      ));
-    }
-    paintLabels();
-  }
-  function close(): void {
-    popup.remove();
-    document.removeEventListener("pointerdown", onOutside, true);
-    document.removeEventListener("keydown", onKey, true);
-  }
-  // A popup opened FROM this one (the colour palette) is body-mounted to escape
-  // our scroll clipping, so it is not inside `anchor` — untreated, picking a
-  // colour read as an outside click and took this popup and its form down.
-  const above = (): Element | null => document.querySelector(".menu-fixed");
-  function onOutside(e: PointerEvent): void {
-    if (!(e.target instanceof Node) || opts.anchor.contains(e.target)) return;
-    if (e.target instanceof Element && e.target.closest(".menu-fixed")) return;
-    close();
-  }
-  function onKey(e: KeyboardEvent): void {
-    if (e.key !== "Escape" || above()) return;
-    e.stopImmediatePropagation();
-    close();
-  }
-
-  filter.addEventListener("input", fill);
-  opts.anchor.append(popup);
-  document.addEventListener("pointerdown", onOutside, true);
-  document.addEventListener("keydown", onKey, true);
-  fill();
-  filter.focus();
-}
-
-// openLabelAddPopup offers the labels not yet assigned IN THIS SCOPE. sessionId
-// null means the author's own; set means one Playing's — so the same label can
-// be added to a card twice, once each way (ADR-0004).
-function openLabelAddPopup(sessionId: number | null, anchorEl?: HTMLElement): void {
-  const card = state.cards.find((c) => c.id === cardDetail.openCardId());
-  if (!card) return;
-  const taken = new Set(assignmentsOf(card.id, sessionId).map((a) => a.labelId));
-  const pool = sortLabels(state.labels.filter((l) => !taken.has(l.id)), state.cardLabels);
-  filteredPopup({
-    anchor: anchorEl || byId("labelAddRow"),
-    items: pool.map((l) => ({ id: l.id, name: l.name, color: l.color })),
-    placeholder: "Фильтр меток…",
-    empty: state.labels.length ? "все метки доски уже добавлены" : "меток на доске нет",
-    // Creating a label from inside a test would still make a plain board label,
-    // so the form belongs only to the author's own section.
-    extra: sessionId == null ? newLabelForm : undefined,
-    onPick: (item) => {
-      const lbl = labelById(item.id);
-      if (lbl) void setLabel(card, lbl, sessionId, true);
-    },
-  });
-}
-
-byId("labelAddBtn").addEventListener("click", () => openLabelAddPopup(null));
-
-// openPlayingAddPopup offers the board's tests this question is not yet marked
-// with — the second of the card's two pickers.
-function openPlayingAddPopup(): void {
-  const card = state.cards.find((c) => c.id === cardDetail.openCardId());
-  if (!card) return;
-  const on = new Set(playingsOf(card.id));
-  const pool = state.sessions.filter((s) => !on.has(s.id))
-    .map((s) => ({ id: s.id, name: sessionName(s.id), date: (sessionMeta(s.id) || { date: "" }).date }))
-    .sort((a, b) => (b.date || "").localeCompare(a.date || "") || b.id - a.id);
-  filteredPopup({
-    anchor: byId("playingAddRow"),
-    items: pool.map((s) => ({ id: s.id, name: s.name })),
-    placeholder: "Фильтр тестов…",
-    empty: state.sessions.length ? "все тесты доски уже отмечены" : "тестов на доске нет",
-    onPick: (item) => { void addPlaying(card, item.id); },
-  });
-}
-
-byId("playingAddBtn").addEventListener("click", openPlayingAddPopup);
-
+// ---- the open card's labels, playings and «Видели» (cardlabels.ts) ----
+const cardLabels = createCardLabels(board, {
+  picker: byId("labelPicker"), playings: byId("cardPlayings"), seen: byId("cardSeen"),
+  addRow: byId("labelAddRow"), addBtn: byId("labelAddBtn"),
+  playingAddRow: byId("playingAddRow"), playingAddBtn: byId("playingAddBtn"),
+  newLabelForm: byId<HTMLFormElement>("newLabelForm"), newLabelName: byId<HTMLInputElement>("newLabelName"), newLabelColor: byId("newLabelColor"),
+  message: byId("cardMessage"),
+}, {
+  mustDK,
+  openCardId: () => cardDetail.openCardId(),
+  copyPlain: (text) => cardDetail.copyPlain(text),
+  tourPicked: (list) => testerList.tourPicked(list),
+  createLabel: (name, color) => labelsEditor.createLabel(name, color),
+  loadTimeline: (cardId) => timeline.load(cardId),
+  paintLabels,
+});
 // ---- the Тесты panel + the label editor ----
 
 const sessionsPanel = createSessionsPanel({
@@ -1720,23 +1182,6 @@ const sessionsPanel = createSessionsPanel({
   render,
 });
 
-
-// NB: `newLabelForm` (the retained node), not getElementById — the form is
-// detached from the document above and lives inside the popup while it is open.
-newLabelForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const name = byId<HTMLInputElement>("newLabelName").value.trim();
-  if (!name) return;
-  try {
-    const lbl = await labelsEditor.createLabel(name, newLabelColor.value());
-    byId<HTMLInputElement>("newLabelName").value = "";
-    const card = state.cards.find((c) => c.id === cardDetail.openCardId());
-    // The form is reachable only from inside the add-label popup, so naming a
-    // label there means you want it ON this card — assign it instead of making
-    // the user reopen the popup to pick what they just typed.
-    if (card) await setLabel(card, lbl, null, true);
-  } catch (err) { byId("cardMessage").textContent = errMsg(err); }
-});
 
 // ---- the panels ----
 // Every feature the ☰ and the list ⋯ menus offer lives in its own module and

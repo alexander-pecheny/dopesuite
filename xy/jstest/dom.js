@@ -66,7 +66,7 @@ export class FakeNode {
   matches(sel) {
     if (sel.startsWith(".")) return this.classes.has(sel.slice(1)) || this.className.split(/\s+/).includes(sel.slice(1));
     if (sel.startsWith("#")) return this.id === sel.slice(1);
-    const m = /^([a-z]+)?(?:\[([^\]=]+)(?:="?([^"\]]*)"?)?\])?$/.exec(sel);
+    const m = /^([a-z][a-z0-9]*)?(?:\[([^\]=]+)(?:="?([^"\]]*)"?)?\])?$/.exec(sel);
     if (!m) return false;
     if (m[1] && this.tag !== m[1]) return false;
     if (m[2] && (this.attrs[m[2]] === undefined || (m[3] !== undefined && this.attrs[m[2]] !== m[3]))) return false;

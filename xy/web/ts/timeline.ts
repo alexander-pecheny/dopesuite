@@ -152,6 +152,16 @@ export interface Timeline {
 
 // ---- pure decision helpers (exported for tests) ----
 
+// eventVerb words an event kind as a neutral noun phrase — gender-agnostic,
+// since an author's grammatical gender is unknown. The лента and the 🔔 share it.
+const EVENT_VERBS: Record<string, string> = {
+  comment: "комментарий", desc_edit: "правка описания",
+  label_add: "добавлена метка", label_remove: "снята метка",
+  attach_add: "вложение добавлено", attach_remove: "вложение удалено", attach_replace: "вложение заменено",
+  reaction: "реакция",
+};
+export function eventVerb(type: string): string { return EVENT_VERBS[type] || type; }
+
 // eventAuthor resolves a timeline event's author to a display name. Pending
 // (offline, un-synced) events carry no author_user_id yet — they're authored by
 // the current user, so fall back to "me".
@@ -645,11 +655,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     } else {
       let info: { label?: string; file?: string; label_id?: number } = {};
       try { info = JSON.parse(payload) as { label?: string; file?: string; label_id?: number }; } catch (_) {}
-      const verbs: Record<string, string> = {
-        label_add: "добавлена метка", label_remove: "снята метка",
-        attach_add: "вложение добавлено", attach_remove: "вложение удалено", attach_replace: "вложение заменено",
-      };
-      const verb = verbs[ev.type] || ev.type;
+      const verb = eventVerb(ev.type);
       // Live name when the label still exists, the frozen one when it doesn't —
       // which keeps a deleted label's history readable, the property freezing the
       // name was there to protect.
