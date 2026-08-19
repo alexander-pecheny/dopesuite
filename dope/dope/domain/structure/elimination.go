@@ -2,6 +2,7 @@ package structure
 
 import (
 	"fmt"
+	"sort"
 )
 
 // The elimination rounds, for both Kinds.
@@ -347,6 +348,77 @@ func rankSources(sources []deSource) []deSource {
 	for i, source := range sources {
 		source.rank = i + 1
 		out[i] = source
+	}
+	return out
+}
+
+// eliminationStandings ranks an elimination's Participants the one way both
+// Kinds do: by Losses. Alive first (fewer Losses first), then the eliminated,
+// the later round of elimination first and, within it, fewer total Losses
+// first — a placement бой (the bronze) adds a Loss to the one it places lower.
+// Equal keys share a place; a survivor has no place until the Block is played
+// out, since the бои that decide it are still ahead. MatchOutcome.Round says
+// when a Loss fell; a бой seats any number, and a shared (fractional) place is
+// no Loss.
+func eliminationStandings(lives, winningPlaces int, results []MatchOutcome) []RankedEntry {
+	if lives < 1 {
+		lives = 1
+	}
+	if winningPlaces < 1 {
+		winningPlaces = 1
+	}
+	losses := map[int64]int{}
+	eliminated := map[int64]int{}
+	var order []int64
+	seen := map[int64]bool{}
+	allFinished := len(results) > 0
+	for _, match := range results {
+		for _, slot := range match.Slots {
+			if slot.Participant != 0 && !seen[slot.Participant] {
+				seen[slot.Participant] = true
+				order = append(order, slot.Participant)
+			}
+		}
+		if !match.Finished {
+			allFinished = false
+			continue
+		}
+		for _, slot := range match.Slots {
+			if slot.Participant == 0 {
+				continue
+			}
+			lost := slot.Place > float64(winningPlaces) && slot.Place == float64(int(slot.Place))
+			if !lost {
+				continue
+			}
+			losses[slot.Participant]++
+			if losses[slot.Participant] == lives {
+				if _, out := eliminated[slot.Participant]; !out {
+					eliminated[slot.Participant] = match.Round
+				}
+			}
+		}
+	}
+	key := func(id int64) int {
+		if round, out := eliminated[id]; out {
+			return 1000*(1000-round) + losses[id]
+		}
+		return losses[id] - 1000
+	}
+	ranked := make([]int64, len(order))
+	copy(ranked, order)
+	sort.SliceStable(ranked, func(i, j int) bool { return key(ranked[i]) < key(ranked[j]) })
+	out := make([]RankedEntry, 0, len(ranked))
+	for i, id := range ranked {
+		entry := RankedEntry{Participant: id, Metrics: map[string]float64{"losses": float64(losses[id])}}
+		if _, placed := eliminated[id]; placed || allFinished {
+			if i > 0 && key(ranked[i-1]) == key(id) {
+				entry.Rank = out[i-1].Rank
+			} else {
+				entry.Rank = i + 1
+			}
+		}
+		out = append(out, entry)
 	}
 	return out
 }

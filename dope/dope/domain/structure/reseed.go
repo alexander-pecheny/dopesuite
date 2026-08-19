@@ -116,21 +116,12 @@ func (reseed) Standings(cfg json.RawMessage, results []MatchOutcome, in Inputs) 
 		entries = append(entries, *entry)
 	}
 
+	byRules := LessBy(rules)
 	less := func(a, b RankedEntry) bool {
 		if band[a.Participant] != band[b.Participant] {
 			return band[a.Participant] < band[b.Participant]
 		}
-		for _, rule := range rules {
-			x, y := a.Metrics[rule.Metric], b.Metrics[rule.Metric]
-			if x == y {
-				continue
-			}
-			if rule.Dir == "desc" {
-				return x > y
-			}
-			return x < y
-		}
-		return a.Participant < b.Participant
+		return byRules(a, b)
 	}
 	tiedButDraw := func(a, b RankedEntry) bool {
 		if band[a.Participant] != band[b.Participant] {

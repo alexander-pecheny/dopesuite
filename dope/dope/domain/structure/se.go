@@ -403,85 +403,13 @@ func (singleElim) Order(cfg json.RawMessage) []SortRule { return nil }
 
 func (singleElim) Metrics() []string { return nil }
 
-// Standings ranks by progression: the champion first, then losers by the round
-// they fell in, late rounds ranking higher. Participants still alive share the
-// top band; a finished bronze бой splits its two semifinal losers.
+// Standings ranks by Losses, one ending a run (eliminationStandings): the
+// champion first, then the eliminated by the round they fell in, the bronze
+// splitting the two semifinal losers.
 func (singleElim) Standings(cfg json.RawMessage, results []MatchOutcome, _ Inputs) ([]RankedEntry, error) {
 	var conf SEConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil, fmt.Errorf("se standings config: %w", err)
 	}
-	rounds := 0
-	for size := len(conf.Entrants); size > 1; size /= 2 {
-		rounds++
-	}
-
-	const (
-		keyChampion = 0.0
-		keyAlive    = 0.5
-	)
-	band := map[int64]float64{}
-	var appearance []int64
-	seen := func(id int64) {
-		if _, ok := band[id]; !ok && id != 0 {
-			band[id] = keyAlive
-			appearance = append(appearance, id)
-		}
-	}
-	for _, match := range results {
-		var round int
-		bronze := false
-		if _, err := fmt.Sscanf(match.Code, conf.Code+"-r%d-3p", &round); err == nil {
-			bronze = true
-		} else if _, err := fmt.Sscanf(match.Code, conf.Code+"-r%d-", &round); err != nil {
-			continue
-		}
-		if len(match.Slots) != 2 {
-			continue
-		}
-		a, b := match.Slots[0], match.Slots[1]
-		seen(a.Participant)
-		seen(b.Participant)
-		if !match.Finished || a.Participant == 0 || b.Participant == 0 {
-			continue
-		}
-		winner, loser := a, b
-		if a.Place > b.Place {
-			winner, loser = b, a
-		}
-		lostAt := float64(rounds - round + 1)
-		switch {
-		case bronze:
-			// Both fell in the semifinal (one round before the бой's own code);
-			// the бой orders them within that band.
-			band[winner.Participant] = lostAt + 1 - 0.1
-			band[loser.Participant] = lostAt + 1 + 0.1
-		case round == rounds:
-			band[winner.Participant] = keyChampion
-			band[loser.Participant] = lostAt
-		default:
-			if band[winner.Participant] == keyAlive {
-				band[winner.Participant] = keyAlive
-			}
-			band[loser.Participant] = lostAt
-		}
-	}
-
-	ranked := make([]RankedEntry, 0, len(appearance))
-	for _, id := range appearance {
-		ranked = append(ranked, RankedEntry{Participant: id, Metrics: map[string]float64{}})
-	}
-	for i := 1; i < len(ranked); i++ {
-		for j := i; j > 0 && band[ranked[j].Participant] < band[ranked[j-1].Participant]; j-- {
-			ranked[j], ranked[j-1] = ranked[j-1], ranked[j]
-		}
-	}
-	for i := range ranked {
-		if i > 0 && band[ranked[i].Participant] == band[ranked[i-1].Participant] {
-			ranked[i].Rank = ranked[i-1].Rank
-		} else {
-			ranked[i].Rank = i + 1
-		}
-	}
-	return ranked, nil
+	return eliminationStandings(1, conf.WinningPlaces, results), nil
 }

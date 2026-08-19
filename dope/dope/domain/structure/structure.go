@@ -141,10 +141,11 @@ type FlatConfig struct {
 }
 
 type SEConfig struct {
-	Code     string             `json:"code,omitempty"`
-	Venue    int                `json:"venue,omitempty"`
-	Bronze   bool               `json:"bronze,omitempty"`
-	Entrants []store.SchemeSlot `json:"entrants,omitempty"`
+	Code          string             `json:"code,omitempty"`
+	Venue         int                `json:"venue,omitempty"`
+	Bronze        bool               `json:"bronze,omitempty"`
+	WinningPlaces int                `json:"winning_places,omitempty"`
+	Entrants      []store.SchemeSlot `json:"entrants,omitempty"`
 }
 
 type PodConfig struct {
@@ -217,6 +218,25 @@ func sortRules(order []string) []SortRule {
 		rules = append(rules, SortRule{Metric: key, Dir: dir})
 	}
 	return rules
+}
+
+// LessBy orders two entries by the rules — the first Metric that differs
+// decides, a "desc" rule ranking the larger value first — and, with every rule
+// equal, by Participant, so an order is total.
+func LessBy(rules []SortRule) func(a, b RankedEntry) bool {
+	return func(a, b RankedEntry) bool {
+		for _, rule := range rules {
+			x, y := a.Metrics[rule.Metric], b.Metrics[rule.Metric]
+			if x == y {
+				continue
+			}
+			if rule.Dir == "desc" {
+				return x > y
+			}
+			return x < y
+		}
+		return a.Participant < b.Participant
+	}
 }
 
 // ExpanderFor looks up the Kind that schedules stages of this code.

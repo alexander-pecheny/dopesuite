@@ -13,7 +13,6 @@ import (
 	"net/http"
 	_ "net/http/pprof" // gated /debug/pprof handlers on a localhost-only listener (DOPE_PPROF)
 	"os"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -511,7 +510,7 @@ func (s *server) applyLegacyUpdate(req updateRequest) (store.MatchView, []byte, 
 		}
 		s.eng.State.Finished = *req.Finished
 		if *req.Finished {
-			assignComputedPlaces(&s.eng.State)
+			store.AssignComputedPlaces(&s.eng.State)
 		}
 		return s.commitLocked()
 	}
@@ -628,41 +627,6 @@ func hasTeamEdit(req updateRequest) bool {
 		req.Player != nil ||
 		req.Tiebreak != nil ||
 		req.Place != nil
-}
-
-func assignComputedPlaces(state *store.MatchState) {
-	type rankedTeam struct {
-		index int
-		view  store.ParticipantView
-	}
-	ranked := make([]rankedTeam, len(state.Participants))
-	for index, team := range state.Participants {
-		ranked[index] = rankedTeam{index: index, view: store.ScoreParticipant(team)}
-	}
-	sort.SliceStable(ranked, func(i, j int) bool {
-		return teamRanksHigher(ranked[i].view, ranked[j].view)
-	})
-	for place, team := range ranked {
-		state.Participants[team.index].Place = float64(place + 1)
-	}
-}
-
-func teamRanksHigher(a, b store.ParticipantView) bool {
-	if a.Total != b.Total {
-		return a.Total > b.Total
-	}
-	if a.ShootoutTotal != b.ShootoutTotal {
-		return a.ShootoutTotal > b.ShootoutTotal
-	}
-	if a.Plus != b.Plus {
-		return a.Plus > b.Plus
-	}
-	for i := len(a.CorrectCounts) - 1; i >= 0; i-- {
-		if a.CorrectCounts[i] != b.CorrectCounts[i] {
-			return a.CorrectCounts[i] > b.CorrectCounts[i]
-		}
-	}
-	return false
 }
 
 func writeJSON(w http.ResponseWriter, data []byte) { _ = route.JSONBytes(w, data) }

@@ -112,32 +112,55 @@ func TestSingleElimScheduleEight(t *testing.T) {
 func TestSingleElimStandings(t *testing.T) {
 	kind, _ := RankerFor("se")
 	cfg := mustJSON(t, SEConfig{Code: "po", Bronze: true, Entrants: seeds(1, 2, 3, 4)})
+	round := func(r int, m MatchOutcome) MatchOutcome { m.Round = r; return m }
 	full, err := kind.Standings(cfg, []MatchOutcome{
-		h2h("po-r1-1", true, 301, 302, 5, 2, 1, 2),
-		h2h("po-r1-2", true, 303, 304, 6, 1, 1, 2),
-		h2h("po-r2-1", true, 303, 301, 4, 3, 1, 2),
-		h2h("po-r2-3p", true, 302, 304, 2, 1, 1, 2),
+		round(1, h2h("po-r1-1", true, 301, 302, 5, 2, 1, 2)),
+		round(1, h2h("po-r1-2", true, 303, 304, 6, 1, 1, 2)),
+		round(2, h2h("po-r2-1", true, 303, 301, 4, 3, 1, 2)),
+		round(2, h2h("po-r2-3p", true, 302, 304, 2, 1, 1, 2)),
 	}, Inputs{})
 	if err != nil {
 		t.Fatalf("Standings: %v", err)
 	}
 	assertRanked(t, full, []RankedEntry{
-		{Rank: 1, Participant: 303}, {Rank: 2, Participant: 301},
-		{Rank: 3, Participant: 302}, {Rank: 4, Participant: 304},
+		{Rank: 1, Participant: 303, Metrics: map[string]float64{"losses": 0}},
+		{Rank: 2, Participant: 301, Metrics: map[string]float64{"losses": 1}},
+		{Rank: 3, Participant: 302, Metrics: map[string]float64{"losses": 1}},
+		{Rank: 4, Participant: 304, Metrics: map[string]float64{"losses": 2}},
 	})
 
+	// Mid-play the finalists are unplaced; the semifinal losers share third
+	// until the bronze splits them.
 	live, err := kind.Standings(cfg, []MatchOutcome{
-		h2h("po-r1-1", true, 301, 302, 5, 2, 1, 2),
-		h2h("po-r1-2", true, 303, 304, 6, 1, 1, 2),
-		h2h("po-r2-1", false, 301, 303, 0, 0, 0, 0),
-		h2h("po-r2-3p", false, 302, 304, 0, 0, 0, 0),
+		round(1, h2h("po-r1-1", true, 301, 302, 5, 2, 1, 2)),
+		round(1, h2h("po-r1-2", true, 303, 304, 6, 1, 1, 2)),
+		round(2, h2h("po-r2-1", false, 301, 303, 0, 0, 0, 0)),
+		round(2, h2h("po-r2-3p", false, 302, 304, 0, 0, 0, 0)),
 	}, Inputs{})
 	if err != nil {
 		t.Fatalf("Standings: %v", err)
 	}
 	assertRanked(t, live, []RankedEntry{
-		{Rank: 1, Participant: 301}, {Rank: 1, Participant: 303},
-		{Rank: 3, Participant: 302}, {Rank: 3, Participant: 304},
+		{Rank: 0, Participant: 301, Metrics: map[string]float64{"losses": 0}},
+		{Rank: 0, Participant: 303, Metrics: map[string]float64{"losses": 0}},
+		{Rank: 3, Participant: 302, Metrics: map[string]float64{"losses": 1}},
+		{Rank: 3, Participant: 304, Metrics: map[string]float64{"losses": 1}},
+	})
+
+	// A four-seat бой with two proceeding eliminates two at once.
+	cfg4 := mustJSON(t, SEConfig{Code: "ek", WinningPlaces: 2})
+	quad := MatchOutcome{Code: "ek-r1-1", Round: 1, Finished: true, Slots: []SlotOutcome{
+		{Participant: 1, Place: 1}, {Participant: 2, Place: 2}, {Participant: 3, Place: 3}, {Participant: 4, Place: 4},
+	}}
+	four, err := kind.Standings(cfg4, []MatchOutcome{quad}, Inputs{})
+	if err != nil {
+		t.Fatalf("Standings: %v", err)
+	}
+	assertRanked(t, four, []RankedEntry{
+		{Rank: 1, Participant: 1, Metrics: map[string]float64{"losses": 0}},
+		{Rank: 1, Participant: 2, Metrics: map[string]float64{"losses": 0}},
+		{Rank: 3, Participant: 3, Metrics: map[string]float64{"losses": 1}},
+		{Rank: 3, Participant: 4, Metrics: map[string]float64{"losses": 1}},
 	})
 }
 

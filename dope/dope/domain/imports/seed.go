@@ -10,6 +10,7 @@ import (
 	"dope/dope/domain/overrides"
 	"dope/dope/domain/protocol"
 	rosterpkg "dope/dope/domain/roster"
+	"dope/dope/domain/structure"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
@@ -737,10 +738,9 @@ select distinct stage_id from stage_standings st join stages s on s.id = st.stag
 		return 0, nil, fmt.Errorf("у игры %s %d таблиц — посев берётся из игры с одной", gameCode, len(stages))
 	}
 	type row struct {
-		rank    int
-		name    string
-		number  int
-		metrics map[string]float64
+		name   string
+		number int
+		entry  structure.RankedEntry
 	}
 	rows, err := store.CollectRows(ctx, q, `
 select st.rank, p.name, coalesce(p.number, 0), st.metrics_json
@@ -748,10 +748,10 @@ from stage_standings st join participants p on p.id = st.participant_id
 where st.stage_id = ? order by st.rank`, []any{stages[0]}, func(rs *sql.Rows) (row, error) {
 		var r row
 		var metrics string
-		if err := rs.Scan(&r.rank, &r.name, &r.number, &metrics); err != nil {
+		if err := rs.Scan(&r.entry.Rank, &r.name, &r.number, &metrics); err != nil {
 			return r, err
 		}
-		_ = json.Unmarshal([]byte(metrics), &r.metrics)
+		_ = json.Unmarshal([]byte(metrics), &r.entry.Metrics)
 		return r, nil
 	})
 	if err != nil {
@@ -760,17 +760,25 @@ where st.stage_id = ? order by st.rank`, []any{stages[0]}, func(rs *sql.Rows) (r
 	if len(rows) == 0 {
 		return 0, nil, errors.New("в игре-источнике нет команд")
 	}
-	order := rules
-	if len(order) == 0 {
-		order = []store.SchemeSortRule{{Metric: "place", Dir: "asc"}}
-		for _, metric := range protocol.Metrics(gameType) {
-			order = append(order, store.SchemeSortRule{Metric: metric, Dir: "desc"})
+	// The table's own rank comes first (the Structure ranked it, ADR-0011);
+	// the [init] sorting rules, when a scheme names some, re-sort within it
+	// by the Metrics the Protocol measured. Rows keep their table order as
+	// the final tie-break.
+	for i := range rows {
+		rows[i].entry.Participant = int64(i)
+		if rows[i].entry.Metrics == nil {
+			rows[i].entry.Metrics = map[string]float64{}
 		}
+		rows[i].entry.Metrics["rank"] = float64(rows[i].entry.Rank)
+	}
+	order := []store.SchemeSortRule{{Metric: "rank", Dir: "asc"}}
+	if len(rules) > 0 {
+		order = rules
 	}
 	for _, rule := range rules {
 		known := false
 		for _, r := range rows {
-			_, known = r.metrics[rule.Metric]
+			_, known = r.entry.Metrics[rule.Metric]
 			if known {
 				break
 			}
@@ -779,19 +787,8 @@ where st.stage_id = ? order by st.rank`, []any{stages[0]}, func(rs *sql.Rows) (r
 			return 0, nil, fmt.Errorf("sorting: %s — игра %s такой метрики не считает", rule.Metric, gameCode)
 		}
 	}
-	sort.SliceStable(rows, func(i, j int) bool {
-		for _, rule := range order {
-			a, b := rows[i].metrics[rule.Metric], rows[j].metrics[rule.Metric]
-			if a == b {
-				continue
-			}
-			if rule.Dir == "asc" {
-				return a < b
-			}
-			return a > b
-		}
-		return rows[i].rank < rows[j].rank
-	})
+	less := structure.LessBy(order)
+	sort.SliceStable(rows, func(i, j int) bool { return less(rows[i].entry, rows[j].entry) })
 	declined := map[int64]bool{}
 	if seats, ok := protocol.Seats(gameType, json.RawMessage(document)); ok {
 		for _, seat := range seats {
