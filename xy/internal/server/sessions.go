@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"net/http"
 	"time"
 )
@@ -39,16 +38,6 @@ select id, meta_enc, created_at from test_sessions where board_id = ? and delete
 	return out, rows.Err()
 }
 
-func boardOfSession(ctx context.Context, q querier, sessionID int64) (int64, error) {
-	var bid int64
-	err := q.QueryRowContext(ctx,
-		`select board_id from test_sessions where id = ? and deleted_at is null`, sessionID).Scan(&bid)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, errNotFound("тест-сессия не найдена")
-	}
-	return bid, err
-}
-
 func (s *server) requireSession(w http.ResponseWriter, r *http.Request) (sessionID, boardID int64, ok bool) {
 	u, authed := s.requireUser(w, r)
 	if !authed {
@@ -58,7 +47,7 @@ func (s *server) requireSession(w http.ResponseWriter, r *http.Request) (session
 	if !ok {
 		return 0, 0, false
 	}
-	boardID, err := boardOfSession(r.Context(), s.db, sessionID)
+	boardID, err := boardOf(r.Context(), s.db, childSession, sessionID)
 	if handleErr(w, err) {
 		return 0, 0, false
 	}

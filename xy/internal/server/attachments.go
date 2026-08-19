@@ -37,7 +37,7 @@ type attachmentDTO struct {
 }
 
 func (s *server) handleListAttachments(w http.ResponseWriter, r *http.Request) {
-	_, cardID, _, ok := s.requireChildAccess(w, r, boardOfCard)
+	_, cardID, _, ok := s.requireChildAccess(w, r, childCard)
 	if !ok {
 		return
 	}
@@ -124,7 +124,7 @@ func boolInt(b bool) int {
 // (filename_enc, mime, lossless, is_excerpt, optional event_payload_enc) and a
 // "blob" file part holding the ciphertext bytes.
 func (s *server) handleCreateAttachment(w http.ResponseWriter, r *http.Request) {
-	uid, cardID, bid, ok := s.requireChildAccess(w, r, boardOfCard)
+	uid, cardID, bid, ok := s.requireChildAccess(w, r, childCard)
 	if !ok {
 		return
 	}

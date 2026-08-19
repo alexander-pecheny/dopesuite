@@ -19,7 +19,7 @@ type addReactionRequest struct {
 }
 
 func (s *server) handleAddReaction(w http.ResponseWriter, r *http.Request) {
-	uid, cardID, bid, ok := s.requireChildAccess(w, r, boardOfCard)
+	uid, cardID, bid, ok := s.requireChildAccess(w, r, childCard)
 	if !ok {
 		return
 	}

@@ -631,31 +631,25 @@ func (s *server) handleSetProfileDefaults(w http.ResponseWriter, r *http.Request
 		return
 	}
 	err := s.withWriteTx(r.Context(), "set-profile-defaults", func(ctx context.Context, tx *sql.Tx) error {
-		now := rfc3339(time.Now())
+		var p patch
 		if req.Timezone != nil {
-			if _, err := tx.ExecContext(ctx, `update users set timezone = ?, updated_at = ? where id = ?`,
-				strings.TrimSpace(*req.Timezone), now, u.UserID); err != nil {
-				return err
-			}
+			p.set("timezone", strings.TrimSpace(*req.Timezone))
 		}
 		if req.DefaultAuthor != nil {
-			if _, err := tx.ExecContext(ctx, `update users set default_author = ?, updated_at = ? where id = ?`,
-				strings.TrimSpace(*req.DefaultAuthor), now, u.UserID); err != nil {
-				return err
-			}
+			p.set("default_author", strings.TrimSpace(*req.DefaultAuthor))
 		}
 		if req.SessionTitleMode != nil {
 			if !sessionTitleModes[*req.SessionTitleMode] {
 				return errBadRequest("bad session_title_mode")
 			}
-			if _, err := tx.ExecContext(ctx, `update users set session_title_mode = ?, updated_at = ? where id = ?`,
-				*req.SessionTitleMode, now, u.UserID); err != nil {
-				return err
-			}
+			p.set("session_title_mode", *req.SessionTitleMode)
+		}
+		if err := p.apply(ctx, tx, "users", u.UserID); err != nil {
+			return err
 		}
 		if req.Onboarded {
 			if _, err := tx.ExecContext(ctx,
-				`update users set onboarded_at = ? where id = ? and onboarded_at is null`, now, u.UserID); err != nil {
+				`update users set onboarded_at = ? where id = ? and onboarded_at is null`, rfc3339(time.Now()), u.UserID); err != nil {
 				return err
 			}
 		}

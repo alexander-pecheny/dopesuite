@@ -22,7 +22,7 @@ type markReadRequest struct {
 // handleMarkRead advances (never rewinds — see the max() upsert) the caller's
 // read watermarks for a card. Sending 0 for a bucket leaves it untouched.
 func (s *server) handleMarkRead(w http.ResponseWriter, r *http.Request) {
-	uid, cardID, _, ok := s.requireChildAccess(w, r, boardOfCard)
+	uid, cardID, _, ok := s.requireChildAccess(w, r, childCard)
 	if !ok {
 		return
 	}

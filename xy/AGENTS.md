@@ -84,11 +84,17 @@ internal/server/       package server — the whole HTTP server
                        metadata trail) and one reader (timelineColumns + scanTimelineEvent, readTimeline)
   unread.go            the unread rule as SQL fragments (the two buckets, the watermark, the Mention) that
                        the board list, the snapshot, the activity feed and «Прочитать всё» compose
-  lists_cards.go       lists/cards/labels/timeline + list-group handlers, DTOs/scanners.
-                       GET /api/boards/{id}/comments returns every live comment on a board in
-                       one response (ciphertext, comments only) — what прогрев indexes; a
-                       desc_edit payload carries a whole question's before/after and is
-                       deliberately excluded
+  access.go            a board's children as one table (child: cards, lists, list_groups, labels,
+                       test_sessions); boardOf (path → 404), onBoard (body ref → 400 «с другой
+                       доски»), requireChildAccess
+  patch.go             patch: the columns a PATCH touched, written as one UPDATE with one updated_at
+  lists.go             lists + list groups: DTOs/scanners and handlers
+  cards.go             cards: DTOs/scanners, create/patch/delete, card labels, Playings, tour testers
+  labels.go            labels CRUD
+  comments.go          the Timeline's DTOs and handlers: GET /api/boards/{id}/comments returns every
+                       live comment on a board in one response (ciphertext, comments only) — what
+                       прогрев indexes; a desc_edit payload carries a whole question's before/after
+                       and is deliberately excluded; comments add/patch/delete, mentions, import
   tokens.go            API tokens: month-lived bearer creds (manage at /profile/tokens)
   trello_compat.go     Trello-compatible API for chgksuite (token-authed via key+token)
   rank.go              server-side fractional-index keyAfter (Trello card upload)

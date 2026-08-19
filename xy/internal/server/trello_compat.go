@@ -282,7 +282,7 @@ func (s *server) handleTrelloCreateCard(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	bid, err := boardOfList(r.Context(), s.db, listID)
+	bid, err := boardOf(r.Context(), s.db, childList, listID)
 	if handleErr(w, err) {
 		return
 	}
