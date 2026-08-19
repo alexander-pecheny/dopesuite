@@ -17,6 +17,8 @@ func TestClassify(t *testing.T) {
 		{"pasted code registers", code, intent{kind: intentRegister, code: code}},
 		{"unknown command points at site", "/help", intent{kind: intentLogin}},
 		{"empty ignored", "   ", intent{kind: intentIgnore}},
+		{"chatter is help, not a server call", "привет, это xy?", intent{kind: intentHelp}},
+		{"start with junk is help", "/start hi!", intent{kind: intentHelp}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

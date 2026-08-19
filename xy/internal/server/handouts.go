@@ -73,7 +73,7 @@ func (s *server) handleHandoutsPDF(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/pdf")
-	w.Header().Set("Content-Disposition", "attachment; filename=\""+outName+".pdf\"")
+	w.Header().Set("Content-Disposition", contentDisposition(outName+".pdf"))
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("Content-Length", strconv.Itoa(len(pdf)))
 	_, _ = w.Write(pdf)
@@ -136,7 +136,7 @@ func (s *server) handleHandoutsSplitFit(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", "attachment; filename=\""+outName+".zip\"")
+	w.Header().Set("Content-Disposition", contentDisposition(outName+".zip"))
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("Content-Length", strconv.Itoa(len(zipped)))
 	_, _ = w.Write(zipped)

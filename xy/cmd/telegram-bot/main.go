@@ -77,6 +77,7 @@ const (
 	intentIgnore   intentKind = iota // empty message
 	intentLogin                      // /login or a bare /start: point at the site
 	intentRegister                   // consume a code (pasted, or from a /start deep link)
+	intentHelp                       // text that is not a code: explain, no server round-trip
 )
 
 type intent struct {
@@ -97,12 +98,34 @@ func classify(text string) intent {
 	if strings.HasPrefix(text, "/") {
 		if commandName(text) == "/start" {
 			if arg := commandArg(text); arg != "" {
-				return intent{kind: intentRegister, code: strings.ToUpper(arg)}
+				return classifyCode(arg)
 			}
 		}
 		return intent{kind: intentLogin}
 	}
-	return intent{kind: intentRegister, code: strings.ToUpper(text)}
+	return classifyCode(text)
+}
+
+// classifyCode takes a pasted code or a /start argument; anything that cannot
+// be a code (base32, 4–64 chars) gets the help text instead of a server call.
+func classifyCode(raw string) intent {
+	code := strings.ToUpper(strings.TrimSpace(raw))
+	if !looksLikeCode(code) {
+		return intent{kind: intentHelp}
+	}
+	return intent{kind: intentRegister, code: code}
+}
+
+func looksLikeCode(s string) bool {
+	if len(s) < 4 || len(s) > 64 {
+		return false
+	}
+	for _, r := range s {
+		if !(r >= 'A' && r <= 'Z') && !(r >= '2' && r <= '7') {
+			return false
+		}
+	}
+	return true
 }
 
 func handler(bridge *tgbot.Bridge) tgbot.Handler {

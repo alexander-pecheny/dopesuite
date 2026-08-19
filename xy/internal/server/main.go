@@ -57,6 +57,43 @@ func Main() {
 		log.Fatal(err)
 	}
 
+	mux := routes(srv)
+
+	port := strings.TrimPrefix(os.Getenv("PORT"), ":")
+	if port == "" {
+		port = "9673"
+	}
+	addr := ":" + port
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("bind %s: %v", addr, err)
+	}
+	// Compile typst (wasm) ahead of the first handout request: cold, that is a ~15s
+	// wasm compile, which no user should sit through.
+	srv.warmTypst()
+	go srv.reapLoop()
+
+	log.Printf("xy %s serving on %s (assets from %s)", buildinfo.Version(), addr, srv.assets.Mode)
+
+	httpSrv := &http.Server{
+		Handler:           webassets.Gzip(mux),
+		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+	log.Fatal(httpSrv.Serve(listener))
+}
+
+// handleIndex serves the board-list home page (client-side auth-gated).
+func (s *server) handleIndex(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	s.servePage("ui/index.dopeui")(w, r)
+}
+
+// routes is the whole table, what Main serves and the integration tests hit.
+func routes(srv *server) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// ---- HTML pages ----
@@ -206,36 +243,5 @@ func Main() {
 	mux.HandleFunc("GET /static/menu.js", srv.assets.ServeShared("/static/menu.js"))
 	mux.Handle("GET /static/fonts/", srv.assets.ServeFonts())
 	mux.Handle("GET /static/", srv.assets.FileServer())
-
-	port := strings.TrimPrefix(os.Getenv("PORT"), ":")
-	if port == "" {
-		port = "9673"
-	}
-	addr := ":" + port
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		log.Fatalf("bind %s: %v", addr, err)
-	}
-	// Compile typst (wasm) ahead of the first handout request: cold, that is a ~15s
-	// wasm compile, which no user should sit through.
-	srv.warmTypst()
-	go srv.reapLoop()
-
-	log.Printf("xy %s serving on %s (assets from %s)", buildinfo.Version(), addr, srv.assets.Mode)
-
-	httpSrv := &http.Server{
-		Handler:           webassets.Gzip(mux),
-		ReadHeaderTimeout: 5 * time.Second,
-		IdleTimeout:       120 * time.Second,
-	}
-	log.Fatal(httpSrv.Serve(listener))
-}
-
-// handleIndex serves the board-list home page (client-side auth-gated).
-func (s *server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-	s.servePage("ui/index.dopeui")(w, r)
+	return mux
 }
