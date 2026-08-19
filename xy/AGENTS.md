@@ -59,7 +59,8 @@ Russian-language UI.
 ## Layout
 ```
 cmd/xy-server/         thin main() → server.Main(); also `xy-server invite [days]`
-cmd/telegram-bot/      login bot, bridges to server via shared secret (no DB handle);
+cmd/telegram-bot/      login bot: env + xy's words around dopecore/tgbot.LoginHandler (the conversation
+                       both bots hold), bridges to server via shared secret (no DB handle);
                        serves /healthz on 127.0.0.1:9676 (tgbridge.DefaultHealthAddr) so the
                        server can ask whether telegram login is worth offering — the answer is
                        about POLLING, not the process: a bot with a revoked token is up and useless

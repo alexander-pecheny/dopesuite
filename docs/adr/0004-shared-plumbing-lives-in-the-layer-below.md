@@ -90,3 +90,16 @@ once and records it; `Exec(script)` is the Up of a plain SQL step. xy's
 a fresh database from the old chain and the new list have identical
 `sqlite_master`. `XY_REHEARSE_DB` walks a prod snapshot through the list the
 way `DOPE_REHEARSE_DB` does.
+
+## Addendum (19 Aug 2026, second review, K4)
+
+Both bots re-implemented the same classify-and-reply machine over `tgbot`'s
+transport, and had drifted: dope's had no health endpoint, xy's posted junk
+to its server, and a bare `/start` greeted in one and asked the server in the
+other. `tgbot.LoginHandler(bridge, Texts{Help, Down})` is the one
+conversation: a code (pasted or in a `/start` deep link) registers through
+the server; `/login`, a bare `/start` and any other command ask the server
+for its «go to the site» reply; text that cannot be a code gets the app's
+`Help` without a round trip; an unreachable server gets `Down`. Each `main.go`
+keeps its env names and its two texts. dope's bare `/start` now answers with
+the server's text (the same instruction its greeting carried), sent plain.
