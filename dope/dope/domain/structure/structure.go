@@ -22,27 +22,13 @@ import (
 	"dope/dope/storage/store"
 )
 
-// MatchOutcome is one match of a stage as the Structure layer sees it: the
-// Protocol scorer's per-slot output, in slot order. Questions is the bout's
-// base question count (без перестрелок) — the denominator for share metrics.
-type MatchOutcome struct {
-	Code      string
-	Finished  bool
-	Round     int
-	Questions int
-	Slots     []SlotOutcome
-}
-
-// SlotOutcome is one seat's result in a match: who sat there, the effective
-// place (scorer's ranking with any host override applied) and the protocol's
-// metrics (e.g. "taken", "total"). Place is fractional because shared places
-// are (e.g. EK's 1.5); 0 = not placed. The Protocol scorer leaves Participant
-// zero — seats are the Structure layer's knowledge, joined in by the caller.
-type SlotOutcome struct {
-	Participant int64 // 0 = empty seat
-	Place       float64
-	Metrics     map[string]float64
-}
+// MatchOutcome, SlotOutcome and RankedEntry are the store's rows for what a
+// Ranker sums and what it returns (store.LoadMatchOutcomes, store.WriteStandings).
+type (
+	MatchOutcome = store.MatchOutcome
+	SlotOutcome  = store.SlotOutcome
+	RankedEntry  = store.RankedEntry
+)
 
 // BoutPoints maps a 2-seat bout place to очки — 2/1/0 for победа/ничья/
 // поражение (КИНСБФ 4.1). Places beyond the second clamp to 0: share metrics
@@ -53,17 +39,6 @@ func BoutPoints(place float64) float64 {
 		return 0
 	}
 	return points
-}
-
-// RankedEntry is one participant's row in a stage's standings. Equal ranks are
-// shared on a full tie of the configured order keys; Rank 0 is unplaced — a
-// pod's survivor whose места are still being played. Bouts are the codes of
-// the бои the row was summed from, when the Kind counts them.
-type RankedEntry struct {
-	Rank        int
-	Participant int64
-	Metrics     map[string]float64
-	Bouts       []string
 }
 
 // SortRule is one key of a Ranker's order — the column a standings table

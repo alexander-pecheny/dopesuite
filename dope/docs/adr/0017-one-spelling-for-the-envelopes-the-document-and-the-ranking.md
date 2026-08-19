@@ -61,3 +61,15 @@ said more than once:
 - The document still has two homes by design — a flat Game's бой, any other
   Game's row — but one reader knows both; ADR-0014's note that a DSL
   `kind: flat` Game keeps its document on the row (and is not scored) stands.
+
+## Addendum (19 Aug 2026, card F4): the resolver keeps the rules, the store keeps the SQL
+
+- **`store.MatchOutcome`, `store.SlotOutcome`, `store.RankedEntry`** are the
+  rows a Ranker sums and returns; `structure` aliases them, as it already did
+  `SortRule`. **`store.LoadMatchOutcomes(ids)`** loads any number of бои in two
+  statements (the resolver used to run one query per бой); **`store.WriteStandings`**
+  is the one writer of `stage_standings` (nil clears).
+- **`resolver.Sources`** is the seam advancement asks through: who took a place
+  in a finished бой, who holds a rank in a source table. `dbSources` is the DB
+  adapter; the tests' map is the other. `desiredOccupant`, `slotTransition`,
+  `prerequisites` and `contenders` are pure over it and tested directly.

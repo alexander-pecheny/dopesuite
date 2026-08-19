@@ -8,7 +8,6 @@ import (
 	"context"
 	"database/sql"
 	"dope/dope/domain/structure"
-	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	"encoding/json"
 	"errors"
@@ -193,32 +192,7 @@ func recomputeKindStandingsTx(ctx context.Context, tx *sql.Tx, stage resolverSta
 	if err != nil {
 		return fmt.Errorf("stage %s standings: %w", stage.code, err)
 	}
-	return writeStandingsTx(ctx, tx, stage.id, ranked)
-}
-
-// writeStandingsTx replaces a stage's table with what its Ranker returned. The
-// stored rank is the distinct seat order (rank refs must resolve uniquely);
-// the Kind's shared display place travels in the metrics, and so do the бои
-// the row was summed from, joined for the Пересев's «Бой» column.
-func writeStandingsTx(ctx context.Context, tx *sql.Tx, stageID int64, ranked []structure.RankedEntry) error {
-	if _, err := tx.ExecContext(ctx, `delete from stage_standings where stage_id = ?`, stageID); err != nil {
-		return err
-	}
-	for seat, entry := range ranked {
-		metrics := map[string]any{"place": float64(entry.Rank)}
-		for key, value := range entry.Metrics {
-			metrics[key] = value
-		}
-		if len(entry.Bouts) > 0 {
-			metrics["match"] = strings.Join(entry.Bouts, "+")
-		}
-		if _, err := tx.ExecContext(ctx, `
-insert into stage_standings(stage_id, rank, participant_id, metrics_json)
-values(?, ?, ?, ?)`, stageID, seat+1, entry.Participant, util.MustJSON(metrics)); err != nil {
-			return err
-		}
-	}
-	return nil
+	return store.WriteStandings(ctx, tx, stage.id, ranked)
 }
 
 // KindConfig is a stage's config as its Kind reads it (store.StageConfig).
@@ -235,7 +209,7 @@ func stageMatchOutcomesTx(ctx context.Context, tx *sql.Tx, stageID int64) ([]str
 	if err != nil {
 		return nil, false, err
 	}
-	outcomes, err := matchOutcomesTx(ctx, tx, ids)
+	outcomes, err := store.LoadMatchOutcomes(ctx, tx, ids)
 	if err != nil {
 		return nil, false, err
 	}
@@ -244,69 +218,6 @@ func stageMatchOutcomesTx(ctx context.Context, tx *sql.Tx, stageID int64) ([]str
 		allFinished = allFinished && outcome.Finished
 	}
 	return outcomes, allFinished, nil
-}
-
-// matchOutcomesTx loads the named matches, in the order given, as
-// structure.MatchOutcome: each with its round, its stage's base question count
-// (без перестрелок — the denominator for share metrics) and its slot results
-// in slot order.
-func matchOutcomesTx(ctx context.Context, tx *sql.Tx, matchIDs []int64) ([]structure.MatchOutcome, error) {
-	type matchRow struct {
-		id     int64
-		code   string
-		status string
-		round  int
-		config string
-	}
-	outcomes := make([]structure.MatchOutcome, 0, len(matchIDs))
-	for _, id := range matchIDs {
-		var m matchRow
-		if err := tx.QueryRowContext(ctx, `
-select m.id, m.code, m.status, m.round, s.config_json from matches m join stages s on s.id = m.stage_id where m.id = ?`,
-			id).Scan(&m.id, &m.code, &m.status, &m.round, &m.config); err != nil {
-			return nil, err
-		}
-		finished := m.status == "finished"
-		questions := int(stageConfigQuestions(m.config))
-		type slotRes struct {
-			teamID  int64
-			place   float64
-			total   float64
-			plus    float64
-			metrics string
-		}
-		slots, err := store.CollectRows(ctx, tx, `
-select coalesce(ms.participant_id, 0), coalesce(mr.place, 0), coalesce(mr.total, 0), coalesce(mr.plus, 0), coalesce(mr.metrics_json, '{}')
-from match_slots ms
-left join match_results mr on mr.match_id = ms.match_id and mr.participant_id = ms.participant_id
-where ms.match_id = ?
-order by ms.slot_index`, []any{m.id}, func(rows *sql.Rows) (slotRes, error) {
-			var s slotRes
-			return s, rows.Scan(&s.teamID, &s.place, &s.total, &s.plus, &s.metrics)
-		})
-		if err != nil {
-			return nil, err
-		}
-		outcome := structure.MatchOutcome{Code: m.code, Finished: finished, Round: m.round, Questions: questions}
-		for _, s := range slots {
-			metrics := map[string]float64{"total": s.total, "plus": s.plus}
-			var parsed map[string]any
-			if json.Unmarshal([]byte(s.metrics), &parsed) == nil {
-				for key, value := range parsed {
-					if n, ok := value.(float64); ok {
-						metrics[key] = n
-					}
-				}
-			}
-			outcome.Slots = append(outcome.Slots, structure.SlotOutcome{
-				Participant: s.teamID,
-				Place:       s.place,
-				Metrics:     metrics,
-			})
-		}
-		outcomes = append(outcomes, outcome)
-	}
-	return outcomes, nil
 }
 
 // resolveStageSlotsTx resolves every from_match/reseed slot of one stage and
@@ -333,16 +244,10 @@ order by ms.match_id, ms.slot_index`,
 		return nil, err
 	}
 
+	src := dbSources{ctx, tx, gameID}
 	var affected []int64
 	for _, slot := range slots {
-		ref := store.ParseSlotRef(slot.sourceType, slot.sourceRef)
-		var desired int64
-		switch ref.Type {
-		case store.SlotFromMatch:
-			desired, err = teamAtMatchPlace(ctx, tx, gameID, ref.Match, ref.Place)
-		case store.SlotReseed:
-			desired, err = teamAtReseedRank(ctx, tx, gameID, ref.Stage, ref.Rank)
-		}
+		desired, err := desiredOccupant(src, store.ParseSlotRef(slot.sourceType, slot.sourceRef))
 		if err != nil {
 			return nil, err
 		}
@@ -357,93 +262,15 @@ order by ms.match_id, ms.slot_index`,
 	return affected, nil
 }
 
-// teamAtMatchPlace returns the team that took the given place in a bout, but
-// only once that bout is finished — provisional standings must not leak
-// downstream. Returns 0 when unresolved.
-func teamAtMatchPlace(ctx context.Context, q store.Queryer, gameID int64, matchCode string, place int) (int64, error) {
-	if matchCode == "" || place <= 0 {
-		return 0, nil
-	}
-	var teamID int64
-	err := q.QueryRowContext(ctx, `
-select mr.participant_id
-from match_results mr
-join matches m on m.id = mr.match_id
-where m.game_id = ? and m.code = ? and m.status = 'finished' and mr.place = ?`,
-		gameID, matchCode, float64(place)).Scan(&teamID)
-	if err == sql.ErrNoRows {
-		return 0, nil
-	}
-	return teamID, err
-}
-
-// teamAtReseedRank returns the team at a reseed rank, or 0 when the reseed has
-// not been computed yet.
-func teamAtReseedRank(ctx context.Context, q store.Queryer, gameID int64, stageCode string, rank int) (int64, error) {
-	if stageCode == "" || rank <= 0 {
-		return 0, nil
-	}
-	// Kind-ranked stages (rr groups, brackets) recompute standings live, so a
-	// rank ref must not leak provisional order downstream: it resolves only
-	// once every bout of the source stage is finished. Reseed stages keep
-	// their explicit-calculate gate (standings exist only when calculated).
-	var stageID int64
-	var kind string
-	err := q.QueryRowContext(ctx, `
-select id, kind from stages where game_id = ? and code = ?`, gameID, stageCode).Scan(&stageID, &kind)
-	if err == sql.ErrNoRows {
-		return 0, nil
-	}
-	if err != nil {
-		return 0, err
-	}
-	if isRankedKind(kind) {
-		var unfinished int
-		if err := q.QueryRowContext(ctx, `
-select count(*) from matches where stage_id = ? and status != 'finished'`, stageID).Scan(&unfinished); err != nil {
-			return 0, err
-		}
-		if unfinished > 0 {
-			return 0, nil
-		}
-	}
-	var teamID int64
-	err = q.QueryRowContext(ctx, `
-select participant_id from stage_standings where stage_id = ? and rank = ?`,
-		stageID, rank).Scan(&teamID)
-	if err == sql.ErrNoRows {
-		return 0, nil
-	}
-	return teamID, err
-}
-
-// applyResolvedSlotTx writes a slot's resolved occupant and reports whether it
-// actually changed (so the caller can collect the affected match for broadcast).
-//
-// It is non-destructive: it never deletes a slot's protocol data (themes /
-// answers / results). Two cases matter:
-//
-//   - desired == 0: the upstream source is not currently final — e.g. a finished
-//     bout was unticked so it could be edited. We HOLD the current occupant and
-//     its data instead of flushing it; re-finishing the source restores the same
-//     slot with no churn, so untick→edit→retick loses nothing. (Genuine occupant
-//     changes still flow through, because those have desired != 0.)
-//   - desired != 0 and differs from current: a different team now occupies the
-//     slot. We move the occupant and reopen the bout (status='active') so its
-//     standings get re-reviewed against the new team — but we leave the previous
-//     occupant's rows in place rather than deleting them.
+// applyResolvedSlotTx writes a slot's resolved occupant per slotTransition and
+// reports whether it changed (so the caller can collect the affected match for
+// broadcast).
 func applyResolvedSlotTx(ctx context.Context, tx *sql.Tx, slotID, matchID, current, desired int64, gameType string) (bool, error) {
-	if desired == current {
+	move, reopen := slotTransition(current, desired)
+	if !move {
 		return false, nil
 	}
-	if desired == 0 {
-		// Source temporarily unresolved (mid-edit). Hold, don't flush.
-		return false, nil
-	}
-	if current != 0 {
-		// A genuinely different team now occupies this slot. Reopen the bout so
-		// its standings are re-reviewed; the previous occupant's protocol stays
-		// in the DB (non-destructive — recoverable, never silently deleted).
+	if reopen {
 		if _, err := tx.ExecContext(ctx, `update matches set status = 'active' where id = ? and status = 'finished'`, matchID); err != nil {
 			return false, err
 		}
@@ -509,59 +336,15 @@ func calculateRequiredReseedEntriesTx(ctx context.Context, tx *sql.Tx, stage res
 	return err
 }
 
-type reseedPrerequisiteState struct {
-	Ready          bool
-	SourceMatchIDs []int64
-	PendingMatches []string
-}
-
 // ReseedPrerequisites reports whether a reseed stage's source bouts are all
 // finished, listing the source bout ids and the codes of any still-pending ones.
 func ReseedPrerequisites(ctx context.Context, q store.Queryer, config []byte, gameID int64) (reseedPrerequisiteState, error) {
-	var state reseedPrerequisiteState
 	cfg := store.ParseStageConfig(string(config))
-
-	sourceMatchIDs, sourcePending, err := reseedSourceMatches(ctx, q, gameID, cfg)
+	bouts, err := reseedSourceBouts(ctx, q, gameID, cfg)
 	if err != nil {
-		return state, err
+		return reseedPrerequisiteState{}, err
 	}
-	state.SourceMatchIDs = sourceMatchIDs
-	for _, code := range sourcePending {
-		state.addPending(code)
-	}
-
-	advancing := 0
-	for _, slot := range cfg.Teams {
-		teamID, source, err := eligibleTeam(ctx, q, gameID, slot)
-		if err != nil {
-			return state, err
-		}
-		if source == "" {
-			continue
-		}
-		if teamID == 0 {
-			state.addPending(source)
-		}
-		advancing++
-	}
-	if advancing == 0 {
-		return state, nil
-	}
-	state.Ready = len(state.SourceMatchIDs) > 0 && len(state.PendingMatches) == 0
-	return state, nil
-}
-
-func (state *reseedPrerequisiteState) addPending(code string) {
-	code = strings.TrimSpace(code)
-	if code == "" {
-		return
-	}
-	for _, existing := range state.PendingMatches {
-		if existing == code {
-			return
-		}
-	}
-	state.PendingMatches = append(state.PendingMatches, code)
+	return prerequisites(dbSources{ctx, q, gameID}, cfg, bouts)
 }
 
 // ReseedNotReadyMessage formats a human-facing message naming the source bouts
@@ -592,39 +375,22 @@ func ReseedNotReadyMessage(pending []string) string {
 // unresolved until then.
 func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, config []byte, gameID int64) error {
 	cfg := store.ParseStageConfig(string(config))
-	clear := func() error {
-		_, err := tx.ExecContext(ctx, `delete from stage_standings where stage_id = ?`, stageID)
+	src := dbSources{ctx, tx, gameID}
+	who, ok, err := contenders(src, cfg)
+	if err != nil {
 		return err
 	}
-	contenders := make([]structure.Contender, 0, len(cfg.Teams))
-	for index, slot := range cfg.Teams {
-		teamID, source, err := eligibleTeam(ctx, tx, gameID, slot)
-		if err != nil {
-			return err
-		}
-		if source == "" {
-			continue
-		}
-		if teamID == 0 {
-			return clear() // a source bout is not finished yet
-		}
-		band := 0
-		if index < len(cfg.Bands) {
-			band = cfg.Bands[index]
-		}
-		contenders = append(contenders, structure.Contender{Participant: teamID, Band: band})
-	}
-	if len(contenders) == 0 {
-		return clear()
+	if !ok {
+		return store.WriteStandings(ctx, tx, stageID, nil) // a source bout is not finished yet
 	}
 	state, err := ReseedPrerequisites(ctx, tx, config, gameID)
 	if err != nil {
 		return err
 	}
 	if !state.Ready {
-		return clear()
+		return store.WriteStandings(ctx, tx, stageID, nil)
 	}
-	outcomes, err := matchOutcomesTx(ctx, tx, state.SourceMatchIDs)
+	outcomes, err := store.LoadMatchOutcomes(ctx, tx, state.SourceMatchIDs)
 	if err != nil {
 		return err
 	}
@@ -636,11 +402,11 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 		return err
 	}
 	ranker, _ := structure.RankerFor("reseed")
-	ranked, err := ranker.Standings(KindConfig(config), outcomes, structure.Inputs{Seed: seed, Contenders: contenders})
+	ranked, err := ranker.Standings(KindConfig(config), outcomes, structure.Inputs{Seed: seed, Contenders: who})
 	if err != nil {
 		return err
 	}
-	return writeStandingsTx(ctx, tx, stageID, ranked)
+	return store.WriteStandings(ctx, tx, stageID, ranked)
 }
 
 // gameRandomSeed returns the game's fixed random seed (the basis for deterministic
@@ -658,95 +424,45 @@ func gameRandomSeed(ctx context.Context, q store.Queryer, gameID int64) (string,
 	return fmt.Sprintf("game-%d", gameID), nil
 }
 
-// reseedSourceMatches returns the bout ids that contribute to a reseed and the
-// codes of source bouts that are not finished yet.
-func reseedSourceMatches(ctx context.Context, q store.Queryer, gameID int64, cfg reseedConfig) ([]int64, []string, error) {
-	var rows []resolverBout
-	var err error
+// reseedSourceBouts returns the бои that contribute to a reseed: the `sources`
+// stages' бои when named, else the бой each team advances from.
+func reseedSourceBouts(ctx context.Context, q store.Queryer, gameID int64, cfg reseedConfig) ([]Bout, error) {
+	scan := func(rows *sql.Rows) (Bout, error) {
+		var b Bout
+		return b, rows.Scan(&b.ID, &b.Code, &b.Status)
+	}
 	if len(cfg.Sources) > 0 {
 		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(cfg.Sources)), ",")
 		args := []any{gameID}
 		for _, code := range cfg.Sources {
 			args = append(args, code)
 		}
-		rows, err = store.CollectRows(ctx, q, fmt.Sprintf(`
+		return store.CollectRows(ctx, q, fmt.Sprintf(`
 select m.id, m.code, m.status from matches m
 join stages s on s.id = m.stage_id
 where m.game_id = ? and s.code in (%s)
-order by s.position, m.position, m.id`, placeholders), args, scanResolverBout)
-	} else {
-		codes := make(map[string]struct{})
-		for _, slot := range cfg.Teams {
-			if slot.FromMatch != nil {
-				codes[slot.FromMatch.Match] = struct{}{}
-			}
+order by s.position, m.position, m.id`, placeholders), args, scan)
+	}
+	codes := make(map[string]struct{})
+	for _, slot := range cfg.Teams {
+		if slot.FromMatch != nil {
+			codes[slot.FromMatch.Match] = struct{}{}
 		}
-		if len(codes) == 0 {
-			return nil, nil, nil
-		}
-		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(codes)), ",")
-		args := []any{gameID}
-		orderedCodes := make([]string, 0, len(codes))
-		for code := range codes {
-			orderedCodes = append(orderedCodes, code)
-		}
-		sort.Strings(orderedCodes)
-		for _, code := range orderedCodes {
-			args = append(args, code)
-		}
-		rows, err = store.CollectRows(ctx, q, fmt.Sprintf(`
+	}
+	if len(codes) == 0 {
+		return nil, nil
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(codes)), ",")
+	args := []any{gameID}
+	orderedCodes := make([]string, 0, len(codes))
+	for code := range codes {
+		orderedCodes = append(orderedCodes, code)
+	}
+	sort.Strings(orderedCodes)
+	for _, code := range orderedCodes {
+		args = append(args, code)
+	}
+	return store.CollectRows(ctx, q, fmt.Sprintf(`
 select id, code, status from matches where game_id = ? and code in (%s)
-order by position, id`, placeholders), args, scanResolverBout)
-	}
-	if err != nil {
-		return nil, nil, err
-	}
-	ids := make([]int64, 0, len(rows))
-	pending := make([]string, 0)
-	for _, r := range rows {
-		ids = append(ids, r.id)
-		if r.status != "finished" {
-			pending = append(pending, r.code)
-		}
-	}
-	return ids, pending, nil
-}
-
-type resolverBout struct {
-	id     int64
-	code   string
-	status string
-}
-
-func scanResolverBout(rows *sql.Rows) (resolverBout, error) {
-	var b resolverBout
-	return b, rows.Scan(&b.id, &b.code, &b.status)
-}
-
-// numFromAny reads a JSON number decoded into an interface{} (always float64).
-func numFromAny(value any) float64 {
-	if n, ok := value.(float64); ok {
-		return n
-	}
-	return 0
-}
-
-// eligibleTeam resolves one advancing-team selector — a from_match place or a
-// source stage's rank — returning the source's code so the caller can name what
-// still blocks it. 0 while the upstream is not final; "" when the slot has no
-// selector at all.
-func eligibleTeam(ctx context.Context, q store.Queryer, gameID int64, slot store.SchemeSlot) (int64, string, error) {
-	switch {
-	case slot.FromMatch != nil:
-		teamID, err := teamAtMatchPlace(ctx, q, gameID, slot.FromMatch.Match, slot.FromMatch.Place)
-		return teamID, slot.FromMatch.Match, err
-	case slot.Reseed != nil:
-		teamID, err := teamAtReseedRank(ctx, q, gameID, slot.Reseed.Stage, slot.Reseed.Rank)
-		return teamID, slot.Reseed.Stage, err
-	}
-	return 0, "", nil
-}
-
-func stageConfigQuestions(raw string) float64 {
-	return float64(store.ParseStageConfig(raw).Questions())
+order by position, id`, placeholders), args, scan)
 }
