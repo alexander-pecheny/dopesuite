@@ -18,6 +18,8 @@ import { DopeEntryModel } from "./entry-model.js";
 import { icon } from "./icons_gen.js";
 import * as od from "./od-protocol.js";
 import type {ODScheme, ODState, ODTeam, QuestionStat, RankKey, ShootoutMark, ShootoutRound} from "./od-protocol.js";
+import {SCREEN_DEFAULTS, normalizeScreenSettings, planScreen, teamFlag} from "./screen-board.js";
+import type {ScreenSettings} from "./screen-board.js";
 
 interface ODPageGlobals {
   __GAME_INIT__?: GameInitLike | null;
@@ -2218,119 +2220,12 @@ function lastEnteredQuestion(): number {
 // the screen. The board is host-customisable (colours, font scale, column count,
 // city/country toggles); settings are shared per game (saved server-side).
 
-interface ScreenSettings {
-  bg: string;
-  fg: string;
-  muted: string;
-  fontScale: number;
-  columns: number;
-  showCity: boolean;
-  showCountry: boolean;
-}
-
-const SCREEN_DEFAULTS: ScreenSettings = {
-  bg: "#ffffff", // background colour
-  fg: "#000000", // primary text colour
-  muted: "#5f6b7a", // secondary (city) text colour
-  fontScale: 1, // multiplier on the auto-fit zoom; 1 = fill the screen
-  columns: 0, // 0 = auto-pick the column count, >0 = force that many
-  showCity: true,
-  showCountry: false,
-};
-
-function normalizeScreenSettings(raw: unknown): ScreenSettings {
-  const s = {...SCREEN_DEFAULTS};
-  if (raw && typeof raw === "object") {
-    const r = raw as {bg?: unknown; fg?: unknown; muted?: unknown; fontScale?: unknown; columns?: unknown; showCity?: unknown; showCountry?: unknown};
-    if (typeof r.bg === "string") s.bg = r.bg;
-    if (typeof r.fg === "string") s.fg = r.fg;
-    if (typeof r.muted === "string") s.muted = r.muted;
-    if (typeof r.fontScale === "number" && Number.isFinite(r.fontScale)) s.fontScale = Math.min(Math.max(r.fontScale, 0.4), 2);
-    if (typeof r.columns === "number" && Number.isFinite(r.columns)) s.columns = Math.max(0, Math.round(r.columns));
-    if (typeof r.showCity === "boolean") s.showCity = r.showCity;
-    if (typeof r.showCountry === "boolean") s.showCountry = r.showCountry;
-  }
-  return s;
-}
-
 let screenSettings = normalizeScreenSettings(initScreenSettings);
 let screenPanelOpen = false;
 
-// City → ISO-3166 alpha-2 lookup for the country-flag option. Russian-domain
-// tournaments are mostly RU/CIS with the occasional international team; unknown
-// cities simply get no flag (and a team whose name/city mentions "сборная" gets
-// a globe instead — see teamFlagEmoji). Extend freely as new cities appear.
-const CITY_COUNTRY: Record<string, string> = {
-  "москва": "RU", "мск": "RU", "санкт-петербург": "RU", "спб": "RU", "петербург": "RU",
-  "питер": "RU", "новосибирск": "RU", "екатеринбург": "RU", "казань": "RU",
-  "нижний новгород": "RU", "челябинск": "RU", "самара": "RU", "омск": "RU",
-  "ростов-на-дону": "RU", "уфа": "RU", "красноярск": "RU", "пермь": "RU",
-  "воронеж": "RU", "волгоград": "RU", "краснодар": "RU", "саратов": "RU",
-  "тюмень": "RU", "тольятти": "RU", "ижевск": "RU", "барнаул": "RU",
-  "ульяновск": "RU", "иркутск": "RU", "хабаровск": "RU", "ярославль": "RU",
-  "владивосток": "RU", "махачкала": "RU", "томск": "RU", "оренбург": "RU",
-  "кемерово": "RU", "новокузнецк": "RU", "рязань": "RU", "астрахань": "RU",
-  "пенза": "RU", "липецк": "RU", "тула": "RU", "киров": "RU", "чебоксары": "RU",
-  "калининград": "RU", "брянск": "RU", "курск": "RU", "иваново": "RU",
-  "магнитогорск": "RU", "тверь": "RU", "ставрополь": "RU", "белгород": "RU",
-  "сочи": "RU", "сургут": "RU", "владимир": "RU", "чита": "RU", "симферополь": "RU",
-  "севастополь": "RU", "калуга": "RU", "смоленск": "RU", "вологда": "RU",
-  "мурманск": "RU", "саранск": "RU", "тамбов": "RU", "грозный": "RU",
-  "якутск": "RU", "кострома": "RU", "петрозаводск": "RU", "нальчик": "RU",
-  "орёл": "RU", "орел": "RU", "новороссийск": "RU", "великий новгород": "RU",
-  "псков": "RU", "обнинск": "RU", "дубна": "RU", "зеленоград": "RU",
-  "минск": "BY", "гомель": "BY", "могилёв": "BY", "могилев": "BY", "витебск": "BY",
-  "гродно": "BY", "брест": "BY", "бобруйск": "BY", "барановичи": "BY",
-  "киев": "UA", "харьков": "UA", "одесса": "UA", "днепр": "UA", "днепропетровск": "UA",
-  "львов": "UA", "запорожье": "UA", "кривой рог": "UA", "николаев": "UA",
-  "винница": "UA", "херсон": "UA", "чернигов": "UA", "полтава": "UA",
-  "черкассы": "UA", "житомир": "UA", "сумы": "UA", "хмельницкий": "UA",
-  "черновцы": "UA", "ровно": "UA", "ивано-франковск": "UA", "тернополь": "UA",
-  "луцк": "UA", "ужгород": "UA",
-  "алматы": "KZ", "астана": "KZ", "нур-султан": "KZ", "нурсултан": "KZ",
-  "шымкент": "KZ", "караганда": "KZ", "актобе": "KZ", "тараз": "KZ",
-  "павлодар": "KZ", "усть-каменогорск": "KZ", "семей": "KZ", "атырау": "KZ",
-  "костанай": "KZ", "кызылорда": "KZ", "уральск": "KZ", "петропавловск": "KZ",
-  "тель-авив": "IL", "иерусалим": "IL", "хайфа": "IL", "беэр-шева": "IL",
-  "нетания": "IL", "ашдод": "IL", "ашкелон": "IL", "ришон-ле-цион": "IL",
-  "бат-ям": "IL", "петах-тиква": "IL",
-  "ташкент": "UZ", "самарканд": "UZ", "бухара": "UZ",
-  "бишкек": "KG", "ош": "KG", "душанбе": "TJ", "ашхабад": "TM",
-  "тбилиси": "GE", "батуми": "GE", "ереван": "AM", "баку": "AZ",
-  "кишинёв": "MD", "кишинев": "MD",
-  "таллин": "EE", "таллинн": "EE", "тарту": "EE", "рига": "LV",
-  "вильнюс": "LT", "каунас": "LT", "хельсинки": "FI",
-  "берлин": "DE", "мюнхен": "DE", "гамбург": "DE", "франкфурт": "DE",
-  "кёльн": "DE", "кельн": "DE", "дюссельдорф": "DE", "штутгарт": "DE",
-  "дрезден": "DE", "лейпциг": "DE", "нюрнберг": "DE", "ганновер": "DE",
-  "бремен": "DE", "дортмунд": "DE", "эссен": "DE", "бонн": "DE",
-  "мёрфельден-вальдорф": "DE", "мёрфельден": "DE",
-  "будапешт": "HU", "лондон": "GB", "манчестер": "GB", "прага": "CZ", "брно": "CZ",
-  "варшава": "PL", "краков": "PL", "вроцлав": "PL", "гданьск": "PL",
-  "париж": "FR", "амстердам": "NL", "мадрид": "ES", "барселона": "ES",
-  "рим": "IT", "милан": "IT", "вена": "AT", "цюрих": "CH", "женева": "CH",
-  "стокгольм": "SE", "осло": "NO",
-  "нью-йорк": "US", "нью йорк": "US", "бостон": "US", "чикаго": "US",
-  "сан-франциско": "US", "лос-анджелес": "US", "вашингтон": "US", "сиэтл": "US",
-  "торонто": "CA", "монреаль": "CA", "ванкувер": "CA",
-  "сидней": "AU", "мельбурн": "AU", "дубай": "AE", "абу-даби": "AE",
-};
-
-// flagEmoji turns a 2-letter ISO country code into its regional-indicator flag.
-function flagEmoji(cc: string): string {
-  return cc.toUpperCase().replace(/[A-Z]/g, (c) => String.fromCodePoint(0x1f1e6 + c.charCodeAt(0) - 65));
-}
-
-// teamFlagEmoji returns the leading emoji for a team when "Показывать страну" is
-// on: a globe for a "сборная" (national/all-star side — rating.chgk gives such
-// teams the town "сборная"), otherwise the flag of the team's city's country,
-// or "" when the city is unknown.
 function teamFlagEmoji(index: number): string {
   const team: Partial<ODTeam> = state.teams[index] || {};
-  const hay = `${team.name || ""} ${team.city || ""}`.toLowerCase();
-  if (hay.includes("сборн")) return "🌍";
-  const cc = CITY_COUNTRY[String(team.city || "").trim().toLowerCase()];
-  return cc ? flagEmoji(cc) : "";
+  return teamFlag(team.name || "", team.city || "");
 }
 
 // saveScreenSettings persists the current settings to the server (shared per
@@ -2677,39 +2572,8 @@ function scheduleScreenFit(): void {
   });
 }
 
-// packRows greedily fills columns top-to-bottom (column-major), starting a new
-// column once the running body height would exceed maxBodyH. A gap is counted
-// before a row whose group differs from the previous row in the same column.
-// Returns the array of per-column rowItem lists.
-function packRows(rowItems: ScreenRowItem[], rowH: number, gapH: number, maxBodyH: number): ScreenRowItem[][] {
-  const columns: ScreenRowItem[][] = [];
-  let current: ScreenRowItem[] = [];
-  let bodyH = 0;
-  for (const item of rowItems) {
-    const needGap = current.length > 0 && item.group !== current[current.length - 1].group;
-    const addH = current.length === 0 ? rowH : bodyH + (needGap ? gapH : 0) + rowH;
-    if (current.length > 0 && addH > maxBodyH + 0.5) {
-      columns.push(current);
-      current = [];
-      bodyH = 0;
-    }
-    bodyH = current.length === 0
-      ? rowH
-      : bodyH + (item.group !== current[current.length - 1].group ? gapH : 0) + rowH;
-    current.push(item);
-  }
-  if (current.length) columns.push(current);
-  return columns;
-}
-
-// layoutScreen packs the rows into columns and scales the board with `zoom` to
-// fill the frame. Auto mode picks the column count that maximises the font; a
-// host override (screenSettings.columns) forces a specific count. For a given
-// count it binary-searches the smallest column body height that still packs into
-// it (a balanced split), giving the tallest — hence largest-zoom — layout. Any
-// leftover horizontal space (height-bound layouts) is then spent by widening the
-// team-name column, and screenSettings.fontScale finally scales the result.
-const SCREEN_BASE_TEAM_COL = 160; // px; matches --screen-team-col default in styles.css
+// layoutScreen measures one probe column at zoom 1, lets planScreen choose the
+// columns and zoom, then renders the plan.
 function layoutScreen(wrapper: ScreenWrapper): void {
   const rowItems = wrapper._screenRows;
   const cols = wrapper.querySelector<HTMLElement>(".screen-cols");
@@ -2717,86 +2581,25 @@ function layoutScreen(wrapper: ScreenWrapper): void {
   if (!cols || !frame || !rowItems || !rowItems.length) return;
 
   const MARGIN = 6; // px of breathing room inside the frame (kept small to use all space)
-  const MAX_ZOOM = 6; // cap so tiny tournaments don't get absurd text
-  const SAFETY = 0.985; // shrink a touch to absorb sub-pixel rounding
-  const fontScale = screenSettings.fontScale || 1;
-  const forcedCols = screenSettings.columns > 0 ? screenSettings.columns : 0;
-
-  // Fill the frame so the board can center; the table-host is content-sized.
   wrapper.style.height = `${frame.clientHeight}px`;
-  const availW = Math.max(1, frame.clientWidth - MARGIN);
-  const availH = Math.max(1, frame.clientHeight - MARGIN);
-  const gapPx = parseFloat(getComputedStyle(cols).columnGap) || 0;
-
-  // Reset any prior width-fill so the natural (base) column width is measured.
   cols.style.removeProperty("--screen-team-col");
-
-  // Measure one natural column holding every row (zoom reset so rects are CSS px).
   cols.style.zoom = "1";
   cols.replaceChildren(makeScreenColumn(wrapper._screenTourLabel, rowItems));
   const probe = cols.firstChild as HTMLTableElement;
-  const headH = probe.querySelector("thead")!.getBoundingClientRect().height;
-  const rowH = probe.querySelector("tbody tr.results-row")!.getBoundingClientRect().height;
   const gapRow = probe.querySelector("tbody tr.results-group-gap");
-  const gapH = gapRow ? gapRow.getBoundingClientRect().height : 0;
-  const colW = probe.getBoundingClientRect().width;
-
-  const n = rowItems.length;
-  const groupCount = rowItems[n - 1].group + 1;
-  const totalBodyH = n * rowH + (groupCount - 1) * gapH;
-
-  const columnsNeeded = (maxBodyH: number) => packRows(rowItems, rowH, gapH, maxBodyH).length;
-  // bodyHForColumns: smallest column body height that still packs into c columns.
-  const bodyHForColumns = (c: number): number => {
-    if (columnsNeeded(rowH) <= c) return rowH; // a single row per column suffices
-    let lo = rowH;
-    let hi = totalBodyH;
-    for (let it = 0; it < 40; it++) {
-      const mid = (lo + hi) / 2;
-      if (columnsNeeded(mid) <= c) hi = mid;
-      else lo = mid;
-    }
-    return hi;
-  };
-
-  let chosen: {c: number; bodyH: number};
-  if (forcedCols) {
-    const c = Math.min(Math.max(1, forcedCols), n);
-    chosen = {c, bodyH: bodyHForColumns(c)};
-  } else {
-    // Keep the column count whose resulting zoom is largest (ties → more columns,
-    // so the board fills the width).
-    let best = {c: 1, bodyH: totalBodyH, zoom: 0};
-    for (let c = 1; c <= n; c++) {
-      const bodyH = bodyHForColumns(c);
-      const colHeight = headH + bodyH;
-      const totalWidth = c * colW + (c - 1) * gapPx;
-      const zoom = Math.min(availH / colHeight, availW / totalWidth);
-      if (zoom >= best.zoom) best = {c, bodyH, zoom};
-    }
-    chosen = best;
-  }
-
-  const c = chosen.c;
-  const colHeight = headH + chosen.bodyH;
-  const totalWidth = c * colW + (c - 1) * gapPx;
-  const zoom = Math.min(availH / colHeight, availW / totalWidth);
-
-  // Width-fill: a height-bound layout leaves leftover horizontal space (the
-  // classic wasted margin). Widen the team-name column to spend it, so the board
-  // uses the whole screen instead of sitting in a narrow centred strip.
-  const renderedWidth = totalWidth * zoom;
-  if (renderedWidth > 0 && availW / renderedWidth > 1.02) {
-    const extraPerCol = (availW / zoom - totalWidth) / c; // CSS px to add per column
-    const newTeamCol = Math.min(SCREEN_BASE_TEAM_COL + extraPerCol, SCREEN_BASE_TEAM_COL * 4);
-    cols.style.setProperty("--screen-team-col", `${Math.round(newTeamCol)}px`);
-  }
-
-  const finalZoom = Math.min(zoom * SAFETY * fontScale, MAX_ZOOM);
-  const parts = packRows(rowItems, rowH, gapH, chosen.bodyH)
-    .map((colRows) => makeScreenColumn(wrapper._screenTourLabel, colRows));
-  cols.replaceChildren(...parts);
-  cols.style.zoom = String(finalZoom);
+  const plan = planScreen(rowItems, {
+    headH: probe.querySelector("thead")!.getBoundingClientRect().height,
+    rowH: probe.querySelector("tbody tr.results-row")!.getBoundingClientRect().height,
+    gapH: gapRow ? gapRow.getBoundingClientRect().height : 0,
+    colW: probe.getBoundingClientRect().width,
+    gapPx: parseFloat(getComputedStyle(cols).columnGap) || 0,
+    availW: Math.max(1, frame.clientWidth - MARGIN),
+    availH: Math.max(1, frame.clientHeight - MARGIN),
+  }, screenSettings);
+  if (!plan) return;
+  if (plan.teamCol !== null) cols.style.setProperty("--screen-team-col", `${plan.teamCol}px`);
+  cols.replaceChildren(...plan.columns.map((colRows) => makeScreenColumn(wrapper._screenTourLabel, colRows)));
+  cols.style.zoom = String(plan.zoom);
 }
 
 function buildResultsTable(): HTMLElement {
