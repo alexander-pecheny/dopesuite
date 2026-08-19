@@ -13,10 +13,6 @@ type (
 	ExpandFunc    = base.ExpandFunc
 	InlineFunc    = base.InlineFunc
 	MountSpec     = base.MountSpec
-	Chrome        = base.Chrome
-	HeadLink      = base.HeadLink
-	PageKind      = base.PageKind
-	SyncSpec      = base.SyncSpec
 	PropSpec      = base.PropSpec
 	EnumSpec      = base.EnumSpec
 	PrimitiveSpec = base.PrimitiveSpec

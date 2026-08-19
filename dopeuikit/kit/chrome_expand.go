@@ -5,7 +5,7 @@ package kit
 // are the design system's, matched by core.css.
 
 func expandPage(ctx *ExpandCtx, p *Element) []Node {
-	ch := ctx.Chrome()
+	ch := ChromeOf(ctx)
 	title, _ := Get(p, "title")
 
 	head := []Node{
@@ -165,7 +165,7 @@ func childElements(p *Element, tag string) []*Element {
 }
 
 func expandTopbar(ctx *ExpandCtx, p *Element) []Node {
-	ch := ctx.Chrome()
+	ch := ChromeOf(ctx)
 	title, _ := Get(p, "title")
 	titleid, hasTitleID := Get(p, "titleid")
 

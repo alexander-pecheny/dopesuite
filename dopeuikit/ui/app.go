@@ -13,7 +13,8 @@ type MountSpec struct {
 
 // Options configures an App. The engine is design-system-agnostic: the caller
 // (the kit design-system layer, or a test) supplies the Base vocabulary, the
-// full Expand/Inline expander tables, mount kinds, and page Chrome. VocabOverlay
+// full Expand/Inline expander tables, mount kinds, and an opaque Env the
+// expanders read back through ctx.Env() (the kit keeps its page Chrome there). VocabOverlay
 // is merged over Base (adding primitives / enums / enum values; re-declaring a
 // Base primitive is an error). ExtendProps adds props to an existing primitive.
 type Options struct {
@@ -23,7 +24,7 @@ type Options struct {
 	Expand       map[string]ExpandFunc
 	Inline       map[string]InlineFunc
 	Mounts       map[string]MountSpec
-	Chrome       Chrome
+	Env          any
 }
 
 // App is a configured DSL instance: a merged vocabulary plus the expander
@@ -33,7 +34,7 @@ type App struct {
 	expand map[string]ExpandFunc
 	inline map[string]InlineFunc
 	mounts map[string]MountSpec
-	chrome Chrome
+	env    any
 }
 
 // NewApp builds an App from opts.Base plus the given overlay. Expand/Inline are
@@ -60,7 +61,7 @@ func NewApp(opts Options) (*App, error) {
 		expand: map[string]ExpandFunc{},
 		inline: map[string]InlineFunc{},
 		mounts: map[string]MountSpec{},
-		chrome: opts.Chrome.withDefaults(),
+		env:    opts.Env,
 	}
 	for k, v := range opts.Expand {
 		app.expand[k] = v

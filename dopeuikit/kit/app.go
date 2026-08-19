@@ -46,7 +46,7 @@ func NewApp(opts Options) (*App, error) {
 		Expand:       expand,
 		Inline:       inline,
 		Mounts:       opts.Mounts,
-		Chrome:       opts.Chrome,
+		Env:          opts.Chrome.withDefaults(),
 	})
 }
 

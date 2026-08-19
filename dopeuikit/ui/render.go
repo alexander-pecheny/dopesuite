@@ -4,7 +4,7 @@ import "strings"
 
 // ExpandCtx carries the recursion into app-supplied ExpandFuncs: it dispatches
 // child primitives back through the app's expander table and exposes the app's
-// mounts, chrome, and vocab placement.
+// mounts, the app env, and vocab placement.
 type ExpandCtx struct{ app *App }
 
 func (a *App) render(doc *Doc) []byte {
@@ -63,8 +63,9 @@ func (c *ExpandCtx) InlineOne(p *Element) Item {
 	return &TextNode{}
 }
 
-// Chrome returns the app's page chrome configuration.
-func (c *ExpandCtx) Chrome() Chrome { return c.app.chrome }
+// Env is whatever the app was built with (Options.Env) — the engine never
+// interprets it.
+func (c *ExpandCtx) Env() any { return c.app.env }
 
 // Mount resolves a mount kind to its tag+classes.
 func (c *ExpandCtx) Mount(kind string) (MountSpec, bool) {

@@ -32,7 +32,7 @@ func expandGameTopbar(c *base.ExpandCtx, p *base.Element) []base.Node {
 
 	headerMain := base.El("div", []base.Attr{base.ClassAttr(mainCls...)}, kids...)
 
-	sync := c.Chrome().TopbarSync
+	sync := base.ChromeOf(c).TopbarSync
 	state := "syncing"
 	if v, ok := base.Get(p, "syncstate"); ok {
 		state = v
