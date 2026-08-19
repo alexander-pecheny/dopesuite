@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"time"
 )
 
 // A Reaction is a timeline event whose payload is the (encrypted) emoji and
@@ -55,13 +54,7 @@ where id = ? and type = 'comment' and deleted_at is null`, *req.TargetID).Scan(&
 		if err != nil {
 			return errBadRequest("invalid payload_enc")
 		}
-		res, err := tx.ExecContext(ctx, `
-insert into timeline_events(board_id, card_id, type, author_user_id, created_at, payload_enc, reply_to_id)
-values(?, ?, 'reaction', ?, ?, ?, ?)`, bid, cardID, uid, rfc3339(time.Now()), payload, req.TargetID)
-		if err != nil {
-			return err
-		}
-		evID, err = res.LastInsertId()
+		evID, err = insertEvent(ctx, tx, timelineEvent{BoardID: bid, CardID: cardID, Type: "reaction", AuthorID: &uid, Payload: payload, ReplyToID: req.TargetID})
 		return err
 	})
 	if handleErr(w, err) {

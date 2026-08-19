@@ -31,8 +31,8 @@ func TestMigrateV18Sessions(t *testing.T) {
 	mustExec(t, db, `insert into _v18_test_labels(id) values(?), (?)`, taken, missed)
 	assignLabel(t, db, clean, taken)
 	assignLabel(t, db, clean, missed)
-	comment := insertEvent(t, db, bid, clean, "comment", "тест шёл дольше обычного")
-	edit := insertEvent(t, db, bid, clean, "desc_edit", "diff")
+	comment := insertLegacyEvent(t, db, bid, clean, "comment", "тест шёл дольше обычного")
+	edit := insertLegacyEvent(t, db, bid, clean, "desc_edit", "diff")
 
 	// Two questions: one the testers took, one they missed. Both were PLAYED.
 	q1 := insertCard(t, db, bid, questions, "question", "q1")
@@ -244,7 +244,7 @@ func assignLabel(t *testing.T, db *sql.DB, cardID, labelID int64) {
 	execIns(t, db, `insert into card_labels(card_id, label_id, session_id) values(?, ?, null)`, cardID, labelID)
 }
 
-func insertEvent(t *testing.T, db *sql.DB, bid, cardID int64, typ, payload string) int64 {
+func insertLegacyEvent(t *testing.T, db *sql.DB, bid, cardID int64, typ, payload string) int64 {
 	return execIns(t, db, `insert into timeline_events(board_id, card_id, type, created_at, payload_enc) values(?, ?, ?, ?, ?)`,
 		bid, cardID, typ, fixtureNow, []byte(payload))
 }

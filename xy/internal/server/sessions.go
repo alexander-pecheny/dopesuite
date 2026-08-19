@@ -178,51 +178,12 @@ func (s *server) handleGetSessionTimeline(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	rows, err := s.db.QueryContext(r.Context(), `
-select e.id, e.type, e.author_user_id, e.created_at, e.edited_at, e.is_excerpt,
-       e.reply_to_id, e.deleted_at is not null,
-       (select count(*) from timeline_events r
-          where r.reply_to_id = e.id and r.deleted_at is null),
-       e.payload_enc, e.card_id
-from timeline_events e
+	out, err := s.readTimeline(r.Context(), `
 left join cards c on c.id = e.card_id
 where e.session_id = ? and e.deleted_at is null
   and (e.card_id is null or c.deleted_at is null)
 order by e.id`, sessionID)
 	if handleErr(w, err) {
-		return
-	}
-	defer rows.Close()
-	out := []timelineEventDTO{}
-	for rows.Next() {
-		var e timelineEventDTO
-		var author, replyTo, cardRef sql.NullInt64
-		var edited sql.NullString
-		var excerpt, deleted int
-		var payload []byte
-		if err := rows.Scan(&e.ID, &e.Type, &author, &e.CreatedAt, &edited, &excerpt,
-			&replyTo, &deleted, &e.ReplyCount, &payload, &cardRef); handleErr(w, err) {
-			return
-		}
-		if author.Valid {
-			e.AuthorID = &author.Int64
-		}
-		if edited.Valid {
-			e.EditedAt = &edited.String
-		}
-		if replyTo.Valid {
-			e.ReplyToID = &replyTo.Int64
-		}
-		if cardRef.Valid {
-			e.CardID = &cardRef.Int64
-		}
-		e.SessionID = &sessionID
-		e.IsExcerpt = excerpt != 0
-		e.Deleted = deleted != 0
-		e.PayloadEnc = b64(payload)
-		out = append(out, e)
-	}
-	if err := rows.Err(); handleErr(w, err) {
 		return
 	}
 	writeJSON(w, out)
@@ -250,9 +211,7 @@ func (s *server) handleAddSessionComment(w http.ResponseWriter, r *http.Request)
 		if err != nil {
 			return errBadRequest("invalid payload_enc")
 		}
-		_, err = tx.ExecContext(ctx, `
-insert into timeline_events(board_id, card_id, session_id, type, author_user_id, created_at, payload_enc)
-values(?, null, ?, 'comment', ?, ?, ?)`, bid, sessionID, u.UserID, rfc3339(time.Now()), payload)
+		_, err = insertEvent(ctx, tx, timelineEvent{BoardID: bid, SessionID: &sessionID, Type: "comment", AuthorID: &u.UserID, Payload: payload})
 		return err
 	})
 	if handleErr(w, err) {

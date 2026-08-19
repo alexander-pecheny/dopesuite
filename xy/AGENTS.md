@@ -80,6 +80,10 @@ internal/server/       package server — the whole HTTP server
   auth.go              sessions, password login, the Telegram handshake's adapter (state machine in dopecore/tglogin:
                        xy brings its write tx, its users table, its error text), the bot bridge
   boards.go            boards CRUD, keymeta (passphrase re-wrap), members, /api/collaborators (who I share boards with), ACL helpers
+  timeline.go          the Timeline's one writer (insertEvent: every kind's columns; appendEvent for the
+                       metadata trail) and one reader (timelineColumns + scanTimelineEvent, readTimeline)
+  unread.go            the unread rule as SQL fragments (the two buckets, the watermark, the Mention) that
+                       the board list, the snapshot, the activity feed and «Прочитать всё» compose
   lists_cards.go       lists/cards/labels/timeline + list-group handlers, DTOs/scanners.
                        GET /api/boards/{id}/comments returns every live comment on a board in
                        one response (ciphertext, comments only) — what прогрев indexes; a

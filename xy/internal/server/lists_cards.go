@@ -1056,55 +1056,13 @@ func (s *server) handleGetTimeline(w http.ResponseWriter, r *http.Request) {
 	// A deleted comment is normally gone from the лента, but one that still
 	// anchors live replies is returned as a tombstone (deleted = 1, empty
 	// payload) so the thread beneath it stays reachable instead of orphaned.
-	rows, err := s.db.QueryContext(r.Context(), `
-select e.id, e.type, e.author_user_id, e.created_at, e.edited_at, e.is_excerpt,
-       e.reply_to_id, e.deleted_at is not null,
-       (select count(*) from timeline_events r
-          where r.reply_to_id = e.id and r.deleted_at is null),
-       e.payload_enc, e.session_id, e.card_id
-from timeline_events e
+	out, err := s.readTimeline(r.Context(), `
 where e.card_id = ?
   and (e.deleted_at is null
        or exists (select 1 from timeline_events r
                     where r.reply_to_id = e.id and r.deleted_at is null))
 order by e.id`, cardID)
 	if handleErr(w, err) {
-		return
-	}
-	defer rows.Close()
-	out := []timelineEventDTO{}
-	for rows.Next() {
-		var e timelineEventDTO
-		var author, replyTo sql.NullInt64
-		var edited sql.NullString
-		var excerpt, deleted int
-		var payload []byte
-		var sessionID, cardRef sql.NullInt64
-		if err := rows.Scan(&e.ID, &e.Type, &author, &e.CreatedAt, &edited, &excerpt,
-			&replyTo, &deleted, &e.ReplyCount, &payload, &sessionID, &cardRef); handleErr(w, err) {
-			return
-		}
-		if sessionID.Valid {
-			e.SessionID = &sessionID.Int64
-		}
-		if cardRef.Valid {
-			e.CardID = &cardRef.Int64
-		}
-		if author.Valid {
-			e.AuthorID = &author.Int64
-		}
-		if edited.Valid {
-			e.EditedAt = &edited.String
-		}
-		if replyTo.Valid {
-			e.ReplyToID = &replyTo.Int64
-		}
-		e.IsExcerpt = excerpt != 0
-		e.Deleted = deleted != 0
-		e.PayloadEnc = b64(payload)
-		out = append(out, e)
-	}
-	if err := rows.Err(); handleErr(w, err) {
 		return
 	}
 	writeJSON(w, out)
@@ -1161,13 +1119,13 @@ func (s *server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusBadRequest, "payload_enc required")
 		return
 	}
-	var replyTo any
+	var replyTo *int64
 	if req.ReplyToID != nil {
 		root, err := threadRoot(r.Context(), s.db, *req.ReplyToID, cardID)
 		if handleErr(w, err) {
 			return
 		}
-		replyTo = root
+		replyTo = &root
 	}
 	if req.SessionID != nil {
 		sbid, err := boardOfSession(r.Context(), s.db, *req.SessionID)
@@ -1188,13 +1146,7 @@ func (s *server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return errBadRequest("invalid payload_enc")
 		}
-		res, err := tx.ExecContext(ctx, `
-insert into timeline_events(board_id, card_id, session_id, type, author_user_id, created_at, payload_enc, reply_to_id)
-values(?, ?, ?, 'comment', ?, ?, ?, ?)`, bid, cardID, req.SessionID, uid, rfc3339(time.Now()), payload, replyTo)
-		if err != nil {
-			return err
-		}
-		evID, err := res.LastInsertId()
+		evID, err := insertEvent(ctx, tx, timelineEvent{BoardID: bid, CardID: cardID, SessionID: req.SessionID, Type: "comment", AuthorID: &uid, Payload: payload, ReplyToID: replyTo})
 		if err != nil {
 			return err
 		}
@@ -1456,25 +1408,16 @@ func (s *server) handleImportEvents(w http.ResponseWriter, r *http.Request) {
 			if _, perr := time.Parse(time.RFC3339, created); perr != nil {
 				created = rfc3339(time.Now()) // fall back on a missing/garbled timestamp
 			}
-			var author any
-			if c.AuthorUserID != nil {
-				author = *c.AuthorUserID
-			}
+			author := c.AuthorUserID
 			// An unresolvable parent (out-of-order or absent from the batch) drops
 			// the reply to top level rather than failing the whole copy.
-			var replyTo any
+			var replyTo *int64
 			if c.ReplyToSrcID != nil {
 				if mapped, ok := newID[*c.ReplyToSrcID]; ok {
-					replyTo = mapped
+					replyTo = &mapped
 				}
 			}
-			res, err := tx.ExecContext(ctx, `
-insert into timeline_events(board_id, card_id, type, author_user_id, created_at, is_excerpt, payload_enc, reply_to_id)
-values(?, ?, ?, ?, ?, ?, ?, ?)`, bid, cardID, typ, author, created, boolInt(c.IsExcerpt), payload, replyTo)
-			if err != nil {
-				return err
-			}
-			id, err := res.LastInsertId()
+			id, err := insertEvent(ctx, tx, timelineEvent{BoardID: bid, CardID: cardID, Type: typ, AuthorID: author, CreatedAt: created, IsExcerpt: c.IsExcerpt, Payload: payload, ReplyToID: replyTo})
 			if err != nil {
 				return err
 			}
@@ -1488,16 +1431,4 @@ values(?, ?, ?, ?, ?, ?, ?, ?)`, bid, cardID, typ, author, created, boolInt(c.Is
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// appendEvent inserts a timeline event with a base64 payload envelope.
-func appendEvent(ctx context.Context, tx *sql.Tx, boardID, cardID int64, typ string, authorID int64, payloadB64 string) error {
-	payload, err := unb64(payloadB64)
-	if err != nil {
-		return errBadRequest("invalid payload_enc")
-	}
-	_, err = tx.ExecContext(ctx, `
-insert into timeline_events(board_id, card_id, type, author_user_id, created_at, payload_enc)
-values(?, ?, ?, ?, ?, ?)`, boardID, cardID, typ, authorID, rfc3339(time.Now()), payload)
-	return err
 }
