@@ -5,6 +5,7 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
+	"dope/dope/domain/protocol"
 	"dope/dope/domain/roster"
 	"dope/dope/platform/realtime"
 	"dope/dope/platform/util"
@@ -32,7 +33,7 @@ func TestRemapAnswerMatrixFollowsTeams(t *testing.T) {
 	oldParts := parts(games.KSIParticipant{Number: 1, Name: "A"}, games.KSIParticipant{Number: 2, Name: "B"}, games.KSIParticipant{Number: 3, Name: "C"})
 	newParts := parts(games.KSIParticipant{Number: 3, Name: "C"}, games.KSIParticipant{Number: 2, Name: "B"}, games.KSIParticipant{Number: 9, Name: "D"}) // A removed, D added, reordered
 
-	out := roster.RemapAnswerMatrix(old, oldParts, newParts, 5)
+	out := protocol.RemapAnswerMatrix(old, oldParts, newParts, 5)
 	if len(out) != 3 {
 		t.Fatalf("want 3 rows, got %d: %v", len(out), out)
 	}
@@ -60,7 +61,7 @@ func TestRemapAnswerMatrixDistinguishesDuplicateNamesByNumber(t *testing.T) {
 	oldParts := parts(games.KSIParticipant{Number: 7, Name: "Дубль"}, games.KSIParticipant{Number: 8, Name: "Дубль"})
 	newParts := parts(games.KSIParticipant{Number: 8, Name: "Дубль"}, games.KSIParticipant{Number: 7, Name: "Дубль"}) // swap order
 
-	out := roster.RemapAnswerMatrix(old, oldParts, newParts, 5)
+	out := protocol.RemapAnswerMatrix(old, oldParts, newParts, 5)
 	if out[0][0] != "b" {
 		t.Fatalf("#8's mark should follow it to new index 0, got %q", out[0][0])
 	}
@@ -79,7 +80,7 @@ func TestRemapAnswerMatrixLegacyNameFallback(t *testing.T) {
 	}
 	oldParts := parts(games.KSIParticipant{Number: 0, Name: "A"}, games.KSIParticipant{Number: 0, Name: "B"})
 	newParts := parts(games.KSIParticipant{Number: 2, Name: "B"}, games.KSIParticipant{Number: 1, Name: "A"}) // now numbered, reordered
-	out := roster.RemapAnswerMatrix(old, oldParts, newParts, 5)
+	out := protocol.RemapAnswerMatrix(old, oldParts, newParts, 5)
 	if out[0][0] != "y" {
 		t.Fatalf("B should map by name to new index 0, got %q", out[0][0])
 	}
@@ -90,7 +91,7 @@ func TestRemapAnswerMatrixLegacyNameFallback(t *testing.T) {
 
 func TestRemapAnswerMatrixLegacyNoParticipantsResizesPositionally(t *testing.T) {
 	old := [][]string{{"a"}, {"b"}}
-	out := roster.RemapAnswerMatrix(old, nil, parts(games.KSIParticipant{Number: 0, Name: "X"}, games.KSIParticipant{Number: 0, Name: "Y"}, games.KSIParticipant{Number: 0, Name: "Z"}), 2)
+	out := protocol.RemapAnswerMatrix(old, nil, parts(games.KSIParticipant{Number: 0, Name: "X"}, games.KSIParticipant{Number: 0, Name: "Y"}, games.KSIParticipant{Number: 0, Name: "Z"}), 2)
 	if len(out) != 3 || out[0][0] != "a" || out[1][0] != "b" || out[2][0] != "" {
 		t.Fatalf("no old participants should resize positionally: %v", out)
 	}

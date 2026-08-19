@@ -209,20 +209,11 @@ func (s *server) serveInjectedHTML(w http.ResponseWriter, r *http.Request, htmlP
 
 func (s *server) buildGameInit(ctx context.Context, scope festScope) (gameInitPayload, error) {
 	payload := gameInitPayload{FestID: scope.FestID, GameID: scope.GameID}
-	var schemeJSON, stateJSON, screenSettingsJSON string
-	if err := s.eng.DB.QueryRowContext(ctx, `
-select coalesce(scheme_json, ''),
-       coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), '{}'),
-       coalesce(screen_settings_json, '')
-from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&schemeJSON, &stateJSON, &screenSettingsJSON); err != nil {
+	doc, err := store.LoadGameDoc(ctx, s.eng.DB, scope.FestID, scope.GameID)
+	if err != nil {
 		return payload, err
 	}
-	if schemeJSON == "" {
-		schemeJSON = "{}"
-	}
-	if stateJSON == "" {
-		stateJSON = "{}"
-	}
+	schemeJSON, stateJSON, screenSettingsJSON := doc.SchemeJSON, doc.State, doc.Screen
 	if screenSettingsJSON == "" {
 		screenSettingsJSON = "{}"
 	}

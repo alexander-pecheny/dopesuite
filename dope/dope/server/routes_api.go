@@ -21,6 +21,7 @@ import (
 	"dope/dope/platform/metrics"
 	"dope/dope/platform/realtime"
 	"dope/dope/platform/util"
+	"dope/dope/storage/store"
 	"dope/dope/web/route"
 )
 
@@ -327,23 +328,16 @@ func (s *server) scopedGameState(w http.ResponseWriter, r *http.Request, sc rout
 	// (idempotent) or one extra resync; erring high would make the client skip
 	// the next delta and diverge permanently.
 	seq := s.eng.CurrentStateSeq(gameStateScopeKey(sc.GameID))
-	var stateJSON string
-	err := s.eng.DB.QueryRowContext(r.Context(), `
-	select coalesce(m.state_json, coalesce(g.state_json, '{}'))
-	from games g left join matches m on m.game_id = g.id and m.code = 'main'
-	where g.fest_id = ? and g.id = ?`, sc.FestID, sc.GameID).Scan(&stateJSON)
+	doc, err := store.LoadGameDoc(r.Context(), s.eng.DB, sc.FestID, sc.GameID)
 	if err != nil {
 		return err
-	}
-	if stateJSON == "" {
-		stateJSON = "{}"
 	}
 	// X-State-Seq lets a resyncing SSE client align its lastSeq with the state
 	// it just fetched; X-State-Epoch says whether the seq space was reset by a
 	// restart, so a low post-restart seq is adopted rather than treated as stale.
 	w.Header().Set("X-State-Seq", strconv.FormatUint(seq, 10))
 	w.Header().Set("X-State-Epoch", s.eng.Epoch)
-	return route.JSONBytes(w, []byte(stateJSON))
+	return route.JSONBytes(w, []byte(doc.State))
 }
 
 func (s *server) scopedGameStatePut(w http.ResponseWriter, r *http.Request, sc route.Scope) error {

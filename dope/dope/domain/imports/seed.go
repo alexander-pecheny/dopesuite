@@ -493,7 +493,7 @@ where fest_id = ? and id = ?`, string(stateJSON), util.UtcNow(), scope.FestID, s
 }
 
 func seedImportStateFromRaw(raw string) (seedImportState, error) {
-	obj, err := rosterpkg.RawJSONObject(raw)
+	obj, err := protocol.RawJSONObject(raw)
 	if err != nil {
 		return seedImportState{}, err
 	}
@@ -509,7 +509,7 @@ func seedImportStateFromRaw(raw string) (seedImportState, error) {
 }
 
 func putSeedImportState(raw string, state seedImportState) ([]byte, error) {
-	obj, err := rosterpkg.RawJSONObject(raw)
+	obj, err := protocol.RawJSONObject(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -712,18 +712,14 @@ func seedRefKey(sourceRef string) (int, int) {
 // some. A team the source document marks as declined comes pre-declined. A
 // Game of more than one table is refused: which of them seeds is not defined.
 func standingsCandidates(ctx context.Context, q store.Queryer, festID int64, gameCode string, rules []store.SchemeSortRule) (int64, []seedCandidate, error) {
-	var gameID int64
-	var gameType, document string
-	err := q.QueryRowContext(ctx, `
-select id, game_type,
-       coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), coalesce(state_json, '{}'))
-from games where fest_id = ? and code = ?`, festID, gameCode).Scan(&gameID, &gameType, &document)
+	doc, err := store.LoadGameDocByCode(ctx, q, festID, gameCode)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, nil, fmt.Errorf("в фесте нет игры с кодом %s", gameCode)
 	}
 	if err != nil {
 		return 0, nil, err
 	}
+	gameID, gameType, document := doc.GameID, doc.GameType, doc.State
 	stages, err := store.CollectRows(ctx, q, `
 select distinct stage_id from stage_standings st join stages s on s.id = st.stage_id where s.game_id = ?`, []any{gameID},
 		func(rows *sql.Rows) (int64, error) {

@@ -24,14 +24,8 @@ import (
 // HandleScopedGameExport serves GET /api/fest/{fid}/games/{gid}/export.xlsx.
 // Gated by read access — anyone who can view the fest can download the archive.
 func HandleScopedGameExport(s Host, w http.ResponseWriter, r *http.Request, festID, gameID int64) {
-	var gameType, schemeJSON, stateJSON string
-	var gameSlug, festSlug sql.NullString
-	err := s.DB().QueryRowContext(r.Context(), `
-select g.game_type, g.slug, coalesce(g.scheme_json, ''),
-       coalesce((select m.state_json from matches m where m.game_id = g.id and m.code = 'main'), coalesce(g.state_json, '')), f.slug
-from games g join fests f on f.id = g.fest_id
-where g.fest_id = ? and g.id = ?`, festID, gameID).
-		Scan(&gameType, &gameSlug, &schemeJSON, &stateJSON, &festSlug)
+	doc, err := store.LoadGameDoc(r.Context(), s.DB(), festID, gameID)
+	gameType, schemeJSON, stateJSON, gameSlug, festSlug := doc.GameType, doc.SchemeJSON, doc.State, doc.Slug, doc.FestSlug
 	if errors.Is(err, sql.ErrNoRows) {
 		http.NotFound(w, r)
 		return

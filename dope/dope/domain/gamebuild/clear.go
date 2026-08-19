@@ -78,7 +78,8 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 			tourComp = []int{15}
 		}
 		var state []byte
-		if newScheme, state, err = pristineODTx(ctx, tx, festID, meta.Slug, meta.Title, tourComp); err != nil {
+		emptyScheme, emptyState := games.ODEmptyGameJSON(meta.Slug, meta.Title, tourComp)
+		if newScheme, state, err = pristineFlatTx(ctx, tx, festID, games.OD, emptyScheme, emptyState); err != nil {
 			return "", err
 		}
 		if err := insertFlatMatchTx(ctx, tx, festID, gameID, title, string(state), now); err != nil {
@@ -95,7 +96,8 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 		}
 		// The sticker configuration survives, so a stickers game stays one.
 		var state []byte
-		if newScheme, state, err = pristineKSITx(ctx, tx, festID, meta.Slug, meta.Title, sc.Themes, sc.Stickers); err != nil {
+		emptyScheme, emptyState := games.KSIStickersEmptyGameJSON(meta.Slug, meta.Title, sc.Themes, sc.Stickers)
+		if newScheme, state, err = pristineFlatTx(ctx, tx, festID, games.KSI, emptyScheme, emptyState); err != nil {
 			return "", err
 		}
 		if err := insertFlatMatchTx(ctx, tx, festID, gameID, title, string(state), now); err != nil {

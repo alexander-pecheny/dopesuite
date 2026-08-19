@@ -806,39 +806,20 @@ func (b *Batcher) applyGamePatchTx(ctx context.Context, tx *sql.Tx, scope core.F
 		sample.Ops = len(req.Ops)
 	}
 
-	// Flat games keep their state on the 'main' match; a game without one (EK)
-	// PATCHes its game-level auxiliary blob instead.
-	var gameType, stateJSON string
-	var matchID sql.NullInt64
-	if err := tx.QueryRowContext(ctx, `
-select g.game_type, m.id, coalesce(m.state_json, coalesce(g.state_json, '{}'))
-from games g left join matches m on m.game_id = g.id and m.code = 'main'
-where g.fest_id = ? and g.id = ?`,
-		scope.FestID, scope.GameID).Scan(&gameType, &matchID, &stateJSON); err != nil {
+	doc, err := store.LoadGameDoc(ctx, tx, scope.FestID, scope.GameID)
+	if err != nil {
 		return nil, 0, nil, err
 	}
-
-	next, blobOps, err := applyStateOps(gameType, stateJSON, req.Ops, sample, metricsOn)
+	next, blobOps, err := applyStateOps(doc.GameType, doc.State, req.Ops, sample, metricsOn)
 	if err != nil {
 		return nil, 0, nil, err
 	}
 	tDB := metrics.NowIf(metricsOn)
-	if matchID.Valid {
-		if err := flatgame.PatchStateTx(ctx, tx, scope.FestID, scope.GameID, matchID.Int64, string(next), blobOps); err != nil {
-			return nil, 0, nil, err
-		}
-	} else {
-		result, err := tx.ExecContext(ctx, `
-update games set state_json = ?, updated_at = ? where fest_id = ? and id = ?`,
-			string(next), util.UtcNow(), scope.FestID, scope.GameID)
-		if err != nil {
-			return nil, 0, nil, err
-		}
-		if n, err := result.RowsAffected(); err != nil {
-			return nil, 0, nil, err
-		} else if n == 0 {
-			return nil, 0, nil, sql.ErrNoRows
-		}
+	if blobOps == nil {
+		blobOps = []store.BlobOp{}
+	}
+	if err := flatgame.SaveDocumentTx(ctx, tx, scope.FestID, scope.GameID, doc.MatchID, string(next), blobOps); err != nil {
+		return nil, 0, nil, err
 	}
 	revision, err := festwrite.BumpFestRevisionTx(ctx, tx, scope.FestID, "game:state-patch", payload)
 	if err != nil {

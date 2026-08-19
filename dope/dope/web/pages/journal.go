@@ -42,13 +42,9 @@ type journalOpRow struct {
 	payload []byte
 }
 
-func (s *Server) loadGameJournalGroups(ctx context.Context, gameID int64) ([]journalChange, error) {
-	var gameType, stateJSON string
-	_ = s.h.DB().QueryRowContext(ctx, `
-select game_type,
-       coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), coalesce(state_json, '{}'))
-from games where id = ?`, gameID).
-		Scan(&gameType, &stateJSON)
+func (s *Server) loadGameJournalGroups(ctx context.Context, festID, gameID int64) ([]journalChange, error) {
+	doc, _ := store.LoadGameDoc(ctx, s.h.DB(), festID, gameID)
+	gameType, stateJSON := doc.GameType, doc.State
 
 	rows, err := s.h.DB().QueryContext(ctx, `
 select j.id, j.ts, j.op, j.payload, coalesce(j.request_id, ''), coalesce(u.username, '')
@@ -785,7 +781,7 @@ func (s *Server) RenderGameJournal(w http.ResponseWriter, r *http.Request, festI
 	if title == "" {
 		title = fmt.Sprintf("игра %d", gameID)
 	}
-	groups, err := s.loadGameJournalGroups(r.Context(), gameID)
+	groups, err := s.loadGameJournalGroups(r.Context(), festID, gameID)
 	if err != nil {
 		http.Error(w, "journal: "+err.Error(), http.StatusInternalServerError)
 		return

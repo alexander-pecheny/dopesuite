@@ -36,6 +36,32 @@ func SetStateTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, raw strin
 	return settleTx(ctx, tx, festID, gameID, matchID)
 }
 
+// SaveDocumentTx writes a Game's document where it lives (store.GameDoc): on
+// its 'main' бой, journalled as the ops that made it (or as one replace when
+// ops is nil) and settled; or, for a Game without one, on the game row.
+func SaveDocumentTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, matchID sql.NullInt64, next string, ops []store.BlobOp) error {
+	if !matchID.Valid {
+		result, err := tx.ExecContext(ctx, `
+update games set state_json = ?, updated_at = ? where fest_id = ? and id = ?`, next, util.UtcNow(), festID, gameID)
+		if err != nil {
+			return err
+		}
+		if n, err := result.RowsAffected(); err != nil {
+			return err
+		} else if n == 0 {
+			return sql.ErrNoRows
+		}
+		return nil
+	}
+	if ops == nil {
+		if err := festwrite.SetFlatGameStateTx(ctx, tx, matchID.Int64, next); err != nil {
+			return err
+		}
+		return settleTx(ctx, tx, festID, gameID, matchID.Int64)
+	}
+	return PatchStateTx(ctx, tx, festID, gameID, matchID.Int64, next, ops)
+}
+
 // PatchStateTx stores a document the caller already patched, journalling the
 // ops that made it.
 func PatchStateTx(ctx context.Context, tx *sql.Tx, festID, gameID, matchID int64, next string, ops []store.BlobOp) error {

@@ -9,6 +9,7 @@ import (
 
 	"dope/dope/domain/flatgame"
 	"dope/dope/domain/games"
+	"dope/dope/domain/protocol"
 	"dope/dope/domain/roster"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
@@ -23,7 +24,8 @@ func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, tours, questi
 	for i := range tourComp {
 		tourComp[i] = questions
 	}
-	schemeJSON, stateJSON, err := pristineODTx(ctx, tx, festID, identity.Code, identity.Title, tourComp)
+	emptyScheme, emptyState := games.ODEmptyGameJSON(identity.Code, identity.Title, tourComp)
+	schemeJSON, stateJSON, err := pristineFlatTx(ctx, tx, festID, games.OD, emptyScheme, emptyState)
 	if err != nil {
 		return 0, err
 	}
@@ -35,17 +37,18 @@ func createKSIGameTx(ctx context.Context, tx *sql.Tx, festID int64, themesCount 
 	if err != nil {
 		return 0, err
 	}
-	schemeJSON, stateJSON, err := pristineKSITx(ctx, tx, festID, identity.Code, identity.Title, themesCount, stickers)
+	emptyScheme, emptyState := games.KSIStickersEmptyGameJSON(identity.Code, identity.Title, themesCount, stickers)
+	schemeJSON, stateJSON, err := pristineFlatTx(ctx, tx, festID, games.KSI, emptyScheme, emptyState)
 	if err != nil {
 		return 0, err
 	}
 	return insertJSONGameTx(ctx, tx, festID, identity, "ksi", schemeJSON, stateJSON)
 }
 
-// pristineODTx is an ОД game's empty scheme and state for these tours, the
-// фест's roster already in both — what creation and «Очистить» write.
-func pristineODTx(ctx context.Context, tx *sql.Tx, festID int64, slug, title string, tourComp []int) ([]byte, []byte, error) {
-	schemeJSON, stateJSON := games.ODEmptyGameJSON(slug, title, tourComp)
+// pristineFlatTx is a flat game's empty scheme and state with the фест's
+// roster already folded in through its Protocol — what creation and
+// «Очистить» write.
+func pristineFlatTx(ctx context.Context, tx *sql.Tx, festID int64, gameType string, schemeJSON, stateJSON []byte) ([]byte, []byte, error) {
 	teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
 	if err != nil {
 		return nil, nil, err
@@ -53,33 +56,11 @@ func pristineODTx(ctx context.Context, tx *sql.Tx, festID int64, slug, title str
 	if len(teams) == 0 {
 		return schemeJSON, stateJSON, nil
 	}
-	if schemeJSON, err = roster.ApplyRosterToChGKScheme(string(schemeJSON), teams); err != nil {
-		return nil, nil, err
+	scheme, state, ok, err := protocol.FoldRoster(gameType, string(schemeJSON), string(stateJSON), roster.RosterTeams(teams), nil)
+	if err != nil || !ok {
+		return schemeJSON, stateJSON, err
 	}
-	if stateJSON, err = roster.ApplyRosterToChGKState(string(stateJSON), teams, nil); err != nil {
-		return nil, nil, err
-	}
-	return schemeJSON, stateJSON, nil
-}
-
-// pristineKSITx is a КСИ game's empty scheme and state for these themes and
-// stickers, the фест's roster already in both.
-func pristineKSITx(ctx context.Context, tx *sql.Tx, festID int64, slug, title string, themesCount int, stickers json.RawMessage) ([]byte, []byte, error) {
-	schemeJSON, stateJSON := games.KSIStickersEmptyGameJSON(slug, title, themesCount, stickers)
-	teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(teams) == 0 {
-		return schemeJSON, stateJSON, nil
-	}
-	if schemeJSON, err = roster.ApplyRosterToKSIScheme(string(schemeJSON), teams); err != nil {
-		return nil, nil, err
-	}
-	if stateJSON, err = roster.ApplyRosterToKSIState(string(stateJSON), teams, themesCount); err != nil {
-		return nil, nil, err
-	}
-	return schemeJSON, stateJSON, nil
+	return scheme, state, nil
 }
 
 func insertJSONGameTx(ctx context.Context, tx *sql.Tx, festID int64, identity gameIdentity, gameType string, schemeJSON, stateJSON []byte) (int64, error) {

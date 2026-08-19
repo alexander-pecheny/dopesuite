@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"dope/dope/domain/core"
+	"dope/dope/domain/games"
 	"dope/dope/domain/overrides"
 	"dope/dope/domain/roster"
 	"dope/dope/platform/util"
@@ -238,18 +239,20 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 
 		// OD/KSI game state is a pure function of the TEAM list, so only re-propagate
 		// when teams actually changed — a player-only change leaves it identical.
-		var chgkUpdates, ksiUpdates []roster.GameStateBroadcast
 		if !teamLevelEqual(sortedCurrent, teams) {
-			chgkUpdates, err = roster.PropagateRosterToChGKTx(ctx, tx, festID, teams, nil)
-			if err != nil {
-				return RatingRosterImportResult{}, err
-			}
-			ksiUpdates, err = roster.PropagateRosterToKSITx(ctx, tx, festID, teams)
-			if err != nil {
+			if updates, err = roster.PropagateRosterTx(ctx, tx, festID, teams, nil); err != nil {
 				return RatingRosterImportResult{}, err
 			}
 		}
-		updates = append(chgkUpdates, ksiUpdates...)
+		odGames, ksiGames := 0, 0
+		for _, u := range updates {
+			switch u.GameType {
+			case games.OD:
+				odGames++
+			case games.KSI:
+				ksiGames++
+			}
+		}
 
 		// Refresh EK override game rosters. With fest_players ids stable the surviving
 		// overrides still point at the right rows (orphaned ones cascaded away with
@@ -270,8 +273,8 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 			"ratingID": ratingID,
 			"teams":    len(teams),
 			"players":  playerCount,
-			"odGames":  len(chgkUpdates),
-			"ksiGames": len(ksiUpdates),
+			"odGames":  odGames,
+			"ksiGames": ksiGames,
 		}))
 		if err != nil {
 			return RatingRosterImportResult{}, err
@@ -283,8 +286,8 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 		return RatingRosterImportResult{
 			TeamCount:    len(teams),
 			PlayerCount:  playerCount,
-			ODGameCount:  len(chgkUpdates),
-			KSIGameCount: len(ksiUpdates),
+			ODGameCount:  odGames,
+			KSIGameCount: ksiGames,
 		}, nil
 	}()
 	if err != nil {

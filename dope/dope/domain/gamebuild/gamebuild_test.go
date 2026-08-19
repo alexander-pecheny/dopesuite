@@ -127,10 +127,11 @@ func TestClearFlatGameKeepsItPlayable(t *testing.T) {
 	if first != "main" {
 		t.Errorf("first бой = %q, want main", first)
 	}
-	state, err := store.FlatGameStateJSON(context.Background(), db, gameID)
-	if err != nil {
+	doc, err := store.LoadGameDoc(context.Background(), db, festID, gameID)
+	if err != nil || !doc.MatchID.Valid {
 		t.Fatalf("the flat match is gone: %v", err)
 	}
+	state := doc.State
 	if strings.Contains(state, "played") || !strings.Contains(state, "Команда 1") {
 		t.Errorf("state after clear = %s; want pristine with the roster", state)
 	}

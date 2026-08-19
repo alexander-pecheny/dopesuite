@@ -115,25 +115,14 @@ func hostPresenceColor(userID int64) string {
 func (s *server) replaceGameState(reqCtx context.Context, scope festScope, raw []byte) (int64, error) {
 	var revision int64
 	err := s.eng.WithWriteTx(reqCtx, scope.FestID, "game-state-put", func(ctx context.Context, tx *sql.Tx) error {
-		var gameType, stateJSON string
-		var matchID sql.NullInt64
-		if err := tx.QueryRowContext(ctx, `
-select g.game_type, m.id, coalesce(m.state_json, coalesce(g.state_json, '{}'))
-from games g left join matches m on m.game_id = g.id and m.code = 'main'
-where g.fest_id = ? and g.id = ?`,
-			scope.FestID, scope.GameID).Scan(&gameType, &matchID, &stateJSON); err != nil {
+		doc, err := store.LoadGameDoc(ctx, tx, scope.FestID, scope.GameID)
+		if err != nil {
 			return err
 		}
-		if err := validateImmutableRatingRosterState(gameType, []byte(stateJSON), raw); err != nil {
+		if err := validateImmutableRatingRosterState(doc.GameType, []byte(doc.State), raw); err != nil {
 			return err
 		}
-		if matchID.Valid {
-			if err := flatgame.SetStateTx(ctx, tx, scope.FestID, scope.GameID, string(raw)); err != nil {
-				return err
-			}
-		} else if _, err := tx.ExecContext(ctx, `
-update games set state_json = ?, updated_at = ? where fest_id = ? and id = ?`,
-			string(raw), util.UtcNow(), scope.FestID, scope.GameID); err != nil {
+		if err := flatgame.SaveDocumentTx(ctx, tx, scope.FestID, scope.GameID, doc.MatchID, string(raw), nil); err != nil {
 			return err
 		}
 		var bumpErr error

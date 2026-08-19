@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"dope/dope/domain/games"
+	"dope/dope/storage/store"
 )
 
 // results.go exposes a computed "results" view for a game: the same total
@@ -22,12 +23,8 @@ func HandleScopedGameResults(s Host, w http.ResponseWriter, r *http.Request, fes
 	// Read seq before the row (same ordering rationale as handleScopedGameState)
 	// so the X-State-Seq we report is never ahead of the state we scored.
 	seq := s.CurrentStateSeq(fmt.Sprintf("game-state:%d", gameID))
-	var gameType, schemeJSON, stateJSON string
-	err := s.DB().QueryRowContext(r.Context(), `
-select game_type, scheme_json,
-       coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), coalesce(state_json, '{}'))
-from games where fest_id = ? and id = ?`,
-		festID, gameID).Scan(&gameType, &schemeJSON, &stateJSON)
+	doc, err := store.LoadGameDoc(r.Context(), s.DB(), festID, gameID)
+	gameType, schemeJSON, stateJSON := doc.GameType, doc.SchemeJSON, doc.State
 	if errors.Is(err, sql.ErrNoRows) {
 		http.NotFound(w, r)
 		return

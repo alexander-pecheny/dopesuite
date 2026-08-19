@@ -38,17 +38,6 @@ func FlatMatchID(ctx context.Context, q Queryer, gameID int64) (int64, error) {
 	return id, err
 }
 
-// FlatGameStateJSON reads a flat game's state document from its match.
-func FlatGameStateJSON(ctx context.Context, q Queryer, gameID int64) (string, error) {
-	var state string
-	err := q.QueryRowContext(ctx,
-		`select state_json from matches where game_id = ? and code = 'main'`, gameID).Scan(&state)
-	if state == "" {
-		state = "{}"
-	}
-	return state, err
-}
-
 // EnsureParticipantByNumber finds or mints the фест's Participant that plays
 // under this number — a team or a player, per roster — and keeps its display
 // name and city in step with what the caller knows. The number is the

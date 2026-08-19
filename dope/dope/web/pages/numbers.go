@@ -391,20 +391,11 @@ func (s *Server) SaveFestNumbers(reqCtx context.Context, festID int64, assignmen
 		if len(entryRemap) == 0 {
 			entryRemap = nil
 		}
-		chgkUpdates, err := roster.PropagateRosterToChGKTx(ctx, tx, festID, teams, entryRemap)
-		if err != nil {
+		// Every flat Protocol carries the universal Number, so a reassignment
+		// flows into each one's document; КСИ's answers follow their team.
+		if updates, err = roster.PropagateRosterTx(ctx, tx, festID, teams, entryRemap); err != nil {
 			return err
 		}
-		// KSI carries the same universal team number in its participants list, so a
-		// number reassignment must flow into KSI states too (the full roster import
-		// propagates to both; the number-edit path used to skip KSI, leaving its
-		// numbers stale relative to OD). Answers follow each team by name when the
-		// number changed, so scores are preserved.
-		ksiUpdates, err := roster.PropagateRosterToKSITx(ctx, tx, festID, teams)
-		if err != nil {
-			return err
-		}
-		updates = append(chgkUpdates, ksiUpdates...)
 		revision, err = festwrite.BumpFestRevisionTx(ctx, tx, festID, "fest:numbers", util.MustJSON(map[string]any{
 			"assigned": len(assignments),
 			"remapped": len(entryRemap),
