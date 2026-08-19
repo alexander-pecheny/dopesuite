@@ -20,6 +20,8 @@ import {createSheetCursor, parseMark} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {computeBrainPlayerStats} from "./brain-stats.js";
 import type {StatsBout} from "./brain-stats.js";
+import * as brain from "./brain-protocol.js";
+import type {BrainMatchState, BrainRow} from "./brain-protocol.js";
 import {buildFestGrid, buildReseedStagePanel} from "./fest-grid.js";
 import type {FestGridStage, ReseedEntry} from "./fest-grid.js";
 import {gameTabs, canonicalKey, groupLabel} from "./game-tabs.js";
@@ -30,16 +32,6 @@ interface PageGlobals {
 }
 
 const pageWindow = window as Window & PageGlobals;
-
-interface BrainRow {
-  player: string;
-  mark: string; // "right" | "wrong" | ""
-}
-
-interface BrainMatchState {
-  tiebreaks?: number;
-  teams?: Array<{rows?: Array<BrainRow | null> | null} | null> | null;
-}
 
 interface BrainSlotTeam {
   id?: number;
@@ -258,22 +250,7 @@ window.addEventListener("hashchange", () => {
 
 
 function normalizeState(view: BrainMatchView): void {
-  const state = (view.state && typeof view.state === "object" ? view.state : {}) as BrainMatchState;
-  view.state = state;
-  if (!Number.isInteger(state.tiebreaks) || (state.tiebreaks as number) < 0) state.tiebreaks = 0;
-  if (!Array.isArray(state.teams)) state.teams = [];
-  while (state.teams.length < 2) state.teams.push({rows: []});
-  const rowCount = questionsFor(view.code || "") + (state.tiebreaks as number);
-  state.teams = state.teams.map((side) => {
-    const rows = Array.isArray(side?.rows) ? side!.rows! : [];
-    while (rows.length < rowCount) rows.push({player: "", mark: ""});
-    return {
-      rows: rows.map((row) => ({
-        player: typeof row?.player === "string" ? row.player : "",
-        mark: row?.mark === "right" || row?.mark === "wrong" ? row.mark : "",
-      })),
-    };
-  });
+  view.state = brain.parseState(view.state, questionsFor(view.code || ""));
 }
 
 // adoptMatchView takes a бой's view from wherever it arrives — the fetch, a

@@ -16,6 +16,9 @@ import {bindScrollEdges, clamp, createTeamNameOverflowController, fitScrollFade,
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {gameTabs} from "./game-tabs.js";
+import * as ksi from "./ksi-protocol.js";
+import {KSI_THEMES, QUESTION_VALUES, RESULT_VALUES, STICKER_NEUTRAL} from "./ksi-protocol.js";
+import type {KSIRules, KSIScheme, KSIState, ParticipantEntry, ResultRow, ScoreSheet, StickerType} from "./ksi-protocol.js";
 
 // Page globals the bundle environment provides (the server-inlined
 // __GAME_INIT__). Accessed via a structural cast, same as game-page.ts.
@@ -25,45 +28,10 @@ interface PageGlobals {
 
 const pageWindow = window as Window & PageGlobals;
 
-interface StickerType {
-  id: string;
-  label: string;
-  color: string;
-  max: number | null;
-}
-
-interface KSIScheme {
-  gameType?: string;
-  title?: string;
-  themes?: unknown;
-  participants?: string[];
-  teams?: Array<{name?: string}>;
-  stickers?: {types?: Array<{id?: unknown; label?: unknown; color?: unknown; max?: unknown} | null | undefined>} | null;
-  [key: string]: unknown;
-}
-
-type ParticipantEntry = string | {number?: unknown; name?: unknown} | null | undefined;
-
-interface KSIState {
-  participants: ParticipantEntry[];
-  themes: Array<{answers: string[][]}>;
-  finished: boolean;
-  declined: Record<string, boolean>;
-  stickers?: string[][];
-  [key: string]: unknown;
-}
-
 interface FestInfo {
   title?: string;
   gameName?: string;
   [key: string]: unknown;
-}
-
-interface ScoreCache {
-  themeScores: number[][];
-  themeScored: boolean[][];
-  totals: number[];
-  places: string[];
 }
 
 type ActiveCell = {player: number; theme: number; answer: number};
@@ -87,12 +55,6 @@ const teamNameOverflow = createTeamNameOverflowController({
     truncatedClass: "results-team-truncated",
   },
 });
-const QUESTION_VALUES = [10, 20, 30, 40, 50];
-const RESULT_VALUES = QUESTION_VALUES.slice().reverse();
-const KSI_THEMES = 20;
-// Sticker type id whose rules match a regular KSI theme; the implicit sticker
-// for plain (non-stickers) KSI games and the fallback for unknown ids.
-const STICKER_NEUTRAL = "neutral";
 // Antu accessories-notes SVG: tick removed, solid fills (no gradient IDs so
 // multiple copies on the same page don't collide). CSS hue-rotate() on the SVG
 // element shifts all shades together, preserving the note's depth and texture.
@@ -146,13 +108,12 @@ let participants: string[] = [];
 let themesCount = 8;
 // Sticker configuration for the "KSI with stickers" variant, parsed from
 // scheme.stickers. Empty for plain KSI/SI games (stickersEnabled() is false).
-let stickerTypes: StickerType[] = [];
-let stickerById = new Map<string, StickerType>();
+let rules: KSIRules = {teamMode: false, themesCount: 8, stickers: [], stickerById: new Map()};
 let activeCell: ActiveCell = {player: 0, theme: 0, answer: 0};
 let renderedTable: HTMLElement | null = null;
 let renderedTab: string | null = null;
 let tableIndex: NodeIndex | null = null;
-let scoreCache: ScoreCache | null = null;
+let scoreCache: ScoreSheet | null = null;
 let detailedOrderCache: number[] | null = null;
 // Client-local row order for the «Подробно» sheet: "name" (default) or "number".
 // Editors pick whichever identity they read off the floor; never synced.
@@ -228,99 +189,40 @@ async function revalidateAll(): Promise<void> {
 }
 
 function initFromScheme(): void {
-  participants = schemeParticipants();
-  themesCount = Number(scheme!.themes) > 0 ? Number(scheme!.themes) : (isTeamMode() ? KSI_THEMES : 8);
-  initStickers();
+  rules = ksi.rulesOf(scheme!);
+  participants = ksi.schemeParticipants(scheme!);
+  themesCount = rules.themesCount;
 }
 
-function initStickers(): void {
-  stickerTypes = [];
-  stickerById = new Map();
-  const types = scheme?.stickers && Array.isArray(scheme.stickers.types) ? scheme.stickers.types : [];
-  for (const raw of types) {
-    if (!raw || typeof raw.id !== "string" || !raw.id) continue;
-    const type: StickerType = {
-      id: raw.id,
-      label: typeof raw.label === "string" && raw.label ? raw.label : raw.id,
-      color: typeof raw.color === "string" ? raw.color : "",
-      // Max count a team may use; null = unlimited (the neutral sticker).
-      max: typeof raw.max === "number" && Number.isFinite(raw.max) ? raw.max : null,
-    };
-    stickerTypes.push(type);
-    stickerById.set(type.id, type);
-  }
-}
+// The Protocol's rules and arithmetic live in ksi-protocol.ts; these read the
+// page's state and rules.
+function stickersEnabled(): boolean { return ksi.stickersEnabled(rules); }
+const stickerTypes = {get list(): StickerType[] { return rules.stickers; }};
+const stickerById = {has: (id: string) => rules.stickerById.has(id), get: (id: string) => rules.stickerById.get(id)};
 
-// stickersEnabled gates the whole sticker UI/scoring path: only KSI team games
-// that actually carry a sticker configuration.
-function stickersEnabled(): boolean {
-  return isTeamMode() && stickerTypes.length > 0;
-}
-
-function stickerValue(player: number, theme: number): string {
-  const id = state!.stickers?.[theme]?.[player];
-  return typeof id === "string" ? id : "";
-}
-
-function schemeParticipants(): string[] {
-  if (Array.isArray(scheme!.participants) && scheme!.participants.length > 0) {
-    return scheme!.participants.slice();
-  }
-  if (isTeamMode() && Array.isArray(scheme!.teams) && scheme!.teams.length > 0) {
-    return scheme!.teams.map((team) => team.name || "");
-  }
-  if (isTeamMode()) return [];
-  return ["Игрок 1", "Игрок 2", "Игрок 3", "Игрок 4"];
-}
-
+function isTeamMode(): boolean { return ksi.isTeamMode(scheme ?? {}); }
+function stickerValue(player: number, theme: number): string { return ksi.stickerValue(state!, player, theme); }
 function ensureState(): void {
-  if (!state || typeof state !== "object") state = {} as KSIState;
-  if (!Array.isArray(state.participants) || state.participants.length === 0) {
-    state.participants = participants.slice();
-  }
-  if (!Array.isArray(state.themes)) state.themes = [];
-  while (state.themes.length < themesCount) state.themes.push({answers: []});
-  state.themes = state.themes.slice(0, themesCount).map((theme) => {
-    const answers = Array.isArray(theme.answers) ? theme.answers : [];
-    const padded: string[][] = [];
-    for (let p = 0; p < state!.participants.length; p++) {
-      const row: string[] = Array.isArray(answers[p]) ? answers[p].slice(0, QUESTION_VALUES.length) : [];
-      while (row.length < QUESTION_VALUES.length) row.push("");
-      padded.push(row);
-    }
-    return {answers: padded};
-  });
-  if (typeof state.finished !== "boolean") state.finished = false;
-  // Refused-to-play flags live in a dedicated top-level map keyed by team identity
-  // (`n<number>`, or `s<name>` for the legacy number-less case) rather than on the
-  // participant objects, which are an immutable rating roster and get fully rebuilt
-  // on every roster re-import — keys here survive that.
-  if (!state.declined || typeof state.declined !== "object" || Array.isArray(state.declined)) {
-    state.declined = {};
-  }
-  ensureStickerGrid();
+  state = ksi.parseState(state, rules, participants);
   invalidateScores();
   invalidateDetailedOrder();
 }
-
-// ensureStickerGrid normalises state.stickers to a themesCount × participants
-// grid of sticker ids (""=unset). Only meaningful for stickers games; left
-// untouched otherwise.
-function ensureStickerGrid(): void {
-  if (!stickersEnabled()) return;
-  const grid: string[][] = Array.isArray(state!.stickers) ? state!.stickers : [];
-  const next: string[][] = [];
-  for (let t = 0; t < themesCount; t++) {
-    const row: string[] = Array.isArray(grid[t]) ? grid[t] : [];
-    const padded: string[] = [];
-    for (let p = 0; p < state!.participants.length; p++) {
-      const id = row[p];
-      padded.push(typeof id === "string" && stickerById.has(id) ? id : "");
-    }
-    next.push(padded);
-  }
-  state!.stickers = next;
+function participantName(index: number): string { return ksi.participantName(state!, index); }
+function participantNumber(index: number): number { return ksi.participantNumber(state!, index); }
+function declinedKey(index: number): string { return ksi.declinedKey(state!, index); }
+function participantDeclined(index: number): boolean { return ksi.participantDeclined(state!, index); }
+const participantsEqual = ksi.participantsEqual;
+const markContribution = ksi.markContribution;
+function computeThemeValue(player: number, theme: number): {value: number; scored: boolean} { return ksi.computeThemeValue(state!, rules, player, theme); }
+function getScoreCache(): ScoreSheet {
+  if (!scoreCache) scoreCache = ksi.scoreSheet(state!, rules);
+  return scoreCache;
 }
+function rankedResultRows(): ResultRow[] { return ksi.rankedResultRows(state!, rules, participantLabel); }
+
+
+
+
 
 function render(options: {preserveScroll?: boolean} = {}): void {
   if (!scheme || !state) return;
@@ -601,84 +503,9 @@ function buildResultsTableInner(): HTMLTableElement {
   return table;
 }
 
-interface ResultMetrics {
-  total: number;
-  plus: number;
-  correct: Record<number, number>;
-}
 
-interface ResultRow {
-  index: number;
-  name: string;
-  metrics: ResultMetrics;
-  placeText: string;
-}
 
-function rankedResultRows(): ResultRow[] {
-  // Teams that refused to play are excluded from the ranking entirely — they take no
-  // place and don't shift anyone else, mirroring how declined teams are skipped in EK
-  // seeding. They appear only in the «Отказы» tab.
-  const rows = state!.participants
-    .map((_, index) => ({
-      index,
-      name: participantLabel(index),
-      metrics: resultMetrics(index),
-      placeText: "",
-    }))
-    .filter((row) => !participantDeclined(row.index));
-  rows.sort(compareResultRows);
-  let i = 0;
-  while (i < rows.length) {
-    let j = i;
-    while (j + 1 < rows.length && sameResultMetrics(rows[i].metrics, rows[j + 1].metrics)) j++;
-    const label = i === j ? String(i + 1) : `${i + 1}–${j + 1}`;
-    for (let k = i; k <= j; k++) rows[k].placeText = label;
-    i = j + 1;
-  }
-  return rows;
-}
 
-function compareResultRows(a: ResultRow, b: ResultRow): number {
-  if (b.metrics.total !== a.metrics.total) return b.metrics.total - a.metrics.total;
-  if (b.metrics.plus !== a.metrics.plus) return b.metrics.plus - a.metrics.plus;
-  for (const value of RESULT_VALUES) {
-    const diff = (b.metrics.correct[value] || 0) - (a.metrics.correct[value] || 0);
-    if (diff) return diff;
-  }
-  return teamNameCollator.compare(a.name, b.name) || a.index - b.index;
-}
-
-function sameResultMetrics(a: ResultMetrics, b: ResultMetrics): boolean {
-  if (a.total !== b.total || a.plus !== b.plus) return false;
-  for (const value of RESULT_VALUES) {
-    if ((a.correct[value] || 0) !== (b.correct[value] || 0)) return false;
-  }
-  return true;
-}
-
-function resultMetrics(playerIndex: number): ResultMetrics {
-  const correct: Record<number, number> = {};
-  for (const value of QUESTION_VALUES) correct[value] = 0;
-  let total = 0;
-  let plus = 0;
-  for (let themeIndex = 0; themeIndex < themesCount; themeIndex++) {
-    let stickerId = STICKER_NEUTRAL;
-    if (stickersEnabled()) {
-      stickerId = stickerValue(playerIndex, themeIndex);
-      if (!stickerId) continue; // unscored theme excluded from the ranking
-    }
-    const row = state!.themes[themeIndex]?.answers?.[playerIndex] || [];
-    for (let answerIndex = 0; answerIndex < QUESTION_VALUES.length; answerIndex++) {
-      const value = QUESTION_VALUES[answerIndex];
-      const mark = row[answerIndex];
-      const contribution = markContribution(stickerId, mark, answerIndex);
-      total += contribution;
-      if (contribution > 0) plus += contribution;
-      if (mark === "right") correct[value] += 1;
-    }
-  }
-  return {total, plus, correct};
-}
 
 function renderTabs(): void {
   if (!siTabsRoot) return;
@@ -763,34 +590,9 @@ function setDetailedSort(key: string): void {
   render();
 }
 
-// Participants are stored as {number, name} objects in team mode — number is the
-// universal team identity — but as bare name strings in player mode / legacy
-// states. These read either shape.
-function participantName(index: number): string {
-  const p = state!.participants?.[index];
-  if (typeof p === "string") return p;
-  return p && typeof p === "object" ? String(p.name ?? "") : "";
-}
 
-function participantNumber(index: number): number {
-  const p = state!.participants?.[index];
-  return p && typeof p === "object" ? Number(p.number) || 0 : 0;
-}
 
-// Identity key for the refused-to-play map: the team number when known (the stable
-// identity that survives roster reorders/renames), else a name fallback for legacy
-// number-less states. Returns "" when there's nothing to key on.
-function declinedKey(index: number): string {
-  const number = participantNumber(index);
-  if (number > 0) return `n${number}`;
-  const name = participantName(index).trim().toLowerCase();
-  return name ? `s${name}` : "";
-}
 
-function participantDeclined(index: number): boolean {
-  const key = declinedKey(index);
-  return key ? Boolean(state!.declined?.[key]) : false;
-}
 
 function setParticipantDeclined(index: number, declined: boolean): void {
   if (viewer) return;
@@ -803,17 +605,6 @@ function setParticipantDeclined(index: number, declined: boolean): void {
   saveState(["declined", key], declined);
 }
 
-// participantsEqual compares two participant arrays by identity (number + name),
-// tolerating both shapes, so in-place patching isn't defeated by fresh object
-// references arriving on every delta.
-function participantsEqual(a: ParticipantEntry[] | null | undefined, b: ParticipantEntry[] | null | undefined): boolean {
-  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
-  const key = (p: ParticipantEntry) => (typeof p === "string" ? `n:${p}` : `${p?.number || 0}:${p?.name ?? ""}`);
-  for (let i = 0; i < a.length; i++) {
-    if (key(a[i]) !== key(b[i])) return false;
-  }
-  return true;
-}
 
 function participantLabel(index: number): string {
   const name = participantName(index).trim();
@@ -916,7 +707,7 @@ function stickerSelectCell(playerIndex: number, themeIndex: number): HTMLElement
   blank.value = "";
   blank.textContent = "—";
   select.appendChild(blank);
-  for (const type of stickerTypes) {
+  for (const type of stickerTypes.list) {
     const opt = document.createElement("option");
     opt.value = type.id;
     opt.textContent = type.label;
@@ -1109,25 +900,6 @@ function selectCellFromNode(cell: HTMLElement, options: {focus?: boolean} = {}):
   selectCell(player, theme, answer, options);
 }
 
-function getScoreCache(): ScoreCache {
-  if (scoreCache) return scoreCache;
-  const themeScores: number[][] = state!.participants.map(() => Array(themesCount).fill(0));
-  // themeScored tracks whether a theme counts yet: in a stickers game a theme is
-  // not scored until its (team, theme) sticker is chosen, so it stays blank and
-  // is excluded from the total.
-  const themeScored: boolean[][] = state!.participants.map(() => Array(themesCount).fill(true));
-  const totals: number[] = state!.participants.map(() => 0);
-  for (let playerIndex = 0; playerIndex < state!.participants.length; playerIndex++) {
-    for (let themeIndex = 0; themeIndex < themesCount; themeIndex++) {
-      const {value, scored} = computeThemeValue(playerIndex, themeIndex);
-      themeScores[playerIndex][themeIndex] = value;
-      themeScored[playerIndex][themeIndex] = scored;
-      if (scored) totals[playerIndex] += value;
-    }
-  }
-  scoreCache = {themeScores, themeScored, totals, places: computePlaces(totals)};
-  return scoreCache;
-}
 
 function invalidateScores(): void {
   scoreCache = null;
@@ -1141,39 +913,7 @@ function resetTableIndex(): void {
   tableIndex = null;
 }
 
-// markContribution is the signed value of one answer mark under a sticker. It
-// mirrors games.KSIStickerMarkValue on the server so client and server scoring
-// can't drift.
-function markContribution(stickerId: string, mark: string, answerIndex: number): number {
-  const value = QUESTION_VALUES[answerIndex];
-  switch (stickerId) {
-    case "x2":
-      return mark === "right" ? 2 * value : mark === "wrong" ? -2 * value : 0;
-    case "nowrong":
-      return mark === "right" ? value : 0;
-    case "emptywrong":
-      return mark === "right" ? value : -value; // wrong or empty → -value
-    default: // neutral, and any unknown id
-      return mark === "right" ? value : mark === "wrong" ? -value : 0;
-  }
-}
 
-// computeThemeValue returns one team's value for one theme and whether it is
-// scored. Plain KSI scores every theme under neutral rules; a stickers game
-// leaves a theme unscored (scored=false) until its sticker is selected.
-function computeThemeValue(player: number, theme: number): {value: number; scored: boolean} {
-  const row = state!.themes[theme]?.answers?.[player] || [];
-  let stickerId = STICKER_NEUTRAL;
-  if (stickersEnabled()) {
-    stickerId = stickerValue(player, theme);
-    if (!stickerId) return {value: 0, scored: false};
-  }
-  let value = 0;
-  for (let answerIndex = 0; answerIndex < QUESTION_VALUES.length; answerIndex++) {
-    value += markContribution(stickerId, row[answerIndex], answerIndex);
-  }
-  return {value, scored: true};
-}
 
 // recomputeTheme recomputes a single (player, theme) value in place and adjusts
 // that player's total/places — used after a mark or sticker change. Sticker
@@ -1194,7 +934,7 @@ function recomputeTheme(player: number, theme: number): void {
 
 // themeScoreDisplay is the text shown in a theme's score cell: the value, or
 // blank for an unscored (sticker not yet chosen) theme.
-function themeScoreDisplay(scores: ScoreCache, player: number, theme: number): number | string {
+function themeScoreDisplay(scores: ScoreSheet, player: number, theme: number): number | string {
   return scores.themeScored[player][theme] ? scores.themeScores[player][theme] : "";
 }
 
@@ -1331,9 +1071,6 @@ function answerTitle(playerIndex: number, themeIndex: number, answerIndex: numbe
   return `${participantLabel(playerIndex)}, Т${themeIndex + 1}, ${QUESTION_VALUES[answerIndex]}`;
 }
 
-function isTeamMode(): boolean {
-  return scheme?.gameType === "ksi";
-}
 
 function isDetailedTabActive(): boolean {
   return !isTeamMode() || activeTab === "detailed";

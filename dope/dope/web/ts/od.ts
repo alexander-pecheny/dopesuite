@@ -17,53 +17,16 @@ import type {VirtualKeypad} from "./widgets.js";
 import { gameTabs } from "./game-tabs.js";
 import { DopeEntryModel } from "./entry-model.js";
 import { icon } from "./icons_gen.js";
+import * as od from "./od-protocol.js";
+import type {ODScheme, ODState, ODTeam, QuestionStat, RankKey, ShootoutMark, ShootoutRound} from "./od-protocol.js";
 
 interface ODPageGlobals {
   __GAME_INIT__?: GameInitLike | null;
 }
 
-interface ODTeam {
-  name: string;
-  city: string;
-  number?: number;
-}
-
-type ShootoutMark = "right" | "";
-
-interface ShootoutRound {
-  teams: number[];
-  entries: number[][];
-  completed: boolean[];
-  answers: ShootoutMark[][];
-}
-
-interface ODState {
-  teams: ODTeam[];
-  entries: number[][];
-  completed: boolean[];
-  shootoutRounds: ShootoutRound[];
-  answers?: unknown;
-  finished?: unknown;
-}
-
-interface ODScheme {
-  title?: string;
-  tourComp?: unknown;
-  // A DSL-compiled game carries the Protocol's params on its one stage.
-  stages?: Array<{config?: {tourComp?: unknown}}>;
-  teams?: Array<{name?: string; city?: string}>;
-  nTeams?: number;
-}
-
 interface FestInfo {
   title?: string;
   gameName?: string;
-}
-
-interface QuestionStat {
-  completed: boolean;
-  counts: Map<number, number>;
-  validCount: number;
 }
 
 interface EntrySuggestOption {
@@ -82,12 +45,6 @@ interface UndoEntry {
   kind: "entry-column";
   qIndex: number;
   previous: number[];
-}
-
-interface RankKey {
-  index: number;
-  total: number;
-  tiebreak: number[];
 }
 
 interface ScreenRowItem {
@@ -297,155 +254,46 @@ async function revalidateAll(): Promise<void> {
 }
 
 function initFromScheme(): void {
-  tourLengths = parseTourComp(scheme.tourComp ?? scheme.stages?.[0]?.config?.tourComp);
+  tourLengths = od.tourLengthsOf(scheme);
   totalQuestions = tourLengths.reduce((acc, n) => acc + n, 0);
 }
 
-function parseTourComp(value: unknown): number[] {
-  if (Array.isArray(value)) return value.map((n) => Number(n) || 0).filter((n) => n > 0);
-  if (typeof value === "string") {
-    const out: number[] = [];
-    for (const segment of value.split(",")) {
-      const seg = segment.trim();
-      if (!seg) continue;
-      if (seg.includes("*")) {
-        const [before, after] = seg.split("*", 2);
-        const count = Number(before.trim()) || 0;
-        const repeat = Number(after.trim()) || 0;
-        for (let i = 0; i < repeat; i++) out.push(count);
-      } else {
-        const n = Number(seg);
-        if (n > 0) out.push(n);
-      }
-    }
-    return out;
-  }
-  return [15];
+// The Protocol's arithmetic lives in od-protocol.ts; these read the page's
+// state and cache the question fold between renders.
+function ensureState(): void { state = od.parseState(state, scheme, totalQuestions); }
+const normalizeShootoutMark = od.normalizeShootoutMark;
+const syncShootoutAnswersFromEntries = od.syncShootoutAnswersFromEntries;
+function teamNumber(teamIndex: number): number { return od.teamNumber(state, teamIndex); }
+function allTeamsNumbered(): boolean { return od.allTeamsNumbered(state); }
+function teamIndexByNumber(number: number): number {
+  if (!Number.isInteger(number) || number < 1) return -1;
+  if (!numberToIndexCache) numberToIndexCache = od.numberIndex(state);
+  return numberToIndexCache.get(number) ?? -1;
 }
-
-function ensureState(): void {
-  if (!state || typeof state !== "object") state = {} as ODState;
-  if (!Array.isArray(state.teams)) {
-    state.teams = (scheme.teams || []).map((team) => ({name: team.name || "", city: team.city || ""}));
+function questionStats(): QuestionStat[] {
+  if (!questionStatsCache) {
+    if (!numberToIndexCache) numberToIndexCache = od.numberIndex(state);
+    questionStatsCache = od.questionStats(state, totalQuestions, numberToIndexCache);
   }
-  const targetCount = state.teams.length || scheme.nTeams || 0;
-  while (state.teams.length < targetCount) {
-    state.teams.push({name: "", city: ""});
-  }
-  const n = state.teams.length;
-  if (!Array.isArray(state.entries)) state.entries = [];
-  while (state.entries.length < totalQuestions) state.entries.push([]);
-  state.entries = state.entries.slice(0, totalQuestions).map((row) => {
-    const arr: unknown[] = Array.isArray(row) ? row.slice(0, n) : [];
-    while (arr.length < n) arr.push(0);
-    return arr.map((v) => {
-      const num = Number(v);
-      return Number.isInteger(num) && num >= 0 ? num : 0;
-    });
-  });
-  if (!Array.isArray(state.completed)) state.completed = [];
-  while (state.completed.length < totalQuestions) state.completed.push(false);
-  state.completed = state.completed.slice(0, totalQuestions).map(Boolean);
-  if (!Array.isArray(state.shootoutRounds)) state.shootoutRounds = [];
-  state.shootoutRounds = state.shootoutRounds
-    .map(normalizeShootoutRound)
-    .filter((round) => round.teams.length > 0);
-  delete state.answers;
-  delete state.finished;
+  return questionStatsCache;
 }
+function teamTookQuestion(teamIndex: number, qIndex: number, stats: QuestionStat[] = questionStats()): boolean { return od.teamTookQuestion(stats, teamIndex, qIndex); }
+function countValidEntries(qIndex: number, stats: QuestionStat[] = questionStats()): number { return od.countValidEntries(stats, qIndex); }
+function sumRow(teamIndex: number, stats: QuestionStat[] = questionStats()): number { return od.sumRow(stats, teamIndex); }
+function tourSumsForTeam(teamIndex: number, stats: QuestionStat[] = questionStats()): number[] { return od.tourSumsForTeam(stats, teamIndex, tourLengths); }
+function ratingForTeam(teamIndex: number, stats: QuestionStat[] = questionStats()): number { return od.ratingForTeam(state, stats, teamIndex); }
+function shootoutTiebreakForTeam(teamIndex: number): number[] { return od.shootoutTiebreakForTeam(state, teamIndex); }
+function rankedTeamOrder(totals: number[], tiebreaks: number[][]): RankKey[] { return od.rankedTeamOrder(state, totals, tiebreaks); }
+function shootoutRoundTotalForTeam(teamIndex: number, roundIndex: number): number | null { return od.shootoutRoundTotalForTeam(state, teamIndex, roundIndex); }
+function placesFor(totals: number[]): string[] { return od.placesFor(state, questionStats(), totals); }
+function shootoutQuestionCompleted(roundIndex: number, questionIndex: number): boolean { return od.shootoutQuestionCompleted(state, roundIndex, questionIndex); }
 
-function normalizeShootoutRound(round: unknown): ShootoutRound {
-  const source = (round && typeof round === "object" ? round : {}) as {
-    teams?: unknown;
-    answers?: unknown;
-    questions?: unknown;
-    entries?: unknown;
-    completed?: unknown;
-  };
-  const seen = new Set<number>();
-  const teams: number[] = [];
-  const rawTeams: unknown[] = Array.isArray(source.teams) ? source.teams : [];
-  for (const value of rawTeams) {
-    const number = Number(value);
-    if (!Number.isInteger(number) || number <= 0 || seen.has(number)) continue;
-    seen.add(number);
-    teams.push(number);
-  }
 
-  let rawAnswers: unknown[] = Array.isArray(source.answers) ? source.answers : [];
-  if (rawAnswers.length === 0 && Array.isArray(source.questions)) rawAnswers = source.questions;
-  const answers = rawAnswers.map((row) => {
-    const values: unknown[] = Array.isArray(row) ? row.slice(0, teams.length) : [];
-    while (values.length < teams.length) values.push("");
-    return values.map(normalizeShootoutMark);
-  });
-  let rawEntries: unknown[] = Array.isArray(source.entries) ? source.entries : [];
-  if (rawEntries.length === 0 && answers.length > 0) {
-    rawEntries = answers.map((row) =>
-      teams.filter((_, index) => normalizeShootoutMark(row?.[index]) === "right"));
-  }
-  const questionCount = Math.max(teams.length > 0 ? 1 : 0, answers.length, rawEntries.length);
-  while (answers.length < questionCount) {
-    answers.push(Array<ShootoutMark>(teams.length).fill(""));
-  }
-  const entries: number[][] = [];
-  for (let questionIndex = 0; questionIndex < questionCount; questionIndex++) {
-    const rawRow: unknown[] = Array.isArray(rawEntries[questionIndex]) ? rawEntries[questionIndex] as unknown[] : [];
-    entries.push(normalizeShootoutEntryRowForTeams(rawRow, teams));
-  }
-  let completed: boolean[];
-  if (Array.isArray(source.completed)) {
-    completed = source.completed.slice(0, questionCount).map(Boolean);
-    while (completed.length < questionCount) completed.push(false);
-  } else {
-    completed = answers.map((row) => (row || []).some((mark) => normalizeShootoutMark(mark) === "right"));
-    while (completed.length < questionCount) completed.push(false);
-  }
-  const normalized: ShootoutRound = {teams, entries, completed, answers};
-  for (let questionIndex = 0; questionIndex < entries.length; questionIndex++) {
-    syncShootoutAnswersFromEntries(normalized, questionIndex);
-  }
-  return normalized;
-}
 
-function normalizeShootoutMark(value: unknown): ShootoutMark {
-  return value === "right" ? "right" : "";
-}
 
-function normalizeShootoutEntryRow(row: unknown, length: number): number[] {
-  const values: unknown[] = Array.isArray(row) ? row.slice(0, length) : [];
-  while (values.length < length) values.push(0);
-  return values.map((value) => {
-    const number = Number(value);
-    return Number.isInteger(number) && number >= 0 ? number : 0;
-  });
-}
 
-function normalizeShootoutEntryRowForTeams(row: unknown, teams: number[]): number[] {
-  const out = Array<number>(teams.length).fill(0);
-  for (const value of normalizeShootoutEntryRow(row, teams.length)) {
-    if (!value) continue;
-    const participantIndex = teams.indexOf(value);
-    if (participantIndex >= 0) out[participantIndex] = value;
-  }
-  return out;
-}
 
-function syncShootoutAnswersFromEntries(round: ShootoutRound | null | undefined, questionIndex: number): void {
-  if (!round) return;
-  const row = normalizeShootoutEntryRowForTeams(round.entries?.[questionIndex], round.teams);
-  if (!Array.isArray(round.entries)) round.entries = [];
-  round.entries[questionIndex] = row;
-  if (!Array.isArray(round.answers)) round.answers = [];
-  while (round.answers.length <= questionIndex) round.answers.push(Array<ShootoutMark>(round.teams.length).fill(""));
-  const answerRow = Array<ShootoutMark>(round.teams.length).fill("");
-  for (const number of row) {
-    if (!number) continue;
-    const participantIndex = round.teams.indexOf(number);
-    if (participantIndex >= 0) answerRow[participantIndex] = "right";
-  }
-  round.answers[questionIndex] = answerRow;
-}
+
 
 function invalidateAllCaches(): void {
   rememberTabScroll(activeTab);
@@ -466,31 +314,8 @@ function invalidateShootoutCaches(): void {
   invalidateTabCache("input", "detailed", "results", "screen");
 }
 
-function teamNumber(teamIndex: number): number {
-  const value = Number(state.teams[teamIndex]?.number);
-  return Number.isInteger(value) && value > 0 ? value : 0;
-}
 
-function allTeamsNumbered(): boolean {
-  if (!state.teams.length) return false;
-  for (let i = 0; i < state.teams.length; i++) {
-    if (!teamNumber(i)) return false;
-  }
-  return true;
-}
 
-function teamIndexByNumber(number: number): number {
-  if (!Number.isInteger(number) || number < 1) return -1;
-  if (!numberToIndexCache) {
-    numberToIndexCache = new Map();
-    for (let i = 0; i < state.teams.length; i++) {
-      const n = teamNumber(i);
-      if (n) numberToIndexCache.set(n, i);
-    }
-  }
-  const found = numberToIndexCache.get(number);
-  return found === undefined ? -1 : found;
-}
 
 function numbersPageURL(): string {
   if (!route.festID) return "#";
@@ -506,31 +331,7 @@ function invalidateTabCache(...tabs: string[]): void {
   }
 }
 
-function questionStats(): QuestionStat[] {
-  if (questionStatsCache) return questionStatsCache;
-  questionStatsCache = [];
-  for (let q = 0; q < totalQuestions; q++) {
-    const counts = new Map<number, number>();
-    if (state.completed[q]) {
-      const entries = state.entries[q] || [];
-      for (const value of entries) {
-        const teamIndex = teamIndexByNumber(value);
-        if (teamIndex < 0) continue;
-        counts.set(teamIndex, (counts.get(teamIndex) || 0) + 1);
-      }
-    }
-    questionStatsCache.push({
-      completed: Boolean(state.completed[q]),
-      counts,
-      validCount: counts.size,
-    });
-  }
-  return questionStatsCache;
-}
 
-function teamTookQuestion(teamIndex: number, qIndex: number, stats: QuestionStat[] = questionStats()): boolean {
-  return Boolean(stats[qIndex]?.counts.has(teamIndex));
-}
 
 function render(): void {
   if (!state || !scheme) return;
@@ -640,9 +441,6 @@ function renderTabs(): void {
 
 // === Ввод ===
 
-function countValidEntries(qIndex: number, stats: QuestionStat[] = questionStats()): number {
-  return stats[qIndex]?.validCount || 0;
-}
 
 function buildInputView(): HTMLElement {
   const wrapper = document.createElement("div");
@@ -1582,9 +1380,6 @@ function setShootoutEntryValue(roundIndex: number, questionIndex: number, rowInd
   return true;
 }
 
-function shootoutQuestionCompleted(roundIndex: number, questionIndex: number): boolean {
-  return Boolean(state.shootoutRounds[roundIndex]?.completed?.[questionIndex]);
-}
 
 function handleEntryDoubleClick(event: MouseEvent): void {
   if (viewer) return;
@@ -3241,118 +3036,15 @@ function shootoutQuestionNumber(roundIndex: number, questionIndex: number): numb
 
 // === scoring helpers ===
 
-function sumRow(teamIndex: number, stats: QuestionStat[] = questionStats()): number {
-  let s = 0;
-  for (let q = 0; q < totalQuestions; q++) {
-    if (teamTookQuestion(teamIndex, q, stats)) s++;
-  }
-  return s;
-}
 
-function tourSumsForTeam(teamIndex: number, stats: QuestionStat[] = questionStats()): number[] {
-  const out: number[] = [];
-  let qi = 0;
-  for (const size of tourLengths) {
-    let s = 0;
-    for (let i = 0; i < size; i++) {
-      if (teamTookQuestion(teamIndex, qi, stats)) s++;
-      qi++;
-    }
-    out.push(s);
-  }
-  return out;
-}
 
-function ratingForTeam(teamIndex: number, stats: QuestionStat[] = questionStats()): number {
-  const teamCount = state.teams.length;
-  let r = 0;
-  for (let q = 0; q < totalQuestions; q++) {
-    if (!teamTookQuestion(teamIndex, q, stats)) continue;
-    const took = countValidEntries(q, stats);
-    r += teamCount - took + 1;
-  }
-  return r;
-}
 
-function shootoutTiebreakForTeam(teamIndex: number): number[] {
-  // Per-round scores for lexicographic comparison; -1 marks rounds the team didn't play,
-  // so an early-exit team isn't overtaken by teams who continued accumulating points.
-  const result: number[] = [];
-  for (let roundIndex = 0; roundIndex < state.shootoutRounds.length; roundIndex++) {
-    const roundTotal = shootoutRoundTotalForTeam(teamIndex, roundIndex);
-    result.push(roundTotal != null ? roundTotal : -1);
-  }
-  return result;
-}
 
-function compareShootoutTiebreaks(a: number[], b: number[]): number {
-  const len = Math.max(a.length, b.length);
-  for (let i = 0; i < len; i++) {
-    const av = a[i] ?? -1;
-    const bv = b[i] ?? -1;
-    if (av !== bv) return bv - av;
-  }
-  return 0;
-}
 
-// rankedTeamOrder sorts team indices into final standings: by game total, then
-// the shootout tiebreak, then original index as a stable fallback. Shared by the
-// «Итог» and «Экран» sheets so their row order always matches (the place LABELS
-// come from computePlaces; this is just the row ordering).
-function rankedTeamOrder(totals: number[], tiebreaks: number[][]): RankKey[] {
-  return state.teams
-    .map((_, index) => ({index, total: totals[index], tiebreak: tiebreaks[index]}))
-    .sort((a, b) => {
-      if (b.total !== a.total) return b.total - a.total;
-      const cmp = compareShootoutTiebreaks(a.tiebreak, b.tiebreak);
-      if (cmp !== 0) return cmp;
-      return a.index - b.index;
-    });
-}
 
-function shootoutRoundTotalForTeam(teamIndex: number, roundIndex: number): number | null {
-  const number = teamNumber(teamIndex);
-  if (!number) return null;
-  const round = state.shootoutRounds[roundIndex];
-  if (!round) return null;
-  const participantIndex = round.teams.indexOf(number);
-  if (participantIndex < 0) return null;
-  let total = 0;
-  for (let questionIndex = 0; questionIndex < (round.answers || []).length; questionIndex++) {
-    if (!shootoutQuestionCompleted(roundIndex, questionIndex)) continue;
-    if (normalizeShootoutMark(round.answers[questionIndex]?.[participantIndex]) === "right") total++;
-  }
-  return total;
-}
 
-function anyShootoutMarked(): boolean {
-  for (const round of state.shootoutRounds || []) {
-    for (let questionIndex = 0; questionIndex < (round.answers || []).length; questionIndex++) {
-      if (!round.completed?.[questionIndex]) continue;
-      for (const mark of round.answers[questionIndex] || []) {
-        if (normalizeShootoutMark(mark)) return true;
-      }
-    }
-  }
-  return false;
-}
 
-function anyQuestionCompleted(stats: QuestionStat[] = questionStats()): boolean {
-  for (const stat of stats) if (stat.completed) return true;
-  return false;
-}
 
-// OD ranks on game total, breaking ties on the shootout result. Before any
-// question or shootout is marked there's nothing to rank, so the board stays
-// blank; otherwise defer to the shared placer with the shootout tiebreak.
-function placesFor(totals: number[]): string[] {
-  if (!anyQuestionCompleted() && !anyShootoutMarked()) return new Array<string>(totals.length).fill("");
-  const tiebreaks = state.teams.map((_, index) => shootoutTiebreakForTeam(index));
-  return computePlaces(totals, {
-    tiebreaks,
-    compareTiebreak: (a, b) => compareShootoutTiebreaks(a as number[], b as number[]),
-  });
-}
 
 // === persistence ===
 

@@ -176,6 +176,7 @@ func targets() []target {
 				{
 					EntryPointsAdvanced: entries("dope/dope/web/ts/",
 						"entry-model", "sheet-cursor", "game-shell", "cells", "score-table", "venue", "standings", "fest-roster", "ek-stats", "state-sync", "game-page", "widgets", "stage-cache", "stats-sync", "fest-grid", "brain-stats", "group-stats", "game-tabs",
+						"od-protocol", "ksi-protocol", "brain-protocol",
 						// game-page draws the 🏠 crumb through it
 						"icons_gen"),
 					Format: api.FormatESModule,
