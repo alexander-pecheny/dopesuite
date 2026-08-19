@@ -14,7 +14,7 @@ func getBoardSnapshot(c *apiClient, boardID string) boardSnapshot {
 	return snap
 }
 
-// TestReadMarkers exercises the unread-tracking flow (migrateV7 / card_reads):
+// TestReadMarkers exercises the unread-tracking flow (schema v7 / card_reads):
 // two users share a board+card, the second user's comment + desc_edit show up
 // as unread for the first (never for their own author), the activity feed
 // reflects the same, and marking the card read clears it from both the
@@ -145,7 +145,7 @@ func TestReadMarkers(t *testing.T) {
 	}
 }
 
-// TestBoardListVisitOrdering covers the board-list additions (migrateV8): the
+// TestBoardListVisitOrdering covers the board-list additions (schema v8): the
 // list orders by the caller's own last visit (most recent first, never-visited
 // last) and flags a board `unread` when another member has an unread change.
 func TestBoardListVisitOrdering(t *testing.T) {

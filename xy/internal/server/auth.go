@@ -535,7 +535,7 @@ func (s *server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 
 // displaySizes is the per-user board layout ({boardW,listW,cardLines}), shared
 // across all of the user's boards and devices. Display numbers only — no question
-// content — so it lives plaintext in users.sizes, like ranks (see migrateV9). All
+// content — so it lives plaintext in users.sizes, like ranks (see schema v9). All
 // three are pointers so a null (boardW/cardLines "unlimited") round-trips and an
 // absent field doesn't collapse to a spurious zero; the client clamps ranges on
 // read, so the server only validates the shape.
@@ -573,7 +573,7 @@ func (s *server) handleSetSizes(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSetDefaultAuthor stores the author name pre-filled into new question
-// cards (users.default_author, see migrateV11). Empty clears it.
+// cards (users.default_author, see schema v11). Empty clears it.
 func (s *server) handleSetDefaultAuthor(w http.ResponseWriter, r *http.Request) {
 	u, ok := s.requireUser(w, r)
 	if !ok {
@@ -694,13 +694,13 @@ func (s *server) handleSetAnnounceCities(w http.ResponseWriter, r *http.Request)
 // label name is written. "" means the default, "date-title".
 var sessionTitleModes = map[string]bool{"": true, "date-title": true, "title": true, "date": true}
 
-// cardTitleModes allowlists the values of users.card_title (see migrateV13):
+// cardTitleModes allowlists the values of users.card_title (see schema v13):
 // which field a card's list preview derives its title from. "" means the
 // default, "question".
 var cardTitleModes = map[string]bool{"": true, "question": true, "answer": true}
 
 // handleSetCardTitle stores whether card previews show the question text or the
-// answer (users.card_title, see migrateV13). A card's alias, when set, wins over
+// answer (users.card_title, see schema v13). A card's alias, when set, wins over
 // either.
 func (s *server) handleSetCardTitle(w http.ResponseWriter, r *http.Request) {
 	u, ok := s.requireUser(w, r)
@@ -729,13 +729,13 @@ func (s *server) handleSetCardTitle(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// feedDefaults allowlists the values of users.feed_default (see migrateV20):
+// feedDefaults allowlists the values of users.feed_default (see schema v20):
 // which kind of timeline entry an opened card's лента shows. "" means the
 // default, "all".
 var feedDefaults = map[string]bool{"": true, "all": true, "comments": true, "edits": true, "meta": true}
 
 // handleSetFeedDefault stores which kind of лента entry a card opens on
-// (users.feed_default, see migrateV20).
+// (users.feed_default, see schema v20).
 func (s *server) handleSetFeedDefault(w http.ResponseWriter, r *http.Request) {
 	u, ok := s.requireUser(w, r)
 	if !ok {

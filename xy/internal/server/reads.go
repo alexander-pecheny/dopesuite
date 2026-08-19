@@ -11,7 +11,7 @@ import (
 // ---- read markers (card_reads) + activity feed ----
 //
 // Read-tracking is online-only best-effort (like loadMembers on the frontend):
-// it never goes through the sync outbox. See migrateV7 for the schema and the
+// it never goes through the sync outbox. See schema v7 for the schema and the
 // unread computation shared with the board snapshot (boards.go).
 
 type markReadRequest struct {

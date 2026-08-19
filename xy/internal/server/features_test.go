@@ -558,7 +558,7 @@ func TestImportEventsPreservesAuthorAndTime(t *testing.T) {
 	}
 }
 
-// TestCardAliasRoundTrip covers cards.alias_enc (migrateV12): the optional
+// TestCardAliasRoundTrip covers cards.alias_enc (schema v12): the optional
 // encrypted short label a card is identified by in the board list. Same
 // create/patch/clear contract as handout_meta_enc.
 func TestCardAliasRoundTrip(t *testing.T) {
@@ -607,7 +607,7 @@ func TestCardAliasRoundTrip(t *testing.T) {
 	}
 }
 
-// TestFeedDefaultPreference covers users.feed_default (migrateV20): which kind
+// TestFeedDefaultPreference covers users.feed_default (schema v20): which kind
 // of лента entry an opened card starts on. Like card_title it reaches the client
 // through both /api/auth/me and the board snapshot — the snapshot is what an
 // offline card open reads.
@@ -641,7 +641,7 @@ func TestFeedDefaultPreference(t *testing.T) {
 	}
 }
 
-// TestCardTitlePreference covers users.card_title (migrateV13): the per-user
+// TestCardTitlePreference covers users.card_title (schema v13): the per-user
 // choice of which field a card's board preview shows. It reaches the client
 // through both /api/auth/me and the board snapshot.
 func TestCardTitlePreference(t *testing.T) {

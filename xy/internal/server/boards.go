@@ -223,7 +223,7 @@ type boardSnapshot struct {
 	TourTesters []tourTesterDTO      `json:"tour_testers"`
 	Unread      map[string]unreadDTO `json:"unread"`
 	// Sizes is the CALLER's display layout ({boardW,listW,cardLines}) — a per-user,
-	// all-boards preference (users.sizes, plaintext JSON; see migrateV9), delivered
+	// all-boards preference (users.sizes, plaintext JSON; see schema v9), delivered
 	// here alongside the snapshot's other caller-specific fields (role, unread) so
 	// the board renders at the user's sizes without a second fetch. Omitted when
 	// never set — the client then uses its defaults. Written via POST /api/auth/sizes.
@@ -251,7 +251,7 @@ type boardSnapshot struct {
 }
 
 // unreadDTO flags, per card, whether the caller has unread events in either
-// bucket (see migrateV7 / card_reads). Only cards with at least one true flag
+// bucket (see schema v7 / card_reads). Only cards with at least one true flag
 // are included in the snapshot's Unread map.
 type unreadDTO struct {
 	Content  bool `json:"content"`

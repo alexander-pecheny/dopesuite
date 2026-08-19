@@ -72,7 +72,9 @@ internal/ui/           xy's overlay on DopeUIKit's kit: overlay vocab.json (xy p
                        the DSL engine (ui/) + design system (kit/) + spec live in ../dopeuikit
 internal/server/       package server — the whole HTTP server
   server.go            DB open (BuildDSN/WAL), write-tx discipline (conn-before-lock)
-  db.go                full schema + migration runner (schema_versions)
+  db.go                the schema as a list: `[]schema.Migration` (dopecore/schema applies them once each, in
+                       order); a new step takes the next number and goes at the end;
+                       XY_REHEARSE_DB=<snapshot> walks a prod copy through them
   main.go              mux wiring (Go 1.22 method+pattern routes), invite subcmd
   assets.go            kit.Assets + kit.PageSet wiring (embed/disk source, ETags, core+xy css), CSP, page serve
   http.go              writeJSON/readJSON/httpError

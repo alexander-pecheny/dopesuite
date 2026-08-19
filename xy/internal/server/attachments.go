@@ -29,7 +29,7 @@ type attachmentDTO struct {
 	Lossless    bool   `json:"lossless"`
 	IsExcerpt   bool   `json:"is_excerpt"`
 	CreatedAt   string `json:"created_at"`
-	// Rev counts replacements (migrateV14). Attachment bytes used to be immutable
+	// Rev counts replacements (schema v14). Attachment bytes used to be immutable
 	// for a given id, which both the client's object-URL memo and its IndexedDB
 	// mirror rely on; a replace keeps the id, so the client keys those caches by
 	// id+rev instead of re-checking every attachment it has ever downloaded.

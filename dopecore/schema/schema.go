@@ -3,7 +3,7 @@
 // fresh database and a migrated one walk the same list, so they cannot end
 // up differing; a step that has been recorded is never run again, so every
 // Up may assume the ones before it and need not be idempotent — though the
-// ones dope carries from before this list all are.
+// ones the apps carry from before this list all are.
 package schema
 
 import (
@@ -50,6 +50,14 @@ create table if not exists schema_versions(
 		}
 	}
 	return nil
+}
+
+// Exec is an Up that runs one SQL script.
+func Exec(script string) func(db *sql.DB) error {
+	return func(db *sql.DB) error {
+		_, err := db.Exec(script)
+		return err
+	}
 }
 
 // Applied reports whether schema_versions records the version.

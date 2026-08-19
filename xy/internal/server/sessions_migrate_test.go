@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// The data half of migrateV18: a test card becomes a Test Session, its comments
+// The data half of schema v18: a test card becomes a Test Session, its comments
 // follow it, every question it labelled gains a Playing, and whatever cannot
 // dissolve stays put. Run against a migrated DB with legacy-shaped rows inserted
 // by hand, so the assertions are about the rebinding rather than the DDL (which
@@ -20,7 +20,7 @@ func TestMigrateV18Sessions(t *testing.T) {
 	keepList := insertList(t, db, bid, "test")
 	questions := insertList(t, db, bid, "normal")
 
-	// migrateV18 has already flattened labels, so the pre-migration marker table
+	// schema v18 has already flattened labels, so the pre-migration marker table
 	// is what says which labels were a session's own. Rebuild it by hand.
 	mustExec(t, db, `create table if not exists _v18_test_labels(id integer)`)
 

@@ -15,8 +15,9 @@ import (
 	"dope/dope/storage/auditmw"
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/migrate"
-	"dope/dope/storage/schema"
 	"dope/dope/storage/store"
+
+	"pecheny.me/dopecore/schema"
 )
 
 // migrations is dope's schema, as a list (storage/schema): each step a

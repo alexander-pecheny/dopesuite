@@ -77,3 +77,16 @@ is now the one statement — the app names the users columns its table has
 and `DeleteSession` are the two writes, run by the app under its own write
 discipline (xy's `withWriteTx`, dope's direct exec). Both apps prove a
 password through `VerifyPasswordUpgrading` (xy passes an empty salt).
+
+## Addendum (19 Aug 2026, second review, H4)
+
+The migration runner was the last piece of SQLite plumbing one app could not
+import: dope's `storage/schema.Apply` (A6) lived in the dope module, so xy
+kept the guard and the record footer copied into 21 `migrateVN` functions and
+a newest-first chain that nothing tested. `pecheny.me/dopecore/schema` is the
+runner now — `Apply(db, []Migration)` validates the order, runs each step
+once and records it; `Exec(script)` is the Up of a plain SQL step. xy's
+`internal/server/db.go` is the list, ascending, same numbers and same SQL;
+a fresh database from the old chain and the new list have identical
+`sqlite_master`. `XY_REHEARSE_DB` walks a prod snapshot through the list the
+way `DOPE_REHEARSE_DB` does.
