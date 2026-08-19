@@ -100,17 +100,24 @@ func (s *server) serveEKHTMLWithInit(w http.ResponseWriter, r *http.Request, sco
 		s.serveEKHTML(w, r)
 		return
 	}
-	if user, ok := s.eng.LookupSession(r); ok {
-		if role, err := festaccess.FestUserRoleFromQuery(r.Context(), s.eng.DB, scope.FestID, user.UserID); err == nil && roles.CanEditGameTables(role) {
-			payload.CanEdit = true
-		}
-	}
+	payload.CanEdit = s.canEdit(r, scope.FestID)
 	data, err := json.Marshal(payload)
 	if err != nil {
 		s.serveEKHTML(w, r)
 		return
 	}
 	s.serveInjectedHTML(w, r, "static/ek.html", ekInitMarker, data)
+}
+
+// canEdit says whether the request's session holds the table-editor role on
+// the fest — what the init payload tells the page about its controls.
+func (s *server) canEdit(r *http.Request, festID int64) bool {
+	user, ok := s.eng.LookupSession(r)
+	if !ok {
+		return false
+	}
+	role, err := festaccess.FestUserRoleFromQuery(r.Context(), s.eng.DB, festID, user.UserID)
+	return err == nil && roles.CanEditGameTables(role)
 }
 
 // serveGameHTMLWithInit serves od.html or si.html with window.__GAME_INIT__
@@ -126,11 +133,7 @@ func (s *server) serveGameHTMLWithInit(w http.ResponseWriter, r *http.Request, h
 		s.serveAppHTML(w, r, htmlPath)
 		return
 	}
-	if user, ok := s.eng.LookupSession(r); ok {
-		if role, err := festaccess.FestUserRoleFromQuery(r.Context(), s.eng.DB, scope.FestID, user.UserID); err == nil && roles.CanEditGameTables(role) {
-			payload.CanEdit = true
-		}
-	}
+	payload.CanEdit = s.canEdit(r, scope.FestID)
 	data, err := json.Marshal(payload)
 	if err != nil {
 		s.serveAppHTML(w, r, htmlPath)

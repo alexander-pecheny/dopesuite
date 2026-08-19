@@ -1,19 +1,16 @@
 package dopeserver
 
 import (
-	"encoding/json"
+	"dope/dope/web/route"
 	"net/http"
 	"strings"
 	"time"
 )
 
 func writeJSONValue(w http.ResponseWriter, value any) {
-	data, err := json.Marshal(value)
-	if err != nil {
+	if err := route.JSON(w, value); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
 	}
-	writeJSON(w, data)
 }
 
 func splitPlayerName(fullName string) (string, string) {

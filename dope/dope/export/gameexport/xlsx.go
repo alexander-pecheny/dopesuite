@@ -24,14 +24,6 @@ import (
 // HandleScopedGameExport serves GET /api/fest/{fid}/games/{gid}/export.xlsx.
 // Gated by read access — anyone who can view the fest can download the archive.
 func HandleScopedGameExport(s Host, w http.ResponseWriter, r *http.Request, festID, gameID int64) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if !s.AuthorizeFestRead(w, r, festID) {
-		return
-	}
-
 	var gameType, schemeJSON, stateJSON string
 	var gameSlug, festSlug sql.NullString
 	err := s.DB().QueryRowContext(r.Context(), `

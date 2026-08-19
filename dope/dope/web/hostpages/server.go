@@ -11,11 +11,19 @@
 // must never import hostpages.
 package hostpages
 
-import "dope/dope/web/pages"
+import (
+	"sync"
 
-// Server binds the host-UI page handlers to a pages.Host. Construct with New.
+	"dope/dope/web/pages"
+	"dope/dope/web/route"
+)
+
+// Server binds the host-UI page handlers to a pages.Host. Construct with New
+// once per host: it builds its route table (routes.go) on first use.
 type Server struct {
-	h pages.Host
+	h     pages.Host
+	table *route.Table
+	once  sync.Once
 }
 
 // New returns a host-page Server over the given Host.

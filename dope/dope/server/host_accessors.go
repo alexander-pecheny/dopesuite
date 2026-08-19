@@ -38,19 +38,6 @@ func (s *server) DB() *sql.DB { return s.eng.DB }
 // Epoch returns the per-process SSE epoch token.
 func (s *server) Epoch() string { return s.eng.Epoch }
 
-// AuthorizeFestRead writes an error response and returns false unless the caller
-// may read the fest.
-func (s *server) AuthorizeFestRead(w http.ResponseWriter, r *http.Request, festID int64) bool {
-	return s.authorizeFestRead(w, r, festID)
-}
-
-// RequireFestTableEditor writes an error response and returns false unless the
-// caller holds the table-editor role on the fest.
-func (s *server) RequireFestTableEditor(w http.ResponseWriter, r *http.Request, festID int64) bool {
-	_, ok := s.requireFestTableEditor(w, r, festID)
-	return ok
-}
-
 // CurrentStateSeq returns the current per-scope SSE sequence number.
 func (s *server) CurrentStateSeq(scope string) uint64 { return s.eng.CurrentStateSeq(scope) }
 
@@ -72,7 +59,10 @@ func (s *server) pageServer() *pages.Server { return pages.New(s) }
 // hostPageServer returns a hostpages.Server bound to this server, for
 // dispatching into the extracted host-UI page handlers. *server satisfies
 // pages.Host (see the assertion above), which hostpages reuses.
-func (s *server) hostPageServer() *hostpages.Server { return hostpages.New(s) }
+func (s *server) hostPageServer() *hostpages.Server {
+	s.hostPagesOnce.Do(func() { s.hostPages = hostpages.New(s) })
+	return s.hostPages
+}
 
 // BroadcastFestView invalidates and re-broadcasts a fest/game's FestView.
 func (s *server) BroadcastFestView(festID, gameID, revision int64) {

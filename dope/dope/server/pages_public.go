@@ -8,18 +8,13 @@ import (
 	"html/template"
 	"net/http"
 	"sort"
-	"strings"
 	"time"
 
 	"dope/dope/domain/games"
-	"dope/dope/export/gameexport"
 	"dope/dope/platform/markdown"
 	"dope/dope/platform/util"
-	"dope/dope/storage/store"
 	"dope/dope/web/hostpages"
 	"dope/dope/web/pages"
-
-	"pecheny.me/dopecore/session"
 )
 
 type publicFestSummary struct {
@@ -128,123 +123,6 @@ func sortPublicFests(fests []publicFestSummary) {
 	})
 }
 
-func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	rest := strings.TrimPrefix(r.URL.Path, "/fest/")
-	if rest == r.URL.Path {
-		http.NotFound(w, r)
-		return
-	}
-	parts := strings.Split(strings.TrimSuffix(rest, "/"), "/")
-	if len(parts) == 0 || parts[0] == "" {
-		http.NotFound(w, r)
-		return
-	}
-	// A trailing /static segment forces the static snapshot for this viewer page
-	// (the always-on, edge-cacheable handle), independent of load mode.
-	forceStatic := false
-	if len(parts) > 1 && parts[len(parts)-1] == "static" {
-		forceStatic = true
-		parts = parts[:len(parts)-1]
-	}
-	id, err := store.ResolveFestID(r.Context(), s.eng.DB, parts[0])
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			http.NotFound(w, r)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if id <= 0 {
-		http.NotFound(w, r)
-		return
-	}
-	// /fest/{festRef}/game/{gameRef}.xlsx — XLSX archive download. Read-gated by
-	// handleScopedGameExport (authorizeFestRead), so hosts of non-public fests can
-	// download too; it deliberately skips the assertFestPublic check below.
-	if len(parts) == 3 && parts[1] == "game" && strings.HasSuffix(parts[2], ".xlsx") {
-		gameRef := strings.TrimSuffix(parts[2], ".xlsx")
-		gameID, err := resolveGameID(r.Context(), s.eng.DB, id, gameRef)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				http.NotFound(w, r)
-				return
-			}
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if gameID <= 0 {
-			http.NotFound(w, r)
-			return
-		}
-		gameexport.HandleScopedGameExport(s, w, r, id, gameID)
-		return
-	}
-	if len(parts) == 1 {
-		s.renderPublicFestPage(w, r, id)
-		return
-	}
-	if !isViewerSubPath(parts[1:]) {
-		http.NotFound(w, r)
-		return
-	}
-	if err := s.assertFestPublic(r.Context(), id); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			http.NotFound(w, r)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	// Public viewer pages mirror host pages: OD/SI get their own viewer.
-	if len(parts) >= 3 {
-		gameID, err := resolveGameID(r.Context(), s.eng.DB, id, parts[2])
-		if err == nil && gameID > 0 {
-			var gameType string
-			if err := s.eng.DB.QueryRowContext(r.Context(), `select game_type from games where id = ? and fest_id = ?`, gameID, id).Scan(&gameType); err == nil {
-				scope := festScope{FestID: id, GameID: gameID}
-				route := parseEKInitRoute(parts[1:], scope)
-				if games.Get(gameType).Init == games.InitGame {
-					// A page on the flat game init renders the whole game
-					// regardless of sub-route, so collapse to one snapshot cache key.
-					route = ekInitRoute{Mode: "grid", FestID: id, GameID: gameID}
-				}
-				// Serve the static snapshot when forced (/static) or, under load,
-				// for cookie-less viewers. Cookie-bearing requests fall through to
-				// the live path so editors keep working — but only up to a small
-				// concurrency budget, so a flood of forged session cookies can't
-				// pierce the shield.
-				serveStatic := forceStatic
-				if !serveStatic && s.eng.StaticMode.Load() {
-					if session.HasCookie(r) {
-						if s.eng.LiveFallthrough.Add(1) > liveFallthroughCap {
-							serveStatic = true
-						}
-						defer s.eng.LiveFallthrough.Add(-1)
-					} else {
-						serveStatic = true
-					}
-				}
-				if serveStatic {
-					s.serveStaticSnapshot(w, r, route)
-					return
-				}
-				if def := games.Get(gameType); def.Init == games.InitEK {
-					s.serveEKHTMLWithInit(w, r, scope, parts[1:])
-				} else {
-					s.serveGameHTMLWithInit(w, r, def.Page, scope)
-				}
-				return
-			}
-		}
-	}
-	s.serveEKHTML(w, r)
-}
-
 func (s *server) renderPublicFestPage(w http.ResponseWriter, r *http.Request, id int64) {
 	detail, err := s.loadPublicFestDetail(r.Context(), id)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -262,39 +140,6 @@ func (s *server) renderPublicFestPage(w http.ResponseWriter, r *http.Request, id
 		Description: detail.Description,
 		Games:       detail.Games,
 	}))
-}
-
-func (s *server) assertFestPublic(ctx context.Context, festID int64) error {
-	var isPublic int
-	if err := s.eng.DB.QueryRowContext(ctx, `select is_public from fests where id = ?`, festID).Scan(&isPublic); err != nil {
-		return err
-	}
-	if isPublic != 1 {
-		return sql.ErrNoRows
-	}
-	return nil
-}
-
-// isViewerSubPath validates that a fest-scoped path under /fest/{id}/
-// is one of the recognised viewer routes (/game/{gid}/...). The game segment
-// can be a numeric id or a slug.
-func isViewerSubPath(parts []string) bool {
-	if len(parts) < 2 {
-		return false
-	}
-	if parts[0] != "game" || parts[1] == "" {
-		return false
-	}
-	if len(parts) == 2 {
-		return true
-	}
-	switch parts[2] {
-	case "venues", "stats", "roster":
-		return len(parts) == 3
-	case "matches", "stage":
-		return len(parts) == 4 && parts[3] != ""
-	}
-	return false
 }
 
 func (s *server) loadPublicFestSummaries(ctx context.Context) ([]publicFestSummary, error) {

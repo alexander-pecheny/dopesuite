@@ -11,7 +11,6 @@ package gameexport
 import (
 	"context"
 	"database/sql"
-	"net/http"
 
 	"dope/dope/storage/store"
 )
@@ -24,12 +23,6 @@ type Host interface {
 	DB() *sql.DB
 	// Epoch returns the per-process SSE epoch token stamped on state responses.
 	Epoch() string
-	// AuthorizeFestRead writes an error response and returns false unless the
-	// caller may read the fest.
-	AuthorizeFestRead(w http.ResponseWriter, r *http.Request, festID int64) bool
-	// RequireFestTableEditor writes an error response and returns false unless
-	// the caller holds the table-editor role on the fest.
-	RequireFestTableEditor(w http.ResponseWriter, r *http.Request, festID int64) bool
 	// CurrentStateSeq returns the current per-scope SSE sequence number.
 	CurrentStateSeq(scope string) uint64
 	// LoadAllStageMatchViews returns every stage's match views for an EK game.

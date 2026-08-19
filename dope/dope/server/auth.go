@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"dope/dope/platform/util"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,10 +16,12 @@ import (
 	"pecheny.me/dopecore/authcred"
 	"pecheny.me/dopecore/session"
 	"pecheny.me/dopecore/tglogin"
+
+	"dope/dope/web/route"
 )
 
 const (
-	trustedOriginHostsEnv = "DOPE_TRUSTED_ORIGIN_HOSTS"
+	trustedOriginHostsEnv = route.TrustedOriginHostsEnv
 	passwordMinLen        = 8
 	// bcrypt only hashes the first 72 bytes of its input and rejects longer
 	// passwords, so cap the new password at that boundary.
@@ -69,24 +70,52 @@ func (s *server) inWriteTx(ctx context.Context, fn func(tx *sql.Tx) error) error
 	return tx.Commit()
 }
 
+// The /api/auth table: every handler returns what it has to say, the
+// dispatcher writes it. The exported HandleAuth* names in testapi.go reach
+// the same handlers.
+func (s *server) authRoutes(t *route.Table) {
+	t.Handle("POST /api/auth/tg/start", route.Public, s.authTgStart)
+	t.Handle("GET /api/auth/tg/status", route.Public, s.authTgStatus)
+	t.Handle("POST /api/auth/tg/claim", route.Public, s.authTgClaim)
+	t.Handle("POST /api/auth/login-password", route.Public, s.authLoginPassword)
+	t.Handle("POST /api/auth/logout", route.Public, s.authLogout)
+	t.Handle("GET /api/auth/me", route.Session, s.authMe)
+	t.Handle("POST /api/auth/username", route.Session, s.authUsername)
+	t.Handle("POST /api/auth/password", route.Session, s.authPassword)
+}
+
 func (s *server) handleAuthTgStart(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if !RequireSameOriginUnsafe(w, r) {
-		return
-	}
+	s.api().Serve(route.Public, s.authTgStart)(w, r)
+}
+func (s *server) handleAuthTgStatus(w http.ResponseWriter, r *http.Request) {
+	s.api().Serve(route.Public, s.authTgStatus)(w, r)
+}
+func (s *server) handleAuthTgClaim(w http.ResponseWriter, r *http.Request) {
+	s.api().Serve(route.Public, s.authTgClaim)(w, r)
+}
+func (s *server) handleAuthLoginPassword(w http.ResponseWriter, r *http.Request) {
+	s.api().Serve(route.Public, s.authLoginPassword)(w, r)
+}
+func (s *server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
+	s.api().Serve(route.Session, s.authMe)(w, r)
+}
+func (s *server) handleAuthUsername(w http.ResponseWriter, r *http.Request) {
+	s.api().Serve(route.Session, s.authUsername)(w, r)
+}
+func (s *server) handleAuthPassword(w http.ResponseWriter, r *http.Request) {
+	s.api().Serve(route.Session, s.authPassword)(w, r)
+}
+
+func (s *server) authTgStart(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
 	var res tglogin.StartResult
 	err := s.inWriteTx(r.Context(), func(tx *sql.Tx) (err error) {
 		res, err = s.handshake().Start(r.Context(), tx, time.Now())
 		return err
 	})
 	if err != nil {
-		writeAuthError(w, err)
-		return
+		return err
 	}
-	writeJSONValue(w, session.StartRegisterResponse{Code: res.Code, ExpiresAt: rfc3339(res.ExpiresAt), BotUsername: botUsername()})
+	return route.JSON(w, session.StartRegisterResponse{Code: res.Code, ExpiresAt: rfc3339(res.ExpiresAt), BotUsername: botUsername()})
 }
 
 // botUsername is the login bot's @handle, used to build the t.me deep link the
@@ -98,72 +127,56 @@ func botUsername() string {
 	return "dope_pecheny_bot"
 }
 
-func (s *server) handleAuthTgStatus(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func (s *server) authTgStatus(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
 	code := strings.TrimSpace(r.URL.Query().Get("code"))
 	if code == "" {
-		http.Error(w, "missing code", http.StatusBadRequest)
-		return
+		return route.BadRequest("missing code")
 	}
 	var out tglogin.Outcome
 	err := s.inWriteTx(r.Context(), func(tx *sql.Tx) (err error) {
 		out, err = s.handshake().Resolve(r.Context(), tx, code, time.Now())
 		return err
 	})
-	writeOutcome(w, out, err)
+	return writeOutcome(w, out, err)
 }
 
-func (s *server) handleAuthTgClaim(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if !RequireSameOriginUnsafe(w, r) {
-		return
-	}
-	defer r.Body.Close()
+func (s *server) authTgClaim(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
 	var req struct {
 		Code     string `json:"code"`
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
-		return
+	if err := route.DecodeJSON(r, &req); err != nil {
+		return err
 	}
 	username := strings.TrimSpace(req.Username)
 	if !util.ValidUsername(username) {
-		writeAuthError(w, authError{code: http.StatusBadRequest, msg: "invalid username"})
-		return
+		return route.BadRequest("invalid username")
 	}
 	var out tglogin.Outcome
 	err := s.inWriteTx(r.Context(), func(tx *sql.Tx) (err error) {
 		out, err = s.handshake().Claim(r.Context(), tx, req.Code, username, req.Password, time.Now())
 		switch {
 		case errors.Is(err, tglogin.ErrCodeNotFound):
-			return authError{code: http.StatusBadRequest, msg: "code not found"}
+			return route.BadRequest("code not found")
 		case errors.Is(err, tglogin.ErrWrongPassword):
-			return authError{code: http.StatusUnauthorized, msg: "wrong password"}
+			return route.Unauthorized("wrong password")
 		case errors.Is(err, tglogin.ErrTelegramLinked):
-			return authError{code: http.StatusConflict, msg: "telegram already linked"}
+			return route.Conflict("telegram already linked")
 		}
 		return err
 	})
-	writeOutcome(w, out, err)
+	return writeOutcome(w, out, err)
 }
 
-func writeOutcome(w http.ResponseWriter, out tglogin.Outcome, err error) {
+func writeOutcome(w http.ResponseWriter, out tglogin.Outcome, err error) error {
 	if err != nil {
-		writeAuthError(w, err)
-		return
+		return err
 	}
 	if out.Token != "" {
 		session.SetCookie(w, out.Token)
 	}
-	writeJSONValue(w, session.RegisterStatusResponse{Status: out.Status, Username: out.Username})
+	return route.JSON(w, session.RegisterStatusResponse{Status: out.Status, Username: out.Username})
 }
 
 // dopeUsers is dope's users table as the handshake needs it: system accounts
@@ -206,119 +219,76 @@ update users set telegram_user_id = ?, telegram_username = ?, telegram_name = ?,
 	return err
 }
 
-func (s *server) handleAuthLoginPassword(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if !RequireSameOriginUnsafe(w, r) {
-		return
-	}
-	defer r.Body.Close()
+func (s *server) authLoginPassword(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
 	var req loginPasswordRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
-		return
+	if err := route.DecodeJSON(r, &req); err != nil {
+		return err
 	}
 	username := strings.TrimSpace(req.Username)
 	password := req.Password
 	if username == "" || password == "" {
-		http.Error(w, "missing username or password", http.StatusBadRequest)
-		return
+		return route.BadRequest("missing username or password")
 	}
-
-	ctx := r.Context()
-	tx, err := s.eng.BeginWriteTx(ctx)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback()
-
-	var (
-		userID   int64
-		hash     sql.NullString
-		salt     sql.NullString
-		isSystem int
-	)
-	err = tx.QueryRowContext(ctx, `
+	var user session.User
+	var token string
+	err := s.inWriteTx(r.Context(), func(tx *sql.Tx) error {
+		ctx := r.Context()
+		var (
+			userID   int64
+			hash     sql.NullString
+			salt     sql.NullString
+			isSystem int
+		)
+		err := tx.QueryRowContext(ctx, `
 select id, password_hash, password_salt, is_system from users where username = ?`, username).Scan(
-		&userID, &hash, &salt, &isSystem)
-	if errors.Is(err, sql.ErrNoRows) || !hash.Valid {
-		http.Error(w, "invalid username or password", http.StatusUnauthorized)
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if isSystem == 1 {
-		http.Error(w, "system user cannot log in", http.StatusForbidden)
-		return
-	}
-	ok, upgraded, err := authcred.VerifyPasswordUpgrading(hash.String, salt.String, password)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if !ok {
-		http.Error(w, "invalid username or password", http.StatusUnauthorized)
-		return
-	}
-	if upgraded != "" {
-		// Lazy migration: upgrade legacy SHA256 hashes to bcrypt on first
-		// successful login so the weaker hash leaves the database.
-		if _, err := tx.ExecContext(ctx, `
-update users set password_hash = ?, password_salt = null, updated_at = ? where id = ?`,
-			upgraded, util.UtcNow(), userID); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			&userID, &hash, &salt, &isSystem)
+		if errors.Is(err, sql.ErrNoRows) || (err == nil && !hash.Valid) {
+			return route.Unauthorized("invalid username or password")
 		}
-	}
-
-	now := time.Now().UTC()
-	token, err := createSessionTx(ctx, tx, userID, now)
+		if err != nil {
+			return err
+		}
+		if isSystem == 1 {
+			return route.Forbid("system user cannot log in")
+		}
+		ok, upgraded, err := authcred.VerifyPasswordUpgrading(hash.String, salt.String, password)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return route.Unauthorized("invalid username or password")
+		}
+		if upgraded != "" {
+			// Lazy migration: a legacy SHA256 hash becomes bcrypt on the first
+			// successful login, so the weaker hash leaves the database.
+			if _, err := tx.ExecContext(ctx, `
+update users set password_hash = ?, password_salt = null, updated_at = ? where id = ?`,
+				upgraded, util.UtcNow(), userID); err != nil {
+				return err
+			}
+		}
+		if token, err = createSessionTx(ctx, tx, userID, time.Now().UTC()); err != nil {
+			return err
+		}
+		user, err = loadUserTx(ctx, tx, userID)
+		return err
+	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	user, err := loadUserTx(ctx, tx, userID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := tx.Commit(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return err
 	}
 	session.SetCookie(w, token)
-	writeJSONValue(w, meResponseFor(user))
+	return route.JSON(w, meResponseFor(user))
 }
 
-func (s *server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	user, ok := s.eng.LookupSession(r)
-	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-	writeJSONValue(w, meResponseFor(user))
+func (s *server) authMe(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	return route.JSON(w, meResponseFor(sc.User))
 }
 
-func (s *server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if !RequireSameOriginUnsafe(w, r) {
-		return
-	}
+func (s *server) authLogout(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
 	s.logoutSession(r)
 	session.ClearCookie(w)
 	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
 func (s *server) logoutSession(r *http.Request) {
@@ -328,131 +298,78 @@ func (s *server) logoutSession(r *http.Request) {
 	}
 }
 
-func (s *server) handleAuthUsername(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if !RequireSameOriginUnsafe(w, r) {
-		return
-	}
-	defer r.Body.Close()
-	user, ok := s.eng.LookupSession(r)
-	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
+func (s *server) authUsername(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	user := sc.User
 	if user.Username.Valid {
-		http.Error(w, "username already set", http.StatusConflict)
-		return
+		return route.Conflict("username already set")
 	}
 	var req usernameRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
-		return
+	if err := route.DecodeJSON(r, &req); err != nil {
+		return err
 	}
 	username := strings.TrimSpace(req.Username)
 	if !util.ValidUsername(username) {
-		http.Error(w, "bad username", http.StatusBadRequest)
-		return
+		return route.BadRequest("bad username")
 	}
 	res, err := s.eng.WriteExec(r.Context(), `
 update users set username = ?, updated_at = ? where id = ? and username is null`,
 		username, util.UtcNow(), user.UserID)
-	if err != nil {
-		if util.IsUniqueViolation(err) {
-			http.Error(w, "username taken", http.StatusConflict)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	if util.IsUniqueViolation(err) {
+		return route.Conflict("username taken")
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		http.Error(w, "username already set", http.StatusConflict)
-		return
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return route.Conflict("username already set")
 	}
 	user.Username = sql.NullString{String: username, Valid: true}
-	writeJSONValue(w, meResponseFor(user))
+	return route.JSON(w, meResponseFor(user))
 }
 
-// handleAuthPassword sets a password for the logged-in user, or changes an
-// existing one. When a password is already set, the caller must supply the
-// current password; the first time a password is set, no current password is
-// required.
-func (s *server) handleAuthPassword(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if !RequireSameOriginUnsafe(w, r) {
-		return
-	}
-	defer r.Body.Close()
-	user, ok := s.eng.LookupSession(r)
-	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
+// authPassword sets a password for the logged-in user, or changes an existing
+// one — then the caller proves the current password first.
+func (s *server) authPassword(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	var req passwordRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
-		return
+	if err := route.DecodeJSON(r, &req); err != nil {
+		return err
 	}
 	if len(req.NewPassword) < passwordMinLen {
-		http.Error(w, fmt.Sprintf("password must be at least %d characters", passwordMinLen), http.StatusBadRequest)
-		return
+		return route.Statusf(http.StatusBadRequest, "password must be at least %d characters", passwordMinLen)
 	}
 	if len(req.NewPassword) > passwordMaxLen {
-		http.Error(w, fmt.Sprintf("password must be at most %d characters", passwordMaxLen), http.StatusBadRequest)
-		return
+		return route.Statusf(http.StatusBadRequest, "password must be at most %d characters", passwordMaxLen)
 	}
-
-	ctx := r.Context()
-	tx, err := s.eng.BeginWriteTx(ctx)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback()
-
-	var (
-		hash sql.NullString
-		salt sql.NullString
-	)
-	if err := tx.QueryRowContext(ctx, `
-select password_hash, password_salt from users where id = ?`, user.UserID).Scan(&hash, &salt); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	// Changing an existing password requires proving knowledge of the old one.
-	if hash.Valid && hash.String != "" {
-		ok, _, err := authcred.VerifyPasswordUpgrading(hash.String, salt.String, req.CurrentPassword)
+	err := s.inWriteTx(r.Context(), func(tx *sql.Tx) error {
+		ctx := r.Context()
+		var hash, salt sql.NullString
+		if err := tx.QueryRowContext(ctx, `
+select password_hash, password_salt from users where id = ?`, sc.User.UserID).Scan(&hash, &salt); err != nil {
+			return err
+		}
+		if hash.Valid && hash.String != "" {
+			ok, _, err := authcred.VerifyPasswordUpgrading(hash.String, salt.String, req.CurrentPassword)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return route.Unauthorized("current password is incorrect")
+			}
+		}
+		hashed, err := authcred.HashPassword(req.NewPassword)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			return err
 		}
-		if !ok {
-			http.Error(w, "current password is incorrect", http.StatusUnauthorized)
-			return
-		}
-	}
-	hashed, err := authcred.HashPassword(req.NewPassword)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if _, err := tx.ExecContext(ctx, `
+		_, err = tx.ExecContext(ctx, `
 update users set password_hash = ?, password_salt = null, updated_at = ? where id = ?`,
-		hashed, util.UtcNow(), user.UserID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := tx.Commit(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+			hashed, util.UtcNow(), sc.User.UserID)
+		return err
+	})
+	if err != nil {
+		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
 func loadUserTx(ctx context.Context, tx *sql.Tx, userID int64) (session.User, error) {
@@ -491,22 +408,6 @@ func meResponseFor(user session.User) meResponse {
 	return resp
 }
 
-type authError struct {
-	code int
-	msg  string
-}
-
-func (e authError) Error() string { return e.msg }
-
-func writeAuthError(w http.ResponseWriter, err error) {
-	var ae authError
-	if errors.As(err, &ae) {
-		http.Error(w, ae.msg, ae.code)
-		return
-	}
-	http.Error(w, err.Error(), http.StatusInternalServerError)
-}
-
 const telegramAPIBase = "https://api.telegram.org"
 
 func sendTelegramMessageFromEnv(ctx context.Context, chatID int64, text string) error {
@@ -540,47 +441,10 @@ func sendTelegramMessageFromEnv(ctx context.Context, chatID int64, text string) 
 	return nil
 }
 
+// RequireSameOriginUnsafe is route.SameOriginUnsafe, kept under the name the
+// tests know.
 func RequireSameOriginUnsafe(w http.ResponseWriter, r *http.Request) bool {
-	switch r.Method {
-	case http.MethodGet, http.MethodHead, http.MethodOptions:
-		return true
-	}
-	origin := strings.TrimSpace(r.Header.Get("Origin"))
-	if origin == "" {
-		return true
-	}
-	u, err := url.Parse(origin)
-	if err != nil || !sameOriginRequestHost(u.Host, r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return false
-	}
-	return true
-}
-
-func sameOriginRequestHost(originHost string, r *http.Request) bool {
-	if strings.EqualFold(originHost, r.Host) {
-		return true
-	}
-	if trustedOriginHost(originHost, os.Getenv(trustedOriginHostsEnv)) {
-		return true
-	}
-	return false
-}
-
-func trustedOriginHost(originHost, trustedHosts string) bool {
-	for _, candidate := range strings.Split(trustedHosts, ",") {
-		host := strings.TrimSpace(candidate)
-		if host == "" {
-			continue
-		}
-		if u, err := url.Parse(host); err == nil && u.Host != "" {
-			host = u.Host
-		}
-		if strings.EqualFold(originHost, host) {
-			return true
-		}
-	}
-	return false
+	return route.SameOriginUnsafe(w, r)
 }
 
 // createInvite is a small helper used by tests / future admin tooling. Not

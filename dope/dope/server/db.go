@@ -4,8 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"strconv"
-	"strings"
 
 	"pecheny.me/dopecore/sqlitex"
 
@@ -14,6 +12,7 @@ import (
 	"dope/dope/platform/util"
 	"dope/dope/storage/journal"
 	"dope/dope/storage/store"
+	"dope/dope/web/route"
 )
 
 const (
@@ -89,23 +88,6 @@ func defaultGameID(ctx context.Context, q store.Queryer, festID int64) (int64, e
 // util.ValidateSlug enforces the slug grammar: 1-64 chars of a-z, 0-9, hyphen;
 // the slug cannot be all digits (so it never collides with a numeric ID lookup).
 
-// resolveGameID accepts either a positive integer (the game id) or a slug and
-// returns the numeric game id within the given fest.
 func resolveGameID(ctx context.Context, q store.Queryer, festID int64, ref string) (int64, error) {
-	ref = strings.TrimSpace(ref)
-	if ref == "" {
-		return 0, sql.ErrNoRows
-	}
-	if id, err := strconv.ParseInt(ref, 10, 64); err == nil && id > 0 {
-		var found int64
-		if err := q.QueryRowContext(ctx, `select id from games where id = ? and fest_id = ?`, id, festID).Scan(&found); err != nil {
-			return 0, err
-		}
-		return found, nil
-	}
-	var id int64
-	if err := q.QueryRowContext(ctx, `select id from games where fest_id = ? and slug = ?`, festID, ref).Scan(&id); err != nil {
-		return 0, err
-	}
-	return id, nil
+	return route.ResolveGameID(ctx, q, festID, ref)
 }

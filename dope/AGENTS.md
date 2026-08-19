@@ -26,7 +26,7 @@ dope/                    # module root (go.mod: module "dope")
   dope/                  # server tree — 7 groups, packages resolve as dope/dope/<group>/<pkg>
     cmd/                 # entry points: dope-server (thin main), telegram-bot
     server/              # package dopeserver — the orchestration trunk + server/tests/ (integration)
-    web/                 # HTTP/UI: pages, hostpages, editbatch, telegrambridge, assets (embed), jstest
+    web/                 # HTTP/UI: route (the one dispatcher), pages, hostpages, editbatch, telegrambridge, assets (embed), jstest
     domain/              # game/fest logic: games, core, gamebuild, flatgame, resolver, roster, overrides, imports, numbering, edit, view
     storage/             # persistence: store, journal, migrate, festwrite, festaccess, auditmw, storeutil, sqlitez
     export/              # output: xlsxexport, gameexport
@@ -48,15 +48,19 @@ files, each one concern:
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `server/main.go` | ~1000 | Entry point, mux wiring, HTTP server, SSE event handlers |
-| `server/scoped_api.go` | ~1200 | Tournament-scoped API endpoints |
+| `server/main.go` | ~830 | Entry point, mux wiring, HTTP server, SSE event handlers |
+| `server/routes_api.go` | ~500 | The `/api/fest/` and `/api/auth/` **route table** (ADR-0016): one row per endpoint — mux pattern, `route.Access` (Read / Editor / Manager…, `.Numbered()` for the numbering guard), handler — and the handlers, each `func(w, r, route.Scope) error`. No method checks, no guards, no `http.Error` in a handler: the dispatcher in `web/route` resolves `{fest}`/`{game}`, the session and the role, and writes the error a handler returns |
+| `server/routes_fest.go` | ~105 | The `/fest/` viewer table: the public fest page, the game pages (with the `/static` snapshot handle and the xlsx download) |
+| `server/scoped_api.go` | ~310 | What the scoped endpoints share below HTTP: match scope resolution, broadcasts, the state PUT, screen settings, match-view loaders, reseed |
+| `web/hostpages/routes.go` | ~120 | The `/host/` table (`Server.routes()`), with the host denial policy: no session or no role → back to `/host`, the wrong role → 403 |
+| `web/route/route.go` | ~460 | **The dispatcher**: `Table.Handle(pattern, access, handler)`, `Access` levels, `Scope`, the denial policies, `Status` errors + `WriteError`, the JSON writers, the same-origin check. `route_test.go` holds the access matrix (every level × caller × public/private fest) |
 | `server/db.go` | ~110 | DB open (`openFestDB`), active context, id resolution |
 | `server/migrations.go` | ~1400 | The schema as a list: `[]schema.Migration` (`storage/schema` applies them once each, in order) and the backfills they call; a new step takes the next number and goes at the end. `server/tests/testdata/schema.sql` pins what the list makes of an empty file (`DOPE_UPDATE_SCHEMA=1` regenerates); `DOPE_REHEARSE_DB=<snapshot>` walks a prod copy through them |
 | `server/auth.go` | ~600 | Sessions, password login, the Telegram handshake's adapter (the state machine is `dopecore/tglogin`; dope brings its write tx, its users table with `is_system`, its error text) |
 | `server/matchview.go` | ~815 | Fest/match view loading + match-update application |
 | `server/import_scheme.go` | ~110 | The pasted-scheme importer (`/api/import`, the host form): clears the fest, calls `gamebuild.Materialise` |
 | `server/static_mode.go` | ~425 | "DDoS lockdown" static-snapshot degradation layer |
-| `server/serve_html.go` | ~365 | Host/viewer/game HTML init payloads + asset versioning |
+| `server/serve_html.go` | ~360 | Host/viewer/game HTML init payloads + asset versioning; `canEdit` is the one place the init payload asks the role |
 | `server/host_accessors.go` | ~190 | Dependency-inversion adapter (`*server` → leaf `Host` interfaces) |
 | `server/testapi.go` | ~185 | The single exported test seam for `server/tests/` |
 

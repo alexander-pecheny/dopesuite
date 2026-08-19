@@ -102,14 +102,6 @@ var festContextSpecs = []struct {
 // HandleScopedGameArchive serves GET /api/fest/{fid}/games/{gid}/export.json.gz.
 // Host-only (table-editor role).
 func HandleScopedGameArchive(s Host, w http.ResponseWriter, r *http.Request, festID, gameID int64) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if !s.RequireFestTableEditor(w, r, festID) {
-		return
-	}
-
 	game := GameArchiveGame{FestID: festID, GameID: gameID}
 	var schemeJSON, stateJSON string
 	var gameSlug sql.NullString

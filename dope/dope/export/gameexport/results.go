@@ -19,13 +19,6 @@ import (
 
 // HandleScopedGameResults serves GET /api/fest/{fid}/games/{gid}/results.
 func HandleScopedGameResults(s Host, w http.ResponseWriter, r *http.Request, festID, gameID int64) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if !s.AuthorizeFestRead(w, r, festID) {
-		return
-	}
 	// Read seq before the row (same ordering rationale as handleScopedGameState)
 	// so the X-State-Seq we report is never ahead of the state we scored.
 	seq := s.CurrentStateSeq(fmt.Sprintf("game-state:%d", gameID))

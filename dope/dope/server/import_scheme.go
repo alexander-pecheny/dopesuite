@@ -11,46 +11,44 @@ import (
 	"dope/dope/domain/gamebuild"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
+	"dope/dope/web/route"
 )
 
+// handleImport is POST /api/import?fest_id=…: the pasted scheme, for a fest's
+// manager. The fest is named in the query, so the access check runs inside.
 func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
+	s.api().Serve(route.Public, s.importScheme)(w, r)
+}
+
+func (s *server) importScheme(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return route.Statusf(http.StatusMethodNotAllowed, "method not allowed")
 	}
 	festID, err := store.ResolveFestID(r.Context(), s.eng.DB, strings.TrimSpace(r.URL.Query().Get("fest_id")))
 	if err != nil || festID <= 0 {
-		http.Error(w, "missing fest_id", http.StatusBadRequest)
-		return
+		return route.BadRequest("missing fest_id")
 	}
-	if _, ok := s.requireFestAdmin(w, r, festID); !ok {
-		return
+	if _, ok := s.api().Admit(w, r, route.Manager, festID, 0); !ok {
+		return nil
 	}
-	defer r.Body.Close()
-
 	var scheme store.FestScheme
-	if err := json.NewDecoder(r.Body).Decode(&scheme); err != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
-		return
+	if err := route.DecodeJSON(r, &scheme); err != nil {
+		return err
 	}
-
 	if err := s.importSchemeIntoFest(r.Context(), festID, scheme); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return route.BadRequest(err.Error())
 	}
 	gameID, err := defaultGameID(r.Context(), s.eng.DB, festID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return err
 	}
 	view, err := s.loadFestViewSnapshot(festID, gameID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return err
 	}
 	data, _ := json.Marshal(view)
 	s.eng.BroadcastState(festID, "fest", view.Revision, data)
-	writeJSON(w, data)
+	return route.JSONBytes(w, data)
 }
 
 // importSchemeIntoFest wipes the fest's existing games (and dependent rows)

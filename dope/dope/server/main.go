@@ -23,6 +23,9 @@ import (
 	"pecheny.me/dopecore/webassets"
 	kit "pecheny.me/dopeuikit/kit"
 
+	"dope/dope/web/hostpages"
+	"dope/dope/web/route"
+
 	"dope/dope/domain/core"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/resolver"
@@ -77,6 +80,15 @@ type server struct {
 	// pages holds the compiled .dopeui-authored shells (see pages.go).
 	pages     *kit.PageSet
 	pagesOnce sync.Once
+
+	// apiTable is the /api/fest route table (routes_api.go), built on first use;
+	// hostPages holds the /host table the same way.
+	apiTable      *route.Table
+	apiOnce       sync.Once
+	hostPages     *hostpages.Server
+	hostPagesOnce sync.Once
+	festTable     *route.Table
+	festOnce      sync.Once
 
 	// assets is the static-asset layer: source FS, ETags, the core+dope
 	// stylesheet, fonts (see css.go).
@@ -172,15 +184,9 @@ func Main() {
 	mux.HandleFunc("/admin", srv.pageServer().HandleAdminLanding)
 	mux.HandleFunc("/admin/create_users", srv.pageServer().HandleAdminCreateUsers)
 	mux.HandleFunc("/admin/users", srv.pageServer().HandleAdminUsers)
-	mux.HandleFunc("/api/fest/", srv.handleScopedAPI)
-	mux.HandleFunc("/api/auth/tg/start", srv.handleAuthTgStart)
-	mux.HandleFunc("/api/auth/tg/status", srv.handleAuthTgStatus)
-	mux.HandleFunc("/api/auth/tg/claim", srv.handleAuthTgClaim)
-	mux.HandleFunc("/api/auth/login-password", srv.handleAuthLoginPassword)
-	mux.HandleFunc("/api/auth/logout", srv.handleAuthLogout)
-	mux.HandleFunc("/api/auth/me", srv.handleAuthMe)
-	mux.HandleFunc("/api/auth/username", srv.handleAuthUsername)
-	mux.HandleFunc("/api/auth/password", srv.handleAuthPassword)
+	mux.Handle("/api/fest/", srv.api().Mux)
+	srv.authRoutes(srv.api())
+	mux.Handle("/api/auth/", srv.api().Mux)
 	// Telegram bridge: the bot calls these (shared-secret gated) instead of
 	// opening fest.db itself — see telegram_bridge.go.
 	mux.HandleFunc("/api/telegram/register", srv.tgBridge().HandleTelegramRegister)
@@ -319,7 +325,7 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing fest_id", http.StatusBadRequest)
 		return
 	}
-	if !s.authorizeFestRead(w, r, festID) {
+	if _, ok := s.api().Admit(w, r, route.Read, festID, 0); !ok {
 		return
 	}
 	// game_id (optional) scopes this connection to the game the viewer is watching
@@ -425,7 +431,7 @@ func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing fest_id", http.StatusBadRequest)
 		return
 	}
-	if !s.authorizeHostPresence(w, r, festID) {
+	if _, ok := s.api().Admit(w, r, route.Editor, festID, 0); !ok {
 		return
 	}
 
@@ -659,10 +665,7 @@ func teamRanksHigher(a, b store.ParticipantView) bool {
 	return false
 }
 
-func writeJSON(w http.ResponseWriter, data []byte) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_, _ = w.Write(data)
-}
+func writeJSON(w http.ResponseWriter, data []byte) { _ = route.JSONBytes(w, data) }
 
 // formatSSE renders one SSE frame. Callers that need to bound the write with a
 // deadline (handleEvents) build the bytes first, then write them.
