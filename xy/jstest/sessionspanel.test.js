@@ -19,6 +19,7 @@ const sessions = [
   { id: 2, meta: meta("2026-08-10", "Поздний", [{ text: "Сборная", type: "team" }, { text: "Боря", type: "player" }]) },
 ];
 const log = [];
+let activeTest = null;
 const stack = fakeStack();
 // leave is what the page's stack does on a back/close: ask the frame's gate, then pop.
 const leave = async () => { const f = stack.frames.at(-1); if (!f.confirm || await f.confirm()) await stack.pop(); };
@@ -35,6 +36,8 @@ const panel = createSessionsPanel({
   patchSession: async (id, m) => { log.push(["patch", id, m]); sessions.find((s) => s.id === id).meta = m; },
   deleteSession: async (id) => { log.push(["delete", id]); },
   copyText: async (t) => { log.push(["copy", t]); },
+  activeTestSession: () => activeTest,
+  setTestMode: (id) => { activeTest = id; log.push(["testmode", id]); },
   loadNotes: async () => [],
   addNote: async () => {},
   modal: (stem) => createModal(stem, { byId: p.byId, stack }),
@@ -51,6 +54,19 @@ test("the list shows the newest test first with its counts, and copies the invit
   assert.equal(log.at(-1)[0], "copy");
   assert.ok(log.at(-1)[1].includes("10 августа"), log.at(-1)[1]);
   assert.equal(p.node("sessionsOverlay").hidden, false);
+});
+
+test("the row's ▶ starts test mode for its session, and reads ⏹ once it is on", () => {
+  const toggle = () => p.node("sessionsList").querySelectorAll(".sess-row")[0]
+    .querySelectorAll("[aria-pressed]")[0];
+  panel.open();
+  assert.equal(toggle().getAttribute("aria-pressed"), "false");
+  toggle().fire("click");
+  assert.deepEqual(log.at(-1), ["testmode", 2]); // the newest session sorts first
+  assert.equal(toggle().getAttribute("aria-pressed"), "true");
+  toggle().fire("click");
+  assert.deepEqual(log.at(-1), ["testmode", null]);
+  activeTest = null;
 });
 
 test("leaving an untouched form sends nothing; a retitled one is patched and the board re-rendered", async () => {

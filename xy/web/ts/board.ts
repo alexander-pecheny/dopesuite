@@ -30,6 +30,7 @@ import { createUnlock } from "./unlock.js";
 import { boardOrder, byRank, dragAfterIn, dragAfterInX, rankAfterMove } from "./dragrank.js";
 import { createTimeline, decodeCommentPayload, eventAuthor } from "./timeline.js";
 import { createCardDetail, nowStamp } from "./carddetail.js";
+import { createDwell, liveTestMode } from "./testmode.js";
 import { createTransfer } from "./transfer.js";
 import { type AnnounceCity, parseSession, type SessionMeta, sessionLabel, type TitleMode, whoSaw } from "./sessions.js";
 import * as people from "./people.js";
@@ -294,6 +295,77 @@ const board: Board = {
   reload: () => unlock.load(),
 };
 
+// ---- test mode (ADR-0012) ----
+// The device-local автопилот of a test evening: while a session is live here,
+// a minute on an open card — or a comment on it — marks the card with the
+// test. The kernel and the rules live in testmode.ts; this block is the
+// board's wiring: the dwell watcher on the open card, the topbar badge, and
+// the hooks the card detail, the лента and the Тесты panel call into.
+const testMode = liveTestMode();
+const testDwell = createDwell({
+  now: () => Date.now(),
+  setTimer: (fn, ms) => window.setTimeout(fn, ms),
+  clearTimer: (id) => window.clearTimeout(id as number),
+  tryMark: (cardId) => {
+    const sid = testMode.sessionFor(boardId);
+    if (sid == null) return false; // no mode live: leave the dwell to retry
+    if (testMode.allowMark(boardId, cardId)) void markTestOnCard(cardId, sid);
+    return true;
+  },
+});
+
+async function markTestOnCard(cardId: number, sessionId: number): Promise<void> {
+  const card = state.cards.find((c) => c.id === cardId);
+  if (card) await cardLabels.ensurePlaying(card, sessionId);
+}
+
+// The session a comment on this card is born tagged with (timeline dep). A
+// card already carrying the test tags freely; a hand-unmarked one tags not at
+// all — a tag the card's picker cannot reproduce helps nobody.
+function testTagFor(cardId: number): number | null {
+  const sid = testMode.sessionFor(boardId);
+  if (sid == null) return null;
+  if (playingsOf(cardId).includes(sid)) return sid;
+  return testMode.allowMark(boardId, cardId) ? sid : null;
+}
+
+function setTestMode(sessionId: number | null): void {
+  if (sessionId == null) testMode.stop();
+  else testMode.start(boardId, sessionId);
+  updateTestBadge();
+}
+
+const testBadge = el("button", {
+  class: "action-icon testmode-badge", type: "button", hidden: true,
+  onclick: () => popupMenu(testBadge, [{ label: "Завершить тест-режим", onClick: () => setTestMode(null) }]),
+});
+byId("notifToggle").before(testBadge);
+
+function updateTestBadge(): void {
+  const sid = testMode.sessionFor(boardId);
+  testBadge.hidden = sid == null;
+  if (sid == null) return;
+  const name = sessionName(sid);
+  testBadge.title = `Тест-режим: «${name}». Завершить — по клику`;
+  testBadge.setAttribute("aria-label", testBadge.title);
+  testBadge.replaceChildren(icon("flask-conical"), el("span", { class: "testmode-badge-name", text: name }));
+}
+
+// The timer a backgrounded tab throttles is only a wake-up call; coming back
+// to the tab, and a once-a-minute tick, re-ask the wall clock — which is also
+// how the badge learns the idle hour has run out.
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    testDwell.check();
+    updateTestBadge();
+  }
+});
+window.addEventListener("pagehide", () => testDwell.check());
+window.setInterval(() => {
+  testDwell.check();
+  updateTestBadge();
+}, 60_000);
+
 // ---- 🔔 bell: the badge and the panel of recent other-authored activity ----
 const bell = createBell(board, { toggle: byId("notifToggle"), badge: byId("notifBadge") }, {
   mustDK,
@@ -341,6 +413,11 @@ function render(): void {
   kanban.hidden = false;
   scheduleReindex();
   renderBoardTitle();
+  // render always runs on a fresh snapshot, which is where a session deleted
+  // on ANOTHER device shows up — a mode left pointing at it must switch off.
+  const liveSid = testMode.sessionFor(boardId);
+  if (liveSid != null && !state.sessions.some((s) => s.id === liveSid)) testMode.stop();
+  updateTestBadge();
   // The list "⋯" menu floats on <body>: a rebuild would strand it next to a
   // stale anchor, so close it with the DOM it was opened for.
   if (openListMenu) openListMenu.close();
@@ -1034,6 +1111,7 @@ const cardDetail = createCardDetail({
   forgetCardLabels,
   preview: { renderPreviewCard, resolveImages: attachments.resolveImages, imageRefs: xyChgk.imageRefs, fillPreviewImages, previewList },
   attachments,
+  onOpenCard: (id) => { if (id != null) testDwell.opened(id); else testDwell.closed(); },
   popupMenu,
   readMarkers: { refreshCardUnreadDot, renderNotifBadge },
   timeline: {
@@ -1082,6 +1160,8 @@ timeline = createTimeline({
   labelName: (id) => { const l = labelById(id); return l ? l.name : ""; },
   cardSessions: (cardId) => playingsOf(cardId).map((id) => ({ id, label: sessionName(id) })),
   sessionName,
+  testSession: testTagFor,
+  onTestComment: (cardId, sid) => { void markTestOnCard(cardId, sid); },
   attachments: { url: attachments.attachmentUrl, download: attachments.download },
 });
 
@@ -1100,6 +1180,9 @@ const cardLabels = createCardLabels(board, {
   createLabel: (name, color) => labelsEditor.createLabel(name, color),
   loadTimeline: (cardId) => timeline.load(cardId),
   paintLabels,
+  onPlayingRemoved: (cardId, sessionId) => {
+    if (testMode.sessionFor(boardId) === sessionId) testMode.noteUnmarked(boardId, cardId);
+  },
 });
 // ---- the Тесты panel + the label editor ----
 
@@ -1141,8 +1224,11 @@ const sessionsPanel = createSessionsPanel({
     state.cardSessions = state.cardSessions.filter((p) => p.sessionId !== id);
     state.cardLabels = state.cardLabels.filter((a) => a.sessionId !== id);
     sessionMetaCache.delete(id);
+    if (testMode.sessionFor(boardId) === id) setTestMode(null);
   },
   copyText: (text: string) => cardDetail.copyPlain(text),
+  activeTestSession: () => testMode.sessionFor(boardId),
+  setTestMode,
   loadNotes: async (sessionId) => {
     const raw = (await fetchJSON(`/api/sessions/${sessionId}/timeline`)) as Array<{
       payload_enc: string; card_id?: number; created_at: string; author_user_id?: number | null;

@@ -44,11 +44,17 @@ export interface CardLabelsDeps {
   createLabel(name: string, color: string): Promise<BoardLabel>;
   loadTimeline(cardId: number): Promise<void>;
   paintLabels(): void;
+  // A person took the active test OFF this card — test mode must not put it
+  // back (ADR-0012). Fires only for the ×, never for a session delete.
+  onPlayingRemoved?(cardId: number, sessionId: number): void;
 }
 
 export interface CardLabels {
   render(card: BoardCard): void;
   closePopup(): void;
+  // Test mode's write: mark the card with the session, silently, if it is not
+  // already. The same whole-set write the picker's + makes.
+  ensurePlaying(card: BoardCard, sessionId: number): Promise<void>;
 }
 
 export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabelsDeps): CardLabels {
@@ -185,7 +191,8 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
   }
 
   async function addPlaying(card: BoardCard, sessionId: number): Promise<void> {
-    await writePlayings(card, [...new Set([...board.playingsOf(card.id), sessionId])]);
+    if (board.playingsOf(card.id).includes(sessionId)) return;
+    await writePlayings(card, [...board.playingsOf(card.id), sessionId]);
   }
 
   // removePlaying takes the labels scoped to it — a label scoped to a playing that
@@ -197,6 +204,7 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
       : `Снять тест «${board.sessionName(sessionId)}» с вопроса?`;
     if (!confirm(what)) return;
     await writePlayings(card, board.playingsOf(card.id).filter((id) => id !== sessionId));
+    deps.onPlayingRemoved?.(card.id, sessionId);
   }
 
   async function writePlayings(card: BoardCard, ids: number[]): Promise<void> {
@@ -347,5 +355,5 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
   ui.addBtn.addEventListener("click", () => openLabelAddPopup(null));
   ui.playingAddBtn.addEventListener("click", openPlayingAddPopup);
 
-  return { render: renderLabelPicker, closePopup: closeLabelAddPopup };
+  return { render: renderLabelPicker, closePopup: closeLabelAddPopup, ensurePlaying: addPlaying };
 }

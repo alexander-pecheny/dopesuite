@@ -33,6 +33,11 @@ export interface SessionsPanelDeps {
   patchSession(id: number, meta: string): Promise<void>;
   deleteSession(id: number): Promise<void>;
   copyText(text: string): Promise<void>;
+  // Test mode (ADR-0012): which session is live on this device, and the
+  // toggle. board.ts owns the controller and the topbar badge; the panel only
+  // draws the per-row play/stop button.
+  activeTestSession(): number | null;
+  setTestMode(sessionId: number | null): void;
   // The session's лента: everything said about any question at this test, plus
   // the notes about the test itself. Decrypted by the caller, which owns the DK.
   loadNotes(sessionId: number): Promise<Array<{ text: string; card: number | null; when: string; author: string }>>;
@@ -108,9 +113,24 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
             title: "Скопировать строку со временем начала для мессенджера",
             onclick: () => { void deps.copyText(inviteLine(m)); },
           }, ...iconed("clipboard", "Приглашение")),
+          testModeButton(s.id),
         ));
       box.append(row);
     }
+  }
+
+  // The ▶ that starts test mode on this device (ADR-0012) — and the ⏹ it
+  // becomes while its session is the active one.
+  function testModeButton(sessionId: number): HTMLElement {
+    const on = deps.activeTestSession() === sessionId;
+    return el("button", {
+      class: "input" + (on ? " testmode-on" : ""), type: "button",
+      "aria-pressed": String(on),
+      title: on
+        ? "Завершить тест-режим"
+        : "Тест-режим: минута на открытом вопросе или комментарий отмечают его этим тестом. Только на этом устройстве; час без действий выключает",
+      onclick: () => { deps.setTestMode(on ? null : sessionId); renderList(); },
+    }, icon(on ? "square" : "play"));
   }
 
   function openSession(id: number): void {

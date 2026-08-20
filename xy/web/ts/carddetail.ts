@@ -197,6 +197,9 @@ export interface CardDetailDeps {
   // Moving or copying the open card (transfer.ts); the board wires one for
   // every panel that transfers.
   transfer: Pick<Transfer, "moveBoardOptions" | "loadMoveBoard" | "transferCard">;
+  // Fires whenever the open card changes — a card id on open, null on close.
+  // The test-mode dwell watcher (testmode.ts) is the one listener.
+  onOpenCard?(cardId: number | null): void;
 }
 
 // cardReturn's shape: where the open card was launched from (a list preview's
@@ -1036,6 +1039,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     versionIdx = 0;
     cardReturn = opts.returnTo || null;
     openCardId = card.id;
+    deps.onOpenCard?.(card.id);
     cardView = "";
     cardFieldReaders = null;
     const openMeta = card.handoutMeta != null ? card.handoutMeta : null;
@@ -1364,6 +1368,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     stopReadTracking();
     cardOverlay.hidden = true;
     openCardId = null;
+    deps.onOpenCard?.(null);
     freshCard = false;
     cardReturn = null;
     cardView = "";
@@ -1386,6 +1391,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   function dismissCard(): void {
     draft.open("", null, null); // clean baseline: nothing to prompt about
     openCardId = null; // and no alias flush onto a card that is gone
+    deps.onOpenCard?.(null);
     overlayStack.pop();
   }
 

@@ -1643,6 +1643,17 @@ body {
 .sess-origin { color: var(--muted); font-size: var(--text-sm); font-style: italic; }
 .sess-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 .sess-cities { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+/* Test mode (ADR-0012): the row's ▶ turned ⏹ while its session is live... */
+.sess-actions .testmode-on { color: var(--accent); border-color: var(--accent); }
+/* ...and the topbar badge that says a test is being run on this device. It is
+   an .action-icon let out of its square so the session's name fits. */
+/* flex:none, or the topbar row crushes it to a bare flask and the name to 0;
+   doubled with .action-icon to outrank `.board-page .action-icon`'s width */
+.action-icon.testmode-badge { flex: none; width: auto; padding: 0 var(--space-2); gap: var(--space-1); color: var(--accent); }
+.testmode-badge-name {
+  max-width: 9em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font-size: var(--text-sm); font-weight: var(--fw-semibold);
+}
 .sess-invite-box { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin: var(--space-3) 0; }
 .sess-invite { flex: 1 1 18rem; margin: 0; font-size: var(--text-base); }
 /* Two lines in the tester list, so they stack and the copy button sits beside */

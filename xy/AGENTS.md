@@ -404,7 +404,14 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        session, the session form (towns/timezone/tester autocompletes), the
                        invite and tester-summary copies, and the session's лента. The form
                        has no Отмена: leaving it by ANY route saves (the overlay stack's
-                       confirm gate), and only a failed save keeps you on it
+                       confirm gate), and only a failed save keeps you on it; each row's ▶
+                       starts test mode for that session on this device
+    testmode.ts        test mode (ADR-0012), the kernel: one localStorage slot per device
+                       (board+session+last-activity+do-not-remark), an idle hour ends it by
+                       wall clock, and the dwell watcher marks a card open for a minute —
+                       all pure over an injected clock/store. board.ts wires the dwell, the
+                       topbar badge and the born-tagged comments; pwa.ts feeds the idle
+                       clock from every page
     colorpick.ts       the label colour control: a swatch button opening a fixed palette
                        plus a hex field, replacing input[type=color] (which hands the
                        choice to a full-screen OS sheet on Android). The kit's

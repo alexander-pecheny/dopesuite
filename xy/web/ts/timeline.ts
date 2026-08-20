@@ -122,6 +122,14 @@ export interface TimelineDeps {
   // One session's CURRENT name, for the badge on a tagged comment: the card it
   // hangs off may since have lost that playing.
   sessionName(sessionId: number): string;
+  // Test mode (ADR-0012): the session a comment on this card should be born
+  // tagged with, or null. Null when no test is active on this device, and also
+  // when the card was hand-unmarked during the mode — an untaggable comment is
+  // better than a tag its card's picker cannot reproduce.
+  testSession?(cardId: number): number | null;
+  // ...and the board's chance to mark the card itself with that session, so
+  // the ⋯ menu invariant (a tag is one of the CARD's tests) holds.
+  onTestComment?(cardId: number, sessionId: number): void;
   attachments: {
     url(att: AttachmentLike): Promise<string>;
     download(att: AttachmentLike, name: string): Promise<void>;
@@ -869,10 +877,13 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     const msg = ui.threadMessage;
     try {
       const dk = mustDK();
+      const sid = deps.testSession?.(oc) ?? null;
       await deps.post("comment", `/api/cards/${oc}/comments`, {
         payload_enc: await xyCrypto.encField(dk, text), reply_to_id: threadRootId,
         mentions: resolveMentions(text, state().members || []),
+        ...(sid != null ? { session_id: sid } : {}),
       });
+      if (sid != null) deps.onTestComment?.(oc, sid);
       input.value = "";
       await load(oc);
       await openThread(threadRootId); // re-render the thread with the new reply
@@ -1029,12 +1040,15 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     const oc = deps.card.openCardId();
     if ((!text && !draftImages.length) || !oc) return false;
     try {
-      // No test is named here: a comment is tagged from its own ⋯ menu once it
-      // exists, so writing one is just writing one.
+      // In test mode a comment is born tagged (ADR-0012); otherwise it is
+      // tagged from its own ⋯ menu once it exists.
+      const sid = deps.testSession?.(oc) ?? null;
       await deps.post("comment", `/api/cards/${oc}/comments`, {
         payload_enc: await xyCrypto.encField(mustDK(), encodeCommentPayload(text, draftImages)),
         mentions: resolveMentions(text, state().members || []),
+        ...(sid != null ? { session_id: sid } : {}),
       });
+      if (sid != null) deps.onTestComment?.(oc, sid);
       input.value = "";
       draftImages = [];
       renderDraftImages();

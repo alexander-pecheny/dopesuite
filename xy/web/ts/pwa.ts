@@ -1,8 +1,19 @@
 // pwa.ts — xy's PWA boot, loaded on every page after the kit's menu.js:
-// inject the manifest/install meta, register the service worker, and disable
-// pinch/double-tap zoom (fixed-shell SPA).
-// A side-effect module: no exports, all work happens at load.
-export {};
+// inject the manifest/install meta, register the service worker, disable
+// pinch/double-tap zoom (fixed-shell SPA), and keep the test-mode idle clock
+// honest. A side-effect module: no exports, all work happens at load.
+import { liveTestMode } from "./testmode.js";
+
+// ---- test-mode activity (ADR-0012, runs on every page) ----
+// The mode expires after an idle hour ANYWHERE in xy, so every page counts as
+// activity — reading the board list mid-test must not switch the test off.
+// touch() throttles its own writes; with no mode on, it is one null read.
+try {
+  const tm = liveTestMode();
+  for (const type of ["pointerdown", "keydown"]) {
+    document.addEventListener(type, () => tm.touch(), { capture: true, passive: true });
+  }
+} catch (_) { /* storage may be unavailable (private mode); the mode simply never runs */ }
 
 // ---- PWA wiring (runs on every page since this loads everywhere) ----
 
