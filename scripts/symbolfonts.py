@@ -56,6 +56,10 @@ PDF_FONTS = [
     for n in ("NotoSans-Regular.ttf", "NotoSans-Bold.ttf", "NotoSans-Italic.ttf", "NotoSans-BoldItalic.ttf")
 ]
 WEB_SUBSET = ROOT / "dopeuikit/assets/fonts/noto-sans-symbols.woff2"
+# The web subset is declared in core.css as a "Noto Sans" face, so a line that
+# shows one of its glyphs unions its metrics into the line box. It must carry
+# the body webfont's vertical metrics, not the donor's.
+WEB_BODY = ROOT / "dopeuikit/assets/fonts/noto-sans-var.woff2"
 
 
 def fetch_donor() -> bytes:
@@ -72,20 +76,22 @@ def fetch_donor() -> bytes:
     return data
 
 
-def donor_subset(data: bytes, flavor: str | None) -> bytes:
+def donor_subset(data: bytes, flavor: str | None, metrics: dict | None = None) -> bytes:
     font = TTFont(io.BytesIO(data))
     missing = [hex(cp) for cp in CODEPOINTS if cp not in font.getBestCmap()]
     if missing:
         sys.exit(f"donor lacks {missing}")
     opts = subset.Options()
-    # The merged-into faces own their layout, and none of them has vertical
-    # metrics; a leftover GSUB or vhea from the donor either collides or trips
-    # the merger, for no gain on plain symbol glyphs.
+    # The merged-into faces own their layout; a leftover GSUB or vhea from the
+    # donor either collides or trips the merger, for no gain on plain symbol
+    # glyphs.
     opts.drop_tables += ["GSUB", "GPOS", "GDEF", "vhea", "vmtx", "VORG"]
     opts.flavor = flavor
     subsetter = subset.Subsetter(opts)
     subsetter.populate(unicodes=CODEPOINTS)
     subsetter.subset(font)
+    if metrics is not None:
+        _stamp(font, metrics)
     out = io.BytesIO()
     font.save(out)
     return out.getvalue()
@@ -96,13 +102,38 @@ def covered(path: Path) -> bool:
     return all(cp in cmap for cp in CODEPOINTS)
 
 
+# The donor's vertical metrics (descender -630) are deeper than Noto Sans's
+# (-293). Left in place they bloat every line box — the PDF faces via the
+# merger, the web subset by being a same-family face — so both outputs carry
+# the target family's metrics instead. The donor's symbol glyphs all fit
+# inside Noto Sans's -293..1069 box, so this clips nothing.
+_METRIC_FIELDS = {
+    "hhea": ("ascender", "descender", "lineGap"),
+    "OS/2": ("sTypoAscender", "sTypoDescender", "sTypoLineGap",
+              "usWinAscent", "usWinDescent"),
+}
+
+
+def _snapshot(font: TTFont) -> dict:
+    return {tbl: {f: getattr(font[tbl], f) for f in fields}
+            for tbl, fields in _METRIC_FIELDS.items()}
+
+
+def _stamp(font: TTFont, keep: dict) -> None:
+    for tbl, fields in _METRIC_FIELDS.items():
+        for f in fields:
+            setattr(font[tbl], f, keep[tbl][f])
+
+
 def merge_into(target: Path, piece: bytes) -> None:
+    keep = _snapshot(TTFont(str(target)))
     tmp = target.with_suffix(".donor.ttf")
     tmp.write_bytes(piece)
     try:
         merged = Merger().merge([str(target), str(tmp)])
         # The merger unions cmap and glyphs but keeps the first font's
         # identity; nothing of the donor's name table survives.
+        _stamp(merged, keep)
         merged.save(str(target))
     finally:
         tmp.unlink()
@@ -118,7 +149,8 @@ def main() -> None:
         merge_into(path, piece)
         assert covered(path)
         print(f"+ {path.relative_to(ROOT)}")
-    WEB_SUBSET.write_bytes(donor_subset(data, flavor="woff2"))
+    web_metrics = _snapshot(TTFont(WEB_BODY, lazy=True))
+    WEB_SUBSET.write_bytes(donor_subset(data, flavor="woff2", metrics=web_metrics))
     print(f"+ {WEB_SUBSET.relative_to(ROOT)} ({WEB_SUBSET.stat().st_size} bytes)")
 
 
