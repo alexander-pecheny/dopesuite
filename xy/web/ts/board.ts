@@ -911,7 +911,10 @@ function pvEditBtn(card: BoardCard): HTMLElement {
       e.stopPropagation();
       const group = previewGroupMode;
       hidePreview();
-      void cardDetail.openCard(card, { returnTo: list ? { listId: list.id, cardId: card.id, group } : null });
+      // The preview renders the export-folded card (every wording page-broken
+      // under one number); open the real one so the editor sees its versions.
+      const real = state.cards.find((c) => c.id === card.id) || card;
+      void cardDetail.openCard(real, { returnTo: list ? { listId: list.id, cardId: card.id, group } : null });
     },
   }, icon("pencil"));
 }
