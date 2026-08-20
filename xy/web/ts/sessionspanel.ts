@@ -107,7 +107,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
             class: "input", type: "button",
             title: "Скопировать строку со временем начала для мессенджера",
             onclick: () => { void deps.copyText(inviteLine(m)); },
-          }),
+          }, ...iconed("clipboard", "Приглашение")),
         ));
       box.append(row);
     }
