@@ -8,6 +8,7 @@
 package webassets
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -16,6 +17,9 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/tdewolff/minify/v2"
+	mincss "github.com/tdewolff/minify/v2/css"
 )
 
 // Config describes where an app's assets come from.
@@ -160,7 +164,10 @@ func (a *Assets) FileServer() http.Handler {
 
 // BuildStylesheet concatenates the design system's core.css ahead of the app's
 // own layer. In disk mode core.css is re-read from CoreCSSDiskPath when present,
-// so an edit in the sibling kit checkout hot-reloads.
+// so an edit in the sibling kit checkout hot-reloads. Embed mode serves the
+// concatenation minified — the sources carry commentary written for readers of
+// the repo, not for every client's first uncached load; disk/dev mode stays
+// readable in the browser's inspector.
 func (a *Assets) BuildStylesheet() []byte {
 	core := a.cfg.CoreCSS
 	if a.NoCache && a.cfg.CoreCSSDiskPath != "" {
@@ -172,7 +179,21 @@ func (a *Assets) BuildStylesheet() []byte {
 	out := make([]byte, 0, len(core)+1+len(layer))
 	out = append(out, core...)
 	out = append(out, '\n')
-	return append(out, layer...)
+	out = append(out, layer...)
+	if !a.NoCache {
+		return minifyCSS(out)
+	}
+	return out
+}
+
+// minifyCSS returns the input unchanged when the minifier chokes — a served
+// stylesheet beats a startup panic over a CSS edge case.
+func minifyCSS(b []byte) []byte {
+	var out bytes.Buffer
+	if err := mincss.Minify(minify.New(), &out, bytes.NewReader(b), nil); err != nil {
+		return b
+	}
+	return out.Bytes()
 }
 
 // ServeStylesheet serves the concatenated stylesheet, rebuilding it per request

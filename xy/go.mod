@@ -10,7 +10,11 @@ require (
 	modernc.org/sqlite v1.50.0
 )
 
-require golang.org/x/crypto v0.52.0 // indirect
+require (
+	github.com/tdewolff/minify/v2 v2.24.17 // indirect
+	github.com/tdewolff/parse/v2 v2.8.16 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
+)
 
 require (
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
@@ -24,7 +28,7 @@ require (
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	modernc.org/libc v1.72.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

@@ -264,6 +264,14 @@ func main() {
 			build.Target = api.ES2019
 			build.Sourcemap = api.SourceMapLinked
 			build.Write = true
+			// Served bundles ship minified; the test-runner outputs (jstest/,
+			// dist/esm) are never served, so they stay readable. ESM export
+			// names survive minification — jstest imports the served xy dist.
+			if !strings.Contains(build.Outdir, "jstest") && !strings.HasSuffix(build.Outdir, "/esm") {
+				build.MinifyWhitespace = true
+				build.MinifySyntax = true
+				build.MinifyIdentifiers = true
+			}
 			if watch {
 				ctx, err := api.Context(build)
 				if err != nil {

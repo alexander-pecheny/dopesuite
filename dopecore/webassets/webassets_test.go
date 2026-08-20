@@ -13,9 +13,9 @@ func testAssets(t *testing.T) *Assets {
 	return New(Config{
 		Embedded: fstest.MapFS{
 			"static/host.js":    &fstest.MapFile{Data: []byte("// host")},
-			"static/styles.css": &fstest.MapFile{Data: []byte(".app{}")},
+			"static/styles.css": &fstest.MapFile{Data: []byte("/* the app layer */\n.app { color: blue; }")},
 		},
-		CoreCSS: []byte(".core{}"),
+		CoreCSS: []byte("/* commentary for the repo, not the wire */\n.core { color: red; }"),
 	})
 }
 
@@ -48,8 +48,10 @@ func TestFileServerCachePolicy(t *testing.T) {
 
 func TestStylesheetIsCorePlusAppLayer(t *testing.T) {
 	a := testAssets(t)
+	// Embed mode serves core+app concatenated AND minified: comments gone,
+	// core's rules ahead of the app's.
 	got := string(a.BuildStylesheet())
-	if want := ".core{}\n.app{}"; got != want {
+	if want := ".core{color:red}.app{color:blue}"; got != want {
 		t.Fatalf("stylesheet = %q, want %q", got, want)
 	}
 	// The served stylesheet is the concatenation, so its ETag must hash the
