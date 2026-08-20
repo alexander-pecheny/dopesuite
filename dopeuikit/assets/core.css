@@ -32,6 +32,31 @@
   src: url("/static/fonts/noto-sans-var-italic.woff2") format("woff2");
 }
 
+/* The symbols Noto Sans does not have: media controls, check marks, clocks —
+   a 10 KB Noto Sans Symbols 2 subset (scripts/symbolfonts.py) scoped by
+   unicode-range, so it is fetched only when a page actually shows one. Without
+   it the browser falls back per platform, and iOS falls back to Apple Color
+   EMOJI for a plain-text ⏸. Declared after the main faces (same family, later
+   faces win inside their range) and for both styles — an italic run would
+   otherwise skip it and fall off the family. */
+@font-face {
+  font-family: "Noto Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/static/fonts/noto-sans-symbols.woff2") format("woff2");
+  unicode-range: U+231A-231B, U+23E9-23EA, U+23ED-23EF, U+23F1-23F3, U+23F8-23FA, U+25B6, U+25C0, U+2713-2714, U+2716-2717;
+}
+
+@font-face {
+  font-family: "Noto Sans";
+  font-style: italic;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/static/fonts/noto-sans-symbols.woff2") format("woff2");
+  unicode-range: U+231A-231B, U+23E9-23EA, U+23ED-23EF, U+23F1-23F3, U+23F8-23FA, U+25B6, U+25C0, U+2713-2714, U+2716-2717;
+}
+
 @font-face {
   font-family: "JetBrains Mono";
   font-style: normal;
