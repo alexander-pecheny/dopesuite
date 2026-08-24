@@ -31,10 +31,92 @@ var xySessions = authcred.Sessions{
 	UserDest:    func(u *session.User) ([]any, func()) { return []any{&u.Username, &u.Telegram}, nil },
 }
 
-// lookupSession resolves the session cookie to a user; an expired session is
-// deleted, a live one slides — with the browser cookie's MaxAge, else the
-// cookie dies 30 days after login however active the user is.
+// bearerToken returns the raw API token of an `Authorization: Bearer …` header,
+// or "" when the request carries none.
+func bearerToken(r *http.Request) string {
+	const prefix = "bearer "
+	h := r.Header.Get("Authorization")
+	if len(h) <= len(prefix) || !strings.EqualFold(h[:len(prefix)], prefix) {
+		return ""
+	}
+	return strings.TrimSpace(h[len(prefix):])
+}
+
+// lookupSession resolves a request to its user: an API token when the request
+// carries one, the session cookie otherwise. A token IS the user (ADR-0015) —
+// bar the routes requireCookieUser guards.
 func (s *server) lookupSession(w http.ResponseWriter, r *http.Request) (session.User, bool) {
+	if raw := bearerToken(r); raw != "" {
+		return s.lookupAPIToken(r, raw)
+	}
+	return s.lookupCookieSession(w, r)
+}
+
+// tokenState is what an API token resolves to: its row id and owner, plus why
+// it was refused. One resolver serves both callers — this one and the
+// Trello-compatible API's key+token params (trello_compat.go).
+type tokenState int
+
+const (
+	tokenOK tokenState = iota
+	tokenUnknown
+	tokenExpired
+)
+
+// resolveAPIToken looks a raw token up by hash. It reads the user's display
+// columns too, so an authenticated request costs one statement.
+func (s *server) resolveAPIToken(ctx context.Context, raw string) (u session.User, id int64, state tokenState, err error) {
+	var (
+		expires  string
+		revoked  sql.NullString
+		lastUsed sql.NullString
+	)
+	err = s.db.QueryRowContext(ctx, `
+select t.id, t.user_id, t.expires_at, t.revoked_at, t.last_used_at, u.username, u.telegram_username
+from api_tokens t join users u on u.id = t.user_id
+where t.token_hash = ?`, authcred.HashSessionToken(raw)).
+		Scan(&id, &u.UserID, &expires, &revoked, &lastUsed, &u.Username, &u.Telegram)
+	switch {
+	case errors.Is(err, sql.ErrNoRows), revoked.Valid && err == nil:
+		return session.User{}, 0, tokenUnknown, nil
+	case err != nil:
+		return session.User{}, 0, tokenUnknown, err
+	}
+	if exp, _ := time.Parse(time.RFC3339, expires); time.Now().After(exp) {
+		return session.User{}, id, tokenExpired, nil
+	}
+	s.touchToken(ctx, id, lastUsed)
+	return u, id, tokenOK, nil
+}
+
+// touchToken stamps last_used_at, so /profile/tokens shows which credential is
+// live — but at most once a minute per token: a CLI takes the write lock on
+// every request otherwise, and the answer this feeds is «сегодня или нет».
+func (s *server) touchToken(ctx context.Context, id int64, lastUsed sql.NullString) {
+	now := time.Now()
+	if lastUsed.Valid {
+		if seen, err := time.Parse(time.RFC3339, lastUsed.String); err == nil && now.Sub(seen) < time.Minute {
+			return
+		}
+	}
+	_ = s.withWriteTx(ctx, "token-touch", func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `update api_tokens set last_used_at = ? where id = ?`, rfc3339(now), id)
+		return err
+	})
+}
+
+// lookupAPIToken resolves a bearer API token to its owner, rejecting unknown,
+// revoked and expired ones — as the cookie path does, a lookup failure is
+// simply «not authenticated».
+func (s *server) lookupAPIToken(r *http.Request, raw string) (session.User, bool) {
+	u, _, state, err := s.resolveAPIToken(r.Context(), raw)
+	return u, err == nil && state == tokenOK
+}
+
+// lookupCookieSession resolves the session cookie to a user; an expired session
+// is deleted, a live one slides — with the browser cookie's MaxAge, else the
+// cookie dies 30 days after login however active the user is.
+func (s *server) lookupCookieSession(w http.ResponseWriter, r *http.Request) (session.User, bool) {
 	c, err := r.Cookie(session.CookieName)
 	if err != nil || c.Value == "" {
 		return session.User{}, false
@@ -62,6 +144,22 @@ func (s *server) lookupSession(w http.ResponseWriter, r *http.Request) (session.
 // requireUser resolves the session or writes 401.
 func (s *server) requireUser(w http.ResponseWriter, r *http.Request) (session.User, bool) {
 	u, ok := s.lookupSession(w, r)
+	if !ok {
+		httpError(w, http.StatusUnauthorized, "not authenticated")
+		return session.User{}, false
+	}
+	return u, true
+}
+
+// requireCookieUser is requireUser for the three things an API token may not do:
+// change the password (its own kill switch — see handleSetPassword), change the
+// username, and reach /admin. Everything else a token does as the user.
+func (s *server) requireCookieUser(w http.ResponseWriter, r *http.Request) (session.User, bool) {
+	if bearerToken(r) != "" {
+		httpError(w, http.StatusForbidden, "сюда API-токен не пускают — нужен вход в браузере")
+		return session.User{}, false
+	}
+	u, ok := s.lookupCookieSession(w, r)
 	if !ok {
 		httpError(w, http.StatusUnauthorized, "not authenticated")
 		return session.User{}, false
@@ -450,7 +548,7 @@ type usernameRequest struct {
 }
 
 func (s *server) handleSetUsername(w http.ResponseWriter, r *http.Request) {
-	u, ok := s.requireUser(w, r)
+	u, ok := s.requireCookieUser(w, r)
 	if !ok {
 		return
 	}
@@ -493,8 +591,12 @@ type passwordRequest struct {
 	NewPassword     string `json:"new_password"`
 }
 
+// handleSetPassword is also the kill switch: a new password revokes every API
+// token and every other session of the account, so a leaked credential dies
+// with one act the user already knows (ADR-0015). Hence cookie-only — a token
+// must not be able to lock its owner out, nor to survive by minting siblings.
 func (s *server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
-	u, ok := s.requireUser(w, r)
+	u, ok := s.requireCookieUser(w, r)
 	if !ok {
 		return
 	}
@@ -521,8 +623,17 @@ func (s *server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 				return errBadRequest("неверный текущий пароль")
 			}
 		}
-		_, err := tx.ExecContext(ctx, `update users set password_hash = ?, updated_at = ? where id = ?`,
-			newHash, rfc3339(time.Now()), u.UserID)
+		now := rfc3339(time.Now())
+		if _, err := tx.ExecContext(ctx, `update users set password_hash = ?, updated_at = ? where id = ?`,
+			newHash, now, u.UserID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx,
+			`update api_tokens set revoked_at = ? where user_id = ? and revoked_at is null`,
+			now, u.UserID); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `delete from sessions where user_id = ? and id <> ?`, u.UserID, u.SessionID)
 		return err
 	})
 	if handleErr(w, err) {

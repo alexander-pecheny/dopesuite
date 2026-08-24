@@ -3,13 +3,12 @@ package server
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"pecheny.me/dopecore/authcred"
+	"xy/internal/rank"
 )
 
 // Trello-compatible API surface for chgksuite (https://github.com/lemonsqueeze
@@ -84,35 +83,19 @@ func (s *server) authToken(w http.ResponseWriter, r *http.Request) (int64, bool)
 		httpError(w, http.StatusUnauthorized, "invalid token")
 		return 0, false
 	}
-	var (
-		id      int64
-		uid     int64
-		expires string
-		revoked sql.NullString
-	)
-	err := s.db.QueryRowContext(r.Context(), `
-select id, user_id, expires_at, revoked_at from api_tokens where token_hash = ?`,
-		authcred.HashSessionToken(raw)).Scan(&id, &uid, &expires, &revoked)
-	if errors.Is(err, sql.ErrNoRows) {
-		httpError(w, http.StatusUnauthorized, "invalid token")
-		return 0, false
-	}
+	u, _, state, err := s.resolveAPIToken(r.Context(), raw)
 	if handleErr(w, err) {
 		return 0, false
 	}
-	if revoked.Valid {
+	switch state {
+	case tokenExpired:
+		httpError(w, http.StatusUnauthorized, "expired token")
+		return 0, false
+	case tokenUnknown:
 		httpError(w, http.StatusUnauthorized, "invalid token")
 		return 0, false
 	}
-	if exp, _ := time.Parse(time.RFC3339, expires); time.Now().After(exp) {
-		httpError(w, http.StatusUnauthorized, "expired token")
-		return 0, false
-	}
-	_ = s.withWriteTx(r.Context(), "token-touch", func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `update api_tokens set last_used_at = ? where id = ?`, rfc3339(time.Now()), id)
-		return err
-	})
-	return uid, true
+	return u.UserID, true
 }
 
 // requireTokenBoard authenticates the token and verifies board access for the
@@ -303,13 +286,13 @@ func (s *server) handleTrelloCreateCard(w http.ResponseWriter, r *http.Request) 
 			`select max(rank) from cards where list_id = ? and deleted_at is null`, listID).Scan(&last); err != nil {
 			return err
 		}
-		rank, err := rankAfter(last.String)
+		newRank, err := rank.After(last.String)
 		if err != nil {
 			return err
 		}
 		res, err := tx.ExecContext(ctx, `
 insert into cards(board_id, list_id, kind, description_enc, rank, created_at, updated_at)
-values(?, ?, 'normal', ?, ?, ?, ?)`, bid, listID, descEnc, rank, rfc3339(now), rfc3339(now))
+values(?, ?, 'normal', ?, ?, ?, ?)`, bid, listID, descEnc, newRank, rfc3339(now), rfc3339(now))
 		if err != nil {
 			return err
 		}

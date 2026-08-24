@@ -24,7 +24,8 @@ const adminUserEnv = "XY_ADMIN_USER"
 
 func (s *server) requireAdmin(w http.ResponseWriter, r *http.Request) (session.User, bool) {
 	return adminusers.RequireAdmin(w, r, adminUserEnv, func() (session.User, bool) {
-		return s.lookupSession(w, r)
+		// Cookie only: /admin creates users, which no API token may do.
+		return s.lookupCookieSession(w, r)
 	})
 }
 
