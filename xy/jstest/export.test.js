@@ -65,10 +65,10 @@ test("offline, only the .4s is offered and it downloads without the network", as
   online = true;
 });
 
-test("the export label says «группы» for a grouped list, and an empty list is refused", () => {
+test("the export label says «группы» for a grouped list, and an empty list is not offered it", () => {
   const panel = createExportPanel(fakeBoard(), { appendImages: async () => new Set() });
   assert.equal(panel.label(scope), "Экспорт");
   assert.equal(panel.label({ ...scope, grouped: true, group: { id: 5, name: "Пакет" } }), "Экспорт группы");
-  panel.open({ ...scope, cards: [] });
-  assert.deepEqual(globalThis.__alerts, ["В списке нет карточек."]);
+  assert.equal(panel.offered({ ...scope, cards: [] }), false, "nothing to export, so no row to press");
+  assert.equal(panel.offered(scope), true);
 });

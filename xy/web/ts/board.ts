@@ -75,6 +75,13 @@ const del = (kind: string, path: string): Promise<unknown> =>
 
 const boardId = Number(location.pathname.split("/").pop());
 
+// The ☰ is data, and two things change it: the role (which arrives with the
+// snapshot, after the menu is first built) and the mass-mode toggle, whose row
+// is its own way out.
+function refreshBoardMenu(): void {
+  window.dopeMenu?.setExtras(boardMenu());
+}
+
 const statusNode = byId("status");
 const kanban = byId("kanban");
 const titleNode = byId("boardTitle");
@@ -123,9 +130,7 @@ const unlock = createUnlock({
     Object.assign(state, s);
     sessionMetaCache = new Map();
     document.title = state.name + " · xy";
-    // The role arrives with the snapshot, and the ☰ was built before it: rebuild
-    // it now that «Удалить доску» knows whether to offer itself.
-    window.dopeMenu?.setExtras(boardMenu());
+    refreshBoardMenu(); // the role came with the snapshot; «Удалить доску» wants it
     // Feed the person directory. The tester names are plaintext in hand at this
     // moment, so this costs a pass over a handful of sessions and no decryption.
     people.remember(boardId, state.name, state.sessions.flatMap((s) => parseSession(s.meta).testers));
@@ -1272,7 +1277,7 @@ const rewrites = createRewrites(board);
 const labelsEditor = createLabelsEditor(board);
 const testerList = createTesterList(board, shell, cardDetail);
 const listsManage = createListsManage(board);
-const mass = createMassPanel(board, { kanban, transfer, forgetCardLabels, paintLabels });
+const mass = createMassPanel(board, { kanban, transfer, forgetCardLabels, paintLabels, refreshMenu: refreshBoardMenu });
 
 // starts marks the head of a cluster: the menu draws a rule above it. Order and
 // clustering are this file's business — a panel module has no idea what it will
@@ -1332,7 +1337,7 @@ registerPanel(
 );
 // Board-level actions live in the burger (☰) menu — sharing (rarely opened) and
 // "forget password" (rarely needed) don't warrant header buttons.
-window.dopeMenu?.setExtras(boardMenu());
+refreshBoardMenu();
 
 void unlock.boot();
 

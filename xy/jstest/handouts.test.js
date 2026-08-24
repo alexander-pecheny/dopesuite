@@ -38,11 +38,12 @@ test("opening writes the .hndt of the scope into the editor and pre-stages its i
   assert.equal(p.node("handoutsOverlay").hidden, true);
 });
 
-test("a list without handouts opens with an empty source and says so", () => {
+// A tour with no раздатка has nothing to generate, so the ⋯ does not offer the
+// row at all rather than opening an empty editor and explaining itself.
+test("a list without handouts is not offered the panel", () => {
   const panel = createHandoutsPanel(fakeBoard(), { appendImages: async () => new Set() });
-  panel.open({ ...scope, cards: [cards[1]] });
-  assert.equal(p.node("handoutsSource").value, "");
-  assert.equal(p.node("handoutsMessage").textContent, "В списке нет вопросов с раздаточным материалом.");
+  assert.equal(panel.offered({ ...scope, cards: [cards[1]] }), false);
+  assert.equal(panel.offered(scope), true);
   assert.equal(panel.label(scope), "Генерация раздаток");
   assert.equal(panel.label({ ...scope, grouped: true }), "Генерация раздаток (вся группа)");
 });

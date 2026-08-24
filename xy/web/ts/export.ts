@@ -75,7 +75,6 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
   }
 
   function openExport(scope: ListScope): void {
-    if (!scope.cards.length) { alert("В списке нет карточек."); return; }
     const hndt = xyHndt.hndtOf(scope.cards).source;
     exportCtx = { cards: scope.cards, title: scope.title, hndt };
 
@@ -175,6 +174,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
   return {
     id: "export", menu: "list", icon: "file-down",
     label: (scope) => `Экспорт${scope.grouped ? " группы" : ""}`,
+    offered: (scope) => scope.cards.length > 0,
     open: openExport,
   };
 }
