@@ -1,6 +1,10 @@
 package tests
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"dope/dope/domain/games"
@@ -54,4 +58,41 @@ func TestTroikaOctobearfestReplay(t *testing.T) {
 		t.Fatalf("Троечка: %v", err)
 	}
 	t.Logf("Троечка: %d боёв и %d таблиц сошлись", len(script.Bouts), len(script.Tables))
+}
+
+// A bracket game boots the bracket init payload — and on its own page. Тройка
+// does both: it plays бои like ЭК and draws them quite differently, so serving
+// it ЭК's HTML would boot ЭК's bundle and none of Тройка's would ever run.
+// The bug this pins shipped once: the route hardcoded static/ek.html for every
+// InitEK format and ignored what the Definition said its page was.
+func TestBracketGamesAreServedTheirOwnPage(t *testing.T) {
+	srv := newAuthTestServer(t)
+	db := srv.Eng().DB
+	festID := newFest(t, db, "pages", "Страницы", systemUserID(t, db))
+	// The viewer route admits a public фест without a session.
+	if _, err := db.Exec(`update fests set is_public = 1 where id = ?`, festID); err != nil {
+		t.Fatal(err)
+	}
+	teams := registerNumberedTeams(t, db, festID, map[string]int{
+		"А": 1, "Б": 2, "В": 3, "Г": 4, "Д": 5, "Е": 6, "Ж": 7, "З": 8,
+	})
+	ids := idsFor(t, teams, []string{"А", "Б", "В", "Г", "Д", "Е", "Ж", "З"})
+
+	for _, c := range []struct{ gameType, dsl, bundle string }{
+		{games.Troika, "[scheme]\nkind: roundrobin\ngroup_size: 8\nthemes: 6\n", "dist/troika.js"},
+		{games.Brain, "[scheme]\nkind: roundrobin\ngroup_size: 8\nquestions: 5\n", "dist/brain.js"},
+		{games.EK, "[scheme]\nkind: single_elimination\nparticipants: 8\nthemes: 6\n", "dist/ek.js"},
+	} {
+		gameID := createSchemeGameFor(t, db, festID, c.gameType, c.gameType, c.dsl, ids)
+		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/fest/%d/game/%d/", festID, gameID), nil)
+		resp := httptest.NewRecorder()
+		srv.HandleFestRouter(resp, req)
+		if resp.Code != http.StatusOK {
+			t.Errorf("%s: страница отдала %d", c.gameType, resp.Code)
+			continue
+		}
+		if body := resp.Body.String(); !strings.Contains(body, c.bundle) {
+			t.Errorf("%s: страница не грузит %s", c.gameType, c.bundle)
+		}
+	}
 }

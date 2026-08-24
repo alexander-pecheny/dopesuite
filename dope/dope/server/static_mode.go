@@ -342,7 +342,7 @@ func (s *server) serveStaticSnapshot(w http.ResponseWriter, r *http.Request, rou
 	if e == nil {
 		// Build failed (e.g. the game vanished mid-request); fall back to the live
 		// viewer shell so the request still gets a usable page.
-		s.serveEKHTML(w, r)
+		s.serveEKHTML(w, r, games.Get("").Page)
 		return
 	}
 	e.lastAccess.Store(time.Now().UnixNano())

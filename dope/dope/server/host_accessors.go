@@ -99,9 +99,10 @@ func (s *server) ServeGameHTMLWithInit(w http.ResponseWriter, r *http.Request, h
 	s.serveGameHTMLWithInit(w, r, htmlPath, scope)
 }
 
-// ServeEKHTMLWithInit serves the ЭК page (static/ek.html) with init payload.
-func (s *server) ServeEKHTMLWithInit(w http.ResponseWriter, r *http.Request, scope core.FestScope, parts []string) {
-	s.serveEKHTMLWithInit(w, r, scope, parts)
+// ServeEKHTMLWithInit serves a bracket game's page with the bracket init
+// payload; which page is the format's own.
+func (s *server) ServeEKHTMLWithInit(w http.ResponseWriter, r *http.Request, scope core.FestScope, parts []string, page string) {
+	s.serveEKHTMLWithInit(w, r, scope, parts, page)
 }
 
 // loadHostFestHeader loads the fest-header view model for the host pages. It
