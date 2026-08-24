@@ -27,6 +27,7 @@ import { xyRank } from "./rank.js";
 import { xyChgk } from "./chgk.js";
 import { xyTrello } from "./trellomodel.js";
 import type { RawDescEdit } from "./trellomodel.js";
+import { importBundle } from "./bundleimport.js";
 
 const { fetchJSON, jpost, jput } = xyApp;
 const { keyBetween } = xyRank;
@@ -523,6 +524,24 @@ form.addEventListener("submit", async (e) => {
   const boardSel = byId<HTMLSelectElement>("trelloBoard");
   const pickerActive = !byId("trelloPickArea").hidden;
   const file = byId<HTMLInputElement>("trelloFile").files?.[0];
+  const bundleFile = byId<HTMLInputElement>("bundleFile").files?.[0];
+
+  // A Board Bundle from another xy instance (ADR-0013) — its own import path,
+  // sharing only the name/passphrase fields with the Trello flows.
+  if (bundleFile) {
+    importBtn.disabled = true;
+    setStatus("saving");
+    try {
+      const { id } = await importBundle(bundleFile, name, pass, log);
+      setStatus("saved");
+      setTimeout(() => { window.location.href = `/board/${id}`; }, 1500);
+    } catch (err) {
+      setStatus("error");
+      log("Импорт прерван: " + errMsg(err));
+      importBtn.disabled = false;
+    }
+    return;
+  }
 
   // "Все доски": import each open board in turn, under the one passphrase. A
   // board that fails is reported and the rest still go through.

@@ -98,6 +98,10 @@ internal/server/       package server — the whole HTTP server
                        live comment on a board in one response (ciphertext, comments only) — what
                        прогрев indexes; a desc_edit payload carries a whole question's before/after
                        and is deliberately excluded; comments add/patch/delete, mentions, import
+  bundle.go            the Board Bundle's server half (ADR-0013): whole-board timeline and
+                       attachment reads (ciphertext) for the export, board-level timeline
+                       import (all event kinds, authors matched by username, src→new id map
+                       returned so batches chain) for the re-encrypting importer
   tokens.go            API tokens: month-lived bearer creds (manage at /profile/tokens)
   trello_compat.go     Trello-compatible API for chgksuite (token-authed via key+token)
   rank.go              server-side fractional-index keyAfter (Trello card upload)
@@ -391,7 +395,18 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
     import.ts          Trello board import → new encrypted board (implicit OAuth,
                        server proxy /api/import/trello/proxy, comments past the
                        1000-action cap, attachments); the pure Trello-card→xy-card
-                       rules live in trellomodel.ts (jstest-covered, no DOM)
+                       rules live in trellomodel.ts (jstest-covered, no DOM); also
+                       routes the Board Bundle path (bundleimport.ts) off the same form
+    bundle.ts          the Board Bundle's shape (ADR-0013), all pure: what board.json
+                       holds, attachment paths inside the zip, the validation an
+                       untrusted file passes before an import touches the server
+    zip.ts             a minimal zip writer/reader for Bundles: store/deflate via the
+                       native CompressionStream, UTF-8 names, no zip64 (jstest-covered)
+    bundleexport.ts    «Скачать доску (.zip)» (☰): decrypt the whole board under the
+                       key this client holds, pack board.json + attachments, download
+    bundleimport.ts    a Bundle zip → new encrypted board: quota pre-check, create,
+                       re-encrypt every field under a fresh key, remap every id,
+                       chunked timeline import; any failure deletes the new board
     sessions.ts        the test-session kernel, all pure: parse/serialize meta_enc (folding
                        every older shape forward), the derived session name, dd.mm.yyyy +
                        24h parsing (native date/time inputs render in the BROWSER's locale,

@@ -195,6 +195,13 @@ func routes(srv *server) *http.ServeMux {
 	mux.HandleFunc("PUT /api/boards/{id}/tour-testers", srv.handleSetTourTesters)
 	mux.HandleFunc("GET /api/cards/{id}/timeline", srv.handleGetTimeline)
 	mux.HandleFunc("GET /api/boards/{id}/comments", srv.handleGetBoardComments)
+
+	// ---- board bundle (ADR-0013): whole-board reads for the export,
+	//      board-level timeline import for the re-encrypting importer ----
+	mux.HandleFunc("GET /api/boards/{id}/timeline", srv.handleGetBoardTimeline)
+	mux.HandleFunc("GET /api/boards/{id}/attachments", srv.handleGetBoardAttachments)
+	mux.HandleFunc("POST /api/boards/{id}/timeline/import", srv.handleBundleImportEvents)
+
 	mux.HandleFunc("POST /api/cards/{id}/comments", srv.handleAddComment)
 	mux.HandleFunc("POST /api/cards/{id}/timeline/import", srv.handleImportEvents)
 	mux.HandleFunc("PATCH /api/comments/{id}", srv.handlePatchComment)

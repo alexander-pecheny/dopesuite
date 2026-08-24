@@ -1,8 +1,8 @@
-page title="Импорт из Trello · xy" kind="wide" scripts="dist/import.js"
-  topbar title="Импорт из Trello"
+page title="Импорт · xy" kind="wide" scripts="dist/import.js"
+  topbar title="Импорт"
     crumbs
       crumb home href="/" icon="house" label="Все доски"
-      crumb "Импорт из Trello"
+      crumb "Импорт"
     iconlink href="/" icon="arrow-left" label="Все доски"
 
   form id="importForm" dir="col"
@@ -32,6 +32,14 @@ page title="Импорт из Trello · xy" kind="wide" scripts="dist/import.js"
         "Меню доски → «Печать, экспорт и общий доступ» → «Экспортировать как JSON»."
         "Из файла берутся до 1000 последних комментариев; вложения так не переносятся."
       filefield id="trelloFile" accept=".json,application/json"
+
+    details id="bundleSection"
+      summary "…или перенести доску с другого сервера xy (.zip)"
+      hint
+        "Архив со страницы доски (меню → «Скачать доску (.zip)»). Переносится всё:"
+        "списки, карточки, метки, тесты, комментарии, история правок и вложения."
+        "Получится новая доска с новым паролем."
+      filefield id="bundleFile" accept=".zip,application/zip"
 
     textfield id="boardName" placeholder="Название доски (по умолчанию — из Trello)"
     -- textfield (not password): board creation is the one safe moment to show the
