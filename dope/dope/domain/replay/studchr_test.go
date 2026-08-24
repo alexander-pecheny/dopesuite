@@ -12,7 +12,7 @@ import (
 // parser and, more importantly, by a person. This test is what stops a reader
 // script from quietly emitting something nobody can check.
 func TestStudchrTranscriptsParse(t *testing.T) {
-	paths, err := filepath.Glob("../../../testdata/studchr2026/*.transcript")
+	paths, err := filepath.Glob("../../../testdata/*/*.transcript")
 	if err != nil {
 		t.Fatal(err)
 	}

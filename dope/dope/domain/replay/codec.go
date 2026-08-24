@@ -17,6 +17,13 @@ type Codec struct {
 	// Questions: the seat's middle field is the бой's questions (who buzzed
 	// and how it went), not a grid of themes.
 	Questions bool
+	// Counts: the seat's middle field counts, per вопрос, how many of the
+	// team answered it — Троечка's sheet, where all three answer every вопрос
+	// and each correct answer pays on its own. Which кресло said what the
+	// sheet does not record, so the count is all there is to transcribe.
+	Counts bool
+	// ThemeSize is how many вопросы a тема holds when a Count grid is read.
+	ThemeSize int
 	// ScoreMetric names the Protocol metric the sheet prints as the бой's Σ
 	// when it is not the total column (брейн counts the questions taken).
 	ScoreMetric string
@@ -39,6 +46,9 @@ var codecs = map[string]Codec{
 	"ek":    {Columns: [3]string{"Σ", "Σ+", "темы"}, Aggregate: ekStats},
 	"si":    {Individual: true, Columns: [3]string{"Σ", "Σ+", "бои"}, Aggregate: individualStats},
 	"brain": {Questions: true, ScoreMetric: "taken", Columns: [3]string{"попытки", "верно", "неверно"}, Aggregate: brainStats},
+	// Троечка's sheet keeps no per-player row — it never records which кресло
+	// answered — so there is no статистика to hold dope to.
+	"troika": {Counts: true, ThemeSize: 3, ScoreMetric: "total"},
 }
 
 // CodecFor is the codec of a game type; a game with none has no transcript form.

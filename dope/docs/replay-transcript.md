@@ -108,6 +108,12 @@ team's `[составы]`.
 
 - **marks** — five characters per theme, themes separated by spaces. `R` taken,
   `W` lost, `-` never played. `---R-` is «взял сороковку».
+- **counts** — Троечка's form: one digit per вопрос, вопросы grouped by тема,
+  `.` for a вопрос nobody took. `131 ..1` is «первый вопрос взял один, второй
+  все трое, третий один; в следующей теме только третий». All three players
+  answer every вопрос and each correct answer pays on its own, so what the sheet
+  records is a count — it never says which кресло — and the кресла are
+  synthesized on replay the way a перестрелка's marks are.
 - **Σ** and **место** are what the sheet printed. They are asserted, not
   applied: dope scores the marks itself and has to agree. A shared place is
   written as a fraction — `1.5` when two finish level.

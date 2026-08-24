@@ -61,6 +61,7 @@ type Play struct {
 	Themes    [][5]Mark
 	Players   []string
 	Questions []Answer
+	Counts    [][]int
 	// Shootout is the net перестрелка points, zero for a seat that played none.
 	Shootout int
 }
@@ -153,7 +154,7 @@ func Run(script Script, game Game) ([]Finding, error) {
 			}
 		}
 		for _, seat := range bout.Seats {
-			if err := game.Play(bout.At, seat.Name, Play{Themes: seat.Marks, Players: seat.Players, Questions: seat.Questions, Shootout: seat.Shootout}); err != nil {
+			if err := game.Play(bout.At, seat.Name, Play{Themes: seat.Marks, Players: seat.Players, Questions: seat.Questions, Counts: seat.Counts, Shootout: seat.Shootout}); err != nil {
 				return findings, fmt.Errorf("%s, %s: отметки: %w", bout.At, seat.Name, err)
 			}
 		}

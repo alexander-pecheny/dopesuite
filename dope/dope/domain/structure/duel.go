@@ -40,7 +40,13 @@ func duelStandings(conf Duel, results []MatchOutcome) ([]RankedEntry, error) {
 		if e, ok := byParticipant[id]; ok {
 			return e
 		}
-		e := &RankedEntry{Participant: id, Metrics: map[string]float64{}}
+		// Every metric this table keeps starts at zero rather than absent: a
+		// scoring rule reads them by name, and expr refuses a name it does not
+		// know, so a группа whose бои have not been played yet would otherwise
+		// fail to rank at all instead of ranking everyone level.
+		e := &RankedEntry{Participant: id, Metrics: map[string]float64{
+			"points": 0, "taken": 0, "conceded": 0, "diff": 0, "place_sum": 0, "bouts": 0,
+		}}
 		byParticipant[id] = e
 		appearance = append(appearance, id)
 		return e
