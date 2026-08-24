@@ -51,6 +51,19 @@ export async function readBundleFile(file: File): Promise<{ bundle: Bundle; byte
   return { bundle, bytesOf };
 }
 
+// sniffBundle answers "is this one of ours?" so the import picker never has to
+// ask. A zip that holds no board.json is somebody else's — a question package
+// for the server's parser — and a corrupt one is best explained by whoever
+// tries to read it next.
+export async function sniffBundle(file: File): Promise<{ bundle: Bundle; bytesOf: AttachmentBytes } | null> {
+  if (!/\.zip$/i.test(file.name)) return null;
+  try {
+    return await readBundleFile(file);
+  } catch {
+    return null;
+  }
+}
+
 export function summarize(bundle: Bundle, r: ApplyResult): string {
   let out = `Готово: ${r.cards} карточек, ${r.units.filter((u) => !u.error).length} списков/групп, `
     + `${bundle.sessions.length} тестов, ${r.events} событий, ${r.attachments} вложений.`;
@@ -101,4 +114,4 @@ export async function importBundle(file: File, name: string, pass: string, log: 
   return await createBoardFromBundle(bundle, bytesOf, name || bundle.board.name, pass, log);
 }
 
-export const xyBundleImport = { importBundle, createBoardFromBundle, readBundleFile, checkQuota };
+export const xyBundleImport = { importBundle, createBoardFromBundle, readBundleFile, sniffBundle, checkQuota };

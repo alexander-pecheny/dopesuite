@@ -1,4 +1,9 @@
-// importpack.ts — «Импорт»: a package (.4s / .zip / .docx) into a new list. The
+// importpack.ts — «Импорт»: the board's one file picker. What the file IS is
+// ours to work out, not the reader's to declare — an xy archive goes to
+// bundleimportpanel.ts to be appended to this board (ADR-0013), and everything
+// else is a package of questions for a new list.
+//
+// A package (.4s / .zip / .docx) becomes a new list. The
 // server parses the upload with the Go port of chgksuite's parser
 // (internal/chgk/chgkimport) and hands back 4s source plus the images it
 // references. Everything below happens client-side under the board key: the
@@ -17,6 +22,8 @@ import { xyRank } from "./rank.js";
 import { byRank } from "./dragrank.js";
 import { nowStamp } from "./carddetail.js";
 import { modal } from "./modal.js";
+import { sniffBundle } from "./bundleimport.js";
+import type { BundleImport } from "./bundleimportpanel.js";
 import type { Board, BoardPanel } from "./panels.js";
 
 const { jpost, byId, errMsg } = xyApp;
@@ -26,7 +33,7 @@ const { keyBetween } = xyRank;
 // does; the renderer is the board's.
 export type PreviewRenderer = (card: { id: number; kind: string; desc: string }, number: string | null, imgMap: Map<string, string>, screen: boolean) => HTMLElement;
 
-export function createImportPanel(board: Board, renderPreviewCard: PreviewRenderer): BoardPanel {
+export function createImportPanel(board: Board, renderPreviewCard: PreviewRenderer, bundles: BundleImport): BoardPanel {
   interface ImportImage { name: string; data: string; mime: string }
   interface ImportCard { id: number; kind: string; desc: string }
   interface ImportPkg { name: string; source: string; images?: ImportImage[] }
@@ -36,10 +43,37 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
 
   const importPickModal = modal("importPick");
 
+  // The picker recognises the file as soon as it is chosen, so the reader sees
+  // what will happen before pressing anything — and «разбить по турам», which
+  // means nothing to an archive, goes away when one is picked.
+  let sniffed: Awaited<ReturnType<typeof sniffBundle>> = null;
+
   function openImportPick(): void {
     byId<HTMLFormElement>("importPickForm").reset();
+    sniffed = null;
+    showKind("");
     importPickModal.open();
   }
+
+  function showKind(what: string): void {
+    byId("importPickWhat").textContent = what;
+    const tours = byId("importSplitTours").closest("label");
+    if (tours) (tours as HTMLElement).hidden = sniffed != null;
+  }
+
+  byId("importFile").addEventListener("change", () => {
+    const file = byId<HTMLInputElement>("importFile").files?.[0];
+    sniffed = null;
+    showKind("");
+    if (!file) return;
+    showKind("Читаю файл…");
+    void sniffBundle(file).then((b) => {
+      sniffed = b;
+      showKind(b
+        ? `Архив xy — доска «${b.bundle.board.name}», выгружена ${b.bundle.exported_at.slice(0, 10)}. Списки из неё добавятся к этой доске.`
+        : "Пакет вопросов — станет новым списком на этой доске.");
+    });
+  });
 
   byId("importPickForm").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -48,6 +82,11 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     if (!file) return;
     const splitTours = byId<HTMLInputElement>("importSplitTours").checked;
     importPickModal.close();
+    const bundle = sniffed ?? await sniffBundle(file);
+    if (bundle) {
+      bundles.openWith(file, bundle.bundle, bundle.bytesOf);
+      return;
+    }
     await importFile(file, splitTours);
   });
 
@@ -286,7 +325,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
   return {
     id: "import", menu: "board", icon: "file-up",
     label: "Импорт",
-    title: "Импортировать пакет вопросов (.4s, .zip или .docx)",
+    title: "Импортировать пакет вопросов (.4s, .docx) или архив xy (.zip)",
     open: openImportPick,
   };
 }

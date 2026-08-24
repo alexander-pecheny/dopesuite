@@ -338,7 +338,9 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
     movelist.ts        «Переместить список…»: within the board a move is a plain re-rank;
                        everything else goes out as a Bundle and back through applyBundle,
                        so a travelling list carries what an exported one does
-    importpack.ts      «Импорт»: a .4s/.zip/.docx to /api/import/parse, the returned 4s
+    importpack.ts      «Импорт»: the board's one file picker — sniffBundle tells an xy
+                       archive from a question package, so the reader picks a file and
+                       not a format. A package goes .4s/.zip/.docx to /api/import/parse, the returned 4s
                        into a new list (or a group of lists, one per «## …» tour), each
                        (img …) attached to the card that references it; a .docx first opens
                        the verification screen (editable 4s left, live preview right)
@@ -421,9 +423,10 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
     bundleimport.ts    reading a Bundle zip, and the target that needs no open board:
                        createBoardFromBundle (quota pre-check, fresh key, applyBundle,
                        and a failure deletes the board it just made)
-    bundleimportpanel.ts «Импорт (.zip)…» (☰): a Bundle appended to the OPEN board —
-                       tick its lists, warn on a title already here, report which units
-                       landed. On the board page because only it holds the target's key
+    bundleimportpanel.ts a Bundle appended to the OPEN board — tick its lists, warn on
+                       a title already here, report which units landed. No menu entry of
+                       its own: «Импорт» (importpack.ts) sniffs the picked file and hands
+                       an xy archive here. On the board page because only it holds the key
     sessions.ts        the test-session kernel, all pure: parse/serialize meta_enc (folding
                        every older shape forward), the derived session name, dd.mm.yyyy +
                        24h parsing (native date/time inputs render in the BROWSER's locale,

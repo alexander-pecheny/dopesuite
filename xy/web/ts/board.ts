@@ -14,7 +14,7 @@ import { createMassPanel } from "./masspanel.js";
 import { createLabelsEditor, sortLabels } from "./labelsedit.js";
 import { createTesterList } from "./testerlist.js";
 import { createBundleExportPanel } from "./bundleexport.js";
-import { createBundleImportPanel } from "./bundleimportpanel.js";
+import { createBundleImport } from "./bundleimportpanel.js";
 import { createAuthorCountPanel } from "./authorcount.js";
 import { xyApp, xySizes } from "./app.js";
 import { xyCrypto } from "./crypto.js";
@@ -1271,7 +1271,7 @@ registerPanel(
   { id: "rename-board", menu: "board", icon: "pencil", label: "Переименовать доску", title: "Изменить название доски", open: () => { void renameBoard(); } },
   listsManage.panel,
   mass.panel,
-  createImportPanel(board, renderPreviewCard),
+  createImportPanel(board, renderPreviewCard, createBundleImport(board, shell)),
   { id: "sessions", menu: "board", icon: "flask-conical", label: "Тесты", title: "Тест-сессии доски: кто когда играл, приглашение со временем начала", open: () => sessionsPanel.open() },
   labelsEditor.panel,
   { id: "members", menu: "board", icon: "users", label: "Участники доски", title: "Поделиться доской: добавить или убрать участников", open: () => boardMembers.open() },
@@ -1279,7 +1279,6 @@ registerPanel(
   createReplacePanel(board, rewrites),
   rewrites.typograph,
   createBundleExportPanel(board, shell),
-  createBundleImportPanel(board, shell),
   {
     id: "forget-password", menu: "board", icon: "lock", label: "Забыть пароль доски", title: "Забыть пароль доски на этом устройстве",
     open: async () => {
