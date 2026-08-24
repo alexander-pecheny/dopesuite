@@ -3,7 +3,7 @@ import type {StageRef, StageRefMatch} from "./standings.js";
 // Which tabs a Game page shows is Block / Round / Group knowledge, held here
 // once; pages render the array and derive nothing of their own.
 
-export type GameKind = "ek" | "si" | "brain" | "ksi" | "od";
+export type GameKind = "ek" | "si" | "brain" | "ksi" | "od" | "troika";
 
 export type TabKind =
   | "grid" | "block" | "pods" | "round" | "protocol" | "reseed" | "stage"
@@ -38,7 +38,11 @@ export function gameTabs(stages: StageRef[], options: GameTabsOptions): GameTab[
       ...fixedTabs(["stats", "Статистика"], ...when(options.game === "ek", ["roster", "Составы"])),
     ];
   case "brain":
-    return brainTabs(stages, host && Boolean(options.seeded));
+    return brainTabs(stages, host && Boolean(options.seeded), "Индивидуальная статистика");
+  // Троечка's tabs are брейн's: a Сетка, a table and протоколы per Block, the
+  // пересев, and the per-player statistics its three chairs make interesting.
+  case "troika":
+    return brainTabs(stages, host && Boolean(options.seeded), "Статистика");
   case "ksi":
     return fixedTabs(["detailed", "Подробно"], ["results", "Итог"], ...when(host, ["refusals", "Отказы"]), ["roster", "Составы"]);
   case "od":
@@ -158,7 +162,7 @@ function stageTabLabel(stage: StageRef): string {
 
 // Per Block its crosstab (or pod board) and протоколы, as the source workbook
 // had them; «table» / «protocol» are the pre-Block hashes.
-function brainTabs(stages: StageRef[], seeded: boolean): GameTab[] {
+function brainTabs(stages: StageRef[], seeded: boolean, statsLabel: string): GameTab[] {
   const tabs = fixedTabs(["grid", "Сетка"]);
   let table: string | undefined = "table";
   let protocol: string | undefined = "protocol";
@@ -177,7 +181,7 @@ function brainTabs(stages: StageRef[], seeded: boolean): GameTab[] {
   }
   const reseeds = stages.filter(isReseed).map((stage) => stage.code);
   if (reseeds.length) tabs.push({key: "reseed", label: "Пересев", kind: "reseed", stages: reseeds});
-  tabs.push(...fixedTabs(["stats", "Индивидуальная статистика"], ["roster", "Составы"], ...when(seeded, ["seed", "Посев"])));
+  tabs.push(...fixedTabs(["stats", statsLabel], ["roster", "Составы"], ...when(seeded, ["seed", "Посев"])));
   return tabs;
 }
 

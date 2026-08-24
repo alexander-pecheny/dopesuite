@@ -1,0 +1,3 @@
+page title="Ведущий · Мультиигры" kind="multi" init="__GAME_INIT__" classicscripts="dist/multi.js"
+  gametopbar tabsid="multiTabs" tabshidden
+  mount kind="table-host" id="multiTable"

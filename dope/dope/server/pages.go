@@ -33,11 +33,13 @@ func (s *server) serveCompiledPage(path string) http.HandlerFunc {
 // compiled bytes feed the existing init-splice + versionAssetRefs pipeline
 // unchanged; everything else is read from the asset FS verbatim.
 var pageSources = map[string]string{
-	"static/login.html": "ui/login.dopeui",
-	"static/ek.html":    "ui/ek.dopeui",
-	"static/od.html":    "ui/od.dopeui",
-	"static/si.html":    "ui/si.dopeui",
-	"static/brain.html": "ui/brain.dopeui",
+	"static/login.html":  "ui/login.dopeui",
+	"static/ek.html":     "ui/ek.dopeui",
+	"static/od.html":     "ui/od.dopeui",
+	"static/si.html":     "ui/si.dopeui",
+	"static/brain.html":  "ui/brain.dopeui",
+	"static/multi.html":  "ui/multi.dopeui",
+	"static/troika.html": "ui/troika.dopeui",
 	// The gallery renders every shared table and the Сетка from fixtures —
 	// the skin sheet the verify matrix shoots. Dev mode only (see main.go).
 	"static/gallery.html": "ui/gallery.dopeui",

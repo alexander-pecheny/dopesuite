@@ -32,7 +32,7 @@ export interface GameChrome {
 }
 
 export interface GameShellSpec {
-  app: "od" | "ksi" | "ek" | "brain";
+  app: "od" | "ksi" | "ek" | "brain" | "multi" | "troika";
   root: HTMLElement;
   statusNode?: HTMLElement | null;
   breadcrumbsNode?: HTMLElement | null;

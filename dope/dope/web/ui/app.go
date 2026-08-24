@@ -75,6 +75,10 @@ func mustApp() *base.App {
 				"od":      {Body: []string{"host", "host-compact", "od-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
 				"si":      {Body: []string{"host", "host-compact", "si-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
 				"brain":   {Body: []string{"host", "host-compact", "brain-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
+				// Мультиигры is a sheet of teams like КСИ; Тройка a wall of бои
+				// like брейн. Both take the same frame every score sheet does.
+				"multi":  {Body: []string{"host", "host-compact", "multi-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
+				"troika": {Body: []string{"host", "host-compact", "troika-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
 			},
 			HeadHook: headHook,
 		}),
