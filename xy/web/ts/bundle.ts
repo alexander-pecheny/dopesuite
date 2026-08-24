@@ -207,4 +207,95 @@ export function contentBytes(b: Bundle): number {
   return n;
 }
 
-export const xyBundle = { BUNDLE_FORMAT, BOARD_JSON, EVENT_TYPES, attachmentPath, parseBundle, attachmentsTotal, contentBytes };
+
+// A BundleUnit is what the export and import pickers tick: a standalone List,
+// or a whole List Group. A Group is one row because its Lists share a
+// numbering sequence and travel as one block — half a Group is not a thing.
+export interface BundleUnit {
+  key: string; // "l<id>" or "g<id>" — the tick's identity
+  title: string;
+  listIds: number[];
+  group: boolean;
+}
+
+// unitsOf folds lists into tickable units, in rank order — over a Bundle's
+// lists or a live board's, so the export picker and the import picker cannot
+// disagree about what a unit is.
+export function unitsOf(
+  lists: Array<{ id: number; title: string; rank: string; group_id: number | null }>,
+  groups: Array<{ id: number; name: string }>,
+): BundleUnit[] {
+  const byRank = [...lists].sort((x, y) => x.rank < y.rank ? -1 : x.rank > y.rank ? 1 : 0);
+  const units: BundleUnit[] = [];
+  const seen = new Set<number>();
+  for (const l of byRank) {
+    if (l.group_id == null) {
+      units.push({ key: `l${l.id}`, title: l.title, listIds: [l.id], group: false });
+      continue;
+    }
+    if (seen.has(l.group_id)) continue;
+    seen.add(l.group_id);
+    const members = byRank.filter((m) => m.group_id === l.group_id);
+    const g = groups.find((x) => x.id === l.group_id);
+    units.push({
+      key: `g${l.group_id}`,
+      title: g ? g.name : members.map((m) => m.title).join(" + "),
+      listIds: members.map((m) => m.id),
+      group: true,
+    });
+  }
+  return units;
+}
+
+export function bundleUnits(b: Bundle): BundleUnit[] {
+  return unitsOf(b.lists, b.groups);
+}
+
+// sliceBundle cuts a Bundle down to the given Lists and everything they reach:
+// their Cards, the Labels those Cards wear, the Sessions they were played at
+// (and the ones their tours declare), the Timeline of those Cards and of those
+// Sessions, and the attachment rows. Nothing else leaves the board — an unused
+// Label and a Session no exported question was played at stay home, testers and
+// all. A whole-board slice is the same operation with every List ticked.
+export function sliceBundle(b: Bundle, listIds: number[]): Bundle {
+  const keptLists = new Set(listIds);
+  const lists = b.lists.filter((l) => keptLists.has(l.id));
+  const keptGroups = new Set(lists.map((l) => l.group_id).filter((g): g is number => g != null));
+  const cards = b.cards.filter((c) => keptLists.has(c.list_id));
+  const keptCards = new Set(cards.map((c) => c.id));
+
+  const cardLabels = b.card_labels.filter((a) => keptCards.has(a.card_id));
+  const cardSessions = b.card_sessions.filter((p) => keptCards.has(p.card_id));
+  const tourTesters = b.tour_testers.filter((t) =>
+    t.list_id != null ? keptLists.has(t.list_id) : t.group_id != null && keptGroups.has(t.group_id)
+  );
+
+  // A Session is reached by a Playing, by a Playing-scoped Label assignment, or
+  // by a tour's Declaration — a Declaration that named a Session we dropped
+  // would name nobody.
+  const keptSessions = new Set<number>();
+  for (const p of cardSessions) keptSessions.add(p.session_id);
+  for (const a of cardLabels) if (a.session_id != null) keptSessions.add(a.session_id);
+  for (const t of tourTesters) if (t.session_id != null) keptSessions.add(t.session_id);
+
+  const keptLabels = new Set(cardLabels.map((a) => a.label_id));
+
+  return {
+    ...b,
+    lists,
+    groups: b.groups.filter((g) => keptGroups.has(g.id)),
+    cards,
+    labels: b.labels.filter((l) => keptLabels.has(l.id)),
+    sessions: b.sessions.filter((s) => keptSessions.has(s.id)),
+    card_labels: cardLabels,
+    card_sessions: cardSessions,
+    tour_testers: tourTesters,
+    timeline: b.timeline.filter((e) =>
+      (e.card_id != null && keptCards.has(e.card_id)) ||
+      (e.card_id == null && e.session_id != null && keptSessions.has(e.session_id))
+    ),
+    attachments: b.attachments.filter((a) => keptCards.has(a.card_id)),
+  };
+}
+
+export const xyBundle = { BUNDLE_FORMAT, BOARD_JSON, EVENT_TYPES, attachmentPath, parseBundle, attachmentsTotal, contentBytes, unitsOf, bundleUnits, sliceBundle };

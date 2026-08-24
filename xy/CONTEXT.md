@@ -97,13 +97,26 @@ The forgiving comparison a search matches by, so that a stress mark, a non-break
 **Occurrence**:
 One matched span in one Card's 4s — the unit an editor ticks before a replacement runs, because «г.» in «г. Москва» and «г.» in «1917 г.» are two different decisions.
 
-**Board Bundle**:
-A whole Board as one plaintext zip — `board.json` plus the attachment files —
-made and read entirely in the browser, for moving a Board to another xy
-instance (ADR-0013). Importing one always creates a new Board under a fresh
-key; per-user state (mentions, read watermarks) and Tombstones stay behind,
-and members ride along as advisory names only.
-_Avoid_: backup (that is litestream's job), sync (a Bundle never merges)
+**Transfer**:
+Carrying content onto another Board — one Card, a List, a List Group or a whole
+Board; live between two Boards this device has keys for, or through a Bundle.
+Everything arrives with fresh ids; nothing on the target is ever overwritten.
+Only Labels and Test Sessions reconcile, onto an equivalent that already means
+the same thing: a Label on decrypted name+colour, a Session on its `key`
+(ADR-0003). A move is a Transfer plus a delete of the source.
+_Avoid_: merge, sync (neither reconciles the same entity twice — that would be a
+sync engine), import (that is a Transfer whose source is a file or Trello)
+
+**Bundle**:
+A Transfer in a file: a Board, or any run of its Lists, as one plaintext zip —
+`board.json` plus the attachment files — made and read entirely in the browser,
+for moving content to another xy instance (ADR-0013). What it carries is what
+its Lists' Cards reach: their Labels, the Sessions they were played at, the
+Declarations of those Lists. A List Group travels whole or not at all.
+Applied to a new Board it is a replica under a fresh key; applied to an existing
+Board it appends. Per-user state (mentions, read watermarks) and Tombstones stay
+behind, and members ride along as advisory names only.
+_Avoid_: backup (that is litestream's job), Board Bundle (it need not hold one)
 
 **Tombstone**:
 Any deleted entity during its 14-day grace period: hidden from the app and from quota, restorable on request. After 14 days it is reaped — permanently destroyed, including attachment bytes.

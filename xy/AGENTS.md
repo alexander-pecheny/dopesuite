@@ -98,7 +98,7 @@ internal/server/       package server — the whole HTTP server
                        live comment on a board in one response (ciphertext, comments only) — what
                        прогрев indexes; a desc_edit payload carries a whole question's before/after
                        and is deliberately excluded; comments add/patch/delete, mentions, import
-  bundle.go            the Board Bundle's server half (ADR-0013): whole-board timeline and
+  bundle.go            the Bundle's server half (ADR-0013): whole-board timeline and
                        attachment reads (ciphertext) for the export, board-level timeline
                        import (all event kinds, authors matched by username, src→new id map
                        returned so batches chain) for the re-encrypting importer
@@ -335,8 +335,9 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        loadMoveBoard / moveBoardOptions / transferCard(card, list, ctx,
                        remove, rank?); the card editor, «Массовое действие» and
                        «Переместить список…» all go through it (transfer.test.js, real keys)
-    movelist.ts        «Переместить список…»: move/copy a whole list within the board or
-                       to another: a re-rank, or the new list and one transferCard per card
+    movelist.ts        «Переместить список…»: within the board a move is a plain re-rank;
+                       everything else goes out as a Bundle and back through applyBundle,
+                       so a travelling list carries what an exported one does
     importpack.ts      «Импорт»: a .4s/.zip/.docx to /api/import/parse, the returned 4s
                        into a new list (or a group of lists, one per «## …» tour), each
                        (img …) attached to the card that references it; a .docx first opens
@@ -392,21 +393,37 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        the Go packages stay as the oracle and both suites read
                        internal/chgk/typoedit/testdata/pass_cases.json. One known
                        divergence (the nbhyphen bounds) is documented at the top of the file
-    import.ts          Trello board import → new encrypted board (implicit OAuth,
-                       server proxy /api/import/trello/proxy, comments past the
-                       1000-action cap, attachments); the pure Trello-card→xy-card
-                       rules live in trellomodel.ts (jstest-covered, no DOM); also
-                       routes the Board Bundle path (bundleimport.ts) off the same form
-    bundle.ts          the Board Bundle's shape (ADR-0013), all pure: what board.json
-                       holds, attachment paths inside the zip, the validation an
-                       untrusted file passes before an import touches the server
+    import.ts          /import — a new board from an archive or from Trello (implicit
+                       OAuth, server proxy /api/import/trello/proxy, comments past the
+                       1000-action cap, attachments). trelloBundle is the Trello producer;
+                       every write is applyBundle's. The pure Trello-card→xy-card rules
+                       live in trellomodel.ts (jstest-covered, no DOM)
+    bundle.ts          the Bundle's shape (ADR-0013), all pure: what board.json holds,
+                       attachment paths inside the zip, the validation an untrusted file
+                       passes before an import touches the server, and the two the pickers
+                       run on — unitsOf (lists folded into ticks; a group is one, always
+                       whole) and sliceBundle (a selection cut down to what its cards
+                       reach: their labels, the sessions they were played at, the
+                       declarations of those tours, their лента and attachments)
     zip.ts             a minimal zip writer/reader for Bundles: store/deflate via the
                        native CompressionStream, UTF-8 names, no zip64 (jstest-covered)
-    bundleexport.ts    «Скачать доску (.zip)» (☰): decrypt the whole board under the
-                       key this client holds, pack board.json + attachments, download
-    bundleimport.ts    a Bundle zip → new encrypted board: quota pre-check, create,
-                       re-encrypt every field under a fresh key, remap every id,
-                       chunked timeline import; any failure deletes the new board
+    bundleapply.ts     the ONE write path a Transfer takes (ADR-0014): applyBundle(bundle,
+                       target, bytesOf) — target is a board created for it (verbatim ranks,
+                       a row per label/session) or an AppendState (append after the target's
+                       last list; labels fold on name+colour, sessions on their key per
+                       ADR-0003 with an origin stamp). The List is the unit of atomicity:
+                       a unit that fails deletes its own lists and the ones before it stay
+    bundleexport.ts    «Скачать (.zip)…» (☰) and the live→Bundle producer: buildBundle
+                       decrypts what the ticked lists reach; zipBundle packs board.json +
+                       attachments; tickList is the picker both bundle panels show.
+                       Attachment bytes come back lazily so a move never holds a board's
+                       раздатки on the heap
+    bundleimport.ts    reading a Bundle zip, and the target that needs no open board:
+                       createBoardFromBundle (quota pre-check, fresh key, applyBundle,
+                       and a failure deletes the board it just made)
+    bundleimportpanel.ts «Загрузить (.zip)…» (☰): a Bundle appended to the OPEN board —
+                       tick its lists, warn on a title already here, report which units
+                       landed. On the board page because only it holds the target's key
     sessions.ts        the test-session kernel, all pure: parse/serialize meta_enc (folding
                        every older shape forward), the derived session name, dd.mm.yyyy +
                        24h parsing (native date/time inputs render in the BROWSER's locale,

@@ -72,9 +72,10 @@ export function rankAfterMove(
   try { return keyBetween(prev, next); } catch { return keyBetween(prev, null); }
 }
 
-// rankForSlot computes a fractional rank for inserting into `cards` at a 1-based
-// slot ("end"/"" appends). excludeId drops the moving card from the neighbour set.
-export function rankForSlot(cards: readonly RankedCard[], posValue: string, excludeId?: number): string {
+// slotBounds: the ranks a 1-based slot sits between ("end"/"" appends);
+// excludeId drops the moving row from the neighbour set. What a single insert
+// asks keyBetween for, and what a run of inserts walks along.
+export function slotBounds(cards: readonly RankedCard[], posValue: string, excludeId?: number): { prev: string | null; next: string | null } {
   const arr = cards.filter((c) => c.id !== excludeId).sort(byRank);
   let prev: RankedCard | undefined, next: RankedCard | undefined;
   if (posValue === "end" || posValue === "") {
@@ -84,10 +85,15 @@ export function rankForSlot(cards: readonly RankedCard[], posValue: string, excl
     prev = k >= 2 ? arr[k - 2] : undefined;
     next = k - 1 < arr.length ? arr[k - 1] : undefined;
   }
-  try { return keyBetween(prev ? prev.rank : null, next ? next.rank : null); }
-  catch { return keyBetween(prev ? prev.rank : null, null); }
+  return { prev: prev ? prev.rank : null, next: next ? next.rank : null };
+}
+
+export function rankForSlot(cards: readonly RankedCard[], posValue: string, excludeId?: number): string {
+  const { prev, next } = slotBounds(cards, posValue, excludeId);
+  try { return keyBetween(prev, next); }
+  catch { return keyBetween(prev, null); }
 }
 
 export const xyDragRank = {
-  byRank, boardOrder, dragAfterIndex, dragAfterIndexX, dragAfterIn, dragAfterInX, rankAfterMove, rankForSlot,
+  byRank, boardOrder, dragAfterIndex, dragAfterIndexX, dragAfterIn, dragAfterInX, rankAfterMove, rankForSlot, slotBounds,
 };
