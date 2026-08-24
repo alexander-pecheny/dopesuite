@@ -413,7 +413,7 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        last list; labels fold on name+colour, sessions on their key per
                        ADR-0003 with an origin stamp). The List is the unit of atomicity:
                        a unit that fails deletes its own lists and the ones before it stay
-    bundleexport.ts    «Скачать (.zip)…» (☰) and the live→Bundle producer: buildBundle
+    bundleexport.ts    «Экспорт (.zip)…» (☰) and the live→Bundle producer: buildBundle
                        decrypts what the ticked lists reach; zipBundle packs board.json +
                        attachments; tickList is the picker both bundle panels show.
                        Attachment bytes come back lazily so a move never holds a board's
@@ -421,7 +421,7 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
     bundleimport.ts    reading a Bundle zip, and the target that needs no open board:
                        createBoardFromBundle (quota pre-check, fresh key, applyBundle,
                        and a failure deletes the board it just made)
-    bundleimportpanel.ts «Загрузить (.zip)…» (☰): a Bundle appended to the OPEN board —
+    bundleimportpanel.ts «Импорт (.zip)…» (☰): a Bundle appended to the OPEN board —
                        tick its lists, warn on a title already here, report which units
                        landed. On the board page because only it holds the target's key
     sessions.ts        the test-session kernel, all pure: parse/serialize meta_enc (folding

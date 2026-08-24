@@ -1,4 +1,4 @@
-// bundleimportpanel.ts — «Загрузить (.zip)…»: a Bundle appended to the board
+// bundleimportpanel.ts — «Импорт (.zip)…»: a Bundle appended to the board
 // that is open. The mirror of the export panel, and the reason it lives on the
 // board page rather than on /import — appending re-encrypts under this board's
 // key, which only its own page holds.
@@ -24,7 +24,7 @@ const { el, errMsg } = xyApp;
 export function createBundleImportPanel(board: Board, shell: PanelShell): BoardPanel {
   return {
     id: "bundle-import", menu: "board", icon: "file-up",
-    label: "Загрузить (.zip)…",
+    label: "Импорт (.zip)…",
     title: "Добавить списки из архива xy на эту доску",
     open() {
       const status = el("p", { class: "hint" }, "");
@@ -32,7 +32,7 @@ export function createBundleImportPanel(board: Board, shell: PanelShell): BoardP
       const file = el("input", { type: "file", accept: ".zip,application/zip", class: "input" }) as HTMLInputElement;
       const body = el("div", { class: "u-col u-gap-sm" },
         el("p", { class: "hint" },
-          "Архив xy (☰ «Скачать (.zip)…» на любой доске). Отмеченные списки добавятся ",
+          "Архив xy (☰ «Экспорт (.zip)…» на любой доске). Отмеченные списки добавятся ",
           "к этой доске в конец; метки и тесты подхватятся к уже существующим здесь. ",
           "Ничего на доске при этом не изменится и не перезапишется."),
         file, picked, status);
@@ -85,7 +85,7 @@ export function createBundleImportPanel(board: Board, shell: PanelShell): BoardP
         }
         // Re-encryption, uploads and the timeline import all go straight at the
         // API — the outbox cannot queue them, as with any cross-board write.
-        if (!xySync.requireOnline("Загрузка архива доступна только онлайн.", status)) return;
+        if (!xySync.requireOnline("Импорт архива доступен только онлайн.", status)) return;
         const slice = sliceBundle(bundle, units.flatMap((u) => u.listIds));
         board.setStatus("saving");
         try {
@@ -113,7 +113,7 @@ export function createBundleImportPanel(board: Board, shell: PanelShell): BoardP
         }
       }
 
-      shell.open({ icon: "file-up", title: "Загрузить (.zip)", body, onClose: () => {} });
+      shell.open({ icon: "file-up", title: "Импорт (.zip)", body, onClose: () => {} });
     },
   };
 }

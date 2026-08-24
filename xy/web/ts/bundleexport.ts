@@ -1,4 +1,4 @@
-// bundleexport.ts — «Скачать (.zip)»: the Bundle export (ADR-0013), and the one
+// bundleexport.ts — «Экспорт (.zip)»: the Bundle export (ADR-0013), and the one
 // place a live board becomes a Bundle. buildBundle decrypts what the ticked
 // Lists reach under the key this client already has; the panel packs that into
 // a plaintext zip, and a cross-board Transfer hands the same pair straight to
@@ -179,8 +179,8 @@ export function tickList(
 export function createBundleExportPanel(board: Board, shell: PanelShell): BoardPanel {
   return {
     id: "bundle-export", menu: "board", icon: "file-down",
-    label: "Скачать (.zip)…",
-    title: "Скачать доску или отдельные списки одним архивом — для переноса на другой сервер xy",
+    label: "Экспорт (.zip)…",
+    title: "Выгрузить доску или отдельные списки одним архивом — для переноса на другой сервер xy",
     open() {
       const state = board.state;
       const units = unitsOf(
@@ -189,14 +189,14 @@ export function createBundleExportPanel(board: Board, shell: PanelShell): BoardP
       );
       const ticks = tickList(units);
       const status = el("p", { class: "hint" }, "");
-      const btn = el("button", { class: "btn btn-primary", type: "button" }, "Скачать .zip") as HTMLButtonElement;
+      const btn = el("button", { class: "btn btn-primary", type: "button" }, "Экспортировать") as HTMLButtonElement;
       const all = el("button", { class: "btn btn-ghost btn-sm", type: "button" }, "Выбрать все") as HTMLButtonElement;
       const body = el("div", { class: "u-col u-gap-sm" },
         el("p", { class: "hint" },
           "В архив попадут отмеченные списки со всем, до чего они дотягиваются: ",
           "карточки, их метки, тесты, на которых их играли, комментарии, историю ",
           "правок и вложения. Импортировать его можно на другом сервере xy — целиком ",
-          "в новую доску (страница «Импорт») или списками в существующую (☰ «Загрузить (.zip)…»)."),
+          "в новую доску (страница «Импорт») или списками в существующую (☰ «Импорт (.zip)…»)."),
         el("p", { class: "hint hint-danger" }, "Этот файл НЕ зашифрован."),
         ticks.node,
         el("div", { class: "u-row u-gap-sm u-wrap" }, all, btn),
@@ -224,7 +224,7 @@ export function createBundleExportPanel(board: Board, shell: PanelShell): BoardP
           btn.disabled = false;
         }
       });
-      shell.open({ icon: "file-down", title: "Скачать (.zip)", body, onClose: () => {} });
+      shell.open({ icon: "file-down", title: "Экспорт (.zip)", body, onClose: () => {} });
     },
   };
 }
