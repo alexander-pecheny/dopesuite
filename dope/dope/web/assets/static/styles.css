@@ -4571,6 +4571,21 @@ body.is-fullscreen.od-page .match-main {
   color: var(--red);
 }
 
+/* A normalised Итог is fractional, so it needs more room than the integer one
+   the shared width is cut for. */
+.match-table.multi-table .sticky-total {
+  width: calc(var(--total-col) + var(--space-5));
+  min-width: calc(var(--total-col) + var(--space-5));
+  max-width: calc(var(--total-col) + var(--space-5));
+}
+
+/* A мини-игра's name heads a block dozens of columns wide; centred it sits off
+   the screen, so it rides at the block's left edge where the block begins. */
+.multi-table .theme-block {
+  text-align: left;
+  padding-left: var(--space-2);
+}
+
 .multi-table .nominal {
   font-size: var(--text-xs);
   font-weight: var(--fw-regular);
