@@ -62,6 +62,22 @@ A Match's human handle: one letter sequence per Game — A..Z, then AA.. — dea
 One sitting of Participants scored together under one Protocol. The unit the Structure schedules and the unit a host edits.
 _Avoid_: bout as a distinct concept — бой is just the brain-format word for a Match.
 
+**Ranking scope**:
+Any set of Participants ranked together, and there is one way to rank one: the
+block's `points` for each бой's outcome, the Protocol's metrics summed, the
+scheme's Scoring rules over those sums, then its sorting comparators. A
+round-robin Group is one, and so is a Round the same two play several times —
+which is why «до большинства побед» is not a rule of the code but the default
+очки sorted on очки, and why Троечка's «победа в первых двух боях не
+гарантирует общую победу» is three lines of scheme.
+
+**Series**:
+A Round played more than once by the same two Participants — a финал до
+большинства побед, Троечка's финал of three боёв. A ranking scope, not a
+bracket step: what it settles comes from its own standings, so a series played
+to a summed рейтинговый балл and one played to two wins differ by the scheme
+they carry and nothing else.
+
 **Protocol**:
 The in-match ruleset: state shape, scoring, and rendering for what happens inside one Match (EK's 12 themes, КСИ's grid, ЧГК's question grid via the `od` protocol; brain's K buzzer questions once it ships). Registered once; the Structure only consumes its output (place + metrics per Slot). Protocol params may vary across one Game (6 themes in early Rounds, 12 in the final): a Game carries defaults plus per-Block or per-Round overrides.
 
@@ -89,6 +105,22 @@ A host's manual place assignment for a Slot, part of the Match's Protocol state.
 
 **Reseed**:
 The block-grain Edge's computation: re-ranking Participants from prior results (with deterministic lots for true ties) so a later Block can seat by rank. Conceptually an Edge rule, not a Block, however it is persisted.
+
+**Мини-игра**:
+One of the several small games a Мультиигры sitting holds — a раздаточный
+конкурс of its own tasks, played by everyone at once. Its tasks are declared
+with a domain each: the set or range of values that task's cell may hold,
+which is at once the validation, the printed номинал and the cell editor.
+Every мини-игра pays a subtotal and the Итог is their sum.
+
+**Кресло**:
+One of a Троечка table's three seats, in the order the ведущий asks them: two
+пристяжные and, last, the коренной who signals. All three answer every вопрос
+their team plays and each correct answer pays on its own, so what a кресло
+records is a mark, never a rank. Who sits in one is a fact about the тема, not
+the бой — the регламент turns the пристяжные round at the половина and teams
+swap oftener — and it is what tells a first correct answer from a repeat of
+one already on the table.
 
 **Перестрелка**:
 A tiebreak continuation, common to every format (EK's shootout themes, ОД's shootout rounds, brain's "П" questions). Two distinct forms: extra material appended to the Match itself until the tie breaks, or a separate replay Match between fully tied Participants. Whether a Block's Matches allow the appended form is part of that Block's rules — regulations differ per tournament.

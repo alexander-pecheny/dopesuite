@@ -37,6 +37,33 @@ The words are CONTEXT.md's: a Block has a Kind and Participants (a team or a
 player — the DSL never says «team»), a Group has a size, a бой a
 `match_size`.
 
+Троечка, whose регламент is almost entirely `points`, a scoring rule and
+`sorting` (the посев above seats it):
+
+```
+[scheme]
+kind: roundrobin
+groups: 8
+group_size: 6
+proceeding_participants: 2
+themes: 6
+metric: total
+points: [1, 0.5, 0]
+standings.rating: points + taken / 50
+sorting: [rating, h2h, taken, diff]
+---
+kind: single_elimination
+participants: 2
+bronze: true
+best_of.final: 3
+best_of.bronze: 3
+themes: 6
+metric: total
+points: [1, 0.5, 0]
+standings.rating: points + taken / 20
+sorting: [rating]
+```
+
 ## Grammar
 
 Line syntax is `.hndt`'s (xy `internal/chgk/handout`): one `key: value` per
@@ -81,6 +108,16 @@ dealing key. The same snake deals reseed ranks into a block's groups.
 
 - `seed: {game}` — that game's standings as metrics, ordered by `[init]`
   `sorting` (roster rating available as a metric).
+- `seed: players` — the посев a сборная format needs, composed over a
+  Participant's people rather than over anything it has done itself.
+  `games: [a, b]` names the source Games; each player carries `place1..placeN`,
+  their own team's place in those Games in that order; `player.<name>: <expr>`
+  defines a metric per player in the scoring-rule language; `seed.<name>:
+  mean(<player metric>)` folds it over the Participant's players (`mean`,
+  `min`, `max`, `sum`, `count`), and `sorting` names those. Who played for whom
+  is each source Game's own roster with its overrides applied, so three people
+  from three teams are one Троечка team here and their own teams' entries
+  there; a player whose team sat a Game out counts one place behind its last.
 - `seed: random` — every rank is a lot.
 - `seed: xlsx` — an uploaded sheet carrying either an exact seeding column or a
   basket column.
@@ -106,20 +143,21 @@ Kind does not read is a compile error, so nothing is dropped on the floor:
 | `kind` | `flat`, `roundrobin`, `single_elimination`, `double_elimination` — the DSL words the registered Kinds declare (`structure.Macro`); a Kind is one Go type in `domain/structure` that names its keys (`Keys()`), expands a Block (`Expand`) and ranks its stages (`Ranker`), and adding one is one file, no compiler edit |
 | `title` | display title: the stage title of a single-group block, a `{title}. Группа N` prefix on multi-group blocks, a `{title}. {round}` prefix on a bracket's rounds when the scheme has more than one block; `title.r3` names one Round |
 | `venues` | restrict the block (or, dotted, one Round) to a venue subset, by title or number |
-| `sorting`, `points` | ranking comparators and win/draw/loss values for this block's standings. A metric's direction follows the metric — место and жребий ascend, everything else descends — unless the scheme writes `taken asc`. On a block with `reseed: true` the sorting key describes the Edge instead (groups fall back to `[defaults]`/canon) and names reseed metrics: any metric the game's Protocol writes (`taken` for брейн, `total`/`plus`/`correct_50` for ЭК), plus the reseed's own `place_sum`, `draw` and the КИНСБФ 3.3.5 rates `points_share`, `taken_share`, `taken_base`, `diff` (desc; очки from final outcomes, взятые без перестрелок, разница against opponents in own bouts); default is place_sum, then taken. A group's `sorting` likewise names the Protocol's metrics or what a group adds (`points`, `h2h`, `taken`, `conceded`, `diff`, `place_sum`, `bouts`); anything else is a compile error naming the metrics there are. `points: [2, 1, 0]` is roundrobin's |
+| `sorting`, `points` | ranking comparators and win/draw/loss values for this block's standings. `points` takes fractions — Троечка pays `[1, 0.5, 0]`, half a балл for a ничья. A metric's direction follows the metric — место and жребий ascend, everything else descends — unless the scheme writes `taken asc`. On a block with `reseed: true` the sorting key describes the Edge instead (groups fall back to `[defaults]`/canon) and names reseed metrics: any metric the game's Protocol writes (`taken` for брейн, `total`/`plus`/`correct_50` for ЭК), plus the reseed's own `place_sum`, `draw` and the КИНСБФ 3.3.5 rates `points_share`, `taken_share`, `taken_base`, `diff` (desc; очки from final outcomes, взятые без перестрелок, разница against opponents in own bouts); default is place_sum, then taken. A group's `sorting` likewise names the Protocol's metrics or what a group adds (`points`, `h2h`, `taken`, `conceded`, `diff`, `place_sum`, `bouts`); anything else is a compile error naming the metrics there are. `points: [2, 1, 0]` is roundrobin's |
 | `reseed` | opt-in re-rank: `true` for the block's incoming Edge (on a DE, between every round too), a round name (`r3`, `semifinal`) for a boundary inside an se block — that round then seats from the re-rank of every place the previous round sent on, bracket-ordered — or `every` for both, the incoming Edge and every se round after it (ТПШ) |
 | `stats_from` | with a reseed only: which blocks' bouts the re-rank metrics are summed over (`stats_from: [s1, s2]`); default is the previous block, or the previous round for a boundary reseed. Naming the block itself at a boundary sums its own rounds so far (СтудЧР's ЭК ranked its пересев перед 1/4 by сумма мест over 1/16 and 1/8 together). Eligibility is independent of the stats scope: the previous block's proceeding places, or every place the previous round sent on |
 | `proceeding_participants` | block-grain Edge: how many advance per Group (rr, de) or overall (flat); an se sends its last round's winners on |
 | `letters` | `letters: false` keeps the block's бои out of the буква deal — the письменный отбор is one sitting for everyone and is not called a бой |
 | `bout.<metric>`, `standings.<metric>` | scoring rules (ADR-0008): an expression per бой summed into the standings, or one over the sums, defining a metric the block may sort by |
 | flat: `participants` | how many the one бой seats (defaults to the game's entrants) |
+| rr: `metric` | the Protocol metric забито counts, when it is not `taken` — Тройка's is `total`, its игровые очки |
 | rr: `groups`, `group_size`, `match_size` | the shape; each Group is one ranking scope. `match_size` above 2 is a Group playing бои of three or four (личная СИ) |
 | rr: `rounds` | play this many круги and stop |
 | rr: `slug` | the URL slug of the group stage's tabs |
 | se: `participants`, `match_size`, `winning_places` | the draw size, the seats per бой (`match_size.r3` for one Round — ЭК plays its 1/4 three to a table), and how many of a бой's places count as winning it: those go on, the rest take their Loss (CONTEXT.md «Winning places»). Two-seat, one winner by default; ЭК's `participants: 48, match_size: 4, winning_places: 2` is the five rounds 1/16, 1/8, 1/4, полуфиналы, финал; without `winning_places` it would be 48→12→3 |
 | se: `rounds` | play this many Rounds and stop short of a final (ТПШ's six winners); the last round's winners are the block's proceeding count |
-| se: `bronze` | add the 3rd-place бой from the semifinal losers (a halving bracket that reaches its semifinal) |
-| se: `best_of` | the final Round only (`best_of.final: 3`, odd ≥ 3): the final becomes a series of identical бои («Финал. Бой k», one стол). No block can follow a series |
+| se: `bronze` | add the 3rd-place бой from the semifinal losers (a halving bracket that reaches its semifinal). With `participants: 2` there is no semifinal to lose: the block is seeded straight into its final, takes four out of the previous block's two Groups, and the матч за 3-е место seats the place below the finalists — Троечка's «победители групп в финал, вторые места в матч за 3-е место» |
+| se: `best_of` | the final and the бронза (`best_of.final: 3`, `best_of.bronze: 3`, odd ≥ 3): that Round becomes a series of identical бои at one стол. A series is a ranking scope like a группа — it ranks through the block's `points`, scoring rules and `sorting`, so the default очки sorted on points is «до большинства побед» and Троечка writes its own rule instead. No block can follow a series |
 | de: `groups`, `group_size`, `participants`, `match_size`, `winning_places` | pods of the given size (`participants` ÷ 4 may stand in for `groups`), each a ranking scope on two lives; `match_size` and `winning_places` as for se (личная СИ's play-off is one DE of four-seat бои with two winners) |
 | protocol keys | any registered param for the game's protocol |
 
