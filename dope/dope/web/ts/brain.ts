@@ -8,8 +8,7 @@
 
 import {cssEscape, formatDisplayText, td} from "./cells.js";
 import {festLetters, standingsTable} from "./standings.js";
-import {buildCrosstables} from "./crosstable.js";
-import type {CrossSlot} from "./crosstable.js";
+import {buildCrosstables, crossSlot, slotKey, standingsByParticipant} from "./crosstable.js";
 import type {StageRef} from "./standings.js";
 import {buildRosterView, fetchFestRoster} from "./fest-roster.js";
 import type {RosterTeam} from "./fest-roster.js";
@@ -857,21 +856,6 @@ function tiebreakControls(code: string, view: BrainMatchView): HTMLElement {
 }
 
 
-// slotKey is a stable identity for an entrant ref, whatever grain it is:
-// seeds by number/position, rank refs by stage+rank.
-function slotKey(slot: SchemeSlotRef | null | undefined): string {
-  if (!slot) return "";
-  if (slot.seed?.number) return `s${slot.seed.number}`;
-  if (slot.seed?.position) return `p${slot.seed.position}`;
-  if (slot.reseed) return `r${slot.reseed.stage || ""}:${slot.reseed.rank || 0}`;
-  return slot.label || "";
-}
-
-// buildCrosstable is the sheets' «Группы» view, on the same skin as СИ's:
-// every группа's crosstab, two abreast where the screen fits them. Each is
-// score cells vs each opponent — live, from the бой views — beside the
-// Group's own table from the server: О, +, −, +/− and М as its Ranker wrote
-// them, so очки move when a бой is finished and never disagree with the Сетка.
 // The группа table is crosstable.ts's, so брейн and Тройка draw one table.
 // This says only what a брейн бой is: two sides, взятые as the score.
 function buildCrosstable(stages: BrainSchemeStage[]): HTMLElement {
@@ -879,15 +863,12 @@ function buildCrosstable(stages: BrainSchemeStage[]): HTMLElement {
     className: "brain-groups",
     groups: stages.filter((stage) => stageKind(stage) === "rr").map((stage) => ({
       title: groupLabel(stage as StageRef),
-      entrants: (groupRules(stage).entrants || []).map((slot) => ({key: slotKey(slot), label: slot.label || ""})),
+      entrants: (groupRules(stage).entrants || []).map(crossSlot),
       bouts: (stage.matches || []).flatMap((planned) => {
         const view = matches.get(planned.code || "");
         if (!view) return [];
         return [{
-          slots: [
-            {key: slotKey(planned.slots?.[0]), label: planned.slots?.[0]?.label || ""},
-            {key: slotKey(planned.slots?.[1]), label: planned.slots?.[1]?.label || ""},
-          ] as [CrossSlot, CrossSlot],
+          slots: [crossSlot(planned.slots?.[0]), crossSlot(planned.slots?.[1])],
           sides: [0, 1].map((side) => ({
             name: view.participants?.[side]?.name || "",
             id: Number(view.participants?.[side]?.id || 0),
@@ -897,19 +878,9 @@ function buildCrosstable(stages: BrainSchemeStage[]): HTMLElement {
           started: started(view),
         }];
       }),
-      standings: standingsOf(stage.code || ""),
+      standings: standingsByParticipant(festStages.get(stage.code || "")),
     })),
   });
-}
-
-// standingsOf is the block's own table for one группа, by Participant id —
-// the server ranks, the page draws (ADR-0011).
-function standingsOf(stageCode: string): Map<number, Record<string, unknown>> {
-  const out = new Map<number, Record<string, unknown>>();
-  for (const entry of festStages.get(stageCode)?.standings || []) {
-    if (entry.participantID) out.set(Number(entry.participantID), entry.metrics || {});
-  }
-  return out;
 }
 
 let seedImport: SeedImportData | null = null;

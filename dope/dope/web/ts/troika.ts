@@ -9,8 +9,7 @@
 import {cssEscape, td, th} from "./cells.js";
 import {festLetters} from "./standings.js";
 import type {StageRef} from "./standings.js";
-import {buildRosterView, fetchFestRoster} from "./fest-roster.js";
-import type {RosterTeam} from "./fest-roster.js";
+import {buildRosterView} from "./fest-roster.js";
 import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
 import {mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
@@ -18,8 +17,8 @@ import type {GameInitLike} from "./game-page.js";
 import {renderTabBar} from "./widgets.js";
 import {createSheetCursor, parseMark} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
-import {buildCrosstables, CANON_COLUMNS} from "./crosstable.js";
-import type {CrossSlot} from "./crosstable.js";
+import {buildCrosstables, CANON_COLUMNS, crossSlot, standingsByParticipant} from "./crosstable.js";
+import type {SchemeSlotRef} from "./crosstable.js";
 import {buildFestGrid} from "./fest-grid.js";
 import type {FestGridStage} from "./fest-grid.js";
 import {gameTabs, groupLabel} from "./game-tabs.js";
@@ -40,12 +39,6 @@ interface FestInfo {
   schemaJson?: unknown;
   stages?: FestGridStage[];
   [key: string]: unknown;
-}
-
-interface SchemeSlotRef {
-  label?: string;
-  seed?: {number?: number; position?: number};
-  reseed?: {stage?: string; rank?: number};
 }
 
 interface SchemeMatch {
@@ -119,7 +112,6 @@ const festStages = new Map<string, FestGridStage>();
 for (const stage of fest?.stages || []) {
   if (stage?.code) festStages.set(stage.code, stage);
 }
-let festRoster: RosterTeam[] = [];
 let rosterView: HTMLElement | null = null;
 let resyncScheduled = false;
 
@@ -272,22 +264,14 @@ function seatName(view: TroikaMatchView, side: number): string {
   return view.participants?.[side]?.name || `Команда ${side + 1}`;
 }
 
-// boutRoster is the three (or more) people a side may field, by id. A бой's
-// own seat roster is what the server sent; the фест registry fills in for a
-// seat whose players it did not carry.
+// boutRoster is the three (or more) people a side may field. The server sends
+// each seat's roster with real player ids (store.SeatsPlayers), which is what
+// a кресло records — a name matched off the фест registry would not survive
+// two players sharing one.
 function boutRoster(view: TroikaMatchView, side: number): Array<{id: number; name: string}> {
-  const seat = view.participants?.[side];
-  const carried = (seat?.roster || [])
-    .filter((player) => player && typeof player.id === "number")
+  return (view.participants?.[side]?.roster || [])
+    .filter((player) => player && typeof player.id === "number" && player.id > 0)
     .map((player) => ({id: Number(player.id), name: player.name || ""}));
-  if (carried.length) return carried;
-  const team = festRoster.find((entry) => entry.name === seat?.name);
-  // A фест player carries no бой id, so the roster's own position stands in —
-  // negative, so it can never collide with a real one.
-  return (team?.players || []).map((player, index) => ({
-    id: -(index + 1),
-    name: typeof player === "string" ? player : player?.name || "",
-  }));
 }
 
 // One бой: a block per side of three chair rows by темы × three вопросы, with
@@ -322,6 +306,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
   for (let side = 0; side < 2; side++) {
     const roster = boutRoster(bout.view, side);
     const total = troika.sideTotal(state, side);
+    body.appendChild(seatRow(bout, side, state));
     for (let chair = 0; chair < troika.CHAIRS; chair++) {
       const tr = document.createElement("tr");
       if (chair === 0) {
@@ -352,18 +337,67 @@ function buildBout(bout: BoutEntry): HTMLElement {
   return box;
 }
 
-// The chair cell names who is sitting there for the тема the sheet opens on,
-// and lets the host reseat from any тема onward — «здесь поменялись местами».
-// Seats are a fact per тема, so a swap rewrites the темы after it and leaves
-// the ones already played exactly as they were.
+// seatEditAt is the тема whose seating each side's chair pickers are showing —
+// one per (бой, side), because two бои are played at once by different threes
+// and the sheet shows them together.
+const seatEditAt = new Map<string, number>();
+
+function seatKey(code: string, side: number): string {
+  return `${code}:${side}`;
+}
+
+function seatFrom(code: string, side: number): number {
+  return seatEditAt.get(seatKey(code, side)) || 0;
+}
+
+// The seat row: one ⇄ per тема, saying «здесь поменялись местами». Pressing it
+// points the chair pickers at that тема; it is marked when the seating there
+// actually differs from the тема before, so the row reads at a glance as where
+// this side turned round.
+function seatRow(bout: BoutEntry, side: number, state: TroikaState): HTMLElement {
+  const tr = document.createElement("tr");
+  tr.className = "troika-seat-row";
+  tr.appendChild(td("", "team-col"));
+  tr.appendChild(td("рассадка", "num-col troika-seat-label"));
+  const at = seatFrom(bout.code, side);
+  state.values.forEach((_value, t) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "troika-seat-mark";
+    button.textContent = "⇄";
+    button.title = `Рассадка с темы ${t + 1}`;
+    button.disabled = viewer || Boolean(bout.view.finished);
+    button.classList.toggle("troika-seat-here", t === at);
+    button.classList.toggle("troika-seat-changed", t > 0 && !sameOrder(state, side, t, t - 1));
+    button.addEventListener("click", () => {
+      seatEditAt.set(seatKey(bout.code, side), t);
+      render();
+    });
+    tr.appendChild(td(button, "troika-seat-cell", {colspan: String(troika.THEME_QUESTIONS)}));
+  });
+  tr.appendChild(td("", "total-col"));
+  return tr;
+}
+
+function sameOrder(state: TroikaState, side: number, a: number, b: number): boolean {
+  for (let c = 0; c < troika.CHAIRS; c++) {
+    if (troika.chairAt(state, side, a, c) !== troika.chairAt(state, side, b, c)) return false;
+  }
+  return true;
+}
+
+// The chair cell names who is sitting there for the тема the seat row points
+// at. Seats are a fact per тема, so setting one rewrites that тема and every
+// one after it, leaving the темы already played exactly as they were played.
 function chairPicker(bout: BoutEntry, side: number, chair: number,
   roster: Array<{id: number; name: string}>): HTMLElement {
   const state = stateOf(bout.code);
+  const from = seatFrom(bout.code, side);
   const select = document.createElement("select");
   select.className = "troika-chair-select";
   select.disabled = viewer || Boolean(bout.view.finished);
   select.title = chair === troika.CHAIRS - 1 ? "Коренной" : `Пристяжной ${chair + 1}`;
-  const current = troika.chairAt(state, side, swapFrom, chair);
+  const current = troika.chairAt(state, side, from, chair);
   const blank = document.createElement("option");
   blank.value = "0";
   blank.textContent = "—";
@@ -378,20 +412,16 @@ function chairPicker(bout: BoutEntry, side: number, chair: number,
   select.addEventListener("change", () => {
     const order: number[] = [];
     for (let c = 0; c < troika.CHAIRS; c++) {
-      order.push(c === chair ? Number(select.value) || 0 : troika.chairAt(state, side, swapFrom, c));
+      order.push(c === chair ? Number(select.value) || 0 : troika.chairAt(state, side, from, c));
     }
-    troika.swapFrom(state, side, swapFrom, order);
-    for (let t = swapFrom; t < state.values.length; t++) {
+    troika.swapFrom(state, side, from, order);
+    for (let t = from; t < state.values.length; t++) {
       patch(bout.code, ["sides", side, "themes", t, "order"], order);
     }
     render();
   });
   return select;
 }
-
-// swapFrom is the тема the chair pickers write from — «начиная с темы N».
-// Zero is the бой's opening lineup, which is what a host sets first.
-let swapFrom = 0;
 
 function markCell(code: string, side: number, theme: number, q: number, chair: number,
   state: TroikaState): HTMLElement {
@@ -503,7 +533,6 @@ function buildProtocols(stages: SchemeStage[]): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "troika-protocol";
   const many = stages.length > 1;
-  wrap.appendChild(swapControl());
   for (const stage of stages) {
     const bouts = stageBouts(stage);
     if (!bouts.length) continue;
@@ -521,34 +550,6 @@ function buildProtocols(stages: SchemeStage[]): HTMLElement {
   return wrap;
 }
 
-// The регламент turns the пристяжные round at the половина and teams swap
-// oftener, so the host says which тема a lineup takes effect from and the
-// chair pickers write from there.
-function swapControl(): HTMLElement {
-  const bar = document.createElement("div");
-  bar.className = "troika-swap-bar";
-  const label = document.createElement("label");
-  label.textContent = "Рассадка начиная с темы ";
-  const select = document.createElement("select");
-  select.className = "troika-swap-select";
-  const themes = sheetBouts().reduce((most, bout) => Math.max(most, stateOf(bout.code).values.length), 0);
-  for (let t = 0; t < themes; t++) {
-    const option = document.createElement("option");
-    option.value = String(t);
-    option.textContent = String(t + 1);
-    if (t === swapFrom) option.selected = true;
-    select.appendChild(option);
-  }
-  select.disabled = viewer;
-  select.addEventListener("change", () => {
-    swapFrom = Number(select.value) || 0;
-    render();
-  });
-  label.appendChild(select);
-  bar.appendChild(label);
-  return bar;
-}
-
 // Троечка's регламент ranks on the рейтинговый балл first, then личная
 // встреча, забитые and разница — so its table shows the балл in front of the
 // canon columns the crosstable already draws.
@@ -558,16 +559,13 @@ function buildGroups(stages: SchemeStage[]): HTMLElement {
     columns: [{label: "Р", metric: "rating"}, ...CANON_COLUMNS],
     groups: stages.filter((stage) => stageKind(stage) === "rr").map((stage) => ({
       title: groupLabel(stage as StageRef),
-      entrants: (stage.config?.entrants || []).map((slot) => ({key: slotKey(slot), label: slot.label || ""})),
+      entrants: (stage.config?.entrants || []).map(crossSlot),
       bouts: (stage.matches || []).flatMap((planned) => {
         const view = matches.get(planned.code || "");
         if (!view) return [];
         const state = stateOf(planned.code || "");
         return [{
-          slots: [
-            {key: slotKey(planned.slots?.[0]), label: planned.slots?.[0]?.label || ""},
-            {key: slotKey(planned.slots?.[1]), label: planned.slots?.[1]?.label || ""},
-          ] as [CrossSlot, CrossSlot],
+          slots: [crossSlot(planned.slots?.[0]), crossSlot(planned.slots?.[1])],
           sides: [0, 1].map((side) => ({
             name: view.participants?.[side]?.name || "",
             id: Number(view.participants?.[side]?.id || 0),
@@ -577,25 +575,9 @@ function buildGroups(stages: SchemeStage[]): HTMLElement {
           started: troika.started(state),
         }];
       }),
-      standings: standingsOf(stage.code || ""),
+      standings: standingsByParticipant(festStages.get(stage.code || "")),
     })),
   });
-}
-
-function standingsOf(stageCode: string): Map<number, Record<string, unknown>> {
-  const out = new Map<number, Record<string, unknown>>();
-  for (const entry of festStages.get(stageCode)?.standings || []) {
-    if (entry.participantID) out.set(Number(entry.participantID), entry.metrics || {});
-  }
-  return out;
-}
-
-function slotKey(slot: SchemeSlotRef | null | undefined): string {
-  if (!slot) return "";
-  if (slot.seed?.number) return `s${slot.seed.number}`;
-  if (slot.seed?.position) return `p${slot.seed.position}`;
-  if (slot.reseed) return `r${slot.reseed.stage || ""}:${slot.reseed.rank || 0}`;
-  return slot.label || "";
 }
 
 function buildStats(): HTMLElement {
@@ -658,8 +640,4 @@ function render(): void {
 
 cursor.bind();
 live.connect();
-fetchFestRoster(route.festID).then((teams) => {
-  festRoster = teams;
-  render();
-}).catch(() => {});
 fetchMatches().catch(() => indicator.fail());

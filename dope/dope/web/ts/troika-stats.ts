@@ -56,7 +56,12 @@ export function computeTroikaPlayerStats(bouts: ReadonlyArray<TroikaBout>): Troi
             if (mark === "") continue;
             const id = troika.chairAt(state, s, t, c);
             const name = side.players.get(id) || "";
-            if (!name) continue;
+            // An unseated chair still put its answer on the table, so it is
+            // what the next player heard, even though no row can be credited.
+            if (!name) {
+              if (mark === "right") correctSoFar++;
+              continue;
+            }
             const key = `${side.team}${name}`;
             let row = rows.get(key);
             if (!row) {

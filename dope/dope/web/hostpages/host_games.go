@@ -542,8 +542,8 @@ func gameSpecFromForm(festID int64, gameType string, form url.Values) (gamebuild
 		if spec.Minigames, err = games.ParseMultiGames(form.Get("multi_games")); err != nil {
 			return spec, fmt.Errorf("Мини-игры: %w", err)
 		}
-		if spec.MultiSorting, err = multiSortingFromForm(spec.Minigames, form.Get("multi_sorting")); err != nil {
-			return spec, err
+		if spec.MultiSorting, err = games.ParseMultiSorting(spec.Minigames, form.Get("multi_sorting")); err != nil {
+			return spec, fmt.Errorf("Что решает при равном итоге: %w", err)
 		}
 	case games.Troika:
 		spec.Label = "Тройка"
@@ -576,8 +576,7 @@ func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType s
 		return 0, errors.New("sqlite is not enabled")
 	}
 	gameType = strings.TrimSpace(gameType)
-	if gameType != games.OD && gameType != games.KSI && gameType != games.EK && gameType != games.Brain &&
-		gameType != games.SI && gameType != games.Multi && gameType != games.Troika && gameType != ksiStickersGameType {
+	if !games.Known(gameType) && gameType != ksiStickersGameType {
 		return 0, errors.New("выберите тип игры")
 	}
 
@@ -692,31 +691,4 @@ func isHexColor(value string) bool {
 		}
 	}
 	return true
-}
-
-// multiSortingFromForm reads the comparators a fest breaks a tie on Итог with,
-// checked against what this game's мини-игры actually measure — a typo here
-// would otherwise surface as an unranked table on the day.
-func multiSortingFromForm(minigames []games.MultiGame, raw string) ([]string, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil, nil
-	}
-	known := map[string]bool{}
-	for _, name := range games.MultiMetricNames(minigames) {
-		known[name] = true
-	}
-	var order []string
-	for _, item := range strings.Split(raw, ",") {
-		item = strings.TrimSpace(item)
-		if item == "" {
-			continue
-		}
-		if !known[item] {
-			return nil, fmt.Errorf("Что решает при равном итоге: %s не считается — есть %s",
-				item, strings.Join(games.MultiMetricNames(minigames), ", "))
-		}
-		order = append(order, item)
-	}
-	return order, nil
 }

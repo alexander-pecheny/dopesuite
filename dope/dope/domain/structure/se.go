@@ -311,10 +311,10 @@ func seSeriesConfig(b Block) (SeriesConfig, error) {
 	if err != nil {
 		return SeriesConfig{}, err
 	}
-	cfg := SeriesConfig{
+	cfg := SeriesConfig{Duel: Duel{
 		Points: &RRPoints{Win: points[0], Draw: points[1], Loss: points[2]},
 		Rules:  b.Rules(),
-	}
+	}}
 	cfg.Metric, _ = b.Str("metric")
 	order, ok, err := b.Sorting()
 	if err != nil {

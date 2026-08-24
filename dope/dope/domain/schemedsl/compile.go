@@ -86,8 +86,6 @@ func uniqueCodes(scheme store.FestScheme) error {
 }
 
 // Metrics where less is better: a place, a lot, a loss.
-var ascendingMetrics = map[string]bool{"place_sum": true, "draw": true, "place": true, "losses": true}
-
 // rankable is everything a stage of this Kind may sort by in this game: what
 // the Protocol declares, what the Kind's Ranker adds, and what the scheme's own
 // scoring rules define.
@@ -114,7 +112,7 @@ func sortDir(rule SortRule) string {
 	if rule.Dir != "" {
 		return rule.Dir
 	}
-	if ascendingMetrics[rule.Metric] {
+	if structure.Ascending(rule.Metric) {
 		return "asc"
 	}
 	return "desc"

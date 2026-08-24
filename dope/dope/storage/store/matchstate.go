@@ -55,6 +55,20 @@ func RegisterTeamBlob(code string) { teamBlobProtocols[code] = true }
 
 func TeamBlobShaped(gameType string) bool { return teamBlobProtocols[gameType] }
 
+// seatRosterProtocols are the Protocols whose бои field named players and so
+// need each seat's roster loaded — every team-blob one, and Тройка, whose
+// document records which of a team's three sat in which кресло. Each registers
+// itself (protocol.Register).
+var seatRosterProtocols = map[string]bool{}
+
+func RegisterSeatRoster(code string) { seatRosterProtocols[code] = true }
+
+// SeatsPlayers reports whether a бой of this Protocol names players in its
+// seats, and therefore wants their roster on the view.
+func SeatsPlayers(gameType string) bool {
+	return TeamBlobShaped(gameType) || seatRosterProtocols[gameType]
+}
+
 // ProtocolState is the document the match's Protocol scores: the projected
 // MatchState for a team-blob game, the raw document for the rest.
 func (m DBMatchState) ProtocolState() json.RawMessage {
@@ -76,7 +90,7 @@ func MatchViewFrom(match DBMatchState) MatchView {
 	if !TeamBlobShaped(match.GameType) {
 		teams := make([]ParticipantView, len(match.State.Participants))
 		for i, team := range match.State.Participants {
-			teams[i] = ParticipantView{ID: team.ID, Name: team.Name, Place: team.Place}
+			teams[i] = ParticipantView{ID: team.ID, Name: team.Name, Roster: team.Roster, Place: team.Place}
 		}
 		return MatchView{
 			Title:        match.Title,
@@ -323,7 +337,12 @@ order by s.position, s.id, m.position, m.id`, args...)
 				} else {
 					match.ParticipantIDs[slot.Index] = slot.ParticipantID.Int64
 				}
-				match.State.Participants[slot.Index] = ParticipantState{ID: match.ParticipantIDs[slot.Index], Name: name, Place: slot.Place}
+				match.State.Participants[slot.Index] = ParticipantState{
+					ID:     match.ParticipantIDs[slot.Index],
+					Name:   name,
+					Roster: rosters[rosterKey{match.GameID, match.ParticipantIDs[slot.Index]}],
+					Place:  slot.Place,
+				}
 				continue
 			}
 			if !slot.ParticipantID.Valid {
@@ -405,7 +424,7 @@ func loadRosters(ctx context.Context, q Queryer, matches []DBMatchState, slots m
 	teams := map[int64]map[int64]bool{}
 	for i := range matches {
 		match := &matches[i]
-		if !TeamBlobShaped(match.GameType) {
+		if !SeatsPlayers(match.GameType) {
 			continue
 		}
 		byGame[match.GameID] = match

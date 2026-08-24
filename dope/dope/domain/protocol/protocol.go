@@ -128,12 +128,22 @@ func Register(p Protocol) {
 	if p.TeamBlob() {
 		store.RegisterTeamBlob(p.Code())
 	}
+	if seater, ok := p.(SeatsPlayers); ok && seater.SeatsPlayers() {
+		store.RegisterSeatRoster(p.Code())
+	}
 }
 
 // Get looks up a registered protocol by code.
 func Get(code string) (Protocol, bool) {
 	p, ok := registry[code]
 	return p, ok
+}
+
+// SeatsPlayers is implemented by a Protocol whose бои field named players —
+// Тройка records which of a team's three sat in which кресло — so each seat
+// wants its roster on the view. A team-blob Protocol already gets one.
+type SeatsPlayers interface {
+	SeatsPlayers() bool
 }
 
 // RatingRosterOwner is implemented by protocols whose state embeds a roster

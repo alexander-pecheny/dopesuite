@@ -385,7 +385,7 @@ func multiSeatStandings(conf RRConfig, results []MatchOutcome) ([]RankedEntry, e
 			if a == b {
 				continue
 			}
-			if key == "place_sum" {
+			if Ascending(key) {
 				return a < b
 			}
 			return a > b

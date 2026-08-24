@@ -6,6 +6,40 @@
 import {formatDisplayText, td} from "./cells.js";
 import {standingsTable} from "./standings.js";
 
+// A seat ref as a scheme writes it, before anyone sits in it.
+export interface SchemeSlotRef {
+  label?: string;
+  seed?: {number?: number; position?: number} | null;
+  reseed?: {stage?: string; rank?: number} | null;
+}
+
+// slotKey is a stable identity for an entrant ref, whatever grain it is — what
+// pairs a planned бой with the two rows it belongs to.
+export function slotKey(slot: SchemeSlotRef | null | undefined): string {
+  if (!slot) return "";
+  if (slot.seed?.number) return `s${slot.seed.number}`;
+  if (slot.seed?.position) return `p${slot.seed.position}`;
+  if (slot.reseed) return `r${slot.reseed.stage || ""}:${slot.reseed.rank || 0}`;
+  return slot.label || "";
+}
+
+// crossSlot is a planned seat as a row: its key and the label the Сетка prints.
+export function crossSlot(slot: SchemeSlotRef | null | undefined): CrossSlot {
+  return {key: slotKey(slot), label: slot?.label || ""};
+}
+
+// standingsByParticipant is a stage's own table keyed by Participant id — the
+// server ranks, the page draws (ADR-0011).
+export function standingsByParticipant(
+  stage: {standings?: Array<{participantID?: number; metrics?: Record<string, unknown>}>} | undefined,
+): Map<number, Record<string, unknown>> {
+  const out = new Map<number, Record<string, unknown>>();
+  for (const entry of stage?.standings || []) {
+    if (entry.participantID) out.set(Number(entry.participantID), entry.metrics || {});
+  }
+  return out;
+}
+
 // A seat as a scheme names it before anyone sits in it — the label a Сетка
 // prints. Its key is what pairs a planned бой with its row.
 export interface CrossSlot {
@@ -80,7 +114,7 @@ export function buildCrosstables(spec: CrosstableSpec): HTMLElement {
   return wrap;
 }
 
-export function buildCrosstable(group: CrossGroup, columns: CrossColumn[]): HTMLElement {
+function buildCrosstable(group: CrossGroup, columns: CrossColumn[]): HTMLElement {
   const rows = group.entrants.map((slot) => ({key: slot.key, name: slot.label || "", id: 0}));
   const indexByKey = new Map<string, number>();
   rows.forEach((row, i) => indexByKey.set(row.key, i));
@@ -111,12 +145,12 @@ export function buildCrosstable(group: CrossGroup, columns: CrossColumn[]): HTML
 
   const cross = (i: number, j: number) => {
     const cell = td(i === j ? "×" : cellText[i][j]);
-    if (i === j) cell.classList.add("brain-cross-diag");
-    else cell.classList.toggle("brain-cross-live", live[i][j]);
+    if (i === j) cell.classList.add("cross-diag");
+    else cell.classList.toggle("cross-live", live[i][j]);
     return cell;
   };
   return standingsTable({
-    className: "group-standings-table brain-crosstable",
+    className: "group-standings-table crosstable",
     columns: [
       {label: "№", kind: "place"},
       {label: "Команда", kind: "name"},

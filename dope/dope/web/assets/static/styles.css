@@ -3965,24 +3965,24 @@ body:not(.embedded-match) .grid-match {
   --group-standings-col: 600px;
 }
 
-.brain-crosstable {
+.crosstable {
   --results-place-col: 40px;
   --results-team-col: 190px;
   width: max-content;
 }
 
-.brain-crosstable .results-num {
+.crosstable .results-num {
   width: 40px;
   min-width: 40px;
   padding-left: var(--space-1);
   padding-right: var(--space-1);
 }
 
-.brain-crosstable .brain-cross-diag {
+.crosstable .cross-diag {
   color: var(--muted-light);
 }
 
-.brain-crosstable .brain-cross-live {
+.crosstable .cross-live {
   font-style: italic;
   color: var(--muted);
 }

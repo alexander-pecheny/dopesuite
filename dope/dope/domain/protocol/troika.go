@@ -26,6 +26,9 @@ func (troika) Params() []Param {
 
 func (troika) TeamBlob() bool { return false }
 
+// A кресло holds a player, so a бой's seats carry their rosters.
+func (troika) SeatsPlayers() bool { return true }
+
 func (troika) Started(state json.RawMessage) bool { return games.TroikaStateStarted(string(state)) }
 
 // Metrics: игровые очки и правильные ответы без учёта номинала. A группа sums

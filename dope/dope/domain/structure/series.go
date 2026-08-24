@@ -20,17 +20,11 @@ type series struct{}
 
 func (series) Code() string { return "series" }
 
-// SeriesConfig is how a series is ranked. Its бои are the stage's own, drawn
-// by the block that emitted it, so they are not repeated here.
+// SeriesConfig is how a series is ranked — a two-seat table like any other.
+// Its бои are the stage's own, drawn by the block that emitted it, so they are
+// not repeated here.
 type SeriesConfig struct {
-	Points *RRPoints `json:"points,omitempty"`
-	Metric string    `json:"metric,omitempty"`
-	Order  []string  `json:"order,omitempty"`
-	Rules  *Rules    `json:"rules,omitempty"`
-}
-
-func (s SeriesConfig) duel() Duel {
-	return Duel{Points: s.Points, Metric: s.Metric, Order: s.Order, Rules: s.Rules}
+	Duel
 }
 
 func (series) Order(cfg json.RawMessage) []SortRule {
@@ -38,11 +32,7 @@ func (series) Order(cfg json.RawMessage) []SortRule {
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil
 	}
-	order := conf.Order
-	if len(order) == 0 {
-		order = []string{"points", "taken"}
-	}
-	rules := sortRules(order)
+	rules := sortRules(conf.Order)
 	out := rules[:0]
 	for _, rule := range rules {
 		// Личная встреча is a comparator over the tied, not a number a row
@@ -64,11 +54,5 @@ func (series) Standings(cfg json.RawMessage, results []MatchOutcome, _ Inputs) (
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil, fmt.Errorf("series standings config: %w", err)
 	}
-	duel := conf.duel()
-	if len(duel.Order) == 0 {
-		// Absent a scheme's own comparators a series is до большинства побед:
-		// the бои taken, then what was scored in them.
-		duel.Order = []string{"points", "taken"}
-	}
-	return duelStandings(duel, results)
+	return duelStandings(conf.Duel, results)
 }

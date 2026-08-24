@@ -12,10 +12,10 @@ import "sort"
 // Duel is what a two-seat table needs: the win/draw/loss values, the Protocol
 // metric забито counts, the comparator order and the scheme's scoring rules.
 type Duel struct {
-	Points *RRPoints
-	Metric string
-	Order  []string
-	Rules  *Rules
+	Points *RRPoints `json:"points,omitempty"`
+	Metric string    `json:"metric,omitempty"`
+	Order  []string  `json:"order,omitempty"`
+	Rules  *Rules    `json:"rules,omitempty"`
 }
 
 // duelStandings ranks everyone who met one-on-one in results.
@@ -25,9 +25,6 @@ func duelStandings(conf Duel, results []MatchOutcome) ([]RankedEntry, error) {
 		return nil, err
 	}
 	order := conf.Order
-	if len(order) == 0 {
-		order = canonOrder
-	}
 	metric := conf.Metric
 	if metric == "" {
 		metric = "taken"
@@ -152,7 +149,7 @@ func duelStandings(conf Duel, results []MatchOutcome) ([]RankedEntry, error) {
 			}
 			val = func(i int) float64 { return sub[ranked[i].Participant] }
 		}
-		ascending := order[keyIdx] == "place_sum"
+		ascending := Ascending(order[keyIdx])
 		sort.SliceStable(ids, func(x, y int) bool {
 			if ascending {
 				return val(ids[x]) < val(ids[y])

@@ -99,6 +99,12 @@ type Spec struct {
 // and «4» in another.
 func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 	if strings.TrimSpace(spec.DSL) != "" {
+		// Мультиигры is one sitting whose shape is its мини-игры, and the DSL
+		// has no way to say what they are — so a scheme for one would compile
+		// to a game that scores nothing. Refuse it rather than build it.
+		if spec.Type == games.Multi {
+			return 0, errors.New("Мультиигры описываются списком мини-игр, а не схемой")
+		}
 		return createSchemeGame(ctx, tx, spec.FestID, spec.Type, spec.Label, spec.DSL, spec.Entrants)
 	}
 	if spec.Pasted != nil {

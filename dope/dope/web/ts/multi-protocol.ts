@@ -136,13 +136,6 @@ export function cellValue(state: MultiState, game: number, participant: number, 
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
-export function gameSubtotal(state: MultiState, rules: MultiRules, game: number, participant: number): number {
-  let total = 0;
-  const columns = rules.minigames[game]?.columns.length || 0;
-  for (let c = 0; c < columns; c++) total += cellValue(state, game, participant, c);
-  return total;
-}
-
 export interface ScoreRow {
   games: number[];
   total: number;

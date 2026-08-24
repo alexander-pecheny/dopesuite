@@ -62,6 +62,13 @@ func Get(code string) Definition {
 	return registry[Default]
 }
 
+// Known reports whether a code names a registered format — what a creation
+// form asks instead of listing the formats it will accept.
+func Known(code string) bool {
+	_, ok := registry[code]
+	return ok
+}
+
 // IsIndividual reports whether the format seats players rather than teams.
 func IsIndividual(code string) bool {
 	d, ok := registry[code]

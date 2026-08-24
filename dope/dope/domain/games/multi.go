@@ -221,6 +221,30 @@ type MultiResultsTeam struct {
 	Games []int
 }
 
+// ParseMultiSorting reads the comparators a фест breaks a tie on Итог with,
+// checked against what these мини-игры measure — a name nobody counts would
+// otherwise surface as an unranked table on the day. Blank is no comparator at
+// all, which leaves equal totals sharing a place.
+func ParseMultiSorting(minigames []MultiGame, raw string) ([]string, error) {
+	known := map[string]bool{}
+	for _, name := range MultiMetricNames(minigames) {
+		known[name] = true
+	}
+	var order []string
+	for _, item := range strings.Split(raw, ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if !known[item] {
+			return nil, fmt.Errorf("%s не считается — есть %s", item,
+				strings.Join(MultiMetricNames(minigames), ", "))
+		}
+		order = append(order, item)
+	}
+	return order, nil
+}
+
 // MultiMetricNames is what a scheme may rank a Мультиигры game on: Итог, Σ+
 // and one name per мини-игра, numbered from 1 in the order they are played.
 func MultiMetricNames(games []MultiGame) []string {
@@ -277,34 +301,26 @@ func ComputeMultiResults(schemeJSON, stateJSON string) ([]MultiResultsTeam, erro
 		ranked = append(ranked, team)
 	}
 
-	order := scheme.Sorting
+	order, err := ParseMultiSorting(scheme.Minigames, strings.Join(scheme.Sorting, ","))
+	if err != nil {
+		return nil, err
+	}
 	if len(order) == 0 {
 		order = []string{"total"}
 	}
-	metric := func(team MultiResultsTeam, name string) (int, bool) {
+	metric := func(team MultiResultsTeam, name string) int {
 		switch name {
 		case "total":
-			return team.Total, true
+			return team.Total
 		case "plus":
-			return team.Plus, true
+			return team.Plus
 		}
-		if index, err := strconv.Atoi(strings.TrimPrefix(name, "game")); err == nil &&
-			strings.HasPrefix(name, "game") && index >= 1 && index <= len(team.Games) {
-			return team.Games[index-1], true
-		}
-		return 0, false
-	}
-	for _, name := range order {
-		if _, ok := metric(MultiResultsTeam{Games: make([]int, len(scheme.Minigames))}, name); !ok {
-			return nil, fmt.Errorf("sorting: %s не считается — есть %s", name,
-				strings.Join(MultiMetricNames(scheme.Minigames), ", "))
-		}
+		index, _ := strconv.Atoi(strings.TrimPrefix(name, "game"))
+		return team.Games[index-1]
 	}
 	same := func(a, b MultiResultsTeam) bool {
 		for _, name := range order {
-			av, _ := metric(a, name)
-			bv, _ := metric(b, name)
-			if av != bv {
+			if metric(a, name) != metric(b, name) {
 				return false
 			}
 		}
@@ -312,8 +328,7 @@ func ComputeMultiResults(schemeJSON, stateJSON string) ([]MultiResultsTeam, erro
 	}
 	sort.SliceStable(ranked, func(i, j int) bool {
 		for _, name := range order {
-			av, _ := metric(ranked[i], name)
-			bv, _ := metric(ranked[j], name)
+			av, bv := metric(ranked[i], name), metric(ranked[j], name)
 			if av != bv {
 				return av > bv
 			}
