@@ -4620,11 +4620,18 @@ body.is-fullscreen.od-page .match-main {
   color: var(--muted);
 }
 
-.troika-sheet .troika-team {
+.troika-sheet .troika-team,
+.troika-sheet .troika-team-head {
   width: var(--team-col);
   min-width: var(--team-col);
+  max-width: var(--team-col);
   font-weight: var(--fw-semibold);
   color: var(--text-strong);
+}
+
+.troika-sheet .troika-seat-label {
+  font-size: var(--text-xs);
+  color: var(--muted);
 }
 
 .troika-sheet .troika-chair {

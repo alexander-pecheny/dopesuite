@@ -117,25 +117,23 @@ function buildTable(): HTMLElement {
 
   const head = document.createElement("thead");
   const gamesRow = document.createElement("tr");
-  gamesRow.appendChild(th("№", "sticky num-col"));
-  gamesRow.appendChild(th("Команда", "sticky team-col"));
+  gamesRow.appendChild(th("Команда", "sticky sticky-name"));
+  gamesRow.appendChild(th("Итог", "sticky sticky-total number"));
+  if (rules.signed) gamesRow.appendChild(th("Σ+", "sticky sticky-place number"));
   rules.minigames.forEach((game, g) => {
     gamesRow.appendChild(th(game.name, "theme-block",
       {colSpan: game.columns.length + 1, dataset: {game: g}}));
   });
-  gamesRow.appendChild(th("Итог", "sticky-right total-col"));
-  if (rules.signed) gamesRow.appendChild(th("Σ+", "sticky-right total-col"));
   head.appendChild(gamesRow);
 
   const valuesRow = document.createElement("tr");
-  valuesRow.appendChild(th("", "sticky num-col"));
-  valuesRow.appendChild(th("", "sticky team-col"));
+  valuesRow.appendChild(th("", "sticky sticky-name"));
+  valuesRow.appendChild(th("", "sticky sticky-total"));
+  if (rules.signed) valuesRow.appendChild(th("", "sticky sticky-place"));
   rules.minigames.forEach((game) => {
     game.columns.forEach((column) => valuesRow.appendChild(th(String(maxOf(column.values)), "nominal")));
     valuesRow.appendChild(th("Σ", "theme-block-score"));
   });
-  valuesRow.appendChild(th("", "sticky-right total-col"));
-  if (rules.signed) valuesRow.appendChild(th("", "sticky-right total-col"));
   head.appendChild(valuesRow);
   table.appendChild(head);
 
@@ -144,15 +142,19 @@ function buildTable(): HTMLElement {
   rowOrder().forEach((p) => {
     const tr = document.createElement("tr");
     if (multi.participantDeclined(state!, p)) tr.classList.add("declined-row");
-    tr.appendChild(td(String(multi.participantNumber(state!, p) || ""), "sticky num-col"));
-    tr.appendChild(td(multi.participantName(state!, p), "sticky team-col", {dataset: {multiTeamCell: ""}}));
+    const number = multi.participantNumber(state!, p);
+    tr.appendChild(td(`${number ? number + ". " : ""}${multi.participantName(state!, p)}`,
+      "sticky sticky-name", {dataset: {multiTeamCell: ""}}));
+    tr.appendChild(td(multi.formatScore(sheetRows[p].total), "sticky sticky-total number total-cell",
+      {dataset: {total: p}}));
+    if (rules.signed) {
+      tr.appendChild(td(String(sheetRows[p].plus), "sticky sticky-place number", {dataset: {plus: p}}));
+    }
     rules.minigames.forEach((game, g) => {
       game.columns.forEach((_, c) => tr.appendChild(cellNode(p, g, c)));
       tr.appendChild(td(String(sheetRows[p].raw[g]), "number theme-block-score",
         {dataset: {subtotal: `${p}-${g}`}}));
     });
-    tr.appendChild(td(multi.formatScore(sheetRows[p].total), "number sticky-right total-col", {dataset: {total: p}}));
-    if (rules.signed) tr.appendChild(td(String(sheetRows[p].plus), "number sticky-right total-col", {dataset: {plus: p}}));
     body.appendChild(tr);
   });
   table.appendChild(body);
@@ -306,16 +308,16 @@ function buildRefusalsTable(): HTMLElement {
   table.className = "match-table refusals-table";
   const head = document.createElement("thead");
   const headRow = document.createElement("tr");
-  headRow.appendChild(th("№", "num-col"));
-  headRow.appendChild(th("Команда", "team-col"));
-  headRow.appendChild(th("Отказ", "num-col"));
+  headRow.appendChild(th("№"));
+  headRow.appendChild(th("Команда", "results-team-head"));
+  headRow.appendChild(th("Отказ"));
   head.appendChild(headRow);
   table.appendChild(head);
   const body = document.createElement("tbody");
   state!.participants.forEach((_, index) => {
     const tr = document.createElement("tr");
-    tr.appendChild(td(String(multi.participantNumber(state!, index) || ""), "num-col"));
-    tr.appendChild(td(multi.participantName(state!, index), "team-col"));
+    tr.appendChild(td(String(multi.participantNumber(state!, index) || "")));
+    tr.appendChild(td(multi.participantName(state!, index), "results-team"));
     const box = document.createElement("input");
     box.type = "checkbox";
     box.checked = multi.participantDeclined(state!, index);
@@ -327,7 +329,7 @@ function buildRefusalsTable(): HTMLElement {
       doc.save(["declined", key], box.checked);
       render();
     });
-    tr.appendChild(td(box, "num-col"));
+    tr.appendChild(td(box));
     body.appendChild(tr);
   });
   table.appendChild(body);
@@ -338,6 +340,7 @@ function buildRefusalsTable(): HTMLElement {
 
 function render(): void {
   if (!scheme || !state) return;
+  shell.renderChrome();
   if (!TABS.some((t) => t.key === activeTab)) activeTab = "detailed";
   if (tabsRoot) renderTabBar(tabsRoot, TABS, activeTab, (key) => {
     activeTab = key;

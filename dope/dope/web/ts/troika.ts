@@ -292,13 +292,13 @@ function buildBout(bout: BoutEntry): HTMLElement {
 
   const thead = document.createElement("thead");
   const themeRow = document.createElement("tr");
-  themeRow.appendChild(th("", "team-col"));
-  themeRow.appendChild(th("", "num-col"));
+  themeRow.appendChild(th("", "troika-team-head"));
+  themeRow.appendChild(th(""));
   state.values.forEach((value, t) => {
     themeRow.appendChild(th(`Тема ${t + 1}${value === 1 ? "" : ` · ${value}`}`, "theme-block",
       {colSpan: troika.THEME_QUESTIONS}));
   });
-  themeRow.appendChild(th("Σ", "total-col"));
+  themeRow.appendChild(th("Σ"));
   thead.appendChild(themeRow);
   table.appendChild(thead);
 
@@ -310,18 +310,17 @@ function buildBout(bout: BoutEntry): HTMLElement {
     for (let chair = 0; chair < troika.CHAIRS; chair++) {
       const tr = document.createElement("tr");
       if (chair === 0) {
-        const teamCell = td(seatName(bout.view, side), "team-col troika-team",
-          {rowSpan: troika.CHAIRS});
+        const teamCell = td(seatName(bout.view, side), "troika-team", {rowSpan: troika.CHAIRS});
         tr.appendChild(teamCell);
       }
-      tr.appendChild(td(chairPicker(bout, side, chair, roster), "num-col troika-chair"));
+      tr.appendChild(td(chairPicker(bout, side, chair, roster), "troika-chair"));
       state.values.forEach((_value, t) => {
         for (let q = 0; q < troika.THEME_QUESTIONS; q++) {
           tr.appendChild(markCell(bout.code, side, t, q, chair, state));
         }
       });
       if (chair === 0) {
-        tr.appendChild(td(String(total), "number total-col troika-total",
+        tr.appendChild(td(String(total), "number troika-total",
           {rowSpan: troika.CHAIRS, dataset: {total: `${bout.code}-${side}`}}));
       }
       body.appendChild(tr);
@@ -357,8 +356,8 @@ function seatFrom(code: string, side: number): number {
 function seatRow(bout: BoutEntry, side: number, state: TroikaState): HTMLElement {
   const tr = document.createElement("tr");
   tr.className = "troika-seat-row";
-  tr.appendChild(td("", "team-col"));
-  tr.appendChild(td("рассадка", "num-col troika-seat-label"));
+  tr.appendChild(td("", "troika-team"));
+  tr.appendChild(td("рассадка", "troika-seat-label"));
   const at = seatFrom(bout.code, side);
   state.values.forEach((_value, t) => {
     const button = document.createElement("button");
@@ -375,7 +374,7 @@ function seatRow(bout: BoutEntry, side: number, state: TroikaState): HTMLElement
     });
     tr.appendChild(td(button, "troika-seat-cell", {colSpan: troika.THEME_QUESTIONS}));
   });
-  tr.appendChild(td("", "total-col"));
+  tr.appendChild(td(""));
   return tr;
 }
 
