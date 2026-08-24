@@ -22,8 +22,9 @@ import (
 var headerTemplate string
 
 const (
-	greytextTmpl = "#qlabel[<GREYTEXT>]"
-	imgTmpl      = `image("<IMGPATH>", width: <IMGWIDTH>)`
+	greytextTmpl  = "#qlabel[<GREYTEXT>]"
+	celllabelTmpl = "clabel[<CELLLABEL>]"
+	imgTmpl       = `image("<IMGPATH>", width: <IMGWIDTH>)`
 
 	defaultFont   = "Noto Sans"
 	defaultTikzMM = 2.0 // DEFAULT_TIKZ_MM (int 2 in Python)
@@ -34,6 +35,8 @@ const (
 
 	// handout_for_question, labels_ru.toml [general]
 	handoutForQuestionRu = "Раздаточный материал к вопросу %s"
+	// question, labels_ru.toml [question_labels]
+	questionRu = "Вопрос %s"
 )
 
 // Args mirrors the chgksuite handout CLI flags xy relies on (ru defaults).
@@ -91,6 +94,7 @@ var reservedWords = map[string]bool{
 	"resize_image": true, "font_size": true, "font_family": true, "no_center": true,
 	"raw_tex": true, "color": true, "handouts_per_team": true, "grouping": true,
 	"rotate": true, "tikz_mm": true, "hspace": true, "vspace": true, "max_width": true,
+	"question_label": true,
 }
 
 var intKeys = map[string]bool{"columns": true, "rows": true, "no_center": true, "color": true, "handouts_per_team": true}
@@ -330,16 +334,34 @@ func (a Args) buildCellBody(b block) string {
 		textExpr = wrapText(t)
 	}
 
+	var body string
 	switch {
 	case imgExpr != "" && textExpr != "":
-		return fmt.Sprintf("stack(dir: ttb, spacing: 1mm, %s, align(center, %s))", imgExpr, textExpr)
+		body = fmt.Sprintf("stack(dir: ttb, spacing: 1mm, %s, align(center, %s))", imgExpr, textExpr)
 	case imgExpr != "":
-		return imgExpr
+		body = imgExpr
 	case textExpr != "":
-		return textExpr
+		body = textExpr
 	default:
-		return wrapText("")
+		body = wrapText("")
 	}
+	if label := insideLabel(b); label != "" {
+		return fmt.Sprintf("stack(dir: ttb, spacing: 1mm, %s, %s)", label, body)
+	}
+	return body
+}
+
+// insideLabel is the grey «Вопрос N» that `question_label: inside` prints inside
+// every cell, so a handout still names its question once it is cut out.
+func insideLabel(b block) string {
+	if v, _ := b.str("question_label"); v != "inside" {
+		return ""
+	}
+	num, ok := b.str("for_question")
+	if !ok || num == "" {
+		return ""
+	}
+	return strings.Replace(celllabelTmpl, "<CELLLABEL>", fmt.Sprintf(questionRu, num), 1)
 }
 
 func (a Args) generateRegularBlock(b block) string {
@@ -405,7 +427,8 @@ func GenerateTyp(hndt string, a Args) string {
 			continue
 		}
 		var label, grid string
-		if fq, ok := b.str("for_question"); ok && fq != "" {
+		ql, _ := b.str("question_label")
+		if fq, ok := b.str("for_question"); ok && fq != "" && ql != "inside" {
 			label = a.generateForQuestion(fq)
 		}
 		if c, ok := b.intVal("columns"); ok && c != 0 {

@@ -46,3 +46,16 @@ func tailLines(s string) string {
 	}
 	return strings.Join(lines, "\n")
 }
+
+// TestQuestionLabelInside pins the rule the byte-parity oracle only shows in one
+// direction: `question_label: inside` moves the number into every cell and drops
+// the grey caption above the block.
+func TestQuestionLabelInside(t *testing.T) {
+	got := GenerateTyp("for_question: 110\ncolumns: 3\nquestion_label: inside\n\nтекст", DefaultArgs())
+	if strings.Contains(got, "#qlabel[") {
+		t.Error("the caption above the block should be gone")
+	}
+	if !strings.Contains(got, "stack(dir: ttb, spacing: 1mm, clabel[Вопрос 110], text(size: 14pt)[текст])") {
+		t.Errorf("no in-cell label:\n%s", got)
+	}
+}
