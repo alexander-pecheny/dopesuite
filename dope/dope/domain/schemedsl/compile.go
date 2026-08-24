@@ -206,7 +206,7 @@ var commonKeys = []string{"kind", "title", "venues", "sorting", "reseed", "stats
 var dottedKeys = []string{"venues", "title", "bout", "standings"}
 
 var defaultsKeys = map[string]bool{"venues": true, "sorting": true}
-var initKeys = map[string]bool{"seed": true, "sorting": true}
+var initKeys = map[string]bool{"seed": true, "sorting": true, "games": true, "player": true}
 
 func keySet(lists ...[]string) map[string]bool {
 	set := map[string]bool{}
@@ -238,6 +238,9 @@ func (c *compiler) checkKeys() error {
 		}
 	}
 	for key, v := range c.doc.Init.Values {
+		if grain, _, dotted := strings.Cut(key, "."); dotted && initKeys[grain] {
+			continue
+		}
 		if !initKeys[key] {
 			return errAt(v.Line, "неизвестный ключ %s в [init] (есть %s)", key, strings.Join(structure.SortedNames(initKeys), ", "))
 		}
@@ -272,12 +275,56 @@ func (c *compiler) checkKeys() error {
 	return nil
 }
 
+// readPlayerSeed reads the composing посев: which Games a player's own team
+// is looked up in, the metrics a player carries, and how those fold over the
+// Participant's three.
+func (c *compiler) readPlayerSeed() (*store.SchemePlayerSeed, error) {
+	line := c.doc.Init.Values["seed"].Line
+	games, ok, err := c.doc.Init.List("games")
+	if err != nil {
+		return nil, err
+	}
+	if !ok || len(games) == 0 {
+		return nil, errAt(line, "seed: players — нужен games: [игра, игра], откуда берутся места игроков")
+	}
+	out := &store.SchemePlayerSeed{Games: games, Player: map[string]string{}, Seed: map[string]string{}}
+	for key, v := range c.doc.Init.Values {
+		grain, name, dotted := strings.Cut(key, ".")
+		if !dotted || name == "" {
+			continue
+		}
+		switch grain {
+		case "player":
+			if _, err := expr.Parse(v.Raw); err != nil {
+				return nil, errAt(v.Line, "player.%s: %s", name, err.Error())
+			}
+			out.Player[name] = v.Raw
+		case "seed":
+			if name == "games" {
+				continue
+			}
+			out.Seed[name] = v.Raw
+		}
+	}
+	if len(out.Seed) == 0 {
+		return nil, errAt(line, "seed: players — нужен хотя бы один seed.<метрика>: mean(<метрика игрока>)")
+	}
+	return out, nil
+}
+
 func (c *compiler) readInit() error {
 	seed, ok := c.doc.Init.Str("seed")
 	if !ok {
 		return nil
 	}
 	seeding := &store.SchemeSeeding{Source: seed}
+	if seed == "players" {
+		players, err := c.readPlayerSeed()
+		if err != nil {
+			return err
+		}
+		seeding.Players = players
+	}
 	rules, ok, err := c.doc.Init.Sorting("sorting")
 	if err != nil {
 		return err

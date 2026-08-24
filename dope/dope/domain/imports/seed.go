@@ -158,6 +158,8 @@ func (fromScheme) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope)
 	case "random":
 		candidates, err := randomSeedCandidates(ctx, tx, scope)
 		return seeding{source: "random", label: "жребий", candidates: candidates}, err
+	case "players":
+		return FromPlayers(declared.Players, declared.Sort).resolve(ctx, tx, scope)
 	}
 	gameID, candidates, err := standingsCandidates(ctx, tx, scope.FestID, declared.Source, declared.Sort)
 	return seeding{source: declared.Source, label: declared.Source, sourceGameID: gameID, candidates: candidates}, err

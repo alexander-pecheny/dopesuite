@@ -115,3 +115,62 @@ func TestTroikaGroupCarriesFractionalPointsAndItsRatingRule(t *testing.T) {
 		t.Fatalf("order = %v", order)
 	}
 }
+
+// Троечка §4.4.2: «номер посева определяется средним арифметическим суммы
+// мест в „Вопросиках“ и „Командном своячке“ команд игроков», and §4.4.3
+// breaks a tie on the best single сумма мест. A Participant here is three
+// people from three other teams, so the посев is composed over them.
+const troikaSeedSrc = `
+[init]
+seed: players
+games: [вопросики, своячок]
+player.place_sum: place1 + place2
+seed.mean: mean(place_sum)
+seed.best: min(place_sum)
+sorting: [mean asc, best asc]
+
+[scheme]
+kind: roundrobin
+groups: 2
+group_size: 4
+themes: 6
+`
+
+func TestTroikaSeedComposesOverPlayers(t *testing.T) {
+	scheme := compileSrc(t, troikaSeedSrc, troikaInput(8))
+	if scheme.Seeding == nil || scheme.Seeding.Source != "players" {
+		t.Fatalf("seeding = %+v", scheme.Seeding)
+	}
+	players := scheme.Seeding.Players
+	if players == nil {
+		t.Fatal("seed: players carries no player spec")
+	}
+	if len(players.Games) != 2 || players.Games[0] != "вопросики" || players.Games[1] != "своячок" {
+		t.Fatalf("games = %v", players.Games)
+	}
+	if players.Player["place_sum"] != "place1 + place2" {
+		t.Fatalf("player rules = %v", players.Player)
+	}
+	if players.Seed["mean"] != "mean(place_sum)" || players.Seed["best"] != "min(place_sum)" {
+		t.Fatalf("seed rules = %v", players.Seed)
+	}
+	if len(scheme.Seeding.Sort) != 2 || scheme.Seeding.Sort[0].Metric != "mean" || scheme.Seeding.Sort[0].Dir != "asc" {
+		t.Fatalf("sort = %+v", scheme.Seeding.Sort)
+	}
+}
+
+func TestPlayerSeedNeedsItsSources(t *testing.T) {
+	for _, src := range []string{
+		"[init]\nseed: players\nseed.mean: mean(x)\n\n[scheme]\nkind: roundrobin\ngroup_size: 4\n",
+		"[init]\nseed: players\ngames: [вопросики]\n\n[scheme]\nkind: roundrobin\ngroup_size: 4\n",
+		"[init]\nseed: players\ngames: [вопросики]\nplayer.x: place1 +\nseed.mean: mean(x)\n\n[scheme]\nkind: roundrobin\ngroup_size: 4\n",
+	} {
+		doc, err := Parse(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Compile(doc, troikaInput(4)); err == nil {
+			t.Errorf("Compile(%q) = nil error, want a complaint", src)
+		}
+	}
+}
