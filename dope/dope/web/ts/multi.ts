@@ -113,7 +113,7 @@ function applyRemoteState(next: unknown): void {
 // domain: a host reading the sheet wants the задание's price, not its range.
 function buildTable(): HTMLElement {
   const table = document.createElement("table");
-  table.className = "score-table multi-table";
+  table.className = "match-table multi-table";
 
   const head = document.createElement("thead");
   const gamesRow = document.createElement("tr");
@@ -304,7 +304,7 @@ function buildResultsTable(): HTMLElement {
 // the sheet and leaves the ranking, so the numbers of the rest do not shift.
 function buildRefusalsTable(): HTMLElement {
   const table = document.createElement("table");
-  table.className = "score-table refusals-table";
+  table.className = "match-table refusals-table";
   const head = document.createElement("thead");
   const headRow = document.createElement("tr");
   headRow.appendChild(th("№", "num-col"));

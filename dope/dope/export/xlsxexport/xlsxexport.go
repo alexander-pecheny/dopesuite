@@ -704,3 +704,248 @@ func uniqueSheetName(f *excelize.File, base string) string {
 		}
 	}
 }
+
+// --- Мультиигры: the sheet and the ranked table -------------------------------
+
+// BuildMultiSheets writes the Мультиигры «Подробно» sheet — a column block per
+// мини-игра with its subtotal — and the «Итог» table beside it.
+func BuildMultiSheets(f *excelize.File, schemeJSON, stateJSON string) error {
+	var scheme games.MultiScheme
+	if strings.TrimSpace(schemeJSON) != "" {
+		if err := json.Unmarshal([]byte(schemeJSON), &scheme); err != nil {
+			return fmt.Errorf("parse Мультиигры scheme: %w", err)
+		}
+	}
+	var state games.MultiState
+	if strings.TrimSpace(stateJSON) != "" {
+		if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
+			return fmt.Errorf("parse Мультиигры state: %w", err)
+		}
+	}
+	if err := buildMultiDetailedSheet(f, &scheme, &state); err != nil {
+		return err
+	}
+	return buildMultiResultsSheet(f, &scheme, schemeJSON, stateJSON, &state)
+}
+
+func buildMultiDetailedSheet(f *excelize.File, scheme *games.MultiScheme, state *games.MultiState) error {
+	const sheet = "Подробно"
+	f.SetSheetName("Sheet1", sheet)
+	if err := setRow(f, sheet, 1, []interface{}{"Команда", "Итог"}); err != nil {
+		return err
+	}
+	_ = f.MergeCell(sheet, "A1", "A2")
+	_ = f.MergeCell(sheet, "B1", "B2")
+
+	// Two header rows, as КСИ's: the мини-игра merged across its block, and
+	// beneath it each задание's номинал — the top of its declared domain.
+	col := 3
+	for _, game := range scheme.Minigames {
+		left, _ := excelize.CoordinatesToCellName(col, 1)
+		right, _ := excelize.CoordinatesToCellName(col+len(game.Columns), 1)
+		_ = f.SetCellValue(sheet, left, game.Name)
+		_ = f.MergeCell(sheet, left, right)
+		sub := make([]interface{}, 0, len(game.Columns)+1)
+		for _, column := range game.Columns {
+			sub = append(sub, column.Max())
+		}
+		sub = append(sub, "Σ")
+		if err := setRowAt(f, sheet, 2, col, sub); err != nil {
+			return err
+		}
+		col += len(game.Columns) + 1
+	}
+
+	row := 3
+	for p := range state.Participants {
+		if games.KSIParticipantDeclined(state.Declined, state.Participants[p]) {
+			continue
+		}
+		total := 0
+		cells := []interface{}{participantExportName(state.Participants, p), nil}
+		for g, game := range scheme.Minigames {
+			subtotal := 0
+			for c := range game.Columns {
+				value := multiExportCell(state, g, p, c)
+				subtotal += value
+				cells = append(cells, value)
+			}
+			total += subtotal
+			cells = append(cells, subtotal)
+		}
+		cells[1] = total
+		if err := setRow(f, sheet, row, cells); err != nil {
+			return err
+		}
+		row++
+	}
+	return nil
+}
+
+func multiExportCell(state *games.MultiState, game, participant, column int) int {
+	if game >= len(state.Games) {
+		return 0
+	}
+	rows := state.Games[game].Cells
+	if participant >= len(rows) || column >= len(rows[participant]) {
+		return 0
+	}
+	return rows[participant][column]
+}
+
+func buildMultiResultsSheet(f *excelize.File, scheme *games.MultiScheme, schemeJSON, stateJSON string,
+	state *games.MultiState) error {
+	sheet := uniqueSheetName(f, "Итог")
+	if _, err := f.NewSheet(sheet); err != nil {
+		return err
+	}
+	signed := games.MultiSigned(scheme.Minigames)
+	header := []interface{}{"Место", "Команда", "Итог"}
+	if signed {
+		header = append(header, "Σ+")
+	}
+	for _, game := range scheme.Minigames {
+		header = append(header, game.Name)
+	}
+	if err := setRow(f, sheet, 1, header); err != nil {
+		return err
+	}
+
+	ranked, err := games.ComputeMultiResults(schemeJSON, stateJSON)
+	if err != nil {
+		return err
+	}
+	for i := 0; i < len(ranked); {
+		j := i
+		for j+1 < len(ranked) && ranked[j+1].Place == ranked[i].Place {
+			j++
+		}
+		place := strconv.Itoa(i + 1)
+		if j > i {
+			place = fmt.Sprintf("%d–%d", i+1, j+1)
+		}
+		for k := i; k <= j; k++ {
+			cells := []interface{}{place, participantExportName(state.Participants, ranked[k].Index), ranked[k].Total}
+			if signed {
+				cells = append(cells, ranked[k].Plus)
+			}
+			for _, subtotal := range ranked[k].Games {
+				cells = append(cells, subtotal)
+			}
+			if err := setRow(f, sheet, 2+k, cells); err != nil {
+				return err
+			}
+		}
+		i = j + 1
+	}
+	return nil
+}
+
+// --- Тройка: one sheet per stage ----------------------------------------------
+
+// BuildTroikaSheets writes a sheet per stage: every бой of it as two blocks of
+// three chair rows across темы of three вопросы, and the Σ each side took.
+func BuildTroikaSheets(f *excelize.File, stages []store.StageMatches) error {
+	if len(stages) == 0 {
+		return nil
+	}
+	first := true
+	for _, stage := range stages {
+		if len(stage.Matches) == 0 {
+			continue
+		}
+		name := uniqueSheetName(f, sanitizeSheetName(stage.Matches[0].StageTitle))
+		if first {
+			f.SetSheetName("Sheet1", name)
+			first = false
+		} else if _, err := f.NewSheet(name); err != nil {
+			return err
+		}
+		row := 1
+		for _, match := range stage.Matches {
+			next, err := writeTroikaMatch(f, name, row, match)
+			if err != nil {
+				return err
+			}
+			row = next + 1 // a blank line between бои
+		}
+	}
+	return nil
+}
+
+func writeTroikaMatch(f *excelize.File, sheet string, row int, match store.MatchView) (int, error) {
+	var state games.TroikaState
+	if len(match.State) > 0 {
+		if err := json.Unmarshal(match.State, &state); err != nil {
+			return row, fmt.Errorf("parse Тройка state of %s: %w", match.Code, err)
+		}
+	}
+	if err := setRow(f, sheet, row, []interface{}{match.Title}); err != nil {
+		return row, err
+	}
+	row++
+
+	header := []interface{}{"Команда", "Кресло"}
+	for t := range state.Values {
+		for q := 1; q <= games.TroikaThemeQuestions; q++ {
+			header = append(header, fmt.Sprintf("Т%d.%d", t+1, q))
+		}
+	}
+	header = append(header, "Σ")
+	if err := setRow(f, sheet, row, header); err != nil {
+		return row, err
+	}
+	row++
+
+	results, err := games.ComputeTroikaResults(string(match.State))
+	if err != nil {
+		return row, err
+	}
+	for side := range state.Sides {
+		for chair := 0; chair < games.TroikaChairs; chair++ {
+			cells := []interface{}{nil, chair + 1}
+			if chair == 0 {
+				cells[0] = troikaSideName(match, side)
+			}
+			for t := range state.Values {
+				for q := 0; q < games.TroikaThemeQuestions; q++ {
+					cells = append(cells, troikaMarkText(state, side, t, q, chair))
+				}
+			}
+			if chair == 0 && side < len(results) {
+				cells = append(cells, results[side].Total)
+			}
+			if err := setRow(f, sheet, row, cells); err != nil {
+				return row, err
+			}
+			row++
+		}
+	}
+	return row, nil
+}
+
+func troikaSideName(match store.MatchView, side int) string {
+	if side < len(match.Participants) {
+		if name := strings.TrimSpace(match.Participants[side].Name); name != "" {
+			return name
+		}
+	}
+	return fmt.Sprintf("Команда %d", side+1)
+}
+
+func troikaMarkText(state games.TroikaState, side, theme, question, chair int) interface{} {
+	if side >= len(state.Sides) || theme >= len(state.Sides[side].Themes) {
+		return nil
+	}
+	answers := state.Sides[side].Themes[theme].Answers
+	if question >= len(answers) || chair >= len(answers[question]) {
+		return nil
+	}
+	switch answers[question][chair] {
+	case "right":
+		return "+"
+	case "wrong":
+		return "−"
+	}
+	return nil
+}

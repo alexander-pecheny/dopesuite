@@ -304,7 +304,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
   box.appendChild(head);
 
   const table = document.createElement("table");
-  table.className = "score-table troika-sheet";
+  table.className = "match-table troika-sheet";
 
   const thead = document.createElement("thead");
   const themeRow = document.createElement("tr");
