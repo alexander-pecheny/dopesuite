@@ -97,5 +97,13 @@ The forgiving comparison a search matches by, so that a stress mark, a non-break
 **Occurrence**:
 One matched span in one Card's 4s — the unit an editor ticks before a replacement runs, because «г.» in «г. Москва» and «г.» in «1917 г.» are two different decisions.
 
+**Board Bundle**:
+A whole Board as one plaintext zip — `board.json` plus the attachment files —
+made and read entirely in the browser, for moving a Board to another xy
+instance (ADR-0013). Importing one always creates a new Board under a fresh
+key; per-user state (mentions, read watermarks) and Tombstones stay behind,
+and members ride along as advisory names only.
+_Avoid_: backup (that is litestream's job), sync (a Bundle never merges)
+
 **Tombstone**:
 Any deleted entity during its 14-day grace period: hidden from the app and from quota, restorable on request. After 14 days it is reaped — permanently destroyed, including attachment bytes.

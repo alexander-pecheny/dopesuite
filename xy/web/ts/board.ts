@@ -13,6 +13,7 @@ import { createHandoutsPanel } from "./handouts.js";
 import { createMassPanel } from "./masspanel.js";
 import { createLabelsEditor, sortLabels } from "./labelsedit.js";
 import { createTesterList } from "./testerlist.js";
+import { createBundleExportPanel } from "./bundleexport.js";
 import { createAuthorCountPanel } from "./authorcount.js";
 import { xyApp, xySizes } from "./app.js";
 import { xyCrypto } from "./crypto.js";
@@ -1276,6 +1277,7 @@ registerPanel(
   rewrites.fixTrello,
   createReplacePanel(board, rewrites),
   rewrites.typograph,
+  createBundleExportPanel(board, shell),
   {
     id: "forget-password", menu: "board", icon: "lock", label: "Забыть пароль доски", title: "Забыть пароль доски на этом устройстве",
     open: async () => {
