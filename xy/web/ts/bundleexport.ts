@@ -124,9 +124,7 @@ export function createBundleExportPanel(board: Board, shell: PanelShell): BoardP
           "Архив содержит всю доску: списки, карточки, метки, тесты, комментарии, ",
           "историю правок и вложения. Его можно импортировать на другом сервере xy ",
           "(страница «Импорт»)."),
-        el("p", { class: "hint hint-danger" },
-          "Файл НЕ зашифрован: внутри — расшифрованное содержимое доски. ",
-          "Храните его как пароль."),
+        el("p", { class: "hint hint-danger" }, "Этот файл НЕ зашифрован."),
         btn, status);
       btn.addEventListener("click", async () => {
         btn.disabled = true;
