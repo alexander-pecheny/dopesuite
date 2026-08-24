@@ -78,13 +78,15 @@ func IsIndividual(code string) bool {
 // registry is the single source of truth for known game types. Iteration order
 // is never relied upon; look-ups go through the helpers below.
 var registry = map[string]Definition{
-	EK:     {Code: EK, Label: "ЭК", Page: "static/ek.html", Init: InitEK},
-	OD:     {Code: OD, Label: "ЧГК", Page: "static/od.html"},
-	KSI:    {Code: KSI, Label: "КСИ", Page: "static/si.html"},
-	SI:     {Code: SI, Label: "Личная СИ", Individual: true, Page: "static/ek.html", Init: InitEK},
-	Brain:  {Code: Brain, Label: "Брейн", Page: "static/brain.html"},
-	Multi:  {Code: Multi, Label: "Мультиигры", Page: "static/multi.html"},
-	Troika: {Code: Troika, Label: "Тройка", Page: "static/troika.html", Init: InitEK},
+	EK:    {Code: EK, Label: "ЭК", Page: "static/ek.html", Init: InitEK},
+	OD:    {Code: OD, Label: "ЧГК", Page: "static/od.html"},
+	KSI:   {Code: KSI, Label: "КСИ", Page: "static/si.html"},
+	SI:    {Code: SI, Label: "Личная СИ", Individual: true, Page: "static/ek.html", Init: InitEK},
+	Brain: {Code: Brain, Label: "Брейн", Page: "static/brain.html"},
+	Multi: {Code: Multi, Label: "Мультиигры", Page: "static/multi.html"},
+	// Тройка plays a bracket of бои, as брейн does, and boots the same payload:
+	// its page fetches the бои itself and draws them its own way.
+	Troika: {Code: Troika, Label: "Тройка", Page: "static/troika.html"},
 }
 
 // Label returns the short display label for a game type, falling back to the

@@ -19,7 +19,7 @@ func TestPageOfEveryGameType(t *testing.T) {
 		// Мультиигры is a flat game like КСИ; Тройка plays a bracket, so it
 		// boots the bracket init on a page of its own.
 		{Multi, "static/multi.html", InitGame},
-		{Troika, "static/troika.html", InitEK},
+		{Troika, "static/troika.html", InitGame},
 		// An unknown or empty type falls back to the default format's page.
 		{"", "static/ek.html", InitEK},
 		{"kvrm", "static/ek.html", InitEK},
