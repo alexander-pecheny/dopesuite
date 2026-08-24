@@ -118,5 +118,15 @@ Board it appends. Per-user state (mentions, read watermarks) and Tombstones stay
 behind, and members ride along as advisory names only.
 _Avoid_: backup (that is litestream's job), Board Bundle (it need not hold one)
 
+**API Token**:
+A month-lived, revocable credential that acts as the user (ADR-0015): minted at
+/profile/tokens, shown once, and accepted on every API route a session cookie
+reaches but three — the password, the username and /admin. It authorizes; it
+decrypts nothing, so what it can reach is ciphertext plus the plaintext Board
+names. Changing the account password revokes every one of them at once, which
+is the answer to a leaked one.
+_Avoid_: API key (there is no key/secret pair — the `key` param of the
+Trello-compatible API is ignored), password
+
 **Tombstone**:
 Any deleted entity during its 14-day grace period: hidden from the app and from quota, restorable on request. After 14 days it is reaped — permanently destroyed, including attachment bytes.

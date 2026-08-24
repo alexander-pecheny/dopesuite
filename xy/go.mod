@@ -5,7 +5,9 @@ go 1.26.4
 require (
 	github.com/pdfcpu/pdfcpu v0.13.0
 	github.com/tetratelabs/wazero v1.12.0
+	golang.org/x/crypto v0.52.0
 	golang.org/x/image v0.43.0
+	golang.org/x/term v0.45.0
 	golang.org/x/text v0.38.0
 	modernc.org/sqlite v1.50.0
 )
@@ -13,7 +15,6 @@ require (
 require (
 	github.com/tdewolff/minify/v2 v2.24.17 // indirect
 	github.com/tdewolff/parse/v2 v2.8.16 // indirect
-	golang.org/x/crypto v0.52.0 // indirect
 )
 
 require (

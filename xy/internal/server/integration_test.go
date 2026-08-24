@@ -48,6 +48,9 @@ type apiClient struct {
 	t    *testing.T
 	base string
 	jar  []*http.Cookie
+	// bearer, when set, authenticates with an API token instead of the cookie
+	// jar (see apitoken_test.go).
+	bearer string
 }
 
 func (c *apiClient) do(method, path string, body any) *http.Response {
@@ -64,6 +67,9 @@ func (c *apiClient) do(method, path string, body any) *http.Response {
 		c.t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if c.bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+c.bearer)
+	}
 	for _, ck := range c.jar {
 		req.AddCookie(ck)
 	}

@@ -65,6 +65,16 @@ cmd/telegram-bot/      login bot: env + xy's words around dopecore/tgbot.LoginHa
                        server can ask whether telegram login is worth offering — the answer is
                        about POLLING, not the process: a bot with a revoked token is up and useless
 cmd/uic/               compile one .dopeui page to HTML on stdout (xy overlay; debug/diff tool)
+cmd/xy-cli/            thin main() → xycli.Run(); `just cli` builds it to ~/.local/bin
+internal/xycli/        xy-cli: the board from the shell, for an agent. A second implementation
+                       of the Envelope (scrypt KEK + AES-GCM, parity-tested both ways against
+                       crypto.ts) and of the export's 4s assembly (parity corpus from export.ts),
+                       over an API-token client (ADR-0015); unlocked data keys live in a 0600
+                       state file (ADR-0016). Commands: boards/unlock, board show, list, card
+                       (4s on stdin/stdout, always with a desc_edit entry), comment (@mentions
+                       resolved), label, search (folded), source, export, attachment
+internal/rank/         fractional indexing (keyBetween/After), the Go half of web/ts/rank.ts:
+                       the server ranks a Trello upload with it, xy-cli every insert and move
 internal/ui/           xy's overlay on DopeUIKit's kit: overlay vocab.json (xy primitives +
                        enum extensions), expand.go (checkbox/editor overrides + xy
                        primitives + mount kinds), app.go (builds the xy App via kit.NewApp
@@ -102,9 +112,11 @@ internal/server/       package server — the whole HTTP server
                        attachment reads (ciphertext) for the export, board-level timeline
                        import (all event kinds, authors matched by username, src→new id map
                        returned so batches chain) for the re-encrypting importer
-  tokens.go            API tokens: month-lived bearer creds (manage at /profile/tokens)
+  tokens.go            API tokens: month-lived bearer creds (manage at /profile/tokens). A token
+                       IS the user on every route but the password, the username and /admin
+                       (ADR-0015, auth.go: bearerToken/lookupAPIToken/requireCookieUser); changing
+                       the password revokes every token and every other session
   trello_compat.go     Trello-compatible API for chgksuite (token-authed via key+token)
-  rank.go              server-side fractional-index keyAfter (Trello card upload)
   invite.go            invite minting (subcommand)
   admin.go             /admin + /admin/create_users (gated on XY_ADMIN_USER, default "pecheny"); the create-users body is kit.AdminCreateUsers, xy wraps its chrome
   export.go            POST /api/export/{docx,pdf} — one 4s source + images, exported two ways, both fully
@@ -535,6 +547,7 @@ just build-wasm     # compile typst → internal/chgk/typstwasm/typst.wasm (need
 just build          # the app (pure Go; embeds the wasm above)
 just dev-web-only   # server only (assets hot-read from disk)
 just dev            # server + bot
+just cli            # xy-cli → ~/.local/bin (the board from the shell; .claude/skills/xy-cli)
 just invite 7       # mint a registration invite
 # bootstrap a password account (registration is otherwise telegram-only):
 printf '<password>' | XY_DB=… xy-server adduser <username>   # password via stdin
