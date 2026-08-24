@@ -12,6 +12,7 @@ const HNDT_RESERVED = new Set([
   "image", "for_question", "columns", "rows", "resize_image", "font_size",
   "font_family", "no_center", "raw_tex", "color", "handouts_per_team",
   "grouping", "rotate", "tikz_mm", "hspace", "vspace", "max_width",
+  "question_label",
 ]);
 const HNDT_DEFAULT_META = "columns: 3";
 

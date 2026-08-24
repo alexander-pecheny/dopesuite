@@ -85,6 +85,4 @@
 // so a handout carries its question number after it is cut out.
 #let clabel(body) = text(fill: gray, size: 9pt, body)
 
-#qlabel[Раздаточный материал к вопросу 7]
-
-#handout(6, 1, 2, 1, 1.5mm, 32.5mm, 2mm, 5.927mm, true, true, text(size: 14pt)[Команде])
+#handout(3, 1, 3, 1, 1.5mm, 66.0mm, 2mm, 5.927mm, true, true, stack(dir: ttb, spacing: 1mm, clabel[Вопрос 110], text(size: 14pt)[Раздатка с номером внутри]))

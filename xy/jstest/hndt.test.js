@@ -36,3 +36,8 @@ test("parseHndtMetaByQuestion strips content, keeps settings by question", () =>
   assert.equal(m["1"], "columns: 2\nrows: 3");
   assert.equal(m["4"], "columns: 3");
 });
+
+test("parseHndtMetaByQuestion keeps question_label, so the style survives the modal", () => {
+  const hndt = "for_question: 1\ncolumns: 3\nquestion_label: inside\n\nтекст";
+  assert.equal(parseHndtMetaByQuestion(hndt)["1"], "columns: 3\nquestion_label: inside");
+});
