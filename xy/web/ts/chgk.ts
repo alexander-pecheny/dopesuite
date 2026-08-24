@@ -31,6 +31,12 @@ function matchMarker(line: string): { type: MarkerType; rest: string } | null {
 
 const MARKER_SET = new Set<string>(MARKERS.map(([m]) => m));
 
+// startsBlock reports whether a line opens a new 4s element rather than
+// continuing the one before it.
+export function startsBlock(line: string): boolean {
+  return matchMarker(line) !== null;
+}
+
 // splitMarker cuts a 4s line into its leading marker (with the whitespace that
 // follows it) and the text after — the port of fsource.SplitMarker, and the
 // vocabulary lives here, so callers that must not touch a marker (the typography
@@ -1179,7 +1185,7 @@ export function composeFields(f: Partial<CardFields>): string {
 }
 
 export const xyChgk = {
-  parseBlocks, splitMarker, numberDirective, questionText, answerText, blockText, previewText, imgName, imgRefs, imageRefs,
+  parseBlocks, splitMarker, startsBlock, numberDirective, questionText, answerText, blockText, previewText, imgName, imgRefs, imageRefs,
   isZeroNumber, numberQuestionCards,
   removeAccents, removeSquareBrackets, screenText, parse4sElem,
   printRuns, renderRuns, splitList, applyOverride, replaceNoBreak,

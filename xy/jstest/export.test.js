@@ -26,6 +26,28 @@ test("exportSource is the cards' 4s in order, blank-line separated, empty cards 
   assert.equal(exportSource(cards), "? Раз\n! А\n\n? Два (img pic.png)\n! Б\n");
 });
 
+// 4s ends an element at a blank line and drops what follows; xy's editor lets one
+// stand inside a question. See fsource.TestBlankLineEndsElement for the parser side.
+test("a blank line inside a field becomes (LINEBREAK), so the rest of it survives 4s", () => {
+  const c = [{ id: 9, listId: 1, kind: "question", rank: "a", desc: "? Первый абзац\n\nВторой абзац\n! А" }];
+  assert.equal(exportSource(c), "? Первый абзац(LINEBREAK)\nВторой абзац\n! А\n");
+});
+
+test("a run of blank lines keeps its height: one (LINEBREAK) each", () => {
+  const c = [{ id: 9, listId: 1, kind: "question", rank: "a", desc: "? А\n\n\nБ\n! О" }];
+  assert.equal(exportSource(c), "? А(LINEBREAK)(LINEBREAK)\nБ\n! О\n");
+});
+
+test("a list item is not a marker: the blank line before it still folds", () => {
+  const c = [{ id: 9, listId: 1, kind: "question", rank: "a", desc: "? Вопрос:\n\n- раз\n- два\n! О" }];
+  assert.equal(exportSource(c), "? Вопрос:(LINEBREAK)\n- раз\n- два\n! О\n");
+});
+
+test("a blank line before a marker just goes — the field after it stays in the question", () => {
+  const c = [{ id: 9, listId: 1, kind: "question", rank: "a", desc: "? Вопрос\n! Ответ\n\n^ Источник" }];
+  assert.equal(exportSource(c), "? Вопрос\n! Ответ\n^ Источник\n");
+});
+
 test("offline, only the .4s is offered and it downloads without the network", async () => {
   online = false;
   const panel = createExportPanel(fakeBoard(), { appendImages: async () => new Set() });

@@ -23,7 +23,25 @@ const { byId, errMsg, downloadBlob } = xyApp;
 // string, which is why the versions are folded back into one question block here
 // and nowhere else — a versioned card is still one numbered question.
 export function exportSource(cards: ReadonlyArray<BoardCard>): string {
-  return cards.map((c) => xyVersions.composeVersions(c.desc).trim()).filter(Boolean).join("\n\n") + "\n";
+  return cards.map((c) => foldBlankLines(xyVersions.composeVersions(c.desc).trim())).filter(Boolean).join("\n\n") + "\n";
+}
+
+// A blank line inside a card is xy's own liberty: to 4s it ends the element, so
+// everything past it — the rest of the question, and any field after it — falls
+// out of the docx. Each one becomes chgksuite's explicit (LINEBREAK) on the end
+// of the line before, which keeps the field one element and the empty line
+// visible (the directive plus the newline the join keeps = two breaks). Before a
+// marker the blank line separates nothing that is printed, so it just goes.
+function foldBlankLines(desc: string): string {
+  const out: string[] = [];
+  let blanks = 0;
+  for (const line of desc.split("\n")) {
+    if (!line.trim()) { blanks++; continue; }
+    if (blanks && out.length && !xyChgk.startsBlock(line)) out[out.length - 1] += "(LINEBREAK)".repeat(blanks);
+    out.push(line);
+    blanks = 0;
+  }
+  return out.join("\n");
 }
 
 export function createExportPanel(board: Board, attachments: Pick<Attachments, "appendImages">): ListPanel {
