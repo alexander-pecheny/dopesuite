@@ -4642,6 +4642,11 @@ body.is-fullscreen.od-page .match-main {
   max-width: var(--team-col);
   font-weight: var(--fw-semibold);
   color: var(--text-strong);
+  /* «длинная Гриша в подготовке к дизастеру» is a real team name, and a бой
+     seats two of them beside a column of кресла. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .troika-sheet .troika-seat-label {
