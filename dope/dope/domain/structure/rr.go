@@ -19,7 +19,7 @@ type roundRobin struct{}
 func (roundRobin) Code() string { return "rr" }
 func (roundRobin) Word() string { return "roundrobin" }
 func (roundRobin) Keys() []Key {
-	return []Key{{Name: "groups"}, {Name: "group_size"}, {Name: "match_size"}, {Name: "rounds"}, {Name: "points", Cascade: true}, {Name: "slug"}}
+	return []Key{{Name: "groups"}, {Name: "group_size"}, {Name: "match_size"}, {Name: "rounds"}, {Name: "points", Cascade: true}, {Name: "metric"}, {Name: "slug"}}
 }
 
 // canonOrder is the round-robin comparator chain when a scheme names none:
@@ -63,6 +63,7 @@ func (roundRobin) Expand(b Block) (Outputs, error) {
 	if err != nil {
 		return Outputs{}, err
 	}
+	metric, _ := b.Str("metric")
 	slug, _ := b.Str("slug")
 	out := Outputs{}
 	for g := 1; g <= groups; g++ {
@@ -71,8 +72,9 @@ func (roundRobin) Expand(b Block) (Outputs, error) {
 			Code:     code,
 			Entrants: entrants[g-1],
 			Order:    order,
-			Points:   &RRPoints{Win: float64(points[0]), Draw: float64(points[1]), Loss: float64(points[2])},
+			Points:   &RRPoints{Win: points[0], Draw: points[1], Loss: points[2]},
 			Venue:    lanes.Pick(g),
+			Metric:   metric,
 			Rules:    b.Rules(),
 		}
 		if matchSize > 2 {
@@ -130,13 +132,13 @@ func blockOrder(b Block) ([]string, error) {
 	return order, nil
 }
 
-func rrPoints(b Block) ([]int, error) {
-	points, ok, err := b.IntList("points")
+func rrPoints(b Block) ([]float64, error) {
+	points, ok, err := b.NumList("points")
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
-		return []int{2, 1, 0}, nil
+		return []float64{2, 1, 0}, nil
 	}
 	if len(points) != 3 {
 		return nil, Keyf("points", "points: жду [победа, ничья, поражение]")
@@ -420,10 +422,10 @@ func rrOrder(conf RRConfig) []string {
 	if conf.Order != nil {
 		return conf.Order
 	}
-	if conf.MatchSize > 2 || !conf.Rules.Empty() {
+	if conf.MatchSize > 2 {
 		return []string{"points", "total", "plus"}
 	}
-	return []string{"points", "h2h", "taken", "diff"}
+	return canonOrder
 }
 
 // Order lists the group's keys as columns; личная встреча is a comparator
@@ -450,142 +452,8 @@ func (roundRobin) Standings(cfg json.RawMessage, results []MatchOutcome, _ Input
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil, fmt.Errorf("rr standings config: %w", err)
 	}
-	if conf.MatchSize > 2 || !conf.Rules.Empty() {
+	if conf.MatchSize > 2 {
 		return multiSeatStandings(conf, results)
 	}
-	win, draw, loss := 2.0, 1.0, 0.0
-	if conf.Points != nil {
-		win, draw, loss = conf.Points.Win, conf.Points.Draw, conf.Points.Loss
-	}
-	metric := conf.Metric
-	if metric == "" {
-		metric = "taken"
-	}
-	order := rrOrder(conf)
-
-	byParticipant := map[int64]*RankedEntry{}
-	var appearance []int64
-	entry := func(id int64) *RankedEntry {
-		if e, ok := byParticipant[id]; ok {
-			return e
-		}
-		e := &RankedEntry{Participant: id, Metrics: map[string]float64{}}
-		byParticipant[id] = e
-		appearance = append(appearance, id)
-		return e
-	}
-	for _, match := range results {
-		if len(match.Slots) != 2 {
-			continue
-		}
-		a, b := match.Slots[0], match.Slots[1]
-		if a.Participant == 0 || b.Participant == 0 {
-			continue
-		}
-		ea, eb := entry(a.Participant), entry(b.Participant)
-		scoreA, scoreB := a.Metrics[metric], b.Metrics[metric]
-		ea.Metrics["taken"] += scoreA
-		ea.Metrics["conceded"] += scoreB
-		eb.Metrics["taken"] += scoreB
-		eb.Metrics["conceded"] += scoreA
-		if match.Finished {
-			switch {
-			case a.Place < b.Place:
-				ea.Metrics["points"] += win
-				eb.Metrics["points"] += loss
-			case a.Place > b.Place:
-				ea.Metrics["points"] += loss
-				eb.Metrics["points"] += win
-			default:
-				ea.Metrics["points"] += draw
-				eb.Metrics["points"] += draw
-			}
-		}
-	}
-	ranked := make([]RankedEntry, 0, len(appearance))
-	for _, id := range appearance {
-		e := byParticipant[id]
-		e.Metrics["diff"] = e.Metrics["taken"] - e.Metrics["conceded"]
-		ranked = append(ranked, *e)
-	}
-
-	// Личная встреча needs each finished бой's point split, not just totals.
-	type duel struct {
-		a, b   int64
-		pa, pb float64
-	}
-	var duels []duel
-	for _, match := range results {
-		if !match.Finished || len(match.Slots) != 2 {
-			continue
-		}
-		a, b := match.Slots[0], match.Slots[1]
-		if a.Participant == 0 || b.Participant == 0 {
-			continue
-		}
-		switch {
-		case a.Place < b.Place:
-			duels = append(duels, duel{a.Participant, b.Participant, win, loss})
-		case a.Place > b.Place:
-			duels = append(duels, duel{a.Participant, b.Participant, loss, win})
-		default:
-			duels = append(duels, duel{a.Participant, b.Participant, draw, draw})
-		}
-	}
-
-	// Each key partitions the still-tied group; "h2h" is relative to that
-	// group — the points the tied teams took in their бои against each other.
-	// Keys are consumed in order and never re-applied to later sub-ties, so a
-	// still-tied pair inside a mini-table falls through to the next key.
-	seats := make([]int, len(ranked))
-	for i := range seats {
-		seats[i] = i
-	}
-	tieGroup := make([]int, len(ranked))
-	groupSeq := 0
-	var arrange func(ids []int, keyIdx int)
-	arrange = func(ids []int, keyIdx int) {
-		if len(ids) < 2 || keyIdx >= len(order) {
-			groupSeq++
-			for _, i := range ids {
-				tieGroup[i] = groupSeq
-			}
-			return
-		}
-		val := func(i int) float64 { return ranked[i].Metrics[order[keyIdx]] }
-		if order[keyIdx] == "h2h" {
-			tied := make(map[int64]bool, len(ids))
-			for _, i := range ids {
-				tied[ranked[i].Participant] = true
-			}
-			sub := map[int64]float64{}
-			for _, d := range duels {
-				if tied[d.a] && tied[d.b] {
-					sub[d.a] += d.pa
-					sub[d.b] += d.pb
-				}
-			}
-			val = func(i int) float64 { return sub[ranked[i].Participant] }
-		}
-		sort.SliceStable(ids, func(x, y int) bool { return val(ids[x]) > val(ids[y]) })
-		start := 0
-		for end := 1; end <= len(ids); end++ {
-			if end == len(ids) || val(ids[end]) != val(ids[start]) {
-				arrange(ids[start:end], keyIdx+1)
-				start = end
-			}
-		}
-	}
-	arrange(seats, 0)
-
-	out := make([]RankedEntry, len(ranked))
-	for pos, i := range seats {
-		out[pos] = ranked[i]
-		if pos > 0 && tieGroup[i] == tieGroup[seats[pos-1]] {
-			out[pos].Rank = out[pos-1].Rank
-		} else {
-			out[pos].Rank = pos + 1
-		}
-	}
-	return out, nil
+	return duelStandings(Duel{Points: conf.Points, Metric: conf.Metric, Order: rrOrder(conf), Rules: conf.Rules}, results)
 }

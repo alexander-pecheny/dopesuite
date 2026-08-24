@@ -45,6 +45,7 @@ type Block interface {
 	Bool(key string) (bool, bool)
 	Str(key string) (string, bool)
 	IntList(key string) ([]int, bool, error)
+	NumList(key string) ([]float64, bool, error)
 	Rounds(names []string) error // the Round names the Kind generates (none: it has no addressable Rounds); a dotted key naming another is refused
 
 	Sorting() ([]store.SortRule, bool, error)

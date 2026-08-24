@@ -52,6 +52,20 @@ func (b *blockHandle) IntList(key string) ([]int, bool, error) {
 	return nil, false, nil
 }
 
+func (b *blockHandle) NumList(key string) ([]float64, bool, error) {
+	sections := []Section{b.blk}
+	if b.keys[key].Cascade {
+		sections = append(sections, b.c.doc.Defaults)
+	}
+	for _, section := range sections {
+		v, ok, err := section.NumList(key)
+		if err != nil || ok {
+			return v, ok, err
+		}
+	}
+	return nil, false, nil
+}
+
 func (b *blockHandle) Rounds(names []string) error {
 	if len(names) == 0 {
 		if _, round := blockReseedSpec(b.blk); round != "" {
@@ -78,7 +92,7 @@ func sortRules(section Section) ([]store.SortRule, bool, error) {
 	return rules, true, nil
 }
 
-func (b *blockHandle) Rankable(ranker string) map[string]bool { return b.c.rankable(ranker) }
+func (b *blockHandle) Rankable(ranker string) map[string]bool { return b.c.rankable(ranker, b.blk) }
 func (b *blockHandle) Rules() *structure.Rules                { return b.rules }
 func (b *blockHandle) Reseed() (bool, string)                 { return blockReseedSpec(b.blk) }
 func (b *blockHandle) Proceeding() (int, bool)                { return b.blk.Int("proceeding_participants") }

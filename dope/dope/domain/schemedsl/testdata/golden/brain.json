@@ -4618,7 +4618,7 @@
    "code": "s5-final",
    "title": "Финальный этап. Финал",
    "stage_type": "matches",
-   "kind": "matches",
+   "kind": "series",
    "position": 28,
    "grain": {
     "block": "s5",
@@ -4702,6 +4702,11 @@
    "sources": null,
    "sort": null,
    "config": {
+    "points": {
+     "draw": 1,
+     "loss": 0,
+     "win": 2
+    },
     "questions": 5
    },
    "layout": null

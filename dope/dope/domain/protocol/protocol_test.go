@@ -57,7 +57,7 @@ func TestEveryProtocolDeclaresWhatItWrites(t *testing.T) {
 			t.Fatalf("%s: not registered", code)
 		}
 		declared := map[string]bool{}
-		for _, name := range p.Metrics() {
+		for _, name := range p.Metrics(nil) {
 			declared[name] = true
 		}
 		outcomes, err := p.Score(json.RawMessage("{}"), json.RawMessage(state))

@@ -91,9 +91,13 @@ var ascendingMetrics = map[string]bool{"place_sum": true, "draw": true, "place":
 // rankable is everything a stage of this Kind may sort by in this game: what
 // the Protocol declares, what the Kind's Ranker adds, and what the scheme's own
 // scoring rules define.
-func (c *compiler) rankable(kind string) map[string]bool {
+func (c *compiler) rankable(kind string, blk Section) map[string]bool {
 	names := map[string]bool{}
-	for _, name := range protocol.Metrics(c.in.GameType) {
+	cfg, err := json.Marshal(c.protocolConfig(blk, nil))
+	if err != nil {
+		cfg = nil
+	}
+	for _, name := range protocol.Metrics(c.in.GameType, cfg) {
 		names[name] = true
 	}
 	for _, name := range structure.RankerMetrics(kind) {
@@ -579,7 +583,7 @@ func (c *compiler) reseedSortRules(blk Section) ([]store.SchemeSortRule, error) 
 	if !ok {
 		rules = []store.SchemeSortRule{{Metric: "place_sum", Dir: "asc"}, {Metric: "taken", Dir: "desc"}}
 	}
-	known := c.rankable("reseed")
+	known := c.rankable("reseed", blk)
 	for _, token := range tokens {
 		if !known[token.Metric] {
 			return nil, errAt(blk.Line, "sorting: %s не считается на пересеве — ни протокол, ни правила подсчёта такой метрики не дают (есть %s)",

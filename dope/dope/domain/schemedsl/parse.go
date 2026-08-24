@@ -233,6 +233,25 @@ func (s Section) IntList(key string) ([]int, bool, error) {
 	return nums, true, nil
 }
 
+// NumList parses a list that may carry fractions — `points: [1, 0.5, 0]`,
+// which is what a format paying half a балл for a ничья writes.
+func (s Section) NumList(key string) ([]float64, bool, error) {
+	items, ok, err := s.List(key)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	v, _ := s.value(key)
+	nums := make([]float64, len(items))
+	for i, item := range items {
+		n, err := strconv.ParseFloat(item, 64)
+		if err != nil {
+			return nil, true, errAt(v.Line, "%s: %q — не число", key, item)
+		}
+		nums[i] = n
+	}
+	return nums, true, nil
+}
+
 // Sorting parses comparator tokens with optional asc/desc suffixes.
 func (s Section) Sorting(key string) ([]SortRule, bool, error) {
 	items, ok, err := s.List(key)

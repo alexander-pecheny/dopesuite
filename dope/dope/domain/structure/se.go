@@ -18,7 +18,7 @@ type singleElim struct{}
 func (singleElim) Code() string { return "se" }
 func (singleElim) Word() string { return "single_elimination" }
 func (singleElim) Keys() []Key {
-	return []Key{{Name: "participants"}, {Name: "match_size", Round: true}, {Name: "winning_places"}, {Name: "rounds"}, {Name: "bronze"}, {Name: "best_of", Round: true}}
+	return []Key{{Name: "participants"}, {Name: "match_size", Round: true}, {Name: "winning_places"}, {Name: "rounds"}, {Name: "bronze"}, {Name: "best_of", Round: true}, {Name: "points", Cascade: true}, {Name: "metric"}}
 }
 
 func seRoundTitle(remaining int) string {
@@ -61,11 +61,12 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 		return Outputs{}, fmt.Errorf("single_elimination: %s", err)
 	}
 	bronze, _ := b.Bool("bronze")
+	directBronze, hasDirect := seDirectBronze(b, participants, bronze)
 	rounds := []string{}
 	for i, r := range plan {
 		rounds = append(rounds, elimRoundNames(r, i, winning)...)
 	}
-	if bronze && participants >= 4 {
+	if bronze && (participants >= 4 || hasDirect) {
 		rounds = append(rounds, "bronze")
 	}
 	if err := b.Rounds(rounds); err != nil {
@@ -120,7 +121,7 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 		} else {
 			for _, name := range names {
 				if _, ok := b.Int("best_of." + name); ok {
-					return Outputs{}, Keyf("best_of."+name, "best_of: серия возможна только в финале")
+					return Outputs{}, Keyf("best_of."+name, "best_of: серия возможна только в финале или матче за 3-е место")
 				}
 			}
 		}
@@ -184,9 +185,18 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 		}
 		// The bronze бой is played before the final, so its stage stands before
 		// the final's: the Сетка draws it first, and it deals its буква first.
-		if round.terminal && bronze && len(semifinalCodes) == 2 {
-			if err := appendBronze(b, semifinalCodes, roundIndex+1); err != nil {
-				return Outputs{}, err
+		if round.terminal && bronze {
+			var pair []store.SchemeSlot
+			switch {
+			case hasDirect:
+				pair = directBronze
+			case len(semifinalCodes) == 2:
+				pair = []store.SchemeSlot{FromMatch(semifinalCodes[0], 2), FromMatch(semifinalCodes[1], 2)}
+			}
+			if pair != nil {
+				if err := appendBronze(b, pair, roundIndex+1); err != nil {
+					return Outputs{}, err
+				}
 			}
 		}
 		if bestOf > 1 {
@@ -202,8 +212,12 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 					Slots:            base.Slots,
 				}
 			}
-			if _, err := b.Emit(Stage{Code: stageCode, Title: b.RoundTitle(names, elimRoundTitle(round, roundIndex, winning)), Kind: "matches",
-				Rounds: names, At: At{Round: roundIndex + 1}, Matches: series}); err != nil {
+			cfg, err := seSeriesConfig(b)
+			if err != nil {
+				return Outputs{}, err
+			}
+			if _, err := b.Emit(Stage{Code: stageCode, Title: b.RoundTitle(names, elimRoundTitle(round, roundIndex, winning)), Kind: "series",
+				Rounds: names, At: At{Round: roundIndex + 1}, Matches: series, Config: cfg}); err != nil {
 				return Outputs{}, err
 			}
 			seriesFinal = true
@@ -245,26 +259,98 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 	}}}, nil
 }
 
-// appendBronze emits the third-place бой between the two semifinal losers.
-func appendBronze(b Block, semifinalCodes []string, round int) error {
+// appendBronze emits the матч за 3-е место between the pair the block hands
+// it — the semifinal losers, or the places below the finalists out of the
+// incoming Edge — as one бой or, with best_of.bronze, as a series.
+func appendBronze(b Block, pair []store.SchemeSlot, round int) error {
 	stageCode := b.Code() + "-bronze"
 	lanes, err := b.Venues("bronze")
 	if err != nil {
 		return err
 	}
-	matches := []store.SchemeMatch{{
-		Code:             stageCode + "-m1",
-		Title:            "Матч за 3-е место",
-		Venue:            lanes.Pick(1),
-		ParticipantCount: 2,
-		Slots: []store.SchemeSlot{
-			FromMatch(semifinalCodes[0], 2),
-			FromMatch(semifinalCodes[1], 2),
-		},
-	}}
-	_, err = b.Emit(Stage{Code: stageCode, Title: b.RoundTitle([]string{"bronze"}, "Матч за 3-е место"), Kind: "matches",
-		Rounds: []string{"bronze"}, At: At{Round: round}, Matches: matches})
+	bouts := 1
+	if v, ok := b.Int("best_of.bronze"); ok {
+		if v < 3 || v%2 == 0 {
+			return Keyf("best_of.bronze", "best_of: серия играется до большинства побед — нечётное число боёв от 3")
+		}
+		bouts = v
+	}
+	title := func(k int) string {
+		if bouts == 1 {
+			return "Матч за 3-е место"
+		}
+		return fmt.Sprintf("Матч за 3-е место. Бой %d", k)
+	}
+	matches := make([]store.SchemeMatch, bouts)
+	for k := 1; k <= bouts; k++ {
+		matches[k-1] = store.SchemeMatch{
+			Code:             fmt.Sprintf("%s-m%d", stageCode, k),
+			Title:            title(k),
+			Venue:            lanes.Pick(1),
+			ParticipantCount: 2,
+			Slots:            pair,
+		}
+	}
+	stage := Stage{Code: stageCode, Title: b.RoundTitle([]string{"bronze"}, "Матч за 3-е место"), Kind: "matches",
+		Rounds: []string{"bronze"}, At: At{Round: round}, Matches: matches}
+	if bouts > 1 {
+		cfg, err := seSeriesConfig(b)
+		if err != nil {
+			return err
+		}
+		stage.Kind, stage.Config = "series", cfg
+	}
+	_, err = b.Emit(stage)
 	return err
+}
+
+// seSeriesConfig is how a series is ranked: the block's own очки, score metric,
+// comparators and scoring rules, exactly as a группа's table reads them.
+func seSeriesConfig(b Block) (SeriesConfig, error) {
+	points, err := rrPoints(b)
+	if err != nil {
+		return SeriesConfig{}, err
+	}
+	cfg := SeriesConfig{
+		Points: &RRPoints{Win: points[0], Draw: points[1], Loss: points[2]},
+		Rules:  b.Rules(),
+	}
+	cfg.Metric, _ = b.Str("metric")
+	order, ok, err := b.Sorting()
+	if err != nil {
+		return SeriesConfig{}, err
+	}
+	if !ok {
+		if order, ok, err = b.DefaultSorting(); err != nil {
+			return SeriesConfig{}, err
+		}
+	}
+	if ok {
+		known := b.Rankable("series")
+		for _, rule := range order {
+			if !known[rule.Metric] {
+				return SeriesConfig{}, UnrankableMetric(rule.Metric, known)
+			}
+			cfg.Order = append(cfg.Order, rule.Metric)
+		}
+	}
+	return cfg, nil
+}
+
+// seDirectBronze is the bronze pair of a bracket with no semifinal to lose:
+// the block is seeded straight into its final, so the матч за 3-е место takes
+// the place below the finalists out of every source Group. Троечка's
+// «победители групп выходят в финал, а команды, занявшие 2-е места, выходят в
+// матч за 3-е место».
+func seDirectBronze(b Block, participants int, bronze bool) ([]store.SchemeSlot, bool) {
+	if !bronze || participants != 2 || b.First() {
+		return nil, false
+	}
+	prev, ok := b.Prev()
+	if !ok || prev.Proceeding != 2 || len(prev.Groups) != 2 {
+		return nil, false
+	}
+	return []store.SchemeSlot{prev.Groups[0].Place(2), prev.Groups[1].Place(2)}, true
 }
 
 // seFirstRound seats the opening round: bracket order over seeds, or the
@@ -298,6 +384,11 @@ func seFirstRound(b Block, opening elimRound, winning int) ([][]store.SchemeSlot
 			return nil, err
 		}
 		return dealt, nil
+	}
+	if bronze, _ := b.Bool("bronze"); bronze && participants == 2 && prev.Proceeding == 2 && len(prev.Groups) == 2 {
+		// Seeded straight into the final: the Group winners meet, and
+		// seDirectBronze takes the places below them.
+		return [][]store.SchemeSlot{{prev.Groups[0].Place(1), prev.Groups[1].Place(1)}}, nil
 	}
 	if opening.size != 2 || winning != 1 {
 		return nil, fmt.Errorf("нет шаблона рассадки в бои по %d из предыдущего блока — добавьте reseed: true", opening.size)
