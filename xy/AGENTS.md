@@ -65,6 +65,16 @@ cmd/telegram-bot/      login bot: env + xy's words around dopecore/tgbot.LoginHa
                        server can ask whether telegram login is worth offering — the answer is
                        about POLLING, not the process: a bot with a revoked token is up and useless
 cmd/uic/               compile one .dopeui page to HTML on stdout (xy overlay; debug/diff tool)
+cmd/xy-cli/            thin main() → xycli.Run(); `just cli` builds it to ~/.local/bin
+internal/xycli/        xy-cli: the board from the shell, for an agent. A second implementation
+                       of the Envelope (scrypt KEK + AES-GCM, parity-tested both ways against
+                       crypto.ts) and of the export's 4s assembly (parity corpus from export.ts),
+                       over an API-token client (ADR-0015); unlocked data keys live in a 0600
+                       state file (ADR-0016). Commands: boards/unlock, board show, list, card
+                       (4s on stdin/stdout, always with a desc_edit entry), comment (@mentions
+                       resolved), label, search (folded), source, export, attachment
+internal/rank/         fractional indexing (keyBetween/After), the Go half of web/ts/rank.ts:
+                       the server ranks a Trello upload with it, xy-cli every insert and move
 internal/ui/           xy's overlay on DopeUIKit's kit: overlay vocab.json (xy primitives +
                        enum extensions), expand.go (checkbox/editor overrides + xy
                        primitives + mount kinds), app.go (builds the xy App via kit.NewApp
@@ -98,9 +108,15 @@ internal/server/       package server — the whole HTTP server
                        live comment on a board in one response (ciphertext, comments only) — what
                        прогрев indexes; a desc_edit payload carries a whole question's before/after
                        and is deliberately excluded; comments add/patch/delete, mentions, import
-  tokens.go            API tokens: month-lived bearer creds (manage at /profile/tokens)
+  bundle.go            the Bundle's server half (ADR-0013): whole-board timeline and
+                       attachment reads (ciphertext) for the export, board-level timeline
+                       import (all event kinds, authors matched by username, src→new id map
+                       returned so batches chain) for the re-encrypting importer
+  tokens.go            API tokens: month-lived bearer creds (manage at /profile/tokens). A token
+                       IS the user on every route but the password, the username and /admin
+                       (ADR-0015, auth.go: bearerToken/lookupAPIToken/requireCookieUser); changing
+                       the password revokes every token and every other session
   trello_compat.go     Trello-compatible API for chgksuite (token-authed via key+token)
-  rank.go              server-side fractional-index keyAfter (Trello card upload)
   invite.go            invite minting (subcommand)
   admin.go             /admin + /admin/create_users (gated on XY_ADMIN_USER, default "pecheny"); the create-users body is kit.AdminCreateUsers, xy wraps its chrome
   export.go            POST /api/export/{docx,pdf} — one 4s source + images, exported two ways, both fully
@@ -331,9 +347,12 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        loadMoveBoard / moveBoardOptions / transferCard(card, list, ctx,
                        remove, rank?); the card editor, «Массовое действие» and
                        «Переместить список…» all go through it (transfer.test.js, real keys)
-    movelist.ts        «Переместить список…»: move/copy a whole list within the board or
-                       to another: a re-rank, or the new list and one transferCard per card
-    importpack.ts      «Импорт»: a .4s/.zip/.docx to /api/import/parse, the returned 4s
+    movelist.ts        «Переместить список…»: within the board a move is a plain re-rank;
+                       everything else goes out as a Bundle and back through applyBundle,
+                       so a travelling list carries what an exported one does
+    importpack.ts      «Импорт»: the board's one file picker — sniffBundle tells an xy
+                       archive from a question package, so the reader picks a file and
+                       not a format. A package goes .4s/.zip/.docx to /api/import/parse, the returned 4s
                        into a new list (or a group of lists, one per «## …» tour), each
                        (img …) attached to the card that references it; a .docx first opens
                        the verification screen (editable 4s left, live preview right)
@@ -388,10 +407,38 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        the Go packages stay as the oracle and both suites read
                        internal/chgk/typoedit/testdata/pass_cases.json. One known
                        divergence (the nbhyphen bounds) is documented at the top of the file
-    import.ts          Trello board import → new encrypted board (implicit OAuth,
-                       server proxy /api/import/trello/proxy, comments past the
-                       1000-action cap, attachments); the pure Trello-card→xy-card
-                       rules live in trellomodel.ts (jstest-covered, no DOM)
+    import.ts          /import — a new board from an archive or from Trello (implicit
+                       OAuth, server proxy /api/import/trello/proxy, comments past the
+                       1000-action cap, attachments). trelloBundle is the Trello producer;
+                       every write is applyBundle's. The pure Trello-card→xy-card rules
+                       live in trellomodel.ts (jstest-covered, no DOM)
+    bundle.ts          the Bundle's shape (ADR-0013), all pure: what board.json holds,
+                       attachment paths inside the zip, the validation an untrusted file
+                       passes before an import touches the server, and the two the pickers
+                       run on — unitsOf (lists folded into ticks; a group is one, always
+                       whole) and sliceBundle (a selection cut down to what its cards
+                       reach: their labels, the sessions they were played at, the
+                       declarations of those tours, their лента and attachments)
+    zip.ts             a minimal zip writer/reader for Bundles: store/deflate via the
+                       native CompressionStream, UTF-8 names, no zip64 (jstest-covered)
+    bundleapply.ts     the ONE write path a Transfer takes (ADR-0014): applyBundle(bundle,
+                       target, bytesOf) — target is a board created for it (verbatim ranks,
+                       a row per label/session) or an AppendState (append after the target's
+                       last list; labels fold on name+colour, sessions on their key per
+                       ADR-0003 with an origin stamp). The List is the unit of atomicity:
+                       a unit that fails deletes its own lists and the ones before it stay
+    bundleexport.ts    «Экспорт (.zip)…» (☰) and the live→Bundle producer: buildBundle
+                       decrypts what the ticked lists reach; zipBundle packs board.json +
+                       attachments; tickList is the picker both bundle panels show.
+                       Attachment bytes come back lazily so a move never holds a board's
+                       раздатки on the heap
+    bundleimport.ts    reading a Bundle zip, and the target that needs no open board:
+                       createBoardFromBundle (quota pre-check, fresh key, applyBundle,
+                       and a failure deletes the board it just made)
+    bundleimportpanel.ts a Bundle appended to the OPEN board — tick its lists, warn on
+                       a title already here, report which units landed. No menu entry of
+                       its own: «Импорт» (importpack.ts) sniffs the picked file and hands
+                       an xy archive here. On the board page because only it holds the key
     sessions.ts        the test-session kernel, all pure: parse/serialize meta_enc (folding
                        every older shape forward), the derived session name, dd.mm.yyyy +
                        24h parsing (native date/time inputs render in the BROWSER's locale,
@@ -500,6 +547,7 @@ just build-wasm     # compile typst → internal/chgk/typstwasm/typst.wasm (need
 just build          # the app (pure Go; embeds the wasm above)
 just dev-web-only   # server only (assets hot-read from disk)
 just dev            # server + bot
+just cli            # xy-cli → ~/.local/bin (the board from the shell; .claude/skills/xy-cli)
 just invite 7       # mint a registration invite
 # bootstrap a password account (registration is otherwise telegram-only):
 printf '<password>' | XY_DB=… xy-server adduser <username>   # password via stdin

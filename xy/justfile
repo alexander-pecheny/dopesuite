@@ -13,6 +13,12 @@ wasm_path := "internal/chgk/typstwasm/typst.wasm"
 build: wasm build-web
     CGO_ENABLED=0 go build -o xy-server ./cmd/xy-server
 
+# xy-cli: the board from the shell, for an agent (docs/adr/0015). It touches no
+# embedded asset and no wasm, so it needs neither guard.
+cli:
+    go build -o ~/.local/bin/xy-cli ./cmd/xy-cli
+    @echo "собрано: ~/.local/bin/xy-cli"
+
 # The shared toolchain (root ADR-0001) builds the gitignored dist trees the Go
 # build embeds (xy's own + the kit's) — so every compiling recipe depends on it.
 build-web:

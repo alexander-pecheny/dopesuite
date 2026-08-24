@@ -22,7 +22,20 @@ test("collect keeps only cards a transform changes; apply patches each with a de
   assert.equal(board.renders, 1);
 });
 
-test("the ☰ offers the two rewrites, Trello clean-up first", () => {
+test("the ☰ offers the typography pass", () => {
   const rw = createRewrites(fakeBoard());
-  assert.deepEqual([rw.fixTrello, rw.typograph].map((p) => [p.menu, p.id]), [["board", "fix-trello"], ["board", "typograph"]]);
+  assert.deepEqual([rw.typograph.menu, rw.typograph.id], ["board", "typograph"]);
+  assert.equal(rw.fixTrello, undefined, "the Trello clean-up is the importer's job now");
+});
+
+// A test card's description is JSON, not 4s: a board-wide rewrite that touched
+// it would turn its quotes into «ёлочки» and leave parseSession nothing to read.
+test("a board-wide rewrite skips cards that are not questions", () => {
+  const board = fakeBoard({ cards: [
+    { id: 1, listId: 1, kind: "question", rank: "a", desc: "? Раз" },
+    { id: 2, listId: 1, kind: "test", rank: "b", desc: '{"datetime":"20.07.2026","players":[]}' },
+    { id: 3, listId: 1, kind: "heading", rank: "c", desc: "## Тур" },
+  ] });
+  const changes = createRewrites(board).collect((c) => c.desc + "!");
+  assert.deepEqual(changes.map((ch) => ch.card.id), [1]);
 });

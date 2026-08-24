@@ -493,6 +493,7 @@ var IconLogIn = Attr{Name: "icon", Value: "log-in"}
 var IconMaximize2 = Attr{Name: "icon", Value: "maximize-2"}
 var IconMenu = Attr{Name: "icon", Value: "menu"}
 var IconMessageCircle = Attr{Name: "icon", Value: "message-circle"}
+var IconPackage = Attr{Name: "icon", Value: "package"}
 var IconPalette = Attr{Name: "icon", Value: "palette"}
 var IconPaperclip = Attr{Name: "icon", Value: "paperclip"}
 var IconPencil = Attr{Name: "icon", Value: "pencil"}

@@ -52,3 +52,56 @@ test("the menus render the registry as data, in registration order, gated by off
   assert.deepEqual(log, ["export:Пакет", "rename"]);
   assert.throws(() => registerPanel({ id: "rename", menu: "board", icon: "pencil", label: "x", open() {} }), /twice/);
 });
+
+test("a panel that opens a cluster carries its divider into both menus", () => {
+  resetPanels();
+  registerPanel(
+    { id: "a", menu: "board", icon: "pencil", label: "A", open() {} },
+    { id: "b", menu: "board", icon: "pencil", label: "B", divider: true, open() {} },
+    { id: "c", menu: "list", icon: "pencil", label: "C", open() {} },
+    { id: "d", menu: "list", icon: "pencil", label: "D", divider: true, open() {} },
+  );
+  assert.deepEqual(boardMenu().map((i) => [i.id, i.divider]), [["a", undefined], ["b", true]]);
+  const scope = listScope(board, lists[2]);
+  assert.deepEqual(listMenu(scope).map((i) => [i.id, i.divider]), [["c", undefined], ["d", true]]);
+});
+
+// The rule belongs to the cluster, not to the entry that happens to open it —
+// otherwise hiding a conditional cluster head silently merges its cluster into
+// the one above, and the grouping quietly rots as entries come and go.
+test("a hidden cluster head hands its rule to the next entry that survives", () => {
+  resetPanels();
+  let head = false;
+  registerPanel(
+    { id: "a", menu: "list", icon: "pencil", label: "A", open() {} },
+    { id: "b", menu: "list", icon: "pencil", label: "B", divider: true, offered: () => head, open() {} },
+    { id: "c", menu: "list", icon: "pencil", label: "C", open() {} },
+  );
+  const scope = listScope(board, lists[2]);
+  assert.deepEqual(listMenu(scope).map((i) => [i.id, i.divider]), [["a", undefined], ["c", true]]);
+  head = true;
+  assert.deepEqual(listMenu(scope).map((i) => [i.id, i.divider]), [["a", undefined], ["b", true], ["c", undefined]]);
+});
+
+test("a menu never opens with a rule, however much of its first cluster is hidden", () => {
+  resetPanels();
+  registerPanel(
+    { id: "a", menu: "list", icon: "pencil", label: "A", offered: () => false, open() {} },
+    { id: "b", menu: "list", icon: "pencil", label: "B", divider: true, open() {} },
+  );
+  assert.deepEqual(listMenu(listScope(board, lists[2])).map((i) => [i.id, i.divider]), [["b", undefined]]);
+});
+
+// The role arrives with the snapshot, after the ☰ is first built — so the board
+// menu has to be honest about `offered` AND be asked again once it changes.
+test("the board menu honours offered, and answers again when the answer changes", () => {
+  resetPanels();
+  let role = "editor";
+  registerPanel(
+    { id: "rename", menu: "board", icon: "pencil", label: "Переименовать", open() {} },
+    { id: "delete", menu: "board", icon: "trash-2", label: "Удалить доску", offered: () => role === "owner", open() {} },
+  );
+  assert.deepEqual(boardMenu().map((i) => i.id), ["rename"], "an editor is not offered the delete");
+  role = "owner";
+  assert.deepEqual(boardMenu().map((i) => i.id), ["rename", "delete"]);
+});

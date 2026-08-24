@@ -20,6 +20,8 @@ export interface MassPanelDeps {
   transfer: Pick<Transfer, "moveBoardOptions" | "loadMoveBoard" | "transferCard">;
   forgetCardLabels(cards: BoardCard[]): void;
   paintLabels(): void;
+  // The ☰ row is a toggle, so its label has to be re-asked when the mode flips.
+  refreshMenu(): void;
 }
 
 export interface MassPanel {
@@ -54,6 +56,7 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
     massMode = on;
     if (!on) massSelected = new Set();
     document.body.classList.toggle("mass-mode", on);
+    deps.refreshMenu();
     board.render();
   }
 
@@ -272,7 +275,8 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
     prune: () => { if (massMode) massSelected = xyMass.prune(massSelected, board.state.cards); },
     panel: {
       id: "mass", menu: "board", icon: "list-checks",
-      label: "Массовое действие",
+      // The row is the way in AND one of the ways out, so it says which.
+      label: () => massMode ? "Выйти из режима отметок" : "Массовое действие",
       title: "Отметить карточки на всей доске и сделать с ними одно действие",
       open: () => setMassMode(!massMode),
     },

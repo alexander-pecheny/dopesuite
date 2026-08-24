@@ -1,6 +1,7 @@
 // import.ts — import a Trello board into a new encrypted xy board.
 //
-// Two sources, one import core:
+// Two sources, one producer: each becomes a Bundle (trelloBundle), and every
+// write is applyBundle's — the same path an archive takes (ADR-0014).
 //  - Trello (primary): the user authorizes read access (Trello's implicit OAuth
 //    flow), picks a board, and everything is pulled live via the Trello API —
 //    lists, cards, labels, ALL comments (paginated past Trello's 1000-action
@@ -16,19 +17,21 @@
 //
 // Conventions handled:
 //  - lists whose name ends in "tests" become xy test-lists; their cards become
-//    test cards (date from the card name, testers kept as a comment), and the
-//    card's green/red labels are mapped to test_taken/test_missed kinds.
+//    test cards (date from the card name, testers kept as a comment).
 //  - other cards are mapped by trellomodel.js: title → alias, body → 4s text,
 //    kind from its chgksuite markers, description history → desc_edit events.
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
-import type { DataKey } from "./crypto.js";
 import { xyRank } from "./rank.js";
 import { xyChgk } from "./chgk.js";
 import { xyTrello } from "./trellomodel.js";
 import type { RawDescEdit } from "./trellomodel.js";
+import { importBundle, createBoardFromBundle } from "./bundleimport.js";
+import { attachmentPath, BUNDLE_FORMAT } from "./bundle.js";
+import type { Bundle, BundleAttachment, BundleCard, BundleCardLabel, BundleEvent, BundleLabel, BundleList } from "./bundle.js";
+import type { AttachmentBytes } from "./bundleapply.js";
 
-const { fetchJSON, jpost, jput } = xyApp;
+const { fetchJSON } = xyApp;
 const { keyBetween } = xyRank;
 
 // Public Trello app key (reused from chgksuite, the user's other project). It's
@@ -75,9 +78,6 @@ interface ImportSource {
   history: History;
   downloadAttachment: (cardId: string, att: TrelloAttachment) => Promise<Uint8Array<ArrayBuffer> | null>;
 }
-interface ImportedCard { id: number; kind: string; desc: string }
-type EncFn = (s: string) => Promise<string>;
-interface Tally { comments: number; edits: number; attachments: number }
 
 const { byId, errMsg } = xyApp;
 
@@ -114,8 +114,6 @@ function colorHex(c: string | null | undefined): string {
   const base = String(c).split("_")[0];
   return TRELLO_COLORS[base] || "#b3bac5";
 }
-const isGreen = (c: string | null | undefined): boolean => /^(green|lime)/.test(String(c || ""));
-const isRed = (c: string | null | undefined): boolean => /^red/.test(String(c || ""));
 
 // A list is a test-list if its name ends with "tests" (e.g. "harmony2025_tests").
 const isTestList = (name: string | null | undefined): boolean => /tests$/i.test(String(name || "").trim());
@@ -232,98 +230,141 @@ function fileSource(board: TrelloBoard): ImportSource {
   return { board, history, downloadAttachment: async () => null };
 }
 
-// ============================= import core =============================
+// ============================= Trello → Bundle =============================
 
-async function runImport(source: ImportSource, name: string, pass: string): Promise<{ id: number; summary: string }> {
+// trelloBundle is the Trello producer (ADR-0014): a board pulled from the API
+// (or read out of a JSON export) becomes a plain Bundle, which applyBundle then
+// writes exactly as it writes one out of an archive. Trello's string ids become
+// the Bundle's own numbering; nothing here touches the server.
+function trelloBundle(source: ImportSource, name: string): { bundle: Bundle; bytesOf: AttachmentBytes } {
   const board = source.board;
-  setStatus("saving");
-  log("Создаю доску…");
+  let nextId = 0;
+  const id = (): number => ++nextId;
 
-  // 1. fresh board key + board row
-  const { keymeta, dk } = await xyCrypto.createBoardKeys(pass);
-  const boardName = name || board.name || "Импорт из Trello";
-  const created = (await jpost("/api/boards", { ...keymeta, name: boardName })) as { id: number };
-  const boardId = created.id;
-  await xyCrypto.cacheDK(boardId, dk);
-
-  const enc: EncFn = (s) => xyCrypto.encField(dk, s);
-
-  // 2. lists (skip closed), remember test-ness, keep a trello→xy id map
   const openLists = (board.lists || []).filter((l) => !l.closed).sort(byPos);
-  const listMap = new Map<string, { id: number; test: boolean }>(); // trelloListId -> { id, test }
+  const lists: BundleList[] = [];
+  const listOf = new Map<string, { id: number; test: boolean }>();
   let listRank: string | null = null;
   for (const l of openLists) {
     const test = isTestList(l.name);
     listRank = keyBetween(listRank, null);
-    const res = (await jpost(`/api/boards/${boardId}/lists`, {
-      title_enc: await enc(l.name || "(без названия)"), rank: listRank, type: test ? "test" : "normal",
-    })) as { id: number };
-    listMap.set(l.id, { id: res.id, test });
+    const row = { id: id(), type: test ? "test" : "normal", title: l.name || "(без названия)", rank: listRank, group_id: null };
+    lists.push(row);
+    listOf.set(l.id, { id: row.id, test });
   }
 
-  // group open cards by their (open) list, in board order
+  const labels: BundleLabel[] = [];
+  const labelOf = new Map<string, number>();
+  for (const l of (board.labels || [])) {
+    const row = { id: id(), name: l.name || `метка (${l.color || "без цвета"})`, color: colorHex(l.color) };
+    labels.push(row);
+    labelOf.set(l.id, row.id);
+  }
+
   const cardsByList = new Map<string, TrelloCard[]>();
   for (const c of (board.cards || [])) {
-    if (c.closed || !listMap.has(c.idList)) continue;
+    if (c.closed || !listOf.has(c.idList)) continue;
     if (!cardsByList.has(c.idList)) cardsByList.set(c.idList, []);
     cardsByList.get(c.idList)!.push(c);
   }
   for (const arr of cardsByList.values()) arr.sort(byPos);
 
-  // 3. decide each label's kind: scan test-list cards, where a green label means
-  // "взяли" (test_taken) and a red one "не взяли" (test_missed).
-  const labelKind = new Map<string, string>(); // trelloLabelId -> 'normal' | 'test_taken' | 'test_missed'
-  for (const l of (board.labels || [])) labelKind.set(l.id, "normal");
-  for (const [listId, cards] of cardsByList) {
-    if (!listMap.get(listId)!.test) continue;
-    for (const c of cards) {
-      for (const lab of (c.labels || [])) {
-        if (isGreen(lab.color)) labelKind.set(lab.id, "test_taken");
-        else if (isRed(lab.color)) labelKind.set(lab.id, "test_missed");
-      }
-    }
-  }
+  const cards: BundleCard[] = [];
+  const cardLabels: BundleCardLabel[] = [];
+  const timeline: BundleEvent[] = [];
+  const attachments: BundleAttachment[] = [];
+  const downloads = new Map<string, { cardId: string; att: TrelloAttachment }>();
 
-  // 4. create labels, mapping trello→xy id
-  const labelMap = new Map<string, number>(); // trelloLabelId -> xyLabelId
-  for (const l of (board.labels || [])) {
-    const nm = l.name || `метка (${l.color || "без цвета"})`;
-    const res = (await jpost(`/api/boards/${boardId}/labels`, {
-      name_enc: await enc(nm), color_enc: await enc(colorHex(l.color)), kind: labelKind.get(l.id) || "normal",
-    })) as { id: number };
-    labelMap.set(l.id, res.id);
-  }
+  // Trello authors are not xy users, so their names fold into the payload and
+  // `author` stays null — the same choice the live import always made.
+  const event = (e: Omit<BundleEvent, "id" | "author" | "edited_at" | "is_excerpt" | "reply_to_id">): void => {
+    timeline.push({ id: id(), author: null, edited_at: null, is_excerpt: false, reply_to_id: null, ...e });
+  };
 
-  // 5. cards (+ their history and attachments)
-  const total = [...cardsByList.values()].reduce((n, a) => n + a.length, 0);
-  let done = 0;
-  const tally: Tally = { comments: 0, edits: 0, attachments: 0 };
-  const errors: string[] = [];
   for (const l of openLists) {
-    const info = listMap.get(l.id)!;
-    const cards = cardsByList.get(l.id) || [];
+    const info = listOf.get(l.id)!;
     let cardRank: string | null = null;
-    for (const c of cards) {
+    for (const c of (cardsByList.get(l.id) || [])) {
       cardRank = keyBetween(cardRank, null);
-      try {
-        const card = info.test
-          ? await importTestCard(boardId, info.id, c, cardRank, enc, labelMap)
-          : await importNormalCard(boardId, info.id, c, cardRank, enc, labelMap);
-        await importCardExtras(card, c, source, enc, dk, tally, errors);
-      } catch (e) {
-        errors.push(`«${c.name || c.id}»: ${errMsg(e)}`);
+      const cardId = id();
+      if (info.test) {
+        // A test list's card is the legacy test-session shape: the date is its
+        // title, and the testers stay as a comment rather than being parsed.
+        cards.push({
+          id: cardId, list_id: info.id, kind: "test", rank: cardRank,
+          description: JSON.stringify({ datetime: (c.name || "").trim() || "тест-сессия", players: [] }),
+          handout_meta: null, alias: null, created_at: null,
+        });
+        const testers = (c.desc || "").trim();
+        if (testers) {
+          event({ card_id: cardId, session_id: null, type: "comment", created_at: new Date().toISOString(), payload: "Тестировали: " + testers });
+        }
+      } else {
+        const { desc, alias, kind } = xyTrello.mapCard(c.name, c.desc);
+        cards.push({ id: cardId, list_id: info.id, kind, rank: cardRank, description: desc, handout_meta: null, alias: alias || null, created_at: null });
+        // Description history is a question's editing record; on a heading or a
+        // note it is noise, so only question cards carry it over.
+        if (kind === "question") {
+          for (const e of xyTrello.descEdits(source.history.descEdits.get(c.id), desc)) {
+            event({
+              card_id: cardId, session_id: null, type: "desc_edit", created_at: e.date,
+              payload: JSON.stringify({ before: e.before, after: e.after, author: e.author }),
+            });
+          }
+        }
       }
-      done++;
-      log(`Импортировано ${done}/${total} карточек…`);
+      for (const lab of (c.labels || [])) {
+        const lid = labelOf.get(lab.id);
+        if (lid != null) cardLabels.push({ card_id: cardId, label_id: lid, session_id: null });
+      }
+      for (const cm of (source.history.comments.get(c.id) || [])) {
+        const body = xyChgk.fixTrelloFormatting(cm.text || "");
+        event({
+          card_id: cardId, session_id: null, type: "comment",
+          created_at: cm.date || new Date().toISOString(),
+          payload: cm.author ? `${cm.author}:\n${body}` : body,
+        });
+      }
+      for (const att of (c.attachments || [])) {
+        if (!att.isUpload) continue;
+        const nm = att.name || att.fileName || "файл";
+        if (att.bytes && att.bytes > 50 * 1024 * 1024) continue; // the server would refuse it anyway
+        const aid = id();
+        attachments.push({
+          id: aid, card_id: cardId, filename: nm, mime: att.mimeType || "application/octet-stream",
+          size: att.bytes || 0, lossless: false, is_excerpt: false, path: attachmentPath(aid, nm),
+        });
+        downloads.set(String(aid), { cardId: c.id, att });
+      }
     }
   }
 
+  timeline.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+
+  const bundle: Bundle = {
+    format: BUNDLE_FORMAT,
+    exported_at: new Date().toISOString(),
+    board: { name: name || board.name || "Импорт из Trello" },
+    members: [], lists, groups: [], cards, labels, sessions: [],
+    card_labels: cardLabels, card_sessions: [], tour_testers: [],
+    timeline, attachments,
+  };
+  // A file source has no bytes to give and a live download may simply fail —
+  // either way the attachment is skipped and named, never fatal to its list.
+  const bytesOf: AttachmentBytes = async (a) => {
+    const d = downloads.get(String(a.id));
+    if (!d) return null;
+    try { return await source.downloadAttachment(d.cardId, d.att); } catch { return null; }
+  };
+  return { bundle, bytesOf };
+}
+
+async function runImport(source: ImportSource, name: string, pass: string): Promise<{ id: number; summary: string }> {
+  setStatus("saving");
+  const { bundle, bytesOf } = trelloBundle(source, name);
+  const out = await createBoardFromBundle(bundle, bytesOf, bundle.board.name, pass, log);
   setStatus("saved");
-  let summary = `Готово: ${done} карточек, ${listMap.size} списков, ${labelMap.size} меток, `
-    + `${tally.comments} комментариев, ${tally.edits} правок, ${tally.attachments} вложений.`;
-  if (errors.length) summary += `\n\nОшибки (${errors.length}):\n` + errors.slice(0, 20).join("\n");
-  log(summary);
-  return { id: boardId, summary };
+  return out;
 }
 
 // runImportAll imports every open Trello board, one xy board each, all under the
@@ -350,110 +391,10 @@ async function runImportAll(token: string, pass: string): Promise<void> {
   log(`Импортировано досок: ${boards.length - failed} из ${boards.length}.\n\n` + report.join("\n\n"));
 }
 
-// importNormalCard: map the Trello card (title → alias, body → 4s text, kind
-// from its markers), then assign its labels. Returns the xy card so the extras
-// step can match its description history against the text just stored.
-async function importNormalCard(boardId: number, listId: number, c: TrelloCard, rank: string, enc: EncFn, labelMap: Map<string, number>): Promise<ImportedCard> {
-  const { desc, alias, kind } = xyTrello.mapCard(c.name, c.desc);
-  const body: Record<string, unknown> = { description_enc: await enc(desc), rank, kind };
-  if (alias) body.alias_enc = await enc(alias);
-  const res = (await jpost(`/api/lists/${listId}/cards`, body)) as { id: number };
-  await assignLabels(res.id, c, labelMap);
-  return { id: res.id, kind, desc };
-}
 
-// importTestCard: a test session. Date comes from the card name; testers (the
-// card body) are preserved as a comment rather than parsed.
-async function importTestCard(boardId: number, listId: number, c: TrelloCard, rank: string, enc: EncFn, labelMap: Map<string, number>): Promise<ImportedCard> {
-  const datetime = (c.name || "").trim() || "тест-сессия";
-  const descJson = JSON.stringify({ datetime, players: [] });
-  const res = (await jpost(`/api/lists/${listId}/cards`, {
-    description_enc: await enc(descJson), rank, kind: "test",
-  })) as { id: number };
-  await assignLabels(res.id, c, labelMap);
-  const testers = (c.desc || "").trim();
-  if (testers) {
-    await jpost(`/api/cards/${res.id}/comments`, { payload_enc: await enc("Тестировали: " + testers) });
-  }
-  return { id: res.id, kind: "test", desc: "" };
-}
 
-// importCardExtras carries a Trello card's comments and description history
-// (both preserving author + timestamp) and its uploaded attachments (files +
-// photos) onto the new xy card. Neither ever aborts the card: each failure is
-// recorded.
-async function importCardExtras(card: ImportedCard, c: TrelloCard, source: ImportSource, enc: EncFn, dk: DataKey, tally: Tally, errors: string[]): Promise<void> {
-  const xyCardId = card.id;
-  // Comments and description edits share one timeline, so they go in one batch,
-  // ordered by date (the server hands out ids in array order and the timeline
-  // reads back in that order). Trello authors aren't xy users, so their names
-  // are folded into the payload and author_user_id stays null.
-  const events: { type: string; created_at: string; author_user_id: null; payload_enc: string }[] = [];
-  for (const cm of (source.history.comments.get(c.id) || [])) {
-    const body = xyChgk.fixTrelloFormatting(cm.text || "");
-    const text = cm.author ? `${cm.author}:\n${body}` : body;
-    events.push({ type: "comment", created_at: cm.date || "", author_user_id: null, payload_enc: await enc(text) });
-  }
-  const comments = events.length;
-  // Description history is a question's editing record; on a heading or a note
-  // it is noise, so only question cards carry it over.
-  if (card.kind === "question") {
-    for (const e of xyTrello.descEdits(source.history.descEdits.get(c.id), card.desc)) {
-      const payload = JSON.stringify({ before: e.before, after: e.after, author: e.author });
-      events.push({ type: "desc_edit", created_at: e.date, author_user_id: null, payload_enc: await enc(payload) });
-    }
-  }
-  if (events.length) {
-    events.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
-    try {
-      await jpost(`/api/cards/${xyCardId}/timeline/import`, { events });
-      tally.comments += comments;
-      tally.edits += events.length - comments;
-    } catch (e) {
-      errors.push(`«${c.name || c.id}» история: ${errMsg(e)}`);
-    }
-  }
 
-  // Attachments — only uploaded files (links are external URLs, not files).
-  for (const att of (c.attachments || [])) {
-    if (!att.isUpload) continue;
-    const nm = att.name || att.fileName || "файл";
-    if (att.bytes && att.bytes > 50 * 1024 * 1024) {
-      errors.push(`«${nm}»: файл больше 50 МБ, пропущен`);
-      continue;
-    }
-    try {
-      const bytes = await source.downloadAttachment(c.id, att);
-      if (!bytes) continue; // source can't fetch bytes (file import)
-      await uploadAttachment(xyCardId, nm, bytes, att.mimeType, dk);
-      tally.attachments++;
-    } catch (e) {
-      errors.push(`«${nm}» вложение: ${errMsg(e)}`);
-    }
-  }
-}
 
-// uploadAttachment encrypts the plain bytes under the board key and POSTs them as
-// a new xy attachment (mirrors board.ts#copyCardExtras).
-async function uploadAttachment(xyCardId: number, name: string, bytes: Uint8Array<ArrayBuffer>, mime: string | undefined, dk: DataKey): Promise<void> {
-  const recipher = await xyCrypto.encBytes(dk, bytes);
-  const lossless = /^image\/(png|gif|webp|bmp|svg)/i.test(mime || "");
-  const fd = new FormData();
-  fd.append("meta", JSON.stringify({
-    filename_enc: await xyCrypto.encField(dk, name),
-    mime: mime || "application/octet-stream",
-    lossless,
-    event_payload_enc: await xyCrypto.encField(dk, JSON.stringify({ file: name })),
-  }));
-  fd.append("blob", new Blob([recipher], { type: "application/octet-stream" }), "blob");
-  const res = await fetch(`/api/cards/${xyCardId}/attachments`, { method: "POST", credentials: "same-origin", body: fd });
-  if (!res.ok) throw new Error(`upload ${res.status}`);
-}
-
-async function assignLabels(cardId: number, c: TrelloCard, labelMap: Map<string, number>): Promise<void> {
-  const ids = (c.labels || []).map((l) => labelMap.get(l.id)).filter((x) => x != null);
-  if (ids.length) await jput(`/api/cards/${cardId}/labels`, { label_ids: ids });
-}
 
 // ============================= Trello connect (OAuth) =============================
 
@@ -523,6 +464,24 @@ form.addEventListener("submit", async (e) => {
   const boardSel = byId<HTMLSelectElement>("trelloBoard");
   const pickerActive = !byId("trelloPickArea").hidden;
   const file = byId<HTMLInputElement>("trelloFile").files?.[0];
+  const bundleFile = byId<HTMLInputElement>("bundleFile").files?.[0];
+
+  // A Board Bundle from another xy instance (ADR-0013) — its own import path,
+  // sharing only the name/passphrase fields with the Trello flows.
+  if (bundleFile) {
+    importBtn.disabled = true;
+    setStatus("saving");
+    try {
+      const { id } = await importBundle(bundleFile, name, pass, log);
+      setStatus("saved");
+      setTimeout(() => { window.location.href = `/board/${id}`; }, 1500);
+    } catch (err) {
+      setStatus("error");
+      log("Импорт прерван: " + errMsg(err));
+      importBtn.disabled = false;
+    }
+    return;
+  }
 
   // "Все доски": import each open board in turn, under the one passphrase. A
   // board that fails is reported and the rest still go through.

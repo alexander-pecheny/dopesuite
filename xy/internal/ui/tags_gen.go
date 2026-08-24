@@ -177,6 +177,7 @@ var IconLogIn = base.IconLogIn
 var IconMaximize2 = base.IconMaximize2
 var IconMenu = base.IconMenu
 var IconMessageCircle = base.IconMessageCircle
+var IconPackage = base.IconPackage
 var IconPalette = base.IconPalette
 var IconPaperclip = base.IconPaperclip
 var IconPencil = base.IconPencil

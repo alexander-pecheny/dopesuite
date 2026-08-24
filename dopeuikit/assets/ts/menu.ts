@@ -190,6 +190,12 @@ function build(): void {
   }
 
   function itemNode(item: MenuItem): HTMLElement {
+    if (item.kind === "divider") {
+      const rule = document.createElement("div");
+      rule.className = "menu-sep";
+      rule.setAttribute("role", "separator");
+      return rule;
+    }
     if (item.kind === "appearance") {
       const appearance = document.createElement("button");
       appearance.type = "button";

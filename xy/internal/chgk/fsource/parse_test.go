@@ -56,3 +56,23 @@ func reindent(b []byte) string {
 	out, _ := json.MarshalIndent(v, "", "  ")
 	return string(out)
 }
+
+// TestBlankLineEndsElement pins the 4s rule the export's fold exists for: a blank
+// line closes the element, and the lines after it belong to nothing and are lost.
+// (LINEBREAK) is how chgksuite writes such a break instead — see export.ts.
+func TestBlankLineEndsElement(t *testing.T) {
+	lost := Parse("? Первый абзац\n\nВторой абзац\n! А\n", "chgk")
+	q, ok := lost[0].Content.(*Question)
+	if !ok || len(lost) != 1 {
+		t.Fatalf("want one question, got %d: %+v", len(lost), lost)
+	}
+	if got := q.Get("question"); got != "Первый абзац" {
+		t.Errorf("question = %q, want the text before the blank line only", got)
+	}
+
+	kept := Parse("? Первый абзац(LINEBREAK)\nВторой абзац\n! А\n", "chgk")
+	q = kept[0].Content.(*Question)
+	if got := q.Get("question"); got != "Первый абзац(LINEBREAK)\nВторой абзац" {
+		t.Errorf("question = %q, want both paragraphs in one element", got)
+	}
+}

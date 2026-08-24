@@ -223,9 +223,11 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
   -- import picker: the package file plus how it lands on the board — one list,
   -- or (разбить по турам) one list per "## " section, linked into a group with
   -- continuous numbering and combined export
-  modal id="importPickOverlay" label="Импорт пакета" title="Импорт пакета"
+  modal id="importPickOverlay" label="Импорт" title="Импорт"
     form id="importPickForm" dir="col"
+      hint "Пакет вопросов (.4s, .docx) или архив xy (.zip) — что именно, разберёмся сами."
       filefield id="importFile" accept=".4s,.zip,.docx" required
+      hint id="importPickWhat"
       checkbox id="importSplitTours" title="Каждый тур станет отдельным списком; списки будут связаны в группу со сквозной нумерацией и общим экспортом" " разбить по турам"
       row gap="sm" wrap
         button submit "Импортировать"

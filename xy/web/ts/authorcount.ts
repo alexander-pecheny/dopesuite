@@ -84,6 +84,7 @@ export function createAuthorCountPanel(shell: PanelShell, deps: { copyPlain(text
   return {
     id: "author-count", menu: "list", icon: "calculator",
     label: "Счётчик авторов",
+    offered: (scope) => scope.cards.some((c) => c.kind === "question"),
     open(scope) {
       const cards = scope.cards;
       const numbers = scope.numbers.filter((n): n is string => n != null);

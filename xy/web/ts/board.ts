@@ -2,7 +2,7 @@
 // drag-reorder with fractional ranks, card detail + timeline + labels.
 import { overlayStack } from "./overlaystack.js";
 import { modal } from "./modal.js";
-import { type Board, boardMenu, createPanelShell, listMenu, listNumbers, listScope, registerPanel } from "./panels.js";
+import { type Board, boardMenu, createPanelShell, listMenu, listNumbers, listScope, type Panel, registerPanel } from "./panels.js";
 import { createRewrites } from "./rewrites.js";
 import { createReplacePanel } from "./replace.js";
 import { createMoveListPanel } from "./movelist.js";
@@ -13,6 +13,8 @@ import { createHandoutsPanel } from "./handouts.js";
 import { createMassPanel } from "./masspanel.js";
 import { createLabelsEditor, sortLabels } from "./labelsedit.js";
 import { createTesterList } from "./testerlist.js";
+import { createBundleExportPanel } from "./bundleexport.js";
+import { createBundleImport } from "./bundleimportpanel.js";
 import { createAuthorCountPanel } from "./authorcount.js";
 import { xyApp, xySizes } from "./app.js";
 import { xyCrypto } from "./crypto.js";
@@ -73,6 +75,13 @@ const del = (kind: string, path: string): Promise<unknown> =>
 
 const boardId = Number(location.pathname.split("/").pop());
 
+// The ☰ is data, and two things change it: the role (which arrives with the
+// snapshot, after the menu is first built) and the mass-mode toggle, whose row
+// is its own way out.
+function refreshBoardMenu(): void {
+  window.dopeMenu?.setExtras(boardMenu());
+}
+
 const statusNode = byId("status");
 const kanban = byId("kanban");
 const titleNode = byId("boardTitle");
@@ -121,6 +130,7 @@ const unlock = createUnlock({
     Object.assign(state, s);
     sessionMetaCache = new Map();
     document.title = state.name + " · xy";
+    refreshBoardMenu(); // the role came with the snapshot; «Удалить доску» wants it
     // Feed the person directory. The tester names are plaintext in hand at this
     // moment, so this costs a pass over a handful of sessions and no decryption.
     people.remember(boardId, state.name, state.sessions.flatMap((s) => parseSession(s.meta).testers));
@@ -469,7 +479,7 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   const menuBtn = el("button", { class: "kadd", title: "Меню списка", "aria-haspopup": "true" }, icon("ellipsis"));
   menuBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    const items: MenuItem[] = listMenu(listScope(board, list)).map((it) => ({ icon: icon(it.icon), label: it.label, onClick: it.onClick }));
+    const items: MenuItem[] = listMenu(listScope(board, list)).map((it) => ({ icon: icon(it.icon), label: it.label, onClick: it.onClick, divider: it.divider }));
     popupMenu(menuWrap, items);
   });
   menuWrap.append(menuBtn);
@@ -859,6 +869,10 @@ function popupMenu(anchor: HTMLElement, items: MenuItem[]): void {
   }
   const menu = el("div", { class: "menu-dropdown menu-fixed", role: "menu" });
   for (const it of items) {
+    // A rule that would open the menu or double another separates nothing.
+    if (it.divider && menu.lastElementChild && !menu.lastElementChild.classList.contains("menu-sep")) {
+      menu.append(el("div", { class: "menu-sep", role: "separator" }));
+    }
     // An item with `checked` is a toggle: a real checkbox, styled by the design
     // system's input[type=checkbox] rules, rather than a ☐/☑ glyph. It is a
     // <label> so the whole row remains the hit target. preventDefault keeps the
@@ -1263,19 +1277,31 @@ const rewrites = createRewrites(board);
 const labelsEditor = createLabelsEditor(board);
 const testerList = createTesterList(board, shell, cardDetail);
 const listsManage = createListsManage(board);
-const mass = createMassPanel(board, { kanban, transfer, forgetCardLabels, paintLabels });
+const mass = createMassPanel(board, { kanban, transfer, forgetCardLabels, paintLabels, refreshMenu: refreshBoardMenu });
+
+// starts marks the head of a cluster: the menu draws a rule above it. Order and
+// clustering are this file's business — a panel module has no idea what it will
+// sit next to.
+const starts = <P extends Panel>(p: P): P => ({ ...p, divider: true });
 
 registerPanel(
-  { id: "rename-board", menu: "board", icon: "pencil", label: "Переименовать доску", title: "Изменить название доски", open: () => { void renameBoard(); } },
+  // Что на доске
   listsManage.panel,
-  mass.panel,
-  createImportPanel(board, renderPreviewCard),
-  { id: "sessions", menu: "board", icon: "flask-conical", label: "Тесты", title: "Тест-сессии доски: кто когда играл, приглашение со временем начала", open: () => sessionsPanel.open() },
   labelsEditor.panel,
-  { id: "members", menu: "board", icon: "users", label: "Участники доски", title: "Поделиться доской: добавить или убрать участников", open: () => boardMembers.open() },
-  rewrites.fixTrello,
+  { id: "sessions", menu: "board", icon: "flask-conical", label: "Тесты", title: "Тест-сессии доски: кто когда играл, приглашение со временем начала", open: () => sessionsPanel.open() },
+
+  // Правки по всей доске
+  starts(mass.panel),
   createReplacePanel(board, rewrites),
   rewrites.typograph,
+
+  // Файлы: одно и то же содержимое туда и обратно
+  starts(createImportPanel(board, renderPreviewCard, createBundleImport(board, shell))),
+  createBundleExportPanel(board, shell),
+
+  // Сама доска
+  starts({ id: "rename-board", menu: "board", icon: "pencil", label: "Переименовать доску", title: "Изменить название доски", open: () => { void renameBoard(); } }),
+  { id: "members", menu: "board", icon: "users", label: "Участники доски", title: "Поделиться доской: добавить или убрать участников", open: () => boardMembers.open() },
   {
     id: "forget-password", menu: "board", icon: "lock", label: "Забыть пароль доски", title: "Забыть пароль доски на этом устройстве",
     open: async () => {
@@ -1289,22 +1315,29 @@ registerPanel(
       location.reload();
     },
   },
-  { id: "delete-board", menu: "board", icon: "trash-2", label: "Удалить доску", title: "Удалить доску со всеми списками и карточками (только владелец)", open: () => { void deleteBoard(); } },
+  { id: "delete-board", menu: "board", icon: "trash-2", label: "Удалить доску", title: "Удалить доску со всеми списками и карточками", offered: () => state.role === "owner", open: () => { void deleteBoard(); } },
 
+  // Карточки списка
   { id: "add-card", menu: "list", icon: "plus", label: "Добавить карточку", open: (s) => { void cardDetail.addCard(s.list); } },
   { id: "preview", menu: "list", icon: "eye", label: (s) => s.grouped ? "Предпросмотр списка" : "Предпросмотр", open: (s) => { void previewList(s.list); } },
   { id: "preview-group", menu: "list", icon: "eye", label: "Предпросмотр всей группы", offered: (s) => s.grouped, open: (s) => { void previewList(s.list, true); } },
-  testerList.panel,
+
+  // Что в нём насчитывается
+  starts(testerList.panel),
   createAuthorCountPanel(shell, cardDetail),
-  createMoveListPanel(board, transfer),
-  { id: "rename-list", menu: "list", icon: "pencil", label: "Переименовать список", open: (s) => { void renameList(s.list); } },
-  createExportPanel(board, attachments),
+
+  // Что из него выходит
+  starts(createExportPanel(board, attachments)),
   createHandoutsPanel(board, attachments),
+
+  // Сам список
+  starts({ id: "rename-list", menu: "list", icon: "pencil", label: "Переименовать список", open: (s) => { void renameList(s.list); } }),
+  createMoveListPanel(board, transfer),
   { id: "delete-list", menu: "list", icon: "trash-2", label: "Удалить список", open: (s) => { void deleteList(s.list); } },
 );
 // Board-level actions live in the burger (☰) menu — sharing (rarely opened) and
 // "forget password" (rarely needed) don't warrant header buttons.
-window.dopeMenu?.setExtras(boardMenu());
+refreshBoardMenu();
 
 void unlock.boot();
 

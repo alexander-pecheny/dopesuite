@@ -82,6 +82,10 @@ interface Entry<S> {
   icon: IconName;
   label: string | ((scope: S) => string);
   title?: string;
+  // Opens a cluster. The rule is drawn above the first entry of the cluster
+  // that survives `offered` — not above this one, which may not be offered at
+  // all — so a conditional cluster head cannot take the grouping with it.
+  divider?: boolean;
   offered?(scope: S): boolean;
   open(scope: S): void;
 }
@@ -94,6 +98,7 @@ export interface PanelMenuItem {
   icon: IconName;
   label: string;
   title?: string;
+  divider?: boolean;
   onClick(): void;
 }
 
@@ -106,13 +111,34 @@ export function registerPanel(...panels: Panel[]): void {
   }
 }
 
-// The two menus, as data, in registration order.
+// The two menus, as data, in registration order. Both honour `offered` — the
+// board menu is rebuilt whenever the snapshot lands, because what a reader may
+// do with a board is not known until their role is.
 export function boardMenu(): PanelMenuItem[] {
-  return registry.filter((p): p is BoardPanel => p.menu === "board").map((p) => item(p, undefined));
+  return cluster(registry.filter((p): p is BoardPanel => p.menu === "board"), undefined);
 }
 export function listMenu(scope: ListScope): PanelMenuItem[] {
-  return registry.filter((p): p is ListPanel => p.menu === "list" && (!p.offered || p.offered(scope))).map((p) => item(p, scope));
+  return cluster(registry.filter((p): p is ListPanel => p.menu === "list"), scope);
 }
+
+// cluster numbers the entries by the `divider` marks in registration order,
+// then drops the ones this scope is not offered — so the rule lands on
+// whichever entry of a cluster is left, and never on the first row of the menu.
+function cluster<S>(panels: Array<Entry<S> & { menu: string }>, scope: S): PanelMenuItem[] {
+  let n = 0;
+  const numbered = panels.map((p) => ({ p, n: p.divider ? ++n : n }));
+  const out: PanelMenuItem[] = [];
+  let last: number | null = null;
+  for (const { p, n: mine } of numbered) {
+    if (p.offered && !p.offered(scope)) continue;
+    const it = item(p, scope);
+    if (last !== null && mine !== last) it.divider = true;
+    last = mine;
+    out.push(it);
+  }
+  return out;
+}
+
 function item<S>(p: Entry<S>, scope: S): PanelMenuItem {
   return {
     id: p.id,

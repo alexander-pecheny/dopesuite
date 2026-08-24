@@ -21,6 +21,7 @@ function setup() {
     transfer: { moveBoardOptions: async () => [], loadMoveBoard: async () => null, transferCard: async () => 0 },
     forgetCardLabels: (cards) => forgotten.push(...cards.map((c) => c.id)),
     paintLabels() {},
+    refreshMenu() {},
   });
   return { board, mass, forgotten };
 }

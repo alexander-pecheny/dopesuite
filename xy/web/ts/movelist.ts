@@ -1,28 +1,28 @@
 // movelist.ts — «Переместить список…»: move or copy a whole list. Within the
-// board a move is a re-rank and a copy a duplicate; to another board it is a
-// client-side re-encryption of the list title, every card and its labels and
-// playings, mirroring the per-card move/copy in carddetail.ts. The destination
-// board is chosen by its (decrypted) name and the insertion position among its
-// lists is selectable.
+// board a move is a plain re-rank; everything else — a copy here, a copy or a
+// move to another board — goes out as a Bundle and back in through applyBundle
+// (ADR-0014), so a list that travels carries what an exported one carries:
+// cards, labels, playings, comments, edit history and attachments. The
+// destination board is chosen by its (decrypted) name and the insertion
+// position among its lists is selectable.
 
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
-import { xyRank } from "./rank.js";
-import { rankForSlot } from "./dragrank.js";
-import { nowStamp } from "./carddetail.js";
+import { rankForSlot, slotBounds } from "./dragrank.js";
 import { modal } from "./modal.js";
 import type { MoveCtx } from "./carddetail.js";
 import type { Transfer } from "./transfer.js";
+import { buildBundle } from "./bundleexport.js";
+import { applyBundle } from "./bundleapply.js";
 import type { Board, ListPanel } from "./panels.js";
 import type { BoardList } from "./unlock.js";
 
-const { fetchJSON, jpost, jput, jdelete, el, byId, errMsg } = xyApp;
-const { keyBetween } = xyRank;
+const { fetchJSON, jdelete, el, byId, errMsg } = xyApp;
 
 interface MoveBoardItem { id: number; name?: string; name_enc?: string | null; schema_version?: number }
 
-export function createMoveListPanel(board: Board, transfer: Pick<Transfer, "loadMoveBoard" | "transferCard">): ListPanel {
+export function createMoveListPanel(board: Board, transfer: Pick<Transfer, "loadMoveBoard">): ListPanel {
 
   let listMoveSrc: BoardList | null = null;  // the list being moved/copied
   let listMoveCtx: MoveCtx | null = null;  // destination board ctx (from loadMoveBoard)
@@ -98,9 +98,7 @@ export function createMoveListPanel(board: Board, transfer: Pick<Transfer, "load
     const targetBid = ctx.boardId;
     const sameBoard = targetBid === board.id;
     const msg = byId("moveListMessage");
-    const rank = rankForSlot(ctx.lists, byId<HTMLSelectElement>("moveListPos").value, sameBoard ? src.id : undefined);
-    const srcCards = board.cardsOf(src.id);
-    const type = src.type || "normal";
+    const slot = byId<HTMLSelectElement>("moveListPos").value;
 
     // A grouped list must stay consecutive with its group, so reordering it on the
     // same board goes through «Управление списками» (which moves the whole group as
@@ -112,6 +110,7 @@ export function createMoveListPanel(board: Board, transfer: Pick<Transfer, "load
 
     // Same-board move is just a re-rank (no re-encryption needed).
     if (sameBoard && remove) {
+      const rank = rankForSlot(ctx.lists, slot, src.id);
       src.rank = rank;
       board.setStatus("saving");
       try {
@@ -121,24 +120,34 @@ export function createMoveListPanel(board: Board, transfer: Pick<Transfer, "load
       return;
     }
 
-    // Copying a list (it carries every card's comments/attachments) and any
+    // Copying a list (it carries every card's history and attachments) and any
     // cross-board op are online-only; only the intra-board move above works offline.
     if (!xySync.requireOnline("Копирование и перенос между досками доступны только онлайн.", msg)) return;
     msg.textContent = sameBoard ? "Копирование…" : "Перешифровка…";
+    const log = (line: string): void => { msg.textContent = line; };
     try {
-      // The new list, then every card through the one transfer path — a copy
-      // on this board, a re-encryption onto another — in order.
-      const key = sameBoard ? board.dk() : ctx.dk;
-      const lres = (await jpost(`/api/boards/${targetBid}/lists`, {
-        title_enc: await xyCrypto.encField(key, src.title), rank, type,
-      })) as { id: number };
-      if (sameBoard) board.state.lists.push({ id: lres.id, type, rank, groupId: null, title: src.title });
-      for (const c of srcCards) await transfer.transferCard(c, lres.id, ctx, false);
-      if (!sameBoard && remove) {
+      // The list becomes a Bundle and lands through applyBundle, the one write
+      // path a Transfer takes (ADR-0014) — the same code an archive arrives by.
+      const { bundle, bytesOf } = await buildBundle(board, [src.id], log);
+      const bounds = slotBounds(ctx.lists, slot, sameBoard ? src.id : undefined);
+      const result = await applyBundle(bundle, {
+        boardId: targetBid,
+        dk: sameBoard ? board.dk() : ctx.dk,
+        append: {
+          labels: ctx.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
+          sessions: ctx.sessions.map((x) => ({ id: x.id, meta: x.meta })),
+          lastRank: bounds.prev,
+          nextRank: bounds.next,
+          sourceName: board.state.name,
+        },
+      }, bytesOf, log);
+      if (result.failed) throw new Error(result.units.find((u) => u.error)!.error);
+      if (remove) {
         await jdelete(`/api/lists/${src.id}`);
         board.state.lists = board.state.lists.filter((l) => l.id !== src.id);
         board.state.cards = board.state.cards.filter((c) => c.listId !== src.id);
       }
+      if (sameBoard || remove) await board.reload();
       board.render();
       msg.textContent = remove ? "Перемещено." : "Скопировано.";
       setTimeout(moveListModal.close, 700);

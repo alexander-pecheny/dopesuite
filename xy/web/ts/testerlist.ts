@@ -146,6 +146,7 @@ export function createTesterList(board: Board, shell: PanelShell, deps: { copyPl
     panel: {
       id: "tester-list", menu: "list", icon: "users",
       label: "Список тестеров",
+      offered: (scope) => scope.cards.some((c) => c.kind === "question"),
       open: (scope) => openTesterList(scope.list),
     },
   };

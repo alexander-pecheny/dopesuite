@@ -37,7 +37,6 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     byId<HTMLTextAreaElement>("handoutsSource").value = source;
     clearHandoutsPdf();
     handoutsModal.open({ onClose: hideHandouts });
-    handoutsModal.message(source.trim() ? "" : "В списке нет вопросов с раздаточным материалом.");
     // Pre-stage the referenced images now (in the background) so the first PDF /
     // split_fit generation doesn't pay the gather+upload, and start heartbeating.
     handoutSession.ensure(source).catch(() => {});
@@ -253,6 +252,9 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
   return {
     id: "handouts", menu: "list", icon: "file-text",
     label: (scope) => scope.grouped ? "Генерация раздаток (вся группа)" : "Генерация раздаток",
+    // Раздатки are the exception, not the rule: a tour without one has nothing
+    // for this panel to open, and the row would only say so after the click.
+    offered: (scope) => xyHndt.hndtOf(scope.cards).source.trim() !== "",
     open: openHandouts,
   };
 }

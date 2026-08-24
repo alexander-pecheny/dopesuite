@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fakeBoard, fakeNode, installDOM } from "./dom.js";
 
-const p = installDOM(["importPickOverlay", "importPickForm", "importFile", "importSplitTours", "importPickCancel", "importOverlay", "importTitle", "importSource", "importPreview", "importCount", "importCommit", "importClose"]);
+const p = installDOM(["importPickOverlay", "importPickForm", "importFile", "importPickWhat", "importSplitTours", "importPickCancel", "importOverlay", "importTitle", "importSource", "importPreview", "importCount", "importCommit", "importClose"]);
 for (const id of ["importPickOverlay", "importOverlay"]) p.node(id).hidden = true;
 p.node("importPickForm").reset = () => {};
 // The server's parse of the upload, then the lists and cards the client posts.

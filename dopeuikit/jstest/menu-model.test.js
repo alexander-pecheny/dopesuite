@@ -71,3 +71,22 @@ test("accountFromMe mirrors the /api/auth/me contract", () => {
   assert.deepEqual(accountFromMe(true, { telegram: "tg" }), { loggedIn: true, username: "tg" });
   assert.deepEqual(accountFromMe(true, {}), { loggedIn: true, username: null });
 });
+
+test("a divider heads a cluster, and never opens the menu or doubles", () => {
+  const kinds = (extras) =>
+    menuItems({ jump: null, extras, account: null, config: {} }).map((i) => i.kind);
+
+  assert.deepEqual(
+    kinds([{ label: "A", onClick() {} }, { label: "B", divider: true, onClick() {} }]),
+    ["appearance", "action", "divider", "action"],
+  );
+  assert.deepEqual(
+    kinds([{ label: "A", divider: true, onClick() {} }]),
+    ["appearance", "divider", "action"],
+    "the appearance row is a row, so a rule after it separates something",
+  );
+  assert.deepEqual(
+    kinds([{ label: "A", divider: true, onClick() {} }, { label: "B", divider: true, onClick() {} }]),
+    ["appearance", "divider", "action", "divider", "action"],
+  );
+});

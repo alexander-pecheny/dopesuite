@@ -1,0 +1,45 @@
+{
+ "passphrase": "correct horse battery staple",
+ "keymeta": {
+  "kdf_salt": "rdve5fOCop1s58G3hGqgxA==",
+  "kdf_params": "{\"kdf\":\"scrypt\",\"N\":65536,\"r\":8,\"p\":1,\"dkLen\":32}",
+  "wrapped_key": "eHkxARcyeAtaZ804hM3qI9TWCAfy8dY2Egz7A9O9319g1biNmioB34qcfUi/kQNah/hj7GSCRHfRZKTMeCnIQQ==",
+  "verify_token": "eHkxAZQOTKJhSS0VwtIyDUov0Yz31v3TfDBS7yhA3czzCw3vzpcO62dTZh4="
+ },
+ "ts_sealed": [
+  {
+   "plain": "первый вопрос",
+   "enc": "eHkxAfDb/zIcsdmtL3rw6HdVUM/FmXK7wn3gUCFrfCuhNDtRthksMPMxL7JbJ6Dn3WQHjvIUJ8OJ"
+  },
+  {
+   "plain": "Вопрос 1: что это?\nОтвет: Envelope\n",
+   "enc": "eHkxAf8abyXumLTw2W/+61nDrj7ZR8uQ+wMcc971uQeRyr4AlsdqbwXbAlpe5t5pgDC/9PwSwCwxNfOo1dy14wnoSLVS58G92kvqpGTnllL41XYQ"
+  },
+  {
+   "plain": "",
+   "enc": "eHkxAc0RXPOBWRW9SzKfaX6EArtx/a8cmjnAKKuS4QI="
+  },
+  {
+   "plain": "emoji 🎲 и «ёлочки» — тире",
+   "enc": "eHkxAQQBo8NgYDPmcsPQ3JDYNba1UXzqfU+un4Um10sajyIwWKSw72mmv2Fz7Av4XyEK7wgoznZclTUgh0PV2sFv7jZfcAE/CP7O"
+  }
+ ],
+ "go_sealed": [
+  {
+   "plain": "первый вопрос",
+   "enc": "eHkxAW3Evep6HTmrQyy/d0IHeLlURzjnkLPtGXz9Yxbi9rgwZDzXO3R0LhLkw0JoOhrTxUw5U8Q2"
+  },
+  {
+   "plain": "Вопрос 1: что это?\nОтвет: Envelope\n",
+   "enc": "eHkxARBaVDoVMR5roBuWZ+1xrHBhGbjp3zbc6KbLPklhG4BFPP+ts4Puokz35yjGAXjO5SPuzVP9k5wmSbaJIwd8RJ4HizkaoB1v8XUbdof+vjN9"
+  },
+  {
+   "plain": "",
+   "enc": "eHkxAYjunLXG8PZqicWccpSE4l/vJinEpm2/5e8Gsj8="
+  },
+  {
+   "plain": "emoji 🎲 и «ёлочки» — тире",
+   "enc": "eHkxAUc/uiTnJt0KqN8iDUdp5SG3RaCNq9p90K47JyqhloMLa1RHbjHLoBSDGIxyzW0WzM8lk0cCBsPsUNj7m4wSgKFQpt5Rx8XI"
+  }
+ ]
+}
