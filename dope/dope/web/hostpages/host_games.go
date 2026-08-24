@@ -40,6 +40,7 @@ type hostGameCreateData struct {
 	SelectedType string
 	BrainDSL     string
 	SIDSL        string
+	TroikaDSL    string
 	// Entrants is the фест's registry offered as this Game's entrant list.
 	// A Game numbers whom it seats from 1 (ADR-0009), so a фест of 65 can hold
 	// an ЭК of 48 and a брейн of a different 48.
@@ -136,6 +137,8 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 			gameTypeRadio("brain", "Брейн", sel),
 			gameTypeRadio("ek", "ЭК", sel),
 			gameTypeRadio("si", "Личная СИ", sel),
+			gameTypeRadio("multi", "Мультиигры", sel),
+			gameTypeRadio("troika", "Тройка", sel),
 		),
 		gameSettings("od", sel,
 			dopeui.Field(dopeui.Label("Количество туров"), dopeui.Textfield(dopeui.Name("od_tours"), dopeui.Inputmode("numeric"), dopeui.Value("3"))),
@@ -161,6 +164,20 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 			dopeui.Field(dopeui.Label("Схема"),
 				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("14"), dopeui.Spellcheck("false"), dopeui.Text(data.SIDSL))),
 			dopeui.Hint(dopeui.Text("Тот же язык схем: за столом сидят игроки, а не команды. Бой на троих — match_size: 3, проходят двое — winning_places: 2.")),
+		),
+		gameSettings("multi", sel,
+			dopeui.Field(dopeui.Label("Мини-игры"),
+				dopeui.Editor(dopeui.Name("multi_games"), dopeui.Rows("8"), dopeui.Spellcheck("false"),
+					dopeui.Placeholder("Фоторяд: {0,1}x10\nЛогика: {0,3}x2 {0,5}\nШтрафной: {-1,0,1}x10"))),
+			dopeui.Hint(dopeui.Text("По строке на мини-игру: «Название: {значения}xN». {0,1} — задание на 0 или 1 балл, {-1,0,1} — со штрафом, {0-12} — любое целое от 0 до 12. Несколько описаний в строке идут подряд: «{0,3}x2 {0,5}» — три задания на 3, 3 и 5 баллов.")),
+			dopeui.Field(dopeui.Label("Что решает при равном итоге (необязательно)"),
+				dopeui.Textfield(dopeui.Name("multi_sorting"), dopeui.Placeholder("total, game2, plus"))),
+			dopeui.Hint(dopeui.Text("Через запятую: total — итог, plus — сумма положительных, game1, game2… — подытоги мини-игр по порядку. Пусто — команды с равным итогом делят место.")),
+		),
+		gameSettings("troika", sel,
+			dopeui.Field(dopeui.Label("Схема"),
+				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("16"), dopeui.Spellcheck("false"), dopeui.Text(data.TroikaDSL))),
+			dopeui.Hint(dopeui.Text("Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50.")),
 		),
 		gameSettings("ek", sel,
 			dopeui.Field(dopeui.Label("Схема"),
@@ -442,7 +459,7 @@ func (s *Server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request
 		}
 		return hostGameCreateDoc(hostGameCreateData{
 			Fest: fest, Error: errMsg, SelectedType: selectedType,
-			BrainDSL: brainDSL, SIDSL: defaultSIDSL(teamCount), Entrants: entrants,
+			BrainDSL: brainDSL, SIDSL: defaultSIDSL(teamCount), TroikaDSL: defaultTroikaDSL(teamCount), Entrants: entrants,
 		}), nil
 	})
 }
@@ -520,6 +537,16 @@ func gameSpecFromForm(festID int64, gameType string, form url.Values) (gamebuild
 		if spec.KSIStickers, err = ksiStickerConfigFromForm(form); err != nil {
 			return spec, err
 		}
+	case games.Multi:
+		spec.Label = "Мультиигры"
+		if spec.Minigames, err = games.ParseMultiGames(form.Get("multi_games")); err != nil {
+			return spec, fmt.Errorf("Мини-игры: %w", err)
+		}
+		if spec.MultiSorting, err = multiSortingFromForm(spec.Minigames, form.Get("multi_sorting")); err != nil {
+			return spec, err
+		}
+	case games.Troika:
+		spec.Label = "Тройка"
 	case games.Brain:
 		spec.Label = "Брейн"
 	case games.SI:
@@ -550,7 +577,7 @@ func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType s
 	}
 	gameType = strings.TrimSpace(gameType)
 	if gameType != games.OD && gameType != games.KSI && gameType != games.EK && gameType != games.Brain &&
-		gameType != games.SI && gameType != ksiStickersGameType {
+		gameType != games.SI && gameType != games.Multi && gameType != games.Troika && gameType != ksiStickersGameType {
 		return 0, errors.New("выберите тип игры")
 	}
 
@@ -593,6 +620,18 @@ func defaultSIDSL(players int) string {
 		players = 3
 	}
 	return fmt.Sprintf("[scheme]\nkind: roundrobin\ngroup_size: %d\nmatch_size: 3\nthemes: 8\nbout.points: seats + 1 - place\nsorting: [points, total, plus]\n", players)
+}
+
+// defaultTroikaDSL is Троечка's регламент at its smallest: one группа of
+// everybody over six темы, ranked as the регламент ranks — a рейтинговый балл
+// of 1 / 0.5 / 0 per бой plus игровые очки over fifty, then личная встреча,
+// забитые, разница. A real tournament edits it into the group stages and the
+// финал.
+func defaultTroikaDSL(participants int) string {
+	if participants < 2 {
+		participants = 2
+	}
+	return fmt.Sprintf("[scheme]\nkind: roundrobin\ngroup_size: %d\nthemes: 6\nmetric: total\npoints: [1, 0.5, 0]\nstandings.rating: points + taken / 50\nsorting: [rating, h2h, taken, diff]\n", participants)
 }
 
 // ksiStickersGameType is the creation-form value for the "KSI with stickers"
@@ -653,4 +692,31 @@ func isHexColor(value string) bool {
 		}
 	}
 	return true
+}
+
+// multiSortingFromForm reads the comparators a fest breaks a tie on Итог with,
+// checked against what this game's мини-игры actually measure — a typo here
+// would otherwise surface as an unranked table on the day.
+func multiSortingFromForm(minigames []games.MultiGame, raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	known := map[string]bool{}
+	for _, name := range games.MultiMetricNames(minigames) {
+		known[name] = true
+	}
+	var order []string
+	for _, item := range strings.Split(raw, ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if !known[item] {
+			return nil, fmt.Errorf("Что решает при равном итоге: %s не считается — есть %s",
+				item, strings.Join(games.MultiMetricNames(minigames), ", "))
+		}
+		order = append(order, item)
+	}
+	return order, nil
 }

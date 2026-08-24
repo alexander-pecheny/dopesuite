@@ -45,6 +45,19 @@ func createKSIGameTx(ctx context.Context, tx *sql.Tx, festID int64, themesCount 
 	return insertJSONGameTx(ctx, tx, festID, identity, "ksi", schemeJSON, stateJSON)
 }
 
+func createMultiGameTx(ctx context.Context, tx *sql.Tx, festID int64, minigames []games.MultiGame, sorting []string) (int64, error) {
+	identity, err := nextGameIdentityTx(ctx, tx, festID, "multi", "Мультиигры")
+	if err != nil {
+		return 0, err
+	}
+	emptyScheme, emptyState := games.MultiEmptyGameJSON(identity.Code, identity.Title, minigames, sorting)
+	schemeJSON, stateJSON, err := pristineFlatTx(ctx, tx, festID, games.Multi, emptyScheme, emptyState)
+	if err != nil {
+		return 0, err
+	}
+	return insertJSONGameTx(ctx, tx, festID, identity, "multi", schemeJSON, stateJSON)
+}
+
 // pristineFlatTx is a flat game's empty scheme and state with the фест's
 // roster already folded in through its Protocol — what creation and
 // «Очистить» write.
