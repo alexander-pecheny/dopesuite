@@ -119,7 +119,7 @@ export function createBundleExportPanel(board: Board, shell: PanelShell): BoardP
     open() {
       const status = el("p", { class: "hint" }, "");
       const btn = el("button", { class: "btn btn-primary", type: "button" }, "Скачать .zip") as HTMLButtonElement;
-      const body = el("div", { class: "col" },
+      const body = el("div", {},
         el("p", { class: "hint" },
           "Архив содержит всю доску: списки, карточки, метки, тесты, комментарии, ",
           "историю правок и вложения. Его можно импортировать на другом сервере xy ",
