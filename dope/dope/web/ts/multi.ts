@@ -147,10 +147,10 @@ function buildTable(): HTMLElement {
     tr.appendChild(td(multi.participantName(state!, p), "sticky team-col", {"data-multi-team-cell": ""}));
     rules.minigames.forEach((game, g) => {
       game.columns.forEach((_, c) => tr.appendChild(cellNode(p, g, c)));
-      tr.appendChild(td(String(sheetRows[p].games[g]), "number theme-block-score",
+      tr.appendChild(td(String(sheetRows[p].raw[g]), "number theme-block-score",
         {"data-subtotal": `${p}-${g}`}));
     });
-    tr.appendChild(td(String(sheetRows[p].total), "number sticky-right total-col", {"data-total": String(p)}));
+    tr.appendChild(td(multi.formatScore(sheetRows[p].total), "number sticky-right total-col", {"data-total": String(p)}));
     if (rules.signed) tr.appendChild(td(String(sheetRows[p].plus), "number sticky-right total-col", {"data-plus": String(p)}));
     body.appendChild(tr);
   });
@@ -269,10 +269,10 @@ function refreshTotals(): void {
   state!.participants.forEach((_, p) => {
     rules.minigames.forEach((_game, g) => {
       const node = root.querySelector<HTMLElement>(`[data-subtotal="${cssEscape(`${p}-${g}`)}"]`);
-      if (node) node.textContent = String(sheetRows[p].games[g]);
+      if (node) node.textContent = String(sheetRows[p].raw[g]);
     });
     const total = root.querySelector<HTMLElement>(`[data-total="${cssEscape(String(p))}"]`);
-    if (total) total.textContent = String(sheetRows[p].total);
+    if (total) total.textContent = multi.formatScore(sheetRows[p].total);
     const plus = root.querySelector<HTMLElement>(`[data-plus="${cssEscape(String(p))}"]`);
     if (plus) plus.textContent = String(sheetRows[p].plus);
   });
@@ -293,8 +293,8 @@ function buildResultsTable(): HTMLElement {
     rows: rows.map((row) => [
       row.placeText,
       resultsTeamCell(row.name),
-      ...row.games.map((value) => String(value)),
-      String(row.total),
+      ...row.games.map(multi.formatScore),
+      multi.formatScore(row.total),
       ...(rules.signed ? [String(row.plus)] : []),
     ]),
   });

@@ -16,12 +16,19 @@ export interface MultiColumn {
 export interface MultiMinigame {
   name: string;
   columns: MultiColumn[];
+  // A normalised мини-игра contributes «сколько от лучшего», out of a hundred,
+  // rather than its own points — so мини-игры of quite different scales weigh
+  // the same in the Итог.
+  normalized: boolean;
 }
+
+// What the best result in a normalised мини-игра is worth.
+export const NORMAL_MAX = 100;
 
 export interface MultiScheme {
   gameType?: string;
   title?: string;
-  minigames?: Array<{name?: unknown; columns?: Array<{values?: unknown} | null> | null} | null>;
+  minigames?: Array<{name?: unknown; normalized?: unknown; columns?: Array<{values?: unknown} | null> | null} | null>;
   sorting?: unknown;
   participants?: string[];
   [key: string]: unknown;
@@ -57,7 +64,11 @@ export function rulesOf(scheme: MultiScheme): MultiRules {
         : [];
       columns.push({values: values.length ? values : [0]});
     }
-    minigames.push({name: typeof raw.name === "string" ? raw.name : "", columns});
+    minigames.push({
+      name: typeof raw.name === "string" ? raw.name : "",
+      normalized: raw.normalized === true,
+      columns,
+    });
   }
   const sorting = Array.isArray(scheme.sorting)
     ? (scheme.sorting as unknown[]).filter((s): s is string => typeof s === "string")
@@ -137,16 +148,26 @@ export function cellValue(state: MultiState, game: number, participant: number, 
 }
 
 export interface ScoreRow {
+  // What each мини-игра contributed to the Итог: its points, or its share of
+  // the best where the мини-игра is normalised.
   games: number[];
+  // What was actually scored in each мини-игра, before any normalising — the
+  // number the cells add up to and the sheet prints under the block.
+  raw: number[];
   total: number;
   plus: number;
 }
 
 // scoreSheet is every participant's subtotals, Итог and Σ+ in one pass — what
 // the «Подробно» sheet prints and what the ranking reads.
+//
+// A normalised мини-игра is scored against the best result in it among the
+// teams in the зачёт: a team that refused to play cannot set the scale for
+// everyone else. Below nought is nought — a team that finished a мини-игра on
+// minus scores nothing for it rather than dragging its Итог down.
 export function scoreSheet(state: MultiState, rules: MultiRules): ScoreRow[] {
-  return state.participants.map((_, p) => {
-    const row: ScoreRow = {games: [], total: 0, plus: 0};
+  const rows = state.participants.map((_, p) => {
+    const row: ScoreRow = {games: [], raw: [], total: 0, plus: 0};
     rules.minigames.forEach((game, g) => {
       let subtotal = 0;
       for (let c = 0; c < game.columns.length; c++) {
@@ -154,11 +175,34 @@ export function scoreSheet(state: MultiState, rules: MultiRules): ScoreRow[] {
         subtotal += value;
         if (value > 0) row.plus += value;
       }
-      row.games.push(subtotal);
-      row.total += subtotal;
+      row.raw.push(subtotal);
     });
     return row;
   });
+  const best = rules.minigames.map((_, g) => {
+    let top = 0;
+    rows.forEach((row, p) => {
+      if (!participantDeclined(state, p)) top = Math.max(top, row.raw[g]);
+    });
+    return top;
+  });
+  for (const row of rows) {
+    rules.minigames.forEach((game, g) => {
+      const raw = row.raw[g];
+      const value = !game.normalized ? raw
+        : best[g] > 0 && raw > 0 ? (NORMAL_MAX * raw) / best[g]
+        : 0;
+      row.games.push(value);
+      row.total += value;
+    });
+  }
+  return rows;
+}
+
+// formatScore prints an Итог that may be fractional the way the sheets do: two
+// decimals where normalising made it fractional, nothing where it did not.
+export function formatScore(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
 export interface ResultRow {
@@ -166,13 +210,14 @@ export interface ResultRow {
   placeText: string;
   name: string;
   games: number[];
+  raw: number[];
   total: number;
   plus: number;
 }
 
 // metricOf reads one of the names a scheme may rank on: total, plus, or
 // game1..gameN by the order the мини-игры are played.
-export function metricOf(row: ScoreRow, name: string): number {
+export function metricOf(row: {games: number[]; total: number; plus: number}, name: string): number {
   if (name === "total") return row.total;
   if (name === "plus") return row.plus;
   const index = Number(name.replace(/^game/, ""));

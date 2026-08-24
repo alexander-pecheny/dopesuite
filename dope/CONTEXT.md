@@ -113,6 +113,14 @@ with a domain each: the set or range of values that task's cell may hold,
 which is at once the validation, the printed номинал and the cell editor.
 Every мини-игра pays a subtotal and the Итог is their sum.
 
+A мини-игра may instead be **normalised** (`→0..100`): it contributes what the
+team scored as a share of the best score in it, out of a hundred, rather than
+its own points. That is what lets мини-игры of quite different scales weigh the
+same — «Ассорти» added a медиа-эрудит worth 980 to a песенный конкурс worth 55.
+The best is taken among the teams in the зачёт, since a team that refused to
+play cannot set the scale for the others, and a team that finished a мини-игра
+on minus scores nothing for it rather than dragging its Итог down.
+
 **Кресло**:
 One of a Троечка table's three seats, in the order the ведущий asks them: two
 пристяжные and, last, the коренной who signals. All three answer every вопрос

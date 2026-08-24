@@ -773,6 +773,8 @@ func buildMultiDetailedSheet(f *excelize.File, scheme *games.MultiScheme, state 
 			total += subtotal
 			cells = append(cells, subtotal)
 		}
+		// The Σ under a block is what the cells add to; what the мини-игра was
+		// worth is «Итог», which the «Итог» sheet carries per мини-игра.
 		cells[1] = total
 		if err := setRow(f, sheet, row, cells); err != nil {
 			return err
@@ -805,7 +807,11 @@ func buildMultiResultsSheet(f *excelize.File, scheme *games.MultiScheme, schemeJ
 		header = append(header, "Σ+")
 	}
 	for _, game := range scheme.Minigames {
-		header = append(header, game.Name)
+		name := game.Name
+		if game.Normalized {
+			name += " (из 100)"
+		}
+		header = append(header, name)
 	}
 	if err := setRow(f, sheet, 1, header); err != nil {
 		return err

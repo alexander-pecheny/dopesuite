@@ -47,17 +47,30 @@ func (c MultiColumn) Signed() bool {
 	return false
 }
 
-// MultiGame is one мини-игра: its name and its tasks in order.
+// MultiGame is one мини-игра: its name, its tasks in order, and whether it
+// pays raw points or is scored against the best result in it.
 type MultiGame struct {
 	Name    string        `json:"name"`
 	Columns []MultiColumn `json:"columns"`
+	// Normalized: the мини-игра contributes «сколько от лучшего», out of a
+	// hundred, rather than its own points — written «→0..100». It is what lets
+	// мини-игры of quite different scales weigh the same in the Итог: a медиа-
+	// эрудит worth 1570 and a песенный конкурс worth 57 both top out at 100.
+	Normalized bool `json:"normalized,omitempty"`
 }
+
+// MultiNormalMax is what the best result in a normalised мини-игра is worth.
+const MultiNormalMax = 100.0
 
 // multiRangeSpan caps a range so a typo — {0-100000} — is a complaint rather
 // than a sheet nobody can draw.
 const multiRangeSpan = 1000
 
 var multiSpecRe = regexp.MustCompile(`^\{([^}]*)\}(?:[xх]([0-9]+))?$`)
+
+// The arrow may be typed either way — «→0..100» reads best, «->0..100» is what
+// a keyboard offers.
+var multiNormalRe = regexp.MustCompile(`\s*(?:→|->)\s*0\.\.100\s*$`)
 var multiRangeRe = regexp.MustCompile(`^(-?[0-9]+)-(-?[0-9]+)$`)
 
 // ParseMultiGames reads the мини-игра spec a host writes: one line per game,
@@ -72,10 +85,14 @@ func ParseMultiGames(src string) ([]MultiGame, error) {
 		}
 		name, specs, ok := strings.Cut(line, ":")
 		name = strings.TrimSpace(name)
+		normalized := multiNormalRe.MatchString(name)
+		if normalized {
+			name = strings.TrimSpace(multiNormalRe.ReplaceAllString(name, ""))
+		}
 		if !ok || name == "" {
 			return nil, fmt.Errorf("строка %d: жду «Имя: {значения}xN»", n+1)
 		}
-		game := MultiGame{Name: name}
+		game := MultiGame{Name: name, Normalized: normalized}
 		for _, spec := range strings.Fields(specs) {
 			columns, err := parseMultiSpec(spec)
 			if err != nil {
@@ -212,13 +229,16 @@ func MultiEmptyGameJSON(slug, title string, games []MultiGame, sorting []string)
 }
 
 // MultiResultsTeam is one ranked team: its participant index, shared place,
-// Итог, Σ+ and the per-мини-игра subtotals.
+// Итог, Σ+ and, per мини-игра, what it contributed and what it scored raw.
+// The two differ only where a мини-игра is normalised, and both are shown —
+// the sheet reads «сколько набрал» beside «сколько это стоило».
 type MultiResultsTeam struct {
 	Index int
 	Place float64
-	Total int
+	Total float64
 	Plus  int
-	Games []int
+	Games []float64
+	Raw   []int
 }
 
 // ParseMultiSorting reads the comparators a фест breaks a tie on Итог with,
@@ -277,7 +297,11 @@ func ComputeMultiResults(schemeJSON, stateJSON string) ([]MultiResultsTeam, erro
 		if KSIParticipantDeclined(state.Declined, state.Participants[p]) {
 			continue
 		}
-		team := MultiResultsTeam{Index: p, Games: make([]int, len(scheme.Minigames))}
+		team := MultiResultsTeam{
+			Index: p,
+			Games: make([]float64, len(scheme.Minigames)),
+			Raw:   make([]int, len(scheme.Minigames)),
+		}
 		for g, game := range scheme.Minigames {
 			if g >= len(state.Games) {
 				continue
@@ -291,14 +315,42 @@ func ComputeMultiResults(schemeJSON, stateJSON string) ([]MultiResultsTeam, erro
 					break
 				}
 				value := rows[p][c]
-				team.Games[g] += value
-				team.Total += value
+				team.Raw[g] += value
 				if value > 0 {
 					team.Plus += value
 				}
 			}
 		}
 		ranked = append(ranked, team)
+	}
+
+	// A normalised мини-игра is scored against the best result in it — and the
+	// best among the teams in the зачёт, since a team that refused to play
+	// cannot set the scale for everyone else. Below nought is nought: a team
+	// that finished on minus scores nothing for that мини-игра rather than
+	// dragging its Итог down.
+	best := make([]int, len(scheme.Minigames))
+	for _, team := range ranked {
+		for g, raw := range team.Raw {
+			if raw > best[g] {
+				best[g] = raw
+			}
+		}
+	}
+	for i := range ranked {
+		team := &ranked[i]
+		team.Total = 0
+		for g, game := range scheme.Minigames {
+			switch {
+			case !game.Normalized:
+				team.Games[g] = float64(team.Raw[g])
+			case best[g] > 0 && team.Raw[g] > 0:
+				team.Games[g] = MultiNormalMax * float64(team.Raw[g]) / float64(best[g])
+			default:
+				team.Games[g] = 0
+			}
+			team.Total += team.Games[g]
+		}
 	}
 
 	order, err := ParseMultiSorting(scheme.Minigames, strings.Join(scheme.Sorting, ","))
@@ -308,12 +360,12 @@ func ComputeMultiResults(schemeJSON, stateJSON string) ([]MultiResultsTeam, erro
 	if len(order) == 0 {
 		order = []string{"total"}
 	}
-	metric := func(team MultiResultsTeam, name string) int {
+	metric := func(team MultiResultsTeam, name string) float64 {
 		switch name {
 		case "total":
 			return team.Total
 		case "plus":
-			return team.Plus
+			return float64(team.Plus)
 		}
 		index, _ := strconv.Atoi(strings.TrimPrefix(name, "game"))
 		return team.Games[index-1]

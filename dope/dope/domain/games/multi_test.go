@@ -131,3 +131,87 @@ func TestComputeMultiResultsSharesAPlaceAndObeysTheSchemesSorting(t *testing.T) 
 		t.Fatalf("ranked = %+v", ranked)
 	}
 }
+
+// A мини-игра may be scored against the best result in it rather than raw —
+// «→0..100» — so two мини-игры of quite different scales weigh the same in the
+// Итог. Below zero is zero: a team that finished on minus scores nothing for
+// that мини-игра rather than dragging its Итог down.
+func TestParseMultiGamesReadsTheNormalisedForm(t *testing.T) {
+	games, err := ParseMultiGames("Медиа-эрудит →0..100: {-10,0,10}x2 {-20,0,20}\nПесни ->0..100: {0,1}x3\nСырая: {0,1}x2")
+	if err != nil {
+		t.Fatalf("ParseMultiGames: %v", err)
+	}
+	if games[0].Name != "Медиа-эрудит" || !games[0].Normalized {
+		t.Fatalf("game 0 = %q normalized=%v", games[0].Name, games[0].Normalized)
+	}
+	if len(games[0].Columns) != 3 {
+		t.Fatalf("Медиа-эрудит has %d columns", len(games[0].Columns))
+	}
+	// The arrow may be typed either way; a мини-игра without one stays raw.
+	if games[1].Name != "Песни" || !games[1].Normalized {
+		t.Fatalf("game 1 = %q normalized=%v", games[1].Name, games[1].Normalized)
+	}
+	if games[2].Normalized {
+		t.Error("a мини-игра with no arrow is raw")
+	}
+}
+
+// The divisor is the best among the teams in the зачёт: a team that refused to
+// play cannot set the scale for everyone else.
+func TestComputeMultiResultsNormalisesAgainstTheBestRankedTeam(t *testing.T) {
+	scheme := `{"minigames":[
+		{"name":"Эрудит","normalized":true,"columns":[{"values":[-10,0,10]},{"values":[-20,0,20]}]},
+		{"name":"Песни","normalized":true,"columns":[{"values":[0,1]},{"values":[0,1]}]}
+	]}`
+	state := `{"participants":[{"number":1,"name":"А"},{"number":2,"name":"Б"},{"number":3,"name":"В"},{"number":4,"name":"Г"}],
+		"declined":{"n4":true},
+		"games":[
+			{"cells":[[10,20],[10,0],[-10,-20],[10,20]]},
+			{"cells":[[1,1],[1,0],[0,0],[1,1]]}
+		]}`
+	ranked, err := ComputeMultiResults(scheme, state)
+	if err != nil {
+		t.Fatalf("ComputeMultiResults: %v", err)
+	}
+	by := map[int]MultiResultsTeam{}
+	for _, row := range ranked {
+		by[row.Index] = row
+	}
+	// А is the best in both: 30 of 30 and 2 of 2 → 100 + 100.
+	if by[0].Total != 200 || by[0].Games[0] != 100 || by[0].Games[1] != 100 {
+		t.Fatalf("А = %+v", by[0])
+	}
+	// Б: 10 of 30 → 33.33…, 1 of 2 → 50.
+	if got := by[1].Games[0]; got < 33.33 || got > 33.34 {
+		t.Fatalf("Б эрудит = %v, want 100/3", got)
+	}
+	if by[1].Games[1] != 50 {
+		t.Fatalf("Б песни = %v", by[1].Games[1])
+	}
+	// В finished on minus: nought for that мини-игра, never below.
+	if by[2].Games[0] != 0 || by[2].Total != 0 {
+		t.Fatalf("В = %+v, want 0 rather than a negative", by[2])
+	}
+	// Г declined, so Г is unranked — and Г's 30 did not set the scale, А's did.
+	if _, ranked := by[3]; ranked {
+		t.Error("a declined team stays out of the ranking")
+	}
+	// The raw subtotals ride along beside the normalised ones.
+	if by[0].Raw[0] != 30 || by[1].Raw[0] != 10 {
+		t.Fatalf("raw = %v / %v", by[0].Raw, by[1].Raw)
+	}
+}
+
+// A мини-игра nobody scored in has no scale to speak of, so it pays nobody
+// rather than dividing by zero.
+func TestComputeMultiResultsSurvivesAnUnplayedMinigame(t *testing.T) {
+	scheme := `{"minigames":[{"name":"Пусто","normalized":true,"columns":[{"values":[0,1]}]}]}`
+	state := `{"participants":[{"number":1,"name":"А"}],"games":[{"cells":[[0]]}]}`
+	ranked, err := ComputeMultiResults(scheme, state)
+	if err != nil {
+		t.Fatalf("ComputeMultiResults: %v", err)
+	}
+	if ranked[0].Total != 0 || ranked[0].Games[0] != 0 {
+		t.Fatalf("row = %+v", ranked[0])
+	}
+}
