@@ -1633,6 +1633,16 @@ input[type="radio"]:focus-visible {
   background: var(--hover-bg);
 }
 
+/* A rule between clusters of menu items. --grid, not --border: the latter is
+   transparent outside high contrast, and a separator that only appears there
+   would leave the grouping to the margin alone. Inset to the label column so it
+   reads as grouping the words, not as cutting the panel in half. */
+.menu-sep {
+  height: 1px;
+  margin: var(--space-1) var(--space-2-5);
+  background: var(--grid);
+}
+
 /* ── Appearance modal ───────────────────────────────────────────────────── */
 .appearance-modal-overlay {
   position: fixed;

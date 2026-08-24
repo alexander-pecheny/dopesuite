@@ -324,7 +324,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
 
   return {
     id: "import", menu: "board", icon: "file-up",
-    label: "Импорт",
+    label: "Импорт…",
     title: "Импортировать пакет вопросов (.4s, .docx) или архив xy (.zip)",
     open: openImportPick,
   };

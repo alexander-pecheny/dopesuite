@@ -1,4 +1,4 @@
-// bundleexport.ts — «Экспорт (.zip)»: the Bundle export (ADR-0013), and the one
+// bundleexport.ts — «Выгрузить архив (.zip)»: the Bundle export (ADR-0013), and one
 // place a live board becomes a Bundle. buildBundle decrypts what the ticked
 // Lists reach under the key this client already has; the panel packs that into
 // a plaintext zip, and a cross-board Transfer hands the same pair straight to
@@ -178,8 +178,8 @@ export function tickList(
 
 export function createBundleExportPanel(board: Board, shell: PanelShell): BoardPanel {
   return {
-    id: "bundle-export", menu: "board", icon: "file-down",
-    label: "Экспорт (.zip)…",
+    id: "bundle-export", menu: "board", icon: "package",
+    label: "Выгрузить архив (.zip)…",
     title: "Выгрузить доску или отдельные списки одним архивом — для переноса на другой сервер xy",
     open() {
       const state = board.state;
@@ -224,7 +224,7 @@ export function createBundleExportPanel(board: Board, shell: PanelShell): BoardP
           btn.disabled = false;
         }
       });
-      shell.open({ icon: "file-down", title: "Экспорт (.zip)", body, onClose: () => {} });
+      shell.open({ icon: "package", title: "Выгрузить архив (.zip)", body, onClose: () => {} });
     },
   };
 }

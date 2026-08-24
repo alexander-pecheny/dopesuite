@@ -82,6 +82,8 @@ interface Entry<S> {
   icon: IconName;
   label: string | ((scope: S) => string);
   title?: string;
+  // Heads a cluster: the menus draw a rule above it.
+  divider?: boolean;
   offered?(scope: S): boolean;
   open(scope: S): void;
 }
@@ -94,6 +96,7 @@ export interface PanelMenuItem {
   icon: IconName;
   label: string;
   title?: string;
+  divider?: boolean;
   onClick(): void;
 }
 
@@ -106,9 +109,13 @@ export function registerPanel(...panels: Panel[]): void {
   }
 }
 
-// The two menus, as data, in registration order.
+// The two menus, as data, in registration order. Both honour `offered` — the
+// board menu is rebuilt whenever the snapshot lands, because what a reader may
+// do with a board is not known until their role is.
 export function boardMenu(): PanelMenuItem[] {
-  return registry.filter((p): p is BoardPanel => p.menu === "board").map((p) => item(p, undefined));
+  return registry
+    .filter((p): p is BoardPanel => p.menu === "board" && (!p.offered || p.offered()))
+    .map((p) => item(p, undefined));
 }
 export function listMenu(scope: ListScope): PanelMenuItem[] {
   return registry.filter((p): p is ListPanel => p.menu === "list" && (!p.offered || p.offered(scope))).map((p) => item(p, scope));
@@ -119,6 +126,7 @@ function item<S>(p: Entry<S>, scope: S): PanelMenuItem {
     icon: p.icon,
     label: typeof p.label === "function" ? p.label(scope) : p.label,
     title: p.title,
+    ...(p.divider ? { divider: true } : {}),
     onClick: () => p.open(scope),
   };
 }

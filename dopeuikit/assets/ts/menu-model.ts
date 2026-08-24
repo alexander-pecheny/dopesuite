@@ -14,6 +14,10 @@ export interface MenuJump {
 
 export interface MenuExtra {
   label: string;
+  // Starts a new cluster: the renderer draws a rule above this row. The model
+  // drops one that would lead the menu or follow another, so a page can mark
+  // every cluster head without knowing which of them survive its own filtering.
+  divider?: boolean;
   // An icon NAME, not a node: this model is DOM-free so jstest can exercise it.
   // menu.ts turns it into the glyph.
   icon?: string;
@@ -36,6 +40,7 @@ export interface MenuConfig {
 }
 
 export type MenuItem =
+  | { kind: "divider" }
   | { kind: "appearance"; icon: string }
   | { kind: "link"; label: string; href: string; title: string; external: boolean; download: boolean; icon?: string }
   | { kind: "action"; label: string; title: string; onClick: () => void; icon?: string };
@@ -70,6 +75,10 @@ export function menuItems(state: {
     items.push(link(state.jump.label, state.jump.href, state.jump.title, state.jump.external));
   }
   for (const extra of state.extras) {
+    // A rule that would open the menu or double another separates nothing.
+    if (extra.divider && items.length && items[items.length - 1].kind !== "divider") {
+      items.push({ kind: "divider" });
+    }
     if (extra.onClick) {
       items.push({ kind: "action", label: extra.label, title: extra.title ?? "", onClick: extra.onClick, ...(extra.icon ? { icon: extra.icon } : {}) });
     } else {

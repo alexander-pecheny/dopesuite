@@ -58,6 +58,10 @@ export interface MenuItem {
   checked?: boolean;
   radio?: boolean;
   icon?: Node;
+  // Starts a new cluster: a rule is drawn above this row (never leading the
+  // menu, never doubled), so a conditional item can mark itself without
+  // knowing which of its neighbours the scope left in.
+  divider?: boolean;
 }
 
 // The slice of the board's live state the timeline reads: cards (for the

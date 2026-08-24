@@ -7,7 +7,6 @@
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
-import { xyChgk } from "./chgk.js";
 import { xyVersions } from "./versions.js";
 import { xyTypo } from "./typo.js";
 import { modal } from "./modal.js";
@@ -25,14 +24,17 @@ export interface Rewrites {
   // first time their board is opened after that release. Idempotent.
   convertLegacyVersions(): Promise<void>;
   // The two ☰ entries, in the order the menu lists them.
-  fixTrello: BoardPanel;
   typograph: BoardPanel;
 }
 
 export function createRewrites(board: Board): Rewrites {
+  // Only question cards. A test card's description is JSON (a legacy session),
+  // and a pass meant for 4s turns its quotes into «ёлочки» and its metadata into
+  // something parseSession cannot read back.
   function collect(next: (c: BoardCard) => string | null): DescChange[] {
     const out: DescChange[] = [];
     for (const c of board.state.cards) {
+      if (c.kind !== "question") continue;
       const desc = next(c);
       if (desc !== null && desc !== c.desc) out.push({ card: c, desc });
     }
@@ -49,24 +51,6 @@ export function createRewrites(board: Board): Rewrites {
       ch.card.desc = ch.desc;
     }
     board.render();
-  }
-
-  // fixTrelloFormatting re-applies chgksuite's Trello clean-up (the same fix
-  // the importer runs) to every already-imported card whose description still
-  // carries Trello artefacts.
-  async function fixTrelloFormatting(): Promise<void> {
-    const changes = collect((c) => xyChgk.fixTrelloFormatting(c.desc));
-    if (!changes.length) { alert("Нечего исправлять — оформление уже в порядке."); return; }
-    if (!confirm(`Исправить оформление Trello в ${changes.length} карточк(ах)? Описания будут изменены.`)) return;
-    board.setStatus("saving");
-    try {
-      await apply(changes);
-      board.setStatus("saved");
-      alert(`Исправлено карточек: ${changes.length}.`);
-    } catch (err) {
-      board.setStatus("error");
-      alert("Ошибка при исправлении: " + errMsg(err));
-    }
   }
 
   // typograph runs the typography pass over every card on the board, every
@@ -147,12 +131,6 @@ export function createRewrites(board: Board): Rewrites {
     collect,
     apply,
     convertLegacyVersions,
-    fixTrello: {
-      id: "fix-trello", menu: "board", icon: "wand-sparkles",
-      label: "Исправить оформление Trello",
-      title: "Убрать артефакты Trello (двойные переносы, экранирование, смарт-ссылки) во всех карточках",
-      open: () => { void fixTrelloFormatting(); },
-    },
     typograph: {
       // wand-sparkles twice over: the vendored lucide set has no «type» glyph, and
       // both items are the same kind of act — rewrite the text of every card at once.
