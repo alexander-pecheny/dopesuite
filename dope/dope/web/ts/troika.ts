@@ -296,7 +296,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
   themeRow.appendChild(th("", "num-col"));
   state.values.forEach((value, t) => {
     themeRow.appendChild(th(`Тема ${t + 1}${value === 1 ? "" : ` · ${value}`}`, "theme-block",
-      {colspan: String(troika.THEME_QUESTIONS)}));
+      {colSpan: troika.THEME_QUESTIONS}));
   });
   themeRow.appendChild(th("Σ", "total-col"));
   thead.appendChild(themeRow);
@@ -311,7 +311,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
       const tr = document.createElement("tr");
       if (chair === 0) {
         const teamCell = td(seatName(bout.view, side), "team-col troika-team",
-          {rowspan: String(troika.CHAIRS)});
+          {rowSpan: troika.CHAIRS});
         tr.appendChild(teamCell);
       }
       tr.appendChild(td(chairPicker(bout, side, chair, roster), "num-col troika-chair"));
@@ -322,7 +322,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
       });
       if (chair === 0) {
         tr.appendChild(td(String(total), "number total-col troika-total",
-          {rowspan: String(troika.CHAIRS), "data-total": `${bout.code}-${side}`}));
+          {rowSpan: troika.CHAIRS, dataset: {total: `${bout.code}-${side}`}}));
       }
       body.appendChild(tr);
     }
@@ -373,7 +373,7 @@ function seatRow(bout: BoutEntry, side: number, state: TroikaState): HTMLElement
       seatEditAt.set(seatKey(bout.code, side), t);
       render();
     });
-    tr.appendChild(td(button, "troika-seat-cell", {colspan: String(troika.THEME_QUESTIONS)}));
+    tr.appendChild(td(button, "troika-seat-cell", {colSpan: troika.THEME_QUESTIONS}));
   });
   tr.appendChild(td("", "total-col"));
   return tr;
@@ -427,12 +427,7 @@ function markCell(code: string, side: number, theme: number, q: number, chair: n
   state: TroikaState): HTMLElement {
   const mark = troika.markAt(state, side, theme, q, chair);
   const cell = td(mark === "right" ? "+" : mark === "wrong" ? "−" : "", "troika-cell answer-cell", {
-    "data-match": code,
-    "data-side": String(side),
-    "data-theme": String(theme),
-    "data-q": String(q),
-    "data-chair": String(chair),
-    "data-mark": mark,
+    dataset: {match: code, side, theme, q, chair, mark},
   });
   return cell;
 }

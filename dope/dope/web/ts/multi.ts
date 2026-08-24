@@ -120,7 +120,8 @@ function buildTable(): HTMLElement {
   gamesRow.appendChild(th("№", "sticky num-col"));
   gamesRow.appendChild(th("Команда", "sticky team-col"));
   rules.minigames.forEach((game, g) => {
-    gamesRow.appendChild(th(game.name, "theme-block", {colspan: String(game.columns.length + 1), "data-game": String(g)}));
+    gamesRow.appendChild(th(game.name, "theme-block",
+      {colSpan: game.columns.length + 1, dataset: {game: g}}));
   });
   gamesRow.appendChild(th("Итог", "sticky-right total-col"));
   if (rules.signed) gamesRow.appendChild(th("Σ+", "sticky-right total-col"));
@@ -144,14 +145,14 @@ function buildTable(): HTMLElement {
     const tr = document.createElement("tr");
     if (multi.participantDeclined(state!, p)) tr.classList.add("declined-row");
     tr.appendChild(td(String(multi.participantNumber(state!, p) || ""), "sticky num-col"));
-    tr.appendChild(td(multi.participantName(state!, p), "sticky team-col", {"data-multi-team-cell": ""}));
+    tr.appendChild(td(multi.participantName(state!, p), "sticky team-col", {dataset: {multiTeamCell: ""}}));
     rules.minigames.forEach((game, g) => {
       game.columns.forEach((_, c) => tr.appendChild(cellNode(p, g, c)));
       tr.appendChild(td(String(sheetRows[p].raw[g]), "number theme-block-score",
-        {"data-subtotal": `${p}-${g}`}));
+        {dataset: {subtotal: `${p}-${g}`}}));
     });
-    tr.appendChild(td(multi.formatScore(sheetRows[p].total), "number sticky-right total-col", {"data-total": String(p)}));
-    if (rules.signed) tr.appendChild(td(String(sheetRows[p].plus), "number sticky-right total-col", {"data-plus": String(p)}));
+    tr.appendChild(td(multi.formatScore(sheetRows[p].total), "number sticky-right total-col", {dataset: {total: p}}));
+    if (rules.signed) tr.appendChild(td(String(sheetRows[p].plus), "number sticky-right total-col", {dataset: {plus: p}}));
     body.appendChild(tr);
   });
   table.appendChild(body);
@@ -165,9 +166,7 @@ function maxOf(values: number[]): number {
 function cellNode(participant: number, game: number, column: number): HTMLElement {
   const value = multi.cellValue(state!, game, participant, column);
   const cell = td(value === 0 ? "" : String(value), "multi-cell", {
-    "data-participant": String(participant),
-    "data-game": String(game),
-    "data-column": String(column),
+    dataset: {participant, game, column},
   });
   if (value < 0) cell.classList.add("multi-cell-minus");
   return cell;
