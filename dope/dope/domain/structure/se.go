@@ -18,7 +18,7 @@ type singleElim struct{}
 func (singleElim) Code() string { return "se" }
 func (singleElim) Word() string { return "single_elimination" }
 func (singleElim) Keys() []Key {
-	return []Key{{Name: "participants"}, {Name: "match_size", Round: true}, {Name: "winning_places"}, {Name: "rounds"}, {Name: "bronze"}, {Name: "best_of", Round: true}, {Name: "points", Cascade: true}, {Name: "metric"}}
+	return []Key{{Name: "participants"}, {Name: "match_size", Round: true}, {Name: "winning_places"}, {Name: "rounds"}, {Name: "bronze"}, {Name: "best_of", Round: true}, {Name: "rollout", Round: true}, {Name: "points", Cascade: true}, {Name: "metric"}}
 }
 
 func seRoundTitle(remaining int) string {
@@ -212,12 +212,16 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 					Slots:            base.Slots,
 				}
 			}
-			cfg, err := seSeriesConfig(b)
-			if err != nil {
-				return Outputs{}, err
+			stage := Stage{Code: stageCode, Title: b.RoundTitle(names, elimRoundTitle(round, roundIndex, winning)), Kind: "matches",
+				Rounds: names, At: At{Round: roundIndex + 1}, Matches: series}
+			if !seRolledOut(b, names) {
+				cfg, err := seSeriesConfig(b)
+				if err != nil {
+					return Outputs{}, err
+				}
+				stage.Kind, stage.Config = "series", cfg
 			}
-			if _, err := b.Emit(Stage{Code: stageCode, Title: b.RoundTitle(names, elimRoundTitle(round, roundIndex, winning)), Kind: "series",
-				Rounds: names, At: At{Round: roundIndex + 1}, Matches: series, Config: cfg}); err != nil {
+			if _, err := b.Emit(stage); err != nil {
 				return Outputs{}, err
 			}
 			seriesFinal = true
@@ -293,7 +297,7 @@ func appendBronze(b Block, pair []store.SchemeSlot, round int) error {
 	}
 	stage := Stage{Code: stageCode, Title: b.RoundTitle([]string{"bronze"}, "Матч за 3-е место"), Kind: "matches",
 		Rounds: []string{"bronze"}, At: At{Round: round}, Matches: matches}
-	if bouts > 1 {
+	if bouts > 1 && !seRolledOut(b, []string{"bronze"}) {
 		cfg, err := seSeriesConfig(b)
 		if err != nil {
 			return err
@@ -302,6 +306,23 @@ func appendBronze(b Block, pair []store.SchemeSlot, round int) error {
 	}
 	_, err = b.Emit(stage)
 	return err
+}
+
+// seRolledOut reports whether this Round's series is drawn as its бои rather
+// than ranked as one. A series is a ranking scope by default — that is what
+// makes «до большинства побед» and Троечка's summed рейтинговый балл the same
+// mechanism — but a tournament that reads its финал off the бои themselves,
+// as СтудЧР's брейн does, says so and gets three boxes instead of a table.
+func seRolledOut(b Block, names []string) bool {
+	if v, ok := b.Bool("rollout"); ok && v {
+		return true
+	}
+	for _, name := range names {
+		if v, ok := b.Bool("rollout." + name); ok && v {
+			return true
+		}
+	}
+	return false
 }
 
 // seSeriesConfig is how a series is ranked: the block's own очки, score metric,

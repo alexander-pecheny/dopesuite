@@ -49,12 +49,14 @@ missing was a series consulting them.
 
 ## Consequences
 
-- A series stage ranks itself, so `RanksItsOwnStage` is true for it: брейн's
-  финал now shows a table where it showed a wall of бои. That is the visible
-  change this carries, and it is the point — a series' standing is what
-  settles it.
-- The golden scheme for брейн moves by two lines: its final stage's kind, and
-  the очки it now records. Nothing about who wins it changes.
+- A series stage ranks itself, so `RanksItsOwnStage` is true for it and the
+  Сетка draws it as a table rather than as its бои. A tournament that reads
+  its финал off the бои says `rollout`, which emits the same `matches` stage
+  as before and computes no standing for it. СтудЧР's брейн carries it, so the
+  conformance replay compiles byte-identically to what it compiled before.
+- Nothing computed a series' winner before this — the бои sat there and a
+  person read them — so the table is new information rather than different
+  information, and no advancement moves either way: a series is terminal.
 - A two-seat block's standings gain `place_sum` and `bouts`, which the
   multi-seat table already carried. Nothing sorts on them unless a scheme says
   so, and a comparator that ascends now ascends on both paths.

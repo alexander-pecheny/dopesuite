@@ -39,3 +39,6 @@ bronze: true
 questions: 7
 questions.final: 5
 best_of.final: 3
+# The финал was read off its three бои, not off a table of them, and the
+# replay reproduces the tournament as played (ADR-0010).
+rollout.final: true

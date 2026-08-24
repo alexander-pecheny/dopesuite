@@ -174,3 +174,53 @@ func TestPlayerSeedNeedsItsSources(t *testing.T) {
 		}
 	}
 }
+
+// A series is a ranking scope by default — that is what lets Троечка's финал
+// be won on summed рейтинговые баллы. A tournament that reads its финал off
+// the бои themselves, as СтудЧР's брейн does, writes rollout and gets them.
+func TestRolloutDrawsASeriesAsItsBouts(t *testing.T) {
+	const src = `
+[scheme]
+kind: roundrobin
+groups: 2
+group_size: 4
+proceeding_participants: 2
+themes: 6
+---
+kind: single_elimination
+participants: 2
+bronze: true
+best_of.final: 3
+best_of.bronze: 3
+%s
+`
+	ranked := compileSrc(t, fmt.Sprintf(src, ""), troikaInput(8))
+	if got := stageByCode(t, ranked, "s2-final").Kind; got != "series" {
+		t.Fatalf("final kind = %q, want series", got)
+	}
+	if got := stageByCode(t, ranked, "s2-bronze").Kind; got != "series" {
+		t.Fatalf("bronze kind = %q, want series", got)
+	}
+
+	// rollout on one Round leaves the other a ranking scope.
+	one := compileSrc(t, fmt.Sprintf(src, "rollout.final: true"), troikaInput(8))
+	if got := stageByCode(t, one, "s2-final").Kind; got != "matches" {
+		t.Fatalf("rolled-out final kind = %q, want matches", got)
+	}
+	if got := stageByCode(t, one, "s2-bronze").Kind; got != "series" {
+		t.Fatalf("bronze kind = %q, want series", got)
+	}
+	// Rolling out changes how the бои are read, never which бои are played.
+	if a, b := stageByCode(t, ranked, "s2-final"), stageByCode(t, one, "s2-final"); len(a.Matches) != len(b.Matches) {
+		t.Fatalf("rollout changed the бои: %d vs %d", len(a.Matches), len(b.Matches))
+	}
+
+	// The block-wide form covers every series it has.
+	both := compileSrc(t, fmt.Sprintf(src, "rollout: true"), troikaInput(8))
+	if got := stageByCode(t, both, "s2-final").Kind; got != "matches" {
+		t.Fatalf("block rollout final kind = %q, want matches", got)
+	}
+	if got := stageByCode(t, both, "s2-bronze").Kind; got != "matches" {
+		t.Fatalf("block rollout bronze kind = %q, want matches", got)
+	}
+}
