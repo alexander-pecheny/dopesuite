@@ -50,6 +50,10 @@ The «Вопросы тестировали: …» line a tour carries in its pr
 Which Sessions a tour's Tester List names. Board data, not a per-reader preference: the preamble belongs to the tour and ships with the package, so two editors preparing it see one answer. Undeclared, a tour falls back to the custom — everyone who saw more than half its questions.
 _Avoid_: tick state, selection, pick
 
+**Common Tester (общий тестер списка)**:
+A tester the tour's Tester List already names, and who is therefore already warned off it. A Card's «Видели» line subtracts them, naming only the extras — the people nobody has warned, who are the whole point of the line. «Показать всех тестеров» on the open card brings them back dimmed; it is a peek that lasts while the card stays open, never a stored preference.
+_Avoid_: main tester, основной тестер, hidden tester
+
 **Announce Set**:
 The cities a Test Session's start time is announced in, and the source of the invite line an editor pastes into a messenger. A city carries a timezone and the name to print; testers are not xy users, so this is an outbound string, not a rendering preference.
 

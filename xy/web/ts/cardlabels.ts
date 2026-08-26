@@ -9,8 +9,8 @@ import { xyCrypto } from "./crypto.js";
 import { sortLabels } from "./labelsedit.js";
 import { colorField, LABEL_COLORS } from "./colorpick.js";
 import { plural } from "./massaction.js";
-import { whoSaw } from "./sessions.js";
-import type { SessionMeta } from "./sessions.js";
+import { testerNames } from "./sessions.js";
+import type { SessionMeta, Tester } from "./sessions.js";
 import { icon } from "./icons_gen.js";
 import type { Board } from "./panels.js";
 import type { BoardCard, BoardLabel, BoardList } from "./unlock.js";
@@ -129,38 +129,61 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
   // names. A tour's preamble lists whoever tested most of it, and those people
   // know not to play; the ones who matter here are the extras — a question moved
   // in from another tournament, seen by three people nobody has warned. Showing
-  // the full list again would bury them.
+  // the full list again would bury them — but on a question every common tester
+  // saw, the subtraction leaves nothing and the card reads as untested. So
+  // «Показать всех тестеров» dims them back in instead. A peek, not a preference:
+  // keyed to the open card, so a label write mid-peek does not collapse the list
+  // and the next card starts folded again.
+  let seenAllFor: number | null = null;
+
+  function seenNames(testers: ReadonlyArray<Tester>): string[] {
+    const { players, teams } = testerNames(testers);
+    return [...players, ...teams];
+  }
+
   function renderSeen(card: BoardCard): void {
     const node = ui.seen;
     const mine = board.playingsOf(card.id).map((sid) => board.sessionMeta(sid)).filter((m): m is SessionMeta => m != null);
-    if (!mine.length) { node.hidden = true; return; }
+    const everyone = seenNames(mine.flatMap((m) => m.testers || []));
+    if (!everyone.length) { node.hidden = true; return; }
 
     const list = board.state.lists.find((l) => l.id === card.listId);
-    const named = list ? deps.tourPicked(list) : new Set<number>();
     const common = new Set<string>();
-    for (const sid of named) {
+    for (const sid of list ? deps.tourPicked(list) : []) {
       const m = board.sessionMeta(sid);
       for (const t of (m && m.testers) || []) common.add((t.text || "").trim());
     }
+    const hiding = common.size > 0 && seenAllFor !== card.id;
+    const names = hiding ? everyone.filter((n) => !common.has(n)) : everyone;
+    const label = hiding ? "Видели вопрос, кроме общих тестеров списка: " : "Видели: ";
 
-    const extras = mine.map((m) => ({
-      ...m,
-      testers: (m.testers || []).filter((t) => !common.has((t.text || "").trim())),
-    }));
-    const line = whoSaw(common.size ? extras : mine);
-    node.hidden = !line;
-    if (!line) return;
-
-    const label = common.size ? "Видели вопрос, кроме общих тестеров списка: " : "Видели: ";
-    node.replaceChildren(
-      el("span", { class: "seen-label", text: label }),
-      el("span", { class: "seen-names", text: line }),
-      el("button", {
+    const parts: Array<HTMLElement | string> = [];
+    if (names.length) {
+      const spans: Array<HTMLElement | string> = [];
+      for (const n of names) {
+        if (spans.length) spans.push(", ");
+        spans.push(common.has(n) ? el("span", { class: "seen-common", title: "Общий тестер списка", text: n }) : n);
+      }
+      parts.push(el("span", { class: "seen-label", text: label }), el("span", { class: "seen-names" }, ...spans));
+    }
+    if (common.size) {
+      const cb = el("input", { type: "checkbox" }) as HTMLInputElement;
+      cb.checked = !hiding;
+      cb.addEventListener("change", () => {
+        seenAllFor = cb.checked ? card.id : null;
+        renderSeen(card);
+      });
+      parts.push(el("label", { class: "checkbox seen-all" }, cb, el("span", { text: "Показать всех тестеров" })));
+    }
+    if (names.length) {
+      parts.push(el("button", {
         class: "input seen-copy", type: "button",
         title: "Скопировать",
-        onclick: () => { void deps.copyPlain(label + line); },
-      }, icon("clipboard")),
-    );
+        onclick: () => { void deps.copyPlain(label + names.join(", ")); },
+      }, icon("clipboard")));
+    }
+    node.hidden = false;
+    node.replaceChildren(...parts);
   }
 
   function closeLabelAddPopup(): void {

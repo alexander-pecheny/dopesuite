@@ -302,7 +302,9 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        (preview.test.js)
     cardlabels.ts      the open card's «Метки», «Тесты» and «Видели» (ADR-0004): two
                        pickers over one filtered popup, the create-label form mounted at
-                       its foot, every write as the card's whole set through the verbs
+                       its foot, every write as the card's whole set through the verbs.
+                       «Видели» subtracts the tour's common testers; «Показать всех
+                       тестеров» un-hides them dimmed for as long as the card is open
                        (cardlabels.test.js over fakeBoard)
     bell.ts            the 🔔: the badge and the panel of recent other-authored activity,
                        wording each event with timeline.eventVerb (one verbs map)

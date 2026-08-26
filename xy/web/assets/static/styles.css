@@ -1737,7 +1737,10 @@ body {
 #cardSeen { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
 .seen-label { color: var(--muted); font-size: var(--text-sm); }
 .seen-names { flex: 1 1 12rem; }
-.seen-copy { flex: 0 0 auto; }
+/* The tour already names these people in its preamble; «Показать всех
+   тестеров» brings them back dimmed so the extras still read first. */
+.seen-common { color: var(--muted); }
+.seen-all, .seen-copy { flex: 0 0 auto; }
 
 /* The person directory's dropdown: this board's names first and unlabelled,
    then names from other unlocked boards tagged with where they came from. */
