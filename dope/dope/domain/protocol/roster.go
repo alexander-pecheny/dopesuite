@@ -295,9 +295,9 @@ func resizeIntSlice(values []int, size int) []int {
 // (legacy state captured before numbers were stored). New teams get an empty
 // row; teams that dropped out lose their row. Each old row is claimed at most
 // once. With no old participants at all, a plain positional resize is used.
-func RemapAnswerMatrix(values [][]string, oldParts, newParts []games.KSIParticipant, cols int) [][]string {
+func RemapAnswerMatrix[T any](values [][]T, oldParts, newParts []games.KSIParticipant, cols int) [][]T {
 	if len(oldParts) == 0 {
-		return resizeStringMatrix(values, len(newParts), cols)
+		return resizeMatrix(values, len(newParts), cols)
 	}
 	consumed := make([]bool, len(oldParts))
 	claim := func(match func(games.KSIParticipant) bool) int {
@@ -309,7 +309,7 @@ func RemapAnswerMatrix(values [][]string, oldParts, newParts []games.KSIParticip
 		}
 		return -1
 	}
-	out := make([][]string, len(newParts))
+	out := make([][]T, len(newParts))
 	for j, p := range newParts {
 		idx := -1
 		if p.Number > 0 {
@@ -320,11 +320,11 @@ func RemapAnswerMatrix(values [][]string, oldParts, newParts []games.KSIParticip
 			name := p.Name
 			idx = claim(func(o games.KSIParticipant) bool { return o.Name == name })
 		}
-		var srcRow []string
+		var srcRow []T
 		if idx >= 0 && idx < len(values) {
 			srcRow = values[idx]
 		}
-		out[j] = resizeStringSlice(srcRow, cols)
+		out[j] = resizeRow(srcRow, cols)
 	}
 	return out
 }
@@ -350,28 +350,91 @@ func ksiThemeCountFromSchemeJSON(raw string) int {
 	return 0
 }
 
-func resizeStringMatrix(values [][]string, rows, cols int) [][]string {
+func resizeMatrix[T any](values [][]T, rows, cols int) [][]T {
 	if len(values) > rows {
 		values = values[:rows]
 	}
-	out := make([][]string, rows)
+	out := make([][]T, rows)
 	for row := 0; row < rows; row++ {
 		if row < len(values) {
-			out[row] = resizeStringSlice(values[row], cols)
+			out[row] = resizeRow(values[row], cols)
 		} else {
-			out[row] = make([]string, cols)
+			out[row] = make([]T, cols)
 		}
 	}
 	return out
 }
 
-func resizeStringSlice(values []string, size int) []string {
+func resizeRow[T any](values []T, size int) []T {
 	if len(values) > size {
 		return values[:size]
 	}
-	out := append([]string(nil), values...)
+	out := append([]T(nil), values...)
+	var zero T
 	for len(out) < size {
-		out = append(out, "")
+		out = append(out, zero)
 	}
 	return out
+}
+
+// Мультиигры carries its roster the way КСИ does — the participants list plus
+// one cell grid per мини-игра, each row a team — so the fold is the same:
+// rewrite the list, and follow every team's row across the reorder.
+func (multi) FoldRoster(schemeJSON, stateJSON string, teams []RosterTeam, _ map[int]int) ([]byte, []byte, error) {
+	participants := teamParticipantsFromRoster(teams)
+	scheme, err := RawJSONObject(schemeJSON)
+	if err != nil {
+		return nil, nil, err
+	}
+	participantsJSON, err := json.Marshal(participants)
+	if err != nil {
+		return nil, nil, err
+	}
+	scheme["participants"] = participantsJSON
+	schemeOut, err := json.Marshal(scheme)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var minigames struct {
+		Minigames []games.MultiGame `json:"minigames"`
+	}
+	_ = json.Unmarshal(schemeOut, &minigames)
+
+	state, err := RawJSONObject(stateJSON)
+	if err != nil {
+		return nil, nil, err
+	}
+	oldParticipants := games.ParseKSIParticipants(state["participants"])
+	state["participants"] = participantsJSON
+
+	var grids []map[string]json.RawMessage
+	if raw, ok := state["games"]; ok && len(raw) > 0 {
+		_ = json.Unmarshal(raw, &grids)
+	}
+	for len(grids) < len(minigames.Minigames) {
+		grids = append(grids, map[string]json.RawMessage{})
+	}
+	grids = grids[:len(minigames.Minigames)]
+	for i, game := range minigames.Minigames {
+		if grids[i] == nil {
+			grids[i] = map[string]json.RawMessage{}
+		}
+		var cells [][]int
+		if raw, ok := grids[i]["cells"]; ok && len(raw) > 0 {
+			_ = json.Unmarshal(raw, &cells)
+		}
+		cellsJSON, err := json.Marshal(RemapAnswerMatrix(cells, oldParticipants, participants, len(game.Columns)))
+		if err != nil {
+			return nil, nil, err
+		}
+		grids[i]["cells"] = cellsJSON
+	}
+	gridsJSON, err := json.Marshal(grids)
+	if err != nil {
+		return nil, nil, err
+	}
+	state["games"] = gridsJSON
+	stateOut, err := json.Marshal(state)
+	return schemeOut, stateOut, err
 }

@@ -103,6 +103,19 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 		if err := insertFlatMatchTx(ctx, tx, festID, gameID, title, string(state), now); err != nil {
 			return "", err
 		}
+	case gameType == games.Multi:
+		// The мини-игры and the fest's tiebreak survive: clearing a game wipes
+		// what was played, not what it is.
+		var sc games.MultiScheme
+		_ = json.Unmarshal([]byte(schemeJSON), &sc)
+		var state []byte
+		emptyScheme, emptyState := games.MultiEmptyGameJSON(meta.Slug, meta.Title, sc.Minigames, sc.Sorting)
+		if newScheme, state, err = pristineFlatTx(ctx, tx, festID, games.Multi, emptyScheme, emptyState); err != nil {
+			return "", err
+		}
+		if err := insertFlatMatchTx(ctx, tx, festID, gameID, title, string(state), now); err != nil {
+			return "", err
+		}
 	case gameType == games.EK:
 		status = "pending"
 		if newScheme, err = rebuildTx(ctx, tx, festID, gameID, gameType, "", schemeJSON, nil); err != nil {

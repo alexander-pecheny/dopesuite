@@ -181,13 +181,24 @@ func Register(kind interface{ Code() string }) {
 	}
 }
 
-// sortRules turns a Kind's order keys into SortRules: места ascend, every
-// other Metric descends.
+// Ascending reports whether a Metric reads better the smaller it is. Места and
+// поражения do, and the жребий that closes a пересев; everything a Protocol
+// measures reads better the bigger. Every table asks here, so a comparator
+// cannot sort one way in a группа and the other in a series.
+func Ascending(metric string) bool {
+	switch metric {
+	case "place", "place_sum", "losses", "draw":
+		return true
+	}
+	return false
+}
+
+// sortRules turns a Kind's order keys into SortRules.
 func sortRules(order []string) []SortRule {
 	rules := make([]SortRule, 0, len(order))
 	for _, key := range order {
 		dir := "desc"
-		if key == "place" || key == "place_sum" || key == "losses" {
+		if Ascending(key) {
 			dir = "asc"
 		}
 		rules = append(rules, SortRule{Metric: key, Dir: dir})

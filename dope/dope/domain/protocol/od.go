@@ -25,7 +25,7 @@ func (od) TeamBlob() bool { return false }
 func (od) Started(state json.RawMessage) bool { return false }
 
 // Metrics: взятые вопросы и рейтинг по Бухгольцу.
-func (od) Metrics() []string { return []string{"total", "rating"} }
+func (od) Metrics(json.RawMessage) []string { return []string{"total", "rating"} }
 
 func (od) RatingRosterStateKey() string { return "teams" }
 

@@ -150,6 +150,10 @@ func (g *serverGame) db() *sql.DB { return g.srv.Eng().DB }
 // The заход is read from the бой where it has one and from the stage otherwise.
 // A stage is normally a Wave, but a Group holds one стол across all of them, so
 // there the Wave is a property of the бой — as the Round already is.
+// A Round may hold more than one stage — Троечка plays its бронза and its финал
+// as three бои each, both at the block's one round — so бои are counted stage by
+// stage, in the order the block emitted them (the бронза is played first). By
+// match position alone the two series would interleave.
 func (g *serverGame) matchAt(at replay.Coord) (int64, string, error) {
 	var id int64
 	var code string
@@ -159,7 +163,7 @@ join stages s on s.id = m.stage_id
 where s.game_id = ? and s.block_code = ? and s.group_code = ?
   and coalesce(nullif(m.wave, 0), s.wave_index) = ?
   and m.round = ?
-order by m.position
+order by s.position, m.position
 limit 1 offset ?`,
 		g.gameID, at.Block, at.Group, at.Wave, at.Round, at.Match-1).Scan(&id, &code)
 	if err == sql.ErrNoRows {
@@ -178,6 +182,15 @@ func (g *serverGame) Seat(at replay.Coord, names []string) error {
 	if err != nil {
 		return err
 	}
+	// A Draw inside a группа is «these two play here», full stop: everybody in a
+	// round-robin already has finished бои, so expressing it as «place N of бой
+	// X» would point the slot at a result instead of at the team the sheet
+	// named. That Edge form is for a bracket, where a hand-drawn seat has to
+	// survive the resolver.
+	group, err := g.stageIsGroup(matchID)
+	if err != nil {
+		return err
+	}
 	for index, name := range names {
 		participantID, err := g.participantID(name)
 		if err != nil {
@@ -187,7 +200,7 @@ func (g *serverGame) Seat(at replay.Coord, names []string) error {
 		if err != nil {
 			return err
 		}
-		if found {
+		if found && !group {
 			ref := fmt.Sprintf(`{"match":%q,"place":%d,"label":"%s, м. %d"}`, source, place, source, place)
 			_, err = g.db().Exec(`
 update match_slots set source_type = 'from_match', source_ref_json = ?, participant_id = null
@@ -202,6 +215,15 @@ where match_id = ? and slot_index = ?`, participantID, matchID, index)
 		}
 	}
 	return g.resolve()
+}
+
+// stageIsGroup reports whether this бой belongs to a round-robin группа, whose
+// seats are its entrants rather than places carried forward.
+func (g *serverGame) stageIsGroup(matchID int64) (bool, error) {
+	var kind string
+	err := g.db().QueryRow(`
+select s.kind from stages s join matches m on m.stage_id = s.id where m.id = ?`, matchID).Scan(&kind)
+	return kind == "rr", err
 }
 
 // resolve runs the same pass the server runs after any write that can move a
@@ -267,6 +289,9 @@ where ms.match_id = ? order by ms.slot_index`, matchID)
 func (g *serverGame) Play(at replay.Coord, name string, play replay.Play) error {
 	if len(play.Questions) > 0 {
 		return g.playBrain(at, name, play.Questions)
+	}
+	if len(play.Counts) > 0 {
+		return g.playTroika(at, name, play.Counts)
 	}
 	matchID, code, err := g.matchAt(at)
 	if err != nil {
@@ -688,6 +713,50 @@ func (g *serverGame) Pin(at replay.Coord, name string, place float64) error {
 		"path":  []any{"participants", fmt.Sprint(participantID), "pin"},
 		"value": place,
 	}})
+}
+
+// playTroika enters a Троечка side. The sheet counts, per вопрос, how many of
+// the three answered it — never which кресла — so the кресла are synthesized:
+// the first N of the three are marked верно and the rest left blank. The Σ is
+// exact, the composition invented, exactly as a перестрелка's marks are, and
+// the бой is scored on marks either way.
+//
+// Its state is two index-aligned sides rather than a per-participant blob, so
+// which side this participant sits on has to be read off the slot order — the
+// only place the Structure writes it down.
+func (g *serverGame) playTroika(at replay.Coord, name string, counts [][]int) error {
+	matchID, code, err := g.matchAt(at)
+	if err != nil {
+		return err
+	}
+	participantID, err := g.participantID(name)
+	if err != nil {
+		return err
+	}
+	var side int
+	err = g.db().QueryRow(`
+select slot_index from match_slots where match_id = ? and participant_id = ?`, matchID, participantID).Scan(&side)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("%s не сидит в бою %s", name, code)
+	}
+	if err != nil {
+		return err
+	}
+	var ops []map[string]any
+	for theme, questions := range counts {
+		for question, taken := range questions {
+			for chair := 0; chair < taken; chair++ {
+				ops = append(ops, map[string]any{
+					"path":  []any{"sides", side, "themes", theme, "answers", question, chair},
+					"value": "right",
+				})
+			}
+		}
+	}
+	if len(ops) == 0 {
+		return nil
+	}
+	return g.via.patch(matchID, code, ops)
 }
 
 // playBrain enters a брейн side. Its state is not a per-participant blob but two

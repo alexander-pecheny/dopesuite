@@ -25,7 +25,7 @@ func (ksi) TeamBlob() bool { return false }
 func (ksi) Started(state json.RawMessage) bool { return false }
 
 // Metrics: сумма и сумма положительных ответов.
-func (ksi) Metrics() []string { return []string{"total", "plus"} }
+func (ksi) Metrics(json.RawMessage) []string { return []string{"total", "plus"} }
 
 func (ksi) RatingRosterStateKey() string { return "participants" }
 

@@ -15,8 +15,8 @@ import (
 	"pecheny.me/dopecore/webassets"
 )
 
-func (s *server) serveEKHTML(w http.ResponseWriter, r *http.Request) {
-	s.serveAppHTML(w, r, "static/ek.html")
+func (s *server) serveEKHTML(w http.ResponseWriter, r *http.Request, page string) {
+	s.serveAppHTML(w, r, page)
 }
 
 // ekInitMarker is the placeholder string inside static/ek.html that is
@@ -88,7 +88,10 @@ type ekInitRoute struct {
 // pre-populated for the current route, eliminating the cold API round trips
 // the SPA would otherwise make immediately after parsing ek.js. Falls back
 // to plain serveEKHTML on any error so a payload bug never breaks the page.
-func (s *server) serveEKHTMLWithInit(w http.ResponseWriter, r *http.Request, scope festScope, parts []string) {
+// serveEKHTMLWithInit serves a bracket game's page with the bracket init
+// payload. Which page that is belongs to the format, not to this function:
+// Тройка plays a bracket and boots the same payload, on a page of its own.
+func (s *server) serveEKHTMLWithInit(w http.ResponseWriter, r *http.Request, scope festScope, parts []string, page string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -96,16 +99,16 @@ func (s *server) serveEKHTMLWithInit(w http.ResponseWriter, r *http.Request, sco
 	route := parseEKInitRoute(parts, scope)
 	payload, err := s.buildEKInit(r.Context(), route)
 	if err != nil {
-		s.serveEKHTML(w, r)
+		s.serveEKHTML(w, r, page)
 		return
 	}
 	payload.CanEdit = s.canEdit(r, scope.FestID)
 	data, err := json.Marshal(payload)
 	if err != nil {
-		s.serveEKHTML(w, r)
+		s.serveEKHTML(w, r, page)
 		return
 	}
-	s.serveInjectedHTML(w, r, "static/ek.html", ekInitMarker, data)
+	s.serveInjectedHTML(w, r, page, ekInitMarker, data)
 }
 
 // canEdit says whether the request's session holds the table-editor role on

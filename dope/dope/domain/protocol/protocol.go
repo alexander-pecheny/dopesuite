@@ -26,7 +26,10 @@ import (
 // number rankable: a scheme may sort a group or a reseed by any name declared
 // here, and the compiler rejects the ones nobody measures. A Protocol that
 // starts measuring something new declares it and it is rankable everywhere —
-// no Go change anywhere else (ADR-0008).
+// no Go change anywhere else (ADR-0008). It takes the match config because a
+// Protocol whose document is configured — Мультиигры, whose мини-игры are
+// named by the scheme — measures a metric per configured part, and those
+// names cannot be a constant list.
 //
 // Params are the DSL keys the Protocol accepts; TeamBlob says its state is
 // the team-keyed blob ЭК edits and replays (matchops/MatchBlob), not an opaque
@@ -35,7 +38,7 @@ import (
 type Protocol interface {
 	Code() string
 	Params() []Param
-	Metrics() []string
+	Metrics(cfg json.RawMessage) []string
 	TeamBlob() bool
 	EmptyState(cfg json.RawMessage) (json.RawMessage, error)
 	Started(state json.RawMessage) bool
@@ -87,10 +90,11 @@ type Param struct {
 	Default int
 }
 
-// Metrics returns the metrics a protocol declares, or nil for an unknown code.
-func Metrics(code string) []string {
+// Metrics returns the metrics a protocol declares for a match config, or nil
+// for an unknown code.
+func Metrics(code string, cfg json.RawMessage) []string {
 	if p, ok := Get(code); ok {
-		return p.Metrics()
+		return p.Metrics(cfg)
 	}
 	return nil
 }
@@ -124,12 +128,22 @@ func Register(p Protocol) {
 	if p.TeamBlob() {
 		store.RegisterTeamBlob(p.Code())
 	}
+	if seater, ok := p.(SeatsPlayers); ok && seater.SeatsPlayers() {
+		store.RegisterSeatRoster(p.Code())
+	}
 }
 
 // Get looks up a registered protocol by code.
 func Get(code string) (Protocol, bool) {
 	p, ok := registry[code]
 	return p, ok
+}
+
+// SeatsPlayers is implemented by a Protocol whose бои field named players —
+// Тройка records which of a team's three sat in which кресло — so each seat
+// wants its roster on the view. A team-blob Protocol already gets one.
+type SeatsPlayers interface {
+	SeatsPlayers() bool
 }
 
 // RatingRosterOwner is implemented by protocols whose state embeds a roster

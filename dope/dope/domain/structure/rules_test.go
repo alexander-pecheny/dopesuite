@@ -230,3 +230,54 @@ func TestSIGroupStandingsPayByPlace(t *testing.T) {
 		t.Errorf("первый = %d (место %d), want участник 1", ranked[0].Participant, ranked[0].Rank)
 	}
 }
+
+// Тройка's group table: рейтинговые баллы are 1/0.5/0 per бой plus очки/50,
+// and the regulations rank on them before личная встреча, забитые and разница.
+// A scoring rule must therefore ride ON the two-seat duel table, not replace it
+// — a rule used to divert the block onto multiSeatStandings, which knows no
+// личная встреча and no разница at all.
+func TestTwoSeatRulesKeepTheDuelTable(t *testing.T) {
+	kind, _ := RankerFor("rr")
+	cfg := json.RawMessage(`{
+		"points": {"win": 1, "draw": 0.5, "loss": 0},
+		"rules": {"standings": {"rating": "points + taken / 50"}},
+		"order": ["rating", "h2h", "taken", "diff"]
+	}`)
+	ranked, err := kind.Standings(cfg, []MatchOutcome{
+		h2h("g-1", true, 101, 102, 14, 1, 1, 2),
+		h2h("g-2", true, 101, 103, 9, 12, 2, 1),
+		h2h("g-3", true, 102, 103, 6, 7, 2, 1),
+	}, Inputs{})
+	if err != nil {
+		t.Fatalf("Standings: %v", err)
+	}
+	// 103 wins both: 2 + 19/50 = 2.38. 101 wins one: 1 + 23/50 = 1.46.
+	// 102 loses both: 0 + 7/50 = 0.14.
+	want := []RankedEntry{
+		{Rank: 1, Participant: 103, Metrics: map[string]float64{"points": 2, "rating": 2.38, "taken": 19, "conceded": 15, "diff": 4}},
+		{Rank: 2, Participant: 101, Metrics: map[string]float64{"points": 1, "rating": 1.46, "taken": 23, "conceded": 13, "diff": 10}},
+		{Rank: 3, Participant: 102, Metrics: map[string]float64{"points": 0, "rating": 0.14, "taken": 7, "conceded": 21, "diff": -14}},
+	}
+	assertRanked(t, ranked, want)
+}
+
+// A bout rule on a two-seat block sees that бой's outcome and sums, so the
+// per-бой form of the same rating agrees with the standings form.
+func TestTwoSeatBoutRuleSumsAcrossTheGroup(t *testing.T) {
+	kind, _ := RankerFor("rr")
+	cfg := json.RawMessage(`{
+		"points": {"win": 1, "draw": 0.5, "loss": 0},
+		"rules": {"bout": {"rating": "(place == 1 ? (tied ? 0.5 : 1) : 0) + taken / 50"}},
+		"order": ["rating"]
+	}`)
+	ranked, err := kind.Standings(cfg, []MatchOutcome{
+		h2h("g-1", true, 101, 102, 14, 1, 1, 2),
+		h2h("g-2", true, 101, 103, 9, 12, 2, 1),
+	}, Inputs{})
+	if err != nil {
+		t.Fatalf("Standings: %v", err)
+	}
+	if got := ranked[0].Metrics["rating"]; got != 1.46 {
+		t.Errorf("101 rating = %v, want 1.46", got)
+	}
+}

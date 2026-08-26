@@ -61,12 +61,12 @@ func (s *server) viewerGamePage(w http.ResponseWriter, r *http.Request, sc route
 	}
 	gameID, err := resolveGameID(r.Context(), s.eng.DB, sc.FestID, parts[1])
 	if err != nil || gameID <= 0 {
-		s.serveEKHTML(w, r)
+		s.serveEKHTML(w, r, games.Get("").Page)
 		return nil
 	}
 	var gameType string
 	if err := s.eng.DB.QueryRowContext(r.Context(), `select game_type from games where id = ? and fest_id = ?`, gameID, sc.FestID).Scan(&gameType); err != nil {
-		s.serveEKHTML(w, r)
+		s.serveEKHTML(w, r, games.Get("").Page)
 		return nil
 	}
 	scope := festScope{FestID: sc.FestID, GameID: gameID}
@@ -84,7 +84,7 @@ func (s *server) viewerGamePage(w http.ResponseWriter, r *http.Request, sc route
 		return nil
 	}
 	if def.Init == games.InitEK {
-		s.serveEKHTMLWithInit(w, r, scope, parts)
+		s.serveEKHTMLWithInit(w, r, scope, parts, def.Page)
 	} else {
 		s.serveGameHTMLWithInit(w, r, def.Page, scope)
 	}

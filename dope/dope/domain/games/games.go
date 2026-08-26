@@ -14,11 +14,13 @@ import "encoding/json"
 
 // Canonical game_type codes as stored in the games.game_type column.
 const (
-	EK    = "ek"    // эрудит-квартет (bracket of small matches)
-	OD    = "od"    // ЧГК — командная викторина с раундами по минуте
-	KSI   = "ksi"   // командная своя игра
-	SI    = "si"    // личная своя игра — за столом игроки, а не команды
-	Brain = "brain" // брейн-ринг — head-to-head buzzer бои
+	EK     = "ek"     // эрудит-квартет (bracket of small matches)
+	OD     = "od"     // ЧГК — командная викторина с раундами по минуте
+	KSI    = "ksi"    // командная своя игра
+	SI     = "si"     // личная своя игра — за столом игроки, а не команды
+	Brain  = "brain"  // брейн-ринг — head-to-head buzzer бои
+	Multi  = "multi"  // мультиигры — несколько мини-игр в одну посадку
+	Troika = "troika" // троечка — бой двух троек по темам из трёх вопросов
 )
 
 // Default is the game type assumed when a game has none recorded.
@@ -60,6 +62,13 @@ func Get(code string) Definition {
 	return registry[Default]
 }
 
+// Known reports whether a code names a registered format — what a creation
+// form asks instead of listing the formats it will accept.
+func Known(code string) bool {
+	_, ok := registry[code]
+	return ok
+}
+
 // IsIndividual reports whether the format seats players rather than teams.
 func IsIndividual(code string) bool {
 	d, ok := registry[code]
@@ -74,6 +83,10 @@ var registry = map[string]Definition{
 	KSI:   {Code: KSI, Label: "КСИ", Page: "static/si.html"},
 	SI:    {Code: SI, Label: "Личная СИ", Individual: true, Page: "static/ek.html", Init: InitEK},
 	Brain: {Code: Brain, Label: "Брейн", Page: "static/brain.html"},
+	Multi: {Code: Multi, Label: "Мультиигры", Page: "static/multi.html"},
+	// Тройка plays a bracket of бои, as брейн does, and boots the same payload:
+	// its page fetches the бои itself and draws them its own way.
+	Troika: {Code: Troika, Label: "Тройка", Page: "static/troika.html"},
 }
 
 // Label returns the short display label for a game type, falling back to the

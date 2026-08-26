@@ -85,7 +85,11 @@ type Spec struct {
 	ODTours, ODQuestions int
 	KSIThemes            int
 	KSIStickers          json.RawMessage
-	Pasted               *store.FestScheme
+	// Мультиигры: the мини-игры as the host wrote them, and the comparators
+	// that break a tie on Итог (empty: equal totals share a place).
+	Minigames    []games.MultiGame
+	MultiSorting []string
+	Pasted       *store.FestScheme
 }
 
 // Create makes the Game the Spec describes and returns its id. A фест's Games
@@ -95,6 +99,12 @@ type Spec struct {
 // and «4» in another.
 func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 	if strings.TrimSpace(spec.DSL) != "" {
+		// Мультиигры is one sitting whose shape is its мини-игры, and the DSL
+		// has no way to say what they are — so a scheme for one would compile
+		// to a game that scores nothing. Refuse it rather than build it.
+		if spec.Type == games.Multi {
+			return 0, errors.New("Мультиигры описываются списком мини-игр, а не схемой")
+		}
 		return createSchemeGame(ctx, tx, spec.FestID, spec.Type, spec.Label, spec.DSL, spec.Entrants)
 	}
 	if spec.Pasted != nil {
@@ -112,6 +122,8 @@ func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 		return createODGameTx(ctx, tx, spec.FestID, spec.ODTours, spec.ODQuestions)
 	case games.KSI:
 		return createKSIGameTx(ctx, tx, spec.FestID, spec.KSIThemes, spec.KSIStickers)
+	case games.Multi:
+		return createMultiGameTx(ctx, tx, spec.FestID, spec.Minigames, spec.MultiSorting)
 	case games.EK:
 		return 0, errors.New("Вставьте JSON-схему ЭК или опишите её схемой")
 	}

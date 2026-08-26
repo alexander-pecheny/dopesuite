@@ -113,7 +113,7 @@ func (s *Server) serveHostGamePage(w http.ResponseWriter, r *http.Request, sc ro
 	}
 	scope := core.FestScope{FestID: sc.FestID, GameID: gameID}
 	if def := games.Get(gameType); def.Init == games.InitEK {
-		s.h.ServeEKHTMLWithInit(w, r, scope, parts)
+		s.h.ServeEKHTMLWithInit(w, r, scope, parts, def.Page)
 	} else {
 		s.h.ServeGameHTMLWithInit(w, r, def.Page, scope)
 	}

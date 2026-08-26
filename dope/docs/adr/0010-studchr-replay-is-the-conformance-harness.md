@@ -47,3 +47,23 @@ The same replayer writes a database rather than only assertions, so the demo Fes
 - Not on the interface: a `Locate(coord)` returning a match id would be the
   storage leaking through, and `Run` has nothing to ask it — the coordinate
   lookup is the adapter's business.
+
+## Amended 24 Aug 2026 (Троечка VIII Octobearfest)
+
+The harness took a second tournament, which is what it was built to be able to
+do — a new reader (`scripts/troika/`) and a `Codec`, nothing else. What the
+second tournament asked for that the first had not:
+
+- **A Draw inside a группа** seats the participants named, rather than the Edge
+  «место N в бою X» a bracket Draw compiles to. Everyone in a round-robin
+  already has finished бои, so the Edge form pointed the slot at a result
+  instead of at the team the sheet named. Троечка needs it because dope's
+  round-robin rotates one way and the tournament's rotated the other: the same
+  fifteen pairs, grouped into круги differently.
+- **A coordinate counts бои stage by stage**, in the order the block emitted
+  them. Троечка plays its бронза and its финал as three бои each at the block's
+  one round; by match position alone the two series interleaved.
+- **A Protocol whose sheet is coarser than its document.** Троечка's протоколы
+  count how many of the three answered a вопрос and never which — so the кресла
+  are synthesized, and the Статистика tab, the one thing that reads them, has
+  no oracle. A sheet is evidence of what it recorded and of nothing else.

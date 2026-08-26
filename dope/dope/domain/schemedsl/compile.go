@@ -86,14 +86,16 @@ func uniqueCodes(scheme store.FestScheme) error {
 }
 
 // Metrics where less is better: a place, a lot, a loss.
-var ascendingMetrics = map[string]bool{"place_sum": true, "draw": true, "place": true, "losses": true}
-
 // rankable is everything a stage of this Kind may sort by in this game: what
 // the Protocol declares, what the Kind's Ranker adds, and what the scheme's own
 // scoring rules define.
-func (c *compiler) rankable(kind string) map[string]bool {
+func (c *compiler) rankable(kind string, blk Section) map[string]bool {
 	names := map[string]bool{}
-	for _, name := range protocol.Metrics(c.in.GameType) {
+	cfg, err := json.Marshal(c.protocolConfig(blk, nil))
+	if err != nil {
+		cfg = nil
+	}
+	for _, name := range protocol.Metrics(c.in.GameType, cfg) {
 		names[name] = true
 	}
 	for _, name := range structure.RankerMetrics(kind) {
@@ -110,7 +112,7 @@ func sortDir(rule SortRule) string {
 	if rule.Dir != "" {
 		return rule.Dir
 	}
-	if ascendingMetrics[rule.Metric] {
+	if structure.Ascending(rule.Metric) {
 		return "asc"
 	}
 	return "desc"
@@ -202,7 +204,7 @@ var commonKeys = []string{"kind", "title", "venues", "sorting", "reseed", "stats
 var dottedKeys = []string{"venues", "title", "bout", "standings"}
 
 var defaultsKeys = map[string]bool{"venues": true, "sorting": true}
-var initKeys = map[string]bool{"seed": true, "sorting": true}
+var initKeys = map[string]bool{"seed": true, "sorting": true, "games": true, "player": true}
 
 func keySet(lists ...[]string) map[string]bool {
 	set := map[string]bool{}
@@ -234,6 +236,9 @@ func (c *compiler) checkKeys() error {
 		}
 	}
 	for key, v := range c.doc.Init.Values {
+		if grain, _, dotted := strings.Cut(key, "."); dotted && initKeys[grain] {
+			continue
+		}
 		if !initKeys[key] {
 			return errAt(v.Line, "неизвестный ключ %s в [init] (есть %s)", key, strings.Join(structure.SortedNames(initKeys), ", "))
 		}
@@ -268,12 +273,56 @@ func (c *compiler) checkKeys() error {
 	return nil
 }
 
+// readPlayerSeed reads the composing посев: which Games a player's own team
+// is looked up in, the metrics a player carries, and how those fold over the
+// Participant's three.
+func (c *compiler) readPlayerSeed() (*store.SchemePlayerSeed, error) {
+	line := c.doc.Init.Values["seed"].Line
+	games, ok, err := c.doc.Init.List("games")
+	if err != nil {
+		return nil, err
+	}
+	if !ok || len(games) == 0 {
+		return nil, errAt(line, "seed: players — нужен games: [игра, игра], откуда берутся места игроков")
+	}
+	out := &store.SchemePlayerSeed{Games: games, Player: map[string]string{}, Seed: map[string]string{}}
+	for key, v := range c.doc.Init.Values {
+		grain, name, dotted := strings.Cut(key, ".")
+		if !dotted || name == "" {
+			continue
+		}
+		switch grain {
+		case "player":
+			if _, err := expr.Parse(v.Raw); err != nil {
+				return nil, errAt(v.Line, "player.%s: %s", name, err.Error())
+			}
+			out.Player[name] = v.Raw
+		case "seed":
+			if name == "games" {
+				continue
+			}
+			out.Seed[name] = v.Raw
+		}
+	}
+	if len(out.Seed) == 0 {
+		return nil, errAt(line, "seed: players — нужен хотя бы один seed.<метрика>: mean(<метрика игрока>)")
+	}
+	return out, nil
+}
+
 func (c *compiler) readInit() error {
 	seed, ok := c.doc.Init.Str("seed")
 	if !ok {
 		return nil
 	}
 	seeding := &store.SchemeSeeding{Source: seed}
+	if seed == "players" {
+		players, err := c.readPlayerSeed()
+		if err != nil {
+			return err
+		}
+		seeding.Players = players
+	}
 	rules, ok, err := c.doc.Init.Sorting("sorting")
 	if err != nil {
 		return err
@@ -579,7 +628,7 @@ func (c *compiler) reseedSortRules(blk Section) ([]store.SchemeSortRule, error) 
 	if !ok {
 		rules = []store.SchemeSortRule{{Metric: "place_sum", Dir: "asc"}, {Metric: "taken", Dir: "desc"}}
 	}
-	known := c.rankable("reseed")
+	known := c.rankable("reseed", blk)
 	for _, token := range tokens {
 		if !known[token.Metric] {
 			return nil, errAt(blk.Line, "sorting: %s не считается на пересеве — ни протокол, ни правила подсчёта такой метрики не дают (есть %s)",

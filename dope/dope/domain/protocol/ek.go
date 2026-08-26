@@ -26,7 +26,7 @@ func (ek) TeamBlob() bool { return true }
 // teams, and their marks go with them.
 func (ek) Started(state json.RawMessage) bool { return false }
 
-func (ek) Metrics() []string {
+func (ek) Metrics(json.RawMessage) []string {
 	names := []string{"total", "plus", "shootoutTotal", "tiebreak"}
 	for _, value := range store.QuestionValues {
 		names = append(names, fmt.Sprintf("correct_%d", value), fmt.Sprintf("wrong_%d", value))

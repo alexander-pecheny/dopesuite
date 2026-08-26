@@ -44,9 +44,9 @@ type Host interface {
 	// ServeGameHTMLWithInit serves a game page (od/si) HTML with the bootstrap
 	// init payload for the given scope.
 	ServeGameHTMLWithInit(w http.ResponseWriter, r *http.Request, htmlPath string, scope core.FestScope)
-	// ServeEKHTMLWithInit serves the ЭК page (ek.html) with init payload for
+	// ServeEKHTMLWithInit serves a bracket game's page with init payload for
 	// the given scope and path parts.
-	ServeEKHTMLWithInit(w http.ResponseWriter, r *http.Request, scope core.FestScope, parts []string)
+	ServeEKHTMLWithInit(w http.ResponseWriter, r *http.Request, scope core.FestScope, parts []string, page string)
 }
 
 // Server binds the page handlers to a Host. Construct with New.

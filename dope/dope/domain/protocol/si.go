@@ -33,7 +33,7 @@ func (si) Started(state json.RawMessage) bool { return false }
 
 // Metrics: сумма, сумма положительных ответов, перестрелка и счётчики взятых
 // по номиналам — СИ ранжирует по ним, когда суммы равны.
-func (si) Metrics() []string {
+func (si) Metrics(json.RawMessage) []string {
 	return []string{"total", "plus", "shootoutTotal", "taken50", "taken40", "taken30", "taken20", "taken10"}
 }
 

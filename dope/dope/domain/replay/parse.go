@@ -147,8 +147,13 @@ type Seat struct {
 	Name      string
 	Marks     [][5]Mark
 	Questions []Answer
-	Total     int
-	Place     float64
+	// Counts is Троечка's grid: per тема, per вопрос, how many of the three
+	// answered it. The кресла behind a count are not in the sheet, so the
+	// driver synthesizes them — total faithful, composition invented, exactly
+	// as a перестрелка's marks are.
+	Counts [][]int
+	Total  int
+	Place  float64
 	// Pinned marks a place the hosts set by hand rather than one the marks
 	// imply — written `3!`. A перестрелка breaks a tie with material the
 	// protocol grid never records, so the place is input, exactly as a Draw is:
@@ -658,6 +663,12 @@ func parseSeat(text string, line int, codec Codec) (Seat, error) {
 			return Seat{}, err
 		}
 		seat.Questions = questions
+	} else if codec.Counts {
+		counts, err := parseCounts(fields[1], seat.Name, line, codec.ThemeSize)
+		if err != nil {
+			return Seat{}, err
+		}
+		seat.Counts = counts
 	} else {
 		if strings.Contains(fields[1], ",") {
 			return Seat{}, errAt(line, "у %s вопросы через запятую — так пишут брейн, а эта игра играет темы", seat.Name)
@@ -777,6 +788,38 @@ func parseOverride(text string, line int) (Override, error) {
 	}
 	field, participant, _ := strings.Cut(subject, " ")
 	return Override{At: at, Field: field, Participant: strings.TrimSpace(participant), Reason: reason, Line: line}, nil
+}
+
+// parseCounts reads a Троечка seat's middle field: one group per тема, one
+// digit per вопрос — how many of the three answered it — and «.» for a вопрос
+// nobody took. `131 ..1` is «первый вопрос взял один, второй трое, третий
+// один; в следующей теме только третий, и его взял один».
+func parseCounts(field, who string, line, size int) ([][]int, error) {
+	if size <= 0 {
+		size = 3
+	}
+	var out [][]int
+	for _, theme := range strings.Fields(field) {
+		if len(theme) != size {
+			return nil, errAt(line, "у %s тема из %d вопросов, а написано %q", who, size, theme)
+		}
+		counts := make([]int, 0, size)
+		for _, r := range theme {
+			switch {
+			case r == '.' || r == '-':
+				counts = append(counts, 0)
+			case r >= '0' && r <= '3':
+				counts = append(counts, int(r-'0'))
+			default:
+				return nil, errAt(line, "у %s в теме %q — жду 0..3 или «.», сколько из троих ответили верно", who, theme)
+			}
+		}
+		out = append(out, counts)
+	}
+	if len(out) == 0 {
+		return nil, errAt(line, "у %s нет ни одной темы", who)
+	}
+	return out, nil
 }
 
 // parseQuestions reads a брейн seat's middle field: one entry per question,

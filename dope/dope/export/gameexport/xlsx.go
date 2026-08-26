@@ -47,6 +47,13 @@ func HandleScopedGameExport(s Host, w http.ResponseWriter, r *http.Request, fest
 		}
 	case "ksi", "si":
 		err = xlsxexport.BuildKSISheets(f, schemeJSON, stateJSON)
+	case "multi":
+		err = xlsxexport.BuildMultiSheets(f, schemeJSON, stateJSON)
+	case "troika":
+		var stages []store.StageMatches
+		if stages, err = s.LoadAllStageMatchViews(r.Context(), festID, gameID); err == nil {
+			err = xlsxexport.BuildTroikaSheets(f, stages)
+		}
 	case "ek":
 		var stages []store.StageMatches
 		if stages, err = s.LoadAllStageMatchViews(r.Context(), festID, gameID); err == nil {

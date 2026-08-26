@@ -32,7 +32,7 @@ func (brain) Started(state json.RawMessage) bool { return games.BrainStateStarte
 
 // Metrics: взятые вопросы, и они же без перестрелки — знаменатель долей на
 // пересеве считается по основным вопросам боя.
-func (brain) Metrics() []string { return []string{"taken", structure.MetricTakenBase} }
+func (brain) Metrics(json.RawMessage) []string { return []string{"taken", structure.MetricTakenBase} }
 
 func (brain) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 	return games.BrainEmptyStateJSON(games.BrainQuestions(string(cfg))), nil

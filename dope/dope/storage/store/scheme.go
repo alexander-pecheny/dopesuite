@@ -34,8 +34,21 @@ type FestScheme struct {
 // the seeding comes from and how the source's metrics are ordered. It resolves
 // only when the host presses «Import seed» — never on its own.
 type SchemeSeeding struct {
-	Source string           `json:"source"`
-	Sort   []SchemeSortRule `json:"sort,omitempty"`
+	Source  string            `json:"source"`
+	Sort    []SchemeSortRule  `json:"sort,omitempty"`
+	Players *SchemePlayerSeed `json:"players,omitempty"`
+}
+
+// SchemePlayerSeed is a посев composed over a Participant's players rather
+// than over its own past results — what a сборная format needs, where a team
+// is three people who played the фест's other games for three other teams.
+// Games are the source Games in order, so a player rule reads place1, place2…
+// by that order; Player defines a metric per player; Seed folds one of those
+// over the Participant's players with mean / min / max / sum.
+type SchemePlayerSeed struct {
+	Games  []string          `json:"games"`
+	Player map[string]string `json:"player,omitempty"`
+	Seed   map[string]string `json:"seed,omitempty"`
 }
 
 // SchemeSortRule is a SortRule as a scheme writes it — the same key.
