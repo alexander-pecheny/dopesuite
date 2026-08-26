@@ -557,7 +557,9 @@ just test           # go test + deno frontend tests
 # XY_TYPST_TEST_BIN=/path/to/typst  → also runs the typst-CLI parity tests (the
 #   oracle the in-process wasm typst is checked against). typst is NOT needed to
 #   run xy — only to run those tests.
-just pre-commit     # fmt + vet + tidy-check + test
+just check          # this module: fmt + vet + tidy-check + test
+just pre-commit     # the whole repo (the root justfile), incl. the kit's gate and
+                    #   class-check, which no single module can run for itself
 just deploy-staging # a branch may go to xytest.pecheny.me for a live test
 just deploy         # prod: from `main` ONLY, merged AND pushed to origin first —
                     #   never from a branch (a branch deploy once undid another's fix)

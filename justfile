@@ -18,15 +18,14 @@ vet: vet-core vet-uikit
     cd xy && just vet
     cd dope && just vet
 
-# Run before committing anything, anywhere in the repo.
+# `just pre-commit` inside xy/ or dope/ comes back here, because class-check and
+# the kit's own gate are things no single module can run for itself.
+#
+# The gate, wherever you are. A module's own faster one is `just check`.
 pre-commit: pre-commit-core pre-commit-uikit class-check
-    cd xy && just pre-commit
-    cd dope && just pre-commit
+    cd xy && just check
+    cd dope && just check
 
-# The Vocabulary is closed where Go emits markup, but ~72% of the class names
-# are written in TypeScript and core.css is shared by both apps — so no single
-# module can check either half. Fail when the two drift: a rule nothing emits,
-# or a name nothing styles. (xy's own dead-CSS test covers only the xy layer.)
 # Vendor one more Lucide icon and regenerate every consumer. Icons are vendored
 # rather than depended on: the build stays offline, and only shapes we actually
 # use ship. Names are lucide.dev's — `just icons-add trash-2`.
@@ -48,6 +47,11 @@ icons-gen:
     cd xy && go generate ./internal/ui
     cd dope && go generate ./dope/web/ui
 
+# The Vocabulary is closed where Go emits markup, but ~72% of the class names
+# are written in TypeScript and core.css is shared by both apps, so no single
+# module can check either half. (xy's own dead-CSS test covers only the xy layer.)
+#
+# Fail when the two drift: a rule nothing emits, or a name nothing styles.
 class-check: fmt-scripts
     go -C scripts/classcheck vet ./...
     go -C scripts/classcheck test ./...

@@ -116,7 +116,8 @@ just test-full        # the same plus the studchr replays over HTTP (~90 s: hand
 just test-js          # Frontend tests only
 just fmt              # gofmt
 just vet              # go vet
-just pre-commit       # fmt + vet + tidy-check + test (run before committing)
+just check            # this module: fmt + vet + tidy-check + test-full
+just pre-commit       # the whole repo (the root justfile) — run before committing
 just deploy           # SSH deploy to VPS
 just invite [days]    # Generate invite code
 ```

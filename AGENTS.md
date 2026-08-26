@@ -20,9 +20,11 @@ dope/        tournament management (EK/OD/KSI) + realtime web UI
   ../dopeuikit` and `replace pecheny.me/dopecore => ../dopecore` — the monorepo
   preserves the sibling layout, so builds need nothing extra. The kit imports
   dopecore the same way; dopecore imports no other module (`docs/adr/0004`).
-- xy and dope each keep a `justfile` (`just dev`, `just test`, `just pre-commit`);
+- xy and dope each keep a `justfile` (`just dev`, `just test`, `just check`);
   dopeuikit and dopecore have none — their recipes live in the root `justfile`,
-  which also fans `test`/`fmt`/`vet`/`pre-commit` out across all four.
+  which also fans `test`/`fmt`/`vet` out across all four. `just pre-commit` is
+  the root gate from anywhere: the module ones delegate up to it, because
+  class-check needs both apps' TypeScript and the shared core.css at once.
 - **Deploy** is one script for the whole repo: `deploy.py`, a target table
   (`dope-server`, `dope-bot`, `xy-server`, `xy-bot`) naming each unit's module,
   package, binary, systemd unit and **host** — xy is on `vps-he`, dope on

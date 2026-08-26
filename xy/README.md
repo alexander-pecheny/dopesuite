@@ -35,7 +35,8 @@ install (in Russian, for the people who asked for it) is
 just dev-web-only   # server only (assets hot-read from disk)
 just dev            # server + telegram bot
 just test           # go test + deno frontend tests
-just pre-commit     # fmt + vet + tidy-check + test
+just check          # this module: fmt + vet + tidy-check + test
+just pre-commit     # the whole repo, incl. class-check — run before a commit
 just invite 7       # mint a one-shot registration invite
 ```
 

@@ -120,12 +120,22 @@ generate-check:
       exit 1
     fi
 
-pre-commit:
+# check cannot see what only the monorepo can: the kit's and dopecore's gates,
+# and class-check, which needs both apps' TypeScript and the shared core.css at
+# once. Landing a red repo-wide gate is what this split is here to stop, so
+# pre-commit below is the one to run before a commit.
+#
+# This module's own gate: fast, and all you need mid-change.
+check:
     just fmt
     just vet
     just tidy-check
     just generate-check
     just test-full
+
+# The whole repo, from wherever you are.
+pre-commit:
+    cd .. && just pre-commit
 
 # Mint a one-shot invite code and print it. Reads DOPE_DB from .env.
 # Usage: just invite [days]

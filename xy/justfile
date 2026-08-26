@@ -110,12 +110,22 @@ generate-check:
     done
     exit $rc
 
-pre-commit:
+# check cannot see what only the monorepo can: the kit's and dopecore's gates,
+# and class-check, which needs both apps' TypeScript and the shared core.css at
+# once. Landing a red repo-wide gate is what this split is here to stop, so
+# pre-commit below is the one to run before a commit.
+#
+# This module's own gate: fast, and all you need mid-change.
+check:
     just fmt
     just vet
     just tidy-check
     just generate-check
     just test
+
+# The whole repo, from wherever you are.
+pre-commit:
+    cd .. && just pre-commit
 
 # Mint a one-shot registration invite and print it. Usage: just invite [days]
 invite days='7': wasm build-web
