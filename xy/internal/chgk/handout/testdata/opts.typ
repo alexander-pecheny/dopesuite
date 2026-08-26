@@ -85,6 +85,11 @@
 // so a handout carries its question number after it is cut out.
 #let clabel(body) = text(fill: gray, size: 9pt, body)
 
+// A block with its number inside prints no caption above it, so nothing would
+// keep it off the block before it; this leaves the caption's air instead, and
+// drops away at the top of a page like the caption's own spacing.
+#let qgap() = v(2.0mm, weak: true)
+
 #qlabel[Раздаточный материал к вопросу 9]
 
 #handout(2, 2, 2, 2, 1.5mm, 99.0mm, 2mm, 7.62mm, false, false, text(size: 18.0pt)[Большой])

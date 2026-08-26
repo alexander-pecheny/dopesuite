@@ -58,4 +58,7 @@ func TestQuestionLabelInside(t *testing.T) {
 	if !strings.Contains(got, "stack(dir: ttb, spacing: 1mm, clabel[Вопрос 110], text(size: 14pt)[текст])") {
 		t.Errorf("no in-cell label:\n%s", got)
 	}
+	if !strings.Contains(got, "#qgap()") {
+		t.Error("a block with no caption still needs the caption's air above it")
+	}
 }

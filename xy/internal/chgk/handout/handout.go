@@ -24,6 +24,7 @@ var headerTemplate string
 const (
 	greytextTmpl  = "#qlabel[<GREYTEXT>]"
 	celllabelTmpl = "clabel[<CELLLABEL>]"
+	qgapTmpl      = "#qgap()"
 	imgTmpl       = `image("<IMGPATH>", width: <IMGWIDTH>)`
 
 	defaultFont   = "Noto Sans"
@@ -427,9 +428,12 @@ func GenerateTyp(hndt string, a Args) string {
 			continue
 		}
 		var label, grid string
-		ql, _ := b.str("question_label")
-		if fq, ok := b.str("for_question"); ok && fq != "" && ql != "inside" {
-			label = a.generateForQuestion(fq)
+		if fq, ok := b.str("for_question"); ok && fq != "" {
+			if ql, _ := b.str("question_label"); ql == "inside" {
+				label = qgapTmpl
+			} else {
+				label = a.generateForQuestion(fq)
+			}
 		}
 		if c, ok := b.intVal("columns"); ok && c != 0 {
 			grid = a.generateRegularBlock(b)
