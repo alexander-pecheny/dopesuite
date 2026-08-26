@@ -4581,6 +4581,12 @@ body.is-fullscreen.od-page .match-main {
 
 /* A мини-игра's name heads a block dozens of columns wide; centred it sits off
    the screen, so it rides at the block's left edge where the block begins. */
+/* Same treatment the seeding import gives a refusal, for the same reason. */
+.multi-table .declined-row td {
+  color: var(--muted);
+  background: var(--surface-tint);
+}
+
 .multi-table .theme-block {
   text-align: left;
   padding-left: var(--space-2);
@@ -4628,13 +4634,6 @@ body.is-fullscreen.od-page .match-main {
   color: var(--text-strong);
 }
 
-.troika-swap-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  color: var(--muted);
-}
-
 .troika-sheet .troika-team,
 .troika-sheet .troika-team-head {
   width: var(--team-col);
@@ -4656,6 +4655,38 @@ body.is-fullscreen.od-page .match-main {
 
 .troika-sheet .troika-chair {
   padding: var(--space-0);
+}
+
+/* The рассадка row annotates a бой instead of scoring it, so it does not carry
+   the weight of the rows around it. Its ⇄ says two things at once: which тема
+   the chair pickers are pointing at (a selection, so a tint), and where the
+   seating actually turned round (the data, so ink). */
+.troika-sheet .troika-seat-row td {
+  padding-top: var(--space-0);
+  padding-bottom: var(--space-0);
+}
+
+.troika-sheet .troika-seat-mark {
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.troika-sheet .troika-seat-mark:disabled {
+  cursor: default;
+}
+
+.troika-sheet .troika-seat-here {
+  background: var(--surface-tint);
+}
+
+.troika-sheet .troika-seat-changed {
+  color: var(--text-strong);
+  font-weight: var(--fw-semibold);
 }
 
 .troika-sheet .troika-chair-select {

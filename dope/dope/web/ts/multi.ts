@@ -305,7 +305,7 @@ function buildResultsTable(): HTMLElement {
 // the sheet and leaves the ranking, so the numbers of the rest do not shift.
 function buildRefusalsTable(): HTMLElement {
   const table = document.createElement("table");
-  table.className = "match-table refusals-table";
+  table.className = "match-table";
   const head = document.createElement("thead");
   const headRow = document.createElement("tr");
   headRow.appendChild(th("№"));
