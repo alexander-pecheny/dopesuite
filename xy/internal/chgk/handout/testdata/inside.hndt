@@ -3,3 +3,9 @@ columns: 3
 question_label: inside
 
 Раздатка с номером внутри
+---
+for_question: 111
+columns: 3
+question_label: inside
+
+Соседний блок

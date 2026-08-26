@@ -84,3 +84,8 @@
 // The same caption printed inside each cell instead (`question_label: inside`),
 // so a handout carries its question number after it is cut out.
 #let clabel(body) = text(fill: gray, size: 9pt, body)
+
+// A block with its number inside prints no caption above it, so nothing would
+// keep it off the block before it; this leaves the caption's air instead, and
+// drops away at the top of a page like the caption's own spacing.
+#let qgap() = v(<LABEL_ABOVE>mm, weak: true)
