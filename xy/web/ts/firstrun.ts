@@ -47,6 +47,10 @@ function build(zone: string, author: string): { overlay: HTMLElement; read: () =
 }
 
 async function firstRun(): Promise<void> {
+  // Not on /join: a fresh account arriving from an invite link is asked to
+  // accept it, and a modal over that button asks about a timezone for tests it
+  // cannot see yet. The next page it opens will ask (ADR-0017).
+  if (location.pathname.startsWith("/join/")) return;
   let me: AuthMe | null = null;
   try {
     me = (await xyApp.fetchJSON("/api/auth/me")) as AuthMe | null;

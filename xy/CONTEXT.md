@@ -122,6 +122,27 @@ Board it appends. Per-user state (mentions, read watermarks) and Tombstones stay
 behind, and members ride along as advisory names only.
 _Avoid_: backup (that is litestream's job), Board Bundle (it need not hold one)
 
+**Invite Link**:
+A URL that admits its holder to one Board as an editor, Telegram's invite link:
+minted by the owner and pasted into a chat. It may cap uses, expire, or hold the
+joiner until the owner approves; it is revocable, and the owner's list says how
+many came in through it and who they were. It grants MEMBERSHIP and never the
+key (ADR-0017): the joiner arrives at the passphrase overlay knowing only the
+Board's name, and the passphrase still travels between people. Nothing to do
+with the instance's registration invite code (`invites`, `xy-server invite`),
+which lets a stranger make an account and knows nothing of Boards.
+_Avoid_: invite (unqualified — the word is already spoken for), share link
+
+**Join Request**:
+A person waiting at an Invite Link that asks for approval: their own row on the
+link, neither a member nor turned away. It costs the link nothing until the
+owner approves, so a one-seat link may gather a queue and the owner picks; a
+decline is final for that link, never for the Board. The owner learns of one
+from the count on «Участники» and, if a bot is configured, a telegram nudge.
+Never from the 🔔, which reads a Card's encrypted events and knows nothing of
+membership.
+_Avoid_: application, pending member
+
 **API Token**:
 A month-lived, revocable credential that acts as the user (ADR-0015): minted at
 /profile/tokens, shown once, and accepted on every API route a session cookie

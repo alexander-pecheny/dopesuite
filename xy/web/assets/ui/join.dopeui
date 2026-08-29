@@ -1,0 +1,9 @@
+page title="Приглашение · xy" kind="sheet" scripts="dist/join.js"
+  topbar title="Приглашение"
+    crumbs
+      crumb home href="/" icon="house" label="Все доски"
+      crumb "Приглашение"
+
+  section
+    mount id="joinBody" kind="join-body"
+    message id="joinMessage"

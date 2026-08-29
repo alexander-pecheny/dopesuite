@@ -92,6 +92,53 @@ func (s *server) notifyComment(bid, cardID, authorID int64, mentions []int64, re
 	}
 }
 
+// notifyJoinRequest knocks on the owner's door when someone asks to join
+// through a link that requires approval (ADR-0017). Nothing waits for it: the
+// pending count in «Участники» is the durable signal, this only saves the
+// requester from waiting on an owner who has no reason to look.
+func (s *server) notifyJoinRequest(bid, requesterID int64) {
+	secret := botSecret()
+	if secret == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	var requester sql.NullString
+	var ownerTg sql.NullInt64
+	if err := s.db.QueryRowContext(ctx,
+		`select coalesce(nullif(username,''), telegram_username) from users where id = ?`, requesterID).Scan(&requester); err != nil {
+		log.Printf("notify: requester lookup: %v", err)
+		return
+	}
+	if err := s.db.QueryRowContext(ctx, `
+select u.telegram_user_id from boards b join users u on u.id = b.owner_user_id where b.id = ?`, bid).
+		Scan(&ownerTg); err != nil {
+		log.Printf("notify: board owner lookup: %v", err)
+		return
+	}
+	if !ownerTg.Valid {
+		return // no telegram — the pending count alone will have to do
+	}
+	// A legacy board's name is still ciphertext, and boardDisplayName is the one
+	// place that knows it; the nudge then just points.
+	boardName, err := boardDisplayName(ctx, s.db, bid)
+	if err != nil {
+		log.Printf("notify: board name: %v", err)
+		return
+	}
+	where := "в доску"
+	if boardName != "" {
+		where = "в доску «" + boardName + "»"
+	}
+	text := requester.String + " просится " + where + " по ссылке-приглашению: " +
+		publicURL() + "/board/" + strconv.FormatInt(bid, 10)
+	go func(tg int64) {
+		sctx, scancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer scancel()
+		sendBotDM(sctx, secret, tg, text)
+	}(ownerTg.Int64)
+}
+
 func botSecret() string { return strings.TrimSpace(os.Getenv("XY_BOT_SECRET")) }
 
 // sendBotDM posts one DM to the bot's loopback /send (tgbot.ServeLocal).

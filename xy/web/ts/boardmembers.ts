@@ -13,6 +13,7 @@ import type { AuthMe } from "./app.js";
 import { xySync } from "./sync.js";
 import { xyStore } from "./store.js";
 import { autocomplete } from "./suggest.js";
+import { createBoardInvites } from "./boardinvites.js";
 
 const { fetchJSON, jpost, jdelete, el } = xyApp;
 
@@ -37,7 +38,16 @@ export function roleLabel(role: string): string { return role === "owner" ? "в�
 
 // createBoardMembers wires the members overlay against the shared board state and
 // board id, and returns { load, open } for board.js to call.
-export function createBoardMembers(state: MembersState, boardId: number | string): { load: () => Promise<void>; open: () => void } {
+// onChange fires whenever the roster or the waiting queue moves, so the caller
+// can repaint what quotes them — the ☰ row carries the pending count.
+export function createBoardMembers(state: MembersState, boardId: number | string, onChange: () => void = () => {}): { load: () => Promise<void>; open: () => void; pendingCount: () => number } {
+  const invites = createBoardInvites({
+    boardId,
+    isOwner: () => state.role === "owner",
+    message: () => document.getElementById("membersMessage")!,
+    onChange: () => { void render().then(onChange); },
+  });
+
   function applyMembers(members: BoardMember[]): void {
     state.members = members;
     state.memberNames = {};
@@ -64,6 +74,7 @@ export function createBoardMembers(state: MembersState, boardId: number | string
     if (!state.me) {
       try { state.me = (await fetchJSON(`/api/auth/me`)) as AuthMe; } catch (_) {}
     }
+    await invites.load();
   }
 
   // Everyone I share any board with, most-shared first — the hint under the
@@ -72,7 +83,7 @@ export function createBoardMembers(state: MembersState, boardId: number | string
   const membersModal = modal("members");
   function open(): void {
     membersModal.open();
-    render();
+    void render();
     fetchJSON(`/api/collaborators`).then((names) => { collaborators = names as string[]; }).catch(() => {});
   }
   autocomplete(document.getElementById("addMemberName") as HTMLInputElement, (q) => {
@@ -99,6 +110,8 @@ export function createBoardMembers(state: MembersState, boardId: number | string
     }
     const isOwner = state.role === "owner";
     addForm.hidden = !isOwner;
+    await invites.load();
+    invites.render();
     for (const m of members) {
       const row = el("div", { class: "member-row" },
         el("span", { class: "member-name", text: memberName(m) }),
@@ -140,7 +153,7 @@ export function createBoardMembers(state: MembersState, boardId: number | string
     }
   });
 
-  return { load, open };
+  return { load, open, pendingCount: invites.pendingCount };
 }
 
 export const xyBoardMembers = { createBoardMembers, memberName, roleLabel };

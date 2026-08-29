@@ -15,7 +15,7 @@ func TestRealPages(t *testing.T) {
 		Compile:   Compile,
 		PagesDir:  "../../web/assets/ui",
 		StaticDir: "../../web/assets/static",
-		Pages:     5,
+		Pages:     6,
 		Provided:  map[string][]byte{"login": kit.LoginPage("Вход · xy", "/")},
 		// authorsDatalist is built by the board script itself.
 		IDsCreatedByJS: map[string]bool{"authorsDatalist": true},

@@ -10,7 +10,7 @@
     "mount-kind":    { "prefix": "Mount",   "values": [
       "kanban", "board-grid", "timeline", "label-picker", "label-add-row",
       "attachments", "card-fields", "preview-body", "card-preview-body",
-      "handouts-pdf", "import-preview", "lists-manage-rows", "members-list",
+      "handouts-pdf", "import-preview", "lists-manage-rows", "members-list", "join-requests", "invite-list", "invite-form", "join-body",
       "token-list", "token-value", "card-copy-msg", "import-count", "card-title",
       "sizes-preview", "excerpts", "excerpt-count", "thread", "feed-grid",
       "sessions-list", "session-form", "labels-editor", "card-seen", "card-playings", "card-versions", "mass-bar", "mass-body",

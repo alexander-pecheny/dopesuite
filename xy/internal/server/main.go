@@ -98,13 +98,14 @@ func routes(srv *server) *http.ServeMux {
 
 	// ---- HTML pages ----
 	mux.HandleFunc("GET /", srv.handleIndex)
-	mux.HandleFunc("GET /login", srv.servePage("ui/login.dopeui"))
+	mux.HandleFunc("GET /login", srv.handleLogin)
 	mux.HandleFunc("GET /register", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusMovedPermanently)
 	})
 	mux.HandleFunc("GET /profile", srv.servePage("ui/profile.dopeui"))
 	mux.HandleFunc("GET /profile/tokens", srv.servePage("ui/tokens.dopeui"))
 	mux.HandleFunc("GET /board/{id}", srv.servePage("ui/board.dopeui"))
+	mux.HandleFunc("GET /join/{code}", srv.servePage("ui/join.dopeui"))
 	mux.HandleFunc("GET /import", srv.servePage("ui/import.dopeui"))
 
 	// ---- admin tooling (gated on the configured admin username) ----
@@ -169,6 +170,15 @@ func routes(srv *server) *http.ServeMux {
 	mux.HandleFunc("POST /api/boards/{id}/members", srv.handleAddMember)
 	mux.HandleFunc("DELETE /api/boards/{id}/members/{userId}", srv.handleRemoveMember)
 	mux.HandleFunc("GET /api/collaborators", srv.handleListCollaborators)
+
+	// ---- invite links (ADR-0017): owner-side management, invitee-side join ----
+	mux.HandleFunc("GET /api/boards/{id}/invites", srv.handleListBoardInvites)
+	mux.HandleFunc("POST /api/boards/{id}/invites", srv.handleCreateBoardInvite)
+	mux.HandleFunc("POST /api/board-invites/{id}/revoke", srv.handleRevokeBoardInvite)
+	mux.HandleFunc("DELETE /api/board-invites/{id}", srv.handleDeleteBoardInvite)
+	mux.HandleFunc("POST /api/boards/{id}/join-requests/{userId}", srv.handleDecideJoinRequest)
+	mux.HandleFunc("GET /api/board-invites/code/{code}", srv.handlePeekInvite)
+	mux.HandleFunc("POST /api/board-invites/code/{code}/join", srv.handleJoinInvite)
 
 	// ---- lists / cards / labels / timeline ----
 	mux.HandleFunc("POST /api/boards/{id}/lists", srv.handleCreateList)

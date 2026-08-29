@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"strings"
+
 	kit "pecheny.me/dopeuikit/kit"
 
 	"pecheny.me/dopecore/webassets"
@@ -28,6 +30,7 @@ var pagePaths = []string{
 	"ui/tokens.dopeui",
 	"ui/import.dopeui",
 	"ui/board.dopeui",
+	"ui/join.dopeui",
 	"ui/index.dopeui",
 }
 
@@ -41,19 +44,58 @@ func (s *server) servePage(name string) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		body = s.assets.VersionRefs(body)
-		w.Header().Set("Content-Security-Policy", contentSecurityPolicy)
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Referrer-Policy", "same-origin")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Content-Length", strconv.Itoa(len(body)))
-		if r.Method == http.MethodHead {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		_, _ = w.Write(body)
+		s.writePage(w, r, body)
 	}
+}
+
+// handleLogin serves the shared login page. An invitee who followed a link while
+// logged out arrives as /login?next=/join/<code>, and the page has to send them
+// back there afterwards — so that one case compiles a copy with its own
+// destination, and everything else gets the page compiled at startup.
+func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	next := safeLoginNext(r.URL.Query().Get("next"))
+	if next == "" {
+		s.servePage("ui/login.dopeui")(w, r)
+		return
+	}
+	body, err := ui.Compile("ui/login.dopeui", kit.LoginPage("Вход · xy", next))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.writePage(w, r, body)
+}
+
+// safeLoginNext allows exactly one shape of post-login destination: an invite
+// link's own page. `next` is whatever the URL carried, so an allow-list of one
+// pattern is the whole defence against turning /login into an open redirect.
+func safeLoginNext(next string) string {
+	code, ok := strings.CutPrefix(next, "/join/")
+	if !ok || code == "" || len(code) > 64 {
+		return ""
+	}
+	for _, r := range code {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
+			return ""
+		}
+	}
+	return next
+}
+
+// writePage sends compiled page HTML with asset-ref versioning and the CSP.
+func (s *server) writePage(w http.ResponseWriter, r *http.Request, body []byte) {
+	body = s.assets.VersionRefs(body)
+	w.Header().Set("Content-Security-Policy", contentSecurityPolicy)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Referrer-Policy", "same-origin")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	_, _ = w.Write(body)
 }
 
 // contentSecurityPolicy locks the page to same-origin scripts only: no inline

@@ -136,7 +136,9 @@ const unlock = createUnlock({
     people.remember(boardId, state.name, state.sessions.flatMap((s) => parseSession(s.meta).testers));
     render();
     renderNotifBadge();
-    void boardMembers.load(); // best-effort: populate the author-name map for timelines (online only)
+    // best-effort, online only: the author-name map for timelines, and the
+    // invite links whose pending count the ☰ row shows.
+    void boardMembers.load().then(refreshBoardMenu);
     void rewrites.convertLegacyVersions();
     if (dk) void xySearchIndex.refreshComments(boardId, dk);
     cardDetail.maybeOpenDeepLink(); // open a ?card=… / &comment=… deep link on first load
@@ -205,7 +207,7 @@ async function deleteBoard(): Promise<void> {
 // ---- members / sharing ----
 // The members/sharing seam lives in boardmembers.js; it caches the roster onto
 // `state` (memberNames feeds the timeline's author names) and owns its overlay.
-const boardMembers = createBoardMembers(state, boardId);
+const boardMembers = createBoardMembers(state, boardId, () => refreshBoardMenu());
 
 // ---- read markers (blue dots) + 🔔 activity bell ----
 // Every user wants to read every OTHER user's changes; own edits never count.
@@ -1301,7 +1303,14 @@ registerPanel(
 
   // Сама доска
   starts({ id: "rename-board", menu: "board", icon: "pencil", label: "Переименовать доску", title: "Изменить название доски", open: () => { void renameBoard(); } }),
-  { id: "members", menu: "board", icon: "users", label: "Участники доски", title: "Поделиться доской: добавить или убрать участников", open: () => boardMembers.open() },
+  // The waiting count rides the row: a join request is board-level plaintext, so
+  // it has no place in the 🔔 (which reads encrypted card events), and the owner
+  // would otherwise never learn someone is queued (ADR-0017).
+  {
+    id: "members", menu: "board", icon: "users", title: "Поделиться доской: добавить или убрать участников",
+    label: () => { const n = boardMembers.pendingCount(); return n ? `Участники доски · ${n}` : "Участники доски"; },
+    open: () => boardMembers.open(),
+  },
   {
     id: "forget-password", menu: "board", icon: "lock", label: "Забыть пароль доски", title: "Забыть пароль доски на этом устройстве",
     open: async () => {

@@ -619,6 +619,36 @@ pragma foreign_keys = on;
 	// board_id with no index, so listing 60 boards over 29k events took 800ms.
 	{Version: 22, Name: "idx_timeline_board", Up: schema.Exec(`
 create index if not exists idx_timeline_board on timeline_events(board_id, id);`)},
+	// v23 adds board invite links (ADR-0017). `code` is plaintext: the owner's
+	// list hands the link back days after minting, which a hash cannot do — and
+	// the code buys membership only, never the data key. `max_uses`/`expires_at`
+	// null mean "no limit"; a use is spent only by a row that reached 'joined',
+	// so a pending request reserves nothing and a decline refunds nothing.
+	// unique(invite_id, user_id) is what makes a decline final.
+	{Version: 23, Name: "board invite links", Up: schema.Exec(`
+create table if not exists board_invites(
+  id integer primary key,
+  board_id integer not null references boards(id) on delete cascade,
+  code text not null unique,
+  label text,
+  created_by integer not null references users(id),
+  created_at text not null,
+  expires_at text,
+  max_uses integer,
+  requires_approval integer not null default 0,
+  revoked_at text
+);
+create index if not exists idx_board_invites_board on board_invites(board_id);
+
+create table if not exists board_invite_uses(
+  id integer primary key,
+  invite_id integer not null references board_invites(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  status text not null check (status in ('joined','pending','declined')),
+  requested_at text not null,
+  decided_at text,
+  unique(invite_id, user_id)
+);`)},
 }
 
 func migrate(db *sql.DB) error { return schema.Apply(db, migrations) }

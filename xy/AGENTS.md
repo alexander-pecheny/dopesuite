@@ -93,6 +93,8 @@ internal/server/       package server — the whole HTTP server
   auth.go              sessions, password login, the Telegram handshake's adapter (state machine in dopecore/tglogin:
                        xy brings its write tx, its users table, its error text), the bot bridge
   boards.go            boards CRUD, keymeta (passphrase re-wrap), members, /api/collaborators (who I share boards with), ACL helpers
+  boardinvites.go      invite links (ADR-0017): owner mints/revokes/deletes and decides join requests;
+                       the invitee peeks at a code and joins. A link grants membership, never the key
   timeline.go          the Timeline's one writer (insertEvent: every kind's columns; appendEvent for the
                        metadata trail) and one reader (timelineColumns + scanTimelineEvent, readTimeline)
   unread.go            the unread rule as SQL fragments (the two buckets, the watermark, the Mention) that
@@ -486,6 +488,10 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        from every board whose key it holds. Plaintext in localStorage on
                        purpose — the same device caches the DKs — and purged per board when
                        its password is forgotten
+    boardinvites.ts    the invite-link half of the «Участники» modal (ADR-0017): the
+                       Заявки queue and the Ссылки list, plus the chip mint form. Owner
+                       only; a decision redraws the roster through onChange, which also
+                       repaints the ☰ row's waiting count
     firstrun.ts        the two questions every account answers once (timezone, default
                        author), asked on whichever page is opened first
     wordlist.ts        EFF diceware list for generated passphrases (data only)
@@ -500,10 +506,13 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        Shared defaults/ranges/sanitize/apply live in app.ts (xySizes)
                        so this write path and board.ts's read path agree
     tokens.ts          /profile/tokens — create/revoke API tokens for the Trello API
+    join.ts            /join/<code> — what an invite link opens: the board's name,
+                       why the link does or does not work, and one button (ADR-0017)
 web/assets/            //go:embed static + ui (package assets)
-  ui/                  the 6 app pages as .dopeui (index, board, login, profile,
-                       tokens, import) — compiled to HTML by internal/ui at server
-                       startup (per-request in dev disk mode)
+  ui/                  the 7 app pages as .dopeui (index, board, login, profile,
+                       tokens, import, join) — compiled to HTML by internal/ui at server
+                       startup (per-request in dev disk mode; /login recompiles per
+                       request only for ?next=/join/<code>)
   static/              built dist/ (gitignored ESM output), icons +
                        manifest.webmanifest, ding.mp3, plus:
     styles.css         the xy-only CSS layer (kanban/card/board + xy vars + PWA

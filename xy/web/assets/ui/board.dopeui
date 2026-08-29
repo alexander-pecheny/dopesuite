@@ -339,6 +339,16 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
     form id="addMemberForm" dir="row" gap="sm" hidden
       textfield id="addMemberName" placeholder="Имя пользователя" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" grow
       button small submit "Добавить"
+    -- Заявки appear only while someone is waiting; ссылки only for the owner,
+    -- who is the only one allowed to mint, revoke or approve (ADR-0017).
+    section id="joinRequestsSection" hidden
+      subhead "Заявки"
+      mount id="joinRequests" kind="join-requests"
+    section id="invitesSection" hidden
+      subhead "Ссылки-приглашения"
+      mount id="inviteList" kind="invite-list"
+      button kind="ghost" small id="newInviteBtn" "+ Создать ссылку"
+      mount id="inviteForm" kind="invite-form"
     message id="membersMessage"
 
   -- expanded лента: the same feed on the whole screen, flowed into columns so a
