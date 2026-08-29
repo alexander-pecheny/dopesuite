@@ -526,12 +526,6 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     refreshSaveState();
   }
 
-  // ensureOption adds a <select> option for `name` if it isn't already present (so
-  // an image referenced by the handout but not currently attached still shows).
-  function ensureOption(sel: HTMLSelectElement, name: string): void {
-    if (name && ![...sel.options].some((o) => o.value === name)) sel.append(el("option", { value: name, text: name }));
-  }
-
   // buildField is the generic absent/present field control: a "+ label" pill when
   // absent, a labelled input with a "×" (back to absent) when present.
   function buildField(label: string, kind: "area" | "input", initial: string | null | undefined, opts: { muted?: boolean; open?: boolean; rows?: number } = {}): FieldReader<string | null> {
@@ -572,8 +566,19 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const ta = el("textarea", { class: "card-desc fld-input", spellcheck: "false", rows: "1" }) as HTMLTextAreaElement;
     autoGrow(ta);
     const sel = el("select", { class: "input fld-input" }) as HTMLSelectElement;
-    const cardImageNames = deps.attachments.imageNames();
-    for (const n of cardImageNames) sel.append(el("option", { value: n, text: n }));
+    // The card gains images while this field is alive — a paste, the Вложения
+    // uploader — so the picker rebuilds its options each time it is opened rather
+    // than freezing them at render. `want` stays among them even when nothing is
+    // attached under that name (a chgksuite import, a picture on another card):
+    // read() runs on every keystroke, so dropping it would rewrite the question.
+    const syncOptions = (want = sel.value): void => {
+      const names = deps.attachments.imageNames();
+      const all = names.includes(want) ? names : [want, ...names];
+      sel.replaceChildren(...all.map((n) => el("option", { value: n, text: n })));
+      sel.value = want;
+    };
+    // focus alone misses reopening a select that already has it.
+    for (const ev of ["focus", "mousedown"]) sel.addEventListener(ev, () => syncOptions());
     // Picking a handout picture used to mean attaching the file further down the
     // card first, then coming back up here to choose it — and on a card that had
     // no attachments yet the dropdown was simply empty, with no way out of it
@@ -587,18 +592,14 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       if (!file) return;
       try {
         await deps.attachments.upload(file, true, file.name);
-        ensureOption(sel, file.name);
-        sel.value = file.name;
+        syncOptions(file.name);
       } catch (err) { cardMessageEl.textContent = errMsg(err); }
     });
     const imgRow = el("div", { class: "fld-row" }, sel, attachBtn, filePick);
     const body = el("div", { class: "fld-body" }, toggle, ta, imgRow);
     let mode: "text" | "image" = initial && initial.kind === "image" ? "image" : "text";
-    if (initial) {
-      if (initial.kind === "image") { ensureOption(sel, initial.name); sel.value = initial.name || ""; }
-      else ta.value = initial.text || "";
-    }
-    if (!cardImageNames.length) ensureOption(sel, "");
+    if (initial && initial.kind === "text") ta.value = initial.text || "";
+    syncOptions(initial && initial.kind === "image" ? initial.name || "" : "");
     const syncMode = (): void => {
       modeText.classList.toggle("active", mode === "text");
       modeImg.classList.toggle("active", mode === "image");

@@ -80,7 +80,7 @@ _Avoid_: feed filter, view mode (the narrowing is transient; only the default is
 chgksuite's plain-text question format — xy's interchange format for import, export, and the card editor's Текст view. Parity with chgksuite is byte-for-byte and oracle-tested; never extend the format unilaterally.
 
 **Handout**:
-Раздатка: a `.hndt` source rendered to PDF fully in-process (typst as wasm). Nothing decrypted ever touches disk.
+Раздатка, in two senses the word does not distinguish. A Card's own — a field of its 4s, either text or the name of one of its image Attachments, and the thing an editor means by «раздаточный материал». And a tour's — the `.hndt` source built from those, rendered to PDF fully in-process (typst as wasm), which is what «Генерация раздаток» makes. The first is content and travels with the question; the second is an artefact and nothing decrypted on its way ever touches disk. An image name is not a foreign key: a Card may name a picture attached to another Card, or to none at all, and an import routinely does.
 
 **Envelope**:
 The one wire format for ciphertext: `magic("xy1") | alg | nonce | ct+tag`, base64 over JSON. `crypto.js` is its sole owner. Per board, a random data key (DK) does the encrypting; the passphrase-derived KEK only wraps DK, so a passphrase change re-wraps without re-encrypting.

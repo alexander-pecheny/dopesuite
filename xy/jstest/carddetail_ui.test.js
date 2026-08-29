@@ -38,7 +38,7 @@ function ui() {
   };
 }
 
-function setup() {
+function setup(images = []) {
   const card = { id: 5, listId: 1, kind: "question", rank: "a", desc: "(hidden-comment xy-version:)\n? Первая?\n! Раз\n(hidden-comment xy-version: полегче)\n? Вторая?\n! Два", handoutMeta: null, alias: null, createdAt: "2026-01-01" };
   const state = { name: "Доска", lists: [{ id: 1, title: "Тур", rank: "a", groupId: null }], cards: [card], labels: [], cardLabels: [], cardSessions: [], sessions: [], unread: {}, defaultAuthor: "" };
   const log = [];
@@ -58,7 +58,7 @@ function setup() {
     popupMenu() {},
     forgetCardLabels() {},
     preview: { renderPreviewCard: () => fakeNode("div", { className: "pv" }), resolveImages: async () => new Map(), imageRefs: () => new Set(), fillPreviewImages() {}, previewList: async () => {} },
-    attachments: { load: async () => {}, imageNames: () => [], clearImageNames() {}, cardAttachments: async () => [], resolveImages: async () => new Map(), attachmentUrl: async () => "", download: async () => {}, imageBlob: async () => null },
+    attachments: { load: async () => {}, imageNames: () => images, clearImageNames() {}, cardAttachments: async () => [], resolveImages: async () => new Map(), attachmentUrl: async () => "", download: async () => {}, imageBlob: async () => null },
     readMarkers: { refreshCardUnreadDot() {}, renderNotifBadge() {} },
     timeline: { load: async () => {}, events: () => [], resetFilter() {}, readBuckets: () => ({}), ensureVisible() {}, commentDraft: () => "", postComment: async () => {}, clearCommentDraft() {} },
     transfer: { moveBoardOptions: async () => [], loadMoveBoard: async () => ({ boardId: 1, dk: {}, lists: [], cardsByList: new Map(), labels: [], sessions: [], name: "" }), transferCard: async () => 0 },
@@ -82,6 +82,23 @@ test("a card opens on version 1 with Сохранить off; the draft turns it 
   assert.equal(p.node("cardSave").disabled, false, "a changed draft can be saved");
   p.node("cardTabPreview").fire("click");
   assert.equal(p.node("cardSave").hidden, false, "a dirty draft keeps the button visible on Просмотр");
+  cd.closeCard();
+  await new Promise((r) => setTimeout(r, 0));
+});
+
+test("the раздатка picker sees an image attached while Поля is open", async () => {
+  const images = ["старая.png"];
+  const { cd, card } = setup(images);
+  card.desc = "? [Раздаточный материал: (img старая.png)]\nВопрос?\n! Ответ";
+  await cd.openCard(card);
+  p.node("cardTabFields").fire("click");
+  const sel = p.node("cardFields").querySelector("select");
+  assert.equal(sel.value, "старая.png");
+  images.push("вставка.png"); // a paste, or the Вложения uploader
+  sel.fire("focus");
+  assert.deepEqual(sel.querySelectorAll("option").map((o) => o.value), ["старая.png", "вставка.png"],
+    "opening the picker rebuilds it from the card's images");
+  assert.equal(sel.value, "старая.png", "and the chosen раздатка is not rewritten underneath");
   cd.closeCard();
   await new Promise((r) => setTimeout(r, 0));
 });
