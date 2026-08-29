@@ -55,7 +55,6 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
   function setMassMode(on: boolean): void {
     massMode = on;
     if (!on) massSelected = new Set();
-    document.body.classList.toggle("mass-mode", on);
     deps.refreshMenu();
     board.render();
   }

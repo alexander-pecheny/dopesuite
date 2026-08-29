@@ -311,6 +311,11 @@
   height: calc(100dvh - var(--header-h));
   overflow: hidden;
   padding: var(--space-4) var(--page-pad-x);
+  /* A column, so «Массовое действие»'s bar can take a row of its own below the
+     board instead of floating over it. */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 /* The board page uses the kit's compact chrome (44px, .host-compact on body).
    z-index: the card modal (--z-card-overlay) covers the lower section, but the
@@ -413,7 +418,10 @@
   display: flex;
   gap: var(--space-3);
   align-items: flex-start;
-  height: 100%;
+  /* Takes the height its parent column has left, which is the whole of it until
+     the mass bar appears. min-height:0 so it may shrink below its content. */
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-x: auto;
   padding-bottom: var(--space-2);
   /* On a wide monitor a full-bleed board strands the reader at the screen edge,
@@ -1343,21 +1351,20 @@
 .fld-add:hover { color: var(--text); border-color: var(--muted); }
 .fld-muted .fld-add { opacity: 0.75; }
 .fld-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
-/* массовое действие — the bar is fixed to the bottom of the viewport because
-   the selection spans the whole board: it must stay reachable however far you
-   have scrolled to tick the next list. */
+/* массовое действие — the bar is a row of .board-main, below the board rather
+   than over it. It was fixed to the viewport, and the board reserved a guessed
+   72px for it; the bar wraps to two and three rows on a narrow window, and the
+   rows it grew past the guess sat on top of the last cards of every list — the
+   ones you were scrolling down to tick. In the flow, the board is whatever
+   height is left and the arithmetic cannot drift. .board-main does not scroll,
+   so the bar stays put however far the kanban or a list is scrolled. */
 .mass-bar {
-  position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: var(--space-3);
-  z-index: 40;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: var(--space-2);
   flex-wrap: wrap;
   justify-content: center;
-  max-width: calc(100vw - 2 * var(--space-3));
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -1372,16 +1379,12 @@
    theme, so the ink has to be that or the word washes out on the button. */
 .mass-act-danger { color: var(--red-dark); background: var(--red); }
 .mass-body { display: flex; flex-direction: column; gap: var(--space-1); }
-/* The board scrolls under the bar; without this the last row of cards hides
-   behind it and cannot be ticked. */
-body.mass-mode .kanban { padding-bottom: 72px; }
 .kcard-check, .klist-check { display: inline-flex; align-items: center; margin-right: var(--space-1); cursor: var(--cursor-action); }
 .kcard-check { float: right; margin-left: var(--space-1); }
-/* Centring a content-width flex box on a phone collapses it into a tall narrow
-   column — seven action buttons stacked. Pin it to both edges instead, which is
-   where a bottom bar belongs on a phone anyway. */
+/* On a phone the actions get a row to themselves and share it evenly, rather
+   than centring into a tall narrow column of seven stacked buttons. */
 @media (max-width: 760px) {
-  .mass-bar { left: var(--space-2); right: var(--space-2); transform: none; max-width: none; justify-content: space-between; }
+  .mass-bar { justify-content: space-between; }
   .mass-acts { flex: 1 1 100%; }
   .mass-act { flex: 1 1 auto; }
   /* …but the destructive one never grows to fill a row on its own: the biggest

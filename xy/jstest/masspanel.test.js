@@ -31,7 +31,6 @@ test("mass mode is off until asked, ticks accumulate, and leaving the mode drops
   assert.equal(mass.mode, false);
   mass.panel.open();
   assert.equal(mass.mode, true);
-  assert.equal(p.doc.body.classes.has("mass-mode"), true);
   assert.equal(board.renders, 1);
   mass.toggle(10);
   mass.toggleAll([20, 11]);
@@ -40,7 +39,8 @@ test("mass mode is off until asked, ticks accumulate, and leaving the mode drops
   assert.deepEqual([...mass.selected], [10]);
   mass.setMode(false);
   assert.equal(mass.selected.size, 0);
-  assert.equal(p.doc.body.classes.has("mass-mode"), false);
+  mass.renderBar();
+  assert.equal(p.node("massBar").hidden, true, "and the bar goes with the mode");
 });
 
 test("the bar names the count and offers the actions only once something is ticked; prune drops dead cards", () => {
