@@ -88,11 +88,11 @@ export interface CrosstableSpec {
   empty?: string;
 }
 
-// A рейтинговый балл is a sum of очки over fifty, so it arrives with the
+// A рейтинговый балл is очки plus взятые over fifty, so it arrives with the
 // binary noise every such sum has — 1.8599999999999999 for 1.86. Ranking uses
-// the full value; only what is printed is settled here.
+// the full value; what is printed is exact in two places.
 function round(value: number): number {
-  return Number.isInteger(value) ? value : Number(value.toFixed(4));
+  return Math.round(value * 100) / 100;
 }
 
 export function buildCrosstables(spec: CrosstableSpec): HTMLElement {

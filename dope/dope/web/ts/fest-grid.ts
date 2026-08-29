@@ -755,6 +755,7 @@ function reseedMetricLabel(metric: string): string {
     diff: "+/−",
     taken_base: "Взятые б/п",
     points: "Очки",
+    rating: "Р",
     taken: "Взятые",
     bouts: "Боёв",
     draw: "Жребий",
@@ -767,7 +768,9 @@ function reseedMetricValue(metric: string, value: unknown): string {
   const number = Number(value);
   if (!Number.isFinite(number) || String(value).trim() === "") return String(value);
   if (metric.endsWith("_share")) return `${scoreText(Math.round(number * 1000) / 10)}%`;
-  return scoreText(number);
+  // A рейтинговый балл is очки plus взятые over fifty: exact in two places,
+  // printed with the binary noise of the sum otherwise.
+  return scoreText(Math.round(number * 100) / 100);
 }
 
 function preferredColumns(count: number): number {

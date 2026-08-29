@@ -4604,9 +4604,26 @@ body.is-fullscreen.od-page .match-main {
   font-weight: var(--fw-semibold);
 }
 
-/* Тройка: бои side by side, each two blocks of three chair rows. */
+/* Тройка: бои side by side, each two blocks of three chair rows; the группа
+   tables flow at their own width and wrap, compact enough for two abreast. */
+.group-standings.troika-groups {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.troika-groups .crosstable {
+  --results-team-col: 160px;
+  font-size: var(--text-xs);
+}
+
+.troika-groups .crosstable .results-num {
+  width: 32px;
+  min-width: 32px;
+}
+
 .troika-protocol {
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-5);
@@ -4619,11 +4636,17 @@ body.is-fullscreen.od-page .match-main {
   gap: var(--space-5);
 }
 
+/* A stage's tab holds every бой of every группа — a hundred and more sheets —
+   so a бой off the screen is neither laid out nor painted until it scrolls in. */
 .troika-bout {
+  --troika-bout-w: 1130px;
+  --troika-bout-h: 260px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-2);
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--troika-bout-w) var(--troika-bout-h);
 }
 
 .troika-bout-head,
@@ -4648,12 +4671,25 @@ body.is-fullscreen.od-page .match-main {
   white-space: nowrap;
 }
 
-.troika-sheet .troika-seat-label {
+.troika-sheet .troika-seat-head {
   font-size: var(--text-xs);
   color: var(--muted);
 }
 
+.troika-sheet .troika-seat-button {
+  margin-left: var(--space-1);
+  padding: var(--space-0) var(--space-1);
+  color: var(--muted);
+}
+
+.troika-sheet .troika-seat-button.troika-seat-open {
+  color: var(--text-strong);
+}
+
+/* A кресло names a player, at the width the ЭК sheet gives its player cell. */
 .troika-sheet .troika-chair {
+  width: calc(var(--question-col) * 5);
+  min-width: calc(var(--question-col) * 5);
   padding: var(--space-0);
 }
 
@@ -4691,8 +4727,11 @@ body.is-fullscreen.od-page .match-main {
 
 .troika-sheet .troika-chair-select {
   width: 100%;
+  height: 100%;
+  padding: var(--space-0) var(--space-1);
   border: 0;
   background: transparent;
+  font: inherit;
   font-size: var(--text-xs);
   color: var(--text-strong);
 }

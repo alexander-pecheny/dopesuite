@@ -128,6 +128,18 @@ export function swapFrom(state: TroikaState, side: number, from: number, order: 
   }
 }
 
+// turnedAt is whether either side sits differently for this тема than for the
+// one before — where the sheet shows a «рассадка» column again.
+export function turnedAt(state: TroikaState, theme: number): boolean {
+  if (theme <= 0) return false;
+  for (let side = 0; side < 2; side++) {
+    for (let c = 0; c < CHAIRS; c++) {
+      if (chairAt(state, side, theme, c) !== chairAt(state, side, theme - 1, c)) return true;
+    }
+  }
+  return false;
+}
+
 export function started(state: TroikaState): boolean {
   for (const side of state.sides) {
     for (const theme of side.themes) {

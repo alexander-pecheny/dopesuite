@@ -90,3 +90,16 @@ Deno.test("stats tell a first answer from a repeat, and rate the repeats", () =>
   assertEquals(rows.map((row) => row.player), ["Боря", "Аня", "Вера"]);
   assertEquals(by["Аня"].bouts, 1);
 });
+
+Deno.test("turnedAt is where either side sits differently from the тема before", () => {
+  const state = troika.parseState({
+    values: [1, 1, 1],
+    sides: [
+      {themes: [theme([1, 2, 3], none, none, none), theme([1, 2, 3], none, none, none), theme([2, 1, 3], none, none, none)]},
+      {themes: [theme([4, 5, 6], none, none, none), theme([4, 5, 6], none, none, none), theme([4, 5, 6], none, none, none)]},
+    ],
+  });
+  assertEquals([0, 1, 2].map((t) => troika.turnedAt(state, t)), [false, false, true]);
+  troika.swapFrom(state, 1, 1, [5, 4, 6]);
+  assertEquals([0, 1, 2].map((t) => troika.turnedAt(state, t)), [false, true, true]);
+});

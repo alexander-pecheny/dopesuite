@@ -130,6 +130,12 @@ the бой — the регламент turns the пристяжные round at th
 swap oftener — and it is what tells a first correct answer from a repeat of
 one already on the table.
 
+**Рассадка**:
+The order of a side's three кресла for a тема — who is пристяжной first and
+second, and who коренной. A side's рассадка holds from the тема it is set at
+until it is set again; a тема whose рассадка differs from the one before is
+where that side turned round.
+
 **Перестрелка**:
 A tiebreak continuation, common to every format (EK's shootout themes, ОД's shootout rounds, brain's "П" questions). Two distinct forms: extra material appended to the Match itself until the tie breaks, or a separate replay Match between fully tied Participants. Whether a Block's Matches allow the appended form is part of that Block's rules — regulations differ per tournament.
 
