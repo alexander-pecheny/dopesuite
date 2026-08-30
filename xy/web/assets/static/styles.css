@@ -770,6 +770,17 @@
 /* timeline */
 .timeline { display: flex; flex-direction: column; gap: var(--space-2); max-height: 320px; overflow-y: auto; }
 .tl-event { padding: var(--space-2) var(--space-3); border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--page); }
+/* the лента's placeholder while the next card's comments are fetched and
+   decrypted: grey bars in the shape of a comment, so the panel keeps its height
+   and nobody reads the previous card's discussion as this one's */
+.tl-skeleton { display: flex; flex-direction: column; gap: var(--space-1); }
+/* mixed off --muted, a FOREGROUND token: --structure is the same colour as the
+   row's own --page background in this theme, so bars painted with it vanished */
+.tl-skeleton-bar { height: 0.7em; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--muted) 25%, transparent); animation: tl-pulse 1.2s ease-in-out infinite; }
+.tl-skeleton-meta { width: 40%; height: 0.6em; }
+.tl-skeleton-short { width: 65%; }
+@keyframes tl-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .tl-skeleton-bar { animation: none; } }
 /* wraps: on a phone the author·time, the «в ответ» link and the actions cannot
    share a line, and unwrapped the pieces stretched apart around a stranded «·» */
 .tl-meta { font-size: var(--text-2xs); color: var(--muted); display: flex; align-items: center; gap: var(--space-1); flex-wrap: wrap; }

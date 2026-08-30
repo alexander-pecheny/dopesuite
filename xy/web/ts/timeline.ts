@@ -450,8 +450,36 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // overlay's scroll height mid-render, so the browser clamped the scroll position
   // and the view jumped up — every marked выписка threw the reader back to
   // «Выписок: N». The container must never be shorter than its content.
+  // painted names the card the лента currently shows, and loadSeq the newest
+  // load in flight. Between them they keep one card's comments off another
+  // card: the skeleton covers the wait, the sequence drops a slow load whose
+  // card is no longer open (open A, open B, A's fetch lands last).
+  let painted: number | null = null;
+  let loadSeq = 0;
+
+  // skeleton is what the лента shows while the next card's comments are being
+  // fetched and decrypted — a second or two on a busy card. Leaving the previous
+  // card's лента up reads as the wrong comments rather than as loading, and
+  // simply emptying it is what the note above forbids: three grey rows keep the
+  // container tall while saying "not yet".
+  function skeleton(): DocumentFragment {
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < 3; i++) {
+      frag.append(el("div", { class: "tl-event tl-skeleton" },
+        el("div", { class: "tl-skeleton-bar tl-skeleton-meta" }),
+        el("div", { class: "tl-skeleton-bar" }),
+        el("div", { class: "tl-skeleton-bar tl-skeleton-short" })));
+    }
+    return frag;
+  }
+
   async function load(cardId: number): Promise<void> {
     const tl = ui.timeline;
+    const seq = ++loadSeq;
+    // Only when the card changes: a reload of the card already on screen (a
+    // posted comment, a new attachment) must not blink, and the лента may not
+    // get shorter under a reader who has scrolled it.
+    if (painted !== cardId) { painted = cardId; tl.replaceChildren(skeleton()); }
     if (composerCard !== cardId) { composerCard = cardId; clearCommentDraft(); }
     // Refresh the cached server timeline when online, then merge any pending
     // (un-synced) events synthesized from the outbox so offline edits/comments show.
@@ -493,6 +521,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     // Oldest goes last in the newest-first лента.
     const born = cardCreatedNode(cardId);
     if (born) frag.append(born);
+    if (seq !== loadSeq) return; // a newer load owns the лента now
     tl.replaceChildren(frag);
   }
 
