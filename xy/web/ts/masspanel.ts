@@ -61,8 +61,27 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
 
   function massToggle(id: number): void {
     massSelected = xyMass.toggleOne(massSelected, id);
-    renderMassBar();
+    keepingListBottoms(renderMassBar);
     paintMassChecks();
+  }
+
+  // The first tick turns the bar from one line of hint into a row of actions,
+  // and the taller bar takes that height off the bottom of every list. Ticking
+  // does not re-render the board (that is what keeps the scroll position), so a
+  // list would keep its old scrollTop and the card just ticked — the last one,
+  // which is why you scrolled down — would slide under the fold. Lists already
+  // scrolled away from their top keep their BOTTOM edge instead, so nothing
+  // under the cursor moves. A list sitting at its top is left alone: there the
+  // first card is the anchor, and shifting it would be the same wart upside
+  // down.
+  function keepingListBottoms(change: () => void): void {
+    const lists = [...deps.kanban.querySelectorAll<HTMLElement>(".kcards")];
+    const before = lists.map((l) => l.clientHeight);
+    change();
+    lists.forEach((l, i) => {
+      const shrank = before[i] - l.clientHeight;
+      if (shrank > 0 && l.scrollTop > 0) l.scrollTop += shrank;
+    });
   }
 
   // paintMassChecks syncs every checkbox to the selection without rebuilding the
