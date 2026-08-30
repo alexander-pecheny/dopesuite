@@ -61,4 +61,9 @@ func TestQuestionLabelInside(t *testing.T) {
 	if !strings.Contains(got, "#qgap()") {
 		t.Error("a block with no caption still needs the caption's air above it")
 	}
+	// A centred block centres everything in its cells, and a centred «Вопрос N»
+	// reads as part of the раздатка rather than as the label of it.
+	if !strings.Contains(got, "#let clabel(body) = block(width: 100%, align(left, text(fill: gray, size: 9pt, body)))") {
+		t.Error("the in-cell label must stay left whatever the block's alignment")
+	}
 }
