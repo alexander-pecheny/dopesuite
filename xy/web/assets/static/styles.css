@@ -1322,15 +1322,20 @@
 .fld-wide, .fld-present { flex: 1 1 100%; }
 .fld-present {
   display: grid;
-  /* as narrow as the longest unbreakable label («Комментарий» at text-xs)
-     allows — multi-word labels wrap instead of widening the column */
-  grid-template-columns: 5.5em 1fr;
+  /* Three tracks: the label, the ×, the control. The label column is as narrow
+     as the longest unbreakable label («Комментарий» at text-xs) allows, so
+     multi-word labels wrap instead of widening it — and the × has a track of
+     its own, sized to the × (issue #65). Sharing the label's track, it had
+     nowhere to go and crept over the input. */
+  grid-template-columns: 5.5em auto 1fr;
   column-gap: var(--space-2);
   align-items: start;
 }
-/* label column: × next to the label (not flushed to the far edge of the card),
-   label dropped onto the input's first text line */
-.fld-present > .fld-head { justify-content: flex-start; padding-top: 7px; gap: var(--space-1); }
+/* The head is only a wrapper for the two of them; contents drops it so label
+   and × land in their own tracks. Its children are always exactly (label, ×). */
+.fld-present > .fld-head { display: contents; }
+/* label dropped onto the input's first text line, × alongside it */
+.fld-present > .fld-head > * { padding-top: 7px; }
 .fld-present .fld-label { font-size: var(--text-xs); }
 .fld-present .fld-rm { padding: 0 2px; }
 .fld-present > .fld-body { margin-top: 0; }
@@ -1452,7 +1457,9 @@ textarea.fld-input { min-height: 0; padding-block: var(--space-2); }
   /* align-items too: the grid rule's `start` would shrink the stacked children
      to content width */
   .fld-present { display: flex; flex-direction: column; align-items: stretch; }
-  .fld-present > .fld-head { justify-content: space-between; padding-top: 0; }
+  /* the head is a row again here, so it gets its box back */
+  .fld-present > .fld-head { display: flex; justify-content: space-between; }
+  .fld-present > .fld-head > * { padding-top: 0; }
   .fld-present > .fld-body { margin-top: var(--space-1); }
 }
 .fld-rows { display: flex; flex-direction: column; gap: var(--space-1); }
