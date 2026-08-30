@@ -60,10 +60,25 @@ agent-browser screenshot $SP/phone.png   # captured at the emulated size
 agent-browser set viewport 1280 800 1    # back to desktop; re-verify desktop too
 ```
 
+- **They are `set` subcommands, and the bare words lie about it.**
+  `agent-browser viewport 390 780` answers `Unknown command: viewport`, and
+  `agent-browser device "iPhone 16"` answers `Valid options: list` — because a
+  separate top-level `device list` exists for macOS iOS simulators and has
+  nothing to do with emulation. Both read as "this build cannot resize", which
+  is wrong: every one of them is `agent-browser set <setting>`. Reach for
+  `--help`'s *Browser Settings* block before concluding a capability is absent.
 - `set device <name>` sets Chrome's metrics + DPR + UA. Valid names (a bad one
   prints the list): `iPhone 15`, `iPhone 16`, `iPhone 16 Pro`, `iPhone 17`,
   `iPad`, `iPad Pro`, `Pixel 9`, `Galaxy S25`. It persists in the daemon and
   re-applies on every command; reset with `set viewport <w> <h> <scale>`.
+- The other settings on the same prefix: `set media dark|light`
+  (`prefers-color-scheme`, plus `reduced-motion`), `set offline on|off`,
+  `set geo <lat> <lng>`, `set headers <json>`, `set credentials <user> <pass>`.
+- **Never fake a breakpoint to test one.** Editing `@media (max-width: …)` in
+  the stylesheet, rebuilding, then restoring it does exercise the rules, but it
+  is slow and leaves the tree dirty if anything interrupts you. `set viewport`
+  makes the real query match — `matchMedia("(max-width: 760px)").matches` goes
+  true — so assert on that instead.
 - **`set device` does NOT enable touch** (`navigator.maxTouchPoints` stays 0, no
   `ontouchstart`). It's a layout/DPR/UA emulation, not a real touch device — fine
   for catching overflow, not for testing touch-only handlers.
