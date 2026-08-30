@@ -315,9 +315,10 @@ function buildBout(bout: BoutEntry): HTMLElement {
 
   const thead = document.createElement("thead");
   const themeRow = document.createElement("tr");
-  themeRow.appendChild(th("", "troika-team-head"));
+  themeRow.appendChild(th("Команда", "troika-team-head"));
   state.values.forEach((value, t) => {
-    if (seatsAt.has(t)) themeRow.appendChild(th("рассадка", "troika-seat-head"));
+    if (seatsAt.has(t)) themeRow.appendChild(th("Рассадка"));
+    else if (t > 0) themeRow.appendChild(th("", "gap-head"));
     themeRow.appendChild(th(themeHead(bout, t, value, editable && seatsAt.has(t)), "theme-block",
       {colSpan: troika.THEME_QUESTIONS}));
   });
@@ -333,6 +334,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
       if (chair === 0) tr.appendChild(td(seatName(bout.view, side), "troika-team", {rowSpan: troika.CHAIRS}));
       state.values.forEach((_value, t) => {
         if (seatsAt.has(t)) tr.appendChild(td(chairPicker(bout, side, t, chair, roster, editable), "troika-chair"));
+        else if (t > 0) tr.appendChild(td("", "gap"));
         for (let q = 0; q < troika.THEME_QUESTIONS; q++) tr.appendChild(markCell(bout.code, side, t, q, chair, state));
       });
       if (chair === 0) {
@@ -420,16 +422,15 @@ function chairPicker(bout: BoutEntry, side: number, from: number, chair: number,
 function markCell(code: string, side: number, theme: number, q: number, chair: number,
   state: TroikaState): HTMLElement {
   const cell = td("", "troika-cell answer-cell", {dataset: {match: code, side, theme, q, chair}});
-  paintMark(cell, troika.markAt(state, side, theme, q, chair), troika.themeValue(state, theme));
+  paintMark(cell, troika.markAt(state, side, theme, q, chair));
   return cell;
 }
 
-// A cell has three faces: paper, red for a wrong answer, green with what it
-// paid for a right one. The cursor reads the mark off the class.
-function paintMark(cell: HTMLElement, mark: Mark, value: number): void {
+// A cell has three faces: paper, red for a wrong answer, green for a right
+// one. The cursor reads the mark off the class.
+function paintMark(cell: HTMLElement, mark: Mark): void {
   cell.classList.toggle("right", mark === "right");
   cell.classList.toggle("wrong", mark === "wrong");
-  cell.textContent = mark === "right" ? String(value) : "";
 }
 
 // === the cursor ===
@@ -504,7 +505,7 @@ function applyMarks(edits: CellEdit[]): void {
     const row = state.sides[side]?.themes[theme]?.answers[q];
     if (!row || row[chair] === mark) continue;
     row[chair] = mark;
-    paintMark(cell, mark, troika.themeValue(state, theme));
+    paintMark(cell, mark);
     patch(code, ["sides", side, "themes", theme, "answers", q, chair], mark);
     touched.add(code);
   }

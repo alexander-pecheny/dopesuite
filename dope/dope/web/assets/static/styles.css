@@ -398,11 +398,12 @@
   height: var(--question-size);
   min-width: var(--question-size);
   padding: 2px 4px;
-  border: var(--cell-gap) solid transparent;
+  border: var(--cell-gap) solid var(--structure);
   border-radius: var(--cell-radius);
-  background:
-    linear-gradient(var(--cell-fill), var(--cell-fill)) padding-box,
-    linear-gradient(var(--structure), var(--structure)) border-box;
+  /* A solid fill, not a gradient pair: Firefox resolves every gradient's stops
+     again for every cell on every scrolled frame, and a sheet has thousands. */
+  background: var(--cell-fill);
+  background-clip: padding-box;
   white-space: nowrap;
   vertical-align: middle;
 }
@@ -4662,18 +4663,17 @@ body.is-fullscreen.od-page .match-main {
   width: var(--team-col);
   min-width: var(--team-col);
   max-width: var(--team-col);
-  font-weight: var(--fw-semibold);
-  color: var(--text-strong);
-  /* «длинная Гриша в подготовке к дизастеру» is a real team name, and a бой
-     seats two of them beside a column of кресла. */
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.troika-sheet .troika-seat-head {
-  font-size: var(--text-xs);
-  color: var(--muted);
+/* «длинная Гриша в подготовке к дизастеру» is a real team name, and a бой
+   seats two of them beside a column of кресла. */
+.troika-sheet .troika-team {
+  font-weight: var(--fw-semibold);
+  color: var(--text-strong);
 }
 
 .troika-sheet .troika-seat-button {
