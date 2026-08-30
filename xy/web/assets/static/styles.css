@@ -430,6 +430,11 @@
      outgrow it. none = full bleed, the old behaviour. */
   max-width: var(--kanban-max-w, none);
   margin-inline: auto;
+  /* An auto cross-axis margin cancels a flex item's stretch, so without an
+     explicit width the box sizes to its lists and overflows .board-main's
+     overflow:hidden instead of scrolling — the lists past the fold become
+     unreachable. */
+  width: 100%;
 }
 /* Workspace width, list width and card line count are user-tunable («Изменить
    размеры» in the ☰ menu, board.js) — the modal overrides these vars on <html>. */
@@ -1173,7 +1178,9 @@
   .board-page h1 { font-size: var(--text-lg); }
   .board-page .action-icon { width: 30px; height: 30px; font-size: 15px; }
 
-  .board-main { padding: var(--space-2) var(--space-2); }
+  /* .board-page's own rule above is more specific, so it has to be named here
+     too or the board keeps the desktop side padding on a phone. */
+  .board-main, .board-page .board-main { padding: var(--space-2) var(--space-2); }
   .klist { flex-basis: 86vw; max-width: 320px; }
   .klist-title { font-size: var(--text-sm); }
   .kcard { padding: var(--space-1) var(--space-2); }
