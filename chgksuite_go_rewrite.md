@@ -24,7 +24,8 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 | `typstwasm/` | (typst binary + `handouter/installer.py`) | done, and better |
 | `imgconv/` | `composer_common.proportional_resize` + Pillow | done for export |
 | `typoedit/` | — | xy-only (editor-side typography) |
-| — | `composer/{pptx,telegram,lj,db,markdown,openquiz,stats}.py` | **not ported** |
+| `tg/` | `composer/telegram.py` | rich messages, oracle-tested; the dead plain path is not ported |
+| — | `composer/{pptx,lj,db,markdown,openquiz,stats}.py` | **not ported** |
 | — | `parser_db.py` | **not ported** |
 | — | `board.py`, `board_config.py`, `xy_crypto.py` | not needed (xy serves `trello_compat.go`) |
 | `cmd/chgksuite/` | `cli.py` | `compose docx` only, so far |
@@ -80,15 +81,25 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 
 ### B. Telegram
 
-- [ ] **B1. Telegram exporter** [both]: `composer/telegram.py` (1959 lines):
-      HTML formatting inside Telegram's length limits, message splitting, photo
-      groups, spoilers, channel/discussion-chat resolution, polls
-      (`poll_config.toml`), `--skip_until`, `--dry_run`. The suite already runs
-      Telegram bots in-process (`tgbot`), so the transport exists; the formatting
-      and packet-walking do not.
-- [ ] **B2. MTProto account auth** [cli]: the interactive `api_id`/`api_hash` +
-      2FA login `telegram.py` uses for user-account posting. Bot-token posting
-      covers most of B1 without it.
+- [x] **B1. Telegram exporter**: `internal/chgk/tg`. A package posted question by
+      question to a channel, each post's copy in the discussion group carrying
+      the polls, and a pinned navigation post at the end. Oracle-tested:
+      `scripts/gen_tg_oracle.py` runs chgksuite's own exporter with every call to
+      Telegram stubbed and records what it would send; `export_test.go` replays
+      the same fixtures and switches and compares call for call.
+      Only the rich rendering is ported, because it is the only one that runs:
+      chgksuite sets `rich_mode` unconditionally, so its older path (plain HTML
+      split into 4096-character messages, photos posted separately, `<tg-spoiler>`
+      instead of `<details>`) is unreachable. If the flag ever comes back, that
+      path — `make_chunk`, `assemble`, `swrap`, the length-tiered
+      `tg_format_question` — is what would need porting.
+      The bot runs in this process, the way xy's and dope's login bots do, rather
+      than as chgksuite's second Python process passing updates through a sqlite
+      file. `--tgaccount` is gone with it: the token comes from `--token` or
+      `$CHGKSUITE_TG_TOKEN`.
+- [ ] **B2. `stop_if_no_stats`** [cli]: chgksuite refuses to publish a package
+      whose questions carry no «Взятия:» when the setting is on. Trivial, and it
+      belongs with C1.
 
 ### C. Statistics
 
@@ -161,9 +172,9 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       smart|light` are not ported.
 - [ ] **G3. `--labels_file`, the settings file, `--config`** [cli]: the CLI's
       config plumbing. (`--add_ts` is done: `compose docx` takes it.)
-- [ ] **G4. A Go CLI**: `cmd/chgksuite` exists and runs `compose docx` with
-      every switch of E1–E3, writing the same filename chgksuite does. Every
-      other command is still Python-only; each ports as its feature does.
+- [ ] **G4. A Go CLI**: `cmd/chgksuite` runs `compose docx` with every switch of
+      E1–E3 and `compose telegram`. Every other command is still Python-only;
+      each ports as its feature does.
 - [ ] **G5. wasm measurement** [xy]: `typstwasm` cannot answer a `query`, so
       F1 is inert under it. Needs a small export in `typst-wasm/` (the
       introspector's position for a label) and a wasm rebuild.
@@ -172,8 +183,8 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 
 - **Finish line**: xy *and* a Go `chgksuite` CLI over the same packages, so the
   Python tool can be retired. The [cli]-tagged items are therefore in scope,
-  except the deliberate non-goals (D6; A5's XML-RPC half and B2 are last).
-- **Order**: as below. Chunk 1 (E1–E3 + F1) is done.
+  except the deliberate non-goals (D6; A5's XML-RPC half is last).
+- **Order**: as below. Chunk 1 (E1–E3 + F1) and B1 are done.
 - **No xy wiring.** Features land in `internal/chgk/*` and in a Go
   `chgksuite` CLI, and are checked against the Python CLI's output. What xy
   then exposes in its export modal is a separate decision, later.
@@ -197,6 +208,6 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 3. **D1–D2, D4**: СИ and тройка parsing, plus `.txt`: the `parse` command,
    which the Go CLI does not have at all yet.
 4. **C1**: add_stats; self-contained and genuinely useful after a tournament.
-5. **B1**: the Telegram exporter, bot-token path only.
+   B2 rides along with it.
 6. **A1**: pptx, the big one, worth its own series.
 7. **G1**: i18n, once there are enough label sites to be worth a table.

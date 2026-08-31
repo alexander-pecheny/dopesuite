@@ -72,8 +72,8 @@ Russian-language UI.
 cmd/xy-server/         thin main() → server.Main(); also `xy-server invite [days]`
 cmd/uic/               compile one .dopeui page to HTML on stdout (xy overlay; debug/diff tool)
 cmd/xy-cli/            thin main() → xycli.Run(); `just cli` builds it to ~/.local/bin
-cmd/chgksuite/         the Go side of chgksuite's own CLI over internal/chgk (currently
-                       `compose docx`), checked against the Python tool's output. Nothing
+cmd/chgksuite/         the Go side of chgksuite's own CLI over internal/chgk (`compose docx`,
+                       `compose telegram`), checked against the Python tool's output. Nothing
                        in xy uses it; see ../chgksuite_go_rewrite.md for what is ported
 internal/xycli/        xy-cli: the board from the shell, for an agent. A second implementation
                        of the Envelope (scrypt KEK + AES-GCM, parity-tested both ways against
@@ -192,6 +192,13 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        oracle the wasm path is checked against (wasm_parity_test.go: the fitted row counts must
                        match, since split_fit binary-searches them).
                        splitfit.go: `handouts split_fit` port — per-block binary-search row fit using typst's own pagination (typst query page count, not pypdf), per-question + all-q PDFs, pdfcpu compress; ~12× faster, row counts match chgksuite. The image-shrink refinement needs a Typesetter that also measures (handout.Measurer): the typst binary answers with a query, the wasm pool cannot yet, and under it an image block simply keeps its size
+  tg/                  `compose telegram`: a package posted to a channel, one rich message per
+                       question (<p>/<details>/<footer>/<img>), the copy Telegram makes in the
+                       discussion group carrying the polls, a pinned navigation post at the end.
+                       The export runs its own in-process bot (dopecore/tgbot, like the login
+                       bots) for the two things a token alone cannot do: hearing the person who
+                       started it, and seeing a post reach the discussion group. Oracle-tested
+                       call-for-call against chgksuite (scripts/gen_tg_oracle.py)
   typstwasm/           typst linked in as a library, compiled to wasm32-wasip1, run under wazero with its
                        World (= typst's filesystem abstraction) served from memory. Removes the last place xy
                        had to hand decrypted questions to a filesystem. A pool of instances, since split_fit
