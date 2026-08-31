@@ -52,6 +52,20 @@ type Args struct {
 	FontSize     int      // 14
 	BoxWidth     *float64 // nil → computed
 	TikzMM       *float64 // nil → defaultTikzMM (int 2)
+	// Resize governs split_fit's image-shrink pass; it is read there only.
+	Resize ResizeConfig
+}
+
+// ResizeConfig is split_fit's image-shrink pass: when a fitted image handout
+// leaves more blank space at the bottom of the page than BottomSpaceRowRatio
+// row heights, the image is shrunk in ShrinkPercent steps until another row
+// fits, then grown back as far as that row count allows.
+type ResizeConfig struct {
+	Disabled            bool
+	BottomSpaceRowRatio float64
+	ShrinkPercent       float64
+	MinResizeImage      float64
+	RefineIterations    int
 }
 
 // DefaultArgs returns the chgksuite handout defaults.
@@ -60,6 +74,10 @@ func DefaultArgs() Args {
 		PaperWidth: 210, PaperHeight: 297,
 		MarginTop: 5, MarginBottom: 5, MarginLeft: 5, MarginRight: 5,
 		FontSize: 14,
+		Resize: ResizeConfig{
+			BottomSpaceRowRatio: 0.6, ShrinkPercent: 2, MinResizeImage: 0.6,
+			RefineIterations: 8,
+		},
 	}
 }
 

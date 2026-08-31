@@ -2,6 +2,7 @@ package handout
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -27,6 +28,52 @@ type Typesetter interface {
 	Compile(ctx context.Context, typ string, wantPDF bool) (pdf []byte, pages int, err error)
 }
 
+// Measurer is a Typesetter that can also say where a document's content ends:
+// the page it ends on and how far down that page, in mm. split_fit's image-shrink
+// pass needs it to see how much blank space is left at the bottom. A Typesetter
+// that cannot measure simply doesn't shrink — the fitted rows are the same, the
+// image just keeps its given size.
+type Measurer interface {
+	Measure(ctx context.Context, typ string) (pages int, yMM float64, err error)
+}
+
+// measureLabel is the metadata element the measured source ends with —
+// chgksuite's MEASURE_LABEL, so the two tools query the same thing.
+const measureLabel = "hndtinfo"
+
+// MeasureSnippet is appended to a .typ to make its end position queryable.
+const MeasureSnippet = "\n#context [#metadata((pages: here().page(), " +
+	"y_mm: here().position().y / 1mm)) <" + measureLabel + ">]\n"
+
+// Measure asks the typst binary for the queried metadata (chgksuite's
+// measure_handout, minus the PDF it never rendered either).
+func (c *CLITypesetter) Measure(ctx context.Context, typ string) (int, float64, error) {
+	name := fmt.Sprintf("ms_%d.typ", c.seq.Add(1))
+	if err := writeScratch(c.dir, name, []byte(typ+MeasureSnippet)); err != nil {
+		return 0, 0, err
+	}
+	defer os.Remove(filepath.Join(c.dir, name))
+
+	cmd := exec.CommandContext(ctx, c.bin, "query", "--root", "/", "--font-path", c.fonts,
+		"--ignore-system-fonts", name, "<"+measureLabel+">", "--field", "value", "--one")
+	cmd.Dir = c.dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return 0, 0, fmt.Errorf("typst query: %s", strings.TrimSpace(string(out)))
+	}
+	// The JSON object, possibly preceded or followed by a warning line.
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		var info struct {
+			Pages int     `json:"pages"`
+			YMM   float64 `json:"y_mm"`
+		}
+		if json.Unmarshal([]byte(strings.TrimSpace(line)), &info) == nil && info.Pages > 0 {
+			return info.Pages, info.YMM, nil
+		}
+	}
+	return 0, 0, fmt.Errorf("typst query: unparseable measurement %q", string(out))
+}
+
 // CLITypesetter shells out to the typst binary. It needs a real directory —
 // precisely the property the wasm typesetter exists to remove — so it writes the
 // plaintext into a RAM-backed scratch dir and wipes it on Close.
@@ -39,11 +86,25 @@ type CLITypesetter struct {
 
 // NewCLITypesetter prepares a scratch dir for the typst binary at bin
 // ("" → "typst" on PATH). Call Close to wipe it.
-func NewCLITypesetter(bin string) (*CLITypesetter, error) {
+func NewCLITypesetter(bin string) (*CLITypesetter, error) { return newCLITypesetter(bin, "") }
+
+// NewCLITypesetterFonts is NewCLITypesetter with the fonts taken from fontDir
+// instead of the embedded ones — how a parity test typesets with chgksuite's own
+// Noto Sans, whose line metrics differ slightly from xy's (xy transplants a pause
+// glyph into the family), and so fits a row differently at the margin.
+func NewCLITypesetterFonts(bin, fontDir string) (*CLITypesetter, error) {
+	return newCLITypesetter(bin, fontDir)
+}
+
+func newCLITypesetter(bin, fontDir string) (*CLITypesetter, error) {
 	if bin == "" {
 		bin = "typst"
 	}
-	fonts, err := bundledFontDir()
+	fonts := fontDir
+	var err error
+	if fonts == "" {
+		fonts, err = bundledFontDir()
+	}
 	if err != nil {
 		return nil, err
 	}

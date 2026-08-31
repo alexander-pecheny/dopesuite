@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"runtime"
 	"strconv"
 	"strings"
@@ -30,9 +31,8 @@ func pdfConf() *model.Configuration {
 // (one-team) PDF, and returns them all as a zip. Per-question + all-q PDFs are
 // compressed with pdfcpu. typst measurement replaces chgksuite's pypdf path.
 //
-// Not yet ported: the image-shrink refinement pass (chgksuite shrinks an image
-// handout to pack more rows when blank space remains) — image blocks fit at
-// their given/native size. The fitted layout is otherwise identical.
+// The image-shrink refinement pass (fitBlock below) needs a Typesetter that can
+// also measure; with one that cannot, image blocks simply keep their given size.
 const splitFitMaxRows = 256
 
 // newSFRun loads the run's images into the typesetter.
@@ -52,7 +52,7 @@ func FitRows(ctx context.Context, hndt string, images map[string][]byte, a Args,
 	}
 	var rows []int
 	for _, b := range parseSFBlocks(hndt) {
-		best, err := r.fitRows(ctx, b)
+		best, _, err := r.fitBlock(ctx, b)
 		if err != nil {
 			return nil, err
 		}
@@ -103,12 +103,12 @@ func SplitFit(ctx context.Context, hndt string, images map[string][]byte, a Args
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			best, err := r.fitRows(ctx, b)
+			best, resize, err := r.fitBlock(ctx, b)
 			if err != nil {
 				fail(fmt.Errorf("q%s: %w", b.qnum(), err))
 				return
 			}
-			pdf, err := r.renderPDF(ctx, b.with(map[string]*string{"rows": ptr(strconv.Itoa(best))}))
+			pdf, err := r.renderPDF(ctx, b.with(withRows(resize, best)))
 			if err != nil {
 				fail(fmt.Errorf("q%s render: %w", b.qnum(), err))
 				return
@@ -295,8 +295,10 @@ func ptr(s string) *string { return &s }
 // ── typst harness ──
 
 // fitRows ports best_rows_for_block: exponential-up then binary search for the
-// largest k where k*step rows still fit on one page.
-func (r *sfRun) fitRows(ctx context.Context, b sfBlock) (int, error) {
+// largest k where k*step rows still fit on one page. extra is the metadata the
+// probe carries besides the row count — the image's resize, during the shrink
+// pass.
+func (r *sfRun) fitRows(ctx context.Context, b sfBlock, extra map[string]*string) (int, error) {
 	step := b.rowStep()
 	maxK := splitFitMaxRows / step
 	if maxK < 1 {
@@ -307,8 +309,7 @@ func (r *sfRun) fitRows(ctx context.Context, b sfBlock) (int, error) {
 		if v, ok := cache[k]; ok {
 			return v, nil
 		}
-		hndt := b.with(map[string]*string{"rows": ptr(strconv.Itoa(k * step))})
-		pages, err := r.pageCount(ctx, hndt)
+		pages, err := r.pageCount(ctx, b.with(withRows(extra, k*step)))
 		if err != nil {
 			return false, err
 		}
@@ -378,4 +379,143 @@ func compressPDF(raw []byte) []byte {
 		return raw
 	}
 	return out.Bytes()
+}
+
+// ── the image-shrink refinement (fit_rows_and_resize) ──
+
+// withRows is the metadata a probe carries: the row count, plus whatever else
+// (the image's resize) the caller wants set.
+func withRows(extra map[string]*string, rows int) map[string]*string {
+	m := map[string]*string{"rows": ptr(strconv.Itoa(rows))}
+	for k, v := range extra {
+		m[k] = v
+	}
+	return m
+}
+
+// fitBlock fits one block, returning its row count and the metadata its render
+// should carry. Without an image, or a typesetter that can measure, it is just
+// the row search; with both, it shrinks the image until another row fits and
+// then grows it back as far as that row count allows — chgksuite's
+// fit_rows_and_resize.
+func (r *sfRun) fitBlock(ctx context.Context, b sfBlock) (int, map[string]*string, error) {
+	resize := b.resizeImage()
+	rows, err := r.fitRows(ctx, b, b.resizeUpdate(resize))
+	if err != nil {
+		return 0, nil, err
+	}
+	cfg := r.a.Resize
+	ms, canMeasure := r.ts.(Measurer)
+	if cfg.Disabled || !canMeasure || b.meta["image"] == "" {
+		return rows, b.resizeUpdate(resize), nil
+	}
+
+	shrink := 1 - cfg.ShrinkPercent/100
+	for {
+		bottom, onePage, err := r.bottomSpace(ctx, ms, b, rows, resize)
+		if err != nil {
+			return 0, nil, err
+		}
+		if !onePage || resize <= cfg.MinResizeImage {
+			break
+		}
+		if bottom <= r.bottomSpaceThreshold(bottom, rows, cfg.BottomSpaceRowRatio) {
+			break
+		}
+
+		// Shrink in steps until one more row fits (or the floor is reached).
+		trial, improvedRows := resize, 0
+		for trial > cfg.MinResizeImage {
+			trial = math.Max(cfg.MinResizeImage, trial*shrink)
+			n, err := r.fitRows(ctx, b, b.resizeUpdate(trial))
+			if err != nil {
+				return 0, nil, err
+			}
+			if n > rows {
+				improvedRows = n
+				break
+			}
+			if math.Abs(trial-cfg.MinResizeImage) < 1e-4 {
+				break
+			}
+		}
+		if improvedRows == 0 {
+			break
+		}
+		// Then give the image back as much size as that row count still allows.
+		grown, err := r.maxResizeForRows(ctx, b, improvedRows, trial, resize)
+		if err != nil {
+			return 0, nil, err
+		}
+		resize, rows = grown, improvedRows
+	}
+	return rows, b.resizeUpdate(resize), nil
+}
+
+// bottomSpace measures the blank space (mm) below the content of a one-page
+// handout; onePage is false when it doesn't fit on one page at all.
+func (r *sfRun) bottomSpace(ctx context.Context, ms Measurer, b sfBlock, rows int, resize float64) (float64, bool, error) {
+	typ := GenerateTyp(b.with(withRows(b.resizeUpdate(resize), rows)), r.a)
+	pages, y, err := ms.Measure(ctx, typ)
+	if err != nil {
+		return 0, false, err
+	}
+	if pages > 1 {
+		return 0, false, nil
+	}
+	return math.Max(0, float64(r.a.PaperHeight)-y), true, nil
+}
+
+// bottomSpaceThreshold is the blank space worth shrinking for: a fraction of one
+// row's height, itself derived from the space the rows do occupy.
+func (r *sfRun) bottomSpaceThreshold(bottom float64, rows int, ratio float64) float64 {
+	available := float64(r.a.PaperHeight - r.a.MarginTop - r.a.MarginBottom)
+	return ratio * math.Max(0, available-bottom) / float64(rows)
+}
+
+// maxResizeForRows binary-searches the largest resize that still fits `rows`.
+func (r *sfRun) maxResizeForRows(ctx context.Context, b sfBlock, rows int, low, high float64) (float64, error) {
+	best := low
+	for i := 0; i < r.a.Resize.RefineIterations; i++ {
+		mid := (low + high) / 2
+		fitted, err := r.fitRows(ctx, b, b.resizeUpdate(mid))
+		if err != nil {
+			return 0, err
+		}
+		if fitted >= rows {
+			best, low = mid, mid
+		} else {
+			high = mid
+		}
+	}
+	return best, nil
+}
+
+// resizeImage is the block's own resize_image, 1.0 by default.
+func (b sfBlock) resizeImage() float64 {
+	if f, err := strconv.ParseFloat(b.meta["resize_image"], 64); err == nil && f > 0 {
+		return f
+	}
+	return 1
+}
+
+// resizeUpdate is resize_update_for_block: the resize_image line a probe or a
+// render should carry — none for a block without an image, and none for an
+// untouched 1.0 the source never spelled out.
+func (b sfBlock) resizeUpdate(resize float64) map[string]*string {
+	if b.meta["image"] == "" {
+		return nil
+	}
+	_, explicit := b.meta["resize_image"]
+	if !explicit && math.Abs(resize-1) < 1e-4 {
+		return nil
+	}
+	return map[string]*string{"resize_image": ptr(formatFloat(resize))}
+}
+
+// formatFloat ports format_float: two decimals, floored, trailing zeros dropped.
+func formatFloat(v float64) string {
+	s := strconv.FormatFloat(math.Floor(v*100+1e-9)/100, 'f', 2, 64)
+	s = strings.TrimRight(s, "0")
+	return strings.TrimRight(s, ".")
 }
