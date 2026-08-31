@@ -3990,17 +3990,28 @@ body:not(.embedded-match) .grid-match {
 }
 
 .match-table.brain-detailed .brain-finish-head,
-.match-table.brain-detailed .brain-finish-gap {
+.match-table.brain-detailed .brain-finish-gap,
+.troika-sheet .troika-finish-head,
+.troika-sheet .troika-finish-gap {
   --cell-fill: var(--structure);
   border-radius: 0;
   border-color: var(--structure);
 }
 
-.match-table.brain-detailed .brain-finish-head {
+.match-table.brain-detailed .brain-finish-head,
+.troika-sheet .troika-finish-head {
   padding: var(--space-0-5) var(--space-1-5);
 }
 
-.brain-player-select {
+/* The sheet's layout is fixed, so the «Закончен» column says its width —
+   otherwise it gets the leftover and clips the word. */
+.troika-sheet .troika-finish-head {
+  width: calc(var(--question-col) * 2.5);
+  min-width: calc(var(--question-col) * 2.5);
+}
+
+.brain-player-select,
+.troika-chair-select {
   width: 100%;
   height: 100%;
   min-height: var(--question-size);
@@ -4693,63 +4704,6 @@ body.is-fullscreen.od-page .match-main {
 }
 
 .troika-sheet .troika-seat-button.troika-seat-open {
-  color: var(--text-strong);
-}
-
-.troika-sheet .troika-finish-head,
-.troika-sheet .troika-finish-gap {
-  --cell-fill: var(--structure);
-  border-color: var(--structure);
-  padding: var(--space-0-5) var(--space-1-5);
-}
-
-/* A кресло names a player, at the width the ЭК sheet gives its player cell. */
-.troika-sheet .troika-chair {
-  width: calc(var(--question-col) * 5);
-  min-width: calc(var(--question-col) * 5);
-  padding: var(--space-0);
-}
-
-/* The рассадка row annotates a бой instead of scoring it, so it does not carry
-   the weight of the rows around it. Its ⇄ says two things at once: which тема
-   the chair pickers are pointing at (a selection, so a tint), and where the
-   seating actually turned round (the data, so ink). */
-.troika-sheet .troika-seat-row td {
-  padding-top: var(--space-0);
-  padding-bottom: var(--space-0);
-}
-
-.troika-sheet .troika-seat-mark {
-  width: 100%;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  font-size: var(--text-xs);
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.troika-sheet .troika-seat-mark:disabled {
-  cursor: default;
-}
-
-.troika-sheet .troika-seat-here {
-  background: var(--surface-tint);
-}
-
-.troika-sheet .troika-seat-changed {
-  color: var(--text-strong);
-  font-weight: var(--fw-semibold);
-}
-
-.troika-sheet .troika-chair-select {
-  width: 100%;
-  height: 100%;
-  padding: var(--space-0) var(--space-1);
-  border: 0;
-  background: transparent;
-  font: inherit;
-  font-size: var(--text-xs);
   color: var(--text-strong);
 }
 

@@ -319,8 +319,10 @@ function buildBout(bout: BoutEntry): HTMLElement {
   const themeRow = document.createElement("tr");
   themeRow.appendChild(th("Команда", "troika-team-head"));
   state.values.forEach((value, t) => {
+    // The gap parts темы BEFORE any «Рассадка» column, which sits flush
+    // against the тема it seats.
+    if (t > 0) themeRow.appendChild(th("", "gap-head"));
     if (seatsAt.has(t)) themeRow.appendChild(th("Рассадка"));
-    else if (t > 0) themeRow.appendChild(th("", "gap-head"));
     themeRow.appendChild(th(themeHead(bout, t, value, editable && seatsAt.has(t)), "theme-block",
       {colSpan: troika.THEME_QUESTIONS}));
   });
@@ -336,8 +338,8 @@ function buildBout(bout: BoutEntry): HTMLElement {
       const tr = document.createElement("tr");
       if (chair === 0) tr.appendChild(td(seatName(bout.view, side), "troika-team", {rowSpan: troika.CHAIRS}));
       state.values.forEach((_value, t) => {
-        if (seatsAt.has(t)) tr.appendChild(td(chairPicker(bout, side, t, chair, roster, editable), "troika-chair"));
-        else if (t > 0) tr.appendChild(td("", "gap"));
+        if (t > 0) tr.appendChild(td("", "gap"));
+        if (seatsAt.has(t)) tr.appendChild(td(chairPicker(bout, side, t, chair, roster, editable), "player-cell"));
         for (let q = 0; q < troika.THEME_QUESTIONS; q++) tr.appendChild(markCell(bout.code, side, t, q, chair, state));
       });
       if (chair === 0) {
