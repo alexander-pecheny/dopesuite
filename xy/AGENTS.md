@@ -72,9 +72,9 @@ Russian-language UI.
 cmd/xy-server/         thin main() → server.Main(); also `xy-server invite [days]`
 cmd/uic/               compile one .dopeui page to HTML on stdout (xy overlay; debug/diff tool)
 cmd/xy-cli/            thin main() → xycli.Run(); `just cli` builds it to ~/.local/bin
-cmd/chgksuite/         the Go side of chgksuite's own CLI over internal/chgk (`compose docx`,
-                       `compose telegram`), checked against the Python tool's output. Nothing
-                       in xy uses it; see ../chgksuite_go_rewrite.md for what is ported
+cmd/chgksuite/         the Go side of chgksuite's own CLI over internal/chgk (`parse`,
+                       `compose docx`, `compose telegram`), checked against the Python tool's
+                       output. Nothing in xy uses it; see ../chgksuite_go_rewrite.md
 internal/xycli/        xy-cli: the board from the shell, for an agent. A second implementation
                        of the Envelope (scrypt KEK + AES-GCM, parity-tested both ways against
                        crypto.ts) and of the export's 4s assembly (parity corpus from export.ts),
@@ -182,8 +182,14 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        This package is the parity ORACLE — both suites read testdata/pass_cases.json
   docxread/            .docx → plain text — a hand-rolled python-docx (zip/OPC, runs,
                        hyperlinks, numbering, tables, image extraction, in memory, no fs)
-  textparse/           parser.py's ChgkParser: plain text → structure. A literal port,
-                       quirks included (see the comments); chgk game only, no si/troika
+  textparse/           parser.py's parsers: plain text → structure. Literal ports, quirks
+                       included (see the comments). parse.go is ChgkParser (chgk and brain);
+                       si.go + troika.go are SiParser and TroikaParser, which read the
+                       document's outline through the "$$HN$$" markers docxread writes for
+                       them. Both are byte-parity tested against chgksuite's corpus canons
+  textenc/             a .txt package whose encoding nobody recorded: UTF-8, or whichever of
+                       CP1251/KOI8-R/CP866/ISO8859-5 spells the most Russian-looking letters
+                       (chgksuite asks chardet; Go has none)
   chgkimport/          the import entry point: .docx/.4s/.zip → 4s source + its images.
                        Byte-parity with chgksuite's `parse` on all 12 chgk .docx fixtures
   handout/             .hndt → .typ (byte-exact vs chgksuite) → PDF via typst; embeds the typst template + Noto Sans.

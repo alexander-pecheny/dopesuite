@@ -16,7 +16,8 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 | `typo/` | `typotools.py` | on/off modes done; smart/light not |
 | `inline/` | `composer/composer_common.py` (`_parse_4s_elem`, `parseimg`, nbsp) | done |
 | `docxread/` | `parsing_engine.py` (python_docx engine) | done (that engine only) |
-| `textparse/` | `parser.py` (ChgkParser) | chgk only |
+| `textparse/` | `parser.py` (ChgkParser, SiParser, TroikaParser) | chgk, si, troika |
+| `textenc/` | chardet + `read_text_file` | guesses among four Russian encodings |
 | `chgkimport/` | `parser.py` `parse_wrapper` | .docx/.4s/.zip |
 | `docx/` | `composer/docx.py` | every `compose docx` switch, oracle-tested |
 | `typstdoc/` | `composer/typst.py` | desktop/mobile, no options |
@@ -111,18 +112,31 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 
 ### D. Parsing
 
-- [ ] **D1. СИ parser** [both]: `si_parse_docx` / `si_parse_text`; `.si4s`.
-- [ ] **D2. Тройка parser** [both]: `troika_parse_docx` / `troika_parse_text`;
-      `.tr4s`. (`fsource` already knows troika/brain numbering; only the
-      text→structure half is missing.)
-- [ ] **D3. db.chgk.info import** [both]: `parser_db.py` (445 lines): a
-      tournament URL → 4s.
-- [ ] **D4. `.txt` import** [xy]: `textparse` handles it, `chgkimport.Parse`
-      does not accept it. Small. Encoding detection (chardet, `--encoding`) is
-      part of this.
-- [ ] **D5. parse knobs** [both]: `--defaultauthor`, `--download_images`,
-      `--tour_numbers_as_words`, `--links`, `--fix_spans`, `--no_image_prefix`,
-      `--numbers_handling none`. Each is small; none is wired today.
+- [x] **D1. СИ parser**: `textparse.ParseSI`, and the `$$HN$$` heading markers
+      docxread now writes for it. Byte-parity with chgksuite on both unencrypted
+      СИ packages in its corpus.
+- [x] **D2. Тройка parser**: `textparse.ParseTroika`, including the
+      «Мультифора» variant and the source lists numbered exactly like the
+      questions. Byte-parity on the corpus's троика package, plus the six
+      awkward cases chgksuite keeps as literals in its own tests
+      (`scripts/gen_si_cases.py` extracts them).
+- [ ] **D3. db.chgk.info import** [both]: `parser_db.py` (445 lines): a PLY
+      lexer over db.chgk.info's own text export (a file that opens
+      «Чемпионат:»), which also downloads the pictures and audio it references.
+      Its oracle is ready and waiting: `balt09-1.txt` in chgksuite's corpus is
+      one, with its canon.
+- [x] **D4. `.txt`**: `chgksuite parse` reads one, guessing the encoding
+      (`textenc`) the way chardet does for chgksuite — a file that decodes as
+      UTF-8 is UTF-8, and otherwise the winner is the single-byte encoding whose
+      letters are distributed most like Russian. xy's own importer still takes
+      .docx/.4s/.zip only: that is a wiring decision, not a missing port.
+- [x] **D5. parse knobs**: `--defaultauthor`, `--tour_numbers_as_words`,
+      `--links`, `--no_image_prefix`, `--numbers_handling none`, `--encoding`,
+      `--preserve_formatting`, `--single_number_line_handling`, `--add_ts`, all
+      checked against the Python CLI's output.
+      Left out: `--download_images` (fetches remote pictures into local files;
+      a convenience, and the only knob that touches the network) and
+      `--fix_spans`, which belongs to the docx engines of D6.
 - [ ] **D6. alternative docx engines** [cli]: `pypandoc`, `mammoth`. Deliberate
       non-goal: they exist because `python_docx` was once insufficient, and they
       need external binaries.
@@ -169,11 +183,13 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       and Russian regexes in `textparse/`.
 - [ ] **G2. typography smart/light modes** [both]: `typo.Options` is
       boolean-only; `--typography_quotes smart`, `--typography_accents
-      smart|light` are not ported.
+      smart|light` are not ported. The СИ parser's own "a package that already
+      has « » gets no quote pass" rides on this.
 - [ ] **G3. `--labels_file`, the settings file, `--config`** [cli]: the CLI's
       config plumbing. (`--add_ts` is done: `compose docx` takes it.)
-- [ ] **G4. A Go CLI**: `cmd/chgksuite` runs `compose docx` with every switch of
-      E1–E3 and `compose telegram`. Every other command is still Python-only;
+- [ ] **G4. A Go CLI**: `cmd/chgksuite` runs `parse` (chgk, brain, СИ, троика,
+      .docx and .txt, with the knobs of D5), `compose docx` with every switch of
+      E1–E3, and `compose telegram`. Every other command is still Python-only;
       each ports as its feature does.
 - [ ] **G5. wasm measurement** [xy]: `typstwasm` cannot answer a `query`, so
       F1 is inert under it. Needs a small export in `typst-wasm/` (the
@@ -184,7 +200,7 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 - **Finish line**: xy *and* a Go `chgksuite` CLI over the same packages, so the
   Python tool can be retired. The [cli]-tagged items are therefore in scope,
   except the deliberate non-goals (D6; A5's XML-RPC half is last).
-- **Order**: as below. Chunk 1 (E1–E3 + F1) and B1 are done.
+- **Order**: as below. Chunk 1 (E1–E3 + F1), B1 and D1/D2/D4/D5 are done.
 - **No xy wiring.** Features land in `internal/chgk/*` and in a Go
   `chgksuite` CLI, and are checked against the Python CLI's output. What xy
   then exposes in its export modal is a separate decision, later.
@@ -203,11 +219,11 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 ## Suggested order
 
 1. ~~**E1–E3 + F1**~~ — done 31 Aug 2026, with the Go CLI's `compose docx`.
-2. **A2–A4**: markdown, base, openquiz: three small exporters, and with them
+2. ~~**D1–D2, D4–D5**~~: the `parse` command, done 31 Aug 2026.
+3. **A2–A4**: markdown, base, openquiz: three small exporters, and with them
    `compose` covers most of what the Python one is used for.
-3. **D1–D2, D4**: СИ and тройка parsing, plus `.txt`: the `parse` command,
-   which the Go CLI does not have at all yet.
 4. **C1**: add_stats; self-contained and genuinely useful after a tournament.
    B2 rides along with it.
+5. **D3**: db.chgk.info's export format, whose oracle is already in the corpus.
 6. **A1**: pptx, the big one, worth its own series.
 7. **G1**: i18n, once there are enough label sites to be worth a table.
