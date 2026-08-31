@@ -13,6 +13,7 @@
   --cell-radius: 4px;
   --theme-radius: var(--cell-radius);
   --team-col: 180px;
+  --troika-cross-col: 48px;
   --total-col: 38px;
   --place-col: 42px;
   --place-gap: 14px;
@@ -4621,6 +4622,13 @@ body.is-fullscreen.od-page .match-main {
 .troika-groups .crosstable .results-num {
   width: 32px;
   min-width: 32px;
+}
+
+/* Wide enough for «14 : 13», so no score stretches its column and every
+   группа's columns land on the same x. */
+.troika-groups .crosstable .cross-col {
+  width: var(--troika-cross-col);
+  min-width: var(--troika-cross-col);
 }
 
 .troika-protocol {

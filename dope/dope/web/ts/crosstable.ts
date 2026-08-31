@@ -161,7 +161,7 @@ function buildCrosstable(group: CrossGroup, columns: CrossColumn[]): HTMLElement
     columns: [
       {label: "№", kind: "place"},
       {label: "Команда", kind: "name"},
-      ...rows.map((_, i) => ({label: i + 1, kind: "num" as const})),
+      ...rows.map((_, i) => ({label: i + 1, kind: "num" as const, className: "cross-col"})),
       ...columns.map((column) => ({label: column.label, kind: "num" as const})),
     ],
     rows: rows.map((row, i) => [
