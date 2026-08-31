@@ -34,6 +34,8 @@ const (
 	NumbersDefault NumbersHandling = "default"
 	// NumbersAll writes every question's number.
 	NumbersAll NumbersHandling = "all"
+	// NumbersNone writes none of them.
+	NumbersNone NumbersHandling = "none"
 )
 
 var reDoubleSep = regexp.MustCompile("\n+")
@@ -127,6 +129,7 @@ func Compose(d Doc, numbers NumbersHandling) string {
 			switch numbers {
 			case NumbersAll:
 				tmp.WriteString("№ " + toString(num) + "\n")
+			case NumbersNone:
 			default:
 				if isZero(num) {
 					tmp.WriteString("№ " + toString(num) + "\n")
