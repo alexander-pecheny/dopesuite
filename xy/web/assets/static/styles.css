@@ -1381,7 +1381,7 @@
    ones you were scrolling down to tick. In the flow, the board is whatever
    height is left and the arithmetic cannot drift. .board-main does not scroll,
    so the bar stays put however far the kanban or a list is scrolled. */
-.mass-bar {
+.mass-bar, .filter-bar {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
@@ -1403,24 +1403,12 @@
 .mass-act-danger { color: var(--red-dark); background: var(--red); }
 .mass-body { display: flex; flex-direction: column; gap: var(--space-1); }
 
-/* «Фильтр по меткам» — a row of .board-main above the board, so a filtered view
-   can never be mistaken for the whole board. Same shape as the mass bar; both
-   can be up at once, each on its own row. */
-.filter-bar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-}
+/* «Фильтр по меткам» — the bar is the mass bar's twin: same box, its own row of
+   .board-main, and both can be up at once. The modal body spaces its children
+   the way .mass-body does, with a gap rather than margins on the children (the
+   kit's .hint carries margin:0 precisely so containers stay in charge). */
 .filter-bar-what { font-weight: var(--fw-semibold); font-size: var(--text-sm); }
-.filter-bar-note { color: var(--muted); font-size: var(--text-xs); }
-.filter-modes { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-2); }
-.filter-modes-label { font-size: var(--text-sm); color: var(--muted); }
+.filter-body { display: flex; flex-direction: column; gap: var(--space-3); align-items: flex-start; }
 /* the column a filtered drag would land in: the cards do not part to show an
    insertion point, so the column itself has to say «here» */
 .kcards-drop { outline: 2px dashed var(--border); outline-offset: -2px; border-radius: var(--radius-sm); }

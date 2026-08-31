@@ -142,7 +142,7 @@ export function createLabelFilter(deps: FilterDeps) {
     const reset = el("button", { class: "btn btn-ghost btn-small", type: "button", text: "Сбросить" });
     reset.addEventListener("click", clear);
     body.replaceChildren(
-      el("div", { class: "filter-modes" }, el("span", { class: "filter-modes-label", text: "Показывать карточки, у которых" }), seg),
+      el("div", { class: "u-row u-gap-sm u-align-center u-wrap" }, el("span", { class: "hint", text: "Показывать карточки, у которых" }), seg),
       row,
       // A card's dots are its unscoped labels only, so a card can match here on
       // a verdict from a test sitting. Better said out loud than discovered.
@@ -164,7 +164,7 @@ export function createLabelFilter(deps: FilterDeps) {
     off.addEventListener("click", clear);
     bar.replaceChildren(
       el("span", { class: "filter-bar-what", text: `${phrase}: ${names.join(", ")}` }),
-      el("span", { class: "filter-bar-note", text: "перетаскивание внутри списка выключено" }),
+      el("span", { class: "hint", text: "перетаскивание внутри списка выключено" }),
       edit, off,
     );
   }
