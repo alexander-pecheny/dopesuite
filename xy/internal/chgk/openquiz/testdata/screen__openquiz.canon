@@ -1,0 +1,24 @@
+[
+  {
+    "Single": {
+      "Caption": "1",
+      "Question": {
+        "Solid": "Вопрос с Для экрана и удар`ением."
+      },
+      "QuestionMedia": null,
+      "Answer": {
+        "OpenAnswer": "Точный ответ\nещё вариант\nИли так"
+      },
+      "AnswerMedia": {
+        "Key": "https://img.example/pic.png",
+        "Type": "Picture"
+      },
+      "Comment": "Комментарий с картинкой (img pic.png).",
+      "Points": "1",
+      "JeopardyPoints": null,
+      "WithChoice": false,
+      "Seconds": null,
+      "EndOfTour": true
+    }
+  }
+]

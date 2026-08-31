@@ -80,6 +80,20 @@ func toString(v any) string {
 	return fmt.Sprint(v)
 }
 
+// IsWarmup is chgksuite_parser.check_if_zero: a warm-up question, numbered 0 or
+// «Разминка». Stricter than isZero below, which is compose_4s's own rule.
+func IsWarmup(q *Question) bool {
+	number := q.Get("number")
+	if number == nil {
+		return false
+	}
+	if n, ok := number.(int); ok {
+		return n == 0
+	}
+	s, ok := number.(string)
+	return ok && (strings.HasPrefix(s, "0") || strings.HasPrefix(s, "Размин"))
+}
+
 // isZero ports compose_4s.is_zero: a number counts as "zero" when it starts with
 // a 0 or isn't an integer at all.
 func isZero(v any) bool {

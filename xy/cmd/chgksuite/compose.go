@@ -16,13 +16,15 @@ import (
 // compose runs `chgksuite compose <filetype> …`.
 func compose(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("compose needs a filetype (docx, telegram)")
+		return fmt.Errorf("compose needs a filetype (docx, telegram, markdown, redditmd, base, openquiz)")
 	}
 	switch args[0] {
 	case "docx":
 		return composeDocx(args[1:])
 	case "telegram":
 		return composeTelegram(args[1:])
+	case "markdown", "redditmd", "base", "openquiz":
+		return composePublished(args[0], args[1:])
 	default:
 		return fmt.Errorf("compose %s is not ported yet", args[0])
 	}

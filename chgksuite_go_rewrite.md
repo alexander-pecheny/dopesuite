@@ -26,7 +26,9 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 | `imgconv/` | `composer_common.proportional_resize` + Pillow | done for export |
 | `typoedit/` | — | xy-only (editor-side typography) |
 | `tg/` | `composer/telegram.py` | rich messages, oracle-tested; the dead plain path is not ported |
-| — | `composer/{pptx,lj,db,markdown,openquiz,stats}.py` | **not ported** |
+| `markdown/`, `dbtext/`, `openquiz/` | `composer/{markdown,db,openquiz}.py` | done, oracle-tested |
+| `imghost/` | `composer_common.Imgur` | done, cache shared with chgksuite |
+| — | `composer/{pptx,lj,stats}.py` | **not ported** |
 | `textparse/db.go` | `parser_db.py` | done, canon-tested |
 | — | `board.py`, `board_config.py`, `xy_crypto.py` | not needed (xy serves `trello_compat.go`) |
 | `cmd/chgksuite/` | `cli.py` | `parse`, `compose docx`, `compose telegram` |
@@ -71,16 +73,28 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       shrink-to-fit, inline images, answer grids, `pptx_config.toml`. Needs an
       OOXML pptx writer and a text-measurement path (the fonts are already
       embedded for handouts).
-- [ ] **A2. markdown / redditmd** [both]: `composer/markdown.py` (121 lines).
-      Small and self-contained; wants an image host for `(img …)` (see A6).
-- [ ] **A3. base (db.chgk.info txt)** [both]: `composer/db.py` (214 lines).
-      Small; same image-host dependency.
-- [ ] **A4. openquiz JSON** [both]: `composer/openquiz.py` (177 lines). Small.
+- [x] **A2. markdown / redditmd**: `internal/chgk/markdown`. Both dialects,
+      character-for-character against chgksuite (`scripts/gen_export_oracles.py`).
+- [x] **A3. base (db.chgk.info txt)**: `internal/chgk/dbtext`, the other side of
+      D3: consecutive «Инфо» merged, a warm-up hoisted to the top of its tour
+      under a «Нулевой вопрос N» heading, a незачёт folded onto the зачёт.
+      Byte-parity against chgksuite. One thing is NOT reproduced: chgksuite
+      reads `#DATE` with `dateparser`, which guesses far more freely than a Go
+      port sensibly can. `dbtext.parseDate` reads the shapes packages actually
+      use — `dd-Mon-yyyy` (day 00 = the month's last), ISO, and `3 января 2014`
+      with the Russian month names — and falls back, as chgksuite does for what
+      it cannot read, to 2010-01-01. dateparser's looser guesses differ: a bare
+      year becomes today's month and day, and `12.01.2020` is read month-first.
+- [x] **A4. openquiz JSON**: `internal/chgk/openquiz`. Byte-parity against
+      chgksuite, key order and `indent=2` included.
 - [ ] **A5. lj (LiveJournal)** [cli]: `composer/lj.py` (403 lines): HTML
       rendering + the XML-RPC challenge/post flow. The HTML renderer is reusable;
       the posting half is legacy.
-- [ ] **A6. Imgur upload** [cli]: `composer_common.Imgur`; what A2/A3/A4 use to
-      turn a local image into a URL. In xy an attachment URL would do instead.
+- [x] **A6. Imgur upload**: `internal/chgk/imghost`, behind an `imghost.Host`
+      the three exporters take, so a test hands them a stub and the parity
+      oracles need no network. The cache is chgksuite's own
+      `~/.chgksuite/image_cache.json`, same key (sha256 of the base64) and same
+      file, so the two tools do not upload each other's pictures twice.
 
 ### B. Telegram
 

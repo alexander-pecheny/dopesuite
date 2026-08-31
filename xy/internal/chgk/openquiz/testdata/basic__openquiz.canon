@@ -1,0 +1,69 @@
+[
+  {
+    "Single": {
+      "Caption": "1",
+      "Question": {
+        "Solid": "Простой вопрос с _курсивом_ и ссылкой (http://example.com текст ссылки), а также картинкой (img pic.png)."
+      },
+      "QuestionMedia": {
+        "Key": "https://img.example/pic.png",
+        "Type": "Picture"
+      },
+      "Answer": {
+        "OpenAnswer": "Ответ\nИ такой вариант"
+      },
+      "AnswerMedia": null,
+      "Comment": "Комментарий в две\nстроки.",
+      "Points": "1",
+      "JeopardyPoints": null,
+      "WithChoice": false,
+      "Seconds": null,
+      "EndOfTour": false
+    }
+  },
+  {
+    "Single": {
+      "Caption": "2",
+      "Question": {
+        "Solid": "Вопрос с раздаткой."
+      },
+      "QuestionMedia": {
+        "Key": "https://img.example/pic.png",
+        "Type": "Picture"
+      },
+      "Answer": {
+        "OpenAnswer": "Второй ответ в скобках\nВторой ответ"
+      },
+      "AnswerMedia": null,
+      "Comment": "Комментарий.",
+      "Points": "1",
+      "JeopardyPoints": null,
+      "WithChoice": false,
+      "Seconds": null,
+      "EndOfTour": true
+    }
+  },
+  {
+    "Single": {
+      "Caption": "3",
+      "Question": {
+        "Split": [
+          "Блиц:\n1. Первый?",
+          "2. Второй?",
+          "3. Третий?"
+        ]
+      },
+      "QuestionMedia": null,
+      "Answer": {
+        "OpenAnswer": "1. Раз\n2. Два\n3. Три"
+      },
+      "AnswerMedia": null,
+      "Comment": "Комментарий к блицу.",
+      "Points": "1",
+      "JeopardyPoints": null,
+      "WithChoice": false,
+      "Seconds": null,
+      "EndOfTour": true
+    }
+  }
+]

@@ -192,6 +192,14 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
   textenc/             a .txt package whose encoding nobody recorded: UTF-8, or whichever of
                        CP1251/KOI8-R/CP866/ISO8859-5 spells the most Russian-looking letters
                        (chgksuite asks chardet; Go has none)
+  markdown/            `compose markdown|redditmd`: a package as Markdown, or as the
+                       Reddit dialect where the answer is a >! … !< spoiler
+  dbtext/              `compose base`: the plain text db.chgk.info takes as a submission —
+                       the other side of textparse/db.go. #DATE is read by a parser that
+                       covers the shapes packages use, not by chgksuite's dateparser
+  openquiz/            `compose openquiz`: openquiz.me's JSON, one object per question
+  imghost/             what those three need and the .docx/.pdf ones do not: a picture as
+                       a URL. Imgur, sharing chgksuite's own ~/.chgksuite/image_cache.json
   chgkimport/          the import entry point: .docx/.4s/.zip → 4s source + its images.
                        Byte-parity with chgksuite's `parse` on all 12 chgk .docx fixtures
   handout/             .hndt → .typ (byte-exact vs chgksuite) → PDF via typst; embeds the typst template + Noto Sans.

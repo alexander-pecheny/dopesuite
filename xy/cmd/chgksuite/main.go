@@ -16,6 +16,9 @@ commands:
   parse [flags] <file.docx|file.txt>…   read a package into .4s
   compose docx [flags] <file.4s>…   render questions to .docx
   compose telegram [flags] <file.4s>  post questions to a telegram channel
+  compose markdown|redditmd [flags] <file.4s>…   render to markdown
+  compose base [flags] <file.4s>…   render to db.chgk.info's submission text
+  compose openquiz [flags] <file.4s>…   render to openquiz.me's JSON
 
 run a command with -h for its flags
 `)
