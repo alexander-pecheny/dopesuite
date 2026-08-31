@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
@@ -72,6 +73,7 @@ func Main() {
 	// wasm compile, which no user should sit through.
 	srv.warmTypst()
 	go srv.reapLoop()
+	srv.startBot(context.Background())
 
 	log.Printf("xy %s serving on %s (assets from %s)", buildinfo.Version(), addr, srv.assets.Mode)
 
@@ -157,10 +159,6 @@ func routes(srv *server) *http.ServeMux {
 	mux.HandleFunc("GET /1/boards/{id}", srv.handleTrelloGetBoard)
 	mux.HandleFunc("GET /1/boards/{id}/lists", srv.handleTrelloGetLists)
 	mux.HandleFunc("POST /1/lists/{id}/cards", srv.handleTrelloCreateCard)
-
-	// ---- telegram bridge (shared-secret) ----
-	mux.HandleFunc("POST /api/telegram/register", srv.handleTelegramRegister)
-	mux.HandleFunc("POST /api/telegram/login", srv.handleTelegramLogin)
 
 	// ---- boards API ----
 	mux.HandleFunc("GET /api/boards", srv.handleListBoards)

@@ -32,8 +32,7 @@ install (in Russian, for the people who asked for it) is
 ## Develop
 
 ```sh
-just dev-web-only   # server only (assets hot-read from disk)
-just dev            # server + telegram bot
+just dev            # server (assets hot-read from disk; polls telegram if XY_BOT_TOKEN is set)
 just test           # go test + deno frontend tests
 just check          # this module: fmt + vet + tidy-check + test
 just pre-commit     # the whole repo, incl. class-check — run before a commit
@@ -42,7 +41,8 @@ just invite 7       # mint a one-shot registration invite
 
 Server listens on `$PORT` (default 9673); DB at `$XY_DB` (default `xy.db`).
 Config via `.env` (copy from [`.env.example`](.env.example)). Telegram
-register/login needs `XY_BOT_SECRET` set on both server and bot.
+register/login needs `XY_BOT_TOKEN` — the server IS the bot, and an instance
+without a token simply does not offer telegram login.
 
 ### Browser testing
 

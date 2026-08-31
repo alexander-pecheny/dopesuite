@@ -46,21 +46,8 @@ wasm:
     echo "missing {{wasm_path}} — run 'just build-wasm' once (needs Rust + the wasm32-wasip1 target)" >&2
     exit 1
 
-# Server only (hot-reloads assets from disk). Use this unless testing the bot.
-dev-web-only: wasm build-web
-    go run ./cmd/xy-server
-
-bot:
-    go run ./cmd/telegram-bot
-
-# Run server + bot concurrently.
 dev: wasm build-web
-    #!/usr/bin/env bash
-    set -euo pipefail
-    trap 'kill 0' EXIT INT TERM
-    go run ./cmd/xy-server &
-    go run ./cmd/telegram-bot &
-    wait
+    go run ./cmd/xy-server
 
 fmt:
     #!/usr/bin/env bash

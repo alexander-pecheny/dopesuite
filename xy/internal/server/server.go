@@ -16,6 +16,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"pecheny.me/dopecore/sqlitex"
+	"pecheny.me/dopecore/tgbot"
 	"pecheny.me/dopecore/webassets"
 	kit "pecheny.me/dopeuikit/kit"
 
@@ -45,6 +46,11 @@ type server struct {
 	// typst, compiled to wasm and run in-process (see typst.go). Built lazily and
 	// shared: compiling the module is what costs, not using it. Tests inject a stub
 	// so they neither compile the wasm nor need a real image to render.
+	// The login bot, polling in this process (see bot.go). nil on an instance
+	// that holds no token — staging, a dev checkout, a second prod binary that
+	// lost the race for the poll lock.
+	bot *tgbot.Client
+
 	typstOnce sync.Once
 	typst     handout.Typesetter
 	typstErr  error

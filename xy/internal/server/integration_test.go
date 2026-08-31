@@ -16,11 +16,6 @@ import (
 // server with the full route set.
 func newTestServer(t *testing.T) (*httptest.Server, *server) {
 	t.Helper()
-	// These tests register through the telegram handshake, which an instance
-	// with no bot of its own now refuses. The health addr points at a dead
-	// port so a mention nudge never leaves the test (this box runs a real bot).
-	t.Setenv("XY_BOT_SECRET", "test-secret")
-	t.Setenv("XY_BOT_HEALTH_ADDR", "127.0.0.1:1")
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	db, err := openDB(dbPath)
 	if err != nil {
@@ -31,7 +26,10 @@ func newTestServer(t *testing.T) (*httptest.Server, *server) {
 	if err != nil {
 		t.Fatalf("blobstore: %v", err)
 	}
-	srv := &server{db: db, blobs: blobs, staging: newHandoutStaging()}
+	// These tests register through the telegram handshake, which an instance
+	// with no bot of its own refuses; the stub also keeps a mention nudge inside
+	// the test, since this box runs the real bot.
+	srv := &server{db: db, blobs: blobs, staging: newHandoutStaging(), bot: stubBot(t, false)}
 	srv.assets, srv.pages = newAssets()
 	if err := srv.pages.Warm(pagePaths...); err != nil {
 		t.Fatal(err)

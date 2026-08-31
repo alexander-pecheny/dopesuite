@@ -70,11 +70,6 @@ Russian-language UI.
 ## Layout
 ```
 cmd/xy-server/         thin main() → server.Main(); also `xy-server invite [days]`
-cmd/telegram-bot/      login bot: env + xy's words around dopecore/tgbot.LoginHandler (the conversation
-                       both bots hold), bridges to server via shared secret (no DB handle);
-                       serves /healthz on 127.0.0.1:9676 (tgbridge.DefaultHealthAddr) so the
-                       server can ask whether telegram login is worth offering — the answer is
-                       about POLLING, not the process: a bot with a revoked token is up and useless
 cmd/uic/               compile one .dopeui page to HTML on stdout (xy overlay; debug/diff tool)
 cmd/xy-cli/            thin main() → xycli.Run(); `just cli` builds it to ~/.local/bin
 internal/xycli/        xy-cli: the board from the shell, for an agent. A second implementation
@@ -102,7 +97,12 @@ internal/server/       package server — the whole HTTP server
   http.go              writeJSON/readJSON/httpError
   errors.go            appError → status mapping
   auth.go              sessions, password login, the Telegram handshake's adapter (state machine in dopecore/tglogin:
-                       xy brings its write tx, its users table, its error text), the bot bridge
+                       xy brings its write tx, its users table, its error text)
+  bot.go               the login bot, polling in THIS process (no separate service since 2026-08-31):
+                       the conversation is dopecore/tgbot.LoginHandler, the answers are xy's writes
+                       under withWriteTx, the DM path is the same client. XY_BOT_TOKEN is the switch;
+                       tgbot.AcquirePollLock keeps a second instance on this host off the same token,
+                       and tgbot.ErrConflict is what Telegram says when the second one is elsewhere
   boards.go            boards CRUD, keymeta (passphrase re-wrap), members, /api/collaborators (who I share boards with), ACL helpers
   boardinvites.go      invite links (ADR-0017): owner mints/revokes/deletes and decides join requests;
                        the invitee peeks at a code and joins. A link grants membership, never the key
@@ -576,8 +576,7 @@ vendored same-origin under that CSP.
 just build-wasm     # compile typst → internal/chgk/typstwasm/typst.wasm (needs Rust;
                     #   not in git — run once per clone, then only on a typst bump)
 just build          # the app (pure Go; embeds the wasm above)
-just dev-web-only   # server only (assets hot-read from disk)
-just dev            # server + bot
+just dev            # server (assets hot-read from disk; polls telegram if XY_BOT_TOKEN is set)
 just cli            # xy-cli → ~/.local/bin (the board from the shell; .claude/skills/xy-cli)
 just invite 7       # mint a registration invite
 # bootstrap a password account (registration is otherwise telegram-only):
@@ -595,7 +594,8 @@ just deploy         # prod: from `main` ONLY, merged AND pushed to origin first 
 ```
 Server listens on `$PORT` (default 9673); DB at `$XY_DB` (default xy.db).
 Config via `.env` (see `.env.example`). Telegram register/login needs
-`XY_BOT_SECRET` set on both server and bot.
+`XY_BOT_TOKEN`: the server IS the bot (internal/server/bot.go), and an instance
+without a token does not poll and does not offer telegram login.
 
 ## Conventions
 - **Reuse the design system** (`styles.css` CSS variables, components) — extend

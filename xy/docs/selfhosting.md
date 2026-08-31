@@ -40,7 +40,7 @@ XY_DB=/var/lib/xy/xy.db
 XY_BLOBS=/var/lib/xy/blobs
 XY_WASM_CACHE=/var/lib/xy/typst-wasm
 XY_ADMIN_USER=ваш_логин
-XY_BOT_SECRET=общий-секрет  # только если нужен вход через телеграм, см. п. 7
+XY_BOT_TOKEN=токен-от-BotFather  # только если нужен вход через телеграм, см. п. 7
 XY_BOT_NAME=имя_вашего_бота
 ```
 
@@ -67,7 +67,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/var/lib/xy
+ReadWritePaths=/var/lib/xy /run/lock
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictAddressFamilies=AF_INET AF_INET6
@@ -106,37 +106,19 @@ printf 'ваш-пароль' | sudo -u xy XY_DB=/var/lib/xy/xy.db /opt/xy/xy-ser
 
 ## 7. Вход через телеграм
 
-Для этого нужен отдельный процесс (бинарник бота в том же архиве, что и основной сервер).
-
-Получите токен у [@BotFather](https://t.me/BotFather), сгенерируйте секрет
-(`openssl rand -hex 32`) и допишите в `/etc/xy.env`:
+Отдельный процесс не нужен: сервер сам опрашивает Telegram. Получите токен у
+[@BotFather](https://t.me/BotFather) и допишите в `/etc/xy.env`:
 
 ```sh
-XY_BOT_SECRET=секрет
+XY_BOT_TOKEN=токен-от-BotFather
 XY_BOT_NAME=логин_вашего_бота
 ```
 
-Для бота нужен отдельный systemd-сервис, `/etc/systemd/system/xy-bot.service`:
-
-```ini
-[Unit]
-Description=xy telegram bot
-After=network.target xy.service
-
-[Service]
-Type=simple
-User=xy
-Group=xy
-EnvironmentFile=/etc/xy.env
-Environment=XY_SERVER_URL=http://localhost:9673
-Environment=XY_BOT_TOKEN=токен-от-BotFather
-ExecStart=/opt/xy/telegram-bot
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
+Токен — это заявка на все коды входа, которые придут этому боту. Один токен —
+один сервер: если его получат две копии (например, боевая и тестовая), Telegram
+отдаст каждой случайную половину сообщений. На одной машине это ловит блокировка
+в `/run/lock` (поэтому в юните и стоит `ReadWritePaths=/run/lock`), на разных —
+только сам Telegram, и тогда в логе будет `getUpdates: CONFLICT`.
 
 ## 8. Бэкапы
 

@@ -8,10 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"time"
-
-	"pecheny.me/dopecore/tgbridge"
 
 	"pecheny.me/dopecore/sqlitex"
 
@@ -272,85 +269,28 @@ type tgStartResponse struct {
 }
 
 // telegramConfigured reports whether this instance is SET UP for telegram login:
-// the shared secret, without which the bot cannot talk to the server, AND the
-// bot's @handle, without which the login page has no one to send the visitor to.
-// Half-configured is the state that hurts — it advertises a way in, then shows a
-// dead link and a literal «@…», which is what an instance carrying only the
-// secret did for two weeks before anyone reported it.
-func telegramConfigured() bool {
-	return telegramBridgeConfigured() && botUsername() != ""
+// a bot of its own, AND that bot's @handle, without which the login page has no
+// one to send the visitor to. Half-configured is the state that hurts — it
+// advertises a way in, then shows a dead link and a literal «@…», which is what
+// an instance carrying only the token did for two weeks before anyone reported it.
+func (s *server) telegramConfigured() bool {
+	return s.bot != nil && botUsername() != ""
 }
-
-// telegramBridgeConfigured is the weaker precondition the HANDSHAKE needs: the
-// shared secret alone. Without the @handle the login page cannot point anyone at
-// the bot, but a visitor who already knows it can still send the code and get
-// in — which is exactly what people did while the handle was missing. So the
-// offer is gated on the handle and the endpoint is not.
-func telegramBridgeConfigured() bool { return strings.TrimSpace(os.Getenv("XY_BOT_SECRET")) != "" }
 
 // The three answers the login page can get about telegram. Being configured and
 // being usable are different things, and a visitor deserves to know which one
 // failed rather than watching a code that no bot will ever collect.
 const (
 	tgStatusOK            = "ok"
-	tgStatusMisconfigured = "misconfigured" // no secret, or no @handle
+	tgStatusMisconfigured = "misconfigured" // no bot on this instance, or no @handle
 	tgStatusUnreachable   = "unreachable"   // configured, but the bot is not polling
 )
 
-// botHealthAddr is where the bot answers "am I working?" — the same default both
-// sides hold, so neither needs an env var to find the other.
-func botHealthAddr() string {
-	if a := strings.TrimSpace(os.Getenv("XY_BOT_HEALTH_ADDR")); a != "" {
-		return a
-	}
-	return tgbridge.DefaultHealthAddr
-}
-
-// The probe is cached: a login page is the one URL a crowd hits at once, and a
-// wedged bot must not turn that into a queue of 300ms waits.
-var botHealth struct {
-	mu       sync.Mutex
-	checked  time.Time
-	ok       bool
-	cacheFor time.Duration // 0 → the default; a test sets its own
-}
-
-// botReachable asks the bot, over loopback, whether its polling is alive. The
-// bot cannot be asked from outside its host, so this only works because the two
-// share one — which is the deployment xy actually has.
-func botReachable(ctx context.Context) bool {
-	botHealth.mu.Lock()
-	defer botHealth.mu.Unlock()
-	ttl := botHealth.cacheFor
-	if ttl == 0 {
-		ttl = 5 * time.Second
-	}
-	if time.Since(botHealth.checked) < ttl {
-		return botHealth.ok
-	}
-	probe, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
-	defer cancel()
-	ok := false
-	req, err := http.NewRequestWithContext(probe, http.MethodGet, "http://"+botHealthAddr()+"/healthz", nil)
-	if err == nil {
-		resp, err := http.DefaultClient.Do(req)
-		if err == nil {
-			// The bot answers 503 while its polling is stale, so the status IS
-			// the verdict — no need to read the body.
-			ok = resp.StatusCode == http.StatusOK
-			_ = resp.Body.Close()
-		}
-	}
-	botHealth.checked = time.Now()
-	botHealth.ok = ok
-	return ok
-}
-
-func telegramStatus(ctx context.Context) string {
-	if !telegramConfigured() {
+func (s *server) telegramStatus() string {
+	if !s.telegramConfigured() {
 		return tgStatusMisconfigured
 	}
-	if !botReachable(ctx) {
+	if !s.botPolling() {
 		return tgStatusUnreachable
 	}
 	return tgStatusOK
@@ -360,7 +300,7 @@ func telegramStatus(ctx context.Context) string {
 // kept for older pages, which read it as a bare on/off; `telegram_status` says
 // WHICH kind of no it is, so the page can name the problem.
 func (s *server) handleLoginMethods(w http.ResponseWriter, r *http.Request) {
-	st := telegramStatus(r.Context())
+	st := s.telegramStatus()
 	writeJSON(w, map[string]any{"telegram": st == tgStatusOK, "telegram_status": st})
 }
 
@@ -374,7 +314,7 @@ func botUsername() string { return strings.TrimSpace(os.Getenv("XY_BOT_NAME")) }
 func (s *server) handshake() tglogin.Handshake { return tglogin.Handshake{Users: xyUsers{}} }
 
 func (s *server) handleTgStart(w http.ResponseWriter, r *http.Request) {
-	if !telegramBridgeConfigured() {
+	if s.bot == nil {
 		httpError(w, http.StatusServiceUnavailable, "telegram login is not configured")
 		return
 	}
@@ -874,66 +814,7 @@ func (s *server) handleSetFeedDefault(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ---- telegram bridge (shared-secret) ----
-
-// requireBotSecret gates the bridge on XY_BOT_SECRET. An unset secret disables
-// the bridge outright rather than leaving the code-issuing endpoints open.
-func (s *server) requireBotSecret(w http.ResponseWriter, r *http.Request) bool {
-	ok, configured := tgbridge.SecretOK(r, os.Getenv("XY_BOT_SECRET"))
-	switch {
-	case !configured:
-		httpError(w, http.StatusServiceUnavailable, "bot bridge not configured")
-	case !ok:
-		httpError(w, http.StatusUnauthorized, "bad secret")
-	}
-	return ok && configured
-}
-
-func (s *server) handleTelegramRegister(w http.ResponseWriter, r *http.Request) {
-	if !s.requireBotSecret(w, r) {
-		return
-	}
-	var req tgbridge.RegisterRequest
-	if !readJSON(w, r, &req) {
-		return
-	}
-	code := strings.TrimSpace(req.Code)
-	now := time.Now()
-	var msg string
-	err := s.withWriteTx(r.Context(), "tg-register", func(ctx context.Context, tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, tgbridge.ConsumeRegisterSQL,
-			req.TelegramUserID, nullStr(req.TelegramUsername), nullStr(req.TelegramName), rfc3339(now), code, rfc3339(now))
-		if err != nil {
-			return err
-		}
-		if n, _ := res.RowsAffected(); n == 1 {
-			msg = "Готово! Вернись на сайт — вход подтверждён."
-		} else {
-			msg = "Код не найден или истёк. Начни вход на сайте заново."
-		}
-		return nil
-	})
-	if handleErr(w, err) {
-		return
-	}
-	writeJSON(w, tgbridge.Response{Message: msg})
-}
-
-// handleTelegramLogin answers a bare /start or /login (no code) sent to the bot —
-// including a deep-link /start whose payload the client dropped (a known Telegram
-// behavior for users who already started the bot). The code the site shows is the
-// only thing that binds this chat to the browser, so point them back at it.
-func (s *server) handleTelegramLogin(w http.ResponseWriter, r *http.Request) {
-	if !s.requireBotSecret(w, r) {
-		return
-	}
-	var req tgbridge.LoginRequest
-	if !readJSON(w, r, &req) {
-		return
-	}
-	writeJSON(w, tgbridge.Response{Message: "Пришлите код со страницы входа. Если его нет — откройте " + publicURL() + "/login и нажмите «Войти через телеграм»."})
-}
-
+// nullStr is an empty telegram field as SQL sees it: absent, not "".
 func nullStr(s string) sql.NullString {
 	if s == "" {
 		return sql.NullString{}

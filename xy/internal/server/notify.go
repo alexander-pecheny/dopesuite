@@ -1,18 +1,11 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"log"
-	"net/http"
-	"os"
 	"strconv"
-	"strings"
 	"time"
-
-	"pecheny.me/dopecore/tgbridge"
 )
 
 // The telegram nudge for a Mention: who + board + card link, nothing from
@@ -25,8 +18,7 @@ import (
 // replyTo is the root comment id (int64) or nil, exactly as handleAddComment
 // resolved it. Runs in a goroutine; does nothing when no bot is configured.
 func (s *server) notifyComment(bid, cardID, authorID int64, mentions []int64, replyTo any) {
-	secret := botSecret()
-	if secret == "" {
+	if s.bot == nil {
 		return
 	}
 	// All the lookups run inline (they are point reads on the same SQLite);
@@ -87,7 +79,7 @@ func (s *server) notifyComment(bid, cardID, authorID int64, mentions []int64, re
 		go func(tg int64) {
 			sctx, scancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer scancel()
-			sendBotDM(sctx, secret, tg, text)
+			s.notifyDM(sctx, tg, text)
 		}(tgID.Int64)
 	}
 }
@@ -97,8 +89,7 @@ func (s *server) notifyComment(bid, cardID, authorID int64, mentions []int64, re
 // pending count in «Участники» is the durable signal, this only saves the
 // requester from waiting on an owner who has no reason to look.
 func (s *server) notifyJoinRequest(bid, requesterID int64) {
-	secret := botSecret()
-	if secret == "" {
+	if s.bot == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -135,32 +126,6 @@ select u.telegram_user_id from boards b join users u on u.id = b.owner_user_id w
 	go func(tg int64) {
 		sctx, scancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer scancel()
-		sendBotDM(sctx, secret, tg, text)
+		s.notifyDM(sctx, tg, text)
 	}(ownerTg.Int64)
-}
-
-func botSecret() string { return strings.TrimSpace(os.Getenv("XY_BOT_SECRET")) }
-
-// sendBotDM posts one DM to the bot's loopback /send (tgbot.ServeLocal).
-func sendBotDM(ctx context.Context, secret string, tgUserID int64, text string) {
-	body, err := json.Marshal(tgbridge.SendRequest{TelegramUserID: tgUserID, Text: text})
-	if err != nil {
-		return
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		"http://"+botHealthAddr()+"/send", bytes.NewReader(body))
-	if err != nil {
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Bot-Secret", secret)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Printf("notify: bot send: %v", err)
-		return
-	}
-	resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		log.Printf("notify: bot send: status %d", resp.StatusCode)
-	}
 }
