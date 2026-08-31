@@ -20,7 +20,7 @@ func composePDF(args []string) error {
 	device := fs.String("device", "desktop", "page size: desktop (A4) or mobile (phone-screen-sized)")
 	configPath := fs.String("pdf_config", "", "a typography config of your own; empty is the one chgksuite ships")
 	font := fs.String("font", "", "font family; empty is the bundled Noto Sans")
-	language := fs.String("language", "ru", "the language typst sets the text in")
+	language := languageFlag(fs)
 	rawTypst := fs.Bool("rawtypst", false, "write the typst source beside the PDF")
 	addTS := fs.String("add_ts", "off", "append a timestamp to the output filename: on|off")
 	merge := fs.Bool("merge", false, "export the input files as one package")
@@ -31,10 +31,14 @@ func composePDF(args []string) error {
 	if *device != "desktop" && *device != "mobile" {
 		return fmt.Errorf("--device: %q is not desktop or mobile", *device)
 	}
+	lang, err := language()
+	if err != nil {
+		return err
+	}
 	opts := typstdoc.Options{
 		Device:   typstdoc.Device(*device),
 		Font:     *font,
-		Language: *language,
+		Language: lang,
 		NoBreak:  noBreak(),
 	}
 	if *configPath != "" {

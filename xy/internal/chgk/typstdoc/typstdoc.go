@@ -30,6 +30,7 @@ import (
 	"strings"
 
 	"xy/internal/chgk/fsource"
+	"xy/internal/chgk/i18n"
 	"xy/internal/chgk/inline"
 )
 
@@ -40,13 +41,6 @@ import (
 type Typesetter interface {
 	SetImages(ctx context.Context, images map[string][]byte) error
 	Compile(ctx context.Context, typ string, wantPDF bool) (pdf []byte, pages int, err error)
-}
-
-// labels (labels_ru.toml question_labels) — the same set the docx export uses.
-var labels = map[string]string{
-	"question": "Вопрос", "answer": "Ответ", "zachet": "Зачёт", "nezachet": "Незачёт",
-	"comment": "Комментарий", "source": "Источник", "sources": "Источники",
-	"author": "Автор", "handout": "Раздаточный материал",
 }
 
 // Device selects the page geometry: Desktop is the docx-mirroring A4 layout,
@@ -104,11 +98,13 @@ type exporter struct {
 	opts   Options
 	cfg    Config
 	device Device
+	labels i18n.Labels
 }
 
 func newExporter(images map[string][]byte, o Options) *exporter {
 	o = o.resolve()
-	return &exporter{images: images, used: map[string][]byte{}, opts: o, cfg: o.Config, device: o.Device}
+	return &exporter{images: images, used: map[string][]byte{}, opts: o, cfg: o.Config,
+		device: o.Device, labels: i18n.LabelsOrDefault(o.Language)}
 }
 
 // preamble is template.docx's page setup, in typst.
@@ -197,9 +193,9 @@ func (e *exporter) renderQuestion(q *fsource.Question) string {
 	var out strings.Builder
 
 	p1 := &para{above: e.cfg.QuestionAbove, keepLines: true}
-	p1.addStyled(questionLabel(q)+". ", "bold")
+	p1.addStyled(e.questionLabel(q)+". ", "bold")
 	if h := q.Get("handout"); h != nil {
-		p1.addStyled("\n["+labelFor(q, "handout")+": ", "")
+		p1.addStyled("\n["+e.labelFor(q, "handout")+": ", "")
 		e.addValue(p1, h, false)
 		p1.addStyled("\n]", "")
 	}
@@ -208,7 +204,7 @@ func (e *exporter) renderQuestion(q *fsource.Question) string {
 	out.WriteString(p1.typ())
 
 	p2 := &para{above: e.cfg.AnswerAbove, keepLines: true}
-	p2.addStyled(labelFor(q, "answer")+": ", "bold")
+	p2.addStyled(e.labelFor(q, "answer")+": ", "bold")
 	e.addValue(p2, q.Get("answer"), true)
 
 	var src *para
@@ -224,12 +220,12 @@ func (e *exporter) renderQuestion(q *fsource.Question) string {
 			} else {
 				src.addBreak()
 			}
-			src.addStyled(labelFor(q, field)+": ", "bold")
+			src.addStyled(e.labelFor(q, field)+": ", "bold")
 			e.addValue(src, v, nbsp)
 			continue
 		}
 		p2.addBreak()
-		p2.addStyled(labelFor(q, field)+": ", "bold")
+		p2.addStyled(e.labelFor(q, field)+": ", "bold")
 		e.addValue(p2, v, nbsp)
 	}
 	out.WriteString(p2.typ())
@@ -239,17 +235,17 @@ func (e *exporter) renderQuestion(q *fsource.Question) string {
 	return out.String()
 }
 
-func questionLabel(q *fsource.Question) string {
+func (e *exporter) questionLabel(q *fsource.Question) string {
 	num := ""
 	if n := q.Get("number"); n != nil {
 		num = fmt.Sprintf("%v", n)
 	}
-	return labelFor(q, "question") + " " + num
+	return i18n.QuestionLabel(e.labelFor(q, "question"), num, e.opts.Language)
 }
 
 // labelFor returns the field label, honouring per-question overrides and the
 // plural "Источники" when source is a list.
-func labelFor(q *fsource.Question, field string) string {
+func (e *exporter) labelFor(q *fsource.Question, field string) string {
 	if ov, ok := q.Get("overrides").(map[string]string); ok {
 		if v, ok := ov[field]; ok {
 			return v
@@ -257,10 +253,10 @@ func labelFor(q *fsource.Question, field string) string {
 	}
 	if field == "source" {
 		if _, isList := q.Get("source").([]any); isList {
-			return labels["sources"]
+			return e.labels.Field("sources")
 		}
 	}
-	return labels[field]
+	return e.labels.Field(field)
 }
 
 // addValue renders a field value (string or list), mirroring docx.addValue: the

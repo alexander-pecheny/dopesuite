@@ -27,18 +27,12 @@ import (
 	"strings"
 
 	"xy/internal/chgk/fsource"
+	"xy/internal/chgk/i18n"
 	"xy/internal/chgk/inline"
 )
 
 //go:embed assets/template.docx
 var templateDocx []byte
-
-// labels (labels_ru.toml question_labels).
-var labels = map[string]string{
-	"question": "Вопрос", "answer": "Ответ", "zachet": "Зачёт", "nezachet": "Незачёт",
-	"comment": "Комментарий", "source": "Источник", "sources": "Источники",
-	"author": "Автор", "handout": "Раздаточный материал",
-}
 
 const (
 	imageRelType     = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
@@ -72,6 +66,7 @@ type exporter struct {
 	nextRel int
 	nextDoc int
 	opts    Options
+	labels  i18n.Labels
 	// body is the document body in order. Paragraphs are objects until the very
 	// end, because a page break inside a question starts a new paragraph while
 	// its caller keeps writing runs into the old one — python-docx's model, and
@@ -85,7 +80,11 @@ type bodyItem interface{ xml() string }
 // Export renders the parsed structure to .docx bytes. images maps the names used
 // in (img …) directives to their bytes (any format; re-encoded for export).
 func Export(doc fsource.Doc, images map[string][]byte, opts Options) ([]byte, error) {
-	e := &exporter{images: images, nextRel: 7, nextDoc: 1000, opts: opts}
+	labels, err := i18n.LoadLabels(opts.Language)
+	if err != nil {
+		return nil, err
+	}
+	e := &exporter{images: images, nextRel: 7, nextDoc: 1000, opts: opts, labels: labels}
 	body := e.renderBody(doc)
 	if opts.OptimizeSize {
 		e.optimizeMedia()
@@ -324,9 +323,9 @@ func (e *exporter) renderQuestionInto(q *fsource.Question, into *para, screen bo
 	p.keepLines = true
 	p.spacingBefore = 360
 
-	p.addRaw(questionLabel(q, e.opts.OnlyQuestionNumber)+". ", "bold")
+	p.addRaw(e.questionLabel(q, e.opts.OnlyQuestionNumber)+". ", "bold")
 	if h := q.Get("handout"); h != nil {
-		p.addRaw("\n["+labelFor(q, "handout")+": ", "")
+		p.addRaw("\n["+e.labelFor(q, "handout")+": ", "")
 		e.addValue(p, h, textOpts{removeAccents: screen, removeBrackets: screen})
 		p.addRaw("\n]", "")
 	}
@@ -368,7 +367,7 @@ func (e *exporter) renderQuestionInto(q *fsource.Question, into *para, screen bo
 	}
 
 	whiten := e.opts.Spoilers == SpoilersWhiten
-	p.addRaw(labelFor(q, "answer")+": ", "bold")
+	p.addRaw(e.labelFor(q, "answer")+": ", "bold")
 	// The answer keeps its brackets even on screen — chgksuite passes only the
 	// accent switch here.
 	e.addValue(p, q.Get("answer"), textOpts{nbsp: true, whiten: whiten, removeAccents: screen})
@@ -396,7 +395,7 @@ func (e *exporter) renderQuestionInto(q *fsource.Question, into *para, screen bo
 				if small {
 					into.sz = srcSz
 				}
-				into.addRaw(labelFor(q, field)+": ", "bold")
+				into.addRaw(e.labelFor(q, field)+": ", "bold")
 				e.addValue(into, v, o)
 				continue
 			}
@@ -415,17 +414,17 @@ func (e *exporter) renderQuestionInto(q *fsource.Question, into *para, screen bo
 				src = p
 				src.addRaw("\n", "")
 			}
-			src.addRaw(labelFor(q, field)+": ", "bold")
+			src.addRaw(e.labelFor(q, field)+": ", "bold")
 			e.addValue(src, v, o)
 			continue
 		}
 		p.addRaw("\n", "")
-		p.addRaw(labelFor(q, field)+": ", "bold")
+		p.addRaw(e.labelFor(q, field)+": ", "bold")
 		e.addValue(p, v, o)
 	}
 }
 
-func questionLabel(q *fsource.Question, onlyNumber bool) string {
+func (e *exporter) questionLabel(q *fsource.Question, onlyNumber bool) string {
 	num := ""
 	if n := q.Get("number"); n != nil {
 		num = fmt.Sprintf("%v", n)
@@ -433,12 +432,12 @@ func questionLabel(q *fsource.Question, onlyNumber bool) string {
 	if onlyNumber {
 		return num
 	}
-	return labelFor(q, "question") + " " + num
+	return i18n.QuestionLabel(e.labelFor(q, "question"), num, e.opts.Language)
 }
 
 // labelFor returns the field label, honouring per-question overrides and the
 // plural "Источники" when source is a list.
-func labelFor(q *fsource.Question, field string) string {
+func (e *exporter) labelFor(q *fsource.Question, field string) string {
 	if ov, ok := q.Get("overrides").(map[string]string); ok {
 		if v, ok := ov[field]; ok {
 			return v
@@ -446,10 +445,10 @@ func labelFor(q *fsource.Question, field string) string {
 	}
 	if field == "source" {
 		if _, isList := q.Get("source").([]any); isList {
-			return labels["sources"]
+			return e.labels.Field("sources")
 		}
 	}
-	return labels[field]
+	return e.labels.Field(field)
 }
 
 // addValue renders a field value (string or list) into the paragraph's runs.

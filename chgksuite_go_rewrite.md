@@ -14,6 +14,7 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 |---|---|---|
 | `fsource/` | `composer/chgksuite_parser.py` (parse_4s), `common.compose_4s` | done, oracle-tested |
 | `typo/` | `typotools.py` | done, every mode |
+| `i18n/` | `resources/labels_*.toml`, `regexes_*.json` | done, all ten languages |
 | `inline/` | `composer/composer_common.py` (`_parse_4s_elem`, `parseimg`, nbsp) | done |
 | `docxread/` | `parsing_engine.py` (python_docx engine) | done (that engine only) |
 | `textparse/` | `parser.py` (ChgkParser, SiParser, TroikaParser) | chgk, si, troika |
@@ -253,9 +254,23 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 
 ### G. Cross-cutting
 
-- [ ] **G1. i18n** [both]: 10 label sets (`labels_*.toml`) and 10 regex sets
-      (`regexes_*.json`). Go hardcodes Russian labels in `docx/` and `typstdoc/`
-      and Russian regexes in `textparse/`.
+- [x] **G1. i18n**: `internal/chgk/i18n` embeds chgksuite's own ten
+      `labels_*.toml` and ten `regexes_*.json` verbatim, so neither tool can
+      drift on a label or a marker. `--language` reaches `parse` (the field
+      markers, and English's "leave the quotes alone" rule) and every `compose`
+      that prints a label — docx, pdf, pptx, telegram — plus the handouts'
+      two captions.
+      One translation is needed and only one: Python's `\s` is Unicode-aware
+      and matches the NBSP a .docx is full of, Go's is ASCII-only, so `i18n.ForRE2`
+      rewrites it. The Russian patterns it produces are what the parser was
+      using hand-written, character for character.
+      Parity in all ten languages: the pdf typst source, and (with the
+      export's own known sz/szCs deviation normalised out) the .docx body;
+      the pptx deck in seven, every authored part; a Telegram package in
+      English, call for call.
+      Not ported, because chgksuite does not either: `markdown` and `base`
+      print their Russian headings whatever the language, and «авторка» and
+      «Нулевой вопрос» are literals in `parser.py` too.
 - [x] **G2. typography smart/light modes**: `typo.Mode` — off/on/smart for
       quotes, and off/on/light/smart for accents — with `Options.Resolve`, the
       decision every parser makes once per package: text that already types its
@@ -303,4 +318,4 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 2. ~~**D1–D2, D4–D5**~~: the `parse` command, done 31 Aug 2026.
 3. ~~**A2–A4**~~: markdown, base, openquiz — done 31 Aug 2026.
 4. ~~**C1**~~, ~~**D3**~~, ~~**A1**~~ — done 31 Aug 2026.
-5. **G1**: i18n, once there are enough label sites to be worth a table.
+5. ~~**G1**~~ — done 31 Aug 2026.

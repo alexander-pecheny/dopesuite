@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"xy/internal/chgk/fsource"
+	"xy/internal/chgk/i18n"
 )
 
 // Poster is everything the export needs from Telegram. The flow is written
@@ -73,7 +74,7 @@ type Request struct {
 func Export(ctx context.Context, p Poster, r Request) error {
 	t, polls := r.Target, r.Polls
 	e := &exporter{
-		f: &formatter{opts: r.Options, images: r.Images}, p: p, t: t, polls: polls,
+		f: &formatter{opts: r.Options, images: r.Images, labels: i18n.LabelsOrDefault(r.Options.Language)}, p: p, t: t, polls: polls,
 		opts: r.Options, qcount: 1, lastNumber: 1,
 	}
 	if polls != nil {
@@ -229,12 +230,12 @@ func (e *exporter) postGroup(ctx context.Context, html string) error {
 // navigation posts the pinned index: the package's title, an invitation to
 // comment, and a link per tour.
 func (e *exporter) navigation(ctx context.Context) error {
-	lines := []string{impressionsRu}
+	lines := []string{e.f.labels.Text("general_impressions_text")}
 	if e.heading != "" {
 		lines = append([]string{"<b>" + e.heading + "</b>", ""}, lines...)
 	}
 	for _, s := range e.sectionLinks {
-		lines = append(lines, sectionLabel+" "+s.tour+": "+s.link)
+		lines = append(lines, e.f.labels.Text("section")+" "+s.tour+": "+s.link)
 	}
 	id, err := e.p.PostText(ctx, e.t.ChannelID, strings.TrimSpace(strings.Join(lines, "\n")), 0)
 	if err != nil {

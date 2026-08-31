@@ -110,6 +110,11 @@ def main():
             ("polls", {"add_polls": True}),
             ("skip", {"skip_until": 2}),
             ("asterisks", {"disable_asterisks_processing": True}),
+            ("english", {
+                "language": "en",
+                "labels_file": os.path.join(RESOURCES, "labels_en.toml"),
+                "regexes_file": os.path.join(RESOURCES, "regexes_en.json"),
+            }),
         ):
             out.append(
                 {

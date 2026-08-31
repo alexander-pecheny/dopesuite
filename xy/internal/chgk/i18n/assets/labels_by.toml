@@ -1,0 +1,21 @@
+[question_labels]
+question = "Пытанне"
+answer = "Адказ"
+zachet = "Залік"
+nezachet = "Незалік"
+comment = "Каментар"
+source = "Крыніца"
+sources = "Крыніцы"
+author = "Аўтар"
+authors = "Аўтары"
+handout = "Раздаткавы матэрыял"
+
+[general]
+section = "Тур"
+editor = "Рэдактар"
+date = "Дата"
+questions_in_comments = "Пытанні ў каментарах."
+handout_for_question = "Раздаткавы матэрыял да пытання {}"
+general_impressions_caption = "Агульныя ўражанні"
+general_impressions_text = "Агульныя ўражанні ад пакета — у каментарах да гэтага паста."
+right_answers_for_stats = "Правільных адказаў"

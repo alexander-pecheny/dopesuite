@@ -16,6 +16,8 @@ import (
 	"math"
 	"strconv"
 	"strings"
+
+	"xy/internal/chgk/i18n"
 )
 
 //go:embed assets/header.typ
@@ -33,11 +35,6 @@ const (
 	labelAbove    = 2.0 // LABEL_ABOVE
 	labelBelow    = 0.6 // LABEL_BELOW
 	strutEM       = 1.2 // STRUT_EM
-
-	// handout_for_question, labels_ru.toml [general]
-	handoutForQuestionRu = "Раздаточный материал к вопросу %s"
-	// question, labels_ru.toml [question_labels]
-	questionRu = "Вопрос %s"
 )
 
 // Args mirrors the chgksuite handout CLI flags xy relies on (ru defaults).
@@ -54,6 +51,9 @@ type Args struct {
 	TikzMM       *float64 // nil → defaultTikzMM (int 2)
 	// Resize governs split_fit's image-shrink pass; it is read there only.
 	Resize ResizeConfig
+	// Language is --language: which labels_*.toml the two printed captions come
+	// from. Empty is Russian.
+	Language string
 }
 
 // ResizeConfig is split_fit's image-shrink pass: when a fitted image handout
@@ -317,8 +317,12 @@ func getCutDirection(columns, numRows, handoutsPerTeam int, grouping string) (in
 }
 
 func (a Args) generateForQuestion(num string) string {
-	return strings.Replace(greytextTmpl, "<GREYTEXT>", fmt.Sprintf(handoutForQuestionRu, num), 1)
+	// handout_for_question carries Python's "{}" where the number goes.
+	text := strings.Replace(a.labels().Text("handout_for_question"), "{}", num, 1)
+	return strings.Replace(greytextTmpl, "<GREYTEXT>", text, 1)
 }
+
+func (a Args) labels() i18n.Labels { return i18n.LabelsOrDefault(a.Language) }
 
 func (a Args) buildCellBody(b block) string {
 	fs := pynum{float64(a.FontSize), true}
@@ -363,7 +367,7 @@ func (a Args) buildCellBody(b block) string {
 	default:
 		body = wrapText("")
 	}
-	if label := insideLabel(b); label != "" {
+	if label := a.insideLabel(b); label != "" {
 		return fmt.Sprintf("stack(dir: ttb, spacing: 1mm, %s, %s)", label, body)
 	}
 	return body
@@ -371,7 +375,7 @@ func (a Args) buildCellBody(b block) string {
 
 // insideLabel is the grey «Вопрос N» that `question_label: inside` prints inside
 // every cell, so a handout still names its question once it is cut out.
-func insideLabel(b block) string {
+func (a Args) insideLabel(b block) string {
 	if v, _ := b.str("question_label"); v != "inside" {
 		return ""
 	}
@@ -379,7 +383,7 @@ func insideLabel(b block) string {
 	if !ok || num == "" {
 		return ""
 	}
-	return strings.Replace(celllabelTmpl, "<CELLLABEL>", fmt.Sprintf(questionRu, num), 1)
+	return strings.Replace(celllabelTmpl, "<CELLLABEL>", a.labels().Field("question")+" "+num, 1)
 }
 
 func (a Args) generateRegularBlock(b block) string {

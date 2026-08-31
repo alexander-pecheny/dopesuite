@@ -46,9 +46,9 @@ func TestSICanonParity(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			doc := ParseSI(text, typo.Options{})
+			doc := ParseSI(text, typo.Options{}, "")
 			if f.game == "troika" {
-				doc = ParseTroika(text, typo.Options{})
+				doc = ParseTroika(text, typo.Options{}, "")
 			}
 			if got := fsource.Compose(doc, fsource.NumbersAll); got != string(want) {
 				t.Errorf("mismatch:\n%s", firstDiff(string(want), got))
@@ -81,7 +81,7 @@ func TestSITextCases(t *testing.T) {
 			if strings.HasSuffix(name, ".troika") {
 				parse = ParseTroika
 			}
-			got := fsource.Compose(parse(string(text), typo.Options{}), fsource.NumbersAll)
+			got := fsource.Compose(parse(string(text), typo.Options{}, ""), fsource.NumbersAll)
 			if got != string(want) {
 				t.Errorf("mismatch:\n%s", firstDiff(string(want), got))
 			}

@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"xy/internal/chgk/fsource"
+	"xy/internal/chgk/i18n"
 	"xy/internal/chgk/inline"
 )
 
@@ -26,22 +27,12 @@ type Options struct {
 	DisableAsterisks bool
 	// SkipUntil starts the export at that question number (0 = from the top).
 	SkipUntil int
+	// Language is --language: which labels_*.toml the headings come from.
+	// Empty is Russian.
+	Language string
 }
 
-// labels are chgksuite's labels_ru.toml, the only language this port speaks.
-var labels = map[string]string{
-	"question": "Вопрос", "answer": "Ответ", "zachet": "Зачёт",
-	"nezachet": "Незачёт", "comment": "Комментарий", "source": "Источник",
-	"sources": "Источники", "author": "Автор", "handout": "Раздаточный материал",
-}
-
-const (
-	sectionLabel   = "Тур"
-	impressionsRu  = "Общее впечатление от пакета — в комментариях к этому посту."
-	handoutForQRu  = "Раздаточный материал к вопросу %s"
-	cfImage        = "см. изображение"
-	richImgHeightP = 200
-)
+const richImgHeightP = 200
 
 // imgSentinel marks an image inside a message's text until the payload is
 // finalized and the picture becomes an <img> and an upload.
@@ -54,6 +45,7 @@ var reImgSentinel = regexp.MustCompile("\x00img:([^\x00]+)\x00")
 type formatter struct {
 	opts   Options
 	images map[string][]byte
+	labels i18n.Labels
 }
 
 // replaceChars is tg_replace_chars: what a run of plain text may not carry into
@@ -201,14 +193,14 @@ func (f *formatter) questionParts(q *fsource.Question, number string) (questionP
 		if err != nil {
 			return "", fmt.Errorf("%s: %w", name, err)
 		}
-		return "<b>" + label(q, name) + ":</b> " + s, nil
+		return "<b>" + f.label(q, name) + ":</b> " + s, nil
 	}
 	txt, err := f.value(q.Get("question"))
 	if err != nil {
 		return p, err
 	}
 	// The two trailing spaces are chgksuite's; _rich_render strips them.
-	p.question = "<b>" + label(q, "question") + " " + number + ":</b> " + txt + "  \n"
+	p.question = "<b>" + f.label(q, "question") + " " + number + ":</b> " + txt + "  \n"
 	for _, spec := range []struct {
 		name string
 		dst  *string
@@ -226,7 +218,7 @@ func (f *formatter) questionParts(q *fsource.Question, number string) (questionP
 }
 
 // label honours a question's own !!Label override, and the plural "Источники".
-func label(q *fsource.Question, field string) string {
+func (f *formatter) label(q *fsource.Question, field string) string {
 	if ov, ok := q.Get("overrides").(map[string]string); ok {
 		if v, ok := ov[field]; ok {
 			return v
@@ -234,16 +226,18 @@ func label(q *fsource.Question, field string) string {
 	}
 	if field == "source" {
 		if _, isList := q.Get("source").([]any); isList {
-			return labels["sources"]
+			return f.labels.Field("sources")
 		}
 	}
-	return labels[field]
+	return f.labels.Field(field)
 }
 
-// reHandoutImg is the "[Раздаточный материал: <picture>]" wrapper: in a message
-// that embeds the picture itself, the wrapper says nothing.
-var reHandoutImg = regexp.MustCompile(`\[` + regexp.QuoteMeta(labels["handout"]) +
-	`:\s*(\x00img:[^\x00]+\x00)\s*\]`)
+// handoutImgRe matches the "[Раздаточный материал: <picture>]" wrapper: in a
+// message that embeds the picture itself, the wrapper says nothing.
+func handoutImgRe(labels i18n.Labels) *regexp.Regexp {
+	return regexp.MustCompile(`\[` + regexp.QuoteMeta(labels.Field("handout")) +
+		`:\s*(\x00img:[^\x00]+\x00)\s*\]`)
+}
 
 // question renders one question as the HTML of a single rich message: the text
 // and its handout in the open, everything else folded into a <details>, sources
@@ -253,7 +247,7 @@ func (f *formatter) question(q *fsource.Question, number string) (string, error)
 	if err != nil {
 		return "", err
 	}
-	html := richRender(strings.TrimSpace(reHandoutImg.ReplaceAllString(p.question, "$1")))
+	html := richRender(strings.TrimSpace(handoutImgRe(f.labels).ReplaceAllString(p.question, "$1")))
 
 	body := richRender(joinNonEmpty("\n", p.answer, p.zachet, p.nezachet, p.comment))
 	if small := joinNonEmpty("\n", p.source, p.author); small != "" {
@@ -267,7 +261,7 @@ func (f *formatter) question(q *fsource.Question, number string) (string, error)
 		if f.opts.NoSpoilers {
 			html += body
 		} else {
-			html += "<details><summary>" + labels["answer"] + "</summary>" + body + "</details>"
+			html += "<details><summary>" + f.labels.Field("answer") + "</summary>" + body + "</details>"
 		}
 	}
 	return html, nil

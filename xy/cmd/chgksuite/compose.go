@@ -11,6 +11,7 @@ import (
 
 	"xy/internal/chgk/docx"
 	"xy/internal/chgk/fsource"
+	"xy/internal/chgk/i18n"
 	"xy/internal/chgk/inline"
 )
 
@@ -49,10 +50,15 @@ func composeDocx(args []string) error {
 	addTS := fs.String("add_ts", "off", "append a timestamp to the output filename: on|off")
 	merge := fs.Bool("merge", false, "export the input files as one package")
 	optimizeSize := fs.String("optimize_size", "on", "re-encode the pictures to shrink the file: on|off")
+	language := languageFlag(fs)
 	// Declared and not read, as in chgksuite: the .docx export calls the
 	// no-break pass through its standalone wrapper, which ignores the switches.
 	noBreakFlags(fs)
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	lang, err := language()
+	if err != nil {
 		return err
 	}
 	opts, err := validDocxOptions(docx.Options{
@@ -63,6 +69,7 @@ func composeDocx(args []string) error {
 		OnlyQuestionNumber:      *onlyNumber,
 		SameSourceAndAuthorSize: *smallerSource == "off",
 		OptimizeSize:            *optimizeSize != "off",
+		Language:                lang,
 	})
 	if err != nil {
 		return err
@@ -147,6 +154,19 @@ func gameOf(name string) string {
 		return "troika"
 	default:
 		return "chgk"
+	}
+}
+
+// languageFlag declares --language, which every compose subcommand takes, and
+// checks it against the sets i18n carries.
+func languageFlag(fs *flag.FlagSet) func() (string, error) {
+	lang := fs.String("language", i18n.DefaultLanguage,
+		"which labels the export prints: "+strings.Join(i18n.Languages(), ", "))
+	return func() (string, error) {
+		if !i18n.Known(*lang) {
+			return "", fmt.Errorf("--language: %q is not one of %s", *lang, strings.Join(i18n.Languages(), ", "))
+		}
+		return *lang, nil
 	}
 }
 

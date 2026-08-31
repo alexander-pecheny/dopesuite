@@ -7,13 +7,6 @@ import "regexp"
 // question's number in СИ is its point value, and a троика's is 1, 2 or 3).
 
 var (
-	reSiTheme          = regexp.MustCompile(`(?i)^Тема` + ws + `+(\d+)\.` + ws + `*(.*)`)
-	reSiThemeComment   = regexp.MustCompile(`(?i)^Комментарий к теме[\.:]`)
-	reSiBattle         = regexp.MustCompile(`(?i)^(?:БОЙ|Бой)` + ws + `+([IVXLCDM\d]+)`)
-	reSiBattleNumbered = regexp.MustCompile(`^(?:\d+\.` + ws + `+[А-ЯЁA-Z` + ws + `\-–—]+|(?i:\d+/\d+` + ws + `+финала(?:\.` + ws + `+\d+` + ws + `+бой)?))$`)
-	reSiYourThemes     = regexp.MustCompile(`(?i)^Ваши` + ws + `+темы` + ws + `*:`)
-	reSiRoundName      = regexp.MustCompile(`(?i)(открытый|полуоткрытый|закрытый)` + ws + `+раунд`)
-
 	// reStyleHeading is the marker docxread writes for a heading paragraph.
 	reStyleHeading = regexp.MustCompile(`^\$\$H(\d)\$\$` + ws + `*(.*)`)
 
@@ -74,10 +67,12 @@ var structuralTypes = map[string]bool{
 
 // questionFields are the labels that open a field of the question in hand, in
 // the order СИ tries them.
-var questionFields = []struct {
-	re    *regexp.Regexp
-	field string
-}{
-	{reAnswer, "answer"}, {reZachet, "zachet"}, {reNezachet, "nezachet"},
-	{reComment, "comment"}, {reSource, "source"},
+func questionFields(rx *regexSet) []named {
+	var out []named
+	for _, field := range []string{"answer", "zachet", "nezachet", "comment", "source"} {
+		if re := rx.field(field); re != nil {
+			out = append(out, named{field, re})
+		}
+	}
+	return out
 }

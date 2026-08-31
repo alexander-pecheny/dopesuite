@@ -28,6 +28,7 @@ func composeTelegram(args []string) error {
 	pollConfig := fs.String("poll_config", "", "poll config TOML (required with --add_polls)")
 	token := fs.String("token", "", "bot token; defaults to $CHGKSUITE_TG_TOKEN")
 	stopIfNoStats := fs.Bool("stop_if_no_stats", false, "refuse to publish a package whose questions carry no «Взятия:»")
+	language := languageFlag(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -36,7 +37,12 @@ func composeTelegram(args []string) error {
 	}
 	in := fs.Arg(0)
 
+	lang, langErr := language()
+	if langErr != nil {
+		return langErr
+	}
 	opts := tg.Options{
+		Language:         lang,
 		NoSpoilers:       *noSpoilers,
 		DisableAsterisks: *disableAsterisks != 0,
 		SkipUntil:        *skipUntil,

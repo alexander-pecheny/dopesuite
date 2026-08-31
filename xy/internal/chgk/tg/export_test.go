@@ -108,6 +108,8 @@ func TestTranscriptParity(t *testing.T) {
 				opts.SkipUntil = 2
 			case "asterisks":
 				opts.DisableAsterisks = true
+			case "english":
+				opts.Language = "en"
 			}
 			rec := &recorder{msgID: 1000, calls: []call{}}
 			target := Target{ChannelID: "-1001111111111", ChatID: "-1002222222222"}

@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"xy/internal/chgk/fsource"
+	"xy/internal/chgk/i18n"
 	"xy/internal/chgk/inline"
 	"xy/internal/chgk/typo"
 )
@@ -60,7 +61,7 @@ func Export(doc fsource.Doc, images map[string][]byte, o Options) ([]byte, error
 		return nil, err
 	}
 	e := &exporter{
-		pkg: p, cfg: cfg, opts: o, images: images,
+		pkg: p, cfg: cfg, opts: o, images: images, labels: i18n.LabelsOrDefault(o.Language),
 		faces: FindFontFaces(cfg.fontName(), o.FontDirs),
 	}
 	if err := e.resolveLayouts(); err != nil {
@@ -81,6 +82,7 @@ type exporter struct {
 	opts   Options
 	images map[string][]byte
 	faces  *fontFaces
+	labels i18n.Labels
 
 	titleLayout, blankLayout    string
 	questionLayout              string
@@ -129,7 +131,7 @@ func (e *exporter) resolveLayouts() error {
 // run is the body of export(): questions one at a time, everything between them
 // buffered until the next one arrives.
 func (e *exporter) run(doc fsource.Doc) error {
-	label := labelFor("handout")
+	label := e.labels.Field("handout")
 	e.handoutRe1 = regexp.MustCompile(`(?s)\[` + regexp.QuoteMeta(label) + `.(.+?)\]`)
 	e.handoutRe2 = regexp.MustCompile(`^` + regexp.QuoteMeta(label) + `.(.+?)$`)
 	e.templateSlideCount = len(e.pkg.slides)
@@ -452,33 +454,9 @@ func (e *exporter) plainLinesForMeasurement(text string) []string {
 
 // ── odds and ends ───────────────────────────────────────────────────────────
 
-// labelFor is the label table chgksuite reads from labels_ru.toml. Only Russian
-// is ported; see G1.
-func labelFor(field string) string {
-	switch field {
-	case "question":
-		return "Вопрос"
-	case "answer":
-		return "Ответ"
-	case "zachet":
-		return "Зачёт"
-	case "nezachet":
-		return "Незачёт"
-	case "comment":
-		return "Комментарий"
-	case "source":
-		return "Источник"
-	case "author":
-		return "Автор"
-	case "handout":
-		return "Раздаточный материал"
-	}
-	return field
-}
-
 // label is get_label: a question's own !!Label override, and the plural
 // «Источники» when it names more than one.
-func label(q *fsource.Question, field string) string {
+func (e *exporter) label(q *fsource.Question, field string) string {
 	if ov, ok := q.Get("overrides").(map[string]string); ok {
 		if v, ok := ov[field]; ok && v != "" {
 			return v
@@ -486,10 +464,13 @@ func label(q *fsource.Question, field string) string {
 	}
 	if field == "source" {
 		if _, isList := q.Get("source").([]any); isList {
-			return "Источники"
+			return e.labels.Field("sources")
 		}
 	}
-	return labelFor(field)
+	if v := e.labels.Field(field); v != "" {
+		return v
+	}
+	return field
 }
 
 func recursiveJoin(v any) string {

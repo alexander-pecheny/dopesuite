@@ -18,6 +18,9 @@ type Options struct {
 	// OptimizeSize is --optimize_size: re-encode the pictures once the document
 	// is built, keeping whichever is smaller. On by default in chgksuite.
 	OptimizeSize bool
+	// Language is --language: which labels_*.toml the headings come from.
+	// Empty is Russian.
+	Language string
 }
 
 // Spoilers says how the answers are hidden from a reader of the printout.

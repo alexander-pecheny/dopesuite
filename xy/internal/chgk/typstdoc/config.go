@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"xy/internal/chgk/i18n"
 	"xy/internal/chgk/inline"
 )
 
@@ -67,7 +68,7 @@ func (o Options) resolve() Options {
 		o.Font = fontFamily
 	}
 	if o.Language == "" {
-		o.Language = "ru"
+		o.Language = i18n.DefaultLanguage
 	}
 	return o
 }

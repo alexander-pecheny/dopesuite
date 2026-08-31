@@ -13,6 +13,7 @@ import (
 
 	"xy/internal/chgk/docxread"
 	"xy/internal/chgk/fsource"
+	"xy/internal/chgk/i18n"
 	"xy/internal/chgk/textenc"
 	"xy/internal/chgk/textparse"
 	"xy/internal/chgk/typo"
@@ -32,6 +33,7 @@ func parseCmd(args []string) error {
 	linksOld := fs.String("links", "unwrap", "hyperlinks: unwrap (text, then the URL) or old (the URL alone)")
 	noImagePrefix := fs.Bool("no_image_prefix", false, "name extracted images without the file's name in front")
 	addTS := fs.String("add_ts", "off", "append a timestamp to the output filename: on|off")
+	language := fs.String("language", i18n.DefaultLanguage, "which labels and field markers to read the package by: "+strings.Join(i18n.Languages(), ", "))
 	quotes := fs.String("typography_quotes", "on", "quotes: on, off or smart (a package that already types « » is left alone)")
 	accents := fs.String("typography_accents", "on", "stress marks: on, off, light (homoglyphs only) or smart")
 	dashes := fs.String("typography_dashes", "on", "dashes: on|off")
@@ -58,6 +60,7 @@ func parseCmd(args []string) error {
 		{"typography_dashes", *dashes, []string{"on", "off"}},
 		{"typography_whitespace", *whitespace, []string{"on", "off"}},
 		{"typography_percent", *percent, []string{"on", "off"}},
+		{"language", *language, i18n.Languages()},
 	} {
 		if !slices.Contains(c.allowed, c.value) {
 			return fmt.Errorf("--%s: %q is not one of %s", c.name, c.value, strings.Join(c.allowed, ", "))
@@ -75,6 +78,7 @@ func parseCmd(args []string) error {
 			linksOld:           *linksOld == "old",
 			noImagePrefix:      *noImagePrefix,
 			addTS:              *addTS == "on",
+			language:           *language,
 			typo: typo.Options{
 				Whitespace: *whitespace == "on",
 				Quotes:     typo.Mode(*quotes),
@@ -97,6 +101,7 @@ type parseArgs struct {
 	game, encoding, defaultAuthor, numbers, singleNumberLines string
 	preserveFormatting, tourNumbersAsWords, linksOld          bool
 	noImagePrefix, addTS                                      bool
+	language                                                  string
 	typo                                                      typo.Options
 }
 
@@ -165,9 +170,9 @@ func readSource(in, game string, a parseArgs) (string, []docxread.Image, error) 
 func parseText(text, game, in string, a parseArgs) (fsource.Doc, error) {
 	switch game {
 	case "si":
-		return textparse.ParseSI(text, a.typo), nil
+		return textparse.ParseSI(text, a.typo, a.language), nil
 	case "troika":
-		return textparse.ParseTroika(text, a.typo), nil
+		return textparse.ParseTroika(text, a.typo, a.language), nil
 	case "chgk", "brain":
 		if strings.EqualFold(filepath.Ext(in), ".txt") {
 			// chgk_parse_txt, in its order: db.chgk.info's own export is read as
@@ -182,6 +187,7 @@ func parseText(text, game, in string, a parseArgs) (fsource.Doc, error) {
 			DefaultAuthor:      defaultAuthorFor(a.defaultAuthor, in),
 			TourNumbersAsWords: a.tourNumbersAsWords,
 			Typo:               a.typo,
+			Language:           a.language,
 		}), nil
 	default:
 		return nil, fmt.Errorf("unknown game %q", game)

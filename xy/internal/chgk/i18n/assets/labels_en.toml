@@ -1,0 +1,21 @@
+[question_labels]
+question = "Question"
+answer = "Answer"
+zachet = "Accept"
+nezachet = "Do not accept"
+comment = "Comment"
+source = "Source"
+sources = "Sources"
+author = "Author"
+authors = "Authors"
+handout = "Handout"
+
+[general]
+section = "Block"
+editor = "Editor"
+date = "Date"
+questions_in_comments = "Questions are in the comments."
+handout_for_question = "Handout for question {}"
+general_impressions_caption = "General impression"
+general_impressions_text = "Please share your general impression of the packet in the comments to this post."
+right_answers_for_stats = "Correct answers"

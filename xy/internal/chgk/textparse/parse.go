@@ -56,12 +56,10 @@ var tourWords = []string{
 // zeroPrefixes are the two ways a package can mark an unnumbered warm-up question.
 var zeroPrefixes = []string{"Нулевой вопрос", "Разминочный вопрос"}
 
-// handoutLabel is labels_ru.toml's question_labels.handout.
-const handoutLabel = "Раздаточный материал"
-
 type parser struct {
 	structure []*elem
 	opts      typo.Options
+	rx        *regexSet
 	// defaultAuthor is written into every question that names none.
 	defaultAuthor string
 	// now is "today" for the date sanity check; injectable so tests are stable.
@@ -79,6 +77,9 @@ type Options struct {
 	// TourNumbersAsWords is --tour_numbers_as_words: «Первый тур» rather than
 	// whatever the document called it.
 	TourNumbersAsWords bool
+	// Language is --language: which regexes_*.json names the field markers.
+	// Empty is Russian.
+	Language string
 	// Typo are the --typography_* switches. The zero value is every knob off,
 	// so a caller that wants chgksuite's defaults says so.
 	Typo typo.Options
@@ -88,7 +89,12 @@ type Options struct {
 // .txt file or from docxread.ToText).
 func Parse(text string, opts Options) fsource.Doc {
 	// The smart modes look at the package once, before any of it is typographed.
-	p := &parser{opts: opts.Typo.Resolve(text), now: time.Now()}
+	t := opts.Typo.Resolve(text)
+	if opts.Language == "en" {
+		// ChgkParser.__init__: English is typed with the quotes it wants.
+		t.Quotes = typo.Off
+	}
+	p := &parser{opts: t, now: time.Now(), rx: mustRegexSet(opts.Language)}
 	return p.parse(text, opts)
 }
 
@@ -107,7 +113,7 @@ func (p *parser) parse(text string, opts Options) fsource.Doc {
 			}
 			fragment = append(fragment, &elem{"", typo.REW(line)})
 		}
-		applyRegexes(&fragment)
+		p.applyRegexes(&fragment)
 		// A fragment containing an answer must start with the question, even if
 		// the question carried no marker of its own.
 		hasAnswer := false
@@ -148,7 +154,7 @@ func (p *parser) parse(text string, opts Options) fsource.Doc {
 	// A bare "Автор:" line means the author's name is on the next line.
 	for i := 0; i < len(p.structure); i++ {
 		if p.structure[i].Type == "author" &&
-			reAuthorOnly.MatchString(typo.REW(p.structure[i].str())) &&
+			p.rx.authorOnly.MatchString(typo.REW(p.structure[i].str())) &&
 			i+1 < len(p.structure) {
 			p.mergeToPrevious(i + 1)
 		}
@@ -169,7 +175,7 @@ func (p *parser) parse(text string, opts Options) fsource.Doc {
 	if len(p.structure) == 0 {
 		return nil
 	}
-	if p.structure[0].Type == "" && reNumber.MatchString(typo.REW(p.structure[0].str())) {
+	if p.structure[0].Type == "" && p.rx.field("number").MatchString(typo.REW(p.structure[0].str())) {
 		p.mergeToNext(0)
 	}
 	p.stripLabels()
@@ -299,7 +305,7 @@ var reUnderscore = strings.NewReplacer("_", "")
 // applyRegexes ports ChgkParser.apply_regexes. When several field markers match
 // one line, the line is split at their offsets and the pieces are spliced into
 // the fragment as separate elements.
-func applyRegexes(fragment *[]*elem) {
+func (p *parser) applyRegexes(fragment *[]*elem) {
 	st := *fragment
 	for i := 0; i < len(st); i++ {
 		// Offsets are measured on the underscore-stripped text but used to slice
@@ -311,7 +317,7 @@ func applyRegexes(fragment *[]*elem) {
 			start int
 		}
 		var hits []hit
-		for _, l := range labelled {
+		for _, l := range p.rx.labelled {
 			if loc := l.re.FindStringIndex(probe); loc != nil {
 				hits = append(hits, hit{l.name, loc[0]})
 			}
@@ -513,13 +519,13 @@ func (p *parser) ensureQuestions() {
 		p.mergeToNext(i)
 		cur := typo.REW(p.structure[i].str())
 		prev := typo.REW(p.at(i - 1).str())
-		if reNumber.MatchString(cur) && !reNumber.MatchString(prev) {
+		if p.rx.field("number").MatchString(cur) && !p.rx.field("number").MatchString(prev) {
 			p.structure[i].Type = "question"
-			p.structure[i].Content = reNumber.ReplaceAllString(cur, "")
+			p.structure[i].Content = p.rx.field("number").ReplaceAllString(cur, "")
 			// Python does int(num.group(0)) on a match like "12. ", which always
 			// raises ValueError and is swallowed — so no number is ever inserted.
 			// Reproduced by only inserting when the match parses as an integer.
-			if m := reNumber.FindString(typo.REW(p.structure[i].str())); m != "" {
+			if m := p.rx.field("number").FindString(typo.REW(p.structure[i].str())); m != "" {
 				if n, err := strconv.Atoi(m); err == nil {
 					p.insert(i, &elem{"number", n})
 				}
@@ -537,13 +543,14 @@ func (p *parser) stripLabels() {
 		if e.Type == "" {
 			e.Type = "meta"
 		}
-		re, known := byName[e.Type]
+		re := p.rx.field(e.Type)
+		known := re != nil
 		if !known || e.Type == "tour" || e.Type == "tourrev" || e.Type == "editor" || e.Type == "battle" {
 			continue
 		}
 		beforeReplacement := ""
 		if e.Type == "question" {
-			num, hasNum := questionNumber(e.str())
+			num, hasNum := p.questionNumber(e.str())
 			if hasNum {
 				p.insert(idx, &elem{"number", num})
 				idx++
@@ -558,8 +565,8 @@ func (p *parser) stripLabels() {
 			lines := strings.Split(e.str(), sep)
 			var out []string
 			for _, line := range lines {
-				if reQuestion.MatchString(line) {
-					line = replaceFirst(reQuestion, line, "")
+				if p.rx.field("question").MatchString(line) {
+					line = replaceFirst(p.rx.field("question"), line, "")
 				}
 				if s := strings.TrimSpace(line); s != "" {
 					out = append(out, s)
@@ -583,12 +590,12 @@ func (p *parser) stripLabels() {
 
 // questionNumber returns the (?P<number>…) group of the question regex, and
 // whether it matched and was non-empty.
-func questionNumber(s string) (string, bool) {
-	m := reQuestion.FindStringSubmatch(s)
+func (p *parser) questionNumber(s string) (string, bool) {
+	m := p.rx.field("question").FindStringSubmatch(s)
 	if m == nil {
 		return "", false
 	}
-	n := m[reQuestion.SubexpIndex("number")]
+	n := m[p.rx.field("question").SubexpIndex("number")]
 	return n, n != ""
 }
 
@@ -607,11 +614,11 @@ func (p *parser) prettify() {
 		e := p.structure[id]
 
 		if e.Type == "question" {
-			if m := reQuestion.FindStringSubmatch(e.str()); m != nil {
-				p.insert(id, &elem{"number", m[reQuestion.SubexpIndex("number")]})
+			if m := p.rx.field("question").FindStringSubmatch(e.str()); m != nil {
+				p.insert(id, &elem{"number", m[p.rx.field("question").SubexpIndex("number")]})
 				id++
 			}
-			e.Content = reQuestion.ReplaceAllString(e.str(), "")
+			e.Content = p.rx.field("question").ReplaceAllString(e.str(), "")
 		}
 
 		p.detectInnerList(e)
@@ -620,7 +627,7 @@ func (p *parser) prettify() {
 			if s, ok := e.Content.(string); ok && len(splitLines(s)) > 1 {
 				var items []any
 				for _, x := range splitLines(s) {
-					items = append(items, replaceFirst(reNumber, typo.REW(x), ""))
+					items = append(items, replaceFirst(p.rx.field("number"), typo.REW(x), ""))
 				}
 				e.Content = items
 			}
@@ -892,7 +899,7 @@ func (p *parser) headerPass(final fsource.Doc) fsource.Doc {
 			continue
 		}
 		n := float64(utf8.RuneCountInString(content)) / 10
-		if m := reDate2.FindString(content); m != "" && float64(utf8.RuneCountInString(m)) >= n {
+		if m := p.rx.field("date2").FindString(content); m != "" && float64(utf8.RuneCountInString(m)) >= n {
 			makeDate(i)
 			dateDefined = true
 			break
@@ -929,25 +936,17 @@ func (p *parser) postprocessQuestion(q *fsource.Question) {
 	qs = joinStrings(q.Get("question"))
 	// "Раздаточный материал:\n[…" → "[Раздаточный материал:\n…" so the handout
 	// ends up inside the bracketed block the composer looks for.
-	if m := reHandoutBracket.FindString(qs); m != "" {
-		gap := reHandoutBracket.FindStringSubmatch(qs)[1]
-		q.Set("question", replaceDeep(q.Get("question"), m, "["+handoutLabel+":"+gap))
+	if m := p.rx.handoutBefore.FindString(qs); m != "" {
+		gap := p.rx.handoutBefore.FindStringSubmatch(qs)[1]
+		q.Set("question", replaceDeep(q.Get("question"), m, "["+p.rx.handoutLabel+":"+gap))
 	}
-}
-
-var reHandoutBracket = regexp.MustCompile(`(?s)` + regexp.QuoteMeta(handoutLabel) + `:([ \n]+)\[`)
-
-// fieldRegexes is the regexes[k] lookup _try_extract_field uses.
-var fieldRegexes = map[string]*regexp.Regexp{
-	"zachet": reZachet, "nezachet": reNezachet, "source": reSource,
-	"comment": reComment, "author": reAuthor,
 }
 
 // tryExtractField ports _try_extract_field: a field that never got its own line
 // (e.g. a "Зачёт:" buried at the end of the answer) is pulled out of whichever
 // field currently holds it.
 func (p *parser) tryExtractField(q *fsource.Question, k string) {
-	re := fieldRegexes[k]
+	re := p.rx.field(k)
 	if re == nil {
 		return
 	}

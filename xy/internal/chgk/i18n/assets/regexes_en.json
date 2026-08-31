@@ -1,0 +1,23 @@
+{
+    "tour": "^(#\\s+)?(B[Ll][Oo][Cc][Kk]|R[Oo][Uu][Nn][Dd])\\s?№?\\s?([0-9IVXLCDM]*)([\\.:])?$",
+    "tourrev": "^([0-9IVXLCDM]+)\\s(B[Ll][Oo][Cc][Kk]|R[Oo][Uu][Nn][Dd])([\\.:])?$",
+    "question": "Q[Uu][Ee][Ss][Tt][Ii][Oo][Nn]\\s?[№N]?(?P<number>[0-9\\s]*)\\s?([\\.:]|\n|\r\n|$)",
+    "answer": "A[Nn][Ss][Ww][Ee][Rr]\\s?[№N]?([0-9]+)?\\s?[\\.:]",
+    "handout": "^H[Aa][Nn][Dd][Oo][Uu][Tt][\\.:]",
+    "zachet": "A[Cc][Ee][Pp][Tt]\\s?[\\.:]",
+    "nezachet": "R[Ee][Jj][Ee][Cc][Tt]\\s?[\\.:]",
+    "comment": "C[Oo][Mm][Mm]?([Ee][Nn][Tt])?\\s?[№N]?([0-9]+)?\\s?[\\.:]",
+    "author": "A[Uu][Tt][Hh][Oo][Rr][Ss]?\\s?[\\.:]",
+    "source": "S[Oo][Uu][Rr][Cc][Ee][Ss]?\\s?[\\.:]",
+    "editor": "E[Dd][Ii][Tt]([Oo][Rr][Ss]?|[Ee][Dd]\\s[Bb][Yy])\\s?(\\s?[\\.:]|\\s[\\-–—]+\\s)",
+    "date": "D[Aa][Tt][Ee]\\s?[\\.:]",
+    "date2": "(^|\\s)Jan(uary)?|Feb(ruary)?|Mar(ch)?|Apr(il)?|May|June?|July?|Aug(ust)?|Sep(tember)?|Oct(ober)?|Nov(ember)?|Dec(ember)?(\\s|$)",
+    "number": "^[0-9]+[\\.\\)]\\s*",
+    "handout_short": "H[Aa][Nn][Dd][Oo][Uu][Tt]",
+    "si_theme": "(?i)^Theme\\s+(\\d+)\\.\\s*(.*)",
+    "si_theme_comment": "(?i)^Theme comment[\\.:]",
+    "si_battle": "(?i)^(?:ROUND|Round|BOUT|Bout)\\s+([IVXLCDM\\d]+)",
+    "si_battle_numbered": "^(\\d+)\\.\\s+([A-Z\\s\\-–—]+)$",
+    "si_your_themes": "(?i)^Your\\s+themes\\s*:",
+    "si_round_name": "(?i)(open|semi[-–]?open|closed)\\s+round"
+}

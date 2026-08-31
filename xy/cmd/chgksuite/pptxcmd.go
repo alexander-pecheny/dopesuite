@@ -17,7 +17,7 @@ func composePptx(args []string) error {
 	fontDir := fs.String("font_dir", "", "an extra directory to look for the measurement font in")
 	disableNumbers := fs.Bool("disable_numbers", false, "no question number in the corner")
 	noAccents := fs.Bool("do_not_remove_accents", false, "keep the stress marks")
-	language := fs.String("language", "ru", "the language runs are tagged with")
+	language := languageFlag(fs)
 	optimizeSize := fs.String("optimize_size", "on", "re-encode the pictures to shrink the file: on|off")
 	addTS := fs.String("add_ts", "off", "append a timestamp to the output filename: on|off")
 	merge := fs.Bool("merge", false, "export the input files as one package")
@@ -26,10 +26,14 @@ func composePptx(args []string) error {
 		return err
 	}
 
+	lang, err := language()
+	if err != nil {
+		return err
+	}
 	opts := pptx.Options{
 		DisableNumbers:     *disableNumbers,
 		DoNotRemoveAccents: *noAccents,
-		Language:           *language,
+		Language:           lang,
 		OptimizeSize:       *optimizeSize != "off",
 		NoBreak:            noBreak(),
 	}

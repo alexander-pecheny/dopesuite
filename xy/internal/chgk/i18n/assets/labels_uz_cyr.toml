@@ -1,0 +1,21 @@
+[question_labels]
+question = "Савол"
+answer = "Жавоб"
+zachet = "Қабул"
+nezachet = "Қабул эмас"
+comment = "Изоҳ"
+source = "Манба"
+sources = "Манбалар"
+author = "Муаллиф"
+authors = "Муаллифлар"
+handout = "Тарқатма материал"
+
+[general]
+section = "Тур"
+editor = "Муҳаррир"
+date = "Сана"
+questions_in_comments = "Саволлар изоҳларда."
+handout_for_question = "{} саволга тарқатма материал."
+general_impressions_caption = "Умумий таасуротлар"
+general_impressions_text = "Тўпламдан умумий таасуротлар — ушбу постнинг изоҳларида."
+right_answers_for_stats = "Тўғри жавоблар фоизи"

@@ -1,0 +1,22 @@
+[question_labels]
+question = "Вопрос"
+answer = "Ответ"
+zachet = "Зачёт"
+nezachet = "Незачёт"
+comment = "Комментарий"
+source = "Источник"
+sources = "Источники"
+author = "Автор"
+authors = "Авторы"
+handout = "Раздаточный материал"
+
+[general]
+section = "Тур"
+editor = "Редактор"
+date = "Дата"
+questions_in_comments = "Вопросы в комментариях."
+general_impressions_caption = "Общие впечатления"
+handout_for_question = "Раздаточный материал к вопросу {}"
+general_impressions_text = "Общее впечатление от пакета — в комментариях к этому посту."
+right_answers_for_stats = "Взятия"
+cf_image = "см. изображение"

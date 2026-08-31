@@ -19,10 +19,14 @@ import (
 
 // ParseSI reads a Своя игра package. None of ЧГК's own knobs mean anything to
 // these two, so they take the typography modes and nothing else.
-func ParseSI(text string, o typo.Options) fsource.Doc { return newSI(false, o).parse(text) }
+func ParseSI(text string, o typo.Options, language string) fsource.Doc {
+	return newSI(false, o, language).parse(text)
+}
 
 // ParseTroika reads a троика package.
-func ParseTroika(text string, o typo.Options) fsource.Doc { return newSI(true, o).parse(text) }
+func ParseTroika(text string, o typo.Options, language string) fsource.Doc {
+	return newSI(true, o, language).parse(text)
+}
 
 // element is one [type, value] pair on the way to a document.
 type element struct {
@@ -32,6 +36,7 @@ type element struct {
 type siParser struct {
 	troika bool
 	typo   typo.Options
+	rx     *regexSet
 
 	structure      []element
 	currentField   string
@@ -51,8 +56,8 @@ type siParser struct {
 	multiforaMode  bool
 }
 
-func newSI(troika bool, o typo.Options) *siParser {
-	return &siParser{troika: troika, typo: o}
+func newSI(troika bool, o typo.Options, language string) *siParser {
+	return &siParser{troika: troika, typo: o, rx: mustRegexSet(language)}
 }
 
 func (p *siParser) parse(text string) fsource.Doc {
@@ -149,14 +154,14 @@ func (p *siParser) siLine(line string, headingRead bool) {
 		}
 	}
 
-	if reSiYourThemes.MatchString(stripped) {
+	if p.rx.field("si_your_themes").MatchString(stripped) {
 		p.flush()
 		p.inThemeList = true
 		p.push("meta", p.apply(stripped))
 		return
 	}
 
-	if m := reSiTheme.FindStringSubmatch(stripped); m != nil {
+	if m := p.rx.field("si_theme").FindStringSubmatch(stripped); m != nil {
 		p.inThemeList = false
 		p.flush()
 		p.push("theme", p.apply(strings.TrimSpace(m[2])))
@@ -173,37 +178,37 @@ func (p *siParser) siLine(line string, headingRead bool) {
 		return
 	}
 
-	if reSiThemeComment.MatchString(stripped) {
+	if p.rx.field("si_theme_comment").MatchString(stripped) {
 		p.flush()
 		p.currentField = "comment"
-		p.currentContent = reSiThemeComment.ReplaceAllString(stripped, "")
+		p.currentContent = p.rx.field("si_theme_comment").ReplaceAllString(stripped, "")
 		return
 	}
 
-	if reSiRoundName.MatchString(stripped) {
+	if p.rx.field("si_round_name").MatchString(stripped) {
 		p.flush()
 		p.push("round", p.apply(stripped))
 		return
 	}
-	if reSiBattle.MatchString(stripped) {
+	if p.rx.field("si_battle").MatchString(stripped) {
 		p.flush()
 		p.push("battle", p.apply(stripped))
 		return
 	}
-	if reSiBattleNumbered.MatchString(stripped) && !reSiTheme.MatchString(stripped) {
+	if p.rx.field("si_battle_numbered").MatchString(stripped) && !p.rx.field("si_theme").MatchString(stripped) {
 		p.flush()
 		p.push("battle", p.apply(stripped))
 		return
 	}
 
-	if p.dispatchLabel(stripped, reEditor, "editor", true) {
+	if p.dispatchLabel(stripped, p.rx.field("editor"), "editor", true) {
 		return
 	}
 	if p.dispatchAuthor(stripped) {
 		return
 	}
-	for _, spec := range questionFields {
-		if p.dispatchLabel(stripped, spec.re, spec.field, false) {
+	for _, spec := range questionFields(p.rx) {
+		if p.dispatchLabel(stripped, spec.re, spec.name, false) {
 			return
 		}
 	}
@@ -231,7 +236,7 @@ func (p *siParser) siLine(line string, headingRead bool) {
 
 // isFieldLabel reports whether a heading is really one of a question's fields.
 func (p *siParser) isFieldLabel(text string) bool {
-	for _, spec := range questionFields {
+	for _, spec := range questionFields(p.rx) {
 		if loc := spec.re.FindStringIndex(text); loc != nil && loc[0] == 0 {
 			return true
 		}
@@ -244,11 +249,11 @@ func (p *siParser) isFieldLabel(text string) bool {
 func (p *siParser) heading(level int, text string) {
 	p.flush()
 	p.inThemeList = false
-	if reSiRoundName.MatchString(text) {
+	if p.rx.field("si_round_name").MatchString(text) {
 		p.push("round", p.apply(text))
 		return
 	}
-	if reSiBattle.MatchString(text) {
+	if p.rx.field("si_battle").MatchString(text) {
 		p.push("battle", p.apply(text))
 		return
 	}
@@ -308,7 +313,7 @@ func (p *siParser) dispatchLabel(stripped string, re *regexp.Regexp, field strin
 // dispatchAuthor: an author right after a theme belongs to the theme, and an
 // author anywhere else opens a field.
 func (p *siParser) dispatchAuthor(stripped string) bool {
-	loc := reAuthor.FindStringIndex(stripped)
+	loc := p.rx.field("author").FindStringIndex(stripped)
 	if loc == nil || loc[0] != 0 {
 		return false
 	}

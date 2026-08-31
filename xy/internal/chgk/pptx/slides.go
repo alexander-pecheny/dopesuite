@@ -405,14 +405,14 @@ func (e *exporter) addAnswerSlide(q *fsource.Question) {
 	e.applyVerticalAlignment(box)
 
 	p := e.configureParagraph(box.tf.first(), answerSize, "", "answer")
-	r := e.addRun(p, label(q, "answer")+": ")
+	r := e.addRun(p, e.label(q, "answer")+": ")
 	r.bold, r.boldSet = true, true
 	e.format(e.processText(q.Get("answer"), false, false, true, false), p, box, s, true, false)
 
 	for _, field := range fields[1:] {
 		stripBrackets := field != "zachet"
 		value := e.processText(q.Get(field), false, stripBrackets, true, false)
-		r := e.addRun(p, "\n"+label(q, field)+": ")
+		r := e.addRun(p, "\n"+e.label(q, field)+": ")
 		r.bold, r.boldSet = true, true
 		e.format(value, p, box, s, true, false)
 	}
@@ -427,7 +427,7 @@ func (e *exporter) answerGridText(q *fsource.Question, fields []string) string {
 	for _, field := range fields {
 		stripBrackets := field != "answer" && field != "zachet"
 		value := e.processText(q.Get(field), false, stripBrackets, true, false)
-		parts = append(parts, label(q, field)+": "+textForGrid(value))
+		parts = append(parts, e.label(q, field)+": "+textForGrid(value))
 	}
 	return strings.Join(parts, "\n")
 }
