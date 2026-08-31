@@ -7,6 +7,7 @@
 /blobs/
 .env
 /xy-server
+/chgksuite
 /telegram-bot
 # built by `just build-wasm` (30 MB); the Rust source is typst-wasm/
 /internal/chgk/typstwasm/typst.wasm

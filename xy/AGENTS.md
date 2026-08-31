@@ -72,6 +72,9 @@ Russian-language UI.
 cmd/xy-server/         thin main() → server.Main(); also `xy-server invite [days]`
 cmd/uic/               compile one .dopeui page to HTML on stdout (xy overlay; debug/diff tool)
 cmd/xy-cli/            thin main() → xycli.Run(); `just cli` builds it to ~/.local/bin
+cmd/chgksuite/         the Go side of chgksuite's own CLI over internal/chgk (currently
+                       `compose docx`), checked against the Python tool's output. Nothing
+                       in xy uses it; see ../chgksuite_go_rewrite.md for what is ported
 internal/xycli/        xy-cli: the board from the shell, for an agent. A second implementation
                        of the Envelope (scrypt KEK + AES-GCM, parity-tested both ways against
                        crypto.ts) and of the export's 4s assembly (parity corpus from export.ts),
@@ -188,7 +191,7 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        nothing is written anywhere. CLITypesetter drives the typst binary and is kept ONLY as the
                        oracle the wasm path is checked against (wasm_parity_test.go: the fitted row counts must
                        match, since split_fit binary-searches them).
-                       splitfit.go: `handouts split_fit` port — per-block binary-search row fit using typst's own pagination (typst query page count, not pypdf), per-question + all-q PDFs, pdfcpu compress; ~12× faster, row counts match chgksuite. (image-shrink refinement not yet ported)
+                       splitfit.go: `handouts split_fit` port — per-block binary-search row fit using typst's own pagination (typst query page count, not pypdf), per-question + all-q PDFs, pdfcpu compress; ~12× faster, row counts match chgksuite. The image-shrink refinement needs a Typesetter that also measures (handout.Measurer): the typst binary answers with a query, the wasm pool cannot yet, and under it an image block simply keeps its size
   typstwasm/           typst linked in as a library, compiled to wasm32-wasip1, run under wazero with its
                        World (= typst's filesystem abstraction) served from memory. Removes the last place xy
                        had to hand decrypted questions to a filesystem. A pool of instances, since split_fit
@@ -197,7 +200,7 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        typst.wasm is //go:embed-ed but NOT in git (30 MB): `just build-wasm` compiles
                        typst-wasm/ (Rust) into it — once per clone, then only on a typst bump. Every Go
                        recipe (build/dev/test) depends on a guard that says so if the file is missing.
-  docx/                parsed structure → .docx (OOXML), reusing chgksuite's template.docx; byte-parity tested (document.xml body + rels: spacing, run boundaries, hyperlinks) vs chgksuite.
+  docx/                parsed structure → .docx (OOXML), reusing chgksuite's template.docx; byte-parity tested (document.xml body + rels: spacing, run boundaries, hyperlinks) vs chgksuite, for every `compose docx` switch (docx.Options: spoilers, screen mode, noanswers/noparagraph/only_question_number). xy passes Options{} — the switches are the CLI's for now; regenerate the oracles with scripts/gen_docx_oracles.sh.
                        (img …) images go through imgconv.ForExport like the PDF's — see below (images.go)
   typstdoc/            parsed structure → .typ → PDF via typst (the same wasm pool handouts use): the docx
                        export in the other format. template.docx's page setup transcribed into the preamble
