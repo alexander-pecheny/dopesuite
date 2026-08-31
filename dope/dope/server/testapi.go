@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"pecheny.me/dopecore/authcred"
+	"pecheny.me/dopecore/tgbot"
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/edit"
@@ -185,6 +186,9 @@ func (s *Server) ServeStaticPage(source fs.FS, path string) http.HandlerFunc {
 }
 
 func (s *Server) TgBridge() *telegrambridge.Server { return s.tgBridge() }
+
+// BotRegistrar is the in-process bot's side of the login conversation.
+func (s *Server) BotRegistrar() tgbot.Registrar { return botRegistrar{s} }
 
 func (s *Server) UpdateVenue(reqCtx context.Context, festID int64, number int, title string) ([]store.VenueView, int64, error) {
 	return s.updateVenue(reqCtx, festID, number, title)

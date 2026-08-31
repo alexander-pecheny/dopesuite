@@ -45,8 +45,6 @@ type Engine struct {
 	// Epoch is the per-process random token stamped on every SSE envelope/init so
 	// clients detect a restart (seq reset) and resync.
 	Epoch string
-	// BotSecret gates the Telegram bridge endpoints; empty disables them.
-	BotSecret string
 	// Assets is the embedded (or disk, in dev) static asset filesystem.
 	Assets fs.FS
 	// AssetNoCache is true in disk/dev mode (assets served no-cache).

@@ -3,12 +3,10 @@ package tests
 import (
 	"context"
 	dopeserver "dope/dope/server"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
+
+	"pecheny.me/dopecore/tgbot"
 
 	"dope/dope/web/telegrambridge"
 )
@@ -33,58 +31,23 @@ values(?, ?, null, 0, ?, ?)`, tgUserID, username, now, now); err != nil {
 	}
 }
 
-func TestTelegramBridgeSecretGate(t *testing.T) {
+// The bot now holds this conversation in the server process: a pasted code goes
+// straight to the registrar, with no secret and no hop in between.
+func TestTelegramBotRegistersThroughTheServer(t *testing.T) {
 	s := newAuthTestServer(t)
-
-	// No secret configured -> bridge disabled (503), even with a header.
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/telegram/login", strings.NewReader(`{"telegram_user_id":1}`))
-	req.Header.Set("X-Bot-Secret", "anything")
-	s.TgBridge().HandleTelegramLogin(rec, req)
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("disabled bridge = %d, want 503", rec.Code)
-	}
-
-	// Secret set but wrong -> 401.
-	s.Eng().BotSecret = "s3kret"
-	rec = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPost, "/api/telegram/login", strings.NewReader(`{"telegram_user_id":1}`))
-	req.Header.Set("X-Bot-Secret", "nope")
-	s.TgBridge().HandleTelegramLogin(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("wrong secret = %d, want 401", rec.Code)
-	}
-
-	// Missing header -> 401.
-	rec = httptest.NewRecorder()
-	s.TgBridge().HandleTelegramLogin(rec, httptest.NewRequest(http.MethodPost, "/api/telegram/login", strings.NewReader(`{"telegram_user_id":1}`)))
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("no header = %d, want 401", rec.Code)
-	}
-}
-
-func TestTelegramBridgeRegisterHandler(t *testing.T) {
-	s := newAuthTestServer(t)
-	s.Eng().BotSecret = "s3kret"
 	seedRegisterCode(t, s, "ABCD2345", time.Now().Add(time.Minute))
 
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/telegram/register",
-		strings.NewReader(`{"code":"abcd2345","telegram_user_id":777,"telegram_username":"alice"}`))
-	req.Header.Set("X-Bot-Secret", "s3kret")
-	s.TgBridge().HandleTelegramRegister(rec, req)
+	reg := s.BotRegistrar()
+	msg, err := reg.Register(context.Background(), "abcd2345", tgbot.From{UserID: 777, Username: "alice"})
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	if msg != telegrambridge.TelegramBridgeRegisterSuccess {
+		t.Fatalf("message = %q, want success", msg)
+	}
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("register = %d, want 200 (%s)", rec.Code, rec.Body.String())
-	}
-	var resp telegrambridge.TelegramBridgeResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp.Message != telegrambridge.TelegramBridgeRegisterSuccess {
-		t.Fatalf("message = %q, want success", resp.Message)
-	}
-	// The row must now be consumed by the telegram account (lowercase code was upper-cased).
+	// The row must now be consumed by the telegram account (the lowercase code
+	// the user pasted was upper-cased on the way in).
 	var tgID int64
 	var consumed string
 	if err := s.Eng().DB.QueryRow(`select telegram_user_id, consumed_at from telegram_login_codes where code = 'ABCD2345'`).Scan(&tgID, &consumed); err != nil {

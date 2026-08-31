@@ -24,7 +24,7 @@ full package-by-package breakdown and the layering rules.
 ```
 dope/                    # module root (go.mod: module "dope")
   dope/                  # server tree — 7 groups, packages resolve as dope/dope/<group>/<pkg>
-    cmd/                 # entry points: dope-server (thin main), telegram-bot
+    cmd/                 # entry points: dope-server (thin main)
     server/              # package dopeserver — the orchestration trunk + server/tests/ (integration)
     web/                 # HTTP/UI: route (the one dispatcher), pages, hostpages, editbatch, telegrambridge, assets (embed), jstest
     domain/              # game/fest logic: games, core, gamebuild, flatgame, resolver, roster, overrides, imports, numbering, edit, view
@@ -109,8 +109,7 @@ queries, view/scheme types, pure scoring), `storage/journal` (forward journal),
 
 ## How to Run / Build / Test
 ```bash
-just dev-web-only     # Server only. Usually you should run this unless you need to test changes related to bot
-just dev              # Run server + bot concurrently (hot reload from disk)
+just dev              # Server (hot reload from disk); polls telegram if TELEGRAM_BOT_TOKEN is set
 just test             # Go tests + deno JS tests, incl. the studchr replays on the direct transport (~25 s) — the conformance gate
 just test-full        # the same plus the studchr replays over HTTP (~90 s: handlers, auth, write path); run before a merge
 just test-js          # Frontend tests only

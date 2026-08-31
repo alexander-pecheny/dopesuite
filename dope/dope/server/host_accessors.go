@@ -133,6 +133,3 @@ func (s *server) tgBridge() *telegrambridge.Server { return telegrambridge.New(s
 // Lock / Unlock expose the global write mutex.
 func (s *server) Lock()   { s.eng.Mu.Lock() }
 func (s *server) Unlock() { s.eng.Mu.Unlock() }
-
-// BotSecret returns the configured Telegram bridge shared secret.
-func (s *server) BotSecret() string { return s.eng.BotSecret }

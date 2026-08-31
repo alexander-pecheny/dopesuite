@@ -186,10 +186,6 @@ func Main() {
 	mux.Handle("/api/fest/", srv.api().Mux)
 	srv.authRoutes(srv.api())
 	mux.Handle("/api/auth/", srv.api().Mux)
-	// Telegram bridge: the bot calls these (shared-secret gated) instead of
-	// opening fest.db itself — see telegram_bridge.go.
-	mux.HandleFunc("/api/telegram/register", srv.tgBridge().HandleTelegramRegister)
-	mux.HandleFunc("/api/telegram/login", srv.tgBridge().HandleTelegramLogin)
 	mux.HandleFunc("/events", srv.handleEvents)
 	mux.HandleFunc("/host-events", srv.handleHostEvents)
 	mux.HandleFunc("/favicon.ico", srv.assets.ServeRoot("favicon.ico", "image/x-icon"))
@@ -241,6 +237,9 @@ func Main() {
 	// edit_metrics.go.
 	srv.metrics.Init()
 
+	// The login bot, polling in this process (see bot.go).
+	srv.startBot(context.Background())
+
 	httpSrv := &http.Server{
 		Handler:           securityHeaders(auditmw.ContextMiddleware(&srv.eng, webassets.Gzip(slideSessionCookie(mux), "/events", "/host-events"))),
 		ReadHeaderTimeout: 5 * time.Second,
@@ -279,7 +278,6 @@ func newServer() (*server, error) {
 			ActiveGameID:    gameID,
 			ActiveMatchCode: matchCode,
 			RT:              realtime.NewManager(),
-			BotSecret:       os.Getenv("DOPE_BOT_SECRET"),
 			Epoch:           epoch,
 		},
 	}

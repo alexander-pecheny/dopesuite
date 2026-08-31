@@ -27,8 +27,7 @@ second, inner `dope/` directory, so packages resolve as `dope/dope/<group>/<pkg>
 dope/                       module root (go.mod: module "dope")
   dope/                     server tree — seven semantic groups, no loose files:
     cmd/                    entry points
-      dope-server/          thin main() → dopeserver.Main()
-      telegram-bot/         standalone Telegram bot (bridges to the server)
+      dope-server/          thin main() → dopeserver.Main(); the login bot polls in it (server/bot.go)
     server/                 package dopeserver — orchestration / the trunk
       tests/                black-box integration tests (package tests)
     web/                    HTTP / UI layer
@@ -74,7 +73,7 @@ is what made the decomposition possible without import cycles.
 - `pages` — public + admin page handlers (register, admin, host journal/numbers).
 - `hostpages` — host editor page handlers (dashboard, roster, numbers, games).
 - `editbatch` — coalesces per-game PATCH edits into one locked write tx per window.
-- `telegrambridge` — shared-secret endpoints the bot calls instead of opening the DB.
+- `telegrambridge` — the login conversation's answers, called by the in-process bot.
 - `assets` — the `//go:embed static` package; the FS keeps the `static/` prefix.
   Frontend source lives under `web/ts/` (built into `static/dist/`); deno tests under `web/jstest/`.
 

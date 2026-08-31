@@ -3,24 +3,19 @@ package telegrambridge
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"log"
-	"net/http"
-	"strings"
 	"time"
 
 	"pecheny.me/dopecore/tgbridge"
 )
 
-// telegram_bridge.go is the server side of the Telegram login/registration
-// handshake. The bot used to open fest.db directly (read+write) to consume
-// register codes and issue login codes, which made it a second long-lived
-// writer/connection on the live database — implicated in the WAL checkpoint/
-// recovery trouble behind the data-loss incident. Instead the bot now holds NO
-// database handle and calls these endpoints; the server stays the sole owner of
-// fest.db. The endpoints are gated by a shared secret (DOPE_BOT_SECRET) so only
-// the co-located bot can drive them. Behavior mirrors the bot's old SQL exactly.
+// The Telegram login/registration handshake, server side. The bot used to open
+// fest.db directly, which made it a second long-lived writer on the live
+// database — implicated in the WAL trouble behind the data-loss incident. Then
+// it called these as loopback HTTP endpoints behind a shared secret. Now it runs
+// in the server process (server/bot.go) and calls them as what they always were:
+// two methods that write under the server's own mutex.
 
 const (
 	TelegramBridgeLoginURL = "https://dope.pecheny.me/login"
@@ -35,60 +30,9 @@ const (
 	TelegramBridgeCodeExpired  = "Срок действия кода истек. Запроси новый на " + TelegramBridgeLoginURL + "."
 )
 
-// The wire protocol — request/response shapes, the shared-secret gate, the SQL —
-// is single-sourced in dopecore/tgbridge. The handlers stay here because they run
-// under dope's own write-mutex discipline and carry dope's reply text.
-type TelegramBridgeResponse = tgbridge.Response
-
-// authorizeBot gates the bot bridge with the shared secret. When DOPE_BOT_SECRET
-// is unset the bridge is disabled outright (503) so the code-issuing endpoints
-// are never open to unauthenticated callers.
-func (s *Server) authorizeBot(w http.ResponseWriter, r *http.Request) bool {
-	ok, configured := tgbridge.SecretOK(r, s.h.BotSecret())
-	switch {
-	case !configured:
-		http.Error(w, "telegram bridge disabled", http.StatusServiceUnavailable)
-	case !ok:
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-	}
-	return ok && configured
-}
-
-func (s *Server) HandleTelegramRegister(w http.ResponseWriter, r *http.Request) {
-	if !s.authorizeBot(w, r) {
-		return
-	}
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	defer r.Body.Close()
-	var req tgbridge.RegisterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
-		return
-	}
-	msg := s.TelegramConsumeRegister(r.Context(), strings.ToUpper(strings.TrimSpace(req.Code)), req.TelegramUserID, req.TelegramUsername, req.TelegramName)
-	s.h.WriteJSONValue(w, TelegramBridgeResponse{Message: msg})
-}
-
-func (s *Server) HandleTelegramLogin(w http.ResponseWriter, r *http.Request) {
-	if !s.authorizeBot(w, r) {
-		return
-	}
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	defer r.Body.Close()
-	var req tgbridge.LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
-		return
-	}
-	msg := s.TelegramIssueLogin(r.Context(), req.TelegramUserID, req.TelegramUsername)
-	s.h.WriteJSONValue(w, TelegramBridgeResponse{Message: msg})
-}
+// The SQL and the code shape are single-sourced in dopecore/tgbridge; the
+// answers stay here because they run under dope's write-mutex discipline and
+// carry dope's reply text.
 
 // TelegramConsumeRegister marks a pending 'register' code as consumed by the
 // telegram account that sent it. Returns the user-facing reply text.
