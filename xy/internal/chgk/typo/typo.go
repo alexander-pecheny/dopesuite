@@ -235,8 +235,10 @@ func (q *quoteFixer) fix() string {
 }
 
 var (
-	reApostropheAfter  = regexp.MustCompile(`(\w)'`)
-	reApostropheBefore = regexp.MustCompile(`'(\w)`)
+	// RE2's \w is ASCII-only and Python's, under re.UNICODE, is not: without
+	// this a Ukrainian apostrophe (Слов'янська) keeps its typewriter quote.
+	reApostropheAfter  = regexp.MustCompile(`([\p{L}\p{N}_])'`)
+	reApostropheBefore = regexp.MustCompile(`'([\p{L}\p{N}_])`)
 )
 
 // GetQuotesRight ports get_quotes_right.

@@ -88,7 +88,9 @@ function fixQuotes(src: string): string {
 
 function getQuotesRight(s: string): string {
   if (s.includes('"') || (s.includes("“") && !s.includes("„"))) s = fixQuotes(s);
-  return s.replace(/(\w)'/g, "$1’").replace(/'(\w)/g, "‘$1");
+  // JS \w is ASCII-only, like Go's RE2 and unlike Python's re.UNICODE: without
+  // the class spelled out a Ukrainian apostrophe (Слов'янська) keeps its quote.
+  return s.replace(/([\p{L}\p{N}_])'/gu, "$1’").replace(/'([\p{L}\p{N}_])/gu, "‘$1");
 }
 
 // ── dashes ──────────────────────────────────────────────────────────────────

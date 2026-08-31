@@ -186,7 +186,9 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        included (see the comments). parse.go is ChgkParser (chgk and brain);
                        si.go + troika.go are SiParser and TroikaParser, which read the
                        document's outline through the "$$HN$$" markers docxread writes for
-                       them. Both are byte-parity tested against chgksuite's corpus canons
+                       them; db.go is parser_db's PLY lexer over db.chgk.info's own text
+                       export (a .txt that opens «Чемпионат:»). All byte-parity tested
+                       against chgksuite's corpus canons
   textenc/             a .txt package whose encoding nobody recorded: UTF-8, or whichever of
                        CP1251/KOI8-R/CP866/ISO8859-5 spells the most Russian-looking letters
                        (chgksuite asks chardet; Go has none)

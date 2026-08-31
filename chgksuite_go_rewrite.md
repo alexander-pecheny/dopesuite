@@ -27,9 +27,9 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 | `typoedit/` | — | xy-only (editor-side typography) |
 | `tg/` | `composer/telegram.py` | rich messages, oracle-tested; the dead plain path is not ported |
 | — | `composer/{pptx,lj,db,markdown,openquiz,stats}.py` | **not ported** |
-| — | `parser_db.py` | **not ported** |
+| `textparse/db.go` | `parser_db.py` | done, canon-tested |
 | — | `board.py`, `board_config.py`, `xy_crypto.py` | not needed (xy serves `trello_compat.go`) |
-| `cmd/chgksuite/` | `cli.py` | `compose docx` only, so far |
+| `cmd/chgksuite/` | `cli.py` | `parse`, `compose docx`, `compose telegram` |
 | — | `chgksuite_qt/`, `chgksuite_tk/` | not needed (the GUIs stay in Python) |
 
 ## Done
@@ -49,10 +49,12 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       chgk game only.
 - [x] **Import**: `.docx` / `.4s` / `.zip` → 4s + images; byte-parity with
       `chgksuite parse` on all 12 chgk .docx fixtures.
-- [x] **.docx export**: reuses chgksuite's `template.docx`; body/rels byte-parity,
-      every `compose docx` switch included (spoilers, screen mode, the layout
-      flags): `scripts/gen_docx_oracles.sh` writes chgksuite's own
-      `word/document.xml` per fixture per switch, `options_test.go` compares.
+- [x] **.docx export**: reuses chgksuite's `template.docx`; body/rels byte-parity
+      for every switch that shapes the body — spoilers, screen mode, the layout
+      flags, `--smaller_source_and_author`. `scripts/gen_docx_oracles.sh` writes
+      chgksuite's own `word/document.xml` per fixture per switch,
+      `options_test.go` compares. Two switches are elsewhere on this list:
+      `--docx_template` and `--font` are E4, `--optimize_size` is E5.
 - [x] **PDF export**: `typstdoc`, desktop and mobile page setups.
 - [x] **Handouts**: `.hndt` → `.typ` byte-exact vs chgksuite, PDF via typst,
       `split_fit` row fitting (~12× faster, row counts match), the image-shrink
@@ -120,11 +122,13 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       questions. Byte-parity on the corpus's троика package, plus the six
       awkward cases chgksuite keeps as literals in its own tests
       (`scripts/gen_si_cases.py` extracts them).
-- [ ] **D3. db.chgk.info import** [both]: `parser_db.py` (445 lines): a PLY
-      lexer over db.chgk.info's own text export (a file that opens
-      «Чемпионат:»), which also downloads the pictures and audio it references.
-      Its oracle is ready and waiting: `balt09-1.txt` in chgksuite's corpus is
-      one, with its canon.
+- [x] **D3. db.chgk.info import**: `textparse.ParseDB`, chgksuite's PLY lexer
+      of fifteen exclusive states written out rule for rule, in the order PLY
+      tries them. `chgksuite parse` reads a .txt that opens «Чемпионат:» as one
+      and fetches the pictures and audio it names. Byte-parity on chgksuite's
+      own `balt09-1.txt` canon, plus a synthetic package for what that file
+      never reaches — a `<раздатка>`, a blitz, numbered comments and sources, a
+      second Ответ, an `(aud …)` — diffed against the Python CLI's output.
 - [x] **D4. `.txt`**: `chgksuite parse` reads one, guessing the encoding
       (`textenc`) the way chardet does for chgksuite — a file that decodes as
       UTF-8 is UTF-8, and otherwise the winner is the single-byte encoding whose
@@ -136,7 +140,10 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       checked against the Python CLI's output.
       Left out: `--download_images` (fetches remote pictures into local files;
       a convenience, and the only knob that touches the network) and
-      `--fix_spans`, which belongs to the docx engines of D6.
+      `--fix_spans`, which belongs to the docx engines of D6. The typography
+      knobs a parse also takes — `--typography_dashes|whitespace|percent`,
+      `--replace_no_break_spaces`, `--replace_no_break_hyphens` — are G2 with
+      the quotes and accents: the pass is one, so its switches go in together.
 - [ ] **D6. alternative docx engines** [cli]: `pypandoc`, `mammoth`. Deliberate
       non-goal: they exist because `python_docx` was once insufficient, and they
       need external binaries.
@@ -153,10 +160,15 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       the Go exporters always print a marker rather than failing.
 - [ ] **E4. font substitution** [both]: `--font`: `docx.py` reads system font
       tables to pick faces and rewrites the template's font. Go hardcodes the
-      template's Arial / Noto Sans.
+      template's Arial / Noto Sans. `--docx_template` belongs here too: the Go
+      exporter embeds the template rather than reading one off disk, which is
+      what font substitution would have to change anyway.
 - [ ] **E5. pdf options** [both]: `--nospoilers`, `--pdf_config` (typst
       typography config), `--rawtypst`. The PDF export takes none of E1–E3
-      either: `typstdoc` is still device-only.
+      either: `typstdoc` is still device-only. `--optimize_size` rides here: it
+      recompresses the pictures a finished .docx or .pptx embedded, which Go
+      does at the other end instead (`imgconv.ForExport`, 200 dpi, q85), so the
+      switch has no lever to pull yet.
 - [ ] **E6. merge several sources** [cli]: `compose --merge`.
 
 ### F. Handouts

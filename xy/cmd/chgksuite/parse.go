@@ -3,10 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"xy/internal/chgk/docxread"
 	"xy/internal/chgk/fsource"
@@ -133,12 +136,6 @@ func readSource(in, game string, a parseArgs) (string, []docxread.Image, error) 
 		return text, images, err
 	case ".txt":
 		text, err := textenc.Decode(raw, a.encoding)
-		// Only a чгк .txt is escaped on the way in: chgksuite calls
-		// escape_underscores_except_urls in chgk_parse_txt and nowhere else, so a
-		// .docx (whose italics are already markers) and a СИ .txt keep theirs.
-		if game == "chgk" || game == "brain" {
-			text = typo.EscapeUnderscoresExceptURLs(text, false)
-		}
 		return text, nil, err
 	default:
 		return "", nil, fmt.Errorf("unsupported file format")
@@ -152,6 +149,14 @@ func parseText(text, game, in string, a parseArgs) (fsource.Doc, error) {
 	case "troika":
 		return textparse.ParseTroika(text), nil
 	case "chgk", "brain":
+		if strings.EqualFold(filepath.Ext(in), ".txt") {
+			// chgk_parse_txt, in its order: db.chgk.info's own export is read as
+			// itself, and only a package written by hand gets the escaping.
+			if textparse.IsDBExport(text) {
+				return textparse.ParseDB(text, dbFetcher(filepath.Dir(in))), nil
+			}
+			text = typo.EscapeUnderscoresExceptURLs(text, false)
+		}
 		return textparse.Parse(text, textparse.Options{
 			SingleNumberLines:  a.singleNumberLines,
 			DefaultAuthor:      defaultAuthorFor(a.defaultAuthor, in),
@@ -159,6 +164,33 @@ func parseText(text, game, in string, a parseArgs) (fsource.Doc, error) {
 		}), nil
 	default:
 		return nil, fmt.Errorf("unknown game %q", game)
+	}
+}
+
+// dbFetcher downloads a picture or sound a db.chgk.info export names, skipping
+// what is already on disk. chgksuite fetches into the working directory; this
+// puts the file beside the one being parsed, where the .4s coming out of it
+// looks for its pictures.
+func dbFetcher(dir string) textparse.Fetcher {
+	client := &http.Client{Timeout: 30 * time.Second}
+	return func(url, name string) error {
+		path := filepath.Join(dir, name)
+		if _, err := os.Stat(path); err == nil {
+			return nil
+		}
+		resp, err := client.Get(url)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("%s: %s", url, resp.Status)
+		}
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(path, data, 0o644)
 	}
 }
 
