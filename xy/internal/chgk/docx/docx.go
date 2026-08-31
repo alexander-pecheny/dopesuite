@@ -80,7 +80,7 @@ type bodyItem interface{ xml() string }
 // Export renders the parsed structure to .docx bytes. images maps the names used
 // in (img …) directives to their bytes (any format; re-encoded for export).
 func Export(doc fsource.Doc, images map[string][]byte, opts Options) ([]byte, error) {
-	labels, err := i18n.LoadLabels(opts.Language)
+	labels, err := i18n.LabelsFor(opts.Language, opts.LabelsFile)
 	if err != nil {
 		return nil, err
 	}

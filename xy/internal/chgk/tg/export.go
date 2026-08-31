@@ -74,7 +74,7 @@ type Request struct {
 func Export(ctx context.Context, p Poster, r Request) error {
 	t, polls := r.Target, r.Polls
 	e := &exporter{
-		f: &formatter{opts: r.Options, images: r.Images, labels: i18n.LabelsOrDefault(r.Options.Language)}, p: p, t: t, polls: polls,
+		f: &formatter{opts: r.Options, images: r.Images, labels: i18n.LabelsForOrDefault(r.Options.Language, r.Options.LabelsFile)}, p: p, t: t, polls: polls,
 		opts: r.Options, qcount: 1, lastNumber: 1,
 	}
 	if polls != nil {

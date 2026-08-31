@@ -27,9 +27,13 @@ func composeTelegram(args []string) error {
 	addPolls := fs.Bool("add_polls", false, "post a poll after each question, tour and the package")
 	pollConfig := fs.String("poll_config", "", "poll config TOML (required with --add_polls)")
 	token := fs.String("token", "", "bot token; defaults to $CHGKSUITE_TG_TOKEN")
-	stopIfNoStats := fs.Bool("stop_if_no_stats", false, "refuse to publish a package whose questions carry no «Взятия:»")
+	stopIfNoStats := fs.Bool("stop_if_no_stats", setting("stop_if_no_stats") == "true", "refuse to publish a package whose questions carry no «Взятия:»")
 	language := languageFlag(fs)
+	config := configFlag(fs)
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := applyConfig(fs, *config); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
@@ -37,12 +41,13 @@ func composeTelegram(args []string) error {
 	}
 	in := fs.Arg(0)
 
-	lang, langErr := language()
+	lang, labelsFile, langErr := language()
 	if langErr != nil {
 		return langErr
 	}
 	opts := tg.Options{
 		Language:         lang,
+		LabelsFile:       labelsFile,
 		NoSpoilers:       *noSpoilers,
 		DisableAsterisks: *disableAsterisks != 0,
 		SkipUntil:        *skipUntil,

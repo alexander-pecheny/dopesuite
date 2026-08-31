@@ -24,22 +24,27 @@ import (
 func parseCmd(args []string) error {
 	fs := flag.NewFlagSet("parse", flag.ContinueOnError)
 	game := fs.String("game", "", "chgk (default), brain, si or troika")
-	encoding := fs.String("encoding", "", "encoding of a .txt file ("+strings.Join(textenc.Encodings(), ", ")+"); guessed when empty")
+	encoding := fs.String("encoding", override("encoding", ""), "encoding of a .txt file ("+strings.Join(textenc.Encodings(), ", ")+"); guessed when empty")
 	defaultAuthor := fs.String("defaultauthor", "off", `credit questions with no author: "off", "file" (the file's name) or a name`)
-	numbers := fs.String("numbers_handling", "default", "question numbers written out: default, all or none")
+	numbers := fs.String("numbers_handling", override("numbers_handling", "default"), "question numbers written out: default, all or none")
 	preserveFormatting := fs.Bool("preserve_formatting", false, "keep bold and italic")
-	singleNumberLines := fs.String("single_number_line_handling", "smart", "a line that is only a number: smart, on or off")
-	tourNumbersAsWords := fs.String("tour_numbers_as_words", "off", "rename the tours «Первый тур», «Второй тур»…: on|off")
-	linksOld := fs.String("links", "unwrap", "hyperlinks: unwrap (text, then the URL) or old (the URL alone)")
+	singleNumberLines := fs.String("single_number_line_handling", override("single_number_line_handling", "smart"), "a line that is only a number: smart, on or off")
+	tourNumbersAsWords := fs.String("tour_numbers_as_words", override("tour_numbers_as_words", "off"), "rename the tours «Первый тур», «Второй тур»…: on|off")
+	linksOld := fs.String("links", override("links", "unwrap"), "hyperlinks: unwrap (text, then the URL) or old (the URL alone)")
 	noImagePrefix := fs.Bool("no_image_prefix", false, "name extracted images without the file's name in front")
-	addTS := fs.String("add_ts", "off", "append a timestamp to the output filename: on|off")
-	language := fs.String("language", i18n.DefaultLanguage, "which labels and field markers to read the package by: "+strings.Join(i18n.Languages(), ", "))
-	quotes := fs.String("typography_quotes", "on", "quotes: on, off or smart (a package that already types « » is left alone)")
-	accents := fs.String("typography_accents", "on", "stress marks: on, off, light (homoglyphs only) or smart")
-	dashes := fs.String("typography_dashes", "on", "dashes: on|off")
-	whitespace := fs.String("typography_whitespace", "on", "trim and collapse whitespace: on|off")
-	percent := fs.String("typography_percent", "on", "decode %-escapes; chgksuite reads this switch and decodes either way")
+	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
+	labelsFile := fs.String("labels_file", "", "a labels TOML of your own, in place of the language's")
+	language := fs.String("language", override("language", i18n.DefaultLanguage), "which labels and field markers to read the package by: "+strings.Join(i18n.Languages(), ", "))
+	quotes := fs.String("typography_quotes", override("typography_quotes", "on"), "quotes: on, off or smart (a package that already types « » is left alone)")
+	accents := fs.String("typography_accents", override("typography_accents", "on"), "stress marks: on, off, light (homoglyphs only) or smart")
+	dashes := fs.String("typography_dashes", override("typography_dashes", "on"), "dashes: on|off")
+	whitespace := fs.String("typography_whitespace", override("typography_whitespace", "on"), "trim and collapse whitespace: on|off")
+	percent := fs.String("typography_percent", override("typography_percent", "on"), "decode %-escapes; chgksuite reads this switch and decodes either way")
+	config := configFlag(fs)
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := applyConfig(fs, *config); err != nil {
 		return err
 	}
 	if fs.NArg() == 0 {
@@ -79,6 +84,7 @@ func parseCmd(args []string) error {
 			noImagePrefix:      *noImagePrefix,
 			addTS:              *addTS == "on",
 			language:           *language,
+			labelsFile:         *labelsFile,
 			typo: typo.Options{
 				Whitespace: *whitespace == "on",
 				Quotes:     typo.Mode(*quotes),
@@ -101,8 +107,12 @@ type parseArgs struct {
 	game, encoding, defaultAuthor, numbers, singleNumberLines string
 	preserveFormatting, tourNumbersAsWords, linksOld          bool
 	noImagePrefix, addTS                                      bool
-	language                                                  string
+	language, labelsFile                                      string
 	typo                                                      typo.Options
+}
+
+func (a parseArgs) siOptions() textparse.SIOptions {
+	return textparse.SIOptions{Typo: a.typo, Language: a.language, LabelsFile: a.labelsFile}
 }
 
 // parseFile reads one package and writes its 4s beside it, returning the name.
@@ -170,9 +180,9 @@ func readSource(in, game string, a parseArgs) (string, []docxread.Image, error) 
 func parseText(text, game, in string, a parseArgs) (fsource.Doc, error) {
 	switch game {
 	case "si":
-		return textparse.ParseSI(text, a.typo, a.language), nil
+		return textparse.ParseSI(text, a.siOptions()), nil
 	case "troika":
-		return textparse.ParseTroika(text, a.typo, a.language), nil
+		return textparse.ParseTroika(text, a.siOptions()), nil
 	case "chgk", "brain":
 		if strings.EqualFold(filepath.Ext(in), ".txt") {
 			// chgk_parse_txt, in its order: db.chgk.info's own export is read as
@@ -188,6 +198,7 @@ func parseText(text, game, in string, a parseArgs) (fsource.Doc, error) {
 			TourNumbersAsWords: a.tourNumbersAsWords,
 			Typo:               a.typo,
 			Language:           a.language,
+			LabelsFile:         a.labelsFile,
 		}), nil
 	default:
 		return nil, fmt.Errorf("unknown game %q", game)

@@ -19,14 +19,19 @@ import (
 
 // ParseSI reads a Своя игра package. None of ЧГК's own knobs mean anything to
 // these two, so they take the typography modes and nothing else.
-func ParseSI(text string, o typo.Options, language string) fsource.Doc {
-	return newSI(false, o, language).parse(text)
+func ParseSI(text string, o SIOptions) fsource.Doc { return newSI(false, o).parse(text) }
+
+// SIOptions are the switches the СИ and троика parsers read: the typography
+// pass and where the labels and field markers come from. None of ЧГК's own
+// knobs mean anything to these two.
+type SIOptions struct {
+	Typo       typo.Options
+	Language   string
+	LabelsFile string
 }
 
 // ParseTroika reads a троика package.
-func ParseTroika(text string, o typo.Options, language string) fsource.Doc {
-	return newSI(true, o, language).parse(text)
-}
+func ParseTroika(text string, o SIOptions) fsource.Doc { return newSI(true, o).parse(text) }
 
 // element is one [type, value] pair on the way to a document.
 type element struct {
@@ -56,8 +61,8 @@ type siParser struct {
 	multiforaMode  bool
 }
 
-func newSI(troika bool, o typo.Options, language string) *siParser {
-	return &siParser{troika: troika, typo: o, rx: mustRegexSet(language)}
+func newSI(troika bool, o SIOptions) *siParser {
+	return &siParser{troika: troika, typo: o.Typo, rx: mustRegexSet(o.Language, o.LabelsFile)}
 }
 
 func (p *siParser) parse(text string) fsource.Doc {

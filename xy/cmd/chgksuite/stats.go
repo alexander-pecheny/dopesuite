@@ -20,10 +20,14 @@ func composeAddStats(args []string) error {
 	customCSV := fs.String("custom_csv", "", "a csv/xlsx результаты table in rating.chgk.info's format, comma-separated")
 	csvArgs := fs.String("custom_csv_args", "{}", `csv reader options as JSON, e.g. {"delimiter": ";"}`)
 	questionRange := fs.String("question_range", "", `range of question numbers to include, e.g. "25-36"`)
-	threshold := fs.Int("team_naming_threshold", 2, "name the teams when this few took the question")
-	addTS := fs.String("add_ts", "off", "append a timestamp to the output filename: on|off")
+	threshold := fs.Int("team_naming_threshold", overrideInt("team_naming_threshold", 2), "name the teams when this few took the question")
+	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
 	merge := fs.Bool("merge", false, "read the input files as one package")
+	config := configFlag(fs)
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := applyConfig(fs, *config); err != nil {
 		return err
 	}
 	if (*ratingIDs == "") == (*customCSV == "") {

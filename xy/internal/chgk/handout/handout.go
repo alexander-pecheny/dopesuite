@@ -54,6 +54,9 @@ type Args struct {
 	// Language is --language: which labels_*.toml the two printed captions come
 	// from. Empty is Russian.
 	Language string
+	// LabelsFile is --labels_file: a labels TOML of one's own, in place of the
+	// language's.
+	LabelsFile string
 }
 
 // ResizeConfig is split_fit's image-shrink pass: when a fitted image handout
@@ -322,7 +325,7 @@ func (a Args) generateForQuestion(num string) string {
 	return strings.Replace(greytextTmpl, "<GREYTEXT>", text, 1)
 }
 
-func (a Args) labels() i18n.Labels { return i18n.LabelsOrDefault(a.Language) }
+func (a Args) labels() i18n.Labels { return i18n.LabelsForOrDefault(a.Language, a.LabelsFile) }
 
 func (a Args) buildCellBody(b block) string {
 	fs := pynum{float64(a.FontSize), true}

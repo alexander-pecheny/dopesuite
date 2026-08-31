@@ -17,12 +17,16 @@ import (
 // host (imgur, as chgksuite does).
 func composePublished(filetype string, args []string) error {
 	fs := flag.NewFlagSet("compose "+filetype, flag.ContinueOnError)
-	clientID := fs.String("imgur_client_id", "", "upload pictures as this imgur client instead of chgksuite's")
+	clientID := fs.String("imgur_client_id", override("imgur_client_id", ""), "upload pictures as this imgur client instead of chgksuite's")
 	removeAccents := fs.Bool("remove_accents", false, "base only: a stressed vowel becomes a capital one")
-	addTS := fs.String("add_ts", "off", "append a timestamp to the output filename: on|off")
+	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
 	merge := fs.Bool("merge", false, "export the input files as one package")
 	noBreak := noBreakFlags(fs)
+	config := configFlag(fs)
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := applyConfig(fs, *config); err != nil {
 		return err
 	}
 	sources, err := loadSources(fs.Args(), *merge)

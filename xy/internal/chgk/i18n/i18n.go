@@ -8,6 +8,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -62,6 +63,35 @@ func LoadLabels(language string) (Labels, error) {
 	}
 	labels[language] = l
 	return l, nil
+}
+
+// LabelsFor is LoadLabels with --labels_file taken into account: a file of
+// one's own replaces the language's set.
+//
+// chgksuite declares that flag and then overwrites it from --language on the
+// way in, so upstream it does nothing and --language custom, which is what it
+// was meant to pair with, has no set to load and crashes. Here it works.
+func LabelsFor(language, file string) (Labels, error) {
+	if file == "" {
+		return LoadLabels(language)
+	}
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		return Labels{}, err
+	}
+	l, err := parseLabels(string(raw))
+	if err != nil {
+		return Labels{}, fmt.Errorf("%s: %w", file, err)
+	}
+	return l, nil
+}
+
+// LabelsForOrDefault is LabelsFor for a caller with nowhere to put an error.
+func LabelsForOrDefault(language, file string) Labels {
+	if l, err := LabelsFor(language, file); err == nil {
+		return l
+	}
+	return MustLabels(DefaultLanguage)
 }
 
 // Known reports whether a language has a set here. Commands check it, so the

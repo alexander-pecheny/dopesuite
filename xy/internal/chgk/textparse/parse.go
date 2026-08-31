@@ -80,6 +80,9 @@ type Options struct {
 	// Language is --language: which regexes_*.json names the field markers.
 	// Empty is Russian.
 	Language string
+	// LabelsFile is --labels_file: a labels TOML of one's own, which the
+	// handout rewrite reads its «Раздаточный материал» from.
+	LabelsFile string
 	// Typo are the --typography_* switches. The zero value is every knob off,
 	// so a caller that wants chgksuite's defaults says so.
 	Typo typo.Options
@@ -94,7 +97,7 @@ func Parse(text string, opts Options) fsource.Doc {
 		// ChgkParser.__init__: English is typed with the quotes it wants.
 		t.Quotes = typo.Off
 	}
-	p := &parser{opts: t, now: time.Now(), rx: mustRegexSet(opts.Language)}
+	p := &parser{opts: t, now: time.Now(), rx: mustRegexSet(opts.Language, opts.LabelsFile)}
 	return p.parse(text, opts)
 }
 

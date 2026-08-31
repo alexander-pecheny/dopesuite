@@ -281,8 +281,17 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       seventeen runs over two packages match the Python CLI byte for byte.
       `--typography_percent off` still decodes, because chgksuite tests that
       switch for truth rather than for "on".
-- [ ] **G3. `--labels_file`, the settings file, `--config`** [cli]: the CLI's
-      config plumbing. (`--add_ts` is done: `compose docx` takes it.)
+- [x] **G3. `--labels_file`, the settings file, `--config`**: all three.
+      `~/.chgksuite/settings.toml` supplies flag defaults from its
+      `[default_overrides]` and the settings that are not flags from its top
+      level (`stop_if_no_stats`); `--config` is a JSON of flag values applied
+      after parsing, so it beats the command line, which is chgksuite's own
+      order. Checked against the Python CLI: the same settings file gives the
+      same .docx.
+      `--labels_file` diverges deliberately, because upstream it does nothing:
+      chgksuite overwrites it from `--language` on the way in, and `--language
+      custom`, the value it was meant to pair with, has no set to load and
+      crashes. Here the file wins, and `custom` is not offered.
 - [ ] **G4. A Go CLI**: `cmd/chgksuite` runs `parse` (chgk, brain, СИ, троика,
       .docx and .txt, with the knobs of D5), `compose docx` with every switch of
       E1–E3, and `compose telegram`. Every other command is still Python-only;

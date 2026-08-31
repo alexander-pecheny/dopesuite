@@ -21,6 +21,9 @@ type Options struct {
 	// Language is --language: which labels_*.toml the headings come from.
 	// Empty is Russian.
 	Language string
+	// LabelsFile is --labels_file: a labels TOML of one's own, in place of the
+	// language's.
+	LabelsFile string
 }
 
 // Spoilers says how the answers are hidden from a reader of the printout.

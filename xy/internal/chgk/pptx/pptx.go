@@ -36,6 +36,9 @@ type Options struct {
 	Language string
 	// NoBreak is --replace_no_break_spaces / --replace_no_break_hyphens.
 	NoBreak inline.NoBreak
+	// LabelsFile is --labels_file: a labels TOML of one's own, in place of the
+	// language's.
+	LabelsFile string
 	// OptimizeSize is --optimize_size: re-encode the pictures once the deck is
 	// built. On by default in chgksuite, and the difference between a 30 MB
 	// presentation and a few megabytes.
@@ -61,7 +64,7 @@ func Export(doc fsource.Doc, images map[string][]byte, o Options) ([]byte, error
 		return nil, err
 	}
 	e := &exporter{
-		pkg: p, cfg: cfg, opts: o, images: images, labels: i18n.LabelsOrDefault(o.Language),
+		pkg: p, cfg: cfg, opts: o, images: images, labels: i18n.LabelsForOrDefault(o.Language, o.LabelsFile),
 		faces: FindFontFaces(cfg.fontName(), o.FontDirs),
 	}
 	if err := e.resolveLayouts(); err != nil {

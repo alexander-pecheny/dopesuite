@@ -14,19 +14,23 @@ func composePptx(args []string) error {
 	fs := flag.NewFlagSet("compose pptx", flag.ContinueOnError)
 	configPath := fs.String("pptx_config", "", "a pptx_config.toml of your own; empty is the one chgksuite ships")
 	template := fs.String("template", "", "a .pptx to build on; empty is chgksuite's own")
-	fontDir := fs.String("font_dir", "", "an extra directory to look for the measurement font in")
+	fontDir := fs.String("font_dir", override("font_dir", ""), "an extra directory to look for the measurement font in")
 	disableNumbers := fs.Bool("disable_numbers", false, "no question number in the corner")
 	noAccents := fs.Bool("do_not_remove_accents", false, "keep the stress marks")
 	language := languageFlag(fs)
-	optimizeSize := fs.String("optimize_size", "on", "re-encode the pictures to shrink the file: on|off")
-	addTS := fs.String("add_ts", "off", "append a timestamp to the output filename: on|off")
+	optimizeSize := fs.String("optimize_size", override("optimize_size", "on"), "re-encode the pictures to shrink the file: on|off")
+	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
 	merge := fs.Bool("merge", false, "export the input files as one package")
 	noBreak := noBreakFlags(fs)
+	config := configFlag(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := applyConfig(fs, *config); err != nil {
+		return err
+	}
 
-	lang, err := language()
+	lang, labelsFile, err := language()
 	if err != nil {
 		return err
 	}
@@ -34,6 +38,7 @@ func composePptx(args []string) error {
 		DisableNumbers:     *disableNumbers,
 		DoNotRemoveAccents: *noAccents,
 		Language:           lang,
+		LabelsFile:         labelsFile,
 		OptimizeSize:       *optimizeSize != "off",
 		NoBreak:            noBreak(),
 	}

@@ -55,6 +55,9 @@ type Options struct {
 	Language string
 	// NoBreak is --replace_no_break_spaces / --replace_no_break_hyphens.
 	NoBreak inline.NoBreak
+	// LabelsFile is --labels_file: a labels TOML of one's own, in place of the
+	// language's.
+	LabelsFile string
 }
 
 func (o Options) resolve() Options {

@@ -104,7 +104,7 @@ type exporter struct {
 func newExporter(images map[string][]byte, o Options) *exporter {
 	o = o.resolve()
 	return &exporter{images: images, used: map[string][]byte{}, opts: o, cfg: o.Config,
-		device: o.Device, labels: i18n.LabelsOrDefault(o.Language)}
+		device: o.Device, labels: i18n.LabelsForOrDefault(o.Language, o.LabelsFile)}
 }
 
 // preamble is template.docx's page setup, in typst.

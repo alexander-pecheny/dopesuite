@@ -40,24 +40,28 @@ func compose(args []string) error {
 
 func composeDocx(args []string) error {
 	fs := flag.NewFlagSet("compose docx", flag.ContinueOnError)
-	spoilers := fs.String("spoilers", "off", "hide answers: off|whiten|pagebreak|dots")
-	screenMode := fs.String("screen_mode", "off", "export for screen: off|replace_all|add_versions|add_versions_columns")
+	spoilers := fs.String("spoilers", override("spoilers", "off"), "hide answers: off|whiten|pagebreak|dots")
+	screenMode := fs.String("screen_mode", override("screen_mode", "off"), "export for screen: off|replace_all|add_versions|add_versions_columns")
 	noAnswers := fs.Bool("noanswers", false, "do not print answers")
 	noParagraph := fs.Bool("noparagraph", false, `no line break after "Вопрос N."`)
 	onlyNumber := fs.Bool("only_question_number", false, `label questions "N." instead of "Вопрос N."`)
-	smallerSource := fs.String("smaller_source_and_author", "on", "set source and author 2pt below the body: on|off")
+	smallerSource := fs.String("smaller_source_and_author", override("smaller_source_and_author", "on"), "set source and author 2pt below the body: on|off")
 	randomize := fs.Bool("randomize", false, "shuffle the questions")
-	addTS := fs.String("add_ts", "off", "append a timestamp to the output filename: on|off")
+	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
 	merge := fs.Bool("merge", false, "export the input files as one package")
-	optimizeSize := fs.String("optimize_size", "on", "re-encode the pictures to shrink the file: on|off")
+	optimizeSize := fs.String("optimize_size", override("optimize_size", "on"), "re-encode the pictures to shrink the file: on|off")
 	language := languageFlag(fs)
 	// Declared and not read, as in chgksuite: the .docx export calls the
 	// no-break pass through its standalone wrapper, which ignores the switches.
 	noBreakFlags(fs)
+	config := configFlag(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	lang, err := language()
+	if err := applyConfig(fs, *config); err != nil {
+		return err
+	}
+	lang, labelsFile, err := language()
 	if err != nil {
 		return err
 	}
@@ -70,6 +74,7 @@ func composeDocx(args []string) error {
 		SameSourceAndAuthorSize: *smallerSource == "off",
 		OptimizeSize:            *optimizeSize != "off",
 		Language:                lang,
+		LabelsFile:              labelsFile,
 	})
 	if err != nil {
 		return err
@@ -159,22 +164,23 @@ func gameOf(name string) string {
 
 // languageFlag declares --language, which every compose subcommand takes, and
 // checks it against the sets i18n carries.
-func languageFlag(fs *flag.FlagSet) func() (string, error) {
-	lang := fs.String("language", i18n.DefaultLanguage,
+func languageFlag(fs *flag.FlagSet) func() (string, string, error) {
+	lang := fs.String("language", override("language", i18n.DefaultLanguage),
 		"which labels the export prints: "+strings.Join(i18n.Languages(), ", "))
-	return func() (string, error) {
+	file := fs.String("labels_file", "", "a labels TOML of your own, in place of the language's")
+	return func() (string, string, error) {
 		if !i18n.Known(*lang) {
-			return "", fmt.Errorf("--language: %q is not one of %s", *lang, strings.Join(i18n.Languages(), ", "))
+			return "", "", fmt.Errorf("--language: %q is not one of %s", *lang, strings.Join(i18n.Languages(), ", "))
 		}
-		return *lang, nil
+		return *lang, *file, nil
 	}
 }
 
 // noBreakFlags declares --replace_no_break_spaces and --replace_no_break_hyphens,
 // which every compose subcommand takes, and reads them once it has parsed.
 func noBreakFlags(fs *flag.FlagSet) func() inline.NoBreak {
-	spaces := fs.String("replace_no_break_spaces", "on", "glue short words to what follows with a non-breaking space: on|off")
-	hyphens := fs.String("replace_no_break_hyphens", "on", "make the hyphen of а short word non-breaking: on|off")
+	spaces := fs.String("replace_no_break_spaces", override("replace_no_break_spaces", "on"), "glue short words to what follows with a non-breaking space: on|off")
+	hyphens := fs.String("replace_no_break_hyphens", override("replace_no_break_hyphens", "on"), "make the hyphen of а short word non-breaking: on|off")
 	return func() inline.NoBreak {
 		return inline.NoBreak{NoSpaces: *spaces == "off", NoHyphens: *hyphens == "off"}
 	}

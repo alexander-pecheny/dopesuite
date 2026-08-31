@@ -44,12 +44,12 @@ type regexSet struct {
 	handoutBefore *regexp.Regexp
 }
 
-func newRegexSet(language string) (*regexSet, error) {
+func newRegexSet(language, labelsFile string) (*regexSet, error) {
 	rx, err := i18n.LoadRegexes(language)
 	if err != nil {
 		return nil, err
 	}
-	labels, err := i18n.LoadLabels(language)
+	labels, err := i18n.LabelsFor(language, labelsFile)
 	if err != nil {
 		return nil, err
 	}
@@ -72,11 +72,11 @@ func (s *regexSet) field(name string) *regexp.Regexp { return s.Get(name) }
 // mustRegexSet is newRegexSet for a language the command has already checked
 // against i18n.Known; an unknown one falls back to the default set rather than
 // leaving the parser with no markers at all.
-func mustRegexSet(language string) *regexSet {
-	if s, err := newRegexSet(language); err == nil {
+func mustRegexSet(language, labelsFile string) *regexSet {
+	if s, err := newRegexSet(language, labelsFile); err == nil {
 		return s
 	}
-	s, err := newRegexSet(i18n.DefaultLanguage)
+	s, err := newRegexSet(i18n.DefaultLanguage, "")
 	if err != nil {
 		panic(err)
 	}

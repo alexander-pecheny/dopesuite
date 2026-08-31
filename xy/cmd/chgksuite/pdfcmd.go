@@ -19,27 +19,32 @@ func composePDF(args []string) error {
 	fs := flag.NewFlagSet("compose pdf", flag.ContinueOnError)
 	device := fs.String("device", "desktop", "page size: desktop (A4) or mobile (phone-screen-sized)")
 	configPath := fs.String("pdf_config", "", "a typography config of your own; empty is the one chgksuite ships")
-	font := fs.String("font", "", "font family; empty is the bundled Noto Sans")
+	font := fs.String("font", override("font", override("font_face", "")), "font family; empty is the bundled Noto Sans")
 	language := languageFlag(fs)
 	rawTypst := fs.Bool("rawtypst", false, "write the typst source beside the PDF")
-	addTS := fs.String("add_ts", "off", "append a timestamp to the output filename: on|off")
+	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
 	merge := fs.Bool("merge", false, "export the input files as one package")
 	noBreak := noBreakFlags(fs)
+	config := configFlag(fs)
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := applyConfig(fs, *config); err != nil {
 		return err
 	}
 	if *device != "desktop" && *device != "mobile" {
 		return fmt.Errorf("--device: %q is not desktop or mobile", *device)
 	}
-	lang, err := language()
+	lang, labelsFile, err := language()
 	if err != nil {
 		return err
 	}
 	opts := typstdoc.Options{
-		Device:   typstdoc.Device(*device),
-		Font:     *font,
-		Language: lang,
-		NoBreak:  noBreak(),
+		Device:     typstdoc.Device(*device),
+		Font:       *font,
+		Language:   lang,
+		LabelsFile: labelsFile,
+		NoBreak:    noBreak(),
 	}
 	if *configPath != "" {
 		raw, err := os.ReadFile(*configPath)
