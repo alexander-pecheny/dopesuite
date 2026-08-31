@@ -4,8 +4,6 @@ import (
 	"context"
 	"log"
 	"strings"
-
-	"pecheny.me/dopecore/tgbridge"
 )
 
 // The login conversation both bots hold. A pasted code, or the code a /start
@@ -95,6 +93,22 @@ func commandArg(text string) string {
 	return parts[1]
 }
 
+// From is who sent the message, as the registrar needs them.
+type From struct {
+	UserID   int64
+	Username string
+	Name     string
+}
+
+// Registrar is where the conversation gets its answers: the app server. Both
+// methods return the text to echo to the user. It is an interface because the
+// server can be across a loopback HTTP hop (Bridge) or in the same process,
+// and the conversation is the same either way.
+type Registrar interface {
+	Register(ctx context.Context, code string, from From) (string, error)
+	Login(ctx context.Context, from From) (string, error)
+}
+
 // Texts is what the app itself says in the conversation; every other reply
 // comes from its server.
 type Texts struct {
@@ -102,37 +116,39 @@ type Texts struct {
 	Down string // the server could not be reached, or answered nothing
 }
 
-// LoginHandler is the bot's Handler for the conversation over bridge.
-func LoginHandler(bridge *Bridge, texts Texts) Handler {
+// LoginHandler is the bot's Handler for the conversation with reg.
+func LoginHandler(reg Registrar, texts Texts) Handler {
 	return func(ctx context.Context, c *Client, u Update) {
 		act := Classify(u.Message.Text)
 		if act.Kind == IntentIgnore {
 			return
 		}
-		from := u.Message.From
-		reply := texts.Help
+		from := From{UserID: u.Message.From.ID, Username: u.Message.From.Username, Name: u.Message.From.DisplayName()}
+		var msg string
+		var err error
 		switch act.Kind {
 		case IntentLogin:
-			reply = call(ctx, bridge, "/api/telegram/login", tgbridge.LoginRequest{
-				TelegramUserID: from.ID, TelegramUsername: from.Username, TelegramName: from.DisplayName(),
-			}, texts.Down)
+			msg, err = reg.Login(ctx, from)
 		case IntentRegister:
-			reply = call(ctx, bridge, "/api/telegram/register", tgbridge.RegisterRequest{
-				Code: act.Code, TelegramUserID: from.ID, TelegramUsername: from.Username, TelegramName: from.DisplayName(),
-			}, texts.Down)
+			msg, err = reg.Register(ctx, act.Code, from)
+		default:
+			c.Send(ctx, u.Message.Chat.ID, texts.Help)
+			return
 		}
-		c.Send(ctx, u.Message.Chat.ID, reply)
+		c.Send(ctx, u.Message.Chat.ID, say(msg, err, texts.Down))
 	}
 }
 
-func call(ctx context.Context, bridge *Bridge, path string, payload any, down string) string {
-	msg, err := bridge.Call(ctx, path, payload)
+// say turns a registrar answer into something to send: its text, or the app's
+// down text when there was none. A registrar that errs has already lost the
+// user's code, so the only thing left is to say so.
+func say(msg string, err error, down string) string {
 	if err != nil {
-		log.Print(err)
+		log.Printf("registrar: %v", err)
 		return down
 	}
 	if msg == "" {
-		log.Printf("bridge %s: empty message", path)
+		log.Print("registrar: empty message")
 		return down
 	}
 	return msg

@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"pecheny.me/dopecore/tgbridge"
 )
 
 const defaultAPIBase = "https://api.telegram.org"
@@ -306,6 +308,20 @@ func NewBridge(serverURL, secret string, hc *http.Client) *Bridge {
 }
 
 func (b *Bridge) ServerURL() string { return b.serverURL }
+
+// Register and Login make a Bridge a Registrar: the conversation over loopback
+// HTTP, for a bot that is its own process.
+func (b *Bridge) Register(ctx context.Context, code string, from From) (string, error) {
+	return b.Call(ctx, "/api/telegram/register", tgbridge.RegisterRequest{
+		Code: code, TelegramUserID: from.UserID, TelegramUsername: from.Username, TelegramName: from.Name,
+	})
+}
+
+func (b *Bridge) Login(ctx context.Context, from From) (string, error) {
+	return b.Call(ctx, "/api/telegram/login", tgbridge.LoginRequest{
+		TelegramUserID: from.UserID, TelegramUsername: from.Username, TelegramName: from.Name,
+	})
+}
 
 // Call POSTs payload to a shared-secret endpoint and returns the server's
 // user-facing "message" field. Anything other than a 200 with parseable JSON is
