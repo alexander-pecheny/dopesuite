@@ -13,7 +13,7 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 | Go | Python | State |
 |---|---|---|
 | `fsource/` | `composer/chgksuite_parser.py` (parse_4s), `common.compose_4s` | done, oracle-tested |
-| `typo/` | `typotools.py` | on/off modes done; smart/light not |
+| `typo/` | `typotools.py` | done, every mode |
 | `inline/` | `composer/composer_common.py` (`_parse_4s_elem`, `parseimg`, nbsp) | done |
 | `docxread/` | `parsing_engine.py` (python_docx engine) | done (that engine only) |
 | `textparse/` | `parser.py` (ChgkParser, SiParser, TroikaParser) | chgk, si, troika |
@@ -185,14 +185,14 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       .docx/.4s/.zip only: that is a wiring decision, not a missing port.
 - [x] **D5. parse knobs**: `--defaultauthor`, `--tour_numbers_as_words`,
       `--links`, `--no_image_prefix`, `--numbers_handling none`, `--encoding`,
-      `--preserve_formatting`, `--single_number_line_handling`, `--add_ts`, all
-      checked against the Python CLI's output.
+      `--preserve_formatting`, `--single_number_line_handling`, `--add_ts`,
+      `--typography_*` (G2), all checked against the Python CLI's output.
       Left out: `--download_images` (fetches remote pictures into local files;
       a convenience, and the only knob that touches the network) and
       `--fix_spans`, which belongs to the docx engines of D6. The typography
-      knobs a parse also takes — `--typography_dashes|whitespace|percent`,
-      `--replace_no_break_spaces`, `--replace_no_break_hyphens` — are G2 with
-      the quotes and accents: the pass is one, so its switches go in together.
+      `--replace_no_break_spaces` and `--replace_no_break_hyphens`, which the
+      parse subparser declares and nothing there reads — they belong to
+      compose, and go in with E5.
 - [ ] **D6. alternative docx engines** [cli]: `pypandoc`, `mammoth`. Deliberate
       non-goal: they exist because `python_docx` was once insufficient, and they
       need external binaries.
@@ -244,10 +244,16 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 - [ ] **G1. i18n** [both]: 10 label sets (`labels_*.toml`) and 10 regex sets
       (`regexes_*.json`). Go hardcodes Russian labels in `docx/` and `typstdoc/`
       and Russian regexes in `textparse/`.
-- [ ] **G2. typography smart/light modes** [both]: `typo.Options` is
-      boolean-only; `--typography_quotes smart`, `--typography_accents
-      smart|light` are not ported. The СИ parser's own "a package that already
-      has « » gets no quote pass" rides on this.
+- [x] **G2. typography smart/light modes**: `typo.Mode` — off/on/smart for
+      quotes, and off/on/light/smart for accents — with `Options.Resolve`, the
+      decision every parser makes once per package: text that already types its
+      own « » or its own stress marks keeps them. The smart modes' second half
+      is the bad-quote repair, reproduced including chgksuite's own slip (the
+      Latin-single-quote loop asks a Cyrillic regex whether to go round again,
+      so only the first pair is fixed). `parse` takes all five switches;
+      seventeen runs over two packages match the Python CLI byte for byte.
+      `--typography_percent off` still decodes, because chgksuite tests that
+      switch for truth rather than for "on".
 - [ ] **G3. `--labels_file`, the settings file, `--config`** [cli]: the CLI's
       config plumbing. (`--add_ts` is done: `compose docx` takes it.)
 - [ ] **G4. A Go CLI**: `cmd/chgksuite` runs `parse` (chgk, brain, СИ, троика,

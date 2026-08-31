@@ -17,14 +17,12 @@ import (
 // markers. This port keeps the two in one parser with a mode flag, because the
 // overrides are interleaved: троика's line handling falls through to СИ's.
 
-// ParseSI reads a Своя игра package. Options is taken for symmetry with Parse
-// and read for nothing yet: none of ЧГК's knobs mean anything to these two, and
-// the typography modes they do vary (smart quotes, smart accents) are not
-// ported here or there.
-func ParseSI(text string) fsource.Doc { return newSI(false).parse(text) }
+// ParseSI reads a Своя игра package. None of ЧГК's own knobs mean anything to
+// these two, so they take the typography modes and nothing else.
+func ParseSI(text string, o typo.Options) fsource.Doc { return newSI(false, o).parse(text) }
 
 // ParseTroika reads a троика package.
-func ParseTroika(text string) fsource.Doc { return newSI(true).parse(text) }
+func ParseTroika(text string, o typo.Options) fsource.Doc { return newSI(true, o).parse(text) }
 
 // element is one [type, value] pair on the way to a document.
 type element struct {
@@ -53,11 +51,13 @@ type siParser struct {
 	multiforaMode  bool
 }
 
-func newSI(troika bool) *siParser {
-	return &siParser{troika: troika, typo: typo.DefaultOptions()}
+func newSI(troika bool, o typo.Options) *siParser {
+	return &siParser{troika: troika, typo: o}
 }
 
 func (p *siParser) parse(text string) fsource.Doc {
+	// The smart modes look at the package once, before any of it is typographed.
+	p.typo = p.typo.Resolve(text)
 	p.multiforaMode = p.troika && reTroikaMultiforaDetect.MatchString(text)
 	for _, line := range splitLines(text) {
 		p.handleLine(line)

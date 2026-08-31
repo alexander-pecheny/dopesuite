@@ -32,6 +32,11 @@ func parseCmd(args []string) error {
 	linksOld := fs.String("links", "unwrap", "hyperlinks: unwrap (text, then the URL) or old (the URL alone)")
 	noImagePrefix := fs.Bool("no_image_prefix", false, "name extracted images without the file's name in front")
 	addTS := fs.String("add_ts", "off", "append a timestamp to the output filename: on|off")
+	quotes := fs.String("typography_quotes", "on", "quotes: on, off or smart (a package that already types « » is left alone)")
+	accents := fs.String("typography_accents", "on", "stress marks: on, off, light (homoglyphs only) or smart")
+	dashes := fs.String("typography_dashes", "on", "dashes: on|off")
+	whitespace := fs.String("typography_whitespace", "on", "trim and collapse whitespace: on|off")
+	percent := fs.String("typography_percent", "on", "decode %-escapes; chgksuite reads this switch and decodes either way")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -48,6 +53,11 @@ func parseCmd(args []string) error {
 		{"tour_numbers_as_words", *tourNumbersAsWords, []string{"on", "off"}},
 		{"links", *linksOld, []string{"unwrap", "old"}},
 		{"add_ts", *addTS, []string{"on", "off"}},
+		{"typography_quotes", *quotes, []string{"on", "off", "smart"}},
+		{"typography_accents", *accents, []string{"on", "off", "light", "smart"}},
+		{"typography_dashes", *dashes, []string{"on", "off"}},
+		{"typography_whitespace", *whitespace, []string{"on", "off"}},
+		{"typography_percent", *percent, []string{"on", "off"}},
 	} {
 		if !slices.Contains(c.allowed, c.value) {
 			return fmt.Errorf("--%s: %q is not one of %s", c.name, c.value, strings.Join(c.allowed, ", "))
@@ -65,6 +75,15 @@ func parseCmd(args []string) error {
 			linksOld:           *linksOld == "old",
 			noImagePrefix:      *noImagePrefix,
 			addTS:              *addTS == "on",
+			typo: typo.Options{
+				Whitespace: *whitespace == "on",
+				Quotes:     typo.Mode(*quotes),
+				Dashes:     *dashes == "on",
+				Accents:    typo.Mode(*accents),
+				// chgksuite tests the switch for truth, not for "on", so it
+				// decodes whatever the flag says. Same here.
+				Percent: true,
+			},
 		})
 		if err != nil {
 			return fmt.Errorf("%s: %w", in, err)
@@ -78,6 +97,7 @@ type parseArgs struct {
 	game, encoding, defaultAuthor, numbers, singleNumberLines string
 	preserveFormatting, tourNumbersAsWords, linksOld          bool
 	noImagePrefix, addTS                                      bool
+	typo                                                      typo.Options
 }
 
 // parseFile reads one package and writes its 4s beside it, returning the name.
@@ -145,9 +165,9 @@ func readSource(in, game string, a parseArgs) (string, []docxread.Image, error) 
 func parseText(text, game, in string, a parseArgs) (fsource.Doc, error) {
 	switch game {
 	case "si":
-		return textparse.ParseSI(text), nil
+		return textparse.ParseSI(text, a.typo), nil
 	case "troika":
-		return textparse.ParseTroika(text), nil
+		return textparse.ParseTroika(text, a.typo), nil
 	case "chgk", "brain":
 		if strings.EqualFold(filepath.Ext(in), ".txt") {
 			// chgk_parse_txt, in its order: db.chgk.info's own export is read as
@@ -161,6 +181,7 @@ func parseText(text, game, in string, a parseArgs) (fsource.Doc, error) {
 			SingleNumberLines:  a.singleNumberLines,
 			DefaultAuthor:      defaultAuthorFor(a.defaultAuthor, in),
 			TourNumbersAsWords: a.tourNumbersAsWords,
+			Typo:               a.typo,
 		}), nil
 	default:
 		return nil, fmt.Errorf("unknown game %q", game)

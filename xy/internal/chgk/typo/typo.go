@@ -466,38 +466,125 @@ func PercentDecode(s string) string {
 
 // ── the pass itself ─────────────────────────────────────────────────────────
 
+// Mode is one of the args.typography_* switches. "smart" looks at the package
+// before deciding: one that already types its own « » or its own stress marks
+// is left alone, which is what SmartDisable stands for. Light is accents only:
+// the Cyrillic/Latin homoglyph fix without the stress-mark detection.
+type Mode string
+
+const (
+	Off          Mode = "off"
+	On           Mode = "on"
+	Smart        Mode = "smart"
+	SmartDisable Mode = "smart_disable"
+	Light        Mode = "light"
+)
+
 // Options mirrors the args.typography_* switches. The zero value is all-off;
 // DefaultOptions is what chgksuite's DefaultArgs use.
 type Options struct {
 	Whitespace bool
-	Quotes     bool
+	Quotes     Mode
 	Dashes     bool
-	Accents    bool
+	Accents    Mode
 	Percent    bool
 }
 
 // DefaultOptions is chgksuite's DefaultArgs: every knob "on".
 func DefaultOptions() Options {
-	return Options{Whitespace: true, Quotes: true, Dashes: true, Accents: true, Percent: true}
+	return Options{Whitespace: true, Quotes: On, Dashes: true, Accents: On, Percent: true}
 }
 
-// Typography ports typotools.typography for the "on"/"off" modes.
+// Resolve is the decision the parsers make once per package: under "smart", a
+// text that already has « » keeps its quotes and one that already has stress
+// marks keeps them. An Options nobody filled in is the default one, as
+// chgksuite's own `quotes = quotes or "on"` makes it.
+func (o Options) Resolve(text string) Options {
+	if o == (Options{}) {
+		o = DefaultOptions()
+	}
+	if o.Quotes == Smart && (strings.Contains(text, "«") || strings.Contains(text, "»")) {
+		o.Quotes = SmartDisable
+	}
+	if o.Accents == Smart && strings.Contains(text, "\u0301") {
+		o.Accents = SmartDisable
+	}
+	return o
+}
+
+// Typography ports typotools.typography.
 func Typography(s string, o Options) string {
 	if o.Whitespace {
 		s = REW(s)
 	}
-	if o.Quotes {
+	if o.Quotes == On || o.Quotes == Smart {
 		s = GetQuotesRight(s)
+	}
+	if o.Quotes == On || strings.HasPrefix(string(o.Quotes), "smart") {
 		s = strings.ReplaceAll(s, "'s", "’s")
+	}
+	if strings.HasPrefix(string(o.Quotes), "smart") {
+		s = fixBadQuotes(s)
 	}
 	if o.Dashes {
 		s = GetDashesRight(s)
 	}
-	if o.Accents {
-		s = fixAccents(s, true)
+	if o.Accents != Off && o.Accents != "" {
+		s = fixAccents(s, o.Accents == On || o.Accents == Smart)
 	}
 	if o.Percent {
 		s = PercentDecode(s)
 	}
 	return s
+}
+
+var (
+	reBadCyrQuotes  = regexp.MustCompile(`“[а-яА-ЯЁё0-9,\.:!\? ]+?”`)
+	reBadLatQuotes  = regexp.MustCompile(`'[a-zA-Z0-9,\.:!\? ]+?'`)
+	reBadLatDQuotes = regexp.MustCompile(`"[a-zA-Z0-9,\.:!\? ]+?"`)
+)
+
+// fixBadQuotes is the smart modes' second half: pairs a package typed with the
+// wrong quote characters, guessing the nesting level from whichever kind it
+// already uses.
+//
+// The Latin-single-quote loop looks for a Cyrillic match to decide whether to
+// go round again — chgksuite's own slip, and by then there are none left, so
+// only the first pair is fixed. Kept as it is, or the two tools disagree.
+func fixBadQuotes(s string) string {
+	fixStart, fixEnd := "«", "»"
+	if strings.Contains(s, "«") {
+		fixStart, fixEnd = "„", "“"
+	}
+	for {
+		grp := reBadCyrQuotes.FindString(s)
+		if grp == "" {
+			break
+		}
+		s = strings.ReplaceAll(s, grp, fixStart+trimQuotes(grp)+fixEnd)
+	}
+	for {
+		grp := reBadLatQuotes.FindString(s)
+		if grp == "" {
+			break
+		}
+		s = strings.ReplaceAll(s, grp, "‘"+trimQuotes(grp)+"’")
+		if reBadCyrQuotes.FindString(s) == "" {
+			break
+		}
+	}
+	for {
+		grp := reBadLatDQuotes.FindString(s)
+		if grp == "" {
+			break
+		}
+		s = strings.ReplaceAll(s, grp, "“"+trimQuotes(grp)+"”")
+	}
+	return s
+}
+
+// trimQuotes drops the first and last character, as Python's grp[1:-1] does.
+func trimQuotes(grp string) string {
+	r := []rune(grp)
+	return string(r[1 : len(r)-1])
 }

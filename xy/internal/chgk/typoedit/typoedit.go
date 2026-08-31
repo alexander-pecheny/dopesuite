@@ -28,13 +28,13 @@ import (
 // opts: the typotools knobs the button promises. Percent-decoding turns the
 // escapes in a pasted Wikipedia URL back into the words they stand for, which is
 // what chgk sources are full of.
-var opts = typo.Options{Quotes: true, Dashes: true, Percent: true}
+var opts = typo.Options{Quotes: typo.On, Dashes: true, Percent: true}
 
 // accentOpts adds detect_accent: chgk marks stress by capitalising the vowel
 // («брАзер»), and this turns that into a real combining acute («бра́зер»). It is a
 // heuristic on capitalisation, so it is its own mode rather than part of the
 // default — see PassAccents.
-var accentOpts = typo.Options{Quotes: true, Dashes: true, Percent: true, Accents: true}
+var accentOpts = typo.Options{Quotes: typo.On, Dashes: true, Percent: true, Accents: typo.On}
 
 // Pass typographs 4s source, marker by marker. It is idempotent: the gluing
 // rules match plain spaces, so text that already carries the NBSPs is left alone.

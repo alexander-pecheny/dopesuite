@@ -79,12 +79,16 @@ type Options struct {
 	// TourNumbersAsWords is --tour_numbers_as_words: «Первый тур» rather than
 	// whatever the document called it.
 	TourNumbersAsWords bool
+	// Typo are the --typography_* switches. The zero value is every knob off,
+	// so a caller that wants chgksuite's defaults says so.
+	Typo typo.Options
 }
 
 // Parse ports ChgkParser.parse. text is the plain text of the package (from a
 // .txt file or from docxread.ToText).
 func Parse(text string, opts Options) fsource.Doc {
-	p := &parser{opts: typo.DefaultOptions(), now: time.Now()}
+	// The smart modes look at the package once, before any of it is typographed.
+	p := &parser{opts: opts.Typo.Resolve(text), now: time.Now()}
 	return p.parse(text, opts)
 }
 
