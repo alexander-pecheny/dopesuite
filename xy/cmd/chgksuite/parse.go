@@ -98,7 +98,7 @@ func parseCmd(args []string) error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", in, err)
 		}
-		fmt.Println("Output:", out)
+		reportOutput(out)
 	}
 	return nil
 }

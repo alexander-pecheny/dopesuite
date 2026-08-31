@@ -33,7 +33,8 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 | `stats/` | `composer/stats.py` + the results readers of `common.py` | done, oracle-tested |
 | `lj/` | `composer/lj.py` | rendering oracle-tested; the XML-RPC posting untried |
 | `textparse/db.go` | `parser_db.py` | done, canon-tested |
-| — | `board.py`, `board_config.py`, `xy_crypto.py` | not needed (xy serves `trello_compat.go`) |
+| `board/` | `board.py`, `board_config.py`, `xy_crypto.py` | done; the crypto is `internal/xycli`'s, parity-tested against crypto.ts |
+| `htmlshot/` | `handouter/html_handout.py` | done; a Chromium off the command line, not Playwright |
 | `cmd/chgksuite/` | `cli.py` | `parse`, `compose docx|pptx|telegram|markdown|redditmd|base|openquiz|add_stats` |
 | — | `chgksuite_qt/`, `chgksuite_tk/` | not needed (the GUIs stay in Python) |
 
@@ -277,10 +278,24 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       `handouts pack`. Same page counts as chgksuite on the same folder, and
       the merge is pdfcpu's rather than pypdf's. It renders in memory instead of
       shelling out to `hndt2pdf` per file, so it leaves no per-file PDFs behind.
-- [x] **F4. `create_html`**: byte-identical to chgksuite's scaffold.
-      `html2img` is NOT ported and is a deliberate non-goal: it drives a
-      headless Chromium through Playwright, and this binary has no browser and
-      no Python to install one with.
+- [x] **F4. `create_html` / `html2img`**: the scaffold is byte-identical to
+      chgksuite's. `html2img` is `internal/chgk/htmlshot`, and it drives a
+      Chromium the user already has — `--browser`, `$CHGKSUITE_BROWSER`, one of
+      the usual names on PATH, or the copy Playwright downloaded — through its
+      command line, rather than through Playwright and a Python runtime.
+      Chromium's CLI cannot return a measurement, and the layout has to be
+      measured before the page can be sized; so the probe copy carries a script
+      that writes the size into the DOM, and `--dump-dom` brings it back. The
+      arithmetic is Playwright's: 96 CSS px to the inch, the PDF printed at the
+      content's own width so the print engine does not shrink to fit, the PNG at
+      `--force-device-scale-factor`. Verified on a real Chromium: 66.7mm of body
+      gives a 66.72 × 54.02 mm PDF and a 504 × 408 PNG at scale 2.
+      Two things it does that chgksuite does not. `--user-data-dir` is not
+      passed, because Chromium given one explicitly keeps running after
+      `--dump-dom` has printed and the command hangs. And the sandbox is dropped
+      only on the retry, after the browser says it has none it can use (a distro
+      that forbids unprivileged user namespaces), with a line saying so —
+      chgksuite's own html2img cannot start on such a machine at all.
 - [x] **F5. image rotation**: `handout.ApplyRotation` turns the picture's bytes
       and hands typst the turned copy under a name of its own, where chgksuite
       writes a rotated temp file. Every renderer (`Render`, `SplitFit`,
@@ -330,13 +345,20 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       chgksuite overwrites it from `--language` on the way in, and `--language
       custom`, the value it was meant to pair with, has no set to load and
       crashes. Here the file wins, and `custom` is not offered.
-- [ ] **G4. A Go CLI**: `cmd/chgksuite` runs `parse` (chgk, brain, СИ, троика,
-      .docx and .txt, with the knobs of D5), `compose docx` with every switch of
-      E1–E3, and `compose telegram`. Every other command is still Python-only;
-      each ports as its feature does.
-- [ ] **G5. wasm measurement** [xy]: `typstwasm` cannot answer a `query`, so
-      F1 is inert under it. Needs a small export in `typst-wasm/` (the
-      introspector's position for a label) and a wasm rebuild.
+- [x] **G4. A Go CLI**: `cmd/chgksuite` runs every command chgksuite's own
+      does: `parse`, `compose docx|pdf|pptx|telegram|markdown|redditmd|base|
+      openquiz|lj|add_stats`, `handouts generate|run|split_fit|pack|create_html|
+      html2img` and `board token|download|upload` (`trello` is the old name for
+      the last), with the settings file, `--config` and `--merge` behind them.
+      Only `handouts install` is left out, and it has nothing to install: it
+      fetched the typst binary, which this either finds or carries.
+- [x] **G5. wasm measurement**: `typst-wasm` grew a `measure` export — it
+      queries the `<hndtinfo>` label the same source already carries and returns
+      the introspector's position for it — so the wasm pool satisfies
+      `handout.Measurer` and split_fit's image-shrink pass runs under the server
+      too, not only under the typst binary. `TestWasmMeasureMatchesCLI` is the
+      gate: the same source measured both ways, to a hundredth of a millimetre.
+      Needs `just build-wasm` (the artifact is not in git).
 
 ## Decisions (2026-08-31)
 
@@ -347,6 +369,34 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 - **No xy wiring.** Features land in `internal/chgk/*` and in a Go
   `chgksuite` CLI, and are checked against the Python CLI's output. What xy
   then exposes in its export modal is a separate decision, later.
+
+## How typst runs
+
+The server compiles typst as wasm and serves its files from memory, because a
+decrypted question must not reach a filesystem. The CLI does not need that — the
+package is a file on the user's own disk already — so `compose pdf` and every
+`handouts` subcommand render with the ordinary typst release: `--typst`, else
+`$CHGKSUITE_TYPST`, else `typst` on PATH. It starts in milliseconds rather than
+compiling 30 MB of wasm (`compose pdf` 0.10s against 1.5s), and it sees the
+machine's own fonts, which is what `--font` needs and what chgksuite does.
+typst's own warnings are passed through on that path (deduplicated — split_fit
+would repeat each one per probe), so a font nobody has stops being a silent
+substitution rather than an error.
+
+The wasm is behind a build tag, because embedding a second copy of an ordinary
+program costs 35 MB:
+
+| build | binary | stripped |
+|---|---|---|
+| `just chgksuite` (default) | 18.6 MB | **13.8 MB** |
+| `just chgksuite-wasm` (`-tags wasmtypst`) | 54.2 MB | 48.1 MB |
+
+wazero goes with it: 2151 of its symbols in the tagged binary, none in the
+default one. Without the tag and with no typst to be found, the command says so
+and names the three ways to fix it. The file carrying the tagged half is
+`typst_embedded.go` and not `typst_wasm.go` on purpose — Go reads a `_wasm`
+filename suffix as GOARCH=wasm, which builds it for nothing and leaves the tag
+looking broken.
 
 ## Parity notes
 

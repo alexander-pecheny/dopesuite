@@ -72,9 +72,15 @@ Russian-language UI.
 cmd/xy-server/         thin main() → server.Main(); also `xy-server invite [days]`
 cmd/uic/               compile one .dopeui page to HTML on stdout (xy overlay; debug/diff tool)
 cmd/xy-cli/            thin main() → xycli.Run(); `just cli` builds it to ~/.local/bin
-cmd/chgksuite/         the Go side of chgksuite's own CLI over internal/chgk (`parse`,
-                       `compose docx`, `compose telegram`), checked against the Python tool's
-                       output. Nothing in xy uses it; see ../chgksuite_go_rewrite.md
+cmd/chgksuite/         the Go side of chgksuite's own CLI over internal/chgk: `parse`,
+                       `compose docx|pdf|pptx|telegram|markdown|redditmd|base|openquiz|lj|add_stats`,
+                       `handouts generate|run|split_fit|pack|create_html`, checked against the
+                       Python tool's output. Renders with the typst BINARY (--typst /
+                       $CHGKSUITE_TYPST / PATH): a shell user's plaintext is already on their
+                       disk, and the binary starts in milliseconds. `just chgksuite` builds it
+                       at 14 MB and needs no Rust and no wasm; `just chgksuite-wasm` carries
+                       typst along (-tags wasmtypst, 49 MB) for a machine that has none.
+                       Nothing in xy uses it; see ../chgksuite_go_rewrite.md
 internal/xycli/        xy-cli: the board from the shell, for an agent. A second implementation
                        of the Envelope (scrypt KEK + AES-GCM, parity-tested both ways against
                        crypto.ts) and of the export's 4s assembly (parity corpus from export.ts),
@@ -205,7 +211,7 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
   dbtext/              `compose base`: the plain text db.chgk.info takes as a submission —
                        the other side of textparse/db.go. #DATE is read by a parser that
                        covers the shapes packages use, not by chgksuite's dateparser
-  openquiz/            `compose openquiz`: openquiz.me's JSON, one object per question
+  openquiz/            `compose openquiz`: open-quiz.com's JSON, one object per question
   imghost/             what those three need and the .docx/.pdf ones do not: a picture as
                        a URL. Imgur, sharing chgksuite's own ~/.chgksuite/image_cache.json
   chgkimport/          the import entry point: .docx/.4s/.zip → 4s source + its images.

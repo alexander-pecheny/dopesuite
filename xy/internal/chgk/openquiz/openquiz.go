@@ -1,4 +1,4 @@
-// Package openquiz is composer/openquiz.py: a package as the JSON openquiz.me
+// Package openquiz is composer/openquiz.py: a package as the JSON open-quiz.com
 // imports, one object per question.
 package openquiz
 

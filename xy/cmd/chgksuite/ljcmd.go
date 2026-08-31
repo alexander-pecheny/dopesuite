@@ -105,7 +105,7 @@ func writeLJ(groups [][]lj.Post, path string, addTS bool) error {
 		if err := os.WriteFile(out, []byte(b.String()), 0o644); err != nil {
 			return err
 		}
-		fmt.Println("Output:", out)
+		reportOutput(out)
 	}
 	return nil
 }
@@ -121,7 +121,7 @@ func publishLJ(client *lj.Client, groups [][]lj.Post, navigation bool) error {
 			return err
 		}
 		results[i] = res
-		fmt.Println("Posted:", res.URL)
+		reportOutput(res.URL)
 	}
 	if !navigation || len(groups) < 2 {
 		return nil

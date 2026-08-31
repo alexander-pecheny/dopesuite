@@ -119,11 +119,11 @@ func composeTelegram(args []string) error {
 		return err
 	}
 	req.Target = target
-	fmt.Printf("Posting to %s (comments in %s)\n", target.ChannelID, target.ChatID)
+	reportNote("публикую в %s, комментарии в %s", target.ChannelID, target.ChatID)
 	start := time.Now()
 	if err := tg.Export(ctx, poster, req); err != nil {
 		return err
 	}
-	fmt.Printf("Done in %s\n", time.Since(start).Round(time.Second))
+	reportDone("готово за %s", time.Since(start).Round(time.Second))
 	return nil
 }

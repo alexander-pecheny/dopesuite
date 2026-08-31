@@ -100,7 +100,7 @@ func composeDocx(args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println("Output:", out)
+		reportOutput(out)
 	}
 	return nil
 }

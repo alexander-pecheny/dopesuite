@@ -81,7 +81,7 @@ func composePptx(args []string) error {
 		if err := os.WriteFile(out, data, 0o644); err != nil {
 			return err
 		}
-		fmt.Println("Output:", out)
+		reportOutput(out)
 	}
 	return nil
 }

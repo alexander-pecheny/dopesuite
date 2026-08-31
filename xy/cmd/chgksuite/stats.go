@@ -50,7 +50,7 @@ func composeAddStats(args []string) error {
 				return fmt.Errorf("%s: %w", name, err)
 			}
 			for _, w := range warnings {
-				fmt.Fprintf(os.Stderr, "%s: %s\n", name, w)
+				warn("%s: %s", name, w)
 			}
 			results = append(results, r...)
 		}
@@ -71,7 +71,7 @@ func composeAddStats(args []string) error {
 		if err := os.WriteFile(out, []byte(fsource.Compose(s.doc, fsource.NumbersDefault)), 0o644); err != nil {
 			return err
 		}
-		fmt.Println("Output:", out)
+		reportOutput(out)
 	}
 	return nil
 }
