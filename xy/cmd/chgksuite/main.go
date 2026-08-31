@@ -15,6 +15,7 @@ func usage() {
 commands:
   parse [flags] <file.docx|file.txt>…   read a package into .4s
   compose docx [flags] <file.4s>…   render questions to .docx
+  compose pptx [flags] <file.4s>…   render questions to .pptx
   compose telegram [flags] <file.4s>  post questions to a telegram channel
   compose markdown|redditmd [flags] <file.4s>…   render to markdown
   compose base [flags] <file.4s>…   render to db.chgk.info's submission text

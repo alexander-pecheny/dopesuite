@@ -28,7 +28,8 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 | `tg/` | `composer/telegram.py` | rich messages, oracle-tested; the dead plain path is not ported |
 | `markdown/`, `dbtext/`, `openquiz/` | `composer/{markdown,db,openquiz}.py` | done, oracle-tested |
 | `imghost/` | `composer_common.Imgur` | done, cache shared with chgksuite |
-| — | `composer/{pptx,lj,stats}.py` | **not ported** |
+| `pptx/` | `composer/pptx.py` | done, oracle-tested |
+| — | `composer/{lj,stats}.py` | **not ported** |
 | `textparse/db.go` | `parser_db.py` | done, canon-tested |
 | — | `board.py`, `board_config.py`, `xy_crypto.py` | not needed (xy serves `trello_compat.go`) |
 | `cmd/chgksuite/` | `cli.py` | `parse`, `compose docx`, `compose telegram` |
@@ -68,11 +69,22 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 
 ### A. Export formats
 
-- [ ] **A1. pptx** [both]: `composer/pptx.py` (1724 lines), the single biggest
-      gap: slide layout, template cloning, service slides, font measurement and
-      shrink-to-fit, inline images, answer grids, `pptx_config.toml`. Needs an
-      OOXML pptx writer and a text-measurement path (the fonts are already
-      embedded for handouts).
+- [x] **A1. pptx**: `internal/chgk/pptx`. An OOXML pptx writer (the package,
+      its slides, its rels and content types, written as python-pptx writes
+      them), the slide builders (title, tour, question, handout, picture, plug,
+      answer grid, blitz, service slides), `pptx_config.toml` and the
+      shrink-to-fit pass. Byte-parity against chgksuite on five fixtures —
+      every slide of every one, `scripts/gen_pptx_oracles.py`.
+      ONE thing is approximate, and it is measurement. chgksuite measures text
+      with Pillow, which shapes through HarfBuzz where libraqm is installed and
+      falls back to whole-pixel advances where it is not — so chgksuite's own
+      layout is not reproducible across machines. This port matches Pillow's
+      advances exactly (unhinted, 1/64 px) and its line height exactly (read off
+      hhea and rounded once, which is what FreeType does and what x/image does
+      not), and differs only by HarfBuzz's GPOS kerning: under 1.4 px across a
+      line. It shows in one place — an inline picture's offset, which is
+      computed from measured text — and the parity test allows that one number
+      a pixel while everything else must match to the byte.
 - [x] **A2. markdown / redditmd**: `internal/chgk/markdown`. Both dialects,
       character-for-character against chgksuite (`scripts/gen_export_oracles.py`).
 - [x] **A3. base (db.chgk.info txt)**: `internal/chgk/dbtext`, the other side of

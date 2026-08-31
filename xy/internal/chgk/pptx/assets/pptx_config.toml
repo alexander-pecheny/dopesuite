@@ -1,0 +1,41 @@
+template_path = "template.pptx"
+template_version = 2
+disable_shrink_fit = false
+overlay_image_and_text = false
+format_links = true
+add_plug = true
+add_comment = true
+add_zachet = true
+
+[textbox]
+left = 0.8
+top = 0.8
+width = 10.5
+height = 6.1
+
+[number_textbox]
+left = 12
+top = 0.8
+width = 1
+height = 1
+
+[list]
+numbering_style = "1."
+blank_line_before_items = true
+
+[handout]
+include_label = false
+font_size = 42
+align = "left"
+space_after = 18
+text_space_after = 72
+image_scale = 1.3
+
+[font]
+name = "Arial"
+default_size = 32
+question_size = 32
+answer_size = 32
+number_size = 32
+title_size = 60
+tour_size = 42

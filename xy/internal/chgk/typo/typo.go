@@ -77,6 +77,10 @@ func httpURLSpans(s string) []span {
 	return out
 }
 
+// HasURL reports whether a string carries anything iter_url_spans calls a URL,
+// which is what lets the pptx wrapper break a long link mid-token.
+func HasURL(s string) bool { return len(urlSpans(s)) > 0 }
+
 // urlSpans ports iter_url_spans: the http scan merged with the reURL matches.
 func urlSpans(s string) []span {
 	spans := httpURLSpans(s)
