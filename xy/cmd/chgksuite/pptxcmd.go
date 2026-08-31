@@ -4,9 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 
-	"xy/internal/chgk/fsource"
 	"xy/internal/chgk/pptx"
 )
 
@@ -22,11 +20,9 @@ func composePptx(args []string) error {
 	language := fs.String("language", "ru", "the language runs are tagged with")
 	optimizeSize := fs.String("optimize_size", "on", "re-encode the pictures to shrink the file: on|off")
 	addTS := fs.String("add_ts", "off", "append a timestamp to the output filename: on|off")
+	merge := fs.Bool("merge", false, "export the input files as one package")
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-	if fs.NArg() == 0 {
-		return fmt.Errorf("no input file")
 	}
 
 	opts := pptx.Options{
@@ -55,21 +51,20 @@ func composePptx(args []string) error {
 		opts.Template = raw
 	}
 
-	for _, in := range fs.Args() {
-		src, err := os.ReadFile(in)
+	sources, err := loadSources(fs.Args(), *merge)
+	if err != nil {
+		return err
+	}
+	for _, s := range sources {
+		images, err := loadImages(s.doc, s.dir)
 		if err != nil {
 			return err
 		}
-		doc := fsource.Parse(string(src), gameOf(in))
-		images, err := loadImages(doc, filepath.Dir(in))
+		data, err := pptx.Export(s.doc, images, opts)
 		if err != nil {
 			return err
 		}
-		data, err := pptx.Export(doc, images, opts)
-		if err != nil {
-			return err
-		}
-		out := outputName(in, "pptx", "", *addTS == "on")
+		out := outputName(s.path, "pptx", "", *addTS == "on")
 		if err := os.WriteFile(out, data, 0o644); err != nil {
 			return err
 		}

@@ -4,10 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"xy/internal/chgk/dbtext"
-	"xy/internal/chgk/fsource"
 	"xy/internal/chgk/imghost"
 	"xy/internal/chgk/markdown"
 	"xy/internal/chgk/openquiz"
@@ -22,20 +20,18 @@ func composePublished(filetype string, args []string) error {
 	clientID := fs.String("imgur_client_id", "", "upload pictures as this imgur client instead of chgksuite's")
 	removeAccents := fs.Bool("remove_accents", false, "base only: a stressed vowel becomes a capital one")
 	addTS := fs.String("add_ts", "off", "append a timestamp to the output filename: on|off")
+	merge := fs.Bool("merge", false, "export the input files as one package")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if fs.NArg() == 0 {
-		return fmt.Errorf("no input file")
+	sources, err := loadSources(fs.Args(), *merge)
+	if err != nil {
+		return err
 	}
 	host := imghost.NewImgur(*clientID)
-	for _, in := range fs.Args() {
-		src, err := os.ReadFile(in)
-		if err != nil {
-			return err
-		}
-		doc := fsource.Parse(string(src), gameOf(in))
-		images, err := loadImages(doc, filepath.Dir(in))
+	for _, s := range sources {
+		doc := s.doc
+		images, err := loadImages(doc, s.dir)
 		if err != nil {
 			return err
 		}
@@ -61,7 +57,7 @@ func composePublished(filetype string, args []string) error {
 			}
 			ext = "json"
 		}
-		out := outputName(in, ext, "", *addTS == "on")
+		out := outputName(s.path, ext, "", *addTS == "on")
 		if err := os.WriteFile(out, data, 0o644); err != nil {
 			return err
 		}

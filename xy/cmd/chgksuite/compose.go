@@ -44,6 +44,7 @@ func composeDocx(args []string) error {
 	smallerSource := fs.String("smaller_source_and_author", "on", "set source and author 2pt below the body: on|off")
 	randomize := fs.Bool("randomize", false, "shuffle the questions")
 	addTS := fs.String("add_ts", "off", "append a timestamp to the output filename: on|off")
+	merge := fs.Bool("merge", false, "export the input files as one package")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -58,11 +59,12 @@ func composeDocx(args []string) error {
 	if err != nil {
 		return err
 	}
-	if fs.NArg() == 0 {
-		return fmt.Errorf("no input file")
+	sources, err := loadSources(fs.Args(), *merge)
+	if err != nil {
+		return err
 	}
-	for _, in := range fs.Args() {
-		out, err := composeDocxFile(in, opts, *randomize, *addTS == "on")
+	for _, s := range sources {
+		out, err := composeDocxFile(s, opts, *randomize, *addTS == "on")
 		if err != nil {
 			return err
 		}
@@ -85,24 +87,19 @@ func validDocxOptions(o docx.Options) (docx.Options, error) {
 	return o, nil
 }
 
-func composeDocxFile(in string, opts docx.Options, randomize, addTS bool) (string, error) {
-	src, err := os.ReadFile(in)
-	if err != nil {
-		return "", err
-	}
-	doc := fsource.Parse(string(src), gameOf(in))
+func composeDocxFile(s source, opts docx.Options, randomize, addTS bool) (string, error) {
 	if randomize {
-		fsource.Randomize(doc, rand.New(rand.NewSource(time.Now().UnixNano())))
+		fsource.Randomize(s.doc, rand.New(rand.NewSource(time.Now().UnixNano())))
 	}
-	images, err := loadImages(doc, filepath.Dir(in))
+	images, err := loadImages(s.doc, s.dir)
 	if err != nil {
 		return "", err
 	}
-	data, err := docx.Export(doc, images, opts)
+	data, err := docx.Export(s.doc, images, opts)
 	if err != nil {
 		return "", err
 	}
-	out := outputName(in, "docx", docxSuffix(opts), addTS)
+	out := outputName(s.path, "docx", docxSuffix(opts), addTS)
 	return out, os.WriteFile(out, data, 0o644)
 }
 
@@ -143,4 +140,76 @@ func gameOf(name string) string {
 	default:
 		return "chgk"
 	}
+}
+
+// source is one package to export: several files when --merge put them
+// together, in which case the output is named after all of them.
+type source struct {
+	doc  fsource.Doc
+	dir  string
+	path string
+}
+
+// loadSources reads the inputs a compose command was given. --merge parses them
+// all into one structure; without it each file is its own export.
+func loadSources(files []string, merge bool) ([]source, error) {
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no input file")
+	}
+	if !merge {
+		out := make([]source, 0, len(files))
+		for _, in := range files {
+			doc, err := parseSource(in)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, source{doc: doc, dir: filepath.Dir(in), path: in})
+		}
+		return out, nil
+	}
+	// chgksuite resolves every name against the first file's directory, and so
+	// the merged package's pictures all come from there too.
+	dir := filepath.Dir(files[0])
+	merged := source{dir: dir, path: filepath.Join(dir, mergedName(files)+filepath.Ext(files[0]))}
+	for _, in := range files {
+		doc, err := parseSource(filepath.Join(dir, filepath.Base(in)))
+		if err != nil {
+			return nil, err
+		}
+		merged.doc = append(merged.doc, doc...)
+	}
+	return []source{merged}, nil
+}
+
+func parseSource(in string) (fsource.Doc, error) {
+	src, err := os.ReadFile(in)
+	if err != nil {
+		return nil, err
+	}
+	return fsource.Parse(string(src), gameOf(in)), nil
+}
+
+// mergedName is make_merged_filename: the basenames' common prefix, then what
+// each of them has after it. Python compares characters, not bytes.
+func mergedName(files []string) string {
+	stems := make([][]rune, len(files))
+	for i, f := range files {
+		stems[i] = []rune(strings.TrimSuffix(filepath.Base(f), filepath.Ext(f)))
+	}
+	n := len(stems[0])
+	for _, s := range stems[1:] {
+		n = min(n, len(s))
+		for i := range n {
+			if s[i] != stems[0][i] {
+				n = i
+				break
+			}
+		}
+	}
+	name := string(stems[0][:n])
+	tails := make([]string, len(stems))
+	for i, s := range stems {
+		tails[i] = string(s[n:])
+	}
+	return name + strings.Join(tails, "_")
 }

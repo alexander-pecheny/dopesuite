@@ -218,7 +218,9 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       recompresses the pictures a finished .docx or .pptx embedded, which Go
       does at the other end instead (`imgconv.ForExport`, 200 dpi, q85), so the
       switch has no lever to pull yet.
-- [ ] **E6. merge several sources** [cli]: `compose --merge`.
+- [x] **E6. merge several sources**: `--merge` on every `compose` that takes
+      files, naming the output after the inputs' common prefix and each one's
+      tail, as make_merged_filename does. Byte-identical to chgksuite's.
 
 ### F. Handouts
 

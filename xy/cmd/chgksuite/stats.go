@@ -22,14 +22,12 @@ func composeAddStats(args []string) error {
 	questionRange := fs.String("question_range", "", `range of question numbers to include, e.g. "25-36"`)
 	threshold := fs.Int("team_naming_threshold", 2, "name the teams when this few took the question")
 	addTS := fs.String("add_ts", "off", "append a timestamp to the output filename: on|off")
+	merge := fs.Bool("merge", false, "read the input files as one package")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if (*ratingIDs == "") == (*customCSV == "") {
 		return fmt.Errorf("add_stats needs either --rating_ids or --custom_csv")
-	}
-	if fs.NArg() == 0 {
-		return fmt.Errorf("no input file")
 	}
 	delimiter, err := csvDelimiter(*csvArgs)
 	if err != nil {
@@ -57,17 +55,16 @@ func composeAddStats(args []string) error {
 	opts := stats.DefaultOptions()
 	opts.QuestionRange = *questionRange
 	opts.TeamNamingThreshold = *threshold
-	for _, in := range fs.Args() {
-		src, err := os.ReadFile(in)
-		if err != nil {
+	sources, err := loadSources(fs.Args(), *merge)
+	if err != nil {
+		return err
+	}
+	for _, s := range sources {
+		if err := stats.Add(s.doc, results, opts); err != nil {
 			return err
 		}
-		doc := fsource.Parse(string(src), gameOf(in))
-		if err := stats.Add(doc, results, opts); err != nil {
-			return err
-		}
-		out := outputName(in, "4s", "_with_stats", *addTS == "on")
-		if err := os.WriteFile(out, []byte(fsource.Compose(doc, fsource.NumbersDefault)), 0o644); err != nil {
+		out := outputName(s.path, "4s", "_with_stats", *addTS == "on")
+		if err := os.WriteFile(out, []byte(fsource.Compose(s.doc, fsource.NumbersDefault)), 0o644); err != nil {
 			return err
 		}
 		fmt.Println("Output:", out)
