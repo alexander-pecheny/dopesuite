@@ -42,13 +42,18 @@ def make_args(**over):
     return args
 
 
-def run(src, out_dir):
+def run(src, out_dir, config=None, template=None):
     with open(src, encoding="utf8") as f:
         structure = parse_4s(f.read(), game="chgk")
     targetdir = os.path.dirname(src)
+    over = {}
+    if config:
+        over["pptx_config"] = config
     exporter = PptxExporter(
-        structure, make_args(), {"targetdir": targetdir, "tmp_dir": targetdir}
+        structure, make_args(**over), {"targetdir": targetdir, "tmp_dir": targetdir}
     )
+    if template:
+        exporter.c["template_path"] = template
     pptx_path = out_dir + ".pptx"
     exporter.export(pptx_path)
 
@@ -70,7 +75,14 @@ def main():
             continue
         src = os.path.join(TESTDATA, name)
         out = os.path.join(TESTDATA, f"{name[:-3]}__pptx")
-        run(src, out)
+        # service.4s is the one fixture with a config and a template of its own:
+        # a real one, from a package whose deck is built almost entirely out of
+        # service slides. See the note in pptx_test.go.
+        config = template = None
+        if name == "service.4s":
+            config = os.path.join(TESTDATA, "service_config.toml")
+            template = os.path.join(TESTDATA, "service_template.pptx")
+        run(src, out, config=config, template=template)
         sys.stderr.write(f"wrote {out}\n")
 
 

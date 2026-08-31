@@ -152,9 +152,19 @@ func (e *exporter) titleSlide(title string, date *fsource.Pair) {
 		}
 		return
 	}
+	// Otherwise a slide of its own, carrying the title layout's placeholders.
 	s := e.pkg.addSlide(e.titleLayout)
-	s.edits = []*editedShape{{tf: titleFrame}, {tf: subtitleFrame, remove: subtitleFrame == nil}}
-	s.raw = []byte(e.pkg.parts[e.pkg.slides[0].name])
+	placeholders := e.pkg.clonePlaceholders(s, e.titleLayout)
+	if len(placeholders) > 0 {
+		placeholders[0].tf = titleFrame
+	}
+	if len(placeholders) > 1 {
+		if subtitleFrame != nil {
+			placeholders[1].tf = subtitleFrame
+		} else {
+			placeholders[1].dropped = true
+		}
+	}
 }
 
 // spreadTitleOverSlide is the half of format_title_slide that runs when there is
@@ -474,21 +484,22 @@ func (e *exporter) addNumberedTourStub() {
 // and links they refer to related to it too.
 func (e *exporter) cloneSlide(src *slidePart) *slidePart {
 	s := e.pkg.addSlide(src.layout)
-	s.raw = append([]byte(nil), src.raw...)
-	for _, r := range e.pkg.relations(relsPathOf(src.name)) {
+	remap := map[string]string{}
+	for _, r := range src.rels {
 		if r.relType == relLayout {
 			continue
 		}
-		s.addRel(r.relType, r.target, r.external)
+		remap[r.id] = s.addRel(r.relType, r.target, r.external)
 	}
+	raw := string(src.raw)
+	s.clonedBG = slideBackground(raw)
+	s.clonedShapes = remapRelIDs(spTreeShapes(raw), remap)
 	return s
 }
 
 func (e *exporter) removeServiceSlideTemplates() {
 	for _, i := range e.serviceIndicesToRemove {
-		if i < len(e.pkg.slides) {
-			e.pkg.slides = append(e.pkg.slides[:i], e.pkg.slides[i+1:]...)
-		}
+		e.pkg.removeSlide(i)
 	}
 }
 

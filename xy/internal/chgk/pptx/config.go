@@ -17,17 +17,19 @@ type Config struct {
 func DefaultConfig() (*Config, error) { return ParseConfig(defaultConfigTOML) }
 
 // ParseConfig reads pptx_config.toml. It is a TOML subset — tables, strings,
-// numbers, booleans and arrays, which is every shape the config comes in — and
-// it refuses what it does not understand rather than half-reading it.
+// numbers, booleans, arrays (which may run over several lines) and the inline
+// tables a size grid is written as — and it refuses what it does not understand
+// rather than half-reading it.
 func ParseConfig(src string) (*Config, error) {
 	c := &Config{values: map[string]any{}}
 	table := c.values
-	for n, line := range strings.Split(src, "\n") {
-		line = strings.TrimSpace(stripTOMLComment(line))
+	lines := strings.Split(src, "\n")
+	for n := 0; n < len(lines); n++ {
+		line := strings.TrimSpace(stripTOMLComment(lines[n]))
 		if line == "" {
 			continue
 		}
-		if strings.HasPrefix(line, "[") {
+		if strings.HasPrefix(line, "[") && !strings.Contains(line, "=") {
 			name := strings.Trim(line, "[]")
 			if name == "" || strings.ContainsAny(name, "[]") {
 				return nil, fmt.Errorf("line %d: %q is not a table header", n+1, line)
@@ -41,13 +43,41 @@ func ParseConfig(src string) (*Config, error) {
 		if !ok {
 			return nil, fmt.Errorf("line %d: %q is neither a table nor a key", n+1, line)
 		}
+		// A value whose brackets do not close on this line runs on to the next.
+		start := n
+		value = strings.TrimSpace(value)
+		for unbalanced(value) {
+			n++
+			if n >= len(lines) {
+				return nil, fmt.Errorf("line %d: the value is never closed", start+1)
+			}
+			value += " " + strings.TrimSpace(stripTOMLComment(lines[n]))
+		}
 		v, err := parseTOMLValue(strings.TrimSpace(value))
 		if err != nil {
-			return nil, fmt.Errorf("line %d: %w", n+1, err)
+			return nil, fmt.Errorf("line %d: %w", start+1, err)
 		}
 		table[strings.TrimSpace(key)] = v
 	}
 	return c, nil
+}
+
+// unbalanced reports whether a value has brackets still open, ignoring any
+// inside a string.
+func unbalanced(s string) bool {
+	depth, inQuotes := 0, false
+	for _, r := range s {
+		switch {
+		case r == '"':
+			inQuotes = !inQuotes
+		case inQuotes:
+		case r == '[' || r == '{':
+			depth++
+		case r == ']' || r == '}':
+			depth--
+		}
+	}
+	return depth > 0
 }
 
 // stripTOMLComment drops a trailing # comment that is not inside a string.
@@ -77,6 +107,8 @@ func parseTOMLValue(s string) (any, error) {
 		return strconv.Unquote(s)
 	case strings.HasPrefix(s, "["):
 		return parseTOMLArray(s)
+	case strings.HasPrefix(s, "{"):
+		return parseInlineTable(s)
 	}
 	if n, err := strconv.ParseInt(s, 10, 64); err == nil {
 		return float64(n), nil
@@ -95,11 +127,38 @@ func parseTOMLArray(s string) (any, error) {
 	}
 	var out []any
 	for _, part := range splitTOMLItems(inner) {
-		v, err := parseTOMLValue(strings.TrimSpace(part))
+		part = strings.TrimSpace(part)
+		// A trailing comma leaves an empty last item, which TOML allows.
+		if part == "" {
+			continue
+		}
+		v, err := parseTOMLValue(part)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, v)
+	}
+	return out, nil
+}
+
+// parseInlineTable reads a {k = v, k = v}, which is how one band of a size grid
+// is written.
+func parseInlineTable(s string) (any, error) {
+	inner := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(s, "{"), "}"))
+	out := map[string]any{}
+	if inner == "" {
+		return out, nil
+	}
+	for _, part := range splitTOMLItems(inner) {
+		key, value, ok := strings.Cut(part, "=")
+		if !ok {
+			return nil, fmt.Errorf("%q is not a key in an inline table", strings.TrimSpace(part))
+		}
+		v, err := parseTOMLValue(strings.TrimSpace(value))
+		if err != nil {
+			return nil, err
+		}
+		out[strings.TrimSpace(key)] = v
 	}
 	return out, nil
 }

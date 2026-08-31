@@ -1,0 +1,77 @@
+template_path = "template.pptx"
+add_handout_on_separate_slide = false
+disable_autolayout = true
+add_plug = false
+add_comment = true
+add_zachet = true
+add_source = true
+add_author = true
+override_answer_caption = "ОТВЕТ"
+question_number_format = "caps"
+tour_as_question_number = "caps"
+disable_shrink_fit = false
+overlay_image_and_text = true
+format_links = false
+
+[textbox]
+left = 2.1
+top = 1.4
+width = 9.14
+height = 5
+vertical_align = "middle"
+color = [53, 53, 53]
+
+[number_textbox]
+left = 1.2
+top = 0.6
+width = 3.2
+height = 0.5
+color = [255, 255, 255]
+font_size = 28
+bold = true
+align = "center"
+
+[text_size_grid]
+default = 24
+smallest = 14
+section = 28
+question_elements = [
+    {length=350, size=24},
+    {length=450, size=22},
+    {length=600, size=20},
+    {length=800, size=18},
+]
+answer_elements = [
+    {length=660, size=20},
+    {length=820, size=19},
+    {length=1000, size=18},
+    {length=1200, size=17},
+    {length=1400, size=16},
+    {length=1600, size=15},
+]
+
+[font]
+name = "Calibri"
+question_size = 24
+answer_size = 20
+line_spacing_multiplier = 1.0
+
+
+
+[list]
+numbering_style = "1)"
+blank_line_before_items = true
+
+[handout]
+include_label = false
+font_size = 32
+align = "center"
+text_space_after = 72
+
+[service_slides]
+intro = [0, 1]
+between_tours = 2
+numbered_tours_stubs = [4, 5, 6]
+final = 7
+remove = [0, 1, 2, 3, 4, 5, 6, 7]
+skip_generated_title = true

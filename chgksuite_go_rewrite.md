@@ -71,20 +71,30 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 
 - [x] **A1. pptx**: `internal/chgk/pptx`. An OOXML pptx writer (the package,
       its slides, its rels and content types, written as python-pptx writes
-      them), the slide builders (title, tour, question, handout, picture, plug,
-      answer grid, blitz, service slides), `pptx_config.toml` and the
-      shrink-to-fit pass. Byte-parity against chgksuite on five fixtures —
-      every slide of every one, `scripts/gen_pptx_oracles.py`.
-      ONE thing is approximate, and it is measurement. chgksuite measures text
-      with Pillow, which shapes through HarfBuzz where libraqm is installed and
-      falls back to whole-pixel advances where it is not — so chgksuite's own
-      layout is not reproducible across machines. This port matches Pillow's
-      advances exactly (unhinted, 1/64 px) and its line height exactly (read off
-      hhea and rounded once, which is what FreeType does and what x/image does
-      not), and differs only by HarfBuzz's GPOS kerning: under 1.4 px across a
-      line. It shows in one place — an inline picture's offset, which is
-      computed from measured text — and the parity test allows that one number
-      a pixel while everything else must match to the byte.
+      them — part names and ids assigned once and never reissued, every .rels
+      sorted by number), the slide builders (title, tour, question, handout,
+      picture, plug, answer grid, blitz), service slides and numbered tour
+      stubs cloned off a template, `pptx_config.toml`, the shrink-to-fit pass,
+      and `--optimize_size`.
+      Byte-parity against chgksuite, every authored part of every deck: six
+      fixtures under `scripts/gen_pptx_oracles.py`, and — off the repo — three
+      real packages of Alexander Shorin's against three real configs, 2077
+      parts compared.
+      TWO things are not byte-identical, both of them image encoders.
+      `--optimize_size` re-encodes the pictures a finished deck embeds, and
+      Go's JPEG encoder is not Pillow's, so the media differ (the deck comes
+      out about a tenth larger). It is on by default, as in chgksuite; the
+      oracles are generated with it off.
+      And measurement. chgksuite measures text with Pillow, which shapes
+      through HarfBuzz where libraqm is installed and falls back to whole-pixel
+      advances where it is not — so chgksuite's own layout is not reproducible
+      across machines. This port matches Pillow's advances exactly (unhinted,
+      1/64 px) and its line height exactly (read off hhea and rounded once,
+      which is what FreeType does and what x/image does not), and differs only
+      by HarfBuzz's GPOS kerning: under 1.4 px across a line. It showed up
+      twice in those 2077 parts — an inline picture's offset, which the parity
+      test allows a pixel, and one answer slide that shrank to 29pt where
+      chgksuite stopped at 30.
 - [x] **A2. markdown / redditmd**: `internal/chgk/markdown`. Both dialects,
       character-for-character against chgksuite (`scripts/gen_export_oracles.py`).
 - [x] **A3. base (db.chgk.info txt)**: `internal/chgk/dbtext`, the other side of

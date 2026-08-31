@@ -267,10 +267,15 @@ func (s *slidePart) render() ([]byte, error) {
 		return s.renderEdited()
 	}
 	var b strings.Builder
+	b.WriteString(s.clonedShapes)
 	for _, sh := range s.shapes {
 		b.WriteString(sh.render(s))
 	}
-	return []byte(fmt.Sprintf(slideSkeleton, b.String())), nil
+	out := fmt.Sprintf(slideSkeleton, b.String())
+	if s.clonedBG != "" {
+		out = strings.Replace(out, "<p:cSld>", "<p:cSld>"+s.clonedBG, 1)
+	}
+	return []byte(out), nil
 }
 
 // addTextbox is python-pptx's shapes.add_textbox.

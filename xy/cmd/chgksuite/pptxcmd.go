@@ -20,6 +20,7 @@ func composePptx(args []string) error {
 	disableNumbers := fs.Bool("disable_numbers", false, "no question number in the corner")
 	noAccents := fs.Bool("do_not_remove_accents", false, "keep the stress marks")
 	language := fs.String("language", "ru", "the language runs are tagged with")
+	optimizeSize := fs.String("optimize_size", "on", "re-encode the pictures to shrink the file: on|off")
 	addTS := fs.String("add_ts", "off", "append a timestamp to the output filename: on|off")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -32,6 +33,7 @@ func composePptx(args []string) error {
 		DisableNumbers:     *disableNumbers,
 		DoNotRemoveAccents: *noAccents,
 		Language:           *language,
+		OptimizeSize:       *optimizeSize != "off",
 	}
 	if *fontDir != "" {
 		opts.FontDirs = []string{*fontDir}

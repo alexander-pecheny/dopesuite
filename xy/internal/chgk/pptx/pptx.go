@@ -33,6 +33,10 @@ type Options struct {
 	DoNotRemoveAccents bool
 	// Language is --language; only "ru" changes anything, by tagging runs.
 	Language string
+	// OptimizeSize is --optimize_size: re-encode the pictures once the deck is
+	// built. On by default in chgksuite, and the difference between a 30 MB
+	// presentation and a few megabytes.
+	OptimizeSize bool
 }
 
 // Export renders a package. images maps a picture's name, as the (img …)
@@ -62,6 +66,9 @@ func Export(doc fsource.Doc, images map[string][]byte, o Options) ([]byte, error
 	}
 	if err := e.run(doc); err != nil {
 		return nil, err
+	}
+	if o.OptimizeSize {
+		p.optimizeImages(80)
 	}
 	return p.save()
 }
@@ -264,9 +271,10 @@ func (e *exporter) setLineSpacing(p *paragraph, size float64, key string) {
 // A text of nothing still makes one run, which is what holds the paragraph open.
 func (e *exporter) addRuns(p *paragraph, text string, color string) []*run {
 	var made []*run
-	// A no-break hyphen is written as a plain one: LibreOffice draws U+2011 as
-	// a missing glyph.
-	text = strings.ReplaceAll(text, "‑", "-")
+	// set_pptx_run_text: a no-break hyphen becomes a plain one fenced by word
+	// joiners, because LibreOffice draws U+2011 as a missing glyph but honours
+	// U+2060 on either side of an ordinary hyphen.
+	text = strings.ReplaceAll(text, "‑", "\u2060-\u2060")
 	for i, part := range strings.Split(text, "\n") {
 		if i > 0 {
 			p.runs = append(p.runs, &run{br: true})
@@ -466,11 +474,17 @@ func labelFor(field string) string {
 	return field
 }
 
-// label honours a question's own !!Label override.
+// label is get_label: a question's own !!Label override, and the plural
+// «Источники» when it names more than one.
 func label(q *fsource.Question, field string) string {
 	if ov, ok := q.Get("overrides").(map[string]string); ok {
 		if v, ok := ov[field]; ok && v != "" {
 			return v
+		}
+	}
+	if field == "source" {
+		if _, isList := q.Get("source").([]any); isList {
+			return "Источники"
 		}
 	}
 	return labelFor(field)

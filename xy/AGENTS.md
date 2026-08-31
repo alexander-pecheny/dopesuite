@@ -193,9 +193,12 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        CP1251/KOI8-R/CP866/ISO8859-5 spells the most Russian-looking letters
                        (chgksuite asks chardet; Go has none)
   pptx/                `compose pptx`: the deck a package is played from. A hand-rolled
-                       OOXML pptx writer over chgksuite's template.pptx, the slide builders,
-                       pptx_config.toml, and the shrink-to-fit pass. Byte-parity per slide vs
-                       chgksuite; measure.go says why measurement alone is only pixel-close
+                       OOXML pptx writer over a template (chgksuite's, or one the config
+                       names), the slide builders, service slides cloned off that template,
+                       pptx_config.toml, the shrink-to-fit pass and --optimize_size.
+                       Byte-parity per authored part vs chgksuite. Two things are not:
+                       optimize.go re-encodes pictures with Go's encoders, and measure.go
+                       says why text measurement is only pixel-close
   markdown/            `compose markdown|redditmd`: a package as Markdown, or as the
                        Reddit dialect where the answer is a >! … !< spoiler
   dbtext/              `compose base`: the plain text db.chgk.info takes as a submission —

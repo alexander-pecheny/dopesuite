@@ -94,6 +94,10 @@ func downscale(img image.Image, maxW, maxH int) image.Image {
 
 // hasAlpha reports whether any pixel is not fully opaque. Most decoded formats
 // answer this in O(1) via Opaque(); the fallback scan is the rare case.
+// HasAlpha reports whether a picture carries transparency, which decides whether
+// it can be re-encoded as a JPEG.
+func HasAlpha(img image.Image) bool { return hasAlpha(img) }
+
 func hasAlpha(img image.Image) bool {
 	if o, ok := img.(interface{ Opaque() bool }); ok {
 		return !o.Opaque()

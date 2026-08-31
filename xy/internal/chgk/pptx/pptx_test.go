@@ -35,10 +35,27 @@ func TestParity(t *testing.T) {
 				}
 				images[filepath.Base(p)] = data
 			}
-			out, err := Export(fsource.Parse(string(raw), "chgk"), images, Options{
+			opts := Options{
 				Language: "ru",
 				FontDirs: []string{"/usr/share/fonts/truetype/msttcorefonts"},
-			})
+			}
+			// service.4s carries a real config and a real template: a deck whose
+			// every tour opens on a slide the template drew by hand. It is the
+			// only fixture that exercises the service slides, the numbered tour
+			// stubs, a multi-slide template and the cloning that goes with them.
+			if name == "service" {
+				cfgRaw, err := os.ReadFile("testdata/service_config.toml")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if opts.Config, err = ParseConfig(string(cfgRaw)); err != nil {
+					t.Fatal(err)
+				}
+				if opts.Template, err = os.ReadFile("testdata/service_template.pptx"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			out, err := Export(fsource.Parse(string(raw), "chgk"), images, opts)
 			if err != nil {
 				t.Fatal(err)
 			}
