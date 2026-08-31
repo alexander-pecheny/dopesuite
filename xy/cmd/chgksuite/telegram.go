@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"xy/internal/chgk/fsource"
+	"xy/internal/chgk/stats"
 	"xy/internal/chgk/tg"
 )
 
@@ -26,6 +27,7 @@ func composeTelegram(args []string) error {
 	addPolls := fs.Bool("add_polls", false, "post a poll after each question, tour and the package")
 	pollConfig := fs.String("poll_config", "", "poll config TOML (required with --add_polls)")
 	token := fs.String("token", "", "bot token; defaults to $CHGKSUITE_TG_TOKEN")
+	stopIfNoStats := fs.Bool("stop_if_no_stats", false, "refuse to publish a package whose questions carry no «Взятия:»")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -65,6 +67,9 @@ func composeTelegram(args []string) error {
 		return fmt.Errorf("the telegram export is ported for chgk only, not %s", game)
 	}
 	doc := fsource.Parse(string(src), "chgk")
+	if *stopIfNoStats && !stats.HasStats(doc) {
+		return fmt.Errorf("don't publish questions without stats")
+	}
 	images, err := loadImages(doc, filepath.Dir(in))
 	if err != nil {
 		return err

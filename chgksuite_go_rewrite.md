@@ -29,10 +29,11 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 | `markdown/`, `dbtext/`, `openquiz/` | `composer/{markdown,db,openquiz}.py` | done, oracle-tested |
 | `imghost/` | `composer_common.Imgur` | done, cache shared with chgksuite |
 | `pptx/` | `composer/pptx.py` | done, oracle-tested |
-| — | `composer/{lj,stats}.py` | **not ported** |
+| `stats/` | `composer/stats.py` + the results readers of `common.py` | done, oracle-tested |
+| — | `composer/lj.py` | **not ported** |
 | `textparse/db.go` | `parser_db.py` | done, canon-tested |
 | — | `board.py`, `board_config.py`, `xy_crypto.py` | not needed (xy serves `trello_compat.go`) |
-| `cmd/chgksuite/` | `cli.py` | `parse`, `compose docx`, `compose telegram` |
+| `cmd/chgksuite/` | `cli.py` | `parse`, `compose docx|pptx|telegram|markdown|redditmd|base|openquiz|add_stats` |
 | — | `chgksuite_qt/`, `chgksuite_tk/` | not needed (the GUIs stay in Python) |
 
 ## Done
@@ -140,17 +141,25 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       than as chgksuite's second Python process passing updates through a sqlite
       file. `--tgaccount` is gone with it: the token comes from `--token` or
       `$CHGKSUITE_TG_TOKEN`.
-- [ ] **B2. `stop_if_no_stats`** [cli]: chgksuite refuses to publish a package
-      whose questions carry no «Взятия:» when the setting is on. Trivial, and it
-      belongs with C1.
+- [x] **B2. `stop_if_no_stats`**: `compose telegram --stop_if_no_stats` refuses
+      to publish a package whose questions carry no «Взятия:». A switch rather
+      than a settings-file key, until G3 brings the settings file.
 
 ### C. Statistics
 
-- [ ] **C1. add_stats** [both]: `composer/stats.py` + `--rating_ids`: fetch
-      tournament results from rating.chgk.info and append «Взяли: N/M» plus
-      team lists to each question's comment. ~150 lines of logic + an HTTP client.
-- [ ] **C2. custom csv/xlsx stats** [cli]: `--custom_csv`, `--custom_csv_args`:
-      the same, from a local rating-format spreadsheet.
+- [x] **C1. add_stats**: `internal/chgk/stats`. `compose add_stats
+      --rating_ids` fetches a tournament's results from rating.chgk.info and
+      appends «Взятия: N/M (P%)» to each question's comment, naming the teams
+      when few enough took it; `--question_range` and `--team_naming_threshold`
+      included. Python's round() is half-to-even and this is too, so a question
+      exactly an eighth of the field took rounds the same way.
+- [x] **C2. custom csv/xlsx stats**: `--custom_csv`, `--custom_csv_args`. Both
+      layouts of a вопросная таблица (per team, per team per tour) from either
+      format. The xlsx side reads SpreadsheetML directly rather than adding a
+      spreadsheet library to the module — a results table is a grid of numbers
+      and names on one sheet. Parity: chgksuite's own four real fixtures give
+      the same masks, and six `compose add_stats` runs over a package are
+      byte-identical to chgksuite's (`scripts/gen_stats_oracle.py`).
 
 ### D. Parsing
 
@@ -272,10 +281,6 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 
 1. ~~**E1–E3 + F1**~~ — done 31 Aug 2026, with the Go CLI's `compose docx`.
 2. ~~**D1–D2, D4–D5**~~: the `parse` command, done 31 Aug 2026.
-3. **A2–A4**: markdown, base, openquiz: three small exporters, and with them
-   `compose` covers most of what the Python one is used for.
-4. **C1**: add_stats; self-contained and genuinely useful after a tournament.
-   B2 rides along with it.
-5. **D3**: db.chgk.info's export format, whose oracle is already in the corpus.
-6. **A1**: pptx, the big one, worth its own series.
-7. **G1**: i18n, once there are enough label sites to be worth a table.
+3. ~~**A2–A4**~~: markdown, base, openquiz — done 31 Aug 2026.
+4. ~~**C1**~~, ~~**D3**~~, ~~**A1**~~ — done 31 Aug 2026.
+5. **G1**: i18n, once there are enough label sites to be worth a table.
