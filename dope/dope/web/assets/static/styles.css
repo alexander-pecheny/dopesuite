@@ -4612,7 +4612,9 @@ body.is-fullscreen.od-page .match-main {
 /* A мини-игра's name heads a block dozens of columns wide; centred it sits off
    the screen, so it rides at the block's left edge where the block begins. */
 /* Same treatment the seeding import gives a refusal, for the same reason. */
-.multi-table .declined-row td {
+.multi-table .declined-row td,
+.multi-table .declined-row .multi-cell.right,
+.multi-table .declined-row .multi-cell.wrong {
   color: var(--muted);
   background: var(--surface-tint);
 }
