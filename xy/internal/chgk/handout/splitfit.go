@@ -465,7 +465,7 @@ func (r *sfRun) fitBlock(ctx context.Context, b sfBlock) (int, map[string]*strin
 // bottomSpace measures the blank space (mm) below the content of a one-page
 // handout; onePage is false when it doesn't fit on one page at all.
 func (r *sfRun) bottomSpace(ctx context.Context, ms Measurer, b sfBlock, rows int, resize float64) (float64, bool, error) {
-	typ := GenerateTyp(b.with(withRows(b.resizeUpdate(resize), rows)), r.a)
+	typ := GenerateTyp(b.with(withRows(b.resizeUpdate(resize), rows)), r.a) + MeasureSnippet
 	pages, y, err := ms.Measure(ctx, typ)
 	if err != nil {
 		return 0, false, err

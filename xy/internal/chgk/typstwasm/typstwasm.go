@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -57,6 +58,7 @@ type instance struct {
 	addFile api.Function
 	reset   api.Function
 	compile api.Function
+	measure api.Function
 }
 
 // NewPool compiles the module once, instantiates `size` copies and loads the fonts
@@ -111,10 +113,12 @@ func NewPool(ctx context.Context, fonts [][]byte, cacheDir string, size int) (*P
 			addFile: mod.ExportedFunction("add_file"),
 			reset:   mod.ExportedFunction("reset_files"),
 			compile: mod.ExportedFunction("compile"),
+			measure: mod.ExportedFunction("measure"),
 		}
 		for name, f := range map[string]api.Function{
 			"alloc": in.alloc, "dealloc": in.dealloc, "add_font": in.addFont,
 			"add_file": in.addFile, "reset_files": in.reset, "compile": in.compile,
+			"measure": in.measure,
 		} {
 			if f == nil {
 				return fail(fmt.Errorf("guest is missing export %q", name))
@@ -184,6 +188,21 @@ func (p *Pool) Compile(ctx context.Context, typ string, wantPDF bool) ([]byte, i
 	return in.compileOn(ctx, typ, wantPDF)
 }
 
+// Measure is handout.Measurer: where the document's content ends, as the page
+// it ends on and how far down that page in millimetres. split_fit's
+// image-shrink pass asks this; before the guest grew the export, the pool could
+// not answer and the pass simply did not run.
+func (p *Pool) Measure(ctx context.Context, typ string) (int, float64, error) {
+	var in *instance
+	select {
+	case in = <-p.free:
+	case <-ctx.Done():
+		return 0, 0, ctx.Err()
+	}
+	defer func() { p.free <- in }()
+	return in.measureOn(ctx, typ)
+}
+
 // ── one instance ──
 
 func (in *instance) write(ctx context.Context, b []byte) (uint32, error) {
@@ -221,6 +240,50 @@ func (in *instance) addImage(ctx context.Context, name string, data []byte) erro
 	return nil
 }
 
+// measureOn calls the guest's measure export, whose payload is the y position
+// in millimetres as decimal text.
+func (in *instance) measureOn(ctx context.Context, typ string) (int, float64, error) {
+	src, err := in.write(ctx, []byte(typ))
+	if err != nil {
+		return 0, 0, err
+	}
+	defer in.free(ctx, src, uint32(len(typ)))
+
+	res, err := in.measure.Call(ctx, uint64(src), uint64(len(typ)))
+	if err != nil {
+		return 0, 0, fmt.Errorf("measure: %w", err)
+	}
+	buf, err := in.readResult(ctx, res[0])
+	if err != nil {
+		return 0, 0, err
+	}
+	pages := int(binary.LittleEndian.Uint32(buf[1:5]))
+	if buf[0] != 1 {
+		return pages, 0, fmt.Errorf("typst: %s", buf[5:])
+	}
+	y, err := strconv.ParseFloat(strings.TrimSpace(string(buf[5:])), 64)
+	if err != nil {
+		return pages, 0, fmt.Errorf("measure: %w", err)
+	}
+	return pages, y, nil
+}
+
+// readResult copies the guest's (ptr << 32) | len result buffer out and frees it.
+func (in *instance) readResult(ctx context.Context, packed uint64) ([]byte, error) {
+	ptr, size := uint32(packed>>32), uint32(packed)
+	out, ok := in.mod.Memory().Read(ptr, size)
+	if !ok {
+		return nil, errors.New("result outside guest memory")
+	}
+	buf := make([]byte, len(out))
+	copy(buf, out) // the guest frees the original next
+	in.free(ctx, ptr, size)
+	if len(buf) < 5 {
+		return nil, errors.New("short result")
+	}
+	return buf, nil
+}
+
 func (in *instance) compileOn(ctx context.Context, typ string, wantPDF bool) ([]byte, int, error) {
 	src, err := in.write(ctx, []byte(typ))
 	if err != nil {
@@ -236,18 +299,9 @@ func (in *instance) compileOn(ctx context.Context, typ string, wantPDF bool) ([]
 	if err != nil {
 		return nil, 0, fmt.Errorf("compile: %w", err)
 	}
-	// The guest packs its result buffer as (ptr << 32) | len.
-	ptr, size := uint32(res[0]>>32), uint32(res[0])
-	out, ok := in.mod.Memory().Read(ptr, size)
-	if !ok {
-		return nil, 0, errors.New("result outside guest memory")
-	}
-	buf := make([]byte, len(out))
-	copy(buf, out) // the guest frees the original next
-	in.free(ctx, ptr, size)
-
-	if len(buf) < 5 {
-		return nil, 0, errors.New("short result")
+	buf, err := in.readResult(ctx, res[0])
+	if err != nil {
+		return nil, 0, err
 	}
 	pages := int(binary.LittleEndian.Uint32(buf[1:5]))
 	if buf[0] != 1 {

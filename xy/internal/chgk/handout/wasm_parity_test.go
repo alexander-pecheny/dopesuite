@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -124,4 +125,41 @@ func TestWasmRenderWithImage(t *testing.T) {
 		t.Fatal("not a PDF")
 	}
 	t.Logf("rendered a %d-byte PDF with an in-memory image", len(pdf))
+}
+
+// The measure export is the other half of the parity: the CLI queries a
+// `<hndtinfo>` label through `typst query`, the wasm reads the same label out of
+// the laid-out document's introspector. split_fit shrinks an image by what they
+// answer, so they must answer the same.
+func TestWasmMeasureMatchesCLI(t *testing.T) {
+	bin := os.Getenv("XY_TYPST_TEST_BIN")
+	if bin == "" {
+		t.Skip("set XY_TYPST_TEST_BIN to compare against the typst binary")
+	}
+	cli, err := newCLITypesetter(bin, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+	wasm := wasmTS(t)
+
+	ctx := context.Background()
+	for _, hndt := range []string{
+		"columns: 3\nrows: 4\n\nКороткий",
+		"columns: 2\nrows: 6\n\nПодлиннее текст, чтобы блок занял заметно больше места на странице.",
+		"columns: 6\nrows: 12\nhandouts_per_team: 2\n\nКоманде",
+	} {
+		typ := GenerateTyp(hndt, DefaultArgs()) + MeasureSnippet
+		wantPages, wantY, err := cli.Measure(ctx, typ)
+		if err != nil {
+			t.Fatal(err)
+		}
+		gotPages, gotY, err := wasm.Measure(ctx, typ)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gotPages != wantPages || math.Abs(gotY-wantY) > 0.01 {
+			t.Errorf("measure = (%d, %.3f), typst says (%d, %.3f)", gotPages, gotY, wantPages, wantY)
+		}
+	}
 }

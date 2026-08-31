@@ -8,16 +8,20 @@
 //!   add_file(name_ptr, name_len, ptr, len)  an image the source reads; once per generation
 //!   reset_files()                         drop the images, keep the fonts
 //!   compile(src_ptr, src_len, want_pdf) -> u64   (ptr << 32) | len of the result buffer
+//!   measure(src_ptr, src_len) -> u64      the same, with the payload "<y_mm>"
 //!
 //! Result buffer: [0] = 1 on success / 0 on failure, [1..5] = page count (u32 LE),
 //! [5..] = the PDF bytes on success, a UTF-8 error message on failure. No base64,
 //! no JSON: the payload is already bytes, and split_fit calls this in a loop.
+//! measure's payload is instead the y position in millimetres, as decimal text.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
 
 use typst::diag::{FileError, FileResult};
-use typst::foundations::{Bytes, Datetime, Duration};
+use typst::foundations::{Bytes, Datetime, Duration, Label, Selector};
+use typst::introspection::Introspector;
+use typst::utils::PicoStr;
 use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
@@ -166,6 +170,63 @@ pub unsafe extern "C" fn add_file(name_ptr: u32, name_len: u32, ptr: u32, len: u
 #[no_mangle]
 pub extern "C" fn reset_files() {
     with_state(|s| s.files.clear());
+}
+
+/// The label the measured source ends with — chgksuite's MEASURE_LABEL, so both
+/// tools query the same thing.
+const MEASURE_LABEL: &str = "hndtinfo";
+
+/// measure compiles the source and reads back where its content ends: the page,
+/// and how far down that page in millimetres. split_fit's image-shrink pass asks
+/// this to see how much blank space is left at the bottom, and without it the
+/// pass simply does not run.
+///
+/// # Safety
+/// src_ptr/src_len must describe the .typ source in guest memory.
+#[no_mangle]
+pub unsafe extern "C" fn measure(src_ptr: u32, src_len: u32) -> u64 {
+    let src = String::from_utf8_lossy(slice(src_ptr, src_len)).into_owned();
+    let out = with_state(|state| {
+        if state.fonts.is_empty() {
+            return result_buf(false, 0, b"no fonts loaded");
+        }
+        let vpath = match VirtualPath::new("source.typ") {
+            Ok(v) => v,
+            Err(e) => return result_buf(false, 0, format!("bad path: {e}").as_bytes()),
+        };
+        let id = FileId::new(RootedPath::new(VirtualRoot::Project, vpath));
+        let world = MemWorld {
+            state,
+            main: Source::new(id, src),
+        };
+        let doc = match typst::compile::<PagedDocument>(&world).output {
+            Ok(doc) => doc,
+            Err(diags) => {
+                let msg = diags
+                    .iter()
+                    .map(|d| d.message.to_string())
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                return result_buf(false, 0, msg.as_bytes());
+            }
+        };
+        let Some(label) = Label::new(PicoStr::intern(MEASURE_LABEL)) else {
+            return result_buf(false, 0, b"bad measure label");
+        };
+        let found = doc.introspector().query(&Selector::Label(label));
+        let Some(elem) = found.iter().next_back() else {
+            return result_buf(false, doc.pages().len() as u32, b"measure label not found");
+        };
+        let loc = match elem.location() {
+            Some(loc) => loc,
+            None => return result_buf(false, doc.pages().len() as u32, b"measure label has no position"),
+        };
+        let Some(pos) = doc.introspector().position(loc) else {
+            return result_buf(false, doc.pages().len() as u32, b"measure label is not on a page");
+        };
+        result_buf(true, pos.page.get() as u32, format!("{}", pos.point.y.to_mm()).as_bytes())
+    });
+    pack(out)
 }
 
 /// # Safety
