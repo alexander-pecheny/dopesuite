@@ -11,7 +11,8 @@ dopecore/    pecheny.me/dopecore — the shared platform layer extracted out of
              xy and dope (no AGENTS/CONTEXT of its own): sessions, credentials,
              the SQLite pool conventions and the migration runner (schema),
              webassets, the admin bulk-create,
-             the Telegram bot and the login handshake (tglogin)
+             the Telegram bot — client, poll lock and the login conversation —
+             and the login handshake (tglogin)
 xy/          ЧГК question-editing boards (encrypted, Trello-style)
 dope/        tournament management (EK/OD/KSI) + realtime web UI
 ```
@@ -26,7 +27,7 @@ dope/        tournament management (EK/OD/KSI) + realtime web UI
   the root gate from anywhere: the module ones delegate up to it, because
   class-check needs both apps' TypeScript and the shared core.css at once.
 - **Deploy** is one script for the whole repo: `deploy.py`, a target table
-  (`dope-server`, `dope-bot`, `xy-server`, `xy-bot`) naming each unit's module,
+  (`dope-server`, `dopetest`, `xy-server`, `xytest`) naming each unit's module,
   package, binary, systemd unit and **host** — xy is on `vps-he`, dope on
   `vps2day-ee`. Each app's `just deploy` calls it with its own targets.
   If you are already on the target production host, do **not** `ssh` to it —

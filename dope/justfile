@@ -47,7 +47,6 @@ vet:
 tidy-check:
     go mod tidy -diff
 
-# A later --target wins: `just deploy --target dope-bot` deploys the bot instead.
 # Build + deploy the dope server via the monorepo's ../deploy.py.
 deploy *args: build-web
     python3 ../deploy.py --target dope-server {{args}}

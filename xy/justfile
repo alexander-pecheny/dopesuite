@@ -118,10 +118,10 @@ pre-commit:
 invite days='7': wasm build-web
     go run ./cmd/xy-server invite {{days}}
 
-# A later --target wins: `just deploy --target xy-server` deploys the server alone.
-# Build + deploy both xy units (server + bot) via the monorepo's ../deploy.py.
+# Build + deploy xy via the monorepo's ../deploy.py. One unit: the login bot
+# polls inside the server (XY_BOT_TOKEN in /etc/xy.env).
 deploy *args: wasm build-web
-    python3 ../deploy.py --target xy-server,xy-bot {{args}}
+    python3 ../deploy.py --target xy-server {{args}}
 
 # Staging at xytest.pecheny.me: a copy of prod's DB, same box, no bot.
 # Release here first whenever the change touches the schema or a migration.

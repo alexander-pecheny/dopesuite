@@ -5,10 +5,13 @@ One script, one target table. Each target names its module, its Go package, the
 binary it installs, the systemd unit it restarts, and the host it lives on —
 xy and dope are on DIFFERENT hosts, so the host is per-target, not global.
 
+Each app is one binary: the login bot polls inside the server process, so there
+is no bot unit to deploy alongside it.
+
   ./deploy.py --target dope-server           # the default for `just deploy` in dope/
-  ./deploy.py --target xy-server,xy-bot      # the default for `just deploy` in xy/
+  ./deploy.py --target xy-server             # the default for `just deploy` in xy/
   ./deploy.py --target dopetest              # dope staging (`just deploy-staging`)
-  ./deploy.py --target dope-bot --skip-tests
+  ./deploy.py --target dope-server --skip-tests
   ./deploy.py --target xy-server --dry-run   # builds, uploads nothing
 
 Every deploy backs the old binary up on the host, restarts, waits, checks the
@@ -44,8 +47,6 @@ SSH_OPTIONS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"]
 #   module        subdir holding the go.mod         (build + `go test` run here)
 #   package       Go package, relative to module
 #   binary        installed name — systemd's ExecStart points at it, do not rename
-#   optional      the unit is not installed on every host; skip the restart if
-#                 it is absent instead of failing (xy's bot)
 TARGETS: dict[str, dict] = {
     "dope-server": {
         "host": "vps2day-ee",
@@ -56,18 +57,6 @@ TARGETS: dict[str, dict] = {
         "package": "./dope/cmd/dope-server",
         "binary": "dope-server",
         "env_prefix": "DOPE",
-        "optional": False,
-    },
-    "dope-bot": {
-        "host": "vps2day-ee",
-        "remote_dir": "/opt/dope",
-        "service": "dope-bot.service",
-        "service_env": "DOPE_DEPLOY_BOT_SERVICE",
-        "module": "dope",
-        "package": "./dope/cmd/telegram-bot",
-        "binary": "dope-bot",
-        "env_prefix": "DOPE",
-        "optional": False,
     },
     # Staging: the same dope binary, on the same box as prod, against a copy of
     # prod's DB (/var/lib/dopetest). It exists so a release's startup migrations
@@ -83,7 +72,6 @@ TARGETS: dict[str, dict] = {
         "package": "./dope/cmd/dope-server",
         "binary": "dope-server",
         "env_prefix": "DOPETEST",
-        "optional": False,
     },
     "xy-server": {
         "host": "vps-he",
@@ -94,7 +82,6 @@ TARGETS: dict[str, dict] = {
         "package": "./cmd/xy-server",
         "binary": "xy-server",
         "env_prefix": "XY",
-        "optional": False,
     },
     # Staging: the same xy binary, on the same box as prod, against a copy of
     # prod's DB (/var/lib/xytest) with prod's blobs hardlinked in. Deploy here
@@ -109,18 +96,6 @@ TARGETS: dict[str, dict] = {
         "package": "./cmd/xy-server",
         "binary": "xy-server",
         "env_prefix": "XYTEST",
-        "optional": False,
-    },
-    "xy-bot": {
-        "host": "vps-he",
-        "remote_dir": "/opt/xy",
-        "service": "xy-bot.service",
-        "service_env": "XY_DEPLOY_BOT",
-        "module": "xy",
-        "package": "./cmd/telegram-bot",
-        "binary": "telegram-bot",
-        "env_prefix": "XY",
-        "optional": True,
     },
 }
 
@@ -141,7 +116,6 @@ class Target:
         self.module = ROOT / spec["module"]
         self.package = args.package or spec["package"]
         self.binary = args.binary or spec["binary"]
-        self.optional = spec["optional"]
 
 
 def command_text(args: list) -> str:
@@ -267,7 +241,6 @@ TMP_BIN={remote_quote(tmp_bin)}
 BACKUP={remote_quote(backup)}
 SERVICE={remote_quote(target.service)}
 HEALTH_WAIT={health_wait}
-OPTIONAL={1 if target.optional else 0}
 
 cleanup() {{
   rm -rf "$REMOTE_TMP"
@@ -290,13 +263,6 @@ if [ -e "$REMOTE_BIN" ]; then
   sudo cp -a "$REMOTE_BIN" "$BACKUP"
 fi
 sudo install -m 0755 "$TMP_BIN" "$REMOTE_BIN"
-
-# The optional unit (xy's bot) is not installed on every host: install the binary,
-# but leave the restart alone when there is nothing to restart.
-if [ "$OPTIONAL" = 1 ] && ! systemctl list-unit-files "$SERVICE" >/dev/null 2>&1; then
-  echo "Installed $REMOTE_BIN; no $SERVICE on this host, skipped the restart"
-  exit 0
-fi
 
 if ! sudo systemctl restart "$SERVICE"; then
   rollback
