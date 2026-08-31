@@ -4592,6 +4592,12 @@ body.is-fullscreen.od-page .match-main {
   max-width: calc(var(--total-col) + var(--space-5));
 }
 
+/* …and Σ+ pins after the widened Итог, or a scrolled sheet parks it on top
+   of the Итог's tail. */
+.match-table.multi-table .sticky-place {
+  left: calc(var(--sheet-corner-col) + var(--team-col) + var(--total-col) + var(--space-5));
+}
+
 /* A мини-игра's name heads a block dozens of columns wide; centred it sits off
    the screen, so it rides at the block's left edge where the block begins. */
 /* Same treatment the seeding import gives a refusal, for the same reason. */

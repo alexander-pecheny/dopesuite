@@ -12,7 +12,7 @@ import {buildRosterView} from "./fest-roster.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
-import {renderTabBar} from "./widgets.js";
+import {createTeamNameOverflowController, renderTabBar} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import * as multi from "./multi-protocol.js";
@@ -54,6 +54,13 @@ const shell = mountGamePage({
   recorderState: () => state,
 });
 const {viewer} = shell;
+
+const teamNameOverflow = createTeamNameOverflowController({
+  root,
+  detailed: {cellSelector: "[data-multi-team-cell]", nameSelector: ".od-detailed-team-name", truncatedClass: "od-detailed-team-cell-truncated"},
+  results: {cellSelector: ".results-team", nameSelector: ".results-team-name", truncatedClass: "results-team-truncated"},
+});
+window.addEventListener("resize", () => teamNameOverflow.schedule());
 
 let scheme: MultiScheme | null = null;
 let state: MultiState | null = null;
@@ -142,9 +149,7 @@ function buildTable(): HTMLElement {
   rowOrder().forEach((p) => {
     const tr = document.createElement("tr");
     if (multi.participantDeclined(state!, p)) tr.classList.add("declined-row");
-    const number = multi.participantNumber(state!, p);
-    tr.appendChild(td(`${number ? number + ". " : ""}${multi.participantName(state!, p)}`,
-      "sticky sticky-name", {dataset: {multiTeamCell: ""}}));
+    tr.appendChild(teamCell(p));
     tr.appendChild(td(multi.formatScore(sheetRows[p].total), "sticky sticky-total number total-cell",
       {dataset: {total: p}}));
     if (rules.signed) {
@@ -159,6 +164,32 @@ function buildTable(): HTMLElement {
   });
   table.appendChild(body);
   return table;
+}
+
+// The sticky name cell is ЭК's: the ek-team-cell family brings the clipped
+// name, the fade and the hover popover, so a long team never paints over the
+// scores beside it.
+function teamCell(p: number): HTMLElement {
+  const number = multi.participantNumber(state!, p);
+  const labelText = `${number ? number + ". " : ""}${multi.participantName(state!, p)}`;
+  const cell = td("", "sticky sticky-name team-name ek-team-cell", {dataset: {multiTeamCell: ""}});
+  const layout = document.createElement("span");
+  layout.className = "od-detailed-team-layout";
+  const nameWrap = document.createElement("span");
+  nameWrap.className = "od-detailed-team-name-wrap";
+  const label = document.createElement("span");
+  label.className = "od-detailed-team-name";
+  label.textContent = labelText;
+  label.tabIndex = 0;
+  label.setAttribute("aria-label", labelText);
+  nameWrap.appendChild(label);
+  layout.appendChild(nameWrap);
+  cell.appendChild(layout);
+  const fullName = document.createElement("span");
+  fullName.className = "popover popover-inline od-detailed-team-name-popover";
+  fullName.textContent = labelText;
+  cell.appendChild(fullName);
+  return cell;
 }
 
 function maxOf(values: number[]): number {
@@ -356,6 +387,7 @@ function render(): void {
         : buildTable();
   root.replaceChildren(node);
   root.classList.toggle("fits-frame", activeTab === "roster");
+  teamNameOverflow.schedule();
   if (activeTab === "detailed") sheet.refresh();
 }
 
