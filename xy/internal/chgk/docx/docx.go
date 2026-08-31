@@ -71,14 +71,30 @@ type exporter struct {
 	rels    []relItem         // image + hyperlink relationships, in document order
 	nextRel int
 	nextDoc int
+	opts    Options
+	// body is the document body in order. Paragraphs are objects until the very
+	// end, because a page break inside a question starts a new paragraph while
+	// its caller keeps writing runs into the old one — python-docx's model, and
+	// the only way spoilers=pagebreak/dots land where chgksuite puts them.
+	body []bodyItem
 }
 
+// bodyItem is a paragraph or a table.
+type bodyItem interface{ xml() string }
+
 // Export renders the parsed structure to .docx bytes. images maps the names used
-// in (img …) directives to their bytes (any format; re-encoded to PNG).
-func Export(doc fsource.Doc, images map[string][]byte) ([]byte, error) {
-	e := &exporter{images: images, nextRel: 7, nextDoc: 1000}
+// in (img …) directives to their bytes (any format; re-encoded for export).
+func Export(doc fsource.Doc, images map[string][]byte, opts Options) ([]byte, error) {
+	e := &exporter{images: images, nextRel: 7, nextDoc: 1000, opts: opts}
 	body := e.renderBody(doc)
 	return e.repackage(body)
+}
+
+// addPara appends an empty paragraph to the body and returns it.
+func (e *exporter) addPara() *para {
+	p := &para{}
+	e.body = append(e.body, p)
+	return p
 }
 
 // ── paragraph builder (mirrors a python-docx paragraph) ──
@@ -116,6 +132,9 @@ func (p *para) xml() string {
 	if p.lang {
 		ppr.WriteString(`<w:rPr><w:lang w:val="en-US"/></w:rPr>`)
 	}
+	if ppr.Len() == 0 && len(p.runs) == 0 {
+		return "<w:p/>"
+	}
 	var b strings.Builder
 	b.WriteString("<w:p>")
 	if ppr.Len() > 0 {
@@ -131,7 +150,7 @@ func (p *para) xml() string {
 // addRaw appends a run for verbatim text (mirrors python-docx paragraph.add_run
 // for labels / list markers / "\n" separators — no nbsp/backtick processing).
 func (p *para) addRaw(text, kind string) {
-	p.runs = append(p.runs, runXML(text, rPr(kind, p.sz)))
+	p.runs = append(p.runs, runXML(text, rPr(kind, p.sz, false)))
 }
 
 // leadEmpty appends the template para0's leading empty run (<w:r><w:rPr/></w:r>).
@@ -141,30 +160,42 @@ func (p *para) leadEmpty() {
 
 // addContent appends a run for editorial text, mirroring set_docx_run_text:
 // backtick accents, optional nbsp gluing, then the non-breaking-hyphen swap.
-func (e *exporter) addContent(p *para, text, kind string, nbsp bool) {
+func (e *exporter) addContent(p *para, text, kind string, o textOpts) {
 	text = inline.BacktickReplace(text)
-	if nbsp {
+	if o.nbsp {
 		text = inline.ReplaceNoBreak(text)
 	}
 	text = strings.ReplaceAll(text, inline.NBHyphen, noBreakHyphenRepl)
-	p.runs = append(p.runs, runXML(text, rPr(kind, p.sz)))
+	p.runs = append(p.runs, runXML(text, rPr(kind, p.sz, o.whiten)))
 }
 
 // addHyperlink appends a <w:hyperlink> wrapping a Hyperlink-styled run, and
 // records the external relationship (URL-quoted target).
 func (e *exporter) addHyperlink(p *para, urlText string) {
-	relID := fmt.Sprintf("rId%d", e.nextRel)
-	e.nextRel++
-	e.rels = append(e.rels, relItem{id: relID, typ: hyperlinkRelType, target: urlQuote(urlText), external: true})
+	relID := e.externalRel(urlQuote(urlText))
 	text := strings.ReplaceAll(urlText, inline.NBHyphen, noBreakHyphenRepl)
 	inner := runXML(text, `<w:rPr><w:rStyle w:val="Hyperlink"/>`+szXML(p.sz)+`</w:rPr>`)
 	p.runs = append(p.runs, `<w:hyperlink r:id="`+relID+`">`+inner+`</w:hyperlink>`)
 }
 
-// ── document body generation (DocxExporter.export loop, chgk/non-screen) ──
+// externalRel returns the relationship id for a hyperlink target, minting one
+// only for a target the document hasn't linked to yet — python-docx reuses an
+// external relationship, and a question printed twice must not double the rels.
+func (e *exporter) externalRel(target string) string {
+	for _, r := range e.rels {
+		if r.external && r.typ == hyperlinkRelType && r.target == target {
+			return r.id
+		}
+	}
+	id := fmt.Sprintf("rId%d", e.nextRel)
+	e.nextRel++
+	e.rels = append(e.rels, relItem{id: id, typ: hyperlinkRelType, target: target, external: true})
+	return id
+}
+
+// ── document body generation (DocxExporter.export loop, chgk) ──
 
 func (e *exporter) renderBody(doc fsource.Doc) string {
-	var out []string
 	paraIsNone := true   // mirrors chgksuite's `para is None`
 	firstSection := true // chgk: only sections after the first page-break
 	headingPB := false   // sticky page_break_before_heading
@@ -174,9 +205,9 @@ func (e *exporter) renderBody(doc fsource.Doc) string {
 	// content paragraph is one that does not reuse it (meta / Question).
 	flushLead := func() {
 		if paraIsNone {
-			p := &para{style: "Normal", lang: true}
+			p := e.addPara()
+			p.style, p.lang = "Normal", true
 			p.leadEmpty()
-			out = append(out, p.xml())
 			paraIsNone = false
 		}
 	}
@@ -185,18 +216,18 @@ func (e *exporter) renderBody(doc fsource.Doc) string {
 		switch el.Type {
 		case "meta":
 			flushLead()
-			p := &para{}
+			p := e.addPara()
 			if prevType == "Question" {
 				p.spacingBefore = 360
 			}
-			e.addValue(p, el.Content, true)
-			out = append(out, p.xml())
-			out = append(out, "<w:p/>") // trailing empty paragraph
+			e.addValue(p, el.Content, textOpts{nbsp: true})
+			e.addPara() // trailing empty paragraph
 			paraIsNone = false
 
 		case "heading", "ljheading", "section", "editor", "date":
 			wasNone := paraIsNone
-			p := &para{keepNext: true}
+			p := e.addPara()
+			p.keepNext = true
 			if wasNone {
 				p.lang = true
 				p.leadEmpty()
@@ -219,81 +250,175 @@ func (e *exporter) renderBody(doc fsource.Doc) string {
 					firstSection = false
 				}
 			}
-			e.addValue(p, el.Content, true)
+			e.addValue(p, el.Content, textOpts{nbsp: true})
 			p.addRaw("\n", "")
-			out = append(out, p.xml())
 
 		case "Question":
 			flushLead()
 			if q, ok := el.Content.(*fsource.Question); ok {
-				out = append(out, e.renderQuestion(q)...)
+				e.renderQuestion(q)
 			}
 
 		default:
-			// battle/round/theme/number/setcounter etc. — not used by xy exports
+			// battle/round/theme/number/setcounter etc. — SI's, not chgk's
 		}
 		prevType = el.Type
 	}
-	return strings.Join(out, "")
+	var b strings.Builder
+	for _, item := range e.body {
+		b.WriteString(item.xml())
+	}
+	return b.String()
 }
 
-func (e *exporter) renderQuestion(q *fsource.Question) []string {
-	var out []string
-
-	// Paragraph 1: label [+ handout] + question text.
-	p1 := &para{keepLines: true, spacingBefore: 360}
-	p1.addRaw(questionLabel(q)+". ", "bold")
-	if h := q.Get("handout"); h != nil {
-		p1.addRaw("\n["+labelFor(q, "handout")+": ", "")
-		e.addValue(p1, h, false)
-		p1.addRaw("\n]", "")
+// renderQuestion writes one question, in as many copies as the screen mode asks
+// for.
+func (e *exporter) renderQuestion(q *fsource.Question) {
+	switch e.opts.ScreenMode {
+	case ScreenAddVersionsColumns:
+		e.renderQuestionColumns(q)
+	case ScreenAddVersions:
+		for _, v := range []struct {
+			title  string
+			screen bool
+		}{{"Версия для ведущего:", false}, {"Версия для экрана:", true}} {
+			e.addPara()
+			e.addPara().addRaw(v.title, "bold")
+			e.renderQuestionInto(q, nil, v.screen)
+		}
+	case ScreenReplaceAll:
+		e.renderQuestionInto(q, nil, true)
+	default:
+		e.renderQuestionInto(q, nil, false)
 	}
-	p1.addRaw("\n", "")
-	e.addValue(p1, q.Get("question"), true)
-	out = append(out, p1.xml())
+}
 
-	// Paragraph 2: answer (+ zachet/nezachet/comment glued in). Source and author
-	// share a fresh paragraph, set 2pt smaller, spaced to start one body line
-	// below (whichever of the two comes first opens it).
-	p2 := &para{keepLines: true, spacingBefore: 120}
-	p2.addRaw(labelFor(q, "answer")+": ", "bold")
-	e.addValue(p2, q.Get("answer"), true)
+// renderQuestionColumns puts the two copies side by side in a one-row table,
+// each cell holding the whole question in a single paragraph.
+func (e *exporter) renderQuestionColumns(q *fsource.Question) {
+	t := &table{}
+	e.body = append(e.body, t)
+	for i, v := range []struct {
+		title  string
+		screen bool
+	}{{"Версия для ведущего", false}, {"Версия для экрана", true}} {
+		cell := &para{}
+		t.cells[i] = cell
+		cell.addRaw(v.title+"\n", "bold")
+		e.renderQuestionInto(q, cell, v.screen)
+	}
+	e.addPara()
+}
 
+// renderQuestionInto ports add_question_to_docx. into is the paragraph a table
+// cell hands it (nil for the ordinary flow, where each part gets its own
+// paragraph); screen says which copy of the text to print.
+func (e *exporter) renderQuestionInto(q *fsource.Question, into *para, screen bool) {
+	p := into
+	if p == nil {
+		p = e.addPara()
+	}
+	p.keepLines = true
+	p.spacingBefore = 360
+
+	p.addRaw(questionLabel(q, e.opts.OnlyQuestionNumber)+". ", "bold")
+	if h := q.Get("handout"); h != nil {
+		p.addRaw("\n["+labelFor(q, "handout")+": ", "")
+		e.addValue(p, h, textOpts{removeAccents: screen, removeBrackets: screen})
+		p.addRaw("\n]", "")
+	}
+	if !e.opts.NoParagraph {
+		p.addRaw("\n", "")
+	}
+	e.addValue(p, q.Get("question"), textOpts{nbsp: true, removeAccents: screen, removeBrackets: screen})
+
+	if e.opts.NoAnswers {
+		return
+	}
+
+	// The answers start below whatever the spoiler puts between them and the
+	// question: nothing, a page break, or thirty lines of dots.
+	if e.opts.Spoilers == SpoilersDots {
+		for i := 0; i < dotLines; i++ {
+			if into != nil {
+				into.addRaw("\n.", "")
+			} else {
+				e.addPara().addRaw(".", "")
+			}
+		}
+	}
+	switch {
+	case e.opts.Spoilers == SpoilersPagebreak:
+		// chgksuite starts the answers on a new body paragraph even inside a
+		// table cell; so does this.
+		p = e.addPara()
+		p.runs = append(p.runs, pageBreakRun)
+		p.keepLines, p.spacingBefore = true, 120
+	case into != nil:
+		into.addRaw("\n", "")
+		// chgksuite sets the spacing on whatever paragraph it holds, so in a cell
+		// the answer's 6pt overwrites the question's 18pt.
+		into.spacingBefore = 120
+	default:
+		p = e.addPara()
+		p.keepLines, p.spacingBefore = true, 120
+	}
+
+	whiten := e.opts.Spoilers == SpoilersWhiten
+	p.addRaw(labelFor(q, "answer")+": ", "bold")
+	// The answer keeps its brackets even on screen — chgksuite passes only the
+	// accent switch here.
+	e.addValue(p, q.Get("answer"), textOpts{nbsp: true, whiten: whiten, removeAccents: screen})
+
+	// Source and author share a paragraph of their own, set 2pt smaller and
+	// spaced to start one body line below the answer (whichever comes first
+	// opens it). In a cell they are runs like the rest, only smaller.
 	var src *para
 	for _, field := range []string{"zachet", "nezachet", "comment", "source", "author"} {
 		v := q.Get(field)
 		if v == nil {
 			continue
 		}
-		nbsp := field != "source"
+		o := textOpts{
+			nbsp:          field != "source",
+			whiten:        whiten && whitenField[field],
+			removeAccents: screen,
+			// зачёт keeps its brackets: they are part of the answer, not a note.
+			removeBrackets: screen && field != "zachet",
+		}
 		if field == "source" || field == "author" {
+			if into != nil {
+				into.addRaw("\n", "")
+				into.sz = srcSz
+				into.addRaw(labelFor(q, field)+": ", "bold")
+				e.addValue(into, v, o)
+				continue
+			}
 			if src == nil {
-				src = &para{keepLines: true, sz: srcSz, spacingBefore: srcGapTw}
+				src = e.addPara()
+				src.keepLines, src.sz, src.spacingBefore = true, srcSz, srcGapTw
 			} else {
 				src.addRaw("\n", "")
 			}
 			src.addRaw(labelFor(q, field)+": ", "bold")
-			e.addValue(src, v, nbsp)
+			e.addValue(src, v, o)
 			continue
 		}
-		p2.addRaw("\n", "")
-		p2.addRaw(labelFor(q, field)+": ", "bold")
-		e.addValue(p2, v, nbsp)
+		p.addRaw("\n", "")
+		p.addRaw(labelFor(q, field)+": ", "bold")
+		e.addValue(p, v, o)
 	}
-	out = append(out, p2.xml())
-	if src != nil {
-		out = append(out, src.xml())
-	}
-	return out
 }
 
-func questionLabel(q *fsource.Question) string {
-	lbl := labelFor(q, "question")
+func questionLabel(q *fsource.Question, onlyNumber bool) string {
 	num := ""
 	if n := q.Get("number"); n != nil {
 		num = fmt.Sprintf("%v", n)
 	}
-	return lbl + " " + num
+	if onlyNumber {
+		return num
+	}
+	return labelFor(q, "question") + " " + num
 }
 
 // labelFor returns the field label, honouring per-question overrides and the
@@ -313,46 +438,74 @@ func labelFor(q *fsource.Question, field string) string {
 }
 
 // addValue renders a field value (string or list) into the paragraph's runs.
-func (e *exporter) addValue(p *para, v any, nbsp bool) {
+func (e *exporter) addValue(p *para, v any, o textOpts) {
 	switch val := v.(type) {
 	case string:
-		e.addRuns(p, val, nbsp)
+		e.addRuns(p, val, o)
 	case []any:
 		// [preamble, [items…]] renders the preamble then a numbered list; a flat
 		// list renders just the numbered items (mirrors format_docx_element).
 		if len(val) >= 2 {
 			if items, ok := val[1].([]any); ok {
-				e.addRuns(p, fmt.Sprintf("%v", val[0]), nbsp)
+				e.addRuns(p, fmt.Sprintf("%v", val[0]), o)
 				for i, it := range items {
 					p.addRaw(fmt.Sprintf("\n%d. ", i+1), "")
-					e.addRuns(p, fmt.Sprintf("%v", it), nbsp)
+					e.addRuns(p, fmt.Sprintf("%v", it), o)
 				}
 				return
 			}
 		}
 		for i, it := range val {
 			p.addRaw(fmt.Sprintf("\n%d. ", i+1), "")
-			e.addRuns(p, fmt.Sprintf("%v", it), nbsp)
+			e.addRuns(p, fmt.Sprintf("%v", it), o)
 		}
 	}
 }
 
-// addRuns tokenizes inline 4s markup and appends one run per token.
-func (e *exporter) addRuns(p *para, text string, nbsp bool) {
+// addRuns tokenizes inline 4s markup and appends one run per token. A (PAGEBREAK)
+// starts a new paragraph and the rest of the text goes there, so the paragraph it
+// was called with may not be the one it ends in — as in chgksuite.
+func (e *exporter) addRuns(p *para, text string, o textOpts) {
+	if o.removeAccents {
+		text = inline.RemoveAccents(text)
+	}
+	if o.removeBrackets {
+		text = inline.RemoveSquareBrackets(text)
+	} else {
+		text = inline.ReplaceEscaped(text)
+	}
 	for _, r := range inline.Parse4sElem(text) {
 		switch r.Kind {
 		case "linebreak":
 			p.addRaw("\n", "")
 		case "pagebreak":
-			p.runs = append(p.runs, `<w:r><w:br w:type="page"/></w:r>`)
+			if e.opts.Spoilers == SpoilersDots {
+				for i := 0; i < dotLines; i++ {
+					e.addPara().addRaw(".", "")
+				}
+				p = e.addPara()
+				break
+			}
+			p = e.addPara()
+			p.runs = append(p.runs, pageBreakRun)
 		case "img":
 			p.runs = append(p.runs, e.embedImage(r.Text))
 		case "screen":
-			e.addContent(p, r.ForPrint, "", nbsp)
+			text := r.ForPrint
+			if o.screen() {
+				text = r.ForScreen
+			}
+			e.addContent(p, text, "", o)
 		case "hyperlink":
+			// A whitened hyperlink is printed as its own (whitened) text, not as
+			// a link — an invisible link is a trap in a printout.
+			if o.whiten {
+				e.addContent(p, r.Text, "", o)
+				continue
+			}
 			e.addHyperlink(p, r.Text)
 		default:
-			e.addContent(p, r.Text, r.Kind, nbsp)
+			e.addContent(p, r.Text, r.Kind, o)
 		}
 	}
 }
@@ -398,8 +551,11 @@ func runXML(text, rpr string) string {
 
 // rPr renders run properties. Child order follows the OOXML CT_RPr schema
 // (b, i, smallCaps, strike, sz, szCs, u).
-func rPr(kind string, sz int) string {
+func rPr(kind string, sz int, whiten bool) string {
 	var props string
+	if whiten {
+		props += `<w:rStyle w:val="Whitened"/>`
+	}
 	if strings.Contains(kind, "bold") {
 		props += "<w:b/>"
 	}
@@ -430,6 +586,12 @@ func szXML(sz int) string {
 }
 
 func brk() string { return "<w:r><w:br/></w:r>" }
+
+// pageBreakRun is the run python-docx's add_page_break puts in its paragraph.
+const pageBreakRun = `<w:r><w:br w:type="page"/></w:r>`
+
+// dotLines is how many lines of dots spoilers=dots pushes an answer down by.
+const dotLines = 30
 
 func xmlEscape(s string) string {
 	s = strings.ReplaceAll(s, "&", "&amp;")
@@ -566,4 +728,33 @@ func injectMediaContentTypes(ct string, media []mediaItem) string {
 		return ct
 	}
 	return strings.Replace(ct, "</Types>", add.String()+"</Types>", 1)
+}
+
+// ── the screen-versions table (DocxExporter._add_question_columns) ──
+
+// cellWidth is half the template's text width in twips: A4 (11906) less its
+// 1080-twip margins, split in two — what python-docx computes for a two-column
+// autofit table.
+const cellWidth = 4873
+
+// table is the one-row, two-column table the add_versions_columns screen mode
+// puts a question in, one copy per cell, one paragraph per copy.
+type table struct{ cells [2]*para }
+
+func (t *table) xml() string {
+	var b strings.Builder
+	b.WriteString(`<w:tbl><w:tblPr><w:tblW w:type="auto" w:w="0"/><w:tblLayout w:type="autofit"/>` +
+		`<w:tblLook w:firstColumn="1" w:firstRow="1" w:lastColumn="0" w:lastRow="0" w:noHBand="0" w:noVBand="1" w:val="04A0"/></w:tblPr>`)
+	fmt.Fprintf(&b, `<w:tblGrid><w:gridCol w:w="%d"/><w:gridCol w:w="%d"/></w:tblGrid><w:tr>`, cellWidth, cellWidth)
+	for _, c := range t.cells {
+		fmt.Fprintf(&b, `<w:tc><w:tcPr><w:tcW w:type="dxa" w:w="%d"/>`, cellWidth)
+		// chgksuite writes w:topBorder/w:leftBorder/… rather than the schema's
+		// w:tcBorders>w:top; Word draws the borders anyway, and parity is parity.
+		for _, edge := range []string{"top", "left", "bottom", "right"} {
+			fmt.Fprintf(&b, `<w:%sBorder w:val="single" w:sz="4" w:space="0" w:color="auto"/>`, edge)
+		}
+		b.WriteString("</w:tcPr>" + c.xml() + "</w:tc>")
+	}
+	b.WriteString("</w:tr></w:tbl>")
+	return b.String()
 }

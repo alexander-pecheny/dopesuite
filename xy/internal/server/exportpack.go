@@ -140,7 +140,7 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 		}
 	}
 	if formats.docx {
-		b, err := docx.Export(structure(), req.images)
+		b, err := docx.Export(structure(), req.images, docx.Options{})
 		if err != nil {
 			return nil, err
 		}

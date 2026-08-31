@@ -59,7 +59,7 @@ func TestPhotoEmbedsAsJPEG(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, err := Export(fsource.Parse("? Что на фото? (img photo.jpg)\n! Ничего\n", "chgk"),
-		map[string][]byte{"photo.jpg": src.Bytes()})
+		map[string][]byte{"photo.jpg": src.Bytes()}, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestTransparentImageStaysPNG(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, err := Export(fsource.Parse("? Что тут? (img pic.png)\n! Ничего\n", "chgk"),
-		map[string][]byte{"pic.png": src.Bytes()})
+		map[string][]byte{"pic.png": src.Bytes()}, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestTransparentImageStaysPNG(t *testing.T) {
 
 // A missing image degrades to a marker run rather than failing the export.
 func TestMissingImageDegrades(t *testing.T) {
-	out, err := Export(fsource.Parse("? Где картинка? (img gone.png)\n! Нигде\n", "chgk"), nil)
+	out, err := Export(fsource.Parse("? Где картинка? (img gone.png)\n! Нигде\n", "chgk"), nil, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,7 @@
 package docx
 
 import (
+	"crypto/sha1"
 	"fmt"
 	"math"
 	"strings"
@@ -20,6 +21,7 @@ type mediaItem struct {
 	partName string // e.g. media/image1.jpg
 	data     []byte
 	ext      string // "jpg" / "png" — drives the [Content_Types].xml defaults
+	sum      [sha1.Size]byte
 }
 
 const emuPerInch = 914400
@@ -61,12 +63,7 @@ func (e *exporter) embedImage(arg string) string {
 		return missingImage(name)
 	}
 
-	idx := len(e.media) + 1
-	relID := fmt.Sprintf("rId%d", e.nextRel)
-	e.nextRel++
-	partName := fmt.Sprintf("media/image%d.%s", idx, ext)
-	e.media = append(e.media, mediaItem{relID: relID, partName: partName, data: data, ext: ext})
-	e.rels = append(e.rels, relItem{id: relID, typ: imageRelType, target: partName})
+	relID := e.mediaRel(data, ext)
 	docID := e.nextDoc
 	e.nextDoc++
 
@@ -76,6 +73,24 @@ func (e *exporter) embedImage(arg string) string {
 	}
 	// block image: surround with line breaks so it sits on its own line
 	return brk() + drawing + brk()
+}
+
+// mediaRel registers an image part and returns its relationship id, reusing the
+// part when the same bytes are embedded again (python-docx keys its image parts
+// by content, so a question printed twice embeds one picture).
+func (e *exporter) mediaRel(data []byte, ext string) string {
+	sum := sha1.Sum(data)
+	for _, m := range e.media {
+		if m.sum == sum {
+			return m.relID
+		}
+	}
+	relID := fmt.Sprintf("rId%d", e.nextRel)
+	e.nextRel++
+	partName := fmt.Sprintf("media/image%d.%s", len(e.media)+1, ext)
+	e.media = append(e.media, mediaItem{relID: relID, partName: partName, data: data, ext: ext, sum: sum})
+	e.rels = append(e.rels, relItem{id: relID, typ: imageRelType, target: partName})
+	return relID
 }
 
 func inchesToEMU(in float64) int64 { return int64(math.Round(in * emuPerInch)) }

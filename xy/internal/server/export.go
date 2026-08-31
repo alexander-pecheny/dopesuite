@@ -170,7 +170,7 @@ func (s *server) handleExportDocx(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	b, err := docx.Export(fsource.Parse(req.source, "chgk"), req.images)
+	b, err := docx.Export(fsource.Parse(req.source, "chgk"), req.images, docx.Options{})
 	if err != nil {
 		httpError(w, http.StatusInternalServerError, "docx export failed: "+err.Error())
 		return

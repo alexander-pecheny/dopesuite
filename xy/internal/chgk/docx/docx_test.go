@@ -103,7 +103,7 @@ func TestDocxTextParity(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			mine, err := Export(fsource.Parse(string(src), "chgk"), nil)
+			mine, err := Export(fsource.Parse(string(src), "chgk"), nil, Options{})
 			if err != nil {
 				t.Fatalf("export: %v", err)
 			}
@@ -150,7 +150,7 @@ func TestDocxBodyParity(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			mine, err := Export(fsource.Parse(string(src), "chgk"), nil)
+			mine, err := Export(fsource.Parse(string(src), "chgk"), nil, Options{})
 			if err != nil {
 				t.Fatalf("export: %v", err)
 			}
