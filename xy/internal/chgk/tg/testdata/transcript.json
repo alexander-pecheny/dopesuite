@@ -1,0 +1,1587 @@
+[
+ {
+  "fixture": "basic",
+  "variant": "plain",
+  "calls": [
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Чемпионат</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тур 1</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1003
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 1:</b> Сколько будет 2+2?</p><details><summary>Ответ</summary><p><b>Ответ:</b> 4<br/><b>Зачёт:</b> четыре</p><footer><b>Источник:</b> Арифметика<br/><b>Автор:</b> Иванов</footer></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1005
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 2:</b> Вопрос с раздаткой</p><details><summary>Ответ</summary><p><b>Ответ:</b> Камень<br/><b>Комментарий:</b> Комментарий<br/>1. первый<br/>2. второй</p></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1007
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "text": "<b>Чемпионат</b>\n\nОбщее впечатление от пакета — в комментариях к этому посту.\nТур 1: https://t.me/c/1111111111/1003",
+    "photo": false
+   },
+   {
+    "call": "pinChatMessage",
+    "data": {
+     "chat_id": "-1001111111111",
+     "message_id": 1009,
+     "disable_notification": true
+    }
+   }
+  ]
+ },
+ {
+  "fixture": "basic",
+  "variant": "nospoilers",
+  "calls": [
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Чемпионат</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тур 1</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1003
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 1:</b> Сколько будет 2+2?</p><p><b>Ответ:</b> 4<br/><b>Зачёт:</b> четыре</p><footer><b>Источник:</b> Арифметика<br/><b>Автор:</b> Иванов</footer>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1005
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 2:</b> Вопрос с раздаткой</p><p><b>Ответ:</b> Камень<br/><b>Комментарий:</b> Комментарий<br/>1. первый<br/>2. второй</p>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1007
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "text": "<b>Чемпионат</b>\n\nОбщее впечатление от пакета — в комментариях к этому посту.\nТур 1: https://t.me/c/1111111111/1003",
+    "photo": false
+   },
+   {
+    "call": "pinChatMessage",
+    "data": {
+     "chat_id": "-1001111111111",
+     "message_id": 1009,
+     "disable_notification": true
+    }
+   }
+  ]
+ },
+ {
+  "fixture": "basic",
+  "variant": "polls",
+  "calls": [
+   {
+    "call": "setChatAvailableReactions",
+    "data": {
+     "chat_id": "-1001111111111",
+     "available_reactions": "[]"
+    }
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Чемпионат</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тур 1</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1003
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 1:</b> Сколько будет 2+2?</p><details><summary>Ответ</summary><p><b>Ответ:</b> 4<br/><b>Зачёт:</b> четыре</p><footer><b>Источник:</b> Арифметика<br/><b>Автор:</b> Иванов</footer></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1005
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка вопроса 1",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1006
+    }
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 2:</b> Вопрос с раздаткой</p><details><summary>Ответ</summary><p><b>Ответ:</b> Камень<br/><b>Комментарий:</b> Комментарий<br/>1. первый<br/>2. второй</p></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1007
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка вопроса 2",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1008
+    }
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка тура 1",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1004
+    }
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "text": "<b>Чемпионат</b>\n\nОбщее впечатление от пакета — в комментариях к этому посту.\nТур 1: https://t.me/c/1111111111/1003",
+    "photo": false
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1009
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка пакета Чемпионат",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1010
+    }
+   },
+   {
+    "call": "pinChatMessage",
+    "data": {
+     "chat_id": "-1001111111111",
+     "message_id": 1009,
+     "disable_notification": true
+    }
+   }
+  ]
+ },
+ {
+  "fixture": "basic",
+  "variant": "skip",
+  "calls": [
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 2:</b> Вопрос с раздаткой</p><details><summary>Ответ</summary><p><b>Ответ:</b> Камень<br/><b>Комментарий:</b> Комментарий<br/>1. первый<br/>2. второй</p></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   }
+  ]
+ },
+ {
+  "fixture": "img",
+  "variant": "plain",
+  "calls": [
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Картиночный пакет</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тур 1</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1003
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 1:</b> Что изображено?</p><img src=\"tg://photo?id=img0\"/><details><summary>Ответ</summary><p><b>Ответ:</b> Ничего<br/><b>Комментарий:</b> Комментарий с картинкой</p><img src=\"tg://photo?id=img1\"/><footer><b>Источник:</b> Источник<br/><b>Автор:</b> Автор</footer></details>",
+    "media": [
+     "img0",
+     "img1"
+    ]
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1005
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 2:</b></p><img src=\"tg://photo?id=img0\"/><p>Что это?</p><details><summary>Ответ</summary><p><b>Ответ:</b> Круг</p></details>",
+    "media": [
+     "img0"
+    ]
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1007
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "text": "<b>Картиночный пакет</b>\n\nОбщее впечатление от пакета — в комментариях к этому посту.\nТур 1: https://t.me/c/1111111111/1003",
+    "photo": false
+   },
+   {
+    "call": "pinChatMessage",
+    "data": {
+     "chat_id": "-1001111111111",
+     "message_id": 1009,
+     "disable_notification": true
+    }
+   }
+  ]
+ },
+ {
+  "fixture": "img",
+  "variant": "nospoilers",
+  "calls": [
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Картиночный пакет</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тур 1</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1003
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 1:</b> Что изображено?</p><img src=\"tg://photo?id=img0\"/><p><b>Ответ:</b> Ничего<br/><b>Комментарий:</b> Комментарий с картинкой</p><img src=\"tg://photo?id=img1\"/><footer><b>Источник:</b> Источник<br/><b>Автор:</b> Автор</footer>",
+    "media": [
+     "img0",
+     "img1"
+    ]
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1005
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 2:</b></p><img src=\"tg://photo?id=img0\"/><p>Что это?</p><p><b>Ответ:</b> Круг</p>",
+    "media": [
+     "img0"
+    ]
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1007
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "text": "<b>Картиночный пакет</b>\n\nОбщее впечатление от пакета — в комментариях к этому посту.\nТур 1: https://t.me/c/1111111111/1003",
+    "photo": false
+   },
+   {
+    "call": "pinChatMessage",
+    "data": {
+     "chat_id": "-1001111111111",
+     "message_id": 1009,
+     "disable_notification": true
+    }
+   }
+  ]
+ },
+ {
+  "fixture": "img",
+  "variant": "polls",
+  "calls": [
+   {
+    "call": "setChatAvailableReactions",
+    "data": {
+     "chat_id": "-1001111111111",
+     "available_reactions": "[]"
+    }
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Картиночный пакет</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тур 1</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1003
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 1:</b> Что изображено?</p><img src=\"tg://photo?id=img0\"/><details><summary>Ответ</summary><p><b>Ответ:</b> Ничего<br/><b>Комментарий:</b> Комментарий с картинкой</p><img src=\"tg://photo?id=img1\"/><footer><b>Источник:</b> Источник<br/><b>Автор:</b> Автор</footer></details>",
+    "media": [
+     "img0",
+     "img1"
+    ]
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1005
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка вопроса 1",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1006
+    }
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 2:</b></p><img src=\"tg://photo?id=img0\"/><p>Что это?</p><details><summary>Ответ</summary><p><b>Ответ:</b> Круг</p></details>",
+    "media": [
+     "img0"
+    ]
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1007
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка вопроса 2",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1008
+    }
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка тура 1",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1004
+    }
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "text": "<b>Картиночный пакет</b>\n\nОбщее впечатление от пакета — в комментариях к этому посту.\nТур 1: https://t.me/c/1111111111/1003",
+    "photo": false
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1009
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка пакета Картиночный пакет",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1010
+    }
+   },
+   {
+    "call": "pinChatMessage",
+    "data": {
+     "chat_id": "-1001111111111",
+     "message_id": 1009,
+     "disable_notification": true
+    }
+   }
+  ]
+ },
+ {
+  "fixture": "img",
+  "variant": "skip",
+  "calls": [
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 2:</b></p><img src=\"tg://photo?id=img0\"/><p>Что это?</p><details><summary>Ответ</summary><p><b>Ответ:</b> Круг</p></details>",
+    "media": [
+     "img0"
+    ]
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   }
+  ]
+ },
+ {
+  "fixture": "multiline",
+  "variant": "plain",
+  "calls": [
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 1:</b> Длинный вопрос<br/>с переносом строки.</p><details><summary>Ответ</summary><p><b>Ответ:</b> Ответ<br/>с комментарием</p><footer><b>Источник:</b> Источник 1<br/>Источник 2<br/><b>Автор:</b> Автор</footer></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "text": "Общее впечатление от пакета — в комментариях к этому посту.",
+    "photo": false
+   },
+   {
+    "call": "pinChatMessage",
+    "data": {
+     "chat_id": "-1001111111111",
+     "message_id": 1003,
+     "disable_notification": true
+    }
+   }
+  ]
+ },
+ {
+  "fixture": "multiline",
+  "variant": "nospoilers",
+  "calls": [
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 1:</b> Длинный вопрос<br/>с переносом строки.</p><p><b>Ответ:</b> Ответ<br/>с комментарием</p><footer><b>Источник:</b> Источник 1<br/>Источник 2<br/><b>Автор:</b> Автор</footer>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "text": "Общее впечатление от пакета — в комментариях к этому посту.",
+    "photo": false
+   },
+   {
+    "call": "pinChatMessage",
+    "data": {
+     "chat_id": "-1001111111111",
+     "message_id": 1003,
+     "disable_notification": true
+    }
+   }
+  ]
+ },
+ {
+  "fixture": "multiline",
+  "variant": "polls",
+  "calls": [
+   {
+    "call": "setChatAvailableReactions",
+    "data": {
+     "chat_id": "-1001111111111",
+     "available_reactions": "[]"
+    }
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 1:</b> Длинный вопрос<br/>с переносом строки.</p><details><summary>Ответ</summary><p><b>Ответ:</b> Ответ<br/>с комментарием</p><footer><b>Источник:</b> Источник 1<br/>Источник 2<br/><b>Автор:</b> Автор</footer></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка вопроса 1",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1002
+    }
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "text": "Общее впечатление от пакета — в комментариях к этому посту.",
+    "photo": false
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1003
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка пакета ",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1004
+    }
+   },
+   {
+    "call": "pinChatMessage",
+    "data": {
+     "chat_id": "-1001111111111",
+     "message_id": 1003,
+     "disable_notification": true
+    }
+   }
+  ]
+ },
+ {
+  "fixture": "multiline",
+  "variant": "skip",
+  "calls": []
+ },
+ {
+  "fixture": "screen",
+  "variant": "plain",
+  "calls": [
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тестовый пакет</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тур 1</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1003
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 1:</b> Пе́рвое сло́во [пауза] и второ́е [Раздаточный материал: сло́во на экра́не] хвост.</p><details><summary>Ответ</summary><p><b>Ответ:</b> Отве́т [пояснение для ведущего]<br/><b>Зачёт:</b> Зачёт [ещё пометка]<br/>: Незачёт [и тут]<br/><b>Комментарий:</b> Коммента́рий [для ведущего]</p><footer><b>Источник:</b> Исто́чник [ссылка]<br/><b>Автор:</b> А́втор [никому]</footer></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1005
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "text": "<b>Тестовый пакет</b>\n\nОбщее впечатление от пакета — в комментариях к этому посту.\nТур 1: https://t.me/c/1111111111/1003",
+    "photo": false
+   },
+   {
+    "call": "pinChatMessage",
+    "data": {
+     "chat_id": "-1001111111111",
+     "message_id": 1007,
+     "disable_notification": true
+    }
+   }
+  ]
+ },
+ {
+  "fixture": "screen",
+  "variant": "nospoilers",
+  "calls": [
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тестовый пакет</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тур 1</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1003
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 1:</b> Пе́рвое сло́во [пауза] и второ́е [Раздаточный материал: сло́во на экра́не] хвост.</p><p><b>Ответ:</b> Отве́т [пояснение для ведущего]<br/><b>Зачёт:</b> Зачёт [ещё пометка]<br/>: Незачёт [и тут]<br/><b>Комментарий:</b> Коммента́рий [для ведущего]</p><footer><b>Источник:</b> Исто́чник [ссылка]<br/><b>Автор:</b> А́втор [никому]</footer>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1005
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "text": "<b>Тестовый пакет</b>\n\nОбщее впечатление от пакета — в комментариях к этому посту.\nТур 1: https://t.me/c/1111111111/1003",
+    "photo": false
+   },
+   {
+    "call": "pinChatMessage",
+    "data": {
+     "chat_id": "-1001111111111",
+     "message_id": 1007,
+     "disable_notification": true
+    }
+   }
+  ]
+ },
+ {
+  "fixture": "screen",
+  "variant": "polls",
+  "calls": [
+   {
+    "call": "setChatAvailableReactions",
+    "data": {
+     "chat_id": "-1001111111111",
+     "available_reactions": "[]"
+    }
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тестовый пакет</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тур 1</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1003
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 1:</b> Пе́рвое сло́во [пауза] и второ́е [Раздаточный материал: сло́во на экра́не] хвост.</p><details><summary>Ответ</summary><p><b>Ответ:</b> Отве́т [пояснение для ведущего]<br/><b>Зачёт:</b> Зачёт [ещё пометка]<br/>: Незачёт [и тут]<br/><b>Комментарий:</b> Коммента́рий [для ведущего]</p><footer><b>Источник:</b> Исто́чник [ссылка]<br/><b>Автор:</b> А́втор [никому]</footer></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1005
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка вопроса 1",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1006
+    }
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка тура 1",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1004
+    }
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "text": "<b>Тестовый пакет</b>\n\nОбщее впечатление от пакета — в комментариях к этому посту.\nТур 1: https://t.me/c/1111111111/1003",
+    "photo": false
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1007
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка пакета Тестовый пакет",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1008
+    }
+   },
+   {
+    "call": "pinChatMessage",
+    "data": {
+     "chat_id": "-1001111111111",
+     "message_id": 1007,
+     "disable_notification": true
+    }
+   }
+  ]
+ },
+ {
+  "fixture": "screen",
+  "variant": "skip",
+  "calls": []
+ },
+ {
+  "fixture": "sources",
+  "variant": "plain",
+  "calls": [
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Чемпионат</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тур 1\nИсточник: Bill Hammack, «Things We Make»</h3><p>Александр Печеный (Белград)</p>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1003
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 1:</b> Во время конклава в 2025 году кардиналы пожаловались на некоторую проблему. Чтобы её решить, пришлось купить более ста ИКСОВ. За последние десятилетия спрос на ИКСЫ сильно упал. Назовите ИКС одним словом.</p><details><summary>Ответ</summary><p><b>Ответ:</b> будильник.<br/><b>Комментарий:</b> на время конклава кардиналы сдают все электронные устройства, чтобы не выдать информацию о ходе выборов раньше времени.</p><footer><b>Источник:</b> <br/>1. NHK, «Behind the scenes at the conclave with Japan's Cardinal Kikuchi Isao» (<a href=\"https://www3.nhk.or.jp/nhkworld/en/news/backstories/4014\">https://www3.nhk.or.jp/nhkworld/en/news/backstories/4014</a>), поиск по тексту «alarm»<br/>2. <a href=\"https://www.ncronline.org/vatican/vatican-news/what-new-book-tells-us-about-conclave-elected-pope-leo\">https://www.ncronline.org/vatican/vatican-news/what-new-book-tells-us-about-conclave-elected-pope-leo</a><br/>3. Instagram iamkaradavid от 10 мая 2025 (<a href=\"https://www.instagram.com/p/DJdN2waz_5c/?img_index=12\">https://www.instagram.com/p/DJdN2waz&#95;5c/?img&#95;index=12</a>)</footer></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1005
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "text": "<b>Чемпионат</b>\n\nОбщее впечатление от пакета — в комментариях к этому посту.\nТур 1: https://t.me/c/1111111111/1003",
+    "photo": false
+   },
+   {
+    "call": "pinChatMessage",
+    "data": {
+     "chat_id": "-1001111111111",
+     "message_id": 1007,
+     "disable_notification": true
+    }
+   }
+  ]
+ },
+ {
+  "fixture": "sources",
+  "variant": "nospoilers",
+  "calls": [
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Чемпионат</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тур 1\nИсточник: Bill Hammack, «Things We Make»</h3><p>Александр Печеный (Белград)</p>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1003
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 1:</b> Во время конклава в 2025 году кардиналы пожаловались на некоторую проблему. Чтобы её решить, пришлось купить более ста ИКСОВ. За последние десятилетия спрос на ИКСЫ сильно упал. Назовите ИКС одним словом.</p><p><b>Ответ:</b> будильник.<br/><b>Комментарий:</b> на время конклава кардиналы сдают все электронные устройства, чтобы не выдать информацию о ходе выборов раньше времени.</p><footer><b>Источник:</b> <br/>1. NHK, «Behind the scenes at the conclave with Japan's Cardinal Kikuchi Isao» (<a href=\"https://www3.nhk.or.jp/nhkworld/en/news/backstories/4014\">https://www3.nhk.or.jp/nhkworld/en/news/backstories/4014</a>), поиск по тексту «alarm»<br/>2. <a href=\"https://www.ncronline.org/vatican/vatican-news/what-new-book-tells-us-about-conclave-elected-pope-leo\">https://www.ncronline.org/vatican/vatican-news/what-new-book-tells-us-about-conclave-elected-pope-leo</a><br/>3. Instagram iamkaradavid от 10 мая 2025 (<a href=\"https://www.instagram.com/p/DJdN2waz_5c/?img_index=12\">https://www.instagram.com/p/DJdN2waz&#95;5c/?img&#95;index=12</a>)</footer>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1005
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "text": "<b>Чемпионат</b>\n\nОбщее впечатление от пакета — в комментариях к этому посту.\nТур 1: https://t.me/c/1111111111/1003",
+    "photo": false
+   },
+   {
+    "call": "pinChatMessage",
+    "data": {
+     "chat_id": "-1001111111111",
+     "message_id": 1007,
+     "disable_notification": true
+    }
+   }
+  ]
+ },
+ {
+  "fixture": "sources",
+  "variant": "polls",
+  "calls": [
+   {
+    "call": "setChatAvailableReactions",
+    "data": {
+     "chat_id": "-1001111111111",
+     "available_reactions": "[]"
+    }
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Чемпионат</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тур 1\nИсточник: Bill Hammack, «Things We Make»</h3><p>Александр Печеный (Белград)</p>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1003
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 1:</b> Во время конклава в 2025 году кардиналы пожаловались на некоторую проблему. Чтобы её решить, пришлось купить более ста ИКСОВ. За последние десятилетия спрос на ИКСЫ сильно упал. Назовите ИКС одним словом.</p><details><summary>Ответ</summary><p><b>Ответ:</b> будильник.<br/><b>Комментарий:</b> на время конклава кардиналы сдают все электронные устройства, чтобы не выдать информацию о ходе выборов раньше времени.</p><footer><b>Источник:</b> <br/>1. NHK, «Behind the scenes at the conclave with Japan's Cardinal Kikuchi Isao» (<a href=\"https://www3.nhk.or.jp/nhkworld/en/news/backstories/4014\">https://www3.nhk.or.jp/nhkworld/en/news/backstories/4014</a>), поиск по тексту «alarm»<br/>2. <a href=\"https://www.ncronline.org/vatican/vatican-news/what-new-book-tells-us-about-conclave-elected-pope-leo\">https://www.ncronline.org/vatican/vatican-news/what-new-book-tells-us-about-conclave-elected-pope-leo</a><br/>3. Instagram iamkaradavid от 10 мая 2025 (<a href=\"https://www.instagram.com/p/DJdN2waz_5c/?img_index=12\">https://www.instagram.com/p/DJdN2waz&#95;5c/?img&#95;index=12</a>)</footer></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1005
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка вопроса 1",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1006
+    }
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка тура 1",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1004
+    }
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "text": "<b>Чемпионат</b>\n\nОбщее впечатление от пакета — в комментариях к этому посту.\nТур 1: https://t.me/c/1111111111/1003",
+    "photo": false
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1007
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка пакета Чемпионат",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1008
+    }
+   },
+   {
+    "call": "pinChatMessage",
+    "data": {
+     "chat_id": "-1001111111111",
+     "message_id": 1007,
+     "disable_notification": true
+    }
+   }
+  ]
+ },
+ {
+  "fixture": "sources",
+  "variant": "skip",
+  "calls": []
+ },
+ {
+  "fixture": "tours",
+  "variant": "plain",
+  "calls": [
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Двухтуровый пакет</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тур 1</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1003
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 1:</b> Первый вопрос?</p><details><summary>Ответ</summary><p><b>Ответ:</b> Ответ 1</p><footer><b>Источник:</b> Источник 1</footer></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1005
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 2:</b> Второй вопрос?</p><details><summary>Ответ</summary><p><b>Ответ:</b> Ответ 2</p><footer><b>Источник:</b> Источник 2</footer></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1007
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тур 2</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1009
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 3:</b> Третий вопрос?</p><details><summary>Ответ</summary><p><b>Ответ:</b> Ответ 3</p><footer><b>Источник:</b> Источник 3</footer></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1011
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 4:</b> Четвёртый вопрос?</p><details><summary>Ответ</summary><p><b>Ответ:</b> Ответ 4</p><footer><b>Источник:</b> Источник 4</footer></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1013
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "text": "<b>Двухтуровый пакет</b>\n\nОбщее впечатление от пакета — в комментариях к этому посту.\nТур 1: https://t.me/c/1111111111/1003\nТур 2: https://t.me/c/1111111111/1009",
+    "photo": false
+   },
+   {
+    "call": "pinChatMessage",
+    "data": {
+     "chat_id": "-1001111111111",
+     "message_id": 1015,
+     "disable_notification": true
+    }
+   }
+  ]
+ },
+ {
+  "fixture": "tours",
+  "variant": "nospoilers",
+  "calls": [
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Двухтуровый пакет</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тур 1</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1003
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 1:</b> Первый вопрос?</p><p><b>Ответ:</b> Ответ 1</p><footer><b>Источник:</b> Источник 1</footer>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1005
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 2:</b> Второй вопрос?</p><p><b>Ответ:</b> Ответ 2</p><footer><b>Источник:</b> Источник 2</footer>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1007
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тур 2</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1009
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 3:</b> Третий вопрос?</p><p><b>Ответ:</b> Ответ 3</p><footer><b>Источник:</b> Источник 3</footer>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1011
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 4:</b> Четвёртый вопрос?</p><p><b>Ответ:</b> Ответ 4</p><footer><b>Источник:</b> Источник 4</footer>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1013
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "text": "<b>Двухтуровый пакет</b>\n\nОбщее впечатление от пакета — в комментариях к этому посту.\nТур 1: https://t.me/c/1111111111/1003\nТур 2: https://t.me/c/1111111111/1009",
+    "photo": false
+   },
+   {
+    "call": "pinChatMessage",
+    "data": {
+     "chat_id": "-1001111111111",
+     "message_id": 1015,
+     "disable_notification": true
+    }
+   }
+  ]
+ },
+ {
+  "fixture": "tours",
+  "variant": "polls",
+  "calls": [
+   {
+    "call": "setChatAvailableReactions",
+    "data": {
+     "chat_id": "-1001111111111",
+     "available_reactions": "[]"
+    }
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Двухтуровый пакет</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тур 1</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1003
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 1:</b> Первый вопрос?</p><details><summary>Ответ</summary><p><b>Ответ:</b> Ответ 1</p><footer><b>Источник:</b> Источник 1</footer></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1005
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка вопроса 1",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1006
+    }
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 2:</b> Второй вопрос?</p><details><summary>Ответ</summary><p><b>Ответ:</b> Ответ 2</p><footer><b>Источник:</b> Источник 2</footer></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1007
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка вопроса 2",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1008
+    }
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка тура 1",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1004
+    }
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тур 2</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1009
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 3:</b> Третий вопрос?</p><details><summary>Ответ</summary><p><b>Ответ:</b> Ответ 3</p><footer><b>Источник:</b> Источник 3</footer></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1011
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка вопроса 3",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1012
+    }
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 4:</b> Четвёртый вопрос?</p><details><summary>Ответ</summary><p><b>Ответ:</b> Ответ 4</p><footer><b>Источник:</b> Источник 4</footer></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1013
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка вопроса 4",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1014
+    }
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка тура 2",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1010
+    }
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "text": "<b>Двухтуровый пакет</b>\n\nОбщее впечатление от пакета — в комментариях к этому посту.\nТур 1: https://t.me/c/1111111111/1003\nТур 2: https://t.me/c/1111111111/1009",
+    "photo": false
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1015
+   },
+   {
+    "call": "sendPoll",
+    "data": {
+     "chat_id": "-1002222222222",
+     "question": "Ваша оценка пакета Двухтуровый пакет",
+     "options": "[\"\\ud83d\\udd25\", \"\\ud83d\\udc4d\", \"\\ud83d\\udc4c\", \"\\ud83e\\udd71\", \"\\ud83d\\udc4e\", \"\\ud83d\\ude21\"]",
+     "is_anonymous": false,
+     "disable_notification": true,
+     "type": "regular",
+     "allows_revoting": false,
+     "reply_to_message_id": 1016
+    }
+   },
+   {
+    "call": "pinChatMessage",
+    "data": {
+     "chat_id": "-1001111111111",
+     "message_id": 1015,
+     "disable_notification": true
+    }
+   }
+  ]
+ },
+ {
+  "fixture": "tours",
+  "variant": "skip",
+  "calls": [
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 2:</b> Второй вопрос?</p><details><summary>Ответ</summary><p><b>Ответ:</b> Ответ 2</p><footer><b>Источник:</b> Источник 2</footer></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1001
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<h3>Тур 2</h3>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1003
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 3:</b> Третий вопрос?</p><details><summary>Ответ</summary><p><b>Ответ:</b> Ответ 3</p><footer><b>Источник:</b> Источник 3</footer></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1005
+   },
+   {
+    "call": "post",
+    "chat": "-1001111111111",
+    "reply_to": null,
+    "html": "<p><b>Вопрос 4:</b> Четвёртый вопрос?</p><details><summary>Ответ</summary><p><b>Ответ:</b> Ответ 4</p><footer><b>Источник:</b> Источник 4</footer></details>",
+    "media": []
+   },
+   {
+    "call": "discussion_of",
+    "message_id": 1007
+   }
+  ]
+ }
+]

@@ -10,6 +10,7 @@
 package inline
 
 import (
+	"fmt"
 	"net/url"
 	"regexp"
 	"sort"
@@ -428,4 +429,23 @@ func dedup(in []string) []string {
 		}
 	}
 	return out
+}
+
+// URLQuote mirrors urllib.parse.quote(url, safe=HYPERLINK_SAFE_CHARS): keep
+// unreserved chars (alnum + "_.-~") and chgksuite's hyperlink-safe set;
+// percent-encode every other byte (UTF-8).
+func URLQuote(s string) string {
+	const safe = "%/:?#[]@!$&'()*+,;="
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9',
+			c == '_', c == '.', c == '-', c == '~', strings.IndexByte(safe, c) >= 0:
+			b.WriteByte(c)
+		default:
+			fmt.Fprintf(&b, "%%%02X", c)
+		}
+	}
+	return b.String()
 }

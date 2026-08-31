@@ -172,7 +172,7 @@ func (e *exporter) addContent(p *para, text, kind string, o textOpts) {
 // addHyperlink appends a <w:hyperlink> wrapping a Hyperlink-styled run, and
 // records the external relationship (URL-quoted target).
 func (e *exporter) addHyperlink(p *para, urlText string) {
-	relID := e.externalRel(urlQuote(urlText))
+	relID := e.externalRel(inline.URLQuote(urlText))
 	text := strings.ReplaceAll(urlText, inline.NBHyphen, noBreakHyphenRepl)
 	inner := runXML(text, `<w:rPr><w:rStyle w:val="Hyperlink"/>`+szXML(p.sz)+`</w:rPr>`)
 	p.runs = append(p.runs, `<w:hyperlink r:id="`+relID+`">`+inner+`</w:hyperlink>`)
@@ -598,25 +598,6 @@ func xmlEscape(s string) string {
 	s = strings.ReplaceAll(s, "<", "&lt;")
 	s = strings.ReplaceAll(s, ">", "&gt;")
 	return s
-}
-
-// urlQuote mirrors urllib.parse.quote(url, safe=HYPERLINK_SAFE_CHARS): keep
-// unreserved chars (alnum + "_.-~") and the hyperlink-safe set; percent-encode
-// every other byte (UTF-8).
-func urlQuote(s string) string {
-	const safe = "%/:?#[]@!$&'()*+,;="
-	var b strings.Builder
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch {
-		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9',
-			c == '_', c == '.', c == '-', c == '~', strings.IndexByte(safe, c) >= 0:
-			b.WriteByte(c)
-		default:
-			fmt.Fprintf(&b, "%%%02X", c)
-		}
-	}
-	return b.String()
 }
 
 // ── repackage template.docx with the generated body + embedded images ──
