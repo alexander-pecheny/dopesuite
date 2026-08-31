@@ -25,6 +25,10 @@ var (
 	styleWarn   = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))           // amber
 	styleError  = lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Bold(true)
 	styleDone   = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
+
+	styleUsageHead = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
+	styleVerb      = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true)
+	styleArgs      = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 )
 
 func paint(s lipgloss.Style, text string) string {
