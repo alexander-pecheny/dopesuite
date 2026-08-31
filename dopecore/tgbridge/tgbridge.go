@@ -1,72 +1,11 @@
-// Package tgbridge single-sources the server side of the Telegram
-// login/registration handshake: the wire protocol the bot speaks, the
-// shared-secret gate, and the two SQL statements that back it.
-//
-// It deliberately does NOT own the bot-facing handlers: the two apps drive
-// these writes through different disciplines — xy wraps every write in a
-// bounded transaction under its global write lock, dope holds its global write
-// mutex across a direct DB exec — and their reply text differs. What must not
-// drift is the protocol and the SQL, and that is what lives here. The
-// visitor-facing side of the same handshake (start, status poll, claim) is the
-// state machine in package tglogin.
-//
-// Background: the bot used to open the database directly, which made it a second
-// long-lived writer on the live file. It now holds no database handle and calls
-// these endpoints instead; the server stays the sole owner of the DB. The
-// shared secret is what keeps the code-issuing endpoints closed to everyone else.
+// Package tgbridge single-sources the one write the Telegram bot causes:
+// consuming a register code. The two apps drive it through different
+// disciplines — xy wraps it in a bounded transaction under its global write
+// lock, dope holds its global write mutex across a direct exec — and their
+// reply text differs. What must not drift is the SQL, and that is what lives
+// here. The visitor-facing side of the same handshake (start, status poll,
+// claim) is the state machine in package tglogin.
 package tgbridge
-
-import (
-	"crypto/subtle"
-	"net/http"
-)
-
-// DefaultHealthAddr is where a bot answers "am I working?" and where a server
-// sharing its host looks. Both sides default to it so that neither needs a new
-// environment variable to find the other — a REQUIRED one would mean a deploy
-// that installs a healthy bot the server then reports as unreachable, which is
-// the failure this whole endpoint exists to prevent. Loopback: whether the bot
-// works is nobody's business from outside the host.
-const DefaultHealthAddr = "127.0.0.1:9676"
-
-// RegisterRequest is the bot's POST body when a user sends it a register code.
-type RegisterRequest struct {
-	Code             string `json:"code"`
-	TelegramUserID   int64  `json:"telegram_user_id"`
-	TelegramUsername string `json:"telegram_username"`
-	TelegramName     string `json:"telegram_name"`
-}
-
-// LoginRequest is the bot's POST body when a registered user asks for a login code.
-type LoginRequest struct {
-	TelegramUserID   int64  `json:"telegram_user_id"`
-	TelegramUsername string `json:"telegram_username"`
-	TelegramName     string `json:"telegram_name"`
-}
-
-// Response is what the server sends back: the text the bot echoes to the user.
-type Response struct {
-	Message string `json:"message"`
-}
-
-// SendRequest is a server→bot ask to DM a user, posted over loopback to the
-// bot's local endpoint (see tgbot.ServeLocal). Best-effort by contract: the
-// caller treats any failure as "the nudge was not delivered", nothing more.
-type SendRequest struct {
-	TelegramUserID int64  `json:"telegram_user_id"`
-	Text           string `json:"text"`
-}
-
-// SecretOK checks the X-Bot-Secret header in constant time. configured is false
-// when no secret is set, which must disable the bridge outright (503) rather
-// than leave the code-issuing endpoints open to unauthenticated callers.
-func SecretOK(r *http.Request, secret string) (ok, configured bool) {
-	if secret == "" {
-		return false, false
-	}
-	got := r.Header.Get("X-Bot-Secret")
-	return subtle.ConstantTimeCompare([]byte(got), []byte(secret)) == 1, true
-}
 
 // ConsumeRegisterSQL marks a pending 'register' code as consumed by the telegram
 // account that sent it. Params: telegram_user_id, telegram_username, telegram_name,

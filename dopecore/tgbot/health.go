@@ -1,26 +1,12 @@
 package tgbot
 
-import (
-	"context"
-	"encoding/json"
-	"log"
-	"net"
-	"net/http"
-	"time"
+import "time"
 
-	"pecheny.me/dopecore/tgbridge"
-)
-
-// A bot is a long-polling client: nothing can connect to it, so nothing can ask
-// whether it works. ServeHealth gives it one loopback endpoint that answers
-// that question, for a server sharing the host that wants to know whether
-// telegram login is worth offering.
+// A bot is a long-polling client, so "is it working" cannot be asked of the
+// process — only of the polling. Health is that answer, for a login page
+// deciding whether telegram is worth offering.
 //
-// It is opt-in — a library that opens a socket the caller never asked for is a
-// surprise, and the two bots that link this package run on different hosts with
-// different port maps.
-//
-// The answer is deliberately about POLLING, not about the process: a bot whose
+// It is deliberately about POLLING, not about the process: a bot whose
 // token was revoked, or whose network is blocked, is up and useless. `ok` is
 // false until the first getUpdates returns, so a bot that has never reached
 // Telegram never reads as healthy.
@@ -58,60 +44,4 @@ func HealthOf(c *Client, now time.Time) Health {
 		h.StaleFor = age.Round(time.Second).String()
 	}
 	return h
-}
-
-// ServeHealth runs the endpoint on addr until ctx is cancelled. addr should be
-// loopback: this says whether the bot is working, which is nobody's business
-// from outside the host.
-func ServeHealth(ctx context.Context, addr string, c *Client) {
-	ServeLocal(ctx, addr, c, "")
-}
-
-// ServeLocal is ServeHealth plus, when secret is non-empty, POST /send: the
-// server's way to DM a user through the bot it shares a host with (see
-// tgbridge.SendRequest). The secret is the same X-Bot-Secret the bridge already
-// shares; an empty one leaves /send off, so a bot deployed without it is
-// exactly the bot of before.
-func ServeLocal(ctx context.Context, addr string, c *Client, secret string) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		h := HealthOf(c, time.Now())
-		w.Header().Set("Content-Type", "application/json")
-		if !h.OK {
-			w.WriteHeader(http.StatusServiceUnavailable)
-		}
-		_ = json.NewEncoder(w).Encode(h)
-	})
-	if secret != "" {
-		mux.HandleFunc("POST /send", func(w http.ResponseWriter, r *http.Request) {
-			if ok, _ := tgbridge.SecretOK(r, secret); !ok {
-				w.WriteHeader(http.StatusForbidden)
-				return
-			}
-			var req tgbridge.SendRequest
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.TelegramUserID == 0 || req.Text == "" {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			c.Send(r.Context(), req.TelegramUserID, req.Text)
-			w.WriteHeader(http.StatusNoContent)
-		})
-	}
-	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		// A bot that cannot serve its health endpoint is still a working bot:
-		// say so and carry on, rather than taking telegram login down with it.
-		log.Printf("health endpoint on %s: %v", addr, err)
-		return
-	}
-	go func() {
-		<-ctx.Done()
-		shutdown, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(shutdown)
-	}()
-	if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
-		log.Printf("health endpoint: %v", err)
-	}
 }

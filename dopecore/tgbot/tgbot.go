@@ -5,7 +5,6 @@
 package tgbot
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -18,8 +17,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"pecheny.me/dopecore/tgbridge"
 )
 
 const defaultAPIBase = "https://api.telegram.org"
@@ -155,7 +152,7 @@ func (c *Client) pollState() (started, lastPoll, lastErr, conflict time.Time) {
 // LastPoll is when getUpdates last answered — zero before the first one returns.
 // A bot whose process is up but whose polling is wedged (revoked token, blocked
 // network) is useless to a login page in exactly the way a dead one is, and this
-// is what tells them apart. See ServeHealth.
+// is what tells them apart. See HealthOf.
 func (c *Client) LastPoll() time.Time {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -291,66 +288,4 @@ func (c *Client) send(ctx context.Context, chatID int64, text, parseMode string)
 
 func (c *Client) method(name string) string {
 	return c.apiBase + "/bot" + c.token + "/" + name
-}
-
-// Bridge is the bot's shared-secret connection to its app server.
-type Bridge struct {
-	serverURL string
-	secret    string
-	http      *http.Client
-}
-
-func NewBridge(serverURL, secret string, hc *http.Client) *Bridge {
-	if hc == nil {
-		hc = http.DefaultClient
-	}
-	return &Bridge{serverURL: strings.TrimRight(serverURL, "/"), secret: secret, http: hc}
-}
-
-func (b *Bridge) ServerURL() string { return b.serverURL }
-
-// Register and Login make a Bridge a Registrar: the conversation over loopback
-// HTTP, for a bot that is its own process.
-func (b *Bridge) Register(ctx context.Context, code string, from From) (string, error) {
-	return b.Call(ctx, "/api/telegram/register", tgbridge.RegisterRequest{
-		Code: code, TelegramUserID: from.UserID, TelegramUsername: from.Username, TelegramName: from.Name,
-	})
-}
-
-func (b *Bridge) Login(ctx context.Context, from From) (string, error) {
-	return b.Call(ctx, "/api/telegram/login", tgbridge.LoginRequest{
-		TelegramUserID: from.UserID, TelegramUsername: from.Username, TelegramName: from.Name,
-	})
-}
-
-// Call POSTs payload to a shared-secret endpoint and returns the server's
-// user-facing "message" field. Anything other than a 200 with parseable JSON is
-// an error; the caller decides what to say to the user.
-func (b *Bridge) Call(ctx context.Context, path string, payload any) (string, error) {
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return "", fmt.Errorf("bridge %s marshal: %w", path, err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, b.serverURL+path, bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("bridge %s build: %w", path, err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Bot-Secret", b.secret)
-	resp, err := b.http.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("bridge %s: %w", path, err)
-	}
-	defer resp.Body.Close()
-	data, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("bridge %s: status %d: %s", path, resp.StatusCode, strings.TrimSpace(string(data)))
-	}
-	var out struct {
-		Message string `json:"message"`
-	}
-	if err := json.Unmarshal(data, &out); err != nil {
-		return "", fmt.Errorf("bridge %s: bad response: %w", path, err)
-	}
-	return out.Message, nil
 }
