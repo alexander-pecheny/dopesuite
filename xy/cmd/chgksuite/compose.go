@@ -18,7 +18,7 @@ import (
 // compose runs `chgksuite compose <filetype> …`.
 func compose(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("compose needs a filetype (docx, pdf, pptx, telegram, markdown, redditmd, base, openquiz, add_stats)")
+		return fmt.Errorf("compose needs a filetype (docx, pdf, pptx, telegram, markdown, redditmd, base, openquiz, lj, add_stats)")
 	}
 	switch args[0] {
 	case "docx":
@@ -33,6 +33,8 @@ func compose(args []string) error {
 		return composeAddStats(args[1:])
 	case "pdf":
 		return composePDF(args[1:])
+	case "lj":
+		return composeLJ(args[1:])
 	default:
 		return fmt.Errorf("compose %s is not ported yet", args[0])
 	}

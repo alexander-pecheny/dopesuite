@@ -1,0 +1,186 @@
+[
+ {
+  "fixture": "basic",
+  "variant": "plain",
+  "posts": [
+   [
+    {
+     "header": "Тестовый пакет",
+     "content": "<center>Тестовый пакет</center>"
+    },
+    {
+     "header": "Вопрос 1",
+     "content": "<strong>Вопрос 1.</strong> Простой вопрос с <em>курсивом</em> и ссылкой (http://example.com текст ссылки), а также картинкой <img width=450 height=350 src=\"https://img.example/pic.png\"/>.\n<lj-spoiler>\n<strong>Ответ: </strong>Ответ.\n<strong>Зачёт: </strong>И такой вариант.\n<strong>Незачёт: </strong>Не такой.\n<strong>Комментарий: </strong>Комментарий в две\nстроки.\n<strong>Источник: </strong>Единственный источник.\n<strong>Автор: </strong>Иван Иванов</lj-spoiler>"
+    },
+    {
+     "header": "Вопрос 2",
+     "content": "<strong>Вопрос 2.</strong> [Раздаточный материал: <img width=450 height=350 src=\"https://img.example/pic.png\"/>]\nВопрос с раздаткой.\n<lj-spoiler>\n<strong>Ответ: </strong>Второй ответ [в скобках].\n<strong>Комментарий: </strong>Комментарий.\n<strong>Источники: </strong>1. Первый источник\n2. Второй источник\n<strong>Автор: </strong>Пётр Петров</lj-spoiler>"
+    },
+    {
+     "header": "Вопрос 3",
+     "content": "<strong>Вопрос 3.</strong> Блиц:\n1. Первый?\n2. Второй?\n3. Третий?\n<lj-spoiler>\n<strong>Ответ: </strong>1. Раз.\n2. Два.\n3. Три.\n<strong>Комментарий: </strong>Комментарий к блицу.\n<strong>Источник: </strong>Источник.</lj-spoiler>"
+    }
+   ]
+  ]
+ },
+ {
+  "fixture": "basic",
+  "variant": "nospoilers",
+  "posts": [
+   [
+    {
+     "header": "Тестовый пакет",
+     "content": "<center>Тестовый пакет</center>"
+    },
+    {
+     "header": "Вопрос 1",
+     "content": "<strong>Вопрос 1.</strong> Простой вопрос с <em>курсивом</em> и ссылкой (http://example.com текст ссылки), а также картинкой <img width=450 height=350 src=\"https://img.example/pic.png\"/>.\n<strong>Ответ: </strong>Ответ.\n<strong>Зачёт: </strong>И такой вариант.\n<strong>Незачёт: </strong>Не такой.\n<strong>Комментарий: </strong>Комментарий в две\nстроки.\n<strong>Источник: </strong>Единственный источник.\n<strong>Автор: </strong>Иван Иванов"
+    },
+    {
+     "header": "Вопрос 2",
+     "content": "<strong>Вопрос 2.</strong> [Раздаточный материал: <img width=450 height=350 src=\"https://img.example/pic.png\"/>]\nВопрос с раздаткой.\n<strong>Ответ: </strong>Второй ответ [в скобках].\n<strong>Комментарий: </strong>Комментарий.\n<strong>Источники: </strong>1. Первый источник\n2. Второй источник\n<strong>Автор: </strong>Пётр Петров"
+    },
+    {
+     "header": "Вопрос 3",
+     "content": "<strong>Вопрос 3.</strong> Блиц:\n1. Первый?\n2. Второй?\n3. Третий?\n<strong>Ответ: </strong>1. Раз.\n2. Два.\n3. Три.\n<strong>Комментарий: </strong>Комментарий к блицу.\n<strong>Источник: </strong>Источник."
+    }
+   ]
+  ]
+ },
+ {
+  "fixture": "basic",
+  "variant": "splittours",
+  "posts": [
+   [
+    {
+     "header": "Тестовый пакет. Тур 1",
+     "content": "<center>Тестовый пакет. Тур 1</center>"
+    },
+    {
+     "header": "Вопрос 1",
+     "content": "<strong>Вопрос 1.</strong> Простой вопрос с <em>курсивом</em> и ссылкой (http://example.com текст ссылки), а также картинкой <img width=450 height=350 src=\"https://img.example/pic.png\"/>.\n<lj-spoiler>\n<strong>Ответ: </strong>Ответ.\n<strong>Зачёт: </strong>И такой вариант.\n<strong>Незачёт: </strong>Не такой.\n<strong>Комментарий: </strong>Комментарий в две\nстроки.\n<strong>Источник: </strong>Единственный источник.\n<strong>Автор: </strong>Иван Иванов</lj-spoiler>"
+    },
+    {
+     "header": "Вопрос 2",
+     "content": "<strong>Вопрос 2.</strong> [Раздаточный материал: <img width=450 height=350 src=\"https://img.example/pic.png\"/>]\nВопрос с раздаткой.\n<lj-spoiler>\n<strong>Ответ: </strong>Второй ответ [в скобках].\n<strong>Комментарий: </strong>Комментарий.\n<strong>Источники: </strong>1. Первый источник\n2. Второй источник\n<strong>Автор: </strong>Пётр Петров</lj-spoiler>"
+    }
+   ],
+   [
+    {
+     "header": "Тестовый пакет. Тур 2",
+     "content": "Общее впечатление от пакета — в комментариях к этому посту."
+    },
+    {
+     "header": "Вопрос 3",
+     "content": "<strong>Вопрос 3.</strong> Блиц:\n1. Первый?\n2. Второй?\n3. Третий?\n<lj-spoiler>\n<strong>Ответ: </strong>1. Раз.\n2. Два.\n3. Три.\n<strong>Комментарий: </strong>Комментарий к блицу.\n<strong>Источник: </strong>Источник.</lj-spoiler>"
+    }
+   ]
+  ]
+ },
+ {
+  "fixture": "basic",
+  "variant": "genimp",
+  "posts": [
+   [
+    {
+     "header": "Тестовый пакет. Тур 1",
+     "content": "<center>Тестовый пакет. Тур 1</center>"
+    },
+    {
+     "header": "Вопрос 1",
+     "content": "<strong>Вопрос 1.</strong> Простой вопрос с <em>курсивом</em> и ссылкой (http://example.com текст ссылки), а также картинкой <img width=450 height=350 src=\"https://img.example/pic.png\"/>.\n<lj-spoiler>\n<strong>Ответ: </strong>Ответ.\n<strong>Зачёт: </strong>И такой вариант.\n<strong>Незачёт: </strong>Не такой.\n<strong>Комментарий: </strong>Комментарий в две\nстроки.\n<strong>Источник: </strong>Единственный источник.\n<strong>Автор: </strong>Иван Иванов</lj-spoiler>"
+    },
+    {
+     "header": "Вопрос 2",
+     "content": "<strong>Вопрос 2.</strong> [Раздаточный материал: <img width=450 height=350 src=\"https://img.example/pic.png\"/>]\nВопрос с раздаткой.\n<lj-spoiler>\n<strong>Ответ: </strong>Второй ответ [в скобках].\n<strong>Комментарий: </strong>Комментарий.\n<strong>Источники: </strong>1. Первый источник\n2. Второй источник\n<strong>Автор: </strong>Пётр Петров</lj-spoiler>"
+    }
+   ],
+   [
+    {
+     "header": "Тестовый пакет. Тур 2",
+     "content": "Общее впечатление от пакета — в комментариях к этому посту."
+    },
+    {
+     "header": "Вопрос 3",
+     "content": "<strong>Вопрос 3.</strong> Блиц:\n1. Первый?\n2. Второй?\n3. Третий?\n<lj-spoiler>\n<strong>Ответ: </strong>1. Раз.\n2. Два.\n3. Три.\n<strong>Комментарий: </strong>Комментарий к блицу.\n<strong>Источник: </strong>Источник.</lj-spoiler>"
+    }
+   ],
+   [
+    {
+     "header": "Тестовый пакет. Общие впечатления",
+     "content": "\nОбщее впечатление от пакета — в комментариях к этому посту."
+    }
+   ]
+  ]
+ },
+ {
+  "fixture": "screen",
+  "variant": "plain",
+  "posts": [
+   [
+    {
+     "header": "Пакет с экраном",
+     "content": "<center>Пакет с экраном</center>"
+    },
+    {
+     "header": "Вопрос 1",
+     "content": "<strong>Вопрос 1.</strong> Вопрос с Для экрана и ударе&#x0301;нием.\n<lj-spoiler>\n<strong>Ответ: </strong>Точный ответ, ещё вариант.\n<strong>Зачёт: </strong>Или так.\n<strong>Комментарий: </strong>Комментарий с картинкой <img width=450 height=350 src=\"https://img.example/pic.png\"/>.\n<strong>Источник: </strong>Источник.\n<strong>Автор: </strong>Автор</lj-spoiler>"
+    }
+   ]
+  ]
+ },
+ {
+  "fixture": "screen",
+  "variant": "nospoilers",
+  "posts": [
+   [
+    {
+     "header": "Пакет с экраном",
+     "content": "<center>Пакет с экраном</center>"
+    },
+    {
+     "header": "Вопрос 1",
+     "content": "<strong>Вопрос 1.</strong> Вопрос с Для экрана и ударе&#x0301;нием.\n<strong>Ответ: </strong>Точный ответ, ещё вариант.\n<strong>Зачёт: </strong>Или так.\n<strong>Комментарий: </strong>Комментарий с картинкой <img width=450 height=350 src=\"https://img.example/pic.png\"/>.\n<strong>Источник: </strong>Источник.\n<strong>Автор: </strong>Автор"
+    }
+   ]
+  ]
+ },
+ {
+  "fixture": "screen",
+  "variant": "splittours",
+  "posts": [
+   [
+    {
+     "header": "Пакет с экраном. Тур 1",
+     "content": "<center>Пакет с экраном. Тур 1</center>"
+    },
+    {
+     "header": "Вопрос 1",
+     "content": "<strong>Вопрос 1.</strong> Вопрос с Для экрана и ударе&#x0301;нием.\n<lj-spoiler>\n<strong>Ответ: </strong>Точный ответ, ещё вариант.\n<strong>Зачёт: </strong>Или так.\n<strong>Комментарий: </strong>Комментарий с картинкой <img width=450 height=350 src=\"https://img.example/pic.png\"/>.\n<strong>Источник: </strong>Источник.\n<strong>Автор: </strong>Автор</lj-spoiler>"
+    }
+   ]
+  ]
+ },
+ {
+  "fixture": "screen",
+  "variant": "genimp",
+  "posts": [
+   [
+    {
+     "header": "Пакет с экраном. Тур 1",
+     "content": "<center>Пакет с экраном. Тур 1</center>"
+    },
+    {
+     "header": "Вопрос 1",
+     "content": "<strong>Вопрос 1.</strong> Вопрос с Для экрана и ударе&#x0301;нием.\n<lj-spoiler>\n<strong>Ответ: </strong>Точный ответ, ещё вариант.\n<strong>Зачёт: </strong>Или так.\n<strong>Комментарий: </strong>Комментарий с картинкой <img width=450 height=350 src=\"https://img.example/pic.png\"/>.\n<strong>Источник: </strong>Источник.\n<strong>Автор: </strong>Автор</lj-spoiler>"
+    }
+   ],
+   [
+    {
+     "header": "Пакет с экраном. Общие впечатления",
+     "content": "\nОбщее впечатление от пакета — в комментариях к этому посту."
+    }
+   ]
+  ]
+ }
+]

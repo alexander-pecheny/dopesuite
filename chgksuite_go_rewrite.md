@@ -31,7 +31,7 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 | `imghost/` | `composer_common.Imgur` | done, cache shared with chgksuite |
 | `pptx/` | `composer/pptx.py` | done, oracle-tested |
 | `stats/` | `composer/stats.py` + the results readers of `common.py` | done, oracle-tested |
-| — | `composer/lj.py` | **not ported** |
+| `lj/` | `composer/lj.py` | rendering oracle-tested; the XML-RPC posting untried |
 | `textparse/db.go` | `parser_db.py` | done, canon-tested |
 | — | `board.py`, `board_config.py`, `xy_crypto.py` | not needed (xy serves `trello_compat.go`) |
 | `cmd/chgksuite/` | `cli.py` | `parse`, `compose docx|pptx|telegram|markdown|redditmd|base|openquiz|add_stats` |
@@ -115,9 +115,18 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       year becomes today's month and day, and `12.01.2020` is read month-first.
 - [x] **A4. openquiz JSON**: `internal/chgk/openquiz`. Byte-parity against
       chgksuite, key order and `indent=2` included.
-- [ ] **A5. lj (LiveJournal)** [cli]: `composer/lj.py` (403 lines): HTML
-      rendering + the XML-RPC challenge/post flow. The HTML renderer is reusable;
-      the posting half is legacy.
+- [x] **A5. lj (LiveJournal)**: `internal/chgk/lj`. The rendering half is
+      oracle-tested — eight runs over two fixtures (plain, `--nospoilers`,
+      `--splittours`, `--genimp`) come out character for character as
+      chgksuite's `lj_process` would post them, `<lj-spoiler>`, the imgur links
+      and the pictures' pixel sizes included (`scripts/gen_lj_oracle.py`, with
+      the XML-RPC half stubbed so the oracle cannot talk to livejournal).
+      The posting half is ported too — LiveJournal's XML-RPC, whose auth is
+      md5(challenge + md5(password)) — but it is **unverified against the live
+      service**: there is no account here to try it on. What is tested is the
+      request it builds, the answer it reads and the hash it computes.
+      `compose lj` therefore writes the posts as .html unless `--login` is
+      given, where chgksuite always publishes.
 - [x] **A6. Imgur upload**: `internal/chgk/imghost`, behind an `imghost.Host`
       the three exporters take, so a test hands them a stub and the parity
       oracles need no network. The cache is chgksuite's own

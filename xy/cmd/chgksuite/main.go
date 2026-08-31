@@ -21,6 +21,7 @@ commands:
   compose base [flags] <file.4s>…   render to db.chgk.info's submission text
   compose openquiz [flags] <file.4s>…   render to openquiz.me's JSON
   compose pdf [flags] <file.4s>…   typeset questions to PDF
+  compose lj [flags] <file.4s>…   render (or post) the LiveJournal HTML
   compose add_stats [flags] <file.4s>…   add a tournament's results to the questions
   handouts generate [flags] <file.4s>   pull the handouts out into a .hndt
   handouts run [flags] <file.hndt>   render a .hndt to PDF

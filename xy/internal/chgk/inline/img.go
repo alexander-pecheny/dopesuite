@@ -70,6 +70,25 @@ func (im Img) SizeInches(nativeW, nativeH int) (w, h float64) {
 	return width / 120, height / 120
 }
 
+// SizePixels is parseimg(dimensions="pixels"), which is what the HTML exports
+// ask for: the picture's own size when the directive names none, and the
+// missing dimension derived from the other otherwise. native is true when
+// neither was named, which is when chgksuite's numbers are whole — with an
+// option they have all been through float().
+func (im Img) SizePixels(nativeW, nativeH int) (w, h float64, native bool) {
+	rw, rh := proportionalResize(max(nativeW, 1), max(nativeH, 1))
+	if im.Width == -1 && im.Height == -1 {
+		return float64(rw), float64(rh), true
+	}
+	w, h = im.Width, im.Height
+	if w != -1 && h == -1 {
+		h = float64(rh) * (w / float64(rw))
+	} else if w == -1 && h != -1 {
+		w = float64(rw) * (h / float64(rh))
+	}
+	return w, h, false
+}
+
 // proportionalResize mirrors chgksuite: clamp the longest side into [200, 600] px.
 func proportionalResize(w, h int) (int, int) {
 	mx := max(w, h)
