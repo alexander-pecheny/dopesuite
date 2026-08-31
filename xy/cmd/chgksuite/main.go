@@ -13,6 +13,7 @@ func usage() {
 	fmt.Fprint(os.Stderr, `usage: chgksuite <command> [<args>]
 
 commands:
+  parse [flags] <file.docx|file.txt>…   read a package into .4s
   compose docx [flags] <file.4s>…   render questions to .docx
   compose telegram [flags] <file.4s>  post questions to a telegram channel
 
@@ -27,6 +28,8 @@ func main() {
 	}
 	var err error
 	switch os.Args[1] {
+	case "parse":
+		err = parseCmd(os.Args[2:])
 	case "compose":
 		err = compose(os.Args[2:])
 	case "-h", "--help", "help":
