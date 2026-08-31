@@ -4,12 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
-	"log"
 	"os"
-	"path/filepath"
+	"runtime"
 	"strings"
-	"syscall"
 )
 
 // Telegram hands every update to exactly one poller. A second process on the
@@ -31,7 +28,18 @@ import (
 // directory (1777, tmpfs, cleared on reboot) and it is NOT shadowed by
 // systemd's PrivateTmp, so units that see different /tmp still contend here.
 // A unit under ProtectSystem=strict needs ReadWritePaths=/run/lock.
-var lockDir = "/run/lock"
+//
+// Windows has no such directory; the per-user temp is the closest thing, and
+// nothing there runs two servers on one token anyway — the CLI links this in
+// for `compose telegram` and never polls.
+var lockDir = defaultLockDir()
+
+func defaultLockDir() string {
+	if runtime.GOOS == "windows" {
+		return os.TempDir()
+	}
+	return "/run/lock"
+}
 
 // TokenHash names a bot token without printing it: the first 12 hex digits of
 // its sha256. Short on purpose — it goes in a filename and a log line, and at
@@ -58,31 +66,4 @@ func open(path string) (*os.File, error) {
 		return nil, err
 	}
 	return os.Open(path)
-}
-
-// AcquirePollLock claims this host's right to poll token. The returned release
-// drops it. An error means someone else already holds it and this process must
-// not poll; the message names the holder it found.
-func AcquirePollLock(token string) (release func(), err error) {
-	path := filepath.Join(lockDir, "dopesuite-bot-"+TokenHash(token)+".lock")
-	f, err := open(path)
-	if err != nil {
-		return nil, fmt.Errorf("poll lock %s: %w", path, err)
-	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		held, _ := os.ReadFile(path)
-		f.Close()
-		return nil, fmt.Errorf("poll lock %s is held by %s: %w", path, strings.TrimSpace(string(held)), err)
-	}
-	// Who holds it, for whoever is reading the log at 3am. Best-effort: the lock
-	// is the fd, not the contents, and we may only have it open for reading.
-	if err := f.Truncate(0); err == nil {
-		_, _ = fmt.Fprintf(f, "pid %d %s\n", os.Getpid(), strings.Join(os.Args, " "))
-	}
-	return func() {
-		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-		if err := f.Close(); err != nil {
-			log.Printf("poll lock %s: %v", path, err)
-		}
-	}, nil
 }
