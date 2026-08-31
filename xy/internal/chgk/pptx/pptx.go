@@ -28,6 +28,9 @@ type Options struct {
 	Template []byte
 	// FontDirs are extra places to look for the measurement font.
 	FontDirs []string
+	// Font is --font: a family name, or a font file to take one from. It
+	// replaces the config's, for both the slides and the measurement.
+	Font string
 	// DisableNumbers is --disable_numbers: no question number in the corner.
 	DisableNumbers bool
 	// DoNotRemoveAccents is --do_not_remove_accents: stress marks stay.
@@ -59,13 +62,18 @@ func Export(doc fsource.Doc, images map[string][]byte, o Options) ([]byte, error
 	if template == nil {
 		template = defaultTemplate
 	}
+	name, err := fontName(o.Font)
+	if err != nil {
+		return nil, err
+	}
+	cfg.setFontName(name)
 	p, err := openPkg(template)
 	if err != nil {
 		return nil, err
 	}
 	e := &exporter{
 		pkg: p, cfg: cfg, opts: o, images: images, labels: i18n.LabelsForOrDefault(o.Language, o.LabelsFile),
-		faces: FindFontFaces(cfg.fontName(), o.FontDirs),
+		faces: FindFontFaces(measurementFont(o.Font, cfg), o.FontDirs),
 	}
 	if err := e.resolveLayouts(); err != nil {
 		return nil, err
@@ -129,6 +137,15 @@ func (e *exporter) resolveLayouts() error {
 		}
 	}
 	return nil
+}
+
+// measurementFont is _get_measurement_font_faces's spec: --font as given (so a
+// file path stays one), falling back to whatever the config names.
+func measurementFont(spec string, cfg *Config) string {
+	if spec != "" {
+		return spec
+	}
+	return cfg.fontName()
 }
 
 // run is the body of export(): questions one at a time, everything between them

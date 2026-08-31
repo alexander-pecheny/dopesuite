@@ -24,6 +24,11 @@ type Options struct {
 	// LabelsFile is --labels_file: a labels TOML of one's own, in place of the
 	// language's.
 	LabelsFile string
+	// Font is --font: a family name, or a font file to take one from. Empty
+	// keeps the template's own Noto Sans.
+	Font string
+	// Template is --docx_template: a .docx to build on. nil is the embedded one.
+	Template []byte
 }
 
 // Spoilers says how the answers are hidden from a reader of the printout.

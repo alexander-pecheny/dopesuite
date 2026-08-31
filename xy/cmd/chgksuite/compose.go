@@ -49,6 +49,8 @@ func composeDocx(args []string) error {
 	randomize := fs.Bool("randomize", false, "shuffle the questions")
 	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
 	merge := fs.Bool("merge", false, "export the input files as one package")
+	font := fs.String("font", override("font", override("font_face", "")), "a font family, or a font file to take one from; empty keeps the template's")
+	docxTemplate := fs.String("docx_template", "", "a .docx to build on; empty is the one chgksuite ships")
 	optimizeSize := fs.String("optimize_size", override("optimize_size", "on"), "re-encode the pictures to shrink the file: on|off")
 	language := languageFlag(fs)
 	// Declared and not read, as in chgksuite: the .docx export calls the
@@ -65,6 +67,12 @@ func composeDocx(args []string) error {
 	if err != nil {
 		return err
 	}
+	var template []byte
+	if *docxTemplate != "" {
+		if template, err = os.ReadFile(*docxTemplate); err != nil {
+			return err
+		}
+	}
 	opts, err := validDocxOptions(docx.Options{
 		Spoilers:                docx.Spoilers(*spoilers),
 		ScreenMode:              docx.ScreenMode(*screenMode),
@@ -75,6 +83,8 @@ func composeDocx(args []string) error {
 		OptimizeSize:            *optimizeSize != "off",
 		Language:                lang,
 		LabelsFile:              labelsFile,
+		Font:                    *font,
+		Template:                template,
 	})
 	if err != nil {
 		return err

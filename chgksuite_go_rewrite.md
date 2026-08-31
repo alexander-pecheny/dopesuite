@@ -208,11 +208,27 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       Deliberately not ported: `--no_line_break` and `--one_line_break`, which
       chgksuite declares and never reads; and `--ignore_missing_images`, since
       the Go exporters always print a marker rather than failing.
-- [ ] **E4. font substitution** [both]: `--font`: `docx.py` reads system font
-      tables to pick faces and rewrites the template's font. Go hardcodes the
-      template's Arial / Noto Sans. `--docx_template` belongs here too: the Go
-      exporter embeds the template rather than reading one off disk, which is
-      what font substitution would have to change anyway.
+- [x] **E4. font substitution**: `--font` on `compose docx` and `compose pptx`
+      (`compose pdf` already had it), and `--docx_template`. A `--font` naming a
+      file is read for its family — the typographic one (name 16) before the
+      legacy one, so NotoSans-Bold.ttf is «Noto Sans» and not «Noto Sans Bold»,
+      which is chgksuite's order; anything else is taken as a family name.
+      Substitution rewrites the template the way replace_font_in_docx does:
+      Arial, Arial Unicode MS and Noto Sans become the new family and the
+      embedded faces go, or Word would draw the new family's name with Noto
+      Sans's glyphs. The one addition is that the rename leaves the font table
+      asking for the same family twice (the template names Arial and Noto Sans
+      separately), and that duplicate is dropped.
+      Parity against chgksuite for three `--font` values and both formats:
+      identical styles.xml, an identical set of font-table entries, identical
+      slides. Only settings.xml differs, and only in its serialisation — lxml
+      rewrites the part, this export passes the template's own bytes through.
+      **A drift this turned up**: `assets/template.docx` is an older copy of
+      chgksuite's. Theirs now asks for Noto Sans and embeds the four faces;
+      this one still asks for Arial and embeds none. Refreshing it would make
+      the two identical and every exported .docx 436 KB bigger (11 KB → 447 KB),
+      which is a decision for xy's export rather than for parity, so it has not
+      been made. `--docx_template` reaches chgksuite's template today.
 - [x] **E5. pdf options**: `compose pdf`, with `--device`, `--pdf_config`
       (`typstdoc.Config`, the same TOML keys), `--font`, `--language`,
       `--rawtypst` and `--merge`. typst runs in this process, as wasm, rather

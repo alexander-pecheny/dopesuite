@@ -287,3 +287,20 @@ func (c *Config) configuredServiceSlideIndices() []int {
 	}
 	return out
 }
+
+// setFontName is the PptxExporter's own __init__ step: --font replaces the
+// config's font name, and its heading name too when the config names one.
+func (c *Config) setFontName(name string) {
+	if name == "" {
+		return
+	}
+	font, ok := c.values["font"].(map[string]any)
+	if !ok {
+		font = map[string]any{}
+		c.values["font"] = font
+	}
+	font["name"] = name
+	if _, hasHeading := font["heading_name"]; hasHeading {
+		font["heading_name"] = name
+	}
+}

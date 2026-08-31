@@ -619,7 +619,11 @@ func xmlEscape(s string) string {
 var reBodyOpen = regexp.MustCompile(`<w:body[^>]*>`)
 
 func (e *exporter) repackage(body string) ([]byte, error) {
-	zr, err := zip.NewReader(bytes.NewReader(templateDocx), int64(len(templateDocx)))
+	template, err := e.opts.template()
+	if err != nil {
+		return nil, err
+	}
+	zr, err := zip.NewReader(bytes.NewReader(template), int64(len(template)))
 	if err != nil {
 		return nil, err
 	}

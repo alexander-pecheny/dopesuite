@@ -14,6 +14,7 @@ func composePptx(args []string) error {
 	fs := flag.NewFlagSet("compose pptx", flag.ContinueOnError)
 	configPath := fs.String("pptx_config", "", "a pptx_config.toml of your own; empty is the one chgksuite ships")
 	template := fs.String("template", "", "a .pptx to build on; empty is chgksuite's own")
+	font := fs.String("font", override("font", override("font_face", "")), "a font family, or a font file to take one from; empty is the config's")
 	fontDir := fs.String("font_dir", override("font_dir", ""), "an extra directory to look for the measurement font in")
 	disableNumbers := fs.Bool("disable_numbers", false, "no question number in the corner")
 	noAccents := fs.Bool("do_not_remove_accents", false, "keep the stress marks")
@@ -39,6 +40,7 @@ func composePptx(args []string) error {
 		DoNotRemoveAccents: *noAccents,
 		Language:           lang,
 		LabelsFile:         labelsFile,
+		Font:               *font,
 		OptimizeSize:       *optimizeSize != "off",
 		NoBreak:            noBreak(),
 	}

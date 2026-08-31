@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"xy/internal/chgk/fontfile"
+
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/font/sfnt"
@@ -57,43 +59,16 @@ func newMeasuredFace(path string) (*measuredFace, error) {
 // gap straight out of the file: the height a line is given is their sum, and
 // nothing else in the stack reports it unrounded.
 func verticalMetrics(data []byte) (unitsPerEm, height int) {
-	tables := sfntTables(data)
+	tables := fontfile.Tables(data)
 	head, hhea := tables["head"], tables["hhea"]
 	if len(head) < 20 || len(hhea) < 12 {
 		return 0, 0
 	}
-	unitsPerEm = int(be16(head[18:]))
-	ascender := int(int16(be16(hhea[4:])))
-	descender := int(int16(be16(hhea[6:])))
-	lineGap := int(int16(be16(hhea[8:])))
+	unitsPerEm = int(fontfile.Be16(head[18:]))
+	ascender := int(int16(fontfile.Be16(hhea[4:])))
+	descender := int(int16(fontfile.Be16(hhea[6:])))
+	lineGap := int(int16(fontfile.Be16(hhea[8:])))
 	return unitsPerEm, ascender - descender + lineGap
-}
-
-// sfntTables indexes a font file's table directory. A collection is not handled:
-// the faces this looks for are single fonts.
-func sfntTables(data []byte) map[string][]byte {
-	out := map[string][]byte{}
-	if len(data) < 12 {
-		return out
-	}
-	count := int(be16(data[4:]))
-	for i := range count {
-		rec := 12 + i*16
-		if rec+16 > len(data) {
-			break
-		}
-		offset, length := int(be32(data[rec+8:])), int(be32(data[rec+12:]))
-		if offset < 0 || length < 0 || offset+length > len(data) {
-			continue
-		}
-		out[string(data[rec:rec+4])] = data[offset : offset+length]
-	}
-	return out
-}
-
-func be16(b []byte) uint16 { return uint16(b[0])<<8 | uint16(b[1]) }
-func be32(b []byte) uint32 {
-	return uint32(b[0])<<24 | uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3])
 }
 
 func (m *measuredFace) face(pixels int) (font.Face, error) {
@@ -175,6 +150,12 @@ func FindFontFaces(name string, dirs []string) *fontFaces {
 	if name == "" {
 		return &fontFaces{}
 	}
+	// _find_font_faces: a spec naming a file is that file, whatever it is called.
+	if info, err := os.Stat(name); err == nil && !info.IsDir() {
+		if face, err := newMeasuredFace(name); err == nil {
+			return &fontFaces{regular: face}
+		}
+	}
 	search := append([]string{}, dirs...)
 	search = append(search,
 		"/usr/share/fonts", "/usr/local/share/fonts",
@@ -230,4 +211,24 @@ func FindFontFaces(name string, dirs []string) *fontFaces {
 
 func normalizeFontName(s string) string {
 	return strings.ToLower(strings.NewReplacer(" ", "", "-", "", "_", "").Replace(s))
+}
+
+// fontName is _docx_font_name, which the pptx export shares: a --font naming a
+// file is that file's family, and anything else is taken as the family itself.
+func fontName(spec string) (string, error) {
+	if spec == "" {
+		return "", nil
+	}
+	path := spec
+	if strings.HasPrefix(path, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			path = filepath.Join(home, path[2:])
+		}
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		if info, err := os.Stat(abs); err == nil && !info.IsDir() {
+			return fontfile.Family(abs)
+		}
+	}
+	return spec, nil
 }
