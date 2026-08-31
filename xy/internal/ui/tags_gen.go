@@ -296,6 +296,7 @@ var MountMassBar = Attr{Name: "kind", Value: "mass-bar"}
 var MountMassBody = Attr{Name: "kind", Value: "mass-body"}
 var MountFilterBar = Attr{Name: "kind", Value: "filter-bar"}
 var MountFilterBody = Attr{Name: "kind", Value: "filter-body"}
+var MountGallery = Attr{Name: "kind", Value: "gallery"}
 var MountAccentPicks = Attr{Name: "kind", Value: "accent-picks"}
 var MountColorField = Attr{Name: "kind", Value: "color-field"}
 var MountReplaceHits = Attr{Name: "kind", Value: "replace-hits"}

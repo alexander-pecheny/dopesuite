@@ -106,6 +106,12 @@ func routes(srv *server) *http.ServeMux {
 	mux.HandleFunc("GET /profile/tokens", srv.servePage("ui/tokens.dopeui"))
 	mux.HandleFunc("GET /board/{id}", srv.servePage("ui/board.dopeui"))
 	mux.HandleFunc("GET /join/{code}", srv.servePage("ui/join.dopeui"))
+	// The specimen sheet for the design system (design-review skill): every
+	// primitive a panel is built from, on one page, from fixtures. Dev only —
+	// NoCache is disk-asset mode, which is where a skin is being worked on.
+	if srv.assets.NoCache {
+		mux.HandleFunc("GET /gallery", srv.servePage("ui/gallery.dopeui"))
+	}
 	mux.HandleFunc("GET /import", srv.servePage("ui/import.dopeui"))
 
 	// ---- admin tooling (gated on the configured admin username) ----

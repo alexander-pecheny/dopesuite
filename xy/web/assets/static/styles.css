@@ -772,6 +772,17 @@
 .color-cell { width: 20px; height: 20px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: var(--cursor-action); }
 .color-cell.is-on { outline: 2px solid var(--text); outline-offset: 1px; }
 
+/* /gallery — the specimen sheet (dev only). Its own frame is deliberately plain:
+   what is being judged is what sits inside each demo, not the page around it. */
+.gal-section { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4) 0; border-top: 1px solid var(--border-soft); }
+.gal-title { font-size: var(--text-base); font-weight: var(--fw-semibold); margin: 0; }
+.gal-h2 { font-size: var(--text-base); font-weight: var(--fw-semibold); margin: 0; }
+.gal-demo { display: flex; flex-direction: column; gap: var(--space-3); align-items: flex-start; }
+.gal-util { display: flex; flex-direction: column; gap: var(--space-1); }
+.gal-code { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--muted); }
+.gal-box { padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); background: var(--structure); font-size: var(--text-sm); }
+.gal-list { width: var(--klist-w); padding: var(--space-1); border-radius: var(--radius-md); background: var(--kanban-col); }
+
 /* timeline */
 .timeline { display: flex; flex-direction: column; gap: var(--space-2); max-height: 320px; overflow-y: auto; }
 .tl-event { padding: var(--space-2) var(--space-3); border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--page); }
