@@ -13,7 +13,7 @@ import {buildRosterView} from "./fest-roster.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
-import {createTeamNameOverflowController, fitScrollFade, renderTabBar} from "./widgets.js";
+import {bindScrollEdges, createTeamNameOverflowController, fitScrollFade, renderTabBar} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import * as multi from "./multi-protocol.js";
@@ -57,6 +57,11 @@ const shell = mountGamePage({
 const {viewer} = shell;
 
 fitScrollFade(root.closest(".sheet-frame"));
+// Once the sheet is scrolled, the frozen columns' edge shades the content
+// sliding under it — the fade every other sheet draws.
+const sheetScroll = bindScrollEdges(root.closest(".sheet-frame"), ({left}, frame) => {
+  frame.classList.toggle("detailed-scroll-left", activeTab === "detailed" && left);
+});
 
 const teamNameOverflow = createTeamNameOverflowController({
   root,
@@ -445,6 +450,7 @@ function render(): void {
   root.replaceChildren(node);
   root.classList.toggle("fits-frame", activeTab === "roster");
   teamNameOverflow.schedule();
+  sheetScroll.refresh();
   if (activeTab === "detailed") sheet.refresh();
 }
 

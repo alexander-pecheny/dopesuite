@@ -2620,7 +2620,9 @@ body:not(.embedded-match) .grid-match {
   background: linear-gradient(to right, var(--results-sticky-fade-from), var(--results-sticky-fade-to));
 }
 
-.detailed-scroll-left .match-table.od-detailed .sticky-total::after {
+.detailed-scroll-left .match-table.od-detailed .sticky-total::after,
+.detailed-scroll-left .match-table.multi-table .sticky-total::after,
+.detailed-scroll-left .match-table.multi-table .sticky-place::after {
   content: "";
   position: absolute;
   top: 0;
@@ -4578,8 +4580,19 @@ body.is-fullscreen.od-page .match-main {
   width: var(--question-col);
   min-width: var(--question-col);
   text-align: center;
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
   cursor: pointer;
+}
+
+/* On a tinted fill the value wears the fill's designated on-color (the
+   btn-danger pairing): dark green on green, light green on dark green. */
+.multi-table .multi-cell.right {
+  color: var(--green-dark);
+}
+
+.multi-table .multi-cell.wrong {
+  color: var(--red-dark);
 }
 
 /* A normalised Итог is fractional, so it needs more room than the integer one
