@@ -111,7 +111,9 @@ One of the several small games a Мультиигры sitting holds — a раз
 конкурс of its own tasks, played by everyone at once. Its tasks are declared
 with a domain each: the set or range of values that task's cell may hold,
 which is at once the validation, the printed номинал and the cell editor.
-Every мини-игра pays a subtotal and the Итог is their sum.
+Every мини-игра pays a subtotal and the Итог is their sum. A мини-игра's
+tasks may stand in блоки — visually separate groups of its sheet; the task
+numbering runs through the whole мини-игра regardless.
 
 A мини-игра may instead be **normalised** (`→0..100`): it contributes what the
 team scored as a share of the best score in it, out of a hundred, rather than

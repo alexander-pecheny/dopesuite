@@ -10,6 +10,7 @@
 export const CYCLE_LIMIT = 3;
 
 export interface MultiColumn {
+  block: number;
   values: number[];
 }
 
@@ -28,7 +29,7 @@ export const NORMAL_MAX = 100;
 export interface MultiScheme {
   gameType?: string;
   title?: string;
-  minigames?: Array<{name?: unknown; normalized?: unknown; columns?: Array<{values?: unknown} | null> | null} | null>;
+  minigames?: Array<{name?: unknown; normalized?: unknown; columns?: Array<{values?: unknown; block?: unknown} | null> | null} | null>;
   sorting?: unknown;
   participants?: string[];
   [key: string]: unknown;
@@ -62,7 +63,8 @@ export function rulesOf(scheme: MultiScheme): MultiRules {
       const values = Array.isArray(column?.values)
         ? (column!.values as unknown[]).filter((v): v is number => typeof v === "number" && Number.isFinite(v))
         : [];
-      columns.push({values: values.length ? values : [0]});
+      const block = typeof column?.block === "number" && column.block > 0 ? Math.floor(column.block) : 0;
+      columns.push({values: values.length ? values : [0], block});
     }
     minigames.push({
       name: typeof raw.name === "string" ? raw.name : "",

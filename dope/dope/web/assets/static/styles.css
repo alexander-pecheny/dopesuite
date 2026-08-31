@@ -3047,9 +3047,11 @@ body:not(.embedded-match) .grid-match {
   overflow: hidden;
 }
 
-/* Личная СИ: the seat is one row, so ЭК's two-row floor would stretch it. */
+/* Личная СИ and Мультиигры: the seat is one row, so ЭК's two-row floor would
+   stretch it. */
 .match-table.individual-blank .ek-team-cell .od-detailed-team-layout,
-.match-table.ek-stage-table.individual-blank .ek-team-cell .od-detailed-team-layout {
+.match-table.ek-stage-table.individual-blank .ek-team-cell .od-detailed-team-layout,
+.match-table.multi-table .ek-team-cell .od-detailed-team-layout {
   min-height: calc(var(--question-size) - var(--cell-gap) * 2);
   max-height: none;
 }
@@ -4580,10 +4582,6 @@ body.is-fullscreen.od-page .match-main {
   cursor: pointer;
 }
 
-.multi-table .multi-cell-minus {
-  color: var(--red);
-}
-
 /* A normalised Итог is fractional, so it needs more room than the integer one
    the shared width is cut for. */
 .match-table.multi-table .sticky-total {
@@ -4611,10 +4609,23 @@ body.is-fullscreen.od-page .match-main {
   padding-left: var(--space-2);
 }
 
+/* The sticky heads span both header rows and read at the numbers' line. */
+.multi-table thead .sticky {
+  vertical-align: bottom;
+}
+
+/* The мини-игра's name follows a scrolled sheet until its block runs out. */
+.multi-game-name {
+  position: sticky;
+  display: inline-block;
+}
+
+/* The head's main line is the вопрос number; a номинал rides above it muted
+   (od-detailed-qcount), so the number keeps the text colour. */
 .multi-table .nominal {
   font-size: var(--text-xs);
   font-weight: var(--fw-regular);
-  color: var(--muted);
+  color: var(--text);
 }
 
 .multi-table .theme-block-score {

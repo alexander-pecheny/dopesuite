@@ -7,12 +7,13 @@
 // what may be entered is the scheme's, never the page's.
 
 import {cssEscape, td, th} from "./cells.js";
+import type {CellContent} from "./cells.js";
 import {resultsTeamCell, standingsTable} from "./standings.js";
 import {buildRosterView} from "./fest-roster.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
-import {createTeamNameOverflowController, renderTabBar} from "./widgets.js";
+import {createTeamNameOverflowController, fitScrollFade, renderTabBar} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import * as multi from "./multi-protocol.js";
@@ -54,6 +55,8 @@ const shell = mountGamePage({
   recorderState: () => state,
 });
 const {viewer} = shell;
+
+fitScrollFade(root.closest(".sheet-frame"));
 
 const teamNameOverflow = createTeamNameOverflowController({
   root,
@@ -120,25 +123,27 @@ function applyRemoteState(next: unknown): void {
 // domain: a host reading the sheet wants the задание's price, not its range.
 function buildTable(): HTMLElement {
   const table = document.createElement("table");
-  table.className = "match-table multi-table";
+  // The КСИ sheet's compact skin: the same short rows and tight cells.
+  table.className = "match-table compact-score-table multi-table";
 
   const head = document.createElement("thead");
   const gamesRow = document.createElement("tr");
-  gamesRow.appendChild(th("Команда", "sticky sticky-name"));
-  gamesRow.appendChild(th("Итог", "sticky sticky-total number"));
-  if (rules.signed) gamesRow.appendChild(th("Σ+", "sticky sticky-place number"));
+  gamesRow.appendChild(th("Команда", "sticky sticky-name", {rowSpan: 2}));
+  gamesRow.appendChild(th("Итог", "sticky sticky-total number", {rowSpan: 2}));
+  if (rules.signed) gamesRow.appendChild(th("Σ+", "sticky sticky-place number", {rowSpan: 2}));
   rules.minigames.forEach((game, g) => {
-    gamesRow.appendChild(th(game.name, "theme-block",
-      {colSpan: game.columns.length + 1, dataset: {game: g}}));
+    gamesRow.appendChild(th(gameHead(game), "theme-block",
+      {colSpan: game.columns.length + gapCount(game) + 1, dataset: {game: g}}));
   });
   head.appendChild(gamesRow);
 
   const valuesRow = document.createElement("tr");
-  valuesRow.appendChild(th("", "sticky sticky-name"));
-  valuesRow.appendChild(th("", "sticky sticky-total"));
-  if (rules.signed) valuesRow.appendChild(th("", "sticky sticky-place"));
   rules.minigames.forEach((game) => {
-    game.columns.forEach((column) => valuesRow.appendChild(th(String(maxOf(column.values)), "nominal")));
+    const uniform = uniformNominal(game);
+    game.columns.forEach((column, c) => {
+      if (c > 0 && column.block !== game.columns[c - 1].block) valuesRow.appendChild(th("", "gap-head"));
+      valuesRow.appendChild(th(questionHead(c + 1, uniform ? null : maxOf(column.values)), "nominal"));
+    });
     valuesRow.appendChild(th("Σ", "theme-block-score"));
   });
   head.appendChild(valuesRow);
@@ -156,7 +161,10 @@ function buildTable(): HTMLElement {
       tr.appendChild(td(String(sheetRows[p].plus), "sticky sticky-place number", {dataset: {plus: p}}));
     }
     rules.minigames.forEach((game, g) => {
-      game.columns.forEach((_, c) => tr.appendChild(cellNode(p, g, c)));
+      game.columns.forEach((column, c) => {
+        if (c > 0 && column.block !== game.columns[c - 1].block) tr.appendChild(td("", "gap"));
+        tr.appendChild(cellNode(p, g, c));
+      });
       tr.appendChild(td(String(sheetRows[p].raw[g]), "number theme-block-score",
         {dataset: {subtotal: `${p}-${g}`}}));
     });
@@ -192,16 +200,65 @@ function teamCell(p: number): HTMLElement {
   return cell;
 }
 
+// Points taken wear the green fill and points lost the red one — the
+// answer-cell idiom every sheet speaks.
+function paintCell(cell: HTMLElement, value: number): void {
+  cell.classList.toggle("right", value > 0);
+  cell.classList.toggle("wrong", value < 0);
+}
+
+function uniformNominal(game: MultiRules["minigames"][number]): boolean {
+  const first = maxOf(game.columns[0]?.values || []);
+  return game.columns.every((column) => maxOf(column.values) === first);
+}
+
+function gapCount(game: MultiRules["minigames"][number]): number {
+  let gaps = 0;
+  for (let c = 1; c < game.columns.length; c++) {
+    if (game.columns[c].block !== game.columns[c - 1].block) gaps++;
+  }
+  return gaps;
+}
+
+// The мини-игра's name rides sticky past the frozen columns, so a scrolled
+// sheet still says which game these columns are; a uniform price joins it —
+// «Не только песни (по 1)» — and the heads keep just the numbers.
+function gameHead(game: MultiRules["minigames"][number]): CellContent {
+  const span = document.createElement("span");
+  span.className = "multi-game-name";
+  span.textContent = uniformNominal(game)
+    ? `${game.name} (по ${maxOf(game.columns[0]?.values || [])})`
+    : game.name;
+  span.style.left = "calc(var(--sheet-corner-col) + var(--team-col) + var(--total-col) + var(--space-5)" +
+    (rules.signed ? " + var(--place-col)" : "") + " + var(--space-2))";
+  return span;
+}
+
+// A head is the вопрос's number — with its номинал above, muted, where the
+// мини-игра pays unevenly (ОД's qhead stack).
+function questionHead(num: number, nominal: number | null): CellContent {
+  if (nominal === null) return String(num);
+  const wrap = document.createElement("span");
+  wrap.className = "od-detailed-qhead";
+  const price = document.createElement("span");
+  price.className = "od-detailed-qcount";
+  price.textContent = String(nominal);
+  const number = document.createElement("span");
+  number.textContent = String(num);
+  wrap.append(price, number);
+  return wrap;
+}
+
 function maxOf(values: number[]): number {
   return values.reduce((best, v) => (v > best ? v : best), values[0] ?? 0);
 }
 
 function cellNode(participant: number, game: number, column: number): HTMLElement {
   const value = multi.cellValue(state!, game, participant, column);
-  const cell = td(value === 0 ? "" : String(value), "multi-cell", {
+  const cell = td(value === 0 ? "" : String(value), "multi-cell answer-cell", {
     dataset: {participant, game, column},
   });
-  if (value < 0) cell.classList.add("multi-cell-minus");
+  paintCell(cell, value);
   return cell;
 }
 
@@ -287,7 +344,7 @@ function applyCellEdits(edits: CellEdit[]): void {
     if (!row || row[column] === value) continue;
     row[column] = value;
     cell.textContent = value === 0 ? "" : String(value);
-    cell.classList.toggle("multi-cell-minus", value < 0);
+    paintCell(cell, value);
     doc.save(["games", game, "cells", participant, column], value);
     changed = true;
   }

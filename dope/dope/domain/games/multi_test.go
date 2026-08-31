@@ -40,8 +40,31 @@ func TestParseMultiGamesReadsNamesAndDomains(t *testing.T) {
 	}
 }
 
+// «|» closes a блок of the sheet; columns remember theirs.
+func TestParseMultiGamesReadsBlocks(t *testing.T) {
+	games, err := ParseMultiGames("Медиа: {0,1}x2 | {0,2} | {0,3}\nПесни: {0,1}x3")
+	if err != nil {
+		t.Fatalf("ParseMultiGames: %v", err)
+	}
+	var blocks []int
+	for _, column := range games[0].Columns {
+		blocks = append(blocks, column.Block)
+	}
+	if !reflect.DeepEqual(blocks, []int{0, 0, 1, 2}) {
+		t.Fatalf("Медиа blocks = %v", blocks)
+	}
+	for i, column := range games[1].Columns {
+		if column.Block != 0 {
+			t.Fatalf("Песни column %d in block %d", i, column.Block)
+		}
+	}
+}
+
 func TestParseMultiGamesRefusesNonsense(t *testing.T) {
 	for _, src := range []string{
+		"Медиа: | {0,1}",
+		"Медиа: {0,1} |",
+		"Медиа: {0,1} | | {0,2}",
 		"Фоторяд: {0,1}x0",
 		"Фоторяд: {}",
 		"Фоторяд: {3-0}",
