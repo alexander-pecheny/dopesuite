@@ -6,7 +6,7 @@
 // бой (PATCH /matches/{code}/state) and sync over match: scopes. A self-booting side-effect module bundled by
 // pages/troika.ts.
 
-import {cssEscape, option, td, th} from "./cells.js";
+import {cssEscape, option, sameArray, td, th} from "./cells.js";
 import type {CellContent} from "./cells.js";
 import {icon} from "./icons_gen.js";
 import {festLetters} from "./standings.js";
@@ -323,7 +323,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
     // against the тема it seats.
     if (t > 0) themeRow.appendChild(th("", "gap-head"));
     if (seatsAt.has(t)) themeRow.appendChild(th("Рассадка"));
-    themeRow.appendChild(th(themeHead(bout, t, value, editable && seatsAt.has(t)), "theme-block",
+    themeRow.appendChild(th(themeHead(bout, t, value, seatsAt.has(t)), "theme-block",
       {colSpan: troika.THEME_QUESTIONS}));
   });
   themeRow.appendChild(th("Σ"));
@@ -394,26 +394,56 @@ function seatColumns(bout: BoutEntry): Set<number> {
   return at;
 }
 
-// The тема's head, and after it — for a host, past the first тема — the button
-// that opens a «рассадка» column before it.
-function themeHead(bout: BoutEntry, t: number, value: number, open: boolean): CellContent {
+// The тема's head with, for a host, the рассадка control before the words: a
+// ⇅ opens a «Рассадка» column before this тема, and while one stands there
+// the same spot is the × that undoes the смена. No quiet toggling — a column
+// is exactly where the seating changes, and removing one is an edit.
+function themeHead(bout: BoutEntry, t: number, value: number, has: boolean): CellContent {
   const label = `Тема ${t + 1} (за ${value})`;
   if (viewer || bout.view.finished || t === 0) return label;
   const button = document.createElement("button");
   button.type = "button";
   button.className = "btn btn-xs troika-seat-button";
-  button.classList.toggle("troika-seat-open", open);
-  button.title = `Рассадка с темы ${t + 1}`;
+  if (has) {
+    button.title = `Убрать смену рассадки перед темой ${t + 1}`;
+    button.replaceChildren(icon("x"));
+    button.addEventListener("click", () => deleteTurn(bout, t));
+  } else {
+    button.title = `Поменять рассадку с темы ${t + 1}`;
+    button.replaceChildren(icon("arrow-up-down"));
+    button.addEventListener("click", () => {
+      const opened = seatOpen.get(bout.code) || new Set<number>();
+      opened.add(t);
+      seatOpen.set(bout.code, opened);
+      render();
+    });
+  }
   button.setAttribute("aria-label", button.title);
-  button.replaceChildren(icon("arrow-up-down"));
-  button.addEventListener("click", () => {
-    const opened = seatOpen.get(bout.code) || new Set<number>();
-    if (opened.has(t)) opened.delete(t);
-    else opened.add(t);
-    seatOpen.set(bout.code, opened);
-    render();
-  });
-  return [label, button];
+  return [button, label];
+}
+
+function orderAt(state: TroikaState, side: number, t: number): number[] {
+  const order: number[] = [];
+  for (let c = 0; c < troika.CHAIRS; c++) order.push(troika.chairAt(state, side, t, c));
+  return order;
+}
+
+// deleteTurn undoes the смена рассадки before тема t: every тема from t that
+// still holds the order set there goes back to the тема before's, so a later
+// смена is left exactly as it was played.
+function deleteTurn(bout: BoutEntry, t: number): void {
+  const state = stateOf(bout.code);
+  for (let side = 0; side < 2; side++) {
+    const prev = orderAt(state, side, t - 1);
+    const cur = orderAt(state, side, t);
+    if (sameArray(prev, cur)) continue;
+    for (let tt = t; tt < state.values.length && sameArray(orderAt(state, side, tt), cur); tt++) {
+      state.sides[side].themes[tt].order = prev.slice();
+      patch(bout.code, ["sides", side, "themes", tt, "order"], prev);
+    }
+  }
+  seatOpen.get(bout.code)?.delete(t);
+  render();
 }
 
 // The chair cell names who is sitting there from the тема its column stands

@@ -4698,13 +4698,9 @@ body.is-fullscreen.od-page .match-main {
 }
 
 .troika-sheet .troika-seat-button {
-  margin-left: var(--space-1);
+  margin-right: var(--space-1);
   padding: var(--space-0) var(--space-1);
   color: var(--muted);
-}
-
-.troika-sheet .troika-seat-button.troika-seat-open {
-  color: var(--text-strong);
 }
 
 .troika-sheet .troika-total {
