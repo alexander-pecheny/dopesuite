@@ -28,6 +28,7 @@ type Health struct {
 	OK       bool   `json:"ok"`
 	LastPoll string `json:"last_poll,omitempty"` // RFC3339, absent before the first
 	StaleFor string `json:"stale_for,omitempty"` // how long since it, when not ok
+	Conflict bool   `json:"conflict,omitempty"`  // another process is polling this token
 }
 
 // HealthOf reports the client's polling health. A poll is stale once more than
@@ -41,7 +42,12 @@ type Health struct {
 // not sit silent: getUpdates fails within seconds (401 on a revoked token) and
 // lastErr ends the grace immediately.
 func HealthOf(c *Client, now time.Time) Health {
-	started, last, failed := c.pollState()
+	started, last, failed, conflict := c.pollState()
+	// A conflict outranks everything below: the last poll may be seconds old and
+	// still mean nothing, because half the updates went to the other poller.
+	if !conflict.IsZero() && conflict.After(last) {
+		return Health{Conflict: true, StaleFor: now.Sub(conflict).Round(time.Second).String()}
+	}
 	if last.IsZero() {
 		warming := !started.IsZero() && failed.IsZero() && now.Sub(started) <= 2*c.PollTimeout()
 		return Health{OK: warming}

@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -20,6 +21,14 @@ import (
 )
 
 const defaultAPIBase = "https://api.telegram.org"
+
+// ErrConflict is Telegram answering getUpdates with 409: another process is
+// polling this same token. It is not a transient network hiccup — retrying it
+// at the ordinary cadence just splits every incoming update between the two
+// pollers at random, which is the failure that looks like nothing at all. Run
+// backs off hard on it and HealthOf reports the bot unusable, so the login page
+// stops offering a way in that only works half the time.
+var ErrConflict = errors.New("another process is polling this token")
 
 type Update struct {
 	UpdateID int64    `json:"update_id"`
@@ -61,6 +70,8 @@ type Config struct {
 	AllowedUpdates []string
 	// RetryDelay is the backoff after a failed getUpdates. Default 3s.
 	RetryDelay time.Duration
+	// ConflictDelay is the backoff after a 409. Default 60s.
+	ConflictDelay time.Duration
 }
 
 type Client struct {
@@ -69,12 +80,14 @@ type Client struct {
 	pollTimeout    time.Duration
 	allowedUpdates []string
 	retryDelay     time.Duration
+	conflictDelay  time.Duration
 	http           *http.Client
 
 	mu       sync.Mutex
 	started  time.Time // when Run began polling
 	lastPoll time.Time // last getUpdates that actually answered
 	lastErr  time.Time // last getUpdates that failed
+	conflict time.Time // last getUpdates that lost the token to another poller
 }
 
 // Handler processes one update whose Message, From and Chat are all non-nil.
@@ -93,12 +106,16 @@ func New(cfg Config) *Client {
 	if cfg.RetryDelay <= 0 {
 		cfg.RetryDelay = 3 * time.Second
 	}
+	if cfg.ConflictDelay <= 0 {
+		cfg.ConflictDelay = 60 * time.Second
+	}
 	return &Client{
 		token:          cfg.Token,
 		apiBase:        strings.TrimRight(cfg.APIBase, "/"),
 		pollTimeout:    cfg.PollTimeout,
 		allowedUpdates: cfg.AllowedUpdates,
 		retryDelay:     cfg.RetryDelay,
+		conflictDelay:  cfg.ConflictDelay,
 		http:           &http.Client{Timeout: cfg.HTTPTimeout},
 	}
 }
@@ -111,9 +128,13 @@ func (c *Client) markPoll(err error) {
 	defer c.mu.Unlock()
 	if err != nil {
 		c.lastErr = time.Now()
+		if errors.Is(err, ErrConflict) {
+			c.conflict = c.lastErr
+		}
 		return
 	}
 	c.lastPoll = time.Now()
+	c.conflict = time.Time{}
 }
 
 func (c *Client) markStarted() {
@@ -123,10 +144,10 @@ func (c *Client) markStarted() {
 }
 
 // pollState is what a health check needs, read under one lock.
-func (c *Client) pollState() (started, lastPoll, lastErr time.Time) {
+func (c *Client) pollState() (started, lastPoll, lastErr, conflict time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.started, c.lastPoll, c.lastErr
+	return c.started, c.lastPoll, c.lastErr, c.conflict
 }
 
 // LastPoll is when getUpdates last answered — zero before the first one returns.
@@ -158,11 +179,18 @@ func (c *Client) Run(ctx context.Context, h Handler) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			log.Printf("getUpdates: %v", err)
+			delay := c.retryDelay
+			if errors.Is(err, ErrConflict) {
+				delay = c.conflictDelay
+				log.Printf("getUpdates: CONFLICT — another process is polling this bot token; "+
+					"updates are being split between us at random. Find it and stop it. (%v)", err)
+			} else {
+				log.Printf("getUpdates: %v", err)
+			}
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(c.retryDelay):
+			case <-time.After(delay):
 			}
 			continue
 		}
@@ -203,6 +231,9 @@ func (c *Client) GetUpdates(ctx context.Context, offset int64) ([]Update, error)
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
+	}
+	if resp.StatusCode == http.StatusConflict {
+		return nil, fmt.Errorf("%w: %s", ErrConflict, strings.TrimSpace(string(body)))
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
