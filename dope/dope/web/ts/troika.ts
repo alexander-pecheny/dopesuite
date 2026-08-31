@@ -322,11 +322,11 @@ function buildBout(bout: BoutEntry): HTMLElement {
     // The gap parts темы BEFORE any «Рассадка» column, which sits flush
     // against the тема it seats.
     if (t > 0) themeRow.appendChild(th("", "gap-head"));
-    if (seatsAt.has(t)) themeRow.appendChild(th("Рассадка"));
+    if (seatsAt.has(t)) themeRow.appendChild(th("Рассадка", "player-cell"));
     themeRow.appendChild(th(themeHead(bout, t, value, seatsAt.has(t)), "theme-block",
       {colSpan: troika.THEME_QUESTIONS}));
   });
-  themeRow.appendChild(th("Σ"));
+  themeRow.appendChild(th("Σ", "troika-total"));
   themeRow.appendChild(th(finishToggle(bout), "troika-finish-head"));
   thead.appendChild(themeRow);
   table.appendChild(thead);

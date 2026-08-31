@@ -4703,7 +4703,18 @@ body.is-fullscreen.od-page .match-main {
   color: var(--muted);
 }
 
+/* Every column of the sheet says its width — fixed layout hands unspecified
+   columns the leftover, so a host's ⇅/× in a header would shift the grid
+   against a viewer's or a finished бой's. The тема block also fits its widest
+   head, «⇅ Тема 6 (за 10)». */
+.troika-sheet th.theme-block {
+  width: calc(var(--question-col) * 3 + var(--space-3));
+  min-width: calc(var(--question-col) * 3 + var(--space-3));
+}
+
 .troika-sheet .troika-total {
+  width: var(--total-col);
+  min-width: var(--total-col);
   font-weight: var(--fw-semibold);
   font-variant-numeric: tabular-nums;
 }
