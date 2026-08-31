@@ -5,11 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 
-	"xy/internal/chgk/handout"
 	"xy/internal/chgk/typstdoc"
-	"xy/internal/chgk/typstwasm"
 )
 
 // composePDF is `chgksuite compose pdf`: the same document the docx export
@@ -22,6 +19,7 @@ func composePDF(args []string) error {
 	font := fs.String("font", override("font", override("font_face", "")), "font family; empty is the bundled Noto Sans")
 	language := languageFlag(fs)
 	rawTypst := fs.Bool("rawtypst", false, "write the typst source beside the PDF")
+	typstBin := typstFlag(fs)
 	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
 	merge := fs.Bool("merge", false, "export the input files as one package")
 	noBreak := noBreakFlags(fs)
@@ -61,15 +59,11 @@ func composePDF(args []string) error {
 	}
 
 	ctx := context.Background()
-	fonts, err := handout.BundledFonts()
+	ts, closeTS, err := typesetter(*typstBin)
 	if err != nil {
 		return err
 	}
-	pool, err := typstwasm.NewPool(ctx, fonts, wasmCacheDir(), 1)
-	if err != nil {
-		return err
-	}
-	defer pool.Close()
+	defer closeTS()
 
 	suffix := ""
 	if *device == "mobile" {
@@ -85,9 +79,9 @@ func composePDF(args []string) error {
 			if err := os.WriteFile(typ, []byte(typstdoc.GenerateTyp(s.doc, images, opts)), 0o644); err != nil {
 				return err
 			}
-			fmt.Println("Output:", typ)
+			reportOutput(typ)
 		}
-		data, err := typstdoc.Export(ctx, s.doc, images, pool, opts)
+		data, err := typstdoc.Export(ctx, s.doc, images, ts, opts)
 		if err != nil {
 			return err
 		}
@@ -95,20 +89,7 @@ func composePDF(args []string) error {
 		if err := os.WriteFile(out, data, 0o644); err != nil {
 			return err
 		}
-		fmt.Println("Output:", out)
+		reportOutput(out)
 	}
 	return nil
-}
-
-// wasmCacheDir is where wazero keeps typst compiled to machine code: a cold
-// compile is ~15s and a warm one half a second, and the cache survives a reboot
-// only if it is not on tmpfs. It holds compiled typst, never a package.
-func wasmCacheDir() string {
-	if dir := os.Getenv("XY_WASM_CACHE"); dir != "" {
-		return dir
-	}
-	if base, err := os.UserCacheDir(); err == nil {
-		return filepath.Join(base, "xy", "typst-wasm")
-	}
-	return filepath.Join(os.TempDir(), "xy-typst-wasm")
 }

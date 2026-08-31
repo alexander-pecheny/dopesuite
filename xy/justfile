@@ -19,6 +19,19 @@ cli:
     go build -o ~/.local/bin/xy-cli ./cmd/xy-cli
     @echo "собрано: ~/.local/bin/xy-cli"
 
+# It renders PDFs and раздатки with the typst BINARY — one it is pointed at,
+# else `typst` on PATH — so it needs neither the wasm nor Rust.
+# The Python tool's CLI in Go (../chgksuite_go_rewrite.md), ~14 MB
+chgksuite:
+    go build -ldflags="-s -w" -o ~/.local/bin/chgksuite ./cmd/chgksuite
+    @echo "собрано: ~/.local/bin/chgksuite ($(du -h ~/.local/bin/chgksuite | cut -f1), typst не встроен)"
+
+# Needs the wasm built first, and comes out ~35 MB heavier (14 → 48 stripped).
+# The same, with typst carried along, for a machine that has none
+chgksuite-wasm: wasm
+    go build -tags wasmtypst -ldflags="-s -w" -o ~/.local/bin/chgksuite ./cmd/chgksuite
+    @echo "собрано: ~/.local/bin/chgksuite ($(du -h ~/.local/bin/chgksuite | cut -f1), typst внутри)"
+
 # The shared toolchain (root ADR-0001) builds the gitignored dist trees the Go
 # build embeds (xy's own + the kit's) — so every compiling recipe depends on it.
 build-web:
