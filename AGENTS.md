@@ -45,6 +45,25 @@ dope/        tournament management (EK/OD/KSI) + realtime web UI
 - Legacy remotes (xy, dope, dopeuikit projects on GitLab) are frozen as of the
   merge; this repo is the source of truth.
 
+## Frontend work is not done until it has been looked at
+
+Behaviour checks pass while a surface looks bolted on: overflow 0, counts right,
+elements present, and the spacing still wrong. Run the `design-review` skill
+after building any panel, modal, bar or row, and the `verify` skill to drive it
+in a browser at both sizes. Both live in `.claude/skills/`.
+
+The two mistakes that keep recurring, and their guards:
+
+- **Re-inventing layout.** The kit ships `.u-col`/`.u-row`/`.u-gap-*`/
+  `.u-align-*`/`.u-justify-*`. `scripts/classcheck` refuses a NEW class whose
+  body is only those (the ratchet in `layout.go`; what exists is grandfathered
+  in `layout-baseline.txt`).
+- **Spacing children instead of containers.** Text primitives carry `margin: 0`
+  deliberately. Give the container a `gap` from the `--space-*` scale.
+
+xy has `/gallery` and dope has `/gallery`, both dev-only: every primitive on one
+page, which is what makes "look at it beside its twin" cheap.
+
 ## Toolchain
 
 - **Go** ≥ 1.26 — all four modules.

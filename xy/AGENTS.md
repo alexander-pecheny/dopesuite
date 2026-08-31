@@ -50,6 +50,17 @@ Russian-language UI.
   🏠 / Профиль / API-токены — replacing the old 🏠 + title pair. An open card is
   a modal, not a place, so it adds no crumb. The primitive and its CSS are the
   kit's; dope renders the same trail.
+- **Before adding UI, run the `design-review` skill.** `.dopeui` is a closed,
+  compile-checked vocabulary, but `mount` is a hole in it — 41 mount kinds in xy,
+  and every panel body, modal and bar is hand-written TS inside one, where
+  nothing checks you. Two habits carry most of it: the kit already ships the
+  layout utilities (`.u-col`/`.u-row`/`.u-gap-*`/`.u-align-*`/`.u-justify-*` in
+  `core.css`) so a class whose whole body is flex+gap+alignment is re-invention
+  (classcheck's layout ratchet now refuses new ones), and **spacing is the
+  container's job** — `.hint` carries `margin: 0` on purpose, so a margin on a
+  child buys one gap and leaves the rest at zero. `/gallery` (dev only) shows
+  every primitive on one page; look there before minting a name, and look at
+  your surface beside its twin before you ship it.
 - **CSS**: the shared design system is DopeUIKit's `assets/core.css` (served via
   `kit.CoreCSS`); xy's `web/assets/static/styles.css` is only the xy layer
   (kanban/card/board + xy vars + PWA overrides). The server serves
@@ -494,6 +505,9 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        see every card), writes nothing, and dies on reload. Under it
                        drag-to-reorder is off, because commitCardMove reads the rank off
                        the VISIBLE neighbours; a cross-list drop appends instead
+    gallery.ts         /gallery (dev only): every primitive a panel is built from, on
+                       one page from fixtures — the sheet the design-review skill judges
+                       a new surface against, and where a skin change is looked at
     boardinvites.ts    the invite-link half of the «Участники» modal (ADR-0017): the
                        Заявки queue and the Ссылки list, plus the chip mint form. Owner
                        only; a decision redraws the roster through onChange, which also
