@@ -197,8 +197,9 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        names), the slide builders, service slides cloned off that template,
                        pptx_config.toml, the shrink-to-fit pass and --optimize_size.
                        Byte-parity per authored part vs chgksuite. Two things are not:
-                       optimize.go re-encodes pictures with Go's encoders, and measure.go
-                       says why text measurement is only pixel-close
+                       optimize.go re-encodes pictures with Go's encoders (same sizes, to
+                       0.1% — imgconv/jpegopt.go is the Huffman pass Pillow's optimize=True
+                       does), and measure.go says why text measurement is only pixel-close
   markdown/            `compose markdown|redditmd`: a package as Markdown, or as the
                        Reddit dialect where the answer is a >! … !< spoiler
   dbtext/              `compose base`: the plain text db.chgk.info takes as a submission —
@@ -248,7 +249,10 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        character-for-character: markup tokenizing (bold/italic/img/screen/hyperlink…),
                        backtick stress accents, the non-breaking space/hyphen gluing, and (img …) sizing.
                        Lifted out of docx/ when typstdoc needed it — do not fork it back.
-  imgconv/             ForExport: encode a picture for the size it is DRAWN at — downscale to 200 dpi of that
+  imgconv/             jpegopt.go: OptimizeJPEG rebuilds a baseline JPEG's Huffman tables
+                       for the image it holds — lossless, 2-20% off, and what Go's encoder
+                       lacks against Pillow's optimize=True.
+                       ForExport: encode a picture for the size it is DRAWN at — downscale to 200 dpi of that
                        size (never up), JPEG q85 unless it has transparency (then PNG). Both exporters use it.
                        Re-encoding is unavoidable (neither Word nor typst reads WebP), but re-encoding a photo
                        as PNG is lossless and huge: an 800 KB JPEG attachment used to come back as a megabyte

@@ -80,11 +80,15 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       fixtures under `scripts/gen_pptx_oracles.py`, and — off the repo — three
       real packages of Alexander Shorin's against three real configs, 2077
       parts compared.
-      TWO things are not byte-identical, both of them image encoders.
-      `--optimize_size` re-encodes the pictures a finished deck embeds, and
-      Go's JPEG encoder is not Pillow's, so the media differ (the deck comes
-      out about a tenth larger). It is on by default, as in chgksuite; the
-      oracles are generated with it off.
+      TWO things are not byte-identical. `--optimize_size` re-encodes the
+      pictures a finished deck embeds, and Go's encoders are not Pillow's, so
+      the media bytes differ — but not the sizes: `imgconv.OptimizeJPEG` is the
+      second pass Pillow gets from `optimize=True`, rebuilding a JPEG's Huffman
+      tables for the image it actually holds (lossless, and the whole of what
+      used to make a deck a tenth larger), and PNGs are written at Go's best
+      compression, which beats Pillow's. Three real decks come out 0.1%
+      SMALLER than chgksuite's. It is on by default, as there; the oracles are
+      generated with it off.
       And measurement. chgksuite measures text with Pillow, which shapes
       through HarfBuzz where libraqm is installed and falls back to whole-pixel
       advances where it is not — so chgksuite's own layout is not reproducible

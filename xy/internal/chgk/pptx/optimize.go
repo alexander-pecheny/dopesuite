@@ -3,6 +3,7 @@ package pptx
 import (
 	"bytes"
 	"fmt"
+	"image"
 	"image/jpeg"
 	"image/png"
 	"regexp"
@@ -66,19 +67,16 @@ func optimizeImage(data []byte, ext string, quality int) ([]byte, string, bool) 
 	}
 	var candidates []candidate
 	if imgconv.HasAlpha(img) {
-		var buf bytes.Buffer
-		if err := png.Encode(&buf, img); err == nil {
-			candidates = append(candidates, candidate{"png", buf.Bytes()})
+		if data, err := encodePNG(img); err == nil {
+			candidates = append(candidates, candidate{"png", data})
 		}
 	} else {
-		var buf bytes.Buffer
-		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality}); err == nil {
-			candidates = append(candidates, candidate{"jpg", buf.Bytes()})
+		if data, err := encodeJPEG(img, quality); err == nil {
+			candidates = append(candidates, candidate{"jpg", data})
 		}
 		if ext == "png" {
-			var alt bytes.Buffer
-			if err := png.Encode(&alt, img); err == nil {
-				candidates = append(candidates, candidate{"png", alt.Bytes()})
+			if data, err := encodePNG(img); err == nil {
+				candidates = append(candidates, candidate{"png", data})
 			}
 		}
 	}
@@ -110,6 +108,33 @@ func (p *pkg) nextMediaName(reserved map[string]bool, original, ext string) stri
 			return candidate
 		}
 	}
+}
+
+// encodeJPEG is Pillow's `save(quality=…, optimize=True)`: Go's encoder writes
+// the fixed Huffman tables, and imgconv.OptimizeJPEG replaces them with the
+// ones this picture earns. Without that second pass a deck comes out a tenth
+// larger than chgksuite's; with it, the two are within a rounding error.
+func encodeJPEG(img image.Image, quality int) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality}); err != nil {
+		return nil, err
+	}
+	optimized, err := imgconv.OptimizeJPEG(buf.Bytes())
+	if err != nil {
+		// A file it will not rewrite is still a good file.
+		return buf.Bytes(), nil //nolint:nilerr // the unoptimized bytes are the fallback
+	}
+	return optimized, nil
+}
+
+// encodePNG is Pillow's `save(optimize=True, compress_level=9)`.
+func encodePNG(img image.Image) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := png.Encoder{CompressionLevel: png.BestCompression}
+	if err := enc.Encode(&buf, img); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 func sameImageExt(a, b string) bool {
