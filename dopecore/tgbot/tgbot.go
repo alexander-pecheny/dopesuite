@@ -5,12 +5,14 @@
 package tgbot
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -39,6 +41,11 @@ type Message struct {
 	From      *User  `json:"from"`
 	Chat      *Chat  `json:"chat"`
 	Text      string `json:"text"`
+	// ForwardFromChat and ForwardFromMessageID say where a forwarded message
+	// came from. A channel post copied into the channel's discussion group
+	// carries them, which is how a poster finds the message to reply to.
+	ForwardFromChat      *Chat `json:"forward_from_chat"`
+	ForwardFromMessageID int64 `json:"forward_from_message_id"`
 }
 
 type User struct {
@@ -55,6 +62,8 @@ func (u *User) DisplayName() string {
 
 type Chat struct {
 	ID int64 `json:"id"`
+	// Type is "private", "group", "supergroup" or "channel".
+	Type string `json:"type"`
 }
 
 type Config struct {
@@ -122,6 +131,10 @@ func New(cfg Config) *Client {
 // HTTP is the client's HTTP client, so a Bridge can share it.
 func (c *Client) HTTP() *http.Client { return c.http }
 
+// Token is the bot token this client polls with, for the caller that has to
+// claim the host's poll lock for it.
+func (c *Client) Token() string { return c.token }
+
 func (c *Client) markPoll(err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -163,9 +176,22 @@ func (c *Client) LastPoll() time.Time {
 // LastPoll has to be before it counts as stale.
 func (c *Client) PollTimeout() time.Duration { return c.pollTimeout }
 
-// Run long-polls until ctx is cancelled, dispatching each message update to h.
-// It returns ctx.Err() on shutdown.
+// Run long-polls until ctx is cancelled, dispatching to h each message update
+// that carries a sender and a chat — what a conversation with a person is. It
+// returns ctx.Err() on shutdown.
 func (c *Client) Run(ctx context.Context, h Handler) error {
+	return c.RunAll(ctx, func(ctx context.Context, c *Client, u Update) {
+		if u.Message.From == nil || u.Message.Chat == nil {
+			return
+		}
+		h(ctx, c, u)
+	})
+}
+
+// RunAll is Run without that filter: every update carrying a message, sender or
+// not. A channel post copied into a discussion group is nobody's message, and
+// it is the one the telegram export waits for.
+func (c *Client) RunAll(ctx context.Context, h Handler) error {
 	c.markStarted()
 	var offset int64
 	for {
@@ -197,7 +223,7 @@ func (c *Client) Run(ctx context.Context, h Handler) error {
 			if u.UpdateID >= offset {
 				offset = u.UpdateID + 1
 			}
-			if u.Message == nil || u.Message.From == nil || u.Message.Chat == nil {
+			if u.Message == nil {
 				continue
 			}
 			h(ctx, c, u)
@@ -288,4 +314,140 @@ func (c *Client) send(ctx context.Context, chatID int64, text, parseMode string)
 
 func (c *Client) method(name string) string {
 	return c.apiBase + "/bot" + c.token + "/" + name
+}
+
+// APIError is Telegram answering a method call with ok:false.
+type APIError struct {
+	Method      string
+	Description string
+	// RateLimited is Telegram asking for a pause; RetryAfter is how long it
+	// wants, which may be zero.
+	RateLimited bool
+	RetryAfter  int
+}
+
+func (e *APIError) Error() string { return e.Method + ": " + e.Description }
+
+// apiResponse is the envelope every Bot API method answers with.
+type apiResponse struct {
+	OK          bool            `json:"ok"`
+	Result      json.RawMessage `json:"result"`
+	Description string          `json:"description"`
+	Parameters  *struct {
+		RetryAfter int `json:"retry_after"`
+	} `json:"parameters"`
+}
+
+// Call invokes a Bot API method with a JSON body and returns its result. A
+// rate-limited call waits the retry_after Telegram asks for and goes again;
+// everything else comes back as an APIError.
+func (c *Client) Call(ctx context.Context, method string, payload any) (json.RawMessage, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	for {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.method(method), bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		res, err := c.do(ctx, method, req)
+		wait, limited := retryAfter(err)
+		if !limited {
+			return res, err
+		}
+		if err := sleep(ctx, wait); err != nil {
+			return nil, err
+		}
+	}
+}
+
+// FilePart is one file uploaded with a multipart method call.
+type FilePart struct {
+	Field, Filename string
+	Data            []byte
+}
+
+// CallMultipart invokes a Bot API method that carries files: the fields are
+// sent as form values (a structured one must already be JSON), the files as
+// attachments the payload can refer to as attach://<field>.
+func (c *Client) CallMultipart(ctx context.Context, method string, fields map[string]string, files []FilePart) (json.RawMessage, error) {
+	for {
+		var buf bytes.Buffer
+		w := multipart.NewWriter(&buf)
+		for k, v := range fields {
+			if err := w.WriteField(k, v); err != nil {
+				return nil, err
+			}
+		}
+		for _, f := range files {
+			part, err := w.CreateFormFile(f.Field, f.Filename)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := part.Write(f.Data); err != nil {
+				return nil, err
+			}
+		}
+		if err := w.Close(); err != nil {
+			return nil, err
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.method(method), &buf)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", w.FormDataContentType())
+		res, err := c.do(ctx, method, req)
+		wait, limited := retryAfter(err)
+		if !limited {
+			return res, err
+		}
+		if err := sleep(ctx, wait); err != nil {
+			return nil, err
+		}
+	}
+}
+
+func (c *Client) do(ctx context.Context, method string, req *http.Request) (json.RawMessage, error) {
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var parsed apiResponse
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, fmt.Errorf("%s: status %d: %s", method, resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	if !parsed.OK {
+		apiErr := &APIError{Method: method, Description: parsed.Description}
+		if parsed.Parameters != nil {
+			apiErr.RateLimited, apiErr.RetryAfter = true, parsed.Parameters.RetryAfter
+		}
+		return nil, apiErr
+	}
+	return parsed.Result, nil
+}
+
+// retryAfter says whether Telegram rate-limited this call, and how long to wait
+// before going again — its own number plus a second, as chgksuite waits.
+func retryAfter(err error) (time.Duration, bool) {
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && apiErr.RateLimited {
+		return time.Duration(apiErr.RetryAfter+1) * time.Second, true
+	}
+	return 0, false
+}
+
+func sleep(ctx context.Context, d time.Duration) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(d):
+		return nil
+	}
 }
