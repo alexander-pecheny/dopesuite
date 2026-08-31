@@ -11,6 +11,7 @@ import { createImportPanel } from "./importpack.js";
 import { createExportPanel } from "./export.js";
 import { createHandoutsPanel } from "./handouts.js";
 import { createMassPanel } from "./masspanel.js";
+import { createLabelFilter, shownCards } from "./labelfilter.js";
 import { createLabelsEditor, sortLabels } from "./labelsedit.js";
 import { createTesterList } from "./testerlist.js";
 import { createBundleExportPanel } from "./bundleexport.js";
@@ -29,7 +30,7 @@ import { xySync } from "./sync.js";
 import { createBoardMembers } from "./boardmembers.js";
 import { create as createAttachments } from "./attachments.js";
 import { createUnlock } from "./unlock.js";
-import { boardOrder, byRank, dragAfterIn, dragAfterInX, rankAfterMove } from "./dragrank.js";
+import { boardOrder, byRank, dragAfterIn, dragAfterInX, rankAfterMove, rankForSlot } from "./dragrank.js";
 import { createTimeline, decodeCommentPayload, eventAuthor } from "./timeline.js";
 import { createCardDetail, nowStamp } from "./carddetail.js";
 import { createDwell, liveTestMode } from "./testmode.js";
@@ -464,6 +465,9 @@ function render(): void {
   // mass.mode left «Готово» with nothing to close.
   mass.prune();
   mass.renderBar();
+  // Also unconditional, and for the same reason: a label the filter names can be
+  // deleted under it, and the bar has to stop naming it.
+  labelFilter.renderBar();
   kanban.scrollLeft = scrollLeft;
   for (const b of kanban.querySelectorAll<HTMLElement>(".kcards")) {
     const top = listScroll.get(b.dataset.listId);
@@ -488,11 +492,25 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   const cards = cardsOf(list.id);
   const headMain = el("div", { class: "klist-headmain" },
     el("span", { class: "klist-title", text: list.title || "(без названия)" }));
+  // The numbers belong to the questions, not to the view: they are computed over
+  // the WHOLE list and carried across, so a filtered тур reads «1, 4, 7».
+  const allNumbers = precomputedNumbers || xyChgk.numberQuestionCards(cards);
+  const view = shownCards(cards, allNumbers, labelFilter.keep());
+  const shown = view.cards;
   const qCount = cards.filter((c) => c.kind === "question").length;
-  if (qCount) headMain.append(el("span", { class: "klist-count", text: questionCountLabel(qCount) }));
+  const qShown = shown.filter((c) => c.kind === "question").length;
+  if (qCount) {
+    headMain.append(el("span", {
+      class: "klist-count",
+      // «1 из 4», not «1 из 4 вопроса»: the word cannot agree with both numbers.
+      // The «из» form appears whenever a filter is on, even where it happens to
+      // hide nothing, so the head reads the same way across the board.
+      text: labelFilter.active() ? `${qShown} из ${qCount}` : questionCountLabel(qCount),
+    }));
+  }
   const headKids: HTMLElement[] = [];
   if (mass.mode) {
-    const ids = cards.map((c) => c.id);
+    const ids = shown.map((c) => c.id);
     const all = el("input", { type: "checkbox", "aria-label": "Отметить весь список" }) as HTMLInputElement;
     all.dataset.listId = String(list.id);
     all.checked = xyMass.allSelected(mass.selected, ids);
@@ -507,8 +525,7 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   const body = el("div", { class: "kcards", dataset: { listId: list.id } });
   // Grouped lists carry continuous numbering computed across the whole group;
   // standalone lists number from 1.
-  const numbers = precomputedNumbers || xyChgk.numberQuestionCards(cards);
-  cards.forEach((card, i) => body.append(renderCard(card, numbers[i])));
+  shown.forEach((card, i) => body.append(renderCard(card, view.numbers[i])));
   col.append(body);
 
   // list drag — a grouped list picks up its whole group (all member columns
@@ -532,18 +549,36 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   body.addEventListener("dragover", (e) => {
     if (!e.dataTransfer?.types.includes("text/xy-card")) return;
     e.preventDefault();
+    // Under a filter the cards between two visible ones are hidden, so an
+    // insertion point among them means nothing — the column only says «drop
+    // here» and the drop appends to the list's true end.
+    if (labelFilter.active()) { body.classList.toggle("kcards-drop", draggedCardListId() !== list.id); return; }
     const after = dragAfter(body, e.clientY);
     const dragging = document.querySelector(".kcard.dragging");
     if (!dragging) return;
     if (after == null) body.append(dragging);
     else body.insertBefore(dragging, after);
   });
+  // dragleave also fires moving between the column's own children, and stripping
+  // the outline there makes it flicker for the length of the drag.
+  body.addEventListener("dragleave", (e) => {
+    if (!body.contains(e.relatedTarget as Node | null)) body.classList.remove("kcards-drop");
+  });
   body.addEventListener("drop", (e) => {
     if (!e.dataTransfer?.types.includes("text/xy-card")) return;
     e.preventDefault();
+    body.classList.remove("kcards-drop");
     if (cardDragCommitted) return; // ignore a stray second drop from the same gesture
-    cardDragCommitted = true;
     const cardId = Number(e.dataTransfer.getData("text/xy-card"));
+    if (labelFilter.active()) {
+      // Reorder is off; only a move to ANOTHER list means anything.
+      const card = state.cards.find((c) => c.id === cardId);
+      if (!card || card.listId === list.id) return;
+      cardDragCommitted = true;
+      void commitCardAppend(cardId, list.id);
+      return;
+    }
+    cardDragCommitted = true;
     void commitCardMove(cardId, list.id, body);
   });
   return col;
@@ -755,6 +790,14 @@ function paintLabels(): void {
     const ink = labelInk(pick.dataset.c || "");
     if (ink) pick.style.color = ink;
   }
+}
+
+// draggedCardListId is the list the card in flight came from — dragover cannot
+// read the dataTransfer (only the drop can), so the dragging node is the source.
+function draggedCardListId(): number | null {
+  const node = kanban.querySelector<HTMLElement>(".kcard.dragging");
+  const card = node ? state.cards.find((c) => c.id === Number(node.dataset.cardId)) : undefined;
+  return card ? card.listId : null;
 }
 
 function dragAfter(container: HTMLElement, y: number): Element | null {
@@ -1011,11 +1054,22 @@ previewOverlay.addEventListener("pointerdown", (e) => { if (e.target === preview
 
 // ---- commit card move (rank recompute from DOM order) ----
 async function commitCardMove(cardId: number, targetListId: number, body: HTMLElement): Promise<void> {
-  const card = state.cards.find((c) => c.id === cardId);
-  if (!card) return;
   const order = [...body.querySelectorAll<HTMLElement>(".kcard")].map((n) => Number(n.dataset.cardId));
   const rankOf = (id: number): string | null => { const c = state.cards.find((x) => x.id === id); return c ? c.rank : null; };
-  const rank = rankAfterMove(order, cardId, rankOf);
+  await commitCardTo(cardId, targetListId, rankAfterMove(order, cardId, rankOf));
+}
+
+// commitCardAppend is what a drop does while a filter is on: the DOM holds only
+// the cards that matched, so a rank read off the visible neighbours would land
+// the card at an arbitrary point among the hidden ones. The end of the true list
+// is the one position that means the same thing filtered or not.
+async function commitCardAppend(cardId: number, targetListId: number): Promise<void> {
+  await commitCardTo(cardId, targetListId, rankForSlot(cardsOf(targetListId), "end", cardId));
+}
+
+async function commitCardTo(cardId: number, targetListId: number, rank: string): Promise<void> {
+  const card = state.cards.find((c) => c.id === cardId);
+  if (!card) return;
   card.listId = targetListId;
   card.rank = rank;
   setStatus("saving");
@@ -1280,6 +1334,7 @@ const labelsEditor = createLabelsEditor(board);
 const testerList = createTesterList(board, shell, cardDetail);
 const listsManage = createListsManage(board);
 const mass = createMassPanel(board, { kanban, transfer, forgetCardLabels, paintLabels, refreshMenu: refreshBoardMenu });
+const labelFilter = createLabelFilter({ board, paintLabels, onChange: () => { refreshBoardMenu(); render(); } });
 
 // starts marks the head of a cluster: the menu draws a rule above it. Order and
 // clustering are this file's business — a panel module has no idea what it will
@@ -1290,6 +1345,7 @@ registerPanel(
   // Что на доске
   listsManage.panel,
   labelsEditor.panel,
+  labelFilter.panel,
   { id: "sessions", menu: "board", icon: "flask-conical", label: "Тесты", title: "Тест-сессии доски: кто когда играл, приглашение со временем начала", open: () => sessionsPanel.open() },
 
   // Правки по всей доске

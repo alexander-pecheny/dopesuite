@@ -488,6 +488,12 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        from every board whose key it holds. Plaintext in localStorage on
                        purpose — the same device caches the DKs — and purged per board when
                        its password is forgotten
+    labelfilter.ts     «Фильтр по меткам»: pick labels + все/любая/ни одной and every
+                       list draws only what matches. A way of looking — it reaches the
+                       drawing and nothing else (numbering, exports and transfer still
+                       see every card), writes nothing, and dies on reload. Under it
+                       drag-to-reorder is off, because commitCardMove reads the rank off
+                       the VISIBLE neighbours; a cross-list drop appends instead
     boardinvites.ts    the invite-link half of the «Участники» modal (ADR-0017): the
                        Заявки queue and the Ссылки list, plus the chip mint form. Owner
                        only; a decision redraws the roster through onChange, which also

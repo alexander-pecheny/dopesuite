@@ -6,6 +6,9 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
     iconbtn id="notifToggle" label="События" title="События других участников" badgeid="notifBadge" aria-haspopup="true" aria-expanded="false" icon="bell"
     iconbtn id="timerToggle" icon="timer" label="Таймер" title="Таймер ЧГК" aria-pressed="false"
 
+  -- Фильтр по меткам: the bar sits ABOVE the board, because it is the caption
+  -- of what you are looking at. Its modal is down with the other overlays.
+  mount id="filterBar" kind="filter-bar" hidden
   mount id="kanban" kind="kanban" hidden
 
   -- unlock overlay
@@ -284,6 +287,9 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
       button small id="moveListCopyBtn" "Копировать"
       button small id="moveListMoveBtn" "Переместить"
     message id="moveListMessage"
+
+  modal id="filterOverlay" label="Фильтр по меткам" title="Фильтр по меткам" done="Готово" doneid="filterClose"
+    mount id="filterBody" kind="filter-body"
 
   -- Массовое действие: the bar that appears once cards are ticked, and the one
   -- dialog every action runs through. The dialog IS the confirmation — it names

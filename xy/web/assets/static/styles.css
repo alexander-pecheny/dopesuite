@@ -1402,6 +1402,28 @@
    theme, so the ink has to be that or the word washes out on the button. */
 .mass-act-danger { color: var(--red-dark); background: var(--red); }
 .mass-body { display: flex; flex-direction: column; gap: var(--space-1); }
+
+/* «Фильтр по меткам» — a row of .board-main above the board, so a filtered view
+   can never be mistaken for the whole board. Same shape as the mass bar; both
+   can be up at once, each on its own row. */
+.filter-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.filter-bar-what { font-weight: var(--fw-semibold); font-size: var(--text-sm); }
+.filter-bar-note { color: var(--muted); font-size: var(--text-xs); }
+.filter-modes { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-2); }
+.filter-modes-label { font-size: var(--text-sm); color: var(--muted); }
+/* the column a filtered drag would land in: the cards do not part to show an
+   insertion point, so the column itself has to say «here» */
+.kcards-drop { outline: 2px dashed var(--border); outline-offset: -2px; border-radius: var(--radius-sm); }
 .kcard-check, .klist-check { display: inline-flex; align-items: center; margin-right: var(--space-1); cursor: var(--cursor-action); }
 .kcard-check { float: right; margin-left: var(--space-1); }
 /* On a phone the actions get a row to themselves and share it evenly, rather

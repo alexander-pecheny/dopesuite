@@ -31,6 +31,19 @@ _Avoid_: comment (that is the Timeline's word — a Hidden Comment is nobody's t
 A named, coloured tag on a Board, assignable to any of its Cards, renameable and recolourable at will. An assignment carries an optional Playing: unscoped it is the author's own view of the question, scoped it is what the testers thought at that sitting. So «взяли» is ONE Board Label composed onto a Playing, not a label per session.
 _Avoid_: tag, метка as a distinct thing; mark (retired — it named the взяли/не взяли slot before an assignment could be scoped)
 
+**Label Filter**:
+A way of LOOKING at a Board: pick Labels and one of все / любая / ни одной, and
+every List draws only the Cards that match. It reaches the drawing and nothing
+computed from it: every export, «Переместить список» and Transfer still see the
+whole Board, so a package can never quietly ship short, and a filtered List
+reads «1, 4, 7» because the number belongs to the question, not to the view. A
+List head says «N из M» while it is on, and ticking a whole List for a Mass
+Action ticks what is drawn — both report the view rather than redefine it. It matches a Label however it is assigned, scoped to a Playing
+or not — so a Card can survive on a verdict its dots do not show, which the
+modal says out loud. Nothing is written and nothing is remembered: it dies on
+reload, like the лента's narrowing and unlike a Feed Default.
+_Avoid_: search (that is Find's word, and it reads content), view, mode
+
 **Test Session**:
 One sitting at which a group of testers played a set of questions. Its own Board-level entity — not a Card and not a List — carrying a date, an optional time and zone, a title, and its testers.
 _Avoid_: тест-список, test list, test card

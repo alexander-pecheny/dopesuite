@@ -91,8 +91,13 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
     for (const box of deps.kanban.querySelectorAll<HTMLInputElement>(".kcard-check input")) {
       box.checked = massSelected.has(Number(box.dataset.cardId));
     }
+    // The ids come from the boxes actually drawn in that column, not from the
+    // list's whole set: under «Фильтр по меткам» the column shows a subset, and
+    // the header must agree with the rows under it.
     for (const box of deps.kanban.querySelectorAll<HTMLInputElement>(".klist-check input")) {
-      const ids = board.cardsOf(Number(box.dataset.listId)).map((c) => c.id);
+      const col = box.closest(".klist");
+      const ids = [...(col?.querySelectorAll<HTMLInputElement>(".kcard-check input") || [])]
+        .map((b) => Number(b.dataset.cardId));
       box.checked = xyMass.allSelected(massSelected, ids);
     }
   }
