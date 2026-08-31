@@ -13,8 +13,8 @@ import (
 
 	"xy/internal/chgk/fsource"
 	"xy/internal/chgk/handout"
+	"xy/internal/chgk/htmlshot"
 	"xy/internal/chgk/i18n"
-	"xy/internal/chgk/typstwasm"
 )
 
 // handouts runs `chgksuite handouts <subcommand>`.
@@ -33,6 +33,8 @@ func handouts(args []string) error {
 		return handoutsPack(args[1:])
 	case "create_html":
 		return handoutsCreateHTML(args[1:])
+	case "html2img":
+		return handoutsHTML2Img(args[1:])
 	default:
 		return fmt.Errorf("handouts %s is not ported yet", args[0])
 	}
@@ -69,14 +71,14 @@ func handoutsGenerate(args []string) error {
 		return err
 	}
 	for _, w := range warnings {
-		fmt.Fprintf(os.Stderr, "вопрос %s: %s\n", w.Number, w.Text)
+		warn("вопрос %s: %s", w.Number, w.Text)
 	}
 	for _, f := range files {
 		out := filepath.Join(dir, f.Name)
 		if err := os.WriteFile(out, []byte(f.Content), 0o644); err != nil {
 			return err
 		}
-		fmt.Println("Output:", out)
+		reportOutput(out)
 	}
 	return nil
 }
@@ -84,6 +86,7 @@ func handoutsGenerate(args []string) error {
 // handoutArgs declares the geometry flags `run` and `split_fit` share.
 func handoutArgs(fs *flag.FlagSet) func() (handout.Args, string, error) {
 	a := handout.DefaultArgs()
+	typstBin := typstFlag(fs)
 	language := fs.String("language", override("language", i18n.DefaultLanguage),
 		"which labels the printed captions use: "+strings.Join(i18n.Languages(), ", "))
 	labelsFile := fs.String("labels_file", "", "a labels TOML of your own, in place of the language's")
@@ -108,7 +111,7 @@ func handoutArgs(fs *flag.FlagSet) func() (handout.Args, string, error) {
 		if *tikzMM != 0 {
 			a.TikzMM = tikzMM
 		}
-		return a, *font, nil
+		return a, *typstBin, nil
 	}
 }
 
@@ -126,12 +129,12 @@ func handoutsRun(args []string) error {
 	if fs.NArg() != 1 {
 		return fmt.Errorf("handouts run takes exactly one .hndt file")
 	}
-	a, _, err := read()
+	a, typstBin, err := read()
 	if err != nil {
 		return err
 	}
 	in := fs.Arg(0)
-	ts, closeTS, err := handoutTypesetter()
+	ts, closeTS, err := typesetter(typstBin)
 	if err != nil {
 		return err
 	}
@@ -150,7 +153,7 @@ func handoutsRun(args []string) error {
 		if err := os.WriteFile(out, pdf, 0o644); err != nil {
 			return err
 		}
-		fmt.Println("Output file:", out)
+		reportOutput(out)
 		return nil
 	}
 	if err := render(); err != nil {
@@ -161,14 +164,14 @@ func handoutsRun(args []string) error {
 	}
 	// chgksuite watches with watchdog; a second's poll on the file's own
 	// timestamp is the same thing for one file, and needs nothing.
-	fmt.Printf("Слежу за %s. Ctrl-C, чтобы закончить.\n", in)
+	reportNote("слежу за %s — Ctrl-C, чтобы закончить", in)
 	last := modTime(in)
 	for {
 		time.Sleep(time.Second)
 		if t := modTime(in); !t.Equal(last) {
 			last = t
 			if err := render(); err != nil {
-				fmt.Fprintln(os.Stderr, "chgksuite:", err)
+				fail(err)
 			}
 		}
 	}
@@ -216,7 +219,39 @@ func handoutsCreateHTML(args []string) error {
 	if err := os.WriteFile(name, []byte(html), 0o644); err != nil {
 		return err
 	}
-	fmt.Printf("Created %s (width: %.1fmm, fraction: %s of A4)\n", name, widthMM, fs.Arg(0))
+	reportOutput(name)
+	reportNote("ширина %.1f мм — %s листа A4", widthMM, fs.Arg(0))
+	return nil
+}
+
+// handoutsHTML2Img is html2img: the hand-laid-out HTML into the PDF that goes
+// to the printer and the PNG that goes into a chat.
+func handoutsHTML2Img(args []string) error {
+	fs := flag.NewFlagSet("handouts html2img", flag.ContinueOnError)
+	scale := fs.Float64("scale", 2, "the PNG's device pixel ratio")
+	browser := fs.String("browser", override("browser", ""),
+		"the chromium to render with; empty looks for one (also $CHGKSUITE_BROWSER)")
+	config := configFlag(fs)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := applyConfig(fs, *config); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return fmt.Errorf("handouts html2img takes exactly one .html file")
+	}
+	res, err := htmlshot.Render(context.Background(), fs.Arg(0), htmlshot.Options{
+		Browser: *browser, Scale: *scale,
+		Say: func(s string) { warn("chromium: %s", s) },
+	})
+	if err != nil {
+		return err
+	}
+	reportOutput(res.PDF)
+	reportNote("%.1f × %.1f мм", res.WidthMM, res.HeightMM)
+	reportOutput(res.PNG)
+	reportNote("масштаб ×%s", strconv.FormatFloat(*scale, 'g', -1, 64))
 	return nil
 }
 
@@ -262,7 +297,7 @@ func handoutsSplitFit(args []string) error {
 	if fs.NArg() != 1 {
 		return fmt.Errorf("handouts split_fit takes exactly one .hndt file")
 	}
-	a, _, err := read()
+	a, typstBin, err := read()
 	if err != nil {
 		return err
 	}
@@ -271,7 +306,7 @@ func handoutsSplitFit(args []string) error {
 	if err != nil {
 		return err
 	}
-	ts, closeTS, err := handoutTypesetter()
+	ts, closeTS, err := typesetter(typstBin)
 	if err != nil {
 		return err
 	}
@@ -288,7 +323,7 @@ func handoutsSplitFit(args []string) error {
 	if err := os.WriteFile(out, zipped, 0o644); err != nil {
 		return err
 	}
-	fmt.Println("Output:", out)
+	reportOutput(out)
 	return nil
 }
 
@@ -318,19 +353,6 @@ func readHandoutSource(in string) (string, map[string][]byte, error) {
 	return hndt, images, nil
 }
 
-// handoutTypesetter starts the wasm typst the renderer needs.
-func handoutTypesetter() (handout.Typesetter, func(), error) {
-	fonts, err := handout.BundledFonts()
-	if err != nil {
-		return nil, nil, err
-	}
-	pool, err := typstwasm.NewPool(context.Background(), fonts, wasmCacheDir(), 1)
-	if err != nil {
-		return nil, nil, err
-	}
-	return pool, func() { pool.Close() }, nil
-}
-
 // handoutsPack is pack.py: every split-fitted single-handout .hndt in a folder,
 // each repeated for as many pages as the field needs, merged into one PDF for
 // the colour printer and one for the black-and-white one.
@@ -350,7 +372,7 @@ func handoutsPack(args []string) error {
 	if *nTeams <= 0 {
 		return fmt.Errorf("handouts pack needs --n_teams")
 	}
-	a, _, err := read()
+	a, typstBin, err := read()
 	if err != nil {
 		return err
 	}
@@ -370,7 +392,7 @@ func handoutsPack(args []string) error {
 	}
 	sort.Strings(names)
 
-	ts, closeTS, err := handoutTypesetter()
+	ts, closeTS, err := typesetter(typstBin)
 	if err != nil {
 		return err
 	}
@@ -381,19 +403,19 @@ func handoutsPack(args []string) error {
 		path := filepath.Join(folder, name)
 		hndt, images, err := readHandoutSource(path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %v — пропускаем\n", name, err)
+			warn("%s: %v — пропускаем", name, err)
 			continue
 		}
 		pages, isColour, err := handout.PackPages(hndt, *nTeams)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %v — пропускаем\n", name, err)
+			warn("%s: %v — пропускаем", name, err)
 			continue
 		}
 		pdf, err := handout.Render(context.Background(), hndt, images, a, ts)
 		if err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
-		fmt.Printf("%s: %d страниц%s\n", name, pages, colourNote(isColour))
+		reportNote("%s: %d страниц%s", name, pages, colourNote(isColour))
 		for range pages {
 			if isColour {
 				colour = append(colour, pdf)
@@ -417,7 +439,7 @@ func handoutsPack(args []string) error {
 		if err := os.WriteFile(path, merged, 0o644); err != nil {
 			return err
 		}
-		fmt.Println("Output:", path)
+		reportOutput(path)
 	}
 	return nil
 }
