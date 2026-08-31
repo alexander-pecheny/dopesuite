@@ -111,14 +111,16 @@ One of the several small games a Мультиигры sitting holds — a раз
 конкурс of its own tasks, played by everyone at once. Its tasks are declared
 with a domain each: the set or range of values that task's cell may hold,
 which is at once the validation, the printed номинал and the cell editor.
-Every мини-игра pays a subtotal and the Итог is their sum.
+Every мини-игра pays a subtotal and the Итог is their sum. A мини-игра's
+tasks may stand in блоки — visually separate groups of its sheet; the task
+numbering runs through the whole мини-игра regardless.
 
 A мини-игра may instead be **normalised** (`→0..100`): it contributes what the
 team scored as a share of the best score in it, out of a hundred, rather than
 its own points. That is what lets мини-игры of quite different scales weigh the
 same — «Ассорти» added a медиа-эрудит worth 980 to a песенный конкурс worth 55.
-The best is taken among the teams in the зачёт, since a team that refused to
-play cannot set the scale for the others, and a team that finished a мини-игра
+The best is taken among the teams that played, since a team that refused
+([[Отказ]]) cannot set the scale for the others, and a team that finished a мини-игра
 on minus scores nothing for it rather than dragging its Итог down.
 
 **Кресло**:
@@ -129,6 +131,30 @@ records is a mark, never a rank. Who sits in one is a fact about the тема, n
 the бой — the регламент turns the пристяжные round at the половина and teams
 swap oftener — and it is what tells a first correct answer from a repeat of
 one already on the table.
+
+**Рассадка**:
+The order of a side's three кресла for a тема — who is пристяжной first and
+second, and who коренной. A side's рассадка holds from the тема it is set at
+until it is set again; a тема whose рассадка differs from the one before is
+where that side turned round.
+
+**Зачёт**:
+A standings a team competes in. A tournament may run several зачёты at once on
+the same questions — an Открытый чемпионат Польши where Polish teams fight for
+the national medals while every team fights for the festival's — and «вне
+зачёта» is a зачёт in its own right, typically adult teams playing a school or
+student championship for fun. Source sheets usually mark a team's зачёт in a
+column of its own. Each зачёт ranks its own teams; вне-зачёта teams are shown
+beneath the ranked ones, in full and unmuted, so they inform without
+distracting. Not yet modelled: today a game ranks everyone in one зачёт, and
+marking a team out of it is not an [[Отказ]].
+
+**Отказ**:
+A team's refusal to play a Game or мини-игра. The team keeps its row so the
+numbers of the rest do not shift, but by definition it has no results there:
+it takes no place and cannot set a normalisation scale. Not to be confused
+with «вне зачёта» ([[Зачёт]]) — a вне-зачёта team plays in full and stands
+with everyone, merely outside the medal standings.
 
 **Перестрелка**:
 A tiebreak continuation, common to every format (EK's shootout themes, ОД's shootout rounds, brain's "П" questions). Two distinct forms: extra material appended to the Match itself until the tie breaks, or a separate replay Match between fully tied Participants. Whether a Block's Matches allow the appended form is part of that Block's rules — regulations differ per tournament.

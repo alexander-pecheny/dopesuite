@@ -19,9 +19,10 @@ dopetest memory note for how to snapshot it); `--pages` takes a file of
 
 Readiness is a contract the tool can check, not a guess per page: fonts
 loaded, a content node present, no DOM mutation for a while, two painted
-frames. Workers attach to one hub Chrome via `agent-browser connect`, so
-eight of them cost tabs, not browsers; the hub is killed by pid at the end
-because `close` does not always take its Chrome with it. Every page opens in
+frames. Each worker session has a Chrome of its own, launched one at a time
+(agent-browser 0.34's `connect` does not outlive the command that ran it, and
+sessions sharing a browser race on tab binding); the Chromes are killed by
+pid at the end because `close` does not always take one with it. Every page opens in
 a fresh tab: over plain HTTP/1.1 (a local dev server; dopetest is h2) the
 previous page's SSE stream outlives an in-place navigation and starves the
 next one of connections. MATRIX_DEBUG=1 dumps a failed page's request log.
@@ -110,23 +111,26 @@ def chrome_pids():
     return pids
 
 
-class Hub:
-    """One Chrome; every worker session attaches to it over CDP."""
+class Fleet:
+    """One Chrome per worker session, launched one at a time. agent-browser
+    0.34's `connect` does not outlive the command that ran it — a worker's next
+    `open` launches a Chrome of its own anyway — and sessions sharing one
+    browser race on tab binding; four Chromes booting at once on four cores
+    time each other out, so the first `open` of a session takes the lock."""
 
-    def __init__(self, name="matrix-hub"):
-        self.name = name
+    launch = threading.Lock()
+
+    def __init__(self):
         self.before = chrome_pids()
-        ab(name, "open", "about:blank")
-        self.cdp = ab(name, "get", "cdp-url").splitlines()[-1]
         self.workers = []
 
     def worker(self, name):
-        ab(name, "connect", self.cdp)
-        self.workers.append(name)
+        if name not in self.workers:
+            self.workers.append(name)
         return name
 
     def close(self):
-        for name in [*self.workers, self.name]:
+        for name in self.workers:
             ab(name, "close", check=False)
         # `close` ends the session; the Chrome behind it sometimes survives.
         for pid in chrome_pids() - self.before:
@@ -149,8 +153,9 @@ def emulate(session, device, height=None):
 
 
 def shoot_cell(host, label, device, theme, pages, out, session, log):
-    emulate(session, device)
-    ab(session, "open", f"{host}/")
+    with Fleet.launch:
+        emulate(session, device)
+        ab(session, "open", f"{host}/")
     ab(session, "eval", f"localStorage.setItem('dope-theme','{theme}')")
     for name, path in pages:
         t0 = time.time()
@@ -208,14 +213,14 @@ def shoot_page(host, path, png, session, device):
     raise RuntimeError("capture never settled")
 
 
-def shoot(hub, host, label, pages, out, split, log):
+def shoot(fleet, host, label, pages, out, split, log):
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir(parents=True)
     threads = []
     for index, (device, theme) in enumerate(CELLS):
         for part in range(split):
             chunk = pages[part::split]
-            session = hub.worker(f"matrix-{label}-{device}-{theme}-{part}")
+            session = fleet.worker(f"matrix-{device}-{theme}-{part}")
             cell_host = worker_host(host, index * split + part)
             thread = threading.Thread(target=shoot_cell, args=(cell_host, label, device, theme, chunk, out, session, log))
             thread.start()
@@ -301,7 +306,7 @@ def run(args):
         before = Server(head_wt / "dope", 9783, args.db, log)
         after = Server(DOPE, 9782, args.db, log)
         servers = [before, after]
-        hub = Hub()
+        hub = Fleet()
         t0 = time.time()
         # One host at a time: rendering is CPU-bound (software GL at DPR 3),
         # so more tabs than cores only buys CDP timeouts.
@@ -339,7 +344,7 @@ def main():
         return run(args)
     if args.cmd == "shoot":
         log = lambda line: print(line, file=sys.stderr, flush=True)
-        hub = Hub()
+        hub = Fleet()
         try:
             t0 = time.time()
             pages = pages_from(args.pages, gallery=args.gallery)

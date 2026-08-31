@@ -13,6 +13,7 @@
   --cell-radius: 4px;
   --theme-radius: var(--cell-radius);
   --team-col: 180px;
+  --troika-cross-col: 46px;
   --total-col: 38px;
   --place-col: 42px;
   --place-gap: 14px;
@@ -398,11 +399,12 @@
   height: var(--question-size);
   min-width: var(--question-size);
   padding: 2px 4px;
-  border: var(--cell-gap) solid transparent;
+  border: var(--cell-gap) solid var(--structure);
   border-radius: var(--cell-radius);
-  background:
-    linear-gradient(var(--cell-fill), var(--cell-fill)) padding-box,
-    linear-gradient(var(--structure), var(--structure)) border-box;
+  /* A solid fill, not a gradient pair: Firefox resolves every gradient's stops
+     again for every cell on every scrolled frame, and a sheet has thousands. */
+  background: var(--cell-fill);
+  background-clip: padding-box;
   white-space: nowrap;
   vertical-align: middle;
 }
@@ -2618,7 +2620,9 @@ body:not(.embedded-match) .grid-match {
   background: linear-gradient(to right, var(--results-sticky-fade-from), var(--results-sticky-fade-to));
 }
 
-.detailed-scroll-left .match-table.od-detailed .sticky-total::after {
+.detailed-scroll-left .match-table.od-detailed .sticky-total::after,
+.detailed-scroll-left .match-table.multi-table .sticky-total::after,
+.detailed-scroll-left .match-table.multi-table .sticky-place::after {
   content: "";
   position: absolute;
   top: 0;
@@ -3045,9 +3049,11 @@ body:not(.embedded-match) .grid-match {
   overflow: hidden;
 }
 
-/* Личная СИ: the seat is one row, so ЭК's two-row floor would stretch it. */
+/* Личная СИ and Мультиигры: the seat is one row, so ЭК's two-row floor would
+   stretch it. */
 .match-table.individual-blank .ek-team-cell .od-detailed-team-layout,
-.match-table.ek-stage-table.individual-blank .ek-team-cell .od-detailed-team-layout {
+.match-table.ek-stage-table.individual-blank .ek-team-cell .od-detailed-team-layout,
+.match-table.multi-table .ek-team-cell .od-detailed-team-layout {
   min-height: calc(var(--question-size) - var(--cell-gap) * 2);
   max-height: none;
 }
@@ -3988,17 +3994,28 @@ body:not(.embedded-match) .grid-match {
 }
 
 .match-table.brain-detailed .brain-finish-head,
-.match-table.brain-detailed .brain-finish-gap {
+.match-table.brain-detailed .brain-finish-gap,
+.troika-sheet .troika-finish-head,
+.troika-sheet .troika-finish-gap {
   --cell-fill: var(--structure);
   border-radius: 0;
   border-color: var(--structure);
 }
 
-.match-table.brain-detailed .brain-finish-head {
+.match-table.brain-detailed .brain-finish-head,
+.troika-sheet .troika-finish-head {
   padding: var(--space-0-5) var(--space-1-5);
 }
 
-.brain-player-select {
+/* The sheet's layout is fixed, so the «Закончен» column says its width —
+   otherwise it gets the leftover and clips the word. */
+.troika-sheet .troika-finish-head {
+  width: calc(var(--question-col) * 2.5);
+  min-width: calc(var(--question-col) * 2.5);
+}
+
+.brain-player-select,
+.troika-chair-select {
   width: 100%;
   height: 100%;
   min-height: var(--question-size);
@@ -4563,12 +4580,19 @@ body.is-fullscreen.od-page .match-main {
   width: var(--question-col);
   min-width: var(--question-col);
   text-align: center;
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
 
-.multi-table .multi-cell-minus {
-  color: var(--red);
+/* On a tinted fill the value wears the fill's designated on-color (the
+   btn-danger pairing): dark green on green, light green on dark green. */
+.multi-table .multi-cell.right {
+  color: var(--green-dark);
+}
+
+.multi-table .multi-cell.wrong {
+  color: var(--red-dark);
 }
 
 /* A normalised Итог is fractional, so it needs more room than the integer one
@@ -4579,10 +4603,18 @@ body.is-fullscreen.od-page .match-main {
   max-width: calc(var(--total-col) + var(--space-5));
 }
 
+/* …and Σ+ pins after the widened Итог, or a scrolled sheet parks it on top
+   of the Итог's tail. */
+.match-table.multi-table .sticky-place {
+  left: calc(var(--sheet-corner-col) + var(--team-col) + var(--total-col) + var(--space-5));
+}
+
 /* A мини-игра's name heads a block dozens of columns wide; centred it sits off
    the screen, so it rides at the block's left edge where the block begins. */
 /* Same treatment the seeding import gives a refusal, for the same reason. */
-.multi-table .declined-row td {
+.multi-table .declined-row td,
+.multi-table .declined-row .multi-cell.right,
+.multi-table .declined-row .multi-cell.wrong {
   color: var(--muted);
   background: var(--surface-tint);
 }
@@ -4592,10 +4624,23 @@ body.is-fullscreen.od-page .match-main {
   padding-left: var(--space-2);
 }
 
+/* The sticky heads span both header rows and read at the numbers' line. */
+.multi-table thead .sticky {
+  vertical-align: bottom;
+}
+
+/* The мини-игра's name follows a scrolled sheet until its block runs out. */
+.multi-game-name {
+  position: sticky;
+  display: inline-block;
+}
+
+/* The head's main line is the вопрос number; a номинал rides above it muted
+   (od-detailed-qcount), so the number keeps the text colour. */
 .multi-table .nominal {
   font-size: var(--text-xs);
   font-weight: var(--fw-regular);
-  color: var(--muted);
+  color: var(--text);
 }
 
 .multi-table .theme-block-score {
@@ -4604,9 +4649,35 @@ body.is-fullscreen.od-page .match-main {
   font-weight: var(--fw-semibold);
 }
 
-/* Тройка: бои side by side, each two blocks of three chair rows. */
+/* Тройка: бои side by side, each two blocks of three chair rows; the группа
+   tables flow at their own width and wrap, compact enough for two abreast. */
+.group-standings.troika-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: flex-start;
+}
+
+.troika-groups .crosstable {
+  --results-place-col: 28px;
+  --results-team-col: 140px;
+  font-size: var(--text-xs);
+}
+
+.troika-groups .crosstable .results-num {
+  width: 32px;
+  min-width: 32px;
+}
+
+/* Wide enough for «14 : 13», so no score stretches its column and every
+   группа's columns land on the same x. */
+.troika-groups .crosstable .cross-col {
+  width: var(--troika-cross-col);
+  min-width: var(--troika-cross-col);
+}
+
 .troika-protocol {
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-5);
@@ -4619,11 +4690,17 @@ body.is-fullscreen.od-page .match-main {
   gap: var(--space-5);
 }
 
+/* A stage's tab holds every бой of every группа — a hundred and more sheets —
+   so a бой off the screen is neither laid out nor painted until it scrolls in. */
 .troika-bout {
+  --troika-bout-w: 1130px;
+  --troika-bout-h: 260px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-2);
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--troika-bout-w) var(--troika-bout-h);
 }
 
 .troika-bout-head,
@@ -4639,65 +4716,37 @@ body.is-fullscreen.od-page .match-main {
   width: var(--team-col);
   min-width: var(--team-col);
   max-width: var(--team-col);
-  font-weight: var(--fw-semibold);
-  color: var(--text-strong);
-  /* «длинная Гриша в подготовке к дизастеру» is a real team name, and a бой
-     seats two of them beside a column of кресла. */
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.troika-sheet .troika-seat-label {
-  font-size: var(--text-xs);
-  color: var(--muted);
-}
-
-.troika-sheet .troika-chair {
-  padding: var(--space-0);
-}
-
-/* The рассадка row annotates a бой instead of scoring it, so it does not carry
-   the weight of the rows around it. Its ⇄ says two things at once: which тема
-   the chair pickers are pointing at (a selection, so a tint), and where the
-   seating actually turned round (the data, so ink). */
-.troika-sheet .troika-seat-row td {
-  padding-top: var(--space-0);
-  padding-bottom: var(--space-0);
-}
-
-.troika-sheet .troika-seat-mark {
-  width: 100%;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  font-size: var(--text-xs);
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.troika-sheet .troika-seat-mark:disabled {
-  cursor: default;
-}
-
-.troika-sheet .troika-seat-here {
-  background: var(--surface-tint);
-}
-
-.troika-sheet .troika-seat-changed {
-  color: var(--text-strong);
+/* «длинная Гриша в подготовке к дизастеру» is a real team name, and a бой
+   seats two of them beside a column of кресла. */
+.troika-sheet .troika-team {
   font-weight: var(--fw-semibold);
+  color: var(--text-strong);
 }
 
-.troika-sheet .troika-chair-select {
-  width: 100%;
-  border: 0;
-  background: transparent;
-  font-size: var(--text-xs);
-  color: var(--text-strong);
+.troika-sheet .troika-seat-button {
+  margin-right: var(--space-1);
+  padding: var(--space-0) var(--space-1);
+  color: var(--muted);
+}
+
+/* Every column of the sheet says its width — fixed layout hands unspecified
+   columns the leftover, so a host's ⇅/× in a header would shift the grid
+   against a viewer's or a finished бой's. The тема block also fits its widest
+   head, «⇅ Тема 6 (за 10)». */
+.troika-sheet th.theme-block {
+  width: calc(var(--question-col) * 3 + var(--space-3));
+  min-width: calc(var(--question-col) * 3 + var(--space-3));
 }
 
 .troika-sheet .troika-total {
+  width: var(--total-col);
+  min-width: var(--total-col);
   font-weight: var(--fw-semibold);
   font-variant-numeric: tabular-nums;
 }

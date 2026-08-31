@@ -21,9 +21,11 @@ import (
 // and it is the cell editor — a domain of two or three values is a cell you
 // click through, a wider one is a cell you type into.
 
-// MultiColumn is one task: the values its cell may hold, ascending.
+// MultiColumn is one task: the values its cell may hold, ascending, and the
+// блок of the sheet it stands in — «|» in the spec closes one.
 type MultiColumn struct {
 	Values []int `json:"values"`
+	Block  int   `json:"block,omitempty"`
 }
 
 // Max is the most a task can pay — what the sheet prints as its номинал.
@@ -93,12 +95,28 @@ func ParseMultiGames(src string) ([]MultiGame, error) {
 			return nil, fmt.Errorf("строка %d: жду «Имя: {значения}xN»", n+1)
 		}
 		game := MultiGame{Name: name, Normalized: normalized}
+		block, sinceBar := 0, 0
 		for _, spec := range strings.Fields(specs) {
+			if spec == "|" {
+				if sinceBar == 0 {
+					return nil, fmt.Errorf("строка %d, %s: «|» без заданий перед ним", n+1, name)
+				}
+				block++
+				sinceBar = 0
+				continue
+			}
 			columns, err := parseMultiSpec(spec)
 			if err != nil {
 				return nil, fmt.Errorf("строка %d, %s: %w", n+1, name, err)
 			}
+			for i := range columns {
+				columns[i].Block = block
+			}
 			game.Columns = append(game.Columns, columns...)
+			sinceBar += len(columns)
+		}
+		if block > 0 && sinceBar == 0 {
+			return nil, fmt.Errorf("строка %d, %s: «|» без заданий после него", n+1, name)
 		}
 		if len(game.Columns) == 0 {
 			return nil, fmt.Errorf("строка %d, %s: ни одного задания", n+1, name)
