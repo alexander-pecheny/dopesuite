@@ -4695,6 +4695,13 @@ body.is-fullscreen.od-page .match-main {
   color: var(--text-strong);
 }
 
+.troika-sheet .troika-finish-head,
+.troika-sheet .troika-finish-gap {
+  --cell-fill: var(--structure);
+  border-color: var(--structure);
+  padding: var(--space-0-5) var(--space-1-5);
+}
+
 /* A кресло names a player, at the width the ЭК sheet gives its player cell. */
 .troika-sheet .troika-chair {
   width: calc(var(--question-col) * 5);

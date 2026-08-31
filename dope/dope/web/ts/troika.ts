@@ -103,6 +103,7 @@ const shell = mountGamePage({
   chrome: () => ({festTitle: fest?.title || "", gameTitle: fest?.gameName || scheme.title || "Тройка"}),
   cursorKinds: {
     answer: {selector: ".troika-cell", keys: ["match", "side", "theme", "q", "chair"]},
+    finish: {selector: ".finish-toggle", keys: ["match"]},
   },
   activeCursorElement: () => cursor.activeCell,
 });
@@ -310,6 +311,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
 
   const table = document.createElement("table");
   table.className = "match-table troika-sheet";
+  table.classList.toggle("match-finished", Boolean(bout.view.finished));
   const editable = !viewer && !bout.view.finished;
   const seatsAt = seatColumns(bout);
 
@@ -323,6 +325,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
       {colSpan: troika.THEME_QUESTIONS}));
   });
   themeRow.appendChild(th("Σ"));
+  themeRow.appendChild(th(finishToggle(bout), "troika-finish-head"));
   thead.appendChild(themeRow);
   table.appendChild(thead);
 
@@ -340,6 +343,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
       if (chair === 0) {
         tr.appendChild(td(String(troika.sideTotal(state, side)), "number troika-total",
           {rowSpan: troika.CHAIRS, dataset: {total: `${bout.code}-${side}`}}));
+        tr.appendChild(td("", "troika-finish-gap", {rowSpan: troika.CHAIRS}));
       }
       body.appendChild(tr);
     }
@@ -352,6 +356,28 @@ function buildBout(bout: BoutEntry): HTMLElement {
   table.appendChild(body);
   box.appendChild(table);
   return box;
+}
+
+// The «Закончен» tick: a finished бой's sheet is read-only until the host
+// unticks it — the server rejects edits to a finished бой.
+function finishToggle(bout: BoutEntry): CellContent {
+  const label = document.createElement("label");
+  label.className = "finish-control";
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.className = "finish-toggle";
+  checkbox.checked = Boolean(bout.view.finished);
+  checkbox.disabled = viewer;
+  checkbox.dataset.match = bout.code;
+  checkbox.addEventListener("change", () => {
+    void writer.send(matchScope(bout.code),
+      {url: `${route.apiBase}/matches/${encodeURIComponent(bout.code)}/finish`, body: {finished: checkbox.checked}},
+      {path: ["finished"], value: checkbox.checked});
+  });
+  const text = document.createElement("span");
+  text.textContent = "Закончен";
+  label.append(checkbox, text);
+  return label;
 }
 
 // seatOpen is the темы a host has opened a «рассадка» column at without yet
@@ -500,7 +526,7 @@ function applyMarks(edits: CellEdit[]): void {
     const q = Number(cell.dataset.q);
     const chair = Number(cell.dataset.chair);
     const state = states.get(code);
-    if (!state) continue;
+    if (!state || matches.get(code)?.finished) continue;
     const mark = parseMark(edit.value);
     const row = state.sides[side]?.themes[theme]?.answers[q];
     if (!row || row[chair] === mark) continue;
