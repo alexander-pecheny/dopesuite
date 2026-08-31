@@ -3,9 +3,9 @@
 // python_docx branch). It turns a .docx into the flat text the 4s parser eats,
 // so xy can import Word packets in-process instead of shelling out to Python.
 //
-// Only the chgk game is in scope, which pins four of chgksuite's knobs:
-// inject_heading_markers=False, preserve_ol_start=False, links="unwrap" and
-// no_image_prefix=False. Only preserve_formatting still varies.
+// chgksuite's knobs: preserve_ol_start=False, links="unwrap" and
+// no_image_prefix=False are pinned; preserve_formatting and the heading markers
+// the SI/troika parsers read (inject_heading_markers) are Options.
 //
 // python-docx has no Go equivalent, so opc.go/styles.go reimplement the parts of
 // it the converter leans on (block iteration in document order, run formatting,
@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -37,6 +38,13 @@ type Options struct {
 	// ImagePrefix is docx_to_text's bn_for_img: the source file's basename with
 	// spaces replaced by underscores, plus a trailing "_".
 	ImagePrefix string
+	// HeadingMarkers prefixes every heading with "$$HN$$", which is how the SI
+	// and troika parsers see the document's outline (inject_heading_markers).
+	HeadingMarkers bool
+	// LinksOld is --links old: a hyperlink becomes its bare URL, and its anchor
+	// text is dropped. The default ("unwrap") keeps the text and appends the URL
+	// only when the text does not already show it.
+	LinksOld bool
 }
 
 // imageExtensions is parsing_engine._IMAGE_EXTENSIONS — note that image/jpg and
@@ -144,12 +152,36 @@ func (c *converter) paragraphText(p *node) string {
 		c.breakListIfNeeded()
 		return ""
 	}
-	// _heading_level only ever feeds the $$H1$$ markers, which chgk never asks
-	// for (inject_heading_markers=False), so it is not ported.
+	// A heading marker replaces the list prefix: the SI and troika parsers read
+	// the document's own outline, and a heading that is also a list item is a
+	// heading first.
+	if level := c.headingLevel(p); c.opts.HeadingMarkers && level >= 1 && level <= 3 {
+		c.breakListIfNeeded()
+		return fmt.Sprintf("$$H%d$$ %s", level, text)
+	}
 	if prefix := c.listPrefix(p); prefix != "" {
 		text = prefix + text
 	}
 	return text
+}
+
+// reHeadingStyle finds the level in a style called "Heading 2" or «Заголовок 2»,
+// by name or by id (parsing_engine._heading_level).
+var reHeadingStyle = regexp.MustCompile(`(?:heading|заголовок)\s*([1-6])`)
+
+// headingLevel is the paragraph's outline level, 0 when it is body text.
+func (c *converter) headingLevel(p *node) int {
+	st := c.paragraphStyle(p)
+	if st == nil {
+		return 0
+	}
+	for _, candidate := range []string{strings.ToLower(st.name), strings.ToLower(st.id)} {
+		if m := reHeadingStyle.FindStringSubmatch(candidate); m != nil {
+			n, _ := strconv.Atoi(m[1])
+			return n
+		}
+	}
+	return 0
 }
 
 // ── inline text ─────────────────────────────────────────────────────────────
@@ -202,6 +234,13 @@ func (c *converter) hyperlinkText(hyperlink *node) string {
 	href := c.hyperlinkHref(hyperlink)
 	if href == "" {
 		return out
+	}
+	if c.opts.LinksOld {
+		// An anchor with no text of its own contributes nothing at all.
+		if plain == "" {
+			return ""
+		}
+		return href
 	}
 	// links="unwrap": keep the anchor text, and append the href only when the
 	// text does not already show the URL.

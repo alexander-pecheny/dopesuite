@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"xy/internal/chgk/fsource"
+	"xy/internal/chgk/textenc"
 	"xy/internal/chgk/typo"
 )
 
@@ -51,7 +52,10 @@ func TestCanonParity(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			text := strings.ReplaceAll(string(raw), "\r\n", "\n")
+			text, err := textenc.Decode(raw, "")
+			if err != nil {
+				t.Fatal(err)
+			}
 			text = typo.EscapeUnderscoresExceptURLs(text, false)
 
 			got := fsource.Compose(Parse(text, Options{}), fsource.NumbersDefault)

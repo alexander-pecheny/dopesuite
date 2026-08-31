@@ -46,6 +46,13 @@ var questionLabels = map[string]bool{
 	"number": true, "setcounter": true,
 }
 
+// tourWords is ChgkParser.TOUR_NUMBERS_AS_WORDS: what --tour_numbers_as_words
+// renames the tours to, whatever the document called them.
+var tourWords = []string{
+	"Первый", "Второй", "Третий", "Четвертый", "Пятый",
+	"Шестой", "Седьмой", "Восьмой", "Девятый", "Десятый",
+}
+
 // zeroPrefixes are the two ways a package can mark an unnumbered warm-up question.
 var zeroPrefixes = []string{"Нулевой вопрос", "Разминочный вопрос"}
 
@@ -55,6 +62,8 @@ const handoutLabel = "Раздаточный материал"
 type parser struct {
 	structure []*elem
 	opts      typo.Options
+	// defaultAuthor is written into every question that names none.
+	defaultAuthor string
 	// now is "today" for the date sanity check; injectable so tests are stable.
 	now time.Time
 }
@@ -64,6 +73,12 @@ type Options struct {
 	// SingleNumberLines mirrors args.single_number_line_handling
 	// ("smart" | "on" | "off"). Empty means "smart", chgksuite's default.
 	SingleNumberLines string
+	// DefaultAuthor is --defaultauthor: whom a question with no author of its
+	// own is credited to.
+	DefaultAuthor string
+	// TourNumbersAsWords is --tour_numbers_as_words: «Первый тур» rather than
+	// whatever the document called it.
+	TourNumbersAsWords bool
 }
 
 // Parse ports ChgkParser.parse. text is the plain text of the package (from a
@@ -74,6 +89,7 @@ func Parse(text string, opts Options) fsource.Doc {
 }
 
 func (p *parser) parse(text string, opts Options) fsource.Doc {
+	p.defaultAuthor = opts.DefaultAuthor
 	// ── 1. split into blank-line-separated fragments and label what we can ──
 	lineSep := "\n"
 	if strings.Contains(text, "\r\n") {
@@ -162,9 +178,14 @@ func (p *parser) parse(text string, opts Options) fsource.Doc {
 
 	// ── 7. header/date detection and per-question postprocessing ──
 	final = p.headerPass(final)
-	for _, pr := range final {
-		if pr.Type == "Question" {
+	tours := 0
+	for i, pr := range final {
+		switch {
+		case pr.Type == "Question":
 			p.postprocessQuestion(pr.Content.(*fsource.Question))
+		case pr.Type == "tour" && opts.TourNumbersAsWords && tours < len(tourWords):
+			final[i].Content = tourWords[tours] + " тур"
+			tours++
 		}
 	}
 	return final
@@ -753,6 +774,7 @@ func (p *parser) pack() fsource.Doc {
 
 	for _, e := range p.structure {
 		if flushOn[e.Type] && cur.Has("question") {
+			p.creditAuthor(cur)
 			final = append(final, fsource.Pair{Type: "Question", Content: cur})
 			cur = fsource.NewQuestion()
 		}
@@ -782,9 +804,18 @@ func (p *parser) pack() fsource.Doc {
 		}
 	}
 	if !cur.Empty() {
+		p.creditAuthor(cur)
 		final = append(final, fsource.Pair{Type: "Question", Content: cur})
 	}
 	return final
+}
+
+// creditAuthor is --defaultauthor: a question that names no author gets the
+// one the whole file was parsed with.
+func (p *parser) creditAuthor(q *fsource.Question) {
+	if p.defaultAuthor != "" && !q.Has("author") {
+		q.Set("author", p.defaultAuthor)
+	}
 }
 
 // ── step 7: header, date, per-question cleanup ──────────────────────────────
