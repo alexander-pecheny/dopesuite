@@ -21,10 +21,10 @@ import (
 // and read for nothing yet: none of ЧГК's knobs mean anything to these two, and
 // the typography modes they do vary (smart quotes, smart accents) are not
 // ported here or there.
-func ParseSI(text string, _ Options) fsource.Doc { return newSI(false).parse(text) }
+func ParseSI(text string) fsource.Doc { return newSI(false).parse(text) }
 
 // ParseTroika reads a троика package.
-func ParseTroika(text string, _ Options) fsource.Doc { return newSI(true).parse(text) }
+func ParseTroika(text string) fsource.Doc { return newSI(true).parse(text) }
 
 // element is one [type, value] pair on the way to a document.
 type element struct {
@@ -118,19 +118,19 @@ func (p *siParser) handleLine(line string) {
 		p.troikaLine(line)
 		return
 	}
-	p.siLine(line, nil)
+	p.siLine(line, false)
 }
 
-// siLine is SiParser._handle_line. headingLevel is what троика already read off
-// the line, so the marker is not parsed twice.
-func (p *siParser) siLine(line string, headingLevel *int) {
+// siLine is SiParser._handle_line. headingRead says троика already took the
+// marker off the line, so it is not parsed twice.
+func (p *siParser) siLine(line string, headingRead bool) {
 	stripped := typo.REW(line)
 	if stripped == "" {
 		p.afterTheme = false
 		return
 	}
 
-	if headingLevel == nil {
+	if !headingRead {
 		if m := reStyleHeading.FindStringSubmatch(stripped); m != nil {
 			text := typo.REW(m[2])
 			if text == "" {
@@ -202,13 +202,7 @@ func (p *siParser) siLine(line string, headingLevel *int) {
 	if p.dispatchAuthor(stripped) {
 		return
 	}
-	for _, spec := range []struct {
-		re    *regexp.Regexp
-		field string
-	}{
-		{reAnswer, "answer"}, {reZachet, "zachet"}, {reNezachet, "nezachet"},
-		{reComment, "comment"}, {reSource, "source"},
-	} {
+	for _, spec := range questionFields {
 		if p.dispatchLabel(stripped, spec.re, spec.field, false) {
 			return
 		}
@@ -237,8 +231,8 @@ func (p *siParser) siLine(line string, headingLevel *int) {
 
 // isFieldLabel reports whether a heading is really one of a question's fields.
 func (p *siParser) isFieldLabel(text string) bool {
-	for _, re := range []*regexp.Regexp{reAnswer, reZachet, reNezachet, reComment, reSource} {
-		if loc := re.FindStringIndex(text); loc != nil && loc[0] == 0 {
+	for _, spec := range questionFields {
+		if loc := spec.re.FindStringIndex(text); loc != nil && loc[0] == 0 {
 			return true
 		}
 	}

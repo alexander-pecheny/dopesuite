@@ -45,6 +45,10 @@ type Options struct {
 	// text is dropped. The default ("unwrap") keeps the text and appends the URL
 	// only when the text does not already show it.
 	LinksOld bool
+	// PreserveListStart is docx_to_text's preserve_ol_start: a numbered list
+	// starts where the document says rather than at 1. chgksuite sets it for СИ
+	// and троика, whose lists carry point values.
+	PreserveListStart bool
 }
 
 // imageExtensions is parsing_engine._IMAGE_EXTENSIONS — note that image/jpg and
@@ -444,7 +448,7 @@ func (c *converter) listPrefix(p *node) string {
 	}
 	key := [2]string{numID, ilvl}
 	if _, seen := c.listCounters[key]; !seen {
-		c.listCounters[key] = c.num.start(numID, ilvl, false)
+		c.listCounters[key] = c.num.start(numID, ilvl, c.opts.PreserveListStart)
 	} else {
 		c.listCounters[key]++
 	}

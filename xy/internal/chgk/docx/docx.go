@@ -271,6 +271,12 @@ func (e *exporter) renderBody(doc fsource.Doc) string {
 	return b.String()
 }
 
+// screenVersions is the pair add_versions writes, in order.
+var screenVersions = []struct {
+	title  string
+	screen bool
+}{{"Версия для ведущего", false}, {"Версия для экрана", true}}
+
 // renderQuestion writes one question, in as many copies as the screen mode asks
 // for.
 func (e *exporter) renderQuestion(q *fsource.Question) {
@@ -278,12 +284,9 @@ func (e *exporter) renderQuestion(q *fsource.Question) {
 	case ScreenAddVersionsColumns:
 		e.renderQuestionColumns(q)
 	case ScreenAddVersions:
-		for _, v := range []struct {
-			title  string
-			screen bool
-		}{{"Версия для ведущего:", false}, {"Версия для экрана:", true}} {
+		for _, v := range screenVersions {
 			e.addPara()
-			e.addPara().addRaw(v.title, "bold")
+			e.addPara().addRaw(v.title+":", "bold")
 			e.renderQuestionInto(q, nil, v.screen)
 		}
 	case ScreenReplaceAll:
@@ -298,10 +301,7 @@ func (e *exporter) renderQuestion(q *fsource.Question) {
 func (e *exporter) renderQuestionColumns(q *fsource.Question) {
 	t := &table{}
 	e.body = append(e.body, t)
-	for i, v := range []struct {
-		title  string
-		screen bool
-	}{{"Версия для ведущего", false}, {"Версия для экрана", true}} {
+	for i, v := range screenVersions {
 		cell := &para{}
 		t.cells[i] = cell
 		cell.addRaw(v.title+"\n", "bold")
@@ -387,17 +387,29 @@ func (e *exporter) renderQuestionInto(q *fsource.Question, into *para, screen bo
 			removeBrackets: screen && field != "zachet",
 		}
 		if field == "source" || field == "author" {
+			small := !e.opts.SameSourceAndAuthorSize
 			if into != nil {
 				into.addRaw("\n", "")
-				into.sz = srcSz
+				if small {
+					into.sz = srcSz
+				}
 				into.addRaw(labelFor(q, field)+": ", "bold")
 				e.addValue(into, v, o)
 				continue
 			}
-			if src == nil {
+			switch {
+			case field == "source" || (small && src == nil):
 				src = e.addPara()
-				src.keepLines, src.sz, src.spacingBefore = true, srcSz, srcGapTw
-			} else {
+				src.keepLines = true
+				if small {
+					src.sz, src.spacingBefore = srcSz, srcGapTw
+				}
+			case src != nil:
+				src.addRaw("\n", "")
+			default:
+				// An author with no source and no shrinking to open a paragraph
+				// of its own trails the answer instead.
+				src = p
 				src.addRaw("\n", "")
 			}
 			src.addRaw(labelFor(q, field)+": ", "bold")
@@ -484,10 +496,10 @@ func (e *exporter) addRuns(p *para, text string, o textOpts) {
 					e.addPara().addRaw(".", "")
 				}
 				p = e.addPara()
-				break
+			} else {
+				p = e.addPara()
+				p.runs = append(p.runs, pageBreakRun)
 			}
-			p = e.addPara()
-			p.runs = append(p.runs, pageBreakRun)
 		case "img":
 			p.runs = append(p.runs, e.embedImage(r.Text))
 		case "screen":

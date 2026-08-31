@@ -21,11 +21,9 @@ import (
 // Telegram makes of what it posts.
 type client struct {
 	bot     *Bot
-	quiet   bool          // dry run: say what would be sent, send nothing
 	settle  time.Duration // how long a channel post is given to reach the group
 	pace    time.Duration // the pause between posts
-	nextID  int64
-	channel int64 // the channel's numeric id, for matching the copies
+	channel int64         // the channel's numeric id, for matching the copies
 	chat    int64
 }
 
@@ -43,9 +41,33 @@ func NewPoster(bot *Bot, t Target) (Poster, error) {
 		channel: channel, chat: chat}, nil
 }
 
-// NewDryRunPoster returns a Poster that writes what it would send to the log and
-// posts nothing, which is `--dry_run`.
-func NewDryRunPoster() Poster { return &client{quiet: true} }
+// dryRun is `--dry_run`: it writes what it would send to the log, sends nothing,
+// and hands back ids of its own so the navigation post still links up.
+type dryRun struct{ nextID int64 }
+
+// NewDryRunPoster returns a Poster that posts nothing.
+func NewDryRunPoster() Poster { return &dryRun{} }
+
+func (d *dryRun) PostRich(_ context.Context, chatID, html string, media []Media, _ int64) (int64, error) {
+	log.Printf("[dry run] rich message to %s (%d picture(s)): %s", chatID, len(media), html)
+	return d.id(), nil
+}
+
+func (d *dryRun) PostText(_ context.Context, chatID, text string, _ int64) (int64, error) {
+	log.Printf("[dry run] message to %s: %s", chatID, text)
+	return d.id(), nil
+}
+
+func (d *dryRun) DiscussionMessage(context.Context, string, int64) (int64, error) {
+	return d.id(), nil
+}
+
+func (d *dryRun) Call(_ context.Context, method string, data map[string]any) error {
+	log.Printf("[dry run] %s %v", method, data)
+	return nil
+}
+
+func (d *dryRun) id() int64 { d.nextID++; return d.nextID }
 
 func numericID(s string) (int64, error) {
 	n, err := strconv.ParseInt(s, 10, 64)
@@ -56,10 +78,6 @@ func numericID(s string) (int64, error) {
 }
 
 func (c *client) PostRich(ctx context.Context, chatID, html string, media []Media, replyTo int64) (int64, error) {
-	if c.quiet {
-		log.Printf("[dry run] rich message to %s (%d picture(s)): %s", chatID, len(media), html)
-		return c.fakeID(), nil
-	}
 	type richMedia struct {
 		ID    string            `json:"id"`
 		Media map[string]string `json:"media"`
@@ -113,10 +131,6 @@ func (c *client) PostRich(ctx context.Context, chatID, html string, media []Medi
 }
 
 func (c *client) PostText(ctx context.Context, chatID, text string, replyTo int64) (int64, error) {
-	if c.quiet {
-		log.Printf("[dry run] message to %s: %s", chatID, text)
-		return c.fakeID(), nil
-	}
 	payload := map[string]any{
 		"chat_id": chatID, "text": text, "parse_mode": "HTML",
 		"disable_web_page_preview": true, "disable_notification": true,
@@ -146,22 +160,16 @@ func (c *client) wait(ctx context.Context) {
 }
 
 func (c *client) DiscussionMessage(ctx context.Context, _ string, messageID int64) (int64, error) {
-	if c.quiet {
-		return c.fakeID(), nil
-	}
 	return c.bot.WaitForDiscussionCopy(ctx, c.channel, c.chat, messageID, c.settle)
 }
 
 func (c *client) Call(ctx context.Context, method string, data map[string]any) error {
-	if c.quiet {
-		log.Printf("[dry run] %s %v", method, data)
-		return nil
+	if _, err := c.bot.Client().Call(ctx, method, data); err != nil {
+		return err
 	}
-	_, err := c.bot.Client().Call(ctx, method, data)
-	return err
+	c.wait(ctx)
+	return nil
 }
-
-func (c *client) fakeID() int64 { c.nextID++; return c.nextID }
 
 func messageID(res json.RawMessage) (int64, error) {
 	var msg struct {

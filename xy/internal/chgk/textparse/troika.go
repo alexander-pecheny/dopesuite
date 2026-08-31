@@ -89,7 +89,7 @@ func (p *siParser) troikaLine(line string) {
 
 	if reTroikaHostNote.MatchString(stripped) {
 		if p.currentField == "question" {
-			p.siLine(stripped, &headingLevel)
+			p.siLine(stripped, true)
 		} else {
 			p.flush()
 			p.push("meta", p.apply(stripped))
@@ -98,7 +98,7 @@ func (p *siParser) troikaLine(line string) {
 		return
 	}
 
-	p.siLine(stripped, &headingLevel)
+	p.siLine(stripped, true)
 	p.lastLineBlank = false
 }
 

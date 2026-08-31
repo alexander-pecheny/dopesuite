@@ -1,0 +1,22 @@
+# Poll posting mode: "comment" (reply in discussion group) or "channel" (separate channel post)
+# Note: non-anonymous polls (is_anonymous = false) can only be posted to groups,
+# i.e. they work in "comment" mode but not in "channel" mode.
+mode = "comment"
+
+[question_poll]
+text = "Ваша оценка вопроса {NUMBER}"
+variants = ["🔥", "👍", "👌", "🥱", "👎", "😡"]
+is_anonymous = false
+allows_revoting = false
+
+[tour_poll]
+text = "Ваша оценка тура {NUMBER}"
+variants = ["🔥", "👍", "👌", "🥱", "👎", "😡"]
+is_anonymous = false
+allows_revoting = false
+
+[packet_poll]
+text = "Ваша оценка пакета {TITLE}"
+variants = ["🔥", "👍", "👌", "🥱", "👎", "😡"]
+is_anonymous = false
+allows_revoting = false

@@ -109,6 +109,7 @@ def main():
             ("nospoilers", {"nospoilers": True}),
             ("polls", {"add_polls": True}),
             ("skip", {"skip_until": 2}),
+            ("asterisks", {"disable_asterisks_processing": True}),
         ):
             out.append(
                 {

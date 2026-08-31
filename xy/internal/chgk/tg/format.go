@@ -208,7 +208,7 @@ func (f *formatter) questionParts(q *fsource.Question, number string) (questionP
 		return p, err
 	}
 	// The two trailing spaces are chgksuite's; _rich_render strips them.
-	p.question = "<b>" + labels["question"] + " " + number + ":</b> " + txt + "  \n"
+	p.question = "<b>" + label(q, "question") + " " + number + ":</b> " + txt + "  \n"
 	for _, spec := range []struct {
 		name string
 		dst  *string

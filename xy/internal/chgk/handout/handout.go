@@ -61,7 +61,6 @@ type Args struct {
 // row heights, the image is shrunk in ShrinkPercent steps until another row
 // fits, then grown back as far as that row count allows.
 type ResizeConfig struct {
-	Disabled            bool
 	BottomSpaceRowRatio float64
 	ShrinkPercent       float64
 	MinResizeImage      float64

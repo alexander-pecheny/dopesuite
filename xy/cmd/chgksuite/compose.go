@@ -35,12 +35,20 @@ func composeDocx(args []string) error {
 	noAnswers := fs.Bool("noanswers", false, "do not print answers")
 	noParagraph := fs.Bool("noparagraph", false, `no line break after "Вопрос N."`)
 	onlyNumber := fs.Bool("only_question_number", false, `label questions "N." instead of "Вопрос N."`)
+	smallerSource := fs.String("smaller_source_and_author", "on", "set source and author 2pt below the body: on|off")
 	randomize := fs.Bool("randomize", false, "shuffle the questions")
 	addTS := fs.String("add_ts", "off", "append a timestamp to the output filename: on|off")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	opts, err := docxOptions(*spoilers, *screenMode, *noAnswers, *noParagraph, *onlyNumber)
+	opts, err := validDocxOptions(docx.Options{
+		Spoilers:                docx.Spoilers(*spoilers),
+		ScreenMode:              docx.ScreenMode(*screenMode),
+		NoAnswers:               *noAnswers,
+		NoParagraph:             *noParagraph,
+		OnlyQuestionNumber:      *onlyNumber,
+		SameSourceAndAuthorSize: *smallerSource == "off",
+	})
 	if err != nil {
 		return err
 	}
@@ -57,23 +65,16 @@ func composeDocx(args []string) error {
 	return nil
 }
 
-func docxOptions(spoilers, screenMode string, noAnswers, noParagraph, onlyNumber bool) (docx.Options, error) {
-	o := docx.Options{
-		Spoilers:           docx.Spoilers(spoilers),
-		ScreenMode:         docx.ScreenMode(screenMode),
-		NoAnswers:          noAnswers,
-		NoParagraph:        noParagraph,
-		OnlyQuestionNumber: onlyNumber,
-	}
+func validDocxOptions(o docx.Options) (docx.Options, error) {
 	switch o.Spoilers {
 	case docx.SpoilersOff, docx.SpoilersWhiten, docx.SpoilersPagebreak, docx.SpoilersDots:
 	default:
-		return o, fmt.Errorf("unknown --spoilers %q", spoilers)
+		return o, fmt.Errorf("unknown --spoilers %q", o.Spoilers)
 	}
 	switch o.ScreenMode {
 	case docx.ScreenOff, docx.ScreenReplaceAll, docx.ScreenAddVersions, docx.ScreenAddVersionsColumns:
 	default:
-		return o, fmt.Errorf("unknown --screen_mode %q", screenMode)
+		return o, fmt.Errorf("unknown --screen_mode %q", o.ScreenMode)
 	}
 	return o, nil
 }

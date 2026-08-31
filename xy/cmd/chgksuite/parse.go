@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"xy/internal/chgk/docxread"
@@ -33,6 +34,21 @@ func parseCmd(args []string) error {
 	}
 	if fs.NArg() == 0 {
 		return fmt.Errorf("no input file")
+	}
+	for _, c := range []struct {
+		name, value string
+		allowed     []string
+	}{
+		{"game", *game, []string{"", "chgk", "brain", "si", "troika"}},
+		{"numbers_handling", *numbers, []string{"default", "all", "none"}},
+		{"single_number_line_handling", *singleNumberLines, []string{"smart", "on", "off"}},
+		{"tour_numbers_as_words", *tourNumbersAsWords, []string{"on", "off"}},
+		{"links", *linksOld, []string{"unwrap", "old"}},
+		{"add_ts", *addTS, []string{"on", "off"}},
+	} {
+		if !slices.Contains(c.allowed, c.value) {
+			return fmt.Errorf("--%s: %q is not one of %s", c.name, c.value, strings.Join(c.allowed, ", "))
+		}
 	}
 	for _, in := range fs.Args() {
 		out, err := parseFile(in, parseArgs{
@@ -68,9 +84,9 @@ func parseFile(in string, a parseArgs) (string, error) {
 		game = "chgk"
 	}
 	// СИ numbers are point values and a троика's repeat in every theme, so both
-	// always write every number out.
+	// write every number out unless asked for something else.
 	numbers := fsource.NumbersHandling(a.numbers)
-	if game == "si" || game == "troika" {
+	if (game == "si" || game == "troika") && numbers == fsource.NumbersDefault {
 		numbers = fsource.NumbersAll
 	}
 
@@ -109,16 +125,21 @@ func readSource(in, game string, a parseArgs) (string, []docxread.Image, error) 
 			PreserveFormatting: a.preserveFormatting,
 			LinksOld:           a.linksOld,
 			ImagePrefix:        prefix,
-			// The СИ and троика parsers read the document's own outline.
-			HeadingMarkers: game == "si" || game == "troika",
+			// The СИ and троика parsers read the document's own outline, and
+			// chgksuite lets their numbered lists start where they say.
+			HeadingMarkers:    game == "si" || game == "troika",
+			PreserveListStart: game == "si" || game == "troika",
 		})
 		return text, images, err
 	case ".txt":
 		text, err := textenc.Decode(raw, a.encoding)
-		// A .txt is escaped on the way in, a .docx is not: chgksuite only calls
-		// escape_underscores_except_urls in chgk_parse_txt, and a document's own
-		// italics have already become markers by the time it is read.
-		return typo.EscapeUnderscoresExceptURLs(text, false), nil, err
+		// Only a чгк .txt is escaped on the way in: chgksuite calls
+		// escape_underscores_except_urls in chgk_parse_txt and nowhere else, so a
+		// .docx (whose italics are already markers) and a СИ .txt keep theirs.
+		if game == "chgk" || game == "brain" {
+			text = typo.EscapeUnderscoresExceptURLs(text, false)
+		}
+		return text, nil, err
 	default:
 		return "", nil, fmt.Errorf("unsupported file format")
 	}
@@ -127,9 +148,9 @@ func readSource(in, game string, a parseArgs) (string, []docxread.Image, error) 
 func parseText(text, game, in string, a parseArgs) (fsource.Doc, error) {
 	switch game {
 	case "si":
-		return textparse.ParseSI(text, textparse.Options{}), nil
+		return textparse.ParseSI(text), nil
 	case "troika":
-		return textparse.ParseTroika(text, textparse.Options{}), nil
+		return textparse.ParseTroika(text), nil
 	case "chgk", "brain":
 		return textparse.Parse(text, textparse.Options{
 			SingleNumberLines:  a.singleNumberLines,

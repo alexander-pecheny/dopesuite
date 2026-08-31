@@ -334,7 +334,9 @@ type apiResponse struct {
 	Result      json.RawMessage `json:"result"`
 	Description string          `json:"description"`
 	Parameters  *struct {
-		RetryAfter int `json:"retry_after"`
+		// A pointer, because Telegram also sends parameters without it (a
+		// migrate_to_chat_id on a 400); only its presence means "wait".
+		RetryAfter *int `json:"retry_after"`
 	} `json:"parameters"`
 }
 
@@ -425,8 +427,8 @@ func (c *Client) do(ctx context.Context, method string, req *http.Request) (json
 	}
 	if !parsed.OK {
 		apiErr := &APIError{Method: method, Description: parsed.Description}
-		if parsed.Parameters != nil {
-			apiErr.RateLimited, apiErr.RetryAfter = true, parsed.Parameters.RetryAfter
+		if parsed.Parameters != nil && parsed.Parameters.RetryAfter != nil {
+			apiErr.RateLimited, apiErr.RetryAfter = true, *parsed.Parameters.RetryAfter
 		}
 		return nil, apiErr
 	}

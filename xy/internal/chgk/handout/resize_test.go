@@ -47,7 +47,7 @@ func TestResizeParity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ts, err := NewCLITypesetterFonts(bin, fonts)
+	ts, err := newCLITypesetter(bin, fonts)
 	if err != nil {
 		t.Fatal(err)
 	}

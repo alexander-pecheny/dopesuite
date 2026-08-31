@@ -26,7 +26,7 @@ var (
 
 	reLeadingNum          = regexp.MustCompile(`^\d+[\.\)]` + ws + `*`)
 	reAuthorGratitudeMeta = regexp.MustCompile(`(?i)^Автор(?:ы|ка)?` + ws + `+благодар`)
-	reThemesHeader        = regexp.MustCompile(`(?i)^.*тем[ыа]` + ws + `*:?$`)
+	reThemesHeader        = regexp.MustCompile(`(?i)^тем[ыа]` + ws + `*:?$`)
 	// RE2's \b is ASCII-only, and these words end in Cyrillic or are followed
 	// by it, so the boundaries are spelled out as "not a letter or digit".
 	reURLLike = regexp.MustCompile(`https?://|www\.|/|\.(?:ru|com|net|org|io|info|edu|su|by|ua|kz)(?:[^\p{L}\p{N}_]|$)`)
@@ -70,4 +70,14 @@ var troikaQuestionNumbers = map[int]bool{1: true, 2: true, 3: true}
 var structuralTypes = map[string]bool{
 	"battle": true, "round": true, "section": true, "theme": true,
 	"heading": true, "editor": true, "date": true, "meta": true,
+}
+
+// questionFields are the labels that open a field of the question in hand, in
+// the order СИ tries them.
+var questionFields = []struct {
+	re    *regexp.Regexp
+	field string
+}{
+	{reAnswer, "answer"}, {reZachet, "zachet"}, {reNezachet, "nezachet"},
+	{reComment, "comment"}, {reSource, "source"},
 }

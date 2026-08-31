@@ -15,11 +15,7 @@ import (
 // TestPollConfigReadsChgksuites reads the file chgksuite ships, so the reader
 // keeps up with the shape it is written in.
 func TestPollConfigReadsChgksuites(t *testing.T) {
-	raw, err := os.ReadFile(pollConfigPath())
-	if err != nil {
-		t.Skipf("no chgksuite checkout: %v", err)
-	}
-	cfg, err := ParsePollConfig(string(raw))
+	cfg, err := DefaultPollConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,4 +139,16 @@ func prepared(t *testing.T, w, h, maxHeight int) image.Rectangle {
 		t.Fatal(err)
 	}
 	return image.Rect(0, 0, cfg.Width, cfg.Height)
+}
+
+// TestEmbeddedPollConfigMatchesChgksuites: the default is a copy of the file
+// chgksuite ships, and the transcript oracle was recorded with that file.
+func TestEmbeddedPollConfigMatchesChgksuites(t *testing.T) {
+	raw, err := os.ReadFile(pollConfigPath())
+	if err != nil {
+		t.Skipf("no chgksuite checkout: %v", err)
+	}
+	if string(raw) != defaultPollConfig {
+		t.Error("assets/poll_config.toml has drifted from chgksuite's")
+	}
 }

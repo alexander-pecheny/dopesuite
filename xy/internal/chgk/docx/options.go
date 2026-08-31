@@ -11,6 +11,10 @@ type Options struct {
 	NoParagraph bool
 	// OnlyQuestionNumber labels a question "N." instead of "Вопрос N.".
 	OnlyQuestionNumber bool
+	// SameSourceAndAuthorSize is --smaller_source_and_author off: source and
+	// author keep the body size instead of dropping 2pt into a paragraph of
+	// their own. Inverted because chgksuite's default is on.
+	SameSourceAndAuthorSize bool
 }
 
 // Spoilers says how the answers are hidden from a reader of the printout.

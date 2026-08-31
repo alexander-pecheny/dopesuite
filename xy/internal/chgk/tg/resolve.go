@@ -55,7 +55,7 @@ func prefixed(id int64) string {
 	if strings.HasPrefix(s, "-100") {
 		return s
 	}
-	return "-100" + s
+	return "-100" + strings.TrimPrefix(s, "-")
 }
 
 // Prompter is how the resolution talks to the person running the export: it
@@ -139,9 +139,7 @@ func verifyAccess(ctx context.Context, bot *Bot, chatID, what string) error {
 	}
 	var admins []struct {
 		User struct {
-			ID       int64 `json:"id"`
-			IsBot    bool  `json:"is_bot"`
-			Username string
+			ID int64 `json:"id"`
 		} `json:"user"`
 	}
 	if err := json.Unmarshal(res, &admins); err != nil {

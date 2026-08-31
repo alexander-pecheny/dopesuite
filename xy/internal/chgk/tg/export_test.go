@@ -82,11 +82,7 @@ func TestTranscriptParity(t *testing.T) {
 	if err := json.Unmarshal(raw, &runs); err != nil {
 		t.Fatal(err)
 	}
-	pollCfg, err := os.ReadFile(pollConfigPath())
-	if err != nil {
-		t.Skipf("no chgksuite poll config: %v", err)
-	}
-	polls, err := ParsePollConfig(string(pollCfg))
+	polls, err := DefaultPollConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,6 +106,8 @@ func TestTranscriptParity(t *testing.T) {
 				cfg = polls
 			case "skip":
 				opts.SkipUntil = 2
+			case "asterisks":
+				opts.DisableAsterisks = true
 			}
 			rec := &recorder{msgID: 1000, calls: []call{}}
 			target := Target{ChannelID: "-1001111111111", ChatID: "-1002222222222"}
@@ -129,8 +127,8 @@ func TestTranscriptParity(t *testing.T) {
 	}
 }
 
-// pollConfigPath is chgksuite's shipped poll config, which the "polls" runs of
-// the transcript were recorded with.
+// pollConfigPath is chgksuite's own copy of the poll config the "polls" runs of
+// the transcript were recorded with; assets/poll_config.toml must still match it.
 func pollConfigPath() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, "chgksuite", "chgksuite", "chgksuite", "resources", "poll_config.toml")

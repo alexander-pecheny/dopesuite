@@ -22,6 +22,7 @@ var optionVariants = map[string]Options{
 	"noanswers":   {NoAnswers: true},
 	"noparagraph": {NoParagraph: true},
 	"onlynumber":  {OnlyQuestionNumber: true},
+	"samesize":    {SameSourceAndAuthorSize: true},
 }
 
 // TestOptionParity compares the generated body XML against chgksuite's own for

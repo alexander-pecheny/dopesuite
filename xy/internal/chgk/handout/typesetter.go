@@ -88,14 +88,6 @@ type CLITypesetter struct {
 // ("" → "typst" on PATH). Call Close to wipe it.
 func NewCLITypesetter(bin string) (*CLITypesetter, error) { return newCLITypesetter(bin, "") }
 
-// NewCLITypesetterFonts is NewCLITypesetter with the fonts taken from fontDir
-// instead of the embedded ones — how a parity test typesets with chgksuite's own
-// Noto Sans, whose line metrics differ slightly from xy's (xy transplants a pause
-// glyph into the family), and so fits a row differently at the margin.
-func NewCLITypesetterFonts(bin, fontDir string) (*CLITypesetter, error) {
-	return newCLITypesetter(bin, fontDir)
-}
-
 func newCLITypesetter(bin, fontDir string) (*CLITypesetter, error) {
 	if bin == "" {
 		bin = "typst"

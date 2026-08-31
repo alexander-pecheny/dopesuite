@@ -1,11 +1,19 @@
 package tg
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 )
+
+//go:embed assets/poll_config.toml
+var defaultPollConfig string
+
+// DefaultPollConfig is chgksuite's resources/poll_config.toml, which --add_polls
+// falls back on when no --poll_config is given.
+func DefaultPollConfig() (*PollConfig, error) { return ParsePollConfig(defaultPollConfig) }
 
 // PollConfig is chgksuite's poll_config.toml: whether the polls go under the
 // posts as comments or into the channel, and one poll each after a question, a
@@ -18,12 +26,13 @@ type PollConfig struct {
 
 // Poll is one configured poll. {NUMBER} and {TITLE} in Text are filled in.
 type Poll struct {
-	Text              string
-	Variants          []string
-	IsAnonymous       bool
-	AllowsRevoting    bool
-	AllowsRevotingSet bool
-	QuizRightAnswer   string
+	Text               string
+	Variants           []string
+	IsAnonymous        bool
+	AllowsRevoting     bool
+	AllowsRevotingSet  bool
+	QuizRightAnswer    string
+	QuizRightAnswerSet bool
 }
 
 // ParsePollConfig reads poll_config.toml. It is not a TOML parser: it reads the
@@ -73,37 +82,41 @@ func ParsePollConfig(src string) (*PollConfig, error) {
 }
 
 func setPollField(p *Poll, key, value string) error {
-	switch key {
-	case "text", "quiz_right_answer":
+	str := func(dst *string) error {
 		s, err := tomlString(value)
+		if err == nil {
+			*dst = s
+		}
+		return err
+	}
+	boolean := func(dst *bool) error {
+		b, err := strconv.ParseBool(value)
 		if err != nil {
-			return err
+			return fmt.Errorf("%s: %w", key, err)
 		}
-		if key == "text" {
-			p.Text = s
-		} else {
-			p.QuizRightAnswer = s
-		}
+		*dst = b
+		return nil
+	}
+	switch key {
+	case "text":
+		return str(&p.Text)
+	case "quiz_right_answer":
+		p.QuizRightAnswerSet = true
+		return str(&p.QuizRightAnswer)
 	case "variants":
 		list, err := tomlStringList(value)
 		if err != nil {
 			return err
 		}
 		p.Variants = list
-	case "is_anonymous", "allows_revoting":
-		b, err := strconv.ParseBool(value)
-		if err != nil {
-			return fmt.Errorf("%s: %w", key, err)
-		}
-		if key == "is_anonymous" {
-			p.IsAnonymous = b
-		} else {
-			p.AllowsRevoting, p.AllowsRevotingSet = b, true
-		}
-	default:
-		return fmt.Errorf("unknown key %s", key)
+		return nil
+	case "is_anonymous":
+		return boolean(&p.IsAnonymous)
+	case "allows_revoting":
+		p.AllowsRevotingSet = true
+		return boolean(&p.AllowsRevoting)
 	}
-	return nil
+	return fmt.Errorf("unknown key %s", key)
 }
 
 // stripComment drops a trailing # comment, unless it is inside the value.

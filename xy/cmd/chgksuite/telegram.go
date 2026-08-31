@@ -21,7 +21,7 @@ func composeTelegram(args []string) error {
 	chat := fs.String("tgchat", "", "the discussion group linked to that channel")
 	dryRun := fs.Bool("dry_run", false, "print what would be posted, post nothing")
 	noSpoilers := fs.Bool("nospoilers", false, "print the answers openly")
-	disableAsterisks := fs.Bool("disable_asterisks_processing", false, "leave * alone")
+	disableAsterisks := fs.Int("disable_asterisks_processing", 0, "leave * alone (non-zero)")
 	skipUntil := fs.Int("skip_until", 0, "start at question N")
 	addPolls := fs.Bool("add_polls", false, "post a poll after each question, tour and the package")
 	pollConfig := fs.String("poll_config", "", "poll config TOML (required with --add_polls)")
@@ -36,20 +36,24 @@ func composeTelegram(args []string) error {
 
 	opts := tg.Options{
 		NoSpoilers:       *noSpoilers,
-		DisableAsterisks: *disableAsterisks,
+		DisableAsterisks: *disableAsterisks != 0,
 		SkipUntil:        *skipUntil,
 	}
 	var polls *tg.PollConfig
 	if *addPolls {
+		var err error
 		if *pollConfig == "" {
-			return fmt.Errorf("--add_polls needs --poll_config")
-		}
-		raw, err := os.ReadFile(*pollConfig)
-		if err != nil {
-			return err
-		}
-		if polls, err = tg.ParsePollConfig(string(raw)); err != nil {
-			return fmt.Errorf("%s: %w", *pollConfig, err)
+			if polls, err = tg.DefaultPollConfig(); err != nil {
+				return err
+			}
+		} else {
+			raw, readErr := os.ReadFile(*pollConfig)
+			if readErr != nil {
+				return readErr
+			}
+			if polls, err = tg.ParsePollConfig(string(raw)); err != nil {
+				return fmt.Errorf("%s: %w", *pollConfig, err)
+			}
 		}
 	}
 

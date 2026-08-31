@@ -406,7 +406,7 @@ func (r *sfRun) fitBlock(ctx context.Context, b sfBlock) (int, map[string]*strin
 	}
 	cfg := r.a.Resize
 	ms, canMeasure := r.ts.(Measurer)
-	if cfg.Disabled || !canMeasure || b.meta["image"] == "" {
+	if !canMeasure || b.meta["image"] == "" {
 		return rows, b.resizeUpdate(resize), nil
 	}
 

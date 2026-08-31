@@ -38,15 +38,16 @@ func TestSICanonParity(t *testing.T) {
 			}
 			base := strings.TrimSuffix(f.file, filepath.Ext(f.file))
 			text, _, err := docxread.ToText(raw, docxread.Options{
-				ImagePrefix:    strings.ReplaceAll(base, " ", "_") + "_",
-				HeadingMarkers: true,
+				ImagePrefix:       strings.ReplaceAll(base, " ", "_") + "_",
+				HeadingMarkers:    true,
+				PreserveListStart: true,
 			})
 			if err != nil {
 				t.Fatal(err)
 			}
-			doc := ParseSI(text, Options{})
+			doc := ParseSI(text)
 			if f.game == "troika" {
-				doc = ParseTroika(text, Options{})
+				doc = ParseTroika(text)
 			}
 			if got := fsource.Compose(doc, fsource.NumbersAll); got != string(want) {
 				t.Errorf("mismatch:\n%s", firstDiff(string(want), got))
@@ -79,7 +80,7 @@ func TestSITextCases(t *testing.T) {
 			if strings.HasSuffix(name, ".troika") {
 				parse = ParseTroika
 			}
-			got := fsource.Compose(parse(string(text), Options{}), fsource.NumbersAll)
+			got := fsource.Compose(parse(string(text)), fsource.NumbersAll)
 			if got != string(want) {
 				t.Errorf("mismatch:\n%s", firstDiff(string(want), got))
 			}

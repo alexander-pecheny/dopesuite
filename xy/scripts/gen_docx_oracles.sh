@@ -21,6 +21,7 @@ variants=(
   "noanswers:--noanswers"
   "noparagraph:--noparagraph"
   "onlynumber:--only_question_number"
+  "samesize:--smaller_source_and_author off"
 )
 
 for src in "$here"/*.4s; do

@@ -287,7 +287,7 @@ func (e *exporter) poll(ctx context.Context, cfg *Poll, subs map[string]string, 
 		"chat_id": chatID, "question": question, "options": options,
 		"is_anonymous": cfg.IsAnonymous, "disable_notification": true,
 	}
-	if cfg.QuizRightAnswer != "" {
+	if cfg.QuizRightAnswerSet {
 		if i := indexOf(cfg.Variants, cfg.QuizRightAnswer); i >= 0 {
 			data["type"] = "quiz"
 			data["correct_option_id"] = i
