@@ -13,7 +13,7 @@
   --cell-radius: 4px;
   --theme-radius: var(--cell-radius);
   --team-col: 180px;
-  --troika-cross-col: 48px;
+  --troika-cross-col: 46px;
   --total-col: 38px;
   --place-col: 42px;
   --place-gap: 14px;
@@ -4615,7 +4615,8 @@ body.is-fullscreen.od-page .match-main {
 }
 
 .troika-groups .crosstable {
-  --results-team-col: 160px;
+  --results-place-col: 32px;
+  --results-team-col: 152px;
   font-size: var(--text-xs);
 }
 
