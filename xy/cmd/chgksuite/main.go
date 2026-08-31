@@ -33,6 +33,7 @@ var commands = []command{
 	{"handouts pack", "<folder>", "merge split-fitted handouts into printer runs"},
 	{"handouts create_html", "<1/6|1/3|1/2|1>", "scaffold a hand-laid-out handout"},
 	{"handouts html2img", "<file.html>", "that HTML to a PDF and a PNG, via chromium"},
+	{"handouts install", "[--browser]", "fetch typst (and chromium) before you need them"},
 	{},
 	{"board token", "[<service-url>]", "store the credential for trello or an xy"},
 	{"board download", "<folder>", "a board into .4s (and .docx) files"},

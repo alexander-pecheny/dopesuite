@@ -15,6 +15,7 @@ import (
 	"xy/internal/chgk/handout"
 	"xy/internal/chgk/htmlshot"
 	"xy/internal/chgk/i18n"
+	"xy/internal/chgk/typstinstall"
 )
 
 // handouts runs `chgksuite handouts <subcommand>`.
@@ -35,6 +36,8 @@ func handouts(args []string) error {
 		return handoutsCreateHTML(args[1:])
 	case "html2img":
 		return handoutsHTML2Img(args[1:])
+	case "install":
+		return handoutsInstall(args[1:])
 	default:
 		return fmt.Errorf("handouts %s is not ported yet", args[0])
 	}
@@ -183,6 +186,32 @@ func modTime(path string) time.Time {
 		return time.Time{}
 	}
 	return info.ModTime()
+}
+
+// handoutsInstall is chgksuite's `handouts install`: fetch the tools the
+// renderers need, into the directory it uses, so neither tool has to fetch them
+// again. Every command does this on its own when it needs one; this is the way
+// to do it before a plane.
+func handoutsInstall(args []string) error {
+	fs := flag.NewFlagSet("handouts install", flag.ContinueOnError)
+	browser := fs.Bool("browser", false, "also fetch a chromium, which only html2img needs")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	typst, err := typstinstall.FindOrInstall(context.Background(), func(s string) { reportNote("typst: %s", s) })
+	if err != nil {
+		return err
+	}
+	reportOutput(typst)
+	if !*browser {
+		return nil
+	}
+	chromium, err := htmlshot.FindOrInstall(context.Background(), "", func(s string) { reportNote("chromium: %s", s) })
+	if err != nil {
+		return err
+	}
+	reportOutput(chromium)
+	return nil
 }
 
 // handoutsCreateHTML is create_html: the scaffold for a handout laid out by

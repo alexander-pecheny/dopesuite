@@ -35,6 +35,7 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 | `textparse/db.go` | `parser_db.py` | done, canon-tested |
 | `board/` | `board.py`, `board_config.py`, `xy_crypto.py` | done; the crypto is `internal/xycli`'s, parity-tested against crypto.ts |
 | `htmlshot/` | `handouter/html_handout.py` | done; a Chromium off the command line, not Playwright |
+| `typstinstall/` | `handouter/installer.py` | done; the same release into the same `~/.pecheny_utils` |
 | `cmd/chgksuite/` | `cli.py` | `parse`, `compose docx|pptx|telegram|markdown|redditmd|base|openquiz|add_stats` |
 | — | `chgksuite_qt/`, `chgksuite_tk/` | not needed (the GUIs stay in Python) |
 
@@ -350,8 +351,8 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       openquiz|lj|add_stats`, `handouts generate|run|split_fit|pack|create_html|
       html2img` and `board token|download|upload` (`trello` is the old name for
       the last), with the settings file, `--config` and `--merge` behind them.
-      Only `handouts install` is left out, and it has nothing to install: it
-      fetched the typst binary, which this either finds or carries.
+      `handouts install` fetches the same typst release into the same
+      `~/.pecheny_utils`, and `--browser` fetches a chromium as well.
 - [x] **G5. wasm measurement**: `typst-wasm` grew a `measure` export — it
       queries the `<hndtinfo>` label the same source already carries and returns
       the introspector's position for it — so the wasm pool satisfies
@@ -382,6 +383,14 @@ machine's own fonts, which is what `--font` needs and what chgksuite does.
 typst's own warnings are passed through on that path (deduplicated — split_fit
 would repeat each one per probe), so a font nobody has stops being a silent
 substitution rather than an error.
+
+typst is looked for where chgksuite looks — PATH, then `~/.pecheny_utils` — and
+downloaded into that same directory when the machine has none, from the same
+GitHub release chgksuite's `handouts install` fetches. So the two tools share
+one binary whichever of them installed it, and `handouts install` is ported
+after all (with `--browser`, which fetches the chromium html2img needs too).
+Go has no xz in its standard library, hence the one dependency this brought in;
+a `.tar.xz` is what every platform but Windows publishes.
 
 The wasm is behind a build tag, because embedding a second copy of an ordinary
 program costs 35 MB:

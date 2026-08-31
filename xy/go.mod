@@ -6,6 +6,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/pdfcpu/pdfcpu v0.13.0
 	github.com/tetratelabs/wazero v1.12.0
+	github.com/ulikunitz/xz v0.5.16
 	golang.org/x/crypto v0.52.0
 	golang.org/x/image v0.43.0
 	golang.org/x/term v0.45.0
