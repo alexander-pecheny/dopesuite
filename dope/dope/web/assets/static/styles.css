@@ -4611,12 +4611,13 @@ body.is-fullscreen.od-page .match-main {
 .group-standings.troika-groups {
   display: flex;
   flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
   align-items: flex-start;
 }
 
 .troika-groups .crosstable {
-  --results-place-col: 32px;
-  --results-team-col: 152px;
+  --results-place-col: 28px;
+  --results-team-col: 140px;
   font-size: var(--text-xs);
 }
 
