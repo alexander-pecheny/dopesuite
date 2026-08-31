@@ -11,12 +11,13 @@ import (
 
 	"xy/internal/chgk/docx"
 	"xy/internal/chgk/fsource"
+	"xy/internal/chgk/inline"
 )
 
 // compose runs `chgksuite compose <filetype> …`.
 func compose(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("compose needs a filetype (docx, pptx, telegram, markdown, redditmd, base, openquiz, add_stats)")
+		return fmt.Errorf("compose needs a filetype (docx, pdf, pptx, telegram, markdown, redditmd, base, openquiz, add_stats)")
 	}
 	switch args[0] {
 	case "docx":
@@ -29,6 +30,8 @@ func compose(args []string) error {
 		return composePptx(args[1:])
 	case "add_stats":
 		return composeAddStats(args[1:])
+	case "pdf":
+		return composePDF(args[1:])
 	default:
 		return fmt.Errorf("compose %s is not ported yet", args[0])
 	}
@@ -45,6 +48,10 @@ func composeDocx(args []string) error {
 	randomize := fs.Bool("randomize", false, "shuffle the questions")
 	addTS := fs.String("add_ts", "off", "append a timestamp to the output filename: on|off")
 	merge := fs.Bool("merge", false, "export the input files as one package")
+	optimizeSize := fs.String("optimize_size", "on", "re-encode the pictures to shrink the file: on|off")
+	// Declared and not read, as in chgksuite: the .docx export calls the
+	// no-break pass through its standalone wrapper, which ignores the switches.
+	noBreakFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -55,6 +62,7 @@ func composeDocx(args []string) error {
 		NoParagraph:             *noParagraph,
 		OnlyQuestionNumber:      *onlyNumber,
 		SameSourceAndAuthorSize: *smallerSource == "off",
+		OptimizeSize:            *optimizeSize != "off",
 	})
 	if err != nil {
 		return err
@@ -139,6 +147,16 @@ func gameOf(name string) string {
 		return "troika"
 	default:
 		return "chgk"
+	}
+}
+
+// noBreakFlags declares --replace_no_break_spaces and --replace_no_break_hyphens,
+// which every compose subcommand takes, and reads them once it has parsed.
+func noBreakFlags(fs *flag.FlagSet) func() inline.NoBreak {
+	spaces := fs.String("replace_no_break_spaces", "on", "glue short words to what follows with a non-breaking space: on|off")
+	hyphens := fs.String("replace_no_break_hyphens", "on", "make the hyphen of а short word non-breaking: on|off")
+	return func() inline.NoBreak {
+		return inline.NoBreak{NoSpaces: *spaces == "off", NoHyphens: *hyphens == "off"}
 	}
 }
 

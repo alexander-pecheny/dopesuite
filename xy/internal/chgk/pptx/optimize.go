@@ -1,11 +1,7 @@
 package pptx
 
 import (
-	"bytes"
 	"fmt"
-	"image"
-	"image/jpeg"
-	"image/png"
 	"regexp"
 	"strings"
 
@@ -34,7 +30,7 @@ func (p *pkg) optimizeImages(quality int) {
 	for _, name := range p.imagePartNames() {
 		data := p.parts[name]
 		ext := strings.ToLower(strings.TrimPrefix(pathExt(name), "."))
-		smaller, newExt, ok := optimizeImage(data, ext, quality)
+		smaller, newExt, ok := imgconv.Optimize(data, ext, quality)
 		if !ok {
 			continue
 		}
@@ -54,47 +50,6 @@ func (p *pkg) optimizeImages(quality int) {
 	p.retargetImageRels(renamed)
 }
 
-// optimizeImage is optimize_raster_image_data: the candidates, and the smallest
-// that actually beats what was there.
-func optimizeImage(data []byte, ext string, quality int) ([]byte, string, bool) {
-	img, err := imgconv.Decode(data)
-	if err != nil {
-		return nil, "", false
-	}
-	type candidate struct {
-		ext  string
-		data []byte
-	}
-	var candidates []candidate
-	if imgconv.HasAlpha(img) {
-		if data, err := encodePNG(img); err == nil {
-			candidates = append(candidates, candidate{"png", data})
-		}
-	} else {
-		if data, err := encodeJPEG(img, quality); err == nil {
-			candidates = append(candidates, candidate{"jpg", data})
-		}
-		if ext == "png" {
-			if data, err := encodePNG(img); err == nil {
-				candidates = append(candidates, candidate{"png", data})
-			}
-		}
-	}
-	best := candidate{}
-	for _, c := range candidates {
-		if len(c.data) >= len(data) {
-			continue
-		}
-		if best.data == nil || len(c.data) < len(best.data) {
-			best = c
-		}
-	}
-	if best.data == nil {
-		return nil, "", false
-	}
-	return best.data, best.ext, true
-}
-
 // nextMediaName is _next_ooxml_media_part_name: the same stem with the new
 // extension, and failing that the stem with a number after it.
 func (p *pkg) nextMediaName(reserved map[string]bool, original, ext string) string {
@@ -108,33 +63,6 @@ func (p *pkg) nextMediaName(reserved map[string]bool, original, ext string) stri
 			return candidate
 		}
 	}
-}
-
-// encodeJPEG is Pillow's `save(quality=…, optimize=True)`: Go's encoder writes
-// the fixed Huffman tables, and imgconv.OptimizeJPEG replaces them with the
-// ones this picture earns. Without that second pass a deck comes out a tenth
-// larger than chgksuite's; with it, the two are within a rounding error.
-func encodeJPEG(img image.Image, quality int) ([]byte, error) {
-	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality}); err != nil {
-		return nil, err
-	}
-	optimized, err := imgconv.OptimizeJPEG(buf.Bytes())
-	if err != nil {
-		// A file it will not rewrite is still a good file.
-		return buf.Bytes(), nil //nolint:nilerr // the unoptimized bytes are the fallback
-	}
-	return optimized, nil
-}
-
-// encodePNG is Pillow's `save(optimize=True, compress_level=9)`.
-func encodePNG(img image.Image) ([]byte, error) {
-	var buf bytes.Buffer
-	enc := png.Encoder{CompressionLevel: png.BestCompression}
-	if err := enc.Encode(&buf, img); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
 }
 
 func sameImageExt(a, b string) bool {

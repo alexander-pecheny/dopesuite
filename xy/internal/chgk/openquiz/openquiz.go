@@ -52,8 +52,8 @@ type Answer struct {
 // Export renders a package as openquiz JSON. images maps a picture's name to its
 // bytes; a directive that already names a URL is left alone, anything else goes
 // to host.
-func Export(doc fsource.Doc, images map[string][]byte, host imghost.Host) ([]byte, error) {
-	e := &exporter{images: images, host: host}
+func Export(doc fsource.Doc, images map[string][]byte, host imghost.Host, o Options) ([]byte, error) {
+	e := &exporter{images: images, host: host, opts: o}
 	out := []Question{}
 	for i, q := range questionsAndTours(doc) {
 		if q.q == nil {
@@ -97,6 +97,12 @@ func questionsAndTours(doc fsource.Doc) []slot {
 type exporter struct {
 	images map[string][]byte
 	host   imghost.Host
+	opts   Options
+}
+
+// Options are the switches this export reads: only the non-breaking ones.
+type Options struct {
+	NoBreak inline.NoBreak
 }
 
 var (
@@ -225,7 +231,7 @@ func (e *exporter) format(s string, removeBrackets bool) (string, []string, erro
 			res = strings.Replace(res, m[0], m[1], 1)
 		}
 	}
-	res = inline.ReplaceNoBreak(res)
+	res = inline.ReplaceNoBreak(res, e.opts.NoBreak)
 	return strings.ReplaceAll(res, "́", ""), images, nil
 }
 

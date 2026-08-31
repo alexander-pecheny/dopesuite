@@ -21,6 +21,7 @@ func composePptx(args []string) error {
 	optimizeSize := fs.String("optimize_size", "on", "re-encode the pictures to shrink the file: on|off")
 	addTS := fs.String("add_ts", "off", "append a timestamp to the output filename: on|off")
 	merge := fs.Bool("merge", false, "export the input files as one package")
+	noBreak := noBreakFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -30,6 +31,7 @@ func composePptx(args []string) error {
 		DoNotRemoveAccents: *noAccents,
 		Language:           *language,
 		OptimizeSize:       *optimizeSize != "off",
+		NoBreak:            noBreak(),
 	}
 	if *fontDir != "" {
 		opts.FontDirs = []string{*fontDir}

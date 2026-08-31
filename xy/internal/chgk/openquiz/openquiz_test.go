@@ -37,7 +37,7 @@ func TestParity(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, err := Export(fsource.Parse(string(raw), "chgk"), images, stubHost{})
+			got, err := Export(fsource.Parse(string(raw), "chgk"), images, stubHost{}, Options{})
 			if err != nil {
 				t.Fatal(err)
 			}

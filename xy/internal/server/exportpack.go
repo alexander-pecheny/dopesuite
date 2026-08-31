@@ -157,7 +157,7 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 		if !v.want {
 			continue
 		}
-		b, err := typstdoc.Export(ctx, structure(), req.images, ts, v.device)
+		b, err := typstdoc.Export(ctx, structure(), req.images, ts, typstdoc.Options{Device: v.device})
 		if err != nil {
 			return nil, err
 		}

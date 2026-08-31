@@ -212,12 +212,24 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       template's Arial / Noto Sans. `--docx_template` belongs here too: the Go
       exporter embeds the template rather than reading one off disk, which is
       what font substitution would have to change anyway.
-- [ ] **E5. pdf options** [both]: `--nospoilers`, `--pdf_config` (typst
-      typography config), `--rawtypst`. The PDF export takes none of E1–E3
-      either: `typstdoc` is still device-only. `--optimize_size` rides here: it
-      recompresses the pictures a finished .docx or .pptx embedded, which Go
-      does at the other end instead (`imgconv.ForExport`, 200 dpi, q85), so the
-      switch has no lever to pull yet.
+- [x] **E5. pdf options**: `compose pdf`, with `--device`, `--pdf_config`
+      (`typstdoc.Config`, the same TOML keys), `--font`, `--language`,
+      `--rawtypst` and `--merge`. typst runs in this process, as wasm, rather
+      than as the binary chgksuite downloads on first use. Parity is on the
+      typst source, which is what either tool actually writes: fifteen runs over
+      nine fixtures — both devices, a config that changes every key, both
+      no-break switches — are byte-identical to chgksuite's.
+      `--replace_no_break_spaces` and `--replace_no_break_hyphens` go in here
+      too, on `compose` as there; `pptx`, `openquiz` and `pdf` read them and
+      `docx` declares and ignores them, which is what chgksuite does (its docx
+      export calls the pass through a wrapper that takes the defaults).
+      `--optimize_size` now also works on docx (`imgconv.Optimize`, shared with
+      the pptx pass). It has less to do there than in chgksuite: the Go exporter
+      already re-encodes for the size Word draws at (`imgconv.ForExport`, 200
+      dpi, q85), so the same package comes out 20 KB against chgksuite's 450 KB
+      with or without the switch.
+      `--nospoilers` is not a pdf switch at all — `typst.py` never reads it. It
+      belongs to `telegram` (ported) and to `lj` (A5).
 - [x] **E6. merge several sources**: `--merge` on every `compose` that takes
       files, naming the output after the inputs' common prefix and each one's
       tail, as make_merged_filename does. Byte-identical to chgksuite's.

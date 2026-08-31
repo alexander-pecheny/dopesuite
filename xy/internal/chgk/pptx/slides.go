@@ -213,7 +213,7 @@ func (e *exporter) processBlock(block fsource.Doc) {
 			}
 			e.setQuestionNumber(s, txt)
 		} else {
-			r := e.addRun(p, inline.ReplaceNoBreak(textForGrid(e.text(section.Content))))
+			r := e.addRun(p, inline.ReplaceNoBreak(textForGrid(e.text(section.Content)), e.opts.NoBreak))
 			if f := e.cfg.headingFontName(); f != "" {
 				r.fontName = f
 			}

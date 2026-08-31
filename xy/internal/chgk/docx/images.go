@@ -116,3 +116,27 @@ func drawingXML(relID string, docID int, cx, cy int64, name string) string {
 		`</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
 		cx, cy, docID, docID, aNS, aNS, picNS, picNS, docID, xmlEscape(name), relID, cx, cy)
 }
+
+// optimizeMedia is optimize_docx_images: --optimize_size re-encodes every
+// embedded picture and keeps the smaller of the two. Cheaper here than in
+// chgksuite, which reopens the finished package to do it — these bytes have not
+// been written yet.
+func (e *exporter) optimizeMedia() {
+	for i, m := range e.media {
+		smaller, ext, ok := imgconv.Optimize(m.data, m.ext, 80)
+		if !ok {
+			continue
+		}
+		e.media[i].data = smaller
+		if ext == m.ext {
+			continue
+		}
+		e.media[i].ext = ext
+		e.media[i].partName = fmt.Sprintf("media/image%d.%s", i+1, ext)
+		for j := range e.rels {
+			if e.rels[j].target == m.partName {
+				e.rels[j].target = e.media[i].partName
+			}
+		}
+	}
+}

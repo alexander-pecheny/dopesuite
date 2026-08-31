@@ -77,12 +77,25 @@ func buildNBLeft() []nbRule {
 	return out
 }
 
-func nbSegment(s string) string {
-	for _, r := range nbRightRes {
-		s = r.re.ReplaceAllString(s, r.repl)
+// NoBreak is --replace_no_break_spaces and --replace_no_break_hyphens, named
+// for what they switch off: chgksuite's default is both on, and so is the zero
+// value here.
+type NoBreak struct {
+	NoSpaces  bool
+	NoHyphens bool
+}
+
+func nbSegment(s string, nb NoBreak) string {
+	if !nb.NoSpaces {
+		for _, r := range nbRightRes {
+			s = r.re.ReplaceAllString(s, r.repl)
+		}
+		for _, r := range nbLeftRes {
+			s = r.re.ReplaceAllString(s, r.repl)
+		}
 	}
-	for _, r := range nbLeftRes {
-		s = r.re.ReplaceAllString(s, r.repl)
+	if nb.NoHyphens {
+		return s
 	}
 	// short hyphenated words (из-за, что-то…) and digit/bare hyphens: replace the
 	// hyphen with U+2011. Mirrors chgksuite's search-replace-all-occurrences loop.
@@ -101,10 +114,10 @@ func nbSegment(s string) string {
 	return s
 }
 
-func ReplaceNoBreak(text string) string {
+func ReplaceNoBreak(text string, nb NoBreak) string {
 	spans := HTTPURLSpans(text)
 	if len(spans) == 0 {
-		return nbSegment(text)
+		return nbSegment(text, nb)
 	}
 	r := []rune(text)
 	var b strings.Builder
@@ -113,10 +126,10 @@ func ReplaceNoBreak(text string) string {
 		if sp[0] < pos {
 			continue
 		}
-		b.WriteString(nbSegment(string(r[pos:sp[0]])))
+		b.WriteString(nbSegment(string(r[pos:sp[0]]), nb))
 		b.WriteString(string(r[sp[0]:sp[1]]))
 		pos = sp[1]
 	}
-	b.WriteString(nbSegment(string(r[pos:])))
+	b.WriteString(nbSegment(string(r[pos:]), nb))
 	return b.String()
 }

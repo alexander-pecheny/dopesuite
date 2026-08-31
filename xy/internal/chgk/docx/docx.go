@@ -87,6 +87,9 @@ type bodyItem interface{ xml() string }
 func Export(doc fsource.Doc, images map[string][]byte, opts Options) ([]byte, error) {
 	e := &exporter{images: images, nextRel: 7, nextDoc: 1000, opts: opts}
 	body := e.renderBody(doc)
+	if opts.OptimizeSize {
+		e.optimizeMedia()
+	}
 	return e.repackage(body)
 }
 
@@ -163,7 +166,7 @@ func (p *para) leadEmpty() {
 func (e *exporter) addContent(p *para, text, kind string, o textOpts) {
 	text = inline.BacktickReplace(text)
 	if o.nbsp {
-		text = inline.ReplaceNoBreak(text)
+		text = inline.ReplaceNoBreak(text, inline.NoBreak{})
 	}
 	text = strings.ReplaceAll(text, inline.NBHyphen, noBreakHyphenRepl)
 	p.runs = append(p.runs, runXML(text, rPr(kind, p.sz, o.whiten)))

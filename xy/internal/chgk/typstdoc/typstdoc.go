@@ -70,28 +70,16 @@ const (
 	mobileMarginBMM = 12.0
 )
 
-// Page setup, transcribed from template.docx (twips → mm/pt).
 const (
-	marginV     = "25.4mm"  // w:top / w:bottom = 1440tw
-	marginH     = "19.05mm" // w:left / w:right = 1080tw
-	bodyPt      = 12.0      // Normal: sz 24 half-points
-	h1Pt        = 16.0      // Heading1: sz 32
-	h2Pt        = 14.0      // Heading2: sz 28
-	headingPt   = 12.0      // Heading{1,2} w:spacing w:before=240tw
-	headingBelo = 3.0       // …w:after=60tw
-	questionPt  = 18.0      // question paragraph w:before=360tw
-	answerPt    = 6.0       // answer paragraph w:before=120tw
-	srcPt       = 10.0      // source/author runs: 2pt below body (matches the docx export)
-	srcGapPt    = 2.72      // the shrunk block starts one BODY line below: 2pt × Noto Sans's 1.362em line box (asc 1.069 + desc 0.293)
-	linkColor   = "#0000ff" // Hyperlink character style
-	tabWidth    = "36pt"    // Word's default tab stop (0.5in)
-	fontFamily  = "Noto Sans"
+	linkColor  = "#0000ff" // Hyperlink character style
+	tabWidth   = "36pt"    // Word's default tab stop (0.5in)
+	fontFamily = "Noto Sans"
 )
 
 // Export renders the parsed structure to PDF bytes. images maps the names used in
 // (img …) directives to their bytes (any format; re-encoded to PNG).
-func Export(ctx context.Context, doc fsource.Doc, images map[string][]byte, ts Typesetter, device Device) ([]byte, error) {
-	e := &exporter{images: images, used: map[string][]byte{}, device: device}
+func Export(ctx context.Context, doc fsource.Doc, images map[string][]byte, ts Typesetter, o Options) ([]byte, error) {
+	e := newExporter(images, o)
 	src := e.generate(doc)
 	if err := ts.SetImages(ctx, e.used); err != nil {
 		return nil, err
@@ -106,15 +94,21 @@ func Export(ctx context.Context, doc fsource.Doc, images map[string][]byte, ts T
 // GenerateTyp returns the typst source for a document, without compiling it (the
 // unit-testable half; also what you want when a PDF comes out looking wrong).
 // Referenced images are resolved, so their sizes land in the source.
-func GenerateTyp(doc fsource.Doc, images map[string][]byte, device Device) string {
-	e := &exporter{images: images, used: map[string][]byte{}, device: device}
-	return e.generate(doc)
+func GenerateTyp(doc fsource.Doc, images map[string][]byte, o Options) string {
+	return newExporter(images, o).generate(doc)
 }
 
 type exporter struct {
 	images map[string][]byte
 	used   map[string][]byte // images actually referenced, keyed by the name the source uses
+	opts   Options
+	cfg    Config
 	device Device
+}
+
+func newExporter(images map[string][]byte, o Options) *exporter {
+	o = o.resolve()
+	return &exporter{images: images, used: map[string][]byte{}, opts: o, cfg: o.Config, device: o.Device}
 }
 
 // preamble is template.docx's page setup, in typst.
@@ -130,15 +124,16 @@ type exporter struct {
 // took in are what the 0.65em leading used to add), i.e. Word's single spacing.
 func (e *exporter) preamble() string {
 	page := fmt.Sprintf(`paper: "a4", margin: (top: %s, bottom: %s, left: %s, right: %s)`,
-		marginV, marginV, marginH, marginH)
+		mm(e.cfg.MarginVMM), mm(e.cfg.MarginVMM), mm(e.cfg.MarginHMM), mm(e.cfg.MarginHMM))
 	if e.device == Mobile {
 		page = fmt.Sprintf(`width: %s, height: %s, margin: (top: %s, left: %s, right: %s, bottom: %s)`,
 			mm(mobileWMM), mm(mobileHMM), mm(mobileMarginMM), mm(mobileMarginMM), mm(mobileMarginMM), mm(mobileMarginBMM))
 	}
 	return fmt.Sprintf(`#set page(%s, footer: context align(center, text(size: %s, counter(page).display())))
-#set text(font: %q, size: %s, lang: "ru", hyphenate: false, top-edge: "ascender", bottom-edge: "descender")
-#set par(spacing: 0pt, leading: 0pt, justify: false)
-`, page, pt(bodyPt), fontFamily, pt(bodyPt))
+#set text(font: %q, size: %s, lang: %q, hyphenate: false, top-edge: %sem, bottom-edge: %sem)
+#set par(spacing: 0pt, leading: %s, justify: false)
+`, page, pt(e.cfg.BodyPt), e.opts.Font, pt(e.cfg.BodyPt), lang(e.opts.Language),
+		num(e.cfg.TopEdge), num(e.cfg.BottomEdge), pt(e.cfg.LeadingPt))
 }
 
 func (e *exporter) generate(doc fsource.Doc) string {
@@ -155,23 +150,23 @@ func (e *exporter) generate(doc fsource.Doc) string {
 		case "meta":
 			p := &para{}
 			if prevType == "Question" {
-				p.above = questionPt
+				p.above = e.cfg.QuestionAbove
 			}
 			e.addValue(p, el.Content, true)
 			out.WriteString(p.typ())
 			out.WriteString(emptyLine()) // docx follows meta with an empty paragraph
 
 		case "heading", "ljheading", "section", "editor", "date":
-			p := &para{above: headingPt, below: headingBelo, sticky: true, size: bodyPt}
+			p := &para{above: e.cfg.HeadingAbove, below: e.cfg.HeadingBelow, sticky: true, size: e.cfg.BodyPt, body: e.cfg.BodyPt}
 			switch el.Type {
 			case "heading":
-				p.size, p.bold = h1Pt, true
+				p.size, p.bold = e.cfg.Heading1Pt, true
 				if !first {
 					headingPB = true
 				}
 				p.pageBreak = headingPB
 			case "section":
-				p.size, p.bold, p.italic = h2Pt, true, true
+				p.size, p.bold, p.italic = e.cfg.Heading2Pt, true, true
 				p.pageBreak = !firstSection
 				firstSection = false
 			}
@@ -201,7 +196,7 @@ func (e *exporter) generate(doc fsource.Doc) string {
 func (e *exporter) renderQuestion(q *fsource.Question) string {
 	var out strings.Builder
 
-	p1 := &para{above: questionPt, keepLines: true}
+	p1 := &para{above: e.cfg.QuestionAbove, keepLines: true}
 	p1.addStyled(questionLabel(q)+". ", "bold")
 	if h := q.Get("handout"); h != nil {
 		p1.addStyled("\n["+labelFor(q, "handout")+": ", "")
@@ -212,7 +207,7 @@ func (e *exporter) renderQuestion(q *fsource.Question) string {
 	e.addValue(p1, q.Get("question"), true)
 	out.WriteString(p1.typ())
 
-	p2 := &para{above: answerPt, keepLines: true}
+	p2 := &para{above: e.cfg.AnswerAbove, keepLines: true}
 	p2.addStyled(labelFor(q, "answer")+": ", "bold")
 	e.addValue(p2, q.Get("answer"), true)
 
@@ -225,7 +220,7 @@ func (e *exporter) renderQuestion(q *fsource.Question) string {
 		nbsp := field != "source"
 		if field == "source" || field == "author" {
 			if src == nil {
-				src = &para{keepLines: true, runSize: srcPt, above: srcGapPt}
+				src = &para{keepLines: true, runSize: e.cfg.SourcePt, above: e.cfg.SourceGap}
 			} else {
 				src.addBreak()
 			}
@@ -304,11 +299,11 @@ func (e *exporter) addRuns(p *para, text string, nbsp bool) {
 		case "img":
 			e.addImage(p, r.Text)
 		case "screen":
-			p.addContent(r.ForPrint, "", nbsp)
+			p.addContent(r.ForPrint, "", e.opts.NoBreak, nbsp)
 		case "hyperlink":
 			p.addLink(r.Text)
 		default:
-			p.addContent(r.Text, r.Kind, nbsp)
+			p.addContent(r.Text, r.Kind, e.opts.NoBreak, nbsp)
 		}
 	}
 }

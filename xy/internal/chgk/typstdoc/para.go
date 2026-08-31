@@ -22,6 +22,7 @@ type para struct {
 	sticky    bool    // w:keepNext  → sticky: true
 	pageBreak bool    // w:pageBreakBefore
 	size      float64 // block-level text size (headings); 0 = body size
+	body      float64 // what the body size is, so a heading knows it is one
 	bold      bool
 	italic    bool
 	runSize   float64  // per-run text size, pt; 0 = inherit
@@ -55,10 +56,10 @@ func (p *para) addStyled(text, kind string) { p.add(p.sized(styled(text, kind)))
 // non-breaking hyphen (U+2011) and NBSP (U+00A0) go into the PDF as themselves —
 // typst's line breaker honours both, so no substitution is needed (the docx export
 // has to swap U+2011 for word-joiner+hyphen+word-joiner, which Word needs).
-func (p *para) addContent(text, kind string, nbsp bool) {
+func (p *para) addContent(text, kind string, nb inline.NoBreak, nbsp bool) {
 	text = inline.BacktickReplace(text)
 	if nbsp {
-		text = inline.ReplaceNoBreak(text)
+		text = inline.ReplaceNoBreak(text, nb)
 	}
 	p.add(p.sized(styled(text, kind)))
 }
@@ -116,7 +117,7 @@ func (p *para) chunks() [][]string {
 // textParams is the heading font, if this paragraph is one.
 func (p *para) textParams() string {
 	var params []string
-	if p.size != 0 && p.size != bodyPt {
+	if p.size != 0 && p.size != p.body {
 		params = append(params, "size: "+pt(p.size))
 	}
 	if p.bold {
@@ -279,6 +280,16 @@ func typstString(s string) string {
 // pt formats a length in points, the way typst wants it.
 func pt(v float64) string {
 	return strconv.FormatFloat(inline.Round2(v), 'f', -1, 64) + "pt"
+}
+
+// num writes the line-box edges as Python writes a float, decimal point and all:
+// they go into the source unrounded, so "1.0em" is what the other tool emits.
+func num(v float64) string {
+	s := strconv.FormatFloat(v, 'g', -1, 64)
+	if !strings.ContainsAny(s, ".eE") {
+		s += ".0"
+	}
+	return s
 }
 
 // mm formats a length in millimetres.

@@ -15,6 +15,9 @@ type Options struct {
 	// author keep the body size instead of dropping 2pt into a paragraph of
 	// their own. Inverted because chgksuite's default is on.
 	SameSourceAndAuthorSize bool
+	// OptimizeSize is --optimize_size: re-encode the pictures once the document
+	// is built, keeping whichever is smaller. On by default in chgksuite.
+	OptimizeSize bool
 }
 
 // Spoilers says how the answers are hidden from a reader of the printout.

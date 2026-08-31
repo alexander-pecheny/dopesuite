@@ -21,6 +21,7 @@ func composePublished(filetype string, args []string) error {
 	removeAccents := fs.Bool("remove_accents", false, "base only: a stressed vowel becomes a capital one")
 	addTS := fs.String("add_ts", "off", "append a timestamp to the output filename: on|off")
 	merge := fs.Bool("merge", false, "export the input files as one package")
+	noBreak := noBreakFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -52,7 +53,7 @@ func composePublished(filetype string, args []string) error {
 			}
 			data, ext = []byte(text), "txt"
 		case "openquiz":
-			if data, err = openquiz.Export(doc, images, host); err != nil {
+			if data, err = openquiz.Export(doc, images, host, openquiz.Options{NoBreak: noBreak()}); err != nil {
 				return err
 			}
 			ext = "json"

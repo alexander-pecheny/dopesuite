@@ -33,6 +33,8 @@ type Options struct {
 	DoNotRemoveAccents bool
 	// Language is --language; only "ru" changes anything, by tagging runs.
 	Language string
+	// NoBreak is --replace_no_break_spaces / --replace_no_break_hyphens.
+	NoBreak inline.NoBreak
 	// OptimizeSize is --optimize_size: re-encode the pictures once the deck is
 	// built. On by default in chgksuite, and the difference between a 30 MB
 	// presentation and a few megabytes.
@@ -211,7 +213,7 @@ func (e *exporter) processText(v any, hasImage, stripBrackets, replaceSpaces, ke
 		s = strings.ReplaceAll(s, " "+punct, punct)
 	}
 	if replaceSpaces {
-		s = inline.ReplaceNoBreak(s)
+		s = inline.ReplaceNoBreak(s, e.opts.NoBreak)
 	}
 	return strings.TrimSpace(s)
 }
@@ -392,7 +394,7 @@ func (e *exporter) formatItems(items []any, p *paragraph, t *textbox, s *slidePa
 func (e *exporter) formatString(str string, p *paragraph, t *textbox, s *slidePart, replaceSpaces bool) {
 	sp := func(text string) string {
 		if replaceSpaces {
-			return inline.ReplaceNoBreak(text)
+			return inline.ReplaceNoBreak(text, e.opts.NoBreak)
 		}
 		return text
 	}

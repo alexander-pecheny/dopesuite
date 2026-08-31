@@ -112,3 +112,79 @@ func hasAlpha(img image.Image) bool {
 	}
 	return false
 }
+
+// Optimize is optimize_raster_image_data, what chgksuite's --optimize_size runs
+// over every picture a finished .docx or .pptx embeds: re-encode, and keep
+// whichever candidate actually beats the bytes that were there. A picture with
+// transparency stays a PNG; anything else becomes a JPEG, which is where the
+// saving is.
+//
+// The bytes are Go's encoders', not Pillow's, so a package built with this on
+// is no longer byte-comparable to chgksuite's — but the sizes are, to a tenth
+// of a percent: encodeJPEG rebuilds the Huffman tables Pillow's optimize=True
+// would have, and PNGs are written at Go's best compression.
+func Optimize(data []byte, ext string, quality int) ([]byte, string, bool) {
+	img, err := Decode(data)
+	if err != nil {
+		return nil, "", false
+	}
+	type candidate struct {
+		ext  string
+		data []byte
+	}
+	var candidates []candidate
+	if HasAlpha(img) {
+		if out, err := EncodePNG(img); err == nil {
+			candidates = append(candidates, candidate{"png", out})
+		}
+	} else {
+		if out, err := EncodeJPEG(img, quality); err == nil {
+			candidates = append(candidates, candidate{"jpg", out})
+		}
+		if ext == "png" {
+			if out, err := EncodePNG(img); err == nil {
+				candidates = append(candidates, candidate{"png", out})
+			}
+		}
+	}
+	best := candidate{}
+	for _, c := range candidates {
+		if len(c.data) >= len(data) {
+			continue
+		}
+		if best.data == nil || len(c.data) < len(best.data) {
+			best = c
+		}
+	}
+	if best.data == nil {
+		return nil, "", false
+	}
+	return best.data, best.ext, true
+}
+
+// EncodeJPEG is Pillow's `save(quality=…, optimize=True)`: Go's encoder writes
+// the fixed Huffman tables, and OptimizeJPEG replaces them with the ones this
+// picture earns. Without that second pass a package comes out a tenth larger
+// than chgksuite's; with it, the two are within a rounding error.
+func EncodeJPEG(img image.Image, quality int) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality}); err != nil {
+		return nil, err
+	}
+	optimized, err := OptimizeJPEG(buf.Bytes())
+	if err != nil {
+		// A file it will not rewrite is still a good file.
+		return buf.Bytes(), nil //nolint:nilerr // the unoptimized bytes are the fallback
+	}
+	return optimized, nil
+}
+
+// EncodePNG is Pillow's `save(optimize=True, compress_level=9)`.
+func EncodePNG(img image.Image) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := png.Encoder{CompressionLevel: png.BestCompression}
+	if err := enc.Encode(&buf, img); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}

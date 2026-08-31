@@ -50,7 +50,7 @@ func pass(source string, o typo.Options) string {
 		if strings.TrimSpace(rest) == "" {
 			continue
 		}
-		lines[i] = prefix + inline.ReplaceNoBreak(typo.Typography(rest, o))
+		lines[i] = prefix + inline.ReplaceNoBreak(typo.Typography(rest, o), inline.NoBreak{})
 	}
 	return strings.Join(lines, "\n")
 }

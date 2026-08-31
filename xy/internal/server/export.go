@@ -201,7 +201,7 @@ func (s *server) handleExportPDF(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), exportPDFTimeout)
 	defer cancel()
-	b, err := typstdoc.Export(ctx, fsource.Parse(req.source, "chgk"), req.images, ts, device)
+	b, err := typstdoc.Export(ctx, fsource.Parse(req.source, "chgk"), req.images, ts, typstdoc.Options{Device: device})
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			httpError(w, http.StatusGatewayTimeout, "typst timed out")
