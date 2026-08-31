@@ -53,6 +53,11 @@ func bundledFontDir() (string, error) {
 // ts decides where typst runs: the server passes the in-memory wasm typesetter, so
 // the decrypted questions never reach a filesystem.
 func Render(ctx context.Context, hndt string, images map[string][]byte, a Args, ts Typesetter) ([]byte, error) {
+	hndt, images, err := ApplyRotation(hndt, images)
+	if err != nil {
+		return nil, err
+	}
+	hndt, images = flattenImagePaths(hndt, images)
 	if err := ts.SetImages(ctx, images); err != nil {
 		return nil, err
 	}

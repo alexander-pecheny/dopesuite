@@ -22,7 +22,7 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 | `chgkimport/` | `parser.py` `parse_wrapper` | .docx/.4s/.zip |
 | `docx/` | `composer/docx.py` | every `compose docx` switch, oracle-tested |
 | `typstdoc/` | `composer/typst.py` | desktop/mobile, no options |
-| `handout/` | `handouter/{gen,runner,split_fit,utils}.py` | .hndt→.typ→PDF + split_fit + image shrink |
+| `handout/` | `handouter/{gen,runner,split_fit,pack,utils}.py` | 4s→.hndt→.typ→PDF, split_fit, image shrink, rotation, pack |
 | `typstwasm/` | (typst binary + `handouter/installer.py`) | done, and better |
 | `imgconv/` | `composer_common.proportional_resize` + Pillow | done for export |
 | `typoedit/` | — | xy-only (editor-side typography) |
@@ -258,15 +258,28 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       (the typst binary answers it with a `query`; the wasm pool cannot yet, and
       simply doesn't shrink). `resize_test.go` reproduces chgksuite's
       "1 -> 0.97, rows 4 -> 5" on the same handout.
-- [ ] **F2. `handouts generate`** [both]: 4s → `.hndt`. Ported to TypeScript
-      (`web/ts/hndt.ts`), not to Go; a Go-side import path would need it.
-- [ ] **F3. `handouts pack`** [cli]: pack several split-fitted single-handout
-      PDFs onto shared sheets (`pack.py`).
-- [ ] **F4. `create_html` / `html2img`** [cli]: the HTML-authored handout escape
-      hatch; `html2img` drives a headless browser.
-- [ ] **F5. image rotation** [both]: `rotate` block key: parsed by Go, ignored
-      (`handout.go:320`).
-- [ ] **F6. watch mode** [cli]: `handouts run` re-renders on file change.
+- [x] **F2. `handouts generate`**: `handout.Generate`, the 4s2hndt port, behind
+      `chgksuite handouts generate`. Byte-identical to chgksuite's .hndt and to
+      its handouts list, in one file and in `--separate` — the absolute picture
+      path chgksuite writes included, so either tool reads the other's.
+      (`web/ts/hndt.ts` remains xy's own, which works from cards rather than
+      from a .4s.)
+- [x] **F3. `handouts pack`**: `handout.PackPages` and `MergePDFs`, behind
+      `handouts pack`. Same page counts as chgksuite on the same folder, and
+      the merge is pdfcpu's rather than pypdf's. It renders in memory instead of
+      shelling out to `hndt2pdf` per file, so it leaves no per-file PDFs behind.
+- [x] **F4. `create_html`**: byte-identical to chgksuite's scaffold.
+      `html2img` is NOT ported and is a deliberate non-goal: it drives a
+      headless Chromium through Playwright, and this binary has no browser and
+      no Python to install one with.
+- [x] **F5. image rotation**: `handout.ApplyRotation` turns the picture's bytes
+      and hands typst the turned copy under a name of its own, where chgksuite
+      writes a rotated temp file. Every renderer (`Render`, `SplitFit`,
+      `FitRows`) runs it.
+- [x] **F6. watch mode**: `handouts run --watch` re-renders on every change to
+      the file, polling its timestamp once a second where chgksuite runs
+      watchdog. Upstream the switch is unreachable: `runner.py` reads
+      `args.watch` and `cli.py` never declares it.
 
 ### G. Cross-cutting
 

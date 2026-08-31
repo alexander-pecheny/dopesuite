@@ -46,6 +46,11 @@ func newSFRun(ctx context.Context, images map[string][]byte, a Args, ts Typesett
 // FitRows returns the fitted row count per block (in order) — exported for parity
 // tests against chgksuite's "final rows=N".
 func FitRows(ctx context.Context, hndt string, images map[string][]byte, a Args, ts Typesetter) ([]int, error) {
+	hndt, images, err := ApplyRotation(hndt, images)
+	if err != nil {
+		return nil, err
+	}
+	hndt, images = flattenImagePaths(hndt, images)
 	r, err := newSFRun(ctx, images, a, ts)
 	if err != nil {
 		return nil, err
@@ -62,6 +67,11 @@ func FitRows(ctx context.Context, hndt string, images map[string][]byte, a Args,
 }
 
 func SplitFit(ctx context.Context, hndt string, images map[string][]byte, a Args, ts Typesetter) ([]byte, error) {
+	hndt, images, err := ApplyRotation(hndt, images)
+	if err != nil {
+		return nil, err
+	}
+	hndt, images = flattenImagePaths(hndt, images)
 	r, err := newSFRun(ctx, images, a, ts)
 	if err != nil {
 		return nil, err
