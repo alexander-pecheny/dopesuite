@@ -14,6 +14,7 @@ func usage() {
 
 commands:
   compose docx [flags] <file.4s>…   render questions to .docx
+  compose telegram [flags] <file.4s>  post questions to a telegram channel
 
 run a command with -h for its flags
 `)
