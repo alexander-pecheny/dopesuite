@@ -85,7 +85,11 @@ func main() {
 	}
 
 	styled := sites{}
-	geometry := 0
+	geometry, layout := 0, 0
+	layoutBaseline, err := readAllow("scripts/classcheck/layout-baseline.txt")
+	if err != nil {
+		fatal("%v", err)
+	}
 	for _, sheet := range stylesheets {
 		src, err := os.ReadFile(sheet)
 		if err != nil {
@@ -95,6 +99,7 @@ func main() {
 			styled.add(name, sheet)
 		}
 		geometry += reportGridLiterals(sheet, string(src))
+		layout += reportLayoutClasses(sheet, string(src), layoutBaseline)
 	}
 
 	literals := sites{} // generous: any class-shaped token inside a string literal
@@ -165,10 +170,12 @@ func main() {
 			strings.Join(emitted.files(name), ", "), name)
 	}
 
-	if n := len(orphans) + len(dead) + geometry; n > 0 {
-		fmt.Fprintf(os.Stderr, "\nclasscheck: %d orphan rule(s), %d dead name(s), %d Сетка geometry literal(s).\n"+
-			"Delete them, or record the exception in scripts/classcheck/allow.txt with a reason.\n",
-			len(orphans), len(dead), geometry)
+	if n := len(orphans) + len(dead) + geometry + layout; n > 0 {
+		fmt.Fprintf(os.Stderr, "\nclasscheck: %d orphan rule(s), %d dead name(s), %d Сетка geometry literal(s), "+
+			"%d re-invented layout class(es).\n"+
+			"Delete them, or record the exception in scripts/classcheck/allow.txt "+
+			"(layout-baseline.txt for the last kind) with a reason.\n",
+			len(orphans), len(dead), geometry, layout)
 		os.Exit(1)
 	}
 	// The exemption is the check's one blind spot, so it is reported every run

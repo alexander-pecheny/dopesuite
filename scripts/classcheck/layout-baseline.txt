@@ -1,0 +1,53 @@
+# Layout classes that predate the ratchet in layout.go.
+#
+# Each of these has a body the kit's .u-* utilities already draw. They are
+# grandfathered, not endorsed: for a named component (.label-picker is «the row
+# of label chips») the layout IS the identity and the class earns its keep; for
+# the rest, composing utilities at the call site would be better and they can be
+# retired one at a time.
+#
+# Adding a line here is allowed. It just has to be a decision somebody made,
+# rather than one nobody noticed — which is the whole point of the ratchet.
+#
+# <class> = <the utilities it is equivalent to>
+appearance-row = u-align-center u-gap-md u-justify-between u-row
+attachments = u-col u-gap-xs
+attach-row = u-align-center u-gap-sm u-row
+brain-bout = u-align-start u-col u-gap-sm
+brain-controls = u-gap-sm u-row
+brain-seed-bar = u-align-center u-gap-md u-row
+classcheck: 0 orphan rule(s), 0 dead name(s), 0 Сетка geometry literal(s), 40 re-invented layout class(es).
+cluster = u-align-center u-gap-sm u-row u-wrap
+fest-group = u-col u-gap-md
+filter-body = u-align-start u-col u-gap-md
+fld = u-col
+fld-head = u-align-center u-gap-sm u-justify-between u-row
+fld-row = u-align-center u-gap-xs u-row
+fld-rows = u-col u-gap-xs
+gal-demo = u-align-start u-col u-gap-md
+gal-util = u-col u-gap-xs
+invite-actions = u-gap-sm u-row u-wrap
+label-add-item = u-align-center u-gap-sm u-row
+label-picker = u-gap-sm u-row u-wrap
+lm-move = u-align-center u-gap-xs u-row
+mass-acts = u-gap-xs u-row u-wrap
+mass-body = u-col u-gap-xs
+modal-actions = u-gap-sm u-justify-end u-row
+od-shootout-dialog-form = u-col u-gap-md
+playing-head = u-align-center u-gap-xs u-row
+reseed-fold = u-align-start u-col u-gap-sm
+screen-controls = u-gap-sm u-row
+section = u-col u-gap-md
+seg-grow = u-row
+sess-actions = u-align-center u-gap-sm u-row u-wrap
+sess-cities = u-align-center u-gap-sm u-row u-wrap
+sess-feed = u-col u-gap-sm
+sizes-row = u-col u-gap-xs
+timer-actions = u-gap-sm u-justify-center u-row
+tl-editrow = u-gap-sm u-row
+tl-skeleton = u-col u-gap-xs
+tl-versions = u-col u-gap-xs
+troika-bout = u-align-start u-col u-gap-sm
+u-col = u-col
+u-row = u-row
+venue-dialog-form = u-col u-gap-md
