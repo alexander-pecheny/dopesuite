@@ -1,7 +1,8 @@
 # dopesuite — monorepo
 
-Four Go modules, one repo: two apps (xy, dope) on two shared layers
-(dopeuikit, dopecore). The apps have their own `AGENTS.md`; start there.
+Five Go modules, one repo: two apps (xy, dope) on two shared layers
+(dopeuikit, dopecore), plus a desktop GUI. The apps have their own `AGENTS.md`;
+start there.
 
 ```
 dopeuikit/   pecheny.me/dopeuikit — the shared UI system:
@@ -15,12 +16,18 @@ dopecore/    pecheny.me/dopecore — the shared platform layer extracted out of
              and the login handshake (tglogin)
 xy/          ЧГК question-editing boards (encrypted, Trello-style)
 dope/        tournament management (EK/OD/KSI) + realtime web UI
+chgksuite-gui/
+             a Fyne window over xy's chgksuite CLI, generated from the flags
+             that CLI declares (`chgksuite spec`)
 ```
 
 - xy and dope consume the shared layers via `replace pecheny.me/dopeuikit =>
   ../dopeuikit` and `replace pecheny.me/dopecore => ../dopecore` — the monorepo
   preserves the sibling layout, so builds need nothing extra. The kit imports
   dopecore the same way; dopecore imports no other module (`docs/adr/0004`).
+- `chgksuite-gui` is deliberately outside the fan-out below: it needs cgo and a
+  desktop toolchain, and neither server depends on it. Build and test it with
+  its own `just check`, which also guards the seam between it and the CLI.
 - xy and dope each keep a `justfile` (`just dev`, `just test`, `just check`);
   dopeuikit and dopecore have none — their recipes live in the root `justfile`,
   which also fans `test`/`fmt`/`vet` out across all four. `just pre-commit` is
