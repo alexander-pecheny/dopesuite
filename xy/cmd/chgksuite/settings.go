@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -88,7 +87,7 @@ func setting(name string) string { return loadSettings()[name] }
 // applyConfig applies a --config JSON over the flags already parsed. Every key
 // must name a flag of this command; chgksuite silently sets whatever it is
 // given, which quietly swallows a typo, so this says so instead.
-func applyConfig(fs *flag.FlagSet, path string) error {
+func applyConfig(fs *flagSet, path string) error {
 	if path == "" {
 		return nil
 	}
@@ -136,6 +135,6 @@ func configValue(v any) string {
 
 // configFlag declares --config on a command's own flag set, since this CLI has
 // no flags of its own before the command name.
-func configFlag(fs *flag.FlagSet) *string {
+func configFlag(fs *flagSet) *string {
 	return fs.String("config", "", "a JSON file of flag values, applied over the command line")
 }

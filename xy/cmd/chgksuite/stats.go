@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -14,18 +13,18 @@ import (
 )
 
 // composeAddStats is `chgksuite compose add_stats`: read a tournament's results
-// and write a copy of the package with «Взятия: N/M» on every question.
+// and write a copy of the packet with «Взятия: N/M» on every question.
 func composeAddStats(args []string) error {
-	fs := flag.NewFlagSet("compose add_stats", flag.ContinueOnError)
+	fs := newFlagSet("compose add_stats")
 	ratingIDs := fs.String("rating_ids", "", "rating.chgk.info tournament id, comma-separated for sync+async")
 	customCSV := fs.String("custom_csv", "", xystrings.Default.Chgkcli.AddStats.CustomCsvFlag())
 	csvArgs := fs.String("custom_csv_args", "{}", `csv reader options as JSON, e.g. {"delimiter": ";"}`)
 	questionRange := fs.String("question_range", "", `range of question numbers to include, e.g. "25-36"`)
 	threshold := fs.Int("team_naming_threshold", overrideInt("team_naming_threshold", 2), "name the teams when this few took the question")
 	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
-	merge := fs.Bool("merge", false, "read the input files as one package")
+	merge := fs.Bool("merge", false, "read the input files as one packet")
 	config := configFlag(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := applyConfig(fs, *config); err != nil {

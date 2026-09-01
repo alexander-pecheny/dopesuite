@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"os"
 
 	"xy/internal/chgk/dbtext"
@@ -10,19 +9,19 @@ import (
 	"xy/internal/chgk/openquiz"
 )
 
-// composePublished runs the three exports that publish a package as text —
+// composePublished runs the three exports that publish a packet as text —
 // markdown, redditmd, base and openquiz — which is what they have in common:
 // a picture becomes a URL rather than embedded bytes, so each takes an image
 // host (imgur, as chgksuite does).
 func composePublished(filetype string, args []string) error {
-	fs := flag.NewFlagSet("compose "+filetype, flag.ContinueOnError)
+	fs := newFlagSet("compose " + filetype)
 	clientID := fs.String("imgur_client_id", override("imgur_client_id", ""), "upload pictures as this imgur client instead of chgksuite's")
 	removeAccents := fs.Bool("remove_accents", false, "base only: a stressed vowel becomes a capital one")
 	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
-	merge := fs.Bool("merge", false, "export the input files as one package")
+	merge := fs.Bool("merge", false, "export the input files as one packet")
 	noBreak := noBreakFlags(fs)
 	config := configFlag(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := applyConfig(fs, *config); err != nil {

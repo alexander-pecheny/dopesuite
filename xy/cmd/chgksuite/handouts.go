@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -44,16 +43,16 @@ func handouts(args []string) error {
 	}
 }
 
-// handoutsGenerate is 4s2hndt: a package's handout brackets
+// handoutsGenerate is 4s2hndt: a packet's handout brackets
 // into the .hndt the renderer reads.
 func handoutsGenerate(args []string) error {
-	fs := flag.NewFlagSet("handouts generate", flag.ContinueOnError)
+	fs := newFlagSet("handouts generate")
 	language := fs.String("language", override("language", i18n.DefaultLanguage),
 		"which regexes recognise the handout bracket: "+strings.Join(i18n.Languages(), ", "))
-	separate := fs.Bool("separate", false, "a file per question instead of one for the package")
+	separate := fs.Bool("separate", false, "a file per question instead of one for the packet")
 	listHandouts := fs.Bool("list_handouts", false, "also write which questions have a handout")
 	config := configFlag(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := applyConfig(fs, *config); err != nil {
@@ -88,7 +87,7 @@ func handoutsGenerate(args []string) error {
 }
 
 // handoutArgs declares the geometry flags `run` and `split_fit` share.
-func handoutArgs(fs *flag.FlagSet) func() (handout.Args, string, error) {
+func handoutArgs(fs *flagSet) func() (handout.Args, string, error) {
 	a := handout.DefaultArgs()
 	typstBin := typstFlag(fs)
 	language := fs.String("language", override("language", i18n.DefaultLanguage),
@@ -120,11 +119,11 @@ func handoutArgs(fs *flag.FlagSet) func() (handout.Args, string, error) {
 }
 
 func handoutsRun(args []string) error {
-	fs := flag.NewFlagSet("handouts run", flag.ContinueOnError)
+	fs := newFlagSet("handouts run")
 	read := handoutArgs(fs)
 	watch := fs.Bool("watch", false, "re-render whenever the file changes; Ctrl-C to stop")
 	config := configFlag(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := applyConfig(fs, *config); err != nil {
@@ -194,9 +193,9 @@ func modTime(path string) time.Time {
 // again. Every command does this on its own when it needs one; this is the way
 // to do it before a plane.
 func handoutsInstall(args []string) error {
-	fs := flag.NewFlagSet("handouts install", flag.ContinueOnError)
+	fs := newFlagSet("handouts install")
 	browser := fs.Bool("browser", false, "also fetch a chromium, which only html2img needs")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	typst, err := typstinstall.FindOrInstall(context.Background(), func(s string) { reportNote("typst: %s", s) })
@@ -218,10 +217,10 @@ func handoutsInstall(args []string) error {
 // handoutsCreateHTML is create_html: the scaffold for a handout laid out by
 // hand in a browser rather than by the .hndt format.
 func handoutsCreateHTML(args []string) error {
-	fs := flag.NewFlagSet("handouts create_html", flag.ContinueOnError)
+	fs := newFlagSet("handouts create_html")
 	font := fs.String("font", "", "font family; empty is the browser's sans-serif")
 	output := fs.String("output", "", "output filename; empty is handout_<fraction>.html")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
@@ -257,12 +256,12 @@ func handoutsCreateHTML(args []string) error {
 // handoutsHTML2Img is html2img: the hand-laid-out HTML into the PDF that goes
 // to the printer and the PNG that goes into a chat.
 func handoutsHTML2Img(args []string) error {
-	fs := flag.NewFlagSet("handouts html2img", flag.ContinueOnError)
+	fs := newFlagSet("handouts html2img")
 	scale := fs.Float64("scale", 2, "the PNG's device pixel ratio")
 	browser := fs.String("browser", override("browser", ""),
 		"the chromium to render with; empty looks for one (also $CHGKSUITE_BROWSER)")
 	config := configFlag(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := applyConfig(fs, *config); err != nil {
@@ -314,11 +313,11 @@ const htmlHandoutTemplate = `<!DOCTYPE html>
 `
 
 func handoutsSplitFit(args []string) error {
-	fs := flag.NewFlagSet("handouts split_fit", flag.ContinueOnError)
+	fs := newFlagSet("handouts split_fit")
 	read := handoutArgs(fs)
 	outputDir := fs.String("output_dir", "", "where to write the zip; empty is beside the input")
 	config := configFlag(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := applyConfig(fs, *config); err != nil {
@@ -387,13 +386,13 @@ func readHandoutSource(in string) (string, map[string][]byte, error) {
 // each repeated for as many pages as the field needs, merged into one PDF for
 // the colour printer and one for the black-and-white one.
 func handoutsPack(args []string) error {
-	fs := flag.NewFlagSet("handouts pack", flag.ContinueOnError)
+	fs := newFlagSet("handouts pack")
 	prefix := fs.String("output_filename_prefix", "packed_handouts", "output filename prefix")
 	nTeams := fs.Int("n_teams", 0, "number of teams (required)")
 	read := handoutArgs(fs)
 	compress := fs.String("compress_pdf", "on", "compress the merged PDF: on|off")
 	config := configFlag(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := applyConfig(fs, *config); err != nil {

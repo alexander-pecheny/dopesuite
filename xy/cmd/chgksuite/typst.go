@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"os"
 	"path/filepath"
 
@@ -21,11 +20,11 @@ import (
 //
 // The wasm — xy's server's typst, linked in so that a decrypted question never
 // reaches a filesystem — is what a build made with -tags wasmtypst falls back
-// on when even the download fails. Here the package is a file on the user's own
+// on when even the download fails. Here the packet is a file on the user's own
 // disk already, and carrying a second typst costs ~33 MB.
 
 // typstFlag declares --typst on a command that renders.
-func typstFlag(fs *flag.FlagSet) *string {
+func typstFlag(fs *flagSet) *string {
 	help := "the typst binary to render with; empty looks for one on PATH and in ~/.pecheny_utils, then downloads it"
 	if wasmBuiltIn {
 		help += " (falling back to the built-in wasm)"
@@ -67,7 +66,7 @@ func typesetter(bin string) (handout.Typesetter, func(), error) {
 
 // wasmCacheDir is where wazero keeps typst compiled to machine code: a cold
 // compile is ~15s and a warm one half a second, and the cache survives a reboot
-// only if it is not on tmpfs. It holds compiled typst, never a package.
+// only if it is not on tmpfs. It holds compiled typst, never a packet.
 func wasmCacheDir() string {
 	if dir := os.Getenv("XY_WASM_CACHE"); dir != "" {
 		return dir

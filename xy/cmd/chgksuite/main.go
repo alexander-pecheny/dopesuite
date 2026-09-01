@@ -15,7 +15,7 @@ type command struct {
 // commands is the usage, and the order it is printed in — the same commands
 // chgksuite has, grouped as it groups them.
 var commands = []command{
-	{"parse", "<file.docx|file.txt>…", "read a package into .4s"},
+	{"parse", "<file.docx|file.txt>…", "read a packet into .4s"},
 	{},
 	{"compose docx", "<file.4s>…", "render questions to .docx"},
 	{"compose pdf", "<file.4s>…", "typeset questions to PDF"},
@@ -55,6 +55,8 @@ func main() {
 		err = handouts(os.Args[2:])
 	case "board", "trello":
 		err = boardCmd(os.Args[2:])
+	case "spec":
+		err = specCmd()
 	case "-h", "--help", "help":
 		usage()
 		return

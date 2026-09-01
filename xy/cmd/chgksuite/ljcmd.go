@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -12,12 +11,12 @@ import (
 	"xy/internal/chgk/lj"
 )
 
-// composeLJ is `chgksuite compose lj`: a package as the LiveJournal posts it
+// composeLJ is `chgksuite compose lj`: a packet as the LiveJournal posts it
 // becomes. Without --login it writes them out as HTML instead of publishing;
 // chgksuite always publishes, but a file is what you want to read first, and
 // the posting half here has never been run against the live service.
 func composeLJ(args []string) error {
-	fs := flag.NewFlagSet("compose lj", flag.ContinueOnError)
+	fs := newFlagSet("compose lj")
 	noSpoilers := fs.Bool("nospoilers", false, "print the answers openly instead of behind <lj-spoiler>")
 	splitTours := fs.Bool("splittours", false, "a post per tour")
 	genimp := fs.Bool("genimp", false, xystrings.Default.Chgkcli.Lj.GenimpFlag())
@@ -28,11 +27,11 @@ func composeLJ(args []string) error {
 	security := fs.String("security", "", "public, friends, or a friend-group mask; empty posts privately")
 	clientID := fs.String("imgur_client_id", override("imgur_client_id", ""), "upload pictures as this imgur client instead of chgksuite's")
 	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
-	merge := fs.Bool("merge", false, "export the input files as one package")
+	merge := fs.Bool("merge", false, "export the input files as one packet")
 	language := languageFlag(fs)
 	noBreak := noBreakFlags(fs)
 	config := configFlag(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := applyConfig(fs, *config); err != nil {

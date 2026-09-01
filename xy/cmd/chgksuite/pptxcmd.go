@@ -1,17 +1,16 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 
 	"xy/internal/chgk/pptx"
 )
 
-// composePptx is `chgksuite compose pptx`: a package as the deck it is played
+// composePptx is `chgksuite compose pptx`: a packet as the deck it is played
 // from.
 func composePptx(args []string) error {
-	fs := flag.NewFlagSet("compose pptx", flag.ContinueOnError)
+	fs := newFlagSet("compose pptx")
 	configPath := fs.String("pptx_config", "", "a pptx_config.toml of your own; empty is the one chgksuite ships")
 	template := fs.String("template", "", "a .pptx to build on; empty is chgksuite's own")
 	font := fs.String("font", override("font", override("font_face", "")), "a font family, or a font file to take one from; empty is the config's")
@@ -21,10 +20,10 @@ func composePptx(args []string) error {
 	language := languageFlag(fs)
 	optimizeSize := fs.String("optimize_size", override("optimize_size", "on"), "re-encode the pictures to shrink the file: on|off")
 	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
-	merge := fs.Bool("merge", false, "export the input files as one package")
+	merge := fs.Bool("merge", false, "export the input files as one packet")
 	noBreak := noBreakFlags(fs)
 	config := configFlag(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := applyConfig(fs, *config); err != nil {

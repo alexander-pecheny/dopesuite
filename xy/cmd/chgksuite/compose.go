@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"math/rand"
 	"os"
@@ -42,7 +41,7 @@ func compose(args []string) error {
 }
 
 func composeDocx(args []string) error {
-	fs := flag.NewFlagSet("compose docx", flag.ContinueOnError)
+	fs := newFlagSet("compose docx")
 	spoilers := fs.String("spoilers", override("spoilers", "off"), "hide answers: off|whiten|pagebreak|dots")
 	screenMode := fs.String("screen_mode", override("screen_mode", "off"), "export for screen: off|replace_all|add_versions|add_versions_columns")
 	noAnswers := fs.Bool("noanswers", false, "do not print answers")
@@ -51,7 +50,7 @@ func composeDocx(args []string) error {
 	smallerSource := fs.String("smaller_source_and_author", override("smaller_source_and_author", "on"), "set source and author 2pt below the body: on|off")
 	randomize := fs.Bool("randomize", false, "shuffle the questions")
 	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
-	merge := fs.Bool("merge", false, "export the input files as one package")
+	merge := fs.Bool("merge", false, "export the input files as one packet")
 	font := fs.String("font", override("font", override("font_face", "")), "a font family, or a font file to take one from; empty keeps the template's")
 	docxTemplate := fs.String("docx_template", "", "a .docx to build on; empty is the one chgksuite ships")
 	optimizeSize := fs.String("optimize_size", override("optimize_size", "on"), "re-encode the pictures to shrink the file: on|off")
@@ -60,7 +59,7 @@ func composeDocx(args []string) error {
 	// no-break pass through its standalone wrapper, which ignores the switches.
 	noBreakFlags(fs)
 	config := configFlag(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := applyConfig(fs, *config); err != nil {
@@ -177,7 +176,7 @@ func gameOf(name string) string {
 
 // languageFlag declares --language, which every compose subcommand takes, and
 // checks it against the sets i18n carries.
-func languageFlag(fs *flag.FlagSet) func() (string, string, error) {
+func languageFlag(fs *flagSet) func() (string, string, error) {
 	lang := fs.String("language", override("language", i18n.DefaultLanguage),
 		"which labels the export prints: "+strings.Join(i18n.Languages(), ", "))
 	file := fs.String("labels_file", "", "a labels TOML of your own, in place of the language's")
@@ -191,7 +190,7 @@ func languageFlag(fs *flag.FlagSet) func() (string, string, error) {
 
 // noBreakFlags declares --replace_no_break_spaces and --replace_no_break_hyphens,
 // which every compose subcommand takes, and reads them once it has parsed.
-func noBreakFlags(fs *flag.FlagSet) func() inline.NoBreak {
+func noBreakFlags(fs *flagSet) func() inline.NoBreak {
 	spaces := fs.String("replace_no_break_spaces", override("replace_no_break_spaces", "on"), "glue short words to what follows with a non-breaking space: on|off")
 	hyphens := fs.String("replace_no_break_hyphens", override("replace_no_break_hyphens", "on"), xystrings.Default.Chgkcli.Shared.ReplaceNoBreakHyphensFlag())
 	return func() inline.NoBreak {
@@ -199,7 +198,7 @@ func noBreakFlags(fs *flag.FlagSet) func() inline.NoBreak {
 	}
 }
 
-// source is one package to export: several files when --merge put them
+// source is one packet to export: several files when --merge put them
 // together, in which case the output is named after all of them.
 type source struct {
 	doc  fsource.Doc
@@ -225,7 +224,7 @@ func loadSources(files []string, merge bool) ([]source, error) {
 		return out, nil
 	}
 	// chgksuite resolves every name against the first file's directory, and so
-	// the merged package's pictures all come from there too.
+	// the merged packet's pictures all come from there too.
 	dir := filepath.Dir(files[0])
 	merged := source{dir: dir, path: filepath.Join(dir, mergedName(files)+filepath.Ext(files[0]))}
 	for _, in := range files {

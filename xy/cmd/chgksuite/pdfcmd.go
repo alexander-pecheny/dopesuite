@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 
@@ -13,7 +12,7 @@ import (
 // makes, typeset by typst. chgksuite downloads a typst binary the first time it
 // needs one; this one carries typst compiled to wasm and runs it in-process.
 func composePDF(args []string) error {
-	fs := flag.NewFlagSet("compose pdf", flag.ContinueOnError)
+	fs := newFlagSet("compose pdf")
 	device := fs.String("device", "desktop", "page size: desktop (A4) or mobile (phone-screen-sized)")
 	configPath := fs.String("pdf_config", "", "a typography config of your own; empty is the one chgksuite ships")
 	font := fs.String("font", override("font", override("font_face", "")), "font family; empty is the bundled Noto Sans")
@@ -21,10 +20,10 @@ func composePDF(args []string) error {
 	rawTypst := fs.Bool("rawtypst", false, "write the typst source beside the PDF")
 	typstBin := typstFlag(fs)
 	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
-	merge := fs.Bool("merge", false, "export the input files as one package")
+	merge := fs.Bool("merge", false, "export the input files as one packet")
 	noBreak := noBreakFlags(fs)
 	config := configFlag(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := applyConfig(fs, *config); err != nil {

@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -36,9 +35,9 @@ func boardCmd(args []string) error {
 // boardToken mints or stores the credential for a service: Trello hands one out
 // through its connect page, xy through /profile/tokens.
 func boardToken(args []string) error {
-	fs := flag.NewFlagSet("board token", flag.ContinueOnError)
+	fs := newFlagSet("board token")
 	noBrowser := fs.Bool("no-browser", false, "print the URL instead of opening it")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	serviceURL := "https://trello.com"
@@ -67,7 +66,7 @@ func boardToken(args []string) error {
 }
 
 func boardDownload(args []string) error {
-	fs := flag.NewFlagSet("board download", flag.ContinueOnError)
+	fs := newFlagSet("board download")
 	lists := fs.String("lists", "", "download only these lists, comma-separated")
 	si := fs.Bool("si", false, "also write a .docx per list, with the card captions as headings")
 	qb := fs.String("qb", "", "pair two lists into a quizbowl .docx: --qb tossups,bonuses")
@@ -81,7 +80,7 @@ func boardDownload(args []string) error {
 	font := fs.String("font", override("font", ""), "font family for the .docx outputs")
 	docxTemplate := fs.String("docx_template", "", "a .docx to build the .docx outputs on")
 	config := configFlag(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := applyConfig(fs, *config); err != nil {
@@ -135,11 +134,11 @@ func boardDownload(args []string) error {
 }
 
 func boardUpload(args []string) error {
-	fs := flag.NewFlagSet("board upload", flag.ContinueOnError)
+	fs := newFlagSet("board upload")
 	author := fs.Bool("author", false, "put the author in the card's caption too")
 	listName := fs.String("list_name", "", "the list to upload into; empty is the board's first")
 	config := configFlag(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := applyConfig(fs, *config); err != nil {
@@ -184,7 +183,7 @@ func boardUpload(args []string) error {
 	return nil
 }
 
-// sourcesToUpload expands a directory argument into the package files in it, as
+// sourcesToUpload expands a directory argument into the packet files in it, as
 // gui_board_upload does.
 func sourcesToUpload(args []string) ([]string, error) {
 	var out []string
@@ -202,7 +201,7 @@ func sourcesToUpload(args []string) ([]string, error) {
 			return nil, err
 		}
 		for _, e := range entries {
-			if !e.IsDir() && isPackageFile(e.Name()) {
+			if !e.IsDir() && isPacketFile(e.Name()) {
 				out = append(out, filepath.Join(arg, e.Name()))
 			}
 		}
@@ -210,7 +209,7 @@ func sourcesToUpload(args []string) ([]string, error) {
 	return out, nil
 }
 
-func isPackageFile(name string) bool {
+func isPacketFile(name string) bool {
 	for _, ext := range []string{".4s", ".si4s", ".br4s", ".tr4s"} {
 		if strings.HasSuffix(name, ext) {
 			return true

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,24 +14,24 @@ import (
 	"xy/internal/chgk/tg"
 )
 
-// composeTelegram is `chgksuite compose telegram`: post a package to a channel,
+// composeTelegram is `chgksuite compose telegram`: post a packet to a channel,
 // question by question, with its comments in the linked discussion group.
 func composeTelegram(args []string) error {
-	fs := flag.NewFlagSet("compose telegram", flag.ContinueOnError)
+	fs := newFlagSet("compose telegram")
 	s := xystrings.Default
 	channel := fs.String("tgchannel", "", "channel to post to: an id, a t.me link or @username")
 	chat := fs.String("tgchat", "", "the discussion group linked to that channel")
 	dryRun := fs.Bool("dry_run", false, "print what would be posted, post nothing")
 	noSpoilers := fs.Bool("nospoilers", false, "print the answers openly")
-	disableAsterisks := fs.Int("disable_asterisks_processing", 0, "leave * alone (non-zero)")
+	disableAsterisks := fs.Bool("disable_asterisks_processing", false, "leave * alone")
 	skipUntil := fs.Int("skip_until", 0, "start at question N")
-	addPolls := fs.Bool("add_polls", false, "post a poll after each question, tour and the package")
+	addPolls := fs.Bool("add_polls", false, "post a poll after each question, tour and the packet")
 	pollConfig := fs.String("poll_config", "", "poll config TOML (required with --add_polls)")
 	token := fs.String("token", "", "bot token; defaults to $CHGKSUITE_TG_TOKEN")
 	stopIfNoStats := fs.Bool("stop_if_no_stats", setting("stop_if_no_stats") == "true", s.Chgkcli.Telegram.StopIfNoStatsFlag())
 	language := languageFlag(fs)
 	config := configFlag(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := applyConfig(fs, *config); err != nil {
@@ -51,7 +50,7 @@ func composeTelegram(args []string) error {
 		Language:         lang,
 		LabelsFile:       labelsFile,
 		NoSpoilers:       *noSpoilers,
-		DisableAsterisks: *disableAsterisks != 0,
+		DisableAsterisks: *disableAsterisks,
 		SkipUntil:        *skipUntil,
 	}
 	var polls *tg.PollConfig

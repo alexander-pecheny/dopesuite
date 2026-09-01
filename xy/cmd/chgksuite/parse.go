@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,10 +19,10 @@ import (
 	"xy/internal/chgk/typo"
 )
 
-// parseCmd is `chgksuite parse`: a .docx or .txt package into the 4s file the
+// parseCmd is `chgksuite parse`: a .docx or .txt packet into the 4s file the
 // rest of the tool reads.
 func parseCmd(args []string) error {
-	fs := flag.NewFlagSet("parse", flag.ContinueOnError)
+	fs := newFlagSet("parse")
 	game := fs.String("game", "", "chgk (default), brain, si or troika")
 	encoding := fs.String("encoding", override("encoding", ""), "encoding of a .txt file ("+strings.Join(textenc.Encodings(), ", ")+"); guessed when empty")
 	defaultAuthor := fs.String("defaultauthor", "off", `credit questions with no author: "off", "file" (the file's name) or a name`)
@@ -35,14 +34,14 @@ func parseCmd(args []string) error {
 	noImagePrefix := fs.Bool("no_image_prefix", false, "name extracted images without the file's name in front")
 	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
 	labelsFile := fs.String("labels_file", "", "a labels TOML of your own, in place of the language's")
-	language := fs.String("language", override("language", i18n.DefaultLanguage), "which labels and field markers to read the package by: "+strings.Join(i18n.Languages(), ", "))
-	quotes := fs.String("typography_quotes", override("typography_quotes", "on"), "quotes: on, off or smart (a package that already types « » is left alone)")
+	language := fs.String("language", override("language", i18n.DefaultLanguage), "which labels and field markers to read the packet by: "+strings.Join(i18n.Languages(), ", "))
+	quotes := fs.String("typography_quotes", override("typography_quotes", "on"), "quotes: on, off or smart (a packet that already types « » is left alone)")
 	accents := fs.String("typography_accents", override("typography_accents", "on"), "stress marks: on, off, light (homoglyphs only) or smart")
 	dashes := fs.String("typography_dashes", override("typography_dashes", "on"), "dashes: on|off")
 	whitespace := fs.String("typography_whitespace", override("typography_whitespace", "on"), "trim and collapse whitespace: on|off")
 	percent := fs.String("typography_percent", override("typography_percent", "on"), "decode %-escapes; chgksuite reads this switch and decodes either way")
 	config := configFlag(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := applyConfig(fs, *config); err != nil {
@@ -116,7 +115,7 @@ func (a parseArgs) siOptions() textparse.SIOptions {
 	return textparse.SIOptions{Typo: a.typo, Language: a.language, LabelsFile: a.labelsFile}
 }
 
-// parseFile reads one package and writes its 4s beside it, returning the name.
+// parseFile reads one packet and writes its 4s beside it, returning the name.
 func parseFile(in string, a parseArgs) (string, error) {
 	game := a.game
 	if game == "" {
@@ -187,7 +186,7 @@ func parseText(text, game, in string, a parseArgs) (fsource.Doc, error) {
 	case "chgk", "brain":
 		if strings.EqualFold(filepath.Ext(in), ".txt") {
 			// chgk_parse_txt, in its order: db.chgk.info's own export is read as
-			// itself, and only a package written by hand gets the escaping.
+			// itself, and only a packet written by hand gets the escaping.
 			if textparse.IsDBExport(text) {
 				return textparse.ParseDB(text, dbFetcher(filepath.Dir(in))), nil
 			}
