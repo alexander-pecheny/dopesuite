@@ -112,7 +112,9 @@ internal/server/       package server — the whole HTTP server
                        under withWriteTx, the DM path is the same client. XY_BOT_TOKEN is the switch;
                        tgbot.AcquirePollLock keeps a second instance on this host off the same token,
                        and tgbot.ErrConflict is what Telegram says when the second one is elsewhere
-  boards.go            boards CRUD, keymeta (passphrase re-wrap), members, /api/collaborators (who I share boards with), ACL helpers
+  boards.go            boards CRUD, keymeta (passphrase re-wrap), /meta (role + plaintext name, what
+                       the passphrase overlay reads before a key exists), members, leaving a board,
+                       /api/collaborators (who I share boards with), ACL helpers
   boardinvites.go      invite links (ADR-0017): owner mints/revokes/deletes and decides join requests;
                        the invitee peeks at a code and joins. A link grants membership, never the key
   timeline.go          the Timeline's one writer (insertEvent: every kind's columns; appendEvent for the
@@ -325,7 +327,7 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        (panels.ts): one
                        registerPanel(...) call lists every ☰ and ⋯ entry in menu order,
                        and both menus render from it. Board-level actions that are not
-                       panels (rename/delete board, forget password, add/rename/delete
+                       panels (rename/delete/leave board, forget password, add/rename/delete
                        list, preview) are registered inline. Display sizes
                        (users.sizes, edited on /profile) arrive in the snapshot and become
                        CSS vars on <html>: --kanban-max-w, --klist-w, --kcard-lines (a

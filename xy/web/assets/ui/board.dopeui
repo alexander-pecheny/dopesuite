@@ -11,12 +11,19 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
   mount id="filterBar" kind="filter-bar" hidden
   mount id="kanban" kind="kanban" hidden
 
-  -- unlock overlay
+  -- unlock overlay. «Не помню пароль» offers the way off a board whose content
+  -- is already lost: deleting or leaving it needs the roster, never the key.
   modal id="unlockOverlay" label="Пароль доски" title="Пароль доски"
     form id="unlockForm" dir="col"
       password id="unlockPass" placeholder="Пароль доски" autocomplete="off" required autofocus
       button submit "Открыть"
     message id="unlockMessage"
+    row
+      button kind="ghost" id="unlockForgot" "Не помню пароль"
+    col id="unlockExit" gap="sm" hidden
+      hint kind="danger" "Содержимое доски без пароля не восстановить."
+      row
+        button kind="danger" id="unlockExitBtn" "Удалить доску"
 
   -- card detail overlay
   docoverlay id="cardOverlay" kind="detail"

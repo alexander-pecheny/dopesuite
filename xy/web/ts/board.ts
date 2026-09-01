@@ -43,6 +43,7 @@ import { anchorPopup } from "./popup.js";
 import { plural, xyMass } from "./massaction.js";
 import { xySearchIndex } from "./searchindex.js";
 import type { DataKey } from "./crypto.js";
+import { xyStore } from "./store.js";
 import type { OpBody } from "./store.js";
 import type { BoardCard, BoardLabel, BoardList, BoardState, CardLabel } from "./unlock.js";
 import type { MembersState } from "./boardmembers.js";
@@ -120,6 +121,9 @@ const unlock = createUnlock({
     form: byId<HTMLFormElement>("unlockForm"),
     pass: byId<HTMLInputElement>("unlockPass"),
     message: byId("unlockMessage"),
+    forgot: byId("unlockForgot"),
+    exit: byId("unlockExit"),
+    exitBtn: byId("unlockExitBtn"),
   },
   crypto: xyCrypto,
   sync: xySync,
@@ -127,6 +131,7 @@ const unlock = createUnlock({
   status: badge,
   applySizes: xySizes.apply,
   onDK: (k) => { dk = k; },
+  exit: { deleteBoard, leaveBoard },
   onState: (s) => {
     Object.assign(state, s);
     sessionMetaCache = new Map();
@@ -186,23 +191,45 @@ async function renameBoard(): Promise<void> {
   } catch (err) { setStatus("error"); alert("Не удалось переименовать: " + errMsg(err)); }
 }
 
-async function deleteBoard(): Promise<void> {
-  if (state.role !== "owner") { alert("Удалить доску может только её владелец."); return; }
+// Everything this device holds for a board, dropped together — the key, the
+// names it fed the person directory, its readable words (ADR-0008), and the
+// ciphertext Mirror, which is dead weight once the key that read it is gone.
+async function forgetLocal(): Promise<void> {
+  try { await xyCrypto.forgetDK(boardId); } catch (_) {}
+  people.forget(boardId);
+  await xySearchIndex.forget(boardId);
+  try { await xyStore.deleteSnapshot(boardId); } catch (_) {}
+}
+
+// deleteBoard and leaveBoard take the name rather than reading `state`: the
+// passphrase overlay offers both to someone who never unlocked the board and so
+// has no state at all. Neither act is owner-gated here — the menu offers each to
+// the role it belongs to and the server says the rule itself.
+async function deleteBoard(name: string): Promise<void> {
   if (!xySync.requireOnline("Удаление доски доступно только онлайн.")) return;
   const warn = "Доска со всеми списками, карточками и вложениями будет скрыта сразу и безвозвратно удалена через 14 дней.";
-  const name = (state.name || "").trim();
-  if (name) {
+  const want = (name || "").trim();
+  if (want) {
     const typed = prompt(`${warn}\n\nЧтобы подтвердить, введите название доски:`);
     if (typed == null) return;
-    if (typed.trim() !== name) { alert("Название не совпало — удаление отменено."); return; }
+    if (typed.trim() !== want) { alert("Название не совпало — удаление отменено."); return; }
   } else if (!confirm(`${warn} Продолжить?`)) return;
   try {
     await jdelete(`/api/boards/${boardId}`);
-    try { await xyCrypto.forgetDK(boardId); } catch (_) {}
-    people.forget(boardId);
-    await xySearchIndex.forget(boardId);
+    await forgetLocal();
     location.href = "/";
   } catch (err) { alert("Не удалось удалить: " + errMsg(err)); }
+}
+
+async function leaveBoard(name: string): Promise<void> {
+  if (!xySync.requireOnline("Выход из доски доступен только онлайн.")) return;
+  const what = (name || "").trim() ? `доску «${name.trim()}»` : "эту доску";
+  if (!confirm(`Покинуть ${what}? У остальных участников она останется, а чтобы вернуться, понадобится новое приглашение.`)) return;
+  try {
+    await jdelete(`/api/boards/${boardId}/membership`);
+    await forgetLocal();
+    location.href = "/";
+  } catch (err) { alert("Не удалось покинуть доску: " + errMsg(err)); }
 }
 
 // ---- members / sharing ----
@@ -1369,18 +1396,16 @@ registerPanel(
   },
   {
     id: "forget-password", menu: "board", icon: "lock", label: "Забыть пароль доски", title: "Забыть пароль доски на этом устройстве",
+    // Once the DK is gone the board is ciphertext with no key on this device, so
+    // everything derived from it goes too — the Search Index for a sharper reason
+    // (ADR-0008): plaintext outliving its key would keep the board readable with none.
     open: async () => {
-      await xyCrypto.forgetDK(boardId);
-      // The names this board contributed to the person directory outlive nothing:
-      // once the DK is gone its content is ciphertext with no key on this device.
-      // Its Search Index goes the same way, and for a sharper reason (ADR-0008):
-      // plaintext that outlived its key would keep the board readable with none.
-      people.forget(boardId);
-      await xySearchIndex.forget(boardId);
+      await forgetLocal();
       location.reload();
     },
   },
-  { id: "delete-board", menu: "board", icon: "trash-2", label: "Удалить доску", title: "Удалить доску со всеми списками и карточками", offered: () => state.role === "owner", open: () => { void deleteBoard(); } },
+  { id: "delete-board", menu: "board", icon: "trash-2", label: "Удалить доску", title: "Удалить доску со всеми списками и карточками", offered: () => state.role === "owner", open: () => { void deleteBoard(state.name); } },
+  { id: "leave-board", menu: "board", icon: "unlink", label: "Покинуть доску", title: "Выйти из доски — у остальных участников она останется", offered: () => state.role !== "" && state.role !== "owner", open: () => { void leaveBoard(state.name); } },
 
   // Карточки списка
   { id: "add-card", menu: "list", icon: "plus", label: "Добавить карточку", open: (s) => { void cardDetail.addCard(s.list); } },

@@ -508,6 +508,46 @@ func (s *server) handleDeleteBoard(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// boardMetaResponse: what a member may know about a board before its data key
+// exists. Both facts are plaintext either way; the passphrase overlay needs them
+// to offer the right way out to someone who has forgotten the password.
+type boardMetaResponse struct {
+	Role string `json:"role"`
+	Name string `json:"name"`
+}
+
+func (s *server) handleGetBoardMeta(w http.ResponseWriter, r *http.Request) {
+	_, bid, role, ok := s.requireBoard(w, r, "id")
+	if !ok {
+		return
+	}
+	var name sql.NullString
+	err := s.db.QueryRowContext(r.Context(), `select name from boards where id = ?`, bid).Scan(&name)
+	if handleErr(w, err) {
+		return
+	}
+	writeJSON(w, boardMetaResponse{Role: role, Name: name.String})
+}
+
+func (s *server) handleLeaveBoard(w http.ResponseWriter, r *http.Request) {
+	uid, bid, role, ok := s.requireBoard(w, r, "id")
+	if !ok {
+		return
+	}
+	if role == "owner" {
+		httpError(w, http.StatusForbidden, "владелец не может покинуть доску — её можно только удалить")
+		return
+	}
+	err := s.withWriteTx(r.Context(), "leave-board", func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `delete from board_members where board_id = ? and user_id = ?`, bid, uid)
+		return err
+	})
+	if handleErr(w, err) {
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // ---- keymeta (passphrase wrapping) ----
 
 type keymetaResponse struct {

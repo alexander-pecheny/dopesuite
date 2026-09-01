@@ -30,13 +30,17 @@ function makeDeps(opts = {}) {
   const dk = { key: "K", raw: new Uint8Array([1, 2, 3]) };
   const calls = {
     fetches: [], jposts: [], status: [], syncStatus: [], states: [], dks: [],
-    saved: [], sizes: [], unavailable: 0, cacheDK: null, started: 0,
+    saved: [], sizes: [], unavailable: 0, cacheDK: null, started: 0, exits: [],
   };
+  const node = () => ({ handlers: {}, addEventListener(type, h) { this.handlers[type] = h; } });
   const ui = {
     overlay: { hidden: true },
-    form: { handlers: {}, addEventListener(type, h) { this.handlers[type] = h; } },
+    form: node(),
     pass: { value: "", focused: 0, focus() { this.focused++; } },
     message: { textContent: "" },
+    forgot: { hidden: false, ...node() },
+    exit: { hidden: true },
+    exitBtn: { textContent: "", ...node() },
   };
   const deps = {
     boardId: 7,
@@ -65,6 +69,7 @@ function makeDeps(opts = {}) {
         calls.fetches.push(url);
         if (opts.fetchFails) throw new TypeError("network down");
         if (url === "/api/boards/7/keymeta") return { kdf_salt: "s", kdf_params: "{}", wrapped_key: "w", verify_token: "v" };
+        if (url === "/api/boards/7/meta") return { role: opts.role || "owner", name: "Доска" };
         if (url === "/api/boards/7") return structuredClone(opts.snap || SNAP);
         throw new Error("unexpected fetch " + url);
       },
@@ -78,6 +83,10 @@ function makeDeps(opts = {}) {
     onDK: (k) => calls.dks.push(k),
     onState: (state, info) => calls.states.push({ state, info }),
     onUnavailable: () => calls.unavailable++,
+    exit: {
+      deleteBoard: async (name) => { calls.exits.push(["delete", name]); },
+      leaveBoard: async (name) => { calls.exits.push(["leave", name]); },
+    },
   };
   return { deps, calls, ui, dk };
 }
@@ -257,4 +266,56 @@ test("boot forwards sync status to the badge seam", async () => {
   calls.onStatusCb({ online: false, pending: 3, syncing: false, deadletters: [] });
   assert.equal(calls.syncStatus.length, 2);
   assert.equal(calls.syncStatus[1].pending, 3);
+});
+
+// ---- «Не помню пароль»: the way off a board this device cannot open ----
+
+test("forgot password: the owner is offered the board's deletion", async () => {
+  const { deps, calls, ui } = makeDeps();
+  const u = createUnlock(deps);
+  await u.boot();
+  assert.equal(ui.overlay.hidden, false);
+
+  ui.forgot.handlers.click();
+  await drain();
+
+  assert.deepEqual(calls.fetches, ["/api/boards/7/meta"]);
+  assert.equal(ui.exitBtn.textContent, "Удалить доску");
+  assert.equal(ui.forgot.hidden, true);
+  assert.equal(ui.exit.hidden, false);
+
+  ui.exitBtn.handlers.click();
+  await drain();
+  assert.deepEqual(calls.exits, [["delete", "Доска"]]);
+});
+
+test("forgot password: an editor is offered the way out, not the board's deletion", async () => {
+  const { deps, calls, ui } = makeDeps({ role: "editor" });
+  const u = createUnlock(deps);
+  await u.boot();
+
+  ui.forgot.handlers.click();
+  await drain();
+  assert.equal(ui.exitBtn.textContent, "Покинуть доску");
+
+  ui.exitBtn.handlers.click();
+  await drain();
+  assert.deepEqual(calls.exits, [["leave", "Доска"]]);
+});
+
+test("an ordinary unlock never asks for /meta, and the button before it does nothing", async () => {
+  const { deps, calls, ui } = makeDeps();
+  const u = createUnlock(deps);
+  await u.boot();
+
+  ui.exitBtn.handlers.click(); // revealed nothing yet: no role, no act
+  await drain();
+  assert.deepEqual(calls.exits, []);
+
+  ui.pass.value = GOOD_PASS;
+  await ui.form.handlers.submit({ preventDefault() {} });
+  await drain();
+
+  assert.equal(ui.overlay.hidden, true);
+  assert.deepEqual(calls.fetches, ["/api/boards/7/keymeta", "/api/boards/7"]);
 });

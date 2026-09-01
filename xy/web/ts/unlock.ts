@@ -17,6 +17,12 @@ export interface DataKey {
   key: CryptoKey;
   raw: Uint8Array<ArrayBuffer>;
 }
+// What a member may read before holding a key: /meta answers the overlay's one
+// question — who am I here, and what is this board called.
+export interface BoardMeta {
+  role: string;
+  name: string;
+}
 export interface BoardKeymeta {
   kdf_salt: string;
   kdf_params: string;
@@ -149,13 +155,18 @@ export interface Snapshot {
 }
 
 // ---- injected seams ----
-// The unlock overlay's four nodes, passed as elements (structural types, so
-// tests fake them as plain objects).
+// The unlock overlay's nodes, passed as elements (structural types, so tests
+// fake them as plain objects).
 export interface UnlockUI {
   overlay: { hidden: boolean | string };
   form: { addEventListener(type: "submit", handler: (e: { preventDefault(): void }) => void): void };
   pass: { value: string; focus(): void };
   message: { textContent: string | null };
+  // «Не помню пароль» and what it reveals: one danger button whose verb depends
+  // on the role, which nothing on the page knows before a key exists.
+  forgot: { hidden: boolean | string; addEventListener(type: "click", handler: () => void): void };
+  exit: { hidden: boolean | string };
+  exitBtn: { textContent: string | null; addEventListener(type: "click", handler: () => void): void };
 }
 // The slices of xyCrypto / xySync / xyApp the flow uses. Injected rather than
 // imported so the tests need neither the vendored scrypt nor IndexedDB; the
@@ -197,6 +208,13 @@ export interface UnlockDeps {
   status: UnlockStatus;
   applySizes(sizes: Sizes): void;
   onDK(dk: DataKey): void;
+  // The way off a board this device cannot open. board.js owns both acts (the
+  // call plus everything the device must forget); the overlay only asks who the
+  // caller is and offers the matching verb.
+  exit: {
+    deleteBoard(name: string): Promise<void>;
+    leaveBoard(name: string): Promise<void>;
+  };
   // offline: the state was rendered from the local mirror, not a fresh server
   // snapshot. Covers render + notif badge + members roster + deep link.
   onState(state: BoardState, info: { offline: boolean }): void;
@@ -255,6 +273,27 @@ export function createUnlock(deps: UnlockDeps): Unlock {
       ui.message.textContent = err instanceof Error ? err.message : String(err);
     }
   });
+
+  // «Не помню пароль». /meta is asked on the click rather than at boot so an
+  // ordinary unlock still costs one request, and so the keymeta an attacker
+  // would grind offline stays where it is: behind the submit.
+  let exitAct: (() => Promise<void>) | null = null;
+  ui.forgot.addEventListener("click", () => {
+    void (async () => {
+      ui.message.textContent = "";
+      try {
+        const meta = (await net.fetchJSON(`/api/boards/${boardId}/meta`)) as BoardMeta;
+        const owner = meta.role === "owner";
+        ui.exitBtn.textContent = owner ? "Удалить доску" : "Покинуть доску";
+        exitAct = () => (owner ? deps.exit.deleteBoard(meta.name) : deps.exit.leaveBoard(meta.name));
+        ui.forgot.hidden = true;
+        ui.exit.hidden = false;
+      } catch (err) {
+        ui.message.textContent = err instanceof Error ? err.message : String(err);
+      }
+    })();
+  });
+  ui.exitBtn.addEventListener("click", () => { void exitAct?.(); });
 
   // Board names are plaintext server-side metadata now (only the board's data stays
   // encrypted). Backfill a legacy board's name once we've decrypted it on load — best-

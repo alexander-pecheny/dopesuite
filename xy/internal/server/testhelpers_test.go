@@ -44,6 +44,15 @@ on conflict(board_id, user_id) do nothing`, boardID, userID)
 	}
 }
 
+func meUserID(t *testing.T, c *apiClient) int64 {
+	t.Helper()
+	resp := c.do("GET", "/api/auth/me", nil)
+	mustStatus(t, resp, 200)
+	var me meResponse
+	c.decode(resp, &me)
+	return me.UserID
+}
+
 // registerUser provisions a fresh logged-in client via the telegram handshake:
 // mint a code, the simulated bot confirms it (a new telegram), then claim `name`
 // as the username.

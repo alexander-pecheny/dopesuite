@@ -135,6 +135,14 @@ Board it appends. Per-user state (mentions, read watermarks) and Tombstones stay
 behind, and members ride along as advisory names only.
 _Avoid_: backup (that is litestream's job), Board Bundle (it need not hold one)
 
+**Membership**:
+A person's place on a Board's roster — wholly separate from holding its key
+(ADR-0017). Granted by the owner or an Invite Link; ended by the owner, or by
+the member themselves, with or without the passphrase: forgetting a Board's
+password costs you its content, never your way off it. The owner has no
+Membership to end — they delete the Board instead.
+_Avoid_: access, permission
+
 **Invite Link**:
 A URL that admits its holder to one Board as an editor, Telegram's invite link:
 minted by the owner and pasted into a chat. It may cap uses, expire, or hold the
