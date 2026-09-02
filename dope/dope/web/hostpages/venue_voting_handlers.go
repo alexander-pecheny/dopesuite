@@ -14,11 +14,6 @@ import (
 	"dope/dope/web/route"
 )
 
-// The Голосование handlers: the Representative's writes on the Слот page, and
-// the public ballot behind the voting link.
-
-// loadVotingView is the Слот page's voting section: the poll if there is one,
-// else the candidates buff offers for the Слот's date.
 func (s *Server) loadVotingView(r *http.Request, slot venues.Slot) (VotingView, error) {
 	view := VotingView{}
 	voting, err := venues.SlotVoting(r.Context(), s.h.Engine().DB, slot.ID)
@@ -54,7 +49,8 @@ func (s *Server) playableCandidates(ctx context.Context, slot venues.Slot) []ven
 	return out
 }
 
-func (s *Server) handleVotingSave(w http.ResponseWriter, r *http.Request, festID int64) error {
+func (s *Server) handleVotingSave(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	festID := sc.FestID
 	_, slot, err := s.slotOf(r, festID)
 	if err != nil {
 		return err
@@ -91,12 +87,11 @@ func (s *Server) handleVotingSave(w http.ResponseWriter, r *http.Request, festID
 			r.Form.Get("opens_at"), r.Form.Get("closes_at"), candidates)
 	})
 	if err != nil {
-		return s.renderSlotPage(w, r, festID, err.Error(), "")
+		return s.renderSlotPage(w, r, sc, err.Error(), "")
 	}
 	return s.redirectToSlot(w, r, festID, slot.ID)
 }
 
-// candidateByID is a tournament added by hand; buff names it when it knows it.
 func (s *Server) candidateByID(ctx context.Context, id int64) venues.Candidate {
 	if t, ok := s.h.Engine().BuffMirror().Tournament(ctx, id); ok {
 		return venues.Candidate{ID: t.ID, Name: t.Name, Type: t.Type}
@@ -104,7 +99,8 @@ func (s *Server) candidateByID(ctx context.Context, id int64) venues.Candidate {
 	return venues.Candidate{ID: id, Name: "Турнир " + strconv.FormatInt(id, 10)}
 }
 
-func (s *Server) handleVotingBallot(w http.ResponseWriter, r *http.Request, festID int64) error {
+func (s *Server) handleVotingBallot(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	festID := sc.FestID
 	_, slot, err := s.slotOf(r, festID)
 	if err != nil {
 		return err
@@ -127,8 +123,6 @@ func (s *Server) handleVotingBallot(w http.ResponseWriter, r *http.Request, fest
 	}
 	return s.redirectToSlot(w, r, festID, slot.ID)
 }
-
-// ---- /vote/{token} -----------------------------------------------------------
 
 func (s *Server) renderVotePage(w http.ResponseWriter, r *http.Request, token, errMsg string) error {
 	voting, err := venues.VotingByToken(r.Context(), s.h.Engine().DB, token)
@@ -169,7 +163,6 @@ func (s *Server) renderVotePage(w http.ResponseWriter, r *http.Request, token, e
 	return nil
 }
 
-// votingState maps a poll's window onto the three states a link can be in.
 func votingState(v venues.Voting, now time.Time) venues.RegState {
 	switch {
 	case v.Closed(now):

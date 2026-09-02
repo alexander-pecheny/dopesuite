@@ -342,6 +342,7 @@ CREATE TABLE slot_ballots(
   choice_json text not null default '[]',
   discarded integer not null default 0,
   created_at text not null,
+  updated_at text not null default '',
   unique(voting_id, user_id)
 );
 
