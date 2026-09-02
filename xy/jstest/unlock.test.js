@@ -30,7 +30,7 @@ function makeDeps(opts = {}) {
   const dk = { key: "K", raw: new Uint8Array([1, 2, 3]) };
   const calls = {
     fetches: [], jposts: [], status: [], syncStatus: [], states: [], dks: [],
-    saved: [], sizes: [], unavailable: 0, cacheDK: null, started: 0, exits: [],
+    saved: [], sizes: [], unavailable: 0, cacheDK: null, started: 0, exits: [], names: [],
   };
   const node = () => ({ handlers: {}, addEventListener(type, h) { this.handlers[type] = h; } });
   const ui = {
@@ -87,6 +87,7 @@ function makeDeps(opts = {}) {
       deleteBoard: async (name) => { calls.exits.push(["delete", name]); },
       leaveBoard: async (name) => { calls.exits.push(["leave", name]); },
     },
+    onName: (name) => calls.names.push(name),
   };
   return { deps, calls, ui, dk };
 }
@@ -280,6 +281,7 @@ test("forgot password: the owner is offered the board's deletion", async () => {
   await drain();
 
   assert.deepEqual(calls.fetches, ["/api/boards/7/meta"]);
+  assert.deepEqual(calls.names, ["Доска"]); // the header can stop saying «Доска»
   assert.equal(ui.exitBtn.textContent, "Удалить доску");
   assert.equal(ui.forgot.hidden, true);
   assert.equal(ui.exit.hidden, false);
@@ -318,4 +320,5 @@ test("an ordinary unlock never asks for /meta, and the button before it does not
 
   assert.equal(ui.overlay.hidden, true);
   assert.deepEqual(calls.fetches, ["/api/boards/7/keymeta", "/api/boards/7"]);
+  assert.deepEqual(calls.names, []);
 });

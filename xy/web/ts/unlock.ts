@@ -215,6 +215,9 @@ export interface UnlockDeps {
     deleteBoard(name: string): Promise<void>;
     leaveBoard(name: string): Promise<void>;
   };
+  // The name, the moment /meta hands it over: until then a locked board's header
+  // reads «Доска», and it is the board about to be deleted.
+  onName(name: string): void;
   // offline: the state was rendered from the local mirror, not a fresh server
   // snapshot. Covers render + notif badge + members roster + deep link.
   onState(state: BoardState, info: { offline: boolean }): void;
@@ -286,6 +289,7 @@ export function createUnlock(deps: UnlockDeps): Unlock {
         const owner = meta.role === "owner";
         ui.exitBtn.textContent = owner ? "Удалить доску" : "Покинуть доску";
         exitAct = () => (owner ? deps.exit.deleteBoard(meta.name) : deps.exit.leaveBoard(meta.name));
+        if (meta.name) deps.onName(meta.name);
         ui.forgot.hidden = true;
         ui.exit.hidden = false;
       } catch (err) {

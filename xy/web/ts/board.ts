@@ -132,6 +132,10 @@ const unlock = createUnlock({
   applySizes: xySizes.apply,
   onDK: (k) => { dk = k; },
   exit: { deleteBoard, leaveBoard },
+  onName: (name) => {
+    titleNode.textContent = name;
+    document.title = name + " · xy";
+  },
   onState: (s) => {
     Object.assign(state, s);
     sessionMetaCache = new Map();
