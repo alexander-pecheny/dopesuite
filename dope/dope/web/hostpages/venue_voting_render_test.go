@@ -47,15 +47,20 @@ func TestSlotVotingSectionOffersTheCandidatesThenTheTally(t *testing.T) {
 		"Вид: три по порядку · до 2026-09-04 18:00",
 		`/host/fest/tbilisi/slot/7/voting/ballot/5`,
 		"Отклонить",
-		"Список турниров заморожен",
+		"По голосованию уже голосовали",
+		`name="kind" value="ranked"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q", want)
 		}
 	}
-	// A frozen poll no longer offers to change its candidates.
+	// A frozen poll offers to change neither its candidates nor what a ballot
+	// means; it only carries them back.
 	if strings.Contains(body, `name="extra_candidate"`) {
 		t.Error("a frozen poll must not take new candidates")
+	}
+	if strings.Contains(body, `type="radio" name="kind"`) {
+		t.Error("a frozen poll must not offer another kind")
 	}
 }
 
