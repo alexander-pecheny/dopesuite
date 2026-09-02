@@ -37,11 +37,11 @@ export function mountDatetimeField(field: HTMLElement): void {
     quiet();
     picker.value = asPicker(text.value);
     try {
-      // showPicker needs a user gesture and throws without one; a browser that
-      // lacks it opens the picker on focus instead.
+      // showPicker needs a user gesture and throws without one. A browser that
+      // lacks it gets no picker from here: focusing the hidden input would take
+      // the caret out of the text field and make it untypeable.
       const withPicker = picker as HTMLInputElement & {showPicker?: () => void};
-      if (typeof withPicker.showPicker === "function") withPicker.showPicker();
-      else picker.focus();
+      withPicker.showPicker?.();
     } catch {
       // Not a gesture, or the browser refused: the field is still typeable.
     }

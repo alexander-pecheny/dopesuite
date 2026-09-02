@@ -26,7 +26,7 @@ const DEBOUNCE_MS = 150;
 export function autocomplete(
   input: HTMLInputElement,
   choices: ChoiceSource,
-  onPick?: (choice: Choice) => void,
+  onPick?: (choice: Choice, query: string) => void,
   options: AutocompleteOptions = {},
 ): void {
   let pop: HTMLElement | null = null;
@@ -34,6 +34,7 @@ export function autocomplete(
   let active = -1;
   let seq = 0;
   let timer = 0;
+  let picked: string | null = null;
 
   const dismiss = (): void => {
     if (pop) pop.remove();
@@ -50,10 +51,15 @@ export function autocomplete(
   };
 
   const pick = (choice: Choice): void => {
+    // What was typed, before the choice overwrites it: a row that means «none
+    // of these» needs the query, not the sentinel it carries.
+    const query = input.value;
+    picked = choice.value;
+    window.clearTimeout(timer);
     input.value = choice.value;
     input.dispatchEvent(new Event("input", {bubbles: true}));
     dismiss();
-    onPick?.(choice);
+    onPick?.(choice, query);
   };
 
   const draw = (hits: Choice[]): void => {
@@ -122,6 +128,10 @@ export function autocomplete(
 
   input.addEventListener("input", () => {
     window.clearTimeout(timer);
+    // The value a pick just wrote is not a search: asking for it would reopen
+    // the popup under the answer the person already gave.
+    if (input.value === picked) return;
+    picked = null;
     timer = window.setTimeout(ask, options.debounceMs ?? DEBOUNCE_MS);
   });
   input.addEventListener("focus", ask);

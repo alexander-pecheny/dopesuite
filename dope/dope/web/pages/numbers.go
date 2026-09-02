@@ -17,8 +17,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"dope/dope/web/route"
 )
 
 type hostFestNumberRow struct {
@@ -41,11 +39,9 @@ type hostFestNumbersData struct {
 // the two mass-import <dialog> modals are driven by numbers.js (keyed on the ids
 // and data-has-numbers here); the DSL page carries no script.
 func hostNumbersDoc(data hostFestNumbersData) *ui.Doc {
-	ref := data.Fest.Ref()
-	s := dopestrings.Default
 	page := []ui.Item{
-		ui.Title(s.Numbers.Page.Title(data.Fest.Title)), ui.PagePublic, ui.Classicscripts("dist/numbers.js"),
-		ui.Publictopbar(Trail(FestCrumbs(ref, data.Fest.Title), s.Numbers.Page.Crumb())),
+		ui.Title(data.Fest.Title + " · номера команд"), ui.PagePublic, ui.Classicscripts("dist/numbers.js"),
+		ui.Publictopbar(Trail(FestCrumbs(data.Fest.HostBase(), data.Fest.Title), dopestrings.Default.Numbers.Page.Crumb())),
 	}
 	if data.Error != "" {
 		page = append(page, ui.Empty(ui.Text(data.Error)))
@@ -54,7 +50,7 @@ func hostNumbersDoc(data hostFestNumbersData) *ui.Doc {
 		page = append(page, ui.Note(ui.Text(data.Notice)))
 	}
 	if len(data.Rows) == 0 {
-		page = append(page, ui.Empty(ui.Text(s.Numbers.Page.Empty())))
+		page = append(page, ui.Empty(ui.Text(dopestrings.Default.Numbers.Page.Empty())))
 		return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
 	}
 
@@ -62,19 +58,19 @@ func hostNumbersDoc(data hostFestNumbersData) *ui.Doc {
 	if data.HasNumbers {
 		hasNum = "1"
 	}
-	base := "/host/fest/" + ref + "/numbers"
+	base := data.Fest.HostBase() + "/numbers"
 
 	actions := []ui.Item{ui.Wrap()}
 	if data.HasNumbers {
 		actions = append(actions, ui.Button(ui.Submit(), ui.ID("numbers-clear-btn"),
-			ui.Formaction(base+"/clear"), ui.Formnovalidate(), ui.Text(s.Numbers.Action.Clear())))
+			ui.Formaction(base+"/clear"), ui.Formnovalidate(), ui.Text(dopestrings.Default.Numbers.Action.Clear())))
 	}
 	actions = append(actions,
-		ui.Button(ui.Submit(), ui.ID("numbers-auto-btn"), ui.Formaction(base+"/auto"), ui.Formnovalidate(), ui.Text(s.Numbers.Action.Auto())),
-		ui.Button(ui.ID("numbers-import-btn"), ui.Text(s.Numbers.Action.Import())),
+		ui.Button(ui.Submit(), ui.ID("numbers-auto-btn"), ui.Formaction(base+"/auto"), ui.Formnovalidate(), ui.Text(dopestrings.Default.Numbers.Action.Auto())),
+		ui.Button(ui.ID("numbers-import-btn"), ui.Text("Импорт номеров")),
 	)
 	if data.HasNumbers {
-		actions = append(actions, ui.Button(ui.ID("numbers-edit-btn"), ui.Text(s.Numbers.Action.Replace())))
+		actions = append(actions, ui.Button(ui.ID("numbers-edit-btn"), ui.Text(dopestrings.Default.Numbers.Action.Replace())))
 	}
 
 	rows := make([]ui.Item, 0, len(data.Rows))
@@ -92,11 +88,12 @@ func hostNumbersDoc(data hostFestNumbersData) *ui.Doc {
 	form := []ui.Item{ui.ID("numbers-form"), ui.Action(base), ui.Data("has-numbers", hasNum)}
 	form = append(form,
 		ui.Row(actions...),
-		ui.Note(ui.ID("numbers-help"), ui.Hidden(), ui.Text(s.Numbers.Help.Edit())),
+		ui.Note(ui.ID("numbers-help"), ui.Hidden(), ui.Text(
+			dopestrings.Default.Numbers.Help.Edit())),
 		ui.Numberlist(rows...),
 		ui.Row(ui.ID("numbers-save"), ui.Hidden(),
-			ui.Button(ui.Submit(), ui.Text(s.Numbers.Action.Save())),
-			ui.Button(ui.ID("numbers-cancel-btn"), ui.Text(s.Numbers.Action.Cancel())),
+			ui.Button(ui.Submit(), ui.Text(dopestrings.Default.Numbers.Action.Save())),
+			ui.Button(ui.ID("numbers-cancel-btn"), ui.Text("Отмена")),
 		),
 	)
 	page = append(page, ui.Numbersform(form...))
@@ -110,12 +107,12 @@ func (s *Server) RenderHostFestNumbers(w http.ResponseWriter, r *http.Request, f
 		return
 	}
 	if err != nil {
-		route.WriteError(w, r, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	data, err := s.buildHostFestNumbersData(r.Context(), festID, errMsg, notice, override)
 	if err != nil {
-		route.WriteError(w, r, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	data.Fest = fest
@@ -236,7 +233,7 @@ func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 	}
 	teams, err := numbering.LoadFestTeams(r.Context(), s.h.Engine().DB, festID)
 	if err != nil {
-		route.WriteError(w, r, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if len(teams) == 0 {
@@ -260,17 +257,17 @@ func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 		hasTeam := row.TeamID != 0
 		if !hasTeam {
 			if hasNum {
-				s.RenderHostFestNumbers(w, r, festID, dopestrings.Default.Numbers.Error.RowNoTeam(strconv.Itoa(row.Index)), "", override)
+				s.RenderHostFestNumbers(w, r, festID, fmt.Sprintf("Строка %d: укажите команду или удалите номер.", row.Index), "", override)
 				return
 			}
 			continue
 		}
 		if !validIDs[row.TeamID] {
-			s.RenderHostFestNumbers(w, r, festID, dopestrings.Default.Numbers.Error.RowForeignTeam(strconv.Itoa(row.Index)), "", override)
+			s.RenderHostFestNumbers(w, r, festID, fmt.Sprintf("Строка %d: команда не из этого феста.", row.Index), "", override)
 			return
 		}
 		if prev, ok := teamToRow[row.TeamID]; ok {
-			s.RenderHostFestNumbers(w, r, festID, dopestrings.Default.Numbers.Error.TeamTwoRows(strconv.Itoa(prev), strconv.Itoa(row.Index)), "", override)
+			s.RenderHostFestNumbers(w, r, festID, fmt.Sprintf("Команда выбрана сразу в строках %d и %d.", prev, row.Index), "", override)
 			return
 		}
 		teamToRow[row.TeamID] = row.Index
@@ -280,11 +277,11 @@ func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 		}
 		n, err := strconv.Atoi(numTxt)
 		if err != nil || n <= 0 || n > numbering.MaxNumber {
-			s.RenderHostFestNumbers(w, r, festID, dopestrings.Default.Numbers.Error.RowRange(strconv.Itoa(row.Index), strconv.Itoa(numbering.MaxNumber)), "", override)
+			s.RenderHostFestNumbers(w, r, festID, fmt.Sprintf("Строка %d: номер должен быть целым от 1 до %d.", row.Index, numbering.MaxNumber), "", override)
 			return
 		}
 		if prev, ok := numberToRow[n]; ok {
-			s.RenderHostFestNumbers(w, r, festID, dopestrings.Default.Numbers.Error.NumberTwoRows(strconv.Itoa(n), strconv.Itoa(prev), strconv.Itoa(row.Index)), "", override)
+			s.RenderHostFestNumbers(w, r, festID, fmt.Sprintf("Номер %d указан сразу в строках %d и %d.", n, prev, row.Index), "", override)
 			return
 		}
 		numberToRow[n] = row.Index
@@ -297,7 +294,7 @@ func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 	}
 	notice := dopestrings.Default.Numbers.Notice.Saved()
 	if len(assignments) < len(teams) {
-		notice = dopestrings.Default.Numbers.Notice.SavedPartial(strconv.Itoa(len(teams) - len(assignments)))
+		notice = fmt.Sprintf("Сохранено. Осталось без номера: %d.", len(teams)-len(assignments))
 	}
 	s.RenderHostFestNumbers(w, r, festID, "", notice, nil)
 }
@@ -309,7 +306,7 @@ func (s *Server) HandleHostAutoFestNumbers(w http.ResponseWriter, r *http.Reques
 	}
 	teams, err := numbering.LoadFestTeams(r.Context(), s.h.Engine().DB, festID)
 	if err != nil {
-		route.WriteError(w, r, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if len(teams) == 0 {
@@ -396,7 +393,7 @@ func (s *Server) SaveFestNumbers(reqCtx context.Context, festID int64, assignmen
 			entryRemap = nil
 		}
 		// Every flat Protocol carries the universal Number, so a reassignment
-		// flows into each one's document; KSI's answers follow their team.
+		// flows into each one's document; КСИ's answers follow their team.
 		if updates, err = roster.PropagateRosterTx(ctx, tx, festID, teams, entryRemap); err != nil {
 			return err
 		}

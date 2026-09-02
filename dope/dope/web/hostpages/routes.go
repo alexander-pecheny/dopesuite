@@ -18,11 +18,16 @@ func (s *Server) HandleHostRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if target, found := s.hostTreeFor(r); found {
-		if target == "" {
+		switch {
+		case target == "":
 			http.NotFound(w, r)
-			return
+		case r.Method == http.MethodGet || r.Method == http.MethodHead:
+			http.Redirect(w, r, target, http.StatusMovedPermanently)
+		default:
+			// A 301 turns a write into a GET, which drops it on the floor
+			// silently; a form must post to the tree it was rendered under.
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
-		http.Redirect(w, r, target, http.StatusMovedPermanently)
 		return
 	}
 	s.routes().Mux.ServeHTTP(w, r)

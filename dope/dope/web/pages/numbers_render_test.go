@@ -43,3 +43,31 @@ func TestHostNumbersDocRenders(t *testing.T) {
 		t.Errorf("row 2 participant_id should be empty:\n%s", body)
 	}
 }
+
+// A Venue is edited under /host/venue, and the router 301s a GET between the
+// trees: a form left pointing at /host/fest would lose its POST.
+func TestHostNumbersDocPostsToItsOwnTree(t *testing.T) {
+	data := hostFestNumbersData{
+		Fest:       view.HostFest{ID: 7, Slug: "pecheny-venue", Title: "Площадка", IsVenue: true},
+		HasNumbers: true,
+		Rows:       []hostFestNumberRow{{Index: 1, Number: "1", TeamID: 11, TeamLabel: "Альфа"}},
+	}
+	html, err := ui.Render(hostNumbersDoc(data))
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	body := string(html)
+	if strings.Contains(body, "/host/fest/") {
+		t.Errorf("venue numbers page still points at /host/fest:\n%s", body)
+	}
+	for _, want := range []string{
+		`action="/host/venue/pecheny-venue/numbers"`,
+		`formaction="/host/venue/pecheny-venue/numbers/clear"`,
+		`formaction="/host/venue/pecheny-venue/numbers/auto"`,
+		`href="/host/venue/pecheny-venue"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("venue numbers page missing %q", want)
+		}
+	}
+}

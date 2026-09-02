@@ -35,8 +35,8 @@ func HostCrumbs() []dopeui.Item {
 
 // FestCrumbs is a fest's dashboard within the editing tree, the prefix every
 // per-fest page (teams, players, games, imports, numbers, audit) hangs off.
-func FestCrumbs(ref, title string) []dopeui.Item {
-	return append(HostCrumbs(), dopeui.Crumb(dopeui.Href("/host/fest/"+ref), dopeui.Text(title)))
+func FestCrumbs(base, title string) []dopeui.Item {
+	return append(HostCrumbs(), dopeui.Crumb(dopeui.Href(base), dopeui.Text(title)))
 }
 
 // AdminCrumbs is the admin tree's root: 🏠 / Admin.

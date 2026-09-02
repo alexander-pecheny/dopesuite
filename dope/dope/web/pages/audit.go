@@ -3,12 +3,9 @@ package pages
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 
 	ui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"
-
-	"dope/dope/web/route"
 )
 
 // The fest-level "audit" page is now an index of the fest's games, each linking
@@ -24,14 +21,13 @@ type auditGameRow struct {
 
 // festAuditIndexDoc builds the fest's per-game history index page: a link list of
 // the fest's games, each pointing at its own edit history + revert.
-func festAuditIndexDoc(festID int64, festTitle string, games []auditGameRow) *ui.Doc {
-	s := dopestrings.Default
-	sect := []ui.Item{ui.Note(ui.Text(s.Journal.Index.Note()))}
+func festAuditIndexDoc(base, festTitle string, games []auditGameRow) *ui.Doc {
+	sect := []ui.Item{ui.Note(ui.Text(dopestrings.Default.Journal.Index.Note()))}
 	if len(games) > 0 {
 		rows := make([]ui.Item, 0, len(games))
 		for _, g := range games {
 			row := []ui.Item{
-				ui.Href(fmt.Sprintf("/host/fest/%d/audit/%d", festID, g.ID)),
+				ui.Href(fmt.Sprintf("%s/audit/%d", base, g.ID)),
 				ui.Listtitle(ui.Text(g.Title)),
 			}
 			if g.Code != "" {
@@ -41,11 +37,11 @@ func festAuditIndexDoc(festID int64, festTitle string, games []auditGameRow) *ui
 		}
 		sect = append(sect, ui.List(rows...))
 	} else {
-		sect = append(sect, ui.Empty(ui.Text(s.Journal.Index.Empty())))
+		sect = append(sect, ui.Empty(ui.Text(dopestrings.Default.Journal.Index.Empty())))
 	}
 	return &ui.Doc{Nodes: []ui.Node{
-		ui.Page(ui.Title(s.Journal.Index.Title()), ui.PagePublic,
-			ui.Publictopbar(Trail(FestCrumbs(strconv.FormatInt(festID, 10), festTitle), s.Journal.Index.Title())),
+		ui.Page(ui.Title(dopestrings.Default.Journal.Index.Title()), ui.PagePublic,
+			ui.Publictopbar(Trail(FestCrumbs(base, festTitle), dopestrings.Default.Journal.Index.Title())),
 			ui.Section(sect...),
 		),
 	}}
@@ -53,10 +49,15 @@ func festAuditIndexDoc(festID int64, festTitle string, games []auditGameRow) *ui
 
 // RenderHostFestAudit renders the fest's per-game history index page.
 func (s *Server) RenderHostFestAudit(w http.ResponseWriter, r *http.Request, festID int64, errMsg, notice string) {
+	fest, err := s.h.LoadHostFestHeader(r.Context(), festID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	rows, err := s.h.Engine().DB.QueryContext(r.Context(),
 		`select id, code, coalesce(title, code) from games where fest_id = ? order by position, id`, festID)
 	if err != nil {
-		route.WriteError(w, r, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
@@ -64,10 +65,10 @@ func (s *Server) RenderHostFestAudit(w http.ResponseWriter, r *http.Request, fes
 	for rows.Next() {
 		var g auditGameRow
 		if err := rows.Scan(&g.ID, &g.Code, &g.Title); err != nil {
-			route.WriteError(w, r, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		games = append(games, g)
 	}
-	RenderDoc(w, s.h.Engine().AssetETags, festAuditIndexDoc(festID, FestTitle(r.Context(), s.h.Engine().DB, festID), games))
+	RenderDoc(w, s.h.Engine().AssetETags, festAuditIndexDoc(fest.HostBase(), fest.Title, games))
 }
