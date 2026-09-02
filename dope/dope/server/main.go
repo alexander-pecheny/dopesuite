@@ -55,6 +55,9 @@ func init() { session.ProdEnvVar = "DOPE_ENV" }
 type server struct {
 	eng          core.Engine
 	SendTelegram telegramSender
+	// RatingHTTP is the client the one live rating.chgk.info call uses; a test
+	// stubs it, production gets the bounded default.
+	RatingHTTP *http.Client
 
 	// Static ("DDoS lockdown") mode cache — see static_mode.go. The gauges/state
 	// live on eng (StaticMode/ReqRate/…); staticMu guards the per-route HTML
@@ -198,6 +201,7 @@ func Main() {
 	srv.authRoutes(srv.api())
 	mux.Handle("/api/auth/", srv.api().Mux)
 	mux.Handle("/api/buff/", srv.api().Mux)
+	mux.Handle("/api/rating/", srv.api().Mux)
 	mux.HandleFunc("/events", srv.handleEvents)
 	mux.HandleFunc("/host-events", srv.handleHostEvents)
 	mux.HandleFunc("/favicon.ico", srv.assets.ServeRoot("favicon.ico", "image/x-icon"))

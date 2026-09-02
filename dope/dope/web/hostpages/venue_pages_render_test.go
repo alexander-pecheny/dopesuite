@@ -1,6 +1,7 @@
 package hostpages
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 
@@ -171,5 +172,38 @@ func TestVenueDashDocListsSlotsAndAccess(t *testing.T) {
 	viewer := renderPublic(t, venueDashDoc(venueDashData{Venue: venues.Venue{ID: 1, Title: "Площадка"}}))
 	if strings.Contains(viewer, "Новый слот") || strings.Contains(viewer, `id="access"`) {
 		t.Error("a host without manage rights gets no forms")
+	}
+}
+
+// A refused create form comes back open, with what was typed and why it was
+// refused; a fresh one is blank and closed.
+func TestHostLandingKeepsARefusedForm(t *testing.T) {
+	form := url.Values{
+		"title": {"Площадка Тбилиси"}, "city": {"Тбилиси"}, "slug": {"bad_slug"},
+		"rating_venue_id": {"6826"}, "description": {"Играем"}, "is_public": {"1"},
+	}
+	body := renderPublic(t, hostLoggedInDoc(hostLandingData{
+		LoggedIn: true, Username: "tester",
+		Error: "Slug: " + SlugTitle,
+		Open:  "venue", Form: form,
+	}))
+	for _, want := range []string{
+		`value="Площадка Тбилиси"`,
+		`value="Тбилиси"`,
+		`value="bad_slug"`,
+		`value="6826"`,
+		`>Играем</textarea>`,
+		`type="checkbox" name="is_public" value="1" checked`,
+		SlugTitle,
+		`pattern="` + SlugPattern + `"`,
+		`data-rating-venue-load`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	fresh := renderPublic(t, hostLoggedInDoc(hostLandingData{LoggedIn: true, Username: "tester"}))
+	if strings.Contains(fresh, `value="bad_slug"`) || strings.Contains(fresh, "checked") {
+		t.Error("a fresh form must be blank")
 	}
 }

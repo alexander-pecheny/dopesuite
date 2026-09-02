@@ -36,7 +36,8 @@ func venueCrumbs(v venues.Venue) []ui.Item {
 
 func venueDashDoc(data venueDashData) *ui.Doc {
 	v := data.Venue
-	page := []ui.Item{ui.Title(v.Title + " · площадка"), ui.PagePublic, ui.Classicscripts("dist/pageforms.js")}
+	page := []ui.Item{ui.Title(v.Title + " · площадка"), ui.PagePublic,
+		ui.Classicscripts("dist/pageforms.js dist/roster-editor.js")}
 	if v.IsPublic {
 		page = append(page,
 			ui.Data("jump-label", "Страница площадки"),
@@ -80,13 +81,11 @@ func venueSettingsForm(v venues.Venue) *ui.Element {
 		pub = append(pub, ui.Checked())
 	}
 	return ui.Form(ui.DirCol, ui.Method("post"), ui.Action(VenueBase(v)), ui.Autocomplete("off"),
-		ui.Field(ui.Label("Название"), ui.Textfield(ui.Name("title"), ui.Value(v.Title), ui.Required())),
-		ui.Field(ui.Label("Город"), ui.Textfield(ui.Name("city"), ui.Value(v.City))),
+		ui.Field(ui.Label("Название"), ui.Textfield(ui.Name("title"), ui.Value(v.Title), ui.Required(), ui.Data("venue-name", ""))),
+		ui.Field(ui.Label("Город"), ui.Textfield(ui.Name("city"), ui.Value(v.City), ui.Data("venue-city", ""))),
 		ui.Field(ui.Label("Описание (markdown)"), ui.Editor(ui.Name("description"), ui.Rows("6"), ui.Text(v.Description))),
-		ui.Field(ui.Label("Slug (URL вида /venue/{slug})"),
-			ui.Textfield(ui.Name("slug"), ui.Value(v.Slug), ui.Pattern("[a-z0-9-]+"), ui.Placeholder("my-venue"))),
-		ui.Field(ui.Label("ID площадки на rating.chgk.info"),
-			ui.Textfield(ui.Name("rating_venue_id"), ui.Value(ratingID), ui.Inputmode("numeric"))),
+		slugField("Slug (URL вида /venue/{slug})", v.Slug),
+		ratingVenueField(ratingID),
 		ui.Checkbox(pub...),
 		ui.Row(ui.Button(ui.Submit(), ui.Text("Сохранить"))),
 	)
@@ -358,19 +357,50 @@ func slotDownloadsSection(data slotPageData) *ui.Element {
 	)
 }
 
-func venueCreateForm() *ui.Element {
-	return ui.Details(
-		ui.Summary(ui.Btn(), ui.Text("Создать площадку")),
+// SlugPattern and SlugTitle are what util.ValidateSlug takes, said to the
+// browser so a bad slug is refused before the form is posted.
+const (
+	// The hyphen is escaped: a bare one inside a class is a syntax error under
+	// the v flag a browser compiles `pattern` with, and a pattern it cannot
+	// compile is one it silently ignores.
+	SlugPattern = `[a-z0-9\-]*[a-z\-][a-z0-9\-]*`
+	SlugTitle   = "Только латиница в нижнем регистре, цифры и дефис; не одни цифры"
+)
+
+func slugField(label, value string) *ui.Element {
+	return ui.Field(ui.Label(label),
+		ui.Textfield(ui.Name("slug"), ui.Value(value), ui.Pattern(SlugPattern),
+			ui.Title(SlugTitle), ui.Placeholder("my-venue")),
+		ui.Hint(ui.Text(SlugTitle)))
+}
+
+func venueCreateForm(data hostLandingData) *ui.Element {
+	items := []ui.Item{ui.Summary(ui.Btn(), ui.Text("Создать площадку"))}
+	if data.Open == "venue" {
+		items = append([]ui.Item{ui.Open()}, items...)
+		if data.Error != "" {
+			items = append(items, ui.Hint(ui.HintDanger, ui.Text(data.Error)))
+		}
+	}
+	return ui.Details(append(items,
 		ui.Form(ui.DirCol, ui.Method("post"), ui.Action("/host/venue"), ui.Autocomplete("off"),
-			ui.Field(ui.Label("Название"), ui.Textfield(ui.Name("title"), ui.Required())),
-			ui.Field(ui.Label("Город"), ui.Textfield(ui.Name("city"))),
-			ui.Field(ui.Label("Slug (URL вида /venue/{slug})"),
-				ui.Textfield(ui.Name("slug"), ui.Pattern("[a-z0-9-]+"), ui.Placeholder("my-venue"))),
-			ui.Field(ui.Label("ID площадки на rating.chgk.info"),
-				ui.Textfield(ui.Name("rating_venue_id"), ui.Inputmode("numeric"))),
-			ui.Field(ui.Label("Описание (markdown)"), ui.Editor(ui.Name("description"), ui.Rows("4"))),
-			ui.Checkbox(ui.Name("is_public"), ui.Value("1"), ui.Text("Публичная")),
+			ui.Field(ui.Label("Название"), ui.Textfield(ui.Name("title"), ui.Value(data.kept("title")), ui.Required(), ui.Data("venue-name", ""))),
+			ui.Field(ui.Label("Город"), ui.Textfield(ui.Name("city"), ui.Value(data.kept("city")), ui.Data("venue-city", ""))),
+			slugField("Slug (URL вида /venue/{slug})", data.kept("slug")),
+			ratingVenueField(data.kept("rating_venue_id")),
+			ui.Field(ui.Label("Описание (markdown)"), ui.Editor(ui.Name("description"), ui.Rows("4"), ui.Text(data.kept("description")))),
+			checkboxKept("is_public", "Публичная", data.checked("is_public")),
 			ui.Row(ui.Button(ui.Submit(), ui.Text("Создать"))),
-		),
-	)
+		))...)
+}
+
+// ratingVenueField is the venue id with the button that fetches what
+// rating.chgk.info calls it — venues are not in buff's mirror, so this is the
+// one live call, and it happens only on click.
+func ratingVenueField(value string) *ui.Element {
+	return ui.Field(ui.Label("ID площадки на rating.chgk.info"),
+		ui.Row(ui.SpaceSM, ui.AlignCenter, ui.Wrap(),
+			ui.Textfield(ui.Name("rating_venue_id"), ui.Value(value), ui.Inputmode("numeric"), ui.Data("rating-venue", "")),
+			ui.Button(ui.Ghost, ui.Small(), ui.Data("rating-venue-load", ""), ui.Text("Загрузить данные")),
+		))
 }

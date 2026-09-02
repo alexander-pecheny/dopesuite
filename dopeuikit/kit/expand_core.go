@@ -44,7 +44,9 @@ var coreExpanders = map[string]ExpandFunc{
 	"muted":   func(c *ExpandCtx, p *Element) []Node { return one(inlineMuted(c, p).(*Element)) },
 	"form":    expandForm,
 	"textfield": func(c *ExpandCtx, p *Element) []Node {
-		return one(Input(c, "text", p, "name", "placeholder", "autocomplete", "spellcheck", "autocapitalize", "autocorrect", "value", "maxlength", "minlength", "inputmode", "pattern", "list"))
+		// title is what a browser shows when a pattern refuses the value, so a
+		// field that constrains its input can say what it takes.
+		return one(Input(c, "text", p, "name", "placeholder", "autocomplete", "spellcheck", "autocapitalize", "autocorrect", "value", "maxlength", "minlength", "inputmode", "pattern", "list", "title"))
 	},
 	"password": func(c *ExpandCtx, p *Element) []Node {
 		return one(Input(c, "password", p, "name", "placeholder", "autocomplete", "spellcheck", "autocapitalize", "autocorrect", "value", "maxlength", "minlength", "inputmode", "pattern"))

@@ -317,8 +317,61 @@ export function mountRosterEditors(doc: Document): void {
   doc.querySelectorAll<HTMLElement>("[data-roster-editor]").forEach(mountRosterEditor);
   doc.querySelectorAll<HTMLInputElement>("input[data-buff-team]").forEach(mountBuffTeamField);
   doc.querySelectorAll<HTMLInputElement>("input[data-buff-tournament]").forEach(mountBuffTournamentField);
+  doc.querySelectorAll<HTMLElement>("[data-rating-venue-load]").forEach(mountRatingVenueLoader);
 }
 
 if (typeof document !== "undefined") {
   mountRosterEditors(document);
+}
+
+// «Загрузить данные»: rating.chgk.info knows what a venue is called and where,
+// and buff does not mirror venues — so the form fetches it on click.
+const CYRILLIC: Record<string, string> = {
+  а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i",
+  й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t",
+  у: "u", ф: "f", х: "h", ц: "c", ч: "ch", ш: "sh", щ: "sch", ъ: "", ы: "y", ь: "",
+  э: "e", ю: "yu", я: "ya",
+};
+
+// slugify is the URL a venue gets when its Representative did not name one.
+export function slugify(name: string): string {
+  const latin = [...name.toLowerCase()].map((ch) => CYRILLIC[ch] ?? ch).join("");
+  const slug = latin.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
+  return /[a-z]/.test(slug) ? slug : "";
+}
+
+export function mountRatingVenueLoader(button: HTMLElement): void {
+  const form = button.closest("form");
+  if (!form) return;
+  const field = (name: string): HTMLInputElement | null =>
+    form.querySelector<HTMLInputElement>(`[data-${name}]`);
+  const message = document.createElement("p");
+  message.className = "hint";
+  button.after(message);
+  button.addEventListener("click", () => {
+    const id = Number((field("rating-venue")?.value || "").trim());
+    if (!id) {
+      message.textContent = "Сначала укажите id площадки";
+      return;
+    }
+    message.textContent = "Загружаем…";
+    void fetch(`/api/rating/venue/${encodeURIComponent(id)}`, {headers: {Accept: "application/json"}})
+      .then(async (response) => {
+        if (!response.ok) throw new Error((await response.text()).trim());
+        return (await response.json()) as {name?: string; city?: string};
+      })
+      .then((venue) => {
+        const name = field("venue-name");
+        const city = field("venue-city");
+        const slug = form.querySelector<HTMLInputElement>('input[name="slug"]');
+        if (name && venue.name) name.value = venue.name;
+        if (city && venue.city) city.value = venue.city;
+        // A slug the Representative typed is theirs; an empty one is derived.
+        if (slug && !slug.value.trim() && venue.name) slug.value = slugify(venue.name);
+        message.textContent = "";
+      })
+      .catch((error: Error) => {
+        message.textContent = error.message || "Не удалось загрузить";
+      });
+  });
 }
