@@ -31,7 +31,7 @@ type venueDashData struct {
 }
 
 func venueCrumbs(v venues.Venue) []ui.Item {
-	return append(pages.HostCrumbs(), ui.Crumb(ui.Href("/host/fest/"+v.Ref()), ui.Text(v.Title)))
+	return append(pages.HostCrumbs(), ui.Crumb(ui.Href(VenueBase(v)), ui.Text(v.Title)))
 }
 
 func venueDashDoc(data venueDashData) *ui.Doc {
@@ -56,12 +56,12 @@ func venueDashDoc(data venueDashData) *ui.Doc {
 	}
 	page = append(page, venueSlotsSection(data))
 	if data.CanManage {
-		page = append(page, hostDashAccessSection(hostFestDashData{Access: data.Access}, v.Ref()))
+		page = append(page, hostDashAccessSection(hostFestDashData{Access: data.Access}, VenueBase(v)))
 	}
 	if data.CanDelete {
 		page = append(page, ui.Section(
 			ui.Subhead(ui.Text("Удаление")),
-			ui.Form(ui.DirCol, ui.Method("post"), ui.Action("/host/fest/"+v.Ref()+"/delete"), ui.Autocomplete("off"),
+			ui.Form(ui.DirCol, ui.Method("post"), ui.Action(VenueBase(v)+"/delete"), ui.Autocomplete("off"),
 				ui.Data("confirm", "Удалить площадку? Все слоты, заявки и результаты будут удалены."),
 				ui.Row(ui.Button(ui.Danger, ui.Submit(), ui.Text("Удалить площадку"))),
 			),
@@ -79,7 +79,7 @@ func venueSettingsForm(v venues.Venue) *ui.Element {
 	if v.IsPublic {
 		pub = append(pub, ui.Checked())
 	}
-	return ui.Form(ui.DirCol, ui.Method("post"), ui.Action("/host/fest/"+v.Ref()), ui.Autocomplete("off"),
+	return ui.Form(ui.DirCol, ui.Method("post"), ui.Action(VenueBase(v)), ui.Autocomplete("off"),
 		ui.Field(ui.Label("Название"), ui.Textfield(ui.Name("title"), ui.Value(v.Title), ui.Required())),
 		ui.Field(ui.Label("Город"), ui.Textfield(ui.Name("city"), ui.Value(v.City))),
 		ui.Field(ui.Label("Описание (markdown)"), ui.Editor(ui.Name("description"), ui.Rows("6"), ui.Text(v.Description))),
@@ -93,7 +93,7 @@ func venueSettingsForm(v venues.Venue) *ui.Element {
 }
 
 func venueSlotsSection(data venueDashData) *ui.Element {
-	ref := data.Venue.Ref()
+	ref := VenueBase(data.Venue)
 	sect := []ui.Item{ui.Subhead(ui.Text("Слоты"))}
 	if len(data.Slots) == 0 {
 		sect = append(sect, ui.Empty(ui.Text("Слотов пока нет.")))
@@ -121,7 +121,7 @@ func venueSlotsSection(data venueDashData) *ui.Element {
 	if data.CanManage {
 		sect = append(sect, ui.Details(
 			ui.Summary(ui.Btn(), ui.Text("Новый слот")),
-			ui.Form(ui.DirCol, ui.Method("post"), ui.Action("/host/fest/"+ref+"/slot/new"), ui.Autocomplete("off"),
+			ui.Form(ui.DirCol, ui.Method("post"), ui.Action(ref+"/slot/new"), ui.Autocomplete("off"),
 				ui.Field(ui.Label("Дата и время (YYYY-MM-DD HH:MM)"),
 					ui.Textfield(ui.Name("starts_at"), ui.Placeholder("2026-09-04 19:00"), ui.Required())),
 				ui.Field(ui.Label("ID турнира на rating.chgk.info (можно выбрать позже)"),
@@ -166,8 +166,12 @@ func slotTitle(slot venues.Slot) string {
 	return slot.StartsAt
 }
 
+// VenueBase is the Representative's tree for one Площадка; a Venue is a Fest
+// of its own kind and has host pages of its own.
+func VenueBase(v venues.Venue) string { return "/host/venue/" + v.Ref() }
+
 func slotBase(v venues.Venue, slot venues.Slot) string {
-	return "/host/fest/" + v.Ref() + "/slot/" + strconv.FormatInt(slot.ID, 10)
+	return VenueBase(v) + "/slot/" + strconv.FormatInt(slot.ID, 10)
 }
 
 func slotPageDoc(data slotPageData) *ui.Doc {

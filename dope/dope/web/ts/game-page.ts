@@ -45,9 +45,11 @@ export interface GameBreadcrumbsOptions {
   currentTitle?: string;
   festHref?: string;
   gameHref?: string;
-  // Host pages sit under /host/fest/…, so their trail carries the My fests
-  // crumb the URL does; the public viewer's does not.
+  // Host pages sit under /host/…, so their trail carries the My fests crumb
+  // the URL does; the public viewer's does not. A Слот hangs off Площадки the
+  // way its server-rendered pages do.
   host?: boolean;
+  venue?: boolean;
 }
 
 // renderGameBreadcrumbs paints the header path, mirroring the URL: 🏠, then one
@@ -64,6 +66,7 @@ export function renderGameBreadcrumbs(root: HTMLElement | null | undefined, opti
     { text: "", href: "/", home: true },
   ];
   if (options.host) trail.push({ text: S.screen.trail.host(), href: "/host" });
+  else if (options.venue) trail.push({ text: "Площадки", href: "/venues" });
   trail.push({ text: festTitle, href: options.festHref || "/" });
   if (options.gameHref && currentTitle && currentTitle !== gameTitle) {
     trail.push({ text: gameTitle, href: options.gameHref });
@@ -134,7 +137,7 @@ export function mountUnnumberedBanner(festID: string | number | null | undefined
   });
   bar.append(S.screen.banner.unassignedLead());
   const link = document.createElement("a");
-  link.href = `/host/fest/${festID}/numbers`;
+  link.href = `${festBase()}/numbers`;
   link.textContent = S.screen.banner.assign();
   Object.assign(link.style, {color: "inherit", fontWeight: "600", textDecoration: "underline"});
   bar.appendChild(link);
@@ -187,28 +190,33 @@ export interface GameRoute {
   festID?: string;
   gameID?: string;
   apiBase?: string;
+  // A Слот at a площадка is watched under /venue/… and run under
+  // /host/venue/…; the API is the фест's either way.
+  venue?: boolean;
 }
 
-export function parseGameRoute(pathname: string = window.location.pathname): GameRoute {
-  const host = pathname.match(/^\/host\/fest\/([^/]+)\/game\/([^/]+)/);
-  if (host) {
-    return {
-      viewer: false,
-      festID: host[1],
-      gameID: host[2],
-      apiBase: `/api/fest/${host[1]}/games/${host[2]}`,
-    };
-  }
-  const pub = pathname.match(/^\/fest\/([^/]+)\/game\/([^/]+)/);
-  if (pub) {
-    return {
-      viewer: true,
-      festID: pub[1],
-      gameID: pub[2],
-      apiBase: `/api/fest/${pub[1]}/games/${pub[2]}`,
-    };
-  }
-  return {};
+function currentPathname(): string {
+  return typeof window === "undefined" ? "" : String(window.location?.pathname || "");
+}
+
+// festBase is the tree the Game's fest lives in — what a crumb and the
+// unnumbered banner link into.
+export function festBase(route: GameRoute = parseGameRoute()): string {
+  const kind = route.venue ? "venue" : "fest";
+  return `${route.viewer ? "" : "/host"}/${kind}/${route.festID || ""}`;
+}
+
+export function parseGameRoute(pathname: string = currentPathname()): GameRoute {
+  const match = pathname.match(/^(\/host)?\/(fest|venue)\/([^/]+)\/game\/([^/]+)/);
+  if (!match) return {};
+  const [, host, kind, festID, gameID] = match;
+  return {
+    viewer: !host,
+    venue: kind === "venue",
+    festID,
+    gameID,
+    apiBase: `/api/fest/${festID}/games/${gameID}`,
+  };
 }
 
 export interface LocalCache {

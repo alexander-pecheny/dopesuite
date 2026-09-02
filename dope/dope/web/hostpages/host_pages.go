@@ -92,7 +92,7 @@ func hostLandingVenues(data hostLandingData) *ui.Element {
 	} else {
 		rows := make([]ui.Item, 0, len(data.Venues))
 		for _, v := range data.Venues {
-			row := []ui.Item{ui.Href("/host/fest/" + v.Ref()), ui.Listtitle(ui.Text(v.Title))}
+			row := []ui.Item{ui.Href(VenueBase(v)), ui.Listtitle(ui.Text(v.Title))}
 			sub := v.City
 			if !v.IsPublic {
 				if sub != "" {

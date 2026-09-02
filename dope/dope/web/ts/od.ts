@@ -8,7 +8,7 @@ import {resultsTeamCell} from "./standings.js";
 import {buildRosterView} from "./fest-roster.js";
 import type {PatchPath} from "./state-sync.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
-import {parseGameRoute} from "./game-page.js";
+import {festBase, parseGameRoute} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
 import {bindScrollEdges, createTeamNameOverflowController, fitScrollFade, installVirtualKeypad, modalSubmitButton, openModal, renderTabBar} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
@@ -312,7 +312,7 @@ function invalidateShootoutCaches(): void {
 
 function numbersPageURL(): string {
   if (!route.festID) return "#";
-  return `/host/fest/${route.festID}/numbers`;
+  return `${festBase(route)}/numbers`;
 }
 
 function invalidateTabCache(...tabs: string[]): void {

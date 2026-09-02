@@ -11,7 +11,7 @@ import {createLiveEvents, createScopedWriter, createSyncIndicator, createHostPre
 import S from "./i18nstrings.js";
 import type {ClientRecorder, HostPresence, LiveEvents, PatchPath, ScopedWriter, SyncIndicator} from "./state-sync.js";
 import {createStatusReporter, createViewerCounter} from "./widgets.js";
-import {createGameDataLoader, fetchGameData, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, renderGameBreadcrumbs} from "./game-page.js";
+import {createGameDataLoader, festBase, fetchGameData, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, parseGameRoute, renderGameBreadcrumbs} from "./game-page.js";
 import type {GameDataSnapshot, GameRoute} from "./game-page.js";
 import {cssEscape} from "./cells.js";
 
@@ -108,9 +108,12 @@ export function mountGamePage(spec: GameShellSpec): GameShell {
     const currentTitle = String(chrome.currentTitle || "").trim();
     document.title = festTitle ? `${currentTitle || gameTitle} · ${festTitle}` : currentTitle || gameTitle;
     if (!spec.breadcrumbsNode || !spec.festID) return;
+    // The kind of tree comes from the URL, the fest from the spec.
+    const venue = Boolean(parseGameRoute().venue);
     renderGameBreadcrumbs(spec.breadcrumbsNode, {
       host: !viewer,
-      festHref: viewer ? `/fest/${spec.festID}` : `/host/fest/${spec.festID}`,
+      venue,
+      festHref: festBase({viewer, venue, festID: spec.festID}),
       festTitle: festTitle || S.screen.title.fest(),
       gameHref: chrome.gameHref || "",
       gameTitle,

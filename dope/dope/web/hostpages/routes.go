@@ -7,6 +7,7 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
 	"dope/dope/domain/venues"
+	"dope/dope/storage/store"
 	"dope/dope/web/route"
 )
 
@@ -16,7 +17,52 @@ func (s *Server) HandleHostRouter(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/host", http.StatusSeeOther)
 		return
 	}
+	if target, found := s.hostTreeFor(r); found {
+		if target == "" {
+			http.NotFound(w, r)
+			return
+		}
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+		return
+	}
 	s.routes().Mux.ServeHTTP(w, r)
+}
+
+// hostTreeFor keeps each kind of Fest in its own tree: a Venue under /host/fest
+// is moved to /host/venue, an ordinary fest under /host/venue is not there at
+// all. It answers the redirect target, "" for a 404, and found=false to let the
+// table serve the request.
+func (s *Server) hostTreeFor(r *http.Request) (string, bool) {
+	from, to := "/host/fest/", "/host/venue/"
+	wantVenue := true
+	if strings.HasPrefix(r.URL.Path, to) {
+		from, to, wantVenue = to, from, false
+	} else if !strings.HasPrefix(r.URL.Path, from) {
+		return "", false
+	}
+	rest := strings.TrimPrefix(r.URL.Path, from)
+	ref, tail, _ := strings.Cut(rest, "/")
+	if ref == "" {
+		return "", false
+	}
+	festID, err := store.ResolveFestID(r.Context(), s.h.Engine().DB, ref)
+	if err != nil || festID <= 0 {
+		return "", false
+	}
+	if venues.IsVenue(r.Context(), s.h.Engine().DB, festID) != wantVenue {
+		return "", false
+	}
+	if !wantVenue {
+		return "", true
+	}
+	target := to + ref
+	if tail != "" {
+		target += "/" + tail
+	}
+	if r.URL.RawQuery != "" {
+		target += "?" + r.URL.RawQuery
+	}
+	return target, true
 }
 
 // routes is the /host/ table. The host pages' denial policy: no session or no
@@ -37,7 +83,22 @@ func denyHost(w http.ResponseWriter, r *http.Request, d route.Denial) {
 
 func (s *Server) buildRoutes() *route.Table {
 	t := route.New(s.h.Engine(), denyHost)
-	const fest, game = "/host/fest/{fest}", "/host/fest/{fest}/game/{game}"
+	t.Handle("POST /host/fest", route.Session, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+		s.handleHostCreateFest(w, r, sc.User)
+		return nil
+	})
+	t.Handle("POST /host/venue", route.Session, s.handleHostCreateVenue)
+	// A Venue is a Fest of its own kind, so it answers to every per-fest page
+	// under a tree of its own; the handlers are the same, only the patterns
+	// differ, and the router keeps each kind on its own prefix.
+	s.handleFestRoutes(t, "/host/fest/{fest}")
+	s.handleFestRoutes(t, "/host/venue/{venue}")
+	s.handleSlotRoutes(t, "/host/venue/{venue}")
+	return t
+}
+
+func (s *Server) handleFestRoutes(t *route.Table, fest string) {
+	game := fest + "/game/{game}"
 	page := func(f func(http.ResponseWriter, *http.Request, int64)) route.Handler {
 		return func(w http.ResponseWriter, r *http.Request, sc route.Scope) error { f(w, r, sc.FestID); return nil }
 	}
@@ -47,11 +108,6 @@ func (s *Server) buildRoutes() *route.Table {
 			return nil
 		}
 	}
-	t.Handle("POST /host/fest", route.Session, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-		s.handleHostCreateFest(w, r, sc.User)
-		return nil
-	})
-	t.Handle("POST /host/venue", route.Session, s.handleHostCreateVenue)
 	t.Handle("GET "+fest, route.Member, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 		if venues.IsVenue(r.Context(), s.h.Engine().DB, sc.FestID) {
 			return s.renderVenueDashboard(w, r, sc, "", "")
@@ -66,23 +122,6 @@ func (s *Server) buildRoutes() *route.Table {
 		s.handleHostUpdateFest(w, r, sc.FestID)
 		return nil
 	})
-	const slot = fest + "/slot/{slot}"
-	t.Handle("POST "+fest+"/slot/new", route.Manager, s.handleHostCreateSlot)
-	t.Handle("GET "+slot, route.Member, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-		return s.renderSlotPage(w, r, sc, "", "")
-	})
-	t.Handle("POST "+slot, route.Manager, s.handleSlotSave)
-	t.Handle("POST "+slot+"/token", route.Manager, s.handleSlotToken)
-	t.Handle("POST "+slot+"/clone", route.Manager, s.handleSlotClone)
-	t.Handle("POST "+slot+"/application/{app}/status", route.Manager, s.handleApplicationStatus)
-	t.Handle("POST "+slot+"/application/{app}/edit", route.Manager, s.handleApplicationEdit)
-	t.Handle("POST "+slot+"/application/{app}/revert", route.Manager, s.handleApplicationRevert)
-	t.Handle("POST "+slot+"/contested/accept", route.Editor, s.handleContestedAccept)
-	t.Handle("POST "+slot+"/contested/delete", route.Editor, s.handleContestedDelete)
-	t.Handle("POST "+slot+"/voting", route.Manager, s.handleVotingSave)
-	t.Handle("POST "+slot+"/voting/ballot/{ballot}", route.Manager, s.handleVotingBallot)
-	t.Handle("GET "+slot+"/export/tours.xlsx", route.Member, s.handleSlotToursExport)
-	t.Handle("GET "+slot+"/export/players.xlsx", route.Member, s.handleSlotPlayersExport)
 	t.Handle("GET "+fest+"/teams", route.Manager, page(s.renderHostFestTeams))
 	t.Handle("GET "+fest+"/players", route.Manager, page(s.renderHostFestPlayers))
 	t.Handle("POST "+fest+"/players/overrides", route.Manager, page(s.handleHostAddPlayerOverride))
@@ -121,9 +160,28 @@ func (s *Server) buildRoutes() *route.Table {
 		s.pages().RenderGameJournal(w, r, id, gid, "", "")
 	}))
 	t.Handle("POST "+fest+"/audit/{game}/revert", route.Manager, gamePage(s.pages().HandleGameRevert))
-	// /host/fest/{id}/game/{gid}[/...] → the game page (ek/od/si/brain) for hosts.
+	// {fest}/game/{gid}[/...] → the game page (ek/od/si/brain) for hosts.
 	t.Handle("GET "+fest+"/game/{rest...}", route.Member, s.serveHostGamePage)
-	return t
+}
+
+func (s *Server) handleSlotRoutes(t *route.Table, venue string) {
+	slot := venue + "/slot/{slot}"
+	t.Handle("POST "+venue+"/slot/new", route.Manager, s.handleHostCreateSlot)
+	t.Handle("GET "+slot, route.Member, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+		return s.renderSlotPage(w, r, sc, "", "")
+	})
+	t.Handle("POST "+slot, route.Manager, s.handleSlotSave)
+	t.Handle("POST "+slot+"/token", route.Manager, s.handleSlotToken)
+	t.Handle("POST "+slot+"/clone", route.Manager, s.handleSlotClone)
+	t.Handle("POST "+slot+"/application/{app}/status", route.Manager, s.handleApplicationStatus)
+	t.Handle("POST "+slot+"/application/{app}/edit", route.Manager, s.handleApplicationEdit)
+	t.Handle("POST "+slot+"/application/{app}/revert", route.Manager, s.handleApplicationRevert)
+	t.Handle("POST "+slot+"/contested/accept", route.Editor, s.handleContestedAccept)
+	t.Handle("POST "+slot+"/contested/delete", route.Editor, s.handleContestedDelete)
+	t.Handle("POST "+slot+"/voting", route.Manager, s.handleVotingSave)
+	t.Handle("POST "+slot+"/voting/ballot/{ballot}", route.Manager, s.handleVotingBallot)
+	t.Handle("GET "+slot+"/export/tours.xlsx", route.Member, s.handleSlotToursExport)
+	t.Handle("GET "+slot+"/export/players.xlsx", route.Member, s.handleSlotPlayersExport)
 }
 
 func (s *Server) serveHostGamePage(w http.ResponseWriter, r *http.Request, sc route.Scope) error {

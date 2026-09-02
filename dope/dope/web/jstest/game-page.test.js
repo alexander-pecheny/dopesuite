@@ -19,7 +19,7 @@ globalThis.document = {
   createElementNS: (_ns, tag) => fakeNode(tag),
 };
 
-const {renderGameBreadcrumbs, createLocalCache, createGameDataLoader, notifyEmbeddedResize} = await import("./dist/game-page.js");
+const {renderGameBreadcrumbs, createLocalCache, createGameDataLoader, notifyEmbeddedResize, parseGameRoute, festBase} = await import("./dist/game-page.js");
 
 // trail renders the crumbs as "tag:class:text", separators dropped. The home
 // crumb's text is empty: it is an SVG glyph now, not a 🏠 character.
@@ -153,4 +153,27 @@ test("notifyEmbeddedResize stays a no-op outside an embed", () => {
   window.parent = window; // embed flag set, but there is no outer frame to message
   notifyEmbeddedResize(true);
   assert.equal(posted, 0, "no parent frame -> no postMessage");
+});
+
+test("parseGameRoute reads both trees; a Слот is watched under /venue and run under /host/venue", () => {
+  assert.deepEqual(parseGameRoute("/fest/kubok/game/od/"), {
+    viewer: true, venue: false, festID: "kubok", gameID: "od", apiBase: "/api/fest/kubok/games/od",
+  });
+  assert.deepEqual(parseGameRoute("/host/fest/kubok/game/od/settings"), {
+    viewer: false, venue: false, festID: "kubok", gameID: "od", apiBase: "/api/fest/kubok/games/od",
+  });
+  assert.deepEqual(parseGameRoute("/venue/tbilisi/game/21/"), {
+    viewer: true, venue: true, festID: "tbilisi", gameID: "21", apiBase: "/api/fest/tbilisi/games/21",
+  });
+  assert.deepEqual(parseGameRoute("/host/venue/tbilisi/game/21/#roster"), {
+    viewer: false, venue: true, festID: "tbilisi", gameID: "21", apiBase: "/api/fest/tbilisi/games/21",
+  });
+  assert.deepEqual(parseGameRoute("/venues"), {});
+});
+
+test("festBase is the tree the crumb and the numbers link point into", () => {
+  assert.equal(festBase({viewer: true, festID: "kubok"}), "/fest/kubok");
+  assert.equal(festBase({viewer: false, festID: "kubok"}), "/host/fest/kubok");
+  assert.equal(festBase({viewer: true, venue: true, festID: "tbilisi"}), "/venue/tbilisi");
+  assert.equal(festBase({viewer: false, venue: true, festID: "tbilisi"}), "/host/venue/tbilisi");
 });

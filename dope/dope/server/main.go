@@ -180,6 +180,7 @@ func Main() {
 	mux.HandleFunc("/login", srv.serveLoginPage())
 	mux.HandleFunc("/venues", srv.hostPageServer().HandleVenueRouter)
 	mux.HandleFunc("/venue/", srv.hostPageServer().HandleVenueRouter)
+	mux.HandleFunc("/venue/{ref}/game/", srv.HandleVenueGameRouter)
 	mux.HandleFunc("/reg/", srv.hostPageServer().HandleVenueRouter)
 	mux.HandleFunc("/vote/", srv.hostPageServer().HandleVenueRouter)
 	if srv.assets.NoCache {

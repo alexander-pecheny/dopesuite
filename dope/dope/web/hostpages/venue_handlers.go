@@ -178,7 +178,7 @@ func (s *Server) renderRegPage(w http.ResponseWriter, r *http.Request, token, er
 	if gameRef == "" {
 		gameRef = strconv.FormatInt(slot.GameID, 10)
 	}
-	page.GameHref = "/fest/" + venue.Ref() + "/game/" + gameRef + "/"
+	page.GameHref = "/venue/" + venue.Ref() + "/game/" + gameRef + "/"
 	user, ok := s.h.Engine().LookupSession(r)
 	page.LoggedIn = ok
 	if ok {
@@ -299,7 +299,7 @@ func (s *Server) renderVenueDashboard(w http.ResponseWriter, r *http.Request, sc
 		rows = append(rows, VenueDashSlot{
 			ID: slot.ID, Date: slot.StartsAt, Tournament: names[slot.RatingTournamentID],
 			Accepted: slot.Accepted, Pending: slot.Pending,
-			Href: "/host/fest/" + venue.Ref() + "/slot/" + strconv.FormatInt(slot.ID, 10),
+			Href: VenueBase(venue) + "/slot/" + strconv.FormatInt(slot.ID, 10),
 		})
 	}
 	members, err := festaccess.LoadFestAccessMembers(s.h.Engine(), r.Context(), festID)
@@ -352,7 +352,7 @@ insert into fest_organizers(fest_id, user_id, role, added_at) values(?, ?, 'crea
 		s.renderHostLanding(w, r, err.Error())
 		return nil
 	}
-	http.Redirect(w, r, fmt.Sprintf("/host/fest/%d", festID), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("/host/venue/%d", festID), http.StatusSeeOther)
 	return nil
 }
 
@@ -383,7 +383,7 @@ where id = ?`, title, util.NullableString(slug), r.Form.Get("description"),
 		return s.renderVenueDashboard(w, r, sc, err.Error(), "")
 	}
 	s.h.Engine().InvalidateFestViewCache(festID)
-	http.Redirect(w, r, "/host/fest/"+s.festRefOrID(r.Context(), festID), http.StatusSeeOther)
+	http.Redirect(w, r, "/host/venue/"+s.festRefOrID(r.Context(), festID), http.StatusSeeOther)
 	return nil
 }
 
@@ -417,7 +417,7 @@ func (s *Server) handleHostCreateSlot(w http.ResponseWriter, r *http.Request, sc
 	if err != nil {
 		return s.renderVenueDashboard(w, r, sc, err.Error(), "")
 	}
-	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s/slot/%d", s.festRefOrID(r.Context(), festID), slotID), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("/host/venue/%s/slot/%d", s.festRefOrID(r.Context(), festID), slotID), http.StatusSeeOther)
 	return nil
 }
 
@@ -478,7 +478,7 @@ func (s *Server) renderSlotPage(w http.ResponseWriter, r *http.Request, sc route
 	data := slotPageData{
 		Venue: venue, Slot: slot, Applications: rows, Voting: voting, Contested: contested,
 		GameStatus: s.gameProgress(r.Context(), festID, slot.GameID),
-		GameHref:   "/host/fest/" + venue.Ref() + "/game/" + gameRef + "/",
+		GameHref:   VenueBase(venue) + "/game/" + gameRef + "/",
 		RegURL:     publicURL(r, "/reg/"+slot.RegToken),
 		CanManage:  roles.CanManageFest(sc.Role),
 		Error:      errMsg, Notice: notice,
@@ -548,7 +548,7 @@ func (s *Server) handleSlotSave(w http.ResponseWriter, r *http.Request, sc route
 }
 
 func (s *Server) redirectToSlot(w http.ResponseWriter, r *http.Request, festID, slotID int64) error {
-	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s/slot/%d", s.festRefOrID(r.Context(), festID), slotID), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("/host/venue/%s/slot/%d", s.festRefOrID(r.Context(), festID), slotID), http.StatusSeeOther)
 	return nil
 }
 
