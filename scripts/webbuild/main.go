@@ -28,6 +28,21 @@ func entries(dir string, names ...string) []api.EntryPoint {
 // xy ships native ES modules: every source transforms per-file (no bundling)
 // so the emitted graph mirrors the source graph. sw.ts builds separately —
 // it gets the derived precache manifest baked in (xySWBuild).
+// xyEntries names each source by its basename, so the kit modules beside them
+// land in dist under their own names rather than a shared-ancestor path.
+func xyEntries() []api.EntryPoint {
+	out := []api.EntryPoint{}
+	for _, path := range xySources() {
+		name := strings.TrimSuffix(filepath.Base(path), ".ts")
+		// suggest.ts is built bundled beside this one (it imports the kit).
+		if name == "suggest" {
+			continue
+		}
+		out = append(out, api.EntryPoint{InputPath: path, OutputPath: name})
+	}
+	return out
+}
+
 func xySources() []string {
 	files, err := os.ReadDir("xy/web/ts")
 	if err != nil {
@@ -82,11 +97,11 @@ func xyPrecache() (urls []string, version string) {
 	addURL("/static/styles.css")
 	hashFile("dopeuikit/assets/core.css")
 	hashFile("xy/web/assets/static/styles.css")
-	for _, src := range xySources() {
-		name := strings.TrimSuffix(filepath.Base(src), ".ts")
-		addURL("/static/dist/" + name + ".js")
-		hashFile(src)
+	for _, entry := range xyEntries() {
+		addURL("/static/dist/" + entry.OutputPath + ".js")
+		hashFile(entry.InputPath)
 	}
+	hashFile("dopeuikit/assets/ts/suggest.ts")
 	addURL("/static/menu.js")
 	addURL("/static/login.js")
 	kitTS, err := filepath.Glob("dopeuikit/assets/ts/*.ts")
@@ -176,13 +191,21 @@ func targets() []target {
 				{
 					EntryPointsAdvanced: entries("dope/dope/web/ts/",
 						"entry-model", "sheet-cursor", "game-shell", "cells", "score-table", "venue", "standings", "fest-roster", "ek-stats", "state-sync", "game-page", "widgets", "stage-cache", "stats-sync", "fest-grid", "brain-stats", "group-stats", "game-tabs", "multi-protocol", "troika-protocol", "troika-stats", "crosstable",
-						"od-protocol", "ksi-protocol", "brain-protocol", "screen-board", "roster-editor",
+						"od-protocol", "ksi-protocol", "brain-protocol", "screen-board",
 						// game-page draws the 🏠 crumb through it
 						"icons_gen",
 						// the TS Catalog: the screens import i18nstrings, it the rest
 						"i18nstrings", "i18nstrings_plural_gen", "i18nstrings_types_gen", "i18nstrings_ru_gen"),
 					Format: api.FormatESModule,
 					Outdir: "dope/dope/web/jstest/dist",
+				},
+				// roster-editor reaches into the kit's suggest, so its test
+				// module is bundled rather than left with a path outside dist.
+				{
+					EntryPointsAdvanced: entries("dope/dope/web/ts/", "roster-editor"),
+					Bundle:              true,
+					Format:              api.FormatESModule,
+					Outdir:              "dope/dope/web/jstest/dist",
 				},
 			}
 		}},
@@ -206,9 +229,20 @@ func targets() []target {
 		{"xy", func() []api.BuildOptions {
 			return []api.BuildOptions{
 				{
-					EntryPoints: xySources(),
-					Format:      api.FormatESModule,
-					Outdir:      "xy/web/assets/static/dist",
+					EntryPointsAdvanced: xyEntries(),
+					Format:              api.FormatESModule,
+					Outdir:              "xy/web/assets/static/dist",
+				},
+				// suggest.ts is the one xy module that reaches into the kit, and
+				// the ES-module build leaves import paths as written — which
+				// would point outside dist. Bundle just this one, with its xy
+				// imports left external so nothing else is duplicated.
+				{
+					EntryPointsAdvanced: entries("xy/web/ts/", "suggest"),
+					Bundle:              true,
+					External:            []string{"./sessions.js", "./towns.js"},
+					Format:              api.FormatESModule,
+					Outdir:              "xy/web/assets/static/dist",
 				},
 				xySWBuild(),
 			}

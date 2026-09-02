@@ -1633,6 +1633,31 @@ input[type="radio"]:focus-visible {
   background: var(--hover-bg);
 }
 
+/* The suggest dropdown (assets/ts/suggest.ts): a .menu-dropdown positioned
+   against the field rather than the menu button, so its anchor is whatever
+   wraps the input. */
+.suggest-anchor { position: relative; }
+
+.suggest-pop {
+  position: absolute;
+  z-index: var(--z-dropdown);
+  max-height: 12rem;
+  overflow-y: auto;
+  /* Wider than a menu: a suggest row carries a name and what tells it from a
+     namesake, and a clipped hint is the half that matters. */
+  max-width: min(30rem, calc(100vw - var(--space-4)));
+}
+
+.suggest-hint {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  margin-left: var(--space-2);
+}
+
+/* Keyboard focus inside the popup never leaves the field, so the arrow keys
+   paint the active row themselves. */
+.suggest-pop .menu-item.is-active { background: var(--hover-bg); }
+
 /* A rule between clusters of menu items. --grid, not --border: the latter is
    transparent outside high contrast, and a separator that only appears there
    would leave the grouping to the margin alone. Inset to the label column so it
