@@ -210,7 +210,7 @@ async function deleteBoard(name: string): Promise<void> {
   const warn = "Доска со всеми списками, карточками и вложениями будет скрыта сразу и безвозвратно удалена через 14 дней.";
   const want = (name || "").trim();
   if (want) {
-    const typed = prompt(`${warn}\n\nЧтобы подтвердить, введите название доски:`);
+    const typed = prompt(`${warn}\n\nЧтобы подтвердить, введите название доски — «${want}»:`);
     if (typed == null) return;
     if (typed.trim() !== want) { alert("Название не совпало — удаление отменено."); return; }
   } else if (!confirm(`${warn} Продолжить?`)) return;
