@@ -129,6 +129,16 @@ func JoinPlayerName(firstName, lastName string) string {
 	return strings.TrimSpace(strings.TrimSpace(firstName) + " " + strings.TrimSpace(lastName))
 }
 
+// JoinFullPlayerName is «Фамилия Имя Отчество» for a player whose отчество is
+// known, which is how rating.chgk.info names one; without it the фест's own
+// «Имя Фамилия» stands, so nothing an import wrote reads differently.
+func JoinFullPlayerName(firstName, lastName, patronymic string) string {
+	if strings.TrimSpace(patronymic) == "" {
+		return JoinPlayerName(firstName, lastName)
+	}
+	return strings.Join(strings.Fields(lastName+" "+firstName+" "+patronymic), " ")
+}
+
 // NormalizeMark canonicalises an answer mark to "right"/"wrong"/"" tolerating
 // the various keyboard inputs the client may send.
 func NormalizeMark(mark string) string {

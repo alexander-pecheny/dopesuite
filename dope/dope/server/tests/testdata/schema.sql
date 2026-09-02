@@ -280,7 +280,7 @@ CREATE TABLE players(
   fest_id integer not null references fests(id) on delete cascade,
   first_name text not null,
   last_name text not null default ''
-);
+, patronymic TEXT NOT NULL DEFAULT '');
 
 -- table schema_versions
 CREATE TABLE schema_versions(

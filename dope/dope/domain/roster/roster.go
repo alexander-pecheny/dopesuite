@@ -97,8 +97,11 @@ func RosterTeams(teams []FestRosterImportTeam) []protocol.RosterTeam {
 // FestRosterPlayerView is one player in a team's roster line. RatingID (when
 // present) links to the player's rating.chgk.info page in the roster view.
 type FestRosterPlayerView struct {
-	Name     string `json:"name"`
-	RatingID int64  `json:"ratingID,omitempty"`
+	Name       string `json:"name"`
+	FirstName  string `json:"firstName,omitempty"`
+	LastName   string `json:"lastName,omitempty"`
+	Patronymic string `json:"patronymic,omitempty"`
+	RatingID   int64  `json:"ratingID,omitempty"`
 }
 
 // FestRosterTeamView is one team with its ordered players, for the read-only
@@ -190,7 +193,7 @@ func importPlayerName(player FestRosterImportPlayer) string {
 func LoadGameRosterView(ctx context.Context, q store.Queryer, festID, gameID int64) ([]FestRosterTeamView, error) {
 	rows, err := q.QueryContext(ctx, `
 select t.id, coalesce(gp.number, coalesce(t.number, 0)), t.name, t.city, coalesce(ft.rating_id, 0),
-       coalesce(p.first_name, ''), coalesce(p.last_name, '')
+       coalesce(p.first_name, ''), coalesce(p.last_name, ''), coalesce(p.patronymic, '')
 from game_participants gp
 join participants t on t.id = gp.participant_id
 left join fest_teams ft on ft.id = t.fest_team_id
@@ -207,8 +210,8 @@ order by gp.number, gp.position, t.id, gtp.roster_order, p.id`, gameID, festID)
 	byID := make(map[int64]int)
 	for rows.Next() {
 		var teamID, number, teamRatingID int64
-		var name, city, firstName, lastName string
-		if err := rows.Scan(&teamID, &number, &name, &city, &teamRatingID, &firstName, &lastName); err != nil {
+		var name, city, firstName, lastName, patronymic string
+		if err := rows.Scan(&teamID, &number, &name, &city, &teamRatingID, &firstName, &lastName, &patronymic); err != nil {
 			return nil, err
 		}
 		idx, ok := byID[teamID]
@@ -217,8 +220,10 @@ order by gp.number, gp.position, t.id, gtp.roster_order, p.id`, gameID, festID)
 			idx = len(teams) - 1
 			byID[teamID] = idx
 		}
-		if player := store.JoinPlayerName(firstName, lastName); player != "" {
-			teams[idx].Players = append(teams[idx].Players, FestRosterPlayerView{Name: player})
+		if player := store.JoinFullPlayerName(firstName, lastName, patronymic); player != "" {
+			teams[idx].Players = append(teams[idx].Players, FestRosterPlayerView{
+				Name: player, FirstName: firstName, LastName: lastName, Patronymic: patronymic,
+			})
 		}
 	}
 	return teams, rows.Err()
