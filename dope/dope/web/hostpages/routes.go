@@ -83,6 +83,8 @@ func (s *Server) buildRoutes() *route.Table {
 	t.Handle("POST "+slot+"/application/{app}/revert", route.Manager, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 		return s.handleApplicationRevert(w, r, sc.FestID, sc.User.UserID)
 	})
+	t.Handle("POST "+slot+"/voting", route.Manager, festHandler(s.handleVotingSave))
+	t.Handle("POST "+slot+"/voting/ballot/{ballot}", route.Manager, festHandler(s.handleVotingBallot))
 	t.Handle("GET "+slot+"/export/tours.xlsx", route.Member, festHandler(s.handleSlotToursExport))
 	t.Handle("GET "+slot+"/export/players.xlsx", route.Member, festHandler(s.handleSlotPlayersExport))
 	t.Handle("GET "+fest+"/teams", route.Manager, page(s.renderHostFestTeams))

@@ -181,6 +181,7 @@ func Main() {
 	mux.HandleFunc("/venues", srv.hostPageServer().HandleVenueRouter)
 	mux.HandleFunc("/venue/", srv.hostPageServer().HandleVenueRouter)
 	mux.HandleFunc("/reg/", srv.hostPageServer().HandleVenueRouter)
+	mux.HandleFunc("/vote/", srv.hostPageServer().HandleVenueRouter)
 	if srv.assets.NoCache {
 		mux.HandleFunc("/gallery", srv.serveCompiledPage("static/gallery.html"))
 	}

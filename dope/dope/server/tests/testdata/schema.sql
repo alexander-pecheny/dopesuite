@@ -320,6 +320,32 @@ CREATE TABLE slot_applications(
   unique(slot_id, user_id)
 );
 
+-- table slot_ballots
+CREATE TABLE slot_ballots(
+  id integer primary key,
+  voting_id integer not null references slot_votings(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  team_name text not null default '',
+  choice_json text not null default '[]',
+  discarded integer not null default 0,
+  created_at text not null,
+  unique(voting_id, user_id)
+);
+
+-- table slot_votings
+CREATE TABLE slot_votings(
+  id integer primary key,
+  slot_id integer not null unique references slots(id) on delete cascade,
+  token text not null unique,
+  kind text not null check (kind in ('one','any','ranked')),
+  per_team integer not null default 0,
+  opens_at text,
+  closes_at text,
+  candidates_json text not null default '[]',
+  frozen integer not null default 0,
+  created_at text not null
+);
+
 -- table slots
 CREATE TABLE slots(
   id integer primary key,

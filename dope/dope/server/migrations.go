@@ -843,6 +843,34 @@ create table if not exists slot_application_versions(
 `)
 		return err
 	}},
+	{Version: 28, Name: "slot votings and ballots", Up: func(db *sql.DB) error {
+		_, err := db.Exec(`
+create table if not exists slot_votings(
+  id integer primary key,
+  slot_id integer not null unique references slots(id) on delete cascade,
+  token text not null unique,
+  kind text not null check (kind in ('one','any','ranked')),
+  per_team integer not null default 0,
+  opens_at text,
+  closes_at text,
+  candidates_json text not null default '[]',
+  frozen integer not null default 0,
+  created_at text not null
+);
+
+create table if not exists slot_ballots(
+  id integer primary key,
+  voting_id integer not null references slot_votings(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  team_name text not null default '',
+  choice_json text not null default '[]',
+  discarded integer not null default 0,
+  created_at text not null,
+  unique(voting_id, user_id)
+);
+`)
+		return err
+	}},
 }
 
 func migrateDB(db *sql.DB) error { return schema.Apply(db, migrations) }
