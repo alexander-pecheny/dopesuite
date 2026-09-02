@@ -79,16 +79,22 @@ values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
 }
 
 func EnsureSeedPlayer(ctx context.Context, tx *sql.Tx, festID int64, firstName, lastName string) (int64, error) {
+	return EnsureSeedPlayerNamed(ctx, tx, festID, firstName, lastName, "")
+}
+
+// EnsureSeedPlayerNamed is EnsureSeedPlayer for a source that knows the
+// отчество — a Состав names a rating.chgk.info player in three parts.
+func EnsureSeedPlayerNamed(ctx context.Context, tx *sql.Tx, festID int64, firstName, lastName, patronymic string) (int64, error) {
 	var id int64
 	err := tx.QueryRowContext(ctx, `
 select id from players
-where fest_id = ? and first_name = ? and last_name = ?
+where fest_id = ? and first_name = ? and last_name = ? and patronymic = ?
 order by id
-limit 1`, festID, firstName, lastName).Scan(&id)
+limit 1`, festID, firstName, lastName, patronymic).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return store.InsertReturningID(ctx, tx, `
-insert into players(fest_id, first_name, last_name)
-values(?, ?, ?)`, festID, firstName, lastName)
+insert into players(fest_id, first_name, last_name, patronymic)
+values(?, ?, ?, ?)`, festID, firstName, lastName, patronymic)
 	}
 	return id, err
 }

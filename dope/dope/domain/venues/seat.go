@@ -327,8 +327,8 @@ func writeGameRosterTx(ctx context.Context, tx *sql.Tx, festID, gameID, particip
 		return err
 	}
 	for order, p := range players {
-		playerID, err := roster.EnsureSeedPlayer(ctx, tx, festID,
-			strings.TrimSpace(p.Name+" "+p.Patronymic), strings.TrimSpace(p.Surname))
+		playerID, err := roster.EnsureSeedPlayerNamed(ctx, tx, festID,
+			strings.TrimSpace(p.Name), strings.TrimSpace(p.Surname), strings.TrimSpace(p.Patronymic))
 		if err != nil {
 			return err
 		}

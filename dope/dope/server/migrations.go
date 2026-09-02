@@ -888,6 +888,13 @@ create table if not exists od_contested(
 `)
 		return err
 	}},
+	{Version: 30, Name: "players.patronymic", Up: func(db *sql.DB) error {
+		// A Состав names a rating.chgk.info player in three parts; without a
+		// column of its own the отчество rode in the first name.
+		return store.AddColumnsIfMissing(db, "players", []store.ColumnSpec{
+			{Name: "patronymic", Type: "TEXT NOT NULL DEFAULT ''"},
+		})
+	}},
 }
 
 func migrateDB(db *sql.DB) error { return schema.Apply(db, migrations) }

@@ -10,6 +10,7 @@ import (
 	"github.com/xuri/excelize/v2"
 
 	"dope/dope/domain/flatgame"
+	"dope/dope/domain/roster"
 	"dope/dope/domain/venues"
 	"dope/dope/export/xlsxexport"
 	"dope/dope/platform/util"
@@ -484,5 +485,48 @@ where gtp.game_id = ? and p.number = 3`, slot.GameID).Scan(&rosterRows); err != 
 	}
 	if got, err := f.GetCellValue("Worksheet", "E3"); err != nil || got != "Текст ответа" {
 		t.Fatalf("tours cell = %q (%v), want the спорный's text", got, err)
+	}
+}
+
+// A Состав names a rating.chgk.info player in three parts, and the roster the
+// Слот's game answers with keeps them apart; a player without an отчество
+// reads exactly as every other fest's does.
+func TestSlotRosterKeepsThePatronymic(t *testing.T) {
+	db := venueTestDB(t)
+	festID, slot := newVenueSlot(t, db, []int{2})
+	alice := newVenueUser(t, db, "alice")
+	fileApplication(t, db, slot, alice, "Мантисса", 0, []venues.RosterPlayer{
+		{PlayerID: 1033, Surname: "Ковалёва", Name: "Елена", Patronymic: "Александровна", Captain: true},
+		{PlayerID: 0, Surname: "Новичок", Name: "Пётр"},
+	})
+	setStatus(t, db, slot, alice, venues.StatusAccepted)
+
+	var first, last, patronymic string
+	if err := db.QueryRow(`
+select first_name, last_name, patronymic from players where fest_id = ? and last_name = 'Ковалёва'`,
+		festID).Scan(&first, &last, &patronymic); err != nil {
+		t.Fatal(err)
+	}
+	if first != "Елена" || last != "Ковалёва" || patronymic != "Александровна" {
+		t.Fatalf("players row %q %q %q", first, last, patronymic)
+	}
+
+	teams, err := roster.LoadGameRosterView(t.Context(), db, festID, slot.GameID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(teams) != 1 || len(teams[0].Players) != 2 {
+		t.Fatalf("roster %+v", teams)
+	}
+	withPatronymic := teams[0].Players[0]
+	if withPatronymic.Name != "Ковалёва Елена Александровна" || withPatronymic.Patronymic != "Александровна" {
+		t.Fatalf("player %+v", withPatronymic)
+	}
+	if withPatronymic.FirstName != "Елена" || withPatronymic.LastName != "Ковалёва" {
+		t.Fatalf("player parts %+v", withPatronymic)
+	}
+	// No отчество: the фест's own «Имя Фамилия», as before.
+	if plain := teams[0].Players[1]; plain.Name != "Пётр Новичок" || plain.Patronymic != "" {
+		t.Fatalf("player without a patronymic %+v", plain)
 	}
 }

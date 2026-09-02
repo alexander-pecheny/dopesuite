@@ -8,7 +8,19 @@ import S from "./i18nstrings.js";
 
 export interface RosterPlayer {
   name?: string;
+  firstName?: string;
+  lastName?: string;
+  patronymic?: string;
   ratingID?: number;
+}
+
+// playerName is «Фамилия Имя Отчество» for a player whose отчество is known —
+// what a Состав at a площадка records — and whatever the server named for
+// everyone else.
+export function playerName(player: RosterPlayer): string {
+  const patronymic = (player.patronymic || "").trim();
+  if (!patronymic) return player.name || "";
+  return [player.lastName, player.firstName, patronymic].map((part) => (part || "").trim()).filter(Boolean).join(" ");
 }
 
 export interface RosterTeam {
@@ -102,7 +114,7 @@ export function buildRosterTable(teams: RosterTeam[] | null | undefined): HTMLEl
       // Non-breaking spaces inside the name so the column wraps between
       // players, never through one — the cell itself is free to wrap, which
       // is what keeps the roster on screen instead of scrolling sideways.
-      chip.appendChild(nameNode(nonBreakingName(info.name), href, "roster-player-name"));
+      chip.appendChild(nameNode(nonBreakingName(playerName(info)), href, "roster-player-name"));
       cell.appendChild(chip);
     }
     return cell;
