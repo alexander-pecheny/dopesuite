@@ -5,7 +5,31 @@ Live scorekeeping for Russian-language trivia formats: a snappier replacement fo
 ## Language
 
 **Fest**:
-One real-world event: a dated gathering with a team registry, hosts, and one or more Games.
+One real-world event: a dated gathering with a team registry, hosts, and one or more Games. A [[Venue]] is a Fest too — an undated one, whose Games are its Слоты.
+
+**Venue (Площадка)**:
+A place where teams gather to play синхроны and асинхроны — long-running tournaments played the same week in many cities, whose results rating.chgk.info merges into one table. A Venue is a Fest of its own kind: it has hosts (its Representatives), a rating.chgk.info venue id, a public/private flag, and lives on `/venues` rather than the main page. It has no date; its Games are dated [[Слот]]s. Its registry accumulates every team that has ever played there.
+
+**Representative (Представитель)**:
+A host of a Venue: the person who runs games in one city, publishes registration and voting links, judges applications and exports results to rating.chgk.info. Not a new role — a Venue's creator or admin.
+
+**Голосование (Voting)**:
+An optional poll on a [[Слот]], reached by its own unguessable link, open between a start and a close time, after which the tally shows to anyone holding the link. Candidates are the tournaments buff knows to be playable on the Slot's date — синхроны first, then асинхроны — minus the ones the [[Representative]] unticks, plus any they add by rating id; the list freezes at the first ballot. Three ballot kinds: **exactly one** (pick a single tournament), **any** (tick every tournament you are willing to play; the tally counts ticks), and **ranked** (order your top three; they score 3, 2, 1 and the rest 0, summed Borda-style). A ballot needs a Telegram login and there is one per user; in per-team mode the voter also names their team and the tally groups by it. The Representative can discard a ballot. The result is advice only: the tournament a Slot plays is set by hand.
+
+**Заявка (Application)**:
+A Telegram user's claim on a place in a [[Слот]]: a team name and a rating.chgk.info team id (0 for a one-off or first-time team), filed through an unguessable registration link. One per user per Slot; filing again edits the existing one. Заявки queue in filing order and the [[Representative]] accepts or declines each; accepting seats the team in the Slot's Game and deals its Number. A declined заявка stays visible. Every edit to a заявка — name, id, состав — is a dated version the Representative can see and revert to, or overwrite by hand, at any time, including after the game has started.
+
+**Состав (Roster)**:
+The players a team fields in one [[Слот]], each a rating.chgk.info player looked up in buff's mirror by name, or typed by hand when too new to be there. One player is marked captain. A player's flag is derived, never chosen: К for the captain, Б for a player in the team's base roster for the current season, Л (легионер) for anyone else — so a team with id 0, which has no base roster, is all Б but its captain. Base rosters are mirrored into buff nightly; until a team's is mirrored, its players read as Л.
+
+**Спорный (Contested answer)**:
+An answer near enough to the accepted one that the tournament's жюри must rule on it after the game. The host records it from Ввод by typing `?` in a question's cell and naming the team and the answer text. On this venue it has two states. **Pending**: scores nothing, paints the cell yellow in Подробно and shows in Итог as `(+N?)` beside the tour and total, never touching the order. **Accepted here** (принят на площадке): the host is sure enough to count it — Итог treats it as a plain taken question, Подробно keeps the yellow with an extra mark. Neither state changes the export: rating.chgk.info gets the answer text in the cell either way, because the ruling is the жюри's. A спорный the host decides was simply wrong is deleted.
+
+**Слот**:
+One dated sitting at a Venue — a particular Friday at 15:00 — realised as one Game (always ОД for now) with its own team list and its own составы, independent of the Venue's registry. A Slot is never recurring; the next Friday is a new Slot, cloned from the last. Registration, voting and спорные all hang off a Slot.
+
+**Registration (Регистрация)**:
+Not a thing a [[Representative]] creates: every [[Слот]] has one, reached by an unguessable link the Representative copies and posts. It may open at once or at a set time, and is closed by the Representative by hand. Anyone can open the link and read what and when; filing a [[Заявка]] needs a Telegram login. A closed registration still shows a user their own заявка.
 
 **Game**:
 One competition inside a Fest, played to completion under a single format (e.g. the ЧГК game, the brain bracket). A Game = one Structure whose Matches all run Protocols.
