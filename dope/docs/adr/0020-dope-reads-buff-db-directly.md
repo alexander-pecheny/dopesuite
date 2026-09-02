@@ -27,9 +27,11 @@ a cache (fresh, but slow on first touch and rate-limited).
 
 ## Consequences
 
-- The dope unit needs `BindPaths=/home/ap/buff` because it sets
-  `ProtectHome=true`; the deploy script does not manage unit files, so this
-  is a hand edit on the box, once, for `dope.service` and `dopetest.service`.
+- The dope unit needs `ProtectHome=tmpfs` plus `BindPaths=/home/ap/buff`:
+  systemd only honours a bind under `/home` when the rest of it is hidden by
+  a tmpfs, not when it is inaccessible. The deploy script does not manage
+  unit files, so this is a hand edit on the box, once, for `dope.service`
+  and `dopetest.service` (dopetest done 2026-09-02).
 - dope's schema coupling to buff lives in one package and fails soft: a
   missing file or table gives an empty suggest and Л flags, never an error
   page.
