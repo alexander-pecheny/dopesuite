@@ -42,6 +42,10 @@ func (s *Server) VenueRoutes() *route.Table {
 			return s.renderRegPage(w, r, r.PathValue("token"), "", "")
 		})
 		t.Handle("POST /reg/{token}", route.Session, s.handleRegSubmit)
+		t.Handle("GET /vote/{token}", route.Public, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+			return s.renderVotePage(w, r, r.PathValue("token"), "")
+		})
+		t.Handle("POST /vote/{token}", route.Session, s.handleVoteSubmit)
 		s.venueTable = t
 	})
 	return s.venueTable
@@ -494,8 +498,12 @@ func (s *Server) renderSlotPage(w http.ResponseWriter, r *http.Request, festID i
 	if gameRef == "" {
 		gameRef = strconv.FormatInt(slot.GameID, 10)
 	}
+	voting, err := s.loadVotingView(r, slot)
+	if err != nil {
+		return err
+	}
 	data := slotPageData{
-		Venue: venue, Slot: slot, Applications: rows,
+		Venue: venue, Slot: slot, Applications: rows, Voting: voting,
 		GameHref:  "/host/fest/" + venue.Ref() + "/game/" + gameRef + "/",
 		RegURL:    publicURL(r, "/reg/"+slot.RegToken),
 		CanManage: s.canManage(r.Context(), festID, r),
