@@ -153,3 +153,45 @@ values(900, 'kubok', 'Кубок', '', 'fest', null, 1, ?, ?, 1)`, now, now); er
 		t.Fatalf("/venue/kubok/game/1/ = %d, want 404", rec.Code)
 	}
 }
+
+// The reg token is the invitation, so the public landing only says a
+// registration is open; the link to it is the Venue's own people's.
+func TestVenueLandingKeepsTheRegToken(t *testing.T) {
+	db := venueTestDB(t)
+	festID, slot := newVenueSlot(t, db, []int{2})
+	srv := dopeserver.NewTestServer(func(e *core.Engine) {
+		e.DB = db
+		e.RT = realtime.NewManager()
+	})
+	ref := strconv.FormatInt(festID, 10)
+
+	get := func(token string) string {
+		req := httptest.NewRequest(http.MethodGet, "/venue/"+ref, nil)
+		if token != "" {
+			req.AddCookie(&http.Cookie{Name: session.CookieName, Value: token})
+		}
+		rec := httptest.NewRecorder()
+		srv.HostPageServer().HandleVenueRouter(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("landing = %d", rec.Code)
+		}
+		return rec.Body.String()
+	}
+
+	anon := get("")
+	if strings.Contains(anon, "/reg/") {
+		t.Error("the anonymous landing leaks the reg token")
+	}
+	if !strings.Contains(anon, "открыта") {
+		t.Error("the anonymous landing should still say the registration is open")
+	}
+
+	userID := newVenueUser(t, db, "organizer")
+	if _, err := db.Exec(`insert into fest_organizers(fest_id, user_id, role, added_at) values(?, ?, 'creator', ?)`,
+		festID, userID, util.UtcNow()); err != nil {
+		t.Fatal(err)
+	}
+	if member := get(createTestSession(t, srv, userID)); !strings.Contains(member, "/reg/"+slot.RegToken) {
+		t.Error("a representative should get the reg link")
+	}
+}
