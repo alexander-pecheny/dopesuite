@@ -35,8 +35,8 @@ func TestSlotContestedSectionOffersTheToggleAndTheDelete(t *testing.T) {
 	body := renderPublic(t, slotPageDoc(data))
 	for _, want := range []string{
 		"Спорные", "Текст", "3 · Вторая",
-		"/host/fest/tbilisi/slot/7/contested/accept",
-		"/host/fest/tbilisi/slot/7/contested/delete",
+		"/host/venue/tbilisi/slot/7/contested/accept",
+		"/host/venue/tbilisi/slot/7/contested/delete",
 		"Принять на площадке",
 	} {
 		if !strings.Contains(body, want) {

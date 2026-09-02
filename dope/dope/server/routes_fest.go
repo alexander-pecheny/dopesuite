@@ -5,7 +5,9 @@ import (
 	"strings"
 
 	"dope/dope/domain/games"
+	"dope/dope/domain/venues"
 	"dope/dope/export/gameexport"
+	"dope/dope/storage/store"
 	"dope/dope/web/route"
 
 	"pecheny.me/dopecore/session"
@@ -14,6 +16,27 @@ import (
 // handleFestRouter serves /fest/…: the public fest page and the viewer game
 // pages, as the table below.
 func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
+	// A Venue's Games are watched under /venue/, the tree its page lives in.
+	if strings.HasPrefix(r.URL.Path, "/fest/") {
+		ref, tail, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/fest/"), "/")
+		if ref != "" && tail != "" {
+			if festID, err := store.ResolveFestID(r.Context(), s.eng.DB, ref); err == nil && festID > 0 &&
+				venues.IsVenue(r.Context(), s.eng.DB, festID) {
+				target := "/venue/" + ref + "/" + tail
+				if r.URL.RawQuery != "" {
+					target += "?" + r.URL.RawQuery
+				}
+				http.Redirect(w, r, target, http.StatusMovedPermanently)
+				return
+			}
+		}
+	}
+	s.fest().Mux.ServeHTTP(w, r)
+}
+
+// HandleVenueGameRouter serves /venue/{ref}/game/… — a Venue's Слот as anyone
+// it seated watches it.
+func (s *server) HandleVenueGameRouter(w http.ResponseWriter, r *http.Request) {
 	s.fest().Mux.ServeHTTP(w, r)
 }
 
@@ -25,6 +48,7 @@ func (s *server) fest() *route.Table {
 			return nil
 		})
 		t.Handle("GET /fest/{fest}/game/{rest...}", route.Public, s.viewerGamePage)
+		t.Handle("GET /venue/{venue}/game/{rest...}", route.Public, s.viewerGamePage)
 		s.festTable = t
 	})
 	return s.festTable

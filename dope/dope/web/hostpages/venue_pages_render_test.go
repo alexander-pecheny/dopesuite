@@ -117,7 +117,7 @@ func TestSlotPageDocCarriesTheLinkAndTheQueue(t *testing.T) {
 	slot := venues.Slot{ID: 7, FestID: 1, GameID: 3, StartsAt: "2026-09-04 19:00", RegToken: "tok"}
 	body := renderPublic(t, slotPageDoc(slotPageData{
 		Venue: venue, Slot: slot, Tournament: "Синхрон", CanManage: true,
-		GameHref: "/host/fest/tbilisi/game/3/", RegURL: "https://dope.test/reg/tok",
+		GameHref: "/host/venue/tbilisi/game/3/", RegURL: "https://dope.test/reg/tok",
 		Applications: []SlotApplicationRow{{
 			App: venues.Application{ID: 9, Status: venues.StatusPending, TeamName: "Мантисса",
 				RatingTeamID: 5723, Number: 1, CreatedAt: "2026-09-02T13:10:36Z", UpdatedAt: "2026-09-02T13:10:36Z"},
@@ -128,13 +128,13 @@ func TestSlotPageDocCarriesTheLinkAndTheQueue(t *testing.T) {
 	for _, want := range []string{
 		`value="https://dope.test/reg/tok"`,
 		`data-copy-target="regLink"`,
-		`/host/fest/tbilisi/slot/7/token`,
-		`/host/fest/tbilisi/slot/7/clone`,
-		`/host/fest/tbilisi/slot/7/application/9/status`,
-		`/host/fest/tbilisi/slot/7/application/9/revert`,
-		`/host/fest/tbilisi/slot/7/application/9/edit`,
-		`/host/fest/tbilisi/slot/7/export/tours.xlsx`,
-		`/host/fest/tbilisi/slot/7/export/players.xlsx`,
+		`/host/venue/tbilisi/slot/7/token`,
+		`/host/venue/tbilisi/slot/7/clone`,
+		`/host/venue/tbilisi/slot/7/application/9/status`,
+		`/host/venue/tbilisi/slot/7/application/9/revert`,
+		`/host/venue/tbilisi/slot/7/application/9/edit`,
+		`/host/venue/tbilisi/slot/7/export/tours.xlsx`,
+		`/host/venue/tbilisi/slot/7/export/players.xlsx`,
 		`rating.chgk.info/teams/5723`,
 		`https://t.me/tester`,
 		`2026-09-02 13:10`,
@@ -154,14 +154,14 @@ func TestSlotPageDocCarriesTheLinkAndTheQueue(t *testing.T) {
 func TestVenueDashDocListsSlotsAndAccess(t *testing.T) {
 	body := renderPublic(t, venueDashDoc(venueDashData{
 		Venue:     venues.Venue{ID: 1, Slug: "tbilisi", Title: "Площадка", City: "Тбилиси", IsPublic: true},
-		Slots:     []VenueDashSlot{{ID: 7, Date: "2026-09-04 19:00", Tournament: "Синхрон", Accepted: 2, Pending: 1, Href: "/host/fest/tbilisi/slot/7"}},
+		Slots:     []VenueDashSlot{{ID: 7, Date: "2026-09-04 19:00", Tournament: "Синхрон", Accepted: 2, Pending: 1, Href: "/host/venue/tbilisi/slot/7"}},
 		CanManage: true,
 	}))
 	for _, want := range []string{
 		`data-jump-href="/venue/tbilisi"`,
-		`href="/host/fest/tbilisi/slot/7"`,
+		`href="/host/venue/tbilisi/slot/7"`,
 		`принято 2, ждут 1`,
-		`/host/fest/tbilisi/slot/new`,
+		`/host/venue/tbilisi/slot/new`,
 		`id="access"`,
 	} {
 		if !strings.Contains(body, want) {

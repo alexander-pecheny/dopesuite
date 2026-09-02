@@ -111,6 +111,10 @@ func TestVenueGameAccess(t *testing.T) {
 	tbl.Handle("POST /publicfest/{fest}/games/{game}", PublicFest, ok)
 	tbl.Handle("POST /read/{fest}/games/{game}", Read, ok)
 	tbl.Handle("POST /read/{fest}", Read, ok)
+	// {venue} names the same thing as {fest}, so a Venue's own tree asks
+	// exactly what the fest patterns it mirrors ask.
+	tbl.Handle("POST /venuetree/{venue}/games/{game}", Read, ok)
+	tbl.Handle("POST /venuetree/{venue}", Member, ok)
 
 	// The Слот the заявка was accepted on; every other read of the Venue —
 	// another Слот, or the fest itself — is closed to the same caller.
@@ -119,6 +123,9 @@ func TestVenueGameAccess(t *testing.T) {
 		"/read/venue/games/g":       {"anon": 404, "outsider": 404, "waiting": 404, "applicant": 200, "host": 200, "admin": 200, "creator": 200},
 		"/read/venue/games/h":       {"anon": 404, "outsider": 404, "waiting": 404, "applicant": 404, "host": 200, "admin": 200, "creator": 200},
 		"/read/venue":               {"anon": 404, "outsider": 404, "waiting": 404, "applicant": 404, "host": 200, "admin": 200, "creator": 200},
+		"/venuetree/venue/games/g":  {"anon": 404, "outsider": 404, "waiting": 404, "applicant": 200, "host": 200, "admin": 200, "creator": 200},
+		"/venuetree/venue/games/h":  {"anon": 404, "outsider": 404, "waiting": 404, "applicant": 404, "host": 200, "admin": 200, "creator": 200},
+		"/venuetree/venue":          {"anon": 401, "outsider": 403, "waiting": 403, "applicant": 403, "host": 200, "admin": 200, "creator": 200},
 	}
 	for path, want := range cases {
 		for caller, code := range want {

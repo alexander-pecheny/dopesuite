@@ -112,25 +112,35 @@ func New(eng *core.Engine, deny func(w http.ResponseWriter, r *http.Request, d D
 
 // Handle registers pattern (a mux pattern; {fest} and {game} are resolved,
 // {rest...} is left to the handler) with its access and handler.
+// A Fest is named by {fest}, a Venue — which is a Fest of its own kind — by
+// {venue}; both resolve the same way, so the two host trees share every
+// handler and differ only in their patterns.
 func (t *Table) Handle(pattern string, access Access, h Handler) {
-	t.Mux.HandleFunc(pattern, t.serve(strings.Contains(pattern, "{fest}"), strings.Contains(pattern, "{game}"), access, h))
+	festKey := ""
+	switch {
+	case strings.Contains(pattern, "{fest}"):
+		festKey = "fest"
+	case strings.Contains(pattern, "{venue}"):
+		festKey = "venue"
+	}
+	t.Mux.HandleFunc(pattern, t.serve(festKey, strings.Contains(pattern, "{game}"), access, h))
 }
 
 // Serve is the dispatcher as a plain handler, for a route whose fest is not in
 // the path (or none): the access check, then h, then its error.
 func (t *Table) Serve(access Access, h Handler) http.HandlerFunc {
-	return t.serve(false, false, access, h)
+	return t.serve("", false, access, h)
 }
 
-func (t *Table) serve(hasFest, hasGame bool, access Access, h Handler) http.HandlerFunc {
+func (t *Table) serve(festKey string, hasGame bool, access Access, h Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !SameOriginUnsafe(w, r) {
 			return
 		}
 		var sc Scope
 		var err error
-		if hasFest {
-			if sc.FestID, err = store.ResolveFestID(r.Context(), t.Eng.DB, r.PathValue("fest")); err != nil || sc.FestID <= 0 {
+		if festKey != "" {
+			if sc.FestID, err = store.ResolveFestID(r.Context(), t.Eng.DB, r.PathValue(festKey)); err != nil || sc.FestID <= 0 {
 				t.refuse(w, r, err, NoFest)
 				return
 			}

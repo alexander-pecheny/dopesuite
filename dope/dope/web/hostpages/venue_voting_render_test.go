@@ -45,7 +45,7 @@ func TestSlotVotingSectionOffersTheCandidatesThenTheTally(t *testing.T) {
 		`value="https://dope.test/vote/vtok"`,
 		`data-copy-target="voteLink"`,
 		"Вид: три по порядку · до 2026-09-04 18:00",
-		`/host/fest/tbilisi/slot/7/voting/ballot/5`,
+		`/host/venue/tbilisi/slot/7/voting/ballot/5`,
 		"Отклонить",
 		"По голосованию уже голосовали",
 		`name="kind" value="ranked"`,

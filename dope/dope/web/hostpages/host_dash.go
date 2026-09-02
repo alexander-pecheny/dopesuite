@@ -89,7 +89,7 @@ func hostFestDashDoc(data hostFestDashData) *dopeui.Doc {
 	}
 	page = append(page, hostDashGamesSection(data, ref))
 	if data.CanManageAccess {
-		page = append(page, hostDashAccessSection(data, ref))
+		page = append(page, hostDashAccessSection(data, "/host/fest/"+ref))
 	}
 	if data.CanManageFest {
 		page = append(page, hostDashRosterSection(data, ref))
@@ -165,7 +165,7 @@ func hostDashGamesSection(data hostFestDashData, ref string) *dopeui.Element {
 	return dopeui.Section(sect...)
 }
 
-func hostDashAccessSection(data hostFestDashData, ref string) *dopeui.Element {
+func hostDashAccessSection(data hostFestDashData, base string) *dopeui.Element {
 	s := dopestrings.Default
 	sect := []dopeui.Item{dopeui.ID("access"), dopeui.Subhead(dopeui.Text(s.Host.Dash.AccessSubhead()))}
 	if data.AccessError != "" {
@@ -177,7 +177,7 @@ func hostDashAccessSection(data hostFestDashData, ref string) *dopeui.Element {
 	sect = append(sect,
 		dopeui.Row(dopeui.Button(dopeui.Data("dialog-open", "bulkAccessDialog"), dopeui.Text(s.Host.Dash.BulkLabel()))),
 		dopeui.Dialog(dopeui.ID("bulkAccessDialog"),
-			dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/access#access"), dopeui.Autocomplete("off"),
+			dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action(base+"/access#access"), dopeui.Autocomplete("off"),
 				dopeui.Subhead(dopeui.Text(s.Host.Dash.BulkLabel())),
 				dopeui.Hiddenfield(dopeui.Name("bulk_access"), dopeui.Value("1")),
 				dopeui.Field(dopeui.Label(s.Host.Dash.BulkDataLabel()),
@@ -216,7 +216,7 @@ func hostDashAccessSection(data hostFestDashData, ref string) *dopeui.Element {
 		dopeui.Cell(dopeui.Button(dopeui.Submit(), dopeui.Name("add_access"), dopeui.Value("1"), dopeui.Text(s.Host.Dash.AddBtn()))),
 	))
 	sect = append(sect,
-		dopeui.Form(dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/access#access"), dopeui.Autocomplete("off"),
+		dopeui.Form(dopeui.Method("post"), dopeui.Action(base+"/access#access"), dopeui.Autocomplete("off"),
 			dopeui.Table(append([]dopeui.Item{dopeui.Scroll()}, rows...)...),
 		),
 	)

@@ -2732,18 +2732,19 @@ function isLastRenderedTheme(isShootout: boolean, themeIndex: number): boolean {
   return shootoutThemeCount() === 0 && themeIndex === regularThemeCount() - 1;
 }
 
-// currentRoute reads the page's URL: /host/fest/… is the host's, /fest/… the
+// currentRoute reads the page's URL: /host/… is the host's, the bare tree the
 // spectator's, and the sub-route after the game is the same for both.
 function currentRoute(): EKRoute {
   const path = window.location.pathname;
-  const prefix = path.match(/^(\/host)?\/fest\/([^/]+)\/game\/([^/]+)/);
+  const prefix = path.match(/^(\/host)?\/(fest|venue)\/([^/]+)\/game\/([^/]+)/);
   if (!prefix) {
     return {mode: "missing"} as EKRoute;
   }
   const host = Boolean(prefix[1]);
-  const festID = prefix[2];
-  const gameID = prefix[3];
-  const viewerBase = `/fest/${festID}/game/${gameID}`;
+  const kind = prefix[2];
+  const festID = prefix[3];
+  const gameID = prefix[4];
+  const viewerBase = `/${kind}/${festID}/game/${gameID}`;
   const at = {
     viewer: !host, festID, gameID, viewerBase,
     base: host ? `/host${viewerBase}` : viewerBase,
