@@ -10,6 +10,7 @@
         "arrow-up-down",
         "bell",
         "calculator",
+        "calendar",
         "check",
         "clipboard",
         "cloud-download",
@@ -458,6 +459,25 @@
         },
         {
           "name": "title"
+        }
+      ],
+      "children": "none"
+    },
+    {
+      "name": "datetimefield",
+      "props": [
+        {
+          "name": "name"
+        },
+        {
+          "name": "value"
+        },
+        {
+          "name": "placeholder"
+        },
+        {
+          "name": "required",
+          "kind": "bare"
         }
       ],
       "children": "none"

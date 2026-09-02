@@ -18,6 +18,7 @@ import {
 } from "./menu-model";
 import { type IconName, icon } from "./icons_gen.js";
 import S from "./i18nstrings.js";
+import { mountDatetimeFields } from "./datetime.js";
 
 const THEME_KEY = "dope-theme";
 const CONTRAST_KEY = "dope-contrast";
@@ -403,4 +404,12 @@ if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", build);
 } else {
   build();
+}
+
+// Every page loads menu.js, which is where the kit's field behaviours are
+// mounted from: a datetime field is markup the page's own script never sees.
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => mountDatetimeFields(document), {once: true});
+} else {
+  mountDatetimeFields(document);
 }

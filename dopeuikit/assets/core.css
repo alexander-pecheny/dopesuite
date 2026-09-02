@@ -1633,6 +1633,17 @@ input[type="radio"]:focus-visible {
   background: var(--hover-bg);
 }
 
+/* A date and time that can be typed, pasted or picked: the text input is the
+   value, the datetime-local beside it is only the calendar. */
+/* Out of sight but not display:none — showPicker() refuses a hidden input. */
+.datetime-picker {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* The suggest dropdown (assets/ts/suggest.ts): a .menu-dropdown positioned
    against the field rather than the menu button, so its anchor is whatever
    wraps the input. */

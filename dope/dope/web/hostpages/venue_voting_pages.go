@@ -107,8 +107,8 @@ func votingForm(base string, view VotingView) *ui.Element {
 			ui.Hiddenfield(ui.Name("per_team"), ui.Value("1")))
 	}
 	form = append(form,
-		ui.Field(ui.Label("Открывается"), ui.Textfield(ui.Name("opens_at"), ui.Value(v.OpensAt), ui.Placeholder("сразу"))),
-		ui.Field(ui.Label("Закрывается"), ui.Textfield(ui.Name("closes_at"), ui.Value(v.ClosesAt), ui.Placeholder("2026-09-04 18:00"))),
+		ui.Field(ui.Label("Открывается"), ui.Datetimefield(ui.Name("opens_at"), ui.Value(v.OpensAt), ui.Placeholder("сразу"))),
+		ui.Field(ui.Label("Закрывается"), ui.Datetimefield(ui.Name("closes_at"), ui.Value(v.ClosesAt), ui.Placeholder("2026-09-04 18:00"))),
 		ui.Row(ui.Button(ui.Submit(), ui.Text(submit))),
 	)
 	return ui.Form(form...)

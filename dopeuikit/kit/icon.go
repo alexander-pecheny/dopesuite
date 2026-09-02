@@ -48,3 +48,14 @@ func withIcon(p *Element, items []Item) []Item {
 	}
 	return append([]Item{ico}, items...)
 }
+
+// calendarGlyph is the icon a control draws without an `icon` prop of its own —
+// the datetime field's picker button, whose glyph is not the author's choice.
+func calendarGlyph() Node {
+	body, found := icons.Body("calendar")
+	if !found {
+		panic("kit: the calendar icon is missing — re-run `go generate ./icons`")
+	}
+	return Raw(`<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
+		`stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` + body + `</svg>`)
+}

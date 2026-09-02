@@ -48,6 +48,7 @@ var coreExpanders = map[string]ExpandFunc{
 		// field that constrains its input can say what it takes.
 		return one(Input(c, "text", p, "name", "placeholder", "autocomplete", "spellcheck", "autocapitalize", "autocorrect", "value", "maxlength", "minlength", "inputmode", "pattern", "list", "title"))
 	},
+	"datetimefield": expandDatetimefield,
 	"password": func(c *ExpandCtx, p *Element) []Node {
 		return one(Input(c, "password", p, "name", "placeholder", "autocomplete", "spellcheck", "autocapitalize", "autocorrect", "value", "maxlength", "minlength", "inputmode", "pattern"))
 	},
@@ -418,4 +419,39 @@ func expandMount(c *ExpandCtx, p *Element) []Node {
 		return one(El(m.Tag, RootAttrs(append([]string(nil), m.Classes...), p), c.Nodes(p.Block)...))
 	}
 	return one(El("div", RootAttrs([]string{kind}, p), c.Nodes(p.Block)...))
+}
+
+// expandDatetimefield is a date and time a person may type, paste OR pick. The
+// posted value is the text input: a bare datetime-local is segmented, so
+// pasting «2026-09-04 19:00» into one does nothing. The picker beside it is a
+// real datetime-local kept out of sight, opened by the button and by putting
+// the cursor in the field (assets/ts/datetime.ts).
+func expandDatetimefield(c *ExpandCtx, p *Element) []Node {
+	text := Input(c, "text", p, "name", "placeholder", "value")
+	addClass(text, "u-grow")
+	text.Attrs = append(text.Attrs, At("autocomplete", "off"), BareAt("data-datetime-text"))
+	text.Attrs = append(text.Attrs, CopyFlags(p, "required")...)
+	picker := El("input", []Attr{
+		ClassAttr("datetime-picker"), At("type", "datetime-local"),
+		At("tabindex", "-1"), At("aria-hidden", "true"), BareAt("data-datetime-picker"),
+	})
+	button := El("button", []Attr{
+		ClassAttr("btn", "btn-ghost", "btn-small"), At("type", "button"),
+		At("aria-label", "Календарь"), BareAt("data-datetime-open"),
+	}, calendarGlyph())
+	return one(El("span", []Attr{
+		ClassAttr("u-row", "u-gap-xs", "u-align-center"), BareAt("data-datetime-field"),
+	}, text, picker, button))
+}
+
+// addClass appends to an element's class attribute, for a control a helper
+// already built.
+func addClass(el *Element, class string) {
+	for i, attr := range el.Attrs {
+		if attr.Name == "class" {
+			el.Attrs[i].Value += " " + class
+			return
+		}
+	}
+	el.Attrs = append([]Attr{ClassAttr(class)}, el.Attrs...)
 }

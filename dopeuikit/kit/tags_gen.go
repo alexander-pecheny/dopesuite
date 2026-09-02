@@ -119,6 +119,10 @@ func Textfield(items ...Item) *Element {
 	return base.New("textfield", items...)
 }
 
+func Datetimefield(items ...Item) *Element {
+	return base.New("datetimefield", items...)
+}
+
 func Password(items ...Item) *Element {
 	return base.New("password", items...)
 }
@@ -473,6 +477,7 @@ var IconArrowUp = Attr{Name: "icon", Value: "arrow-up"}
 var IconArrowUpDown = Attr{Name: "icon", Value: "arrow-up-down"}
 var IconBell = Attr{Name: "icon", Value: "bell"}
 var IconCalculator = Attr{Name: "icon", Value: "calculator"}
+var IconCalendar = Attr{Name: "icon", Value: "calendar"}
 var IconCheck = Attr{Name: "icon", Value: "check"}
 var IconClipboard = Attr{Name: "icon", Value: "clipboard"}
 var IconCloudDownload = Attr{Name: "icon", Value: "cloud-download"}
