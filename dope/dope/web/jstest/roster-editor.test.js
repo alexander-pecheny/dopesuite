@@ -2,6 +2,7 @@ import { assertEquals } from "jsr:@std/assert";
 import {
   emptyPlayer,
   fullName,
+  gamesWord,
   MAX_ROSTER,
   parseRoster,
   rosterWarning,
@@ -36,7 +37,11 @@ Deno.test("serializeRoster drops the nameless rows the form leaves behind", () =
   assertEquals(JSON.parse(serializeRoster(players)).length, 1);
 });
 
-Deno.test("suggestLabel names the player and their id", () => {
+Deno.test("suggestLabel names the player, their id and the games they are known by", () => {
+  assertEquals(
+    suggestLabel({ player_id: 24850, surname: "Печеный", name: "Александр", patronymic: "Павлович", captain: false, games: 412 }),
+    "Печеный Александр Павлович (24850) · 412 игр",
+  );
   assertEquals(
     suggestLabel({ player_id: 24850, surname: "Печеный", name: "Александр", patronymic: "Павлович", captain: false }),
     "Печеный Александр Павлович (24850)",
@@ -46,6 +51,12 @@ Deno.test("suggestLabel names the player and their id", () => {
     "Новый Игрок",
   );
   assertEquals(fullName(emptyPlayer()), "");
+});
+
+Deno.test("gamesWord counts the Russian way", () => {
+  assertEquals([1, 2, 4, 5, 11, 14, 21, 102, 412].map(gamesWord), [
+    "игра", "игры", "игры", "игр", "игр", "игр", "игра", "игры", "игр",
+  ]);
 });
 
 Deno.test("setCaptain keeps exactly one", () => {

@@ -29,6 +29,7 @@ type Player struct {
 	Surname    string `json:"surname"`
 	Name       string `json:"name"`
 	Patronymic string `json:"patronymic"`
+	Games      int    `json:"games"`
 }
 
 func (p Player) FullName() string {
@@ -88,30 +89,83 @@ func TourComposition(questionsByTour string) []int {
 	return out
 }
 
-func (s *Store) Players(ctx context.Context, prefix string, limit int) []Player {
-	prefix = strings.TrimSpace(prefix)
-	if !s.Enabled() || prefix == "" {
+// Players suggests by name: the first word is a surname prefix, the second a
+// first-name one, the third a patronymic — «Плотников Д» is one player, not a
+// surname nobody has. The order is how many games each has played, so a
+// namesake with hundreds comes before one with two.
+func (s *Store) Players(ctx context.Context, query string, limit int) []Player {
+	surname, name, patronymic := splitNameQuery(query)
+	if !s.Enabled() || surname == "" {
 		return nil
 	}
+	where := `surname like ? escape '\'`
+	args := []any{likePrefix(surname)}
+	if name != "" {
+		where += ` and name like ? escape '\'`
+		args = append(args, likePrefix(name))
+	}
+	if patronymic != "" {
+		where += ` and patronymic like ? escape '\'`
+		args = append(args, likePrefix(patronymic))
+	}
+	args = append(args, capLimit(limit))
 	rows, err := s.db.QueryContext(ctx, `
-select id, coalesce(surname, ''), coalesce(name, ''), coalesce(patronymic, '')
+select p.id, coalesce(p.surname, ''), coalesce(p.name, ''), coalesce(p.patronymic, ''), coalesce(g.games, 0)
+from players p
+left join player_games g on g.player_id = p.id
+where `+where+`
+order by coalesce(g.games, 0) desc, p.surname, p.name, p.id
+limit ?`, args...)
+	if err != nil {
+		return s.playersAlphabetical(ctx, where, args)
+	}
+	defer rows.Close()
+	return scanPlayers(rows)
+}
+
+// playersAlphabetical is the answer without player_games — a mirror that has
+// not been rebuilt since the table was added still suggests, just unranked.
+func (s *Store) playersAlphabetical(ctx context.Context, where string, args []any) []Player {
+	rows, err := s.db.QueryContext(ctx, `
+select id, coalesce(surname, ''), coalesce(name, ''), coalesce(patronymic, ''), 0
 from players
-where surname like ? escape '\'
+where `+where+`
 order by surname, name, id
-limit ?`, likePrefix(prefix), capLimit(limit))
+limit ?`, args...)
 	if err != nil {
 		return nil
 	}
 	defer rows.Close()
+	return scanPlayers(rows)
+}
+
+func scanPlayers(rows *sql.Rows) []Player {
 	var out []Player
 	for rows.Next() {
 		var p Player
-		if err := rows.Scan(&p.ID, &p.Surname, &p.Name, &p.Patronymic); err != nil {
+		if err := rows.Scan(&p.ID, &p.Surname, &p.Name, &p.Patronymic, &p.Games); err != nil {
 			return out
 		}
 		out = append(out, p)
 	}
 	return out
+}
+
+// splitNameQuery reads «Фамилия Имя Отчество» as far as it was typed; the
+// surname always comes first, which is what keeps idx_players_surname useful.
+func splitNameQuery(query string) (surname, name, patronymic string) {
+	words := strings.Fields(query)
+	for i, word := range words {
+		switch i {
+		case 0:
+			surname = word
+		case 1:
+			name = word
+		case 2:
+			patronymic = word
+		}
+	}
+	return surname, name, patronymic
 }
 
 func (s *Store) Player(ctx context.Context, id int64) (Player, bool) {
