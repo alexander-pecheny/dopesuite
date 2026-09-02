@@ -195,8 +195,7 @@ export function mountRosterEditor(container: HTMLElement): void {
       // so and turns into three typed fields.
       if (typed.trim() !== "") choices.push({value: MANUAL, label: "нет в базе"});
       return choices;
-    }, (choice) => {
-      const typed = query.value;
+    }, (choice, typed) => {
       if (choice.value === MANUAL) {
         players[index] = {...emptyPlayer(), surname: typed.trim(), captain: players[index].captain};
       } else {

@@ -15,6 +15,18 @@ type HostFest struct {
 	EndDate   string
 	Dates     string
 	IsPublic  bool
+	IsVenue   bool
+}
+
+// HostBase is the /host tree this fest is edited under. A Venue lives under
+// /host/venue and every other fest under /host/fest; the router 301s a GET
+// between the trees, which would turn a POST to the wrong one into a lost
+// write, so every form and formaction on a shared page takes its action here.
+func (h HostFest) HostBase() string {
+	if h.IsVenue {
+		return "/host/venue/" + h.Ref()
+	}
+	return "/host/fest/" + h.Ref()
 }
 
 // Ref returns the slug when set, else the numeric id — used when building host

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"dope/dope/domain/core"
+	"dope/dope/domain/venues"
 	"dope/dope/domain/view"
 	"dope/dope/export/gameexport"
 	"dope/dope/platform/util"
@@ -112,12 +113,14 @@ func (s *server) ServeEKHTMLWithInit(w http.ResponseWriter, r *http.Request, sco
 func (s *server) loadHostFestHeader(ctx context.Context, festID int64) (view.HostFest, error) {
 	var t view.HostFest
 	var pub int
+	var kind string
 	if err := s.eng.DB.QueryRowContext(ctx, `
-select id, coalesce(slug, ''), title, coalesce(start_date, ''), coalesce(end_date, ''), is_public
-from fests where id = ?`, festID).Scan(&t.ID, &t.Slug, &t.Title, &t.StartDate, &t.EndDate, &pub); err != nil {
+select id, coalesce(slug, ''), title, coalesce(start_date, ''), coalesce(end_date, ''), is_public, coalesce(kind, '')
+from fests where id = ?`, festID).Scan(&t.ID, &t.Slug, &t.Title, &t.StartDate, &t.EndDate, &pub, &kind); err != nil {
 		return view.HostFest{}, err
 	}
 	t.IsPublic = pub == 1
+	t.IsVenue = kind == venues.KindVenue
 	t.Dates = util.FormatFestDates(t.StartDate, t.EndDate)
 	return t, nil
 }

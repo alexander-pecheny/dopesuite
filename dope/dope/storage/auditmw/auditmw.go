@@ -53,9 +53,10 @@ func ContextMiddleware(eng *core.Engine, next http.Handler) http.Handler {
 }
 
 // auditFestIDFromPath resolves the fest a mutating request targets from its URL
-// path, covering the three fest-scoped prefixes. Returns 0 when the path is not
-// fest-scoped or the ref doesn't resolve (those mutations get a null fest_id and
-// are never touched by a fest-scoped revert).
+// path, covering the fest-scoped prefixes — a Venue is a Fest under a tree of
+// its own, so it has two. Returns 0 when the path is not fest-scoped or the ref
+// doesn't resolve (those mutations get a null fest_id and are never touched by a
+// fest-scoped revert).
 func auditFestIDFromPath(eng *core.Engine, ctx context.Context, path string) int64 {
 	if eng.DB == nil {
 		return 0
@@ -66,6 +67,8 @@ func auditFestIDFromPath(eng *core.Engine, ctx context.Context, path string) int
 		rest = strings.TrimPrefix(path, "/api/fest/")
 	case strings.HasPrefix(path, "/host/fest/"):
 		rest = strings.TrimPrefix(path, "/host/fest/")
+	case strings.HasPrefix(path, "/host/venue/"):
+		rest = strings.TrimPrefix(path, "/host/venue/")
 	case strings.HasPrefix(path, "/fest/"):
 		rest = strings.TrimPrefix(path, "/fest/")
 	default:

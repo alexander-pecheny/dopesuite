@@ -13,8 +13,6 @@ import (
 	"strings"
 
 	ui "dope/dope/web/ui"
-
-	"dope/dope/web/route"
 )
 
 // The per-game journal page lists a game's edits newest-first, each rendered as
@@ -377,13 +375,12 @@ func (r *nameResolver) describeGroup(ops []journalOpRow) []string {
 // and falls back to coarse event labels for non-patch events.
 func (r *nameResolver) describeStatePatchGroup(ops []journalOpRow, lineFn func(op edit.PatchOp) string) []string {
 	var lines []string
-	s := dopestrings.Default
 	for _, o := range ops {
 		switch {
 		case o.op == journal.OpEvGameStatePatch:
 			var req edit.PatchRequest
 			if json.Unmarshal(o.payload, &req) != nil {
-				lines = append(lines, s.Journal.Patch.StateFallback())
+				lines = append(lines, dopestrings.Default.Journal.Patch.StateFallback())
 				continue
 			}
 			for _, p := range req.Ops {
@@ -392,7 +389,7 @@ func (r *nameResolver) describeStatePatchGroup(ops []journalOpRow, lineFn func(o
 				}
 			}
 		case o.op == journal.OpEvGameState:
-			lines = append(lines, s.Journal.Event.StateReplaced())
+			lines = append(lines, dopestrings.Default.Journal.Event.StateReplaced())
 		case o.op >= journal.OpEvImport && o.op != journal.OpEvMatchUpdate:
 			lines = append(lines, describeEvent(o.op, o.payload)...)
 		}
@@ -404,22 +401,21 @@ func (r *nameResolver) describeStatePatchGroup(ops []journalOpRow, lineFn func(o
 // themes[t].answers[player][question] = mark; participants[i] = name.
 func (r *nameResolver) ksiPatchLine(op edit.PatchOp) string {
 	segs := patchSegs(op.Path)
-	s := dopestrings.Default
 	switch {
 	case len(segs) == 5 && segs[0].s == "themes" && segs[2].s == "answers" &&
 		segs[1].num && segs[3].num && segs[4].num:
 		who := r.name(segs[3].n)
 		if who == "" {
-			who = s.Journal.Ksi.ParticipantFallback(strconv.Itoa(segs[3].n + 1))
+			who = fmt.Sprintf("участник %d", segs[3].n+1)
 		}
-		return s.Journal.Ksi.Answer(strconv.Itoa(segs[0+1].n+1), who, strconv.Itoa(segs[4].n+1), patchMark(op.Value))
+		return fmt.Sprintf("тема %d, %s, вопрос %d: %s", segs[0+1].n+1, who, segs[4].n+1, patchMark(op.Value))
 	case len(segs) == 2 && segs[0].s == "participants" && segs[1].num:
 		_, name := patchValue(op.Value)
-		return s.Journal.Ksi.Rename(strconv.Itoa(segs[1].n+1), name)
+		return fmt.Sprintf("переименование участника %d → %s", segs[1].n+1, name)
 	case len(segs) >= 1 && segs[0].s == "finished":
-		return s.Journal.Ksi.Finished()
+		return dopestrings.Default.Journal.Ksi.Finished()
 	case len(segs) >= 1 && segs[0].s == "declined":
-		return s.Journal.Ksi.Declined()
+		return dopestrings.Default.Journal.Ksi.Declined()
 	default:
 		return genericPatchLine(op)
 	}
@@ -431,23 +427,22 @@ func (r *nameResolver) ksiPatchLine(op edit.PatchOp) string {
 // the team from the value, not from the slot index.
 func (r *nameResolver) odPatchLine(op edit.PatchOp) string {
 	segs := patchSegs(op.Path)
-	s := dopestrings.Default
 	switch {
 	case len(segs) == 3 && segs[0].s == "entries" && segs[1].num && segs[2].num:
 		num := patchInt(op.Value)
 		if num <= 0 {
-			return s.Journal.Od.AnswerClear(strconv.Itoa(segs[1].n + 1))
+			return fmt.Sprintf("вопрос %d: отметка снята", segs[1].n+1)
 		}
-		return s.Journal.Od.AnswerSet(strconv.Itoa(segs[1].n+1), r.odTeamLabel(num))
+		return fmt.Sprintf("вопрос %d: засчитана %s", segs[1].n+1, r.odTeamLabel(num))
 	case len(segs) == 2 && segs[0].s == "entries" && segs[1].num:
-		return s.Journal.Od.EntryChanged(strconv.Itoa(segs[1].n + 1))
+		return fmt.Sprintf("вопрос %d изменён", segs[1].n+1)
 	case len(segs) == 1 && segs[0].s == "entries":
-		return s.Journal.Od.EntriesChanged()
+		return dopestrings.Default.Journal.Od.EntriesChanged()
 	case len(segs) == 2 && segs[0].s == "completed" && segs[1].num:
 		_, val := patchValue(op.Value)
-		return s.Journal.Od.Readiness(strconv.Itoa(segs[1].n+1), val)
+		return fmt.Sprintf("вопрос %d: готовность → %s", segs[1].n+1, val)
 	case len(segs) >= 1 && segs[0].s == "shootoutRounds":
-		return s.Journal.Od.Shootout()
+		return dopestrings.Default.Journal.Od.Shootout()
 	default:
 		return genericPatchLine(op)
 	}
@@ -456,16 +451,14 @@ func (r *nameResolver) odPatchLine(op edit.PatchOp) string {
 // odTeamLabel renders a team identified by its printed number, using its name
 // when known and falling back to the bare number.
 func (r *nameResolver) odTeamLabel(num int) string {
-	s := dopestrings.Default
 	if name := strings.TrimSpace(r.odNum[num]); name != "" {
-		return s.Journal.Od.TeamNamed(name, strconv.Itoa(num))
+		return fmt.Sprintf("«%s» (№%d)", name, num)
 	}
-	return s.Journal.Od.TeamUnnamed(strconv.Itoa(num))
+	return fmt.Sprintf("команда №%d", num)
 }
 
 func (r *nameResolver) describeEK(ops []journalOpRow) []string {
 	var lines []string
-	s := dopestrings.Default
 	for _, o := range ops {
 		if o.op > journal.OpRowDel {
 			continue
@@ -479,35 +472,35 @@ func (r *nameResolver) describeEK(ops []journalOpRow) []string {
 			id, _ := rowInt(row, "id")
 			cell := r.ekAnswer[id]
 			mark := markLabel(rowStr(row, "mark"))
-			lines = append(lines, s.Journal.Ek.Answer(
-				matchPrefix(cell.match), teamOr(cell.team), strconv.Itoa(cell.theme+1), strconv.Itoa(cell.question+1), mark))
+			lines = append(lines, fmt.Sprintf("%s%s, тема %d, вопрос %d: %s",
+				matchPrefix(cell.match), teamOr(cell.team), cell.theme+1, cell.question+1, mark))
 		case "match_results":
 			teamID, _ := rowInt(row, "participant_id")
 			matchID, _ := rowInt(row, "match_id")
 			if rank, ok := rowInt(row, "rank"); ok {
-				lines = append(lines, s.Journal.Ek.Rank(
-					matchPrefix(r.ekMatch[matchID]), teamOr(r.ekTeam[teamID]), strconv.FormatInt(rank, 10)))
+				lines = append(lines, fmt.Sprintf("%s%s: место %d",
+					matchPrefix(r.ekMatch[matchID]), teamOr(r.ekTeam[teamID]), rank))
 			}
 		case "themes":
 			teamID, _ := rowInt(row, "participant_id")
 			matchID, _ := rowInt(row, "match_id")
 			theme, _ := rowInt(row, "theme_index")
-			prefix := s.Journal.Ek.ThemePrefix(
-				matchPrefix(r.ekMatch[matchID]), teamOr(r.ekTeam[teamID]), strconv.FormatInt(theme+1, 10))
+			prefix := fmt.Sprintf("%s%s, тема %d: ",
+				matchPrefix(r.ekMatch[matchID]), teamOr(r.ekTeam[teamID]), theme+1)
 			if playerID, ok := rowInt(row, "player_id"); ok && playerID != 0 {
 				if name := strings.TrimSpace(r.ekPlayer[playerID]); name != "" {
-					lines = append(lines, prefix+s.Journal.Ek.PlayerPlays(name))
+					lines = append(lines, prefix+"играет "+name)
 				} else {
-					lines = append(lines, prefix+s.Journal.Ek.PlayerAssigned())
+					lines = append(lines, prefix+dopestrings.Default.Journal.Ek.PlayerAssigned())
 				}
 			} else {
-				lines = append(lines, prefix+s.Journal.Ek.PlayerRemoved())
+				lines = append(lines, prefix+dopestrings.Default.Journal.Ek.PlayerRemoved())
 			}
 		case "matches":
 			if st := rowStr(row, "status"); st != "" {
-				label := s.Journal.Ek.MatchReopened()
+				label := dopestrings.Default.Journal.Ek.MatchReopened()
 				if st == "finished" {
-					label = s.Journal.Ek.MatchFinished()
+					label = dopestrings.Default.Journal.Ek.MatchFinished()
 				}
 				lines = append(lines, matchPrefix(r.ekMatch[rowInt64(row, "id")])+label)
 			}
@@ -520,7 +513,7 @@ func (r *nameResolver) describeEK(ops []journalOpRow) []string {
 				if l := describeEvent(o.op, o.payload); len(l) > 0 {
 					lines = append(lines, l...)
 				} else if o.op == journal.OpEvMatchUpdate {
-					lines = append(lines, s.Journal.Ek.MatchUpdate())
+					lines = append(lines, dopestrings.Default.Journal.Ek.MatchUpdate())
 				}
 			}
 		}
@@ -532,7 +525,7 @@ func matchPrefix(code string) string {
 	if code == "" {
 		return ""
 	}
-	return dopestrings.Default.Journal.Ek.MatchPrefix(code)
+	return "матч " + code + ", "
 }
 
 func teamOr(name string) string {
@@ -568,11 +561,10 @@ func genericPatchLine(op edit.PatchOp) string {
 		parts = append(parts, strings.Trim(strings.TrimSpace(string(seg)), `"`))
 	}
 	_, val := patchValue(op.Value)
-	path := strings.Join(parts, " · ")
 	if op.Op == "remove" {
-		return dopestrings.Default.Journal.Patch.GenericRemoved(path)
+		return strings.Join(parts, " · ") + ": снято"
 	}
-	return dopestrings.Default.Journal.Patch.GenericSet(path, val)
+	return strings.Join(parts, " · ") + " → " + val
 }
 
 // patchInt reads a JSON patch value as an integer (OD entries store team
@@ -614,14 +606,13 @@ func patchValue(v json.RawMessage) (raw, display string) {
 }
 
 func markLabel(m string) string {
-	s := dopestrings.Default
 	switch m {
 	case "right":
-		return s.Journal.Mark.Right()
+		return "верно"
 	case "wrong":
-		return s.Journal.Mark.Wrong()
+		return "неверно"
 	case "":
-		return s.Journal.Mark.None()
+		return dopestrings.Default.Journal.Mark.None()
 	default:
 		return m
 	}
@@ -629,34 +620,33 @@ func markLabel(m string) string {
 
 // describeEvent renders coarse, non-game-typed events (imports, reseeds, etc.).
 func describeEvent(op journal.Op, payload []byte) []string {
-	s := dopestrings.Default
 	switch op {
 	case journal.OpEvReseedCalculate:
-		return []string{s.Journal.Event.Reseed()}
+		return []string{dopestrings.Default.Journal.Event.Reseed()}
 	case journal.OpEvRatingImport:
-		return []string{s.Journal.Event.RatingImport()}
+		return []string{dopestrings.Default.Journal.Event.RatingImport()}
 	case journal.OpEvSeedImportKSI:
-		return []string{s.Journal.Event.SeedImportKsi()}
+		return []string{dopestrings.Default.Journal.Event.SeedImportKsi()}
 	case journal.OpEvSeedImportDecline:
-		return []string{s.Journal.Event.SeedDecline()}
+		return []string{dopestrings.Default.Journal.Event.SeedDecline()}
 	case journal.OpEvGameCreate:
-		return []string{s.Journal.Event.GameCreate()}
+		return []string{dopestrings.Default.Journal.Event.GameCreate()}
 	case journal.OpEvGameClear:
-		return []string{s.Journal.Event.GameClear()}
+		return []string{dopestrings.Default.Journal.Event.GameClear()}
 	case journal.OpEvGameDelete:
-		return []string{s.Journal.Event.GameDelete()}
+		return []string{dopestrings.Default.Journal.Event.GameDelete()}
 	case journal.OpEvFestNumbers:
-		return []string{s.Journal.Event.FestNumbers()}
+		return []string{dopestrings.Default.Journal.Event.FestNumbers()}
 	case journal.OpEvVenuesUpdate, journal.OpEvMatchVenue:
-		return []string{s.Journal.Event.Venue()}
+		return []string{dopestrings.Default.Journal.Event.Venue()}
 	case journal.OpEvPlayerOverride, journal.OpEvPlayerOverrideEdit:
-		return []string{s.Journal.Event.PlayerOverride()}
+		return []string{dopestrings.Default.Journal.Event.PlayerOverride()}
 	case journal.OpEvFestAccess:
-		return []string{s.Journal.Event.FestAccess()}
+		return []string{dopestrings.Default.Journal.Event.FestAccess()}
 	case journal.OpEvImport:
-		return []string{s.Journal.Event.SchemeImport()}
+		return []string{dopestrings.Default.Journal.Event.SchemeImport()}
 	case journal.OpEvGameRevert:
-		return []string{s.Journal.Event.GameRevert()}
+		return []string{dopestrings.Default.Journal.Event.GameRevert()}
 	default:
 		return nil
 	}
@@ -735,9 +725,8 @@ func formatJournalTime(ts string) string {
 // per host action (when / who / the change descriptions) and a per-row
 // revert-to-here form. The revert confirm is a data-confirm attribute wired by
 // pageforms.js (no inline on* handler).
-func journalDoc(festID, gameID int64, title, festTitle, errMsg, notice string, groups []journalChange) *ui.Doc {
+func journalDoc(base string, festID, gameID int64, title, festTitle, errMsg, notice string, groups []journalChange) *ui.Doc {
 	var main []ui.Item
-	s := dopestrings.Default
 	if errMsg != "" {
 		main = append(main, ui.Empty(ui.Text(errMsg)))
 	}
@@ -746,28 +735,27 @@ func journalDoc(festID, gameID int64, title, festTitle, errMsg, notice string, g
 	}
 	if len(groups) > 0 {
 		rows := []ui.Item{ui.Trow(
-			ui.Hcell(ui.Text(s.Journal.Page.ColWhen())), ui.Hcell(ui.Text(s.Journal.Page.ColWho())),
-			ui.Hcell(ui.Text(s.Journal.Page.ColChanges())), ui.Hcell(),
+			ui.Hcell(ui.Text(dopestrings.Default.Journal.Page.ColWhen())), ui.Hcell(ui.Text(dopestrings.Default.Journal.Page.ColWho())),
+			ui.Hcell(ui.Text(dopestrings.Default.Journal.Page.ColChanges())), ui.Hcell(),
 		)}
 		for _, g := range groups {
-			rows = append(rows, journalRow(festID, gameID, g))
+			rows = append(rows, journalRow(base, gameID, g))
 		}
 		main = append(main, ui.Section(ui.Table(append([]ui.Item{ui.Scroll()}, rows...)...)))
 	} else {
-		main = append(main, ui.Section(ui.Empty(ui.Text(s.Journal.Page.Empty()))))
+		main = append(main, ui.Section(ui.Empty(ui.Text(dopestrings.Default.Journal.Page.Empty()))))
 	}
 
 	page := []ui.Item{
-		ui.Title(s.Journal.Page.Title(title)), ui.PagePublic, ui.Classicscripts("dist/pageforms.js"),
-		ui.Publictopbar(Trail(append(FestCrumbs(strconv.FormatInt(festID, 10), festTitle),
-			ui.Crumb(ui.Href(fmt.Sprintf("/host/fest/%d/audit", festID)), ui.Text(s.Journal.Index.Title()))), title)),
+		ui.Title("История игры · " + title), ui.PagePublic, ui.Classicscripts("dist/pageforms.js"),
+		ui.Publictopbar(Trail(append(FestCrumbs(base, festTitle),
+			ui.Crumb(ui.Href(base+"/audit"), ui.Text(dopestrings.Default.Journal.Index.Title()))), title)),
 	}
 	page = append(page, main...)
 	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
 }
 
-func journalRow(festID, gameID int64, g journalChange) *ui.Element {
-	s := dopestrings.Default
+func journalRow(base string, gameID int64, g journalChange) *ui.Element {
 	actor := ui.Cell(ui.Muted(ui.Text("—")))
 	if g.Actor != "" {
 		actor = ui.Cell(ui.Text(g.Actor))
@@ -777,29 +765,34 @@ func journalRow(festID, gameID int64, g journalChange) *ui.Element {
 		lines = append(lines, ui.Paragraph(ui.Text(ln)))
 	}
 	if g.More > 0 {
-		lines = append(lines, ui.Note(ui.Text(s.Journal.Page.More(strconv.Itoa(g.More)))))
+		lines = append(lines, ui.Note(ui.Text(fmt.Sprintf("+ ещё %d", g.More))))
 	}
 	revert := ui.Cell(ui.Form(
-		ui.Method("post"), ui.Action(fmt.Sprintf("/host/fest/%d/audit/%d/revert", festID, gameID)),
-		ui.Data("confirm", s.Journal.Page.RevertConfirm()),
+		ui.Method("post"), ui.Action(fmt.Sprintf("%s/audit/%d/revert", base, gameID)),
+		ui.Data("confirm", dopestrings.Default.Journal.Page.RevertConfirm()),
 		ui.Hiddenfield(ui.Name("target"), ui.Value(strconv.FormatInt(g.RevertTo, 10))),
-		ui.Button(ui.Danger, ui.Submit(), ui.Text(s.Journal.Page.RevertSubmit())),
+		ui.Button(ui.Danger, ui.Submit(), ui.Text(dopestrings.Default.Journal.Page.RevertSubmit())),
 	))
 	return ui.Trow(ui.Cell(ui.Muted(ui.Text(g.When))), actor, ui.Cell(lines...), revert)
 }
 
 func (s *Server) RenderGameJournal(w http.ResponseWriter, r *http.Request, festID, gameID int64, errMsg, notice string) {
+	fest, err := s.h.LoadHostFestHeader(r.Context(), festID)
+	if err != nil {
+		http.Error(w, "journal: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	var title string
 	_ = s.h.Engine().DB.QueryRowContext(r.Context(), `select coalesce(title, code) from games where id = ? and fest_id = ?`, gameID, festID).Scan(&title)
 	if title == "" {
-		title = dopestrings.Default.Journal.Page.DefaultTitle(strconv.FormatInt(gameID, 10))
+		title = fmt.Sprintf("игра %d", gameID)
 	}
 	groups, err := s.loadGameJournalGroups(r.Context(), festID, gameID)
 	if err != nil {
-		route.WriteError(w, r, fmt.Errorf("journal: %w", err))
+		http.Error(w, "journal: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	RenderDoc(w, s.h.Engine().AssetETags, journalDoc(festID, gameID, title, FestTitle(r.Context(), s.h.Engine().DB, festID), errMsg, notice, groups))
+	RenderDoc(w, s.h.Engine().AssetETags, journalDoc(fest.HostBase(), festID, gameID, title, fest.Title, errMsg, notice, groups))
 }
 
 func (s *Server) HandleGameRevert(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
@@ -814,7 +807,7 @@ func (s *Server) HandleGameRevert(w http.ResponseWriter, r *http.Request, festID
 	}
 	revision, err := s.h.RevertGameToPoint(r.Context(), festID, gameID, target)
 	if err != nil {
-		s.RenderGameJournal(w, r, festID, gameID, dopestrings.Default.Journal.Page.RevertFailed(err.Error()), "")
+		s.RenderGameJournal(w, r, festID, gameID, "Не удалось откатить: "+err.Error(), "")
 		return
 	}
 	s.h.BroadcastFestView(festID, gameID, revision)
