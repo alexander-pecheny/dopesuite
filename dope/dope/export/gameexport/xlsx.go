@@ -42,9 +42,7 @@ func HandleScopedGameExport(s Host, w http.ResponseWriter, r *http.Request, fest
 	switch gameType {
 	case "od":
 		var ratingByNumber map[int64]int64
-		if list, cerr := store.LoadContested(r.Context(), s.DB(), gameID); cerr == nil {
-			stateJSON = string(store.WithContested([]byte(stateJSON), list))
-		}
+		stateJSON = string(store.WithContestedFor(r.Context(), s.DB(), gameID, []byte(stateJSON)))
 		ratingByNumber, err = loadTeamRatingIDsByNumber(r.Context(), s.DB(), festID)
 		if err == nil {
 			err = xlsxexport.BuildODSheet(f, schemeJSON, stateJSON, ratingByNumber)

@@ -8,11 +8,6 @@ import (
 	"sort"
 )
 
-// The спорные of one ОД Game, keyed by the team's Number in that Game — which
-// is the identity the ОД document uses — and stored against the Participant
-// that number seats.
-
-// LoadContested reads a Game's спорные in reading order.
 func LoadContested(ctx context.Context, q Queryer, gameID int64) ([]ContestedAnswer, error) {
 	list, err := CollectRows(ctx, q, `
 select c.question, coalesce(gp.number, coalesce(p.number, 0)), c.answer, c.accepted_here
@@ -33,7 +28,6 @@ where c.game_id = ?`, []any{gameID}, func(rows *sql.Rows) (ContestedAnswer, erro
 	return list, nil
 }
 
-// ErrNoSuchNumber is a спорный named against a number the Game does not seat.
 var ErrNoSuchNumber = errors.New("в игре нет команды с таким номером")
 
 // participantByGameNumber resolves a Game's team Number to the Participant it
@@ -59,7 +53,6 @@ order by coalesce(game_id, 0) desc limit 1`, festID, gameID, number).Scan(&id)
 	return id, err
 }
 
-// SaveContestedTx records a спорный, replacing the one that cell already held.
 func SaveContestedTx(ctx context.Context, tx *sql.Tx, festID, gameID, userID int64, question int, number int64, answer, now string) error {
 	participantID, err := participantByGameNumber(ctx, tx, festID, gameID, number)
 	if err != nil {
@@ -73,7 +66,6 @@ on conflict(game_id, question, participant_id) do update set answer = excluded.a
 	return err
 }
 
-// SetContestedAcceptedTx is the host's «Принят на площадке» toggle.
 func SetContestedAcceptedTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, question int, number int64, accepted bool) error {
 	participantID, err := participantByGameNumber(ctx, tx, festID, gameID, number)
 	if err != nil {
@@ -89,7 +81,6 @@ update od_contested set accepted_here = ? where game_id = ? and question = ? and
 	return err
 }
 
-// DeleteContestedTx drops a спорный the host decided was simply wrong.
 func DeleteContestedTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, question int, number int64) error {
 	participantID, err := participantByGameNumber(ctx, tx, festID, gameID, number)
 	if err != nil {
@@ -106,8 +97,6 @@ func DeleteContestedTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, qu
 // the ОД document rather than in it — the ruling is not a score — and splices
 // them into the document every reader gets.
 
-// ContestedAnswer is one спорный as the ОД page reads it: the question it was
-// given on, the team's Number, the text, and whether the host counts it here.
 type ContestedAnswer struct {
 	Question     int    `json:"question"`
 	Number       int64  `json:"number"`
@@ -115,11 +104,8 @@ type ContestedAnswer struct {
 	AcceptedHere bool   `json:"acceptedHere"`
 }
 
-// ContestedKey is the document key the list travels under.
 const ContestedKey = "contested"
 
-// SortContested puts the list in the order a page reads it: by question, then
-// by team number.
 func SortContested(list []ContestedAnswer) {
 	sort.SliceStable(list, func(i, j int) bool {
 		if list[i].Question != list[j].Question {
@@ -127,6 +113,14 @@ func SortContested(list []ContestedAnswer) {
 		}
 		return list[i].Number < list[j].Number
 	})
+}
+
+func WithContestedFor(ctx context.Context, q Queryer, gameID int64, state []byte) []byte {
+	list, err := LoadContested(ctx, q, gameID)
+	if err != nil || len(list) == 0 {
+		return state
+	}
+	return WithContested(state, list)
 }
 
 // WithContested returns the ОД document with the спорные spliced in. A
@@ -153,8 +147,6 @@ func WithContested(state []byte, list []ContestedAnswer) []byte {
 	return merged
 }
 
-// StripContested removes the spliced list, so what a client PUTs back is
-// stored without it.
 func StripContested(state []byte) []byte {
 	obj := map[string]json.RawMessage{}
 	if err := json.Unmarshal(state, &obj); err != nil {
@@ -171,9 +163,6 @@ func StripContested(state []byte) []byte {
 	return stripped
 }
 
-// ContestedAnswersFor is the answers a спорный carries for one question, keyed
-// by team number — what the tours export writes into the cell whatever
-// accepted_here says.
 func ContestedAnswersFor(list []ContestedAnswer) map[int]map[int64]string {
 	out := map[int]map[int64]string{}
 	for _, c := range list {

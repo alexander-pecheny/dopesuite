@@ -658,3 +658,65 @@ export function fitEKStageTeamName(cell: HTMLElement | null | undefined, nameNod
   }
   return vertOverflows() || horizOverflows();
 }
+
+// A page's own modal: a <dialog> with a form in it, torn down on close. The
+// caller fills the body and says what submitting means; everything around it —
+// the scaffold, the backdrop click, the removal — is the same on every page.
+export interface ModalSpec {
+  title: string;
+  className?: string;
+  body: Node[];
+  submitLabel: string;
+  cancelLabel?: string;
+  extraActions?: HTMLElement[];
+  onSubmit: () => void;
+  focus?: HTMLElement;
+}
+
+export function openModal(spec: ModalSpec): HTMLDialogElement {
+  const dialog = document.createElement("dialog");
+  dialog.className = spec.className ? `modal-dialog ${spec.className}` : "modal-dialog";
+  const form = document.createElement("form");
+  form.className = "u-col u-gap-md";
+
+  const heading = document.createElement("h2");
+  heading.textContent = spec.title;
+
+  const actions = document.createElement("div");
+  actions.className = "modal-actions";
+  for (const extra of spec.extraActions || []) actions.append(extra);
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "btn";
+  cancel.textContent = spec.cancelLabel || "Отмена";
+  cancel.addEventListener("click", () => dialog.close());
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.className = "btn btn-primary";
+  submit.textContent = spec.submitLabel;
+  actions.append(cancel, submit);
+
+  form.append(heading, ...spec.body, actions);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (submit.disabled) return;
+    dialog.close();
+    spec.onSubmit();
+  });
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+  dialog.addEventListener("close", () => dialog.remove(), {once: true});
+  dialog.appendChild(form);
+  document.body.appendChild(dialog);
+  if (typeof dialog.showModal === "function") dialog.showModal();
+  else dialog.setAttribute("open", "");
+  spec.focus?.focus();
+  return dialog;
+}
+
+// modalSubmitButton is the modal's own submit control, for a caller that must
+// enable or disable it as its body is typed into.
+export function modalSubmitButton(dialog: HTMLDialogElement): HTMLButtonElement | null {
+  return dialog.querySelector<HTMLButtonElement>(".modal-actions button[type=submit]");
+}
