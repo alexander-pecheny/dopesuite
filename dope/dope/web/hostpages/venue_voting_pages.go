@@ -9,10 +9,6 @@ import (
 	ui "dope/dope/web/ui"
 )
 
-// The Голосование pages: the Слот page's section 4 and the public ballot the
-// voting link opens.
-
-// VotingView is a Слот's poll as its host page shows it.
 type VotingView struct {
 	Voting     venues.Voting
 	URL        string
@@ -28,7 +24,6 @@ var kindLabels = []struct{ kind, label string }{
 	{venues.KindRanked, "три по порядку"},
 }
 
-// KindLabel is a ballot kind in the host's words.
 func KindLabel(kind string) string {
 	for _, k := range kindLabels {
 		if k.kind == kind {
@@ -42,8 +37,6 @@ func candidateLabel(c venues.Candidate) string {
 	return joinDots(c.Name, c.Type)
 }
 
-// votingForm is «Создать голосование» and, once created, its settings: the
-// candidates buff offers for the Слот's date, the ballot kind and the window.
 func votingForm(base string, view VotingView) *ui.Element {
 	v := view.Voting
 	candidates := view.Candidates
@@ -157,7 +150,6 @@ func votingBallots(base string, view VotingView) *ui.Element {
 
 func joinList(parts []string) string { return strings.Join(parts, ", ") }
 
-// slotVotingSection is section 4 of the Слот page.
 func slotVotingSection(data slotPageData) *ui.Element {
 	base := slotBase(data.Venue, data.Slot)
 	view := data.Voting
@@ -199,9 +191,6 @@ func votingWindowLabel(v venues.Voting) string {
 	return "без срока"
 }
 
-// ---- /vote/{token} -----------------------------------------------------------
-
-// VotePage is what a voting link shows.
 type VotePage struct {
 	Voting     venues.Voting
 	VenueTitle string
@@ -215,7 +204,6 @@ type VotePage struct {
 	Error      string
 }
 
-// VoteDoc builds /vote/{token}: when it opens, the ballot, or the tally.
 func VoteDoc(p VotePage) *ui.Doc {
 	page := []ui.Item{ui.Title("Голосование · " + p.VenueTitle), ui.PagePublic, ui.Classicscripts("dist/pageforms.js")}
 	page = append(page, ui.Publictopbar(ui.Crumbs(

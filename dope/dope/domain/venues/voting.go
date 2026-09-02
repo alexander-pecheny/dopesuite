@@ -17,27 +17,22 @@ import (
 // unguessable link, whose candidates are the tournaments buff knows to be
 // playable that day. The result is advice only.
 
-// Ballot kinds.
 const (
 	KindOne    = "one"
 	KindAny    = "any"
 	KindRanked = "ranked"
 )
 
-// RankedDepth is how many tournaments a ranked ballot orders, and BordaPoints
-// what each place pays.
 const RankedDepth = 3
 
 var bordaPoints = []int{3, 2, 1}
 
-// Candidate is one tournament on the ballot.
 type Candidate struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
 	Type string `json:"type"`
 }
 
-// Voting is a Слот's poll.
 type Voting struct {
 	ID         int64
 	SlotID     int64
@@ -50,8 +45,6 @@ type Voting struct {
 	Frozen     bool
 }
 
-// Ballot is one voter's answer. Choice holds candidate ids: one for KindOne,
-// any number for KindAny, up to RankedDepth in order for KindRanked.
 type Ballot struct {
 	ID        int64
 	VotingID  int64
@@ -61,15 +54,14 @@ type Ballot struct {
 	Choice    []int64
 	Discarded bool
 	CreatedAt string
+	UpdatedAt string
 }
 
-// TallyRow is one candidate's standing in the count.
 type TallyRow struct {
 	Candidate Candidate
 	Score     int
 }
 
-// Open reports whether the poll takes ballots at now.
 func (v Voting) Open(now time.Time) bool {
 	if opens, ok := ParseTime(v.OpensAt); ok && now.Before(opens) {
 		return false
@@ -77,8 +69,6 @@ func (v Voting) Open(now time.Time) bool {
 	return !v.Closed(now)
 }
 
-// Closed reports whether the poll is over — after which the tally shows to
-// anyone holding the link.
 func (v Voting) Closed(now time.Time) bool {
 	closes, ok := ParseTime(v.ClosesAt)
 	return ok && !now.Before(closes)
@@ -113,8 +103,6 @@ func Tally(v Voting, ballots []Ballot) []TallyRow {
 	return rows
 }
 
-// countedBallots drops the discarded ones and, in per-team mode, keeps one
-// ballot per team — the last one filed.
 func countedBallots(perTeam bool, ballots []Ballot) []Ballot {
 	kept := make([]Ballot, 0, len(ballots))
 	for _, b := range ballots {
@@ -141,8 +129,6 @@ func countedBallots(perTeam bool, ballots []Ballot) []Ballot {
 	return out
 }
 
-// NormalizeChoice keeps only ids the poll offers, in the form its kind takes:
-// one id, any number of them, or at most RankedDepth in order and each once.
 func NormalizeChoice(v Voting, ids []int64) []int64 {
 	offered := map[int64]bool{}
 	for _, c := range v.Candidates {
@@ -166,8 +152,6 @@ func NormalizeChoice(v Voting, ids []int64) []int64 {
 	return out
 }
 
-// ---- persistence -------------------------------------------------------------
-
 const votingSelect = `
 select id, slot_id, token, kind, per_team, coalesce(opens_at, ''), coalesce(closes_at, ''), candidates_json, frozen
 from slot_votings where `
@@ -184,12 +168,10 @@ func scanVoting(row interface{ Scan(...any) error }) (Voting, error) {
 	return v, err
 }
 
-// SlotVoting is a Слот's poll; sql.ErrNoRows when it has none.
 func SlotVoting(ctx context.Context, q store.Queryer, slotID int64) (Voting, error) {
 	return scanVoting(q.QueryRowContext(ctx, votingSelect+`slot_id = ?`, slotID))
 }
 
-// VotingByToken is the poll a voting link names.
 func VotingByToken(ctx context.Context, q store.Queryer, token string) (Voting, error) {
 	if strings.TrimSpace(token) == "" {
 		return Voting{}, sql.ErrNoRows
@@ -197,40 +179,37 @@ func VotingByToken(ctx context.Context, q store.Queryer, token string) (Voting, 
 	return scanVoting(q.QueryRowContext(ctx, votingSelect+`token = ?`, token))
 }
 
-// ErrNoCandidates refuses a poll with nothing to vote for.
 var ErrNoCandidates = errors.New("выберите хотя бы один турнир")
 
-// SaveVotingTx creates or rewrites a Слот's poll. A poll that has taken a
-// ballot is frozen: its candidates stay as the voters saw them.
 func SaveVotingTx(ctx context.Context, tx *sql.Tx, slotID int64, kind string, perTeam bool, opensAt, closesAt string, candidates []Candidate) error {
-	if len(candidates) == 0 {
-		return ErrNoCandidates
-	}
 	switch kind {
 	case KindOne, KindAny, KindRanked:
 	default:
 		return errors.New("неизвестный вид голосования")
 	}
+	existing, err := SlotVoting(ctx, tx, slotID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	fresh := errors.Is(err, sql.ErrNoRows)
+	// The candidate list froze at the first ballot, so a later save carries
+	// none: the window and the kind still change, the offer does not.
+	if !fresh && existing.Frozen {
+		candidates = existing.Candidates
+	}
+	if len(candidates) == 0 {
+		return ErrNoCandidates
+	}
 	encoded, err := json.Marshal(candidates)
 	if err != nil {
 		return err
 	}
-	existing, err := SlotVoting(ctx, tx, slotID)
-	if errors.Is(err, sql.ErrNoRows) {
+	if fresh {
 		_, err = store.InsertReturningID(ctx, tx, `
 insert into slot_votings(slot_id, token, kind, per_team, opens_at, closes_at, candidates_json, frozen, created_at)
 values(?, ?, ?, ?, ?, ?, ?, 0, ?)`, slotID, NewToken(), kind, util.BoolToInt(perTeam),
 			util.NullableString(FormatTime(opensAt)), util.NullableString(FormatTime(closesAt)), string(encoded), util.UtcNow())
 		return err
-	}
-	if err != nil {
-		return err
-	}
-	if existing.Frozen {
-		encoded, err = json.Marshal(existing.Candidates)
-		if err != nil {
-			return err
-		}
 	}
 	_, err = tx.ExecContext(ctx, `
 update slot_votings set kind = ?, per_team = ?, opens_at = ?, closes_at = ?, candidates_json = ?
@@ -239,19 +218,18 @@ where id = ?`, kind, util.BoolToInt(perTeam),
 	return err
 }
 
-// VotingBallots are a poll's ballots in filing order.
 func VotingBallots(ctx context.Context, q store.Queryer, votingID int64) ([]Ballot, error) {
 	return store.CollectRows(ctx, q, `
 select b.id, b.voting_id, b.user_id,
        coalesce(nullif(u.telegram_username, ''), nullif(u.username, ''), ''),
-       coalesce(b.team_name, ''), b.choice_json, b.discarded, b.created_at
+       coalesce(b.team_name, ''), b.choice_json, b.discarded, b.created_at, b.updated_at
 from slot_ballots b join users u on u.id = b.user_id
 where b.voting_id = ?
-order by b.created_at, b.id`, []any{votingID}, func(rows *sql.Rows) (Ballot, error) {
+order by b.id`, []any{votingID}, func(rows *sql.Rows) (Ballot, error) {
 		var b Ballot
 		var choice string
 		var discarded int
-		err := rows.Scan(&b.ID, &b.VotingID, &b.UserID, &b.Voter, &b.TeamName, &choice, &discarded, &b.CreatedAt)
+		err := rows.Scan(&b.ID, &b.VotingID, &b.UserID, &b.Voter, &b.TeamName, &choice, &discarded, &b.CreatedAt, &b.UpdatedAt)
 		b.Discarded = discarded == 1
 		if choice != "" {
 			_ = json.Unmarshal([]byte(choice), &b.Choice)
@@ -260,7 +238,6 @@ order by b.created_at, b.id`, []any{votingID}, func(rows *sql.Rows) (Ballot, err
 	})
 }
 
-// UserBallot is a voter's own ballot; sql.ErrNoRows when they have not voted.
 func UserBallot(ctx context.Context, q store.Queryer, votingID, userID int64) (Ballot, error) {
 	ballots, err := VotingBallots(ctx, q, votingID)
 	if err != nil {
@@ -274,24 +251,36 @@ func UserBallot(ctx context.Context, q store.Queryer, votingID, userID int64) (B
 	return Ballot{}, sql.ErrNoRows
 }
 
-// CastBallotTx files or replaces a voter's ballot and freezes the candidates.
 func CastBallotTx(ctx context.Context, tx *sql.Tx, v Voting, userID int64, teamName string, choice []int64) error {
 	encoded, err := json.Marshal(NormalizeChoice(v, choice))
 	if err != nil {
 		return err
 	}
+	// A re-vote replaces the row rather than updating it, so the ballot a team
+	// is counted on is the highest id — an ordering two votes in one second
+	// cannot confuse.
+	now := util.UtcNow()
+	var createdAt string
+	err = tx.QueryRowContext(ctx,
+		`select created_at from slot_ballots where voting_id = ? and user_id = ?`, v.ID, userID).Scan(&createdAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		createdAt = now
+	} else if err != nil {
+		return err
+	} else if _, err := tx.ExecContext(ctx,
+		`delete from slot_ballots where voting_id = ? and user_id = ?`, v.ID, userID); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `
-insert into slot_ballots(voting_id, user_id, team_name, choice_json, discarded, created_at)
-values(?, ?, ?, ?, 0, ?)
-on conflict(voting_id, user_id) do update set team_name = excluded.team_name, choice_json = excluded.choice_json`,
-		v.ID, userID, strings.TrimSpace(teamName), string(encoded), util.UtcNow()); err != nil {
+insert into slot_ballots(voting_id, user_id, team_name, choice_json, discarded, created_at, updated_at)
+values(?, ?, ?, ?, 0, ?, ?)`,
+		v.ID, userID, strings.TrimSpace(teamName), string(encoded), createdAt, now); err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `update slot_votings set frozen = 1 where id = ?`, v.ID)
 	return err
 }
 
-// DiscardBallotTx is the Representative's «Отклонить»; discarded reverses it.
 func DiscardBallotTx(ctx context.Context, tx *sql.Tx, votingID, ballotID int64, discarded bool) error {
 	_, err := tx.ExecContext(ctx, `update slot_ballots set discarded = ? where id = ? and voting_id = ?`,
 		util.BoolToInt(discarded), ballotID, votingID)
