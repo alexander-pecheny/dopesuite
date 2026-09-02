@@ -10,7 +10,7 @@ import type {PatchPath} from "./state-sync.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
-import {bindScrollEdges, createTeamNameOverflowController, fitScrollFade, installVirtualKeypad, renderTabBar} from "./widgets.js";
+import {bindScrollEdges, createTeamNameOverflowController, fitScrollFade, installVirtualKeypad, modalSubmitButton, openModal, renderTabBar} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {VirtualKeypad} from "./widgets.js";
 import { gameTabs } from "./game-tabs.js";
@@ -361,7 +361,7 @@ function getTabPane(tab: string): HTMLElement {
   let node;
   if (tab === "input") node = buildInputView();
   else if (tab === "detailed") node = buildDetailedTable();
-  else if (tab === "roster") node = buildRosterView(route.festID);
+  else if (tab === "roster") node = buildRosterView(route.festID, route.gameID);
   else if (tab === "screen") node = buildScreenView();
   else node = buildResultsTable();
   const pane = document.createElement("div");
@@ -1933,14 +1933,6 @@ function openContestedDialog(cell: HTMLElement): void {
   const {q: qIndex, row: rowIndex} = pos;
   const existing = contestedAtCell(qIndex, rowIndex);
 
-  const dialog = document.createElement("dialog");
-  dialog.className = "modal-dialog";
-  const form = document.createElement("form");
-  form.className = "u-col u-gap-md";
-
-  const title = document.createElement("h2");
-  title.textContent = `Спорный ответ · вопрос ${qIndex + 1}`;
-
   const numberField = document.createElement("label");
   numberField.className = "field";
   const numberCaption = document.createElement("span");
@@ -1973,8 +1965,7 @@ function openContestedDialog(cell: HTMLElement): void {
   acceptedCaption.textContent = "Принят на площадке";
   acceptedField.append(acceptedInput, acceptedCaption);
 
-  const actions = document.createElement("div");
-  actions.className = "modal-actions";
+  const extras: HTMLElement[] = [];
   if (existing) {
     const remove = document.createElement("button");
     remove.type = "button";
@@ -1986,48 +1977,31 @@ function openContestedDialog(cell: HTMLElement): void {
     });
     const spacer = document.createElement("span");
     spacer.className = "u-spacer";
-    actions.append(remove, spacer);
+    extras.push(remove, spacer);
   }
-  const cancel = document.createElement("button");
-  cancel.type = "button";
-  cancel.className = "btn";
-  cancel.textContent = "Отмена";
-  cancel.addEventListener("click", () => dialog.close());
-  const submit = document.createElement("button");
-  submit.type = "submit";
-  submit.className = "btn btn-primary";
-  submit.textContent = "Сохранить";
-  actions.append(cancel, submit);
 
   const typedNumber = () => Number(numberInput.value.trim());
+  const dialog = openModal({
+    title: `Спорный ответ · вопрос ${qIndex + 1}`,
+    body: [numberField, teamHint, answerField, acceptedField],
+    extraActions: extras,
+    submitLabel: "Сохранить",
+    focus: numberInput,
+    onSubmit: () => {
+      void submitContested(qIndex, typedNumber(), answerInput.value.trim(), acceptedInput.checked, existing);
+    },
+  });
+  const submit = modalSubmitButton(dialog);
   const syncSubmit = () => {
     const teamIndex = teamIndexByNumber(typedNumber());
     teamHint.hidden = numberInput.value.trim() === "";
     teamHint.textContent = teamIndex >= 0 ? teamLabel(teamIndex) : "Нет такой команды";
     teamHint.classList.toggle("hint-danger", teamIndex < 0);
-    submit.disabled = teamIndex < 0 || answerInput.value.trim() === "";
+    if (submit) submit.disabled = teamIndex < 0 || answerInput.value.trim() === "";
   };
   numberInput.addEventListener("input", syncSubmit);
   answerInput.addEventListener("input", syncSubmit);
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const number = typedNumber();
-    if (submit.disabled || teamIndexByNumber(number) < 0) return;
-    dialog.close();
-    void submitContested(qIndex, number, answerInput.value.trim(), acceptedInput.checked, existing);
-  });
   syncSubmit();
-
-  form.append(title, numberField, teamHint, answerField, acceptedField, actions);
-  dialog.appendChild(form);
-  dialog.addEventListener("click", (event) => {
-    if (event.target === dialog) dialog.close();
-  });
-  dialog.addEventListener("close", () => dialog.remove(), {once: true});
-  document.body.appendChild(dialog);
-  if (typeof dialog.showModal === "function") dialog.showModal();
-  else dialog.setAttribute("open", "");
-  numberInput.focus();
   numberInput.select();
 }
 
@@ -2053,13 +2027,8 @@ async function submitContested(question: number, number: number, answer: string,
   if (existing && existing.number !== number) {
     if (!await contestedRequest("DELETE", {question, number: existing.number})) return;
   }
-  let list = await contestedRequest("POST", {question, number, answer});
-  if (!list) return;
-  const saved = list.find((item) => item.question === question && item.number === number);
-  if (saved && saved.acceptedHere !== accepted) {
-    list = await contestedRequest("PATCH", {question, number, acceptedHere: accepted}) || list;
-  }
-  applyContested(list);
+  const list = await contestedRequest("POST", {question, number, answer, acceptedHere: accepted});
+  if (list) applyContested(list);
 }
 
 async function deleteContested(question: number, number: number): Promise<void> {

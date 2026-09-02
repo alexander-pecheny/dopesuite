@@ -15,7 +15,7 @@ import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReloa
 import type {PendingOp, WireOp} from "./state-sync.js";
 import {mountGamePage} from "./game-shell.js";
 import {createLocalCache, notifyEmbeddedResize} from "./game-page.js";
-import {bindScrollEdges, clamp, createFloatingPopover, fitEKStageTeamName, fitScrollFade, installCellNavBar, isClipped, markNameOverflow} from "./widgets.js";
+import {bindScrollEdges, clamp, createFloatingPopover, fitEKStageTeamName, fitScrollFade, installCellNavBar, isClipped, markNameOverflow, openModal} from "./widgets.js";
 import type {CellNavBar, ScrollEdgeBinding} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
@@ -2477,51 +2477,25 @@ function battleHeader(): HTMLElement {
 function openVenueDialog(matchCode: string): void {
   const matchState = matchStateFor(matchCode);
   if (!matchState) return;
-  const dialog = document.createElement("dialog");
-  dialog.className = "modal-dialog venue-dialog";
-  const form = document.createElement("form");
-  form.className = "venue-dialog-form";
-
-  const title = document.createElement("h2");
-  title.textContent = matchState.title || matchTitle(matchState);
-  form.appendChild(title);
-
   const select = document.createElement("select");
   select.className = "venue-dialog-select";
   venues.forEach((venue) => {
     select.appendChild(option(String(venue.number), `${venue.number}: ${venue.title}`));
   });
   select.value = matchState.venue ? String(matchState.venue.number) : "";
-  form.appendChild(select);
-
-  const actions = document.createElement("div");
-  actions.className = "modal-actions";
-  const cancel = document.createElement("button");
-  cancel.type = "button";
-  cancel.className = "btn";
-  cancel.textContent = S.ek.venue.cancel();
-  cancel.addEventListener("click", () => dialog.close());
-  const save = document.createElement("button");
-  save.type = "submit";
-  save.className = "btn";
-  save.textContent = S.ek.venue.save();
-  actions.append(cancel, save);
-  form.appendChild(actions);
-
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const number = Number(select.value);
-    dialog.close();
-    const current = matchStateFor(matchCode) || matchState;
-    if (number > 0 && number !== current.venue?.number) {
-      sendVenueChange(number, matchCode);
-    }
+  openModal({
+    title: matchState.title || matchTitle(matchState),
+    className: "venue-dialog",
+    cancelLabel: S.ek.venue.cancel(),
+    body: [select],
+    submitLabel: S.ek.venue.save(),
+    focus: select,
+    onSubmit: () => {
+      const number = Number(select.value);
+      const current = matchStateFor(matchCode) || matchState;
+      if (number > 0 && number !== current.venue?.number) sendVenueChange(number, matchCode);
+    },
   });
-  dialog.addEventListener("close", () => dialog.remove());
-  dialog.appendChild(form);
-  document.body.appendChild(dialog);
-  dialog.showModal();
-  select.focus();
 }
 
 function shootoutControlsHeader(): HTMLElement {

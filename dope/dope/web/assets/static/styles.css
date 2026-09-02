@@ -452,12 +452,6 @@
   width: min(340px, calc(100vw - var(--space-6)));
 }
 
-.venue-dialog-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
 .venue-dialog-select {
   width: 100%;
   min-height: 34px;

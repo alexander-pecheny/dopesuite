@@ -7,18 +7,12 @@ import (
 	"net/http"
 	"strconv"
 
-	"dope/dope/domain/core"
 	"dope/dope/domain/games"
 	"dope/dope/storage/store"
 	"dope/dope/web/route"
 	ui "dope/dope/web/ui"
 )
 
-// The Слот page's Спорные list: what the ОД page recorded from Ввод, with the
-// «Принят на площадке» toggle and the delete a host reaches for when an answer
-// was simply wrong.
-
-// ContestedRow is one спорный as the Слот page shows it.
 type ContestedRow struct {
 	store.ContestedAnswer
 	Tour     int
@@ -26,8 +20,6 @@ type ContestedRow struct {
 	TeamName string
 }
 
-// contestedRows numbers each спорный by tour and by its place in that tour,
-// and names the team its Number seats.
 func contestedRows(list []store.ContestedAnswer, schemeJSON, stateJSON string) []ContestedRow {
 	tours := games.ParseTourComp(schemeJSON)
 	var state games.ODState
@@ -119,8 +111,9 @@ func (s *Server) loadContestedRows(ctx context.Context, festID, gameID int64) ([
 
 // contestedWrite runs one host action on a спорный and rebroadcasts the Слот's
 // document so every open page sees it.
-func (s *Server) contestedWrite(w http.ResponseWriter, r *http.Request, festID int64,
+func (s *Server) contestedWrite(w http.ResponseWriter, r *http.Request, sc route.Scope,
 	apply func(ctx context.Context, tx *sql.Tx, question int, number int64) error) error {
+	festID := sc.FestID
 	_, slot, err := s.slotOf(r, festID)
 	if err != nil {
 		return err
@@ -136,33 +129,33 @@ func (s *Server) contestedWrite(w http.ResponseWriter, r *http.Request, festID i
 	if err := s.h.Engine().WithWriteTx(r.Context(), festID, "contested", func(ctx context.Context, tx *sql.Tx) error {
 		return apply(ctx, tx, question, number)
 	}); err != nil {
-		return s.renderSlotPage(w, r, festID, err.Error(), "")
+		return s.renderSlotPage(w, r, sc, err.Error(), "")
 	}
-	if doc, err := store.LoadGameDoc(r.Context(), s.h.Engine().DB, festID, slot.GameID); err == nil {
-		var revision int64
-		_ = s.h.Engine().DB.QueryRowContext(r.Context(), `select revision from games where id = ?`, slot.GameID).Scan(&revision)
-		s.h.Engine().BroadcastState(festID, core.GameStateScope(slot.GameID), revision, []byte(doc.State))
+	if err := s.h.Engine().RebroadcastGameDocument(r.Context(), festID, slot.GameID); err != nil {
+		return err
 	}
 	return s.redirectToSlot(w, r, festID, slot.ID)
 }
 
-func (s *Server) handleContestedAccept(w http.ResponseWriter, r *http.Request, festID int64) error {
+func (s *Server) handleContestedAccept(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	festID := sc.FestID
 	_, slot, err := s.slotOf(r, festID)
 	if err != nil {
 		return err
 	}
 	accepted := r.FormValue("accepted") == "1"
-	return s.contestedWrite(w, r, festID, func(ctx context.Context, tx *sql.Tx, question int, number int64) error {
+	return s.contestedWrite(w, r, sc, func(ctx context.Context, tx *sql.Tx, question int, number int64) error {
 		return store.SetContestedAcceptedTx(ctx, tx, festID, slot.GameID, question, number, accepted)
 	})
 }
 
-func (s *Server) handleContestedDelete(w http.ResponseWriter, r *http.Request, festID int64) error {
+func (s *Server) handleContestedDelete(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	festID := sc.FestID
 	_, slot, err := s.slotOf(r, festID)
 	if err != nil {
 		return err
 	}
-	return s.contestedWrite(w, r, festID, func(ctx context.Context, tx *sql.Tx, question int, number int64) error {
+	return s.contestedWrite(w, r, sc, func(ctx context.Context, tx *sql.Tx, question int, number int64) error {
 		return store.DeleteContestedTx(ctx, tx, festID, slot.GameID, question, number)
 	})
 }
