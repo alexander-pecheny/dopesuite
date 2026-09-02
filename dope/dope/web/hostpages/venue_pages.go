@@ -10,11 +10,6 @@ import (
 	ui "dope/dope/web/ui"
 )
 
-// The public Площадка pages: the /venues index, a Venue's own page and the
-// registration link a Representative posts. They are builder pages like the
-// two fest ones beside them, and share their vocabulary.
-
-// VenueRow is one Venue on the index.
 type VenueRow struct {
 	Ref           string
 	Title         string
@@ -25,7 +20,6 @@ type VenueRow struct {
 	RatingVenueID int64
 }
 
-// SlotRow is one Слот on a Venue's page.
 type SlotRow struct {
 	Date         string
 	Tournament   string
@@ -34,7 +28,6 @@ type SlotRow struct {
 	Accepted     int
 }
 
-// VenueDetail is a Venue's own page.
 type VenueDetail struct {
 	Ref           string
 	Title         string
@@ -45,26 +38,23 @@ type VenueDetail struct {
 	Past          []SlotRow
 }
 
-// RegPage is what a registration link shows: always the Слот, then whichever
-// of the three states it is in.
 type RegPage struct {
-	Token        string
-	VenueTitle   string
-	VenueRef     string
-	City         string
-	Date         string
-	Tournament   string
-	State        venues.RegState
-	OpensAt      string
-	LoggedIn     bool
-	LoginHref    string
-	Application  *ApplicationView
-	SuggestLimit int
-	Error        string
-	Notice       string
+	Token       string
+	VenueTitle  string
+	VenueRef    string
+	City        string
+	Date        string
+	Tournament  string
+	State       venues.RegState
+	OpensAt     string
+	LoggedIn    bool
+	LoginHref   string
+	Application *ApplicationView
+	GameHref    string
+	Error       string
+	Notice      string
 }
 
-// ApplicationView is a Заявка as a page shows it.
 type ApplicationView struct {
 	Status       string
 	StatusLabel  string
@@ -76,7 +66,6 @@ type ApplicationView struct {
 	Number       int64
 }
 
-// joinDots is the one line a page's subtitle is: what is known, dotted.
 func joinDots(parts ...string) string {
 	kept := make([]string, 0, len(parts))
 	for _, p := range parts {
@@ -92,7 +81,6 @@ func ratingVenueLink(id int64) ui.Item {
 		ui.Text("рейтинг"))
 }
 
-// VenuesIndexDoc builds /venues: one table, one filter box over it.
 func VenuesIndexDoc(rows []VenueRow) *ui.Doc {
 	page := []ui.Item{ui.Title("Площадки"), ui.PagePublic, ui.Classicscripts("dist/pageforms.js")}
 	page = append(page, ui.Publictopbar(pages.Trail([]ui.Item{pages.HomeCrumb()}, "Площадки")))
@@ -143,7 +131,6 @@ func slotTable(title string, rows []SlotRow) *ui.Element {
 	return ui.Section(ui.Subhead(ui.Text(title)), ui.Table(table...))
 }
 
-// VenueDoc builds /venue/{slug}: what the площадка is, and its Слоты.
 func VenueDoc(d VenueDetail) *ui.Doc {
 	page := []ui.Item{ui.Title(d.Title), ui.PagePublic}
 	page = append(page, ui.Publictopbar(ui.Crumbs(
@@ -191,16 +178,12 @@ func rosterFlagsTable(players []venues.RosterPlayer, flags []string) *ui.Element
 	return ui.Table(table...)
 }
 
-// rosterEditor is the Состав editor's mount: the current roster travels in a
-// hidden field, and roster-editor.js draws the rows over it.
 func rosterEditor(players []venues.RosterPlayer) *ui.Element {
 	return ui.Col(ui.SpaceSM, ui.Data("roster-editor", ""),
 		ui.Hiddenfield(ui.Data("roster-json", ""), ui.Name("roster_json"), ui.Value(venues.MarshalRoster(players))),
 	)
 }
 
-// applicationForm is the заявка form, the same one the Representative edits a
-// заявка with.
 func applicationForm(action string, app *ApplicationView, submit string) *ui.Element {
 	teamName, ratingID := "", ""
 	var players []venues.RosterPlayer
@@ -231,7 +214,6 @@ var statusLabels = map[string]string{
 	venues.StatusDeclined: "отклонена",
 }
 
-// StatusLabel is a Заявка's status in the host's words.
 func StatusLabel(status string) string {
 	if label, ok := statusLabels[status]; ok {
 		return label
@@ -239,7 +221,6 @@ func StatusLabel(status string) string {
 	return status
 }
 
-// RegDoc builds /reg/{token}.
 func RegDoc(p RegPage) *ui.Doc {
 	page := []ui.Item{ui.Title("Регистрация · " + p.VenueTitle), ui.PagePublic,
 		ui.Classicscripts("dist/pageforms.js dist/roster-editor.js")}
@@ -282,6 +263,9 @@ func applicationSection(p RegPage) *ui.Element {
 			number = "номер команды " + strconv.FormatInt(p.Application.Number, 10)
 		}
 		sect = append(sect, ui.Note(ui.Text(joinDots("Статус: "+p.Application.StatusLabel, number))))
+		if p.Application.Status == venues.StatusAccepted && p.GameHref != "" {
+			sect = append(sect, ui.Row(ui.Button(ui.Primary, ui.Href(p.GameHref), ui.Text("Страница игры"))))
+		}
 		if len(p.Application.Roster) > 0 {
 			sect = append(sect, rosterFlagsTable(p.Application.Roster, p.Application.Flags))
 		}

@@ -16,7 +16,6 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// PathEnv names the buff mirror on disk.
 const PathEnv = "DOPE_BUFF_DB"
 
 // Store answers the venue pages' questions about rating.chgk.info. The zero
@@ -25,7 +24,6 @@ type Store struct {
 	db *sql.DB
 }
 
-// Player is one rating.chgk.info player.
 type Player struct {
 	ID         int64  `json:"id"`
 	Surname    string `json:"surname"`
@@ -33,19 +31,16 @@ type Player struct {
 	Patronymic string `json:"patronymic"`
 }
 
-// FullName is «Фамилия Имя Отчество» with the parts the mirror knows.
 func (p Player) FullName() string {
 	return strings.TrimSpace(strings.Join(strings.Fields(p.Surname+" "+p.Name+" "+p.Patronymic), " "))
 }
 
-// Team is one team as the mirror last saw it play.
 type Team struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
 	Town string `json:"town"`
 }
 
-// Tournament is a tournament's identity and its tour composition.
 type Tournament struct {
 	ID              int64  `json:"id"`
 	Name            string `json:"name"`
@@ -54,11 +49,8 @@ type Tournament struct {
 	DateStart       string `json:"dateStart"`
 }
 
-// Disabled is the store with no mirror behind it.
 func Disabled() *Store { return &Store{} }
 
-// Open returns a store over the buff mirror at path, or Disabled when the path
-// is empty or the file is not there.
 func Open(path string) (*Store, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -75,7 +67,6 @@ func Open(path string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-// Enabled reports whether a mirror is actually open.
 func (s *Store) Enabled() bool { return s != nil && s.db != nil }
 
 func (s *Store) Close() error {
@@ -85,7 +76,6 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-// TourComposition splits buff's "12,12,12" into questions per tour.
 func TourComposition(questionsByTour string) []int {
 	var out []int
 	for _, part := range strings.Split(questionsByTour, ",") {
@@ -98,7 +88,6 @@ func TourComposition(questionsByTour string) []int {
 	return out
 }
 
-// Players are the players whose surname starts with prefix, surname then name.
 func (s *Store) Players(ctx context.Context, prefix string, limit int) []Player {
 	prefix = strings.TrimSpace(prefix)
 	if !s.Enabled() || prefix == "" {
@@ -125,7 +114,6 @@ limit ?`, likePrefix(prefix), capLimit(limit))
 	return out
 }
 
-// Player is one player by id.
 func (s *Store) Player(ctx context.Context, id int64) (Player, bool) {
 	if !s.Enabled() || id <= 0 {
 		return Player{}, false
@@ -140,7 +128,6 @@ from players where id = ?`, id).Scan(&p.ID, &p.Surname, &p.Name, &p.Patronymic)
 	return p, true
 }
 
-// TeamName is the name a team last played under.
 func (s *Store) TeamName(ctx context.Context, teamID int64) string {
 	if !s.Enabled() || teamID <= 0 {
 		return ""
@@ -158,7 +145,6 @@ limit 1`, teamID).Scan(&name)
 	return name
 }
 
-// Team is a team's identity as the mirror last saw it.
 func (s *Store) Team(ctx context.Context, teamID int64) (Team, bool) {
 	if !s.Enabled() || teamID <= 0 {
 		return Team{}, false
@@ -176,7 +162,6 @@ limit 1`, teamID).Scan(&team.Name, &team.Town)
 	return team, true
 }
 
-// Teams are the teams whose latest name starts with prefix.
 func (s *Store) Teams(ctx context.Context, prefix string, limit int) []Team {
 	prefix = strings.TrimSpace(prefix)
 	if !s.Enabled() || prefix == "" {
@@ -241,8 +226,6 @@ where ts.team_id = ?
 // on its own week, an асинхрон any time inside its window.
 var playableTypes = []string{"Синхрон", "Строго синхронный", "Асинхрон"}
 
-// PlayableTournaments are the tournaments whose window contains on, синхроны
-// first, then by start date.
 func (s *Store) PlayableTournaments(ctx context.Context, on time.Time) []Tournament {
 	if !s.Enabled() {
 		return nil
@@ -263,8 +246,6 @@ order by case when tournament_type = 'Асинхрон' then 1 else 0 end, date_
 	return scanTournaments(rows)
 }
 
-// SearchTournaments are the tournaments whose name contains q, playable on the
-// given day when it is not zero.
 func (s *Store) SearchTournaments(ctx context.Context, q string, on time.Time, limit int) []Tournament {
 	q = strings.TrimSpace(q)
 	if !s.Enabled() || q == "" {
@@ -288,7 +269,6 @@ limit ?`, "%"+escapeLike(q)+"%", day, day, day, capLimit(limit))
 	return scanTournaments(rows)
 }
 
-// Tournament is one tournament by id.
 func (s *Store) Tournament(ctx context.Context, id int64) (Tournament, bool) {
 	if !s.Enabled() || id <= 0 {
 		return Tournament{}, false

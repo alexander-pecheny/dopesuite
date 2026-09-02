@@ -7,11 +7,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"dope/dope/domain/gamebuild"
-	"dope/dope/domain/games"
 	"dope/dope/domain/venues"
 	"dope/dope/platform/util"
 	dopeserver "dope/dope/server"
+	"dope/dope/storage/store"
 )
 
 // Accepting a Заявка seats the team in the Слот's Game with the next free
@@ -147,7 +146,7 @@ func newVenueSlot(t *testing.T, db *sql.DB, comp []int) (int64, venues.Slot) {
 	now := util.UtcNow()
 	result, err := db.Exec(`
 insert into fests(slug, title, description, kind, city, created_by, revision, created_at, updated_at, is_public)
-values('venue', 'Площадка', '', 'venue', 'Тбилиси', null, 1, ?, ?, 1)`, now, now)
+values(null, 'Площадка', '', 'venue', 'Тбилиси', null, 1, ?, ?, 1)`, now, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,11 +156,8 @@ values('venue', 'Площадка', '', 'venue', 'Тбилиси', null, 1, ?, ?
 	}
 	var slotID int64
 	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
-		gameID, err := gamebuild.Create(ctx, tx, gamebuild.Spec{FestID: festID, Type: games.OD, ODTourComp: comp})
-		if err != nil {
-			return err
-		}
-		slotID, err = venues.CreateSlotTx(ctx, tx, festID, gameID, "2026-09-04 19:00", 0, "")
+		var err error
+		slotID, err = venues.CreateSlotTx(ctx, tx, festID, "2026-09-04 19:00", 0, "", comp)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -265,11 +261,7 @@ func TestTwoSlotsBothNumberFromOne(t *testing.T) {
 
 	var second venues.Slot
 	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
-		gameID, err := gamebuild.Create(ctx, tx, gamebuild.Spec{FestID: festID, Type: games.OD, ODTourComp: []int{2}})
-		if err != nil {
-			return err
-		}
-		_, err = venues.CreateSlotTx(ctx, tx, festID, gameID, "2026-09-11 19:00", 0, "")
+		_, err := venues.CreateSlotTx(ctx, tx, festID, "2026-09-11 19:00", 0, "", []int{2})
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -299,5 +291,72 @@ func TestTwoSlotsBothNumberFromOne(t *testing.T) {
 	}
 	if names[first.GameID] != "Мантисса" || names[second.GameID] != "Вторая" {
 		t.Fatalf("number 1 by game: %v", names)
+	}
+}
+
+// A Заявка owns its own seat and no other: a team the host seated by hand on
+// the game page survives a stranger's заявка, and its Number is not reused.
+func TestHandSeatedTeamSurvivesAnApplication(t *testing.T) {
+	db := venueTestDB(t)
+	festID, slot := newVenueSlot(t, db, []int{2})
+	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+		return venues.ReseatTx(ctx, tx, slot, "Тбилиси")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// The host types a team straight into the Game's document.
+	if _, err := db.Exec(`
+update matches set state_json = ?
+where game_id = ? and code = 'main'`,
+		`{"teams":[{"name":"Вручную","city":"Тбилиси","number":1}],"entries":[[],[]],"completed":[false,false],"shootoutRounds":[]}`,
+		slot.GameID); err != nil {
+		t.Fatal(err)
+	}
+
+	alice := newVenueUser(t, db, "alice")
+	fileApplication(t, db, slot, alice, "Мантисса", 0, nil)
+	// A pending заявка touches nothing.
+	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+		return venues.ReseatTx(ctx, tx, slot, "Тбилиси")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := numbersByTeam(t, db, festID); got["Мантисса"] != 0 {
+		t.Fatalf("a pending заявка seated a team: %v", got)
+	}
+
+	setStatus(t, db, slot, alice, venues.StatusAccepted)
+	got := numbersByTeam(t, db, festID)
+	if got["Вручную"] != 1 {
+		t.Fatalf("the hand-seated team was dropped: %v", got)
+	}
+	if got["Мантисса"] != 2 {
+		t.Fatalf("the заявка took a seat it does not own: %v", got)
+	}
+
+	// Declining frees only the заявка's own seat.
+	setStatus(t, db, slot, alice, venues.StatusDeclined)
+	if got := numbersByTeam(t, db, festID); got["Вручную"] != 1 || got["Мантисса"] != 0 {
+		t.Fatalf("after the decline: %v", got)
+	}
+}
+
+// A спорный counts as a result: unseating the team it names is refused.
+func TestContestedBlocksAnUnseat(t *testing.T) {
+	db := venueTestDB(t)
+	festID, slot := newVenueSlot(t, db, []int{2})
+	alice := newVenueUser(t, db, "alice")
+	fileApplication(t, db, slot, alice, "Мантисса", 0, nil)
+	setStatus(t, db, slot, alice, venues.StatusAccepted)
+	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+		return store.SaveContestedTx(ctx, tx, festID, slot.GameID, alice, 0, 1, "Ответ", util.UtcNow())
+	}); err != nil {
+		t.Fatal(err)
+	}
+	err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+		return venues.SetStatusTx(ctx, tx, slot, "", applicationID(t, db, slot, alice), venues.StatusDeclined)
+	})
+	if !errors.Is(err, venues.ErrHasResults) {
+		t.Fatalf("err = %v, want ErrHasResults", err)
 	}
 }

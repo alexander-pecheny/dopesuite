@@ -15,7 +15,7 @@ import (
 // returns the seq assigned to it. Any buffered deltas for the scope are flushed
 // first (they carry lower seqs) so viewers never see the snapshot before them.
 func (e *Engine) BroadcastState(festID int64, scope string, revision int64, payload []byte) uint64 {
-	payload = e.WithGameExtras(scope, payload)
+	payload = e.WithGameExtras(context.Background(), scope, payload)
 	e.InvalidateFestViewCache(festID)
 	e.SeqMu.Lock()
 	defer e.SeqMu.Unlock()
@@ -179,16 +179,12 @@ func (e *Engine) InvalidateFestViewCache(festID int64) {
 // state — today the спорные, which live in a table because a ruling is not a
 // score — into a whole-document snapshot. Deltas are untouched: their ops
 // never name the spliced keys, so a client keeps what it already has.
-func (e *Engine) WithGameExtras(scope string, payload []byte) []byte {
+func (e *Engine) WithGameExtras(ctx context.Context, scope string, payload []byte) []byte {
 	gameID, ok := gameStateScopeID(scope)
 	if !ok || e.DB == nil {
 		return payload
 	}
-	list, err := store.LoadContested(context.Background(), e.DB, gameID)
-	if err != nil || len(list) == 0 {
-		return payload
-	}
-	return store.WithContested(payload, list)
+	return store.WithContestedFor(ctx, e.DB, gameID, payload)
 }
 
 func gameStateScopeID(scope string) (int64, bool) {
@@ -198,4 +194,17 @@ func gameStateScopeID(scope string) (int64, bool) {
 	}
 	id, err := strconv.ParseInt(rest, 10, 64)
 	return id, err == nil && id > 0
+}
+
+// RebroadcastGameDocument fans the Game's document out again after something
+// that rides it changed without the document itself moving — a спорный.
+func (e *Engine) RebroadcastGameDocument(ctx context.Context, festID, gameID int64) error {
+	doc, err := store.LoadGameDoc(ctx, e.DB, festID, gameID)
+	if err != nil {
+		return err
+	}
+	var revision int64
+	_ = e.DB.QueryRowContext(ctx, `select revision from games where id = ?`, gameID).Scan(&revision)
+	e.BroadcastState(festID, GameStateScope(gameID), revision, []byte(doc.State))
+	return nil
 }

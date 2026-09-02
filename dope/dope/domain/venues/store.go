@@ -7,11 +7,12 @@ import (
 	"strconv"
 	"strings"
 
+	"dope/dope/domain/gamebuild"
+	"dope/dope/domain/games"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 )
 
-// Venue is a Fest of kind 'venue'.
 type Venue struct {
 	ID            int64
 	Slug          string
@@ -22,7 +23,6 @@ type Venue struct {
 	IsPublic      bool
 }
 
-// Ref is how a Venue is named in a URL.
 func (v Venue) Ref() string {
 	if v.Slug != "" {
 		return v.Slug
@@ -30,7 +30,6 @@ func (v Venue) Ref() string {
 	return strconv.FormatInt(v.ID, 10)
 }
 
-// Slot is one dated sitting at a Venue, realised as one Game.
 type Slot struct {
 	ID                 int64
 	FestID             int64
@@ -40,14 +39,11 @@ type Slot struct {
 	RegToken           string
 	RegOpensAt         string
 	RegClosed          bool
-	// GameSlug and TournamentName are joined in for the pages.
-	GameSlug       string
-	TournamentName string
-	Accepted       int
-	Pending        int
+	GameSlug           string
+	Accepted           int
+	Pending            int
 }
 
-// Application is one Заявка with its current version folded in.
 type Application struct {
 	ID            int64
 	SlotID        int64
@@ -65,7 +61,6 @@ type Application struct {
 	Number        int64
 }
 
-// Version is one dated edit of a Заявка.
 type Version struct {
 	ID           int64
 	Seq          int64
@@ -89,12 +84,16 @@ func scanVenue(row interface{ Scan(...any) error }) (Venue, error) {
 	return v, err
 }
 
-// LoadVenue reads one Venue by fest id; sql.ErrNoRows when the fest is not one.
 func LoadVenue(ctx context.Context, q store.Queryer, festID int64) (Venue, error) {
 	return scanVenue(q.QueryRowContext(ctx, venueSelect+`f.id = ?`, festID))
 }
 
-// PublicVenues are the venues the /venues index lists.
+func IsVenue(ctx context.Context, q store.Queryer, festID int64) bool {
+	var kind string
+	err := q.QueryRowContext(ctx, `select kind from fests where id = ?`, festID).Scan(&kind)
+	return err == nil && kind == KindVenue
+}
+
 func PublicVenues(ctx context.Context, q store.Queryer) ([]Venue, error) {
 	return store.CollectRows(ctx, q, venueSelect+`f.is_public = 1 order by f.title, f.id`, nil,
 		func(rows *sql.Rows) (Venue, error) { return scanVenue(rows) })
@@ -116,12 +115,10 @@ func scanSlot(row interface{ Scan(...any) error }) (Slot, error) {
 	return s, err
 }
 
-// LoadSlot reads one Слот by id.
 func LoadSlot(ctx context.Context, q store.Queryer, slotID int64) (Slot, error) {
 	return scanSlot(q.QueryRowContext(ctx, slotSelect+`s.id = ?`, slotID))
 }
 
-// SlotByToken reads the Слот a registration link names.
 func SlotByToken(ctx context.Context, q store.Queryer, token string) (Slot, error) {
 	if strings.TrimSpace(token) == "" {
 		return Slot{}, sql.ErrNoRows
@@ -129,7 +126,6 @@ func SlotByToken(ctx context.Context, q store.Queryer, token string) (Slot, erro
 	return scanSlot(q.QueryRowContext(ctx, slotSelect+`s.reg_token = ?`, token))
 }
 
-// VenueSlots are a Venue's Слоты, soonest first, undated last.
 func VenueSlots(ctx context.Context, q store.Queryer, festID int64) ([]Slot, error) {
 	return store.CollectRows(ctx, q, slotSelect+`
 s.fest_id = ?
@@ -137,8 +133,13 @@ order by case when s.starts_at = '' then 1 else 0 end, s.starts_at, s.id`, []any
 		func(rows *sql.Rows) (Slot, error) { return scanSlot(rows) })
 }
 
-// CreateSlotTx records a Слот over a Game just built for it.
-func CreateSlotTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, startsAt string, tournamentID int64, opensAt string) (int64, error) {
+func CreateSlotTx(ctx context.Context, tx *sql.Tx, festID int64, startsAt string, tournamentID int64, opensAt string, tourComp []int) (int64, error) {
+	gameID, err := gamebuild.Create(ctx, tx, gamebuild.Spec{
+		FestID: festID, Type: games.OD, ODTourComp: tourComp, OwnTeams: true,
+	})
+	if err != nil {
+		return 0, err
+	}
 	now := util.UtcNow()
 	return store.InsertReturningID(ctx, tx, `
 insert into slots(fest_id, game_id, starts_at, rating_tournament_id, reg_token, reg_opens_at, reg_closed, created_at, updated_at)
@@ -147,7 +148,6 @@ values(?, ?, ?, ?, ?, ?, 0, ?, ?)`,
 		util.NullableString(FormatTime(opensAt)), now, now)
 }
 
-// UpdateSlotTx saves the header fields of a Слот.
 func UpdateSlotTx(ctx context.Context, tx *sql.Tx, slotID int64, startsAt string, tournamentID int64, opensAt string, closed bool) error {
 	_, err := tx.ExecContext(ctx, `
 update slots set starts_at = ?, rating_tournament_id = ?, reg_opens_at = ?, reg_closed = ?, updated_at = ?
@@ -156,7 +156,6 @@ where id = ?`, FormatTime(startsAt), util.NullableInt64(tournamentID),
 	return err
 }
 
-// NewTokenTx re-mints a Слот's registration link.
 func NewTokenTx(ctx context.Context, tx *sql.Tx, slotID int64) error {
 	_, err := tx.ExecContext(ctx, `update slots set reg_token = ?, updated_at = ? where id = ?`,
 		NewToken(), util.UtcNow(), slotID)
@@ -185,23 +184,19 @@ func scanApplication(row interface{ Scan(...any) error }) (Application, error) {
 	return a, err
 }
 
-// SlotApplications are a Слот's Заявки in filing order.
 func SlotApplications(ctx context.Context, q store.Queryer, slotID int64) ([]Application, error) {
 	return store.CollectRows(ctx, q, applicationSelect+`a.slot_id = ? order by a.created_at, a.id`, []any{slotID},
 		func(rows *sql.Rows) (Application, error) { return scanApplication(rows) })
 }
 
-// UserApplication is a user's own Заявка on a Слот; sql.ErrNoRows when none.
 func UserApplication(ctx context.Context, q store.Queryer, slotID, userID int64) (Application, error) {
 	return scanApplication(q.QueryRowContext(ctx, applicationSelect+`a.slot_id = ? and a.user_id = ?`, slotID, userID))
 }
 
-// LoadApplication reads one Заявка by id.
 func LoadApplication(ctx context.Context, q store.Queryer, appID int64) (Application, error) {
 	return scanApplication(q.QueryRowContext(ctx, applicationSelect+`a.id = ?`, appID))
 }
 
-// ApplicationVersions are every edit of a Заявка, newest first.
 func ApplicationVersions(ctx context.Context, q store.Queryer, appID int64) ([]Version, error) {
 	return store.CollectRows(ctx, q, `
 select v.id, v.seq, v.team_name, coalesce(v.rating_team_id, 0), v.roster_json,
@@ -218,12 +213,8 @@ order by v.seq desc`, []any{appID}, func(rows *sql.Rows) (Version, error) {
 	})
 }
 
-// ErrNoTeamName refuses a заявка with nothing to call the team.
 var ErrNoTeamName = errors.New("укажите название команды")
 
-// SaveVersionTx files or edits a Заявка: the row when it is the first, then a
-// version of its own. authorID is who typed it — the Representative when they
-// edit someone else's заявка.
 func SaveVersionTx(ctx context.Context, tx *sql.Tx, slotID, userID, authorID int64, teamName string, ratingTeamID int64, roster []RosterPlayer) (int64, error) {
 	teamName = strings.TrimSpace(teamName)
 	if teamName == "" {
@@ -254,4 +245,47 @@ values(?, ?, ?, ?, ?, ?, ?)`, appID, seq, teamName, ratingTeamID, MarshalRoster(
 		return 0, err
 	}
 	return appID, nil
+}
+
+func VenuesOf(ctx context.Context, q store.Queryer, userID int64) ([]Venue, error) {
+	return store.CollectRows(ctx, q, venueSelect+`
+f.id in (select fest_id from fest_organizers where user_id = ?)
+order by f.title, f.id`, []any{userID}, func(rows *sql.Rows) (Venue, error) { return scanVenue(rows) })
+}
+
+func NextSlots(ctx context.Context, q store.Queryer, day string) (map[int64]Slot, error) {
+	rows, err := store.CollectRows(ctx, q, slotSelect+`
+s.starts_at >= ?
+order by s.fest_id, s.starts_at, s.id`, []any{day},
+		func(rows *sql.Rows) (Slot, error) { return scanSlot(rows) })
+	if err != nil {
+		return nil, err
+	}
+	out := map[int64]Slot{}
+	for _, slot := range rows {
+		if _, seen := out[slot.FestID]; !seen {
+			out[slot.FestID] = slot
+		}
+	}
+	return out, nil
+}
+
+// RegistryCities are the Venue's registry rows' towns, keyed by rating team id.
+func RegistryCities(ctx context.Context, q store.Queryer, festID int64) (map[int64]string, error) {
+	rows, err := store.CollectRows(ctx, q, `
+select rating_id, city from fest_teams where fest_id = ? and rating_id is not null and city <> ''`,
+		[]any{festID}, func(rows *sql.Rows) ([2]any, error) {
+			var id int64
+			var city string
+			err := rows.Scan(&id, &city)
+			return [2]any{id, city}, err
+		})
+	if err != nil {
+		return nil, err
+	}
+	out := map[int64]string{}
+	for _, row := range rows {
+		out[row[0].(int64)] = row[1].(string)
+	}
+	return out, nil
 }

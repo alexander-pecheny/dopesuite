@@ -193,7 +193,7 @@ func (s *server) buildGameInit(ctx context.Context, scope festScope) (gameInitPa
 		screenSettingsJSON = "{}"
 	}
 	payload.Scheme = json.RawMessage(schemeJSON)
-	payload.State = s.eng.WithGameExtras(core.GameStateScope(scope.GameID), []byte(stateJSON))
+	payload.State = s.eng.WithGameExtras(ctx, core.GameStateScope(scope.GameID), []byte(stateJSON))
 	payload.ScreenSettings = json.RawMessage(screenSettingsJSON)
 	payload.Seq = s.eng.CurrentStateSeq(core.GameStateScope(scope.GameID))
 	payload.Epoch = s.eng.Epoch

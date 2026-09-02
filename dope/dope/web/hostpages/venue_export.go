@@ -12,13 +12,11 @@ import (
 	"dope/dope/export/gameexport"
 	"dope/dope/export/xlsxexport"
 	"dope/dope/storage/store"
+	"dope/dope/web/route"
 )
 
-// The two rating.chgk.info workbooks a Representative uploads after a Слот:
-// the per-tour answers and the players who took them. Both read the Слот's
-// accepted Заявки, which is where the rating team and player ids live.
-
-func (s *Server) handleSlotToursExport(w http.ResponseWriter, r *http.Request, festID int64) error {
+func (s *Server) handleSlotToursExport(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	festID := sc.FestID
 	_, slot, err := s.slotOf(r, festID)
 	if err != nil {
 		return err
@@ -31,10 +29,7 @@ func (s *Server) handleSlotToursExport(w http.ResponseWriter, r *http.Request, f
 	if err != nil {
 		return err
 	}
-	state := doc.State
-	if list, err := store.LoadContested(r.Context(), s.h.Engine().DB, slot.GameID); err == nil {
-		state = string(store.WithContested([]byte(state), list))
-	}
+	state := string(store.WithContestedFor(r.Context(), s.h.Engine().DB, slot.GameID, []byte(doc.State)))
 	f := excelize.NewFile()
 	defer f.Close()
 	if err := xlsxexport.BuildODSheet(f, doc.SchemeJSON, state, ratingByNumber); err != nil {
@@ -43,7 +38,8 @@ func (s *Server) handleSlotToursExport(w http.ResponseWriter, r *http.Request, f
 	return writeWorkbook(w, f, slotFileStem(slot)+"-tours")
 }
 
-func (s *Server) handleSlotPlayersExport(w http.ResponseWriter, r *http.Request, festID int64) error {
+func (s *Server) handleSlotPlayersExport(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	festID := sc.FestID
 	venue, slot, err := s.slotOf(r, festID)
 	if err != nil {
 		return err
@@ -57,18 +53,20 @@ func (s *Server) handleSlotPlayersExport(w http.ResponseWriter, r *http.Request,
 		return err
 	}
 	placeByNumber := map[int64]string{}
-	cityByNumber := map[int64]string{}
 	for _, team := range results.Teams {
 		placeByNumber[team.Number] = team.Place
-		cityByNumber[team.Number] = team.City
 	}
 	_, apps, err := s.acceptedByNumber(r.Context(), slot)
 	if err != nil {
 		return err
 	}
+	registryCity, err := venues.RegistryCities(r.Context(), s.h.Engine().DB, festID)
+	if err != nil {
+		return err
+	}
 	rows := make([]xlsxexport.ODPlayerRow, 0, len(apps)*6)
 	for _, app := range apps {
-		city := cityByNumber[app.Number]
+		city := registryCity[app.RatingTeamID]
 		if city == "" {
 			city = venue.City
 		}
@@ -93,8 +91,6 @@ func (s *Server) handleSlotPlayersExport(w http.ResponseWriter, r *http.Request,
 	return writeWorkbook(w, f, slotFileStem(slot)+"-players")
 }
 
-// acceptedByNumber is the Слот's accepted Заявки, keyed by the Number they
-// were seated under, and the same list in seating order.
 func (s *Server) acceptedByNumber(ctx context.Context, slot venues.Slot) (map[int64]int64, []venues.Application, error) {
 	apps, err := venues.SlotApplications(ctx, s.h.Engine().DB, slot.ID)
 	if err != nil {

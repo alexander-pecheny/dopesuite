@@ -438,10 +438,6 @@ func (s *Server) handleHostDeleteFest(w http.ResponseWriter, r *http.Request, fe
 }
 
 func (s *Server) renderHostFestDashboard(w http.ResponseWriter, r *http.Request, festID int64, msgs hostDashMessages) {
-	if s.IsVenue(r.Context(), festID) {
-		s.renderVenueDashboard(w, r, festID, msgs.FormError, "")
-		return
-	}
 	var (
 		title       string
 		slug        string

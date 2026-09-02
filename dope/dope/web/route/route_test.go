@@ -39,8 +39,8 @@ create table game_participants(game_id integer, participant_id integer, position
 insert into users(id, username) values (1,'creator'),(2,'admin'),(3,'host'),(4,'outsider'),(5,'applicant'),(6,'waiting');
 insert into fests(id, slug, is_public, created_by, kind) values (10,'open',1,1,'fest'),(20,'closed',0,1,'fest'),(30,'venue',1,1,'venue');
 insert into fest_organizers values (10,2,'admin',''),(10,3,'host',''),(20,2,'admin',''),(20,3,'host',''),(30,2,'admin',''),(30,3,'host','');
-insert into games(id, fest_id, slug) values (100,10,'g'),(200,20,'g'),(300,30,'g');
-insert into slots(id, fest_id, game_id) values (1,30,300);
+insert into games(id, fest_id, slug) values (100,10,'g'),(200,20,'g'),(300,30,'g'),(301,30,'h');
+insert into slots(id, fest_id, game_id) values (1,30,300),(2,30,301);
 insert into slot_applications(slot_id, user_id, status) values (1,5,'accepted'),(1,6,'pending');
 insert into fest_teams(fest_id, name, position, number) values (10,'A',1,1),(20,'B',1,null);`); err != nil {
 		t.Fatal(err)
@@ -112,8 +112,15 @@ func TestVenueGameAccess(t *testing.T) {
 	tbl.Handle("POST /read/{fest}/games/{game}", Read, ok)
 	tbl.Handle("POST /read/{fest}", Read, ok)
 
-	want := map[string]int{"anon": 404, "outsider": 404, "waiting": 404, "applicant": 200, "host": 200, "admin": 200, "creator": 200}
-	for _, path := range []string{"/publicfest/venue/games/g", "/read/venue/games/g", "/read/venue"} {
+	// The Слот the заявка was accepted on; every other read of the Venue —
+	// another Слот, or the fest itself — is closed to the same caller.
+	cases := map[string]map[string]int{
+		"/publicfest/venue/games/g": {"anon": 404, "outsider": 404, "waiting": 404, "applicant": 200, "host": 200, "admin": 200, "creator": 200},
+		"/read/venue/games/g":       {"anon": 404, "outsider": 404, "waiting": 404, "applicant": 200, "host": 200, "admin": 200, "creator": 200},
+		"/read/venue/games/h":       {"anon": 404, "outsider": 404, "waiting": 404, "applicant": 404, "host": 200, "admin": 200, "creator": 200},
+		"/read/venue":               {"anon": 404, "outsider": 404, "waiting": 404, "applicant": 404, "host": 200, "admin": 200, "creator": 200},
+	}
+	for path, want := range cases {
 		for caller, code := range want {
 			req := httptest.NewRequest("POST", path, nil)
 			if caller != "anon" {

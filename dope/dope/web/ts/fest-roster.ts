@@ -22,13 +22,22 @@ export interface RosterTeam {
 // Roster — the fest-level team→players list, shared by every game
 // page (EK/OD/KSI, host and viewer). The data is the same for all games in a
 // fest, so it is fetched once per festID and cached for the page's lifetime.
-const rosterCache = new Map<string | number, Promise<RosterTeam[]>>();
+const rosterCache = new Map<string, Promise<RosterTeam[]>>();
 
-export function fetchFestRoster(festID: string | number | null | undefined): Promise<RosterTeam[]> {
+export function fetchFestRoster(
+  festID: string | number | null | undefined,
+  gameID?: string | number | null,
+): Promise<RosterTeam[]> {
   if (!festID) return Promise.resolve([]);
-  const cached = rosterCache.get(festID);
+  // A Game that keeps its own составы (a Слот at a площадка) answers for
+  // itself; the key carries the game so two of them do not share a cache line.
+  const key = gameID ? `${festID}/${gameID}` : String(festID);
+  const cached = rosterCache.get(key);
   if (cached) return cached;
-  const promise = fetch(`/api/fest/${encodeURIComponent(festID)}/roster`)
+  const path = gameID
+    ? `/api/fest/${encodeURIComponent(festID)}/games/${encodeURIComponent(gameID)}/roster`
+    : `/api/fest/${encodeURIComponent(festID)}/roster`;
+  const promise = fetch(path)
     .then((response) => {
       if (!response.ok) throw new Error(`roster ${response.status}`);
       return response.json();
@@ -39,10 +48,10 @@ export function fetchFestRoster(festID: string | number | null | undefined): Pro
     })
     .catch((err: unknown) => {
       // Don't cache a failure — let a later render retry the fetch.
-      rosterCache.delete(festID);
+      rosterCache.delete(key);
       throw err;
     });
-  rosterCache.set(festID, promise);
+  rosterCache.set(key, promise);
   return promise;
 }
 
@@ -121,14 +130,17 @@ export function buildRosterTable(teams: RosterTeam[] | null | undefined): HTMLEl
 // itself asynchronously: it shows a loading line, fetches the fest roster, then
 // swaps in the table (or an error line on failure). Safe to drop straight into
 // a tab pane by any page — no roster data needs to be threaded through.
-export function buildRosterView(festID: string | number | null | undefined): HTMLElement {
+export function buildRosterView(
+  festID: string | number | null | undefined,
+  gameID?: string | number | null,
+): HTMLElement {
   const container = document.createElement("div");
   const loading = document.createElement("p");
   loading.className = "roster-empty";
   loading.textContent = S.fest.roster.loading();
   container.appendChild(loading);
 
-  fetchFestRoster(festID)
+  fetchFestRoster(festID, gameID)
     .then((teams) => {
       container.replaceChildren(buildRosterTable(teams));
       // Flag clipped team names so the shared fade + popover kick in, and

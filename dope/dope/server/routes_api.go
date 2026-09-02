@@ -50,6 +50,7 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("GET "+fest+"/venues", route.Read, s.scopedVenues)
 	t.Handle("PUT "+fest+"/venues/{n}", route.Editor, s.scopedVenuePut)
 	t.Handle("GET "+fest+"/roster", route.Read, s.scopedFestRoster)
+	t.Handle("GET "+game+"/roster", route.Read, s.scopedFestRoster)
 	t.Handle("GET "+game, route.Read, s.scopedGame)
 	t.Handle("GET "+game+"/matches/{code}", route.Read, s.scopedMatch)
 	t.Handle("PATCH "+game+"/matches/{code}/state", route.Editor.Numbered(), s.scopedMatchPatch)
@@ -156,6 +157,13 @@ func (s *server) scopedGame(w http.ResponseWriter, r *http.Request, sc route.Sco
 // scopedFestRoster serves the fest's canonical team→players roster for the
 // read-only rosters tab, visible to every visitor of a public fest.
 func (s *server) scopedFestRoster(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	if sc.GameID > 0 && roster.GameOwnsRoster(r.Context(), s.eng.DB, sc.FestID, sc.GameID) {
+		teams, err := roster.LoadGameRosterView(r.Context(), s.eng.DB, sc.FestID, sc.GameID)
+		if err != nil {
+			return err
+		}
+		return route.JSON(w, map[string]any{"teams": teams})
+	}
 	teams, err := roster.LoadFestRosterView(r.Context(), s.eng.DB, sc.FestID)
 	if err != nil {
 		return err
@@ -389,7 +397,7 @@ func (s *server) scopedGameState(w http.ResponseWriter, r *http.Request, sc rout
 	// restart, so a low post-restart seq is adopted rather than treated as stale.
 	w.Header().Set("X-State-Seq", strconv.FormatUint(seq, 10))
 	w.Header().Set("X-State-Epoch", s.eng.Epoch)
-	return route.JSONBytes(w, s.eng.WithGameExtras(gameStateScopeKey(sc.GameID), []byte(doc.State)))
+	return route.JSONBytes(w, s.eng.WithGameExtras(r.Context(), gameStateScopeKey(sc.GameID), []byte(doc.State)))
 }
 
 // ---- спорные ----
@@ -432,27 +440,19 @@ func (s *server) contestedWrite(w http.ResponseWriter, r *http.Request, sc route
 	if err != nil {
 		return err
 	}
-	doc, err := store.LoadGameDoc(r.Context(), s.eng.DB, sc.FestID, sc.GameID)
-	if err != nil {
+	if err := s.eng.RebroadcastGameDocument(r.Context(), sc.FestID, sc.GameID); err != nil {
 		return err
 	}
-	s.eng.BroadcastState(sc.FestID, gameStateScopeKey(sc.GameID),
-		gameRevision(r.Context(), s.eng.DB, sc.GameID), []byte(doc.State))
 	return s.scopedContested(w, r, sc)
-}
-
-// gameRevision is the revision a spliced-document snapshot carries, so a
-// client's revision tracking is not reset by a спорный.
-func gameRevision(ctx context.Context, q store.Queryer, gameID int64) int64 {
-	var revision int64
-	_ = q.QueryRowContext(ctx, `select revision from games where id = ?`, gameID).Scan(&revision)
-	return revision
 }
 
 func (s *server) scopedContestedSave(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	return s.contestedWrite(w, r, sc, func(ctx context.Context, tx *sql.Tx, req contestedRequest) error {
-		return store.SaveContestedTx(ctx, tx, sc.FestID, sc.GameID, sc.User.UserID, req.Question, req.Number,
-			strings.TrimSpace(req.Answer), util.UtcNow())
+		if err := store.SaveContestedTx(ctx, tx, sc.FestID, sc.GameID, sc.User.UserID, req.Question, req.Number,
+			strings.TrimSpace(req.Answer), util.UtcNow()); err != nil {
+			return err
+		}
+		return store.SetContestedAcceptedTx(ctx, tx, sc.FestID, sc.GameID, req.Question, req.Number, req.AcceptedHere)
 	})
 }
 
@@ -494,7 +494,7 @@ func (s *server) scopedGameStatePut(w http.ResponseWriter, r *http.Request, sc r
 		return err
 	}
 	s.eng.BroadcastState(sc.FestID, gameStateScopeKey(sc.GameID), revision, raw)
-	return route.JSONBytes(w, s.eng.WithGameExtras(gameStateScopeKey(sc.GameID), raw))
+	return route.JSONBytes(w, s.eng.WithGameExtras(r.Context(), gameStateScopeKey(sc.GameID), raw))
 }
 
 // scopedGameStatePatch applies edit ops to the whole document; like a Match
@@ -513,7 +513,7 @@ func (s *server) scopedGameStatePatch(w http.ResponseWriter, r *http.Request, sc
 	if err != nil {
 		return route.BadUser(err)
 	}
-	if err := route.JSONBytes(w, s.eng.WithGameExtras(gameStateScopeKey(sc.GameID), next)); err != nil {
+	if err := route.JSONBytes(w, s.eng.WithGameExtras(r.Context(), gameStateScopeKey(sc.GameID), next)); err != nil {
 		return err
 	}
 	if s.metrics.On {

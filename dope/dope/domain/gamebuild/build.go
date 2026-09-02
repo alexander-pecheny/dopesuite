@@ -87,7 +87,10 @@ type Spec struct {
 	ODTours, ODQuestions int
 	// ODTourComp names uneven tours outright — what a rating tournament's
 	// questions_by_tour says — and wins over ODTours × ODQuestions.
-	ODTourComp  []int
+	ODTourComp []int
+	// OwnTeams makes the Game's team list and rosters its own rather than the
+	// фест's: a Слот at a Venue seats whom its Заявки say and nobody else.
+	OwnTeams    bool
 	KSIThemes   int
 	KSIStickers json.RawMessage
 	// Multi: the minigames as the host wrote them, and the comparators that
@@ -124,7 +127,13 @@ func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 	}
 	switch spec.Type {
 	case games.OD:
-		return createODGameTx(ctx, tx, spec.FestID, odTourComp(spec))
+		gameID, err := createODGameTx(ctx, tx, spec.FestID, odTourComp(spec))
+		if err != nil || !spec.OwnTeams {
+			return gameID, err
+		}
+		_, err = tx.ExecContext(ctx,
+			`update games set team_list_source = 'game', roster_source = 'game' where id = ?`, gameID)
+		return gameID, err
 	case games.KSI:
 		return createKSIGameTx(ctx, tx, spec.FestID, spec.KSIThemes, spec.KSIStickers)
 	case games.Multi:

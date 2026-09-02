@@ -13,10 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"dope/dope/domain/flatgame"
-	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/games"
-	"dope/dope/domain/protocol"
 	"dope/dope/domain/venues"
 	"dope/dope/platform/markdown"
 	"dope/dope/platform/roles"
@@ -28,14 +25,20 @@ import (
 	"dope/dope/web/route"
 )
 
-// The Площадка handlers: the three public pages (/venues, /venue/{ref},
-// /reg/{token}) and the Representative's writes, which the /host table below
-// dispatches like every other host page.
+// denyVenuePage is the public Площадка pages' policy: a form post without a
+// session goes through the Telegram handshake and comes back to the same page,
+// which is what a registration or voting link is for.
+func denyVenuePage(w http.ResponseWriter, r *http.Request, d route.Denial) {
+	if d == route.NoSession {
+		http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.Path), http.StatusSeeOther)
+		return
+	}
+	route.DenyAPI(w, r, d)
+}
 
-// VenueRoutes is the public Площадка table: /venues, /venue/… and /reg/….
 func (s *Server) VenueRoutes() *route.Table {
 	s.venueOnce.Do(func() {
-		t := route.New(s.h.Engine(), route.DenyAPI)
+		t := route.New(s.h.Engine(), denyVenuePage)
 		t.Handle("GET /venues", route.Public, s.renderVenuesIndex)
 		t.Handle("GET /venue/{ref}", route.Public, s.renderVenuePage)
 		t.Handle("GET /reg/{token}", route.Public, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
@@ -51,12 +54,9 @@ func (s *Server) VenueRoutes() *route.Table {
 	return s.venueTable
 }
 
-// HandleVenueRouter serves the public Площадка pages.
 func (s *Server) HandleVenueRouter(w http.ResponseWriter, r *http.Request) {
 	s.VenueRoutes().Mux.ServeHTTP(w, r)
 }
-
-// ---- /venues ----------------------------------------------------------------
 
 func (s *Server) renderVenuesIndex(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
 	list, err := venues.PublicVenues(r.Context(), s.h.Engine().DB)
@@ -64,24 +64,22 @@ func (s *Server) renderVenuesIndex(w http.ResponseWriter, r *http.Request, _ rou
 		return err
 	}
 	now := time.Now().UTC()
+	next, err := venues.NextSlots(r.Context(), s.h.Engine().DB, now.Format(venues.TimeLayout))
+	if err != nil {
+		return err
+	}
 	rows := make([]VenueRow, 0, len(list))
-	sortKeys := make(map[string]string, len(list))
 	for _, v := range list {
-		slots, err := venues.VenueSlots(r.Context(), s.h.Engine().DB, v.ID)
-		if err != nil {
-			return err
-		}
 		row := VenueRow{Ref: v.Ref(), Title: v.Title, City: v.City, RatingVenueID: v.RatingVenueID}
-		if next, ok := nextSlot(slots, now); ok {
-			row.NextSlot = next.StartsAt
-			row.Registration = registrationLabel(next, now)
-			row.Accepted = next.Accepted
+		if slot, ok := next[v.ID]; ok {
+			row.NextSlot = slot.StartsAt
+			row.Registration = registrationLabel(slot, now)
+			row.Accepted = slot.Accepted
 		}
-		sortKeys[row.Ref] = row.NextSlot
 		rows = append(rows, row)
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
-		a, b := sortKeys[rows[i].Ref], sortKeys[rows[j].Ref]
+		a, b := rows[i].NextSlot, rows[j].NextSlot
 		if (a == "") != (b == "") {
 			return b == ""
 		}
@@ -89,15 +87,6 @@ func (s *Server) renderVenuesIndex(w http.ResponseWriter, r *http.Request, _ rou
 	})
 	pages.RenderDoc(w, s.h.Engine().AssetETags, VenuesIndexDoc(rows))
 	return nil
-}
-
-func nextSlot(slots []venues.Slot, now time.Time) (venues.Slot, bool) {
-	for _, s := range slots {
-		if at, ok := venues.ParseTime(s.StartsAt); ok && at.After(now) {
-			return s, true
-		}
-	}
-	return venues.Slot{}, false
 }
 
 func registrationLabel(slot venues.Slot, now time.Time) string {
@@ -110,8 +99,6 @@ func registrationLabel(slot venues.Slot, now time.Time) string {
 		return "открыта"
 	}
 }
-
-// ---- /venue/{ref} -----------------------------------------------------------
 
 func (s *Server) renderVenuePage(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
 	festID, err := store.ResolveFestID(r.Context(), s.h.Engine().DB, r.PathValue("ref"))
@@ -166,8 +153,6 @@ func (s *Server) tournamentNames(ctx context.Context, slots []venues.Slot) map[i
 	return out
 }
 
-// ---- /reg/{token} -----------------------------------------------------------
-
 func (s *Server) renderRegPage(w http.ResponseWriter, r *http.Request, token, errMsg, notice string) error {
 	slot, err := venues.SlotByToken(r.Context(), s.h.Engine().DB, token)
 	if err != nil {
@@ -189,6 +174,11 @@ func (s *Server) renderRegPage(w http.ResponseWriter, r *http.Request, token, er
 			page.Tournament = t.Name
 		}
 	}
+	gameRef := slot.GameSlug
+	if gameRef == "" {
+		gameRef = strconv.FormatInt(slot.GameID, 10)
+	}
+	page.GameHref = "/fest/" + venue.Ref() + "/game/" + gameRef + "/"
 	user, ok := s.h.Engine().LookupSession(r)
 	page.LoggedIn = ok
 	if ok {
@@ -250,7 +240,7 @@ func (s *Server) handleRegSubmit(w http.ResponseWriter, r *http.Request, sc rout
 	if err != nil {
 		return s.renderRegPage(w, r, token, err.Error(), "")
 	}
-	if err := s.reseatSlot(r.Context(), slot); err != nil {
+	if err := s.reseatIfSeated(r.Context(), slot, sc.User.UserID); err != nil {
 		return err
 	}
 	http.Redirect(w, r, "/reg/"+token, http.StatusSeeOther)
@@ -265,8 +255,19 @@ func formInt64(form url.Values, key string) int64 {
 	return value
 }
 
-// reseatSlot re-runs the Слот's seating, which is what carries a roster edit
-// into an already-accepted team's participant_players.
+// reseatIfSeated carries a Заявка's edit into the Game only when that Заявка
+// is already accepted; a pending one is a version row and nothing more.
+func (s *Server) reseatIfSeated(reqCtx context.Context, slot venues.Slot, userID int64) error {
+	app, err := venues.UserApplication(reqCtx, s.h.Engine().DB, slot.ID, userID)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && app.Status != venues.StatusAccepted) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return s.reseatSlot(reqCtx, slot)
+}
+
 func (s *Server) reseatSlot(reqCtx context.Context, slot venues.Slot) error {
 	venue, err := venues.LoadVenue(reqCtx, s.h.Engine().DB, slot.FestID)
 	if err != nil {
@@ -281,28 +282,16 @@ func (s *Server) reseatSlot(reqCtx context.Context, slot venues.Slot) error {
 	return err
 }
 
-// ---- the Representative's pages ---------------------------------------------
-
-// IsVenue reports whether a fest is a Площадка.
-func (s *Server) IsVenue(ctx context.Context, festID int64) bool {
-	var kind string
-	if err := s.h.Engine().DB.QueryRowContext(ctx, `select coalesce(kind, 'fest') from fests where id = ?`, festID).Scan(&kind); err != nil {
-		return false
-	}
-	return kind == venues.KindVenue
-}
-
-func (s *Server) renderVenueDashboard(w http.ResponseWriter, r *http.Request, festID int64, errMsg, notice string) {
+func (s *Server) renderVenueDashboard(w http.ResponseWriter, r *http.Request, sc route.Scope, errMsg, notice string) error {
+	festID := sc.FestID
 	_ = r.ParseForm()
 	venue, err := venues.LoadVenue(r.Context(), s.h.Engine().DB, festID)
 	if err != nil {
-		http.NotFound(w, r)
-		return
+		return err
 	}
 	slots, err := venues.VenueSlots(r.Context(), s.h.Engine().DB, festID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return err
 	}
 	names := s.tournamentNames(r.Context(), slots)
 	rows := make([]VenueDashSlot, 0, len(slots))
@@ -315,42 +304,31 @@ func (s *Server) renderVenueDashboard(w http.ResponseWriter, r *http.Request, fe
 	}
 	members, err := festaccess.LoadFestAccessMembers(s.h.Engine(), r.Context(), festID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return err
 	}
-	user, _ := s.h.Engine().LookupSession(r)
-	role, _ := festaccess.FestUserRoleFromQuery(r.Context(), s.h.Engine().DB, festID, user.UserID)
 	pages.RenderDoc(w, s.h.Engine().AssetETags, venueDashDoc(venueDashData{
 		Venue: venue, Slots: rows, Access: members,
-		CanManage: roles.CanManageFest(role), CanDelete: roles.CanDeleteFest(role),
+		CanManage: roles.CanManageFest(sc.Role), CanDelete: roles.CanDeleteFest(sc.Role),
 		Error: errMsg, Notice: notice,
 	}))
+	return nil
 }
 
-func (s *Server) canManage(ctx context.Context, festID int64, r *http.Request) bool {
-	user, ok := s.h.Engine().LookupSession(r)
-	if !ok {
-		return false
-	}
-	role, err := festaccess.FestUserRoleFromQuery(ctx, s.h.Engine().DB, festID, user.UserID)
-	return err == nil && roles.CanManageFest(role)
-}
-
-func (s *Server) handleHostCreateVenue(w http.ResponseWriter, r *http.Request, userID int64) {
+func (s *Server) handleHostCreateVenue(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	userID := sc.User.UserID
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad form", http.StatusBadRequest)
-		return
+		return route.BadRequest("bad form")
 	}
 	title := strings.TrimSpace(r.Form.Get("title"))
 	if title == "" {
 		s.renderHostLanding(w, r, "Название площадки обязательно.")
-		return
+		return nil
 	}
 	slug := strings.TrimSpace(r.Form.Get("slug"))
 	if slug != "" {
 		if err := util.ValidateSlug(slug); err != nil {
 			s.renderHostLanding(w, r, "Slug: "+err.Error())
-			return
+			return nil
 		}
 	}
 	now := util.UtcNow()
@@ -372,26 +350,25 @@ insert into fest_organizers(fest_id, user_id, role, added_at) values(?, ?, 'crea
 	})
 	if err != nil {
 		s.renderHostLanding(w, r, err.Error())
-		return
+		return nil
 	}
 	http.Redirect(w, r, fmt.Sprintf("/host/fest/%d", festID), http.StatusSeeOther)
+	return nil
 }
 
-func (s *Server) handleHostUpdateVenue(w http.ResponseWriter, r *http.Request, festID int64) {
+func (s *Server) handleHostUpdateVenue(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	festID := sc.FestID
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad form", http.StatusBadRequest)
-		return
+		return route.BadRequest("bad form")
 	}
 	title := strings.TrimSpace(r.Form.Get("title"))
 	if title == "" {
-		s.renderVenueDashboard(w, r, festID, "Название обязательно.", "")
-		return
+		return s.renderVenueDashboard(w, r, sc, "Название обязательно.", "")
 	}
 	slug := strings.TrimSpace(r.Form.Get("slug"))
 	if slug != "" {
 		if err := util.ValidateSlug(slug); err != nil {
-			s.renderVenueDashboard(w, r, festID, "Slug: "+err.Error(), "")
-			return
+			return s.renderVenueDashboard(w, r, sc, "Slug: "+err.Error(), "")
 		}
 	}
 	err := s.h.Engine().WithWriteTx(r.Context(), festID, "venue-update", func(ctx context.Context, tx *sql.Tx) error {
@@ -403,15 +380,13 @@ where id = ?`, title, util.NullableString(slug), r.Form.Get("description"),
 		return err
 	})
 	if err != nil {
-		s.renderVenueDashboard(w, r, festID, err.Error(), "")
-		return
+		return s.renderVenueDashboard(w, r, sc, err.Error(), "")
 	}
 	s.h.Engine().InvalidateFestViewCache(festID)
 	http.Redirect(w, r, "/host/fest/"+s.festRefOrID(r.Context(), festID), http.StatusSeeOther)
+	return nil
 }
 
-// tourComposition is a Слот's ОД shape: the tournament's own questions_by_tour
-// when it names one, else what the form typed.
 func (s *Server) tourComposition(ctx context.Context, tournamentID int64, typed string) []int {
 	if tournamentID > 0 {
 		if t, ok := s.h.Engine().BuffMirror().Tournament(ctx, tournamentID); ok {
@@ -426,31 +401,24 @@ func (s *Server) tourComposition(ctx context.Context, tournamentID int64, typed 
 	return []int{12, 12, 12}
 }
 
-func (s *Server) handleHostCreateSlot(w http.ResponseWriter, r *http.Request, festID int64) {
+func (s *Server) handleHostCreateSlot(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	festID := sc.FestID
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad form", http.StatusBadRequest)
-		return
+		return route.BadRequest("bad form")
 	}
 	tournamentID := formInt64(r.Form, "rating_tournament_id")
 	comp := s.tourComposition(r.Context(), tournamentID, r.Form.Get("tour_comp"))
 	var slotID int64
 	err := s.h.Engine().WithWriteTx(r.Context(), festID, "slot-create", func(ctx context.Context, tx *sql.Tx) error {
-		gameID, err := gamebuild.Create(ctx, tx, gamebuild.Spec{FestID: festID, Type: games.OD, ODTourComp: comp})
-		if err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `
-update games set team_list_source = 'game', roster_source = 'game' where id = ?`, gameID); err != nil {
-			return err
-		}
-		slotID, err = venues.CreateSlotTx(ctx, tx, festID, gameID, r.Form.Get("starts_at"), tournamentID, "")
+		var err error
+		slotID, err = venues.CreateSlotTx(ctx, tx, festID, r.Form.Get("starts_at"), tournamentID, "", comp)
 		return err
 	})
 	if err != nil {
-		s.renderVenueDashboard(w, r, festID, err.Error(), "")
-		return
+		return s.renderVenueDashboard(w, r, sc, err.Error(), "")
 	}
 	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s/slot/%d", s.festRefOrID(r.Context(), festID), slotID), http.StatusSeeOther)
+	return nil
 }
 
 func (s *Server) slotOf(r *http.Request, festID int64) (venues.Venue, venues.Slot, error) {
@@ -472,7 +440,8 @@ func (s *Server) slotOf(r *http.Request, festID int64) (venues.Venue, venues.Slo
 	return venue, slot, nil
 }
 
-func (s *Server) renderSlotPage(w http.ResponseWriter, r *http.Request, festID int64, errMsg, notice string) error {
+func (s *Server) renderSlotPage(w http.ResponseWriter, r *http.Request, sc route.Scope, errMsg, notice string) error {
+	festID := sc.FestID
 	_ = r.ParseForm()
 	venue, slot, err := s.slotOf(r, festID)
 	if err != nil {
@@ -508,10 +477,11 @@ func (s *Server) renderSlotPage(w http.ResponseWriter, r *http.Request, festID i
 	}
 	data := slotPageData{
 		Venue: venue, Slot: slot, Applications: rows, Voting: voting, Contested: contested,
-		GameHref:  "/host/fest/" + venue.Ref() + "/game/" + gameRef + "/",
-		RegURL:    publicURL(r, "/reg/"+slot.RegToken),
-		CanManage: s.canManage(r.Context(), festID, r),
-		Error:     errMsg, Notice: notice,
+		GameStatus: s.gameProgress(r.Context(), festID, slot.GameID),
+		GameHref:   "/host/fest/" + venue.Ref() + "/game/" + gameRef + "/",
+		RegURL:     publicURL(r, "/reg/"+slot.RegToken),
+		CanManage:  roles.CanManageFest(sc.Role),
+		Error:      errMsg, Notice: notice,
 	}
 	if slot.RatingTournamentID > 0 {
 		if t, ok := s.h.Engine().BuffMirror().Tournament(r.Context(), slot.RatingTournamentID); ok {
@@ -542,7 +512,6 @@ func submitterLink(app venues.Application) string {
 	return ""
 }
 
-// publicURL is the absolute link a Representative copies and posts.
 func publicURL(r *http.Request, path string) string {
 	scheme := "https"
 	if r.TLS == nil && !strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
@@ -551,7 +520,8 @@ func publicURL(r *http.Request, path string) string {
 	return scheme + "://" + r.Host + path
 }
 
-func (s *Server) handleSlotSave(w http.ResponseWriter, r *http.Request, festID int64) error {
+func (s *Server) handleSlotSave(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	festID := sc.FestID
 	_, slot, err := s.slotOf(r, festID)
 	if err != nil {
 		return err
@@ -568,11 +538,10 @@ func (s *Server) handleSlotSave(w http.ResponseWriter, r *http.Request, festID i
 		if tournamentID <= 0 || tournamentID == slot.RatingTournamentID {
 			return nil
 		}
-		comp := s.tourComposition(ctx, tournamentID, "")
-		return retourGameTx(ctx, tx, festID, slot.GameID, comp)
+		return venues.RetourTx(ctx, tx, festID, slot.GameID, s.tourComposition(ctx, tournamentID, ""))
 	})
 	if err != nil {
-		return s.renderSlotPage(w, r, festID, err.Error(), "")
+		return s.renderSlotPage(w, r, sc, err.Error(), "")
 	}
 	s.h.Engine().InvalidateFestViewCache(festID)
 	return s.redirectToSlot(w, r, festID, slot.ID)
@@ -583,7 +552,8 @@ func (s *Server) redirectToSlot(w http.ResponseWriter, r *http.Request, festID, 
 	return nil
 }
 
-func (s *Server) handleSlotToken(w http.ResponseWriter, r *http.Request, festID int64) error {
+func (s *Server) handleSlotToken(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	festID := sc.FestID
 	_, slot, err := s.slotOf(r, festID)
 	if err != nil {
 		return err
@@ -596,7 +566,8 @@ func (s *Server) handleSlotToken(w http.ResponseWriter, r *http.Request, festID 
 	return s.redirectToSlot(w, r, festID, slot.ID)
 }
 
-func (s *Server) handleSlotClone(w http.ResponseWriter, r *http.Request, festID int64) error {
+func (s *Server) handleSlotClone(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	festID := sc.FestID
 	_, slot, err := s.slotOf(r, festID)
 	if err != nil {
 		return err
@@ -618,69 +589,18 @@ func (s *Server) handleSlotClone(w http.ResponseWriter, r *http.Request, festID 
 	comp := games.ParseTourComp(doc.SchemeJSON)
 	var newSlot int64
 	err = s.h.Engine().WithWriteTx(r.Context(), festID, "slot-clone", func(ctx context.Context, tx *sql.Tx) error {
-		gameID, err := gamebuild.Create(ctx, tx, gamebuild.Spec{FestID: festID, Type: games.OD, ODTourComp: comp})
-		if err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `
-update games set team_list_source = 'game', roster_source = 'game' where id = ?`, gameID); err != nil {
-			return err
-		}
-		newSlot, err = venues.CreateSlotTx(ctx, tx, festID, gameID, startsAt, 0, opensAt)
+		var err error
+		newSlot, err = venues.CreateSlotTx(ctx, tx, festID, startsAt, 0, opensAt, comp)
 		return err
 	})
 	if err != nil {
-		return s.renderSlotPage(w, r, festID, err.Error(), "")
+		return s.renderSlotPage(w, r, sc, err.Error(), "")
 	}
 	return s.redirectToSlot(w, r, festID, newSlot)
 }
 
-// retourGameTx rewrites a Слот's Game to a new tour composition, keeping the
-// teams it already seats. It is only ever run before the Слот is played —
-// naming the tournament is what sets the tours — so it starts from a pristine
-// document rather than trying to reshape the answers grid.
-func retourGameTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, comp []int) error {
-	doc, err := store.LoadGameDoc(ctx, tx, festID, gameID)
-	if err != nil {
-		return err
-	}
-	if sameComp(games.ParseTourComp(doc.SchemeJSON), comp) {
-		return nil
-	}
-	var current games.ODState
-	_ = json.Unmarshal([]byte(doc.State), &current)
-	teams := make([]protocol.RosterTeam, 0, len(current.Teams))
-	for _, t := range current.Teams {
-		teams = append(teams, protocol.RosterTeam{Name: t.Name, City: t.City, Number: t.Number})
-	}
-	emptyScheme, emptyState := games.ODEmptyGameJSON(doc.Slug.String, "", comp)
-	scheme, state, ok, err := protocol.FoldRoster(games.OD, string(emptyScheme), string(emptyState), teams, nil)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		scheme, state = emptyScheme, emptyState
-	}
-	if _, err := tx.ExecContext(ctx, `update games set scheme_json = ?, updated_at = ? where id = ? and fest_id = ?`,
-		string(scheme), util.UtcNow(), gameID, festID); err != nil {
-		return err
-	}
-	return flatgame.SetStateTx(ctx, tx, festID, gameID, string(state))
-}
-
-func sameComp(a, b []int) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func (s *Server) handleApplicationStatus(w http.ResponseWriter, r *http.Request, festID int64) error {
+func (s *Server) handleApplicationStatus(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	festID := sc.FestID
 	venue, slot, err := s.slotOf(r, festID)
 	if err != nil {
 		return err
@@ -705,13 +625,14 @@ func (s *Server) handleApplicationStatus(w http.ResponseWriter, r *http.Request,
 		return route.Conflict(venues.ErrHasResults.Error())
 	}
 	if err != nil {
-		return s.renderSlotPage(w, r, festID, err.Error(), "")
+		return s.renderSlotPage(w, r, sc, err.Error(), "")
 	}
 	s.h.Engine().InvalidateFestViewCache(festID)
 	return s.redirectToSlot(w, r, festID, slot.ID)
 }
 
-func (s *Server) handleApplicationEdit(w http.ResponseWriter, r *http.Request, festID, authorID int64) error {
+func (s *Server) handleApplicationEdit(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	festID, authorID := sc.FestID, sc.User.UserID
 	_, slot, err := s.slotOf(r, festID)
 	if err != nil {
 		return err
@@ -733,15 +654,16 @@ func (s *Server) handleApplicationEdit(w http.ResponseWriter, r *http.Request, f
 		return err
 	})
 	if err != nil {
-		return s.renderSlotPage(w, r, festID, err.Error(), "")
+		return s.renderSlotPage(w, r, sc, err.Error(), "")
 	}
-	if err := s.reseatSlot(r.Context(), slot); err != nil {
+	if err := s.reseatIfSeated(r.Context(), slot, app.UserID); err != nil {
 		return err
 	}
 	return s.redirectToSlot(w, r, festID, slot.ID)
 }
 
-func (s *Server) handleApplicationRevert(w http.ResponseWriter, r *http.Request, festID, authorID int64) error {
+func (s *Server) handleApplicationRevert(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	festID, authorID := sc.FestID, sc.User.UserID
 	_, slot, err := s.slotOf(r, festID)
 	if err != nil {
 		return err
@@ -777,27 +699,41 @@ func (s *Server) handleApplicationRevert(w http.ResponseWriter, r *http.Request,
 		return err
 	})
 	if err != nil {
-		return s.renderSlotPage(w, r, festID, err.Error(), "")
+		return s.renderSlotPage(w, r, sc, err.Error(), "")
 	}
-	if err := s.reseatSlot(r.Context(), slot); err != nil {
+	if err := s.reseatIfSeated(r.Context(), slot, app.UserID); err != nil {
 		return err
 	}
 	return s.redirectToSlot(w, r, festID, slot.ID)
 }
 
-// loadHostVenues are the Площадки a user represents.
 func (s *Server) loadHostVenues(ctx context.Context, userID int64) ([]venues.Venue, error) {
-	return store.CollectRows(ctx, s.h.Engine().DB, `
-select f.id, coalesce(f.slug, ''), f.title, coalesce(f.city, ''), f.description,
-       coalesce(f.rating_venue_id, 0), f.is_public
-from fests f
-join fest_organizers o on o.fest_id = f.id
-where o.user_id = ? and f.kind = 'venue'
-order by f.title, f.id`, []any{userID}, func(rows *sql.Rows) (venues.Venue, error) {
-		var v venues.Venue
-		var public int
-		err := rows.Scan(&v.ID, &v.Slug, &v.Title, &v.City, &v.Description, &v.RatingVenueID, &public)
-		v.IsPublic = public == 1
-		return v, err
-	})
+	return venues.VenuesOf(ctx, s.h.Engine().DB, userID)
+}
+
+// gameProgress is the ОД page's own header line — «Игра не началась» until a
+// question is entered, then how far the sitting has got.
+func (s *Server) gameProgress(ctx context.Context, festID, gameID int64) string {
+	doc, err := store.LoadGameDoc(ctx, s.h.Engine().DB, festID, gameID)
+	if err != nil {
+		return ""
+	}
+	var state games.ODState
+	if err := json.Unmarshal([]byte(doc.State), &state); err != nil {
+		return ""
+	}
+	last := 0
+	for q, entries := range state.Entries {
+		entered := q < len(state.Completed) && state.Completed[q]
+		for _, number := range entries {
+			entered = entered || number > 0
+		}
+		if entered {
+			last = q + 1
+		}
+	}
+	if last == 0 {
+		return "игра не началась"
+	}
+	return "введён вопрос " + strconv.Itoa(last)
 }
