@@ -43,6 +43,7 @@ func venueDashDoc(data venueDashData) *ui.Doc {
 			ui.Data("jump-label", "Страница площадки"),
 			ui.Data("jump-href", "/venue/"+v.Ref()),
 			ui.Data("jump-title", "Открыть страницу площадки"),
+			ui.Data("jump-icon", "eye"),
 		)
 	}
 	page = append(page, ui.Publictopbar(pages.Trail(pages.HostCrumbs(), v.Title)))

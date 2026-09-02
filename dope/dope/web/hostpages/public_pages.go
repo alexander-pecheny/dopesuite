@@ -46,6 +46,9 @@ func jumpHostNav(href, label, title string) []ui.Item {
 		ui.Data("jump-label", label),
 		ui.Data("jump-href", href),
 		ui.Data("jump-title", title),
+		ui.Data("jump-icon", "clipboard"),
+		// Only an account has an organizer's side; a visitor is not offered one.
+		ui.Data("jump-authed", "1"),
 	}
 }
 

@@ -301,16 +301,16 @@ var RU = Strings{
 	},
 	Gallery: GalleryStrings{
 		Brain: GalleryBrainStrings{
-			Title: func() string { return "Ведущий · Брейн" },
+			Title: func() string { return "Организатор · Брейн" },
 		},
 		Ek: GalleryEkStrings{
 			Title: func() string { return "ЭК · Фест" },
 		},
 		Multi: GalleryMultiStrings{
-			Title: func() string { return "Ведущий · Мультиигры" },
+			Title: func() string { return "Организатор · Мультиигры" },
 		},
 		Od: GalleryOdStrings{
-			Title: func() string { return "Ведущий · ОД" },
+			Title: func() string { return "Организатор · ОД" },
 		},
 		Page: GalleryPageStrings{
 			Title: func() string { return "Галерея · dope" },
@@ -323,16 +323,16 @@ var RU = Strings{
 			Reseed:          func() string { return "Пересев" },
 			Roster:          func() string { return "Составы" },
 			Venues:          func() string { return "Площадки" },
-			VenuesHost:      func() string { return "Площадки, ведущий" },
+			VenuesHost:      func() string { return "Площадки, организатор" },
 		},
 		Si: GallerySiStrings{
-			Title: func() string { return "Ведущий · СИ" },
+			Title: func() string { return "Организатор · СИ" },
 		},
 		Topbar: GalleryTopbarStrings{
 			Title: func() string { return "Галерея" },
 		},
 		Troika: GalleryTroikaStrings{
-			Title: func() string { return "Ведущий · Тройка" },
+			Title: func() string { return "Организатор · Тройка" },
 		},
 	},
 	Gamebuild: GamebuildStrings{
@@ -494,7 +494,7 @@ var RU = Strings{
 			NumbersStatusDone:    func() string { return "готово" },
 			NumbersStatusPartial: func(done string, total string) string { return fmt.Sprintf("%s из %s", done, total) },
 			NumbersStatusUnset:   func() string { return "не выставлены" },
-			PageTitle:            func(title string) string { return fmt.Sprintf("%s · ведущий", title) },
+			PageTitle:            func(title string) string { return fmt.Sprintf("%s · организатор", title) },
 			PublicLabel:          func() string { return "Публичный" },
 			RatingStatusNone:     func() string { return "нет rating ID" },
 			RosterImportLink:     func() string { return "Загрузить команды и игроков" },
@@ -604,9 +604,9 @@ var RU = Strings{
 			GroupPast:                  func() string { return "Прошедшие" },
 			HomeCrumbLabel:             func() string { return "Главная" },
 			IdentityUsernameLead:       func() string { return "Вы вошли как " },
-			JumpHostLabel:              func() string { return "Режим ведущего" },
-			JumpHostTitleFest:          func() string { return "Открыть в режиме ведущего" },
-			JumpHostTitleIndex:         func() string { return "Перейти в режим ведущего" },
+			JumpHostLabel:              func() string { return "Режим организатора" },
+			JumpHostTitleFest:          func() string { return "Открыть в режиме организатора" },
+			JumpHostTitleIndex:         func() string { return "Перейти в режим организатора" },
 			JumpLabel:                  func() string { return "Страница зрителя" },
 			JumpTitle:                  func() string { return "Открыть зрительскую страницу" },
 			LandingCrumb:               func() string { return "Мои фесты" },
@@ -1877,8 +1877,8 @@ var RU = Strings{
 			PrevRow:    func() string { return "Предыдущая строка" },
 		},
 		Menu: WidgetsMenuStrings{
-			Login:   func() string { return "Вход для ведущего" },
-			Profile: func() string { return "Профиль ведущего" },
+			Login:   func() string { return "Войти" },
+			Profile: func() string { return "Профиль организатора" },
 		},
 		Profile: WidgetsProfileStrings{
 			Changed:  func() string { return "Пароль изменён." },

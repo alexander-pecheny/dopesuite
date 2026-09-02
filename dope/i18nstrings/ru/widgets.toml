@@ -54,8 +54,8 @@ changed = "Пароль изменён."
 
 [menu]
 # The ☰ menu's host account entries (window.dopeMenuConfig).
-profile = "Профиль ведущего"
-login = "Вход для ведущего"
+profile = "Профиль организатора"
+login = "Войти"
 
 [group_stats]
 # Arithmetic parser errors in evalScoringRule (group-stats.ts).

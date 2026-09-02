@@ -50,19 +50,35 @@ test("menuItems account entry uses config labels with kit defaults", () => {
     jump: null,
     extras: [],
     account: { loggedIn: false },
-    config: { loginHref: "/login?next=1", loginLabel: "Вход для ведущего" },
+    config: { loginHref: "/login?next=1", loginLabel: "Войти" },
   });
   assert.equal(anon[1].href, "/login?next=1");
-  assert.equal(anon[1].label, "Вход для ведущего");
+  assert.equal(anon[1].label, "Войти");
   assert.equal(anon[1].icon, "log-in");
 });
 
 test("jumpFromDataset reads the body data-jump-* contract", () => {
   assert.equal(jumpFromDataset({}), null);
   assert.deepEqual(jumpFromDataset({ jumpHref: "/f/1", jumpExternal: "1" }), {
-    label: "Перейти", href: "/f/1", title: "", external: true,
+    label: "Перейти", href: "/f/1", title: "", external: true, authed: false,
   });
   assert.equal(jumpFromDataset({ jumpHref: "/f/2", jumpLabel: "Смотреть" }).label, "Смотреть");
+  assert.deepEqual(jumpFromDataset({ jumpHref: "/host", jumpIcon: "clipboard", jumpAuthed: "1" }), {
+    label: "Перейти", href: "/host", title: "", external: false, icon: "clipboard", authed: true,
+  });
+});
+
+// A jump into the organizer's side is not offered to a visitor with no account.
+test("an authed jump waits for a session", () => {
+  const jump = { label: "Режим организатора", href: "/host", authed: true, icon: "clipboard" };
+  const anon = menuItems({ jump, extras: [], account: { loggedIn: false }, config: {} });
+  assert.equal(anon.some((i) => i.label === "Режим организатора"), false);
+  const authed = menuItems({ jump, extras: [], account: { loggedIn: true, username: "ap" }, config: {} });
+  const row = authed.find((i) => i.label === "Режим организатора");
+  assert.equal(row.icon, "clipboard");
+  // A jump that names no account requirement is offered to everyone.
+  const open = menuItems({ jump: { label: "Страница зрителя", href: "/" }, extras: [], account: { loggedIn: false }, config: {} });
+  assert.equal(open.some((i) => i.label === "Страница зрителя"), true);
 });
 
 test("accountFromMe mirrors the /api/auth/me contract", () => {

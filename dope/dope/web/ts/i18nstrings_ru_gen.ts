@@ -281,16 +281,16 @@ export const RU: Strings = {
   },
   gallery: {
     brain: {
-      title: () => "Ведущий · Брейн",
+      title: () => "Организатор · Брейн",
     },
     ek: {
       title: () => "ЭК · Фест",
     },
     multi: {
-      title: () => "Ведущий · Мультиигры",
+      title: () => "Организатор · Мультиигры",
     },
     od: {
-      title: () => "Ведущий · ОД",
+      title: () => "Организатор · ОД",
     },
     page: {
       title: () => "Галерея · dope",
@@ -303,16 +303,16 @@ export const RU: Strings = {
       reseed: () => "Пересев",
       roster: () => "Составы",
       venues: () => "Площадки",
-      venuesHost: () => "Площадки, ведущий",
+      venuesHost: () => "Площадки, организатор",
     },
     si: {
-      title: () => "Ведущий · СИ",
+      title: () => "Организатор · СИ",
     },
     topbar: {
       title: () => "Галерея",
     },
     troika: {
-      title: () => "Ведущий · Тройка",
+      title: () => "Организатор · Тройка",
     },
   },
   gamebuild: {
@@ -418,7 +418,7 @@ export const RU: Strings = {
       numbersStatusDone: () => "готово",
       numbersStatusPartial: (done: string, total: string) => `${done} из ${total}`,
       numbersStatusUnset: () => "не выставлены",
-      pageTitle: (title: string) => `${title} · ведущий`,
+      pageTitle: (title: string) => `${title} · организатор`,
       publicLabel: () => "Публичный",
       ratingStatusNone: () => "нет rating ID",
       rosterImportLink: () => "Загрузить команды и игроков",
@@ -498,9 +498,9 @@ export const RU: Strings = {
       groupPast: () => "Прошедшие",
       homeCrumbLabel: () => "Главная",
       identityUsernameLead: () => "Вы вошли как ",
-      jumpHostLabel: () => "Режим ведущего",
-      jumpHostTitleFest: () => "Открыть в режиме ведущего",
-      jumpHostTitleIndex: () => "Перейти в режим ведущего",
+      jumpHostLabel: () => "Режим организатора",
+      jumpHostTitleFest: () => "Открыть в режиме организатора",
+      jumpHostTitleIndex: () => "Перейти в режим организатора",
       jumpLabel: () => "Страница зрителя",
       jumpTitle: () => "Открыть зрительскую страницу",
       landingCrumb: () => "Мои фесты",
@@ -1379,8 +1379,8 @@ export const RU: Strings = {
       prevRow: () => "Предыдущая строка",
     },
     menu: {
-      login: () => "Вход для ведущего",
-      profile: () => "Профиль ведущего",
+      login: () => "Войти",
+      profile: () => "Профиль организатора",
     },
     profile: {
       changed: () => "Пароль изменён.",

@@ -12,6 +12,10 @@ export interface MenuJump {
   href: string;
   title?: string;
   external?: boolean;
+  icon?: string;
+  // A jump into a place only an account has — the organizer's side of dope —
+  // is not offered to a visitor who has no account here.
+  authed?: boolean;
 }
 
 export interface MenuExtra {
@@ -73,8 +77,8 @@ export function menuItems(state: {
   // the account entry — used to be the only ones without one, so the column of
   // icons broke at the top and the bottom.
   const items: MenuItem[] = [{ kind: "appearance", icon: "palette" }];
-  if (state.jump) {
-    items.push(link(state.jump.label, state.jump.href, state.jump.title, state.jump.external));
+  if (state.jump && (!state.jump.authed || state.account?.loggedIn)) {
+    items.push(link(state.jump.label, state.jump.href, state.jump.title, state.jump.external, false, state.jump.icon));
   }
   for (const extra of state.extras) {
     // A rule that would open the menu or double another separates nothing.
@@ -107,6 +111,8 @@ export function jumpFromDataset(d: Partial<Record<string, string>>): MenuJump | 
     href: d.jumpHref,
     title: d.jumpTitle || "",
     external: d.jumpExternal === "1",
+    ...(d.jumpIcon ? { icon: d.jumpIcon } : {}),
+    authed: d.jumpAuthed === "1",
   };
 }
 

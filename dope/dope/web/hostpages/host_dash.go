@@ -78,6 +78,7 @@ func hostFestDashDoc(data hostFestDashData) *dopeui.Doc {
 			dopeui.Data("jump-label", s.Host.Dash.JumpLabel()),
 			dopeui.Data("jump-href", "/fest/"+ref),
 			dopeui.Data("jump-title", s.Host.Dash.JumpTitle()),
+			dopeui.Data("jump-icon", "eye"),
 		)
 	}
 	page = append(page, dopeui.Publictopbar(pages.Trail(pages.HostCrumbs(), data.Fest.Title)))

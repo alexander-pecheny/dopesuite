@@ -26,7 +26,7 @@ individual_stats = "Статистика личной СИ"
 # The section drawing the venues table as the spectator reads it.
 venues = "Площадки"
 # The section drawing the venues table as the host edits it.
-venues_host = "Площадки, ведущий"
+venues_host = "Площадки, организатор"
 # The section drawing the fest roster table.
 roster = "Составы"
 
@@ -36,20 +36,20 @@ title = "ЭК · Фест"
 
 [od]
 # The <title> of the ОД page's host shell (static/od.html).
-title = "Ведущий · ОД"
+title = "Организатор · ОД"
 
 [si]
 # The <title> of the СИ page's host shell (static/si.html).
-title = "Ведущий · СИ"
+title = "Организатор · СИ"
 
 [multi]
 # The <title> of the Мультиигры page's host shell (static/multi.html).
-title = "Ведущий · Мультиигры"
+title = "Организатор · Мультиигры"
 
 [troika]
 # The <title> of the Тройка page's host shell (static/troika.html).
-title = "Ведущий · Тройка"
+title = "Организатор · Тройка"
 
 [brain]
 # The <title> of the Брейн page's host shell (static/brain.html).
-title = "Ведущий · Брейн"
+title = "Организатор · Брейн"
