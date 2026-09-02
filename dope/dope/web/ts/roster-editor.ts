@@ -12,6 +12,10 @@ export type RosterPlayer = {
   captain: boolean;
 };
 
+// A suggested player carries how many games the mirror knows them by, which is
+// how a Representative tells namesakes apart.
+export type SuggestedPlayer = RosterPlayer & {games?: number};
+
 export const MAX_ROSTER = 6;
 
 export function emptyPlayer(): RosterPlayer {
@@ -46,10 +50,29 @@ export function fullName(p: RosterPlayer): string {
   return [p.surname, p.name, p.patronymic].map((s) => s.trim()).filter(Boolean).join(" ");
 }
 
-// suggestLabel is «Фамилия Имя Отчество (id)», the line the suggest shows.
-export function suggestLabel(p: RosterPlayer): string {
+// suggestLabel is «Фамилия Имя Отчество (id)», the line the suggest shows,
+// with the games the mirror knows the player by when it does.
+export function suggestLabel(p: SuggestedPlayer): string {
   const name = fullName(p);
-  return p.player_id > 0 ? `${name} (${p.player_id})` : name;
+  if (p.player_id <= 0) return name;
+  const games = Number(p.games) || 0;
+  return games > 0 ? `${name} (${p.player_id}) · ${games} ${gamesWord(games)}` : `${name} (${p.player_id})`;
+}
+
+// gamesWord is «игра/игры/игр» — Russian counts by the last digits.
+export function gamesWord(games: number): string {
+  const tens = games % 100;
+  if (tens >= 11 && tens <= 14) return "игр";
+  switch (games % 10) {
+    case 1:
+      return "игра";
+    case 2:
+    case 3:
+    case 4:
+      return "игры";
+    default:
+      return "игр";
+  }
 }
 
 // setCaptain keeps exactly one captain: picking a new one clears the old.
@@ -124,13 +147,13 @@ async function fetchJSON<T>(url: string): Promise<T | null> {
   }
 }
 
-async function fetchPlayers(query: string): Promise<RosterPlayer[]> {
+async function fetchPlayers(query: string): Promise<SuggestedPlayer[]> {
   const response = await fetch(`/api/buff/players?q=${encodeURIComponent(query)}`, {
     headers: { Accept: "application/json" },
   });
   if (!response.ok) return [];
   const rows = (await response.json()) as
-    | Array<{ id: number; surname: string; name: string; patronymic: string }>
+    | Array<{ id: number; surname: string; name: string; patronymic: string; games?: number }>
     | null;
   if (!Array.isArray(rows)) return [];
   return rows.map((r) => ({
@@ -139,6 +162,7 @@ async function fetchPlayers(query: string): Promise<RosterPlayer[]> {
     name: r.name ?? "",
     patronymic: r.patronymic ?? "",
     captain: false,
+    games: Number(r.games) || 0,
   }));
 }
 
@@ -184,7 +208,7 @@ export function mountRosterEditor(container: HTMLElement): void {
 
   const drawSuggest = (player: RosterPlayer, index: number): HTMLElement => {
     const box = el("div", "u-col u-gap-sm");
-    const query = input("input", suggestLabel(player), "Фамилия");
+    const query = input("input", suggestLabel(player), "Фамилия Имя");
     const list = el("div", "u-col u-gap-sm");
     attachSuggest(query, list, fetchPlayers, suggestLabel, (candidate) => {
       players[index] = { ...candidate, captain: players[index].captain };

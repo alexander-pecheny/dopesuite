@@ -8,9 +8,10 @@ import (
 	"time"
 )
 
-func fixture(t *testing.T) *Store {
+func fixture(t *testing.T) *Store { return fixtureAt(t, filepath.Join(t.TempDir(), "buff.db")) }
+
+func fixtureAt(t *testing.T, path string) *Store {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "buff.db")
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
@@ -22,10 +23,17 @@ create table tournament_results(id integer, team_id integer, team_current_name t
 create table seasons(id integer primary key, date_start text, date_end text);
 create table team_seasons(team_id integer, season_id integer, player_id integer, date_added text, date_removed text, player_number integer);
 
+create table player_games(player_id integer primary key, games integer not null default 0);
+
 insert into players values
   (24850, 'Александр', 'Павлович', 'Печеный'),
   (25121, 'Дмитрий', 'Владимирович', 'Плотников'),
-  (3438, 'Игорь', 'Владимирович', 'Биткин');
+  (25122, 'Дмитрий', 'Сергеевич', 'Плотников'),
+  (25123, 'Данила', 'Игоревич', 'Плотников'),
+  (3438, 'Игорь', 'Владимирович', 'Биткин'),
+  (999, '100%', '_под', 'Проце_нт');
+
+insert into player_games values (24850, 500), (25121, 412), (25122, 7), (25123, 900);
 
 insert into tournaments values
   (10233, 'Синхрон августа', '2026-08-28T00:00:00+00:00', '2026-09-03T00:00:00+00:00', 'Синхрон', '12,12,12'),
@@ -63,17 +71,71 @@ func day(t *testing.T, s string) time.Time {
 	return d
 }
 
-func TestPlayersByPrefix(t *testing.T) {
+func TestPlayersRankByGames(t *testing.T) {
 	s := fixture(t)
 	got := s.Players(context.Background(), "П", 10)
-	if len(got) != 2 || got[0].Surname != "Печеный" || got[1].Surname != "Плотников" {
+	if len(got) != 5 {
 		t.Fatalf("players: %+v", got)
 	}
-	if got[0].FullName() != "Печеный Александр Павлович" {
-		t.Fatalf("full name %q", got[0].FullName())
+	// Most games first; the one the mirror knows nothing about goes last.
+	if got[0].ID != 25123 || got[1].ID != 24850 || got[2].ID != 25121 || got[3].ID != 25122 {
+		t.Fatalf("order %+v", got)
+	}
+	if got[1].FullName() != "Печеный Александр Павлович" || got[1].Games != 500 {
+		t.Fatalf("player %+v", got[1])
 	}
 	if len(s.Players(context.Background(), "", 10)) != 0 {
-		t.Fatal("an empty prefix must suggest nothing")
+		t.Fatal("an empty query must suggest nothing")
+	}
+}
+
+// «Плотников Д» is a surname and a first name, not a surname nobody has.
+func TestPlayersMatchNameWords(t *testing.T) {
+	s := fixture(t)
+	got := s.Players(context.Background(), "Плотников Д", 10)
+	if len(got) != 3 {
+		t.Fatalf("two words: %+v", got)
+	}
+	if got[0].ID != 25123 || got[1].ID != 25121 || got[2].ID != 25122 {
+		t.Fatalf("order %+v", got)
+	}
+	if got := s.Players(context.Background(), " Плотников   Дмитрий  Влад ", 10); len(got) != 1 || got[0].ID != 25121 {
+		t.Fatalf("three words: %+v", got)
+	}
+	if got := s.Players(context.Background(), "Плотников Я", 10); len(got) != 0 {
+		t.Fatalf("no such first name: %+v", got)
+	}
+}
+
+// A wildcard typed by hand is a literal, not a pattern.
+func TestPlayersEscapeWildcards(t *testing.T) {
+	s := fixture(t)
+	if got := s.Players(context.Background(), "Проце_", 10); len(got) != 1 || got[0].ID != 999 {
+		t.Fatalf("underscore: %+v", got)
+	}
+	if got := s.Players(context.Background(), "Проце_нт 100%", 10); len(got) != 1 {
+		t.Fatalf("percent: %+v", got)
+	}
+	if got := s.Players(context.Background(), "Проце%", 10); len(got) != 0 {
+		t.Fatalf("a literal %% must match nothing: %+v", got)
+	}
+}
+
+// A mirror from before player_games still suggests, just unranked.
+func TestPlayersWithoutTheGamesTable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "buff.db")
+	s := fixtureAt(t, path)
+	writable, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writable.Exec(`drop table player_games`); err != nil {
+		t.Fatal(err)
+	}
+	_ = writable.Close()
+	got := s.Players(context.Background(), "Плотников", 10)
+	if len(got) != 3 || got[0].Name != "Данила" || got[0].Games != 0 {
+		t.Fatalf("alphabetical fallback: %+v", got)
 	}
 }
 
