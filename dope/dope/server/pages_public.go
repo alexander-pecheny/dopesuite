@@ -153,7 +153,7 @@ func (s *server) loadPublicFestSummaries(ctx context.Context) ([]publicFestSumma
 	rows, err := s.eng.DB.QueryContext(ctx, `
 select id, coalesce(slug, ''), title, coalesce(start_date, ''), coalesce(end_date, '')
 from fests
-where is_public = 1
+where is_public = 1 and coalesce(kind, 'fest') = 'fest'
 order by case when start_date is null or start_date = '' then 1 else 0 end,
          start_date,
          id`)

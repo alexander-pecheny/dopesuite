@@ -44,6 +44,13 @@ func FlatMatchID(ctx context.Context, q Queryer, gameID int64) (int64, error) {
 // identity (ADR-0009): two same-named teams stay distinct, and re-seeding
 // follows a team across a rename.
 func EnsureParticipantByNumber(ctx context.Context, tx *sql.Tx, festID int64, roster string, number int64, name, city string) (int64, error) {
+	return EnsureGameParticipantByNumber(ctx, tx, festID, 0, roster, number, name, city)
+}
+
+// EnsureGameParticipantByNumber is EnsureParticipantByNumber for a Game that
+// deals its own numbers rather than reading the фест's registry — a Слот at a
+// Venue, whose next sitting starts again at 1. gameID 0 is the фест's own.
+func EnsureGameParticipantByNumber(ctx context.Context, tx *sql.Tx, festID, gameID int64, roster string, number int64, name, city string) (int64, error) {
 	name = strings.TrimSpace(name)
 	city = strings.TrimSpace(city)
 	if number <= 0 || name == "" {
@@ -53,10 +60,12 @@ func EnsureParticipantByNumber(ctx context.Context, tx *sql.Tx, festID int64, ro
 	var oldName, oldCity string
 	err := tx.QueryRowContext(ctx, `
 select id, name, city from participants
-where fest_id = ? and roster = ? and number = ? limit 1`, festID, roster, number).Scan(&id, &oldName, &oldCity)
+where fest_id = ? and coalesce(game_id, 0) = ? and roster = ? and number = ? limit 1`,
+		festID, gameID, roster, number).Scan(&id, &oldName, &oldCity)
 	if errors.Is(err, sql.ErrNoRows) {
 		return InsertReturningID(ctx, tx, `
-insert into participants(fest_id, roster, name, city, number) values(?, ?, ?, ?, ?)`, festID, roster, name, city, number)
+insert into participants(fest_id, game_id, roster, name, city, number) values(?, ?, ?, ?, ?, ?)`,
+			festID, NullableID(gameID), roster, name, city, number)
 	}
 	if err != nil {
 		return 0, err
@@ -70,4 +79,12 @@ insert into participants(fest_id, roster, name, city, number) values(?, ?, ?, ?,
 		}
 	}
 	return id, nil
+}
+
+// NullableID is an id as a nullable column value: 0 becomes NULL.
+func NullableID(id int64) any {
+	if id <= 0 {
+		return nil
+	}
+	return id
 }

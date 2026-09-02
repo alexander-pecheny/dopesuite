@@ -27,8 +27,8 @@ dope/                    # module root (go.mod: module "dope")
     cmd/                 # entry points: dope-server (thin main)
     server/              # package dopeserver — the orchestration trunk + server/tests/ (integration)
     web/                 # HTTP/UI: route (the one dispatcher), pages, hostpages, editbatch, telegrambridge, assets (embed), jstest
-    domain/              # game/fest logic: games, core, gamebuild, flatgame, resolver, roster, overrides, imports, numbering, edit, view
-    storage/             # persistence: store, journal, migrate, festwrite, festaccess, auditmw, storeutil, sqlitez
+    domain/              # game/fest logic: games, core, gamebuild, flatgame, resolver, roster, overrides, imports, numbering, edit, view, venues
+    storage/             # persistence: store, journal, migrate, festwrite, festaccess, auditmw, storeutil, sqlitez, buffdb
     export/              # output: xlsxexport, gameexport
     platform/            # cross-cutting leaves: realtime, roles, markdown, session, metrics, util
 scripts/
@@ -84,7 +84,8 @@ queries, view/scheme types, pure scoring), `storage/journal` (forward journal),
 | `score-table.ts` | ~530 | A бой's score table — `buildFlatScoreTable`/`buildTwoRowScoreTable`, `computePlaces`, and the node index + `patchScoreTable` that update it in place from a MatchView |
 | `standings.ts` | ~190 | The server's tables as the pages draw them (ADR-0011): `standingsTable` (the one builder behind every standings-shaped table: пересев, группы, статистика, площадки, составы, the брейн crosstab), `resultsTeamCell` (the one fading name cell), `buildGroupStandingsView`, and the fest-view stage refs (`festLetters`, `letteredTitle`, `stageType`) |
 | `screen-board.ts` | ~210 | The ОД Экран (projector board) without the DOM: `ScreenSettings` + `normalizeScreenSettings`, `CITY_COUNTRY` + `teamFlag`, `packRows` (column-major, a gap between place groups) and `planScreen(rows, metrics, settings) → {columns, zoom, teamCol}` — od.ts measures one probe column, hands the px in, and paints the plan; `jstest/screen-board.test.js` drives the packing and the zoom choice |
-| `venue.ts` | ~75 | Площадка — `normalizeVenue`/`formatVenue*` and `buildVenuesTable`; fest-grid imports it too |
+| `venue.ts` | ~75 | Площадка (the table a бой is played at) — `normalizeVenue`/`formatVenue*` and `buildVenuesTable`; fest-grid imports it too |
+| `roster-editor.ts` | ~230 | The Состав editor on `/reg/{token}` and the Слот page — rows of a suggest over `/api/buff/players`, a «нет в базе» fallback that types three name fields with id 0, one captain, and the whole roster serialised into one hidden field. Pure parts (`parseRoster`, `serializeRoster`, `setCaptain`, `rosterWarning`) tested in `jstest/roster-editor.test.js` |
 | `fest-roster.ts` | ~170 | Составы — `fetchFestRoster` (cached per fest), `buildRosterTable`, `buildRosterView` |
 | `ek-stats.ts` | ~225 | ЭК's Статистика folds (`computeEKPlayerStats`, `computeIndividualPlayerStats`) and their tables; the sibling of `brain-stats.ts` and `group-stats.ts` |
 | `game-shell.ts` | ~320 | **The game shell** — `mountGameDocument(spec)` (ADR-0018): the lifecycle of a page whose whole document is one state blob (ОД, КСИ) — loader, live events and scoped writer on the game-state scope composed over the page's `adopt`/`apply` callbacks; `scope`, `load`, `save`, `overlay`, `isPending`. And `mountGamePage(spec)` — `mountGamePage(spec)`: what every game page mounts before it draws its own thing: the ☰ jump links and downloads, the unnumbered-teams banner, the status dot + viewer counter (`indicator`), the client recorder, `renderChrome()` (the header trail — «Мои фесты» only on the /host tree, derived from the route — and `document.title` as `game · fest` or `section · fest`), and host presence whose cursors are a declared list of element kinds (selector + the data-* keys the sheet cursor uses); a page keeps only its data adopters and renderers |

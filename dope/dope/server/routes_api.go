@@ -17,10 +17,12 @@ import (
 	"dope/dope/domain/imports"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/roster"
+	"dope/dope/domain/venues"
 	"dope/dope/export/gameexport"
 	"dope/dope/platform/metrics"
 	"dope/dope/platform/realtime"
 	"dope/dope/platform/util"
+	"dope/dope/storage/buffdb"
 	"dope/dope/storage/store"
 	"dope/dope/web/route"
 	dopestrings "dope/i18nstrings"
@@ -69,7 +71,51 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("POST "+game+"/seed-import/run", route.Editor.Numbered(), s.seedImportRoute(func(*http.Request) (imports.SeedSource, error) { return imports.FromScheme(), nil }))
 	t.Handle("POST "+game+"/seed-import/xlsx", route.Editor.Numbered(), s.seedImportRoute(seedXLSXSource))
 	t.Handle("POST "+game+"/seed-import/decline", route.Editor, s.scopedSeedDecline)
+	s.buffRoutes(t)
 	return t
+}
+
+// buffRoutes are the thin JSON reads over buff's mirror the Состав and
+// tournament suggests type against (ADR-0020). A session is all they ask:
+// they expose nothing dope's users cannot read on rating.chgk.info.
+func (s *server) buffRoutes(t *route.Table) {
+	buff := func() *buffdb.Store { return s.eng.BuffMirror() }
+	t.Handle("GET /api/buff/players", route.Session, func(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
+		return route.JSON(w, buff().Players(r.Context(), r.URL.Query().Get("q"), suggestLimit(r)))
+	})
+	t.Handle("GET /api/buff/teams", route.Session, func(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
+		return route.JSON(w, buff().Teams(r.Context(), r.URL.Query().Get("q"), suggestLimit(r)))
+	})
+	t.Handle("GET /api/buff/team/{id}", route.Session, func(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			return route.BadRequest("bad team id")
+		}
+		team, ok := buff().Team(r.Context(), id)
+		if !ok {
+			return route.NotFound
+		}
+		return route.JSON(w, team)
+	})
+	t.Handle("GET /api/buff/tournaments", route.Session, func(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
+		q := r.URL.Query()
+		on, _ := venues.ParseTime(q.Get("on"))
+		if query := strings.TrimSpace(q.Get("q")); query != "" {
+			return route.JSON(w, buff().SearchTournaments(r.Context(), query, on, suggestLimit(r)))
+		}
+		if on.IsZero() {
+			return route.JSON(w, []buffdb.Tournament{})
+		}
+		return route.JSON(w, buff().PlayableTournaments(r.Context(), on))
+	})
+}
+
+func suggestLimit(r *http.Request) int {
+	n, err := strconv.Atoi(r.URL.Query().Get("limit"))
+	if err != nil {
+		return 20
+	}
+	return n
 }
 
 func (s *server) gameexportRoute(h func(gameexport.Host, http.ResponseWriter, *http.Request, int64, int64)) route.Handler {

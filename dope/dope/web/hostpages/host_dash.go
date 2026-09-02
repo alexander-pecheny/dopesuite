@@ -438,6 +438,10 @@ func (s *Server) handleHostDeleteFest(w http.ResponseWriter, r *http.Request, fe
 }
 
 func (s *Server) renderHostFestDashboard(w http.ResponseWriter, r *http.Request, festID int64, msgs hostDashMessages) {
+	if s.IsVenue(r.Context(), festID) {
+		s.renderVenueDashboard(w, r, festID, msgs.FormError, "")
+		return
+	}
 	var (
 		title       string
 		slug        string
@@ -574,7 +578,7 @@ func (s *Server) loadHostFests(ctx context.Context, userID int64) ([]view.HostFe
 select t.id, coalesce(t.slug, ''), t.title, coalesce(t.start_date, ''), coalesce(t.end_date, ''), t.is_public
 from fests t
 join fest_organizers o on o.fest_id = t.id
-where o.user_id = ?
+where o.user_id = ? and coalesce(t.kind, 'fest') = 'fest'
 order by case when t.start_date is null or t.start_date = '' then 1 else 0 end,
          t.start_date desc,
          t.id desc`, []any{userID}, func(rows *sql.Rows) (view.HostFest, error) {

@@ -29,21 +29,25 @@ func newTable(t *testing.T) (*Table, map[string]string) {
 	if _, err := db.Exec(`
 create table users(id integer primary key, username text, telegram_username text, is_system integer default 0);
 create table sessions(id integer primary key, user_id integer, token_hash text unique, created_at text, expires_at text, last_seen_at text);
-create table fests(id integer primary key, slug text unique, is_public integer default 0, created_by integer);
+create table fests(id integer primary key, slug text unique, is_public integer default 0, created_by integer, kind text default 'fest');
+create table slots(id integer primary key, fest_id integer, game_id integer);
+create table slot_applications(id integer primary key, slot_id integer, user_id integer, status text);
 create table fest_organizers(fest_id integer, user_id integer, role text, added_at text);
 create table games(id integer primary key, fest_id integer, slug text);
 create table fest_teams(id integer primary key, fest_id integer, name text, city text default '', position real, number integer, deleted integer default 0);
 create table game_participants(game_id integer, participant_id integer, position integer, number integer default 0);
-insert into users(id, username) values (1,'creator'),(2,'admin'),(3,'host'),(4,'outsider');
-insert into fests(id, slug, is_public, created_by) values (10,'open',1,1),(20,'closed',0,1);
-insert into fest_organizers values (10,2,'admin',''),(10,3,'host',''),(20,2,'admin',''),(20,3,'host','');
-insert into games(id, fest_id, slug) values (100,10,'g'),(200,20,'g');
+insert into users(id, username) values (1,'creator'),(2,'admin'),(3,'host'),(4,'outsider'),(5,'applicant'),(6,'waiting');
+insert into fests(id, slug, is_public, created_by, kind) values (10,'open',1,1,'fest'),(20,'closed',0,1,'fest'),(30,'venue',1,1,'venue');
+insert into fest_organizers values (10,2,'admin',''),(10,3,'host',''),(20,2,'admin',''),(20,3,'host',''),(30,2,'admin',''),(30,3,'host','');
+insert into games(id, fest_id, slug) values (100,10,'g'),(200,20,'g'),(300,30,'g');
+insert into slots(id, fest_id, game_id) values (1,30,300);
+insert into slot_applications(slot_id, user_id, status) values (1,5,'accepted'),(1,6,'pending');
 insert into fest_teams(fest_id, name, position, number) values (10,'A',1,1),(20,'B',1,null);`); err != nil {
 		t.Fatal(err)
 	}
 	tokens := map[string]string{}
 	now := time.Now()
-	for uid, name := range map[int64]string{1: "creator", 2: "admin", 3: "host", 4: "outsider"} {
+	for uid, name := range map[int64]string{1: "creator", 2: "admin", 3: "host", 4: "outsider", 5: "applicant", 6: "waiting"} {
 		tok, err := authcred.CreateSession(t.Context(), db, uid, now)
 		if err != nil {
 			t.Fatal(err)
@@ -93,6 +97,32 @@ func TestAccessMatrix(t *testing.T) {
 			tbl.Mux.ServeHTTP(rec, req)
 			if rec.Code != want {
 				t.Errorf("%s on %s as %s: %d, want %d (%s)", rw.level, rw.fest, caller, rec.Code, want, rec.Body.String())
+			}
+		}
+	}
+}
+
+// A Venue's Game is never public-read (CONTEXT.md): its Representatives read
+// it, and so does whoever holds an accepted Заявка on the Слот — nobody else,
+// however public the Venue is.
+func TestVenueGameAccess(t *testing.T) {
+	tbl, tokens := newTable(t)
+	ok := func(w http.ResponseWriter, r *http.Request, sc Scope) error { return JSON(w, sc.Role) }
+	tbl.Handle("POST /publicfest/{fest}/games/{game}", PublicFest, ok)
+	tbl.Handle("POST /read/{fest}/games/{game}", Read, ok)
+	tbl.Handle("POST /read/{fest}", Read, ok)
+
+	want := map[string]int{"anon": 404, "outsider": 404, "waiting": 404, "applicant": 200, "host": 200, "admin": 200, "creator": 200}
+	for _, path := range []string{"/publicfest/venue/games/g", "/read/venue/games/g", "/read/venue"} {
+		for caller, code := range want {
+			req := httptest.NewRequest("POST", path, nil)
+			if caller != "anon" {
+				req.AddCookie(&http.Cookie{Name: session.CookieName, Value: tokens[caller]})
+			}
+			rec := httptest.NewRecorder()
+			tbl.Mux.ServeHTTP(rec, req)
+			if rec.Code != code {
+				t.Errorf("%s as %s: %d, want %d (%s)", path, caller, rec.Code, code, rec.Body.String())
 			}
 		}
 	}

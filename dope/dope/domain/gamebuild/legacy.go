@@ -16,14 +16,10 @@ import (
 	dopestrings "dope/i18nstrings"
 )
 
-func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, tours, questions int) (int64, error) {
+func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, tourComp []int) (int64, error) {
 	identity, err := nextGameIdentityTx(ctx, tx, festID, "od", dopestrings.Default.Gamebuild.Titles.Od())
 	if err != nil {
 		return 0, err
-	}
-	tourComp := make([]int, tours)
-	for i := range tourComp {
-		tourComp[i] = questions
 	}
 	emptyScheme, emptyState := games.ODEmptyGameJSON(identity.Code, identity.Title, tourComp)
 	schemeJSON, stateJSON, err := pristineFlatTx(ctx, tx, festID, games.OD, emptyScheme, emptyState)

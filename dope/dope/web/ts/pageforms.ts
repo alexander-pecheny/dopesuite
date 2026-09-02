@@ -7,6 +7,9 @@
 //     selects, which saved on change via an inline onchange before).
 //   - [data-dialog-open="id"] on a button: showModal() that <dialog>.
 //   - [data-dialog-close] on a button inside a <dialog>: close it.
+//   - [data-filter-rows="tableId"] on an input: hide the rows of that table
+//     that do not contain what was typed.
+//   - [data-copy-target="id"] on a button: copy that field's value.
 
 type SelectableField = HTMLElement & { select?: () => void };
 type FormControl = HTMLElement & {
@@ -63,6 +66,38 @@ document.addEventListener("click", (event) => {
       else dialog.removeAttribute("open");
     }
   }
+});
+
+// filterRows is the one text box over a table: a row survives when its whole
+// text contains the query, so any column filters.
+export function filterRows(table: HTMLElement, query: string): void {
+  const needle = query.trim().toLowerCase();
+  const rows = table.querySelectorAll("tbody tr");
+  rows.forEach((row) => {
+    const text = (row.textContent || "").toLowerCase();
+    (row as HTMLElement).hidden = needle !== "" && !text.includes(needle);
+  });
+}
+
+document.addEventListener("input", (event) => {
+  const el = event.target;
+  if (!(el instanceof HTMLElement)) return;
+  const id = el.getAttribute("data-filter-rows");
+  if (!id) return;
+  const table = document.getElementById(id);
+  if (table) filterRows(table, (el as HTMLInputElement).value || "");
+});
+
+document.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const button = target.closest("[data-copy-target]");
+  if (!button) return;
+  const id = button.getAttribute("data-copy-target");
+  const field = id ? document.getElementById(id) : null;
+  if (!(field instanceof HTMLInputElement)) return;
+  field.select();
+  void navigator.clipboard?.writeText(field.value);
 });
 
 export {};

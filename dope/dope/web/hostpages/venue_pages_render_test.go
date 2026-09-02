@@ -1,0 +1,175 @@
+package hostpages
+
+import (
+	"strings"
+	"testing"
+
+	"dope/dope/domain/venues"
+)
+
+func TestVenuesIndexDocIsOneFilteredTable(t *testing.T) {
+	body := renderPublic(t, VenuesIndexDoc([]VenueRow{
+		{Ref: "tbilisi", Title: "Площадка Тбилиси", City: "Тбилиси", NextSlot: "2026-09-04 19:00",
+			Registration: "открыта", Accepted: 3, RatingVenueID: 123},
+	}))
+	for _, want := range []string{
+		`data-filter-rows="venues"`,
+		`id="venues"`,
+		`href="/venue/tbilisi"`,
+		`Площадка Тбилиси`,
+		`2026-09-04 19:00`,
+		`rating.chgk.info/venues/123`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if empty := renderPublic(t, VenuesIndexDoc(nil)); !strings.Contains(empty, "Публичных площадок пока нет.") {
+		t.Error("missing the empty note")
+	}
+}
+
+func TestVenueDocSplitsUpcomingFromPast(t *testing.T) {
+	body := renderPublic(t, VenueDoc(VenueDetail{
+		Ref: "tbilisi", Title: "Площадка Тбилиси", City: "Тбилиси", RatingVenueID: 123,
+		Description: "<p>Привет</p>",
+		Upcoming:    []SlotRow{{Date: "2026-09-04 19:00", Registration: "открыта", RegHref: "/reg/tok"}},
+		Past:        []SlotRow{{Date: "2026-08-28 19:00", Tournament: "Синхрон"}},
+	}))
+	for _, want := range []string{
+		`href="/venues"`,
+		`<p>Привет</p>`,
+		`Ближайшие слоты`,
+		`href="/reg/tok"`,
+		`Прошедшие слоты`,
+		`Синхрон`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	bare := renderPublic(t, VenueDoc(VenueDetail{Ref: "x", Title: "X"}))
+	if !strings.Contains(bare, "Слотов пока нет.") {
+		t.Error("missing the empty note")
+	}
+}
+
+func TestRegDocSaysWhatEachStateAllows(t *testing.T) {
+	base := RegPage{Token: "tok", VenueTitle: "Площадка", VenueRef: "tbilisi", Date: "2026-09-04 19:00"}
+
+	scheduled := base
+	scheduled.State = venues.RegScheduled
+	scheduled.OpensAt = "2026-09-01 10:00"
+	if body := renderPublic(t, RegDoc(scheduled)); !strings.Contains(body, "Регистрация откроется 2026-09-01 10:00.") {
+		t.Error("a scheduled registration must say when it opens")
+	}
+
+	anon := base
+	anon.LoginHref = "/login?next=%2Freg%2Ftok"
+	body := renderPublic(t, RegDoc(anon))
+	if !strings.Contains(body, `href="/login?next=%2Freg%2Ftok"`) {
+		t.Error("an anonymous visitor is sent to the handshake and back")
+	}
+	if strings.Contains(body, "data-roster-editor") {
+		t.Error("no form before login")
+	}
+
+	open := base
+	open.LoggedIn = true
+	open.Application = &ApplicationView{
+		Status: venues.StatusAccepted, StatusLabel: StatusLabel(venues.StatusAccepted),
+		TeamName: "Мантисса", RatingTeamID: 5723, BuffTeamName: "Мантисса", Number: 4,
+		Roster: []venues.RosterPlayer{{PlayerID: 1033, Surname: "Ковалёва", Name: "Елена", Captain: true}},
+		Flags:  []string{venues.FlagCaptain},
+	}
+	body = renderPublic(t, RegDoc(open))
+	for _, want := range []string{
+		`Статус: принята · номер команды 4`,
+		`Ковалёва Елена`,
+		`>К<`,
+		`data-roster-editor`,
+		`name="roster_json"`,
+		`value="Мантисса"`,
+		`Сохранить заявку`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+
+	// A closed registration still shows a user their own заявка, and still
+	// lets them edit it; a stranger sees only that it is closed.
+	closed := open
+	closed.State = venues.RegClosed
+	if body := renderPublic(t, RegDoc(closed)); !strings.Contains(body, "data-roster-editor") {
+		t.Error("a closed registration keeps the owner's form")
+	}
+	stranger := base
+	stranger.LoggedIn = true
+	stranger.State = venues.RegClosed
+	if body := renderPublic(t, RegDoc(stranger)); !strings.Contains(body, "Регистрация закрыта.") {
+		t.Error("a stranger is told it is closed")
+	}
+}
+
+func TestSlotPageDocCarriesTheLinkAndTheQueue(t *testing.T) {
+	venue := venues.Venue{ID: 1, Slug: "tbilisi", Title: "Площадка", City: "Тбилиси"}
+	slot := venues.Slot{ID: 7, FestID: 1, GameID: 3, StartsAt: "2026-09-04 19:00", RegToken: "tok"}
+	body := renderPublic(t, slotPageDoc(slotPageData{
+		Venue: venue, Slot: slot, Tournament: "Синхрон", CanManage: true,
+		GameHref: "/host/fest/tbilisi/game/3/", RegURL: "https://dope.test/reg/tok",
+		Applications: []SlotApplicationRow{{
+			App: venues.Application{ID: 9, Status: venues.StatusPending, TeamName: "Мантисса",
+				RatingTeamID: 5723, Number: 1, CreatedAt: "2026-09-02T13:10:36Z", UpdatedAt: "2026-09-02T13:10:36Z"},
+			FlagSummary: "1К", Submitter: "@tester", SubmitterTg: "https://t.me/tester",
+			Versions: []venues.Version{{Seq: 1, TeamName: "Мантисса", CreatedAt: "2026-09-02T13:10:36Z"}},
+		}},
+	}))
+	for _, want := range []string{
+		`value="https://dope.test/reg/tok"`,
+		`data-copy-target="regLink"`,
+		`/host/fest/tbilisi/slot/7/token`,
+		`/host/fest/tbilisi/slot/7/clone`,
+		`/host/fest/tbilisi/slot/7/application/9/status`,
+		`/host/fest/tbilisi/slot/7/application/9/revert`,
+		`/host/fest/tbilisi/slot/7/application/9/edit`,
+		`/host/fest/tbilisi/slot/7/export/tours.xlsx`,
+		`/host/fest/tbilisi/slot/7/export/players.xlsx`,
+		`rating.chgk.info/teams/5723`,
+		`https://t.me/tester`,
+		`2026-09-02 13:10`,
+		`Принять`,
+		`Отклонить`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	// A pending заявка is not offered «Вернуть в ожидание» — it is there.
+	if strings.Contains(body, "Вернуть в ожидание") {
+		t.Error("a pending заявка should not offer the status it already has")
+	}
+}
+
+func TestVenueDashDocListsSlotsAndAccess(t *testing.T) {
+	body := renderPublic(t, venueDashDoc(venueDashData{
+		Venue:     venues.Venue{ID: 1, Slug: "tbilisi", Title: "Площадка", City: "Тбилиси", IsPublic: true},
+		Slots:     []VenueDashSlot{{ID: 7, Date: "2026-09-04 19:00", Tournament: "Синхрон", Accepted: 2, Pending: 1, Href: "/host/fest/tbilisi/slot/7"}},
+		CanManage: true,
+	}))
+	for _, want := range []string{
+		`data-jump-href="/venue/tbilisi"`,
+		`href="/host/fest/tbilisi/slot/7"`,
+		`принято 2, ждут 1`,
+		`/host/fest/tbilisi/slot/new`,
+		`id="access"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	viewer := renderPublic(t, venueDashDoc(venueDashData{Venue: venues.Venue{ID: 1, Title: "Площадка"}}))
+	if strings.Contains(viewer, "Новый слот") || strings.Contains(viewer, `id="access"`) {
+		t.Error("a host without manage rights gets no forms")
+	}
+}
