@@ -60,6 +60,7 @@ func PublicIndexDoc(groups []PublicFestGroup) *ui.Doc {
 		ui.Crumb(ui.Text(s.Host.Pages.PublicIndexCrumb())),
 	)))
 
+	page = append(page, ui.Row(ui.Link(ui.Href("/venues"), ui.Text("Площадки"))))
 	if len(groups) == 0 {
 		page = append(page, ui.Empty(ui.Text(s.Host.Pages.PublicIndexEmpty())))
 		return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}

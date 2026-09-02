@@ -778,6 +778,71 @@ where kind = 'rr' and block_code = '' and code glob 's[0-9]*-g[0-9]*'`); err != 
 		}
 		return nil
 	}},
+	{Version: 27, Name: "venues, slots, registration", Up: func(db *sql.DB) error {
+		// v27: a Venue is a Fest of its own kind, and its Games are dated
+		// Слоты with a registration link, заявки and their versions. A Слот
+		// deals its own numbers from 1, so its Participants are the Game's
+		// rather than the фест's — participants.game_id, and the number
+		// uniqueness that follows it.
+		if err := store.AddColumnsIfMissing(db, "fests", []store.ColumnSpec{
+			{Name: "kind", Type: "TEXT NOT NULL DEFAULT 'fest'"},
+			{Name: "city", Type: "TEXT NOT NULL DEFAULT ''"},
+			{Name: "rating_venue_id", Type: "INTEGER"},
+		}); err != nil {
+			return err
+		}
+		if err := store.AddColumnsIfMissing(db, "participants", []store.ColumnSpec{
+			{Name: "game_id", Type: "INTEGER REFERENCES games(id) ON DELETE CASCADE"},
+		}); err != nil {
+			return err
+		}
+		_, err := db.Exec(`
+drop index if exists participants_fest_roster_number_idx;
+
+create unique index if not exists participants_fest_game_roster_number_idx
+  on participants(fest_id, coalesce(game_id, 0), roster, number) where number is not null;
+
+create table if not exists slots(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  game_id integer not null references games(id) on delete cascade,
+  starts_at text not null default '',
+  rating_tournament_id integer,
+  reg_token text not null unique,
+  reg_opens_at text,
+  reg_closed integer not null default 0,
+  created_at text not null,
+  updated_at text not null,
+  unique(game_id)
+);
+
+create index if not exists slots_fest_starts_idx on slots(fest_id, starts_at);
+
+create table if not exists slot_applications(
+  id integer primary key,
+  slot_id integer not null references slots(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  status text not null default 'pending' check (status in ('pending','accepted','declined')),
+  participant_id integer references participants(id),
+  created_at text not null,
+  updated_at text not null,
+  unique(slot_id, user_id)
+);
+
+create table if not exists slot_application_versions(
+  id integer primary key,
+  application_id integer not null references slot_applications(id) on delete cascade,
+  seq integer not null,
+  team_name text not null default '',
+  rating_team_id integer not null default 0,
+  roster_json text not null default '[]',
+  created_by integer references users(id),
+  created_at text not null,
+  unique(application_id, seq)
+);
+`)
+		return err
+	}},
 }
 
 func migrateDB(db *sql.DB) error { return schema.Apply(db, migrations) }

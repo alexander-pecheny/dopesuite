@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 
 	"dope/dope/platform/realtime"
+	"dope/dope/storage/buffdb"
 	"dope/dope/storage/store"
 )
 
@@ -52,6 +53,9 @@ type Engine struct {
 	// AssetETags maps "/static/..." paths to content-hash ETags for cache-busting
 	// (nil in disk mode).
 	AssetETags map[string]string
+	// Buff is buff's read-only mirror of rating.chgk.info (ADR-0020), or a
+	// disabled store when DOPE_BUFF_DB names nothing.
+	Buff *buffdb.Store
 
 	// Mu guards game/DB writes (writers win contention over viewer reads).
 	Mu sync.RWMutex
@@ -78,4 +82,13 @@ type Engine struct {
 	LastRate        atomic.Int64
 	SseConns        atomic.Int64
 	LiveFallthrough atomic.Int64
+}
+
+// BuffMirror is the buff store, never nil: a Disabled one answers empty when
+// no mirror is configured.
+func (e *Engine) BuffMirror() *buffdb.Store {
+	if e.Buff == nil {
+		return buffdb.Disabled()
+	}
+	return e.Buff
 }

@@ -105,6 +105,9 @@ metadata.
   a seed source is `ImportSeeds(FromKSI()|FromScheme()|FromXLSX())`, and the
   `game` source reads the source Game's one table.
 - `numbering` — team-number assignment. `edit` — match-edit value types.
+- `venues` — the Площадка domain (CONTEXT.md): Слоты and their registration,
+  Заявки and their versions, the derived Б/Л/К flags, and the seating that
+  turns accepted Заявки into the Слот's team list.
 - `view` — shared presentation DTOs (e.g. `HostFest`) kept in a leaf so the
   server and the web handlers can name them without importing each other.
 
@@ -123,6 +126,8 @@ metadata.
 - `festaccess` — per-fest access/role persistence (DB-backed authz).
 - `auditmw` — audit-log write middleware. `storeutil` — scheme/query helpers.
 - `sqlitez` — low-level SQLite helpers.
+- `buffdb` — buff's mirror of rating.chgk.info, opened read-only and failing
+  soft (`DOPE_BUFF_DB`, ADR-0020): players, teams, base rosters, tournaments.
 
 ### `export/` — output generation
 

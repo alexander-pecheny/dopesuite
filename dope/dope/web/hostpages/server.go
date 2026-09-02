@@ -26,9 +26,11 @@ import (
 // Server binds the host-UI page handlers to a pages.Host. Construct with New
 // once per host: it builds its route table (routes.go) on first use.
 type Server struct {
-	h     pages.Host
-	table *route.Table
-	once  sync.Once
+	h          pages.Host
+	table      *route.Table
+	once       sync.Once
+	venueTable *route.Table
+	venueOnce  sync.Once
 }
 
 // New returns a host-page Server over the given Host.

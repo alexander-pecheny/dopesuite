@@ -360,3 +360,23 @@ func lookupUserIDByNicknameTx(ctx context.Context, tx *sql.Tx, nickname string) 
 	err = tx.QueryRowContext(ctx, `select id from users where telegram_username = ?`, nickname).Scan(&userID)
 	return userID, err
 }
+
+// HasAcceptedApplication reports whether the user holds an accepted Заявка on
+// a Venue — on the given Game's Слот when gameID is set, on any of them
+// otherwise. It is what lets a team read the Слот it plays (CONTEXT.md).
+func HasAcceptedApplication(ctx context.Context, q store.Queryer, festID, gameID, userID int64) (bool, error) {
+	if userID <= 0 {
+		return false, nil
+	}
+	var found int
+	err := q.QueryRowContext(ctx, `
+select 1 from slot_applications a
+join slots s on s.id = a.slot_id
+where a.user_id = ? and a.status = 'accepted' and s.fest_id = ?
+  and (? = 0 or s.game_id = ?)
+limit 1`, userID, festID, gameID, gameID).Scan(&found)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}

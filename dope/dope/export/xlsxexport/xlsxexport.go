@@ -966,3 +966,44 @@ func troikaMarkText(state games.TroikaState, side, theme, question, chair int) i
 	}
 	return nil
 }
+
+// --- OD: rating.chgk.info "tournament-with-players" layout --------------------
+
+// ODPlayerRow is one player of one team in the players sheet: the team's place
+// and identity repeated per player, then the player.
+type ODPlayerRow struct {
+	Place      string
+	TeamID     int64
+	Name       string
+	City       string
+	Flag       string
+	PlayerID   int64
+	Surname    string
+	FirstName  string
+	Patronymic string
+}
+
+// ODPlayersHeader is the reference workbook's header, in its order.
+var ODPlayersHeader = []interface{}{"Место", "Team ID", "Название", "Город", "Флаг", "IDplayer", "Фамилия", "Имя", "Отчество"}
+
+// BuildODPlayersSheet writes the OD "tournament-with-players" worksheet: one
+// row per player, the header in row 1.
+func BuildODPlayersSheet(f *excelize.File, rows []ODPlayerRow) error {
+	const sheet = "Worksheet"
+	f.SetSheetName("Sheet1", sheet)
+	if err := setRow(f, sheet, 1, ODPlayersHeader); err != nil {
+		return err
+	}
+	for i, r := range rows {
+		place := interface{}(r.Place)
+		if n, err := strconv.Atoi(r.Place); err == nil {
+			place = n
+		}
+		if err := setRow(f, sheet, i+2, []interface{}{
+			place, r.TeamID, r.Name, r.City, r.Flag, r.PlayerID, r.Surname, r.FirstName, r.Patronymic,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}

@@ -32,6 +32,7 @@ import (
 	"dope/dope/platform/realtime"
 	"dope/dope/platform/roles"
 	"dope/dope/storage/auditmw"
+	"dope/dope/storage/buffdb"
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/journal"
 	"dope/dope/storage/migrate"
@@ -157,6 +158,11 @@ func Main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	buff, err := buffdb.Open(os.Getenv(buffdb.PathEnv))
+	if err != nil {
+		log.Printf("buff mirror unavailable: %v", err)
+	}
+	srv.eng.Buff = buff
 	srv.assets = newAssets()
 	srv.eng.Assets = srv.assets.Source
 	srv.eng.AssetNoCache = srv.assets.NoCache
@@ -171,7 +177,10 @@ func Main() {
 	mux.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusMovedPermanently)
 	})
-	mux.HandleFunc("/login", srv.serveCompiledPage("static/login.html"))
+	mux.HandleFunc("/login", srv.serveLoginPage())
+	mux.HandleFunc("/venues", srv.hostPageServer().HandleVenueRouter)
+	mux.HandleFunc("/venue/", srv.hostPageServer().HandleVenueRouter)
+	mux.HandleFunc("/reg/", srv.hostPageServer().HandleVenueRouter)
 	if srv.assets.NoCache {
 		mux.HandleFunc("/gallery", srv.serveCompiledPage("static/gallery.html"))
 	}
@@ -186,6 +195,7 @@ func Main() {
 	mux.Handle("/api/fest/", srv.api().Mux)
 	srv.authRoutes(srv.api())
 	mux.Handle("/api/auth/", srv.api().Mux)
+	mux.Handle("/api/buff/", srv.api().Mux)
 	mux.HandleFunc("/events", srv.handleEvents)
 	mux.HandleFunc("/host-events", srv.handleHostEvents)
 	mux.HandleFunc("/favicon.ico", srv.assets.ServeRoot("favicon.ico", "image/x-icon"))

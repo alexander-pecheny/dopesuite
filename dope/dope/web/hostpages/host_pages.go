@@ -2,6 +2,7 @@ package hostpages
 
 import (
 	"database/sql"
+	"dope/dope/domain/venues"
 	"dope/dope/web/pages"
 	"dope/dope/web/route"
 	ui "dope/dope/web/ui"
@@ -20,6 +21,7 @@ type hostLandingData struct {
 	LoggedIn bool
 	Username string
 	Groups   []hostFestGroup
+	Venues   []venues.Venue
 	Error    string
 }
 
@@ -65,6 +67,7 @@ func hostLoggedInDoc(data hostLandingData) *ui.Doc {
 		page = append(page, ui.Empty(ui.Text(s.Host.Pages.FestsEmpty())))
 	}
 
+	page = append(page, hostLandingVenues(data))
 	page = append(page, ui.Section(ui.Details(
 		ui.Summary(ui.Btn(), ui.Text(s.Host.Pages.CreateFestSummary())),
 		ui.Form(ui.DirCol, ui.Method("post"), ui.Action("/host/fest"), ui.Autocomplete("off"),
@@ -78,6 +81,33 @@ func hostLoggedInDoc(data hostLandingData) *ui.Doc {
 		),
 	)))
 	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
+}
+
+// hostLandingVenues is the Площадки the user represents, and the form that
+// makes one.
+func hostLandingVenues(data hostLandingData) *ui.Element {
+	sect := []ui.Item{ui.Subhead(ui.Text("Площадки"))}
+	if len(data.Venues) == 0 {
+		sect = append(sect, ui.Empty(ui.Text("Площадок пока нет.")))
+	} else {
+		rows := make([]ui.Item, 0, len(data.Venues))
+		for _, v := range data.Venues {
+			row := []ui.Item{ui.Href("/host/fest/" + v.Ref()), ui.Listtitle(ui.Text(v.Title))}
+			sub := v.City
+			if !v.IsPublic {
+				if sub != "" {
+					sub += " · "
+				}
+				sub += "непубличная"
+			}
+			if sub != "" {
+				row = append(row, ui.Muted(ui.Text(sub)))
+			}
+			rows = append(rows, ui.Listrow(row...))
+		}
+		sect = append(sect, ui.List(rows...))
+	}
+	return ui.Section(append(sect, venueCreateForm())...)
 }
 
 type profileData struct {
@@ -174,10 +204,16 @@ func (s *Server) renderHostLanding(w http.ResponseWriter, r *http.Request, errMs
 	if username == "" {
 		username = dopestrings.Default.Host.Pages.UsernameFallback()
 	}
+	hostVenues, err := s.loadHostVenues(r.Context(), user.UserID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	pages.RenderDoc(w, s.h.Engine().AssetETags, hostLoggedInDoc(hostLandingData{
 		LoggedIn: true,
 		Username: username,
 		Groups:   groupHostFests(fests, time.Now().Format("2006-01-02")),
+		Venues:   hostVenues,
 		Error:    errMsg,
 	}))
 }

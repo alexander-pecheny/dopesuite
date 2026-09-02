@@ -193,23 +193,29 @@ func (t *Table) admit(r *http.Request, access Access, sc *Scope) (Denial, error)
 			return NoSession, nil
 		}
 	case levelPublicFest:
-		exists, public, err := festVisibility(ctx, t.Eng.DB, sc.FestID)
+		exists, public, venue, err := festVisibility(ctx, t.Eng.DB, sc.FestID)
 		if err != nil {
 			return 0, err
 		}
 		if !exists {
 			return NoFest, nil
+		}
+		if venue {
+			return t.admitVenue(r, sc)
 		}
 		if !public {
 			return NotPublic, nil
 		}
 	case levelRead:
-		exists, public, err := festVisibility(ctx, t.Eng.DB, sc.FestID)
+		exists, public, venue, err := festVisibility(ctx, t.Eng.DB, sc.FestID)
 		if err != nil {
 			return 0, err
 		}
 		if !exists {
 			return NoFest, nil
+		}
+		if venue {
+			return t.admitVenue(r, sc)
 		}
 		if public {
 			break
@@ -233,7 +239,7 @@ func (t *Table) admit(r *http.Request, access Access, sc *Scope) (Denial, error)
 			return 0, err
 		}
 		if !allowed(access.level, sc.Role) {
-			exists, _, err := festVisibility(ctx, t.Eng.DB, sc.FestID)
+			exists, _, _, err := festVisibility(ctx, t.Eng.DB, sc.FestID)
 			if err != nil {
 				return 0, err
 			}
@@ -291,19 +297,49 @@ func DenyAPI(w http.ResponseWriter, r *http.Request, d Denial) {
 	}
 }
 
-func festVisibility(ctx context.Context, db *sql.DB, festID int64) (exists, public bool, err error) {
+// admitVenue is the Площадка rule (CONTEXT.md): a Venue's Games are never
+// public-read whatever is_public says — they are read by the Venue's
+// Representatives and by whoever holds an accepted Заявка on the Слот.
+func (t *Table) admitVenue(r *http.Request, sc *Scope) (Denial, error) {
+	ctx := r.Context()
+	if !sc.HasUser {
+		sc.User, sc.HasUser = t.Eng.LookupSession(r)
+	}
+	if !sc.HasUser {
+		return NoFest, nil
+	}
+	role, err := festaccess.FestUserRoleFromQuery(ctx, t.Eng.DB, sc.FestID, sc.User.UserID)
+	if err != nil {
+		return 0, err
+	}
+	if role != "" {
+		sc.Role = role
+		return 0, nil
+	}
+	seated, err := festaccess.HasAcceptedApplication(ctx, t.Eng.DB, sc.FestID, sc.GameID, sc.User.UserID)
+	if err != nil {
+		return 0, err
+	}
+	if !seated {
+		return NoFest, nil
+	}
+	return 0, nil
+}
+
+func festVisibility(ctx context.Context, db *sql.DB, festID int64) (exists, public, venue bool, err error) {
 	if db == nil {
-		return false, false, nil
+		return false, false, false, nil
 	}
 	var isPublic int
-	err = db.QueryRowContext(ctx, `select is_public from fests where id = ?`, festID).Scan(&isPublic)
+	var kind string
+	err = db.QueryRowContext(ctx, `select is_public, coalesce(kind, 'fest') from fests where id = ?`, festID).Scan(&isPublic, &kind)
 	if errors.Is(err, sql.ErrNoRows) {
-		return false, false, nil
+		return false, false, false, nil
 	}
 	if err != nil {
-		return false, false, err
+		return false, false, false, err
 	}
-	return true, isPublic == 1, nil
+	return true, isPublic == 1, kind == "venue", nil
 }
 
 // ResolveGameID accepts a positive integer (the game id) or a slug and returns

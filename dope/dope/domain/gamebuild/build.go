@@ -85,8 +85,11 @@ type Spec struct {
 	// optional stickers block; EK: a pasted detailed scheme — the ADR-0006
 	// escape hatch, and the one road to the manual Kind.
 	ODTours, ODQuestions int
-	KSIThemes            int
-	KSIStickers          json.RawMessage
+	// ODTourComp names uneven tours outright — what a rating tournament's
+	// questions_by_tour says — and wins over ODTours × ODQuestions.
+	ODTourComp  []int
+	KSIThemes   int
+	KSIStickers json.RawMessage
 	// Multi: the minigames as the host wrote them, and the comparators that
 	// break a tie on the total (empty: equal totals share a place).
 	Minigames    []games.MultiGame
@@ -121,7 +124,7 @@ func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 	}
 	switch spec.Type {
 	case games.OD:
-		return createODGameTx(ctx, tx, spec.FestID, spec.ODTours, spec.ODQuestions)
+		return createODGameTx(ctx, tx, spec.FestID, odTourComp(spec))
 	case games.KSI:
 		return createKSIGameTx(ctx, tx, spec.FestID, spec.KSIThemes, spec.KSIStickers)
 	case games.Multi:
@@ -130,6 +133,19 @@ func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 		return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.EkNoScheme())
 	}
 	return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.SchemeRequired())
+}
+
+// odTourComp is the Spec's tour composition: the one it names, else so many
+// equal tours.
+func odTourComp(spec Spec) []int {
+	if len(spec.ODTourComp) > 0 {
+		return spec.ODTourComp
+	}
+	comp := make([]int, spec.ODTours)
+	for i := range comp {
+		comp[i] = spec.ODQuestions
+	}
+	return comp
 }
 
 // Materialise makes a Game from a pasted detailed scheme, in the fest given:

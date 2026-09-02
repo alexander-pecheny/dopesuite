@@ -13,9 +13,12 @@ CREATE INDEX journal_game_seq on journal(game_id, seq);
 -- index journal_request_id
 CREATE INDEX journal_request_id on journal(request_id);
 
--- index participants_fest_roster_number_idx
-CREATE UNIQUE INDEX participants_fest_roster_number_idx
-  on participants(fest_id, roster, number) where number is not null;
+-- index participants_fest_game_roster_number_idx
+CREATE UNIQUE INDEX participants_fest_game_roster_number_idx
+  on participants(fest_id, coalesce(game_id, 0), roster, number) where number is not null;
+
+-- index slots_fest_starts_idx
+CREATE INDEX slots_fest_starts_idx on slots(fest_id, starts_at);
 
 -- table audit_ctx
 CREATE TABLE audit_ctx(
@@ -78,7 +81,7 @@ CREATE TABLE fests(
   start_date text,
   end_date text,
   is_public integer not null default 0
-);
+, kind TEXT NOT NULL DEFAULT 'fest', city TEXT NOT NULL DEFAULT '', rating_venue_id INTEGER);
 
 -- table game_assignments
 CREATE TABLE game_assignments(
@@ -256,7 +259,7 @@ CREATE TABLE participants(
   city text not null default '',
   fest_team_id integer references fest_teams(id),
   fest_player_id integer references fest_players(id)
-, number INTEGER);
+, number INTEGER, game_id INTEGER REFERENCES games(id) ON DELETE CASCADE);
 
 -- table players
 CREATE TABLE players(
@@ -290,6 +293,46 @@ CREATE TABLE sessions(
   created_at text not null,
   expires_at text not null,
   last_seen_at text not null
+);
+
+-- table slot_application_versions
+CREATE TABLE slot_application_versions(
+  id integer primary key,
+  application_id integer not null references slot_applications(id) on delete cascade,
+  seq integer not null,
+  team_name text not null default '',
+  rating_team_id integer not null default 0,
+  roster_json text not null default '[]',
+  created_by integer references users(id),
+  created_at text not null,
+  unique(application_id, seq)
+);
+
+-- table slot_applications
+CREATE TABLE slot_applications(
+  id integer primary key,
+  slot_id integer not null references slots(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  status text not null default 'pending' check (status in ('pending','accepted','declined')),
+  participant_id integer references participants(id),
+  created_at text not null,
+  updated_at text not null,
+  unique(slot_id, user_id)
+);
+
+-- table slots
+CREATE TABLE slots(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  game_id integer not null references games(id) on delete cascade,
+  starts_at text not null default '',
+  rating_tournament_id integer,
+  reg_token text not null unique,
+  reg_opens_at text,
+  reg_closed integer not null default 0,
+  created_at text not null,
+  updated_at text not null,
+  unique(game_id)
 );
 
 -- table stage_standings

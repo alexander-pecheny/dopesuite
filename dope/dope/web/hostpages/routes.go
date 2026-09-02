@@ -40,6 +40,9 @@ func (s *Server) buildRoutes() *route.Table {
 	page := func(f func(http.ResponseWriter, *http.Request, int64)) route.Handler {
 		return func(w http.ResponseWriter, r *http.Request, sc route.Scope) error { f(w, r, sc.FestID); return nil }
 	}
+	festHandler := func(f func(http.ResponseWriter, *http.Request, int64) error) route.Handler {
+		return func(w http.ResponseWriter, r *http.Request, sc route.Scope) error { return f(w, r, sc.FestID) }
+	}
 	gamePage := func(f func(http.ResponseWriter, *http.Request, int64, int64)) route.Handler {
 		return func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 			f(w, r, sc.FestID, sc.GameID)
@@ -50,11 +53,38 @@ func (s *Server) buildRoutes() *route.Table {
 		s.handleHostCreateFest(w, r, sc.User)
 		return nil
 	})
+	t.Handle("POST /host/venue", route.Session, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+		s.handleHostCreateVenue(w, r, sc.User.UserID)
+		return nil
+	})
 	t.Handle("GET "+fest, route.Member, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 		s.renderHostFestDashboard(w, r, sc.FestID, hostDashMessages{})
 		return nil
 	})
-	t.Handle("POST "+fest, route.Manager, page(s.handleHostUpdateFest))
+	t.Handle("POST "+fest, route.Manager, page(func(w http.ResponseWriter, r *http.Request, id int64) {
+		if s.IsVenue(r.Context(), id) {
+			s.handleHostUpdateVenue(w, r, id)
+			return
+		}
+		s.handleHostUpdateFest(w, r, id)
+	}))
+	const slot = fest + "/slot/{slot}"
+	t.Handle("POST "+fest+"/slot/new", route.Manager, page(s.handleHostCreateSlot))
+	t.Handle("GET "+slot, route.Member, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+		return s.renderSlotPage(w, r, sc.FestID, "", "")
+	})
+	t.Handle("POST "+slot, route.Manager, festHandler(s.handleSlotSave))
+	t.Handle("POST "+slot+"/token", route.Manager, festHandler(s.handleSlotToken))
+	t.Handle("POST "+slot+"/clone", route.Manager, festHandler(s.handleSlotClone))
+	t.Handle("POST "+slot+"/application/{app}/status", route.Manager, festHandler(s.handleApplicationStatus))
+	t.Handle("POST "+slot+"/application/{app}/edit", route.Manager, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+		return s.handleApplicationEdit(w, r, sc.FestID, sc.User.UserID)
+	})
+	t.Handle("POST "+slot+"/application/{app}/revert", route.Manager, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+		return s.handleApplicationRevert(w, r, sc.FestID, sc.User.UserID)
+	})
+	t.Handle("GET "+slot+"/export/tours.xlsx", route.Member, festHandler(s.handleSlotToursExport))
+	t.Handle("GET "+slot+"/export/players.xlsx", route.Member, festHandler(s.handleSlotPlayersExport))
 	t.Handle("GET "+fest+"/teams", route.Manager, page(s.renderHostFestTeams))
 	t.Handle("GET "+fest+"/players", route.Manager, page(s.renderHostFestPlayers))
 	t.Handle("POST "+fest+"/players/overrides", route.Manager, page(s.handleHostAddPlayerOverride))

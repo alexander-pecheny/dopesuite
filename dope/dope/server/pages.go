@@ -1,8 +1,13 @@
 package dopeserver
 
 import (
+	"bytes"
+	"html"
 	"io/fs"
 	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
 
 	kit "pecheny.me/dopeuikit/kit"
 
@@ -74,4 +79,38 @@ func (s *server) warmPageCache() error {
 		srcs = append(srcs, src)
 	}
 	return s.pageSet().Warm(srcs...)
+}
+
+// serveLoginPage is /login. The compiled page carries one redirect target;
+// ?next= replaces it so a registration link can send a visitor through the
+// Telegram handshake and back to itself. Only a local path is honoured.
+func (s *server) serveLoginPage() http.HandlerFunc {
+	page := s.serveCompiledPage("static/login.html")
+	return func(w http.ResponseWriter, r *http.Request) {
+		next := SafeNextPath(r.URL.Query().Get("next"))
+		if next == "" {
+			page(w, r)
+			return
+		}
+		rec := httptest.NewRecorder()
+		page(rec, r)
+		for key, values := range rec.Header() {
+			w.Header()[key] = values
+		}
+		body := bytes.ReplaceAll(rec.Body.Bytes(),
+			[]byte(`data-login-redirect="/host"`),
+			[]byte(`data-login-redirect="`+html.EscapeString(next)+`"`))
+		w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+		w.WriteHeader(rec.Code)
+		_, _ = w.Write(body)
+	}
+}
+
+// SafeNextPath keeps only a same-site path, so ?next= can never bounce a
+// visitor off the site.
+func SafeNextPath(next string) string {
+	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.ContainsAny(next, "\r\n\"") {
+		return ""
+	}
+	return next
 }

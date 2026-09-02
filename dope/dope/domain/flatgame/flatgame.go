@@ -96,7 +96,11 @@ select g.game_type, m.state_json from matches m join games g on g.id = m.game_id
 	if !ok {
 		return fmt.Errorf("%w: %s", ErrNotFlat, gameType)
 	}
-	if err := seatTx(ctx, tx, festID, gameID, matchID, seats); err != nil {
+	ownNumbers, err := gameOwnsItsNumbers(ctx, tx, gameID)
+	if err != nil {
+		return err
+	}
+	if err := seatTx(ctx, tx, festID, gameID, matchID, seats, ownNumbers); err != nil {
 		return err
 	}
 	match, err := store.LoadMatchState(ctx, tx, store.MatchSelector{FestID: festID, GameID: gameID, MatchID: matchID})
@@ -110,12 +114,29 @@ select g.game_type, m.state_json from matches m join games g on g.id = m.game_id
 	return err
 }
 
+// gameOwnsItsNumbers reports whether a Game deals its own Numbers rather than
+// reading the фест's registry: a Слот at a Venue does, and its next sitting
+// starts again at 1 without renaming the last one's teams.
+func gameOwnsItsNumbers(ctx context.Context, tx *sql.Tx, gameID int64) (bool, error) {
+	var found int
+	err := tx.QueryRowContext(ctx, `select 1 from slots where game_id = ?`, gameID).Scan(&found)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 // seatTx makes the Match's slots the document's team list: seat i is the
 // Participant playing under the i-th team's number, minted or renamed as the
 // document says; a team without a number sits in an empty seat. The Game's
 // entrant list follows when every seat is numbered, and is dropped otherwise
-// so the numbering guard falls back to the fest's registry.
-func seatTx(ctx context.Context, tx *sql.Tx, festID, gameID, matchID int64, seats []protocol.Seat) error {
+// so the numbering guard falls back to the fest's registry. A Game that deals
+// its own Numbers seats its Participants against itself, not the фест.
+func seatTx(ctx context.Context, tx *sql.Tx, festID, gameID, matchID int64, seats []protocol.Seat, ownNumbers bool) error {
+	participantGame := int64(0)
+	if ownNumbers {
+		participantGame = gameID
+	}
 	wanted := make([]int64, len(seats))
 	numbered := true
 	for i, seat := range seats {
@@ -123,7 +144,7 @@ func seatTx(ctx context.Context, tx *sql.Tx, festID, gameID, matchID int64, seat
 			numbered = false
 			continue
 		}
-		id, err := store.EnsureParticipantByNumber(ctx, tx, festID, "team", seat.Number, seat.Name, seat.City)
+		id, err := store.EnsureGameParticipantByNumber(ctx, tx, festID, participantGame, "team", seat.Number, seat.Name, seat.City)
 		if err != nil {
 			return err
 		}
