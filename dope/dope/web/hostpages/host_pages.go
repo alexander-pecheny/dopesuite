@@ -42,6 +42,7 @@ func jumpViewerNav() []ui.Item {
 		ui.Data("jump-label", s.Host.Pages.JumpLabel()),
 		ui.Data("jump-href", "/"),
 		ui.Data("jump-title", s.Host.Pages.JumpTitle()),
+		ui.Data("jump-icon", "eye"),
 	}
 }
 

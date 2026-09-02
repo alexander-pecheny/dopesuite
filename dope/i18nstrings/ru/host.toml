@@ -168,8 +168,8 @@ error_obj_source_team = "исходную команду"
 [dash]
 # The fest dashboard (hostFestDashDoc): the fest-edit form, the games list, the
 # access section, the participants links and the delete section.
-# Dashboard page title: "<fest title> · ведущий".
-page_title = '{{.title}} · ведущий'
+# Dashboard page title: "<fest title> · организатор".
+page_title = '{{.title}} · организатор'
 # Body data-jump-* attrs menu.js reads to offer the jump to this fest's viewer
 # page.
 jump_label = "Страница зрителя"
@@ -279,12 +279,12 @@ logout_submit = "Разлогиниться"
 error_int_range = '{{.field}} должно быть от {{.min}} до {{.max}}'
 # The public fest index (/): title, jump-to-host nav, crumbs, empty state.
 public_index_title = "Фесты"
-jump_host_label = "Режим ведущего"
-jump_host_title_index = "Перейти в режим ведущего"
+jump_host_label = "Режим организатора"
+jump_host_title_index = "Перейти в режим организатора"
 home_crumb_label = "Главная"
 public_index_crumb = "Фесты"
 public_index_empty = "Нет публичных фестов."
 # A fest's public page: jump-to-host nav, empty games state, games subhead.
-jump_host_title_fest = "Открыть в режиме ведущего"
+jump_host_title_fest = "Открыть в режиме организатора"
 fest_games_empty = "В этом фесте пока нет игр."
 games_subhead = "Игры"
