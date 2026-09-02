@@ -2,6 +2,7 @@ package dopeserver
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -71,6 +72,10 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("POST "+game+"/seed-import/run", route.Editor.Numbered(), s.seedImportRoute(func(*http.Request) (imports.SeedSource, error) { return imports.FromScheme(), nil }))
 	t.Handle("POST "+game+"/seed-import/xlsx", route.Editor.Numbered(), s.seedImportRoute(seedXLSXSource))
 	t.Handle("POST "+game+"/seed-import/decline", route.Editor, s.scopedSeedDecline)
+	t.Handle("GET "+game+"/contested", route.Read, s.scopedContested)
+	t.Handle("POST "+game+"/contested", route.Editor, s.scopedContestedSave)
+	t.Handle("PATCH "+game+"/contested", route.Editor, s.scopedContestedAccept)
+	t.Handle("DELETE "+game+"/contested", route.Editor, s.scopedContestedDelete)
 	s.buffRoutes(t)
 	return t
 }
@@ -384,7 +389,83 @@ func (s *server) scopedGameState(w http.ResponseWriter, r *http.Request, sc rout
 	// restart, so a low post-restart seq is adopted rather than treated as stale.
 	w.Header().Set("X-State-Seq", strconv.FormatUint(seq, 10))
 	w.Header().Set("X-State-Epoch", s.eng.Epoch)
-	return route.JSONBytes(w, []byte(doc.State))
+	return route.JSONBytes(w, s.eng.WithGameExtras(gameStateScopeKey(sc.GameID), []byte(doc.State)))
+}
+
+// ---- спорные ----
+
+// contestedRequest is one cell: the question and the team's Number in this
+// Game, plus whatever the verb sets.
+type contestedRequest struct {
+	Question     int    `json:"question"`
+	Number       int64  `json:"number"`
+	Answer       string `json:"answer"`
+	AcceptedHere bool   `json:"acceptedHere"`
+}
+
+func (s *server) scopedContested(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	list, err := store.LoadContested(r.Context(), s.eng.DB, sc.GameID)
+	if err != nil {
+		return err
+	}
+	return route.JSON(w, list)
+}
+
+// contestedWrite runs one спорный change and answers with the whole list, so
+// the page adopts it without a second read; the Game's document is broadcast
+// again with the new list spliced in.
+func (s *server) contestedWrite(w http.ResponseWriter, r *http.Request, sc route.Scope,
+	apply func(ctx context.Context, tx *sql.Tx, req contestedRequest) error) error {
+	var req contestedRequest
+	if err := route.DecodeJSON(r, &req); err != nil {
+		return err
+	}
+	if req.Question < 0 || req.Number <= 0 {
+		return route.BadRequest("нужны номер вопроса и номер команды")
+	}
+	err := s.eng.WithWriteTx(r.Context(), sc.FestID, "contested", func(ctx context.Context, tx *sql.Tx) error {
+		return apply(ctx, tx, req)
+	})
+	if errors.Is(err, store.ErrNoSuchNumber) {
+		return route.BadRequest(err.Error())
+	}
+	if err != nil {
+		return err
+	}
+	doc, err := store.LoadGameDoc(r.Context(), s.eng.DB, sc.FestID, sc.GameID)
+	if err != nil {
+		return err
+	}
+	s.eng.BroadcastState(sc.FestID, gameStateScopeKey(sc.GameID),
+		gameRevision(r.Context(), s.eng.DB, sc.GameID), []byte(doc.State))
+	return s.scopedContested(w, r, sc)
+}
+
+// gameRevision is the revision a spliced-document snapshot carries, so a
+// client's revision tracking is not reset by a спорный.
+func gameRevision(ctx context.Context, q store.Queryer, gameID int64) int64 {
+	var revision int64
+	_ = q.QueryRowContext(ctx, `select revision from games where id = ?`, gameID).Scan(&revision)
+	return revision
+}
+
+func (s *server) scopedContestedSave(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	return s.contestedWrite(w, r, sc, func(ctx context.Context, tx *sql.Tx, req contestedRequest) error {
+		return store.SaveContestedTx(ctx, tx, sc.FestID, sc.GameID, sc.User.UserID, req.Question, req.Number,
+			strings.TrimSpace(req.Answer), util.UtcNow())
+	})
+}
+
+func (s *server) scopedContestedAccept(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	return s.contestedWrite(w, r, sc, func(ctx context.Context, tx *sql.Tx, req contestedRequest) error {
+		return store.SetContestedAcceptedTx(ctx, tx, sc.FestID, sc.GameID, req.Question, req.Number, req.AcceptedHere)
+	})
+}
+
+func (s *server) scopedContestedDelete(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	return s.contestedWrite(w, r, sc, func(ctx context.Context, tx *sql.Tx, req contestedRequest) error {
+		return store.DeleteContestedTx(ctx, tx, sc.FestID, sc.GameID, req.Question, req.Number)
+	})
 }
 
 func (s *server) scopedGameStatePut(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
@@ -396,6 +477,9 @@ func (s *server) scopedGameStatePut(w http.ResponseWriter, r *http.Request, sc r
 	if !json.Valid(raw) {
 		return route.BadRequest("bad json")
 	}
+	// The спорные ride the document a page reads but are not part of it: they
+	// live in a table, so a wholesale PUT of that document drops them again.
+	raw = store.StripContested(raw)
 	// Canonicalize so a wholesale PUT stores the same byte representation a
 	// PATCH would: the stored state, the SSE payload and the response stay
 	// identical whichever path produced them, which replay/diff rely on.
@@ -410,7 +494,7 @@ func (s *server) scopedGameStatePut(w http.ResponseWriter, r *http.Request, sc r
 		return err
 	}
 	s.eng.BroadcastState(sc.FestID, gameStateScopeKey(sc.GameID), revision, raw)
-	return route.JSONBytes(w, raw)
+	return route.JSONBytes(w, s.eng.WithGameExtras(gameStateScopeKey(sc.GameID), raw))
 }
 
 // scopedGameStatePatch applies edit ops to the whole document; like a Match
@@ -429,7 +513,7 @@ func (s *server) scopedGameStatePatch(w http.ResponseWriter, r *http.Request, sc
 	if err != nil {
 		return route.BadUser(err)
 	}
-	if err := route.JSONBytes(w, next); err != nil {
+	if err := route.JSONBytes(w, s.eng.WithGameExtras(gameStateScopeKey(sc.GameID), next)); err != nil {
 		return err
 	}
 	if s.metrics.On {

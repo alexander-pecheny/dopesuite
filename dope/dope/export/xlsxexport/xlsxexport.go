@@ -32,11 +32,18 @@ import (
 func BuildODSheet(f *excelize.File, schemeJSON, stateJSON string, ratingByNumber map[int64]int64) error {
 	tours := games.ParseTourComp(schemeJSON)
 	var state games.ODState
+	var contested struct {
+		Contested []store.ContestedAnswer `json:"contested"`
+	}
 	if stateJSON != "" {
 		if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
 			return fmt.Errorf("parse OD state: %w", err)
 		}
+		_ = json.Unmarshal([]byte(stateJSON), &contested)
 	}
+	// rating.chgk.info gets the answer text in the cell for every спорный,
+	// accepted here or not: the ruling is the жюри's (CONTEXT.md).
+	answers := store.ContestedAnswersFor(contested.Contested)
 	if len(tours) == 0 {
 		// No tour composition recorded: fall back to a single tour holding every
 		// completed question so the export is never empty.
@@ -99,11 +106,14 @@ func BuildODSheet(f *excelize.File, schemeJSON, stateJSON string, ratingByNumber
 			cells := []interface{}{teamID, team.Name, team.City, tourIdx + 1}
 			for i := 0; i < tourSize; i++ {
 				q := qBase + i
-				v := 0
+				var cell interface{} = 0
 				if q < len(took) && took[q] != nil && took[q][teamIdx] {
-					v = 1
+					cell = 1
 				}
-				cells = append(cells, v)
+				if answer, ok := answers[q][team.Number]; ok {
+					cell = answer
+				}
+				cells = append(cells, cell)
 			}
 			if err := setRow(f, sheet, row, cells); err != nil {
 				return err

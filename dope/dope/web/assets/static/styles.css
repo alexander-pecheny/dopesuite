@@ -2817,6 +2817,30 @@ body:not(.embedded-match) .grid-match {
   --cell-fill: var(--green);
 }
 
+/* Спорный: an answer the жюри rules on after the game. Yellow wherever the cell
+   shows — Ввод, Подробно, Итог — and, once the host accepted it on the venue,
+   yellow warmed toward the green of a taken question. Declared after .right
+   because both fills are single-class specificity. */
+.entry-table .od-contested {
+  background-color: var(--warn-bg);
+  color: var(--warn-text);
+}
+
+.answer-cell.od-contested,
+.results-answer.od-contested .results-answer-mark {
+  --cell-fill: var(--warn-bg);
+  color: var(--warn-text);
+}
+
+.entry-table .od-contested-accepted {
+  background-color: var(--contested-accepted-fill);
+}
+
+.answer-cell.od-contested-accepted,
+.results-answer.od-contested-accepted .results-answer-mark {
+  --cell-fill: var(--contested-accepted-fill);
+}
+
 .results-group-gap td {
   height: 8px;
   padding: 0;
@@ -4054,6 +4078,9 @@ body:not(.embedded-match) .grid-match {
   --screen-muted-default: #5f6b7a;
   --ksi-sticker-col: 36px;
   --transition-fast: 120ms ease;
+  /* a спорный the host accepted on the venue: the warning fill carried toward
+     the green a taken question wears */
+  --contested-accepted-fill: color-mix(in oklab, var(--warn-bg) 60%, var(--green));
 }
 
 /* ── design system: layout primitives ─────────────────────── */

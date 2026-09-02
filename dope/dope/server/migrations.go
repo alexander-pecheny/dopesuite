@@ -871,6 +871,22 @@ create table if not exists slot_ballots(
 `)
 		return err
 	}},
+	{Version: 29, Name: "od contested answers", Up: func(db *sql.DB) error {
+		_, err := db.Exec(`
+create table if not exists od_contested(
+  id integer primary key,
+  game_id integer not null references games(id) on delete cascade,
+  question integer not null,
+  participant_id integer not null references participants(id) on delete cascade,
+  answer text not null default '',
+  accepted_here integer not null default 0,
+  created_by integer references users(id),
+  created_at text not null,
+  unique(game_id, question, participant_id)
+);
+`)
+		return err
+	}},
 }
 
 func migrateDB(db *sql.DB) error { return schema.Apply(db, migrations) }

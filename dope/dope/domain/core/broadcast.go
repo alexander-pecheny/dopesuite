@@ -1,16 +1,21 @@
 package core
 
 import (
+	"context"
 	"log"
+	"strconv"
+	"strings"
 	"time"
 
 	"dope/dope/platform/realtime"
+	"dope/dope/storage/store"
 )
 
 // BroadcastState fans out a full scoped state snapshot to all subscribers and
 // returns the seq assigned to it. Any buffered deltas for the scope are flushed
 // first (they carry lower seqs) so viewers never see the snapshot before them.
 func (e *Engine) BroadcastState(festID int64, scope string, revision int64, payload []byte) uint64 {
+	payload = e.WithGameExtras(scope, payload)
 	e.InvalidateFestViewCache(festID)
 	e.SeqMu.Lock()
 	defer e.SeqMu.Unlock()
@@ -168,4 +173,29 @@ func (e *Engine) InvalidateFestViewCache(festID int64) {
 	e.FestViewMu.Lock()
 	defer e.FestViewMu.Unlock()
 	delete(e.FestViewCache, festID)
+}
+
+// WithGameExtras splices what a Game's document carries beside its stored
+// state — today the спорные, which live in a table because a ruling is not a
+// score — into a whole-document snapshot. Deltas are untouched: their ops
+// never name the spliced keys, so a client keeps what it already has.
+func (e *Engine) WithGameExtras(scope string, payload []byte) []byte {
+	gameID, ok := gameStateScopeID(scope)
+	if !ok || e.DB == nil {
+		return payload
+	}
+	list, err := store.LoadContested(context.Background(), e.DB, gameID)
+	if err != nil || len(list) == 0 {
+		return payload
+	}
+	return store.WithContested(payload, list)
+}
+
+func gameStateScopeID(scope string) (int64, bool) {
+	rest, found := strings.CutPrefix(scope, gameStateScopePrefix)
+	if !found {
+		return 0, false
+	}
+	id, err := strconv.ParseInt(rest, 10, 64)
+	return id, err == nil && id > 0
 }

@@ -156,6 +156,7 @@ type slotPageData struct {
 	GameHref     string
 	Applications []SlotApplicationRow
 	Voting       VotingView
+	Contested    []ContestedRow
 	RegURL       string
 	CanManage    bool
 	Error        string
@@ -187,7 +188,7 @@ func slotPageDoc(data slotPageData) *ui.Doc {
 		page = append(page, ui.Hint(ui.Text(data.Notice)))
 	}
 	page = append(page, slotHeaderSection(data), slotLinksSection(data), slotApplicationsSection(data),
-		slotVotingSection(data), slotDownloadsSection(data))
+		slotVotingSection(data), slotContestedSection(data), slotDownloadsSection(data))
 	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
 }
 

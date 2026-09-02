@@ -8,8 +8,8 @@ package core
 
 import (
 	"database/sql"
-	"fmt"
 	"io/fs"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -26,7 +26,9 @@ type FestScope struct {
 }
 
 // GameStateScope is the SSE scope a Game's whole document is broadcast on.
-func GameStateScope(gameID int64) string { return fmt.Sprintf("game-state:%d", gameID) }
+func GameStateScope(gameID int64) string { return gameStateScopePrefix + strconv.FormatInt(gameID, 10) }
+
+const gameStateScopePrefix = "game-state:"
 
 // Engine is the shared server runtime state. The zero value is usable (so a
 // server built directly in tests is safe); production wiring fills the fields.

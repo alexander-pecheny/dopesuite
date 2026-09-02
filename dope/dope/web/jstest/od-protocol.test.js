@@ -69,3 +69,54 @@ test("a shootout breaks a tie on the total; a team that skipped a round ranks be
   assert.deepEqual(rows.map((r) => [r.index, r.place]), [[1, "1"], [0, "2"], [2, "3"]]);
   assert.deepEqual(od.shootoutTiebreakForTeam(tied, 2), [-1]);
 });
+
+test("parseState normalises contested and drops rubbish rows", () => {
+  const state = od.parseState({
+    teams: [{name: "A", number: 1}],
+    contested: [
+      {question: "0", number: "1", answer: "Ответ"},
+      {question: 1, number: 2, answer: "Ещё", acceptedHere: 1},
+      {question: -1, number: 1}, {question: 0, number: 0}, "junk", null,
+    ],
+  }, {}, 2);
+  assert.deepEqual(state.contested, [
+    {question: 0, number: 1, answer: "Ответ", acceptedHere: false},
+    {question: 1, number: 2, answer: "Ещё", acceptedHere: true},
+  ]);
+  assert.deepEqual(od.parseState({}, {nTeams: 1}, 1).contested, []);
+});
+
+test("a pending спорный changes no number, only the pending counts", () => {
+  const pending = od.parseState({...structuredClone(played), contested: [{question: 1, number: 3, answer: "Ответ"}]}, {}, 4);
+  const rows = od.rows(pending, [2, 2]);
+  assert.deepEqual(rows.map((r) => [r.index, r.total, r.tourSums, r.rating, r.place]), [
+    [0, 3, [2, 1], 2 + 3 + 1, "1"],
+    [1, 2, [1, 1], 2 + 1, "2"],
+    [2, 1, [0, 1], 1, "3"],
+  ]);
+  assert.deepEqual(rows.map((r) => [r.pendingTotal, r.pendingTours]), [[0, [0, 0]], [0, [0, 0]], [1, [1, 0]]]);
+  assert.equal(od.contestedAt(pending, 2, 1).answer, "Ответ");
+  assert.equal(od.contestedAt(pending, 1, 1), undefined);
+});
+
+test("a спорный accepted here counts as a taken question in the total, the tour and the rating", () => {
+  const accepted = od.parseState({
+    ...structuredClone(played),
+    contested: [{question: 1, number: 3, answer: "Ответ", acceptedHere: true}],
+  }, {}, 4);
+  const rows = od.rows(accepted, [2, 2]);
+  assert.deepEqual(rows.map((r) => [r.index, r.total, r.tourSums, r.rating, r.place]), [
+    [0, 3, [2, 1], 2 + 2 + 1, "1"],
+    [1, 2, [1, 1], 2 + 1, "2–3"],
+    [2, 2, [1, 1], 2 + 1, "2–3"],
+  ]);
+  assert.deepEqual(rows.map((r) => r.pendingTotal), [0, 0, 0]);
+  assert.equal(od.scoredStats(accepted, 4)[1].validCount, 2);
+  assert.deepEqual(od.questionStats(accepted, 4)[1].validCount, 1);
+});
+
+test("contestedLabel names the pending спорные beside the score", () => {
+  assert.equal(od.contestedLabel(12, 0), "12");
+  assert.equal(od.contestedLabel(12, 3), "12 (+3?)");
+  assert.equal(od.contestedLabel("·", 1), "· (+1?)");
+});
