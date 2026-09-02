@@ -7,8 +7,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/xuri/excelize/v2"
+
 	"dope/dope/domain/flatgame"
 	"dope/dope/domain/venues"
+	"dope/dope/export/xlsxexport"
 	"dope/dope/platform/util"
 	dopeserver "dope/dope/server"
 	"dope/dope/storage/store"
@@ -419,5 +422,67 @@ func TestReseatFollowsARenumberedTeam(t *testing.T) {
 	setStatus(t, db, slot, alice, venues.StatusAccepted)
 	if got := numbersByTeam(t, db, festID); len(got) != 1 || got["Мантисса"] != 1 {
 		t.Fatalf("after re-accepting: %v", got)
+	}
+}
+
+// A спорный is the жюри's to rule on, so it follows the team through a
+// renumber rather than being cascaded away with the Participant it retired.
+func TestContestedFollowARenumberedTeam(t *testing.T) {
+	db := venueTestDB(t)
+	festID, slot := newVenueSlot(t, db, []int{2})
+	alice := newVenueUser(t, db, "alice")
+	fileApplication(t, db, slot, alice, "Мантисса", 0, []venues.RosterPlayer{
+		{PlayerID: 1, Surname: "Иванов", Name: "Иван", Captain: true},
+	})
+	setStatus(t, db, slot, alice, venues.StatusAccepted)
+	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+		return store.SaveContestedTx(ctx, tx, festID, slot.GameID, alice, 0, 1, "Текст ответа", util.UtcNow())
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+		return flatgame.SetStateTx(ctx, tx, festID, slot.GameID,
+			`{"teams":[{"name":"Мантисса","city":"Тбилиси","number":3}],"entries":[[],[]],"completed":[false,false],"shootoutRounds":[]}`)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+		return venues.ReseatTx(ctx, tx, slot, "Тбилиси")
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	list, err := store.LoadContested(t.Context(), db, slot.GameID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].Number != 3 || list[0].Answer != "Текст ответа" {
+		t.Fatalf("спорные %+v, want one on the team at 3", list)
+	}
+	var rosterRows int
+	if err := db.QueryRow(`
+select count(*) from game_team_players gtp
+join participants p on p.id = gtp.participant_id
+where gtp.game_id = ? and p.number = 3`, slot.GameID).Scan(&rosterRows); err != nil {
+		t.Fatal(err)
+	}
+	if rosterRows != 1 {
+		t.Fatalf("game_team_players on the new seat = %d, want 1", rosterRows)
+	}
+
+	// The tours export still writes the answer text in the cell.
+	doc, err := store.LoadGameDoc(t.Context(), db, festID, slot.GameID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := string(store.WithContestedFor(t.Context(), db, slot.GameID, []byte(doc.State)))
+	f := excelize.NewFile()
+	defer f.Close()
+	if err := xlsxexport.BuildODSheet(f, doc.SchemeJSON, state, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := f.GetCellValue("Worksheet", "E3"); err != nil || got != "Текст ответа" {
+		t.Fatalf("tours cell = %q (%v), want the спорный's text", got, err)
 	}
 }
