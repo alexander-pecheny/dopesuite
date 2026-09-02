@@ -78,6 +78,13 @@ func votingForm(base string, view VotingView) *ui.Element {
 	if v.PerTeam {
 		perTeam = append(perTeam, ui.Checked())
 	}
+	// A cast ballot means one thing under one kind and another under the next,
+	// so a frozen poll shows them rather than offering them, and posts them
+	// back unchanged.
+	if v.Frozen {
+		kinds = []ui.Item{ui.Note(ui.Text(KindLabel(v.Kind))), ui.Hiddenfield(ui.Name("kind"), ui.Value(v.Kind))}
+		perTeam = nil
+	}
 	submit := "Создать голосование"
 	if v.ID != 0 {
 		submit = "Сохранить голосование"
@@ -85,15 +92,21 @@ func votingForm(base string, view VotingView) *ui.Element {
 	form := []ui.Item{ui.DirCol, ui.Method("post"), ui.Action(base + "/voting"), ui.Autocomplete("off")}
 	form = append(form, ui.Fieldset(append([]ui.Item{ui.Subhead(ui.Text("Турниры"))}, picks...)...))
 	if v.Frozen {
-		form = append(form, ui.Hint(ui.Text("Список турниров заморожен: по нему уже проголосовали.")))
+		form = append(form, ui.Hint(ui.Text("По голосованию уже голосовали: турниры, вид и режим больше не меняются.")))
 	}
 	if !v.Frozen {
 		form = append(form, ui.Field(ui.Label("Добавить турнир по id"),
 			ui.Textfield(ui.Name("extra_candidate"), ui.Inputmode("numeric"))))
 	}
+	form = append(form, ui.Pickgroup(append([]ui.Item{ui.Label("Сколько можно выбрать")}, kinds...)...))
+	if perTeam != nil {
+		form = append(form, ui.Checkbox(perTeam...))
+	} else if v.PerTeam {
+		form = append(form,
+			ui.Note(ui.Text("Голосуют команды, а не люди")),
+			ui.Hiddenfield(ui.Name("per_team"), ui.Value("1")))
+	}
 	form = append(form,
-		ui.Pickgroup(append([]ui.Item{ui.Label("Сколько можно выбрать")}, kinds...)...),
-		ui.Checkbox(perTeam...),
 		ui.Field(ui.Label("Открывается"), ui.Textfield(ui.Name("opens_at"), ui.Value(v.OpensAt), ui.Placeholder("сразу"))),
 		ui.Field(ui.Label("Закрывается"), ui.Textfield(ui.Name("closes_at"), ui.Value(v.ClosesAt), ui.Placeholder("2026-09-04 18:00"))),
 		ui.Row(ui.Button(ui.Submit(), ui.Text(submit))),

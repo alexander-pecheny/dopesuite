@@ -167,10 +167,11 @@ select a.id, a.slot_id, a.user_id, a.status, coalesce(a.participant_id, 0), a.cr
        coalesce(nullif(u.telegram_username, ''), nullif(u.username, ''), ''),
        coalesce(u.telegram_user_id, 0),
        coalesce(v.seq, 0), coalesce(v.team_name, ''), coalesce(v.rating_team_id, 0), coalesce(v.roster_json, '[]'),
-       coalesce(p.number, 0)
+       coalesce(gp.number, 0)
 from slot_applications a
 join users u on u.id = a.user_id
-left join participants p on p.id = a.participant_id
+join slots sl on sl.id = a.slot_id
+left join game_participants gp on gp.participant_id = a.participant_id and gp.game_id = sl.game_id
 left join slot_application_versions v on v.application_id = a.id
   and v.seq = (select max(seq) from slot_application_versions w where w.application_id = a.id)
 where `

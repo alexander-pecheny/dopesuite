@@ -181,6 +181,10 @@ func VotingByToken(ctx context.Context, q store.Queryer, token string) (Voting, 
 
 var ErrNoCandidates = errors.New("выберите хотя бы один турнир")
 
+// ErrVotingFrozen refuses a change the ballots already cast cannot survive: a
+// choice made under one kind counts differently under another.
+var ErrVotingFrozen = errors.New("по голосованию уже голосовали — вид и режим менять нельзя")
+
 func SaveVotingTx(ctx context.Context, tx *sql.Tx, slotID int64, kind string, perTeam bool, opensAt, closesAt string, candidates []Candidate) error {
 	switch kind {
 	case KindOne, KindAny, KindRanked:
@@ -192,9 +196,13 @@ func SaveVotingTx(ctx context.Context, tx *sql.Tx, slotID int64, kind string, pe
 		return err
 	}
 	fresh := errors.Is(err, sql.ErrNoRows)
-	// The candidate list froze at the first ballot, so a later save carries
-	// none: the window and the kind still change, the offer does not.
+	// The first ballot freezes what a ballot means: the candidates it chose
+	// from, the kind it was counted under, and whom it counted for. Only the
+	// window still moves.
 	if !fresh && existing.Frozen {
+		if kind != existing.Kind || perTeam != existing.PerTeam {
+			return ErrVotingFrozen
+		}
 		candidates = existing.Candidates
 	}
 	if len(candidates) == 0 {
@@ -261,8 +269,10 @@ func CastBallotTx(ctx context.Context, tx *sql.Tx, v Voting, userID int64, teamN
 	// cannot confuse.
 	now := util.UtcNow()
 	var createdAt string
+	var discarded bool
 	err = tx.QueryRowContext(ctx,
-		`select created_at from slot_ballots where voting_id = ? and user_id = ?`, v.ID, userID).Scan(&createdAt)
+		`select created_at, discarded from slot_ballots where voting_id = ? and user_id = ?`,
+		v.ID, userID).Scan(&createdAt, &discarded)
 	if errors.Is(err, sql.ErrNoRows) {
 		createdAt = now
 	} else if err != nil {
@@ -271,10 +281,12 @@ func CastBallotTx(ctx context.Context, tx *sql.Tx, v Voting, userID int64, teamN
 		`delete from slot_ballots where voting_id = ? and user_id = ?`, v.ID, userID); err != nil {
 		return err
 	}
+	// «Отклонить» is the Representative's word on that voter, and a re-vote
+	// does not take it back.
 	if _, err := tx.ExecContext(ctx, `
 insert into slot_ballots(voting_id, user_id, team_name, choice_json, discarded, created_at, updated_at)
-values(?, ?, ?, ?, 0, ?, ?)`,
-		v.ID, userID, strings.TrimSpace(teamName), string(encoded), createdAt, now); err != nil {
+values(?, ?, ?, ?, ?, ?, ?)`,
+		v.ID, userID, strings.TrimSpace(teamName), string(encoded), util.BoolToInt(discarded), createdAt, now); err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `update slot_votings set frozen = 1 where id = ?`, v.ID)

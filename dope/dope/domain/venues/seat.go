@@ -27,6 +27,9 @@ func SetStatusTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string, a
 	if app.SlotID != slot.ID {
 		return sql.ErrNoRows
 	}
+	if app, err = resolveSeatTx(ctx, tx, slot, app); err != nil {
+		return err
+	}
 	unseating := app.Status == StatusAccepted && status != StatusAccepted
 	if unseating {
 		scored, err := numberScored(ctx, tx, slot.FestID, slot.GameID, app.Number)
@@ -74,9 +77,13 @@ func reseatTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string, drop
 	}
 	accepted := make([]Application, 0, len(apps))
 	for _, a := range apps {
-		if a.Status == StatusAccepted {
-			accepted = append(accepted, a)
+		if a.Status != StatusAccepted {
+			continue
 		}
+		if a, err = resolveSeatTx(ctx, tx, slot, a); err != nil {
+			return err
+		}
+		accepted = append(accepted, a)
 	}
 	seated, err := gameTeams(ctx, tx, slot.FestID, slot.GameID)
 	if err != nil {
@@ -94,6 +101,9 @@ func reseatTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string, drop
 	}
 	sort.SliceStable(teams, func(i, j int) bool { return teams[i].Number < teams[j].Number })
 	if err := foldTeamsTx(ctx, tx, slot.FestID, slot.GameID, teams); err != nil {
+		return err
+	}
+	if err := pruneRenumberedTx(ctx, tx, slot.GameID, teams); err != nil {
 		return err
 	}
 	for _, a := range accepted {
@@ -116,6 +126,61 @@ func reseatTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string, drop
 		}
 	}
 	return nil
+}
+
+// resolveSeatTx re-finds a Заявка's seat after the host renumbered its team on
+// the game page: renumbering mints a Participant at the new number and leaves
+// the old row behind, so the Заявка's own pointer goes stale. The team is
+// looked up again by the name and registry row it plays under, and the Заявка
+// is repointed; a team that is no longer in the Game reads as unseated.
+func resolveSeatTx(ctx context.Context, tx *sql.Tx, slot Slot, app Application) (Application, error) {
+	if app.Number > 0 || app.ParticipantID == 0 {
+		return app, nil
+	}
+	var (
+		participantID int64
+		number        int64
+	)
+	err := tx.QueryRowContext(ctx, `
+select p.id, gp.number
+from game_participants gp
+join participants p on p.id = gp.participant_id
+left join fest_teams ft on ft.id = p.fest_team_id
+where gp.game_id = ? and p.name = ?
+order by case when coalesce(ft.rating_id, 0) = ? then 0 else 1 end, gp.number
+limit 1`, slot.GameID, app.TeamName, app.RatingTeamID).Scan(&participantID, &number)
+	if errors.Is(err, sql.ErrNoRows) {
+		participantID, number = 0, 0
+	} else if err != nil {
+		return app, err
+	}
+	if _, err := tx.ExecContext(ctx, `update slot_applications set participant_id = ? where id = ?`,
+		util.NullableInt64(participantID), app.ID); err != nil {
+		return app, err
+	}
+	app.ParticipantID, app.Number = participantID, number
+	return app, nil
+}
+
+// pruneRenumberedTx drops the Participants the document no longer names — what
+// a renumber leaves behind, since it mints a row at the new number rather than
+// moving the old one.
+func pruneRenumberedTx(ctx context.Context, tx *sql.Tx, gameID int64, teams []protocol.RosterTeam) error {
+	args := []any{gameID}
+	holes := ""
+	for _, team := range teams {
+		if holes != "" {
+			holes += ", "
+		}
+		holes += "?"
+		args = append(args, team.Number)
+	}
+	query := `delete from participants where game_id = ?`
+	if holes != "" {
+		query += ` and number not in (` + holes + `)`
+	}
+	_, err := tx.ExecContext(ctx, query, args...)
+	return err
 }
 
 func gameTeams(ctx context.Context, q store.Queryer, festID, gameID int64) (map[int64]protocol.RosterTeam, error) {

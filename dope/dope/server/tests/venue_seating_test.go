@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"dope/dope/domain/flatgame"
 	"dope/dope/domain/venues"
 	"dope/dope/platform/util"
 	dopeserver "dope/dope/server"
@@ -358,5 +359,65 @@ func TestContestedBlocksAnUnseat(t *testing.T) {
 	})
 	if !errors.Is(err, venues.ErrHasResults) {
 		t.Fatalf("err = %v, want ErrHasResults", err)
+	}
+}
+
+// The host may renumber a team on the game page; the Заявка follows it there
+// rather than seating a second copy under the number it used to hold.
+func TestReseatFollowsARenumberedTeam(t *testing.T) {
+	db := venueTestDB(t)
+	festID, slot := newVenueSlot(t, db, []int{2})
+	alice := newVenueUser(t, db, "alice")
+	fileApplication(t, db, slot, alice, "Мантисса", 5723, []venues.RosterPlayer{
+		{PlayerID: 1, Surname: "Иванов", Name: "Иван", Captain: true},
+	})
+	setStatus(t, db, slot, alice, venues.StatusAccepted)
+
+	// The game page renumbers 1 → 3 — a document write, which reseats the бой
+	// and so mints a Participant at 3 and leaves the Заявка pointing at 1.
+	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+		return flatgame.SetStateTx(ctx, tx, festID, slot.GameID,
+			`{"teams":[{"name":"Мантисса","city":"Тбилиси","number":3}],"entries":[[],[]],"completed":[false,false],"shootoutRounds":[]}`)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+		return venues.ReseatTx(ctx, tx, slot, "Тбилиси")
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A roster edit reseats again; the team must still be one row at 3.
+	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+		return venues.ReseatTx(ctx, tx, slot, "Тбилиси")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := numbersByTeam(t, db, festID); len(got) != 1 || got["Мантисса"] != 3 {
+		t.Fatalf("participants %v, want one team at 3", got)
+	}
+	var seats int
+	if err := db.QueryRow(`select count(*) from game_participants where game_id = ?`, slot.GameID).Scan(&seats); err != nil {
+		t.Fatal(err)
+	}
+	if seats != 1 {
+		t.Fatalf("game_participants = %d, want 1", seats)
+	}
+	app, err := venues.UserApplication(t.Context(), db, slot.ID, alice)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if app.Number != 3 || app.ParticipantID == 0 {
+		t.Fatalf("заявка %+v, want the renumbered seat", app)
+	}
+
+	// And the queue still works over the renumbered seat.
+	setStatus(t, db, slot, alice, venues.StatusDeclined)
+	if got := numbersByTeam(t, db, festID); len(got) != 0 {
+		t.Fatalf("after the decline: %v", got)
+	}
+	setStatus(t, db, slot, alice, venues.StatusAccepted)
+	if got := numbersByTeam(t, db, festID); len(got) != 1 || got["Мантисса"] != 1 {
+		t.Fatalf("after re-accepting: %v", got)
 	}
 }
