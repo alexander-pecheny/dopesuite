@@ -243,30 +243,39 @@ limit ?`, likePrefix(prefix), capLimit(limit))
 	return out
 }
 
-// BaseRoster is the team's base roster for the season containing at: the
-// player ids the rating site declared. The second result is false when the
-// mirror knows no roster, which is what makes every player read as легионер.
+// BaseRoster is the team's base roster as of at: the player ids the rating site
+// declared for the season containing at, or — while the team has declared
+// nothing for it, which most teams have not months in — for the last season it
+// did. The `player_id = 0` rows the mirror writes for a fetched-but-empty
+// roster are not players and never make a season the answer. The second result
+// is false when the mirror knows no roster at all, which is what makes every
+// player read as легионер.
 func (s *Store) BaseRoster(ctx context.Context, teamID int64, at time.Time) (map[int64]bool, bool) {
 	if !s.Enabled() || teamID <= 0 {
 		return nil, false
 	}
-	day := at.Format("2006-01-02")
 	rows, err := s.db.QueryContext(ctx, `
-select ts.player_id
+select ts.season_id, ts.player_id
 from team_seasons ts
 join seasons s on s.id = ts.season_id
-where ts.team_id = ?
+where ts.team_id = ? and ts.player_id > 0
   and substr(s.date_start, 1, 10) <= ?
-  and substr(s.date_end, 1, 10) >= ?`, teamID, day, day)
+order by s.date_start desc`, teamID, at.Format("2006-01-02"))
 	if err != nil {
 		return nil, false
 	}
 	defer rows.Close()
 	out := map[int64]bool{}
+	season := int64(0)
 	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
+		var seasonID, id int64
+		if err := rows.Scan(&seasonID, &id); err != nil {
 			return nil, false
+		}
+		if season == 0 {
+			season = seasonID
+		} else if seasonID != season {
+			break
 		}
 		out[id] = true
 	}

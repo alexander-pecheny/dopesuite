@@ -46,8 +46,16 @@ insert into tournament_results values
   (10233, 62868, 'Gay Guerrilla', 'сборная'),
   (10233, 52916, 'Неловко', 'сборная');
 
-insert into seasons values (61, '2026-08-27T00:00:00+00:00', '2027-08-26T00:00:00+00:00');
-insert into team_seasons values (62868, 61, 24850, '2026-08-27', null, 0), (62868, 61, 25121, '2026-08-27', null, 0);
+insert into seasons values
+  (60, '2025-08-28T00:00:00+00:00', '2026-08-26T00:00:00+00:00'),
+  (61, '2026-08-27T00:00:00+00:00', '2027-08-26T00:00:00+00:00');
+-- 62868 declared a roster for the season under way; 70001 has not yet, and
+-- 70002 has declared an empty one in both (player 0 is the mirror's sentinel).
+insert into team_seasons values
+  (62868, 61, 24850, '2026-08-27', null, 0), (62868, 61, 25121, '2026-08-27', null, 0),
+  (70001, 61, 0, null, null, null),
+  (70001, 60, 3438, '2025-08-28', null, 0), (70001, 60, 25122, '2025-08-28', null, 0),
+  (70002, 61, 0, null, null, null), (70002, 60, 0, null, null, null);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -164,6 +172,24 @@ func TestBaseRoster(t *testing.T) {
 	}
 	if _, ok := s.BaseRoster(context.Background(), 52916, day(t, "2026-09-02")); ok {
 		t.Fatal("a team with no rows must read as unknown")
+	}
+}
+
+// Most teams declare nothing for weeks after a season turns over, so until they
+// do their last declared roster is the answer.
+func TestBaseRosterFallsBackToTheLastSeasonDeclared(t *testing.T) {
+	s := fixture(t)
+	roster, ok := s.BaseRoster(context.Background(), 70001, day(t, "2026-09-02"))
+	if !ok || !roster[3438] || !roster[25122] || roster[0] {
+		t.Fatalf("previous season's roster %v ok=%v", roster, ok)
+	}
+	if _, ok := s.BaseRoster(context.Background(), 70002, day(t, "2026-09-02")); ok {
+		t.Fatal("sentinel rows in every season are no roster at all")
+	}
+	// A season the team did declare is not overtaken by an older one.
+	roster, ok = s.BaseRoster(context.Background(), 70001, day(t, "2026-08-01"))
+	if !ok || !roster[3438] {
+		t.Fatalf("season 60 roster %v ok=%v", roster, ok)
 	}
 }
 
