@@ -150,7 +150,9 @@ export function mountRosterEditor(container: HTMLElement): void {
   const field = container.querySelector<HTMLInputElement>("[data-roster-json]");
   if (!field) return;
   let players = parseRoster(field.value);
-  if (players.length === 0) players = [emptyPlayer()];
+  // There is always a row waiting for the next player: «Добавить игрока» is
+  // for putting one back after a removal, not for every name.
+  if (players.length === 0 || fullName(players[players.length - 1]) !== "") players.push(emptyPlayer());
   const rows = el("div", "u-col u-gap-sm");
   const warning = el("p", "hint");
   const add = document.createElement("button");
@@ -175,19 +177,43 @@ export function mountRosterEditor(container: HTMLElement): void {
   const drawRow = (player: RosterPlayer, index: number): HTMLElement => {
     const row = el("div", "u-row u-gap-sm u-wrap u-align-center");
     // A row is either a mirror player or a hand-typed one; an empty row is a
-    // suggest until «нет в базе» turns it into the three name fields.
-    if (player.player_id > 0 || fullName(player) === "") {
-      row.append(drawSuggest(player, index));
-    } else {
-      row.append(drawTyped(player, index));
-    }
-    row.append(drawCaptain(player, index), drawRemove(index));
+    // suggest until «нет в базе» turns it into the three name fields. The name
+    // takes the width the row has left, so «Печеный Александр Павлович» fits.
+    const name = player.player_id > 0 || fullName(player) === ""
+      ? drawSuggest(player, index)
+      : drawTyped(player, index);
+    name.classList.add("u-grow");
+    row.append(name, drawCaptain(player, index), drawRemove(index));
     return row;
+  };
+
+  const focusRow = (index: number): void => {
+    (rows.children[index] as HTMLElement | undefined)?.querySelector("input")?.focus();
+  };
+
+  const appendEmptyRow = (focus: boolean): void => {
+    players.push(emptyPlayer());
+    rows.append(drawRow(players[players.length - 1], players.length - 1));
+    sync();
+    if (focus) focusRow(players.length - 1);
+  };
+
+  // After a pick the submitter's next act is the next player, so the row for
+  // them is already there and waiting rather than behind «Добавить игрока».
+  const openNextRow = (): void => {
+    if (fullName(players[players.length - 1]) !== "") {
+      appendEmptyRow(true);
+      return;
+    }
+    focusRow(players.length - 1);
   };
 
   const drawSuggest = (player: RosterPlayer, index: number): HTMLElement => {
     const box = el("div", "u-col u-gap-sm");
     const query = input("input", suggestLabel(player), "Фамилия Имя");
+    // Wide enough that the row wraps its controls under it on a phone rather
+    // than squeezing the name into a third of the line.
+    query.size = 28;
     autocomplete(query, async (typed) => {
       const found = await fetchPlayers(typed);
       const choices = found.map(playerChoice);
@@ -196,12 +222,14 @@ export function mountRosterEditor(container: HTMLElement): void {
       if (typed.trim() !== "") choices.push({value: MANUAL, label: "нет в базе"});
       return choices;
     }, (choice, typed) => {
-      if (choice.value === MANUAL) {
-        players[index] = {...emptyPlayer(), surname: typed.trim(), captain: players[index].captain};
-      } else {
-        players[index] = {...(JSON.parse(choice.value) as SuggestedPlayer), captain: players[index].captain};
-      }
+      const manual = choice.value === MANUAL;
+      players[index] = manual
+        ? {...emptyPlayer(), surname: typed.trim(), captain: players[index].captain}
+        : {...(JSON.parse(choice.value) as SuggestedPlayer), captain: players[index].captain};
       draw();
+      // A hand-typed player still has to be named; the next row waits for that.
+      if (manual) focusRow(index);
+      else openNextRow();
     });
     box.append(query);
     return box;
@@ -215,10 +243,13 @@ export function mountRosterEditor(container: HTMLElement): void {
       ["patronymic", "Отчество"],
     ];
     for (const [key, placeholder] of fields) {
-      const node = input("input", String(player[key] ?? ""), placeholder);
+      const node = input("input u-grow", String(player[key] ?? ""), placeholder);
       node.addEventListener("input", () => {
         players[index] = { ...players[index], [key]: node.value };
         sync();
+        // Named at last: open the next row, without taking the caret out of
+        // the one being typed into.
+        if (index === players.length - 1 && fullName(players[index]) !== "") appendEmptyRow(false);
       });
       box.append(node);
     }

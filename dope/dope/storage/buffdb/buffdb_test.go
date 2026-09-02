@@ -115,6 +115,24 @@ func TestPlayersMatchNameWords(t *testing.T) {
 	}
 }
 
+// SQLite's LIKE folds case for ASCII only, so a Cyrillic query has to be tried
+// the way the mirror spells it as well as the way it was typed.
+func TestSuggestsIgnoreCase(t *testing.T) {
+	s := fixture(t)
+	want := s.Players(context.Background(), "Пече", 10)
+	if len(want) != 1 || want[0].ID != 24850 {
+		t.Fatalf("as spelled: %+v", want)
+	}
+	for _, typed := range []string{"пече", "ПЕЧЕ", "ПеЧе", "печеный александр"} {
+		if got := s.Players(context.Background(), typed, 10); len(got) != 1 || got[0].ID != 24850 {
+			t.Errorf("%q: %+v", typed, got)
+		}
+	}
+	if got := s.Teams(context.Background(), "гей", 10); len(got) != 1 || got[0].ID != 62868 {
+		t.Errorf("teams: %+v", got)
+	}
+}
+
 // A wildcard typed by hand is a literal, not a pattern.
 func TestPlayersEscapeWildcards(t *testing.T) {
 	s := fixture(t)
@@ -206,7 +224,9 @@ func TestPlayableTournamentsPutSynchronsFirst(t *testing.T) {
 
 func TestSearchAndLoadTournament(t *testing.T) {
 	s := fixture(t)
-	if got := s.SearchTournaments(context.Background(), "синхрон", time.Time{}, 10); len(got) != 2 {
+	// Three: «Синхрон августа», «Асинхрон августа» and «Старый синхрон» — the
+	// lowercase query finds the capitalised name too.
+	if got := s.SearchTournaments(context.Background(), "синхрон", time.Time{}, 10); len(got) != 3 {
 		t.Fatalf("search %+v", got)
 	}
 	tournament, ok := s.Tournament(context.Background(), 10233)

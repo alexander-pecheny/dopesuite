@@ -3,11 +3,13 @@ package tests
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
 
 	"dope/dope/domain/core"
+	"dope/dope/domain/venues"
 	"dope/dope/platform/realtime"
 	"dope/dope/platform/util"
 	dopeserver "dope/dope/server"
@@ -193,5 +195,50 @@ func TestVenueLandingKeepsTheRegToken(t *testing.T) {
 	}
 	if member := get(createTestSession(t, srv, userID)); !strings.Contains(member, "/reg/"+slot.RegToken) {
 		t.Error("a representative should get the reg link")
+	}
+}
+
+// The Состав is asked for after the Заявка is accepted, so a POST that carries
+// one before then is not believed.
+func TestPendingApplicationStoresNoRoster(t *testing.T) {
+	db := venueTestDB(t)
+	_, slot := newVenueSlot(t, db, []int{2})
+	srv := dopeserver.NewTestServer(func(e *core.Engine) {
+		e.DB = db
+		e.RT = realtime.NewManager()
+	})
+	userID := newVenueUser(t, db, "applicant")
+	token := createTestSession(t, srv, userID)
+
+	post := func(roster string) {
+		form := url.Values{"team_name": {"Мантисса"}, "rating_team_id": {"0"}, "roster_json": {roster}}
+		req := httptest.NewRequest(http.MethodPost, "/reg/"+slot.RegToken, strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(&http.Cookie{Name: session.CookieName, Value: token})
+		rec := httptest.NewRecorder()
+		srv.HostPageServer().HandleVenueRouter(rec, req)
+		if rec.Code != http.StatusSeeOther {
+			t.Fatalf("submit = %d: %s", rec.Code, rec.Body.String())
+		}
+	}
+	filed := `[{"player_id":1,"surname":"Иванов","name":"Иван","captain":true}]`
+
+	post(filed)
+	app, err := venues.UserApplication(t.Context(), db, slot.ID, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(app.Roster) != 0 {
+		t.Fatalf("a pending заявка kept a roster: %+v", app.Roster)
+	}
+
+	setStatus(t, db, slot, userID, venues.StatusAccepted)
+	post(filed)
+	app, err = venues.UserApplication(t.Context(), db, slot.ID, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(app.Roster) != 1 || app.Roster[0].Surname != "Иванов" {
+		t.Fatalf("an accepted заявка should keep its roster: %+v", app.Roster)
 	}
 }

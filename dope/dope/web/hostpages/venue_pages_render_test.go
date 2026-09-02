@@ -132,6 +132,38 @@ func TestRegDocSaysWhatEachStateAllows(t *testing.T) {
 	}
 }
 
+// A Слот has more applicants than seats, so the Состав is asked for only once
+// the Заявка is accepted.
+func TestRegDocAsksForTheRosterOnlyOnceAccepted(t *testing.T) {
+	base := RegPage{Token: "tok", VenueTitle: "Площадка", VenueRef: "tbilisi", LoggedIn: true}
+
+	fresh := renderPublic(t, RegDoc(base))
+	if strings.Contains(fresh, "data-roster-editor") {
+		t.Error("a new заявка asks for a team, not a состав")
+	}
+	if !strings.Contains(fresh, "Состав нужно будет указать после того, как заявку примут.") {
+		t.Error("a new заявка should say when the состав is due")
+	}
+
+	for _, status := range []string{venues.StatusPending, venues.StatusDeclined} {
+		p := base
+		p.Application = &ApplicationView{Status: status, StatusLabel: StatusLabel(status), TeamName: "Мантисса"}
+		if body := renderPublic(t, RegDoc(p)); strings.Contains(body, "data-roster-editor") {
+			t.Errorf("%s: no состав before acceptance", status)
+		}
+	}
+
+	p := base
+	p.Application = &ApplicationView{Status: venues.StatusAccepted, StatusLabel: StatusLabel(venues.StatusAccepted), TeamName: "Мантисса"}
+	body := renderPublic(t, RegDoc(p))
+	if !strings.Contains(body, "data-roster-editor") || !strings.Contains(body, `name="roster_json"`) {
+		t.Error("an accepted заявка gets the состав editor")
+	}
+	if strings.Contains(body, "Состав нужно будет указать") {
+		t.Error("the note outstays its welcome")
+	}
+}
+
 func TestSlotPageDocCarriesTheLinkAndTheQueue(t *testing.T) {
 	venue := venues.Venue{ID: 1, Slug: "tbilisi", Title: "Площадка", City: "Тбилиси"}
 	slot := venues.Slot{ID: 7, FestID: 1, GameID: 3, StartsAt: "2026-09-04 19:00", RegToken: "tok"}
