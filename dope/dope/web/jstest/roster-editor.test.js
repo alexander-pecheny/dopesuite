@@ -8,6 +8,7 @@ import {
   rosterWarning,
   serializeRoster,
   setCaptain,
+  slugify,
   suggestLabel,
 } from "./dist/roster-editor.js";
 
@@ -74,4 +75,14 @@ Deno.test("rosterWarning asks for a captain and warns above six", () => {
   assertEquals(rosterWarning(setCaptain([named(1)], 0)), "");
   const seven = setCaptain([1, 2, 3, 4, 5, 6, 7].map(named), 0);
   assertEquals(rosterWarning(seven), `В составе больше ${MAX_ROSTER} игроков.`);
+});
+
+Deno.test("slugify derives a URL from a Russian venue name", () => {
+  assertEquals(slugify("Санкт-Петербург / Трубников Артём"), "sankt-peterburg-trubnikov-artem");
+  assertEquals(slugify("Тбилиси"), "tbilisi");
+  assertEquals(slugify("Ёлки-палки 2026"), "elki-palki-2026");
+  // Nothing latin to build a slug from, and a slug of digits alone is refused
+  // by the server anyway.
+  assertEquals(slugify("2026"), "");
+  assertEquals(slugify("!!!"), "");
 });

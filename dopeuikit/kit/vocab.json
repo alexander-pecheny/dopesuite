@@ -455,6 +455,9 @@
         {
           "name": "disabled",
           "kind": "bare"
+        },
+        {
+          "name": "title"
         }
       ],
       "children": "none"

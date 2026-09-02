@@ -289,6 +289,16 @@ func (s *Server) renderVenueDashboard(w http.ResponseWriter, r *http.Request, sc
 	if err != nil {
 		return err
 	}
+	// A refused save comes back with what was typed, not with what is stored.
+	// Only the venue form posts a slug; a refused slot form leaves it alone.
+	if errMsg != "" && r.Form.Has("slug") {
+		venue = venues.Venue{
+			ID: venue.ID, Slug: r.Form.Get("slug"), Title: r.Form.Get("title"),
+			City: r.Form.Get("city"), Description: r.Form.Get("description"),
+			RatingVenueID: formInt64(r.Form, "rating_venue_id"),
+			IsPublic:      r.Form.Get("is_public") == "1",
+		}
+	}
 	slots, err := venues.VenueSlots(r.Context(), s.h.Engine().DB, festID)
 	if err != nil {
 		return err
@@ -319,16 +329,18 @@ func (s *Server) handleHostCreateVenue(w http.ResponseWriter, r *http.Request, s
 	if err := r.ParseForm(); err != nil {
 		return route.BadRequest("bad form")
 	}
+	refused := func(msg string) error {
+		s.renderHostLandingForm(w, r, msg, "venue", r.Form)
+		return nil
+	}
 	title := strings.TrimSpace(r.Form.Get("title"))
 	if title == "" {
-		s.renderHostLanding(w, r, "Название площадки обязательно.")
-		return nil
+		return refused("Название площадки обязательно.")
 	}
 	slug := strings.TrimSpace(r.Form.Get("slug"))
 	if slug != "" {
-		if err := util.ValidateSlug(slug); err != nil {
-			s.renderHostLanding(w, r, "Slug: "+err.Error())
-			return nil
+		if util.ValidateSlug(slug) != nil {
+			return refused("Slug: " + SlugTitle)
 		}
 	}
 	now := util.UtcNow()
@@ -349,8 +361,7 @@ insert into fest_organizers(fest_id, user_id, role, added_at) values(?, ?, 'crea
 		return err
 	})
 	if err != nil {
-		s.renderHostLanding(w, r, err.Error())
-		return nil
+		return refused(err.Error())
 	}
 	http.Redirect(w, r, fmt.Sprintf("/host/venue/%d", festID), http.StatusSeeOther)
 	return nil
@@ -367,8 +378,8 @@ func (s *Server) handleHostUpdateVenue(w http.ResponseWriter, r *http.Request, s
 	}
 	slug := strings.TrimSpace(r.Form.Get("slug"))
 	if slug != "" {
-		if err := util.ValidateSlug(slug); err != nil {
-			return s.renderVenueDashboard(w, r, sc, "Slug: "+err.Error(), "")
+		if util.ValidateSlug(slug) != nil {
+			return s.renderVenueDashboard(w, r, sc, "Slug: "+SlugTitle, "")
 		}
 	}
 	err := s.h.Engine().WithWriteTx(r.Context(), festID, "venue-update", func(ctx context.Context, tx *sql.Tx) error {

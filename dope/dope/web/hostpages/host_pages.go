@@ -23,7 +23,16 @@ type hostLandingData struct {
 	Groups   []hostFestGroup
 	Venues   []venues.Venue
 	Error    string
+	// Form is what was just submitted and refused, so the form comes back
+	// filled instead of blank; Open names the disclosure to leave open.
+	Form url.Values
+	Open string
 }
+
+// kept reads a refused form's value, so nothing a host typed is lost.
+func (d hostLandingData) kept(field string) string { return d.Form.Get(field) }
+
+func (d hostLandingData) checked(field string) bool { return d.Form.Get(field) == "1" }
 
 // jumpViewerNav are the body data-jump-* attrs menu.js reads to offer a jump to
 // the public viewer page from the host landing.
@@ -40,11 +49,12 @@ func jumpViewerNav() []ui.Item {
 // grouped into current/future/past disclosures, and the create-fest form.
 func hostLoggedInDoc(data hostLandingData) *ui.Doc {
 	s := dopestrings.Default
-	page := []ui.Item{ui.Title(s.Host.Pages.LandingTitle(data.Username)), ui.PagePublic}
+	page := []ui.Item{ui.Title(s.Host.Pages.LandingTitle(data.Username)), ui.PagePublic,
+		ui.Classicscripts("dist/pageforms.js dist/roster-editor.js")}
 	page = append(page, jumpViewerNav()...)
 	page = append(page, ui.Publictopbar(pages.Trail([]ui.Item{pages.HomeCrumb()}, s.Host.Pages.LandingCrumb())))
 
-	if data.Error != "" {
+	if data.Error != "" && data.Open == "" {
 		page = append(page, ui.Empty(ui.Text(data.Error)))
 	}
 	if len(data.Groups) > 0 {
@@ -68,19 +78,35 @@ func hostLoggedInDoc(data hostLandingData) *ui.Doc {
 	}
 
 	page = append(page, hostLandingVenues(data))
-	page = append(page, ui.Section(ui.Details(
-		ui.Summary(ui.Btn(), ui.Text(s.Host.Pages.CreateFestSummary())),
+	festForm := []ui.Item{ui.Summary(ui.Btn(), ui.Text(s.Host.Pages.CreateFestSummary()))}
+	if data.Open == "fest" {
+		festForm = append([]ui.Item{ui.Open()}, festForm...)
+		if data.Error != "" {
+			festForm = append(festForm, ui.Hint(ui.HintDanger, ui.Text(data.Error)))
+		}
+	}
+	festForm = append(festForm,
 		ui.Form(ui.DirCol, ui.Method("post"), ui.Action("/host/fest"), ui.Autocomplete("off"),
-			ui.Field(ui.Label(s.Host.Pages.TitleLabel()), ui.Textfield(ui.Name("title"), ui.Required())),
-			ui.Field(ui.Label(s.Host.Pages.DescriptionLabel()), ui.Editor(ui.Name("description"), ui.Rows("4"))),
-			ui.Field(ui.Label(s.Host.Pages.StartDateLabel()), ui.Textfield(ui.Name("start_date"), ui.Placeholder("2026-05-15"))),
-			ui.Field(ui.Label(s.Host.Pages.EndDateLabel()), ui.Textfield(ui.Name("end_date"), ui.Placeholder("2026-05-17"))),
-			ui.Field(ui.Label(s.Host.Pages.RatingIdLabel()), ui.Textfield(ui.Name("rating_id"), ui.Inputmode("numeric"))),
-			ui.Checkbox(ui.Name("is_public"), ui.Value("1"), ui.Text(s.Host.Pages.PublicLabel())),
+			ui.Field(ui.Label(s.Host.Pages.TitleLabel()), ui.Textfield(ui.Name("title"), ui.Value(data.kept("title")), ui.Required())),
+			ui.Field(ui.Label(s.Host.Pages.DescriptionLabel()), ui.Editor(ui.Name("description"), ui.Rows("4"), ui.Text(data.kept("description")))),
+			ui.Field(ui.Label(s.Host.Pages.StartDateLabel()), ui.Textfield(ui.Name("start_date"), ui.Value(data.kept("start_date")), ui.Placeholder("2026-05-15"))),
+			ui.Field(ui.Label(s.Host.Pages.EndDateLabel()), ui.Textfield(ui.Name("end_date"), ui.Value(data.kept("end_date")), ui.Placeholder("2026-05-17"))),
+			ui.Field(ui.Label(s.Host.Pages.RatingIdLabel()), ui.Textfield(ui.Name("rating_id"), ui.Value(data.kept("rating_id")), ui.Inputmode("numeric"))),
+			checkboxKept("is_public", s.Host.Pages.PublicLabel(), data.checked("is_public")),
 			ui.Row(ui.Button(ui.Submit(), ui.Text(s.Host.Pages.CreateSubmit()))),
 		),
-	)))
+	)
+	page = append(page, ui.Section(ui.Details(festForm...)))
 	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
+}
+
+// checkboxKept is a tickbox that comes back ticked when the refused form had it.
+func checkboxKept(name, label string, on bool) *ui.Element {
+	items := []ui.Item{ui.Name(name), ui.Value("1"), ui.Text(label)}
+	if on {
+		items = append(items, ui.Checked())
+	}
+	return ui.Checkbox(items...)
 }
 
 // hostLandingVenues is the Площадки the user represents, and the form that
@@ -107,7 +133,7 @@ func hostLandingVenues(data hostLandingData) *ui.Element {
 		}
 		sect = append(sect, ui.List(rows...))
 	}
-	return ui.Section(append(sect, venueCreateForm())...)
+	return ui.Section(append(sect, venueCreateForm(data))...)
 }
 
 type profileData struct {
@@ -187,6 +213,12 @@ func (s *Server) HandleHostLanding(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderHostLanding(w http.ResponseWriter, r *http.Request, errMsg string) {
+	s.renderHostLandingForm(w, r, errMsg, "", nil)
+}
+
+// renderHostLandingForm re-renders /host after a refused create form, keeping
+// what was typed and leaving that disclosure open.
+func (s *Server) renderHostLandingForm(w http.ResponseWriter, r *http.Request, errMsg, open string, form url.Values) {
 	user, ok := s.h.Engine().LookupSession(r)
 	if !ok {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
@@ -215,6 +247,8 @@ func (s *Server) renderHostLanding(w http.ResponseWriter, r *http.Request, errMs
 		Groups:   groupHostFests(fests, time.Now().Format("2006-01-02")),
 		Venues:   hostVenues,
 		Error:    errMsg,
+		Form:     form,
+		Open:     open,
 	}))
 }
 
