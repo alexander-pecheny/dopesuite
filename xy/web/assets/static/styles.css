@@ -1808,14 +1808,6 @@ body {
 /* position:absolute with no offsets leaves the popup at its STATIC position —
    inline after the input, i.e. off to the right of the row. It has to be pinned
    to the anchor's bottom-left to read as a dropdown. */
-.suggest-pop {
-  position: absolute;
-  z-index: 30;
-  max-height: 12rem;
-  overflow-y: auto;
-}
-.suggest-hint { color: var(--muted); font-size: var(--text-sm); margin-left: var(--space-2); }
-
 /* A tester row is seg + name + ×. The name SHRINKS rather than claiming a line
    of its own — giving it 100% pushed the × onto a third line at every width, not
    just on a phone — so all three stay on one row down to ~200px, below which the
@@ -1868,8 +1860,6 @@ body {
 .sess-city-add { width: 12rem; max-width: 100%; }
 /* Any input with an autocomplete under it: the popup is absolute, so its parent
    has to be the positioning context. */
-.suggest-anchor { position: relative; }
-
 /* A city is not a coloured label, so it does not wear the label pill — that
    painted it grey-on-white and made both the name and its offset unreadable.
    Surface + border, text in the normal ink. */

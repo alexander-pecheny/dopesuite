@@ -16,6 +16,17 @@ export type RosterPlayer = {
 // how a Representative tells namesakes apart.
 export type SuggestedPlayer = RosterPlayer & {games?: number};
 
+// playerChoice is one suggested player as the shared dropdown draws it: the
+// name and id on the line, the games it is known by as the hint.
+export function playerChoice(p: SuggestedPlayer): Choice {
+  const games = Number(p.games) || 0;
+  const hint = games > 0 ? `${games} ${gamesWord(games)} · ${p.player_id}` : String(p.player_id);
+  return {value: JSON.stringify(p), label: fullName(p), hint};
+}
+
+import {autocomplete} from "../../../../dopeuikit/assets/ts/suggest.js";
+import type {Choice} from "../../../../dopeuikit/assets/ts/suggest.js";
+
 export const MAX_ROSTER = 6;
 
 export function emptyPlayer(): RosterPlayer {
@@ -105,38 +116,6 @@ function input(className: string, value: string, placeholder: string): HTMLInput
   return node;
 }
 
-// attachSuggest is the one suggest mechanism the Состав rows and the two buff
-// fields share: debounce, fetch, draw the choices, let one be picked.
-export function attachSuggest<T>(
-  input: HTMLInputElement,
-  list: HTMLElement,
-  load: (query: string) => Promise<T[]>,
-  label: (item: T) => string,
-  pick: (item: T) => void,
-  extra?: (query: string) => HTMLElement | null,
-): void {
-  let timer = 0;
-  input.addEventListener("input", () => {
-    window.clearTimeout(timer);
-    timer = window.setTimeout(() => {
-      const query = input.value.trim();
-      void load(query).then((found) => {
-        list.textContent = "";
-        for (const item of found.slice(0, 8)) {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = "btn btn-ghost";
-          button.textContent = label(item);
-          button.addEventListener("click", () => pick(item));
-          list.append(button);
-        }
-        const tail = extra?.(query);
-        if (tail) list.append(tail);
-      });
-    }, 200);
-  });
-}
-
 async function fetchJSON<T>(url: string): Promise<T | null> {
   try {
     const response = await fetch(url, {headers: {Accept: "application/json"}});
@@ -209,22 +188,23 @@ export function mountRosterEditor(container: HTMLElement): void {
   const drawSuggest = (player: RosterPlayer, index: number): HTMLElement => {
     const box = el("div", "u-col u-gap-sm");
     const query = input("input", suggestLabel(player), "Фамилия Имя");
-    const list = el("div", "u-col u-gap-sm");
-    attachSuggest(query, list, fetchPlayers, suggestLabel, (candidate) => {
-      players[index] = { ...candidate, captain: players[index].captain };
+    autocomplete(query, async (typed) => {
+      const found = await fetchPlayers(typed);
+      const choices = found.map(playerChoice);
+      // The mirror does not know a player who has never played; the row says
+      // so and turns into three typed fields.
+      if (typed.trim() !== "") choices.push({value: MANUAL, label: "нет в базе"});
+      return choices;
+    }, (choice) => {
+      const typed = query.value;
+      if (choice.value === MANUAL) {
+        players[index] = {...emptyPlayer(), surname: typed.trim(), captain: players[index].captain};
+      } else {
+        players[index] = {...(JSON.parse(choice.value) as SuggestedPlayer), captain: players[index].captain};
+      }
       draw();
-    }, (typed) => {
-      const manual = document.createElement("button");
-      manual.type = "button";
-      manual.className = "btn btn-ghost";
-      manual.textContent = "нет в базе";
-      manual.addEventListener("click", () => {
-        players[index] = { ...emptyPlayer(), surname: typed, captain: players[index].captain };
-        draw();
-      });
-      return manual;
     });
-    box.append(query, list);
+    box.append(query);
     return box;
   };
 
@@ -287,6 +267,8 @@ type BuffTournament = {id: number; name: string; type: string};
 
 // mountBuffTeamField names the team a rating id stands for as it is typed,
 // which is how a Representative tells 5723 from 5732.
+const MANUAL = "\u0000manual";
+
 export function mountBuffTeamField(field: HTMLInputElement): void {
   const hint = document.createElement("p");
   hint.className = "hint";
@@ -312,30 +294,23 @@ export function mountBuffTeamField(field: HTMLInputElement): void {
 // mountBuffTournamentField turns the tournament id into a suggest over the
 // tournaments buff knows to be playable on the Слот's date.
 export function mountBuffTournamentField(field: HTMLInputElement): void {
-  const list = document.createElement("div");
-  list.className = "u-col u-gap-sm";
   const query = document.createElement("input");
   query.type = "text";
   query.className = "input";
   query.autocomplete = "off";
   query.placeholder = "поиск по названию";
-  field.after(query, list);
+  field.after(query);
   const on = field.getAttribute("data-buff-tournament") || "";
-  attachSuggest(
-    query,
-    list,
-    (text) =>
-      fetchJSON<BuffTournament[]>(
-        `/api/buff/tournaments?q=${encodeURIComponent(text)}&on=${encodeURIComponent(on)}`,
-      ).then((rows) => rows || []),
-    (t) => `${t.name} · ${t.type} · ${t.id}`,
-    (t) => {
-      field.value = String(t.id);
-      field.dispatchEvent(new Event("input", {bubbles: true}));
-      query.value = t.name;
-      list.textContent = "";
-    },
-  );
+  autocomplete(query, async (text) => {
+    const rows = await fetchJSON<BuffTournament[]>(
+      `/api/buff/tournaments?q=${encodeURIComponent(text)}&on=${encodeURIComponent(on)}`,
+    );
+    return (rows || []).map((t) => ({value: String(t.id), label: t.name, hint: `${t.type} · ${t.id}`}));
+  }, (choice) => {
+    field.value = choice.value;
+    field.dispatchEvent(new Event("input", {bubbles: true}));
+    query.value = choice.label;
+  });
 }
 
 export function mountRosterEditors(doc: Document): void {
