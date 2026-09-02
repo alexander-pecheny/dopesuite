@@ -186,7 +186,10 @@ func rosterEditor(players []venues.RosterPlayer) *ui.Element {
 	)
 }
 
-func applicationForm(action string, app *ApplicationView, submit string) *ui.Element {
+// applicationForm is the Заявка as its submitter edits it. The Состав is asked
+// for only once the Заявка is accepted — before that a Слот has more applicants
+// than seats, and naming six players is work for a team that has one.
+func applicationForm(action string, app *ApplicationView, submit string, roster bool) *ui.Element {
 	teamName, ratingID := "", ""
 	var players []venues.RosterPlayer
 	if app != nil {
@@ -202,12 +205,15 @@ func applicationForm(action string, app *ApplicationView, submit string) *ui.Ele
 	if app != nil && app.BuffTeamName != "" {
 		ratingField = append(ratingField, ui.Hint(ui.Text(app.BuffTeamName)))
 	}
-	return ui.Form(ui.DirCol, ui.Method("post"), ui.Action(action), ui.Autocomplete("off"),
+	form := []ui.Item{ui.DirCol, ui.Method("post"), ui.Action(action), ui.Autocomplete("off"),
 		ui.Field(ui.Label("Название команды"), ui.Textfield(ui.Name("team_name"), ui.Value(teamName), ui.Required())),
 		ui.Field(ratingField...),
-		ui.Field(ui.Label("Состав"), rosterEditor(players)),
-		ui.Row(ui.Button(ui.Submit(), ui.Text(submit))),
-	)
+	}
+	if roster {
+		form = append(form, ui.Field(ui.Label("Состав"), rosterEditor(players)))
+	}
+	form = append(form, ui.Row(ui.Button(ui.Submit(), ui.Text(submit))))
+	return ui.Form(form...)
 }
 
 var statusLabels = map[string]string{
@@ -277,9 +283,14 @@ func applicationSection(p RegPage) *ui.Element {
 		return ui.Section(sect...)
 	}
 	submit := "Подать заявку"
+	accepted := false
 	if p.Application != nil {
 		submit = "Сохранить заявку"
+		accepted = p.Application.Status == venues.StatusAccepted
 	}
-	sect = append(sect, applicationForm(action, p.Application, submit))
+	if !accepted {
+		sect = append(sect, ui.Hint(ui.Text("Состав нужно будет указать после того, как заявку примут.")))
+	}
+	sect = append(sect, applicationForm(action, p.Application, submit, accepted))
 	return ui.Section(sect...)
 }

@@ -235,16 +235,23 @@ func (s *Server) handleRegSubmit(w http.ResponseWriter, r *http.Request, sc rout
 	if state == venues.RegScheduled {
 		return s.renderRegPage(w, r, token, "Регистрация ещё не открыта.", "")
 	}
-	if state == venues.RegClosed {
-		if _, err := venues.UserApplication(r.Context(), s.h.Engine().DB, slot.ID, sc.User.UserID); errors.Is(err, sql.ErrNoRows) {
-			return s.renderRegPage(w, r, token, "Регистрация закрыта.", "")
-		} else if err != nil {
-			return err
-		}
+	current, err := venues.UserApplication(r.Context(), s.h.Engine().DB, slot.ID, sc.User.UserID)
+	has := err == nil
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if state == venues.RegClosed && !has {
+		return s.renderRegPage(w, r, token, "Регистрация закрыта.", "")
+	}
+	// The Состав is asked for only once the Заявка is accepted, so a pending
+	// one stores an empty roster whatever the request carries.
+	var roster []venues.RosterPlayer
+	if has && current.Status == venues.StatusAccepted {
+		roster = venues.ParseRoster(r.Form.Get("roster_json"))
 	}
 	err = s.h.Engine().WithWriteTx(r.Context(), slot.FestID, "slot-application", func(ctx context.Context, tx *sql.Tx) error {
 		_, err := venues.SaveVersionTx(ctx, tx, slot.ID, sc.User.UserID, sc.User.UserID,
-			r.Form.Get("team_name"), formInt64(r.Form, "rating_team_id"), venues.ParseRoster(r.Form.Get("roster_json")))
+			r.Form.Get("team_name"), formInt64(r.Form, "rating_team_id"), roster)
 		return err
 	})
 	if err != nil {

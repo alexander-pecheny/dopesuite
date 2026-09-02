@@ -340,7 +340,7 @@ func slotApplicationsSection(data slotPageData) *ui.Element {
 				applicationVersions(base, row),
 				applicationForm(base+"/application/"+strconv.FormatInt(row.App.ID, 10)+"/edit",
 					&ApplicationView{TeamName: row.App.TeamName, RatingTeamID: row.App.RatingTeamID, Roster: row.App.Roster},
-					"Сохранить как новую версию"),
+					"Сохранить как новую версию", true),
 			))
 		}
 	}

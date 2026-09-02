@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
 
 	_ "modernc.org/sqlite"
 )
@@ -98,15 +99,16 @@ func (s *Store) Players(ctx context.Context, query string, limit int) []Player {
 	if !s.Enabled() || surname == "" {
 		return nil
 	}
-	where := `surname like ? escape '\'`
-	args := []any{likePrefix(surname)}
-	if name != "" {
-		where += ` and name like ? escape '\'`
-		args = append(args, likePrefix(name))
-	}
-	if patronymic != "" {
-		where += ` and patronymic like ? escape '\'`
-		args = append(args, likePrefix(patronymic))
+	where, args := likeAny("surname", surname, likePrefix)
+	for _, part := range []struct {
+		col, word string
+	}{{"name", name}, {"patronymic", patronymic}} {
+		if part.word == "" {
+			continue
+		}
+		clause, more := likeAny(part.col, part.word, likePrefix)
+		where += " and " + clause
+		args = append(args, more...)
 	}
 	args = append(args, capLimit(limit))
 	rows, err := s.db.QueryContext(ctx, `
@@ -221,13 +223,14 @@ func (s *Store) Teams(ctx context.Context, prefix string, limit int) []Team {
 	if !s.Enabled() || prefix == "" {
 		return nil
 	}
+	where, args := likeAny("r.team_current_name", prefix, likePrefix)
 	rows, err := s.db.QueryContext(ctx, `
 select r.team_id, r.team_current_name, coalesce(r.team_current_town, '')
 from tournament_results r
-where r.team_current_name like ? escape '\'
+where `+where+`
 group by r.team_id
 order by r.team_current_name, r.team_id
-limit ?`, likePrefix(prefix), capLimit(limit))
+limit ?`, append(args, capLimit(limit))...)
 	if err != nil {
 		return nil
 	}
@@ -318,13 +321,15 @@ func (s *Store) SearchTournaments(ctx context.Context, q string, on time.Time, l
 	if !on.IsZero() {
 		day = on.Format("2006-01-02")
 	}
+	where, args := likeAny("name", q, likeInfix)
+	args = append(args, day, day, day, capLimit(limit))
 	rows, err := s.db.QueryContext(ctx, `
 select id, coalesce(name, ''), coalesce(tournament_type, ''), coalesce(questions_by_tour, ''), coalesce(date_start, '')
 from tournaments
-where name like ? escape '\'
+where `+where+`
   and (? = '0000-00-00' or (substr(date_start, 1, 10) <= ? and substr(date_end, 1, 10) >= ?))
 order by date_start desc, id
-limit ?`, "%"+escapeLike(q)+"%", day, day, day, capLimit(limit))
+limit ?`, args...)
 	if err != nil {
 		return nil
 	}
@@ -366,6 +371,44 @@ func capLimit(limit int) int {
 }
 
 func likePrefix(prefix string) string { return escapeLike(prefix) + "%" }
+
+func likeInfix(s string) string { return "%" + escapeLike(s) + "%" }
+
+// likeAny matches col against the word as the mirror spells it and, when that
+// differs, as it was typed. SQLite's LIKE folds case for ASCII only, so
+// `surname like 'пече%'` never finds «Печеный»; each branch is still a plain
+// prefix, so the index carries it. wrap turns a word into its LIKE pattern.
+func likeAny(col, word string, wrap func(string) string) (string, []any) {
+	words := []string{titleFold(word)}
+	if words[0] != word {
+		words = append(words, word)
+	}
+	parts := make([]string, len(words))
+	args := make([]any, len(words))
+	for i, w := range words {
+		parts[i] = col + ` like ? escape '\'`
+		args[i] = wrap(w)
+	}
+	if len(parts) == 1 {
+		return parts[0], args
+	}
+	return "(" + strings.Join(parts, " or ") + ")", args
+}
+
+// titleFold is the rating site's spelling of a name: first rune upper, rest
+// lower.
+func titleFold(word string) string {
+	runes := []rune(word)
+	if len(runes) == 0 {
+		return word
+	}
+	out := make([]rune, len(runes))
+	out[0] = unicode.ToUpper(runes[0])
+	for i := 1; i < len(runes); i++ {
+		out[i] = unicode.ToLower(runes[i])
+	}
+	return string(out)
+}
 
 func escapeLike(s string) string {
 	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
