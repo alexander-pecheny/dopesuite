@@ -17,7 +17,7 @@ import { gameTabs } from "./game-tabs.js";
 import { DopeEntryModel } from "./entry-model.js";
 import { icon } from "./icons_gen.js";
 import * as od from "./od-protocol.js";
-import type {ODScheme, ODState, ODTeam, QuestionStat, RankKey, ShootoutMark, ShootoutRound} from "./od-protocol.js";
+import type {ContestedAnswer, ODScheme, ODState, ODTeam, QuestionStat, RankKey, ShootoutMark, ShootoutRound} from "./od-protocol.js";
 import {SCREEN_DEFAULTS, normalizeScreenSettings, planScreen, teamFlag} from "./screen-board.js";
 import type {ScreenSettings} from "./screen-board.js";
 import S from "./i18nstrings.js";
@@ -124,6 +124,8 @@ let tourLengths: number[] = [];
 let totalQuestions = 0;
 let renderedTab: string | null = null;
 let questionStatsCache: QuestionStat[] | null = null;
+let scoredStatsCache: QuestionStat[] | null = null;
+let contestedRowsCache: Array<Map<number, ContestedAnswer>> | null = null;
 let activeEntryEditor: {cell: HTMLElement; input: HTMLInputElement} | null = null;
 let activeEntryRows: Element[] = [];
 const tabCache = new Map<string, HTMLElement>();
@@ -255,6 +257,15 @@ function questionStats(): QuestionStat[] {
   }
   return questionStatsCache;
 }
+// scoredStats is questionStats with the спорные the host accepted here folded
+// in: Итог, Подробно and Экран score on it, Ввод reads the raw entries.
+function scoredStats(): QuestionStat[] {
+  if (!scoredStatsCache) {
+    if (!numberToIndexCache) numberToIndexCache = od.numberIndex(state);
+    scoredStatsCache = od.scoredStats(state, totalQuestions, numberToIndexCache);
+  }
+  return scoredStatsCache;
+}
 function teamTookQuestion(teamIndex: number, qIndex: number, stats: QuestionStat[] = questionStats()): boolean { return od.teamTookQuestion(stats, teamIndex, qIndex); }
 function countValidEntries(qIndex: number, stats: QuestionStat[] = questionStats()): number { return od.countValidEntries(stats, qIndex); }
 function sumRow(teamIndex: number, stats: QuestionStat[] = questionStats()): number { return od.sumRow(stats, teamIndex); }
@@ -263,7 +274,7 @@ function ratingForTeam(teamIndex: number, stats: QuestionStat[] = questionStats(
 function shootoutTiebreakForTeam(teamIndex: number): number[] { return od.shootoutTiebreakForTeam(state, teamIndex); }
 function rankedTeamOrder(totals: number[], tiebreaks: number[][]): RankKey[] { return od.rankedTeamOrder(state, totals, tiebreaks); }
 function shootoutRoundTotalForTeam(teamIndex: number, roundIndex: number): number | null { return od.shootoutRoundTotalForTeam(state, teamIndex, roundIndex); }
-function placesFor(totals: number[]): string[] { return od.placesFor(state, questionStats(), totals); }
+function placesFor(totals: number[]): string[] { return od.placesFor(state, scoredStats(), totals); }
 function shootoutQuestionCompleted(roundIndex: number, questionIndex: number): boolean { return od.shootoutQuestionCompleted(state, roundIndex, questionIndex); }
 
 
@@ -278,6 +289,8 @@ function invalidateAllCaches(): void {
   activeEntryEditor = null;
   closeEntrySuggest();
   questionStatsCache = null;
+  scoredStatsCache = null;
+  contestedRowsCache = null;
   numberToIndexCache = null;
   for (const pane of tabCache.values()) pane.remove();
   tabCache.clear();
@@ -285,6 +298,8 @@ function invalidateAllCaches(): void {
 
 function invalidateScoreCaches(): void {
   questionStatsCache = null;
+  scoredStatsCache = null;
+  contestedRowsCache = null;
   invalidateTabCache("detailed", "results", "screen");
 }
 
@@ -604,7 +619,8 @@ const sheet = createSheetCursor({
   parse: (text) => entryModel.coerceValue(text, state.teams.map((_, i) => ({label: teamLabel(i), number: teamNumber(i)}))),
   applyValues: applyEntryEdits,
   onEdit: (cell, text) => {
-    if (text === null) openEntryEditor(cell);
+    if (text === "?") openContestedDialog(cell);
+    else if (text === null) openEntryEditor(cell);
     else startEntryEditWithText(cell, text);
   },
   // From the top row, ArrowUp steps onto the column's tickbox so the operator
@@ -1212,6 +1228,15 @@ function entryCellShowsCoffin(qIndex: number, rowIndex: number): boolean {
 }
 
 function applyEntryCellDisplay(td: HTMLElement, qIndex: number, rowIndex: number): void {
+  const contested = contestedAtCell(qIndex, rowIndex);
+  td.classList.toggle("od-contested", Boolean(contested));
+  td.classList.toggle("od-contested-accepted", Boolean(contested?.acceptedHere));
+  if (contested) {
+    td.textContent = String(contested.number);
+    td.title = contested.answer;
+    return;
+  }
+  td.removeAttribute("title");
   if (entryCellShowsCoffin(qIndex, rowIndex)) {
     td.textContent = "⚰️";
     return;
@@ -1220,14 +1245,49 @@ function applyEntryCellDisplay(td: HTMLElement, qIndex: number, rowIndex: number
   td.textContent = value ? String(value) : "";
 }
 
-function refreshEntryColumnCoffin(qIndex: number): void {
-  if (!Number.isInteger(qIndex)) return;
-  if (activeEntryEditor) {
-    const editorCell = activeEntryEditor.cell;
-    if (Number(editorCell?.dataset.q) === qIndex && Number(editorCell?.dataset.row) === 0) return;
+// A спорный is not an entry and so has no row of its own: each column's
+// спорные take its free rows, in team-number order.
+function contestedRows(): Array<Map<number, ContestedAnswer>> {
+  if (contestedRowsCache) return contestedRowsCache;
+  const byQuestion: Array<Map<number, ContestedAnswer>> = [];
+  for (let q = 0; q < totalQuestions; q++) byQuestion.push(new Map());
+  const perQuestion = new Map<number, ContestedAnswer[]>();
+  for (const item of state.contested || []) {
+    if (item.question < 0 || item.question >= totalQuestions) continue;
+    const list = perQuestion.get(item.question) || [];
+    list.push(item);
+    perQuestion.set(item.question, list);
   }
-  const cell = entryCellNode(qIndex, 0);
-  if (cell) applyEntryCellDisplay(cell, qIndex, 0);
+  for (const [qIndex, list] of perQuestion) {
+    const values = state.entries[qIndex] || [];
+    let row = 0;
+    for (const item of list.slice().sort((a, b) => a.number - b.number)) {
+      while (row < state.teams.length && values[row]) row++;
+      if (row >= state.teams.length) break;
+      byQuestion[qIndex].set(row, item);
+      row++;
+    }
+  }
+  contestedRowsCache = byQuestion;
+  return byQuestion;
+}
+
+function contestedAtCell(qIndex: number, rowIndex: number): ContestedAnswer | undefined {
+  return contestedRows()[qIndex]?.get(rowIndex);
+}
+
+// refreshEntryColumn repaints a column in place (the Ввод pane is cached, not
+// rebuilt): the coffin on row 0, and every row when спорные share the column,
+// because an entry typed into a free row pushes them down.
+function refreshEntryColumn(qIndex: number): void {
+  if (!Number.isInteger(qIndex)) return;
+  const lastRow = contestedRows()[qIndex]?.size ? state.teams.length - 1 : 0;
+  for (let row = 0; row <= lastRow; row++) {
+    const editorCell = activeEntryEditor?.cell;
+    if (editorCell && Number(editorCell.dataset.q) === qIndex && Number(editorCell.dataset.row) === row) continue;
+    const cell = entryCellNode(qIndex, row);
+    if (cell) applyEntryCellDisplay(cell, qIndex, row);
+  }
 }
 
 function buildInputValidationCounts(): Array<Map<number, number>> {
@@ -1405,7 +1465,7 @@ function handleEntryInput(event: Event): void {
   closeEntrySuggest();
   invalidateScoreCaches();
   updateInputValidity(qIndex);
-  refreshEntryColumnCoffin(qIndex);
+  refreshEntryColumn(qIndex);
   if (state.completed[qIndex]) refreshEntryQuestionHead(qIndex);
   saveState(["entries", qIndex, rowIndex], parsed.value);
 }
@@ -1426,6 +1486,12 @@ function handleEntryKeydown(event: KeyboardEvent): void {
     event.preventDefault();
     closeEntryEditor();
     cell?.focus({preventScroll: true});
+    return;
+  }
+  if (event.key === "?" && input.dataset.entryKind !== "shootout") {
+    event.preventDefault();
+    closeEntryEditor();
+    if (cell) openContestedDialog(cell);
     return;
   }
   if (input.dataset.entryKind === "shootout") {
@@ -1800,7 +1866,7 @@ function handleEntryChange(event: Event): void {
   state.completed[qIndex] = cb.checked;
   invalidateScoreCaches();
   updateHeaderProgress();
-  refreshEntryColumnCoffin(qIndex);
+  refreshEntryColumn(qIndex);
   refreshEntryQuestionHead(qIndex);
   saveState(["completed", qIndex], cb.checked);
 }
@@ -1855,6 +1921,161 @@ function markActiveEntryRow(cell: Element | null): void {
   activeEntryRows = [row];
 }
 
+// === Contested ===
+//
+// A спорный answer is recorded from Ввод by typing «?» in a question's cell.
+// The server owns the list (it strips it from the document the page PUTs), so
+// these go to their own endpoint and adopt the array it answers with.
+
+function openContestedDialog(cell: HTMLElement): void {
+  const pos = entryCellPosition(cell);
+  if (viewer || !pos) return;
+  const {q: qIndex, row: rowIndex} = pos;
+  const existing = contestedAtCell(qIndex, rowIndex);
+
+  const dialog = document.createElement("dialog");
+  dialog.className = "modal-dialog";
+  const form = document.createElement("form");
+  form.className = "u-col u-gap-md";
+
+  const title = document.createElement("h2");
+  title.textContent = `Спорный ответ · вопрос ${qIndex + 1}`;
+
+  const numberField = document.createElement("label");
+  numberField.className = "field";
+  const numberCaption = document.createElement("span");
+  numberCaption.textContent = "Номер команды";
+  const numberInput = document.createElement("input");
+  numberInput.type = "text";
+  numberInput.inputMode = "numeric";
+  numberInput.autocomplete = "off";
+  numberInput.value = String(existing?.number || state.entries[qIndex]?.[rowIndex] || "");
+  numberField.append(numberCaption, numberInput);
+
+  const teamHint = document.createElement("p");
+  teamHint.className = "hint";
+
+  const answerField = document.createElement("label");
+  answerField.className = "field";
+  const answerCaption = document.createElement("span");
+  answerCaption.textContent = "Ответ";
+  const answerInput = document.createElement("textarea");
+  answerInput.rows = 3;
+  answerInput.value = existing?.answer || "";
+  answerField.append(answerCaption, answerInput);
+
+  const acceptedField = document.createElement("label");
+  acceptedField.className = "checkbox";
+  const acceptedInput = document.createElement("input");
+  acceptedInput.type = "checkbox";
+  acceptedInput.checked = Boolean(existing?.acceptedHere);
+  const acceptedCaption = document.createElement("span");
+  acceptedCaption.textContent = "Принят на площадке";
+  acceptedField.append(acceptedInput, acceptedCaption);
+
+  const actions = document.createElement("div");
+  actions.className = "modal-actions";
+  if (existing) {
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "btn btn-danger";
+    remove.textContent = "Удалить";
+    remove.addEventListener("click", () => {
+      dialog.close();
+      void deleteContested(qIndex, existing.number);
+    });
+    const spacer = document.createElement("span");
+    spacer.className = "u-spacer";
+    actions.append(remove, spacer);
+  }
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "btn";
+  cancel.textContent = "Отмена";
+  cancel.addEventListener("click", () => dialog.close());
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.className = "btn btn-primary";
+  submit.textContent = "Сохранить";
+  actions.append(cancel, submit);
+
+  const typedNumber = () => Number(numberInput.value.trim());
+  const syncSubmit = () => {
+    const teamIndex = teamIndexByNumber(typedNumber());
+    teamHint.hidden = numberInput.value.trim() === "";
+    teamHint.textContent = teamIndex >= 0 ? teamLabel(teamIndex) : "Нет такой команды";
+    teamHint.classList.toggle("hint-danger", teamIndex < 0);
+    submit.disabled = teamIndex < 0 || answerInput.value.trim() === "";
+  };
+  numberInput.addEventListener("input", syncSubmit);
+  answerInput.addEventListener("input", syncSubmit);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const number = typedNumber();
+    if (submit.disabled || teamIndexByNumber(number) < 0) return;
+    dialog.close();
+    void submitContested(qIndex, number, answerInput.value.trim(), acceptedInput.checked, existing);
+  });
+  syncSubmit();
+
+  form.append(title, numberField, teamHint, answerField, acceptedField, actions);
+  dialog.appendChild(form);
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+  dialog.addEventListener("close", () => dialog.remove(), {once: true});
+  document.body.appendChild(dialog);
+  if (typeof dialog.showModal === "function") dialog.showModal();
+  else dialog.setAttribute("open", "");
+  numberInput.focus();
+  numberInput.select();
+}
+
+async function contestedRequest(method: string, body: Record<string, unknown>): Promise<ContestedAnswer[] | null> {
+  try {
+    const response = await fetch(`${route.apiBase}/contested`, {
+      method,
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) throw new Error((await response.text()).trim());
+    return od.normalizeContested(await response.json());
+  } catch (error) {
+    console.error(error);
+    window.alert("Не удалось сохранить спорный ответ");
+    return null;
+  }
+}
+
+// The endpoint keys a спорный by (question, team number), so retyping the
+// number moves it: the old row goes first.
+async function submitContested(question: number, number: number, answer: string, accepted: boolean, existing: ContestedAnswer | undefined): Promise<void> {
+  if (existing && existing.number !== number) {
+    if (!await contestedRequest("DELETE", {question, number: existing.number})) return;
+  }
+  let list = await contestedRequest("POST", {question, number, answer});
+  if (!list) return;
+  const saved = list.find((item) => item.question === question && item.number === number);
+  if (saved && saved.acceptedHere !== accepted) {
+    list = await contestedRequest("PATCH", {question, number, acceptedHere: accepted}) || list;
+  }
+  applyContested(list);
+}
+
+async function deleteContested(question: number, number: number): Promise<void> {
+  const list = await contestedRequest("DELETE", {question, number});
+  if (list) applyContested(list);
+}
+
+function applyContested(list: ContestedAnswer[]): void {
+  state.contested = list;
+  rememberTabScroll(activeTab);
+  invalidateScoreCaches();
+  invalidateTabCache("input");
+  render();
+  focusEntrySelection();
+}
+
 // === Detailed ===
 
 function buildDetailedTable(): HTMLElement {
@@ -1881,8 +2102,16 @@ function detailedQuestionHeadLabel(displayNumber: number, stat: QuestionStat | u
   return wrap;
 }
 
+// A спорный marks the cell whatever its state: «?» while the жюри has yet to
+// rule, «✓» once the host accepted it here. One glyph either way — a question
+// cell is one digit wide, and the number is in the column head anyway.
+function contestedCellText(qIndex: number, answered: boolean, contested: ContestedAnswer | undefined): string {
+  if (contested) return contested.acceptedHere ? "✓" : "?";
+  return answered ? String(qIndex + 1) : "";
+}
+
 function buildDetailedScoreTable(): HTMLTableElement {
-  const stats = questionStats();
+  const stats = scoredStats();
   const themes: ScoreTableTheme[] = [];
   let qNum = 1;
   tourLengths.forEach((tourSize, tourIndex) => {
@@ -1916,12 +2145,16 @@ function buildDetailedScoreTable(): HTMLTableElement {
         for (let i = 0; i < tourSize; i++) {
           const answered = teamTookQuestion(teamIndex, qIndex, stats);
           if (answered) tourSum += 1;
+          const contested = od.contestedAt(state, teamIndex, qIndex);
           const classes = ["answer-cell", "theme-block", "readonly"];
           if (answered) classes.push("right");
+          if (contested) classes.push("od-contested");
+          if (contested?.acceptedHere) classes.push("od-contested-accepted");
           if (i === 0) classes.push("theme-block-top-left", "theme-block-bottom-left");
           answers.push({
-            content: answered ? String(qIndex + 1) : "",
+            content: contestedCellText(qIndex, answered, contested),
             className: classes.join(" "),
+            attrs: contested ? {title: contested.answer} : {},
           });
           qIndex++;
         }
@@ -2069,7 +2302,7 @@ function openShootoutRoundDialog(): void {
 
   const list = document.createElement("div");
   list.className = "scroll-fade-xy od-shootout-team-list";
-  const stats = questionStats();
+  const stats = scoredStats();
   const totals = state.teams.map((_, teamIndex) => sumRow(teamIndex, stats));
   const order = state.teams
     .map((_, teamIndex) => teamIndex)
@@ -2481,7 +2714,7 @@ function populateScreenRows(wrapper: ScreenWrapper): void {
     return;
   }
 
-  const stats = questionStats();
+  const stats = scoredStats();
   const totals = state.teams.map((_, i) => sumRow(i, stats));
   const tiebreaks = state.teams.map((_, i) => shootoutTiebreakForTeam(i));
   const tourTotals = state.teams.map((_, i) => tourSumsForTeam(i, stats));
@@ -2611,13 +2844,15 @@ function buildResultsTable(): HTMLElement {
 }
 
 function buildResultsTableInner(): HTMLTableElement {
-  const stats = questionStats();
+  const stats = scoredStats();
   const totals = state.teams.map((_, i) => sumRow(i, stats));
   const shootoutRoundTotals = state.teams.map((_, teamIndex) =>
     state.shootoutRounds.map((__, roundIndex) => shootoutRoundTotalForTeam(teamIndex, roundIndex)));
   const tiebreaks = state.teams.map((_, i) => shootoutTiebreakForTeam(i));
   const ratings = state.teams.map((_, i) => ratingForTeam(i, stats));
   const tourTotals = state.teams.map((_, i) => tourSumsForTeam(i, stats));
+  const pendingTotals = state.teams.map((_, i) => od.pendingTotal(state, i));
+  const pendingTours = state.teams.map((_, i) => od.pendingTourCounts(state, i, tourLengths));
   const tourStarts = tourStartIndexes();
   const tourStarted = tourLengths.map((_, tourIndex) => tourHasStarted(tourIndex));
   const shootoutRoundCount = state.shootoutRounds.length;
@@ -2681,9 +2916,9 @@ function buildResultsTableInner(): HTMLTableElement {
       tr.className = classes.join(" ");
       tr.appendChild(td(group.placeText, "results-place"));
       tr.appendChild(resultsTeamCell(teamLabel(index), {city: state.teams[index].city}));
-      tr.appendChild(td(total, "results-num total-cell results-total"));
+      tr.appendChild(td(od.contestedLabel(total, pendingTotals[index]), "results-num total-cell results-total"));
       for (let t = 0; t < tourLengths.length; t++) {
-        if (tourStarted[t]) tr.appendChild(td(tourTotals[index][t], "results-tour"));
+        if (tourStarted[t]) tr.appendChild(td(od.contestedLabel(tourTotals[index][t], pendingTours[index][t]), "results-tour"));
         else tr.appendChild(td("·", "results-tour results-tour-pending"));
         if (resultsExpandedTours.has(t)) {
           for (let q = 0; q < tourLengths[t]; q++) {
@@ -2735,13 +2970,17 @@ function resultsShootoutHeader(roundIndex: number): HTMLElement {
 
 function resultsAnswerCell(teamIndex: number, qIndex: number, stats: QuestionStat[], tourQuestionIndex: number, tourSize: number): HTMLElement {
   const answered = teamTookQuestion(teamIndex, qIndex, stats);
+  const contested = od.contestedAt(state, teamIndex, qIndex);
   const classes = ["results-answer"];
   if (tourQuestionIndex === 0) classes.push("results-answer-left");
   if (tourQuestionIndex === tourSize - 1) classes.push("results-answer-right");
+  if (contested) classes.push("od-contested");
+  if (contested?.acceptedHere) classes.push("od-contested-accepted");
   const cell = td("", classes.join(" "));
+  if (contested) cell.title = contested.answer;
   const mark = document.createElement("span");
   mark.className = "results-answer-mark";
-  mark.textContent = answered ? String(qIndex + 1) : "";
+  mark.textContent = contestedCellText(qIndex, answered, contested);
   cell.appendChild(mark);
   if (answered) cell.classList.add("right");
   return cell;
@@ -2881,6 +3120,8 @@ function applyRemoteState(nextState: unknown): void {
   updateHeaderProgress();
   if (editingInput || editingShootout || focusedLockCol) {
     questionStatsCache = null;
+    scoredStatsCache = null;
+    contestedRowsCache = null;
     numberToIndexCache = null;
     invalidateTabCache("detailed", "results", "screen");
     refreshPendingMarkers();

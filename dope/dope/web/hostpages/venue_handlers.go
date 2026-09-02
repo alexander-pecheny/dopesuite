@@ -502,8 +502,12 @@ func (s *Server) renderSlotPage(w http.ResponseWriter, r *http.Request, festID i
 	if err != nil {
 		return err
 	}
+	contested, err := s.loadContestedRows(r.Context(), festID, slot.GameID)
+	if err != nil {
+		return err
+	}
 	data := slotPageData{
-		Venue: venue, Slot: slot, Applications: rows, Voting: voting,
+		Venue: venue, Slot: slot, Applications: rows, Voting: voting, Contested: contested,
 		GameHref:  "/host/fest/" + venue.Ref() + "/game/" + gameRef + "/",
 		RegURL:    publicURL(r, "/reg/"+slot.RegToken),
 		CanManage: s.canManage(r.Context(), festID, r),

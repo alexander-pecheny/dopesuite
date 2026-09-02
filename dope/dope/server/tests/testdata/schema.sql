@@ -242,6 +242,19 @@ CREATE TABLE matches(
   unique(game_id, code)
 );
 
+-- table od_contested
+CREATE TABLE od_contested(
+  id integer primary key,
+  game_id integer not null references games(id) on delete cascade,
+  question integer not null,
+  participant_id integer not null references participants(id) on delete cascade,
+  answer text not null default '',
+  accepted_here integer not null default 0,
+  created_by integer references users(id),
+  created_at text not null,
+  unique(game_id, question, participant_id)
+);
+
 -- table participant_players
 CREATE TABLE participant_players(
   participant_id integer not null references participants(id) on delete cascade,

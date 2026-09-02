@@ -31,9 +31,13 @@ func (s *Server) handleSlotToursExport(w http.ResponseWriter, r *http.Request, f
 	if err != nil {
 		return err
 	}
+	state := doc.State
+	if list, err := store.LoadContested(r.Context(), s.h.Engine().DB, slot.GameID); err == nil {
+		state = string(store.WithContested([]byte(state), list))
+	}
 	f := excelize.NewFile()
 	defer f.Close()
-	if err := xlsxexport.BuildODSheet(f, doc.SchemeJSON, doc.State, ratingByNumber); err != nil {
+	if err := xlsxexport.BuildODSheet(f, doc.SchemeJSON, state, ratingByNumber); err != nil {
 		return err
 	}
 	return writeWorkbook(w, f, slotFileStem(slot)+"-tours")

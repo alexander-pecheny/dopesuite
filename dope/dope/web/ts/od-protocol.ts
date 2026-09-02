@@ -20,11 +20,22 @@ export interface ShootoutRound {
   answers: ShootoutMark[][];
 }
 
+// A спорный: an answer the жюри must rule on after the game. The server owns
+// the list (it strips it from anything the page PUTs), so the document carries
+// it read-only.
+export interface ContestedAnswer {
+  question: number;
+  number: number;
+  answer: string;
+  acceptedHere: boolean;
+}
+
 export interface ODState {
   teams: ODTeam[];
   entries: number[][];
   completed: boolean[];
   shootoutRounds: ShootoutRound[];
+  contested?: ContestedAnswer[];
   answers?: unknown;
   finished?: unknown;
 }
@@ -110,6 +121,7 @@ export function parseState(raw: unknown, scheme: ODScheme, totalQuestions: numbe
   state.shootoutRounds = state.shootoutRounds
     .map(normalizeShootoutRound)
     .filter((round) => round.teams.length > 0);
+  state.contested = normalizeContested(state.contested);
   delete state.answers;
   delete state.finished;
   return state;
@@ -171,6 +183,26 @@ export function normalizeShootoutRound(round: unknown): ShootoutRound {
 
 export function normalizeShootoutMark(value: unknown): ShootoutMark {
   return value === "right" ? "right" : "";
+}
+
+export function normalizeContested(raw: unknown): ContestedAnswer[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ContestedAnswer[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Partial<ContestedAnswer>;
+    const question = Number(row.question);
+    const number = Number(row.number);
+    if (!Number.isInteger(question) || question < 0) continue;
+    if (!Number.isInteger(number) || number <= 0) continue;
+    out.push({
+      question,
+      number,
+      answer: typeof row.answer === "string" ? row.answer : "",
+      acceptedHere: Boolean(row.acceptedHere),
+    });
+  }
+  return out;
 }
 
 export function normalizeShootoutEntryRow(row: unknown, length: number): number[] {
@@ -258,6 +290,60 @@ export function questionStats(state: ODState, totalQuestions: number, index: Map
 
 export function teamTookQuestion(stats: QuestionStat[], teamIndex: number, qIndex: number): boolean {
   return Boolean(stats[qIndex]?.counts.has(teamIndex));
+}
+
+// === спорные ===
+
+export function contestedAt(state: ODState, teamIndex: number, qIndex: number): ContestedAnswer | undefined {
+  const number = teamNumber(state, teamIndex);
+  if (!number) return undefined;
+  return (state.contested || []).find((item) => item.question === qIndex && item.number === number);
+}
+
+function pendingFor(state: ODState, teamIndex: number): ContestedAnswer[] {
+  const number = teamNumber(state, teamIndex);
+  if (!number) return [];
+  return (state.contested || []).filter((item) => item.number === number && !item.acceptedHere);
+}
+
+export function pendingTotal(state: ODState, teamIndex: number): number {
+  return pendingFor(state, teamIndex).length;
+}
+
+export function pendingTourCounts(state: ODState, teamIndex: number, tourLengths: number[]): number[] {
+  const out = new Array<number>(tourLengths.length).fill(0);
+  for (const item of pendingFor(state, teamIndex)) {
+    let start = 0;
+    for (let tour = 0; tour < tourLengths.length; tour++) {
+      if (item.question >= start && item.question < start + tourLengths[tour]) {
+        out[tour]++;
+        break;
+      }
+      start += tourLengths[tour];
+    }
+  }
+  return out;
+}
+
+// contestedLabel is how a score reads while спорные wait on the жюри: "12 (+3?)".
+export function contestedLabel(value: number | string, pending: number): string {
+  return pending > 0 ? `${value} (+${pending}?)` : String(value);
+}
+
+// scoredStats is what Итог scores on: the entries fold with every спорный the
+// host accepted on the venue folded in as a taken question. A pending one
+// changes nothing.
+export function scoredStats(state: ODState, totalQuestions: number, index: Map<number, number> = numberIndex(state)): QuestionStat[] {
+  const stats = questionStats(state, totalQuestions, index);
+  for (const item of state.contested || []) {
+    if (!item.acceptedHere) continue;
+    const stat = stats[item.question];
+    const teamIndex = index.get(item.number);
+    if (!stat || teamIndex === undefined || stat.counts.has(teamIndex)) continue;
+    stat.counts.set(teamIndex, 1);
+    stat.validCount = stat.counts.size;
+  }
+  return stats;
 }
 
 export function countValidEntries(stats: QuestionStat[], qIndex: number): number {
@@ -391,11 +477,13 @@ export interface ODRow {
   tourSums: number[];
   rating: number;
   place: string;
+  pendingTotal: number;
+  pendingTours: number[];
 }
 
 export function rows(state: ODState, tourLengths: number[]): ODRow[] {
   const total = tourLengths.reduce((acc, n) => acc + n, 0);
-  const stats = questionStats(state, total);
+  const stats = scoredStats(state, total);
   const totals = state.teams.map((_, i) => sumRow(stats, i));
   const tiebreaks = state.teams.map((_, i) => shootoutTiebreakForTeam(state, i));
   const places = placesFor(state, stats, totals);
@@ -405,5 +493,7 @@ export function rows(state: ODState, tourLengths: number[]): ODRow[] {
     tourSums: tourSumsForTeam(stats, index, tourLengths),
     rating: ratingForTeam(state, stats, index),
     place: places[index],
+    pendingTotal: pendingTotal(state, index),
+    pendingTours: pendingTourCounts(state, index, tourLengths),
   }));
 }

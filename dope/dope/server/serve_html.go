@@ -193,14 +193,16 @@ func (s *server) buildGameInit(ctx context.Context, scope festScope) (gameInitPa
 		screenSettingsJSON = "{}"
 	}
 	payload.Scheme = json.RawMessage(schemeJSON)
-	payload.State = json.RawMessage(stateJSON)
+	payload.State = s.eng.WithGameExtras(core.GameStateScope(scope.GameID), []byte(stateJSON))
 	payload.ScreenSettings = json.RawMessage(screenSettingsJSON)
 	payload.Seq = s.eng.CurrentStateSeq(core.GameStateScope(scope.GameID))
 	payload.Epoch = s.eng.Epoch
 	if festBytes, err := s.festViewBytes(scope.FestID, scope.GameID); err == nil {
 		payload.Fest = festBytes
 	}
-	if unnumbered, err := numbering.HasUnnumbered(ctx, s.eng.DB, scope.FestID); err == nil {
+	// The banner must say what the write guard says: a Game that names its own
+	// entrants numbers them itself, and a Слот's registry is never numbered.
+	if unnumbered, err := numbering.GameHasUnnumbered(ctx, s.eng.DB, scope.FestID, scope.GameID); err == nil {
 		payload.TeamsUnnumbered = unnumbered
 	}
 	return payload, nil
