@@ -66,8 +66,6 @@ export function rosterWarning(players: RosterPlayer[]): string {
   return "";
 }
 
-type Doc = Document;
-
 function el(tag: string, className?: string): HTMLElement {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -82,6 +80,48 @@ function input(className: string, value: string, placeholder: string): HTMLInput
   node.placeholder = placeholder;
   node.autocomplete = "off";
   return node;
+}
+
+// attachSuggest is the one suggest mechanism the Состав rows and the two buff
+// fields share: debounce, fetch, draw the choices, let one be picked.
+export function attachSuggest<T>(
+  input: HTMLInputElement,
+  list: HTMLElement,
+  load: (query: string) => Promise<T[]>,
+  label: (item: T) => string,
+  pick: (item: T) => void,
+  extra?: (query: string) => HTMLElement | null,
+): void {
+  let timer = 0;
+  input.addEventListener("input", () => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      const query = input.value.trim();
+      void load(query).then((found) => {
+        list.textContent = "";
+        for (const item of found.slice(0, 8)) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "btn btn-ghost";
+          button.textContent = label(item);
+          button.addEventListener("click", () => pick(item));
+          list.append(button);
+        }
+        const tail = extra?.(query);
+        if (tail) list.append(tail);
+      });
+    }, 200);
+  });
+}
+
+async function fetchJSON<T>(url: string): Promise<T | null> {
+  try {
+    const response = await fetch(url, {headers: {Accept: "application/json"}});
+    if (!response.ok) return null;
+    return (await response.json()) as T;
+  } catch {
+    return null;
+  }
 }
 
 async function fetchPlayers(query: string): Promise<RosterPlayer[]> {
@@ -131,10 +171,11 @@ export function mountRosterEditor(container: HTMLElement): void {
 
   const drawRow = (player: RosterPlayer, index: number): HTMLElement => {
     const row = el("div", "u-row u-gap-sm u-wrap u-align-center");
+    // A row is either a mirror player or a hand-typed one; an empty row is a
+    // suggest until «нет в базе» turns it into the three name fields.
     if (player.player_id > 0 || fullName(player) === "") {
       row.append(drawSuggest(player, index));
-    }
-    if (player.player_id === 0) {
+    } else {
       row.append(drawTyped(player, index));
     }
     row.append(drawCaptain(player, index), drawRemove(index));
@@ -145,34 +186,19 @@ export function mountRosterEditor(container: HTMLElement): void {
     const box = el("div", "u-col u-gap-sm");
     const query = input("input", suggestLabel(player), "Фамилия");
     const list = el("div", "u-col u-gap-sm");
-    let timer = 0;
-    query.addEventListener("input", () => {
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        void fetchPlayers(query.value.trim()).then((found) => {
-          list.textContent = "";
-          for (const candidate of found.slice(0, 8)) {
-            const pick = document.createElement("button");
-            pick.type = "button";
-            pick.className = "btn btn-ghost";
-            pick.textContent = suggestLabel(candidate);
-            pick.addEventListener("click", () => {
-              players[index] = { ...candidate, captain: players[index].captain };
-              draw();
-            });
-            list.append(pick);
-          }
-          const manual = document.createElement("button");
-          manual.type = "button";
-          manual.className = "btn btn-ghost";
-          manual.textContent = "нет в базе";
-          manual.addEventListener("click", () => {
-            players[index] = { ...emptyPlayer(), surname: query.value.trim(), captain: players[index].captain };
-            draw();
-          });
-          list.append(manual);
-        });
-      }, 200);
+    attachSuggest(query, list, fetchPlayers, suggestLabel, (candidate) => {
+      players[index] = { ...candidate, captain: players[index].captain };
+      draw();
+    }, (typed) => {
+      const manual = document.createElement("button");
+      manual.type = "button";
+      manual.className = "btn btn-ghost";
+      manual.textContent = "нет в базе";
+      manual.addEventListener("click", () => {
+        players[index] = { ...emptyPlayer(), surname: typed, captain: players[index].captain };
+        draw();
+      });
+      return manual;
     });
     box.append(query, list);
     return box;
@@ -232,8 +258,66 @@ export function mountRosterEditor(container: HTMLElement): void {
   draw();
 }
 
-export function mountRosterEditors(doc: Doc): void {
+type BuffTeam = {id: number; name: string; town: string};
+type BuffTournament = {id: number; name: string; type: string};
+
+// mountBuffTeamField names the team a rating id stands for as it is typed,
+// which is how a Representative tells 5723 from 5732.
+export function mountBuffTeamField(field: HTMLInputElement): void {
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  field.after(hint);
+  let timer = 0;
+  const show = (): void => {
+    const id = Number(field.value.trim());
+    if (!id) {
+      hint.textContent = "";
+      return;
+    }
+    void fetchJSON<BuffTeam>(`/api/buff/team/${encodeURIComponent(id)}`).then((team) => {
+      hint.textContent = team ? [team.name, team.town].filter(Boolean).join(" · ") : "Буфф не знает такой команды";
+    });
+  };
+  field.addEventListener("input", () => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(show, 200);
+  });
+  show();
+}
+
+// mountBuffTournamentField turns the tournament id into a suggest over the
+// tournaments buff knows to be playable on the Слот's date.
+export function mountBuffTournamentField(field: HTMLInputElement): void {
+  const list = document.createElement("div");
+  list.className = "u-col u-gap-sm";
+  const query = document.createElement("input");
+  query.type = "text";
+  query.className = "input";
+  query.autocomplete = "off";
+  query.placeholder = "поиск по названию";
+  field.after(query, list);
+  const on = field.getAttribute("data-buff-tournament") || "";
+  attachSuggest(
+    query,
+    list,
+    (text) =>
+      fetchJSON<BuffTournament[]>(
+        `/api/buff/tournaments?q=${encodeURIComponent(text)}&on=${encodeURIComponent(on)}`,
+      ).then((rows) => rows || []),
+    (t) => `${t.name} · ${t.type} · ${t.id}`,
+    (t) => {
+      field.value = String(t.id);
+      field.dispatchEvent(new Event("input", {bubbles: true}));
+      query.value = t.name;
+      list.textContent = "";
+    },
+  );
+}
+
+export function mountRosterEditors(doc: Document): void {
   doc.querySelectorAll<HTMLElement>("[data-roster-editor]").forEach(mountRosterEditor);
+  doc.querySelectorAll<HTMLInputElement>("input[data-buff-team]").forEach(mountBuffTeamField);
+  doc.querySelectorAll<HTMLInputElement>("input[data-buff-tournament]").forEach(mountBuffTournamentField);
 }
 
 if (typeof document !== "undefined") {

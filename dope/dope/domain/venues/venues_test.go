@@ -3,6 +3,8 @@ package venues
 import (
 	"testing"
 	"time"
+
+	"dope/dope/domain/protocol"
 )
 
 func TestFlagsAreDerived(t *testing.T) {
@@ -87,9 +89,16 @@ func TestTimeHelpers(t *testing.T) {
 
 func TestAssignNumbersFillsTheGaps(t *testing.T) {
 	apps := []Application{{Number: 2}, {}, {Number: 4}, {}}
-	assignNumbers(apps)
+	assignNumbers(apps, nil)
 	if apps[0].Number != 2 || apps[1].Number != 1 || apps[2].Number != 4 || apps[3].Number != 3 {
 		t.Fatalf("numbers %v %v %v %v", apps[0].Number, apps[1].Number, apps[2].Number, apps[3].Number)
+	}
+	// A team the host seated by hand holds its number against a new заявка.
+	hand := map[int64]protocol.RosterTeam{1: {Number: 1}}
+	fresh := []Application{{}}
+	assignNumbers(fresh, hand)
+	if fresh[0].Number != 2 {
+		t.Fatalf("number %d, want the first free one past the hand-seated team", fresh[0].Number)
 	}
 }
 

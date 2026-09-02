@@ -333,14 +333,15 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing fest_id", http.StatusBadRequest)
 		return
 	}
-	if _, ok := s.api().Admit(w, r, route.Read, festID, 0); !ok {
-		return
-	}
 	// game_id (optional) scopes this connection to the game the viewer is watching
 	// so the concurrent-viewer tally is reported per game. Best-effort: an absent
 	// or unresolvable id leaves the connection unscoped (gameID 0) and counted in
-	// the fest's game-less bucket.
+	// the fest's game-less bucket. It is resolved before the access check because
+	// a Venue grants a team its own Слот and no other.
 	gameID, _ := resolveGameID(r.Context(), s.eng.DB, festID, strings.TrimSpace(r.URL.Query().Get("game_id")))
+	if _, ok := s.api().Admit(w, r, route.Read, festID, gameID); !ok {
+		return
+	}
 
 	// Under static mode, shed anonymous viewers (the DDoS vector) but keep editors
 	// live so organizers can still run the event. The editor check only runs for

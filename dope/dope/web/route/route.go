@@ -299,7 +299,8 @@ func DenyAPI(w http.ResponseWriter, r *http.Request, d Denial) {
 
 // admitVenue is the Площадка rule (CONTEXT.md): a Venue's Games are never
 // public-read whatever is_public says — they are read by the Venue's
-// Representatives and by whoever holds an accepted Заявка on the Слот.
+// Representatives and, for one Слот each, by whoever holds an accepted Заявка
+// on it. A read with no Game named is therefore a Representative's alone.
 func (t *Table) admitVenue(r *http.Request, sc *Scope) (Denial, error) {
 	ctx := r.Context()
 	if !sc.HasUser {

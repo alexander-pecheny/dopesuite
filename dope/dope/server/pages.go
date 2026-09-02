@@ -1,12 +1,9 @@
 package dopeserver
 
 import (
-	"bytes"
-	"html"
 	"io/fs"
 	"net/http"
-	"net/http/httptest"
-	"strconv"
+	"net/url"
 	"strings"
 
 	kit "pecheny.me/dopeuikit/kit"
@@ -38,6 +35,10 @@ func (s *server) serveCompiledPage(path string) http.HandlerFunc {
 // to HTML — at startup in embed mode, per request in disk/dev mode. Their
 // compiled bytes feed the existing init-splice + versionAssetRefs pipeline
 // unchanged; everything else is read from the asset FS verbatim.
+// The login shell is compiled per request when ?next= names a return path, so
+// its source lives beside the PageSet's own copy.
+const loginPageSource = "ui/login.dopeui"
+
 var pageSources = map[string]string{
 	"static/login.html":  "ui/login.dopeui",
 	"static/ek.html":     "ui/ek.dopeui",
@@ -66,7 +67,7 @@ func (s *server) pageBytes(path string) ([]byte, error) {
 func (s *server) pageSet() *kit.PageSet {
 	s.pagesOnce.Do(func() {
 		s.pages = kit.NewPageSet(s.eng.Assets, s.eng.AssetNoCache, dopeui.Compile).
-			Provide("ui/login.dopeui", kit.LoginPage(dopestrings.Default.Server.Login.Title(), "/host"))
+			Provide(loginPageSource, kit.LoginPage(dopestrings.Default.Server.Login.Title(), "/host"))
 	})
 	return s.pages
 }
@@ -81,9 +82,8 @@ func (s *server) warmPageCache() error {
 	return s.pageSet().Warm(srcs...)
 }
 
-// serveLoginPage is /login. The compiled page carries one redirect target;
-// ?next= replaces it so a registration link can send a visitor through the
-// Telegram handshake and back to itself. Only a local path is honoured.
+// serveLoginPage is /login. ?next= sends a visitor through the Telegram
+// handshake and back to where they came from; only a same-site path is honoured.
 func (s *server) serveLoginPage() http.HandlerFunc {
 	page := s.serveCompiledPage("static/login.html")
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -92,25 +92,27 @@ func (s *server) serveLoginPage() http.HandlerFunc {
 			page(w, r)
 			return
 		}
-		rec := httptest.NewRecorder()
-		page(rec, r)
-		for key, values := range rec.Header() {
-			w.Header()[key] = values
+		body, err := dopeui.Compile(loginPageSource, kit.LoginPage(dopestrings.Default.Server.Login.Title(), next))
+		if err != nil {
+			page(w, r)
+			return
 		}
-		body := bytes.ReplaceAll(rec.Body.Bytes(),
-			[]byte(`data-login-redirect="/host"`),
-			[]byte(`data-login-redirect="`+html.EscapeString(next)+`"`))
-		w.Header().Set("Content-Length", strconv.Itoa(len(body)))
-		w.WriteHeader(rec.Code)
-		_, _ = w.Write(body)
+		s.writeAppHTML(w, r, body)
 	}
 }
 
-// SafeNextPath keeps only a same-site path, so ?next= can never bounce a
-// visitor off the site.
+// SafeNextPath keeps only a same-site path. A browser folds a backslash to a
+// slash, so "/\\evil.com" is a redirect off the site and is refused here.
 func SafeNextPath(next string) string {
-	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.ContainsAny(next, "\r\n\"") {
+	if next == "" || strings.ContainsAny(next, "\\\r\n\"") {
 		return ""
 	}
-	return next
+	u, err := url.Parse(next)
+	if err != nil || u.Scheme != "" || u.Opaque != "" || u.Host != "" || u.User != nil {
+		return ""
+	}
+	if !strings.HasPrefix(u.Path, "/") || strings.HasPrefix(u.Path, "//") {
+		return ""
+	}
+	return u.String()
 }

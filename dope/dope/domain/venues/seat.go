@@ -17,13 +17,8 @@ import (
 	"dope/dope/storage/store"
 )
 
-// ErrHasResults refuses to unseat a team the Слот's Game already scored.
 var ErrHasResults = errors.New("у команды уже есть результаты в игре — сначала уберите их")
 
-// SetStatusTx accepts, declines or returns a Заявка to the queue and reseats
-// the Слот's Game accordingly: an accepted team takes the next free Number,
-// a declined one leaves its seat. Unseating a team the Game already scored is
-// refused (ErrHasResults).
 func SetStatusTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string, appID int64, status string) error {
 	app, err := LoadApplication(ctx, tx, appID)
 	if err != nil {
@@ -32,7 +27,8 @@ func SetStatusTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string, a
 	if app.SlotID != slot.ID {
 		return sql.ErrNoRows
 	}
-	if app.Status == StatusAccepted && status != StatusAccepted {
+	unseating := app.Status == StatusAccepted && status != StatusAccepted
+	if unseating {
 		scored, err := numberScored(ctx, tx, slot.FestID, slot.GameID, app.Number)
 		if err != nil {
 			return err
@@ -45,18 +41,33 @@ func SetStatusTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string, a
 		status, util.UtcNow(), appID); err != nil {
 		return err
 	}
-	if status != StatusAccepted {
-		if _, err := tx.ExecContext(ctx, `update slot_applications set participant_id = null where id = ?`, appID); err != nil {
-			return err
-		}
+	if !unseating {
+		return reseatTx(ctx, tx, slot, venueCity, 0)
 	}
-	return ReseatTx(ctx, tx, slot, venueCity)
+	if _, err := tx.ExecContext(ctx, `update slot_applications set participant_id = null where id = ?`, appID); err != nil {
+		return err
+	}
+	// Reseat first: it is what clears the Game's rows for that seat, and the
+	// Participant cannot go while they still point at it.
+	if err := reseatTx(ctx, tx, slot, venueCity, app.Number); err != nil {
+		return err
+	}
+	if app.ParticipantID <= 0 {
+		return nil
+	}
+	_, err = tx.ExecContext(ctx, `delete from participants where id = ? and game_id = ?`, app.ParticipantID, slot.GameID)
+	return err
 }
 
-// ReseatTx rewrites the Слот's Game team list from its accepted Заявки: every
-// accepted team keeps the Number it already holds, a newly accepted one takes
-// the lowest free number, and the Состав follows into the Слот's own roster.
+// ReseatTx folds the accepted Заявки into the Слот's Game: each keeps the
+// Number it holds, a newly accepted one takes the lowest free one. A team the
+// host seated by hand is left where it is — a Заявка owns its own seat and no
+// other.
 func ReseatTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string) error {
+	return reseatTx(ctx, tx, slot, venueCity, 0)
+}
+
+func reseatTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string, drop int64) error {
 	apps, err := SlotApplications(ctx, tx, slot.ID)
 	if err != nil {
 		return err
@@ -67,11 +78,19 @@ func ReseatTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string) erro
 			accepted = append(accepted, a)
 		}
 	}
-	assignNumbers(accepted)
-
-	teams := make([]protocol.RosterTeam, 0, len(accepted))
+	seated, err := gameTeams(ctx, tx, slot.FestID, slot.GameID)
+	if err != nil {
+		return err
+	}
+	delete(seated, drop)
+	assignNumbers(accepted, seated)
 	for _, a := range accepted {
-		teams = append(teams, protocol.RosterTeam{Name: a.TeamName, City: venueCity, Number: a.Number})
+		seated[a.Number] = protocol.RosterTeam{Name: a.TeamName, City: venueCity, Number: a.Number}
+	}
+
+	teams := make([]protocol.RosterTeam, 0, len(seated))
+	for _, team := range seated {
+		teams = append(teams, team)
 	}
 	sort.SliceStable(teams, func(i, j int) bool { return teams[i].Number < teams[j].Number })
 	if err := foldTeamsTx(ctx, tx, slot.FestID, slot.GameID, teams); err != nil {
@@ -96,37 +115,30 @@ func ReseatTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string) erro
 			return err
 		}
 	}
-	return dropUnseatedTx(ctx, tx, slot.GameID, accepted)
+	return nil
 }
 
-// dropUnseatedTx removes the Participants the Слот no longer seats: a declined
-// Заявка leaves no team behind, and its Number is free again.
-func dropUnseatedTx(ctx context.Context, tx *sql.Tx, gameID int64, accepted []Application) error {
-	keep := make([]any, 0, len(accepted)+1)
-	keep = append(keep, gameID)
-	placeholders := ""
-	for _, a := range accepted {
-		if a.Number <= 0 {
-			continue
-		}
-		if placeholders != "" {
-			placeholders += ", "
-		}
-		placeholders += "?"
-		keep = append(keep, a.Number)
+func gameTeams(ctx context.Context, q store.Queryer, festID, gameID int64) (map[int64]protocol.RosterTeam, error) {
+	doc, err := store.LoadGameDoc(ctx, q, festID, gameID)
+	if err != nil {
+		return nil, err
 	}
-	query := `delete from participants where game_id = ?`
-	if placeholders != "" {
-		query += ` and number not in (` + placeholders + `)`
+	var state games.ODState
+	_ = json.Unmarshal([]byte(doc.State), &state)
+	out := make(map[int64]protocol.RosterTeam, len(state.Teams))
+	for _, team := range state.Teams {
+		if team.Number > 0 {
+			out[team.Number] = protocol.RosterTeam{Name: team.Name, City: team.City, Number: team.Number}
+		}
 	}
-	_, err := tx.ExecContext(ctx, query, keep...)
-	return err
+	return out, nil
 }
 
-// assignNumbers deals the lowest free Number to every accepted Заявка that has
-// none, keeping the ones already seated where they are.
-func assignNumbers(accepted []Application) {
+func assignNumbers(accepted []Application, seated map[int64]protocol.RosterTeam) {
 	taken := map[int64]bool{}
+	for number := range seated {
+		taken[number] = true
+	}
 	for _, a := range accepted {
 		if a.Number > 0 {
 			taken[a.Number] = true
@@ -145,8 +157,6 @@ func assignNumbers(accepted []Application) {
 	}
 }
 
-// foldTeamsTx makes the Game's document hold exactly these teams; flatgame
-// settles the бой, which is what mints the Participants and their numbers.
 func foldTeamsTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, teams []protocol.RosterTeam) error {
 	doc, err := store.LoadGameDoc(ctx, tx, festID, gameID)
 	if err != nil {
@@ -180,8 +190,6 @@ func participantByNumber(ctx context.Context, q store.Queryer, festID, gameID, n
 	return id, err
 }
 
-// linkRegistryTeamTx keeps the Venue's registry — every team that has ever
-// played there — in step with the accepted Заявка, keyed on the rating team id.
 func linkRegistryTeamTx(ctx context.Context, tx *sql.Tx, festID, participantID int64, app Application, city string) error {
 	if app.RatingTeamID <= 0 {
 		return nil
@@ -233,8 +241,6 @@ values(?, ?, ?, ?)`, gameID, participantID, playerID, order); err != nil {
 	return nil
 }
 
-// numberScored reports whether the Слот's Game already holds an answer for a
-// team number, which is what makes unseating it a 409.
 func numberScored(ctx context.Context, q store.Queryer, festID, gameID, number int64) (bool, error) {
 	if number <= 0 {
 		return false, nil
@@ -254,5 +260,54 @@ func numberScored(ctx context.Context, q store.Queryer, festID, gameID, number i
 			}
 		}
 	}
+	contested, err := store.LoadContested(ctx, q, gameID)
+	if err != nil {
+		return false, err
+	}
+	for _, c := range contested {
+		if c.Number == number {
+			return true, nil
+		}
+	}
 	return false, nil
+}
+
+func RetourTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, comp []int) error {
+	doc, err := store.LoadGameDoc(ctx, tx, festID, gameID)
+	if err != nil {
+		return err
+	}
+	if sameComp(games.ParseTourComp(doc.SchemeJSON), comp) {
+		return nil
+	}
+	seated, err := gameTeams(ctx, tx, festID, gameID)
+	if err != nil {
+		return err
+	}
+	teams := make([]protocol.RosterTeam, 0, len(seated))
+	for _, team := range seated {
+		teams = append(teams, team)
+	}
+	sort.SliceStable(teams, func(i, j int) bool { return teams[i].Number < teams[j].Number })
+	emptyScheme, emptyState := games.ODEmptyGameJSON(doc.Slug.String, "", comp)
+	if _, err := tx.ExecContext(ctx, `update games set scheme_json = ?, updated_at = ? where id = ? and fest_id = ?`,
+		string(emptyScheme), util.UtcNow(), gameID, festID); err != nil {
+		return err
+	}
+	if err := flatgame.SetStateTx(ctx, tx, festID, gameID, string(emptyState)); err != nil {
+		return err
+	}
+	return foldTeamsTx(ctx, tx, festID, gameID, teams)
+}
+
+func sameComp(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

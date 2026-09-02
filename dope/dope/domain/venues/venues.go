@@ -14,28 +14,23 @@ import (
 	"time"
 )
 
-// Kind values of the fests row.
 const (
 	KindFest  = "fest"
 	KindVenue = "venue"
 )
 
-// Application statuses.
 const (
 	StatusPending  = "pending"
 	StatusAccepted = "accepted"
 	StatusDeclined = "declined"
 )
 
-// Flags a player carries in a Состав. They are derived, never chosen.
 const (
 	FlagCaptain = "К"
 	FlagBase    = "Б"
 	FlagLegion  = "Л"
 )
 
-// RosterPlayer is one player of a Состав as the заявка stores them. PlayerID
-// 0 means hand-typed: too new for the mirror to know.
 type RosterPlayer struct {
 	PlayerID   int64  `json:"player_id"`
 	Surname    string `json:"surname"`
@@ -44,16 +39,12 @@ type RosterPlayer struct {
 	Captain    bool   `json:"captain"`
 }
 
-// FullName is «Фамилия Имя Отчество».
 func (p RosterPlayer) FullName() string {
 	return strings.Join(strings.Fields(p.Surname+" "+p.Name+" "+p.Patronymic), " ")
 }
 
-// MaxRoster is how many players a Состав holds before the form warns.
 const MaxRoster = 6
 
-// ParseRoster reads a stored roster_json, dropping the nameless rows a
-// half-filled form leaves behind and keeping at most one captain.
 func ParseRoster(raw string) []RosterPlayer {
 	var players []RosterPlayer
 	if strings.TrimSpace(raw) != "" {
@@ -77,7 +68,6 @@ func ParseRoster(raw string) []RosterPlayer {
 	return out
 }
 
-// MarshalRoster is the form a roster is stored in.
 func MarshalRoster(players []RosterPlayer) string {
 	if players == nil {
 		players = []RosterPlayer{}
@@ -110,8 +100,6 @@ func Flags(players []RosterPlayer, ratingTeamID int64, base map[int64]bool) []st
 	return out
 }
 
-// FlagSummary counts a Состав's flags for the заявки list: «3Б 1Л» beside the
-// captain's К.
 func FlagSummary(flags []string) string {
 	counts := map[string]int{}
 	for _, f := range flags {
@@ -126,20 +114,14 @@ func FlagSummary(flags []string) string {
 	return strings.Join(parts, " ")
 }
 
-// RegState is what a registration link says when it is opened.
 type RegState int
 
 const (
-	// RegOpen accepts заявки.
 	RegOpen RegState = iota
-	// RegScheduled has not opened yet.
 	RegScheduled
-	// RegClosed still shows a user their own заявка.
 	RegClosed
 )
 
-// Registration is the state of a Слот's registration at now. opensAt is the
-// stored text ("" — open at once).
 func Registration(opensAt string, closed bool, now time.Time) RegState {
 	if closed {
 		return RegClosed
@@ -150,10 +132,8 @@ func Registration(opensAt string, closed bool, now time.Time) RegState {
 	return RegOpen
 }
 
-// TimeLayout is how a Слот's datetime is typed, stored and shown.
 const TimeLayout = "2006-01-02 15:04"
 
-// ParseTime reads a stored datetime, accepting the date alone.
 func ParseTime(value string) (time.Time, bool) {
 	value = strings.TrimSpace(strings.Replace(value, "T", " ", 1))
 	for _, layout := range []string{TimeLayout, "2006-01-02 15:04:05", "2006-01-02"} {
@@ -164,8 +144,6 @@ func ParseTime(value string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-// FormatTime normalises a typed datetime for storage; an unparseable one is
-// kept as typed so a host never loses what they wrote.
 func FormatTime(value string) string {
 	if t, ok := ParseTime(value); ok {
 		return t.Format(TimeLayout)
@@ -173,7 +151,6 @@ func FormatTime(value string) string {
 	return strings.TrimSpace(value)
 }
 
-// Shift moves a stored datetime by delta, keeping an unparseable one as is.
 func Shift(value string, delta time.Duration) string {
 	t, ok := ParseTime(value)
 	if !ok {
@@ -182,7 +159,6 @@ func Shift(value string, delta time.Duration) string {
 	return t.Add(delta).Format(TimeLayout)
 }
 
-// NewToken mints a registration or voting link's unguessable part.
 func NewToken() string {
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
@@ -191,7 +167,6 @@ func NewToken() string {
 	return base64.RawURLEncoding.EncodeToString(buf)
 }
 
-// HumanTime is a stored timestamp as a page shows it: minutes, no zone.
 func HumanTime(stored string) string {
 	if t, err := time.Parse(time.RFC3339, strings.TrimSpace(stored)); err == nil {
 		return t.UTC().Format(TimeLayout)

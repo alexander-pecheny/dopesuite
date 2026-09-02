@@ -11,9 +11,6 @@ import (
 	ui "dope/dope/web/ui"
 )
 
-// The Representative's pages: a Venue's dashboard and one long page per Слот.
-
-// VenueDashSlot is one Слот on the venue dashboard.
 type VenueDashSlot struct {
 	ID         int64
 	Date       string
@@ -37,7 +34,6 @@ func venueCrumbs(v venues.Venue) []ui.Item {
 	return append(pages.HostCrumbs(), ui.Crumb(ui.Href("/host/fest/"+v.Ref()), ui.Text(v.Title)))
 }
 
-// venueDashDoc builds /host/fest/{venue}: what the площадка is, and its Слоты.
 func venueDashDoc(data venueDashData) *ui.Doc {
 	v := data.Venue
 	page := []ui.Item{ui.Title(v.Title + " · площадка"), ui.PagePublic, ui.Classicscripts("dist/pageforms.js")}
@@ -139,7 +135,6 @@ func venueSlotsSection(data venueDashData) *ui.Element {
 	return ui.Section(sect...)
 }
 
-// SlotApplicationRow is one Заявка on the Слот page.
 type SlotApplicationRow struct {
 	App         venues.Application
 	Flags       []string
@@ -153,6 +148,7 @@ type slotPageData struct {
 	Venue        venues.Venue
 	Slot         venues.Slot
 	Tournament   string
+	GameStatus   string
 	GameHref     string
 	Applications []SlotApplicationRow
 	Voting       VotingView
@@ -174,8 +170,6 @@ func slotBase(v venues.Venue, slot venues.Slot) string {
 	return "/host/fest/" + v.Ref() + "/slot/" + strconv.FormatInt(slot.ID, 10)
 }
 
-// slotPageDoc builds /host/fest/{venue}/slot/{slot}: one page holding the
-// header, the links, the заявки and the downloads.
 func slotPageDoc(data slotPageData) *ui.Doc {
 	page := []ui.Item{ui.Title(slotTitle(data.Slot) + " · " + data.Venue.Title), ui.PagePublic,
 		ui.Classicscripts("dist/pageforms.js dist/roster-editor.js")}
@@ -198,12 +192,13 @@ func slotHeaderSection(data slotPageData) *ui.Element {
 	if data.Slot.RatingTournamentID > 0 {
 		tournamentID = strconv.FormatInt(data.Slot.RatingTournamentID, 10)
 	}
-	sect := []ui.Item{ui.Subhead(ui.Text("Слот"))}
-	if data.Tournament != "" {
-		sect = append(sect, ui.Note(ui.Text(data.Tournament)))
+	sect := []ui.Item{
+		ui.Subhead(ui.Text("Слот")),
+		ui.Note(ui.Text(joinDots(slotTitle(data.Slot), data.Tournament, data.GameStatus))),
+		ui.Row(ui.Button(ui.Ghost, ui.Small(), ui.Href(data.GameHref), ui.Text("Страница игры"))),
 	}
 	if !data.CanManage {
-		return ui.Section(append(sect, ui.Note(ui.Text(slotTitle(data.Slot))))...)
+		return ui.Section(sect...)
 	}
 	closed := []ui.Item{ui.Name("reg_closed"), ui.Value("1"), ui.Text("Регистрация закрыта")}
 	if data.Slot.RegClosed {
@@ -214,19 +209,23 @@ func slotHeaderSection(data slotPageData) *ui.Element {
 			ui.Field(ui.Label("Дата и время"), ui.Textfield(ui.Name("starts_at"), ui.Value(data.Slot.StartsAt))),
 			ui.Field(ui.Label("ID турнира на rating.chgk.info"),
 				ui.Textfield(ui.Name("rating_tournament_id"), ui.Value(tournamentID), ui.Inputmode("numeric"),
-					ui.Data("buff-tournament", ""), ui.Autocomplete("off"))),
+					ui.Data("buff-tournament", data.Slot.StartsAt), ui.Autocomplete("off"))),
 			ui.Field(ui.Label("Регистрация открывается"),
 				ui.Textfield(ui.Name("reg_opens_at"), ui.Value(data.Slot.RegOpensAt), ui.Placeholder("сразу"))),
 			ui.Checkbox(closed...),
 			ui.Row(ui.Button(ui.Submit(), ui.Text("Сохранить"))),
 		),
-		ui.Details(
-			ui.Summary(ui.Btn(), ui.Text("Клонировать")),
+		ui.Row(ui.Button(ui.Ghost, ui.Data("dialog-open", "cloneSlot"), ui.Text("Клонировать"))),
+		ui.Dialog(ui.ID("cloneSlot"),
 			ui.Form(ui.DirCol, ui.Method("post"), ui.Action(base+"/clone"), ui.Autocomplete("off"),
+				ui.Subhead(ui.Text("Клонировать слот")),
 				ui.Note(ui.Text("Копируются настройки игры и новая ссылка: без турнира, заявок и голосования.")),
 				ui.Field(ui.Label("Дата и время нового слота"),
 					ui.Textfield(ui.Name("starts_at"), ui.Value(venues.Shift(data.Slot.StartsAt, 7*24*time.Hour)), ui.Required())),
-				ui.Row(ui.Button(ui.Submit(), ui.Text("Клонировать"))),
+				ui.Row(
+					ui.Button(ui.Submit(), ui.Text("Клонировать")),
+					ui.Button(ui.Data("dialog-close", ""), ui.Text("Отмена")),
+				),
 			),
 		),
 	)
@@ -351,13 +350,10 @@ func slotDownloadsSection(data slotPageData) *ui.Element {
 		ui.Row(ui.SpaceSM, ui.Wrap(),
 			ui.Button(ui.Ghost, ui.Href(base+"/export/tours.xlsx"), ui.Download(), ui.Text("Туры (xlsx)")),
 			ui.Button(ui.Ghost, ui.Href(base+"/export/players.xlsx"), ui.Download(), ui.Text("Игроки (xlsx)")),
-			ui.Button(ui.Ghost, ui.Href(data.GameHref), ui.Text("Страница игры")),
 		),
 	)
 }
 
-// venueCreateForm is the «Создать площадку» disclosure beside the fest one on
-// /host.
 func venueCreateForm() *ui.Element {
 	return ui.Details(
 		ui.Summary(ui.Btn(), ui.Text("Создать площадку")),

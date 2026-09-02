@@ -183,3 +183,51 @@ type FestRosterImportPlayer struct {
 func importPlayerName(player FestRosterImportPlayer) string {
 	return store.JoinPlayerName(player.FirstName, player.LastName)
 }
+
+// LoadGameRosterView is LoadFestRosterView for a Game whose roster is its own
+// (roster_source 'game'): a Слот's составы belong to the sitting, not to the
+// Venue's accumulating registry.
+func LoadGameRosterView(ctx context.Context, q store.Queryer, festID, gameID int64) ([]FestRosterTeamView, error) {
+	rows, err := q.QueryContext(ctx, `
+select t.id, coalesce(gp.number, coalesce(t.number, 0)), t.name, t.city, coalesce(ft.rating_id, 0),
+       coalesce(p.first_name, ''), coalesce(p.last_name, '')
+from game_participants gp
+join participants t on t.id = gp.participant_id
+left join fest_teams ft on ft.id = t.fest_team_id
+left join game_team_players gtp on gtp.game_id = gp.game_id and gtp.participant_id = t.id
+left join players p on p.id = gtp.player_id
+where gp.game_id = ? and t.fest_id = ?
+order by gp.number, gp.position, t.id, gtp.roster_order, p.id`, gameID, festID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var teams []FestRosterTeamView
+	byID := make(map[int64]int)
+	for rows.Next() {
+		var teamID, number, teamRatingID int64
+		var name, city, firstName, lastName string
+		if err := rows.Scan(&teamID, &number, &name, &city, &teamRatingID, &firstName, &lastName); err != nil {
+			return nil, err
+		}
+		idx, ok := byID[teamID]
+		if !ok {
+			teams = append(teams, FestRosterTeamView{Number: number, Name: name, City: city, RatingID: teamRatingID})
+			idx = len(teams) - 1
+			byID[teamID] = idx
+		}
+		if player := store.JoinPlayerName(firstName, lastName); player != "" {
+			teams[idx].Players = append(teams[idx].Players, FestRosterPlayerView{Name: player})
+		}
+	}
+	return teams, rows.Err()
+}
+
+// GameOwnsRoster reports whether a Game keeps its own составы.
+func GameOwnsRoster(ctx context.Context, q store.Queryer, festID, gameID int64) bool {
+	var source string
+	err := q.QueryRowContext(ctx,
+		`select roster_source from games where id = ? and fest_id = ?`, gameID, festID).Scan(&source)
+	return err == nil && source == "game"
+}

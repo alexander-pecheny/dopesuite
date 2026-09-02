@@ -56,11 +56,13 @@ func (s *server) viewerGamePage(w http.ResponseWriter, r *http.Request, sc route
 	if !route.GamePagePath(parts, false) {
 		return route.NotFound
 	}
-	if _, ok := s.fest().Admit(w, r, route.PublicFest, sc.FestID, 0); !ok {
+	// The game is resolved before the access check: a Venue grants a team the
+	// Слот it plays and no other, so the check needs to know which one.
+	gameID, _ := resolveGameID(r.Context(), s.eng.DB, sc.FestID, parts[1])
+	if _, ok := s.fest().Admit(w, r, route.PublicFest, sc.FestID, gameID); !ok {
 		return nil
 	}
-	gameID, err := resolveGameID(r.Context(), s.eng.DB, sc.FestID, parts[1])
-	if err != nil || gameID <= 0 {
+	if gameID <= 0 {
 		s.serveEKHTML(w, r, games.Get("").Page)
 		return nil
 	}
