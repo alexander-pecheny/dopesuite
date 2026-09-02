@@ -54,7 +54,7 @@ changed = "Пароль изменён."
 
 [menu]
 # The ☰ menu's host account entries (window.dopeMenuConfig).
-profile = "Профиль организатора"
+profile = "Профиль"
 login = "Войти"
 
 [group_stats]
