@@ -83,6 +83,7 @@ func ratingVenueLink(id int64) ui.Item {
 
 func VenuesIndexDoc(rows []VenueRow) *ui.Doc {
 	page := []ui.Item{ui.Title("Площадки"), ui.PagePublic, ui.Classicscripts("dist/pageforms.js")}
+	page = append(page, jumpHostNav("/host", "Режим организатора", "Перейти в режим организатора")...)
 	page = append(page, ui.Publictopbar(pages.Trail([]ui.Item{pages.HomeCrumb()}, "Площадки")))
 	if len(rows) == 0 {
 		page = append(page, ui.Empty(ui.Text("Публичных площадок пока нет.")))
@@ -133,6 +134,7 @@ func slotTable(title string, rows []SlotRow) *ui.Element {
 
 func VenueDoc(d VenueDetail) *ui.Doc {
 	page := []ui.Item{ui.Title(d.Title), ui.PagePublic}
+	page = append(page, jumpHostNav("/host/venue/"+d.Ref, "Режим организатора", "Открыть в режиме организатора")...)
 	page = append(page, ui.Publictopbar(ui.Crumbs(
 		pages.HomeCrumb(), ui.Crumb(ui.Href("/venues"), ui.Text("Площадки")), pages.Leaf(d.Title))))
 	head := []ui.Item{ui.SpaceSM, ui.AlignCenter, ui.Wrap()}

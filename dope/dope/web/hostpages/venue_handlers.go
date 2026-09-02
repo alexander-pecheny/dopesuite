@@ -105,6 +105,16 @@ func (s *Server) renderVenuePage(w http.ResponseWriter, r *http.Request, _ route
 	if err != nil {
 		return route.NotFound
 	}
+	// The reg token is the invitation: the landing says a registration is open,
+	// but only the Venue's own people get the link to it off a public page.
+	member := false
+	if user, ok := s.h.Engine().LookupSession(r); ok {
+		role, err := festaccess.FestUserRoleFromQuery(r.Context(), s.h.Engine().DB, festID, user.UserID)
+		if err != nil {
+			return err
+		}
+		member = role != ""
+	}
 	venue, err := venues.LoadVenue(r.Context(), s.h.Engine().DB, festID)
 	if err != nil || !venue.IsPublic {
 		return route.NotFound
@@ -127,7 +137,7 @@ func (s *Server) renderVenuePage(w http.ResponseWriter, r *http.Request, _ route
 			continue
 		}
 		row.Registration = registrationLabel(slot, now)
-		if venues.Registration(slot.RegOpensAt, slot.RegClosed, now) == venues.RegOpen {
+		if member && venues.Registration(slot.RegOpensAt, slot.RegClosed, now) == venues.RegOpen {
 			row.RegHref = "/reg/" + slot.RegToken
 		}
 		detail.Upcoming = append(detail.Upcoming, row)

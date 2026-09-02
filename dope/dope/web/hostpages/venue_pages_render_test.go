@@ -55,6 +55,25 @@ func TestVenueDocSplitsUpcomingFromPast(t *testing.T) {
 	}
 }
 
+// The landing and the index offer the organizer's side the way a fest's public
+// page does: an authed-only ☰ row into the tree the Venue is edited under.
+func TestVenuePagesOfferTheOrganizerMode(t *testing.T) {
+	for name, body := range map[string]string{
+		"landing": renderPublic(t, VenueDoc(VenueDetail{Ref: "tbilisi", Title: "Площадка"})),
+		"index":   renderPublic(t, VenuesIndexDoc([]VenueRow{{Ref: "tbilisi", Title: "Площадка"}})),
+	} {
+		want := `data-jump-href="/host/venue/tbilisi"`
+		if name == "index" {
+			want = `data-jump-href="/host"`
+		}
+		for _, s := range []string{want, `data-jump-label="Режим организатора"`, `data-jump-icon="clipboard"`, `data-jump-authed="1"`} {
+			if !strings.Contains(body, s) {
+				t.Errorf("%s: missing %q", name, s)
+			}
+		}
+	}
+}
+
 func TestRegDocSaysWhatEachStateAllows(t *testing.T) {
 	base := RegPage{Token: "tok", VenueTitle: "Площадка", VenueRef: "tbilisi", Date: "2026-09-04 19:00"}
 
