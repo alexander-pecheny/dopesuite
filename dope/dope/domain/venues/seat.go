@@ -154,12 +154,36 @@ limit 1`, slot.GameID, app.TeamName, app.RatingTeamID).Scan(&participantID, &num
 	} else if err != nil {
 		return app, err
 	}
+	if participantID > 0 && participantID != app.ParticipantID {
+		if err := carryOverSeatTx(ctx, tx, slot.GameID, app.ParticipantID, participantID); err != nil {
+			return app, err
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `update slot_applications set participant_id = ? where id = ?`,
 		util.NullableInt64(participantID), app.ID); err != nil {
 		return app, err
 	}
 	app.ParticipantID, app.Number = participantID, number
 	return app, nil
+}
+
+// carryOverSeatTx moves what a seat owns from the Participant a renumber
+// retired to the one it minted: the спорные are the жюри's to rule on and
+// the Состав is the sitting's, and both are keyed on the Participant.
+func carryOverSeatTx(ctx context.Context, tx *sql.Tx, gameID, from, to int64) error {
+	for _, table := range []string{"od_contested", "game_team_players"} {
+		if _, err := tx.ExecContext(ctx,
+			`update or ignore `+table+` set participant_id = ? where game_id = ? and participant_id = ?`,
+			to, gameID, from); err != nil {
+			return err
+		}
+		// What the update ignored is a row the new Participant already owns.
+		if _, err := tx.ExecContext(ctx,
+			`delete from `+table+` where game_id = ? and participant_id = ?`, gameID, from); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // pruneRenumberedTx drops the Participants the document no longer names — what
@@ -175,11 +199,22 @@ func pruneRenumberedTx(ctx context.Context, tx *sql.Tx, gameID int64, teams []pr
 		holes += "?"
 		args = append(args, team.Number)
 	}
-	query := `delete from participants where game_id = ?`
+	where := `where game_id = ?`
 	if holes != "" {
-		query += ` and number not in (` + holes + `)`
+		where += ` and number not in (` + holes + `)`
 	}
-	_, err := tx.ExecContext(ctx, query, args...)
+	// A спорный outlives the sitting it was given at, so a Participant that
+	// still owns one is never debris.
+	var owned int
+	if err := tx.QueryRowContext(ctx, `
+select count(*) from od_contested
+where participant_id in (select id from participants `+where+`)`, args...).Scan(&owned); err != nil {
+		return err
+	}
+	if owned > 0 {
+		return ErrHasResults
+	}
+	_, err := tx.ExecContext(ctx, `delete from participants `+where, args...)
 	return err
 }
 
