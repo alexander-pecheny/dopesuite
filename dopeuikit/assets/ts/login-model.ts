@@ -2,6 +2,8 @@
 // the server-status → next-step decisions. login.ts renders what this module
 // decides.
 
+import S from "./i18nstrings_ru_gen.js";
+
 export type LoginStep = "method" | "code" | "username" | "link" | "password";
 
 export interface TgStartView {
@@ -40,8 +42,8 @@ export interface LoginMethods {
 }
 
 const TG_NOTES: Record<string, string> = {
-  misconfigured: "Телеграм-логин настроен неверно.",
-  unreachable: "Бот для телеграм-логина недоступен.",
+  misconfigured: S.login.message.tgMisconfigured(),
+  unreachable: S.login.message.tgUnreachable(),
 };
 
 export function loginMethods(
@@ -79,11 +81,11 @@ export async function pollTelegram(code: string, isCurrent: () => boolean, deps:
     if (st.status === "ready") return { kind: "redirect" };
     if (st.status === "choose_username") return { kind: "step", step: "username" };
     if (st.status === "expired" || st.status === "not_found") {
-      return { kind: "message", text: "Код истёк. Начните вход заново." };
+      return { kind: "message", text: S.login.message.codeExpired() };
     }
   }
   if (!isCurrent()) return { kind: "stale" };
-  return { kind: "message", text: "Время ожидания вышло. Обновите страницу." };
+  return { kind: "message", text: S.login.message.timedOut() };
 }
 
 export type ClaimOutcome =
@@ -98,8 +100,8 @@ export type ClaimOutcome =
 export function claimOutcome(status: string | undefined): ClaimOutcome {
   if (status === "ready") return { kind: "redirect" };
   if (status === "password_required") return { kind: "step", step: "link" };
-  if (status === "username_taken") return { kind: "username_taken", text: "Логин занят, выберите другой." };
-  return { kind: "error", text: "Что-то пошло не так, попробуйте снова." };
+  if (status === "username_taken") return { kind: "username_taken", text: S.login.message.usernameTaken() };
+  return { kind: "error", text: S.login.message.failed() };
 }
 
 export function errorMessage(error: unknown): string {

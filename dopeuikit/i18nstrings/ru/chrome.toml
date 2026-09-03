@@ -1,0 +1,8 @@
+# The page shell every screen shares: the sync dot and the breadcrumbs.
+[sync]
+saved = "Готово"
+saving = "Подождите"
+error = "Ошибка"
+
+[crumbs]
+label = "Навигация"

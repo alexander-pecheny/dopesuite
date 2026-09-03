@@ -3,11 +3,89 @@
 /** One language's Catalog: a key per Surface, a nested object per group,
  * a function per string. */
 export type Strings = {
-  common: {
-    cancel: () => string;
-    save: () => string;
-    selection: {
-      count: (n: number) => string;
+  admin: {
+    create: {
+      empty: () => string;
+      skippedLead: () => string;
+      submit: () => string;
+      usernamesLabel: () => string;
     };
+    created: {
+      copyLabel: () => string;
+      hint: () => string;
+      password: () => string;
+      username: () => string;
+    };
+    errors: {
+      title: () => string;
+    };
+  };
+  chrome: {
+    crumbs: {
+      label: () => string;
+    };
+    sync: {
+      error: () => string;
+      saved: () => string;
+      saving: () => string;
+    };
+  };
+  login: {
+    code: {
+      botHintLead: () => string;
+      botHintMid: () => string;
+      linkHint: () => string;
+      waiting: () => string;
+    };
+    field: {
+      password: () => string;
+      username: () => string;
+    };
+    link: {
+      cancel: () => string;
+      hint: () => string;
+      submit: () => string;
+    };
+    message: {
+      codeExpired: () => string;
+      failed: () => string;
+      tgMisconfigured: () => string;
+      tgUnreachable: () => string;
+      timedOut: () => string;
+      usernameTaken: () => string;
+    };
+    method: {
+      hint: () => string;
+      password: () => string;
+      telegram: () => string;
+    };
+    password: {
+      hint: () => string;
+      submit: () => string;
+    };
+    title: () => string;
+    username: {
+      hint: () => string;
+      submit: () => string;
+    };
+  };
+  menu: {
+    account: {
+      login: () => string;
+      profile: () => string;
+    };
+    appearance: {
+      contrast: () => string;
+      contrastHigh: () => string;
+      contrastRegular: () => string;
+      done: () => string;
+      theme: () => string;
+      themeDark: () => string;
+      themeLight: () => string;
+      themeSystem: () => string;
+      title: () => string;
+    };
+    jump: () => string;
+    trigger: () => string;
   };
 };

@@ -2,21 +2,97 @@
 
 package i18nstrings
 
-import (
-	"fmt"
-
-	core "pecheny.me/dopecore/i18nstrings"
-)
-
 // RU is the ru Catalog.
 var RU = Strings{
-	Common: CommonStrings{
-		Cancel: func() string { return "Отмена" },
-		Save:   func() string { return "Сохранить" },
-		Selection: CommonSelectionStrings{
-			Count: func(n int) string {
-				return fmt.Sprintf("Выбрано %d %s", n, core.Plural("ru", n, "элемент", "элемента", "элементов"))
-			},
+	Admin: AdminStrings{
+		Create: AdminCreateStrings{
+			Empty:          func() string { return "Не указано ни одного логина." },
+			SkippedLead:    func() string { return "Уже существуют (пропущены): " },
+			Submit:         func() string { return "Создать" },
+			UsernamesLabel: func() string { return "Логины (по одному в строке)" },
 		},
+		Created: AdminCreatedStrings{
+			CopyLabel: func() string { return "Для копирования (логин ⇥ пароль)" },
+			Hint: func() string {
+				return "Пароли показаны один раз. Скопируйте и разошлите — пользователи сменят их сами."
+			},
+			Password: func() string { return "Пароль" },
+			Username: func() string { return "Логин" },
+		},
+		Errors: AdminErrorsStrings{
+			Title: func() string { return "Ошибки:" },
+		},
+	},
+	Chrome: ChromeStrings{
+		Crumbs: ChromeCrumbsStrings{
+			Label: func() string { return "Навигация" },
+		},
+		Sync: ChromeSyncStrings{
+			Error:  func() string { return "Ошибка" },
+			Saved:  func() string { return "Готово" },
+			Saving: func() string { return "Подождите" },
+		},
+	},
+	Login: LoginStrings{
+		Code: LoginCodeStrings{
+			BotHintLead: func() string { return "Если ссылка не открывается, напишите боту " },
+			BotHintMid:  func() string { return " и пришлите код " },
+			LinkHint:    func() string { return "Для входа пройдите по ссылке:" },
+			Waiting:     func() string { return "Жду подтверждения от бота…" },
+		},
+		Field: LoginFieldStrings{
+			Password: func() string { return "Пароль" },
+			Username: func() string { return "Логин" },
+		},
+		Link: LoginLinkStrings{
+			Cancel: func() string { return "Это не я, выберу другой логин" },
+			Hint: func() string {
+				return "Такой пользователь уже существует. Если это вы, введите пароль, чтобы привязать аккаунт."
+			},
+			Submit: func() string { return "Привязать" },
+		},
+		Message: LoginMessageStrings{
+			CodeExpired:     func() string { return "Код истёк. Начните вход заново." },
+			Failed:          func() string { return "Что-то пошло не так, попробуйте снова." },
+			TgMisconfigured: func() string { return "Телеграм-логин настроен неверно." },
+			TgUnreachable:   func() string { return "Бот для телеграм-логина недоступен." },
+			TimedOut:        func() string { return "Время ожидания вышло. Обновите страницу." },
+			UsernameTaken:   func() string { return "Логин занят, выберите другой." },
+		},
+		Method: LoginMethodStrings{
+			Hint:     func() string { return "Войдите, чтобы продолжить." },
+			Password: func() string { return "Войти по паролю" },
+			Telegram: func() string { return "Войти через телеграм" },
+		},
+		Password: LoginPasswordStrings{
+			Hint:   func() string { return "Вход по паролю." },
+			Submit: func() string { return "Войти" },
+		},
+		Title: func() string { return "Вход" },
+		Username: LoginUsernameStrings{
+			Hint: func() string {
+				return "Придумайте никнейм. Изменить его потом нельзя."
+			},
+			Submit: func() string { return "Продолжить" },
+		},
+	},
+	Menu: MenuStrings{
+		Account: MenuAccountStrings{
+			Login:   func() string { return "Вход" },
+			Profile: func() string { return "Профиль" },
+		},
+		Appearance: MenuAppearanceStrings{
+			Contrast:        func() string { return "Контраст" },
+			ContrastHigh:    func() string { return "Высокий" },
+			ContrastRegular: func() string { return "Обычный" },
+			Done:            func() string { return "Готово" },
+			Theme:           func() string { return "Тема" },
+			ThemeDark:       func() string { return "Тёмная" },
+			ThemeLight:      func() string { return "Светлая" },
+			ThemeSystem:     func() string { return "Системная" },
+			Title:           func() string { return "Оформление" },
+		},
+		Jump:    func() string { return "Перейти" },
+		Trigger: func() string { return "Меню" },
 	},
 }

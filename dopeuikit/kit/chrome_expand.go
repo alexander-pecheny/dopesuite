@@ -4,6 +4,8 @@ package kit
 // emit the document shell and header. Class names here (host-top, host-brand, …)
 // are the design system's, matched by core.css.
 
+import kitstrings "pecheny.me/dopeuikit/i18nstrings"
+
 func expandPage(ctx *ExpandCtx, p *Element) []Node {
 	ch := ChromeOf(ctx)
 	title, _ := Get(p, "title")
@@ -123,7 +125,7 @@ func ExpandCrumbs(ctx *ExpandCtx, p *Element) []Node {
 		}
 		kids = append(kids, crumbNode(ctx, c, i == len(crumbs)-1))
 	}
-	return one(El("nav", []Attr{ClassAttr("crumbs"), At("aria-label", "Навигация")}, kids...))
+	return one(El("nav", []Attr{ClassAttr("crumbs"), At("aria-label", kitstrings.Default.Chrome.Crumbs.Label())}, kids...))
 }
 
 func crumbNode(ctx *ExpandCtx, c *Element, last bool) Node {

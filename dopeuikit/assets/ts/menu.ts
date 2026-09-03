@@ -17,6 +17,7 @@ import {
   resolveTheme,
 } from "./menu-model";
 import { type IconName, icon } from "./icons_gen.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const THEME_KEY = "dope-theme";
 const CONTRAST_KEY = "dope-contrast";
@@ -141,7 +142,7 @@ function build(): void {
   const trigger = document.createElement("button");
   trigger.type = "button";
   trigger.className = "action-icon menu-trigger";
-  trigger.setAttribute("aria-label", "Меню");
+  trigger.setAttribute("aria-label", S.menu.trigger());
   trigger.setAttribute("aria-haspopup", "true");
   trigger.setAttribute("aria-expanded", "false");
   // An SVG hamburger centers crisply at any size; the ☰ glyph (U+2630) sits
@@ -201,7 +202,7 @@ function build(): void {
       appearance.type = "button";
       appearance.className = "menu-item";
       appearance.setAttribute("role", "menuitem");
-      appearance.append(leadGlyph(item.icon), "Оформление");
+      appearance.append(leadGlyph(item.icon), S.menu.appearance.title());
       appearance.addEventListener("click", () => {
         closeMenu();
         openModal();
@@ -324,18 +325,18 @@ function build(): void {
     dialog.className = "appearance-modal";
     dialog.setAttribute("role", "dialog");
     dialog.setAttribute("aria-modal", "true");
-    dialog.setAttribute("aria-label", "Оформление");
+    dialog.setAttribute("aria-label", S.menu.appearance.title());
 
     const title = document.createElement("h2");
     title.className = "appearance-modal-title";
-    title.textContent = "Оформление";
+    title.textContent = S.menu.appearance.title();
 
     const themeGroup = segmented(
-      "Тема",
+      S.menu.appearance.theme(),
       [
-        { value: "system", label: "Системная" },
-        { value: "light", label: "Светлая" },
-        { value: "dark", label: "Тёмная" },
+        { value: "system", label: S.menu.appearance.themeSystem() },
+        { value: "light", label: S.menu.appearance.themeLight() },
+        { value: "dark", label: S.menu.appearance.themeDark() },
       ],
       () => theme,
       (value) => {
@@ -345,10 +346,10 @@ function build(): void {
       },
     );
     const contrastGroup = segmented(
-      "Контраст",
+      S.menu.appearance.contrast(),
       [
-        { value: "regular", label: "Обычный" },
-        { value: "high", label: "Высокий" },
+        { value: "regular", label: S.menu.appearance.contrastRegular() },
+        { value: "high", label: S.menu.appearance.contrastHigh() },
       ],
       () => contrast,
       (value) => {
@@ -361,7 +362,7 @@ function build(): void {
     const done = document.createElement("button");
     done.type = "button";
     done.className = "appearance-modal-done";
-    done.textContent = "Готово";
+    done.textContent = S.menu.appearance.done();
     done.addEventListener("click", closeModal);
 
     dialog.append(title, themeGroup.el, contrastGroup.el, done);

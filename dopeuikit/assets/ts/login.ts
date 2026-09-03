@@ -1,11 +1,12 @@
 // Shared login for the dopesuite apps. One /login page, two ways in:
-//   • «Войти через телеграм» — mint a code, forward it to the bot, poll. A known
+//   • telegram — mint a code, forward it to the bot, poll. A known
 //     telegram logs straight in; a brand-new one picks a username (and, if that
 //     username is an existing password account, proves the password to link it).
-//   • «Войти по паролю» — username + password, existing accounts only.
+//   • password — username + password, existing accounts only.
 // Registration is not a separate flow: the telegram button creates the account.
 // The flow decisions live in login-model.ts; this file only binds the DOM.
 
+import S from "./i18nstrings_ru_gen.js";
 import { claimOutcome, errorMessage, loginMethods, pollTelegram, tgStartView } from "./login-model";
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -126,7 +127,7 @@ function showCode(view: ReturnType<typeof tgStartView>): void {
 }
 
 // makeCopyable turns an inline token into a click-to-copy control that flashes a
-// «скопировано» confirmation (the .copied CSS tooltip).
+// "copied" confirmation (the .copied CSS tooltip).
 function makeCopyable(el: HTMLElement): void {
   el.classList.add("copyable");
   el.setAttribute("role", "button");
@@ -270,7 +271,7 @@ function setText(node: HTMLElement, text: string): void {
 
 function setStatus(state: "saved" | "saving" | "error"): void {
   if (!statusNode) return;
-  const labels = { saved: "Готово", saving: "Подождите", error: "Ошибка" };
+  const labels = { saved: S.chrome.sync.saved(), saving: S.chrome.sync.saving(), error: S.chrome.sync.error() };
   statusNode.dataset.state = state;
   statusNode.setAttribute("aria-label", labels[state]);
   statusNode.title = labels[state];

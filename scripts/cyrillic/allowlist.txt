@@ -148,14 +148,6 @@ dope/dope/web/ui/expand.go
 dope/scripts/octobearfest/assorti.go
 dope/scripts/octobearfest/main.go
 dope/scripts/octobearfest/troika.go
-dopeuikit/assets/ts/login-model.ts
-dopeuikit/assets/ts/login.ts
-dopeuikit/assets/ts/menu-model.ts
-dopeuikit/assets/ts/menu.ts
-dopeuikit/assets/ui/login.dopeui
-dopeuikit/kit/admin.go
-dopeuikit/kit/app.go
-dopeuikit/kit/chrome_expand.go
 scripts/classcheck/cssgeom.go
 scripts/classcheck/main.go
 xy/cmd/chgksuite/boardcmd.go

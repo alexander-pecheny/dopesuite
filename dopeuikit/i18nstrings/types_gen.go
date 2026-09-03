@@ -5,16 +5,244 @@ package i18nstrings
 // Strings is one language's Catalog: a field per Surface, a nested struct
 // per group, a func per string.
 type Strings struct {
-	Common CommonStrings
+	Admin  AdminStrings
+	Chrome ChromeStrings
+	Login  LoginStrings
+	Menu   MenuStrings
 }
 
-// CommonStrings is the common Surface.
-type CommonStrings struct {
-	Cancel    func() string
-	Save      func() string
-	Selection CommonSelectionStrings
+// AdminStrings is the admin Surface.
+type AdminStrings struct {
+	Create  AdminCreateStrings
+	Created AdminCreatedStrings
+	Errors  AdminErrorsStrings
 }
 
-type CommonSelectionStrings struct {
-	Count func(n int) string
+type AdminCreateStrings struct {
+	Empty          func() string
+	SkippedLead    func() string
+	Submit         func() string
+	UsernamesLabel func() string
+}
+
+type AdminCreatedStrings struct {
+	CopyLabel func() string
+	Hint      func() string
+	Password  func() string
+	Username  func() string
+}
+
+type AdminErrorsStrings struct {
+	Title func() string
+}
+
+// ChromeStrings is the chrome Surface.
+type ChromeStrings struct {
+	Crumbs ChromeCrumbsStrings
+	Sync   ChromeSyncStrings
+}
+
+type ChromeCrumbsStrings struct {
+	Label func() string
+}
+
+type ChromeSyncStrings struct {
+	Error  func() string
+	Saved  func() string
+	Saving func() string
+}
+
+// LoginStrings is the login Surface.
+type LoginStrings struct {
+	Code     LoginCodeStrings
+	Field    LoginFieldStrings
+	Link     LoginLinkStrings
+	Message  LoginMessageStrings
+	Method   LoginMethodStrings
+	Password LoginPasswordStrings
+	Title    func() string
+	Username LoginUsernameStrings
+}
+
+type LoginCodeStrings struct {
+	BotHintLead func() string
+	BotHintMid  func() string
+	LinkHint    func() string
+	Waiting     func() string
+}
+
+type LoginFieldStrings struct {
+	Password func() string
+	Username func() string
+}
+
+type LoginLinkStrings struct {
+	Cancel func() string
+	Hint   func() string
+	Submit func() string
+}
+
+type LoginMessageStrings struct {
+	CodeExpired     func() string
+	Failed          func() string
+	TgMisconfigured func() string
+	TgUnreachable   func() string
+	TimedOut        func() string
+	UsernameTaken   func() string
+}
+
+type LoginMethodStrings struct {
+	Hint     func() string
+	Password func() string
+	Telegram func() string
+}
+
+type LoginPasswordStrings struct {
+	Hint   func() string
+	Submit func() string
+}
+
+type LoginUsernameStrings struct {
+	Hint   func() string
+	Submit func() string
+}
+
+// MenuStrings is the menu Surface.
+type MenuStrings struct {
+	Account    MenuAccountStrings
+	Appearance MenuAppearanceStrings
+	Jump       func() string
+	Trigger    func() string
+}
+
+type MenuAccountStrings struct {
+	Login   func() string
+	Profile func() string
+}
+
+type MenuAppearanceStrings struct {
+	Contrast        func() string
+	ContrastHigh    func() string
+	ContrastRegular func() string
+	Done            func() string
+	Theme           func() string
+	ThemeDark       func() string
+	ThemeLight      func() string
+	ThemeSystem     func() string
+	Title           func() string
+}
+
+// Lookup returns an untemplated string by its String Id, for `@surface.key`
+// in a .dopeui page.
+func (s Strings) Lookup(id string) (string, bool) {
+	switch id {
+	case "admin.create.empty":
+		return s.Admin.Create.Empty(), true
+	case "admin.create.skipped_lead":
+		return s.Admin.Create.SkippedLead(), true
+	case "admin.create.submit":
+		return s.Admin.Create.Submit(), true
+	case "admin.create.usernames_label":
+		return s.Admin.Create.UsernamesLabel(), true
+	case "admin.created.copy_label":
+		return s.Admin.Created.CopyLabel(), true
+	case "admin.created.hint":
+		return s.Admin.Created.Hint(), true
+	case "admin.created.password":
+		return s.Admin.Created.Password(), true
+	case "admin.created.username":
+		return s.Admin.Created.Username(), true
+	case "admin.errors.title":
+		return s.Admin.Errors.Title(), true
+	case "chrome.crumbs.label":
+		return s.Chrome.Crumbs.Label(), true
+	case "chrome.sync.error":
+		return s.Chrome.Sync.Error(), true
+	case "chrome.sync.saved":
+		return s.Chrome.Sync.Saved(), true
+	case "chrome.sync.saving":
+		return s.Chrome.Sync.Saving(), true
+	case "login.code.bot_hint_lead":
+		return s.Login.Code.BotHintLead(), true
+	case "login.code.bot_hint_mid":
+		return s.Login.Code.BotHintMid(), true
+	case "login.code.link_hint":
+		return s.Login.Code.LinkHint(), true
+	case "login.code.waiting":
+		return s.Login.Code.Waiting(), true
+	case "login.field.password":
+		return s.Login.Field.Password(), true
+	case "login.field.username":
+		return s.Login.Field.Username(), true
+	case "login.link.cancel":
+		return s.Login.Link.Cancel(), true
+	case "login.link.hint":
+		return s.Login.Link.Hint(), true
+	case "login.link.submit":
+		return s.Login.Link.Submit(), true
+	case "login.message.code_expired":
+		return s.Login.Message.CodeExpired(), true
+	case "login.message.failed":
+		return s.Login.Message.Failed(), true
+	case "login.message.tg_misconfigured":
+		return s.Login.Message.TgMisconfigured(), true
+	case "login.message.tg_unreachable":
+		return s.Login.Message.TgUnreachable(), true
+	case "login.message.timed_out":
+		return s.Login.Message.TimedOut(), true
+	case "login.message.username_taken":
+		return s.Login.Message.UsernameTaken(), true
+	case "login.method.hint":
+		return s.Login.Method.Hint(), true
+	case "login.method.password":
+		return s.Login.Method.Password(), true
+	case "login.method.telegram":
+		return s.Login.Method.Telegram(), true
+	case "login.password.hint":
+		return s.Login.Password.Hint(), true
+	case "login.password.submit":
+		return s.Login.Password.Submit(), true
+	case "login.title":
+		return s.Login.Title(), true
+	case "login.username.hint":
+		return s.Login.Username.Hint(), true
+	case "login.username.submit":
+		return s.Login.Username.Submit(), true
+	case "menu.account.login":
+		return s.Menu.Account.Login(), true
+	case "menu.account.profile":
+		return s.Menu.Account.Profile(), true
+	case "menu.appearance.contrast":
+		return s.Menu.Appearance.Contrast(), true
+	case "menu.appearance.contrast_high":
+		return s.Menu.Appearance.ContrastHigh(), true
+	case "menu.appearance.contrast_regular":
+		return s.Menu.Appearance.ContrastRegular(), true
+	case "menu.appearance.done":
+		return s.Menu.Appearance.Done(), true
+	case "menu.appearance.theme":
+		return s.Menu.Appearance.Theme(), true
+	case "menu.appearance.theme_dark":
+		return s.Menu.Appearance.ThemeDark(), true
+	case "menu.appearance.theme_light":
+		return s.Menu.Appearance.ThemeLight(), true
+	case "menu.appearance.theme_system":
+		return s.Menu.Appearance.ThemeSystem(), true
+	case "menu.appearance.title":
+		return s.Menu.Appearance.Title(), true
+	case "menu.jump":
+		return s.Menu.Jump(), true
+	case "menu.trigger":
+		return s.Menu.Trigger(), true
+	}
+	return "", false
+}
+
+// Defines reports whether the Catalog holds the id at all, templated or not.
+func (Strings) Defines(id string) bool {
+	switch id {
+	case "admin.create.empty", "admin.create.skipped_lead", "admin.create.submit", "admin.create.usernames_label", "admin.created.copy_label", "admin.created.hint", "admin.created.password", "admin.created.username", "admin.errors.title", "chrome.crumbs.label", "chrome.sync.error", "chrome.sync.saved", "chrome.sync.saving", "login.code.bot_hint_lead", "login.code.bot_hint_mid", "login.code.link_hint", "login.code.waiting", "login.field.password", "login.field.username", "login.link.cancel", "login.link.hint", "login.link.submit", "login.message.code_expired", "login.message.failed", "login.message.tg_misconfigured", "login.message.tg_unreachable", "login.message.timed_out", "login.message.username_taken", "login.method.hint", "login.method.password", "login.method.telegram", "login.password.hint", "login.password.submit", "login.title", "login.username.hint", "login.username.submit", "menu.account.login", "menu.account.profile", "menu.appearance.contrast", "menu.appearance.contrast_high", "menu.appearance.contrast_regular", "menu.appearance.done", "menu.appearance.theme", "menu.appearance.theme_dark", "menu.appearance.theme_light", "menu.appearance.theme_system", "menu.appearance.title", "menu.jump", "menu.trigger":
+		return true
+	}
+	return false
 }

@@ -1,3 +1,5 @@
+import S from "./i18nstrings_ru_gen.js";
+
 // The pure kernel of the site-wide chrome: theme/contrast preference rules and
 // the menu item model. menu.ts renders what this module decides.
 
@@ -58,8 +60,8 @@ function link(label: string, href: string, title?: string, external?: boolean, d
   return { kind: "link", label, href, title: title ?? "", external: external ?? false, download: download ?? false, ...(icon ? { icon } : {}) };
 }
 
-// Item order: Оформление, then the page-supplied jump (Редактировать / Страница
-// зрителя), then page extras (downloads/actions), then the account entry
+// Item order: appearance, then the page-supplied jump (edit / audience page),
+// then page extras (downloads/actions), then the account entry
 // (profile when logged in, login otherwise; labels come from the app config).
 export function menuItems(state: {
   jump: MenuJump | null;
@@ -67,7 +69,7 @@ export function menuItems(state: {
   account: MenuAccount | null;
   config: MenuConfig;
 }): MenuItem[] {
-  // Every row is a glyph and a word. The two the model owns — Оформление and
+  // Every row is a glyph and a word. The two the model owns — appearance and
   // the account entry — used to be the only ones without one, so the column of
   // icons broke at the top and the bottom.
   const items: MenuItem[] = [{ kind: "appearance", icon: "palette" }];
@@ -89,8 +91,8 @@ export function menuItems(state: {
     const cfg = state.config;
     items.push(
       state.account.loggedIn
-        ? link(cfg.profileLabel || "Профиль", cfg.profileHref || "/profile", "", false, false, "user")
-        : link(cfg.loginLabel || "Вход", cfg.loginHref || "/login", "", false, false, "log-in"),
+        ? link(cfg.profileLabel || S.menu.account.profile(), cfg.profileHref || "/profile", "", false, false, "user")
+        : link(cfg.loginLabel || S.menu.account.login(), cfg.loginHref || "/login", "", false, false, "log-in"),
     );
   }
   return items;
@@ -101,7 +103,7 @@ export function menuItems(state: {
 export function jumpFromDataset(d: Partial<Record<string, string>>): MenuJump | null {
   if (!d.jumpHref) return null;
   return {
-    label: d.jumpLabel || "Перейти",
+    label: d.jumpLabel || S.menu.jump(),
     href: d.jumpHref,
     title: d.jumpTitle || "",
     external: d.jumpExternal === "1",

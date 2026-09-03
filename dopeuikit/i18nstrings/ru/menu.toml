@@ -1,0 +1,18 @@
+# The topbar menu and its appearance dialog.
+trigger = "Меню"
+jump = "Перейти"
+
+[account]
+profile = "Профиль"
+login = "Вход"
+
+[appearance]
+title = "Оформление"
+theme = "Тема"
+theme_system = "Системная"
+theme_light = "Светлая"
+theme_dark = "Тёмная"
+contrast = "Контраст"
+contrast_regular = "Обычный"
+contrast_high = "Высокий"
+done = "Готово"

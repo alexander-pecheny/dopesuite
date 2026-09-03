@@ -1,0 +1,15 @@
+# /admin/create_users, served by both apps.
+[create]
+usernames_label = "Логины (по одному в строке)"
+submit = "Создать"
+skipped_lead = "Уже существуют (пропущены): "
+empty = "Не указано ни одного логина."
+
+[created]
+username = "Логин"
+password = "Пароль"
+hint = "Пароли показаны один раз. Скопируйте и разошлите — пользователи сменят их сами."
+copy_label = "Для копирования (логин ⇥ пароль)"
+
+[errors]
+title = "Ошибки:"
