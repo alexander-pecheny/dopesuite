@@ -22,7 +22,7 @@ vet: vet-core vet-uikit
 # the kit's own gate are things no single module can run for itself.
 #
 # The gate, wherever you are. A module's own faster one is `just check`.
-pre-commit: pre-commit-core pre-commit-uikit class-check cyrillic-check strings-gen-check
+pre-commit: pre-commit-core pre-commit-uikit class-check cyrillic-check strings-check
     cd xy && just check
     cd dope && just check
 
@@ -63,10 +63,25 @@ class-check: fmt-scripts
     go -C scripts/classcheck test ./...
     go -C scripts/classcheck run .
 
-# The generator's own gate; the catalogs it writes are checked by generate-check.
-strings-gen-check: fmt-scripts
+# The generator's own gate, then every module's Catalog: each app's
+# generate-check knows only its own tags_gen.go, and no module can regenerate
+# the kit's Catalog, so a stale *_gen would otherwise pass three green gates.
+strings-check: fmt-scripts
+    #!/usr/bin/env bash
+    set -euo pipefail
     go -C scripts/i18nstringsgen vet ./...
     go -C scripts/i18nstringsgen test ./...
+    # Compare each regenerated file against what was on disk, NOT against HEAD,
+    # for the reason the apps' generate-check gives.
+    tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+    files=$(ls */i18nstrings/*_gen.go */assets/ts/i18nstrings_*_gen.ts */web/ts/i18nstrings_*_gen.ts */*/web/ts/i18nstrings_*_gen.ts)
+    for f in $files; do mkdir -p "$tmp/$(dirname "$f")"; cp "$f" "$tmp/$f"; done
+    just generate-strings
+    rc=0
+    for f in $files; do
+      diff -q "$tmp/$f" "$f" >/dev/null || { echo "$f is stale w.r.t. its TOML: run 'just generate-strings'" >&2; rc=1; }
+    done
+    exit $rc
 
 # User-facing Russian belongs in a Catalog (root docs/adr/0006). Fail on any
 # Cyrillic in .go/.ts/.dopeui outside the catalogs, the generated files, the

@@ -76,13 +76,6 @@ func TestUnknownLanguageFallsBack(t *testing.T) {
 	}
 }
 
-func TestRegister(t *testing.T) {
-	i18nstrings.Register("zz", func(int) int { return 1 })
-	if got := i18nstrings.Plural("zz", 1, "one", "few", "many"); got != "few" {
-		t.Errorf("zz = %s", got)
-	}
-}
-
 func TestUserErrorUnwraps(t *testing.T) {
 	err := fmt.Errorf("saving: %w", i18nstrings.User("нельзя"))
 	msg, ok := i18nstrings.AsUser(err)

@@ -226,3 +226,60 @@ func TestReferencesFromEveryLanguage(t *testing.T) {
 		t.Fatalf("a fully referenced catalog was rejected: %v", err)
 	}
 }
+
+func TestTailOfALongerPathIsNotAReference(t *testing.T) {
+	dir, ts := stage(t)
+	module := filepath.Dir(dir)
+	// board.delete.title is read; common.title, whose Go path is the tail of
+	// that one, is not.
+	extra := "[title]\nsave = 'Готово'\n"
+	for _, lang := range []string{"ru", "en"} {
+		f := filepath.Join(dir, lang, "common.toml")
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(f, append(b, []byte("\n"+extra)...), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	body := "package p\n\nvar _ = s.Board.Delete.Title()\n"
+	if err := os.WriteFile(filepath.Join(module, "page.go"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := generate(dir, ts, true)
+	if err == nil || !strings.Contains(err.Error(), "common.title.save") {
+		t.Errorf("a tail match passed for common.title.save: %v", err)
+	}
+}
+
+func TestTestFilesAreNotReferences(t *testing.T) {
+	dir, ts := stage(t)
+	module := filepath.Dir(dir)
+	body := "package p\n\nvar _ = s.Board.Delete.Title()\n"
+	if err := os.WriteFile(filepath.Join(module, "page_test.go"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := generate(dir, ts, true)
+	if err == nil || !strings.Contains(err.Error(), "board.delete.title") {
+		t.Errorf("a test-only reference counted: %v", err)
+	}
+}
+
+func TestFailedGenerateWritesNothing(t *testing.T) {
+	dir, ts := stage(t)
+	if err := generate(dir, ts, true); err == nil {
+		t.Fatal("an unreferenced catalog was accepted")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "types_gen.go")); !os.IsNotExist(err) {
+		t.Errorf("a failed generate left types_gen.go behind: %v", err)
+	}
+}
+
+func TestBadParameterName(t *testing.T) {
+	for _, tmpl := range []string{"{{.func}}", "{{.Name}}", "{{plural .type \"a\" \"b\" \"c\"}}"} {
+		if _, err := compile("board.x", tmpl); err == nil {
+			t.Errorf("%s was accepted as a parameter name", tmpl)
+		}
+	}
+}

@@ -58,7 +58,23 @@ type chunk struct {
 	forms [3]string // chunkPlural
 }
 
-var ident = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+var (
+	ident = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+	// A parameter becomes an argument name in both Go and TypeScript, so it
+	// must be an identifier neither language reserves — snake_case like a key.
+	reserved = map[string]bool{
+		"break": true, "case": true, "catch": true, "chan": true, "class": true,
+		"const": true, "continue": true, "default": true, "defer": true, "delete": true,
+		"do": true, "else": true, "enum": true, "export": true, "extends": true,
+		"fallthrough": true, "false": true, "for": true, "func": true, "function": true,
+		"go": true, "goto": true, "if": true, "import": true, "in": true,
+		"instanceof": true, "interface": true, "map": true, "new": true, "null": true,
+		"package": true, "range": true, "return": true, "select": true, "struct": true,
+		"super": true, "switch": true, "this": true, "throw": true, "true": true,
+		"try": true, "type": true, "typeof": true, "var": true, "void": true,
+		"while": true, "with": true, "yield": true,
+	}
+)
 
 // plural exists only so text/template/parse accepts the name; nothing runs it.
 func plural(int, string, string, string) string { return "" }
@@ -158,11 +174,18 @@ func compile(id, text string) (*str, error) {
 	e := &str{id: id}
 	ints := map[string]bool{}
 	seen := map[string]bool{}
-	addParam := func(name string) {
+	addParam := func(name string) error {
+		switch {
+		case !ident.MatchString(name):
+			return fmt.Errorf("%q is not a snake_case parameter name", name)
+		case reserved[name]:
+			return fmt.Errorf("%q is a reserved word in Go or TypeScript", name)
+		}
 		if !seen[name] {
 			seen[name] = true
 			e.params = append(e.params, param{name: name})
 		}
+		return nil
 	}
 	for _, n := range trees[id].Root.Nodes {
 		switch n := n.(type) {
@@ -173,7 +196,9 @@ func compile(id, text string) (*str, error) {
 			if err != nil {
 				return nil, err
 			}
-			addParam(c.param)
+			if err := addParam(c.param); err != nil {
+				return nil, err
+			}
 			if c.kind == chunkPlural {
 				ints[c.param] = true
 			}
