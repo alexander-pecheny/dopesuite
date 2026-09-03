@@ -37,7 +37,7 @@ func candidateLabel(c venues.Candidate) string {
 	return joinDots(c.Name, c.Type)
 }
 
-func votingForm(base string, view VotingView) *ui.Element {
+func votingForm(base string, view VotingView, tz string) *ui.Element {
 	v := view.Voting
 	candidates := view.Candidates
 	ticked := map[int64]bool{}
@@ -107,8 +107,10 @@ func votingForm(base string, view VotingView) *ui.Element {
 			ui.Hiddenfield(ui.Name("per_team"), ui.Value("1")))
 	}
 	form = append(form,
-		ui.Field(ui.Label("Открывается"), ui.Datetimefield(ui.Name("opens_at"), ui.Value(v.OpensAt), ui.Placeholder("сразу"))),
-		ui.Field(ui.Label("Закрывается"), ui.Datetimefield(ui.Name("closes_at"), ui.Value(v.ClosesAt), ui.Placeholder("2026-09-04 18:00"))),
+		ui.Field(ui.Label("Открывается"), ui.Datetimefield(ui.Name("opens_at"), ui.Value(v.OpensAt),
+			ui.Placeholder("сразу"), ui.Data("datetime-tz", tz))),
+		ui.Field(ui.Label("Закрывается"), ui.Datetimefield(ui.Name("closes_at"), ui.Value(v.ClosesAt),
+			ui.Placeholder("2026-09-04 18:00"), ui.Data("datetime-tz", tz))),
 		ui.Row(ui.Button(ui.Submit(), ui.Text(submit))),
 	)
 	return ui.Form(form...)
@@ -185,10 +187,10 @@ func slotVotingSection(data slotPageData) *ui.Element {
 		if len(view.Ballots) > 0 {
 			sect = append(sect, votingBallots(base, view))
 		}
-		sect = append(sect, ui.Details(ui.Summary(ui.Btn(), ui.Text("Настройки голосования")), votingForm(base, view)))
+		sect = append(sect, ui.Details(ui.Summary(ui.Btn(), ui.Text("Настройки голосования")), votingForm(base, view, data.Tz)))
 		return ui.Section(sect...)
 	}
-	sect = append(sect, ui.Details(ui.Summary(ui.Btn(), ui.Text("Создать голосование")), votingForm(base, view)))
+	sect = append(sect, ui.Details(ui.Summary(ui.Btn(), ui.Text("Создать голосование")), votingForm(base, view, data.Tz)))
 	return ui.Section(sect...)
 }
 

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"pecheny.me/dopecore/tglogin"
 )
 
 func TestLoginMethodsFollowsBotConfig(t *testing.T) {
@@ -16,10 +18,10 @@ func TestLoginMethodsFollowsBotConfig(t *testing.T) {
 		botName string
 		want    string
 	}{
-		{"a polling bot with a handle", true, true, "xy_bot", tgStatusOK},
-		{"no bot on this instance", false, false, "xy_bot", tgStatusMisconfigured},
-		{"a bot but no @handle — the state that showed a dead link", true, true, "", tgStatusMisconfigured},
-		{"a bot that is not polling", true, false, "xy_bot", tgStatusUnreachable},
+		{"a polling bot with a handle", true, true, "xy_bot", tglogin.StatusOK},
+		{"no bot on this instance", false, false, "xy_bot", tglogin.StatusMisconfigured},
+		{"a bot but no @handle — the state that showed a dead link", true, true, "", tglogin.StatusMisconfigured},
+		{"a bot that is not polling", true, false, "xy_bot", tglogin.StatusUnreachable},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			srv.bot = nil
@@ -29,10 +31,7 @@ func TestLoginMethodsFollowsBotConfig(t *testing.T) {
 			t.Setenv("XY_BOT_NAME", c.botName)
 			w := httptest.NewRecorder()
 			srv.handleLoginMethods(w, httptest.NewRequest(http.MethodGet, "/api/auth/methods", nil))
-			var got struct {
-				Telegram bool   `json:"telegram"`
-				Status   string `json:"telegram_status"`
-			}
+			var got tglogin.MethodsResponse
 			if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
 				t.Fatalf("decode: %v", err)
 			}
@@ -41,7 +40,7 @@ func TestLoginMethodsFollowsBotConfig(t *testing.T) {
 			}
 			// The old boolean still has to mean "offer the button", for a page
 			// older than telegram_status.
-			if want := c.want == tgStatusOK; got.Telegram != want {
+			if want := c.want == tglogin.StatusOK; got.Telegram != want {
 				t.Errorf("telegram = %v, want %v", got.Telegram, want)
 			}
 		})

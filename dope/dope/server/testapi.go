@@ -54,6 +54,8 @@ func (s *Server) Metrics() *metrics.Recorder { return &s.metrics }
 
 // SetEditBatchWindow shortens the edit batching window for a test that plays
 // many edits one after another and awaits each.
+// SetBot configures the bot client, typically for tests.
+func (s *Server) SetBot(b *tgbot.Client) { s.bot = b }
 func (s *Server) SetEditBatchWindow(d time.Duration) { s.editor().Window = d }
 
 // ----- exported type aliases (request/response + scope types) -----
@@ -64,6 +66,7 @@ type (
 	UpdateRequest      = updateRequest
 	MeResponse         = meResponse
 	PasswordRequest    = passwordRequest
+	TimezoneRequest    = timezoneRequest
 	UsernameRequest    = usernameRequest
 	VenueUpdateRequest = venueUpdateRequest
 )
@@ -137,12 +140,18 @@ func (s *Server) CalculateScopedReseed(ctx context.Context, scope FestScope, sta
 	return s.calculateScopedReseed(ctx, scope, stageCode)
 }
 
+func (s *Server) HandleAuthMethods(w http.ResponseWriter, r *http.Request) {
+	s.handleAuthMethods(w, r)
+}
 func (s *Server) HandleAuthLoginPassword(w http.ResponseWriter, r *http.Request) {
 	s.handleAuthLoginPassword(w, r)
 }
 func (s *Server) HandleAuthMe(w http.ResponseWriter, r *http.Request) { s.handleAuthMe(w, r) }
 func (s *Server) HandleAuthPassword(w http.ResponseWriter, r *http.Request) {
 	s.handleAuthPassword(w, r)
+}
+func (s *Server) HandleAuthTimezone(w http.ResponseWriter, r *http.Request) {
+	s.handleAuthTimezone(w, r)
 }
 func (s *Server) HandleAuthTgStart(w http.ResponseWriter, r *http.Request) {
 	s.handleAuthTgStart(w, r)

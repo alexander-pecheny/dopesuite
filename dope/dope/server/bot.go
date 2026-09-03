@@ -40,7 +40,7 @@ func (s *server) startBot(ctx context.Context) {
 		log.Printf("telegram bot: not polling: %v", err)
 		return
 	}
-	client := tgbot.New(tgbot.Config{
+	s.bot = tgbot.New(tgbot.Config{
 		Token:          token,
 		PollTimeout:    30 * time.Second,
 		AllowedUpdates: []string{"message"},
@@ -48,8 +48,14 @@ func (s *server) startBot(ctx context.Context) {
 	log.Printf("telegram bot %s polling (token %s)", buildinfo.Version(), tgbot.TokenHash(token))
 	go func() {
 		defer release()
-		_ = client.Run(ctx, recovering(tgbot.LoginHandler(botRegistrar{s}, botTexts)))
+		_ = s.bot.Run(ctx, recovering(tgbot.LoginHandler(botRegistrar{s}, botTexts)))
 	}()
+}
+
+// botPolling reports whether this instance's bot is actually working — not
+// whether the process is up, which was never the question.
+func (s *server) botPolling() bool {
+	return s.bot != nil && tgbot.HealthOf(s.bot, time.Now()).OK
 }
 
 // recovering keeps one malformed message from taking the fest down with it —

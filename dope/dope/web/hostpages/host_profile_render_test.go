@@ -67,3 +67,20 @@ func TestProfileDocIdentity(t *testing.T) {
 		})
 	}
 }
+
+// TestProfileDocTimezone checks the profile timezone form: the stored zone
+// prefills the field, and the ids profile.js drives are all present.
+func TestProfileDocTimezone(t *testing.T) {
+	html, err := dopeui.Render(profileDoc(profileData{Timezone: "Europe/Moscow"}))
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	body := string(html)
+	for _, want := range []string{
+		`id="tzForm"`, `id="tzValue"`, `id="tzMessage"`, `value="Europe/Moscow"`, "Часовой пояс",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+}

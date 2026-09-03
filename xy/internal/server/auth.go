@@ -280,31 +280,15 @@ func (s *server) telegramConfigured() bool {
 	return s.bot != nil && botUsername() != ""
 }
 
-// The three answers the login page can get about telegram. Being configured and
-// being usable are different things, and a visitor deserves to know which one
-// failed rather than watching a code that no bot will ever collect.
-const (
-	tgStatusOK            = "ok"
-	tgStatusMisconfigured = "misconfigured" // no bot on this instance, or no @handle
-	tgStatusUnreachable   = "unreachable"   // configured, but the bot is not polling
-)
-
 func (s *server) telegramStatus() string {
-	if !s.telegramConfigured() {
-		return tgStatusMisconfigured
-	}
-	if !s.botPolling() {
-		return tgStatusUnreachable
-	}
-	return tgStatusOK
+	return tglogin.TelegramStatus(s.bot != nil, botUsername(), s.botPolling())
 }
 
 // handleLoginMethods tells the login page which ways in to offer. `telegram` is
 // kept for older pages, which read it as a bare on/off; `telegram_status` says
 // WHICH kind of no it is, so the page can name the problem.
 func (s *server) handleLoginMethods(w http.ResponseWriter, r *http.Request) {
-	st := s.telegramStatus()
-	writeJSON(w, map[string]any{"telegram": st == tgStatusOK, "telegram_status": st})
+	writeJSON(w, tglogin.NewMethodsResponse(s.bot != nil, botUsername(), s.botPolling()))
 }
 
 // botUsername is the login bot's @handle, used to build the t.me deep link the

@@ -150,6 +150,7 @@ type profileData struct {
 	HasPassword bool
 	Username    string
 	Telegram    string
+	Timezone    string
 }
 
 // identitySection renders who you are logged in as. Either identity can be
@@ -195,11 +196,23 @@ func profileDoc(data profileData) *ui.Doc {
 	if lines := identitySection(data); len(lines) > 0 {
 		page = append(page, ui.Section(lines...))
 	}
+	tzForm := []ui.Item{
+		ui.ID("tzForm"), ui.DirCol, ui.Autocomplete("off"),
+		ui.Textfield(ui.ID("tzValue"), ui.Name("timezone"), ui.Placeholder("Europe/Moscow"),
+			ui.Value(data.Timezone), ui.Autocomplete("off"), ui.Maxlength("64")),
+		ui.Hint(ui.Text("В этом поясе записывается время слотов и голосований; календарь показывает его под сеткой.")),
+		ui.Row(ui.Button(ui.Submit(), ui.Text("Сохранить"))),
+	}
 	page = append(page,
 		ui.Section(
 			ui.Hint(ui.Text(action)),
 			ui.Form(form...),
 			ui.Message(ui.ID("passwordMessage")),
+		),
+		ui.Section(
+			ui.Hint(ui.Text("Часовой пояс")),
+			ui.Form(tzForm...),
+			ui.Message(ui.ID("tzMessage")),
 		),
 		ui.Form(ui.Method("post"), ui.Action("/profile/logout"),
 			ui.Button(ui.Submit(), ui.Text(s.Host.Pages.LogoutSubmit())),
@@ -274,10 +287,10 @@ func (s *Server) HandleProfilePage(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
 		}
-		var hash, username, telegram sql.NullString
+		var hash, username, telegram, tz sql.NullString
 		if err := s.h.Engine().DB.QueryRowContext(r.Context(),
-			`select password_hash, username, telegram_username from users where id = ?`,
-			user.UserID).Scan(&hash, &username, &telegram); err != nil {
+			`select password_hash, username, telegram_username, timezone from users where id = ?`,
+			user.UserID).Scan(&hash, &username, &telegram, &tz); err != nil {
 			route.WriteError(w, r, err)
 			return
 		}
@@ -285,6 +298,7 @@ func (s *Server) HandleProfilePage(w http.ResponseWriter, r *http.Request) {
 			HasPassword: hash.Valid && hash.String != "",
 			Username:    username.String,
 			Telegram:    strings.TrimPrefix(telegram.String, "@"),
+			Timezone:    tz.String,
 		}))
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
