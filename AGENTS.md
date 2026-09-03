@@ -89,9 +89,12 @@ Every string a person reads comes from a Catalog, never from the call site
 - An error a person may read is `i18nstrings.User(s.Board.Delete.Locked())`;
   the HTTP edge shows those verbatim and everything else as one generic line.
 - `just cyrillic-check` fails on Cyrillic in any `.go`/`.ts`/`.dopeui` outside
-  the catalogs, generated files and tests. What still has some is listed in
-  `scripts/cyrillic/allowlist.txt` — the migration's burn-down, so a listed
-  file with no Cyrillic left fails too. Never add a line to it to land a string.
+  the catalogs, generated files and tests. The migration is complete, so the
+  only files still listed in `scripts/cyrillic/allowlist.txt` are ones whose
+  Cyrillic is functional — regexes that match Russian input, data tables,
+  the chgksuite-parity format strings — plus `xy/web/ts/sw.ts`, a classic
+  worker with no import graph. A listed file that goes clean fails too.
+  Never add a line to it to land a string.
 
 ## Toolchain
 

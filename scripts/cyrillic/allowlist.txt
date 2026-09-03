@@ -1,7 +1,12 @@
-# Files that still carry user-facing Russian outside a Catalog. This list is the
-# migration's burn-down (root docs/adr/0006): a Surface moves into TOML, its
-# files leave this list, and the lint fails if a listed file has no Cyrillic
-# left — so the list cannot rot into a permanent exemption.
+# Files that still carry Cyrillic outside a Catalog (root docs/adr/0006). The
+# migration is DONE: every user-facing string lives in a module's
+# i18nstrings/<lang>/*.toml. What remains here is functional Cyrillic that
+# cannot move: regexes that match Russian input, month/city/label data
+# tables, the chgksuite-parity format strings (dbtext, СИ docx, the parity
+# i18n package), fixture data (the gallery skin, server defaultMatch), and
+# xy's sw.ts, whose classic-worker build has no import graph for a catalog.
+# The lint still fails if a listed file goes clean, and a new prose string
+# must go to a Catalog, never onto this list.
 dope/dope/domain/gamebuild/build.go
 dope/dope/domain/games/multi.go
 dope/dope/domain/replay/parse.go
