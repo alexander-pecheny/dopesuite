@@ -74,7 +74,7 @@ tzForm.addEventListener("submit", async (event) => {
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({timezone: tzValue.value.trim()}),
     });
-    setText(tzMessage, "Часовой пояс сохранён.");
+    setText(tzMessage, S.host.profile.tzSaved());
   } catch (error) {
     setText(tzMessage, error instanceof Error ? error.message : String(error));
   }

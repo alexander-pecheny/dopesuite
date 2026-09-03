@@ -46,7 +46,7 @@ export interface GameBreadcrumbsOptions {
   festHref?: string;
   gameHref?: string;
   // Host pages sit under /host/…, so their trail carries the My fests crumb
-  // the URL does; the public viewer's does not. A Слот hangs off Площадки the
+  // the URL does; the public viewer's does not. A Slot hangs off Venues the
   // way its server-rendered pages do.
   host?: boolean;
   venue?: boolean;
@@ -66,7 +66,7 @@ export function renderGameBreadcrumbs(root: HTMLElement | null | undefined, opti
     { text: "", href: "/", home: true },
   ];
   if (options.host) trail.push({ text: S.screen.trail.host(), href: "/host" });
-  else if (options.venue) trail.push({ text: "Площадки", href: "/venues" });
+  else if (options.venue) trail.push({ text: S.screen.venue.trail(), href: "/venues" });
   trail.push({ text: festTitle, href: options.festHref || "/" });
   if (options.gameHref && currentTitle && currentTitle !== gameTitle) {
     trail.push({ text: gameTitle, href: options.gameHref });
@@ -190,8 +190,8 @@ export interface GameRoute {
   festID?: string;
   gameID?: string;
   apiBase?: string;
-  // A Слот at a площадка is watched under /venue/… and run under
-  // /host/venue/…; the API is the фест's either way.
+  // A Slot at a venue is watched under /venue/… and run under
+  // /host/venue/…; the API is the fest's either way.
   venue?: boolean;
 }
 

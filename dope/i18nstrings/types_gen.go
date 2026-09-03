@@ -41,6 +41,7 @@ type Strings struct {
 	Telegram     TelegramStrings
 	Troika       TroikaStrings
 	Ui           UiStrings
+	Venues       VenuesStrings
 	Widgets      WidgetsStrings
 }
 
@@ -325,9 +326,16 @@ type ExportNameStrings struct {
 }
 
 type ExportOdStrings struct {
-	City func() string
-	Name func() string
-	Tour func() string
+	City              func() string
+	Name              func() string
+	PlayersCity       func() string
+	PlayersFirstName  func() string
+	PlayersFlag       func() string
+	PlayersName       func() string
+	PlayersPatronymic func() string
+	PlayersPlace      func() string
+	PlayersSurname    func() string
+	Tour              func() string
 }
 
 type ExportSheetStrings struct {
@@ -577,10 +585,12 @@ type GamesTroikaStrings struct {
 
 // HostStrings is the host Surface.
 type HostStrings struct {
-	Dash   HostDashStrings
-	Games  HostGamesStrings
-	Pages  HostPagesStrings
-	Roster HostRosterStrings
+	Dash       HostDashStrings
+	Games      HostGamesStrings
+	Pages      HostPagesStrings
+	Profile    HostProfileStrings
+	PublicTabs HostPublicTabsStrings
+	Roster     HostRosterStrings
 }
 
 type HostDashStrings struct {
@@ -724,6 +734,18 @@ type HostPagesStrings struct {
 	StartDateLabel             func() string
 	TitleLabel                 func() string
 	UsernameFallback           func() string
+}
+
+type HostProfileStrings struct {
+	TzHint    func() string
+	TzSave    func() string
+	TzSaved   func() string
+	TzSubhead func() string
+}
+
+type HostPublicTabsStrings struct {
+	Fests  func() string
+	Venues func() string
 }
 
 type HostRosterStrings struct {
@@ -1091,16 +1113,22 @@ type OctobearfestLogStrings struct {
 
 // OdStrings is the od Surface.
 type OdStrings struct {
-	Detailed OdDetailedStrings
-	Guard    OdGuardStrings
-	Head     OdHeadStrings
-	Invert   OdInvertStrings
-	Progress OdProgressStrings
-	Results  OdResultsStrings
-	Screen   OdScreenStrings
-	Shootout OdShootoutStrings
-	Team     OdTeamStrings
-	Title    func() string
+	Contested OdContestedStrings
+	Detailed  OdDetailedStrings
+	Guard     OdGuardStrings
+	Head      OdHeadStrings
+	Invert    OdInvertStrings
+	Progress  OdProgressStrings
+	Results   OdResultsStrings
+	Screen    OdScreenStrings
+	Shootout  OdShootoutStrings
+	Team      OdTeamStrings
+	Title     func() string
+}
+
+type OdContestedStrings struct {
+	NeedQuestionAndTeam func() string
+	NoSuchNumber        func() string
 }
 
 type OdDetailedStrings struct {
@@ -1480,6 +1508,7 @@ type ScreenStrings struct {
 	Tabs      ScreenTabsStrings
 	Title     ScreenTitleStrings
 	Trail     ScreenTrailStrings
+	Venue     ScreenVenueStrings
 }
 
 type ScreenBannerStrings struct {
@@ -1531,6 +1560,10 @@ type ScreenTitleStrings struct {
 type ScreenTrailStrings struct {
 	Home func() string
 	Host func() string
+}
+
+type ScreenVenueStrings struct {
+	Trail func() string
 }
 
 // ServerStrings is the server Surface.
@@ -1813,12 +1846,258 @@ type UiSyncStrings struct {
 	Label func() string
 }
 
+// VenuesStrings is the venues Surface.
+type VenuesStrings struct {
+	Contested    VenuesContestedStrings
+	Errors       VenuesErrorsStrings
+	Flags        VenuesFlagsStrings
+	Game         VenuesGameStrings
+	Host         VenuesHostStrings
+	OdContested  VenuesOdContestedStrings
+	Public       VenuesPublicStrings
+	Reg          VenuesRegStrings
+	RosterEditor VenuesRosterEditorStrings
+	Voting       VenuesVotingStrings
+}
+
+type VenuesContestedStrings struct {
+	Accept        func() string
+	ColAccepted   func() string
+	ColAnswer     func() string
+	ColQuestion   func() string
+	ColTeam       func() string
+	ColTour       func() string
+	Delete        func() string
+	DeleteConfirm func() string
+	Empty         func() string
+	StateAccepted func() string
+	StatePending  func() string
+	Subhead       func() string
+	Unaccept      func() string
+}
+
+type VenuesErrorsStrings struct {
+	GameEntered         func(n string) string
+	GameNotStarted      func() string
+	NeedsTeamNumber     func() string
+	NoTeamName          func() string
+	RatingNoVenue       func() string
+	RatingUnavailable   func() string
+	RatingVenueRequired func() string
+	TeamHasResults      func() string
+	TitleRequired       func() string
+}
+
+type VenuesFlagsStrings struct {
+	Base    func() string
+	Captain func() string
+	Legion  func() string
+}
+
+type VenuesGameStrings struct {
+	ApplicationsEmpty   func() string
+	ApplicationsSubhead func() string
+	CloneBtn            func() string
+	CloneCancel         func() string
+	CloneDatetimeLabel  func() string
+	CloneNote           func() string
+	CloneTitle          func() string
+	ColEdited           func() string
+	ColFiled            func() string
+	ColFlags            func() string
+	ColNumber           func() string
+	ColRoster           func() string
+	ColStatus           func() string
+	ColSubmitter        func() string
+	ColTeam             func() string
+	ColWho              func() string
+	DatetimeLabel       func() string
+	DeleteConfirm       func() string
+	DeleteSubmit        func() string
+	DownloadPlayers     func() string
+	DownloadTours       func() string
+	DownloadsSubhead    func() string
+	LinkCopy            func() string
+	LinkHidden          func() string
+	LinkRotate          func() string
+	LinkRotateConfirm   func() string
+	LinkSubhead         func() string
+	LinkVisibleLabel    func() string
+	RegClosedLabel      func() string
+	RegOpensLabel       func() string
+	RegOpensPlaceholder func() string
+	StatusAccept        func() string
+	StatusDecline       func() string
+	StatusPending       func() string
+	Subhead             func() string
+	TableBtn            func() string
+	TournamentLabel     func() string
+	UndatedTitle        func() string
+	VersionRestore      func() string
+	VersionSave         func() string
+	VersionsSummary     func() string
+}
+
+type VenuesHostStrings struct {
+	CityLabel              func() string
+	CreateVenueSubmit      func() string
+	CreateVenueSummary     func() string
+	DeleteSubhead          func() string
+	DeleteVenueConfirm     func() string
+	DeleteVenueSubmit      func() string
+	DescriptionLabel       func() string
+	GameAccepted           func(n string) string
+	GameNoTournament       func() string
+	GamePending            func(n string) string
+	GameUndated            func() string
+	GamesEmpty             func() string
+	GamesSubhead           func() string
+	JumpLabel              func() string
+	JumpTitle              func() string
+	NewGameSubmit          func() string
+	NewGameSummary         func() string
+	PageTitle              func(title string) string
+	PublicLabel            func() string
+	RatingVenueLabel       func() string
+	RatingVenuePlaceholder func() string
+	SaveSubmit             func() string
+	SlugHint               func() string
+	SlugLabel              func() string
+	TitleLabel             func() string
+	VenueUnlisted          func() string
+	VenuesEmpty            func() string
+}
+
+type VenuesOdContestedStrings struct {
+	AcceptedLabel func() string
+	AnswerLabel   func() string
+	DialogTitle   func(n string) string
+	NoSuchTeam    func() string
+	NumberLabel   func() string
+	Remove        func() string
+	Save          func() string
+	SaveFailed    func() string
+}
+
+type VenuesPublicStrings struct {
+	ColCity           func() string
+	ColNextGame       func() string
+	ColRating         func() string
+	ColRegistration   func() string
+	ColTeams          func() string
+	ColTournament     func() string
+	ColVenue          func() string
+	ColWhen           func() string
+	GamesEmpty        func() string
+	IndexEmpty        func() string
+	IndexTitle        func() string
+	PastGames         func() string
+	RatingLink        func() string
+	RegClosed         func() string
+	RegOpen           func() string
+	RegScheduled      func(at string) string
+	SearchLabel       func() string
+	SearchPlaceholder func() string
+	UpcomingGames     func() string
+}
+
+type VenuesRegStrings struct {
+	ApplicationSubhead func() string
+	Closed             func() string
+	ColFlag            func() string
+	ColId              func() string
+	ColPlayer          func() string
+	Crumb              func() string
+	ErrorNotOpen       func() string
+	LoginBtn           func() string
+	LoginHint          func() string
+	RatingTeamLabel    func() string
+	RosterLabel        func() string
+	Scheduled          func(at string) string
+	StatusAccepted     func() string
+	StatusDeclined     func() string
+	StatusLine         func(status string) string
+	StatusPending      func() string
+	SubmitEdit         func() string
+	SubmitNew          func() string
+	TableBtn           func() string
+	TeamNameLabel      func() string
+	TeamNumber         func(n string) string
+	Title              func(venue string) string
+}
+
+type VenuesRosterEditorStrings struct {
+	AddPlayer         func() string
+	Captain           func() string
+	GamesCount        func(n int) string
+	Name              func() string
+	NoCaptain         func() string
+	NotInBase         func() string
+	Patronymic        func() string
+	PlayerPlaceholder func() string
+	Remove            func() string
+	Surname           func() string
+	TeamPlaceholder   func() string
+	TeamUnknown       func() string
+	TooMany           func(n string) string
+}
+
+type VenuesVotingStrings struct {
+	AddByIdLabel       func() string
+	BallotDecline      func() string
+	BallotRestore      func() string
+	BallotsSubhead     func() string
+	BuffEmpty          func() string
+	ClosesLabel        func() string
+	ColChoice          func() string
+	ColWho             func() string
+	CopyLink           func() string
+	CreateSubmit       func() string
+	DeclinedNote       func() string
+	Empty              func() string
+	ErrorFrozen        func() string
+	ErrorKindUnknown   func() string
+	ErrorNoTournaments func() string
+	ErrorPickOne       func() string
+	FrozenNote         func() string
+	KindAny            func() string
+	KindLabel          func() string
+	KindLine           func(kind string) string
+	KindOne            func() string
+	KindRanked         func() string
+	OpensLabel         func() string
+	OpensPlaceholder   func() string
+	PageClosed         func() string
+	PageLogin          func() string
+	PageScheduled      func(at string) string
+	PageTitle          func(venue string) string
+	PerTeamLabel       func() string
+	PickAny            func() string
+	PickOne            func() string
+	RankFirst          func() string
+	RankSecond         func() string
+	RankThird          func() string
+	SaveSubmit         func() string
+	SettingsSummary    func() string
+	Subhead            func() string
+	SubmitEdit         func() string
+	SubmitNew          func() string
+	TallySubhead       func() string
+	TournamentN        func(id string) string
+	TournamentsLabel   func() string
+	WindowFrom         func(at string) string
+	WindowNone         func() string
+	WindowUntil        func(at string) string
+	YourBallot         func() string
+}
+
 // WidgetsStrings is the widgets Surface.
 type WidgetsStrings struct {
 	CellNav    WidgetsCellNavStrings
 	GroupStats WidgetsGroupStatsStrings
 	Keypad     WidgetsKeypadStrings
 	Menu       WidgetsMenuStrings
+	Modal      WidgetsModalStrings
 	Profile    WidgetsProfileStrings
 	Recorder   WidgetsRecorderStrings
 	Roster     WidgetsRosterStrings
@@ -1850,6 +2129,10 @@ type WidgetsKeypadStrings struct {
 type WidgetsMenuStrings struct {
 	Login   func() string
 	Profile func() string
+}
+
+type WidgetsModalStrings struct {
+	Cancel func() string
 }
 
 type WidgetsProfileStrings struct {
@@ -2082,6 +2365,20 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Export.Od.City(), true
 	case "export.od.name":
 		return s.Export.Od.Name(), true
+	case "export.od.players_city":
+		return s.Export.Od.PlayersCity(), true
+	case "export.od.players_first_name":
+		return s.Export.Od.PlayersFirstName(), true
+	case "export.od.players_flag":
+		return s.Export.Od.PlayersFlag(), true
+	case "export.od.players_name":
+		return s.Export.Od.PlayersName(), true
+	case "export.od.players_patronymic":
+		return s.Export.Od.PlayersPatronymic(), true
+	case "export.od.players_place":
+		return s.Export.Od.PlayersPlace(), true
+	case "export.od.players_surname":
+		return s.Export.Od.PlayersSurname(), true
 	case "export.od.tour":
 		return s.Export.Od.Tour(), true
 	case "export.sheet.detailed":
@@ -2474,6 +2771,18 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Host.Pages.TitleLabel(), true
 	case "host.pages.username_fallback":
 		return s.Host.Pages.UsernameFallback(), true
+	case "host.profile.tz_hint":
+		return s.Host.Profile.TzHint(), true
+	case "host.profile.tz_save":
+		return s.Host.Profile.TzSave(), true
+	case "host.profile.tz_saved":
+		return s.Host.Profile.TzSaved(), true
+	case "host.profile.tz_subhead":
+		return s.Host.Profile.TzSubhead(), true
+	case "host.public_tabs.fests":
+		return s.Host.PublicTabs.Fests(), true
+	case "host.public_tabs.venues":
+		return s.Host.PublicTabs.Venues(), true
 	case "host.roster.add_override_btn":
 		return s.Host.Roster.AddOverrideBtn(), true
 	case "host.roster.cancel_btn":
@@ -2764,6 +3073,10 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Octobearfest.Flag.Slug(), true
 	case "octobearfest.log.troika_done":
 		return s.Octobearfest.Log.TroikaDone(), true
+	case "od.contested.need_question_and_team":
+		return s.Od.Contested.NeedQuestionAndTeam(), true
+	case "od.contested.no_such_number":
+		return s.Od.Contested.NoSuchNumber(), true
 	case "od.guard.lead":
 		return s.Od.Guard.Lead(), true
 	case "od.guard.numbers":
@@ -3034,6 +3347,8 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Screen.Trail.Home(), true
 	case "screen.trail.host":
 		return s.Screen.Trail.Host(), true
+	case "screen.venue.trail":
+		return s.Screen.Venue.Trail(), true
 	case "server.bot.down":
 		return s.Server.Bot.Down(), true
 	case "server.bot.help":
@@ -3168,6 +3483,372 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Ui.Palette.Label(), true
 	case "ui.sync.label":
 		return s.Ui.Sync.Label(), true
+	case "venues.contested.accept":
+		return s.Venues.Contested.Accept(), true
+	case "venues.contested.col_accepted":
+		return s.Venues.Contested.ColAccepted(), true
+	case "venues.contested.col_answer":
+		return s.Venues.Contested.ColAnswer(), true
+	case "venues.contested.col_question":
+		return s.Venues.Contested.ColQuestion(), true
+	case "venues.contested.col_team":
+		return s.Venues.Contested.ColTeam(), true
+	case "venues.contested.col_tour":
+		return s.Venues.Contested.ColTour(), true
+	case "venues.contested.delete":
+		return s.Venues.Contested.Delete(), true
+	case "venues.contested.delete_confirm":
+		return s.Venues.Contested.DeleteConfirm(), true
+	case "venues.contested.empty":
+		return s.Venues.Contested.Empty(), true
+	case "venues.contested.state_accepted":
+		return s.Venues.Contested.StateAccepted(), true
+	case "venues.contested.state_pending":
+		return s.Venues.Contested.StatePending(), true
+	case "venues.contested.subhead":
+		return s.Venues.Contested.Subhead(), true
+	case "venues.contested.unaccept":
+		return s.Venues.Contested.Unaccept(), true
+	case "venues.errors.game_not_started":
+		return s.Venues.Errors.GameNotStarted(), true
+	case "venues.errors.needs_team_number":
+		return s.Venues.Errors.NeedsTeamNumber(), true
+	case "venues.errors.no_team_name":
+		return s.Venues.Errors.NoTeamName(), true
+	case "venues.errors.rating_no_venue":
+		return s.Venues.Errors.RatingNoVenue(), true
+	case "venues.errors.rating_unavailable":
+		return s.Venues.Errors.RatingUnavailable(), true
+	case "venues.errors.rating_venue_required":
+		return s.Venues.Errors.RatingVenueRequired(), true
+	case "venues.errors.team_has_results":
+		return s.Venues.Errors.TeamHasResults(), true
+	case "venues.errors.title_required":
+		return s.Venues.Errors.TitleRequired(), true
+	case "venues.flags.base":
+		return s.Venues.Flags.Base(), true
+	case "venues.flags.captain":
+		return s.Venues.Flags.Captain(), true
+	case "venues.flags.legion":
+		return s.Venues.Flags.Legion(), true
+	case "venues.game.applications_empty":
+		return s.Venues.Game.ApplicationsEmpty(), true
+	case "venues.game.applications_subhead":
+		return s.Venues.Game.ApplicationsSubhead(), true
+	case "venues.game.clone_btn":
+		return s.Venues.Game.CloneBtn(), true
+	case "venues.game.clone_cancel":
+		return s.Venues.Game.CloneCancel(), true
+	case "venues.game.clone_datetime_label":
+		return s.Venues.Game.CloneDatetimeLabel(), true
+	case "venues.game.clone_note":
+		return s.Venues.Game.CloneNote(), true
+	case "venues.game.clone_title":
+		return s.Venues.Game.CloneTitle(), true
+	case "venues.game.col_edited":
+		return s.Venues.Game.ColEdited(), true
+	case "venues.game.col_filed":
+		return s.Venues.Game.ColFiled(), true
+	case "venues.game.col_flags":
+		return s.Venues.Game.ColFlags(), true
+	case "venues.game.col_number":
+		return s.Venues.Game.ColNumber(), true
+	case "venues.game.col_roster":
+		return s.Venues.Game.ColRoster(), true
+	case "venues.game.col_status":
+		return s.Venues.Game.ColStatus(), true
+	case "venues.game.col_submitter":
+		return s.Venues.Game.ColSubmitter(), true
+	case "venues.game.col_team":
+		return s.Venues.Game.ColTeam(), true
+	case "venues.game.col_who":
+		return s.Venues.Game.ColWho(), true
+	case "venues.game.datetime_label":
+		return s.Venues.Game.DatetimeLabel(), true
+	case "venues.game.delete_confirm":
+		return s.Venues.Game.DeleteConfirm(), true
+	case "venues.game.delete_submit":
+		return s.Venues.Game.DeleteSubmit(), true
+	case "venues.game.download_players":
+		return s.Venues.Game.DownloadPlayers(), true
+	case "venues.game.download_tours":
+		return s.Venues.Game.DownloadTours(), true
+	case "venues.game.downloads_subhead":
+		return s.Venues.Game.DownloadsSubhead(), true
+	case "venues.game.link_copy":
+		return s.Venues.Game.LinkCopy(), true
+	case "venues.game.link_hidden":
+		return s.Venues.Game.LinkHidden(), true
+	case "venues.game.link_rotate":
+		return s.Venues.Game.LinkRotate(), true
+	case "venues.game.link_rotate_confirm":
+		return s.Venues.Game.LinkRotateConfirm(), true
+	case "venues.game.link_subhead":
+		return s.Venues.Game.LinkSubhead(), true
+	case "venues.game.link_visible_label":
+		return s.Venues.Game.LinkVisibleLabel(), true
+	case "venues.game.reg_closed_label":
+		return s.Venues.Game.RegClosedLabel(), true
+	case "venues.game.reg_opens_label":
+		return s.Venues.Game.RegOpensLabel(), true
+	case "venues.game.reg_opens_placeholder":
+		return s.Venues.Game.RegOpensPlaceholder(), true
+	case "venues.game.status_accept":
+		return s.Venues.Game.StatusAccept(), true
+	case "venues.game.status_decline":
+		return s.Venues.Game.StatusDecline(), true
+	case "venues.game.status_pending":
+		return s.Venues.Game.StatusPending(), true
+	case "venues.game.subhead":
+		return s.Venues.Game.Subhead(), true
+	case "venues.game.table_btn":
+		return s.Venues.Game.TableBtn(), true
+	case "venues.game.tournament_label":
+		return s.Venues.Game.TournamentLabel(), true
+	case "venues.game.undated_title":
+		return s.Venues.Game.UndatedTitle(), true
+	case "venues.game.version_restore":
+		return s.Venues.Game.VersionRestore(), true
+	case "venues.game.version_save":
+		return s.Venues.Game.VersionSave(), true
+	case "venues.game.versions_summary":
+		return s.Venues.Game.VersionsSummary(), true
+	case "venues.host.city_label":
+		return s.Venues.Host.CityLabel(), true
+	case "venues.host.create_venue_submit":
+		return s.Venues.Host.CreateVenueSubmit(), true
+	case "venues.host.create_venue_summary":
+		return s.Venues.Host.CreateVenueSummary(), true
+	case "venues.host.delete_subhead":
+		return s.Venues.Host.DeleteSubhead(), true
+	case "venues.host.delete_venue_confirm":
+		return s.Venues.Host.DeleteVenueConfirm(), true
+	case "venues.host.delete_venue_submit":
+		return s.Venues.Host.DeleteVenueSubmit(), true
+	case "venues.host.description_label":
+		return s.Venues.Host.DescriptionLabel(), true
+	case "venues.host.game_no_tournament":
+		return s.Venues.Host.GameNoTournament(), true
+	case "venues.host.game_undated":
+		return s.Venues.Host.GameUndated(), true
+	case "venues.host.games_empty":
+		return s.Venues.Host.GamesEmpty(), true
+	case "venues.host.games_subhead":
+		return s.Venues.Host.GamesSubhead(), true
+	case "venues.host.jump_label":
+		return s.Venues.Host.JumpLabel(), true
+	case "venues.host.jump_title":
+		return s.Venues.Host.JumpTitle(), true
+	case "venues.host.new_game_submit":
+		return s.Venues.Host.NewGameSubmit(), true
+	case "venues.host.new_game_summary":
+		return s.Venues.Host.NewGameSummary(), true
+	case "venues.host.public_label":
+		return s.Venues.Host.PublicLabel(), true
+	case "venues.host.rating_venue_label":
+		return s.Venues.Host.RatingVenueLabel(), true
+	case "venues.host.rating_venue_placeholder":
+		return s.Venues.Host.RatingVenuePlaceholder(), true
+	case "venues.host.save_submit":
+		return s.Venues.Host.SaveSubmit(), true
+	case "venues.host.slug_hint":
+		return s.Venues.Host.SlugHint(), true
+	case "venues.host.slug_label":
+		return s.Venues.Host.SlugLabel(), true
+	case "venues.host.title_label":
+		return s.Venues.Host.TitleLabel(), true
+	case "venues.host.venue_unlisted":
+		return s.Venues.Host.VenueUnlisted(), true
+	case "venues.host.venues_empty":
+		return s.Venues.Host.VenuesEmpty(), true
+	case "venues.od_contested.accepted_label":
+		return s.Venues.OdContested.AcceptedLabel(), true
+	case "venues.od_contested.answer_label":
+		return s.Venues.OdContested.AnswerLabel(), true
+	case "venues.od_contested.no_such_team":
+		return s.Venues.OdContested.NoSuchTeam(), true
+	case "venues.od_contested.number_label":
+		return s.Venues.OdContested.NumberLabel(), true
+	case "venues.od_contested.remove":
+		return s.Venues.OdContested.Remove(), true
+	case "venues.od_contested.save":
+		return s.Venues.OdContested.Save(), true
+	case "venues.od_contested.save_failed":
+		return s.Venues.OdContested.SaveFailed(), true
+	case "venues.public.col_city":
+		return s.Venues.Public.ColCity(), true
+	case "venues.public.col_next_game":
+		return s.Venues.Public.ColNextGame(), true
+	case "venues.public.col_rating":
+		return s.Venues.Public.ColRating(), true
+	case "venues.public.col_registration":
+		return s.Venues.Public.ColRegistration(), true
+	case "venues.public.col_teams":
+		return s.Venues.Public.ColTeams(), true
+	case "venues.public.col_tournament":
+		return s.Venues.Public.ColTournament(), true
+	case "venues.public.col_venue":
+		return s.Venues.Public.ColVenue(), true
+	case "venues.public.col_when":
+		return s.Venues.Public.ColWhen(), true
+	case "venues.public.games_empty":
+		return s.Venues.Public.GamesEmpty(), true
+	case "venues.public.index_empty":
+		return s.Venues.Public.IndexEmpty(), true
+	case "venues.public.index_title":
+		return s.Venues.Public.IndexTitle(), true
+	case "venues.public.past_games":
+		return s.Venues.Public.PastGames(), true
+	case "venues.public.rating_link":
+		return s.Venues.Public.RatingLink(), true
+	case "venues.public.reg_closed":
+		return s.Venues.Public.RegClosed(), true
+	case "venues.public.reg_open":
+		return s.Venues.Public.RegOpen(), true
+	case "venues.public.search_label":
+		return s.Venues.Public.SearchLabel(), true
+	case "venues.public.search_placeholder":
+		return s.Venues.Public.SearchPlaceholder(), true
+	case "venues.public.upcoming_games":
+		return s.Venues.Public.UpcomingGames(), true
+	case "venues.reg.application_subhead":
+		return s.Venues.Reg.ApplicationSubhead(), true
+	case "venues.reg.closed":
+		return s.Venues.Reg.Closed(), true
+	case "venues.reg.col_flag":
+		return s.Venues.Reg.ColFlag(), true
+	case "venues.reg.col_id":
+		return s.Venues.Reg.ColId(), true
+	case "venues.reg.col_player":
+		return s.Venues.Reg.ColPlayer(), true
+	case "venues.reg.crumb":
+		return s.Venues.Reg.Crumb(), true
+	case "venues.reg.error_not_open":
+		return s.Venues.Reg.ErrorNotOpen(), true
+	case "venues.reg.login_btn":
+		return s.Venues.Reg.LoginBtn(), true
+	case "venues.reg.login_hint":
+		return s.Venues.Reg.LoginHint(), true
+	case "venues.reg.rating_team_label":
+		return s.Venues.Reg.RatingTeamLabel(), true
+	case "venues.reg.roster_label":
+		return s.Venues.Reg.RosterLabel(), true
+	case "venues.reg.status_accepted":
+		return s.Venues.Reg.StatusAccepted(), true
+	case "venues.reg.status_declined":
+		return s.Venues.Reg.StatusDeclined(), true
+	case "venues.reg.status_pending":
+		return s.Venues.Reg.StatusPending(), true
+	case "venues.reg.submit_edit":
+		return s.Venues.Reg.SubmitEdit(), true
+	case "venues.reg.submit_new":
+		return s.Venues.Reg.SubmitNew(), true
+	case "venues.reg.table_btn":
+		return s.Venues.Reg.TableBtn(), true
+	case "venues.reg.team_name_label":
+		return s.Venues.Reg.TeamNameLabel(), true
+	case "venues.roster_editor.add_player":
+		return s.Venues.RosterEditor.AddPlayer(), true
+	case "venues.roster_editor.captain":
+		return s.Venues.RosterEditor.Captain(), true
+	case "venues.roster_editor.name":
+		return s.Venues.RosterEditor.Name(), true
+	case "venues.roster_editor.no_captain":
+		return s.Venues.RosterEditor.NoCaptain(), true
+	case "venues.roster_editor.not_in_base":
+		return s.Venues.RosterEditor.NotInBase(), true
+	case "venues.roster_editor.patronymic":
+		return s.Venues.RosterEditor.Patronymic(), true
+	case "venues.roster_editor.player_placeholder":
+		return s.Venues.RosterEditor.PlayerPlaceholder(), true
+	case "venues.roster_editor.remove":
+		return s.Venues.RosterEditor.Remove(), true
+	case "venues.roster_editor.surname":
+		return s.Venues.RosterEditor.Surname(), true
+	case "venues.roster_editor.team_placeholder":
+		return s.Venues.RosterEditor.TeamPlaceholder(), true
+	case "venues.roster_editor.team_unknown":
+		return s.Venues.RosterEditor.TeamUnknown(), true
+	case "venues.voting.add_by_id_label":
+		return s.Venues.Voting.AddByIdLabel(), true
+	case "venues.voting.ballot_decline":
+		return s.Venues.Voting.BallotDecline(), true
+	case "venues.voting.ballot_restore":
+		return s.Venues.Voting.BallotRestore(), true
+	case "venues.voting.ballots_subhead":
+		return s.Venues.Voting.BallotsSubhead(), true
+	case "venues.voting.buff_empty":
+		return s.Venues.Voting.BuffEmpty(), true
+	case "venues.voting.closes_label":
+		return s.Venues.Voting.ClosesLabel(), true
+	case "venues.voting.col_choice":
+		return s.Venues.Voting.ColChoice(), true
+	case "venues.voting.col_who":
+		return s.Venues.Voting.ColWho(), true
+	case "venues.voting.copy_link":
+		return s.Venues.Voting.CopyLink(), true
+	case "venues.voting.create_submit":
+		return s.Venues.Voting.CreateSubmit(), true
+	case "venues.voting.declined_note":
+		return s.Venues.Voting.DeclinedNote(), true
+	case "venues.voting.empty":
+		return s.Venues.Voting.Empty(), true
+	case "venues.voting.error_frozen":
+		return s.Venues.Voting.ErrorFrozen(), true
+	case "venues.voting.error_kind_unknown":
+		return s.Venues.Voting.ErrorKindUnknown(), true
+	case "venues.voting.error_no_tournaments":
+		return s.Venues.Voting.ErrorNoTournaments(), true
+	case "venues.voting.error_pick_one":
+		return s.Venues.Voting.ErrorPickOne(), true
+	case "venues.voting.frozen_note":
+		return s.Venues.Voting.FrozenNote(), true
+	case "venues.voting.kind_any":
+		return s.Venues.Voting.KindAny(), true
+	case "venues.voting.kind_label":
+		return s.Venues.Voting.KindLabel(), true
+	case "venues.voting.kind_one":
+		return s.Venues.Voting.KindOne(), true
+	case "venues.voting.kind_ranked":
+		return s.Venues.Voting.KindRanked(), true
+	case "venues.voting.opens_label":
+		return s.Venues.Voting.OpensLabel(), true
+	case "venues.voting.opens_placeholder":
+		return s.Venues.Voting.OpensPlaceholder(), true
+	case "venues.voting.page_closed":
+		return s.Venues.Voting.PageClosed(), true
+	case "venues.voting.page_login":
+		return s.Venues.Voting.PageLogin(), true
+	case "venues.voting.per_team_label":
+		return s.Venues.Voting.PerTeamLabel(), true
+	case "venues.voting.pick_any":
+		return s.Venues.Voting.PickAny(), true
+	case "venues.voting.pick_one":
+		return s.Venues.Voting.PickOne(), true
+	case "venues.voting.rank_first":
+		return s.Venues.Voting.RankFirst(), true
+	case "venues.voting.rank_second":
+		return s.Venues.Voting.RankSecond(), true
+	case "venues.voting.rank_third":
+		return s.Venues.Voting.RankThird(), true
+	case "venues.voting.save_submit":
+		return s.Venues.Voting.SaveSubmit(), true
+	case "venues.voting.settings_summary":
+		return s.Venues.Voting.SettingsSummary(), true
+	case "venues.voting.subhead":
+		return s.Venues.Voting.Subhead(), true
+	case "venues.voting.submit_edit":
+		return s.Venues.Voting.SubmitEdit(), true
+	case "venues.voting.submit_new":
+		return s.Venues.Voting.SubmitNew(), true
+	case "venues.voting.tally_subhead":
+		return s.Venues.Voting.TallySubhead(), true
+	case "venues.voting.tournaments_label":
+		return s.Venues.Voting.TournamentsLabel(), true
+	case "venues.voting.window_none":
+		return s.Venues.Voting.WindowNone(), true
+	case "venues.voting.your_ballot":
+		return s.Venues.Voting.YourBallot(), true
 	case "widgets.cell_nav.next":
 		return s.Widgets.CellNav.Next(), true
 	case "widgets.cell_nav.prev":
@@ -3190,6 +3871,8 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Widgets.Menu.Login(), true
 	case "widgets.menu.profile":
 		return s.Widgets.Menu.Profile(), true
+	case "widgets.modal.cancel":
+		return s.Widgets.Modal.Cancel(), true
 	case "widgets.profile.changed":
 		return s.Widgets.Profile.Changed(), true
 	case "widgets.profile.mismatch":
@@ -3221,7 +3904,7 @@ func (s Strings) Lookup(id string) (string, bool) {
 // Defines reports whether the Catalog holds the id at all, templated or not.
 func (Strings) Defines(id string) bool {
 	switch id {
-	case "admin.create_users.invalid_username", "admin.create_users.name", "admin.create_users.title", "admin.page.title", "admin.users.col_activity", "admin.users.col_created", "admin.users.col_login", "admin.users.empty", "admin.users.name", "admin.users.system_tag", "admin.users.title", "auth.login.code_missing", "auth.login.code_not_found", "auth.login.credentials_invalid", "auth.login.credentials_missing", "auth.login.password_wrong", "auth.login.system_user", "auth.login.telegram_linked", "auth.login.username_invalid", "auth.password.current_wrong", "auth.password.too_long", "auth.password.too_short", "auth.username.already_set", "auth.username.invalid", "auth.username.taken", "brain.bout.finished", "brain.mark.title", "brain.pod.round", "brain.protocol.empty", "brain.reseed.calculate_failed", "brain.reseed.pending_many", "brain.reseed.pending_one", "brain.row.tiebreak", "brain.row.tiebreak_n", "brain.seed.draw", "brain.seed.empty", "brain.seed.import_from", "brain.seed.no_file", "brain.seed.upload", "brain.seed.waitlist", "brain.seed_head.city", "brain.seed_head.declined", "brain.seed_head.rank", "brain.seed_head.seed", "brain.seed_head.team", "brain.stats.attempts", "brain.stats.empty", "brain.stats.player", "brain.stats.right", "brain.stats.share", "brain.stats.team", "brain.stats.wrong", "brain.team.fallback", "brain.tiebreak.add", "brain.tiebreak.add_hint", "brain.tiebreak.remove", "brain.tiebreak.remove_hint", "brain.title", "crosstable.columns.name", "crosstable.columns.place", "crosstable.columns.points", "crosstable.empty", "edit.roster.immutable", "ek.answer.title", "ek.bout.finished", "ek.crumb.seed_import", "ek.crumb.stats", "ek.crumb.venues", "ek.seed.decline_failed", "ek.seed.declined_aria", "ek.seed.empty", "ek.seed.error", "ek.seed.error_prefix", "ek.seed.import", "ek.seed.import_failed", "ek.seed.imported", "ek.seed.summary", "ek.seed.team_placeholder", "ek.seed.waitlist", "ek.seed_head.declined", "ek.seed_head.seed", "ek.seed_head.team", "ek.shootout.add", "ek.shootout.add_label", "ek.shootout.column", "ek.shootout.letter", "ek.shootout.remove", "ek.shootout.remove_confirm", "ek.shootout.remove_label", "ek.stage.empty", "ek.stage.match_fallback", "ek.stats.battles", "ek.stats.empty", "ek.stats.individual_empty", "ek.stats.player", "ek.stats.share", "ek.stats.team", "ek.theme.column", "ek.title", "ek.venue.cancel", "ek.venue.edit", "ek.venue.save", "export.col.battles", "export.col.chair", "export.col.match_place", "export.col.place", "export.col.player", "export.col.shootout_n", "export.col.team", "export.col.team_share", "export.col.theme_n", "export.col.theme_question", "export.col.total", "export.error.multi_scheme", "export.error.multi_state", "export.error.troika_state", "export.multi.normalized_name", "export.name.team_n", "export.od.city", "export.od.name", "export.od.tour", "export.sheet.detailed", "export.sheet.fallback", "export.sheet.results", "export.sheet.stats", "fest.grid.col_place", "fest.grid.match_default", "fest.grid.slot_basket", "fest.grid.slot_reseed", "fest.grid.slot_reseed_ranked", "fest.grid.venue", "fest.grid.venue_titled", "fest.metric.bouts", "fest.metric.draw", "fest.metric.place_sum", "fest.metric.points", "fest.metric.points_share", "fest.metric.rating", "fest.metric.taken", "fest.metric.taken_base", "fest.metric.taken_share", "fest.metric.tiebreak", "fest.metric_short.bouts", "fest.metric_short.points", "fest.metric_short.taken", "fest.reseed.blocked_default", "fest.reseed.blocked_many", "fest.reseed.blocked_one", "fest.reseed.calculate", "fest.reseed.col_match", "fest.reseed.col_place", "fest.reseed.col_team", "fest.reseed.empty", "fest.reseed.recalculate", "fest.roster.col_players", "fest.roster.col_team", "fest.roster.empty", "fest.roster.load_failed", "fest.roster.loading", "festaccess.add.creator_exists", "festaccess.add.nickname_required", "festaccess.add.role_invalid", "festaccess.add.user_not_found", "festaccess.bulk.empty", "festaccess.bulk.line_prefix", "festaccess.bulk.user_not_found", "festaccess.manage.denied", "festaccess.member.creator_protected", "festaccess.member.role_invalid", "gallery.brain.title", "gallery.ek.title", "gallery.multi.title", "gallery.od.title", "gallery.page.title", "gallery.section.ek_stats", "gallery.section.fest_grid", "gallery.section.group_standings", "gallery.section.individual_stats", "gallery.section.reseed", "gallery.section.roster", "gallery.section.venues", "gallery.section.venues_host", "gallery.si.title", "gallery.topbar.title", "gallery.troika.title", "gamebuild.clear.parse_pasted", "gamebuild.clear.unsupported", "gamebuild.create.ek_no_scheme", "gamebuild.create.json_type_mismatch", "gamebuild.create.multi_from_scheme", "gamebuild.create.pasted_teams", "gamebuild.create.scheme_required", "gamebuild.create.seed_unknown", "gamebuild.recompile.started_bouts", "gamebuild.seating.kind_player", "gamebuild.seating.kind_team", "gamebuild.seating.need_players", "gamebuild.seating.need_two", "gamebuild.seating.unknown_participant", "gamebuild.seating.unnumbered", "gamebuild.titles.ksi", "gamebuild.titles.multi", "gamebuild.titles.od", "games.brain.label", "games.ek.label", "games.ksi.label", "games.multi.bar_no_tasks_after", "games.multi.bar_no_tasks_before", "games.multi.domain_empty", "games.multi.label", "games.multi.line_expected", "games.multi.line_prefix", "games.multi.metric_unknown", "games.multi.no_games", "games.multi.no_tasks", "games.multi.not_a_number", "games.multi.range_descending", "games.multi.range_too_wide", "games.multi.repeat_count", "games.multi.spec_expected", "games.od.label", "games.si.label", "games.troika.label", "host.dash.access_saved_notice", "host.dash.access_subhead", "host.dash.add_btn", "host.dash.add_game_btn", "host.dash.audit_link", "host.dash.audit_muted", "host.dash.bulk_apply", "host.dash.bulk_data_label", "host.dash.bulk_done_notice", "host.dash.bulk_label", "host.dash.cancel_btn", "host.dash.clear_btn", "host.dash.clear_confirm", "host.dash.col_nickname", "host.dash.col_role", "host.dash.delete_access_confirm", "host.dash.delete_btn", "host.dash.delete_confirm", "host.dash.delete_game_confirm", "host.dash.delete_note", "host.dash.delete_subhead", "host.dash.delete_submit", "host.dash.description_label", "host.dash.end_date_label", "host.dash.error_slug_invalid", "host.dash.error_slug_taken", "host.dash.error_title_required", "host.dash.games_empty", "host.dash.games_subhead", "host.dash.jump_label", "host.dash.jump_title", "host.dash.numbers_link", "host.dash.numbers_status_done", "host.dash.numbers_status_partial", "host.dash.numbers_status_unset", "host.dash.page_title", "host.dash.public_label", "host.dash.rating_status_none", "host.dash.roster_import_link", "host.dash.roster_players_link", "host.dash.roster_subhead", "host.dash.roster_teams_link", "host.dash.save_submit", "host.dash.settings_btn", "host.dash.slug_label", "host.dash.start_date_label", "host.dash.title_label", "host.games.brain_hint", "host.games.create_crumb", "host.games.create_submit", "host.games.create_title", "host.games.ek_hint", "host.games.ek_json_label", "host.games.entrants_hint", "host.games.entrants_summary", "host.games.error_ek_scheme_missing", "host.games.error_json_parse", "host.games.error_minigames", "host.games.error_multi_sorting", "host.games.error_slug_invalid", "host.games.error_slug_taken", "host.games.error_title_required", "host.games.error_type_missing", "host.games.minigames_hint", "host.games.minigames_label", "host.games.minigames_placeholder", "host.games.minigames_share_hint", "host.games.multi_sorting_hint", "host.games.multi_sorting_label", "host.games.od_questions_label", "host.games.od_tours_label", "host.games.rebuild_hint", "host.games.save_submit", "host.games.scheme_label", "host.games.si_hint", "host.games.slug_label", "host.games.sticker_emptywrong", "host.games.sticker_emptywrong_row", "host.games.sticker_max_field", "host.games.sticker_max_label", "host.games.sticker_neutral", "host.games.sticker_nowrong", "host.games.sticker_nowrong_row", "host.games.sticker_x2_row", "host.games.stickers_hint", "host.games.themes_label", "host.games.title_label", "host.games.troika_hint", "host.games.type_brain", "host.games.type_ek", "host.games.type_ksi", "host.games.type_ksi_stickers", "host.games.type_label", "host.games.type_multi", "host.games.type_od", "host.games.type_si", "host.games.type_troika", "host.pages.create_fest_summary", "host.pages.create_submit", "host.pages.description_label", "host.pages.end_date_label", "host.pages.error_int_range", "host.pages.fest_games_empty", "host.pages.fest_row_unlisted", "host.pages.fests_empty", "host.pages.games_subhead", "host.pages.group_current", "host.pages.group_future", "host.pages.group_past", "host.pages.home_crumb_label", "host.pages.identity_username_lead", "host.pages.jump_host_label", "host.pages.jump_host_title_fest", "host.pages.jump_host_title_index", "host.pages.jump_label", "host.pages.jump_title", "host.pages.landing_crumb", "host.pages.landing_title", "host.pages.logout_submit", "host.pages.password_change_submit", "host.pages.password_confirm_placeholder", "host.pages.password_current_placeholder", "host.pages.password_new_placeholder", "host.pages.password_set_submit", "host.pages.profile_crumb", "host.pages.profile_title", "host.pages.public_index_crumb", "host.pages.public_index_empty", "host.pages.public_index_title", "host.pages.public_label", "host.pages.rating_id_label", "host.pages.start_date_label", "host.pages.title_label", "host.pages.username_fallback", "host.roster.add_override_btn", "host.roster.cancel_btn", "host.roster.col_city", "host.roster.col_from_team", "host.roster.col_players", "host.roster.col_to_team", "host.roster.delete_btn", "host.roster.delete_override_confirm", "host.roster.edit_override_label", "host.roster.error_json_empty", "host.roster.error_json_parse", "host.roster.error_obj_player", "host.roster.error_obj_source_team", "host.roster.error_obj_team", "host.roster.games_label", "host.roster.import_done_counts", "host.roster.import_done_notice", "host.roster.import_submit", "host.roster.import_unchanged_notice", "host.roster.need_rating_note", "host.roster.new_team_label", "host.roster.no_override_games", "host.roster.override_title", "host.roster.overrides_subhead", "host.roster.player_label", "host.roster.players_crumb", "host.roster.players_empty", "host.roster.players_title", "host.roster.rating_import_crumb", "host.roster.rating_import_note", "host.roster.rating_import_title", "host.roster.rating_source", "host.roster.save_submit", "host.roster.scheme_import_crumb", "host.roster.scheme_import_note", "host.roster.scheme_import_submit", "host.roster.scheme_import_title", "host.roster.scheme_json_label", "host.roster.team_label", "host.roster.teams_crumb", "host.roster.teams_empty", "host.roster.teams_title", "imports.ek_restore.match_header", "imports.rating.api_error", "imports.rating.decode_failed", "imports.rating.fetch_failed", "imports.rating.no_teams", "imports.rating.squad_too_big", "imports.seed.game_missing", "imports.seed.ksi_missing", "imports.seed.metric_unknown", "imports.seed.multiple_standings", "imports.seed.no_numbered_teams", "imports.seed.no_standings", "imports.seed.nothing_imported", "imports.seed.scheme_missing", "imports.seed.scheme_xlsx", "imports.seed.source_no_teams", "imports.seed.team_not_found", "imports.seed.team_twice", "imports.seed.xlsx_basket_missing", "imports.seed.xlsx_basket_not_number", "imports.seed.xlsx_no_sheets", "imports.seed.xlsx_no_teams", "imports.seed.xlsx_open", "imports.seed.xlsx_team_unknown", "imports.seed_players.aggregate_expected", "imports.seed_players.metric_missing", "imports.seed_players.metric_unknown", "imports.seed_players.multiple_standings", "imports.seed_players.no_games", "imports.seed_players.no_roster", "imports.seed_players.no_rosters", "imports.seed_players.no_sorting", "imports.seed_players.self_reference", "imports.seed_source.ksi", "imports.seed_source.players", "imports.seed_source.random", "journal.ek.answer", "journal.ek.match_finished", "journal.ek.match_prefix", "journal.ek.match_reopened", "journal.ek.match_update", "journal.ek.player_assigned", "journal.ek.player_plays", "journal.ek.player_removed", "journal.ek.rank", "journal.ek.team_unnamed", "journal.ek.theme_prefix", "journal.event.fest_access", "journal.event.fest_numbers", "journal.event.game_clear", "journal.event.game_create", "journal.event.game_delete", "journal.event.game_revert", "journal.event.player_override", "journal.event.rating_import", "journal.event.reseed", "journal.event.scheme_import", "journal.event.seed_decline", "journal.event.seed_import_ksi", "journal.event.state_replaced", "journal.event.venue", "journal.index.empty", "journal.index.note", "journal.index.title", "journal.ksi.answer", "journal.ksi.declined", "journal.ksi.finished", "journal.ksi.participant_fallback", "journal.ksi.rename", "journal.mark.none", "journal.mark.right", "journal.mark.wrong", "journal.od.answer_clear", "journal.od.answer_set", "journal.od.entries_changed", "journal.od.entry_changed", "journal.od.readiness", "journal.od.shootout", "journal.od.team_named", "journal.od.team_unnamed", "journal.page.col_changes", "journal.page.col_when", "journal.page.col_who", "journal.page.default_title", "journal.page.empty", "journal.page.more", "journal.page.revert_confirm", "journal.page.revert_done", "journal.page.revert_failed", "journal.page.revert_submit", "journal.page.title", "journal.patch.generic_removed", "journal.patch.generic_set", "journal.patch.state_fallback", "journal.value.empty", "markdown.details.default_summary", "multi.game.uniform_price", "multi.refusals.declined", "multi.refusals.team", "multi.results.place", "multi.results.team", "multi.results.total", "multi.sheet.team", "multi.sheet.total", "multi.tabs.detailed", "multi.tabs.refusals", "multi.tabs.results", "multi.tabs.roster", "multi.title", "numbers.action.auto", "numbers.action.auto_confirm", "numbers.action.cancel", "numbers.action.clear", "numbers.action.clear_confirm", "numbers.action.import", "numbers.action.replace", "numbers.action.save", "numbers.apply.back", "numbers.apply.badge_exact", "numbers.apply.badge_unmatched", "numbers.apply.empty", "numbers.apply.foreign_team", "numbers.apply.no_assignments", "numbers.apply.number_range", "numbers.apply.read_failed", "numbers.apply.save_failed", "numbers.apply.skip", "numbers.apply.submit", "numbers.apply.team_repeated", "numbers.apply.team_repeated_client", "numbers.apply.title", "numbers.error.number_two_rows", "numbers.error.row_foreign_team", "numbers.error.row_no_team", "numbers.error.row_range", "numbers.error.team_two_rows", "numbers.help.edit", "numbers.import.cancel", "numbers.import.empty_input", "numbers.import.hint", "numbers.import.line_dup", "numbers.import.line_format", "numbers.import.line_range", "numbers.import.match_failed", "numbers.import.placeholder", "numbers.import.server_error", "numbers.import.submit", "numbers.import.title", "numbers.notice.auto", "numbers.notice.cleared", "numbers.notice.saved", "numbers.notice.saved_partial", "numbers.page.crumb", "numbers.page.empty", "numbers.page.no_teams", "numbers.page.title", "octobearfest.error.assorti_step", "octobearfest.error.db_missing", "octobearfest.error.fest_exists", "octobearfest.error.finish", "octobearfest.error.multi_bout", "octobearfest.error.no_bout_at", "octobearfest.error.no_system_user", "octobearfest.error.not_seated", "octobearfest.error.troika_step", "octobearfest.flag.db", "octobearfest.flag.root", "octobearfest.flag.slug", "octobearfest.log.assorti_start", "octobearfest.log.fest", "octobearfest.log.organizers", "octobearfest.log.registry", "octobearfest.log.troika_done", "octobearfest.log.troika_start", "od.detailed.tour", "od.guard.lead", "od.guard.missing", "od.guard.numbers", "od.head.place", "od.head.place_short", "od.head.team", "od.invert.label", "od.progress.entered", "od.progress.not_started", "od.results.shootout_collapse", "od.results.shootout_expand", "od.results.tour_collapse", "od.results.tour_expand", "od.screen.bg", "od.screen.chrome_hide", "od.screen.chrome_show", "od.screen.columns", "od.screen.fg", "od.screen.font", "od.screen.muted", "od.screen.no_teams", "od.screen.reset", "od.screen.settings", "od.screen.show_city", "od.screen.show_country", "od.shootout.add_question", "od.shootout.add_round", "od.shootout.add_round_blocked", "od.shootout.cancel", "od.shootout.create", "od.shootout.entry_title", "od.shootout.remove_question", "od.shootout.remove_question_confirm", "od.shootout.remove_round_confirm", "od.shootout.round", "od.shootout.round_dialog", "od.shootout.title", "od.team.fallback", "od.title", "override.entry.game_invalid", "override.entry.game_type_wrong", "override.entry.pick_from_hint", "override.entry.pick_games", "override.entry.pick_player", "override.entry.pick_team", "override.lookup.not_found", "override.lookup.player_not_found", "override.lookup.team_not_found", "override.save.team_same", "override.save.team_too_big", "pages.crumbs.admin", "pages.crumbs.fest_fallback", "pages.crumbs.home", "pages.crumbs.host", "replay.codec.stat_attempts", "replay.codec.stat_bouts", "replay.codec.stat_right", "replay.codec.stat_themes", "replay.codec.stat_wrong", "replay.parse.bout_header_extra", "replay.parse.bout_no_seats", "replay.parse.coord_expected", "replay.parse.coord_no_block", "replay.parse.coord_table", "replay.parse.coord_taken", "replay.parse.counts_digit", "replay.parse.counts_theme_size", "replay.parse.entrant_expected", "replay.parse.entrant_no_name", "replay.parse.entrant_number", "replay.parse.game_no_codec", "replay.parse.game_pair_expected", "replay.parse.game_unknown_key", "replay.parse.group_expected", "replay.parse.head_table_expected", "replay.parse.header_unclosed", "replay.parse.line_outside_section", "replay.parse.line_prefix", "replay.parse.lineup_empty_name", "replay.parse.lineup_expected", "replay.parse.lineup_no_players", "replay.parse.lineup_player_twice", "replay.parse.lineup_twice", "replay.parse.lineup_unknown_team", "replay.parse.lineups_individual", "replay.parse.override_expected", "replay.parse.part_expected", "replay.parse.part_match", "replay.parse.part_number_expected", "replay.parse.part_round", "replay.parse.part_wave", "replay.parse.question_empty", "replay.parse.question_mark", "replay.parse.question_none", "replay.parse.roster_name_twice", "replay.parse.roster_number_taken", "replay.parse.seat_brain_player_field", "replay.parse.seat_comma_not_brain", "replay.parse.seat_expected", "replay.parse.seat_individual_player", "replay.parse.seat_no_name", "replay.parse.seat_no_themes", "replay.parse.seat_place", "replay.parse.seat_players_mismatch", "replay.parse.seat_sum", "replay.parse.seat_unknown", "replay.parse.shootout_expected", "replay.parse.shootout_not_number", "replay.parse.shootout_twice", "replay.parse.shootout_unknown", "replay.parse.stat_fields", "replay.parse.stat_no_player", "replay.parse.stat_no_team", "replay.parse.stat_not_in_lineup", "replay.parse.stat_not_numbers", "replay.parse.stat_unknown", "replay.parse.stat_unknown_team", "replay.parse.table_name_twice", "replay.parse.table_no_rows", "replay.parse.table_row_expected", "replay.parse.table_trailing", "replay.parse.table_unknown", "replay.parse.theme_five", "replay.parse.theme_mark", "replay.parse.theme_player_unknown", "replay.report.col_bout", "replay.report.col_what", "replay.report.col_who", "replay.report.col_why", "replay.report.collected_lead", "replay.report.collected_mid", "replay.report.intro", "replay.report.none_yet", "replay.report.title", "replay.report.who_all", "replay.run.all_agreed", "replay.run.field_extra", "replay.run.field_outcome", "replay.run.field_place", "replay.run.field_seating", "replay.run.field_stats", "replay.run.field_table", "replay.run.field_unneeded", "replay.run.finding", "replay.run.finish_wrap", "replay.run.lineups_unwritable", "replay.run.lineups_wrap", "replay.run.no_row", "replay.run.not_seated", "replay.run.nothing", "replay.run.outcome_wrap", "replay.run.pin_wrap", "replay.run.play_wrap", "replay.run.seat_draw_wrap", "replay.run.seated_wrap", "replay.run.sheet_score", "replay.run.stats_uncomputable", "replay.run.stats_wrap", "replay.run.table_unrankable", "resolver.reseed.not_ready", "resolver.reseed.pending", "roles.bulk.action_unknown", "roles.bulk.format_expected", "route.guard.unnumbered", "scheme.entrants.count_mismatch", "scheme.entrants.proceeding_missing", "scheme.entrants.supply_mismatch", "scheme.error.line_prefix", "scheme.keys.match_size_round", "scheme.keys.unknown_block", "scheme.keys.unknown_defaults", "scheme.keys.unknown_dotted", "scheme.keys.unknown_init", "scheme.keys.unknown_round", "scheme.parse.duplicate_key", "scheme.parse.int_expected", "scheme.parse.key_outside_section", "scheme.parse.list_expected", "scheme.parse.not_a_number", "scheme.parse.separator", "scheme.parse.sort_direction", "scheme.parse.sort_token", "scheme.parse.unknown_section", "scheme.parse.unparsed_line", "scheme.reseed.metric_unknown", "scheme.reseed.needs_reseed", "scheme.reseed.no_template", "scheme.reseed.previous_terminal", "scheme.reseed.proceeding_two", "scheme.reseed.round_unknown", "scheme.reseed.stats_from_bounds", "scheme.reseed.stats_from_needs_reseed", "scheme.seed.players_need_games", "scheme.seed.players_need_seed", "scheme.structure.kind_missing", "scheme.structure.kind_unknown", "scheme.structure.kind_unregistered", "scheme.structure.match_code_dup", "scheme.structure.no_blocks", "scheme.structure.slug_charset", "scheme.structure.slug_is_stage_code", "scheme.structure.slug_two_blocks", "scheme.structure.stage_code_dup", "scheme.titles.block_group_n", "scheme.titles.group", "scheme.titles.group_n", "scheme.titles.reseed_stage", "scheme.titles.seed", "scheme.titles.stage", "scheme.titles.venue", "scheme.titles.wave", "scheme.validate.match_code_dup", "scheme.validate.match_code_required", "scheme.validate.slot_count", "scheme.validate.slot_seed_basket", "scheme.validate.slot_seed_number", "scheme.validate.slot_team_source", "scheme.validate.slug_required", "scheme.validate.stage_code_dup", "scheme.validate.stage_code_required", "scheme.validate.stage_no_matches", "scheme.validate.stage_type", "scheme.validate.stages_required", "scheme.validate.team_assignment", "scheme.validate.team_collision", "scheme.validate.team_name_required", "scheme.validate.title_required", "scheme.venues.count", "scheme.venues.empty", "scheme.venues.undeclared", "screen.banner.assign", "screen.banner.unassigned_lead", "screen.downloads.archive", "screen.downloads.archive_title", "screen.downloads.xlsx", "screen.downloads.xlsx_title", "screen.jump.edit", "screen.jump.edit_title", "screen.jump.viewer", "screen.jump.viewer_title", "screen.tabs.block_group", "screen.tabs.detailed", "screen.tabs.final", "screen.tabs.grid", "screen.tabs.group_n", "screen.tabs.individual_stats", "screen.tabs.input", "screen.tabs.playoff", "screen.tabs.protocol", "screen.tabs.refusals", "screen.tabs.reseed", "screen.tabs.results", "screen.tabs.roster", "screen.tabs.round", "screen.tabs.screen", "screen.tabs.seed", "screen.tabs.seed_import", "screen.tabs.stats", "screen.tabs.venues", "screen.title.fest", "screen.title.game", "screen.trail.home", "screen.trail.host", "server.bot.down", "server.bot.help", "server.error.bad_request", "server.error.internal", "server.login.title", "server.migration.v14", "server.public_fests.current", "server.public_fests.future", "server.public_fests.past", "server.seed_import.file_missing", "si.battle.fallback_title", "si.battle.finished", "si.participant.fallback_player", "si.participant.fallback_team", "si.refusals.declined", "si.refusals.declined_aria", "si.refusals.team", "si.results.place", "si.results.team", "si.sheet.answer_title", "si.sheet.sort_by_name", "si.sheet.sort_by_number", "si.sheet.team", "si.sticker.title", "si.theme.label", "si.title.ksi", "si.title.si", "standings.columns.place", "standings.columns.player", "standings.columns.points", "standings.columns.round", "storage.match.default_title", "storage.slot.placeholder", "storage.slot.reseed", "storage.slot.seed_basket", "storage.slot.seed_legacy_prefix", "storage.slot.seed_unlabelled", "structure.de.bad_groups", "structure.de.groups_needed", "structure.de.participants_needed", "structure.de.playoff", "structure.de.reseed_round_unknown", "structure.elimination.bout_cannot_output", "structure.elimination.bracket_not_divisible", "structure.elimination.lives_min", "structure.elimination.match_size_min", "structure.elimination.round_bracket", "structure.elimination.round_eliminate_nothing", "structure.elimination.round_not_divisible", "structure.elimination.too_many_rounds", "structure.elimination.winning_places_min", "structure.flat.game", "structure.flat.no_entrants", "structure.flat.participants_missing", "structure.macro.reseed_rank", "structure.macro.seat_from_bout", "structure.macro.unrankable_metric", "structure.rr.group_feed", "structure.rr.group_size_needed", "structure.rr.no_schedule", "structure.rr.points_list", "structure.rr.too_many_rounds", "structure.se.best_of_final_only", "structure.se.best_of_parity", "structure.se.bronze", "structure.se.bronze_bout", "structure.se.final_bout", "structure.se.match_nth_round", "structure.se.match_semifinal", "structure.se.participants_missing", "structure.se.proceeding_missing", "structure.se.reseed_first_round", "structure.se.reseed_round_unknown", "structure.se.round_nth", "structure.se.round_semifinals", "structure.se.template_groups", "structure.se.template_size", "structure.titles.bout", "structure.titles.final", "structure.titles.round", "telegram.reply.code_consumed", "telegram.reply.code_expired", "telegram.reply.code_missing", "telegram.reply.code_wrong", "telegram.reply.generic_error", "telegram.reply.login_on_site", "telegram.reply.register_success", "troika.bout.finished", "troika.chair.lead", "troika.chair.outrider", "troika.groups.rating", "troika.protocol.seating", "troika.protocol.team", "troika.stats.bouts", "troika.stats.first", "troika.stats.player", "troika.stats.points", "troika.stats.repeat", "troika.stats.repeat_rate", "troika.stats.team", "troika.team.fallback", "troika.theme.head", "troika.theme.seat", "troika.theme.unseat", "troika.title", "ui.crumbs.label", "ui.palette.label", "ui.sync.label", "widgets.cell_nav.next", "widgets.cell_nav.prev", "widgets.group_stats.no_token", "widgets.group_stats.paren", "widgets.group_stats.truncated", "widgets.keypad.backspace", "widgets.keypad.next_column", "widgets.keypad.next_row", "widgets.keypad.prev_column", "widgets.keypad.prev_row", "widgets.menu.login", "widgets.menu.profile", "widgets.profile.changed", "widgets.profile.mismatch", "widgets.recorder.label", "widgets.recorder.title", "widgets.roster.pick_suggestion", "widgets.score_table.place", "widgets.status.error", "widgets.status.reconnecting", "widgets.status.saved", "widgets.status.saving", "widgets.venue.battle", "widgets.venue.battle_short", "widgets.venue.name_column", "widgets.viewers.label", "widgets.viewers.title":
+	case "admin.create_users.invalid_username", "admin.create_users.name", "admin.create_users.title", "admin.page.title", "admin.users.col_activity", "admin.users.col_created", "admin.users.col_login", "admin.users.empty", "admin.users.name", "admin.users.system_tag", "admin.users.title", "auth.login.code_missing", "auth.login.code_not_found", "auth.login.credentials_invalid", "auth.login.credentials_missing", "auth.login.password_wrong", "auth.login.system_user", "auth.login.telegram_linked", "auth.login.username_invalid", "auth.password.current_wrong", "auth.password.too_long", "auth.password.too_short", "auth.username.already_set", "auth.username.invalid", "auth.username.taken", "brain.bout.finished", "brain.mark.title", "brain.pod.round", "brain.protocol.empty", "brain.reseed.calculate_failed", "brain.reseed.pending_many", "brain.reseed.pending_one", "brain.row.tiebreak", "brain.row.tiebreak_n", "brain.seed.draw", "brain.seed.empty", "brain.seed.import_from", "brain.seed.no_file", "brain.seed.upload", "brain.seed.waitlist", "brain.seed_head.city", "brain.seed_head.declined", "brain.seed_head.rank", "brain.seed_head.seed", "brain.seed_head.team", "brain.stats.attempts", "brain.stats.empty", "brain.stats.player", "brain.stats.right", "brain.stats.share", "brain.stats.team", "brain.stats.wrong", "brain.team.fallback", "brain.tiebreak.add", "brain.tiebreak.add_hint", "brain.tiebreak.remove", "brain.tiebreak.remove_hint", "brain.title", "crosstable.columns.name", "crosstable.columns.place", "crosstable.columns.points", "crosstable.empty", "edit.roster.immutable", "ek.answer.title", "ek.bout.finished", "ek.crumb.seed_import", "ek.crumb.stats", "ek.crumb.venues", "ek.seed.decline_failed", "ek.seed.declined_aria", "ek.seed.empty", "ek.seed.error", "ek.seed.error_prefix", "ek.seed.import", "ek.seed.import_failed", "ek.seed.imported", "ek.seed.summary", "ek.seed.team_placeholder", "ek.seed.waitlist", "ek.seed_head.declined", "ek.seed_head.seed", "ek.seed_head.team", "ek.shootout.add", "ek.shootout.add_label", "ek.shootout.column", "ek.shootout.letter", "ek.shootout.remove", "ek.shootout.remove_confirm", "ek.shootout.remove_label", "ek.stage.empty", "ek.stage.match_fallback", "ek.stats.battles", "ek.stats.empty", "ek.stats.individual_empty", "ek.stats.player", "ek.stats.share", "ek.stats.team", "ek.theme.column", "ek.title", "ek.venue.cancel", "ek.venue.edit", "ek.venue.save", "export.col.battles", "export.col.chair", "export.col.match_place", "export.col.place", "export.col.player", "export.col.shootout_n", "export.col.team", "export.col.team_share", "export.col.theme_n", "export.col.theme_question", "export.col.total", "export.error.multi_scheme", "export.error.multi_state", "export.error.troika_state", "export.multi.normalized_name", "export.name.team_n", "export.od.city", "export.od.name", "export.od.players_city", "export.od.players_first_name", "export.od.players_flag", "export.od.players_name", "export.od.players_patronymic", "export.od.players_place", "export.od.players_surname", "export.od.tour", "export.sheet.detailed", "export.sheet.fallback", "export.sheet.results", "export.sheet.stats", "fest.grid.col_place", "fest.grid.match_default", "fest.grid.slot_basket", "fest.grid.slot_reseed", "fest.grid.slot_reseed_ranked", "fest.grid.venue", "fest.grid.venue_titled", "fest.metric.bouts", "fest.metric.draw", "fest.metric.place_sum", "fest.metric.points", "fest.metric.points_share", "fest.metric.rating", "fest.metric.taken", "fest.metric.taken_base", "fest.metric.taken_share", "fest.metric.tiebreak", "fest.metric_short.bouts", "fest.metric_short.points", "fest.metric_short.taken", "fest.reseed.blocked_default", "fest.reseed.blocked_many", "fest.reseed.blocked_one", "fest.reseed.calculate", "fest.reseed.col_match", "fest.reseed.col_place", "fest.reseed.col_team", "fest.reseed.empty", "fest.reseed.recalculate", "fest.roster.col_players", "fest.roster.col_team", "fest.roster.empty", "fest.roster.load_failed", "fest.roster.loading", "festaccess.add.creator_exists", "festaccess.add.nickname_required", "festaccess.add.role_invalid", "festaccess.add.user_not_found", "festaccess.bulk.empty", "festaccess.bulk.line_prefix", "festaccess.bulk.user_not_found", "festaccess.manage.denied", "festaccess.member.creator_protected", "festaccess.member.role_invalid", "gallery.brain.title", "gallery.ek.title", "gallery.multi.title", "gallery.od.title", "gallery.page.title", "gallery.section.ek_stats", "gallery.section.fest_grid", "gallery.section.group_standings", "gallery.section.individual_stats", "gallery.section.reseed", "gallery.section.roster", "gallery.section.venues", "gallery.section.venues_host", "gallery.si.title", "gallery.topbar.title", "gallery.troika.title", "gamebuild.clear.parse_pasted", "gamebuild.clear.unsupported", "gamebuild.create.ek_no_scheme", "gamebuild.create.json_type_mismatch", "gamebuild.create.multi_from_scheme", "gamebuild.create.pasted_teams", "gamebuild.create.scheme_required", "gamebuild.create.seed_unknown", "gamebuild.recompile.started_bouts", "gamebuild.seating.kind_player", "gamebuild.seating.kind_team", "gamebuild.seating.need_players", "gamebuild.seating.need_two", "gamebuild.seating.unknown_participant", "gamebuild.seating.unnumbered", "gamebuild.titles.ksi", "gamebuild.titles.multi", "gamebuild.titles.od", "games.brain.label", "games.ek.label", "games.ksi.label", "games.multi.bar_no_tasks_after", "games.multi.bar_no_tasks_before", "games.multi.domain_empty", "games.multi.label", "games.multi.line_expected", "games.multi.line_prefix", "games.multi.metric_unknown", "games.multi.no_games", "games.multi.no_tasks", "games.multi.not_a_number", "games.multi.range_descending", "games.multi.range_too_wide", "games.multi.repeat_count", "games.multi.spec_expected", "games.od.label", "games.si.label", "games.troika.label", "host.dash.access_saved_notice", "host.dash.access_subhead", "host.dash.add_btn", "host.dash.add_game_btn", "host.dash.audit_link", "host.dash.audit_muted", "host.dash.bulk_apply", "host.dash.bulk_data_label", "host.dash.bulk_done_notice", "host.dash.bulk_label", "host.dash.cancel_btn", "host.dash.clear_btn", "host.dash.clear_confirm", "host.dash.col_nickname", "host.dash.col_role", "host.dash.delete_access_confirm", "host.dash.delete_btn", "host.dash.delete_confirm", "host.dash.delete_game_confirm", "host.dash.delete_note", "host.dash.delete_subhead", "host.dash.delete_submit", "host.dash.description_label", "host.dash.end_date_label", "host.dash.error_slug_invalid", "host.dash.error_slug_taken", "host.dash.error_title_required", "host.dash.games_empty", "host.dash.games_subhead", "host.dash.jump_label", "host.dash.jump_title", "host.dash.numbers_link", "host.dash.numbers_status_done", "host.dash.numbers_status_partial", "host.dash.numbers_status_unset", "host.dash.page_title", "host.dash.public_label", "host.dash.rating_status_none", "host.dash.roster_import_link", "host.dash.roster_players_link", "host.dash.roster_subhead", "host.dash.roster_teams_link", "host.dash.save_submit", "host.dash.settings_btn", "host.dash.slug_label", "host.dash.start_date_label", "host.dash.title_label", "host.games.brain_hint", "host.games.create_crumb", "host.games.create_submit", "host.games.create_title", "host.games.ek_hint", "host.games.ek_json_label", "host.games.entrants_hint", "host.games.entrants_summary", "host.games.error_ek_scheme_missing", "host.games.error_json_parse", "host.games.error_minigames", "host.games.error_multi_sorting", "host.games.error_slug_invalid", "host.games.error_slug_taken", "host.games.error_title_required", "host.games.error_type_missing", "host.games.minigames_hint", "host.games.minigames_label", "host.games.minigames_placeholder", "host.games.minigames_share_hint", "host.games.multi_sorting_hint", "host.games.multi_sorting_label", "host.games.od_questions_label", "host.games.od_tours_label", "host.games.rebuild_hint", "host.games.save_submit", "host.games.scheme_label", "host.games.si_hint", "host.games.slug_label", "host.games.sticker_emptywrong", "host.games.sticker_emptywrong_row", "host.games.sticker_max_field", "host.games.sticker_max_label", "host.games.sticker_neutral", "host.games.sticker_nowrong", "host.games.sticker_nowrong_row", "host.games.sticker_x2_row", "host.games.stickers_hint", "host.games.themes_label", "host.games.title_label", "host.games.troika_hint", "host.games.type_brain", "host.games.type_ek", "host.games.type_ksi", "host.games.type_ksi_stickers", "host.games.type_label", "host.games.type_multi", "host.games.type_od", "host.games.type_si", "host.games.type_troika", "host.pages.create_fest_summary", "host.pages.create_submit", "host.pages.description_label", "host.pages.end_date_label", "host.pages.error_int_range", "host.pages.fest_games_empty", "host.pages.fest_row_unlisted", "host.pages.fests_empty", "host.pages.games_subhead", "host.pages.group_current", "host.pages.group_future", "host.pages.group_past", "host.pages.home_crumb_label", "host.pages.identity_username_lead", "host.pages.jump_host_label", "host.pages.jump_host_title_fest", "host.pages.jump_host_title_index", "host.pages.jump_label", "host.pages.jump_title", "host.pages.landing_crumb", "host.pages.landing_title", "host.pages.logout_submit", "host.pages.password_change_submit", "host.pages.password_confirm_placeholder", "host.pages.password_current_placeholder", "host.pages.password_new_placeholder", "host.pages.password_set_submit", "host.pages.profile_crumb", "host.pages.profile_title", "host.pages.public_index_crumb", "host.pages.public_index_empty", "host.pages.public_index_title", "host.pages.public_label", "host.pages.rating_id_label", "host.pages.start_date_label", "host.pages.title_label", "host.pages.username_fallback", "host.profile.tz_hint", "host.profile.tz_save", "host.profile.tz_saved", "host.profile.tz_subhead", "host.public_tabs.fests", "host.public_tabs.venues", "host.roster.add_override_btn", "host.roster.cancel_btn", "host.roster.col_city", "host.roster.col_from_team", "host.roster.col_players", "host.roster.col_to_team", "host.roster.delete_btn", "host.roster.delete_override_confirm", "host.roster.edit_override_label", "host.roster.error_json_empty", "host.roster.error_json_parse", "host.roster.error_obj_player", "host.roster.error_obj_source_team", "host.roster.error_obj_team", "host.roster.games_label", "host.roster.import_done_counts", "host.roster.import_done_notice", "host.roster.import_submit", "host.roster.import_unchanged_notice", "host.roster.need_rating_note", "host.roster.new_team_label", "host.roster.no_override_games", "host.roster.override_title", "host.roster.overrides_subhead", "host.roster.player_label", "host.roster.players_crumb", "host.roster.players_empty", "host.roster.players_title", "host.roster.rating_import_crumb", "host.roster.rating_import_note", "host.roster.rating_import_title", "host.roster.rating_source", "host.roster.save_submit", "host.roster.scheme_import_crumb", "host.roster.scheme_import_note", "host.roster.scheme_import_submit", "host.roster.scheme_import_title", "host.roster.scheme_json_label", "host.roster.team_label", "host.roster.teams_crumb", "host.roster.teams_empty", "host.roster.teams_title", "imports.ek_restore.match_header", "imports.rating.api_error", "imports.rating.decode_failed", "imports.rating.fetch_failed", "imports.rating.no_teams", "imports.rating.squad_too_big", "imports.seed.game_missing", "imports.seed.ksi_missing", "imports.seed.metric_unknown", "imports.seed.multiple_standings", "imports.seed.no_numbered_teams", "imports.seed.no_standings", "imports.seed.nothing_imported", "imports.seed.scheme_missing", "imports.seed.scheme_xlsx", "imports.seed.source_no_teams", "imports.seed.team_not_found", "imports.seed.team_twice", "imports.seed.xlsx_basket_missing", "imports.seed.xlsx_basket_not_number", "imports.seed.xlsx_no_sheets", "imports.seed.xlsx_no_teams", "imports.seed.xlsx_open", "imports.seed.xlsx_team_unknown", "imports.seed_players.aggregate_expected", "imports.seed_players.metric_missing", "imports.seed_players.metric_unknown", "imports.seed_players.multiple_standings", "imports.seed_players.no_games", "imports.seed_players.no_roster", "imports.seed_players.no_rosters", "imports.seed_players.no_sorting", "imports.seed_players.self_reference", "imports.seed_source.ksi", "imports.seed_source.players", "imports.seed_source.random", "journal.ek.answer", "journal.ek.match_finished", "journal.ek.match_prefix", "journal.ek.match_reopened", "journal.ek.match_update", "journal.ek.player_assigned", "journal.ek.player_plays", "journal.ek.player_removed", "journal.ek.rank", "journal.ek.team_unnamed", "journal.ek.theme_prefix", "journal.event.fest_access", "journal.event.fest_numbers", "journal.event.game_clear", "journal.event.game_create", "journal.event.game_delete", "journal.event.game_revert", "journal.event.player_override", "journal.event.rating_import", "journal.event.reseed", "journal.event.scheme_import", "journal.event.seed_decline", "journal.event.seed_import_ksi", "journal.event.state_replaced", "journal.event.venue", "journal.index.empty", "journal.index.note", "journal.index.title", "journal.ksi.answer", "journal.ksi.declined", "journal.ksi.finished", "journal.ksi.participant_fallback", "journal.ksi.rename", "journal.mark.none", "journal.mark.right", "journal.mark.wrong", "journal.od.answer_clear", "journal.od.answer_set", "journal.od.entries_changed", "journal.od.entry_changed", "journal.od.readiness", "journal.od.shootout", "journal.od.team_named", "journal.od.team_unnamed", "journal.page.col_changes", "journal.page.col_when", "journal.page.col_who", "journal.page.default_title", "journal.page.empty", "journal.page.more", "journal.page.revert_confirm", "journal.page.revert_done", "journal.page.revert_failed", "journal.page.revert_submit", "journal.page.title", "journal.patch.generic_removed", "journal.patch.generic_set", "journal.patch.state_fallback", "journal.value.empty", "markdown.details.default_summary", "multi.game.uniform_price", "multi.refusals.declined", "multi.refusals.team", "multi.results.place", "multi.results.team", "multi.results.total", "multi.sheet.team", "multi.sheet.total", "multi.tabs.detailed", "multi.tabs.refusals", "multi.tabs.results", "multi.tabs.roster", "multi.title", "numbers.action.auto", "numbers.action.auto_confirm", "numbers.action.cancel", "numbers.action.clear", "numbers.action.clear_confirm", "numbers.action.import", "numbers.action.replace", "numbers.action.save", "numbers.apply.back", "numbers.apply.badge_exact", "numbers.apply.badge_unmatched", "numbers.apply.empty", "numbers.apply.foreign_team", "numbers.apply.no_assignments", "numbers.apply.number_range", "numbers.apply.read_failed", "numbers.apply.save_failed", "numbers.apply.skip", "numbers.apply.submit", "numbers.apply.team_repeated", "numbers.apply.team_repeated_client", "numbers.apply.title", "numbers.error.number_two_rows", "numbers.error.row_foreign_team", "numbers.error.row_no_team", "numbers.error.row_range", "numbers.error.team_two_rows", "numbers.help.edit", "numbers.import.cancel", "numbers.import.empty_input", "numbers.import.hint", "numbers.import.line_dup", "numbers.import.line_format", "numbers.import.line_range", "numbers.import.match_failed", "numbers.import.placeholder", "numbers.import.server_error", "numbers.import.submit", "numbers.import.title", "numbers.notice.auto", "numbers.notice.cleared", "numbers.notice.saved", "numbers.notice.saved_partial", "numbers.page.crumb", "numbers.page.empty", "numbers.page.no_teams", "numbers.page.title", "octobearfest.error.assorti_step", "octobearfest.error.db_missing", "octobearfest.error.fest_exists", "octobearfest.error.finish", "octobearfest.error.multi_bout", "octobearfest.error.no_bout_at", "octobearfest.error.no_system_user", "octobearfest.error.not_seated", "octobearfest.error.troika_step", "octobearfest.flag.db", "octobearfest.flag.root", "octobearfest.flag.slug", "octobearfest.log.assorti_start", "octobearfest.log.fest", "octobearfest.log.organizers", "octobearfest.log.registry", "octobearfest.log.troika_done", "octobearfest.log.troika_start", "od.contested.need_question_and_team", "od.contested.no_such_number", "od.detailed.tour", "od.guard.lead", "od.guard.missing", "od.guard.numbers", "od.head.place", "od.head.place_short", "od.head.team", "od.invert.label", "od.progress.entered", "od.progress.not_started", "od.results.shootout_collapse", "od.results.shootout_expand", "od.results.tour_collapse", "od.results.tour_expand", "od.screen.bg", "od.screen.chrome_hide", "od.screen.chrome_show", "od.screen.columns", "od.screen.fg", "od.screen.font", "od.screen.muted", "od.screen.no_teams", "od.screen.reset", "od.screen.settings", "od.screen.show_city", "od.screen.show_country", "od.shootout.add_question", "od.shootout.add_round", "od.shootout.add_round_blocked", "od.shootout.cancel", "od.shootout.create", "od.shootout.entry_title", "od.shootout.remove_question", "od.shootout.remove_question_confirm", "od.shootout.remove_round_confirm", "od.shootout.round", "od.shootout.round_dialog", "od.shootout.title", "od.team.fallback", "od.title", "override.entry.game_invalid", "override.entry.game_type_wrong", "override.entry.pick_from_hint", "override.entry.pick_games", "override.entry.pick_player", "override.entry.pick_team", "override.lookup.not_found", "override.lookup.player_not_found", "override.lookup.team_not_found", "override.save.team_same", "override.save.team_too_big", "pages.crumbs.admin", "pages.crumbs.fest_fallback", "pages.crumbs.home", "pages.crumbs.host", "replay.codec.stat_attempts", "replay.codec.stat_bouts", "replay.codec.stat_right", "replay.codec.stat_themes", "replay.codec.stat_wrong", "replay.parse.bout_header_extra", "replay.parse.bout_no_seats", "replay.parse.coord_expected", "replay.parse.coord_no_block", "replay.parse.coord_table", "replay.parse.coord_taken", "replay.parse.counts_digit", "replay.parse.counts_theme_size", "replay.parse.entrant_expected", "replay.parse.entrant_no_name", "replay.parse.entrant_number", "replay.parse.game_no_codec", "replay.parse.game_pair_expected", "replay.parse.game_unknown_key", "replay.parse.group_expected", "replay.parse.head_table_expected", "replay.parse.header_unclosed", "replay.parse.line_outside_section", "replay.parse.line_prefix", "replay.parse.lineup_empty_name", "replay.parse.lineup_expected", "replay.parse.lineup_no_players", "replay.parse.lineup_player_twice", "replay.parse.lineup_twice", "replay.parse.lineup_unknown_team", "replay.parse.lineups_individual", "replay.parse.override_expected", "replay.parse.part_expected", "replay.parse.part_match", "replay.parse.part_number_expected", "replay.parse.part_round", "replay.parse.part_wave", "replay.parse.question_empty", "replay.parse.question_mark", "replay.parse.question_none", "replay.parse.roster_name_twice", "replay.parse.roster_number_taken", "replay.parse.seat_brain_player_field", "replay.parse.seat_comma_not_brain", "replay.parse.seat_expected", "replay.parse.seat_individual_player", "replay.parse.seat_no_name", "replay.parse.seat_no_themes", "replay.parse.seat_place", "replay.parse.seat_players_mismatch", "replay.parse.seat_sum", "replay.parse.seat_unknown", "replay.parse.shootout_expected", "replay.parse.shootout_not_number", "replay.parse.shootout_twice", "replay.parse.shootout_unknown", "replay.parse.stat_fields", "replay.parse.stat_no_player", "replay.parse.stat_no_team", "replay.parse.stat_not_in_lineup", "replay.parse.stat_not_numbers", "replay.parse.stat_unknown", "replay.parse.stat_unknown_team", "replay.parse.table_name_twice", "replay.parse.table_no_rows", "replay.parse.table_row_expected", "replay.parse.table_trailing", "replay.parse.table_unknown", "replay.parse.theme_five", "replay.parse.theme_mark", "replay.parse.theme_player_unknown", "replay.report.col_bout", "replay.report.col_what", "replay.report.col_who", "replay.report.col_why", "replay.report.collected_lead", "replay.report.collected_mid", "replay.report.intro", "replay.report.none_yet", "replay.report.title", "replay.report.who_all", "replay.run.all_agreed", "replay.run.field_extra", "replay.run.field_outcome", "replay.run.field_place", "replay.run.field_seating", "replay.run.field_stats", "replay.run.field_table", "replay.run.field_unneeded", "replay.run.finding", "replay.run.finish_wrap", "replay.run.lineups_unwritable", "replay.run.lineups_wrap", "replay.run.no_row", "replay.run.not_seated", "replay.run.nothing", "replay.run.outcome_wrap", "replay.run.pin_wrap", "replay.run.play_wrap", "replay.run.seat_draw_wrap", "replay.run.seated_wrap", "replay.run.sheet_score", "replay.run.stats_uncomputable", "replay.run.stats_wrap", "replay.run.table_unrankable", "resolver.reseed.not_ready", "resolver.reseed.pending", "roles.bulk.action_unknown", "roles.bulk.format_expected", "route.guard.unnumbered", "scheme.entrants.count_mismatch", "scheme.entrants.proceeding_missing", "scheme.entrants.supply_mismatch", "scheme.error.line_prefix", "scheme.keys.match_size_round", "scheme.keys.unknown_block", "scheme.keys.unknown_defaults", "scheme.keys.unknown_dotted", "scheme.keys.unknown_init", "scheme.keys.unknown_round", "scheme.parse.duplicate_key", "scheme.parse.int_expected", "scheme.parse.key_outside_section", "scheme.parse.list_expected", "scheme.parse.not_a_number", "scheme.parse.separator", "scheme.parse.sort_direction", "scheme.parse.sort_token", "scheme.parse.unknown_section", "scheme.parse.unparsed_line", "scheme.reseed.metric_unknown", "scheme.reseed.needs_reseed", "scheme.reseed.no_template", "scheme.reseed.previous_terminal", "scheme.reseed.proceeding_two", "scheme.reseed.round_unknown", "scheme.reseed.stats_from_bounds", "scheme.reseed.stats_from_needs_reseed", "scheme.seed.players_need_games", "scheme.seed.players_need_seed", "scheme.structure.kind_missing", "scheme.structure.kind_unknown", "scheme.structure.kind_unregistered", "scheme.structure.match_code_dup", "scheme.structure.no_blocks", "scheme.structure.slug_charset", "scheme.structure.slug_is_stage_code", "scheme.structure.slug_two_blocks", "scheme.structure.stage_code_dup", "scheme.titles.block_group_n", "scheme.titles.group", "scheme.titles.group_n", "scheme.titles.reseed_stage", "scheme.titles.seed", "scheme.titles.stage", "scheme.titles.venue", "scheme.titles.wave", "scheme.validate.match_code_dup", "scheme.validate.match_code_required", "scheme.validate.slot_count", "scheme.validate.slot_seed_basket", "scheme.validate.slot_seed_number", "scheme.validate.slot_team_source", "scheme.validate.slug_required", "scheme.validate.stage_code_dup", "scheme.validate.stage_code_required", "scheme.validate.stage_no_matches", "scheme.validate.stage_type", "scheme.validate.stages_required", "scheme.validate.team_assignment", "scheme.validate.team_collision", "scheme.validate.team_name_required", "scheme.validate.title_required", "scheme.venues.count", "scheme.venues.empty", "scheme.venues.undeclared", "screen.banner.assign", "screen.banner.unassigned_lead", "screen.downloads.archive", "screen.downloads.archive_title", "screen.downloads.xlsx", "screen.downloads.xlsx_title", "screen.jump.edit", "screen.jump.edit_title", "screen.jump.viewer", "screen.jump.viewer_title", "screen.tabs.block_group", "screen.tabs.detailed", "screen.tabs.final", "screen.tabs.grid", "screen.tabs.group_n", "screen.tabs.individual_stats", "screen.tabs.input", "screen.tabs.playoff", "screen.tabs.protocol", "screen.tabs.refusals", "screen.tabs.reseed", "screen.tabs.results", "screen.tabs.roster", "screen.tabs.round", "screen.tabs.screen", "screen.tabs.seed", "screen.tabs.seed_import", "screen.tabs.stats", "screen.tabs.venues", "screen.title.fest", "screen.title.game", "screen.trail.home", "screen.trail.host", "screen.venue.trail", "server.bot.down", "server.bot.help", "server.error.bad_request", "server.error.internal", "server.login.title", "server.migration.v14", "server.public_fests.current", "server.public_fests.future", "server.public_fests.past", "server.seed_import.file_missing", "si.battle.fallback_title", "si.battle.finished", "si.participant.fallback_player", "si.participant.fallback_team", "si.refusals.declined", "si.refusals.declined_aria", "si.refusals.team", "si.results.place", "si.results.team", "si.sheet.answer_title", "si.sheet.sort_by_name", "si.sheet.sort_by_number", "si.sheet.team", "si.sticker.title", "si.theme.label", "si.title.ksi", "si.title.si", "standings.columns.place", "standings.columns.player", "standings.columns.points", "standings.columns.round", "storage.match.default_title", "storage.slot.placeholder", "storage.slot.reseed", "storage.slot.seed_basket", "storage.slot.seed_legacy_prefix", "storage.slot.seed_unlabelled", "structure.de.bad_groups", "structure.de.groups_needed", "structure.de.participants_needed", "structure.de.playoff", "structure.de.reseed_round_unknown", "structure.elimination.bout_cannot_output", "structure.elimination.bracket_not_divisible", "structure.elimination.lives_min", "structure.elimination.match_size_min", "structure.elimination.round_bracket", "structure.elimination.round_eliminate_nothing", "structure.elimination.round_not_divisible", "structure.elimination.too_many_rounds", "structure.elimination.winning_places_min", "structure.flat.game", "structure.flat.no_entrants", "structure.flat.participants_missing", "structure.macro.reseed_rank", "structure.macro.seat_from_bout", "structure.macro.unrankable_metric", "structure.rr.group_feed", "structure.rr.group_size_needed", "structure.rr.no_schedule", "structure.rr.points_list", "structure.rr.too_many_rounds", "structure.se.best_of_final_only", "structure.se.best_of_parity", "structure.se.bronze", "structure.se.bronze_bout", "structure.se.final_bout", "structure.se.match_nth_round", "structure.se.match_semifinal", "structure.se.participants_missing", "structure.se.proceeding_missing", "structure.se.reseed_first_round", "structure.se.reseed_round_unknown", "structure.se.round_nth", "structure.se.round_semifinals", "structure.se.template_groups", "structure.se.template_size", "structure.titles.bout", "structure.titles.final", "structure.titles.round", "telegram.reply.code_consumed", "telegram.reply.code_expired", "telegram.reply.code_missing", "telegram.reply.code_wrong", "telegram.reply.generic_error", "telegram.reply.login_on_site", "telegram.reply.register_success", "troika.bout.finished", "troika.chair.lead", "troika.chair.outrider", "troika.groups.rating", "troika.protocol.seating", "troika.protocol.team", "troika.stats.bouts", "troika.stats.first", "troika.stats.player", "troika.stats.points", "troika.stats.repeat", "troika.stats.repeat_rate", "troika.stats.team", "troika.team.fallback", "troika.theme.head", "troika.theme.seat", "troika.theme.unseat", "troika.title", "ui.crumbs.label", "ui.palette.label", "ui.sync.label", "venues.contested.accept", "venues.contested.col_accepted", "venues.contested.col_answer", "venues.contested.col_question", "venues.contested.col_team", "venues.contested.col_tour", "venues.contested.delete", "venues.contested.delete_confirm", "venues.contested.empty", "venues.contested.state_accepted", "venues.contested.state_pending", "venues.contested.subhead", "venues.contested.unaccept", "venues.errors.game_entered", "venues.errors.game_not_started", "venues.errors.needs_team_number", "venues.errors.no_team_name", "venues.errors.rating_no_venue", "venues.errors.rating_unavailable", "venues.errors.rating_venue_required", "venues.errors.team_has_results", "venues.errors.title_required", "venues.flags.base", "venues.flags.captain", "venues.flags.legion", "venues.game.applications_empty", "venues.game.applications_subhead", "venues.game.clone_btn", "venues.game.clone_cancel", "venues.game.clone_datetime_label", "venues.game.clone_note", "venues.game.clone_title", "venues.game.col_edited", "venues.game.col_filed", "venues.game.col_flags", "venues.game.col_number", "venues.game.col_roster", "venues.game.col_status", "venues.game.col_submitter", "venues.game.col_team", "venues.game.col_who", "venues.game.datetime_label", "venues.game.delete_confirm", "venues.game.delete_submit", "venues.game.download_players", "venues.game.download_tours", "venues.game.downloads_subhead", "venues.game.link_copy", "venues.game.link_hidden", "venues.game.link_rotate", "venues.game.link_rotate_confirm", "venues.game.link_subhead", "venues.game.link_visible_label", "venues.game.reg_closed_label", "venues.game.reg_opens_label", "venues.game.reg_opens_placeholder", "venues.game.status_accept", "venues.game.status_decline", "venues.game.status_pending", "venues.game.subhead", "venues.game.table_btn", "venues.game.tournament_label", "venues.game.undated_title", "venues.game.version_restore", "venues.game.version_save", "venues.game.versions_summary", "venues.host.city_label", "venues.host.create_venue_submit", "venues.host.create_venue_summary", "venues.host.delete_subhead", "venues.host.delete_venue_confirm", "venues.host.delete_venue_submit", "venues.host.description_label", "venues.host.game_accepted", "venues.host.game_no_tournament", "venues.host.game_pending", "venues.host.game_undated", "venues.host.games_empty", "venues.host.games_subhead", "venues.host.jump_label", "venues.host.jump_title", "venues.host.new_game_submit", "venues.host.new_game_summary", "venues.host.page_title", "venues.host.public_label", "venues.host.rating_venue_label", "venues.host.rating_venue_placeholder", "venues.host.save_submit", "venues.host.slug_hint", "venues.host.slug_label", "venues.host.title_label", "venues.host.venue_unlisted", "venues.host.venues_empty", "venues.od_contested.accepted_label", "venues.od_contested.answer_label", "venues.od_contested.dialog_title", "venues.od_contested.no_such_team", "venues.od_contested.number_label", "venues.od_contested.remove", "venues.od_contested.save", "venues.od_contested.save_failed", "venues.public.col_city", "venues.public.col_next_game", "venues.public.col_rating", "venues.public.col_registration", "venues.public.col_teams", "venues.public.col_tournament", "venues.public.col_venue", "venues.public.col_when", "venues.public.games_empty", "venues.public.index_empty", "venues.public.index_title", "venues.public.past_games", "venues.public.rating_link", "venues.public.reg_closed", "venues.public.reg_open", "venues.public.reg_scheduled", "venues.public.search_label", "venues.public.search_placeholder", "venues.public.upcoming_games", "venues.reg.application_subhead", "venues.reg.closed", "venues.reg.col_flag", "venues.reg.col_id", "venues.reg.col_player", "venues.reg.crumb", "venues.reg.error_not_open", "venues.reg.login_btn", "venues.reg.login_hint", "venues.reg.rating_team_label", "venues.reg.roster_label", "venues.reg.scheduled", "venues.reg.status_accepted", "venues.reg.status_declined", "venues.reg.status_line", "venues.reg.status_pending", "venues.reg.submit_edit", "venues.reg.submit_new", "venues.reg.table_btn", "venues.reg.team_name_label", "venues.reg.team_number", "venues.reg.title", "venues.roster_editor.add_player", "venues.roster_editor.captain", "venues.roster_editor.games_count", "venues.roster_editor.name", "venues.roster_editor.no_captain", "venues.roster_editor.not_in_base", "venues.roster_editor.patronymic", "venues.roster_editor.player_placeholder", "venues.roster_editor.remove", "venues.roster_editor.surname", "venues.roster_editor.team_placeholder", "venues.roster_editor.team_unknown", "venues.roster_editor.too_many", "venues.voting.add_by_id_label", "venues.voting.ballot_decline", "venues.voting.ballot_restore", "venues.voting.ballots_subhead", "venues.voting.buff_empty", "venues.voting.closes_label", "venues.voting.col_choice", "venues.voting.col_who", "venues.voting.copy_link", "venues.voting.create_submit", "venues.voting.declined_note", "venues.voting.empty", "venues.voting.error_frozen", "venues.voting.error_kind_unknown", "venues.voting.error_no_tournaments", "venues.voting.error_pick_one", "venues.voting.frozen_note", "venues.voting.kind_any", "venues.voting.kind_label", "venues.voting.kind_line", "venues.voting.kind_one", "venues.voting.kind_ranked", "venues.voting.opens_label", "venues.voting.opens_placeholder", "venues.voting.page_closed", "venues.voting.page_login", "venues.voting.page_scheduled", "venues.voting.page_title", "venues.voting.per_team_label", "venues.voting.pick_any", "venues.voting.pick_one", "venues.voting.rank_first", "venues.voting.rank_second", "venues.voting.rank_third", "venues.voting.save_submit", "venues.voting.settings_summary", "venues.voting.subhead", "venues.voting.submit_edit", "venues.voting.submit_new", "venues.voting.tally_subhead", "venues.voting.tournament_n", "venues.voting.tournaments_label", "venues.voting.window_from", "venues.voting.window_none", "venues.voting.window_until", "venues.voting.your_ballot", "widgets.cell_nav.next", "widgets.cell_nav.prev", "widgets.group_stats.no_token", "widgets.group_stats.paren", "widgets.group_stats.truncated", "widgets.keypad.backspace", "widgets.keypad.next_column", "widgets.keypad.next_row", "widgets.keypad.prev_column", "widgets.keypad.prev_row", "widgets.menu.login", "widgets.menu.profile", "widgets.modal.cancel", "widgets.profile.changed", "widgets.profile.mismatch", "widgets.recorder.label", "widgets.recorder.title", "widgets.roster.pick_suggestion", "widgets.score_table.place", "widgets.status.error", "widgets.status.reconnecting", "widgets.status.saved", "widgets.status.saving", "widgets.venue.battle", "widgets.venue.battle_short", "widgets.venue.name_column", "widgets.viewers.label", "widgets.viewers.title":
 		return true
 	}
 	return false

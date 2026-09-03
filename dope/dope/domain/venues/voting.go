@@ -11,9 +11,11 @@ import (
 
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
+
+	dopestrings "dope/i18nstrings"
 )
 
-// Голосование (CONTEXT.md): an optional poll on a Слот, reached by its own
+// Poll (CONTEXT.md): an optional poll on a Slot, reached by its own
 // unguessable link, whose candidates are the tournaments buff knows to be
 // playable that day. The result is advice only.
 
@@ -179,17 +181,17 @@ func VotingByToken(ctx context.Context, q store.Queryer, token string) (Voting, 
 	return scanVoting(q.QueryRowContext(ctx, votingSelect+`token = ?`, token))
 }
 
-var ErrNoCandidates = errors.New("выберите хотя бы один турнир")
+var ErrNoCandidates = errors.New(dopestrings.Default.Venues.Voting.ErrorNoTournaments())
 
 // ErrVotingFrozen refuses a change the ballots already cast cannot survive: a
 // choice made under one kind counts differently under another.
-var ErrVotingFrozen = errors.New("по голосованию уже голосовали — вид и режим менять нельзя")
+var ErrVotingFrozen = errors.New(dopestrings.Default.Venues.Voting.ErrorFrozen())
 
 func SaveVotingTx(ctx context.Context, tx *sql.Tx, slotID int64, kind string, perTeam bool, opensAt, closesAt string, candidates []Candidate) error {
 	switch kind {
 	case KindOne, KindAny, KindRanked:
 	default:
-		return errors.New("неизвестный вид голосования")
+		return errors.New(dopestrings.Default.Venues.Voting.ErrorKindUnknown())
 	}
 	existing, err := SlotVoting(ctx, tx, slotID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -281,7 +283,7 @@ func CastBallotTx(ctx context.Context, tx *sql.Tx, v Voting, userID int64, teamN
 		`delete from slot_ballots where voting_id = ? and user_id = ?`, v.ID, userID); err != nil {
 		return err
 	}
-	// «Отклонить» is the Representative's word on that voter, and a re-vote
+	// "Decline" is the Representative's word on that voter, and a re-vote
 	// does not take it back.
 	if _, err := tx.ExecContext(ctx, `
 insert into slot_ballots(voting_id, user_id, team_name, choice_json, discarded, created_at, updated_at)

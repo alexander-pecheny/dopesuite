@@ -12,7 +12,7 @@ import (
 )
 
 // The declared-seed loop: a brain scheme with [init] seed: {od-code} compiles
-// to Посев placeholders; «Import seed» snapshots the ОД game's CURRENT
+// to Посев placeholders; «Import seed» snapshots the OD game's CURRENT
 // standings into the ladder and seats every seed slot; a decline moves
 // everyone below up the ladder.
 func TestBrainSeedImportFromOD(t *testing.T) {
@@ -47,7 +47,7 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?
 	if err := srv.Eng().DB.QueryRow(`select id, code from games where fest_id = ? and game_type = 'od'`, festID).Scan(&odGameID, &odCode); err != nil {
 		t.Fatalf("od game: %v", err)
 	}
-	// Partial ОД standings: Гинкго 3, Берёза 2, Астра 1, Вяз 0 — entered the
+	// Partial OD standings: Гинкго 3, Берёза 2, Астра 1, Вяз 0 — entered the
 	// way the page enters them, so the game is scored and ranked.
 	if resp := scopedAPIRequest(t, srv, http.MethodPatch, fmt.Sprintf("/api/fest/%d/games/%d/state", festID, odGameID),
 		map[string]any{"ops": []map[string]any{
@@ -88,7 +88,7 @@ where m.game_id = ? and m.code = ? and ms.slot_index = ?`, brainID, matchCode, s
 		}
 		return name
 	}
-	// Round one pairs seeds 1-2 and 3-4 of the ОД standings.
+	// Round one pairs seeds 1-2 and 3-4 of the OD standings.
 	if a, b := teamAtSeat("s1-g1-1", 0), teamAtSeat("s1-g1-1", 1); a != "Гинкго" || b != "Берёза" {
 		t.Fatalf("бой 1 = %s vs %s, want Гинкго vs Берёза", a, b)
 	}

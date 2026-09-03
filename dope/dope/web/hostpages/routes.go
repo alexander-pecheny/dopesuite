@@ -171,10 +171,10 @@ func (s *Server) handleFestRoutes(t *route.Table, fest string, venue bool) {
 	t.Handle("GET "+fest+"/game/{rest...}", route.Member, s.serveHostGamePage)
 }
 
-// handleSlotRoutes hangs a Venue's Слот off its Game: /host/venue/{v}/game/{g}
-// is the Слот — its date, registration, Заявки, голосование — and the table it
+// handleSlotRoutes hangs a Venue's Slot off its Game: /host/venue/{v}/game/{g}
+// is the Slot — its date, registration, applications, poll — and the table it
 // is played on is /table under it. A Venue's Games are made here and not by
-// the фест's /game/new: every one of them is a Слот.
+// the fest's /game/new: every one of them is a Slot.
 func (s *Server) handleSlotRoutes(t *route.Table, venue string) {
 	slot := venue + "/game/{game}"
 	t.Handle("POST "+venue+"/game/new", route.Manager, s.handleHostCreateSlot)

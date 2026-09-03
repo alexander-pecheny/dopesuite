@@ -66,3 +66,7 @@ no_token = 'нет {{.token}}'
 [roster]
 # Validation error when a datalist input was not picked from suggestions (roster.ts).
 pick_suggestion = "Выберите значение из подсказки"
+
+[modal]
+# The default label of a modal's cancel button (web/ts/widgets.ts openModal).
+cancel = "Отмена"

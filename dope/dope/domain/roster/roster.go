@@ -188,7 +188,7 @@ func importPlayerName(player FestRosterImportPlayer) string {
 }
 
 // LoadGameRosterView is LoadFestRosterView for a Game whose roster is its own
-// (roster_source 'game'): a Слот's составы belong to the sitting, not to the
+// (roster_source 'game'): a Slot's rosters belong to the sitting, not to the
 // Venue's accumulating registry.
 func LoadGameRosterView(ctx context.Context, q store.Queryer, festID, gameID int64) ([]FestRosterTeamView, error) {
 	rows, err := q.QueryContext(ctx, `
@@ -229,7 +229,7 @@ order by gp.number, gp.position, t.id, gtp.roster_order, p.id`, gameID, festID)
 	return teams, rows.Err()
 }
 
-// GameOwnsRoster reports whether a Game keeps its own составы.
+// GameOwnsRoster reports whether a Game keeps its own rosters.
 func GameOwnsRoster(ctx context.Context, q store.Queryer, festID, gameID int64) bool {
 	var source string
 	err := q.QueryRowContext(ctx,

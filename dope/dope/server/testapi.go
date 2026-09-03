@@ -55,7 +55,7 @@ func (s *Server) Metrics() *metrics.Recorder { return &s.metrics }
 // SetEditBatchWindow shortens the edit batching window for a test that plays
 // many edits one after another and awaits each.
 // SetBot configures the bot client, typically for tests.
-func (s *Server) SetBot(b *tgbot.Client) { s.bot = b }
+func (s *Server) SetBot(b *tgbot.Client)             { s.bot = b }
 func (s *Server) SetEditBatchWindow(d time.Duration) { s.editor().Window = d }
 
 // ----- exported type aliases (request/response + scope types) -----

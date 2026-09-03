@@ -1,5 +1,5 @@
 // Package ratingvenues holds rating.chgk.info's venue catalogue whole. A
-// Площадка in dope is one of theirs, so the create form has to search them —
+// Venue in dope is one of theirs, so the create form has to search them —
 // and their API has no search over venues, only pages. Three thousand rows
 // arrive in seven of those and are kept for a day.
 package ratingvenues
@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	dopestrings "dope/i18nstrings"
 )
 
 // Venue is a rating.chgk.info venue as dope shows and stores it.
@@ -27,10 +29,10 @@ type Venue struct {
 
 // ErrUnavailable is every way the rating site can fail to answer: what a host
 // does about it is the same in each case.
-var ErrUnavailable = errors.New("rating.chgk.info не ответил")
+var ErrUnavailable = errors.New(dopestrings.Default.Venues.Errors.RatingUnavailable())
 
 // ErrNoVenue is an id the rating site does not know.
-var ErrNoVenue = errors.New("такой площадки нет на rating.chgk.info")
+var ErrNoVenue = errors.New(dopestrings.Default.Venues.Errors.RatingNoVenue())
 
 const (
 	ttl      = 24 * time.Hour
@@ -71,7 +73,7 @@ func (c *Catalogue) base() string {
 
 // Search answers what to offer for what has been typed: an id, a venue's name
 // or the town it is in. What starts with the query comes before what merely
-// contains it, so «Тбилиси» offers Тбилиси itself first.
+// contains it, so "Tbilisi" offers Tbilisi itself first.
 func (c *Catalogue) Search(ctx context.Context, query string, limit int) ([]Venue, error) {
 	all, err := c.all(ctx)
 	if err != nil {

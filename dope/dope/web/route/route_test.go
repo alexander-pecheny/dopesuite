@@ -103,7 +103,7 @@ func TestAccessMatrix(t *testing.T) {
 }
 
 // A Venue's Game is never public-read (CONTEXT.md): its Representatives read
-// it, and so does whoever holds an accepted Заявка on the Слот — nobody else,
+// it, and so does whoever holds an accepted application on the Slot — nobody else,
 // however public the Venue is.
 func TestVenueGameAccess(t *testing.T) {
 	tbl, tokens := newTable(t)
@@ -116,8 +116,8 @@ func TestVenueGameAccess(t *testing.T) {
 	tbl.Handle("POST /venuetree/{venue}/games/{game}", Read, ok)
 	tbl.Handle("POST /venuetree/{venue}", Member, ok)
 
-	// The Слот the заявка was accepted on; every other read of the Venue —
-	// another Слот, or the fest itself — is closed to the same caller.
+	// The Slot the application was accepted on; every other read of the Venue —
+	// another Slot, or the fest itself — is closed to the same caller.
 	cases := map[string]map[string]int{
 		"/publicfest/venue/games/g": {"anon": 404, "outsider": 404, "waiting": 404, "applicant": 200, "host": 200, "admin": 200, "creator": 200},
 		"/read/venue/games/g":       {"anon": 404, "outsider": 404, "waiting": 404, "applicant": 200, "host": 200, "admin": 200, "creator": 200},

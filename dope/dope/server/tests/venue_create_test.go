@@ -15,7 +15,7 @@ import (
 	"pecheny.me/dopecore/session"
 )
 
-// A Площадка is one of rating.chgk.info's venues: the form posts its id and the
+// A Venue is one of rating.chgk.info's venues: the form posts its id and the
 // name and the town are theirs, not the Representative's.
 func TestCreateVenueTakesItsNameFromRating(t *testing.T) {
 	db := venueTestDB(t)

@@ -179,7 +179,7 @@ func TestParseBrainSeatLine(t *testing.T) {
 }
 
 // The two forms are not interchangeable: a брейн бой written as a theme grid,
-// or an ЭК бой written as questions, is a transcript of a game nobody played.
+// or an EK бой written as questions, is a transcript of a game nobody played.
 func TestParseRefusesTheWrongSeatForm(t *testing.T) {
 	if _, err := Parse("[game]\ntype: brain\n\n[s1/r1/w1/m1]\nА | ---R- | 40 | 1\n"); err == nil {
 		t.Error("брейн принял сетку тем")
@@ -189,7 +189,7 @@ func TestParseRefusesTheWrongSeatForm(t *testing.T) {
 	}
 }
 
-// Составы: a team game's transcript names each team's players, so the replay
+// rosters: a team game's transcript names each team's players, so the replay
 // can register them and the theme players below can be held to a real roster.
 func TestParseLineups(t *testing.T) {
 	script, err := Parse(`[game]
@@ -219,7 +219,7 @@ type: ek
 	}
 }
 
-// An ЭК seat line may carry a fifth field: who played each theme, comma-
+// An EK seat line may carry a fifth field: who played each theme, comma-
 // separated and aligned with the marks, `-` where the sheet named nobody.
 func TestParseEKThemePlayers(t *testing.T) {
 	script, err := Parse(`[game]
@@ -280,7 +280,7 @@ type: ek
 }
 
 // In an individual game the participant is the player, so a stats line carries
-// no team and a составы section has nothing to say.
+// no team and a rosters section has nothing to say.
 func TestParseStatsIndividual(t *testing.T) {
 	script, err := Parse(`[game]
 type: si
@@ -335,8 +335,8 @@ override [статистика] Σ+ Виктор Вега: лист сам с с
 	}
 }
 
-// Составы and статистика are held to the transcript's own data: an unknown
-// team, an unknown player, or a theme player outside his team's состав is a
+// rosters and статистика are held to the transcript's own data: an unknown
+// team, an unknown player, or a theme player outside his team's roster is a
 // parse error, not data.
 func TestParseLineupAndStatsStrictness(t *testing.T) {
 	for _, c := range []struct{ name, src string }{

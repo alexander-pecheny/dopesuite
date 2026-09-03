@@ -21,7 +21,7 @@ func TestSlotVotingSectionOffersTheCandidatesThenTheTally(t *testing.T) {
 	venue := venues.Venue{ID: 1, Slug: "tbilisi", Title: "Площадка"}
 	slot := venues.Slot{ID: 7, FestID: 1, GameID: 3, StartsAt: "2026-09-04 19:00", RegToken: "tok"}
 
-	// No poll yet: the form offers what buff knows about the Слот's date.
+	// No poll yet: the form offers what buff knows about the Slot's date.
 	body := renderPublic(t, slotPageDoc(slotPageData{
 		Venue: venue, Slot: slot, CanManage: true,
 		Voting: VotingView{Candidates: []venues.Candidate{{ID: 1, Name: "Синхрон А", Type: "Синхрон"}}},

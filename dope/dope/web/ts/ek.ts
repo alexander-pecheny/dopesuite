@@ -2753,7 +2753,7 @@ function currentRoute(): EKRoute {
   };
   // A trailing /static segment forces the static snapshot server-side (see
   // handleFestRouter) but leaves the URL in the bar, and /table names the game
-  // itself where a Слот owns the bare path. Strip both before matching the
+  // itself where a Slot owns the bare path. Strip both before matching the
   // sub-route, else the injected snapshot is rejected as a "missing" route.
   const rest = path.slice(prefix[0].length)
     .replace(/\/static$/, "").replace(/\/table$/, "").replace(/\/$/, "");

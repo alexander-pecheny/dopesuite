@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+
+	dopestrings "dope/i18nstrings"
 )
 
 func LoadContested(ctx context.Context, q Queryer, gameID int64) ([]ContestedAnswer, error) {
@@ -28,11 +30,11 @@ where c.game_id = ?`, []any{gameID}, func(rows *sql.Rows) (ContestedAnswer, erro
 	return list, nil
 }
 
-var ErrNoSuchNumber = errors.New("в игре нет команды с таким номером")
+var ErrNoSuchNumber = errors.New(dopestrings.Default.Od.Contested.NoSuchNumber())
 
 // participantByGameNumber resolves a Game's team Number to the Participant it
 // seats — game_participants first, since a Number belongs to a Participant's
-// entry in a Game, then the фест's registry for a Game that seats nobody yet.
+// entry in a Game, then the fest's registry for a Game that seats nobody yet.
 func participantByGameNumber(ctx context.Context, q Queryer, festID, gameID, number int64) (int64, error) {
 	var id int64
 	err := q.QueryRowContext(ctx,
@@ -92,9 +94,9 @@ func DeleteContestedTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, qu
 	return err
 }
 
-// Спорный (CONTEXT.md): an answer near enough to the accepted one that the
-// tournament's жюри must rule on it after the game. dope stores them beside
-// the ОД document rather than in it — the ruling is not a score — and splices
+// Contested answer (CONTEXT.md): an answer near enough to the accepted one that the
+// tournament's jury must rule on it after the game. dope stores them beside
+// the OD document rather than in it — the ruling is not a score — and splices
 // them into the document every reader gets.
 
 type ContestedAnswer struct {
@@ -123,9 +125,9 @@ func WithContestedFor(ctx context.Context, q Queryer, gameID int64, state []byte
 	return WithContested(state, list)
 }
 
-// WithContested returns the ОД document with the спорные spliced in. A
+// WithContested returns the OD document with the contested answers spliced in. A
 // document that is not a JSON object is returned unchanged, so a broken state
-// never costs a page its спорные and vice versa.
+// never costs a page its contested answers and vice versa.
 func WithContested(state []byte, list []ContestedAnswer) []byte {
 	obj := map[string]json.RawMessage{}
 	if err := json.Unmarshal(state, &obj); err != nil {

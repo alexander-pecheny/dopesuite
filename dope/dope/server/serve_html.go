@@ -201,7 +201,7 @@ func (s *server) buildGameInit(ctx context.Context, scope festScope) (gameInitPa
 		payload.Fest = festBytes
 	}
 	// The banner must say what the write guard says: a Game that names its own
-	// entrants numbers them itself, and a Слот's registry is never numbered.
+	// entrants numbers them itself, and a Slot's registry is never numbered.
 	if unnumbered, err := numbering.GameHasUnnumbered(ctx, s.eng.DB, scope.FestID, scope.GameID); err == nil {
 		payload.TeamsUnnumbered = unnumbered
 	}

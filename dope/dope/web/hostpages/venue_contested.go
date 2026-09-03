@@ -46,13 +46,13 @@ func contestedRows(list []store.ContestedAnswer, schemeJSON, stateJSON string) [
 
 func slotContestedSection(data slotPageData) *ui.Element {
 	base := slotBase(data.Venue, data.Slot)
-	sect := []ui.Item{ui.Subhead(ui.Text("Спорные"))}
+	sect := []ui.Item{ui.Subhead(ui.Text(strs.Venues.Contested.Subhead()))}
 	if len(data.Contested) == 0 {
-		return ui.Section(append(sect, ui.Empty(ui.Text("Спорных нет.")))...)
+		return ui.Section(append(sect, ui.Empty(ui.Text(strs.Venues.Contested.Empty())))...)
 	}
 	table := []ui.Item{ui.Scroll(), ui.Trow(
-		ui.Hcell(ui.Text("Тур")), ui.Hcell(ui.Text("Вопрос")), ui.Hcell(ui.Text("Команда")),
-		ui.Hcell(ui.Text("Ответ")), ui.Hcell(ui.Text("Принят")), ui.Hcell(ui.Text("")),
+		ui.Hcell(ui.Text(strs.Venues.Contested.ColTour())), ui.Hcell(ui.Text(strs.Venues.Contested.ColQuestion())), ui.Hcell(ui.Text(strs.Venues.Contested.ColTeam())),
+		ui.Hcell(ui.Text(strs.Venues.Contested.ColAnswer())), ui.Hcell(ui.Text(strs.Venues.Contested.ColAccepted())), ui.Hcell(ui.Text("")),
 	)}
 	for _, row := range data.Contested {
 		question := strconv.Itoa(row.Question)
@@ -61,9 +61,9 @@ func slotContestedSection(data slotPageData) *ui.Element {
 			ui.Hiddenfield(ui.Name("question"), ui.Value(question)),
 			ui.Hiddenfield(ui.Name("number"), ui.Value(number)),
 		}
-		toggle, accepted := "Принять на площадке", "1"
+		toggle, accepted := strs.Venues.Contested.Accept(), "1"
 		if row.AcceptedHere {
-			toggle, accepted = "Снять принятие", "0"
+			toggle, accepted = strs.Venues.Contested.Unaccept(), "0"
 		}
 		actions := ui.Cell(ui.Text(""))
 		state := ui.Cell(ui.Text(contestedStateLabel(row.AcceptedHere)))
@@ -72,8 +72,8 @@ func slotContestedSection(data slotPageData) *ui.Element {
 				append(fields, ui.Button(ui.Ghost, ui.Small(), ui.Submit(), ui.Name("accepted"), ui.Value(accepted),
 					ui.Text(toggle)))...)...))
 			actions = ui.Cell(ui.Form(append([]ui.Item{ui.Method("post"), ui.Action(base + "/contested/delete"),
-				ui.Data("confirm", "Удалить спорный?")},
-				append(fields, ui.Button(ui.Danger, ui.Small(), ui.Submit(), ui.Text("Удалить")))...)...))
+				ui.Data("confirm", strs.Venues.Contested.DeleteConfirm())},
+				append(fields, ui.Button(ui.Danger, ui.Small(), ui.Submit(), ui.Text(strs.Venues.Contested.Delete())))...)...))
 		}
 		table = append(table, ui.Trow(
 			ui.Cell(ui.Text(strconv.Itoa(row.Tour))),
@@ -89,9 +89,9 @@ func slotContestedSection(data slotPageData) *ui.Element {
 
 func contestedStateLabel(accepted bool) string {
 	if accepted {
-		return "принят на площадке"
+		return strs.Venues.Contested.StateAccepted()
 	}
-	return "ждёт жюри"
+	return strs.Venues.Contested.StatePending()
 }
 
 func (s *Server) loadContestedRows(ctx context.Context, festID, gameID int64) ([]ContestedRow, error) {
@@ -109,7 +109,7 @@ func (s *Server) loadContestedRows(ctx context.Context, festID, gameID int64) ([
 	return contestedRows(list, doc.SchemeJSON, doc.State), nil
 }
 
-// contestedWrite runs one host action on a спорный and rebroadcasts the Слот's
+// contestedWrite runs one host action on a contested answer and rebroadcasts the Slot's
 // document so every open page sees it.
 func (s *Server) contestedWrite(w http.ResponseWriter, r *http.Request, sc route.Scope,
 	apply func(ctx context.Context, tx *sql.Tx, question int, number int64) error) error {
@@ -124,7 +124,7 @@ func (s *Server) contestedWrite(w http.ResponseWriter, r *http.Request, sc route
 	question := int(formInt64(r.Form, "question"))
 	number := formInt64(r.Form, "number")
 	if number <= 0 {
-		return route.BadRequest("нужен номер команды")
+		return route.BadRequest(strs.Venues.Errors.NeedsTeamNumber())
 	}
 	if err := s.h.Engine().WithWriteTx(r.Context(), festID, "contested", func(ctx context.Context, tx *sql.Tx) error {
 		return apply(ctx, tx, question, number)

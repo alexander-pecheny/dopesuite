@@ -17,10 +17,10 @@ import (
 	"pecheny.me/dopecore/session"
 )
 
-// A фест's Games rarely share an entrant list. СтудЧР-2026 registered 65 teams;
-// its ОД seated all of them, its ЭК seated 48 and its брейн a different 48. So
+// A fest's Games rarely share an entrant list. СтудЧР-2026 registered 65 teams;
+// its OD seated all of them, its EK seated 48 and its брейн a different 48. So
 // who plays a Game, under which number, is the Game's own knowledge (ADR-0009),
-// and until it was one фест per Game — which split a championship into three.
+// and until it was one fest per Game — which split a championship into three.
 func TestGameSeatsItsOwnEntrants(t *testing.T) {
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
@@ -54,7 +54,7 @@ func TestGameSeatsItsOwnEntrants(t *testing.T) {
 	}
 }
 
-// A Game created without a selection seats the whole фест, as it always has.
+// A Game created without a selection seats the whole fest, as it always has.
 func TestGameWithoutSelectionSeatsTheFest(t *testing.T) {
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
@@ -68,7 +68,7 @@ func TestGameWithoutSelectionSeatsTheFest(t *testing.T) {
 	}
 }
 
-// seedParticipants registers n teams as фест Participants, numbered in order.
+// seedParticipants registers n teams as fest Participants, numbered in order.
 func seedParticipants(t *testing.T, db *sql.DB, festID int64, n int) []int64 {
 	t.Helper()
 	var out []int64
@@ -156,9 +156,9 @@ select number from game_participants where game_id = ? and participant_id = ?`, 
 	return number
 }
 
-// The championship on one фест. СтудЧР-2026 registered 65 teams; its ЭК seated
+// The championship on one fest. СтудЧР-2026 registered 65 teams; its EK seated
 // 48 of them and its брейн a different 48, overlapping in 43. Before a Game could
-// carry its own entrant list this needed three фесты, which is what ADR-0009 was
+// carry its own entrant list this needed three festы, which is what ADR-0009 was
 // written about.
 func TestStudchrGamesShareOneFest(t *testing.T) {
 	ek := transcriptRoster(t, "ek")
@@ -258,7 +258,7 @@ func union(lists ...[]string) []string {
 	return out
 }
 
-// A recompile keeps the Game's entrants. Reading the фест's registry instead
+// A recompile keeps the Game's entrants. Reading the fest's registry instead
 // would recompile a game of four against a roster of six and refuse the scheme
 // it was created from.
 func TestRecompileKeepsGameEntrants(t *testing.T) {
@@ -288,7 +288,7 @@ func TestRecompileKeepsGameEntrants(t *testing.T) {
 	}
 }
 
-// A фест may hold two games of one type under names of their own: СтудЧР played
+// A fest may hold two games of one type under names of their own: СтудЧР played
 // личная СИ and ТПШ, and both are `si`. Only a collision earns a suffix.
 func TestGameKeepsItsGivenTitle(t *testing.T) {
 	srv := newAuthTestServer(t)
@@ -313,10 +313,10 @@ func TestGameKeepsItsGivenTitle(t *testing.T) {
 	}
 }
 
-// The numbering guard asks the Game, not the фест's registry (ADR-0009). A
-// фест may register a team that plays nothing — СтудЧР registered 65 and its ЭК
+// The numbering guard asks the Game, not the fest's registry (ADR-0009). A
+// fest may register a team that plays nothing — СтудЧР registered 65 and its EK
 // seated 48 — and an unnumbered row it never seats says nothing about whether
-// the ЭК can be scored.
+// the EK can be scored.
 func TestNumberingGuardAsksTheGame(t *testing.T) {
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
@@ -347,7 +347,7 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, 'Не и
 }
 
 // The host picks who plays. Before this a Game could only be told its entrants
-// by a caller holding the list; the фест page had no way to say it, so every
+// by a caller holding the list; the fest page had no way to say it, so every
 // Game seated the whole registry (ADR-0009).
 func TestCreateGameFormPicksEntrants(t *testing.T) {
 	srv := newAuthTestServer(t)

@@ -34,11 +34,11 @@ func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
 	s.fest().Mux.ServeHTTP(w, r)
 }
 
-// HandleVenueGameRouter serves /venue/{ref}/game/… — a Venue's Слот as anyone
+// HandleVenueGameRouter serves /venue/{ref}/game/… — a Venue's Slot as anyone
 // it seated watches it.
 func (s *server) HandleVenueGameRouter(w http.ResponseWriter, r *http.Request) {
 	// An ordinary fest is not in this tree at all: /venue/ is where a Venue's
-	// Слот is watched, and its own /fest/ path is the one that serves it.
+	// Slot is watched, and its own /fest/ path is the one that serves it.
 	ref, _, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/venue/"), "/")
 	festID, err := store.ResolveFestID(r.Context(), s.eng.DB, ref)
 	if err == nil && festID > 0 && !venues.IsVenue(r.Context(), s.eng.DB, festID) {
@@ -89,7 +89,7 @@ func (s *server) viewerGamePage(w http.ResponseWriter, r *http.Request, sc route
 		return route.NotFound
 	}
 	// The game is resolved before the access check: a Venue grants a team the
-	// Слот it plays and no other, so the check needs to know which one.
+	// Slot it plays and no other, so the check needs to know which one.
 	gameID, _ := resolveGameID(r.Context(), s.eng.DB, sc.FestID, parts[1])
 	if _, ok := s.fest().Admit(w, r, route.PublicFest, sc.FestID, gameID); !ok {
 		return nil

@@ -48,8 +48,8 @@ func TestVenueDocSplitsUpcomingFromPast(t *testing.T) {
 			t.Errorf("missing %q", want)
 		}
 	}
-	// The reg token is handed out from the Слот's page and nowhere else, so a
-	// public Площадка says a registration is open without linking to it.
+	// The reg token is handed out from the Slot's page and nowhere else, so a
+	// public Venue says a registration is open without linking to it.
 	if strings.Contains(body, "/reg/") {
 		t.Error("the venue page hands out a reg link")
 	}
@@ -121,7 +121,7 @@ func TestRegDocSaysWhatEachStateAllows(t *testing.T) {
 		}
 	}
 
-	// A closed registration still shows a user their own заявка, and still
+	// A closed registration still shows a user their own application, and still
 	// lets them edit it; a stranger sees only that it is closed.
 	closed := open
 	closed.State = venues.RegClosed
@@ -134,7 +134,7 @@ func TestRegDocSaysWhatEachStateAllows(t *testing.T) {
 	if body := renderPublic(t, RegDoc(stranger)); !strings.Contains(body, "Регистрация закрыта.") {
 		t.Error("a stranger is told it is closed")
 	}
-	// A Слот starts closed, so this is the first thing most links show: say it
+	// A Slot starts closed, so this is the first thing most links show: say it
 	// is closed rather than send someone through Telegram for nothing.
 	shut := base
 	shut.State = venues.RegClosed
@@ -148,8 +148,8 @@ func TestRegDocSaysWhatEachStateAllows(t *testing.T) {
 	}
 }
 
-// A Слот has more applicants than seats, so the Состав is asked for only once
-// the Заявка is accepted.
+// A Slot has more applicants than seats, so the roster is asked for only once
+// the application is accepted.
 func TestRegDocAsksForTheRosterOnlyOnceAccepted(t *testing.T) {
 	base := RegPage{Token: "tok", VenueTitle: "Площадка", VenueRef: "tbilisi", LoggedIn: true}
 
@@ -209,7 +209,7 @@ func TestSlotPageDocCarriesTheLinkAndTheQueue(t *testing.T) {
 			t.Errorf("missing %q", want)
 		}
 	}
-	// A pending заявка is not offered «Вернуть в ожидание» — it is there.
+	// A pending application is not offered «Вернуть в ожидание» — it is there.
 	if strings.Contains(body, "Вернуть в ожидание") {
 		t.Error("a pending заявка should not offer the status it already has")
 	}
@@ -220,7 +220,7 @@ func TestSlotPageDocCarriesTheLinkAndTheQueue(t *testing.T) {
 	}
 }
 
-// «Ссылка видна» is the whole switch: the Слот's page is the only place the
+// «Ссылка видна» is the whole switch: the Slot's page is the only place the
 // reg token is handed over, and it hands it over only when told to.
 func TestSlotPageHandsTheRegLinkOverOnlyWhenTold(t *testing.T) {
 	venue := venues.Venue{ID: 1, Slug: "tbilisi", Title: "Площадка"}
@@ -269,7 +269,7 @@ func TestVenueDashDocListsSlotsAndAccess(t *testing.T) {
 	}
 }
 
-// Фесты and Площадки are the same shape on the landing: a heading, what there
+// fests and Venues are the same shape on the landing: a heading, what there
 // is, and the way to make another.
 func TestHostLandingSectionsMatch(t *testing.T) {
 	body := renderPublic(t, hostLoggedInDoc(hostLandingData{LoggedIn: true, Username: "tester"}))
@@ -284,7 +284,7 @@ func TestHostLandingSectionsMatch(t *testing.T) {
 	if strings.Index(body, "Фестов пока нет.") > strings.Index(body, "Площадок пока нет.") {
 		t.Error("Фесты come first")
 	}
-	// The Площадка's name and town are rating.chgk.info's, so the create form
+	// The Venue's name and town are rating.chgk.info's, so the create form
 	// does not ask for them.
 	if strings.Contains(body, `name="city"`) {
 		t.Error("the create form asks for a city")

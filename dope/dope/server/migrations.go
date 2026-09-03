@@ -780,9 +780,9 @@ where kind = 'rr' and block_code = '' and code glob 's[0-9]*-g[0-9]*'`); err != 
 	}},
 	{Version: 27, Name: "venues, slots, registration", Up: func(db *sql.DB) error {
 		// v27: a Venue is a Fest of its own kind, and its Games are dated
-		// Слоты with a registration link, заявки and their versions. A Слот
+		// Slots with a registration link, applications and their versions. A Slot
 		// deals its own numbers from 1, so its Participants are the Game's
-		// rather than the фест's — participants.game_id, and the number
+		// rather than the fest's — participants.game_id, and the number
 		// uniqueness that follows it.
 		if err := store.AddColumnsIfMissing(db, "fests", []store.ColumnSpec{
 			{Name: "kind", Type: "TEXT NOT NULL DEFAULT 'fest'"},
@@ -889,8 +889,8 @@ create table if not exists od_contested(
 		return err
 	}},
 	{Version: 30, Name: "players.patronymic", Up: func(db *sql.DB) error {
-		// A Состав names a rating.chgk.info player in three parts; without a
-		// column of its own the отчество rode in the first name.
+		// A roster names a rating.chgk.info player in three parts; without a
+		// column of its own the patronymic rode in the first name.
 		return store.AddColumnsIfMissing(db, "players", []store.ColumnSpec{
 			{Name: "patronymic", Type: "TEXT NOT NULL DEFAULT ''"},
 		})
@@ -903,8 +903,8 @@ create table if not exists od_contested(
 		})
 	}},
 	{Version: 32, Name: "slots.link_visible", Up: func(db *sql.DB) error {
-		// Whether the Слот hands its registration link over. A Слот is made
-		// with the link hidden; a Слот whose registration is already open was
+		// Whether the Slot hands its registration link over. A Slot is made
+		// with the link hidden; a Slot whose registration is already open was
 		// handing it over before this column existed, so it keeps doing so.
 		if err := store.AddColumnsIfMissing(db, "slots", []store.ColumnSpec{
 			{Name: "link_visible", Type: "INTEGER NOT NULL DEFAULT 0"},

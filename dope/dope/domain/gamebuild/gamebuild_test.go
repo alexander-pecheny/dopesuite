@@ -145,7 +145,7 @@ func TestClearFlatGameKeepsItPlayable(t *testing.T) {
 }
 
 // A Game that named its entrants keeps them through a clear: the brackets
-// are rebuilt for those three, not for the whole фест.
+// are rebuilt for those three, not for the whole fest.
 func TestClearKeepsAGamesEntrants(t *testing.T) {
 	db, festID := newFest(t, 5)
 	var chosen []int64

@@ -35,7 +35,7 @@ func TestPlanClassicBracket(t *testing.T) {
 	}
 }
 
-// ЭК: 48 играющих, бои по четыре, проходят двое — и четвертьфинал, который
+// EK: 48 играющих, бои по четыре, проходят двое — и четвертьфинал, который
 // регламент играет втроём.
 func TestPlanEKBracket(t *testing.T) {
 	sizeFor := func(round, entering int) int {

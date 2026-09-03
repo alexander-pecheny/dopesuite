@@ -65,7 +65,7 @@ func TestGroupStageCarriesItsStandings(t *testing.T) {
 	}
 }
 
-// A бой draws as many theme columns as it plays. Twelve is ЭК's number and used
+// A бой draws as many theme columns as it plays. Twelve is EK's number and used
 // to be everyone's: личная СИ's группы play six, its play-off eight, its grand
 // final twelve, and padding them all to twelve drew empty columns nobody could
 // fill and hid the шапка the sheet prints.

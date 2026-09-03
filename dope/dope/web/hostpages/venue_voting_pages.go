@@ -19,9 +19,9 @@ type VotingView struct {
 }
 
 var kindLabels = []struct{ kind, label string }{
-	{venues.KindOne, "ровно один"},
-	{venues.KindAny, "любые"},
-	{venues.KindRanked, "три по порядку"},
+	{venues.KindOne, strs.Venues.Voting.KindOne()},
+	{venues.KindAny, strs.Venues.Voting.KindAny()},
+	{venues.KindRanked, strs.Venues.Voting.KindRanked()},
 }
 
 func KindLabel(kind string) string {
@@ -64,7 +64,7 @@ func votingForm(base string, view VotingView, tz string) *ui.Element {
 		picks = append(picks, ui.Checkbox(items...))
 	}
 	if len(picks) == 0 {
-		picks = append(picks, ui.Empty(ui.Text("Буфф не знает турниров на эту дату — добавьте по id.")))
+		picks = append(picks, ui.Empty(ui.Text(strs.Venues.Voting.BuffEmpty())))
 	}
 	kinds := make([]ui.Item, 0, len(kindLabels))
 	for _, k := range kindLabels {
@@ -74,7 +74,7 @@ func votingForm(base string, view VotingView, tz string) *ui.Element {
 		}
 		kinds = append(kinds, ui.Radio(items...))
 	}
-	perTeam := []ui.Item{ui.Name("per_team"), ui.Value("1"), ui.Text("Голосуют команды, а не люди")}
+	perTeam := []ui.Item{ui.Name("per_team"), ui.Value("1"), ui.Text(strs.Venues.Voting.PerTeamLabel())}
 	if v.PerTeam {
 		perTeam = append(perTeam, ui.Checked())
 	}
@@ -85,31 +85,31 @@ func votingForm(base string, view VotingView, tz string) *ui.Element {
 		kinds = []ui.Item{ui.Note(ui.Text(KindLabel(v.Kind))), ui.Hiddenfield(ui.Name("kind"), ui.Value(v.Kind))}
 		perTeam = nil
 	}
-	submit := "Создать голосование"
+	submit := strs.Venues.Voting.CreateSubmit()
 	if v.ID != 0 {
-		submit = "Сохранить голосование"
+		submit = strs.Venues.Voting.SaveSubmit()
 	}
 	form := []ui.Item{ui.DirCol, ui.Method("post"), ui.Action(base + "/voting"), ui.Autocomplete("off")}
-	form = append(form, ui.Fieldset(append([]ui.Item{ui.Subhead(ui.Text("Турниры"))}, picks...)...))
+	form = append(form, ui.Fieldset(append([]ui.Item{ui.Subhead(ui.Text(strs.Venues.Voting.TournamentsLabel()))}, picks...)...))
 	if v.Frozen {
-		form = append(form, ui.Hint(ui.Text("По голосованию уже голосовали: турниры, вид и режим больше не меняются.")))
+		form = append(form, ui.Hint(ui.Text(strs.Venues.Voting.FrozenNote())))
 	}
 	if !v.Frozen {
-		form = append(form, ui.Field(ui.Label("Добавить турнир по id"),
+		form = append(form, ui.Field(ui.Label(strs.Venues.Voting.AddByIdLabel()),
 			ui.Textfield(ui.Name("extra_candidate"), ui.Inputmode("numeric"))))
 	}
-	form = append(form, ui.Pickgroup(append([]ui.Item{ui.Label("Сколько можно выбрать")}, kinds...)...))
+	form = append(form, ui.Pickgroup(append([]ui.Item{ui.Label(strs.Venues.Voting.KindLabel())}, kinds...)...))
 	if perTeam != nil {
 		form = append(form, ui.Checkbox(perTeam...))
 	} else if v.PerTeam {
 		form = append(form,
-			ui.Note(ui.Text("Голосуют команды, а не люди")),
+			ui.Note(ui.Text(strs.Venues.Voting.PerTeamLabel())),
 			ui.Hiddenfield(ui.Name("per_team"), ui.Value("1")))
 	}
 	form = append(form,
-		ui.Field(ui.Label("Открывается"), ui.Datetimefield(ui.Name("opens_at"), ui.Value(v.OpensAt),
-			ui.Placeholder("сразу"), ui.Data("datetime-tz", tz))),
-		ui.Field(ui.Label("Закрывается"), ui.Datetimefield(ui.Name("closes_at"), ui.Value(v.ClosesAt),
+		ui.Field(ui.Label(strs.Venues.Voting.OpensLabel()), ui.Datetimefield(ui.Name("opens_at"), ui.Value(v.OpensAt),
+			ui.Placeholder(strs.Venues.Voting.OpensPlaceholder()), ui.Data("datetime-tz", tz))),
+		ui.Field(ui.Label(strs.Venues.Voting.ClosesLabel()), ui.Datetimefield(ui.Name("closes_at"), ui.Value(v.ClosesAt),
 			ui.Placeholder("2026-09-04 18:00"), ui.Data("datetime-tz", tz))),
 		ui.Row(ui.Button(ui.Submit(), ui.Text(submit))),
 	)
@@ -117,7 +117,7 @@ func votingForm(base string, view VotingView, tz string) *ui.Element {
 }
 
 func votingTally(rows []venues.TallyRow) *ui.Element {
-	table := []ui.Item{ui.Scroll(), ui.Trow(ui.Hcell(ui.Text("Турнир")), ui.Hcell(ui.Text("Голоса")))}
+	table := []ui.Item{ui.Scroll(), ui.Trow(ui.Hcell(ui.Text(strs.Venues.Public.ColTournament())), ui.Hcell(ui.Text(strs.Venues.Voting.BallotsSubhead())))}
 	for _, r := range rows {
 		table = append(table, ui.Trow(
 			ui.Cell(ui.Text(candidateLabel(r.Candidate))),
@@ -133,17 +133,17 @@ func votingBallots(base string, view VotingView) *ui.Element {
 		names[c.ID] = c.Name
 	}
 	table := []ui.Item{ui.Scroll(), ui.Trow(
-		ui.Hcell(ui.Text("Кто")), ui.Hcell(ui.Text("Команда")), ui.Hcell(ui.Text("Выбор")),
-		ui.Hcell(ui.Text("Когда")), ui.Hcell(ui.Text("")),
+		ui.Hcell(ui.Text(strs.Venues.Voting.ColWho())), ui.Hcell(ui.Text(strs.Venues.Contested.ColTeam())), ui.Hcell(ui.Text(strs.Venues.Voting.ColChoice())),
+		ui.Hcell(ui.Text(strs.Venues.Public.ColWhen())), ui.Hcell(ui.Text("")),
 	)}
 	for _, b := range view.Ballots {
 		choice := make([]string, 0, len(b.Choice))
 		for _, id := range b.Choice {
 			choice = append(choice, names[id])
 		}
-		label, discard := "Отклонить", "1"
+		label, discard := strs.Venues.Voting.BallotDecline(), "1"
 		if b.Discarded {
-			label, discard = "Вернуть", "0"
+			label, discard = strs.Venues.Voting.BallotRestore(), "0"
 		}
 		voter := b.Voter
 		if voter == "" {
@@ -168,29 +168,29 @@ func joinList(parts []string) string { return strings.Join(parts, ", ") }
 func slotVotingSection(data slotPageData) *ui.Element {
 	base := slotBase(data.Venue, data.Slot)
 	view := data.Voting
-	sect := []ui.Item{ui.Subhead(ui.Text("Голосование"))}
+	sect := []ui.Item{ui.Subhead(ui.Text(strs.Venues.Voting.Subhead()))}
 	if !data.CanManage {
 		if view.Voting.ID == 0 {
-			return ui.Section(append(sect, ui.Empty(ui.Text("Голосования нет.")))...)
+			return ui.Section(append(sect, ui.Empty(ui.Text(strs.Venues.Voting.Empty())))...)
 		}
 		return ui.Section(append(sect, votingTally(view.Tally))...)
 	}
 	if view.Voting.ID != 0 {
 		sect = append(sect,
-			ui.Note(ui.Text(joinDots("Вид: "+KindLabel(view.Voting.Kind), votingWindowLabel(view.Voting)))),
+			ui.Note(ui.Text(joinDots(strs.Venues.Voting.KindLine(KindLabel(view.Voting.Kind)), votingWindowLabel(view.Voting)))),
 			ui.Row(ui.SpaceSM, ui.AlignCenter, ui.Wrap(),
 				ui.Textfield(ui.ID("voteLink"), ui.Value(view.URL), ui.Readonly(), ui.Data("select-all", "")),
-				ui.Button(ui.Ghost, ui.Small(), ui.Data("copy-target", "voteLink"), ui.Text("Копировать")),
+				ui.Button(ui.Ghost, ui.Small(), ui.Data("copy-target", "voteLink"), ui.Text(strs.Venues.Voting.CopyLink())),
 			),
 			votingTally(view.Tally),
 		)
 		if len(view.Ballots) > 0 {
 			sect = append(sect, votingBallots(base, view))
 		}
-		sect = append(sect, ui.Details(ui.Summary(ui.Btn(), ui.Text("Настройки голосования")), votingForm(base, view, data.Tz)))
+		sect = append(sect, ui.Details(ui.Summary(ui.Btn(), ui.Text(strs.Venues.Voting.SettingsSummary())), votingForm(base, view, data.Tz)))
 		return ui.Section(sect...)
 	}
-	sect = append(sect, ui.Details(ui.Summary(ui.Btn(), ui.Text("Создать голосование")), votingForm(base, view, data.Tz)))
+	sect = append(sect, ui.Details(ui.Summary(ui.Btn(), ui.Text(strs.Venues.Voting.CreateSubmit())), votingForm(base, view, data.Tz)))
 	return ui.Section(sect...)
 }
 
@@ -199,11 +199,11 @@ func votingWindowLabel(v venues.Voting) string {
 	case v.OpensAt != "" && v.ClosesAt != "":
 		return v.OpensAt + " — " + v.ClosesAt
 	case v.ClosesAt != "":
-		return "до " + v.ClosesAt
+		return strs.Venues.Voting.WindowUntil(v.ClosesAt)
 	case v.OpensAt != "":
-		return "с " + v.OpensAt
+		return strs.Venues.Voting.WindowFrom(v.OpensAt)
 	}
-	return "без срока"
+	return strs.Venues.Voting.WindowNone()
 }
 
 type VotePage struct {
@@ -220,10 +220,10 @@ type VotePage struct {
 }
 
 func VoteDoc(p VotePage) *ui.Doc {
-	page := []ui.Item{ui.Title("Голосование · " + p.VenueTitle), ui.PagePublic, ui.Classicscripts("dist/pageforms.js")}
+	page := []ui.Item{ui.Title(strs.Venues.Voting.PageTitle(p.VenueTitle)), ui.PagePublic, ui.Classicscripts("dist/pageforms.js")}
 	page = append(page, ui.Publictopbar(ui.Crumbs(
-		pages.HomeCrumb(), ui.Crumb(ui.Href("/venues"), ui.Text("Площадки")),
-		ui.Crumb(ui.Href("/venue/"+p.VenueRef), ui.Text(p.VenueTitle)), pages.Leaf("Голосование"))))
+		pages.HomeCrumb(), ui.Crumb(ui.Href("/venues"), ui.Text(strs.Venues.Public.IndexTitle())),
+		ui.Crumb(ui.Href("/venue/"+p.VenueRef), ui.Text(p.VenueTitle)), pages.Leaf(strs.Venues.Voting.Subhead()))))
 	page = append(page, ui.Section(
 		ui.Subhead(ui.Text(p.VenueTitle)),
 		ui.Note(ui.Text(joinDots(p.SlotDate, votingWindowLabel(p.Voting)))),
@@ -233,13 +233,13 @@ func VoteDoc(p VotePage) *ui.Doc {
 	}
 	switch {
 	case p.State == venues.RegScheduled:
-		page = append(page, ui.Empty(ui.Text("Голосование откроется "+p.Voting.OpensAt+".")))
+		page = append(page, ui.Empty(ui.Text(strs.Venues.Voting.PageScheduled(p.Voting.OpensAt))))
 	case p.State == venues.RegClosed:
-		page = append(page, ui.Section(ui.Subhead(ui.Text("Итог")), votingTally(p.Tally)))
+		page = append(page, ui.Section(ui.Subhead(ui.Text(strs.Venues.Voting.TallySubhead())), votingTally(p.Tally)))
 	case !p.LoggedIn:
 		page = append(page, ui.Section(
-			ui.Hint(ui.Text("Чтобы проголосовать, войдите через Telegram.")),
-			ui.Row(ui.Button(ui.Primary, ui.Href(p.LoginHref), ui.Text("Войти"))),
+			ui.Hint(ui.Text(strs.Venues.Voting.PageLogin())),
+			ui.Row(ui.Button(ui.Primary, ui.Href(p.LoginHref), ui.Text(strs.Venues.Reg.LoginBtn()))),
 		))
 	default:
 		page = append(page, ballotSection(p))
@@ -263,7 +263,7 @@ func ballotSection(p VotePage) *ui.Element {
 		if p.Ballot != nil {
 			teamName = p.Ballot.TeamName
 		}
-		form = append(form, ui.Field(ui.Label("Команда"),
+		form = append(form, ui.Field(ui.Label(strs.Venues.Contested.ColTeam()),
 			ui.Textfield(ui.Name("team_name"), ui.Value(teamName), ui.Required())))
 	}
 	switch v.Kind {
@@ -281,7 +281,7 @@ func ballotSection(p VotePage) *ui.Element {
 		}
 	case venues.KindAny:
 		picks := make([]ui.Item, 0, len(v.Candidates)+1)
-		picks = append(picks, ui.Subhead(ui.Text("Во что готовы играть")))
+		picks = append(picks, ui.Subhead(ui.Text(strs.Venues.Voting.PickAny())))
 		for _, c := range v.Candidates {
 			items := []ui.Item{ui.Name("choice"), ui.Value(strconv.FormatInt(c.ID, 10)), ui.Text(candidateLabel(c))}
 			if chosen[c.ID] {
@@ -292,7 +292,7 @@ func ballotSection(p VotePage) *ui.Element {
 		form = append(form, ui.Fieldset(picks...))
 	default:
 		picks := make([]ui.Item, 0, len(v.Candidates)+1)
-		picks = append(picks, ui.Label("Во что играем"))
+		picks = append(picks, ui.Label(strs.Venues.Voting.PickOne()))
 		for _, c := range v.Candidates {
 			items := []ui.Item{ui.Name("choice"), ui.Value(strconv.FormatInt(c.ID, 10)), ui.Text(candidateLabel(c))}
 			if chosen[c.ID] {
@@ -302,17 +302,17 @@ func ballotSection(p VotePage) *ui.Element {
 		}
 		form = append(form, ui.Pickgroup(picks...))
 	}
-	submit := "Проголосовать"
+	submit := strs.Venues.Voting.SubmitNew()
 	if p.Ballot != nil {
-		submit = "Изменить голос"
+		submit = strs.Venues.Voting.SubmitEdit()
 	}
 	form = append(form, ui.Row(ui.Button(ui.Submit(), ui.Text(submit))))
 
-	sect := []ui.Item{ui.Subhead(ui.Text("Ваш голос"))}
+	sect := []ui.Item{ui.Subhead(ui.Text(strs.Venues.Voting.YourBallot()))}
 	if p.Ballot != nil && p.Ballot.Discarded {
-		sect = append(sect, ui.Hint(ui.HintDanger, ui.Text("Ваш голос отклонён представителем площадки.")))
+		sect = append(sect, ui.Hint(ui.HintDanger, ui.Text(strs.Venues.Voting.DeclinedNote())))
 	}
 	return ui.Section(append(sect, ui.Form(form...))...)
 }
 
-var rankLabels = [venues.RankedDepth]string{"Первое место", "Второе место", "Третье место"}
+var rankLabels = [venues.RankedDepth]string{strs.Venues.Voting.RankFirst(), strs.Venues.Voting.RankSecond(), strs.Venues.Voting.RankThird()}

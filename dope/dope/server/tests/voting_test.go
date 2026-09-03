@@ -109,7 +109,7 @@ func TestPerTeamTallyFollowsTheLatestBallot(t *testing.T) {
 	}
 }
 
-// «Отклонить» is final for that voter: re-voting does not bring the ballot back.
+// "Decline" is final for that voter: re-voting does not bring the ballot back.
 func TestADiscardedBallotStaysDiscardedAcrossARevote(t *testing.T) {
 	db, _, voting := votingFixture(t)
 	alice := newVenueUser(t, db, "alice")

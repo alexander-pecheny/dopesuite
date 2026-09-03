@@ -106,7 +106,7 @@ func TestPlayersRankByGames(t *testing.T) {
 	}
 }
 
-// «Плотников Д» is a surname and a first name, not a surname nobody has.
+// "Plotnikov D" is a surname and a first name, not a surname nobody has.
 func TestPlayersMatchNameWords(t *testing.T) {
 	s := fixture(t)
 	got := s.Players(context.Background(), "Плотников Д", 10)
@@ -226,7 +226,7 @@ func TestPlayableTournamentsPutSynchronsFirst(t *testing.T) {
 	if len(got) != 2 || got[0].ID != 10233 || got[1].ID != 10234 {
 		t.Fatalf("playable %+v", got)
 	}
-	// The window closes Saturday 10:00 Moscow time: an evening Слот that day
+	// The window closes Saturday 10:00 Moscow time: an evening Slot that day
 	// is past it, a morning one is not.
 	if got := s.PlayableTournaments(context.Background(), at(t, "2026-09-05 18:00")); len(got) != 1 || got[0].ID != 10234 {
 		t.Fatalf("after the window %+v", got)
@@ -244,7 +244,7 @@ func TestPlayableTournamentsPutSynchronsFirst(t *testing.T) {
 
 func TestSearchAndLoadTournament(t *testing.T) {
 	s := fixture(t)
-	// Three: «Синхрон августа», «Асинхрон августа» and «Старый синхрон» — the
+	// Three: «Синхрон августа», «Аsync tournament августа» and «Старый sync tournament» — the
 	// lowercase query finds the capitalised name too.
 	if got := s.SearchTournaments(context.Background(), "синхрон", time.Time{}, 10); len(got) != 3 {
 		t.Fatalf("search %+v", got)

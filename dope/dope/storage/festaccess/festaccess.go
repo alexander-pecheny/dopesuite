@@ -361,8 +361,8 @@ func lookupUserIDByNicknameTx(ctx context.Context, tx *sql.Tx, nickname string) 
 	return userID, err
 }
 
-// HasAcceptedApplication reports whether the user holds an accepted Заявка on
-// this Game's Слот. The grant is that Слот's alone: the next Friday is a
+// HasAcceptedApplication reports whether the user holds an accepted application on
+// this Game's Slot. The grant is that Slot's alone: the next Friday is a
 // different sitting, and a team that played one may not read the others.
 func HasAcceptedApplication(ctx context.Context, q store.Queryer, festID, gameID, userID int64) (bool, error) {
 	if userID <= 0 || gameID <= 0 {

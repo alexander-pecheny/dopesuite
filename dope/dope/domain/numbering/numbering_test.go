@@ -65,7 +65,7 @@ func TestNumberingGuards(t *testing.T) {
 			t.Errorf("HasUnnumbered(%d) = %v", fest, got)
 		}
 	}
-	// A Game with its own entrants answers for itself; one without falls back to the фест.
+	// A Game with its own entrants answers for itself; one without falls back to the fest.
 	if _, err := db.Exec(`insert into game_participants values (10, 1, 0, 1), (10, 2, 1, 2), (11, 1, 0, 0)`); err != nil {
 		t.Fatal(err)
 	}

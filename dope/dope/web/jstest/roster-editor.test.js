@@ -2,7 +2,6 @@ import { assertEquals } from "jsr:@std/assert";
 import {
   emptyPlayer,
   fullName,
-  gamesWord,
   MAX_ROSTER,
   parseRoster,
   rosterWarning,
@@ -53,12 +52,6 @@ Deno.test("suggestLabel names the player, their id and the games they are known 
     "Новый Игрок",
   );
   assertEquals(fullName(emptyPlayer()), "");
-});
-
-Deno.test("gamesWord counts the Russian way", () => {
-  assertEquals([1, 2, 4, 5, 11, 14, 21, 102, 412].map(gamesWord), [
-    "игра", "игры", "игры", "игр", "игр", "игр", "игра", "игры", "игр",
-  ]);
 });
 
 Deno.test("setCaptain keeps exactly one", () => {

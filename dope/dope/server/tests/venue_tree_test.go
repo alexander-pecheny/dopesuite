@@ -64,7 +64,7 @@ values(900, 'kubok', 'Кубок', '', 'fest', null, 1, ?, ?, 1)`, now, now); er
 	}
 }
 
-// Deleting an игра takes its Слот with it — the Заявки, their versions and the
+// Deleting an игра takes its Slot with it — the applications, their versions and the
 // Game all hang off the same row — and lands the Representative on the Venue,
 // not on the /host/fest tree a Venue is never served from.
 func TestDeletingAVenueGameTakesTheSlot(t *testing.T) {
@@ -202,11 +202,12 @@ values(900, 'kubok', 'Кубок', '', 'fest', null, 1, ?, ?, 1)`, now, now); er
 	}
 }
 
-// The reg token is the invitation, so the public landing only says a
-// registration is open; the link to it is the Venue's own people's.
+// The reg token is the invitation, and a Representative hands it out from the
+// game's own page: the public landing says a registration is open and stops
+// there, for a Representative as much as for a stranger.
 func TestVenueLandingKeepsTheRegToken(t *testing.T) {
 	db := venueTestDB(t)
-	festID, slot := newVenueSlot(t, db, []int{2})
+	festID, _ := newVenueSlot(t, db, []int{2})
 	srv := dopeserver.NewTestServer(func(e *core.Engine) {
 		e.DB = db
 		e.RT = realtime.NewManager()
@@ -239,12 +240,12 @@ func TestVenueLandingKeepsTheRegToken(t *testing.T) {
 		festID, userID, util.UtcNow()); err != nil {
 		t.Fatal(err)
 	}
-	if member := get(createTestSession(t, srv, userID)); !strings.Contains(member, "/reg/"+slot.RegToken) {
-		t.Error("a representative should get the reg link")
+	if member := get(createTestSession(t, srv, userID)); strings.Contains(member, "/reg/") {
+		t.Error("the landing hands a Representative the reg token")
 	}
 }
 
-// The Состав is asked for after the Заявка is accepted, so a POST that carries
+// The roster is asked for after the application is accepted, so a POST that carries
 // one before then is not believed.
 func TestPendingApplicationStoresNoRoster(t *testing.T) {
 	db := venueTestDB(t)

@@ -16,7 +16,7 @@ import (
 
 // A flat game is a Structure like every other: its one Block ranks into
 // stage_standings as the document changes, and the fest view carries the
-// table — ОД by взятые and rating, a КСИ team that declined ranked last.
+// table — OD by взятые and rating, a KSI team that declined ranked last.
 func TestFlatGameRanksAsItIsPlayed(t *testing.T) {
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)

@@ -5,11 +5,17 @@
 // not on offer — so the kit draws both. The text input stays what the form
 // posts, and the calendar only ever writes into it.
 
+import S from "./i18nstrings.js";
+
 const TEXT = "[data-datetime-text]";
 const OPEN = "[data-datetime-open]";
 
 // The week starts on Monday everywhere this kit is used.
-const WEEKDAYS = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
+const WEEKDAYS = [
+  S.datetime.calendar.dowMon(), S.datetime.calendar.dowTue(), S.datetime.calendar.dowWed(),
+  S.datetime.calendar.dowThu(), S.datetime.calendar.dowFri(), S.datetime.calendar.dowSat(),
+  S.datetime.calendar.dowSun(),
+];
 
 const MONTH = new Intl.DateTimeFormat("ru", {month: "long"});
 const FULL = new Intl.DateTimeFormat("ru", {day: "numeric", month: "long", year: "numeric"});
@@ -20,7 +26,7 @@ export interface ParsedValue {
 }
 
 // parseValue reads what the field holds. A bare date parses; anything else —
-// «завтра», a lone «19:00» — is none of the calendar's business.
+// "tomorrow", a lone «19:00» — is none of the calendar's business.
 export function parseValue(text: string): ParsedValue | null {
   const m = text.trim().match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/);
   if (!m) return null;
@@ -187,7 +193,7 @@ export function mountDatetimeField(field: HTMLElement): void {
     pop = document.createElement("div");
     pop.className = "calendar-pop";
     pop.setAttribute("role", "dialog");
-    pop.setAttribute("aria-label", "Календарь");
+    pop.setAttribute("aria-label", S.datetime.calendar.label());
 
     const head = document.createElement("div");
     head.className = "u-row u-align-center u-gap-xs";
@@ -202,7 +208,7 @@ export function mountDatetimeField(field: HTMLElement): void {
     };
     title = document.createElement("span");
     title.className = "calendar-title";
-    head.append(nav("‹", "Предыдущий месяц", -1), title, nav("›", "Следующий месяц", 1));
+    head.append(nav("‹", S.datetime.calendar.prevMonth(), -1), title, nav("›", S.datetime.calendar.nextMonth(), 1));
 
     grid = document.createElement("div");
     grid.className = "calendar-grid";
@@ -211,7 +217,7 @@ export function mountDatetimeField(field: HTMLElement): void {
     timeRow.className = "u-row u-align-center u-justify-between u-gap-xs";
     const timeLabel = document.createElement("span");
     timeLabel.className = "calendar-tz";
-    timeLabel.textContent = "Время";
+    timeLabel.textContent = S.datetime.calendar.time();
     timeInput = document.createElement("input");
     timeInput.type = "text";
     timeInput.className = "calendar-time-input";
@@ -219,7 +225,7 @@ export function mountDatetimeField(field: HTMLElement): void {
     timeInput.maxLength = 5;
     timeInput.size = 5;
     timeInput.placeholder = "19:00";
-    timeInput.setAttribute("aria-label", "Время");
+    timeInput.setAttribute("aria-label", S.datetime.calendar.time());
     timeInput.value = parseValue(text.value)?.time || "";
     const writeTime = (time: string): void => {
       const date = parseValue(text.value)?.date;
@@ -253,7 +259,7 @@ export function mountDatetimeField(field: HTMLElement): void {
     const clear = document.createElement("button");
     clear.type = "button";
     clear.className = "btn btn-ghost btn-small";
-    clear.textContent = "Очистить";
+    clear.textContent = S.datetime.calendar.clear();
     clear.addEventListener("click", () => {
       if (timeInput) timeInput.value = "";
       commit("");
@@ -262,7 +268,7 @@ export function mountDatetimeField(field: HTMLElement): void {
     const done = document.createElement("button");
     done.type = "button";
     done.className = "btn btn-primary btn-small";
-    done.textContent = "Готово";
+    done.textContent = S.datetime.calendar.done();
     done.addEventListener("click", finish);
     foot.append(clear, done);
 
@@ -275,7 +281,7 @@ export function mountDatetimeField(field: HTMLElement): void {
       tzRow.className = "u-row u-align-center u-justify-between u-gap-xs";
       const tz = document.createElement("span");
       tz.className = "calendar-tz";
-      tz.textContent = `Часовой пояс: ${zone}`;
+      tz.textContent = S.datetime.calendar.timezone(zone);
       tzRow.append(tz);
     }
 

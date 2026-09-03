@@ -15,9 +15,11 @@ import (
 	"dope/dope/domain/roster"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
+
+	dopestrings "dope/i18nstrings"
 )
 
-var ErrHasResults = errors.New("у команды уже есть результаты в игре — сначала уберите их")
+var ErrHasResults = errors.New(dopestrings.Default.Venues.Errors.TeamHasResults())
 
 func SetStatusTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string, appID int64, status string) error {
 	app, err := LoadApplication(ctx, tx, appID)
@@ -62,9 +64,9 @@ func SetStatusTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string, a
 	return err
 }
 
-// ReseatTx folds the accepted Заявки into the Слот's Game: each keeps the
+// ReseatTx folds the accepted applications into the Slot's Game: each keeps the
 // Number it holds, a newly accepted one takes the lowest free one. A team the
-// host seated by hand is left where it is — a Заявка owns its own seat and no
+// host seated by hand is left where it is — a application owns its own seat and no
 // other.
 func ReseatTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string) error {
 	return reseatTx(ctx, tx, slot, venueCity, 0)
@@ -128,10 +130,10 @@ func reseatTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string, drop
 	return nil
 }
 
-// resolveSeatTx re-finds a Заявка's seat after the host renumbered its team on
+// resolveSeatTx re-finds a application's seat after the host renumbered its team on
 // the game page: renumbering mints a Participant at the new number and leaves
-// the old row behind, so the Заявка's own pointer goes stale. The team is
-// looked up again by the name and registry row it plays under, and the Заявка
+// the old row behind, so the application's own pointer goes stale. The team is
+// looked up again by the name and registry row it plays under, and the application
 // is repointed; a team that is no longer in the Game reads as unseated.
 func resolveSeatTx(ctx context.Context, tx *sql.Tx, slot Slot, app Application) (Application, error) {
 	if app.Number > 0 || app.ParticipantID == 0 {
@@ -168,8 +170,8 @@ limit 1`, slot.GameID, app.TeamName, app.RatingTeamID).Scan(&participantID, &num
 }
 
 // carryOverSeatTx moves what a seat owns from the Participant a renumber
-// retired to the one it minted: the спорные are the жюри's to rule on and
-// the Состав is the sitting's, and both are keyed on the Participant.
+// retired to the one it minted: the contested answers are the jury's to rule on and
+// the roster is the sitting's, and both are keyed on the Participant.
 func carryOverSeatTx(ctx context.Context, tx *sql.Tx, gameID, from, to int64) error {
 	for _, table := range []string{"od_contested", "game_team_players"} {
 		if _, err := tx.ExecContext(ctx,
@@ -203,7 +205,7 @@ func pruneRenumberedTx(ctx context.Context, tx *sql.Tx, gameID int64, teams []pr
 	if holes != "" {
 		where += ` and number not in (` + holes + `)`
 	}
-	// A спорный outlives the sitting it was given at, so a Participant that
+	// A contested answer outlives the sitting it was given at, so a Participant that
 	// still owns one is never debris.
 	var owned int
 	if err := tx.QueryRowContext(ctx, `
@@ -316,10 +318,10 @@ values(?, ?, ?, ?, ?, 0)`, festID, app.RatingTeamID, app.TeamName, city, positio
 	return err
 }
 
-// writeGameRosterTx mirrors a Состав into the Слот's own roster
+// writeGameRosterTx mirrors a roster into the Slot's own roster
 // (game_team_players, which the Game reads because its roster_source is
 // 'game'), so a team's players belong to the sitting they played, not to the
-// Venue. The rating player ids stay on the Заявка — they are what the players
+// Venue. The rating player ids stay on the application — they are what the players
 // export needs.
 func writeGameRosterTx(ctx context.Context, tx *sql.Tx, festID, gameID, participantID int64, players []RosterPlayer) error {
 	if _, err := tx.ExecContext(ctx,

@@ -14,9 +14,9 @@ func TestPageOfEveryGameType(t *testing.T) {
 		{OD, "static/od.html", InitGame},
 		{KSI, "static/si.html", InitGame},
 		{Brain, "static/brain.html", InitGame},
-		// Личная СИ borrows ЭК's page for its bracket, not КСИ's blank.
+		// Личная СИ borrows EK's page for its bracket, not KSI's blank.
 		{SI, "static/ek.html", InitEK},
-		// Мультиигры is a flat game like КСИ; Тройка plays a bracket, so it
+		// Мультиигры is a flat game like KSI; Тройка plays a bracket, so it
 		// boots the bracket init on a page of its own.
 		{Multi, "static/multi.html", InitGame},
 		{Troika, "static/troika.html", InitGame},

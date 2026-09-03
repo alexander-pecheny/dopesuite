@@ -223,7 +223,7 @@ func Main() {
 	log.Printf("listening on http://localhost%s/host and http://localhost%s/", addr, addr)
 
 	// rating.chgk.info's venue catalogue is seven pages, about eight seconds:
-	// taken at boot, the first Представитель to open the Площадка form does not
+	// taken at boot, the first Представитель to open the Venue form does not
 	// wait for it.
 	go func() {
 		if _, err := srv.eng.RatingVenues().Search(context.Background(), "", 1); err != nil {
@@ -349,7 +349,7 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	// so the concurrent-viewer tally is reported per game. Best-effort: an absent
 	// or unresolvable id leaves the connection unscoped (gameID 0) and counted in
 	// the fest's game-less bucket. It is resolved before the access check because
-	// a Venue grants a team its own Слот and no other.
+	// a Venue grants a team its own Slot and no other.
 	gameID, _ := resolveGameID(r.Context(), s.eng.DB, festID, strings.TrimSpace(r.URL.Query().Get("game_id")))
 	if _, ok := s.api().Admit(w, r, route.Read, festID, gameID); !ok {
 		return

@@ -309,7 +309,7 @@ type: ek
 Анна Ким    | ВШЭстером | 10 | 1 | 1
 `
 
-// Составы are input: the replay registers them before the first бой, so the
+// rosters are input: the replay registers them before the first бой, so the
 // theme players have somebody to be.
 func TestRunWritesLineups(t *testing.T) {
 	script, err := Parse(statsSample)

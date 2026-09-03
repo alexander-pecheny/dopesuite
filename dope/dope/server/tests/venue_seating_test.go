@@ -19,7 +19,7 @@ import (
 	"dope/dope/storage/store"
 )
 
-// Accepting a Заявка seats the team in the Слот's Game with the next free
+// Accepting a application seats the team in the Slot's Game with the next free
 // Number; declining unseats it, unless the Game already scored it.
 func TestSlotSeatingFollowsTheAcceptedApplications(t *testing.T) {
 	db := venueTestDB(t)
@@ -41,8 +41,8 @@ func TestSlotSeatingFollowsTheAcceptedApplications(t *testing.T) {
 	if got := numbersByTeam(t, db, festID); got["Мантисса"] != 1 || got["Вторая"] != 2 {
 		t.Fatalf("numbers %v", got)
 	}
-	// The registry gains the team the заявка named by its rating id, and the
-	// Состав reaches the fest roster.
+	// The registry gains the team the application named by its rating id, and the
+	// roster reaches the fest roster.
 	var teamID int64
 	if err := db.QueryRow(`select id from fest_teams where fest_id = ? and rating_id = 5723`, festID).Scan(&teamID); err != nil {
 		t.Fatalf("registry row: %v", err)
@@ -96,7 +96,7 @@ where game_id = ? and code = 'main'`,
 	}
 }
 
-// A new version of an accepted заявка rewrites the seated team's roster.
+// A new version of an accepted application rewrites the seated team's roster.
 func TestRosterVersionAfterAcceptanceRewritesTheRoster(t *testing.T) {
 	db := venueTestDB(t)
 	festID, slot := venueSlotWithAcceptedTeam(t, db)
@@ -174,7 +174,7 @@ func newVenueSlot(t *testing.T, db *sql.DB, comp []int) (int64, venues.Slot) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// A Слот is born with its registration shut; these tests are about what
+	// A Slot is born with its registration shut; these tests are about what
 	// happens after a Representative opens it.
 	if _, err := db.Exec(`update slots set reg_closed = 0 where id = ?`, slotID); err != nil {
 		t.Fatal(err)
@@ -186,8 +186,8 @@ func newVenueSlot(t *testing.T, db *sql.DB, comp []int) (int64, venues.Slot) {
 	return festID, slot
 }
 
-// A new Слот has a reg token from the first moment, so it must not also have an
-// open registration: the Representative picks the турнир and the date first.
+// A new Slot has a reg token from the first moment, so it must not also have an
+// open registration: the Representative picks the tournament and the date first.
 func TestNewSlotStartsWithRegistrationClosed(t *testing.T) {
 	db := venueTestDB(t)
 	festID := newVenueFest(t, db)
@@ -292,8 +292,8 @@ func venueSlotWithAcceptedTeam(t *testing.T, db *sql.DB) (int64, venues.Slot) {
 	return festID, slot
 }
 
-// Two Слоты of one Venue both number their teams from 1, and neither renames
-// the other's: a Слот's Participants are its Game's, not the фест's.
+// Two Slots of one Venue both number their teams from 1, and neither renames
+// the other's: a Slot's Participants are its Game's, not the fest's.
 func TestTwoSlotsBothNumberFromOne(t *testing.T) {
 	db := venueTestDB(t)
 	festID, first := newVenueSlot(t, db, []int{2})
@@ -336,8 +336,8 @@ func TestTwoSlotsBothNumberFromOne(t *testing.T) {
 	}
 }
 
-// A Заявка owns its own seat and no other: a team the host seated by hand on
-// the game page survives a stranger's заявка, and its Number is not reused.
+// A application owns its own seat and no other: a team the host seated by hand on
+// the game page survives a stranger's application, and its Number is not reused.
 func TestHandSeatedTeamSurvivesAnApplication(t *testing.T) {
 	db := venueTestDB(t)
 	festID, slot := newVenueSlot(t, db, []int{2})
@@ -357,7 +357,7 @@ where game_id = ? and code = 'main'`,
 
 	alice := newVenueUser(t, db, "alice")
 	fileApplication(t, db, slot, alice, "Мантисса", 0, nil)
-	// A pending заявка touches nothing.
+	// A pending application touches nothing.
 	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
 		return venues.ReseatTx(ctx, tx, slot, "Тбилиси")
 	}); err != nil {
@@ -376,14 +376,14 @@ where game_id = ? and code = 'main'`,
 		t.Fatalf("the заявка took a seat it does not own: %v", got)
 	}
 
-	// Declining frees only the заявка's own seat.
+	// Declining frees only the application's own seat.
 	setStatus(t, db, slot, alice, venues.StatusDeclined)
 	if got := numbersByTeam(t, db, festID); got["Вручную"] != 1 || got["Мантисса"] != 0 {
 		t.Fatalf("after the decline: %v", got)
 	}
 }
 
-// A спорный counts as a result: unseating the team it names is refused.
+// A contested answer counts as a result: unseating the team it names is refused.
 func TestContestedBlocksAnUnseat(t *testing.T) {
 	db := venueTestDB(t)
 	festID, slot := newVenueSlot(t, db, []int{2})
@@ -403,7 +403,7 @@ func TestContestedBlocksAnUnseat(t *testing.T) {
 	}
 }
 
-// The host may renumber a team on the game page; the Заявка follows it there
+// The host may renumber a team on the game page; the application follows it there
 // rather than seating a second copy under the number it used to hold.
 func TestReseatFollowsARenumberedTeam(t *testing.T) {
 	db := venueTestDB(t)
@@ -415,7 +415,7 @@ func TestReseatFollowsARenumberedTeam(t *testing.T) {
 	setStatus(t, db, slot, alice, venues.StatusAccepted)
 
 	// The game page renumbers 1 → 3 — a document write, which reseats the бой
-	// and so mints a Participant at 3 and leaves the Заявка pointing at 1.
+	// and so mints a Participant at 3 and leaves the application pointing at 1.
 	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
 		return flatgame.SetStateTx(ctx, tx, festID, slot.GameID,
 			`{"teams":[{"name":"Мантисса","city":"Тбилиси","number":3}],"entries":[[],[]],"completed":[false,false],"shootoutRounds":[]}`)
@@ -463,7 +463,7 @@ func TestReseatFollowsARenumberedTeam(t *testing.T) {
 	}
 }
 
-// A спорный is the жюри's to rule on, so it follows the team through a
+// A contested answer is the jury's to rule on, so it follows the team through a
 // renumber rather than being cascaded away with the Participant it retired.
 func TestContestedFollowARenumberedTeam(t *testing.T) {
 	db := venueTestDB(t)
@@ -525,8 +525,8 @@ where gtp.game_id = ? and p.number = 3`, slot.GameID).Scan(&rosterRows); err != 
 	}
 }
 
-// A Состав names a rating.chgk.info player in three parts, and the roster the
-// Слот's game answers with keeps them apart; a player without an отчество
+// A roster names a rating.chgk.info player in three parts, and the roster the
+// Slot's game answers with keeps them apart; a player without an patronymic
 // reads exactly as every other fest's does.
 func TestSlotRosterKeepsThePatronymic(t *testing.T) {
 	db := venueTestDB(t)
@@ -562,7 +562,7 @@ select first_name, last_name, patronymic from players where fest_id = ? and last
 	if withPatronymic.FirstName != "Елена" || withPatronymic.LastName != "Ковалёва" {
 		t.Fatalf("player parts %+v", withPatronymic)
 	}
-	// No отчество: the фест's own «Имя Фамилия», as before.
+	// No patronymic: the fest's own «Имя Фамилия», as before.
 	if plain := teams[0].Players[1]; plain.Name != "Пётр Новичок" || plain.Patronymic != "" {
 		t.Fatalf("player without a patronymic %+v", plain)
 	}

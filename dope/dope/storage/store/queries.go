@@ -48,8 +48,8 @@ func EnsureParticipantByNumber(ctx context.Context, tx *sql.Tx, festID int64, ro
 }
 
 // EnsureGameParticipantByNumber is EnsureParticipantByNumber for a Game that
-// deals its own numbers rather than reading the фест's registry — a Слот at a
-// Venue, whose next sitting starts again at 1. gameID 0 is the фест's own.
+// deals its own numbers rather than reading the fest's registry — a Slot at a
+// Venue, whose next sitting starts again at 1. gameID 0 is the fest's own.
 func EnsureGameParticipantByNumber(ctx context.Context, tx *sql.Tx, festID, gameID int64, roster string, number int64, name, city string) (int64, error) {
 	name = strings.TrimSpace(name)
 	city = strings.TrimSpace(city)

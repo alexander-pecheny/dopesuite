@@ -14,8 +14,8 @@ export interface RosterPlayer {
   ratingID?: number;
 }
 
-// playerName is «Фамилия Имя Отчество» for a player whose отчество is known —
-// what a Состав at a площадка records — and whatever the server named for
+// playerName is "Surname Name Patronymic" for a player whose patronymic is known —
+// what a roster at a venue records — and whatever the server named for
 // everyone else.
 export function playerName(player: RosterPlayer): string {
   const patronymic = (player.patronymic || "").trim();
@@ -41,7 +41,7 @@ export function fetchFestRoster(
   gameID?: string | number | null,
 ): Promise<RosterTeam[]> {
   if (!festID) return Promise.resolve([]);
-  // A Game that keeps its own составы (a Слот at a площадка) answers for
+  // A Game that keeps its own rosters (a Slot at a venue) answers for
   // itself; the key carries the game so two of them do not share a cache line.
   const key = gameID ? `${festID}/${gameID}` : String(festID);
   const cached = rosterCache.get(key);

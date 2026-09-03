@@ -89,7 +89,7 @@ type Engine struct {
 	LiveFallthrough atomic.Int64
 }
 
-// RatingVenues is the venue catalogue the Площадка forms search, never nil.
+// RatingVenues is the venue catalogue the Venue forms search, never nil.
 func (e *Engine) RatingVenues() *ratingvenues.Catalogue {
 	if e.Rating == nil {
 		return ratingvenues.Default()

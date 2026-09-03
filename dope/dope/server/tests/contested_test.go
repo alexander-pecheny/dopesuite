@@ -12,7 +12,7 @@ import (
 	"dope/dope/storage/store"
 )
 
-// A спорный is stored beside the ОД document and spliced into every copy of it
+// A contested answer is stored beside the OD document and spliced into every copy of it
 // a reader gets, and stripped again from whatever a client writes back.
 func TestContestedRideTheDocumentButAreNotInIt(t *testing.T) {
 	db := venueTestDB(t)

@@ -1,0 +1,24 @@
+# The datetime field's own calendar (assets/ts/datetime.ts, kit datetimefield).
+# The browser's built-in picker follows the browser locale — a Monday-first
+# grid and a 24-hour clock are not on offer — so the kit draws both, and every
+# word on them is here.
+
+[calendar]
+# The popover itself and the two month arrows.
+label = "Календарь"
+prev_month = "Предыдущий месяц"
+next_month = "Следующий месяц"
+# The weekday headers, Monday first, as narrow as the day cells under them.
+dow_mon = "пн"
+dow_tue = "вт"
+dow_wed = "ср"
+dow_thu = "чт"
+dow_fri = "пт"
+dow_sat = "сб"
+dow_sun = "вс"
+# The 24-hour time field beside the grid, and the two buttons under it.
+time = "Время"
+clear = "Очистить"
+done = "Готово"
+# The zone a value is written in, when the page names one.
+timezone = 'Часовой пояс: {{.zone}}'

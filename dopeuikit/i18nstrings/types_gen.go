@@ -5,10 +5,11 @@ package i18nstrings
 // Strings is one language's Catalog: a field per Surface, a nested struct
 // per group, a func per string.
 type Strings struct {
-	Admin  AdminStrings
-	Chrome ChromeStrings
-	Login  LoginStrings
-	Menu   MenuStrings
+	Admin    AdminStrings
+	Chrome   ChromeStrings
+	Datetime DatetimeStrings
+	Login    LoginStrings
+	Menu     MenuStrings
 }
 
 // AdminStrings is the admin Surface.
@@ -50,6 +51,28 @@ type ChromeSyncStrings struct {
 	Error  func() string
 	Saved  func() string
 	Saving func() string
+}
+
+// DatetimeStrings is the datetime Surface.
+type DatetimeStrings struct {
+	Calendar DatetimeCalendarStrings
+}
+
+type DatetimeCalendarStrings struct {
+	Clear     func() string
+	Done      func() string
+	DowFri    func() string
+	DowMon    func() string
+	DowSat    func() string
+	DowSun    func() string
+	DowThu    func() string
+	DowTue    func() string
+	DowWed    func() string
+	Label     func() string
+	NextMonth func() string
+	PrevMonth func() string
+	Time      func() string
+	Timezone  func(zone string) string
 }
 
 // LoginStrings is the login Surface.
@@ -162,6 +185,32 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Chrome.Sync.Saved(), true
 	case "chrome.sync.saving":
 		return s.Chrome.Sync.Saving(), true
+	case "datetime.calendar.clear":
+		return s.Datetime.Calendar.Clear(), true
+	case "datetime.calendar.done":
+		return s.Datetime.Calendar.Done(), true
+	case "datetime.calendar.dow_fri":
+		return s.Datetime.Calendar.DowFri(), true
+	case "datetime.calendar.dow_mon":
+		return s.Datetime.Calendar.DowMon(), true
+	case "datetime.calendar.dow_sat":
+		return s.Datetime.Calendar.DowSat(), true
+	case "datetime.calendar.dow_sun":
+		return s.Datetime.Calendar.DowSun(), true
+	case "datetime.calendar.dow_thu":
+		return s.Datetime.Calendar.DowThu(), true
+	case "datetime.calendar.dow_tue":
+		return s.Datetime.Calendar.DowTue(), true
+	case "datetime.calendar.dow_wed":
+		return s.Datetime.Calendar.DowWed(), true
+	case "datetime.calendar.label":
+		return s.Datetime.Calendar.Label(), true
+	case "datetime.calendar.next_month":
+		return s.Datetime.Calendar.NextMonth(), true
+	case "datetime.calendar.prev_month":
+		return s.Datetime.Calendar.PrevMonth(), true
+	case "datetime.calendar.time":
+		return s.Datetime.Calendar.Time(), true
 	case "login.code.bot_hint_lead":
 		return s.Login.Code.BotHintLead(), true
 	case "login.code.bot_hint_mid":
@@ -241,7 +290,7 @@ func (s Strings) Lookup(id string) (string, bool) {
 // Defines reports whether the Catalog holds the id at all, templated or not.
 func (Strings) Defines(id string) bool {
 	switch id {
-	case "admin.create.empty", "admin.create.skipped_lead", "admin.create.submit", "admin.create.usernames_label", "admin.created.copy_label", "admin.created.hint", "admin.created.password", "admin.created.username", "admin.errors.title", "chrome.crumbs.label", "chrome.sync.error", "chrome.sync.saved", "chrome.sync.saving", "login.code.bot_hint_lead", "login.code.bot_hint_mid", "login.code.link_hint", "login.code.waiting", "login.field.password", "login.field.username", "login.link.cancel", "login.link.hint", "login.link.submit", "login.message.code_expired", "login.message.failed", "login.message.tg_misconfigured", "login.message.tg_unreachable", "login.message.timed_out", "login.message.username_taken", "login.method.hint", "login.method.password", "login.method.telegram", "login.password.hint", "login.password.submit", "login.title", "login.username.hint", "login.username.submit", "menu.account.login", "menu.account.profile", "menu.appearance.contrast", "menu.appearance.contrast_high", "menu.appearance.contrast_regular", "menu.appearance.done", "menu.appearance.theme", "menu.appearance.theme_dark", "menu.appearance.theme_light", "menu.appearance.theme_system", "menu.appearance.title", "menu.jump", "menu.trigger":
+	case "admin.create.empty", "admin.create.skipped_lead", "admin.create.submit", "admin.create.usernames_label", "admin.created.copy_label", "admin.created.hint", "admin.created.password", "admin.created.username", "admin.errors.title", "chrome.crumbs.label", "chrome.sync.error", "chrome.sync.saved", "chrome.sync.saving", "datetime.calendar.clear", "datetime.calendar.done", "datetime.calendar.dow_fri", "datetime.calendar.dow_mon", "datetime.calendar.dow_sat", "datetime.calendar.dow_sun", "datetime.calendar.dow_thu", "datetime.calendar.dow_tue", "datetime.calendar.dow_wed", "datetime.calendar.label", "datetime.calendar.next_month", "datetime.calendar.prev_month", "datetime.calendar.time", "datetime.calendar.timezone", "login.code.bot_hint_lead", "login.code.bot_hint_mid", "login.code.link_hint", "login.code.waiting", "login.field.password", "login.field.username", "login.link.cancel", "login.link.hint", "login.link.submit", "login.message.code_expired", "login.message.failed", "login.message.tg_misconfigured", "login.message.tg_unreachable", "login.message.timed_out", "login.message.username_taken", "login.method.hint", "login.method.password", "login.method.telegram", "login.password.hint", "login.password.submit", "login.title", "login.username.hint", "login.username.submit", "menu.account.login", "menu.account.profile", "menu.appearance.contrast", "menu.appearance.contrast_high", "menu.appearance.contrast_regular", "menu.appearance.done", "menu.appearance.theme", "menu.appearance.theme_dark", "menu.appearance.theme_light", "menu.appearance.theme_system", "menu.appearance.title", "menu.jump", "menu.trigger":
 		return true
 	}
 	return false

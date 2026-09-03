@@ -285,7 +285,7 @@ where ms.match_id = ? order by ms.slot_index`, matchID)
 
 // Play enters one participant's side of a бой as state patches — the same ops
 // the host page sends when a judge taps a cell: the theme's player from the
-// team's состав, then the marks.
+// team's roster, then the marks.
 func (g *serverGame) Play(at replay.Coord, name string, play replay.Play) error {
 	if len(play.Questions) > 0 {
 		return g.playBrain(at, name, play.Questions)
@@ -481,7 +481,7 @@ func (g *serverGame) Outcome(at replay.Coord) (map[string]replay.Result, error) 
 		return nil, err
 	}
 	// Σ is whatever the sheet printed as the бой's score, and that is not the
-	// same column in every game: ЭК and своя игра score points, брейн counts the
+	// same column in every game: EK and своя игра score points, брейн counts the
 	// questions a side took — the codec says which.
 	score := "r.total"
 	args := []any{matchID}
@@ -510,10 +510,10 @@ where r.match_id = ?`, args...)
 	return out, rows.Err()
 }
 
-// Lineups writes the game's составы the way the scheme import does: players
+// Lineups writes the game's rosters the way the scheme import does: players
 // into the fest pool, membership into participant_players, so the state patch
 // that names a theme's player finds him in the team's roster. Two games of one
-// фест share their participants, so a player another game already rostered is
+// fest share their participants, so a player another game already rostered is
 // kept rather than doubled.
 func (g *serverGame) Lineups(lineups []replay.Lineup) error {
 	for _, lineup := range lineups {

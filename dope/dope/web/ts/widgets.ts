@@ -688,7 +688,7 @@ export function openModal(spec: ModalSpec): HTMLDialogElement {
   const cancel = document.createElement("button");
   cancel.type = "button";
   cancel.className = "btn";
-  cancel.textContent = spec.cancelLabel || "Отмена";
+  cancel.textContent = spec.cancelLabel || S.widgets.modal.cancel();
   cancel.addEventListener("click", () => dialog.close());
   const submit = document.createElement("button");
   submit.type = "submit";

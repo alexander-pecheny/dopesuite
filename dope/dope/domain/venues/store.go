@@ -11,6 +11,8 @@ import (
 	"dope/dope/domain/games"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
+
+	dopestrings "dope/i18nstrings"
 )
 
 type Venue struct {
@@ -45,7 +47,7 @@ type Slot struct {
 	Pending            int
 }
 
-// GameRef is how a Слот's Game is named in a URL: its slug when it has one,
+// GameRef is how a Slot's Game is named in a URL: its slug when it has one,
 // its id otherwise.
 func (s Slot) GameRef() string {
 	if s.GameSlug != "" {
@@ -148,9 +150,9 @@ order by case when s.starts_at = '' then 1 else 0 end, s.starts_at, s.id`, []any
 		func(rows *sql.Rows) (Slot, error) { return scanSlot(rows) })
 }
 
-// CreateSlotTx makes a Слот with its registration shut and its link hidden.
-// The reg token exists from the first moment, so a Слот open on creation would
-// take Заявки before its Representative had picked the турнир or the date.
+// CreateSlotTx makes a Slot with its registration shut and its link hidden.
+// The reg token exists from the first moment, so a Slot open on creation would
+// take applications before its Representative had picked the tournament or the date.
 func CreateSlotTx(ctx context.Context, tx *sql.Tx, festID int64, startsAt string, tournamentID int64, opensAt string, tourComp []int) (int64, error) {
 	gameID, err := gamebuild.Create(ctx, tx, gamebuild.Spec{
 		FestID: festID, Type: games.OD, ODTourComp: tourComp, OwnTeams: true,
@@ -233,7 +235,7 @@ order by v.seq desc`, []any{appID}, func(rows *sql.Rows) (Version, error) {
 	})
 }
 
-var ErrNoTeamName = errors.New("укажите название команды")
+var ErrNoTeamName = errors.New(dopestrings.Default.Venues.Errors.NoTeamName())
 
 func SaveVersionTx(ctx context.Context, tx *sql.Tx, slotID, userID, authorID int64, teamName string, ratingTeamID int64, roster []RosterPlayer) (int64, error) {
 	teamName = strings.TrimSpace(teamName)
