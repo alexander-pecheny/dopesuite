@@ -17,7 +17,7 @@ import {
   resolveTheme,
 } from "./menu-model";
 import { type IconName, icon } from "./icons_gen.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const THEME_KEY = "dope-theme";
 const CONTRAST_KEY = "dope-contrast";

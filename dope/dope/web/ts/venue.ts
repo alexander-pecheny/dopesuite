@@ -2,7 +2,7 @@
 
 import {td} from "./cells.js";
 import {standingsTable} from "./standings.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 export type VenueLike = number | string | {number?: unknown; Number?: unknown; title?: unknown; Title?: unknown} | null | undefined;
 

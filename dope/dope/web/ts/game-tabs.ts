@@ -1,6 +1,6 @@
 import {stageType} from "./standings.js";
 import type {StageRef, StageRefMatch} from "./standings.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 // Which tabs a Game page shows is Block / Round / Group knowledge, held here
 // once; pages render the array and derive nothing of their own.
 

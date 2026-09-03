@@ -14,7 +14,7 @@ import type {EKPlayerStatsRow, IndividualStatsRow} from "./ek-stats.js";
 import {markNameOverflow} from "./widgets.js";
 import { buildFestGrid, buildReseedStagePanel } from "./fest-grid.js";
 import type { FestGridMatch, FestGridStage } from "./fest-grid.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const LONG = "Команда с названием длиннее любой колонки, которую ей отвели";
 

@@ -10,7 +10,7 @@ import {
   parseDate, parseSession, parseTime, serializeSession, type SessionMeta,
   sessionLabel, zoneOffset,
 } from "./sessions.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
 import { TOWNS } from "./towns.js";
 import { autocomplete, type Choice, townChoices, zoneChoices } from "./suggest.js";

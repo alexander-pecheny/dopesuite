@@ -8,7 +8,7 @@
 import { xySizes } from "./app.js";
 import type { AuthMe, Sizes } from "./app.js";
 import type { SyncStatus } from "./sync.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 // Structural mirrors of crypto.ts's DataKey/BoardKeymeta. Deliberately not
 // imported: crypto.ts pulls the vendored scrypt, and this module's whole point

@@ -20,7 +20,7 @@ import * as od from "./od-protocol.js";
 import type {ODScheme, ODState, ODTeam, QuestionStat, RankKey, ShootoutMark, ShootoutRound} from "./od-protocol.js";
 import {SCREEN_DEFAULTS, normalizeScreenSettings, planScreen, teamFlag} from "./screen-board.js";
 import type {ScreenSettings} from "./screen-board.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 interface ODPageGlobals {
   __GAME_INIT__?: GameInitLike | null;

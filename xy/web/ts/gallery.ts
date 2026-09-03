@@ -8,7 +8,7 @@
 // design-review skill), and here again to judge a change to the skin.
 import { xyApp } from "./app.js";
 import { icon } from "./icons_gen.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const { el, byId } = xyApp;
 

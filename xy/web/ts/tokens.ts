@@ -1,7 +1,7 @@
 // tokens.ts — manage API tokens for the Trello-compatible API.
 // Create (shown once), list, revoke. Session-authed via /api/tokens.
 import { xyApp } from "./app.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const { fetchJSON, jpost, jdelete, el } = xyApp;
 

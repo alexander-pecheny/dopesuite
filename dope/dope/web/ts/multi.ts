@@ -18,7 +18,7 @@ import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import * as multi from "./multi-protocol.js";
 import {CYCLE_LIMIT} from "./multi-protocol.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 import type {MultiRules, MultiScheme, MultiState} from "./multi-protocol.js";
 
 interface PageGlobals {

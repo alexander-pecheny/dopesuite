@@ -5,7 +5,7 @@
 
 import {formatDisplayText, td} from "./cells.js";
 import {standingsTable} from "./standings.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 // A seat ref as a scheme writes it, before anyone sits in it.
 export interface SchemeSlotRef {

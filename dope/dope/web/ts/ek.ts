@@ -28,7 +28,7 @@ import { gameTabs, canonicalKey, groupLabel, RESEED_TAB_CODE } from "./game-tabs
 import type { GameTab, TabKind } from "./game-tabs.js";
 import type { ReseedEntry } from "./fest-grid.js";
 import { icon } from "./icons_gen.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 type EKMode = "grid" | "venues" | "roster" | "stats" | "seedImport" | "match" | "stage" | "missing";
 

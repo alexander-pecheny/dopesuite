@@ -12,7 +12,7 @@ import type { MoveCtx } from "./carddetail.js";
 import type { Transfer } from "./transfer.js";
 import type { Board, BoardPanel } from "./panels.js";
 import type { BoardCard } from "./unlock.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const { jput, el, byId } = xyApp;
 

@@ -5,7 +5,7 @@
 // ranked results with shared places. Pure: every function takes the state and
 // the rules it reads.
 import {computePlaces} from "./score-table.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 export const QUESTION_VALUES = [10, 20, 30, 40, 50];
 export const RESULT_VALUES = QUESTION_VALUES.slice().reverse();

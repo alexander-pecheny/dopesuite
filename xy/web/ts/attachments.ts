@@ -12,7 +12,7 @@ import { xySync } from "./sync.js";
 import type { DataKey } from "./crypto.js";
 import type { MenuItem } from "./timeline.js";
 import { icon, iconed } from "./icons_gen.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const { fetchJSON, jpatch, jdelete, el, errMsg } = xyApp;
 

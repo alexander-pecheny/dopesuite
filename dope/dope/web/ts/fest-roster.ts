@@ -4,7 +4,7 @@
 import {nameNode, td} from "./cells.js";
 import {resultsTeamCell, standingsTable} from "./standings.js";
 import {markNameOverflow} from "./widgets.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 export interface RosterPlayer {
   name?: string;

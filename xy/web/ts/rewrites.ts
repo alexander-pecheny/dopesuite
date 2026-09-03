@@ -12,7 +12,7 @@ import { xyTypo } from "./typo.js";
 import { modal } from "./modal.js";
 import type { Board, BoardPanel } from "./panels.js";
 import type { BoardCard } from "./unlock.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const { el, byId, errMsg } = xyApp;
 

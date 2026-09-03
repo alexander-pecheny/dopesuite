@@ -8,7 +8,7 @@ import { decodeCommentPayload, eventAuthor, eventVerb } from "./timeline.js";
 import type { Board } from "./panels.js";
 import type { BoardCard } from "./unlock.js";
 import type { DataKey } from "./crypto.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const { fetchJSON, jpost, el, deriveTitle } = xyApp;
 

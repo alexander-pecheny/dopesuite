@@ -17,7 +17,7 @@ import type { AttachmentBytes } from "./bundleapply.js";
 import { zipWrite } from "./zip.js";
 import type { ZipEntry } from "./zip.js";
 import type { Board, BoardPanel, PanelShell } from "./panels.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const { fetchJSON, downloadBlob, el, errMsg } = xyApp;
 

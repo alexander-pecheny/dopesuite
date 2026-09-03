@@ -4,7 +4,7 @@ import {normalizeVenue} from "./venue.js";
 import type {Venue} from "./venue.js";
 import { markNameOverflow } from "./widgets.js";
 import { blockLabel, groupLabel } from "./game-tabs.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 export interface FestGridVenueObject {
   number?: unknown;

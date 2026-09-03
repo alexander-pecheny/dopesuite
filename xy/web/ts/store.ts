@@ -1,4 +1,4 @@
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 // store.ts — xy's offline persistence layer (IndexedDB). Mirrors board
 // ciphertext snapshots, the board list, per-card timelines and attachment bytes

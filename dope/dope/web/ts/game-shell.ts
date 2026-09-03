@@ -8,7 +8,7 @@
 // `host` is never passed: it is the route's.
 
 import {createLiveEvents, createScopedWriter, createSyncIndicator, createHostPresence, gameEventsURL, installClientRecorder, scheduleStaticReload} from "./state-sync.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 import type {ClientRecorder, HostPresence, LiveEvents, PatchPath, ScopedWriter, SyncIndicator} from "./state-sync.js";
 import {createStatusReporter, createViewerCounter} from "./widgets.js";
 import {createGameDataLoader, fetchGameData, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, renderGameBreadcrumbs} from "./game-page.js";

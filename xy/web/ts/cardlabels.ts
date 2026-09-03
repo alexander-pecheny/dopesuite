@@ -11,7 +11,7 @@ import { colorField, LABEL_COLORS } from "./colorpick.js";
 import { testerNames } from "./sessions.js";
 import type { SessionMeta, Tester } from "./sessions.js";
 import { icon } from "./icons_gen.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 import type { Board } from "./panels.js";
 import type { BoardCard, BoardLabel, BoardList } from "./unlock.js";
 import type { DataKey } from "./crypto.js";

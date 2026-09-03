@@ -8,7 +8,7 @@ import type { BoardIndex, Hit } from "./searchindex.js";
 import { xySync } from "./sync.js";
 import { stampPassCheck } from "./passcheck.js";
 import { iconed } from "./icons_gen.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const { fetchJSON, jpost, el, escapeHtml } = xyApp;
 

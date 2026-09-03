@@ -16,7 +16,7 @@ import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {gameTabs} from "./game-tabs.js";
 import * as ksi from "./ksi-protocol.js";
 import {KSI_THEMES, QUESTION_VALUES, RESULT_VALUES, STICKER_NEUTRAL} from "./ksi-protocol.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 import type {KSIRules, KSIScheme, KSIState, ParticipantEntry, ResultRow, ScoreSheet, StickerType} from "./ksi-protocol.js";
 
 // Page globals the bundle environment provides (the server-inlined

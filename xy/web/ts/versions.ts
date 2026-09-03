@@ -16,7 +16,7 @@
 
 import { composeFields, extractInlineHandout, parseBlocks, scanDirectives, splitFields, versionLineName } from "./chgk.js";
 import type { HiddenSpan } from "./chgk.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const PAGEBREAK = "(PAGEBREAK)";
 const VERSION_TAG = "xy-version:";

@@ -6,7 +6,7 @@
 // Loaded as an ES module (CSP script-src 'self'); consumers import from it.
 import { scrypt } from "../vendor/scrypt.js";
 import { WORDLIST } from "./wordlist.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 // scrypt KDF parameters, stored (JSON-encoded) per board.
 export interface KdfParams {

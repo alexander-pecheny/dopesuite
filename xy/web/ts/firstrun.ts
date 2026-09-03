@@ -13,7 +13,7 @@ import { xyApp } from "./app.js";
 import { guessZone } from "./sessions.js";
 import { autocomplete, zoneChoices } from "./suggest.js";
 import type { AuthMe } from "./app.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const { jpost, el } = xyApp;
 

@@ -4,7 +4,7 @@
 
 import {formatDisplayText, nameNode, td, th} from "./cells.js";
 import type {CellContent, CellContentItem} from "./cells.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 export interface StageRef {
   code: string;

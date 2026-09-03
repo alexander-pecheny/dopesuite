@@ -5,7 +5,7 @@
 
 import { xyApp } from "./app.js";
 import { anchorPopup, type AnchoredPopup } from "./popup.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 // The palette is a list of NAMES — "green", "teal" — and the hex a name paints
 // is --label-<name>, which each theme sets to a different rung of that hue. It
 // has to work that way: no single colour clears 3:1 against both a near-white

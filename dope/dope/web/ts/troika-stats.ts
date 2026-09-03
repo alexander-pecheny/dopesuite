@@ -15,7 +15,7 @@
 
 import {standingsTable} from "./standings.js";
 import * as troika from "./troika-protocol.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 import type {TroikaState} from "./troika-protocol.js";
 
 export interface TroikaBout {

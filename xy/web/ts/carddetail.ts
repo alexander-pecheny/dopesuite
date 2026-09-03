@@ -27,7 +27,7 @@ import type { OpBody } from "./store.js";
 import type { CardEvent } from "./timeline.js";
 import type { Transfer } from "./transfer.js";
 import { icon, iconed } from "./icons_gen.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const { fetchJSON, jpost, jput, jdelete, el, onCmdEnter } = xyApp;
 const { keyBetween } = xyRank;

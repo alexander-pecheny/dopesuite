@@ -1,4 +1,4 @@
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 // Fest team-numbers page: edit-in-place toggle (number replacement) and the two mass
 // number-import <dialog> modals (paste → confirm → apply). Extracted verbatim

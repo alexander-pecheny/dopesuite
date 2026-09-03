@@ -6,7 +6,7 @@
 // writing the invite line, and the tester lists (players / teams) of the test
 // cards the sessions grew out of. The DOM lives in board.ts and sessionspanel.ts.
 
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 // ---- test cards: tester lists (players / teams) ----
 // A test card's description is JSON {datetime, title, testers:[{text,type}]},

@@ -20,7 +20,7 @@ import { parseSession, serializeSession } from "./sessions.js";
 import { bundleUnits } from "./bundle.js";
 import type { Bundle, BundleAttachment, BundleEvent, BundleUnit } from "./bundle.js";
 import type { DataKey } from "./crypto.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const { jpost, jput, jdelete, errMsg } = xyApp;
 const { keyBetween } = xyRank;

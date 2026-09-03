@@ -25,7 +25,7 @@ import { modal } from "./modal.js";
 import { sniffBundle } from "./bundleimport.js";
 import type { BundleImport } from "./bundleimportpanel.js";
 import type { Board, BoardPanel } from "./panels.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const { jpost, byId, errMsg } = xyApp;
 const { keyBetween } = xyRank;

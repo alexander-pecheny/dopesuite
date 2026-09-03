@@ -2,7 +2,7 @@
 // floating popovers, sync-status dot, team-name overflow, cell range selection,
 // and the viewer counter. DOM-only — no table building, no sync.
 
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));

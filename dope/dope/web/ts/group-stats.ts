@@ -1,4 +1,4 @@
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 // The client mirror of a Block's per-match scoring rule (ADR-0008), for the
 // group-stage tab: the source sheets show a player's points split by round,

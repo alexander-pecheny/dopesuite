@@ -22,7 +22,7 @@ import type { Haystack, Snippet } from "./find.js";
 import { xyStore } from "./store.js";
 import type { BoardSnapshot } from "./store.js";
 import { xySync } from "./sync.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 export interface IndexList { id: number; title: string }
 export interface IndexCard { id: number; list: number; kind: string; desc: string; alias: string }

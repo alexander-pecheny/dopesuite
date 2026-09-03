@@ -7,7 +7,7 @@
 // card editor's Preview view and the import preview all draw through it.
 import { xyApp } from "./app.js";
 import { xyChgk } from "./chgk.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 import type { ScreenValue } from "./chgk.js";
 import type { BoardCard } from "./unlock.js";
 

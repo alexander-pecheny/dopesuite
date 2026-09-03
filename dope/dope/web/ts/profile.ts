@@ -1,6 +1,6 @@
 // Profile password form (new password vs change password modes).
 
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 function byId<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);

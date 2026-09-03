@@ -3,7 +3,7 @@
 
 import {applyAttrs, cellFromSpec, formatDisplayText, formatPlace, sameArray, td, th} from "./cells.js";
 import type {CellAttrs, CellContent, CellSpec} from "./cells.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 export interface ScoreTableTheme {
   label?: CellContent;

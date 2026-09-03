@@ -3,7 +3,7 @@
 // carries membership only: what you get here is the right to fetch the board's
 // ciphertext, and the passphrase still has to reach you from a person.
 import { xyApp } from "./app.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const { jpost, el, byId, errMsg } = xyApp;
 

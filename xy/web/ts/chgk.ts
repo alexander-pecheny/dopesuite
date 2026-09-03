@@ -7,7 +7,7 @@
 // ES module.
 
 import { MARKERS, type MarkerType } from "./markers_gen.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 export type { MarkerType };
 
 // The block types produced by the line-leading markers, plus "pre" for leading

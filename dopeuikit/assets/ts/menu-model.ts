@@ -1,4 +1,4 @@
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 // The pure kernel of the site-wide chrome: theme/contrast preference rules and
 // the menu item model. menu.ts renders what this module decides.

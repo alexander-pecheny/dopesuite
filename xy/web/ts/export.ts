@@ -15,7 +15,7 @@ import { modal } from "./modal.js";
 import type { Attachments } from "./attachments.js";
 import type { Board, ListPanel, ListScope } from "./panels.js";
 import type { BoardCard } from "./unlock.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const { byId, errMsg, downloadBlob } = xyApp;
 

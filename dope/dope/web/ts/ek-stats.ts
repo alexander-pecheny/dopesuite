@@ -3,7 +3,7 @@
 
 import type {MatchView} from "./score-table.js";
 import {standingsTable} from "./standings.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 export interface EKStage {
   code?: string;

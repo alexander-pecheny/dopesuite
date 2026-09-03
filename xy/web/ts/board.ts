@@ -52,7 +52,7 @@ import type { MembersState } from "./boardmembers.js";
 import type { MenuItem, Timeline } from "./timeline.js";
 import type { PreviewCardLike } from "./carddetail.js";
 import { icon, iconed } from "./icons_gen.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const { fetchJSON, jpost, jpatch, jput, jdelete, el, byId, errMsg, deriveTitle, onCmdEnter } = xyApp;
 const { keyBetween } = xyRank;

@@ -1,5 +1,5 @@
 import { icon } from "./icons_gen.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 // Game-page plumbing shared by od/si/host/viewer: the window globals contract
 // (init payloads, menu chrome), route parsing, breadcrumbs, the menu jump/
 // download mounts, the localStorage snapshot cache and the init/cache/fetch

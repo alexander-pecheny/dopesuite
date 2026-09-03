@@ -1,6 +1,6 @@
 // app.ts — shared frontend helpers. API fetch wrappers, HTML escaping, tiny
 // DOM builder, derived card titles.
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 export interface AuthMe {
   user_id: number;

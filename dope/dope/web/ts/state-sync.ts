@@ -7,7 +7,7 @@
 // coalesced per scope, structural writes with an intent, both overlaid until
 // acked). OD and SI register one game-state scope; EK and Brain one per match.
 
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 // EventSource.OPEN, spelled numerically so fake streams need no global.
 const SSE_OPEN = 1;

@@ -14,7 +14,7 @@ import type { AttachmentBytes, ApplyResult } from "./bundleapply.js";
 import { BOARD_JSON, contentBytes, parseBundle } from "./bundle.js";
 import type { Bundle } from "./bundle.js";
 import { zipRead } from "./zip.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const { fetchJSON, jpost, errMsg } = xyApp;
 

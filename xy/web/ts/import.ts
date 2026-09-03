@@ -30,7 +30,7 @@ import { importBundle, createBoardFromBundle } from "./bundleimport.js";
 import { attachmentPath, BUNDLE_FORMAT } from "./bundle.js";
 import type { Bundle, BundleAttachment, BundleCard, BundleCardLabel, BundleEvent, BundleLabel, BundleList } from "./bundle.js";
 import type { AttachmentBytes } from "./bundleapply.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const { fetchJSON } = xyApp;
 const { keyBetween } = xyRank;

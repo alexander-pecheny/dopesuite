@@ -7,7 +7,7 @@
 import type { PassphraseSetup } from "./app.js";
 import type { BoardKeymeta, DataKey } from "./crypto.js";
 import type { BoardPanel } from "./panels.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 export interface ChangePassUI {
   modal: {

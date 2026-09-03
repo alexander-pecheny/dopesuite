@@ -1,4 +1,4 @@
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 // zip.ts — a minimal zip writer/reader for Board Bundles (ADR-0013).
 //

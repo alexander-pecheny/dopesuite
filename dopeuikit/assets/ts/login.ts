@@ -6,7 +6,7 @@
 // Registration is not a separate flow: the telegram button creates the account.
 // The flow decisions live in login-model.ts; this file only binds the DOM.
 
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 import { claimOutcome, errorMessage, loginMethods, pollTelegram, tgStartView } from "./login-model";
 
 function byId<T extends HTMLElement>(id: string): T {

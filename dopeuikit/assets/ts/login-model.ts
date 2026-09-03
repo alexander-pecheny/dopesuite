@@ -2,7 +2,7 @@
 // the server-status → next-step decisions. login.ts renders what this module
 // decides.
 
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 export type LoginStep = "method" | "code" | "username" | "link" | "password";
 

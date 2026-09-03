@@ -8,7 +8,7 @@
 // new one. Everything is injected (clock, storage, modal, the verify call), so
 // the whole rule runs on plain objects in jstest.
 
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 export const PASSCHECK_PREFIX = "xy-passcheck:";
 export const PASSCHECK_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;

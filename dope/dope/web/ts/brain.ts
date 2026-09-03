@@ -27,7 +27,7 @@ import {buildFestGrid, buildReseedStagePanel} from "./fest-grid.js";
 import type {FestGridStage, ReseedEntry} from "./fest-grid.js";
 import {gameTabs, canonicalKey, groupLabel} from "./game-tabs.js";
 import type {GameTab} from "./game-tabs.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 interface PageGlobals {
   __GAME_INIT__?: GameInitLike | null;

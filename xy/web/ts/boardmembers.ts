@@ -14,7 +14,7 @@ import { xySync } from "./sync.js";
 import { xyStore } from "./store.js";
 import { autocomplete } from "./suggest.js";
 import { createBoardInvites } from "./boardinvites.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const { fetchJSON, jpost, jdelete, el } = xyApp;
 

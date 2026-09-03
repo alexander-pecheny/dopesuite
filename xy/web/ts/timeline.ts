@@ -20,7 +20,7 @@ import type { DataKey } from "./crypto.js";
 import type { DiffOp } from "./diff.js";
 import type { OpBody, TimelineEvent } from "./store.js";
 import { icon, iconed } from "./icons_gen.js";
-import S from "./i18nstrings_ru_gen.js";
+import S from "./i18nstrings.js";
 
 const { fetchJSON, jpost, jpatch, jdelete, el, onCmdEnter, deriveTitle } = xyApp;
 
