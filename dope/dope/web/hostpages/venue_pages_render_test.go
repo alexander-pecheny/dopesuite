@@ -98,7 +98,7 @@ func TestRegDocSaysWhatEachStateAllows(t *testing.T) {
 	open.LoggedIn = true
 	open.Application = &ApplicationView{
 		Status: venues.StatusAccepted, StatusLabel: StatusLabel(venues.StatusAccepted),
-		TeamName: "Мантисса", RatingTeamID: 5723, BuffTeamName: "Мантисса", Number: 4,
+		TeamName: "Мантисса", RatingTeamID: 5723, Number: 4,
 		Roster: []venues.RosterPlayer{{PlayerID: 1033, Surname: "Ковалёва", Name: "Елена", Captain: true}},
 		Flags:  []string{venues.FlagCaptain},
 	}
@@ -141,9 +141,6 @@ func TestRegDocAsksForTheRosterOnlyOnceAccepted(t *testing.T) {
 	if strings.Contains(fresh, "data-roster-editor") {
 		t.Error("a new заявка asks for a team, not a состав")
 	}
-	if !strings.Contains(fresh, "Состав нужно будет указать после того, как заявку примут.") {
-		t.Error("a new заявка should say when the состав is due")
-	}
 
 	for _, status := range []string{venues.StatusPending, venues.StatusDeclined} {
 		p := base
@@ -158,9 +155,6 @@ func TestRegDocAsksForTheRosterOnlyOnceAccepted(t *testing.T) {
 	body := renderPublic(t, RegDoc(p))
 	if !strings.Contains(body, "data-roster-editor") || !strings.Contains(body, `name="roster_json"`) {
 		t.Error("an accepted заявка gets the состав editor")
-	}
-	if strings.Contains(body, "Состав нужно будет указать") {
-		t.Error("the note outstays its welcome")
 	}
 }
 

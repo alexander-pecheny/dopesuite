@@ -60,7 +60,6 @@ type ApplicationView struct {
 	StatusLabel  string
 	TeamName     string
 	RatingTeamID int64
-	BuffTeamName string
 	Roster       []venues.RosterPlayer
 	Flags        []string
 	Number       int64
@@ -199,15 +198,13 @@ func applicationForm(action string, app *ApplicationView, submit string, roster 
 		}
 		players = app.Roster
 	}
-	ratingField := []ui.Item{ui.Label("ID команды на rating.chgk.info (0 — разовая команда)")}
-	ratingField = append(ratingField, ui.Textfield(ui.Name("rating_team_id"), ui.Value(ratingID),
-		ui.Inputmode("numeric"), ui.Data("buff-team", ""), ui.Autocomplete("off")))
-	if app != nil && app.BuffTeamName != "" {
-		ratingField = append(ratingField, ui.Hint(ui.Text(app.BuffTeamName)))
-	}
 	form := []ui.Item{ui.DirCol, ui.Method("post"), ui.Action(action), ui.Autocomplete("off"),
 		ui.Field(ui.Label("Название команды"), ui.Textfield(ui.Name("team_name"), ui.Value(teamName), ui.Required())),
-		ui.Field(ratingField...),
+		// The id names the team: roster-editor.js writes what buff answers into
+		// the box above rather than printing it under this one.
+		ui.Field(ui.Label("ID команды на rating.chgk.info (0 — разовая команда)"),
+			ui.Textfield(ui.Name("rating_team_id"), ui.Value(ratingID),
+				ui.Inputmode("numeric"), ui.Data("buff-team", ""), ui.Autocomplete("off"))),
 	}
 	if roster {
 		form = append(form, ui.Field(ui.Label("Состав"), rosterEditor(players)))
@@ -287,9 +284,6 @@ func applicationSection(p RegPage) *ui.Element {
 	if p.Application != nil {
 		submit = "Сохранить заявку"
 		accepted = p.Application.Status == venues.StatusAccepted
-	}
-	if !accepted {
-		sect = append(sect, ui.Hint(ui.Text("Состав нужно будет указать после того, как заявку примут.")))
 	}
 	sect = append(sect, applicationForm(action, p.Application, submit, accepted))
 	return ui.Section(sect...)

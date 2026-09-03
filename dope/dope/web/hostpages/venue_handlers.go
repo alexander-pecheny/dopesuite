@@ -207,8 +207,8 @@ func (s *Server) renderRegPage(w http.ResponseWriter, r *http.Request, token, er
 func (s *Server) applicationView(ctx context.Context, app venues.Application, slot venues.Slot) ApplicationView {
 	return ApplicationView{
 		Status: app.Status, StatusLabel: StatusLabel(app.Status), TeamName: app.TeamName,
-		RatingTeamID: app.RatingTeamID, BuffTeamName: s.h.Engine().BuffMirror().TeamName(ctx, app.RatingTeamID),
-		Roster: app.Roster, Flags: s.rosterFlags(ctx, app, slot), Number: app.Number,
+		RatingTeamID: app.RatingTeamID,
+		Roster:       app.Roster, Flags: s.rosterFlags(ctx, app, slot), Number: app.Number,
 	}
 }
 
