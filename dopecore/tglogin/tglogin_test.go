@@ -369,3 +369,30 @@ func TestClaimPassesTheAppsOwnRefusalThrough(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestTelegramStatus(t *testing.T) {
+	for _, c := range []struct {
+		name        string
+		hasBot      bool
+		botUsername string
+		botPolling  bool
+		wantStatus  string
+		wantTg      bool
+	}{
+		{"active bot with handle", true, "my_bot", true, StatusOK, true},
+		{"no bot", false, "my_bot", true, StatusMisconfigured, false},
+		{"empty bot username", true, "  ", true, StatusMisconfigured, false},
+		{"bot not polling", true, "my_bot", false, StatusUnreachable, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			st := TelegramStatus(c.hasBot, c.botUsername, c.botPolling)
+			if st != c.wantStatus {
+				t.Errorf("TelegramStatus = %q, want %q", st, c.wantStatus)
+			}
+			resp := NewMethodsResponse(c.hasBot, c.botUsername, c.botPolling)
+			if resp.Status != c.wantStatus || resp.Telegram != c.wantTg {
+				t.Errorf("NewMethodsResponse = %+v, want status %q, telegram %v", resp, c.wantStatus, c.wantTg)
+			}
+		})
+	}
+}

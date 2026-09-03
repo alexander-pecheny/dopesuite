@@ -29,6 +29,45 @@ const (
 	PasswordRequired = "password_required"
 )
 
+// The three answers the login page can get about telegram (login-model.ts).
+// Being configured and being usable are different things, and a visitor deserves
+// to know which one failed rather than watching a code that no bot will ever collect.
+const (
+	StatusMisconfigured = "misconfigured" // no bot on this instance, or no @handle
+	StatusUnreachable   = "unreachable"   // configured, but the bot is not polling
+	StatusOK            = "ok"
+)
+
+// MethodsResponse is the GET /api/auth/methods payload describing which ways in
+// this instance offers.
+type MethodsResponse struct {
+	Telegram bool   `json:"telegram"`
+	Status   string `json:"telegram_status"`
+}
+
+// TelegramStatus decides what to report to the login page:
+//   - StatusMisconfigured when the instance has no bot or no @handle to direct visitors to
+//   - StatusUnreachable when the bot is configured but not actively polling Telegram
+//   - StatusOK when the bot is reachable and ready to collect login codes
+func TelegramStatus(hasBot bool, botUsername string, botPolling bool) string {
+	if !hasBot || strings.TrimSpace(botUsername) == "" {
+		return StatusMisconfigured
+	}
+	if !botPolling {
+		return StatusUnreachable
+	}
+	return StatusOK
+}
+
+// NewMethodsResponse builds the MethodsResponse for the given bot status.
+func NewMethodsResponse(hasBot bool, botUsername string, botPolling bool) MethodsResponse {
+	st := TelegramStatus(hasBot, botUsername, botPolling)
+	return MethodsResponse{
+		Telegram: st == StatusOK,
+		Status:   st,
+	}
+}
+
 // Claim's refusals. The app maps each to its own HTTP status and wording.
 var (
 	ErrCodeNotFound   = errors.New("code not found")

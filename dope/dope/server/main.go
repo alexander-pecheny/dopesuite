@@ -40,6 +40,7 @@ import (
 	"dope/dope/web/editbatch"
 
 	"pecheny.me/dopecore/session"
+	"pecheny.me/dopecore/tgbot"
 )
 
 const (
@@ -55,6 +56,7 @@ func init() { session.ProdEnvVar = "DOPE_ENV" }
 type server struct {
 	eng          core.Engine
 	SendTelegram telegramSender
+	bot          *tgbot.Client
 	// Static ("DDoS lockdown") mode cache — see static_mode.go. The gauges/state
 	// live on eng (StaticMode/ReqRate/…); staticMu guards the per-route HTML
 	// snapshot cache, with staticBuilds providing per-route singleflight on misses.

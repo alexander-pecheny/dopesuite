@@ -26,6 +26,7 @@ type venueDashData struct {
 	Access    []festaccess.HostAccessMember
 	CanManage bool
 	CanDelete bool
+	Tz        string
 	Error     string
 	Notice    string
 }
@@ -123,11 +124,8 @@ func venueSlotsSection(data venueDashData) *ui.Element {
 			ui.Summary(ui.Btn(), ui.Text("Новый слот")),
 			ui.Form(ui.DirCol, ui.Method("post"), ui.Action(ref+"/slot/new"), ui.Autocomplete("off"),
 				ui.Field(ui.Label("Дата и время"),
-					ui.Datetimefield(ui.Name("starts_at"), ui.Placeholder("2026-09-04 19:00"), ui.Required())),
-				ui.Field(ui.Label("ID турнира на rating.chgk.info (можно выбрать позже)"),
-					ui.Textfield(ui.Name("rating_tournament_id"), ui.Inputmode("numeric"))),
-				ui.Field(ui.Label("Туры, если турнир не выбран"),
-					ui.Textfield(ui.Name("tour_comp"), ui.Value("12,12,12"), ui.Placeholder("12,12,12"))),
+					ui.Datetimefield(ui.Name("starts_at"), ui.Placeholder("2026-09-04 19:00"), ui.Required(),
+						ui.Data("datetime-tz", data.Tz))),
 				ui.Row(ui.Button(ui.Submit(), ui.Text("Создать слот"))),
 			),
 		))
@@ -155,6 +153,7 @@ type slotPageData struct {
 	Contested    []ContestedRow
 	RegURL       string
 	CanManage    bool
+	Tz           string
 	Error        string
 	Notice       string
 }
@@ -210,12 +209,14 @@ func slotHeaderSection(data slotPageData) *ui.Element {
 	}
 	sect = append(sect,
 		ui.Form(ui.DirCol, ui.Method("post"), ui.Action(base), ui.Autocomplete("off"),
-			ui.Field(ui.Label("Дата и время"), ui.Datetimefield(ui.Name("starts_at"), ui.Value(data.Slot.StartsAt))),
+			ui.Field(ui.Label("Дата и время"), ui.Datetimefield(ui.Name("starts_at"), ui.Value(data.Slot.StartsAt),
+				ui.Data("datetime-tz", data.Tz))),
 			ui.Field(ui.Label("ID турнира на rating.chgk.info"),
 				ui.Textfield(ui.Name("rating_tournament_id"), ui.Value(tournamentID), ui.Inputmode("numeric"),
 					ui.Data("buff-tournament", data.Slot.StartsAt), ui.Autocomplete("off"))),
 			ui.Field(ui.Label("Регистрация открывается"),
-				ui.Datetimefield(ui.Name("reg_opens_at"), ui.Value(data.Slot.RegOpensAt), ui.Placeholder("сразу"))),
+				ui.Datetimefield(ui.Name("reg_opens_at"), ui.Value(data.Slot.RegOpensAt), ui.Placeholder("сразу"),
+					ui.Data("datetime-tz", data.Tz))),
 			ui.Checkbox(closed...),
 			ui.Row(ui.Button(ui.Submit(), ui.Text("Сохранить"))),
 		),
@@ -225,7 +226,8 @@ func slotHeaderSection(data slotPageData) *ui.Element {
 				ui.Subhead(ui.Text("Клонировать слот")),
 				ui.Note(ui.Text("Копируются настройки игры и новая ссылка: без турнира, заявок и голосования.")),
 				ui.Field(ui.Label("Дата и время нового слота"),
-					ui.Datetimefield(ui.Name("starts_at"), ui.Value(venues.Shift(data.Slot.StartsAt, 7*24*time.Hour)), ui.Required())),
+					ui.Datetimefield(ui.Name("starts_at"), ui.Value(venues.Shift(data.Slot.StartsAt, 7*24*time.Hour)),
+						ui.Required(), ui.Data("datetime-tz", data.Tz))),
 				ui.Row(
 					ui.Button(ui.Submit(), ui.Text("Клонировать")),
 					ui.Button(ui.Data("dialog-close", ""), ui.Text("Отмена")),

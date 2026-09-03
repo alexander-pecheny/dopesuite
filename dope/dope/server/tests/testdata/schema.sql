@@ -423,7 +423,7 @@ CREATE TABLE users(
   is_system integer not null default 0,
   created_at text not null,
   updated_at text not null
-, password_hash TEXT, password_salt TEXT, telegram_name TEXT);
+, password_hash TEXT, password_salt TEXT, telegram_name TEXT, timezone TEXT);
 
 -- table venues
 CREATE TABLE venues(

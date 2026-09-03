@@ -48,6 +48,11 @@ type meResponse struct {
 	UserID   int64   `json:"user_id"`
 	Username *string `json:"username,omitempty"`
 	Telegram *string `json:"telegram,omitempty"`
+	Timezone *string `json:"timezone,omitempty"`
+}
+
+type timezoneRequest struct {
+	Timezone string `json:"timezone"`
 }
 
 type telegramSender func(ctx context.Context, chatID int64, text string) error
@@ -76,6 +81,7 @@ func (s *server) inWriteTx(ctx context.Context, fn func(tx *sql.Tx) error) error
 // dispatcher writes it. The exported HandleAuth* names in testapi.go reach
 // the same handlers.
 func (s *server) authRoutes(t *route.Table) {
+	t.Handle("GET /api/auth/methods", route.Public, s.authMethods)
 	t.Handle("POST /api/auth/tg/start", route.Public, s.authTgStart)
 	t.Handle("GET /api/auth/tg/status", route.Public, s.authTgStatus)
 	t.Handle("POST /api/auth/tg/claim", route.Public, s.authTgClaim)
@@ -84,6 +90,7 @@ func (s *server) authRoutes(t *route.Table) {
 	t.Handle("GET /api/auth/me", route.Session, s.authMe)
 	t.Handle("POST /api/auth/username", route.Session, s.authUsername)
 	t.Handle("POST /api/auth/password", route.Session, s.authPassword)
+	t.Handle("POST /api/auth/timezone", route.Session, s.authTimezone)
 }
 
 func (s *server) handleAuthTgStart(w http.ResponseWriter, r *http.Request) {
@@ -107,8 +114,21 @@ func (s *server) handleAuthUsername(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleAuthPassword(w http.ResponseWriter, r *http.Request) {
 	s.api().Serve(route.Session, s.authPassword)(w, r)
 }
+func (s *server) handleAuthTimezone(w http.ResponseWriter, r *http.Request) {
+	s.api().Serve(route.Session, s.authTimezone)(w, r)
+}
+func (s *server) handleAuthMethods(w http.ResponseWriter, r *http.Request) {
+	s.api().Serve(route.Public, s.authMethods)(w, r)
+}
+
+func (s *server) authMethods(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
+	return route.JSON(w, tglogin.NewMethodsResponse(s.bot != nil, botUsername(), s.botPolling()))
+}
 
 func (s *server) authTgStart(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
+	if s.bot == nil {
+		return route.Statusf(http.StatusServiceUnavailable, "telegram login is not configured")
+	}
 	var res tglogin.StartResult
 	err := s.inWriteTx(r.Context(), func(tx *sql.Tx) (err error) {
 		res, err = s.handshake().Start(r.Context(), tx, time.Now())
@@ -233,6 +253,7 @@ func (s *server) authLoginPassword(w http.ResponseWriter, r *http.Request, _ rou
 	}
 	var user session.User
 	var token string
+	var tz string
 	err := s.inWriteTx(r.Context(), func(tx *sql.Tx) error {
 		ctx := r.Context()
 		var (
@@ -272,18 +293,57 @@ update users set password_hash = ?, password_salt = null, updated_at = ? where i
 		if token, err = createSessionTx(ctx, tx, userID, time.Now().UTC()); err != nil {
 			return err
 		}
-		user, err = loadUserTx(ctx, tx, userID)
+		user, tz, err = loadUserTx(ctx, tx, userID)
 		return err
 	})
 	if err != nil {
 		return err
 	}
 	session.SetCookie(w, token)
-	return route.JSON(w, meResponseFor(user))
+	return route.JSON(w, meResponseFor(user, tz))
 }
 
 func (s *server) authMe(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	return route.JSON(w, meResponseFor(sc.User))
+	tz, err := s.userTimezone(r.Context(), sc.User.UserID)
+	if err != nil {
+		return err
+	}
+	return route.JSON(w, meResponseFor(sc.User, tz))
+}
+
+// authTimezone stores the profile's IANA timezone — the zone a person writes
+// slot times in, shown by the datetime picker to keep a wall-clock
+// unambiguous. An empty value clears it; like xy's profile defaults, it is
+// length-capped and otherwise trusted to be a zone.
+func (s *server) authTimezone(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	var req timezoneRequest
+	if err := route.DecodeJSON(r, &req); err != nil {
+		return err
+	}
+	tz := strings.TrimSpace(req.Timezone)
+	if len(tz) > 64 {
+		return route.BadRequest("timezone too long")
+	}
+	if _, err := s.eng.WriteExec(r.Context(),
+		`update users set timezone = ?, updated_at = ? where id = ?`,
+		tz, util.UtcNow(), sc.User.UserID); err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+// userTimezone reads the profile's IANA zone (users.timezone): "" when unset.
+func (s *server) userTimezone(ctx context.Context, userID int64) (string, error) {
+	var tz sql.NullString
+	if err := s.eng.DB.QueryRowContext(ctx,
+		`select timezone from users where id = ?`, userID).Scan(&tz); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return tz.String, nil
 }
 
 func (s *server) authLogout(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
@@ -325,8 +385,12 @@ update users set username = ?, updated_at = ? where id = ? and username is null`
 	if n, _ := res.RowsAffected(); n == 0 {
 		return route.Conflict(dopestrings.Default.Auth.Username.AlreadySet())
 	}
+	tz, err := s.userTimezone(r.Context(), user.UserID)
+	if err != nil {
+		return err
+	}
 	user.Username = sql.NullString{String: username, Valid: true}
-	return route.JSON(w, meResponseFor(user))
+	return route.JSON(w, meResponseFor(user, tz))
 }
 
 // authPassword sets a password for the logged-in user, or changes an existing
@@ -374,30 +438,34 @@ update users set password_hash = ?, password_salt = null, updated_at = ? where i
 	return nil
 }
 
-func loadUserTx(ctx context.Context, tx *sql.Tx, userID int64) (session.User, error) {
+// loadUserTx reads the display fields and the profile timezone of one user
+// inside a write transaction.
+func loadUserTx(ctx context.Context, tx *sql.Tx, userID int64) (session.User, string, error) {
 	var (
 		username sql.NullString
 		tgUser   sql.NullString
 		isSystem int
+		tz       sql.NullString
 	)
 	err := tx.QueryRowContext(ctx, `
-select username, telegram_username, is_system from users where id = ?`, userID).Scan(&username, &tgUser, &isSystem)
+select username, telegram_username, is_system, timezone from users where id = ?`, userID).
+		Scan(&username, &tgUser, &isSystem, &tz)
 	if err != nil {
-		return session.User{}, err
+		return session.User{}, "", err
 	}
 	return session.User{
 		UserID:   userID,
 		Username: username,
 		Telegram: tgUser,
 		IsSystem: isSystem == 1,
-	}, nil
+	}, tz.String, nil
 }
 
 func createSessionTx(ctx context.Context, tx *sql.Tx, userID int64, now time.Time) (string, error) {
 	return authcred.CreateSession(ctx, tx, userID, now)
 }
 
-func meResponseFor(user session.User) meResponse {
+func meResponseFor(user session.User, timezone string) meResponse {
 	resp := meResponse{UserID: user.UserID}
 	if user.Username.Valid {
 		v := user.Username.String
@@ -406,6 +474,9 @@ func meResponseFor(user session.User) meResponse {
 	if user.Telegram.Valid {
 		v := user.Telegram.String
 		resp.Telegram = &v
+	}
+	if timezone != "" {
+		resp.Timezone = &timezone
 	}
 	return resp
 }

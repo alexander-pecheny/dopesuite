@@ -436,25 +436,24 @@ func expandMount(c *ExpandCtx, p *Element) []Node {
 
 // expandDatetimefield is a date and time a person may type, paste OR pick. The
 // posted value is the text input: a bare datetime-local is segmented, so
-// pasting «2026-09-04 19:00» into one does nothing. The picker beside it is a
-// real datetime-local kept out of sight, opened by the button and by putting
-// the cursor in the field (assets/ts/datetime.ts).
+// pasting «2026-09-04 19:00» into one does nothing. The calendar beside it is
+// the kit's own — Monday-first in every browser, opened by the button or a
+// click in the field (assets/ts/datetime.ts) — because the native picker
+// follows the browser locale and cannot be told otherwise. A field may carry
+// data-datetime-tz: the zone its value is written in, spelled out under the
+// grid.
 func expandDatetimefield(c *ExpandCtx, p *Element) []Node {
 	text := Input(c, "text", p, "name", "placeholder", "value")
 	addClass(text, "u-grow")
 	text.Attrs = append(text.Attrs, At("autocomplete", "off"), BareAt("data-datetime-text"))
 	text.Attrs = append(text.Attrs, CopyFlags(p, "required")...)
-	picker := El("input", []Attr{
-		ClassAttr("datetime-picker"), At("type", "datetime-local"),
-		At("tabindex", "-1"), At("aria-hidden", "true"), BareAt("data-datetime-picker"),
-	})
 	button := El("button", []Attr{
 		ClassAttr("btn", "btn-ghost", "btn-small"), At("type", "button"),
 		At("aria-label", "Календарь"), BareAt("data-datetime-open"),
 	}, calendarGlyph())
 	return one(El("span", []Attr{
-		ClassAttr("u-row", "u-gap-xs", "u-align-center"), BareAt("data-datetime-field"),
-	}, text, picker, button))
+		ClassAttr("datetime-field", "u-row", "u-gap-xs", "u-align-center"), BareAt("data-datetime-field"),
+	}, text, button))
 }
 
 // addClass appends to an element's class attribute, for a control a helper

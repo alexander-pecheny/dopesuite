@@ -23,6 +23,8 @@ import (
 
 	"pecheny.me/dopecore/authcred"
 	"pecheny.me/dopecore/session"
+	"pecheny.me/dopecore/tgbot"
+	"pecheny.me/dopecore/tglogin"
 )
 
 func newAuthTestServer(t *testing.T) *dopeserver.Server {
@@ -33,11 +35,13 @@ func newAuthTestServer(t *testing.T) *dopeserver.Server {
 	}
 	t.Cleanup(func() { db.Close() })
 	createDefaultFestFixture(t, db, dopeserver.DefaultMatch())
-	return dopeserver.NewTestServer(func(e *core.Engine) {
+	srv := dopeserver.NewTestServer(func(e *core.Engine) {
 		e.DB = db
 		e.RT = realtime.NewManager()
 		e.Assets = dopeserver.StaticFiles
 	})
+	srv.SetBot(stubBot(t, false))
+	return srv
 }
 
 func systemUserID(t *testing.T, db *sql.DB) int64 {
@@ -240,6 +244,80 @@ func TestProfilePasswordRequiresAuth(t *testing.T) {
 	srv.HandleAuthPassword(resp, req)
 	if resp.Code != http.StatusUnauthorized {
 		t.Fatalf("password without session status = %d, want 401", resp.Code)
+	}
+}
+
+func TestProfileTimezone(t *testing.T) {
+	srv := newAuthTestServer(t)
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := srv.Eng().DB.Exec(`
+insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at)
+values(null, null, ?, 0, ?, ?)`, "tz_user", now, now)
+	if err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	userID, _ := res.LastInsertId()
+	cookie := createTestSession(t, srv, userID)
+
+	post := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/timezone", strings.NewReader(body))
+		req.AddCookie(&http.Cookie{Name: session.CookieName, Value: cookie})
+		resp := httptest.NewRecorder()
+		srv.HandleAuthTimezone(resp, req)
+		return resp
+	}
+
+	// Storing a zone trims, answers 204 and lands in the users row.
+	if resp := post(`{"timezone":" Europe/Moscow "}`); resp.Code != http.StatusNoContent {
+		t.Fatalf("set timezone status = %d, body %s", resp.Code, resp.Body.String())
+	}
+	var stored string
+	if err := srv.Eng().DB.QueryRow(`select timezone from users where id = ?`, userID).Scan(&stored); err != nil {
+		t.Fatalf("read timezone: %v", err)
+	}
+	if stored != "Europe/Moscow" {
+		t.Fatalf("timezone = %q, want Europe/Moscow", stored)
+	}
+
+	// /api/auth/me carries the zone back to the client.
+	meReq := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	meReq.AddCookie(&http.Cookie{Name: session.CookieName, Value: cookie})
+	meResp := httptest.NewRecorder()
+	srv.HandleAuthMe(meResp, meReq)
+	if meResp.Code != http.StatusOK {
+		t.Fatalf("me status = %d", meResp.Code)
+	}
+	var me struct {
+		Timezone string `json:"timezone"`
+	}
+	if err := json.Unmarshal(meResp.Body.Bytes(), &me); err != nil {
+		t.Fatalf("decode me: %v (body=%s)", err, meResp.Body.String())
+	}
+	if me.Timezone != "Europe/Moscow" {
+		t.Fatalf("me timezone = %q, want Europe/Moscow", me.Timezone)
+	}
+
+	// An empty value clears the zone; an oversized one is refused.
+	if resp := post(`{"timezone":""}`); resp.Code != http.StatusNoContent {
+		t.Fatalf("clear timezone status = %d, body %s", resp.Code, resp.Body.String())
+	}
+	if err := srv.Eng().DB.QueryRow(`select timezone from users where id = ?`, userID).Scan(&stored); err != nil {
+		t.Fatalf("read timezone after clear: %v", err)
+	}
+	if stored != "" {
+		t.Fatalf("timezone after clear = %q, want empty", stored)
+	}
+	long := `{"timezone":"` + strings.Repeat("A", 65) + `"}`
+	if resp := post(long); resp.Code != http.StatusBadRequest {
+		t.Fatalf("long timezone status = %d, want 400", resp.Code)
+	}
+
+	// No session, no write.
+	anon := httptest.NewRequest(http.MethodPost, "/api/auth/timezone", strings.NewReader(`{"timezone":"UTC"}`))
+	anonResp := httptest.NewRecorder()
+	srv.HandleAuthTimezone(anonResp, anon)
+	if anonResp.Code != http.StatusUnauthorized {
+		t.Fatalf("timezone without session status = %d, want 401", anonResp.Code)
 	}
 }
 
@@ -1049,5 +1127,74 @@ func TestLegacySHA256PasswordVerifiesAndUpgradesToBcrypt(t *testing.T) {
 	ok, _, _ = dopeserver.VerifyPassword(legacy, salt, "wrong")
 	if ok {
 		t.Fatalf("legacy verify accepted wrong password")
+	}
+}
+func stubBot(t *testing.T, polling bool) *tgbot.Client {
+	t.Helper()
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true,"result":[]}`))
+	}))
+	t.Cleanup(api.Close)
+	c := tgbot.New(tgbot.Config{Token: "stub", APIBase: api.URL, PollTimeout: time.Minute})
+	if !polling {
+		return c
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { _ = c.Run(ctx, func(context.Context, *tgbot.Client, tgbot.Update) {}) }()
+	t.Cleanup(cancel)
+	deadline := time.Now().Add(2 * time.Second)
+	for c.LastPoll().IsZero() {
+		if time.Now().After(deadline) {
+			t.Fatal("stub bot never polled")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	cancel()
+	return c
+}
+
+func TestAuthMethodsFollowsBotConfig(t *testing.T) {
+	srv := newAuthTestServer(t)
+	for _, c := range []struct {
+		name    string
+		hasBot  bool
+		polling bool
+		botName string
+		want    string
+	}{
+		{"a polling bot with a handle", true, true, "dope_bot", tglogin.StatusOK},
+		{"no bot on this instance", false, false, "dope_bot", tglogin.StatusMisconfigured},
+		{"a bot with explicit handle", true, true, "custom_bot", tglogin.StatusOK},
+		{"a bot that is not polling", true, false, "dope_bot", tglogin.StatusUnreachable},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			srv.SetBot(nil)
+			if c.hasBot {
+				srv.SetBot(stubBot(t, c.polling))
+			}
+			t.Setenv("DOPE_BOT_NAME", c.botName)
+			w := httptest.NewRecorder()
+			srv.HandleAuthMethods(w, httptest.NewRequest(http.MethodGet, "/api/auth/methods", nil))
+			var got tglogin.MethodsResponse
+			if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if got.Status != c.want {
+				t.Errorf("telegram_status = %q, want %q", got.Status, c.want)
+			}
+			if want := c.want == tglogin.StatusOK; got.Telegram != want {
+				t.Errorf("telegram = %v, want %v", got.Telegram, want)
+			}
+		})
+	}
+}
+
+func TestAuthTgStartRefusedWithoutBot(t *testing.T) {
+	srv := newAuthTestServer(t)
+	srv.SetBot(nil)
+	w := httptest.NewRecorder()
+	srv.HandleAuthTgStart(w, httptest.NewRequest(http.MethodPost, "/api/auth/tg/start", nil))
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusServiceUnavailable)
 	}
 }

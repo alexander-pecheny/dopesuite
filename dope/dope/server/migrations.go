@@ -895,6 +895,13 @@ create table if not exists od_contested(
 			{Name: "patronymic", Type: "TEXT NOT NULL DEFAULT ''"},
 		})
 	}},
+	{Version: 31, Name: "users.timezone", Up: func(db *sql.DB) error {
+		// The profile's IANA zone: the zone a person's slot times are written
+		// in, shown by the datetime picker so a wall-clock is never ambiguous.
+		return store.AddColumnsIfMissing(db, "users", []store.ColumnSpec{
+			{Name: "timezone", Type: "TEXT"},
+		})
+	}},
 }
 
 func migrateDB(db *sql.DB) error { return schema.Apply(db, migrations) }

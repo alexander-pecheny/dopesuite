@@ -1,4 +1,7 @@
-// Profile password form (new password vs change password modes).
+// Profile password form (new password vs change password modes) and the
+// timezone a person's slot times are written in.
+import {autocomplete} from "../../../../dopeuikit/assets/ts/suggest.js";
+import {guessZone, zoneChoices} from "./zones.js";
 
 import S from "./i18nstrings.js";
 
@@ -53,6 +56,29 @@ async function fetchVoid(url: string, init: RequestInit): Promise<void> {
     throw new Error(text || `HTTP ${response.status}`);
   }
 }
+
+const tzForm = byId<HTMLFormElement>("tzForm");
+const tzValue = byId<HTMLInputElement>("tzValue");
+const tzMessage = byId("tzMessage");
+
+// An account that has not answered yet starts from the device's own zone.
+if (!tzValue.value) tzValue.value = guessZone();
+autocomplete(tzValue, zoneChoices);
+
+tzForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setText(tzMessage, "");
+  try {
+    await fetchVoid("/api/auth/timezone", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({timezone: tzValue.value.trim()}),
+    });
+    setText(tzMessage, "Часовой пояс сохранён.");
+  } catch (error) {
+    setText(tzMessage, error instanceof Error ? error.message : String(error));
+  }
+});
 
 function setText(node: HTMLElement, text: string): void {
   node.textContent = text;

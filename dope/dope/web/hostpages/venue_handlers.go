@@ -299,6 +299,18 @@ func (s *Server) reseatSlot(reqCtx context.Context, slot venues.Slot) error {
 	return err
 }
 
+// userTimezone reads the viewer's profile zone (users.timezone) — the caption
+// the datetime pickers show, so the wall-clock a slot is written in says
+// whose clock it is. "" when the profile has none.
+func (s *Server) userTimezone(ctx context.Context, userID int64) string {
+	var tz sql.NullString
+	if err := s.h.Engine().DB.QueryRowContext(ctx,
+		`select timezone from users where id = ?`, userID).Scan(&tz); err != nil {
+		return ""
+	}
+	return tz.String
+}
+
 func (s *Server) renderVenueDashboard(w http.ResponseWriter, r *http.Request, sc route.Scope, errMsg, notice string) error {
 	festID := sc.FestID
 	_ = r.ParseForm()
@@ -336,6 +348,7 @@ func (s *Server) renderVenueDashboard(w http.ResponseWriter, r *http.Request, sc
 	pages.RenderDoc(w, s.h.Engine().AssetETags, venueDashDoc(venueDashData{
 		Venue: venue, Slots: rows, Access: members,
 		CanManage: roles.CanManageFest(sc.Role), CanDelete: roles.CanDeleteFest(sc.Role),
+		Tz:    s.userTimezone(r.Context(), sc.User.UserID),
 		Error: errMsg, Notice: notice,
 	}))
 	return nil
@@ -515,6 +528,7 @@ func (s *Server) renderSlotPage(w http.ResponseWriter, r *http.Request, sc route
 		GameHref:   VenueBase(venue) + "/game/" + gameRef + "/",
 		RegURL:     publicURL(r, "/reg/"+slot.RegToken),
 		CanManage:  roles.CanManageFest(sc.Role),
+		Tz:         s.userTimezone(r.Context(), sc.User.UserID),
 		Error:      errMsg, Notice: notice,
 	}
 	if slot.RatingTournamentID > 0 {
