@@ -336,7 +336,7 @@ export function mountBuffTeamField(field: HTMLInputElement): void {
 }
 
 // mountBuffTournamentField turns the tournament id into a suggest over the
-// tournaments buff knows to be playable on the Слот's date.
+// tournaments buff knows to be playable at the Слот's time.
 export function mountBuffTournamentField(field: HTMLInputElement): void {
   const query = document.createElement("input");
   query.type = "text";

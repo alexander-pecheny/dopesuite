@@ -36,7 +36,7 @@ insert into players values
 insert into player_games values (24850, 500), (25121, 412), (25122, 7), (25123, 900);
 
 insert into tournaments values
-  (10233, 'Синхрон августа', '2026-08-28T00:00:00+00:00', '2026-09-03T00:00:00+00:00', 'Синхрон', '12,12,12'),
+  (10233, 'Синхрон августа', '2026-08-29T07:00:00+00:00', '2026-09-05T10:00:00+03:00', 'Синхрон', '12,12,12'),
   (10234, 'Асинхрон августа', '2026-08-01T00:00:00+00:00', '2026-09-30T00:00:00+00:00', 'Асинхрон', '12,12'),
   (10235, 'Обычный турнир', '2026-08-28T00:00:00+00:00', '2026-09-03T00:00:00+00:00', 'Обычный', '12'),
   (10100, 'Старый синхрон', '2025-01-01T00:00:00+00:00', '2025-01-07T00:00:00+00:00', 'Синхрон', '12');
@@ -68,6 +68,15 @@ insert into team_seasons values
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	return store
+}
+
+func at(t *testing.T, s string) time.Time {
+	t.Helper()
+	d, err := time.Parse("2006-01-02 15:04", s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
 }
 
 func day(t *testing.T, s string) time.Time {
@@ -216,6 +225,17 @@ func TestPlayableTournamentsPutSynchronsFirst(t *testing.T) {
 	got := s.PlayableTournaments(context.Background(), day(t, "2026-09-02"))
 	if len(got) != 2 || got[0].ID != 10233 || got[1].ID != 10234 {
 		t.Fatalf("playable %+v", got)
+	}
+	// The window closes Saturday 10:00 Moscow time: an evening Слот that day
+	// is past it, a morning one is not.
+	if got := s.PlayableTournaments(context.Background(), at(t, "2026-09-05 18:00")); len(got) != 1 || got[0].ID != 10234 {
+		t.Fatalf("after the window %+v", got)
+	}
+	if got := s.PlayableTournaments(context.Background(), at(t, "2026-09-05 09:59")); len(got) != 2 {
+		t.Fatalf("inside the window %+v", got)
+	}
+	if got := s.SearchTournaments(context.Background(), "августа", at(t, "2026-09-05 18:00"), 10); len(got) != 1 || got[0].ID != 10234 {
+		t.Fatalf("search after the window %+v", got)
 	}
 	if comp := TourComposition(got[0].QuestionsByTour); len(comp) != 3 || comp[0] != 12 {
 		t.Fatalf("tour composition %v", comp)

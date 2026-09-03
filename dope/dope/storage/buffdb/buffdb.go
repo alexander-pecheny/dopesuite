@@ -292,19 +292,35 @@ order by s.date_start desc`, teamID, at.Format("2006-01-02"))
 // on its own week, an асинхрон any time inside its window.
 var playableTypes = []string{"Синхрон", "Строго синхронный", "Асинхрон"}
 
-func (s *Store) PlayableTournaments(ctx context.Context, on time.Time) []Tournament {
-	if !s.Enabled() {
+// ratingClock is the clock rating.chgk.info keeps: a синхрон's window runs
+// from Saturday 10:00 to the next Saturday 10:00 Moscow time. A Слот's wall
+// time carries no zone, so it is read on the same clock.
+var ratingClock = time.FixedZone("MSK", 3*60*60)
+
+// instant renders a Слот's wall time the way SQLite's datetime() renders the
+// mirror's offset-bearing timestamps, so the two compare as strings.
+func instant(wall time.Time) string {
+	if wall.IsZero() {
+		return ""
+	}
+	at := time.Date(wall.Year(), wall.Month(), wall.Day(), wall.Hour(), wall.Minute(), wall.Second(), 0, ratingClock)
+	return at.UTC().Format("2006-01-02 15:04:05")
+}
+
+const withinWindow = "(? = '' or (datetime(date_start) <= ? and datetime(date_end) > ?))"
+
+func (s *Store) PlayableTournaments(ctx context.Context, at time.Time) []Tournament {
+	if !s.Enabled() || at.IsZero() {
 		return nil
 	}
-	day := on.Format("2006-01-02")
+	when := instant(at)
 	rows, err := s.db.QueryContext(ctx, `
 select id, coalesce(name, ''), coalesce(tournament_type, ''), coalesce(questions_by_tour, ''), coalesce(date_start, '')
 from tournaments
 where tournament_type in (?, ?, ?)
-  and substr(date_start, 1, 10) <= ?
-  and substr(date_end, 1, 10) >= ?
+  and `+withinWindow+`
 order by case when tournament_type = 'Асинхрон' then 1 else 0 end, date_start, id`,
-		playableTypes[0], playableTypes[1], playableTypes[2], day, day)
+		playableTypes[0], playableTypes[1], playableTypes[2], when, when, when)
 	if err != nil {
 		return nil
 	}
@@ -312,22 +328,19 @@ order by case when tournament_type = 'Асинхрон' then 1 else 0 end, date_
 	return scanTournaments(rows)
 }
 
-func (s *Store) SearchTournaments(ctx context.Context, q string, on time.Time, limit int) []Tournament {
+func (s *Store) SearchTournaments(ctx context.Context, q string, at time.Time, limit int) []Tournament {
 	q = strings.TrimSpace(q)
 	if !s.Enabled() || q == "" {
 		return nil
 	}
-	day := "0000-00-00"
-	if !on.IsZero() {
-		day = on.Format("2006-01-02")
-	}
+	when := instant(at)
 	where, args := likeAny("name", q, likeInfix)
-	args = append(args, day, day, day, capLimit(limit))
+	args = append(args, when, when, when, capLimit(limit))
 	rows, err := s.db.QueryContext(ctx, `
 select id, coalesce(name, ''), coalesce(tournament_type, ''), coalesce(questions_by_tour, ''), coalesce(date_start, '')
 from tournaments
 where `+where+`
-  and (? = '0000-00-00' or (substr(date_start, 1, 10) <= ? and substr(date_end, 1, 10) >= ?))
+  and `+withinWindow+`
 order by date_start desc, id
 limit ?`, args...)
 	if err != nil {

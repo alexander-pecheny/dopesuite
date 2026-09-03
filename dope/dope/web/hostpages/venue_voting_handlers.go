@@ -34,8 +34,8 @@ func (s *Server) loadVotingView(r *http.Request, slot venues.Slot) (VotingView, 
 	return view, nil
 }
 
-// playableCandidates are the tournaments buff knows to be playable on the
-// Слот's date, синхроны first (buffdb orders them so).
+// playableCandidates are the tournaments buff knows to be playable at the
+// Слот's time, синхроны first (buffdb orders them so).
 func (s *Server) playableCandidates(ctx context.Context, slot venues.Slot) []venues.Candidate {
 	at, ok := venues.ParseTime(slot.StartsAt)
 	if !ok {
