@@ -1,3 +1,3 @@
-// The брейн page bundle (see od.ts).
+// The Brain page bundle (see od.ts).
 import '../init.js';
 import '../brain.js';

@@ -1,7 +1,7 @@
-// The «🧪 Тесты» panel: the board-level surface that replaced the тест-список.
+// The "Tests" panel (🧪): the board-level surface that replaced the test list.
 // One row per Test Session — date, title, tester count — plus the two things a
 // session is actually for: the invite line you paste into a messenger, and the
-// «Вопросы тестировали» line you paste into a document.
+// "Questions tested" summary line you paste into a document.
 //
 // A create(deps) kernel like the board's others; board.ts owns the wiring.
 
@@ -10,6 +10,7 @@ import {
   parseDate, parseSession, parseTime, serializeSession, type SessionMeta,
   sessionLabel, zoneOffset,
 } from "./sessions.js";
+import S from "./i18nstrings_ru_gen.js";
 import { xyApp } from "./app.js";
 import { TOWNS } from "./towns.js";
 import { autocomplete, type Choice, townChoices, zoneChoices } from "./suggest.js";
@@ -38,7 +39,7 @@ export interface SessionsPanelDeps {
   // draws the per-row play/stop button.
   activeTestSession(): number | null;
   setTestMode(sessionId: number | null): void;
-  // The session's лента: everything said about any question at this test, plus
+  // The session's timeline: everything said about any question at this test, plus
   // the notes about the test itself. Decrypted by the caller, which owns the DK.
   loadNotes(sessionId: number): Promise<Array<{ text: string; card: number | null; when: string; author: string }>>;
   addNote(sessionId: number, text: string): Promise<void>;
@@ -81,38 +82,40 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     box.replaceChildren();
     const rows = sorted();
     if (!rows.length) {
-      box.append(el("p", { class: "label-empty", text: "Тестов пока нет." }));
+      box.append(el("p", { class: "label-empty", text: S.sessions.list.empty() }));
       return;
     }
     for (const { s, m } of rows) {
       const players = m.testers.filter((t) => t.type === "player").length;
       const teams = m.testers.filter((t) => t.type === "team").length;
       const counts: string[] = [];
-      if (players) counts.push(`${players} игр.`);
-      if (teams) counts.push(`${teams} ком.`);
+      if (players) counts.push(S.sessions.list.players(String(players)));
+      if (teams) counts.push(S.sessions.list.teams(String(teams)));
       const marked = deps.playedCount(s.id);
 
       const head = el("div", { class: "sess-head" },
-        el("span", { class: "sess-title", text: sessionLabel(m) || "(без даты)" }),
-        el("span", { class: "sess-meta", text: [m.time, counts.join(", "), marked ? `${marked} вопр.` : ""].filter(Boolean).join(" · ") }),
+        el("span", { class: "sess-title", text: sessionLabel(m) || S.sessions.list.noDate() }),
+        el("span", { class: "sess-meta", text: [m.time, counts.join(", "), marked ? S.sessions.list.played(String(marked)) : ""].filter(Boolean).join(" · ") }),
       );
       // A copied session says how stale it might be (ADR-0003) — its testers are
-      // frozen at transfer time, and that list is what «Видели» reads.
+      // frozen at transfer time, and that list is what the card's "Seen" line reads.
       if (m.origin && m.origin.board) {
         head.append(el("span", {
           class: "sess-origin",
-          title: "Скопирована с другой доски: список тестеров с тех пор мог измениться",
-          text: `копия с «${m.origin.board}»${m.origin.at ? ` от ${humanDate(m.origin.at)}` : ""}`,
+          title: S.sessions.list.originTitle(),
+          text: m.origin.at
+            ? S.sessions.list.originAt(m.origin.board, humanDate(m.origin.at))
+            : S.sessions.list.origin(m.origin.board),
         }));
       }
       const row = el("div", { class: "sess-row" }, head,
         el("div", { class: "sess-actions" },
-          el("button", { class: "input", type: "button", text: "Открыть", onclick: () => openSession(s.id) }),
+          el("button", { class: "input", type: "button", text: S.sessions.list.open(), onclick: () => openSession(s.id) }),
           el("button", {
             class: "input", type: "button",
-            title: "Скопировать строку со временем начала для мессенджера",
+            title: S.sessions.list.inviteTitle(),
             onclick: () => { void deps.copyText(inviteLine(m)); },
-          }, ...iconed("clipboard", "Приглашение")),
+          }, ...iconed("clipboard", S.sessions.list.invite())),
           testModeButton(s.id),
         ));
       box.append(row);
@@ -126,9 +129,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     return el("button", {
       class: "input" + (on ? " testmode-on" : ""), type: "button",
       "aria-pressed": String(on),
-      title: on
-        ? "Завершить тест-режим"
-        : "Тест-режим: минута на открытом вопросе или комментарий отмечают его этим тестом. Только на этом устройстве; час без действий выключает",
+      title: on ? S.sessions.testmode.stopTitle() : S.sessions.testmode.startTitle(),
       onclick: () => { deps.setTestMode(on ? null : sessionId); renderList(); },
     }, icon(on ? "square" : "play"));
   }
@@ -156,7 +157,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       renderList();
       openSession(id);
     } catch (_) {
-      listModal.message("Не удалось создать тест.");
+      listModal.message(S.sessions.message.createFailed());
     }
   }
 
@@ -165,25 +166,25 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     box.replaceChildren();
 
     const dateInp = el("input", {
-      class: "input", type: "text", value: formatDate(m.date), placeholder: "дд.мм.гггг", autocomplete: "off",
+      class: "input", type: "text", value: formatDate(m.date), placeholder: S.sessions.form.datePlaceholder(), autocomplete: "off",
     }) as HTMLInputElement;
     // Date only by default (issue #33): most tests never need a time, and the
     // ones that do get a zone with it.
     const timeInp = el("input", {
-      class: "input", type: "text", value: m.time, placeholder: "чч:мм", autocomplete: "off",
+      class: "input", type: "text", value: m.time, placeholder: S.sessions.form.timePlaceholder(), autocomplete: "off",
     }) as HTMLInputElement;
     const tzInp = el("input", {
       class: "input", type: "text", value: m.tz || deps.defaultTimezone(),
       placeholder: "Europe/Moscow", autocomplete: "off",
     }) as HTMLInputElement;
     autocomplete(tzInp, zoneChoices);
-    const titleInp = el("input", { class: "input", type: "text", value: m.title, placeholder: "короткое имя теста — напр. «Иван Иванов и др.»" }) as HTMLInputElement;
+    const titleInp = el("input", { class: "input", type: "text", value: m.title, placeholder: S.sessions.form.aliasPlaceholder() }) as HTMLInputElement;
 
     box.append(
-      field("Дата", dateInp),
-      field("Время (необязательно)", timeInp),
-      field("Часовой пояс", tzInp),
-      field("Алиас", titleInp),
+      field(S.sessions.form.date(), dateInp),
+      field(S.sessions.form.time(), timeInp),
+      field(S.sessions.form.timezone(), tzInp),
+      field(S.sessions.form.alias(), titleInp),
     );
 
     const cityBox = el("div", { class: "sess-cities" });
@@ -196,14 +197,14 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
           el("span", { class: "city-chip-zone", text: zoneOffset(c.zone) }),
           el("button", {
             class: "city-chip-x", type: "button", text: "×",
-            title: "Убрать город", "aria-label": `Убрать ${c.name}`,
+            title: S.sessions.cities.remove(), "aria-label": S.sessions.cities.removeNamed(c.name),
             onclick: () => { cities.splice(i, 1); drawCities(); previewInvite(); },
           })));
       }
-      // A town brings its zone with it, so a city nobody could place — Тбилиси,
-      // Кокшетау — needs no IANA knowledge from the person inviting.
+      // A town brings its zone with it, so a city nobody could place — Tbilisi,
+      // Kokshetau — needs no IANA knowledge from the person inviting.
       const add = el("input", {
-        class: "input sess-city-add", type: "text", placeholder: "+ город…", autocomplete: "off",
+        class: "input sess-city-add", type: "text", placeholder: S.sessions.cities.addPlaceholder(), autocomplete: "off",
       }) as HTMLInputElement;
       const addCity = (name: string, zone: string): void => {
         if (!name || cities.some((c) => c.name === name)) return;
@@ -228,10 +229,10 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       cityBox.append(add);
     };
     drawCities();
-    box.append(field("Города для приглашения", cityBox));
+    box.append(field(S.sessions.cities.label(), cityBox));
 
     const invitePreview = el("p", { class: "sess-invite" });
-    const inviteCopy = el("button", { class: "input", type: "button" }, ...iconed("clipboard", "Скопировать приглашение"));
+    const inviteCopy = el("button", { class: "input", type: "button" }, ...iconed("clipboard", S.sessions.cities.copy()));
     const previewInvite = (): void => {
       invitePreview.textContent = inviteLine({ ...m, ...read(), cities });
     };
@@ -239,21 +240,21 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     for (const inp of [dateInp, timeInp, tzInp]) inp.addEventListener("input", previewInvite);
     box.append(el("div", { class: "sess-invite-box" }, invitePreview, inviteCopy));
 
-    // Testers: one row each, name + игрок/команда, suggested from every board
+    // Testers: one row each, name + player/team toggle, suggested from every board
     // this device has unlocked.
     const rows = el("div", { class: "fld-rows" });
     const addRow = (t: Tester | null): HTMLInputElement => {
       const seg = el("div", { class: "seg tester-seg" });
-      const bP = el("button", { class: "seg-btn", type: "button", text: "игрок" });
-      const bT = el("button", { class: "seg-btn", type: "button", text: "команда" });
+      const bP = el("button", { class: "seg-btn", type: "button", text: S.sessions.testers.player() });
+      const bT = el("button", { class: "seg-btn", type: "button", text: S.sessions.testers.team() });
       let type: Tester["type"] = t && t.type === "team" ? "team" : "player";
       const sync = (): void => { bP.classList.toggle("active", type === "player"); bT.classList.toggle("active", type === "team"); };
       bP.addEventListener("click", () => { type = "player"; sync(); });
       bT.addEventListener("click", () => { type = "team"; sync(); });
       seg.append(bP, bT); sync();
-      const inp = el("input", { class: "input fld-row-input", type: "text", value: (t && t.text) || "", placeholder: "имя…", autocomplete: "off" }) as HTMLInputElement;
+      const inp = el("input", { class: "input fld-row-input", type: "text", value: (t && t.text) || "", placeholder: S.sessions.testers.namePlaceholder(), autocomplete: "off" }) as HTMLInputElement;
       autocomplete(inp, testerChoices);
-      const rm = el("button", { class: "fld-row-rm", type: "button", text: "×", title: "Удалить строку" });
+      const rm = el("button", { class: "fld-row-rm", type: "button", text: "×", title: S.sessions.testers.removeRow() });
       const row = el("div", { class: "fld-row tester-row" }, seg, inp, rm);
       rm.addEventListener("click", () => row.remove());
       (row as TesterRow)._read = () => ({ text: inp.value, type });
@@ -261,14 +262,14 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       return inp;
     };
     (m.testers.length ? m.testers : [{ text: "", type: "player" as const }]).forEach((t) => addRow(t));
-    const add = el("button", { class: "input fld-add-row", type: "button", text: "+ тестер" });
+    const add = el("button", { class: "input fld-add-row", type: "button", text: S.sessions.testers.add() });
     add.addEventListener("click", () => addRow({ text: "", type: "player" }).focus());
-    box.append(field("Тестировали", el("div", { class: "sess-testers" }, rows, add)));
+    box.append(field(S.sessions.testers.label(), el("div", { class: "sess-testers" }, rows, add)));
     testerRows = () => [...rows.querySelectorAll<TesterRow>(".tester-row")].map((r) => (r._read as () => Tester)());
 
-    // These come BEFORE the лента: they act on the fields above, and burying them
+    // These come BEFORE the feed: they act on the fields above, and burying them
     // under a comment thread of unknown length puts them off the bottom. There is
-    // no Сохранить — Готово saves, and so does every other way out.
+    // no Save — Done saves, and so does every other way out.
     const summary = el("button", {
       class: "input", type: "button",
       onclick: () => {
@@ -276,20 +277,20 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
         if (line) void deps.copyText(line);
       },
     });
-    const drop = el("button", { class: "btn btn-danger", type: "button" }, ...iconed("trash-2", "Удалить тест"));
+    const drop = el("button", { class: "btn btn-danger", type: "button" }, ...iconed("trash-2", S.sessions.delete.label()));
     drop.addEventListener("click", () => { void removeSession(); });
     box.append(el("div", { class: "sess-actions" }, summary, drop));
 
-    // The debrief wears the card's OWN лента classes — .tl-event / .tl-meta /
+    // The debrief wears the card's OWN timeline classes — .tl-event / .tl-meta /
     // .tl-comment, and .card-desc on the box — so a note here is the same markup
     // as a comment there rather than a lookalike.
     const notes = el("div", { class: "timeline sess-notes" });
     const noteInput = el("textarea", {
-      class: "card-desc comment-input", placeholder: "Комментарий…", spellcheck: "false",
+      class: "card-desc comment-input", placeholder: S.sessions.feed.placeholder(), spellcheck: "false",
     }) as HTMLTextAreaElement;
-    const noteAdd = el("button", { class: "btn", type: "button", text: "Отправить" });
+    const noteAdd = el("button", { class: "btn", type: "button", text: S.sessions.feed.send() });
     noteAdd.addEventListener("click", () => { void postNote(noteInput); });
-    box.append(field("Лента", el("div", { class: "sess-feed" }, notes,
+    box.append(field(S.sessions.feed.label(), el("div", { class: "sess-feed" }, notes,
       el("div", { class: "u-col u-gap-sm" }, noteInput, noteAdd))));
     void drawNotes(notes);
 
@@ -317,15 +318,15 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     try {
       const notes = await deps.loadNotes(editing);
       box.replaceChildren();
-      if (!notes.length) { box.append(el("p", { class: "label-empty", text: "Комментариев пока нет." })); return; }
+      if (!notes.length) { box.append(el("p", { class: "label-empty", text: S.sessions.feed.empty() })); return; }
       for (const n of notes) {
-        const meta = [n.author, n.card ? "к вопросу" : "", shortWhen(n.when)].filter(Boolean).join(" · ");
+        const meta = [n.author, n.card ? S.sessions.feed.atQuestion() : "", shortWhen(n.when)].filter(Boolean).join(" · ");
         box.append(el("div", { class: "tl-event tl-comment" },
           el("div", { class: "tl-meta", text: meta }),
           commentBody(decodeCommentPayload(n.text).text)));
       }
     } catch (_) {
-      box.replaceChildren(el("p", { class: "label-empty", text: "Не удалось загрузить." }));
+      box.replaceChildren(el("p", { class: "label-empty", text: S.sessions.message.notesLoadFailed() }));
     }
   }
 
@@ -342,7 +343,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       input.value = "";
       if (notesBox) await drawNotes(notesBox);
     } catch (_) {
-      editModal.message("Не удалось добавить заметку.");
+      editModal.message(S.sessions.message.noteAddFailed());
     }
   }
 
@@ -352,15 +353,15 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       control);
   }
 
-  // summaryLine is the «Вопросы тестировали: …» line, terminated with a period.
+  // summaryLine is the "Questions tested: …" line, terminated with a period.
   function summaryLine(testers: Tester[]): string {
     const parts = testers.map((t) => ({ text: (t.text || "").trim(), type: t.type })).filter((t) => t.text);
     if (!parts.length) return "";
     const players = parts.filter((t) => t.type === "player").map((t) => t.text);
     const teams = parts.filter((t) => t.type === "team").map((t) => t.text);
     let s = "";
-    if (players.length) s = "Вопросы тестировали: " + players.join(", ");
-    if (teams.length) s += (s ? ", а также команды: " : "Вопросы тестировали команды: ") + teams.join(", ");
+    if (players.length) s = S.sessions.summary.players(players.join(", "));
+    if (teams.length) s += (s ? S.sessions.summary.teamsAlso(teams.join(", ")) : S.sessions.summary.teamsOnly(teams.join(", ")));
     return s ? s + "." : "";
   }
 
@@ -391,7 +392,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     deps.render();
   }
 
-  // The form has no Отмена: every field on it is a fact about the test, so any
+  // The form has no Cancel: every field on it is a fact about the test, so any
   // exit saves, and only a save that FAILS keeps you here (the stack's gate).
   async function saveOnLeave(): Promise<boolean> {
     if (editing == null || !formSave) return true;
@@ -399,14 +400,14 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       await formSave();
       return true;
     } catch (_) {
-      editModal.message("Не удалось сохранить.");
+      editModal.message(S.sessions.message.saveFailed());
       return false;
     }
   }
 
   async function removeSession(): Promise<void> {
     if (editing == null) return;
-    if (!confirm("Удалить тест-сессию? Её метки исчезнут с карточек.")) return;
+    if (!confirm(S.sessions.delete.confirm())) return;
     try {
       await deps.deleteSession(editing);
       editing = null; // nothing left to save on the way out
@@ -414,7 +415,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       renderList();
       deps.render();
     } catch (_) {
-      editModal.message("Не удалось удалить.");
+      editModal.message(S.sessions.message.deleteFailed());
     }
   }
 

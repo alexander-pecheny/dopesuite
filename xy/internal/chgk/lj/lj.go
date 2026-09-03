@@ -30,7 +30,7 @@ type Options struct {
 	NoSpoilers bool
 	// SplitTours writes a post per tour rather than one for the package.
 	SplitTours bool
-	// GeneralImpressions adds the «Общие впечатления» post at the end.
+	// GeneralImpressions adds the general-impressions post at the end.
 	GeneralImpressions bool
 	// Navigation adds the line linking each tour's post to the others. It needs
 	// the posts' URLs, so it only means anything once they exist.
@@ -82,8 +82,8 @@ type exporter struct {
 	counter int
 }
 
-// splitIntoTours is split_into_tours: the structure cut at each «## тур», with
-// the first tour's heading extended by its own name and the rest given one.
+// splitIntoTours is split_into_tours: the structure cut at each tour heading,
+// with the first tour's heading extended by its own name and the rest given one.
 func (e *exporter) splitIntoTours(doc fsource.Doc) []fsource.Doc {
 	var result []fsource.Doc
 	var current fsource.Doc

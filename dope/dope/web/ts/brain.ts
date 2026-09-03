@@ -1,8 +1,8 @@
-// The брейн page (ADR-0001): a round-robin group of head-to-head бои. The
-// Протоколы tab mirrors the reference sheet's match block — question rows of
-// № | player | mark | mark | player around a running score, with «П» tiebreak
-// rows — and the Таблица tab is the sheet's group cross-table (score cells,
-// О/+/−/± totals, М places). Matches come from the rr stage; edits go per бой
+// The Brain page (ADR-0001): a round-robin group of head-to-head matches. The
+// protocols tab mirrors the reference sheet's match block — question rows of
+// № | player | mark | mark | player around a running score, with tiebreak
+// rows — and the tables tab is the sheet's group cross-table (score cells,
+// points/+/−/± totals, place numbers). Matches come from the rr stage; edits go per match
 // (PATCH /matches/{code}/state) and sync over match: scopes. A self-booting
 // side-effect module bundled by pages/brain.ts.
 
@@ -27,6 +27,7 @@ import {buildFestGrid, buildReseedStagePanel} from "./fest-grid.js";
 import type {FestGridStage, ReseedEntry} from "./fest-grid.js";
 import {gameTabs, canonicalKey, groupLabel} from "./game-tabs.js";
 import type {GameTab} from "./game-tabs.js";
+import S from "./i18nstrings_ru_gen.js";
 
 interface PageGlobals {
   __GAME_INIT__?: GameInitLike | null;
@@ -64,7 +65,7 @@ interface BrainSchemeMatch {
 
 // BrainStageRules is the rr stage's config vocabulary (the inner object of
 // stages.config_json): entrant seeds, the ranking comparator order, the
-// points rule and the appended-перестрелка switch.
+// points rule and the appended-tiebreak switch.
 interface BrainStageRules {
   entrants?: SchemeSlotRef[];
   order?: string[];
@@ -123,7 +124,7 @@ const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
 
 // Long team names fade at their fixed width and carry a popover — the same
-// treatment the ЭК tables give theirs.
+// treatment the EK tables give theirs.
 const floatingPopover = createFloatingPopover({root: brainRoot, specs: [
   {trigger: ".brain-name-head.brain-name-truncated", popover: ".brain-name-popover", anchor: ".brain-name-wrap"},
   {trigger: ".results-team-truncated", popover: ".results-team-name-popover", anchor: ".results-team-name"},
@@ -164,7 +165,7 @@ const shell = mountGamePage({
   apiBase: route.apiBase,
   init,
   downloads: false,
-  chrome: () => ({festTitle: fest?.title || "", gameTitle: fest?.gameName || scheme.title || "Брейн"}),
+  chrome: () => ({festTitle: fest?.title || "", gameTitle: fest?.gameName || scheme.title || S.brain.title()}),
   cursorKinds: {
     answer: {selector: ".answer-cell", keys: ["match", "side", "q"]},
     player: {selector: ".brain-player-select", keys: ["match", "side", "q"]},
@@ -191,11 +192,11 @@ function stageKind(stage: BrainSchemeStage): string {
   return stage.kind || stage.stage_type || "";
 }
 
-// Every бой of the game carries a буква — the sheets' A..Z, AA.. handle —
+// Every match of the game carries a letter — the sheets' A..Z, AA.. handle —
 // dealt by the compiler and carried on the fest view.
 const boutLetters = festLetters(fest?.stages as StageRef[] | undefined);
 
-// protocolStages are the stages whose бої the page draws — everything except
+// protocolStages are the stages whose matches the page draws — everything except
 // reseed edges, in scheme order.
 function protocolStages(): BrainSchemeStage[] {
   return (scheme.stages || []).filter((s) => stageKind(s) !== "reseed");
@@ -221,7 +222,7 @@ function schemeQuestions(): number {
   return Number.isInteger(n) && n > 0 ? n : 5;
 }
 
-// questionsFor is a бой's regular question count: its stage's override (the
+// questionsFor is a match's regular question count: its stage's override (the
 // DSL's per-block/round questions cascade), else the scheme-wide default.
 function questionsFor(code: string): number {
   const stage = stageByMatch.get(code);
@@ -229,7 +230,7 @@ function questionsFor(code: string): number {
   return Number.isInteger(n) && n > 0 ? n : schemeQuestions();
 }
 
-// onProtocolTab reports a «протоколы» tab in front — the tab keys are
+// onProtocolTab reports a protocols tab in front — the tab keys are
 // `protocol:<block>`, one per Block, never the bare word.
 function onProtocolTab(): boolean {
   return tabs().find((t) => t.key === activeTab)?.kind === "protocol";
@@ -254,7 +255,7 @@ function normalizeState(view: BrainMatchView): void {
   view.state = brain.parseState(view.state, questionsFor(view.code || ""));
 }
 
-// adoptMatchView takes a бой's view from wherever it arrives — the fetch, a
+// adoptMatchView takes a match's view from wherever it arrives — the fetch, a
 // write's response, the stream — with this page's un-acked edits overlaid, so
 // a slow write never visibly regresses.
 function adoptMatchView(view: BrainMatchView | null | undefined): boolean {
@@ -341,7 +342,7 @@ const live = createLiveEvents({
 const writer = createScopedWriter({
   readonly: viewer,
   urlOf: (scope) => `${route.apiBase}/matches/${encodeURIComponent(scope.slice(`match:${scopeGameID}:`.length))}/state`,
-  // Ops address the бой's Protocol document, which the view carries as `state`.
+  // Ops address the match's Protocol document, which the view carries as `state`.
   docPath: ["state"],
   adopt: (scope, response) => {
     if (scope.startsWith("stage:")) adoptFestStages(response as FestInfo);
@@ -373,12 +374,12 @@ function started(view: BrainMatchView): boolean {
 }
 
 function teamName(view: BrainMatchView, side: number): string {
-  return view.participants?.[side]?.name || `Команда ${side + 1}`;
+  return view.participants?.[side]?.name || S.brain.team.fallback(String(side + 1));
 }
 
 function rowLabel(index: number, base: number): string {
   if (index < base) return String(index + 1);
-  return index === base ? "П" : `П${index - base + 1}`;
+  return index === base ? S.brain.row.tiebreak() : S.brain.row.tiebreakN(String(index - base + 1));
 }
 
 function rosterFor(name: string): string[] {
@@ -406,7 +407,7 @@ function stageBouts(stage: BrainSchemeStage): BoutEntry[] {
   return out;
 }
 
-// allBouts flattens every protocol stage's бої in scheme order — the selection
+// allBouts flattens every protocol stage's matches in scheme order — the selection
 // grid's column space spans them all.
 function allBouts(): BoutEntry[] {
   return protocolStages().flatMap(stageBouts);
@@ -421,7 +422,7 @@ function render(options: {preserveScroll?: boolean} = {}): void {
   const node = buildTab(tabs().find((tab) => tab.key === activeTab));
   brainRoot.replaceChildren(node);
   brainRoot.classList.toggle("fits-frame", activeTab === "roster");
-  // A Сетка fits the frame's width like ЭК's, so its columns measure the same.
+  // A grid fits the frame's width like EK's, so its columns measure the same.
   brainRoot.classList.toggle("grid-host", node.matches(".fest-grid") || Boolean(node.querySelector(".fest-grid")));
   scheduleBrainNameOverflowUpdate();
   if (options.preserveScroll && frame) frame.scrollTop = scrollTop;
@@ -462,7 +463,7 @@ function renderTabs(): void {
 }
 
 // The live fest view feeds the reseed panels (entries, sort rules). The init
-// snapshot goes stale, so «Рассчитать» adopts the fresh view it gets back.
+// snapshot goes stale, so the calculate button adopts the fresh view it gets back.
 const festStages = new Map<string, FestGridStage>();
 for (const viewStage of fest?.stages || []) {
   if (viewStage?.code) festStages.set(viewStage.code, viewStage);
@@ -491,7 +492,7 @@ function reseedPendingBouts(stage: BrainSchemeStage): string[] {
 async function calculateReseed(code: string): Promise<void> {
   const sent = await writer.send(`stage:${code}`, {url: `${route.apiBase}/stages/${encodeURIComponent(code)}/reseed`});
   if (sent.ok) reseedError.delete(code);
-  else reseedError.set(code, sent.error || "Не удалось рассчитать пересев");
+  else reseedError.set(code, sent.error || S.brain.reseed.calculateFailed());
   render({preserveScroll: true});
 }
 
@@ -499,8 +500,8 @@ function buildBrainReseedPanel(stage: BrainSchemeStage): HTMLElement {
   const code = stage.code || "";
   const pending = reseedPendingBouts(stage);
   const blocked = pending.length === 1
-    ? `Бой ${pending[0]} не закончен`
-    : pending.length > 1 ? `Бои ${pending.join(", ")} не закончены` : "";
+    ? S.brain.reseed.pendingOne(pending[0])
+    : pending.length > 1 ? S.brain.reseed.pendingMany(pending.join(", ")) : "";
   const panel = buildReseedStagePanel({...(festStages.get(code) || {}), code}, {
     letters: boutLetters,
     editable: !viewer,
@@ -518,8 +519,8 @@ function buildBrainReseedPanel(stage: BrainSchemeStage): HTMLElement {
   return panel;
 }
 
-// buildProtocols lays one Block's бої out the way the sheet's протоколы tab
-// does: a section per stage (группа, pod, round), its бої side by side.
+// buildProtocols lays one Block's matches out the way the sheet's protocols tab
+// does: a section per stage (group, pod, round), its matches side by side.
 function buildProtocols(stages: BrainSchemeStage[]): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "brain-protocol";
@@ -545,14 +546,14 @@ function buildProtocols(stages: BrainSchemeStage[]): HTMLElement {
   if (!rendered) {
     const empty = document.createElement("p");
     empty.className = "roster-empty";
-    empty.textContent = "Бои ещё не загружены.";
+    empty.textContent = S.brain.protocol.empty();
     wrap.appendChild(empty);
   }
   return wrap;
 }
 
-// buildGrid is the Сетка: the whole Game at a glance from the same fest data
-// the ЭК pages draw — every Block one column, М-grain, no protocol detail.
+// buildGrid is the grid tab: the whole Game at a glance from the same fest data
+// the EK pages draw — every Block one column, place-grain, no protocol detail.
 function buildGrid(): HTMLElement {
   const stages: FestGridStage[] = [];
   for (const viewStage of fest?.stages || []) {
@@ -563,15 +564,15 @@ function buildGrid(): HTMLElement {
 }
 
 // buildPodBoard is a pod Block's detail tab, the sheet's «Double Elimination»
-// view: one column per round, each бой a box with its буква, teams and Σ. The
-// same boxes the Сетка once carried — moved where detail belongs. A pod is a
-// row band: its бои of every round sit in the band, so a round with one бой
+// view: one column per round, each match a box with its letter, teams and Σ. The
+// same boxes the grid once carried — moved where detail belongs. A pod is a
+// row band: its matches of every round sit in the band, so a round with one match
 // per pod leaves the pod's other slot blank and the columns read across.
 function buildPodBoard(pods: BrainSchemeStage[]): HTMLElement {
   type GridMatch = NonNullable<FestGridStage["matches"]>[number];
   const byRound = new Map<number, GridMatch[]>();
   const roundOf = (planned: BrainSchemeMatch) => Number((planned as {round?: number}).round || 1);
-  // slots[pod][i] is the бой's slot within its pod's round; podRows the widest.
+  // slots[pod][i] is the match's slot within its pod's round; podRows the widest.
   const slots = pods.map((stage) => {
     const seen = new Map<number, number>();
     return (stage.matches || []).map((planned) => {
@@ -593,7 +594,7 @@ function buildPodBoard(pods: BrainSchemeStage[]): HTMLElement {
   });
   const stages = Array.from(byRound.keys()).sort((a, b) => a - b).map((round): FestGridStage => ({
     code: `round-${round}`,
-    title: `Раунд ${round}`,
+    title: S.brain.pod.round(String(round)),
     stage_type: "matches",
     matches: byRound.get(round),
   }));
@@ -620,8 +621,8 @@ function buildReseedTab(reseeds: BrainSchemeStage[]): HTMLElement {
   return wrap;
 }
 
-// buildStatsView is the sheet's «Индивидуальная статистика»: попытки, верно,
-// неверно per (player, team) over the regular questions of finished бои.
+// buildStatsView is the sheet's individual statistics: attempts, right,
+// wrong per (player, team) over the regular questions of finished matches.
 function buildStatsView(): HTMLElement {
   const bouts: StatsBout[] = [];
   for (const {code, view} of allBouts()) {
@@ -638,21 +639,21 @@ function buildStatsView(): HTMLElement {
   if (!stats.length) {
     const empty = document.createElement("p");
     empty.className = "roster-empty";
-    empty.textContent = "Пока никто не жал на кнопку.";
+    empty.textContent = S.brain.stats.empty();
     wrapper.appendChild(empty);
     return wrapper;
   }
-  // The same table ЭК's Статистика is — its name columns size to content and
+  // The same table EK's statistics is — its name columns size to content and
   // its numbers sit tight — with the buzzer's columns in place of the themes'.
   wrapper.appendChild(standingsTable({
     className: "ek-stats-table",
     columns: [
-      {label: "Игрок", kind: "name", className: "ek-stats-name ek-stats-player"},
-      {label: "Команда", kind: "name", className: "ek-stats-name"},
-      {label: "Попытки", kind: "num"},
-      {label: "Верно", kind: "num"},
-      {label: "Неверно", kind: "num", className: "ek-stats-wrong"},
-      {label: "% верных", kind: "num", className: "ek-stats-share"},
+      {label: S.brain.stats.player(), kind: "name", className: "ek-stats-name ek-stats-player"},
+      {label: S.brain.stats.team(), kind: "name", className: "ek-stats-name"},
+      {label: S.brain.stats.attempts(), kind: "num"},
+      {label: S.brain.stats.right(), kind: "num"},
+      {label: S.brain.stats.wrong(), kind: "num", className: "ek-stats-wrong"},
+      {label: S.brain.stats.share(), kind: "num", className: "ek-stats-share"},
     ],
     rows: stats.map((row) => [
       row.player,
@@ -676,9 +677,9 @@ function buildBout({code, view, planned}: BoutEntry): HTMLElement {
   table.classList.toggle("match-finished", Boolean(view.finished));
   table.dataset.match = code;
 
-  // One head row, everything on one line: the бой's буква, a team over its
+  // One head row, everything on one line: the match's letter, a team over its
   // player column, the score over the two mark columns, the other team, and
-  // the «Закончен» tick. A name wider than its column fades to a popover.
+  // the finished tick. A name wider than its column fades to a popover.
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
   const corner = document.createElement("th");
@@ -726,7 +727,7 @@ function buildBout({code, view, planned}: BoutEntry): HTMLElement {
 }
 
 // nameHead shows the seated team; an unresolved slot shows its source label
-// (Посев 5, Гр. 1-2 — the server fills it from the slot ref) muted.
+// (seed 5, group 1-2 — the server fills it from the slot ref) muted.
 function nameHead(view: BrainMatchView, side: number, planned: BrainSchemeMatch): HTMLElement {
   const th = document.createElement("th");
   th.className = "brain-name-head";
@@ -760,7 +761,7 @@ function finishHead(code: string, view: BrainMatchView): HTMLElement {
   checkbox.disabled = viewer;
   checkbox.dataset.match = code;
   const text = document.createElement("span");
-  text.textContent = "Закончен";
+  text.textContent = S.brain.bout.finished();
   label.append(checkbox, text);
   th.appendChild(label);
   return th;
@@ -806,20 +807,20 @@ function markCell(code: string, view: BrainMatchView, side: number, q: number, e
   td.dataset.match = code;
   td.dataset.side = String(side);
   td.dataset.q = String(q);
-  td.title = `${teamName(view, side)}, вопрос ${rowLabel(q, questionsFor(code))}`;
+  td.title = S.brain.mark.title(teamName(view, side), rowLabel(q, questionsFor(code)));
   return td;
 }
 
-// tiebreakControls adds/removes «П» rows — the tiebreak questions appended
-// after the base K when this бой must produce a winner.
+// tiebreakControls adds/removes tiebreak rows — the tiebreak questions appended
+// after the base K when this match must produce a winner.
 function tiebreakControls(code: string, view: BrainMatchView): HTMLElement {
   const bar = document.createElement("div");
   bar.className = "brain-controls";
   const add = document.createElement("button");
   add.type = "button";
   add.className = "btn-xs";
-  add.textContent = "+ П";
-  add.title = "Добавить вопрос перестрелки";
+  add.textContent = S.brain.tiebreak.add();
+  add.title = S.brain.tiebreak.addHint();
   add.addEventListener("click", () => {
     const state = view.state as BrainMatchState;
     const index = matchRows(view, 0).length;
@@ -841,8 +842,8 @@ function tiebreakControls(code: string, view: BrainMatchView): HTMLElement {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "btn-xs";
-    remove.textContent = "− П";
-    remove.title = "Убрать пустой вопрос перестрелки";
+    remove.textContent = S.brain.tiebreak.remove();
+    remove.title = S.brain.tiebreak.removeHint();
     remove.addEventListener("click", () => {
       sendOps(code, [
         {path: ["tiebreaks"], value: (state.tiebreaks || 0) - 1},
@@ -856,8 +857,8 @@ function tiebreakControls(code: string, view: BrainMatchView): HTMLElement {
 }
 
 
-// The группа table is crosstable.ts's, so брейн and Тройка draw one table.
-// This says only what a брейн бой is: two sides, взятые as the score.
+// The group table is crosstable.ts's, so Brain and Troika draw one table.
+// This says only what a Brain match is: two sides, taken marks as the score.
 function buildCrosstable(stages: BrainSchemeStage[]): HTMLElement {
   return buildCrosstables({
     className: "brain-groups",
@@ -925,7 +926,7 @@ function loadSeedView(): void {
     });
 }
 
-// buildSeedView is the Посев tab: the declared source, the one import button
+// buildSeedView is the seeding tab: the declared source, the one import button
 // (or the xlsx upload), and the ladder — active seeds, declines, waitlist.
 function buildSeedView(): HTMLElement {
   loadSeedView();
@@ -943,12 +944,12 @@ function buildSeedView(): HTMLElement {
     const upload = document.createElement("button");
     upload.type = "button";
     upload.className = "btn";
-    upload.textContent = "Загрузить посев из xlsx";
+    upload.textContent = S.brain.seed.upload();
     upload.disabled = seedBusy;
     upload.addEventListener("click", () => {
       const chosen = file.files?.[0];
       if (!chosen) {
-        seedError = "Выберите файл";
+        seedError = S.brain.seed.noFile();
         render({preserveScroll: true});
         return;
       }
@@ -961,7 +962,7 @@ function buildSeedView(): HTMLElement {
     const importButton = document.createElement("button");
     importButton.type = "button";
     importButton.className = "btn";
-    importButton.textContent = source === "random" ? "Провести жребий" : `Импортировать посев из ${source}`;
+    importButton.textContent = source === "random" ? S.brain.seed.draw() : S.brain.seed.importFrom(source);
     importButton.disabled = seedBusy;
     importButton.addEventListener("click", () => {
       void seedAction(() => fetch(`${route.apiBase}/seed-import/run`, {method: "POST"}));
@@ -981,7 +982,7 @@ function buildSeedView(): HTMLElement {
   if (!rows.length) {
     const empty = document.createElement("p");
     empty.className = "roster-empty";
-    empty.textContent = "Посев ещё не импортирован.";
+    empty.textContent = S.brain.seed.empty();
     wrap.appendChild(empty);
     return wrap;
   }
@@ -990,7 +991,7 @@ function buildSeedView(): HTMLElement {
   table.className = "match-table brain-seed-table";
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
-  for (const text of ["Посев", "Команда", "Город", "Место в источнике", "Отказ"]) {
+  for (const text of [S.brain.seedHead.seed(), S.brain.seedHead.team(), S.brain.seedHead.city(), S.brain.seedHead.rank(), S.brain.seedHead.declined()]) {
     const th = document.createElement("th");
     th.textContent = text;
     head.appendChild(th);
@@ -1004,7 +1005,7 @@ function buildSeedView(): HTMLElement {
     tr.classList.toggle("brain-seed-declined", Boolean(row.declined));
     const seed = document.createElement("td");
     seed.className = "number";
-    seed.textContent = row.declined ? "—" : row.waitlist ? "запас" : String(row.seedNumber || "");
+    seed.textContent = row.declined ? "—" : row.waitlist ? S.brain.seed.waitlist() : String(row.seedNumber || "");
     const name = document.createElement("td");
     name.className = "brain-seed-name";
     name.textContent = row.name || "";
@@ -1067,8 +1068,8 @@ function cellNode(code: string, side: number, q: number): HTMLElement | null {
   );
 }
 
-// The selection treats the бої laid side by side as one sheet: row = the
-// question, col = бой × 2 + side. The widget (shared with КСИ) then gives
+// The selection treats the matches laid side by side as one sheet: row = the
+// question, col = match × 2 + side. The widget (shared with KSI) then gives
 // click/drag/shift ranges, copy/paste and touch tap-cycling.
 function cellCoord(code: string, side: number, q: number): CellCoord | null {
   const idx = allBouts().findIndex((bout) => bout.code === code);
@@ -1084,7 +1085,7 @@ function totalCols(): number {
   return allBouts().length * 2;
 }
 
-// applyMarkEdits updates the local views and DOM, then sends one PATCH per бой.
+// applyMarkEdits updates the local views and DOM, then sends one PATCH per match.
 function applyMarkEdits(edits: CellEdit[]): void {
   const opsByCode = new Map<string, Array<{path: Array<string | number>; value: unknown}>>();
   for (const edit of edits) {
@@ -1112,8 +1113,8 @@ function cellAt(coord: CellCoord | null): HTMLElement | null {
   return at ? cellNode(at.code, at.side, coord.row) : null;
 }
 
-// The бои laid side by side are one sheet: row = the question, col = бой × 2 +
-// side; a бой with tiebreak questions is taller than its neighbours.
+// The matches laid side by side are one sheet: row = the question, col = match × 2 +
+// side; a match with tiebreak questions is taller than its neighbours.
 const cursor = createSheetCursor({
   root: brainRoot,
   rows: (col) => {

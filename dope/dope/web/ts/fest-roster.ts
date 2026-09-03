@@ -1,9 +1,10 @@
-// Составы — the fest-level team→players list, fetched once per fest and drawn
+// The roster — the fest-level team→players list, fetched once per fest and drawn
 // as the roster table with rating.chgk.info links.
 
 import {nameNode, td} from "./cells.js";
 import {resultsTeamCell, standingsTable} from "./standings.js";
 import {markNameOverflow} from "./widgets.js";
+import S from "./i18nstrings_ru_gen.js";
 
 export interface RosterPlayer {
   name?: string;
@@ -18,7 +19,7 @@ export interface RosterTeam {
   players?: Array<RosterPlayer | string>;
 }
 
-// Roster ("Составы") — the fest-level team→players list, shared by every game
+// Roster — the fest-level team→players list, shared by every game
 // page (EK/OD/KSI, host and viewer). The data is the same for all games in a
 // fest, so it is fetched once per festID and cached for the page's lifetime.
 const rosterCache = new Map<string | number, Promise<RosterTeam[]>>();
@@ -45,7 +46,7 @@ export function fetchFestRoster(festID: string | number | null | undefined): Pro
   return promise;
 }
 
-// rating.chgk.info deep links: team/player names in the Составы view link to
+// rating.chgk.info deep links: team/player names in the roster view link to
 // their rating pages when a rating id is known.
 const RATING_TEAM_URL = "https://rating.chgk.info/teams/";
 const RATING_PLAYER_URL = "https://rating.chgk.info/players/";
@@ -69,7 +70,7 @@ export function buildRosterTable(teams: RosterTeam[] | null | undefined): HTMLEl
   if (list.length === 0) {
     const empty = document.createElement("p");
     empty.className = "roster-empty";
-    empty.textContent = "Составы пока не заданы.";
+    empty.textContent = S.fest.roster.empty();
     wrapper.appendChild(empty);
     return wrapper;
   }
@@ -101,8 +102,8 @@ export function buildRosterTable(teams: RosterTeam[] | null | undefined): HTMLEl
     className: "roster-results-table",
     columns: [
       ...(hasNumbers ? [{label: "№", kind: "place" as const}] : []),
-      {label: "Команда", kind: "name"},
-      {label: "Игроки", className: "roster-players"},
+      {label: S.fest.roster.colTeam(), kind: "name"},
+      {label: S.fest.roster.colPlayers(), className: "roster-players"},
     ],
     rows: list.map((team) => [
       ...(hasNumbers ? [Number(team.number) > 0 ? team.number : ""] : []),
@@ -116,7 +117,7 @@ export function buildRosterTable(teams: RosterTeam[] | null | undefined): HTMLEl
   return wrapper;
 }
 
-// buildRosterView returns a container node for the "Составы" tab that fills
+// buildRosterView returns a container node for the roster tab that fills
 // itself asynchronously: it shows a loading line, fetches the fest roster, then
 // swaps in the table (or an error line on failure). Safe to drop straight into
 // a tab pane by any page — no roster data needs to be threaded through.
@@ -124,7 +125,7 @@ export function buildRosterView(festID: string | number | null | undefined): HTM
   const container = document.createElement("div");
   const loading = document.createElement("p");
   loading.className = "roster-empty";
-  loading.textContent = "Загрузка составов…";
+  loading.textContent = S.fest.roster.loading();
   container.appendChild(loading);
 
   fetchFestRoster(festID)
@@ -147,7 +148,7 @@ export function buildRosterView(festID: string | number | null | undefined): HTM
     .catch(() => {
       const error = document.createElement("p");
       error.className = "roster-empty";
-      error.textContent = "Не удалось загрузить составы.";
+      error.textContent = S.fest.roster.loadFailed();
       container.replaceChildren(error);
     });
   return container;

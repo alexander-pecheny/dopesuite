@@ -3,10 +3,13 @@ package replay
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
+
+	dopestrings "dope/i18nstrings"
 )
 
-// Result is what dope made of a бой for one participant.
+// Result is what dope made of a Match for one participant.
 type Result struct {
 	Place float64
 	Total int
@@ -16,23 +19,23 @@ type Result struct {
 // so the same script can run against a real server, an in-process one, or a
 // stub — and so nothing in here knows any SQL.
 type Game interface {
-	// Seat writes a Draw: these participants take the бой's slots, in order.
+	// Seat writes a Draw: these participants take the Match's slots, in order.
 	Seat(at Coord, names []string) error
 	// Seats reports whom the Structure has seated, in slot order.
 	Seats(at Coord) ([]string, error)
-	// Play enters one participant's side of a бой.
+	// Play enters one participant's side of a Match.
 	Play(at Coord, name string, play Play) error
 	// Pin sets a place the hosts assigned by hand, overriding what the marks
-	// score to. Called before Finish, so the бой closes on the host's ruling.
+	// score to. Called before Finish, so the Match closes on the host's ruling.
 	Pin(at Coord, name string, place float64) error
-	// Finish closes a бой so its results reach the rounds that follow.
+	// Finish closes a Match so its results reach the rounds that follow.
 	Finish(at Coord) error
 	// Outcome reports the place and Σ dope computed, by participant.
 	Outcome(at Coord) (map[string]Result, error)
 }
 
 // LineupWriter is the half of Game a transcript with [составы] needs: register
-// each team's players before the first бой, so the theme players have somebody
+// each team's players before the first Match, so the theme players have somebody
 // to be. Optional — a Game that cannot take lineups fails such a script.
 type LineupWriter interface {
 	Lineups(lineups []Lineup) error
@@ -46,14 +49,14 @@ type StatsReader interface {
 }
 
 // StandingsReader is the half of Game a transcript with [таблица] needs: the
-// table dope ranked for a Block, or a Group in it, as rows of the место it
+// table dope ranked for a Block, or a Group in it, as rows of the place it
 // shows (shared when level) and who holds it. Optional, like StatsReader.
 type StandingsReader interface {
 	Standings(at Coord) ([]TableRow, error)
 }
 
-// Play is what one participant did in a бой, in whichever of the two shapes the
-// game uses. It carries the play data alone — the sheet's Σ and место stay out,
+// Play is what one participant did in a Match, in whichever of the two shapes the
+// game uses. It carries the play data alone — the sheet's Σ and place stay out,
 // so a Game cannot quietly apply the answer it is supposed to be checked against.
 // Players, when the transcript carries them, name who played each theme,
 // aligned with Themes.
@@ -62,7 +65,7 @@ type Play struct {
 	Players   []string
 	Questions []Answer
 	Counts    [][]int
-	// Shootout is the net перестрелка points, zero for a seat that played none.
+	// Shootout is the net shootout points, zero for a seat that played none.
 	Shootout int
 }
 
@@ -82,18 +85,19 @@ func (f Finding) String() string {
 	if f.Participant != "" {
 		who = ", " + f.Participant
 	}
-	return fmt.Sprintf("%s%s: %s — лист %s, у нас %s", f.At, who, f.Field, f.Sheet, f.Ours)
+	return dopestrings.Default.Replay.Run.Finding(fmt.Sprint(f.At), who, f.Field, f.Sheet, f.Ours)
 }
 
 // Run replays a transcript against a Game and reports where the two disagree.
 //
-// It plays бои in written order and closes each one before the next, because a
+// It plays Matches in written order and closes each one before the next, because a
 // round left open seats the round after it from stale results. A seating the
 // script marks as a Draw is written; every other seating is checked.
 //
 // The error return is for a Game that could not be driven at all. A
 // disagreement is not an error — it is the output.
 func Run(script Script, game Game) ([]Finding, error) {
+	s := dopestrings.Default
 	silenced := make(map[string]*Override, len(script.Overrides))
 	used := map[string]bool{}
 	for i := range script.Overrides {
@@ -103,7 +107,7 @@ func Run(script Script, game Game) ([]Finding, error) {
 	var findings []Finding
 	// An override silences the exact disagreement it was written about. One
 	// naming a participant covers only that participant; one without a name
-	// covers the бой, which is what a seating ruling needs. Either way the key
+	// covers the whole Match, which is what a seating ruling needs. Either way the key
 	// is recorded as used, so an override that matched nothing can be reported
 	// rather than sitting on the discrepancies page as a reviewed deviation.
 	report := func(f Finding) {
@@ -146,7 +150,7 @@ func Run(script Script, game Game) ([]Finding, error) {
 			if !sameSeating(seated, names) {
 				report(Finding{
 					At:    bout.At,
-					Field: "посадка",
+					Field: s.Replay.Run.FieldSeating(),
 					Sheet: strings.Join(names, ", "),
 					Ours:  strings.Join(seated, ", "),
 					Line:  bout.Line,
@@ -174,19 +178,19 @@ func Run(script Script, game Game) ([]Finding, error) {
 			return findings, fmt.Errorf("%s: итог боя: %w", bout.At, err)
 		}
 		// Whom dope scored that the sheet never seated. Checking only the sheet's
-		// own names would accept a бой with an extra participant in it.
+		// own names would accept a Match with an extra participant in it.
 		for name := range outcome {
 			if !hasSeat(bout.Seats, name) {
-				report(Finding{At: bout.At, Field: "лишний участник", Participant: name,
-					Sheet: "не сидел", Ours: fmt.Sprintf("Σ%d, место %s", outcome[name].Total, place(outcome[name].Place)),
+				report(Finding{At: bout.At, Field: s.Replay.Run.FieldExtra(), Participant: name,
+					Sheet: s.Replay.Run.NotSeated(), Ours: s.Replay.Run.SheetScore(strconv.Itoa(outcome[name].Total), place(outcome[name].Place)),
 					Line: bout.Line})
 			}
 		}
 		for _, seat := range bout.Seats {
 			got, ok := outcome[seat.Name]
 			if !ok {
-				report(Finding{At: bout.At, Field: "итог", Participant: seat.Name,
-					Sheet: fmt.Sprintf("Σ%d, место %s", seat.Total, place(seat.Place)), Ours: "ничего", Line: seat.Line})
+				report(Finding{At: bout.At, Field: s.Replay.Run.FieldOutcome(), Participant: seat.Name,
+					Sheet: s.Replay.Run.SheetScore(strconv.Itoa(seat.Total), place(seat.Place)), Ours: s.Replay.Run.Nothing(), Line: seat.Line})
 				continue
 			}
 			if got.Total != seat.Total {
@@ -197,12 +201,12 @@ func Run(script Script, game Game) ([]Finding, error) {
 			// check that dope stored what it was told; an unranked one the sheet
 			// never printed, so there is nothing to hold dope to.
 			if got.Place != seat.Place && !seat.Pinned && !seat.Unranked {
-				report(Finding{At: bout.At, Field: "место", Participant: seat.Name,
+				report(Finding{At: bout.At, Field: s.Replay.Run.FieldPlace(), Participant: seat.Name,
 					Sheet: place(seat.Place), Ours: place(got.Place), Line: seat.Line})
 			}
 		}
 	}
-	// Статистика is asserted the way Σ and место are, once, after the last бой:
+	// Stats are asserted the way Σ and place are, once, after the last Match:
 	// dope aggregates the game itself and has to agree with the sheet player by
 	// player — including players only one side knows about.
 	if len(script.Stats) > 0 {
@@ -226,8 +230,8 @@ func Run(script Script, game Game) ([]Finding, error) {
 			sheetKeys[statKey(want)] = true
 			got, ok := oursBy[statKey(want)]
 			if !ok {
-				report(Finding{At: StatsCoord, Field: "статистика", Participant: want.Player,
-					Sheet: fmt.Sprint(want.Values), Ours: "ничего", Line: want.Line})
+				report(Finding{At: StatsCoord, Field: s.Replay.Run.FieldStats(), Participant: want.Player,
+					Sheet: fmt.Sprint(want.Values), Ours: s.Replay.Run.Nothing(), Line: want.Line})
 				continue
 			}
 			for i := range want.Values {
@@ -239,13 +243,13 @@ func Run(script Script, game Game) ([]Finding, error) {
 		}
 		for _, stat := range ours {
 			if !sheetKeys[statKey(stat)] {
-				report(Finding{At: StatsCoord, Field: "статистика", Participant: stat.Player,
-					Sheet: "нет строки", Ours: fmt.Sprint(stat.Values)})
+				report(Finding{At: StatsCoord, Field: s.Replay.Run.FieldStats(), Participant: stat.Player,
+					Sheet: s.Replay.Run.NoRow(), Ours: fmt.Sprint(stat.Values)})
 			}
 		}
 	}
 
-	// A table is asserted like статистика: once, both ways.
+	// A table is asserted like the stats: once, both ways.
 	if len(script.Tables) > 0 {
 		reader, ok := game.(StandingsReader)
 		if !ok {
@@ -265,17 +269,17 @@ func Run(script Script, game Game) ([]Finding, error) {
 				listed[want.Name] = true
 				got, ok := oursBy[want.Name]
 				if !ok {
-					report(Finding{At: table.At, Field: "таблица", Participant: want.Name,
-						Sheet: place(want.Place), Ours: "нет строки", Line: want.Line})
+					report(Finding{At: table.At, Field: s.Replay.Run.FieldTable(), Participant: want.Name,
+						Sheet: place(want.Place), Ours: s.Replay.Run.NoRow(), Line: want.Line})
 				} else if got != want.Place {
-					report(Finding{At: table.At, Field: "место", Participant: want.Name,
+					report(Finding{At: table.At, Field: s.Replay.Run.FieldPlace(), Participant: want.Name,
 						Sheet: place(want.Place), Ours: place(got), Line: want.Line})
 				}
 			}
 			for _, row := range ours {
 				if !listed[row.Name] {
-					report(Finding{At: table.At, Field: "таблица", Participant: row.Name,
-						Sheet: "нет строки", Ours: place(row.Place), Line: table.Line})
+					report(Finding{At: table.At, Field: s.Replay.Run.FieldTable(), Participant: row.Name,
+						Sheet: s.Replay.Run.NoRow(), Ours: place(row.Place), Line: table.Line})
 				}
 			}
 		}
@@ -289,8 +293,8 @@ func Run(script Script, game Game) ([]Finding, error) {
 			continue
 		}
 		findings = append(findings, Finding{
-			At: over.At, Field: "лишнее расхождение", Participant: over.Participant,
-			Sheet: over.Reason, Ours: "здесь всё сошлось", Line: over.Line,
+			At: over.At, Field: s.Replay.Run.FieldUnneeded(), Participant: over.Participant,
+			Sheet: over.Reason, Ours: s.Replay.Run.AllAgreed(), Line: over.Line,
 		})
 	}
 	sort.SliceStable(findings, func(a, b int) bool { return findings[a].Line < findings[b].Line })
@@ -311,7 +315,7 @@ func hasSeat(seats []Seat, name string) bool {
 }
 
 // sameSeating compares who is at the table, not in what order: a Protocol reads
-// its seats by participant, and столы are dealt by lot within a бой.
+// its seats by participant, and tables are dealt by lot within a Match.
 func sameSeating(ours, sheet []string) bool {
 	if len(ours) != len(sheet) {
 		return false

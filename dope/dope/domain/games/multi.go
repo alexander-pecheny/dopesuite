@@ -9,26 +9,27 @@ import (
 	"strings"
 )
 
-// Мультиигры (Даугавпилс, медиаигры, раздаточные конкурсы) pure domain logic.
+// Multi (Daugavpils, media games, handout contests) pure domain logic.
 //
 // Several small games in one sitting: every team gets the same sheets, one per
-// мини-игра, and solves them at the same time. A cell holds the points that
+// minigame, and solves them at the same time. A cell holds the points that
 // task earned — not a mark — because a task may be worth anything and may be
-// solved by halves, and Итог is their plain sum with a subtotal per мини-игра.
+// solved by halves, and the total is their plain sum with a subtotal per
+// minigame.
 //
-// What a cell may hold is the мини-игра's own business, so the scheme declares
+// What a cell may hold is the minigame's own business, so the scheme declares
 // a domain per column: a set of values or a range of them. That is validation
 // and it is the cell editor — a domain of two or three values is a cell you
 // click through, a wider one is a cell you type into.
 
 // MultiColumn is one task: the values its cell may hold, ascending, and the
-// блок of the sheet it stands in — «|» in the spec closes one.
+// block of the sheet it stands in — «|» in the spec closes one.
 type MultiColumn struct {
 	Values []int `json:"values"`
 	Block  int   `json:"block,omitempty"`
 }
 
-// Max is the most a task can pay — what the sheet prints as its номинал.
+// Max is the most a task can pay — what the sheet prints as its nominal value.
 func (c MultiColumn) Max() int {
 	max := 0
 	for i, v := range c.Values {
@@ -49,19 +50,20 @@ func (c MultiColumn) Signed() bool {
 	return false
 }
 
-// MultiGame is one мини-игра: its name, its tasks in order, and whether it
+// MultiGame is one minigame: its name, its tasks in order, and whether it
 // pays raw points or is scored against the best result in it.
 type MultiGame struct {
 	Name    string        `json:"name"`
 	Columns []MultiColumn `json:"columns"`
-	// Normalized: the мини-игра contributes «сколько от лучшего», out of a
-	// hundred, rather than its own points — written «→0..100». It is what lets
-	// мини-игры of quite different scales weigh the same in the Итог: a медиа-
-	// эрудит worth 1570 and a песенный конкурс worth 57 both top out at 100.
+	// Normalized: the minigame contributes its score as a share of the best
+	// result, out of a hundred, rather than its own points — written
+	// «→0..100». It is what lets minigames of quite different scales weigh the
+	// same in the total: a media quiz worth 1570 and a song contest worth 57
+	// both top out at 100.
 	Normalized bool `json:"normalized,omitempty"`
 }
 
-// MultiNormalMax is what the best result in a normalised мини-игра is worth.
+// MultiNormalMax is what the best result in a normalised minigame is worth.
 const MultiNormalMax = 100.0
 
 // multiRangeSpan caps a range so a typo — {0-100000} — is a complaint rather
@@ -75,8 +77,8 @@ var multiSpecRe = regexp.MustCompile(`^\{([^}]*)\}(?:[xх]([0-9]+))?$`)
 var multiNormalRe = regexp.MustCompile(`\s*(?:→|->)\s*0\.\.100\s*$`)
 var multiRangeRe = regexp.MustCompile(`^(-?[0-9]+)-(-?[0-9]+)$`)
 
-// ParseMultiGames reads the мини-игра spec a host writes: one line per game,
-// `Имя: {домен}xN {домен}…`, the specs of a line concatenating into its
+// ParseMultiGames reads the minigame spec a host writes: one line per game,
+// `Name: {values}xN {domain}…`, the specs of a line concatenating into its
 // columns. Blank lines and # comments are skipped.
 func ParseMultiGames(src string) ([]MultiGame, error) {
 	var games []MultiGame
@@ -204,15 +206,15 @@ func MultiSigned(games []MultiGame) bool {
 	return false
 }
 
-// MultiScheme is the game document's shape: its мини-игры and, when a fest
-// wants one, the comparators that break a tie on Итог.
+// MultiScheme is the game document's shape: its minigames and, when a fest
+// wants one, the comparators that break a tie on the total.
 type MultiScheme struct {
 	Minigames []MultiGame `json:"minigames"`
 	Sorting   []string    `json:"sorting"`
 }
 
 // MultiState is the persisted state JSON: the participants and one cell grid
-// per мини-игра, each row a participant in participants order.
+// per minigame, each row a participant in participants order.
 type MultiState struct {
 	Participants []KSIParticipant `json:"participants"`
 	Declined     map[string]bool  `json:"declined"`
@@ -222,7 +224,7 @@ type MultiState struct {
 	Finished bool `json:"finished"`
 }
 
-// MultiEmptyGameJSON builds the pristine scheme/state for a Мультиигры game.
+// MultiEmptyGameJSON builds the pristine scheme/state for a Multi game.
 func MultiEmptyGameJSON(slug, title string, games []MultiGame, sorting []string) ([]byte, []byte) {
 	scheme := map[string]any{
 		"schemaVersion": 2,
@@ -247,9 +249,9 @@ func MultiEmptyGameJSON(slug, title string, games []MultiGame, sorting []string)
 }
 
 // MultiResultsTeam is one ranked team: its participant index, shared place,
-// Итог, Σ+ and, per мини-игра, what it contributed and what it scored raw.
-// The two differ only where a мини-игра is normalised, and both are shown —
-// the sheet reads «сколько набрал» beside «сколько это стоило».
+// total, Σ+ and, per minigame, what it contributed and what it scored raw.
+// The two differ only where a minigame is normalised, and both are shown —
+// the sheet reads what was earned beside what it cost.
 type MultiResultsTeam struct {
 	Index int
 	Place float64
@@ -259,10 +261,10 @@ type MultiResultsTeam struct {
 	Raw   []int
 }
 
-// ParseMultiSorting reads the comparators a фест breaks a tie on Итог with,
-// checked against what these мини-игры measure — a name nobody counts would
-// otherwise surface as an unranked table on the day. Blank is no comparator at
-// all, which leaves equal totals sharing a place.
+// ParseMultiSorting reads the comparators a fest breaks a tie on the total
+// with, checked against what these minigames measure — a name nobody counts
+// would otherwise surface as an unranked table on the day. Blank is no
+// comparator at all, which leaves equal totals sharing a place.
 func ParseMultiSorting(minigames []MultiGame, raw string) ([]string, error) {
 	known := map[string]bool{}
 	for _, name := range MultiMetricNames(minigames) {
@@ -283,8 +285,8 @@ func ParseMultiSorting(minigames []MultiGame, raw string) ([]string, error) {
 	return order, nil
 }
 
-// MultiMetricNames is what a scheme may rank a Мультиигры game on: Итог, Σ+
-// and one name per мини-игра, numbered from 1 in the order they are played.
+// MultiMetricNames is what a scheme may rank a Multi game on: the total, Σ+
+// and one name per minigame, numbered from 1 in the order they are played.
 func MultiMetricNames(games []MultiGame) []string {
 	names := []string{"total", "plus"}
 	for i := range games {
@@ -293,8 +295,8 @@ func MultiMetricNames(games []MultiGame) []string {
 	return names
 }
 
-// ComputeMultiResults scores a Мультиигры game from its scheme and state.
-// Cells outside a мини-игра's declared width are ignored: the scheme is what
+// ComputeMultiResults scores a Multi game from its scheme and state.
+// Cells outside a minigame's declared width are ignored: the scheme is what
 // says how wide a sheet is, and a stale grid must not pay.
 func ComputeMultiResults(schemeJSON, stateJSON string) ([]MultiResultsTeam, error) {
 	var scheme MultiScheme
@@ -342,11 +344,11 @@ func ComputeMultiResults(schemeJSON, stateJSON string) ([]MultiResultsTeam, erro
 		ranked = append(ranked, team)
 	}
 
-	// A normalised мини-игра is scored against the best result in it — and the
-	// best among the teams in the зачёт, since a team that refused to play
-	// cannot set the scale for everyone else. Below nought is nought: a team
-	// that finished on minus scores nothing for that мини-игра rather than
-	// dragging its Итог down.
+	// A normalised minigame is scored against the best result in it — and the
+	// best among the teams counted in the standings, since a team that refused
+	// to play cannot set the scale for everyone else. Below nought is nought:
+	// a team that finished on minus scores nothing for that minigame rather
+	// than dragging its total down.
 	best := make([]int, len(scheme.Minigames))
 	for _, team := range ranked {
 		for g, raw := range team.Raw {
@@ -406,8 +408,8 @@ func ComputeMultiResults(schemeJSON, stateJSON string) ([]MultiResultsTeam, erro
 		return ranked[i].Index < ranked[j].Index
 	})
 	// A shared place is the mean of the places it covers, as everywhere in
-	// dope: место is what a Structure pays очки on, and splitting a tie the
-	// game did not break would invent a difference.
+	// dope: a place is what a Structure pays points on, and splitting a tie
+	// the game did not break would invent a difference.
 	for start := 0; start < len(ranked); {
 		end := start + 1
 		for end < len(ranked) && same(ranked[end], ranked[start]) {

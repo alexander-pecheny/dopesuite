@@ -57,7 +57,7 @@ export function remember(boardId: number, boardName: string, names: ReadonlyArra
   write(store);
 }
 
-// forget drops a board's names. Wired to «Забыть пароль доски»: once the DK is
+// forget drops a board's names. Wired to the "Forget board passphrase" action: once the DK is
 // gone the board's content is ciphertext with no key on this device, and its
 // names should not still be sitting in the clear.
 export function forget(boardId: number): void {

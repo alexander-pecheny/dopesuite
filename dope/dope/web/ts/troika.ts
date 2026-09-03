@@ -1,9 +1,9 @@
-// The Тройка page (ADR-0001): a bracket of head-to-head бои between threes.
-// The Протоколы tab draws each бой as two blocks of three chair rows across
-// темы of three вопросы, with a «рассадка» column before every тема a side
+// The Troika page (ADR-0001): a bracket of head-to-head bouts between threes.
+// The protocols tab draws each bout as two blocks of three chair rows across
+// themes of three questions, with a seating column before every theme a side
 // turned round at; the group tabs are crosstable.ts's table with the
-// регламент's рейтинговый балл in front of the canon columns. Edits go per
-// бой (PATCH /matches/{code}/state) and sync over match: scopes. A self-booting side-effect module bundled by
+// regulations' rating ball in front of the canon columns. Edits go per
+// bout (PATCH /matches/{code}/state) and sync over match: scopes. A self-booting side-effect module bundled by
 // pages/troika.ts.
 
 import {cssEscape, option, sameArray, td, th} from "./cells.js";
@@ -29,6 +29,7 @@ import * as troika from "./troika-protocol.js";
 import type {Mark, TroikaState} from "./troika-protocol.js";
 import {buildTroikaStatsTable, computeTroikaPlayerStats} from "./troika-stats.js";
 import type {TroikaBout} from "./troika-stats.js";
+import S from "./i18nstrings_ru_gen.js";
 
 interface PageGlobals {
   __GAME_INIT__?: GameInitLike | null;
@@ -100,7 +101,7 @@ const shell = mountGamePage({
   apiBase: route.apiBase,
   init,
   downloads: false,
-  chrome: () => ({festTitle: fest?.title || "", gameTitle: fest?.gameName || scheme.title || "Тройка"}),
+  chrome: () => ({festTitle: fest?.title || "", gameTitle: fest?.gameName || scheme.title || S.troika.title()}),
   cursorKinds: {
     answer: {selector: ".troika-cell", keys: ["match", "side", "theme", "q", "chair"]},
     finish: {selector: ".finish-toggle", keys: ["match"]},
@@ -108,9 +109,8 @@ const shell = mountGamePage({
   activeCursorElement: () => cursor.activeCell,
 });
 const {viewer, staticMode, scopeGameID, indicator, viewerCounter} = shell;
-
-// Long team names fade at their column and carry a popover, in the группа
-// tables and the Сетка's boxes alike.
+// Long team names fade at their column and carry a popover, in the group
+// tables and the fest grid's boxes alike.
 createFloatingPopover({root, specs: [
   {trigger: ".results-team-truncated", popover: ".results-team-name-popover", anchor: ".results-team-name"},
   {trigger: ".grid-slot-team-truncated", popover: ".grid-slot-team-popover", anchor: ".grid-slot-team-name"},
@@ -256,8 +256,7 @@ const writer = createScopedWriter({
 function patch(code: string, path: Array<string | number>, value: unknown): void {
   writer.patch(matchScope(code), path, value);
 }
-
-// === the протокол sheet ===
+// === the protocol sheet ===
 
 interface BoutEntry {
   code: string;
@@ -281,12 +280,12 @@ function stageBouts(stage: SchemeStage): BoutEntry[] {
 }
 
 function seatName(view: TroikaMatchView, side: number): string {
-  return view.participants?.[side]?.name || `Команда ${side + 1}`;
+  return view.participants?.[side]?.name || S.troika.team.fallback(String(side + 1));
 }
 
 // boutRoster is the three (or more) people a side may field. The server sends
 // each seat's roster with real player ids (store.SeatsPlayers), which is what
-// a кресло records — a name matched off the фест registry would not survive
+// a chair records — a name matched off the fest registry would not survive
 // two players sharing one.
 function boutRoster(view: TroikaMatchView, side: number): Array<{id: number; name: string}> {
   return (view.participants?.[side]?.roster || [])
@@ -294,9 +293,9 @@ function boutRoster(view: TroikaMatchView, side: number): Array<{id: number; nam
     .map((player) => ({id: Number(player.id), name: player.name || ""}));
 }
 
-// One бой: a block per side of three chair rows by темы × three вопросы, with
-// «Тема N (за V)» over each block and a running Σ beside it. A «рассадка»
-// column of chair pickers opens the sheet and stands again before every тема
+// One bout: a block per side of three chair rows by themes × three questions, with
+// a numbered theme head with its value over each block and a running Σ beside it. A seating
+// column of chair pickers opens the sheet and stands again before every theme
 // where a side turned round.
 function buildBout(bout: BoutEntry): HTMLElement {
   const state = stateOf(bout.code);
@@ -317,12 +316,12 @@ function buildBout(bout: BoutEntry): HTMLElement {
 
   const thead = document.createElement("thead");
   const themeRow = document.createElement("tr");
-  themeRow.appendChild(th("Команда", "troika-team-head"));
+  themeRow.appendChild(th(S.troika.protocol.team(), "troika-team-head"));
   state.values.forEach((value, t) => {
-    // The gap parts темы BEFORE any «Рассадка» column, which sits flush
-    // against the тема it seats.
+    // The gap parts themes BEFORE any seating column, which sits flush
+    // against the theme it seats.
     if (t > 0) themeRow.appendChild(th("", "gap-head"));
-    if (seatsAt.has(t)) themeRow.appendChild(th("Рассадка", "player-cell"));
+    if (seatsAt.has(t)) themeRow.appendChild(th(S.troika.protocol.seating(), "player-cell"));
     themeRow.appendChild(th(themeHead(bout, t, value, seatsAt.has(t)), "theme-block",
       {colSpan: troika.THEME_QUESTIONS}));
   });
@@ -360,8 +359,8 @@ function buildBout(bout: BoutEntry): HTMLElement {
   return box;
 }
 
-// The «Закончен» tick: a finished бой's sheet is read-only until the host
-// unticks it — the server rejects edits to a finished бой.
+// The finished tick: a finished bout's sheet is read-only until the host
+// unticks it — the server rejects edits to a finished bout.
 function finishToggle(bout: BoutEntry): CellContent {
   const label = document.createElement("label");
   label.className = "finish-control";
@@ -377,12 +376,12 @@ function finishToggle(bout: BoutEntry): CellContent {
       {path: ["finished"], value: checkbox.checked});
   });
   const text = document.createElement("span");
-  text.textContent = "Закончен";
+  text.textContent = S.troika.bout.finished();
   label.append(checkbox, text);
   return label;
 }
 
-// seatOpen is the темы a host has opened a «рассадка» column at without yet
+// seatOpen is the themes a host has opened a seating column at without yet
 // changing the seating there; once it differs, the column stands on its own.
 const seatOpen = new Map<string, Set<number>>();
 
@@ -394,22 +393,22 @@ function seatColumns(bout: BoutEntry): Set<number> {
   return at;
 }
 
-// The тема's head with, for a host, the рассадка control before the words: a
-// ⇅ opens a «Рассадка» column before this тема, and while one stands there
-// the same spot is the × that undoes the смена. No quiet toggling — a column
+// The theme's head with, for a host, the seating control before the words: a
+// ⇅ opens a seating column before this theme, and while one stands there
+// the same spot is the × that undoes the change. No quiet toggling — a column
 // is exactly where the seating changes, and removing one is an edit.
 function themeHead(bout: BoutEntry, t: number, value: number, has: boolean): CellContent {
-  const label = `Тема ${t + 1} (за ${value})`;
+  const label = S.troika.theme.head(String(t + 1), String(value));
   if (viewer || bout.view.finished || t === 0) return label;
   const button = document.createElement("button");
   button.type = "button";
   button.className = "btn btn-xs troika-seat-button";
   if (has) {
-    button.title = `Убрать смену рассадки перед темой ${t + 1}`;
+    button.title = S.troika.theme.unseat(String(t + 1));
     button.replaceChildren(icon("x"));
     button.addEventListener("click", () => deleteTurn(bout, t));
   } else {
-    button.title = `Поменять рассадку с темы ${t + 1}`;
+    button.title = S.troika.theme.seat(String(t + 1));
     button.replaceChildren(icon("arrow-up-down"));
     button.addEventListener("click", () => {
       const opened = seatOpen.get(bout.code) || new Set<number>();
@@ -428,9 +427,9 @@ function orderAt(state: TroikaState, side: number, t: number): number[] {
   return order;
 }
 
-// deleteTurn undoes the смена рассадки before тема t: every тема from t that
-// still holds the order set there goes back to the тема before's, so a later
-// смена is left exactly as it was played.
+// deleteTurn undoes the seating change before theme t: every theme from t that
+// still holds the order set there goes back to the theme before's, so a later
+// change is left exactly as it was played.
 function deleteTurn(bout: BoutEntry, t: number): void {
   const state = stateOf(bout.code);
   for (let side = 0; side < 2; side++) {
@@ -446,16 +445,16 @@ function deleteTurn(bout: BoutEntry, t: number): void {
   render();
 }
 
-// The chair cell names who is sitting there from the тема its column stands
-// before. Seats are a fact per тема, so setting one rewrites that тема and
-// every one after it, leaving the темы already played exactly as they were.
+// The chair cell names who is sitting there from the theme its column stands
+// before. Seats are a fact per theme, so setting one rewrites that theme and
+// every one after it, leaving the themes already played exactly as they were.
 function chairPicker(bout: BoutEntry, side: number, from: number, chair: number,
   roster: Array<{id: number; name: string}>, editable: boolean): HTMLElement {
   const state = stateOf(bout.code);
   const select = document.createElement("select");
   select.className = "troika-chair-select";
   select.disabled = !editable;
-  select.title = chair === troika.CHAIRS - 1 ? "Коренной" : `Пристяжной ${chair + 1}`;
+  select.title = chair === troika.CHAIRS - 1 ? S.troika.chair.lead() : S.troika.chair.outrider(String(chair + 1));
   const current = troika.chairAt(state, side, from, chair);
   select.appendChild(option(0, "—"));
   for (const player of roster) {
@@ -493,9 +492,9 @@ function paintMark(cell: HTMLElement, mark: Mark): void {
 
 // === the cursor ===
 
-// The sheet the cursor walks is every бой of the tab stacked: a row is one
-// chair of one side of one бой, a column one вопрос. The columns are uniform
-// within a бой and may differ between them, which is what the ragged geometry
+// The sheet the cursor walks is every bout of the tab stacked: a row is one
+// chair of one side of one bout, a column one question. The columns are uniform
+// within a bout and may differ between them, which is what the ragged geometry
 // is for.
 function sheetBouts(): BoutEntry[] {
   const tab = tabs().find((entry) => entry.key === activeTab);
@@ -570,7 +569,7 @@ function applyMarks(edits: CellEdit[]): void {
   for (const code of touched) refreshTotals(code);
 }
 
-// refreshTotals repaints the Σ a бой's cells feed rather than the sheet, so an
+// refreshTotals repaints the Σ a bout's cells feed rather than the sheet, so an
 // edit does not move the cursor out from under the host.
 function refreshTotals(code: string): void {
   const state = stateOf(code);
@@ -603,13 +602,13 @@ function buildProtocols(stages: SchemeStage[]): HTMLElement {
   return wrap;
 }
 
-// Троечка's регламент ranks on the рейтинговый балл first, then личная
-// встреча, забитые and разница — so its table shows the балл in front of the
+// Troika's regulations rank on the rating ball first, then the head-to-head
+// comparator, taken and the difference — so its table shows the ball in front of the
 // canon columns the crosstable already draws.
 function buildGroups(stages: SchemeStage[]): HTMLElement {
   return buildCrosstables({
     className: "troika-groups",
-    columns: [{label: "Р", metric: "rating"}, ...CANON_COLUMNS],
+    columns: [{label: S.troika.groups.rating(), metric: "rating"}, ...CANON_COLUMNS],
     groups: stages.filter((stage) => stageKind(stage) === "rr").map((stage) => ({
       title: groupLabel(stage as StageRef),
       entrants: (stage.config?.entrants || []).map(crossSlot),
@@ -687,7 +686,7 @@ function render(): void {
   const tab = tabs().find((entry) => entry.key === activeTab);
   const node = buildTab(tab);
   root.replaceChildren(node);
-  // Группы and бои wrap into the frame's width rather than pushing the page sideways.
+  // Groups and bouts wrap into the frame's width rather than pushing the page sideways.
   root.classList.toggle("fits-frame", tab?.kind !== "grid");
   root.classList.toggle("grid-host", Boolean(node.querySelector(".fest-grid")) || node.matches(".fest-grid"));
   scheduleNameOverflow();

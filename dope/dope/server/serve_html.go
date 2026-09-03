@@ -26,7 +26,7 @@ const (
 	gameInitMarker = "null;/*__GAME_INIT__*/"
 )
 
-// ekInitPayload seeds the ЭК page — the host's /host/fest/… and the spectator's
+// ekInitPayload seeds the EK page — the host's /host/fest/… and the spectator's
 // /fest/… alike; the page tells the two apart by its URL.
 type ekInitPayload struct {
 	Route      ekInitRoute             `json:"route"`
@@ -53,7 +53,7 @@ type gameInitPayload struct {
 	Scheme json.RawMessage `json:"scheme,omitempty"`
 	State  json.RawMessage `json:"state,omitempty"`
 	Fest   json.RawMessage `json:"fest,omitempty"`
-	// ScreenSettings is the per-game "Экран" projector-board configuration
+	// ScreenSettings is the per-game screen projector-board configuration
 	// (colours, font scale, columns, city/country toggles). Shared by all hosts
 	// of the game; the client seeds its settings panel from it on load.
 	ScreenSettings json.RawMessage `json:"screenSettings,omitempty"`
@@ -90,7 +90,7 @@ type ekInitRoute struct {
 // to plain serveEKHTML on any error so a payload bug never breaks the page.
 // serveEKHTMLWithInit serves a bracket game's page with the bracket init
 // payload. Which page that is belongs to the format, not to this function:
-// Тройка plays a bracket and boots the same payload, on a page of its own.
+// Troika plays a bracket and boots the same payload, on a page of its own.
 func (s *server) serveEKHTMLWithInit(w http.ResponseWriter, r *http.Request, scope festScope, parts []string, page string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

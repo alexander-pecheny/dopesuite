@@ -23,6 +23,7 @@ import (
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	"dope/dope/web/route"
+	dopestrings "dope/i18nstrings"
 )
 
 // api is the /api/fest/ table, built once; handleScopedAPI is its entry for
@@ -102,7 +103,7 @@ func (s *server) scopedGame(w http.ResponseWriter, r *http.Request, sc route.Sco
 }
 
 // scopedFestRoster serves the fest's canonical team→players roster for the
-// read-only «Составы» tab, visible to every visitor of a public fest.
+// read-only rosters tab, visible to every visitor of a public fest.
 func (s *server) scopedFestRoster(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	teams, err := roster.LoadFestRosterView(r.Context(), s.eng.DB, sc.FestID)
 	if err != nil {
@@ -198,7 +199,7 @@ func (s *server) scopedMatch(w http.ResponseWriter, r *http.Request, sc route.Sc
 	return route.JSON(w, view)
 }
 
-// scopedMatchPatch applies edit ops to one бой. Ops are coalesced with every
+// scopedMatchPatch applies edit ops to one Match. Ops are coalesced with every
 // other edit to this game into a 150ms window and applied in one locked
 // transaction; the call returns once that window has committed, with the match
 // view (and seq) the flusher broadcast.
@@ -366,7 +367,7 @@ func (s *server) scopedGameStatePut(w http.ResponseWriter, r *http.Request, sc r
 	return route.JSONBytes(w, raw)
 }
 
-// scopedGameStatePatch applies edit ops to the whole document; like a бой
+// scopedGameStatePatch applies edit ops to the whole document; like a Match
 // patch, the ops ride the 150ms batch and the call returns the committed state.
 func (s *server) scopedGameStatePatch(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	var sample metrics.Sample
@@ -405,7 +406,7 @@ func (s *server) scopedGameScheme(w http.ResponseWriter, r *http.Request, sc rou
 	return route.JSONBytes(w, []byte(schemeJSON))
 }
 
-// The per-game «Экран» projector-board configuration is an opaque blob the
+// The per-game screen projector-board configuration is an opaque blob the
 // client owns; the server only checks that it is JSON.
 func (s *server) scopedScreenSettings(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	var settingsJSON string
@@ -472,7 +473,7 @@ func seedXLSXSource(r *http.Request) (imports.SeedSource, error) {
 	}
 	file, _, err := r.FormFile("file")
 	if err != nil {
-		return nil, route.BadRequest("нет файла")
+		return nil, route.BadRequest(dopestrings.Default.Server.SeedImport.FileMissing())
 	}
 	return imports.FromXLSX(file), nil
 }

@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 
+	xystrings "xy/i18nstrings"
+
 	"golang.org/x/term"
 )
 
@@ -15,9 +17,10 @@ import (
 // month-lived, revocable credential, and changing the account password revokes
 // every one of them at once (ADR-0015).
 func cmdLogin(a *app, args []string) error {
-	fs := a.flags("login", "Сохранить адрес xy и API-токен. Токен создаётся в браузере: /profile/tokens.")
-	url := fs.String("url", "", "адрес instance, например https://xy.pecheny.me")
-	token := fs.String("token", "", "токен (иначе XY_TOKEN или запрос в терминале)")
+	s := xystrings.Default
+	fs := a.flags("login", s.Cli.Login.Usage())
+	url := fs.String("url", "", s.Cli.Login.UrlFlag())
+	token := fs.String("token", "", s.Cli.Login.TokenFlag())
 	_, err := a.parse(fs, args)
 	if err != nil {
 		return err
@@ -38,7 +41,7 @@ func cmdLogin(a *app, args []string) error {
 	}
 	if raw == "" {
 		var err error
-		if raw, err = a.secret("Токен из /profile/tokens: "); err != nil {
+		if raw, err = a.secret(s.Cli.Login.TokenPrompt()); err != nil {
 			return err
 		}
 	}
@@ -57,12 +60,13 @@ func cmdLogin(a *app, args []string) error {
 	}
 	path, _ := StatePath()
 	return a.emit(map[string]any{"url": a.st.URL, "username": username}, func() {
-		a.printf("вошли как %s на %s (состояние: %s)\n", username, a.st.URL, path)
+		a.printf("%s", s.Cli.Login.Done(username, a.st.URL, path))
 	})
 }
 
 func cmdLogout(a *app, args []string) error {
-	fs := a.flags("logout", "Забыть токен и ключи всех досок.")
+	s := xystrings.Default
+	fs := a.flags("logout", s.Cli.Logout.Usage())
 	_, err := a.parse(fs, args)
 	if err != nil {
 		return err
@@ -72,7 +76,7 @@ func cmdLogout(a *app, args []string) error {
 	if err := a.st.Save(); err != nil {
 		return err
 	}
-	return a.emit(map[string]any{"ok": true}, func() { a.printf("токен и ключи забыты\n") })
+	return a.emit(map[string]any{"ok": true}, func() { a.printf("%s", s.Cli.Logout.Done()) })
 }
 
 type boardRow struct {
@@ -83,7 +87,8 @@ type boardRow struct {
 }
 
 func cmdBoards(a *app, args []string) error {
-	fs := a.flags("boards", "Доски аккаунта. 🔓 — ключ доски есть на этой машине.")
+	s := xystrings.Default
+	fs := a.flags("boards", s.Cli.Boards.Usage())
 	_, err := a.parse(fs, args)
 	if err != nil {
 		return err
@@ -123,7 +128,8 @@ func cmdBoards(a *app, args []string) error {
 // is written to the state file so later commands need nobody at the keyboard
 // (ADR-0016).
 func cmdUnlock(a *app, args []string) error {
-	fs := a.flags("unlock", "xy-cli unlock <id|имя>\nСпрашивает пароль доски и запоминает её ключ.")
+	s := xystrings.Default
+	fs := a.flags("unlock", s.Cli.Unlock.Usage())
 	rest, err := a.parse(fs, args)
 	if err != nil {
 		return err
@@ -147,7 +153,7 @@ func cmdUnlock(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	pass, err := a.secret(fmt.Sprintf("Пароль доски «%s»: ", board.Name))
+	pass, err := a.secret(s.Cli.Unlock.PassphrasePrompt(board.Name))
 	if err != nil {
 		return err
 	}
@@ -166,13 +172,14 @@ func cmdUnlock(a *app, args []string) error {
 		return err
 	}
 	return a.emit(map[string]any{"id": board.ID, "name": name}, func() {
-		a.printf("доска %d «%s» разблокирована\n", board.ID, name)
+		a.printf("%s", s.Cli.Unlock.Done(itoa(board.ID), name))
 	})
 }
 
 func cmdLock(a *app, args []string) error {
-	fs := a.flags("lock", "xy-cli lock <id|имя> | --all\nЗабыть ключ доски.")
-	all := fs.Bool("all", false, "забыть ключи всех досок")
+	s := xystrings.Default
+	fs := a.flags("lock", s.Cli.Lock.Usage())
+	all := fs.Bool("all", false, s.Cli.Lock.AllFlag())
 	rest, err := a.parse(fs, args)
 	if err != nil {
 		return err
@@ -182,7 +189,7 @@ func cmdLock(a *app, args []string) error {
 		if err := a.st.Save(); err != nil {
 			return err
 		}
-		return a.emit(map[string]any{"ok": true}, func() { a.printf("ключи всех досок забыты\n") })
+		return a.emit(map[string]any{"ok": true}, func() { a.printf("%s", s.Cli.Lock.AllDone()) })
 	}
 	if len(rest) != 1 {
 		return errors.New("нужен id или имя доски (или --all)")
@@ -196,13 +203,13 @@ func cmdLock(a *app, args []string) error {
 	if err := a.st.Save(); err != nil {
 		return err
 	}
-	return a.emit(map[string]any{"id": id}, func() { a.printf("ключ доски %d «%s» забыт\n", id, name) })
+	return a.emit(map[string]any{"id": id}, func() { a.printf("%s", s.Cli.Lock.Done(itoa(id), name)) })
 }
 
 // matchBoard resolves an id or a name against what the account can see — the
 // unlock path, where the key is not held yet so boardRef cannot help.
 func matchBoard(boards []BoardSummary, ref string) (BoardSummary, error) {
-	return pickOne(boards, ref, "доска",
+	return pickOne(boards, ref, xystrings.Default.Cli.Shared.WhatBoard(),
 		func(b BoardSummary) int64 { return b.ID }, func(b BoardSummary) string { return b.Name })
 }
 

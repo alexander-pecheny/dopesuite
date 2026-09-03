@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"time"
+
+	xystrings "xy/i18nstrings"
 )
 
 type timelineEventDTO struct {
@@ -21,16 +23,16 @@ type timelineEventDTO struct {
 	// rendered because live replies hang off it. PayloadEnc is empty for these.
 	Deleted    bool   `json:"deleted,omitempty"`
 	PayloadEnc string `json:"payload_enc"`
-	// SessionID tags a comment with the Test Session it came out of («на этом
-	// тесте команда споткнулась о формулировку»). CardID is null on a note about
+	// SessionID tags a comment with the Test Session it came out of ("on this
+	// test the team stumbled over the wording"). CardID is null on a note about
 	// the session itself, which is what a comment on the old test card was.
 	SessionID *int64 `json:"session_id,omitempty"`
 	CardID    *int64 `json:"card_id,omitempty"`
 }
 
-// boardCommentDTO is one comment as прогрев indexes it: which card it hangs off,
+// boardCommentDTO is one comment as the prewarm indexes it: which card it hangs off,
 // its ciphertext, and the id a search hit deep-links to. Nothing else — an
-// author or a date would only be shown by a лента, and the лента asks per card.
+// author or a date would only be shown by a timeline, and the timeline asks per card.
 type boardCommentDTO struct {
 	ID         int64  `json:"id"`
 	CardID     int64  `json:"card_id"`
@@ -78,7 +80,7 @@ func (s *server) handleGetTimeline(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// A deleted comment is normally gone from the лента, but one that still
+	// A deleted comment is normally gone from the timeline, but one that still
 	// anchors live replies is returned as a tombstone (deleted = 1, empty
 	// payload) so the thread beneath it stays reachable instead of orphaned.
 	out, err := s.readTimeline(r.Context(), `
@@ -185,19 +187,20 @@ func (s *server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 // card — otherwise a reply could be smuggled onto another board's discussion.
 // A tombstoned parent is still a valid target; its thread outlives its text.
 func threadRoot(ctx context.Context, q querier, id, cardID int64) (int64, error) {
+	str := xystrings.Default
 	var root sql.NullInt64
 	var owner int64
 	err := q.QueryRowContext(ctx, `
 select card_id, coalesce(reply_to_id, id) from timeline_events where id = ? and type = 'comment'`, id).
 		Scan(&owner, &root)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, errNotFound("комментарий не найден")
+		return 0, errNotFound(str.Server.Comment.NotFound())
 	}
 	if err != nil {
 		return 0, err
 	}
 	if owner != cardID {
-		return 0, errBadRequest("комментарий с другой карточки")
+		return 0, errBadRequest(str.Server.Comment.Foreign())
 	}
 	return root.Int64, nil
 }
@@ -212,7 +215,7 @@ type patchCommentRequest struct {
 	Mentions *[]int64 `json:"mentions"`
 }
 
-// handlePatchComment edits a comment's text, flips its «выписка» flag and/or
+// handlePatchComment edits a comment's text, flips its excerpt flag and/or
 // retags the test it came out of. The fields carry different permissions:
 // rewriting what someone said is the author's business alone, while marking a
 // comment as an excerpt or naming the test behind it is curation any board
@@ -227,7 +230,7 @@ func (s *server) handlePatchComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.PayloadEnc != nil && (author == nil || *author != uid) {
-		httpError(w, http.StatusForbidden, "редактировать может только автор")
+		httpError(w, http.StatusForbidden, xystrings.Default.Server.Comment.EditOwnerOnly())
 		return
 	}
 	if req.Mentions != nil {
@@ -325,7 +328,7 @@ func (s *server) handleDeleteComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if author == nil || *author != uid {
-		httpError(w, http.StatusForbidden, "удалить может только автор")
+		httpError(w, http.StatusForbidden, xystrings.Default.Server.Comment.DeleteOwnerOnly())
 		return
 	}
 	err := s.withWriteTx(r.Context(), "delete-comment", func(ctx context.Context, tx *sql.Tx) error {
@@ -356,7 +359,7 @@ func (s *server) requireComment(w http.ResponseWriter, r *http.Request) (uid, ev
 select board_id, card_id, author_user_id from timeline_events
 where id = ? and type = 'comment' and deleted_at is null`, id).Scan(&bid, &cardID, &a)
 	if errors.Is(err, sql.ErrNoRows) {
-		httpError(w, http.StatusNotFound, "комментарий не найден")
+		httpError(w, http.StatusNotFound, xystrings.Default.Server.Comment.NotFound())
 		return
 	}
 	if handleErr(w, err) {

@@ -1,6 +1,6 @@
 // Package expr is the little arithmetic language a scheme author writes
 // scoring rules in (ADR-0008). It exists so a format with unfamiliar group
-// scoring — «4 − место», 3/1/0, «0 очков за нулевую ничью» — is a line of
+// scoring — «4 − place», 3/1/0, «0 points for a scoreless draw» — is a line of
 // YAML rather than a new Go rule, and so the metric a standings sorts on can be
 // one the scheme invented.
 //

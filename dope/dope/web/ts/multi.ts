@@ -1,5 +1,5 @@
-// The Мультиигры page: one sheet per мини-игра side by side, a subtotal after
-// each and Итог at the end, plus the ranked table, refusals and составы. A
+// The multi games page: one sheet per minigame side by side, a subtotal after
+// each and the total at the end, plus the ranked table, refusals and the roster. A
 // self-booting side-effect module bundled by pages/multi.ts.
 //
 // The cells hold numbers, so a task whose domain is two or three values is a
@@ -18,6 +18,7 @@ import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import * as multi from "./multi-protocol.js";
 import {CYCLE_LIMIT} from "./multi-protocol.js";
+import S from "./i18nstrings_ru_gen.js";
 import type {MultiRules, MultiScheme, MultiState} from "./multi-protocol.js";
 
 interface PageGlobals {
@@ -47,7 +48,7 @@ const shell = mountGamePage({
   viewer: Boolean(route.viewer),
   apiBase: route.apiBase,
   init: pageWindow.__GAME_INIT__,
-  chrome: () => ({festTitle: fest?.title || "", gameTitle: fest?.gameName || scheme?.title || "Мультиигры"}),
+  chrome: () => ({festTitle: fest?.title || "", gameTitle: fest?.gameName || scheme?.title || S.multi.title()}),
   cursorKinds: {
     cell: {selector: ".multi-cell", keys: ["participant", "game", "column"]},
   },
@@ -77,10 +78,10 @@ let rules: MultiRules = {minigames: [], sorting: ["total"], signed: false};
 let participants: string[] = [];
 
 const TABS = [
-  {key: "detailed", label: "Подробно"},
-  {key: "results", label: "Итог"},
-  ...(viewer ? [] : [{key: "refusals", label: "Отказы"}]),
-  {key: "roster", label: "Составы"},
+  {key: "detailed", label: S.multi.tabs.detailed()},
+  {key: "results", label: S.multi.tabs.results()},
+  ...(viewer ? [] : [{key: "refusals", label: S.multi.tabs.refusals()}]),
+  {key: "roster", label: S.multi.tabs.roster()},
 ];
 let activeTab = tabFromHash() || "detailed";
 
@@ -123,18 +124,18 @@ function applyRemoteState(next: unknown): void {
 
 // === the sheet ===
 
-// A column block per мини-игра — its tasks, then its subtotal — and Итог last.
-// The номинал row prints what each task is worth, which is the top of its
-// domain: a host reading the sheet wants the задание's price, not its range.
+// A column block per minigame — its tasks, then its subtotal — and the total last.
+// The nominal row prints what each task is worth, which is the top of its
+// domain: a host reading the sheet wants the task's price, not its range.
 function buildTable(): HTMLElement {
   const table = document.createElement("table");
-  // The КСИ sheet's compact skin: the same short rows and tight cells.
+  // The KSI sheet's compact skin: the same short rows and tight cells.
   table.className = "match-table compact-score-table multi-table";
 
   const head = document.createElement("thead");
   const gamesRow = document.createElement("tr");
-  gamesRow.appendChild(th("Команда", "sticky sticky-name", {rowSpan: 2}));
-  gamesRow.appendChild(th("Итог", "sticky sticky-total number", {rowSpan: 2}));
+  gamesRow.appendChild(th(S.multi.sheet.team(), "sticky sticky-name", {rowSpan: 2}));
+  gamesRow.appendChild(th(S.multi.sheet.total(), "sticky sticky-total number", {rowSpan: 2}));
   if (rules.signed) gamesRow.appendChild(th("Σ+", "sticky sticky-place number", {rowSpan: 2}));
   rules.minigames.forEach((game, g) => {
     gamesRow.appendChild(th(gameHead(game), "theme-block",
@@ -179,7 +180,7 @@ function buildTable(): HTMLElement {
   return table;
 }
 
-// The sticky name cell is ЭК's: the ek-team-cell family brings the clipped
+// The sticky name cell is EK's: the ek-team-cell family brings the clipped
 // name, the fade and the hover popover, so a long team never paints over the
 // scores beside it.
 function teamCell(p: number): HTMLElement {
@@ -225,22 +226,22 @@ function gapCount(game: MultiRules["minigames"][number]): number {
   return gaps;
 }
 
-// The мини-игра's name rides sticky past the frozen columns, so a scrolled
+// The minigame's name rides sticky past the frozen columns, so a scrolled
 // sheet still says which game these columns are; a uniform price joins it —
-// «Не только песни (по 1)» — and the heads keep just the numbers.
+// "Not only songs (1 each)" — and the heads keep just the numbers.
 function gameHead(game: MultiRules["minigames"][number]): CellContent {
   const span = document.createElement("span");
   span.className = "multi-game-name";
   span.textContent = uniformNominal(game)
-    ? `${game.name} (по ${maxOf(game.columns[0]?.values || [])})`
+    ? S.multi.game.uniformPrice(game.name, String(maxOf(game.columns[0]?.values || [])))
     : game.name;
   span.style.left = "calc(var(--sheet-corner-col) + var(--team-col) + var(--total-col) + var(--space-5)" +
     (rules.signed ? " + var(--place-col)" : "") + " + var(--space-2))";
   return span;
 }
 
-// A head is the вопрос's number — with its номинал above, muted, where the
-// мини-игра pays unevenly (ОД's qhead stack).
+// A head is the question's number — with its nominal above, muted, where the
+// minigame pays unevenly (OD's qhead stack).
 function questionHead(num: number, nominal: number | null): CellContent {
   if (nominal === null) return String(num);
   const wrap = document.createElement("span");
@@ -275,7 +276,7 @@ function rowOrder(): number[] {
 
 // domainOf is what this cell may hold. A domain small enough to click through
 // cycles; a wider one is typed, and a typed value outside the domain is
-// refused rather than silently rounded — the scheme said what a задание pays.
+// refused rather than silently rounded — the scheme said what a task pays.
 function domainOf(game: number, column: number): number[] {
   return rules.minigames[game]?.columns[column]?.values || [0];
 }
@@ -378,10 +379,10 @@ function buildResultsTable(): HTMLElement {
   const rows = multi.rankedResultRows(state!, rules, (index) => multi.participantName(state!, index));
   return standingsTable({
     columns: [
-      {label: "М", kind: "place"},
-      {label: "Команда", kind: "name"},
+      {label: S.multi.results.place(), kind: "place"},
+      {label: S.multi.results.team(), kind: "name"},
       ...rules.minigames.map((game) => ({label: game.name, kind: "num" as const})),
-      {label: "Итог", kind: "num" as const, className: "total-col"},
+      {label: S.multi.results.total(), kind: "num" as const, className: "total-col"},
       ...(rules.signed ? [{label: "Σ+", kind: "num" as const, className: "total-col"}] : []),
     ],
     rows: rows.map((row) => [
@@ -394,7 +395,7 @@ function buildResultsTable(): HTMLElement {
   });
 }
 
-// The «Отказы» tab is the host's: a team that refused to play keeps its row on
+// The refusals tab is the host's: a team that refused to play keeps its row on
 // the sheet and leaves the ranking, so the numbers of the rest do not shift.
 function buildRefusalsTable(): HTMLElement {
   const table = document.createElement("table");
@@ -402,8 +403,8 @@ function buildRefusalsTable(): HTMLElement {
   const head = document.createElement("thead");
   const headRow = document.createElement("tr");
   headRow.appendChild(th("№"));
-  headRow.appendChild(th("Команда", "results-team-head"));
-  headRow.appendChild(th("Отказ"));
+  headRow.appendChild(th(S.multi.refusals.team(), "results-team-head"));
+  headRow.appendChild(th(S.multi.refusals.declined()));
   head.appendChild(headRow);
   table.appendChild(head);
   const body = document.createElement("tbody");

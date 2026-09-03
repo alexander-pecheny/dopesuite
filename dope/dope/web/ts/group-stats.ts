@@ -1,10 +1,10 @@
-// The client mirror of a Block's per-бой scoring rule (ADR-0008), for the
-// «Групповой этап» tab: the source sheets show a player's очки split by круг,
-// and the split exists nowhere server-side — only the бои do. Kept pure so the
+// The client mirror of a Block's per-match scoring rule (ADR-0008), for the
+// group-stage tab: the source sheets show a player's points split by round,
+// and the split exists nowhere server-side — only the matches do. Kept pure so
 // deno suite pins it.
 
 // evalScoringRule evaluates an arithmetic expression — numbers, named
-// variables, + - * / and parens — over a бой's outcome. Anything it cannot
+// variables, + - * / and parens — over a match's outcome. Anything it cannot
 // read is 0: a broken rule must not take the whole tab down.
 export function evalScoringRule(expr: string, vars: Record<string, number>): number {
   const tokens = String(expr).match(/\d+(?:\.\d+)?|[a-zа-яё_][a-zа-яё0-9_]*|[-+*/()]/gi) || [];
@@ -60,8 +60,9 @@ export interface GroupRoundsRow {
   rounds: number[];
 }
 
-// computeGroupRounds folds one группа's бои into очки per круг per player —
-// finished бои only, the way standings count them — sorted by очки.
+// computeGroupRounds folds one group's matches into points per round per
+// player — finished matches only, the way standings count them — sorted by
+// points.
 export function computeGroupRounds(opts: {
   matches: GroupRoundsMatch[];
   pointsRule?: string;

@@ -4,14 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 	"dope/dope/domain/flatgame"
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/games"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
+
+	core "pecheny.me/dopecore/i18nstrings"
 )
 
 // assortiFixture is what read-assorti-sheets.py carried out of the workbook.
@@ -31,11 +34,12 @@ func readAssorti(path string) (assortiFixture, error) {
 	return fixture, json.Unmarshal(raw, &fixture)
 }
 
-// buildAssorti creates the Мультиигры game and writes its document the way the
+// buildAssorti creates the multi game and writes its document the way the
 // page writes it — one whole-document save, since a flat game's Protocol keeps
-// everything on its one бой.
+// everything on its one Match.
 func buildAssorti(ctx context.Context, db *sql.DB, festID int64, registry map[string]int64,
 	fixture assortiFixture) error {
+	s := dopestrings.Default
 	minigames, err := games.ParseMultiGames(fixture.Spec)
 	if err != nil {
 		return err
@@ -54,15 +58,15 @@ func buildAssorti(ctx context.Context, db *sql.DB, festID int64, registry map[st
 	if err != nil {
 		return err
 	}
-	// The Protocol names a Мультиигры game after its format; this фест called
-	// its own «Ассорти».
+	// The Protocol names a multi game after its format; this fest called
+	// its own Assorti.
 	if _, err := db.Exec(`update games set title = ? where id = ?`, "Ассорти", gameID); err != nil {
 		return err
 	}
-	log.Printf("ассорти: игра %d, мини-игр %d, команд %d", gameID, len(minigames), len(fixture.Participants))
+	log.Printf("%s", s.Octobearfest.Log.AssortiStart(strconv.FormatInt(gameID, 10), strconv.Itoa(len(minigames)), strconv.Itoa(len(fixture.Participants))))
 
-	// A flat game's team list IS its document — that is what seats its one бой —
-	// so it is written from the workbook's own order, carrying each team's фест
+	// A flat game's team list IS its document — that is what seats its one Match —
+	// so it is written from the workbook's own order, carrying each team's fest
 	// number so the registry and the sheet name the same team.
 	numbers, err := festNumbers(db, festID)
 	if err != nil {
@@ -110,14 +114,14 @@ func buildAssorti(ctx context.Context, db *sql.DB, festID int64, registry map[st
 	if id, err := store.FlatMatchID(ctx, db, gameID); err == nil {
 		matchID = sql.NullInt64{Int64: id, Valid: true}
 	} else {
-		return fmt.Errorf("бой мультиигр: %w", err)
+		return core.User(s.Octobearfest.Error.MultiBout(err.Error()))
 	}
 	return inTx(db, func(tx *sql.Tx) error {
 		return flatgame.SaveDocumentTx(ctx, tx, festID, gameID, matchID, string(document), nil)
 	})
 }
 
-// festNumbers is the фест registry by name — the number every game of the фест
+// festNumbers is the fest registry by name — the number every game of the fest
 // calls a team by.
 func festNumbers(db *sql.DB, festID int64) (map[string]int, error) {
 	rows, err := db.Query(`select name, coalesce(number, 0) from participants where fest_id = ?`, festID)

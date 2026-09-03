@@ -3,7 +3,7 @@
 //
 // Both built-in PDF viewers take the name they suggest on Save from the
 // Content-Disposition header, or failing that from the last segment of the URL.
-// A blob: URL's last segment is a UUID, which is why a generated раздатка saved
+// A blob: URL's last segment is a UUID, which is why a generated handout saved
 // as "5f2c…-….pdf" (issue #43). Handing the bytes to the worker and pointing the
 // iframe at /dl/<name> gives the viewer both a real name and a real header.
 //

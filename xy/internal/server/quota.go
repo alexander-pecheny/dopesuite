@@ -8,6 +8,8 @@ import (
 	"strconv"
 
 	"pecheny.me/dopecore/adminusers"
+
+	xystrings "xy/i18nstrings"
 )
 
 // mbNum renders a byte count as a bare MiB number, rounded to two decimals with
@@ -97,7 +99,7 @@ where b.id = ?`, boardID).Scan(&ownerID, &quota, &username); err != nil {
 		return err
 	}
 	if used+addBytes > quota {
-		return errTooLarge("превышен лимит хранилища (" + humanMB(quota) + ")")
+		return errTooLarge(xystrings.Default.Server.Quota.Exceeded(mbNum(quota)))
 	}
 	return nil
 }

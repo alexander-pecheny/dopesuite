@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	xystrings "xy/i18nstrings"
 )
 
 // Client is an ordinary xy client that authenticates with an API token
@@ -62,7 +64,7 @@ func (c *Client) request(method, path string, body io.Reader, contentType string
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
 		text := serverMessage(msg)
 		if resp.StatusCode == http.StatusUnauthorized {
-			text = "токен не принят: истёк, отозван или сменился пароль аккаунта — `xy-cli login` заново"
+			text = xystrings.Default.Cli.Client.TokenRejected()
 		}
 		return nil, &apiError{Status: resp.StatusCode, Msg: text, Path: path}
 	}
@@ -208,7 +210,7 @@ type snapshotDTO struct {
 	CardLabels []cardLabelDTO `json:"card_labels"`
 }
 
-// TimelineEvent is one лента entry as the API returns it (ciphertext payload).
+// TimelineEvent is one Timeline entry as the API returns it (ciphertext payload).
 type TimelineEvent struct {
 	ID         int64   `json:"id"`
 	Type       string  `json:"type"`
@@ -344,7 +346,7 @@ func (c *Client) CreateLabel(boardID int64, nameEnc, colorEnc string) (int64, er
 }
 
 // SetCardLabels writes a card's whole assignment set, as the web client does,
-// with the label_add/label_remove entries that put the change in the лента.
+// with the label_add/label_remove entries that put the change in the Timeline.
 func (c *Client) SetCardLabels(cardID int64, labels []cardLabelDTO, events []map[string]any) error {
 	items := make([]map[string]any, 0, len(labels))
 	for _, l := range labels {
@@ -368,7 +370,7 @@ func (c *Client) AttachmentBytes(id int64) ([]byte, error) {
 }
 
 // UploadAttachment posts ciphertext bytes plus the encrypted filename, and the
-// «file» timeline entry that tells the лента an attachment arrived.
+// «file» timeline entry that tells the Timeline an attachment arrived.
 func (c *Client) UploadAttachment(cardID int64, meta map[string]any, blob []byte) (int64, error) {
 	var out idResponse
 	data, _, err := c.postForm(fmt.Sprintf("/api/cards/%d/attachments", cardID), func(mw *multipart.Writer) error {

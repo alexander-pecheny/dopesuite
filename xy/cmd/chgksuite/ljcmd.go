@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	xystrings "xy/i18nstrings"
 	"xy/internal/chgk/imghost"
 	"xy/internal/chgk/lj"
 )
@@ -19,7 +20,7 @@ func composeLJ(args []string) error {
 	fs := flag.NewFlagSet("compose lj", flag.ContinueOnError)
 	noSpoilers := fs.Bool("nospoilers", false, "print the answers openly instead of behind <lj-spoiler>")
 	splitTours := fs.Bool("splittours", false, "a post per tour")
-	genimp := fs.Bool("genimp", false, "add the «Общие впечатления» post")
+	genimp := fs.Bool("genimp", false, xystrings.Default.Chgkcli.Lj.GenimpFlag())
 	navigation := fs.Bool("navigation", false, "link the tours' posts to each other (needs --login)")
 	login := fs.String("login", "", "livejournal user to post as; empty writes the HTML to files instead")
 	password := fs.String("password", "", "that user's password; also read from $CHGKSUITE_LJ_PASSWORD")

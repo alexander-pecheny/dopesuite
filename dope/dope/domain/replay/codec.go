@@ -4,35 +4,37 @@ import (
 	"encoding/json"
 	"sort"
 	"strconv"
+
+	dopestrings "dope/i18nstrings"
 )
 
-// Codec is how one Protocol's бои read in a transcript and how its
-// [статистика] is counted: the seat form, the three stat columns, and the
-// aggregate over the finished бои. One per game type, so neither the parser
+// Codec is how one Protocol's Matches read in a transcript and how its
+// [статистика] section is counted: the seat form, the three stat columns, and the
+// aggregate over the finished Matches. One per game type, so neither the parser
 // nor a Game adapter switches on a name.
 type Codec struct {
-	// Individual: the participant is the player — no составы, no theme
-	// players, no team column in статистика.
+	// Individual: the participant is the player — no lineups, no theme
+	// players, no team column in the stats.
 	Individual bool
-	// Questions: the seat's middle field is the бой's questions (who buzzed
+	// Questions: the seat's middle field is the Match's questions (who buzzed
 	// and how it went), not a grid of themes.
 	Questions bool
-	// Counts: the seat's middle field counts, per вопрос, how many of the
-	// team answered it — Троечка's sheet, where all three answer every вопрос
-	// and each correct answer pays on its own. Which кресло said what the
+	// Counts: the seat's middle field counts, per question, how many of the
+	// team answered it — Troika's sheet, where all three answer every question
+	// and each correct answer pays on its own. Which seat said what the
 	// sheet does not record, so the count is all there is to transcribe.
 	Counts bool
-	// ThemeSize is how many вопросы a тема holds when a Count grid is read.
+	// ThemeSize is how many questions a theme holds when a Count grid is read.
 	ThemeSize int
-	// ScoreMetric names the Protocol metric the sheet prints as the бой's Σ
-	// when it is not the total column (брейн counts the questions taken).
+	// ScoreMetric names the Protocol metric the sheet prints as the Match's Σ
+	// when it is not the total column (brain counts the questions taken).
 	ScoreMetric string
 	Columns     [3]string
-	// Aggregate folds every finished бой into the sheet's per-player rows.
+	// Aggregate folds every finished Match into the sheet's per-player rows.
 	Aggregate func(bouts []BoutState) ([]Stat, error)
 }
 
-// BoutState is one finished бой as an adapter hands it to a Codec: the
+// BoutState is one finished Match as an adapter hands it to a Codec: the
 // Protocol document, the seated participants' names in slot order, and the
 // names behind the ids the document keys by.
 type BoutState struct {
@@ -43,11 +45,11 @@ type BoutState struct {
 }
 
 var codecs = map[string]Codec{
-	"ek":    {Columns: [3]string{"Σ", "Σ+", "темы"}, Aggregate: ekStats},
-	"si":    {Individual: true, Columns: [3]string{"Σ", "Σ+", "бои"}, Aggregate: individualStats},
-	"brain": {Questions: true, ScoreMetric: "taken", Columns: [3]string{"попытки", "верно", "неверно"}, Aggregate: brainStats},
-	// Троечка's sheet keeps no per-player row — it never records which кресло
-	// answered — so there is no статистика to hold dope to.
+	"ek":    {Columns: [3]string{"Σ", "Σ+", dopestrings.Default.Replay.Codec.StatThemes()}, Aggregate: ekStats},
+	"si":    {Individual: true, Columns: [3]string{"Σ", "Σ+", dopestrings.Default.Replay.Codec.StatBouts()}, Aggregate: individualStats},
+	"brain": {Questions: true, ScoreMetric: "taken", Columns: [3]string{dopestrings.Default.Replay.Codec.StatAttempts(), dopestrings.Default.Replay.Codec.StatRight(), dopestrings.Default.Replay.Codec.StatWrong()}, Aggregate: brainStats},
+	// Troika's sheet keeps no per-player row — it never records which seat
+	// answered — so there is no stats section to hold dope to.
 	"troika": {Counts: true, ThemeSize: 3, ScoreMetric: "total"},
 }
 
@@ -116,9 +118,9 @@ func ekStats(bouts []BoutState) ([]Stat, error) {
 	return statRows(acc), nil
 }
 
-// individualStats: per player, Σ, Σ+ and the бои he sat — counted from the
+// individualStats: per player, Σ, Σ+ and the Matches he sat — counted from the
 // seating, since a player who took nothing has no state section and the sheet
-// still counts the бой.
+// still counts the Match.
 func individualStats(bouts []BoutState) ([]Stat, error) {
 	acc := map[[2]string]*[3]int{}
 	for _, bout := range bouts {

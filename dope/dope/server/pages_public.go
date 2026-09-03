@@ -15,6 +15,7 @@ import (
 	"dope/dope/platform/util"
 	"dope/dope/web/hostpages"
 	"dope/dope/web/pages"
+	dopestrings "dope/i18nstrings"
 )
 
 type publicFestSummary struct {
@@ -82,10 +83,10 @@ type publicFestGroup struct {
 	Fests []publicFestSummary
 }
 
-// groupPublicFests partitions fests into Текущие/Будущие/Прошедшие relative to
-// today ("YYYY-MM-DD"), sorts each bucket by start date descending (then title
-// ascending), and drops empty buckets. Fests without an effective start date
-// land in Прошедшие.
+// groupPublicFests partitions fests into the current/future/past buckets
+// (the Server.PublicFests headings) relative to today ("YYYY-MM-DD"), sorts
+// each bucket by start date descending (then title ascending), and drops
+// empty buckets. Fests without an effective start date land in the past.
 func groupPublicFests(fests []publicFestSummary, today string) []publicFestGroup {
 	var current, future, past []publicFestSummary
 	for _, f := range fests {
@@ -103,9 +104,9 @@ func groupPublicFests(fests []publicFestSummary, today string) []publicFestGroup
 	sortPublicFests(past)
 	groups := make([]publicFestGroup, 0, 3)
 	for _, g := range []publicFestGroup{
-		{Title: "Текущие", Fests: current},
-		{Title: "Будущие", Fests: future},
-		{Title: "Прошедшие", Fests: past},
+		{Title: dopestrings.Default.Server.PublicFests.Current(), Fests: current},
+		{Title: dopestrings.Default.Server.PublicFests.Future(), Fests: future},
+		{Title: dopestrings.Default.Server.PublicFests.Past(), Fests: past},
 	} {
 		if len(g.Fests) > 0 {
 			groups = append(groups, g)

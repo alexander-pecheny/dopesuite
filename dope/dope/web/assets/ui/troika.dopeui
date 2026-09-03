@@ -1,3 +1,3 @@
-page title="Ведущий · Тройка" kind="troika" init="__GAME_INIT__" classicscripts="dist/troika.js"
+page title=@gallery.troika.title kind="troika" init="__GAME_INIT__" classicscripts="dist/troika.js"
   gametopbar tabsid="troikaTabs" tabshidden
   mount kind="table-host" id="troikaTable"

@@ -10,9 +10,9 @@ import (
 
 func init() { Register(troika{}) }
 
-// troika wraps games.ComputeTroikaResults: state is games.TroikaState, and the
-// бой's shape — how many темы, what each is worth — comes from its stage
-// config at build time and is recorded in the document.
+// troika wraps games.ComputeTroikaResults: state is games.TroikaState, and
+// the match's shape — how many themes, what each is worth — comes from its
+// stage config at build time and is recorded in the document.
 type troika struct{}
 
 func (troika) Code() string { return "troika" }
@@ -26,14 +26,14 @@ func (troika) Params() []Param {
 
 func (troika) TeamBlob() bool { return false }
 
-// A кресло holds a player, so a бой's seats carry their rosters.
+// A chair holds a player, so a match's seats carry their rosters.
 func (troika) SeatsPlayers() bool { return true }
 
 func (troika) Started(state json.RawMessage) bool { return games.TroikaStateStarted(string(state)) }
 
-// Metrics: игровые очки и правильные ответы без учёта номинала. A группа sums
-// очки into забито/пропущено with `metric: total`, and the регламент's
-// рейтинговый балл is a scoring rule over them.
+// Metrics: game points and correct answers without the nominal. A group sums
+// points into scored/conceded with `metric: total`, and the regulations'
+// rating score is a scoring rule over them.
 func (troika) Metrics(json.RawMessage) []string { return []string{"total", "correct"} }
 
 func (troika) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {

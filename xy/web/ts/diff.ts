@@ -77,10 +77,10 @@ function takeWords(toks: string[], n: number, fromEnd: boolean): string {
 // deleted chunk followed by one inserted chunk.
 //
 // A rewritten phrase rarely replaces every word: the LCS latches onto whatever
-// short tokens survive ("не", a preposition) and the result alternates
+// short tokens survive (e.g. a preposition) and the result alternates
 // del/add/del/add, which in the INLINE view reads as an unparseable barcode.
 // The two-pane view does not need this — each side has its own pane — so this
-// runs for the краткий view only, where old and new share one line.
+// runs for the brief view only, where old and new share one line.
 //
 // Pieces are rejoined with single spaces: the whitespace between them belonged
 // to the ops being absorbed, and a summary line does not owe the original its
@@ -103,7 +103,7 @@ function clusterChanges(ops: DiffOp[]): DiffOp[] {
     // A cluster that trims away to nothing was a change of whitespace ALONE —
     // most of what the typography pass does, since it swaps ordinary spaces for
     // non-breaking ones. Dropping it outright welded the words either side
-    // together («В восьмидесятые» → «Ввосьмидесятые»), so the лента read as
+    // together ("In the eighties" → "Inthe eighties"), so the feed read as
     // though the edit had deleted every space in the question. Kept verbatim
     // instead: the words stay apart, and the highlight says where the pass
     // touched even though no reader can see one kind of space from the other.
@@ -125,7 +125,7 @@ function clusterChanges(ops: DiffOp[]): DiffOp[] {
 // briefOps elides the unchanged bulk of a diff, keeping `context` words either
 // side of every change and replacing what it drops with a "gap" op. A question
 // is mostly untouched text between small edits; showing all of it to reveal two
-// swapped words is what the краткий view exists to avoid.
+// swapped words is what the brief view exists to avoid.
 //
 // The context around a change belongs to the change: for an equal run the words
 // nearest the PREVIOUS change (its head) and the NEXT one (its tail) are kept,

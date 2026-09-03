@@ -1,4 +1,4 @@
-// testmode.ts — Тест-режим (ADR-0012): press play on a Test Session and the
+// testmode.ts — Test mode (ADR-0012): press play on a Test Session and the
 // device does the bookkeeping a test evening otherwise costs in clicks. While
 // the mode is on, a question card kept open for a minute is marked with the
 // test, and every comment posted goes up already tagged with it.

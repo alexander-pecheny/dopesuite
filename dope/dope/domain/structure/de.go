@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
+
+	dopestrings "dope/i18nstrings"
 
 	"dope/dope/storage/store"
 )
@@ -12,12 +15,12 @@ import (
 func init() { Register(pod{}) }
 
 // pod is a Group of a double elimination — a table of four playing until two
-// have lost twice — as a Ranker only: the DSL expands its бои, since a pod is
-// hand-drawn into rounds. It ranks the never-eliminated first (fewest Losses),
-// then the eliminated by how late their second Loss came; a tie the бои did
-// not settle shares its place, and survivors of an unfinished pod stay
-// unplaced — their места are still being played. Only an outright lost бой
-// counts: a shared place is a tie, not a Loss.
+// have lost twice — as a Ranker only: the DSL expands its Matches, since a pod
+// is hand-drawn into rounds. It ranks the never-eliminated first (fewest
+// Losses), then the eliminated by how late their second Loss came; a tie the
+// Matches did not settle shares its place, and survivors of an unfinished pod
+// stay unplaced — their places are still being played. Only an outright lost
+// Match counts: a shared place is a tie, not a Loss.
 type pod struct{}
 
 func (pod) Code() string { return "de" }
@@ -27,14 +30,16 @@ func (pod) Keys() []Key {
 }
 
 // Expand is an elimination where two Losses end a tournament —
-// КИнСБФ's pods of four and личная СИ's whole play-off are the same Kind, told
-// apart only by their size and by how many Participants leave the block.
+// KINSBF's pods of four and individual SI's whole play-off are the same Kind,
+// told apart only by their size and by how many Participants leave the block.
 //
-// Pods (groups > 1) stay one stage each: a pod's five бои run in sequence at
-// its own стол, so the pod is the unit a host works with. A single bracket
-// emits one stage per round, because a round is what plays at once across every
-// стол — and, when the block reseeds, what gets re-ranked between rounds.
+// Pods (groups > 1) stay one stage each: a pod's five Matches run in sequence
+// at its own table, so the pod is the unit a host works with. A single bracket
+// emits one stage per round, because a round is what plays at once across
+// every table — and, when the block reseeds, what gets re-ranked between
+// rounds.
 func (pod) Expand(b Block) (Outputs, error) {
+	s := dopestrings.Default
 	winning := 1
 	if v, ok := b.Int("winning_places"); ok {
 		winning = v
@@ -72,7 +77,7 @@ func (pod) Expand(b Block) (Outputs, error) {
 	if v, ok := b.Proceeding(); ok {
 		proceeding = v
 	}
-	// A пересев hands the block a ranking, so its opening round deals that
+	// A reseed hands the block a ranking, so its opening round deals that
 	// ranking as a snake like every later round does. Only the deterministic
 	// template arrives pre-balanced, and slicing it in order is the point.
 	opening := snakeChunks
@@ -112,7 +117,7 @@ func (pod) Expand(b Block) (Outputs, error) {
 		}
 		label := fmt.Sprintf("DE %d", g)
 		if groups == 1 {
-			label = b.Title("Плей-офф")
+			label = b.Title(s.Structure.De.Playoff())
 		}
 		place := func(p int) store.SchemeSlot {
 			if p < 1 || p > len(plan.survivor) {
@@ -126,9 +131,10 @@ func (pod) Expand(b Block) (Outputs, error) {
 	return out, nil
 }
 
-// emitLivesBracket writes one bracket's stages and returns each planned бой's
-// match code plus the stage codes, newest last.
+// emitLivesBracket writes one bracket's stages and returns each planned
+// Match's code plus the stage codes, newest last.
 func emitLivesBracket(b Block, group, groups int, plan *dePlan, entrants []store.SchemeSlot, lanes Lanes, reranked bool) ([]string, []string, error) {
+	s := dopestrings.Default
 	blockCode := b.Code()
 	stageCode := fmt.Sprintf("%s-g%d", blockCode, group)
 	if groups == 1 {
@@ -179,9 +185,9 @@ func emitLivesBracket(b Block, group, groups int, plan *dePlan, entrants []store
 					slots = append(slots, FromMatch(codes[source.bout], source.place))
 				}
 			}
-			title := fmt.Sprintf("Бой %d", seq)
+			title := s.Structure.Titles.Bout(strconv.Itoa(seq))
 			if groups == 1 {
-				title = fmt.Sprintf("Бой %d", i+1)
+				title = s.Structure.Titles.Bout(strconv.Itoa(i + 1))
 			}
 			matches = append(matches, store.SchemeMatch{
 				Code:             code,
@@ -195,8 +201,8 @@ func emitLivesBracket(b Block, group, groups int, plan *dePlan, entrants []store
 			if r < len(plan.rounds)-1 {
 				continue // pods emit once, below
 			}
-			// A pod plays all its rounds at one стол, so its stage spans them:
-			// each бой carries the round it belongs to, the stage carries none.
+			// A pod plays all its rounds at one table, so its stage spans them:
+			// each Match carries the round it belongs to, the stage carries none.
 			roundOf := boutRounds(plan)
 			all := make([]store.SchemeMatch, 0, len(plan.bouts))
 			for _, boutIndex := range flatBouts(plan) {
@@ -211,7 +217,7 @@ func emitLivesBracket(b Block, group, groups int, plan *dePlan, entrants []store
 			return codes, []string{stageCode}, nil
 		}
 		names := []string{fmt.Sprintf("r%d", r+1)}
-		if _, err := b.Emit(Stage{Code: roundStage, Title: b.RoundTitle(names, fmt.Sprintf("Раунд %d", r+1)), Kind: "matches",
+		if _, err := b.Emit(Stage{Code: roundStage, Title: b.RoundTitle(names, s.Structure.Titles.Round(strconv.Itoa(r+1))), Kind: "matches",
 			Rounds: names, At: At{Round: r + 1}, Matches: matches}); err != nil {
 			return nil, nil, err
 		}
@@ -233,8 +239,8 @@ func emitLivesBracket(b Block, group, groups int, plan *dePlan, entrants []store
 func roundEntrantBands(plan *dePlan, round int) ([]deSource, []int) {
 	// Everyone still in, not only everyone who plays. A bracket already down to
 	// its winning places sits the round out, and it keeps its ranks while it
-	// waits — the бои of this round are numbered around them, so a reseed that
-	// skipped them would hand every later rank to the wrong person.
+	// waits — the Matches of this round are numbered around them, so a reseed
+	// that skipped them would hand every later rank to the wrong person.
 	return plan.alive[round], denseBands(plan.aliveBands[round])
 }
 
@@ -285,6 +291,7 @@ func boutRounds(plan *dePlan) map[int]int {
 }
 
 func podMatch(plan *dePlan, codes []string, boutIndex int, entrants []store.SchemeSlot, venue int) store.SchemeMatch {
+	s := dopestrings.Default
 	bout := plan.bouts[boutIndex]
 	slots := make([]store.SchemeSlot, 0, len(bout.sources))
 	for _, source := range bout.sources {
@@ -296,14 +303,15 @@ func podMatch(plan *dePlan, codes []string, boutIndex int, entrants []store.Sche
 	}
 	return store.SchemeMatch{
 		Code:             codes[boutIndex],
-		Title:            fmt.Sprintf("Бой %d", boutIndex+1),
+		Title:            s.Structure.Titles.Bout(strconv.Itoa(boutIndex + 1)),
 		Venue:            venue,
 		ParticipantCount: len(slots),
 		Slots:            slots,
 	}
 }
 
-// A pod's table shows М alone; Losses are how it ranks, not a column.
+// A pod's table shows the place column alone; Losses are how it ranks, not a
+// column.
 func (pod) Order(cfg json.RawMessage) []SortRule { return nil }
 
 func (pod) Metrics() []string { return []string{"losses"} }

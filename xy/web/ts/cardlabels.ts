@@ -1,17 +1,17 @@
-// cardlabels.ts — the open card's «Метки», «Тесты» and «Видели» (ADR-0004):
+// cardlabels.ts — the open card's labels, playings and seen sections (ADR-0004):
 // a label is the author's view of the question, a Playing is where it was
 // tested, a label scoped to a Playing is what the testers thought there, and
-// «Видели» names who saw this question beyond the people the tour already
+// the seen section names who saw this question beyond the people the tour already
 // names. Two pickers over one filtered popup; every write goes up as the card's
 // whole set through the board's verbs.
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { sortLabels } from "./labelsedit.js";
 import { colorField, LABEL_COLORS } from "./colorpick.js";
-import { plural } from "./massaction.js";
 import { testerNames } from "./sessions.js";
 import type { SessionMeta, Tester } from "./sessions.js";
 import { icon } from "./icons_gen.js";
+import S from "./i18nstrings_ru_gen.js";
 import type { Board } from "./panels.js";
 import type { BoardCard, BoardLabel, BoardList } from "./unlock.js";
 import type { DataKey } from "./crypto.js";
@@ -39,7 +39,7 @@ export interface CardLabelsDeps {
   mustDK(): DataKey;
   openCardId(): number | null;
   copyPlain(text: string): Promise<void>;
-  // The Sessions the card's tour names in its Tester List — «Видели» shows the extras.
+  // The Sessions the card's tour names in its Tester List — the seen section shows the extras.
   tourPicked(list: BoardList): Set<number>;
   createLabel(name: string, color: string): Promise<BoardLabel>;
   loadTimeline(cardId: number): Promise<void>;
@@ -63,10 +63,10 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
   const newLabelColor = colorField(ui.newLabelColor, LABEL_COLORS[0]);
   newLabelForm.remove();
 
-  // The card's «Метки» and «Тесты» are two separate pickers (ADR-0004): a label is
+  // The card's labels and playings are two separate pickers (ADR-0004): a label is
   // the author's view of the question, a Playing is where it was tested, and a
   // label scoped to a Playing is what the testers thought there. Mixing them into
-  // one list was what made «взяли» multiply by the number of tests.
+  // one list was what made the "took it" label multiply by the number of tests.
 
 
   function labelChip(lbl: BoardLabel, onRemove: () => void, title: string): HTMLElement {
@@ -74,7 +74,7 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
       el("span", { class: "label-pick-name", text: lbl.name }),
       el("button", {
         class: "label-pick-x", type: "button", text: "×",
-        title, "aria-label": `${title}: ${lbl.name}`,
+        title, "aria-label": S.card.chip.removeAria(title, lbl.name),
         onclick: onRemove,
       }));
   }
@@ -85,9 +85,9 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
     const own = board.assignmentsOf(card.id, null);
     for (const a of own) {
       const lbl = labelById(a.labelId);
-      if (lbl) picker.append(labelChip(lbl, () => { void setLabel(card, lbl, null, false); }, "Снять метку"));
+      if (lbl) picker.append(labelChip(lbl, () => { void setLabel(card, lbl, null, false); }, S.card.labels.removeTitle()));
     }
-    if (!own.length) picker.append(el("span", { class: "label-empty", text: "меток нет" }));
+    if (!own.length) picker.append(el("span", { class: "label-empty", text: S.card.labels.empty() }));
 
     renderPlayings(card);
     renderSeen(card);
@@ -100,7 +100,7 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
     box.replaceChildren();
     const ids = board.playingsOf(card.id);
     if (!ids.length) {
-      box.append(el("span", { class: "label-empty", text: "тестов нет" }));
+      box.append(el("span", { class: "label-empty", text: S.card.playings.empty() }));
       return;
     }
     for (const sid of ids) {
@@ -108,17 +108,17 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
         el("span", { class: "playing-name", text: board.sessionName(sid) }),
         el("button", {
           class: "label-pick-x", type: "button", text: "×",
-          title: "Убрать тест с вопроса", "aria-label": `Убрать тест ${board.sessionName(sid)}`,
+          title: S.card.playings.removeTitle(), "aria-label": S.card.playings.removeAria(board.sessionName(sid)),
           onclick: () => { void removePlaying(card, sid); },
         }));
       const chips = el("div", { class: "playing-labels" });
       for (const a of board.assignmentsOf(card.id, sid)) {
         const lbl = labelById(a.labelId);
-        if (lbl) chips.append(labelChip(lbl, () => { void setLabel(card, lbl, sid, false); }, "Снять отметку теста"));
+        if (lbl) chips.append(labelChip(lbl, () => { void setLabel(card, lbl, sid, false); }, S.card.playings.labelRemoveTitle()));
       }
       chips.append(el("button", {
         class: "input playing-add", type: "button", text: "＋",
-        title: "Добавить метку этого теста",
+        title: S.card.playings.labelAddTitle(),
         onclick: (e: Event) => { openLabelAddPopup(sid, (e.currentTarget as HTMLElement).parentElement as HTMLElement); },
       }));
       box.append(el("div", { class: "playing" }, head, chips));
@@ -131,7 +131,7 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
   // in from another tournament, seen by three people nobody has warned. Showing
   // the full list again would bury them — but on a question every common tester
   // saw, the subtraction leaves nothing and the card reads as untested. So
-  // «Показать всех тестеров» dims them back in instead. A peek, not a preference:
+  // The show-all-testers checkbox dims them back in instead. A peek, not a preference:
   // keyed to the open card, so a label write mid-peek does not collapse the list
   // and the next card starts folded again.
   let seenAllFor: number | null = null;
@@ -155,14 +155,14 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
     }
     const hiding = common.size > 0 && seenAllFor !== card.id;
     const names = hiding ? everyone.filter((n) => !common.has(n)) : everyone;
-    const label = hiding ? "Видели вопрос, кроме общих тестеров списка: " : "Видели: ";
+    const label = hiding ? S.card.seen.labelExceptCommon() : S.card.seen.label();
 
     const parts: Array<HTMLElement | string> = [];
     if (names.length) {
       const spans: Array<HTMLElement | string> = [];
       for (const n of names) {
         if (spans.length) spans.push(", ");
-        spans.push(common.has(n) ? el("span", { class: "seen-common", title: "Общий тестер списка", text: n }) : n);
+        spans.push(common.has(n) ? el("span", { class: "seen-common", title: S.card.seen.commonTesterTitle(), text: n }) : n);
       }
       parts.push(el("span", { class: "seen-label", text: label }), el("span", { class: "seen-names" }, ...spans));
     }
@@ -173,12 +173,12 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
         seenAllFor = cb.checked ? card.id : null;
         renderSeen(card);
       });
-      parts.push(el("label", { class: "checkbox seen-all" }, cb, el("span", { text: "Показать всех тестеров" })));
+      parts.push(el("label", { class: "checkbox seen-all" }, cb, el("span", { text: S.card.seen.showAll() })));
     }
     if (names.length) {
       parts.push(el("button", {
         class: "input seen-copy", type: "button",
-        title: "Скопировать",
+        title: S.card.seen.copyTitle(),
         onclick: () => { void deps.copyPlain(label + names.join(", ")); },
       }, icon("clipboard")));
     }
@@ -223,8 +223,8 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
   async function removePlaying(card: BoardCard, sessionId: number): Promise<void> {
     const scoped = board.assignmentsOf(card.id, sessionId).length;
     const what = scoped
-      ? `Снять тест «${board.sessionName(sessionId)}» и ${scoped} ${plural(scoped, "метку", "метки", "меток")} на нём?`
-      : `Снять тест «${board.sessionName(sessionId)}» с вопроса?`;
+      ? S.card.playings.removeConfirmScoped(board.sessionName(sessionId), scoped)
+      : S.card.playings.removeConfirm(board.sessionName(sessionId));
     if (!confirm(what)) return;
     await writePlayings(card, board.playingsOf(card.id).filter((id) => id !== sessionId));
     deps.onPlayingRemoved?.(card.id, sessionId);
@@ -275,7 +275,7 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
       const shown = q ? opts.items.filter((i) => i.name.toLowerCase().includes(q)) : opts.items;
       listBox.replaceChildren();
       if (!shown.length) {
-        listBox.append(el("span", { class: "label-empty", text: opts.items.length ? "ничего не найдено" : opts.empty }));
+        listBox.append(el("span", { class: "label-empty", text: opts.items.length ? S.card.add.noMatch() : opts.empty }));
         return;
       }
       for (const item of shown) {
@@ -328,8 +328,8 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
     filteredPopup({
       anchor: anchorEl || ui.addRow,
       items: pool.map((l) => ({ id: l.id, name: l.name, color: l.color })),
-      placeholder: "Фильтр меток…",
-      empty: board.state.labels.length ? "все метки доски уже добавлены" : "меток на доске нет",
+      placeholder: S.card.add.labelsPlaceholder(),
+      empty: board.state.labels.length ? S.card.add.labelsAllAdded() : S.card.add.labelsNone(),
       // Creating a label from inside a test would still make a plain board label,
       // so the form belongs only to the author's own section.
       extra: sessionId == null ? newLabelForm : undefined,
@@ -352,8 +352,8 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
     filteredPopup({
       anchor: ui.playingAddRow,
       items: pool.map((s) => ({ id: s.id, name: s.name })),
-      placeholder: "Фильтр тестов…",
-      empty: board.state.sessions.length ? "все тесты доски уже отмечены" : "тестов на доске нет",
+      placeholder: S.card.add.playingsPlaceholder(),
+      empty: board.state.sessions.length ? S.card.add.playingsAllMarked() : S.card.add.playingsNone(),
       onPick: (item) => { void addPlaying(card, item.id); },
     });
   }

@@ -14,6 +14,7 @@ import type { AttachmentBytes, ApplyResult } from "./bundleapply.js";
 import { BOARD_JSON, contentBytes, parseBundle } from "./bundle.js";
 import type { Bundle } from "./bundle.js";
 import { zipRead } from "./zip.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const { fetchJSON, jpost, errMsg } = xyApp;
 
@@ -66,9 +67,8 @@ export async function sniffBundle(file: File): Promise<{ bundle: Bundle; bytesOf
 }
 
 export function summarize(bundle: Bundle, r: ApplyResult): string {
-  let out = `Готово: ${r.cards} карточек, ${r.units.filter((u) => !u.error).length} списков/групп, `
-    + `${bundle.sessions.length} тестов, ${r.events} событий, ${r.attachments} вложений.`;
-  if (r.skipped.length) out += `\nНе перенеслись вложения (${r.skipped.length}): ` + r.skipped.slice(0, 20).join(", ");
+  let out = S.import.bundle.summary(String(r.cards), String(r.units.filter((u) => !u.error).length), String(bundle.sessions.length), String(r.events), String(r.attachments));
+  if (r.skipped.length) out += S.import.bundle.summarySkipped(String(r.skipped.length)) + r.skipped.slice(0, 20).join(", ");
   return out;
 }
 
@@ -83,7 +83,7 @@ export async function createBoardFromBundle(
   log: (line: string) => void,
 ): Promise<{ id: number; summary: string }> {
   await checkQuota(bundle);
-  log("Создаю доску…");
+  log(S.import.bundle.creating());
   const { keymeta, dk } = await xyCrypto.createBoardKeys(pass);
   const created = (await jpost("/api/boards", { ...keymeta, name: name || bundle.board.name })) as { id: number };
   const boardId = created.id;
@@ -102,7 +102,7 @@ export async function createBoardFromBundle(
   } catch (e) {
     // Never leave a half-imported board behind: it was created seconds ago by
     // this same flow, so deleting it is safe, and a retry starts clean.
-    log("Импорт прерван, удаляю недосозданную доску…");
+    log(S.import.bundle.rollback());
     try {
       await xyApp.jdelete(`/api/boards/${boardId}`);
     } catch { /* the original error matters more */ }
@@ -111,7 +111,7 @@ export async function createBoardFromBundle(
 }
 
 export async function importBundle(file: File, name: string, pass: string, log: (line: string) => void): Promise<{ id: number; summary: string }> {
-  log("Читаю архив…");
+  log(S.import.bundle.reading());
   const { bundle, bytesOf } = await readBundleFile(file);
   return await createBoardFromBundle(bundle, bytesOf, name || bundle.board.name, pass, log);
 }

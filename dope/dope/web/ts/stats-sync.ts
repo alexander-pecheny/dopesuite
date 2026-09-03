@@ -1,7 +1,7 @@
 // stats-sync.ts — the live stats-page recompute loop (DopeStatsSync).
 //
 // The EK stats table stays live off the same SSE stream the bracket uses: the
-// engine folds each бой's events into the shared stage cache and the table
+// engine folds each match's events into the shared stage cache and the table
 // recomputes from memory — no refetch — throttled to a few times a second. A
 // delta that couldn't chain means a dropped event, so the bracket resyncs once,
 // debounced so a fleet that all gap together doesn't stampede the bulk endpoint.

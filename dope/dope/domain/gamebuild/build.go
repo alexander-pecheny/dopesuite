@@ -1,10 +1,10 @@
 // Package gamebuild is where a Game comes to exist: it takes a Spec — which
-// фест, which format, its label, its scheme DSL and, when the фест's Games
+// fest, which format, its label, its scheme DSL and, when the fest's Games
 // differ, its entrants — and materialises the Structure the DSL compiles to,
 // numbering the entrants from 1 (ADR-0009), seating the seeds, and writing
 // the stage, match and slot rows every other module reads. Recompile plays an
-// edited DSL onto a live Game the same way, refusing to touch a бой that has
-// begun. The formats that predate the DSL — ОД's tours, КСИ's themes, ЭК's
+// edited DSL onto a live Game the same way, refusing to touch a Match that
+// has begun. The formats that predate the DSL — OD's tours, KSI's themes, EK's
 // pasted JSON — enter through the same Spec, so a caller never learns which
 // is which.
 package gamebuild
@@ -41,9 +41,10 @@ func nextGameIdentityTx(ctx context.Context, tx *sql.Tx, festID int64, gameType,
 	if err := tx.QueryRowContext(ctx, `select coalesce(max(position), 0) + 1 from games where fest_id = ?`, festID).Scan(&position); err != nil {
 		return gameIdentity{}, err
 	}
-	// Suffix only to break a collision. A фест may hold two games of one type
-	// under names of their own — СтудЧР played личная СИ and ТПШ, both `si` —
-	// and numbering the second «ТПШ 2» renames a tournament that had a name.
+	// Suffix only to break a collision. A fest may hold two games of one type
+	// under names of their own — Studchr played individual SI and TPSh, both
+	// `si` — and numbering the second «TPSh 2» renames a tournament that had
+	// a name.
 	title := titleBase
 	for n := 2; ; n++ {
 		var taken int
@@ -71,35 +72,35 @@ func nextGameIdentityTx(ctx context.Context, tx *sql.Tx, festID int64, gameType,
 // title the Game is offered under (a collision gets a numeric suffix); DSL
 // its scheme, which every format is described in now — except the three
 // that predate it, whose knobs ride below and are used only when DSL is
-// empty. Entrants are which of the фест's Participants play, in seed order;
-// absent, the whole фест plays, which is what a one-game фест wants.
+// empty. Entrants are which of the fest's Participants play, in seed order;
+// absent, the whole fest plays, which is what a one-game fest wants.
 type Spec struct {
 	FestID   int64
 	Type     string
 	Label    string
 	DSL      string
 	Entrants []int64
-	// The pre-DSL formats. ОД: tours of so many questions; КСИ: themes and an
-	// optional stickers block; ЭК: a pasted detailed scheme — the ADR-0006
+	// The pre-DSL formats. OD: tours of so many questions; KSI: themes and an
+	// optional stickers block; EK: a pasted detailed scheme — the ADR-0006
 	// escape hatch, and the one road to the manual Kind.
 	ODTours, ODQuestions int
 	KSIThemes            int
 	KSIStickers          json.RawMessage
-	// Мультиигры: the мини-игры as the host wrote them, and the comparators
-	// that break a tie on Итог (empty: equal totals share a place).
+	// Multi: the minigames as the host wrote them, and the comparators that
+	// break a tie on the total (empty: equal totals share a place).
 	Minigames    []games.MultiGame
 	MultiSorting []string
 	Pasted       *store.FestScheme
 }
 
-// Create makes the Game the Spec describes and returns its id. A фест's Games
-// rarely share an entrant list (ADR-0009): СтудЧР-2026 registered 65 teams,
-// its ОД seated all of them, its ЭК seated 48 and its брейн a different 48.
+// Create makes the Game the Spec describes and returns its id. A fest's Games
+// rarely share an entrant list (ADR-0009): Studchr-2026 registered 65 teams,
+// its OD seated all of them, its EK seated 48 and its Brain a different 48.
 // Numbers are dealt from 1 inside the Game, so the same team is «2» in one
 // and «4» in another.
 func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 	if strings.TrimSpace(spec.DSL) != "" {
-		// Мультиигры is one sitting whose shape is its мини-игры, and the DSL
+		// Multi is one sitting whose shape is its minigames, and the DSL
 		// has no way to say what they are — so a scheme for one would compile
 		// to a game that scores nothing. Refuse it rather than build it.
 		if spec.Type == games.Multi {
@@ -130,9 +131,9 @@ func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 	return 0, errors.New("опишите схему игры")
 }
 
-// Materialise makes a Game from a pasted detailed scheme, in the фест given:
-// the scheme row, the game row, its столы, and the Structure — stages with
-// their Kind, бои with their буква (dealt here when the JSON brought none),
+// Materialise makes a Game from a pasted detailed scheme, in the fest given:
+// the scheme row, the game row, its venues, and the Structure — stages with
+// their Kind, matches with their letter (dealt here when the JSON brought none),
 // slots left for a seed import to fill. It returns the game id. Teams travel
 // by that import, never inside the JSON.
 func Materialise(ctx context.Context, tx *sql.Tx, festID int64, scheme store.FestScheme) (int64, error) {
@@ -175,7 +176,7 @@ values(?, ?, ?, ?, ?, ?, ?, '{}', 'pending', 'fest', 'fest', 1, ?, ?)`,
 	return gameID, writePastedStructureTx(ctx, tx, festID, gameID, scheme)
 }
 
-// writePastedStructureTx writes a pasted scheme's столы and Structure with no
+// writePastedStructureTx writes a pasted scheme's venues and Structure with no
 // seat resolved: its Participants arrive by seed import, and the resolver
 // seats them then.
 func writePastedStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, scheme store.FestScheme) error {
@@ -188,10 +189,10 @@ func writePastedStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int6
 
 func unseated(store.SchemeSlot) any { return nil }
 
-// dealLetters gives a pasted scheme's бои their буквы the way the sheets do —
-// A.. in stage order, then бой order — when the JSON brought none. A sitting
-// not called «Бой N» (the письменный отбор) is skipped, as the compiler skips a
-// Block that declined letters.
+// dealLetters gives a pasted scheme's matches their letters the way the sheets
+// do — A.. in stage order, then match order — when the JSON brought none. A
+// sitting whose title does not match boutTitle (the written qualifier) is
+// skipped, as the compiler skips a Block that declined letters.
 func dealLetters(scheme *store.FestScheme) {
 	for _, stage := range scheme.Stages {
 		for _, match := range stage.Matches {
@@ -218,7 +219,7 @@ var boutTitle = regexp.MustCompile(`Бой\s+\d+`)
 // createSchemeGame creates a game of any type from a scheme DSL: compile,
 // store the scheme with its source, seat the entrants and materialise the
 // structure. Every format reaches the same plumbing — the DSL is the way a
-// bracket is described, not a брейн feature.
+// bracket is described, not a Brain feature.
 func createSchemeGame(ctx context.Context, tx *sql.Tx, festID int64, gameType, label, dsl string, entrants []int64) (int64, error) {
 	identity, err := nextGameIdentityTx(ctx, tx, festID, gameType, label)
 	if err != nil {
@@ -288,12 +289,12 @@ func schemeForEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType
 }
 
 // stageEmptyState builds a match's pristine Protocol document for a stage of a
-// compiled scheme. The Protocol owns the shape — a брейн бой is a row of
-// questions, a СИ бой a grid of themes — so the builder asks it rather than
-// knowing. Falls back to брейн's for schemes compiled before Protocols carried
-// their own config.
+// compiled scheme. The Protocol owns the shape — a Brain match is a row of
+// questions, an SI match a grid of themes — so the builder asks it rather
+// than knowing. Falls back to Brain's for schemes compiled before Protocols
+// carried their own config.
 func stageEmptyState(gameType string, stage store.SchemeStage, seats, fallbackQuestions int) string {
-	// A blob-shaped Protocol (ЭК, личная СИ) stores an empty document: its
+	// A blob-shaped Protocol (EK, individual SI) stores an empty document: its
 	// seats come from the Slots and its marks arrive as edits. Seeding it with
 	// the Protocol's own state shape would write an array where the blob keys
 	// a map, and the first edit would fail to parse it.
@@ -321,7 +322,7 @@ func stageEmptyState(gameType string, stage store.SchemeStage, seats, fallbackQu
 }
 
 // writeCompiledStructureTx writes a compiled scheme's Structure, seating the
-// фест's registry first unless a seed source owns the seats — «Import seed»
+// fest's registry first unless a seed source owns the seats — «Import seed»
 // writes game_assignments by seed rank, so creation must not pre-fill them by
 // number — or the Game already named its entrants: seating the registry on
 // top would add the teams this Game does not play.
@@ -344,9 +345,9 @@ func writeCompiledStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID in
 
 // writeStructureTx is the one writer of a Game's stages, matches and slots —
 // compiled or pasted, created, rebuilt or imported. A stage carries its Kind
-// (its stage_type when the scheme names none), a бой its буква, its стол when
-// the caller resolved the scheme's столы to rows, and the pristine Protocol
-// document its Protocol asks for; seat says who sits in a seed slot.
+// (its stage_type when the scheme names none), a match its letter, its venue
+// when the caller resolved the scheme's venues to rows, and the pristine
+// Protocol document its Protocol asks for; seat says who sits in a seed slot.
 func writeStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string, scheme store.FestScheme, venues map[int]int64, seat func(store.SchemeSlot) any) error {
 	for stageIndex, stage := range scheme.Stages {
 		position := stage.Position
@@ -396,7 +397,7 @@ values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
 }
 
 // Recompile re-expands an edited DSL onto a live game: stages and unstarted
-// бои follow the new scheme (questions changes included), started бои must
+// matches follow the new scheme (questions changes included), started matches
 // survive with identical slot sources — else the whole edit is refused,
 // naming them.
 func Recompile(ctx context.Context, tx *sql.Tx, festID, gameID int64, dsl string) error {
@@ -412,7 +413,7 @@ select coalesce(scheme_json, '{}'), game_type from games where id = ? and fest_i
 	}
 	_ = json.Unmarshal([]byte(oldSchemeJSON), &meta)
 	// A Game that named its entrants keeps them across a recompile. Falling back
-	// to the фест's registry here would recompile a game of 48 against a roster
+	// to the fest's registry here would recompile a game of 48 against a roster
 	// of 65 and refuse the scheme it was created from.
 	entrants, err := gameEntrantsTx(ctx, tx, gameID)
 	if err != nil {
@@ -637,7 +638,7 @@ func uniqueSchemeSlug(base string) string {
 
 // rebuildTx materialises a Game's Structure afresh from what the Game already
 // holds — its DSL, compiled against its own entrants and seating them again,
-// or its pasted scheme with its столы — and returns the scheme it built.
+// or its pasted scheme with its venues — and returns the scheme it built.
 // Clear deletes the old rows first and calls this.
 func rebuildTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType, dsl, schemeJSON string, entrants []int64) ([]byte, error) {
 	if strings.TrimSpace(dsl) != "" {

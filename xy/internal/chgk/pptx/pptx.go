@@ -475,7 +475,7 @@ func (e *exporter) plainLinesForMeasurement(text string) []string {
 // ── odds and ends ───────────────────────────────────────────────────────────
 
 // label is get_label: a question's own !!Label override, and the plural
-// «Источники» when it names more than one.
+// sources label when it names more than one.
 func (e *exporter) label(q *fsource.Question, field string) string {
 	if ov, ok := q.Get("overrides").(map[string]string); ok {
 		if v, ok := ov[field]; ok && v != "" {

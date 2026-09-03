@@ -376,7 +376,7 @@ func (a Args) buildCellBody(b block) string {
 	return body
 }
 
-// insideLabel is the grey «Вопрос N» that `question_label: inside` prints inside
+// insideLabel is the grey "Question N" that `question_label: inside` prints inside
 // every cell, so a handout still names its question once it is cut out.
 func (a Args) insideLabel(b block) string {
 	if v, _ := b.str("question_label"); v != "inside" {

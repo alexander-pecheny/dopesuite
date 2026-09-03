@@ -74,14 +74,14 @@ type Options struct {
 	// DefaultAuthor is --defaultauthor: whom a question with no author of its
 	// own is credited to.
 	DefaultAuthor string
-	// TourNumbersAsWords is --tour_numbers_as_words: «Первый тур» rather than
-	// whatever the document called it.
+	// TourNumbersAsWords is --tour_numbers_as_words: "the first tour" rather
+	// than whatever the document called it.
 	TourNumbersAsWords bool
 	// Language is --language: which regexes_*.json names the field markers.
 	// Empty is Russian.
 	Language string
 	// LabelsFile is --labels_file: a labels TOML of one's own, which the
-	// handout rewrite reads its «Раздаточный материал» from.
+	// handout rewrite reads its printed handout label from.
 	LabelsFile string
 	// Typo are the --typography_* switches. The zero value is every knob off,
 	// so a caller that wants chgksuite's defaults says so.
@@ -154,7 +154,7 @@ func (p *parser) parse(text string, opts Options) fsource.Doc {
 	}
 	p.dirtyMergeToXUntilNextField("source")
 
-	// A bare "Автор:" line means the author's name is on the next line.
+	// A bare author-label line means the author's name is on the next line.
 	for i := 0; i < len(p.structure); i++ {
 		if p.structure[i].Type == "author" &&
 			p.rx.authorOnly.MatchString(typo.REW(p.structure[i].str())) &&
@@ -446,7 +446,7 @@ func (p *parser) processSingleNumberLines(mode string) {
 	}
 	patch := func(l numLine) {
 		p.structure[l.idx].Type = "question"
-		// question_stub for ru: "Вопрос {}."
+		// question_stub for ru: "Question {}."
 		p.structure[l.idx].Content = "Вопрос " + strconv.Itoa(l.num) + "."
 	}
 	if mode == "on" {
@@ -478,9 +478,9 @@ func (p *parser) processSingleNumberLines(mode string) {
 	}
 }
 
-// dupletBlitzHack ports the "Дуплет."/"Блиц." special case (chgksuite issue #23).
-// Note the Python operator precedence: a lone "Дуплет." forces a question
-// unconditionally, while "Блиц." is also gated on the surrounding elements.
+// dupletBlitzHack ports the "duplet"/"blitz" special case (chgksuite issue #23).
+// Note the Python operator precedence: a lone "duplet." forces a question
+// unconditionally, while "blitz." is also gated on the surrounding elements.
 func (p *parser) dupletBlitzHack() {
 	for i, e := range p.structure {
 		words := strings.Fields(e.str())
@@ -583,7 +583,7 @@ func (p *parser) stripLabels() {
 		if strings.HasPrefix(e.str(), sep) {
 			e.Content = strings.TrimPrefix(e.str(), sep)
 		}
-		// The gendered "Авторка:" label is preserved as a 4s field-label override.
+		// The gendered feminine author label is preserved as a 4s field-label override.
 		if e.Type == "author" && beforeReplacement != "" &&
 			strings.Contains(strings.ToLower(beforeReplacement), "авторка:") {
 			e.Content = "!!Авторка" + e.str()
@@ -669,7 +669,7 @@ func listItemEnd(s string, end int) int {
 
 // detectInnerList ports the "detect inner lists" block: a run of 1., 2., 3. …
 // markers turns the element's content into a [preamble, items] list. For a
-// question this only applies to Дуплет/Блиц (whose parts really are a list);
+// question this only applies to duplets and blitzes (whose parts really are a list);
 // elsewhere (sources, comments) any ascending run counts.
 func (p *parser) detectInnerList(e *elem) {
 	s, ok := e.Content.(string)
@@ -718,7 +718,7 @@ func (p *parser) detectInnerList(e *elem) {
 	}
 	isQuestion := e.Type == "question"
 	low := strings.ToLower(s)
-	// Python: element[0] != "question" or (element[0]=="question" and "дуплет" in …) or "блиц" in …
+	// Python: element[0] != "question" or (element[0]=="question" and "duplet" in …) or "blitz" in …
 	if !(!isQuestion || (isQuestion && strings.Contains(low, "дуплет")) || strings.Contains(low, "блиц")) {
 		return
 	}
@@ -937,7 +937,7 @@ func (p *parser) postprocessQuestion(q *fsource.Question) {
 		}
 	}
 	qs = joinStrings(q.Get("question"))
-	// "Раздаточный материал:\n[…" → "[Раздаточный материал:\n…" so the handout
+	// "Handout:\n[…" → "[Handout:\n…" so the handout
 	// ends up inside the bracketed block the composer looks for.
 	if m := p.rx.handoutBefore.FindString(qs); m != "" {
 		gap := p.rx.handoutBefore.FindStringSubmatch(qs)[1]
@@ -946,7 +946,7 @@ func (p *parser) postprocessQuestion(q *fsource.Question) {
 }
 
 // tryExtractField ports _try_extract_field: a field that never got its own line
-// (e.g. a "Зачёт:" buried at the end of the answer) is pulled out of whichever
+// (e.g. a "zachet:" label buried at the end of the answer) is pulled out of whichever
 // field currently holds it.
 func (p *parser) tryExtractField(q *fsource.Question, k string) {
 	re := p.rx.field(k)

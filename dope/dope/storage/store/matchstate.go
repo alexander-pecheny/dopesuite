@@ -8,13 +8,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	dopestrings "dope/i18nstrings"
 )
 
-// ThemeCount is how many regular themes a бой has when nothing says otherwise —
-// ЭК's twelve. A Kind that plays a different number says so in its stage config
-// (личная СИ's группы play six, its play-off eight, its grand final twelve), and
-// a бой padded to twelve when it played six draws six empty columns nobody can
-// fill.
+// ThemeCount is how many regular themes a match has when nothing says otherwise —
+// EK's twelve. A Kind that plays a different number says so in its stage config
+// (individual SI's groups play six, its play-off eight, its grand final twelve),
+// and a match padded to twelve when it played six draws six empty columns
+// nobody can fill.
 const ThemeCount = 12
 
 // QuestionValues is the EK/KSI per-answer point scale (lowest to highest).
@@ -40,30 +42,30 @@ type DBMatchState struct {
 	RawState       string // verbatim matches.state_json — the Protocol document for non-EK games
 	ParticipantIDs []int64
 	RosterSource   string
-	// Themes is how many regular themes this бой plays, from its stage. Zero
-	// means the default — a бой whose stage never said.
+	// Themes is how many regular themes this match plays, from its stage. Zero
+	// means the default — a match whose stage never said.
 	Themes int
 }
 
 // teamBlobProtocols are the Protocols whose match state is the team-keyed
 // blob (matchops/MatchBlob), which the loader projects into slots and every
 // generic edit addresses by team; each registers itself (protocol.Register).
-// A game with no type is the legacy ЭК fixture.
+// A game with no type is the legacy EK fixture.
 var teamBlobProtocols = map[string]bool{"": true}
 
 func RegisterTeamBlob(code string) { teamBlobProtocols[code] = true }
 
 func TeamBlobShaped(gameType string) bool { return teamBlobProtocols[gameType] }
 
-// seatRosterProtocols are the Protocols whose бои field named players and so
-// need each seat's roster loaded — every team-blob one, and Тройка, whose
-// document records which of a team's three sat in which кресло. Each registers
+// seatRosterProtocols are the Protocols whose matches name players and so
+// need each seat's roster loaded — every team-blob one, and Troika, whose
+// document records which of a team's three sat in which chair. Each registers
 // itself (protocol.Register).
 var seatRosterProtocols = map[string]bool{}
 
 func RegisterSeatRoster(code string) { seatRosterProtocols[code] = true }
 
-// SeatsPlayers reports whether a бой of this Protocol names players in its
+// SeatsPlayers reports whether a match of this Protocol names players in its
 // seats, and therefore wants their roster on the view.
 func SeatsPlayers(gameType string) bool {
 	return TeamBlobShaped(gameType) || seatRosterProtocols[gameType]
@@ -154,7 +156,7 @@ func NormalizeStateTo(state *MatchState, themes int) {
 		themes = ThemeCount
 	}
 	if state.Title == "" {
-		state.Title = "Бой A"
+		state.Title = dopestrings.Default.Storage.Match.DefaultTitle()
 	}
 	if state.Revision == 0 {
 		state.Revision = 1
@@ -194,9 +196,9 @@ func NormalizeStateTo(state *MatchState, themes int) {
 	}
 }
 
-// MatchSelector names the бои a loader reads; every field given narrows the
-// set. A fest and a code is one бой of a bracket; a fest, game and match id
-// is one бой exactly; a fest and game is the whole game, a stage code one
+// MatchSelector names the matches a loader reads; every field given narrows the
+// set. A fest and a code is one match of a bracket; a fest, game and match id
+// is one match exactly; a fest and game is the whole game, a stage code one
 // Block of it.
 type MatchSelector struct {
 	FestID, GameID, MatchID int64
@@ -236,7 +238,7 @@ func LoadDBMatchState(ctx context.Context, q Queryer, festID int64, code string)
 	return LoadMatchState(ctx, q, MatchSelector{FestID: festID, Code: code})
 }
 
-// LoadMatchState loads the first бой the selector names, in schedule order;
+// LoadMatchState loads the first match the selector names, in schedule order;
 // sql.ErrNoRows when it names none.
 func LoadMatchState(ctx context.Context, q Queryer, sel MatchSelector) (DBMatchState, error) {
 	matches, err := LoadMatchStates(ctx, q, sel)
@@ -249,9 +251,9 @@ func LoadMatchState(ctx context.Context, q Queryer, sel MatchSelector) (DBMatchS
 	return matches[0], nil
 }
 
-// LoadMatchStates loads every бой the selector names, in schedule order —
-// stage, then бой — with slots resolved into team states. Four statements
-// however many бои: the headers, the slots, the rosters, the player names.
+// LoadMatchStates loads every match the selector names, in schedule order —
+// stage, then match — with slots resolved into team states. Four statements
+// however many matches: the headers, the slots, the rosters, the player names.
 func LoadMatchStates(ctx context.Context, q Queryer, sel MatchSelector) ([]DBMatchState, error) {
 	where, args := sel.where()
 	rows, err := q.QueryContext(ctx, `
@@ -386,7 +388,7 @@ func placeholders(n int) string {
 	return strings.TrimSuffix(strings.Repeat("?,", n), ",")
 }
 
-// loadMatchSlots reads every бой's seats in one statement, by match id.
+// loadMatchSlots reads every match's seats in one statement, by match id.
 func loadMatchSlots(ctx context.Context, q Queryer, matches []DBMatchState) (map[int64][]slotRecord, error) {
 	ids := matchIDs(matches)
 	rows, err := q.QueryContext(ctx, `
@@ -416,7 +418,7 @@ type rosterKey struct {
 	gameID, participantID int64
 }
 
-// loadRosters reads the roster of every seated team of every team-blob бой in
+// loadRosters reads the roster of every seated team of every team-blob match in
 // one statement per roster source in play — a fest-wide roster or a game's own.
 func loadRosters(ctx context.Context, q Queryer, matches []DBMatchState, slots map[int64][]slotRecord) (map[rosterKey][]RosterMember, error) {
 	rosters := map[rosterKey][]RosterMember{}
@@ -484,7 +486,7 @@ order by gtp.participant_id, gtp.roster_order`
 
 func stageThemeCount(configJSON string) int { return ParseStageConfig(configJSON).Themes() }
 
-// blobPlayerNames resolves every player id the бои's blobs mention to a
+// blobPlayerNames resolves every player id the matches' blobs mention to a
 // display name, in one statement.
 func blobPlayerNames(ctx context.Context, q Queryer, matches []DBMatchState) (func(int64) string, error) {
 	ids := map[int64]bool{}

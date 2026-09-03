@@ -1,6 +1,6 @@
 // bell.ts — the 🔔: the badge (blue for an unread change by someone else, red
 // when any of it mentions me) and the panel of recent other-authored activity,
-// newest first, each row wording the event the way the лента does and opening
+// newest first, each row wording the event the way the Timeline does and opening
 // its card. Read tracking is online-only best-effort, never through the outbox.
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
@@ -8,6 +8,7 @@ import { decodeCommentPayload, eventAuthor, eventVerb } from "./timeline.js";
 import type { Board } from "./panels.js";
 import type { BoardCard } from "./unlock.js";
 import type { DataKey } from "./crypto.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const { fetchJSON, jpost, el, deriveTitle } = xyApp;
 
@@ -78,9 +79,9 @@ export function createBell(board: Board, ui: BellUI, deps: BellDeps): Bell {
     if (notifPanelEl) { closeNotifPanel(); return; }
     const panel = el("div", { class: "popover notif-panel" });
     const head = el("div", { class: "notif-panel-head" },
-      el("span", { text: "События" }),
+      el("span", { text: S.chrome.bell.title() }),
       el("button", {
-        class: "btn btn-small", type: "button", text: "Прочитать всё",
+        class: "btn btn-small", type: "button", text: S.chrome.bell.readAll(),
         onclick: async () => {
           try { await jpost(`/api/boards/${board.id}/read-all`, {}); } catch (_) { return; }
           board.state.unread = {};
@@ -90,7 +91,7 @@ export function createBell(board: Board, ui: BellUI, deps: BellDeps): Bell {
         },
       }));
     panel.append(head);
-    const body = el("div", { class: "notif-panel-body" }, el("div", { class: "notif-empty", text: "Загрузка…" }));
+    const body = el("div", { class: "notif-panel-body" }, el("div", { class: "notif-empty", text: S.chrome.bell.loading() }));
     panel.append(body);
     ui.toggle.setAttribute("aria-expanded", "true");
     ui.toggle.parentElement?.append(panel);
@@ -102,13 +103,13 @@ export function createBell(board: Board, ui: BellUI, deps: BellDeps): Bell {
     try { events = (await fetchJSON(`/api/boards/${board.id}/activity`)) as ActivityEvent[]; } catch (_) {}
     if (notifPanelEl !== panel) return; // closed while loading
     body.replaceChildren();
-    if (!events.length) { body.append(el("div", { class: "notif-empty", text: "Нет новых событий" })); return; }
+    if (!events.length) { body.append(el("div", { class: "notif-empty", text: S.chrome.bell.empty() })); return; }
     for (const ev of events) {
       const card = board.state.cards.find((c) => c.id === ev.card_id);
       if (!card) continue; // card deleted/moved away since the event was recorded
       const row = el("button", { class: "notif-row", type: "button" });
       if (ev.unread) row.append(el("span", { class: "unread-dot" + (ev.mention ? " unread-dot-mention" : "") }));
-      const verb = ev.mention ? (ev.mention_reply ? "ответ вам" : "упомянул(а) вас") : eventVerb(ev.type);
+      const verb = ev.mention ? (ev.mention_reply ? S.chrome.bell.mentionReply() : S.chrome.bell.mention()) : eventVerb(ev.type);
       const when = new Date(ev.created_at).toLocaleString("ru-RU");
       const bodyWrap = el("div", { class: "notif-row-body" },
         el("div", { class: "notif-row-meta", text: `${eventAuthor(ev, board.state.me, board.state.memberNames)} ${verb} · ${deps.cardTitle(card)} · ${when}` }));

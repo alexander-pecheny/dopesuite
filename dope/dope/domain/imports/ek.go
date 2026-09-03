@@ -8,6 +8,7 @@ import (
 	"dope/dope/domain/scoring"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -17,7 +18,7 @@ import (
 
 // ek.go is a one-shot maintenance entrypoint
 // (`dope import-ek-results --db ... --plan ek_plan.json [--apply]`) used to
-// restore the СтудЧР-2026 ЭК bracket after it was played in a Google Sheet
+// restore the StudChR-2026 EK bracket after it was played in a Google Sheet
 // while only the start of the game was saved in the app. It replays the parsed
 // sheet through the app's own write path — per match it writes the per-theme
 // player, the five per-question marks, and the manual place, marks the bout
@@ -216,7 +217,7 @@ order by m.position, m.code, r.place`, gameID)
 			return
 		}
 		if mcode != cur {
-			fmt.Printf("-- Бой %s [%s]\n", mcode, status)
+			fmt.Println(dopestrings.Default.Imports.EkRestore.MatchHeader(mcode, status))
 			cur = mcode
 		}
 		fmt.Printf("   %.0f. %-30s Σ=%-5d Σ+=%-5d\n", place, name, total, plus)

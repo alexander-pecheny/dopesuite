@@ -81,7 +81,8 @@ func toString(v any) string {
 }
 
 // IsWarmup is chgksuite_parser.check_if_zero: a warm-up question, numbered 0 or
-// «Разминка». Stricter than isZero below, which is compose_4s's own rule.
+// carrying the warm-up heading (the Russian for "Warm-up"). Stricter than
+// isZero below, which is compose_4s's own rule.
 func IsWarmup(q *Question) bool {
 	number := q.Get("number")
 	if number == nil {

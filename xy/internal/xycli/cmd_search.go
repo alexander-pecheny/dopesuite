@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	xystrings "xy/i18nstrings"
 )
 
 // Search reads what the browser's Search Index reads — each Card's 4s, its Alias
@@ -20,11 +22,12 @@ type searchHit struct {
 }
 
 func cmdSearch(a *app, args []string) error {
-	fs := a.flags("search", "xy-cli search «Гоголь» --board B [--regex] [--cards|--comments]")
+	s := xystrings.Default
+	fs := a.flags("search", s.Cli.Search.Usage())
 	board := a.boardFlag(fs)
-	useRegex := fs.Bool("regex", false, "запрос — регулярное выражение (по свёрнутому тексту)")
-	cardsOnly := fs.Bool("cards", false, "искать только в карточках")
-	commentsOnly := fs.Bool("comments", false, "искать только в комментариях")
+	useRegex := fs.Bool("regex", false, s.Cli.Search.RegexFlag())
+	cardsOnly := fs.Bool("cards", false, s.Cli.Search.CardsFlag())
+	commentsOnly := fs.Bool("comments", false, s.Cli.Search.CommentsFlag())
 	rest, err := a.parse(fs, args)
 	if err != nil {
 		return err
@@ -94,7 +97,7 @@ func cmdSearch(a *app, args []string) error {
 			a.printf("%6d %s %s\n", h.CardID, mark, oneLine(h.Line))
 		}
 		if len(hits) == 0 {
-			a.note("ничего не нашлось\n")
+			a.note("%s", s.Cli.Search.Nothing())
 		}
 	})
 }

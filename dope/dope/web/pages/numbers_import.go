@@ -10,6 +10,7 @@ import (
 	"dope/dope/domain/numbering"
 	"dope/dope/platform/util"
 	"dope/dope/web/route"
+	dopestrings "dope/i18nstrings"
 )
 
 // Mass import of team numbers from an external source (e.g. printed answer
@@ -48,7 +49,7 @@ type importEntry struct {
 	Raw    string
 }
 
-// normalizeTeamName folds a name for fuzzy comparison: lowercase, ё→е, and
+// normalizeTeamName folds a name for fuzzy comparison: lowercase, yo→ye, and
 // collapsed internal whitespace.
 func normalizeTeamName(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
@@ -102,6 +103,7 @@ func levenshtein(a, b string) int {
 func parseNumberImport(text string) (entries []importEntry, errs []string) {
 	seenNumber := make(map[int]int) // number -> first line it appeared on
 	lineNo := 0
+	s := dopestrings.Default
 	for _, raw := range strings.Split(text, "\n") {
 		lineNo++
 		line := strings.TrimSpace(strings.TrimSuffix(raw, "\r"))
@@ -110,16 +112,16 @@ func parseNumberImport(text string) (entries []importEntry, errs []string) {
 		}
 		numTxt, name := splitNumberLine(line)
 		if numTxt == "" || name == "" {
-			errs = append(errs, "Строка "+strconv.Itoa(lineNo)+": ожидается «номер<таб>команда».")
+			errs = append(errs, s.Numbers.Import.LineFormat(strconv.Itoa(lineNo)))
 			continue
 		}
 		n, err := strconv.Atoi(numTxt)
 		if err != nil || n <= 0 || n > numbering.MaxNumber {
-			errs = append(errs, "Строка "+strconv.Itoa(lineNo)+": номер должен быть целым от 1 до "+strconv.Itoa(numbering.MaxNumber)+".")
+			errs = append(errs, s.Numbers.Import.LineRange(strconv.Itoa(lineNo), strconv.Itoa(numbering.MaxNumber)))
 			continue
 		}
 		if prev, ok := seenNumber[n]; ok {
-			errs = append(errs, "Строка "+strconv.Itoa(lineNo)+": номер "+strconv.Itoa(n)+" уже указан в строке "+strconv.Itoa(prev)+".")
+			errs = append(errs, s.Numbers.Import.LineDup(strconv.Itoa(lineNo), strconv.Itoa(n), strconv.Itoa(prev)))
 			continue
 		}
 		seenNumber[n] = lineNo
@@ -255,7 +257,7 @@ type importApplyResponse struct {
 func (s *Server) HandleHostFestNumbersImportApply(w http.ResponseWriter, r *http.Request, festID int64) {
 	var req importApplyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		if err := route.JSON(w, importApplyResponse{Error: "Не удалось прочитать данные."}); err != nil {
+		if err := route.JSON(w, importApplyResponse{Error: dopestrings.Default.Numbers.Apply.ReadFailed()}); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
@@ -280,19 +282,19 @@ func (s *Server) HandleHostFestNumbersImportApply(w http.ResponseWriter, r *http
 	seenTeam := make(map[int64]bool, len(req.Assignments))
 	for _, a := range req.Assignments {
 		if !validIDs[a.TeamID] {
-			if err := route.JSON(w, importApplyResponse{Error: "Команда не из этого феста."}); err != nil {
+			if err := route.JSON(w, importApplyResponse{Error: dopestrings.Default.Numbers.Apply.ForeignTeam()}); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 			return
 		}
 		if a.Number <= 0 || a.Number > numbering.MaxNumber {
-			if err := route.JSON(w, importApplyResponse{Error: "Номер должен быть целым от 1 до " + strconv.Itoa(numbering.MaxNumber) + "."}); err != nil {
+			if err := route.JSON(w, importApplyResponse{Error: dopestrings.Default.Numbers.Apply.NumberRange(strconv.Itoa(numbering.MaxNumber))}); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 			return
 		}
 		if seenTeam[a.TeamID] {
-			if err := route.JSON(w, importApplyResponse{Error: "Команда выбрана несколько раз."}); err != nil {
+			if err := route.JSON(w, importApplyResponse{Error: dopestrings.Default.Numbers.Apply.TeamRepeated()}); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 			return

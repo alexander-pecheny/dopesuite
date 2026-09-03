@@ -8,6 +8,7 @@
 // `host` is never passed: it is the route's.
 
 import {createLiveEvents, createScopedWriter, createSyncIndicator, createHostPresence, gameEventsURL, installClientRecorder, scheduleStaticReload} from "./state-sync.js";
+import S from "./i18nstrings_ru_gen.js";
 import type {ClientRecorder, HostPresence, LiveEvents, PatchPath, ScopedWriter, SyncIndicator} from "./state-sync.js";
 import {createStatusReporter, createViewerCounter} from "./widgets.js";
 import {createGameDataLoader, fetchGameData, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, renderGameBreadcrumbs} from "./game-page.js";
@@ -25,8 +26,8 @@ export interface CursorKind {
 export interface GameChrome {
   festTitle: string;
   gameTitle: string;
-  // The game's own href when the current page is a section below it (ЭК's
-  // Площадки, Статистика…), and that section's title; both empty at the game.
+  // The game's own href when the current page is a section below it (EK's
+  // Venues, Stats…), and that section's title; both empty at the game.
   gameHref?: string;
   currentTitle?: string;
 }
@@ -42,10 +43,10 @@ export interface GameShellSpec {
   apiBase?: string;
   // The init payload's common flags, read before a loader consumes it.
   init?: Record<string, unknown> | null;
-  // An embedded view (ЭК's ?embed=1) mounts no menu items and no presence.
+  // An embedded view (EK's ?embed=1) mounts no menu items and no presence.
   embedded?: boolean;
   // Whether the ☰ menu offers the game's XLSX/archive downloads (the server
-  // exports ОД, КСИ and ЭК; not брейн). Default true.
+  // exports OD, KSI and EK; not brain). Default true.
   downloads?: boolean;
   chrome: () => GameChrome;
   cursorKinds: Record<string, CursorKind>;
@@ -102,7 +103,7 @@ export function mountGamePage(spec: GameShellSpec): GameShell {
 
   function renderChrome(): void {
     const chrome = spec.chrome();
-    const gameTitle = String(chrome.gameTitle || "").trim() || "Игра";
+    const gameTitle = String(chrome.gameTitle || "").trim() || S.screen.title.game();
     const festTitle = String(chrome.festTitle || "").trim();
     const currentTitle = String(chrome.currentTitle || "").trim();
     document.title = festTitle ? `${currentTitle || gameTitle} · ${festTitle}` : currentTitle || gameTitle;
@@ -110,7 +111,7 @@ export function mountGamePage(spec: GameShellSpec): GameShell {
     renderGameBreadcrumbs(spec.breadcrumbsNode, {
       host: !viewer,
       festHref: viewer ? `/fest/${spec.festID}` : `/host/fest/${spec.festID}`,
-      festTitle: festTitle || "Фест",
+      festTitle: festTitle || S.screen.title.fest(),
       gameHref: chrome.gameHref || "",
       gameTitle,
       currentTitle,
@@ -179,7 +180,7 @@ export function mountGamePage(spec: GameShellSpec): GameShell {
 
 // ---- the game document ----
 
-// A page whose whole Protocol document is one state blob (ОД, КСИ) lives
+// A page whose whole Protocol document is one state blob (OD, KSI) lives
 // through one lifecycle: the snapshot (init payload, then the cache, then the
 // API) is adopted; the live events and the scoped writer are built on the
 // game-state scope; a remote state arrives overlaid with this page's un-acked

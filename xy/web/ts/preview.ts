@@ -1,11 +1,13 @@
 // preview.ts — xy's one screen rendering of a question: a 4s card as the docx
 // export would set it. renderPreviewCard turns a card into DOM — a numbered
-// question with its answer, зачёт and the rest, or a heading/meta block — over
+// question with its answer, zachet (accepted answer) and the rest, or a
+// heading/meta block — over
 // renderRich, which walks chgk's inline runs (bold, italic, links, (screen …),
 // line and page breaks, images) in print or screen mode. The list preview, the
-// card editor's Просмотр and the import preview all draw through it.
+// card editor's Preview view and the import preview all draw through it.
 import { xyApp } from "./app.js";
 import { xyChgk } from "./chgk.js";
+import S from "./i18nstrings_ru_gen.js";
 import type { ScreenValue } from "./chgk.js";
 import type { BoardCard } from "./unlock.js";
 
@@ -14,7 +16,7 @@ const { el } = xyApp;
 export interface PvCard { id: number; kind: string; desc: string; listId?: number }
 const PV_LABELS = xyChgk.QUESTION_LABELS;
 
-// fillPreviewImages swaps the "[изображение: …]" placeholders inside an already
+// fillPreviewImages swaps the image-missing placeholders inside an already
 // rendered preview for the images that have since resolved.
 export function fillPreviewImages(root: ParentNode, imgMap: Map<string, string>): void {
   for (const ph of root.querySelectorAll<HTMLElement>(".pv-img-missing")) {
@@ -57,7 +59,7 @@ export function renderRich(text: string, imgMap: Map<string, string>, opts: Rich
       const name = xyChgk.imgName(val);
       const url = imgMap.get(name);
       if (url) frag.append(el("img", { class: "pv-img", src: url, alt: name }));
-      else frag.append(el("span", { class: "pv-img-missing", dataset: { img: name }, text: `[изображение: ${name}]` }));
+      else frag.append(el("span", { class: "pv-img-missing", dataset: { img: name }, text: S.chgk.preview.imageMissing(name) }));
       afterImg = true;
       continue;
     }
@@ -136,10 +138,10 @@ export function renderPreviewCard(card: PvCard, number: string | null, imgMap: M
     const wrap = el("article", { class: "pv-q", dataset: { cardId: card.id } });
     const handout = find("handout");
     if (handout) wrap.append(pvField("handout", handout.text, imgMap, screen, "pv-handout"));
-    // Question line: small inline ✏️ (edit lists only) + bold "Вопрос N." label
+    // Question line: small inline ✏️ (edit lists only) + bold "Question N." label
     // (overridable) + question text (which may itself be a blitz/duplet list).
     const qov = xyChgk.applyOverride(xyChgk.questionText(card.desc));
-    const qLabel = qov.label || "Вопрос";
+    const qLabel = qov.label || S.chgk.label.question();
     const qline = el("div", { class: "pv-q-text" });
     if (edit) qline.append(edit(card as BoardCard));
     qline.append(el("strong", { class: "pv-label", text: `${qLabel}${number ? " " + number : ""}. ` }));

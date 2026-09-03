@@ -1,5 +1,6 @@
 // app.ts — shared frontend helpers. API fetch wrappers, HTML escaping, tiny
 // DOM builder, derived card titles.
+import S from "./i18nstrings_ru_gen.js";
 
 export interface AuthMe {
   user_id: number;
@@ -90,16 +91,16 @@ function syncBadge(node: HTMLElement): SyncBadge {
     let state: string, title: string;
     if (!sync.online) {
       state = "offline";
-      title = sync.pending ? `Офлайн · ${sync.pending} изм. ждут отправки` : "Офлайн";
+      title = sync.pending ? S.chrome.sync.offlinePending(String(sync.pending)) : S.chrome.sync.offline();
     } else if (sync.syncing || sync.pending > 0) {
       state = "pending";
-      title = sync.pending ? `Синхронизация · осталось ${sync.pending}` : "Синхронизация…";
+      title = sync.pending ? S.chrome.sync.syncingPending(String(sync.pending)) : S.chrome.sync.syncing();
     } else if (lastOp === "error") {
-      state = "error"; title = "Ошибка";
+      state = "error"; title = S.chrome.sync.writeError();
     } else if (lastOp === "saving") {
-      state = "saving"; title = "Подождите";
+      state = "saving"; title = S.chrome.sync.saving();
     } else {
-      state = "saved"; title = "Готово";
+      state = "saved"; title = S.chrome.sync.saved();
     }
     node.dataset.state = state;
     node.title = title;
@@ -135,10 +136,10 @@ function el(tag: string, props: ElProps = {}, ...children: ElChild[]): HTMLEleme
 // whitespace (incl. line breaks) collapsed to single spaces, then trimmed to a
 // word boundary at `max` chars. Flowing across lines — rather than stopping at
 // the first line — keeps the preview useful for questions whose first line is
-// uninformative (handout "Раздаточный материал:", duplet/blitz lead-ins).
+// uninformative (a handout's "Handout material:" header, duplet/blitz lead-ins).
 function deriveTitle(desc: string | null | undefined, max = 80): string {
   const t = (desc || "").replace(/\s+/g, " ").trim();
-  if (!t) return "(пусто)";
+  if (!t) return S.chrome.card.titleEmpty();
   if (t.length <= max) return t;
   const cut = t.slice(0, max);
   const sp = cut.lastIndexOf(" ");
@@ -177,9 +178,9 @@ export interface Sizes {
 
 const SIZES_DEFAULT: Sizes = { boardW: 1512, listW: 280, cardLines: 3, cardFont: 14 };
 const SIZES_RANGE = {
-  BOARD_W_MIN: 800, BOARD_W_MAX: 3200,   // MAX = «вся ширина»
+  BOARD_W_MIN: 800, BOARD_W_MAX: 3200,   // MAX = "full width"
   LIST_W_MIN: 200, LIST_W_MAX: 640,
-  CARD_LINES_MAX: 12,                    // MAX = «без ограничения»
+  CARD_LINES_MAX: 12,                    // MAX = "unlimited"
   CARD_FONT_MIN: 10, CARD_FONT_MAX: 18,  // px; default 14 = --text-sm
 };
 

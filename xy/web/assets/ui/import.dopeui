@@ -1,55 +1,43 @@
-page title="Импорт · xy" kind="wide" scripts="dist/import.js"
-  topbar title="Импорт"
+page title=@import.page.title kind="wide" scripts="dist/import.js"
+  topbar title=@import.page.name
     crumbs
-      crumb home href="/" icon="house" label="Все доски"
-      crumb "Импорт"
-    iconlink href="/" icon="arrow-left" label="Все доски"
+      crumb home href="/" icon="house" label=@import.page.home
+      crumb @import.page.name
+    iconlink href="/" icon="arrow-left" label=@import.page.home
 
   form id="importForm" dir="col"
     section
-      subhead "Из архива xy (.zip)"
-      hint
-        "Архив со страницы доски (☰ «Экспорт (.zip)…»). Переносится всё, что было"
-        "отмечено: списки, карточки, метки, тесты, комментарии, история правок и"
-        "вложения. Здесь из него получается новая доска — чтобы добавить списки к"
-        "уже существующей, откройте её и возьмите там ☰ «Импорт»."
+      subhead @import.archive.subhead
+      hint @import.archive.hint
       filefield id="bundleFile" accept=".zip,application/zip"
 
     section
-      subhead "Из Trello"
-      hint
-        "Импортируются карточки, списки, метки, все комментарии (без лимита в 1000)"
-        "и вложения (файлы и фото). Списки, оканчивающиеся на " (code "_tests") ", становятся"
-        "тест-списками."
-      button kind="primary" id="trelloConnectBtn" href="#" "Подключить Trello"
+      subhead @import.trello.subhead
+      hint @import.trello.intro_lead (code "_tests") @import.trello.intro_mid
+      button kind="primary" id="trelloConnectBtn" href="#" @import.trello.connect
       col id="trelloTokenArea" gap="sm" hidden
-        hint "Нажмите «Allow», скопируйте показанный токен и вставьте его сюда."
-        textfield id="trelloTokenInput" placeholder="Токен из Trello" autocomplete="off"
-        button kind="ghost" small id="trelloTokenBtn" "Подтвердить токен"
+        hint @import.trello.token_hint
+        textfield id="trelloTokenInput" placeholder=@import.trello.token_placeholder autocomplete="off"
+        button kind="ghost" small id="trelloTokenBtn" @import.trello.token_submit
       col id="trelloPickArea" gap="sm" hidden
-        label for="trelloBoard" "Доска в Trello"
+        label for="trelloBoard" @import.trello.board_label
         selectfield id="trelloBoard"
-        hint
-          "«Все доски» перенесёт каждую открытую доску Trello в отдельную доску xy —"
-          "все под одним паролем; названия берутся из Trello."
-        button kind="ghost" small id="trelloResetBtn" "Подключить другой аккаунт"
-      hint
-        "Без подключения сгодится сохранённый JSON-экспорт: меню доски Trello →"
-        "«Печать, экспорт и общий доступ» → «Экспортировать как JSON». Из файла"
-        "берутся до 1000 последних комментариев; вложения так не переносятся."
+        hint @import.trello.all_hint
+        button kind="ghost" small id="trelloResetBtn" @import.trello.reset
+      hint @import.trello.json_hint
       filefield id="trelloFile" accept=".json,application/json"
 
-    textfield id="boardName" placeholder="Название доски (по умолчанию — из архива или из Trello)"
+    textfield id="boardName" placeholder=@import.board.name_placeholder
     -- textfield (not password): board creation is the one safe moment to show the
     -- passphrase; the dice button fills a strong one and copies it. Mirrors the create dialog.
     row gap="sm" align="center"
-      textfield id="boardPass" placeholder="Пароль доски (для шифрования)" autocomplete="new-password" required grow
-      iconbtn id="genPassBtn" icon="dices" label="Сгенерировать пароль"
-    muted id="importPassCopied" hidden "Пароль уже скопирован"
-    hint "Пароль нужен для E2E-шифрования."
-    hint kind="danger" "Сохраните этот пароль прямо сейчас — восстановить его будет невозможно."
-    checkbox id="importPassSaved" "Я сохранил(а) пароль в надёжное место и обещаю его не терять"
+      textfield id="boardPass" placeholder=@import.board.pass_placeholder autocomplete="new-password" required grow
+      iconbtn id="genPassBtn" icon="dices" label=@import.board.gen_pass
+    muted id="importPassCopied" hidden @import.board.pass_copied
+    hint @import.board.pass_hint
+    hint kind="danger" @import.board.pass_danger
+    checkbox id="importPassSaved" @import.board.pass_saved
     row gap="sm" wrap
-      button submit id="importBtn" disabled "Импортировать"
-      button kind="ghost" href="/" "Отмена"
+      button submit id="importBtn" disabled @import.board.submit
+      button kind="ghost" href="/" @import.board.cancel
     message id="importMessage"

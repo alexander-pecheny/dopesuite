@@ -220,7 +220,8 @@ func (f *formatter) questionParts(q *fsource.Question, number string) (questionP
 	return p, nil
 }
 
-// label honours a question's own !!Label override, and the plural "Источники".
+// label honours a question's own !!Label override, and the plural form taken
+// when a question's sources are a list.
 func (f *formatter) label(q *fsource.Question, field string) string {
 	if ov, ok := q.Get("overrides").(map[string]string); ok {
 		if v, ok := ov[field]; ok {
@@ -235,7 +236,7 @@ func (f *formatter) label(q *fsource.Question, field string) string {
 	return f.labels.Field(field)
 }
 
-// handoutImgRe matches the "[Раздаточный материал: <picture>]" wrapper: in a
+// handoutImgRe matches the "[<handout label>: <picture>]" wrapper: in a
 // message that embeds the picture itself, the wrapper says nothing.
 func handoutImgRe(labels i18n.Labels) *regexp.Regexp {
 	return regexp.MustCompile(`\[` + regexp.QuoteMeta(labels.Field("handout")) +

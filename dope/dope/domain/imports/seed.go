@@ -14,6 +14,7 @@ import (
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -98,8 +99,8 @@ type seedCandidate struct {
 	Declined   bool
 }
 
-// A SeedSource ranks the фест's Participants for a Game's seeding: the
-// фест's first КСИ (the ЭК page's button), whatever the Game's [init]
+// A SeedSource ranks the fest's Participants for a Game's seeding: the
+// fest's first KSI (the EK page's button), whatever the Game's [init]
 // declares — a lot for random, else the named Game's current table — or an
 // uploaded sheet. Each is resolved inside the import's transaction.
 type SeedSource interface {
@@ -115,7 +116,7 @@ type seeding struct {
 	candidates    []seedCandidate
 }
 
-// FromKSI is the ЭК page's «Импорт из КСИ»: the фест's first КСИ, ranked.
+// FromKSI is the EK page's "Import from KSI" button: the fest's first KSI, ranked.
 func FromKSI() SeedSource { return fromKSI{} }
 
 // FromScheme is what the Game's [init] declares.
@@ -140,7 +141,7 @@ select code from games where fest_id = ? and game_type = 'ksi' order by position
 		return seeding{}, err
 	}
 	gameID, candidates, err := standingsCandidates(ctx, tx, scope.FestID, code, nil)
-	return seeding{source: seedSourceKSI, label: "КСИ", sourceGameID: gameID, candidates: candidates}, err
+	return seeding{source: seedSourceKSI, label: dopestrings.Default.Imports.SeedSource.Ksi(), sourceGameID: gameID, candidates: candidates}, err
 }
 
 type fromScheme struct{}
@@ -157,7 +158,7 @@ func (fromScheme) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope)
 		return seeding{}, errors.New("посев из xlsx: загрузите файл на вкладке посева")
 	case "random":
 		candidates, err := randomSeedCandidates(ctx, tx, scope)
-		return seeding{source: "random", label: "жребий", candidates: candidates}, err
+		return seeding{source: "random", label: dopestrings.Default.Imports.SeedSource.Random(), candidates: candidates}, err
 	case "players":
 		return FromPlayers(declared.Players, declared.Sort).resolve(ctx, tx, scope)
 	}
@@ -177,7 +178,7 @@ func (f fromXLSX) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope)
 }
 
 // ImportSeeds seeds the Game from the source: the source's current order is
-// snapshotted into the seed ladder (partial results mid-фест are a normal
+// snapshotted into the seed ladder (partial results mid-fest are a normal
 // source), previous declines survive, and every seed slot is reseated.
 func ImportSeeds(eng *core.Engine, ctx context.Context, scope core.FestScope, src SeedSource) (SeedImportView, int64, []byte, error) {
 	var view SeedImportView
@@ -618,7 +619,7 @@ order by ms.id`, []any{gameID}, func(rows *sql.Rows) (slotRecord, error) {
 	touchedMatches := make(map[int64]struct{})
 
 	for _, slot := range slots {
-		// A played бой keeps its participants: a decline shifts the ladder
+		// A played match keeps its participants: a decline shifts the ladder
 		// only through matches nobody has started — results already earned
 		// stand, the vacancy propagates to the unplayed part of the scheme.
 		if slot.Status == "finished" || protocol.Started(gameType, slot.State) {
@@ -925,7 +926,7 @@ func EnsureSeedTeamByNumber(ctx context.Context, tx *sql.Tx, festID, number int6
 // EnsureSeedPlayerByNumber is EnsureSeedTeamByNumber for an individual format:
 // the Participant it ensures is one player of the fest roster, carrying
 // roster='player' and a link back to the fest_players row it was drawn from
-// (ADR-0007). Личная СИ seats these.
+// (ADR-0007). Individual SI seats these.
 func EnsureSeedPlayerByNumber(ctx context.Context, tx *sql.Tx, festID, number int64, name string, festPlayerID int64) (int64, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {

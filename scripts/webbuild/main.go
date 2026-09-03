@@ -178,7 +178,9 @@ func targets() []target {
 						"entry-model", "sheet-cursor", "game-shell", "cells", "score-table", "venue", "standings", "fest-roster", "ek-stats", "state-sync", "game-page", "widgets", "stage-cache", "stats-sync", "fest-grid", "brain-stats", "group-stats", "game-tabs", "multi-protocol", "troika-protocol", "troika-stats", "crosstable",
 						"od-protocol", "ksi-protocol", "brain-protocol", "screen-board",
 						// game-page draws the 🏠 crumb through it
-						"icons_gen"),
+						"icons_gen",
+						// the TS Catalog: the migrated screens import it
+						"i18nstrings_plural_gen", "i18nstrings_types_gen", "i18nstrings_ru_gen"),
 					Format: api.FormatESModule,
 					Outdir: "dope/dope/web/jstest/dist",
 				},

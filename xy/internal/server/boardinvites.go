@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"pecheny.me/dopecore/authcred"
+
+	xystrings "xy/i18nstrings"
 )
 
 // Board invite links (ADR-0017). A link grants MEMBERSHIP, never the key: the
@@ -138,13 +140,11 @@ func (s *server) requireBoardOwner(w http.ResponseWriter, r *http.Request) (user
 		return 0, 0, false
 	}
 	if role != "owner" {
-		httpError(w, http.StatusForbidden, ownerOnly)
+		httpError(w, http.StatusForbidden, xystrings.Default.Server.Invite.OwnerOnly())
 		return 0, 0, false
 	}
 	return uid, bid, true
 }
-
-const ownerOnly = "только владелец управляет ссылками"
 
 func (s *server) handleListBoardInvites(w http.ResponseWriter, r *http.Request) {
 	_, bid, ok := s.requireBoardOwner(w, r)
@@ -226,8 +226,8 @@ const (
 
 type createInviteRequest struct {
 	Label            string `json:"label"`
-	MaxUses          int64  `json:"max_uses"`  // 0 = без ограничения
-	TTLHours         int64  `json:"ttl_hours"` // 0 = без срока
+	MaxUses          int64  `json:"max_uses"`  // 0 = unlimited
+	TTLHours         int64  `json:"ttl_hours"` // 0 = no expiry
 	RequiresApproval bool   `json:"requires_approval"`
 }
 
@@ -241,11 +241,11 @@ func (s *server) handleCreateBoardInvite(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if req.MaxUses < 0 || req.TTLHours < 0 || req.TTLHours > maxTTLHours {
-		httpError(w, http.StatusBadRequest, "ограничения вне допустимого диапазона")
+		httpError(w, http.StatusBadRequest, xystrings.Default.Server.Invite.LimitsOutOfRange())
 		return
 	}
 	if len([]rune(req.Label)) > maxInviteLabel {
-		httpError(w, http.StatusBadRequest, "название слишком длинное")
+		httpError(w, http.StatusBadRequest, xystrings.Default.Server.Invite.LabelTooLong())
 		return
 	}
 	code, err := authcred.NewInviteCode()
@@ -298,7 +298,7 @@ func (s *server) requireOwnedInvite(w http.ResponseWriter, r *http.Request) (inv
 	}
 	iv, err := s.inviteByID(r.Context(), id)
 	if errors.Is(err, sql.ErrNoRows) {
-		httpError(w, http.StatusNotFound, "ссылка не найдена")
+		httpError(w, http.StatusNotFound, xystrings.Default.Server.Invite.NotFound())
 		return inviteRow{}, false
 	}
 	if handleErr(w, err) {
@@ -309,7 +309,7 @@ func (s *server) requireOwnedInvite(w http.ResponseWriter, r *http.Request) (inv
 		return inviteRow{}, false
 	}
 	if role != "owner" {
-		httpError(w, http.StatusForbidden, ownerOnly)
+		httpError(w, http.StatusForbidden, xystrings.Default.Server.Invite.OwnerOnly())
 		return inviteRow{}, false
 	}
 	return iv, true
@@ -369,7 +369,7 @@ func (s *server) handleDecideJoinRequest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if req.Decision != "approve" && req.Decision != "decline" {
-		httpError(w, http.StatusBadRequest, "решение должно быть approve или decline")
+		httpError(w, http.StatusBadRequest, xystrings.Default.Server.Invite.DecisionInvalid())
 		return
 	}
 	now := time.Now()
@@ -386,7 +386,7 @@ update board_invite_uses set status = 'declined', decided_at = ? where id = ?`, 
 		// Approving still has to fit under the cap: the queue was allowed to grow
 		// past it, so the seats may have gone to earlier approvals in the meantime.
 		if iv.maxUses.Valid && iv.used >= iv.maxUses.Int64 {
-			return errBadRequest("в ссылке не осталось мест")
+			return errBadRequest(xystrings.Default.Server.Invite.NoSeatsLeft())
 		}
 		if _, err := tx.ExecContext(ctx, `
 update board_invite_uses set status = 'joined', decided_at = ? where id = ?`, rfc3339(now), use); err != nil {
@@ -407,7 +407,7 @@ func pendingRequest(ctx context.Context, tx *sql.Tx, bid, userID int64) (inviteR
 join board_invite_uses u on u.invite_id = i.id
 where i.board_id = ? and u.user_id = ? and u.status = 'pending'`, bid, userID))
 	if errors.Is(err, sql.ErrNoRows) {
-		return iv, 0, errBadRequest("заявка не найдена")
+		return iv, 0, errBadRequest(xystrings.Default.Server.Invite.RequestNotFound())
 	}
 	if err != nil {
 		return iv, 0, err
@@ -484,7 +484,7 @@ func (s *server) handlePeekInvite(w http.ResponseWriter, r *http.Request) {
 	}
 	iv, err := s.inviteByCode(r.Context(), r.PathValue("code"))
 	if errors.Is(err, sql.ErrNoRows) {
-		httpError(w, http.StatusNotFound, "ссылка не найдена")
+		httpError(w, http.StatusNotFound, xystrings.Default.Server.Invite.NotFound())
 		return
 	}
 	if handleErr(w, err) {
@@ -535,7 +535,7 @@ func (s *server) handleJoinInvite(w http.ResponseWriter, r *http.Request) {
 	err := s.withWriteTx(r.Context(), "join-invite", func(ctx context.Context, tx *sql.Tx) error {
 		iv, err := scanInvite(tx.QueryRowContext(ctx, inviteSelect+` where i.code = ?`, code))
 		if errors.Is(err, sql.ErrNoRows) {
-			return &appError{status: http.StatusNotFound, msg: "ссылка не найдена"}
+			return &appError{status: http.StatusNotFound, msg: xystrings.Default.Server.Invite.NotFound()}
 		}
 		if err != nil {
 			return err
@@ -599,17 +599,18 @@ func nullIf(cond bool, v string) any {
 
 // inviteRefusal words a dead link for the person holding it.
 func inviteRefusal(state string) string {
+	str := xystrings.Default
 	switch state {
 	case "revoked":
-		return "ссылка отозвана"
+		return str.Server.Refusal.Revoked()
 	case "expired":
-		return "срок ссылки истёк"
+		return str.Server.Refusal.Expired()
 	case "exhausted":
-		return "ссылка исчерпана"
+		return str.Server.Refusal.Exhausted()
 	case "declined":
-		return "владелец отклонил заявку"
+		return str.Server.Refusal.Declined()
 	case "spent":
-		return "по этой ссылке вы уже проходили — попросите новую"
+		return str.Server.Refusal.Spent()
 	}
-	return "ссылка не работает"
+	return str.Server.Refusal.Broken()
 }

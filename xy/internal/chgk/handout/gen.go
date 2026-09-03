@@ -9,14 +9,15 @@ import (
 	"strconv"
 	"strings"
 
+	xystrings "xy/i18nstrings"
 	"xy/internal/chgk/fsource"
 	"xy/internal/chgk/i18n"
 	"xy/internal/chgk/inline"
 )
 
 // The 4s2hndt half of handouts (chgksuite/handouter/gen.py): a package's
-// questions scanned for their «[Раздаточный материал: …]» brackets, and one
-// .hndt block written per handout found.
+// questions scanned for their Handout brackets, and one .hndt block written
+// per handout found.
 
 // GenerateOptions are the switches `handouts generate` takes.
 type GenerateOptions struct {
@@ -44,6 +45,7 @@ type Warning struct {
 // Generate is generate_handouts. dir is where the package lives, which is where
 // a picture it names is looked for.
 func Generate(doc fsource.Doc, base, dir string, o GenerateOptions) ([]File, []Warning, error) {
+	s := xystrings.Default
 	rx, err := i18n.LoadRegexes(o.Language)
 	if err != nil {
 		return nil, nil, err
@@ -77,8 +79,7 @@ func Generate(doc fsource.Doc, base, dir string, o GenerateOptions) ([]File, []W
 					return nil, nil, err
 				}
 				if _, err := os.Stat(path); err != nil {
-					warnings = append(warnings, Warning{number,
-						"файл картинки не найден, добавьте раздатку вручную"})
+					warnings = append(warnings, Warning{number, s.Docs.Handout.ImageMissing()})
 					continue
 				}
 				h.text, h.image = "", path
@@ -88,7 +89,7 @@ func Generate(doc fsource.Doc, base, dir string, o GenerateOptions) ([]File, []W
 		}
 		lower := strings.ToLower(text)
 		if strings.Contains(lower, "раздат") || strings.Contains(lower, "роздан") || strings.Contains(lower, "(img") {
-			warnings = append(warnings, Warning{number, "раздатка, похоже, размечена неправильно"})
+			warnings = append(warnings, Warning{number, s.Docs.Handout.BadMarkup()})
 			handouts = append(handouts, handout{number: number, text: postprocess(text)})
 		}
 	}
@@ -177,6 +178,7 @@ func pad2(number string) string {
 // handoutsList is generate_handouts_list: the numbers with a handout, straight
 // through and then by tour.
 func handoutsList(handouts []handout, doc fsource.Doc) string {
+	s := xystrings.Default
 	has := map[int]bool{}
 	var numbers []int
 	for _, h := range handouts {
@@ -190,9 +192,9 @@ func handoutsList(handouts []handout, doc fsource.Doc) string {
 	sort.Ints(numbers)
 
 	var b strings.Builder
-	b.WriteString("ВОПРОСЫ С РАЗДАТОЧНЫМ МАТЕРИАЛОМ:\n\n")
-	b.WriteString("Сквозная нумерация:\n" + joinInts(numbers) + "\n\n")
-	b.WriteString("По турам:\n")
+	b.WriteString(s.Docs.HandoutList.Heading())
+	b.WriteString(s.Docs.HandoutList.ByNumberLead() + joinInts(numbers) + "\n\n")
+	b.WriteString(s.Docs.HandoutList.ByTourLead())
 
 	tour := 0
 	byTour := map[int][]string{}
@@ -220,10 +222,10 @@ func handoutsList(handouts []handout, doc fsource.Doc) string {
 	}
 	for _, t := range tours {
 		if len(byTour[t]) == 0 {
-			fmt.Fprintf(&b, "Тур %d: нет раздаток\n", t)
+			b.WriteString(s.Docs.HandoutList.TourNone(strconv.Itoa(t)))
 			continue
 		}
-		fmt.Fprintf(&b, "Тур %d: %s\n", t, strings.Join(byTour[t], ", "))
+		b.WriteString(s.Docs.HandoutList.TourNumbers(strconv.Itoa(t), strings.Join(byTour[t], ", ")))
 	}
 	return b.String()
 }

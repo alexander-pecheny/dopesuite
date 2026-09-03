@@ -11,7 +11,7 @@ import (
 func init() { Register(brain{}) }
 
 // brain wraps games.ComputeBrainResults: state is games.BrainState, the match
-// config is the brain scheme document (its questions count sizes the бой).
+// config is the brain scheme document (its questions count sizes the match).
 // Places track the running score; the rr stage awards group points from them
 // only once the match is finished (matches.status, structure.MatchOutcome).
 type brain struct{}
@@ -30,8 +30,8 @@ func (brain) TeamBlob() bool { return false }
 
 func (brain) Started(state json.RawMessage) bool { return games.BrainStateStarted(string(state)) }
 
-// Metrics: взятые вопросы, и они же без перестрелки — знаменатель долей на
-// пересеве считается по основным вопросам боя.
+// Metrics: questions taken, and the same without the shootout — the share
+// denominator on a reseed counts the match's base questions.
 func (brain) Metrics(json.RawMessage) []string { return []string{"taken", structure.MetricTakenBase} }
 
 func (brain) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {

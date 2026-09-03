@@ -97,8 +97,8 @@ order by m.position, m.id`, stageID)
 
 // LoadMatchSummaries returns the per-team summary rows for a match, ordered by
 // slot index, resolving each slot's source label. The score is what the sheet
-// prints as the бой's счёт, and that is not the same column in every game:
-// брейн counts the questions a side took, everything else scores points.
+// prints as the match's score, and that is not the same column in every game:
+// brain counts the questions a side took, everything else scores points.
 func LoadMatchSummaries(ctx context.Context, q Queryer, matchID int64, gameType string) ([]MatchParticipantSummary, error) {
 	score := "coalesce(r.total, 0)"
 	if gameType == "brain" {

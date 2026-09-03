@@ -46,8 +46,8 @@ type Options struct {
 	// only when the text does not already show it.
 	LinksOld bool
 	// PreserveListStart is docx_to_text's preserve_ol_start: a numbered list
-	// starts where the document says rather than at 1. chgksuite sets it for СИ
-	// and троика, whose lists carry point values.
+	// starts where the document says rather than at 1. chgksuite sets it for SI
+	// and troika, whose lists carry point values.
 	PreserveListStart bool
 }
 
@@ -169,8 +169,8 @@ func (c *converter) paragraphText(p *node) string {
 	return text
 }
 
-// reHeadingStyle finds the level in a style called "Heading 2" or «Заголовок 2»,
-// by name or by id (parsing_engine._heading_level).
+// reHeadingStyle finds the level in a style called "Heading 2" or its Russian
+// counterpart, by name or by id (parsing_engine._heading_level).
 var reHeadingStyle = regexp.MustCompile(`(?:heading|заголовок)\s*([1-6])`)
 
 // headingLevel is the paragraph's outline level, 0 when it is body text.
@@ -475,7 +475,7 @@ func (c *converter) paragraphNumbering(p *node) (numID, ilvl string, ok bool) {
 		return "", "", false // a bullet list gets no prefix at all
 	}
 	// No w:numPr anywhere: fall back to the style-name heuristic, which catches
-	// the "ListNumber"/"Номер списка" styles Word writes without a numPr.
+	// the "ListNumber"/"Number list" styles Word writes without a numPr.
 	styleName, styleID := "", ""
 	if st != nil {
 		styleName, styleID = strings.ToLower(st.name), strings.ToLower(st.id)

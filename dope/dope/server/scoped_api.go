@@ -25,8 +25,8 @@ import (
 // uses core.FestScope directly.
 type festScope = core.FestScope
 
-// verifyMatchInScope resolves a бой by its code or its буква — a URL says
-// «BU», the store says s2-g1-m2 — and returns the code, which every scope key
+// verifyMatchInScope resolves a Match by its code or its letter — a URL says
+// BU, the store says s2-g1-m2 — and returns the code, which every scope key
 // downstream is built on.
 func (s *server) verifyMatchInScope(ctx context.Context, scope festScope, code string) (matchScope, error) {
 	row := s.eng.DB.QueryRowContext(ctx, `
@@ -221,10 +221,10 @@ func (s *server) loadStageMatchViews(ctx context.Context, scope festScope, stage
 	return s.loadMatchViews(ctx, scope, stageCode)
 }
 
-// loadMatchViews reads a game's бои — one stage's, or all — on ONE read-only
+// loadMatchViews reads a game's Matches — one stage's, or all — on ONE read-only
 // snapshot, off the write lock: the whole bracket is a consistent point in
 // time and a busy editor never stalls this fetch. Four statements however many
-// бои (store.LoadMatchStates).
+// Matches (store.LoadMatchStates).
 func (s *server) loadMatchViews(ctx context.Context, scope festScope, stageCode string) ([]store.MatchView, error) {
 	tx, err := s.eng.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {

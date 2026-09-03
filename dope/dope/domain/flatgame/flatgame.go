@@ -1,6 +1,6 @@
-// Package flatgame keeps a flat game — one Block, one бой, the whole document
-// on it (ЧГК, КСИ) — a Structure like every other. A flat document changes
-// two ways, SetStateTx and PatchStateTx, and both end the same way: the бой's
+// Package flatgame keeps a flat game — one Block, one Match, the whole document
+// on it (ChGK, KSI) — a Structure like every other. A flat document changes
+// two ways, SetStateTx and PatchStateTx, and both end the same way: the Match's
 // seats follow the document's team list, the Protocol scores the document
 // into match_results, and the Block ranks into stage_standings. SettleTx is
 // that ending on its own, for a game just built, cleared or migrated.
@@ -21,7 +21,7 @@ import (
 	"dope/dope/storage/store"
 )
 
-// ErrNotFlat is a game whose Protocol keeps no document on one бой.
+// ErrNotFlat is a game whose Protocol keeps no document on one Match.
 var ErrNotFlat = errors.New("flatgame: not a flat format")
 
 // SetStateTx replaces the whole document, journalled as one replace op.
@@ -37,7 +37,7 @@ func SetStateTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, raw strin
 }
 
 // SaveDocumentTx writes a Game's document where it lives (store.GameDoc): on
-// its 'main' бой, journalled as the ops that made it (or as one replace when
+// its 'main' Match, journalled as the ops that made it (or as one replace when
 // ops is nil) and settled; or, for a Game without one, on the game row.
 func SaveDocumentTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, matchID sql.NullInt64, next string, ops []store.BlobOp) error {
 	if !matchID.Valid {
@@ -110,11 +110,11 @@ select g.game_type, m.state_json from matches m join games g on g.id = m.game_id
 	return err
 }
 
-// seatTx makes the бой's slots the document's team list: seat i is the
+// seatTx makes the Match's slots the document's team list: seat i is the
 // Participant playing under the i-th team's number, minted or renamed as the
 // document says; a team without a number sits in an empty seat. The Game's
 // entrant list follows when every seat is numbered, and is dropped otherwise
-// so the numbering guard falls back to the фест's registry.
+// so the numbering guard falls back to the fest's registry.
 func seatTx(ctx context.Context, tx *sql.Tx, festID, gameID, matchID int64, seats []protocol.Seat) error {
 	wanted := make([]int64, len(seats))
 	numbered := true

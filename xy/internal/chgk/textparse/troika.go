@@ -8,13 +8,13 @@ import (
 	"xy/internal/chgk/typo"
 )
 
-// The троика overrides: everything СИ does, plus this game's own headers (a
-// group stage, a бой, a «Тема N.» line), the «Мультифора» variant whose
+// The troika overrides: everything SI does, plus this game's own headers (a
+// group stage, a battle, a "Theme N." line), the multifora variant whose
 // questions are numbered "N.M.", and a source list that has to be told apart
 // from the numbered questions it looks exactly like.
 
 // troikaLine is TroikaParser._handle_line: what it does not recognise falls
-// through to СИ's.
+// through to SI's.
 func (p *siParser) troikaLine(line string) {
 	stripped := typo.REW(line)
 	if stripped == "" {
@@ -102,7 +102,7 @@ func (p *siParser) troikaLine(line string) {
 	p.lastLineBlank = false
 }
 
-// multiforaLine reads the «Мультифора» variant's own headers and questions.
+// multiforaLine reads the multifora variant's own headers and questions.
 func (p *siParser) multiforaLine(stripped string) bool {
 	if reTroikaReserveSection.MatchString(stripped) {
 		p.flush()
@@ -169,7 +169,7 @@ func (p *siParser) currentQuestionHasAnswer() bool {
 
 // shouldContinueSourceList decides whether a numbered line is the next entry of
 // the source list being read, or the question that ends it. A source list and a
-// троика's questions are both "1." "2." "3.", so this is the whole difficulty of
+// troika's questions are both "1." "2." "3.", so this is the whole difficulty of
 // the format: a URL is an entry, a line right after another entry is an entry,
 // and after a blank line only a run that keeps counting up still is.
 func (p *siParser) shouldContinueSourceList(stripped string) bool {
@@ -208,8 +208,8 @@ func (p *siParser) shouldContinueSourceList(stripped string) bool {
 	return false
 }
 
-// dropThemeNumberBeforePrefix removes a "Тема N." that stands in front of
-// another "Тема:", keeping the second — chgksuite writes this as a lookahead,
+// dropThemeNumberBeforePrefix removes a "Theme N." that stands in front of
+// another "Theme:", keeping the second — chgksuite writes this as a lookahead,
 // which RE2 has not got, so the kept part is a group here instead.
 func dropThemeNumberBeforePrefix(text string) string {
 	m := reTroikaThemeNumBeforeRedundant.FindStringSubmatchIndex(text)
@@ -219,7 +219,7 @@ func dropThemeNumberBeforePrefix(text string) string {
 	return text[:m[0]] + text[m[2]:]
 }
 
-// normalizeTroikaTheme drops the «Тема:» a theme's text repeats after its own
+// normalizeTroikaTheme drops the "Theme:" a theme's text repeats after its own
 // header.
 func normalizeTroikaTheme(text string) string {
 	text = strings.TrimSpace(dropThemeNumberBeforePrefix(text))

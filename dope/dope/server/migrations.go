@@ -160,7 +160,7 @@ create table if not exists game_player_team_overrides(
 
 -- The game-side Participant registry: whoever occupies a Slot and is scored.
 -- The roster column says which Fest roster the row was drawn from — a team, or
--- one player in an individual format (личная СИ). See ADR-0007.
+-- one player in an individual format (individual SI). See ADR-0007.
 create table if not exists participants(
   id integer primary key,
   fest_id integer not null references fests(id) on delete cascade,
@@ -552,7 +552,7 @@ create index if not exists game_player_team_overrides_game_idx on game_player_te
 		}); err != nil {
 			return err
 		}
-		// Numbering is per Kind: «команда 12» and «игрок 12» are different
+		// Numbering is per Kind: team 12 and player 12 are different
 		// identities, and a fest that runs both a team format and an individual one
 		// numbers each from 1. A single fest-wide number space would have the
 		// individual game claim the teams' rows (ADR-0007).
@@ -569,7 +569,7 @@ create index if not exists game_player_team_overrides_game_idx on game_player_te
 		return nil
 	}},
 	{Version: 15, Name: "games.random_seed", Up: func(db *sql.DB) error {
-		// v15: give each game a fixed random_seed. Reseed lots (Жребий) are now
+		// v15: give each game a fixed random_seed. Reseed lots are now
 		// derived deterministically from this seed, so a reseed recomputes identically
 		// every time and an untick/retick (or any unrelated edit) can never reshuffle a
 		// tie. Backfill a distinct random seed for every existing game exactly once;
@@ -597,7 +597,7 @@ end`); err != nil {
 		return nil
 	}},
 	{Version: 16, Name: "screen settings, telegram names", Up: func(db *sql.DB) error {
-		// v16: per-game "Экран" (projector board) display settings — colours, font
+		// v16: per-game screen (projector board) display settings — colours, font
 		// scale, column-count override, city/country toggles. Stored as an opaque
 		// JSON blob so all hosts of a game share one configuration (the screen is a
 		// shared projector, not a per-browser preference).
@@ -687,10 +687,10 @@ create table if not exists stage_standings(
 	}},
 	{Version: 21, Name: "stage grain: block, wave, group; match round and wave", Up: func(db *sql.DB) error {
 		// v21: the schedule says where it sits. A stage row is usually a Wave, so it
-		// names its Block, its turn at the столы and — round-robin only — the Group
-		// it ranks. A Group is the exception: it holds one стол from its first бой
+		// names its Block, its turn at the tables and — round-robin only — the Group
+		// it ranks. A Group is the exception: it holds one table from its first Match
 		// to its last, so its stage spans every Round and every Wave, and both of
-		// those coordinates sit on the бой instead. Existing rows stay blank: a game
+		// those coordinates sit on the Match instead. Existing rows stay blank: a game
 		// compiled
 		// before this knows its shape only through its stage codes, and guessing
 		// coordinates back out of `s1-g7` is the habit these columns exist to end.
@@ -710,9 +710,9 @@ create table if not exists stage_standings(
 		return nil
 	}},
 	{Version: 22, Name: "game_participants.number", Up: func(db *sql.DB) error {
-		// v22: a Participant's playing number belongs to its Game (ADR-0009). A фест
+		// v22: a Participant's playing number belongs to its Game (ADR-0009). A Fest
 		// registers teams; a Game seats some of them and numbers those from 1, so the
-		// same team is «2» in the ЭК and «4» in the ОД. Existing rows keep number 0
+		// same team is 2 in the EK and 4 in the OD. Existing rows keep number 0
 		// until their game is next compiled — a Game that has never had an entrant
 		// list is not improved by inventing one.
 		if err := store.AddColumnsIfMissing(db, "game_participants", []store.ColumnSpec{
@@ -733,10 +733,10 @@ create table if not exists stage_standings(
 		return nil
 	}},
 	{Version: 24, Name: "matches.letter dealt, rr grain from codes", Up: func(db *sql.DB) error {
-		// v24: a бой carries its буква in the store, dealt at compile time, so a
-		// URL can say «BU» and the view need not compute it. Existing games get
-		// theirs dealt once, in schedule order, skipping the бои that were never
-		// called one (a title without «Бой N» — the письменный отбор); a group
+		// v24: a Match carries its letter in the store, dealt at compile time, so a
+		// URL can say BU and the view need not compute it. Existing games get
+		// theirs dealt once, in schedule order, skipping the Matches that were never
+		// called one (a title that does not match boutTitle — the written qualifier); a group
 		// stage from before grain existed gets its Block and Group from its code
 		// the one last time, so no page has to.
 		if err := store.AddColumnsIfMissing(db, "matches", []store.ColumnSpec{
@@ -755,10 +755,10 @@ where kind = 'rr' and block_code = '' and code glob 's[0-9]*-g[0-9]*'`); err != 
 		return nil
 	}},
 	{Version: 25, Name: "pasted schemes' kinds and letters", Up: func(db *sql.DB) error {
-		// v25: a pasted scheme's stages carry their Kind and its бои their буквы
+		// v25: a pasted scheme's stages carry their Kind and its Matches their letters
 		// now that gamebuild writes them (Materialise). Games imported before then
 		// read their Kinds back from scheme_json once, and a game without a single
-		// буква is dealt them the way v24 dealt everyone's.
+		// letter is dealt them the way v24 dealt everyone's.
 		if err := pastedKindsBackfill(db); err != nil {
 			return err
 		}
@@ -769,9 +769,9 @@ where kind = 'rr' and block_code = '' and code glob 's[0-9]*-g[0-9]*'`); err != 
 	}},
 	{Version: 26, Name: "flat games seated and ranked", Up: func(db *sql.DB) error {
 		// v26: a flat game is a Structure like every other — its 'main' Block is
-		// the flat Kind, its бой seats the document's teams, the Protocol scores
-		// it and the Block ranks into stage_standings (flatgame). Every ОД and
-		// КСИ from before is settled once.
+		// the flat Kind, its Match seats the document's teams, the Protocol scores
+		// it and the Block ranks into stage_standings (flatgame). Every OD and
+		// KSI from before is settled once.
 		if err := settleFlatGamesBackfill(db); err != nil {
 			return err
 		}
@@ -855,9 +855,9 @@ func pastedKindsBackfill(db *sql.DB) error {
 	return nil
 }
 
-// dealLettersBackfill deals the бои of every game that has none their буквы
+// dealLettersBackfill deals every game's letterless Matches their letters
 // the way the browser used to: A.. in stage order then match order, skipping
-// a бой whose title is not «Бой N».
+// a Match whose title does not match boutTitle.
 func dealLettersBackfill(db *sql.DB) error {
 	rows, err := db.Query(`
 select m.id, m.game_id, m.title from matches m join stages s on s.id = m.stage_id

@@ -6,6 +6,7 @@ import (
 	"math"
 	"strings"
 
+	xystrings "xy/i18nstrings"
 	"xy/internal/chgk/imgconv"
 	"xy/internal/chgk/inline"
 )
@@ -96,7 +97,7 @@ func (e *exporter) mediaRel(data []byte, ext string) string {
 func inchesToEMU(in float64) int64 { return int64(math.Round(in * emuPerInch)) }
 
 func missingImage(name string) string {
-	return "<w:r><w:rPr><w:b/></w:rPr>" + `<w:t xml:space="preserve">` + xmlEscape("[нет изображения: "+name+"]") + "</w:t></w:r>"
+	return "<w:r><w:rPr><w:b/></w:rPr>" + `<w:t xml:space="preserve">` + xmlEscape(xystrings.Default.Docs.Image.Missing(name)) + "</w:t></w:r>"
 }
 
 // drawingXML builds an inline picture run. xmlns:wp and xmlns:r are declared on

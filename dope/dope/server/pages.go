@@ -7,6 +7,7 @@ import (
 	kit "pecheny.me/dopeuikit/kit"
 
 	dopeui "dope/dope/web/ui"
+	dopestrings "dope/i18nstrings"
 )
 
 // serveCompiledPage serves a DSL-authored shell (e.g. the login page) through the
@@ -40,7 +41,7 @@ var pageSources = map[string]string{
 	"static/brain.html":  "ui/brain.dopeui",
 	"static/multi.html":  "ui/multi.dopeui",
 	"static/troika.html": "ui/troika.dopeui",
-	// The gallery renders every shared table and the Сетка from fixtures —
+	// The gallery renders every shared table and the Grid from fixtures —
 	// the skin sheet the verify matrix shoots. Dev mode only (see main.go).
 	"static/gallery.html": "ui/gallery.dopeui",
 }
@@ -60,7 +61,7 @@ func (s *server) pageBytes(path string) ([]byte, error) {
 func (s *server) pageSet() *kit.PageSet {
 	s.pagesOnce.Do(func() {
 		s.pages = kit.NewPageSet(s.eng.Assets, s.eng.AssetNoCache, dopeui.Compile).
-			Provide("ui/login.dopeui", kit.LoginPage("Вход · Фест", "/host"))
+			Provide("ui/login.dopeui", kit.LoginPage(dopestrings.Default.Server.Login.Title(), "/host"))
 	})
 	return s.pages
 }

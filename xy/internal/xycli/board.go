@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	xystrings "xy/i18nstrings"
 )
 
 // Board is a snapshot decrypted under a held key — the plaintext model every
@@ -146,7 +148,7 @@ func (b *Board) Card(id int64) (Card, error) {
 
 // Label resolves a label by id or by name, the forgiving way a search matches.
 func (b *Board) Label(ref string) (Label, error) {
-	return pickOne(b.Labels, ref, "метка",
+	return pickOne(b.Labels, ref, xystrings.Default.Cli.Shared.WhatLabel(),
 		func(l Label) int64 { return l.ID }, func(l Label) string { return l.Name })
 }
 

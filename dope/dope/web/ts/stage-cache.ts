@@ -48,8 +48,8 @@ export interface StageCacheOptions {
   stageType: (stage: SchemeStage | null | undefined) => string;
   getMatches: (stage: SchemeStage | null | undefined) => MatchDescriptor[] | null | undefined;
   // stageMembers names the real server stages a displayed stage is assembled
-  // from. A круг spans every Group of its Block — the sheets enter protocols by
-  // круг, not by группа — so what the tabs show is not always what the server
+  // from. A round spans every Group of its Block — the sheets enter protocols
+  // by round, not by group — so what the tabs show is not always what the server
   // stores. Absent or empty means the stage is its own.
   stageMembers?: (stage: SchemeStage | null | undefined) => string[];
   buildPaneContent: (args: {
@@ -203,8 +203,8 @@ export function createStageCache(options: StageCacheOptions): StageCache {
   }
 
   // routeBatch folds fetched matches into whichever displayed stage owns each
-  // one. A single server stage's бои can belong to different tabs — one круг per
-  // tab — so the batch is split by match rather than applied wholesale.
+  // one. A single server stage's matches can belong to different tabs — one
+  // round per tab — so the batch is split by match rather than applied wholesale.
   function routeBatch(batchedMatches: unknown): void {
     if (!Array.isArray(batchedMatches)) return;
     for (const stage of schemeStages() || []) ensureStageData(stage.code);

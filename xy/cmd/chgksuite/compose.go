@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	xystrings "xy/i18nstrings"
 	"xy/internal/chgk/docx"
 	"xy/internal/chgk/fsource"
 	"xy/internal/chgk/i18n"
@@ -45,8 +46,8 @@ func composeDocx(args []string) error {
 	spoilers := fs.String("spoilers", override("spoilers", "off"), "hide answers: off|whiten|pagebreak|dots")
 	screenMode := fs.String("screen_mode", override("screen_mode", "off"), "export for screen: off|replace_all|add_versions|add_versions_columns")
 	noAnswers := fs.Bool("noanswers", false, "do not print answers")
-	noParagraph := fs.Bool("noparagraph", false, `no line break after "Вопрос N."`)
-	onlyNumber := fs.Bool("only_question_number", false, `label questions "N." instead of "Вопрос N."`)
+	noParagraph := fs.Bool("noparagraph", false, xystrings.Default.Chgkcli.Docx.NoParagraphFlag())
+	onlyNumber := fs.Bool("only_question_number", false, xystrings.Default.Chgkcli.Docx.OnlyQuestionNumberFlag())
 	smallerSource := fs.String("smaller_source_and_author", override("smaller_source_and_author", "on"), "set source and author 2pt below the body: on|off")
 	randomize := fs.Bool("randomize", false, "shuffle the questions")
 	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
@@ -192,7 +193,7 @@ func languageFlag(fs *flag.FlagSet) func() (string, string, error) {
 // which every compose subcommand takes, and reads them once it has parsed.
 func noBreakFlags(fs *flag.FlagSet) func() inline.NoBreak {
 	spaces := fs.String("replace_no_break_spaces", override("replace_no_break_spaces", "on"), "glue short words to what follows with a non-breaking space: on|off")
-	hyphens := fs.String("replace_no_break_hyphens", override("replace_no_break_hyphens", "on"), "make the hyphen of а short word non-breaking: on|off")
+	hyphens := fs.String("replace_no_break_hyphens", override("replace_no_break_hyphens", "on"), xystrings.Default.Chgkcli.Shared.ReplaceNoBreakHyphensFlag())
 	return func() inline.NoBreak {
 		return inline.NoBreak{NoSpaces: *spaces == "off", NoHyphens: *hyphens == "off"}
 	}

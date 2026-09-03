@@ -1,4 +1,4 @@
-// The КСИ (team jeopardy) page (ADR-0001): question/answer tables, team/player
+// The KSI (team jeopardy) page (ADR-0001): question/answer tables, team/player
 // rows, detailed/results/refusals tabs. Converted from the legacy si.js; a
 // self-booting side-effect module bundled by pages/si.ts.
 
@@ -16,6 +16,7 @@ import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {gameTabs} from "./game-tabs.js";
 import * as ksi from "./ksi-protocol.js";
 import {KSI_THEMES, QUESTION_VALUES, RESULT_VALUES, STICKER_NEUTRAL} from "./ksi-protocol.js";
+import S from "./i18nstrings_ru_gen.js";
 import type {KSIRules, KSIScheme, KSIState, ParticipantEntry, ResultRow, ScoreSheet, StickerType} from "./ksi-protocol.js";
 
 // Page globals the bundle environment provides (the server-inlined
@@ -111,13 +112,12 @@ let renderedTab: string | null = null;
 let tableIndex: NodeIndex | null = null;
 let scoreCache: ScoreSheet | null = null;
 let detailedOrderCache: number[] | null = null;
-// Client-local row order for the «Подробно» sheet: "name" (default) or "number".
+// Client-local row order for the detailed sheet: "name" (default) or "number".
 // Editors pick whichever identity they read off the floor; never synced.
 let detailedSort: "name" | "number" = "name";
 const tabScroll = new Map<string, {top: number; left: number}>();
-
-// The «Отказы» tab is a host-only control surface; its effect — declined teams
-// dropping out of the «Итог» ranking — is visible to spectators in that tab.
+// The refusals tab is a host-only control surface; its effect — declined teams
+// dropping out of the results ranking — is visible to spectators in that tab.
 const TABS = gameTabs([], {game: "ksi", viewer});
 let activeTab = tabFromHash() || "detailed";
 
@@ -216,8 +216,7 @@ function render(options: {preserveScroll?: boolean} = {}): void {
           : buildTable();
     renderedTable = activeTab === "detailed" ? node : null;
     if (activeTab !== "detailed") resetTableIndex();
-    siRoot.replaceChildren(node);
-    // Составы fits the frame and wraps rather than scrolling sideways like a
+    // The roster tab fits the frame and wraps rather than scrolling sideways like a
     // score board, so the host drops its max-content sizing.
     siRoot.classList.toggle("fits-frame", activeTab === "roster");
     renderedTab = activeTab;
@@ -255,7 +254,7 @@ function buildTable(): HTMLTableElement {
   const scores = getScoreCache();
   const showPlaceColumn = false;
   const themes = Array.from({length: themesCount}, (_, index) => ({
-    label: `Т${index + 1}`,
+    label: S.si.theme.label(String(index + 1)),
     questionLabels: QUESTION_VALUES,
   }));
   const rows = detailedPlayerOrder().map((playerIndex) => ({
@@ -376,7 +375,7 @@ function buildResultsTable(): HTMLElement {
   return wrapper;
 }
 
-// The «Составы» tab: the fest-level team→players roster (read-only, visible to
+// The roster tab: the fest-level team→players roster (read-only, visible to
 // all visitors). Its content never depends on game state, so the view node is
 // built once and reused across renders — avoiding a re-fetch flash on every SSE
 // delta while this tab is open.
@@ -386,8 +385,8 @@ function rosterView(): HTMLElement {
   return siRosterView;
 }
 
-// The «Отказы» tab: every team with a checkbox to mark it as having refused to play.
-// Mirrors the EK seed-import decline list; a checked team drops out of the «Итог»
+// The refusals tab: every team with a checkbox to mark it as having refused to play.
+// Mirrors the EK seed-import decline list; a checked team drops out of the results
 // ranking. Reuses the seed-import table styling for a consistent look.
 function buildRefusalsTable(): HTMLElement {
   const wrapper = document.createElement("div");
@@ -401,8 +400,8 @@ function buildRefusalsTable(): HTMLElement {
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
   head.appendChild(th("№", "results-place-head seed-number-head"));
-  head.appendChild(th("Команда", "results-team-head seed-team-head"));
-  head.appendChild(th("Отказалась", "seed-declined-head"));
+  head.appendChild(th(S.si.refusals.team(), "results-team-head seed-team-head"));
+  head.appendChild(th(S.si.refusals.declined(), "seed-declined-head"));
   thead.appendChild(head);
   table.appendChild(thead);
 
@@ -428,7 +427,7 @@ function buildRefusalsTable(): HTMLElement {
     checkbox.type = "checkbox";
     checkbox.checked = declined;
     checkbox.disabled = viewer;
-    checkbox.setAttribute("aria-label", `Отказалась: ${label}`);
+    checkbox.setAttribute("aria-label", S.si.refusals.declinedAria(label));
     checkbox.addEventListener("change", () => setParticipantDeclined(index, checkbox.checked));
     declinedCell.appendChild(checkbox);
     tr.appendChild(declinedCell);
@@ -447,8 +446,8 @@ function buildResultsTableInner(): HTMLTableElement {
 
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
-  head.appendChild(th("Место", "results-place-head"));
-  head.appendChild(th("Команда", "results-team-head"));
+  head.appendChild(th(S.si.results.place(), "results-place-head"));
+  head.appendChild(th(S.si.results.team(), "results-team-head"));
   head.appendChild(th("Σ", "results-num-head results-total-head"));
   head.appendChild(th("Σ+", "results-num-head"));
   for (const value of RESULT_VALUES) {
@@ -530,7 +529,7 @@ function detailedPlayerOrder(): number[] {
   if (detailedOrderCache) return detailedOrderCache;
   let order = state!.participants.map((_, index) => index);
   if (isTeamMode()) {
-    // Teams that refused to play are dropped from the «Подробно» sheet entirely.
+    // Teams that refused to play are dropped from the detailed sheet entirely.
     order = order.filter((index) => !participantDeclined(index));
     order.sort(detailedSort === "number" ? compareParticipantNumbers : compareParticipantNames);
   }
@@ -553,7 +552,7 @@ function compareParticipantNumbers(a: number, b: number): number {
   return compareParticipantNames(a, b);
 }
 
-// setDetailedSort changes the local row order of the «Подробно» sheet and
+// setDetailedSort changes the local row order of the detailed sheet and
 // re-renders. Purely a view concern — no state write, no broadcast — so it is
 // available to viewers too.
 function setDetailedSort(key: string): void {
@@ -675,7 +674,7 @@ function stickerSelectCell(playerIndex: number, themeIndex: number): HTMLElement
   select.dataset.player = String(playerIndex);
   select.dataset.theme = String(themeIndex);
   select.disabled = state!.finished || viewer;
-  select.title = `${participantLabel(playerIndex)}, Т${themeIndex + 1}: стикер`;
+  select.title = S.si.sticker.title(participantLabel(playerIndex), String(themeIndex + 1));
 
   const blank = document.createElement("option");
   blank.value = "";
@@ -787,7 +786,7 @@ function battleHeader(): HTMLElement {
   layout.className = "battle-layout";
   const title = document.createElement("span");
   title.className = "battle-title";
-  title.textContent = scheme!.title || "Бой";
+  title.textContent = scheme!.title || S.si.battle.fallbackTitle();
   layout.appendChild(title);
 
   const label = document.createElement("label");
@@ -798,7 +797,7 @@ function battleHeader(): HTMLElement {
   checkbox.checked = Boolean(state!.finished);
   checkbox.disabled = viewer;
   const text = document.createElement("span");
-  text.textContent = "Закончен";
+  text.textContent = S.si.battle.finished();
   label.append(checkbox, text);
   layout.appendChild(label);
   node.appendChild(layout);
@@ -813,17 +812,17 @@ function detailedNameHeader(): HTMLElement {
   numberHead.type = "button";
   numberHead.className = "od-detailed-team-number ksi-sort-head";
   numberHead.textContent = "№";
-  numberHead.title = "Сортировать по номеру";
-  numberHead.setAttribute("aria-label", "Сортировать по номеру");
+  numberHead.title = S.si.sheet.sortByNumber();
+  numberHead.setAttribute("aria-label", S.si.sheet.sortByNumber());
   numberHead.classList.toggle("ksi-sort-active", detailedSort === "number");
   numberHead.addEventListener("click", () => setDetailedSort("number"));
 
   const label = document.createElement("button");
   label.type = "button";
   label.className = "od-detailed-team-head-label ksi-sort-head";
-  label.textContent = "Команда";
-  label.title = "Сортировать по названию";
-  label.setAttribute("aria-label", "Сортировать по названию");
+  label.textContent = S.si.sheet.team();
+  label.title = S.si.sheet.sortByName();
+  label.setAttribute("aria-label", S.si.sheet.sortByName());
   label.classList.toggle("ksi-sort-active", detailedSort === "name");
   label.addEventListener("click", () => setDetailedSort("name"));
 
@@ -1022,7 +1021,7 @@ function canPatchState(previous: KSIState | null, next: KSIState | null): boolea
   // A sticker change re-scores whole themes and re-selects dropdowns; rebuild
   // the sheet rather than try to patch it cell by cell.
   if (stickersEnabled() && JSON.stringify(previous.stickers || []) !== JSON.stringify(next.stickers || [])) return false;
-  // A refusal toggle adds/removes a team from the «Подробно» sheet and «Итог» ranking
+  // A refusal toggle adds/removes a team from the detailed sheet and results ranking
   // but leaves participants/themes untouched, so force a full re-render to reflect it.
   if (JSON.stringify(previous.declined || {}) !== JSON.stringify(next.declined || {})) return false;
   if (!Array.isArray(previous.participants) || !Array.isArray(next.participants)) return false;
@@ -1042,7 +1041,7 @@ function canPatchState(previous: KSIState | null, next: KSIState | null): boolea
 }
 
 function answerTitle(playerIndex: number, themeIndex: number, answerIndex: number): string {
-  return `${participantLabel(playerIndex)}, Т${themeIndex + 1}, ${QUESTION_VALUES[answerIndex]}`;
+  return S.si.sheet.answerTitle(participantLabel(playerIndex), String(themeIndex + 1), String(QUESTION_VALUES[answerIndex]));
 }
 
 
@@ -1051,11 +1050,11 @@ function isDetailedTabActive(): boolean {
 }
 
 function gameTitleFallback(): string {
-  return isTeamMode() ? "КСИ" : "СИ";
+  return isTeamMode() ? S.si.title.ksi() : S.si.title.si();
 }
 
 function participantFallback(index: number): string {
-  return `${isTeamMode() ? "Команда" : "Игрок"} ${index + 1}`;
+  return isTeamMode() ? S.si.participant.fallbackTeam(String(index + 1)) : S.si.participant.fallbackPlayer(String(index + 1));
 }
 
 function ksiCoordForActive(): CellCoord {

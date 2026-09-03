@@ -11,7 +11,7 @@ import (
 )
 
 // Participant rename (ADR-0007): the game-side registry stops calling itself
-// `teams`, because личная СИ seats players in the same rows and a column whose
+// `teams`, because individual SI seats players in the same rows and a column whose
 // name lies about its contents is the expensive kind of mistake. Runs once, as
 // schema version 20 (server/db.go).
 //

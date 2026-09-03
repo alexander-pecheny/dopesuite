@@ -1,6 +1,6 @@
-// multi-protocol.ts — the Мультиигры Protocol's document as the page reads it
-// (ADR-0018): the shape, the мини-игры a scheme declares, the adapter from the
-// server's JSON, and the arithmetic — a мини-игра's subtotal, Итог, Σ+ and the
+// multi-protocol.ts — the multi games protocol's document as the page reads it
+// (ADR-0018): the shape, the minigames a scheme declares, the adapter from the
+// server's JSON, and the arithmetic — a minigame's subtotal, total, Σ+ and the
 // ranked results with shared places. Pure: every function takes the state and
 // the rules it reads.
 
@@ -17,13 +17,13 @@ export interface MultiColumn {
 export interface MultiMinigame {
   name: string;
   columns: MultiColumn[];
-  // A normalised мини-игра contributes «сколько от лучшего», out of a hundred,
-  // rather than its own points — so мини-игры of quite different scales weigh
-  // the same in the Итог.
+  // A normalised minigame contributes a share of the best, out of a hundred,
+  // rather than its own points — so minigames of quite different scales weigh
+  // the same in the total.
   normalized: boolean;
 }
 
-// What the best result in a normalised мини-игра is worth.
+// What the best result in a normalised minigame is worth.
 export const NORMAL_MAX = 100;
 
 export interface MultiScheme {
@@ -45,8 +45,8 @@ export interface MultiState {
   [key: string]: unknown;
 }
 
-// MultiRules is what the scheme fixes: which мини-игры are played, what breaks
-// a tie on Итог, and whether any task can take points away — the last decides
+// MultiRules is what the scheme fixes: which minigames are played, what breaks
+// a tie on the total, and whether any task can take points away — the last decides
 // whether a Σ+ column is worth drawing at all.
 export interface MultiRules {
   minigames: MultiMinigame[];
@@ -84,8 +84,8 @@ export function schemeParticipants(scheme: MultiScheme): string[] {
 }
 
 // parseState is the adapter from whatever the server stored to a MultiState the
-// renderers can trust: one cell grid per мини-игра, one row per participant,
-// each row as wide as the scheme says that мини-игра is.
+// renderers can trust: one cell grid per minigame, one row per participant,
+// each row as wide as the scheme says that minigame is.
 export function parseState(raw: unknown, rules: MultiRules, participants: string[]): MultiState {
   const state = (raw && typeof raw === "object" ? raw : {}) as MultiState;
   if (!Array.isArray(state.participants) || state.participants.length === 0) {
@@ -150,23 +150,23 @@ export function cellValue(state: MultiState, game: number, participant: number, 
 }
 
 export interface ScoreRow {
-  // What each мини-игра contributed to the Итог: its points, or its share of
-  // the best where the мини-игра is normalised.
+  // What each minigame contributed to the total: its points, or its share of
+  // the best where the minigame is normalised.
   games: number[];
-  // What was actually scored in each мини-игра, before any normalising — the
+  // What was actually scored in each minigame, before any normalising — the
   // number the cells add up to and the sheet prints under the block.
   raw: number[];
   total: number;
   plus: number;
 }
 
-// scoreSheet is every participant's subtotals, Итог and Σ+ in one pass — what
-// the «Подробно» sheet prints and what the ranking reads.
+// scoreSheet is every participant's subtotals, total and Σ+ in one pass — what
+// the detailed sheet prints and what the ranking reads.
 //
-// A normalised мини-игра is scored against the best result in it among the
-// teams in the зачёт: a team that refused to play cannot set the scale for
-// everyone else. Below nought is nought — a team that finished a мини-игра on
-// minus scores nothing for it rather than dragging its Итог down.
+// A normalised minigame is scored against the best result in it among the
+// teams in the standings: a team that refused to play cannot set the scale for
+// everyone else. Below nought is nought — a team that finished a minigame on
+// minus scores nothing for it rather than dragging its total down.
 export function scoreSheet(state: MultiState, rules: MultiRules): ScoreRow[] {
   const rows = state.participants.map((_, p) => {
     const row: ScoreRow = {games: [], raw: [], total: 0, plus: 0};
@@ -201,7 +201,7 @@ export function scoreSheet(state: MultiState, rules: MultiRules): ScoreRow[] {
   return rows;
 }
 
-// formatScore prints an Итог that may be fractional the way the sheets do: two
+// formatScore prints a total that may be fractional the way the sheets do: two
 // decimals where normalising made it fractional, nothing where it did not.
 export function formatScore(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
@@ -218,7 +218,7 @@ export interface ResultRow {
 }
 
 // metricOf reads one of the names a scheme may rank on: total, plus, or
-// game1..gameN by the order the мини-игры are played.
+// game1..gameN by the order the minigames are played.
 export function metricOf(row: {games: number[]; total: number; plus: number}, name: string): number {
   if (name === "total") return row.total;
   if (name === "plus") return row.plus;
@@ -229,8 +229,8 @@ export function metricOf(row: {games: number[]; total: number; plus: number}, na
   return 0;
 }
 
-// rankedResultRows is the «Итог» table: every team that did not refuse to
-// play, ranked by the scheme's comparators — Итог alone unless a фест named
+// rankedResultRows is the results table: every team that did not refuse to
+// play, ranked by the scheme's comparators — the total alone unless a fest named
 // more — with a shared place label ("2–3") where every one of them ties. A
 // declined team takes no place and shifts nobody.
 export function rankedResultRows(

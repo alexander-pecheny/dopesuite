@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
+
+	dopestrings "dope/i18nstrings"
 
 	"dope/dope/storage/store"
 )
@@ -23,12 +26,13 @@ func (roundRobin) Keys() []Key {
 }
 
 // canonOrder is the round-robin comparator chain when a scheme names none:
-// КИНСБФ's очки, then личная встреча, взятые, разница.
+// KINSBF's points, then head-to-head, taken, diff.
 var canonOrder = []string{"points", "h2h", "taken", "diff"}
 
 // Expand is a Block of Groups, one rr stage each, seated from the incoming
 // Edge and ranked by the block's comparators.
 func (roundRobin) Expand(b Block) (Outputs, error) {
+	s := dopestrings.Default
 	size, ok := b.Int("group_size")
 	if !ok {
 		return Outputs{}, errors.New("roundrobin: нужен group_size")
@@ -86,7 +90,7 @@ func (roundRobin) Expand(b Block) (Outputs, error) {
 			return Outputs{}, err
 		}
 		stageCode := code
-		label := fmt.Sprintf("Гр. %d", g)
+		label := s.Structure.Rr.GroupFeed(strconv.Itoa(g))
 		out.Groups = append(out.Groups, Feed{
 			Stage: stageCode,
 			Label: label,
@@ -158,11 +162,11 @@ var rrCanonRounds = map[int][][][]int{
 	4: {{{1, 2}, {3, 4}}, {{1, 4}, {2, 3}}, {{1, 3}, {2, 4}}},
 }
 
-// rrCanonTables holds the schedules for groups whose бой seats more than two,
-// keyed by (entrants, seats). The 9×3 order is the СтудЧР СИ sheets'
+// rrCanonTables holds the schedules for groups whose Match seats more than
+// two, keyed by (entrants, seats). The 9×3 order is the StudChR SI sheets'
 // (generate_si.py GROUP_STAGE), so a dope group and the reference sheet name
-// the same бои; it is the affine plane AG(2,3) with its parallel classes in
-// that document's order.
+// the same Matches; it is the affine plane AG(2,3) with its parallel classes
+// in that document's order.
 var rrCanonTables = map[[2]int][][][]int{
 	{9, 3}: {
 		{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}},
@@ -173,6 +177,7 @@ var rrCanonTables = map[[2]int][][][]int{
 }
 
 func (roundRobin) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
+	s := dopestrings.Default
 	var conf RRConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil, fmt.Errorf("rr config: %w", err)
@@ -195,15 +200,18 @@ func (roundRobin) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 		}
 		rounds = rounds[:conf.Rounds]
 	}
-	title := conf.Title
-	if title == "" {
-		title = "Бой %d"
+	boutTitle := func(seq int) string {
+		if conf.Title == "" {
+			return s.Structure.Titles.Bout(strconv.Itoa(seq))
+		}
+		return fmt.Sprintf(conf.Title, seq)
 	}
 	var matches []store.SchemeMatch
 	seq := 0
 	for circle, round := range rounds {
-		// A Group holds one стол for the whole block, so the бои of a круг are
-		// played one after another. Their order in the schedule is the заход.
+		// A Group holds one table for the whole block, so the Matches of a
+		// circle-round are played one after another. Their order in the
+		// schedule is the Wave.
 		for wave, table := range round {
 			seq++
 			slots := make([]store.SchemeSlot, 0, len(table))
@@ -219,7 +227,7 @@ func (roundRobin) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 			}
 			matches = append(matches, store.SchemeMatch{
 				Code:             fmt.Sprintf("%s-%d", conf.Code, seq),
-				Title:            fmt.Sprintf(title, seq),
+				Title:            boutTitle(seq),
 				Venue:            conf.Venue,
 				Round:            circle + 1,
 				Wave:             wave + 1,
@@ -232,7 +240,7 @@ func (roundRobin) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 }
 
 // rrRounds picks the group's schedule: the config's explicit pairings, the
-// canon for its shape, else a construction — the circle method for бои of two,
+// canon for its shape, else a construction — the circle method for Matches of two,
 // the affine plane for bigger tables.
 func rrRounds(n, size int, conf RRConfig) ([][][]int, error) {
 	if conf.Pairings != nil {
@@ -328,16 +336,16 @@ func circleRounds(n int) [][][]int {
 	return rounds
 }
 
-// multiSeatStandings ranks a group whose бои seat more than two. There is no
-// личная встреча — a бой of three is not a duel — and no разница, so очки come
-// from the block's scoring rule and every Protocol metric simply sums.
+// multiSeatStandings ranks a group whose Matches seat more than two. There is
+// no head-to-head — a Match of three is not a duel — and no diff, so points
+// come from the block's scoring rule and every Protocol metric simply sums.
 func multiSeatStandings(conf RRConfig, results []MatchOutcome) ([]RankedEntry, error) {
 	rules, err := compileRules(conf.Rules)
 	if err != nil {
 		return nil, err
 	}
 	if len(rules.bout) == 0 {
-		// «4 − место» generalised: a бой of k seats pays (k + 1) − место, so a
+		// "4 − place" generalised: a Match of k seats pays (k + 1) − place, so
 		// win at three seats is 3, and a shared place pays the mean of the
 		// places it shares without anyone spelling that out.
 		if rules, err = compileRules(&Rules{Bout: map[string]string{"points": "seats + 1 - place"}}); err != nil {
@@ -417,7 +425,7 @@ func shareRanks(ranked []RankedEntry, order []string) {
 }
 
 // rrOrder is the group's ranking keys: the scheme's, else the two-seat
-// default with личная встреча or the multi-seat one without.
+// default with head-to-head or the multi-seat one without.
 func rrOrder(conf RRConfig) []string {
 	if conf.Order != nil {
 		return conf.Order
@@ -428,7 +436,7 @@ func rrOrder(conf RRConfig) []string {
 	return canonOrder
 }
 
-// Order lists the group's keys as columns; личная встреча is a comparator
+// Order lists the group's keys as columns; head-to-head is a comparator
 // over the tied, not a number a row carries, so it is not one.
 func (roundRobin) Order(cfg json.RawMessage) []SortRule {
 	var conf RRConfig
@@ -445,8 +453,8 @@ func (roundRobin) Order(cfg json.RawMessage) []SortRule {
 	return out
 }
 
-// Standings is the cross-table. Defaults are the КИНСБФ canon (§4.2): 2/1/0
-// over "taken", ranked очки → личная встреча among the tied → taken → diff.
+// Standings is the cross-table. Defaults are the KINSBF canon (§4.2): 2/1/0
+// over "taken", ranked points → head-to-head among the tied → taken → diff.
 func (roundRobin) Standings(cfg json.RawMessage, results []MatchOutcome, _ Inputs) ([]RankedEntry, error) {
 	var conf RRConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {

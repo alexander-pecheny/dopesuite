@@ -1,5 +1,5 @@
 // Package replay reads a tournament transcript — what the hosts actually
-// entered, бой by бой — and holds dope to it.
+// entered, Match by Match — and holds dope to it.
 //
 // The transcript is a language rather than a dump because the transcript *is*
 // the oracle: a fixture nobody can read is not evidence of anything. Every
@@ -19,12 +19,12 @@
 //
 //	override [s1/r2/w1/m1] место: лист сложил три темы из двенадцати
 //
-// A бой names where it sits — Block, круг, заход, бой — and a seat line carries
-// the marks on the left and, past the bars, what the sheet claimed the бой
+// A Match names where it sits — Block, Round, Wave, Match — and a seat line carries
+// the marks on the left and, past the bars, what the sheet claimed the Match
 // produced. The claims are asserted, never applied: dope scores the marks
 // itself and must agree.
 //
-// `жребий` on the бой header says this seating is a Draw — input, written into
+// `жребий` on the Match header says this seating is a Draw — input, written into
 // the Edges before play. Without it the seating is derived, and the replay
 // checks that the resolver seated exactly these participants.
 package replay
@@ -44,15 +44,15 @@ const (
 	Wrong Mark = 'W'
 )
 
-// Coord is where a бой sits in its Game: which Block, which Group of it (only
-// where a Block has them), which круг, which заход of that круг, and which бой
-// of the заход. It is the join key between a transcript and dope, and
+// Coord is where a Match sits in its Game: which Block, which Group of it (only
+// where a Block has them), which Round, which Wave of that Round, and which Match
+// of the Wave. It is the join key between a transcript and dope, and
 // deliberately not "whoever sat at the table" — matching by participants only
 // works when the seating is already right, so it can never catch a seeding bug.
 //
-// The Group is not optional decoration: личная СИ's six группы all sit at Block
-// s1, заход 1, круги 1..4, so without it one coordinate names six different
-// бои and five of them are never checked.
+// The Group is not optional decoration: individual SI's six Groups all sit at Block
+// s1, Wave 1, Rounds 1..4, so without it one coordinate names six different
+// Matches and five of them are never checked.
 type Coord struct {
 	Block string
 	Group string
@@ -63,7 +63,7 @@ type Coord struct {
 
 func (c Coord) String() string {
 	if c.Round == 0 {
-		// Not a бой at all (a real круг starts at 1): the статистика
+		// Not a Match at all (a real Round starts at 1): the stats
 		// pseudo-coordinate, or a Block's table.
 		if c.Block == StatsCoord.Block {
 			return c.Block
@@ -90,9 +90,9 @@ type Entrant struct {
 	City   string
 }
 
-// Lineup is one team's состав: its players, in roster order. It is input the
-// replay registers, and the fence the theme players and the статистика are
-// checked against at the door.
+// Lineup is one team's players, in roster order. It is input the replay
+// registers, and the fence the theme players and the stats are checked
+// against at the door.
 type Lineup struct {
 	Team    string
 	Players []string
@@ -100,9 +100,9 @@ type Lineup struct {
 }
 
 // Stat is one line of the sheet's own per-player aggregates, asserted after
-// the last бой the way Σ and место are asserted after each one. What the three
-// numbers mean is the game's affair: ЭК writes Σ, positive themes and themes
-// played; брейн — попытки, верно, неверно; личная СИ — Σ, Σ+ and бои.
+// the last Match the way Σ and place are asserted after each one. What the three
+// numbers mean is the game's affair: EK writes Σ, positive themes and themes
+// played; brain — attempts, right, wrong; individual SI — Σ, Σ+ and Matches sat.
 type Stat struct {
 	Player string
 	Team   string
@@ -110,26 +110,26 @@ type Stat struct {
 	Line   int
 }
 
-// StatsCoord is the coordinate статистика findings and overrides live at: the
-// aggregates hold the whole game, so no бой coordinate can name them.
+// StatsCoord is the coordinate the stats findings and overrides live at: the
+// aggregates hold the whole game, so no Match coordinate can name them.
 var StatsCoord = Coord{Block: "статистика"}
 
 // Table is the sheet's standings of one Block or Group — `[таблица s1/g3]` —
-// asserted after the last бой the way статистика is.
+// asserted after the last Match the way the stats are.
 type Table struct {
 	At   Coord
 	Rows []TableRow
 	Line int
 }
 
-// TableRow is one line of a table: a место (shared when level) and who holds it.
+// TableRow is one line of a table: a place (shared when level) and who holds it.
 type TableRow struct {
 	Place float64
 	Name  string
 	Line  int
 }
 
-// Answer is one буzzer question of a брейн бой from one side: whether they took
+// Answer is one buzzer question of a brain Match from one side: whether they took
 // it, and who buzzed. The sheets do not always record the player, so a taken
 // question with nobody named is ordinary data rather than a hole.
 type Answer struct {
@@ -137,39 +137,39 @@ type Answer struct {
 	Player string
 }
 
-// Seat is one participant's бой: what was entered, then what the sheet says it
+// Seat is one participant's Match: what was entered, then what the sheet says it
 // came to.
 //
-// The entered part has two shapes, and a бой is one or the other. Marks is the
-// theme grid of ЭК and своя игра — five cells per theme. Questions is брейн's
+// The entered part has two shapes, and a Match is one or the other. Marks is the
+// theme grid of EK and SI — five cells per theme. Questions is brain's
 // duel over buzzer questions, where a cell also names who took it.
 type Seat struct {
 	Name      string
 	Marks     [][5]Mark
 	Questions []Answer
-	// Counts is Троечка's grid: per тема, per вопрос, how many of the three
-	// answered it. The кресла behind a count are not in the sheet, so the
+	// Counts is Troika's grid: per theme, per question, how many of the three
+	// answered it. The seats behind a count are not in the sheet, so the
 	// driver synthesizes them — total faithful, composition invented, exactly
-	// as a перестрелка's marks are.
+	// as a shootout's marks are.
 	Counts [][]int
 	Total  int
 	Place  float64
 	// Pinned marks a place the hosts set by hand rather than one the marks
-	// imply — written `3!`. A перестрелка breaks a tie with material the
+	// imply — written `3!`. A shootout breaks a tie with material the
 	// protocol grid never records, so the place is input, exactly as a Draw is:
 	// the replayer writes it and does not assert it.
 	Pinned bool
-	// Unranked marks a seat whose место the sheet never printed — ТПШ's written
-	// отбор prints Σ and leaves место to a standings tab. There is nothing to
+	// Unranked marks a seat whose place the sheet never printed — TPSh's written
+	// qualifier prints Σ and leaves the place to a standings tab. There is nothing to
 	// hold dope to, so the replay checks the Σ and says nothing about the place.
 	Unranked bool
-	// Players names who played each theme, aligned with Marks — ЭК's fifth
+	// Players names who played each theme, aligned with Marks — EK's fifth
 	// field. Empty string is a theme the sheet named nobody for; a nil slice is
 	// a transcript that does not carry players at all.
 	Players []string
-	// Shootout is the net перестрелка points the sheet recorded for this seat —
+	// Shootout is the net shootout points the sheet recorded for this seat —
 	// extra material the theme grid never holds, written as its own line inside
-	// the бой. It is input, like a Draw: dope replays it and ranks with it.
+	// the Match. It is input, like a Draw: dope replays it and ranks with it.
 	Shootout int
 	Line     int
 }
@@ -205,7 +205,7 @@ type Script struct {
 }
 
 // individual reports whether the game seats players rather than teams — no
-// составы, no theme players, no team column in статистика.
+// lineups, no theme players, no team column in the stats.
 func (s Script) individual() bool {
 	codec, _ := CodecFor(s.Game)
 	return codec.Individual
@@ -225,7 +225,7 @@ func Parse(src string) (Script, error) {
 	seen := map[string]int{}
 	var failure error
 
-	// flush closes the бой being read. A бой with no seats is refused here
+	// flush closes the Match being read. A Match with no seats is refused here
 	// rather than replayed: it would seat nobody, assert nothing and pass, which
 	// is precisely how a truncated transcript reads as a clean tournament.
 	flush := func() {
@@ -383,7 +383,7 @@ func checkTables(script Script) error {
 }
 
 // stripComment drops a whole-line comment only. A '#' mid-line stays: teams are
-// called things like «Решётка #1», and silently truncating one turns every бой
+// called things like «Решётка #1», and silently truncating one turns every Match
 // it played into an unexplained seating disagreement.
 func stripComment(raw string) string {
 	if strings.HasPrefix(strings.TrimSpace(raw), "#") {
@@ -428,9 +428,9 @@ func checkRoster(script Script) error {
 	return checkLineups(script, known)
 }
 
-// checkLineups holds составы, theme players and статистика to each other: a
-// состав names a rostered team, a theme player and a статистика line name
-// someone from his team's состав. A misspelt name held only by the Game would
+// checkLineups holds lineups, theme players and stats to each other: a
+// lineup names a rostered team, a theme player and a stats line name
+// someone from his team's lineup. A misspelt name held only by the Game would
 // surface as a defect somewhere downstream; here it is a typo with a line
 // number.
 func checkLineups(script Script, teams map[string]bool) error {
@@ -486,7 +486,7 @@ func splitHeader(text string, line int) (string, string, error) {
 	return strings.TrimSpace(text[1:end]), strings.TrimSpace(text[end+1:]), nil
 }
 
-// parseHead reads what a section header or an override points at: a бой's
+// parseHead reads what a section header or an override points at: a Match's
 // coordinate, `таблица s1/g3` for a Block's or Group's standings, or
 // `статистика`.
 func parseHead(head string, line int) (Coord, error) {
@@ -514,8 +514,8 @@ func parseTableRow(text string, line int) (TableRow, error) {
 }
 
 // parseCoord reads `s1/r1/w1/m1`, or `s1/g3/r1/w1/m1` in a Block that has
-// Groups. Круг, заход and бой are always required: a бой that does not say
-// which заход it is cannot be told from its twin.
+// Groups. Round, Wave and Match are always required: a Match that does not say
+// which Wave it is cannot be told from its twin.
 func parseCoord(text string, line int) (Coord, error) {
 	parts := strings.Split(text, "/")
 	coord := Coord{Block: parts[0]}
@@ -583,7 +583,7 @@ func parseLineup(text string, line int) (Lineup, error) {
 
 // parseStat reads one line of the sheet's aggregates: `Игрок | Команда | a | b
 // | c` in a team game, `Игрок | a | b | c` in an individual one, where the
-// участник already is the player.
+// participant already is the player.
 func parseStat(text string, line int, individual bool) (Stat, error) {
 	fields := strings.Split(text, "|")
 	want := 5
@@ -638,9 +638,9 @@ func parseEntrant(text string, line int) (Entrant, error) {
 }
 
 // parseSeat reads `Ктулху | ----- ---R- RR--W | 120 | 1`: who sat there, what
-// they took, and the sheet's Σ and место for them. In a брейн the middle field
-// is the бой's questions instead — `R Виктория Корнеева, -, W Санжи Сундуев`.
-// An ЭК line may carry a fifth field naming who played each theme.
+// they took, and the sheet's Σ and place for them. In a brain the middle field
+// is the Match's questions instead — `R Виктория Корнеева, -, W Санжи Сундуев`.
+// An EK line may carry a fifth field naming who played each theme.
 func parseSeat(text string, line int, codec Codec) (Seat, error) {
 	fields := strings.Split(text, "|")
 	if len(fields) == 5 {
@@ -719,8 +719,8 @@ func parseSeat(text string, line int, codec Codec) (Seat, error) {
 	return seat, nil
 }
 
-// parseShootout reads `перестрелка Ктулху: 60` — the net points a перестрелка
-// came to for one seat of the бой it sits in. Zero is refused rather than
+// parseShootout reads `перестрелка Ктулху: 60` — the net points a shootout
+// came to for one seat of the Match it sits in. Zero is refused rather than
 // stored: a seat with no line nets zero already, so an explicit one is either a
 // duplicate or a misread sheet.
 func parseShootout(text string, line int, bout *Bout) error {
@@ -769,7 +769,7 @@ func parseTheme(text string, line int) ([5]Mark, error) {
 
 // parseOverride reads `override [s1/r2/w1/m1] место: причина`, or, scoped to
 // one participant, `override [s1/r2/w1/m1] место Ктулху: причина`. Naming the
-// participant matters: a бой-wide ruling hides the same field for everyone at
+// participant matters: a Match-wide ruling hides the same field for everyone at
 // the table, so a real defect in the other three seats would go unreported.
 func parseOverride(text string, line int) (Override, error) {
 	head, rest, err := splitHeader(strings.TrimSpace(strings.TrimPrefix(text, "override")), line)
@@ -790,10 +790,10 @@ func parseOverride(text string, line int) (Override, error) {
 	return Override{At: at, Field: field, Participant: strings.TrimSpace(participant), Reason: reason, Line: line}, nil
 }
 
-// parseCounts reads a Троечка seat's middle field: one group per тема, one
-// digit per вопрос — how many of the three answered it — and «.» for a вопрос
-// nobody took. `131 ..1` is «первый вопрос взял один, второй трое, третий
-// один; в следующей теме только третий, и его взял один».
+// parseCounts reads a Troika seat's middle field: one group per theme, one
+// digit per question — how many of the three answered it — and «.» for a question
+// nobody took. `131 ..1` reads: one took the first question, three the second,
+// one the third; in the next theme only the third, and one took it.
 func parseCounts(field, who string, line, size int) ([][]int, error) {
 	if size <= 0 {
 		size = 3
@@ -822,7 +822,7 @@ func parseCounts(field, who string, line, size int) ([][]int, error) {
 	return out, nil
 }
 
-// parseQuestions reads a брейн seat's middle field: one entry per question,
+// parseQuestions reads a brain seat's middle field: one entry per question,
 // comma-separated because a player's name has a space in the middle of it.
 // Each is `-`, or a mark with the player who took it — `R Виктория Корнеева` —
 // or a bare mark where the sheet did not record who buzzed.

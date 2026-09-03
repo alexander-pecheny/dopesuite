@@ -1,5 +1,5 @@
-// The flat formats that predate the DSL — ОД and КСИ — built the way they
-// always were, behind the same Spec; and the столы every scheme may name.
+// The flat formats that predate the DSL — OD and KSI — built the way they
+// always were, behind the same Spec; and the venues every scheme may name.
 package gamebuild
 
 import (
@@ -13,10 +13,11 @@ import (
 	"dope/dope/domain/roster"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
 )
 
 func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, tours, questions int) (int64, error) {
-	identity, err := nextGameIdentityTx(ctx, tx, festID, "od", "ОД")
+	identity, err := nextGameIdentityTx(ctx, tx, festID, "od", dopestrings.Default.Gamebuild.Titles.Od())
 	if err != nil {
 		return 0, err
 	}
@@ -33,7 +34,7 @@ func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, tours, questi
 }
 
 func createKSIGameTx(ctx context.Context, tx *sql.Tx, festID int64, themesCount int, stickers json.RawMessage) (int64, error) {
-	identity, err := nextGameIdentityTx(ctx, tx, festID, "ksi", "КСИ")
+	identity, err := nextGameIdentityTx(ctx, tx, festID, "ksi", dopestrings.Default.Gamebuild.Titles.Ksi())
 	if err != nil {
 		return 0, err
 	}
@@ -46,7 +47,7 @@ func createKSIGameTx(ctx context.Context, tx *sql.Tx, festID int64, themesCount 
 }
 
 func createMultiGameTx(ctx context.Context, tx *sql.Tx, festID int64, minigames []games.MultiGame, sorting []string) (int64, error) {
-	identity, err := nextGameIdentityTx(ctx, tx, festID, "multi", "Мультиигры")
+	identity, err := nextGameIdentityTx(ctx, tx, festID, "multi", dopestrings.Default.Gamebuild.Titles.Multi())
 	if err != nil {
 		return 0, err
 	}
@@ -58,9 +59,9 @@ func createMultiGameTx(ctx context.Context, tx *sql.Tx, festID int64, minigames 
 	return insertJSONGameTx(ctx, tx, festID, identity, "multi", schemeJSON, stateJSON)
 }
 
-// pristineFlatTx is a flat game's empty scheme and state with the фест's
-// roster already folded in through its Protocol — what creation and
-// «Очистить» write.
+// pristineFlatTx is a flat game's empty scheme and state with the fest's
+// roster already folded in through its Protocol — what creation and Clear
+// write.
 func pristineFlatTx(ctx context.Context, tx *sql.Tx, festID int64, gameType string, schemeJSON, stateJSON []byte) ([]byte, []byte, error) {
 	teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
 	if err != nil {
@@ -95,7 +96,7 @@ values(?, ?, ?, ?, ?, ?, ?, '{}', 'active', 'fest', 'fest', 1, ?, ?)`,
 }
 
 // insertFlatMatchTx writes a flat game's Structure — one flat Block holding
-// one 'main' бой that carries the whole document — and settles it: seats
+// one 'main' Match that carries the whole document — and settles it: seats
 // from the document, scored, ranked (flatgame).
 func insertFlatMatchTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, title, stateJSON, now string) error {
 	stageID, err := store.InsertReturningID(ctx, tx, `
@@ -112,8 +113,8 @@ values(?, ?, ?, 'main', ?, 1, 1, 1, 0, 'active', 0, ?)`, festID, gameID, stageID
 	return flatgame.SettleTx(ctx, tx, festID, gameID)
 }
 
-// upsertVenuesTx makes the фест's столы the scheme names and returns them by
-// number, for the бои to point at.
+// upsertVenuesTx makes the fest's venues the scheme names and returns them by
+// number, for the matches to point at.
 func upsertVenuesTx(ctx context.Context, tx *sql.Tx, festID int64, venues []store.SchemeVenue) (map[int]int64, error) {
 	now := util.UtcNow()
 	ids := make(map[int]int64, len(venues))

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"pecheny.me/dopecore/authcred"
+
+	xystrings "xy/i18nstrings"
 )
 
 // API tokens authorize the Trello-compatible API (see trello_compat.go). They
@@ -102,7 +104,7 @@ func (s *server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 	}
 	raw, err := newAPIToken()
 	if err != nil {
-		httpError(w, http.StatusInternalServerError, "ошибка сервера")
+		httpError(w, http.StatusInternalServerError, xystrings.Default.Server.Internal())
 		return
 	}
 	now := time.Now()

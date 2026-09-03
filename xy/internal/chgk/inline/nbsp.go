@@ -97,8 +97,9 @@ func nbSegment(s string, nb NoBreak) string {
 	if nb.NoHyphens {
 		return s
 	}
-	// short hyphenated words (из-за, что-то…) and digit/bare hyphens: replace the
-	// hyphen with U+2011. Mirrors chgksuite's search-replace-all-occurrences loop.
+	// short hyphenated words (Russian compounds like "iz-za") and digit/bare
+	// hyphens: replace the hyphen with U+2011. Mirrors chgksuite's
+	// search-replace-all-occurrences loop.
 	for {
 		m := reHyphen.FindStringSubmatchIndex(s)
 		if m == nil {

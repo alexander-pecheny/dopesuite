@@ -53,7 +53,7 @@ func SortedFestRosterImportTeams(teams []FestRosterImportTeam) []FestRosterImpor
 }
 
 // PropagateRosterTx folds the fest roster into every Game whose Protocol
-// carries it (protocol.RosterFolder) — ОД's teams and entries, КСИ's
+// carries it (protocol.RosterFolder) — OD's teams and entries, KSI's
 // participants and answer rows — and reports the documents it rewrote.
 // entryRemap (old Number → new) renumbers the cells keyed on a Number; nil on
 // a plain re-import.
@@ -95,14 +95,14 @@ func RosterTeams(teams []FestRosterImportTeam) []protocol.RosterTeam {
 }
 
 // FestRosterPlayerView is one player in a team's roster line. RatingID (when
-// present) links to the player's rating.chgk.info page in the Составы view.
+// present) links to the player's rating.chgk.info page in the roster view.
 type FestRosterPlayerView struct {
 	Name     string `json:"name"`
 	RatingID int64  `json:"ratingID,omitempty"`
 }
 
 // FestRosterTeamView is one team with its ordered players, for the read-only
-// "Составы" roster view shown to every visitor of a fest. Sourced from the
+// "roster" view shown to every visitor of a fest. Sourced from the
 // canonical fest roster tables (fest_teams/fest_players/fest_team_players) so all
 // game types (EK/OD/KSI) surface the same "who plays for what team" list. The
 // team's and each player's RatingID (when present) link to their respective
@@ -116,7 +116,7 @@ type FestRosterTeamView struct {
 }
 
 // LoadFestRosterView loads every active team of a fest with its ordered players,
-// for the public Составы view. Teams keep their roster position order; players
+// for the public roster view. Teams keep their roster position order; players
 // keep their roster_order within each team.
 func LoadFestRosterView(ctx context.Context, q store.Queryer, festID int64) ([]FestRosterTeamView, error) {
 	rows, err := q.QueryContext(ctx, `

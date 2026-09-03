@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	xystrings "xy/i18nstrings"
 )
 
 // querier is satisfied by *sql.DB, *sql.Conn, and *sql.Tx.
@@ -35,20 +37,21 @@ func pathInt(w http.ResponseWriter, r *http.Request, name string) (int64, bool) 
 
 // boardRole returns the caller's role on a board, or an appError (403/404).
 func boardRole(ctx context.Context, q querier, boardID, userID int64) (string, error) {
+	str := xystrings.Default
 	var deleted sql.NullString
 	if err := q.QueryRowContext(ctx, `select deleted_at from boards where id = ?`, boardID).Scan(&deleted); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", errNotFound("доска не найдена")
+			return "", errNotFound(str.Server.Board.NotFound())
 		}
 		return "", err
 	}
 	if deleted.Valid {
-		return "", errNotFound("доска удалена")
+		return "", errNotFound(str.Server.Board.Deleted())
 	}
 	var role string
 	err := q.QueryRowContext(ctx, `select role from board_members where board_id = ? and user_id = ?`, boardID, userID).Scan(&role)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", errForbidden("нет доступа к доске")
+		return "", errForbidden(str.Server.Board.NoAccess())
 	}
 	if err != nil {
 		return "", err
@@ -216,10 +219,10 @@ type boardSnapshot struct {
 	Sessions      []sessionDTO   `json:"sessions"`
 	CardLabels    []cardLabelDTO `json:"card_labels"`
 	// CardSessions is the Playings — one row per (card, session), the same shape
-	// as CardLabels because both mirror their table. What «Видели» reads.
+	// as CardLabels because both mirror their table. What the Seen column reads.
 	CardSessions []cardSessionDTO `json:"card_sessions"`
-	// TourTesters is each tour's Declaration: which sessions its «Вопросы
-	// тестировали» line names. A tour with none falls back to the custom.
+	// TourTesters is each tour's Declaration: which sessions its questions-tested
+	// line names. A tour with none falls back to the custom.
 	TourTesters []tourTesterDTO      `json:"tour_testers"`
 	Unread      map[string]unreadDTO `json:"unread"`
 	// Sizes is the CALLER's display layout ({boardW,listW,cardLines}) — a per-user,
@@ -236,7 +239,7 @@ type boardSnapshot struct {
 	// users.card_title), delivered like Sizes so the board renders previews the
 	// reader's way straight from the cached snapshot. A card's alias wins over it.
 	CardTitle string `json:"card_title,omitempty"`
-	// FeedDefault is the kind of лента entry an opened card starts on
+	// FeedDefault is the kind of timeline entry an opened card starts on
 	// ("all" / "comments" / "edits" / "meta", users.feed_default), delivered like
 	// Sizes so a card opened offline still obeys the reader's choice.
 	FeedDefault string `json:"feed_default,omitempty"`
@@ -496,7 +499,7 @@ func (s *server) handleDeleteBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if role != "owner" {
-		httpError(w, http.StatusForbidden, "только владелец может удалить доску")
+		httpError(w, http.StatusForbidden, xystrings.Default.Server.Board.DeleteOwnerOnly())
 		return
 	}
 	err := s.withWriteTx(r.Context(), "delete-board", func(ctx context.Context, tx *sql.Tx) error {
@@ -535,7 +538,7 @@ func (s *server) handleLeaveBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if role == "owner" {
-		httpError(w, http.StatusForbidden, "владелец не может покинуть доску — её можно только удалить")
+		httpError(w, http.StatusForbidden, xystrings.Default.Server.Board.LeaveOwnerOnly())
 		return
 	}
 	err := s.withWriteTx(r.Context(), "leave-board", func(ctx context.Context, tx *sql.Tx) error {
@@ -587,7 +590,7 @@ func (s *server) handlePutKeymeta(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if role != "owner" {
-		httpError(w, http.StatusForbidden, "только владелец может менять пароль доски")
+		httpError(w, http.StatusForbidden, xystrings.Default.Server.Board.KeymetaOwnerOnly())
 		return
 	}
 	var req putKeymetaRequest
@@ -657,7 +660,7 @@ func (s *server) handleAddMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if role != "owner" {
-		httpError(w, http.StatusForbidden, "только владелец может добавлять участников")
+		httpError(w, http.StatusForbidden, xystrings.Default.Server.Member.AddOwnerOnly())
 		return
 	}
 	var req addMemberRequest
@@ -668,7 +671,7 @@ func (s *server) handleAddMember(w http.ResponseWriter, r *http.Request) {
 		var memberID int64
 		if err := tx.QueryRowContext(ctx, `select id from users where username = ?`, req.Username).Scan(&memberID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return errBadRequest("пользователь не найден")
+				return errBadRequest(xystrings.Default.Server.Member.UserNotFound())
 			}
 			return err
 		}
@@ -689,7 +692,7 @@ func (s *server) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if role != "owner" {
-		httpError(w, http.StatusForbidden, "только владелец может удалять участников")
+		httpError(w, http.StatusForbidden, xystrings.Default.Server.Member.RemoveOwnerOnly())
 		return
 	}
 	memberID, ok := pathInt(w, r, "userId")

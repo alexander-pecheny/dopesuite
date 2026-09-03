@@ -175,7 +175,7 @@ func rewriteCheckpointStandings(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-// convertFlatGames gives every ЧГК-family game (od/ksi/si) its unified shape:
+// convertFlatGames gives every ChGK-family game (od/ksi/si) its unified shape:
 // one stage (kind 'matches', code 'main') holding one match whose state_json
 // carries what used to live on games.state_json. Journal records touching a
 // flat game's state redirect onto the match row; checkpoints fold their

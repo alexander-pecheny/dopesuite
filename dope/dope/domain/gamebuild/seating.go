@@ -28,7 +28,7 @@ select count(*) from game_assignments where game_id = ?`, gameID).Scan(&count); 
 
 // seatChosenTx numbers the Game's chosen Participants from 1, in the order
 // given. It runs before the Structure is built, so the Slots resolve against
-// these numbers rather than against the фест's.
+// these numbers rather than against the fest's.
 func seatChosenTx(ctx context.Context, tx *sql.Tx, gameID int64, entrants []int64) error {
 	for i, participantID := range entrants {
 		if _, err := tx.ExecContext(ctx, `
@@ -44,7 +44,7 @@ on conflict(game_id, basket, number) do update set participant_id = excluded.par
 // recordGameEntrantsTx writes who plays this Game, in seed order and under the
 // number the Game deals them. It reads back the seating rather than the list it
 // was given, so the entrant list can never claim somebody the Structure did not
-// seat. A team knocked out before its first бой is still visibly an entrant,
+// seat. A team knocked out before its first Match is still visibly an entrant,
 // which is the point of keeping the list at all.
 func recordGameEntrantsTx(ctx context.Context, tx *sql.Tx, gameID int64) error {
 	rows, err := tx.QueryContext(ctx, `
@@ -83,7 +83,7 @@ on conflict(game_id, participant_id) do update set position = excluded.position,
 
 // gameEntrantsTx is who this Game seats, in its own seed order — empty for a
 // Game created before Games could name their entrants, which then reads the
-// фест's registry as it always did.
+// fest's registry as it always did.
 func gameEntrantsTx(ctx context.Context, tx *sql.Tx, gameID int64) ([]int64, error) {
 	rows, err := tx.QueryContext(ctx, `
 select participant_id from game_participants where game_id = ? order by position`, gameID)
@@ -103,14 +103,14 @@ select participant_id from game_participants where game_id = ? order by position
 }
 
 // chosenEntrantsTx turns the Game's chosen Participants into scheme entrants,
-// numbered from 1 in the order given. Without a choice the whole фест plays.
+// numbered from 1 in the order given. Without a choice the whole fest plays.
 func chosenEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType string, chosen []int64) ([]store.SchemeSlot, error) {
 	if len(chosen) == 0 {
 		return seedEntrantsTx(ctx, tx, festID, gameType)
 	}
 	// A team format seats teams and an individual one players, so a chosen
 	// Participant of the other kind is a mistake worth naming rather than a
-	// seat left empty at the стол.
+	// seat left empty at the venue.
 	want := "team"
 	if games.IsIndividual(gameType) {
 		want = "player"
@@ -166,8 +166,8 @@ func seedEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType stri
 // (declared-seed games).
 func seedSeaterTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string) (func(slot store.SchemeSlot) any, error) {
 	// A Game numbers the Participants it seats, and the assignment rows carry
-	// that numbering (ADR-0009). Reading them first is what lets one фест hold an
-	// ЭК of 48 and a брейн of a different 48.
+	// that numbering (ADR-0009). Reading them first is what lets one fest hold
+	// an EK of 48 and a Brain of a different 48.
 	byNumber := map[int]int64{}
 	rows, err := tx.QueryContext(ctx, `
 select number, participant_id from game_assignments
@@ -189,7 +189,7 @@ where game_id = ? and basket = 1 and participant_id is not null`, gameID)
 		return nil, err
 	}
 	if !games.IsIndividual(gameType) {
-		// A team Game that never named its entrants seats the фест's registry by
+		// A team Game that never named its entrants seats the fest's registry by
 		// its registration numbers, as every game did before Games could differ.
 		teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
 		if err != nil {

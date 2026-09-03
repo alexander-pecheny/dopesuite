@@ -10,7 +10,7 @@ import (
 
 func init() { Register(ek{}) }
 
-// ek wraps the existing EK (эрудит-квартет) pure scoring: state is
+// ek wraps the existing EK (erudit-quartet) pure scoring: state is
 // store.MatchState, totals come from store.ScoreParticipant, and places are the
 // host-entered ones (auto-placement arrives with the migration; parity with
 // the current system requires manual places for now).
@@ -22,8 +22,8 @@ func (ek) Params() []Param { return []Param{{Key: "themes", Config: "themes"}} }
 
 func (ek) TeamBlob() bool { return true }
 
-// An ЭК бой is a seat plan until it is finished; a re-seed may still move its
-// teams, and their marks go with them.
+// An EK match is a seat plan until it is finished; a re-seed may still move
+// its teams, and their marks go with them.
 func (ek) Started(state json.RawMessage) bool { return false }
 
 func (ek) Metrics(json.RawMessage) []string {

@@ -1,6 +1,6 @@
 // Package festview composes the fest view — what every game page draws from
 // and what the server broadcasts after each write: the Fest and Game header,
-// the venues, and every stage with its grain, its бои, its Ranker's table and
+// the venues, and every stage with its grain, its Matches, its Ranker's table and
 // the sort rules that table shows. One place answers the question, so no page
 // re-derives a Block from a code or a column from a config.
 package festview
@@ -113,8 +113,8 @@ order by position, id`, stageArgs...)
 				return store.FestView{}, err
 			}
 			record.Stage.Matches = matches
-			// A Kind that ranks keeps its own table — the Сетка draws a Group as
-			// место against team, the way the sheets do, and the бои stay for the
+			// A Kind that ranks keeps its own table — the grid draws a Group as
+			// place against team, the way the sheets do, and the Matches stay for the
 			// tab that lists them.
 			if resolver.RanksItsOwnStage(record.Kind) {
 				standings, err := store.LoadReseedEntries(ctx, q, record.ID)

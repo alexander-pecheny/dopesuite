@@ -1,11 +1,11 @@
-// troika-protocol.ts — the Тройка Protocol's document as the page reads it
+// troika-protocol.ts — the Troika protocol's document as the page reads it
 // (ADR-0018): the shape, the adapter from the server's JSON, and the
 // arithmetic. Pure: every function takes the state it reads.
 //
-// A бой is two sides over темы of three вопросы. Three players sit at each
-// table in the order the ведущий asks them — chair 0 first — and all three
-// answer every вопрос their team plays. Every correct answer pays that тема's
-// нарицательная on its own, so one вопрос yields nought to three times its
+// A bout is two sides over themes of three questions. Three players sit at each
+// table in the order the host asks them — chair 0 first — and all three
+// answer every question their team plays. Every correct answer pays that theme's
+// value on its own, so one question yields nought to three times its
 // value; the sheet's familiar 1/2/3 is a count of correct answers, not a rank.
 
 export const CHAIRS = 3;
@@ -15,9 +15,9 @@ export const DEFAULT_THEME_VALUE = 1;
 export type Mark = "right" | "wrong" | "";
 
 export interface TroikaTheme {
-  // The players' ids in the order the ведущий asks them. Zero is an empty seat.
+  // The players' ids in the order the host asks them. Zero is an empty seat.
   order: number[];
-  // [вопрос][кресло].
+  // [question][chair].
   answers: Mark[][];
 }
 
@@ -26,14 +26,14 @@ export interface TroikaSide {
 }
 
 export interface TroikaState {
-  // Each тема's нарицательная, written when the бой was built.
+  // Each theme's value, written when the bout was built.
   values: number[];
   sides: TroikaSide[];
   [key: string]: unknown;
 }
 
 // parseState is the adapter from whatever the server stored to a TroikaState
-// the renderers can trust: two sides, as many темы as the document declares
+// the renderers can trust: two sides, as many themes as the document declares
 // values for, each a three-by-three grid.
 export function parseState(raw: unknown): TroikaState {
   const doc = (raw && typeof raw === "object" ? raw : {}) as Partial<TroikaState>;
@@ -79,7 +79,7 @@ export function markAt(state: TroikaState, side: number, theme: number, question
   return state.sides[side]?.themes[theme]?.answers[question]?.[chair] ?? "";
 }
 
-// questionScore is what one вопрос paid a side: every correct answer at its
+// questionScore is what one question paid a side: every correct answer at its
 // value, so three players who all took it pay three times over.
 export function questionScore(state: TroikaState, side: number, theme: number, question: number): number {
   let correct = 0;
@@ -101,8 +101,8 @@ export function sideTotal(state: TroikaState, side: number): number {
   return total;
 }
 
-// places are 1 and 2, shared at 1.5 on a ничья — the регламент pays half a
-// рейтинговый балл for one, so the бой does not invent a winner.
+// places are 1 and 2, shared at 1.5 on a tie — the regulations pay half a
+// rating ball for one, so the bout does not invent a winner.
 export function places(state: TroikaState): number[] {
   const a = sideTotal(state, 0);
   const b = sideTotal(state, 1);
@@ -111,15 +111,15 @@ export function places(state: TroikaState): number[] {
   return [1.5, 1.5];
 }
 
-// chairAt is who sat in chair c for this тема; the page resolves the id to a
-// name through the бой's roster.
+// chairAt is who sat in chair c for this theme; the page resolves the id to a
+// name through the bout's roster.
 export function chairAt(state: TroikaState, side: number, theme: number, chair: number): number {
   return state.sides[side]?.themes[theme]?.order[chair] ?? 0;
 }
 
-// swapFrom rewrites the seating from theme t onward — what the host's «здесь
-// поменялись местами» button does. Seats are a fact per тема, so a swap is
-// simply the new order written into every тема after it; an earlier one is
+// swapFrom rewrites the seating from theme t onward — what the host's swap
+// button does. Seats are a fact per theme, so a swap is
+// simply the new order written into every theme after it; an earlier one is
 // left exactly as it was played.
 export function swapFrom(state: TroikaState, side: number, from: number, order: number[]): void {
   for (let t = from; t < state.values.length; t++) {
@@ -128,8 +128,8 @@ export function swapFrom(state: TroikaState, side: number, from: number, order: 
   }
 }
 
-// turnedAt is whether either side sits differently for this тема than for the
-// one before — where the sheet shows a «рассадка» column again.
+// turnedAt is whether either side sits differently for this theme than for the
+// one before — where the sheet shows a seating column again.
 export function turnedAt(state: TroikaState, theme: number): boolean {
   if (theme <= 0) return false;
   for (let side = 0; side < 2; side++) {

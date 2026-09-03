@@ -67,8 +67,8 @@ func (c StageConfig) KindConfig() json.RawMessage {
 	return b
 }
 
-// protocolConfig is what a Protocol keeps under Config: the per-бой question
-// count and the КСИ/ЭК theme count.
+// protocolConfig is what a Protocol keeps under Config: the per-match question
+// count and the KSI/EK theme count.
 type protocolConfig struct {
 	Questions int `json:"questions"`
 	Themes    int `json:"themes"`
@@ -82,7 +82,7 @@ func (c StageConfig) protocol() protocolConfig {
 	return p
 }
 
-// Questions is the Block's per-бой question count: Config.questions, else the
+// Questions is the Block's per-match question count: Config.questions, else the
 // legacy top-level one, else 0.
 func (c StageConfig) Questions() int {
 	if q := c.protocol().Questions; q > 0 {
@@ -91,5 +91,5 @@ func (c StageConfig) Questions() int {
 	return c.LegacyQuestions
 }
 
-// Themes is how many themes the Block's бои play; 0 means the Protocol's default.
+// Themes is how many themes the Block's matches play; 0 means the Protocol's default.
 func (c StageConfig) Themes() int { return c.protocol().Themes }

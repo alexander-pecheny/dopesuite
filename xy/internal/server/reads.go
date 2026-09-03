@@ -66,7 +66,7 @@ type activityEventDTO struct {
 	// Mention: this row names the caller — the 🔔 panel paints it red while
 	// Unread holds. MentionReply: it does so by replying to their comment
 	// (the two are told apart so the row's wording can be honest: a reply to
-	// a THIRD person that @-mentions you is not «ответ вам»).
+	// a THIRD person that @-mentions you is not a reply to you).
 	Mention      bool   `json:"mention"`
 	MentionReply bool   `json:"mention_reply"`
 	ReplyToID    *int64 `json:"reply_to_id"`
@@ -125,8 +125,8 @@ limit ?`, uid, uid, uid, uid, bid, limit)
 }
 
 // handleBoardReadAll upserts every board card's watermarks to their current
-// per-bucket max (i.e. marks the whole board read), for the panel's "Прочитать
-// всё" button.
+// per-bucket max (i.e. marks the whole board read), for the panel's
+// mark-all-read button.
 func (s *server) handleBoardReadAll(w http.ResponseWriter, r *http.Request) {
 	uid, bid, _, ok := s.requireBoard(w, r, "id")
 	if !ok {

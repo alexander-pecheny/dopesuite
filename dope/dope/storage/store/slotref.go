@@ -3,7 +3,10 @@ package store
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
+
+	dopestrings "dope/i18nstrings"
 )
 
 // SlotRef is a match slot's source — the (source_type, source_ref_json) pair
@@ -15,7 +18,7 @@ type SlotRef struct {
 	// seed: a basket and a number within it (Position is the legacy spelling of Number).
 	Basket int `json:"basket,omitempty"`
 	Number int `json:"number,omitempty"`
-	// from_match: the place taken in a прошедший бой.
+	// from_match: the place taken in a prior match.
 	Match string `json:"match,omitempty"`
 	Place int    `json:"place,omitempty"`
 	// reseed: a rank in a Block's standings.
@@ -34,8 +37,9 @@ const (
 )
 
 // SlotRefOf derives the stored ref from a scheme slot: a seed without a basket
-// sits in basket 1 and, unlabelled, shows as «Посев-N».
+// sits in basket 1 and, unlabelled, gets the Storage.Slot.SeedUnlabelled label.
 func SlotRefOf(slot SchemeSlot) SlotRef {
+	s := dopestrings.Default
 	switch {
 	case slot.Seed != nil:
 		number := slot.Seed.Number
@@ -48,7 +52,7 @@ func SlotRefOf(slot SchemeSlot) SlotRef {
 		}
 		label := slot.Label
 		if label == "" && slot.Seed.Basket <= 0 {
-			label = fmt.Sprintf("Посев-%d", number)
+			label = s.Storage.Slot.SeedUnlabelled(strconv.Itoa(number))
 		}
 		return SlotRef{Type: SlotSeed, Basket: basket, Number: number, Label: label}
 	case slot.FromMatch != nil:
@@ -110,7 +114,7 @@ func (r SlotRef) JSON() string {
 }
 
 // Identity is the ref without its label: what a rebuild compares to decide
-// whether a бой's seats still mean what the scheme says.
+// whether a match's seats still mean what the scheme says.
 func (r SlotRef) Identity() string {
 	switch r.Type {
 	case SlotSeed:
@@ -124,26 +128,27 @@ func (r SlotRef) Identity() string {
 }
 
 // DisplayLabel is the human label of a slot whose seat is empty: its Label if
-// any (legacy schemes baked the English "seed-N"; it reads as «Посев-N»),
-// else the kind's default.
+// any (legacy schemes baked the English "seed-N"; it reads as the
+// Storage.Slot.SeedLegacyPrefix label), else the kind's default.
 func (r SlotRef) DisplayLabel() string {
+	s := dopestrings.Default
 	if r.Label != "" {
 		if rest, found := strings.CutPrefix(r.Label, "seed-"); found {
-			return "Посев-" + rest
+			return s.Storage.Slot.SeedLegacyPrefix() + rest
 		}
 		return r.Label
 	}
 	switch r.Type {
 	case SlotSeed:
-		return fmt.Sprintf("К%d-%d", r.Basket, r.Number)
+		return s.Storage.Slot.SeedBasket(strconv.Itoa(r.Basket), strconv.Itoa(r.Number))
 	case SlotFromMatch:
 		return fmt.Sprintf("%s%d", r.Match, r.Place)
 	case SlotReseed:
-		return fmt.Sprintf("Пересев-%d", r.Rank)
+		return s.Storage.Slot.Reseed(strconv.Itoa(r.Rank))
 	case SlotPlaceholder:
 		if r.Placeholder != "" {
 			return r.Placeholder
 		}
 	}
-	return "Ожидает команды"
+	return s.Storage.Slot.Placeholder()
 }

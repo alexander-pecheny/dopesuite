@@ -1,6 +1,7 @@
 // tokens.ts — manage API tokens for the Trello-compatible API.
 // Create (shown once), list, revoke. Session-authed via /api/tokens.
 import { xyApp } from "./app.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const { fetchJSON, jpost, jdelete, el } = xyApp;
 
@@ -33,9 +34,9 @@ function fmtDate(s: string | null | undefined): string {
 }
 
 function statusText(t: ApiToken): string {
-  if (t.revoked_at) return "отозван";
-  if (!t.active) return "истёк";
-  return "активен";
+  if (t.revoked_at) return S.chrome.tokens.statusRevoked();
+  if (!t.active) return S.chrome.tokens.statusExpired();
+  return S.chrome.tokens.statusActive();
 }
 
 async function loadTokens(): Promise<void> {
@@ -44,11 +45,11 @@ async function loadTokens(): Promise<void> {
   emptyHint.hidden = tokens.length > 0;
   for (const t of tokens) {
     const inactive = t.revoked_at || !t.active;
-    const meta = `создан ${fmtDate(t.created_at)} · действует до ${fmtDate(t.expires_at)}` +
-      (t.last_used_at ? ` · использован ${fmtDate(t.last_used_at)}` : " · не использовался");
+    const meta = S.chrome.tokens.metaDates(fmtDate(t.created_at), fmtDate(t.expires_at)) +
+      (t.last_used_at ? S.chrome.tokens.metaUsed(fmtDate(t.last_used_at)) : S.chrome.tokens.metaUnused());
     const row = el("li", { class: "token-row" + (inactive ? " token-row-inactive" : "") },
       el("div", { class: "token-row-main" },
-        el("span", { class: "token-row-label", text: t.label || "(без названия)" }),
+        el("span", { class: "token-row-label", text: t.label || S.chrome.tokens.labelUnnamed() }),
         el("span", { class: "token-row-status", text: statusText(t) }),
       ),
       el("div", { class: "token-row-meta", text: meta }),
@@ -57,11 +58,11 @@ async function loadTokens(): Promise<void> {
       row.append(el("button", {
         class: "btn btn-ghost token-revoke", type: "button",
         onclick: async () => {
-          if (!confirm("Отозвать токен? Приложения, использующие его, потеряют доступ.")) return;
+          if (!confirm(S.chrome.tokens.revokeConfirm())) return;
           try { await jdelete(`/api/tokens/${t.id}`); await loadTokens(); }
           catch (err) { alert(errMsg(err)); }
         },
-      }, "Отозвать"));
+      }, S.chrome.tokens.revoke()));
     }
     tokenList.append(row);
   }
@@ -84,8 +85,8 @@ createForm.addEventListener("submit", async (e) => {
 copyTokenBtn.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(newTokenValue.textContent ?? "");
-    copyTokenBtn.textContent = "Скопировано";
-    setTimeout(() => { copyTokenBtn.textContent = "Скопировать"; }, 1500);
+    copyTokenBtn.textContent = S.chrome.tokens.copied();
+    setTimeout(() => { copyTokenBtn.textContent = S.chrome.tokens.copy(); }, 1500);
   } catch (_) {
     // Clipboard API unavailable (e.g. non-secure context) — select for manual copy.
     const range = document.createRange();

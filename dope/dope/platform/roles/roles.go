@@ -1,15 +1,18 @@
 // Package roles holds the pure fest-permission model: the role hierarchy and
 // the predicates that decide what each role may do, plus the bulk-access line
-// parser. It is a leaf — it depends only on the standard library and never on
-// the server, database or HTTP layers — so the permission rules have a single,
-// independently-testable home. The DB-backed access management (loading and
-// persisting fest_organizers rows) stays in package main as a thin layer that
-// consults these predicates.
+// parser. It is a leaf — it depends only on the standard library and the
+// shared Catalog, never on the server, database or HTTP layers — so the
+// permission rules have a single, independently-testable home. The DB-backed
+// access management (loading and persisting fest_organizers rows) stays in
+// package main as a thin layer that consults these predicates.
 package roles
 
 import (
-	"fmt"
+	"strconv"
 	"strings"
+
+	dopestrings "dope/i18nstrings"
+	core "pecheny.me/dopecore/i18nstrings"
 )
 
 // Canonical fest roles, ordered creator > admin > host. Stored verbatim in the
@@ -75,6 +78,7 @@ type BulkAccessLine struct {
 // line. "username:remove" marks a deletion. Blank lines are skipped. The error
 // messages are line-numbered and shown to the host verbatim.
 func ParseBulkLines(raw string) ([]BulkAccessLine, error) {
+	s := dopestrings.Default
 	var out []BulkAccessLine
 	for idx, line := range strings.Split(raw, "\n") {
 		lineNo := idx + 1
@@ -84,12 +88,12 @@ func ParseBulkLines(raw string) ([]BulkAccessLine, error) {
 		}
 		nickname, action, ok := strings.Cut(line, ":")
 		if !ok {
-			return nil, fmt.Errorf("строка %d: нужен формат username:role", lineNo)
+			return nil, core.User(s.Roles.Bulk.FormatExpected(strconv.Itoa(lineNo)))
 		}
 		nickname = strings.TrimSpace(nickname)
 		action = strings.ToLower(strings.TrimSpace(action))
 		if nickname == "" || action == "" {
-			return nil, fmt.Errorf("строка %d: нужен формат username:role", lineNo)
+			return nil, core.User(s.Roles.Bulk.FormatExpected(strconv.Itoa(lineNo)))
 		}
 		change := BulkAccessLine{Line: lineNo, Nickname: nickname}
 		switch action {
@@ -98,7 +102,7 @@ func ParseBulkLines(raw string) ([]BulkAccessLine, error) {
 		case "remove":
 			change.Delete = true
 		default:
-			return nil, fmt.Errorf("строка %d: действие должно быть host, admin или remove", lineNo)
+			return nil, core.User(s.Roles.Bulk.ActionUnknown(strconv.Itoa(lineNo)))
 		}
 		out = append(out, change)
 	}

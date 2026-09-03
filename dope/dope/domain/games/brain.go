@@ -5,14 +5,14 @@ import (
 	"fmt"
 )
 
-// Brain (брейн-ринг) pure domain logic.
+// Brain (brain-ring) pure domain logic.
 //
-// A brain match is a head-to-head бой between two teams over K buzzer
+// A brain match is a head-to-head match between two teams over K buzzer
 // questions: per question each side records at most one answering player and a
 // mark ("right" — took it, "wrong" — missed, "" — untouched). Extra tiebreak
-// questions (the sheet's "П" rows) are appended after the base K when a draw
-// must be broken. The shapes below mirror matches.state_json; who the sides
-// are is the Structure's knowledge (match_slots), and finishedness is
+// questions (the sheet's shootout rows) are appended after the base K when a
+// draw must be broken. The shapes below mirror matches.state_json; who the
+// sides are is the Structure's knowledge (match_slots), and finishedness is
 // matches.status — the state holds play data only.
 
 // BrainRow is one team's cell pair for one question: who buzzed and how it went.
@@ -21,24 +21,24 @@ type BrainRow struct {
 	Mark   string `json:"mark"` // "right" | "wrong" | ""
 }
 
-// BrainSide is one side of a бой: one row per question, index-aligned with the
-// other side (base questions first, then tiebreaks).
+// BrainSide is one side of a match: one row per question, index-aligned with
+// the other side (base questions first, then tiebreaks).
 type BrainSide struct {
 	Rows []BrainRow `json:"rows"`
 }
 
 // BrainState mirrors the persisted brain match state JSON. The last Tiebreaks
-// rows are the "П" questions.
+// rows are the shootout questions.
 type BrainState struct {
 	Tiebreaks int         `json:"tiebreaks"`
 	Teams     []BrainSide `json:"teams"`
 }
 
-// BrainQuestionCount is the default number of base questions in a бой.
+// BrainQuestionCount is the default number of base questions in a match.
 const BrainQuestionCount = 5
 
-// BrainEmptyStateJSON builds the pristine state blob for one бой of the given
-// base question count.
+// BrainEmptyStateJSON builds the pristine state blob for one match of the
+// given base question count.
 func BrainEmptyStateJSON(questions int) []byte {
 	if questions <= 0 {
 		questions = BrainQuestionCount
@@ -50,9 +50,9 @@ func BrainEmptyStateJSON(questions int) []byte {
 	return []byte(mustJSON(BrainState{Teams: teams}))
 }
 
-// BrainStateStarted reports whether a бой has any entered protocol data — a
-// mark, a player attribution or appended tiebreak rows. Started бои are the
-// ones a scheme recompile must not touch.
+// BrainStateStarted reports whether a match has any entered protocol data — a
+// mark, a player attribution or appended tiebreak rows. Started matches are
+// the ones a scheme recompile must not touch.
 func BrainStateStarted(stateJSON string) bool {
 	var state BrainState
 	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
@@ -86,7 +86,7 @@ func BrainQuestions(schemeJSON string) int {
 }
 
 // BrainTaken counts the questions a side took; withTiebreaks includes the
-// trailing "П" rows.
+// trailing shootout rows.
 func BrainTaken(state BrainState, side int, withTiebreaks bool) int {
 	if side >= len(state.Teams) {
 		return 0
@@ -104,14 +104,14 @@ func BrainTaken(state BrainState, side int, withTiebreaks bool) int {
 	return taken
 }
 
-// BrainResultsTeam is one side's computed outcome of a бой.
+// BrainResultsTeam is one side's computed outcome of a match.
 type BrainResultsTeam struct {
 	Taken     int     `json:"taken"`     // questions taken, tiebreaks included
 	TakenBase int     `json:"takenBase"` // without tiebreaks — the reshuffle stat
 	Place     float64 `json:"place"`     // 1 / 2, 1.5 shared on a draw
 }
 
-// ComputeBrainResults scores a бой from its state JSON, sides in slot order.
+// ComputeBrainResults scores a match from its state JSON, sides in slot order.
 // Places track the running score unconditionally; whether they count (group
 // points, advancement) is the Structure's call, gated on matches.status.
 func ComputeBrainResults(stateJSON string) ([]BrainResultsTeam, error) {

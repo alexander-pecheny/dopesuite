@@ -11,6 +11,7 @@ import (
 
 	"pecheny.me/dopecore/webassets"
 
+	xystrings "xy/i18nstrings"
 	"xy/internal/ui"
 	"xy/web/assets"
 )
@@ -19,7 +20,7 @@ import (
 // with the kit's files wired in, and the page set that compiles ui/*.dopeui.
 func newAssets() (*webassets.Assets, *kit.PageSet) {
 	a := kit.Assets(assets.FS, ".", "web/assets")
-	return a, kit.NewPageSet(a.Source, a.NoCache, ui.Compile).Provide("ui/login.dopeui", kit.LoginPage("Вход · xy", "/"))
+	return a, kit.NewPageSet(a.Source, a.NoCache, ui.Compile).Provide("ui/login.dopeui", kit.LoginPage(xystrings.Default.Auth.Page.Title(), "/"))
 }
 
 // pagePaths are the ui/*.dopeui sources servePage compiles; warmed up front in
@@ -58,7 +59,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		s.servePage("ui/login.dopeui")(w, r)
 		return
 	}
-	body, err := ui.Compile("ui/login.dopeui", kit.LoginPage("Вход · xy", next))
+	body, err := ui.Compile("ui/login.dopeui", kit.LoginPage(xystrings.Default.Auth.Page.Title(), next))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

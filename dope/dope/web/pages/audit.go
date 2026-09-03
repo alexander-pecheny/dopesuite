@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	ui "dope/dope/web/ui"
+	dopestrings "dope/i18nstrings"
 )
 
 // The fest-level "audit" page is now an index of the fest's games, each linking
@@ -22,7 +23,8 @@ type auditGameRow struct {
 // festAuditIndexDoc builds the fest's per-game history index page: a link list of
 // the fest's games, each pointing at its own edit history + revert.
 func festAuditIndexDoc(festID int64, festTitle string, games []auditGameRow) *ui.Doc {
-	sect := []ui.Item{ui.Note(ui.Text("История и откат ведутся отдельно по каждой игре."))}
+	s := dopestrings.Default
+	sect := []ui.Item{ui.Note(ui.Text(s.Journal.Index.Note()))}
 	if len(games) > 0 {
 		rows := make([]ui.Item, 0, len(games))
 		for _, g := range games {
@@ -37,11 +39,11 @@ func festAuditIndexDoc(festID int64, festTitle string, games []auditGameRow) *ui
 		}
 		sect = append(sect, ui.List(rows...))
 	} else {
-		sect = append(sect, ui.Empty(ui.Text("В этом фестивале пока нет игр.")))
+		sect = append(sect, ui.Empty(ui.Text(s.Journal.Index.Empty())))
 	}
 	return &ui.Doc{Nodes: []ui.Node{
-		ui.Page(ui.Title("История изменений"), ui.PagePublic,
-			ui.Publictopbar(Trail(FestCrumbs(strconv.FormatInt(festID, 10), festTitle), "История изменений")),
+		ui.Page(ui.Title(s.Journal.Index.Title()), ui.PagePublic,
+			ui.Publictopbar(Trail(FestCrumbs(strconv.FormatInt(festID, 10), festTitle), s.Journal.Index.Title())),
 			ui.Section(sect...),
 		),
 	}}

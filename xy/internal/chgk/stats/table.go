@@ -2,19 +2,21 @@ package stats
 
 import (
 	"encoding/csv"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
+
+	xystrings "xy/i18nstrings"
 )
 
 // ReadTable ports _results_table_to_masks: the two layouts rating.chgk.info
-// exports a вопросная таблица in — one row per team, or one row per team per
-// tour — under a header row whose second column reads «Название». Anything
-// before that header is skipped, and any cell that is neither 0 nor 1 (an
-// unresolved спорный, say) counts as not taken and is reported rather than
-// refused.
+// exports a question table in — one row per team, or one row per team per
+// tour — under a header row whose second column is the team-name column.
+// Anything before that header is skipped, and any cell that is neither 0 nor 1
+// (an unresolved controversy, say) counts as not taken and is reported rather
+// than refused.
 func ReadTable(rows [][]string) ([]Result, []string) {
+	s := xystrings.Default
 	type key struct {
 		id   int
 		name string
@@ -81,14 +83,12 @@ func ReadTable(rows [][]string) ([]Result, []string) {
 	}
 
 	if layout == "" {
-		return nil, []string{"Не удалось найти заголовок вопросной таблицы (строку со столбцом «Название»)."}
+		return nil, []string{s.Stats.Table.HeaderMissing()}
 	}
 	var warnings []string
 	if disputedN > 0 {
-		warnings = append(warnings, fmt.Sprintf(
-			"В расплюсовке найдены нерассмотренные спорные или неожиданные значения (%d шт.), "+
-				"они засчитаны как неверные. Например: значение=%q, команда=%q.",
-			disputedN, disputedValue, disputedTeam))
+		warnings = append(warnings, s.Stats.Table.Disputed(
+			strconv.Itoa(disputedN), disputedValue, disputedTeam))
 	}
 	slicesSort(tours)
 	results := make([]Result, 0, len(order))
@@ -106,7 +106,7 @@ func ReadTable(rows [][]string) ([]Result, []string) {
 	return results, warnings
 }
 
-// ReadCSV reads a вопросная таблица exported as csv. The delimiter is what
+// ReadCSV reads a question table exported as csv. The delimiter is what
 // chgksuite takes as --custom_csv_args {"delimiter": ";"}; a leading BOM is
 // dropped, as Python's utf-8-sig does.
 func ReadCSV(path string, delimiter rune) ([]Result, []string, error) {

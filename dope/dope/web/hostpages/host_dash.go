@@ -19,6 +19,7 @@ import (
 	"dope/dope/storage/store"
 	"dope/dope/web/pages"
 	dopeui "dope/dope/web/ui"
+	dopestrings "dope/i18nstrings"
 
 	"pecheny.me/dopecore/session"
 )
@@ -66,14 +67,15 @@ type hostDashMessages struct {
 // pageforms.js data-attributes (no inline on* handlers).
 func hostFestDashDoc(data hostFestDashData) *dopeui.Doc {
 	ref := data.Fest.Ref()
+	s := dopestrings.Default
 	page := []dopeui.Item{
-		dopeui.Title(data.Fest.Title + " · ведущий"), dopeui.PagePublic, dopeui.Classicscripts("dist/pageforms.js"),
+		dopeui.Title(s.Host.Dash.PageTitle(data.Fest.Title)), dopeui.PagePublic, dopeui.Classicscripts("dist/pageforms.js"),
 	}
 	if data.Fest.IsPublic {
 		page = append(page,
-			dopeui.Data("jump-label", "Страница зрителя"),
+			dopeui.Data("jump-label", s.Host.Dash.JumpLabel()),
 			dopeui.Data("jump-href", "/fest/"+ref),
-			dopeui.Data("jump-title", "Открыть зрительскую страницу"),
+			dopeui.Data("jump-title", s.Host.Dash.JumpTitle()),
 		)
 	}
 	page = append(page, dopeui.Publictopbar(pages.Trail(pages.HostCrumbs(), data.Fest.Title)))
@@ -92,11 +94,11 @@ func hostFestDashDoc(data hostFestDashData) *dopeui.Doc {
 	}
 	if data.CanDeleteFest {
 		page = append(page, dopeui.Section(
-			dopeui.Subhead(dopeui.Text("Удаление")),
+			dopeui.Subhead(dopeui.Text(s.Host.Dash.DeleteSubhead())),
 			dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/delete"), dopeui.Autocomplete("off"),
-				dopeui.Data("confirm", "Удалить турнир? Все игры, команды и результаты будут удалены."),
-				dopeui.Note(dopeui.Text("Удаление убирает фест со всеми играми, командами и результатами.")),
-				dopeui.Row(dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Text("Удалить фест"))),
+				dopeui.Data("confirm", s.Host.Dash.DeleteConfirm()),
+				dopeui.Note(dopeui.Text(s.Host.Dash.DeleteNote())),
+				dopeui.Row(dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Text(s.Host.Dash.DeleteSubmit()))),
 			),
 		))
 	}
@@ -104,29 +106,31 @@ func hostFestDashDoc(data hostFestDashData) *dopeui.Doc {
 }
 
 func hostDashFestForm(data hostFestDashData, ref string) *dopeui.Element {
+	s := dopestrings.Default
 	ratingID := ""
 	if data.RatingID != 0 {
 		ratingID = strconv.FormatInt(data.RatingID, 10)
 	}
-	pub := dopeui.Checkbox(dopeui.Name("is_public"), dopeui.Value("1"), dopeui.Text("Публичный"))
+	pub := dopeui.Checkbox(dopeui.Name("is_public"), dopeui.Value("1"), dopeui.Text(s.Host.Dash.PublicLabel()))
 	if data.Fest.IsPublic {
-		pub = dopeui.Checkbox(dopeui.Name("is_public"), dopeui.Value("1"), dopeui.Checked(), dopeui.Text("Публичный"))
+		pub = dopeui.Checkbox(dopeui.Name("is_public"), dopeui.Value("1"), dopeui.Checked(), dopeui.Text(s.Host.Dash.PublicLabel()))
 	}
 	return dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref), dopeui.Autocomplete("off"),
-		dopeui.Field(dopeui.Label("Название"), dopeui.Textfield(dopeui.Name("title"), dopeui.Value(data.Fest.Title), dopeui.Required())),
-		dopeui.Field(dopeui.Label("Описание (markdown)"), dopeui.Editor(dopeui.Name("description"), dopeui.Rows("6"), dopeui.Text(data.Description))),
-		dopeui.Field(dopeui.Label("Slug (необязательно; задайте, чтобы получить URL вида /fest/{slug})"),
+		dopeui.Field(dopeui.Label(s.Host.Dash.TitleLabel()), dopeui.Textfield(dopeui.Name("title"), dopeui.Value(data.Fest.Title), dopeui.Required())),
+		dopeui.Field(dopeui.Label(s.Host.Dash.DescriptionLabel()), dopeui.Editor(dopeui.Name("description"), dopeui.Rows("6"), dopeui.Text(data.Description))),
+		dopeui.Field(dopeui.Label(s.Host.Dash.SlugLabel()),
 			dopeui.Textfield(dopeui.Name("slug"), dopeui.Value(data.Slug), dopeui.Pattern("[a-z0-9-]+"), dopeui.Placeholder("my-fest"))),
-		dopeui.Field(dopeui.Label("Дата начала"), dopeui.Textfield(dopeui.Name("start_date"), dopeui.Value(data.Fest.StartDate))),
-		dopeui.Field(dopeui.Label("Дата окончания"), dopeui.Textfield(dopeui.Name("end_date"), dopeui.Value(data.Fest.EndDate))),
+		dopeui.Field(dopeui.Label(s.Host.Dash.StartDateLabel()), dopeui.Textfield(dopeui.Name("start_date"), dopeui.Value(data.Fest.StartDate))),
+		dopeui.Field(dopeui.Label(s.Host.Dash.EndDateLabel()), dopeui.Textfield(dopeui.Name("end_date"), dopeui.Value(data.Fest.EndDate))),
 		dopeui.Field(dopeui.Label("rating.chgk.info ID"), dopeui.Textfield(dopeui.Name("rating_id"), dopeui.Value(ratingID), dopeui.Inputmode("numeric"))),
 		pub,
-		dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text("Сохранить"))),
+		dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Dash.SaveSubmit()))),
 	)
 }
 
 func hostDashGamesSection(data hostFestDashData, ref string) *dopeui.Element {
-	sect := []dopeui.Item{dopeui.Subhead(dopeui.Text("Игры"))}
+	s := dopestrings.Default
+	sect := []dopeui.Item{dopeui.Subhead(dopeui.Text(s.Host.Dash.GamesSubhead()))}
 	if len(data.Games) > 0 {
 		rows := make([]dopeui.Item, 0, len(data.Games))
 		for _, g := range data.Games {
@@ -138,29 +142,30 @@ func hostDashGamesSection(data hostFestDashData, ref string) *dopeui.Element {
 			row := []dopeui.Item{dopeui.Rowlink(link...)}
 			if data.CanManageGames {
 				row = append(row,
-					dopeui.Button(dopeui.Href(base+"/settings"), dopeui.Text("Свойства")),
+					dopeui.Button(dopeui.Href(base+"/settings"), dopeui.Text(s.Host.Dash.SettingsBtn())),
 					dopeui.Form(dopeui.Method("post"), dopeui.Action(base+"/clear"),
-						dopeui.Data("confirm", "Очистить игру? Все результаты, импортированные команды и посев будут удалены, игра вернётся в исходное состояние. Настройки и ссылка сохранятся."),
-						dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Text("Очистить"))),
+						dopeui.Data("confirm", s.Host.Dash.ClearConfirm()),
+						dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Text(s.Host.Dash.ClearBtn()))),
 					dopeui.Form(dopeui.Method("post"), dopeui.Action(base+"/delete"),
-						dopeui.Data("confirm", "Удалить игру? Все результаты этой игры будут потеряны."),
-						dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Text("Удалить"))),
+						dopeui.Data("confirm", s.Host.Dash.DeleteGameConfirm()),
+						dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Text(s.Host.Dash.DeleteBtn()))),
 				)
 			}
 			rows = append(rows, dopeui.Actionrow(row...))
 		}
 		sect = append(sect, dopeui.Actionlist(rows...))
 	} else {
-		sect = append(sect, dopeui.Empty(dopeui.Text("Игр пока нет.")))
+		sect = append(sect, dopeui.Empty(dopeui.Text(s.Host.Dash.GamesEmpty())))
 	}
 	if data.CanManageGames {
-		sect = append(sect, dopeui.Row(dopeui.Button(dopeui.Href("/host/fest/"+ref+"/game/new"), dopeui.Text("Добавить игру"))))
+		sect = append(sect, dopeui.Row(dopeui.Button(dopeui.Href("/host/fest/"+ref+"/game/new"), dopeui.Text(s.Host.Dash.AddGameBtn()))))
 	}
 	return dopeui.Section(sect...)
 }
 
 func hostDashAccessSection(data hostFestDashData, ref string) *dopeui.Element {
-	sect := []dopeui.Item{dopeui.ID("access"), dopeui.Subhead(dopeui.Text("Доступ"))}
+	s := dopestrings.Default
+	sect := []dopeui.Item{dopeui.ID("access"), dopeui.Subhead(dopeui.Text(s.Host.Dash.AccessSubhead()))}
 	if data.AccessError != "" {
 		sect = append(sect, dopeui.Empty(dopeui.Text(data.AccessError)))
 	}
@@ -168,24 +173,24 @@ func hostDashAccessSection(data hostFestDashData, ref string) *dopeui.Element {
 		sect = append(sect, dopeui.Note(dopeui.Text(data.AccessNotice)))
 	}
 	sect = append(sect,
-		dopeui.Row(dopeui.Button(dopeui.Data("dialog-open", "bulkAccessDialog"), dopeui.Text("Массовое действие"))),
+		dopeui.Row(dopeui.Button(dopeui.Data("dialog-open", "bulkAccessDialog"), dopeui.Text(s.Host.Dash.BulkLabel()))),
 		dopeui.Dialog(dopeui.ID("bulkAccessDialog"),
 			dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/access#access"), dopeui.Autocomplete("off"),
-				dopeui.Subhead(dopeui.Text("Массовое действие")),
+				dopeui.Subhead(dopeui.Text(s.Host.Dash.BulkLabel())),
 				dopeui.Hiddenfield(dopeui.Name("bulk_access"), dopeui.Value("1")),
-				dopeui.Field(dopeui.Label("Данные"),
+				dopeui.Field(dopeui.Label(s.Host.Dash.BulkDataLabel()),
 					dopeui.Editor(dopeui.Name("bulk_access_lines"), dopeui.Rows("8"),
 						dopeui.Placeholder("username1:host\nusername2:host\nusername3:admin\nusername4:remove"), dopeui.Required())),
 				dopeui.Row(
-					dopeui.Button(dopeui.Submit(), dopeui.Text("Применить")),
-					dopeui.Button(dopeui.Data("dialog-close", ""), dopeui.Text("Отмена")),
+					dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Dash.BulkApply())),
+					dopeui.Button(dopeui.Data("dialog-close", ""), dopeui.Text(s.Host.Dash.CancelBtn())),
 				),
 			),
 		),
 	)
 
 	rows := []dopeui.Item{dopeui.Trow(
-		dopeui.Hcell(dopeui.Text("Никнейм")), dopeui.Hcell(dopeui.Text("Роль")), dopeui.Hcell(),
+		dopeui.Hcell(dopeui.Text(s.Host.Dash.ColNickname())), dopeui.Hcell(dopeui.Text(s.Host.Dash.ColRole())), dopeui.Hcell(),
 	)}
 	for _, m := range data.Access {
 		uid := strconv.FormatInt(m.UserID, 10)
@@ -197,7 +202,7 @@ func hostDashAccessSection(data hostFestDashData, ref string) *dopeui.Element {
 			roleCell = dopeui.Cell(dopeui.Selectfield(dopeui.Name("role_"+uid), dopeui.Data("autosubmit", ""),
 				roleOption("admin", m.Role), roleOption("host", m.Role)))
 			actionCell = dopeui.Cell(dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Name("delete_"+uid), dopeui.Value("1"),
-				dopeui.Data("confirm", "Удалить доступ для "+m.Nickname+"?"), dopeui.Text("Удалить")))
+				dopeui.Data("confirm", s.Host.Dash.DeleteAccessConfirm(m.Nickname)), dopeui.Text(s.Host.Dash.DeleteBtn())))
 		}
 		rows = append(rows, dopeui.Trow(dopeui.Cell(dopeui.Text(m.Nickname)), roleCell, actionCell))
 	}
@@ -206,7 +211,7 @@ func hostDashAccessSection(data hostFestDashData, ref string) *dopeui.Element {
 		dopeui.Cell(dopeui.Selectfield(dopeui.Name("new_role"),
 			dopeui.Option(dopeui.Value("host"), dopeui.Text("host")),
 			dopeui.Option(dopeui.Value("admin"), dopeui.Text("admin")))),
-		dopeui.Cell(dopeui.Button(dopeui.Submit(), dopeui.Name("add_access"), dopeui.Value("1"), dopeui.Text("Добавить"))),
+		dopeui.Cell(dopeui.Button(dopeui.Submit(), dopeui.Name("add_access"), dopeui.Value("1"), dopeui.Text(s.Host.Dash.AddBtn()))),
 	))
 	sect = append(sect,
 		dopeui.Form(dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/access#access"), dopeui.Autocomplete("off"),
@@ -224,7 +229,8 @@ func roleOption(value, current string) *dopeui.Element {
 }
 
 func hostDashRosterSection(data hostFestDashData, ref string) *dopeui.Element {
-	sect := []dopeui.Item{dopeui.Subhead(dopeui.Text("Участники"))}
+	s := dopestrings.Default
+	sect := []dopeui.Item{dopeui.Subhead(dopeui.Text(s.Host.Dash.RosterSubhead()))}
 	if data.RosterError != "" {
 		sect = append(sect, dopeui.Empty(dopeui.Text(data.RosterError)))
 	}
@@ -232,28 +238,28 @@ func hostDashRosterSection(data hostFestDashData, ref string) *dopeui.Element {
 		sect = append(sect, dopeui.Note(dopeui.Text(data.RosterNotice)))
 	}
 	rows := []dopeui.Item{
-		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/teams"), dopeui.Listtitle(dopeui.Text("Команды")), dopeui.Muted(dopeui.Text(strconv.Itoa(data.TeamCount)))),
-		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/players"), dopeui.Listtitle(dopeui.Text("Игроки")), dopeui.Muted(dopeui.Text(strconv.Itoa(data.PlayerCount)))),
+		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/teams"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterTeamsLink())), dopeui.Muted(dopeui.Text(strconv.Itoa(data.TeamCount)))),
+		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/players"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterPlayersLink())), dopeui.Muted(dopeui.Text(strconv.Itoa(data.PlayerCount)))),
 	}
 	if data.TeamCount > 0 {
-		status := "не выставлены"
+		status := s.Host.Dash.NumbersStatusUnset()
 		if data.NumbersAllSet {
-			status = "готово"
+			status = s.Host.Dash.NumbersStatusDone()
 		} else if data.NumbersAssigned > 0 {
-			status = fmt.Sprintf("%d из %d", data.NumbersAssigned, data.TeamCount)
+			status = s.Host.Dash.NumbersStatusPartial(strconv.Itoa(data.NumbersAssigned), strconv.Itoa(data.TeamCount))
 		}
 		rows = append(rows, dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/numbers"),
-			dopeui.Listtitle(dopeui.Text("Номера команд")), dopeui.Muted(dopeui.Text(status))))
+			dopeui.Listtitle(dopeui.Text(s.Host.Dash.NumbersLink())), dopeui.Muted(dopeui.Text(status))))
 	}
-	ratingStatus := "нет rating ID"
+	ratingStatus := s.Host.Dash.RatingStatusNone()
 	if data.RatingID != 0 {
 		ratingStatus = "rating " + strconv.FormatInt(data.RatingID, 10)
 	}
 	rows = append(rows,
 		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/rating/import"),
-			dopeui.Listtitle(dopeui.Text("Загрузить команды и игроков")), dopeui.Muted(dopeui.Text(ratingStatus))),
+			dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterImportLink())), dopeui.Muted(dopeui.Text(ratingStatus))),
 		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/audit"),
-			dopeui.Listtitle(dopeui.Text("История изменений")), dopeui.Muted(dopeui.Text("откат состояния"))),
+			dopeui.Listtitle(dopeui.Text(s.Host.Dash.AuditLink())), dopeui.Muted(dopeui.Text(s.Host.Dash.AuditMuted()))),
 	)
 	sect = append(sect, dopeui.List(rows...))
 	return dopeui.Section(sect...)
@@ -266,7 +272,7 @@ func (s *Server) handleHostCreateFest(w http.ResponseWriter, r *http.Request, us
 	}
 	title := strings.TrimSpace(r.Form.Get("title"))
 	if title == "" {
-		s.renderHostLanding(w, r, "Название обязательно.")
+		s.renderHostLanding(w, r, dopestrings.Default.Host.Dash.ErrorTitleRequired())
 		return
 	}
 	description := r.Form.Get("description")
@@ -311,7 +317,7 @@ func (s *Server) handleHostUpdateFest(w http.ResponseWriter, r *http.Request, fe
 	}
 	title := strings.TrimSpace(r.Form.Get("title"))
 	if title == "" {
-		s.renderHostFestDashboard(w, r, festID, hostDashMessages{FormError: "Название обязательно."})
+		s.renderHostFestDashboard(w, r, festID, hostDashMessages{FormError: dopestrings.Default.Host.Dash.ErrorTitleRequired()})
 		return
 	}
 	description := r.Form.Get("description")
@@ -323,14 +329,14 @@ func (s *Server) handleHostUpdateFest(w http.ResponseWriter, r *http.Request, fe
 	var slugValue any
 	if slug != "" {
 		if err := util.ValidateSlug(slug); err != nil {
-			s.renderHostFestDashboard(w, r, festID, hostDashMessages{FormError: "Slug: " + err.Error()})
+			s.renderHostFestDashboard(w, r, festID, hostDashMessages{FormError: dopestrings.Default.Host.Dash.ErrorSlugInvalid(err.Error())})
 			return
 		}
 		if taken, err := s.slugTakenByOtherFest(r.Context(), slug, festID); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		} else if taken {
-			s.renderHostFestDashboard(w, r, festID, hostDashMessages{FormError: "Slug уже занят."})
+			s.renderHostFestDashboard(w, r, festID, hostDashMessages{FormError: dopestrings.Default.Host.Dash.ErrorSlugTaken()})
 			return
 		}
 		slugValue = slug
@@ -365,14 +371,14 @@ func (s *Server) handleHostSaveAccess(w http.ResponseWriter, r *http.Request, fe
 			s.renderHostFestDashboard(w, r, festID, hostDashMessages{AccessError: err.Error()})
 			return
 		}
-		s.renderHostFestDashboard(w, r, festID, hostDashMessages{AccessNotice: fmt.Sprintf("Массовое действие выполнено: %d.", count)})
+		s.renderHostFestDashboard(w, r, festID, hostDashMessages{AccessNotice: dopestrings.Default.Host.Dash.BulkDoneNotice(strconv.Itoa(count))})
 		return
 	}
 	if err := festaccess.SaveFestAccess(s.h.Engine(), r.Context(), festID, actorID, r.Form); err != nil {
 		s.renderHostFestDashboard(w, r, festID, hostDashMessages{AccessError: err.Error()})
 		return
 	}
-	s.renderHostFestDashboard(w, r, festID, hostDashMessages{AccessNotice: "Доступ сохранён."})
+	s.renderHostFestDashboard(w, r, festID, hostDashMessages{AccessNotice: dopestrings.Default.Host.Dash.AccessSavedNotice()})
 }
 
 func (s *Server) slugTakenByOtherFest(ctx context.Context, slug string, festID int64) (bool, error) {
@@ -587,10 +593,11 @@ type hostFestGroup struct {
 	Fests []view.HostFest
 }
 
-// groupHostFests partitions the host's fests into Текущие/Будущие/Прошедшие
+// groupHostFests partitions the host's fests into current/future/past buckets
 // relative to today ("YYYY-MM-DD"), sorts each bucket by start date descending
 // (then title ascending), and drops empty buckets.
 func groupHostFests(fests []view.HostFest, today string) []hostFestGroup {
+	s := dopestrings.Default
 	var current, future, past []view.HostFest
 	for _, f := range fests {
 		switch util.ClassifyFestDate(f.StartDate, f.EndDate, today) {
@@ -607,9 +614,9 @@ func groupHostFests(fests []view.HostFest, today string) []hostFestGroup {
 	sortHostFests(past)
 	groups := make([]hostFestGroup, 0, 3)
 	for _, g := range []hostFestGroup{
-		{Title: "Текущие", Fests: current},
-		{Title: "Будущие", Fests: future},
-		{Title: "Прошедшие", Fests: past},
+		{Title: s.Host.Pages.GroupCurrent(), Fests: current},
+		{Title: s.Host.Pages.GroupFuture(), Fests: future},
+		{Title: s.Host.Pages.GroupPast(), Fests: past},
 	} {
 		if len(g.Fests) > 0 {
 			groups = append(groups, g)

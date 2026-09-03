@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// The xlsx side of the вопросная таблица. openpyxl reads these for chgksuite;
+// The xlsx side of the question table. openpyxl reads these for chgksuite;
 // a results table is a grid of numbers and team names on one sheet, so this
 // reads that much of SpreadsheetML directly rather than adding a spreadsheet
 // library to the module.

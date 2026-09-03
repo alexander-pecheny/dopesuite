@@ -3,14 +3,14 @@ package structure
 import "sort"
 
 // The two-seat table: the one place duels are ranked, whether they are a
-// round-robin группа's бои or a Round played as a series. Every ranking scope
-// ranks the same way — очки from each бой's outcome, the Protocol's metrics
-// summed, the scheme's scoring rules over those sums, then the block's
-// comparators — so «до большинства побед» is not a rule of its own but the
-// default points sorted on points.
+// round-robin Group's Matches or a Round played as a series. Every ranking
+// scope ranks the same way — points from each Match's outcome, the Protocol's
+// metrics summed, the scheme's scoring rules over those sums, then the block's
+// comparators — so best-of is not a rule of its own but the default points
+// sorted on points.
 
 // Duel is what a two-seat table needs: the win/draw/loss values, the Protocol
-// metric забито counts, the comparator order and the scheme's scoring rules.
+// metric taken counts, the comparator order and the scheme's scoring rules.
 type Duel struct {
 	Points *RRPoints `json:"points,omitempty"`
 	Metric string    `json:"metric,omitempty"`
@@ -42,8 +42,8 @@ func duelStandings(conf Duel, results []MatchOutcome) ([]RankedEntry, error) {
 		}
 		// Every metric this table keeps starts at zero rather than absent: a
 		// scoring rule reads them by name, and expr refuses a name it does not
-		// know, so a группа whose бои have not been played yet would otherwise
-		// fail to rank at all instead of ranking everyone level.
+		// know, so a Group whose Matches have not been played yet would
+		// otherwise fail to rank at all instead of ranking everyone level.
 		e := &RankedEntry{Participant: id, Metrics: map[string]float64{
 			"points": 0, "taken": 0, "conceded": 0, "diff": 0, "place_sum": 0, "bouts": 0,
 		}}
@@ -97,7 +97,7 @@ func duelStandings(conf Duel, results []MatchOutcome) ([]RankedEntry, error) {
 		ranked = append(ranked, *e)
 	}
 
-	// Личная встреча needs each finished бой's point split, not just totals.
+	// Head-to-head needs each finished Match's point split, not just totals.
 	type duel struct {
 		a, b   int64
 		pa, pb float64
@@ -122,7 +122,7 @@ func duelStandings(conf Duel, results []MatchOutcome) ([]RankedEntry, error) {
 	}
 
 	// Each key partitions the still-tied group; "h2h" is relative to that
-	// group — the points the tied teams took in their бои against each other.
+	// group — the points the tied teams took in their Matches against each other.
 	// Keys are consumed in order and never re-applied to later sub-ties, so a
 	// still-tied pair inside a mini-table falls through to the next key.
 	seats := make([]int, len(ranked))

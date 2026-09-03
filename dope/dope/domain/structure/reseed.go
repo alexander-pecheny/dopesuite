@@ -10,13 +10,13 @@ import (
 func init() { Register(reseed{}) }
 
 // reseed is the re-ranking Kind: it schedules nothing and seats nobody itself.
-// It aggregates its source бои per contender — place_sum plus the sum of every
-// Protocol metric, and регламент КИнСБФ 3.3.5's shares and разница — orders
-// them by the configured sort rules, and hands out distinct ranks for later
-// stages to seat by. Bands go first: a Participant just dropped from the сетка
-// above outranks one that survived the сетка below, however the two played.
-// True ties are split by deterministic Жребий lots from the game's seed, so a
-// reseed recomputes identically every time.
+// It aggregates its source Matches per contender — place_sum plus the sum of
+// every Protocol metric, and the KINSBF regulations' (3.3.5) shares and diff —
+// orders them by the configured sort rules, and hands out distinct ranks for
+// later stages to seat by. Bands go first: a Participant just dropped from the
+// bracket above outranks one that survived the bracket below, however the two
+// played. True ties are split by deterministic draw lots from the game's seed,
+// so a reseed recomputes identically every time.
 type reseed struct{}
 
 func (reseed) Code() string { return "reseed" }
@@ -155,7 +155,7 @@ func (reseed) Standings(cfg json.RawMessage, results []MatchOutcome, in Inputs) 
 	return entries, nil
 }
 
-// deterministicLot derives a stable Жребий lot in [1, 1_000_000] from the
+// deterministicLot derives a stable draw lot in [1, 1_000_000] from the
 // game's fixed random seed and the participant, so the lottery order survives
 // every recompute. A collision inside a tie is harmless: participant id breaks
 // the residual tie.

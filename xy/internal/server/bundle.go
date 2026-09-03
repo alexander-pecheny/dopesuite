@@ -10,6 +10,8 @@ import (
 	"database/sql"
 	"net/http"
 	"time"
+
+	xystrings "xy/i18nstrings"
 )
 
 type bundleEventDTO struct {
@@ -175,7 +177,7 @@ func (s *server) handleBundleImportEvents(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if len(req.Events) > maxBundleEventsPerRequest {
-		httpError(w, http.StatusBadRequest, "слишком много событий в одном запросе")
+		httpError(w, http.StatusBadRequest, xystrings.Default.Server.Bundle.TooManyEvents())
 		return
 	}
 	newID := make(map[int64]int64, len(req.Events))
@@ -198,7 +200,7 @@ func (s *server) handleBundleImportEvents(w http.ResponseWriter, r *http.Request
 				return errBadRequest("bad event type")
 			}
 			if e.CardID == nil && e.SessionID == nil {
-				return errBadRequest("событие ни на карточке, ни на тесте")
+				return errBadRequest(xystrings.Default.Server.Bundle.EventWithoutTarget())
 			}
 			if e.CardID != nil {
 				if err := checkRef(okCard, childCard, *e.CardID); err != nil {

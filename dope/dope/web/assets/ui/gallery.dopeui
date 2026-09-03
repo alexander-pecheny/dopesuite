@@ -1,3 +1,3 @@
-page title="Галерея · dope" kind="gallery" classicscripts="dist/gallery.js"
-  topbar title="Галерея"
+page title=@gallery.page.title kind="gallery" classicscripts="dist/gallery.js"
+  topbar title=@gallery.topbar.title
   mount kind="table-host" id="gallery"

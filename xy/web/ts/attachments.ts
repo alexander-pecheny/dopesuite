@@ -12,6 +12,7 @@ import { xySync } from "./sync.js";
 import type { DataKey } from "./crypto.js";
 import type { MenuItem } from "./timeline.js";
 import { icon, iconed } from "./icons_gen.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const { fetchJSON, jpatch, jdelete, el, errMsg } = xyApp;
 
@@ -67,7 +68,7 @@ export // withExt drops any extension the user typed and forces the one that mat
 // filename never claims a type the bytes aren't.
 function withExt(name: string, ext: string): string {
   const base = name.replace(/\.[^./\\]+$/, "").trim();
-  return `${base || "вставка"}.${ext}`;
+  return `${base || S.attachments.name.defaultStem()}.${ext}`;
 }
 
 // The card editor's static elements the kernel writes to and listens on.
@@ -195,7 +196,7 @@ async function resolveImages(cards: ReadonlyArray<{ id: number }>, wanted: Set<s
 
 // ---- attachments ----
 // cardImageNames holds the decrypted filenames of the open card's image
-// attachments — the choices offered by the handout image picker (Поля view).
+// attachments — the choices offered by the handout image picker (the Fields view).
 let cardImageNames: string[] = [];
 
 async function loadAttachments(cardId: number): Promise<void> {
@@ -207,16 +208,16 @@ async function loadAttachments(cardId: number): Promise<void> {
   // Built off-DOM and swapped in one go — see loadTimeline on the scroll jump.
   const frag = document.createDocumentFragment();
   for (const att of list) {
-    const name = att.name || "файл";
+    const name = att.name || S.attachments.list.fallbackName();
     const isImage = (att.mime || "").startsWith("image/");
     if (isImage) cardImageNames.push(name);
     // Images open in the lightbox (save via right-click there); other files download.
     const row = el("div", { class: "attach-row" },
       el("button", { class: "attach-name", type: "button", onclick: () => { void (isImage ? viewAttachment(att, name) : download(att, name)); } }, ...iconed("paperclip", name)),
-      att.is_excerpt ? el("span", { class: "tl-badge", text: "выписка" }) : null,
+      att.is_excerpt ? el("span", { class: "tl-badge", text: S.attachments.list.excerptBadge() }) : null,
       el("span", { class: "attach-size", text: humanSize(att.size) }),
       el("button", {
-        class: "attach-del", type: "button", title: "Действия с вложением", "aria-haspopup": "true",
+        class: "attach-del", type: "button", title: S.attachments.list.actionsTitle(), "aria-haspopup": "true",
         onclick: (e: Event) => attachMenu(e.currentTarget as HTMLElement, att, name),
       }, icon("ellipsis")),
     );
@@ -228,10 +229,10 @@ async function loadAttachments(cardId: number): Promise<void> {
 
 function attachMenu(anchor: HTMLElement, att: NamedAttachment, name: string): void {
   deps.popupMenu(anchor, [
-    { icon: icon("replace"), label: "Заменить", onClick: () => pickReplacement(att, name) },
-    { icon: icon("trash-2"), label: "Удалить", onClick: () => { void removeAttachment(att, name); } },
+    { icon: icon("replace"), label: S.attachments.menu.replace(), onClick: () => pickReplacement(att, name) },
+    { icon: icon("trash-2"), label: S.attachments.menu.delete(), onClick: () => { void removeAttachment(att, name); } },
     {
-      label: "Выписка", checked: !!att.is_excerpt,
+      label: S.attachments.menu.excerpt(), checked: !!att.is_excerpt,
       onClick: () => { void attachAction(async () => {
         await jpatch(`/api/attachments/${att.id}`, { is_excerpt: !att.is_excerpt });
       }); },
@@ -241,7 +242,7 @@ function attachMenu(anchor: HTMLElement, att: NamedAttachment, name: string): vo
 
 async function attachAction(fn: () => Promise<unknown>): Promise<void> {
   const msg = ui.message;
-  if (!xySync.requireOnline("Правка вложений доступна только онлайн.", msg)) return;
+  if (!xySync.requireOnline(S.attachments.status.offlineEdit(), msg)) return;
   try {
     await fn();
     msg.textContent = "";
@@ -253,7 +254,7 @@ async function attachAction(fn: () => Promise<unknown>): Promise<void> {
   } catch (err) { msg.textContent = errMsg(err); }
 }
 
-// pickReplacement re-shoots an attachment in place: the id (and so its выписка
+// pickReplacement re-shoots an attachment in place: the id (and so its excerpt
 // flag, its position, and every card that names the file) survives, only the
 // bytes change. The compress choice is inherited from what the original stored.
 function pickReplacement(att: NamedAttachment, name: string): void {
@@ -263,7 +264,7 @@ function pickReplacement(att: NamedAttachment, name: string): void {
     if (!file) return;
     void attachAction(async () => {
       const msg = ui.message;
-      msg.textContent = "Шифрование…";
+      msg.textContent = S.attachments.status.encrypting();
       const lossless = !!att.lossless;
       let bytes: Uint8Array<ArrayBuffer>, mime: string;
       if (lossless) { bytes = new Uint8Array(await file.arrayBuffer()); mime = file.type || "application/octet-stream"; }
@@ -308,7 +309,7 @@ async function uploadAttachment(file: File, lossless: boolean, name: string): Pr
   const oc = deps.openCardId();
   if (!file || oc == null) return null;
   const msg = ui.message;
-  msg.textContent = "Шифрование…";
+  msg.textContent = S.attachments.status.encrypting();
   let bytes: Uint8Array<ArrayBuffer>, mime: string;
   if (lossless) { bytes = new Uint8Array(await file.arrayBuffer()); mime = file.type || "application/octet-stream"; }
   else ({ bytes, mime } = await recompressToWebp(file));
@@ -334,7 +335,7 @@ ui.upload.addEventListener("click", async () => {
   const input = ui.file;
   const file = input.files && input.files[0];
   if (!file || deps.openCardId() == null) return;
-  if (!xySync.requireOnline("Загрузка вложений доступна только онлайн.", ui.message)) return;
+  if (!xySync.requireOnline(S.attachments.status.offlineUpload(), ui.message)) return;
   const compress = ui.compress.checked;
   try {
     await uploadAttachment(file, !compress, file.name);
@@ -368,7 +369,7 @@ document.addEventListener("paste", (e) => {
   const nameInput = ui.pasteName;
   // Clipboard images usually arrive as the generic "image.png"; offer a friendlier
   // default the user can overwrite.
-  nameInput.value = (file.name && file.name !== "image.png") ? file.name : `вставка.${extFromMime(file.type)}`;
+  nameInput.value = (file.name && file.name !== "image.png") ? file.name : S.attachments.name.pasteDefault(extFromMime(file.type));
   ui.pasteCompress.checked = false;
   pasteModal.open({ onClose: () => { pastedFile = null; } });
   nameInput.focus();
@@ -384,7 +385,7 @@ ui.pasteForm.addEventListener("submit", async (e) => {
   const compress = ui.pasteCompress.checked;
   const name = withExt(ui.pasteName.value, compress ? "webp" : extFromMime(file.type));
   pasteModal.close();
-  if (!xySync.requireOnline("Загрузка вложений доступна только онлайн.", msg)) return;
+  if (!xySync.requireOnline(S.attachments.status.offlineUpload(), msg)) return;
   try {
     const id = await uploadAttachment(file, !compress, name);
     if (forComment && id != null) deps.onCommentImage?.(id);
@@ -434,8 +435,8 @@ function lbZoomTo(next: number, cx: number, cy: number): void {
 function ensureLightbox(): LightboxEls {
   if (lbEls) return lbEls;
   const img = el("img", { class: "img-lb-img", alt: "" }) as HTMLImageElement;
-  const closeBtn = el("button", { class: "img-lb-close", type: "button", title: "Закрыть", "aria-label": "Закрыть" }, icon("x"));
-  const overlay = el("div", { class: "img-lb", role: "dialog", "aria-label": "Просмотр изображения", hidden: true }, img, closeBtn);
+  const closeBtn = el("button", { class: "img-lb-close", type: "button", title: S.attachments.lightbox.close(), "aria-label": S.attachments.lightbox.close() }, icon("x"));
+  const overlay = el("div", { class: "img-lb", role: "dialog", "aria-label": S.attachments.lightbox.dialogLabel(), hidden: true }, img, closeBtn);
   document.body.append(overlay);
   lbEls = { overlay, img, closeBtn };
 
@@ -519,8 +520,8 @@ async function download(att: NamedAttachment, name: string): Promise<void> {
 }
 
 async function removeAttachment(att: NamedAttachment, name: string): Promise<void> {
-  if (!confirm(`Удалить вложение «${name}»?`)) return;
-  if (!xySync.requireOnline("Удаление вложений доступно только онлайн.", ui.message)) return;
+  if (!confirm(S.attachments.confirm.remove(name))) return;
+  if (!xySync.requireOnline(S.attachments.status.offlineDelete(), ui.message)) return;
   try {
     const ev = await xyCrypto.encField(deps.mustDK(), JSON.stringify({ file: name }));
     await jdelete(`/api/attachments/${att.id}?event_payload_enc=${encodeURIComponent(ev)}`);

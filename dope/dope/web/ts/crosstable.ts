@@ -1,10 +1,11 @@
-// The группа cross-table every two-seat format draws: who met whom and what
-// the бой finished, with the block's own standings columns beside it. Брейн
-// and Тройка both read it; a format that adds a column names the metric it
-// wants rather than restating the table.
+// The group cross-table every two-seat format draws: who met whom and what
+// each match finished at, with the block's own standings columns beside it.
+// Brain and Troika both read it; a format that adds a column names the metric
+// it wants rather than restating the table.
 
 import {formatDisplayText, td} from "./cells.js";
 import {standingsTable} from "./standings.js";
+import S from "./i18nstrings_ru_gen.js";
 
 // A seat ref as a scheme writes it, before anyone sits in it.
 export interface SchemeSlotRef {
@@ -14,7 +15,7 @@ export interface SchemeSlotRef {
 }
 
 // slotKey is a stable identity for an entrant ref, whatever grain it is — what
-// pairs a planned бой with the two rows it belongs to.
+// pairs a planned match with the two rows it belongs to.
 export function slotKey(slot: SchemeSlotRef | null | undefined): string {
   if (!slot) return "";
   if (slot.seed?.number) return `s${slot.seed.number}`;
@@ -23,7 +24,7 @@ export function slotKey(slot: SchemeSlotRef | null | undefined): string {
   return slot.label || "";
 }
 
-// crossSlot is a planned seat as a row: its key and the label the Сетка prints.
+// crossSlot is a planned seat as a row: its key and the label the grid prints.
 export function crossSlot(slot: SchemeSlotRef | null | undefined): CrossSlot {
   return {key: slotKey(slot), label: slot?.label || ""};
 }
@@ -40,16 +41,16 @@ export function standingsByParticipant(
   return out;
 }
 
-// A seat as a scheme names it before anyone sits in it — the label a Сетка
-// prints. Its key is what pairs a planned бой with its row.
+// A seat as a scheme names it before anyone sits in it — the label the grid
+// prints. Its key is what pairs a planned match with its row.
 export interface CrossSlot {
   key: string;
   label: string;
 }
 
-// CrossBout is one бой of the группа as the page knows it now: who is sitting
-// where, what each has scored, and whether the бой is over. A бой nobody has
-// touched reports started false and prints nothing in the cell.
+// CrossBout is one match of the group as the page knows it now: who is sitting
+// where, what each has scored, and whether the match is over. A match nobody
+// has touched reports started false and prints nothing in the cell.
 export interface CrossBout {
   slots: [CrossSlot | null, CrossSlot | null];
   sides: Array<{name: string; id: number; score: number}>;
@@ -61,7 +62,7 @@ export interface CrossGroup {
   title: string;
   entrants: CrossSlot[];
   bouts: CrossBout[];
-  // The block's standings for this группа, by Participant id — whatever the
+  // The block's standings for this group, by Participant id — whatever the
   // Ranker measured, read for the columns asked for.
   standings: Map<number, Record<string, unknown>>;
 }
@@ -71,14 +72,14 @@ export interface CrossColumn {
   metric: string;
 }
 
-// The columns the КИНСБФ canon prints, and what Троечка's регламент adds in
-// front of them: очки, забитые, пропущенные, разница, место.
+// The columns the KINSBF canon prints, and what Troika's regulations add in
+// front of them: points, taken, conceded, diff, place.
 export const CANON_COLUMNS: CrossColumn[] = [
-  {label: "О", metric: "points"},
+  {label: S.crosstable.columns.points(), metric: "points"},
   {label: "+", metric: "taken"},
   {label: "−", metric: "conceded"},
   {label: "+/−", metric: "diff"},
-  {label: "М", metric: "place"},
+  {label: S.crosstable.columns.place(), metric: "place"},
 ];
 
 export interface CrosstableSpec {
@@ -88,7 +89,7 @@ export interface CrosstableSpec {
   empty?: string;
 }
 
-// A рейтинговый балл is очки plus взятые over fifty, so it arrives with the
+// A rating score is points plus taken over fifty, so it arrives with the
 // binary noise every such sum has — 1.8599999999999999 for 1.86. Ranking uses
 // the full value; what is printed is exact in two places.
 function round(value: number): number {
@@ -101,7 +102,7 @@ export function buildCrosstables(spec: CrosstableSpec): HTMLElement {
   if (!spec.groups.length) {
     const empty = document.createElement("p");
     empty.className = "roster-empty";
-    empty.textContent = spec.empty || "В этой схеме нет групповых таблиц.";
+    empty.textContent = spec.empty || S.crosstable.empty();
     wrap.appendChild(empty);
     return wrap;
   }
@@ -160,7 +161,7 @@ function buildCrosstable(group: CrossGroup, columns: CrossColumn[]): HTMLElement
     className: "group-standings-table crosstable",
     columns: [
       {label: "№", kind: "place"},
-      {label: "Команда", kind: "name"},
+      {label: S.crosstable.columns.name(), kind: "name"},
       ...rows.map((_, i) => ({label: i + 1, kind: "num" as const, className: "cross-col"})),
       ...columns.map((column) => ({label: column.label, kind: "num" as const})),
     ],

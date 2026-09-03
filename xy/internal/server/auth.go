@@ -16,6 +16,8 @@ import (
 
 	"pecheny.me/dopecore/session"
 	"pecheny.me/dopecore/tglogin"
+
+	xystrings "xy/i18nstrings"
 )
 
 func rfc3339(t time.Time) string { return t.UTC().Format(time.RFC3339) }
@@ -88,7 +90,7 @@ where t.token_hash = ?`, authcred.HashSessionToken(raw)).
 
 // touchToken stamps last_used_at, so /profile/tokens shows which credential is
 // live — but at most once a minute per token: a CLI takes the write lock on
-// every request otherwise, and the answer this feeds is «сегодня или нет».
+// every request otherwise, and the answer this feeds is "today or not".
 func (s *server) touchToken(ctx context.Context, id int64, lastUsed sql.NullString) {
 	now := time.Now()
 	if lastUsed.Valid {
@@ -153,7 +155,7 @@ func (s *server) requireUser(w http.ResponseWriter, r *http.Request) (session.Us
 // username, and reach /admin. Everything else a token does as the user.
 func (s *server) requireCookieUser(w http.ResponseWriter, r *http.Request) (session.User, bool) {
 	if bearerToken(r) != "" {
-		httpError(w, http.StatusForbidden, "сюда API-токен не пускают — нужен вход в браузере")
+		httpError(w, http.StatusForbidden, xystrings.Default.Auth.Token.Forbidden())
 		return session.User{}, false
 	}
 	u, ok := s.lookupCookieSession(w, r)
@@ -178,7 +180,7 @@ type meResponse struct {
 	// handleSetSizes) and the author name pre-filled into new question cards
 	// (see handleSetDefaultAuthor), which field a card's list preview
 	// derives its title from (see handleSetCardTitle), and which kind of
-	// timeline entry an opened card's лента shows (see handleSetFeedDefault).
+	// timeline entry an opened card's timeline shows (see handleSetFeedDefault).
 	Sizes         json.RawMessage `json:"sizes,omitempty"`
 	DefaultAuthor string          `json:"default_author,omitempty"`
 	CardTitle     string          `json:"card_title,omitempty"`
@@ -360,19 +362,20 @@ func (s *server) handleTgClaim(w http.ResponseWriter, r *http.Request) {
 	}
 	uname := strings.TrimSpace(req.Username)
 	if !validNewUsername(uname) {
-		httpError(w, http.StatusBadRequest, "логин: 3–64 символа, латиница, цифры, . _ -")
+		httpError(w, http.StatusBadRequest, xystrings.Default.Auth.Tg.UsernameFormat())
 		return
 	}
 	var out tglogin.Outcome
 	err := s.withWriteTx(r.Context(), "tg-claim", func(ctx context.Context, tx *sql.Tx) (err error) {
 		out, err = s.handshake().Claim(ctx, tx, req.Code, uname, req.Password, time.Now())
+		str := xystrings.Default
 		switch {
 		case errors.Is(err, tglogin.ErrCodeNotFound):
-			return errBadRequest("код не найден, начните заново")
+			return errBadRequest(str.Auth.Tg.CodeMissing())
 		case errors.Is(err, tglogin.ErrWrongPassword):
-			return errBadRequest("неверный пароль")
+			return errBadRequest(str.Auth.Tg.PasswordWrong())
 		case errors.Is(err, tglogin.ErrTelegramLinked):
-			return errBadRequest("этот телеграм уже привязан к другому аккаунту")
+			return errBadRequest(str.Auth.Tg.TelegramTaken())
 		}
 		return err
 	})
@@ -413,7 +416,7 @@ func scanAccount(row *sql.Row) (tglogin.Account, bool, error) {
 
 func (xyUsers) Create(ctx context.Context, tx tglogin.Tx, id tglogin.Identity, username string, now time.Time) (int64, error) {
 	if isAdminUsername(username) {
-		return 0, errForbidden("этот логин зарезервирован")
+		return 0, errForbidden(xystrings.Default.Auth.Tg.UsernameReserved())
 	}
 	res, err := tx.ExecContext(ctx, `
 insert into users(telegram_user_id, telegram_username, telegram_name, username, created_at, updated_at)
@@ -439,13 +442,14 @@ type loginPasswordRequest struct {
 }
 
 func (s *server) handleLoginPassword(w http.ResponseWriter, r *http.Request) {
+	str := xystrings.Default
 	var req loginPasswordRequest
 	if !readJSON(w, r, &req) {
 		return
 	}
 	uname := strings.TrimSpace(req.Username)
 	if uname == "" || req.Password == "" {
-		httpError(w, http.StatusBadRequest, "логин и пароль обязательны")
+		httpError(w, http.StatusBadRequest, str.Auth.Login.FieldsRequired())
 		return
 	}
 	now := time.Now()
@@ -459,12 +463,12 @@ func (s *server) handleLoginPassword(w http.ResponseWriter, r *http.Request) {
 		row := tx.QueryRowContext(ctx, `select id, password_hash, username, telegram_username from users where username = ?`, uname)
 		if err := row.Scan(&uid, &pwHash, &uname2, &tg); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return errBadRequest("неверный логин или пароль")
+				return errBadRequest(str.Auth.Login.Invalid())
 			}
 			return err
 		}
 		if ok, _, _ := authcred.VerifyPasswordUpgrading(pwHash.String, "", req.Password); !ok {
-			return errBadRequest("неверный логин или пароль")
+			return errBadRequest(str.Auth.Login.Invalid())
 		}
 		var err error
 		token, err = s.createSessionTx(ctx, tx, uid, now)
@@ -488,6 +492,7 @@ type usernameRequest struct {
 }
 
 func (s *server) handleSetUsername(w http.ResponseWriter, r *http.Request) {
+	str := xystrings.Default
 	u, ok := s.requireCookieUser(w, r)
 	if !ok {
 		return
@@ -498,11 +503,11 @@ func (s *server) handleSetUsername(w http.ResponseWriter, r *http.Request) {
 	}
 	uname := strings.TrimSpace(req.Username)
 	if len(uname) < 3 {
-		httpError(w, http.StatusBadRequest, "логин слишком короткий")
+		httpError(w, http.StatusBadRequest, str.Auth.Username.TooShort())
 		return
 	}
 	if len(uname) > 64 {
-		httpError(w, http.StatusBadRequest, "логин слишком длинный")
+		httpError(w, http.StatusBadRequest, str.Auth.Username.TooLong())
 		return
 	}
 	err := s.withWriteTx(r.Context(), "set-username", func(ctx context.Context, tx *sql.Tx) error {
@@ -511,12 +516,12 @@ func (s *server) handleSetUsername(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		if existing.Valid && existing.String != "" {
-			return errBadRequest("логин уже задан")
+			return errBadRequest(str.Auth.Username.AlreadySet())
 		}
 		_, err := tx.ExecContext(ctx, `update users set username = ?, updated_at = ? where id = ?`,
 			uname, rfc3339(time.Now()), u.UserID)
 		if sqlitex.IsUniqueViolation(err) {
-			return errBadRequest("логин занят")
+			return errBadRequest(str.Auth.Username.Taken())
 		}
 		return err
 	})
@@ -536,6 +541,7 @@ type passwordRequest struct {
 // with one act the user already knows (ADR-0015). Hence cookie-only — a token
 // must not be able to lock its owner out, nor to survive by minting siblings.
 func (s *server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
+	str := xystrings.Default
 	u, ok := s.requireCookieUser(w, r)
 	if !ok {
 		return
@@ -545,12 +551,12 @@ func (s *server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(req.NewPassword) < authcred.PasswordMinLen || len(req.NewPassword) > authcred.PasswordMaxLen {
-		httpError(w, http.StatusBadRequest, "пароль должен быть от 8 до 72 символов")
+		httpError(w, http.StatusBadRequest, str.Auth.Password.Length())
 		return
 	}
 	newHash, err := authcred.HashPassword(req.NewPassword)
 	if err != nil {
-		httpError(w, http.StatusInternalServerError, "ошибка сервера")
+		httpError(w, http.StatusInternalServerError, str.Server.Internal())
 		return
 	}
 	err = s.withWriteTx(r.Context(), "set-password", func(ctx context.Context, tx *sql.Tx) error {
@@ -560,7 +566,7 @@ func (s *server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 		}
 		if cur.Valid && cur.String != "" {
 			if ok, _, _ := authcred.VerifyPasswordUpgrading(cur.String, "", req.CurrentPassword); !ok {
-				return errBadRequest("неверный текущий пароль")
+				return errBadRequest(str.Auth.Password.CurrentWrong())
 			}
 		}
 		now := rfc3339(time.Now())
@@ -638,7 +644,7 @@ func (s *server) handleSetDefaultAuthor(w http.ResponseWriter, r *http.Request) 
 	}
 	author := strings.TrimSpace(req.DefaultAuthor)
 	if len(author) > 200 {
-		httpError(w, http.StatusBadRequest, "слишком длинное имя")
+		httpError(w, http.StatusBadRequest, xystrings.Default.Auth.Profile.NameTooLong())
 		return
 	}
 	err := s.withWriteTx(r.Context(), "set-default-author", func(ctx context.Context, tx *sql.Tx) error {
@@ -674,11 +680,11 @@ func (s *server) handleSetProfileDefaults(w http.ResponseWriter, r *http.Request
 	// these, and a zone the server rejects would be a zone the user's browser
 	// believes in. Length-capped only.
 	if req.Timezone != nil && len(*req.Timezone) > 64 {
-		httpError(w, http.StatusBadRequest, "слишком длинный часовой пояс")
+		httpError(w, http.StatusBadRequest, xystrings.Default.Auth.Profile.TimezoneTooLong())
 		return
 	}
 	if req.DefaultAuthor != nil && len(strings.TrimSpace(*req.DefaultAuthor)) > 200 {
-		httpError(w, http.StatusBadRequest, "слишком длинное имя")
+		httpError(w, http.StatusBadRequest, xystrings.Default.Auth.Profile.NameTooLong())
 		return
 	}
 	err := s.withWriteTx(r.Context(), "set-profile-defaults", func(ctx context.Context, tx *sql.Tx) error {
@@ -727,7 +733,7 @@ func (s *server) handleSetAnnounceCities(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if len(req.AnnounceCities) > 4096 {
-		httpError(w, http.StatusBadRequest, "слишком длинный список городов")
+		httpError(w, http.StatusBadRequest, xystrings.Default.Auth.Profile.CitiesTooLong())
 		return
 	}
 	err := s.withWriteTx(r.Context(), "set-announce-cities", func(ctx context.Context, tx *sql.Tx) error {
@@ -781,11 +787,11 @@ func (s *server) handleSetCardTitle(w http.ResponseWriter, r *http.Request) {
 }
 
 // feedDefaults allowlists the values of users.feed_default (see schema v20):
-// which kind of timeline entry an opened card's лента shows. "" means the
+// which kind of timeline entry an opened card's timeline shows. "" means the
 // default, "all".
 var feedDefaults = map[string]bool{"": true, "all": true, "comments": true, "edits": true, "meta": true}
 
-// handleSetFeedDefault stores which kind of лента entry a card opens on
+// handleSetFeedDefault stores which kind of timeline entry a card opens on
 // (users.feed_default, see schema v20).
 func (s *server) handleSetFeedDefault(w http.ResponseWriter, r *http.Request) {
 	u, ok := s.requireUser(w, r)

@@ -30,7 +30,7 @@ func ResolveFestID(ctx context.Context, q Queryer, ref string) (int64, error) {
 }
 
 // FlatMatchID returns the id of the single match (code 'main') hosting a flat
-// (ЧГК-family) game's state under the unified model.
+// (ChGK-family) game's state under the unified model.
 func FlatMatchID(ctx context.Context, q Queryer, gameID int64) (int64, error) {
 	var id int64
 	err := q.QueryRowContext(ctx,
@@ -38,7 +38,7 @@ func FlatMatchID(ctx context.Context, q Queryer, gameID int64) (int64, error) {
 	return id, err
 }
 
-// EnsureParticipantByNumber finds or mints the фест's Participant that plays
+// EnsureParticipantByNumber finds or mints the fest's Participant that plays
 // under this number — a team or a player, per roster — and keeps its display
 // name and city in step with what the caller knows. The number is the
 // identity (ADR-0009): two same-named teams stay distinct, and re-seeding

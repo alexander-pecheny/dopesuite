@@ -143,7 +143,7 @@ type Batcher struct {
 	// finished status, so the server can refresh the fest-level grid it caches.
 	OnFestChanged func(festID, gameID, revision int64)
 	// Window overrides editBatchWindow when set; the replay harness plays a
-	// championship one edit at a time and would otherwise wait 150ms per бой.
+	// championship one edit at a time and would otherwise wait 150ms per Match.
 	Window time.Duration
 
 	mu      sync.Mutex

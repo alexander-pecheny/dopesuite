@@ -12,6 +12,8 @@ import (
 	"pecheny.me/dopecore/buildinfo"
 	"pecheny.me/dopecore/tgbot"
 	"pecheny.me/dopecore/tgbridge"
+
+	xystrings "xy/i18nstrings"
 )
 
 // xy's login bot runs here, in the server process. It used to be its own
@@ -24,8 +26,8 @@ import (
 // updates; tgbot.AcquirePollLock is what happens when someone gets it wrong.
 
 var botTexts = tgbot.Texts{
-	Help: "Не понял. Пришли код регистрации с сайта или /login.",
-	Down: "Сервер недоступен, попробуй позже.",
+	Help: xystrings.Default.Bot.Texts.Help(),
+	Down: xystrings.Default.Bot.Texts.Down(),
 }
 
 // startBot begins polling if this instance holds both the token and the host's
@@ -73,7 +75,7 @@ type botRegistrar struct{ s *server }
 
 func (b botRegistrar) Register(ctx context.Context, code string, from tgbot.From) (string, error) {
 	now := time.Now()
-	msg := "Код не найден или истёк. Начни вход на сайте заново."
+	msg := xystrings.Default.Bot.Register.Expired()
 	err := b.s.withWriteTx(ctx, "tg-register", func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, tgbridge.ConsumeRegisterSQL,
 			from.UserID, nullStr(from.Username), nullStr(from.Name),
@@ -82,7 +84,7 @@ func (b botRegistrar) Register(ctx context.Context, code string, from tgbot.From
 			return err
 		}
 		if n, _ := res.RowsAffected(); n == 1 {
-			msg = "Готово! Вернись на сайт — вход подтверждён."
+			msg = xystrings.Default.Bot.Register.Done()
 		}
 		return nil
 	})
@@ -94,8 +96,7 @@ func (b botRegistrar) Register(ctx context.Context, code string, from tgbot.From
 // started the bot). The code the site shows is the only thing that binds this
 // chat to the browser, so point them back at it.
 func (botRegistrar) Login(context.Context, tgbot.From) (string, error) {
-	return "Пришлите код со страницы входа. Если его нет — откройте " +
-		publicURL() + "/login и нажмите «Войти через телеграм».", nil
+	return xystrings.Default.Bot.Login.Hint(publicURL()), nil
 }
 
 // botPolling reports whether this instance's bot is actually working — not

@@ -17,7 +17,7 @@ const ws = `[\s\x{00a0}]`
 
 // labelledOrder is the set apply_regexes tries, in the order chgksuite tries
 // them: every key except the ones it excludes there ("number", "date2",
-// "handout_short", and the si_* keys, which belong to the СИ parser).
+// "handout_short", and the si_* keys, which belong to the SI parser).
 var labelledOrder = []string{
 	"battle", "tour", "tourrev", "question", "handout", "answer",
 	"zachet", "nezachet", "comment", "author", "source", "editor", "date",
@@ -35,10 +35,10 @@ type named struct {
 type regexSet struct {
 	*i18n.Regexes
 	labelled []named
-	// authorOnly is the author marker anchored whole-line ("Автор:" and nothing
-	// else), used to splice the following element into it.
+	// authorOnly is the author marker anchored whole-line (the bare label and
+	// nothing else), used to splice the following element into it.
 	authorOnly *regexp.Regexp
-	// handoutLabel is the printed «Раздаточный материал», which the handout
+	// handoutLabel is the printed handout label, which the handout
 	// rewrite looks for as text rather than as a marker.
 	handoutLabel  string
 	handoutBefore *regexp.Regexp

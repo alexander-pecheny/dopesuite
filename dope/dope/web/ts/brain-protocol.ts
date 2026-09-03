@@ -1,7 +1,7 @@
-// brain-protocol.ts — the брейн Protocol's бой document as the page reads it:
+// brain-protocol.ts — the brain Protocol's match document as the page reads it:
 // two sides of question rows (who buzzed, right or wrong) plus how many
 // tiebreak questions were appended, and the adapter from the server's JSON to
-// that shape. Pure: parseState takes the row count the scheme gives the бой.
+// that shape. Pure: parseState takes the row count the scheme gives the match.
 export interface BrainRow {
   player: string;
   mark: string; // "right" | "wrong" | ""

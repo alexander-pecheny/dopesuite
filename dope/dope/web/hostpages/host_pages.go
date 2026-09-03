@@ -5,6 +5,7 @@ import (
 	"dope/dope/web/pages"
 	"dope/dope/web/route"
 	ui "dope/dope/web/ui"
+	dopestrings "dope/i18nstrings"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -25,19 +26,21 @@ type hostLandingData struct {
 // jumpViewerNav are the body data-jump-* attrs menu.js reads to offer a jump to
 // the public viewer page from the host landing.
 func jumpViewerNav() []ui.Item {
+	s := dopestrings.Default
 	return []ui.Item{
-		ui.Data("jump-label", "Страница зрителя"),
+		ui.Data("jump-label", s.Host.Pages.JumpLabel()),
 		ui.Data("jump-href", "/"),
-		ui.Data("jump-title", "Открыть зрительскую страницу"),
+		ui.Data("jump-title", s.Host.Pages.JumpTitle()),
 	}
 }
 
 // hostLoggedInDoc builds the /host landing for a signed-in organizer: their fests
 // grouped into current/future/past disclosures, and the create-fest form.
 func hostLoggedInDoc(data hostLandingData) *ui.Doc {
-	page := []ui.Item{ui.Title("Мои фесты · " + data.Username), ui.PagePublic}
+	s := dopestrings.Default
+	page := []ui.Item{ui.Title(s.Host.Pages.LandingTitle(data.Username)), ui.PagePublic}
 	page = append(page, jumpViewerNav()...)
-	page = append(page, ui.Publictopbar(pages.Trail([]ui.Item{pages.HomeCrumb()}, "Мои фесты")))
+	page = append(page, ui.Publictopbar(pages.Trail([]ui.Item{pages.HomeCrumb()}, s.Host.Pages.LandingCrumb())))
 
 	if data.Error != "" {
 		page = append(page, ui.Empty(ui.Text(data.Error)))
@@ -48,7 +51,7 @@ func hostLoggedInDoc(data hostLandingData) *ui.Doc {
 			for _, f := range g.Fests {
 				title := f.Title
 				if !f.IsPublic {
-					title += " · непубличный"
+					title = s.Host.Pages.FestRowUnlisted(f.Title)
 				}
 				row := []ui.Item{ui.Href("/host/fest/" + f.Ref()), ui.Listtitle(ui.Text(title))}
 				if f.Dates != "" {
@@ -59,19 +62,19 @@ func hostLoggedInDoc(data hostLandingData) *ui.Doc {
 			page = append(page, ui.Festgroup(ui.Open(), ui.Title(g.Title), ui.List(fests...)))
 		}
 	} else {
-		page = append(page, ui.Empty(ui.Text("Фестов пока нет.")))
+		page = append(page, ui.Empty(ui.Text(s.Host.Pages.FestsEmpty())))
 	}
 
 	page = append(page, ui.Section(ui.Details(
-		ui.Summary(ui.Btn(), ui.Text("Создать фест")),
+		ui.Summary(ui.Btn(), ui.Text(s.Host.Pages.CreateFestSummary())),
 		ui.Form(ui.DirCol, ui.Method("post"), ui.Action("/host/fest"), ui.Autocomplete("off"),
-			ui.Field(ui.Label("Название"), ui.Textfield(ui.Name("title"), ui.Required())),
-			ui.Field(ui.Label("Описание (markdown)"), ui.Editor(ui.Name("description"), ui.Rows("4"))),
-			ui.Field(ui.Label("Дата начала (YYYY-MM-DD)"), ui.Textfield(ui.Name("start_date"), ui.Placeholder("2026-05-15"))),
-			ui.Field(ui.Label("Дата окончания"), ui.Textfield(ui.Name("end_date"), ui.Placeholder("2026-05-17"))),
-			ui.Field(ui.Label("rating.chgk.info ID (опционально)"), ui.Textfield(ui.Name("rating_id"), ui.Inputmode("numeric"))),
-			ui.Checkbox(ui.Name("is_public"), ui.Value("1"), ui.Text("Публичный")),
-			ui.Row(ui.Button(ui.Submit(), ui.Text("Создать"))),
+			ui.Field(ui.Label(s.Host.Pages.TitleLabel()), ui.Textfield(ui.Name("title"), ui.Required())),
+			ui.Field(ui.Label(s.Host.Pages.DescriptionLabel()), ui.Editor(ui.Name("description"), ui.Rows("4"))),
+			ui.Field(ui.Label(s.Host.Pages.StartDateLabel()), ui.Textfield(ui.Name("start_date"), ui.Placeholder("2026-05-15"))),
+			ui.Field(ui.Label(s.Host.Pages.EndDateLabel()), ui.Textfield(ui.Name("end_date"), ui.Placeholder("2026-05-17"))),
+			ui.Field(ui.Label(s.Host.Pages.RatingIdLabel()), ui.Textfield(ui.Name("rating_id"), ui.Inputmode("numeric"))),
+			ui.Checkbox(ui.Name("is_public"), ui.Value("1"), ui.Text(s.Host.Pages.PublicLabel())),
+			ui.Row(ui.Button(ui.Submit(), ui.Text(s.Host.Pages.CreateSubmit()))),
 		),
 	)))
 	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
@@ -87,9 +90,10 @@ type profileData struct {
 // missing: a Telegram-only account has no username until it picks one, and a
 // username/password account never links a Telegram handle.
 func identitySection(data profileData) []ui.Item {
+	s := dopestrings.Default
 	var lines []ui.Item
 	if data.Username != "" {
-		lines = append(lines, ui.Hint(ui.Inline(ui.Text("Вы вошли как "), ui.Strong(ui.Text(data.Username)), ui.Text("."))))
+		lines = append(lines, ui.Hint(ui.Inline(ui.Text(s.Host.Pages.IdentityUsernameLead()), ui.Strong(ui.Text(data.Username)), ui.Text("."))))
 	}
 	if data.Telegram != "" {
 		lines = append(lines, ui.Hint(ui.Inline(ui.Text("Telegram: "), ui.Strong(ui.Text("@"+data.Telegram)), ui.Text("."))))
@@ -100,26 +104,27 @@ func identitySection(data profileData) []ui.Item {
 // profileDoc builds the /profile page: who you are, the set/change-password form
 // (driven by profile.js via #passwordForm + data-has-password) and a logout form.
 func profileDoc(data profileData) *ui.Doc {
-	action := "Установить пароль"
+	s := dopestrings.Default
+	action := s.Host.Pages.PasswordSetSubmit()
 	hasPassword := "0"
 	if data.HasPassword {
-		action = "Сменить пароль"
+		action = s.Host.Pages.PasswordChangeSubmit()
 		hasPassword = "1"
 	}
 	form := []ui.Item{ui.ID("passwordForm"), ui.DirCol, ui.Autocomplete("off"), ui.Data("has-password", hasPassword)}
 	if data.HasPassword {
 		form = append(form, ui.Password(ui.ID("currentPassword"), ui.Name("current_password"),
-			ui.Placeholder("Текущий пароль"), ui.Autocomplete("current-password"), ui.Required()))
+			ui.Placeholder(s.Host.Pages.PasswordCurrentPlaceholder()), ui.Autocomplete("current-password"), ui.Required()))
 	}
 	form = append(form,
 		ui.Password(ui.ID("newPassword"), ui.Name("new_password"),
-			ui.Placeholder("Новый пароль"), ui.Autocomplete("new-password"), ui.Minlength("8"), ui.Required()),
+			ui.Placeholder(s.Host.Pages.PasswordNewPlaceholder()), ui.Autocomplete("new-password"), ui.Minlength("8"), ui.Required()),
 		ui.Password(ui.ID("confirmPassword"), ui.Name("confirm_password"),
-			ui.Placeholder("Повторите новый пароль"), ui.Autocomplete("new-password"), ui.Required()),
+			ui.Placeholder(s.Host.Pages.PasswordConfirmPlaceholder()), ui.Autocomplete("new-password"), ui.Required()),
 		ui.Button(ui.Submit(), ui.Text(action)),
 	)
-	page := []ui.Item{ui.Title("Профиль"), ui.PagePublic, ui.Classicscripts("dist/profile.js"),
-		ui.Publictopbar(pages.Trail(pages.HostCrumbs(), "Профиль")),
+	page := []ui.Item{ui.Title(s.Host.Pages.ProfileTitle()), ui.PagePublic, ui.Classicscripts("dist/profile.js"),
+		ui.Publictopbar(pages.Trail(pages.HostCrumbs(), s.Host.Pages.ProfileCrumb())),
 	}
 	if lines := identitySection(data); len(lines) > 0 {
 		page = append(page, ui.Section(lines...))
@@ -131,7 +136,7 @@ func profileDoc(data profileData) *ui.Doc {
 			ui.Message(ui.ID("passwordMessage")),
 		),
 		ui.Form(ui.Method("post"), ui.Action("/profile/logout"),
-			ui.Button(ui.Submit(), ui.Text("Разлогиниться")),
+			ui.Button(ui.Submit(), ui.Text(s.Host.Pages.LogoutSubmit())),
 		),
 	)
 	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
@@ -167,7 +172,7 @@ func (s *Server) renderHostLanding(w http.ResponseWriter, r *http.Request, errMs
 		username = user.Username.String
 	}
 	if username == "" {
-		username = "Профиль"
+		username = dopestrings.Default.Host.Pages.UsernameFallback()
 	}
 	pages.RenderDoc(w, s.h.Engine().AssetETags, hostLoggedInDoc(hostLandingData{
 		LoggedIn: true,

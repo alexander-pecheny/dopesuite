@@ -6,30 +6,31 @@ import (
 	"strconv"
 
 	dopeui "dope/dope/web/ui"
+	dopestrings "dope/i18nstrings"
 )
 
 // The header breadcrumb trail, shared by every server-rendered page. It mirrors
 // the URL: each crumb is a real navigable prefix, labelled with the title of the
 // page it links to, and the last one — the page you are on — is plain text.
 //
-//	/host/fest/12/roster  →  🏠 / Мои фесты / Кубок Города / Команды
-//	/fest/12              →  🏠 / Кубок Города
+//	/host/fest/12/roster  →  🏠 / My fests / City Cup / Teams
+//	/fest/12              →  🏠 / City Cup
 //
 // dope has two parallel trees: /host/... is where a fest is edited and /fest/...
 // is where it is watched. Both start at 🏠 (the public index); the host tree just
-// earns a Мои фесты crumb on the way, exactly as its URL does.
+// earns a My-fests crumb on the way, exactly as its URL does.
 //
 // Each helper returns the shared prefix; pages append their own leaf crumb, so
 // no page restates its ancestry by hand.
 
 // HomeCrumb is the 🏠 every trail starts with.
 func HomeCrumb() dopeui.Item {
-	return dopeui.Crumb(dopeui.Home(), dopeui.Href("/"), dopeui.IconHouse, dopeui.Label("Главная"))
+	return dopeui.Crumb(dopeui.Home(), dopeui.Href("/"), dopeui.IconHouse, dopeui.Label(dopestrings.Default.Pages.Crumbs.Home()))
 }
 
-// HostCrumbs is the editing tree's root: 🏠 / Мои фесты.
+// HostCrumbs is the editing tree's root: 🏠 / My fests.
 func HostCrumbs() []dopeui.Item {
-	return []dopeui.Item{HomeCrumb(), dopeui.Crumb(dopeui.Href("/host"), dopeui.Text("Мои фесты"))}
+	return []dopeui.Item{HomeCrumb(), dopeui.Crumb(dopeui.Href("/host"), dopeui.Text(dopestrings.Default.Pages.Crumbs.Host()))}
 }
 
 // FestCrumbs is a fest's dashboard within the editing tree, the prefix every
@@ -38,9 +39,9 @@ func FestCrumbs(ref, title string) []dopeui.Item {
 	return append(HostCrumbs(), dopeui.Crumb(dopeui.Href("/host/fest/"+ref), dopeui.Text(title)))
 }
 
-// AdminCrumbs is the admin tree's root: 🏠 / Админка.
+// AdminCrumbs is the admin tree's root: 🏠 / Admin.
 func AdminCrumbs() []dopeui.Item {
-	return []dopeui.Item{HomeCrumb(), dopeui.Crumb(dopeui.Href("/admin"), dopeui.Text("Админка"))}
+	return []dopeui.Item{HomeCrumb(), dopeui.Crumb(dopeui.Href("/admin"), dopeui.Text(dopestrings.Default.Pages.Crumbs.Admin()))}
 }
 
 // Leaf closes a trail with the current page, which is text rather than a link.
@@ -60,7 +61,7 @@ func Trail(prefix []dopeui.Item, title string) dopeui.Item {
 func FestTitle(ctx context.Context, db *sql.DB, festID int64) string {
 	var title string
 	if err := db.QueryRowContext(ctx, `select coalesce(title, '') from fests where id = ?`, festID).Scan(&title); err != nil || title == "" {
-		return "Фест " + strconv.FormatInt(festID, 10)
+		return dopestrings.Default.Pages.Crumbs.FestFallback(strconv.FormatInt(festID, 10))
 	}
 	return title
 }

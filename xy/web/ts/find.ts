@@ -45,7 +45,8 @@ function foldChar(c: string, opts: FoldOpts): string {
 }
 
 // How forgiving a comparison is. `typography` folds what the pass writes over
-// the text (accents, quotes, dashes, ё); it is off for a replacement, which
+// the text (accents, quotes, dashes, Cyrillic yo→ye); it is off for a
+// replacement, which
 // matches what is on screen. NBSP/NBHY folding is not optional — see foldChar.
 export interface FoldOpts { caseless?: boolean; typography?: boolean }
 
@@ -188,7 +189,8 @@ export function snippet(text: string, spans: ReadonlyArray<Span>, radius = 40): 
 }
 
 // foldSearch is the search's forgiving comparison as a key: what two strings
-// must agree on to be the same to an editor (accents, quotes, dashes, ё, case).
+// must agree on to be the same to an editor (accents, quotes, dashes, Cyrillic
+// yo→ye, case).
 export function foldSearch(text: string): string {
   return foldQuery(text, SEARCH_FOLD);
 }

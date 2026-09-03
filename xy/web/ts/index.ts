@@ -8,6 +8,7 @@ import type { BoardIndex, Hit } from "./searchindex.js";
 import { xySync } from "./sync.js";
 import { stampPassCheck } from "./passcheck.js";
 import { iconed } from "./icons_gen.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const { fetchJSON, jpost, el, escapeHtml } = xyApp;
 
@@ -47,13 +48,13 @@ async function boot(): Promise<void> {
   await refresh();
 }
 
-// Прогрев lives in the site-wide burger, next to nothing else on this page: it
+// Prewarm lives in the site-wide burger, next to nothing else on this page: it
 // is a rare, deliberate act, and it is what makes search cover boards this
 // device has not opened.
 window.dopeMenu?.setExtras([{
   icon: "cloud-download",
-  label: "Прогрев поиска",
-  title: "Скачать все доски, от которых есть ключ, чтобы искать по ним и офлайн",
+  label: S.chrome.prewarm.menuLabel(),
+  title: S.chrome.prewarm.menuTitle(),
   onClick: () => { void prewarm(); },
 }]);
 
@@ -97,7 +98,7 @@ async function refresh(): Promise<void> {
 // cards it can quote. Every board therefore appears in exactly one place, and
 // the top grid keeps meaning one thing.
 // One screenful of results at a time, with a button for the next — a query that
-// names four hundred questions wants narrowing, but «показаны первые 50» with no
+// names four hundred questions wants narrowing, but only the first 50 shown with no
 // way to see the fifty-first is just a wall.
 const HIT_PAGE = 50;
 let shownQuestions = HIT_PAGE;
@@ -134,7 +135,7 @@ function setNote(node: HTMLElement, text: string): void {
 
 async function runSearch(query: string, keepShown = false): Promise<void> {
   const q = query.trim();
-  // A new query starts from the first page again; «Показать ещё» does not.
+  // A new query starts from the first page again; Show more does not.
   if (!keepShown) { shownQuestions = HIT_PAGE; shownComments = HIT_PAGE; }
   document.body.classList.toggle("searching", !!q);
   hitNode.hidden = !q;
@@ -163,19 +164,19 @@ async function runSearch(query: string, keepShown = false): Promise<void> {
   renderHits(commentNode, res.comments);
   moreQuestions.hidden = res.questionTotal <= res.questions.length;
   moreComments.hidden = res.commentTotal <= res.comments.length;
-  setNote(cardNote, note("Вопросы", res.questionTotal, res.questions.length, held.length));
-  setNote(commentNote, res.commentTotal ? note("Комментарии", res.commentTotal, res.comments.length, held.length) : "");
+  setNote(cardNote, note(S.chrome.search.questions(), res.questionTotal, res.questions.length, held.length));
+  setNote(commentNote, res.commentTotal ? note(S.chrome.search.comments(), res.commentTotal, res.comments.length, held.length) : "");
   hitNode.hidden = !res.questions.length;
   commentNode.hidden = !res.comments.length;
 }
 
 function note(what: string, total: number, shown: number, boards: number): string {
   if (!boards) {
-    return "Ни одна доска не скачана на это устройство — «Прогрев поиска» в меню ☰ сделает их искомыми.";
+    return S.chrome.search.noteNoBoards();
   }
-  if (!total) return `${what}: ничего не найдено.`;
-  if (total > shown) return `${what}: ${total}, показаны ${shown}.`;
-  return `${what}: ${total}.`;
+  if (!total) return S.chrome.search.noteNone(what);
+  if (total > shown) return S.chrome.search.notePartial(what, String(total), String(shown));
+  return S.chrome.search.noteAll(what, String(total));
 }
 
 function renderHits(into: HTMLElement, hits: Hit[]): void {
@@ -215,20 +216,20 @@ searchBox.addEventListener("input", () => {
   searchTimer = setTimeout(() => { void runSearch(searchBox.value); }, 120);
 });
 
-// прогрев: fill the Mirror and the Search Index for every board this device can
+// Prewarm: fill the Mirror and the Search Index for every board this device can
 // unlock, so search stops depending on which boards happened to be opened.
 async function prewarm(): Promise<void> {
   if (searching) return;
-  if (!xySync.requireOnline("Прогрев доступен только онлайн.", cardNote)) return;
+  if (!xySync.requireOnline(S.chrome.prewarm.offline(), cardNote)) return;
   searching = true;
   try {
     const indexed = await xySearchIndex.prewarm(
       allBoards.map((b) => ({ id: b.id, name: b.name })),
-      (done, total) => { setNote(cardNote, `Прогрев: ${done} из ${total}…`); },
+      (done, total) => { setNote(cardNote, S.chrome.prewarm.progress(String(done), String(total))); },
     );
     indexes = null;
-    setNote(cardNote, `Прогрев закончен: досок скачано ${indexed} из ${allBoards.length}.` +
-      (indexed < allBoards.length ? " Остальные заперты — их пароль на этом устройстве не сохранён." : ""));
+    setNote(cardNote, S.chrome.prewarm.done(String(indexed), String(allBoards.length)) +
+      (indexed < allBoards.length ? S.chrome.prewarm.lockedNote() : ""));
     if (searchBox.value.trim()) await runSearch(searchBox.value);
   } finally {
     searching = false;
@@ -242,7 +243,7 @@ async function renderBoards(boards: BoardListItem[]): Promise<void> {
     b.schema_version >= 2 ? xyCrypto.loadCachedDK(b.id).then((dk) => !dk, () => false) : true));
   listNode.replaceChildren();
   if (!boards.length) {
-    listNode.append(el("p", { class: "empty", text: searchBox.value.trim() ? "Досок с таким названием нет." : "Пока нет досок. Нажмите + чтобы создать." }));
+    listNode.append(el("p", { class: "empty", text: searchBox.value.trim() ? S.chrome.home.emptyNamed() : S.chrome.home.emptyAll() }));
     return;
   }
   // Boards arrive already ordered by the caller's last visit (server-side).
@@ -251,15 +252,15 @@ async function renderBoards(boards: BoardListItem[]): Promise<void> {
     // lock marks a board that will still ask for the passphrase. Legacy (v1)
     // boards need the cached DK for the name itself, so start with a placeholder.
     const migrated = b.schema_version >= 2;
-    const name = migrated ? b.name : "доска #" + b.id;
+    const name = migrated ? b.name : S.chrome.home.boardLockedName(String(b.id));
     const card = el("a", { class: "board-card", href: `/board/${b.id}` },
       el("span", { class: "board-card-name-wrap" },
         el("span", { class: "board-card-name" }, ...(locked[i] ? iconed("lock", name) : [name]))),
-      el("span", { class: "board-card-role", text: b.role === "owner" ? "владелец" : "редактор" }),
+      el("span", { class: "board-card-role", text: b.role === "owner" ? S.chrome.home.roleOwner() : S.chrome.home.roleEditor() }),
     );
     if (b.unread) {
       const mention = b.unread_mentions ? " unread-dot-mention" : "";
-      const title = b.unread_mentions ? "Вас упомянули" : "Есть непрочитанные изменения";
+      const title = b.unread_mentions ? S.chrome.home.unreadMentionTitle() : S.chrome.home.unreadTitle();
       card.append(el("span", { class: "unread-dot unread-dot-corner board-card-unread" + mention, title }));
     }
     if (!migrated) {
@@ -380,7 +381,7 @@ createForm.addEventListener("submit", async (e) => {
   if (!name || !pass) return;
   const passErr = xyCrypto.validatePassphrase(pass);
   if (passErr) { createMessage.textContent = passErr; return; }
-  if (!xySync.requireOnline("Создание доски доступно только онлайн.", createMessage)) return;
+  if (!xySync.requireOnline(S.chrome.home.createOffline(), createMessage)) return;
   try {
     // The passphrase still mints the board's data key (lists/cards stay encrypted);
     // only the name travels in the clear now.

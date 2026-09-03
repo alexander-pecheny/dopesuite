@@ -204,7 +204,7 @@ func replaceImageRef(source, from, to string) string {
 // `(img …)` directives to match.
 //
 // chgksuite derives an extracted image's name from the source filename, so a
-// package called "Кубок (48в).docx" yields `(img Кубок_(48в)_001.png)`. But an
+// package called "Cup (48q).docx" yields `(img Cup_(48q)_001.png)`. But an
 // (img …) directive ends at the first ')' and splits its options on whitespace,
 // so such a name is truncated by every reader of the format — chgksuite's own
 // included. Import is the one moment we can fix it, since the name is ours to

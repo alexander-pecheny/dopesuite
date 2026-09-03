@@ -1,4 +1,4 @@
-// The gallery: every shared table and the Сетка, drawn from fixtures on one
+// The gallery: every shared table and the fest grid, drawn from fixtures on one
 // page — the skin sheet a table-skin change is judged on. Four screenshots
 // (phone × desktop × light × dark) cover what 84 live pages did, with no live
 // data, no viewer count and no tab strip to move between two shots. Served at
@@ -14,6 +14,7 @@ import type {EKPlayerStatsRow, IndividualStatsRow} from "./ek-stats.js";
 import {markNameOverflow} from "./widgets.js";
 import { buildFestGrid, buildReseedStagePanel } from "./fest-grid.js";
 import type { FestGridMatch, FestGridStage } from "./fest-grid.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const LONG = "Команда с названием длиннее любой колонки, которую ей отвели";
 
@@ -25,9 +26,9 @@ function bout(code: string, letter: string, venue: number, teams: Array<[string,
   }];
 }
 
-// A Сетка with every box kind: a group Block of three групп (one long name),
-// a pod Block whose Ranker sent no sort (М alone), a бой round of four-seat
-// and two-seat boxes, and a reseed the Сетка drops.
+// A fest grid with every box kind: a group Block of three groups (one long
+// name), a pod Block whose Ranker sent no sort (M alone), a Match round of
+// four-seat and two-seat boxes, and a reseed the fest grid drops.
 const festStages: FestGridStage[] = [
   {
     code: "s1-g1", title: "Групповой этап. Группа 1", stage_type: "matches", kind: "rr", grain: {block: "s1", group: "1"},
@@ -123,18 +124,18 @@ function section(title: string, host: string, node: HTMLElement): HTMLElement {
 
 function render(root: HTMLElement): void {
   // The mount is a table-host; as the page's whole width it must fit the
-  // frame (a max-content host around the Сетка's column grid sizes to
+  // frame (a max-content host around the fest grid's column grid sizes to
   // Chromium's infinite width). Each section scrolls its own table.
   root.classList.add("fits-frame");
   root.replaceChildren(
-    section("Сетка", "table-host grid-host", buildFestGrid({stages: festStages}, {stageHeaderLink: false, matchTitleLink: false})),
-    section("Пересев", "table-host fits-frame", buildReseedStagePanel(reseedStage, {letters: new Map([["s1-g1-1", "A"], ["s1-g1-2", "B"]])})),
-    section("Групповой этап", "table-host fits-frame", buildGroupStandingsView(groups)),
-    section("Статистика ЭК", "table-host", buildEKStatsTable(ekStats)),
-    section("Статистика личной СИ", "table-host", buildIndividualStatsTable(individualStats)),
-    section("Площадки", "table-host", buildVenuesTable(venues)),
-    section("Площадки, ведущий", "table-host", buildVenuesTable(venues, {editable: true, onTitleChange: () => {}})),
-    section("Составы", "table-host fits-frame", buildRosterTable(roster)),
+    section(S.gallery.section.festGrid(), "table-host grid-host", buildFestGrid({stages: festStages}, {stageHeaderLink: false, matchTitleLink: false})),
+    section(S.gallery.section.reseed(), "table-host fits-frame", buildReseedStagePanel(reseedStage, {letters: new Map([["s1-g1-1", "A"], ["s1-g1-2", "B"]])})),
+    section(S.gallery.section.groupStandings(), "table-host fits-frame", buildGroupStandingsView(groups)),
+    section(S.gallery.section.ekStats(), "table-host", buildEKStatsTable(ekStats)),
+    section(S.gallery.section.individualStats(), "table-host", buildIndividualStatsTable(individualStats)),
+    section(S.gallery.section.venues(), "table-host", buildVenuesTable(venues)),
+    section(S.gallery.section.venuesHost(), "table-host", buildVenuesTable(venues, {editable: true, onTitleChange: () => {}})),
+    section(S.gallery.section.roster(), "table-host fits-frame", buildRosterTable(roster)),
   );
   requestAnimationFrame(() => markNameOverflow(root, {
     cellSelector: ".results-team",

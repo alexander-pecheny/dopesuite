@@ -1,9 +1,10 @@
 // The server's tables as the pages draw them (ADR-0011): standings columns and
 // rows, the results team cell, group standings, and the fest-view stage refs
-// they hang off (буквы, stage type).
+// they hang off (letters, stage type).
 
 import {formatDisplayText, nameNode, td, th} from "./cells.js";
 import type {CellContent, CellContentItem} from "./cells.js";
+import S from "./i18nstrings_ru_gen.js";
 
 export interface StageRef {
   code: string;
@@ -29,8 +30,8 @@ export interface StageRefMatch {
   group?: string;
 }
 
-// One группа of the «Групповой этап» tab: its title and the rows the sheets'
-// «Группы» view draws — a player, his очки, and the split by круг.
+// One group of the group-stage tab: its title and the rows the sheets'
+// Groups view draws — a player, his points, and the split by round.
 export interface GroupStandingsGroup {
   title: string;
   roundCount: number;
@@ -126,9 +127,9 @@ function classNames(...names: Array<string | false | null | undefined>): string 
   return names.filter(Boolean).join(" ");
 }
 
-// buildGroupStandingsView is the sheets' «Группы» view: all групп on one tab,
-// each a table of Игрок | Очки | Круг 1..N, two abreast where the screen fits
-// them.
+// buildGroupStandingsView is the sheets' Groups view: all groups on one tab,
+// each a table of Player | Points | Round 1..N, two abreast where the screen
+// fits them.
 export function buildGroupStandingsView(groups: GroupStandingsGroup[]): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "group-standings";
@@ -146,10 +147,10 @@ export function buildGroupStandingsView(groups: GroupStandingsGroup[]): HTMLElem
     wrapper.appendChild(standingsTable({
       className: "group-standings-table",
       columns: [
-        {label: "М", kind: "place"},
-        {label: "Игрок", kind: "name"},
-        {label: "Очки", kind: "num"},
-        ...rounds(group).map((round) => ({label: `Круг ${round + 1}`, kind: "num" as const})),
+        {label: S.standings.columns.place(), kind: "place"},
+        {label: S.standings.columns.player(), kind: "name"},
+        {label: S.standings.columns.points(), kind: "num"},
+        ...rounds(group).map((round) => ({label: S.standings.columns.round(String(round + 1)), kind: "num" as const})),
       ],
       rows: group.rows.map((row, index) => [
         index + 1,
@@ -164,7 +165,7 @@ export function buildGroupStandingsView(groups: GroupStandingsGroup[]): HTMLElem
   return wrap;
 }
 
-// festLetters is every бой's буква by code, read off the fest view: the
+// festLetters is every match's letter by code, read off the fest view: the
 // compiler dealt them (A..Z, AA.. in schedule order, none for a block that
 // declined) and the store carries them, so a page never counts.
 export function festLetters(stages: ReadonlyArray<StageRef | null | undefined> | null | undefined): Map<string, string> {
@@ -177,8 +178,8 @@ export function festLetters(stages: ReadonlyArray<StageRef | null | undefined> |
   return letters;
 }
 
-// letteredTitle swaps a title's «Бой N» for the бой's letter; a title that
-// never says «Бой» (the письменный отбор) is left alone.
+// letteredTitle swaps a title's bout number for the match's letter; a title
+// the bout regex never matches (the written qualifier) is left alone.
 export function letteredTitle(title: string, letter: string | undefined): string {
   if (!letter) return title;
   return title.replace(/Бой\s+\d+/, `Бой ${letter}`);

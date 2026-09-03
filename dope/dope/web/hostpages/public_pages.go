@@ -5,6 +5,7 @@ import (
 
 	"dope/dope/web/pages"
 	ui "dope/dope/web/ui"
+	dopestrings "dope/i18nstrings"
 )
 
 // The two public pages — the fest index at / and a fest's own page at
@@ -21,7 +22,7 @@ type PublicFest struct {
 	Dates string
 }
 
-// PublicFestGroup is a collapsible bucket (Текущие / Будущие / Прошедшие).
+// PublicFestGroup is a collapsible bucket (current / future / past).
 type PublicFestGroup struct {
 	Title string
 	Fests []PublicFest
@@ -51,15 +52,16 @@ func jumpHostNav(href, label, title string) []ui.Item {
 // PublicIndexDoc builds the public fest list at /. It is home, so its 🏠 crumb
 // is the page you are on rather than a link out.
 func PublicIndexDoc(groups []PublicFestGroup) *ui.Doc {
-	page := []ui.Item{ui.Title("Фесты"), ui.PagePublic}
-	page = append(page, jumpHostNav("/host", "Режим ведущего", "Перейти в режим ведущего")...)
+	s := dopestrings.Default
+	page := []ui.Item{ui.Title(s.Host.Pages.PublicIndexTitle()), ui.PagePublic}
+	page = append(page, jumpHostNav("/host", s.Host.Pages.JumpHostLabel(), s.Host.Pages.JumpHostTitleIndex())...)
 	page = append(page, ui.Publictopbar(ui.Crumbs(
-		ui.Crumb(ui.Home(), ui.IconHouse, ui.Label("Главная")),
-		ui.Crumb(ui.Text("Фесты")),
+		ui.Crumb(ui.Home(), ui.IconHouse, ui.Label(s.Host.Pages.HomeCrumbLabel())),
+		ui.Crumb(ui.Text(s.Host.Pages.PublicIndexCrumb())),
 	)))
 
 	if len(groups) == 0 {
-		page = append(page, ui.Empty(ui.Text("Нет публичных фестов.")))
+		page = append(page, ui.Empty(ui.Text(s.Host.Pages.PublicIndexEmpty())))
 		return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
 	}
 	for _, g := range groups {
@@ -79,8 +81,9 @@ func PublicIndexDoc(groups []PublicFestGroup) *ui.Doc {
 // PublicFestDoc builds a fest's public page: its dates, its description and its
 // games. The trail is 🏠 / {fest} — the public tree's home is /, not /host.
 func PublicFestDoc(d PublicFestDetail) *ui.Doc {
+	s := dopestrings.Default
 	page := []ui.Item{ui.Title(d.Title), ui.PagePublic}
-	page = append(page, jumpHostNav("/host/fest/"+d.Ref, "Режим ведущего", "Открыть в режиме ведущего")...)
+	page = append(page, jumpHostNav("/host/fest/"+d.Ref, s.Host.Pages.JumpHostLabel(), s.Host.Pages.JumpHostTitleFest())...)
 	page = append(page, ui.Publictopbar(pages.Trail([]ui.Item{pages.HomeCrumb()}, d.Title)))
 
 	if d.Dates != "" {
@@ -90,7 +93,7 @@ func PublicFestDoc(d PublicFestDetail) *ui.Doc {
 		page = append(page, ui.Richtext(ui.Raw(string(d.Description))))
 	}
 	if len(d.Games) == 0 {
-		page = append(page, ui.Empty(ui.Text("В этом фесте пока нет игр.")))
+		page = append(page, ui.Empty(ui.Text(s.Host.Pages.FestGamesEmpty())))
 		return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
 	}
 	rows := make([]ui.Item, 0, len(d.Games))
@@ -101,6 +104,6 @@ func PublicFestDoc(d PublicFestDetail) *ui.Doc {
 		}
 		rows = append(rows, ui.Listrow(row...))
 	}
-	page = append(page, ui.Section(ui.Subhead(ui.Text("Игры")), ui.List(rows...)))
+	page = append(page, ui.Section(ui.Subhead(ui.Text(s.Host.Pages.GamesSubhead())), ui.List(rows...)))
 	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
 }

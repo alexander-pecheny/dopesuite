@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	xystrings "xy/i18nstrings"
 )
 
 // Pair is one [type, content] element of the parsed structure. Content is one of:
@@ -192,7 +194,7 @@ func dropRunes(line string, n int) string {
 //
 // It exists because the typography passes are defined on a *field's value*: the
 // parser applies them after this split, never to raw 4s. Anything that
-// typographs the source directly (the editor's Типограф button) has to make the
+// typographs the source directly (the editor's Typograph button) has to make the
 // same split first, or it rewrites a list item's leading "-" into an em dash.
 func SplitMarker(line string) (prefix, rest string) {
 	first, ok := firstField(line)
@@ -455,7 +457,7 @@ func numberThemes(final Doc, game string) {
 					label = raw
 				} else {
 					name = raw
-					label = "Тема " + strconv.Itoa(themeNumber) + ". " + name
+					label = xystrings.Default.Fsource.Theme.DefaultLabel(strconv.Itoa(themeNumber), name)
 				}
 				q := newQuestion()
 				q.Set("name", name)

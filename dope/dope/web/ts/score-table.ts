@@ -1,8 +1,9 @@
-// A бой's score table — built once (flat or two-row) and then patched in place
+// A match's score table — built once (flat or two-row) and then patched in place
 // from a MatchView through a node index keyed by the cells' dataset.
 
 import {applyAttrs, cellFromSpec, formatDisplayText, formatPlace, sameArray, td, th} from "./cells.js";
 import type {CellAttrs, CellContent, CellSpec} from "./cells.js";
+import S from "./i18nstrings_ru_gen.js";
 
 export interface ScoreTableTheme {
   label?: CellContent;
@@ -87,7 +88,7 @@ export function buildFlatScoreTable(options: ScoreTableOptions): HTMLTableElemen
   header.appendChild(cellFromSpec("th", options.nameHeader, {className: "sticky sticky-name battle"}));
   header.appendChild(cellFromSpec("th", options.totalHeader ?? "Σ", {className: "sticky sticky-total number"}));
   if (showPlaceColumn) {
-    header.appendChild(cellFromSpec("th", options.placeHeader ?? "М", {className: "sticky sticky-place number"}));
+    header.appendChild(cellFromSpec("th", options.placeHeader ?? S.widgets.scoreTable.place(), {className: "sticky sticky-place number"}));
     header.appendChild(cellFromSpec("th", options.placeGapHeader ?? "", {className: "sticky sticky-place-gap place-gap-head"}));
   }
 
@@ -176,7 +177,7 @@ export function buildTwoRowScoreTable(options: ScoreTableOptions): HTMLTableElem
   header.appendChild(cellFromSpec("th", options.nameHeader, {className: "sticky sticky-name battle"}));
   header.appendChild(cellFromSpec("th", options.totalHeader ?? "Σ", {className: "sticky sticky-total number"}));
   if (showPlaceColumn) {
-    header.appendChild(cellFromSpec("th", options.placeHeader ?? "М", {className: "sticky sticky-place number"}));
+    header.appendChild(cellFromSpec("th", options.placeHeader ?? S.widgets.scoreTable.place(), {className: "sticky sticky-place number"}));
     header.appendChild(cellFromSpec("th", options.placeGapHeader ?? "", {className: "sticky sticky-place-gap place-gap-head"}));
   }
 

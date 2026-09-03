@@ -1,4 +1,4 @@
-// export.ts — «Экспорт»: concatenate the list's card descriptions (in board
+// export.ts — the list-scope "Export": concatenate the list's card descriptions (in board
 // order) into a chgksuite "4s" document, gather any images referenced by
 // `(img …)` directives from the cards' attachments, and hand both to the server,
 // which composes the requested formats in memory and streams back one file — or
@@ -15,6 +15,7 @@ import { modal } from "./modal.js";
 import type { Attachments } from "./attachments.js";
 import type { Board, ListPanel, ListScope } from "./panels.js";
 import type { BoardCard } from "./unlock.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const { byId, errMsg, downloadBlob } = xyApp;
 
@@ -71,7 +72,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     byId<HTMLButtonElement>("exportRun").disabled = chosen.length === 0;
     const available = EXPORT_FORMATS.filter((f) => !exportBox(f.box).disabled);
     const allOn = available.length > 0 && chosen.length === available.length;
-    byId("exportToggleAll").textContent = allOn ? "Снять выделение" : "Выбрать все";
+    byId("exportToggleAll").textContent = allOn ? S.export.form.deselectAll() : S.export.form.selectAll();
   }
 
   function openExport(scope: ListScope): void {
@@ -87,8 +88,8 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
       if (box.disabled) box.checked = false;
     }
     const notes: string[] = [];
-    if (offline) notes.push("Офлайн: доступен только .4s, без изображений.");
-    if (!hndt.trim()) notes.push("В списке нет вопросов с раздаточным материалом.");
+    if (offline) notes.push(S.export.notes.offline());
+    if (!hndt.trim()) notes.push(S.export.notes.noHandouts());
     syncExportForm();
     exportModal.open({ onClose: () => { exportCtx = null; } });
     exportModal.message(notes.join(" "));
@@ -114,10 +115,10 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     }
 
     const msg = byId("exportMessage");
-    if (!xySync.requireOnline("Эти форматы доступны только онлайн.", msg)) return;
+    if (!xySync.requireOnline(S.export.run.offlineFormats(), msg)) return;
     const btn = byId<HTMLButtonElement>("exportRun");
     btn.disabled = true;
-    msg.textContent = formats.includes("handouts") ? "Экспорт… (вёрстка раздаток может занять время)" : "Экспорт…";
+    msg.textContent = formats.includes("handouts") ? S.export.run.progressHandouts() : S.export.run.progress();
     board.setStatus("saving");
     try {
       const fd = new FormData();
@@ -132,7 +133,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
       if (formats.some((f) => f !== "4s") || wantsImages) for (const n of wanted) needed.add(n);
       const found = await attachments.appendImages(fd, cards, needed);
       const missing = [...needed].filter((n) => !found.has(n));
-      if (missing.length && !confirm(`Не найдены изображения: ${missing.join(", ")}. Продолжить?`)) {
+      if (missing.length && !confirm(S.export.run.missingImagesConfirm(missing.join(", ")))) {
         board.setStatus("saved");
         msg.textContent = "";
         return;
@@ -161,7 +162,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
 
   byId("exportForm").addEventListener("submit", (e) => { e.preventDefault(); void runExport(); });
   byId("exportToggleAll").addEventListener("click", () => {
-    const target = byId("exportToggleAll").textContent === "Выбрать все";
+    const target = byId("exportToggleAll").textContent === S.export.form.selectAll();
     for (const f of EXPORT_FORMATS) {
       const box = exportBox(f.box);
       if (!box.disabled) box.checked = target;
@@ -173,7 +174,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
 
   return {
     id: "export", menu: "list", icon: "file-down",
-    label: (scope) => `Экспорт${scope.grouped ? " группы" : ""}`,
+    label: (scope) => scope.grouped ? S.export.menu.labelGrouped() : S.export.menu.label(),
     offered: (scope) => scope.cards.length > 0,
     open: openExport,
   };

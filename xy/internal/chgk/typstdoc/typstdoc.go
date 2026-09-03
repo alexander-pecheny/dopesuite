@@ -244,7 +244,7 @@ func (e *exporter) questionLabel(q *fsource.Question) string {
 }
 
 // labelFor returns the field label, honouring per-question overrides and the
-// plural "Источники" when source is a list.
+// plural sources label when source is a list.
 func (e *exporter) labelFor(q *fsource.Question, field string) string {
 	if ov, ok := q.Get("overrides").(map[string]string); ok {
 		if v, ok := ov[field]; ok {

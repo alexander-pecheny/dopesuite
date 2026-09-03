@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	xystrings "xy/i18nstrings"
 	"xy/internal/chgk/imgconv"
 	"xy/internal/chgk/inline"
 )
@@ -11,7 +12,7 @@ import (
 // addImage resolves an (img …) directive and appends the picture to the paragraph,
 // at the size the docx export would give it (inline.Img.SizeInches — 120 dpi pixels
 // through chgksuite's proportional_resize). A missing or undecodable image degrades
-// to a bold "[нет изображения: …]", as in the docx, so an export never fails on one.
+// to a bold missing-image placeholder, as in the docx, so an export never fails on one.
 //
 // The bytes are re-encoded for the size they are drawn at (imgconv.ForExport: downscale
 // to 200 dpi, JPEG unless the image has transparency). Embedding the original is how
@@ -80,4 +81,4 @@ func (e *exporter) addImage(p *para, arg string) {
 	p.addBreak()
 }
 
-func missingImage(name string) string { return "[нет изображения: " + name + "]" }
+func missingImage(name string) string { return xystrings.Default.Docs.Image.Missing(name) }

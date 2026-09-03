@@ -26,6 +26,7 @@ import (
 	"slices"
 	"strings"
 
+	xystrings "xy/i18nstrings"
 	"xy/internal/chgk/fsource"
 	"xy/internal/chgk/i18n"
 	"xy/internal/chgk/inline"
@@ -277,7 +278,10 @@ func (e *exporter) renderBody(doc fsource.Doc) string {
 var screenVersions = []struct {
 	title  string
 	screen bool
-}{{"Версия для ведущего", false}, {"Версия для экрана", true}}
+}{
+	{xystrings.Default.Docs.Docx.HostVersion(), false},
+	{xystrings.Default.Docs.Docx.ScreenVersion(), true},
+}
 
 // renderQuestion writes one question, in as many copies as the screen mode asks
 // for.
@@ -385,7 +389,7 @@ func (e *exporter) renderQuestionInto(q *fsource.Question, into *para, screen bo
 			nbsp:          field != "source",
 			whiten:        whiten && whitenField[field],
 			removeAccents: screen,
-			// зачёт keeps its brackets: they are part of the answer, not a note.
+			// A zachet keeps its brackets: they are part of the answer, not a note.
 			removeBrackets: screen && field != "zachet",
 		}
 		if field == "source" || field == "author" {
@@ -436,7 +440,7 @@ func (e *exporter) questionLabel(q *fsource.Question, onlyNumber bool) string {
 }
 
 // labelFor returns the field label, honouring per-question overrides and the
-// plural "Источники" when source is a list.
+// plural sources label when source is a list.
 func (e *exporter) labelFor(q *fsource.Question, field string) string {
 	if ov, ok := q.Get("overrides").(map[string]string); ok {
 		if v, ok := ov[field]; ok {

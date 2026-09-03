@@ -10,8 +10,8 @@ import (
 )
 
 // MatchOutcome is one match of a stage as the Structure layer sees it: the
-// Protocol scorer's per-slot output, in slot order. Questions is the bout's
-// base question count (без перестрелок) — the denominator for share metrics.
+// Protocol scorer's per-slot output, in slot order. Questions is the match's
+// base question count (shootouts excluded) — the denominator for share metrics.
 type MatchOutcome struct {
 	Code      string
 	Finished  bool
@@ -33,8 +33,8 @@ type SlotOutcome struct {
 
 // RankedEntry is one participant's row in a stage's standings. Equal ranks are
 // shared on a full tie of the configured order keys; Rank 0 is unplaced — a
-// pod's survivor whose места are still being played. Bouts are the codes of
-// the бои the row was summed from, when the Kind counts them.
+// pod's survivor whose places are still being played. Bouts are the codes of
+// the matches the row was summed from, when the Kind counts them.
 type RankedEntry struct {
 	Rank        int
 	Participant int64
@@ -42,8 +42,8 @@ type RankedEntry struct {
 	Bouts       []string
 }
 
-// LoadMatchOutcomes reads the named бои, in the order given, as the outcomes a
-// Ranker sums: two statements for any number of бои.
+// LoadMatchOutcomes reads the named matches, in the order given, as the outcomes a
+// Ranker sums: two statements for any number of matches.
 func LoadMatchOutcomes(ctx context.Context, q Queryer, matchIDs []int64) ([]MatchOutcome, error) {
 	if len(matchIDs) == 0 {
 		return nil, nil
@@ -123,8 +123,8 @@ order by ms.match_id, ms.slot_index`, args, func(rows *sql.Rows) (slotRow, error
 // WriteStandings replaces a stage's table with what its Ranker returned (nil
 // clears it). The stored rank is the distinct seat order (rank refs must
 // resolve uniquely); the Kind's shared display place travels in the metrics,
-// and so do the бои the row was summed from, joined for the Пересев's «Бой»
-// column.
+// and so do the matches the row was summed from, joined for the reseed's
+// match column.
 func WriteStandings(ctx context.Context, tx *sql.Tx, stageID int64, ranked []RankedEntry) error {
 	if _, err := tx.ExecContext(ctx, `delete from stage_standings where stage_id = ?`, stageID); err != nil {
 		return err

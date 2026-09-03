@@ -7,9 +7,9 @@ type Options struct {
 	ScreenMode ScreenMode
 	// NoAnswers prints questions only — not even spoilered answers.
 	NoAnswers bool
-	// NoParagraph drops the line break after "Вопрос N.".
+	// NoParagraph drops the line break after "Question N.".
 	NoParagraph bool
-	// OnlyQuestionNumber labels a question "N." instead of "Вопрос N.".
+	// OnlyQuestionNumber labels a question "N." instead of "Question N.".
 	OnlyQuestionNumber bool
 	// SameSourceAndAuthorSize is --smaller_source_and_author off: source and
 	// author keep the body size instead of dropping 2pt into a paragraph of

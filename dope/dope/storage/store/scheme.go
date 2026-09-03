@@ -39,9 +39,9 @@ type SchemeSeeding struct {
 	Players *SchemePlayerSeed `json:"players,omitempty"`
 }
 
-// SchemePlayerSeed is a посев composed over a Participant's players rather
-// than over its own past results — what a сборная format needs, where a team
-// is three people who played the фест's other games for three other teams.
+// SchemePlayerSeed is a seed composed over a Participant's players rather
+// than over its own past results — what a team format needs, where a team
+// is three people who played the fest's other games for three other teams.
 // Games are the source Games in order, so a player rule reads place1, place2…
 // by that order; Player defines a metric per player; Seed folds one of those
 // over the Participant's players with mean / min / max / sum.
@@ -86,9 +86,9 @@ type SchemeStage struct {
 
 // SchemeGrain says where a stage sits in its Game. A stage row is a Wave — the
 // finest grain the schedule has — so it names the Block it expands, the Group
-// it ranks (round-robin only) and which turn at the столы it is. The remaining
-// coordinate, the Round, lives on the Match: a Group plays all its круги at one
-// стол, so one stage spans several Rounds and only a бой knows which.
+// it ranks (round-robin only) and which turn at the tables it is. The remaining
+// coordinate, the Round, lives on the Match: a Group plays all its rounds at one
+// table, so one stage spans several Rounds and only a match knows which.
 type SchemeGrain struct {
 	Block string `json:"block,omitempty"`
 	Wave  int    `json:"wave,omitempty"`
@@ -96,7 +96,7 @@ type SchemeGrain struct {
 }
 
 // Normalized is what every writer must store. A stage that knows its Block is
-// at least the first заход, so wave 0 there means "nobody said", not "заход
+// at least the first wave, so wave 0 there means "nobody said", not "wave
 // zero" — and a scheme unmarshalled from JSON written before grain existed has
 // no wave at all. Without this, the same tournament compiled from DSL and
 // imported from JSON lands on different coordinates.
@@ -113,10 +113,10 @@ func (g SchemeGrain) Normalized() SchemeGrain {
 type SchemeMatch struct {
 	Code             string       `json:"code"`
 	Title            string       `json:"title"`
-	Letter           string       `json:"letter,omitempty"` // Буква боя, dealt at compile time; "" for a бой that has none
+	Letter           string       `json:"letter,omitempty"` // The match's letter, dealt at compile time; "" for a match that has none
 	Venue            int          `json:"venue"`
-	Round            int          `json:"round,omitempty"` // 1-based круг within the Block
-	Wave             int          `json:"wave,omitempty"`  // 1-based заход, set where the stage spans several
+	Round            int          `json:"round,omitempty"` // 1-based round within the Block
+	Wave             int          `json:"wave,omitempty"`  // 1-based wave, set where the stage spans several
 	ParticipantCount int          `json:"participantCount"`
 	Slots            []SchemeSlot `json:"slots"`
 }

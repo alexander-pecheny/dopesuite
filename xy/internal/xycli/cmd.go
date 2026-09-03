@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	xystrings "xy/i18nstrings"
 )
 
 // The command layer. xy-cli is meant to be driven by an agent, so: human text by
@@ -31,31 +33,32 @@ type command struct {
 }
 
 var commands = []command{
-	{"login", "сохранить адрес xy и API-токен (создать токен: /profile/tokens)", cmdLogin},
-	{"logout", "забыть токен и все ключи досок", cmdLogout},
-	{"boards", "список досок аккаунта (🔓 = ключ есть)", cmdBoards},
-	{"unlock", "ввести пароль доски и запомнить её ключ", cmdUnlock},
-	{"lock", "забыть ключ доски", cmdLock},
-	{"board", "board show — списки и карточки доски", cmdBoard},
-	{"list", "list add|rename|rm — списки", cmdList},
-	{"card", "card get|set|add|mv|rm — карточки (4s на stdin/stdout)", cmdCard},
-	{"comment", "comment ls|add|edit|rm — лента карточки", cmdComment},
-	{"label", "label ls|add|assign — метки", cmdLabel},
-	{"search", "поиск по карточкам и комментариям доски", cmdSearch},
-	{"source", "4s списка (или всей группы) целиком", cmdSource},
-	{"export", "экспорт списка в docx/pdf/4s/раздатки", cmdExport},
-	{"attachment", "attachment ls|get|add — вложения карточки", cmdAttachment},
+	{"login", xystrings.Default.Cli.Login.Summary(), cmdLogin},
+	{"logout", xystrings.Default.Cli.Logout.Summary(), cmdLogout},
+	{"boards", xystrings.Default.Cli.Boards.Summary(), cmdBoards},
+	{"unlock", xystrings.Default.Cli.Unlock.Summary(), cmdUnlock},
+	{"lock", xystrings.Default.Cli.Lock.Summary(), cmdLock},
+	{"board", xystrings.Default.Cli.Board.Summary(), cmdBoard},
+	{"list", xystrings.Default.Cli.List.Summary(), cmdList},
+	{"card", xystrings.Default.Cli.Card.Summary(), cmdCard},
+	{"comment", xystrings.Default.Cli.Comment.Summary(), cmdComment},
+	{"label", xystrings.Default.Cli.Label.Summary(), cmdLabel},
+	{"search", xystrings.Default.Cli.Search.Summary(), cmdSearch},
+	{"source", xystrings.Default.Cli.Source.Summary(), cmdSource},
+	{"export", xystrings.Default.Cli.Export.Summary(), cmdExport},
+	{"attachment", xystrings.Default.Cli.Attachment.Summary(), cmdAttachment},
 }
 
 // Run is the whole CLI: cmd/xy-cli is a main() around it.
 func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	s := xystrings.Default
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		usage(stdout)
 		return 0
 	}
 	st, err := LoadState()
 	if err != nil {
-		fmt.Fprintln(stderr, "не читается файл состояния:", err)
+		fmt.Fprintln(stderr, s.Cli.Run.StateUnreadable(err.Error()))
 		return 1
 	}
 	a := &app{st: st, stdin: stdin, stdout: stdout, stderr: stderr}
@@ -72,23 +75,24 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	fmt.Fprintf(stderr, "неизвестная команда %q\n", args[0])
+	fmt.Fprint(stderr, s.Cli.Run.UnknownCommand(args[0]))
 	usage(stderr)
 	return 2
 }
 
 func usage(w io.Writer) {
-	fmt.Fprintln(w, "xy-cli — доски xy из командной строки, для агента.")
-	fmt.Fprintln(w, "\nНачало работы:")
-	fmt.Fprintln(w, "  xy-cli login --url https://xy.example        токен из /profile/tokens")
-	fmt.Fprintln(w, "  xy-cli boards                                какие доски видно")
-	fmt.Fprintln(w, "  xy-cli unlock 12                             пароль доски — ключ хранится локально")
-	fmt.Fprintln(w, "\nКоманды:")
+	s := xystrings.Default
+	fmt.Fprintln(w, s.Cli.Run.Title())
+	fmt.Fprintln(w, s.Cli.Run.StartHead())
+	fmt.Fprintln(w, s.Cli.Run.ExampleLogin())
+	fmt.Fprintln(w, s.Cli.Run.ExampleBoards())
+	fmt.Fprintln(w, s.Cli.Run.ExampleUnlock())
+	fmt.Fprintln(w, s.Cli.Run.CommandsHead())
 	for _, c := range commands {
 		fmt.Fprintf(w, "  %-11s %s\n", c.name, c.summary)
 	}
-	fmt.Fprintln(w, "\nУ каждой команды свой --help. Доска называется всегда: --board <id|имя>.")
-	fmt.Fprintln(w, "Содержимое карточки — это 4s: `card get` печатает его как есть, `card set` читает со stdin.")
+	fmt.Fprintln(w, s.Cli.Run.FooterHelp())
+	fmt.Fprintln(w, s.Cli.Run.Footer4s())
 }
 
 // ---- shared plumbing ----
@@ -97,9 +101,10 @@ func usage(w io.Writer) {
 func (a *app) flags(name string, usage string) *flag.FlagSet {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(a.stderr)
-	fs.BoolVar(&a.json, "json", false, "вывести JSON вместо текста")
+	s := xystrings.Default
+	fs.BoolVar(&a.json, "json", false, s.Cli.Run.JsonFlag())
 	fs.Usage = func() {
-		fmt.Fprintf(a.stderr, "xy-cli %s\n%s\n\nФлаги:\n", name, usage)
+		fmt.Fprint(a.stderr, s.Cli.Run.FlagsHead(name, usage))
 		fs.PrintDefaults()
 	}
 	return fs
@@ -108,7 +113,7 @@ func (a *app) flags(name string, usage string) *flag.FlagSet {
 // boardFlag registers --board, which every content command takes: there is no
 // current board, so each says which one it means.
 func (a *app) boardFlag(fs *flag.FlagSet) *string {
-	return fs.String("board", "", "доска: id или имя")
+	return fs.String("board", "", xystrings.Default.Cli.Shared.BoardFlag())
 }
 
 // oneArg parses flags and requires exactly one positional argument — the id of
@@ -212,7 +217,7 @@ func (a *app) boardRef(ref string) (int64, DataKey, error) {
 		held = append(held, board)
 	}
 	sort.Slice(held, func(i, j int) bool { return held[i].id < held[j].id })
-	board, err := pickOne(held, ref, "разблокированная доска",
+	board, err := pickOne(held, ref, xystrings.Default.Cli.Shared.WhatUnlockedBoard(),
 		func(h HeldKey) int64 { return h.id }, func(h HeldKey) string { return h.Name })
 	if err != nil {
 		if id, convErr := strconv.ParseInt(ref, 10, 64); convErr == nil {

@@ -14,6 +14,7 @@ import { xySync } from "./sync.js";
 import { xyStore } from "./store.js";
 import { autocomplete } from "./suggest.js";
 import { createBoardInvites } from "./boardinvites.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const { fetchJSON, jpost, jdelete, el } = xyApp;
 
@@ -34,7 +35,7 @@ export interface MembersState {
 
 // memberName / roleLabel are the pure display helpers (unit-tested).
 export function memberName(m: BoardMember): string { return m.username || `#${m.user_id}`; }
-export function roleLabel(role: string): string { return role === "owner" ? "владелец" : "редактор"; }
+export function roleLabel(role: string): string { return role === "owner" ? S.board.members.roleOwner() : S.board.members.roleEditor(); }
 
 // createBoardMembers wires the members overlay against the shared board state and
 // board id, and returns { load, open } for board.js to call.
@@ -104,7 +105,7 @@ export function createBoardMembers(state: MembersState, boardId: number | string
     try {
       members = await fetchMembers();
     } catch (_) {
-      msg.textContent = "Не удалось загрузить участников — нужно подключение к сети.";
+      msg.textContent = S.board.members.loadFailed();
       addForm.hidden = true;
       return;
     }
@@ -119,7 +120,7 @@ export function createBoardMembers(state: MembersState, boardId: number | string
       );
       if (isOwner && m.role !== "owner") {
         row.append(el("button", {
-          class: "attach-del member-del", type: "button", title: "Убрать из доски", text: "×",
+          class: "attach-del member-del", type: "button", title: S.board.members.removeTitle(), text: "×",
           onclick: () => removeMember(m),
         }));
       }
@@ -128,7 +129,7 @@ export function createBoardMembers(state: MembersState, boardId: number | string
   }
 
   async function removeMember(m: BoardMember): Promise<void> {
-    if (!confirm(`Убрать ${m.username || "участника"} из доски?`)) return;
+    if (!confirm(S.board.members.removeConfirm(m.username || S.board.members.removeFallback()))) return;
     try {
       await jdelete(`/api/boards/${boardId}/members/${m.user_id}`);
       await render();

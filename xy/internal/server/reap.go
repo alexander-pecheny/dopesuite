@@ -62,7 +62,7 @@ where b.deleted_at < ?1 or c.deleted_at < ?1 or l.deleted_at < ?1 or a.deleted_a
 			`delete from test_sessions where deleted_at < ?1`,
 			// An expired comment that still anchors surviving replies is kept:
 			// its payload was blanked at delete, the timeline renders it as the
-			// thread's «комментарий удалён» placeholder, and no surviving
+			// thread's deleted-comment placeholder, and no surviving
 			// reply_to_id ever dangles. It reaps once its replies are gone.
 			`delete from timeline_events where deleted_at < ?1
 			 and id not in (select reply_to_id from timeline_events

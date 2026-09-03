@@ -11,9 +11,9 @@ import (
 func init() { Register(multi{}) }
 
 // multi wraps games.ComputeMultiResults: state is games.MultiState and the
-// match config is the Мультиигры scheme document, whose мини-игры say how wide
-// each sheet is and whose sorting says what breaks a tie on Итог. Declined
-// teams keep their slot but stay unplaced, as in КСИ.
+// match config is the Multi scheme document, whose minigames say how wide
+// each sheet is and whose sorting says what breaks a tie on the total.
+// Declined teams keep their slot but stay unplaced, as in KSI.
 type multi struct{}
 
 func (multi) Code() string { return "multi" }
@@ -24,9 +24,9 @@ func (multi) TeamBlob() bool { return false }
 
 func (multi) Started(state json.RawMessage) bool { return false }
 
-// Metrics: Итог, Σ+ и подытог каждой мини-игры. The мини-игры are the scheme's,
-// so what a scheme may rank on depends on the config — which is why Metrics
-// takes it.
+// Metrics: the total, Σ+ and each minigame's subtotal. The minigames are the
+// scheme's, so what a scheme may rank on depends on the config — which is
+// why Metrics takes it.
 func (multi) Metrics(cfg json.RawMessage) []string {
 	var scheme games.MultiScheme
 	if len(cfg) > 0 {

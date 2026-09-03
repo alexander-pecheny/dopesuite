@@ -3,6 +3,7 @@ package schemedsl
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"dope/dope/domain/expr"
@@ -10,11 +11,12 @@ import (
 	"dope/dope/domain/structure"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
 )
 
 // Input is what the DSL cannot know by itself: the game's identity and,
 // optionally, the seeded entrant list in seed-rank order (roster-derived at
-// creation; absent entrants compile to positional Посев placeholders).
+// creation; absent entrants compile to positional Seed placeholders).
 type Input struct {
 	Slug     string
 	Title    string
@@ -64,7 +66,7 @@ func uniqueSlugs(scheme store.FestScheme) error {
 	return nil
 }
 
-// uniqueCodes refuses a scheme whose stages or бои collide. The database says
+// uniqueCodes refuses a scheme whose stages or Matches collide. The database says
 // the same thing — unique(game_id, code) — but it says it as a raw constraint
 // error at insert time, half a screen away from the scheme that caused it.
 func uniqueCodes(scheme store.FestScheme) error {
@@ -107,7 +109,7 @@ func (c *compiler) rankable(kind string, blk Section) map[string]bool {
 	return names
 }
 
-// sortDir выбирает направление: как написал автор, иначе по смыслу метрики.
+// sortDir picks a sorting direction: as the scheme author wrote it, otherwise by what the metric means.
 func sortDir(rule SortRule) string {
 	if rule.Dir != "" {
 		return rule.Dir
@@ -123,7 +125,7 @@ type compiler struct {
 	in     Input
 	scheme store.FestScheme
 
-	ruleMetrics []string // метрики, определённые правилами подсчёта схемы
+	ruleMetrics []string // metrics the scheme's scoring rules define
 
 	venueCount  int
 	position    int
@@ -160,10 +162,10 @@ func (c *compiler) run() error {
 	return nil
 }
 
-// assignLetters deals every бой its буква — A..Z, then AA.. — in schedule
-// order over the whole Game: Block, then stage, then бой. A block may decline
-// (`letters: false`): the письменный отбор is one sitting for everyone and
-// is not called a бой.
+// assignLetters deals every Match its letter — A..Z, then AA.. — in schedule
+// order over the whole Game: Block, then stage, then Match. A block may decline
+// (`letters: false`): TPSh's written qualifying round is one sitting for
+// everyone and is not called a Match.
 func (c *compiler) assignLetters() {
 	dealt := 0
 	for i := range c.scheme.Stages {
@@ -182,7 +184,7 @@ func (c *compiler) assignLetters() {
 	}
 }
 
-// BoutLetter is the буква of the n-th бой (0-based): A..Z, then AA, AB.. —
+// BoutLetter is the letter of the n-th Match (0-based): A..Z, then AA, AB.. —
 // the sheets' handle, base-26 without a zero.
 func BoutLetter(n int) string {
 	label := ""
@@ -273,7 +275,7 @@ func (c *compiler) checkKeys() error {
 	return nil
 }
 
-// readPlayerSeed reads the composing посев: which Games a player's own team
+// readPlayerSeed reads the composed seed: which Games a player's own team
 // is looked up in, the metrics a player carries, and how those fold over the
 // Participant's three.
 func (c *compiler) readPlayerSeed() (*store.SchemePlayerSeed, error) {
@@ -339,12 +341,13 @@ func (c *compiler) readInit() error {
 // readVenues resolves [defaults] venues (count or titled list); absent, the
 // count is derived as the widest block's lane need.
 func (c *compiler) readVenues() error {
+	s := dopestrings.Default
 	if count, ok := c.doc.Defaults.Int("venues"); ok {
 		if count < 1 {
 			return errAt(c.doc.Defaults.Values["venues"].Line, "venues: нужен хотя бы один стол")
 		}
 		for i := 1; i <= count; i++ {
-			c.scheme.Venues = append(c.scheme.Venues, store.SchemeVenue{Number: i, Title: fmt.Sprintf("Стол %d", i)})
+			c.scheme.Venues = append(c.scheme.Venues, store.SchemeVenue{Number: i, Title: s.Scheme.Titles.Venue(strconv.Itoa(i))})
 		}
 		c.venueCount = count
 		return nil
@@ -368,7 +371,7 @@ func (c *compiler) readVenues() error {
 		}
 	}
 	for i := 1; i <= need; i++ {
-		c.scheme.Venues = append(c.scheme.Venues, store.SchemeVenue{Number: i, Title: fmt.Sprintf("Стол %d", i)})
+		c.scheme.Venues = append(c.scheme.Venues, store.SchemeVenue{Number: i, Title: s.Scheme.Titles.Venue(strconv.Itoa(i))})
 	}
 	c.venueCount = need
 	return nil
@@ -508,7 +511,7 @@ func (c *compiler) protocolConfig(blk Section, rounds []string) map[string]any {
 	return config
 }
 
-// blockRules reads the block's scoring rules — bout.<name> is evaluated per бой
+// blockRules reads the block's scoring rules — bout.<name> is evaluated per Match
 // and summed, standings.<name> once over the sums (ADR-0008). Whatever they
 // define becomes rankable, so `sorting:` may name it.
 func (c *compiler) blockRules(blk Section) (*structure.Rules, error) {
@@ -562,7 +565,7 @@ func snakeDeal(groups, size int) [][]int {
 }
 
 // seedSlot returns the entrant at seed rank p (1-based): the provided entrant
-// list, or a positional Посев placeholder. Basket stays 1 — the seed-import
+// list, or a positional Seed placeholder. Basket stays 1 — the seed-import
 // ladder keys assignments on (basket 1, rank); bands live in the position.
 func (c *compiler) seedSlot(rank int) store.SchemeSlot {
 	if len(c.in.Entrants) > 0 {
@@ -570,7 +573,7 @@ func (c *compiler) seedSlot(rank int) store.SchemeSlot {
 	}
 	return store.SchemeSlot{
 		Seed:  &store.SchemeSeedRef{Basket: 1, Position: rank},
-		Label: fmt.Sprintf("Посев %d", rank),
+		Label: dopestrings.Default.Scheme.Titles.Seed(strconv.Itoa(rank)),
 	}
 }
 
@@ -601,7 +604,7 @@ func (c *compiler) blockEntrants(index int, blk Section, groups, size int) ([][]
 
 // blockReseedSpec parses the reseed key: `true` re-ranks the incoming Edge, a
 // round code re-ranks at that boundary inside the block (se only), and `every`
-// does both — the incoming Edge and every round after it, which is what ТПШ
+// does both — the incoming Edge and every round after it, which is what TPSh
 // does and what `true` already means on a bracket with lives.
 func blockReseedSpec(blk Section) (incoming bool, round string) {
 	if v, ok := blk.Bool("reseed"); ok {
@@ -617,7 +620,7 @@ func blockReseedSpec(blk Section) (incoming bool, round string) {
 }
 
 // reseedSortRules maps the block's sorting tokens onto reseed metrics; absent
-// sorting keeps the canonical place_sum-then-taken order. Жребий closes every
+// sorting keeps the canonical place_sum-then-taken order. The draw metric closes every
 // order — the resolver only lots ties when a draw rule is present to use them.
 func (c *compiler) reseedSortRules(blk Section) ([]store.SchemeSortRule, error) {
 	tokens, ok, err := blk.Sorting("sorting")
@@ -651,7 +654,7 @@ func (c *compiler) dealSeeds(groups, size int) [][]store.SchemeSlot {
 }
 
 // reseedStageBanded materialises one reseed Edge: teams is who is re-ranked
-// (place selectors into the feeding round), sources is whose бои the stats
+// (place selectors into the feeding round), sources is whose Matches the stats
 // are summed over, bands how many Losses each team carries — the ranking
 // runs inside a band. Returns the stage code; rank refs against it seat what
 // follows.
@@ -663,7 +666,7 @@ func (c *compiler) reseedStageBanded(code string, where at, blk Section, sources
 	c.position++
 	c.scheme.Stages = append(c.scheme.Stages, store.SchemeStage{
 		Code:      code,
-		Title:     "Пересев",
+		Title:     dopestrings.Default.Scheme.Titles.ReseedStage(),
 		StageType: "reseed",
 		Kind:      "reseed",
 		Position:  c.position,
@@ -686,7 +689,7 @@ func (c *compiler) prevStageCodes() []string {
 
 // reseedSources resolves what a reseed sums its stats over: `otherwise` (the
 // previous block, or the round before a boundary), or with stats_from every
-// stage of the listed blocks (регламент КИНСБФ 3.3.5 counts both the groups
+// stage of the listed blocks (the KInSBF regulations 3.3.5 counts both the groups
 // and the DE) — the block being expanded meaning `self`, its rounds so far.
 func (c *compiler) reseedSources(index int, blk Section, otherwise, self []string) ([]string, error) {
 	tokens, ok, err := blk.List("stats_from")
@@ -776,7 +779,7 @@ func (c *compiler) dealDeterministic(blk Section, groups, size int) ([][]store.S
 			// The pair this Group crosses with, taken in source-Group order: the
 			// winner out of its own and the runner-up out of its partner. Reading
 			// own-Group-first instead seats the same four but pairs them in a
-			// different заход, and a бой's turn at the стол is a fact about the
+			// different Wave, and a Match's turn at a venue is a fact about the
 			// tournament like any other.
 			for column := g &^ 1; column <= g|1; column++ {
 				place := 2
@@ -848,14 +851,14 @@ func (c *compiler) expandThrough(index int, blk Section, macro structure.Macro) 
 	return &out, nil
 }
 
-// roundTitle lets a scheme name a round itself — `title.r1: 1/16 финала` —
+// roundTitle lets a scheme name a round itself — `title.r1: Round of 16` —
 // falling back to the derived name. The traditional 1/N names are arithmetic
 // only in a bracket that halves; anywhere else they are the tournament's own
 // word for the round, so the scheme says them.
 //
-// A titled block among other blocks says whose round it is — «Плей-офф.
-// 1 этап» — the same way a группа carries its block's title. A scheme of one
-// block has nothing to tell apart, so ЭК's «1/16 финала» stays bare.
+// A titled block among other blocks says whose round it is — "Play-off.
+// Stage 1" — the same way a Group carries its block's title. A scheme of one
+// block has nothing to tell apart, so EK's "Round of 16" stays bare.
 func (c *compiler) roundTitle(blk Section, names []string, derived string) string {
 	title := derived
 	for _, name := range names {
@@ -871,16 +874,17 @@ func (c *compiler) roundTitle(blk Section, names []string, derived string) strin
 }
 
 func (c *compiler) groupTitle(blk Section, group, groups int) string {
+	s := dopestrings.Default
 	if title, ok := blk.Str("title"); ok {
 		if groups == 1 {
 			return title
 		}
-		return fmt.Sprintf("%s. Группа %d", title, group)
+		return s.Scheme.Titles.BlockGroupN(title, strconv.Itoa(group))
 	}
 	if groups == 1 && len(c.doc.Blocks) == 1 {
-		return "Группа"
+		return s.Scheme.Titles.Group()
 	}
-	return fmt.Sprintf("Группа %d", group)
+	return s.Scheme.Titles.GroupN(strconv.Itoa(group))
 }
 
 func blockTitle(blk Section, fallback string) string {
@@ -890,10 +894,10 @@ func blockTitle(blk Section, fallback string) string {
 	return fallback
 }
 
-// at is where a stage sits: which Block it expands, which turn at the столы it
-// is, and — for the Kinds whose stage is one Round — which Round its бои play.
+// at is where a stage sits: which Block it expands, which turn at the venues it
+// is, and — for the Kinds whose stage is one Round — which Round its Matches play.
 // A stage spanning several Rounds (a round-robin Group, a DE pod) leaves round
-// zero and lets each бой carry its own.
+// zero and lets each Match carry its own.
 type at struct {
 	block string
 	round int
@@ -909,7 +913,7 @@ func (a at) grain() store.SchemeGrain {
 	return store.SchemeGrain{Block: a.block, Wave: wave, Group: a.group}
 }
 
-// appendManualStage adds a hand-drawn stage: its бои as the compiler laid
+// appendManualStage adds a hand-drawn stage: its Matches as the compiler laid
 // them out, no Kind config of its own.
 func (c *compiler) appendManualStage(blk Section, code, title string, rounds []string, where at, matches []store.SchemeMatch) {
 	c.appendDrawnStage("matches", nil, blk, code, title, rounds, where, matches)

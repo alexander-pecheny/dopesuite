@@ -20,6 +20,9 @@ import (
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
+
+	core "pecheny.me/dopecore/i18nstrings"
 )
 
 type HostPlayerOverrideOption struct {
@@ -204,7 +207,7 @@ func containsInt64(values []int64, needle int64) bool {
 func ParseHostOverrideID(raw, label string) (int64, error) {
 	id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
 	if err != nil || id <= 0 {
-		return 0, fmt.Errorf("Выберите %s из подсказки.", label)
+		return 0, core.User(dopestrings.Default.Override.Entry.PickFromHint(label))
 	}
 	return id, nil
 }
@@ -214,7 +217,7 @@ func ParseHostOverrideGameIDs(values []string) ([]int64, error) {
 	for _, raw := range values {
 		id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
 		if err != nil || id <= 0 {
-			return nil, errors.New("Некорректная игра.")
+			return nil, core.User(dopestrings.Default.Override.Entry.GameInvalid())
 		}
 		out = append(out, id)
 	}
@@ -248,7 +251,7 @@ where p.id = ? and p.fest_id = ? and tt.fest_id = ? and tt.deleted = 0
 order by ttp.roster_order, tt.position, tt.id
 limit 1`, playerID, festID, festID).Scan(&teamID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, errors.New("Игрок не найден в активном составе феста.")
+		return 0, core.User(dopestrings.Default.Override.Lookup.PlayerNotFound())
 	}
 	return teamID, err
 }
@@ -258,7 +261,7 @@ func assertActiveFestTeam(ctx context.Context, q store.Queryer, festID, teamID i
 	err := q.QueryRowContext(ctx, `
 select id from fest_teams where id = ? and fest_id = ? and deleted = 0`, teamID, festID).Scan(&found)
 	if errors.Is(err, sql.ErrNoRows) {
-		return errors.New("Команда не найдена в активном составе феста.")
+		return core.User(dopestrings.Default.Override.Lookup.TeamNotFound())
 	}
 	return err
 }
@@ -268,7 +271,7 @@ func overrideGameType(ctx context.Context, q store.Queryer, festID, gameID int64
 	err := q.QueryRowContext(ctx, `
 select game_type from games where id = ? and fest_id = ? and game_type in ('ksi', 'ek')`, gameID, festID).Scan(&gameType)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", errors.New("Игра для оверрайда должна быть КСИ или ЭК.")
+		return "", core.User(dopestrings.Default.Override.Entry.GameTypeWrong())
 	}
 	return gameType, err
 }
@@ -293,14 +296,15 @@ func LoadHostPlayerOverrideOptions(ctx context.Context, db store.Queryer, festID
 }
 
 func SavePlayerTeamOverride(h Host, reqCtx context.Context, festID, playerID, overrideTeamID int64, gameIDs []int64) (int64, []int64, error) {
+	s := dopestrings.Default
 	if playerID <= 0 {
-		return 0, nil, errors.New("Выберите игрока из подсказки.")
+		return 0, nil, core.User(s.Override.Entry.PickPlayer())
 	}
 	if overrideTeamID <= 0 {
-		return 0, nil, errors.New("Выберите новую команду из подсказки.")
+		return 0, nil, core.User(s.Override.Entry.PickTeam())
 	}
 	if len(gameIDs) == 0 {
-		return 0, nil, errors.New("Выберите хотя бы одну игру.")
+		return 0, nil, core.User(s.Override.Entry.PickGames())
 	}
 
 	var revision int64
@@ -311,7 +315,7 @@ func SavePlayerTeamOverride(h Host, reqCtx context.Context, festID, playerID, ov
 			return err
 		}
 		if sourceTeamID == overrideTeamID {
-			return errors.New("Новая команда совпадает с командой игрока в рейтинге.")
+			return core.User(s.Override.Save.TeamSame())
 		}
 		if err := assertActiveFestTeam(ctx, tx, festID, overrideTeamID); err != nil {
 			return err
@@ -367,8 +371,9 @@ on conflict(fest_id, game_id, player_id) do update set
 }
 
 func ReplacePlayerTeamOverride(h Host, reqCtx context.Context, festID, playerID, sourceTeamID, overrideTeamID int64, gameIDs []int64) (int64, []int64, error) {
+	s := dopestrings.Default
 	if playerID <= 0 || sourceTeamID <= 0 || overrideTeamID <= 0 {
-		return 0, nil, errors.New("Оверрайд не найден.")
+		return 0, nil, core.User(s.Override.Lookup.NotFound())
 	}
 
 	var revision int64
@@ -408,7 +413,7 @@ where o.fest_id = ? and o.player_id = ? and o.source_team_id = ? and o.override_
 			return err
 		}
 		if len(affectedGameTypes) == 0 {
-			return errors.New("Оверрайд не найден.")
+			return core.User(s.Override.Lookup.NotFound())
 		}
 
 		newGameTypes := make(map[int64]string)
@@ -537,7 +542,7 @@ order by player_id`, festID, gameID)
 	}
 	for _, team := range teams {
 		if len(team.Players) > 9 {
-			return nil, fmt.Errorf("В команде %q после оверрайдов больше 9 игроков.", team.Name)
+			return nil, core.User(dopestrings.Default.Override.Save.TeamTooBig(team.Name))
 		}
 	}
 	return teams, nil

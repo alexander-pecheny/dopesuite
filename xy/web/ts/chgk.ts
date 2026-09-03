@@ -7,6 +7,7 @@
 // ES module.
 
 import { MARKERS, type MarkerType } from "./markers_gen.js";
+import S from "./i18nstrings_ru_gen.js";
 export type { MarkerType };
 
 // The block types produced by the line-leading markers, plus "pre" for leading
@@ -123,7 +124,7 @@ export function blockText(desc: string | null | undefined, type: BlockType): str
 // answerText returns the "! " block of a question, or "" when it has none. Kept
 // separate from blockText, whose preamble/whole-text fallback is right for meta
 // and heading cards but would make an answerless question preview as its own
-// question text under a heading that says "ответ".
+// question text under a heading that says "answer".
 function answerText(desc: string | null | undefined): string {
   const b = parseBlocks(desc).find((x) => x.type === "answer");
   return b ? b.text : "";
@@ -151,7 +152,7 @@ function titleSource(kind: string, desc: string | null | undefined, mode: string
 }
 
 // isZeroNumber mirrors chgksuite's is_zero: a number that starts with "0" or
-// isn't an integer (e.g. a warm-up "0" / "разминка") — it's shown verbatim and
+// isn't an integer (e.g. a warm-up "0" or "razminka") — it's shown verbatim and
 // does not advance the auto-counter.
 function isZeroNumber(value: string | number): boolean {
   const s = String(value).trim();
@@ -202,12 +203,13 @@ export function numberQuestionCards(cards: ReadonlyArray<ChgkCard>): Array<strin
 // ── "screen mode" transforms (ported from chgksuite composer_common.py) ──────
 // chgksuite's screen export strips two things that are meant for the host but not
 // the players: combining stress accents (́) and the contents of square
-// brackets (reading instructions). Square brackets whose body starts with
-// "Раздат…" are *handout* markers — players DO see those, so they (and accents
-// inside them) are preserved. Used by the "copy for testing" action.
+// brackets (reading instructions). Square brackets whose body begins with the
+// handout stem (see HANDOUT_SHORT) are *handout* markers — players DO see
+// those, so they (and accents inside them) are preserved. Used by the "copy
+// for testing" action.
 
 // handout_short regex from chgksuite (regexes_ru.json): a bracket body that
-// begins with "Раздат" (in any letter case) is a handout, not a host note.
+// begins with "Razdat" (in any letter case) is a handout, not a host note.
 const HANDOUT_SHORT = /^Р[Аа][Зз][Дд][Аа][Тт]/;
 
 function isEscapedBracket(s: string, i: number): boolean {
@@ -651,7 +653,7 @@ function nbSegment(s: string): string {
       s = s.replace(new RegExp(" " + reEscape(v) + "([ \\u00a0]|$)", "g"), NBSP + v + "$1");
     }
   }
-  // short hyphenated words (из-за, что-то, кто-то…): require a letter on each side
+  // short hyphenated words ("iz-za", "chto-to", "kto-to"…): require a letter on each side
   // so a stray spaced "-" can't turn every hyphen non-breaking.
   const re = /(^|[^а-яё])([а-яё]{1,3}-[а-яё]{1,3})([^а-яё]|$)/i;
   let m: RegExpExecArray | null;
@@ -767,7 +769,7 @@ function fixTrelloLinks(desc: string): string {
 
 // ── the version separator ──────────────────────────────────────────────────
 // A Version (versions.ts, ADR-0007) is introduced by a standalone
-// (hidden-comment xy-version: имя) line. That line is xy's own metadata: every
+// (hidden-comment xy-version: name) line. That line is xy's own metadata: every
 // reader but the card editor drops it, so parseBlocks sees version 1 only.
 const VERSION_LINE = /^\(hidden-comment\s+xy-version:([^()]*)\)$/;
 
@@ -780,8 +782,8 @@ export function versionLineName(line: string): string | null {
 }
 // ── what a card offers to copy ──────────────────────────────────────────────
 // One button used to copy handout-and-question together, which is not how a
-// tester receives them: the раздатка goes out first, on its own, and a
-// дуплет/блиц goes out a leg at a time (issue #45). copyTargets is that list —
+// tester receives them: the handout goes out first, on its own, and a
+// duplet/blitz goes out a leg at a time (issue #45). copyTargets is that list —
 // what THIS card has, in the order it would be sent.
 export interface CopyTarget {
   label: string;
@@ -794,15 +796,15 @@ export interface CopyTarget {
 // The captions chgksuite prints (resources/labels_ru.toml, question_labels).
 // The list preview prints the same ones, and so does a copied question.
 const QUESTION_LABELS: Readonly<Record<string, string>> = {
-  answer: "Ответ", zachet: "Зачёт", nezachet: "Незачёт",
-  comment: "Комментарий", source: "Источник", author: "Автор",
-  handout: "Раздаточный материал", editor: "Редактор", date: "Дата",
+  answer: S.chgk.label.answer(), zachet: S.chgk.label.zachet(),
+  nezachet: S.chgk.label.nezachet(), comment: S.chgk.label.comment(),
+  source: S.chgk.label.source(), author: S.chgk.label.author(),
+  handout: S.chgk.label.handout(), editor: S.chgk.label.editor(),
+  date: S.chgk.label.date(),
 };
-const SOURCE_PLURAL = "Источники";
 
-// A picture cannot ride along in a text paste, so «целиком» says where it is and
-// leaves the copying of it to the Раздатка target above.
-const IMAGE_HANDOUT_NOTE = `[${QUESTION_LABELS.handout}: см. изображение]`;
+// A picture cannot ride along in a text paste, so the whole-question copy says
+// where it is and leaves the copying of it to the handout target above.
 
 // The fields chgksuite lets a "!!Label " override rename (OVERRIDE_PREFIX).
 const OVERRIDABLE: ReadonlySet<string> = new Set(
@@ -814,11 +816,12 @@ const OVERRIDABLE: ReadonlySet<string> = new Set(
 function fieldCaption(field: string, text: string): { label: string; text: string } {
   const ov = OVERRIDABLE.has(field) ? applyOverride(text) : { label: null, text };
   const plural = field === "source" && splitList(ov.text).items;
-  return { label: ov.label || (plural ? SOURCE_PLURAL : QUESTION_LABELS[field] || field), text: ov.text };
+  return { label: ov.label || (plural ? S.chgk.label.sourcePlural() : QUESTION_LABELS[field] || field), text: ov.text };
 }
 
-// Screen mode drops host-only [ … ] notes — except in an answer or a зачёт,
-// where a bracketed alternative IS part of the answer (as chgksuite's docx has it).
+// Screen mode drops host-only [ … ] notes — except in an answer or a zachet
+// (accepted answer), where a bracketed alternative IS part of the answer
+// (as chgksuite's docx has it).
 function fieldKeepsBrackets(field: string): boolean {
   return field === "answer" || field === "zachet";
 }
@@ -827,8 +830,8 @@ function fieldScreenText(field: string, text: string): string {
   return renderRunsForScreen(renderRuns(text, { accents: true, brackets: !fieldKeepsBrackets(field) }));
 }
 
-// fieldLine prints one «Ответ: …» the way the preview renders it, with a "- …"
-// list numbered under its caption. Empty when the field is a bare marker.
+// fieldLine prints one "Answer: …" line the way the preview renders it, with a
+// "- …" list numbered under its caption. Empty when the field is a bare marker.
 function fieldLine(field: string, text: string): string {
   const cap = fieldCaption(field, text);
   const lst = splitList(fieldScreenText(field, cap.text));
@@ -847,16 +850,16 @@ function answerBlock(f: CardFields): string[] {
     if (line) out.push(line);
   }
   const srcs = (f.sources || []).map((s) => fieldScreenText("source", s).trim()).filter(Boolean);
-  if (srcs.length === 1) out.push(`${QUESTION_LABELS.source}: ${srcs[0]}`);
-  else if (srcs.length) out.push(`${SOURCE_PLURAL}:\n` + srcs.map((s, i) => `${i + 1}. ${s}`).join("\n"));
+  if (srcs.length === 1) out.push(`${S.chgk.label.source()}: ${srcs[0]}`);
+  else if (srcs.length) out.push(`${S.chgk.label.sourcePlural()}:\n` + srcs.map((s, i) => `${i + 1}. ${s}`).join("\n"));
   const authors = (f.authors || []).map((a) => fieldScreenText("author", a).trim()).filter(Boolean);
-  if (authors.length) out.push(`${f.authorLabel || QUESTION_LABELS.author}: ${authors.join(", ")}`);
+  if (authors.length) out.push(`${f.authorLabel || S.chgk.label.author()}: ${authors.join(", ")}`);
   return out;
 }
 
 // copyTargets enumerates a question card's copyable pieces. `desc` is one
 // version's body — the caller passes the one being looked at. The blitz rule: the
-// lead-in («Блиц:») rides with the first leg and is not repeated, because the
+// lead-in ("Blitz:") rides with the first leg and is not repeated, because the
 // legs are pasted into one conversation in order. A card with more than one piece
 // also offers all of them as a single paste, for a chat where the question is one
 // message rather than three.
@@ -865,33 +868,33 @@ function copyTargets(desc: string | null | undefined, number: string | number | 
   const out: CopyTarget[] = [];
   const h = f.handout;
   const handoutTarget: CopyTarget | null = !h ? null
-    : h.kind === "image" ? { label: "Раздатка", image: h.name }
-    : { label: "Раздатка", text: `${QUESTION_LABELS.handout}:\n${screenText(h.text)}` };
+    : h.kind === "image" ? { label: S.chgk.copy.handout(), image: h.name }
+    : { label: S.chgk.copy.handout(), text: `${S.chgk.label.handout()}:\n${screenText(h.text)}` };
   // A picture is not pastable text, so the aggregates carry the note instead.
-  const handout = !handoutTarget ? "" : handoutTarget.text || IMAGE_HANDOUT_NOTE;
+  const handout = !handoutTarget ? "" : handoutTarget.text || S.chgk.copy.imageHandoutNote(S.chgk.label.handout());
   if (handoutTarget) out.push(handoutTarget);
   // splitFields lifts an inline handout out of the question and leaves the bare
   // anchor where it stood; that marks a position, and has no business in a paste.
   const q = screenText(f.question ?? "").split(HANDOUT_ANCHOR).join("").trim();
-  const head = number ? `Вопрос ${number}. ` : "";
+  const head = number ? S.chgk.copy.questionNumbered(String(number)) : "";
   const lst = splitList(q);
   const pieces: CopyTarget[] = [];
   if (lst.items) {
     const lead = lst.preamble.trim();
     lst.items.forEach((item, i) => {
       const line = `${i + 1}. ${item.trim()}`;
-      pieces.push({ label: `Вопрос ${i + 1}`, text: i === 0 ? head + (lead ? lead + "\n" : "") + line : line });
+      pieces.push({ label: S.chgk.copy.questionPiece(String(i + 1)), text: i === 0 ? head + (lead ? lead + "\n" : "") + line : line });
     });
   } else {
-    pieces.push({ label: "Вопрос", text: head + q });
+    pieces.push({ label: S.chgk.copy.question(), text: head + q });
   }
   const body = pieces.map((p) => p.text).join("\n");
   const whole = handout ? handout + "\n\n" + body : body;
   out.push(...pieces);
-  if (head) out.push({ label: "Вопрос без номера", text: body.slice(head.length) });
-  if (handout || pieces.length > 1) out.push({ label: "Вопрос целиком", text: whole });
+  if (head) out.push({ label: S.chgk.copy.questionUnnumbered(), text: body.slice(head.length) });
+  if (handout || pieces.length > 1) out.push({ label: S.chgk.copy.questionWhole(), text: whole });
   const tail = answerBlock(f);
-  if (tail.length) out.push({ label: "Вопрос с ответом", text: whole + "\n\n" + tail.join("\n") });
+  if (tail.length) out.push({ label: S.chgk.copy.questionWithAnswer(), text: whole + "\n\n" + tail.join("\n") });
   return out;
 }
 
@@ -917,9 +920,9 @@ export interface CardFields {
   sources: string[] | null;
   authors: string[] | null;
   // The "@" line's chgksuite "!!Label" override, decoded ("~" → space), or null
-  // for the default «Автор». Its own field because it is a property of the
-  // caption, not of any name: «Авторка Мария» is one author with a gendered
-  // label, not an author called "!!Авторка" (issue #44).
+  // for the default caption. Its own field because it is a property of the
+  // caption, not of any name: "Authorka Maria" is one author with a gendered
+  // label, not an author called "!!Authorka" (issue #44).
   authorLabel: string | null;
   extra: string | null;
 }
@@ -984,7 +987,7 @@ function parseHandoutBlock(text: string | null | undefined): Handout {
   return { kind: "text", text: text || "" };
 }
 
-// handoutBracketContent: the text after the "Раздат…" label's colon, "" for a
+// handoutBracketContent: the text after the handout label's colon, "" for a
 // label-only bracket — which is the position ANCHOR the pair of functions
 // below uses to keep a mid-question handout in its place.
 function handoutBracketContent(body: string): string {
@@ -992,13 +995,13 @@ function handoutBracketContent(body: string): string {
   return idx >= 0 ? body.slice(idx + 1).trim() : "";
 }
 
-const HANDOUT_ANCHOR = "[Раздаточный материал]";
+const HANDOUT_ANCHOR = `[${S.chgk.label.handout()}]`;
 
-// extractInlineHandout pulls the first "[Раздаточный материал: …]" bracket out
-// of question text → { handout, rest } or null. A LEADING bracket (only
-// host-note brackets like [Ведущему: …] may precede it — those stay in the
-// text) is removed outright; a mid-question bracket is replaced by the bare
-// [Раздаточный материал] anchor, so the spot survives question edits and the
+// extractInlineHandout pulls the first inline handout bracket out of question
+// text → { handout, rest } or null. A LEADING bracket (only host-note brackets
+// like [For the host: …] may precede it — those stay in the text) is removed
+// outright; a mid-question bracket is replaced by the bare HANDOUT_ANCHOR (the
+// handout label in brackets), so the spot survives question edits and the
 // compose side can put the handout back exactly where the author had it.
 export function extractInlineHandout(q: string | null | undefined): { handout: Handout; rest: string } | null {
   const t = q || "";
@@ -1051,11 +1054,11 @@ function insertInlineHandout(q: string | null | undefined, inline: string): stri
 // bare-marker form, so present-but-empty does not survive a recompose.
 function composeInlineHandout(h: Handout | null | undefined): string {
   if (!h) return "";
-  if (h.kind === "image") return h.name ? `[Раздаточный материал: (img ${h.name})]` : "";
+  if (h.kind === "image") return h.name ? `[${S.chgk.label.handout()}: (img ${h.name})]` : "";
   if (!h.text) return "";
   return h.text.includes("\n")
-    ? `[Раздаточный материал:\n${h.text}\n]`
-    : `[Раздаточный материал: ${h.text}]`;
+    ? `[${S.chgk.label.handout()}:\n${h.text}\n]`
+    : `[${S.chgk.label.handout()}: ${h.text}]`;
 }
 
 // sourcesFromBlock splits a "^" source block into individual source lines,
@@ -1073,11 +1076,13 @@ function authorsFromText(text: string | null | undefined): string[] {
   return (text || "").split(",").map((s) => s.trim()).filter((s) => s !== "");
 }
 
-// The captions the Поля dropdown offers. chgksuite prints «Автор» and never
+// The captions the Fields dropdown offers. chgksuite prints "Author" and never
 // pluralises (composer/docx.py#get_label_standalone does that for sources only),
 // so every caption but the first is spelled out as an override — anything else
 // would promise a label the export won't print.
-const AUTHOR_LABELS = ["Автор", "Авторка", "Авторы", "Авторки"] as const;
+const AUTHOR_LABELS = [
+  S.chgk.author.default(), S.chgk.author.feminine(), S.chgk.author.plural(), S.chgk.author.femininePlural(),
+] as const;
 
 // The 4s override token is space-delimited, so a caption with a space in it is
 // written with "~" and read back as a space (applyOverride decodes it).
@@ -1088,7 +1093,7 @@ function authorBlock(text: string | null | undefined): { label: string | null; n
   const ov = applyOverride(text);
   if (ov.label) return { label: ov.label, names: authorsFromText(ov.text) };
   // Repair pass for the importer's output: both chgksuite's parser and our port
-  // of it glue the caption straight onto the name («!!АвторкаМария»), which
+  // of it glue the caption straight onto the name ("!!AuthorkaMaria"), which
   // applyOverride cannot split because there is no space to split on. Only the
   // captions we know are recovered — anything else stays verbatim rather than
   // being guessed at.
@@ -1101,7 +1106,7 @@ function authorBlock(text: string | null | undefined): { label: string | null; n
   return { label: null, names: authorsFromText(s) };
 }
 
-// composeAuthors is authorBlock's inverse: "@ !!Авторка Мария Петрова".
+// composeAuthors is authorBlock's inverse: "@ !!Authorka Maria Petrova".
 function composeAuthors(names: ReadonlyArray<string>, label: string | null): string {
   const clean = names.map((s) => s.trim()).filter((s) => s !== "");
   const enc = label ? encodeLabel(label) : "";
@@ -1164,8 +1169,8 @@ export function composeFields(f: Partial<CardFields>): string {
   const out: string[] = [];
   const marker = (m: string, v: string): void => { out.push(v ? `${m} ${v}` : m); };
   if (f.preMarkup && f.preMarkup.trim()) out.push(f.preMarkup.trim());
-  // The handout rides INSIDE the question text as the chgksuite-style
-  // "[Раздаточный материал: …]" bracket. The old standalone "> " block sat
+  // The handout rides INSIDE the question text as the chgksuite-style inline
+  // handout bracket. The old standalone "> " block sat
   // before the "?" marker, where parse_4s reads it as a loose doc element that
   // never reaches the exported Question — docx/PDF silently dropped it.
   const inline = composeInlineHandout(f.handout);

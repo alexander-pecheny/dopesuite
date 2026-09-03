@@ -240,7 +240,8 @@ func (q *quoteFixer) fix() string {
 
 var (
 	// RE2's \w is ASCII-only and Python's, under re.UNICODE, is not: without
-	// this a Ukrainian apostrophe (Слов'янська) keeps its typewriter quote.
+	// this a Ukrainian apostrophe (as in the Ukrainian for "Slavic") keeps its
+	// typewriter quote.
 	reApostropheAfter  = regexp.MustCompile(`([\p{L}\p{N}_])'`)
 	reApostropheBefore = regexp.MustCompile(`'([\p{L}\p{N}_])`)
 )
@@ -316,8 +317,9 @@ func isCyrillic(r rune) bool {
 }
 
 // detectAccent ports typotools.detect_accent: in a mixed-case word an interior
-// capital vowel is the chgk convention for marking stress ("мОсква"), so it is
-// lowercased and given a combining acute.
+// capital vowel is the chgk convention for marking stress (the Russian for
+// "Moscow" written with its stressed vowel capitalised), so it is lowercased
+// and given a combining acute.
 func detectAccent(s string) string {
 	for _, word := range reNotRussian.Split(s, -1) {
 		if word == "" || strings.ToUpper(word) == word || utf8.RuneCountInString(word) <= 1 {

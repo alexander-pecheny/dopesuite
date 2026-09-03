@@ -2,6 +2,8 @@
 // floating popovers, sync-status dot, team-name overflow, cell range selection,
 // and the viewer counter. DOM-only — no table building, no sync.
 
+import S from "./i18nstrings_ru_gen.js";
+
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -48,8 +50,8 @@ export function installCellNavBar(options: CellNavBarOptions = {}): CellNavBar {
     return button;
   };
   bar.append(
-    make(prevLabel, "Предыдущая ячейка", onPrev),
-    make(nextLabel, "Следующая ячейка", onNext),
+    make(prevLabel, S.widgets.cellNav.prev(), onPrev),
+    make(nextLabel, S.widgets.cellNav.next(), onNext),
   );
   document.body.appendChild(bar);
 
@@ -141,10 +143,10 @@ export function installVirtualKeypad(options: VirtualKeypadOptions = {}): Virtua
   const navRow = document.createElement("div");
   navRow.className = "entry-keypad-nav";
   navRow.append(
-    key("←", "Предыдущая колонка", "entry-keypad-key entry-keypad-arrow", () => onNav?.(-1, 0)),
-    key("↑", "Предыдущая строка", "entry-keypad-key entry-keypad-arrow", () => onNav?.(0, -1)),
-    key("↓", "Следующая строка", "entry-keypad-key entry-keypad-arrow", () => onNav?.(0, 1)),
-    key("→", "Следующая колонка", "entry-keypad-key entry-keypad-arrow", () => onNav?.(1, 0)),
+    key("←", S.widgets.keypad.prevColumn(), "entry-keypad-key entry-keypad-arrow", () => onNav?.(-1, 0)),
+    key("↑", S.widgets.keypad.prevRow(), "entry-keypad-key entry-keypad-arrow", () => onNav?.(0, -1)),
+    key("↓", S.widgets.keypad.nextRow(), "entry-keypad-key entry-keypad-arrow", () => onNav?.(0, 1)),
+    key("→", S.widgets.keypad.nextColumn(), "entry-keypad-key entry-keypad-arrow", () => onNav?.(1, 0)),
   );
 
   const digits = document.createElement("div");
@@ -153,7 +155,7 @@ export function installVirtualKeypad(options: VirtualKeypadOptions = {}): Virtua
     digits.appendChild(key(String(n), String(n), "entry-keypad-key", () => onDigit?.(String(n))));
   }
   digits.appendChild(key("0", "0", "entry-keypad-key entry-keypad-zero", () => onDigit?.("0")));
-  digits.appendChild(key("⌫", "Удалить", "entry-keypad-key entry-keypad-back", () => onBackspace?.()));
+  digits.appendChild(key("⌫", S.widgets.keypad.backspace(), "entry-keypad-key entry-keypad-back", () => onBackspace?.()));
 
   pad.append(navRow, digits);
   document.body.appendChild(pad);
@@ -392,10 +394,10 @@ export function createFloatingPopover(options: FloatingPopoverOptions): Floating
 }
 
 const SYNC_STATUS_LABELS: Record<string, string> = {
-  saved: "Синхронизировано",
-  saving: "Синхронизация",
-  reconnecting: "Переподключение",
-  error: "Ошибка",
+  saved: S.widgets.status.saved(),
+  saving: S.widgets.status.saving(),
+  reconnecting: S.widgets.status.reconnecting(),
+  error: S.widgets.status.error(),
 };
 
 export function createStatusReporter(statusNode: HTMLElement | null | undefined): (state: string) => void {
@@ -531,7 +533,7 @@ export function createViewerCounter(statusNode: HTMLElement | null | undefined):
   const node = document.createElement("span");
   node.className = "viewers-count";
   node.hidden = true;
-  node.setAttribute("aria-label", "Зрителей онлайн");
+  node.setAttribute("aria-label", S.widgets.viewers.label());
   // Number and eyes are separate children so the flex `gap` spaces them — a
   // single "N👀" text node would render them touching.
   const num = document.createElement("span");
@@ -549,7 +551,7 @@ export function createViewerCounter(statusNode: HTMLElement | null | undefined):
         return;
       }
       num.textContent = String(n);
-      node.title = `Зрителей онлайн: ${n}`;
+      node.title = S.widgets.viewers.title(String(n));
       node.hidden = false;
     },
   };
@@ -581,7 +583,7 @@ export function renderTabBar(
     root.appendChild(btn);
   }
   // A dozen tabs overflow at any width — fade whichever edge hides more, the
-  // same treatment the ЭК tab bar gets.
+  // same treatment the EK tab bar gets.
   let binding = tabBarScrollBindings.get(root);
   if (!binding) {
     binding = bindScrollEdges(root, ({left, right}, bar) => {

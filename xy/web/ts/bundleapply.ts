@@ -20,6 +20,7 @@ import { parseSession, serializeSession } from "./sessions.js";
 import { bundleUnits } from "./bundle.js";
 import type { Bundle, BundleAttachment, BundleEvent, BundleUnit } from "./bundle.js";
 import type { DataKey } from "./crypto.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const { jpost, jput, jdelete, errMsg } = xyApp;
 const { keyBetween } = xyRank;
@@ -117,7 +118,7 @@ export async function applyBundle(
 
   // reconcileSession maps a Bundle Session onto the target, matched on the
   // `key` that means "the same sitting" (ADR-0003). A copy carries an origin
-  // stamp so the Тесты panel can say whose sitting it was and when it was
+  // stamp so the Tests panel can say whose sitting it was and when it was
   // taken; a board created for this Bundle is a replica, not a copy, so it
   // takes the meta verbatim. Returns the new session's id, and true when this
   // call is what created it.
@@ -184,7 +185,7 @@ export async function applyBundle(
       const res = (await jpost(`/api/boards/${boardId}/timeline/import`, { events: wire })) as { ids: Record<string, number> };
       for (const [src, id] of Object.entries(res.ids)) eventMap.set(Number(src), id);
       result.events += chunk.length;
-      log(`${what}: история… (${Math.min(at + chunk.length, ordered.length)}/${ordered.length})`);
+      log(S.import.apply.history(what, String(Math.min(at + chunk.length, ordered.length)), String(ordered.length)));
     }
   }
 
@@ -219,11 +220,11 @@ export async function applyBundle(
         if (c.alias) body.alias_enc = await enc(c.alias);
         const res = (await jpost(`/api/lists/${listMap.get(c.list_id)}/cards`, body)) as { id: number };
         cardMap.set(c.id, res.id);
-        if (++done % 20 === 0) log(`${unit.title}: карточки… (${done}/${cards.length})`);
+        if (++done % 20 === 0) log(S.import.apply.cards(unit.title, String(done), String(cards.length)));
       }
       const ours = new Set(cards.map((c) => c.id));
 
-      // Sessions this unit is the first to bring across — their own лента rides
+      // Sessions this unit is the first to bring across — their own Timeline rides
       // with them rather than with any one card.
       const newSessions: number[] = [];
       const session = async (srcId: number): Promise<number> => {
@@ -308,7 +309,7 @@ export async function applyBundle(
         const res = await fetch(`/api/cards/${cardMap.get(a.card_id)}/attachments`, { method: "POST", credentials: "same-origin", body: fd });
         if (!res.ok) throw new Error(`вложение «${a.filename}»: ${res.status}`);
         result.attachments++;
-        log(`${unit.title}: вложения… (${++attDone}/${atts.length})`);
+        log(S.import.apply.attachments(unit.title, String(++attDone), String(atts.length)));
       }
 
       result.cards += cards.length;

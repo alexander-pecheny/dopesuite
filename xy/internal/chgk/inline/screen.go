@@ -7,9 +7,9 @@ import (
 
 // The "screen mode" transforms (composer_common.py): the host's copy of a
 // question carries stress accents and bracketed reading instructions; the
-// screen's copy carries neither. A bracket whose body opens with "Раздат" is a
-// handout — the players see it, so it and everything inside it survive both
-// passes. The same port lives in web/ts/chgk.ts for the card editor.
+// screen's copy carries neither. A bracket whose body opens with the handout
+// marker is a handout — the players see it, so it and everything inside it
+// survive both passes. The same port lives in web/ts/chgk.ts for the card editor.
 
 // reHandoutShort is regexes_ru.json's handout_short.
 var reHandoutShort = regexp.MustCompile(`^Р[Аа][Зз][Дд][Аа][Тт]`)

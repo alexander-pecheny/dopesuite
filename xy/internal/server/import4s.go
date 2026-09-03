@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"xy/internal/chgk/chgkimport"
+
+	xystrings "xy/i18nstrings"
 )
 
 // maxImportUpload bounds an uploaded package. A .docx of a full tournament with
@@ -36,7 +38,7 @@ type textParseResponse struct {
 }
 
 // handleImportText turns one card's plain text — a question pasted as prose,
-// "Вопрос 1: … Ответ: … Автор: …" — into 4s source. It is handleImportParse's
+// "Question 1: … Answer: … Author: …" — into 4s source. It is handleImportParse's
 // pipeline without the file: the same chgk text parser, run on text the client
 // already holds in plaintext.
 //
@@ -53,7 +55,7 @@ func (s *server) handleImportText(w http.ResponseWriter, r *http.Request) {
 	}
 	source := chgkimport.ParseText(req.Text)
 	if source == "" {
-		httpError(w, http.StatusBadRequest, "в тексте не найдено вопросов")
+		httpError(w, http.StatusBadRequest, xystrings.Default.Server.Import.TextNoQuestions())
 		return
 	}
 	writeJSON(w, textParseResponse{Source: source})
@@ -75,29 +77,29 @@ func (s *server) handleImportParse(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxImportUpload)
 	form, err := readMultipart(r, maxImportUpload)
 	if err != nil {
-		httpError(w, http.StatusBadRequest, "не удалось прочитать файл")
+		httpError(w, http.StatusBadRequest, xystrings.Default.Server.Import.ReadFailed())
 		return
 	}
 	files := form.Files("file")
 	if len(files) == 0 {
-		httpError(w, http.StatusBadRequest, "файл не выбран")
+		httpError(w, http.StatusBadRequest, xystrings.Default.Server.Import.NoFile())
 		return
 	}
 
 	res, err := chgkimport.Parse(files[0].Filename, files[0].Data)
 	if err != nil {
 		if errors.Is(err, chgkimport.ErrUnsupported) {
-			httpError(w, http.StatusBadRequest, "поддерживаются только .4s, .zip и .docx")
+			httpError(w, http.StatusBadRequest, xystrings.Default.Server.Import.Unsupported())
 			return
 		}
-		httpError(w, http.StatusBadRequest, "не удалось разобрать файл: "+err.Error())
+		httpError(w, http.StatusBadRequest, xystrings.Default.Server.Import.ParseFailed(err.Error()))
 		return
 	}
 	// Give the images names the (img …) directives can actually reference.
 	res.SafeImageNames()
 
 	if strings.TrimSpace(res.Source) == "" {
-		httpError(w, http.StatusBadRequest, "в файле не найдено вопросов")
+		httpError(w, http.StatusBadRequest, xystrings.Default.Server.Import.FileNoQuestions())
 		return
 	}
 

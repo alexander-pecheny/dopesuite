@@ -1,9 +1,9 @@
-// The brain page's «Индивидуальная статистика»: who buzzed what, folded from
-// the бои's marks. This is the one thing the page still computes itself — the
-// buzzes are in the бой blobs and nowhere else server-side; every ranking
+// The brain page's individual statistics: who buzzed what, folded from
+// the matches' marks. This is the one thing the page still computes itself — the
+// buzzes are in the match blobs and nowhere else server-side; every ranking
 // comes from the server's tables.
 
-// One бой flattened for the stats fold: the two team names, how many of its
+// One match flattened for the stats fold: the two team names, how many of its
 // rows are regular questions, and per row the two sides' (player, mark).
 export interface StatsBout {
   teams: [string, string] | string[];
@@ -19,10 +19,10 @@ export interface BrainPlayerStatsRow {
   wrong: number;
 }
 
-// computeBrainPlayerStats aggregates who buzzed what across every бой — the
-// sheet's «Индивидуальная статистика»: попытки, верно, неверно per (player,
-// team). Regular questions only: перестрелки stay out, as the sheet leaves
-// them out. Sorted by верно, then попытки, then name.
+// computeBrainPlayerStats aggregates who buzzed what across every match — the
+// sheet's individual statistics: attempts, right, wrong per (player,
+// team). Regular questions only: tiebreaks stay out, as the sheet leaves
+// them out. Sorted by right, then attempts, then name.
 export function computeBrainPlayerStats(bouts: StatsBout[]): BrainPlayerStatsRow[] {
   const acc = new Map<string, BrainPlayerStatsRow>();
   for (const bout of bouts) {

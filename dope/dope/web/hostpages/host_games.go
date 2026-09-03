@@ -21,6 +21,7 @@ import (
 	"dope/dope/storage/store"
 	"dope/dope/web/pages"
 	dopeui "dope/dope/web/ui"
+	dopestrings "dope/i18nstrings"
 
 	"pecheny.me/dopeuikit/palette"
 )
@@ -41,9 +42,9 @@ type hostGameCreateData struct {
 	BrainDSL     string
 	SIDSL        string
 	TroikaDSL    string
-	// Entrants is the фест's registry offered as this Game's entrant list.
-	// A Game numbers whom it seats from 1 (ADR-0009), so a фест of 65 can hold
-	// an ЭК of 48 and a брейн of a different 48.
+	// Entrants is the fest's registry offered as this Game's entrant list.
+	// A Game numbers whom it seats from 1 (ADR-0009), so a fest of 65 can hold
+	// an EK of 48 and a brain of a different 48.
 	Entrants []gameEntrantOption
 }
 
@@ -81,7 +82,7 @@ func stickerRow(label, maxName, maxVal, colorName, colorSel string) *dopeui.Elem
 	return dopeui.Col(dopeui.SpaceSM,
 		dopeui.Strong(dopeui.Text(label)),
 		dopeui.Row(dopeui.AlignCenter, dopeui.SpaceMD, dopeui.Wrap(),
-			dopeui.Field(dopeui.Label("Макс."), dopeui.Textfield(dopeui.Name(maxName), dopeui.Inputmode("numeric"), dopeui.Value(maxVal))),
+			dopeui.Field(dopeui.Label(dopestrings.Default.Host.Games.StickerMaxLabel()), dopeui.Textfield(dopeui.Name(maxName), dopeui.Inputmode("numeric"), dopeui.Value(maxVal))),
 			stickerPalette(colorName, colorSel),
 		),
 	)
@@ -114,9 +115,10 @@ func gameSettings(kind, selected string, kids ...dopeui.Item) *dopeui.Element {
 func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 	ref := data.Fest.Ref()
 	sel := data.SelectedType
+	s := dopestrings.Default
 	page := []dopeui.Item{
-		dopeui.Title(data.Fest.Title + " · новая игра"), dopeui.PagePublic, dopeui.Classicscripts("dist/gamecreate.js"),
-		dopeui.Publictopbar(pages.Trail(pages.FestCrumbs(ref, data.Fest.Title), "Добавить игру")),
+		dopeui.Title(s.Host.Games.CreateTitle(data.Fest.Title)), dopeui.PagePublic, dopeui.Classicscripts("dist/gamecreate.js"),
+		dopeui.Publictopbar(pages.Trail(pages.FestCrumbs(ref, data.Fest.Title), s.Host.Games.CreateCrumb())),
 	}
 	if data.Error != "" {
 		page = append(page, dopeui.Empty(dopeui.Text(data.Error)))
@@ -126,65 +128,65 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 	if sel == "" {
 		submit = append(submit, dopeui.Hidden())
 	}
-	submit = append(submit, dopeui.Button(dopeui.Submit(), dopeui.Text("Создать")))
+	submit = append(submit, dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Games.CreateSubmit())))
 
 	page = append(page, dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/game/new"),
 		dopeui.Autocomplete("off"), dopeui.Data("game-create-form", ""),
-		dopeui.Pickgroup(dopeui.Label("Тип игры"),
-			gameTypeRadio("od", "ОД", sel),
-			gameTypeRadio("ksi", "КСИ", sel),
-			gameTypeRadio("ksi_stickers", "КСИ со стикерами", sel),
-			gameTypeRadio("brain", "Брейн", sel),
-			gameTypeRadio("ek", "ЭК", sel),
-			gameTypeRadio("si", "Личная СИ", sel),
-			gameTypeRadio("multi", "Мультиигры", sel),
-			gameTypeRadio("troika", "Тройка", sel),
+		dopeui.Pickgroup(dopeui.Label(s.Host.Games.TypeLabel()),
+			gameTypeRadio("od", s.Host.Games.TypeOd(), sel),
+			gameTypeRadio("ksi", s.Host.Games.TypeKsi(), sel),
+			gameTypeRadio("ksi_stickers", s.Host.Games.TypeKsiStickers(), sel),
+			gameTypeRadio("brain", s.Host.Games.TypeBrain(), sel),
+			gameTypeRadio("ek", s.Host.Games.TypeEk(), sel),
+			gameTypeRadio("si", s.Host.Games.TypeSi(), sel),
+			gameTypeRadio("multi", s.Host.Games.TypeMulti(), sel),
+			gameTypeRadio("troika", s.Host.Games.TypeTroika(), sel),
 		),
 		gameSettings("od", sel,
-			dopeui.Field(dopeui.Label("Количество туров"), dopeui.Textfield(dopeui.Name("od_tours"), dopeui.Inputmode("numeric"), dopeui.Value("3"))),
-			dopeui.Field(dopeui.Label("Количество вопросов в туре"), dopeui.Textfield(dopeui.Name("od_questions"), dopeui.Inputmode("numeric"), dopeui.Value("15"))),
+			dopeui.Field(dopeui.Label(s.Host.Games.OdToursLabel()), dopeui.Textfield(dopeui.Name("od_tours"), dopeui.Inputmode("numeric"), dopeui.Value("3"))),
+			dopeui.Field(dopeui.Label(s.Host.Games.OdQuestionsLabel()), dopeui.Textfield(dopeui.Name("od_questions"), dopeui.Inputmode("numeric"), dopeui.Value("15"))),
 		),
 		gameSettings("ksi", sel,
-			dopeui.Field(dopeui.Label("Количество тем"), dopeui.Textfield(dopeui.Name("ksi_themes"), dopeui.Inputmode("numeric"), dopeui.Value("20"))),
+			dopeui.Field(dopeui.Label(s.Host.Games.ThemesLabel()), dopeui.Textfield(dopeui.Name("ksi_themes"), dopeui.Inputmode("numeric"), dopeui.Value("20"))),
 		),
 		gameSettings("ksi_stickers", sel,
-			dopeui.Field(dopeui.Label("Количество тем"), dopeui.Textfield(dopeui.Name("ksis_themes"), dopeui.Inputmode("numeric"), dopeui.Value("20"))),
-			dopeui.Hint(dopeui.Text("Для каждого стикера задайте, сколько штук есть у команды (0 — стикер не используется) и цвет для подсветки. «Обычный» стикер работает как стандартная тема КСИ.")),
-			stickerRow("Обычный", "ksis_neutral_max", "20", "ksis_neutral_color", "#ffffff"),
-			stickerRow("×2 (правильные и неправильные удваиваются)", "ksis_x2_max", "2", "ksis_x2_color", "#fdf66f"),
-			stickerRow("Без минуса (неправильные = 0)", "ksis_nowrong_max", "1", "ksis_nowrong_color", "#aded87"),
-			stickerRow("Пустой = минус (пустые = −номинал)", "ksis_emptywrong_max", "1", "ksis_emptywrong_color", "#ff7a6b"),
+			dopeui.Field(dopeui.Label(s.Host.Games.ThemesLabel()), dopeui.Textfield(dopeui.Name("ksis_themes"), dopeui.Inputmode("numeric"), dopeui.Value("20"))),
+			dopeui.Hint(dopeui.Text(s.Host.Games.StickersHint())),
+			stickerRow(s.Host.Games.StickerNeutral(), "ksis_neutral_max", "20", "ksis_neutral_color", "#ffffff"),
+			stickerRow(s.Host.Games.StickerX2Row(), "ksis_x2_max", "2", "ksis_x2_color", "#fdf66f"),
+			stickerRow(s.Host.Games.StickerNowrongRow(), "ksis_nowrong_max", "1", "ksis_nowrong_color", "#aded87"),
+			stickerRow(s.Host.Games.StickerEmptywrongRow(), "ksis_emptywrong_max", "1", "ksis_emptywrong_color", "#ff7a6b"),
 		),
 		gameSettings("brain", sel,
-			dopeui.Field(dopeui.Label("Схема"),
+			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
 				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("14"), dopeui.Spellcheck("false"), dopeui.Text(data.BrainDSL))),
-			dopeui.Hint(dopeui.Text("Формат описан в docs/scheme-dsl.md: блоки [scheme] через ---, kind: roundrobin / single_elimination / double_elimination.")),
+			dopeui.Hint(dopeui.Text(s.Host.Games.BrainHint())),
 		),
 		gameSettings("si", sel,
-			dopeui.Field(dopeui.Label("Схема"),
+			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
 				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("14"), dopeui.Spellcheck("false"), dopeui.Text(data.SIDSL))),
-			dopeui.Hint(dopeui.Text("Тот же язык схем: за столом сидят игроки, а не команды. Бой на троих — match_size: 3, проходят двое — winning_places: 2.")),
+			dopeui.Hint(dopeui.Text(s.Host.Games.SiHint())),
 		),
 		gameSettings("multi", sel,
-			dopeui.Field(dopeui.Label("Мини-игры"),
+			dopeui.Field(dopeui.Label(s.Host.Games.MinigamesLabel()),
 				dopeui.Editor(dopeui.Name("multi_games"), dopeui.Rows("8"), dopeui.Spellcheck("false"),
-					dopeui.Placeholder("Фоторяд: {0,1}x10\nЛогика: {0,3}x2 {0,5}\nШтрафной: {-1,0,1}x10\nПесни →0..100: {0,1}x72"))),
-			dopeui.Hint(dopeui.Text("По строке на мини-игру: «Название: {значения}xN». {0,1} — задание на 0 или 1 балл, {-1,0,1} — со штрафом, {0-12} — любое целое от 0 до 12. Несколько описаний в строке идут подряд: «{0,3}x2 {0,5}» — три задания на 3, 3 и 5 баллов. «|» закрывает блок листа: «{0,1}x10 | {0,1}x10» — два блока по десять, с зазором и сквозной нумерацией.")),
-			dopeui.Hint(dopeui.Text("«Название →0..100: …» — мини-игра идёт в итог не своими баллами, а долей от лучшего результата в ней, из ста. Так мини-игры разного масштаба весят в итоге поровну; ушедшим в минус засчитывается ноль.")),
-			dopeui.Field(dopeui.Label("Что решает при равном итоге (необязательно)"),
+					dopeui.Placeholder(s.Host.Games.MinigamesPlaceholder()))),
+			dopeui.Hint(dopeui.Text(s.Host.Games.MinigamesHint())),
+			dopeui.Hint(dopeui.Text(s.Host.Games.MinigamesShareHint())),
+			dopeui.Field(dopeui.Label(s.Host.Games.MultiSortingLabel()),
 				dopeui.Textfield(dopeui.Name("multi_sorting"), dopeui.Placeholder("total, game2, plus"))),
-			dopeui.Hint(dopeui.Text("Через запятую: total — итог, plus — сумма положительных, game1, game2… — подытоги мини-игр по порядку. Пусто — команды с равным итогом делят место.")),
+			dopeui.Hint(dopeui.Text(s.Host.Games.MultiSortingHint())),
 		),
 		gameSettings("troika", sel,
-			dopeui.Field(dopeui.Label("Схема"),
+			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
 				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("16"), dopeui.Spellcheck("false"), dopeui.Text(data.TroikaDSL))),
-			dopeui.Hint(dopeui.Text("Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50.")),
+			dopeui.Hint(dopeui.Text(s.Host.Games.TroikaHint())),
 		),
 		gameSettings("ek", sel,
-			dopeui.Field(dopeui.Label("Схема"),
+			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
 				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("10"), dopeui.Spellcheck("false"), dopeui.Placeholder("[scheme]\nkind: single_elimination\nparticipants: 48\nmatch_size: 4\nwinning_places: 2"))),
-			dopeui.Hint(dopeui.Text("Либо схемой, либо готовым JSON ниже — что заполнено, то и используется.")),
-			dopeui.Field(dopeui.Label("JSON-схема"),
+			dopeui.Hint(dopeui.Text(s.Host.Games.EkHint())),
+			dopeui.Field(dopeui.Label(s.Host.Games.EkJsonLabel()),
 				dopeui.Editor(dopeui.Name("ek_scheme"), dopeui.Rows("14"), dopeui.Placeholder(`{"slug":"...","title":"...","gameType":"ek","stages":[...]}`))),
 		),
 		entrantPicker(data),
@@ -193,29 +195,29 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
 }
 
-// entrantPicker offers the фест's registry as this Game's entrant list. Ticking
-// nothing means everyone, which is what a one-game фест wants and what every
+// entrantPicker offers the fest's registry as this Game's entrant list. Ticking
+// nothing means everyone, which is what a one-game fest wants and what every
 // Game did before Games could differ.
 func entrantPicker(data hostGameCreateData) dopeui.Item {
+	s := dopestrings.Default
 	if len(data.Entrants) == 0 {
 		return dopeui.Empty()
 	}
 	boxes := make([]dopeui.Item, 0, len(data.Entrants)+1)
 	boxes = append(boxes,
-		dopeui.Hint(dopeui.Text("Отметьте, кто играет в этой игре. Если не отметить никого, играют все — "+
-			"а номера игра раздаёт свои, с единицы, так что одна и та же команда бывает второй в ЭК и четвёртой в ОД. "+
-			"Командная игра сажает за стол команды, личная — игроков; сначала команды, потом игроки.")))
+		dopeui.Hint(dopeui.Text(s.Host.Games.EntrantsHint())))
 	for _, entrant := range data.Entrants {
 		boxes = append(boxes, dopeui.Checkbox(dopeui.Name("entrant_id"),
 			dopeui.Value(strconv.FormatInt(entrant.ID, 10)), dopeui.Text(entrant.Label)))
 	}
-	return dopeui.Details(dopeui.Summary(dopeui.Text("Состав игры")), dopeui.Col(boxes...))
+	return dopeui.Details(dopeui.Summary(dopeui.Text(s.Host.Games.EntrantsSummary())), dopeui.Col(boxes...))
 }
 
 // hostGameSettingsDoc builds a game's settings page: a small form to rename the
 // game and set its slug (its type is shown read-only).
 func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
 	festRef := data.Fest.Ref()
+	s := dopestrings.Default
 	page := []dopeui.Item{
 		dopeui.Title(data.Game.Title + " · " + data.Fest.Title), dopeui.PagePublic,
 		dopeui.Publictopbar(pages.Trail(pages.FestCrumbs(festRef, data.Fest.Title), data.Game.Title)),
@@ -225,18 +227,18 @@ func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
 	}
 	form := []dopeui.Item{dopeui.DirCol, dopeui.Method("post"),
 		dopeui.Action("/host/fest/" + festRef + "/game/" + data.Game.Ref() + "/settings"), dopeui.Autocomplete("off"),
-		dopeui.Field(dopeui.Label("Тип игры"), dopeui.Textfield(dopeui.Value(data.Game.Type), dopeui.Disabled())),
-		dopeui.Field(dopeui.Label("Название"), dopeui.Textfield(dopeui.Name("title"), dopeui.Value(data.Game.Title), dopeui.Required())),
-		dopeui.Field(dopeui.Label("Slug (необязательно, a-z, 0-9, дефис)"), dopeui.Textfield(dopeui.Name("slug"), dopeui.Value(data.Slug), dopeui.Pattern("[a-z0-9-]+"))),
+		dopeui.Field(dopeui.Label(s.Host.Games.TypeLabel()), dopeui.Textfield(dopeui.Value(data.Game.Type), dopeui.Disabled())),
+		dopeui.Field(dopeui.Label(s.Host.Games.TitleLabel()), dopeui.Textfield(dopeui.Name("title"), dopeui.Value(data.Game.Title), dopeui.Required())),
+		dopeui.Field(dopeui.Label(s.Host.Games.SlugLabel()), dopeui.Textfield(dopeui.Name("slug"), dopeui.Value(data.Slug), dopeui.Pattern("[a-z0-9-]+"))),
 	}
 	if data.HasDSL {
 		form = append(form,
-			dopeui.Field(dopeui.Label("Схема"),
+			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
 				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("14"), dopeui.Spellcheck("false"), dopeui.Text(data.SchemeDSL))),
-			dopeui.Hint(dopeui.Text("Пересборка меняет только не начатые бои: можно поменять число вопросов или добавить блок, но начатый бой должен сохраниться без изменений.")),
+			dopeui.Hint(dopeui.Text(s.Host.Games.RebuildHint())),
 		)
 	}
-	form = append(form, dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text("Сохранить"))))
+	form = append(form, dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Games.SaveSubmit()))))
 	page = append(page, dopeui.Form(form...))
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
 }
@@ -281,14 +283,14 @@ func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Req
 	}
 	title := strings.TrimSpace(r.Form.Get("title"))
 	if title == "" {
-		s.renderHostGameSettings(w, r, festID, gameID, "Название обязательно.")
+		s.renderHostGameSettings(w, r, festID, gameID, dopestrings.Default.Host.Games.ErrorTitleRequired())
 		return
 	}
 	slug := strings.TrimSpace(r.Form.Get("slug"))
 	var slugValue any
 	if slug != "" {
 		if err := util.ValidateSlug(slug); err != nil {
-			s.renderHostGameSettings(w, r, festID, gameID, "Slug: "+err.Error())
+			s.renderHostGameSettings(w, r, festID, gameID, dopestrings.Default.Host.Games.ErrorSlugInvalid(err.Error()))
 			return
 		}
 		var count int
@@ -298,7 +300,7 @@ select count(*) from games where fest_id = ? and slug = ? and id <> ?`, festID, 
 			return
 		}
 		if count > 0 {
-			s.renderHostGameSettings(w, r, festID, gameID, "Slug уже занят в этом фесте.")
+			s.renderHostGameSettings(w, r, festID, gameID, dopestrings.Default.Host.Games.ErrorSlugTaken())
 			return
 		}
 		slugValue = slug
@@ -465,7 +467,7 @@ func (s *Server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request
 	})
 }
 
-// festEntrantOptions lists the фест's Participants a Game may seat, teams and
+// festEntrantOptions lists the fest's Participants a Game may seat, teams and
 // players alike — which kind a Game wants depends on its format, and the picker
 // offers both rather than guessing before the type is chosen.
 func festEntrantOptions(ctx context.Context, db *sql.DB, festID int64) ([]gameEntrantOption, error) {
@@ -485,7 +487,7 @@ where fest_id = ? order by roster desc, coalesce(nullif(number, 0), 1 << 30), id
 		})
 }
 
-// chosenEntrantIDs reads the picker: whom this Game seats, in the фест's order.
+// chosenEntrantIDs reads the picker: whom this Game seats, in the fest's order.
 // Nothing ticked means everyone, which is what every Game did before Games
 // could name their own.
 func chosenEntrantIDs(form url.Values) []int64 {
@@ -517,29 +519,30 @@ func (s *Server) handleHostCreateGame(w http.ResponseWriter, r *http.Request, fe
 // formats their own knobs.
 func gameSpecFromForm(festID int64, gameType string, form url.Values) (gamebuild.Spec, error) {
 	spec := gamebuild.Spec{FestID: festID, Type: gameType, Entrants: chosenEntrantIDs(form), DSL: strings.TrimSpace(form.Get("brain_dsl"))}
+	s := dopestrings.Default
 	var err error
 	switch gameType {
 	case games.OD:
-		if spec.ODTours, err = parsePositiveFormInt(form, "od_tours", "Количество туров", 1, 20); err != nil {
+		if spec.ODTours, err = parsePositiveFormInt(form, "od_tours", s.Host.Games.OdToursLabel(), 1, 20); err != nil {
 			return spec, err
 		}
-		if spec.ODQuestions, err = parsePositiveFormInt(form, "od_questions", "Количество вопросов в туре", 1, 100); err != nil {
+		if spec.ODQuestions, err = parsePositiveFormInt(form, "od_questions", s.Host.Games.OdQuestionsLabel(), 1, 100); err != nil {
 			return spec, err
 		}
 	case games.KSI:
-		if spec.KSIThemes, err = parsePositiveFormInt(form, "ksi_themes", "Количество тем", 1, 100); err != nil {
+		if spec.KSIThemes, err = parsePositiveFormInt(form, "ksi_themes", s.Host.Games.ThemesLabel(), 1, 100); err != nil {
 			return spec, err
 		}
 	case ksiStickersGameType:
 		spec.Type = games.KSI
-		if spec.KSIThemes, err = parsePositiveFormInt(form, "ksis_themes", "Количество тем", 1, 100); err != nil {
+		if spec.KSIThemes, err = parsePositiveFormInt(form, "ksis_themes", s.Host.Games.ThemesLabel(), 1, 100); err != nil {
 			return spec, err
 		}
 		if spec.KSIStickers, err = ksiStickerConfigFromForm(form); err != nil {
 			return spec, err
 		}
 	case games.Multi:
-		spec.Label = "Мультиигры"
+		spec.Label = s.Host.Games.TypeMulti()
 		if spec.Minigames, err = games.ParseMultiGames(form.Get("multi_games")); err != nil {
 			return spec, fmt.Errorf("Мини-игры: %w", err)
 		}
@@ -547,16 +550,16 @@ func gameSpecFromForm(festID int64, gameType string, form url.Values) (gamebuild
 			return spec, fmt.Errorf("Что решает при равном итоге: %w", err)
 		}
 	case games.Troika:
-		spec.Label = "Тройка"
+		spec.Label = s.Host.Games.TypeTroika()
 	case games.Brain:
-		spec.Label = "Брейн"
+		spec.Label = s.Host.Games.TypeBrain()
 	case games.SI:
-		spec.Label = "Личная СИ"
+		spec.Label = s.Host.Games.TypeSi()
 	case games.EK:
-		// ЭК's bracket is describable in the scheme language now that an
+		// EK's bracket is describable in the scheme language now that an
 		// elimination counts Losses rather than seats, so a DSL wins over
 		// the pasted JSON when both are offered.
-		spec.Label = "ЭК"
+		spec.Label = s.Host.Games.TypeEk()
 		if spec.DSL == "" {
 			raw := strings.TrimSpace(form.Get("ek_scheme"))
 			if raw == "" {
@@ -613,7 +616,7 @@ func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType s
 
 // defaultBrainDSL is the creation form's prefill: today's shortcut — one group
 // over the whole fest — written in the DSL so the host sees something editable.
-// defaultSIDSL is личная СИ's shape at its smallest: one table, everyone at it,
+// defaultSIDSL is personal SI's shape at its smallest: one table, everyone at it,
 // eight themes. A real tournament edits it into groups and a play-off.
 func defaultSIDSL(players int) string {
 	if players < 3 {
@@ -622,11 +625,11 @@ func defaultSIDSL(players int) string {
 	return fmt.Sprintf("[scheme]\nkind: roundrobin\ngroup_size: %d\nmatch_size: 3\nthemes: 8\nbout.points: seats + 1 - place\nsorting: [points, total, plus]\n", players)
 }
 
-// defaultTroikaDSL is Троечка's регламент at its smallest: one группа of
-// everybody over six темы, ranked as the регламент ranks — a рейтинговый балл
-// of 1 / 0.5 / 0 per бой plus игровые очки over fifty, then личная встреча,
-// забитые, разница. A real tournament edits it into the group stages and the
-// финал.
+// defaultTroikaDSL is Troika's regulations at their smallest: one group of
+// everybody over six themes, ranked as the regulations rank — a rating score
+// of 1 / 0.5 / 0 per Match plus game points over fifty, then head-to-head,
+// taken, difference. A real tournament edits it into the group stages and the
+// final.
 func defaultTroikaDSL(participants int) string {
 	if participants < 2 {
 		participants = 2
@@ -646,14 +649,14 @@ func ksiStickerConfigFromForm(form url.Values) (json.RawMessage, error) {
 	all := []struct {
 		id, label, colorField, maxField, defColor string
 	}{
-		{games.KSIStickerNeutral, "Обычный", "ksis_neutral_color", "ksis_neutral_max", "#ffffff"},
+		{games.KSIStickerNeutral, dopestrings.Default.Host.Games.StickerNeutral(), "ksis_neutral_color", "ksis_neutral_max", "#ffffff"},
 		{games.KSIStickerX2, "×2", "ksis_x2_color", "ksis_x2_max", "#fdf66f"},
-		{games.KSIStickerNoWrong, "Без минуса", "ksis_nowrong_color", "ksis_nowrong_max", "#aded87"},
-		{games.KSIStickerEmptyWrong, "Пустой = минус", "ksis_emptywrong_color", "ksis_emptywrong_max", "#ff7a6b"},
+		{games.KSIStickerNoWrong, dopestrings.Default.Host.Games.StickerNowrong(), "ksis_nowrong_color", "ksis_nowrong_max", "#aded87"},
+		{games.KSIStickerEmptyWrong, dopestrings.Default.Host.Games.StickerEmptywrong(), "ksis_emptywrong_color", "ksis_emptywrong_max", "#ff7a6b"},
 	}
 	cfg := games.KSIStickerConfig{}
 	for _, s := range all {
-		max, err := parseNonNegativeFormInt(form, s.maxField, "Максимум стикеров", 0, 100)
+		max, err := parseNonNegativeFormInt(form, s.maxField, dopestrings.Default.Host.Games.StickerMaxField(), 0, 100)
 		if err != nil {
 			return nil, err
 		}

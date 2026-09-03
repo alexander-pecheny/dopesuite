@@ -8,6 +8,7 @@ import (
 	"dope/dope/storage/store"
 	"dope/dope/web/route"
 	ui "dope/dope/web/ui"
+	dopestrings "dope/i18nstrings"
 	"errors"
 	"net/http"
 	"slices"
@@ -28,12 +29,13 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (session.U
 
 // adminIndexDoc builds the /admin landing page: a link list of admin tools.
 func adminIndexDoc() *ui.Doc {
+	s := dopestrings.Default
 	return &ui.Doc{Nodes: []ui.Node{
-		ui.Page(ui.Title("Админка"), ui.PagePublic,
-			ui.Publictopbar(Trail([]ui.Item{HomeCrumb()}, "Админка")),
+		ui.Page(ui.Title(s.Admin.Page.Title()), ui.PagePublic,
+			ui.Publictopbar(Trail([]ui.Item{HomeCrumb()}, s.Admin.Page.Title())),
 			ui.List(
-				ui.Listrow(ui.Href("/admin/create_users"), ui.Listtitle(ui.Text("Создать пользователей"))),
-				ui.Listrow(ui.Href("/admin/users"), ui.Listtitle(ui.Text("Пользователи"))),
+				ui.Listrow(ui.Href("/admin/create_users"), ui.Listtitle(ui.Text(s.Admin.CreateUsers.Name()))),
+				ui.Listrow(ui.Href("/admin/users"), ui.Listtitle(ui.Text(s.Admin.Users.Name()))),
 			),
 		),
 	}}
@@ -42,9 +44,10 @@ func adminIndexDoc() *ui.Doc {
 // adminCreateUsersDoc wraps the kit's create-users body in dope's public
 // chrome; pageforms.js drives the copy-textarea select-on-click.
 func adminCreateUsersDoc(data adminusers.CreateUsersData) *ui.Doc {
+	s := dopestrings.Default
 	page := []ui.Item{
-		ui.Title("Создать пользователей · Админка"), ui.PagePublic, ui.Classicscripts("dist/pageforms.js"),
-		ui.Publictopbar(Trail(AdminCrumbs(), "Создать пользователей")),
+		ui.Title(s.Admin.CreateUsers.Title()), ui.PagePublic, ui.Classicscripts("dist/pageforms.js"),
+		ui.Publictopbar(Trail(AdminCrumbs(), s.Admin.CreateUsers.Name())),
 	}
 	return &ui.Doc{Nodes: []ui.Node{ui.Page(append(page, kit.AdminCreateUsers(data)...)...)}}
 }
@@ -80,18 +83,19 @@ func sortAdminUsers(users []adminUserRow, s adminusers.Sort) {
 }
 
 // adminUsersDoc builds the /admin/users page: a table of all users, or an empty
-// note. System accounts are tagged "(система)".
+// note. System accounts are tagged "(system)".
 func adminUsersDoc(data adminUsersData) *ui.Doc {
+	s := dopestrings.Default
 	var body ui.Item
 	if len(data.Users) > 0 {
 		rows := []ui.Item{ui.Scroll(), ui.Trow(
-			ui.Hcell(ui.Text("ID")), ui.Hcell(ui.Text("Логин")), ui.Hcell(ui.Text("Telegram")),
-			kit.SortHeader("last", "Активность", data.Sort), ui.Hcell(ui.Text("Создан")),
+			ui.Hcell(ui.Text("ID")), ui.Hcell(ui.Text(s.Admin.Users.ColLogin())), ui.Hcell(ui.Text("Telegram")),
+			kit.SortHeader("last", s.Admin.Users.ColActivity(), data.Sort), ui.Hcell(ui.Text(s.Admin.Users.ColCreated())),
 		)}
 		for _, u := range data.Users {
 			nameCell := ui.Cell(ui.Text(u.Username))
 			if u.IsSystem {
-				nameCell = ui.Cell(ui.Inline(ui.Text(u.Username+" "), ui.Muted(ui.Text("(система)"))))
+				nameCell = ui.Cell(ui.Inline(ui.Text(u.Username+" "), ui.Muted(ui.Text(s.Admin.Users.SystemTag()))))
 			}
 			rows = append(rows, ui.Trow(
 				ui.Cell(ui.Text(strconv.FormatInt(u.ID, 10))),
@@ -103,11 +107,11 @@ func adminUsersDoc(data adminUsersData) *ui.Doc {
 		}
 		body = ui.Section(ui.Table(rows...))
 	} else {
-		body = ui.Empty(ui.Text("Пользователей нет."))
+		body = ui.Empty(ui.Text(s.Admin.Users.Empty()))
 	}
 	return &ui.Doc{Nodes: []ui.Node{
-		ui.Page(ui.Title("Пользователи · Админка"), ui.PagePublic,
-			ui.Publictopbar(Trail(AdminCrumbs(), "Пользователи")),
+		ui.Page(ui.Title(s.Admin.Users.Title()), ui.PagePublic,
+			ui.Publictopbar(Trail(AdminCrumbs(), s.Admin.Users.Name())),
 			body,
 		),
 	}}

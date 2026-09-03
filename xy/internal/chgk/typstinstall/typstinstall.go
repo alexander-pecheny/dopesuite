@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"github.com/ulikunitz/xz"
+
+	xystrings "xy/i18nstrings"
 )
 
 // ReleasesURL is where typst publishes its builds.
@@ -70,6 +72,7 @@ func works(path string) bool {
 // Install downloads the latest typst release into the utils dir and returns the
 // binary. progress, if set, is told what is happening.
 func Install(ctx context.Context, progress func(string)) (string, error) {
+	s := xystrings.Default
 	say := func(format string, a ...any) {
 		if progress != nil {
 			progress(fmt.Sprintf(format, a...))
@@ -83,7 +86,7 @@ func Install(ctx context.Context, progress func(string)) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	say("качаю typst %s…", version)
+	say("%s", s.Install.Typst.Downloading(version))
 	archive, err := download(ctx, url, dir)
 	if err != nil {
 		return "", err
@@ -110,7 +113,7 @@ func Install(ctx context.Context, progress func(string)) (string, error) {
 	if err := os.Chmod(target, 0o755); err != nil {
 		return "", err
 	}
-	say("установлен: %s", target)
+	say("%s", s.Install.Installed(target))
 	return target, nil
 }
 
@@ -120,7 +123,7 @@ func FindOrInstall(ctx context.Context, progress func(string)) (string, error) {
 		return path, nil
 	}
 	if progress != nil {
-		progress("typst на этой машине нет")
+		progress(xystrings.Default.Install.Typst.NotFound())
 	}
 	return Install(ctx, progress)
 }

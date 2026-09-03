@@ -5,6 +5,7 @@
 
 import { xyApp } from "./app.js";
 import { anchorPopup, type AnchoredPopup } from "./popup.js";
+import S from "./i18nstrings_ru_gen.js";
 // The palette is a list of NAMES — "green", "teal" — and the hex a name paints
 // is --label-<name>, which each theme sets to a different rung of that hue. It
 // has to work that way: no single colour clears 3:1 against both a near-white
@@ -121,7 +122,7 @@ export function colorField(host: HTMLElement, initial: string): ColorField {
   host.classList.add("color-field");
   const btn = el("button", {
     class: "color-field-btn", type: "button",
-    title: "Цвет метки", "aria-label": "Цвет метки",
+    title: S.chrome.colorpick.buttonTitle(), "aria-label": S.chrome.colorpick.buttonTitle(),
   }) as HTMLButtonElement;
   host.replaceChildren(btn);
 

@@ -1,4 +1,4 @@
-// od-protocol.ts — the ОД Protocol's document as the page reads it: the shape
+// od-protocol.ts — the OD Protocol's document as the page reads it: the shape
 // (ODState), the adapter from the server's JSON to that shape (parseState), and
 // the arithmetic over it — who took what, totals per tour, the rating, the
 // shootout tiebreak and the places. Pure: every function takes the state it
@@ -286,7 +286,7 @@ export function tourSumsForTeam(stats: QuestionStat[], teamIndex: number, tourLe
   return out;
 }
 
-// ratingForTeam is the ЧГК rating: a question taken by k of n teams is worth
+// ratingForTeam is the ChGK rating: a question taken by k of n teams is worth
 // n − k + 1 to each of them.
 export function ratingForTeam(state: ODState, stats: QuestionStat[], teamIndex: number): number {
   const teamCount = state.teams.length;
@@ -340,8 +340,8 @@ export function compareShootoutTiebreaks(a: number[], b: number[]): number {
 }
 
 // rankedTeamOrder sorts team rows into standings order: by game total, then
-// the shootout tiebreak, then the row as a stable fallback. The «Итог» and
-// «Экран» sheets share it so their rows agree; the place labels come from
+// the shootout tiebreak, then the row as a stable fallback. The results sheet and
+// screen board share it so their rows agree; the place labels come from
 // placesFor.
 export function rankedTeamOrder(state: ODState, totals: number[], tiebreaks: number[][]): RankKey[] {
   return state.teams

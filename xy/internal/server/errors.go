@@ -4,6 +4,8 @@ import (
 	"errors"
 	"log"
 	"net/http"
+
+	xystrings "xy/i18nstrings"
 )
 
 // appError is a handler error carrying an HTTP status and a user-facing message.
@@ -33,6 +35,6 @@ func handleErr(w http.ResponseWriter, err error) bool {
 		return true
 	}
 	log.Printf("internal error: %v", err)
-	httpError(w, http.StatusInternalServerError, "ошибка сервера")
+	httpError(w, http.StatusInternalServerError, xystrings.Default.Server.Internal())
 	return true
 }

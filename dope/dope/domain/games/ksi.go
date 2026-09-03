@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// KSI (командная своя игра) pure domain logic.
+// KSI (team jeopardy) pure domain logic.
 //
 // The persisted KSI state JSON is structured as a list of participant teams and
 // a list of themes, each theme holding a per-player × per-question grid of
@@ -148,13 +148,14 @@ func KSIStickerMarkValue(stickerID, mark string, value int) int {
 	}
 }
 
-// SIThemeCount is личная СИ's usual бой: eight themes. The regulation varies it
-// by round (six early, twelve in the grand final), so a game's scheme overrides
-// it — this is only the default.
+// SIThemeCount is individual SI's usual match: eight themes. The regulation
+// varies it by round (six early, twelve in the grand final), so a game's
+// scheme overrides it — this is only the default.
 const SIThemeCount = 8
 
-// SIEmptyGameJSON builds the pristine scheme/state for a личная СИ бой: the
-// same themes × participants grid as КСИ, sized for the players at one table.
+// SIEmptyGameJSON builds the pristine scheme/state for an individual SI
+// match: the same themes × participants grid as KSI, sized for the players
+// at one table.
 func SIEmptyGameJSON(slug, title string, themesCount, participants int) ([]byte, []byte) {
 	if themesCount <= 0 {
 		themesCount = SIThemeCount

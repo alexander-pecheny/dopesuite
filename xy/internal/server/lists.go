@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"net/http"
 	"time"
+
+	xystrings "xy/i18nstrings"
 )
 
 type listDTO struct {
@@ -185,7 +187,7 @@ func (s *server) handleCreateListGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(req.ListIDs) < 2 {
-		httpError(w, http.StatusBadRequest, "нужно минимум два списка")
+		httpError(w, http.StatusBadRequest, xystrings.Default.Server.List.GroupNeedsTwo())
 		return
 	}
 	now := time.Now()
@@ -208,7 +210,7 @@ func (s *server) handleCreateListGroup(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			if n, _ := res.RowsAffected(); n == 0 {
-				return errBadRequest("список не найден на этой доске")
+				return errBadRequest(xystrings.Default.Server.List.NotOnBoard())
 			}
 			if _, err := tx.ExecContext(ctx, `delete from tour_testers where list_id = ?`, lid); err != nil {
 				return err

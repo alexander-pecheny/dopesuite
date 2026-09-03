@@ -1,5 +1,5 @@
-// The sheet cursor: one active-cell selection for every editable grid — ЭК's
-// бой and stage tables, КСИ's answers, брейн's protocols laid side by side, ОД's
+// The sheet cursor: one active-cell selection for every editable grid — EK's
+// match and stage tables, KSI's answers, brain's protocols laid side by side, OD's
 // entry grid. A page describes its grid (rows, the columns each row has, how a
 // DOM cell maps to a coordinate and back) and how to apply values; the cursor
 // owns the rest: click/shift/drag ranges, arrow keys with clamping (rows may be
@@ -28,12 +28,12 @@ export interface CellEdit {
   value: unknown;
 }
 
-// ---- marks: the one value space for ЭК, КСИ and брейн cells ------------------
+// ---- marks: the one value space for EK, KSI and brain cells ------------------
 
 export type Mark = "right" | "wrong" | "";
 
 // Every spelling a pasted or typed mark may take, across the pages: +/−, 1/0,
-// the Latin and Cyrillic q/w keys, the words, and the п/м the ЭК sheets used.
+// the Latin and Cyrillic q/w keys, the words, and the plus/minus letters the EK sheets used.
 const RIGHT_TOKENS = ["+", "1", "right", "y", "yes", "✓", "v", "да", "п", "п.", "q", "й"];
 const WRONG_TOKENS = ["-", "−", "0", "wrong", "n", "no", "x", "✗", "нет", "м", "м.", "w", "ц"];
 
@@ -64,7 +64,7 @@ export function cycleMark(cell: Element): Mark {
 }
 
 // markKey maps a keydown to the mark it sets, or null when the key is not a
-// mark key. q/й and w/ц are the two home-row keys under either layout.
+// mark key. q/w are the two home-row keys under either the Latin or the Russian layout.
 export function markKey(event: {key: string; code?: string}): Mark | null {
   const key = event.key.toLowerCase();
   if (key === "q" || key === "й" || key === "+" || key === "1" || event.code === "NumpadAdd") return "right";
@@ -74,8 +74,8 @@ export function markKey(event: {key: string; code?: string}): Mark | null {
 
 // ---- geometry ----------------------------------------------------------------
 
-// A sheet may be ragged either way: ЭК's stage sheet stacks бои with different
-// shootout counts (a row's column count varies), брейн lays бои side by side
+// A sheet may be ragged either way: EK's stage sheet stacks matches with different
+// shootout counts (a row's column count varies), brain lays matches side by side
 // with different question counts (a column's row count varies). Each axis is
 // asked given the other; a rectangular sheet ignores the argument.
 export interface SheetGeometry {
@@ -181,7 +181,7 @@ export function serializeGrid(rows: string[][]): string {
 
 // ---- the DOM binding ---------------------------------------------------------
 
-// The classes the cursor paints; "" leaves one out (ОД has no anchor mark
+// The classes the cursor paints; "" leaves one out (OD has no anchor mark
 // and highlights rows itself).
 export interface SheetCursorClasses {
   selected: string;
@@ -198,7 +198,7 @@ export interface SheetSpec extends SheetGeometry {
   root: HTMLElement;
   cellSelector?: string;
   // Whether the sheet takes input at all right now (a spectator, a finished
-  // бой, another tab in front). Reads still work: the cursor can be shown.
+  // match, another tab in front). Reads still work: the cursor can be shown.
   readonly?: () => boolean;
   // Whether keys typed anywhere on the page belong to this sheet: a page with
   // several sheets or tabs says which one is in front.
@@ -216,12 +216,12 @@ export interface SheetSpec extends SheetGeometry {
   // "text" sheets: open the cell's editor, with `text` already typed or none.
   onEdit?: (cell: HTMLElement, text: string | null) => void;
   // A page's first look at a key, before the cursor's own reading; return true
-  // to say it was handled (ОД sends ArrowUp on the top row to the column's tick).
+  // to say it was handled (OD sends ArrowUp on the top row to the column's tick).
   onKey?: (event: KeyboardEvent, focus: CellCoord) => boolean;
   onActive?: (cell: HTMLElement | null, coord: CellCoord | null) => void;
   onSelectionChange?: (selection: {anchor: CellCoord; focus: CellCoord; rect: CellRect} | null) => void;
   // The row elements the active cell's row highlight applies to; default is
-  // the cell's own <tr> (ЭК's two-row table has two per team).
+  // the cell's own <tr> (EK's two-row table has two per team).
   rowsOf?: (cell: HTMLElement) => Element[];
   // Where the cursor listens for keys: the document (default) or the root.
   keyTarget?: "document" | "root";

@@ -12,21 +12,22 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/expr"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
 )
 
-// The посев a сборная format needs: a Participant here is three people who
-// played the фест's other Games for three other teams, so its seed number
-// comes from what those teams did, not from anything this Participant has
-// ever done. Троечка's регламент §4.4.2 — «номер посева определяется средним
-// арифметическим суммы мест в „Вопросиках“ и „Командном своячке“ команд
-// игроков» — with §4.4.3's tiebreak, the best single сумма мест, right behind
-// it.
+// The seeding an assembled-team format needs: a Participant here is three
+// people who played the fest's other Games for three other teams, so its
+// seed number comes from what those teams did, not from anything this
+// Participant has ever done. Troika's rulebook §4.4.2 — "the seed number is
+// the arithmetic mean of the sum of places the players' teams took in
+// Voprosiki and Team Svoyachok" — with §4.4.3's tiebreak, the best single
+// place sum, right behind it.
 //
 // The scheme says it like this:
 //
 //	[init]
 //	seed: players
-//	games: [вопросики, своячок]
+//	games: [voprosiki, svoyachok]
 //	player.place_sum: place1 + place2
 //	seed.mean: mean(place_sum)
 //	seed.best: min(place_sum)
@@ -34,12 +35,12 @@ import (
 //
 // place1..placeN are the player's own team's places in the games named, in
 // that order. A player whose team did not play one of them counts as one
-// place worse than that game's last — a сборная is not rewarded for sitting a
-// discipline out, and the import does not stop because of one.
+// place worse than that game's last — an assembled team is not rewarded for
+// sitting a discipline out, and the import does not stop because of one.
 
 var seedAggRe = regexp.MustCompile(`^(mean|min|max|sum|count)\(\s*([^)\s]+)\s*\)$`)
 
-// FromPlayers is the composing посев the Game's [init] declares.
+// FromPlayers is the composing seeding the Game's [init] declares.
 func FromPlayers(spec *store.SchemePlayerSeed, sort []store.SchemeSortRule) SeedSource {
 	return fromPlayers{spec: spec, sort: sort}
 }
@@ -145,7 +146,7 @@ func (f fromPlayers) resolve(ctx context.Context, tx *sql.Tx, scope core.FestSco
 	for i, row := range table {
 		candidates[i] = seedCandidate{SourceRank: i + 1, Name: row.name, Number: row.number}
 	}
-	return seeding{source: "players", label: "по игрокам", candidates: candidates}, nil
+	return seeding{source: "players", label: dopestrings.Default.Imports.SeedSource.Players(), candidates: candidates}, nil
 }
 
 type namedExpr struct {
@@ -258,7 +259,7 @@ func sortedKeys[T any](m map[string]T) []string {
 	return out
 }
 
-// teamPlacesByFestTeam is a Game's table as places against фест teams — what a
+// teamPlacesByFestTeam is a Game's table as places against fest teams — what a
 // player's own team took there. A Game with several tables has no single
 // place, so it is refused rather than guessed at.
 func loadSeedSourceGame(ctx context.Context, q store.Queryer, festID int64, code string) (seedSourceGame, error) {
@@ -321,10 +322,10 @@ type seedEntry struct {
 	players []seedPlayer
 }
 
-// gameRoster is who played a Game and for whom: фест team by player, the
+// gameRoster is who played a Game and for whom: fest team by player, the
 // Game's own overrides applied. A player overridden into a team plays for
 // that team and no longer for the one the registry lists them under — which
-// is how three people from three teams come to be one Троечка team, and how
+// is how three people from three teams come to be one Troika team, and how
 // the same three are still found on their own teams in the source Games.
 func gameRoster(ctx context.Context, q store.Queryer, festID, gameID int64) (map[int64]int64, error) {
 	teamOf, err := store.CollectRows(ctx, q, `
@@ -414,7 +415,7 @@ order by ga.number, p.id`, []any{scope.GameID, scope.FestID}, func(rs *sql.Rows)
 	return entries, nil
 }
 
-// seedSourceGame is one Game a player's place is read from: its table by фест
+// seedSourceGame is one Game a player's place is read from: its table by fest
 // team, and who played it for whom.
 type seedSourceGame struct {
 	places map[int64]float64

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/edit"
@@ -15,14 +16,18 @@ import (
 	"dope/dope/domain/replay"
 	"dope/dope/domain/resolver"
 	"dope/dope/web/editbatch"
+	dopestrings "dope/i18nstrings"
+
+	corestrings "pecheny.me/dopecore/i18nstrings"
 )
 
 // buildTroika plays the transcript through the same writes a host's taps make:
 // the seating a Draw declares, the marks as a match patch, the finish, and the
-// resolver after each бой — the replay driver without its assertions, which
+// resolver after each Match — the replay driver without its assertions, which
 // server/tests already ran over this very transcript.
 func buildTroika(ctx context.Context, db *sql.DB, festID int64, registry map[string]int64,
 	script replay.Script, root string) error {
+	s := dopestrings.Default
 	dsl, err := os.ReadFile(root + "/scripts/troika/troika.dsl")
 	if err != nil {
 		return err
@@ -38,7 +43,7 @@ func buildTroika(ctx context.Context, db *sql.DB, festID int64, registry map[str
 		return err
 	}
 	scope := core.FestScope{FestID: festID, GameID: gameID}
-	log.Printf("троечка: игра %d, боёв %d", gameID, len(script.Bouts))
+	log.Printf("%s", s.Octobearfest.Log.TroikaStart(strconv.FormatInt(gameID, 10), strconv.Itoa(len(script.Bouts))))
 
 	for _, bout := range script.Bouts {
 		matchID, err := matchAt(db, gameID, bout.At)
@@ -89,13 +94,13 @@ where match_id = ? and slot_index = ?`, registry[seat.Name], matchID, index); er
 			_, err := editbatch.RecomputeMatchTx(ctx, tx, scope, matchID, true, "", "")
 			return err
 		}); err != nil {
-			return fmt.Errorf("%s: доигрыш: %w", bout.At, err)
+			return corestrings.User(s.Octobearfest.Error.Finish(bout.At.String(), err.Error()))
 		}
 		if err := resolve(ctx, db, gameID); err != nil {
 			return err
 		}
 	}
-	log.Printf("троечка: сыграна")
+	log.Printf("%s", s.Octobearfest.Log.TroikaDone())
 	return nil
 }
 
@@ -123,7 +128,7 @@ where s.game_id = ? and s.block_code = ? and s.group_code = ?
 order by s.position, m.position
 limit 1 offset ?`, gameID, at.Block, at.Group, at.Wave, at.Round, at.Match-1).Scan(&id)
 	if err == sql.ErrNoRows {
-		return 0, fmt.Errorf("нет боя по координате")
+		return 0, corestrings.User(dopestrings.Default.Octobearfest.Error.NoBoutAt())
 	}
 	return id, err
 }
@@ -134,7 +139,7 @@ func slotOf(db *sql.DB, matchID, participantID int64) (int, error) {
 select slot_index from match_slots where match_id = ? and participant_id = ?`,
 		matchID, participantID).Scan(&side)
 	if err == sql.ErrNoRows {
-		return 0, fmt.Errorf("не сидит в этом бою")
+		return 0, corestrings.User(dopestrings.Default.Octobearfest.Error.NotSeated())
 	}
 	return side, err
 }

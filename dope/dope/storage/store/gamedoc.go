@@ -6,9 +6,9 @@ import (
 )
 
 // GameDoc is a Game's document as every reader wants it: the flat document on
-// the 'main' бой when the Game has one (ЧГК, КСИ), else the game-level blob
-// (ЭК's seed ladder, a DSL flat game before it has a бой), never empty.
-// MatchID says which: valid means the document lives on that бой.
+// the 'main' match when the Game has one (ChGK, KSI), else the game-level blob
+// (EK's seed ladder, a DSL flat game before it has a match), never empty.
+// MatchID says which: valid means the document lives on that match.
 type GameDoc struct {
 	GameID     int64
 	GameType   string

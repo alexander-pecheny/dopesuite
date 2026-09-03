@@ -5,23 +5,27 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+
+	xystrings "xy/i18nstrings"
 )
 
 // A board's children — lists, list groups, cards, labels, tests — each carry a
 // board_id and a tombstone. child names one table and how its absence reads;
 // boardOf and onBoard are the two questions every handler asks of a child.
+// notFound/foreign resolve lazily so the Catalog is read at call time, not
+// package init.
 type child struct {
 	table    string
-	notFound string
-	foreign  string
+	notFound func() string
+	foreign  func() string
 }
 
 var (
-	childCard    = child{"cards", "карточка не найдена", "карточка с другой доски"}
-	childList    = child{"lists", "список не найден", "список с другой доски"}
-	childGroup   = child{"list_groups", "группа списков не найдена", "группа с другой доски"}
-	childLabel   = child{"labels", "метка не найдена", "метка с другой доски"}
-	childSession = child{"test_sessions", "тест не найден", "тест с другой доски"}
+	childCard    = child{"cards", xystrings.Default.Server.Child.CardNotFound, xystrings.Default.Server.Child.CardForeign}
+	childList    = child{"lists", xystrings.Default.Server.Child.ListNotFound, xystrings.Default.Server.Child.ListForeign}
+	childGroup   = child{"list_groups", xystrings.Default.Server.Child.GroupNotFound, xystrings.Default.Server.Child.GroupForeign}
+	childLabel   = child{"labels", xystrings.Default.Server.Child.LabelNotFound, xystrings.Default.Server.Child.LabelForeign}
+	childSession = child{"test_sessions", xystrings.Default.Server.Child.SessionNotFound, xystrings.Default.Server.Child.SessionForeign}
 )
 
 func (c child) board(ctx context.Context, q querier, id int64) (int64, error) {
@@ -34,7 +38,7 @@ func (c child) board(ctx context.Context, q querier, id int64) (int64, error) {
 func boardOf(ctx context.Context, q querier, c child, id int64) (int64, error) {
 	bid, err := c.board(ctx, q, id)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, errNotFound(c.notFound)
+		return 0, errNotFound(c.notFound())
 	}
 	return bid, err
 }
@@ -44,13 +48,13 @@ func boardOf(ctx context.Context, q querier, c child, id int64) (int64, error) {
 func onBoard(ctx context.Context, q querier, c child, id, bid int64) error {
 	owner, err := c.board(ctx, q, id)
 	if errors.Is(err, sql.ErrNoRows) {
-		return errBadRequest(c.notFound)
+		return errBadRequest(c.notFound())
 	}
 	if err != nil {
 		return err
 	}
 	if owner != bid {
-		return errBadRequest(c.foreign)
+		return errBadRequest(c.foreign())
 	}
 	return nil
 }

@@ -5,7 +5,7 @@
 // separable roles, registered together: a Macro expands one Block of the
 // scheme DSL into stages at compile time (macro.go — the Kind declares its
 // keys and emits through the Block it is handed), an Expander produces a
-// scheduled stage's бои from its typed config, a Ranker ranks a stage's
+// scheduled stage's Matches from its typed config, a Ranker ranks a stage's
 // participants from match outcomes at resolve time. Most Kinds are all
 // three; the reseed is only a Ranker, the hand-authored kind only an
 // Expander. The package never knows Protocol rules or DSL text; it consumes
@@ -30,9 +30,9 @@ type (
 	RankedEntry  = store.RankedEntry
 )
 
-// BoutPoints maps a 2-seat bout place to очки — 2/1/0 for победа/ничья/
-// поражение (КИНСБФ 4.1). Places beyond the second clamp to 0: share metrics
-// are only defined for head-to-head bouts.
+// BoutPoints maps a 2-seat Match place to points — 2/1/0 for win/draw/loss
+// (KINSBF 4.1). Places beyond the second clamp to 0: share metrics are only
+// defined for head-to-head bouts.
 func BoutPoints(place float64) float64 {
 	points := 2 * (2 - place)
 	if points < 0 {
@@ -54,7 +54,8 @@ type Expander interface {
 
 // Ranker is a Kind's resolve-time role: Standings ranks the stage's
 // participants from its matches' outcomes, and Order names the Metrics it
-// ranked by, in order — what a table of those standings shows beside М.
+// ranked by, in order — what a table of those standings shows beside the place
+// column.
 // Metrics is what the Kind itself adds to a row over the Protocol's metrics,
 // which every Kind sums; the compiler lets a scheme sort by nothing else.
 type Ranker interface {
@@ -105,7 +106,7 @@ type RRPoints struct {
 	Loss float64 `json:"loss"`
 }
 
-// FlatConfig is a flat game: one бой of every entrant.
+// FlatConfig is a flat game: one Match of every entrant.
 type FlatConfig struct {
 	Code     string             `json:"code,omitempty"`
 	Title    string             `json:"title,omitempty"`
@@ -139,7 +140,7 @@ type ManualConfig struct {
 }
 
 // MetricTakenBase is the Protocol metric a reseed's shares are built on —
-// взятые without перестрелка. A Protocol that wants shares writes it.
+// taken without the shootout. A Protocol that wants shares writes it.
 const MetricTakenBase = "takenBase"
 
 // The registries are the single source of truth for known stage kinds. Add a
@@ -181,10 +182,10 @@ func Register(kind interface{ Code() string }) {
 	}
 }
 
-// Ascending reports whether a Metric reads better the smaller it is. Места and
-// поражения do, and the жребий that closes a пересев; everything a Protocol
+// Ascending reports whether a Metric reads better the smaller it is. Places
+// and losses do, and the draw lot that closes a reseed; everything a Protocol
 // measures reads better the bigger. Every table asks here, so a comparator
-// cannot sort one way in a группа and the other in a series.
+// cannot sort one way in a Group and the other in a series.
 func Ascending(metric string) bool {
 	switch metric {
 	case "place", "place_sum", "losses", "draw":

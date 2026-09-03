@@ -93,7 +93,7 @@ func convertSegments(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-// flatMatchIDs maps every ЧГК-family game to its single 'main' match — the
+// flatMatchIDs maps every ChGK-family game to its single 'main' match — the
 // redirect target for its legacy games.state_json deltas.
 func flatMatchIDs(ctx context.Context, db *sql.DB) (map[int64]int64, error) {
 	rows, err := db.QueryContext(ctx, `

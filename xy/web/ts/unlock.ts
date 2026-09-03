@@ -8,6 +8,7 @@
 import { xySizes } from "./app.js";
 import type { AuthMe, Sizes } from "./app.js";
 import type { SyncStatus } from "./sync.js";
+import S from "./i18nstrings_ru_gen.js";
 
 // Structural mirrors of crypto.ts's DataKey/BoardKeymeta. Deliberately not
 // imported: crypto.ts pulls the vendored scrypt, and this module's whole point
@@ -116,7 +117,7 @@ export interface BoardState {
   sizes: Sizes;
   defaultAuthor: string;
   cardTitle: string;
-  // Which kind of лента entry an opened card starts on — the reader's own
+  // Which kind of feed entry an opened card starts on — the reader's own
   // choice (users.feed_default, /profile). "" is the default, "all".
   feedDefault: string;
   timezone: string;
@@ -162,7 +163,7 @@ export interface UnlockUI {
   form: { addEventListener(type: "submit", handler: (e: { preventDefault(): void }) => void): void };
   pass: { value: string; focus(): void };
   message: { textContent: string | null };
-  // «Не помню пароль» and what it reveals: one danger button whose verb depends
+  // The forgot-passphrase button and what it reveals: one danger button whose verb depends
   // on the role, which nothing on the page knows before a key exists.
   forgot: { hidden: boolean | string; addEventListener(type: "click", handler: () => void): void };
   exit: { hidden: boolean | string };
@@ -219,13 +220,13 @@ export interface UnlockDeps {
     leaveBoard(name: string): Promise<void>;
   };
   // The name, the moment /meta hands it over: until then a locked board's header
-  // reads «Доска», and it is the board about to be deleted.
+  // reads the generic "Board", and it is the board about to be deleted.
   onName(name: string): void;
   // offline: the state was rendered from the local mirror, not a fresh server
   // snapshot. Covers render + notif badge + members roster + deep link.
   onState(state: BoardState, info: { offline: boolean }): void;
   // No snapshot and no network: board.js hides the kanban and titles the page
-  // "Доска недоступна офлайн" (status.set("error") has already fired).
+  // "Board unavailable offline" (status.set("error") has already fired).
   onUnavailable(): void;
 }
 
@@ -280,7 +281,7 @@ export function createUnlock(deps: UnlockDeps): Unlock {
     }
   });
 
-  // «Не помню пароль». /meta is asked on the click rather than at boot so an
+  // The forgot-passphrase button. /meta is asked on the click rather than at boot so an
   // ordinary unlock still costs one request, and so the keymeta an attacker
   // would grind offline stays where it is: behind the submit.
   let exitAct: (() => Promise<void>) | null = null;
@@ -290,7 +291,7 @@ export function createUnlock(deps: UnlockDeps): Unlock {
       try {
         const meta = (await net.fetchJSON(`/api/boards/${boardId}/meta`)) as BoardMeta;
         const owner = meta.role === "owner";
-        ui.exitBtn.textContent = owner ? "Удалить доску" : "Покинуть доску";
+        ui.exitBtn.textContent = owner ? S.passphrase.exit.delete() : S.passphrase.exit.leave();
         exitAct = () => (owner ? deps.exit.deleteBoard(meta.name) : deps.exit.leaveBoard(meta.name));
         if (meta.name) deps.onName(meta.name);
         ui.forgot.hidden = true;

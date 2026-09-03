@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	xystrings "xy/i18nstrings"
 )
 
 // Attachments carry ciphertext bytes (already an xy envelope) plus encrypted
@@ -178,7 +180,7 @@ func (s *server) handleReplaceAttachment(w http.ResponseWriter, r *http.Request)
 	err := s.db.QueryRowContext(r.Context(), `
 select board_id, card_id, blob_ref, size from attachments where id = ? and deleted_at is null`, attID).Scan(&bid, &cardID, &oldRef, &oldSize)
 	if errors.Is(err, sql.ErrNoRows) {
-		httpError(w, http.StatusNotFound, "вложение не найдено")
+		httpError(w, http.StatusNotFound, xystrings.Default.Server.Attachment.NotFound())
 		return
 	}
 	if handleErr(w, err) {
@@ -218,7 +220,7 @@ type patchAttachmentRequest struct {
 	IsExcerpt *bool `json:"is_excerpt"`
 }
 
-// handlePatchAttachment flips an attachment's «выписка» flag.
+// handlePatchAttachment flips an attachment's excerpt flag.
 func (s *server) handlePatchAttachment(w http.ResponseWriter, r *http.Request) {
 	u, ok := s.requireUser(w, r)
 	if !ok {
@@ -231,7 +233,7 @@ func (s *server) handlePatchAttachment(w http.ResponseWriter, r *http.Request) {
 	var bid int64
 	err := s.db.QueryRowContext(r.Context(), `select board_id from attachments where id = ? and deleted_at is null`, attID).Scan(&bid)
 	if errors.Is(err, sql.ErrNoRows) {
-		httpError(w, http.StatusNotFound, "вложение не найдено")
+		httpError(w, http.StatusNotFound, xystrings.Default.Server.Attachment.NotFound())
 		return
 	}
 	if handleErr(w, err) {
@@ -272,7 +274,7 @@ func (s *server) handleGetAttachment(w http.ResponseWriter, r *http.Request) {
 	err := s.db.QueryRowContext(r.Context(), `select board_id, blob_ref, mime from attachments where id = ? and deleted_at is null`, attID).
 		Scan(&bid, &ref, &mime)
 	if errors.Is(err, sql.ErrNoRows) {
-		httpError(w, http.StatusNotFound, "вложение не найдено")
+		httpError(w, http.StatusNotFound, xystrings.Default.Server.Attachment.NotFound())
 		return
 	}
 	if handleErr(w, err) {

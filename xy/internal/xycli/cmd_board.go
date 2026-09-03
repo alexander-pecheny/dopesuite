@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 
+	xystrings "xy/i18nstrings"
+
 	"xy/internal/rank"
 )
 
@@ -17,7 +19,8 @@ func cmdBoard(a *app, args []string) error {
 	if len(args) == 0 || args[0] != "show" {
 		return errors.New("пока есть только `xy-cli board show --board <id|имя>`")
 	}
-	fs := a.flags("board show", "Списки и карточки доски, в порядке доски.")
+	s := xystrings.Default
+	fs := a.flags("board show", s.Cli.Board.Usage())
 	board := a.boardFlag(fs)
 	_, err := a.parse(fs, args[1:])
 	if err != nil {
@@ -90,10 +93,11 @@ func cmdList(a *app, args []string) error {
 }
 
 func listAdd(a *app, args []string) error {
-	fs := a.flags("list add", "Создать список в конце доски (или после указанного).")
+	s := xystrings.Default
+	fs := a.flags("list add", s.Cli.List.AddUsage())
 	board := a.boardFlag(fs)
-	title := fs.String("title", "", "название списка")
-	after := fs.Int64("after", 0, "id списка, после которого встать")
+	title := fs.String("title", "", s.Cli.List.AddTitleFlag())
+	after := fs.Int64("after", 0, s.Cli.List.AddAfterFlag())
 	_, err := a.parse(fs, args)
 	if err != nil {
 		return err
@@ -122,13 +126,14 @@ func listAdd(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	return a.emit(map[string]any{"id": id}, func() { a.printf("список %d «%s» создан\n", id, *title) })
+	return a.emit(map[string]any{"id": id}, func() { a.printf("%s", s.Cli.List.Created(itoa(id), *title)) })
 }
 
 func listRename(a *app, args []string) error {
-	fs := a.flags("list rename", "xy-cli list rename <id> --board B --title «Новое»")
+	s := xystrings.Default
+	fs := a.flags("list rename", s.Cli.List.RenameUsage())
 	board := a.boardFlag(fs)
-	title := fs.String("title", "", "новое название")
+	title := fs.String("title", "", s.Cli.List.RenameTitleFlag())
 	rest, err := a.parse(fs, args)
 	if err != nil {
 		return err
@@ -136,7 +141,7 @@ func listRename(a *app, args []string) error {
 	if len(rest) != 1 || *title == "" {
 		return errors.New("нужен id списка и --title")
 	}
-	listID, err := parseID(rest[0], "список")
+	listID, err := parseID(rest[0], s.Cli.Shared.WhatList())
 	if err != nil {
 		return err
 	}
@@ -154,13 +159,14 @@ func listRename(a *app, args []string) error {
 	if err := c.PatchList(listID, map[string]any{"title_enc": titleEnc}); err != nil {
 		return err
 	}
-	return a.emit(map[string]any{"id": listID}, func() { a.printf("список %d переименован\n", listID) })
+	return a.emit(map[string]any{"id": listID}, func() { a.printf("%s", s.Cli.List.Renamed(itoa(listID))) })
 }
 
 func listRemove(a *app, args []string) error {
-	fs := a.flags("list rm", "xy-cli list rm <id> --board B\nУдаление — надгробие на 14 дней (ADR-0002).")
+	s := xystrings.Default
+	fs := a.flags("list rm", s.Cli.List.RmUsage())
 	board := a.boardFlag(fs)
-	listID, err := a.oneID(fs, args, "список")
+	listID, err := a.oneID(fs, args, s.Cli.Shared.WhatList())
 	if err != nil {
 		return err
 	}
@@ -175,7 +181,7 @@ func listRemove(a *app, args []string) error {
 	if err := c.DeleteList(listID); err != nil {
 		return err
 	}
-	return a.emit(map[string]any{"id": listID}, func() { a.printf("список %d «%s» удалён\n", listID, l.Title) })
+	return a.emit(map[string]any{"id": listID}, func() { a.printf("%s", s.Cli.List.Removed(itoa(listID), l.Title)) })
 }
 
 // ---- cards ----
@@ -194,9 +200,10 @@ func descHash(desc string) string {
 }
 
 func cardGet(a *app, args []string) error {
-	fs := a.flags("card get", "xy-cli card get <id> --board B\nПечатает 4s карточки как есть; хэш для --expect уходит в stderr.")
+	s := xystrings.Default
+	fs := a.flags("card get", s.Cli.Card.GetUsage())
 	board := a.boardFlag(fs)
-	cardID, err := a.oneID(fs, args, "карточка")
+	cardID, err := a.oneID(fs, args, s.Cli.Shared.WhatCard())
 	if err != nil {
 		return err
 	}
@@ -216,19 +223,20 @@ func cardGet(a *app, args []string) error {
 		if !strings.HasSuffix(card.Desc, "\n") {
 			a.printf("\n")
 		}
-		a.note("# карточка %d, список %d, hash %s\n", card.ID, card.ListID, descHash(card.Desc))
+		a.note("%s", s.Cli.Card.GetHeader(itoa(card.ID), itoa(card.ListID), descHash(card.Desc)))
 	})
 }
 
 func cardSet(a *app, args []string) error {
-	fs := a.flags("card set", "xy-cli card set <id> --board B [--expect hash] < новый.4s\nВсегда пишет правку в ленту (desc_edit).")
+	s := xystrings.Default
+	fs := a.flags("card set", s.Cli.Card.SetUsage())
 	board := a.boardFlag(fs)
-	text := fs.String("text", "", "новый 4s (иначе stdin)")
-	file := fs.String("file", "", "файл с 4s (иначе stdin)")
-	expect := fs.String("expect", "", "хэш из `card get` — записать, только если карточка не менялась")
-	alias := fs.String("alias", "", "короткое имя карточки")
-	kind := fs.String("kind", "", "тип карточки: normal|question|test|meta|heading|other")
-	cardID, err := a.oneID(fs, args, "карточка")
+	text := fs.String("text", "", s.Cli.Card.SetTextFlag())
+	file := fs.String("file", "", s.Cli.Card.FileFlag())
+	expect := fs.String("expect", "", s.Cli.Card.ExpectFlag())
+	alias := fs.String("alias", "", s.Cli.Card.AliasFlag())
+	kind := fs.String("kind", "", s.Cli.Card.SetKindFlag())
+	cardID, err := a.oneID(fs, args, s.Cli.Shared.WhatCard())
 	if err != nil {
 		return err
 	}
@@ -259,7 +267,7 @@ func cardSet(a *app, args []string) error {
 			if err != nil {
 				return err
 			}
-			// The лента's memory of what the question used to say — written on a
+			// The Timeline's memory of what the question used to say — written on a
 			// real change only, as the browser's rewrites do. The server writes the
 			// row, but only from a payload the client seals: before/after are
 			// plaintext it never sees.
@@ -287,27 +295,28 @@ func cardSet(a *app, args []string) error {
 	}
 	if len(body) == 0 {
 		return a.emit(map[string]any{"id": cardID, "hash": descHash(desc), "changed": false}, func() {
-			a.printf("карточка %d уже такая — ничего не записано\n", cardID)
+			a.printf("%s", s.Cli.Card.Unchanged(itoa(cardID)))
 		})
 	}
 	if err := c.PatchCard(cardID, body); err != nil {
 		return err
 	}
 	return a.emit(map[string]any{"id": cardID, "hash": descHash(desc)}, func() {
-		a.printf("карточка %d обновлена (hash %s)\n", cardID, descHash(desc))
+		a.printf("%s", s.Cli.Card.Updated(itoa(cardID), descHash(desc)))
 	})
 }
 
 func cardAdd(a *app, args []string) error {
-	fs := a.flags("card add", "xy-cli card add --board B --list L [--after id|--before id] < вопрос.4s")
+	s := xystrings.Default
+	fs := a.flags("card add", s.Cli.Card.AddUsage())
 	board := a.boardFlag(fs)
-	list := fs.Int64("list", 0, "id списка")
-	text := fs.String("text", "", "4s карточки (иначе stdin)")
-	file := fs.String("file", "", "файл с 4s (иначе stdin)")
-	kind := fs.String("kind", "normal", "тип карточки")
-	alias := fs.String("alias", "", "короткое имя карточки")
-	after := fs.Int64("after", 0, "id карточки, после которой встать")
-	before := fs.Int64("before", 0, "id карточки, перед которой встать")
+	list := fs.Int64("list", 0, s.Cli.Card.AddListFlag())
+	text := fs.String("text", "", s.Cli.Card.AddTextFlag())
+	file := fs.String("file", "", s.Cli.Card.FileFlag())
+	kind := fs.String("kind", "normal", s.Cli.Card.AddKindFlag())
+	alias := fs.String("alias", "", s.Cli.Card.AliasFlag())
+	after := fs.Int64("after", 0, s.Cli.Card.AfterFlag())
+	before := fs.Int64("before", 0, s.Cli.Card.BeforeFlag())
 	_, err := a.parse(fs, args)
 	if err != nil {
 		return err
@@ -355,16 +364,17 @@ func cardAdd(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	return a.emit(map[string]any{"id": id, "rank": newRank}, func() { a.printf("карточка %d создана\n", id) })
+	return a.emit(map[string]any{"id": id, "rank": newRank}, func() { a.printf("%s", s.Cli.Card.Created(itoa(id))) })
 }
 
 func cardMove(a *app, args []string) error {
+	s := xystrings.Default
 	fs := a.flags("card mv", "xy-cli card mv <id> --board B [--list L] [--after id|--before id]")
 	board := a.boardFlag(fs)
-	list := fs.Int64("list", 0, "id списка назначения (по умолчанию тот же)")
-	after := fs.Int64("after", 0, "id карточки, после которой встать")
-	before := fs.Int64("before", 0, "id карточки, перед которой встать")
-	cardID, err := a.oneID(fs, args, "карточка")
+	list := fs.Int64("list", 0, s.Cli.Card.MvListFlag())
+	after := fs.Int64("after", 0, s.Cli.Card.AfterFlag())
+	before := fs.Int64("before", 0, s.Cli.Card.BeforeFlag())
+	cardID, err := a.oneID(fs, args, s.Cli.Shared.WhatCard())
 	if err != nil {
 		return err
 	}
@@ -404,14 +414,15 @@ func cardMove(a *app, args []string) error {
 		return err
 	}
 	return a.emit(map[string]any{"id": cardID, "list_id": target, "rank": newRank}, func() {
-		a.printf("карточка %d в списке %d\n", cardID, target)
+		a.printf("%s", s.Cli.Card.Moved(itoa(cardID), itoa(target)))
 	})
 }
 
 func cardRemove(a *app, args []string) error {
-	fs := a.flags("card rm", "xy-cli card rm <id> --board B\nУдаление — надгробие на 14 дней (ADR-0002).")
+	s := xystrings.Default
+	fs := a.flags("card rm", s.Cli.Card.RmUsage())
 	board := a.boardFlag(fs)
-	cardID, err := a.oneID(fs, args, "карточка")
+	cardID, err := a.oneID(fs, args, s.Cli.Shared.WhatCard())
 	if err != nil {
 		return err
 	}
@@ -425,7 +436,7 @@ func cardRemove(a *app, args []string) error {
 	if err := c.DeleteCard(cardID); err != nil {
 		return err
 	}
-	return a.emit(map[string]any{"id": cardID}, func() { a.printf("карточка %d удалена\n", cardID) })
+	return a.emit(map[string]any{"id": cardID}, func() { a.printf("%s", s.Cli.Card.Removed(itoa(cardID))) })
 }
 
 // rankFor places an item among ranks (ordered, parallel to ids): after/before a

@@ -9,7 +9,7 @@ export interface MappedCard { desc: string; alias: string | null; kind: CardKind
 export interface RawDescEdit { before: string; date: string; author: string }
 export interface DescEdit { before: string; after: string; date: string; author: string }
 
-// Markers that make a block part of a ЧГК question, whatever line it sits on:
+// Markers that make a block part of a chgk question, whatever line it sits on:
 // compose_4s puts "№ N" ahead of "? …", and an answer/zachet/source is as much
 // a question's field as the question line itself.
 const QUESTION_BLOCKS = new Set<string>([
@@ -21,7 +21,7 @@ const META_BLOCKS = new Set<string>(["meta", "editor", "date"]);
 // cardKind classifies a card by the chgksuite markers in its text. A Trello
 // board holds plenty of cards that are neither a question nor a caption — notes,
 // links, checklists — and reading those as questions makes them a numbered part
-// of the package, so anything unmarked lands in «Другое».
+// of the package, so anything unmarked lands in "Other".
 export function cardKind(desc: string): CardKind {
   const blocks = xyChgk.parseBlocks(desc);
   if (blocks.some((b) => QUESTION_BLOCKS.has(b.type))) return "question";

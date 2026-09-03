@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"net/http"
 	"time"
+
+	xystrings "xy/i18nstrings"
 )
 
 type cardDTO struct {
@@ -15,7 +17,7 @@ type cardDTO struct {
 	Rank           string  `json:"rank"`
 	HandoutMetaEnc *string `json:"handout_meta_enc,omitempty"` // nil = no saved handout settings
 	AliasEnc       *string `json:"alias_enc,omitempty"`        // nil = no alias
-	// CreatedAt anchors the лента: the client shows it as a «карточка создана»
+	// CreatedAt anchors the timeline: the client shows it as a "card created"
 	// line under the oldest event, so every later timestamp has something to be
 	// read against. Deliberately NOT a timeline event — the column already
 	// exists on every card ever made, where an event would only cover new ones.
@@ -269,8 +271,8 @@ func (s *server) handleSetCardLabels(w http.ResponseWriter, r *http.Request) {
 			if err := onBoard(ctx, tx, childLabel, a.LabelID, bid); err != nil {
 				return err
 			}
-			// A scoped assignment must name a Playing that exists: «взяли», but at
-			// what, is not a state the model has.
+			// A scoped assignment must name a Playing that exists — a "taken"
+			// whose "at what" is not a state the model has.
 			if a.SessionID != nil {
 				var played int
 				if err := tx.QueryRowContext(ctx,
@@ -278,7 +280,7 @@ func (s *server) handleSetCardLabels(w http.ResponseWriter, r *http.Request) {
 					return err
 				}
 				if played == 0 {
-					return errBadRequest("вопрос не отмечен этим тестом")
+					return errBadRequest(xystrings.Default.Server.Card.QuestionNotMarked())
 				}
 			}
 			if _, err := tx.ExecContext(ctx,
@@ -388,7 +390,7 @@ func (s *server) handleSetTourTesters(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if (req.ListID == nil) == (req.GroupID == nil) {
-		httpError(w, http.StatusBadRequest, "нужен ровно один из list_id / group_id")
+		httpError(w, http.StatusBadRequest, xystrings.Default.Server.Card.ScopeExactlyOne())
 		return
 	}
 	err := s.withWriteTx(r.Context(), "set-tour-testers", func(ctx context.Context, tx *sql.Tx) error {

@@ -17,7 +17,7 @@ type RosterTeam struct {
 }
 
 // RosterFolder is a flat Protocol whose scheme and document carry the fest
-// roster: ОД's teams array and entries grid, КСИ's participants and answer
+// roster: OD's teams array and entries grid, KSI's participants and answer
 // rows. FoldRoster rewrites both for a new roster; entryRemap (old number →
 // new) renumbers the cells that key on a Number.
 type RosterFolder interface {
@@ -25,7 +25,7 @@ type RosterFolder interface {
 }
 
 // FoldRoster folds the roster into a Game's scheme and document through its
-// Protocol; ok is false for a Protocol that carries no roster (ЭК, брейн).
+// Protocol; ok is false for a Protocol that carries no roster (EK, brain).
 func FoldRoster(code, schemeJSON, stateJSON string, teams []RosterTeam, entryRemap map[int]int) (scheme, state []byte, ok bool, err error) {
 	p, found := Get(code)
 	if !found {
@@ -48,7 +48,7 @@ func (od) FoldRoster(schemeJSON, stateJSON string, teams []RosterTeam, entryRema
 	return scheme, state, err
 }
 
-// КСИ's theme count rides on the scheme, so the state is resized to it.
+// KSI's theme count rides on the scheme, so the state is resized to it.
 func (ksi) FoldRoster(schemeJSON, stateJSON string, teams []RosterTeam, _ map[int]int) ([]byte, []byte, error) {
 	scheme, err := ksiRosterScheme(schemeJSON, teams)
 	if err != nil {
@@ -377,8 +377,8 @@ func resizeRow[T any](values []T, size int) []T {
 	return out
 }
 
-// Мультиигры carries its roster the way КСИ does — the participants list plus
-// one cell grid per мини-игра, each row a team — so the fold is the same:
+// Multi carries its roster the way KSI does — the participants list plus
+// one cell grid per minigame, each row a team — so the fold is the same:
 // rewrite the list, and follow every team's row across the reorder.
 func (multi) FoldRoster(schemeJSON, stateJSON string, teams []RosterTeam, _ map[int]int) ([]byte, []byte, error) {
 	participants := teamParticipantsFromRoster(teams)

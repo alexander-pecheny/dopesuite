@@ -17,8 +17,8 @@ import (
 // row goes — results, imported seeds, the bracket's resolution — and the
 // pristine Structure is written back, while the Game keeps its id, code, slug,
 // title and, when it named its entrants, those entrants. Fest-scoped teams,
-// players and the audit log stay. Returns the code of the first бой, for the
-// ведущий's cursor.
+// players and the audit log stay. Returns the code of the first Match, for
+// the host's cursor.
 func Clear(ctx context.Context, tx *sql.Tx, festID, gameID int64) (string, error) {
 	var gameType, title, schemeJSON, dsl string
 	if err := tx.QueryRowContext(ctx, `
@@ -26,7 +26,7 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 		gameID, festID).Scan(&gameType, &title, &schemeJSON, &dsl); err != nil {
 		return "", err
 	}
-	// A pre-DSL брейн gets its shortcut scheme re-expressed in the DSL, so a
+	// A pre-DSL Brain gets its shortcut scheme re-expressed in the DSL, so a
 	// clear upgrades it onto the one authoring path.
 	if gameType == games.Brain && strings.TrimSpace(dsl) == "" {
 		var count int
@@ -104,7 +104,7 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 			return "", err
 		}
 	case gameType == games.Multi:
-		// The мини-игры and the fest's tiebreak survive: clearing a game wipes
+		// The minigames and the fest's tiebreak survive: clearing a game wipes
 		// what was played, not what it is.
 		var sc games.MultiScheme
 		_ = json.Unmarshal([]byte(schemeJSON), &sc)
@@ -142,9 +142,9 @@ select code from matches where game_id = ? order by position, id limit 1`, gameI
 	return first.String, err
 }
 
-// DefaultBrainDSL is a брейн at its plainest: one round-robin of everybody,
-// so many questions a бой. The creation form offers it and Clear upgrades a
-// pre-DSL брейн onto it.
+// DefaultBrainDSL is a Brain at its plainest: one round-robin of everybody,
+// so many questions a Match. The creation form offers it and Clear upgrades
+// a pre-DSL Brain onto it.
 func DefaultBrainDSL(participants, questions int) string {
 	if participants < 2 {
 		participants = 4

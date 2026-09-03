@@ -6,6 +6,7 @@
 // Loaded as an ES module (CSP script-src 'self'); consumers import from it.
 import { scrypt } from "../vendor/scrypt.js";
 import { WORDLIST } from "./wordlist.js";
+import S from "./i18nstrings_ru_gen.js";
 
 // scrypt KDF parameters, stored (JSON-encoded) per board.
 export interface KdfParams {
@@ -65,10 +66,10 @@ const PASSPHRASE_MIN_WORDS = 3;
 function validatePassphrase(passphrase: string | null | undefined): string | null {
   const pass = (passphrase || "").normalize("NFKC");
   if ([...pass].length < PASSPHRASE_MIN_LEN) {
-    return `Пароль доски должен быть не короче ${PASSPHRASE_MIN_LEN} символов.`;
+    return S.chrome.passphrase.tooShort(String(PASSPHRASE_MIN_LEN));
   }
   if (pass.split(/[ \-_]+/).filter(Boolean).length < PASSPHRASE_MIN_WORDS) {
-    return `Пароль доски должен содержать минимум ${PASSPHRASE_MIN_WORDS} слова (через пробел, «-» или «_»).`;
+    return S.chrome.passphrase.tooFewWords(String(PASSPHRASE_MIN_WORDS));
   }
   return null;
 }

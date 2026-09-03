@@ -1,4 +1,5 @@
 import { icon } from "./icons_gen.js";
+import S from "./i18nstrings_ru_gen.js";
 // Game-page plumbing shared by od/si/host/viewer: the window globals contract
 // (init payloads, menu chrome), route parsing, breadcrumbs, the menu jump/
 // download mounts, the localStorage snapshot cache and the init/cache/fetch
@@ -44,7 +45,7 @@ export interface GameBreadcrumbsOptions {
   currentTitle?: string;
   festHref?: string;
   gameHref?: string;
-  // Host pages sit under /host/fest/…, so their trail carries the Мои фесты
+  // Host pages sit under /host/fest/…, so their trail carries the My fests
   // crumb the URL does; the public viewer's does not.
   host?: boolean;
 }
@@ -55,14 +56,14 @@ export interface GameBreadcrumbsOptions {
 // pages' trail.
 export function renderGameBreadcrumbs(root: HTMLElement | null | undefined, options: GameBreadcrumbsOptions = {}): void {
   if (!root) return;
-  const festTitle = String(options.festTitle || "Фест").trim() || "Фест";
-  const gameTitle = String(options.gameTitle || "Игра").trim() || "Игра";
+  const festTitle = String(options.festTitle || S.screen.title.fest()).trim() || S.screen.title.fest();
+  const gameTitle = String(options.gameTitle || S.screen.title.game()).trim() || S.screen.title.game();
   const currentTitle = String(options.currentTitle || "").trim();
 
   const trail: Array<{ text: string; href?: string; home?: boolean }> = [
     { text: "", href: "/", home: true },
   ];
-  if (options.host) trail.push({ text: "Мои фесты", href: "/host" });
+  if (options.host) trail.push({ text: S.screen.trail.host(), href: "/host" });
   trail.push({ text: festTitle, href: options.festHref || "/" });
   if (options.gameHref && currentTitle && currentTitle !== gameTitle) {
     trail.push({ text: gameTitle, href: options.gameHref });
@@ -80,8 +81,8 @@ export function renderGameBreadcrumbs(root: HTMLElement | null | undefined, opti
     // The home crumb is a glyph with no words; the rest say what they are.
     if (crumb.home) {
       node.appendChild(icon("house"));
-      node.setAttribute("aria-label", "Главная");
-      node.title = "Главная";
+      node.setAttribute("aria-label", S.screen.trail.home());
+      node.title = S.screen.trail.home();
     } else {
       node.textContent = crumb.text;
     }
@@ -101,9 +102,9 @@ function breadcrumbSeparator(): HTMLElement {
 
 export function mountEditorLink(): {refresh(): void} {
   const set = () => (window as Window & PageGlobals).dopeMenu?.setJump({
-    label: "Редактировать",
+    label: S.screen.jump.edit(),
     href: editorHrefForCurrentLocation(),
-    title: "Открыть в режиме редактирования",
+    title: S.screen.jump.editTitle(),
   });
   set();
   return {refresh: set};
@@ -131,10 +132,10 @@ export function mountUnnumberedBanner(festID: string | number | null | undefined
     padding: "8px 12px",
     textAlign: "center",
   });
-  bar.append("Командам не присвоены номера — редактирование результатов заблокировано. ");
+  bar.append(S.screen.banner.unassignedLead());
   const link = document.createElement("a");
   link.href = `/host/fest/${festID}/numbers`;
-  link.textContent = "Присвоить номера";
+  link.textContent = S.screen.banner.assign();
   Object.assign(link.style, {color: "inherit", fontWeight: "600", textDecoration: "underline"});
   bar.appendChild(link);
   document.body.prepend(bar);
@@ -143,9 +144,9 @@ export function mountUnnumberedBanner(festID: string | number | null | undefined
 
 export function mountViewerLink(): {refresh(): void} {
   const set = () => (window as Window & PageGlobals).dopeMenu?.setJump({
-    label: "Страница зрителя",
+    label: S.screen.jump.viewer(),
     href: viewerHrefForCurrentLocation(),
-    title: "Открыть зрительскую страницу",
+    title: S.screen.jump.viewerTitle(),
     external: true,
   });
   set();
@@ -158,23 +159,23 @@ function viewerHrefForCurrentLocation(): string {
 }
 
 // mountGameDownloads registers the game's archive download links in the ☰ menu:
-// "Скачать XLSX" for everyone, and "Скачать .json.gz" (current state + edit
+// "Download XLSX" for everyone, and "Download .json.gz" (current state + edit
 // history) for hosts only. apiBase is the game's /api/fest/.../games/... base.
 export function mountGameDownloads(opts: {apiBase?: string; canEdit?: boolean} | null | undefined): void {
   const apiBase = opts && opts.apiBase;
   const menu = (window as Window & PageGlobals).dopeMenu;
   if (!apiBase || !menu?.setExtras) return;
   const items: DopeMenuExtra[] = [{
-    label: "Скачать XLSX",
+    label: S.screen.downloads.xlsx(),
     href: `${apiBase}/export.xlsx`,
-    title: "Скачать таблицу игры в формате XLSX",
+    title: S.screen.downloads.xlsxTitle(),
     download: true,
   }];
   if (opts.canEdit) {
     items.push({
-      label: "Скачать .json.gz",
+      label: S.screen.downloads.archive(),
       href: `${apiBase}/export.json.gz`,
-      title: "Скачать текущее состояние игры и историю правок",
+      title: S.screen.downloads.archiveTitle(),
       download: true,
     });
   }

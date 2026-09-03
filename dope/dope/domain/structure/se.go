@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+
+	dopestrings "dope/i18nstrings"
 
 	"dope/dope/storage/store"
 )
@@ -12,7 +15,7 @@ func init() { Register(singleElim{}) }
 
 // singleElim is the knockout kind: entrants (a power of two) are laid out in
 // standard bracket order, each round's winners advance by fromMatch place-1
-// refs, and an optional bronze бой seats the semifinal losers.
+// refs, and an optional bronze Match seats the semifinal losers.
 type singleElim struct{}
 
 func (singleElim) Code() string { return "se" }
@@ -22,19 +25,21 @@ func (singleElim) Keys() []Key {
 }
 
 func seRoundTitle(remaining int) string {
+	s := dopestrings.Default
 	switch remaining {
 	case 2:
-		return "Финал"
+		return s.Structure.Titles.Final()
 	case 4:
-		return "Полуфиналы"
+		return s.Structure.Se.RoundSemifinals()
 	}
-	return fmt.Sprintf("1/%d финала", remaining/2)
+	return s.Structure.Se.RoundNth(strconv.Itoa(remaining / 2))
 }
 
 // Expand is the knockout: a bracket of Rounds, each round's winning places
-// carried forward, with an optional reseed at a Round boundary, a bronze бой
+// carried forward, with an optional reseed at a Round boundary, a bronze Match
 // and a best-of series in the final.
 func (singleElim) Expand(b Block) (Outputs, error) {
+	s := dopestrings.Default
 	participants, ok := b.Int("participants")
 	if !ok {
 		return Outputs{}, errors.New("single_elimination: нужен participants")
@@ -43,7 +48,7 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 	if v, ok := b.Int("winning_places"); ok {
 		winning = v
 	}
-	// match_size may differ round by round — ЭК plays its 1/4 three to a table
+	// match_size may differ round by round — EK plays its 1/4 three to a table
 	// and everything else four — so the size is asked for per round.
 	sizeFor := func(round, entering int) int {
 		size := 2
@@ -127,8 +132,8 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 		}
 		var reseedCode string
 		if (everyRound && roundIndex > 0) || remaining == boundaryAt {
-			// Every place that survived the round before, best бой first — the
-			// reseed's own sorting decides the rest.
+			// Every place that survived the round before, best Match first —
+			// the reseed's own sorting decides the rest.
 			alive := make([]store.SchemeSlot, 0, len(prevCodes)*winning)
 			for _, prev := range prevCodes {
 				for place := 1; place <= winning; place++ {
@@ -153,9 +158,9 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 		}
 		matches := make([]store.SchemeMatch, count)
 		codes := make([]string, count)
-		// Who meets whom: a reseed re-ranks everyone and deals the бои by the
-		// draw, so the round's best meets its worst; without one the bracket
-		// template carries each бой's winners forward in бой order.
+		// Who meets whom: a reseed re-ranks everyone and deals the Matches by
+		// the draw, so the round's best meets its worst; without one the
+		// bracket template carries each Match's winners forward in Match order.
 		drawn := elimDraw(remaining, count, size, winning)
 		template := straightChunks(remaining, count)
 		for i := 1; i <= count; i++ {
@@ -172,19 +177,20 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 			default:
 				for _, rank := range template[i-1] {
 					from, place := (rank-1)/winning, (rank-1)%winning+1
-					slots = append(slots, LabelledFromMatch(prevCodes[from], fmt.Sprintf("Бой %d", from+1), place))
+					slots = append(slots, LabelledFromMatch(prevCodes[from], s.Structure.Titles.Bout(strconv.Itoa(from+1)), place))
 				}
 			}
 			matches[i-1] = store.SchemeMatch{
 				Code:             code,
-				Title:            fmt.Sprintf("Бой %d", i),
+				Title:            s.Structure.Titles.Bout(strconv.Itoa(i)),
 				Venue:            lanes.Pick(i),
 				ParticipantCount: len(slots),
 				Slots:            slots,
 			}
 		}
-		// The bronze бой is played before the final, so its stage stands before
-		// the final's: the Сетка draws it first, and it deals its буква first.
+		// The bronze Match is played before the final, so its stage stands
+		// before the final's: the grid draws it first, and it deals its letter
+		// first.
 		if round.terminal && bronze {
 			var pair []store.SchemeSlot
 			switch {
@@ -200,13 +206,14 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 			}
 		}
 		if bestOf > 1 {
-			// The series is sequential бои at one стол, so it never wave-splits.
+			// The series is sequential Matches at one table, so it never
+			// wave-splits.
 			base := matches[0]
 			series := make([]store.SchemeMatch, bestOf)
 			for k := 1; k <= bestOf; k++ {
 				series[k-1] = store.SchemeMatch{
 					Code:             fmt.Sprintf("%s-m%d", stageCode, k),
-					Title:            fmt.Sprintf("Финал. Бой %d", k),
+					Title:            s.Structure.Se.FinalBout(strconv.Itoa(k)),
 					Venue:            base.Venue,
 					ParticipantCount: 2,
 					Slots:            base.Slots,
@@ -240,14 +247,15 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 		prevCodes = codes
 	}
 	if len(prevCodes) > 1 {
-		// The bracket stopped short of a final, so its last round's бои are what
-		// the block offers on: each is a Group sending its winning places.
+		// The bracket stopped short of a final, so its last round's Matches
+		// are what the block offers on: each is a Group sending its winning
+		// places.
 		out := Outputs{Proceeding: winning}
 		for i, code := range prevCodes {
 			code := code
 			out.Groups = append(out.Groups, Feed{
 				Stage: code,
-				Label: fmt.Sprintf("Бой %d", i+1),
+				Label: s.Structure.Titles.Bout(strconv.Itoa(i + 1)),
 				Place: func(p int) store.SchemeSlot { return FromMatch(code, p) },
 			})
 		}
@@ -256,17 +264,18 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 	finalCode := prevCodes[0]
 	return Outputs{Terminal: seriesFinal, Groups: []Feed{{
 		Stage: finalCode,
-		Label: "Финал",
+		Label: s.Structure.Titles.Final(),
 		Place: func(p int) store.SchemeSlot {
 			return FromMatch(finalCode, p)
 		},
 	}}}, nil
 }
 
-// appendBronze emits the матч за 3-е место between the pair the block hands
-// it — the semifinal losers, or the places below the finalists out of the
-// incoming Edge — as one бой or, with best_of.bronze, as a series.
+// appendBronze emits the bronze Match between the pair the block hands it —
+// the semifinal losers, or the places below the finalists out of the incoming
+// Edge — as one Match or, with best_of.bronze, as a series.
 func appendBronze(b Block, pair []store.SchemeSlot, round int) error {
+	s := dopestrings.Default
 	stageCode := b.Code() + "-bronze"
 	lanes, err := b.Venues("bronze")
 	if err != nil {
@@ -281,9 +290,9 @@ func appendBronze(b Block, pair []store.SchemeSlot, round int) error {
 	}
 	title := func(k int) string {
 		if bouts == 1 {
-			return "Матч за 3-е место"
+			return s.Structure.Se.Bronze()
 		}
-		return fmt.Sprintf("Матч за 3-е место. Бой %d", k)
+		return s.Structure.Se.BronzeBout(strconv.Itoa(k))
 	}
 	matches := make([]store.SchemeMatch, bouts)
 	for k := 1; k <= bouts; k++ {
@@ -295,7 +304,7 @@ func appendBronze(b Block, pair []store.SchemeSlot, round int) error {
 			Slots:            pair,
 		}
 	}
-	stage := Stage{Code: stageCode, Title: b.RoundTitle([]string{"bronze"}, "Матч за 3-е место"), Kind: "matches",
+	stage := Stage{Code: stageCode, Title: b.RoundTitle([]string{"bronze"}, s.Structure.Se.Bronze()), Kind: "matches",
 		Rounds: []string{"bronze"}, At: At{Round: round}, Matches: matches}
 	if bouts > 1 && !seRolledOut(b, []string{"bronze"}) {
 		cfg, err := seSeriesConfig(b)
@@ -308,11 +317,11 @@ func appendBronze(b Block, pair []store.SchemeSlot, round int) error {
 	return err
 }
 
-// seRolledOut reports whether this Round's series is drawn as its бои rather
-// than ranked as one. A series is a ranking scope by default — that is what
-// makes «до большинства побед» and Троечка's summed рейтинговый балл the same
-// mechanism — but a tournament that reads its финал off the бои themselves,
-// as СтудЧР's брейн does, says so and gets three boxes instead of a table.
+// seRolledOut reports whether this Round's series is drawn as its Matches
+// rather than ranked as one. A series is a ranking scope by default — that is
+// what makes best-of and Troika's summed rating score the same mechanism — but
+// a tournament that reads its final off the Matches themselves, as StudChR's
+// brain does, says so and gets three boxes instead of a table.
 func seRolledOut(b Block, names []string) bool {
 	if v, ok := b.Bool("rollout"); ok && v {
 		return true
@@ -325,8 +334,8 @@ func seRolledOut(b Block, names []string) bool {
 	return false
 }
 
-// seSeriesConfig is how a series is ranked: the block's own очки, score metric,
-// comparators and scoring rules, exactly as a группа's table reads them.
+// seSeriesConfig is how a series is ranked: the block's own points, score
+// metric, comparators and scoring rules, exactly as a Group's table reads them.
 func seSeriesConfig(b Block) (SeriesConfig, error) {
 	points, err := rrPoints(b)
 	if err != nil {
@@ -359,10 +368,9 @@ func seSeriesConfig(b Block) (SeriesConfig, error) {
 }
 
 // seDirectBronze is the bronze pair of a bracket with no semifinal to lose:
-// the block is seeded straight into its final, so the матч за 3-е место takes
-// the place below the finalists out of every source Group. Троечка's
-// «победители групп выходят в финал, а команды, занявшие 2-е места, выходят в
-// матч за 3-е место».
+// the block is seeded straight into its final, so the bronze Match takes the
+// place below the finalists out of every source Group. Troika's "group winners
+// go to the final, and the teams that placed second go to the bronze Match".
 func seDirectBronze(b Block, participants int, bronze bool) ([]store.SchemeSlot, bool) {
 	if !bronze || participants != 2 || b.First() {
 		return nil, false
@@ -396,9 +404,9 @@ func seFirstRound(b Block, opening elimRound, winning int) ([][]store.SchemeSlot
 	if prev.Proceeding <= 0 {
 		return nil, errors.New("предыдущему блоку нужен proceeding_participants, чтобы продолжить схему")
 	}
-	// A пересев makes the бой's size irrelevant: it hands over a ranking, and the
-	// snake deals that ranking into бои of any size — ТПШ opens on four seats.
-	// Only the template below needs бои of two.
+	// A reseed makes the Match's size irrelevant: it hands over a ranking, and
+	// the snake deals that ranking into Matches of any size — TPSH opens on
+	// four seats. Only the template below needs Matches of two.
 	if incoming, _ := b.Reseed(); incoming {
 		dealt, err := b.Reseeded(count, opening.size)
 		if err != nil {
@@ -447,6 +455,7 @@ func BracketOrder(n int) []int {
 }
 
 func (singleElim) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
+	s := dopestrings.Default
 	var conf SEConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil, fmt.Errorf("se config: %w", err)
@@ -493,24 +502,26 @@ func (singleElim) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 	}
 	if conf.Bronze {
 		semi := rounds - 1
-		emit(rounds, fmt.Sprintf("%s-r%d-3p", conf.Code, rounds), "Матч за 3-е место",
+		emit(rounds, fmt.Sprintf("%s-r%d-3p", conf.Code, rounds), s.Structure.Se.Bronze(),
 			[2]store.SchemeSlot{loserOf(code(semi, 1)), loserOf(code(semi, 2))})
 	}
 	return matches, nil
 }
 
 func roundTitle(rounds, round, index int) string {
+	s := dopestrings.Default
 	switch rounds - round {
 	case 0:
-		return "Финал"
+		return s.Structure.Titles.Final()
 	case 1:
-		return fmt.Sprintf("Полуфинал %d", index)
+		return s.Structure.Se.MatchSemifinal(strconv.Itoa(index))
 	default:
-		return fmt.Sprintf("1/%d финала %d", 1<<uint(rounds-round), index)
+		return s.Structure.Se.MatchNthRound(strconv.Itoa(1<<uint(rounds-round)), strconv.Itoa(index))
 	}
 }
 
-// A bracket ranks by progression, which no column shows; its table is М alone.
+// A bracket ranks by progression, which no column shows; its table is the
+// place column alone.
 func (singleElim) Order(cfg json.RawMessage) []SortRule { return nil }
 
 func (singleElim) Metrics() []string { return nil }

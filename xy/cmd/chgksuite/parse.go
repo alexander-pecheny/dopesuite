@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	xystrings "xy/i18nstrings"
 	"xy/internal/chgk/docxread"
 	"xy/internal/chgk/fsource"
 	"xy/internal/chgk/i18n"
@@ -29,7 +30,7 @@ func parseCmd(args []string) error {
 	numbers := fs.String("numbers_handling", override("numbers_handling", "default"), "question numbers written out: default, all or none")
 	preserveFormatting := fs.Bool("preserve_formatting", false, "keep bold and italic")
 	singleNumberLines := fs.String("single_number_line_handling", override("single_number_line_handling", "smart"), "a line that is only a number: smart, on or off")
-	tourNumbersAsWords := fs.String("tour_numbers_as_words", override("tour_numbers_as_words", "off"), "rename the tours «Первый тур», «Второй тур»…: on|off")
+	tourNumbersAsWords := fs.String("tour_numbers_as_words", override("tour_numbers_as_words", "off"), xystrings.Default.Chgkcli.Parse.TourNumbersAsWordsFlag())
 	linksOld := fs.String("links", override("links", "unwrap"), "hyperlinks: unwrap (text, then the URL) or old (the URL alone)")
 	noImagePrefix := fs.Bool("no_image_prefix", false, "name extracted images without the file's name in front")
 	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
@@ -121,7 +122,7 @@ func parseFile(in string, a parseArgs) (string, error) {
 	if game == "" {
 		game = "chgk"
 	}
-	// СИ numbers are point values and a троика's repeat in every theme, so both
+	// SI numbers are point values and a troika's repeat in every theme, so both
 	// write every number out unless asked for something else.
 	numbers := fsource.NumbersHandling(a.numbers)
 	if (game == "si" || game == "troika") && numbers == fsource.NumbersDefault {
@@ -163,7 +164,7 @@ func readSource(in, game string, a parseArgs) (string, []docxread.Image, error) 
 			PreserveFormatting: a.preserveFormatting,
 			LinksOld:           a.linksOld,
 			ImagePrefix:        prefix,
-			// The СИ and троика parsers read the document's own outline, and
+			// The SI and troika parsers read the document's own outline, and
 			// chgksuite lets their numbered lists start where they say.
 			HeadingMarkers:    game == "si" || game == "troika",
 			PreserveListStart: game == "si" || game == "troika",

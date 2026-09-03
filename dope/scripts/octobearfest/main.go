@@ -1,6 +1,6 @@
-// Command octobearfest builds the VIII Octobearfest фест into an existing dope
-// database: the Троечка replayed from its transcript, and the «Ассорти»
-// мультиигры loaded from its fixture. It adds one фест and touches nothing
+// Command octobearfest builds the VIII Octobearfest fest into an existing dope
+// database: the Troika game replayed from its transcript, and the Assorti multi
+// loaded from its fixture. It adds one fest and touches nothing
 // else, so it can be pointed at a staging database that already holds others.
 //
 //	go run ./scripts/octobearfest -db /var/lib/dopetest/fest.db
@@ -14,24 +14,27 @@ import (
 	"context"
 	"database/sql"
 	"flag"
-	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 	_ "modernc.org/sqlite"
 
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/replay"
 	"dope/dope/platform/util"
+	dopestrings "dope/i18nstrings"
+
+	core "pecheny.me/dopecore/i18nstrings"
 )
 
 func main() {
-	dbPath := flag.String("db", "", "путь к базе dope")
-	slug := flag.String("slug", "octobearfest2025", "slug феста")
-	root := flag.String("root", ".", "корень модуля: откуда читать стенограмму, схему и набор")
+	dbPath := flag.String("db", "", dopestrings.Default.Octobearfest.Flag.Db())
+	slug := flag.String("slug", "octobearfest2025", dopestrings.Default.Octobearfest.Flag.Slug())
+	root := flag.String("root", ".", dopestrings.Default.Octobearfest.Flag.Root())
 	flag.Parse()
 	if *dbPath == "" {
-		log.Fatal("укажите -db")
+		log.Fatal(dopestrings.Default.Octobearfest.Error.DbMissing())
 	}
 	if err := run(*dbPath, *slug, *root); err != nil {
 		log.Fatal(err)
@@ -39,6 +42,7 @@ func main() {
 }
 
 func run(dbPath, slug, root string) error {
+	s := dopestrings.Default
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return err
@@ -54,7 +58,7 @@ func run(dbPath, slug, root string) error {
 		return err
 	}
 	if exists > 0 {
-		return fmt.Errorf("фест %s в этой базе уже есть — удалите его или возьмите другой slug", slug)
+		return core.User(s.Octobearfest.Error.FestExists(slug))
 	}
 
 	script, err := parseTranscript(root + "/testdata/octobearfest2025/troika.transcript")
@@ -74,10 +78,10 @@ func run(dbPath, slug, root string) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("фест %d (%s)", festID, slug)
+	log.Printf("%s", s.Octobearfest.Log.Fest(strconv.FormatInt(festID, 10), slug))
 
-	// One registry for the фест: everyone who played either game, Троечка's
-	// forty-eight first so their numbers are the посев the schema deals by.
+	// One registry for the fest: everyone who played either game, Troika's
+	// forty-eight first so their numbers are the seed the schema deals by.
 	registry := map[string]int64{}
 	numbers := map[string]int{}
 	for _, team := range script.Roster {
@@ -97,21 +101,21 @@ func run(dbPath, slug, root string) error {
 		}
 		registry[name] = id
 	}
-	log.Printf("реестр: %d команд", len(registry))
+	log.Printf("%s", s.Octobearfest.Log.Registry(strconv.Itoa(len(registry))))
 
 	if err := buildTroika(ctx, db, festID, registry, script, root); err != nil {
-		return fmt.Errorf("троечка: %w", err)
+		return core.User(s.Octobearfest.Error.TroikaStep(err.Error()))
 	}
 	if err := buildAssorti(ctx, db, festID, registry, assorti); err != nil {
-		return fmt.Errorf("ассорти: %w", err)
+		return core.User(s.Octobearfest.Error.AssortiStep(err.Error()))
 	}
 
 	// Whoever organises anything on this instance organises this too, so the
-	// фест is reachable from the host tree rather than only by its public URL.
+	// fest is reachable from the host tree rather than only by its public URL.
 	if _, err := db.Exec(`
 insert or ignore into fest_organizers(fest_id, user_id)
 select ?, user_id from fest_organizers group by user_id`, festID); err != nil {
-		log.Printf("организаторы: %v (пропущено)", err)
+		log.Printf("%s", s.Octobearfest.Log.Organizers(err.Error()))
 	}
 	return nil
 }
@@ -128,7 +132,7 @@ func systemUser(db *sql.DB) (int64, error) {
 	var id int64
 	err := db.QueryRow(`select id from users where is_system = 1 order by id limit 1`).Scan(&id)
 	if err == sql.ErrNoRows {
-		return 0, fmt.Errorf("в базе нет системного пользователя")
+		return 0, core.User(dopestrings.Default.Octobearfest.Error.NoSystemUser())
 	}
 	return id, err
 }

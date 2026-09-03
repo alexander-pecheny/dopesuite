@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"pecheny.me/dopecore/tgbridge"
+
+	dopestrings "dope/i18nstrings"
 )
 
 // The Telegram login/registration handshake, server side. The bot used to open
@@ -17,17 +19,19 @@ import (
 // in the server process (server/bot.go) and calls them as what they always were:
 // two methods that write under the server's own mutex.
 
-const (
-	TelegramBridgeLoginURL = "https://dope.pecheny.me/login"
+const TelegramBridgeLoginURL = "https://dope.pecheny.me/login"
 
-	TelegramBridgeGenericError    = "Произошла ошибка. Попробуй еще раз через минуту."
-	TelegramBridgeRegisterSuccess = "Готово! Вернись на сайт — там уже видна твоя регистрация."
-	TelegramBridgeLoginOnSite     = "Пришлите код со страницы входа. Если его нет — откройте " + TelegramBridgeLoginURL + " и нажмите «Войти через телеграм»."
+// The bot's replies, from the Catalog (i18nstrings/ru/telegram.toml); the URL
+// stays a Go constant and fills {{.url}}.
+var (
+	TelegramBridgeGenericError    = dopestrings.Default.Telegram.Reply.GenericError()
+	TelegramBridgeRegisterSuccess = dopestrings.Default.Telegram.Reply.RegisterSuccess()
+	TelegramBridgeLoginOnSite     = dopestrings.Default.Telegram.Reply.LoginOnSite(TelegramBridgeLoginURL)
 
-	TelegramBridgeCodeMissing  = "Такого кода нет. Проверь, что скопировал его без пробелов и не дольше минуты прошло."
-	TelegramBridgeCodeConsumed = "Этот код уже использован. Запроси новый на сайте."
-	TelegramBridgeCodeWrong    = "Этот код не для входа. Открой " + TelegramBridgeLoginURL + " и начни заново."
-	TelegramBridgeCodeExpired  = "Срок действия кода истек. Запроси новый на " + TelegramBridgeLoginURL + "."
+	TelegramBridgeCodeMissing  = dopestrings.Default.Telegram.Reply.CodeMissing()
+	TelegramBridgeCodeConsumed = dopestrings.Default.Telegram.Reply.CodeConsumed()
+	TelegramBridgeCodeWrong    = dopestrings.Default.Telegram.Reply.CodeWrong(TelegramBridgeLoginURL)
+	TelegramBridgeCodeExpired  = dopestrings.Default.Telegram.Reply.CodeExpired(TelegramBridgeLoginURL)
 )
 
 // The SQL and the code shape are single-sourced in dopecore/tgbridge; the

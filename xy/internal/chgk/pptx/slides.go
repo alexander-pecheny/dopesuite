@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	xystrings "xy/i18nstrings"
 	"xy/internal/chgk/fsource"
 	"xy/internal/chgk/inline"
 )
@@ -61,7 +62,7 @@ func (e *exporter) setQuestionNumber(s *slidePart, number string) {
 	p := e.configureParagraph(box.tf.first(), 0, tableStr(cfg, "align", ""), "")
 	if e.cfg.str("question_number_format", "") == "caps" {
 		if _, ok := tryInt(number); ok {
-			number = "ВОПРОС " + number
+			number = xystrings.Default.Docs.Pptx.QuestionCaps(number)
 		}
 	}
 	r := e.addRun(p, number)

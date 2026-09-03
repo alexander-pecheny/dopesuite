@@ -24,6 +24,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	xystrings "xy/i18nstrings"
 )
 
 // Options are the switches `handouts html2img` takes.
@@ -237,7 +239,7 @@ func FindOrInstall(ctx context.Context, named string, progress func(string)) (st
 		return path, nil
 	}
 	if progress != nil {
-		progress("браузера на этой машине нет")
+		progress(xystrings.Default.Install.Browser.NotInstalled())
 	}
 	return Install(ctx, progress)
 }
@@ -350,7 +352,7 @@ func output(ctx context.Context, browser string, o *Options, args []string) (str
 	if !o.NoSandbox && strings.Contains(stderr, "No usable sandbox") {
 		o.NoSandbox = true
 		if o.Say != nil {
-			o.Say("система запрещает песочницу chromium, запускаю с --no-sandbox")
+			o.Say(xystrings.Default.Install.Browser.NoSandbox())
 		}
 		out, stderr, err = runOnce(ctx, browser, *o, args)
 		if err == nil {

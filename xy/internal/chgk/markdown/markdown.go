@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	xystrings "xy/i18nstrings"
 	"xy/internal/chgk/fsource"
 	"xy/internal/chgk/imghost"
 	"xy/internal/chgk/inline"
@@ -49,6 +50,7 @@ type exporter struct {
 
 // question is markdown_format_question.
 func (e *exporter) question(q *fsource.Question) (string, error) {
+	s := xystrings.Default
 	if v, ok := q.Get("setcounter").(string); ok {
 		if n, err := strconv.Atoi(v); err == nil {
 			e.qcount = n
@@ -66,7 +68,7 @@ func (e *exporter) question(q *fsource.Question) (string, error) {
 		return "", err
 	}
 	var b strings.Builder
-	b.WriteString("__Вопрос " + number + "__: " + body + "  \n")
+	b.WriteString("__" + s.Docs.Markdown.Question(number) + "__: " + body + "  \n")
 
 	open, close := "", ""
 	if e.opts.Reddit {
@@ -76,10 +78,10 @@ func (e *exporter) question(q *fsource.Question) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	b.WriteString("__Ответ:__ " + open + answer + "  \n")
+	b.WriteString("__" + s.Docs.Markdown.Answer() + ":__ " + open + answer + "  \n")
 	for _, f := range []struct{ field, label string }{
-		{"zachet", "Зачёт"}, {"nezachet", "Незачёт"},
-		{"comment", "Комментарий"}, {"source", "Источник"},
+		{"zachet", s.Docs.Markdown.Zachet()}, {"nezachet", s.Docs.Markdown.Nezachet()},
+		{"comment", s.Docs.Markdown.Comment()}, {"source", s.Docs.Markdown.Source()},
 	} {
 		if !q.Has(f.field) {
 			continue
@@ -95,7 +97,7 @@ func (e *exporter) question(q *fsource.Question) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		b.WriteString(close + "\n__Автор:__ " + author + "  \n")
+		b.WriteString(close + "\n__" + s.Docs.Markdown.Author() + ":__ " + author + "  \n")
 	} else {
 		b.WriteString(close + "\n")
 	}
@@ -159,7 +161,7 @@ func (e *exporter) format(s string) (string, error) {
 				return "", err
 			}
 			if e.opts.Reddit {
-				b.WriteString("[картинка](" + link + ")")
+				b.WriteString("[" + xystrings.Default.Docs.Markdown.ImageLink() + "](" + link + ")")
 			} else {
 				b.WriteString("![](" + link + ")")
 			}

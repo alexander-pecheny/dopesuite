@@ -1,5 +1,5 @@
-// od.ts — the ОД/ЧГК game page (host + viewer): tabbed results/input sheets,
-// entry-cell navigation, shootout rounds, the Экран projector board, SSE state
+// od.ts — the OD/ChGK game page (host + viewer): tabbed results/input sheets,
+// entry-cell navigation, shootout rounds, the Screen projector board, SSE state
 // sync. Converted from the legacy od.js; boots itself on import (ADR-0001).
 import {cssEscape, td, th} from "./cells.js";
 import {buildFlatScoreTable, computePlaces} from "./score-table.js";
@@ -20,6 +20,7 @@ import * as od from "./od-protocol.js";
 import type {ODScheme, ODState, ODTeam, QuestionStat, RankKey, ShootoutMark, ShootoutRound} from "./od-protocol.js";
 import {SCREEN_DEFAULTS, normalizeScreenSettings, planScreen, teamFlag} from "./screen-board.js";
 import type {ScreenSettings} from "./screen-board.js";
+import S from "./i18nstrings_ru_gen.js";
 
 interface ODPageGlobals {
   __GAME_INIT__?: GameInitLike | null;
@@ -90,7 +91,7 @@ const teamNameOverflow = createTeamNameOverflowController({
 const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
 const route = parseGameRoute();
 const gameInit = (window as Window & ODPageGlobals).__GAME_INIT__;
-// Экран (projector board) settings ship in the init payload (shared per game so
+// Screen (projector board) settings ship in the init payload (shared per game so
 // every host sees the same board). Capture before the loader nulls __GAME_INIT__.
 const initScreenSettings: unknown = (gameInit?.screenSettings &&
   typeof gameInit.screenSettings === "object")
@@ -106,7 +107,7 @@ const shell = mountGamePage({
   viewer: Boolean(route.viewer),
   apiBase: route.apiBase,
   init: gameInit,
-  chrome: () => ({festTitle: fest?.title || "", gameTitle: fest?.gameName || scheme?.title || "ОД"}),
+  chrome: () => ({festTitle: fest?.title || "", gameTitle: fest?.gameName || scheme?.title || S.od.title()}),
   cursorKinds: {
     "shootout-entry": {selector: '.entry-cell[data-entry-kind="shootout"], .shootout-entry-checkbox', keys: ["round", "question", "row"]},
     entry: {selector: '.entry-cell:not([data-entry-kind]), .entry-input', keys: ["q", "row"]},
@@ -131,13 +132,13 @@ const resultsExpandedTours = new Set<number>();
 const resultsExpandedShootouts = new Set<number>();
 let numberToIndexCache: Map<number, number> | null = null;
 let entrySuggest: EntrySuggestState | null = null;
-let invertOverlay: HTMLButtonElement | null = null; // floating yin-yang "Инвертировать" button, positioned over the active column
+let invertOverlay: HTMLButtonElement | null = null; // floating yin-yang "Invert" button, positioned over the active column
 let entryKeypad: VirtualKeypad | null = null; // floating virtual numeric keypad shown for cell entry on touch devices
 const coarsePointer = typeof window.matchMedia === "function" &&
   window.matchMedia("(pointer: coarse)").matches;
 const undoStack: UndoEntry[] = [];
 
-// Two-tone yin-yang for the "Инвертировать" button. The dark lobe/dot use
+// Two-tone yin-yang for the "Invert" button. The dark lobe/dot use
 // currentColor and the light lobe/dot use the surface colour, so it reads on
 // both themes (inverted on dark, which still looks like a yin-yang).
 const YINYANG_SVG = '<svg viewBox="0 0 100 100" aria-hidden="true" focusable="false">'
@@ -148,7 +149,7 @@ const YINYANG_SVG = '<svg viewBox="0 0 100 100" aria-hidden="true" focusable="fa
   + '</svg>';
 const UNDO_LIMIT = 100;
 
-// Экран (проекторное табло) is a host-only tab; tabFromHash() filters against
+// Screen (the projector board) is a host-only tab; tabFromHash() filters against
 // TABS, so a viewer can't reach it by hash either.
 const TABS = gameTabs([], {game: "od", viewer});
 
@@ -171,7 +172,7 @@ window.addEventListener("resize", () => {
   updateResultsScrollState();
 });
 
-// Chrome-hide ("Скрыть оформление"): the host explicitly drops the site chrome
+// Chrome-hide ("Hide chrome"): the host explicitly drops the site chrome
 // so only the board shows, and we request native fullscreen for maximum space.
 // (Replaces the old auto-detect-fullscreen heuristic — projection is now an
 // intentional toggle, not something inferred from window geometry.)
@@ -315,7 +316,7 @@ function render(): void {
   if (renderedTab === "input" && activeTab !== "input") closeEntryEditor();
   const renderedPane = renderedTab === null ? undefined : tabCache.get(renderedTab);
   if (renderedPane?.isConnected) rememberTabScroll(renderedTab);
-  setHeading(scheme.title || "ОД");
+  setHeading(scheme.title || S.od.title());
   if (!TABS.some((t) => t.key === activeTab)) activeTab = TABS[0].key;
   renderTabs();
   updateHeaderProgress();
@@ -323,10 +324,10 @@ function render(): void {
   for (const pane of tabCache.values()) pane.hidden = pane !== activePane;
   if (!activePane.isConnected) odRoot.appendChild(activePane);
   renderedTab = activeTab;
-  // The Экран tab is a projection surface: hide the page-global diagnostic
-  // "Скачать лог" chip (and anything else corner-pinned) while it is showing.
+  // The Screen tab is a projection surface: hide the page-global diagnostic
+  // "download log" chip (and anything else corner-pinned) while it is showing.
   document.body.classList.toggle("od-screen-active", activeTab === "screen");
-  // Составы, and the numbering guard's message, fit the frame and wrap instead
+  // The roster, and the numbering guard's message, fit the frame and wrap instead
   // of scrolling sideways like a score board, so the host drops its max-content
   // sizing — the same class-toggle the grid uses, rather than a :has() the
   // layout silently depends on.
@@ -403,7 +404,7 @@ function toggleResultsShootout(roundIndex: number): void {
 function updateHeaderProgress(): void {
   if (!progressNode) return;
   const lastQ = lastEnteredQuestion();
-  progressNode.textContent = lastQ ? `Введён вопрос ${lastQ}` : "Игра не началась";
+  progressNode.textContent = lastQ ? S.od.progress.entered(String(lastQ)) : S.od.progress.notStarted();
 }
 
 function renderTabs(): void {
@@ -416,7 +417,7 @@ function renderTabs(): void {
   });
 }
 
-// === Ввод ===
+// === Entry ===
 
 
 function buildInputView(): HTMLElement {
@@ -458,8 +459,8 @@ function ensureInvertOverlay(): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "entry-invert";
-  button.title = "Инвертировать";
-  button.setAttribute("aria-label", "Инвертировать");
+  button.title = S.od.invert.label();
+  button.setAttribute("aria-label", S.od.invert.label());
   button.hidden = true;
   button.innerHTML = YINYANG_SVG;
   button.addEventListener("click", (event) => {
@@ -577,7 +578,7 @@ function attachInvertListeners(): void {
   window.addEventListener("resize", positionInvertOverlay);
 }
 
-// The Ввод grid as one sheet: row = the team, col = the question. Shootout
+// The entry grid as one sheet: row = the team, col = the question. Shootout
 // cells sit in their own tables and are not part of it. Values are team
 // numbers typed into an inline editor: a printable key opens it with that
 // character, Enter/F2 open it, Delete/Space clear the selection, a paste is
@@ -750,7 +751,7 @@ function entryQuestionHeadCell(qIndex: number, displayNumber: number, className:
 
 // applyEntryQuestionHeadContent stacks the number of teams that took the
 // question above the question number once it's ticked (completed) — mirroring
-// the Подробно page's column headers. Before it's ticked, just the number shows.
+// the detailed page's column headers. Before it's ticked, just the number shows.
 function applyEntryQuestionHeadContent(cell: HTMLElement, displayNumber: number, stat: QuestionStat | undefined): void {
   cell.textContent = "";
   if (stat?.completed) {
@@ -760,7 +761,7 @@ function applyEntryQuestionHeadContent(cell: HTMLElement, displayNumber: number,
   }
 }
 
-// refreshEntryQuestionHead re-renders one Ввод column header in place (the input
+// refreshEntryQuestionHead re-renders one entry column header in place (the input
 // pane is cached and not rebuilt when a column is ticked or its entries change).
 function refreshEntryQuestionHead(qIndex: number): void {
   if (!Number.isInteger(qIndex)) return;
@@ -884,7 +885,7 @@ function buildInputShootoutTable(): HTMLElement | null {
   roundHead.appendChild(th("", "od-shootout-meta-round-cell"));
   for (const question of questions) {
     const cls = "entry-q-head od-shootout-round-head" + (question.lastInRound ? " entry-tour-end" : "");
-    roundHead.appendChild(th(question.firstInRound ? `П${question.roundIndex + 1}` : "", cls));
+    roundHead.appendChild(th(question.firstInRound ? S.od.shootout.round(String(question.roundIndex + 1)) : "", cls));
   }
   if (!viewer) {
     roundHead.appendChild(shootoutControlsHeaderCell({rowSpan: 3}));
@@ -984,7 +985,7 @@ function shootoutMetaCell(): HTMLTableCellElement {
   inner.className = "od-shootout-meta-inner";
   const title = document.createElement("div");
   title.className = "od-shootout-entry-title";
-  title.textContent = "Перестрелка";
+  title.textContent = S.od.shootout.title();
   inner.append(title);
   cell.appendChild(inner);
   return cell;
@@ -995,7 +996,7 @@ function shootoutThemeHeaders(): ScoreTableTheme[] {
   return state.shootoutRounds.map((round, roundIndex) => {
     const questionLabels = round.answers.map(() => questionNumber++);
     return {
-      label: `П${roundIndex + 1}`,
+      label: S.od.shootout.round(String(roundIndex + 1)),
       questionLabels,
       questionClassName: "question-head shootout-head",
       labelClassName: "theme-head shootout-head",
@@ -1016,9 +1017,9 @@ function shootoutControlsHeaderCell(attrs: {rowSpan?: number} = {}, options: {in
     const addRound = document.createElement("button");
     addRound.type = "button";
     addRound.className = "btn";
-    addRound.textContent = "Добавить раунд перестрелки";
+    addRound.textContent = S.od.shootout.addRound();
     addRound.disabled = !allTeamsNumbered() || state.teams.length < 2;
-    addRound.title = addRound.disabled ? "Сначала заполните номера команд" : "Добавить раунд перестрелки";
+    addRound.title = addRound.disabled ? S.od.shootout.addRoundBlocked() : S.od.shootout.addRound();
     addRound.addEventListener("click", openShootoutRoundDialog);
     panel.appendChild(addRound);
   }
@@ -1034,20 +1035,20 @@ function shootoutControlsHeaderCell(attrs: {rowSpan?: number} = {}, options: {in
 
     const label = document.createElement("span");
     label.className = "od-shootout-round-label";
-    label.textContent = `П${roundIndex + 1}`;
+    label.textContent = S.od.shootout.round(String(roundIndex + 1));
     group.appendChild(label);
 
     const addQuestion = document.createElement("button");
     addQuestion.type = "button";
     addQuestion.className = "btn";
-    addQuestion.textContent = "Добавить вопрос";
+    addQuestion.textContent = S.od.shootout.addQuestion();
     addQuestion.addEventListener("click", () => addShootoutQuestion(roundIndex));
     group.appendChild(addQuestion);
 
     const removeQuestion = document.createElement("button");
     removeQuestion.type = "button";
     removeQuestion.className = "btn btn-danger";
-    removeQuestion.textContent = "Удалить вопрос";
+    removeQuestion.textContent = S.od.shootout.removeQuestion();
     removeQuestion.addEventListener("click", () => removeShootoutQuestion(roundIndex));
     group.appendChild(removeQuestion);
 
@@ -1128,13 +1129,13 @@ function buildNumberingGuard(): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "od-input-gate";
   const msg = document.createElement("p");
-  msg.appendChild(document.createTextNode("Чтобы ввод работал, надо заполнить "));
+  msg.appendChild(document.createTextNode(S.od.guard.lead()));
   if (viewer || !route.festID) {
-    msg.appendChild(document.createTextNode("номера команд"));
+    msg.appendChild(document.createTextNode(S.od.guard.numbers()));
   } else {
     const link = document.createElement("a");
     link.href = numbersPageURL();
-    link.textContent = "номера команд";
+    link.textContent = S.od.guard.numbers();
     msg.appendChild(link);
   }
   msg.appendChild(document.createTextNode("."));
@@ -1145,7 +1146,7 @@ function buildNumberingGuard(): HTMLElement {
   const missing = unnumberedTeamLabels();
   if (missing.length) {
     const detail = document.createElement("p");
-    detail.textContent = `Без номера: ${missing.join(", ")}.`;
+    detail.textContent = S.od.guard.missing(missing.join(", "));
     wrap.appendChild(detail);
   }
   return wrap;
@@ -1854,7 +1855,7 @@ function markActiveEntryRow(cell: Element | null): void {
   activeEntryRows = [row];
 }
 
-// === Подробно ===
+// === Detailed ===
 
 function buildDetailedTable(): HTMLElement {
   const wrapper = document.createElement("div");
@@ -1865,13 +1866,13 @@ function buildDetailedTable(): HTMLElement {
 
 // detailedQuestionHeadLabel stacks the number of teams that took the question
 // (muted, smaller) above the question number, mirroring how the yin-yang sits in
-// the free space above the active column on the Ввод page.
+// the free space above the active column on the entry page.
 function detailedQuestionHeadLabel(displayNumber: number, stat: QuestionStat | undefined): HTMLElement {
   const wrap = document.createElement("span");
   wrap.className = "od-detailed-qhead";
   const count = document.createElement("span");
   count.className = "od-detailed-qcount";
-  // Once the question is entered (ticked on Ввод) show the team count even when
+  // Once the question is entered (ticked on the entry page) show the team count even when
   // it's 0; before that the slot stays empty.
   count.textContent = stat?.completed ? String(stat.validCount || 0) : "";
   const num = document.createElement("span");
@@ -1890,7 +1891,7 @@ function buildDetailedScoreTable(): HTMLTableElement {
       questionLabels.push(detailedQuestionHeadLabel(qNum, stats[qNum - 1]));
       qNum++;
     }
-    themes.push({label: `Т${tourIndex + 1}`, questionLabels});
+    themes.push({label: S.od.detailed.tour(String(tourIndex + 1)), questionLabels});
   });
   themes.push(...shootoutThemeHeaders());
 
@@ -1986,7 +1987,7 @@ function shootoutAnswerCell(teamIndex: number, roundIndex: number, questionIndex
   cell.dataset.question = String(questionIndex);
   cell.dataset.teamNumber = String(teamNumber(teamIndex));
   if (participating) {
-    cell.title = `${teamLabel(teamIndex)}, П${roundIndex + 1}, вопрос ${questionIndex + 1}`;
+    cell.title = S.od.shootout.entryTitle(teamLabel(teamIndex), S.od.shootout.round(String(roundIndex + 1)), String(questionIndex + 1));
   }
   return cell;
 }
@@ -2006,7 +2007,7 @@ function detailedTeamOrder(): number[] {
 
 function teamLabel(index: number): string {
   const name = String(state.teams[index]?.name || "").trim();
-  return name || `Команда ${index + 1}`;
+  return name || S.od.team.fallback(String(index + 1));
 }
 
 function nameCell(teamIndex: number): HTMLTableCellElement {
@@ -2048,7 +2049,7 @@ function detailedNameHeader(): HTMLElement {
   numberSpace.className = "od-detailed-team-number";
   const label = document.createElement("span");
   label.className = "od-detailed-team-head-label";
-  label.textContent = "Команда";
+  label.textContent = S.od.head.team();
   layout.append(numberSpace, label);
   return layout;
 }
@@ -2063,7 +2064,7 @@ function openShootoutRoundDialog(): void {
   form.className = "od-shootout-dialog-form";
 
   const title = document.createElement("h2");
-  title.textContent = "Раунд перестрелки";
+  title.textContent = S.od.shootout.roundDialog();
   form.appendChild(title);
 
   const list = document.createElement("div");
@@ -2100,12 +2101,12 @@ function openShootoutRoundDialog(): void {
   const cancel = document.createElement("button");
   cancel.type = "button";
   cancel.className = "btn";
-  cancel.textContent = "Отмена";
+  cancel.textContent = S.od.shootout.cancel();
   cancel.addEventListener("click", () => dialog.close());
   const submit = document.createElement("button");
   submit.type = "button";
   submit.className = "btn";
-  submit.textContent = "Создать";
+  submit.textContent = S.od.shootout.create();
   submit.disabled = true;
   actions.append(cancel, submit);
   form.appendChild(actions);
@@ -2185,7 +2186,7 @@ function removeShootoutQuestion(roundIndex: number): void {
   const round = state.shootoutRounds[roundIndex];
   if (!round || round.answers.length === 0) return;
   const lastQuestion = round.answers.length <= 1;
-  const message = lastQuestion ? "Удалить раунд перестрелки?" : "Удалить последний вопрос перестрелки?";
+  const message = lastQuestion ? S.od.shootout.removeRoundConfirm() : S.od.shootout.removeQuestionConfirm();
   if (!window.confirm(message)) return;
   if (lastQuestion) {
     state.shootoutRounds.splice(roundIndex, 1);
@@ -2201,7 +2202,7 @@ function removeShootoutQuestion(roundIndex: number): void {
   if (!lastQuestion) focusShootoutInput(roundIndex, round.entries.length - 1, 0);
 }
 
-// === Итог ===
+// === Results ===
 
 function lastEnteredQuestion(): number {
   for (let q = state.completed.length - 1; q >= 0; q--) {
@@ -2210,12 +2211,12 @@ function lastEnteredQuestion(): number {
   return 0;
 }
 
-// === Экран (проекторное табло) ===
+// === Screen (the projector board) ===
 //
-// A pared-down Итог for projection: it reuses the .results-table styling but
-// keeps only four columns (М, Команда, Σ, T{N}). Teams sharing a place are
+// A pared-down results sheet for projection: it reuses the .results-table styling but
+// keeps only four columns (place, team, Σ, T{N}). Teams sharing a place are
 // glued into a group (rounded block) with a gap between groups, exactly like
-// Итог; the groups are packed column-major across as many columns as it takes
+// the results sheet; the groups are packed column-major across as many columns as it takes
 // to maximise the font, then the whole board is scaled with `zoom` so it fills
 // the screen. The board is host-customisable (colours, font scale, column count,
 // city/country toggles); settings are shared per game (saved server-side).
@@ -2278,7 +2279,7 @@ function updateScreenControls(): void {
     wrapper._screenSettingsBtn.setAttribute("aria-expanded", screenPanelOpen ? "true" : "false");
   }
   if (wrapper._screenChromeBtn) {
-    wrapper._screenChromeBtn.textContent = chromeHidden ? "Показать оформление" : "Скрыть оформление";
+    wrapper._screenChromeBtn.textContent = chromeHidden ? S.od.screen.chromeShow() : S.od.screen.chromeHide();
   }
   // Opening the panel pins the overlay visible; closing lets the next pointer
   // move out of the corner hide it.
@@ -2296,7 +2297,7 @@ function buildScreenOverlay(wrapper: ScreenWrapper): HTMLElement {
   const settingsBtn = document.createElement("button");
   settingsBtn.type = "button";
   settingsBtn.className = "btn screen-btn";
-  settingsBtn.replaceChildren(icon("settings"), "Настройки");
+  settingsBtn.replaceChildren(icon("settings"), S.od.screen.settings());
   settingsBtn.setAttribute("aria-expanded", screenPanelOpen ? "true" : "false");
   settingsBtn.addEventListener("click", () => {
     screenPanelOpen = !screenPanelOpen;
@@ -2305,7 +2306,7 @@ function buildScreenOverlay(wrapper: ScreenWrapper): HTMLElement {
   const chromeBtn = document.createElement("button");
   chromeBtn.type = "button";
   chromeBtn.className = "btn screen-btn";
-  chromeBtn.textContent = chromeHidden ? "Показать оформление" : "Скрыть оформление";
+  chromeBtn.textContent = chromeHidden ? S.od.screen.chromeShow() : S.od.screen.chromeHide();
   chromeBtn.addEventListener("click", toggleChrome);
   bar.append(settingsBtn, chromeBtn);
   wrapper._screenSettingsBtn = settingsBtn;
@@ -2338,15 +2339,15 @@ function buildScreenPanel(wrapper: ScreenWrapper): HTMLElement {
     return f;
   };
   panel.append(
-    colorField("Цвет фона", "bg"),
-    colorField("Цвет текста", "fg"),
-    colorField("Цвет подписей", "muted"),
+    colorField(S.od.screen.bg(), "bg"),
+    colorField(S.od.screen.fg(), "fg"),
+    colorField(S.od.screen.muted(), "muted"),
   );
 
   const fontField = document.createElement("label");
   fontField.className = "field screen-field";
   const fontSpan = document.createElement("span");
-  fontSpan.textContent = "Размер шрифта";
+  fontSpan.textContent = S.od.screen.font();
   const fontInput = document.createElement("input");
   fontInput.type = "range";
   fontInput.min = "0.4";
@@ -2364,7 +2365,7 @@ function buildScreenPanel(wrapper: ScreenWrapper): HTMLElement {
   const colField = document.createElement("label");
   colField.className = "field screen-field";
   const colSpan = document.createElement("span");
-  colSpan.textContent = "Столбцы (0 — авто)";
+  colSpan.textContent = S.od.screen.columns();
   const colInput = document.createElement("input");
   colInput.type = "number";
   colInput.min = "0";
@@ -2398,14 +2399,14 @@ function buildScreenPanel(wrapper: ScreenWrapper): HTMLElement {
     return l;
   };
   panel.append(
-    checkbox("Показывать город", "showCity", refreshScreen),
-    checkbox("Показывать страну", "showCountry", refreshScreen),
+    checkbox(S.od.screen.showCity(), "showCity", refreshScreen),
+    checkbox(S.od.screen.showCountry(), "showCountry", refreshScreen),
   );
 
   const reset = document.createElement("button");
   reset.type = "button";
   reset.className = "btn screen-reset";
-  reset.textContent = "Сбросить";
+  reset.textContent = S.od.screen.reset();
   reset.addEventListener("click", () => {
     screenSettings = {...SCREEN_DEFAULTS};
     saveScreenSettings();
@@ -2435,15 +2436,15 @@ function currentTourIndex(): number {
 // makeScreenColumn builds one results-table holding the given row items. A gap
 // row is inserted between two consecutive rows that belong to different place
 // groups (so same-place teams stay glued and different places get breathing
-// room, like Итог). A group that doesn't fit a column simply continues in the
+// room, like the results sheet). A group that doesn't fit a column simply continues in the
 // next one — the column break falls between rows with no gap.
 function makeScreenColumn(tourLabel: string | undefined, rowItems: ScreenRowItem[]): HTMLTableElement {
   const table = document.createElement("table");
   table.className = "results-table od-results-table screen-table";
   const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
-  headRow.appendChild(th("М", "results-place-head"));
-  headRow.appendChild(th("Команда", "results-team-head"));
+  headRow.appendChild(th(S.od.head.placeShort(), "results-place-head"));
+  headRow.appendChild(th(S.od.head.team(), "results-team-head"));
   headRow.appendChild(th("Σ", "results-num-head results-total-head"));
   headRow.appendChild(th(tourLabel, "results-num-head results-tour-head"));
   thead.appendChild(headRow);
@@ -2474,7 +2475,7 @@ function populateScreenRows(wrapper: ScreenWrapper): void {
   if (!state.teams.length) {
     const empty = document.createElement("div");
     empty.className = "screen-empty";
-    empty.textContent = "Команды не заданы";
+    empty.textContent = S.od.screen.noTeams();
     cols.replaceChildren(empty);
     wrapper._screenRows = [];
     return;
@@ -2566,7 +2567,7 @@ function scheduleScreenFit(): void {
     if (!wrapper) return;
     layoutScreen(wrapper);
     // Fade + popover for names too long for the (fixed-width) team column,
-    // reusing the Итог truncation primitive. Width is in logical px, so the
+    // reusing the results-sheet truncation primitive. Width is in logical px, so the
     // decision is independent of the zoom applied by layoutScreen.
     teamNameOverflow.schedule(pane);
   });
@@ -2630,8 +2631,8 @@ function buildResultsTableInner(): HTMLTableElement {
 
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
-  head.appendChild(th("Место", "results-place-head"));
-  head.appendChild(th("Команда", "results-team-head"));
+  head.appendChild(th(S.od.head.place(), "results-place-head"));
+  head.appendChild(th(S.od.head.team(), "results-team-head"));
   head.appendChild(th("Σ", "results-num-head results-total-head"));
   for (let t = 0; t < tourLengths.length; t++) {
     head.appendChild(resultsTourHeader(t));
@@ -2715,7 +2716,7 @@ function resultsTourHeader(tourIndex: number): HTMLElement {
   button.className = "results-tour-toggle";
   button.textContent = `T${tourIndex + 1}`;
   button.setAttribute("aria-expanded", expanded ? "true" : "false");
-  button.title = expanded ? "Свернуть тур" : "Показать вопросы тура";
+  button.title = expanded ? S.od.results.tourCollapse() : S.od.results.tourExpand();
   button.addEventListener("click", () => toggleResultsTour(tourIndex));
   return th(button, "results-tour-head results-tour-toggle-head" + (expanded ? " expanded" : ""));
 }
@@ -2725,9 +2726,9 @@ function resultsShootoutHeader(roundIndex: number): HTMLElement {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "results-tour-toggle";
-  button.textContent = `П${roundIndex + 1}`;
+  button.textContent = S.od.shootout.round(String(roundIndex + 1));
   button.setAttribute("aria-expanded", expanded ? "true" : "false");
-  button.title = expanded ? "Свернуть перестрелку" : "Показать вопросы перестрелки";
+  button.title = expanded ? S.od.results.shootoutCollapse() : S.od.results.shootoutExpand();
   button.addEventListener("click", () => toggleResultsShootout(roundIndex));
   return th(button, "results-num-head results-tour-toggle-head results-shootout-toggle-head" + (expanded ? " expanded" : ""));
 }

@@ -1,106 +1,106 @@
-page title="Профиль · xy" kind="sheet" scripts="dist/profile.js"
-  topbar title="Профиль"
+page title=@profile.title kind="sheet" scripts="dist/profile.js"
+  topbar title=@profile.name
     crumbs
-      crumb home href="/" icon="house" label="Все доски"
-      crumb "Профиль"
+      crumb home href="/" icon="house" label=@profile.home
+      crumb @profile.name
 
   section
-    hint "Вы вошли как " (strong id="whoami" "…") "."
+    hint @profile.whoami.hint_lead (strong id="whoami" "…") @profile.whoami.hint_mid
 
   section
-    hint "Хранилище: " (strong id="storageUsed" "…") "."
+    hint @profile.storage.hint_lead (strong id="storageUsed" "…") @profile.storage.hint_mid
 
   section id="usernameSection" hidden
-    hint "Задайте логин (один раз)."
+    hint @profile.username.hint
     form id="usernameForm"
-      textfield id="usernameValue" placeholder="Логин" autocomplete="username" spellcheck="false" autocapitalize="none" required grow
-      button submit "Сохранить"
+      textfield id="usernameValue" placeholder=@profile.username.placeholder autocomplete="username" spellcheck="false" autocapitalize="none" required grow
+      button submit @profile.save
     message id="usernameMessage"
 
   section
-    button kind="ghost" id="passwordBtn" "Изменить пароль"
-    button kind="ghost" id="sizesBtn" "Настройка ширины / высоты"
-    button kind="ghost" id="authorBtn" "Автор по умолчанию"
-    button kind="ghost" id="cardTitleBtn" "Заголовок карточки"
-    button kind="ghost" id="feedDefaultBtn" "Лента"
-    button kind="ghost" id="tzBtn" "Часовой пояс и города"
-    button kind="ghost" href="/profile/tokens" "API-токены"
-    button kind="ghost" id="logoutBtn" "Выйти"
+    button kind="ghost" id="passwordBtn" @profile.password.name
+    button kind="ghost" id="sizesBtn" @profile.sizes.name
+    button kind="ghost" id="authorBtn" @profile.author.name
+    button kind="ghost" id="cardTitleBtn" @profile.card_title.name
+    button kind="ghost" id="feedDefaultBtn" @profile.feed.name
+    button kind="ghost" id="tzBtn" @profile.tz.name
+    button kind="ghost" href="/profile/tokens" @profile.account.tokens
+    button kind="ghost" id="logoutBtn" @profile.account.logout
 
   -- change-password dialog
-  modal id="passwordOverlay" label="Изменить пароль" title="Изменить пароль"
+  modal id="passwordOverlay" label=@profile.password.name title=@profile.password.name
     form id="passwordForm" dir="col"
-      password id="currentPassword" placeholder="Текущий пароль (если установлен)" autocomplete="current-password"
-      password id="newPassword" placeholder="Новый пароль" autocomplete="new-password" required
-      password id="confirmPassword" placeholder="Повторите пароль" autocomplete="new-password" required
+      password id="currentPassword" placeholder=@profile.password.current autocomplete="current-password"
+      password id="newPassword" placeholder=@profile.password.new autocomplete="new-password" required
+      password id="confirmPassword" placeholder=@profile.password.repeat autocomplete="new-password" required
       row gap="sm" wrap
-        button submit "Сохранить пароль"
-        button kind="ghost" id="passwordCancel" "Отмена"
+        button submit @profile.password.submit
+        button kind="ghost" id="passwordCancel" @profile.cancel
     message id="passwordMessage"
 
   -- board sizes dialog: workspace/list width + card height, stored per user
   -- (server-side, all boards); the pseudo-board previews the proportions
-  modal id="sizesOverlay" label="Настройка ширины / высоты" title="Настройка ширины / высоты" variant="sizes"
+  modal id="sizesOverlay" label=@profile.sizes.name title=@profile.sizes.name variant="sizes"
     mount id="sizesPreview" kind="sizes-preview"
-    sliderrow id="sizesBoardW" label="Ширина рабочей области" valueid="sizesBoardWVal" min="800" max="3200" step="50" hint="Доска центрируется на экране — на широком мониторе не приходится смотреть в край."
-    sliderrow id="sizesListW" label="Ширина списка" valueid="sizesListWVal" min="200" max="640" step="10"
-    sliderrow id="sizesCardH" label="Текст карточки" valueid="sizesCardHVal" min="1" max="12" step="1" hint="Сколько строк вопроса показывать на карточке. На максимуме — весь текст."
-    sliderrow id="sizesCardFont" label="Шрифт карточки" valueid="sizesCardFontVal" min="10" max="18" step="1" hint="Размер шрифта текста на карточке — мельче шрифт, больше вопросов на экране."
+    sliderrow id="sizesBoardW" label=@profile.sizes.board_w valueid="sizesBoardWVal" min="800" max="3200" step="50" hint=@profile.sizes.board_w_hint
+    sliderrow id="sizesListW" label=@profile.sizes.list_w valueid="sizesListWVal" min="200" max="640" step="10"
+    sliderrow id="sizesCardH" label=@profile.sizes.card_h valueid="sizesCardHVal" min="1" max="12" step="1" hint=@profile.sizes.card_h_hint
+    sliderrow id="sizesCardFont" label=@profile.sizes.font valueid="sizesCardFontVal" min="10" max="18" step="1" hint=@profile.sizes.font_hint
     row gap="sm" align="center" justify="between"
-      button small kind="ghost" id="sizesReset" "Сбросить по умолчанию"
-      button id="sizesClose" "Готово"
+      button small kind="ghost" id="sizesReset" @profile.sizes.reset
+      button id="sizesClose" @profile.sizes.close
 
   -- default-author dialog: pre-filled into new question cards
-  modal id="authorOverlay" label="Автор по умолчанию" title="Автор по умолчанию"
+  modal id="authorOverlay" label=@profile.author.name title=@profile.author.name
     form id="authorForm" dir="col"
-      textfield id="authorValue" placeholder="Имя автора" autocomplete="off" maxlength="200"
-      hint "Подставляется в новые карточки-вопросы (поле Автор и строка «@» в Тексте). Пустое — не подставлять."
+      textfield id="authorValue" placeholder=@profile.author.placeholder autocomplete="off" maxlength="200"
+      hint @profile.author.hint
       row gap="sm" wrap
-        button submit "Сохранить"
-        button kind="ghost" id="authorCancel" "Отмена"
+        button submit @profile.save
+        button kind="ghost" id="authorCancel" @profile.cancel
     message id="authorMessage"
 
   -- timezone + the default announce set: the anchor a new test session is
   -- written in, and the cities its invite line is written for
-  modal id="tzOverlay" label="Часовой пояс и города" title="Часовой пояс и города"
+  modal id="tzOverlay" label=@profile.tz.name title=@profile.tz.name
     form id="tzForm" dir="col"
       textfield id="tzValue" placeholder="Europe/Moscow" autocomplete="off" maxlength="64"
-      hint "Часовой пояс, в котором записывается время новых тестов."
-      label for="tzCities" "Города для приглашения"
-      textfield id="tzCities" placeholder="Москва, Берлин, Алматы" autocomplete="off"
-      hint "Через запятую. Строка со временем начала выглядит так: 20 июля, 19:00 (Москва) / 18:00 (Берлин)."
-      label for="tzTitleMode" "Названия меток тестов"
-      selectfield id="tzTitleMode" title="Названия меток тестов"
-        option value="date-title" "дата и название"
-        option value="title" "только название"
-        option value="date" "только дата"
+      hint @profile.tz.hint
+      label for="tzCities" @profile.tz.cities_label
+      textfield id="tzCities" placeholder=@profile.tz.cities_placeholder autocomplete="off"
+      hint @profile.tz.cities_hint
+      label for="tzTitleMode" @profile.tz.title_mode_label
+      selectfield id="tzTitleMode" title=@profile.tz.title_mode_label
+        option value="date-title" @profile.tz.mode_date_title
+        option value="title" @profile.tz.mode_title
+        option value="date" @profile.tz.mode_date
       row gap="sm" wrap
-        button submit "Сохранить"
-        button kind="ghost" id="tzCancel" "Отмена"
+        button submit @profile.save
+        button kind="ghost" id="tzCancel" @profile.cancel
     message id="tzMessage"
 
-  -- лента dialog: which kind of entry an opened card's лента shows
-  modal id="feedDefaultOverlay" label="Лента" title="Лента"
+  -- feed dialog: which kind of entry an opened card's feed shows
+  modal id="feedDefaultOverlay" label=@profile.feed.name title=@profile.feed.name
     form id="feedDefaultForm" dir="col"
       fieldset
-        radio name="feedDefault" value="all" "Всё"
-        radio name="feedDefault" value="comments" "Комментарии"
-        radio name="feedDefault" value="edits" "Правки"
-        radio name="feedDefault" value="meta" "Метки и вложения"
-      hint "С чего начинается лента открытой карточки. В самой карточке это можно переключить — до её закрытия."
+        radio name="feedDefault" value="all" @profile.feed.all
+        radio name="feedDefault" value="comments" @profile.feed.comments
+        radio name="feedDefault" value="edits" @profile.feed.edits
+        radio name="feedDefault" value="meta" @profile.feed.meta
+      hint @profile.feed.hint
       row gap="sm" wrap
-        button submit "Сохранить"
-        button kind="ghost" id="feedDefaultCancel" "Отмена"
+        button submit @profile.save
+        button kind="ghost" id="feedDefaultCancel" @profile.cancel
     message id="feedDefaultMessage"
 
   -- card-title dialog: which field a card shows in the board list
-  modal id="cardTitleOverlay" label="Заголовок карточки" title="Заголовок карточки"
+  modal id="cardTitleOverlay" label=@profile.card_title.name title=@profile.card_title.name
     form id="cardTitleForm" dir="col"
       fieldset
-        radio name="cardTitle" value="question" "Текст вопроса"
-        radio name="cardTitle" value="answer" "Ответ"
-      hint "По ответу вопрос часто узнаётся быстрее, чем по началу текста. Если у карточки задан алиас, показывается он — в любом режиме."
+        radio name="cardTitle" value="question" @profile.card_title.question
+        radio name="cardTitle" value="answer" @profile.card_title.answer
+      hint @profile.card_title.hint
       row gap="sm" wrap
-        button submit "Сохранить"
-        button kind="ghost" id="cardTitleCancel" "Отмена"
+        button submit @profile.save
+        button kind="ghost" id="cardTitleCancel" @profile.cancel
     message id="cardTitleMessage"

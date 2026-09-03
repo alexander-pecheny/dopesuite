@@ -12,6 +12,7 @@ import { xyTypo } from "./typo.js";
 import { modal } from "./modal.js";
 import type { Board, BoardPanel } from "./panels.js";
 import type { BoardCard } from "./unlock.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const { el, byId, errMsg } = xyApp;
 
@@ -29,7 +30,7 @@ export interface Rewrites {
 
 export function createRewrites(board: Board): Rewrites {
   // Only question cards. A test card's description is JSON (a legacy session),
-  // and a pass meant for 4s turns its quotes into «ёлочки» and its metadata into
+  // and a pass meant for 4s turns its quotes into guillemets and its metadata into
   // something parseSession cannot read back.
   function collect(next: (c: BoardCard) => string | null): DescChange[] {
     const out: DescChange[] = [];
@@ -57,7 +58,7 @@ export function createRewrites(board: Board): Rewrites {
   // version of it. It runs in the browser, so a whole package's question text is
   // never posted anywhere and this works offline like any other board edit.
   // Stress marks are the one part of the pass that guesses. chgk writes stress by
-  // capitalising the vowel («брАзер»), and a camel-cased compound («ГазпромИнвест»)
+  // capitalising the vowel ("brAzer"), and a camel-cased compound ("GazpromInvest")
   // is exactly the same shape, so a board-wide press asks first — one tick per
   // distinct word, however many cards it appears in. Everything else the pass does
   // (quotes, dashes, spaces, percent-escapes) is not a guess and is not asked about.
@@ -71,18 +72,18 @@ export function createRewrites(board: Board): Rewrites {
     const opts = allow ? { allow } : {};
     const changes = collect((c) => xyTypo.passVersions(c.desc, opts));
     const total = board.state.cards.length;
-    if (!changes.length) { alert("Нечего типографить — вся доска уже в порядке."); return; }
-    // «N из M», because the rest were already right: the pass only rewrites a card
+    if (!changes.length) { alert(S.chrome.typograph.nothingToDo()); return; }
+    // "N of M", because the rest were already right: the pass only rewrites a card
     // whose text it actually changes, and a bare count reads like it skipped some.
-    if (!allow && !confirm(`Типографить ${changes.length} из ${total}? В остальных карточках менять нечего.`)) return;
+    if (!allow && !confirm(S.chrome.typograph.confirm(String(changes.length), String(total)))) return;
     board.setStatus("saving");
     try {
       await apply(changes);
       board.setStatus("saved");
-      alert(`Оттипографлено карточек: ${changes.length} из ${total}.`);
+      alert(S.chrome.typograph.done(String(changes.length), String(total)));
     } catch (err) {
       board.setStatus("error");
-      alert("Ошибка при типографике: " + errMsg(err));
+      alert(S.chrome.typograph.failed(errMsg(err)));
     }
   }
 
@@ -135,8 +136,8 @@ export function createRewrites(board: Board): Rewrites {
       // wand-sparkles twice over: the vendored lucide set has no «type» glyph, and
       // both items are the same kind of act — rewrite the text of every card at once.
       id: "typograph", menu: "board", icon: "wand-sparkles",
-      label: "Типографить всю доску",
-      title: "Кавычки-ёлочки, тире, неразрывные пробелы и раскодированные ссылки — во всех карточках и всех версиях",
+      label: S.chrome.typograph.menuLabel(),
+      title: S.chrome.typograph.menuTitle(),
       open: () => { void typograph(); },
     },
   };

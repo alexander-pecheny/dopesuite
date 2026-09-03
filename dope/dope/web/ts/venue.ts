@@ -1,7 +1,8 @@
-// Площадка: the number-plus-title a бой is played at, and the venues table.
+// Venue: the number-plus-title a match is played at, and the venues table.
 
 import {td} from "./cells.js";
 import {standingsTable} from "./standings.js";
+import S from "./i18nstrings_ru_gen.js";
 
 export type VenueLike = number | string | {number?: unknown; Number?: unknown; title?: unknown; Title?: unknown} | null | undefined;
 
@@ -31,12 +32,14 @@ export function formatVenue(venue: VenueLike): string {
 export function formatBattleVenue(venue: VenueLike): string {
   const normalized = normalizeVenue(venue);
   if (!normalized) return "";
-  return normalized.title ? `пл. ${normalized.number} (${normalized.title})` : `пл. ${normalized.number}`;
+  return normalized.title
+    ? S.widgets.venue.battle(String(normalized.number), normalized.title)
+    : S.widgets.venue.battleShort(String(normalized.number));
 }
 
 export function formatBattleVenueShort(venue: VenueLike): string {
   const normalized = normalizeVenue(venue);
-  return normalized ? `пл. ${normalized.number}` : "";
+  return normalized ? S.widgets.venue.battleShort(String(normalized.number)) : "";
 }
 
 export interface VenuesTableOptions {
@@ -70,7 +73,7 @@ export function buildVenuesTable(venues: Venue[] | null | undefined, options: Ve
   };
   wrapper.appendChild(standingsTable({
     className: "venues-results-table",
-    columns: [{label: "№", kind: "place"}, {label: "Название", kind: "name"}],
+    columns: [{label: "№", kind: "place"}, {label: S.widgets.venue.nameColumn(), kind: "name"}],
     rows: (venues || []).map((venue) => [venue.number, title(venue)]),
   }));
   return wrapper;

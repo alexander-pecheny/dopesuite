@@ -4,6 +4,8 @@ import (
 	"context"
 	"regexp"
 	"strings"
+
+	xystrings "xy/i18nstrings"
 )
 
 // upload_file: a .4s split at its blank lines, one card per question, each
@@ -23,7 +25,7 @@ func Cards(source string, withAuthor bool) []struct{ Caption, Text string } {
 		if card == "" || card == "\n" || card == "\r\n" {
 			continue
 		}
-		caption := "вопрос"
+		caption := xystrings.Default.Boardsync.Upload.DefaultCaption()
 		if m := reUploadAnswer.FindStringSubmatch(card); m != nil {
 			caption = m[1]
 			if withAuthor {
@@ -49,12 +51,13 @@ func (c *Client) Upload(ctx context.Context, b Board, source, listName string, w
 	if err != nil {
 		return err
 	}
-	say("загружаю в список «" + target.Name + "»")
+	s := xystrings.Default
+	say(s.Boardsync.Upload.Uploading(target.Name))
 	for _, card := range Cards(source, withAuthor) {
 		if err := c.PostCard(ctx, b, target.ID, card.Caption, card.Text); err != nil {
 			return err
 		}
-		say("отправлено: " + card.Caption)
+		say(s.Boardsync.Upload.Posted(card.Caption))
 	}
 	return nil
 }

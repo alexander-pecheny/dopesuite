@@ -10,7 +10,7 @@ import (
 )
 
 // Sources answers what advancement asks of the rest of the game: who took a
-// place in a finished бой, who holds a rank in a source stage's table. The DB
+// place in a finished Match, who holds a rank in a source stage's table. The DB
 // is one adapter; the tests' map is the other — the rules below never see SQL.
 type Sources interface {
 	TeamAtMatchPlace(matchCode string, place int) (int64, error)
@@ -30,9 +30,9 @@ func desiredOccupant(src Sources, ref store.SlotRef) (int64, error) {
 }
 
 // slotTransition is the non-destructive rule for a resolved slot. desired 0
-// means the source is temporarily un-final (a finished бой unticked for
+// means the source is temporarily un-final (a finished Match unticked for
 // editing): HOLD the occupant, so untick→edit→retick loses nothing. A
-// different team moves in and, if someone sat there, the бой reopens so its
+// different team moves in and, if someone sat there, the Match reopens so its
 // standings are re-reviewed — the previous occupant's protocol rows stay.
 func slotTransition(current, desired int64) (move, reopen bool) {
 	if desired == 0 || desired == current {
@@ -57,7 +57,7 @@ func eligibleTeam(src Sources, slot store.SchemeSlot) (int64, string, error) {
 	return 0, "", nil
 }
 
-// Bout is a source бой as the readiness rule sees it.
+// Bout is a source Match as the readiness rule sees it.
 type Bout struct {
 	ID     int64
 	Code   string
@@ -71,7 +71,7 @@ type reseedPrerequisiteState struct {
 }
 
 // prerequisites is the readiness rule: a reseed can be calculated once every
-// source бой is finished and every advancing selector resolves. A stage with
+// source Match is finished and every advancing selector resolves. A stage with
 // no advancing selector is never ready.
 func prerequisites(src Sources, cfg store.StageConfig, bouts []Bout) (reseedPrerequisiteState, error) {
 	var state reseedPrerequisiteState

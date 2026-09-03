@@ -1,4 +1,4 @@
-// masspanel.ts — «Массовое действие»: ticking cards across the whole board, then
+// masspanel.ts — "mass action": ticking cards across the whole board, then
 // doing one thing to all of them. The rules (what a select-all covers, board
 // order, how a partly-failed run reads) live in massaction.ts; this is the mode,
 // the bar, the checkboxes' state, the one dialog with its pickers, and the writes.
@@ -12,6 +12,7 @@ import type { MoveCtx } from "./carddetail.js";
 import type { Transfer } from "./transfer.js";
 import type { Board, BoardPanel } from "./panels.js";
 import type { BoardCard } from "./unlock.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const { jput, el, byId } = xyApp;
 
@@ -92,7 +93,7 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
       box.checked = massSelected.has(Number(box.dataset.cardId));
     }
     // The ids come from the boxes actually drawn in that column, not from the
-    // list's whole set: under «Фильтр по меткам» the column shows a subset, and
+    // list's whole set: under the label filter the column shows a subset, and
     // the header must agree with the rows under it.
     for (const box of deps.kanban.querySelectorAll<HTMLInputElement>(".klist-check input")) {
       const col = box.closest(".klist");
@@ -113,11 +114,11 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
           b.addEventListener("click", () => { void openMass(a); });
           return b;
         })
-      : [el("span", { class: "mass-hint", text: "Отметьте карточки" })];
-    const done = el("button", { class: "input", type: "button", text: "Готово" });
+      : [el("span", { class: "mass-hint", text: S.board.mass.hint() })];
+    const done = el("button", { class: "input", type: "button", text: S.board.actions.done() });
     done.addEventListener("click", () => setMassMode(false));
     bar.replaceChildren(
-      el("span", { class: "mass-count", text: n ? `Выбрано: ${xyMass.cardCount(n)}` : "Массовое действие" }),
+      el("span", { class: "mass-count", text: n ? S.board.mass.selectedCount(xyMass.cardCount(n)) : S.board.mass.name() }),
       el("div", { class: "mass-acts" }, ...actions),
       done,
     );
@@ -145,14 +146,14 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
     if (action.needs === "label") buildMassLabelPick(body, run);
     else if (action.needs === "session") buildMassSessionPick(body, run);
     else if (action.needs === "target") await buildMassTargetPick(body, run);
-    else body.append(el("p", { class: "label-empty", text: "Карточки будут удалены. Их можно восстановить в течение 14 дней." }));
+    else body.append(el("p", { class: "label-empty", text: S.board.mass.deleteHint() }));
     massModal.open({ onClose: hideMass });
   }
 
   // The label picker is the board's own label list, same chips as the card's —
   // reusing the vocabulary rather than inventing a bulk-only one.
   function buildMassLabelPick(body: HTMLElement, run: HTMLButtonElement): void {
-    if (!board.state.labels.length) { body.append(el("p", { class: "label-empty", text: "На доске нет меток." })); return; }
+    if (!board.state.labels.length) { body.append(el("p", { class: "label-empty", text: S.board.mass.noLabels() })); return; }
     const row = el("div", { class: "label-picker" });
     for (const l of [...board.state.labels].sort((a, b) => a.name.localeCompare(b.name))) {
       const chip = el("button", { class: "label-pick", type: "button", dataset: { c: l.color }, text: l.name });
@@ -169,9 +170,9 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
   }
 
   function buildMassSessionPick(body: HTMLElement, run: HTMLButtonElement): void {
-    if (!board.state.sessions.length) { body.append(el("p", { class: "label-empty", text: "На доске нет тестов." })); return; }
+    if (!board.state.sessions.length) { body.append(el("p", { class: "label-empty", text: S.board.mass.noTests() })); return; }
     const sel = el("select", { class: "input" }) as HTMLSelectElement;
-    sel.append(el("option", { value: "", text: "— выберите тест —" }));
+    sel.append(el("option", { value: "", text: S.board.mass.pickTest() }));
     for (const s of board.state.sessions) sel.append(el("option", { value: String(s.id), text: board.sessionName(s.id) }));
     sel.addEventListener("change", () => { massPick = Number(sel.value) || null; run.disabled = !massPick; });
     body.append(sel);
@@ -183,8 +184,8 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
   async function buildMassTargetPick(body: HTMLElement, run: HTMLButtonElement): Promise<void> {
     const boardSel = el("select", { class: "input" }) as HTMLSelectElement;
     const listSel = el("select", { class: "input" }) as HTMLSelectElement;
-    body.append(el("label", { class: "section-label", text: "Доска" }), boardSel,
-                el("label", { class: "section-label", text: "Список" }), listSel);
+    body.append(el("label", { class: "section-label", text: S.board.fields.board() }), boardSel,
+                el("label", { class: "section-label", text: S.board.fields.list() }), listSel);
     const boards = await deps.transfer.moveBoardOptions();
     for (const b of boards) boardSel.append(el("option", { value: String(b.id), text: b.label }));
     boardSel.value = String(board.id);
@@ -193,8 +194,8 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
       run.disabled = true;
       massTarget = null;
       const ctx = await deps.transfer.loadMoveBoard(Number(boardSel.value));
-      if (!ctx) { listSel.append(el("option", { value: "", text: "— пароль доски неизвестен —" })); return; }
-      for (const l of ctx.lists) listSel.append(el("option", { value: String(l.id), text: l.title || "(без названия)" }));
+      if (!ctx) { listSel.append(el("option", { value: "", text: S.board.mass.boardLocked() })); return; }
+      for (const l of ctx.lists) listSel.append(el("option", { value: String(l.id), text: l.title || S.board.list.untitled() }));
       const pick = (): void => {
         const listId = Number(listSel.value);
         massTarget = listId ? { listId, ctx } : null;
@@ -221,12 +222,12 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
     // attachments — online-only, like the single-card path. Saying so once beats
     // letting every card fail with the same message.
     const online = action.key === "copy" || (action.key === "move" && massTarget && massTarget.ctx.boardId !== board.id);
-    if (online && !xySync.requireOnline("Копирование и перенос между досками доступны только онлайн.", msg)) return;
+    if (online && !xySync.requireOnline(S.board.mass.copyOffline(), msg)) return;
     run.disabled = true;
     const failed = new Set<number>();
     let ok = 0;
     for (const [i, card] of cards.entries()) {
-      msg.textContent = `${i + 1} из ${cards.length}…`;
+      msg.textContent = S.board.mass.progress(String(i + 1), String(cards.length));
       try {
         await applyMass(action, card);
         ok++;
@@ -299,8 +300,8 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
     panel: {
       id: "mass", menu: "board", icon: "list-checks",
       // The row is the way in AND one of the ways out, so it says which.
-      label: () => massMode ? "Выйти из режима отметок" : "Массовое действие",
-      title: "Отметить карточки на всей доске и сделать с ними одно действие",
+      label: () => massMode ? S.board.mass.exitLabel() : S.board.mass.name(),
+      title: S.board.mass.menuTitle(),
       open: () => setMassMode(!massMode),
     },
   };

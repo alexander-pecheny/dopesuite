@@ -1,4 +1,4 @@
-// hndt.ts — the .hndt side of раздатки: generation (the port of chgksuite
+// hndt.ts — the .hndt side of handouts: generation (the port of chgksuite
 // handouts 4s2hndt) and the read-back of per-question settings. The corpus in
 // internal/chgk/fsource/testdata/parity.json holds one document this writes
 // and the Go side parses.
@@ -21,8 +21,8 @@ function postprocessHandout(s: string | null | undefined): string {
 }
 
 // handoutForCard extracts a question card's handout: the inline
-// "[Раздаточный материал: …]" bracket in the question (chgksuite-native, what
-// 4s2hndt scans, and what the Поля editor composes) or a legacy standalone
+// handout bracket (the "[<handout label>: …]" 4s construct — chgksuite-native,
+// what 4s2hndt scans, and what the Fields editor composes) or a legacy standalone
 // "> …" block. Returns {kind:'image',name} | {kind:'text',text} | null.
 function handoutForCard(desc: string | null | undefined): Handout | null {
   const blocks = parseBlocks(desc);
@@ -68,8 +68,8 @@ function generateHndt(
   const blocks: string[] = [];
   cards.forEach((c, i) => {
     if (c.kind !== "question") return;
-    // Version 1's раздатка, like every other reader outside the card editor. A
-    // block per version would print two раздатки under one question number, and
+    // Version 1's handout, like every other reader outside the card editor. A
+    // block per version would print two handouts under one question number, and
     // split-fit names its output by that number — the second would overwrite the
     // first in the zip.
     const handout = handoutForCard(c.desc);
@@ -127,7 +127,7 @@ function parseHndtMetaByQuestion(text: string | null | undefined): Record<string
 
 
 // hndtOf is what a list's cards generate: their display numbers and the .hndt
-// document with each card's saved settings — export and «Генерация раздаток»
+// document with each card's saved settings — export and the Generate-handouts
 // both start here.
 function hndtOf(cards: ReadonlyArray<ChgkCard & { id: number; handoutMeta?: string | null }>): { numbers: Array<string | null>; source: string } {
   const numbers = numberQuestionCards(cards);

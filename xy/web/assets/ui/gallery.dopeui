@@ -1,11 +1,10 @@
-page title="Галерея · xy" kind="wide" scripts="dist/gallery.js"
-  topbar title="Галерея"
+page title=@gallery.page.title kind="wide" scripts="dist/gallery.js"
+  topbar title=@gallery.page.name
     crumbs
-      crumb home href="/" icon="house" label="Все доски"
-      crumb "Галерея"
+      crumb home href="/" icon="house" label=@gallery.page.home
+      crumb @gallery.page.name
 
   section
     hint
-      "Каждый примитив, из которых собираются панели: сюда смотрят перед тем,"
-      "как завести новый класс, и на нём же судят правку скина. Только в dev."
+      @gallery.page.hint
     mount id="gallery" kind="gallery"

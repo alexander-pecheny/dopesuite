@@ -1,72 +1,72 @@
-page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
-  topbar title="Доска"
+page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
+  topbar title=@board.page.name
     crumbs
-      crumb home href="/" icon="house" label="Все доски"
-      crumb id="boardTitle" "Доска"
-    iconbtn id="notifToggle" label="События" title="События других участников" badgeid="notifBadge" aria-haspopup="true" aria-expanded="false" icon="bell"
-    iconbtn id="timerToggle" icon="timer" label="Таймер" title="Таймер ЧГК" aria-pressed="false"
+      crumb home href="/" icon="house" label=@board.page.home
+      crumb id="boardTitle" @board.page.name
+    iconbtn id="notifToggle" label=@board.bell.label title=@board.bell.title badgeid="notifBadge" aria-haspopup="true" aria-expanded="false" icon="bell"
+    iconbtn id="timerToggle" icon="timer" label=@board.timer.label title=@board.timer.title aria-pressed="false"
 
-  -- Фильтр по меткам: the bar sits ABOVE the board, because it is the caption
+  -- Label filter: the bar sits ABOVE the board, because it is the caption
   -- of what you are looking at. Its modal is down with the other overlays.
   mount id="filterBar" kind="filter-bar" hidden
   mount id="kanban" kind="kanban" hidden
 
-  -- unlock overlay. «Не помню пароль» offers the way off a board whose content
+  -- unlock overlay. The ghost "forgot password" button offers the way off a board whose content
   -- is already lost: deleting or leaving it needs the roster, never the key.
-  modal id="unlockOverlay" label="Пароль доски" title="Пароль доски"
+  modal id="unlockOverlay" label=@board.unlock.title title=@board.unlock.title
     form id="unlockForm" dir="col"
-      password id="unlockPass" placeholder="Пароль доски" autocomplete="off" required autofocus
-      button submit "Открыть"
+      password id="unlockPass" placeholder=@board.unlock.pass_placeholder autocomplete="off" required autofocus
+      button submit @board.unlock.submit
     message id="unlockMessage"
     row
-      button kind="ghost" id="unlockForgot" "Не помню пароль"
+      button kind="ghost" id="unlockForgot" @board.unlock.forgot
     col id="unlockExit" gap="sm" hidden
-      hint kind="danger" "Содержимое доски без пароля не восстановить."
+      hint kind="danger" @board.unlock.exit_hint
       row
-        button kind="danger" id="unlockExitBtn" "Удалить доску"
+        button kind="danger" id="unlockExitBtn" @board.delete.label
 
-  -- the Passphrase Check. No ✕ and no «Позже»: the two ways out are typing the
+  -- the Passphrase Check. No ✕ and no "later": the two ways out are typing the
   -- pass and setting a new one (passcheck.ts vetoes every other dismissal).
-  modal id="passCheckOverlay" label="Пароль доски" title="Помните пароль доски?"
+  modal id="passCheckOverlay" label=@board.unlock.title title=@board.passcheck.title
     col id="passCheckStep1" gap="sm"
       hint
-        "Раз в месяц xy спрашивает пароль доски: на этом устройстве она открывается"
-        "без него, и забытый пароль обнаружится только тогда, когда будет поздно."
+        @board.passcheck.hint_lead
+        @board.passcheck.hint_mid
       form id="passCheckForm" dir="col"
-        password id="passCheckPass" placeholder="Пароль доски" autocomplete="off" required
+        password id="passCheckPass" placeholder=@board.unlock.pass_placeholder autocomplete="off" required
         row gap="sm" wrap
-          button submit "ОК"
-          button kind="ghost" id="passCheckForgot" "Не помню пароль, поменять"
+          button submit @board.passcheck.submit
+          button kind="ghost" id="passCheckForgot" @board.passcheck.forgot
     col id="passCheckStep2" gap="sm" hidden
-      hint "Пароль сохранён. А ещё сейчас хорошее время, чтобы сохранить бэкап."
+      hint @board.passcheck.saved_hint
       row gap="sm" wrap
-        button kind="primary" id="passCheckBackup" "Сохранить бэкап"
-        button kind="ghost" id="passCheckClose" "Закрыть"
+        button kind="primary" id="passCheckBackup" @board.passcheck.backup
+        button kind="ghost" id="passCheckClose" @board.actions.close
     message id="passCheckMessage"
 
-  -- «Сменить пароль доски»: the creation form again, minus the old passphrase.
+  -- changePass ("change the board password"): the creation form again, minus the old passphrase.
   -- The device holds the key, so the change only re-wraps it.
-  modal id="changePassOverlay" label="Сменить пароль доски" title="Сменить пароль доски"
+  modal id="changePassOverlay" label=@board.changepass.title title=@board.changepass.title
     form id="changePassForm" dir="col"
       row gap="sm" align="center"
-        textfield id="changePassInput" placeholder="Новый пароль доски" autocomplete="new-password" required grow
-        iconbtn id="changePassGen" icon="dices" label="Сгенерировать пароль"
-      muted id="changePassCopied" hidden "Пароль уже скопирован"
-      hint kind="danger" "Сохраните этот пароль прямо сейчас — восстановить его будет невозможно."
-      checkbox id="changePassSaved" "Я сохранил(а) пароль в надёжное место и обещаю его не терять"
+        textfield id="changePassInput" placeholder=@board.changepass.placeholder autocomplete="new-password" required grow
+        iconbtn id="changePassGen" icon="dices" label=@board.changepass.generate
+      muted id="changePassCopied" hidden @board.changepass.copied
+      hint kind="danger" @board.changepass.danger
+      checkbox id="changePassSaved" @board.changepass.saved
       row gap="sm" wrap
-        button submit id="changePassSubmit" disabled "Сменить"
-        button kind="ghost" id="changePassCancel" "Отмена"
+        button submit id="changePassSubmit" disabled @board.changepass.submit
+        button kind="ghost" id="changePassCancel" @board.actions.cancel
     message id="changePassMessage"
 
   -- card detail overlay
   docoverlay id="cardOverlay" kind="detail"
     headrow kind="detail"
-      selectfield id="cardKind" compact aria-label="Тип карточки"
-        option value="question" "Вопрос"
-        option value="meta" "Метаинформация"
-        option value="heading" "Заголовок"
-        option value="other" "Другое"
+      selectfield id="cardKind" compact aria-label=@board.card.kind_label
+        option value="question" @board.card.kind_question
+        option value="meta" @board.card.kind_meta
+        option value="heading" @board.card.kind_heading
+        option value="other" @board.card.kind_other
       mount id="cardDetailTitle" kind="card-title" hidden
       -- these buttons share the header row with the 38px kind-select and the
       -- icon button, so they are full height too — `small` made them 30px and
@@ -75,391 +75,392 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
       -- keeps its own colours on every platform while an inline SVG follows the
       -- button's text colour. The words live on in title/aria-label.
       headactions kind="detail"
-        unreaddot id="contentUnreadDot" title="Непрочитанные изменения"
-        button id="cardLink" icon="link" title="Скопировать прямую ссылку на карточку" aria-label="Ссылка на карточку"
-        button id="cardCopy" hidden icon="clipboard" title="Скопировать вопрос или раздатку" aria-label="Копировать"
-        button id="cardAddVersion" hidden icon="copy" title="Добавить версию — копию текущей формулировки, которую можно переписать" aria-label="Добавить версию"
-        -- Закрыть by default; openCard swaps in ← Назад when the card was opened
+        unreaddot id="contentUnreadDot" title=@board.unread.dot
+        button id="cardLink" icon="link" title=@board.card.link_title aria-label=@board.card.link_label
+        button id="cardCopy" hidden icon="clipboard" title=@board.card.copy_title aria-label=@board.actions.copy
+        button id="cardAddVersion" hidden icon="copy" title=@board.card.add_version_title aria-label=@board.card.add_version_label
+        -- Close by default; openCard swaps in "← Back" when the card was opened
         -- from a list preview, which is where closing it actually lands.
-        iconbtn id="cardClose" icon="x" label="Закрыть"
+        iconbtn id="cardClose" icon="x" label=@board.actions.close
     mount id="cardCopyMsg" kind="card-copy-msg" hidden
 
     -- view switch: preview (read-only) / structured fields / raw 4s text
     tabs id="cardViewTabs"
-      tab id="cardTabPreview" view="preview" "Просмотр"
-      tab id="cardTabFields" view="fields" "Поля"
-      tab id="cardTabText" view="text" "Формат 4s"
+      tab id="cardTabPreview" view="preview" @board.card.tab_preview
+      tab id="cardTabFields" view="fields" @board.card.tab_fields
+      tab id="cardTabText" view="text" @board.card.tab_text
 
     -- Versions of the question, when it has more than one: a second strip that
-    -- scopes Просмотр and Поля to one wording. Формат 4s always shows the whole
+    -- scopes Preview and Fields to one wording. The 4s tab always shows the whole
     -- field, (PAGEBREAK)s and all — that is the escape hatch.
     mount id="cardVersions" kind="card-versions" hidden
 
-    -- editing tools: ударение types into whichever field of Поля/Текст the caret
-    -- was last in; типограф and →.4s rewrite the whole card, so they need no caret
+    -- editing tools: the stress tool types into whichever field of Fields/Text the caret
+    -- was last in; the typographer and →.4s rewrite the whole card, so they need no caret
     row id="cardEditTools" gap="sm" align="center" wrap
-      button small kind="ghost" id="cardInsStress" title="Вставить знак ударения (ставится на гласную слева от курсора)" "◌́ ударение"
-      button small kind="ghost" id="cardTypo" title="Типографика: кавычки-ёлочки, тире, неразрывные пробелы и дефисы, раскодирование ссылок" "типограф"
-      button small kind="ghost" id="cardTo4s" title="Разобрать простой текст вопроса в формат 4s" "→.4s"
+      button small kind="ghost" id="cardInsStress" title=@board.card.stress_title @board.card.stress_label
+      button small kind="ghost" id="cardTypo" title=@board.card.typo_title @board.card.typo_label
+      button small kind="ghost" id="cardTo4s" title=@board.card.to4s_title "→.4s"
 
-    -- Просмотр: single-card docx-style render (read-only)
+    -- Preview: single-card docx-style render (read-only)
     tabpanel id="cardViewPreview"
-      checkbox id="cardPreviewScreen" kind="card-preview" title="Экранный режим: убрать пометки ведущему [в скобках] и ударения" " для экрана"
-      mount id="cardPreviewBody" kind="card-preview-body" title="Двойной клик — редактировать"
+      checkbox id="cardPreviewScreen" kind="card-preview" title=@board.card.screen_title @board.card.screen_label
+      mount id="cardPreviewBody" kind="card-preview-body" title=@board.card.preview_dblclick
 
-    -- Поля: structured field editor (question cards)
+    -- Fields: structured field editor (question cards)
     tabpanel id="cardViewFields"
       mount id="cardFields" kind="card-fields"
 
-    -- Текст: raw 4s editor
+    -- Text: raw 4s editor
     tabpanel id="cardViewText"
-      label id="cardDescLabel" "Описание"
+      label id="cardDescLabel" @board.card.desc_label
       editor id="cardDesc" spellcheck="false"
 
     row gap="sm" wrap
-      button id="cardSave" "Сохранить"
-      button kind="danger" id="cardDelete" "Удалить карточку"
+      button id="cardSave" @board.actions.save
+      button kind="danger" id="cardDelete" @board.card.delete
     message id="cardMessage"
 
-    label "Метки"
+    label @board.labels.name
     -- The assigned labels and the add button share ONE row; the "create a new
     -- label" form is not here at all — board.js detaches it at boot and mounts it
     -- inside the add-label popup, which is the only place it is wanted.
     row gap="sm" align="center" wrap
       mount id="labelPicker" kind="label-picker"
       mount id="labelAddRow" kind="label-add-row"
-        button kind="ghost" icon="plus" id="labelAddBtn" "Добавить метку…"
+        button kind="ghost" icon="plus" id="labelAddBtn" @board.card.label_add
 
-    -- Тесты: which sittings this question was played at, each with its own
-    -- labels. Separate from Метки above: a label there is the author's view, a
+    -- Tests: which sittings this question was played at, each with its own
+    -- labels. Separate from Labels above: a label there is the author's view, a
     -- label under a test is what the testers thought (ADR-0004).
-    label "Тесты"
+    label @board.card.playings_label
     mount id="cardPlayings" kind="card-playings"
     row gap="sm" align="center" wrap
       mount id="playingAddRow" kind="label-add-row"
-        button kind="ghost" icon="plus" id="playingAddBtn" "Отметить тестом…"
-    -- Видели: every tester from every session this card is tagged with, derived
+        button kind="ghost" icon="plus" id="playingAddBtn" @board.card.mark_test
+    -- Seen: every tester from every session this card is tagged with, derived
     -- and stored nowhere. Hidden until there is one.
     mount id="cardSeen" kind="card-seen" hidden
 
     form id="newLabelForm" dir="row" gap="sm"
-      textfield id="newLabelName" placeholder="Новая метка" grow
+      textfield id="newLabelName" placeholder=@board.card.new_label_placeholder grow
       mount id="newLabelColor" kind="color-field"
-      button small submit icon="plus" title="Создать и добавить метку"
+      button small submit icon="plus" title=@board.card.new_label_title
 
-    -- Алиас: the card's short name, shown in the list instead of its text. NOT a
+    -- Alias: the card's short name, shown in the list instead of its text. NOT a
     -- 4s field (its own encrypted column), so it lives out here below the views
-    -- rather than inside Поля. No save button — it autosaves (saveAlias).
-    label "Алиас"
-    textfield id="cardAlias" placeholder="короткое имя карточки — показывается в списке вместо текста" autocomplete="off" maxlength="200"
+    -- rather than inside Fields. No save button — it autosaves (saveAlias).
+    label @board.card.alias_label
+    textfield id="cardAlias" placeholder=@board.card.alias_placeholder autocomplete="off" maxlength="200"
 
-    -- Выписки: the comments and attachments flagged as source excerpts, counted
+    -- Excerpts: the comments and attachments flagged as source excerpts, counted
     -- here and shown together in one modal — the point of the flag is to have the
-    -- sources at hand mid-edit without scrolling the whole лента for them.
+    -- sources at hand mid-edit without scrolling the whole feed for them.
     -- the count is a span mount, NOT a `label`: the label primitive is a section
     -- heading and carries a 24px top margin, which drops it out of line with the
     -- button beside it however the row is aligned
     row gap="sm" align="center" wrap
       mount id="excerptsCount" kind="excerpt-count"
-      button small kind="ghost" id="excerptsView" disabled "Смотреть"
+      button small kind="ghost" id="excerptsView" disabled @board.card.excerpts_view
 
-    label "Вложения"
+    label @board.card.attachments_label
     mount id="attachments" kind="attachments"
     row gap="sm" align="center" wrap
       -- no `small` on the upload button: it shares this row with the file field,
       -- and a 30px button beside a 38px field cannot line up with it
       filefield id="attachFile"
-      checkbox id="attachCompress" " сжать (WebP)"
-      button id="attachUpload" "Загрузить"
+      checkbox id="attachCompress" @board.card.compress
+      button id="attachUpload" @board.card.upload
 
-    label "Переместить / копировать"
+    label @board.card.move_label
     row gap="sm" align="center" wrap
-      selectfield id="moveBoard" title="Доска" grow
-      selectfield id="moveList" title="Список" grow
-      selectfield id="movePos" title="Позиция" grow
+      selectfield id="moveBoard" title=@board.fields.board grow
+      selectfield id="moveList" title=@board.fields.list grow
+      selectfield id="movePos" title=@board.fields.position grow
     row gap="sm" align="center" wrap
-      button small id="copyBtn" "Копировать"
-      button small id="moveBtn" "Переместить"
+      button small id="copyBtn" @board.actions.copy
+      button small id="moveBtn" @board.actions.move
 
-    label "Лента " (unreaddot id="commentsUnreadDot" title="Непрочитанные комментарии")
-    -- показать narrows the лента to one kind of entry, only until the card
-    -- closes; вид правок governs how a desc_edit renders, so it goes away in the
+    label @board.card.feed_label (unreaddot id="commentsUnreadDot" title=@board.unread.comments)
+    -- show narrows the feed to one kind of entry, only until the card
+    -- closes; the edit-view select governs how a desc_edit renders, so it goes away in the
     -- modes that show none.
     row gap="sm" align="center" wrap
       row gap="sm" align="center"
-        label for="feedFilter" "Показать"
-        selectfield id="feedFilter" compact title="Что показывать в ленте"
-          option value="all" "всё"
-          option value="comments" "комментарии"
-          option value="edits" "правки"
-          option value="meta" "метки и вложения"
+        label for="feedFilter" @board.feed.show
+        selectfield id="feedFilter" compact title=@board.feed.filter_title
+          option value="all" @board.feed.opt_all
+          option value="comments" @board.feed.opt_comments
+          option value="edits" @board.feed.opt_edits
+          option value="meta" @board.feed.opt_meta
       row id="feedDiffViewRow" gap="sm" align="center"
-        label for="feedDiffView" "Вид правок"
-        selectfield id="feedDiffView" compact title="Вид правок"
-          option value="brief" "краткий"
-          option value="full" "подробный"
+        label for="feedDiffView" @board.feed.diff_view
+        selectfield id="feedDiffView" compact title=@board.feed.diff_view
+          option value="brief" @board.feed.opt_brief
+          option value="full" @board.feed.opt_full
       -- glyph only: with its caption the row wrapped onto a second line beside
       -- the two labelled selects, and the words live on in title/aria-label
-      button small kind="ghost" icon="maximize-2" id="feedExpand" title="Развернуть ленту на весь экран" aria-label="Развернуть ленту"
+      button small kind="ghost" icon="maximize-2" id="feedExpand" title=@board.feed.expand_title aria-label=@board.feed.expand_label
     mount id="timeline" kind="timeline"
     form id="commentForm" dir="col"
-      editor id="commentInput" kind="comment" placeholder="Комментарий…" spellcheck="false"
-      button small submit "Отправить"
+      editor id="commentInput" kind="comment" placeholder=@board.feed.comment_placeholder spellcheck="false"
+      button small submit @board.feed.submit
 
   -- list preview overlay (docx-style render, JS-only)
-  docoverlay id="previewOverlay" kind="doc" label="Предпросмотр списка"
+  docoverlay id="previewOverlay" kind="doc" label=@board.preview.list
     headrow
-      previewtitle id="previewTitle" "Предпросмотр"
+      previewtitle id="previewTitle" @board.preview.title
       headactions
-        checkbox id="previewScreen" kind="preview" title="Экранный режим: убрать пометки ведущему [в скобках] и ударения" " для экрана"
-        iconbtn id="previewClose" icon="x" label="Закрыть"
+        checkbox id="previewScreen" kind="preview" title=@board.card.screen_title @board.card.screen_label
+        iconbtn id="previewClose" icon="x" label=@board.actions.close
     mount id="previewBody" kind="preview-body"
 
   -- export picker: tick the formats, get one file — or a zip of all of them.
   -- Offline only .4s survives; the rest need the server to render.
-  modal id="exportOverlay" label="Экспорт списка" title="Экспорт"
+  modal id="exportOverlay" label=@board.export.overlay_label title=@board.export.title
     form id="exportForm" dir="col"
-      checkbox id="exportFmt4s" checked title="Исходник chgksuite; изображения кладутся рядом в архив" " .4s"
+      checkbox id="exportFmt4s" checked title=@board.export.fmt4s_title " .4s"
       checkbox id="exportFmtDocx" " .docx"
       checkbox id="exportFmtPdf" " .pdf"
-      checkbox id="exportFmtPdfMobile" title="Вёрстка под узкий экран" " .pdf для телефона"
-      checkbox id="exportFmtHandouts" title="Раздатки по одной на страницу, свёрстанные по размеру (split-fit)" " раздатки в pdf"
+      checkbox id="exportFmtPdfMobile" title=@board.export.pdf_mobile_title @board.export.pdf_mobile_label
+      checkbox id="exportFmtHandouts" title=@board.export.handouts_title @board.export.handouts_label
       row gap="sm" align="center" wrap
-        button small kind="ghost" id="exportToggleAll" "Выбрать все"
-        button submit id="exportRun" "Экспорт"
-        button kind="ghost" id="exportCancel" "Отмена"
+        button small kind="ghost" id="exportToggleAll" @board.export.select_all
+        button submit id="exportRun" @board.export.run
+        button kind="ghost" id="exportCancel" @board.actions.cancel
     message id="exportMessage"
 
-  -- «Типографить всю доску» stops here when the pass wants to add stress marks:
-  -- chgk writes stress by capitalising the vowel («брАзер»), and a camel-cased
-  -- compound («ГазпромИнвест») is the same shape, so the editor confirms each
-  -- word once for the whole board. Nothing else in the pass is reviewable.
-  -- Найти и заменить: one replacement over the whole board, one list or one
+  -- The board-wide typographer stops here when the pass wants to add stress marks:
+  -- chgk writes stress by capitalising the stressed vowel ("brAzer"), and a
+  -- camel-cased compound ("GazpromInvest") is the same shape, so the editor
+  -- confirms each word once for the whole board. Nothing else in the pass is reviewable.
+  -- Find and replace: one replacement over the whole board, one list or one
   -- group. Every occurrence is shown with its context and ticked one by one,
-  -- because «г.» in «г. Москва» and in «1917 г.» are two different decisions.
-  modal id="replaceOverlay" label="Найти и заменить" title="Найти и заменить" done="Закрыть" doneid="replaceClose"
-    -- one control per line: «найти» and «заменить на» read as a pair, and a pair
+  -- because the same abbreviation before a city name and after a year are two
+  -- different decisions.
+  modal id="replaceOverlay" label=@board.replace.title title=@board.replace.title done=@board.actions.close doneid="replaceClose"
+    -- one control per line: "find" and "replace with" read as a pair, and a pair
     -- that wraps mid-row reads as neither
     row gap="sm" align="center" wrap
       selectfield id="replaceScope" compact
-        option value="board" selected "Вся доска"
-      checkbox id="replaceCase" checked "Учитывать регистр"
-    textfield id="replaceFrom" placeholder="Найти" autocomplete="off" spellcheck="false"
-    textfield id="replaceTo" placeholder="Заменить на" autocomplete="off" spellcheck="false"
+        option value="board" selected @board.replace.scope_board
+      checkbox id="replaceCase" checked @board.replace.case
+    textfield id="replaceFrom" placeholder=@board.replace.find autocomplete="off" spellcheck="false"
+    textfield id="replaceTo" placeholder=@board.replace.replace_with autocomplete="off" spellcheck="false"
     mount id="replaceHits" kind="replace-hits"
     row gap="sm" align="center" wrap
-      button small kind="ghost" id="replacePrev" "Назад"
+      button small kind="ghost" id="replacePrev" @board.replace.prev
       muted id="replacePage"
-      button small kind="ghost" id="replaceNext" "Дальше"
-    -- «Закрыть», never «Отмена»: nothing here is undone by leaving, and a run
-    -- that already happened is in each card's ленте, not in this dialog.
+      button small kind="ghost" id="replaceNext" @board.replace.next
+    -- "Close", never "Cancel": nothing here is undone by leaving, and a run
+    -- that already happened is in each card's feed, not in this dialog.
     row gap="sm" wrap
-      button id="replaceRun" "Заменить"
+      button id="replaceRun" @board.replace.run
     message id="replaceMessage"
 
-  modal id="accentOverlay" label="Ударения" title="Ударения"
-    hint "Проверьте ударения — снимите галочку там, где заглавная буква не означает ударение."
+  modal id="accentOverlay" label=@board.accent.title title=@board.accent.title
+    hint @board.accent.hint
     mount id="accentPicks" kind="accent-picks"
     row gap="sm" wrap
-      button id="accentRun" "Типографить"
-      button kind="ghost" id="accentCancel" "Отмена"
+      button id="accentRun" @board.accent.run
+      button kind="ghost" id="accentCancel" @board.actions.cancel
 
   -- import picker: the package file plus how it lands on the board — one list,
-  -- or (разбить по турам) one list per "## " section, linked into a group with
+  -- or (split by tours) one list per "## " section, linked into a group with
   -- continuous numbering and combined export
-  modal id="importPickOverlay" label="Импорт" title="Импорт"
+  modal id="importPickOverlay" label=@board.importpick.title title=@board.importpick.title
     form id="importPickForm" dir="col"
-      hint "Пакет вопросов (.4s, .docx) или архив xy (.zip) — что именно, разберёмся сами."
+      hint @board.importpick.hint
       filefield id="importFile" accept=".4s,.zip,.docx" required
       hint id="importPickWhat"
-      checkbox id="importSplitTours" title="Каждый тур станет отдельным списком; списки будут связаны в группу со сквозной нумерацией и общим экспортом" " разбить по турам"
+      checkbox id="importSplitTours" title=@board.importpick.split_title @board.importpick.split_label
       row gap="sm" wrap
-        button submit "Импортировать"
-        button kind="ghost" id="importPickCancel" "Отмена"
+        button submit @board.importpick.submit
+        button kind="ghost" id="importPickCancel" @board.actions.cancel
 
   -- import verification overlay: the parsed 4s source (left, editable) next to
   -- its live preview (right), so parsing mistakes can be fixed before the
   -- package becomes a list. Only .docx needs it — .4s/.zip import straight.
-  docoverlay id="importOverlay" kind="doc" variant="import" label="Проверка импорта"
+  docoverlay id="importOverlay" kind="doc" variant="import" label=@board.importverify.title
     headrow
-      previewtitle id="importTitle" "Проверка импорта"
+      previewtitle id="importTitle" @board.importverify.title
       headactions
         mount id="importCount" kind="import-count"
-        button small id="importCommit" "Импортировать"
-        iconbtn id="importClose" icon="x" label="Закрыть"
+        button small id="importCommit" @board.importpick.submit
+        iconbtn id="importClose" icon="x" label=@board.actions.close
     split
       pane kind="src"
-        editor id="importSource" kind="importsrc" spellcheck="false" aria-label="Исходник 4s"
+        editor id="importSource" kind="importsrc" spellcheck="false" aria-label=@board.importverify.src_label
       mount id="importPreview" kind="import-preview"
 
   -- handouts generation overlay: edit the chgksuite .hndt source (left) and
   -- render it to a PDF via the server (right). The PDF is ephemeral.
-  docoverlay id="handoutsOverlay" kind="doc" variant="handouts" label="Генерация раздаток"
+  docoverlay id="handoutsOverlay" kind="doc" variant="handouts" label=@board.handouts.title
     headrow
-      previewtitle "Генерация раздаток"
+      previewtitle @board.handouts.title
       headactions
-        iconbtn id="handoutsClose" icon="x" label="Закрыть"
+        iconbtn id="handoutsClose" icon="x" label=@board.actions.close
     split
       pane kind="src"
         -- both panes open with the same header row, so the two labels (and the
         -- textarea / pdf area under them) sit on one line across the splitter
         row gap="sm" align="center" justify="between"
-          label "Источник (.hndt)"
+          label @board.handouts.src_label
         editor id="handoutsSource" kind="handouts" spellcheck="false"
         row gap="sm" align="center" wrap
-          button small id="handoutsGenerate" "Сгенерировать PDF"
-          button small kind="ghost" id="handoutsSplitFit" title="Подобрать раскладку (split-fit) и скачать zip со всеми PDF" "Split-fit"
+          button small id="handoutsGenerate" @board.handouts.generate
+          button small kind="ghost" id="handoutsSplitFit" title=@board.handouts.splitfit_title "Split-fit"
         message id="handoutsMessage"
       pane kind="preview"
         row gap="sm" align="center" justify="between"
           label "PDF"
-          button small download id="handoutsDownload" hidden "Скачать"
+          button small download id="handoutsDownload" hidden @board.handouts.download
         mount id="handoutsPdf" kind="handouts-pdf"
 
   -- move / copy list overlay (within board → re-rank; other board →
   -- client-side re-encryption of the list + its cards)
-  modal id="moveListOverlay" label="Переместить список" title="Переместить список" done="Закрыть" doneid="moveListClose"
+  modal id="moveListOverlay" label=@board.movelist.title title=@board.movelist.title done=@board.actions.close doneid="moveListClose"
     col gap="sm"
-      label for="moveListBoard" "Доска"
-      selectfield id="moveListBoard" title="Доска"
-      label for="moveListPos" "Позиция"
-      selectfield id="moveListPos" title="Позиция"
+      label for="moveListBoard" @board.fields.board
+      selectfield id="moveListBoard" title=@board.fields.board
+      label for="moveListPos" @board.fields.position
+      selectfield id="moveListPos" title=@board.fields.position
     row gap="sm" align="center" wrap
-      button small id="moveListCopyBtn" "Копировать"
-      button small id="moveListMoveBtn" "Переместить"
+      button small id="moveListCopyBtn" @board.actions.copy
+      button small id="moveListMoveBtn" @board.actions.move
     message id="moveListMessage"
 
-  modal id="filterOverlay" label="Фильтр по меткам" title="Фильтр по меткам" done="Готово" doneid="filterClose"
+  modal id="filterOverlay" label=@board.filter.title title=@board.filter.title done=@board.actions.done doneid="filterClose"
     mount id="filterBody" kind="filter-body"
 
-  -- Массовое действие: the bar that appears once cards are ticked, and the one
+  -- Mass action: the bar that appears once cards are ticked, and the one
   -- dialog every action runs through. The dialog IS the confirmation — it names
   -- the count, holds whatever the action needs picked, and its primary button
-  -- does the thing; there is no second «точно?» to click past.
+  -- does the thing; there is no second "really sure?" to click past.
   mount id="massBar" kind="mass-bar" hidden
-  modal id="massOverlay" label="Массовое действие" title="Массовое действие" done="Закрыть" doneid="massClose"
+  modal id="massOverlay" label=@board.mass.name title=@board.mass.name done=@board.actions.close doneid="massClose"
     mount id="massBody" kind="mass-body"
     row gap="sm" align="center" wrap
-      button id="massRun" "Выполнить"
+      button id="massRun" @board.mass.run
     message id="massMessage"
 
   -- lists management overlay: reorder lists (drag / position), select several
   -- and move them together, and link consecutive lists into a group
   -- (list_of_lists) with shared numbering + combined export.
-  modal id="listsManageOverlay" label="Управление списками" title="Управление списками" variant="lists" done="Готово" doneid="listsManageClose"
+  modal id="listsManageOverlay" label=@board.listsmanage.title title=@board.listsmanage.title variant="lists" done=@board.actions.done doneid="listsManageClose"
     row gap="sm" align="center" justify="between" wrap
-      button small icon="link" id="listsLinkBtn" disabled title="Выберите подряд идущие списки и свяжите их в группу" "Связать списки"
+      button small icon="link" id="listsLinkBtn" disabled title=@board.listsmanage.link_title @board.listsmanage.link_label
       row gap="sm" align="center"
         numfield id="listsMovePos" min="1" placeholder="№" narrow
-        button small kind="ghost" id="listsMoveBtn" disabled title="Переместить выбранные на указанную позицию" "Переместить выбранные"
+        button small kind="ghost" id="listsMoveBtn" disabled title=@board.listsmanage.move_title @board.listsmanage.move_label
     mount id="listsManageRows" kind="lists-manage-rows"
     message id="listsManageMessage"
 
-  -- test sessions: the board-level panel that replaced the тест-список
-  modal id="sessionsOverlay" icon="flask-conical" label="Тесты" title="Тесты" variant="lists" done="Готово" doneid="sessionsClose"
+  -- test sessions: the board-level panel that replaced the test list
+  modal id="sessionsOverlay" icon="flask-conical" label=@board.sessions.name title=@board.sessions.name variant="lists" done=@board.actions.done doneid="sessionsClose"
     row gap="sm" align="center" justify="between" wrap
-      button small id="sessionAddBtn" title="Создать тест-сессию" "＋ Новый тест"
+      button small id="sessionAddBtn" title=@board.sessions.add_title @board.sessions.add
     mount id="sessionsList" kind="sessions-list"
     message id="sessionsMessage"
 
   -- one session: date, optional time and zone, title, testers, announce cities
-  modal id="sessionEditOverlay" label="Тест-сессия" title="Тест-сессия" variant="lists" done="Готово" doneid="sessionEditClose"
+  modal id="sessionEditOverlay" label=@board.sessionedit.title title=@board.sessionedit.title variant="lists" done=@board.actions.done doneid="sessionEditClose"
     mount id="sessionForm" kind="session-form"
     message id="sessionEditMessage"
 
   -- rename / recolour every label on the board (issue #25)
-  modal id="labelsEditOverlay" icon="tags" label="Метки" title="Метки" variant="lists" done="Готово" doneid="labelsEditClose"
+  modal id="labelsEditOverlay" icon="tags" label=@board.labels.name title=@board.labels.name variant="lists" done=@board.actions.done doneid="labelsEditClose"
     mount id="labelsEditor" kind="labels-editor"
     message id="labelsEditMessage"
 
-  -- «Вопросы тестировали» for ONE tour: each session with how much of the tour
+  -- "who tested these questions" for ONE tour: each session with how much of the tour
   -- it saw, so the custom (name those who tested most of it) can be applied
   -- the panel shell: one modal for the panels that build their body in TS
-  -- (Список тестеров, Счётчик авторов) — panels.ts sets the title and the body
-  modal id="panelOverlay" label="Панель" title="Панель" variant="lists" done="Готово" doneid="panelClose"
+  -- (tester list, author count) — panels.ts sets the title and the body
+  modal id="panelOverlay" label=@board.panel.title title=@board.panel.title variant="lists" done=@board.actions.done doneid="panelClose"
     mount id="panelBody" kind="panel-body"
     message id="panelMessage"
 
   -- members / sharing overlay
-  modal id="membersOverlay" label="Участники доски" title="Участники доски" done="Готово" doneid="membersClose"
+  modal id="membersOverlay" label=@board.members.name title=@board.members.name done=@board.actions.done doneid="membersClose"
     mount id="membersList" kind="members-list"
     form id="addMemberForm" dir="row" gap="sm" hidden
-      textfield id="addMemberName" placeholder="Имя пользователя" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" grow
-      button small submit "Добавить"
-    -- Заявки appear only while someone is waiting; ссылки only for the owner,
+      textfield id="addMemberName" placeholder=@board.members.name_placeholder autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" grow
+      button small submit @board.members.add
+    -- Join requests appear only while someone is waiting; invite links only for the owner,
     -- who is the only one allowed to mint, revoke or approve (ADR-0017).
     section id="joinRequestsSection" hidden
-      subhead "Заявки"
+      subhead @board.members.requests
       mount id="joinRequests" kind="join-requests"
     section id="invitesSection" hidden
-      subhead "Ссылки-приглашения"
+      subhead @board.members.invites
       mount id="inviteList" kind="invite-list"
-      button kind="ghost" small id="newInviteBtn" "+ Создать ссылку"
+      button kind="ghost" small id="newInviteBtn" @board.members.create_invite
       mount id="inviteForm" kind="invite-form"
     message id="membersMessage"
 
-  -- expanded лента: the same feed on the whole screen, flowed into columns so a
+  -- expanded feed: the same feed on the whole screen, flowed into columns so a
   -- long discussion can be read without scrolling a 320px-tall panel
-  -- No «Лента» title: after «Развернуть» it is obvious where you are. The
+  -- No feed title: after "expand" it is obvious where you are. The
   -- labelled selects sit on ONE line (desktop has the room, and a second row
   -- would only eat into the feed); on a phone they shrink and wrap.
-  docoverlay id="feedOverlay" kind="doc" variant="feed" label="Лента"
+  docoverlay id="feedOverlay" kind="doc" variant="feed" label=@board.feed.title
     headrow
       headactions
         -- each label+select is one nowrap unit, so when the row wraps on a phone
         -- the label never orphans from its select (clean pairs, one each row)
         row gap="sm" align="center"
-          label for="feedFilterFull" "Показать"
-          selectfield id="feedFilterFull" compact title="Что показывать в ленте"
-            option value="all" "всё"
-            option value="comments" "комментарии"
-            option value="edits" "правки"
-            option value="meta" "метки и вложения"
+          label for="feedFilterFull" @board.feed.show
+          selectfield id="feedFilterFull" compact title=@board.feed.filter_title
+            option value="all" @board.feed.opt_all
+            option value="comments" @board.feed.opt_comments
+            option value="edits" @board.feed.opt_edits
+            option value="meta" @board.feed.opt_meta
         row id="feedDiffViewFullRow" gap="sm" align="center"
-          label for="feedDiffViewFull" "Вид правок"
-          selectfield id="feedDiffViewFull" compact title="Вид правок"
-            option value="brief" "краткий"
-            option value="full" "подробный"
+          label for="feedDiffViewFull" @board.feed.diff_view
+          selectfield id="feedDiffViewFull" compact title=@board.feed.diff_view
+            option value="brief" @board.feed.opt_brief
+            option value="full" @board.feed.opt_full
         row gap="sm" align="center"
-          label for="feedOrder" "Порядок"
-          selectfield id="feedOrder" compact title="Порядок событий"
-            option value="new" "сначала новое"
-            option value="old" "сначала старое"
-        iconbtn id="feedClose" icon="x" label="Закрыть"
+          label for="feedOrder" @board.feed.order_label
+          selectfield id="feedOrder" compact title=@board.feed.order_title
+            option value="new" @board.feed.opt_new
+            option value="old" @board.feed.opt_old
+        iconbtn id="feedClose" icon="x" label=@board.actions.close
     mount id="feedGrid" kind="feed-grid"
 
-  -- thread viewer: one comment and its replies, oldest→newest (the лента itself
+  -- thread viewer: one comment and its replies, oldest→newest (the feed itself
   -- is newest-first, but a conversation only reads top-to-bottom). Replies also
-  -- stay in the flat лента; this is the place to read one exchange in order.
-  modal id="threadOverlay" label="Ответы" title="Ответы" variant="wide" done="Закрыть" doneid="threadClose"
+  -- stay in the flat feed; this is the place to read one exchange in order.
+  modal id="threadOverlay" label=@board.thread.title title=@board.thread.title variant="wide" done=@board.actions.close doneid="threadClose"
     mount id="threadBody" kind="thread"
     form id="threadForm" dir="col"
-      editor id="threadInput" kind="comment" placeholder="Ответить…" spellcheck="false"
-      button small submit "Ответить"
+      editor id="threadInput" kind="comment" placeholder=@board.thread.placeholder spellcheck="false"
+      button small submit @board.thread.submit
     message id="threadMessage"
 
-  -- выписки viewer: every excerpt of the open card in one scrollable place,
+  -- excerpts viewer: every excerpt of the open card in one scrollable place,
   -- images inline (they are usually screenshots of the source, and opening one
   -- per tab was exactly the friction this replaces)
-  modal id="excerptsOverlay" label="Выписки" title="Выписки" variant="wide" done="Закрыть" doneid="excerptsClose"
+  modal id="excerptsOverlay" label=@board.excerpts.title title=@board.excerpts.title variant="wide" done=@board.actions.close doneid="excerptsClose"
     mount id="excerptsBody" kind="excerpts"
 
   -- paste-image overlay
-  modal id="pasteOverlay" label="Вставить изображение" title="Вставить изображение"
+  modal id="pasteOverlay" label=@board.paste.title title=@board.paste.title
     form id="pasteForm" dir="col"
-      textfield id="pasteName" placeholder="Имя файла" autocomplete="off" required
-      checkbox id="pasteCompress" " сжать (WebP)"
+      textfield id="pasteName" placeholder=@board.paste.name_placeholder autocomplete="off" required
+      checkbox id="pasteCompress" @board.card.compress
       row gap="sm" wrap
-        button submit "Сохранить"
-        button kind="ghost" id="pasteCancel" "Отмена"
+        button submit @board.actions.save
+        button kind="ghost" id="pasteCancel" @board.actions.cancel
 
   -- unsaved-changes prompt: leaving a dirty card by any route (the back button, Escape,
   -- Android back, the backdrop, ← / → to the next card) asks rather than
   -- silently discarding, which is what every exit used to do.
-  modal id="dirtyOverlay" label="Несохранённые изменения" title="Несохранённые изменения"
-    hint "В карточке есть несохранённые изменения."
+  modal id="dirtyOverlay" label=@board.dirty.title title=@board.dirty.title
+    hint @board.dirty.hint
     row gap="sm" wrap
-      button id="dirtySave" "Сохранить"
-      button kind="danger" id="dirtyDiscard" "Не сохранять"
-      button kind="ghost" id="dirtyCancel" "Отмена"
+      button id="dirtySave" @board.actions.save
+      button kind="danger" id="dirtyDiscard" @board.dirty.discard
+      button kind="ghost" id="dirtyCancel" @board.actions.cancel
     message id="dirtyMessage"

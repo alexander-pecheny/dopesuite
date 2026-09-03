@@ -19,8 +19,8 @@ import (
 // RecalculateMatchResultsTx scores a match through its game's registered
 // Protocol and upserts match_results for every occupied slot, honouring pins.
 func RecalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, match store.DBMatchState) error {
-	// The Game's scheme is what a flat Protocol reads its shape from — ОД's
-	// tour composition, КСИ's stickers; the бой Protocols read nothing.
+	// The Game's scheme is what a flat Protocol reads its shape from — OD's
+	// tour composition, KSI's stickers; the Match Protocols read nothing.
 	var protocolCode, schemeJSON string
 	if err := tx.QueryRowContext(ctx,
 		`select game_type, coalesce(scheme_json, '') from games where id = ?`, match.GameID).Scan(&protocolCode, &schemeJSON); err != nil {

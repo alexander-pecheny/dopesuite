@@ -6,6 +6,8 @@
 // writing the invite line, and the tester lists (players / teams) of the test
 // cards the sessions grew out of. The DOM lives in board.ts and sessionspanel.ts.
 
+import S from "./i18nstrings_ru_gen.js";
+
 // ---- test cards: tester lists (players / teams) ----
 // A test card's description is JSON {datetime, title, testers:[{text,type}]},
 // where type is "player" or "team". The first iteration stored {players:[ids]}
@@ -82,7 +84,7 @@ export function testersFromText(text: string | null | undefined): Tester[] {
 
 // testerSortKey returns the [surname, given] comparison key for a player name:
 // the last whitespace-separated word is the surname, the rest the given name(s),
-// so "Александр Иванов" sorts under "Иванов", then "Александр".
+// so "Alexander Ivanov" sorts under "Ivanov", then "Alexander".
 function testerSortKey(name: string | null | undefined): [string, string] {
   const words = String(name || "").trim().split(/\s+/).filter(Boolean);
   if (!words.length) return ["", ""];
@@ -91,8 +93,8 @@ function testerSortKey(name: string | null | undefined): [string, string] {
 }
 
 // testerNames dedupes and orders testers: players by surname-then-given, teams
-// alphabetically. Split out of testerCopyText because the «Видели» line on a
-// card wants the names WITHOUT the «Вопросы тестировали:» framing.
+// alphabetically. Split out of testerCopyText because the "Seen" line on a
+// card wants the names WITHOUT the "Questions tested:" framing.
 export function testerNames(testers: ReadonlyArray<TesterLike> | null | undefined): { players: string[]; teams: string[] } {
   const seen: Record<TesterType, Set<string>> = { player: new Set(), team: new Set() };
   const players: string[] = [], teams: string[] = [];
@@ -116,8 +118,8 @@ export function testerNames(testers: ReadonlyArray<TesterLike> | null | undefine
 export function testerCopyText(testers: ReadonlyArray<TesterLike> | null | undefined): string {
   const { players, teams } = testerNames(testers);
   let s = "";
-  if (players.length) s = "Вопросы тестировали: " + players.join(", ");
-  if (teams.length) s += (s ? ", а также команды: " : "Вопросы тестировали команды: ") + teams.join(", ");
+  if (players.length) s = S.sessions.summary.players(players.join(", "));
+  if (teams.length) s += (s ? S.sessions.summary.teamsAlso(teams.join(", ")) : S.sessions.summary.teamsOnly(teams.join(", ")));
   return s;
 }
 
@@ -283,7 +285,7 @@ export function parseDate(human: string): string {
   return `${y}-${pad(mo)}-${pad(d)}`;
 }
 
-// parseTime: чч:мм, 24-hour. "" when it isn't one — including "7:00 PM", which
+// parseTime: hh:mm, 24-hour. "" when it isn't one — including "7:00 PM", which
 // is exactly the input this replaces.
 export function parseTime(human: string): string {
   const m = /^(\d{1,2})[:.](\d{2})$/.exec((human || "").trim());
@@ -324,7 +326,7 @@ export function allZones(): string[] {
 
 // ---- the invite line ----
 
-// Wall clock plus a zone is what the editor means — «19:00 по Москве» is an
+// Wall clock plus a zone is what the editor means — "19:00 Moscow time" is an
 // anchor, not an instant — so the other cities are computed FROM that pairing
 // rather than from a stored timestamp.
 function anchorInstant(m: SessionMeta): Date | null {
@@ -369,10 +371,10 @@ function zonedParts(at: Date, zone: string): Parts {
 // messenger where the testers actually are. 99% of them will never have an
 // account, so this is an outbound string, not a rendering preference.
 //
-//   20 июля, 19:00 (Берлин) / 21:00 (Москва) / 23:00 (Алматы)
+//   20 July, 19:00 (Berlin) / 21:00 (Moscow) / 23:00 (Almaty)
 //
 // A city whose local date differs from the anchor's carries its own — 23:00
-// Алматы can be tomorrow.
+// Almaty can be tomorrow.
 export function inviteLine(m: SessionMeta): string {
   const head = humanDate(m.date);
   if (!m.time) return head;
@@ -425,5 +427,5 @@ export function partialSeen(questions: ReadonlyArray<SeenQuestion>, named: Reado
   const parts = [...byName.entries()]
     .sort((a, b) => a[0].localeCompare(b[0], "ru"))
     .map(([name, nums]) => `${name}: ${nums.join(", ")}`);
-  return parts.length ? `Видели отдельные вопросы: ${parts.join("; ")}.` : "";
+  return parts.length ? S.sessions.seen.partial(parts.join("; ")) : "";
 }

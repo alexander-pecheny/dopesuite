@@ -23,6 +23,7 @@ import (
 	"dope/dope/platform/roles"
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
 
 	"pecheny.me/dopecore/session"
 )
@@ -271,7 +272,7 @@ func allowed(l level, role string) bool {
 }
 
 // ErrUnnumbered is the numbering guard's refusal, in the host's words.
-var ErrUnnumbered = errors.New("сначала присвойте номера всем командам — без номеров результаты нельзя редактировать")
+var ErrUnnumbered = errors.New(dopestrings.Default.Route.Guard.Unnumbered())
 
 // DenyAPI is the API tables' policy: no session is 401, no role or the wrong
 // one 403, the numbering guard 409, and a missing fest or game — or a private

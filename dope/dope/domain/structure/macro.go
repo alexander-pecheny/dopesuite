@@ -3,7 +3,10 @@ package structure
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
+
+	dopestrings "dope/i18nstrings"
 
 	"dope/dope/storage/store"
 )
@@ -12,7 +15,7 @@ import (
 // for a Kind, «a registered macroexpansion algorithm that turns a Block's
 // config into Rounds of Matches». It declares the DSL keys it reads, and
 // expands one Block through the Block it is handed: reading typed values,
-// asking for столы and entrants, emitting stages in schedule order, and
+// asking for venues and entrants, emitting stages in schedule order, and
 // returning what the next Block's Edge may seat from. It is pure: no I/O, no
 // registry lookups by name, no Protocol. Word is the DSL's name for the Kind
 // («roundrobin»); Code stays the Ranker's («rr»).
@@ -35,11 +38,11 @@ type Key struct {
 // it. Reads name only the Kind's declared keys and the common ones; the
 // compiler pins every complaint to a line, so a Kind returns a KeyError to
 // name the key at fault and a plain error otherwise. Emission order is
-// schedule order: it decides Position and the буквы.
+// schedule order: it decides Position and the letters.
 type Block interface {
 	Code() string // «s2» — every code the Kind emits starts with it
 	First() bool  // no Block before it: seats come from the seed
-	Seeded() int  // how many entrants the caller seeded; 0 = positional Посев placeholders
+	Seeded() int  // how many entrants the caller seeded; 0 = positional seed placeholders
 
 	Int(key string) (int, bool)
 	Bool(key string) (bool, bool)
@@ -72,9 +75,9 @@ type Block interface {
 
 // Stage is one stage a Kind emits: a scheduled one (Kind rr or flat, its typed
 // Config, no Matches — the Kind's Expander schedules it) or a drawn one (its
-// бои as laid out; Kind «matches», or «de» for a pod). Rounds are the Round
-// names whose dotted params reach this stage. Waves splits a drawn stage into
-// as many turns at the столы as it needs.
+// Matches as laid out; Kind "matches", or "de" for a pod). Rounds are the
+// Round names whose dotted params reach this stage. Waves splits a drawn
+// stage into as many turns at the venues as it needs.
 type Stage struct {
 	Code, Title, Kind, Slug string
 	Rounds                  []string
@@ -85,7 +88,7 @@ type Stage struct {
 	Lanes                   Lanes
 }
 
-// At is where a stage sits in its Block: which Round its бои play (0 for a
+// At is where a stage sits in its Block: which Round its Matches play (0 for a
 // stage spanning Rounds), which Group it ranks.
 type At struct {
 	Round int
@@ -106,7 +109,7 @@ type Feed struct {
 	Place func(p int) store.SchemeSlot
 }
 
-// Lanes are the столы open to a stage: a declared subset, else all of them.
+// Lanes are the venues open to a stage: a declared subset, else all of them.
 type Lanes struct {
 	Restricted []int
 	Total      int
@@ -127,7 +130,7 @@ func (l Lanes) PerWave() int {
 }
 
 // ReseedEveryRound is the `reseed:` word for a Block that re-ranks its incoming
-// Edge and every Round after it — what ТПШ does, and what `true` already means
+// Edge and every Round after it — what TPSH does, and what `true` already means
 // on a bracket with lives.
 const ReseedEveryRound = "every"
 
@@ -165,22 +168,22 @@ func FromMatch(matchCode string, place int) store.SchemeSlot {
 }
 
 // LabelledFromMatch is FromMatch with the label a host reads while the seat
-// is still empty — «Бой 3, м. 2», not the internal бой code.
+// is still empty — "Match 3, place 2", not the internal Match code.
 func LabelledFromMatch(matchCode, boutLabel string, place int) store.SchemeSlot {
 	slot := FromMatch(matchCode, place)
-	slot.Label = fmt.Sprintf("%s, м. %d", boutLabel, place)
+	slot.Label = dopestrings.Default.Structure.Macro.SeatFromBout(boutLabel, strconv.Itoa(place))
 	return slot
 }
 
 func ReseedRank(stage string, rank int) store.SchemeSlot {
 	return store.SchemeSlot{
 		Reseed: &store.SchemeReseedRef{Stage: stage, Rank: rank},
-		Label:  fmt.Sprintf("Пересев-%d", rank),
+		Label:  dopestrings.Default.Structure.Macro.ReseedRank(strconv.Itoa(rank)),
 	}
 }
 
 // GroupCode names a Group only where a Block has more than one: a single-group
-// block is the Block, and labelling it «группа 1» invents a distinction the
+// block is the Block, and labelling it "group 1" invents a distinction the
 // tournament does not make.
 func GroupCode(groups, group int) string {
 	if groups <= 1 {

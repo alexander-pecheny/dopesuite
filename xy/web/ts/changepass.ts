@@ -1,12 +1,13 @@
-// changepass.ts — «Сменить пароль доски», the owner's way out of a forgotten
-// passphrase while a device still holds the key. The passphrase only ever wraps
-// the data key, so a change re-wraps the SAME key: nothing is re-encrypted, and
-// the old words are never asked for — holding the key IS the proof, and someone
-// who remembered the old ones would not be here.
+// changepass.ts — "Change the board's passphrase", the owner's way out of a
+// forgotten passphrase while a device still holds the key. The passphrase only
+// ever wraps the data key, so a change re-wraps the SAME key: nothing is
+// re-encrypted, and the old words are never asked for — holding the key IS the
+// proof, and someone who remembered the old ones would not be here.
 
 import type { PassphraseSetup } from "./app.js";
 import type { BoardKeymeta, DataKey } from "./crypto.js";
 import type { BoardPanel } from "./panels.js";
+import S from "./i18nstrings_ru_gen.js";
 
 export interface ChangePassUI {
   modal: {
@@ -58,7 +59,7 @@ export function createChangePass(deps: ChangePassDeps): ChangePass {
     const pass = ui.input.value;
     const bad = deps.crypto.validatePassphrase(pass);
     if (bad) { ui.modal.message(bad); return; }
-    if (!deps.requireOnline("Смена пароля доски доступна только онлайн.")) return;
+    if (!deps.requireOnline(S.passphrase.change.offline())) return;
     try {
       const keymeta = await deps.crypto.rewrapKey(pass, deps.dk());
       await deps.jput(`/api/boards/${deps.boardId}/keymeta`, keymeta);
@@ -79,8 +80,8 @@ export function createChangePass(deps: ChangePassDeps): ChangePass {
     open,
     panel: {
       id: "change-pass", menu: "board", icon: "lock",
-      label: "Сменить пароль доски",
-      title: "Задать доске новый пароль — старый спрашивать не нужно",
+      label: S.passphrase.change.label(),
+      title: S.passphrase.change.title(),
       offered: () => deps.owner(),
       open: () => open(),
     },

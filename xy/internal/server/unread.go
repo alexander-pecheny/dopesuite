@@ -7,7 +7,7 @@ package server
 // when it is live, on a live card, by someone else, and past the reader's
 // watermark for its bucket; a comment is a Mention when it names the reader
 // (event_mentions) or replies to one of theirs. The board list, the snapshot,
-// the activity feed and «Прочитать всё» compose these fragments; `e` is the
+// the activity feed and the mark-all-read button compose these fragments; `e` is the
 // timeline_events row, `cr` the reader's card_reads row.
 const (
 	sqlCommentBucket = `(e.type = 'comment' or (e.type = 'reaction' and e.reply_to_id is not null))`

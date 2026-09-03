@@ -52,6 +52,7 @@ import type { MembersState } from "./boardmembers.js";
 import type { MenuItem, Timeline } from "./timeline.js";
 import type { PreviewCardLike } from "./carddetail.js";
 import { icon, iconed } from "./icons_gen.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const { fetchJSON, jpost, jpatch, jput, jdelete, el, byId, errMsg, deriveTitle, onCmdEnter } = xyApp;
 const { keyBetween } = xyRank;
@@ -111,7 +112,7 @@ function mustDK(): DataKey {
 let cardDragCommitted = false;
 // Board-level list drag: the dragged list's id + the same commit/abort guard.
 // A grouped list drags its whole group as one block (reorder INSIDE a group
-// lives in «Управление списками»).
+// lives in the lists-management dialog).
 let listDragId: number | null = null;
 let listDragCommitted = false;
 
@@ -151,7 +152,7 @@ const unlock = createUnlock({
     Object.assign(state, s);
     sessionMetaCache = new Map();
     document.title = state.name + " · xy";
-    refreshBoardMenu(); // the role came with the snapshot; «Удалить доску» wants it
+    refreshBoardMenu(); // the role came with the snapshot; delete-board wants it
     // Feed the person directory. The tester names are plaintext in hand at this
     // moment, so this costs a pass over a handful of sessions and no decryption.
     people.remember(boardId, state.name, state.sessions.flatMap((s) => parseSession(s.meta).testers));
@@ -173,8 +174,8 @@ const unlock = createUnlock({
   },
   onUnavailable: () => {
     kanban.hidden = true;
-    titleNode.textContent = "Доска недоступна офлайн";
-    statusNode.title = "Нет сохранённой копии — откройте доску при подключении";
+    titleNode.textContent = S.board.page.offline();
+    statusNode.title = S.board.page.offlineHint();
   },
 });
 
@@ -198,11 +199,11 @@ xySizes.apply(state.sizes);
 // per-board sync outbox (lists/cards) — so both are online-only. The server
 // tombstones the board (owner-only); the reaper destroys it after 14 days.
 async function renameBoard(): Promise<void> {
-  const name = prompt("Новое название доски:", state.name || "");
+  const name = prompt(S.board.rename.boardPrompt(), state.name || "");
   if (name == null) return;
   const t = name.trim();
   if (!t || t === state.name) return;
-  if (!xySync.requireOnline("Переименование доски доступно только онлайн.")) return;
+  if (!xySync.requireOnline(S.board.rename.boardOffline())) return;
   setStatus("saving");
   try {
     await jpatch(`/api/boards/${boardId}`, { name: t });
@@ -210,7 +211,7 @@ async function renameBoard(): Promise<void> {
     titleNode.textContent = t;
     document.title = t + " · xy";
     setStatus("saved");
-  } catch (err) { setStatus("error"); alert("Не удалось переименовать: " + errMsg(err)); }
+  } catch (err) { setStatus("error"); alert(S.board.rename.failed(errMsg(err))); }
 }
 
 // Everything this device holds for a board, dropped together — the key, the
@@ -228,30 +229,30 @@ async function forgetLocal(): Promise<void> {
 // has no state at all. Neither act is owner-gated here — the menu offers each to
 // the role it belongs to and the server says the rule itself.
 async function deleteBoard(name: string): Promise<void> {
-  if (!xySync.requireOnline("Удаление доски доступно только онлайн.")) return;
-  const warn = "Доска со всеми списками, карточками и вложениями будет скрыта сразу и безвозвратно удалена через 14 дней.";
+  if (!xySync.requireOnline(S.board.delete.offline())) return;
+  const warn = S.board.delete.warn();
   const want = (name || "").trim();
   if (want) {
-    const typed = prompt(`${warn}\n\nЧтобы подтвердить, введите название доски — «${want}»:`);
+    const typed = prompt(`${warn}\n\n${S.board.delete.typeName(want)}`);
     if (typed == null) return;
-    if (typed.trim() !== want) { alert("Название не совпало — удаление отменено."); return; }
-  } else if (!confirm(`${warn} Продолжить?`)) return;
+    if (typed.trim() !== want) { alert(S.board.delete.mismatch()); return; }
+  } else if (!confirm(`${warn} ${S.board.delete.continueQ()}`)) return;
   try {
     await jdelete(`/api/boards/${boardId}`);
     await forgetLocal();
     location.href = "/";
-  } catch (err) { alert("Не удалось удалить: " + errMsg(err)); }
+  } catch (err) { alert(S.board.delete.failed(errMsg(err))); }
 }
 
 async function leaveBoard(name: string): Promise<void> {
-  if (!xySync.requireOnline("Выход из доски доступен только онлайн.")) return;
-  const what = (name || "").trim() ? `доску «${name.trim()}»` : "эту доску";
-  if (!confirm(`Покинуть ${what}? У остальных участников она останется, а чтобы вернуться, понадобится новое приглашение.`)) return;
+  if (!xySync.requireOnline(S.board.leave.offline())) return;
+  const what = (name || "").trim() ? S.board.leave.targetNamed(name.trim()) : S.board.leave.targetThis();
+  if (!confirm(S.board.leave.confirm(what))) return;
   try {
     await jdelete(`/api/boards/${boardId}/membership`);
     await forgetLocal();
     location.href = "/";
-  } catch (err) { alert("Не удалось покинуть доску: " + errMsg(err)); }
+  } catch (err) { alert(S.board.leave.failed(errMsg(err))); }
 }
 
 // ---- members / sharing ----
@@ -266,7 +267,7 @@ const boardMembers = createBoardMembers(state, boardId, () => refreshBoardMenu()
 // unreadDotFor builds a card's dot: red for a mention, blue otherwise.
 function unreadDotFor(u: { mentions?: boolean }, extra: string): HTMLElement {
   const mention = u.mentions ? " unread-dot-mention" : "";
-  const title = u.mentions ? "Вас упомянули" : "Непрочитанные изменения";
+  const title = u.mentions ? S.board.unread.mention() : S.board.unread.dot();
   return el("span", { class: "unread-dot " + extra + mention, title });
 }
 
@@ -305,7 +306,7 @@ function titleMode(): TitleMode {
 
 function sessionName(id: number): string {
   const m = sessionMeta(id);
-  return m ? sessionLabel(m, titleMode()) : "тест";
+  return m ? sessionLabel(m, titleMode()) : S.board.sessions.fallback();
 }
 
 function playingsOf(cardId: number): number[] {
@@ -358,11 +359,11 @@ const board: Board = {
 };
 
 // ---- test mode (ADR-0012) ----
-// The device-local автопилот of a test evening: while a session is live here,
+// The device-local autopilot of a test evening: while a session is live here,
 // a minute on an open card — or a comment on it — marks the card with the
 // test. The kernel and the rules live in testmode.ts; this block is the
 // board's wiring: the dwell watcher on the open card, the topbar badge, and
-// the hooks the card detail, the лента and the Тесты panel call into.
+// the hooks the card detail, the feed and the tests panel call into.
 const testMode = liveTestMode();
 const testDwell = createDwell({
   now: () => Date.now(),
@@ -399,7 +400,7 @@ function setTestMode(sessionId: number | null): void {
 
 const testBadge = el("button", {
   class: "action-icon testmode-badge", type: "button", hidden: true,
-  onclick: () => popupMenu(testBadge, [{ label: "Завершить тест-режим", onClick: () => setTestMode(null) }]),
+  onclick: () => popupMenu(testBadge, [{ label: S.board.testmode.stop(), onClick: () => setTestMode(null) }]),
 });
 byId("notifToggle").before(testBadge);
 
@@ -408,7 +409,7 @@ function updateTestBadge(): void {
   testBadge.hidden = sid == null;
   if (sid == null) return;
   const name = sessionName(sid);
-  testBadge.title = `Тест-режим: «${name}». Завершить — по клику`;
+  testBadge.title = S.board.testmode.badge(name);
   testBadge.setAttribute("aria-label", testBadge.title);
   testBadge.replaceChildren(icon("flask-conical"), el("span", { class: "testmode-badge-name", text: name }));
 }
@@ -437,9 +438,10 @@ const bell = createBell(board, { toggle: byId("notifToggle"), badge: byId("notif
 });
 const renderNotifBadge = (): void => bell.renderBadge();
 
-// plural picks the Russian declension for n: 1 вопрос, 2 вопроса, 12 вопросов.
+// questionCountLabel renders the question count with the Russian plural the
+// Catalog's count template picks for n.
 function questionCountLabel(n: number): string {
-  return `${n} ${plural(n, "вопрос", "вопроса", "вопросов")}`;
+  return S.board.count.questions(n);
 }
 
 // renderBoardTitle writes the crumb: the board's name, then how many questions
@@ -511,7 +513,7 @@ function render(): void {
   kanban.append(renderAddList());
   paintLabels();
   // Unconditional: renderBar is also what HIDES the bar, so guarding it on
-  // mass.mode left «Готово» with nothing to close.
+  // mass.mode left "Done" with nothing to close.
   mass.prune();
   mass.renderBar();
   // Also unconditional, and for the same reason: a label the filter names can be
@@ -529,9 +531,9 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   const menuWrap = el("div", { class: "klist-menu-wrap" });
   // Adding a card is the most-used list action (issue #4): a dedicated "+"
   // beside the ⋯ menu saves the menu round-trip. The menu item stays too.
-  const addCardBtn = el("button", { class: "kadd", title: "Добавить карточку", "aria-label": "Добавить карточку" }, icon("plus"));
+  const addCardBtn = el("button", { class: "kadd", title: S.board.list.addCard(), "aria-label": S.board.list.addCard() }, icon("plus"));
   addCardBtn.addEventListener("click", () => { void cardDetail.addCard(list); });
-  const menuBtn = el("button", { class: "kadd", title: "Меню списка", "aria-haspopup": "true" }, icon("ellipsis"));
+  const menuBtn = el("button", { class: "kadd", title: S.board.list.menuTitle(), "aria-haspopup": "true" }, icon("ellipsis"));
   menuBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     const items: MenuItem[] = listMenu(listScope(board, list)).map((it) => ({ icon: icon(it.icon), label: it.label, onClick: it.onClick, divider: it.divider }));
@@ -540,9 +542,9 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   menuWrap.append(menuBtn);
   const cards = cardsOf(list.id);
   const headMain = el("div", { class: "klist-headmain" },
-    el("span", { class: "klist-title", text: list.title || "(без названия)" }));
+    el("span", { class: "klist-title", text: list.title || S.board.list.untitled() }));
   // The numbers belong to the questions, not to the view: they are computed over
-  // the WHOLE list and carried across, so a filtered тур reads «1, 4, 7».
+  // the WHOLE list and carried across, so a filtered tour reads 1, 4, 7.
   const allNumbers = precomputedNumbers || xyChgk.numberQuestionCards(cards);
   const view = shownCards(cards, allNumbers, labelFilter.keep());
   const shown = view.cards;
@@ -551,16 +553,16 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   if (qCount) {
     headMain.append(el("span", {
       class: "klist-count",
-      // «1 из 4», not «1 из 4 вопроса»: the word cannot agree with both numbers.
-      // The «из» form appears whenever a filter is on, even where it happens to
+      // "1 of 4", not "1 of 4 questions": the word cannot agree with both numbers.
+      // The "of" form appears whenever a filter is on, even where it happens to
       // hide nothing, so the head reads the same way across the board.
-      text: labelFilter.active() ? `${qShown} из ${qCount}` : questionCountLabel(qCount),
+      text: labelFilter.active() ? S.board.count.filtered(String(qShown), String(qCount)) : questionCountLabel(qCount),
     }));
   }
   const headKids: HTMLElement[] = [];
   if (mass.mode) {
     const ids = shown.map((c) => c.id);
-    const all = el("input", { type: "checkbox", "aria-label": "Отметить весь список" }) as HTMLInputElement;
+    const all = el("input", { type: "checkbox", "aria-label": S.board.mass.selectList() }) as HTMLInputElement;
     all.dataset.listId = String(list.id);
     all.checked = xyMass.allSelected(mass.selected, ids);
     all.addEventListener("change", () => mass.toggleAll(ids));
@@ -569,7 +571,7 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   col.append(el("div", { class: "klist-head" }, ...headKids, headMain, addCardBtn, menuWrap));
   if (list.groupId != null) {
     const g = groupById(list.groupId);
-    col.append(el("div", { class: "klist-group-tag", title: "Список входит в группу — сквозная нумерация и общий экспорт" }, ...iconed("link", (g && g.name) || "связанные списки")));
+    col.append(el("div", { class: "klist-group-tag", title: S.board.list.groupTitle() }, ...iconed("link", (g && g.name) || S.board.list.groupFallback())));
   }
   const body = el("div", { class: "kcards", dataset: { listId: list.id } });
   // Grouped lists carry continuous numbering computed across the whole group;
@@ -636,7 +638,7 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
 // renameList re-encrypts a new title under the board key and patches the list
 // (offline-capable via the sync outbox).
 async function renameList(list: BoardList): Promise<void> {
-  const name = prompt("Новое название списка:", list.title || "");
+  const name = prompt(S.board.rename.listPrompt(), list.title || "");
   if (name == null) return;
   const t = name.trim();
   if (!t || t === list.title) return;
@@ -646,15 +648,15 @@ async function renameList(list: BoardList): Promise<void> {
     list.title = t;
     setStatus("saved");
     render();
-  } catch (err) { setStatus("error"); alert("Не удалось переименовать: " + errMsg(err)); }
+  } catch (err) { setStatus("error"); alert(S.board.rename.failed(errMsg(err))); }
 }
 
 // deleteList soft-deletes the list and its cards (server cascades the cards),
 // offline-capable via the sync outbox.
 async function deleteList(list: BoardList): Promise<void> {
   const n = cardsOf(list.id).length;
-  const tail = n ? ` и ${n} карточк(и) в нём` : "";
-  if (!confirm(`Удалить список «${list.title || "без названия"}»${tail}? Это действие необратимо.`)) return;
+  const tail = n ? S.board.delete.listTail(String(n)) : "";
+  if (!confirm(S.board.delete.listConfirm(list.title || S.board.delete.listUntitled(), tail))) return;
   setStatus("saving");
   try {
     const removed = cardsOf(list.id);
@@ -666,7 +668,7 @@ async function deleteList(list: BoardList): Promise<void> {
     forgetCardLabels(removed);
     setStatus("saved");
     render();
-  } catch (err) { setStatus("error"); alert("Не удалось удалить: " + errMsg(err)); }
+  } catch (err) { setStatus("error"); alert(S.board.delete.failed(errMsg(err))); }
 }
 
 // forgetCardLabels drops dead cards' assignments and playings. cardLabels is a
@@ -751,10 +753,10 @@ function flaskIcon(color: string): SVGSVGElement {
 
 function renderCard(card: BoardCard, number?: string | null): HTMLElement {
   const node = el("div", { class: "kcard kcard-" + (card.kind || "normal"), draggable: "true", dataset: { cardId: card.id }, onclick: () => { void cardDetail.openCard(card); } });
-  // In массовое действие a card is something you pick, not something you open:
+  // In mass mode a card is something you pick, not something you open:
   // the tickbox swallows the click so ticking a run never opens one by accident.
   if (mass.mode) {
-    const box = el("input", { type: "checkbox", "aria-label": "Отметить карточку" }) as HTMLInputElement;
+    const box = el("input", { type: "checkbox", "aria-label": S.board.mass.selectCard() }) as HTMLInputElement;
     box.dataset.cardId = String(card.id);
     box.checked = mass.selected.has(card.id);
     const wrap = el("label", { class: "kcard-check" }, box);
@@ -766,13 +768,13 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
   // Derived from the text, so it leads the row: nobody put it there and nobody
   // can take it off, unlike everything after it.
   if (card.kind === "question" && xyHndt.handoutForCard(card.desc)) {
-    labelRow.append(el("span", { class: "kcard-handout", title: "Раздаточный материал" }, icon("file-text")));
+    labelRow.append(el("span", { class: "kcard-handout", title: S.board.card.handoutTitle() }, icon("file-text")));
   }
   // Which questions the group has not settled on yet — the card itself shows
   // version 1, and this is the only sign the others exist.
   const versions = xyVersions.versionCount(card.desc);
   if (card.kind === "question" && versions > 1) {
-    labelRow.append(el("span", { class: "kcard-versions", title: `Версий: ${versions}` }, ...iconed("copy", String(versions))));
+    labelRow.append(el("span", { class: "kcard-versions", title: S.board.card.versionsTitle(String(versions)) }, ...iconed("copy", String(versions))));
   }
   // The board card shows the author's own labels; a test's verdict belongs to the
   // card detail, where it can say WHICH test it came from.
@@ -787,8 +789,8 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
     const verdicts = assignmentsOf(card.id, sid)
       .map((a) => labelById(a.labelId))
       .filter((l): l is BoardLabel => !!l);
-    const title = "Тест: " + sessionName(sid) +
-      (verdicts.length ? " — " + verdicts.map((l) => l.name).join(", ") : "");
+    const title = S.board.card.testLead() + sessionName(sid) +
+      (verdicts.length ? S.board.card.testMid() + verdicts.map((l) => l.name).join(", ") : "");
     const test = el("span", { class: "kcard-test", title },
       el("span", { class: "kcard-test-icon" }, flaskIcon(verdicts[0]?.color || "")));
     // The rest of the verdicts, as many as the grid holds; the tooltip above
@@ -855,7 +857,7 @@ function dragAfter(container: HTMLElement, y: number): Element | null {
 
 // ---- board-level list reorder (drag a column) ----
 // Orderable units are standalone lists and whole groups, same as the
-// «Управление списками» modal: the dragged block is every column of the
+// lists-management modal: the dragged block is every column of the
 // dragged list's unit, and an insertion point is only ever BETWEEN units —
 // snapToUnitStart keeps a drop from splitting somebody else's group.
 
@@ -916,15 +918,15 @@ kanban.addEventListener("drop", (e) => {
 function renderAddList(): HTMLElement {
   const wrap = el("div", { class: "klist klist-add" });
   const form = el("form", { class: "kadd-form" });
-  const input = el("input", { class: "input u-grow", type: "text", placeholder: "+ Новый список" }) as HTMLInputElement;
+  const input = el("input", { class: "input u-grow", type: "text", placeholder: S.board.list.addPlaceholder() }) as HTMLInputElement;
   // Android's soft keyboard has no Enter on this field, so a visible ✓ submit
   // appears as soon as there is a name to create.
   const okBtn = el("button", {
-    class: "kadd kadd-ok", type: "submit", title: "Создать список", "aria-label": "Создать список", hidden: true,
+    class: "kadd kadd-ok", type: "submit", title: S.board.list.create(), "aria-label": S.board.list.create(), hidden: true,
   }, icon("check")) as HTMLButtonElement;
   input.addEventListener("input", () => { okBtn.hidden = !input.value.trim(); });
   // Every list is a question list now: a test session is board-level, not a
-  // column, so the old «вопросы / тесты» picker has nothing left to pick.
+  // column, so the old question/test picker has nothing left to pick.
   form.append(el("div", { class: "u-row u-gap-sm" }, input, okBtn));
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -996,7 +998,7 @@ function popupMenu(anchor: HTMLElement, items: MenuItem[]): void {
 
 // ---- list preview (docx-style HTML render, entirely client-side) ----
 // Renders a whole list the way chgksuite's docx export would — questions with
-// numbered labels and Ответ/Зачёт/Комментарий/etc. fields, plus meta, headings
+// numbered labels and Answer/Correct/Comment/etc. fields, plus meta, headings
 // and handouts — but in the browser, so it's instant. Inline 4s markup
 // (bold/italic/links/(img …)/(screen …)) is parsed via xyChgk; referenced image
 // handouts are resolved from the cards' attachments (decrypted + object-URL'd).
@@ -1006,7 +1008,7 @@ function popupMenu(anchor: HTMLElement, items: MenuItem[]): void {
 const previewOverlay = byId("previewOverlay");
 
 // pvEditBtn builds the small inline ✏️ button rendered just before each preview
-// block's leading label (e.g. "✏️Вопрос 1."): it hides the preview and drops
+// block's leading label (e.g. "✏️Question 1."): it hides the preview and drops
 // straight into the card editor, remembering the preview + card so the card's
 // ↩️ back button can restore this exact preview scrolled to the same question.
 // The preview is hidden rather than closed: the card takes over its place on the
@@ -1014,7 +1016,7 @@ const previewOverlay = byId("previewOverlay");
 function pvEditBtn(card: BoardCard): HTMLElement {
   const list = previewListRef;
   return el("button", {
-    class: "pv-edit", title: "Редактировать карточку", "aria-label": "Редактировать карточку",
+    class: "pv-edit", title: S.board.preview.editTitle(), "aria-label": S.board.preview.editTitle(),
     onclick: (e: Event) => {
       e.stopPropagation();
       const group = previewGroupMode;
@@ -1061,13 +1063,13 @@ async function previewList(list: BoardList, wholeGroup = false): Promise<void> {
   const scopeLists = group ? listsInGroup(list.groupId as number) : [list];
   // The preview is what the pack will look like, so a versioned card is folded
   // the way exportSource folds it — every wording page-broken under one number.
-  // (The card editor's Просмотр is the other thing: there you are reading ONE
+  // (The card editor's Preview is the other thing: there you are reading ONE
   // version, so it renders the body it is handed.)
   const cards = scopeLists.flatMap((l) => cardsOf(l.id))
     .map((c) => (xyVersions.versionCount(c.desc) > 1 ? { ...c, desc: xyVersions.composeVersions(c.desc) } : c));
   const title = byId("previewTitle");
-  if (group) title.replaceChildren(...iconed("link", group.name || "связанные списки"));
-  else title.textContent = list.title || "Предпросмотр";
+  if (group) title.replaceChildren(...iconed("link", group.name || S.board.list.groupFallback()));
+  else title.textContent = list.title || S.board.preview.title();
   const body = byId("previewBody");
   body.replaceChildren();
   previewCtx = null;
@@ -1077,7 +1079,7 @@ async function previewList(list: BoardList, wholeGroup = false): Promise<void> {
   previewOverlay.hidden = false;
   overlayStack.open({ el: previewOverlay, close: hidePreview });
   if (!cards.length) {
-    body.append(el("p", { class: "pv-empty", text: "В списке нет карточек." }));
+    body.append(el("p", { class: "pv-empty", text: S.board.preview.empty() }));
     return;
   }
   // Text renders straight away (cards are decrypted at board load); image
@@ -1164,7 +1166,7 @@ const attachments = createAttachments({
 });
 
 // transfer moves and copies cards within and across boards; the card editor,
-// «Массовое действие» and «Переместить список…» share it.
+// mass action and "move list" share it.
 const transfer = createTransfer({ boardId, getState: () => state, getDK: () => dk, verbs: { patch }, cardsOf, labelById });
 
 const cardDetail = createCardDetail({
@@ -1287,7 +1289,7 @@ timeline = createTimeline({
   attachments: { url: attachments.attachmentUrl, download: attachments.download },
 });
 
-// ---- the open card's labels, playings and «Видели» (cardlabels.ts) ----
+// ---- the open card's labels, playings and seen strip (cardlabels.ts) ----
 const cardLabels = createCardLabels(board, {
   picker: byId("labelPicker"), playings: byId("cardPlayings"), seen: byId("cardSeen"),
   addRow: byId("labelAddRow"), addBtn: byId("labelAddBtn"),
@@ -1306,7 +1308,7 @@ const cardLabels = createCardLabels(board, {
     if (testMode.sessionFor(boardId) === sessionId) testMode.noteUnmarked(boardId, cardId);
   },
 });
-// ---- the Тесты panel + the label editor ----
+// ---- the tests panel + the label editor ----
 
 const sessionsPanel = createSessionsPanel({
   boardId,
@@ -1319,7 +1321,7 @@ const sessionsPanel = createSessionsPanel({
     const c = state.announceCities;
     return Array.isArray(c) ? (c as AnnounceCity[]) : [];
   },
-  // How many questions this test was played at — the number the Тесты panel
+  // How many questions this test was played at — the number the tests panel
   // shows and the tester-list modal counts coverage from.
   playedCount: (sessionId) =>
     new Set(state.cardSessions.filter((p) => p.sessionId === sessionId).map((p) => p.cardId)).size,
@@ -1359,7 +1361,7 @@ const sessionsPanel = createSessionsPanel({
     for (const e of raw) {
       let text = "";
       try { text = await xyCrypto.decField(mustDK(), e.payload_enc || ""); } catch (_) { continue; }
-      // Same author resolution the card's лента uses, so the two read alike.
+      // Same author resolution the card's feed uses, so the two read alike.
       out.push({ text, card: e.card_id ?? null, when: e.created_at, author: eventAuthor(e, state.me, state.memberNames) });
     }
     return out;
@@ -1443,33 +1445,33 @@ const labelFilter = createLabelFilter({ board, paintLabels, onChange: () => { re
 const starts = <P extends Panel>(p: P): P => ({ ...p, divider: true });
 
 registerPanel(
-  // Что на доске
+  // What is on the board
   listsManage.panel,
   labelsEditor.panel,
   labelFilter.panel,
-  { id: "sessions", menu: "board", icon: "flask-conical", label: "Тесты", title: "Тест-сессии доски: кто когда играл, приглашение со временем начала", open: () => sessionsPanel.open() },
+  { id: "sessions", menu: "board", icon: "flask-conical", label: S.board.sessions.name(), title: S.board.sessions.menuTitle(), open: () => sessionsPanel.open() },
 
-  // Правки по всей доске
+  // Board-wide edits
   starts(mass.panel),
   createReplacePanel(board, rewrites),
   rewrites.typograph,
 
-  // Файлы: одно и то же содержимое туда и обратно
+  // Files: the same content there and back
   starts(createImportPanel(board, renderPreviewCard, createBundleImport(board, shell))),
   createBundleExportPanel(board, shell),
 
-  // Сама доска
-  starts({ id: "rename-board", menu: "board", icon: "pencil", label: "Переименовать доску", title: "Изменить название доски", open: () => { void renameBoard(); } }),
+  // The board itself
+  starts({ id: "rename-board", menu: "board", icon: "pencil", label: S.board.rename.boardLabel(), title: S.board.rename.boardTitle(), open: () => { void renameBoard(); } }),
   // The waiting count rides the row: a join request is board-level plaintext, so
   // it has no place in the 🔔 (which reads encrypted card events), and the owner
   // would otherwise never learn someone is queued (ADR-0017).
   {
-    id: "members", menu: "board", icon: "users", title: "Поделиться доской: добавить или убрать участников",
-    label: () => { const n = boardMembers.pendingCount(); return n ? `Участники доски · ${n}` : "Участники доски"; },
+    id: "members", menu: "board", icon: "users", title: S.board.members.menuTitle(),
+    label: () => { const n = boardMembers.pendingCount(); return n ? S.board.members.menuPending(String(n)) : S.board.members.name(); },
     open: () => boardMembers.open(),
   },
   {
-    id: "forget-password", menu: "board", icon: "lock", label: "Забыть пароль доски", title: "Забыть пароль доски на этом устройстве",
+    id: "forget-password", menu: "board", icon: "lock", label: S.board.forget.label(), title: S.board.forget.title(),
     // Once the DK is gone the board is ciphertext with no key on this device, so
     // everything derived from it goes too — the Search Index for a sharper reason
     // (ADR-0008): plaintext outliving its key would keep the board readable with none.
@@ -1479,26 +1481,26 @@ registerPanel(
     },
   },
   changePass.panel,
-  { id: "delete-board", menu: "board", icon: "trash-2", label: "Удалить доску", title: "Удалить доску со всеми списками и карточками", offered: () => state.role === "owner", open: () => { void deleteBoard(state.name); } },
-  { id: "leave-board", menu: "board", icon: "unlink", label: "Покинуть доску", title: "Выйти из доски — у остальных участников она останется", offered: () => state.role !== "" && state.role !== "owner", open: () => { void leaveBoard(state.name); } },
+  { id: "delete-board", menu: "board", icon: "trash-2", label: S.board.delete.label(), title: S.board.delete.title(), offered: () => state.role === "owner", open: () => { void deleteBoard(state.name); } },
+  { id: "leave-board", menu: "board", icon: "unlink", label: S.board.leave.label(), title: S.board.leave.title(), offered: () => state.role !== "" && state.role !== "owner", open: () => { void leaveBoard(state.name); } },
 
-  // Карточки списка
-  { id: "add-card", menu: "list", icon: "plus", label: "Добавить карточку", open: (s) => { void cardDetail.addCard(s.list); } },
-  { id: "preview", menu: "list", icon: "eye", label: (s) => s.grouped ? "Предпросмотр списка" : "Предпросмотр", open: (s) => { void previewList(s.list); } },
-  { id: "preview-group", menu: "list", icon: "eye", label: "Предпросмотр всей группы", offered: (s) => s.grouped, open: (s) => { void previewList(s.list, true); } },
+  // The list's cards
+  { id: "add-card", menu: "list", icon: "plus", label: S.board.list.addCard(), open: (s) => { void cardDetail.addCard(s.list); } },
+  { id: "preview", menu: "list", icon: "eye", label: (s) => s.grouped ? S.board.preview.list() : S.board.preview.title(), open: (s) => { void previewList(s.list); } },
+  { id: "preview-group", menu: "list", icon: "eye", label: S.board.preview.group(), offered: (s) => s.grouped, open: (s) => { void previewList(s.list, true); } },
 
-  // Что в нём насчитывается
+  // What is counted within it
   starts(testerList.panel),
   createAuthorCountPanel(shell, cardDetail),
 
-  // Что из него выходит
+  // What comes out of it
   starts(createExportPanel(board, attachments)),
   createHandoutsPanel(board, attachments),
 
-  // Сам список
-  starts({ id: "rename-list", menu: "list", icon: "pencil", label: "Переименовать список", open: (s) => { void renameList(s.list); } }),
+  // The list itself
+  starts({ id: "rename-list", menu: "list", icon: "pencil", label: S.board.rename.listLabel(), open: (s) => { void renameList(s.list); } }),
   createMoveListPanel(board, transfer),
-  { id: "delete-list", menu: "list", icon: "trash-2", label: "Удалить список", open: (s) => { void deleteList(s.list); } },
+  { id: "delete-list", menu: "list", icon: "trash-2", label: S.board.delete.listLabel(), open: (s) => { void deleteList(s.list); } },
 );
 // Board-level actions live in the burger (☰) menu — sharing (rarely opened) and
 // "forget password" (rarely needed) don't warrant header buttons.

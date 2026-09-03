@@ -6,13 +6,15 @@ import (
 	"fmt"
 	"sort"
 
+	dopestrings "dope/i18nstrings"
+
 	"dope/dope/storage/store"
 )
 
 func init() { Register(flat{}) }
 
 // flat is the degenerate Structure: one Match seating every Participant, which
-// is the whole bracket of ЧГК, ОД and КСИ. It exists so those games are said in
+// is the whole bracket of ChGK, OD and KSI. It exists so those games are said in
 // the same language as the others rather than being the case with no Kind —
 // the standings are then just the Protocol's own places.
 type flat struct{}
@@ -21,10 +23,11 @@ func (flat) Code() string { return "flat" }
 func (flat) Word() string { return "flat" }
 func (flat) Keys() []Key  { return []Key{{Name: "participants"}} }
 
-// Expand is the whole bracket of a flat game: one Match seating everyone. ОД
-// and КСИ have always been this shape in the database; the Kind only lets a
+// Expand is the whole bracket of a flat game: one Match seating everyone. OD
+// and KSI have always been this shape in the database; the Kind only lets a
 // scheme say so.
 func (flat) Expand(b Block) (Outputs, error) {
+	s := dopestrings.Default
 	participants, ok := b.Int("participants")
 	if !ok {
 		if b.Seeded() == 0 {
@@ -44,7 +47,7 @@ func (flat) Expand(b Block) (Outputs, error) {
 	if err != nil {
 		return Outputs{}, err
 	}
-	code, title := b.Code(), b.Title("Игра")
+	code, title := b.Code(), b.Title(s.Structure.Flat.Game())
 	cfg := FlatConfig{Code: code, Entrants: entrants[0], Title: title, Venue: lanes.Pick(1), Rules: b.Rules()}
 	if order, ok, err := b.Sorting(); err != nil {
 		return Outputs{}, err
@@ -63,10 +66,11 @@ func (flat) Expand(b Block) (Outputs, error) {
 	return Outputs{Proceeding: proceeding, Groups: []Feed{{
 		Stage: code,
 		Label: title,
-		// The block's standings rank, not the бой's место. A бой shares a place
-		// between seats that tie, and a shared place names nobody — ТПШ's отбор
-		// has ties inside its top 24, and «место 10.5» cannot seat anyone. The
-		// standings apply the block's whole sorting chain and rank distinctly.
+		// The block's standings rank, not the Match's place. A Match shares a
+		// place between seats that tie, and a shared place names nobody —
+		// TPSH's qualifier has ties inside its top 24, and "place 10.5" cannot
+		// seat anyone. The standings apply the block's whole sorting chain and
+		// rank distinctly.
 		Place: func(p int) store.SchemeSlot {
 			return store.SchemeSlot{
 				Reseed: &store.SchemeReseedRef{Stage: code, Rank: p},
@@ -77,6 +81,7 @@ func (flat) Expand(b Block) (Outputs, error) {
 }
 
 func (flat) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
+	s := dopestrings.Default
 	var conf FlatConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil, fmt.Errorf("flat config: %w", err)
@@ -86,7 +91,7 @@ func (flat) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 	}
 	title := conf.Title
 	if title == "" {
-		title = "Игра"
+		title = s.Structure.Flat.Game()
 	}
 	code := conf.Code
 	if code == "" {
@@ -142,8 +147,8 @@ func (flat) Standings(cfg json.RawMessage, results []MatchOutcome, _ Inputs) ([]
 				continue
 			}
 			if key == "place" || key == "place_sum" {
-				// A seat the Protocol left unplaced — a КСИ team that declined,
-				// a бой not scored — ranks after everyone it did place.
+				// A seat the Protocol left unplaced — a KSI team that declined,
+				// a Match not scored — ranks after everyone it did place.
 				return (a != 0 && a < b) || b == 0
 			}
 			return a > b
@@ -152,7 +157,7 @@ func (flat) Standings(cfg json.RawMessage, results []MatchOutcome, _ Inputs) ([]
 	})
 	shareRanks(ranked, order)
 	// A table sorted by its own keys shows the rank they give; one that only
-	// keeps the бой's order shows the бой's own place, mean of a tie and all.
+	// keeps the Match's order shows the Match's own place, mean of a tie and all.
 	if conf.Order != nil {
 		for i := range ranked {
 			ranked[i].Metrics["place"] = float64(ranked[i].Rank)

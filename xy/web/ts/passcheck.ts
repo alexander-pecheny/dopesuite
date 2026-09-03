@@ -4,9 +4,11 @@
 // board is gone. Once a month, on a device holding the key, the owner is asked
 // to type the words again.
 //
-// It has no «Позже»: the two ways out are typing the passphrase and setting a
+// It has no "Later": the two ways out are typing the passphrase and setting a
 // new one. Everything is injected (clock, storage, modal, the verify call), so
 // the whole rule runs on plain objects in jstest.
+
+import S from "./i18nstrings_ru_gen.js";
 
 export const PASSCHECK_PREFIX = "xy-passcheck:";
 export const PASSCHECK_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -73,9 +75,9 @@ export interface PassCheckDeps {
   write(at: number): void;
   // Throws when the words are wrong; the thrown message is what the modal shows.
   verify(passphrase: string): Promise<void>;
-  // «Не помню пароль, поменять» — the change form, which calls back on success.
+  // "Forgot the passphrase, change it" — the change form, which calls back on success.
   changePass(onDone: () => void): void;
-  // «Сохранить бэкап» — the ☰ archive panel.
+  // "Save backup" — the ☰ archive panel.
   backup(): void;
 }
 
@@ -96,7 +98,7 @@ export function createPassCheck(deps: PassCheckDeps): PassCheck {
   // walks away after proving the words is not asked again tomorrow.
   function proved(): void {
     stamp();
-    ui.title.textContent = "Пароль доски";
+    ui.title.textContent = S.passphrase.check.title();
     ui.step1.hidden = true;
     ui.step2.hidden = false;
   }

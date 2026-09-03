@@ -3,6 +3,8 @@ package markdown
 import (
 	"strings"
 
+	dopestrings "dope/i18nstrings"
+
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/parser"
@@ -15,8 +17,8 @@ import (
 // <details>/<summary> disclosure, WITHOUT enabling goldmark's unsafe raw-HTML
 // passthrough. Hosts write:
 //
-//	:::details Состав судей
-//	Иван **Петров**, Мария Сидорова
+//	:::details Judges
+//	Ivan **Petrov**, Maria Sidorova
 //	:::
 //
 // The opening fence is three-or-more colons immediately followed by the
@@ -32,7 +34,7 @@ const detailsKeyword = "details"
 
 // defaultDetailsSummary labels a disclosure whose opening fence gave no summary
 // text.
-const defaultDetailsSummary = "Подробнее"
+var defaultDetailsSummary = dopestrings.Default.Markdown.Details.DefaultSummary()
 
 func (detailsExtension) Extend(md goldmark.Markdown) {
 	md.Parser().AddOptions(parser.WithBlockParsers(

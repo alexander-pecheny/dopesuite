@@ -6,6 +6,8 @@ import (
 	"log"
 	"strconv"
 	"time"
+
+	xystrings "xy/i18nstrings"
 )
 
 // The telegram nudge for a Mention: who + board + card link, nothing from
@@ -56,10 +58,11 @@ func (s *server) notifyComment(bid, cardID, authorID int64, mentions []int64, re
 		log.Printf("notify: board lookup: %v", err)
 		return
 	}
-	where := "на доске"
+	str := xystrings.Default
+	where := str.Notify.Mention.BoardUnnamed()
 	// A legacy board's name is still ciphertext; the nudge just points.
 	if boardName.String != "" {
-		where = "на доске «" + boardName.String + "»"
+		where = str.Notify.Mention.BoardNamed(boardName.String)
 	}
 	link := publicURL() + "/board/" + strconv.FormatInt(bid, 10)
 	if cardID != 0 {
@@ -71,9 +74,9 @@ func (s *server) notifyComment(bid, cardID, authorID int64, mentions []int64, re
 			`select telegram_user_id from users where id = ?`, id).Scan(&tgID); err != nil || !tgID.Valid {
 			continue // no telegram — the red dot alone will have to do
 		}
-		verb := "упомянул(а) вас"
+		verb := str.Notify.Mention.VerbMentioned()
 		if !mentioned[id] {
-			verb = "ответил(а) на ваш комментарий"
+			verb = str.Notify.Mention.VerbReplied()
 		}
 		text := author.String + " " + verb + " " + where + ": " + link
 		go func(tg int64) {
@@ -86,7 +89,7 @@ func (s *server) notifyComment(bid, cardID, authorID int64, mentions []int64, re
 
 // notifyJoinRequest knocks on the owner's door when someone asks to join
 // through a link that requires approval (ADR-0017). Nothing waits for it: the
-// pending count in «Участники» is the durable signal, this only saves the
+// Members panel is the durable signal, this only saves the
 // requester from waiting on an owner who has no reason to look.
 func (s *server) notifyJoinRequest(bid, requesterID int64) {
 	if s.bot == nil {
@@ -117,12 +120,13 @@ select u.telegram_user_id from boards b join users u on u.id = b.owner_user_id w
 		log.Printf("notify: board name: %v", err)
 		return
 	}
-	where := "в доску"
+	str := xystrings.Default
+	where := str.Notify.Join.BoardUnnamed()
 	if boardName != "" {
-		where = "в доску «" + boardName + "»"
+		where = str.Notify.Join.BoardNamed(boardName)
 	}
-	text := requester.String + " просится " + where + " по ссылке-приглашению: " +
-		publicURL() + "/board/" + strconv.FormatInt(bid, 10)
+	text := str.Notify.Join.Text(requester.String, where,
+		publicURL()+"/board/"+strconv.FormatInt(bid, 10))
 	go func(tg int64) {
 		sctx, scancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer scancel()

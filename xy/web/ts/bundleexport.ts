@@ -1,11 +1,11 @@
-// bundleexport.ts — «Выгрузить архив (.zip)»: the Bundle export (ADR-0013), and one
+// bundleexport.ts — "Export archive (.zip)": the Bundle export (ADR-0013), and one
 // place a live board becomes a Bundle. buildBundle decrypts what the ticked
 // Lists reach under the key this client already has; the panel packs that into
 // a plaintext zip, and a cross-board Transfer hands the same pair straight to
 // applyBundle (ADR-0014) without a file in between.
 //
 // Attachment bytes come back through a lazy `bytesOf` rather than in the
-// Bundle: a board's worth of раздатки must not sit on the heap just because
+// Bundle: a board's worth of handouts must not sit on the heap just because
 // something downstream might want them.
 
 import { xyApp } from "./app.js";
@@ -17,6 +17,7 @@ import type { AttachmentBytes } from "./bundleapply.js";
 import { zipWrite } from "./zip.js";
 import type { ZipEntry } from "./zip.js";
 import type { Board, BoardPanel, PanelShell } from "./panels.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const { fetchJSON, downloadBlob, el, errMsg } = xyApp;
 
@@ -58,7 +59,7 @@ export async function buildBundle(
   const state = board.state;
   const dec = (b64: string): Promise<string> => xyCrypto.decField(dk, b64);
 
-  log("Собираю данные доски…");
+  log(S.import.export.collecting());
   const members = (await fetchJSON(`/api/boards/${board.id}/members`)) as MemberRow[];
   const rawEvents = (await fetchJSON(`/api/boards/${board.id}/timeline`)) as EventRow[];
   const rawAtts = (await fetchJSON(`/api/boards/${board.id}/attachments`)) as AttachmentRow[];
@@ -82,7 +83,7 @@ export async function buildBundle(
       reply_to_id: e.reply_to_id ?? null,
       payload: await dec(e.payload_enc),
     });
-    if (timeline.length % 200 === 0) log(`Расшифровываю историю… (${timeline.length})`);
+    if (timeline.length % 200 === 0) log(S.import.export.decrypting(String(timeline.length)));
   }
 
   const attachments: BundleAttachment[] = [];
@@ -137,12 +138,12 @@ async function zipBundle(
   const entries: ZipEntry[] = [];
   let done = 0;
   for (const a of bundle.attachments) {
-    log(`Скачиваю вложения… (${++done}/${bundle.attachments.length})`);
+    log(S.import.export.downloading(String(++done), String(bundle.attachments.length)));
     const data = await bytesOf(a);
     if (data) entries.push({ name: a.path, data });
   }
   entries.unshift({ name: BOARD_JSON, data: new TextEncoder().encode(JSON.stringify(bundle, null, 1)) });
-  log("Собираю архив…");
+  log(S.import.export.zipping());
   const zipped = await zipWrite(entries, (name) => name === BOARD_JSON);
   const safe = stem.replace(/[/\\:*?"<>|]/g, "_").trim() || "board";
   return { name: `${safe}.xyboard.zip`, blob: new Blob([zipped], { type: "application/zip" }) };
@@ -179,8 +180,8 @@ export function tickList(
 export function createBundleExportPanel(board: Board, shell: PanelShell): BoardPanel {
   return {
     id: "bundle-export", menu: "board", icon: "package",
-    label: "Выгрузить архив (.zip)…",
-    title: "Выгрузить доску или отдельные списки одним архивом — для переноса на другой сервер xy",
+    label: S.import.export.label(),
+    title: S.import.export.menuTitle(),
     open() {
       const state = board.state;
       const units = unitsOf(
@@ -189,15 +190,11 @@ export function createBundleExportPanel(board: Board, shell: PanelShell): BoardP
       );
       const ticks = tickList(units);
       const status = el("p", { class: "hint" }, "");
-      const btn = el("button", { class: "btn btn-primary", type: "button" }, "Экспортировать") as HTMLButtonElement;
-      const all = el("button", { class: "btn btn-ghost btn-sm", type: "button" }, "Выбрать все") as HTMLButtonElement;
+      const btn = el("button", { class: "btn btn-primary", type: "button" }, S.import.export.submit()) as HTMLButtonElement;
+      const all = el("button", { class: "btn btn-ghost btn-sm", type: "button" }, S.import.export.selectAll()) as HTMLButtonElement;
       const body = el("div", { class: "u-col u-gap-sm" },
-        el("p", { class: "hint" },
-          "В архив попадут отмеченные списки со всем, до чего они дотягиваются: ",
-          "карточки, их метки, тесты, на которых их играли, комментарии, историю ",
-          "правок и вложения. Импортировать его можно на другом сервере xy — целиком ",
-          "в новую доску (страница «Импорт») или списками в существующую (☰ «Импорт»)."),
-        el("p", { class: "hint hint-danger" }, "Этот файл НЕ зашифрован."),
+        el("p", { class: "hint" }, S.import.export.hintBody()),
+        el("p", { class: "hint hint-danger" }, S.import.export.notEncrypted()),
         ticks.node,
         el("div", { class: "u-row u-gap-sm u-wrap" }, all, btn),
         status);
@@ -205,7 +202,7 @@ export function createBundleExportPanel(board: Board, shell: PanelShell): BoardP
       btn.addEventListener("click", async () => {
         const picked = ticks.picked();
         if (!picked.length) {
-          status.textContent = "Отметьте хотя бы один список.";
+          status.textContent = S.import.export.nonePicked();
           return;
         }
         btn.disabled = true;
@@ -217,14 +214,14 @@ export function createBundleExportPanel(board: Board, shell: PanelShell): BoardP
           const stem = whole || picked.length > 1 ? state.name : `${state.name} — ${picked[0].title}`;
           const { name, blob } = await zipBundle(bundle, bytesOf, stem, log);
           downloadBlob(blob, name);
-          status.textContent = "Готово — архив скачан.";
+          status.textContent = S.import.export.downloaded();
         } catch (e) {
-          status.textContent = "Не получилось: " + errMsg(e);
+          status.textContent = S.import.export.failed(errMsg(e));
         } finally {
           btn.disabled = false;
         }
       });
-      shell.open({ icon: "package", title: "Выгрузить архив (.zip)", body, onClose: () => {} });
+      shell.open({ icon: "package", title: S.import.export.modalTitle(), body, onClose: () => {} });
     },
   };
 }

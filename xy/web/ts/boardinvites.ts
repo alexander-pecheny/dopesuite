@@ -1,9 +1,10 @@
-// boardinvites.ts — invite links inside the «Участники» modal (ADR-0017).
+// boardinvites.ts — invite links inside the members modal (ADR-0017).
 // Owner-only: mint a link, watch it get used, revoke or delete it, and decide
 // the Join Requests a link with approval collects. A link grants membership and
 // never the key, so nothing here touches the data key or the passphrase.
 import { xyApp } from "./app.js";
 import { xySync } from "./sync.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const { fetchJSON, jpost, jdelete, el, errMsg } = xyApp;
 
@@ -37,10 +38,10 @@ export interface BoardInvite {
 
 export function inviteStateLabel(state: string): string {
   switch (state) {
-    case "active": return "активна";
-    case "revoked": return "отозвана";
-    case "expired": return "просрочена";
-    case "exhausted": return "исчерпана";
+    case "active": return S.invite.state.active();
+    case "revoked": return S.invite.state.revoked();
+    case "expired": return S.invite.state.expired();
+    case "exhausted": return S.invite.state.exhausted();
   }
   return state;
 }
@@ -48,22 +49,22 @@ export function inviteStateLabel(state: string): string {
 // inviteUsage says how much of the link is spent. An uncapped link has nothing
 // left to count down, so it only reports what it has done.
 export function inviteUsage(inv: Pick<BoardInvite, "used" | "left">): string {
-  const used = `использований: ${inv.used}`;
-  return inv.left === null ? used : `${used}, осталось: ${inv.left}`;
+  const used = S.invite.usage.used(String(inv.used));
+  return inv.left === null ? used : S.invite.usage.left(String(inv.used), String(inv.left));
 }
 
 // inviteTimeLeft is the coarse remainder — an editor deciding whether to resend
-// a link cares about "3 дн", never about the minute. "" means the link has no
+// a link cares about "3 days", never about the minute. "" means the link has no
 // expiry at all, which is not the same as an expiry that has passed.
 export function inviteTimeLeft(expiresAt: string | undefined, now: number): string {
   if (!expiresAt) return "";
   const ms = new Date(expiresAt).getTime() - now;
   if (isNaN(ms)) return "";
-  if (ms <= 0) return "срок истёк";
+  if (ms <= 0) return S.invite.time.expired();
   const hours = Math.floor(ms / 3600000);
-  if (hours >= 24) return `осталось ${Math.floor(hours / 24)} дн`;
-  if (hours >= 1) return `осталось ${hours} ч`;
-  return "осталось меньше часа";
+  if (hours >= 24) return S.invite.time.days(String(Math.floor(hours / 24)));
+  if (hours >= 1) return S.invite.time.hours(String(hours));
+  return S.invite.time.underHour();
 }
 
 export function inviteUrl(origin: string, code: string): string {
@@ -119,11 +120,11 @@ export function createBoardInvites(deps: InvitesDeps) {
       el("span", { class: "member-name", text: personName(p) }),
       el("span", { class: "member-role", text: inv.label || inv.code }),
       el("button", {
-        class: "btn btn-ghost btn-small", type: "button", text: "Принять",
+        class: "btn btn-ghost btn-small", type: "button", text: S.invite.request.approve(),
         onclick: () => { void act(() => jpost(`/api/boards/${deps.boardId}/join-requests/${p.user_id}`, { decision: "approve" })); },
       }),
       el("button", {
-        class: "btn btn-ghost btn-small", type: "button", text: "Отклонить",
+        class: "btn btn-ghost btn-small", type: "button", text: S.invite.request.decline(),
         onclick: () => { void act(() => jpost(`/api/boards/${deps.boardId}/join-requests/${p.user_id}`, { decision: "decline" })); },
       }),
     )));
@@ -138,31 +139,31 @@ export function createBoardInvites(deps: InvitesDeps) {
     box.replaceChildren(...invites.map((inv) => {
       const url = inviteUrl(location.origin, inv.code);
       const facts = [inviteStateLabel(inv.state), inviteUsage(inv), inviteTimeLeft(inv.expires_at, now)].filter(Boolean);
-      if (inv.requires_approval) facts.push("с одобрением");
+      if (inv.requires_approval) facts.push(S.invite.facts.approval());
       const actions = el("div", { class: "invite-actions" },
-        el("button", { class: "btn btn-ghost btn-small", type: "button", text: "Копировать", onclick: () => { void copyLink(url); } }),
+        el("button", { class: "btn btn-ghost btn-small", type: "button", text: S.invite.row.copy(), onclick: () => { void copyLink(url); } }),
       );
       if (inv.state !== "revoked") {
         actions.append(el("button", {
-          class: "btn btn-ghost btn-small", type: "button", text: "Отозвать",
+          class: "btn btn-ghost btn-small", type: "button", text: S.invite.row.revoke(),
           onclick: () => { void act(() => jpost(`/api/board-invites/${inv.id}/revoke`, {})); },
         }));
       }
       actions.append(el("button", {
-        class: "btn btn-ghost btn-small", type: "button", text: "Удалить",
+        class: "btn btn-ghost btn-small", type: "button", text: S.invite.row.remove(),
         onclick: () => {
-          if (!confirm("Удалить ссылку вместе с историей входов по ней?")) return;
+          if (!confirm(S.invite.row.removeConfirm())) return;
           void act(() => jdelete(`/api/board-invites/${inv.id}`));
         },
       }));
       return el("div", { class: "invite-row" },
         el("div", { class: "invite-head" },
-          el("span", { class: "invite-label", text: inv.label || "Ссылка" }),
+          el("span", { class: "invite-label", text: inv.label || S.invite.row.defaultLabel() }),
           el("span", { class: "invite-facts", text: facts.join(" · ") }),
         ),
         el("div", { class: "invite-link", text: url }),
         actions,
-        inv.joined.length ? el("div", { class: "invite-joined", text: "вошли: " + inv.joined.map(personName).join(", ") }) : null,
+        inv.joined.length ? el("div", { class: "invite-joined", text: S.invite.row.joined(inv.joined.map(personName).join(", ")) }) : null,
       );
     }));
   }
@@ -172,12 +173,12 @@ export function createBoardInvites(deps: InvitesDeps) {
   async function copyLink(url: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(url);
-      deps.message().textContent = "Ссылка скопирована.";
+      deps.message().textContent = S.invite.message.copied();
     } catch (_) { deps.message().textContent = url; }
   }
 
-  // The mint form: two chip rows and a checkbox, collapsed behind «+ Создать
-  // ссылку» so adding a member by username stays one row.
+  // The mint form: two chip rows and a checkbox, collapsed behind the
+  // "+ create link" button so adding a member by username stays one row.
   let ttlHours = 0;
   let maxUses = 0;
 
@@ -197,9 +198,9 @@ export function createBoardInvites(deps: InvitesDeps) {
 
   function buildForm(): void {
     const box = document.getElementById("inviteForm")!;
-    const label = el("input", { class: "input", type: "text", placeholder: "Название, например «тестерам»", maxlength: "100" }) as HTMLInputElement;
+    const label = el("input", { class: "input", type: "text", placeholder: S.invite.form.labelPlaceholder(), maxlength: "100" }) as HTMLInputElement;
     const approval = el("input", { type: "checkbox" }) as HTMLInputElement;
-    const create = el("button", { class: "btn", type: "button", text: "Создать" }) as HTMLButtonElement;
+    const create = el("button", { class: "btn", type: "button", text: S.invite.form.submit() }) as HTMLButtonElement;
     create.addEventListener("click", () => {
       create.disabled = true;
       void act(async () => {
@@ -212,11 +213,11 @@ export function createBoardInvites(deps: InvitesDeps) {
     });
     box.replaceChildren(
       label,
-      el("div", { class: "invite-field" }, el("span", { class: "invite-field-label", text: "Срок" }),
-        chips([["час", 1], ["сутки", 24], ["неделя", 168], ["без срока", 0]], () => ttlHours, (v) => { ttlHours = v; })),
-      el("div", { class: "invite-field" }, el("span", { class: "invite-field-label", text: "Использований" }),
-        chips([["1", 1], ["10", 10], ["100", 100], ["без ограничения", 0]], () => maxUses, (v) => { maxUses = v; })),
-      el("label", { class: "invite-field" }, approval, el("span", { text: "С одобрением владельца" })),
+      el("div", { class: "invite-field" }, el("span", { class: "invite-field-label", text: S.invite.form.ttlLabel() }),
+        chips([[S.invite.form.ttlHour(), 1], [S.invite.form.ttlDay(), 24], [S.invite.form.ttlWeek(), 168], [S.invite.form.ttlNever(), 0]], () => ttlHours, (v) => { ttlHours = v; })),
+      el("div", { class: "invite-field" }, el("span", { class: "invite-field-label", text: S.invite.form.usesLabel() }),
+        chips([["1", 1], ["10", 10], ["100", 100], [S.invite.form.usesUnlimited(), 0]], () => maxUses, (v) => { maxUses = v; })),
+      el("label", { class: "invite-field" }, approval, el("span", { text: S.invite.form.approval() })),
       create,
     );
     box.hidden = true;

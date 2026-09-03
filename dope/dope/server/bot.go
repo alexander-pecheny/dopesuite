@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	dopestrings "dope/i18nstrings"
 	"pecheny.me/dopecore/buildinfo"
 	"pecheny.me/dopecore/tgbot"
 )
@@ -22,10 +23,8 @@ import (
 // second instance on this host from claiming the same token anyway.
 
 var botTexts = tgbot.Texts{
-	Help: "Этот бот подтверждает вход на dope.pecheny.me.\n\n" +
-		"Откройте https://dope.pecheny.me/login, нажмите «Войти через телеграм» " +
-		"и пришлите мне код, который покажет сайт.",
-	Down: "Произошла ошибка. Попробуй еще раз через минуту.",
+	Help: dopestrings.Default.Server.Bot.Help(),
+	Down: dopestrings.Default.Server.Bot.Down(),
 }
 
 // startBot begins polling if this instance holds both the token and the host's

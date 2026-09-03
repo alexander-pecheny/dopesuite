@@ -10,7 +10,7 @@ import (
 
 func init() { Register(od{}) }
 
-// od wraps the existing OD (ЧГК) pure scoring: state is games.ODState, ranked
+// od wraps the existing OD (ChGK) pure scoring: state is games.ODState, ranked
 // by games.ComputeODResults. The match config is the OD scheme document (its
 // tourComp drives the tour split). Teams tied on total share a place, matching
 // the results page's tie-grouped labels.
@@ -24,7 +24,7 @@ func (od) TeamBlob() bool { return false }
 
 func (od) Started(state json.RawMessage) bool { return false }
 
-// Metrics: взятые вопросы и рейтинг по Бухгольцу.
+// Metrics: questions taken and the Buchholz rating.
 func (od) Metrics(json.RawMessage) []string { return []string{"total", "rating"} }
 
 func (od) RatingRosterStateKey() string { return "teams" }

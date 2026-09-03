@@ -1,3 +1,3 @@
-// The ЭК page bundle, host and spectator alike (see od.ts).
+// The EK page bundle (see od.ts).
 import '../init.js';
 import '../ek.js';

@@ -77,11 +77,11 @@ func HasUnnumbered(ctx context.Context, q store.Queryer, festID int64) (bool, er
 
 // GameHasUnnumbered is the guard scoped to one Game (ADR-0009). A Game that
 // names its entrants numbers them from 1 as it seats them, so it is never
-// blocked: a фест may register a team that plays nothing — СтудЧР registered 65
-// and its ЭК seated 48 — and an unnumbered row the Game never seats says
+// blocked: a fest may register a team that plays nothing — Studchr registered 65
+// and its EK seated 48 — and an unnumbered row the Game never seats says
 // nothing about whether the Game can be scored.
 //
-// A Game with no entrant list of its own falls back to the фест's registry,
+// A Game with no entrant list of its own falls back to the fest's registry,
 // which is what every Game did before Games could differ.
 func GameHasUnnumbered(ctx context.Context, q store.Queryer, festID, gameID int64) (bool, error) {
 	if gameID > 0 {

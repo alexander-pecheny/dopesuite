@@ -3,15 +3,17 @@ package schemedsl
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"dope/dope/domain/structure"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
 )
 
 // blockHandle is the compiler's adapter at the Kind seam: one Block as its
 // Macro sees it (structure.Block). It reads the section, keeps the compiler's
-// facts — столы, the previous Block, the Protocol cascade — behind typed
+// facts — venues, the previous Block, the Protocol cascade — behind typed
 // calls, and pins every complaint to a line.
 type blockHandle struct {
 	c     *compiler
@@ -237,7 +239,7 @@ func (c *compiler) appendSERound(blk Section, stageCode, title string, rounds []
 		waveAt := where
 		waveAt.wave = wave + 1
 		c.appendManualStage(blk, code,
-			fmt.Sprintf("%s, заход %d", title, wave+1),
+			dopestrings.Default.Scheme.Titles.Wave(title, strconv.Itoa(wave+1)),
 			rounds, waveAt, matches[wave*perWave:end])
 		codes = append(codes, code)
 	}

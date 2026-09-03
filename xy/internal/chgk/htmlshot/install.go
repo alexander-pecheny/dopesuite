@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	xystrings "xy/i18nstrings"
 )
 
 // Fetching a browser, for the machine that has none. chgksuite's html2img runs
@@ -42,6 +44,7 @@ func CacheDir() string {
 // executable. progress, if set, is told what is happening — it is a hundred
 // megabytes, and a silent minute looks like a hang.
 func Install(ctx context.Context, progress func(string)) (string, error) {
+	s := xystrings.Default
 	platform, err := chromePlatform()
 	if err != nil {
 		return "", err
@@ -60,7 +63,7 @@ func Install(ctx context.Context, progress func(string)) (string, error) {
 	if exe := headlessShellIn(root); exe != "" {
 		return exe, nil
 	}
-	say("качаю chromium %s для %s…", version, platform)
+	say("%s", s.Install.Browser.Downloading(version, platform))
 	archive, err := download(ctx, url)
 	if err != nil {
 		return "", err
@@ -87,7 +90,7 @@ func Install(ctx context.Context, progress func(string)) (string, error) {
 	if exe == "" {
 		return "", fmt.Errorf("в архиве нет chrome-headless-shell")
 	}
-	say("установлен: %s", exe)
+	say("%s", s.Install.Installed(exe))
 	return exe, nil
 }
 

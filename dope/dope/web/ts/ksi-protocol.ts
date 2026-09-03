@@ -1,15 +1,16 @@
-// ksi-protocol.ts — the КСИ Protocol's document as the page reads it: the
+// ksi-protocol.ts — the KSI protocol's document as the page reads it: the
 // shape (KSIState), the rules a scheme sets (rulesOf: team mode, theme count,
 // stickers), the adapter from the server's JSON (parseState), and the scoring
 // — a mark's value under a sticker, a theme's value, the score sheet, the
 // ranked results with shared places. Pure: every function takes the state and
 // the rules it reads.
 import {computePlaces} from "./score-table.js";
+import S from "./i18nstrings_ru_gen.js";
 
 export const QUESTION_VALUES = [10, 20, 30, 40, 50];
 export const RESULT_VALUES = QUESTION_VALUES.slice().reverse();
 export const KSI_THEMES = 20;
-// The sticker whose rules match a regular КСИ theme: the implicit sticker of
+// The sticker whose rules match a regular KSI theme: the implicit sticker of
 // a plain game and the fallback for an unknown id.
 export const STICKER_NEUTRAL = "neutral";
 
@@ -65,7 +66,7 @@ export function schemeParticipants(scheme: KSIScheme): string[] {
     return scheme.teams.map((team) => team.name || "");
   }
   if (isTeamMode(scheme)) return [];
-  return ["Игрок 1", "Игрок 2", "Игрок 3", "Игрок 4"];
+  return [1, 2, 3, 4].map((n) => S.si.participant.fallbackPlayer(String(n)));
 }
 
 export function rulesOf(scheme: KSIScheme): KSIRules {
@@ -85,7 +86,7 @@ export function rulesOf(scheme: KSIScheme): KSIRules {
   return {teamMode, themesCount, stickers, stickerById: new Map(stickers.map((t) => [t.id, t]))};
 }
 
-// stickersEnabled gates the sticker UI and scoring: only a КСИ team game that
+// stickersEnabled gates the sticker UI and scoring: only a KSI team game that
 // carries a sticker configuration.
 export function stickersEnabled(rules: KSIRules): boolean {
   return rules.teamMode && rules.stickers.length > 0;
@@ -251,7 +252,7 @@ export interface ResultRow {
   placeText: string;
 }
 
-// resultMetrics is what the «Итоги» table ranks a team by: the total, the
+// resultMetrics is what the results table ranks a team by: the total, the
 // plus (positive contributions only) and how many of each value it took.
 export function resultMetrics(state: KSIState, rules: KSIRules, playerIndex: number): ResultMetrics {
   const correct: Record<number, number> = {};
@@ -297,10 +298,10 @@ export function sameResultMetrics(a: ResultMetrics, b: ResultMetrics): boolean {
   return true;
 }
 
-// rankedResultRows is the «Итоги» table: every team that did not refuse to
+// rankedResultRows is the results table: every team that did not refuse to
 // play, in rank order, with a shared place label ("2–3") where the metrics
 // tie. A declined team takes no place and shifts nobody; it appears in
-// «Отказы» alone. label names a team for the tie-break and the row.
+// the refusals tab alone. label names a team for the tie-break and the row.
 export function rankedResultRows(state: KSIState, rules: KSIRules, label: (index: number) => string): ResultRow[] {
   const rows = state.participants
     .map((_, index) => ({index, name: label(index), metrics: resultMetrics(state, rules, index), placeText: ""}))

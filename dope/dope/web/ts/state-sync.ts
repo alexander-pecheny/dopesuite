@@ -5,7 +5,9 @@
 // every game page: createLiveEvents reads (a scope map of what a delta chains
 // onto and who adopts the result), createScopedWriter writes (patches
 // coalesced per scope, structural writes with an intent, both overlaid until
-// acked). ОД and КСИ register one game-state scope; ЭК and брейн one per бой.
+// acked). OD and SI register one game-state scope; EK and Brain one per match.
+
+import S from "./i18nstrings_ru_gen.js";
 
 // EventSource.OPEN, spelled numerically so fake streams need no global.
 const SSE_OPEN = 1;
@@ -408,14 +410,14 @@ export interface ScopedWriterOptions {
   readonly?: boolean;
   // Where a scope's queued cell ops PATCH to.
   urlOf: (scope: string) => string;
-  // A page whose views are keyed differently from its wire (ЭК: a team's slot
+  // A page whose views are keyed differently from its wire (EK: a team's slot
   // on screen, its id on the wire) translates here. null means the scope has
   // no base to translate against yet — the ops stay queued for a later flush.
   // Ops that translate to nothing are dropped as unsendable, not retried.
   encode?: (scope: string, ops: PendingOp[]) => WireOp[] | null;
   // The server's post-write view of the scope, to adopt.
   adopt: (scope: string, response: unknown) => void;
-  // Where the edited document sits inside an adopted view (брейн's ops address
+  // Where the edited document sits inside an adopted view (Brain's ops address
   // view.state); queued ops overlay relative to it, intents at the view root.
   docPath?: PatchPath;
   indicator?: SyncIndicator;
@@ -903,8 +905,8 @@ function mountRecorderButton(recorder: ClientRecorder, label?: string): void {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "dope-rec-btn";
-  btn.textContent = label || "Скачать лог";
-  btn.title = "Скачать журнал состояния этой вкладки (для диагностики)";
+  btn.textContent = label || S.widgets.recorder.label();
+  btn.title = S.widgets.recorder.title();
   Object.assign(btn.style, {
     position: "fixed",
     bottom: "8px",

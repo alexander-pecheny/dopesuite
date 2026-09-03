@@ -1,5 +1,6 @@
 import {stageType} from "./standings.js";
 import type {StageRef, StageRefMatch} from "./standings.js";
+import S from "./i18nstrings_ru_gen.js";
 // Which tabs a Game page shows is Block / Round / Group knowledge, held here
 // once; pages render the array and derive nothing of their own.
 
@@ -16,7 +17,7 @@ export interface GameTab {
   kind: TabKind;
   stages: string[];
   legacy?: string;
-  stage?: StageRef; // ЭК panes draw it: the stage, or a synthetic круг / Пересев
+  stage?: StageRef; // EK panes draw it: the stage, or a synthetic round / reseed
 }
 
 export interface GameTabsOptions {
@@ -33,20 +34,20 @@ export function gameTabs(stages: StageRef[], options: GameTabsOptions): GameTab[
   case "ek":
   case "si":
     return [
-      ...fixedTabs(["grid", "Сетка"], ["venues", "Площадки"], ...when(host, ["seedImport", "Импорт команд"])),
+      ...fixedTabs(["grid", S.screen.tabs.grid()], ["venues", S.screen.tabs.venues()], ...when(host, ["seedImport", S.screen.tabs.seedImport()])),
       ...foldReseeds(stages.flatMap((stage) => roundTabs(stage, stages))),
-      ...fixedTabs(["stats", "Статистика"], ...when(options.game === "ek", ["roster", "Составы"])),
+      ...fixedTabs(["stats", S.screen.tabs.stats()], ...when(options.game === "ek", ["roster", S.screen.tabs.roster()])),
     ];
   case "brain":
-    return brainTabs(stages, host && Boolean(options.seeded), "Индивидуальная статистика");
-  // Троечка's tabs are брейн's: a Сетка, a table and протоколы per Block, the
-  // пересев, and the per-player statistics its three chairs make interesting.
+    return brainTabs(stages, host && Boolean(options.seeded), S.screen.tabs.individualStats());
+  // Troika's tabs are brain's: a crosstab, a table and protocols per Block, the
+  // reseed, and the per-player statistics its three chairs make interesting.
   case "troika":
-    return brainTabs(stages, host && Boolean(options.seeded), "Статистика");
+    return brainTabs(stages, host && Boolean(options.seeded), S.screen.tabs.stats());
   case "ksi":
-    return fixedTabs(["detailed", "Подробно"], ["results", "Итог"], ...when(host, ["refusals", "Отказы"]), ["roster", "Составы"]);
+    return fixedTabs(["detailed", S.screen.tabs.detailed()], ["results", S.screen.tabs.results()], ...when(host, ["refusals", S.screen.tabs.refusals()]), ["roster", S.screen.tabs.roster()]);
   case "od":
-    return fixedTabs(["results", "Итог"], ["detailed", "Подробно"], ["input", "Ввод"], ...when(host, ["screen", "Экран"]), ["roster", "Составы"]);
+    return fixedTabs(["results", S.screen.tabs.results()], ["detailed", S.screen.tabs.detailed()], ["input", S.screen.tabs.input()], ...when(host, ["screen", S.screen.tabs.screen()]), ["roster", S.screen.tabs.roster()]);
   }
 }
 
@@ -55,24 +56,24 @@ export function canonicalKey(tabs: GameTab[], key: string): string {
   return tabs.find((tab) => tab.legacy === key)?.key || key;
 }
 
-// «1-й групповой этап. Группа 1» → «1-й групповой этап», «DE 1» → «DE»,
-// «Плей-офф. 1 этап» + «Плей-офф. 2 этап» → «Плей-офф».
+// "1st group stage. Group 1" → "1st group stage", "DE 1" → "DE",
+// "Play-off. Stage 1" + "Play-off. Stage 2" → "Play-off".
 export function blockLabel(stages: StageRef[]): string {
   const first = String(stages[0]?.title || "");
   if (stages.some((stage) => stage.grain?.group)) {
     const named = first.replace(/\.?\s*Группа\s*\S+$/, "");
-    if (named !== first) return named || "Групповой этап";
+    if (named !== first) return named || S.screen.tabs.blockGroup();
     return first.replace(/\s*\d+$/, "") || first;
   }
   if (stages.length === 1) return first;
   const prefix = first.split(". ")[0];
   if (prefix !== first && stages.every((stage) => String(stage.title || "").startsWith(prefix + ". "))) return prefix;
-  return "Плей-офф";
+  return S.screen.tabs.playoff();
 }
 
 export function groupLabel(stage: StageRef): string {
   const title = String(stage.title || "");
-  return title.match(/Группа\s*\S+$/)?.[0] || title || `Группа ${stage.grain?.group || "?"}`;
+  return title.match(/Группа\s*\S+$/)?.[0] || title || S.screen.tabs.groupN(stage.grain?.group || "?");
 }
 
 type Fixed = [TabKind, string];
@@ -100,8 +101,8 @@ function stageTab(stage: StageRef, kind: TabKind, label = stage.title || stage.c
   };
 }
 
-// The sheets enter protocols by круг — every группа at once — because that is
-// the order the бои are played in; a tab per группа is the Сетка's job.
+// The sheets enter protocols by round — every group at once — because that is
+// the order the matches are played in; a tab per group is the crosstab's job.
 function roundTabs(stage: StageRef, stages: StageRef[]): GameTab[] {
   const block = stage.grain?.block;
   if (!block || !stage.grain?.group) return [stageTab(stage, isReseed(stage) ? "reseed" : "stage", stageTabLabel(stage))];
@@ -123,25 +124,25 @@ function roundTabs(stage: StageRef, stages: StageRef[]): GameTab[] {
   return [stageTab(standings, "block"), ...Array.from(byRound.keys()).sort((a, b) => a - b).map((round) => stageTab({
     code: `${slug || block}-r${round}`,
     legacy: `${block}@r${round}`,
-    title: `Круг ${round}`,
+    title: S.screen.tabs.round(String(round)),
     stage_type: "matches",
     matches: byRound.get(round) || [],
     members,
   }, "round"))];
 }
 
-// Личная СИ reseeds before every play-off round; seven identical tabs said
+// Individual SI reseeds before every play-off round; seven identical tabs said
 // nothing six of them didn't. A lone reseed keeps its own tab.
 function foldReseeds(tabs: GameTab[]): GameTab[] {
   const reseeds = tabs.filter((tab) => tab.kind === "reseed");
   if (reseeds.length < 2) return tabs;
   const members = reseeds.map((tab) => tab.stages[0]);
-  const folded = stageTab({code: RESEED_TAB_CODE, title: "Пересев", stage_type: "reseed", members}, "reseed");
+  const folded = stageTab({code: RESEED_TAB_CODE, title: S.screen.tabs.reseed(), stage_type: "reseed", members}, "reseed");
   return tabs.flatMap((tab) => tab.kind !== "reseed" ? [tab] : tab === reseeds[0] ? [folded] : []);
 }
 
 function stageTabLabel(stage: StageRef): string {
-  if (isReseed(stage)) return "Пересев";
+  if (isReseed(stage)) return S.screen.tabs.reseed();
   switch (stage.code) {
   case "r16_run1":
     return "1/16-1";
@@ -154,16 +155,16 @@ function stageTabLabel(stage: StageRef): string {
   case "r2":
     return "1/2";
   case "final":
-    return "Финал";
+    return S.screen.tabs.final();
   default:
     return stage.title || stage.code;
   }
 }
 
-// Per Block its crosstab (or pod board) and протоколы, as the source workbook
-// had them; «table» / «protocol» are the pre-Block hashes.
+// Per Block its crosstab (or pod board) and protocols, as the source workbook
+// had them; "table" / "protocol" are the pre-Block hashes.
 function brainTabs(stages: StageRef[], seeded: boolean, statsLabel: string): GameTab[] {
-  const tabs = fixedTabs(["grid", "Сетка"]);
+  const tabs = fixedTabs(["grid", S.screen.tabs.grid()]);
   let table: string | undefined = "table";
   let protocol: string | undefined = "protocol";
   for (const block of blocks(stages)) {
@@ -176,12 +177,12 @@ function brainTabs(stages: StageRef[], seeded: boolean, statsLabel: string): Gam
     } else if (block.stages.some((stage) => stage.grain?.group)) {
       tabs.push({key: `block:${block.code}`, label, kind: "pods", stages: codes});
     }
-    tabs.push({key: `protocol:${block.code}`, label: `${label} (протоколы)`, kind: "protocol", stages: codes, legacy: protocol});
+    tabs.push({key: `protocol:${block.code}`, label: S.screen.tabs.protocol(label), kind: "protocol", stages: codes, legacy: protocol});
     protocol = undefined;
   }
   const reseeds = stages.filter(isReseed).map((stage) => stage.code);
-  if (reseeds.length) tabs.push({key: "reseed", label: "Пересев", kind: "reseed", stages: reseeds});
-  tabs.push(...fixedTabs(["stats", statsLabel], ["roster", "Составы"], ...when(seeded, ["seed", "Посев"])));
+  if (reseeds.length) tabs.push({key: "reseed", label: S.screen.tabs.reseed(), kind: "reseed", stages: reseeds});
+  tabs.push(...fixedTabs(["stats", statsLabel], ["roster", S.screen.tabs.roster()], ...when(seeded, ["seed", S.screen.tabs.seed()])));
   return tabs;
 }
 

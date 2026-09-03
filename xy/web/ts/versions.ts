@@ -1,7 +1,7 @@
 // versions.ts — the Version algebra (ADR-0007). A Version is a WHOLE 4s body —
-// question, ответ, зачёт, раздатка, автор, all of it. A card's description holds
+// question, answer, zachet, handout, author, all of it. A card's description holds
 // its versions concatenated, each introduced by a standalone
-// (hidden-comment xy-version: имя) line; the name is optional and the line is
+// (hidden-comment xy-version: name) line; the name is optional and the line is
 // xy's own metadata, dropped by parseBlocks (chgk.ts owns that rule:
 // versionLineName), so every reader but the card editor sees version 1 and
 // never knows the rest are there. A card with one version carries no such line
@@ -11,11 +11,12 @@
 // so a versioned card is still one numbered question: the `?` field carries every
 // wording page-broken, and any other field the versions disagree on prints each
 // value labelled by its version's NUMBER (never its name — a name is shorthand
-// between editors, and «полегче» above a question tells a tester how hard it is
+// between editors, and "easier" above a question tells a tester how hard it is
 // meant to be before they have tried it).
 
 import { composeFields, extractInlineHandout, parseBlocks, scanDirectives, splitFields, versionLineName } from "./chgk.js";
 import type { HiddenSpan } from "./chgk.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const PAGEBREAK = "(PAGEBREAK)";
 const VERSION_TAG = "xy-version:";
@@ -108,9 +109,9 @@ function setVersionName(desc: string | null | undefined, i: number, name: string
 }
 
 // addVersion clones version `i` whole and inserts the copy after it. Cloning
-// rather than starting blank is what «Добавить версию» is for: a version is a
+// rather than starting blank is what "Add version" is for: a version is a
 // rewording of what is already there. The copy is unnamed — two tabs reading
-// «полегче» tell the editor nothing.
+// "easier" tell the editor nothing.
 function addVersion(desc: string | null | undefined, i: number): { desc: string; index: number } {
   const v = readVersions(desc);
   const at = Math.min(Math.max(i, 0), v.bodies.length - 1);
@@ -150,7 +151,7 @@ function rawQuestion(desc: string | null | undefined, keepVersionLines = false):
   return b ? b.text : "";
 }
 
-const versionLabel = (i: number): string => `версия ${i + 1}: `;
+const versionLabel = (i: number): string => S.import.versions.label(String(i + 1));
 
 // mergeField prints one value when every version agrees and one labelled value
 // per version when they do not. A field one version simply lacks counts as
@@ -196,7 +197,7 @@ function composeVersions(desc: string | null | undefined): string {
     preMarkup: f0.preMarkup,
     handout: null, // each version's own bracket rides inside its question text
     question: bodies
-      .map((b, i) => `Версия ${i + 1}: ${rawQuestion(b).trim()}`)
+      .map((b, i) => S.import.versions.question(String(i + 1), rawQuestion(b).trim()))
       .join("\n" + PAGEBREAK + "\n"),
     answer: mergeField(fs.map((f) => f.answer)),
     zachet: mergeField(fs.map((f) => f.zachet)),
@@ -235,7 +236,7 @@ function convertLegacyVersions(desc: string | null | undefined): string | null {
   const q = rawQuestion(desc, true);
   if (!q.includes(PAGEBREAK)) return null;
   const f = splitFields(desc);
-  // The раздатка was shared, and it physically sat in the first version's text —
+  // The handout was shared, and it physically sat in the first version's text —
   // so it is lifted out here and composed back into EVERY body. Leave it in the
   // text and versions 2+ lose the picture their question asks about.
   const inline = extractInlineHandout(q);

@@ -4,6 +4,7 @@ import {normalizeVenue} from "./venue.js";
 import type {Venue} from "./venue.js";
 import { markNameOverflow } from "./widgets.js";
 import { blockLabel, groupLabel } from "./game-tabs.js";
+import S from "./i18nstrings_ru_gen.js";
 
 export interface FestGridVenueObject {
   number?: unknown;
@@ -41,8 +42,8 @@ export interface FestGridMatch {
   slots?: FestGridSlot[];
   participants?: FestGridLiveParticipant[];
   participantCount?: number | string;
-  // row pins the бой to a row of the Сетка's shared grid (1-based); unset, it
-  // flows under the бой before it.
+  // row pins the Match to a row of the grid's shared row layout (1-based);
+  // unset, it flows under the Match before it.
   row?: number;
 }
 
@@ -93,15 +94,15 @@ export interface FestGridOptions {
   onCalculate?: () => void;
   stageHeaderLink?: boolean;
   matchTitleLink?: boolean;
-  // letters is the whole game's буква map — a caller drawing a slice of the
-  // scheme passes it, so a slot that names a бой outside the slice still
-  // reads «Бой BU».
+  // letters is the whole game's letter map — a caller drawing a slice of the
+  // scheme passes it, so a slot that names a Match outside the slice still
+  // reads its default "Match BU" label.
   letters?: Map<string, string>;
 }
 
 // A drawn grid: its root, its Blocks of Groups (re-shaped to the screen on
 // every resize) and the frame that update waits on. One entry per grid, so
-// two on a page — the брейн Сетка and its pod board — never share state; a
+// two on a page — the brain grid and its pod board — never share state; a
 // grid whose root has left the page is forgotten at the next build or resize.
 interface Grid {
   root: HTMLElement;
@@ -162,11 +163,11 @@ export function buildFestGrid(data: FestGridData, options: FestGridOptions = {})
 
 // --- the plan ---------------------------------------------------------------
 //
-// planGrid is the Сетка's layout without its DOM: what each column is, how
+// planGrid is the grid's layout without its DOM: what each column is, how
 // many rows each box takes of the shared row grid, and how a Block of Groups
 // packs into columns. The builders below read it and add nothing.
 
-// GridItem is one box — a бой or a Group's table — its rows (a head and its
+// GridItem is one box — a Match or a Group's table — its rows (a head and its
 // seats), the units of the shared row it spans, and the row it is pinned to.
 export interface GridItem {
   rows: number;
@@ -186,7 +187,7 @@ export interface GridTable {
   item: GridItem;
 }
 
-// GridBoxes is a stage drawn as бой boxes, one item per бой.
+// GridBoxes is a stage drawn as Match boxes, one item per Match.
 export interface GridBoxes {
   stage: FestGridStage;
   live: FestGridStage;
@@ -213,21 +214,21 @@ export interface GridPlan {
   sections: GridSection[];
 }
 
-// The Сетка's rows are shared across its columns, like the sheet's: a row is
+// The grid's rows are shared across its columns, like the sheet's: a row is
 // the grid's tallest box, up to a head and four seats, and anything taller
 // spans as many rows as it needs, so what stands beside it stays level. A
-// board of two-seat бои gets three-row units; every Сетка with a group table
+// board of two-seat Matches gets three-row units; every grid with a group table
 // gets five.
 const MAX_UNIT_ROWS = 5;
 
 export function planGrid(stages: FestGridStage[], liveStages: Map<string | undefined, FestGridStage> = new Map()): GridPlan {
   const liveOf = (stage: FestGridStage) => liveStages.get(stage.code) || stage;
   const items: GridItem[] = [];
-  // A Group is a table, not a wall of бои: a группа of nine plays twelve of
+  // A Group is a table, not a wall of Matches: a group of nine plays twelve of
   // them, and twelve boxes say less about who is winning than nine rows do.
-  // The бои are still there — the detailed tab lists them. A Group the Ranker
+  // The Matches are still there — the detailed tab lists them. A Group the Ranker
   // has not written yet gets placeless rows in seating order, so the map of
-  // who sits where is there before a бой is played. Bracket rounds carry no
+  // who sits where is there before a Match is played. Bracket rounds carry no
   // group and keep their boxes, and so does a legacy grouped stage the scheme
   // never graded (kind unknown).
   const table = (stage: FestGridStage): GridTable | null => {
@@ -273,7 +274,7 @@ function blockUnits(entries: Array<GridTable | GridBoxes>): number[] {
 
 // A Block of Groups wraps into as many columns as the screen's height asks
 // for: as many rows as fit below the block's head, then the next column — so
-// the whole Сетка fits one screen where its бой columns do. The row is the
+// the whole grid fits one screen where its Match columns do. The row is the
 // unit the CSS sizes; the JS only counts, and evens the columns out. Until
 // the screen is measured the stack is one column.
 const MIN_BLOCK_ROWS = 2;
@@ -283,7 +284,7 @@ export function packBlock(units: number[], viewportRows?: number): {rows: number
   if (viewportRows === undefined) return {rows: total || 1, cols: 1};
   const most = Math.max(viewportRows, MIN_BLOCK_ROWS, ...units);
   const cols = columnsFor(units, most);
-  // The fewest rows that still pack into that many columns — 12 групп at
+  // The fewest rows that still pack into that many columns — 12 groups at
   // five to a column read as 4+4+4, not 5+5+2.
   let rows = Math.ceil(total / cols);
   while (rows < most && columnsFor(units, rows) > cols) rows += 1;
@@ -308,7 +309,7 @@ function columnsFor(units: number[], rows: number): number {
 // --- the paint --------------------------------------------------------------
 
 // groupStagesByBlock buckets consecutive group stages of one Block together
-// (reseeds dropped — the Пересев tab holds those), leaving every other stage
+// (reseeds dropped — the reseed tab holds those), leaving every other stage
 // in a bucket of its own.
 // blockOf names a Group stage's Block, as the grain says; a stage without a
 // Group is its own column.
@@ -335,7 +336,7 @@ function groupStagesByBlock(stages: FestGridStage[]): FestGridStage[][] {
   return buckets;
 }
 
-// stageColumn is a column of the Сетка: one stage, or a Block's stack.
+// stageColumn is a column of the grid: one stage, or a Block's stack.
 function stageColumn(stage: FestGridStage, columns: number, className = ""): HTMLElement {
   const column = document.createElement("section");
   column.className = `grid-stage${className ? " " + className : ""}`;
@@ -398,10 +399,12 @@ export function buildReseedStagePanel(
     const calculateButton = document.createElement("button");
     calculateButton.type = "button";
     calculateButton.className = "btn";
-    calculateButton.textContent = entries.length > 0 ? "Пересчитать" : "Рассчитать";
+    calculateButton.textContent = entries.length > 0
+      ? S.fest.reseed.recalculate()
+      : S.fest.reseed.calculate();
     calculateButton.disabled = !options.canCalculate;
     if (!options.canCalculate) {
-      calculateButton.title = blockedMessage || "Исходные бои ещё не закончены";
+      calculateButton.title = blockedMessage || S.fest.reseed.blockedDefault();
     }
     calculateButton.addEventListener("click", () => {
       if (calculateButton.disabled) return;
@@ -415,8 +418,9 @@ export function buildReseedStagePanel(
   const sortRules = stage?.sort || [];
   const metricColumns = sortRules.map((rule) => rule.metric)
     .filter((metric, index, values) => values.indexOf(metric) === index);
-  // The source бои speak in буквы; a column that reads the same in every row
-  // — the отбор seats everyone from one бой — says nothing and goes.
+  // The source Matches speak in letters; a column that reads the same in
+  // every row — the qualifier seats everyone from one Match — says nothing
+  // and goes.
   const letters = options.letters;
   const sources = entries.map((entry) => String(entry.metrics?.match || "").split("+").filter(Boolean)
     .map((code) => letters?.get(code) || code).join(", "));
@@ -425,9 +429,9 @@ export function buildReseedStagePanel(
   wrapper.appendChild(standingsTable({
     className: "reseed-results-table",
     columns: [
-      {label: "Место", kind: "place"},
-      {label: "Команда", kind: "name"},
-      ...(hasSourceMatch ? [{label: "Бой", kind: "num" as const}] : []),
+      {label: S.fest.reseed.colPlace(), kind: "place"},
+      {label: S.fest.reseed.colTeam(), kind: "name"},
+      ...(hasSourceMatch ? [{label: S.fest.reseed.colMatch(), kind: "num" as const}] : []),
       ...metricColumns.map((metric) => ({label: reseedMetricHeader(metric, sortRules), kind: "num" as const})),
     ],
     rows: entries.map((entry, index) => [
@@ -446,7 +450,7 @@ export function buildReseedStagePanel(
   } else if (entries.length === 0) {
     const empty = document.createElement("p");
     empty.className = "empty";
-    empty.textContent = "Пересев пока не рассчитан.";
+    empty.textContent = S.fest.reseed.empty();
     wrapper.appendChild(empty);
   }
 
@@ -461,14 +465,14 @@ function reseedBlockedMessage(stage: FestGridStage | null | undefined, options: 
   const pending = Array.isArray(stage?.reseedPendingMatches)
     ? stage.reseedPendingMatches.map((code) => String(code || "").trim()).filter(Boolean)
     : [];
-  if (pending.length === 1) return `Бой ${pending[0]} не закончен`;
-  if (pending.length > 1) return `Бои ${pending.join(", ")} не закончены`;
+  if (pending.length === 1) return S.fest.reseed.blockedOne(pending[0]);
+  if (pending.length > 1) return S.fest.reseed.blockedMany(pending.join(", "));
   return "";
 }
 
-// buildStandingsStage draws a ranking Kind as its own table — место, team, and
-// whatever the block ranks by. It is what the source sheets show for a группа,
-// and it fits a column where a dozen бой boxes do not.
+// buildStandingsStage draws a ranking Kind as its own table — place, team, and
+// whatever the block ranks by. It is what the source sheets show for a group,
+// and it fits a column where a dozen Match boxes do not.
 function buildStandingsStage(section: GridTable, ctx: PaintContext): HTMLElement {
   const {stage} = section;
   const column = stageColumn(stage, 1);
@@ -493,9 +497,10 @@ function stageHead(stage: FestGridStage, title: string | undefined, ctx: PaintCo
   return header;
 }
 
-// A table's head row names what the table is — the группа, or the Block when
-// it is the Block's only table — and the table it plays at, the way a бой box
-// says «Бой A · пл. 1». A Group holds one table, so the venue is its own.
+// A table's head row names what the table is — the group, or the Block when
+// it is the Block's only table — and the table it plays at, the way a Match
+// box says "Match A · venue 1". A Group holds one table, so the venue is its
+// own.
 interface TableHead {
   title: string;
   venue: Venue | null;
@@ -508,8 +513,8 @@ function tableHead(stage: FestGridStage, liveStage: FestGridStage): TableHead {
   };
 }
 
-// stageVenue is the one table every бой of the stage sits at, or null when
-// they spread — a pod's бои share a table like a группа's do.
+// stageVenue is the one table every Match of the stage sits at, or null when
+// they spread — a pod's Matches share a table like a group's do.
 function stageVenue(stage: FestGridStage, liveStage: FestGridStage): Venue | null {
   const liveMatches = new Map((liveStage.matches || []).map((match) => [match.code, match]));
   let found: Venue | null = null;
@@ -523,10 +528,11 @@ function stageVenue(stage: FestGridStage, liveStage: FestGridStage): Venue | nul
 }
 
 // stageSlotOrder is the seating order of a stage's participants — first
-// appearance across its бои, which is how the schedule dealt them. The Сетка's
-// rows sit in this order, not place order, so a live группа never reshuffles
-// under the reader. An unseated slot contributes its label («Пересев-3»), so
-// the map of who proceeds where survives until the reseed fills the names.
+// appearance across its Matches, which is how the schedule dealt them. The
+// grid's rows sit in this order, not place order, so a live group never
+// reshuffles under the reader. An unseated slot contributes its label
+// ("Reseed-3"), so the map of who proceeds where survives until the reseed
+// fills the names.
 function stageSlotOrder(stage: FestGridStage, liveStage: FestGridStage): string[] {
   const order: string[] = [];
   const seen = new Set<string>();
@@ -547,11 +553,11 @@ function stageSlotOrder(stage: FestGridStage, liveStage: FestGridStage): string[
   return order;
 }
 
-// A Group's table is a бой box: the same article and cells the бой boxes
+// A Group's table is a Match box: the same article and cells the Match boxes
 // beside it wear, so one skin covers both by construction. The rows sit in
-// seating order; the columns are the name, М, and the one number the Block
-// ranks by first — a second number costs forty pixels the names need, and
-// everything else belongs on the stage's own page.
+// seating order; the columns are the name, the place, and the one number the
+// Block ranks by first — a second number costs forty pixels the names need,
+// and everything else belongs on the stage's own page.
 function buildStandingsTable({stage, live, entries, order, sort, item}: GridTable): HTMLElement {
   const metric = sort?.[0]?.metric;
   const head = tableHead(stage, live);
@@ -561,7 +567,7 @@ function buildStandingsTable({stage, live, entries, order, sort, item}: GridTabl
   title.appendChild(headLayout(el("span", "grid-match-title", head.title), head.venue));
   grid.appendChild(title);
   if (metric) grid.appendChild(gridHeadCell("slot-total-head", standingsMetricLabel(metric)));
-  grid.appendChild(gridHeadCell("slot-place-head", "М"));
+  grid.appendChild(gridHeadCell("slot-place-head", S.fest.grid.colPlace()));
   const rows = order.length
     ? entries.slice().sort((a, b) => slotIndex(order, a) - slotIndex(order, b))
     : entries;
@@ -585,11 +591,15 @@ function slotIndex(order: string[], entry: ReseedEntry): number {
   return index < 0 ? order.length + Number(entry.rank || 0) : index;
 }
 
-// The Сетка's columns are a glance wide, and it already writes М and Σ rather
-// than «место» and «сумма». The few metrics whose names do not fit get the same
-// treatment; everything else keeps the word the пересев panel uses.
+// The grid's columns are a glance wide, and it already writes M and Σ rather
+// than "place" and "sum". The few metrics whose names do not fit get the same
+// treatment; everything else keeps the word the reseed panel uses.
 function standingsMetricLabel(metric: string): string {
-  const short: Record<string, string> = {points: "О", taken: "В", bouts: "Б"};
+  const short: Record<string, string> = {
+    points: S.fest.metricShort.points(),
+    taken: S.fest.metricShort.taken(),
+    bouts: S.fest.metricShort.bouts(),
+  };
   return short[metric] || reseedMetricLabel(metric);
 }
 
@@ -626,7 +636,7 @@ function buildMatchBox(match: FestGridMatch, liveMatch: FestGridMatch | undefine
   grid.className = "grid-slot-grid";
   grid.appendChild(matchHeadCell(match, venue, ctx));
   grid.appendChild(gridHeadCell("slot-total-head", "Σ"));
-  grid.appendChild(gridHeadCell("slot-place-head", "М"));
+  grid.appendChild(gridHeadCell("slot-place-head", S.fest.grid.colPlace()));
   const liveTeams = liveMatch?.participants || [];
   const slots = match.slots || [];
   spanRows(box, item);
@@ -731,10 +741,10 @@ function reseedMetricHeader(metric: string, sortRules: SortRule[]): string {
 
 function reseedMetricLabel(metric: string): string {
   const labels: Record<string, string> = {
-    place_sum: "Σ мест",
+    place_sum: S.fest.metric.placeSum(),
     total: "Σ",
     plus: "Σ+",
-    tiebreak: "П",
+    tiebreak: S.fest.metric.tiebreak(),
     correct_50: "+50",
     correct_40: "+40",
     correct_30: "+30",
@@ -750,15 +760,15 @@ function reseedMetricLabel(metric: string): string {
     wrong_30: "−30",
     wrong_20: "−20",
     wrong_10: "−10",
-    points_share: "% очков",
-    taken_share: "% взятых",
+    points_share: S.fest.metric.pointsShare(),
+    taken_share: S.fest.metric.takenShare(),
     diff: "+/−",
-    taken_base: "Взятые б/п",
-    points: "Очки",
-    rating: "Р",
-    taken: "Взятые",
-    bouts: "Боёв",
-    draw: "Жребий",
+    taken_base: S.fest.metric.takenBase(),
+    points: S.fest.metric.points(),
+    rating: S.fest.metric.rating(),
+    taken: S.fest.metric.taken(),
+    bouts: S.fest.metric.bouts(),
+    draw: S.fest.metric.draw(),
   };
   return labels[metric] || metric;
 }
@@ -768,7 +778,7 @@ function reseedMetricValue(metric: string, value: unknown): string {
   const number = Number(value);
   if (!Number.isFinite(number) || String(value).trim() === "") return String(value);
   if (metric.endsWith("_share")) return `${scoreText(Math.round(number * 1000) / 10)}%`;
-  // A рейтинговый балл is очки plus взятые over fifty: exact in two places,
+  // A rating score is points plus taken over fifty: exact in two places,
   // printed with the binary noise of the sum otherwise.
   return scoreText(Math.round(number * 100) / 100);
 }
@@ -793,11 +803,13 @@ function basePath(options: FestGridOptions = {}): string {
   return options.basePath || "";
 }
 
-// The бои wear their буква — the sheets' A..Z, AA.. handle — as the compiler
-// dealt them and the fest view carries them; a URL says the буква too.
+// The Matches wear their letter — the sheets' A..Z, AA.. handle — as the
+// compiler dealt them and the fest view carries them; a URL says the letter too.
 function matchLabel(match: FestGridMatch, letters: Map<string, string> | null): string {
   const letter = letters?.get(match.code || "");
-  if (!match.title || match.title === `Бой ${match.code}`) return `Бой ${letter || match.code}`;
+  if (!match.title || match.title === S.fest.grid.matchDefault(String(match.code))) {
+    return S.fest.grid.matchDefault(String(letter || match.code));
+  }
   return letteredTitle(match.title, letter);
 }
 
@@ -847,7 +859,7 @@ function slotLabel(slot: FestGridSlot, live: FestGridLiveParticipant = {}, lette
   }
   if (slot.seed) {
     const number = slot.seed.number || slot.seed.position;
-    if (slot.seed.basket) return `К${slot.seed.basket}-${number}`;
+    if (slot.seed.basket) return S.fest.grid.slotBasket(String(slot.seed.basket), String(number));
     return number ? `seed-${number}` : "seed";
   }
   if (slot.fromMatch) return `${slot.fromMatch.match}${slot.fromMatch.place}`;
@@ -859,13 +871,17 @@ function slotLabel(slot: FestGridSlot, live: FestGridLiveParticipant = {}, lette
 
 function reseedLabel(reseed: { rank?: number | string }): string {
   const rank = Number(reseed.rank);
-  return Number.isFinite(rank) && rank > 0 ? `Пересев-${rank}` : "Пересев";
+  return Number.isFinite(rank) && rank > 0
+    ? S.fest.grid.slotReseedRanked(String(rank))
+    : S.fest.grid.slotReseed();
 }
 
 function venueText(venue: FestGridVenue | Venue | null): string {
   const normalized = normalizeVenue(venue);
   if (!normalized) return "";
-  return normalized.title ? `пл. ${normalized.number} (${normalized.title})` : `пл. ${normalized.number}`;
+  return normalized.title
+    ? S.fest.grid.venueTitled(String(normalized.number), normalized.title)
+    : S.fest.grid.venue(String(normalized.number));
 }
 
 function firstVenue(...venues: FestGridVenue[]): Venue | null {

@@ -1,5 +1,5 @@
-// Package typoedit is the typography pass the card editor's «типограф» button
-// runs: chgksuite's typotools (quotes → «ёлочки», hyphen runs → em dashes,
+// Package typoedit is the typography pass the card editor's Typograph button
+// runs: chgksuite's typotools (quotes → guillemets, hyphen runs → em dashes,
 // percent-escapes → the text they encode) plus the non-breaking-space/hyphen
 // gluing the exporters apply, over 4s source.
 //
@@ -31,9 +31,9 @@ import (
 var opts = typo.Options{Quotes: typo.On, Dashes: true, Percent: true}
 
 // accentOpts adds detect_accent: chgk marks stress by capitalising the vowel
-// («брАзер»), and this turns that into a real combining acute («бра́зер»). It is a
-// heuristic on capitalisation, so it is its own mode rather than part of the
-// default — see PassAccents.
+// (as in "brAzer"), and this turns that into a real combining acute ("brázer").
+// It is a heuristic on capitalisation, so it is its own mode rather than part of
+// the default — see PassAccents.
 var accentOpts = typo.Options{Quotes: typo.On, Dashes: true, Percent: true, Accents: typo.On}
 
 // Pass typographs 4s source, marker by marker. It is idempotent: the gluing

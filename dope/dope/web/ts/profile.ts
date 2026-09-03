@@ -1,5 +1,7 @@
 // Profile password form (new password vs change password modes).
 
+import S from "./i18nstrings_ru_gen.js";
+
 function byId<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
   if (!node) throw new Error(`profile page is missing #${id}`);
@@ -17,7 +19,7 @@ passwordForm.addEventListener("submit", async (event) => {
   const newPassword = byId<HTMLInputElement>("newPassword").value;
   const confirmPassword = byId<HTMLInputElement>("confirmPassword").value;
   if (newPassword !== confirmPassword) {
-    setText(passwordMessage, "Пароли не совпадают.");
+    setText(passwordMessage, S.widgets.profile.mismatch());
     return;
   }
 
@@ -34,7 +36,7 @@ passwordForm.addEventListener("submit", async (event) => {
     });
     passwordForm.reset();
     if (hasPassword) {
-      setText(passwordMessage, "Пароль изменён.");
+      setText(passwordMessage, S.widgets.profile.changed());
     } else {
       // Reload so the form switches into "change password" mode.
       window.location.reload();

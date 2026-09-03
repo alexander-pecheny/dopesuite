@@ -24,7 +24,7 @@ export interface DraftState {
   savedMeta: string | null;
 }
 
-// contentDirty decides whether «Сохранить» is enabled. A new card (isNew) is
+// contentDirty decides whether Save is enabled. A new card (isNew) is
 // dirty once it has any 4s content; an existing card is dirty when its
 // description or handout settings differ from the persisted baseline. The alias
 // is no part of either — it autosaves, so counting it would offer to save

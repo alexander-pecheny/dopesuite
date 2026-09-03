@@ -1,6 +1,8 @@
 package ui
 
 import (
+	dopestrings "dope/i18nstrings"
+
 	base "pecheny.me/dopeuikit/kit"
 )
 
@@ -12,8 +14,9 @@ import (
 func expandGameTopbar(c *base.ExpandCtx, p *base.Element) []base.Node {
 	mainCls := []string{"game-header-main"}
 
+	s := dopestrings.Default
 	kids := []base.Node{
-		base.El("nav", []base.Attr{base.ClassAttr("crumbs"), base.At("id", "gameBreadcrumbs"), base.At("aria-label", "Навигация")}),
+		base.El("nav", []base.Attr{base.ClassAttr("crumbs"), base.At("id", "gameBreadcrumbs"), base.At("aria-label", s.Ui.Crumbs.Label())}),
 	}
 	tabsCls := []string{"match-tabs"}
 	if base.Flag(p, "ektabs") {
@@ -39,7 +42,7 @@ func expandGameTopbar(c *base.ExpandCtx, p *base.Element) []base.Node {
 	}
 	dot := base.El("span", []base.Attr{
 		base.ClassAttr(sync.Class), base.At("id", sync.ID), base.At("data-state", state),
-		base.At("aria-label", "Синхронизация"), base.At("title", "Синхронизация"),
+		base.At("aria-label", s.Ui.Sync.Label()), base.At("title", s.Ui.Sync.Label()),
 	})
 	actions := base.El("div", []base.Attr{base.ClassAttr("host-actions")},
 		base.El("div", []base.Attr{base.ClassAttr("sync-stack")}, dot))
@@ -122,11 +125,12 @@ func expandSummary(c *base.ExpandCtx, p *base.Element) []base.Node {
 	return one(base.Leaf(c, "summary", classes, nil, p))
 }
 
-// expandPalette wraps sticker swatches in the radiogroup box with its "Цвет" label.
+// expandPalette wraps sticker swatches in the radiogroup box with its color label.
 func expandPalette(c *base.ExpandCtx, p *base.Element) []base.Node {
-	kids := []base.Node{base.Inl("span", nil, &base.TextNode{Value: "Цвет"})}
+	s := dopestrings.Default
+	kids := []base.Node{base.Inl("span", nil, &base.TextNode{Value: s.Ui.Palette.Label()})}
 	kids = append(kids, c.Nodes(p.Block)...)
-	attrs := []base.Attr{base.ClassAttr("sticker-palette"), base.At("role", "radiogroup"), base.At("aria-label", "Цвет")}
+	attrs := []base.Attr{base.ClassAttr("sticker-palette"), base.At("role", "radiogroup"), base.At("aria-label", s.Ui.Palette.Label())}
 	return one(base.El("div", attrs, kids...))
 }
 
@@ -183,7 +187,7 @@ func expandNumberrow(c *base.ExpandCtx, p *base.Element) []base.Node {
 	return one(base.El("li", []base.Attr{base.ClassAttr("number-row")}, numInput, team, hiddenLabel, hiddenID))
 }
 
-// expandFestgroup is the fest-list collapsible bucket (Текущие/Будущие/Прошедшие)
+// expandFestgroup is the fest-list collapsible bucket (current/upcoming/past)
 // shared by the public index and the host landing: details.fest-group with the
 // chevroned summary.fest-group-title.
 func expandFestgroup(c *base.ExpandCtx, p *base.Element) []base.Node {
@@ -220,8 +224,8 @@ func expandRowlink(c *base.ExpandCtx, p *base.Element) []base.Node {
 }
 
 // expandCheckbox is dope's checkbox: the core generic box plus name/value on the
-// input, so server-rendered forms (create-fest "Публичный", the roster game
-// pickers) submit real values. label.checkbox > input[type=checkbox] + span.
+// input, so server-rendered forms (the create-fest "Public" checkbox, the roster
+// game pickers) submit real values. label.checkbox > input[type=checkbox] + span.
 func expandCheckbox(c *base.ExpandCtx, p *base.Element) []base.Node {
 	labelAttrs := []base.Attr{base.ClassAttr(base.GrowClasses([]string{"checkbox"}, p)...)}
 	labelAttrs = append(labelAttrs, base.MetaAttrs(p)...)

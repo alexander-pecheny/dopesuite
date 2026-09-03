@@ -21,6 +21,7 @@ import (
 
 	"dope/dope/domain/games"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
 )
 
 // --- OD: rating.chgk.info "tournament-tours" layout ---------------------------
@@ -80,8 +81,8 @@ func BuildODSheet(f *excelize.File, schemeJSON, stateJSON string, ratingByNumber
 		if tourIdx > 0 {
 			row++ // blank separator row between tour blocks
 		}
-		// Header row, repeated per tour block.
-		header := []interface{}{"Team ID", "Название", "Город", "Тур"}
+		s := dopestrings.Default
+		header := []interface{}{"Team ID", s.Export.Od.Name(), s.Export.Od.City(), s.Export.Od.Tour()}
 		for i := 1; i <= maxTour; i++ {
 			header = append(header, i)
 		}
@@ -113,7 +114,7 @@ func BuildODSheet(f *excelize.File, schemeJSON, stateJSON string, ratingByNumber
 	return nil
 }
 
-// --- KSI: "Подробно" + "Итог" sheets ------------------------------------------
+// --- KSI: the detailed and results sheets -------------------------------------
 
 type ksiExportState struct {
 	Participants []games.KSIParticipant `json:"participants"`
@@ -128,9 +129,9 @@ type ksiExportState struct {
 	stickersMode bool
 }
 
-// BuildKSISheets writes the KSI "Подробно" (detailed) and "Итог" (results)
-// sheets. schemeJSON is consulted only to detect the "KSI with stickers"
-// variant (its `stickers` config); plain KSI games score exactly as before.
+// BuildKSISheets writes the KSI detailed and results sheets. schemeJSON is
+// consulted only to detect the "KSI with stickers" variant (its `stickers`
+// config); plain KSI games score exactly as before.
 func BuildKSISheets(f *excelize.File, schemeJSON, stateJSON string) error {
 	var state ksiExportState
 	if stateJSON != "" {
@@ -185,14 +186,15 @@ func ksiThemeSticker(state *ksiExportState, theme, player int) (string, bool) {
 }
 
 func buildKSIDetailedSheet(f *excelize.File, state *ksiExportState) error {
-	const sheet = "Подробно"
+	s := dopestrings.Default
+	sheet := s.Export.Sheet.Detailed()
 	f.SetSheetName("Sheet1", sheet)
 	themesCount := len(state.Themes)
 	nv := len(store.QuestionValues)
 
 	// Two header rows: theme labels merged across each 6-column block (5 values +
 	// score), with the value sub-headers beneath.
-	if err := setRow(f, sheet, 1, []interface{}{"Команда", "Σ"}); err != nil {
+	if err := setRow(f, sheet, 1, []interface{}{s.Export.Col.Team(), "Σ"}); err != nil {
 		return err
 	}
 	_ = f.MergeCell(sheet, "A1", "A2")
@@ -201,7 +203,7 @@ func buildKSIDetailedSheet(f *excelize.File, state *ksiExportState) error {
 	for t := 0; t < themesCount; t++ {
 		left, _ := excelize.CoordinatesToCellName(col, 1)
 		right, _ := excelize.CoordinatesToCellName(col+nv, 1)
-		_ = f.SetCellValue(sheet, left, fmt.Sprintf("Т%d", t+1))
+		_ = f.SetCellValue(sheet, left, s.Export.Col.ThemeN(strconv.Itoa(t+1)))
 		_ = f.MergeCell(sheet, left, right)
 		sub := make([]interface{}, 0, nv+1)
 		for _, v := range store.QuestionValues {
@@ -254,7 +256,8 @@ func buildKSIDetailedSheet(f *excelize.File, state *ksiExportState) error {
 }
 
 func buildKSIResultsSheet(f *excelize.File, state *ksiExportState, schemeJSON, stateJSON string) error {
-	sheet := uniqueSheetName(f, "Итог")
+	s := dopestrings.Default
+	sheet := uniqueSheetName(f, s.Export.Sheet.Results())
 	if _, err := f.NewSheet(sheet); err != nil {
 		return err
 	}
@@ -264,7 +267,7 @@ func buildKSIResultsSheet(f *excelize.File, state *ksiExportState, schemeJSON, s
 		resultValues[len(store.QuestionValues)-1-i] = v
 	}
 
-	header := []interface{}{"Место", "Команда", "Σ", "Σ+"}
+	header := []interface{}{s.Export.Col.Place(), s.Export.Col.Team(), "Σ", "Σ+"}
 	for _, v := range resultValues {
 		header = append(header, v)
 	}
@@ -306,19 +309,19 @@ func participantExportName(participants []games.KSIParticipant, i int) string {
 			return n
 		}
 	}
-	return fmt.Sprintf("Команда %d", i+1)
+	return dopestrings.Default.Export.Name.TeamN(strconv.Itoa(i + 1))
 }
 
 // --- EK: one sheet per stage --------------------------------------------------
 
 // BuildEKSheets writes the EK per-stage match sheets plus the leading
-// "Статистика" per-player overview.
+// stats per-player overview.
 func BuildEKSheets(f *excelize.File, stages []store.StageMatches) error {
 	if len(stages) == 0 {
 		return nil
 	}
-	// "Статистика" first (leftmost) so the per-player overview — the most readable
-	// view — opens by default. Skipped when no answers are marked anywhere.
+	// The stats sheet first (leftmost) so the per-player overview — the most
+	// readable view — opens by default. Skipped when no answers are marked anywhere.
 	if err := buildEKStatsSheet(f, stages); err != nil {
 		return err
 	}
@@ -358,6 +361,7 @@ func axis(col, row int) string {
 // theme's value columns so it sits above that player's answers, exactly as the
 // page renders it.
 func writeEKMatchBlock(f *excelize.File, sheet string, startRow int, mv store.MatchView) (int, error) {
+	s := dopestrings.Default
 	nv := len(mv.QuestionValues)
 
 	maxThemes, maxShootout := 0, 0
@@ -385,19 +389,19 @@ func writeEKMatchBlock(f *excelize.File, sheet string, startRow int, mv store.Ma
 	}
 	row++
 
-	// Theme label header row: "Т1".."Тn" then "П1".. ; each label spans its value
-	// columns, with a "Σ" score-column header after it.
+	// Theme label header row: one label per theme block, then one per shootout
+	// block; each label spans its value columns, with a "Σ" score-column header after it.
 	labelRow := row
-	labels := []interface{}{"Команда", "Σ", "М"}
+	labels := []interface{}{s.Export.Col.Team(), "Σ", s.Export.Col.MatchPlace()}
 	for t := 0; t < maxThemes; t++ {
-		labels = append(labels, fmt.Sprintf("Т%d", t+1))
+		labels = append(labels, s.Export.Col.ThemeN(strconv.Itoa(t+1)))
 		for i := 1; i < nv; i++ {
 			labels = append(labels, nil)
 		}
 		labels = append(labels, "Σ")
 	}
 	for t := 0; t < maxShootout; t++ {
-		labels = append(labels, fmt.Sprintf("П%d", t+1))
+		labels = append(labels, s.Export.Col.ShootoutN(strconv.Itoa(t+1)))
 		for i := 1; i < nv; i++ {
 			labels = append(labels, nil)
 		}
@@ -493,14 +497,14 @@ func writeEKMatchBlock(f *excelize.File, sheet string, startRow int, mv store.Ma
 	return row - startRow, nil
 }
 
-// ekPlayerStat is one row of the "Статистика" sheet: a player's aggregate across
+// ekPlayerStat is one row of the stats sheet: a player's aggregate across
 // every match they played, mirroring computeEKPlayerStats in static/match-table.js.
 type ekPlayerStat struct {
 	Player  string
 	Team    string
 	Sum     int     // Σ: signed point total
 	Plus    int     // Σ+: points from correct answers only
-	Battles int     // Бои: distinct matches the player appeared in
+	Battles int     // distinct matches the player appeared in
 	Right   [5]int  // correct counts by value index (0→10 … 4→50)
 	Wrong   [5]int  // wrong counts by value index
 	Share   float64 // 0..1 share among the team's positive contributors
@@ -556,8 +560,8 @@ func computeEKPlayerStats(stages []store.StageMatches) []ekPlayerStat {
 			}
 		}
 	}
-	// "% от команды": a positive player's share among their team's positive
-	// contributors, so a team's positive players' shares sum to 100%.
+	// The team-share column: a positive player's share among their team's
+	// positive contributors, so a team's positive players' shares sum to 100%.
 	teamPositive := map[string]int{}
 	rows := make([]ekPlayerStat, 0, len(order))
 	for _, key := range order {
@@ -584,26 +588,28 @@ func computeEKPlayerStats(stages []store.StageMatches) []ekPlayerStat {
 	return rows
 }
 
-// buildEKStatsSheet writes the per-player "Статистика" sheet. Columns mirror the
-// on-screen table: Игрок, Команда, Σ, Σ+, Бои, 50…10 (correct counts), −50…−10
-// (wrong counts), % от команды. No sheet is added when nothing is scored yet.
+// buildEKStatsSheet writes the per-player stats sheet. Columns mirror the
+// on-screen table: player, team, Σ, Σ+, battles, 50…10 (correct counts),
+// −50…−10 (wrong counts), team share. No sheet is added when nothing is
+// scored yet.
 func buildEKStatsSheet(f *excelize.File, stages []store.StageMatches) error {
 	rows := computeEKPlayerStats(stages)
 	if len(rows) == 0 {
 		return nil
 	}
-	sheet := uniqueSheetName(f, "Статистика")
+	s := dopestrings.Default
+	sheet := uniqueSheetName(f, s.Export.Sheet.Stats())
 	if _, err := f.NewSheet(sheet); err != nil {
 		return err
 	}
-	header := []interface{}{"Игрок", "Команда", "Σ", "Σ+", "Бои"}
+	header := []interface{}{s.Export.Col.Player(), s.Export.Col.Team(), "Σ", "Σ+", s.Export.Col.Battles()}
 	for _, v := range []int{50, 40, 30, 20, 10} {
 		header = append(header, v)
 	}
 	for _, v := range []int{50, 40, 30, 20, 10} {
 		header = append(header, fmt.Sprintf("-%d", v))
 	}
-	header = append(header, "% от команды")
+	header = append(header, s.Export.Col.TeamShare())
 	if err := setRow(f, sheet, 1, header); err != nil {
 		return err
 	}
@@ -674,7 +680,7 @@ func sanitizeSheetName(name string) string {
 	replacer := strings.NewReplacer("/", "-", "\\", "-", "?", "", "*", "", "[", "(", "]", ")", ":", "-")
 	name = strings.TrimSpace(replacer.Replace(name))
 	if name == "" {
-		name = "Лист"
+		name = dopestrings.Default.Export.Sheet.Fallback()
 	}
 	if r := []rune(name); len(r) > 31 {
 		name = string(r[:31])
@@ -705,10 +711,10 @@ func uniqueSheetName(f *excelize.File, base string) string {
 	}
 }
 
-// --- Мультиигры: the sheet and the ranked table -------------------------------
+// --- Multi: the sheet and the ranked table ------------------------------------
 
-// BuildMultiSheets writes the Мультиигры «Подробно» sheet — a column block per
-// мини-игра with its subtotal — and the «Итог» table beside it.
+// BuildMultiSheets writes the Multi detailed sheet — a column block per
+// minigame with its subtotal — and the results table beside it.
 func BuildMultiSheets(f *excelize.File, schemeJSON, stateJSON string) error {
 	var scheme games.MultiScheme
 	if strings.TrimSpace(schemeJSON) != "" {
@@ -729,16 +735,17 @@ func BuildMultiSheets(f *excelize.File, schemeJSON, stateJSON string) error {
 }
 
 func buildMultiDetailedSheet(f *excelize.File, scheme *games.MultiScheme, state *games.MultiState) error {
-	const sheet = "Подробно"
+	s := dopestrings.Default
+	sheet := s.Export.Sheet.Detailed()
 	f.SetSheetName("Sheet1", sheet)
-	if err := setRow(f, sheet, 1, []interface{}{"Команда", "Итог"}); err != nil {
+	if err := setRow(f, sheet, 1, []interface{}{s.Export.Col.Team(), s.Export.Col.Total()}); err != nil {
 		return err
 	}
 	_ = f.MergeCell(sheet, "A1", "A2")
 	_ = f.MergeCell(sheet, "B1", "B2")
 
-	// Two header rows, as КСИ's: the мини-игра merged across its block, and
-	// beneath it each задание's номинал — the top of its declared domain.
+	// Two header rows, as KSI's: the minigame merged across its block, and
+	// beneath it each column's maximum — the top of its declared domain.
 	col := 3
 	for _, game := range scheme.Minigames {
 		left, _ := excelize.CoordinatesToCellName(col, 1)
@@ -773,8 +780,8 @@ func buildMultiDetailedSheet(f *excelize.File, scheme *games.MultiScheme, state 
 			total += subtotal
 			cells = append(cells, subtotal)
 		}
-		// The Σ under a block is what the cells add to; what the мини-игра was
-		// worth is «Итог», which the «Итог» sheet carries per мини-игра.
+		// The Σ under a block is what the cells add to; what the minigame was
+		// worth is the total, which the results sheet carries per minigame.
 		cells[1] = total
 		if err := setRow(f, sheet, row, cells); err != nil {
 			return err
@@ -797,19 +804,20 @@ func multiExportCell(state *games.MultiState, game, participant, column int) int
 
 func buildMultiResultsSheet(f *excelize.File, scheme *games.MultiScheme, schemeJSON, stateJSON string,
 	state *games.MultiState) error {
-	sheet := uniqueSheetName(f, "Итог")
+	s := dopestrings.Default
+	sheet := uniqueSheetName(f, s.Export.Sheet.Results())
 	if _, err := f.NewSheet(sheet); err != nil {
 		return err
 	}
 	signed := games.MultiSigned(scheme.Minigames)
-	header := []interface{}{"Место", "Команда", "Итог"}
+	header := []interface{}{s.Export.Col.Place(), s.Export.Col.Team(), s.Export.Col.Total()}
 	if signed {
 		header = append(header, "Σ+")
 	}
 	for _, game := range scheme.Minigames {
 		name := game.Name
 		if game.Normalized {
-			name += " (из 100)"
+			name = s.Export.Multi.NormalizedName(name)
 		}
 		header = append(header, name)
 	}
@@ -847,10 +855,11 @@ func buildMultiResultsSheet(f *excelize.File, scheme *games.MultiScheme, schemeJ
 	return nil
 }
 
-// --- Тройка: one sheet per stage ----------------------------------------------
+// --- Troika: one sheet per stage ----------------------------------------------
 
-// BuildTroikaSheets writes a sheet per stage: every бой of it as two blocks of
-// three chair rows across темы of three вопросы, and the Σ each side took.
+// BuildTroikaSheets writes a sheet per stage: each of its matches as two
+// blocks of three chair rows across themes of three questions, and the Σ each
+// side took.
 func BuildTroikaSheets(f *excelize.File, stages []store.StageMatches) error {
 	if len(stages) == 0 {
 		return nil
@@ -873,13 +882,14 @@ func BuildTroikaSheets(f *excelize.File, stages []store.StageMatches) error {
 			if err != nil {
 				return err
 			}
-			row = next + 1 // a blank line between бои
+			row = next + 1 // a blank line between matches
 		}
 	}
 	return nil
 }
 
 func writeTroikaMatch(f *excelize.File, sheet string, row int, match store.MatchView) (int, error) {
+	s := dopestrings.Default
 	var state games.TroikaState
 	if len(match.State) > 0 {
 		if err := json.Unmarshal(match.State, &state); err != nil {
@@ -891,10 +901,10 @@ func writeTroikaMatch(f *excelize.File, sheet string, row int, match store.Match
 	}
 	row++
 
-	header := []interface{}{"Команда", "Кресло"}
+	header := []interface{}{s.Export.Col.Team(), s.Export.Col.Chair()}
 	for t := range state.Values {
 		for q := 1; q <= games.TroikaThemeQuestions; q++ {
-			header = append(header, fmt.Sprintf("Т%d.%d", t+1, q))
+			header = append(header, s.Export.Col.ThemeQuestion(strconv.Itoa(t+1), strconv.Itoa(q)))
 		}
 	}
 	header = append(header, "Σ")
@@ -936,7 +946,7 @@ func troikaSideName(match store.MatchView, side int) string {
 			return name
 		}
 	}
-	return fmt.Sprintf("Команда %d", side+1)
+	return dopestrings.Default.Export.Name.TeamN(strconv.Itoa(side + 1))
 }
 
 func troikaMarkText(state games.TroikaState, side, theme, question, chair int) interface{} {

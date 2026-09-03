@@ -3,21 +3,24 @@ package structure
 import (
 	"fmt"
 	"sort"
+	"strconv"
+
+	dopestrings "dope/i18nstrings"
 )
 
 // The elimination rounds, for both Kinds.
 //
 // An elimination is defined by how many Losses end a Participant's tournament —
-// one, or two — and by nothing else. A Loss is failing to be among a бой's
-// winning places, so a бой of four where two proceed eliminates two, exactly as
-// a бой of two where one proceeds eliminates one. That is why ЭК's bracket of
-// four-seat бои and КИнСБФ's pods of two-seat бои are the same Kind at
-// different sizes (CONTEXT.md, «Loss»).
+// one, or two — and by nothing else. A Loss is failing to be among a Match's
+// winning places, so a Match of four where two proceed eliminates two, exactly
+// as a Match of two where one proceeds eliminates one. That is why EK's bracket
+// of four-seat Matches and KINSBF's pods of two-seat Matches are the same Kind
+// at different sizes (CONTEXT.md, "Loss").
 
 // elimRound is one round of an elimination: how many Participants enter it,
-// how many seats a бой has, and how many бои there are. A round whose бои seat
-// every survivor is terminal — it decides the block's final places and nothing
-// follows it.
+// how many seats a Match has, and how many Matches there are. A round whose
+// Matches seat every survivor is terminal — it decides the block's final
+// places and nothing follows it.
 type elimRound struct {
 	entering int
 	size     int
@@ -34,13 +37,13 @@ func (r elimRound) survivors(winning int) int {
 }
 
 // planElimRounds lays out the rounds one bracket plays: each round splits its
-// entrants into бои of the size that round asks for, the winning places go on,
-// and the block ends when a single бой seats everyone left. sizeFor is asked
-// per round so a scheme can play its 1/4 three to a table and its 1/2 four, the
-// way ЭК does.
+// entrants into Matches of the size that round asks for, the winning places go
+// on, and the block ends when a single Match seats everyone left. sizeFor is
+// asked per round so a scheme can play its 1/4 three to a table and its 1/2
+// four, the way EK does.
 //
-// maxRounds stops the bracket short of a final. ТПШ plays two: three бои of four
-// each send two on, and those six are the winners — nobody plays again.
+// maxRounds stops the bracket short of a final. TPSH plays two: three Matches
+// of four each send two on, and those six are the winners — nobody plays again.
 func planElimRounds(entrants, winning, maxRounds int, sizeFor func(round, entering int) int) ([]elimRound, error) {
 	if winning < 1 {
 		return nil, fmt.Errorf("winning_places должен быть хотя бы 1")
@@ -81,7 +84,7 @@ func planElimRounds(entrants, winning, maxRounds int, sizeFor func(round, enteri
 // elimRoundNames are the dotted-override keys a round answers to: `r{N}` by
 // its number in the block, always. A halving bracket's last two rounds are
 // the semifinal and the final by arithmetic, so those go by their names too,
-// and by them first (the stage code); a round of twelve four-seat бои is
+// and by them first (the stage code); a round of twelve four-seat Matches is
 // nobody's 1/16, so a scheme that wants that name writes it as a title.
 func elimRoundNames(r elimRound, index int, winning int) []string {
 	ordinal := fmt.Sprintf("r%d", index+1)
@@ -97,19 +100,20 @@ func elimRoundNames(r elimRound, index int, winning int) []string {
 }
 
 func elimRoundTitle(r elimRound, index int, winning int) string {
+	s := dopestrings.Default
 	if r.size == 2 && winning == 1 {
 		return seRoundTitle(r.entering)
 	}
 	if r.terminal {
-		return "Финал"
+		return s.Structure.Titles.Final()
 	}
-	return fmt.Sprintf("Раунд %d", index+1)
+	return s.Structure.Titles.Round(strconv.Itoa(index + 1))
 }
 
-// snakeChunks splits 1..n into `bouts` бои of equal size the way a group draw
-// deals baskets: the first бой takes the best and the worst, so no бой is a
-// group of death. It is the same shape СтудЧР's playoff sheets use — ranks
-// 1, 12, 13, 24 meeting in the first бой of 24.
+// snakeChunks splits 1..n into `bouts` Matches of equal size the way a group
+// draw deals baskets: the first Match takes the best and the worst, so no
+// Match is a group of death. It is the same shape StudChR's playoff sheets
+// use — ranks 1, 12, 13, 24 meeting in the first Match of 24.
 func snakeChunks(n, bouts int) [][]int {
 	size := n / bouts
 	out := make([][]int, bouts)
@@ -127,8 +131,8 @@ func snakeChunks(n, bouts int) [][]int {
 	return out
 }
 
-// straightChunks splits 1..n into consecutive бои — the bracket template, where
-// a round's бой takes the previous round's бои in order.
+// straightChunks splits 1..n into consecutive Matches — the bracket template,
+// where a round's Match takes the previous round's Matches in order.
 func straightChunks(n, bouts int) [][]int {
 	size := n / bouts
 	out := make([][]int, bouts)
@@ -142,8 +146,8 @@ func straightChunks(n, bouts int) [][]int {
 
 // elimDraw seats a re-ranked round. A halving bracket keeps the classic
 // bracket order, which holds the top seeds apart until the late rounds; any
-// other shape uses the snake, which is what a multi-seat бой wants and what
-// the СтудЧР sheets do.
+// other shape uses the snake, which is what a multi-seat Match wants and what
+// the StudChR sheets do.
 func elimDraw(remaining, bouts, size, winning int) [][]int {
 	if size == 2 && winning == 1 {
 		order := BracketOrder(remaining)
@@ -158,31 +162,31 @@ func elimDraw(remaining, bouts, size, winning int) [][]int {
 
 // --- the bracket with lives ----------------------------------------------
 
-// deSource is where one seat of a planned бой comes from: an entrant rank
-// before anything has been played, or a place in an earlier бой.
+// deSource is where one seat of a planned Match comes from: an entrant rank
+// before anything has been played, or a place in an earlier Match.
 type deSource struct {
-	entrant int // 1-based entrant rank, 0 when the seat comes from a бой
+	entrant int // 1-based entrant rank, 0 when the seat comes from a Match
 	bout    int // index into dePlan.bouts
 	place   int
 	rank    int // 1-based rank among all survivors, for a re-ranked round
 }
 
-// deBout is one planned бой: the Losses its seats carry into it, and where
+// deBout is one planned Match: the Losses its seats carry into it, and where
 // those seats come from.
 type deBout struct {
 	losses  int
 	sources []deSource
 }
 
-// dePlan is a whole elimination with lives: бои in play order, grouped into
-// rounds, and who is left when it stops.
+// dePlan is a whole elimination with lives: Matches in play order, grouped
+// into rounds, and who is left when it stops.
 type dePlan struct {
 	lives, winning int
 	bouts          []deBout
 	rounds         [][]int
 	// alive[r] is everyone still in at round r, in the rank order the reseed
 	// hands out — including the brackets that sit the round out, because they
-	// still hold their ranks and the бои of that round are numbered around them.
+	// still hold their ranks and the Matches of that round are numbered around them.
 	alive      [][]deSource
 	aliveBands [][][2]int // per round, per alive entry: (Losses now, Losses before)
 	survivor   []deSource // block qualifiers, best first
@@ -190,17 +194,17 @@ type dePlan struct {
 
 // planLives lays out an elimination where `lives` Losses end a tournament.
 //
-// Every round, each bracket (0 Losses, 1 Loss, …) plays its own бои; the
+// Every round, each bracket (0 Losses, 1 Loss, …) plays its own Matches; the
 // winning places stay where they are and everyone else moves down a bracket or
 // out. A bracket that is already down to its winning places stops playing — it
 // has produced its finalists and waits. The block ends when the survivors fit
-// the block's proceeding count, or when a single бой seats all of them: that
-// бой is the final and decides their places.
+// the block's proceeding count, or when a single Match seats all of them: that
+// Match is the final and decides their places.
 //
 // Ordering is the model's one real convention: survivors rank by bracket first
 // and place second, and a Participant just dropped from the bracket above
 // ranks ahead of one that survived the bracket below. Both are what «fewer
-// losses first» means, and both are what the СтудЧР sheets do.
+// losses first» means, and both are what the StudChR sheets do.
 func planLives(entrants, lives, winning, proceeding int, sizeFor func(round, members int) int) (*dePlan, error) {
 	return planLivesDrawn(entrants, lives, winning, proceeding, sizeFor, snakeChunks)
 }
@@ -319,10 +323,10 @@ func planLivesDrawn(entrants, lives, winning, proceeding int, sizeFor func(round
 	}
 }
 
-// bracketBoutSize picks the largest бой a bracket divides into evenly, capped
-// by what the scheme asked for. СИ's playoff needs this: the same round seats
-// its upper bracket of six three at a table and its lower bracket of twelve
-// four at a table.
+// bracketBoutSize picks the largest Match a bracket divides into evenly, and
+// caps it by what the scheme asked for. SI's playoff needs this: the same
+// round seats its upper bracket of six three at a table and its lower bracket
+// of twelve four at a table.
 func bracketBoutSize(members, winning, want int) (int, error) {
 	if want < 2 {
 		want = 2
@@ -355,11 +359,11 @@ func rankSources(sources []deSource) []deSource {
 // eliminationStandings ranks an elimination's Participants the one way both
 // Kinds do: by Losses. Alive first (fewer Losses first), then the eliminated,
 // the later round of elimination first and, within it, fewer total Losses
-// first — a placement бой (the bronze) adds a Loss to the one it places lower.
+// first — a placement Match (the bronze) adds a Loss to the one it places lower.
 // Equal keys share a place; a survivor has no place until the Block is played
-// out, since the бои that decide it are still ahead. MatchOutcome.Round says
-// when a Loss fell; a бой seats any number, and a shared (fractional) place is
-// no Loss.
+// out, since the Matches that decide it are still ahead. MatchOutcome.Round
+// says when a Loss fell; a Match seats any number, and a shared (fractional)
+// place is no Loss.
 func eliminationStandings(lives, winningPlaces int, results []MatchOutcome) []RankedEntry {
 	if lives < 1 {
 		lives = 1

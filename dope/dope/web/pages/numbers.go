@@ -10,6 +10,7 @@ import (
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	ui "dope/dope/web/ui"
+	dopestrings "dope/i18nstrings"
 	"errors"
 	"fmt"
 	"net/http"
@@ -39,9 +40,10 @@ type hostFestNumbersData struct {
 // and data-has-numbers here); the DSL page carries no script.
 func hostNumbersDoc(data hostFestNumbersData) *ui.Doc {
 	ref := data.Fest.Ref()
+	s := dopestrings.Default
 	page := []ui.Item{
-		ui.Title(data.Fest.Title + " · номера команд"), ui.PagePublic, ui.Classicscripts("dist/numbers.js"),
-		ui.Publictopbar(Trail(FestCrumbs(ref, data.Fest.Title), "Номера команд")),
+		ui.Title(s.Numbers.Page.Title(data.Fest.Title)), ui.PagePublic, ui.Classicscripts("dist/numbers.js"),
+		ui.Publictopbar(Trail(FestCrumbs(ref, data.Fest.Title), s.Numbers.Page.Crumb())),
 	}
 	if data.Error != "" {
 		page = append(page, ui.Empty(ui.Text(data.Error)))
@@ -50,7 +52,7 @@ func hostNumbersDoc(data hostFestNumbersData) *ui.Doc {
 		page = append(page, ui.Note(ui.Text(data.Notice)))
 	}
 	if len(data.Rows) == 0 {
-		page = append(page, ui.Empty(ui.Text("Сначала загрузите команды на странице феста.")))
+		page = append(page, ui.Empty(ui.Text(s.Numbers.Page.Empty())))
 		return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
 	}
 
@@ -63,14 +65,14 @@ func hostNumbersDoc(data hostFestNumbersData) *ui.Doc {
 	actions := []ui.Item{ui.Wrap()}
 	if data.HasNumbers {
 		actions = append(actions, ui.Button(ui.Submit(), ui.ID("numbers-clear-btn"),
-			ui.Formaction(base+"/clear"), ui.Formnovalidate(), ui.Text("Очистить")))
+			ui.Formaction(base+"/clear"), ui.Formnovalidate(), ui.Text(s.Numbers.Action.Clear())))
 	}
 	actions = append(actions,
-		ui.Button(ui.Submit(), ui.ID("numbers-auto-btn"), ui.Formaction(base+"/auto"), ui.Formnovalidate(), ui.Text("Проставить автоматически")),
-		ui.Button(ui.ID("numbers-import-btn"), ui.Text("Импорт номеров")),
+		ui.Button(ui.Submit(), ui.ID("numbers-auto-btn"), ui.Formaction(base+"/auto"), ui.Formnovalidate(), ui.Text(s.Numbers.Action.Auto())),
+		ui.Button(ui.ID("numbers-import-btn"), ui.Text(s.Numbers.Action.Import())),
 	)
 	if data.HasNumbers {
-		actions = append(actions, ui.Button(ui.ID("numbers-edit-btn"), ui.Text("Замена номера")))
+		actions = append(actions, ui.Button(ui.ID("numbers-edit-btn"), ui.Text(s.Numbers.Action.Replace())))
 	}
 
 	rows := make([]ui.Item, 0, len(data.Rows))
@@ -88,12 +90,11 @@ func hostNumbersDoc(data hostFestNumbersData) *ui.Doc {
 	form := []ui.Item{ui.ID("numbers-form"), ui.Action(base), ui.Data("has-numbers", hasNum)}
 	form = append(form,
 		ui.Row(actions...),
-		ui.Note(ui.ID("numbers-help"), ui.Hidden(), ui.Text(
-			"Меняйте номер прямо в строке. Когда сохраните, все упоминания старого номера в ОД заменятся на новый — удобно, чтобы перевести команду на резервный номер (101 и т. п.), не задевая остальных.")),
+		ui.Note(ui.ID("numbers-help"), ui.Hidden(), ui.Text(s.Numbers.Help.Edit())),
 		ui.Numberlist(rows...),
 		ui.Row(ui.ID("numbers-save"), ui.Hidden(),
-			ui.Button(ui.Submit(), ui.Text("Сохранить")),
-			ui.Button(ui.ID("numbers-cancel-btn"), ui.Text("Отмена")),
+			ui.Button(ui.Submit(), ui.Text(s.Numbers.Action.Save())),
+			ui.Button(ui.ID("numbers-cancel-btn"), ui.Text(s.Numbers.Action.Cancel())),
 		),
 	)
 	page = append(page, ui.Numbersform(form...))
@@ -237,7 +238,7 @@ func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if len(teams) == 0 {
-		s.RenderHostFestNumbers(w, r, festID, "Сначала загрузите команды.", "", nil)
+		s.RenderHostFestNumbers(w, r, festID, dopestrings.Default.Numbers.Page.NoTeams(), "", nil)
 		return
 	}
 	validIDs := make(map[int64]bool, len(teams))
@@ -257,17 +258,17 @@ func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 		hasTeam := row.TeamID != 0
 		if !hasTeam {
 			if hasNum {
-				s.RenderHostFestNumbers(w, r, festID, fmt.Sprintf("Строка %d: укажите команду или удалите номер.", row.Index), "", override)
+				s.RenderHostFestNumbers(w, r, festID, dopestrings.Default.Numbers.Error.RowNoTeam(strconv.Itoa(row.Index)), "", override)
 				return
 			}
 			continue
 		}
 		if !validIDs[row.TeamID] {
-			s.RenderHostFestNumbers(w, r, festID, fmt.Sprintf("Строка %d: команда не из этого феста.", row.Index), "", override)
+			s.RenderHostFestNumbers(w, r, festID, dopestrings.Default.Numbers.Error.RowForeignTeam(strconv.Itoa(row.Index)), "", override)
 			return
 		}
 		if prev, ok := teamToRow[row.TeamID]; ok {
-			s.RenderHostFestNumbers(w, r, festID, fmt.Sprintf("Команда выбрана сразу в строках %d и %d.", prev, row.Index), "", override)
+			s.RenderHostFestNumbers(w, r, festID, dopestrings.Default.Numbers.Error.TeamTwoRows(strconv.Itoa(prev), strconv.Itoa(row.Index)), "", override)
 			return
 		}
 		teamToRow[row.TeamID] = row.Index
@@ -277,11 +278,11 @@ func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 		}
 		n, err := strconv.Atoi(numTxt)
 		if err != nil || n <= 0 || n > numbering.MaxNumber {
-			s.RenderHostFestNumbers(w, r, festID, fmt.Sprintf("Строка %d: номер должен быть целым от 1 до %d.", row.Index, numbering.MaxNumber), "", override)
+			s.RenderHostFestNumbers(w, r, festID, dopestrings.Default.Numbers.Error.RowRange(strconv.Itoa(row.Index), strconv.Itoa(numbering.MaxNumber)), "", override)
 			return
 		}
 		if prev, ok := numberToRow[n]; ok {
-			s.RenderHostFestNumbers(w, r, festID, fmt.Sprintf("Номер %d указан сразу в строках %d и %d.", n, prev, row.Index), "", override)
+			s.RenderHostFestNumbers(w, r, festID, dopestrings.Default.Numbers.Error.NumberTwoRows(strconv.Itoa(n), strconv.Itoa(prev), strconv.Itoa(row.Index)), "", override)
 			return
 		}
 		numberToRow[n] = row.Index
@@ -292,9 +293,9 @@ func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 		s.RenderHostFestNumbers(w, r, festID, err.Error(), "", override)
 		return
 	}
-	notice := "Номера сохранены."
+	notice := dopestrings.Default.Numbers.Notice.Saved()
 	if len(assignments) < len(teams) {
-		notice = fmt.Sprintf("Сохранено. Осталось без номера: %d.", len(teams)-len(assignments))
+		notice = dopestrings.Default.Numbers.Notice.SavedPartial(strconv.Itoa(len(teams) - len(assignments)))
 	}
 	s.RenderHostFestNumbers(w, r, festID, "", notice, nil)
 }
@@ -310,7 +311,7 @@ func (s *Server) HandleHostAutoFestNumbers(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if len(teams) == 0 {
-		s.RenderHostFestNumbers(w, r, festID, "Сначала загрузите команды.", "", nil)
+		s.RenderHostFestNumbers(w, r, festID, dopestrings.Default.Numbers.Page.NoTeams(), "", nil)
 		return
 	}
 	sorted := append([]numbering.Team(nil), teams...)
@@ -331,7 +332,7 @@ func (s *Server) HandleHostAutoFestNumbers(w http.ResponseWriter, r *http.Reques
 		s.RenderHostFestNumbers(w, r, festID, err.Error(), "", nil)
 		return
 	}
-	s.RenderHostFestNumbers(w, r, festID, "", "Номера проставлены автоматически по алфавиту.", nil)
+	s.RenderHostFestNumbers(w, r, festID, "", dopestrings.Default.Numbers.Notice.Auto(), nil)
 }
 
 func (s *Server) HandleHostClearFestNumbers(w http.ResponseWriter, r *http.Request, festID int64) {
@@ -343,7 +344,7 @@ func (s *Server) HandleHostClearFestNumbers(w http.ResponseWriter, r *http.Reque
 		s.RenderHostFestNumbers(w, r, festID, err.Error(), "", nil)
 		return
 	}
-	s.RenderHostFestNumbers(w, r, festID, "", "Номера очищены.", nil)
+	s.RenderHostFestNumbers(w, r, festID, "", dopestrings.Default.Numbers.Notice.Cleared(), nil)
 }
 
 // purgeFestSoftDeletedTeams hard-deletes any soft-deleted fest_teams rows for

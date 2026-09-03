@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+
+	xystrings "xy/i18nstrings"
 )
 
 // A Reaction is a timeline event whose payload is the (encrypted) emoji and
 // whose reply_to_id is the comment it sits on — null when it sits on the card
-// itself. It renders as chips, never as a лента row, and un-reacting deletes
+// itself. It renders as chips, never as a timeline row, and un-reacting deletes
 // the row outright: the one deviation from the everything-is-a-tombstone rule
 // (ADR-0002), because a toggled-off reaction is not content anyone could miss.
 
@@ -37,14 +39,14 @@ func (s *server) handleAddReaction(w http.ResponseWriter, r *http.Request) {
 select card_id from timeline_events
 where id = ? and type = 'comment' and deleted_at is null`, *req.TargetID).Scan(&owner)
 		if errors.Is(err, sql.ErrNoRows) {
-			httpError(w, http.StatusNotFound, "комментарий не найден")
+			httpError(w, http.StatusNotFound, xystrings.Default.Server.Comment.NotFound())
 			return
 		}
 		if handleErr(w, err) {
 			return
 		}
 		if !owner.Valid || owner.Int64 != cardID {
-			httpError(w, http.StatusBadRequest, "комментарий с другой карточки")
+			httpError(w, http.StatusBadRequest, xystrings.Default.Server.Comment.Foreign())
 			return
 		}
 	}
@@ -76,14 +78,14 @@ func (s *server) handleDeleteReaction(w http.ResponseWriter, r *http.Request) {
 	err := s.db.QueryRowContext(r.Context(),
 		`select author_user_id from timeline_events where id = ? and type = 'reaction'`, id).Scan(&author)
 	if errors.Is(err, sql.ErrNoRows) {
-		httpError(w, http.StatusNotFound, "реакция не найдена")
+		httpError(w, http.StatusNotFound, xystrings.Default.Server.Reaction.NotFound())
 		return
 	}
 	if handleErr(w, err) {
 		return
 	}
 	if !author.Valid || author.Int64 != u.UserID {
-		httpError(w, http.StatusForbidden, "убрать может только автор")
+		httpError(w, http.StatusForbidden, xystrings.Default.Server.Reaction.DeleteOwnerOnly())
 		return
 	}
 	err = s.withWriteTx(r.Context(), "delete-reaction", func(ctx context.Context, tx *sql.Tx) error {

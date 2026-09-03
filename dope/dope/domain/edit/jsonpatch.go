@@ -7,11 +7,12 @@ import (
 	"strconv"
 
 	"dope/dope/domain/protocol"
+	dopestrings "dope/i18nstrings"
 )
 
 // ErrRatingRosterImmutable is returned when a patch tries to mutate a roster
 // that is owned by a rating.chgk.info import.
-var ErrRatingRosterImmutable = errors.New("команды загружаются из rating.chgk.info; чтобы изменить список, переимпортируйте участников")
+var ErrRatingRosterImmutable = errors.New(dopestrings.Default.Edit.Roster.Immutable())
 
 // JSONPathSegment is one resolved step of a JSON-patch path: either an object
 // key or an array index.

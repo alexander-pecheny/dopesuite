@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	xystrings "xy/i18nstrings"
 	"xy/internal/chgk/fsource"
 	"xy/internal/chgk/stats"
 	"xy/internal/chgk/tg"
@@ -18,6 +19,7 @@ import (
 // question by question, with its comments in the linked discussion group.
 func composeTelegram(args []string) error {
 	fs := flag.NewFlagSet("compose telegram", flag.ContinueOnError)
+	s := xystrings.Default
 	channel := fs.String("tgchannel", "", "channel to post to: an id, a t.me link or @username")
 	chat := fs.String("tgchat", "", "the discussion group linked to that channel")
 	dryRun := fs.Bool("dry_run", false, "print what would be posted, post nothing")
@@ -27,7 +29,7 @@ func composeTelegram(args []string) error {
 	addPolls := fs.Bool("add_polls", false, "post a poll after each question, tour and the package")
 	pollConfig := fs.String("poll_config", "", "poll config TOML (required with --add_polls)")
 	token := fs.String("token", "", "bot token; defaults to $CHGKSUITE_TG_TOKEN")
-	stopIfNoStats := fs.Bool("stop_if_no_stats", setting("stop_if_no_stats") == "true", "refuse to publish a package whose questions carry no «Взятия:»")
+	stopIfNoStats := fs.Bool("stop_if_no_stats", setting("stop_if_no_stats") == "true", s.Chgkcli.Telegram.StopIfNoStatsFlag())
 	language := languageFlag(fs)
 	config := configFlag(fs)
 	if err := fs.Parse(args); err != nil {
@@ -119,11 +121,11 @@ func composeTelegram(args []string) error {
 		return err
 	}
 	req.Target = target
-	reportNote("публикую в %s, комментарии в %s", target.ChannelID, target.ChatID)
+	reportNote("%s", s.Chgkcli.Telegram.Posting(target.ChannelID, target.ChatID))
 	start := time.Now()
 	if err := tg.Export(ctx, poster, req); err != nil {
 		return err
 	}
-	reportDone("готово за %s", time.Since(start).Round(time.Second))
+	reportDone("%s", s.Chgkcli.Telegram.Done(time.Since(start).Round(time.Second).String()))
 	return nil
 }

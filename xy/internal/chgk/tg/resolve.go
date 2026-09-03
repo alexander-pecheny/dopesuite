@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	xystrings "xy/i18nstrings"
 )
 
 // Where a package goes is given as a numeric id, a t.me link or an @username.
@@ -65,6 +67,7 @@ type Prompter func(format string, args ...any)
 // ResolveTarget turns the two references into the ids the export posts to,
 // asking for help only for a username it has not seen before.
 func ResolveTarget(ctx context.Context, bot *Bot, channelRef, chatRef string, say Prompter) (Target, error) {
+	s := xystrings.Default
 	var t Target
 	channelID, channelName, err := parseTargetRef(channelRef)
 	if err != nil {
@@ -88,7 +91,7 @@ func ResolveTarget(ctx context.Context, bot *Bot, channelRef, chatRef string, sa
 		}
 	}
 	if channelID == 0 {
-		say("Перешлите боту любое сообщение из канала «%s».", channelName)
+		say("%s", s.Tg.Resolve.Forward(channelName))
 		if channelID, err = bot.WaitForForwardedChannel(ctx, 5*time.Minute); err != nil {
 			return t, fmt.Errorf("channel %s: %w", channelName, err)
 		}
@@ -96,11 +99,11 @@ func ResolveTarget(ctx context.Context, bot *Bot, channelRef, chatRef string, sa
 	}
 	for chatID == 0 || chatID == channelID {
 		if chatID == channelID {
-			say("Это тот же канал, а нужна группа обсуждения — напишите в неё, не в канал.")
+			say("%s", s.Tg.Resolve.SameChannel())
 		}
 		code := shortCode()
-		say("Напишите в группе обсуждения «%s» сообщение: %s", chatName, code)
-		say("Бот должен быть в группе и быть администратором, иначе он не увидит.")
+		say("%s", s.Tg.Resolve.GroupCode(chatName, code))
+		say("%s", s.Tg.Resolve.GroupCodeHint())
 		if chatID, err = bot.WaitForChatMessage(ctx, code, 5*time.Minute); err != nil {
 			return t, fmt.Errorf("chat %s: %w", chatName, err)
 		}
@@ -120,13 +123,14 @@ func ResolveTarget(ctx context.Context, bot *Bot, channelRef, chatRef string, sa
 // introduce is chgksuite's authenticate_user: before asking the person to do
 // things in Telegram, make sure the bot can hear them at all.
 func introduce(ctx context.Context, bot *Bot, say Prompter) error {
+	s := xystrings.Default
 	code := shortCode()
-	say("Отправьте боту в личном чате код: %s", code)
+	say("%s", s.Tg.Resolve.PrivateCode(code))
 	chatID, err := bot.WaitForCode(ctx, code, 5*time.Minute)
 	if err != nil {
 		return fmt.Errorf("authentication: %w", err)
 	}
-	bot.Client().Send(ctx, chatID, "✅ Готово, продолжаем.")
+	bot.Client().Send(ctx, chatID, s.Tg.Resolve.Done())
 	return nil
 }
 

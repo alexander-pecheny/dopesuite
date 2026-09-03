@@ -11,14 +11,15 @@ import (
 
 func init() { Register(si{}) }
 
-// si is личная своя игра: three or four players at a table over six, eight or
-// twelve themes, each theme five questions at 10..50.
+// si is individual jeopardy: three or four players at a table over six, eight
+// or twelve themes, each theme five questions at 10..50.
 //
-// Its Match state is the same blob ЭК uses — «участник × тема × пять ответов»
-// is the shape of both — which is why a бой of личная СИ is played on the very
-// screen ЭК is played on, with no renderer of its own. Личная СИ differs from
-// ЭК in one thing only: nobody enters places by hand. A бой ranks by сумма, and
-// equal sums share a place, because место is what the group pays очки for.
+// Its Match state is the same blob EK uses — participant × theme × five
+// answers is the shape of both — which is why a match of individual SI is
+// played on the very screen EK is played on, with no renderer of its own.
+// Individual SI differs from EK in one thing only: nobody enters places by
+// hand. A match ranks by total, and equal totals share a place, because a
+// place is what the group pays points for.
 type si struct{}
 
 func (si) Code() string { return "si" }
@@ -31,20 +32,20 @@ func (si) TeamBlob() bool { return true }
 
 func (si) Started(state json.RawMessage) bool { return false }
 
-// Metrics: сумма, сумма положительных ответов, перестрелка и счётчики взятых
-// по номиналам — СИ ранжирует по ним, когда суммы равны.
+// Metrics: the total, the sum of positive answers, the shootout and the
+// per-nominal taken counts — SI ranks on them when totals tie.
 func (si) Metrics(json.RawMessage) []string {
 	return []string{"total", "plus", "shootoutTotal", "taken50", "taken40", "taken30", "taken20", "taken10"}
 }
 
-// EmptyState is the empty blob: a бой's seats come from its Slots and its marks
-// arrive as edits, so a fresh бой's document holds nothing at all.
+// EmptyState is the empty blob: a match's seats come from its Slots and its
+// marks arrive as edits, so a fresh match's document holds nothing at all.
 func (si) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 	return json.RawMessage("{}"), nil
 }
 
-// Score ranks the blob-projected state by сумма — nobody enters places by hand
-// in личная СИ — and reports the same metrics ЭК's scorer reads.
+// Score ranks the blob-projected state by total — nobody enters places by
+// hand in individual SI — and reports the same metrics EK's scorer reads.
 func (si) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error) {
 	var state store.MatchState
 	if err := json.Unmarshal(stateJSON, &state); err != nil {
@@ -67,12 +68,12 @@ func (si) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error)
 	return outcomes, nil
 }
 
-// placesBySum ranks a бой by сумма, then by перестрелка where sums tie — extra
-// material played exactly to break the tie, held outside Σ. A tie the
-// перестрелка did not touch stays shared: two players who both took 110 finish
-// 1.5, not 1 and 2, because личная СИ pays очки by place and a split here would
-// invent a difference the бой did not produce. Σ+ and the per-value counts are
-// still emitted; the group table sorts on them.
+// placesBySum ranks a match by total, then by shootout where totals tie —
+// extra material played exactly to break the tie, held outside Σ. A tie the
+// shootout did not touch stays shared: two players who both took 110 finish
+// 1.5, not 1 and 2, because individual SI pays points by place and a split
+// here would invent a difference the match did not produce. Σ+ and the
+// per-value counts are still emitted; the group table sorts on them.
 func placesBySum(players []store.ParticipantView) []float64 {
 	order := make([]int, len(players))
 	for i := range order {

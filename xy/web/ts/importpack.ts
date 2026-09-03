@@ -1,4 +1,4 @@
-// importpack.ts — «Импорт»: the board's one file picker. What the file IS is
+// importpack.ts — "Import": the board's one file picker. What the file IS is
 // ours to work out, not the reader's to declare — an xy archive goes to
 // bundleimportpanel.ts to be appended to this board (ADR-0013), and everything
 // else is a package of questions for a new list.
@@ -25,6 +25,7 @@ import { modal } from "./modal.js";
 import { sniffBundle } from "./bundleimport.js";
 import type { BundleImport } from "./bundleimportpanel.js";
 import type { Board, BoardPanel } from "./panels.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const { jpost, byId, errMsg } = xyApp;
 const { keyBetween } = xyRank;
@@ -44,7 +45,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
   const importPickModal = modal("importPick");
 
   // The picker recognises the file as soon as it is chosen, so the reader sees
-  // what will happen before pressing anything — and «разбить по турам», which
+  // what will happen before pressing anything — and "split by tours", which
   // means nothing to an archive, goes away when one is picked.
   let sniffed: Awaited<ReturnType<typeof sniffBundle>> = null;
 
@@ -66,12 +67,12 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     sniffed = null;
     showKind("");
     if (!file) return;
-    showKind("Читаю файл…");
+    showKind(S.import.pack.readingFile());
     void sniffBundle(file).then((b) => {
       sniffed = b;
       showKind(b
-        ? `Архив xy — доска «${b.bundle.board.name}», выгружена ${b.bundle.exported_at.slice(0, 10)}. Списки из неё добавятся к этой доске.`
-        : "Пакет вопросов — станет новым списком на этой доске.");
+        ? S.import.pack.sniffedArchive(b.bundle.board.name, b.bundle.exported_at.slice(0, 10))
+        : S.import.pack.sniffedPackage());
     });
   });
 
@@ -91,7 +92,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
   });
 
   async function importFile(file: File, splitTours: boolean): Promise<void> {
-    if (!xySync.requireOnline("Импорт доступен только онлайн.")) return;
+    if (!xySync.requireOnline(S.import.pack.offline())) return;
     board.setStatus("saving");
     try {
       const fd = new FormData();
@@ -105,7 +106,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
       else await commitImport(pkg.name, pkg.source, pkg.images, splitTours);
     } catch (err) {
       board.setStatus("error");
-      alert("Не удалось разобрать файл: " + errMsg(err));
+      alert(S.import.pack.parseFailed(errMsg(err)));
     }
   }
 
@@ -148,7 +149,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
   function openImportVerify(pkg: ImportPkg, splitTours: boolean): void {
     importModal.close();
     importCtx = { name: pkg.name, images: pkg.images || [], imgMap: importImgMap(pkg.images), splitTours };
-    byId("importTitle").textContent = "Проверка импорта: " + pkg.name;
+    byId("importTitle").textContent = S.import.pack.verifyTitle(pkg.name);
     const src = byId<HTMLTextAreaElement>("importSource");
     src.value = pkg.source;
     importModal.open({ onClose: hideImportVerify });
@@ -170,7 +171,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     body.replaceChildren();
     cards.forEach((card, i) => body.append(renderPreviewCard(card, numbers[i], ctx.imgMap, false)));
     const qs = cards.filter((c) => c.kind === "question").length;
-    byId("importCount").textContent = `${cards.length} блоков, ${qs} вопросов`;
+    byId("importCount").textContent = S.import.pack.blockCount(String(cards.length), String(qs));
   }
 
   function hideImportVerify(): void {
@@ -209,10 +210,10 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     for (const c of cards) {
       const sec = xyChgk.parseBlocks(c.desc).find((b) => b.type === "section");
       if (sec) {
-        cur = { title: sec.text.split("\n")[0].trim() || `Тур ${tours.length + 1}`, cards: [] };
+        cur = { title: sec.text.split("\n")[0].trim() || S.import.pack.tourFallback(String(tours.length + 1)), cards: [] };
         tours.push(cur);
       } else if (!cur) {
-        cur = { title: "Преамбула", cards: [] };
+        cur = { title: S.import.pack.preamble(), cards: [] };
         tours.push(cur);
       }
       cur.cards.push(c);
@@ -231,12 +232,12 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
   // POST to /api/cards/{id}/attachments, cannot use. Going direct keeps every id real.
   async function commitImport(name: string, source: string, images: ImportImage[] | undefined, splitTours: boolean): Promise<void> {
     const cards = importCards(source);
-    if (!cards.length) { alert("В файле не найдено вопросов."); return; }
-    if (!xySync.requireOnline("Импорт доступен только онлайн.")) return;
+    if (!cards.length) { alert(S.import.pack.noQuestions()); return; }
+    if (!xySync.requireOnline(S.import.pack.offline())) return;
     const tours = splitTours ? splitCardsByTours(cards) : [];
     // The server refuses a group of one, and a group of one is pointless anyway.
     const grouped = tours.length >= 2;
-    const title = (prompt(grouped ? "Название группы списков:" : "Название нового списка:", name || "Импорт") || "").trim();
+    const title = (prompt(grouped ? S.import.pack.promptGroup() : S.import.pack.promptList(), name || S.import.pack.defaultTitle()) || "").trim();
     if (!title) return;
     const parts = grouped ? tours : [{ title, cards }];
 
@@ -282,19 +283,19 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
       } else board.render();
       board.setStatus("saved");
       let msg = grouped
-        ? `Импортировано: ${parts.length} списков (по турам), ${done} карточек, ${attached} изображений.`
-        : `Импортировано: ${done} карточек, ${attached} изображений.`;
-      if (splitTours && !grouped) msg += "\nТуры («## …») в файле не найдены — создан один список.";
+        ? S.import.pack.doneGrouped(String(parts.length), String(done), String(attached))
+        : S.import.pack.doneSingle(String(done), String(attached));
+      if (splitTours && !grouped) msg += S.import.pack.noToursNote();
       // A dropped image is invisible otherwise: the card keeps its (img …) directive
       // but the picture is gone, and the parse response is not kept to retry from.
-      if (failed.length) msg += `\n\nНе удалось загрузить изображения (${failed.length}): ${failed.join(", ")}`;
+      if (failed.length) msg += S.import.pack.imagesFailed(String(failed.length)) + failed.join(", ");
       alert(msg);
     } catch (err) {
       // The lists and the cards created so far are already on the server — show them
       // rather than leaving the board looking as if nothing happened.
       board.render();
       board.setStatus("error");
-      alert(`Импорт прерван после ${done} карточек: ${errMsg(err)}\n\nЧастично импортированный список остался на доске — удалите его перед повторным импортом.`);
+      alert(S.import.pack.aborted(String(done), errMsg(err)));
     }
   }
 
@@ -324,8 +325,8 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
 
   return {
     id: "import", menu: "board", icon: "file-up",
-    label: "Импорт…",
-    title: "Импортировать пакет вопросов (.4s, .docx) или архив xy (.zip)",
+    label: S.import.pack.label(),
+    title: S.import.pack.menuTitle(),
     open: openImportPick,
   };
 }

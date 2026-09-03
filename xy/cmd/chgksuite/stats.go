@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	xystrings "xy/i18nstrings"
 	"xy/internal/chgk/fsource"
 	"xy/internal/chgk/stats"
 )
@@ -17,7 +18,7 @@ import (
 func composeAddStats(args []string) error {
 	fs := flag.NewFlagSet("compose add_stats", flag.ContinueOnError)
 	ratingIDs := fs.String("rating_ids", "", "rating.chgk.info tournament id, comma-separated for sync+async")
-	customCSV := fs.String("custom_csv", "", "a csv/xlsx результаты table in rating.chgk.info's format, comma-separated")
+	customCSV := fs.String("custom_csv", "", xystrings.Default.Chgkcli.AddStats.CustomCsvFlag())
 	csvArgs := fs.String("custom_csv_args", "{}", `csv reader options as JSON, e.g. {"delimiter": ";"}`)
 	questionRange := fs.String("question_range", "", `range of question numbers to include, e.g. "25-36"`)
 	threshold := fs.Int("team_naming_threshold", overrideInt("team_naming_threshold", 2), "name the teams when this few took the question")

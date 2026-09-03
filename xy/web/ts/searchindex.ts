@@ -5,7 +5,7 @@
 // with the key).
 //
 // Written only by code that already holds a data key: the board page as it loads
-// and edits (putCards), and прогрев (prewarm), which fills the Mirror for every
+// and edits (putCards), and prewarm, which fills the Mirror for every
 // board this device can unlock so search coverage stops depending on which
 // boards happened to be opened. The searching itself is pure and lives below.
 //
@@ -22,6 +22,7 @@ import type { Haystack, Snippet } from "./find.js";
 import { xyStore } from "./store.js";
 import type { BoardSnapshot } from "./store.js";
 import { xySync } from "./sync.js";
+import S from "./i18nstrings_ru_gen.js";
 
 export interface IndexList { id: number; title: string }
 export interface IndexCard { id: number; list: number; kind: string; desc: string; alias: string }
@@ -48,8 +49,8 @@ export interface Hit {
   comment?: number;
 }
 
-// A question and the discussion about it are two different answers to «где это
-// было?», so they are counted and listed apart. Each half caps independently —
+// A question and the discussion about it are two different answers to "where
+// was it?", so they are counted and listed apart. Each half caps independently —
 // a needle that names a hundred questions must not bury the one comment.
 export interface SearchResult {
   questions: Hit[];
@@ -63,7 +64,7 @@ const empty = (name = ""): BoardIndex => ({ name, lists: [], cards: [], comments
 // ---- storage ----
 
 // Every write here is a read-modify-write of one record, and two of them run
-// concurrently on board open (the render path writes the cards while прогрев or
+// concurrently on board open (the render path writes the cards while prewarm or
 // refreshComments awaits the network). Serialised per board, the later one reads
 // what the earlier one wrote instead of clobbering it.
 const writing = new Map<number, Promise<unknown>>();
@@ -84,8 +85,9 @@ export async function all(): Promise<Array<{ board: number; index: BoardIndex }>
   return rows.map((r) => ({ board: r.board, index: r.index as BoardIndex }));
 }
 
-// forget drops a board's index. Called wherever its key is dropped — «Забыть
-// пароль доски» and board deletion — because an index that outlived the key
+// forget drops a board's index. Called wherever its key is dropped — the
+// forget-board-password action and board deletion — because an index that
+// outlived the key
 // would keep every question readable with none.
 export async function forget(boardId: number): Promise<void> {
   await xyStore.deleteIndex(boardId).catch(() => undefined);
@@ -93,7 +95,7 @@ export async function forget(boardId: number): Promise<void> {
 
 // putCards writes the half the board page owns: the names, the lists and the
 // cards, in board order. The comments are left as they were — the board page
-// never holds them all, and прогрев is what fills them.
+// never holds them all, and prewarm is what fills them.
 export async function putCards(
   boardId: number,
   name: string,
@@ -188,7 +190,7 @@ export async function indexBoard(boardId: number, dk: DataKey, name: string, sna
   return cards.length;
 }
 
-// ---- прогрев ----
+// ---- prewarm ----
 
 export interface BoardRef { id: number; name: string }
 
@@ -233,8 +235,8 @@ export interface TitleableCard { kind: string; desc: string; alias: string | nul
 
 // cardTitle is what a row calls the card: its Alias when it has one, else the
 // same preview the board shows. `mode` is the reader's card-title preference
-// where the caller knows it; an index built by прогрев does not.
-export function cardTitle(c: TitleableCard, mode: string | null = null, blank = "(пусто)"): string {
+// where the caller knows it; an index built by prewarm does not.
+export function cardTitle(c: TitleableCard, mode: string | null = null, blank = S.search.blank()): string {
   const alias = (c.alias || "").trim();
   if (alias) return alias;
   return xyChgk.previewText(c.kind, c.desc, mode).trim().split("\n")[0] || blank;

@@ -9,7 +9,7 @@ import (
 // The Timeline (CONTEXT.md): comments, description edits and the metadata
 // trail, on a Card or on a Test Session, with Reactions riding along. One
 // writer knows every kind's columns; one scanner reads a row into the DTO the
-// лента renders. The unread rule over the same rows is unread.go's.
+// timeline renders. The unread rule over the same rows is unread.go's.
 
 // timelineEvent is one entry as written. CardID 0 is a note on the Session
 // itself; a nil AuthorID is an imported entry with no author on record; an
@@ -103,7 +103,7 @@ func scanTimelineEvent(rows *sql.Rows) (timelineEventDTO, error) {
 	return e, nil
 }
 
-// readTimeline runs a query over timelineColumns into the лента's rows.
+// readTimeline runs a query over timelineColumns into the timeline's rows.
 func (s *server) readTimeline(ctx context.Context, where string, args ...any) ([]timelineEventDTO, error) {
 	rows, err := s.db.QueryContext(ctx, timelineColumns+where, args...)
 	if err != nil {

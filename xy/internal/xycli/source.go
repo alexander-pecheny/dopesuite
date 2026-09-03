@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	xystrings "xy/i18nstrings"
+
 	"xy/internal/chgk/fsource"
 )
 
@@ -360,7 +362,9 @@ func rawQuestion(desc string) string {
 	return ""
 }
 
-func versionLabel(i int) string { return "версия " + strconv.Itoa(i+1) + ": " }
+func versionLabel(i int) string {
+	return xystrings.Default.Cli.Versions.FieldLabel(strconv.Itoa(i + 1))
+}
 
 // mergeField prints one value when every version agrees and one labelled value
 // per version when they do not. A field a version simply lacks counts as
@@ -463,7 +467,7 @@ func ComposeVersions(desc string) string {
 	questions := make([]string, len(bodies))
 	for i, b := range bodies {
 		fs[i] = splitFields(b)
-		questions[i] = "Версия " + strconv.Itoa(i+1) + ": " + strings.TrimSpace(rawQuestion(b))
+		questions[i] = xystrings.Default.Cli.Versions.QuestionLabel(strconv.Itoa(i+1)) + strings.TrimSpace(rawQuestion(b))
 	}
 	pick := func(get func(fields) *string) []*string {
 		out := make([]*string, len(fs))

@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	xystrings "xy/i18nstrings"
 )
 
 // The Timeline: a Card's comments, the word-level record of its description
@@ -28,10 +30,11 @@ type commentRow struct {
 }
 
 func commentList(a *app, args []string) error {
-	fs := a.flags("comment ls", "xy-cli comment ls <id карточки> --board B\nПо умолчанию — только комментарии.")
+	s := xystrings.Default
+	fs := a.flags("comment ls", s.Cli.Comment.LsUsage())
 	board := a.boardFlag(fs)
-	all := fs.Bool("all", false, "вся лента: правки описания и метаданные тоже")
-	cardID, err := a.oneID(fs, args, "карточка")
+	all := fs.Bool("all", false, s.Cli.Comment.AllFlag())
+	cardID, err := a.oneID(fs, args, s.Cli.Shared.WhatCard())
 	if err != nil {
 		return err
 	}
@@ -60,7 +63,7 @@ func commentList(a *app, args []string) error {
 			row.Author = names[*e.AuthorID]
 		}
 		if e.Deleted {
-			row.Text = "(удалён)"
+			row.Text = s.Cli.Comment.Deleted()
 		} else if plain, err := b.DK.DecField(e.PayloadEnc); err == nil {
 			row.Text, _ = decodeCommentPayload(plain)
 		}
@@ -85,12 +88,13 @@ func commentList(a *app, args []string) error {
 }
 
 func commentAdd(a *app, args []string) error {
-	fs := a.flags("comment add", "xy-cli comment add <id карточки> --board B [--reply-to N] < текст\n@логин в тексте становится упоминанием (ADR-0009).")
+	s := xystrings.Default
+	fs := a.flags("comment add", s.Cli.Comment.AddUsage())
 	board := a.boardFlag(fs)
-	text := fs.String("text", "", "текст комментария (иначе stdin)")
-	file := fs.String("file", "", "файл с текстом (иначе stdin)")
-	replyTo := fs.Int64("reply-to", 0, "id комментария, на который отвечаем")
-	cardID, err := a.oneID(fs, args, "карточка")
+	text := fs.String("text", "", s.Cli.Comment.AddTextFlag())
+	file := fs.String("file", "", s.Cli.Comment.AddFileFlag())
+	replyTo := fs.Int64("reply-to", 0, s.Cli.Comment.ReplyToFlag())
+	cardID, err := a.oneID(fs, args, s.Cli.Shared.WhatCard())
 	if err != nil {
 		return err
 	}
@@ -126,20 +130,21 @@ func commentAdd(a *app, args []string) error {
 		return err
 	}
 	return a.emit(map[string]any{"card_id": cardID, "mentions": mentions}, func() {
-		a.printf("комментарий добавлен к карточке %d", cardID)
+		a.printf("%s", s.Cli.Comment.Added(itoa(cardID)))
 		if len(mentions) > 0 {
-			a.printf(" (упомянуто: %d)", len(mentions))
+			a.printf("%s", s.Cli.Comment.Mentioned(itoa(int64(len(mentions)))))
 		}
 		a.printf("\n")
 	})
 }
 
 func commentEdit(a *app, args []string) error {
-	fs := a.flags("comment edit", "xy-cli comment edit <id комментария> --board B < новый текст")
+	s := xystrings.Default
+	fs := a.flags("comment edit", s.Cli.Comment.EditUsage())
 	board := a.boardFlag(fs)
-	text := fs.String("text", "", "новый текст (иначе stdin)")
-	file := fs.String("file", "", "файл с текстом (иначе stdin)")
-	commentID, err := a.oneID(fs, args, "комментарий")
+	text := fs.String("text", "", s.Cli.Comment.EditTextFlag())
+	file := fs.String("file", "", s.Cli.Comment.EditFileFlag())
+	commentID, err := a.oneID(fs, args, s.Cli.Shared.WhatComment())
 	if err != nil {
 		return err
 	}
@@ -168,13 +173,14 @@ func commentEdit(a *app, args []string) error {
 	}); err != nil {
 		return err
 	}
-	return a.emit(map[string]any{"id": commentID}, func() { a.printf("комментарий %d изменён\n", commentID) })
+	return a.emit(map[string]any{"id": commentID}, func() { a.printf("%s", s.Cli.Comment.Edited(itoa(commentID))) })
 }
 
 func commentRemove(a *app, args []string) error {
-	fs := a.flags("comment rm", "xy-cli comment rm <id комментария> --board B")
+	s := xystrings.Default
+	fs := a.flags("comment rm", s.Cli.Comment.RmUsage())
 	board := a.boardFlag(fs)
-	commentID, err := a.oneID(fs, args, "комментарий")
+	commentID, err := a.oneID(fs, args, s.Cli.Shared.WhatComment())
 	if err != nil {
 		return err
 	}
@@ -188,12 +194,12 @@ func commentRemove(a *app, args []string) error {
 	if err := c.DeleteComment(commentID); err != nil {
 		return err
 	}
-	return a.emit(map[string]any{"id": commentID}, func() { a.printf("комментарий %d удалён\n", commentID) })
+	return a.emit(map[string]any{"id": commentID}, func() { a.printf("%s", s.Cli.Comment.Removed(itoa(commentID))) })
 }
 
 var mentionRe = regexp.MustCompile(`@([A-Za-z0-9_.-]+)`)
 
-// resolveMentions turns the @логины of a comment into the member ids the server
+// resolveMentions turns the @usernames of a comment into the member ids the server
 // notifies by: the text is only the rendering, the ids are the routing truth
 // (ADR-0009). A name that is on no member is dropped, not guessed at.
 func resolveMentions(text string, members []MemberDTO) []int64 {

@@ -1,4 +1,4 @@
-// The Экран (projector board) arithmetic, DOM-free: host settings, the
+// The screen (projector board) arithmetic, DOM-free: host settings, the
 // city→flag lookup and the column/zoom layout. od.ts measures one probe column
 // and applies the plan; everything that can be wrong about the packing lives here.
 
@@ -100,8 +100,8 @@ export function flagEmoji(cc: string): string {
   return cc.toUpperCase().replace(/[A-Z]/g, (c) => String.fromCodePoint(0x1f1e6 + c.charCodeAt(0) - 65));
 }
 
-// teamFlag is the leading emoji when «Показывать страну» is on: a globe for a
-// «сборная» (rating.chgk gives national/all-star sides that town), otherwise
+// teamFlag is the leading emoji when "Show country" is on: a globe for a
+// national side (rating.chgk gives national/all-star sides that town), otherwise
 // the flag of the city's country, or "" when the city is unknown.
 export function teamFlag(name: string, city: string): string {
   if (`${name} ${city}`.toLowerCase().includes("сборн")) return "🌍";

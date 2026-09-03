@@ -30,6 +30,7 @@ import { importBundle, createBoardFromBundle } from "./bundleimport.js";
 import { attachmentPath, BUNDLE_FORMAT } from "./bundle.js";
 import type { Bundle, BundleAttachment, BundleCard, BundleCardLabel, BundleEvent, BundleLabel, BundleList } from "./bundle.js";
 import type { AttachmentBytes } from "./bundleapply.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const { fetchJSON } = xyApp;
 const { keyBetween } = xyRank;
@@ -101,7 +102,7 @@ function setStatus(s: string): void {
   statusNode.dataset.state = s;
 }
 // logPrefix labels every progress line when several boards are imported in a row
-// ("Доска 2/7 «Синхрон»: …"); empty for a single board.
+// ("Board 2/7 «Synchron»: …"); empty for a single board.
 let logPrefix = "";
 function log(line: string): void {
   msg.textContent = line ? logPrefix + line : "";
@@ -197,7 +198,7 @@ async function fetchHistory(token: string, boardId: string): Promise<History> {
     if (!Array.isArray(page) || page.length === 0) break;
     collectActions(page, history);
     seen += page.length;
-    log(`Загружаю историю из Trello… (${seen} событий)`);
+    log(S.import.run.history(String(seen)));
     if (page.length < 1000) break;
     before = page[page.length - 1].id;
   }
@@ -254,7 +255,7 @@ function trelloBundle(source: ImportSource, name: string): { bundle: Bundle; byt
   for (const l of openLists) {
     const test = isTestList(l.name);
     listRank = keyBetween(listRank, null);
-    const row = { id: id(), type: test ? "test" : "normal", title: l.name || "(без названия)", rank: listRank, group_id: null };
+    const row = { id: id(), type: test ? "test" : "normal", title: l.name || S.import.trello.listFallback(), rank: listRank, group_id: null };
     lists.push(row);
     listOf.set(l.id, { id: row.id, test });
   }
@@ -262,7 +263,7 @@ function trelloBundle(source: ImportSource, name: string): { bundle: Bundle; byt
   const labels: BundleLabel[] = [];
   const labelOf = new Map<string, number>();
   for (const l of (board.labels || [])) {
-    const row = { id: id(), name: l.name || `метка (${l.color || "без цвета"})`, color: colorHex(l.color) };
+    const row = { id: id(), name: l.name || S.import.trello.labelFallback(l.color || S.import.trello.labelNoColor()), color: colorHex(l.color) };
     labels.push(row);
     labelOf.set(l.id, row.id);
   }
@@ -298,12 +299,12 @@ function trelloBundle(source: ImportSource, name: string): { bundle: Bundle; byt
         // title, and the testers stay as a comment rather than being parsed.
         cards.push({
           id: cardId, list_id: info.id, kind: "test", rank: cardRank,
-          description: JSON.stringify({ datetime: (c.name || "").trim() || "тест-сессия", players: [] }),
+          description: JSON.stringify({ datetime: (c.name || "").trim() || S.import.trello.testSessionFallback(), players: [] }),
           handout_meta: null, alias: null, created_at: null,
         });
         const testers = (c.desc || "").trim();
         if (testers) {
-          event({ card_id: cardId, session_id: null, type: "comment", created_at: new Date().toISOString(), payload: "Тестировали: " + testers });
+          event({ card_id: cardId, session_id: null, type: "comment", created_at: new Date().toISOString(), payload: S.import.trello.testersLead(testers) });
         }
       } else {
         const { desc, alias, kind } = xyTrello.mapCard(c.name, c.desc);
@@ -333,7 +334,7 @@ function trelloBundle(source: ImportSource, name: string): { bundle: Bundle; byt
       }
       for (const att of (c.attachments || [])) {
         if (!att.isUpload) continue;
-        const nm = att.name || att.fileName || "файл";
+        const nm = att.name || att.fileName || S.import.trello.attachmentFallback();
         if (att.bytes && att.bytes > 50 * 1024 * 1024) continue; // the server would refuse it anyway
         const aid = id();
         attachments.push({
@@ -350,7 +351,7 @@ function trelloBundle(source: ImportSource, name: string): { bundle: Bundle; byt
   const bundle: Bundle = {
     format: BUNDLE_FORMAT,
     exported_at: new Date().toISOString(),
-    board: { name: name || board.name || "Импорт из Trello" },
+    board: { name: name || board.name || S.import.trello.boardNameDefault() },
     members: [], lists, groups: [], cards, labels, sessions: [],
     card_labels: cardLabels, card_sessions: [], tour_testers: [],
     timeline, attachments,
@@ -383,18 +384,18 @@ async function runImportAll(token: string, pass: string): Promise<void> {
     const b = boards[i];
     logPrefix = `[${i + 1}/${boards.length}] «${b.name || b.id}» — `;
     try {
-      log("загружаю из Trello…");
+      log(S.import.run.importing());
       const source = await trelloSource(token, b.id);
       const { summary } = await runImport(source, b.name || "", pass);
       report.push(`«${b.name || b.id}» — ${summary}`);
     } catch (err) {
-      report.push(`«${b.name || b.id}» — НЕ ИМПОРТИРОВАНА: ${errMsg(err)}`);
+      report.push(S.import.run.reportFailed(b.name || b.id, errMsg(err)));
     }
   }
   logPrefix = "";
   const failed = report.filter((r) => r.includes("НЕ ИМПОРТИРОВАНА")).length;
   setStatus(failed ? "error" : "saved");
-  log(`Импортировано досок: ${boards.length - failed} из ${boards.length}.\n\n` + report.join("\n\n"));
+  log(S.import.run.reportSummary(String(boards.length - failed), String(boards.length)) + report.join("\n\n"));
 }
 
 
@@ -431,10 +432,10 @@ async function loadBoards(token: string): Promise<void> {
     sel.appendChild(o);
   };
   if (!openBoards.length) {
-    option("", "(нет открытых досок)");
+    option("", S.import.picker.noBoards());
     return;
   }
-  if (openBoards.length > 1) option(ALL_BOARDS, `★ Все доски (${openBoards.length})`);
+  if (openBoards.length > 1) option(ALL_BOARDS, S.import.picker.allBoards(String(openBoards.length)));
   for (const b of openBoards) option(b.id, b.name || b.id);
 }
 
@@ -483,13 +484,13 @@ form.addEventListener("submit", async (e) => {
       setTimeout(() => { window.location.href = `/board/${id}`; }, 1500);
     } catch (err) {
       setStatus("error");
-      log("Импорт прерван: " + errMsg(err));
+      log(S.import.run.aborted(errMsg(err)));
       importBtn.disabled = false;
     }
     return;
   }
 
-  // "Все доски": import each open board in turn, under the one passphrase. A
+  // "All boards": import each open board in turn, under the one passphrase. A
   // board that fails is reported and the rest still go through.
   if (token && pickerActive && boardSel.value === ALL_BOARDS) {
     importBtn.disabled = true;
@@ -501,22 +502,22 @@ form.addEventListener("submit", async (e) => {
   let source: ImportSource;
   try {
     if (token && pickerActive && boardSel.value) {
-      log("Загружаю доску из Trello…");
+      log(S.import.run.loading());
       source = await trelloSource(token, boardSel.value);
     } else if (file) {
       const board = JSON.parse(await file.text()) as TrelloBoard;
       if (!board || !Array.isArray(board.lists)) {
-        log("Это не похоже на экспорт доски Trello (нет массива lists).");
+        log(S.import.run.notTrelloExport());
         return;
       }
       source = fileSource(board);
     } else {
-      log("Подключите Trello и выберите доску — или выберите JSON-файл ниже.");
+      log(S.import.run.needSource());
       return;
     }
   } catch (err) {
     setStatus("error");
-    log("Не удалось загрузить доску из Trello: " + errMsg(err));
+    log(S.import.run.loadFailed(errMsg(err)));
     return;
   }
 
@@ -526,7 +527,7 @@ form.addEventListener("submit", async (e) => {
     setTimeout(() => { window.location.href = `/board/${id}`; }, 1500);
   } catch (err) {
     setStatus("error");
-    log("Импорт прерван: " + errMsg(err));
+    log(S.import.run.aborted(errMsg(err)));
     importBtn.disabled = false;
   }
 });
@@ -544,12 +545,12 @@ form.addEventListener("submit", async (e) => {
   const tokenInput = byId<HTMLInputElement>("trelloTokenInput");
   const confirmToken = async (): Promise<void> => {
     const tok = tokenInput.value.trim();
-    if (!tok) { log("Вставьте токен из Trello."); return; }
+    if (!tok) { log(S.import.run.tokenRequired()); return; }
     try {
       await useToken(tok);
     } catch (e) {
       sessionStorage.removeItem("trelloToken");
-      log("Токен не подошёл. Проверьте и вставьте снова.");
+      log(S.import.run.tokenRejected());
     }
   };
   byId("trelloTokenBtn").addEventListener("click", confirmToken);

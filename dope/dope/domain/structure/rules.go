@@ -9,11 +9,11 @@ import (
 
 // Scoring rules (ADR-0008) at the two grains a tournament actually uses.
 //
-// A bout rule is evaluated once per Participant per бой, over that бой's
-// outcome, and its value is SUMMED into the standings — «4 − место» accumulates
-// across the group. A standings rule is evaluated once, over those sums, and
-// its value REPLACES anything of that name — «очки / (2 × бои)» cannot be
-// summed, because a share of a share is not a share.
+// A bout rule is evaluated once per Participant per Match, over that Match's
+// outcome, and its value is SUMMED into the standings — "4 − place"
+// accumulates across the group. A standings rule is evaluated once, over
+// those sums, and its value REPLACES anything of that name — "points /
+// (2 × Matches)" cannot be summed, because a share of a share is not a share.
 //
 // The two are not interchangeable even for linear rules, which is why both
 // exist and why a scheme says which it means.
@@ -117,9 +117,9 @@ func (r *compiledRules) names() []string {
 	return out
 }
 
-// boutScope is what a bout rule can see: its own seat, the бой around it, and
-// the other seats — indexed in seat order as opp1_, opp2_… plus the opp_,
-// opp_max_ and opp_min_ aggregates, so «взято − пропущено» reads the same at
+// boutScope is what a bout rule can see: its own seat, the Match around it,
+// and the other seats — indexed in seat order as opp1_, opp2_… plus the opp_,
+// opp_max_ and opp_min_ aggregates, so "taken − conceded" reads the same at
 // two seats and at four.
 func boutScope(match MatchOutcome, seat int) expr.Vars {
 	mine := match.Slots[seat]
@@ -170,7 +170,7 @@ func boutScope(match MatchOutcome, seat int) expr.Vars {
 
 // applyBout evaluates the bout rules for one seat and adds each result to that
 // Participant's running metrics. Later rules see earlier ones, so a rule can
-// build on another within the same бой.
+// build on another within the same Match.
 func (r *compiledRules) applyBout(match MatchOutcome, seat int, into map[string]float64) error {
 	if r == nil || len(r.bout) == 0 {
 		return nil

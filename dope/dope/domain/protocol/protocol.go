@@ -27,14 +27,14 @@ import (
 // here, and the compiler rejects the ones nobody measures. A Protocol that
 // starts measuring something new declares it and it is rankable everywhere —
 // no Go change anywhere else (ADR-0008). It takes the match config because a
-// Protocol whose document is configured — Мультиигры, whose мини-игры are
+// Protocol whose document is configured — Multi, whose minigames are
 // named by the scheme — measures a metric per configured part, and those
 // names cannot be a constant list.
 //
 // Params are the DSL keys the Protocol accepts; TeamBlob says its state is
-// the team-keyed blob ЭК edits and replays (matchops/MatchBlob), not an opaque
-// document; Started says a host has entered something, which keeps a бой's
-// seats through a re-seed. No caller decides any of this by game type.
+// the team-keyed blob EK edits and replays (matchops/MatchBlob), not an
+// opaque document; Started says a host has entered something, which keeps a
+// match's seats through a re-seed. No caller decides any of this by game type.
 type Protocol interface {
 	Code() string
 	Params() []Param
@@ -51,13 +51,13 @@ type Seat struct {
 	Number int64
 	Name   string
 	City   string
-	// Declined marks a team that refused to play on — КСИ's «Отказы» tab —
+	// Declined marks a team that refused to play on — KSI's refusals tab —
 	// so a seeding drawn from this game skips it.
 	Declined bool
 }
 
-// Seater is the Protocol of a flat format — one Block, one бой, the whole
-// document on it — declaring who sits at that бой: the Participants its
+// Seater is the Protocol of a flat format — one Block, one match, the whole
+// document on it — declaring who sits at that match: the Participants its
 // document lists, in the order Score returns their outcomes. The Structure
 // seats them from this, so a flat game ranks like every other.
 type Seater interface {
@@ -108,7 +108,7 @@ func Params(code string) []Param {
 }
 
 // Started asks a game's Protocol whether a host has entered anything into a
-// бой; an unknown Protocol counts as started, so nothing of it is touched.
+// match; an unknown Protocol counts as started, so nothing of it is touched.
 func Started(code, state string) bool {
 	p, ok := Get(code)
 	return !ok || p.Started(json.RawMessage(state))
@@ -139,9 +139,10 @@ func Get(code string) (Protocol, bool) {
 	return p, ok
 }
 
-// SeatsPlayers is implemented by a Protocol whose бои field named players —
-// Тройка records which of a team's three sat in which кресло — so each seat
-// wants its roster on the view. A team-blob Protocol already gets one.
+// SeatsPlayers is implemented by a Protocol whose matches field named
+// players — Troika records which of a team's three sat in which chair — so
+// each seat wants its roster on the view. A team-blob Protocol already gets
+// one.
 type SeatsPlayers interface {
 	SeatsPlayers() bool
 }

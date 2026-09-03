@@ -71,7 +71,7 @@ export function autocomplete(
   inp.addEventListener("focus", draw);
 }
 
-// Nobody should have to know that Алматы is Asia/Almaty, so the zone picker
+// Nobody should have to know that Almaty is Asia/Almaty, so the zone picker
 // searches Russian city names as well as IANA ids.
 let townsByZone: Map<string, string[]> | null = null;
 function zoneTowns(): Map<string, string[]> {
@@ -111,7 +111,7 @@ export function zoneChoices(q: string): Choice[] {
   return out;
 }
 
-// A town brings its timezone with it, so picking «Алматы» fills the zone too.
+// A town brings its timezone with it, so picking Almaty fills the zone too.
 export function townChoices(q: string): Choice[] {
   const needle = q.trim().toLowerCase();
   const pool = needle ? TOWNS.filter((c) => c.name.toLowerCase().startsWith(needle)) : TOWNS;

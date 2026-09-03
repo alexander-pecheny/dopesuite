@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"dope/dope/domain/structure"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,7 +19,7 @@ import (
 
 var (
 	ErrReseedStageNotFound = errors.New("reseed stage not found")
-	errReseedNotReady      = errors.New("пересев можно рассчитать после завершения всех исходных боёв")
+	errReseedNotReady      = errors.New(dopestrings.Default.Resolver.Reseed.NotReady())
 )
 
 // ErrReseedNotReady is returned (via reseedNotReadyError) when an explicit
@@ -159,7 +160,7 @@ type resolverStage struct {
 }
 
 // RanksItsOwnStage reports whether a stage's kind computes its own Standings —
-// what lets a view show a Group as a table rather than as a wall of бои.
+// what lets a view show a Group as a table rather than as a wall of Matches.
 func RanksItsOwnStage(kind string) bool { return isRankedKind(kind) }
 
 // isRankedKind reports whether a stage's kind ranks itself live on every
@@ -357,19 +358,19 @@ func ReseedNotReadyMessage(pending []string) string {
 	}
 	switch len(codes) {
 	case 0:
-		return errReseedNotReady.Error()
+		return dopestrings.Default.Resolver.Reseed.NotReady()
 	case 1:
-		return fmt.Sprintf("Бой %s не закончен", codes[0])
+		return dopestrings.Default.Resolver.Reseed.Pending(1, codes[0])
 	default:
-		return fmt.Sprintf("Бои %s не закончены", strings.Join(codes, ", "))
+		return dopestrings.Default.Resolver.Reseed.Pending(len(codes), strings.Join(codes, ", "))
 	}
 }
 
 // recomputeReseedEntriesTx rebuilds a reseed stage's table: the resolver
 // names who advances (the place selectors in `teams`, each with its band) and
-// which бои count (the `sources` stages, else the бой each team advanced
+// which Matches count (the `sources` stages, else the Match each team advanced
 // from), and the reseed Ranker sums, orders and lots them. The table is
-// cleared until every source бой is finished, so downstream reseed slots stay
+// cleared until every source Match is finished, so downstream reseed slots stay
 // unresolved until then.
 func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, config []byte, gameID int64) error {
 	cfg := store.ParseStageConfig(string(config))
@@ -392,7 +393,7 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 	if err != nil {
 		return err
 	}
-	// Жребий lots are derived from the game's fixed random seed, so a tie
+	// The reseed's tie lots are derived from the game's fixed random seed, so a tie
 	// always breaks the same way no matter how many times the reseed is
 	// recomputed — re-finishing an edited source bout can never reshuffle it.
 	seed, err := gameRandomSeed(ctx, tx, gameID)
@@ -422,8 +423,8 @@ func gameRandomSeed(ctx context.Context, q store.Queryer, gameID int64) (string,
 	return fmt.Sprintf("game-%d", gameID), nil
 }
 
-// reseedSourceBouts returns the бои that contribute to a reseed: the `sources`
-// stages' бои when named, else the бой each team advances from.
+// reseedSourceBouts returns the Matches that contribute to a reseed: the `sources`
+// stages' Matches when named, else the Match each team advances from.
 func reseedSourceBouts(ctx context.Context, q store.Queryer, gameID int64, cfg store.StageConfig) ([]Bout, error) {
 	scan := func(rows *sql.Rows) (Bout, error) {
 		var b Bout

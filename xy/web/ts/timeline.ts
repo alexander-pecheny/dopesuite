@@ -1,8 +1,8 @@
-// timeline.ts — the card timeline (лента), lifted out of board.js into a typed
+// timeline.ts — the card timeline, lifted out of board.js into a typed
 // create(deps) factory: event rendering (comments, desc_edit diffs, label +
-// attachment events), the краткий/подробный diff preference, the expanded
-// full-screen лента, one-level reply threads, comment edit/delete/выписка and
-// the выписки overlay. The board injects what it owns (live state, DK, the
+// attachment events), the brief/full diff preference, the expanded
+// full-screen timeline, one-level reply threads, comment edit/delete/excerpt
+// and the excerpts overlay. The board injects what it owns (live state, DK, the
 // outbox `post` verb, popupMenu, plural, attachment access); the card-detail
 // module is reached through the `card` seam (open-card id + comment-link copy),
 // which the orchestrator wires back to the carddetail factory's API.
@@ -20,6 +20,7 @@ import type { DataKey } from "./crypto.js";
 import type { DiffOp } from "./diff.js";
 import type { OpBody, TimelineEvent } from "./store.js";
 import { icon, iconed } from "./icons_gen.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const { fetchJSON, jpost, jpatch, jdelete, el, onCmdEnter, deriveTitle } = xyApp;
 
@@ -40,7 +41,7 @@ export interface CardEvent extends TimelineEvent {
   session_id?: number | null;
 }
 
-// The slice of an attachment the выписки overlay needs (board's attachment
+// The slice of an attachment the excerpts overlay needs (board's attachment
 // DTOs carry more; structural, so they pass through unchanged).
 export interface AttachmentLike {
   id: number;
@@ -65,7 +66,7 @@ export interface MenuItem {
 }
 
 // The slice of the board's live state the timeline reads: cards (for the
-// «карточка создана» line) and the members roster (author names).
+// card-created line) and the members roster (author names).
 export interface TimelineState {
   cards: Array<{ id: number; createdAt: string | null }>;
   me?: AuthMe | null;
@@ -73,12 +74,12 @@ export interface TimelineState {
   // The roster (boardmembers.js writes it; mirrored for offline) — what @ can
   // name and what resolveMentions resolves against.
   members?: MentionMember[];
-  // The reader's own лента default (users.feed_default, edited on /profile),
+  // The reader's own timeline default (users.feed_default, edited on /profile),
   // delivered in the board snapshot so an offline card open obeys it too.
   feedDefault?: string;
 }
 
-// The nodes the лента works on, resolved once by the page (board.ts).
+// The nodes the timeline works on, resolved once by the page (board.ts).
 export interface TimelineUI {
   timeline: HTMLElement;
   cardMessage: HTMLElement;
@@ -107,7 +108,7 @@ export interface TimelineDeps {
   getState(): TimelineState;
   getDK(): DataKey | null;
   // The board's outbox `post` verb (see board.js's mutate wrappers) — comments
-  // are offline-capable, unlike the edit/delete/выписка mutations below.
+  // are offline-capable, unlike the edit/delete/excerpt mutations below.
   post(kind: string, path: string, body: OpBody): Promise<unknown>;
   popupMenu(anchor: HTMLElement, items: MenuItem[]): void;
   plural(n: number, one: string, few: string, many: string): string;
@@ -144,12 +145,12 @@ export interface Timeline {
   load(cardId: number): Promise<void>;
   events(): CardEvent[];
   // The board's loadAttachments hands over the fresh attachment list; the
-  // timeline keeps the выписка-flagged ones and refreshes the counter.
+  // timeline keeps the excerpt-flagged ones and refreshes the counter.
   setAttachments(atts: AttachmentLike[]): void;
-  // Drops a card's narrowing of the лента: opening a card starts from the
+  // Drops a card's narrowing of the timeline: opening a card starts from the
   // reader's own default, never from what the previous card was left on.
   resetFilter(): void;
-  // Which unread watermarks the лента as currently filtered may clear.
+  // Which unread watermarks the timeline as currently filtered may clear.
   readBuckets(): { content: boolean; comments: boolean };
   ensureVisible(type: string): Promise<void>;
   // The composer's pending comment ("" when empty) and the shared write path —
@@ -165,12 +166,12 @@ export interface Timeline {
 // ---- pure decision helpers (exported for tests) ----
 
 // eventVerb words an event kind as a neutral noun phrase — gender-agnostic,
-// since an author's grammatical gender is unknown. The лента and the 🔔 share it.
+// since an author's grammatical gender is unknown. The timeline and the 🔔 share it.
 const EVENT_VERBS: Record<string, string> = {
-  comment: "комментарий", desc_edit: "правка описания",
-  label_add: "добавлена метка", label_remove: "снята метка",
-  attach_add: "вложение добавлено", attach_remove: "вложение удалено", attach_replace: "вложение заменено",
-  reaction: "реакция",
+  comment: S.timeline.event.comment(), desc_edit: S.timeline.event.descEdit(),
+  label_add: S.timeline.event.labelAdd(), label_remove: S.timeline.event.labelRemove(),
+  attach_add: S.timeline.event.attachAdd(), attach_remove: S.timeline.event.attachRemove(),
+  attach_replace: S.timeline.event.attachReplace(), reaction: S.timeline.event.reaction(),
 };
 export function eventVerb(type: string): string { return EVENT_VERBS[type] || type; }
 
@@ -193,7 +194,7 @@ export function eventAuthor(
 
 // replyCountsOf recounts replies over the merged (synced + pending) event list.
 // reply_count arrives from the server, which cannot see replies still sitting
-// in the outbox — so «N ответов» would omit one composed offline. The client
+// in the outbox — so the reply-count button would omit one composed offline. The client
 // holds the card's WHOLE timeline (deleted replies already filtered out
 // server-side), so recounting over the merged list is equivalent online and
 // correct offline.
@@ -232,7 +233,7 @@ export function feedOrderOf(raw: string | null): "old" | "new" {
   return raw === "old" ? "old" : "new";
 }
 
-// A лента holds three kinds of entry, and a reader may narrow it to one of them:
+// A timeline holds three kinds of entry, and a reader may narrow it to one of them:
 // comments (the discussion), edits (desc_edit — what the question used to say)
 // and meta (labels and attachments). "all" is every kind.
 export type FeedFilter = "all" | "comments" | "edits" | "meta";
@@ -249,15 +250,15 @@ export function feedFilterKeeps(type: string, filter: FeedFilter): boolean {
   return type !== "comment" && type !== "desc_edit";
 }
 
-// readBucketsOf: which unread watermarks a лента read under this filter may
-// advance. A reader who narrowed the лента to comments never saw the edits, so
+// readBucketsOf: which unread watermarks a timeline read under this filter may
+// advance. A reader who narrowed the timeline to comments never saw the edits, so
 // their dot must survive. The content bucket is one watermark over both edits
 // and meta (migrateV7), so those two cannot be told apart here.
 export function readBucketsOf(filter: FeedFilter): { content: boolean; comments: boolean } {
   return { content: filter !== "comments", comments: filter === "all" || filter === "comments" };
 }
 
-// linkSegments splits a comment's text into plain runs and URLs so the лента can
+// linkSegments splits a comment's text into plain runs and URLs so the timeline can
 // make links clickable without ever treating user text as markup. Trailing
 // sentence punctuation stays outside the link; a ")" is cut only when the URL
 // itself opened no "(" (wikipedia-style paths keep theirs).
@@ -323,7 +324,7 @@ export function resolveMentions(text: string, members: readonly MentionMember[])
 
 // ---- reactions ----
 // Reactions aggregate into chips per target (0 = the card itself), never into
-// лента rows. mineId is the caller's own reaction event, the handle for the
+// timeline rows. mineId is the caller's own reaction event, the handle for the
 // toggle-off DELETE.
 
 export interface ReactionInput { id: number; emoji: string; author: number | null; target: number | null }
@@ -370,13 +371,13 @@ export function commentBody(text: string, mentionNames: readonly string[] = [], 
   return el("div", { class: "tl-comment" }, out);
 }
 
-// orderFeedEvents: events are oldest→newest (by id), so "сначала новое" is the
+// orderFeedEvents: events are oldest→newest (by id), so "newest first" is the
 // reverse.
 export function orderFeedEvents<T>(events: readonly T[], order: "old" | "new"): T[] {
   return order === "old" ? [...events] : [...events].reverse();
 }
 
-// excerptComments picks the comments flagged as выписка.
+// excerptComments picks the comments flagged as excerpts.
 export function excerptComments(events: ReadonlyArray<CardEvent>): CardEvent[] {
   return events.filter((e) => e.type === "comment" && !!e.is_excerpt);
 }
@@ -407,7 +408,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   const state = deps.getState;
 
   // openCardEvents mirrors the open card's timeline (set by load) so the
-  // expanded лента, threads, выписки and the card module's markCardRead can
+  // expanded timeline, threads, excerpts and the card module's markCardRead can
   // reuse it without a re-fetch.
   let openCardEvents: CardEvent[] = [];
   let openCardAtts: AttachmentLike[] = [];
@@ -417,7 +418,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // different card starting to load clears it, so a draft never crosses cards.
   let composerCard: number | null = null;
 
-  // The лента's current narrowing. It starts from the reader's saved default and
+  // The timeline's current narrowing. It starts from the reader's saved default and
   // is dropped when the card closes (resetFilter), so a card always opens the way
   // /profile says — the selects are a look at this card, not a stored preference.
   let filter: FeedFilter = "all";
@@ -446,20 +447,20 @@ export function createTimeline(deps: TimelineDeps): Timeline {
 
   // ---- timeline ----
   // load renders into a detached fragment and swaps it in once. Emptying
-  // the лента first and appending as the decrypts resolved collapsed the card
+  // the timeline first and appending as the decrypts resolved collapsed the card
   // overlay's scroll height mid-render, so the browser clamped the scroll position
-  // and the view jumped up — every marked выписка threw the reader back to
-  // «Выписок: N». The container must never be shorter than its content.
-  // painted names the card the лента currently shows, and loadSeq the newest
+  // and the view jumped up — every flagged excerpt threw the reader back to
+  // the excerpts counter. The container must never be shorter than its content.
+  // painted names the card the timeline currently shows, and loadSeq the newest
   // load in flight. Between them they keep one card's comments off another
   // card: the skeleton covers the wait, the sequence drops a slow load whose
   // card is no longer open (open A, open B, A's fetch lands last).
   let painted: number | null = null;
   let loadSeq = 0;
 
-  // skeleton is what the лента shows while the next card's comments are being
+  // skeleton is what the timeline shows while the next card's comments are being
   // fetched and decrypted — a second or two on a busy card. Leaving the previous
-  // card's лента up reads as the wrong comments rather than as loading, and
+  // card's timeline up reads as the wrong comments rather than as loading, and
   // simply emptying it is what the note above forbids: three grey rows keep the
   // container tall while saying "not yet".
   function skeleton(): DocumentFragment {
@@ -477,7 +478,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     const tl = ui.timeline;
     const seq = ++loadSeq;
     // Only when the card changes: a reload of the card already on screen (a
-    // posted comment, a new attachment) must not blink, and the лента may not
+    // posted comment, a new attachment) must not blink, and the timeline may not
     // get shorter under a reader who has scrolled it.
     if (painted !== cardId) { painted = cardId; tl.replaceChildren(skeleton()); }
     if (composerCard !== cardId) { composerCard = cardId; clearCommentDraft(); }
@@ -518,10 +519,10 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     for (const ev of shown(events).reverse()) {
       frag.append(renderEvent(ev, payloads.get(ev.id) || ""));
     }
-    // Oldest goes last in the newest-first лента.
+    // Oldest goes last in the newest-first timeline.
     const born = cardCreatedNode(cardId);
     if (born) frag.append(born);
-    if (seq !== loadSeq) return; // a newer load owns the лента now
+    if (seq !== loadSeq) return; // a newer load owns the timeline now
     tl.replaceChildren(frag);
   }
 
@@ -534,7 +535,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     const oc = deps.card.openCardId();
     if (!oc) return;
     const msg = ui.cardMessage;
-    if (!xySync.requireOnline("Реакции доступны только онлайн.", msg)) return;
+    if (!xySync.requireOnline(S.timeline.reaction.offline(), msg)) return;
     const mine = (openChips.get(targetId ?? 0) || []).find((c) => c.emoji === emoji)?.mineId;
     try {
       if (mine) await jdelete(`/api/reactions/${mine}`);
@@ -553,16 +554,16 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       label: emoji, onClick: () => { void toggleReaction(targetId, emoji); },
     }));
     items.push({
-      label: "Другой…",
+      label: S.timeline.reaction.other(),
       onClick: () => {
-        const raw = (prompt("Эмодзи:") || "").trim();
+        const raw = (prompt(S.timeline.reaction.emojiPrompt()) || "").trim();
         if (raw) void toggleReaction(targetId, raw);
       },
     });
     deps.popupMenu(anchor, items);
   }
 
-  // chipsRow renders a target's chips (клик = toggle) plus the add button.
+  // chipsRow renders a target's chips (click = toggle) plus the add button.
   // targetId null = the card itself.
   function chipsRow(targetId: number | null, always: boolean): HTMLElement | null {
     const chips = openChips.get(targetId ?? 0) || [];
@@ -577,7 +578,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
         onclick: () => { void toggleReaction(targetId, c.emoji); },
       }));
     }
-    const add = el("button", { class: "tl-chip tl-chip-add", type: "button", title: "Реакция" }, icon("plus"));
+    const add = el("button", { class: "tl-chip tl-chip-add", type: "button", title: S.timeline.reaction.addTitle() }, icon("plus"));
     add.addEventListener("click", () => openReactionPicker(add, targetId));
     row.append(add);
     return row;
@@ -594,13 +595,13 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   function commentImageNodes(ids: readonly number[]): HTMLElement[] {
     return ids.map((id) => {
       const att = openCardAtts.find((a) => a.id === id) || { id };
-      const img = el("img", { class: "tl-comment-img pv-img", alt: "картинка из комментария" }) as HTMLImageElement;
+      const img = el("img", { class: "tl-comment-img pv-img", alt: S.timeline.comment.imageAlt() }) as HTMLImageElement;
       deps.attachments.url(att).then((u) => { img.src = u; }).catch(() => { img.remove(); });
       return img;
     });
   }
 
-  // cardCreatedNode is the «карточка создана» line closing the лента — the anchor
+  // cardCreatedNode is the card-created line closing the timeline — the anchor
   // every later timestamp is read against. It is derived from cards.created_at
   // rather than from a timeline event, so it is there for every card ever made,
   // not just ones created after this shipped.
@@ -608,7 +609,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     const card = state().cards.find((c) => c.id === cardId);
     if (!card || !card.createdAt) return null;
     return el("div", { class: "tl-event tl-born" },
-      el("div", { class: "tl-meta", text: `карточка создана · ${new Date(card.createdAt).toLocaleString("ru-RU")}` }));
+      el("div", { class: "tl-meta", text: S.timeline.feed.cardCreated(new Date(card.createdAt).toLocaleString("ru-RU")) }));
   }
 
   function renderEvent(ev: CardEvent, payload: string): HTMLElement {
@@ -622,46 +623,46 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       if (ev.deleted) {
         wrap.classList.add("tl-deleted");
         wrap.id = "tlev-" + ev.id;
-        const row = el("div", { class: "tl-meta" }, "комментарий удалён");
+        const row = el("div", { class: "tl-meta" }, S.timeline.comment.deleted());
         if ((ev.reply_count || 0) > 0) row.append(threadButton(ev));
         wrap.append(row);
         return wrap;
       }
       let quoteNode: HTMLElement | null = null;
-      const metaRow = el("div", { class: "tl-meta" }, meta(when + (ev.edited_at ? " · изменён" : "")));
+      const metaRow = el("div", { class: "tl-meta" }, meta(when + (ev.edited_at ? S.timeline.comment.editedSuffix() : "")));
       if (ev.is_excerpt) {
         wrap.classList.add("tl-excerpt");
-        metaRow.append(el("span", { class: "tl-badge", text: "выписка" }));
+        metaRow.append(el("span", { class: "tl-badge", text: S.timeline.excerpt.badge() }));
       }
       // Which test it came out of, since that is now set from the ⋯ menu and
       // would otherwise be visible only from inside that menu.
       if (ev.session_id != null) {
         metaRow.append(el("span", { class: "tl-badge tl-badge-session" }, icon("flask-conical"), deps.sessionName(ev.session_id)));
       }
-      // A reply keeps its place in the flat лента (it is part of the card's
+      // A reply keeps its place in the flat timeline (it is part of the card's
       // history) but says what it answers, and links up to it. Added BEFORE
       // .tl-actions, which is margin-left:auto and would otherwise push this to
       // the far right of the row.
       if (ev.reply_to_id) {
         const rootId = ev.reply_to_id;
         const parent = (openCardEvents || []).find((e) => e.id === rootId);
-        const parentWho = parent ? (parent.deleted ? "удалённый комментарий" : author(parent)) : "комментарий";
+        const parentWho = parent ? (parent.deleted ? S.timeline.reply.deletedParent() : author(parent)) : S.timeline.reply.unknownParent();
         metaRow.append(el("span", { class: "tl-sep", text: "·" }), el("button", {
-          class: "tl-replyto", type: "button", title: "Открыть ветку",
-          text: `↳ в ответ ${parentWho}`, onclick: () => { void openThread(rootId); },
+          class: "tl-replyto", type: "button", title: S.timeline.thread.openTitle(),
+          text: S.timeline.reply.inReplyTo(parentWho), onclick: () => { void openThread(rootId); },
         }));
         // The parent's first line and a half, so the answer carries its
         // question — old replies included, since this is derived at render.
         const parentText = decodeCommentPayload(payloadOf.get(rootId) || "").text;
         if (parent && !parent.deleted && parentText) {
           quoteNode = el("button", {
-            class: "tl-quote", type: "button", title: "Открыть ветку",
+            class: "tl-quote", type: "button", title: S.timeline.thread.openTitle(),
             text: deriveTitle(parentText, 110), onclick: () => { void openThread(rootId); },
           });
         }
       }
       // Synced comments have a stable event id → offer a copyable direct link, the
-      // edit/delete/выписка menu, and an anchor target. Pending (offline) comments
+      // edit/delete/excerpt menu, and an anchor target. Pending (offline) comments
       // have no id yet, so none of that can address them.
       if (ev.id) {
         wrap.id = "tlev-" + ev.id;
@@ -669,11 +670,11 @@ export function createTimeline(deps: TimelineDeps): Timeline {
         // rather than trailing a timestamp of unpredictable width.
         metaRow.append(el("div", { class: "tl-actions" },
           el("button", {
-            class: "tl-link", type: "button", title: "Копировать ссылку на комментарий",
+            class: "tl-link", type: "button", title: S.timeline.comment.copyLinkTitle(),
             onclick: () => deps.card.copyCommentLink(ev.id),
           }, icon("link")),
           el("button", {
-            class: "tl-menu", type: "button", title: "Действия с комментарием", "aria-haspopup": "true",
+            class: "tl-menu", type: "button", title: S.timeline.comment.menuTitle(), "aria-haspopup": "true",
             onclick: (e: Event) => commentMenu(e.currentTarget as HTMLElement, ev, payload),
           }, icon("ellipsis"))));
       }
@@ -691,7 +692,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       // An imported edit (Trello history) names its author inside the payload —
       // they are not an xy user, so author_user_id has nobody to point at.
       const editor = diff.author ? `${diff.author} · ` : meta("");
-      wrap.append(el("div", { class: "tl-meta", text: editor + "правка описания · " + when }),
+      wrap.append(el("div", { class: "tl-meta", text: editor + S.timeline.feed.descEditMeta(when) }),
         renderDescDiff(diff.before || "", diff.after || ""));
     } else {
       let info: { label?: string; file?: string; label_id?: number } = {};
@@ -707,9 +708,9 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     return wrap;
   }
 
-  // ---- desc_edit rendering: краткий / подробный ----
+  // ---- desc_edit rendering: brief / full ----
   // A card's description is long and an edit usually touches a few words, so the
-  // default (краткий) shows just those with a little context. подробный is the
+  // default (brief) shows just those with a little context. full is the
   // original two-pane before/after, kept for when the whole text matters. The
   // choice is a per-reader display preference, so it lives in localStorage beside
   // the other display prefs rather than on the server.
@@ -734,7 +735,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     for (let i = 0; i < Math.max(b.length, a.length); i++) {
       const name = xyVersions.versionName(after, i) ?? xyVersions.versionName(before, i);
       box.append(
-        el("div", { class: "tl-vname", text: name || `Версия ${i + 1}` }),
+        el("div", { class: "tl-vname", text: name || S.timeline.diff.versionFallback(String(i + 1)) }),
         one(b[i] ?? "", a[i] ?? ""),
       );
     }
@@ -769,11 +770,11 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       else box.append(el("ins", { class: "tl-chg", text: op.text }));
     }
     // An edit that changed only whitespace leaves nothing visible to show.
-    if (!(box.textContent || "").trim()) box.append(el("span", { class: "tl-gap", text: "без видимых изменений" }));
+    if (!(box.textContent || "").trim()) box.append(el("span", { class: "tl-gap", text: S.timeline.diff.noChanges() }));
     return box;
   }
 
-  // setDiffView keeps the two selects (card + expanded лента) in step and
+  // setDiffView keeps the two selects (card + expanded timeline) in step and
   // re-renders whichever feeds are on screen.
   async function setDiffView(v: string): Promise<void> {
     localStorage.setItem(DIFF_VIEW_KEY, v === "full" ? "full" : "brief");
@@ -788,9 +789,9 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     sel.addEventListener("change", () => { void setDiffView(sel.value); });
   }
 
-  // ---- показать: which kind of entry the лента shows ----
-  // Both selects and the two «Вид правок» rows follow one value: a диффвид
-  // control governs nothing when no правки are on screen.
+  // ---- show: which kind of entry the timeline shows ----
+  // Both selects and the two diff-view rows follow one value: a diff-view
+  // control governs nothing when no edits are on screen.
   async function setFilter(v: string, reload: boolean): Promise<void> {
     filter = feedFilterOf(v);
     for (const sel of [ui.feedFilter, ui.feedFilterFull]) sel.value = filter;
@@ -806,11 +807,11 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     sel.addEventListener("change", () => { void setFilter(sel.value, true); });
   }
 
-  // ---- expanded лента ----
-  // The card panel gives the лента ~320px of height; on a long discussion that is
-  // a keyhole. Развернуть re-renders the same events full-screen, flowed into
+  // ---- expanded timeline ----
+  // The card panel gives the timeline ~320px of height; on a long discussion that is
+  // a keyhole. Expand re-renders the same events full-screen, flowed into
   // columns so as much as possible is readable at once.
-  // Reading order in the expanded лента. The panel's feed is always newest-first
+  // Reading order in the expanded timeline. The panel's feed is always newest-first
   // (you go there for what just happened); reading a whole discussion end to end
   // is the other job, and that one wants oldest-first.
   const FEED_ORDER_KEY = "xy.feedOrder";
@@ -821,7 +822,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   async function renderFeedGrid(): Promise<void> {
     const grid = ui.feedGrid;
     const frag = document.createDocumentFragment();
-    // openCardEvents is oldest→newest (by id), so "сначала новое" is the reverse.
+    // openCardEvents is oldest→newest (by id), so "newest first" is the reverse.
     const ordered = orderFeedEvents(shown(openCardEvents || []), feedOrder());
     for (const ev of ordered) {
       let payload = "";
@@ -832,7 +833,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
         } catch (_) {}
       }
       const node = renderEvent(ev, payload);
-      // The panel's лента already owns tlev-{id}; these are a SECOND rendering of
+      // The panel's timeline already owns tlev-{id}; these are a SECOND rendering of
       // the same events, so they must not duplicate those ids — deep links and
       // highlightComment resolve by id and would land on whichever came first.
       node.removeAttribute("id");
@@ -857,15 +858,15 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   });
 
   // ---- reply threads ----
-  // Threads are one level deep and live in a modal: the лента stays flat and
+  // Threads are one level deep and live in a modal: the timeline stays flat and
   // newest-first (it is a history), while a thread reads oldest-first (it is a
-  // conversation). Replies appear in BOTH — the лента never hides a comment.
+  // conversation). Replies appear in BOTH — the timeline never hides a comment.
   function threadButton(ev: CardEvent): HTMLElement {
     const n = ev.reply_count || 0;
     return el("button", {
       class: "tl-thread", type: "button",
       onclick: () => { void openThread(ev.id); },
-    }, ...iconed("message-circle", `${n} ${deps.plural(n, "ответ", "ответа", "ответов")}`));
+    }, ...iconed("message-circle", S.timeline.thread.replies(n)));
   }
 
   // openThread renders the root comment and its replies, oldest first, from the
@@ -889,9 +890,9 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       const decoded = decodeCommentPayload(text);
       const node = el("div", { class: "thread-item" + (ev.id === rootId ? " thread-root" : "") },
         el("div", { class: "tl-meta" },
-          ev.deleted ? "комментарий удалён"
-            : `${author(ev)} · ${new Date(ev.created_at).toLocaleString("ru-RU")}${ev.edited_at ? " · изменён" : ""}`,
-          ev.is_excerpt ? el("span", { class: "tl-badge", text: "выписка" }) : null),
+          ev.deleted ? S.timeline.comment.deleted()
+            : `${author(ev)} · ${new Date(ev.created_at).toLocaleString("ru-RU")}${ev.edited_at ? S.timeline.comment.editedSuffix() : ""}`,
+          ev.is_excerpt ? el("span", { class: "tl-badge", text: S.timeline.excerpt.badge() }) : null),
         ev.deleted ? null : mentionBody(decoded.text),
         ...(ev.deleted ? [] : commentImageNodes(decoded.images)));
       frag.append(node);
@@ -930,9 +931,9 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     return dk;
   }
 
-  // ---- comment edit / delete / выписка ----
-  // Rewriting or removing a comment is the author's business; flagging one as a
-  // выписка is curation any member may do (the server draws the same line in
+  // ---- comment edit / delete / excerpt ----
+  // Rewriting or removing a comment is the author's business; flagging one as an
+  // excerpt is curation any member may do (the server draws the same line in
   // handlePatchComment). All three are online-only, like attachment mutations: a
   // queued edit of a comment that has not itself synced yet is a temp-id knot the
   // outbox has no reason to learn.
@@ -941,22 +942,22 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     const mine = !!(st.me && ev.author_user_id === st.me.user_id);
     // Replying opens the thread (with its composer) — for a comment with no
     // replies yet, that is just the comment plus an empty answer box.
-    const items: MenuItem[] = [{ icon: icon("message-circle"), label: "Ответить", onClick: () => { void openThread(ev.reply_to_id || ev.id); } }];
+    const items: MenuItem[] = [{ icon: icon("message-circle"), label: S.timeline.comment.menuReply(), onClick: () => { void openThread(ev.reply_to_id || ev.id); } }];
     // A comment's FIRST reaction has no chip to click yet — this is its way in.
-    items.push({ icon: icon("plus"), label: "Реакция…", onClick: () => openReactionPicker(anchor, ev.id) });
+    items.push({ icon: icon("plus"), label: S.timeline.comment.menuReact(), onClick: () => openReactionPicker(anchor, ev.id) });
     if (mine) {
       // The node is taken from the anchor, not looked up by id: the same comment
-      // may also be rendered in the expanded лента, and the edit must open on the
+      // may also be rendered in the expanded timeline, and the edit must open on the
       // copy whose ⋯ was actually clicked.
-      items.push({ icon: icon("pencil"), label: "Редактировать", onClick: () => startCommentEdit(ev, payload, anchor.closest<HTMLElement>(".tl-event")) });
-      items.push({ icon: icon("trash-2"), label: "Удалить", onClick: () => deleteComment(ev) });
+      items.push({ icon: icon("pencil"), label: S.timeline.comment.menuEdit(), onClick: () => startCommentEdit(ev, payload, anchor.closest<HTMLElement>(".tl-event")) });
+      items.push({ icon: icon("trash-2"), label: S.timeline.comment.menuDelete(), onClick: () => deleteComment(ev) });
     }
     items.push({
-      label: "Выписка", checked: !!ev.is_excerpt,
+      label: S.timeline.comment.menuExcerpt(), checked: !!ev.is_excerpt,
       onClick: () => { void commentAction(() => jpatch(`/api/comments/${ev.id}`, { is_excerpt: !ev.is_excerpt })); },
     });
-    // The test this came out of, named after the fact — «на этом тесте команда
-    // споткнулась о формулировку». Radio, not checkboxes: a comment came out of
+    // The test this came out of, named after the fact — the sitting where the
+    // team stumbled over the wording. Radio, not checkboxes: a comment came out of
     // one sitting, unlike the card, which is played at several. 0 clears it.
     // A comment queued offline has no card_id of its own yet.
     const cardId = typeof ev.card_id === "number" ? ev.card_id : deps.card.openCardId();
@@ -965,7 +966,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       const tag = (id: number): void => {
         void commentAction(() => jpatch(`/api/comments/${ev.id}`, { session_id: id }));
       };
-      items.push({ label: "без теста", checked: ev.session_id == null, radio: true, onClick: () => tag(0) });
+      items.push({ label: S.timeline.comment.menuNoTest(), checked: ev.session_id == null, radio: true, onClick: () => tag(0) });
       for (const s of sessions) {
         items.push({ label: s.label, checked: ev.session_id === s.id, radio: true, onClick: () => tag(s.id) });
       }
@@ -973,11 +974,11 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     deps.popupMenu(anchor, items);
   }
 
-  // commentAction runs one comment mutation and re-renders the лента (which also
-  // refreshes the выписки counter), reporting failures in the card's message line.
+  // commentAction runs one comment mutation and re-renders the timeline (which also
+  // refreshes the excerpts counter), reporting failures in the card's message line.
   async function commentAction(fn: () => Promise<unknown>): Promise<void> {
     const msg = ui.cardMessage;
-    if (!xySync.requireOnline("Правка комментариев доступна только онлайн.", msg)) return;
+    if (!xySync.requireOnline(S.timeline.comment.offline(), msg)) return;
     try {
       await fn();
       msg.textContent = "";
@@ -986,7 +987,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   }
 
   // refreshFeeds re-renders both places a comment can appear: the card panel's
-  // лента and, when open, the expanded one.
+  // timeline and, when open, the expanded one.
   async function refreshFeeds(): Promise<void> {
     const oc = deps.card.openCardId();
     if (oc != null) await load(oc);
@@ -994,12 +995,12 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   }
 
   function deleteComment(ev: CardEvent): void {
-    if (!confirm("Удалить комментарий?")) return;
+    if (!confirm(S.timeline.comment.deleteConfirm())) return;
     void commentAction(() => jdelete(`/api/comments/${ev.id}`));
   }
 
   // startCommentEdit swaps the comment's body for a textarea in place, so the
-  // surrounding лента stays put while it is edited.
+  // surrounding timeline stays put while it is edited.
   function startCommentEdit(ev: CardEvent, payload: string, wrap: HTMLElement | null): void {
     if (!wrap || wrap.querySelector(".tl-edit")) return;
     const body = wrap.querySelector(".tl-comment");
@@ -1010,7 +1011,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     const decoded = decodeCommentPayload(payload);
     ta.value = decoded.text;
     const save = el("button", {
-      class: "btn btn-small", type: "button", text: "Сохранить",
+      class: "btn btn-small", type: "button", text: S.timeline.comment.save(),
       onclick: async () => {
         const text = ta.value.trim();
         if (!text) return;
@@ -1021,7 +1022,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       },
     });
     const cancel = el("button", {
-      class: "btn btn-small btn-ghost", type: "button", text: "Отмена",
+      class: "btn btn-small btn-ghost", type: "button", text: S.timeline.comment.cancel(),
       onclick: () => { void refreshFeeds(); },
     });
     body.replaceWith(el("div", { class: "tl-editbox" }, ta, el("div", { class: "tl-editrow" }, save, cancel)));
@@ -1043,7 +1044,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       const img = el("img", { alt: "" }) as HTMLImageElement;
       deps.attachments.url({ id }).then((u) => { img.src = u; }).catch(() => {});
       chip.append(img, el("button", {
-        class: "attach-del", type: "button", title: "Убрать из комментария", text: "×",
+        class: "attach-del", type: "button", title: S.timeline.comment.removeImageTitle(), text: "×",
         onclick: () => { draftImages = draftImages.filter((x) => x !== id); renderDraftImages(); },
       }));
       draftImagesRow.append(chip);
@@ -1062,7 +1063,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   }
 
   function commentDraft(): string {
-    return ui.commentInput.value.trim() || (draftImages.length ? "картинка" : "");
+    return ui.commentInput.value.trim() || (draftImages.length ? S.timeline.comment.imageDraft() : "");
   }
 
   // postComment is the one write path: the submit handler and the card's
@@ -1139,14 +1140,14 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   attachMentionPicker(ui.commentInput);
   attachMentionPicker(ui.threadInput);
 
-  // ---- выписки ----
-  // A выписка is an excerpt from a source — a comment or an attachment flagged as
+  // ---- excerpts ----
+  // An excerpt is a passage from a source — a comment or an attachment flagged as
   // such — so the sources behind a question can be re-read mid-edit without
-  // scrolling the whole лента or opening attachments one browser tab at a time.
+  // scrolling the whole timeline or opening attachments one browser tab at a time.
   // The flag is a plaintext column server-side (migrateV14); the content is not.
   function renderExcerptCount(): void {
     const n = excerptComments(openCardEvents || []).length + openCardExcerptAtts.length;
-    ui.excerptsCount.textContent = `Выписок: ${n}`;
+    ui.excerptsCount.textContent = S.timeline.excerpt.count(String(n));
     ui.excerptsView.disabled = n === 0;
   }
 
@@ -1164,7 +1165,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
         el("div", { class: "excerpt-text", text })));
     }
     for (const att of openCardExcerptAtts) {
-      const name = att.name || "файл";
+      const name = att.name || S.timeline.excerpt.fileFallback();
       const box = el("div", { class: "excerpt" }, el("div", { class: "excerpt-meta" }, ...iconed("paperclip", name)));
       if ((att.mime || "").startsWith("image/")) {
         // .pv-img wires it into the shared lightbox (zoom/pan) on click.
@@ -1172,7 +1173,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
         deps.attachments.url(att).then((u) => { img.src = u; }).catch(() => {});
         box.append(img);
       } else {
-        box.append(el("button", { class: "attach-name", type: "button", text: "Скачать", onclick: () => { void deps.attachments.download(att, name); } }));
+        box.append(el("button", { class: "attach-name", type: "button", text: S.timeline.excerpt.download(), onclick: () => { void deps.attachments.download(att, name); } }));
       }
       body.append(box);
     }
@@ -1191,7 +1192,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     },
     resetFilter(): void { void setFilter(state().feedDefault || "all", false); },
     readBuckets: () => readBucketsOf(filter),
-    // A link INTO the лента — a 🔔 row, a ?comment= deep link — must land on the
+    // A link INTO the timeline — a 🔔 row, a ?comment= deep link — must land on the
     // entry it names, whatever the reader's default hides.
     async ensureVisible(type: string): Promise<void> {
       if (!feedFilterKeeps(type, filter)) await setFilter("all", true);

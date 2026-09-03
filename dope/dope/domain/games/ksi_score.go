@@ -6,10 +6,10 @@ import (
 	"sort"
 )
 
-// Server-side KSI scoring, mirroring the si.js results tab and the xlsx «Итог»
-// sheet: totals under the per-(team,theme) sticker rules, ranked by total,
-// then plus, then correct counts from the highest value down. Declined teams
-// keep their participant index but are excluded from the ranking.
+// Server-side KSI scoring, mirroring the si.js results tab and the xlsx
+// results sheet: totals under the per-(team,theme) sticker rules, ranked by
+// total, then plus, then correct counts from the highest value down. Declined
+// teams keep their participant index but are excluded from the ranking.
 
 // KSIState is the persisted KSI state JSON: the participants list, the
 // declined map (see KSIDeclinedKey), the per-theme × per-team sticker grid
@@ -103,7 +103,7 @@ func ComputeKSIResults(schemeJSON, stateJSON string, values []int) ([]KSIResults
 		ranked = append(ranked, team)
 	}
 
-	// Ranking values high to low, matching the «Итог» sheet.
+	// Ranking values high to low, matching the results sheet.
 	resultValues := make([]int, len(values))
 	for i, v := range values {
 		resultValues[len(values)-1-i] = v
@@ -134,10 +134,10 @@ func ComputeKSIResults(schemeJSON, stateJSON string, values []int) ([]KSIResults
 		}
 		return true
 	}
-	// A shared place is the mean of the places it covers — «среднее
-	// арифметическое поделённых мест». Two firsts are 1.5 each, not 1 each:
-	// places are what the Structure layer pays очки on, and only the mean
-	// keeps a group's очки independent of how the ties fell (CONTEXT.md).
+	// A shared place is the mean of the places it covers — the arithmetic mean
+	// of the divided places. Two firsts are 1.5 each, not 1 each:
+	// places are what the Structure layer pays points on, and only the mean
+	// keeps a group's points independent of how the ties fell (CONTEXT.md).
 	for start := 0; start < len(ranked); {
 		end := start + 1
 		for end < len(ranked) && sameMetrics(ranked[end], ranked[start]) {

@@ -1,25 +1,26 @@
-// Тройка's Статистика: the per-player fold across every бой of a game, and its
+// Troika's statistics: the per-player fold across every bout of a game, and its
 // table. The sibling of ek-stats, brain-stats and group-stats.
 //
-// The three players hear each other, because they answer the same вопрос one
+// The three players hear each other, because they answer the same question one
 // after another. So a correct answer is one of two quite different things: the
-// first on that вопрос — the player knew it — or a repeat of one already on
+// first on that question — the player knew it — or a repeat of one already on
 // the table, which is the smaller skill of recognising that the answer just
 // given was right. Both pay the same points and neither is the other, so they
 // are counted apart and the table sorts on the first.
 //
-// «Удачные повторы» is the same skill as a rate: of the turns where a correct
+// The repeat rate is the same skill as a rate: of the turns where a correct
 // answer was already there to repeat, how often the player took it. A turn
 // where nothing correct had been said yet is not a choice about repeating and
 // is not counted either way.
 
 import {standingsTable} from "./standings.js";
 import * as troika from "./troika-protocol.js";
+import S from "./i18nstrings_ru_gen.js";
 import type {TroikaState} from "./troika-protocol.js";
 
 export interface TroikaBout {
   state: TroikaState;
-  // The бой's two sides as the page knows them: the Participant's name and the
+  // The bout's two sides as the page knows them: the Participant's name and the
   // names of the players by id.
   sides: Array<{team: string; players: Map<number, string>}>;
 }
@@ -36,7 +37,7 @@ export interface TroikaPlayerStatsRow {
   points: number;
 }
 
-// computeTroikaPlayerStats folds every бой into one row per (team, player) —
+// computeTroikaPlayerStats folds every bout into one row per (team, player) —
 // keyed by both, so namesakes on different teams stay apart.
 export function computeTroikaPlayerStats(bouts: ReadonlyArray<TroikaBout>): TroikaPlayerStatsRow[] {
   const rows = new Map<string, TroikaPlayerStatsRow>();
@@ -48,7 +49,7 @@ export function computeTroikaPlayerStats(bouts: ReadonlyArray<TroikaBout>): Troi
       for (let t = 0; t < state.values.length; t++) {
         const value = troika.themeValue(state, t);
         for (let q = 0; q < troika.THEME_QUESTIONS; q++) {
-          // Walk the chairs in the order the ведущий asked them, so "already
+          // Walk the chairs in the order the host asked them, so "already
           // on the table" is a fact about what this player had heard.
           let correctSoFar = 0;
           for (let c = 0; c < troika.CHAIRS; c++) {
@@ -103,13 +104,13 @@ export function buildTroikaStatsTable(rows: ReadonlyArray<TroikaPlayerStatsRow>)
   return standingsTable({
     className: "troika-stats",
     columns: [
-      {label: "Игрок", kind: "name"},
-      {label: "Команда", kind: "name"},
-      {label: "Бои", kind: "num"},
-      {label: "Взял первым", kind: "num"},
-      {label: "Повторил", kind: "num"},
-      {label: "Удачные повторы", kind: "num"},
-      {label: "Очки", kind: "num"},
+      {label: S.troika.stats.player(), kind: "name"},
+      {label: S.troika.stats.team(), kind: "name"},
+      {label: S.troika.stats.bouts(), kind: "num"},
+      {label: S.troika.stats.first(), kind: "num"},
+      {label: S.troika.stats.repeat(), kind: "num"},
+      {label: S.troika.stats.repeatRate(), kind: "num"},
+      {label: S.troika.stats.points(), kind: "num"},
     ],
     rows: rows.map((row) => [
       row.player,

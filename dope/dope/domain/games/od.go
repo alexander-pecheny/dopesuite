@@ -76,7 +76,7 @@ func ODEmptyGameJSON(slug, title string, tourComp []int) ([]byte, []byte) {
 
 // ParseTourComp reads scheme.tourComp — either a JSON array of ints or a
 // comma-separated string with "count*repeat" segments (mirrors od.js) — from
-// the ОД document's top level, or from its one stage's config, where the DSL
+// the OD document's top level, or from its one stage's config, where the DSL
 // compiler writes the Protocol's params.
 func ParseTourComp(schemeJSON string) []int {
 	if schemeJSON == "" {

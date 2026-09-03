@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Handout image staging. When the user opens the "Генерация раздаток" screen the
+// Handout image staging. When the user opens the handout-generation screen the
 // client decrypts the referenced images once and uploads them here; subsequent
 // PDF / split_fit generations reuse the staged copies instead of re-decrypting +
 // re-uploading them every time (which dominated the latency). A session stays

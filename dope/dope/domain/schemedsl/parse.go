@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	dopestrings "dope/i18nstrings"
 )
 
 // Error is a parse or compile failure pinned to a 1-based source line.
@@ -17,7 +19,7 @@ type Error struct {
 
 func (e *Error) Error() string {
 	if e.Line > 0 {
-		return fmt.Sprintf("строка %d: %s", e.Line, e.Msg)
+		return dopestrings.Default.Scheme.Error.LinePrefix(strconv.Itoa(e.Line), e.Msg)
 	}
 	return e.Msg
 }
@@ -234,7 +236,7 @@ func (s Section) IntList(key string) ([]int, bool, error) {
 }
 
 // NumList parses a list that may carry fractions — `points: [1, 0.5, 0]`,
-// which is what a format paying half a балл for a ничья writes.
+// which is what a format paying half a point for a draw writes.
 func (s Section) NumList(key string) ([]float64, bool, error) {
 	items, ok, err := s.List(key)
 	if !ok || err != nil {
@@ -263,7 +265,7 @@ func (s Section) Sorting(key string) ([]SortRule, bool, error) {
 	for i, item := range items {
 		fields := strings.Fields(item)
 		// No direction unless the scheme writes one. Which way a metric reads is
-		// a property of the metric — место and жребий are lower-is-better, очки
+		// a property of the metric — place and draw are lower-is-better, points
 		// are higher — and defaulting to desc here silently overrode that.
 		rule := SortRule{}
 		switch len(fields) {

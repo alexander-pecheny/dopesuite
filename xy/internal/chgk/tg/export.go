@@ -324,8 +324,8 @@ func messageLink(chatID string, messageID int64) string {
 
 var reDigits = regexp.MustCompile(`\d+`)
 
-// tourNumber pulls "3" out of "Тур 3", and settles for the whole text when the
-// section carries no number.
+// tourNumber pulls "3" out of a tour heading ("Tour 3"), and settles for the
+// whole text when the section carries no number.
 func tourNumber(section string) string {
 	if m := reDigits.FindString(section); m != "" {
 		return m

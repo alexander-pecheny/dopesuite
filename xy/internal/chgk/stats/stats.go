@@ -1,8 +1,9 @@
 // Package stats is a Go port of chgksuite's `compose add_stats`
-// (chgksuite/composer/stats.py plus the вопросная-таблица readers in
-// common.py). It appends «Взятия: N/M (P%)» to each question's comment from a
-// tournament's results, taken either from rating.chgk.info or from a local
-// csv/xlsx export in the same shape.
+// (chgksuite/composer/stats.py plus the question-table readers in
+// common.py). It appends the per-question stats line — label: taken/total
+// (percent) — to each question's comment from a tournament's results, taken
+// either from rating.chgk.info or from a local csv/xlsx export in the same
+// shape.
 package stats
 
 import (
@@ -12,10 +13,12 @@ import (
 	"strconv"
 	"strings"
 
+	xystrings "xy/i18nstrings"
+
 	"xy/internal/chgk/fsource"
 )
 
-// Result is one team's row of a результаты table: the mask is one character per
+// Result is one team's row of a results table: the mask is one character per
 // question, "1" for taken.
 type Result struct {
 	TeamID int
@@ -25,7 +28,7 @@ type Result struct {
 
 // Options are the switches `compose add_stats` takes.
 type Options struct {
-	// Label heads the line; «Взятия» in Russian.
+	// Label heads the line; the default is the catalog's stats.options.label.
 	Label string
 	// QuestionRange narrows the mask to a slice of it, "25-36" style. Empty
 	// means the whole of it.
@@ -34,15 +37,16 @@ type Options struct {
 	TeamNamingThreshold int
 }
 
-// DefaultOptions are chgksuite's, with its Russian label.
+// DefaultOptions are chgksuite's, with its label from the catalog.
 func DefaultOptions() Options {
-	return Options{Label: "Взятия", TeamNamingThreshold: 2}
+	return Options{Label: xystrings.Default.Stats.Options.Label(), TeamNamingThreshold: 2}
 }
 
 // Add appends the stats line to every non-warm-up question of the package, in
 // order: the results' masks are positional, so question N of the structure is
 // bit N of the mask.
 func Add(doc fsource.Doc, results []Result, o Options) error {
+	s := xystrings.Default
 	start, end, err := parseRange(o.QuestionRange)
 	if err != nil {
 		return err
@@ -83,15 +87,16 @@ func Add(doc fsource.Doc, results []Result, o Options) error {
 		scored := taken[qnumber]
 		// Python's round() is half-to-even, and a package where exactly an
 		// eighth of the field took a question would round the other way here.
-		message := fmt.Sprintf("%s: %d/%d (%d%%)", o.Label, scored, total,
-			int(math.RoundToEven(float64(scored)/float64(total)*100)))
+		percent := int(math.RoundToEven(float64(scored) / float64(total) * 100))
+		message := s.Stats.Question.Line(o.Label, strconv.Itoa(scored), strconv.Itoa(total),
+			strconv.Itoa(percent))
 		if scored > 0 && scored <= o.TeamNamingThreshold {
 			names := make([]string, 0, len(byQuestion[qnumber]))
 			for name := range byQuestion[qnumber] {
 				names = append(names, name)
 			}
 			sort.Strings(names)
-			message += " (" + strings.Join(names, ", ") + ")"
+			message += s.Stats.Question.Takers(strings.Join(names, ", "))
 		}
 		patchQuestion(q, message)
 		qnumber++
