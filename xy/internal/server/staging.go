@@ -142,7 +142,7 @@ func (s *server) handleHandoutsStage(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxExportRequest)
 	form, err := readMultipart(r, maxExportRequest)
 	if err != nil {
-		httpError(w, http.StatusBadRequest, err.Error())
+		handleUser(w, err)
 		return
 	}
 	images := map[string][]byte{}

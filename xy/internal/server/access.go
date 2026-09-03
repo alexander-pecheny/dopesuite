@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
 
@@ -48,13 +49,13 @@ func boardOf(ctx context.Context, q querier, c child, id int64) (int64, error) {
 func onBoard(ctx context.Context, q querier, c child, id, bid int64) error {
 	owner, err := c.board(ctx, q, id)
 	if errors.Is(err, sql.ErrNoRows) {
-		return errBadRequest(c.notFound())
+		return corei18n.User(c.notFound())
 	}
 	if err != nil {
 		return err
 	}
 	if owner != bid {
-		return errBadRequest(c.foreign())
+		return corei18n.User(c.foreign())
 	}
 	return nil
 }

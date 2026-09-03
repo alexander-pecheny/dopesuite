@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
 
@@ -178,7 +179,7 @@ func (s *server) handlePatchCard(w http.ResponseWriter, r *http.Request) {
 		if req.DescEnc != nil {
 			descEnc, err := unb64(*req.DescEnc)
 			if err != nil {
-				return errBadRequest("invalid description_enc")
+				return corei18n.User("invalid description_enc")
 			}
 			p.set("description_enc", descEnc)
 			if req.DescEventEnc != nil {
@@ -190,14 +191,14 @@ func (s *server) handlePatchCard(w http.ResponseWriter, r *http.Request) {
 		if req.HandoutMetaEnc != nil {
 			metaEnc, err := optBlob(req.HandoutMetaEnc)
 			if err != nil {
-				return errBadRequest("invalid handout_meta_enc")
+				return corei18n.User("invalid handout_meta_enc")
 			}
 			p.set("handout_meta_enc", metaEnc)
 		}
 		if req.AliasEnc != nil {
 			aliasEnc, err := optBlob(req.AliasEnc)
 			if err != nil {
-				return errBadRequest("invalid alias_enc")
+				return corei18n.User("invalid alias_enc")
 			}
 			p.set("alias_enc", aliasEnc)
 		}
@@ -206,7 +207,7 @@ func (s *server) handlePatchCard(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Kind != nil {
 			if !validCardKind(*req.Kind) {
-				return errBadRequest("bad card kind")
+				return corei18n.User("bad card kind")
 			}
 			p.set("kind", *req.Kind)
 		}
@@ -280,7 +281,7 @@ func (s *server) handleSetCardLabels(w http.ResponseWriter, r *http.Request) {
 					return err
 				}
 				if played == 0 {
-					return errBadRequest(xystrings.Default.Server.Card.QuestionNotMarked())
+					return corei18n.User(xystrings.Default.Server.Card.QuestionNotMarked())
 				}
 			}
 			if _, err := tx.ExecContext(ctx,
@@ -291,7 +292,7 @@ func (s *server) handleSetCardLabels(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, ev := range req.Events {
 			if ev.Type != "label_add" && ev.Type != "label_remove" {
-				return errBadRequest("bad label event type")
+				return corei18n.User("bad label event type")
 			}
 			if err := appendEvent(ctx, tx, bid, cardID, ev.Type, uid, ev.PayloadEnc); err != nil {
 				return err

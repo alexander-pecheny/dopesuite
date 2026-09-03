@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
 
@@ -166,7 +167,7 @@ func (s *server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 	err = s.withWriteTx(r.Context(), "add-comment", func(ctx context.Context, tx *sql.Tx) error {
 		payload, err := unb64(req.PayloadEnc)
 		if err != nil {
-			return errBadRequest("invalid payload_enc")
+			return corei18n.User("invalid payload_enc")
 		}
 		evID, err := insertEvent(ctx, tx, timelineEvent{BoardID: bid, CardID: cardID, SessionID: req.SessionID, Type: "comment", AuthorID: &uid, Payload: payload, ReplyToID: replyTo})
 		if err != nil {
@@ -200,7 +201,7 @@ select card_id, coalesce(reply_to_id, id) from timeline_events where id = ? and 
 		return 0, err
 	}
 	if owner != cardID {
-		return 0, errBadRequest(str.Server.Comment.Foreign())
+		return 0, corei18n.User(str.Server.Comment.Foreign())
 	}
 	return root.Int64, nil
 }
@@ -268,7 +269,7 @@ func (s *server) handlePatchComment(w http.ResponseWriter, r *http.Request) {
 		if req.PayloadEnc != nil {
 			payload, err := unb64(*req.PayloadEnc)
 			if err != nil || len(payload) == 0 {
-				return errBadRequest("invalid payload_enc")
+				return corei18n.User("invalid payload_enc")
 			}
 			if _, err := tx.ExecContext(ctx, `
 update timeline_events set payload_enc = ?, edited_at = ? where id = ?`, payload, rfc3339(time.Now()), evID); err != nil {
@@ -416,11 +417,11 @@ func (s *server) handleImportEvents(w http.ResponseWriter, r *http.Request) {
 				typ = "comment"
 			}
 			if typ != "comment" && typ != "desc_edit" {
-				return errBadRequest("bad event type")
+				return corei18n.User("bad event type")
 			}
 			payload, err := unb64(c.PayloadEnc)
 			if err != nil {
-				return errBadRequest("invalid payload_enc")
+				return corei18n.User("invalid payload_enc")
 			}
 			created := c.CreatedAt
 			if _, perr := time.Parse(time.RFC3339, created); perr != nil {

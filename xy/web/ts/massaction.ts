@@ -6,6 +6,8 @@
 // pickers and the writes are masspanel.ts; everything here is pure so jstest
 // can exercise the rules without a board.
 
+import S from "./i18nstrings.js";
+
 // One selectable thing, as this module needs to see it.
 export interface SelectableCard { id: number }
 
@@ -46,22 +48,16 @@ export function ordered<T extends SelectableCard>(selected: ReadonlySet<number>,
   return cards.filter((c) => selected.has(c.id));
 }
 
-// plural picks the Russian declension for n (1 card, 2 cards, 12 cards).
-export function plural(n: number, one: string, few: string, many: string): string {
-  const m10 = n % 10, m100 = n % 100;
-  return m100 >= 11 && m100 <= 14 ? many : m10 === 1 ? one : m10 >= 2 && m10 <= 4 ? few : many;
-}
-
 export function cardCount(n: number): string {
-  return `${n} ${plural(n, "карточка", "карточки", "карточек")}`;
+  return S.board.count.cards(n);
 }
 
 // runSummary reports a finished run. A bulk write is not a transaction — one
 // card failing must not undo the rest — so the count that failed is said out
 // loud rather than folded into a single "done".
 export function runSummary(ok: number, failed: number): string {
-  if (!failed) return `Готово: ${cardCount(ok)}.`;
-  return `Готово: ${ok}. Не удалось: ${failed} — они остались отмеченными.`;
+  if (!failed) return S.board.mass.done(cardCount(ok));
+  return S.board.mass.doneFailed(String(ok), String(failed));
 }
 
 // The actions the bar offers. `needs` says what the dialog must ask for before
@@ -78,15 +74,15 @@ export interface MassAction {
 }
 
 export const MASS_ACTIONS: MassAction[] = [
-  { key: "move", label: "Переместить", title: "Перенести отмеченные карточки в другой список или на другую доску", needs: "target", verb: "Переместить" },
-  { key: "copy", label: "Копировать", title: "Скопировать отмеченные карточки в другой список или на другую доску", needs: "target", verb: "Копировать" },
-  { key: "label-add", label: "Добавить метку", title: "Поставить одну метку на все отмеченные карточки", needs: "label", verb: "Добавить" },
-  { key: "label-del", label: "Снять метку", title: "Убрать одну метку со всех отмеченных карточек", needs: "label", verb: "Снять" },
-  { key: "session-add", label: "Отметить тестом", title: "Отметить все выбранные карточки как сыгранные на тесте", needs: "session", verb: "Отметить" },
-  { key: "session-del", label: "Снять тест", title: "Убрать отметку о тесте со всех отмеченных карточек", needs: "session", verb: "Снять" },
-  { key: "delete", label: "Удалить", title: "Удалить отмеченные карточки", needs: "none", danger: true, verb: "Удалить" },
+  { key: "move", label: S.board.mass.moveLabel(), title: S.board.mass.moveTitle(), needs: "target", verb: S.board.actions.move() },
+  { key: "copy", label: S.board.mass.copyLabel(), title: S.board.mass.copyTitle(), needs: "target", verb: S.board.actions.copy() },
+  { key: "label-add", label: S.board.mass.labelAddLabel(), title: S.board.mass.labelAddTitle(), needs: "label", verb: S.board.mass.labelAddVerb() },
+  { key: "label-del", label: S.board.mass.labelDelLabel(), title: S.board.mass.labelDelTitle(), needs: "label", verb: S.board.mass.labelDelVerb() },
+  { key: "session-add", label: S.board.mass.sessionAddLabel(), title: S.board.mass.sessionAddTitle(), needs: "session", verb: S.board.mass.sessionAddVerb() },
+  { key: "session-del", label: S.board.mass.sessionDelLabel(), title: S.board.mass.sessionDelTitle(), needs: "session", verb: S.board.mass.sessionDelVerb() },
+  { key: "delete", label: S.board.mass.deleteLabel(), title: S.board.mass.deleteTitle(), needs: "none", danger: true, verb: S.board.mass.deleteLabel() },
 ];
 
 export const xyMass = {
-  allSelected, toggleAll, toggleOne, prune, ordered, plural, cardCount, runSummary, MASS_ACTIONS,
+  allSelected, toggleAll, toggleOne, prune, ordered, cardCount, runSummary, MASS_ACTIONS,
 };

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"time"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
 
@@ -197,10 +198,10 @@ func (s *server) handleBundleImportEvents(w http.ResponseWriter, r *http.Request
 		}
 		for _, e := range req.Events {
 			if !bundleEventTypes[e.Type] {
-				return errBadRequest("bad event type")
+				return corei18n.User("bad event type")
 			}
 			if e.CardID == nil && e.SessionID == nil {
-				return errBadRequest(xystrings.Default.Server.Bundle.EventWithoutTarget())
+				return corei18n.User(xystrings.Default.Server.Bundle.EventWithoutTarget())
 			}
 			if e.CardID != nil {
 				if err := checkRef(okCard, childCard, *e.CardID); err != nil {
@@ -214,7 +215,7 @@ func (s *server) handleBundleImportEvents(w http.ResponseWriter, r *http.Request
 			}
 			payload, err := unb64(e.PayloadEnc)
 			if err != nil {
-				return errBadRequest("invalid payload_enc")
+				return corei18n.User("invalid payload_enc")
 			}
 			created := e.CreatedAt
 			if _, perr := time.Parse(time.RFC3339, created); perr != nil {

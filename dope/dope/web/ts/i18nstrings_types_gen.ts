@@ -5,6 +5,7 @@
 export type Strings = {
   admin: {
     createUsers: {
+      invalidUsername: () => string;
       name: () => string;
       title: () => string;
     };
@@ -19,6 +20,28 @@ export type Strings = {
       name: () => string;
       systemTag: () => string;
       title: () => string;
+    };
+  };
+  auth: {
+    login: {
+      codeMissing: () => string;
+      codeNotFound: () => string;
+      credentialsInvalid: () => string;
+      credentialsMissing: () => string;
+      passwordWrong: () => string;
+      systemUser: () => string;
+      telegramLinked: () => string;
+      usernameInvalid: () => string;
+    };
+    password: {
+      currentWrong: () => string;
+      tooLong: (n: string) => string;
+      tooShort: (n: string) => string;
+    };
+    username: {
+      alreadySet: () => string;
+      invalid: () => string;
+      taken: () => string;
     };
   };
   brain: {
@@ -1071,6 +1094,24 @@ export type Strings = {
       stage: (block: string, title: string) => string;
       venue: (n: string) => string;
       wave: (title: string, n: string) => string;
+    };
+    validate: {
+      matchCodeDup: (match: string) => string;
+      matchCodeRequired: (stage: string) => string;
+      slotCount: (match: string) => string;
+      slotSeedBasket: (match: string, slot: string) => string;
+      slotSeedNumber: (match: string, slot: string) => string;
+      slotTeamSource: (match: string, slot: string) => string;
+      slugRequired: () => string;
+      stageCodeDup: (code: string) => string;
+      stageCodeRequired: () => string;
+      stageNoMatches: (stage: string) => string;
+      stageType: (kind: string) => string;
+      stagesRequired: () => string;
+      teamAssignment: (index: string, name: string) => string;
+      teamCollision: (index: string, name: string, basket: string, number: string, other: string) => string;
+      teamNameRequired: (index: string) => string;
+      titleRequired: () => string;
     };
     venues: {
       count: () => string;

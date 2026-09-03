@@ -6,6 +6,7 @@ import type { Strings } from "./i18nstrings_types_gen.js";
 export const RU: Strings = {
   admin: {
     createUsers: {
+      invalidUsername: () => "недопустимый логин",
       name: () => "Создать пользователей",
       title: () => "Создать пользователей · Админка",
     },
@@ -20,6 +21,28 @@ export const RU: Strings = {
       name: () => "Пользователи",
       systemTag: () => "(система)",
       title: () => "Пользователи · Админка",
+    },
+  },
+  auth: {
+    login: {
+      codeMissing: () => "нет кода",
+      codeNotFound: () => "код не найден",
+      credentialsInvalid: () => "неверное имя пользователя или пароль",
+      credentialsMissing: () => "введите имя пользователя и пароль",
+      passwordWrong: () => "неверный пароль",
+      systemUser: () => "системная учётная запись не входит",
+      telegramLinked: () => "этот телеграм уже привязан",
+      usernameInvalid: () => "недопустимое имя пользователя",
+    },
+    password: {
+      currentWrong: () => "текущий пароль неверен",
+      tooLong: (n: string) => `пароль длиннее ${n} символов`,
+      tooShort: (n: string) => `пароль короче ${n} символов`,
+    },
+    username: {
+      alreadySet: () => "имя пользователя уже задано",
+      invalid: () => "недопустимое имя пользователя",
+      taken: () => "имя пользователя занято",
     },
   },
   brain: {
@@ -1072,6 +1095,24 @@ export const RU: Strings = {
       stage: (block: string, title: string) => `${block}. ${title}`,
       venue: (n: string) => `Стол ${n}`,
       wave: (title: string, n: string) => `${title}, заход ${n}`,
+    },
+    validate: {
+      matchCodeDup: (match: string) => `код боя "${match}" встречается дважды`,
+      matchCodeRequired: (stage: string) => `у боя в этапе "${stage}" нет кода (code)`,
+      slotCount: (match: string) => `в бою "${match}" participantCount не сходится с числом слотов`,
+      slotSeedBasket: (match: string, slot: string) => `бой "${match}", слот ${slot}: корзина посева не может быть отрицательной`,
+      slotSeedNumber: (match: string, slot: string) => `бой "${match}", слот ${slot}: номер посева должен быть положительным`,
+      slotTeamSource: (match: string, slot: string) => `бой "${match}", слот ${slot}: источник team больше не поддерживается — пишите seed-N или seed{basket, number}, команды приходят отдельным посевом`,
+      slugRequired: () => "схеме нужен slug",
+      stageCodeDup: (code: string) => `код этапа "${code}" встречается дважды`,
+      stageCodeRequired: () => "у этапа нет кода (code)",
+      stageNoMatches: (stage: string) => `в этапе "${stage}" нет ни одного боя`,
+      stageType: (kind: string) => `неизвестный stage_type "${kind}" — есть matches и reseed`,
+      stagesRequired: () => "схеме нужен хотя бы один этап (stages)",
+      teamAssignment: (index: string, name: string) => `команде teams[${index}] ("${name}") нужны basket и number от 1`,
+      teamCollision: (index: string, name: string, basket: string, number: string, other: string) => `teams[${index}] ("${name}") встали на ту же корзину ${basket} и номер ${number}, что и "${other}"`,
+      teamNameRequired: (index: string) => `у команды teams[${index}] нет названия`,
+      titleRequired: () => "схеме нужно название (title)",
     },
     venues: {
       count: () => "venues: нужен хотя бы один стол",

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"dope/dope/storage/store"
+	"dope/dope/web/route"
 )
 
 // gzipped JSON archive of a game: its full current state plus the edit history
@@ -116,7 +117,7 @@ from games where fest_id = ? and id = ?`, festID, gameID).
 		return
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	game.Scheme = rawJSONOrNull(schemeJSON)
@@ -125,12 +126,12 @@ from games where fest_id = ? and id = ?`, festID, gameID).
 	ctx := r.Context()
 	rows, _, err := loadGameRelationalRows(ctx, s.DB(), gameID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	festRow, festContext, err := loadGameArchiveContext(ctx, s.DB(), festID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 
@@ -144,7 +145,7 @@ from games where fest_id = ? and id = ?`, festID, gameID).
 	}
 	headJSON, err := marshalNoHTMLEscape(head)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 

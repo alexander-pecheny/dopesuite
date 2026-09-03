@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	"time"
 )
 
@@ -106,14 +107,14 @@ func (s *server) handlePatchLabel(w http.ResponseWriter, r *http.Request) {
 		if req.NameEnc != nil {
 			nameEnc, err := unb64(*req.NameEnc)
 			if err != nil {
-				return errBadRequest("invalid name_enc")
+				return corei18n.User("invalid name_enc")
 			}
 			p.set("name_enc", nameEnc)
 		}
 		if req.ColorEnc != nil {
 			colorEnc, err := unb64(*req.ColorEnc)
 			if err != nil {
-				return errBadRequest("invalid color_enc")
+				return corei18n.User("invalid color_enc")
 			}
 			p.set("color_enc", colorEnc)
 		}

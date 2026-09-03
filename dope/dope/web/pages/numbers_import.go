@@ -213,7 +213,7 @@ func (s *Server) HandleHostFestNumbersImportMatch(w http.ResponseWriter, r *http
 	}
 	teams, err := numbering.LoadFestTeams(r.Context(), s.h.Engine().DB, festID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	entries, errs := parseNumberImport(r.Form.Get("text"))
@@ -237,7 +237,7 @@ func (s *Server) HandleHostFestNumbersImportMatch(w http.ResponseWriter, r *http
 		errs = []string{}
 	}
 	if err := route.JSON(w, importMatchResponse{Teams: options, Matches: matches, Errors: errs}); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 	}
 }
 
@@ -258,13 +258,13 @@ func (s *Server) HandleHostFestNumbersImportApply(w http.ResponseWriter, r *http
 	var req importApplyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		if err := route.JSON(w, importApplyResponse{Error: dopestrings.Default.Numbers.Apply.ReadFailed()}); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			route.WriteError(w, r, err)
 		}
 		return
 	}
 	teams, err := numbering.LoadFestTeams(r.Context(), s.h.Engine().DB, festID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	// Start from the teams' current numbers so a partial import keeps the rest
@@ -283,19 +283,19 @@ func (s *Server) HandleHostFestNumbersImportApply(w http.ResponseWriter, r *http
 	for _, a := range req.Assignments {
 		if !validIDs[a.TeamID] {
 			if err := route.JSON(w, importApplyResponse{Error: dopestrings.Default.Numbers.Apply.ForeignTeam()}); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				route.WriteError(w, r, err)
 			}
 			return
 		}
 		if a.Number <= 0 || a.Number > numbering.MaxNumber {
 			if err := route.JSON(w, importApplyResponse{Error: dopestrings.Default.Numbers.Apply.NumberRange(strconv.Itoa(numbering.MaxNumber))}); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				route.WriteError(w, r, err)
 			}
 			return
 		}
 		if seenTeam[a.TeamID] {
 			if err := route.JSON(w, importApplyResponse{Error: dopestrings.Default.Numbers.Apply.TeamRepeated()}); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				route.WriteError(w, r, err)
 			}
 			return
 		}
@@ -311,11 +311,11 @@ func (s *Server) HandleHostFestNumbersImportApply(w http.ResponseWriter, r *http
 	}
 	if err := s.SaveFestNumbers(r.Context(), festID, final); err != nil {
 		if err := route.JSON(w, importApplyResponse{Error: err.Error()}); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			route.WriteError(w, r, err)
 		}
 		return
 	}
 	if err := route.JSON(w, importApplyResponse{OK: true, Assigned: len(req.Assignments)}); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 	}
 }

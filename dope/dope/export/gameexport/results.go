@@ -11,6 +11,7 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
 	"dope/dope/storage/store"
+	"dope/dope/web/route"
 )
 
 // results.go exposes a computed "results" view for a game: the same total
@@ -31,7 +32,7 @@ func HandleScopedGameResults(s Host, w http.ResponseWriter, r *http.Request, fes
 		return
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	if gameType != games.OD {
@@ -40,12 +41,12 @@ func HandleScopedGameResults(s Host, w http.ResponseWriter, r *http.Request, fes
 	}
 	results, err := games.ComputeODResults(schemeJSON, stateJSON)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	body, err := json.Marshal(results)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	w.Header().Set("X-State-Seq", strconv.FormatUint(seq, 10))

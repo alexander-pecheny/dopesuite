@@ -10,6 +10,7 @@ import (
 
 	"pecheny.me/dopecore/authcred"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
 
@@ -386,7 +387,7 @@ update board_invite_uses set status = 'declined', decided_at = ? where id = ?`, 
 		// Approving still has to fit under the cap: the queue was allowed to grow
 		// past it, so the seats may have gone to earlier approvals in the meantime.
 		if iv.maxUses.Valid && iv.used >= iv.maxUses.Int64 {
-			return errBadRequest(xystrings.Default.Server.Invite.NoSeatsLeft())
+			return corei18n.User(xystrings.Default.Server.Invite.NoSeatsLeft())
 		}
 		if _, err := tx.ExecContext(ctx, `
 update board_invite_uses set status = 'joined', decided_at = ? where id = ?`, rfc3339(now), use); err != nil {
@@ -407,7 +408,7 @@ func pendingRequest(ctx context.Context, tx *sql.Tx, bid, userID int64) (inviteR
 join board_invite_uses u on u.invite_id = i.id
 where i.board_id = ? and u.user_id = ? and u.status = 'pending'`, bid, userID))
 	if errors.Is(err, sql.ErrNoRows) {
-		return iv, 0, errBadRequest(xystrings.Default.Server.Invite.RequestNotFound())
+		return iv, 0, corei18n.User(xystrings.Default.Server.Invite.RequestNotFound())
 	}
 	if err != nil {
 		return iv, 0, err
@@ -556,7 +557,7 @@ func (s *server) handleJoinInvite(w http.ResponseWriter, r *http.Request) {
 			return nil
 		case "active":
 		default:
-			return errBadRequest(inviteRefusal(state))
+			return corei18n.User(inviteRefusal(state))
 		}
 		status := "joined"
 		if iv.requiresApproval {

@@ -77,7 +77,7 @@ func createdSection(data adminusers.CreateUsersData) *Element {
 	)
 }
 
-func errorsSection(errs []adminusers.UserError) *Element {
+func errorsSection(errs []adminusers.RowError) *Element {
 	rows := make([]Item, len(errs))
 	for i, e := range errs {
 		rows[i] = Listrow(Listtitle(Text(e.Username)), Muted(Text(e.Reason)))

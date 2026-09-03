@@ -5,6 +5,7 @@
 export type Strings = {
   admin: {
     createUsers: {
+      invalidUsername: () => string;
       name: () => string;
       title: () => string;
     };
@@ -160,6 +161,7 @@ export type Strings = {
       title: () => string;
     };
     count: {
+      cards: (n: number) => string;
       filtered: (shown: string, total: string) => string;
       questions: (n: number) => string;
     };
@@ -282,11 +284,25 @@ export type Strings = {
     };
     mass: {
       boardLocked: () => string;
+      copyLabel: () => string;
       copyOffline: () => string;
+      copyTitle: () => string;
       deleteHint: () => string;
+      deleteLabel: () => string;
+      deleteTitle: () => string;
+      done: (cards: string) => string;
+      doneFailed: (ok: string, failed: string) => string;
       exitLabel: () => string;
       hint: () => string;
+      labelAddLabel: () => string;
+      labelAddTitle: () => string;
+      labelAddVerb: () => string;
+      labelDelLabel: () => string;
+      labelDelTitle: () => string;
+      labelDelVerb: () => string;
       menuTitle: () => string;
+      moveLabel: () => string;
+      moveTitle: () => string;
       name: () => string;
       noLabels: () => string;
       noTests: () => string;
@@ -296,6 +312,12 @@ export type Strings = {
       selectCard: () => string;
       selectList: () => string;
       selectedCount: (count: string) => string;
+      sessionAddLabel: () => string;
+      sessionAddTitle: () => string;
+      sessionAddVerb: () => string;
+      sessionDelLabel: () => string;
+      sessionDelTitle: () => string;
+      sessionDelVerb: () => string;
     };
     members: {
       add: () => string;

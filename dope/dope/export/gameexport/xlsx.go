@@ -13,6 +13,7 @@ import (
 
 	"dope/dope/export/xlsxexport"
 	"dope/dope/storage/store"
+	"dope/dope/web/route"
 )
 
 // XLSX export of a game's tables for archival. OD games export in the
@@ -31,7 +32,7 @@ func HandleScopedGameExport(s Host, w http.ResponseWriter, r *http.Request, fest
 		return
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 
@@ -64,7 +65,7 @@ func HandleScopedGameExport(s Host, w http.ResponseWriter, r *http.Request, fest
 		return
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 

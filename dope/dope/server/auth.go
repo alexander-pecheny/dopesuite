@@ -18,6 +18,8 @@ import (
 	"pecheny.me/dopecore/tglogin"
 
 	"dope/dope/web/route"
+	dopestrings "dope/i18nstrings"
+	"strconv"
 )
 
 const (
@@ -130,7 +132,7 @@ func botUsername() string {
 func (s *server) authTgStatus(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
 	code := strings.TrimSpace(r.URL.Query().Get("code"))
 	if code == "" {
-		return route.BadRequest("missing code")
+		return route.BadRequest(dopestrings.Default.Auth.Login.CodeMissing())
 	}
 	var out tglogin.Outcome
 	err := s.inWriteTx(r.Context(), func(tx *sql.Tx) (err error) {
@@ -151,18 +153,18 @@ func (s *server) authTgClaim(w http.ResponseWriter, r *http.Request, _ route.Sco
 	}
 	username := strings.TrimSpace(req.Username)
 	if !util.ValidUsername(username) {
-		return route.BadRequest("invalid username")
+		return route.BadRequest(dopestrings.Default.Auth.Login.UsernameInvalid())
 	}
 	var out tglogin.Outcome
 	err := s.inWriteTx(r.Context(), func(tx *sql.Tx) (err error) {
 		out, err = s.handshake().Claim(r.Context(), tx, req.Code, username, req.Password, time.Now())
 		switch {
 		case errors.Is(err, tglogin.ErrCodeNotFound):
-			return route.BadRequest("code not found")
+			return route.BadRequest(dopestrings.Default.Auth.Login.CodeNotFound())
 		case errors.Is(err, tglogin.ErrWrongPassword):
-			return route.Unauthorized("wrong password")
+			return route.Unauthorized(dopestrings.Default.Auth.Login.PasswordWrong())
 		case errors.Is(err, tglogin.ErrTelegramLinked):
-			return route.Conflict("telegram already linked")
+			return route.Conflict(dopestrings.Default.Auth.Login.TelegramLinked())
 		}
 		return err
 	})
@@ -227,7 +229,7 @@ func (s *server) authLoginPassword(w http.ResponseWriter, r *http.Request, _ rou
 	username := strings.TrimSpace(req.Username)
 	password := req.Password
 	if username == "" || password == "" {
-		return route.BadRequest("missing username or password")
+		return route.BadRequest(dopestrings.Default.Auth.Login.CredentialsMissing())
 	}
 	var user session.User
 	var token string
@@ -243,20 +245,20 @@ func (s *server) authLoginPassword(w http.ResponseWriter, r *http.Request, _ rou
 select id, password_hash, password_salt, is_system from users where username = ?`, username).Scan(
 			&userID, &hash, &salt, &isSystem)
 		if errors.Is(err, sql.ErrNoRows) || (err == nil && !hash.Valid) {
-			return route.Unauthorized("invalid username or password")
+			return route.Unauthorized(dopestrings.Default.Auth.Login.CredentialsInvalid())
 		}
 		if err != nil {
 			return err
 		}
 		if isSystem == 1 {
-			return route.Forbid("system user cannot log in")
+			return route.Forbid(dopestrings.Default.Auth.Login.SystemUser())
 		}
 		ok, upgraded, err := authcred.VerifyPasswordUpgrading(hash.String, salt.String, password)
 		if err != nil {
 			return err
 		}
 		if !ok {
-			return route.Unauthorized("invalid username or password")
+			return route.Unauthorized(dopestrings.Default.Auth.Login.CredentialsInvalid())
 		}
 		if upgraded != "" {
 			// Lazy migration: a legacy SHA256 hash becomes bcrypt on the first
@@ -301,7 +303,7 @@ func (s *server) logoutSession(r *http.Request) {
 func (s *server) authUsername(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	user := sc.User
 	if user.Username.Valid {
-		return route.Conflict("username already set")
+		return route.Conflict(dopestrings.Default.Auth.Username.AlreadySet())
 	}
 	var req usernameRequest
 	if err := route.DecodeJSON(r, &req); err != nil {
@@ -309,19 +311,19 @@ func (s *server) authUsername(w http.ResponseWriter, r *http.Request, sc route.S
 	}
 	username := strings.TrimSpace(req.Username)
 	if !util.ValidUsername(username) {
-		return route.BadRequest("bad username")
+		return route.BadRequest(dopestrings.Default.Auth.Username.Invalid())
 	}
 	res, err := s.eng.WriteExec(r.Context(), `
 update users set username = ?, updated_at = ? where id = ? and username is null`,
 		username, util.UtcNow(), user.UserID)
 	if util.IsUniqueViolation(err) {
-		return route.Conflict("username taken")
+		return route.Conflict(dopestrings.Default.Auth.Username.Taken())
 	}
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return route.Conflict("username already set")
+		return route.Conflict(dopestrings.Default.Auth.Username.AlreadySet())
 	}
 	user.Username = sql.NullString{String: username, Valid: true}
 	return route.JSON(w, meResponseFor(user))
@@ -335,10 +337,10 @@ func (s *server) authPassword(w http.ResponseWriter, r *http.Request, sc route.S
 		return err
 	}
 	if len(req.NewPassword) < passwordMinLen {
-		return route.Statusf(http.StatusBadRequest, "password must be at least %d characters", passwordMinLen)
+		return route.BadRequest(dopestrings.Default.Auth.Password.TooShort(strconv.Itoa(passwordMinLen)))
 	}
 	if len(req.NewPassword) > passwordMaxLen {
-		return route.Statusf(http.StatusBadRequest, "password must be at most %d characters", passwordMaxLen)
+		return route.BadRequest(dopestrings.Default.Auth.Password.TooLong(strconv.Itoa(passwordMaxLen)))
 	}
 	err := s.inWriteTx(r.Context(), func(tx *sql.Tx) error {
 		ctx := r.Context()
@@ -353,7 +355,7 @@ select password_hash, password_salt from users where id = ?`, sc.User.UserID).Sc
 				return err
 			}
 			if !ok {
-				return route.Unauthorized("current password is incorrect")
+				return route.Unauthorized(dopestrings.Default.Auth.Password.CurrentWrong())
 			}
 		}
 		hashed, err := authcred.HashPassword(req.NewPassword)

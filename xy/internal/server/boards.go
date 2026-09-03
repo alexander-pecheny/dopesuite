@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
 
@@ -671,7 +672,7 @@ func (s *server) handleAddMember(w http.ResponseWriter, r *http.Request) {
 		var memberID int64
 		if err := tx.QueryRowContext(ctx, `select id from users where username = ?`, req.Username).Scan(&memberID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return errBadRequest(xystrings.Default.Server.Member.UserNotFound())
+				return corei18n.User(xystrings.Default.Server.Member.UserNotFound())
 			}
 			return err
 		}

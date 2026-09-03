@@ -282,6 +282,30 @@ hint = "Отметьте карточки"
 # Bar caption once cards are ticked; the count text comes from the mass
 # engine (massaction.ts).
 selected_count = 'Выбрано: {{.count}}'
+# The finished run, when every card went through, and when some did not: a
+# bulk write is not a transaction, so the failures are said out loud.
+done = 'Готово: {{.cards}}.'
+done_failed = 'Готово: {{.ok}}. Не удалось: {{.failed}} — они остались отмеченными.'
+# The seven actions the bar offers: menu label, tooltip, and the dialog's
+# primary button ("Удалить 7 карточек", not "OK").
+move_label = "Переместить"
+move_title = "Перенести отмеченные карточки в другой список или на другую доску"
+copy_label = "Копировать"
+copy_title = "Скопировать отмеченные карточки в другой список или на другую доску"
+label_add_label = "Добавить метку"
+label_add_title = "Поставить одну метку на все отмеченные карточки"
+label_add_verb = "Добавить"
+label_del_label = "Снять метку"
+label_del_title = "Убрать одну метку со всех отмеченных карточек"
+label_del_verb = "Снять"
+session_add_label = "Отметить тестом"
+session_add_title = "Отметить все выбранные карточки как сыгранные на тесте"
+session_add_verb = "Отметить"
+session_del_label = "Снять тест"
+session_del_title = "Убрать отметку о тесте со всех отмеченных карточек"
+session_del_verb = "Снять"
+delete_label = "Удалить"
+delete_title = "Удалить отмеченные карточки"
 # Hint shown in the delete dialog (no pickers needed).
 delete_hint = "Карточки будут удалены. Их можно восстановить в течение 14 дней."
 # Empty-state lines of the label and test pickers.
@@ -467,6 +491,8 @@ create = "Создать список"
 questions = '{{.n}} {{plural .n "вопрос" "вопроса" "вопросов"}}'
 # Filtered count ("1 из 4") shown while a label filter is on.
 filtered = '{{.shown}} из {{.total}}'
+# Card count, said wherever a bulk action reports on what it touched.
+cards = '{{.n}} {{plural .n "карточка" "карточки" "карточек"}}'
 
 [error]
 # Error thrown when a board action needs the key and it is not unlocked.

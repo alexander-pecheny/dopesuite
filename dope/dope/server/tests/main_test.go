@@ -28,6 +28,7 @@ import (
 
 	"pecheny.me/dopecore/session"
 
+	dopestrings "dope/i18nstrings"
 	"pecheny.me/dopecore/authcred"
 )
 
@@ -538,8 +539,9 @@ func TestImportRejectsTeamSlot(t *testing.T) {
 		}},
 	}
 	resp := importScheme(t, srv, festID, scheme, token)
-	if resp.Code != http.StatusBadRequest || !strings.Contains(resp.Body.String(), "removed source") {
-		t.Fatalf("import = %d %s, want 400 mentioning the removed source", resp.Code, resp.Body.String())
+	want := dopestrings.Default.Scheme.Validate.SlotTeamSource("A", "0")
+	if resp.Code != http.StatusBadRequest || !strings.Contains(resp.Body.String(), want) {
+		t.Fatalf("import = %d %s, want 400 saying %q", resp.Code, resp.Body.String(), want)
 	}
 }
 

@@ -119,3 +119,40 @@ block_group_n = '{{.block}}. Группа {{.n}}'
 wave = '{{.title}}, заход {{.n}}'
 # A round of a titled block in a multi-block scheme: "<block>. <title>".
 stage = '{{.block}}. {{.title}}'
+
+[validate]
+# Every failure of the imported scheme JSON (storeutil.ValidateScheme), as the
+# host who uploaded the file reads it. The field names stay latin: they name
+# what is written in the file.
+# The scheme has no slug.
+slug_required = "схеме нужен slug"
+# The scheme has no title.
+title_required = "схеме нужно название (title)"
+# An EK scheme with an empty stages list.
+stages_required = "схеме нужен хотя бы один этап (stages)"
+# A stage with an empty code.
+stage_code_required = "у этапа нет кода (code)"
+# Two stages with the same code.
+stage_code_dup = 'код этапа "{{.code}}" встречается дважды'
+# A stage_type that is neither matches nor reseed.
+stage_type = 'неизвестный stage_type "{{.kind}}" — есть matches и reseed'
+# A matches stage with an empty matches list.
+stage_no_matches = 'в этапе "{{.stage}}" нет ни одного боя'
+# A match with an empty code.
+match_code_required = 'у боя в этапе "{{.stage}}" нет кода (code)'
+# Two matches with the same code.
+match_code_dup = 'код боя "{{.match}}" встречается дважды'
+# participantCount disagrees with the number of slots written out.
+slot_count = 'в бою "{{.match}}" participantCount не сходится с числом слотов'
+# A slot filled from the removed "team" source.
+slot_team_source = 'бой "{{.match}}", слот {{.slot}}: источник team больше не поддерживается — пишите seed-N или seed{basket, number}, команды приходят отдельным посевом'
+# A seed slot whose number is zero or negative.
+slot_seed_number = 'бой "{{.match}}", слот {{.slot}}: номер посева должен быть положительным'
+# A seed slot whose basket is negative.
+slot_seed_basket = 'бой "{{.match}}", слот {{.slot}}: корзина посева не может быть отрицательной'
+# A team entry with an empty name.
+team_name_required = 'у команды teams[{{.index}}] нет названия'
+# A team entry whose basket or number is below one.
+team_assignment = 'команде teams[{{.index}}] ("{{.name}}") нужны basket и number от 1'
+# Two teams claiming the same basket and number.
+team_collision = 'teams[{{.index}}] ("{{.name}}") встали на ту же корзину {{.basket}} и номер {{.number}}, что и "{{.other}}"'

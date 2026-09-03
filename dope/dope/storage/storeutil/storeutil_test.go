@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
 )
 
 func seed(n int) store.SchemeSlot { return store.SchemeSlot{Seed: &store.SchemeSeedRef{Number: n}} }
@@ -24,23 +25,24 @@ func TestValidateScheme(t *testing.T) {
 	if err := ValidateScheme(validScheme()); err != nil {
 		t.Fatalf("valid scheme rejected: %v", err)
 	}
+	v := dopestrings.Default.Scheme.Validate
 	cases := map[string]struct {
 		mutate func(*store.FestScheme)
 		want   string
 	}{
-		"no slug":           {func(s *store.FestScheme) { s.Slug = " " }, "slug"},
-		"ek needs stages":   {func(s *store.FestScheme) { s.Stages = nil }, "stages are required"},
+		"no slug":           {func(s *store.FestScheme) { s.Slug = " " }, v.SlugRequired()},
+		"ek needs stages":   {func(s *store.FestScheme) { s.Stages = nil }, v.StagesRequired()},
 		"od may be flat":    {func(s *store.FestScheme) { s.Stages = nil; s.GameType = "od" }, ""},
-		"dup stage":         {func(s *store.FestScheme) { s.Stages = append(s.Stages, s.Stages[0]) }, "duplicate stage"},
-		"bad stage type":    {func(s *store.FestScheme) { s.Stages[0].StageType = "swiss" }, "bad stage_type"},
+		"dup stage":         {func(s *store.FestScheme) { s.Stages = append(s.Stages, s.Stages[0]) }, v.StageCodeDup("s1")},
+		"bad stage type":    {func(s *store.FestScheme) { s.Stages[0].StageType = "swiss" }, v.StageType("swiss")},
 		"reseed no matches": {func(s *store.FestScheme) { s.Stages[0].StageType = "reseed"; s.Stages[0].Matches = nil }, ""},
-		"slot count":        {func(s *store.FestScheme) { s.Stages[0].Matches[0].ParticipantCount = 3 }, "participantCount"},
+		"slot count":        {func(s *store.FestScheme) { s.Stages[0].Matches[0].ParticipantCount = 3 }, v.SlotCount("m1")},
 		"removed team src": {func(s *store.FestScheme) {
 			s.Stages[0].Matches[0].Slots[0] = store.SchemeSlot{Team: &store.SchemeTeamRef{Name: "x"}}
-		}, "removed source"},
-		"seed zero":      {func(s *store.FestScheme) { s.Stages[0].Matches[0].Slots[0] = seed(0) }, "bad seed number"},
-		"team collision": {func(s *store.FestScheme) { s.Teams[1].Number = 1 }, "collides"},
-		"team no basket": {func(s *store.FestScheme) { s.Teams[1].Basket = 0 }, "basket>=1"},
+		}, v.SlotTeamSource("m1", "0")},
+		"seed zero":      {func(s *store.FestScheme) { s.Stages[0].Matches[0].Slots[0] = seed(0) }, v.SlotSeedNumber("m1", "0")},
+		"team collision": {func(s *store.FestScheme) { s.Teams[1].Number = 1 }, v.TeamCollision("1", "B", "1", "1", "A")},
+		"team no basket": {func(s *store.FestScheme) { s.Teams[1].Basket = 0 }, v.TeamAssignment("1", "B")},
 	}
 	for name, c := range cases {
 		s := validScheme()
@@ -49,7 +51,7 @@ func TestValidateScheme(t *testing.T) {
 		switch {
 		case c.want == "" && err != nil:
 			t.Errorf("%s: unexpected %v", name, err)
-		case c.want != "" && (err == nil || !strings.Contains(err.Error(), c.want)):
+		case c.want != "" && (err == nil || err.Error() != c.want):
 			t.Errorf("%s: err = %v, want %q", name, err, c.want)
 		}
 	}

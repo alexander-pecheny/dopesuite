@@ -2,7 +2,6 @@ package server
 
 import (
 	"errors"
-	"log"
 	"net/http"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
@@ -10,7 +9,9 @@ import (
 	xystrings "xy/i18nstrings"
 )
 
-// appError is a handler error carrying an HTTP status and a user-facing message.
+// appError is a handler error carrying a status other than 400 and a message
+// written for the person who caused it. A 400 needs no type of its own: that is
+// what corei18n.User is, and handleErr answers both.
 type appError struct {
 	status int
 	msg    string
@@ -18,15 +19,15 @@ type appError struct {
 
 func (e *appError) Error() string { return e.msg }
 
-func errBadRequest(msg string) error { return &appError{status: http.StatusBadRequest, msg: msg} }
-func errForbidden(msg string) error  { return &appError{status: http.StatusForbidden, msg: msg} }
-func errNotFound(msg string) error   { return &appError{status: http.StatusNotFound, msg: msg} }
+func errForbidden(msg string) error { return &appError{status: http.StatusForbidden, msg: msg} }
+func errNotFound(msg string) error  { return &appError{status: http.StatusNotFound, msg: msg} }
 func errTooLarge(msg string) error {
 	return &appError{status: http.StatusRequestEntityTooLarge, msg: msg}
 }
 
 // handleErr writes an error response if err != nil and reports whether it did.
-// appErrors map to their status + message; anything else is a logged 500.
+// appErrors map to their status + message, a UserError to a 400 carrying its
+// own, anything else to a logged 500 (root docs/adr/0006).
 func handleErr(w http.ResponseWriter, err error) bool {
 	if err == nil {
 		return false
@@ -36,12 +37,12 @@ func handleErr(w http.ResponseWriter, err error) bool {
 		httpError(w, ae.status, ae.msg)
 		return true
 	}
-	if msg, ok := corei18n.AsUser(err); ok {
+	msg, forUser := corei18n.Reveal(err, xystrings.Default.Server.Internal())
+	if forUser {
 		httpError(w, http.StatusBadRequest, msg)
 		return true
 	}
-	log.Printf("internal error: %v", err)
-	httpError(w, http.StatusInternalServerError, xystrings.Default.Server.Internal())
+	httpError(w, http.StatusInternalServerError, msg)
 	return true
 }
 
@@ -50,10 +51,6 @@ func handleErr(w http.ResponseWriter, err error) bool {
 // The edge shows only messages written for the person who caused them
 // (root docs/adr/0006).
 func handleUser(w http.ResponseWriter, err error) {
-	if msg, ok := corei18n.AsUser(err); ok {
-		httpError(w, http.StatusBadRequest, msg)
-		return
-	}
-	log.Printf("bad request: %v", err)
-	httpError(w, http.StatusBadRequest, xystrings.Default.Server.Error.BadRequest())
+	msg, _ := corei18n.Reveal(err, xystrings.Default.Server.Error.BadRequest())
+	httpError(w, http.StatusBadRequest, msg)
 }

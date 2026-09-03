@@ -134,7 +134,7 @@ func (s *Server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	users, err := s.loadAdminUsers(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	order := adminusers.ParseSort(r.URL.Query(), "last")
@@ -245,19 +245,20 @@ func (s *Server) handleAdminCreateUsersSubmit(w http.ResponseWriter, r *http.Req
 	ctx := r.Context()
 	tx, err := s.h.Engine().BeginWriteTx(ctx)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	defer tx.Rollback()
 
 	data, _ := adminusers.Creator{
-		Store:    adminUserStore{tx: tx},
-		Validate: util.ValidUsername,
-		Policy:   adminusers.CollectRowErrors,
+		Store:         adminUserStore{tx: tx},
+		Validate:      util.ValidUsername,
+		InvalidReason: dopestrings.Default.Admin.CreateUsers.InvalidUsername(),
+		Policy:        adminusers.CollectRowErrors,
 	}.Create(ctx, usernames)
 
 	if err := tx.Commit(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	s.renderAdminCreateUsers(w, data)

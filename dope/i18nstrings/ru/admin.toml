@@ -24,3 +24,8 @@ col_created = "Создан"
 system_tag = "(система)"
 # The users page's empty state.
 empty = "Пользователей нет."
+
+[create_users]
+# The reason beside a username this app's rules rejected, handed to
+# adminusers.Creator — dopecore has no Catalog of its own (root docs/adr/0004).
+invalid_username = "недопустимый логин"

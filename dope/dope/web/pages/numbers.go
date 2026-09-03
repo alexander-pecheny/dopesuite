@@ -17,6 +17,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"dope/dope/web/route"
 )
 
 type hostFestNumberRow struct {
@@ -108,12 +110,12 @@ func (s *Server) RenderHostFestNumbers(w http.ResponseWriter, r *http.Request, f
 		return
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	data, err := s.buildHostFestNumbersData(r.Context(), festID, errMsg, notice, override)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	data.Fest = fest
@@ -234,7 +236,7 @@ func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 	}
 	teams, err := numbering.LoadFestTeams(r.Context(), s.h.Engine().DB, festID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	if len(teams) == 0 {
@@ -307,7 +309,7 @@ func (s *Server) HandleHostAutoFestNumbers(w http.ResponseWriter, r *http.Reques
 	}
 	teams, err := numbering.LoadFestTeams(r.Context(), s.h.Engine().DB, festID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	if len(teams) == 0 {

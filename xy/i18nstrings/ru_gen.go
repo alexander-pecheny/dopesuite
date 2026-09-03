@@ -12,8 +12,9 @@ import (
 var RU = Strings{
 	Admin: AdminStrings{
 		CreateUsers: AdminCreateUsersStrings{
-			Name:  func() string { return "Создать пользователей" },
-			Title: func() string { return "Создать пользователей · Админка" },
+			InvalidUsername: func() string { return "недопустимый логин" },
+			Name:            func() string { return "Создать пользователей" },
+			Title:           func() string { return "Создать пользователей · Админка" },
 		},
 		Page: AdminPageStrings{
 			Title: func() string { return "Админка" },
@@ -187,6 +188,9 @@ var RU = Strings{
 			Title:  func() string { return "Сменить пароль доски" },
 		},
 		Count: BoardCountStrings{
+			Cards: func(n int) string {
+				return fmt.Sprintf("%d %s", n, core.Plural("ru", n, "карточка", "карточки", "карточек"))
+			},
 			Filtered: func(shown string, total string) string { return fmt.Sprintf("%s из %s", shown, total) },
 			Questions: func(n int) string {
 				return fmt.Sprintf("%d %s", n, core.Plural("ru", n, "вопрос", "вопроса", "вопросов"))
@@ -341,26 +345,60 @@ var RU = Strings{
 		},
 		Mass: BoardMassStrings{
 			BoardLocked: func() string { return "— пароль доски неизвестен —" },
+			CopyLabel:   func() string { return "Копировать" },
 			CopyOffline: func() string {
 				return "Копирование и перенос между досками доступны только онлайн."
+			},
+			CopyTitle: func() string {
+				return "Скопировать отмеченные карточки в другой список или на другую доску"
 			},
 			DeleteHint: func() string {
 				return "Карточки будут удалены. Их можно восстановить в течение 14 дней."
 			},
-			ExitLabel: func() string { return "Выйти из режима отметок" },
-			Hint:      func() string { return "Отметьте карточки" },
+			DeleteLabel: func() string { return "Удалить" },
+			DeleteTitle: func() string { return "Удалить отмеченные карточки" },
+			Done:        func(cards string) string { return fmt.Sprintf("Готово: %s.", cards) },
+			DoneFailed: func(ok string, failed string) string {
+				return fmt.Sprintf("Готово: %s. Не удалось: %s — они остались отмеченными.", ok, failed)
+			},
+			ExitLabel:     func() string { return "Выйти из режима отметок" },
+			Hint:          func() string { return "Отметьте карточки" },
+			LabelAddLabel: func() string { return "Добавить метку" },
+			LabelAddTitle: func() string {
+				return "Поставить одну метку на все отмеченные карточки"
+			},
+			LabelAddVerb:  func() string { return "Добавить" },
+			LabelDelLabel: func() string { return "Снять метку" },
+			LabelDelTitle: func() string {
+				return "Убрать одну метку со всех отмеченных карточек"
+			},
+			LabelDelVerb: func() string { return "Снять" },
 			MenuTitle: func() string {
 				return "Отметить карточки на всей доске и сделать с ними одно действие"
 			},
-			Name:          func() string { return "Массовое действие" },
-			NoLabels:      func() string { return "На доске нет меток." },
-			NoTests:       func() string { return "На доске нет тестов." },
-			PickTest:      func() string { return "— выберите тест —" },
-			Progress:      func(done string, total string) string { return fmt.Sprintf("%s из %s…", done, total) },
-			Run:           func() string { return "Выполнить" },
-			SelectCard:    func() string { return "Отметить карточку" },
-			SelectList:    func() string { return "Отметить весь список" },
-			SelectedCount: func(count string) string { return fmt.Sprintf("Выбрано: %s", count) },
+			MoveLabel: func() string { return "Переместить" },
+			MoveTitle: func() string {
+				return "Перенести отмеченные карточки в другой список или на другую доску"
+			},
+			Name:            func() string { return "Массовое действие" },
+			NoLabels:        func() string { return "На доске нет меток." },
+			NoTests:         func() string { return "На доске нет тестов." },
+			PickTest:        func() string { return "— выберите тест —" },
+			Progress:        func(done string, total string) string { return fmt.Sprintf("%s из %s…", done, total) },
+			Run:             func() string { return "Выполнить" },
+			SelectCard:      func() string { return "Отметить карточку" },
+			SelectList:      func() string { return "Отметить весь список" },
+			SelectedCount:   func(count string) string { return fmt.Sprintf("Выбрано: %s", count) },
+			SessionAddLabel: func() string { return "Отметить тестом" },
+			SessionAddTitle: func() string {
+				return "Отметить все выбранные карточки как сыгранные на тесте"
+			},
+			SessionAddVerb:  func() string { return "Отметить" },
+			SessionDelLabel: func() string { return "Снять тест" },
+			SessionDelTitle: func() string {
+				return "Убрать отметку о тесте со всех отмеченных карточек"
+			},
+			SessionDelVerb: func() string { return "Снять" },
 		},
 		Members: BoardMembersStrings{
 			Add:          func() string { return "Добавить" },

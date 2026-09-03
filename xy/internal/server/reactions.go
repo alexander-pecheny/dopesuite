@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
 
@@ -54,7 +55,7 @@ where id = ? and type = 'comment' and deleted_at is null`, *req.TargetID).Scan(&
 	err := s.withWriteTx(r.Context(), "add-reaction", func(ctx context.Context, tx *sql.Tx) error {
 		payload, err := unb64(req.PayloadEnc)
 		if err != nil {
-			return errBadRequest("invalid payload_enc")
+			return corei18n.User("invalid payload_enc")
 		}
 		evID, err = insertEvent(ctx, tx, timelineEvent{BoardID: bid, CardID: cardID, Type: "reaction", AuthorID: &uid, Payload: payload, ReplyToID: req.TargetID})
 		return err

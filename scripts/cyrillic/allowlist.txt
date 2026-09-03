@@ -25,7 +25,6 @@ dope/dope/web/ts/sheet-cursor.ts
 dope/dope/web/ts/standings.ts
 dope/scripts/octobearfest/assorti.go
 dope/scripts/octobearfest/troika.go
-dopecore/adminusers/adminusers.go
 scripts/classcheck/cssgeom.go
 scripts/classcheck/main.go
 xy/cmd/chgksuite/stats.go
@@ -69,7 +68,6 @@ xy/web/ts/join.ts
 xy/web/ts/labelfilter.ts
 xy/web/ts/labelsedit.ts
 xy/web/ts/listsmanage.ts
-xy/web/ts/massaction.ts
 xy/web/ts/movelist.ts
 xy/web/ts/profile.ts
 xy/web/ts/replace.ts

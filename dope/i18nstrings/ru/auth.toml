@@ -1,0 +1,39 @@
+# dope — the auth surface (dope/dope/server/auth.go): every refusal the login
+# page and the profile form show. Each one leaves the handler as a route error
+# whose message the browser prints verbatim, so it is written for the person
+# who hit it, not for the log.
+
+[login]
+# The Telegram claim arrived without a code.
+code_missing = "нет кода"
+# The claim's username fails the username rules.
+username_invalid = "недопустимое имя пользователя"
+# The code is unknown or has already been used.
+code_not_found = "код не найден"
+# The password does not match the one the code was minted with.
+password_wrong = "неверный пароль"
+# This Telegram account is already tied to another user.
+telegram_linked = "этот телеграм уже привязан"
+# The password login arrived with a field missing.
+credentials_missing = "введите имя пользователя и пароль"
+# No such user, or the password is wrong — one line for both, so neither
+# tells an outsider which usernames exist.
+credentials_invalid = "неверное имя пользователя или пароль"
+# A system account (the bot's own user) tried to log in.
+system_user = "системная учётная запись не входит"
+
+[username]
+# The username is already set and cannot be changed again.
+already_set = "имя пользователя уже задано"
+# The requested username fails the username rules.
+invalid = "недопустимое имя пользователя"
+# Someone else holds it.
+taken = "имя пользователя занято"
+
+[password]
+# The new password is shorter than the minimum.
+too_short = 'пароль короче {{.n}} символов'
+# The new password is longer than the maximum.
+too_long = 'пароль длиннее {{.n}} символов'
+# Changing a password proves the current one first, and this one was wrong.
+current_wrong = "текущий пароль неверен"

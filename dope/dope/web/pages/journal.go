@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	ui "dope/dope/web/ui"
+
+	"dope/dope/web/route"
 )
 
 // The per-game journal page lists a game's edits newest-first, each rendered as
@@ -794,7 +796,7 @@ func (s *Server) RenderGameJournal(w http.ResponseWriter, r *http.Request, festI
 	}
 	groups, err := s.loadGameJournalGroups(r.Context(), festID, gameID)
 	if err != nil {
-		http.Error(w, "journal: "+err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, fmt.Errorf("journal: %w", err))
 		return
 	}
 	RenderDoc(w, s.h.Engine().AssetETags, journalDoc(festID, gameID, title, FestTitle(r.Context(), s.h.Engine().DB, festID), errMsg, notice, groups))

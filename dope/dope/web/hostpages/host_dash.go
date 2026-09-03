@@ -22,6 +22,8 @@ import (
 	dopestrings "dope/i18nstrings"
 
 	"pecheny.me/dopecore/session"
+
+	"dope/dope/web/route"
 )
 
 type hostFestDashData struct {
@@ -284,7 +286,7 @@ func (s *Server) handleHostCreateFest(w http.ResponseWriter, r *http.Request, us
 	now := util.UtcNow()
 	tx, err := s.h.Engine().BeginWriteTx(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	defer tx.Rollback()
@@ -294,17 +296,17 @@ values(?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
 		nil, title, description, ratingID, user.UserID, now, now,
 		util.NullableString(startDate), util.NullableString(endDate), util.BoolToInt(isPublic))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	if _, err := tx.ExecContext(r.Context(), `
 insert into fest_organizers(fest_id, user_id, role, added_at)
 values(?, ?, 'creator', ?)`, festID, user.UserID, now); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	if err := tx.Commit(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/host/fest/%d", festID), http.StatusSeeOther)
@@ -333,7 +335,7 @@ func (s *Server) handleHostUpdateFest(w http.ResponseWriter, r *http.Request, fe
 			return
 		}
 		if taken, err := s.slugTakenByOtherFest(r.Context(), slug, festID); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			route.WriteError(w, r, err)
 			return
 		} else if taken {
 			s.renderHostFestDashboard(w, r, festID, hostDashMessages{FormError: dopestrings.Default.Host.Dash.ErrorSlugTaken()})
@@ -349,7 +351,7 @@ where id = ?`,
 		title, slugValue, description, ratingID,
 		util.NullableString(startDate), util.NullableString(endDate), util.BoolToInt(isPublic),
 		util.UtcNow(), festID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	s.h.Engine().InvalidateFestViewCache(festID)
@@ -408,7 +410,7 @@ func (s *Server) gameRefOrID(ctx context.Context, gameID int64) string {
 func (s *Server) handleHostDeleteFest(w http.ResponseWriter, r *http.Request, festID, userID int64) {
 	creator, err := s.isFestCreator(r.Context(), festID, userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	if !creator {
@@ -419,7 +421,7 @@ func (s *Server) handleHostDeleteFest(w http.ResponseWriter, r *http.Request, fe
 	defer s.h.Engine().Mu.Unlock()
 	result, err := s.h.Engine().WriteExec(r.Context(), `delete from fests where id = ? and created_by = ?`, festID, userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	affected, _ := result.RowsAffected()
@@ -452,12 +454,12 @@ from fests where id = ?`, festID).Scan(&title, &slug, &description, &startDate, 
 			http.NotFound(w, r)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	gameRows, err := LoadFestGames(r.Context(), s.h.Engine().DB, festID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	festRef := slug
@@ -477,21 +479,21 @@ from fests where id = ?`, festID).Scan(&title, &slug, &description, &startDate, 
 	}
 	teamCount, playerCount, err := s.loadHostFestRosterCounts(r.Context(), festID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	var numbersAssigned int
 	if err := s.h.Engine().DB.QueryRowContext(r.Context(), `
 select coalesce(sum(case when number is not null then 1 else 0 end), 0)
 from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigned); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	currentRole := ""
 	if user, ok := s.h.Engine().LookupSession(r); ok {
 		currentRole, err = festaccess.FestUserRoleFromQuery(r.Context(), s.h.Engine().DB, festID, user.UserID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			route.WriteError(w, r, err)
 			return
 		}
 	}
@@ -503,7 +505,7 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigne
 	if canManageAccess {
 		access, err = festaccess.LoadFestAccessMembers(s.h.Engine(), r.Context(), festID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			route.WriteError(w, r, err)
 			return
 		}
 	}

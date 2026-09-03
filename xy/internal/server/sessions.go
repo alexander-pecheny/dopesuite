@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	"time"
 )
 
@@ -198,7 +199,7 @@ func (s *server) handleAddSessionComment(w http.ResponseWriter, r *http.Request)
 	err := s.withWriteTx(r.Context(), "add-session-comment", func(ctx context.Context, tx *sql.Tx) error {
 		payload, err := unb64(req.PayloadEnc)
 		if err != nil {
-			return errBadRequest("invalid payload_enc")
+			return corei18n.User("invalid payload_enc")
 		}
 		_, err = insertEvent(ctx, tx, timelineEvent{BoardID: bid, SessionID: &sessionID, Type: "comment", AuthorID: &u.UserID, Payload: payload})
 		return err

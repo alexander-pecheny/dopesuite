@@ -18,6 +18,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"dope/dope/web/route"
 )
 
 type hostFestTeam struct {
@@ -499,7 +501,7 @@ func (s *Server) handleHostImportRatingRoster(w http.ResponseWriter, r *http.Req
 			http.NotFound(w, r)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	if ratingID <= 0 {

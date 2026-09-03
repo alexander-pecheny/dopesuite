@@ -42,7 +42,7 @@ func (s *server) servePage(name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := s.pages.Bytes(name)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			handleErr(w, err)
 			return
 		}
 		s.writePage(w, r, body)
@@ -61,7 +61,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	body, err := ui.Compile("ui/login.dopeui", kit.LoginPage(xystrings.Default.Auth.Page.Title(), next))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		handleErr(w, err)
 		return
 	}
 	s.writePage(w, r, body)

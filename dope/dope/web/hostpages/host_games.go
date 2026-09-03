@@ -25,6 +25,8 @@ import (
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
 	"pecheny.me/dopeuikit/palette"
+
+	"dope/dope/web/route"
 )
 
 type hostGameSettingsData struct {
@@ -297,7 +299,7 @@ func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Req
 		var count int
 		if err := s.h.Engine().DB.QueryRowContext(r.Context(), `
 select count(*) from games where fest_id = ? and slug = ? and id <> ?`, festID, slug, gameID).Scan(&count); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			route.WriteError(w, r, err)
 			return
 		}
 		if count > 0 {
@@ -350,7 +352,7 @@ func (s *Server) handleHostDeleteGame(w http.ResponseWriter, r *http.Request, fe
 	defer cancel()
 	conn, err := s.h.Engine().AcquireWriteConn(ctx, "game-delete")
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	defer conn.Close()
@@ -358,7 +360,7 @@ func (s *Server) handleHostDeleteGame(w http.ResponseWriter, r *http.Request, fe
 
 	tx, err := s.h.Engine().BeginWriteTxConn(ctx, conn)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	defer tx.Rollback()
@@ -370,11 +372,11 @@ select title from games where id = ? and fest_id = ?`, gameID, festID).Scan(&tit
 			http.NotFound(w, r)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	if _, err := tx.ExecContext(ctx, `delete from games where id = ? and fest_id = ?`, gameID, festID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	var nextGameID sql.NullInt64
@@ -387,18 +389,18 @@ from games g
 where g.fest_id = ?
 order by g.position, g.id
 limit 1`, festID).Scan(&nextGameID, &nextMatchCode); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	if _, err := festwrite.BumpFestRevisionTx(ctx, tx, festID, "game:delete", util.MustJSON(map[string]any{
 		"gameID": gameID,
 		"title":  title,
 	})); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	if err := tx.Commit(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	if s.h.Engine().FestID == festID && s.h.Engine().ActiveGameID == gameID {
@@ -425,7 +427,7 @@ func (s *Server) handleHostClearGame(w http.ResponseWriter, r *http.Request, fes
 
 	tx, err := s.h.Engine().BeginWriteTx(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	defer tx.Rollback()
@@ -435,11 +437,11 @@ func (s *Server) handleHostClearGame(w http.ResponseWriter, r *http.Request, fes
 		return
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		route.WriteError(w, r, route.BadUser(err))
 		return
 	}
 	if err := tx.Commit(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	if s.h.Engine().FestID == festID && s.h.Engine().ActiveGameID == gameID {

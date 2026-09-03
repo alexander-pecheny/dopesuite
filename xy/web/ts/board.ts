@@ -42,7 +42,7 @@ import * as people from "./people.js";
 import { createSessionsPanel } from "./sessionspanel.js";
 import { colorField, labelFill, labelInk, LABEL_COLORS } from "./colorpick.js";
 import { anchorPopup } from "./popup.js";
-import { plural, xyMass } from "./massaction.js";
+import { xyMass } from "./massaction.js";
 import { xySearchIndex } from "./searchindex.js";
 import type { BoardKeymeta, DataKey } from "./crypto.js";
 import { xyStore } from "./store.js";
@@ -1276,7 +1276,6 @@ timeline = createTimeline({
   getDK: () => dk,
   post,
   popupMenu,
-  plural,
   card: {
     openCardId: () => cardDetail.openCardId(),
     copyCommentLink: (id) => { void cardDetail.copyCommentLink(id); },

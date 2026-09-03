@@ -164,7 +164,7 @@ func (s *Server) renderHostLanding(w http.ResponseWriter, r *http.Request, errMs
 	}
 	fests, err := s.loadHostFests(r.Context(), user.UserID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	username := ""
@@ -198,7 +198,7 @@ func (s *Server) HandleProfilePage(w http.ResponseWriter, r *http.Request) {
 		if err := s.h.Engine().DB.QueryRowContext(r.Context(),
 			`select password_hash, username, telegram_username from users where id = ?`,
 			user.UserID).Scan(&hash, &username, &telegram); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			route.WriteError(w, r, err)
 			return
 		}
 		pages.RenderDoc(w, s.h.Engine().AssetETags, profileDoc(profileData{

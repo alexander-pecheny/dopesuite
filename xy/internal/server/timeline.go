@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"database/sql"
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	"time"
 )
 
@@ -57,7 +58,7 @@ values(?, ?, ?, ?, ?, ?, ?, ?, ?)`, ev.BoardID, cardID, sessionID, ev.Type, auth
 func appendEvent(ctx context.Context, tx *sql.Tx, boardID, cardID int64, typ string, authorID int64, payloadB64 string) error {
 	payload, err := unb64(payloadB64)
 	if err != nil {
-		return errBadRequest("invalid payload_enc")
+		return corei18n.User("invalid payload_enc")
 	}
 	_, err = insertEvent(ctx, tx, timelineEvent{BoardID: boardID, CardID: cardID, Type: typ, AuthorID: &authorID, Payload: payload})
 	return err

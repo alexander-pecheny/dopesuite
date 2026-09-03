@@ -86,7 +86,10 @@ type CreatedUser struct {
 	Password string
 }
 
-type UserError struct {
+// RowError is one username the batch could not create, and why — shown on the
+// admin page beside the ones it did. (Not i18nstrings.UserError: this one is a
+// row of a report, not an error a handler returns.)
+type RowError struct {
 	Username string
 	Reason   string
 }
@@ -95,7 +98,7 @@ type CreateUsersData struct {
 	Submitted bool
 	Created   []CreatedUser
 	Skipped   []string
-	Errors    []UserError
+	Errors    []RowError
 }
 
 // Copyable returns the created credentials as tab-separated lines, ready to
@@ -137,9 +140,13 @@ const (
 // Creator runs the bulk-create loop: validate → skip if the user exists →
 // random password → hash → insert.
 type Creator struct {
-	Store    Store
-	Validate func(username string) bool
-	Policy   ErrorPolicy
+	Store Store
+	// Validate is the app's username rule; InvalidReason is the Catalog line a
+	// rejected one is reported with. dopecore has no Catalog of its own — it
+	// imports no module (root docs/adr/0004) — so the wording comes from the app.
+	Validate      func(username string) bool
+	InvalidReason string
+	Policy        ErrorPolicy
 }
 
 // Create processes usernames in order. An invalid username is always a
@@ -151,7 +158,7 @@ func (c Creator) Create(ctx context.Context, usernames []string) (CreateUsersDat
 	data := CreateUsersData{Submitted: true}
 	for _, name := range usernames {
 		if !c.Validate(name) {
-			data.Errors = append(data.Errors, UserError{Username: name, Reason: "недопустимый логин"})
+			data.Errors = append(data.Errors, RowError{Username: name, Reason: c.InvalidReason})
 			continue
 		}
 		exists, err := c.Store.UserExists(ctx, name)
@@ -159,7 +166,7 @@ func (c Creator) Create(ctx context.Context, usernames []string) (CreateUsersDat
 			if c.Policy == AbortOnRowError {
 				return data, err
 			}
-			data.Errors = append(data.Errors, UserError{Username: name, Reason: err.Error()})
+			data.Errors = append(data.Errors, RowError{Username: name, Reason: err.Error()})
 			continue
 		}
 		if exists {
@@ -171,7 +178,7 @@ func (c Creator) Create(ctx context.Context, usernames []string) (CreateUsersDat
 			if c.Policy == AbortOnRowError {
 				return data, err
 			}
-			data.Errors = append(data.Errors, UserError{Username: name, Reason: err.Error()})
+			data.Errors = append(data.Errors, RowError{Username: name, Reason: err.Error()})
 			continue
 		}
 		hash, err := authcred.HashPassword(password)
@@ -179,7 +186,7 @@ func (c Creator) Create(ctx context.Context, usernames []string) (CreateUsersDat
 			if c.Policy == AbortOnRowError {
 				return data, err
 			}
-			data.Errors = append(data.Errors, UserError{Username: name, Reason: err.Error()})
+			data.Errors = append(data.Errors, RowError{Username: name, Reason: err.Error()})
 			continue
 		}
 		if err := c.Store.InsertUser(ctx, name, hash); err != nil {
@@ -190,7 +197,7 @@ func (c Creator) Create(ctx context.Context, usernames []string) (CreateUsersDat
 			if c.Policy == AbortOnRowError {
 				return data, err
 			}
-			data.Errors = append(data.Errors, UserError{Username: name, Reason: err.Error()})
+			data.Errors = append(data.Errors, RowError{Username: name, Reason: err.Error()})
 			continue
 		}
 		data.Created = append(data.Created, CreatedUser{Username: name, Password: password})

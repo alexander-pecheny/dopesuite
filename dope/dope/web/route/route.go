@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -383,14 +382,15 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 			return
 		}
 		http.Error(w, st.Msg, st.Code)
-	case isUser(err):
-		msg, _ := corei18n.AsUser(err)
-		http.Error(w, msg, http.StatusBadRequest)
 	case errors.Is(err, sql.ErrNoRows):
 		http.NotFound(w, r)
 	default:
-		log.Printf("internal error: %v", err)
-		http.Error(w, dopestrings.Default.Server.Error.Internal(), http.StatusInternalServerError)
+		msg, forUser := corei18n.Reveal(err, dopestrings.Default.Server.Error.Internal())
+		code := http.StatusInternalServerError
+		if forUser {
+			code = http.StatusBadRequest
+		}
+		http.Error(w, msg, code)
 	}
 }
 
@@ -398,16 +398,8 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 // (it was written for the person who caused the failure), anything else one
 // generic line over a log entry (root docs/adr/0006).
 func BadUser(err error) error {
-	if msg, ok := corei18n.AsUser(err); ok {
-		return BadRequest(msg)
-	}
-	log.Printf("bad request: %v", err)
-	return BadRequest(dopestrings.Default.Server.Error.BadRequest())
-}
-
-func isUser(err error) bool {
-	_, ok := corei18n.AsUser(err)
-	return ok
+	msg, _ := corei18n.Reveal(err, dopestrings.Default.Server.Error.BadRequest())
+	return BadRequest(msg)
 }
 
 // JSON writes v as the response body.

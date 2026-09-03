@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
 
@@ -133,7 +134,7 @@ func (s *server) handlePatchList(w http.ResponseWriter, r *http.Request) {
 		if req.TitleEnc != nil {
 			titleEnc, err := unb64(*req.TitleEnc)
 			if err != nil {
-				return errBadRequest("invalid title_enc")
+				return corei18n.User("invalid title_enc")
 			}
 			p.set("title_enc", titleEnc)
 		}
@@ -210,7 +211,7 @@ func (s *server) handleCreateListGroup(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			if n, _ := res.RowsAffected(); n == 0 {
-				return errBadRequest(xystrings.Default.Server.List.NotOnBoard())
+				return corei18n.User(xystrings.Default.Server.List.NotOnBoard())
 			}
 			if _, err := tx.ExecContext(ctx, `delete from tour_testers where list_id = ?`, lid); err != nil {
 				return err
@@ -242,7 +243,7 @@ func (s *server) handlePatchListGroup(w http.ResponseWriter, r *http.Request) {
 		if req.NameEnc != nil {
 			nameEnc, err := unb64(*req.NameEnc)
 			if err != nil {
-				return errBadRequest("invalid name_enc")
+				return corei18n.User("invalid name_enc")
 			}
 			p.set("name_enc", nameEnc)
 		}

@@ -17,6 +17,7 @@ import (
 	"pecheny.me/dopecore/session"
 	"pecheny.me/dopecore/tglogin"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
 
@@ -371,11 +372,11 @@ func (s *server) handleTgClaim(w http.ResponseWriter, r *http.Request) {
 		str := xystrings.Default
 		switch {
 		case errors.Is(err, tglogin.ErrCodeNotFound):
-			return errBadRequest(str.Auth.Tg.CodeMissing())
+			return corei18n.User(str.Auth.Tg.CodeMissing())
 		case errors.Is(err, tglogin.ErrWrongPassword):
-			return errBadRequest(str.Auth.Tg.PasswordWrong())
+			return corei18n.User(str.Auth.Tg.PasswordWrong())
 		case errors.Is(err, tglogin.ErrTelegramLinked):
-			return errBadRequest(str.Auth.Tg.TelegramTaken())
+			return corei18n.User(str.Auth.Tg.TelegramTaken())
 		}
 		return err
 	})
@@ -463,12 +464,12 @@ func (s *server) handleLoginPassword(w http.ResponseWriter, r *http.Request) {
 		row := tx.QueryRowContext(ctx, `select id, password_hash, username, telegram_username from users where username = ?`, uname)
 		if err := row.Scan(&uid, &pwHash, &uname2, &tg); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return errBadRequest(str.Auth.Login.Invalid())
+				return corei18n.User(str.Auth.Login.Invalid())
 			}
 			return err
 		}
 		if ok, _, _ := authcred.VerifyPasswordUpgrading(pwHash.String, "", req.Password); !ok {
-			return errBadRequest(str.Auth.Login.Invalid())
+			return corei18n.User(str.Auth.Login.Invalid())
 		}
 		var err error
 		token, err = s.createSessionTx(ctx, tx, uid, now)
@@ -516,12 +517,12 @@ func (s *server) handleSetUsername(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		if existing.Valid && existing.String != "" {
-			return errBadRequest(str.Auth.Username.AlreadySet())
+			return corei18n.User(str.Auth.Username.AlreadySet())
 		}
 		_, err := tx.ExecContext(ctx, `update users set username = ?, updated_at = ? where id = ?`,
 			uname, rfc3339(time.Now()), u.UserID)
 		if sqlitex.IsUniqueViolation(err) {
-			return errBadRequest(str.Auth.Username.Taken())
+			return corei18n.User(str.Auth.Username.Taken())
 		}
 		return err
 	})
@@ -566,7 +567,7 @@ func (s *server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 		}
 		if cur.Valid && cur.String != "" {
 			if ok, _, _ := authcred.VerifyPasswordUpgrading(cur.String, "", req.CurrentPassword); !ok {
-				return errBadRequest(str.Auth.Password.CurrentWrong())
+				return corei18n.User(str.Auth.Password.CurrentWrong())
 			}
 		}
 		now := rfc3339(time.Now())
@@ -697,7 +698,7 @@ func (s *server) handleSetProfileDefaults(w http.ResponseWriter, r *http.Request
 		}
 		if req.SessionTitleMode != nil {
 			if !sessionTitleModes[*req.SessionTitleMode] {
-				return errBadRequest("bad session_title_mode")
+				return corei18n.User("bad session_title_mode")
 			}
 			p.set("session_title_mode", *req.SessionTitleMode)
 		}

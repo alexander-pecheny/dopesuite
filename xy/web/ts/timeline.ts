@@ -3,7 +3,7 @@
 // attachment events), the brief/full diff preference, the expanded
 // full-screen timeline, one-level reply threads, comment edit/delete/excerpt
 // and the excerpts overlay. The board injects what it owns (live state, DK, the
-// outbox `post` verb, popupMenu, plural, attachment access); the card-detail
+// outbox `post` verb, popupMenu, attachment access); the card-detail
 // module is reached through the `card` seam (open-card id + comment-link copy),
 // which the orchestrator wires back to the carddetail factory's API.
 import { modal } from "./modal.js";
@@ -111,7 +111,6 @@ export interface TimelineDeps {
   // are offline-capable, unlike the edit/delete/excerpt mutations below.
   post(kind: string, path: string, body: OpBody): Promise<unknown>;
   popupMenu(anchor: HTMLElement, items: MenuItem[]): void;
-  plural(n: number, one: string, few: string, many: string): string;
   card: {
     openCardId(): number | null;
     copyCommentLink(eventId: number): void;

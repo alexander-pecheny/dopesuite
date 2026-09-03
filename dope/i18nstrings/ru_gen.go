@@ -12,8 +12,9 @@ import (
 var RU = Strings{
 	Admin: AdminStrings{
 		CreateUsers: AdminCreateUsersStrings{
-			Name:  func() string { return "Создать пользователей" },
-			Title: func() string { return "Создать пользователей · Админка" },
+			InvalidUsername: func() string { return "недопустимый логин" },
+			Name:            func() string { return "Создать пользователей" },
+			Title:           func() string { return "Создать пользователей · Админка" },
 		},
 		Page: AdminPageStrings{
 			Title: func() string { return "Админка" },
@@ -26,6 +27,28 @@ var RU = Strings{
 			Name:        func() string { return "Пользователи" },
 			SystemTag:   func() string { return "(система)" },
 			Title:       func() string { return "Пользователи · Админка" },
+		},
+	},
+	Auth: AuthStrings{
+		Login: AuthLoginStrings{
+			CodeMissing:        func() string { return "нет кода" },
+			CodeNotFound:       func() string { return "код не найден" },
+			CredentialsInvalid: func() string { return "неверное имя пользователя или пароль" },
+			CredentialsMissing: func() string { return "введите имя пользователя и пароль" },
+			PasswordWrong:      func() string { return "неверный пароль" },
+			SystemUser:         func() string { return "системная учётная запись не входит" },
+			TelegramLinked:     func() string { return "этот телеграм уже привязан" },
+			UsernameInvalid:    func() string { return "недопустимое имя пользователя" },
+		},
+		Password: AuthPasswordStrings{
+			CurrentWrong: func() string { return "текущий пароль неверен" },
+			TooLong:      func(n string) string { return fmt.Sprintf("пароль длиннее %s символов", n) },
+			TooShort:     func(n string) string { return fmt.Sprintf("пароль короче %s символов", n) },
+		},
+		Username: AuthUsernameStrings{
+			AlreadySet: func() string { return "имя пользователя уже задано" },
+			Invalid:    func() string { return "недопустимое имя пользователя" },
+			Taken:      func() string { return "имя пользователя занято" },
 		},
 	},
 	Brain: BrainStrings{
@@ -1484,6 +1507,48 @@ var RU = Strings{
 			Stage:       func(block string, title string) string { return fmt.Sprintf("%s. %s", block, title) },
 			Venue:       func(n string) string { return fmt.Sprintf("Стол %s", n) },
 			Wave:        func(title string, n string) string { return fmt.Sprintf("%s, заход %s", title, n) },
+		},
+		Validate: SchemeValidateStrings{
+			MatchCodeDup: func(match string) string {
+				return fmt.Sprintf("код боя \"%s\" встречается дважды", match)
+			},
+			MatchCodeRequired: func(stage string) string {
+				return fmt.Sprintf("у боя в этапе \"%s\" нет кода (code)", stage)
+			},
+			SlotCount: func(match string) string {
+				return fmt.Sprintf("в бою \"%s\" participantCount не сходится с числом слотов", match)
+			},
+			SlotSeedBasket: func(match string, slot string) string {
+				return fmt.Sprintf("бой \"%s\", слот %s: корзина посева не может быть отрицательной", match, slot)
+			},
+			SlotSeedNumber: func(match string, slot string) string {
+				return fmt.Sprintf("бой \"%s\", слот %s: номер посева должен быть положительным", match, slot)
+			},
+			SlotTeamSource: func(match string, slot string) string {
+				return fmt.Sprintf("бой \"%s\", слот %s: источник team больше не поддерживается — пишите seed-N или seed{basket, number}, команды приходят отдельным посевом", match, slot)
+			},
+			SlugRequired: func() string { return "схеме нужен slug" },
+			StageCodeDup: func(code string) string {
+				return fmt.Sprintf("код этапа \"%s\" встречается дважды", code)
+			},
+			StageCodeRequired: func() string { return "у этапа нет кода (code)" },
+			StageNoMatches: func(stage string) string {
+				return fmt.Sprintf("в этапе \"%s\" нет ни одного боя", stage)
+			},
+			StageType: func(kind string) string {
+				return fmt.Sprintf("неизвестный stage_type \"%s\" — есть matches и reseed", kind)
+			},
+			StagesRequired: func() string { return "схеме нужен хотя бы один этап (stages)" },
+			TeamAssignment: func(index string, name string) string {
+				return fmt.Sprintf("команде teams[%s] (\"%s\") нужны basket и number от 1", index, name)
+			},
+			TeamCollision: func(index string, name string, basket string, number string, other string) string {
+				return fmt.Sprintf("teams[%s] (\"%s\") встали на ту же корзину %s и номер %s, что и \"%s\"", index, name, basket, number, other)
+			},
+			TeamNameRequired: func(index string) string {
+				return fmt.Sprintf("у команды teams[%s] нет названия", index)
+			},
+			TitleRequired: func() string { return "схеме нужно название (title)" },
 		},
 		Venues: SchemeVenuesStrings{
 			Count: func() string { return "venues: нужен хотя бы один стол" },

@@ -54,7 +54,7 @@ func (s *Server) festPage(w http.ResponseWriter, r *http.Request, festID int64, 
 	case errors.Is(err, sql.ErrNoRows):
 		http.NotFound(w, r)
 	case err != nil:
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 	default:
 		pages.RenderDoc(w, s.h.Engine().AssetETags, doc)
 	}

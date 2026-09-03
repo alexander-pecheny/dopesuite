@@ -4,7 +4,9 @@ import (
 	"net/http"
 
 	dopeui "dope/dope/web/ui"
+	dopestrings "dope/i18nstrings"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	"pecheny.me/dopecore/webassets"
 )
 
@@ -17,7 +19,8 @@ import (
 func RenderDoc(w http.ResponseWriter, etags map[string]string, doc *dopeui.Doc) {
 	rendered, err := dopeui.Render(doc)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		msg, _ := corei18n.Reveal(err, dopestrings.Default.Server.Error.Internal())
+		http.Error(w, msg, http.StatusInternalServerError)
 		return
 	}
 	body := versionAssetRefs(etags, rendered)

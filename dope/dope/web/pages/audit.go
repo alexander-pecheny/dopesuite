@@ -7,6 +7,8 @@ import (
 
 	ui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"
+
+	"dope/dope/web/route"
 )
 
 // The fest-level "audit" page is now an index of the fest's games, each linking
@@ -54,7 +56,7 @@ func (s *Server) RenderHostFestAudit(w http.ResponseWriter, r *http.Request, fes
 	rows, err := s.h.Engine().DB.QueryContext(r.Context(),
 		`select id, code, coalesce(title, code) from games where fest_id = ? order by position, id`, festID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		route.WriteError(w, r, err)
 		return
 	}
 	defer rows.Close()
@@ -62,7 +64,7 @@ func (s *Server) RenderHostFestAudit(w http.ResponseWriter, r *http.Request, fes
 	for rows.Next() {
 		var g auditGameRow
 		if err := rows.Scan(&g.ID, &g.Code, &g.Title); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			route.WriteError(w, r, err)
 			return
 		}
 		games = append(games, g)

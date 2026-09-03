@@ -171,7 +171,7 @@ func (s *server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	users, err := s.loadAdminUsers(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		handleErr(w, err)
 		return
 	}
 	order := adminusers.ParseSort(r.URL.Query(), "used", "last")
@@ -256,7 +256,7 @@ func (s *server) HandleAdminCreateUsers(w http.ResponseWriter, r *http.Request) 
 func (s *server) renderAdminPage(w http.ResponseWriter, doc *ui.Doc) {
 	rendered, err := ui.Render(doc)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		handleErr(w, err)
 		return
 	}
 	body := s.assets.VersionRefs(rendered)
@@ -310,14 +310,15 @@ func (s *server) handleAdminCreateUsersSubmit(w http.ResponseWriter, r *http.Req
 	err := s.withWriteTx(r.Context(), "admin-create-users", func(ctx context.Context, tx *sql.Tx) error {
 		var err error
 		data, err = adminusers.Creator{
-			Store:    adminUserStore{tx: tx, now: now},
-			Validate: validNewUsername,
-			Policy:   adminusers.AbortOnRowError,
+			Store:         adminUserStore{tx: tx, now: now},
+			Validate:      validNewUsername,
+			InvalidReason: xystrings.Default.Admin.CreateUsers.InvalidUsername(),
+			Policy:        adminusers.AbortOnRowError,
 		}.Create(ctx, usernames)
 		return err
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		handleErr(w, err)
 		return
 	}
 	s.renderAdminPage(w, adminCreateUsersDoc(data))
