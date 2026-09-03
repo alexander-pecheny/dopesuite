@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+
+	"pecheny.me/dopecore/i18nstrings"
 )
 
 //go:embed assets/labels_*.toml assets/regexes_*.json
@@ -122,60 +124,19 @@ func MustLabels(language string) Labels {
 // parseLabels reads the two tables of flat string keys these files are.
 func parseLabels(text string) (Labels, error) {
 	l := Labels{Question: map[string]string{}, General: map[string]string{}}
-	table := map[string]string(nil)
-	for n, line := range strings.Split(text, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
+	pairs, err := i18nstrings.Parse(text)
+	if err != nil {
+		return l, err
+	}
+	for _, p := range pairs {
+		switch p.Table {
+		case "question_labels":
+			l.Question[p.Key] = p.Value
+		case "general":
+			l.General[p.Key] = p.Value
 		}
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			switch strings.TrimSpace(line[1 : len(line)-1]) {
-			case "question_labels":
-				table = l.Question
-			case "general":
-				table = l.General
-			default:
-				table = nil
-			}
-			continue
-		}
-		key, value, ok := strings.Cut(line, "=")
-		if !ok {
-			return l, fmt.Errorf("строка %d: не пара ключ = значение", n+1)
-		}
-		if table == nil {
-			continue
-		}
-		s, err := tomlString(strings.TrimSpace(value))
-		if err != nil {
-			return l, fmt.Errorf("строка %d: %w", n+1, err)
-		}
-		table[strings.TrimSpace(key)] = s
 	}
 	return l, nil
-}
-
-func tomlString(v string) (string, error) {
-	if len(v) < 2 || v[0] != '"' || v[len(v)-1] != '"' {
-		return "", fmt.Errorf("значение %q не строка в кавычках", v)
-	}
-	var out strings.Builder
-	for i := 1; i < len(v)-1; i++ {
-		if v[i] != '\\' || i+1 >= len(v)-1 {
-			out.WriteByte(v[i])
-			continue
-		}
-		i++
-		switch v[i] {
-		case 'n':
-			out.WriteByte('\n')
-		case 't':
-			out.WriteByte('\t')
-		default:
-			out.WriteByte(v[i])
-		}
-	}
-	return out.String(), nil
 }
 
 // Regexes is one regexes_*.json, compiled. A key the file leaves out is nil,
