@@ -220,12 +220,34 @@ func TestVenueDashDocListsSlotsAndAccess(t *testing.T) {
 	}
 }
 
+// Фесты and Площадки are the same shape on the landing: a heading, what there
+// is, and the way to make another.
+func TestHostLandingSectionsMatch(t *testing.T) {
+	body := renderPublic(t, hostLoggedInDoc(hostLandingData{LoggedIn: true, Username: "tester"}))
+	for _, want := range []string{
+		"Фесты", "Фестов пока нет.", "Создать фест",
+		"Площадки", "Площадок пока нет.", "Создать площадку",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if strings.Index(body, "Фестов пока нет.") > strings.Index(body, "Площадок пока нет.") {
+		t.Error("Фесты come first")
+	}
+	// The Площадка's name and town are rating.chgk.info's, so the create form
+	// does not ask for them.
+	if strings.Contains(body, `name="city"`) {
+		t.Error("the create form asks for a city")
+	}
+}
+
 // A refused create form comes back open, with what was typed and why it was
 // refused; a fresh one is blank and closed.
 func TestHostLandingKeepsARefusedForm(t *testing.T) {
 	form := url.Values{
-		"title": {"Площадка Тбилиси"}, "city": {"Тбилиси"}, "slug": {"bad_slug"},
-		"rating_venue_id": {"6826"}, "description": {"Играем"}, "is_public": {"1"},
+		"slug": {"bad_slug"}, "rating_venue_id": {"6826"},
+		"description": {"Играем"}, "is_public": {"1"},
 	}
 	body := renderPublic(t, hostLoggedInDoc(hostLandingData{
 		LoggedIn: true, Username: "tester",
@@ -233,15 +255,13 @@ func TestHostLandingKeepsARefusedForm(t *testing.T) {
 		Open:  "venue", Form: form,
 	}))
 	for _, want := range []string{
-		`value="Площадка Тбилиси"`,
-		`value="Тбилиси"`,
 		`value="bad_slug"`,
 		`value="6826"`,
 		`>Играем</textarea>`,
 		`type="checkbox" name="is_public" value="1" checked`,
 		SlugTitle,
 		`pattern="` + SlugPattern + `"`,
-		`data-rating-venue-load`,
+		`data-rating-venue`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q", want)

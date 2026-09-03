@@ -361,15 +361,15 @@ export function mountRosterEditors(doc: Document): void {
   doc.querySelectorAll<HTMLElement>("[data-roster-editor]").forEach(mountRosterEditor);
   doc.querySelectorAll<HTMLInputElement>("input[data-buff-team]").forEach(mountBuffTeamField);
   doc.querySelectorAll<HTMLInputElement>("input[data-buff-tournament]").forEach(mountBuffTournamentField);
-  doc.querySelectorAll<HTMLElement>("[data-rating-venue-load]").forEach(mountRatingVenueLoader);
+  doc.querySelectorAll<HTMLInputElement>("input[data-rating-venue]").forEach(mountRatingVenueField);
 }
 
 if (typeof document !== "undefined") {
   mountRosterEditors(document);
 }
 
-// «Загрузить данные»: rating.chgk.info knows what a venue is called and where,
-// and buff does not mirror venues — so the form fetches it on click.
+// A Площадка is a venue rating.chgk.info already has: the field is a suggest
+// over their catalogue, by id, by name or by the town it is in.
 const CYRILLIC: Record<string, string> = {
   а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i",
   й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t",
@@ -384,38 +384,51 @@ export function slugify(name: string): string {
   return /[a-z]/.test(slug) ? slug : "";
 }
 
-export function mountRatingVenueLoader(button: HTMLElement): void {
-  const form = button.closest("form");
-  if (!form) return;
-  const field = (name: string): HTMLInputElement | null =>
-    form.querySelector<HTMLInputElement>(`[data-${name}]`);
-  const message = document.createElement("p");
-  message.className = "hint";
-  button.after(message);
-  button.addEventListener("click", () => {
-    const id = Number((field("rating-venue")?.value || "").trim());
-    if (!id) {
-      message.textContent = "Сначала укажите id площадки";
-      return;
-    }
-    message.textContent = "Загружаем…";
-    void fetch(`/api/rating/venue/${encodeURIComponent(id)}`, {headers: {Accept: "application/json"}})
-      .then(async (response) => {
-        if (!response.ok) throw new Error((await response.text()).trim());
-        return (await response.json()) as {name?: string; city?: string};
-      })
-      .then((venue) => {
-        const name = field("venue-name");
-        const city = field("venue-city");
-        const slug = form.querySelector<HTMLInputElement>('input[name="slug"]');
-        if (name && venue.name) name.value = venue.name;
-        if (city && venue.city) city.value = venue.city;
-        // A slug the Representative typed is theirs; an empty one is derived.
-        if (slug && !slug.value.trim() && venue.name) slug.value = slugify(venue.name);
-        message.textContent = "";
-      })
-      .catch((error: Error) => {
-        message.textContent = error.message || "Не удалось загрузить";
-      });
+type RatingVenue = {id: number; name: string; town: string};
+
+async function fetchVenues(query: string): Promise<RatingVenue[]> {
+  return (await fetchJSON<RatingVenue[]>(`/api/rating/venues?q=${encodeURIComponent(query)}`)) || [];
+}
+
+export function mountRatingVenueField(field: HTMLInputElement): void {
+  const form = field.form;
+  const named = (name: string): HTMLInputElement | null =>
+    form?.querySelector<HTMLInputElement>(`[data-${name}]`) ?? null;
+  const chosen = document.createElement("p");
+  chosen.className = "hint";
+  field.after(chosen);
+  const seen = new Map<number, RatingVenue>();
+
+  const took = (venue: RatingVenue): void => {
+    chosen.textContent = `${venue.name} · ${venue.town}`;
+    // The edit form still names the Площадка itself; the create form does not,
+    // and takes the name rating.chgk.info has for it.
+    const name = named("venue-name");
+    const city = named("venue-city");
+    if (name) name.value = venue.name;
+    if (city) city.value = venue.town;
+    // A slug the Representative typed is theirs; an empty one is derived.
+    const slug = form?.querySelector<HTMLInputElement>('input[name="slug"]');
+    if (slug && !slug.value.trim()) slug.value = slugify(venue.name);
+  };
+
+  const offer = async (typed: string): Promise<Choice[]> => {
+    const found = await fetchVenues(typed);
+    for (const venue of found) seen.set(venue.id, venue);
+    return found.map((v) => ({value: String(v.id), label: v.name, hint: `${v.town} · ${v.id}`}));
+  };
+
+  autocomplete(field, offer, (choice) => {
+    const venue = seen.get(Number(choice.value));
+    if (venue) took(venue);
   });
+
+  // A Площадка already made says which venue it is, not just its number.
+  const id = Number(field.value.trim());
+  if (id) {
+    void fetchVenues(field.value.trim()).then((found) => {
+      const venue = found.find((v) => v.id === id);
+      if (venue) chosen.textContent = `${venue.name} · ${venue.town}`;
+    });
+  }
 }

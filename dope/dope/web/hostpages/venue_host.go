@@ -86,7 +86,7 @@ func venueSettingsForm(v venues.Venue) *ui.Element {
 		ui.Field(ui.Label("Город"), ui.Textfield(ui.Name("city"), ui.Value(v.City), ui.Data("venue-city", ""))),
 		ui.Field(ui.Label("Описание (markdown)"), ui.Editor(ui.Name("description"), ui.Rows("6"), ui.Text(v.Description))),
 		slugField("Slug (URL вида /venue/{slug})", v.Slug),
-		ratingVenueField(ratingID),
+		ratingVenueField(ratingID, false),
 		ui.Checkbox(pub...),
 		ui.Row(ui.Button(ui.Submit(), ui.Text("Сохранить"))),
 	)
@@ -385,23 +385,23 @@ func venueCreateForm(data hostLandingData) *ui.Element {
 	}
 	return ui.Details(append(items,
 		ui.Form(ui.DirCol, ui.Method("post"), ui.Action("/host/venue"), ui.Autocomplete("off"),
-			ui.Field(ui.Label("Название"), ui.Textfield(ui.Name("title"), ui.Value(data.kept("title")), ui.Required(), ui.Data("venue-name", ""))),
-			ui.Field(ui.Label("Город"), ui.Textfield(ui.Name("city"), ui.Value(data.kept("city")), ui.Data("venue-city", ""))),
+			ratingVenueField(data.kept("rating_venue_id"), true),
 			slugField("Slug (URL вида /venue/{slug})", data.kept("slug")),
-			ratingVenueField(data.kept("rating_venue_id")),
 			ui.Field(ui.Label("Описание (markdown)"), ui.Editor(ui.Name("description"), ui.Rows("4"), ui.Text(data.kept("description")))),
 			checkboxKept("is_public", "Публичная", data.checked("is_public")),
 			ui.Row(ui.Button(ui.Submit(), ui.Text("Создать"))),
 		))...)
 }
 
-// ratingVenueField is the venue id with the button that fetches what
-// rating.chgk.info calls it — venues are not in buff's mirror, so this is the
-// one live call, and it happens only on click.
-func ratingVenueField(value string) *ui.Element {
-	return ui.Field(ui.Label("ID площадки на rating.chgk.info"),
-		ui.Row(ui.SpaceSM, ui.AlignCenter, ui.Wrap(),
-			ui.Textfield(ui.Name("rating_venue_id"), ui.Value(value), ui.Inputmode("numeric"), ui.Data("rating-venue", "")),
-			ui.Button(ui.Ghost, ui.Small(), ui.Data("rating-venue-load", ""), ui.Text("Загрузить данные")),
-		))
+// ratingVenueField is the venue on rating.chgk.info a Площадка stands for: a
+// suggest over their catalogue by id, name or town. A Площадка is one of
+// theirs, so the create form asks for nothing else — the name and the town come
+// with the pick.
+func ratingVenueField(value string, required bool) *ui.Element {
+	field := []ui.Item{ui.Name("rating_venue_id"), ui.Value(value),
+		ui.Placeholder("город, название или id"), ui.Data("rating-venue", "")}
+	if required {
+		field = append(field, ui.Required())
+	}
+	return ui.Field(ui.Label("Площадка на rating.chgk.info"), ui.Textfield(field...))
 }

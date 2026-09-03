@@ -77,7 +77,7 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("POST "+game+"/contested", route.Editor, s.scopedContestedSave)
 	t.Handle("PATCH "+game+"/contested", route.Editor, s.scopedContestedAccept)
 	t.Handle("DELETE "+game+"/contested", route.Editor, s.scopedContestedDelete)
-	t.Handle("GET /api/rating/venue/{id}", route.Session, s.ratingVenue)
+	t.Handle("GET /api/rating/venues", route.Session, s.ratingVenues)
 	s.buffRoutes(t)
 	return t
 }
@@ -117,57 +117,14 @@ func (s *server) buffRoutes(t *route.Table) {
 	})
 }
 
-// ratingVenue is what rating.chgk.info answers for a venue; buff does not
-// mirror venues, so this is the one live call dope makes — and only on click.
-func (s *server) ratingVenue(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil || id <= 0 {
-		return route.BadRequest("нужен номер площадки")
-	}
-	venue, err := ratingVenueByID(r.Context(), s.ratingClient(), id)
+// ratingVenues is the suggest the Площадка forms search: rating.chgk.info's
+// venues by id, name or town, out of the catalogue dope keeps a copy of.
+func (s *server) ratingVenues(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
+	found, err := s.eng.RatingVenues().Search(r.Context(), r.URL.Query().Get("q"), suggestLimit(r))
 	if err != nil {
 		return route.BadRequest(err.Error())
 	}
-	return route.JSON(w, venue)
-}
-
-// RatingVenue is the venue as the form fills itself from.
-type RatingVenue struct {
-	Name string `json:"name"`
-	City string `json:"city"`
-}
-
-// ErrRatingUnavailable is every way the rating site can fail to answer, in the
-// host's words: what they do about it is the same in each case.
-var ErrRatingUnavailable = errors.New("rating.chgk.info не ответил")
-
-func ratingVenueByID(ctx context.Context, client *http.Client, id int64) (RatingVenue, error) {
-	url := fmt.Sprintf("https://api.rating.chgk.net/venues/%d", id)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return RatingVenue{}, ErrRatingUnavailable
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return RatingVenue{}, ErrRatingUnavailable
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusNotFound {
-		return RatingVenue{}, errors.New("такой площадки нет на rating.chgk.info")
-	}
-	if resp.StatusCode != http.StatusOK {
-		return RatingVenue{}, ErrRatingUnavailable
-	}
-	var body struct {
-		Name string `json:"name"`
-		Town struct {
-			Name string `json:"name"`
-		} `json:"town"`
-	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&body); err != nil {
-		return RatingVenue{}, ErrRatingUnavailable
-	}
-	return RatingVenue{Name: strings.TrimSpace(body.Name), City: strings.TrimSpace(body.Town.Name)}, nil
+	return route.JSON(w, found)
 }
 
 func suggestLimit(r *http.Request) int {
@@ -673,13 +630,4 @@ func (s *server) scopedSeedDecline(w http.ResponseWriter, r *http.Request, sc ro
 	}
 	s.eng.BroadcastState(sc.FestID, gameStateScopeKey(sc.GameID), revision, stateJSON)
 	return route.JSON(w, view)
-}
-
-// ratingClient bounds the one outward call dope makes: a slow rating site must
-// not hold a host's request open.
-func (s *server) ratingClient() *http.Client {
-	if s.RatingHTTP != nil {
-		return s.RatingHTTP
-	}
-	return &http.Client{Timeout: 10 * time.Second}
 }

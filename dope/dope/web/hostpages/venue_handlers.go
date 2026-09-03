@@ -350,9 +350,15 @@ func (s *Server) handleHostCreateVenue(w http.ResponseWriter, r *http.Request, s
 		s.renderHostLandingForm(w, r, msg, "venue", r.Form)
 		return nil
 	}
-	title := strings.TrimSpace(r.Form.Get("title"))
-	if title == "" {
-		return refused("Название площадки обязательно.")
+	// A Площадка is a venue rating.chgk.info already knows: the form picks one,
+	// and its name and town are theirs, not typed here.
+	ratingID := formInt64(r.Form, "rating_venue_id")
+	if ratingID <= 0 {
+		return refused("Выберите площадку на rating.chgk.info.")
+	}
+	venue, err := s.h.Engine().RatingVenues().Lookup(r.Context(), ratingID)
+	if err != nil {
+		return refused(err.Error())
 	}
 	slug := strings.TrimSpace(r.Form.Get("slug"))
 	if slug != "" {
@@ -362,12 +368,12 @@ func (s *Server) handleHostCreateVenue(w http.ResponseWriter, r *http.Request, s
 	}
 	now := util.UtcNow()
 	var festID int64
-	err := s.h.Engine().WithWriteTx(r.Context(), 0, "venue-create", func(ctx context.Context, tx *sql.Tx) error {
+	err = s.h.Engine().WithWriteTx(r.Context(), 0, "venue-create", func(ctx context.Context, tx *sql.Tx) error {
 		id, err := store.InsertReturningID(ctx, tx, `
 insert into fests(slug, title, description, kind, city, rating_venue_id, created_by, revision, created_at, updated_at, is_public)
 values(?, ?, ?, 'venue', ?, ?, ?, 1, ?, ?, ?)`,
-			util.NullableString(slug), title, r.Form.Get("description"),
-			strings.TrimSpace(r.Form.Get("city")), util.ParseOptionalInt64(r.Form.Get("rating_venue_id")),
+			util.NullableString(slug), venue.Name, r.Form.Get("description"),
+			venue.Town, venue.ID,
 			userID, now, now, util.BoolToInt(r.Form.Get("is_public") == "1"))
 		if err != nil {
 			return err

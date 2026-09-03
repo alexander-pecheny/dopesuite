@@ -55,10 +55,6 @@ func init() { session.ProdEnvVar = "DOPE_ENV" }
 type server struct {
 	eng          core.Engine
 	SendTelegram telegramSender
-	// RatingHTTP is the client the one live rating.chgk.info call uses; a test
-	// stubs it, production gets the bounded default.
-	RatingHTTP *http.Client
-
 	// Static ("DDoS lockdown") mode cache — see static_mode.go. The gauges/state
 	// live on eng (StaticMode/ReqRate/…); staticMu guards the per-route HTML
 	// snapshot cache, with staticBuilds providing per-route singleflight on misses.
@@ -223,6 +219,15 @@ func Main() {
 		log.Fatalf("bind %s: %v", addr, err)
 	}
 	log.Printf("listening on http://localhost%s/host and http://localhost%s/", addr, addr)
+
+	// rating.chgk.info's venue catalogue is seven pages, about eight seconds:
+	// taken at boot, the first Представитель to open the Площадка form does not
+	// wait for it.
+	go func() {
+		if _, err := srv.eng.RatingVenues().Search(context.Background(), "", 1); err != nil {
+			log.Printf("rating venues: %v", err)
+		}
+	}()
 
 	// Optional pprof on a SEPARATE localhost-only listener so it never rides the
 	// public mux/middleware (and is never reachable through Caddy in prod). Set

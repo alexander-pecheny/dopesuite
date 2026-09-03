@@ -46,8 +46,8 @@ func jumpViewerNav() []ui.Item {
 	}
 }
 
-// hostLoggedInDoc builds the /host landing for a signed-in organizer: their fests
-// grouped into current/future/past disclosures, and the create-fest form.
+// hostLoggedInDoc builds the /host landing for a signed-in organizer: their
+// Фесты, their Площадки, and the form that makes another of each.
 func hostLoggedInDoc(data hostLandingData) *ui.Doc {
 	s := dopestrings.Default
 	page := []ui.Item{ui.Title(s.Host.Pages.LandingTitle(data.Username)), ui.PagePublic,
@@ -58,35 +58,47 @@ func hostLoggedInDoc(data hostLandingData) *ui.Doc {
 	if data.Error != "" && data.Open == "" {
 		page = append(page, ui.Empty(ui.Text(data.Error)))
 	}
-	if len(data.Groups) > 0 {
-		for _, g := range data.Groups {
-			fests := make([]ui.Item, 0, len(g.Fests))
-			for _, f := range g.Fests {
-				title := f.Title
-				if !f.IsPublic {
-					title = s.Host.Pages.FestRowUnlisted(f.Title)
-				}
-				row := []ui.Item{ui.Href("/host/fest/" + f.Ref()), ui.Listtitle(ui.Text(title))}
-				if f.Dates != "" {
-					row = append(row, ui.Muted(ui.Text(f.Dates)))
-				}
-				fests = append(fests, ui.Listrow(row...))
-			}
-			page = append(page, ui.Festgroup(ui.Open(), ui.Title(g.Title), ui.List(fests...)))
-		}
-	} else {
-		page = append(page, ui.Empty(ui.Text(s.Host.Pages.FestsEmpty())))
-	}
+	page = append(page, hostLandingFests(data), hostLandingVenues(data))
+	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
+}
 
-	page = append(page, hostLandingVenues(data))
-	festForm := []ui.Item{ui.Summary(ui.Btn(), ui.Text(s.Host.Pages.CreateFestSummary()))}
+// hostLandingFests is the Фесты the user runs, and the form that makes one.
+// It and Площадки are the same shape: a heading, what there is, and the way to
+// make another.
+func hostLandingFests(data hostLandingData) *ui.Element {
+	s := dopestrings.Default
+	sect := []ui.Item{ui.Subhead(ui.Text("Фесты"))}
+	if len(data.Groups) == 0 {
+		sect = append(sect, ui.Empty(ui.Text(s.Host.Pages.FestsEmpty())))
+	}
+	for _, g := range data.Groups {
+		fests := make([]ui.Item, 0, len(g.Fests))
+		for _, f := range g.Fests {
+			title := f.Title
+			if !f.IsPublic {
+				title = s.Host.Pages.FestRowUnlisted(f.Title)
+			}
+			row := []ui.Item{ui.Href("/host/fest/" + f.Ref()), ui.Listtitle(ui.Text(title))}
+			if f.Dates != "" {
+				row = append(row, ui.Muted(ui.Text(f.Dates)))
+			}
+			fests = append(fests, ui.Listrow(row...))
+		}
+		sect = append(sect, ui.Festgroup(ui.Open(), ui.Title(g.Title), ui.List(fests...)))
+	}
+	return ui.Section(append(sect, festCreateForm(data))...)
+}
+
+func festCreateForm(data hostLandingData) *ui.Element {
+	s := dopestrings.Default
+	items := []ui.Item{ui.Summary(ui.Btn(), ui.Text(s.Host.Pages.CreateFestSummary()))}
 	if data.Open == "fest" {
-		festForm = append([]ui.Item{ui.Open()}, festForm...)
+		items = append([]ui.Item{ui.Open()}, items...)
 		if data.Error != "" {
-			festForm = append(festForm, ui.Hint(ui.HintDanger, ui.Text(data.Error)))
+			items = append(items, ui.Hint(ui.HintDanger, ui.Text(data.Error)))
 		}
 	}
-	festForm = append(festForm,
+	return ui.Details(append(items,
 		ui.Form(ui.DirCol, ui.Method("post"), ui.Action("/host/fest"), ui.Autocomplete("off"),
 			ui.Field(ui.Label(s.Host.Pages.TitleLabel()), ui.Textfield(ui.Name("title"), ui.Value(data.kept("title")), ui.Required())),
 			ui.Field(ui.Label(s.Host.Pages.DescriptionLabel()), ui.Editor(ui.Name("description"), ui.Rows("4"), ui.Text(data.kept("description")))),
@@ -95,10 +107,7 @@ func hostLoggedInDoc(data hostLandingData) *ui.Doc {
 			ui.Field(ui.Label(s.Host.Pages.RatingIdLabel()), ui.Textfield(ui.Name("rating_id"), ui.Value(data.kept("rating_id")), ui.Inputmode("numeric"))),
 			checkboxKept("is_public", s.Host.Pages.PublicLabel(), data.checked("is_public")),
 			ui.Row(ui.Button(ui.Submit(), ui.Text(s.Host.Pages.CreateSubmit()))),
-		),
-	)
-	page = append(page, ui.Section(ui.Details(festForm...)))
-	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
+		))...)
 }
 
 // checkboxKept is a tickbox that comes back ticked when the refused form had it.
