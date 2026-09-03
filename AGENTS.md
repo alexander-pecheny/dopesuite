@@ -80,6 +80,12 @@ Every string a person reads comes from a Catalog, never from the call site
 - Add one: edit the TOML, run `just generate-strings`, commit the `*_gen` files
   beside it. `just generate-check` fails on a stale one. Callers hold a
   `Strings` value (`i18nstrings.Default`) and write `s.Board.Delete.Confirm(n)`.
+- Write the full path from the `Strings` value at every call site, never
+  `c := s.Board.Delete`: the generator fails on any id no `.go`, `.ts` or
+  `.dopeui` file names in full, so a string nobody reads cannot linger.
+- A `.dopeui` page writes an untemplated string as `label=@board.delete.title`
+  or a bare `@board.delete.hint` item; a quoted value is always a literal. The
+  kit's Catalog answers any id the app's does not.
 - An error a person may read is `i18nstrings.User(s.Board.Delete.Locked())`;
   the HTTP edge shows those verbatim and everything else as one generic line.
 - `just cyrillic-check` fails on Cyrillic in any `.go`/`.ts`/`.dopeui` outside
