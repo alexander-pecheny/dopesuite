@@ -95,6 +95,20 @@ chgksuite's plain-text question format — xy's interchange format for import, e
 **Handout**:
 Раздатка, in two senses the word does not distinguish. A Card's own — a field of its 4s, either text or the name of one of its image Attachments, and the thing an editor means by «раздаточный материал». And a tour's — the `.hndt` source built from those, rendered to PDF fully in-process (typst as wasm), which is what «Генерация раздаток» makes. The first is content and travels with the question; the second is an artefact and nothing decrypted on its way ever touches disk. An image name is not a foreign key: a Card may name a picture attached to another Card, or to none at all, and an import routinely does.
 
+**Board Passphrase**:
+The words that wrap a Board's key. Chosen once at creation, replaceable by the
+owner alone, never stored anywhere, never recoverable. A device that has
+unlocked once keeps the key, not the words — so a Board can stay readable on
+one phone for years after the passphrase is forgotten.
+_Avoid_: password (that is the account's), master password
+
+**Passphrase Check**:
+A monthly question the Board asks its owner on a device that holds the key
+without the words: type the Board Passphrase, or set a new one. Device-local,
+never while Тест-режим is on, and it has no «Позже» — the two ways out are
+the two ways the passphrase becomes known again. Non-owners are never asked;
+they ask the owner.
+
 **Envelope**:
 The one wire format for ciphertext: `magic("xy1") | alg | nonce | ct+tag`, base64 over JSON. `crypto.js` is its sole owner. Per board, a random data key (DK) does the encrypting; the passphrase-derived KEK only wraps DK, so a passphrase change re-wraps without re-encrypting.
 
