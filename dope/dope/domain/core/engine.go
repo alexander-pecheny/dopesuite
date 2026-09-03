@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"dope/dope/domain/ratingvenues"
 	"dope/dope/platform/realtime"
 	"dope/dope/storage/buffdb"
 	"dope/dope/storage/store"
@@ -58,6 +59,8 @@ type Engine struct {
 	// Buff is buff's read-only mirror of rating.chgk.info (ADR-0020), or a
 	// disabled store when DOPE_BUFF_DB names nothing.
 	Buff *buffdb.Store
+	// Rating is rating.chgk.info's venue catalogue; nil means the shared one.
+	Rating *ratingvenues.Catalogue
 
 	// Mu guards game/DB writes (writers win contention over viewer reads).
 	Mu sync.RWMutex
@@ -84,6 +87,14 @@ type Engine struct {
 	LastRate        atomic.Int64
 	SseConns        atomic.Int64
 	LiveFallthrough atomic.Int64
+}
+
+// RatingVenues is the venue catalogue the Площадка forms search, never nil.
+func (e *Engine) RatingVenues() *ratingvenues.Catalogue {
+	if e.Rating == nil {
+		return ratingvenues.Default()
+	}
+	return e.Rating
 }
 
 // BuffMirror is the buff store, never nil: a Disabled one answers empty when

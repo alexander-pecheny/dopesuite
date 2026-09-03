@@ -2,90 +2,85 @@ package tests
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"dope/dope/domain/core"
+	"dope/dope/domain/ratingvenues"
 	"dope/dope/platform/realtime"
 	dopeserver "dope/dope/server"
 
 	"pecheny.me/dopecore/session"
 )
 
-type stubRoundTripper func(*http.Request) *http.Response
-
-func (f stubRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) { return f(r), nil }
-
-func ratingResponse(t *testing.T, status int, body string) *http.Client {
+// ratingSite is the venue catalogue dope's copy is taken from.
+func ratingSite(t *testing.T, body string) *ratingvenues.Catalogue {
 	t.Helper()
-	return &http.Client{Transport: stubRoundTripper(func(r *http.Request) *http.Response {
-		if !strings.HasPrefix(r.URL.String(), "https://api.rating.chgk.net/venues/") {
-			t.Errorf("unexpected url %s", r.URL)
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/venues") {
+			t.Errorf("unexpected path %s", r.URL)
 		}
-		return &http.Response{
-			StatusCode: status,
-			Body:       io.NopCloser(strings.NewReader(body)),
-			Header:     http.Header{},
-		}
-	})}
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(site.Close)
+	return &ratingvenues.Catalogue{HTTP: site.Client(), Base: site.URL}
 }
 
-// The one live rating.chgk.info call: the venue's name and the town it is in.
-func TestRatingVenueLookup(t *testing.T) {
-	db := venueTestDB(t)
-	cases := []struct {
-		name   string
-		status int
-		body   string
-		code   int
-		want   string
-	}{
-		{"ok", 200, `{"id":6826,"name":"Санкт-Петербург / Трубников Артём","town":{"name":"Санкт-Петербург"}}`, 200,
-			`{"name":"Санкт-Петербург / Трубников Артём","city":"Санкт-Петербург"}`},
-		{"missing", 404, `{}`, 400, "такой площадки нет"},
-		{"broken", 500, ``, 400, "не ответил"},
-		{"garbage", 200, `not json`, 400, "не ответил"},
-	}
-	for _, c := range cases {
-		srv := dopeserver.NewTestServer(func(e *core.Engine) {
-			e.DB = db
-			e.RT = realtime.NewManager()
-		})
-		srv.RatingHTTP = ratingResponse(t, c.status, c.body)
-		userID, token := createAPITestSession(t, srv, "rating-"+c.name)
-		_ = userID
-		req := httptest.NewRequest(http.MethodGet, "/api/rating/venue/6826", nil)
+func ratingServer(t *testing.T, body string) *dopeserver.Server {
+	t.Helper()
+	return dopeserver.NewTestServer(func(e *core.Engine) {
+		e.DB = venueTestDB(t)
+		e.RT = realtime.NewManager()
+		e.Rating = ratingSite(t, body)
+	})
+}
+
+// The suggest a Площадка is created from: rating.chgk.info's venues by id, by
+// name or by town.
+func TestRatingVenueSuggest(t *testing.T) {
+	srv := ratingServer(t, `[
+		{"id":3152,"name":"Тбилиси","town":{"name":"Тбилиси"}},
+		{"id":3541,"name":"Больбес","town":{"name":"Москва"}}]`)
+	_, token := createAPITestSession(t, srv, "rating-suggest")
+	for _, c := range []struct{ query, want string }{
+		{"тбилиси", `"id":3152`},
+		{"москва", `"id":3541`},
+		{"3541", `"id":3541`},
+	} {
+		req := httptest.NewRequest(http.MethodGet, "/api/rating/venues?q="+c.query, nil)
 		req.AddCookie(&http.Cookie{Name: session.CookieName, Value: token})
 		rec := httptest.NewRecorder()
 		srv.HandleScopedAPI(rec, req)
-		if rec.Code != c.code {
-			t.Errorf("%s: %d, want %d (%s)", c.name, rec.Code, c.code, rec.Body.String())
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), c.want) {
+			t.Errorf("%s: %d %s", c.query, rec.Code, rec.Body.String())
 		}
-		if !strings.Contains(rec.Body.String(), c.want) {
-			t.Errorf("%s: body %q, want %q", c.name, rec.Body.String(), c.want)
-		}
-		if c.code == 200 {
-			var venue dopeserver.RatingVenue
-			if err := json.Unmarshal(rec.Body.Bytes(), &venue); err != nil || venue.City == "" {
-				t.Errorf("%s: %v %+v", c.name, err, venue)
-			}
+		var found []ratingvenues.Venue
+		if err := json.Unmarshal(rec.Body.Bytes(), &found); err != nil || len(found) != 1 {
+			t.Errorf("%s: %v %+v", c.query, err, found)
 		}
 	}
 }
 
-// Without a session there is no lookup at all.
-func TestRatingVenueNeedsASession(t *testing.T) {
-	db := venueTestDB(t)
-	srv := dopeserver.NewTestServer(func(e *core.Engine) {
-		e.DB = db
-		e.RT = realtime.NewManager()
-	})
-	srv.RatingHTTP = ratingResponse(t, 200, `{}`)
+// A site that does not answer is said so, rather than an empty catalogue.
+func TestRatingVenueSuggestWithoutTheSite(t *testing.T) {
+	srv := ratingServer(t, `not json`)
+	_, token := createAPITestSession(t, srv, "rating-broken")
+	req := httptest.NewRequest(http.MethodGet, "/api/rating/venues?q=тбилиси", nil)
+	req.AddCookie(&http.Cookie{Name: session.CookieName, Value: token})
 	rec := httptest.NewRecorder()
-	srv.HandleScopedAPI(rec, httptest.NewRequest(http.MethodGet, "/api/rating/venue/1", nil))
+	srv.HandleScopedAPI(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "не ответил") {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// Without a session there is no catalogue at all.
+func TestRatingVenueSuggestNeedsASession(t *testing.T) {
+	srv := ratingServer(t, `[]`)
+	rec := httptest.NewRecorder()
+	srv.HandleScopedAPI(rec, httptest.NewRequest(http.MethodGet, "/api/rating/venues", nil))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("%d", rec.Code)
 	}
