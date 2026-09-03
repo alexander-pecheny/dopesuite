@@ -1,0 +1,4 @@
+save = "Save"
+
+[selection]
+count = 'Selected {{.n}} {{plural .n "item" "items" "items"}}'

@@ -13,4 +13,7 @@ __pycache__/
 *.tsbuildinfo
 
 /scripts/webbuild/webbuild
+/scripts/i18nstringsgen/i18nstringsgen
+/scripts/cyrillic/cyrillic
+/scripts/classcheck/classcheck
 .tmp/

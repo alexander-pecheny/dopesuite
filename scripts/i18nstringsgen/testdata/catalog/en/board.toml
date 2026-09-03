@@ -1,0 +1,4 @@
+[delete]
+confirm = 'Delete board {{.title}}? It holds {{plural .cards "card" "cards" "cards"}} — {{.cards}}.'
+title = "Deleting a board"
+percent = "100% done"
