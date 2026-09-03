@@ -111,12 +111,27 @@ var RU = Strings{
 			Title: func() string { return "Ударения" },
 		},
 		Actions: BoardActionsStrings{
-			Cancel: func() string { return "Отмена" },
-			Close:  func() string { return "Закрыть" },
-			Copy:   func() string { return "Копировать" },
-			Done:   func() string { return "Готово" },
-			Move:   func() string { return "Переместить" },
-			Save:   func() string { return "Сохранить" },
+			Cancel:   func() string { return "Отмена" },
+			Close:    func() string { return "Закрыть" },
+			Copy:     func() string { return "Копировать" },
+			CopyText: func() string { return "Скопировать" },
+			Done:     func() string { return "Готово" },
+			Move:     func() string { return "Переместить" },
+			Save:     func() string { return "Сохранить" },
+		},
+		Authorcount: BoardAuthorcountStrings{
+			ColAuthor:         func() string { return "Автор" },
+			ColNumbers:        func() string { return "Номера" },
+			ColQuestions:      func() string { return "Вопросов" },
+			ColShare:          func() string { return "Доля" },
+			CountZero:         func() string { return " считать нулевые" },
+			Inclusive:         func() string { return "включительно" },
+			Name:              func() string { return "Счётчик авторов" },
+			NoSuch:            func() string { return "Нет такого вопроса." },
+			NumberPlaceholder: func() string { return "номер" },
+			Total:             func() string { return "Всего" },
+			Unauthored:        func() string { return "без автора" },
+			UpTo:              func() string { return "До вопроса" },
 		},
 		Bell: BoardBellStrings{
 			Label: func() string { return "События" },
@@ -224,10 +239,11 @@ var RU = Strings{
 			Title:   func() string { return "Несохранённые изменения" },
 		},
 		Error: BoardErrorStrings{
-			NoKey:   func() string { return "нет ключа доски" },
-			NoLabel: func() string { return "не выбрана метка" },
-			NoList:  func() string { return "не выбран список" },
-			NoTest:  func() string { return "не выбран тест" },
+			Cancelled: func() string { return "отменено" },
+			NoKey:     func() string { return "нет ключа доски" },
+			NoLabel:   func() string { return "не выбрана метка" },
+			NoList:    func() string { return "не выбран список" },
+			NoTest:    func() string { return "не выбран тест" },
 		},
 		Excerpts: BoardExcerptsStrings{
 			Title: func() string { return "Выписки" },
@@ -273,6 +289,28 @@ var RU = Strings{
 			Position: func() string { return "Позиция" },
 		},
 		Filter: BoardFilterStrings{
+			AllPhrase:  func() string { return "Со всеми метками" },
+			AllTitle:   func() string { return "Карточка несёт все выбранные метки" },
+			AllWord:    func() string { return "все" },
+			AnyPhrase:  func() string { return "С любой из меток" },
+			AnyTitle:   func() string { return "Карточка несёт хотя бы одну из выбранных" },
+			AnyWord:    func() string { return "любая" },
+			BarNodrag:  func() string { return "перетаскивание внутри списка выключено" },
+			BarWhat:    func(phrase string, names string) string { return fmt.Sprintf("%s: %s", phrase, names) },
+			Edit:       func() string { return "Изменить" },
+			Lead:       func() string { return "Показывать карточки, у которых" },
+			MenuActive: func(n string) string { return fmt.Sprintf("Фильтр по меткам · %s", n) },
+			MenuTitle: func() string {
+				return "Показать только карточки с выбранными метками — вид, который ничего не меняет на доске"
+			},
+			NoLabels:   func() string { return "На доске нет меток." },
+			NonePhrase: func() string { return "Без меток" },
+			NoneTitle:  func() string { return "Карточка не несёт ни одной из выбранных" },
+			NoneWord:   func() string { return "ни одной" },
+			Reset:      func() string { return "Сбросить" },
+			ScopedNote: func() string {
+				return "Метка засчитывается и тогда, когда она проставлена на тесте — такие метки на карточке не видны."
+			},
 			Title: func() string { return "Фильтр по меткам" },
 		},
 		Forget: BoardForgetStrings{
@@ -282,8 +320,24 @@ var RU = Strings{
 		Handouts: BoardHandoutsStrings{
 			Download: func() string { return "Скачать" },
 			Generate: func() string { return "Сгенерировать PDF" },
+			GenerateFailed: func(reason string) string {
+				return fmt.Sprintf("Не удалось сгенерировать: %s", reason)
+			},
+			Generated:       func() string { return "Готово." },
+			Generating:      func() string { return "Генерация…" },
+			MenuGroup:       func() string { return "Генерация раздаток (вся группа)" },
+			OpenPdf:         func() string { return "Открыть PDF" },
+			PdfOffline:      func() string { return "Генерация PDF доступна только онлайн." },
+			SafariNote:      func() string { return "Safari не показывает PDF внутри приложения." },
+			SourceEmpty:     func() string { return "Пустой источник." },
+			SplitfitDone:    func() string { return "Готово — zip со всеми PDF скачан." },
+			SplitfitFailed:  func(reason string) string { return fmt.Sprintf("Split-fit не удался: %s", reason) },
+			SplitfitOffline: func() string { return "Split-fit доступен только онлайн." },
 			SplitfitTitle: func() string {
 				return "Подобрать раскладку (split-fit) и скачать zip со всеми PDF"
+			},
+			Splitfitting: func() string {
+				return "Split-fit… (подбор раскладки может занять время)"
 			},
 			SrcLabel: func() string { return "Источник (.hndt)" },
 			Title:    func() string { return "Генерация раздаток" },
@@ -304,7 +358,17 @@ var RU = Strings{
 			Title:    func() string { return "Проверка импорта" },
 		},
 		Labels: BoardLabelsStrings{
-			Name: func() string { return "Метки" },
+			Add: func() string { return "Добавить" },
+			DeleteConfirm: func(name string) string {
+				return fmt.Sprintf("Удалить метку «%s»? Она исчезнет со всех карточек.", name)
+			},
+			Empty: func() string { return "Меток нет." },
+			MenuTitle: func() string {
+				return "Переименовать, перекрасить или удалить метки доски"
+			},
+			Name:           func() string { return "Метки" },
+			NewPlaceholder: func() string { return "Новая метка" },
+			Usage:          func(n string) string { return fmt.Sprintf("%s карт.", n) },
 		},
 		Leave: BoardLeaveStrings{
 			Confirm: func(target string) string {
@@ -333,15 +397,37 @@ var RU = Strings{
 			Untitled:  func() string { return "(без названия)" },
 		},
 		Listsmanage: BoardListsmanageStrings{
-			LinkLabel: func() string { return "Связать списки" },
+			Drag:          func() string { return "Перетащить" },
+			DragInGroup:   func() string { return "Перетащить внутри группы" },
+			GroupFallback: func() string { return "Связанные списки" },
+			LinkLabel:     func() string { return "Связать списки" },
+			LinkOffline: func() string {
+				return "Связывание списков доступно только онлайн."
+			},
+			LinkPrompt: func() string { return "Название списка списков:" },
 			LinkTitle: func() string {
 				return "Выберите подряд идущие списки и свяжите их в группу"
+			},
+			MenuTitle: func() string {
+				return "Переупорядочить списки и связать их в группы (списки списков)"
 			},
 			MoveLabel: func() string { return "Переместить выбранные" },
 			MoveTitle: func() string {
 				return "Переместить выбранные на указанную позицию"
 			},
-			Title: func() string { return "Управление списками" },
+			PosMissing:     func() string { return "Укажите позицию." },
+			PosPlaceholder: func() string { return "№" },
+			PosTitle:       func() string { return "Переместить на эту позицию" },
+			RenameGroup:    func() string { return "Переименовать группу" },
+			RenameOffline:  func() string { return "Переименование доступно только онлайн." },
+			RenamePrompt:   func() string { return "Новое название группы:" },
+			Title:          func() string { return "Управление списками" },
+			UnlinkConfirm: func() string {
+				return "Разъединить группу? Списки останутся, но нумерация снова станет раздельной."
+			},
+			UnlinkGroup:   func() string { return "Разъединить группу" },
+			UnlinkOffline: func() string { return "Разъединение доступно только онлайн." },
+			Untitled:      func() string { return "(без названия)" },
 		},
 		Mass: BoardMassStrings{
 			BoardLocked: func() string { return "— пароль доски неизвестен —" },
@@ -421,7 +507,21 @@ var RU = Strings{
 			RoleOwner:       func() string { return "владелец" },
 		},
 		Movelist: BoardMovelistStrings{
-			Title: func() string { return "Переместить список" },
+			Copied:  func() string { return "Скопировано." },
+			Copying: func() string { return "Копирование…" },
+			Grouped: func() string {
+				return "Список входит в группу — измените порядок через «Управление списками»."
+			},
+			Loading:   func() string { return "загрузка…" },
+			MenuLabel: func() string { return "Переместить список…" },
+			Moved:     func() string { return "Перемещено." },
+			Offline: func() string {
+				return "Копирование и перенос между досками доступны только онлайн."
+			},
+			Position:     func(n string) string { return fmt.Sprintf("позиция %s", n) },
+			Reencrypting: func() string { return "Перешифровка…" },
+			Title:        func() string { return "Переместить список" },
+			ToEnd:        func() string { return "в конец" },
 		},
 		Page: BoardPageStrings{
 			Home:    func() string { return "Все доски" },
@@ -475,13 +575,27 @@ var RU = Strings{
 			ListPrompt: func() string { return "Новое название списка:" },
 		},
 		Replace: BoardReplaceStrings{
-			Case:        func() string { return "Учитывать регистр" },
-			Find:        func() string { return "Найти" },
+			CardUntitled: func() string { return "(пустая карточка)" },
+			Case:         func() string { return "Учитывать регистр" },
+			Done:         func(cards string) string { return fmt.Sprintf("Готово: %s.", cards) },
+			DoneStale: func(cards string) string {
+				return fmt.Sprintf(" %s изменились, пока шёл просмотр — они пропущены, найдите заново.", cards)
+			},
+			Failed: func(reason string) string { return fmt.Sprintf("Ошибка при замене: %s", reason) },
+			Find:   func() string { return "Найти" },
+			MenuTitle: func() string {
+				return "Заменить один и тот же текст во всех карточках доски, списка или группы"
+			},
 			Next:        func() string { return "Дальше" },
+			NotFound:    func() string { return "Ничего не найдено." },
+			Page:        func(n string, pages string) string { return fmt.Sprintf("Страница %s из %s", n, pages) },
 			Prev:        func() string { return "Назад" },
 			ReplaceWith: func() string { return "Заменить на" },
 			Run:         func() string { return "Заменить" },
+			RunCount:    func(verb string, n string, cards string) string { return fmt.Sprintf("%s %s в %s", verb, n, cards) },
+			RunDelete:   func() string { return "Удалить" },
 			ScopeBoard:  func() string { return "Вся доска" },
+			ScopeGroup:  func(name string) string { return fmt.Sprintf("Группа: %s", name) },
 			Title:       func() string { return "Найти и заменить" },
 		},
 		Sessionedit: BoardSessioneditStrings{
@@ -496,6 +610,16 @@ var RU = Strings{
 			},
 			Name: func() string { return "Тесты" },
 		},
+		Testerlist: BoardTesterlistStrings{
+			Empty: func() string { return "Вопросы этого тура никто не тестировал." },
+			Hint: func() string {
+				return "По умолчанию отмечены те, кто видел больше половины вопросов из списка."
+			},
+			Name:         func() string { return "Список тестеров" },
+			Seen:         func(seen string, total string) string { return fmt.Sprintf("%s из %s", seen, total) },
+			Summary:      func(names string) string { return fmt.Sprintf("Вопросы тестировали: %s.", names) },
+			SummaryEmpty: func() string { return "Никто не отмечен." },
+		},
 		Testmode: BoardTestmodeStrings{
 			Badge: func(name string) string {
 				return fmt.Sprintf("Тест-режим: «%s». Завершить — по клику", name)
@@ -508,8 +632,28 @@ var RU = Strings{
 			Title:       func() string { return "Ответы" },
 		},
 		Timer: BoardTimerStrings{
-			Label: func() string { return "Таймер" },
-			Title: func() string { return "Таймер ЧГК" },
+			CustomLabel:       func() string { return "Свои длительности, через +" },
+			CustomPlaceholder: func() string { return "напр. 40+20" },
+			Label:             func() string { return "Таймер" },
+			ModeLabel:         func() string { return "Режим таймера" },
+			Pause:             func() string { return "Пауза" },
+			PhaseAnswer:       func() string { return "Ответ" },
+			PhaseDone:         func() string { return "Готово" },
+			PhaseSegment:      func(n string, total string) string { return fmt.Sprintf("Вопрос %s / %s", n, total) },
+			PresetBlitz:       func() string { return "Блиц (20 + 20 + 20)" },
+			PresetCustom:      func() string { return "Свой…" },
+			PresetDuplet:      func() string { return "Дуплет (30 + 30)" },
+			PresetRegular:     func() string { return "Обычный вопрос (60 с)" },
+			Reset:             func() string { return "Сброс" },
+			Resume:            func() string { return "Продолжить" },
+			Start:             func() string { return "Старт" },
+			Title:             func() string { return "Таймер ЧГК" },
+		},
+		Transfer: BoardTransferStrings{
+			AskPassphrase:      func() string { return "Пароль целевой доски:" },
+			AttachmentFallback: func() string { return "файл" },
+			BoardNumber:        func(id string) string { return fmt.Sprintf("доска #%s", id) },
+			ThisBoard:          func() string { return " (эта доска)" },
 		},
 		Unlock: BoardUnlockStrings{
 			ExitHint: func() string {
@@ -845,12 +989,31 @@ var RU = Strings{
 			ButtonTitle: func() string { return "Цвет метки" },
 		},
 		Home: ChromeHomeStrings{
-			BoardLockedName:    func(id string) string { return fmt.Sprintf("доска #%s", id) },
-			CreateOffline:      func() string { return "Создание доски доступно только онлайн." },
-			EmptyAll:           func() string { return "Пока нет досок. Нажмите + чтобы создать." },
-			EmptyNamed:         func() string { return "Досок с таким названием нет." },
+			BoardLockedName: func(id string) string { return fmt.Sprintf("доска #%s", id) },
+			CreateOffline:   func() string { return "Создание доски доступно только онлайн." },
+			CreateSubmit:    func() string { return "Создать" },
+			CreateTitle:     func() string { return "Новая доска" },
+			EmptyAll:        func() string { return "Пока нет досок. Нажмите + чтобы создать." },
+			EmptyNamed:      func() string { return "Досок с таким названием нет." },
+			ImportLabel:     func() string { return "Импорт из Trello" },
+			More:            func() string { return "Показать ещё" },
+			NamePlaceholder: func() string { return "Название доски" },
+			NewBoard:        func() string { return "Новая доска" },
+			PassCopied:      func() string { return "Пароль уже скопирован" },
+			PassGenerate:    func() string { return "Сгенерировать пароль" },
+			PassHint:        func() string { return "Пароль нужен для E2E-шифрования." },
+			PassPlaceholder: func() string { return "Пароль доски (для шифрования)" },
+			PassSaved: func() string {
+				return "Я сохранил(а) пароль в надёжное место и обещаю его не терять"
+			},
+			PassWarning: func() string {
+				return "Сохраните этот пароль прямо сейчас — восстановить его будет невозможно."
+			},
 			RoleEditor:         func() string { return "редактор" },
 			RoleOwner:          func() string { return "владелец" },
+			SearchLabel:        func() string { return "Поиск" },
+			SearchPlaceholder:  func() string { return "Поиск по доскам, вопросам и комментариям" },
+			Title:              func() string { return "Доски" },
 			UnreadMentionTitle: func() string { return "Вас упомянули" },
 			UnreadTitle:        func() string { return "Есть непрочитанные изменения" },
 		},
@@ -911,21 +1074,36 @@ var RU = Strings{
 			WriteError:     func() string { return "Ошибка" },
 		},
 		Tokens: ChromeTokensStrings{
-			Copied:       func() string { return "Скопировано" },
-			Copy:         func() string { return "Скопировать" },
-			LabelUnnamed: func() string { return "(без названия)" },
+			Copied: func() string { return "Скопировано" },
+			Copy:   func() string { return "Скопировать" },
+			Create: func() string { return "Создать токен" },
+			IntroAfter: func() string {
+				return "). Действует месяц. Данные приходят зашифрованными —"
+			},
+			IntroBefore: func() string {
+				return "Токен даёт доступ к доскам через Trello-совместимый API (например, для"
+			},
+			IntroTail:        func() string { return "расшифровываются локально паролем доски." },
+			LabelPlaceholder: func() string { return "Название (например, «chgksuite на ноутбуке»)" },
+			LabelUnnamed:     func() string { return "(без названия)" },
+			ListEmpty:        func() string { return "Токенов пока нет." },
+			ListTitle:        func() string { return "Активные и прошлые токены" },
 			MetaDates: func(created string, expires string) string {
 				return fmt.Sprintf("создан %s · действует до %s", created, expires)
 			},
 			MetaUnused: func() string { return " · не использовался" },
 			MetaUsed:   func(used string) string { return fmt.Sprintf(" · использован %s", used) },
-			Revoke:     func() string { return "Отозвать" },
+			NewHint: func() string {
+				return "Скопируйте токен сейчас — позже он не будет показан:"
+			},
+			Revoke: func() string { return "Отозвать" },
 			RevokeConfirm: func() string {
 				return "Отозвать токен? Приложения, использующие его, потеряют доступ."
 			},
 			StatusActive:  func() string { return "активен" },
 			StatusExpired: func() string { return "истёк" },
 			StatusRevoked: func() string { return "отозван" },
+			Title:         func() string { return "API-токены" },
 		},
 		Typograph: ChromeTypographStrings{
 			Confirm: func(n string, total string) string {
@@ -1481,6 +1659,28 @@ var RU = Strings{
 		},
 	},
 	Import: ImportStrings{
+		Append: ImportAppendStrings{
+			All:    func() string { return "Выбрать все" },
+			Clash:  func() string { return "такой список уже есть на доске" },
+			Failed: func(reason string) string { return fmt.Sprintf("Не получилось: %s", reason) },
+			FailedDone: func(titles string) string {
+				return fmt.Sprintf("Загружено: %s. Откройте файл снова и отметьте остальное.", titles)
+			},
+			FailedNone: func() string { return "Доска не изменилась." },
+			FailedUnit: func(title string, reason string) string {
+				return fmt.Sprintf("«%s» не загрузился (%s) и откачен. ", title, reason)
+			},
+			Lead: func(board string, date string) string {
+				return fmt.Sprintf("Доска «%s», выгружена %s. ", board, date)
+			},
+			LeadTail: func() string {
+				return "Отмеченные списки добавятся к этой доске в конец; метки и тесты подхватятся к уже существующим здесь. Ничего на доске не изменится и не перезапишется."
+			},
+			NonePicked: func() string { return "Отметьте хотя бы один список." },
+			Offline:    func() string { return "Импорт архива доступен только онлайн." },
+			Run:        func() string { return "Добавить на доску" },
+			Title:      func(file string) string { return fmt.Sprintf("Импорт — %s", file) },
+		},
 		Apply: ImportApplyStrings{
 			AttachFailed: func(name string, status string) string {
 				return fmt.Sprintf("вложение «%s»: %s", name, status)
@@ -1519,11 +1719,30 @@ var RU = Strings{
 			Submit: func() string { return "Импортировать" },
 		},
 		Bundle: ImportBundleStrings{
-			Creating:          func() string { return "Создаю доску…" },
+			AttachmentFields: func() string { return "attachments: нет path/filename" },
+			BadFormat: func(got string, want string) string {
+				return fmt.Sprintf("неизвестный формат «%s» (ожидается %s)", got, want)
+			},
+			BadId:      func(what string) string { return fmt.Sprintf("%s: плохой или повторный id", what) },
+			CardFields: func() string { return "cards: нет description/rank" },
+			Creating:   func() string { return "Создаю доску…" },
+			DanglingRef: func(what string, id string) string {
+				return fmt.Sprintf("%s: ссылка на несуществующий id %s", what, id)
+			},
+			EventOrphan:  func() string { return "timeline: событие ни на карточке, ни на тесте" },
+			EventPayload: func() string { return "timeline: нет payload" },
+			EventType: func(got string) string {
+				return fmt.Sprintf("timeline: неизвестный тип события «%s»", got)
+			},
+			ListFields:        func() string { return "lists: нет title/rank" },
 			MissingAttachment: func(path string) string { return fmt.Sprintf("в архиве нет файла %s", path) },
 			NoBoardJson: func(file string) string {
 				return fmt.Sprintf("в архиве нет %s — это не экспорт доски xy", file)
 			},
+			NoBoardName: func() string { return "нет названия доски" },
+			NotArray:    func(key string) string { return fmt.Sprintf("%s — не массив", key) },
+			NotJson:     func() string { return "board.json — не JSON" },
+			NotObject:   func() string { return "board.json — не объект" },
 			Quota: func(need string, left string) string {
 				return fmt.Sprintf("архив (~%s МБ) не помещается в остаток хранилища (%s МБ)", need, left)
 			},
@@ -1535,6 +1754,7 @@ var RU = Strings{
 				return fmt.Sprintf("Готово: %s карточек, %s списков/групп, %s тестов, %s событий, %s вложений.", cards, lists, tests, events, attachments)
 			},
 			SummarySkipped: func(n string) string { return fmt.Sprintf("\nНе перенеслись вложения (%s): ", n) },
+			TesterScope:    func() string { return "tour_testers: нужен ровно один из list_id / group_id" },
 		},
 		Export: ImportExportStrings{
 			AttachFailed: func(name string, status string) string {
@@ -1729,8 +1949,35 @@ var RU = Strings{
 			Copied: func() string { return "Ссылка скопирована." },
 		},
 		Page: InvitePageStrings{
-			BoardFallback: func() string { return "доску" },
-			BoardWrapper:  func(name string) string { return fmt.Sprintf("«%s»", name) },
+			ActiveApprovalHeading: func(board string) string { return fmt.Sprintf("Заявка в %s", board) },
+			ActiveApprovalNote: func() string {
+				return "Владелец доски рассмотрит заявку — доступ появится после одобрения."
+			},
+			ActiveHeading: func(board string) string { return fmt.Sprintf("Приглашение в %s", board) },
+			ActiveNote: func() string {
+				return "Пароль доски придётся узнать у того, кто вас позвал: по ссылке он не передаётся."
+			},
+			AskNew:          func() string { return "Попросите у владельца доски новую." },
+			BoardFallback:   func() string { return "доску" },
+			BoardWrapper:    func(name string) string { return fmt.Sprintf("«%s»", name) },
+			BrokenHeading:   func() string { return "Ссылка не работает" },
+			DeclinedHeading: func() string { return "Заявка отклонена" },
+			DeclinedNote: func() string {
+				return "По этой ссылке войти больше нельзя — попросите новую."
+			},
+			ExhaustedHeading: func() string { return "Ссылка исчерпана" },
+			ExhaustedNote:    func() string { return "По ней уже прошли все, кого она пускала." },
+			ExpiredHeading:   func() string { return "Срок ссылки истёк" },
+			Join:             func() string { return "Присоединиться" },
+			MemberHeading:    func(board string) string { return fmt.Sprintf("Вы уже в %s", board) },
+			NotFound:         func() string { return "Ссылка не найдена" },
+			OpenBoard:        func() string { return "Открыть доску" },
+			PendingHeading:   func() string { return "Заявка отправлена" },
+			PendingNote:      func() string { return "Ждём, пока владелец доски её рассмотрит." },
+			Request:          func() string { return "Подать заявку" },
+			RevokedHeading:   func() string { return "Ссылка отозвана" },
+			SpentHeading:     func() string { return "По этой ссылке вы уже проходили" },
+			Title:            func() string { return "Приглашение" },
 		},
 		Request: InviteRequestStrings{
 			Approve: func() string { return "Принять" },
@@ -1839,16 +2086,31 @@ var RU = Strings{
 			Name: func() string { return "Лента" },
 		},
 		Firstrun: ProfileFirstrunStrings{
+			AuthorHint: func() string {
+				return "Подставляется в поле «Автор» новых вопросов."
+			},
+			AuthorLabel:       func() string { return "Автор по умолчанию" },
 			AuthorPlaceholder: func() string { return "Иванов Иван" },
+			Label:             func() string { return "Настройки" },
+			Later:             func() string { return "Потом" },
+			Save:              func() string { return "Сохранить" },
+			Subtitle:          func() string { return "Их можно поменять потом в профиле." },
+			Title:             func() string { return "Пара настроек" },
+			TzHint: func() string {
+				return "В нём записывается время тестов. Подставлен пояс этого устройства."
+			},
+			TzLabel: func() string { return "Часовой пояс" },
 		},
 		Home: func() string { return "Все доски" },
 		Name: func() string { return "Профиль" },
 		Password: ProfilePasswordStrings{
-			Current: func() string { return "Текущий пароль (если установлен)" },
-			Name:    func() string { return "Изменить пароль" },
-			New:     func() string { return "Новый пароль" },
-			Repeat:  func() string { return "Повторите пароль" },
-			Submit:  func() string { return "Сохранить пароль" },
+			Current:  func() string { return "Текущий пароль (если установлен)" },
+			Mismatch: func() string { return "Пароли не совпадают." },
+			Name:     func() string { return "Изменить пароль" },
+			New:      func() string { return "Новый пароль" },
+			Repeat:   func() string { return "Повторите пароль" },
+			Saved:    func() string { return "Пароль сохранён." },
+			Submit:   func() string { return "Сохранить пароль" },
 		},
 		Save: func() string { return "Сохранить" },
 		Sizes: ProfileSizesStrings{
@@ -1856,9 +2118,14 @@ var RU = Strings{
 			BoardWHint: func() string {
 				return "Доска центрируется на экране — на широком мониторе не приходится смотреть в край."
 			},
-			CardH: func() string { return "Текст карточки" },
+			BoardWMax: func() string { return "вся ширина" },
+			CardH:     func() string { return "Текст карточки" },
 			CardHHint: func() string {
 				return "Сколько строк вопроса показывать на карточке. На максимуме — весь текст."
+			},
+			CardHMax: func() string { return "весь текст" },
+			CardLines: func(n int) string {
+				return fmt.Sprintf("%d %s", n, core.Plural("ru", n, "строка", "строки", "строк"))
 			},
 			Close: func() string { return "Готово" },
 			Font:  func() string { return "Шрифт карточки" },
@@ -1867,11 +2134,16 @@ var RU = Strings{
 			},
 			ListW: func() string { return "Ширина списка" },
 			Name:  func() string { return "Настройка ширины / высоты" },
+			Px:    func(n string) string { return fmt.Sprintf("%s px", n) },
 			Reset: func() string { return "Сбросить по умолчанию" },
 		},
 		Storage: ProfileStorageStrings{
-			HintLead: func() string { return "Хранилище: " },
-			HintMid:  func() string { return "." },
+			HintLead:  func() string { return "Хранилище: " },
+			HintMid:   func() string { return "." },
+			OfQuota:   func(used string, quota string) string { return fmt.Sprintf("%s из %s", used, quota) },
+			Unknown:   func() string { return "—" },
+			Unlimited: func(used string) string { return fmt.Sprintf("%s (без лимита)", used) },
+			Used:      func(mb string) string { return fmt.Sprintf("%s МБ", mb) },
 		},
 		Title: func() string { return "Профиль · xy" },
 		Tz: ProfileTzStrings{

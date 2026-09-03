@@ -6,6 +6,7 @@
 //
 // The decisions are pure (jstest covers them); the modal, the bar and the board
 // wiring are below them.
+import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
 import { modal } from "./modal.js";
 import type { Board, BoardPanel } from "./panels.js";
@@ -110,9 +111,9 @@ export function createLabelFilter(deps: FilterDeps) {
 
   interface ModeCopy { mode: FilterMode; word: string; title: string; phrase: string }
   const MODES: ModeCopy[] = [
-    { mode: "all", word: "все", title: "Карточка несёт все выбранные метки", phrase: "Со всеми метками" },
-    { mode: "any", word: "любая", title: "Карточка несёт хотя бы одну из выбранных", phrase: "С любой из меток" },
-    { mode: "none", word: "ни одной", title: "Карточка не несёт ни одной из выбранных", phrase: "Без меток" },
+    { mode: "all", word: S.board.filter.allWord(), title: S.board.filter.allTitle(), phrase: S.board.filter.allPhrase() },
+    { mode: "any", word: S.board.filter.anyWord(), title: S.board.filter.anyTitle(), phrase: S.board.filter.anyPhrase() },
+    { mode: "none", word: S.board.filter.noneWord(), title: S.board.filter.noneTitle(), phrase: S.board.filter.nonePhrase() },
   ];
   const copyFor = (m: FilterMode): ModeCopy => MODES.find((c) => c.mode === m)!;
 
@@ -120,7 +121,7 @@ export function createLabelFilter(deps: FilterDeps) {
     const body = byId("filterBody");
     const labels = [...deps.board.state.labels].sort((a, b) => a.name.localeCompare(b.name));
     if (!labels.length) {
-      body.replaceChildren(el("p", { class: "label-empty", text: "На доске нет меток." }));
+      body.replaceChildren(el("p", { class: "label-empty", text: S.board.filter.noLabels() }));
       return;
     }
     const seg = el("div", { class: "seg" });
@@ -139,14 +140,14 @@ export function createLabelFilter(deps: FilterDeps) {
       });
       row.append(chip);
     }
-    const reset = el("button", { class: "btn btn-ghost btn-small", type: "button", text: "Сбросить" });
+    const reset = el("button", { class: "btn btn-ghost btn-small", type: "button", text: S.board.filter.reset() });
     reset.addEventListener("click", clear);
     body.replaceChildren(
-      el("div", { class: "u-row u-gap-sm u-align-center u-wrap" }, el("span", { class: "hint", text: "Показывать карточки, у которых" }), seg),
+      el("div", { class: "u-row u-gap-sm u-align-center u-wrap" }, el("span", { class: "hint", text: S.board.filter.lead() }), seg),
       row,
       // A card's dots are its unscoped labels only, so a card can match here on
       // a verdict from a test sitting. Better said out loud than discovered.
-      el("p", { class: "hint", text: "Метка засчитывается и тогда, когда она проставлена на тесте — такие метки на карточке не видны." }),
+      el("p", { class: "hint", text: S.board.filter.scopedNote() }),
       reset,
     );
     deps.paintLabels();
@@ -158,13 +159,13 @@ export function createLabelFilter(deps: FilterDeps) {
     if (!active()) { bar.replaceChildren(); return; }
     const names = state().labels.map((id) => deps.board.state.labels.find((l) => l.id === id)!.name);
     const phrase = copyFor(mode).phrase;
-    const edit = el("button", { class: "btn btn-ghost btn-small", type: "button", text: "Изменить" });
+    const edit = el("button", { class: "btn btn-ghost btn-small", type: "button", text: S.board.filter.edit() });
     edit.addEventListener("click", open);
-    const off = el("button", { class: "btn btn-ghost btn-small", type: "button", text: "Сбросить" });
+    const off = el("button", { class: "btn btn-ghost btn-small", type: "button", text: S.board.filter.reset() });
     off.addEventListener("click", clear);
     bar.replaceChildren(
-      el("span", { class: "filter-bar-what", text: `${phrase}: ${names.join(", ")}` }),
-      el("span", { class: "hint", text: "перетаскивание внутри списка выключено" }),
+      el("span", { class: "filter-bar-what", text: S.board.filter.barWhat(phrase, names.join(", ")) }),
+      el("span", { class: "hint", text: S.board.filter.barNodrag() }),
       edit, off,
     );
   }
@@ -176,8 +177,8 @@ export function createLabelFilter(deps: FilterDeps) {
 
   const panel: BoardPanel = {
     id: "label-filter", menu: "board", icon: "funnel",
-    label: () => (active() ? `Фильтр по меткам · ${state().labels.length}` : "Фильтр по меткам"),
-    title: "Показать только карточки с выбранными метками — вид, который ничего не меняет на доске",
+    label: () => (active() ? S.board.filter.menuActive(String(state().labels.length)) : S.board.filter.title()),
+    title: S.board.filter.menuTitle(),
     open,
   };
 

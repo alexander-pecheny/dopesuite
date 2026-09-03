@@ -6,6 +6,7 @@
 // destination board is chosen by its (decrypted) name and the insertion
 // position among its lists is selectable.
 
+import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
@@ -44,8 +45,8 @@ export function createMoveListPanel(board: Board, transfer: Pick<Transfer, "load
     try { boards = (await fetchJSON("/api/boards")) as MoveBoardItem[]; } catch (_) {}
     if (!boards.some((b) => b.id === board.id)) boards.unshift({ id: board.id, name_enc: null });
     for (const b of boards) {
-      let label = "доска #" + b.id;
-      if (b.id === board.id) label = (board.state.name || label) + " (эта доска)";
+      let label = S.board.transfer.boardNumber(String(b.id));
+      if (b.id === board.id) label = (board.state.name || label) + S.board.transfer.thisBoard();
       else if ((b.schema_version ?? 0) >= 2) label = b.name || label; // plaintext name, no key needed
       else {
         try { const cdk = await xyCrypto.loadCachedDK(b.id); if (cdk) label = await xyCrypto.decField(cdk, b.name_enc || ""); }
@@ -63,7 +64,7 @@ export function createMoveListPanel(board: Board, transfer: Pick<Transfer, "load
   async function onMoveListBoardChange(): Promise<void> {
     const posSel = byId<HTMLSelectElement>("moveListPos");
     const bid = Number(byId<HTMLSelectElement>("moveListBoard").value);
-    posSel.replaceChildren(el("option", { value: "", text: "загрузка…" }));
+    posSel.replaceChildren(el("option", { value: "", text: S.board.movelist.loading() }));
     try { listMoveCtx = await transfer.loadMoveBoard(bid); }
     catch (err) {
       listMoveCtx = null;
@@ -72,8 +73,8 @@ export function createMoveListPanel(board: Board, transfer: Pick<Transfer, "load
     }
     const ctx = listMoveCtx, src = listMoveSrc;
     const lists = ctx.lists.filter((l) => !(ctx.boardId === board.id && src && l.id === src.id));
-    posSel.replaceChildren(el("option", { value: "end", text: "в конец" }));
-    for (let i = 1; i <= lists.length; i++) posSel.append(el("option", { value: String(i), text: `позиция ${i}` }));
+    posSel.replaceChildren(el("option", { value: "end", text: S.board.movelist.toEnd() }));
+    for (let i = 1; i <= lists.length; i++) posSel.append(el("option", { value: String(i), text: S.board.movelist.position(String(i)) }));
     posSel.value = "end";
   }
 
@@ -104,7 +105,7 @@ export function createMoveListPanel(board: Board, transfer: Pick<Transfer, "load
     // same board goes through "Manage lists" (which moves the whole group as
     // a unit). Copying it, or moving it to another board, is still fine.
     if (sameBoard && remove && src.groupId != null) {
-      msg.textContent = "Список входит в группу — измените порядок через «Управление списками».";
+      msg.textContent = S.board.movelist.grouped();
       return;
     }
 
@@ -122,8 +123,8 @@ export function createMoveListPanel(board: Board, transfer: Pick<Transfer, "load
 
     // Copying a list (it carries every card's history and attachments) and any
     // cross-board op are online-only; only the intra-board move above works offline.
-    if (!xySync.requireOnline("Копирование и перенос между досками доступны только онлайн.", msg)) return;
-    msg.textContent = sameBoard ? "Копирование…" : "Перешифровка…";
+    if (!xySync.requireOnline(S.board.movelist.offline(), msg)) return;
+    msg.textContent = sameBoard ? S.board.movelist.copying() : S.board.movelist.reencrypting();
     const log = (line: string): void => { msg.textContent = line; };
     try {
       // The list becomes a Bundle and lands through applyBundle, the one write
@@ -149,7 +150,7 @@ export function createMoveListPanel(board: Board, transfer: Pick<Transfer, "load
       }
       if (sameBoard || remove) await board.reload();
       board.render();
-      msg.textContent = remove ? "Перемещено." : "Скопировано.";
+      msg.textContent = remove ? S.board.movelist.moved() : S.board.movelist.copied();
       setTimeout(moveListModal.close, 700);
     } catch (err) { msg.textContent = errMsg(err); }
   }
@@ -161,7 +162,7 @@ export function createMoveListPanel(board: Board, transfer: Pick<Transfer, "load
 
   return {
     id: "move-list", menu: "list", icon: "arrow-left-right",
-    label: "Переместить список…",
+    label: S.board.movelist.menuLabel(),
     open: (scope) => openMoveList(scope.list),
   };
 }

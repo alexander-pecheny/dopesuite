@@ -57,17 +57,17 @@ async function boot(): Promise<void> {
 const booted = boot();
 
 const MB = 1024 * 1024;
-function fmtMB(bytes: number): string { return (bytes / MB).toFixed(1) + " МБ"; }
+function fmtMB(bytes: number): string { return S.profile.storage.used((bytes / MB).toFixed(1)); }
 
 async function loadStorage(): Promise<void> {
   const node = byId("storageUsed");
   try {
     const s = (await fetchJSON("/api/auth/storage")) as { unlimited?: boolean; used_bytes: number; quota_bytes: number };
     node.textContent = s.unlimited
-      ? fmtMB(s.used_bytes) + " (без лимита)"
-      : fmtMB(s.used_bytes) + " из " + fmtMB(s.quota_bytes);
+      ? S.profile.storage.unlimited(fmtMB(s.used_bytes))
+      : S.profile.storage.ofQuota(fmtMB(s.used_bytes), fmtMB(s.quota_bytes));
   } catch (_) {
-    node.textContent = "—";
+    node.textContent = S.profile.storage.unknown();
   }
 }
 
@@ -94,7 +94,7 @@ passwordForm.addEventListener("submit", async (e) => {
   const newPassword = byId<HTMLInputElement>("newPassword").value;
   const confirm = byId<HTMLInputElement>("confirmPassword").value;
   if (newPassword !== confirm) {
-    setText(passwordMessage, "Пароли не совпадают.");
+    setText(passwordMessage, S.profile.password.mismatch());
     return;
   }
   const body: { new_password: string; current_password?: string } = { new_password: newPassword };
@@ -103,7 +103,7 @@ passwordForm.addEventListener("submit", async (e) => {
   try {
     await jpost("/api/auth/password", body);
     passwordForm.reset();
-    setText(passwordMessage, "Пароль сохранён.");
+    setText(passwordMessage, S.profile.password.saved());
   } catch (err) {
     setText(passwordMessage, errMsg(err));
   }
@@ -157,11 +157,11 @@ function syncSizesUI(): void {
   sizesListW.value = String(s.listW);
   sizesCardH.value = String(s.cardLines == null ? xySizes.CARD_LINES_MAX : s.cardLines);
   sizesCardFont.value = String(s.cardFont);
-  byId("sizesBoardWVal").textContent = s.boardW == null ? "вся ширина" : s.boardW + " px";
-  byId("sizesListWVal").textContent = s.listW + " px";
+  byId("sizesBoardWVal").textContent = s.boardW == null ? S.profile.sizes.boardWMax() : S.profile.sizes.px(String(s.boardW));
+  byId("sizesListWVal").textContent = S.profile.sizes.px(String(s.listW));
   byId("sizesCardHVal").textContent =
-    s.cardLines == null ? "весь текст" : s.cardLines + (s.cardLines === 1 ? " строка" : s.cardLines < 5 ? " строки" : " строк");
-  byId("sizesCardFontVal").textContent = s.cardFont + " px";
+    s.cardLines == null ? S.profile.sizes.cardHMax() : S.profile.sizes.cardLines(s.cardLines);
+  byId("sizesCardFontVal").textContent = S.profile.sizes.px(String(s.cardFont));
   renderPreview();
 }
 

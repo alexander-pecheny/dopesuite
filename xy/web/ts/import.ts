@@ -380,6 +380,7 @@ async function runImport(source: ImportSource, name: string, pass: string): Prom
 async function runImportAll(token: string, pass: string): Promise<void> {
   const boards = openBoards.slice();
   const report: string[] = [];
+  let failed = 0;
   for (let i = 0; i < boards.length; i++) {
     const b = boards[i];
     logPrefix = `[${i + 1}/${boards.length}] «${b.name || b.id}» — `;
@@ -389,11 +390,11 @@ async function runImportAll(token: string, pass: string): Promise<void> {
       const { summary } = await runImport(source, b.name || "", pass);
       report.push(`«${b.name || b.id}» — ${summary}`);
     } catch (err) {
+      failed++;
       report.push(S.import.run.reportFailed(b.name || b.id, errMsg(err)));
     }
   }
   logPrefix = "";
-  const failed = report.filter((r) => r.includes("НЕ ИМПОРТИРОВАНА")).length;
   setStatus(failed ? "error" : "saved");
   log(S.import.run.reportSummary(String(boards.length - failed), String(boards.length)) + report.join("\n\n"));
 }

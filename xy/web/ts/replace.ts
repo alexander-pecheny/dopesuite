@@ -4,6 +4,7 @@
 // places can want two different answers, which is why the preview ticks
 // Occurrences and not cards.
 
+import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
 import { xyFind } from "./find.js";
 import { xyMass } from "./massaction.js";
@@ -103,7 +104,7 @@ export function createReplacePanel(board: Board, rewrites: Pick<Rewrites, "apply
           renderReplace();
         });
         rows.push(el("label", { class: "replace-card" }, head,
-          el("span", { class: "replace-card-name", text: xySearchIndex.cardTitle(o.card, board.state.cardTitle, "(пустая карточка)") }),
+          el("span", { class: "replace-card-name", text: xySearchIndex.cardTitle(o.card, board.state.cardTitle, S.board.replace.cardUntitled()) }),
           el("span", { class: "replace-card-count", text: `${ids.length}` })));
       }
       const snip = xyFind.snippet(o.card.desc, [o.span], 60);
@@ -123,7 +124,7 @@ export function createReplacePanel(board: Board, rewrites: Pick<Rewrites, "apply
           snip.text.slice(at.end))));
     }
     box.replaceChildren(...rows);
-    byId("replacePage").textContent = occurrences.length ? `Страница ${replacePageNo + 1} из ${pages}` : "";
+    byId("replacePage").textContent = occurrences.length ? S.board.replace.page(String(replacePageNo + 1), String(pages)) : "";
     byId<HTMLButtonElement>("replacePrev").disabled = replacePageNo === 0;
     byId<HTMLButtonElement>("replaceNext").disabled = replacePageNo >= pages - 1;
     const picked = occurrences.filter((o) => replacePicked.has(o.i));
@@ -132,9 +133,9 @@ export function createReplacePanel(board: Board, rewrites: Pick<Rewrites, "apply
     run.disabled = picked.length === 0;
     // An empty "with" deletes, and the button says so rather than promising a
     // replacement with nothing.
-    const verb = replaceTo.value ? "Заменить" : "Удалить";
-    run.textContent = picked.length ? `${verb} ${picked.length} в ${xyMass.cardCount(cards)}` : verb;
-    replaceModal.message(replaceFrom.value && !occurrences.length ? "Ничего не найдено." : "");
+    const verb = replaceTo.value ? S.board.replace.run() : S.board.replace.runDelete();
+    run.textContent = picked.length ? S.board.replace.runCount(verb, String(picked.length), xyMass.cardCount(cards)) : verb;
+    replaceModal.message(replaceFrom.value && !occurrences.length ? S.board.replace.notFound() : "");
   }
 
   async function runReplace(): Promise<void> {
@@ -166,11 +167,11 @@ export function createReplacePanel(board: Board, rewrites: Pick<Rewrites, "apply
       // Re-plan first: what is left to replace has changed, and renderReplace owns
       // the message line, so the report has to be written after it.
       planReplace();
-      replaceModal.message(`Готово: ${xyMass.cardCount(changes.length)}.` +
-        (stale ? ` ${xyMass.cardCount(stale)} изменились, пока шёл просмотр — они пропущены, найдите заново.` : ""));
+      replaceModal.message(S.board.replace.done(xyMass.cardCount(changes.length)) +
+        (stale ? S.board.replace.doneStale(xyMass.cardCount(stale)) : ""));
     } catch (err) {
       board.setStatus("error");
-      replaceModal.message("Ошибка при замене: " + errMsg(err));
+      replaceModal.message(S.board.replace.failed(errMsg(err)));
     }
   }
 
@@ -179,11 +180,11 @@ export function createReplacePanel(board: Board, rewrites: Pick<Rewrites, "apply
     // is named correctly.
     const groups = new Map(board.state.groups.map((g) => [g.id, g.name]));
     const seen = new Set<number>();
-    const opts = [el("option", { value: "board", text: "Вся доска" })];
+    const opts = [el("option", { value: "board", text: S.board.replace.scopeBoard() })];
     for (const l of [...board.state.lists].sort(byRank)) {
       if (l.groupId != null && !seen.has(l.groupId)) {
         seen.add(l.groupId);
-        opts.push(el("option", { value: `group:${l.groupId}`, text: `Группа: ${groups.get(l.groupId) || ""}` }));
+        opts.push(el("option", { value: `group:${l.groupId}`, text: S.board.replace.scopeGroup(groups.get(l.groupId) || "") }));
       }
       opts.push(el("option", { value: `list:${l.id}`, text: l.title }));
     }
@@ -210,8 +211,8 @@ export function createReplacePanel(board: Board, rewrites: Pick<Rewrites, "apply
 
   return {
     id: "replace", menu: "board", icon: "replace",
-    label: "Найти и заменить",
-    title: "Заменить один и тот же текст во всех карточках доски, списка или группы",
+    label: S.board.replace.title(),
+    title: S.board.replace.menuTitle(),
     open: openReplace,
   };
 }

@@ -1,12 +1,10 @@
-# Files that still carry Cyrillic outside a Catalog (root docs/adr/0006). The
-# migration is DONE: every user-facing string lives in a module's
-# i18nstrings/<lang>/*.toml. What remains here is functional Cyrillic that
-# cannot move: regexes that match Russian input, month/city/label data
-# tables, the chgksuite-parity format strings (dbtext, СИ docx, the parity
-# i18n package), fixture data (the gallery skin, server defaultMatch), and
-# xy's sw.ts, whose classic-worker build has no import graph for a catalog.
-# The lint still fails if a listed file goes clean, and a new prose string
-# must go to a Catalog, never onto this list.
+# Files that still carry Cyrillic outside a Catalog (root docs/adr/0006). What
+# remains here is functional Cyrillic that cannot move: regexes that match
+# Russian input, month/city/label data tables, the chgksuite-parity format
+# strings (dbtext, СИ docx, the parity i18n package), fixture data (the gallery
+# skin, server defaultMatch), and xy's sw.ts, whose classic-worker build has no
+# import graph for a catalog. The lint still fails if a listed file goes clean,
+# and a new prose string must go to a Catalog, never onto this list.
 dope/dope/domain/gamebuild/build.go
 dope/dope/domain/games/multi.go
 dope/dope/domain/replay/parse.go
@@ -53,27 +51,8 @@ xy/internal/chgk/typo/typo.go
 xy/internal/server/exportpack.go
 xy/internal/xycli/fold.go
 xy/internal/xycli/source.go
-xy/web/assets/ui/index.dopeui
-xy/web/assets/ui/join.dopeui
-xy/web/assets/ui/tokens.dopeui
-xy/web/ts/authorcount.ts
-xy/web/ts/bundle.ts
-xy/web/ts/bundleimportpanel.ts
 xy/web/ts/chgk.ts
 xy/web/ts/find.ts
-xy/web/ts/firstrun.ts
-xy/web/ts/handouts.ts
-xy/web/ts/import.ts
-xy/web/ts/join.ts
-xy/web/ts/labelfilter.ts
-xy/web/ts/labelsedit.ts
-xy/web/ts/listsmanage.ts
-xy/web/ts/movelist.ts
-xy/web/ts/profile.ts
-xy/web/ts/replace.ts
 xy/web/ts/sessions.ts
 xy/web/ts/sw.ts
-xy/web/ts/testerlist.ts
-xy/web/ts/timer.ts
-xy/web/ts/transfer.ts
 xy/web/ts/typo.ts

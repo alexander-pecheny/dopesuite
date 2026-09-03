@@ -3,6 +3,8 @@
 // file passes before an import touches the server. All pure; the encrypt/
 // decrypt and the network live in bundleexport.ts / bundleimport.ts.
 
+import S from "./i18nstrings.js";
+
 export const BUNDLE_FORMAT = "xy.board.v1";
 export const BOARD_JSON = "board.json";
 
@@ -117,24 +119,24 @@ export function parseBundle(text: string): Bundle {
   try {
     raw = JSON.parse(text);
   } catch {
-    throw new Error("board.json — не JSON");
+    throw new Error(S.import.bundle.notJson());
   }
   const b = raw as Bundle;
-  if (!b || typeof b !== "object") throw new Error("board.json — не объект");
-  if (b.format !== BUNDLE_FORMAT) throw new Error(`неизвестный формат «${String(b.format)}» (ожидается ${BUNDLE_FORMAT})`);
-  if (!b.board || typeof b.board.name !== "string" || !b.board.name.trim()) throw new Error("нет названия доски");
+  if (!b || typeof b !== "object") throw new Error(S.import.bundle.notObject());
+  if (b.format !== BUNDLE_FORMAT) throw new Error(S.import.bundle.badFormat(String(b.format), BUNDLE_FORMAT));
+  if (!b.board || typeof b.board.name !== "string" || !b.board.name.trim()) throw new Error(S.import.bundle.noBoardName());
   const arrays: Array<keyof Bundle> = [
     "members", "lists", "groups", "cards", "labels", "sessions",
     "card_labels", "card_sessions", "tour_testers", "timeline", "attachments",
   ];
   for (const key of arrays) {
-    if (!Array.isArray(b[key])) throw new Error(`${key} — не массив`);
+    if (!Array.isArray(b[key])) throw new Error(S.import.bundle.notArray(key));
   }
 
   const ids = (rows: Array<{ id: number }>, what: string): Set<number> => {
     const set = new Set<number>();
     for (const r of rows) {
-      if (typeof r.id !== "number" || set.has(r.id)) throw new Error(`${what}: плохой или повторный id`);
+      if (typeof r.id !== "number" || set.has(r.id)) throw new Error(S.import.bundle.badId(what));
       set.add(r.id);
     }
     return set;
@@ -146,14 +148,14 @@ export function parseBundle(text: string): Bundle {
   const sessionIds = ids(b.sessions, "sessions");
 
   const ref = (id: number | null | undefined, set: Set<number>, what: string): void => {
-    if (id != null && !set.has(id)) throw new Error(`${what}: ссылка на несуществующий id ${id}`);
+    if (id != null && !set.has(id)) throw new Error(S.import.bundle.danglingRef(what, String(id)));
   };
   for (const l of b.lists) {
-    if (typeof l.title !== "string" || typeof l.rank !== "string") throw new Error("lists: нет title/rank");
+    if (typeof l.title !== "string" || typeof l.rank !== "string") throw new Error(S.import.bundle.listFields());
     ref(l.group_id, groupIds, "lists.group_id");
   }
   for (const c of b.cards) {
-    if (typeof c.description !== "string" || typeof c.rank !== "string") throw new Error("cards: нет description/rank");
+    if (typeof c.description !== "string" || typeof c.rank !== "string") throw new Error(S.import.bundle.cardFields());
     ref(c.list_id, listIds, "cards.list_id");
   }
   for (const cl of b.card_labels) {
@@ -166,22 +168,22 @@ export function parseBundle(text: string): Bundle {
     ref(p.session_id, sessionIds, "card_sessions.session_id");
   }
   for (const t of b.tour_testers) {
-    if ((t.list_id == null) === (t.group_id == null)) throw new Error("tour_testers: нужен ровно один из list_id / group_id");
+    if ((t.list_id == null) === (t.group_id == null)) throw new Error(S.import.bundle.testerScope());
     ref(t.list_id, listIds, "tour_testers.list_id");
     ref(t.group_id, groupIds, "tour_testers.group_id");
     ref(t.session_id, sessionIds, "tour_testers.session_id");
   }
   for (const e of b.timeline) {
-    if (!EVENT_TYPES.has(e.type)) throw new Error(`timeline: неизвестный тип события «${String(e.type)}»`);
-    if (e.card_id == null && e.session_id == null) throw new Error("timeline: событие ни на карточке, ни на тесте");
+    if (!EVENT_TYPES.has(e.type)) throw new Error(S.import.bundle.eventType(String(e.type)));
+    if (e.card_id == null && e.session_id == null) throw new Error(S.import.bundle.eventOrphan());
     ref(e.card_id, cardIds, "timeline.card_id");
     ref(e.session_id, sessionIds, "timeline.session_id");
-    if (typeof e.payload !== "string") throw new Error("timeline: нет payload");
+    if (typeof e.payload !== "string") throw new Error(S.import.bundle.eventPayload());
   }
   ids(b.attachments, "attachments");
   for (const a of b.attachments) {
     ref(a.card_id, cardIds, "attachments.card_id");
-    if (typeof a.path !== "string" || typeof a.filename !== "string") throw new Error("attachments: нет path/filename");
+    if (typeof a.path !== "string" || typeof a.filename !== "string") throw new Error(S.import.bundle.attachmentFields());
   }
   return b;
 }

@@ -5,6 +5,7 @@
 // Test Session's key (ADR-0003). The card editor, "Mass action" and
 // "Move list…" all transfer through here, so a bulk move behaves like
 // the card's own move done once per card.
+import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
@@ -58,10 +59,10 @@ export function createTransfer(deps: TransferDeps): Transfer {
   const nowStamp = (): string => new Date().toISOString();
   function mustDK(): DataKey {
     const dk = deps.getDK();
-    if (!dk) throw new Error("нет ключа доски");
+    if (!dk) throw new Error(S.board.error.noKey());
     return dk;
   }
-  const askPassphrase = deps.askPassphrase ?? (() => prompt("Пароль целевой доски:"));
+  const askPassphrase = deps.askPassphrase ?? (() => prompt(S.board.transfer.askPassphrase()));
 
   // ensureDK returns a usable DK for a board, unlocking via passphrase if needed.
   async function ensureDK(bid: number): Promise<DataKey> {
@@ -69,7 +70,7 @@ export function createTransfer(deps: TransferDeps): Transfer {
     let d = await xyCrypto.loadCachedDK(bid);
     if (d) return d;
     const pass = askPassphrase();
-    if (pass == null) throw new Error("отменено");
+    if (pass == null) throw new Error(S.board.error.cancelled());
     const keymeta = (await fetchJSON(`/api/boards/${bid}/keymeta`)) as BoardKeymeta;
     d = await xyCrypto.unlockBoard(pass, keymeta);
     await xyCrypto.cacheDK(bid, d);
@@ -88,8 +89,8 @@ export function createTransfer(deps: TransferDeps): Transfer {
     // another board's password — even when offline and the board list is unfetched).
     if (!boards.some((b) => b.id === boardId)) boards.unshift({ id: boardId, name_enc: null });
     return await Promise.all(boards.map(async (b) => {
-      let label = "доска #" + b.id;
-      if (b.id === boardId) label = (st().name || label) + " (эта доска)";
+      let label = S.board.transfer.boardNumber(String(b.id));
+      if (b.id === boardId) label = (st().name || label) + S.board.transfer.thisBoard();
       else if ((b.schema_version ?? 0) >= 2) label = b.name || label; // plaintext name, no key needed
       else {
         try { const cdk = await xyCrypto.loadCachedDK(b.id); if (cdk) label = await xyCrypto.decField(cdk, b.name_enc || ""); }
@@ -185,7 +186,7 @@ export function createTransfer(deps: TransferDeps): Transfer {
     let atts: AttachmentDTO[] = [];
     try { atts = (await fetchJSON(`/api/cards/${srcCardId}/attachments`)) as AttachmentDTO[]; } catch (_) { atts = []; }
     for (const att of atts) {
-      let name = "файл";
+      let name = S.board.transfer.attachmentFallback();
       try { name = await xyCrypto.decField(dk, att.filename_enc); } catch (_) {}
       let plain: Uint8Array<ArrayBuffer>;
       try {

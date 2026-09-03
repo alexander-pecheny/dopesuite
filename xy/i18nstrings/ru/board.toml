@@ -26,8 +26,29 @@ title = "События других участников"
 [timer]
 # Label of the topbar timer button.
 label = "Таймер"
-# Its tooltip.
+# Its tooltip, and the aria-label of the timer box itself.
 title = "Таймер ЧГК"
+# The four presets in the mode picker, and that picker's aria-label.
+mode_label = "Режим таймера"
+preset_regular = "Обычный вопрос (60 с)"
+preset_duplet = "Дуплет (30 + 30)"
+preset_blitz = "Блиц (20 + 20 + 20)"
+preset_custom = "Свой…"
+# The custom-durations field, shown only under that preset.
+custom_placeholder = "напр. 40+20"
+custom_label = "Свои длительности, через +"
+# What the display says under the clock: the answer window, the end, and
+# which segment of a multi-part question is running.
+phase_answer = "Ответ"
+phase_done = "Готово"
+phase_segment = 'Вопрос {{.n}} / {{.total}}'
+# The three buttons. Icons, not captions — three worded buttons overflowed the
+# 240px box, so the word lives in title/aria-label. Start says "continue"
+# after a pause.
+start = "Старт"
+resume = "Продолжить"
+pause = "Пауза"
+reset = "Сброс"
 
 [unlock]
 # Title and aria-label of the unlock dialog and of the passphrase-check
@@ -144,6 +165,18 @@ feed_label = "Лента "
 # Name of the labels feature: the card's section heading and the
 # rename/recolour dialog's title.
 name = "Метки"
+# ☰ row tooltip of the label editor.
+menu_title = "Переименовать, перекрасить или удалить метки доски"
+# The create row at the top of the editor: its field, and its button. Add
+# commits at once, so the next one can be typed.
+new_placeholder = "Новая метка"
+add = "Добавить"
+# Shown when the board has no labels yet.
+empty = "Меток нет."
+# How many cards carry a label, beside its row.
+usage = '{{.n}} карт.'
+# Confirm before dropping one.
+delete_confirm = 'Удалить метку «{{.name}}»? Она исчезнет со всех карточек.'
 
 [unread]
 # Tooltip of the blue unread dot (cards and the card header).
@@ -223,8 +256,27 @@ replace_with = "Заменить на"
 # Paging buttons over the hits.
 prev = "Назад"
 next = "Дальше"
-# The run button.
+# The run button, and what it says once occurrences are ticked. An empty
+# "with" deletes, and the button says so rather than promising a replacement
+# with nothing.
 run = "Заменить"
+run_delete = "Удалить"
+run_count = '{{.verb}} {{.n}} в {{.cards}}'
+# Scope options below the whole board: one list, or a whole group.
+scope_group = 'Группа: {{.name}}'
+# A card with no text to title it by.
+card_untitled = "(пустая карточка)"
+# Paging line over the hits.
+page = 'Страница {{.n}} из {{.pages}}'
+# Said when the search text matches nothing.
+not_found = "Ничего не найдено."
+# The run's report: what was replaced, then — if any card's text moved between
+# the plan and the run — what was skipped, and how the replace failed.
+done = 'Готово: {{.cards}}.'
+done_stale = ' {{.cards}} изменились, пока шёл просмотр — они пропущены, найдите заново.'
+failed = 'Ошибка при замене: {{.reason}}'
+# ☰ row tooltip.
+menu_title = "Заменить один и тот же текст во всех карточках доски, списка или группы"
 
 [accent]
 # Title of the stress-review dialog.
@@ -252,8 +304,10 @@ title = "Проверка импорта"
 src_label = "Исходник 4s"
 
 [handouts]
-# Title of the handouts-generation overlay.
+# Title of the handouts-generation overlay, and the ⋯ row that opens it —
+# a grouped list generates the whole group's.
 title = "Генерация раздаток"
+menu_group = "Генерация раздаток (вся группа)"
 # Label above the .hndt source editor.
 src_label = "Источник (.hndt)"
 # Generate button.
@@ -262,14 +316,73 @@ generate = "Сгенерировать PDF"
 splitfit_title = "Подобрать раскладку (split-fit) и скачать zip со всеми PDF"
 # Download button once the PDF is ready.
 download = "Скачать"
+# Both buttons need the server.
+pdf_offline = "Генерация PDF доступна только онлайн."
+splitfit_offline = "Split-fit доступен только онлайн."
+# Pressed with an empty .hndt.
+source_empty = "Пустой источник."
+# The two long steps and their endings.
+generating = "Генерация…"
+generated = "Готово."
+generate_failed = 'Не удалось сгенерировать: {{.reason}}'
+splitfitting = "Split-fit… (подбор раскладки может занять время)"
+splitfit_done = "Готово — zip со всеми PDF скачан."
+splitfit_failed = 'Split-fit не удался: {{.reason}}'
+# The preview pane where the browser will not show a PDF inline.
+safari_note = "Safari не показывает PDF внутри приложения."
+open_pdf = "Открыть PDF"
 
 [movelist]
-# Title of the move/copy-list dialog.
+# Title of the move/copy-list dialog, and the ⋯ row that opens it.
 title = "Переместить список"
+menu_label = "Переместить список…"
+# The position picker: while the destination board loads, the append slot,
+# and one slot per existing list.
+loading = "загрузка…"
+to_end = "в конец"
+position = 'позиция {{.n}}'
+# A grouped list stays consecutive with its group, so reordering it on the
+# same board goes through the lists manager, which moves the group whole.
+grouped = "Список входит в группу — измените порядок через «Управление списками»."
+# Copying a list, and any cross-board move, needs the server.
+offline = "Копирование и перенос между досками доступны только онлайн."
+# The two long steps, and the two endings.
+copying = "Копирование…"
+reencrypting = "Перешифровка…"
+moved = "Перемещено."
+copied = "Скопировано."
 
 [filter]
-# Title of the label-filter dialog.
+# Title of the label-filter dialog, and the ☰ row when the filter is on
+# (the number of picked labels follows).
 title = "Фильтр по меткам"
+menu_active = 'Фильтр по меткам · {{.n}}'
+# ☰ row tooltip.
+menu_title = "Показать только карточки с выбранными метками — вид, который ничего не меняет на доске"
+# The three match modes: the segment button, its tooltip, and how the bar
+# names the mode once it is on.
+all_word = "все"
+all_title = "Карточка несёт все выбранные метки"
+all_phrase = "Со всеми метками"
+any_word = "любая"
+any_title = "Карточка несёт хотя бы одну из выбранных"
+any_phrase = "С любой из меток"
+none_word = "ни одной"
+none_title = "Карточка не несёт ни одной из выбранных"
+none_phrase = "Без меток"
+# Shown when the board has no labels to filter by.
+no_labels = "На доске нет меток."
+# The line before the mode buttons.
+lead = "Показывать карточки, у которых"
+# A card's dots are its unscoped labels only, so a card can match on a verdict
+# from a test sitting. Better said out loud than discovered.
+scoped_note = "Метка засчитывается и тогда, когда она проставлена на тесте — такие метки на карточке не видны."
+# The bar above the board while a filter is on: what it filters by, the
+# warning that reordering is off under it, and the two buttons.
+bar_what = '{{.phrase}}: {{.names}}'
+bar_nodrag = "перетаскивание внутри списка выключено"
+edit = "Изменить"
+reset = "Сбросить"
 
 [mass]
 # Name of the mass-action feature: the bar's idle caption, the ☰ row label
@@ -328,6 +441,40 @@ exit_label = "Выйти из режима отметок"
 # ☰ row tooltip.
 menu_title = "Отметить карточки на всей доске и сделать с ними одно действие"
 
+[authorcount]
+# Name of the author-counter panel: the list ⋯ row and the dialog title.
+name = "Счётчик авторов"
+# The cutoff field: the words either side of it, and its placeholder.
+up_to = "До вопроса"
+inclusive = "включительно"
+number_placeholder = "номер"
+# The toggle offered only when the list holds zero-numbered questions; the
+# 1/n split is what a fee is divided by, and those are usually unpaid.
+count_zero = " считать нулевые"
+# Shown when the cutoff names no question of this list.
+no_such = "Нет такого вопроса."
+# The row for questions with no author at all.
+unauthored = "без автора"
+# The table's four column heads, then its total row's first cell.
+col_author = "Автор"
+col_questions = "Вопросов"
+col_share = "Доля"
+col_numbers = "Номера"
+total = "Всего"
+
+[testerlist]
+# Name of the tester-list panel: the list ⋯ row and the dialog title.
+name = "Список тестеров"
+# Hint above the picks.
+hint = "По умолчанию отмечены те, кто видел больше половины вопросов из списка."
+# The copyable summary line, and what it says when nobody is ticked.
+summary = 'Вопросы тестировали: {{.names}}.'
+summary_empty = "Никто не отмечен."
+# Shown when nobody tested this tour.
+empty = "Вопросы этого тура никто не тестировал."
+# How much of the list one tester saw.
+seen = '{{.seen}} из {{.total}}'
+
 [listsmanage]
 # Title of the lists-management dialog.
 title = "Управление списками"
@@ -337,6 +484,31 @@ link_label = "Связать списки"
 # Move-to-position button: tooltip and label.
 move_title = "Переместить выбранные на указанную позицию"
 move_label = "Переместить выбранные"
+# ☰ row tooltip.
+menu_title = "Переупорядочить списки и связать их в группы (списки списков)"
+# The per-row position field and the button beside it.
+pos_placeholder = "№"
+pos_title = "Переместить на эту позицию"
+# Said when the move button is pressed with no position typed.
+pos_missing = "Укажите позицию."
+# Drag handles: a unit among units, and a list inside its group.
+drag = "Перетащить"
+drag_in_group = "Перетащить внутри группы"
+# A list with no title of its own.
+untitled = "(без названия)"
+# A group whose name has not arrived (or was never set).
+group_fallback = "Связанные списки"
+# The two icon buttons on a group's head.
+rename_group = "Переименовать группу"
+unlink_group = "Разъединить группу"
+# The three prompts and the confirm these actions ask.
+link_prompt = "Название списка списков:"
+rename_prompt = "Новое название группы:"
+unlink_confirm = "Разъединить группу? Списки останутся, но нумерация снова станет раздельной."
+# Each one needs the server, so each says so when offline.
+link_offline = "Связывание списков доступно только онлайн."
+rename_offline = "Переименование доступно только онлайн."
+unlink_offline = "Разъединение доступно только онлайн."
 
 [sessions]
 # Name of the tests feature: the ☰ row label and the dialog title.
@@ -497,11 +669,23 @@ cards = '{{.n}} {{plural .n "карточка" "карточки" "карточ�
 [error]
 # Error thrown when a board action needs the key and it is not unlocked.
 no_key = "нет ключа доски"
+# Thrown when the passphrase prompt for a destination board is dismissed.
+cancelled = "отменено"
 # Guards thrown by the mass run (defensive: the buttons stay disabled until
 # a pick is made).
 no_label = "не выбрана метка"
 no_test = "не выбран тест"
 no_list = "не выбран список"
+
+[transfer]
+# The board picker of the card's move/copy row and the move-list dialog: a
+# board whose name this device cannot read, and the board already open.
+board_number = 'доска #{{.id}}'
+this_board = ' (эта доска)'
+# The prompt for a destination board's passphrase.
+ask_passphrase = "Пароль целевой доски:"
+# Fallback name of an attachment whose filename will not decrypt.
+attachment_fallback = "файл"
 
 [fields]
 # Labels of the board/list/position pickers: the card's move/copy row, the
@@ -518,3 +702,5 @@ done = "Готово"
 save = "Сохранить"
 copy = "Копировать"
 move = "Переместить"
+# The clipboard button under a panel's table (author count, tester list).
+copy_text = "Скопировать"

@@ -1,15 +1,15 @@
 page title=@chrome.page.index_title kind="full" scripts="dist/index.js"
-  topbar title="Доски"
+  topbar title=@chrome.home.title
     crumbs
-      crumb home icon="house" label="Все доски"
-      crumb "Доски"
-    iconlink href="/import" icon="file-up" label="Импорт из Trello"
-    iconbtn id="newBoardBtn" icon="plus" label="Новая доска"
+      crumb home icon="house" label=@board.page.home
+      crumb @chrome.home.title
+    iconlink href="/import" icon="file-up" label=@chrome.home.import_label
+    iconbtn id="newBoardBtn" icon="plus" label=@chrome.home.new_board
 
   -- one box over three grids: boards it can name, then the questions it can
   -- quote, then the comments — a question and a discussion about it are two
-  -- different answers to «где это было?»
-  searchfield id="boardSearch" placeholder="Поиск по доскам, вопросам и комментариям" label="Поиск"
+  -- different answers to "where was that?"
+  searchfield id="boardSearch" placeholder=@chrome.home.search_placeholder label=@chrome.home.search_label
   mount id="boardList" kind="board-grid"
   -- both counts start hidden for the same reason as the grids: an empty line
   -- box under the board list is 20px of nothing, and it pushed the last row of
@@ -19,27 +19,27 @@ page title=@chrome.page.index_title kind="full" scripts="dist/index.js"
   -- left on the page still takes its share of the column and clips the board
   -- list mid-row. runSearch shows each one only when it has something.
   mount id="hitList" kind="board-grid" hidden
-  button kind="ghost" id="moreQuestions" hidden "Показать ещё"
+  button kind="ghost" id="moreQuestions" hidden @chrome.home.more
   muted id="commentNote" hidden
   mount id="commentList" kind="board-grid" hidden
-  button kind="ghost" id="moreComments" hidden "Показать ещё"
+  button kind="ghost" id="moreComments" hidden @chrome.home.more
   message id="message"
 
   -- create-board dialog
-  modal id="createOverlay" label="Новая доска" title="Новая доска"
+  modal id="createOverlay" label=@chrome.home.create_title title=@chrome.home.create_title
     form id="createForm" dir="col"
-      textfield id="boardName" placeholder="Название доски" required
+      textfield id="boardName" placeholder=@chrome.home.name_placeholder required
       -- textfield (not password) so the passphrase is visible while creating a board:
       -- typing it once, unmasked, in a private moment beats a blind mistake you can't recover from.
       -- The dice button fills a strong xkcd-style passphrase and copies it to the clipboard.
       row gap="sm" align="center"
-        textfield id="boardPass" placeholder="Пароль доски (для шифрования)" autocomplete="new-password" required grow
-        iconbtn id="genPassBtn" icon="dices" label="Сгенерировать пароль"
-      muted id="createPassCopied" hidden "Пароль уже скопирован"
-      hint "Пароль нужен для E2E-шифрования."
-      hint kind="danger" "Сохраните этот пароль прямо сейчас — восстановить его будет невозможно."
-      checkbox id="createPassSaved" "Я сохранил(а) пароль в надёжное место и обещаю его не терять"
+        textfield id="boardPass" placeholder=@chrome.home.pass_placeholder autocomplete="new-password" required grow
+        iconbtn id="genPassBtn" icon="dices" label=@chrome.home.pass_generate
+      muted id="createPassCopied" hidden @chrome.home.pass_copied
+      hint @chrome.home.pass_hint
+      hint kind="danger" @chrome.home.pass_warning
+      checkbox id="createPassSaved" @chrome.home.pass_saved
       row gap="sm" wrap
-        button submit id="createSubmit" disabled "Создать"
-        button kind="ghost" id="createCancel" "Отмена"
+        button submit id="createSubmit" disabled @chrome.home.create_submit
+        button kind="ghost" id="createCancel" @board.actions.cancel
     message id="createMessage"

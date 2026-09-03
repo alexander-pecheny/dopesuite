@@ -9,6 +9,7 @@
 // (same sitting, ADR-0003) is reused rather than twinned. A unit that fails
 // rolls itself back and the ones before it stay.
 
+import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
 import { xySync } from "./sync.js";
 import { unitsOf } from "./bundle.js";
@@ -35,16 +36,15 @@ export function createBundleImport(board: Board, shell: PanelShell): BundleImpor
       const titleOf = (id: number): string | undefined => bundle.lists.find((l) => l.id === id)?.title;
       const clash = (u: BundleUnit): string =>
         u.listIds.some((id) => { const t = titleOf(id); return t !== undefined && here.has(t); })
-          ? "такой список уже есть на доске"
+          ? S.import.append.clash()
           : "";
       const ticks = tickList(units, clash);
-      const run = el("button", { class: "btn btn-primary", type: "button" }, "Добавить на доску") as HTMLButtonElement;
-      const all = el("button", { class: "btn btn-ghost btn-sm", type: "button" }, "Выбрать все") as HTMLButtonElement;
+      const run = el("button", { class: "btn btn-primary", type: "button" }, S.import.append.run()) as HTMLButtonElement;
+      const all = el("button", { class: "btn btn-ghost btn-sm", type: "button" }, S.import.append.all()) as HTMLButtonElement;
       const body = el("div", { class: "u-col u-gap-sm" },
         el("p", { class: "hint" },
-          `Доска «${bundle.board.name}», выгружена ${bundle.exported_at.slice(0, 10)}. `,
-          "Отмеченные списки добавятся к этой доске в конец; метки и тесты подхватятся ",
-          "к уже существующим здесь. Ничего на доске не изменится и не перезапишется."),
+          S.import.append.lead(bundle.board.name, bundle.exported_at.slice(0, 10)),
+          S.import.append.leadTail()),
         ticks.node,
         el("div", { class: "u-row u-gap-sm u-wrap" }, all, run),
         status);
@@ -53,19 +53,19 @@ export function createBundleImport(board: Board, shell: PanelShell): BundleImpor
         run.disabled = true;
         void append(bundle, bytesOf, ticks.picked(), status).finally(() => { run.disabled = false; });
       });
-      shell.open({ icon: "file-up", title: `Импорт — ${file.name}`, body, onClose: () => {} });
+      shell.open({ icon: "file-up", title: S.import.append.title(file.name), body, onClose: () => {} });
     },
   };
 
   async function append(bundle: Bundle, bytesOf: AttachmentBytes, units: BundleUnit[], status: HTMLElement): Promise<void> {
     const log = (line: string): void => { status.textContent = line; };
     if (!units.length) {
-      log("Отметьте хотя бы один список.");
+      log(S.import.append.nonePicked());
       return;
     }
     // Re-encryption, uploads and the timeline import all go straight at the
     // API — the outbox cannot queue them, as with any cross-board write.
-    if (!xySync.requireOnline("Импорт архива доступен только онлайн.", status)) return;
+    if (!xySync.requireOnline(S.import.append.offline(), status)) return;
     const slice = sliceBundle(bundle, units.flatMap((u) => u.listIds));
     board.setStatus("saving");
     try {
@@ -85,11 +85,11 @@ export function createBundleImport(board: Board, shell: PanelShell): BundleImpor
       }
       const failed = result.units.find((u) => u.error)!;
       const done = result.units.filter((u) => !u.error).map((u) => u.title);
-      log(`«${failed.title}» не загрузился (${failed.error}) и откачен. `
-        + (done.length ? `Загружено: ${done.join(", ")}. Откройте файл снова и отметьте остальное.` : "Доска не изменилась."));
+      log(S.import.append.failedUnit(failed.title, String(failed.error))
+        + (done.length ? S.import.append.failedDone(done.join(", ")) : S.import.append.failedNone()));
     } catch (e) {
       board.setStatus("error");
-      log("Не получилось: " + errMsg(e));
+      log(S.import.append.failed(errMsg(e)));
     }
   }
 }

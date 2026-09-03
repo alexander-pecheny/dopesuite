@@ -6,6 +6,7 @@
 // may, skipping what they know — so a flat list cannot serve. tourPicked is that
 // rule, shared with the card's "except common testers" line.
 
+import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
 import { partialSeen, type SeenQuestion, type SessionMeta, whoSaw } from "./sessions.js";
 import { iconed } from "./icons_gen.js";
@@ -105,13 +106,13 @@ export function createTesterList(board: Board, shell: PanelShell, deps: { copyPl
         if (m) testers.push(...m.testers);
       }
       const names = whoSaw(testers.length ? [{ testers } as SessionMeta] : []);
-      line.textContent = names ? `Вопросы тестировали: ${names}.` : "Никто не отмечен.";
+      line.textContent = names ? S.board.testerlist.summary(names) : S.board.testerlist.summaryEmpty();
       partial.textContent = partialSeen(seenQuestions(list), new Set(testers.map((t) => (t.text || "").trim())));
       partial.hidden = !partial.textContent;
     };
 
     box.replaceChildren();
-    if (!rows.length) box.append(el("p", { class: "label-empty", text: "Вопросы этого тура никто не тестировал." }));
+    if (!rows.length) box.append(el("p", { class: "label-empty", text: S.board.testerlist.empty() }));
     for (const r of rows) {
       const cb = el("input", { class: "input", type: "checkbox" }) as HTMLInputElement;
       cb.checked = picked.has(r.id);
@@ -124,7 +125,7 @@ export function createTesterList(board: Board, shell: PanelShell, deps: { copyPl
       });
       box.append(el("label", { class: "sess-row" },
         el("div", { class: "sess-head" }, cb, el("span", { class: "sess-title", text: r.name })),
-        el("span", { class: "sess-meta", text: `${r.seen} из ${total}` })));
+        el("span", { class: "sess-meta", text: S.board.testerlist.seen(String(r.seen), String(total)) })));
     }
     const copy = el("button", {
       class: "input", type: "button",
@@ -132,12 +133,12 @@ export function createTesterList(board: Board, shell: PanelShell, deps: { copyPl
         const text = [line.textContent, partial.textContent].filter(Boolean).join("\n");
         void deps.copyPlain(text);
       },
-    }, ...iconed("clipboard", "Скопировать"));
+    }, ...iconed("clipboard", S.board.actions.copyText()));
     box.append(el("div", { class: "sess-invite-box" },
       el("div", { class: "sess-invite-lines" }, line, partial), copy));
     redraw();
-    shell.open({ icon: "users", title: "Список тестеров", body: el("div", {},
-      el("p", { class: "hint", text: "По умолчанию отмечены те, кто видел больше половины вопросов из списка." }), box) });
+    shell.open({ icon: "users", title: S.board.testerlist.name(), body: el("div", {},
+      el("p", { class: "hint", text: S.board.testerlist.hint() }), box) });
   }
 
 
@@ -145,7 +146,7 @@ export function createTesterList(board: Board, shell: PanelShell, deps: { copyPl
     tourPicked,
     panel: {
       id: "tester-list", menu: "list", icon: "users",
-      label: "Список тестеров",
+      label: S.board.testerlist.name(),
       offered: (scope) => scope.cards.some((c) => c.kind === "question"),
       open: (scope) => openTesterList(scope.list),
     },

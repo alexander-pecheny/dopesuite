@@ -4,6 +4,7 @@
 // Save: Done commits the lot. sortLabels is the board's one ordering of
 // labels, shared with the card's add-label popup.
 
+import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { type ColorField, colorField, LABEL_COLORS } from "./colorpick.js";
@@ -83,10 +84,10 @@ export function createLabelsEditor(board: Board): LabelsEditor {
 
     // The card's add-label popup was the only way to make one, so you had to open
     // a card first — and managing labels is what this modal is for.
-    const newName = el("input", { class: "input", type: "text", placeholder: "Новая метка" }) as HTMLInputElement;
+    const newName = el("input", { class: "input", type: "text", placeholder: S.board.labels.newPlaceholder() }) as HTMLInputElement;
     const newColor = colorField(el("div"), LABEL_COLORS[0]);
     labelDraft = { name: newName, color: newColor };
-    const add = el("button", { class: "input", type: "button", text: "Добавить" });
+    const add = el("button", { class: "input", type: "button", text: S.board.labels.add() });
     // Add is the create affordance, not a save — it commits now so you can
     // type the next one. Leaving with a name still in the box creates it too.
     const submit = async (): Promise<void> => {
@@ -107,15 +108,15 @@ export function createLabelsEditor(board: Board): LabelsEditor {
       el("div", { class: "sess-head" }, newName),
       el("div", { class: "sess-actions" }, newColor.node, add)));
 
-    if (!board.state.labels.length) box.append(el("p", { class: "label-empty", text: "Меток нет." }));
+    if (!board.state.labels.length) box.append(el("p", { class: "label-empty", text: S.board.labels.empty() }));
     for (const lbl of sortLabels(board.state.labels, board.state.cardLabels)) {
       const name = el("input", { class: "input", type: "text", value: lbl.name }) as HTMLInputElement;
       const color = colorField(el("div"), lbl.color);
-      const count = el("span", { class: "sess-meta", text: `${usage.get(lbl.id) || 0} карт.` });
+      const count = el("span", { class: "sess-meta", text: S.board.labels.usage(String(usage.get(lbl.id) || 0)) });
       labelRows.push({ lbl, name, color });
       const drop = el("button", { class: "btn btn-danger", type: "button" }, icon("trash-2"));
       drop.addEventListener("click", async () => {
-        if (!confirm(`Удалить метку «${lbl.name}»? Она исчезнет со всех карточек.`)) return;
+        if (!confirm(S.board.labels.deleteConfirm(lbl.name))) return;
         try {
           // Commit the other rows first — this re-renders, and their edits would
           // go with the old DOM.
@@ -180,8 +181,8 @@ export function createLabelsEditor(board: Board): LabelsEditor {
     createLabel,
     panel: {
       id: "labels", menu: "board", icon: "tags",
-      label: "Метки",
-      title: "Переименовать, перекрасить или удалить метки доски",
+      label: S.board.labels.name(),
+      title: S.board.labels.menuTitle(),
       open: openLabelsEditor,
     },
   };

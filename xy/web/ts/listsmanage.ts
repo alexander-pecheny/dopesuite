@@ -5,6 +5,7 @@
 // Orderable units are standalone lists and whole groups; a group always moves as
 // one block, keeping its members consecutive (the invariant the board relies on).
 
+import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
@@ -88,8 +89,8 @@ export function createListsManage(board: Board): ListsManage {
   }
 
   function manageMoveControl(unit: Unit): HTMLElement {
-    const inp = el("input", { class: "input lm-move-pos", type: "number", min: "1", placeholder: "№" }) as HTMLInputElement;
-    const btn = el("button", { class: "btn btn-small btn-ghost lm-move-btn", type: "button", title: "Переместить на эту позицию" }, icon("arrow-up-down"));
+    const inp = el("input", { class: "input lm-move-pos", type: "number", min: "1", placeholder: S.board.listsmanage.posPlaceholder() }) as HTMLInputElement;
+    const btn = el("button", { class: "btn btn-small btn-ghost lm-move-btn", type: "button", title: S.board.listsmanage.posTitle() }, icon("arrow-up-down"));
     const go = (): void => { const n = parseInt(inp.value, 10); if (n >= 1) void moveUnitsTo(new Set([unit.key]), n); };
     btn.addEventListener("click", go);
     inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); go(); } });
@@ -97,7 +98,7 @@ export function createListsManage(board: Board): ListsManage {
   }
 
   function manageTitle(list: BoardList): string {
-    return list.title || "(без названия)";
+    return list.title || S.board.listsmanage.untitled();
   }
 
   function renderManageUnit(unit: Unit, pos: number): HTMLElement {
@@ -107,10 +108,10 @@ export function createListsManage(board: Board): ListsManage {
       node.append(el("div", { class: "lm-row lm-grouphead" },
         manageCheckbox(unit),
         el("span", { class: "lm-pos", text: "#" + pos }),
-        el("span", { class: "lm-handle", text: "≡", title: "Перетащить" }),
-        el("span", { class: "lm-title lm-group-title" }, ...iconed("link", (g && g.name) || "Связанные списки")),
-        el("button", { class: "lm-icon", type: "button", title: "Переименовать группу", onclick: () => { void renameGroup(unit.id); } }, icon("pencil")),
-        el("button", { class: "lm-icon", type: "button", title: "Разъединить группу", onclick: () => { void unlinkGroup(unit.id); } }, icon("unlink")),
+        el("span", { class: "lm-handle", text: "≡", title: S.board.listsmanage.drag() }),
+        el("span", { class: "lm-title lm-group-title" }, ...iconed("link", (g && g.name) || S.board.listsmanage.groupFallback())),
+        el("button", { class: "lm-icon", type: "button", title: S.board.listsmanage.renameGroup(), onclick: () => { void renameGroup(unit.id); } }, icon("pencil")),
+        el("button", { class: "lm-icon", type: "button", title: S.board.listsmanage.unlinkGroup(), onclick: () => { void unlinkGroup(unit.id); } }, icon("unlink")),
         manageMoveControl(unit),
       ));
       // Members are draggable within their own group (the whole group is still
@@ -119,7 +120,7 @@ export function createListsManage(board: Board): ListsManage {
       const members = el("div", { class: "lm-members" });
       for (const l of unit.lists) {
         const row = el("div", { class: "lm-member", draggable: "true", dataset: { listId: l.id } },
-          el("span", { class: "lm-handle", text: "≡", title: "Перетащить внутри группы" }),
+          el("span", { class: "lm-handle", text: "≡", title: S.board.listsmanage.dragInGroup() }),
           el("span", { class: "lm-title", text: manageTitle(l) }));
         row.addEventListener("dragstart", (e) => {
           e.stopPropagation(); // the unit node is draggable too — don't start both
@@ -162,7 +163,7 @@ export function createListsManage(board: Board): ListsManage {
       node.append(el("div", { class: "lm-row" },
         manageCheckbox(unit),
         el("span", { class: "lm-pos", text: "#" + pos }),
-        el("span", { class: "lm-handle", text: "≡", title: "Перетащить" }),
+        el("span", { class: "lm-handle", text: "≡", title: S.board.listsmanage.drag() }),
         el("span", { class: "lm-title", text: manageTitle(unit.lists[0]) }),
         manageMoveControl(unit),
       ));
@@ -265,8 +266,8 @@ export function createListsManage(board: Board): ListsManage {
     const selected = units.filter((u) => manageSelected.has(u.key));
     if (selected.length < 2 || selected.some((u) => u.kind !== "list")) return;
     const msg = byId("listsManageMessage");
-    if (!xySync.requireOnline("Связывание списков доступно только онлайн.", msg)) return;
-    const name = (prompt("Название списка списков:", "") || "").trim();
+    if (!xySync.requireOnline(S.board.listsmanage.linkOffline(), msg)) return;
+    const name = (prompt(S.board.listsmanage.linkPrompt(), "") || "").trim();
     if (!name) return;
     // Preserve board order (units are rank-sorted).
     const listIds = selected.sort((a, b) => units.indexOf(a) - units.indexOf(b)).flatMap((u) => u.lists.map((l) => l.id));
@@ -280,10 +281,10 @@ export function createListsManage(board: Board): ListsManage {
 
   async function renameGroup(gid: number): Promise<void> {
     const g = board.groupById(gid);
-    const name = (prompt("Новое название группы:", g ? g.name : "") || "").trim();
+    const name = (prompt(S.board.listsmanage.renamePrompt(), g ? g.name : "") || "").trim();
     if (!name) return;
     const msg = byId("listsManageMessage");
-    if (!xySync.requireOnline("Переименование доступно только онлайн.", msg)) return;
+    if (!xySync.requireOnline(S.board.listsmanage.renameOffline(), msg)) return;
     try {
       await jpatch(`/api/list-groups/${gid}`, { name_enc: await xyCrypto.encField(board.dk(), name) });
       await board.reload();
@@ -292,9 +293,9 @@ export function createListsManage(board: Board): ListsManage {
   }
 
   async function unlinkGroup(gid: number): Promise<void> {
-    if (!confirm("Разъединить группу? Списки останутся, но нумерация снова станет раздельной.")) return;
+    if (!confirm(S.board.listsmanage.unlinkConfirm())) return;
     const msg = byId("listsManageMessage");
-    if (!xySync.requireOnline("Разъединение доступно только онлайн.", msg)) return;
+    if (!xySync.requireOnline(S.board.listsmanage.unlinkOffline(), msg)) return;
     try {
       await jdelete(`/api/list-groups/${gid}`);
       await board.reload();
@@ -305,7 +306,7 @@ export function createListsManage(board: Board): ListsManage {
   byId("listsLinkBtn").addEventListener("click", () => { void linkSelected(); });
   byId("listsMoveBtn").addEventListener("click", () => {
     const n = parseInt(byId<HTMLInputElement>("listsMovePos").value, 10);
-    if (!(n >= 1)) { listsManageModal.message("Укажите позицию."); return; }
+    if (!(n >= 1)) { listsManageModal.message(S.board.listsmanage.posMissing()); return; }
     void moveUnitsTo(new Set(manageSelected), n);
   });
 
@@ -314,8 +315,8 @@ export function createListsManage(board: Board): ListsManage {
     applyUnitOrder,
     panel: {
       id: "lists-manage", menu: "board", icon: "columns-3",
-      label: "Управление списками",
-      title: "Переупорядочить списки и связать их в группы (списки списков)",
+      label: S.board.listsmanage.title(),
+      title: S.board.listsmanage.menuTitle(),
       open: openListsManage,
     },
   };

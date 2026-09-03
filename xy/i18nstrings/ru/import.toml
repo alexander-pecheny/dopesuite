@@ -166,6 +166,51 @@ rollback = "Импорт прерван, удаляю недосозданную
 summary = 'Готово: {{.cards}} карточек, {{.lists}} списков/групп, {{.tests}} тестов, {{.events}} событий, {{.attachments}} вложений.'
 # Summary continuation listing the attachments that did not transfer.
 summary_skipped = "\nНе перенеслись вложения ({{.n}}): "
+# Everything parseBundle refuses an untrusted board.json for. The file may be
+# hand-edited, so each one names what is wrong; the latin words in them are
+# the file's own field names.
+not_json = "board.json — не JSON"
+not_object = "board.json — не объект"
+bad_format = 'неизвестный формат «{{.got}}» (ожидается {{.want}})'
+no_board_name = "нет названия доски"
+not_array = '{{.key}} — не массив'
+bad_id = '{{.what}}: плохой или повторный id'
+dangling_ref = '{{.what}}: ссылка на несуществующий id {{.id}}'
+list_fields = "lists: нет title/rank"
+card_fields = "cards: нет description/rank"
+tester_scope = "tour_testers: нужен ровно один из list_id / group_id"
+event_type = 'timeline: неизвестный тип события «{{.got}}»'
+event_orphan = "timeline: событие ни на карточке, ни на тесте"
+event_payload = "timeline: нет payload"
+attachment_fields = "attachments: нет path/filename"
+
+[append]
+# Appending an archive's lists to the OPEN board (bundleimportpanel.ts) — the
+# only bundle target that needs no new board, since only the board page holds
+# the key.
+# Overlay title: the picked file's name.
+title = 'Импорт — {{.file}}'
+# The blurb above the ticks: where the archive came from, and what appending
+# it does. Nothing already on the board changes.
+lead = 'Доска «{{.board}}», выгружена {{.date}}. '
+lead_tail = "Отмеченные списки добавятся к этой доске в конец; метки и тесты подхватятся к уже существующим здесь. Ничего на доске не изменится и не перезапишется."
+# Warning beside a list whose title is already here.
+clash = "такой список уже есть на доске"
+# The two buttons.
+run = "Добавить на доску"
+all = "Выбрать все"
+# Pressed with nothing ticked.
+none_picked = "Отметьте хотя бы один список."
+# Re-encryption, uploads and the timeline import go straight at the API, so
+# the outbox cannot queue them.
+offline = "Импорт архива доступен только онлайн."
+# The List is the unit of atomicity: a failed one rolls itself back and the
+# ones before it stay.
+failed_unit = '«{{.title}}» не загрузился ({{.reason}}) и откачен. '
+failed_done = 'Загружено: {{.titles}}. Откройте файл снова и отметьте остальное.'
+failed_none = "Доска не изменилась."
+# Anything that failed before the first unit was written.
+failed = 'Не получилось: {{.reason}}'
 
 [apply]
 # Progress line while a unit's cards are posted, every 20 cards (bundleapply.ts).

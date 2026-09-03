@@ -101,9 +101,24 @@ export type Strings = {
       cancel: () => string;
       close: () => string;
       copy: () => string;
+      copyText: () => string;
       done: () => string;
       move: () => string;
       save: () => string;
+    };
+    authorcount: {
+      colAuthor: () => string;
+      colNumbers: () => string;
+      colQuestions: () => string;
+      colShare: () => string;
+      countZero: () => string;
+      inclusive: () => string;
+      name: () => string;
+      noSuch: () => string;
+      numberPlaceholder: () => string;
+      total: () => string;
+      unauthored: () => string;
+      upTo: () => string;
     };
     bell: {
       label: () => string;
@@ -185,6 +200,7 @@ export type Strings = {
       title: () => string;
     };
     error: {
+      cancelled: () => string;
       noKey: () => string;
       noLabel: () => string;
       noList: () => string;
@@ -230,6 +246,24 @@ export type Strings = {
       position: () => string;
     };
     filter: {
+      allPhrase: () => string;
+      allTitle: () => string;
+      allWord: () => string;
+      anyPhrase: () => string;
+      anyTitle: () => string;
+      anyWord: () => string;
+      barNodrag: () => string;
+      barWhat: (phrase: string, names: string) => string;
+      edit: () => string;
+      lead: () => string;
+      menuActive: (n: string) => string;
+      menuTitle: () => string;
+      noLabels: () => string;
+      nonePhrase: () => string;
+      noneTitle: () => string;
+      noneWord: () => string;
+      reset: () => string;
+      scopedNote: () => string;
       title: () => string;
     };
     forget: {
@@ -239,7 +273,19 @@ export type Strings = {
     handouts: {
       download: () => string;
       generate: () => string;
+      generateFailed: (reason: string) => string;
+      generated: () => string;
+      generating: () => string;
+      menuGroup: () => string;
+      openPdf: () => string;
+      pdfOffline: () => string;
+      safariNote: () => string;
+      sourceEmpty: () => string;
+      splitfitDone: () => string;
+      splitfitFailed: (reason: string) => string;
+      splitfitOffline: () => string;
       splitfitTitle: () => string;
+      splitfitting: () => string;
       srcLabel: () => string;
       title: () => string;
     };
@@ -255,7 +301,13 @@ export type Strings = {
       title: () => string;
     };
     labels: {
+      add: () => string;
+      deleteConfirm: (name: string) => string;
+      empty: () => string;
+      menuTitle: () => string;
       name: () => string;
+      newPlaceholder: () => string;
+      usage: (n: string) => string;
     };
     leave: {
       confirm: (target: string) => string;
@@ -276,11 +328,27 @@ export type Strings = {
       untitled: () => string;
     };
     listsmanage: {
+      drag: () => string;
+      dragInGroup: () => string;
+      groupFallback: () => string;
       linkLabel: () => string;
+      linkOffline: () => string;
+      linkPrompt: () => string;
       linkTitle: () => string;
+      menuTitle: () => string;
       moveLabel: () => string;
       moveTitle: () => string;
+      posMissing: () => string;
+      posPlaceholder: () => string;
+      posTitle: () => string;
+      renameGroup: () => string;
+      renameOffline: () => string;
+      renamePrompt: () => string;
       title: () => string;
+      unlinkConfirm: () => string;
+      unlinkGroup: () => string;
+      unlinkOffline: () => string;
+      untitled: () => string;
     };
     mass: {
       boardLocked: () => string;
@@ -336,7 +404,17 @@ export type Strings = {
       roleOwner: () => string;
     };
     movelist: {
+      copied: () => string;
+      copying: () => string;
+      grouped: () => string;
+      loading: () => string;
+      menuLabel: () => string;
+      moved: () => string;
+      offline: () => string;
+      position: (n: string) => string;
+      reencrypting: () => string;
       title: () => string;
+      toEnd: () => string;
     };
     page: {
       home: () => string;
@@ -378,13 +456,23 @@ export type Strings = {
       listPrompt: () => string;
     };
     replace: {
+      cardUntitled: () => string;
       case: () => string;
+      done: (cards: string) => string;
+      doneStale: (cards: string) => string;
+      failed: (reason: string) => string;
       find: () => string;
+      menuTitle: () => string;
       next: () => string;
+      notFound: () => string;
+      page: (n: string, pages: string) => string;
       prev: () => string;
       replaceWith: () => string;
       run: () => string;
+      runCount: (verb: string, n: string, cards: string) => string;
+      runDelete: () => string;
       scopeBoard: () => string;
+      scopeGroup: (name: string) => string;
       title: () => string;
     };
     sessionedit: {
@@ -397,6 +485,14 @@ export type Strings = {
       menuTitle: () => string;
       name: () => string;
     };
+    testerlist: {
+      empty: () => string;
+      hint: () => string;
+      name: () => string;
+      seen: (seen: string, total: string) => string;
+      summary: (names: string) => string;
+      summaryEmpty: () => string;
+    };
     testmode: {
       badge: (name: string) => string;
       stop: () => string;
@@ -407,8 +503,28 @@ export type Strings = {
       title: () => string;
     };
     timer: {
+      customLabel: () => string;
+      customPlaceholder: () => string;
       label: () => string;
+      modeLabel: () => string;
+      pause: () => string;
+      phaseAnswer: () => string;
+      phaseDone: () => string;
+      phaseSegment: (n: string, total: string) => string;
+      presetBlitz: () => string;
+      presetCustom: () => string;
+      presetDuplet: () => string;
+      presetRegular: () => string;
+      reset: () => string;
+      resume: () => string;
+      start: () => string;
       title: () => string;
+    };
+    transfer: {
+      askPassphrase: () => string;
+      attachmentFallback: () => string;
+      boardNumber: (id: string) => string;
+      thisBoard: () => string;
     };
     unlock: {
       exitHint: () => string;
@@ -692,10 +808,25 @@ export type Strings = {
     home: {
       boardLockedName: (id: string) => string;
       createOffline: () => string;
+      createSubmit: () => string;
+      createTitle: () => string;
       emptyAll: () => string;
       emptyNamed: () => string;
+      importLabel: () => string;
+      more: () => string;
+      namePlaceholder: () => string;
+      newBoard: () => string;
+      passCopied: () => string;
+      passGenerate: () => string;
+      passHint: () => string;
+      passPlaceholder: () => string;
+      passSaved: () => string;
+      passWarning: () => string;
       roleEditor: () => string;
       roleOwner: () => string;
+      searchLabel: () => string;
+      searchPlaceholder: () => string;
+      title: () => string;
       unreadMentionTitle: () => string;
       unreadTitle: () => string;
     };
@@ -740,15 +871,24 @@ export type Strings = {
     tokens: {
       copied: () => string;
       copy: () => string;
+      create: () => string;
+      introAfter: () => string;
+      introBefore: () => string;
+      introTail: () => string;
+      labelPlaceholder: () => string;
       labelUnnamed: () => string;
+      listEmpty: () => string;
+      listTitle: () => string;
       metaDates: (created: string, expires: string) => string;
       metaUnused: () => string;
       metaUsed: (used: string) => string;
+      newHint: () => string;
       revoke: () => string;
       revokeConfirm: () => string;
       statusActive: () => string;
       statusExpired: () => string;
       statusRevoked: () => string;
+      title: () => string;
     };
     typograph: {
       confirm: (n: string, total: string) => string;
@@ -1134,6 +1274,20 @@ export type Strings = {
     };
   };
   import: {
+    append: {
+      all: () => string;
+      clash: () => string;
+      failed: (reason: string) => string;
+      failedDone: (titles: string) => string;
+      failedNone: () => string;
+      failedUnit: (title: string, reason: string) => string;
+      lead: (board: string, date: string) => string;
+      leadTail: () => string;
+      nonePicked: () => string;
+      offline: () => string;
+      run: () => string;
+      title: (file: string) => string;
+    };
     apply: {
       attachFailed: (name: string, status: string) => string;
       attachments: (title: string, done: string, total: string) => string;
@@ -1156,14 +1310,28 @@ export type Strings = {
       submit: () => string;
     };
     bundle: {
+      attachmentFields: () => string;
+      badFormat: (got: string, want: string) => string;
+      badId: (what: string) => string;
+      cardFields: () => string;
       creating: () => string;
+      danglingRef: (what: string, id: string) => string;
+      eventOrphan: () => string;
+      eventPayload: () => string;
+      eventType: (got: string) => string;
+      listFields: () => string;
       missingAttachment: (path: string) => string;
       noBoardJson: (file: string) => string;
+      noBoardName: () => string;
+      notArray: (key: string) => string;
+      notJson: () => string;
+      notObject: () => string;
       quota: (need: string, left: string) => string;
       reading: () => string;
       rollback: () => string;
       summary: (cards: string, lists: string, tests: string, events: string, attachments: string) => string;
       summarySkipped: (n: string) => string;
+      testerScope: () => string;
     };
     export: {
       attachFailed: (name: string, status: string) => string;
@@ -1296,8 +1464,29 @@ export type Strings = {
       copied: () => string;
     };
     page: {
+      activeApprovalHeading: (board: string) => string;
+      activeApprovalNote: () => string;
+      activeHeading: (board: string) => string;
+      activeNote: () => string;
+      askNew: () => string;
       boardFallback: () => string;
       boardWrapper: (name: string) => string;
+      brokenHeading: () => string;
+      declinedHeading: () => string;
+      declinedNote: () => string;
+      exhaustedHeading: () => string;
+      exhaustedNote: () => string;
+      expiredHeading: () => string;
+      join: () => string;
+      memberHeading: (board: string) => string;
+      notFound: () => string;
+      openBoard: () => string;
+      pendingHeading: () => string;
+      pendingNote: () => string;
+      request: () => string;
+      revokedHeading: () => string;
+      spentHeading: () => string;
+      title: () => string;
     };
     request: {
       approve: () => string;
@@ -1390,33 +1579,52 @@ export type Strings = {
       name: () => string;
     };
     firstrun: {
+      authorHint: () => string;
+      authorLabel: () => string;
       authorPlaceholder: () => string;
+      label: () => string;
+      later: () => string;
+      save: () => string;
+      subtitle: () => string;
+      title: () => string;
+      tzHint: () => string;
+      tzLabel: () => string;
     };
     home: () => string;
     name: () => string;
     password: {
       current: () => string;
+      mismatch: () => string;
       name: () => string;
       new: () => string;
       repeat: () => string;
+      saved: () => string;
       submit: () => string;
     };
     save: () => string;
     sizes: {
       boardW: () => string;
       boardWHint: () => string;
+      boardWMax: () => string;
       cardH: () => string;
       cardHHint: () => string;
+      cardHMax: () => string;
+      cardLines: (n: number) => string;
       close: () => string;
       font: () => string;
       fontHint: () => string;
       listW: () => string;
       name: () => string;
+      px: (n: string) => string;
       reset: () => string;
     };
     storage: {
       hintLead: () => string;
       hintMid: () => string;
+      ofQuota: (used: string, quota: string) => string;
+      unknown: () => string;
+      unlimited: (used: string) => string;
+      used: (mb: string) => string;
     };
     title: () => string;
     tz: {

@@ -69,3 +69,29 @@ approval = "С одобрением владельца"
 board_wrapper = '«{{.name}}»'
 # Board name fallback when board name is empty.
 board_fallback = "доску"
+# Topbar heading and the current-page crumb of /join/<code>.
+title = "Приглашение"
+# One heading and one line per state of the link: what it offers, or why it
+# does not work. The board name is the wrapper above.
+active_approval_heading = 'Заявка в {{.board}}'
+active_approval_note = "Владелец доски рассмотрит заявку — доступ появится после одобрения."
+active_heading = 'Приглашение в {{.board}}'
+active_note = "Пароль доски придётся узнать у того, кто вас позвал: по ссылке он не передаётся."
+member_heading = 'Вы уже в {{.board}}'
+pending_heading = "Заявка отправлена"
+pending_note = "Ждём, пока владелец доски её рассмотрит."
+declined_heading = "Заявка отклонена"
+declined_note = "По этой ссылке войти больше нельзя — попросите новую."
+revoked_heading = "Ссылка отозвана"
+ask_new = "Попросите у владельца доски новую."
+expired_heading = "Срок ссылки истёк"
+exhausted_heading = "Ссылка исчерпана"
+exhausted_note = "По ней уже прошли все, кого она пускала."
+spent_heading = "По этой ссылке вы уже проходили"
+broken_heading = "Ссылка не работает"
+# Shown when the code names no invite at all.
+not_found = "Ссылка не найдена"
+# The one button, in its three forms.
+open_board = "Открыть доску"
+request = "Подать заявку"
+join = "Присоединиться"

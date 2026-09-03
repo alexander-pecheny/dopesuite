@@ -1,28 +1,28 @@
 page title=@chrome.page.tokens_title kind="sheet" scripts="dist/tokens.js"
-  topbar title="API-токены"
+  topbar title=@chrome.tokens.title
     crumbs
-      crumb home href="/" icon="house" label="Все доски"
-      crumb href="/profile" "Профиль"
-      crumb "API-токены"
-    iconlink href="/profile" icon="arrow-left" label="Профиль"
+      crumb home href="/" icon="house" label=@board.page.home
+      crumb href="/profile" @profile.name
+      crumb @chrome.tokens.title
+    iconlink href="/profile" icon="arrow-left" label=@profile.name
 
   section
     hint
-      "Токен даёт доступ к доскам через Trello-совместимый API (например, для"
-      (code "chgksuite") "). Действует месяц. Данные приходят зашифрованными —"
-      "расшифровываются локально паролем доски."
+      @chrome.tokens.intro_before
+      (code "chgksuite") @chrome.tokens.intro_after
+      @chrome.tokens.intro_tail
     form id="createForm"
-      textfield id="tokenLabel" placeholder="Название (например, «chgksuite на ноутбуке»)" maxlength="100" spellcheck="false" grow
-      button submit "Создать токен"
+      textfield id="tokenLabel" placeholder=@chrome.tokens.label_placeholder maxlength="100" spellcheck="false" grow
+      button submit @chrome.tokens.create
     message id="createMessage"
 
   section id="newTokenSection" hidden
-    hint "Скопируйте токен сейчас — позже он не будет показан:"
+    hint @chrome.tokens.new_hint
     row gap="sm" align="center" wrap
       mount id="newTokenValue" kind="token-value"
-      button kind="ghost" id="copyTokenBtn" "Скопировать"
+      button kind="ghost" id="copyTokenBtn" @chrome.tokens.copy
 
   section
-    subhead "Активные и прошлые токены"
+    subhead @chrome.tokens.list_title
     mount id="tokenList" kind="token-list"
-    hint id="emptyHint" hidden "Токенов пока нет."
+    hint id="emptyHint" hidden @chrome.tokens.list_empty

@@ -56,6 +56,29 @@ empty_named = "Досок с таким названием нет."
 empty_all = "Пока нет досок. Нажмите + чтобы создать."
 # Offline guard on the create-board form.
 create_offline = "Создание доски доступно только онлайн."
+# Topbar heading and the current-page crumb of / (index.dopeui).
+title = "Доски"
+# The two topbar actions.
+import_label = "Импорт из Trello"
+new_board = "Новая доска"
+# The one search box over both grids, and its label.
+search_placeholder = "Поиск по доскам, вопросам и комментариям"
+search_label = "Поиск"
+# The button under each result grid.
+more = "Показать ещё"
+# The create-board dialog: its label and title, the name field, and the
+# passphrase row. The passphrase is a plain text field, not a password one:
+# typing it once unmasked in a private moment beats a blind mistake nothing
+# can recover from.
+create_title = "Новая доска"
+name_placeholder = "Название доски"
+pass_placeholder = "Пароль доски (для шифрования)"
+pass_generate = "Сгенерировать пароль"
+pass_copied = "Пароль уже скопирован"
+pass_hint = "Пароль нужен для E2E-шифрования."
+pass_warning = "Сохраните этот пароль прямо сейчас — восстановить его будет невозможно."
+pass_saved = "Я сохранил(а) пароль в надёжное место и обещаю его не терять"
+create_submit = "Создать"
 
 [search]
 # The home page's search sections (index.ts).
@@ -117,7 +140,22 @@ too_few_words = 'Пароль доски должен содержать мин�
 wrong = "Неверный пароль доски"
 
 [tokens]
-# The /tokens page (tokens.ts): API tokens for the Trello-compatible API.
+# The /tokens page (tokens.dopeui + tokens.ts): API tokens for the
+# Trello-compatible API.
+# Topbar heading and the current-page crumb.
+title = "API-токены"
+# The blurb above the mint form, in three runs around the (code "chgksuite").
+intro_before = "Токен даёт доступ к доскам через Trello-совместимый API (например, для"
+intro_after = "). Действует месяц. Данные приходят зашифрованными —"
+intro_tail = "расшифровываются локально паролем доски."
+# The mint form: the name field and its button.
+label_placeholder = "Название (например, «chgksuite на ноутбуке»)"
+create = "Создать токен"
+# The freshly minted token, shown once.
+new_hint = "Скопируйте токен сейчас — позже он не будет показан:"
+# The list below: its heading, and what it says when empty.
+list_title = "Активные и прошлые токены"
+list_empty = "Токенов пока нет."
 # The status word on each row.
 status_revoked = "отозван"
 status_expired = "истёк"

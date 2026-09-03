@@ -27,15 +27,15 @@ function build(zone: string, author: string): { overlay: HTMLElement; read: () =
     autocomplete: "off", maxlength: "200", id: "firstRunAuthor",
   }) as HTMLInputElement;
 
-  const card = el("div", { class: "appearance-modal", role: "dialog", "aria-modal": "true", "aria-label": "Настройки" },
-    el("h2", { class: "appearance-modal-title", text: "Пара настроек" }),
-    el("p", { class: "hint", text: "Их можно поменять потом в профиле." }),
-    el("label", { class: "fld-label", for: "firstRunTz", text: "Часовой пояс" }),
+  const card = el("div", { class: "appearance-modal", role: "dialog", "aria-modal": "true", "aria-label": S.profile.firstrun.label() },
+    el("h2", { class: "appearance-modal-title", text: S.profile.firstrun.title() }),
+    el("p", { class: "hint", text: S.profile.firstrun.subtitle() }),
+    el("label", { class: "fld-label", for: "firstRunTz", text: S.profile.firstrun.tzLabel() }),
     tzInput,
-    el("p", { class: "hint", text: "В нём записывается время тестов. Подставлен пояс этого устройства." }),
-    el("label", { class: "fld-label", for: "firstRunAuthor", text: "Автор по умолчанию" }),
+    el("p", { class: "hint", text: S.profile.firstrun.tzHint() }),
+    el("label", { class: "fld-label", for: "firstRunAuthor", text: S.profile.firstrun.authorLabel() }),
     authorInput,
-    el("p", { class: "hint", text: "Подставляется в поле «Автор» новых вопросов." }),
+    el("p", { class: "hint", text: S.profile.firstrun.authorHint() }),
   );
   // The zone box is the first thing a new account is asked for, so it gets the
   // same picker as everywhere else rather than expecting an IANA id typed blind.
@@ -63,8 +63,8 @@ async function firstRun(): Promise<void> {
   const { overlay, read } = build(me.timezone || guessZone(), me.default_author || "");
   const card = overlay.firstElementChild as HTMLElement;
 
-  const save = el("button", { class: "btn", type: "button", text: "Сохранить" });
-  const skip = el("button", { class: "btn btn-ghost", type: "button", text: "Потом" });
+  const save = el("button", { class: "btn", type: "button", text: S.profile.firstrun.save() });
+  const skip = el("button", { class: "btn btn-ghost", type: "button", text: S.profile.firstrun.later() });
   const msg = el("p", { class: "hint" });
   card.append(el("div", { class: "u-row u-gap-sm u-wrap" }, save, skip), msg);
 
@@ -80,7 +80,7 @@ async function firstRun(): Promise<void> {
     const { tz, author } = read();
     void finish({ timezone: tz, default_author: author });
   });
-  // «Потом» still stamps onboarded_at: asking again on the next page load is how
+  // The later button still stamps onboarded_at: asking again on the next page load is how
   // a modal becomes an annoyance. /profile has both fields.
   skip.addEventListener("click", () => { void finish({}); });
 

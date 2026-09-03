@@ -6,6 +6,7 @@
 // ephemeral PDF. On close the per-question settings (everything but the handout
 // text) are persisted back.
 
+import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
@@ -59,8 +60,8 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
   function pdfPreviewNode(url: string): HTMLElement {
     if (!pdfInlinePreviewBroken()) return el("iframe", { class: "handouts-pdf-frame", src: url, title: "PDF" });
     return el("div", { class: "handouts-pdf-fallback" },
-      el("div", { class: "handouts-pdf-note", text: "Safari не показывает PDF внутри приложения." }),
-      el("a", { class: "btn", href: url, target: "_blank", rel: "noopener", text: "Открыть PDF" }));
+      el("div", { class: "handouts-pdf-note", text: S.board.handouts.safariNote() }),
+      el("a", { class: "btn", href: url, target: "_blank", rel: "noopener", text: S.board.handouts.openPdf() }));
   }
 
   function clearHandoutsPdf(): void {
@@ -115,13 +116,13 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
 
   async function generateHandoutsPdf(): Promise<void> {
     if (!handoutsCtx) return;
-    if (!xySync.requireOnline("Генерация PDF доступна только онлайн.", byId("handoutsMessage"))) return;
+    if (!xySync.requireOnline(S.board.handouts.pdfOffline(), byId("handoutsMessage"))) return;
     const source = byId<HTMLTextAreaElement>("handoutsSource").value;
     const msg = byId("handoutsMessage");
-    if (!source.trim()) { msg.textContent = "Пустой источник."; return; }
+    if (!source.trim()) { msg.textContent = S.board.handouts.sourceEmpty(); return; }
     const btn = byId<HTMLButtonElement>("handoutsGenerate");
     btn.disabled = true;
-    msg.textContent = "Генерация…";
+    msg.textContent = S.board.handouts.generating();
     clearHandoutsPdf();
     try {
       const fd = await handoutsBody(source);
@@ -138,9 +139,9 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
       dl.href = handoutsDlUrl;
       dl.setAttribute("download", name);
       dl.hidden = false;
-      msg.textContent = "Готово.";
+      msg.textContent = S.board.handouts.generated();
     } catch (err) {
-      msg.textContent = "Не удалось сгенерировать: " + errMsg(err);
+      msg.textContent = S.board.handouts.generateFailed(errMsg(err));
     } finally {
       btn.disabled = false;
     }
@@ -223,20 +224,20 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
   async function generateSplitFitZip(): Promise<void> {
     if (!handoutsCtx) return;
     const msg = byId("handoutsMessage");
-    if (!xySync.requireOnline("Split-fit доступен только онлайн.", msg)) return;
+    if (!xySync.requireOnline(S.board.handouts.splitfitOffline(), msg)) return;
     const source = byId<HTMLTextAreaElement>("handoutsSource").value;
-    if (!source.trim()) { msg.textContent = "Пустой источник."; return; }
+    if (!source.trim()) { msg.textContent = S.board.handouts.sourceEmpty(); return; }
     const btn = byId<HTMLButtonElement>("handoutsSplitFit");
     btn.disabled = true;
-    msg.textContent = "Split-fit… (подбор раскладки может занять время)";
+    msg.textContent = S.board.handouts.splitfitting();
     try {
       const fd = await handoutsBody(source);
       const res = await fetch("/api/handouts/split_fit", { method: "POST", credentials: "same-origin", body: fd });
       if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
       downloadBlob(await res.blob(), handoutFileBase() + ".zip");
-      msg.textContent = "Готово — zip со всеми PDF скачан.";
+      msg.textContent = S.board.handouts.splitfitDone();
     } catch (err) {
-      msg.textContent = "Split-fit не удался: " + errMsg(err);
+      msg.textContent = S.board.handouts.splitfitFailed(errMsg(err));
     } finally {
       btn.disabled = false;
     }
@@ -251,7 +252,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
 
   return {
     id: "handouts", menu: "list", icon: "file-text",
-    label: (scope) => scope.grouped ? "Генерация раздаток (вся группа)" : "Генерация раздаток",
+    label: (scope) => scope.grouped ? S.board.handouts.menuGroup() : S.board.handouts.title(),
     // Handouts are the exception, not the rule: a tour without one has nothing
     // for this panel to open, and the row would only say so after the click.
     offered: (scope) => xyHndt.hndtOf(scope.cards).source.trim() !== "",

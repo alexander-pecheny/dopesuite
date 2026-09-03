@@ -41,24 +41,24 @@ export function joinView(peek: InvitePeek): JoinView {
   switch (peek.state) {
     case "active":
       return peek.requires_approval
-        ? { heading: `Заявка в ${board}`, note: "Владелец доски рассмотрит заявку — доступ появится после одобрения.", action: "join" }
-        : { heading: `Приглашение в ${board}`, note: "Пароль доски придётся узнать у того, кто вас позвал: по ссылке он не передаётся.", action: "join" };
+        ? { heading: S.invite.page.activeApprovalHeading(board), note: S.invite.page.activeApprovalNote(), action: "join" }
+        : { heading: S.invite.page.activeHeading(board), note: S.invite.page.activeNote(), action: "join" };
     case "member":
-      return { heading: `Вы уже в ${board}`, note: "", action: "open" };
+      return { heading: S.invite.page.memberHeading(board), note: "", action: "open" };
     case "pending":
-      return { heading: "Заявка отправлена", note: "Ждём, пока владелец доски её рассмотрит.", action: "none" };
+      return { heading: S.invite.page.pendingHeading(), note: S.invite.page.pendingNote(), action: "none" };
     case "declined":
-      return { heading: "Заявка отклонена", note: "По этой ссылке войти больше нельзя — попросите новую.", action: "none" };
+      return { heading: S.invite.page.declinedHeading(), note: S.invite.page.declinedNote(), action: "none" };
     case "revoked":
-      return { heading: "Ссылка отозвана", note: "Попросите у владельца доски новую.", action: "none" };
+      return { heading: S.invite.page.revokedHeading(), note: S.invite.page.askNew(), action: "none" };
     case "expired":
-      return { heading: "Срок ссылки истёк", note: "Попросите у владельца доски новую.", action: "none" };
+      return { heading: S.invite.page.expiredHeading(), note: S.invite.page.askNew(), action: "none" };
     case "exhausted":
-      return { heading: "Ссылка исчерпана", note: "По ней уже прошли все, кого она пускала.", action: "none" };
+      return { heading: S.invite.page.exhaustedHeading(), note: S.invite.page.exhaustedNote(), action: "none" };
     case "spent":
-      return { heading: "По этой ссылке вы уже проходили", note: "Попросите у владельца доски новую.", action: "none" };
+      return { heading: S.invite.page.spentHeading(), note: S.invite.page.askNew(), action: "none" };
   }
-  return { heading: "Ссылка не работает", note: "", action: "none" };
+  return { heading: S.invite.page.brokenHeading(), note: "", action: "none" };
 }
 
 // The code is the last path segment: /join/<code>.
@@ -78,7 +78,7 @@ async function main(): Promise<void> {
     return;
   }
   if (!res.ok) {
-    body.replaceChildren(el("h2", { text: "Ссылка не найдена" }));
+    body.replaceChildren(el("h2", { text: S.invite.page.notFound() }));
     msg.textContent = (await res.text()).trim();
     return;
   }
@@ -89,9 +89,9 @@ async function main(): Promise<void> {
     const nodes: HTMLElement[] = [el("h2", { text: view.heading })];
     if (view.note) nodes.push(el("p", { class: "hint", text: view.note }));
     if (view.action === "open") {
-      nodes.push(el("a", { class: "btn", href: `/board/${p.board_id}`, text: "Открыть доску" }));
+      nodes.push(el("a", { class: "btn", href: `/board/${p.board_id}`, text: S.invite.page.openBoard() }));
     } else if (view.action === "join") {
-      const btn = el("button", { class: "btn", type: "button", text: p.requires_approval ? "Подать заявку" : "Присоединиться" });
+      const btn = el("button", { class: "btn", type: "button", text: p.requires_approval ? S.invite.page.request() : S.invite.page.join() });
       btn.addEventListener("click", async () => {
         btn.setAttribute("disabled", "");
         msg.textContent = "";

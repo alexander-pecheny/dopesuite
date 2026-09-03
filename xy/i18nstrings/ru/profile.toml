@@ -25,6 +25,12 @@ hint_mid = "."
 # used-space figure the page fills in.
 hint_lead = "Хранилище: "
 hint_mid = "."
+# The figure itself: megabytes used, out of a quota or against none, and the
+# dash shown while it will not load.
+used = '{{.mb}} МБ'
+of_quota = '{{.used}} из {{.quota}}'
+unlimited = '{{.used}} (без лимита)'
+unknown = "—"
 
 [username]
 # The one-time "set your login" section, hidden once a login exists.
@@ -48,6 +54,9 @@ new = "Новый пароль"
 repeat = "Повторите пароль"
 # Submit button of the dialog.
 submit = "Сохранить пароль"
+# The two answers the form gives: the repeat did not match, and it saved.
+mismatch = "Пароли не совпадают."
+saved = "Пароль сохранён."
 
 [sizes]
 # Board-sizes dialog (sizesOverlay): workspace width, list width, card text
@@ -71,6 +80,11 @@ font_hint = "Размер шрифта текста на карточке — м
 reset = "Сбросить по умолчанию"
 # Button closing the dialog.
 close = "Готово"
+# The value beside each slider: pixels, and what the two maxima mean.
+px = '{{.n}} px'
+board_w_max = "вся ширина"
+card_h_max = "весь текст"
+card_lines = '{{.n}} {{plural .n "строка" "строки" "строк"}}'
 
 [author]
 # Default-author dialog (authorOverlay); the opener button reuses name.
@@ -81,9 +95,23 @@ placeholder = "Имя автора"
 hint = "Подставляется в новые карточки-вопросы (поле Автор и строка «@» в Тексте). Пустое — не подставлять."
 
 [firstrun]
-# First-run onboarding dialog (firstrun.ts).
+# First-run onboarding dialog (firstrun.ts): the two questions every account
+# answers once, on whichever page it opens first.
 # Author name placeholder.
 author_placeholder = "Иванов Иван"
+# aria-label of the dialog, its heading, and the line under it.
+label = "Настройки"
+title = "Пара настроек"
+subtitle = "Их можно поменять потом в профиле."
+# The timezone field: its label and the hint under it.
+tz_label = "Часовой пояс"
+tz_hint = "В нём записывается время тестов. Подставлен пояс этого устройства."
+# The default-author field: its label and the hint under it.
+author_label = "Автор по умолчанию"
+author_hint = "Подставляется в поле «Автор» новых вопросов."
+# The two buttons. The later one still stamps onboarded_at.
+save = "Сохранить"
+later = "Потом"
 
 [tz]
 # Timezone-and-cities dialog (tzOverlay); the opener button reuses name.

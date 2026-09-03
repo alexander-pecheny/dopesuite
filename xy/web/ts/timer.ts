@@ -9,6 +9,7 @@
 // shipped bell sample played at different rates; synthesised beeps until it is
 // decoded; every cue put on the audio clock when a countdown starts, so a
 // background tab still rings on time) and the ⏰ toggle.
+import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
 const { el } = xyApp;
 
@@ -24,10 +25,10 @@ declare global {
 // earlier ones simply end on a long beep.
 export interface TimerPreset { label: string; segments: number[] }
 const PRESETS: Record<string, TimerPreset> = {
-  regular: { label: "Обычный вопрос (60 с)", segments: [60] },
-  duplet: { label: "Дуплет (30 + 30)", segments: [30, 30] },
-  blitz: { label: "Блиц (20 + 20 + 20)", segments: [20, 20, 20] },
-  custom: { label: "Свой…", segments: [60] },
+  regular: { label: S.board.timer.presetRegular(), segments: [60] },
+  duplet: { label: S.board.timer.presetDuplet(), segments: [30, 30] },
+  blitz: { label: S.board.timer.presetBlitz(), segments: [20, 20, 20] },
+  custom: { label: S.board.timer.presetCustom(), segments: [60] },
 };
 const ANSWER_SEC = 10; // post-question window to write the answer down
 const WARN_AT = 10; // seconds-left at which the single warning beep fires
@@ -127,9 +128,9 @@ export function createTimer(deps: TimerDeps): Timer {
   function render(): void {
     const answer = m.phase === "answer" || (m.phase === "paused" && m.resumePhase === "answer");
     let label = "";
-    if (answer) label = "Ответ";
-    else if (m.phase === "done") label = "Готово";
-    else if (m.segments.length > 1) label = `Вопрос ${m.segIdx + 1} / ${m.segments.length}`;
+    if (answer) label = S.board.timer.phaseAnswer();
+    else if (m.phase === "done") label = S.board.timer.phaseDone();
+    else if (m.segments.length > 1) label = S.board.timer.phaseSegment(String(m.segIdx + 1), String(m.segments.length));
     deps.view.render({
       shown: m.shown,
       phase: m.phase,
@@ -138,7 +139,7 @@ export function createTimer(deps: TimerDeps): Timer {
       label,
       canStart: m.phase === "ready" || m.phase === "paused",
       canPause: m.phase === "running" || m.phase === "answer",
-      startWord: m.phase === "paused" ? "Продолжить" : "Старт",
+      startWord: m.phase === "paused" ? S.board.timer.resume() : S.board.timer.start(),
     });
   }
 
@@ -369,7 +370,7 @@ function paint(vm: TimerVM): void {
 }
 
 function build(): void {
-  presetSel = el("select", { class: "input timer-preset", "aria-label": "Режим таймера" }) as HTMLSelectElement;
+  presetSel = el("select", { class: "input timer-preset", "aria-label": S.board.timer.modeLabel() }) as HTMLSelectElement;
   for (const [key, p] of Object.entries(PRESETS)) presetSel.append(el("option", { value: key, text: p.label }));
   presetSel.addEventListener("change", () => {
     customWrap.hidden = presetSel.value !== "custom";
@@ -380,8 +381,8 @@ function build(): void {
     class: "input timer-custom-input",
     type: "text",
     inputmode: "numeric",
-    placeholder: "напр. 40+20",
-    "aria-label": "Свои длительности, через +",
+    placeholder: S.board.timer.customPlaceholder(),
+    "aria-label": S.board.timer.customLabel(),
   }) as HTMLInputElement;
   const applyCustom = (): void => { if (presetSel.value === "custom") timer!.selectPreset("custom", customInput.value); };
   customInput.addEventListener("change", applyCustom);
@@ -393,13 +394,13 @@ function build(): void {
 
   // Icons, not captions — three worded buttons overflowed the 240px box
   // ("Continue" alone nearly filled it). The word lives in title/aria-label.
-  startBtn = el("button", { class: "btn btn-small", type: "button", title: "Старт", "aria-label": "Старт", onclick: () => timer!.start() }, playIcon()) as HTMLButtonElement;
-  pauseBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", title: "Пауза", "aria-label": "Пауза", onclick: () => timer!.pause() }, pauseIcon()) as HTMLButtonElement;
-  const resetBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", title: "Сброс", "aria-label": "Сброс", onclick: () => timer!.reset() }, resetIcon());
+  startBtn = el("button", { class: "btn btn-small", type: "button", title: S.board.timer.start(), "aria-label": S.board.timer.start(), onclick: () => timer!.start() }, playIcon()) as HTMLButtonElement;
+  pauseBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", title: S.board.timer.pause(), "aria-label": S.board.timer.pause(), onclick: () => timer!.pause() }, pauseIcon()) as HTMLButtonElement;
+  const resetBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", title: S.board.timer.reset(), "aria-label": S.board.timer.reset(), onclick: () => timer!.reset() }, resetIcon());
 
   overlay = el(
     "div",
-    { class: "timer-overlay", role: "dialog", "aria-label": "Таймер ЧГК", hidden: true },
+    { class: "timer-overlay", role: "dialog", "aria-label": S.board.timer.title(), hidden: true },
     el("div", { class: "timer-row" }, presetSel),
     customWrap,
     el("div", { class: "timer-display" }, timeNode, labelNode),

@@ -1,8 +1,8 @@
 page title=@chrome.page.join_title kind="sheet" scripts="dist/join.js"
-  topbar title="Приглашение"
+  topbar title=@invite.page.title
     crumbs
-      crumb home href="/" icon="house" label="Все доски"
-      crumb "Приглашение"
+      crumb home href="/" icon="house" label=@board.page.home
+      crumb @invite.page.title
 
   section
     mount id="joinBody" kind="join-body"
