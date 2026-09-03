@@ -47,7 +47,7 @@ func jumpViewerNav() []ui.Item {
 }
 
 // hostLoggedInDoc builds the /host landing for a signed-in organizer: their
-// Фесты, their Площадки, and the form that makes another of each.
+// fests, their Venues, and the form that makes another of each.
 func hostLoggedInDoc(data hostLandingData) *ui.Doc {
 	s := dopestrings.Default
 	page := []ui.Item{ui.Title(s.Host.Pages.LandingTitle(data.Username)), ui.PagePublic,
@@ -62,12 +62,12 @@ func hostLoggedInDoc(data hostLandingData) *ui.Doc {
 	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
 }
 
-// hostLandingFests is the Фесты the user runs, and the form that makes one.
-// It and Площадки are the same shape: a heading, what there is, and the way to
+// hostLandingFests is the fests the user runs, and the form that makes one.
+// It and Venues are the same shape: a heading, what there is, and the way to
 // make another.
 func hostLandingFests(data hostLandingData) *ui.Element {
 	s := dopestrings.Default
-	sect := []ui.Item{ui.Subhead(ui.Text("Фесты"))}
+	sect := []ui.Item{ui.Subhead(ui.Text(s.Host.PublicTabs.Fests()))}
 	if len(data.Groups) == 0 {
 		sect = append(sect, ui.Empty(ui.Text(s.Host.Pages.FestsEmpty())))
 	}
@@ -119,12 +119,12 @@ func checkboxKept(name, label string, on bool) *ui.Element {
 	return ui.Checkbox(items...)
 }
 
-// hostLandingVenues is the Площадки the user represents, and the form that
+// hostLandingVenues is the Venues the user represents, and the form that
 // makes one.
 func hostLandingVenues(data hostLandingData) *ui.Element {
-	sect := []ui.Item{ui.Subhead(ui.Text("Площадки"))}
+	sect := []ui.Item{ui.Subhead(ui.Text(strs.Venues.Public.IndexTitle()))}
 	if len(data.Venues) == 0 {
-		sect = append(sect, ui.Empty(ui.Text("Площадок пока нет.")))
+		sect = append(sect, ui.Empty(ui.Text(strs.Venues.Host.VenuesEmpty())))
 	} else {
 		rows := make([]ui.Item, 0, len(data.Venues))
 		for _, v := range data.Venues {
@@ -134,7 +134,7 @@ func hostLandingVenues(data hostLandingData) *ui.Element {
 				if sub != "" {
 					sub += " · "
 				}
-				sub += "непубличная"
+				sub += strs.Venues.Host.VenueUnlisted()
 			}
 			if sub != "" {
 				row = append(row, ui.Muted(ui.Text(sub)))
@@ -200,8 +200,8 @@ func profileDoc(data profileData) *ui.Doc {
 		ui.ID("tzForm"), ui.DirCol, ui.Autocomplete("off"),
 		ui.Textfield(ui.ID("tzValue"), ui.Name("timezone"), ui.Placeholder("Europe/Moscow"),
 			ui.Value(data.Timezone), ui.Autocomplete("off"), ui.Maxlength("64")),
-		ui.Hint(ui.Text("В этом поясе записывается время игр и голосований; календарь показывает его под сеткой.")),
-		ui.Row(ui.Button(ui.Submit(), ui.Text("Сохранить"))),
+		ui.Hint(ui.Text(s.Host.Profile.TzHint())),
+		ui.Row(ui.Button(ui.Submit(), ui.Text(s.Host.Profile.TzSave()))),
 	}
 	page = append(page,
 		ui.Section(
@@ -210,7 +210,7 @@ func profileDoc(data profileData) *ui.Doc {
 			ui.Message(ui.ID("passwordMessage")),
 		),
 		ui.Section(
-			ui.Hint(ui.Text("Часовой пояс")),
+			ui.Hint(ui.Text(s.Host.Profile.TzSubhead())),
 			ui.Form(tzForm...),
 			ui.Message(ui.ID("tzMessage")),
 		),

@@ -1,5 +1,5 @@
 // Package buffdb reads buff's mirror of rating.chgk.info (ADR-0020): player
-// names for the состав suggest, teams and their base rosters, and the
+// names for the roster suggest, teams and their base rosters, and the
 // tournaments playable on a date. It is opened read-only and fails soft — a
 // missing file, a missing table or a broken query gives an empty answer, never
 // an error page, because every caller is a suggest or a flag.
@@ -91,7 +91,7 @@ func TourComposition(questionsByTour string) []int {
 }
 
 // Players suggests by name: the first word is a surname prefix, the second a
-// first-name one, the third a patronymic — «Плотников Д» is one player, not a
+// first-name one, the third a patronymic — "Plotnikov D" is one player, not a
 // surname nobody has. The order is how many games each has played, so a
 // namesake with hundreds comes before one with two.
 func (s *Store) Players(ctx context.Context, query string, limit int) []Player {
@@ -153,7 +153,7 @@ func scanPlayers(rows *sql.Rows) []Player {
 	return out
 }
 
-// splitNameQuery reads «Фамилия Имя Отчество» as far as it was typed; the
+// splitNameQuery reads "Surname Name Patronymic" as far as it was typed; the
 // surname always comes first, which is what keeps idx_players_surname useful.
 func splitNameQuery(query string) (surname, name, patronymic string) {
 	words := strings.Fields(query)
@@ -252,7 +252,7 @@ limit ?`, append(args, capLimit(limit))...)
 // did. The `player_id = 0` rows the mirror writes for a fetched-but-empty
 // roster are not players and never make a season the answer. The second result
 // is false when the mirror knows no roster at all, which is what makes every
-// player read as легионер.
+// player read as legionnaire.
 func (s *Store) BaseRoster(ctx context.Context, teamID int64, at time.Time) (map[int64]bool, bool) {
 	if !s.Enabled() || teamID <= 0 {
 		return nil, false
@@ -288,16 +288,16 @@ order by s.date_start desc`, teamID, at.Format("2006-01-02"))
 	return out, true
 }
 
-// playableTypes are the tournament types a Слот can play: a синхрон is played
-// on its own week, an асинхрон any time inside its window.
+// playableTypes are the tournament types a Slot can play: a sync tournament is played
+// on its own week, an async tournament any time inside its window.
 var playableTypes = []string{"Синхрон", "Строго синхронный", "Асинхрон"}
 
-// ratingClock is the clock rating.chgk.info keeps: a синхрон's window runs
-// from Saturday 10:00 to the next Saturday 10:00 Moscow time. A Слот's wall
+// ratingClock is the clock rating.chgk.info keeps: a sync tournament's window runs
+// from Saturday 10:00 to the next Saturday 10:00 Moscow time. A Slot's wall
 // time carries no zone, so it is read on the same clock.
 var ratingClock = time.FixedZone("MSK", 3*60*60)
 
-// instant renders a Слот's wall time the way SQLite's datetime() renders the
+// instant renders a Slot's wall time the way SQLite's datetime() renders the
 // mirror's offset-bearing timestamps, so the two compare as strings.
 func instant(wall time.Time) string {
 	if wall.IsZero() {
@@ -389,7 +389,7 @@ func likeInfix(s string) string { return "%" + escapeLike(s) + "%" }
 
 // likeAny matches col against the word as the mirror spells it and, when that
 // differs, as it was typed. SQLite's LIKE folds case for ASCII only, so
-// `surname like 'пече%'` never finds «Печеный»; each branch is still a plain
+// `surname like 'peche%'` never finds "Pecheny"; each branch is still a plain
 // prefix, so the index carries it. wrap turns a word into its LIKE pattern.
 func likeAny(col, word string, wrap func(string) string) (string, []any) {
 	words := []string{titleFold(word)}

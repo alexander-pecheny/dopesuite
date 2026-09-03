@@ -1,5 +1,7 @@
 package kit
 
+import kitstrings "pecheny.me/dopeuikit/i18nstrings"
+
 // coreExpanders maps each core primitive to its HTML expansion. App overlays
 // override an entry (checkbox/editor in xy) or add new ones (docoverlay …).
 var coreExpanders = map[string]ExpandFunc{
@@ -449,7 +451,7 @@ func expandDatetimefield(c *ExpandCtx, p *Element) []Node {
 	text.Attrs = append(text.Attrs, CopyFlags(p, "required")...)
 	button := El("button", []Attr{
 		ClassAttr("btn", "btn-ghost", "btn-small"), At("type", "button"),
-		At("aria-label", "Календарь"), BareAt("data-datetime-open"),
+		At("aria-label", kitstrings.Default.Datetime.Calendar.Label()), BareAt("data-datetime-open"),
 	}, calendarGlyph())
 	return one(El("span", []Attr{
 		ClassAttr("datetime-field", "u-row", "u-gap-xs", "u-align-center"), BareAt("data-datetime-field"),

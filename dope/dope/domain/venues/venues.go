@@ -1,6 +1,6 @@
-// Package venues is the Площадка domain (CONTEXT.md): a Venue is a Fest of
-// kind 'venue' whose Games are dated Слоты, each with its own registration
-// link, its Заявки and their Составы. This file is the pure part — flags,
+// Package venues is the Venue domain (CONTEXT.md): a Venue is a Fest of
+// kind 'venue' whose Games are dated Slots, each with its own registration
+// link, its applications and their rosters. This file is the pure part — flags,
 // registration state, tokens, the roster document — and the sibling files
 // keep the persistence the host and public pages share.
 package venues
@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	dopestrings "dope/i18nstrings"
 )
 
 const (
@@ -25,10 +27,11 @@ const (
 	StatusDeclined = "declined"
 )
 
-const (
-	FlagCaptain = "К"
-	FlagBase    = "Б"
-	FlagLegion  = "Л"
+// The marks a roster's players carry, in the letters a roster table shows.
+var (
+	FlagCaptain = dopestrings.Default.Venues.Flags.Captain()
+	FlagBase    = dopestrings.Default.Venues.Flags.Base()
+	FlagLegion  = dopestrings.Default.Venues.Flags.Legion()
 )
 
 type RosterPlayer struct {
@@ -79,9 +82,9 @@ func MarshalRoster(players []RosterPlayer) string {
 	return string(data)
 }
 
-// Flags are the Б/Л/К marks of a Состав, aligned with players. base is the
-// team's base roster for the Слот's season, nil when the mirror knows none —
-// which reads as легионер for a real team and as основной for a team without
+// Flags are the captain/base/legion marks of a roster, aligned with players. base is the
+// team's base roster for the Slot's season, nil when the mirror knows none —
+// which reads as legionnaire for a real team and as base-roster player for a team without
 // a rating id, since it has no base roster to be outside of.
 func Flags(players []RosterPlayer, ratingTeamID int64, base map[int64]bool) []string {
 	out := make([]string, len(players))

@@ -88,3 +88,7 @@ xlsx_title = "Скачать таблицу игры в формате XLSX"
 archive = "Скачать .json.gz"
 # Its tooltip.
 archive_title = "Скачать текущее состояние игры и историю правок"
+
+[venue]
+# The crumb a Venue's game pages hang off, in the trail every game page paints.
+trail = "Площадки"

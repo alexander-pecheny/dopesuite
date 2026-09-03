@@ -110,7 +110,7 @@ func TestAssortiSheetIsReproduced(t *testing.T) {
 			}
 		}
 	}
-	// The Итог, and the order it puts the фест in.
+	// The Итог, and the order it puts the fest in.
 	for _, want := range fixture.Overall {
 		row, ok := byName[want.Name]
 		if !ok {

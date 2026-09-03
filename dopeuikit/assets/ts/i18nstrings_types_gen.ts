@@ -30,6 +30,24 @@ export type Strings = {
       saving: () => string;
     };
   };
+  datetime: {
+    calendar: {
+      clear: () => string;
+      done: () => string;
+      dowFri: () => string;
+      dowMon: () => string;
+      dowSat: () => string;
+      dowSun: () => string;
+      dowThu: () => string;
+      dowTue: () => string;
+      dowWed: () => string;
+      label: () => string;
+      nextMonth: () => string;
+      prevMonth: () => string;
+      time: () => string;
+      timezone: (zone: string) => string;
+    };
+  };
   login: {
     code: {
       botHintLead: () => string;

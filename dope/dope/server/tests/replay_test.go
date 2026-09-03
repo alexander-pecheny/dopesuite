@@ -15,7 +15,7 @@ import (
 // write the expected numbers by hand, which is the point: it proves the harness
 // itself before the harness is trusted about a real tournament.
 //
-// ЭК scoring: a taken answer at position i is worth (i+1)×10, a lost one the
+// EK scoring: a taken answer at position i is worth (i+1)×10, a lost one the
 // same negative. So `---R-` is 40 and `R----` is 10.
 const miniTranscript = `[game]
 type: ek
@@ -179,7 +179,7 @@ func TestReplayCatchesAWrongSeating(t *testing.T) {
 }
 
 // A Draw is written into the Edges, not into the seat, so it survives the
-// resolver recomputing an earlier round. This is what caught out the first ЭК
+// resolver recomputing an earlier round. This is what caught out the first EK
 // transfer, where hand-seated rounds kept reverting.
 func TestReplayDrawSurvivesRecompute(t *testing.T) {
 	script, err := replay.Parse(miniTranscript)
@@ -227,7 +227,7 @@ func TestReplayDrawSurvivesRecompute(t *testing.T) {
 	}
 }
 
-// ЭК of СтудЧР-2026, replayed from its committed transcript: 48 teams, 25 бои
+// EK of СтудЧР-2026, replayed from its committed transcript: 48 teams, 25 бои
 // over five rounds, every round drawn by hand. This is the harness doing the
 // job it exists for — dope scores what the hosts entered and has to arrive at
 // the same Σ and the same место the tournament published.

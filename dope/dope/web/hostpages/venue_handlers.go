@@ -25,7 +25,7 @@ import (
 	"dope/dope/web/route"
 )
 
-// denyVenuePage is the public Площадка pages' policy: a form post without a
+// denyVenuePage is the public Venue pages' policy: a form post without a
 // session goes through the Telegram handshake and comes back to the same page,
 // which is what a registration or voting link is for.
 func denyVenuePage(w http.ResponseWriter, r *http.Request, d route.Denial) {
@@ -92,11 +92,11 @@ func (s *Server) renderVenuesIndex(w http.ResponseWriter, r *http.Request, _ rou
 func registrationLabel(slot venues.Slot, now time.Time) string {
 	switch venues.Registration(slot.RegOpensAt, slot.RegClosed, now) {
 	case venues.RegClosed:
-		return "закрыта"
+		return strs.Venues.Public.RegClosed()
 	case venues.RegScheduled:
-		return "откроется " + slot.RegOpensAt
+		return strs.Venues.Public.RegScheduled(slot.RegOpensAt)
 	default:
-		return "открыта"
+		return strs.Venues.Public.RegOpen()
 	}
 }
 
@@ -106,7 +106,7 @@ func (s *Server) renderVenuePage(w http.ResponseWriter, r *http.Request, _ route
 		return route.NotFound
 	}
 	// The reg token is the invitation, and a Representative hands it out from
-	// the Слот's own page: this one says a registration is open and no more.
+	// the Slot's own page: this one says a registration is open and no more.
 	venue, err := venues.LoadVenue(r.Context(), s.h.Engine().DB, festID)
 	if err != nil || !venue.IsPublic {
 		return route.NotFound
@@ -218,7 +218,7 @@ func (s *Server) handleRegSubmit(w http.ResponseWriter, r *http.Request, sc rout
 	now := time.Now().UTC()
 	state := venues.Registration(slot.RegOpensAt, slot.RegClosed, now)
 	if state == venues.RegScheduled {
-		return s.renderRegPage(w, r, token, "Регистрация ещё не открыта.", "")
+		return s.renderRegPage(w, r, token, strs.Venues.Reg.ErrorNotOpen(), "")
 	}
 	current, err := venues.UserApplication(r.Context(), s.h.Engine().DB, slot.ID, sc.User.UserID)
 	has := err == nil
@@ -226,9 +226,9 @@ func (s *Server) handleRegSubmit(w http.ResponseWriter, r *http.Request, sc rout
 		return err
 	}
 	if state == venues.RegClosed && !has {
-		return s.renderRegPage(w, r, token, "Регистрация закрыта.", "")
+		return s.renderRegPage(w, r, token, strs.Venues.Reg.Closed(), "")
 	}
-	// The Состав is asked for only once the Заявка is accepted, so a pending
+	// The roster is asked for only once the application is accepted, so a pending
 	// one stores an empty roster whatever the request carries.
 	var roster []venues.RosterPlayer
 	if has && current.Status == venues.StatusAccepted {
@@ -257,7 +257,7 @@ func formInt64(form url.Values, key string) int64 {
 	return value
 }
 
-// reseatIfSeated carries a Заявка's edit into the Game only when that Заявка
+// reseatIfSeated carries a application's edit into the Game only when that application
 // is already accepted; a pending one is a version row and nothing more.
 func (s *Server) reseatIfSeated(reqCtx context.Context, slot venues.Slot, userID int64) error {
 	app, err := venues.UserApplication(reqCtx, s.h.Engine().DB, slot.ID, userID)
@@ -348,11 +348,11 @@ func (s *Server) handleHostCreateVenue(w http.ResponseWriter, r *http.Request, s
 		s.renderHostLandingForm(w, r, msg, "venue", r.Form)
 		return nil
 	}
-	// A Площадка is a venue rating.chgk.info already knows: the form picks one,
+	// A Venue is a venue rating.chgk.info already knows: the form picks one,
 	// and its name and town are theirs, not typed here.
 	ratingID := formInt64(r.Form, "rating_venue_id")
 	if ratingID <= 0 {
-		return refused("Выберите площадку на rating.chgk.info.")
+		return refused(strs.Venues.Errors.RatingVenueRequired())
 	}
 	venue, err := s.h.Engine().RatingVenues().Lookup(r.Context(), ratingID)
 	if err != nil {
@@ -395,7 +395,7 @@ func (s *Server) handleHostUpdateVenue(w http.ResponseWriter, r *http.Request, s
 	}
 	title := strings.TrimSpace(r.Form.Get("title"))
 	if title == "" {
-		return s.renderVenueDashboard(w, r, sc, "Название обязательно.", "")
+		return s.renderVenueDashboard(w, r, sc, strs.Venues.Errors.TitleRequired(), "")
 	}
 	slug := strings.TrimSpace(r.Form.Get("slug"))
 	if slug != "" {
@@ -452,7 +452,7 @@ func (s *Server) handleHostCreateSlot(w http.ResponseWriter, r *http.Request, sc
 	return s.redirectToSlot(w, r, festID, slotID)
 }
 
-// slotOf reads the Слот the route named. A Venue's Слот is named by its Game,
+// slotOf reads the Slot the route named. A Venue's Slot is named by its Game,
 // the one the dispatcher already resolved off {game}.
 func (s *Server) slotOf(r *http.Request, sc route.Scope) (venues.Venue, venues.Slot, error) {
 	venue, err := venues.LoadVenue(r.Context(), s.h.Engine().DB, sc.FestID)
@@ -574,8 +574,8 @@ func (s *Server) handleSlotSave(w http.ResponseWriter, r *http.Request, sc route
 	return s.redirectToSlot(w, r, festID, slot.ID)
 }
 
-// redirectToSlot sends the host back to the Слот's page, which is named by its
-// Game: a Слот just created or cloned is re-read for the Game it made.
+// redirectToSlot sends the host back to the Slot's page, which is named by its
+// Game: a Slot just created or cloned is re-read for the Game it made.
 func (s *Server) redirectToSlot(w http.ResponseWriter, r *http.Request, festID, slotID int64) error {
 	slot, err := venues.LoadSlot(r.Context(), s.h.Engine().DB, slotID)
 	if err != nil {
@@ -744,7 +744,7 @@ func (s *Server) loadHostVenues(ctx context.Context, userID int64) ([]venues.Ven
 	return venues.VenuesOf(ctx, s.h.Engine().DB, userID)
 }
 
-// gameProgress is the ОД page's own header line — «Игра не началась» until a
+// gameProgress is the OD page's own header line — not-started until a
 // question is entered, then how far the sitting has got.
 func (s *Server) gameProgress(ctx context.Context, festID, gameID int64) string {
 	doc, err := store.LoadGameDoc(ctx, s.h.Engine().DB, festID, gameID)
@@ -766,7 +766,7 @@ func (s *Server) gameProgress(ctx context.Context, festID, gameID int64) string 
 		}
 	}
 	if last == 0 {
-		return "игра не началась"
+		return strs.Venues.Errors.GameNotStarted()
 	}
-	return "введён вопрос " + strconv.Itoa(last)
+	return strs.Venues.Errors.GameEntered(strconv.Itoa(last))
 }

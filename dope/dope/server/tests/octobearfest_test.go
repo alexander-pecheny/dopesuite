@@ -61,15 +61,15 @@ func TestTroikaOctobearfestReplay(t *testing.T) {
 }
 
 // A bracket game boots the bracket init payload — and on its own page. Тройка
-// does both: it plays бои like ЭК and draws them quite differently, so serving
-// it ЭК's HTML would boot ЭК's bundle and none of Тройка's would ever run.
+// does both: it plays бои like EK and draws them quite differently, so serving
+// it EK's HTML would boot EK's bundle and none of Тройка's would ever run.
 // The bug this pins shipped once: the route hardcoded static/ek.html for every
 // InitEK format and ignored what the Definition said its page was.
 func TestBracketGamesAreServedTheirOwnPage(t *testing.T) {
 	srv := newAuthTestServer(t)
 	db := srv.Eng().DB
 	festID := newFest(t, db, "pages", "Страницы", systemUserID(t, db))
-	// The viewer route admits a public фест without a session.
+	// The viewer route admits a public fest without a session.
 	if _, err := db.Exec(`update fests set is_public = 1 where id = ?`, festID); err != nil {
 		t.Fatal(err)
 	}

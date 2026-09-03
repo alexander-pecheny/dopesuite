@@ -2,6 +2,10 @@
 
 package i18nstrings
 
+import (
+	"fmt"
+)
+
 // RU is the ru Catalog.
 var RU = Strings{
 	Admin: AdminStrings{
@@ -31,6 +35,24 @@ var RU = Strings{
 			Error:  func() string { return "Ошибка" },
 			Saved:  func() string { return "Готово" },
 			Saving: func() string { return "Подождите" },
+		},
+	},
+	Datetime: DatetimeStrings{
+		Calendar: DatetimeCalendarStrings{
+			Clear:     func() string { return "Очистить" },
+			Done:      func() string { return "Готово" },
+			DowFri:    func() string { return "пт" },
+			DowMon:    func() string { return "пн" },
+			DowSat:    func() string { return "сб" },
+			DowSun:    func() string { return "вс" },
+			DowThu:    func() string { return "чт" },
+			DowTue:    func() string { return "вт" },
+			DowWed:    func() string { return "ср" },
+			Label:     func() string { return "Календарь" },
+			NextMonth: func() string { return "Следующий месяц" },
+			PrevMonth: func() string { return "Предыдущий месяц" },
+			Time:      func() string { return "Время" },
+			Timezone:  func(zone string) string { return fmt.Sprintf("Часовой пояс: %s", zone) },
 		},
 	},
 	Login: LoginStrings{

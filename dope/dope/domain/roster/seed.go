@@ -83,7 +83,7 @@ func EnsureSeedPlayer(ctx context.Context, tx *sql.Tx, festID int64, firstName, 
 }
 
 // EnsureSeedPlayerNamed is EnsureSeedPlayer for a source that knows the
-// отчество — a Состав names a rating.chgk.info player in three parts.
+// patronymic — a roster names a rating.chgk.info player in three parts.
 func EnsureSeedPlayerNamed(ctx context.Context, tx *sql.Tx, festID int64, firstName, lastName, patronymic string) (int64, error) {
 	var id int64
 	err := tx.QueryRowContext(ctx, `

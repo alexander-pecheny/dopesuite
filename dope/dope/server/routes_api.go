@@ -82,7 +82,7 @@ func (s *server) apiRoutes() *route.Table {
 	return t
 }
 
-// buffRoutes are the thin JSON reads over buff's mirror the Состав and
+// buffRoutes are the thin JSON reads over buff's mirror the roster and
 // tournament suggests type against (ADR-0020). A session is all they ask:
 // they expose nothing dope's users cannot read on rating.chgk.info.
 func (s *server) buffRoutes(t *route.Table) {
@@ -117,7 +117,7 @@ func (s *server) buffRoutes(t *route.Table) {
 	})
 }
 
-// ratingVenues is the suggest the Площадка forms search: rating.chgk.info's
+// ratingVenues is the suggest the Venue forms search: rating.chgk.info's
 // venues by id, name or town, out of the catalogue dope keeps a copy of.
 func (s *server) ratingVenues(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
 	found, err := s.eng.RatingVenues().Search(r.Context(), r.URL.Query().Get("q"), suggestLimit(r))
@@ -411,7 +411,7 @@ func (s *server) scopedGameState(w http.ResponseWriter, r *http.Request, sc rout
 	return route.JSONBytes(w, s.eng.WithGameExtras(r.Context(), gameStateScopeKey(sc.GameID), []byte(doc.State)))
 }
 
-// ---- спорные ----
+// ---- contested answers ----
 
 // contestedRequest is one cell: the question and the team's Number in this
 // Game, plus whatever the verb sets.
@@ -430,7 +430,7 @@ func (s *server) scopedContested(w http.ResponseWriter, r *http.Request, sc rout
 	return route.JSON(w, list)
 }
 
-// contestedWrite runs one спорный change and answers with the whole list, so
+// contestedWrite runs one contested answer change and answers with the whole list, so
 // the page adopts it without a second read; the Game's document is broadcast
 // again with the new list spliced in.
 func (s *server) contestedWrite(w http.ResponseWriter, r *http.Request, sc route.Scope,
@@ -440,7 +440,7 @@ func (s *server) contestedWrite(w http.ResponseWriter, r *http.Request, sc route
 		return err
 	}
 	if req.Question < 0 || req.Number <= 0 {
-		return route.BadRequest("нужны номер вопроса и номер команды")
+		return route.BadRequest(dopestrings.Default.Od.Contested.NeedQuestionAndTeam())
 	}
 	err := s.eng.WithWriteTx(r.Context(), sc.FestID, "contested", func(ctx context.Context, tx *sql.Tx) error {
 		return apply(ctx, tx, req)
@@ -488,7 +488,7 @@ func (s *server) scopedGameStatePut(w http.ResponseWriter, r *http.Request, sc r
 	if !json.Valid(raw) {
 		return route.BadRequest("bad json")
 	}
-	// The спорные ride the document a page reads but are not part of it: they
+	// The contested answers ride the document a page reads but are not part of it: they
 	// live in a table, so a wholesale PUT of that document drops them again.
 	raw = store.StripContested(raw)
 	// Canonicalize so a wholesale PUT stores the same byte representation a

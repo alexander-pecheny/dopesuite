@@ -176,7 +176,7 @@ func (e *Engine) InvalidateFestViewCache(festID int64) {
 }
 
 // WithGameExtras splices what a Game's document carries beside its stored
-// state — today the спорные, which live in a table because a ruling is not a
+// state — today the contested answers, which live in a table because a ruling is not a
 // score — into a whole-document snapshot. Deltas are untouched: their ops
 // never name the spliced keys, so a client keeps what it already has.
 func (e *Engine) WithGameExtras(ctx context.Context, scope string, payload []byte) []byte {
@@ -197,7 +197,7 @@ func gameStateScopeID(scope string) (int64, bool) {
 }
 
 // RebroadcastGameDocument fans the Game's document out again after something
-// that rides it changed without the document itself moving — a спорный.
+// that rides it changed without the document itself moving — a contested answer.
 func (e *Engine) RebroadcastGameDocument(ctx context.Context, festID, gameID int64) error {
 	doc, err := store.LoadGameDoc(ctx, e.DB, festID, gameID)
 	if err != nil {

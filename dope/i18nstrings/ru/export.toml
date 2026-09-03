@@ -46,6 +46,14 @@ team_n = 'Команда {{.n}}'
 name = "Название"
 city = "Город"
 tour = "Тур"
+# The players sheet a venue hands to rating.chgk.info, column by column.
+players_place = "Место"
+players_name = "Название"
+players_city = "Город"
+players_flag = "Флаг"
+players_surname = "Фамилия"
+players_first_name = "Имя"
+players_patronymic = "Отчество"
 
 [multi]
 # The Multi results header's suffix for a minigame normalized out of 100;

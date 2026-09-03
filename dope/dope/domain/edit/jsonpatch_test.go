@@ -83,7 +83,7 @@ func TestDecodePatchValue(t *testing.T) {
 }
 
 func TestPatchPathTouchesRatingRoster(t *testing.T) {
-	// ОД's roster is imported from rating.chgk.info and lives under "teams".
+	// OD's roster is imported from rating.chgk.info and lives under "teams".
 	od := []JSONPathSegment{{Key: "teams"}, {Index: 0, IsIndex: true}}
 	if !PatchPathTouchesRatingRoster("od", od) {
 		t.Fatal("od teams path not protected")

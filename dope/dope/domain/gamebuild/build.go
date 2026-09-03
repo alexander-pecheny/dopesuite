@@ -89,7 +89,7 @@ type Spec struct {
 	// questions_by_tour says — and wins over ODTours × ODQuestions.
 	ODTourComp []int
 	// OwnTeams makes the Game's team list and rosters its own rather than the
-	// фест's: a Слот at a Venue seats whom its Заявки say and nobody else.
+	// fest's: a Slot at a Venue seats whom its applications say and nobody else.
 	OwnTeams    bool
 	KSIThemes   int
 	KSIStickers json.RawMessage

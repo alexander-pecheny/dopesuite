@@ -13,11 +13,11 @@ import (
 	"dope/dope/platform/util"
 )
 
-// The whole championship on one фест, built the way a host would build it and
+// The whole championship on one fest, built the way a host would build it and
 // then replayed бой by бой from the committed transcripts.
 //
 // This is the deliverable the harness was for: not four games proved separately,
-// but one фест that holds all of them at once — 65 registered teams, an ЭК of 48
+// but one fest that holds all of them at once — 65 registered teams, an EK of 48
 // and a брейн of a different 48, and two individual tournaments beside them.
 //
 // It takes minutes, so it runs on request rather than on every suite: set
@@ -30,7 +30,7 @@ func TestStudchrWholeFest(t *testing.T) {
 	srv := newAuthTestServer(t)
 	db := srv.Eng().DB
 	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))
-	// A фест of its own, beside the bootstrap one rather than inside it: the
+	// A fest of its own, beside the bootstrap one rather than inside it: the
 	// championship's registry is its own and should not inherit a demo game's
 	// teams.
 	festID := newFest(t, db, "studchr-2026", "Студенческий чемпионат России 2026",
@@ -45,13 +45,13 @@ func TestStudchrWholeFest(t *testing.T) {
 		scripts[name] = script
 	}
 
-	// The фест's registry. ОД seated every team the championship registered, and
+	// The fest's registry. OD seated every team the championship registered, and
 	// both 48-team games are subsets of it, so its list in its own numbering is
-	// the фест's registry — which is what a registry is.
-	// The фест registry carries ОД's numbering — the fest_teams family below
+	// the fest's registry — which is what a registry is.
+	// The fest registry carries OD's numbering — the fest_teams family below
 	// says the same numbers, and the two spaces must agree: game creation
 	// reconciles registry entries with fest teams BY NUMBER, so a registry
-	// numbered any other way gets its teams renamed into ОД's.
+	// numbered any other way gets its teams renamed into OD's.
 	od := readOD(t)
 	numbers := map[string]int{}
 	for _, team := range od.Teams {
@@ -69,9 +69,9 @@ func TestStudchrWholeFest(t *testing.T) {
 		union(rosterOf(scripts["si"]), rosterOf(scripts["tpsh"])))
 	t.Logf("реестр феста: %d команд, %d игроков", len(teams), len(players))
 
-	// The фест-level Составы view reads the fest_teams family, so the games'
-	// составы are united into it: every registered team, with the players the
-	// брейн and ЭК workbooks agree it fielded.
+	// The fest-level rosters view reads the fest_teams family, so the games'
+	// rosters are united into it: every registered team, with the players the
+	// брейн and EK workbooks agree it fielded.
 	registerFestRoster(t, db, festID, od,
 		unionLineups(scripts["brain"].Lineups, scripts["ek"].Lineups))
 
@@ -100,12 +100,12 @@ func TestStudchrWholeFest(t *testing.T) {
 		t.Logf("%s: %d боёв сошлись", c.title, len(script.Bouts))
 	}
 
-	// ОД has no бои: its whole document is one grid of which teams took which
+	// OD has no бои: its whole document is one grid of which teams took which
 	// question, held on the game. So it is loaded rather than replayed, through
 	// the same patch path the page edits it by.
 	odGame := createSchemeGameFor(t, db, festID, games.OD, "ОД",
 		readFile(t, "../../../scripts/studchr/od.dsl"), idsFor(t, teams, od.names()))
-	// ОД's team list belongs to the rating import and the protocol declares it
+	// OD's team list belongs to the rating import and the protocol declares it
 	// immutable under host edits, so it is seated before any play rather than
 	// patched — the same thing the import does, by the same route.
 	seatODTeams(t, db, odGame, od)
@@ -139,7 +139,7 @@ func TestStudchrWholeFest(t *testing.T) {
 	t.Logf("фест собран: %s", out)
 }
 
-// unionLineups merges the games' составы by team, first writer keeping order,
+// unionLineups merges the games' rosters by team, first writer keeping order,
 // later ones appending only players it did not name.
 func unionLineups(lists ...[]replay.Lineup) map[string][]string {
 	out := map[string][]string{}
@@ -162,8 +162,8 @@ func unionLineups(lists ...[]replay.Lineup) map[string][]string {
 }
 
 // registerFestRoster writes the fest_teams/fest_players/fest_team_players
-// family the public Составы view reads — every registered team in ОД's
-// numbering, with its united состав.
+// family the public rosters view reads — every registered team in OD's
+// numbering, with its united roster.
 func registerFestRoster(t *testing.T, db *sql.DB, festID int64, od odData, lineups map[string][]string) {
 	t.Helper()
 	playerID := map[string]int64{}
@@ -260,7 +260,7 @@ func idsFor(t *testing.T, registry map[string]int64, names []string) []int64 {
 	return out
 }
 
-// odData is ОД's document as the sheet holds it: the teams in their own
+// odData is OD's document as the sheet holds it: the teams in their own
 // numbering, and per question the numbers of the teams that took it.
 type odData struct {
 	Teams []struct {
@@ -289,7 +289,7 @@ func readOD(t *testing.T) odData {
 	return data
 }
 
-// seatODTeams writes the ОД game's team list, which the protocol declares
+// seatODTeams writes the OD game's team list, which the protocol declares
 // immutable once play starts (RatingRosterStateKey), so the patch path refuses
 // it and the import owns it instead.
 func seatODTeams(t *testing.T, db *sql.DB, gameID int64, od odData) {

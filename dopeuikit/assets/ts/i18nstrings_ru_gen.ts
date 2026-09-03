@@ -30,6 +30,24 @@ export const RU: Strings = {
       saving: () => "Подождите",
     },
   },
+  datetime: {
+    calendar: {
+      clear: () => "Очистить",
+      done: () => "Готово",
+      dowFri: () => "пт",
+      dowMon: () => "пн",
+      dowSat: () => "сб",
+      dowSun: () => "вс",
+      dowThu: () => "чт",
+      dowTue: () => "вт",
+      dowWed: () => "ср",
+      label: () => "Календарь",
+      nextMonth: () => "Следующий месяц",
+      prevMonth: () => "Предыдущий месяц",
+      time: () => "Время",
+      timezone: (zone: string) => `Часовой пояс: ${zone}`,
+    },
+  },
   login: {
     code: {
       botHintLead: () => "Если ссылка не открывается, напишите боту ",

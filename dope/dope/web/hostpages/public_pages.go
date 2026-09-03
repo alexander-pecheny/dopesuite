@@ -52,7 +52,7 @@ func jumpHostNav(href, label, title string) []ui.Item {
 	}
 }
 
-// PublicTabs is the public tree's two halves — the Фесты and the Площадки —
+// PublicTabs is the public tree's two halves — the fests and the Venues —
 // as the segmented control. Each tab is a link, so the strip reads the same on
 // both pages and the one you are on is the one that is lit.
 func PublicTabs(here string) *ui.Element {
@@ -63,7 +63,7 @@ func PublicTabs(here string) *ui.Element {
 		}
 		return ui.Tab(items...)
 	}
-	return ui.Tabs(tab("/", "Фесты"), tab("/venues", "Площадки"))
+	return ui.Tabs(tab("/", strs.Host.PublicTabs.Fests()), tab("/venues", strs.Host.PublicTabs.Venues()))
 }
 
 // PublicIndexDoc builds the public fest list at /. It is home, so its 🏠 crumb

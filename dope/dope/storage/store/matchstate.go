@@ -129,8 +129,8 @@ func JoinPlayerName(firstName, lastName string) string {
 	return strings.TrimSpace(strings.TrimSpace(firstName) + " " + strings.TrimSpace(lastName))
 }
 
-// JoinFullPlayerName is «Фамилия Имя Отчество» for a player whose отчество is
-// known, which is how rating.chgk.info names one; without it the фест's own
+// JoinFullPlayerName is "Surname Name Patronymic" for a player whose patronymic is
+// known, which is how rating.chgk.info names one; without it the fest's own
 // «Имя Фамилия» stands, so nothing an import wrote reads differently.
 func JoinFullPlayerName(firstName, lastName, patronymic string) string {
 	if strings.TrimSpace(patronymic) == "" {

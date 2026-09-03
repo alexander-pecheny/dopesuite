@@ -203,6 +203,13 @@ export type Strings = {
     od: {
       city: () => string;
       name: () => string;
+      playersCity: () => string;
+      playersFirstName: () => string;
+      playersFlag: () => string;
+      playersName: () => string;
+      playersPatronymic: () => string;
+      playersPlace: () => string;
+      playersSurname: () => string;
       tour: () => string;
     };
     sheet: {
@@ -521,6 +528,16 @@ export type Strings = {
       titleLabel: () => string;
       usernameFallback: () => string;
     };
+    profile: {
+      tzHint: () => string;
+      tzSave: () => string;
+      tzSaved: () => string;
+      tzSubhead: () => string;
+    };
+    publicTabs: {
+      fests: () => string;
+      venues: () => string;
+    };
     roster: {
       addOverrideBtn: () => string;
       cancelBtn: () => string;
@@ -813,6 +830,10 @@ export type Strings = {
     };
   };
   od: {
+    contested: {
+      needQuestionAndTeam: () => string;
+      noSuchNumber: () => string;
+    };
     detailed: {
       tour: (n: string) => string;
     };
@@ -1165,6 +1186,9 @@ export type Strings = {
       home: () => string;
       host: () => string;
     };
+    venue: {
+      trail: () => string;
+    };
   };
   server: {
     bot: {
@@ -1360,6 +1384,229 @@ export type Strings = {
       label: () => string;
     };
   };
+  venues: {
+    contested: {
+      accept: () => string;
+      colAccepted: () => string;
+      colAnswer: () => string;
+      colQuestion: () => string;
+      colTeam: () => string;
+      colTour: () => string;
+      delete: () => string;
+      deleteConfirm: () => string;
+      empty: () => string;
+      stateAccepted: () => string;
+      statePending: () => string;
+      subhead: () => string;
+      unaccept: () => string;
+    };
+    errors: {
+      gameEntered: (n: string) => string;
+      gameNotStarted: () => string;
+      needsTeamNumber: () => string;
+      noTeamName: () => string;
+      ratingNoVenue: () => string;
+      ratingUnavailable: () => string;
+      ratingVenueRequired: () => string;
+      teamHasResults: () => string;
+      titleRequired: () => string;
+    };
+    flags: {
+      base: () => string;
+      captain: () => string;
+      legion: () => string;
+    };
+    game: {
+      applicationsEmpty: () => string;
+      applicationsSubhead: () => string;
+      cloneBtn: () => string;
+      cloneCancel: () => string;
+      cloneDatetimeLabel: () => string;
+      cloneNote: () => string;
+      cloneTitle: () => string;
+      colEdited: () => string;
+      colFiled: () => string;
+      colFlags: () => string;
+      colNumber: () => string;
+      colRoster: () => string;
+      colStatus: () => string;
+      colSubmitter: () => string;
+      colTeam: () => string;
+      colWho: () => string;
+      datetimeLabel: () => string;
+      deleteConfirm: () => string;
+      deleteSubmit: () => string;
+      downloadPlayers: () => string;
+      downloadTours: () => string;
+      downloadsSubhead: () => string;
+      linkCopy: () => string;
+      linkHidden: () => string;
+      linkRotate: () => string;
+      linkRotateConfirm: () => string;
+      linkSubhead: () => string;
+      linkVisibleLabel: () => string;
+      regClosedLabel: () => string;
+      regOpensLabel: () => string;
+      regOpensPlaceholder: () => string;
+      statusAccept: () => string;
+      statusDecline: () => string;
+      statusPending: () => string;
+      subhead: () => string;
+      tableBtn: () => string;
+      tournamentLabel: () => string;
+      undatedTitle: () => string;
+      versionRestore: () => string;
+      versionSave: () => string;
+      versionsSummary: () => string;
+    };
+    host: {
+      cityLabel: () => string;
+      createVenueSubmit: () => string;
+      createVenueSummary: () => string;
+      deleteSubhead: () => string;
+      deleteVenueConfirm: () => string;
+      deleteVenueSubmit: () => string;
+      descriptionLabel: () => string;
+      gameAccepted: (n: string) => string;
+      gameNoTournament: () => string;
+      gamePending: (n: string) => string;
+      gameUndated: () => string;
+      gamesEmpty: () => string;
+      gamesSubhead: () => string;
+      jumpLabel: () => string;
+      jumpTitle: () => string;
+      newGameSubmit: () => string;
+      newGameSummary: () => string;
+      pageTitle: (title: string) => string;
+      publicLabel: () => string;
+      ratingVenueLabel: () => string;
+      ratingVenuePlaceholder: () => string;
+      saveSubmit: () => string;
+      slugHint: () => string;
+      slugLabel: () => string;
+      titleLabel: () => string;
+      venueUnlisted: () => string;
+      venuesEmpty: () => string;
+    };
+    odContested: {
+      acceptedLabel: () => string;
+      answerLabel: () => string;
+      dialogTitle: (n: string) => string;
+      noSuchTeam: () => string;
+      numberLabel: () => string;
+      remove: () => string;
+      save: () => string;
+      saveFailed: () => string;
+    };
+    public: {
+      colCity: () => string;
+      colNextGame: () => string;
+      colRating: () => string;
+      colRegistration: () => string;
+      colTeams: () => string;
+      colTournament: () => string;
+      colVenue: () => string;
+      colWhen: () => string;
+      gamesEmpty: () => string;
+      indexEmpty: () => string;
+      indexTitle: () => string;
+      pastGames: () => string;
+      ratingLink: () => string;
+      regClosed: () => string;
+      regOpen: () => string;
+      regScheduled: (at: string) => string;
+      searchLabel: () => string;
+      searchPlaceholder: () => string;
+      upcomingGames: () => string;
+    };
+    reg: {
+      applicationSubhead: () => string;
+      closed: () => string;
+      colFlag: () => string;
+      colId: () => string;
+      colPlayer: () => string;
+      crumb: () => string;
+      errorNotOpen: () => string;
+      loginBtn: () => string;
+      loginHint: () => string;
+      ratingTeamLabel: () => string;
+      rosterLabel: () => string;
+      scheduled: (at: string) => string;
+      statusAccepted: () => string;
+      statusDeclined: () => string;
+      statusLine: (status: string) => string;
+      statusPending: () => string;
+      submitEdit: () => string;
+      submitNew: () => string;
+      tableBtn: () => string;
+      teamNameLabel: () => string;
+      teamNumber: (n: string) => string;
+      title: (venue: string) => string;
+    };
+    rosterEditor: {
+      addPlayer: () => string;
+      captain: () => string;
+      gamesCount: (n: number) => string;
+      name: () => string;
+      noCaptain: () => string;
+      notInBase: () => string;
+      patronymic: () => string;
+      playerPlaceholder: () => string;
+      remove: () => string;
+      surname: () => string;
+      teamPlaceholder: () => string;
+      teamUnknown: () => string;
+      tooMany: (n: string) => string;
+    };
+    voting: {
+      addByIdLabel: () => string;
+      ballotDecline: () => string;
+      ballotRestore: () => string;
+      ballotsSubhead: () => string;
+      buffEmpty: () => string;
+      closesLabel: () => string;
+      colChoice: () => string;
+      colWho: () => string;
+      copyLink: () => string;
+      createSubmit: () => string;
+      declinedNote: () => string;
+      empty: () => string;
+      errorFrozen: () => string;
+      errorKindUnknown: () => string;
+      errorNoTournaments: () => string;
+      errorPickOne: () => string;
+      frozenNote: () => string;
+      kindAny: () => string;
+      kindLabel: () => string;
+      kindLine: (kind: string) => string;
+      kindOne: () => string;
+      kindRanked: () => string;
+      opensLabel: () => string;
+      opensPlaceholder: () => string;
+      pageClosed: () => string;
+      pageLogin: () => string;
+      pageScheduled: (at: string) => string;
+      pageTitle: (venue: string) => string;
+      perTeamLabel: () => string;
+      pickAny: () => string;
+      pickOne: () => string;
+      rankFirst: () => string;
+      rankSecond: () => string;
+      rankThird: () => string;
+      saveSubmit: () => string;
+      settingsSummary: () => string;
+      subhead: () => string;
+      submitEdit: () => string;
+      submitNew: () => string;
+      tallySubhead: () => string;
+      tournamentN: (id: string) => string;
+      tournamentsLabel: () => string;
+      windowFrom: (at: string) => string;
+      windowNone: () => string;
+      windowUntil: (at: string) => string;
+      yourBallot: () => string;
+    };
+  };
   widgets: {
     cellNav: {
       next: () => string;
@@ -1380,6 +1627,9 @@ export type Strings = {
     menu: {
       login: () => string;
       profile: () => string;
+    };
+    modal: {
+      cancel: () => string;
     };
     profile: {
       changed: () => string;

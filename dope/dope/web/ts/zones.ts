@@ -1,6 +1,6 @@
 // dope's choices for the shared suggest dropdown: the profile timezone.
 // The dropdown itself lives in dopeuikit (both apps use it); xy's picker
-// additionally searches ЧГК town names, which dope has no data for.
+// additionally searches ChGK town names, which dope has no data for.
 
 import type {Choice} from "../../../../dopeuikit/assets/ts/suggest.js";
 

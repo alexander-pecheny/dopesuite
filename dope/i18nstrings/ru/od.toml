@@ -88,3 +88,8 @@ tour_expand = "Показать вопросы тура"
 # The shootout toggle's tooltip.
 shootout_collapse = "Свернуть перестрелку"
 shootout_expand = "Показать вопросы перестрелки"
+
+[contested]
+# The спорные endpoint's refusals, and the number a спорный is filed against.
+no_such_number = "в игре нет команды с таким номером"
+need_question_and_team = "нужны номер вопроса и номер команды"

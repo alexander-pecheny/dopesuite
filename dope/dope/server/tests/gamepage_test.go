@@ -11,8 +11,8 @@ import (
 var pageBundle = regexp.MustCompile(`dist/([a-z]+)\.js`)
 
 // A game type's page is one datum: the live viewer route and the lockdown
-// snapshot serve the same bundle. Личная СИ borrows ЭК's page for its bracket,
-// and lockdown used to hand it КСИ's blank instead.
+// snapshot serve the same bundle. Личная СИ borrows EK's page for its bracket,
+// and lockdown used to hand it KSI's blank instead.
 func TestLockdownServesTheLivePage(t *testing.T) {
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)

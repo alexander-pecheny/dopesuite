@@ -22,7 +22,7 @@ func TestFlagsAreDerived(t *testing.T) {
 	if got := Flags(players, 0, nil); got[0] != FlagCaptain || got[1] != FlagBase || got[2] != FlagBase {
 		t.Fatalf("id-0 flags %v", got)
 	}
-	// A team the mirror has not caught up with reads as легионеры.
+	// A team the mirror has not caught up with reads as legionnaireы.
 	if got := Flags(players, 62868, nil); got[1] != FlagLegion || got[2] != FlagLegion {
 		t.Fatalf("unmirrored flags %v", got)
 	}
@@ -93,7 +93,7 @@ func TestAssignNumbersFillsTheGaps(t *testing.T) {
 	if apps[0].Number != 2 || apps[1].Number != 1 || apps[2].Number != 4 || apps[3].Number != 3 {
 		t.Fatalf("numbers %v %v %v %v", apps[0].Number, apps[1].Number, apps[2].Number, apps[3].Number)
 	}
-	// A team the host seated by hand holds its number against a new заявка.
+	// A team the host seated by hand holds its number against a new application.
 	hand := map[int64]protocol.RosterTeam{1: {Number: 1}}
 	fresh := []Application{{}}
 	assignNumbers(fresh, hand)

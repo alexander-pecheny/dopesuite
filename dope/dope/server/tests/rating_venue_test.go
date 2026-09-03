@@ -37,7 +37,7 @@ func ratingServer(t *testing.T, body string) *dopeserver.Server {
 	})
 }
 
-// The suggest a Площадка is created from: rating.chgk.info's venues by id, by
+// The suggest a Venue is created from: rating.chgk.info's venues by id, by
 // name or by town.
 func TestRatingVenueSuggest(t *testing.T) {
 	srv := ratingServer(t, `[

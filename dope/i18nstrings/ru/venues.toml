@@ -1,0 +1,280 @@
+# The Площадка surface (dope/dope/web/hostpages/venue_*.go): the public venue
+# index and a venue's own page ([public]), the Representative's venue dashboard
+# and the игра page under it ([host]), the registration link a Заявка is filed
+# through ([reg]), the голосование that picks the турнир ([voting]) and the
+# спорные a жюри still has to rule on ([contested]).
+
+[public]
+# The /venues index: page title, the search field over the table, the table's
+# columns, and what it says when there is no public venue at all.
+index_title = "Площадки"
+index_empty = "Публичных площадок пока нет."
+search_label = "Поиск"
+search_placeholder = "город, название…"
+col_venue = "Площадка"
+col_city = "Город"
+col_next_game = "Ближайшая игра"
+col_registration = "Регистрация"
+col_teams = "Команд"
+col_rating = "Рейтинг"
+# The link out to this venue on rating.chgk.info.
+rating_link = "рейтинг"
+# A venue's own page: the two lists of its games, and the note when it has none.
+upcoming_games = "Ближайшие игры"
+past_games = "Прошедшие игры"
+games_empty = "Игр пока нет."
+# Columns of those two lists.
+col_when = "Когда"
+col_tournament = "Турнир"
+# The registration's state, as the index and a venue page report it.
+reg_open = "открыта"
+reg_closed = "закрыта"
+reg_scheduled = 'откроется {{.at}}'
+
+[host]
+# The venue dashboard (venueDashDoc): its title, the jump into the public page,
+# the settings form, and the delete at the bottom.
+page_title = '{{.title}} · площадка'
+jump_label = "Страница площадки"
+jump_title = "Открыть страницу площадки"
+title_label = "Название"
+city_label = "Город"
+description_label = "Описание (markdown)"
+slug_label = "Slug (URL вида /venue/{slug})"
+slug_hint = "Только латиница в нижнем регистре, цифры и дефис; не одни цифры"
+public_label = "Публичная"
+save_submit = "Сохранить"
+delete_subhead = "Удаление"
+delete_venue_confirm = "Удалить площадку? Все игры, заявки и результаты будут удалены."
+delete_venue_submit = "Удалить площадку"
+# The venue's games: the list, its empty note, and the create form.
+games_subhead = "Игры"
+games_empty = "Игр пока нет."
+# A game row: its date, or this when it has none, then the tournament and the
+# counts of accepted and pending заявки.
+game_undated = "без даты"
+game_no_tournament = "турнир не выбран"
+game_accepted = ' · принято {{.n}}'
+game_pending = ', ждут {{.n}}'
+new_game_summary = "Новая игра"
+new_game_submit = "Создать игру"
+# The create-venue form on the host landing.
+# The Площадки a user represents, on the host landing.
+venues_empty = "Площадок пока нет."
+venue_unlisted = "непубличная"
+create_venue_summary = "Создать площадку"
+create_venue_submit = "Создать"
+rating_venue_label = "Площадка на rating.chgk.info"
+rating_venue_placeholder = "город, название или id"
+
+[game]
+# The игра page (slotPageDoc) — one venue game with its registration, its
+# заявки, its голосование and its спорные. A game with no date yet is titled
+# with this.
+undated_title = "Игра без даты"
+subhead = "Игра"
+# The button through to the table the game is played on.
+table_btn = "Таблица игры"
+# The game's own form: when it plays, which tournament, when registration opens
+# and whether it is shut, and whether the link is handed over at all.
+datetime_label = "Дата и время"
+tournament_label = "ID турнира на rating.chgk.info"
+reg_opens_label = "Регистрация открывается"
+reg_opens_placeholder = "сразу"
+reg_closed_label = "Регистрация закрыта"
+link_visible_label = "Ссылка видна"
+# Cloning a game into the next week's sitting.
+clone_btn = "Клонировать"
+clone_title = "Клонировать игру"
+clone_note = "Копируются настройки игры и новая ссылка: без турнира, заявок и голосования."
+clone_datetime_label = "Дата и время новой игры"
+clone_cancel = "Отмена"
+# Deleting the game, which takes its Слот and everything hanging off it.
+delete_confirm = "Удалить игру? Заявки, составы, голосование и результаты будут удалены."
+delete_submit = "Удалить игру"
+# The registration link: the section, what stands in for the link while it is
+# not handed over, and the two things a Representative does with it.
+link_subhead = "Ссылка на регистрацию"
+link_hidden = "Отметьте «Ссылка видна», чтобы получить ссылку."
+link_copy = "Копировать"
+link_rotate_confirm = "Сменить ссылку? Старая перестанет работать."
+link_rotate = "Сменить ссылку"
+# The queue of заявки: the table, its columns and the actions on one row.
+applications_subhead = "Заявки"
+applications_empty = "Заявок пока нет."
+col_number = "№"
+col_team = "Команда"
+col_submitter = "Кто подал"
+col_filed = "Подана"
+col_edited = "Изменена"
+col_roster = "Состав"
+col_flags = "Флаги"
+col_status = "Статус"
+status_accept = "Принять"
+status_decline = "Отклонить"
+status_pending = "Вернуть в ожидание"
+# One заявка's edit history: every version is dated and can be restored.
+versions_summary = "Версии и правка"
+col_who = "Кто"
+version_restore = "Вернуть эту версию"
+version_save = "Сохранить как новую версию"
+# The two spreadsheets a Representative takes away.
+downloads_subhead = "Выгрузки"
+download_tours = "Туры (xlsx)"
+download_players = "Игроки (xlsx)"
+
+[flags]
+# A player's mark in a Состав, derived from the team's base roster: captain,
+# base-roster player, legionnaire. One letter each — they head a narrow column.
+captain = "К"
+base = "Б"
+legion = "Л"
+
+[reg]
+# The registration page a Заявка is filed on (/reg/{token}): its title, what it
+# says in each state of the registration, and the form itself.
+title = 'Регистрация · {{.venue}}'
+crumb = "Регистрация"
+scheduled = 'Регистрация откроется {{.at}}.'
+closed = "Регистрация закрыта."
+login_hint = "Чтобы подать заявку, войдите через Telegram."
+login_btn = "Войти"
+application_subhead = "Заявка"
+status_line = 'Статус: {{.status}}'
+team_number = 'номер команды {{.n}}'
+table_btn = "Таблица игры"
+submit_new = "Подать заявку"
+submit_edit = "Сохранить заявку"
+# The заявка's own fields, and the состав table under an accepted one.
+team_name_label = "Название команды"
+rating_team_label = "ID команды на rating.chgk.info (0 — разовая команда)"
+roster_label = "Состав"
+col_player = "Игрок"
+col_id = "ID"
+col_flag = "Флаг"
+# A заявка's status, as its filer and the Representative read it.
+status_pending = "на рассмотрении"
+status_accepted = "принята"
+status_declined = "отклонена"
+# What the registration form refuses with; the rest of a venue's refusals are
+# in [errors], which both the public and the host side read.
+error_not_open = "Регистрация ещё не открыта."
+
+[voting]
+# The голосование that picks which турнир a game plays: the Representative's
+# section on the game page, and the public ballot page (/vote/{token}).
+subhead = "Голосование"
+empty = "Голосования нет."
+create_submit = "Создать голосование"
+save_submit = "Сохранить голосование"
+settings_summary = "Настройки голосования"
+frozen_note = "По голосованию уже голосовали: турниры, вид и режим больше не меняются."
+# The poll's own fields.
+tournaments_label = "Турниры"
+add_by_id_label = "Добавить турнир по id"
+kind_label = "Сколько можно выбрать"
+per_team_label = "Голосуют команды, а не люди"
+opens_label = "Открывается"
+opens_placeholder = "сразу"
+closes_label = "Закрывается"
+buff_empty = "Буфф не знает турниров на эту дату — добавьте по id."
+# The three ballot kinds.
+kind_one = "ровно один"
+kind_any = "любые"
+kind_ranked = "три по порядку"
+# The poll's line under the subhead: its kind, then when it runs.
+kind_line = 'Вид: {{.kind}}'
+window_until = 'до {{.at}}'
+window_from = 'с {{.at}}'
+window_none = "без срока"
+copy_link = "Копировать"
+# The ballots as the Representative sees them, and what they can do with one.
+ballots_subhead = "Голоса"
+col_who = "Кто"
+col_choice = "Выбор"
+ballot_decline = "Отклонить"
+ballot_restore = "Вернуть"
+tally_subhead = "Итог"
+# The public ballot page.
+page_title = 'Голосование · {{.venue}}'
+page_scheduled = 'Голосование откроется {{.at}}.'
+page_closed = "Голосование закрыто."
+page_login = "Чтобы проголосовать, войдите через Telegram."
+pick_any = "Во что готовы играть"
+pick_one = "Во что играем"
+submit_new = "Проголосовать"
+submit_edit = "Изменить голос"
+your_ballot = "Ваш голос"
+declined_note = "Ваш голос отклонён представителем площадки."
+rank_first = "Первое место"
+rank_second = "Второе место"
+rank_third = "Третье место"
+tournament_n = 'Турнир {{.id}}'
+error_pick_one = "Выберите хотя бы один турнир."
+# Refusals the save answers with.
+error_no_tournaments = "выберите хотя бы один турнир"
+error_frozen = "по голосованию уже голосовали — вид и режим менять нельзя"
+error_kind_unknown = "неизвестный вид голосования"
+
+[contested]
+# The спорные a game recorded: an answer near enough that the жюри must rule on
+# it after the game. The Representative accepts one on the площадка or drops it.
+subhead = "Спорные"
+empty = "Спорных нет."
+col_tour = "Тур"
+col_question = "Вопрос"
+col_team = "Команда"
+col_answer = "Ответ"
+col_accepted = "Принят"
+accept = "Принять на площадке"
+unaccept = "Снять принятие"
+delete_confirm = "Удалить спорный?"
+delete = "Удалить"
+state_accepted = "принят на площадке"
+state_pending = "ждёт жюри"
+
+[errors]
+# What a write on a venue refuses with, in the Representative's words.
+no_team_name = "укажите название команды"
+team_has_results = "у команды уже есть результаты в игре — сначала уберите их"
+needs_team_number = "нужен номер команды"
+rating_venue_required = "Выберите площадку на rating.chgk.info."
+title_required = "Название обязательно."
+# What rating.chgk.info's venue catalogue answers with when it will not.
+rating_unavailable = "rating.chgk.info не ответил"
+rating_no_venue = "такой площадки нет на rating.chgk.info"
+# The game's progress line on the игра page.
+game_not_started = "игра не началась"
+game_entered = 'введён вопрос {{.n}}'
+
+[roster_editor]
+# The Состав editor (web/ts/roster-editor.ts) on the registration page and the
+# game page: one suggest row per player over buff's mirror, with a fallback for
+# a player too new to be there.
+add_player = "Добавить игрока"
+player_placeholder = "Фамилия Имя"
+not_in_base = "нет в базе"
+surname = "Фамилия"
+name = "Имя"
+patronymic = "Отчество"
+captain = "капитан"
+remove = "Убрать"
+# How many games buff has this player in, beside their name in the suggest.
+games_count = '{{.n}} {{plural .n "игра" "игры" "игр"}}'
+# What the editor refuses to save, and what it says about an unknown team.
+too_many = 'В составе больше {{.n}} игроков.'
+no_captain = "Отметьте капитана."
+team_unknown = "Буфф не знает такой команды"
+team_placeholder = "поиск по названию"
+
+[od_contested]
+# The спорный dialog on the ОД page (web/ts/od.ts): a host records an answer
+# the жюри must still rule on, against a team number.
+dialog_title = 'Спорный ответ · вопрос {{.n}}'
+number_label = "Номер команды"
+answer_label = "Ответ"
+accepted_label = "Принят на площадке"
+remove = "Удалить"
+save = "Сохранить"
+no_such_team = "Нет такой команды"
+save_failed = "Не удалось сохранить спорный ответ"

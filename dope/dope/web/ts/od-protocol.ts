@@ -20,7 +20,7 @@ export interface ShootoutRound {
   answers: ShootoutMark[][];
 }
 
-// A спорный: an answer the жюри must rule on after the game. The server owns
+// A contested answer: an answer the jury must rule on after the game. The server owns
 // the list (it strips it from anything the page PUTs), so the document carries
 // it read-only.
 export interface ContestedAnswer {
@@ -292,7 +292,7 @@ export function teamTookQuestion(stats: QuestionStat[], teamIndex: number, qInde
   return Boolean(stats[qIndex]?.counts.has(teamIndex));
 }
 
-// === спорные ===
+// === contested answers ===
 
 export function contestedAt(state: ODState, teamIndex: number, qIndex: number): ContestedAnswer | undefined {
   const number = teamNumber(state, teamIndex);
@@ -325,12 +325,12 @@ export function pendingTourCounts(state: ODState, teamIndex: number, tourLengths
   return out;
 }
 
-// contestedLabel is how a score reads while спорные wait on the жюри: "12 (+3?)".
+// contestedLabel is how a score reads while contested answers wait on the jury: "12 (+3?)".
 export function contestedLabel(value: number | string, pending: number): string {
   return pending > 0 ? `${value} (+${pending}?)` : String(value);
 }
 
-// scoredStats is what Итог scores on: the entries fold with every спорный the
+// scoredStats is what the results tab scores on: the entries fold with every contested answer the
 // host accepted on the venue folded in as a taken question. A pending one
 // changes nothing.
 export function scoredStats(state: ODState, totalQuestions: number, index: Map<number, number> = numberIndex(state)): QuestionStat[] {

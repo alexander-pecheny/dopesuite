@@ -106,7 +106,7 @@ func TestStageGrainOfGroups(t *testing.T) {
 	}
 }
 
-// ЭК's 1/16 финала on six столов is twelve бои in two заходов — two stage rows
+// EK's 1/16 финала on six столов is twelve бои in two заходов — two stage rows
 // of the same Block and the same Round.
 func TestStageGrainOfWaves(t *testing.T) {
 	srv := newAuthTestServer(t)

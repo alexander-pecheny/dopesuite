@@ -35,7 +35,7 @@ func (s *Server) loadVotingView(r *http.Request, slot venues.Slot) (VotingView, 
 }
 
 // playableCandidates are the tournaments buff knows to be playable at the
-// Слот's time, синхроны first (buffdb orders them so).
+// Slot's time, sync tournaments first (buffdb orders them so).
 func (s *Server) playableCandidates(ctx context.Context, slot venues.Slot) []venues.Candidate {
 	at, ok := venues.ParseTime(slot.StartsAt)
 	if !ok {
@@ -96,7 +96,7 @@ func (s *Server) candidateByID(ctx context.Context, id int64) venues.Candidate {
 	if t, ok := s.h.Engine().BuffMirror().Tournament(ctx, id); ok {
 		return venues.Candidate{ID: t.ID, Name: t.Name, Type: t.Type}
 	}
-	return venues.Candidate{ID: id, Name: "Турнир " + strconv.FormatInt(id, 10)}
+	return venues.Candidate{ID: id, Name: strs.Venues.Voting.TournamentN(strconv.FormatInt(id, 10))}
 }
 
 func (s *Server) handleVotingBallot(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
@@ -188,7 +188,7 @@ func (s *Server) handleVoteSubmit(w http.ResponseWriter, r *http.Request, sc rou
 		return route.BadRequest("bad form")
 	}
 	if !voting.Open(time.Now().UTC()) {
-		return s.renderVotePage(w, r, token, "Голосование закрыто.")
+		return s.renderVotePage(w, r, token, strs.Venues.Voting.PageClosed())
 	}
 	var choice []int64
 	for _, raw := range r.Form["choice"] {
@@ -197,7 +197,7 @@ func (s *Server) handleVoteSubmit(w http.ResponseWriter, r *http.Request, sc rou
 		}
 	}
 	if len(choice) == 0 {
-		return s.renderVotePage(w, r, token, "Выберите хотя бы один турнир.")
+		return s.renderVotePage(w, r, token, strs.Venues.Voting.ErrorPickOne())
 	}
 	if err := s.h.Engine().WithWriteTx(r.Context(), slot.FestID, "vote", func(ctx context.Context, tx *sql.Tx) error {
 		return venues.CastBallotTx(ctx, tx, voting, sc.User.UserID, r.Form.Get("team_name"), choice)

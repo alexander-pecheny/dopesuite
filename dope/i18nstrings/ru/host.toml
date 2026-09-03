@@ -288,3 +288,16 @@ public_index_empty = "Нет публичных фестов."
 jump_host_title_fest = "Открыть в режиме организатора"
 fest_games_empty = "В этом фесте пока нет игр."
 games_subhead = "Игры"
+
+[public_tabs]
+# The public tree's two halves, as the tab strip over both names them.
+fests = "Фесты"
+venues = "Площадки"
+
+[profile]
+# The profile page's timezone form: its heading, the hint under the field, its
+# submit, and what the page says once it saved (web/ts/profile.ts).
+tz_subhead = "Часовой пояс"
+tz_hint = "В этом поясе записывается время игр и голосований; календарь показывает его под сеткой."
+tz_save = "Сохранить"
+tz_saved = "Часовой пояс сохранён."

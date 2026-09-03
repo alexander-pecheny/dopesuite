@@ -620,7 +620,7 @@ func TestCompileErrors(t *testing.T) {
 }
 
 // A sorting key is any metric the game's Protocol declares — no Go change is
-// needed to rank on one. takenBase is brain's; ЭК's Σ+ is not, in a brain game.
+// needed to rank on one. takenBase is brain's; EK's Σ+ is not, in a brain game.
 func TestSortingAcceptsAnyDeclaredMetric(t *testing.T) {
 	src := func(metric string) string {
 		return "[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 4\nsorting: [points, " + metric + "]\n"
@@ -648,7 +648,7 @@ func TestSortingAcceptsAnyDeclaredMetric(t *testing.T) {
 
 // A sorting key the Protocol never writes and the Kind never derives is a
 // compile error that names it; what the Protocol writes to match_results
-// (ЭК's per-номинал counts) and what the Kind adds (a reseed's shares, a
+// (EK's per-номинал counts) and what the Kind adds (a reseed's shares, a
 // group's разница) both compile — each on its own Kind.
 func TestSortingKnowsProtocolAndKindMetrics(t *testing.T) {
 	group := func(sorting string) string {
@@ -680,7 +680,7 @@ func TestSortingKnowsProtocolAndKindMetrics(t *testing.T) {
 	}
 }
 
-// ОД's tour composition is a list Param: the DSL's `tour_comp: [15, 15]` lands
+// OD's tour composition is a list Param: the DSL's `tour_comp: [15, 15]` lands
 // on the flat stage's config, where games.ParseTourComp finds it.
 func TestCompileODTourComp(t *testing.T) {
 	scheme := compileSrc(t, "[scheme]\nkind: flat\nparticipants: 4\ntour_comp: [15, 15, 12]\n", Input{GameType: "od"})
@@ -699,7 +699,7 @@ func TestCompileODTourComp(t *testing.T) {
 	}
 }
 
-// ЭК's bracket is a single elimination of four-seat бои where two proceed —
+// EK's bracket is a single elimination of four-seat бои where two proceed —
 // the same Kind as a classic bracket, at a different size. The 1/4 is played
 // three to a table, so the size is a per-round override.
 func TestCompileMultiSeatElimination(t *testing.T) {
@@ -791,7 +791,7 @@ sorting: [place_sum, total, plus]
 	}
 }
 
-// ОД и КСИ — это один блок и один бой, за которым сидят все. Kind у них
+// OD и KSI — это один блок и один бой, за которым сидят все. Kind у них
 // теперь есть, и схема умеет это сказать.
 func TestCompileFlat(t *testing.T) {
 	scheme := compileSrc(t, "[scheme]\nkind: flat\nparticipants: 90\ntitle: КВРМ\n", Input{GameType: "od"})
@@ -889,8 +889,8 @@ sorting: [points, take_rate]
 	}
 }
 
-// Раунд может назваться сам: у ЭК двенадцать боёв на четверых зовут «1/16
-// финала», потому что так их зовёт турнир, а не потому что это следует из
+// Раунд может назваться сам: у EK двенадцать боёв на четверых зовут «1/16
+// финала», потому что так их зовёт tournament, а не потому что это следует из
 // арифметики.
 func TestRoundTitleOverride(t *testing.T) {
 	src := `
@@ -1053,7 +1053,7 @@ reseed: true
 
 // A boundary reseed re-ranks everyone the round before sent on — both places
 // where two proceed, not the winners alone — and stats_from naming the block
-// itself sums the block's own rounds before the boundary (СтудЧР's ЭК ranked
+// itself sums the block's own rounds before the boundary (СтудЧР's EK ranked
 // its пересев перед 1/4 by сумма мест over 1/16 and 1/8 together).
 func TestCompileBoundaryReseedTakesEveryProceedingPlace(t *testing.T) {
 	src := `

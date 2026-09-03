@@ -1,8 +1,8 @@
-// The Состав editor: rows of a suggest over buff's player mirror, a
-// «нет в базе» fallback that turns a row into three typed name fields with id
+// The roster editor: rows of a suggest over buff's player mirror, a
+// not-in-the-base fallback that turns a row into three typed name fields with id
 // 0, and one captain. Flags are derived server-side on save, so the editor
 // never offers them. The whole roster travels in one hidden field, which is
-// what the заявка form posts.
+// what the application form posts.
 
 export type RosterPlayer = {
   player_id: number;
@@ -20,10 +20,11 @@ export type SuggestedPlayer = RosterPlayer & {games?: number};
 // name and id on the line, the games it is known by as the hint.
 export function playerChoice(p: SuggestedPlayer): Choice {
   const games = Number(p.games) || 0;
-  const hint = games > 0 ? `${games} ${gamesWord(games)} · ${p.player_id}` : String(p.player_id);
+  const hint = games > 0 ? `${S.venues.rosterEditor.gamesCount(games)} · ${p.player_id}` : String(p.player_id);
   return {value: JSON.stringify(p), label: fullName(p), hint};
 }
 
+import S from "./i18nstrings.js";
 import {autocomplete} from "../../../../dopeuikit/assets/ts/suggest.js";
 import type {Choice} from "../../../../dopeuikit/assets/ts/suggest.js";
 
@@ -61,29 +62,15 @@ export function fullName(p: RosterPlayer): string {
   return [p.surname, p.name, p.patronymic].map((s) => s.trim()).filter(Boolean).join(" ");
 }
 
-// suggestLabel is «Фамилия Имя Отчество (id)», the line the suggest shows,
+// suggestLabel is «Surname Name Patronymic (id)», the line the suggest shows,
 // with the games the mirror knows the player by when it does.
 export function suggestLabel(p: SuggestedPlayer): string {
   const name = fullName(p);
   if (p.player_id <= 0) return name;
   const games = Number(p.games) || 0;
-  return games > 0 ? `${name} (${p.player_id}) · ${games} ${gamesWord(games)}` : `${name} (${p.player_id})`;
-}
-
-// gamesWord is «игра/игры/игр» — Russian counts by the last digits.
-export function gamesWord(games: number): string {
-  const tens = games % 100;
-  if (tens >= 11 && tens <= 14) return "игр";
-  switch (games % 10) {
-    case 1:
-      return "игра";
-    case 2:
-    case 3:
-    case 4:
-      return "игры";
-    default:
-      return "игр";
-  }
+  return games > 0
+    ? `${name} (${p.player_id}) · ${S.venues.rosterEditor.gamesCount(games)}`
+    : `${name} (${p.player_id})`;
 }
 
 // setCaptain keeps exactly one captain: picking a new one clears the old.
@@ -95,8 +82,8 @@ export function setCaptain(players: RosterPlayer[], index: number): RosterPlayer
 // nothing to remark on.
 export function rosterWarning(players: RosterPlayer[]): string {
   const filled = players.filter((p) => fullName(p) !== "");
-  if (filled.length > MAX_ROSTER) return `В составе больше ${MAX_ROSTER} игроков.`;
-  if (filled.length > 0 && !filled.some((p) => p.captain)) return "Отметьте капитана.";
+  if (filled.length > MAX_ROSTER) return S.venues.rosterEditor.tooMany(String(MAX_ROSTER));
+  if (filled.length > 0 && !filled.some((p) => p.captain)) return S.venues.rosterEditor.noCaptain();
   return "";
 }
 
@@ -150,7 +137,7 @@ export function mountRosterEditor(container: HTMLElement): void {
   const field = container.querySelector<HTMLInputElement>("[data-roster-json]");
   if (!field) return;
   let players = parseRoster(field.value);
-  // There is always a row waiting for the next player: «Добавить игрока» is
+  // There is always a row waiting for the next player: the add button is
   // for putting one back after a removal, not for every name.
   if (players.length === 0 || fullName(players[players.length - 1]) !== "") players.push(emptyPlayer());
   const rows = el("div", "u-col u-gap-sm");
@@ -158,7 +145,7 @@ export function mountRosterEditor(container: HTMLElement): void {
   const add = document.createElement("button");
   add.type = "button";
   add.className = "btn btn-ghost";
-  add.textContent = "Добавить игрока";
+  add.textContent = S.venues.rosterEditor.addPlayer();
   container.append(rows, warning, add);
 
   const sync = (): void => {
@@ -177,8 +164,8 @@ export function mountRosterEditor(container: HTMLElement): void {
   const drawRow = (player: RosterPlayer, index: number): HTMLElement => {
     const row = el("div", "u-row u-gap-sm u-wrap u-align-center");
     // A row is either a mirror player or a hand-typed one; an empty row is a
-    // suggest until «нет в базе» turns it into the three name fields. The name
-    // takes the width the row has left, so «Печеный Александр Павлович» fits.
+    // suggest until the fallback turns it into the three name fields. The name
+    // takes the width the row has left, so a full three-part name fits.
     const name = player.player_id > 0 || fullName(player) === ""
       ? drawSuggest(player, index)
       : drawTyped(player, index);
@@ -199,7 +186,7 @@ export function mountRosterEditor(container: HTMLElement): void {
   };
 
   // After a pick the submitter's next act is the next player, so the row for
-  // them is already there and waiting rather than behind «Добавить игрока».
+  // them is already there and waiting rather than behind the add button.
   const openNextRow = (): void => {
     if (fullName(players[players.length - 1]) !== "") {
       appendEmptyRow(true);
@@ -210,7 +197,7 @@ export function mountRosterEditor(container: HTMLElement): void {
 
   const drawSuggest = (player: RosterPlayer, index: number): HTMLElement => {
     const box = el("div", "u-col u-gap-sm");
-    const query = input("input", suggestLabel(player), "Фамилия Имя");
+    const query = input("input", suggestLabel(player), S.venues.rosterEditor.playerPlaceholder());
     // Wide enough that the row wraps its controls under it on a phone rather
     // than squeezing the name into a third of the line.
     query.size = 28;
@@ -219,7 +206,7 @@ export function mountRosterEditor(container: HTMLElement): void {
       const choices = found.map(playerChoice);
       // The mirror does not know a player who has never played; the row says
       // so and turns into three typed fields.
-      if (typed.trim() !== "") choices.push({value: MANUAL, label: "нет в базе"});
+      if (typed.trim() !== "") choices.push({value: MANUAL, label: S.venues.rosterEditor.notInBase()});
       return choices;
     }, (choice, typed) => {
       const manual = choice.value === MANUAL;
@@ -238,9 +225,9 @@ export function mountRosterEditor(container: HTMLElement): void {
   const drawTyped = (player: RosterPlayer, index: number): HTMLElement => {
     const box = el("div", "u-row u-gap-sm u-wrap");
     const fields: Array<[keyof RosterPlayer, string]> = [
-      ["surname", "Фамилия"],
-      ["name", "Имя"],
-      ["patronymic", "Отчество"],
+      ["surname", S.venues.rosterEditor.surname()],
+      ["name", S.venues.rosterEditor.name()],
+      ["patronymic", S.venues.rosterEditor.patronymic()],
     ];
     for (const [key, placeholder] of fields) {
       const node = input("input u-grow", String(player[key] ?? ""), placeholder);
@@ -267,7 +254,7 @@ export function mountRosterEditor(container: HTMLElement): void {
       draw();
     });
     const caption = document.createElement("span");
-    caption.textContent = "капитан";
+    caption.textContent = S.venues.rosterEditor.captain();
     label.append(radio, caption);
     return label;
   };
@@ -276,7 +263,7 @@ export function mountRosterEditor(container: HTMLElement): void {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "btn btn-ghost";
-    button.textContent = "Убрать";
+    button.textContent = S.venues.rosterEditor.remove();
     button.addEventListener("click", () => {
       players.splice(index, 1);
       if (players.length === 0) players.push(emptyPlayer());
@@ -297,7 +284,7 @@ type BuffTournament = {id: number; name: string; type: string};
 
 const MANUAL = "\u0000manual";
 
-// nextTeamName is what «Название команды» should say once a rating id resolves.
+// nextTeamName is what the team-name field should say once a rating id resolves.
 // The id names the team, but a name typed by hand is the submitter's: it is
 // overwritten only while it is empty or still the answer to the last id.
 export function nextTeamName(current: string, previous: string, found: string): string {
@@ -322,7 +309,7 @@ export function mountBuffTeamField(field: HTMLInputElement): void {
       return;
     }
     void fetchJSON<BuffTeam>(`/api/buff/team/${encodeURIComponent(id)}`).then((team) => {
-      warning.textContent = team ? "" : "Буфф не знает такой команды";
+      warning.textContent = team ? "" : S.venues.rosterEditor.teamUnknown();
       if (!team || !name) return;
       name.value = nextTeamName(name.value, previous, team.name);
       previous = team.name;
@@ -336,13 +323,13 @@ export function mountBuffTeamField(field: HTMLInputElement): void {
 }
 
 // mountBuffTournamentField turns the tournament id into a suggest over the
-// tournaments buff knows to be playable at the Слот's time.
+// tournaments buff knows to be playable at the Slot's time.
 export function mountBuffTournamentField(field: HTMLInputElement): void {
   const query = document.createElement("input");
   query.type = "text";
   query.className = "input";
   query.autocomplete = "off";
-  query.placeholder = "поиск по названию";
+  query.placeholder = S.venues.rosterEditor.teamPlaceholder();
   field.after(query);
   const on = field.getAttribute("data-buff-tournament") || "";
   autocomplete(query, async (text) => {
@@ -368,7 +355,7 @@ if (typeof document !== "undefined") {
   mountRosterEditors(document);
 }
 
-// A Площадка is a venue rating.chgk.info already has: the field is a suggest
+// A Venue is a venue rating.chgk.info already has: the field is a suggest
 // over their catalogue, by id, by name or by the town it is in.
 const CYRILLIC: Record<string, string> = {
   а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i",
@@ -401,7 +388,7 @@ export function mountRatingVenueField(field: HTMLInputElement): void {
 
   const took = (venue: RatingVenue): void => {
     chosen.textContent = `${venue.name} · ${venue.town}`;
-    // The edit form still names the Площадка itself; the create form does not,
+    // The edit form still names the Venue itself; the create form does not,
     // and takes the name rating.chgk.info has for it.
     const name = named("venue-name");
     const city = named("venue-city");
@@ -423,7 +410,7 @@ export function mountRatingVenueField(field: HTMLInputElement): void {
     if (venue) took(venue);
   });
 
-  // A Площадка already made says which venue it is, not just its number.
+  // A Venue already made says which venue it is, not just its number.
   const id = Number(field.value.trim());
   if (id) {
     void fetchVenues(field.value.trim()).then((found) => {

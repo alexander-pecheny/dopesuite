@@ -2,8 +2,10 @@
 # remains here is functional Cyrillic that cannot move: regexes that match
 # Russian input, month/city/label data tables, the chgksuite-parity format
 # strings (dbtext, СИ docx, the parity i18n package), fixture data (the gallery
-# skin, server defaultMatch), and xy's sw.ts, whose classic-worker build has no
-# import graph for a catalog. The lint still fails if a listed file goes clean,
+# skin, server defaultMatch), buff's own tournament_type values and the
+# transliteration table a Latin-spelled name is searched by, and xy's sw.ts,
+# whose classic-worker build has no import graph for a catalog. The lint still
+# fails if a listed file goes clean,
 # and a new prose string must go to a Catalog, never onto this list.
 dope/dope/domain/gamebuild/build.go
 dope/dope/domain/games/multi.go
@@ -12,12 +14,14 @@ dope/dope/platform/util/util.go
 dope/dope/server/db.go
 dope/dope/server/main.go
 dope/dope/server/migrations.go
+dope/dope/storage/buffdb/buffdb.go
 dope/dope/storage/store/matchstate.go
 dope/dope/web/pages/numbers_import.go
 dope/dope/web/ts/ek.ts
 dope/dope/web/ts/gallery.ts
 dope/dope/web/ts/game-tabs.ts
 dope/dope/web/ts/group-stats.ts
+dope/dope/web/ts/roster-editor.ts
 dope/dope/web/ts/screen-board.ts
 dope/dope/web/ts/sheet-cursor.ts
 dope/dope/web/ts/standings.ts

@@ -257,8 +257,9 @@ function questionStats(): QuestionStat[] {
   }
   return questionStatsCache;
 }
-// scoredStats is questionStats with the спорные the host accepted here folded
-// in: Итог, Подробно and Экран score on it, Ввод reads the raw entries.
+// scoredStats is questionStats with the contested answers the host accepted here folded
+// in: the results, detailed and screen tabs score on it; the entry tab reads
+// the raw entries.
 function scoredStats(): QuestionStat[] {
   if (!scoredStatsCache) {
     if (!numberToIndexCache) numberToIndexCache = od.numberIndex(state);
@@ -1245,8 +1246,8 @@ function applyEntryCellDisplay(td: HTMLElement, qIndex: number, rowIndex: number
   td.textContent = value ? String(value) : "";
 }
 
-// A спорный is not an entry and so has no row of its own: each column's
-// спорные take its free rows, in team-number order.
+// A contested answer is not an entry and so has no row of its own: each column's
+// contested answers take its free rows, in team-number order.
 function contestedRows(): Array<Map<number, ContestedAnswer>> {
   if (contestedRowsCache) return contestedRowsCache;
   const byQuestion: Array<Map<number, ContestedAnswer>> = [];
@@ -1276,8 +1277,8 @@ function contestedAtCell(qIndex: number, rowIndex: number): ContestedAnswer | un
   return contestedRows()[qIndex]?.get(rowIndex);
 }
 
-// refreshEntryColumn repaints a column in place (the Ввод pane is cached, not
-// rebuilt): the coffin on row 0, and every row when спорные share the column,
+// refreshEntryColumn repaints a column in place (the entry pane is cached, not
+// rebuilt): the coffin on row 0, and every row when contested answers share the column,
 // because an entry typed into a free row pushes them down.
 function refreshEntryColumn(qIndex: number): void {
   if (!Number.isInteger(qIndex)) return;
@@ -1923,7 +1924,8 @@ function markActiveEntryRow(cell: Element | null): void {
 
 // === Contested ===
 //
-// A спорный answer is recorded from Ввод by typing «?» in a question's cell.
+// A contested answer is recorded from the entry pane by typing "?" in a
+// question's cell.
 // The server owns the list (it strips it from the document the page PUTs), so
 // these go to their own endpoint and adopt the array it answers with.
 
@@ -1936,7 +1938,7 @@ function openContestedDialog(cell: HTMLElement): void {
   const numberField = document.createElement("label");
   numberField.className = "field";
   const numberCaption = document.createElement("span");
-  numberCaption.textContent = "Номер команды";
+  numberCaption.textContent = S.venues.odContested.numberLabel();
   const numberInput = document.createElement("input");
   numberInput.type = "text";
   numberInput.inputMode = "numeric";
@@ -1950,7 +1952,7 @@ function openContestedDialog(cell: HTMLElement): void {
   const answerField = document.createElement("label");
   answerField.className = "field";
   const answerCaption = document.createElement("span");
-  answerCaption.textContent = "Ответ";
+  answerCaption.textContent = S.venues.odContested.answerLabel();
   const answerInput = document.createElement("textarea");
   answerInput.rows = 3;
   answerInput.value = existing?.answer || "";
@@ -1962,7 +1964,7 @@ function openContestedDialog(cell: HTMLElement): void {
   acceptedInput.type = "checkbox";
   acceptedInput.checked = Boolean(existing?.acceptedHere);
   const acceptedCaption = document.createElement("span");
-  acceptedCaption.textContent = "Принят на площадке";
+  acceptedCaption.textContent = S.venues.odContested.acceptedLabel();
   acceptedField.append(acceptedInput, acceptedCaption);
 
   const extras: HTMLElement[] = [];
@@ -1970,7 +1972,7 @@ function openContestedDialog(cell: HTMLElement): void {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "btn btn-danger";
-    remove.textContent = "Удалить";
+    remove.textContent = S.venues.odContested.remove();
     remove.addEventListener("click", () => {
       dialog.close();
       void deleteContested(qIndex, existing.number);
@@ -1982,10 +1984,10 @@ function openContestedDialog(cell: HTMLElement): void {
 
   const typedNumber = () => Number(numberInput.value.trim());
   const dialog = openModal({
-    title: `Спорный ответ · вопрос ${qIndex + 1}`,
+    title: S.venues.odContested.dialogTitle(String(qIndex + 1)),
     body: [numberField, teamHint, answerField, acceptedField],
     extraActions: extras,
-    submitLabel: "Сохранить",
+    submitLabel: S.venues.odContested.save(),
     focus: numberInput,
     onSubmit: () => {
       void submitContested(qIndex, typedNumber(), answerInput.value.trim(), acceptedInput.checked, existing);
@@ -1995,7 +1997,7 @@ function openContestedDialog(cell: HTMLElement): void {
   const syncSubmit = () => {
     const teamIndex = teamIndexByNumber(typedNumber());
     teamHint.hidden = numberInput.value.trim() === "";
-    teamHint.textContent = teamIndex >= 0 ? teamLabel(teamIndex) : "Нет такой команды";
+    teamHint.textContent = teamIndex >= 0 ? teamLabel(teamIndex) : S.venues.odContested.noSuchTeam();
     teamHint.classList.toggle("hint-danger", teamIndex < 0);
     if (submit) submit.disabled = teamIndex < 0 || answerInput.value.trim() === "";
   };
@@ -2016,12 +2018,12 @@ async function contestedRequest(method: string, body: Record<string, unknown>): 
     return od.normalizeContested(await response.json());
   } catch (error) {
     console.error(error);
-    window.alert("Не удалось сохранить спорный ответ");
+    window.alert(S.venues.odContested.saveFailed());
     return null;
   }
 }
 
-// The endpoint keys a спорный by (question, team number), so retyping the
+// The endpoint keys a contested answer by (question, team number), so retyping the
 // number moves it: the old row goes first.
 async function submitContested(question: number, number: number, answer: string, accepted: boolean, existing: ContestedAnswer | undefined): Promise<void> {
   if (existing && existing.number !== number) {
@@ -2071,7 +2073,7 @@ function detailedQuestionHeadLabel(displayNumber: number, stat: QuestionStat | u
   return wrap;
 }
 
-// A спорный marks the cell whatever its state: «?» while the жюри has yet to
+// A contested answer marks the cell whatever its state: «?» while the jury has yet to
 // rule, «✓» once the host accepted it here. One glyph either way — a question
 // cell is one digit wide, and the number is in the column head anyway.
 function contestedCellText(qIndex: number, answered: boolean, contested: ContestedAnswer | undefined): string {

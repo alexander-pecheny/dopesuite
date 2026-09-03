@@ -115,7 +115,7 @@ select g.game_type, m.state_json from matches m join games g on g.id = m.game_id
 }
 
 // gameOwnsItsNumbers reports whether a Game deals its own Numbers rather than
-// reading the фест's registry: a Слот at a Venue does, and its next sitting
+// reading the fest's registry: a Slot at a Venue does, and its next sitting
 // starts again at 1 without renaming the last one's teams.
 func gameOwnsItsNumbers(ctx context.Context, tx *sql.Tx, gameID int64) (bool, error) {
 	var found int
@@ -131,7 +131,7 @@ func gameOwnsItsNumbers(ctx context.Context, tx *sql.Tx, gameID int64) (bool, er
 // document says; a team without a number sits in an empty seat. The Game's
 // entrant list follows when every seat is numbered, and is dropped otherwise
 // so the numbering guard falls back to the fest's registry. A Game that deals
-// its own Numbers seats its Participants against itself, not the фест.
+// its own Numbers seats its Participants against itself, not the fest.
 func seatTx(ctx context.Context, tx *sql.Tx, festID, gameID, matchID int64, seats []protocol.Seat, ownNumbers bool) error {
 	participantGame := int64(0)
 	if ownNumbers {

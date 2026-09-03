@@ -46,8 +46,8 @@ func TestStudchrTranscriptsParse(t *testing.T) {
 	}
 }
 
-// ЭК СтудЧР-2026 в цифрах: 48 команд, 25 боёв, 96 мест. Если читатель листа
-// однажды съедет на строку, это заметит здесь, а не через полтурнира.
+// EK СтудЧР-2026 в цифрах: 48 команд, 25 боёв, 96 мест. Если читатель листа
+// однажды съедет на строку, это заметит здесь, а не через полtournament's.
 func TestStudchrEKTranscriptShape(t *testing.T) {
 	src, err := os.ReadFile("../../../testdata/studchr2026/ek.transcript")
 	if err != nil {

@@ -41,8 +41,8 @@ func BuildODSheet(f *excelize.File, schemeJSON, stateJSON string, ratingByNumber
 		}
 		_ = json.Unmarshal([]byte(stateJSON), &contested)
 	}
-	// rating.chgk.info gets the answer text in the cell for every спорный,
-	// accepted here or not: the ruling is the жюри's (CONTEXT.md).
+	// rating.chgk.info gets the answer text in the cell for every contested answer,
+	// accepted here or not: the ruling is the jury's (CONTEXT.md).
 	answers := store.ContestedAnswersFor(contested.Contested)
 	if len(tours) == 0 {
 		// No tour composition recorded: fall back to a single tour holding every
@@ -994,7 +994,12 @@ type ODPlayerRow struct {
 }
 
 // ODPlayersHeader is the reference workbook's header, in its order.
-var ODPlayersHeader = []interface{}{"Место", "Team ID", "Название", "Город", "Флаг", "IDplayer", "Фамилия", "Имя", "Отчество"}
+var ODPlayersHeader = []interface{}{
+	dopestrings.Default.Export.Od.PlayersPlace(), "Team ID", dopestrings.Default.Export.Od.PlayersName(),
+	dopestrings.Default.Export.Od.PlayersCity(), dopestrings.Default.Export.Od.PlayersFlag(), "IDplayer",
+	dopestrings.Default.Export.Od.PlayersSurname(), dopestrings.Default.Export.Od.PlayersFirstName(),
+	dopestrings.Default.Export.Od.PlayersPatronymic(),
+}
 
 // BuildODPlayersSheet writes the OD "tournament-with-players" worksheet: one
 // row per player, the header in row 1.
