@@ -29,10 +29,11 @@ cannot be translated.
   (`{{.n}}`) and one `plural` function are allowed; the generator parses with
   `text/template/parse` and rejects any other node. Russian one/few/many lives
   once in `dopecore` and once in `dopeuikit`, replacing xy's three copies.
-- **One `Strings` struct per module, one value per language.** Callers hold a
-  `Strings` value (`i18nstrings.Default` where no reader chose a language) and
-  write `s.Board.Delete.Confirm(n)`. Adding a language touches the place that
-  picks it, not the call sites.
+- **One `Strings` struct per module, one value per language.** Callers write
+  `s.Board.Delete.Confirm(n)` off a `Strings` value. Today every one of them
+  reads the module's default — `i18nstrings.Default` in Go, `i18nstrings.ts`
+  in the browser — so adding a language is an edit to that one file, and the
+  type already allows a value to be threaded the day a reader gets to choose.
 - **Errors a person may read are `UserError`s** built from the catalog where
   they arise; the HTTP edge shows those verbatim and maps everything else to
   one generic line plus a log entry.
@@ -41,7 +42,8 @@ cannot be translated.
 - **A Cyrillic lint** fails on any Cyrillic outside the catalogs, generated
   files, tests and an explicit allowlist. The allowlist is the migration's
   burn-down: strings move Surface by Surface, verbatim, and rewording happens
-  afterwards in TOML.
+  afterwards in TOML. It is line-based, so it cannot tell a Russian comment
+  from a Russian string; the comments were translated rather than exempted.
 
 ## Considered
 

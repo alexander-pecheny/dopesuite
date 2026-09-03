@@ -1,6 +1,7 @@
 // profile.ts — username management, logout, and the settings dialogs: change
 // password, board sizes (with a pseudo-board preview), default author, card
 // title, timezone, and which kind of entry an opened card's feed shows.
+import S from "./i18nstrings.js";
 import { xyApp, xySizes } from "./app.js";
 import { type Modal, modal } from "./modal.js";
 import { COMMON_CITIES, guessZone } from "./sessions.js";
