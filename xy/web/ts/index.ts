@@ -351,16 +351,25 @@ async function migrateName(id: number, name: string): Promise<void> {
 }
 
 // ---- create board ----
+const boardPass = byId<HTMLInputElement>("boardPass");
+const passSetup = xyApp.wirePassphraseSetup({
+  input: boardPass,
+  dice: byId("genPassBtn"),
+  copied: byId("createPassCopied"),
+  saved: byId<HTMLInputElement>("createPassSaved"),
+  submit: byId<HTMLButtonElement>("createSubmit"),
+}, xyCrypto.generatePassphrase);
+
+// The passphrase is rolled and copied inside the click, not on submit: the
+// clipboard only answers to a user gesture, and this is the one moment the words
+// are ever shown in the clear.
 byId("newBoardBtn").addEventListener("click", () => {
   createForm.reset();
+  passSetup.reset();
+  void passSetup.roll(true);
   createModal.open();
   byId("boardName").focus();
 });
-// «🎲»: fill the field with a fresh xkcd-style passphrase and copy it, so the one
-// place it's ever shown in the clear (creation) doubles as the moment you stash
-// it somewhere safe.
-const boardPass = byId<HTMLInputElement>("boardPass");
-xyApp.wireGenPassphrase(byId("genPassBtn"), boardPass, xyCrypto.generatePassphrase);
 
 createForm.addEventListener("submit", async (e) => {
   e.preventDefault();

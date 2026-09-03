@@ -228,22 +228,56 @@ function onCmdEnter(node: HTMLElement, run: () => void): void {
   });
 }
 
-// wireGenPassphrase makes `button` fill `input` with a fresh passphrase and copy
-// it to the clipboard. Shared by the board-create and Trello-import flows (both
-// mint a new board from a passphrase). `generate` is injected so this module
-// stays free of the crypto dependency. No status text — the field visibly
-// changing on each click is confirmation enough, and the copy is silent.
-function wireGenPassphrase(button: HTMLElement, input: HTMLInputElement, generate: () => string): void {
-  button.addEventListener("click", async () => {
-    const pass = generate();
-    input.value = pass;
-    input.focus();
+// ---- setting a board passphrase ----
+// The three forms that SET one (create, import, change) share a ritual: the
+// field starts filled with a generated passphrase, the dice re-rolls and copies
+// it, a muted line appears only when the clipboard actually took it, and submit
+// stays shut until the promise is ticked. The words are unrecoverable, so the
+// form's job is to make losing them take an act of will.
+// `generate` and `copy` are injected: this module knows no crypto, and the tests
+// need no clipboard.
+export interface PassphraseSetupUI {
+  input: { value: string; focus(): void };
+  dice: { addEventListener(type: "click", handler: () => void): void };
+  copied: { hidden: boolean | string };
+  saved: { checked: boolean; addEventListener(type: "change", handler: () => void): void };
+  submit: { disabled: boolean };
+}
+export interface PassphraseSetup {
+  // Fill the field with a fresh passphrase. `copy` is only ever true inside a
+  // user gesture — outside one the clipboard refuses, and a refusal must never
+  // be shown as a copy.
+  roll(copy: boolean): Promise<void>;
+  // Back to square one: nothing promised, nothing copied, submit shut.
+  reset(): void;
+}
+
+function wirePassphraseSetup(
+  ui: PassphraseSetupUI,
+  generate: () => string,
+  copy: (text: string) => Promise<void> = (t) => navigator.clipboard.writeText(t),
+): PassphraseSetup {
+  const gate = (): void => { ui.submit.disabled = !ui.saved.checked; };
+  async function roll(withCopy: boolean): Promise<void> {
+    ui.input.value = generate();
+    ui.copied.hidden = true;
+    if (!withCopy) return;
     try {
-      await navigator.clipboard.writeText(pass);
-    } catch { /* clipboard unavailable/denied — the passphrase is visible in the field */ }
-  });
+      await copy(ui.input.value);
+      ui.copied.hidden = false;
+    } catch { /* clipboard denied — the passphrase is visible in the field */ }
+  }
+  function reset(): void {
+    ui.saved.checked = false;
+    ui.copied.hidden = true;
+    gate();
+  }
+  ui.dice.addEventListener("click", () => { void roll(true); ui.input.focus(); });
+  ui.saved.addEventListener("change", gate);
+  reset();
+  return { roll, reset };
 }
 
 export const xySizes = { DEFAULT: SIZES_DEFAULT, ...SIZES_RANGE, sanitize: sanitizeSizes, apply: applySizes };
 
-export const xyApp = { fetchJSON, fetchVoid, jpost, jpatch, jput, jdelete, escapeHtml, el, byId, errMsg, downloadBlob, syncBadge, deriveTitle, requireLogin, onCmdEnter, wireGenPassphrase };
+export const xyApp = { fetchJSON, fetchVoid, jpost, jpatch, jput, jdelete, escapeHtml, el, byId, errMsg, downloadBlob, syncBadge, deriveTitle, requireLogin, onCmdEnter, wirePassphraseSetup };

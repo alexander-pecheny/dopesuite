@@ -45,9 +45,11 @@ page title="Импорт · xy" kind="wide" scripts="dist/import.js"
     row gap="sm" align="center"
       textfield id="boardPass" placeholder="Пароль доски (для шифрования)" autocomplete="new-password" required grow
       iconbtn id="genPassBtn" icon="dices" label="Сгенерировать пароль"
+    muted id="importPassCopied" hidden "Пароль уже скопирован"
     hint "Пароль нужен для E2E-шифрования."
-    hint kind="danger" "Сохраните его прямо сейчас, его нельзя будет восстановить"
+    hint kind="danger" "Сохраните этот пароль прямо сейчас — восстановить его будет невозможно."
+    checkbox id="importPassSaved" "Я сохранил(а) пароль в надёжное место и обещаю его не терять"
     row gap="sm" wrap
-      button submit id="importBtn" "Импортировать"
+      button submit id="importBtn" disabled "Импортировать"
       button kind="ghost" href="/" "Отмена"
     message id="importMessage"

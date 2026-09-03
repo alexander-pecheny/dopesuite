@@ -90,3 +90,87 @@ test("the sync badge: offline beats pending beats the last write's state", () =>
   badge.set("saved");
   assert.equal(node.title, "Готово");
 });
+
+// ---- setting a board passphrase ----
+// The ritual the three creation forms share. `generate` and `copy` are injected,
+// so the whole thing runs on fake nodes with no clipboard.
+
+function passForm(copy = async () => {}) {
+  let n = 0;
+  const node = () => ({ handlers: {}, addEventListener(type, h) { this.handlers[type] = h; } });
+  const ui = {
+    input: { value: "", focused: 0, focus() { this.focused++; } },
+    dice: node(),
+    copied: { hidden: false },
+    saved: { checked: true, ...node() },
+    submit: { disabled: false },
+  };
+  const setup = xyApp.wirePassphraseSetup(ui, () => `пароль ${++n}`, copy);
+  return { ui, setup, copies: copy };
+}
+
+test("wiring resets the form: nothing promised, nothing copied, submit shut", () => {
+  const { ui } = passForm();
+  assert.equal(ui.saved.checked, false);
+  assert.equal(ui.copied.hidden, true);
+  assert.equal(ui.submit.disabled, true);
+});
+
+test("the tick gates submit, both ways", () => {
+  const { ui } = passForm();
+  ui.saved.checked = true;
+  ui.saved.handlers.change();
+  assert.equal(ui.submit.disabled, false);
+  ui.saved.checked = false;
+  ui.saved.handlers.change();
+  assert.equal(ui.submit.disabled, true);
+});
+
+test("roll fills the field; the copied line appears only when the clipboard took it", async () => {
+  const copied = [];
+  const { ui, setup } = passForm(async (t) => { copied.push(t); });
+  await setup.roll(true);
+  assert.equal(ui.input.value, "пароль 1");
+  assert.deepEqual(copied, ["пароль 1"]);
+  assert.equal(ui.copied.hidden, false);
+});
+
+test("roll(false) fills without copying — the import page has no gesture to spend", async () => {
+  const copied = [];
+  const { ui, setup } = passForm(async (t) => { copied.push(t); });
+  await setup.roll(false);
+  assert.equal(ui.input.value, "пароль 1");
+  assert.deepEqual(copied, []);
+  assert.equal(ui.copied.hidden, true);
+});
+
+test("a refused clipboard is not shown as a copy", async () => {
+  const { ui, setup } = passForm(async () => { throw new Error("denied"); });
+  await setup.roll(true);
+  assert.equal(ui.input.value, "пароль 1");
+  assert.equal(ui.copied.hidden, true);
+});
+
+test("the dice re-rolls, copies and focuses the field", async () => {
+  const copied = [];
+  const { ui } = passForm(async (t) => { copied.push(t); });
+  ui.dice.handlers.click();
+  await Promise.resolve();
+  assert.equal(ui.input.value, "пароль 1");
+  assert.equal(ui.input.focused, 1);
+  ui.dice.handlers.click();
+  await Promise.resolve();
+  assert.equal(ui.input.value, "пароль 2");
+  assert.deepEqual(copied, ["пароль 1", "пароль 2"]);
+});
+
+test("reset takes back the promise and the copied line (the modal opening again)", async () => {
+  const { ui, setup } = passForm();
+  await setup.roll(true);
+  ui.saved.checked = true;
+  ui.saved.handlers.change();
+  setup.reset();
+  assert.equal(ui.saved.checked, false);
+  assert.equal(ui.copied.hidden, true);
+  assert.equal(ui.submit.disabled, true);
+});

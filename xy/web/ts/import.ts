@@ -86,10 +86,16 @@ const msg = byId("importMessage");
 const form = byId<HTMLFormElement>("importForm");
 const importBtn = byId<HTMLButtonElement>("importBtn");
 
-// «🎲»: fill + copy a fresh passphrase (see app.ts).
-xyApp.wireGenPassphrase(
-  byId("genPassBtn"), byId<HTMLInputElement>("boardPass"), xyCrypto.generatePassphrase,
-);
+// The passphrase field starts filled (see app.ts). Nothing here is a user
+// gesture, so nothing is copied until the dice is clicked.
+const passSetup = xyApp.wirePassphraseSetup({
+  input: byId<HTMLInputElement>("boardPass"),
+  dice: byId("genPassBtn"),
+  copied: byId("importPassCopied"),
+  saved: byId<HTMLInputElement>("importPassSaved"),
+  submit: importBtn,
+}, xyCrypto.generatePassphrase);
+void passSetup.roll(false);
 
 function setStatus(s: string): void {
   statusNode.dataset.state = s;
