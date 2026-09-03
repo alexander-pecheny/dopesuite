@@ -5,15 +5,3885 @@ package i18nstrings
 // Strings is one language's Catalog: a field per Surface, a nested struct
 // per group, a func per string.
 type Strings struct {
+	Attachments AttachmentsStrings
+	Auth        AuthStrings
+	Board       BoardStrings
+	Boardsync   BoardsyncStrings
+	Bot         BotStrings
+	Card        CardStrings
+	Chgk        ChgkStrings
+	Chgkcli     ChgkcliStrings
+	Chgkimport  ChgkimportStrings
+	Chrome      ChromeStrings
+	Cli         CliStrings
+	Docs        DocsStrings
+	Export      ExportStrings
+	Fsource     FsourceStrings
+	Gallery     GalleryStrings
+	Import      ImportStrings
+	Install     InstallStrings
+	Invite      InviteStrings
+	Lj          LjStrings
+	Notify      NotifyStrings
+	Passphrase  PassphraseStrings
+	Profile     ProfileStrings
+	Search      SearchStrings
+	Server      ServerStrings
+	Sessions    SessionsStrings
+	Stats       StatsStrings
+	Tg          TgStrings
+	Timeline    TimelineStrings
+}
+
+// AttachmentsStrings is the attachments Surface.
+type AttachmentsStrings struct {
+	Confirm  AttachmentsConfirmStrings
+	Error    AttachmentsErrorStrings
+	Lightbox AttachmentsLightboxStrings
+	List     AttachmentsListStrings
+	Menu     AttachmentsMenuStrings
+	Name     AttachmentsNameStrings
+	Status   AttachmentsStatusStrings
+}
+
+type AttachmentsConfirmStrings struct {
+	Remove func(name string) string
+}
+
+type AttachmentsErrorStrings struct {
+	BlobDownloadFailed func() string
+	DownloadFailed     func() string
+	OfflineUnavailable func() string
+	ReplaceFailed      func() string
+	UploadFailed       func() string
+}
+
+type AttachmentsLightboxStrings struct {
+	Close       func() string
+	DialogLabel func() string
+}
+
+type AttachmentsListStrings struct {
+	ActionsTitle func() string
+	ExcerptBadge func() string
+	FallbackName func() string
+}
+
+type AttachmentsMenuStrings struct {
+	Delete  func() string
+	Excerpt func() string
+	Replace func() string
+}
+
+type AttachmentsNameStrings struct {
+	DefaultStem  func() string
+	PasteDefault func(ext string) string
+}
+
+type AttachmentsStatusStrings struct {
+	Encrypting    func() string
+	OfflineDelete func() string
+	OfflineEdit   func() string
+	OfflineUpload func() string
+}
+
+// AuthStrings is the auth Surface.
+type AuthStrings struct {
+	Login    AuthLoginStrings
+	Page     AuthPageStrings
+	Password AuthPasswordStrings
+	Profile  AuthProfileStrings
+	Tg       AuthTgStrings
+	Token    AuthTokenStrings
+	Username AuthUsernameStrings
+}
+
+type AuthLoginStrings struct {
+	FieldsRequired func() string
+	Invalid        func() string
+}
+
+type AuthPageStrings struct {
+	Title func() string
+}
+
+type AuthPasswordStrings struct {
+	CurrentWrong func() string
+	Length       func() string
+}
+
+type AuthProfileStrings struct {
+	CitiesTooLong   func() string
+	NameTooLong     func() string
+	TimezoneTooLong func() string
+}
+
+type AuthTgStrings struct {
+	CodeMissing      func() string
+	PasswordWrong    func() string
+	TelegramTaken    func() string
+	UsernameFormat   func() string
+	UsernameReserved func() string
+}
+
+type AuthTokenStrings struct {
+	Forbidden func() string
+}
+
+type AuthUsernameStrings struct {
+	AlreadySet func() string
+	Taken      func() string
+	TooLong    func() string
+	TooShort   func() string
+}
+
+// BoardStrings is the board Surface.
+type BoardStrings struct {
+	Accent       BoardAccentStrings
+	Actions      BoardActionsStrings
+	Bell         BoardBellStrings
+	Card         BoardCardStrings
+	Changepass   BoardChangepassStrings
+	Count        BoardCountStrings
+	Delete       BoardDeleteStrings
+	Dirty        BoardDirtyStrings
+	Error        BoardErrorStrings
+	Excerpts     BoardExcerptsStrings
+	Export       BoardExportStrings
+	Feed         BoardFeedStrings
+	Fields       BoardFieldsStrings
+	Filter       BoardFilterStrings
+	Forget       BoardForgetStrings
+	Handouts     BoardHandoutsStrings
+	Importpick   BoardImportpickStrings
+	Importverify BoardImportverifyStrings
+	Labels       BoardLabelsStrings
+	Leave        BoardLeaveStrings
+	List         BoardListStrings
+	Listsmanage  BoardListsmanageStrings
+	Mass         BoardMassStrings
+	Members      BoardMembersStrings
+	Movelist     BoardMovelistStrings
+	Page         BoardPageStrings
+	Panel        BoardPanelStrings
+	Passcheck    BoardPasscheckStrings
+	Paste        BoardPasteStrings
+	Preview      BoardPreviewStrings
+	Rename       BoardRenameStrings
+	Replace      BoardReplaceStrings
+	Sessionedit  BoardSessioneditStrings
+	Sessions     BoardSessionsStrings
+	Testmode     BoardTestmodeStrings
+	Thread       BoardThreadStrings
+	Timer        BoardTimerStrings
+	Unlock       BoardUnlockStrings
+	Unread       BoardUnreadStrings
+}
+
+type BoardAccentStrings struct {
+	Hint  func() string
+	Run   func() string
+	Title func() string
+}
+
+type BoardActionsStrings struct {
+	Cancel func() string
+	Close  func() string
+	Copy   func() string
+	Done   func() string
+	Move   func() string
+	Save   func() string
+}
+
+type BoardBellStrings struct {
+	Label func() string
+	Title func() string
+}
+
+type BoardCardStrings struct {
+	AddVersionLabel     func() string
+	AddVersionTitle     func() string
+	AliasLabel          func() string
+	AliasPlaceholder    func() string
+	AttachmentsLabel    func() string
+	Compress            func() string
+	CopyTitle           func() string
+	Delete              func() string
+	DescLabel           func() string
+	ExcerptsView        func() string
+	FeedLabel           func() string
+	HandoutTitle        func() string
+	KindHeading         func() string
+	KindLabel           func() string
+	KindMeta            func() string
+	KindOther           func() string
+	KindQuestion        func() string
+	LabelAdd            func() string
+	LinkLabel           func() string
+	LinkTitle           func() string
+	MarkTest            func() string
+	MoveLabel           func() string
+	NewLabelPlaceholder func() string
+	NewLabelTitle       func() string
+	PlayingsLabel       func() string
+	PreviewDblclick     func() string
+	ScreenLabel         func() string
+	ScreenTitle         func() string
+	StressLabel         func() string
+	StressTitle         func() string
+	TabFields           func() string
+	TabPreview          func() string
+	TabText             func() string
+	TestLead            func() string
+	TestMid             func() string
+	To4sTitle           func() string
+	TypoLabel           func() string
+	TypoTitle           func() string
+	Upload              func() string
+	VersionsTitle       func(n string) string
+}
+
+type BoardChangepassStrings struct {
+	Copied      func() string
+	Danger      func() string
+	Generate    func() string
+	Placeholder func() string
+	Saved       func() string
+	Submit      func() string
+	Title       func() string
+}
+
+type BoardCountStrings struct {
+	Filtered  func(shown string, total string) string
+	Questions func(n int) string
+}
+
+type BoardDeleteStrings struct {
+	ContinueQ    func() string
+	Failed       func(error string) string
+	Label        func() string
+	ListConfirm  func(title string, tail string) string
+	ListLabel    func() string
+	ListTail     func(n string) string
+	ListUntitled func() string
+	Mismatch     func() string
+	Offline      func() string
+	Title        func() string
+	TypeName     func(name string) string
+	Warn         func() string
+}
+
+type BoardDirtyStrings struct {
+	Discard func() string
+	Hint    func() string
+	Title   func() string
+}
+
+type BoardErrorStrings struct {
+	NoKey   func() string
+	NoLabel func() string
+	NoList  func() string
+	NoTest  func() string
+}
+
+type BoardExcerptsStrings struct {
+	Title func() string
+}
+
+type BoardExportStrings struct {
+	Fmt4sTitle     func() string
+	HandoutsLabel  func() string
+	HandoutsTitle  func() string
+	OverlayLabel   func() string
+	PdfMobileLabel func() string
+	PdfMobileTitle func() string
+	Run            func() string
+	SelectAll      func() string
+	Title          func() string
+}
+
+type BoardFeedStrings struct {
+	CommentPlaceholder func() string
+	DiffView           func() string
+	ExpandLabel        func() string
+	ExpandTitle        func() string
+	FilterTitle        func() string
+	OptAll             func() string
+	OptBrief           func() string
+	OptComments        func() string
+	OptEdits           func() string
+	OptFull            func() string
+	OptMeta            func() string
+	OptNew             func() string
+	OptOld             func() string
+	OrderLabel         func() string
+	OrderTitle         func() string
+	Show               func() string
+	Submit             func() string
+	Title              func() string
+}
+
+type BoardFieldsStrings struct {
+	Board    func() string
+	List     func() string
+	Position func() string
+}
+
+type BoardFilterStrings struct {
+	Title func() string
+}
+
+type BoardForgetStrings struct {
+	Label func() string
+	Title func() string
+}
+
+type BoardHandoutsStrings struct {
+	Download      func() string
+	Generate      func() string
+	SplitfitTitle func() string
+	SrcLabel      func() string
+	Title         func() string
+}
+
+type BoardImportpickStrings struct {
+	Hint       func() string
+	SplitLabel func() string
+	SplitTitle func() string
+	Submit     func() string
+	Title      func() string
+}
+
+type BoardImportverifyStrings struct {
+	SrcLabel func() string
+	Title    func() string
+}
+
+type BoardLabelsStrings struct {
+	Name func() string
+}
+
+type BoardLeaveStrings struct {
+	Confirm     func(target string) string
+	Failed      func(error string) string
+	Label       func() string
+	Offline     func() string
+	TargetNamed func(name string) string
+	TargetThis  func() string
+	Title       func() string
+}
+
+type BoardListStrings struct {
+	AddCard        func() string
+	AddPlaceholder func() string
+	Create         func() string
+	GroupFallback  func() string
+	GroupTitle     func() string
+	MenuTitle      func() string
+	Untitled       func() string
+}
+
+type BoardListsmanageStrings struct {
+	LinkLabel func() string
+	LinkTitle func() string
+	MoveLabel func() string
+	MoveTitle func() string
+	Title     func() string
+}
+
+type BoardMassStrings struct {
+	BoardLocked   func() string
+	CopyOffline   func() string
+	DeleteHint    func() string
+	ExitLabel     func() string
+	Hint          func() string
+	MenuTitle     func() string
+	Name          func() string
+	NoLabels      func() string
+	NoTests       func() string
+	PickTest      func() string
+	Progress      func(done string, total string) string
+	Run           func() string
+	SelectCard    func() string
+	SelectList    func() string
+	SelectedCount func(count string) string
+}
+
+type BoardMembersStrings struct {
+	Add             func() string
+	CreateInvite    func() string
+	Invites         func() string
+	LoadFailed      func() string
+	MenuPending     func(n string) string
+	MenuTitle       func() string
+	Name            func() string
+	NamePlaceholder func() string
+	RemoveConfirm   func(name string) string
+	RemoveFallback  func() string
+	RemoveTitle     func() string
+	Requests        func() string
+	RoleEditor      func() string
+	RoleOwner       func() string
+}
+
+type BoardMovelistStrings struct {
+	Title func() string
+}
+
+type BoardPageStrings struct {
+	Home        func() string
+	Name        func() string
+	Offline     func() string
+	OfflineHint func() string
+	Title       func() string
+}
+
+type BoardPanelStrings struct {
+	Title func() string
+}
+
+type BoardPasscheckStrings struct {
+	Backup    func() string
+	Forgot    func() string
+	HintLead  func() string
+	HintMid   func() string
+	SavedHint func() string
+	Submit    func() string
+	Title     func() string
+}
+
+type BoardPasteStrings struct {
+	NamePlaceholder func() string
+	Title           func() string
+}
+
+type BoardPreviewStrings struct {
+	EditTitle func() string
+	Empty     func() string
+	Group     func() string
+	List      func() string
+	Title     func() string
+}
+
+type BoardRenameStrings struct {
+	BoardLabel   func() string
+	BoardOffline func() string
+	BoardPrompt  func() string
+	BoardTitle   func() string
+	Failed       func(error string) string
+	ListLabel    func() string
+	ListPrompt   func() string
+}
+
+type BoardReplaceStrings struct {
+	Case        func() string
+	Find        func() string
+	Next        func() string
+	Prev        func() string
+	ReplaceWith func() string
+	Run         func() string
+	ScopeBoard  func() string
+	Title       func() string
+}
+
+type BoardSessioneditStrings struct {
+	Title func() string
+}
+
+type BoardSessionsStrings struct {
+	Add       func() string
+	AddTitle  func() string
+	Fallback  func() string
+	MenuTitle func() string
+	Name      func() string
+}
+
+type BoardTestmodeStrings struct {
+	Badge func(name string) string
+	Stop  func() string
+}
+
+type BoardThreadStrings struct {
+	Placeholder func() string
+	Submit      func() string
+	Title       func() string
+}
+
+type BoardTimerStrings struct {
+	Label func() string
+	Title func() string
+}
+
+type BoardUnlockStrings struct {
+	ExitHint        func() string
+	Forgot          func() string
+	PassPlaceholder func() string
+	Submit          func() string
+	Title           func() string
+}
+
+type BoardUnreadStrings struct {
+	Comments func() string
+	Dot      func() string
+	Mention  func() string
+}
+
+// BoardsyncStrings is the boardsync Surface.
+type BoardsyncStrings struct {
+	Config BoardsyncConfigStrings
+	Fetch  BoardsyncFetchStrings
+	Upload BoardsyncUploadStrings
+}
+
+type BoardsyncConfigStrings struct {
+	EmptyUrl     func() string
+	Unrecognized func(url string) string
+}
+
+type BoardsyncFetchStrings struct {
+	Card func(id string, err string) string
+	List func(id string, err string) string
+}
+
+type BoardsyncUploadStrings struct {
+	DefaultCaption func() string
+	ListMissing    func(name string, known string) string
+	NoLists        func() string
+	Posted         func(caption string) string
+	Uploading      func(name string) string
+}
+
+// BotStrings is the bot Surface.
+type BotStrings struct {
+	Login    BotLoginStrings
+	Register BotRegisterStrings
+	Texts    BotTextsStrings
+}
+
+type BotLoginStrings struct {
+	Hint func(url string) string
+}
+
+type BotRegisterStrings struct {
+	Done    func() string
+	Expired func() string
+}
+
+type BotTextsStrings struct {
+	Down func() string
+	Help func() string
+}
+
+// CardStrings is the card Surface.
+type CardStrings struct {
+	Add      CardAddStrings
+	Authors  CardAuthorsStrings
+	Chip     CardChipStrings
+	Copy     CardCopyStrings
+	Create   CardCreateStrings
+	Delete   CardDeleteStrings
+	Dirty    CardDirtyStrings
+	Error    CardErrorStrings
+	Field    CardFieldStrings
+	Handout  CardHandoutStrings
+	Kind     CardKindStrings
+	Labels   CardLabelsStrings
+	Move     CardMoveStrings
+	Playings CardPlayingsStrings
+	Preview  CardPreviewStrings
+	Save     CardSaveStrings
+	Seen     CardSeenStrings
+	To4s     CardTo4sStrings
+	Version  CardVersionStrings
+	View     CardViewStrings
+}
+
+type CardAddStrings struct {
+	LabelsAllAdded      func() string
+	LabelsNone          func() string
+	LabelsPlaceholder   func() string
+	NoMatch             func() string
+	PlayingsAllMarked   func() string
+	PlayingsNone        func() string
+	PlayingsPlaceholder func() string
+}
+
+type CardAuthorsStrings struct {
+	CaptionTitle func() string
+	Placeholder  func() string
+}
+
+type CardChipStrings struct {
+	RemoveAria func(title string, name string) string
+}
+
+type CardCopyStrings struct {
+	CardLink    func() string
+	CommentLink func() string
+	Done        func(what string) string
+	Failed      func(error string) string
+}
+
+type CardCreateStrings struct {
+	Failed func(error string) string
+}
+
+type CardDeleteStrings struct {
+	Confirm func() string
+}
+
+type CardDirtyStrings struct {
+	CommentFailed func() string
+	SaveFailed    func() string
+}
+
+type CardErrorStrings struct {
+	CardNotOpen          func() string
+	ClipboardUnavailable func() string
+	ImageNotFound        func() string
+	NoBoardKey           func() string
+	NoImageCopySupport   func() string
+	ReencodeFailed       func() string
+}
+
+type CardFieldStrings struct {
+	Add            func(field string) string
+	AddRow         func() string
+	AddTitle       func() string
+	Answer         func() string
+	Comment        func() string
+	Handout        func() string
+	Hndt           func() string
+	Nezachet       func() string
+	Question       func() string
+	RemoveRowTitle func() string
+	RemoveTitle    func() string
+	Source         func() string
+	Zachet         func() string
+}
+
+type CardHandoutStrings struct {
+	Attach      func() string
+	AttachTitle func() string
+	ModeImage   func() string
+	ModeText    func() string
+}
+
+type CardKindStrings struct {
+	Changed func() string
+}
+
+type CardLabelsStrings struct {
+	Empty       func() string
+	RemoveTitle func() string
+}
+
+type CardMoveStrings struct {
+	Copied       func() string
+	Loading      func() string
+	Moved        func() string
+	NoLists      func() string
+	Offline      func() string
+	Position     func(n string) string
+	Reencrypting func() string
+	Saving       func() string
+	ToEnd        func() string
+	UntitledList func() string
+}
+
+type CardPlayingsStrings struct {
+	Empty               func() string
+	LabelAddTitle       func() string
+	LabelRemoveTitle    func() string
+	RemoveAria          func(name string) string
+	RemoveConfirm       func(name string) string
+	RemoveConfirmScoped func(name string, n int) string
+	RemoveTitle         func() string
+}
+
+type CardPreviewStrings struct {
+	Empty func() string
+}
+
+type CardSaveStrings struct {
+	Saved func() string
+}
+
+type CardSeenStrings struct {
+	CommonTesterTitle func() string
+	CopyTitle         func() string
+	Label             func() string
+	LabelExceptCommon func() string
+	ShowAll           func() string
+}
+
+type CardTo4sStrings struct {
+	Failed  func(error string) string
+	Offline func() string
+}
+
+type CardVersionStrings struct {
+	FallbackName func(n string) string
+	PromoteAria  func() string
+	PromoteTitle func() string
+	RemoveAria   func() string
+	RemoveTitle  func() string
+	RenameAria   func() string
+	RenamePrompt func() string
+	RenameTitle  func() string
+}
+
+type CardViewStrings struct {
+	Back      func() string
+	Close     func() string
+	DescLabel func() string
+	TabText   func() string
+}
+
+// ChgkStrings is the chgk Surface.
+type ChgkStrings struct {
+	Author  ChgkAuthorStrings
+	Copy    ChgkCopyStrings
+	Label   ChgkLabelStrings
+	Preview ChgkPreviewStrings
+	Zip     ChgkZipStrings
+}
+
+type ChgkAuthorStrings struct {
+	Default        func() string
+	Feminine       func() string
+	FemininePlural func() string
+	Plural         func() string
+}
+
+type ChgkCopyStrings struct {
+	Handout            func() string
+	ImageHandoutNote   func(label string) string
+	Question           func() string
+	QuestionNumbered   func(number string) string
+	QuestionPiece      func(n string) string
+	QuestionUnnumbered func() string
+	QuestionWhole      func() string
+	QuestionWithAnswer func() string
+}
+
+type ChgkLabelStrings struct {
+	Answer       func() string
+	Author       func() string
+	Comment      func() string
+	Date         func() string
+	Editor       func() string
+	Handout      func() string
+	Nezachet     func() string
+	Question     func() string
+	Source       func() string
+	SourcePlural func() string
+	Zachet       func() string
+}
+
+type ChgkPreviewStrings struct {
+	ImageMissing func(name string) string
+}
+
+type ChgkZipStrings struct {
+	Corrupt           func() string
+	FileCorrupt       func(name string) string
+	MethodUnsupported func(method string) string
+	NotZip            func() string
+	TooLarge          func() string
+	Zip64Unsupported  func() string
+}
+
+// ChgkcliStrings is the chgkcli Surface.
+type ChgkcliStrings struct {
+	AddStats ChgkcliAddStatsStrings
+	Docx     ChgkcliDocxStrings
+	Lj       ChgkcliLjStrings
+	Parse    ChgkcliParseStrings
+	Shared   ChgkcliSharedStrings
+	Telegram ChgkcliTelegramStrings
+}
+
+type ChgkcliAddStatsStrings struct {
+	CustomCsvFlag func() string
+}
+
+type ChgkcliDocxStrings struct {
+	NoParagraphFlag        func() string
+	OnlyQuestionNumberFlag func() string
+}
+
+type ChgkcliLjStrings struct {
+	GenimpFlag func() string
+}
+
+type ChgkcliParseStrings struct {
+	TourNumbersAsWordsFlag func() string
+}
+
+type ChgkcliSharedStrings struct {
+	ReplaceNoBreakHyphensFlag func() string
+}
+
+type ChgkcliTelegramStrings struct {
+	Done              func(duration string) string
+	Posting           func(channel string, chat string) string
+	StopIfNoStatsFlag func() string
+}
+
+// ChgkimportStrings is the chgkimport Surface.
+type ChgkimportStrings struct {
+	Error ChgkimportErrorStrings
+}
+
+type ChgkimportErrorStrings struct {
+	No4s        func() string
+	NoQuestions func() string
+	TooBig      func() string
+}
+
+// ChromeStrings is the chrome Surface.
+type ChromeStrings struct {
+	Bell        ChromeBellStrings
+	Card        ChromeCardStrings
+	Colorpick   ChromeColorpickStrings
+	Home        ChromeHomeStrings
+	OfflinePage ChromeOfflinePageStrings
+	Passphrase  ChromePassphraseStrings
+	Prewarm     ChromePrewarmStrings
+	Search      ChromeSearchStrings
+	Store       ChromeStoreStrings
+	Sync        ChromeSyncStrings
+	Tokens      ChromeTokensStrings
+	Typograph   ChromeTypographStrings
+}
+
+type ChromeBellStrings struct {
+	Empty        func() string
+	Loading      func() string
+	Mention      func() string
+	MentionReply func() string
+	ReadAll      func() string
+	Title        func() string
+}
+
+type ChromeCardStrings struct {
+	TitleEmpty func() string
+}
+
+type ChromeColorpickStrings struct {
+	ButtonTitle func() string
+}
+
+type ChromeHomeStrings struct {
+	BoardLockedName    func(id string) string
+	CreateOffline      func() string
+	EmptyAll           func() string
+	EmptyNamed         func() string
+	RoleEditor         func() string
+	RoleOwner          func() string
+	UnreadMentionTitle func() string
+	UnreadTitle        func() string
+}
+
+type ChromeOfflinePageStrings struct {
+	Body func() string
+}
+
+type ChromePassphraseStrings struct {
+	TooFewWords func(n string) string
+	TooShort    func(n string) string
+	Wrong       func() string
+}
+
+type ChromePrewarmStrings struct {
+	Done       func(done string, total string) string
+	LockedNote func() string
+	MenuLabel  func() string
+	MenuTitle  func() string
+	Offline    func() string
+	Progress   func(done string, total string) string
+}
+
+type ChromeSearchStrings struct {
+	Comments     func() string
+	NoteAll      func(what string, total string) string
+	NoteNoBoards func() string
+	NoteNone     func(what string) string
+	NotePartial  func(what string, total string, shown string) string
+	Questions    func() string
+}
+
+type ChromeStoreStrings struct {
+	UpgradeBlocked func() string
+}
+
+type ChromeSyncStrings struct {
+	Offline        func() string
+	OfflinePending func(n string) string
+	Saved          func() string
+	Saving         func() string
+	Syncing        func() string
+	SyncingPending func(n string) string
+	WriteError     func() string
+}
+
+type ChromeTokensStrings struct {
+	Copied        func() string
+	Copy          func() string
+	LabelUnnamed  func() string
+	MetaDates     func(created string, expires string) string
+	MetaUnused    func() string
+	MetaUsed      func(used string) string
+	Revoke        func() string
+	RevokeConfirm func() string
+	StatusActive  func() string
+	StatusExpired func() string
+	StatusRevoked func() string
+}
+
+type ChromeTypographStrings struct {
+	Confirm     func(n string, total string) string
+	Done        func(n string, total string) string
+	Failed      func(error string) string
+	MenuLabel   func() string
+	MenuTitle   func() string
+	NothingToDo func() string
+}
+
+// CliStrings is the cli Surface.
+type CliStrings struct {
+	Attachment CliAttachmentStrings
+	Board      CliBoardStrings
+	Boards     CliBoardsStrings
+	Card       CliCardStrings
+	Client     CliClientStrings
+	Comment    CliCommentStrings
+	Export     CliExportStrings
+	Label      CliLabelStrings
+	List       CliListStrings
+	Lock       CliLockStrings
+	Login      CliLoginStrings
+	Logout     CliLogoutStrings
+	Run        CliRunStrings
+	Search     CliSearchStrings
+	Shared     CliSharedStrings
+	Snapshot   CliSnapshotStrings
+	Source     CliSourceStrings
+	Unlock     CliUnlockStrings
+	Versions   CliVersionsStrings
+}
+
+type CliAttachmentStrings struct {
+	Summary func() string
+}
+
+type CliBoardStrings struct {
+	OnlyShow func() string
+	Summary  func() string
+	Usage    func() string
+}
+
+type CliBoardsStrings struct {
+	Summary func() string
+	Usage   func() string
+}
+
+type CliCardStrings struct {
+	AddEmpty          func() string
+	AddKindFlag       func() string
+	AddListFlag       func() string
+	AddTextFlag       func() string
+	AddUsage          func() string
+	AfterFlag         func() string
+	AliasFlag         func() string
+	BeforeFlag        func() string
+	Changed           func(id string, now string, expected string) string
+	Created           func(id string) string
+	ExpectFlag        func() string
+	FileFlag          func() string
+	GetHeader         func(id string, list string, hash string) string
+	GetUsage          func() string
+	Moved             func(id string, list string) string
+	MvListFlag        func() string
+	NeedList          func() string
+	RankAfterMissing  func(id string) string
+	RankBeforeMissing func(id string) string
+	Removed           func(id string) string
+	RmUsage           func() string
+	SetEmpty          func() string
+	SetKindFlag       func() string
+	SetTextFlag       func() string
+	SetUsage          func() string
+	Summary           func() string
+	Unchanged         func(id string) string
+	Updated           func(id string, hash string) string
+}
+
+type CliClientStrings struct {
+	TokenRejected func() string
+}
+
+type CliCommentStrings struct {
+	AddFileFlag  func() string
+	AddTextFlag  func() string
+	AddUsage     func() string
+	Added        func(id string) string
+	AllFlag      func() string
+	Deleted      func() string
+	EditFileFlag func() string
+	EditTextFlag func() string
+	EditUsage    func() string
+	Edited       func(id string) string
+	Empty        func() string
+	LsUsage      func() string
+	Mentioned    func(n string) string
+	Removed      func(id string) string
+	ReplyToFlag  func() string
+	RmUsage      func() string
+	Summary      func() string
+}
+
+type CliExportStrings struct {
+	Summary func() string
+}
+
+type CliLabelStrings struct {
+	Summary func() string
+}
+
+type CliListStrings struct {
+	AddAfterFlag    func() string
+	AddTitleFlag    func() string
+	AddUsage        func() string
+	Created         func(id string, title string) string
+	NeedIdTitle     func() string
+	NeedTitle       func() string
+	Removed         func(id string, title string) string
+	RenameTitleFlag func() string
+	RenameUsage     func() string
+	Renamed         func(id string) string
+	RmUsage         func() string
+	Summary         func() string
+}
+
+type CliLockStrings struct {
+	AllDone func() string
+	AllFlag func() string
+	Done    func(id string, name string) string
+	NeedRef func() string
+	Summary func() string
+	Usage   func() string
+}
+
+type CliLoginStrings struct {
+	Done        func(username string, url string, path string) string
+	EmptyToken  func() string
+	NeedUrl     func() string
+	Rejected    func(err string) string
+	Summary     func() string
+	TokenFlag   func() string
+	TokenPrompt func() string
+	UrlFlag     func() string
+	Usage       func() string
+}
+
+type CliLogoutStrings struct {
+	Done    func() string
+	Summary func() string
+	Usage   func() string
+}
+
+type CliRunStrings struct {
+	CommandsHead    func() string
+	ExampleBoards   func() string
+	ExampleLogin    func() string
+	ExampleUnlock   func() string
+	FlagsHead       func(name string, usage string) string
+	Footer4s        func() string
+	FooterHelp      func() string
+	JsonFlag        func() string
+	StartHead       func() string
+	StateUnreadable func(err string) string
+	Title           func() string
+	UnknownCommand  func(name string) string
+}
+
+type CliSearchStrings struct {
+	BadRegex     func(err string) string
+	CardsFlag    func() string
+	CommentsFlag func() string
+	NeedQuery    func() string
+	Nothing      func() string
+	RegexFlag    func() string
+	Summary      func() string
+	Usage        func() string
+}
+
+type CliSharedStrings struct {
+	Ambiguous         func(ref string, found string) string
+	BoardFlag         func() string
+	LoginFirst        func() string
+	NeedBoard         func() string
+	NeedId            func(what string) string
+	NoKey             func(id string) string
+	NotFound          func(what string, ref string) string
+	NumericId         func(what string, raw string) string
+	SeeBoards         func(err string) string
+	UnknownAction     func(verb string, known string) string
+	WhatBoard         func() string
+	WhatCard          func() string
+	WhatComment       func() string
+	WhatLabel         func() string
+	WhatList          func() string
+	WhatUnlockedBoard func() string
+}
+
+type CliSnapshotStrings struct {
+	Card         func(id string, err string) string
+	CardAlias    func(id string, err string) string
+	CardNotFound func(id string) string
+	Group        func(id string, err string) string
+	Label        func(id string, err string) string
+	LabelColor   func(id string, err string) string
+	List         func(id string, err string) string
+	ListNotFound func(id string) string
+}
+
+type CliSourceStrings struct {
+	Summary func() string
+}
+
+type CliUnlockStrings struct {
+	Done             func(id string, name string) string
+	NeedRef          func() string
+	PassphrasePrompt func(name string) string
+	Summary          func() string
+	Usage            func() string
+	WrongPassphrase  func() string
+}
+
+type CliVersionsStrings struct {
+	FieldLabel    func(n string) string
+	QuestionLabel func(n string) string
+}
+
+// DocsStrings is the docs Surface.
+type DocsStrings struct {
+	Docx        DocsDocxStrings
+	Handout     DocsHandoutStrings
+	HandoutList DocsHandoutListStrings
+	Image       DocsImageStrings
+	Markdown    DocsMarkdownStrings
+	Pptx        DocsPptxStrings
+	Print       DocsPrintStrings
+	Typst       DocsTypstStrings
+}
+
+type DocsDocxStrings struct {
+	HostVersion   func() string
+	ScreenVersion func() string
+}
+
+type DocsHandoutStrings struct {
+	BadMarkup          func() string
+	ImageMissing       func() string
+	LanguageMissing    func(language string) string
+	PackMultiple       func() string
+	PackNoGrid         func() string
+	PackNone           func() string
+	RotateImageMissing func(name string) string
+}
+
+type DocsHandoutListStrings struct {
+	ByNumberLead func() string
+	ByTourLead   func() string
+	Heading      func() string
+	TourNone     func(n string) string
+	TourNumbers  func(n string, numbers string) string
+}
+
+type DocsImageStrings struct {
+	Missing func(name string) string
+}
+
+type DocsMarkdownStrings struct {
+	Answer    func() string
+	Author    func() string
+	Comment   func() string
+	ImageLink func() string
+	Nezachet  func() string
+	Question  func(n string) string
+	Source    func() string
+	Zachet    func() string
+}
+
+type DocsPptxStrings struct {
+	QuestionCaps func(n string) string
+}
+
+type DocsPrintStrings struct {
+	Measure           func(err string) string
+	MeasureNoSize     func() string
+	MeasureZeroHeight func() string
+	Pdf               func(err string) string
+	Png               func(err string) string
+	WidthMissing      func() string
+}
+
+type DocsTypstStrings struct {
+	LineError   func(n string, err string) string
+	LineNotPair func(n string) string
+}
+
+// ExportStrings is the export Surface.
+type ExportStrings struct {
+	Form  ExportFormStrings
+	Menu  ExportMenuStrings
+	Notes ExportNotesStrings
+	Run   ExportRunStrings
+}
+
+type ExportFormStrings struct {
+	DeselectAll func() string
+	SelectAll   func() string
+}
+
+type ExportMenuStrings struct {
+	Label        func() string
+	LabelGrouped func() string
+}
+
+type ExportNotesStrings struct {
+	NoHandouts func() string
+	Offline    func() string
+}
+
+type ExportRunStrings struct {
+	Failed               func(error string) string
+	MissingImagesConfirm func(names string) string
+	OfflineFormats       func() string
+	Progress             func() string
+	ProgressHandouts     func() string
+}
+
+// FsourceStrings is the fsource Surface.
+type FsourceStrings struct {
+	Theme FsourceThemeStrings
+}
+
+type FsourceThemeStrings struct {
+	DefaultLabel func(n string, name string) string
+}
+
+// GalleryStrings is the gallery Surface.
+type GalleryStrings struct {
+	Bars     GalleryBarsStrings
+	Buttons  GalleryButtonsStrings
+	Card     GalleryCardStrings
+	Feed     GalleryFeedStrings
+	Fields   GalleryFieldsStrings
+	Labels   GalleryLabelsStrings
+	Layout   GalleryLayoutStrings
+	ListRows GalleryListRowsStrings
+	Page     GalleryPageStrings
+	Segment  GallerySegmentStrings
+	Text     GalleryTextStrings
+}
+
+type GalleryBarsStrings struct {
+	FilterHint   func() string
+	FilterReset  func() string
+	FilterWhat   func() string
+	MassDelete   func() string
+	MassDone     func() string
+	MassMove     func() string
+	MassSelected func(n int) string
+	Note         func() string
+	Title        func() string
+}
+
+type GalleryButtonsStrings struct {
+	AddTitle func() string
+	Cancel   func() string
+	Delete   func() string
+	Minor    func() string
+	Note     func() string
+	Save     func() string
+	Title    func() string
+}
+
+type GalleryCardStrings struct {
+	HandoutTitle func() string
+	Heading      func() string
+	Note         func() string
+	Question     func() string
+	Title        func() string
+}
+
+type GalleryFeedStrings struct {
+	EventComment func() string
+	EventMeta    func() string
+	Note         func() string
+	Title        func() string
+}
+
+type GalleryFieldsStrings struct {
+	PlainPlaceholder func() string
+	SelectOption     func() string
+	Title            func() string
+}
+
+type GalleryLabelsStrings struct {
+	Long     func() string
+	NotTaken func() string
+	Note     func() string
+	Rewrite  func() string
+	Taken    func() string
+	Title    func() string
+}
+
+type GalleryLayoutStrings struct {
+	Box1  func() string
+	Box2  func() string
+	Box3  func() string
+	Note  func() string
+	Title func() string
+}
+
+type GalleryListRowsStrings struct {
+	MemberName func() string
+	MemberRole func() string
+	Note       func() string
+	Title      func() string
+}
+
+type GalleryPageStrings struct {
+	Hint  func() string
+	Home  func() string
+	Name  func() string
+	Title func() string
+}
+
+type GallerySegmentStrings struct {
+	All   func() string
+	Any   func() string
+	None  func() string
+	Note  func() string
+	Title func() string
+}
+
+type GalleryTextStrings struct {
+	Danger  func() string
+	Empty   func() string
+	Heading func() string
+	Hint    func() string
+	Note    func() string
+	Title   func() string
+}
+
+// ImportStrings is the import Surface.
+type ImportStrings struct {
+	Apply    ImportApplyStrings
+	Archive  ImportArchiveStrings
+	Board    ImportBoardStrings
+	Bundle   ImportBundleStrings
+	Export   ImportExportStrings
+	Pack     ImportPackStrings
+	Page     ImportPageStrings
+	Picker   ImportPickerStrings
+	Run      ImportRunStrings
+	Trello   ImportTrelloStrings
+	Versions ImportVersionsStrings
+}
+
+type ImportApplyStrings struct {
+	AttachFailed func(name string, status string) string
+	Attachments  func(title string, done string, total string) string
+	Cards        func(title string, done string, total string) string
+	History      func(title string, done string, total string) string
+}
+
+type ImportArchiveStrings struct {
+	Hint    func() string
+	Subhead func() string
+}
+
+type ImportBoardStrings struct {
+	Cancel          func() string
+	GenPass         func() string
+	NamePlaceholder func() string
+	PassCopied      func() string
+	PassDanger      func() string
+	PassHint        func() string
+	PassPlaceholder func() string
+	PassSaved       func() string
+	Submit          func() string
+}
+
+type ImportBundleStrings struct {
+	Creating          func() string
+	MissingAttachment func(path string) string
+	NoBoardJson       func(file string) string
+	Quota             func(need string, left string) string
+	Reading           func() string
+	Rollback          func() string
+	Summary           func(cards string, lists string, tests string, events string, attachments string) string
+	SummarySkipped    func(n string) string
+}
+
+type ImportExportStrings struct {
+	AttachFailed func(name string, status string) string
+	Collecting   func() string
+	Decrypting   func(n string) string
+	Downloaded   func() string
+	Downloading  func(done string, total string) string
+	Failed       func(error string) string
+	HintBody     func() string
+	Label        func() string
+	MenuTitle    func() string
+	ModalTitle   func() string
+	NonePicked   func() string
+	NotEncrypted func() string
+	SelectAll    func() string
+	Submit       func() string
+	Zipping      func() string
+}
+
+type ImportPackStrings struct {
+	Aborted        func(done string, error string) string
+	BlockCount     func(blocks string, questions string) string
+	DefaultTitle   func() string
+	DoneGrouped    func(lists string, cards string, images string) string
+	DoneSingle     func(cards string, images string) string
+	ImagesFailed   func(n string) string
+	Label          func() string
+	MenuTitle      func() string
+	NoQuestions    func() string
+	NoToursNote    func() string
+	Offline        func() string
+	ParseFailed    func(error string) string
+	Preamble       func() string
+	PromptGroup    func() string
+	PromptList     func() string
+	ReadingFile    func() string
+	SniffedArchive func(name string, date string) string
+	SniffedPackage func() string
+	TourFallback   func(n string) string
+	VerifyTitle    func(name string) string
+}
+
+type ImportPageStrings struct {
+	Home  func() string
+	Name  func() string
+	Title func() string
+}
+
+type ImportPickerStrings struct {
+	AllBoards func(n string) string
+	NoBoards  func() string
+}
+
+type ImportRunStrings struct {
+	Aborted         func(error string) string
+	History         func(n string) string
+	Importing       func() string
+	LoadFailed      func(error string) string
+	Loading         func() string
+	NeedSource      func() string
+	NotTrelloExport func() string
+	ReportFailed    func(name string, error string) string
+	ReportSummary   func(done string, total string) string
+	TokenRejected   func() string
+	TokenRequired   func() string
+}
+
+type ImportTrelloStrings struct {
+	AllHint             func() string
+	AttachmentFallback  func() string
+	BoardLabel          func() string
+	BoardNameDefault    func() string
+	Connect             func() string
+	IntroLead           func() string
+	IntroMid            func() string
+	JsonHint            func() string
+	LabelFallback       func(color string) string
+	LabelNoColor        func() string
+	ListFallback        func() string
+	Reset               func() string
+	Subhead             func() string
+	TestSessionFallback func() string
+	TestersLead         func(testers string) string
+	TokenHint           func() string
+	TokenPlaceholder    func() string
+	TokenSubmit         func() string
+}
+
+type ImportVersionsStrings struct {
+	Label    func(n string) string
+	Question func(n string, question string) string
+}
+
+// InstallStrings is the install Surface.
+type InstallStrings struct {
+	ArchiveEscape func(name string) string
+	Browser       InstallBrowserStrings
+	Installed     func(path string) string
+	Typst         InstallTypstStrings
+}
+
+type InstallBrowserStrings struct {
+	ArchiveNoShell   func() string
+	Downloading      func(version string, platform string) string
+	NoBuild          func(platform string) string
+	NoSandbox        func() string
+	NotFound         func() string
+	NotInstalled     func() string
+	PlatformMissing  func(platform string) string
+	ReleasesFailed   func(status string) string
+	ReleasesNoStable func() string
+	SymlinkEscape    func(name string, dest string) string
+}
+
+type InstallTypstStrings struct {
+	ArchiveNoBinary func(binary string) string
+	Downloading     func(version string) string
+	NotFound        func() string
+	PlatformMissing func(platform string) string
+	ReleaseNoBuild  func(build string) string
+	ReleasesFailed  func(status string) string
+	UnknownArchive  func(archive string) string
+}
+
+// InviteStrings is the invite Surface.
+type InviteStrings struct {
+	Facts   InviteFactsStrings
+	Form    InviteFormStrings
+	Message InviteMessageStrings
+	Request InviteRequestStrings
+	Row     InviteRowStrings
+	State   InviteStateStrings
+	Time    InviteTimeStrings
+	Usage   InviteUsageStrings
+}
+
+type InviteFactsStrings struct {
+	Approval func() string
+}
+
+type InviteFormStrings struct {
+	Approval         func() string
+	LabelPlaceholder func() string
+	Submit           func() string
+	TtlDay           func() string
+	TtlHour          func() string
+	TtlLabel         func() string
+	TtlNever         func() string
+	TtlWeek          func() string
+	UsesLabel        func() string
+	UsesUnlimited    func() string
+}
+
+type InviteMessageStrings struct {
+	Copied func() string
+}
+
+type InviteRequestStrings struct {
+	Approve func() string
+	Decline func() string
+}
+
+type InviteRowStrings struct {
+	Copy          func() string
+	DefaultLabel  func() string
+	Joined        func(names string) string
+	Remove        func() string
+	RemoveConfirm func() string
+	Revoke        func() string
+}
+
+type InviteStateStrings struct {
+	Active    func() string
+	Exhausted func() string
+	Expired   func() string
+	Revoked   func() string
+}
+
+type InviteTimeStrings struct {
+	Days      func(n string) string
+	Expired   func() string
+	Hours     func(n string) string
+	UnderHour func() string
+}
+
+type InviteUsageStrings struct {
+	Left func(n string, left string) string
+	Used func(n string) string
+}
+
+// LjStrings is the lj Surface.
+type LjStrings struct {
+	Error LjErrorStrings
+}
+
+type LjErrorStrings struct {
+	Fault       func(message string, code string) string
+	Malformed   func(err string) string
+	NoChallenge func() string
+	Nothing     func() string
+	Status      func(status string) string
+}
+
+// NotifyStrings is the notify Surface.
+type NotifyStrings struct {
+	Join    NotifyJoinStrings
+	Mention NotifyMentionStrings
+}
+
+type NotifyJoinStrings struct {
+	BoardNamed   func(board string) string
+	BoardUnnamed func() string
+	Text         func(requester string, where string, link string) string
+}
+
+type NotifyMentionStrings struct {
+	BoardNamed    func(board string) string
+	BoardUnnamed  func() string
+	VerbMentioned func() string
+	VerbReplied   func() string
+}
+
+// PassphraseStrings is the passphrase Surface.
+type PassphraseStrings struct {
+	Change PassphraseChangeStrings
+	Check  PassphraseCheckStrings
+	Exit   PassphraseExitStrings
+}
+
+type PassphraseChangeStrings struct {
+	Label   func() string
+	Offline func() string
+	Title   func() string
+}
+
+type PassphraseCheckStrings struct {
+	Title func() string
+}
+
+type PassphraseExitStrings struct {
+	Delete func() string
+	Leave  func() string
+}
+
+// ProfileStrings is the profile Surface.
+type ProfileStrings struct {
+	Account   ProfileAccountStrings
+	Author    ProfileAuthorStrings
+	Cancel    func() string
+	CardTitle ProfileCardTitleStrings
+	Feed      ProfileFeedStrings
+	Home      func() string
+	Name      func() string
+	Password  ProfilePasswordStrings
+	Save      func() string
+	Sizes     ProfileSizesStrings
+	Storage   ProfileStorageStrings
+	Title     func() string
+	Tz        ProfileTzStrings
+	Username  ProfileUsernameStrings
+	Whoami    ProfileWhoamiStrings
+}
+
+type ProfileAccountStrings struct {
+	Logout func() string
+	Tokens func() string
+}
+
+type ProfileAuthorStrings struct {
+	Hint        func() string
+	Name        func() string
+	Placeholder func() string
+}
+
+type ProfileCardTitleStrings struct {
+	Answer   func() string
+	Hint     func() string
+	Name     func() string
+	Question func() string
+}
+
+type ProfileFeedStrings struct {
+	All      func() string
+	Comments func() string
+	Edits    func() string
+	Hint     func() string
+	Meta     func() string
+	Name     func() string
+}
+
+type ProfilePasswordStrings struct {
+	Current func() string
+	Name    func() string
+	New     func() string
+	Repeat  func() string
+	Submit  func() string
+}
+
+type ProfileSizesStrings struct {
+	BoardW     func() string
+	BoardWHint func() string
+	CardH      func() string
+	CardHHint  func() string
+	Close      func() string
+	Font       func() string
+	FontHint   func() string
+	ListW      func() string
+	Name       func() string
+	Reset      func() string
+}
+
+type ProfileStorageStrings struct {
+	HintLead func() string
+	HintMid  func() string
+}
+
+type ProfileTzStrings struct {
+	CitiesHint        func() string
+	CitiesLabel       func() string
+	CitiesPlaceholder func() string
+	Hint              func() string
+	ModeDate          func() string
+	ModeDateTitle     func() string
+	ModeTitle         func() string
+	Name              func() string
+	TitleModeLabel    func() string
+}
+
+type ProfileUsernameStrings struct {
+	Hint        func() string
+	Placeholder func() string
+}
+
+type ProfileWhoamiStrings struct {
+	HintLead func() string
+	HintMid  func() string
+}
+
+// SearchStrings is the search Surface.
+type SearchStrings struct {
+	Blank func() string
+}
+
+// ServerStrings is the server Surface.
+type ServerStrings struct {
+	Attachment ServerAttachmentStrings
+	Board      ServerBoardStrings
+	Bundle     ServerBundleStrings
+	Card       ServerCardStrings
+	Child      ServerChildStrings
+	Comment    ServerCommentStrings
+	Import     ServerImportStrings
+	Internal   func() string
+	Invite     ServerInviteStrings
+	List       ServerListStrings
+	Member     ServerMemberStrings
+	Quota      ServerQuotaStrings
+	Reaction   ServerReactionStrings
+	Refusal    ServerRefusalStrings
+}
+
+type ServerAttachmentStrings struct {
+	NotFound func() string
+}
+
+type ServerBoardStrings struct {
+	DeleteOwnerOnly  func() string
+	Deleted          func() string
+	KeymetaOwnerOnly func() string
+	LeaveOwnerOnly   func() string
+	NoAccess         func() string
+	NotFound         func() string
+}
+
+type ServerBundleStrings struct {
+	EventWithoutTarget func() string
+	TooManyEvents      func() string
+}
+
+type ServerCardStrings struct {
+	QuestionNotMarked func() string
+	ScopeExactlyOne   func() string
+}
+
+type ServerChildStrings struct {
+	CardForeign     func() string
+	CardNotFound    func() string
+	GroupForeign    func() string
+	GroupNotFound   func() string
+	LabelForeign    func() string
+	LabelNotFound   func() string
+	ListForeign     func() string
+	ListNotFound    func() string
+	SessionForeign  func() string
+	SessionNotFound func() string
+}
+
+type ServerCommentStrings struct {
+	DeleteOwnerOnly func() string
+	EditOwnerOnly   func() string
+	Foreign         func() string
+	NotFound        func() string
+}
+
+type ServerImportStrings struct {
+	FileNoQuestions func() string
+	NoFile          func() string
+	ParseFailed     func(reason string) string
+	ReadFailed      func() string
+	TextNoQuestions func() string
+	Unsupported     func() string
+}
+
+type ServerInviteStrings struct {
+	DecisionInvalid  func() string
+	LabelTooLong     func() string
+	LimitsOutOfRange func() string
+	NoSeatsLeft      func() string
+	NotFound         func() string
+	OwnerOnly        func() string
+	RequestNotFound  func() string
+}
+
+type ServerListStrings struct {
+	GroupNeedsTwo func() string
+	NotOnBoard    func() string
+}
+
+type ServerMemberStrings struct {
+	AddOwnerOnly    func() string
+	RemoveOwnerOnly func() string
+	UserNotFound    func() string
+}
+
+type ServerQuotaStrings struct {
+	Exceeded func(mb string) string
+}
+
+type ServerReactionStrings struct {
+	DeleteOwnerOnly func() string
+	NotFound        func() string
+}
+
+type ServerRefusalStrings struct {
+	Broken    func() string
+	Declined  func() string
+	Exhausted func() string
+	Expired   func() string
+	Revoked   func() string
+	Spent     func() string
+}
+
+// SessionsStrings is the sessions Surface.
+type SessionsStrings struct {
+	Cities   SessionsCitiesStrings
+	Delete   SessionsDeleteStrings
+	Feed     SessionsFeedStrings
+	Form     SessionsFormStrings
+	List     SessionsListStrings
+	Message  SessionsMessageStrings
+	Seen     SessionsSeenStrings
+	Summary  SessionsSummaryStrings
+	Testers  SessionsTestersStrings
+	Testmode SessionsTestmodeStrings
+}
+
+type SessionsCitiesStrings struct {
+	AddPlaceholder func() string
+	Copy           func() string
+	Label          func() string
+	Remove         func() string
+	RemoveNamed    func(name string) string
+}
+
+type SessionsDeleteStrings struct {
+	Confirm func() string
+	Label   func() string
+}
+
+type SessionsFeedStrings struct {
+	AtQuestion  func() string
+	Empty       func() string
+	Label       func() string
+	Placeholder func() string
+	Send        func() string
+}
+
+type SessionsFormStrings struct {
+	Alias            func() string
+	AliasPlaceholder func() string
+	Date             func() string
+	DatePlaceholder  func() string
+	Time             func() string
+	TimePlaceholder  func() string
+	Timezone         func() string
+}
+
+type SessionsListStrings struct {
+	Empty       func() string
+	Invite      func() string
+	InviteTitle func() string
+	NoDate      func() string
+	Open        func() string
+	Origin      func(board string) string
+	OriginAt    func(board string, date string) string
+	OriginTitle func() string
+	Played      func(n string) string
+	Players     func(n string) string
+	Teams       func(n string) string
+}
+
+type SessionsMessageStrings struct {
+	CreateFailed    func() string
+	DeleteFailed    func() string
+	NoteAddFailed   func() string
+	NotesLoadFailed func() string
+	SaveFailed      func() string
+}
+
+type SessionsSeenStrings struct {
+	Partial func(parts string) string
+}
+
+type SessionsSummaryStrings struct {
+	Players   func(names string) string
+	TeamsAlso func(teams string) string
+	TeamsOnly func(teams string) string
+}
+
+type SessionsTestersStrings struct {
+	Add             func() string
+	Label           func() string
+	NamePlaceholder func() string
+	Player          func() string
+	RemoveRow       func() string
+	Team            func() string
+}
+
+type SessionsTestmodeStrings struct {
+	StartTitle func() string
+	StopTitle  func() string
+}
+
+// StatsStrings is the stats Surface.
+type StatsStrings struct {
+	Options  StatsOptionsStrings
+	Question StatsQuestionStrings
+	Range    StatsRangeStrings
+	Rating   StatsRatingStrings
+	Results  StatsResultsStrings
+	Table    StatsTableStrings
+	Xlsx     StatsXlsxStrings
+}
+
+type StatsOptionsStrings struct {
+	Label func() string
+}
+
+type StatsQuestionStrings struct {
+	Line   func(label string, taken string, total string, percent string) string
+	Takers func(names string) string
+}
+
+type StatsRangeStrings struct {
+	Bad func(value string) string
+}
+
+type StatsRatingStrings struct {
+	Decode func(id string, err string) string
+	Status func(id string, status string) string
+}
+
+type StatsResultsStrings struct {
+	Empty func() string
+}
+
+type StatsTableStrings struct {
+	Disputed      func(n string, value string, team string) string
+	HeaderMissing func() string
+}
+
+type StatsXlsxStrings struct {
+	NoSheets     func() string
+	PartMissing  func(name string) string
+	SheetMissing func(id string) string
+}
+
+// TgStrings is the tg Surface.
+type TgStrings struct {
+	Resolve TgResolveStrings
+	Verify  TgVerifyStrings
+}
+
+type TgResolveStrings struct {
+	Done          func() string
+	Forward       func(name string) string
+	GroupCode     func(name string, code string) string
+	GroupCodeHint func() string
+	PrivateCode   func(code string) string
+	SameChannel   func() string
+}
+
+type TgVerifyStrings struct {
+	NotAdmin    func(what string) string
+	NotMember   func(what string, err string) string
+	WhatChannel func() string
+	WhatChat    func() string
+}
+
+// TimelineStrings is the timeline Surface.
+type TimelineStrings struct {
+	Comment   TimelineCommentStrings
+	Diff      TimelineDiffStrings
+	Event     TimelineEventStrings
+	Excerpt   TimelineExcerptStrings
+	Feed      TimelineFeedStrings
+	MissingDk func() string
+	Reaction  TimelineReactionStrings
+	Reply     TimelineReplyStrings
+	Thread    TimelineThreadStrings
+}
+
+type TimelineCommentStrings struct {
+	Cancel           func() string
+	CopyLinkTitle    func() string
+	DeleteConfirm    func() string
+	Deleted          func() string
+	EditedSuffix     func() string
+	ImageAlt         func() string
+	ImageDraft       func() string
+	MenuDelete       func() string
+	MenuEdit         func() string
+	MenuExcerpt      func() string
+	MenuNoTest       func() string
+	MenuReact        func() string
+	MenuReply        func() string
+	MenuTitle        func() string
+	Offline          func() string
+	RemoveImageTitle func() string
+	Save             func() string
+}
+
+type TimelineDiffStrings struct {
+	NoChanges       func() string
+	VersionFallback func(n string) string
+}
+
+type TimelineEventStrings struct {
+	AttachAdd     func() string
+	AttachRemove  func() string
+	AttachReplace func() string
+	Comment       func() string
+	DescEdit      func() string
+	LabelAdd      func() string
+	LabelRemove   func() string
+	Reaction      func() string
+}
+
+type TimelineExcerptStrings struct {
+	Badge        func() string
+	Count        func(n string) string
+	Download     func() string
+	FileFallback func() string
+}
+
+type TimelineFeedStrings struct {
+	CardCreated  func(when string) string
+	DescEditMeta func(when string) string
+}
+
+type TimelineReactionStrings struct {
+	AddTitle    func() string
+	EmojiPrompt func() string
+	Offline     func() string
+	Other       func() string
+}
+
+type TimelineReplyStrings struct {
+	DeletedParent func() string
+	InReplyTo     func(who string) string
+	UnknownParent func() string
+}
+
+type TimelineThreadStrings struct {
+	OpenTitle func() string
+	Replies   func(n int) string
 }
 
 // Lookup returns an untemplated string by its String Id, for `@surface.key`
 // in a .dopeui page.
 func (s Strings) Lookup(id string) (string, bool) {
+	switch id {
+	case "attachments.error.blob_download_failed":
+		return s.Attachments.Error.BlobDownloadFailed(), true
+	case "attachments.error.download_failed":
+		return s.Attachments.Error.DownloadFailed(), true
+	case "attachments.error.offline_unavailable":
+		return s.Attachments.Error.OfflineUnavailable(), true
+	case "attachments.error.replace_failed":
+		return s.Attachments.Error.ReplaceFailed(), true
+	case "attachments.error.upload_failed":
+		return s.Attachments.Error.UploadFailed(), true
+	case "attachments.lightbox.close":
+		return s.Attachments.Lightbox.Close(), true
+	case "attachments.lightbox.dialog_label":
+		return s.Attachments.Lightbox.DialogLabel(), true
+	case "attachments.list.actions_title":
+		return s.Attachments.List.ActionsTitle(), true
+	case "attachments.list.excerpt_badge":
+		return s.Attachments.List.ExcerptBadge(), true
+	case "attachments.list.fallback_name":
+		return s.Attachments.List.FallbackName(), true
+	case "attachments.menu.delete":
+		return s.Attachments.Menu.Delete(), true
+	case "attachments.menu.excerpt":
+		return s.Attachments.Menu.Excerpt(), true
+	case "attachments.menu.replace":
+		return s.Attachments.Menu.Replace(), true
+	case "attachments.name.default_stem":
+		return s.Attachments.Name.DefaultStem(), true
+	case "attachments.status.encrypting":
+		return s.Attachments.Status.Encrypting(), true
+	case "attachments.status.offline_delete":
+		return s.Attachments.Status.OfflineDelete(), true
+	case "attachments.status.offline_edit":
+		return s.Attachments.Status.OfflineEdit(), true
+	case "attachments.status.offline_upload":
+		return s.Attachments.Status.OfflineUpload(), true
+	case "auth.login.fields_required":
+		return s.Auth.Login.FieldsRequired(), true
+	case "auth.login.invalid":
+		return s.Auth.Login.Invalid(), true
+	case "auth.page.title":
+		return s.Auth.Page.Title(), true
+	case "auth.password.current_wrong":
+		return s.Auth.Password.CurrentWrong(), true
+	case "auth.password.length":
+		return s.Auth.Password.Length(), true
+	case "auth.profile.cities_too_long":
+		return s.Auth.Profile.CitiesTooLong(), true
+	case "auth.profile.name_too_long":
+		return s.Auth.Profile.NameTooLong(), true
+	case "auth.profile.timezone_too_long":
+		return s.Auth.Profile.TimezoneTooLong(), true
+	case "auth.tg.code_missing":
+		return s.Auth.Tg.CodeMissing(), true
+	case "auth.tg.password_wrong":
+		return s.Auth.Tg.PasswordWrong(), true
+	case "auth.tg.telegram_taken":
+		return s.Auth.Tg.TelegramTaken(), true
+	case "auth.tg.username_format":
+		return s.Auth.Tg.UsernameFormat(), true
+	case "auth.tg.username_reserved":
+		return s.Auth.Tg.UsernameReserved(), true
+	case "auth.token.forbidden":
+		return s.Auth.Token.Forbidden(), true
+	case "auth.username.already_set":
+		return s.Auth.Username.AlreadySet(), true
+	case "auth.username.taken":
+		return s.Auth.Username.Taken(), true
+	case "auth.username.too_long":
+		return s.Auth.Username.TooLong(), true
+	case "auth.username.too_short":
+		return s.Auth.Username.TooShort(), true
+	case "board.accent.hint":
+		return s.Board.Accent.Hint(), true
+	case "board.accent.run":
+		return s.Board.Accent.Run(), true
+	case "board.accent.title":
+		return s.Board.Accent.Title(), true
+	case "board.actions.cancel":
+		return s.Board.Actions.Cancel(), true
+	case "board.actions.close":
+		return s.Board.Actions.Close(), true
+	case "board.actions.copy":
+		return s.Board.Actions.Copy(), true
+	case "board.actions.done":
+		return s.Board.Actions.Done(), true
+	case "board.actions.move":
+		return s.Board.Actions.Move(), true
+	case "board.actions.save":
+		return s.Board.Actions.Save(), true
+	case "board.bell.label":
+		return s.Board.Bell.Label(), true
+	case "board.bell.title":
+		return s.Board.Bell.Title(), true
+	case "board.card.add_version_label":
+		return s.Board.Card.AddVersionLabel(), true
+	case "board.card.add_version_title":
+		return s.Board.Card.AddVersionTitle(), true
+	case "board.card.alias_label":
+		return s.Board.Card.AliasLabel(), true
+	case "board.card.alias_placeholder":
+		return s.Board.Card.AliasPlaceholder(), true
+	case "board.card.attachments_label":
+		return s.Board.Card.AttachmentsLabel(), true
+	case "board.card.compress":
+		return s.Board.Card.Compress(), true
+	case "board.card.copy_title":
+		return s.Board.Card.CopyTitle(), true
+	case "board.card.delete":
+		return s.Board.Card.Delete(), true
+	case "board.card.desc_label":
+		return s.Board.Card.DescLabel(), true
+	case "board.card.excerpts_view":
+		return s.Board.Card.ExcerptsView(), true
+	case "board.card.feed_label":
+		return s.Board.Card.FeedLabel(), true
+	case "board.card.handout_title":
+		return s.Board.Card.HandoutTitle(), true
+	case "board.card.kind_heading":
+		return s.Board.Card.KindHeading(), true
+	case "board.card.kind_label":
+		return s.Board.Card.KindLabel(), true
+	case "board.card.kind_meta":
+		return s.Board.Card.KindMeta(), true
+	case "board.card.kind_other":
+		return s.Board.Card.KindOther(), true
+	case "board.card.kind_question":
+		return s.Board.Card.KindQuestion(), true
+	case "board.card.label_add":
+		return s.Board.Card.LabelAdd(), true
+	case "board.card.link_label":
+		return s.Board.Card.LinkLabel(), true
+	case "board.card.link_title":
+		return s.Board.Card.LinkTitle(), true
+	case "board.card.mark_test":
+		return s.Board.Card.MarkTest(), true
+	case "board.card.move_label":
+		return s.Board.Card.MoveLabel(), true
+	case "board.card.new_label_placeholder":
+		return s.Board.Card.NewLabelPlaceholder(), true
+	case "board.card.new_label_title":
+		return s.Board.Card.NewLabelTitle(), true
+	case "board.card.playings_label":
+		return s.Board.Card.PlayingsLabel(), true
+	case "board.card.preview_dblclick":
+		return s.Board.Card.PreviewDblclick(), true
+	case "board.card.screen_label":
+		return s.Board.Card.ScreenLabel(), true
+	case "board.card.screen_title":
+		return s.Board.Card.ScreenTitle(), true
+	case "board.card.stress_label":
+		return s.Board.Card.StressLabel(), true
+	case "board.card.stress_title":
+		return s.Board.Card.StressTitle(), true
+	case "board.card.tab_fields":
+		return s.Board.Card.TabFields(), true
+	case "board.card.tab_preview":
+		return s.Board.Card.TabPreview(), true
+	case "board.card.tab_text":
+		return s.Board.Card.TabText(), true
+	case "board.card.test_lead":
+		return s.Board.Card.TestLead(), true
+	case "board.card.test_mid":
+		return s.Board.Card.TestMid(), true
+	case "board.card.to4s_title":
+		return s.Board.Card.To4sTitle(), true
+	case "board.card.typo_label":
+		return s.Board.Card.TypoLabel(), true
+	case "board.card.typo_title":
+		return s.Board.Card.TypoTitle(), true
+	case "board.card.upload":
+		return s.Board.Card.Upload(), true
+	case "board.changepass.copied":
+		return s.Board.Changepass.Copied(), true
+	case "board.changepass.danger":
+		return s.Board.Changepass.Danger(), true
+	case "board.changepass.generate":
+		return s.Board.Changepass.Generate(), true
+	case "board.changepass.placeholder":
+		return s.Board.Changepass.Placeholder(), true
+	case "board.changepass.saved":
+		return s.Board.Changepass.Saved(), true
+	case "board.changepass.submit":
+		return s.Board.Changepass.Submit(), true
+	case "board.changepass.title":
+		return s.Board.Changepass.Title(), true
+	case "board.delete.continue_q":
+		return s.Board.Delete.ContinueQ(), true
+	case "board.delete.label":
+		return s.Board.Delete.Label(), true
+	case "board.delete.list_label":
+		return s.Board.Delete.ListLabel(), true
+	case "board.delete.list_untitled":
+		return s.Board.Delete.ListUntitled(), true
+	case "board.delete.mismatch":
+		return s.Board.Delete.Mismatch(), true
+	case "board.delete.offline":
+		return s.Board.Delete.Offline(), true
+	case "board.delete.title":
+		return s.Board.Delete.Title(), true
+	case "board.delete.warn":
+		return s.Board.Delete.Warn(), true
+	case "board.dirty.discard":
+		return s.Board.Dirty.Discard(), true
+	case "board.dirty.hint":
+		return s.Board.Dirty.Hint(), true
+	case "board.dirty.title":
+		return s.Board.Dirty.Title(), true
+	case "board.error.no_key":
+		return s.Board.Error.NoKey(), true
+	case "board.error.no_label":
+		return s.Board.Error.NoLabel(), true
+	case "board.error.no_list":
+		return s.Board.Error.NoList(), true
+	case "board.error.no_test":
+		return s.Board.Error.NoTest(), true
+	case "board.excerpts.title":
+		return s.Board.Excerpts.Title(), true
+	case "board.export.fmt4s_title":
+		return s.Board.Export.Fmt4sTitle(), true
+	case "board.export.handouts_label":
+		return s.Board.Export.HandoutsLabel(), true
+	case "board.export.handouts_title":
+		return s.Board.Export.HandoutsTitle(), true
+	case "board.export.overlay_label":
+		return s.Board.Export.OverlayLabel(), true
+	case "board.export.pdf_mobile_label":
+		return s.Board.Export.PdfMobileLabel(), true
+	case "board.export.pdf_mobile_title":
+		return s.Board.Export.PdfMobileTitle(), true
+	case "board.export.run":
+		return s.Board.Export.Run(), true
+	case "board.export.select_all":
+		return s.Board.Export.SelectAll(), true
+	case "board.export.title":
+		return s.Board.Export.Title(), true
+	case "board.feed.comment_placeholder":
+		return s.Board.Feed.CommentPlaceholder(), true
+	case "board.feed.diff_view":
+		return s.Board.Feed.DiffView(), true
+	case "board.feed.expand_label":
+		return s.Board.Feed.ExpandLabel(), true
+	case "board.feed.expand_title":
+		return s.Board.Feed.ExpandTitle(), true
+	case "board.feed.filter_title":
+		return s.Board.Feed.FilterTitle(), true
+	case "board.feed.opt_all":
+		return s.Board.Feed.OptAll(), true
+	case "board.feed.opt_brief":
+		return s.Board.Feed.OptBrief(), true
+	case "board.feed.opt_comments":
+		return s.Board.Feed.OptComments(), true
+	case "board.feed.opt_edits":
+		return s.Board.Feed.OptEdits(), true
+	case "board.feed.opt_full":
+		return s.Board.Feed.OptFull(), true
+	case "board.feed.opt_meta":
+		return s.Board.Feed.OptMeta(), true
+	case "board.feed.opt_new":
+		return s.Board.Feed.OptNew(), true
+	case "board.feed.opt_old":
+		return s.Board.Feed.OptOld(), true
+	case "board.feed.order_label":
+		return s.Board.Feed.OrderLabel(), true
+	case "board.feed.order_title":
+		return s.Board.Feed.OrderTitle(), true
+	case "board.feed.show":
+		return s.Board.Feed.Show(), true
+	case "board.feed.submit":
+		return s.Board.Feed.Submit(), true
+	case "board.feed.title":
+		return s.Board.Feed.Title(), true
+	case "board.fields.board":
+		return s.Board.Fields.Board(), true
+	case "board.fields.list":
+		return s.Board.Fields.List(), true
+	case "board.fields.position":
+		return s.Board.Fields.Position(), true
+	case "board.filter.title":
+		return s.Board.Filter.Title(), true
+	case "board.forget.label":
+		return s.Board.Forget.Label(), true
+	case "board.forget.title":
+		return s.Board.Forget.Title(), true
+	case "board.handouts.download":
+		return s.Board.Handouts.Download(), true
+	case "board.handouts.generate":
+		return s.Board.Handouts.Generate(), true
+	case "board.handouts.splitfit_title":
+		return s.Board.Handouts.SplitfitTitle(), true
+	case "board.handouts.src_label":
+		return s.Board.Handouts.SrcLabel(), true
+	case "board.handouts.title":
+		return s.Board.Handouts.Title(), true
+	case "board.importpick.hint":
+		return s.Board.Importpick.Hint(), true
+	case "board.importpick.split_label":
+		return s.Board.Importpick.SplitLabel(), true
+	case "board.importpick.split_title":
+		return s.Board.Importpick.SplitTitle(), true
+	case "board.importpick.submit":
+		return s.Board.Importpick.Submit(), true
+	case "board.importpick.title":
+		return s.Board.Importpick.Title(), true
+	case "board.importverify.src_label":
+		return s.Board.Importverify.SrcLabel(), true
+	case "board.importverify.title":
+		return s.Board.Importverify.Title(), true
+	case "board.labels.name":
+		return s.Board.Labels.Name(), true
+	case "board.leave.label":
+		return s.Board.Leave.Label(), true
+	case "board.leave.offline":
+		return s.Board.Leave.Offline(), true
+	case "board.leave.target_this":
+		return s.Board.Leave.TargetThis(), true
+	case "board.leave.title":
+		return s.Board.Leave.Title(), true
+	case "board.list.add_card":
+		return s.Board.List.AddCard(), true
+	case "board.list.add_placeholder":
+		return s.Board.List.AddPlaceholder(), true
+	case "board.list.create":
+		return s.Board.List.Create(), true
+	case "board.list.group_fallback":
+		return s.Board.List.GroupFallback(), true
+	case "board.list.group_title":
+		return s.Board.List.GroupTitle(), true
+	case "board.list.menu_title":
+		return s.Board.List.MenuTitle(), true
+	case "board.list.untitled":
+		return s.Board.List.Untitled(), true
+	case "board.listsmanage.link_label":
+		return s.Board.Listsmanage.LinkLabel(), true
+	case "board.listsmanage.link_title":
+		return s.Board.Listsmanage.LinkTitle(), true
+	case "board.listsmanage.move_label":
+		return s.Board.Listsmanage.MoveLabel(), true
+	case "board.listsmanage.move_title":
+		return s.Board.Listsmanage.MoveTitle(), true
+	case "board.listsmanage.title":
+		return s.Board.Listsmanage.Title(), true
+	case "board.mass.board_locked":
+		return s.Board.Mass.BoardLocked(), true
+	case "board.mass.copy_offline":
+		return s.Board.Mass.CopyOffline(), true
+	case "board.mass.delete_hint":
+		return s.Board.Mass.DeleteHint(), true
+	case "board.mass.exit_label":
+		return s.Board.Mass.ExitLabel(), true
+	case "board.mass.hint":
+		return s.Board.Mass.Hint(), true
+	case "board.mass.menu_title":
+		return s.Board.Mass.MenuTitle(), true
+	case "board.mass.name":
+		return s.Board.Mass.Name(), true
+	case "board.mass.no_labels":
+		return s.Board.Mass.NoLabels(), true
+	case "board.mass.no_tests":
+		return s.Board.Mass.NoTests(), true
+	case "board.mass.pick_test":
+		return s.Board.Mass.PickTest(), true
+	case "board.mass.run":
+		return s.Board.Mass.Run(), true
+	case "board.mass.select_card":
+		return s.Board.Mass.SelectCard(), true
+	case "board.mass.select_list":
+		return s.Board.Mass.SelectList(), true
+	case "board.members.add":
+		return s.Board.Members.Add(), true
+	case "board.members.create_invite":
+		return s.Board.Members.CreateInvite(), true
+	case "board.members.invites":
+		return s.Board.Members.Invites(), true
+	case "board.members.load_failed":
+		return s.Board.Members.LoadFailed(), true
+	case "board.members.menu_title":
+		return s.Board.Members.MenuTitle(), true
+	case "board.members.name":
+		return s.Board.Members.Name(), true
+	case "board.members.name_placeholder":
+		return s.Board.Members.NamePlaceholder(), true
+	case "board.members.remove_fallback":
+		return s.Board.Members.RemoveFallback(), true
+	case "board.members.remove_title":
+		return s.Board.Members.RemoveTitle(), true
+	case "board.members.requests":
+		return s.Board.Members.Requests(), true
+	case "board.members.role_editor":
+		return s.Board.Members.RoleEditor(), true
+	case "board.members.role_owner":
+		return s.Board.Members.RoleOwner(), true
+	case "board.movelist.title":
+		return s.Board.Movelist.Title(), true
+	case "board.page.home":
+		return s.Board.Page.Home(), true
+	case "board.page.name":
+		return s.Board.Page.Name(), true
+	case "board.page.offline":
+		return s.Board.Page.Offline(), true
+	case "board.page.offline_hint":
+		return s.Board.Page.OfflineHint(), true
+	case "board.page.title":
+		return s.Board.Page.Title(), true
+	case "board.panel.title":
+		return s.Board.Panel.Title(), true
+	case "board.passcheck.backup":
+		return s.Board.Passcheck.Backup(), true
+	case "board.passcheck.forgot":
+		return s.Board.Passcheck.Forgot(), true
+	case "board.passcheck.hint_lead":
+		return s.Board.Passcheck.HintLead(), true
+	case "board.passcheck.hint_mid":
+		return s.Board.Passcheck.HintMid(), true
+	case "board.passcheck.saved_hint":
+		return s.Board.Passcheck.SavedHint(), true
+	case "board.passcheck.submit":
+		return s.Board.Passcheck.Submit(), true
+	case "board.passcheck.title":
+		return s.Board.Passcheck.Title(), true
+	case "board.paste.name_placeholder":
+		return s.Board.Paste.NamePlaceholder(), true
+	case "board.paste.title":
+		return s.Board.Paste.Title(), true
+	case "board.preview.edit_title":
+		return s.Board.Preview.EditTitle(), true
+	case "board.preview.empty":
+		return s.Board.Preview.Empty(), true
+	case "board.preview.group":
+		return s.Board.Preview.Group(), true
+	case "board.preview.list":
+		return s.Board.Preview.List(), true
+	case "board.preview.title":
+		return s.Board.Preview.Title(), true
+	case "board.rename.board_label":
+		return s.Board.Rename.BoardLabel(), true
+	case "board.rename.board_offline":
+		return s.Board.Rename.BoardOffline(), true
+	case "board.rename.board_prompt":
+		return s.Board.Rename.BoardPrompt(), true
+	case "board.rename.board_title":
+		return s.Board.Rename.BoardTitle(), true
+	case "board.rename.list_label":
+		return s.Board.Rename.ListLabel(), true
+	case "board.rename.list_prompt":
+		return s.Board.Rename.ListPrompt(), true
+	case "board.replace.case":
+		return s.Board.Replace.Case(), true
+	case "board.replace.find":
+		return s.Board.Replace.Find(), true
+	case "board.replace.next":
+		return s.Board.Replace.Next(), true
+	case "board.replace.prev":
+		return s.Board.Replace.Prev(), true
+	case "board.replace.replace_with":
+		return s.Board.Replace.ReplaceWith(), true
+	case "board.replace.run":
+		return s.Board.Replace.Run(), true
+	case "board.replace.scope_board":
+		return s.Board.Replace.ScopeBoard(), true
+	case "board.replace.title":
+		return s.Board.Replace.Title(), true
+	case "board.sessionedit.title":
+		return s.Board.Sessionedit.Title(), true
+	case "board.sessions.add":
+		return s.Board.Sessions.Add(), true
+	case "board.sessions.add_title":
+		return s.Board.Sessions.AddTitle(), true
+	case "board.sessions.fallback":
+		return s.Board.Sessions.Fallback(), true
+	case "board.sessions.menu_title":
+		return s.Board.Sessions.MenuTitle(), true
+	case "board.sessions.name":
+		return s.Board.Sessions.Name(), true
+	case "board.testmode.stop":
+		return s.Board.Testmode.Stop(), true
+	case "board.thread.placeholder":
+		return s.Board.Thread.Placeholder(), true
+	case "board.thread.submit":
+		return s.Board.Thread.Submit(), true
+	case "board.thread.title":
+		return s.Board.Thread.Title(), true
+	case "board.timer.label":
+		return s.Board.Timer.Label(), true
+	case "board.timer.title":
+		return s.Board.Timer.Title(), true
+	case "board.unlock.exit_hint":
+		return s.Board.Unlock.ExitHint(), true
+	case "board.unlock.forgot":
+		return s.Board.Unlock.Forgot(), true
+	case "board.unlock.pass_placeholder":
+		return s.Board.Unlock.PassPlaceholder(), true
+	case "board.unlock.submit":
+		return s.Board.Unlock.Submit(), true
+	case "board.unlock.title":
+		return s.Board.Unlock.Title(), true
+	case "board.unread.comments":
+		return s.Board.Unread.Comments(), true
+	case "board.unread.dot":
+		return s.Board.Unread.Dot(), true
+	case "board.unread.mention":
+		return s.Board.Unread.Mention(), true
+	case "boardsync.config.empty_url":
+		return s.Boardsync.Config.EmptyUrl(), true
+	case "boardsync.upload.default_caption":
+		return s.Boardsync.Upload.DefaultCaption(), true
+	case "boardsync.upload.no_lists":
+		return s.Boardsync.Upload.NoLists(), true
+	case "bot.register.done":
+		return s.Bot.Register.Done(), true
+	case "bot.register.expired":
+		return s.Bot.Register.Expired(), true
+	case "bot.texts.down":
+		return s.Bot.Texts.Down(), true
+	case "bot.texts.help":
+		return s.Bot.Texts.Help(), true
+	case "card.add.labels_all_added":
+		return s.Card.Add.LabelsAllAdded(), true
+	case "card.add.labels_none":
+		return s.Card.Add.LabelsNone(), true
+	case "card.add.labels_placeholder":
+		return s.Card.Add.LabelsPlaceholder(), true
+	case "card.add.no_match":
+		return s.Card.Add.NoMatch(), true
+	case "card.add.playings_all_marked":
+		return s.Card.Add.PlayingsAllMarked(), true
+	case "card.add.playings_none":
+		return s.Card.Add.PlayingsNone(), true
+	case "card.add.playings_placeholder":
+		return s.Card.Add.PlayingsPlaceholder(), true
+	case "card.authors.caption_title":
+		return s.Card.Authors.CaptionTitle(), true
+	case "card.authors.placeholder":
+		return s.Card.Authors.Placeholder(), true
+	case "card.copy.card_link":
+		return s.Card.Copy.CardLink(), true
+	case "card.copy.comment_link":
+		return s.Card.Copy.CommentLink(), true
+	case "card.delete.confirm":
+		return s.Card.Delete.Confirm(), true
+	case "card.dirty.comment_failed":
+		return s.Card.Dirty.CommentFailed(), true
+	case "card.dirty.save_failed":
+		return s.Card.Dirty.SaveFailed(), true
+	case "card.error.card_not_open":
+		return s.Card.Error.CardNotOpen(), true
+	case "card.error.clipboard_unavailable":
+		return s.Card.Error.ClipboardUnavailable(), true
+	case "card.error.image_not_found":
+		return s.Card.Error.ImageNotFound(), true
+	case "card.error.no_board_key":
+		return s.Card.Error.NoBoardKey(), true
+	case "card.error.no_image_copy_support":
+		return s.Card.Error.NoImageCopySupport(), true
+	case "card.error.reencode_failed":
+		return s.Card.Error.ReencodeFailed(), true
+	case "card.field.add_row":
+		return s.Card.Field.AddRow(), true
+	case "card.field.add_title":
+		return s.Card.Field.AddTitle(), true
+	case "card.field.answer":
+		return s.Card.Field.Answer(), true
+	case "card.field.comment":
+		return s.Card.Field.Comment(), true
+	case "card.field.handout":
+		return s.Card.Field.Handout(), true
+	case "card.field.hndt":
+		return s.Card.Field.Hndt(), true
+	case "card.field.nezachet":
+		return s.Card.Field.Nezachet(), true
+	case "card.field.question":
+		return s.Card.Field.Question(), true
+	case "card.field.remove_row_title":
+		return s.Card.Field.RemoveRowTitle(), true
+	case "card.field.remove_title":
+		return s.Card.Field.RemoveTitle(), true
+	case "card.field.source":
+		return s.Card.Field.Source(), true
+	case "card.field.zachet":
+		return s.Card.Field.Zachet(), true
+	case "card.handout.attach":
+		return s.Card.Handout.Attach(), true
+	case "card.handout.attach_title":
+		return s.Card.Handout.AttachTitle(), true
+	case "card.handout.mode_image":
+		return s.Card.Handout.ModeImage(), true
+	case "card.handout.mode_text":
+		return s.Card.Handout.ModeText(), true
+	case "card.kind.changed":
+		return s.Card.Kind.Changed(), true
+	case "card.labels.empty":
+		return s.Card.Labels.Empty(), true
+	case "card.labels.remove_title":
+		return s.Card.Labels.RemoveTitle(), true
+	case "card.move.copied":
+		return s.Card.Move.Copied(), true
+	case "card.move.loading":
+		return s.Card.Move.Loading(), true
+	case "card.move.moved":
+		return s.Card.Move.Moved(), true
+	case "card.move.no_lists":
+		return s.Card.Move.NoLists(), true
+	case "card.move.offline":
+		return s.Card.Move.Offline(), true
+	case "card.move.reencrypting":
+		return s.Card.Move.Reencrypting(), true
+	case "card.move.saving":
+		return s.Card.Move.Saving(), true
+	case "card.move.to_end":
+		return s.Card.Move.ToEnd(), true
+	case "card.move.untitled_list":
+		return s.Card.Move.UntitledList(), true
+	case "card.playings.empty":
+		return s.Card.Playings.Empty(), true
+	case "card.playings.label_add_title":
+		return s.Card.Playings.LabelAddTitle(), true
+	case "card.playings.label_remove_title":
+		return s.Card.Playings.LabelRemoveTitle(), true
+	case "card.playings.remove_title":
+		return s.Card.Playings.RemoveTitle(), true
+	case "card.preview.empty":
+		return s.Card.Preview.Empty(), true
+	case "card.save.saved":
+		return s.Card.Save.Saved(), true
+	case "card.seen.common_tester_title":
+		return s.Card.Seen.CommonTesterTitle(), true
+	case "card.seen.copy_title":
+		return s.Card.Seen.CopyTitle(), true
+	case "card.seen.label":
+		return s.Card.Seen.Label(), true
+	case "card.seen.label_except_common":
+		return s.Card.Seen.LabelExceptCommon(), true
+	case "card.seen.show_all":
+		return s.Card.Seen.ShowAll(), true
+	case "card.to4s.offline":
+		return s.Card.To4s.Offline(), true
+	case "card.version.promote_aria":
+		return s.Card.Version.PromoteAria(), true
+	case "card.version.promote_title":
+		return s.Card.Version.PromoteTitle(), true
+	case "card.version.remove_aria":
+		return s.Card.Version.RemoveAria(), true
+	case "card.version.remove_title":
+		return s.Card.Version.RemoveTitle(), true
+	case "card.version.rename_aria":
+		return s.Card.Version.RenameAria(), true
+	case "card.version.rename_prompt":
+		return s.Card.Version.RenamePrompt(), true
+	case "card.version.rename_title":
+		return s.Card.Version.RenameTitle(), true
+	case "card.view.back":
+		return s.Card.View.Back(), true
+	case "card.view.close":
+		return s.Card.View.Close(), true
+	case "card.view.desc_label":
+		return s.Card.View.DescLabel(), true
+	case "card.view.tab_text":
+		return s.Card.View.TabText(), true
+	case "chgk.author.default":
+		return s.Chgk.Author.Default(), true
+	case "chgk.author.feminine":
+		return s.Chgk.Author.Feminine(), true
+	case "chgk.author.feminine_plural":
+		return s.Chgk.Author.FemininePlural(), true
+	case "chgk.author.plural":
+		return s.Chgk.Author.Plural(), true
+	case "chgk.copy.handout":
+		return s.Chgk.Copy.Handout(), true
+	case "chgk.copy.question":
+		return s.Chgk.Copy.Question(), true
+	case "chgk.copy.question_unnumbered":
+		return s.Chgk.Copy.QuestionUnnumbered(), true
+	case "chgk.copy.question_whole":
+		return s.Chgk.Copy.QuestionWhole(), true
+	case "chgk.copy.question_with_answer":
+		return s.Chgk.Copy.QuestionWithAnswer(), true
+	case "chgk.label.answer":
+		return s.Chgk.Label.Answer(), true
+	case "chgk.label.author":
+		return s.Chgk.Label.Author(), true
+	case "chgk.label.comment":
+		return s.Chgk.Label.Comment(), true
+	case "chgk.label.date":
+		return s.Chgk.Label.Date(), true
+	case "chgk.label.editor":
+		return s.Chgk.Label.Editor(), true
+	case "chgk.label.handout":
+		return s.Chgk.Label.Handout(), true
+	case "chgk.label.nezachet":
+		return s.Chgk.Label.Nezachet(), true
+	case "chgk.label.question":
+		return s.Chgk.Label.Question(), true
+	case "chgk.label.source":
+		return s.Chgk.Label.Source(), true
+	case "chgk.label.source_plural":
+		return s.Chgk.Label.SourcePlural(), true
+	case "chgk.label.zachet":
+		return s.Chgk.Label.Zachet(), true
+	case "chgk.zip.corrupt":
+		return s.Chgk.Zip.Corrupt(), true
+	case "chgk.zip.not_zip":
+		return s.Chgk.Zip.NotZip(), true
+	case "chgk.zip.too_large":
+		return s.Chgk.Zip.TooLarge(), true
+	case "chgk.zip.zip64_unsupported":
+		return s.Chgk.Zip.Zip64Unsupported(), true
+	case "chgkcli.add_stats.custom_csv_flag":
+		return s.Chgkcli.AddStats.CustomCsvFlag(), true
+	case "chgkcli.docx.no_paragraph_flag":
+		return s.Chgkcli.Docx.NoParagraphFlag(), true
+	case "chgkcli.docx.only_question_number_flag":
+		return s.Chgkcli.Docx.OnlyQuestionNumberFlag(), true
+	case "chgkcli.lj.genimp_flag":
+		return s.Chgkcli.Lj.GenimpFlag(), true
+	case "chgkcli.parse.tour_numbers_as_words_flag":
+		return s.Chgkcli.Parse.TourNumbersAsWordsFlag(), true
+	case "chgkcli.shared.replace_no_break_hyphens_flag":
+		return s.Chgkcli.Shared.ReplaceNoBreakHyphensFlag(), true
+	case "chgkcli.telegram.stop_if_no_stats_flag":
+		return s.Chgkcli.Telegram.StopIfNoStatsFlag(), true
+	case "chgkimport.error.no_4s":
+		return s.Chgkimport.Error.No4s(), true
+	case "chgkimport.error.no_questions":
+		return s.Chgkimport.Error.NoQuestions(), true
+	case "chgkimport.error.too_big":
+		return s.Chgkimport.Error.TooBig(), true
+	case "chrome.bell.empty":
+		return s.Chrome.Bell.Empty(), true
+	case "chrome.bell.loading":
+		return s.Chrome.Bell.Loading(), true
+	case "chrome.bell.mention":
+		return s.Chrome.Bell.Mention(), true
+	case "chrome.bell.mention_reply":
+		return s.Chrome.Bell.MentionReply(), true
+	case "chrome.bell.read_all":
+		return s.Chrome.Bell.ReadAll(), true
+	case "chrome.bell.title":
+		return s.Chrome.Bell.Title(), true
+	case "chrome.card.title_empty":
+		return s.Chrome.Card.TitleEmpty(), true
+	case "chrome.colorpick.button_title":
+		return s.Chrome.Colorpick.ButtonTitle(), true
+	case "chrome.home.create_offline":
+		return s.Chrome.Home.CreateOffline(), true
+	case "chrome.home.empty_all":
+		return s.Chrome.Home.EmptyAll(), true
+	case "chrome.home.empty_named":
+		return s.Chrome.Home.EmptyNamed(), true
+	case "chrome.home.role_editor":
+		return s.Chrome.Home.RoleEditor(), true
+	case "chrome.home.role_owner":
+		return s.Chrome.Home.RoleOwner(), true
+	case "chrome.home.unread_mention_title":
+		return s.Chrome.Home.UnreadMentionTitle(), true
+	case "chrome.home.unread_title":
+		return s.Chrome.Home.UnreadTitle(), true
+	case "chrome.offline_page.body":
+		return s.Chrome.OfflinePage.Body(), true
+	case "chrome.passphrase.wrong":
+		return s.Chrome.Passphrase.Wrong(), true
+	case "chrome.prewarm.locked_note":
+		return s.Chrome.Prewarm.LockedNote(), true
+	case "chrome.prewarm.menu_label":
+		return s.Chrome.Prewarm.MenuLabel(), true
+	case "chrome.prewarm.menu_title":
+		return s.Chrome.Prewarm.MenuTitle(), true
+	case "chrome.prewarm.offline":
+		return s.Chrome.Prewarm.Offline(), true
+	case "chrome.search.comments":
+		return s.Chrome.Search.Comments(), true
+	case "chrome.search.note_no_boards":
+		return s.Chrome.Search.NoteNoBoards(), true
+	case "chrome.search.questions":
+		return s.Chrome.Search.Questions(), true
+	case "chrome.store.upgrade_blocked":
+		return s.Chrome.Store.UpgradeBlocked(), true
+	case "chrome.sync.offline":
+		return s.Chrome.Sync.Offline(), true
+	case "chrome.sync.saved":
+		return s.Chrome.Sync.Saved(), true
+	case "chrome.sync.saving":
+		return s.Chrome.Sync.Saving(), true
+	case "chrome.sync.syncing":
+		return s.Chrome.Sync.Syncing(), true
+	case "chrome.sync.write_error":
+		return s.Chrome.Sync.WriteError(), true
+	case "chrome.tokens.copied":
+		return s.Chrome.Tokens.Copied(), true
+	case "chrome.tokens.copy":
+		return s.Chrome.Tokens.Copy(), true
+	case "chrome.tokens.label_unnamed":
+		return s.Chrome.Tokens.LabelUnnamed(), true
+	case "chrome.tokens.meta_unused":
+		return s.Chrome.Tokens.MetaUnused(), true
+	case "chrome.tokens.revoke":
+		return s.Chrome.Tokens.Revoke(), true
+	case "chrome.tokens.revoke_confirm":
+		return s.Chrome.Tokens.RevokeConfirm(), true
+	case "chrome.tokens.status_active":
+		return s.Chrome.Tokens.StatusActive(), true
+	case "chrome.tokens.status_expired":
+		return s.Chrome.Tokens.StatusExpired(), true
+	case "chrome.tokens.status_revoked":
+		return s.Chrome.Tokens.StatusRevoked(), true
+	case "chrome.typograph.menu_label":
+		return s.Chrome.Typograph.MenuLabel(), true
+	case "chrome.typograph.menu_title":
+		return s.Chrome.Typograph.MenuTitle(), true
+	case "chrome.typograph.nothing_to_do":
+		return s.Chrome.Typograph.NothingToDo(), true
+	case "cli.attachment.summary":
+		return s.Cli.Attachment.Summary(), true
+	case "cli.board.only_show":
+		return s.Cli.Board.OnlyShow(), true
+	case "cli.board.summary":
+		return s.Cli.Board.Summary(), true
+	case "cli.board.usage":
+		return s.Cli.Board.Usage(), true
+	case "cli.boards.summary":
+		return s.Cli.Boards.Summary(), true
+	case "cli.boards.usage":
+		return s.Cli.Boards.Usage(), true
+	case "cli.card.add_empty":
+		return s.Cli.Card.AddEmpty(), true
+	case "cli.card.add_kind_flag":
+		return s.Cli.Card.AddKindFlag(), true
+	case "cli.card.add_list_flag":
+		return s.Cli.Card.AddListFlag(), true
+	case "cli.card.add_text_flag":
+		return s.Cli.Card.AddTextFlag(), true
+	case "cli.card.add_usage":
+		return s.Cli.Card.AddUsage(), true
+	case "cli.card.after_flag":
+		return s.Cli.Card.AfterFlag(), true
+	case "cli.card.alias_flag":
+		return s.Cli.Card.AliasFlag(), true
+	case "cli.card.before_flag":
+		return s.Cli.Card.BeforeFlag(), true
+	case "cli.card.expect_flag":
+		return s.Cli.Card.ExpectFlag(), true
+	case "cli.card.file_flag":
+		return s.Cli.Card.FileFlag(), true
+	case "cli.card.get_usage":
+		return s.Cli.Card.GetUsage(), true
+	case "cli.card.mv_list_flag":
+		return s.Cli.Card.MvListFlag(), true
+	case "cli.card.need_list":
+		return s.Cli.Card.NeedList(), true
+	case "cli.card.rm_usage":
+		return s.Cli.Card.RmUsage(), true
+	case "cli.card.set_empty":
+		return s.Cli.Card.SetEmpty(), true
+	case "cli.card.set_kind_flag":
+		return s.Cli.Card.SetKindFlag(), true
+	case "cli.card.set_text_flag":
+		return s.Cli.Card.SetTextFlag(), true
+	case "cli.card.set_usage":
+		return s.Cli.Card.SetUsage(), true
+	case "cli.card.summary":
+		return s.Cli.Card.Summary(), true
+	case "cli.client.token_rejected":
+		return s.Cli.Client.TokenRejected(), true
+	case "cli.comment.add_file_flag":
+		return s.Cli.Comment.AddFileFlag(), true
+	case "cli.comment.add_text_flag":
+		return s.Cli.Comment.AddTextFlag(), true
+	case "cli.comment.add_usage":
+		return s.Cli.Comment.AddUsage(), true
+	case "cli.comment.all_flag":
+		return s.Cli.Comment.AllFlag(), true
+	case "cli.comment.deleted":
+		return s.Cli.Comment.Deleted(), true
+	case "cli.comment.edit_file_flag":
+		return s.Cli.Comment.EditFileFlag(), true
+	case "cli.comment.edit_text_flag":
+		return s.Cli.Comment.EditTextFlag(), true
+	case "cli.comment.edit_usage":
+		return s.Cli.Comment.EditUsage(), true
+	case "cli.comment.empty":
+		return s.Cli.Comment.Empty(), true
+	case "cli.comment.ls_usage":
+		return s.Cli.Comment.LsUsage(), true
+	case "cli.comment.reply_to_flag":
+		return s.Cli.Comment.ReplyToFlag(), true
+	case "cli.comment.rm_usage":
+		return s.Cli.Comment.RmUsage(), true
+	case "cli.comment.summary":
+		return s.Cli.Comment.Summary(), true
+	case "cli.export.summary":
+		return s.Cli.Export.Summary(), true
+	case "cli.label.summary":
+		return s.Cli.Label.Summary(), true
+	case "cli.list.add_after_flag":
+		return s.Cli.List.AddAfterFlag(), true
+	case "cli.list.add_title_flag":
+		return s.Cli.List.AddTitleFlag(), true
+	case "cli.list.add_usage":
+		return s.Cli.List.AddUsage(), true
+	case "cli.list.need_id_title":
+		return s.Cli.List.NeedIdTitle(), true
+	case "cli.list.need_title":
+		return s.Cli.List.NeedTitle(), true
+	case "cli.list.rename_title_flag":
+		return s.Cli.List.RenameTitleFlag(), true
+	case "cli.list.rename_usage":
+		return s.Cli.List.RenameUsage(), true
+	case "cli.list.rm_usage":
+		return s.Cli.List.RmUsage(), true
+	case "cli.list.summary":
+		return s.Cli.List.Summary(), true
+	case "cli.lock.all_done":
+		return s.Cli.Lock.AllDone(), true
+	case "cli.lock.all_flag":
+		return s.Cli.Lock.AllFlag(), true
+	case "cli.lock.need_ref":
+		return s.Cli.Lock.NeedRef(), true
+	case "cli.lock.summary":
+		return s.Cli.Lock.Summary(), true
+	case "cli.lock.usage":
+		return s.Cli.Lock.Usage(), true
+	case "cli.login.empty_token":
+		return s.Cli.Login.EmptyToken(), true
+	case "cli.login.need_url":
+		return s.Cli.Login.NeedUrl(), true
+	case "cli.login.summary":
+		return s.Cli.Login.Summary(), true
+	case "cli.login.token_flag":
+		return s.Cli.Login.TokenFlag(), true
+	case "cli.login.token_prompt":
+		return s.Cli.Login.TokenPrompt(), true
+	case "cli.login.url_flag":
+		return s.Cli.Login.UrlFlag(), true
+	case "cli.login.usage":
+		return s.Cli.Login.Usage(), true
+	case "cli.logout.done":
+		return s.Cli.Logout.Done(), true
+	case "cli.logout.summary":
+		return s.Cli.Logout.Summary(), true
+	case "cli.logout.usage":
+		return s.Cli.Logout.Usage(), true
+	case "cli.run.commands_head":
+		return s.Cli.Run.CommandsHead(), true
+	case "cli.run.example_boards":
+		return s.Cli.Run.ExampleBoards(), true
+	case "cli.run.example_login":
+		return s.Cli.Run.ExampleLogin(), true
+	case "cli.run.example_unlock":
+		return s.Cli.Run.ExampleUnlock(), true
+	case "cli.run.footer_4s":
+		return s.Cli.Run.Footer4s(), true
+	case "cli.run.footer_help":
+		return s.Cli.Run.FooterHelp(), true
+	case "cli.run.json_flag":
+		return s.Cli.Run.JsonFlag(), true
+	case "cli.run.start_head":
+		return s.Cli.Run.StartHead(), true
+	case "cli.run.title":
+		return s.Cli.Run.Title(), true
+	case "cli.search.cards_flag":
+		return s.Cli.Search.CardsFlag(), true
+	case "cli.search.comments_flag":
+		return s.Cli.Search.CommentsFlag(), true
+	case "cli.search.need_query":
+		return s.Cli.Search.NeedQuery(), true
+	case "cli.search.nothing":
+		return s.Cli.Search.Nothing(), true
+	case "cli.search.regex_flag":
+		return s.Cli.Search.RegexFlag(), true
+	case "cli.search.summary":
+		return s.Cli.Search.Summary(), true
+	case "cli.search.usage":
+		return s.Cli.Search.Usage(), true
+	case "cli.shared.board_flag":
+		return s.Cli.Shared.BoardFlag(), true
+	case "cli.shared.login_first":
+		return s.Cli.Shared.LoginFirst(), true
+	case "cli.shared.need_board":
+		return s.Cli.Shared.NeedBoard(), true
+	case "cli.shared.what_board":
+		return s.Cli.Shared.WhatBoard(), true
+	case "cli.shared.what_card":
+		return s.Cli.Shared.WhatCard(), true
+	case "cli.shared.what_comment":
+		return s.Cli.Shared.WhatComment(), true
+	case "cli.shared.what_label":
+		return s.Cli.Shared.WhatLabel(), true
+	case "cli.shared.what_list":
+		return s.Cli.Shared.WhatList(), true
+	case "cli.shared.what_unlocked_board":
+		return s.Cli.Shared.WhatUnlockedBoard(), true
+	case "cli.source.summary":
+		return s.Cli.Source.Summary(), true
+	case "cli.unlock.need_ref":
+		return s.Cli.Unlock.NeedRef(), true
+	case "cli.unlock.summary":
+		return s.Cli.Unlock.Summary(), true
+	case "cli.unlock.usage":
+		return s.Cli.Unlock.Usage(), true
+	case "cli.unlock.wrong_passphrase":
+		return s.Cli.Unlock.WrongPassphrase(), true
+	case "docs.docx.host_version":
+		return s.Docs.Docx.HostVersion(), true
+	case "docs.docx.screen_version":
+		return s.Docs.Docx.ScreenVersion(), true
+	case "docs.handout.bad_markup":
+		return s.Docs.Handout.BadMarkup(), true
+	case "docs.handout.image_missing":
+		return s.Docs.Handout.ImageMissing(), true
+	case "docs.handout.pack_multiple":
+		return s.Docs.Handout.PackMultiple(), true
+	case "docs.handout.pack_no_grid":
+		return s.Docs.Handout.PackNoGrid(), true
+	case "docs.handout.pack_none":
+		return s.Docs.Handout.PackNone(), true
+	case "docs.handout_list.by_number_lead":
+		return s.Docs.HandoutList.ByNumberLead(), true
+	case "docs.handout_list.by_tour_lead":
+		return s.Docs.HandoutList.ByTourLead(), true
+	case "docs.handout_list.heading":
+		return s.Docs.HandoutList.Heading(), true
+	case "docs.markdown.answer":
+		return s.Docs.Markdown.Answer(), true
+	case "docs.markdown.author":
+		return s.Docs.Markdown.Author(), true
+	case "docs.markdown.comment":
+		return s.Docs.Markdown.Comment(), true
+	case "docs.markdown.image_link":
+		return s.Docs.Markdown.ImageLink(), true
+	case "docs.markdown.nezachet":
+		return s.Docs.Markdown.Nezachet(), true
+	case "docs.markdown.source":
+		return s.Docs.Markdown.Source(), true
+	case "docs.markdown.zachet":
+		return s.Docs.Markdown.Zachet(), true
+	case "docs.print.measure_no_size":
+		return s.Docs.Print.MeasureNoSize(), true
+	case "docs.print.measure_zero_height":
+		return s.Docs.Print.MeasureZeroHeight(), true
+	case "docs.print.width_missing":
+		return s.Docs.Print.WidthMissing(), true
+	case "export.form.deselect_all":
+		return s.Export.Form.DeselectAll(), true
+	case "export.form.select_all":
+		return s.Export.Form.SelectAll(), true
+	case "export.menu.label":
+		return s.Export.Menu.Label(), true
+	case "export.menu.label_grouped":
+		return s.Export.Menu.LabelGrouped(), true
+	case "export.notes.no_handouts":
+		return s.Export.Notes.NoHandouts(), true
+	case "export.notes.offline":
+		return s.Export.Notes.Offline(), true
+	case "export.run.offline_formats":
+		return s.Export.Run.OfflineFormats(), true
+	case "export.run.progress":
+		return s.Export.Run.Progress(), true
+	case "export.run.progress_handouts":
+		return s.Export.Run.ProgressHandouts(), true
+	case "gallery.bars.filter_hint":
+		return s.Gallery.Bars.FilterHint(), true
+	case "gallery.bars.filter_reset":
+		return s.Gallery.Bars.FilterReset(), true
+	case "gallery.bars.filter_what":
+		return s.Gallery.Bars.FilterWhat(), true
+	case "gallery.bars.mass_delete":
+		return s.Gallery.Bars.MassDelete(), true
+	case "gallery.bars.mass_done":
+		return s.Gallery.Bars.MassDone(), true
+	case "gallery.bars.mass_move":
+		return s.Gallery.Bars.MassMove(), true
+	case "gallery.bars.note":
+		return s.Gallery.Bars.Note(), true
+	case "gallery.bars.title":
+		return s.Gallery.Bars.Title(), true
+	case "gallery.buttons.add_title":
+		return s.Gallery.Buttons.AddTitle(), true
+	case "gallery.buttons.cancel":
+		return s.Gallery.Buttons.Cancel(), true
+	case "gallery.buttons.delete":
+		return s.Gallery.Buttons.Delete(), true
+	case "gallery.buttons.minor":
+		return s.Gallery.Buttons.Minor(), true
+	case "gallery.buttons.note":
+		return s.Gallery.Buttons.Note(), true
+	case "gallery.buttons.save":
+		return s.Gallery.Buttons.Save(), true
+	case "gallery.buttons.title":
+		return s.Gallery.Buttons.Title(), true
+	case "gallery.card.handout_title":
+		return s.Gallery.Card.HandoutTitle(), true
+	case "gallery.card.heading":
+		return s.Gallery.Card.Heading(), true
+	case "gallery.card.note":
+		return s.Gallery.Card.Note(), true
+	case "gallery.card.question":
+		return s.Gallery.Card.Question(), true
+	case "gallery.card.title":
+		return s.Gallery.Card.Title(), true
+	case "gallery.feed.event_comment":
+		return s.Gallery.Feed.EventComment(), true
+	case "gallery.feed.event_meta":
+		return s.Gallery.Feed.EventMeta(), true
+	case "gallery.feed.note":
+		return s.Gallery.Feed.Note(), true
+	case "gallery.feed.title":
+		return s.Gallery.Feed.Title(), true
+	case "gallery.fields.plain_placeholder":
+		return s.Gallery.Fields.PlainPlaceholder(), true
+	case "gallery.fields.select_option":
+		return s.Gallery.Fields.SelectOption(), true
+	case "gallery.fields.title":
+		return s.Gallery.Fields.Title(), true
+	case "gallery.labels.long":
+		return s.Gallery.Labels.Long(), true
+	case "gallery.labels.not_taken":
+		return s.Gallery.Labels.NotTaken(), true
+	case "gallery.labels.note":
+		return s.Gallery.Labels.Note(), true
+	case "gallery.labels.rewrite":
+		return s.Gallery.Labels.Rewrite(), true
+	case "gallery.labels.taken":
+		return s.Gallery.Labels.Taken(), true
+	case "gallery.labels.title":
+		return s.Gallery.Labels.Title(), true
+	case "gallery.layout.box_1":
+		return s.Gallery.Layout.Box1(), true
+	case "gallery.layout.box_2":
+		return s.Gallery.Layout.Box2(), true
+	case "gallery.layout.box_3":
+		return s.Gallery.Layout.Box3(), true
+	case "gallery.layout.note":
+		return s.Gallery.Layout.Note(), true
+	case "gallery.layout.title":
+		return s.Gallery.Layout.Title(), true
+	case "gallery.list_rows.member_name":
+		return s.Gallery.ListRows.MemberName(), true
+	case "gallery.list_rows.member_role":
+		return s.Gallery.ListRows.MemberRole(), true
+	case "gallery.list_rows.note":
+		return s.Gallery.ListRows.Note(), true
+	case "gallery.list_rows.title":
+		return s.Gallery.ListRows.Title(), true
+	case "gallery.page.hint":
+		return s.Gallery.Page.Hint(), true
+	case "gallery.page.home":
+		return s.Gallery.Page.Home(), true
+	case "gallery.page.name":
+		return s.Gallery.Page.Name(), true
+	case "gallery.page.title":
+		return s.Gallery.Page.Title(), true
+	case "gallery.segment.all":
+		return s.Gallery.Segment.All(), true
+	case "gallery.segment.any":
+		return s.Gallery.Segment.Any(), true
+	case "gallery.segment.none":
+		return s.Gallery.Segment.None(), true
+	case "gallery.segment.note":
+		return s.Gallery.Segment.Note(), true
+	case "gallery.segment.title":
+		return s.Gallery.Segment.Title(), true
+	case "gallery.text.danger":
+		return s.Gallery.Text.Danger(), true
+	case "gallery.text.empty":
+		return s.Gallery.Text.Empty(), true
+	case "gallery.text.heading":
+		return s.Gallery.Text.Heading(), true
+	case "gallery.text.hint":
+		return s.Gallery.Text.Hint(), true
+	case "gallery.text.note":
+		return s.Gallery.Text.Note(), true
+	case "gallery.text.title":
+		return s.Gallery.Text.Title(), true
+	case "import.archive.hint":
+		return s.Import.Archive.Hint(), true
+	case "import.archive.subhead":
+		return s.Import.Archive.Subhead(), true
+	case "import.board.cancel":
+		return s.Import.Board.Cancel(), true
+	case "import.board.gen_pass":
+		return s.Import.Board.GenPass(), true
+	case "import.board.name_placeholder":
+		return s.Import.Board.NamePlaceholder(), true
+	case "import.board.pass_copied":
+		return s.Import.Board.PassCopied(), true
+	case "import.board.pass_danger":
+		return s.Import.Board.PassDanger(), true
+	case "import.board.pass_hint":
+		return s.Import.Board.PassHint(), true
+	case "import.board.pass_placeholder":
+		return s.Import.Board.PassPlaceholder(), true
+	case "import.board.pass_saved":
+		return s.Import.Board.PassSaved(), true
+	case "import.board.submit":
+		return s.Import.Board.Submit(), true
+	case "import.bundle.creating":
+		return s.Import.Bundle.Creating(), true
+	case "import.bundle.reading":
+		return s.Import.Bundle.Reading(), true
+	case "import.bundle.rollback":
+		return s.Import.Bundle.Rollback(), true
+	case "import.export.collecting":
+		return s.Import.Export.Collecting(), true
+	case "import.export.downloaded":
+		return s.Import.Export.Downloaded(), true
+	case "import.export.hint_body":
+		return s.Import.Export.HintBody(), true
+	case "import.export.label":
+		return s.Import.Export.Label(), true
+	case "import.export.menu_title":
+		return s.Import.Export.MenuTitle(), true
+	case "import.export.modal_title":
+		return s.Import.Export.ModalTitle(), true
+	case "import.export.none_picked":
+		return s.Import.Export.NonePicked(), true
+	case "import.export.not_encrypted":
+		return s.Import.Export.NotEncrypted(), true
+	case "import.export.select_all":
+		return s.Import.Export.SelectAll(), true
+	case "import.export.submit":
+		return s.Import.Export.Submit(), true
+	case "import.export.zipping":
+		return s.Import.Export.Zipping(), true
+	case "import.pack.default_title":
+		return s.Import.Pack.DefaultTitle(), true
+	case "import.pack.label":
+		return s.Import.Pack.Label(), true
+	case "import.pack.menu_title":
+		return s.Import.Pack.MenuTitle(), true
+	case "import.pack.no_questions":
+		return s.Import.Pack.NoQuestions(), true
+	case "import.pack.no_tours_note":
+		return s.Import.Pack.NoToursNote(), true
+	case "import.pack.offline":
+		return s.Import.Pack.Offline(), true
+	case "import.pack.preamble":
+		return s.Import.Pack.Preamble(), true
+	case "import.pack.prompt_group":
+		return s.Import.Pack.PromptGroup(), true
+	case "import.pack.prompt_list":
+		return s.Import.Pack.PromptList(), true
+	case "import.pack.reading_file":
+		return s.Import.Pack.ReadingFile(), true
+	case "import.pack.sniffed_package":
+		return s.Import.Pack.SniffedPackage(), true
+	case "import.page.home":
+		return s.Import.Page.Home(), true
+	case "import.page.name":
+		return s.Import.Page.Name(), true
+	case "import.page.title":
+		return s.Import.Page.Title(), true
+	case "import.picker.no_boards":
+		return s.Import.Picker.NoBoards(), true
+	case "import.run.importing":
+		return s.Import.Run.Importing(), true
+	case "import.run.loading":
+		return s.Import.Run.Loading(), true
+	case "import.run.need_source":
+		return s.Import.Run.NeedSource(), true
+	case "import.run.not_trello_export":
+		return s.Import.Run.NotTrelloExport(), true
+	case "import.run.token_rejected":
+		return s.Import.Run.TokenRejected(), true
+	case "import.run.token_required":
+		return s.Import.Run.TokenRequired(), true
+	case "import.trello.all_hint":
+		return s.Import.Trello.AllHint(), true
+	case "import.trello.attachment_fallback":
+		return s.Import.Trello.AttachmentFallback(), true
+	case "import.trello.board_label":
+		return s.Import.Trello.BoardLabel(), true
+	case "import.trello.board_name_default":
+		return s.Import.Trello.BoardNameDefault(), true
+	case "import.trello.connect":
+		return s.Import.Trello.Connect(), true
+	case "import.trello.intro_lead":
+		return s.Import.Trello.IntroLead(), true
+	case "import.trello.intro_mid":
+		return s.Import.Trello.IntroMid(), true
+	case "import.trello.json_hint":
+		return s.Import.Trello.JsonHint(), true
+	case "import.trello.label_no_color":
+		return s.Import.Trello.LabelNoColor(), true
+	case "import.trello.list_fallback":
+		return s.Import.Trello.ListFallback(), true
+	case "import.trello.reset":
+		return s.Import.Trello.Reset(), true
+	case "import.trello.subhead":
+		return s.Import.Trello.Subhead(), true
+	case "import.trello.test_session_fallback":
+		return s.Import.Trello.TestSessionFallback(), true
+	case "import.trello.token_hint":
+		return s.Import.Trello.TokenHint(), true
+	case "import.trello.token_placeholder":
+		return s.Import.Trello.TokenPlaceholder(), true
+	case "import.trello.token_submit":
+		return s.Import.Trello.TokenSubmit(), true
+	case "install.browser.archive_no_shell":
+		return s.Install.Browser.ArchiveNoShell(), true
+	case "install.browser.no_sandbox":
+		return s.Install.Browser.NoSandbox(), true
+	case "install.browser.not_found":
+		return s.Install.Browser.NotFound(), true
+	case "install.browser.not_installed":
+		return s.Install.Browser.NotInstalled(), true
+	case "install.browser.releases_no_stable":
+		return s.Install.Browser.ReleasesNoStable(), true
+	case "install.typst.not_found":
+		return s.Install.Typst.NotFound(), true
+	case "invite.facts.approval":
+		return s.Invite.Facts.Approval(), true
+	case "invite.form.approval":
+		return s.Invite.Form.Approval(), true
+	case "invite.form.label_placeholder":
+		return s.Invite.Form.LabelPlaceholder(), true
+	case "invite.form.submit":
+		return s.Invite.Form.Submit(), true
+	case "invite.form.ttl_day":
+		return s.Invite.Form.TtlDay(), true
+	case "invite.form.ttl_hour":
+		return s.Invite.Form.TtlHour(), true
+	case "invite.form.ttl_label":
+		return s.Invite.Form.TtlLabel(), true
+	case "invite.form.ttl_never":
+		return s.Invite.Form.TtlNever(), true
+	case "invite.form.ttl_week":
+		return s.Invite.Form.TtlWeek(), true
+	case "invite.form.uses_label":
+		return s.Invite.Form.UsesLabel(), true
+	case "invite.form.uses_unlimited":
+		return s.Invite.Form.UsesUnlimited(), true
+	case "invite.message.copied":
+		return s.Invite.Message.Copied(), true
+	case "invite.request.approve":
+		return s.Invite.Request.Approve(), true
+	case "invite.request.decline":
+		return s.Invite.Request.Decline(), true
+	case "invite.row.copy":
+		return s.Invite.Row.Copy(), true
+	case "invite.row.default_label":
+		return s.Invite.Row.DefaultLabel(), true
+	case "invite.row.remove":
+		return s.Invite.Row.Remove(), true
+	case "invite.row.remove_confirm":
+		return s.Invite.Row.RemoveConfirm(), true
+	case "invite.row.revoke":
+		return s.Invite.Row.Revoke(), true
+	case "invite.state.active":
+		return s.Invite.State.Active(), true
+	case "invite.state.exhausted":
+		return s.Invite.State.Exhausted(), true
+	case "invite.state.expired":
+		return s.Invite.State.Expired(), true
+	case "invite.state.revoked":
+		return s.Invite.State.Revoked(), true
+	case "invite.time.expired":
+		return s.Invite.Time.Expired(), true
+	case "invite.time.under_hour":
+		return s.Invite.Time.UnderHour(), true
+	case "lj.error.no_challenge":
+		return s.Lj.Error.NoChallenge(), true
+	case "lj.error.nothing":
+		return s.Lj.Error.Nothing(), true
+	case "notify.join.board_unnamed":
+		return s.Notify.Join.BoardUnnamed(), true
+	case "notify.mention.board_unnamed":
+		return s.Notify.Mention.BoardUnnamed(), true
+	case "notify.mention.verb_mentioned":
+		return s.Notify.Mention.VerbMentioned(), true
+	case "notify.mention.verb_replied":
+		return s.Notify.Mention.VerbReplied(), true
+	case "passphrase.change.label":
+		return s.Passphrase.Change.Label(), true
+	case "passphrase.change.offline":
+		return s.Passphrase.Change.Offline(), true
+	case "passphrase.change.title":
+		return s.Passphrase.Change.Title(), true
+	case "passphrase.check.title":
+		return s.Passphrase.Check.Title(), true
+	case "passphrase.exit.delete":
+		return s.Passphrase.Exit.Delete(), true
+	case "passphrase.exit.leave":
+		return s.Passphrase.Exit.Leave(), true
+	case "profile.account.logout":
+		return s.Profile.Account.Logout(), true
+	case "profile.account.tokens":
+		return s.Profile.Account.Tokens(), true
+	case "profile.author.hint":
+		return s.Profile.Author.Hint(), true
+	case "profile.author.name":
+		return s.Profile.Author.Name(), true
+	case "profile.author.placeholder":
+		return s.Profile.Author.Placeholder(), true
+	case "profile.cancel":
+		return s.Profile.Cancel(), true
+	case "profile.card_title.answer":
+		return s.Profile.CardTitle.Answer(), true
+	case "profile.card_title.hint":
+		return s.Profile.CardTitle.Hint(), true
+	case "profile.card_title.name":
+		return s.Profile.CardTitle.Name(), true
+	case "profile.card_title.question":
+		return s.Profile.CardTitle.Question(), true
+	case "profile.feed.all":
+		return s.Profile.Feed.All(), true
+	case "profile.feed.comments":
+		return s.Profile.Feed.Comments(), true
+	case "profile.feed.edits":
+		return s.Profile.Feed.Edits(), true
+	case "profile.feed.hint":
+		return s.Profile.Feed.Hint(), true
+	case "profile.feed.meta":
+		return s.Profile.Feed.Meta(), true
+	case "profile.feed.name":
+		return s.Profile.Feed.Name(), true
+	case "profile.home":
+		return s.Profile.Home(), true
+	case "profile.name":
+		return s.Profile.Name(), true
+	case "profile.password.current":
+		return s.Profile.Password.Current(), true
+	case "profile.password.name":
+		return s.Profile.Password.Name(), true
+	case "profile.password.new":
+		return s.Profile.Password.New(), true
+	case "profile.password.repeat":
+		return s.Profile.Password.Repeat(), true
+	case "profile.password.submit":
+		return s.Profile.Password.Submit(), true
+	case "profile.save":
+		return s.Profile.Save(), true
+	case "profile.sizes.board_w":
+		return s.Profile.Sizes.BoardW(), true
+	case "profile.sizes.board_w_hint":
+		return s.Profile.Sizes.BoardWHint(), true
+	case "profile.sizes.card_h":
+		return s.Profile.Sizes.CardH(), true
+	case "profile.sizes.card_h_hint":
+		return s.Profile.Sizes.CardHHint(), true
+	case "profile.sizes.close":
+		return s.Profile.Sizes.Close(), true
+	case "profile.sizes.font":
+		return s.Profile.Sizes.Font(), true
+	case "profile.sizes.font_hint":
+		return s.Profile.Sizes.FontHint(), true
+	case "profile.sizes.list_w":
+		return s.Profile.Sizes.ListW(), true
+	case "profile.sizes.name":
+		return s.Profile.Sizes.Name(), true
+	case "profile.sizes.reset":
+		return s.Profile.Sizes.Reset(), true
+	case "profile.storage.hint_lead":
+		return s.Profile.Storage.HintLead(), true
+	case "profile.storage.hint_mid":
+		return s.Profile.Storage.HintMid(), true
+	case "profile.title":
+		return s.Profile.Title(), true
+	case "profile.tz.cities_hint":
+		return s.Profile.Tz.CitiesHint(), true
+	case "profile.tz.cities_label":
+		return s.Profile.Tz.CitiesLabel(), true
+	case "profile.tz.cities_placeholder":
+		return s.Profile.Tz.CitiesPlaceholder(), true
+	case "profile.tz.hint":
+		return s.Profile.Tz.Hint(), true
+	case "profile.tz.mode_date":
+		return s.Profile.Tz.ModeDate(), true
+	case "profile.tz.mode_date_title":
+		return s.Profile.Tz.ModeDateTitle(), true
+	case "profile.tz.mode_title":
+		return s.Profile.Tz.ModeTitle(), true
+	case "profile.tz.name":
+		return s.Profile.Tz.Name(), true
+	case "profile.tz.title_mode_label":
+		return s.Profile.Tz.TitleModeLabel(), true
+	case "profile.username.hint":
+		return s.Profile.Username.Hint(), true
+	case "profile.username.placeholder":
+		return s.Profile.Username.Placeholder(), true
+	case "profile.whoami.hint_lead":
+		return s.Profile.Whoami.HintLead(), true
+	case "profile.whoami.hint_mid":
+		return s.Profile.Whoami.HintMid(), true
+	case "search.blank":
+		return s.Search.Blank(), true
+	case "server.attachment.not_found":
+		return s.Server.Attachment.NotFound(), true
+	case "server.board.delete_owner_only":
+		return s.Server.Board.DeleteOwnerOnly(), true
+	case "server.board.deleted":
+		return s.Server.Board.Deleted(), true
+	case "server.board.keymeta_owner_only":
+		return s.Server.Board.KeymetaOwnerOnly(), true
+	case "server.board.leave_owner_only":
+		return s.Server.Board.LeaveOwnerOnly(), true
+	case "server.board.no_access":
+		return s.Server.Board.NoAccess(), true
+	case "server.board.not_found":
+		return s.Server.Board.NotFound(), true
+	case "server.bundle.event_without_target":
+		return s.Server.Bundle.EventWithoutTarget(), true
+	case "server.bundle.too_many_events":
+		return s.Server.Bundle.TooManyEvents(), true
+	case "server.card.question_not_marked":
+		return s.Server.Card.QuestionNotMarked(), true
+	case "server.card.scope_exactly_one":
+		return s.Server.Card.ScopeExactlyOne(), true
+	case "server.child.card_foreign":
+		return s.Server.Child.CardForeign(), true
+	case "server.child.card_not_found":
+		return s.Server.Child.CardNotFound(), true
+	case "server.child.group_foreign":
+		return s.Server.Child.GroupForeign(), true
+	case "server.child.group_not_found":
+		return s.Server.Child.GroupNotFound(), true
+	case "server.child.label_foreign":
+		return s.Server.Child.LabelForeign(), true
+	case "server.child.label_not_found":
+		return s.Server.Child.LabelNotFound(), true
+	case "server.child.list_foreign":
+		return s.Server.Child.ListForeign(), true
+	case "server.child.list_not_found":
+		return s.Server.Child.ListNotFound(), true
+	case "server.child.session_foreign":
+		return s.Server.Child.SessionForeign(), true
+	case "server.child.session_not_found":
+		return s.Server.Child.SessionNotFound(), true
+	case "server.comment.delete_owner_only":
+		return s.Server.Comment.DeleteOwnerOnly(), true
+	case "server.comment.edit_owner_only":
+		return s.Server.Comment.EditOwnerOnly(), true
+	case "server.comment.foreign":
+		return s.Server.Comment.Foreign(), true
+	case "server.comment.not_found":
+		return s.Server.Comment.NotFound(), true
+	case "server.import.file_no_questions":
+		return s.Server.Import.FileNoQuestions(), true
+	case "server.import.no_file":
+		return s.Server.Import.NoFile(), true
+	case "server.import.read_failed":
+		return s.Server.Import.ReadFailed(), true
+	case "server.import.text_no_questions":
+		return s.Server.Import.TextNoQuestions(), true
+	case "server.import.unsupported":
+		return s.Server.Import.Unsupported(), true
+	case "server.internal":
+		return s.Server.Internal(), true
+	case "server.invite.decision_invalid":
+		return s.Server.Invite.DecisionInvalid(), true
+	case "server.invite.label_too_long":
+		return s.Server.Invite.LabelTooLong(), true
+	case "server.invite.limits_out_of_range":
+		return s.Server.Invite.LimitsOutOfRange(), true
+	case "server.invite.no_seats_left":
+		return s.Server.Invite.NoSeatsLeft(), true
+	case "server.invite.not_found":
+		return s.Server.Invite.NotFound(), true
+	case "server.invite.owner_only":
+		return s.Server.Invite.OwnerOnly(), true
+	case "server.invite.request_not_found":
+		return s.Server.Invite.RequestNotFound(), true
+	case "server.list.group_needs_two":
+		return s.Server.List.GroupNeedsTwo(), true
+	case "server.list.not_on_board":
+		return s.Server.List.NotOnBoard(), true
+	case "server.member.add_owner_only":
+		return s.Server.Member.AddOwnerOnly(), true
+	case "server.member.remove_owner_only":
+		return s.Server.Member.RemoveOwnerOnly(), true
+	case "server.member.user_not_found":
+		return s.Server.Member.UserNotFound(), true
+	case "server.reaction.delete_owner_only":
+		return s.Server.Reaction.DeleteOwnerOnly(), true
+	case "server.reaction.not_found":
+		return s.Server.Reaction.NotFound(), true
+	case "server.refusal.broken":
+		return s.Server.Refusal.Broken(), true
+	case "server.refusal.declined":
+		return s.Server.Refusal.Declined(), true
+	case "server.refusal.exhausted":
+		return s.Server.Refusal.Exhausted(), true
+	case "server.refusal.expired":
+		return s.Server.Refusal.Expired(), true
+	case "server.refusal.revoked":
+		return s.Server.Refusal.Revoked(), true
+	case "server.refusal.spent":
+		return s.Server.Refusal.Spent(), true
+	case "sessions.cities.add_placeholder":
+		return s.Sessions.Cities.AddPlaceholder(), true
+	case "sessions.cities.copy":
+		return s.Sessions.Cities.Copy(), true
+	case "sessions.cities.label":
+		return s.Sessions.Cities.Label(), true
+	case "sessions.cities.remove":
+		return s.Sessions.Cities.Remove(), true
+	case "sessions.delete.confirm":
+		return s.Sessions.Delete.Confirm(), true
+	case "sessions.delete.label":
+		return s.Sessions.Delete.Label(), true
+	case "sessions.feed.at_question":
+		return s.Sessions.Feed.AtQuestion(), true
+	case "sessions.feed.empty":
+		return s.Sessions.Feed.Empty(), true
+	case "sessions.feed.label":
+		return s.Sessions.Feed.Label(), true
+	case "sessions.feed.placeholder":
+		return s.Sessions.Feed.Placeholder(), true
+	case "sessions.feed.send":
+		return s.Sessions.Feed.Send(), true
+	case "sessions.form.alias":
+		return s.Sessions.Form.Alias(), true
+	case "sessions.form.alias_placeholder":
+		return s.Sessions.Form.AliasPlaceholder(), true
+	case "sessions.form.date":
+		return s.Sessions.Form.Date(), true
+	case "sessions.form.date_placeholder":
+		return s.Sessions.Form.DatePlaceholder(), true
+	case "sessions.form.time":
+		return s.Sessions.Form.Time(), true
+	case "sessions.form.time_placeholder":
+		return s.Sessions.Form.TimePlaceholder(), true
+	case "sessions.form.timezone":
+		return s.Sessions.Form.Timezone(), true
+	case "sessions.list.empty":
+		return s.Sessions.List.Empty(), true
+	case "sessions.list.invite":
+		return s.Sessions.List.Invite(), true
+	case "sessions.list.invite_title":
+		return s.Sessions.List.InviteTitle(), true
+	case "sessions.list.no_date":
+		return s.Sessions.List.NoDate(), true
+	case "sessions.list.open":
+		return s.Sessions.List.Open(), true
+	case "sessions.list.origin_title":
+		return s.Sessions.List.OriginTitle(), true
+	case "sessions.message.create_failed":
+		return s.Sessions.Message.CreateFailed(), true
+	case "sessions.message.delete_failed":
+		return s.Sessions.Message.DeleteFailed(), true
+	case "sessions.message.note_add_failed":
+		return s.Sessions.Message.NoteAddFailed(), true
+	case "sessions.message.notes_load_failed":
+		return s.Sessions.Message.NotesLoadFailed(), true
+	case "sessions.message.save_failed":
+		return s.Sessions.Message.SaveFailed(), true
+	case "sessions.testers.add":
+		return s.Sessions.Testers.Add(), true
+	case "sessions.testers.label":
+		return s.Sessions.Testers.Label(), true
+	case "sessions.testers.name_placeholder":
+		return s.Sessions.Testers.NamePlaceholder(), true
+	case "sessions.testers.player":
+		return s.Sessions.Testers.Player(), true
+	case "sessions.testers.remove_row":
+		return s.Sessions.Testers.RemoveRow(), true
+	case "sessions.testers.team":
+		return s.Sessions.Testers.Team(), true
+	case "sessions.testmode.start_title":
+		return s.Sessions.Testmode.StartTitle(), true
+	case "sessions.testmode.stop_title":
+		return s.Sessions.Testmode.StopTitle(), true
+	case "stats.options.label":
+		return s.Stats.Options.Label(), true
+	case "stats.results.empty":
+		return s.Stats.Results.Empty(), true
+	case "stats.table.header_missing":
+		return s.Stats.Table.HeaderMissing(), true
+	case "stats.xlsx.no_sheets":
+		return s.Stats.Xlsx.NoSheets(), true
+	case "tg.resolve.done":
+		return s.Tg.Resolve.Done(), true
+	case "tg.resolve.group_code_hint":
+		return s.Tg.Resolve.GroupCodeHint(), true
+	case "tg.resolve.same_channel":
+		return s.Tg.Resolve.SameChannel(), true
+	case "tg.verify.what_channel":
+		return s.Tg.Verify.WhatChannel(), true
+	case "tg.verify.what_chat":
+		return s.Tg.Verify.WhatChat(), true
+	case "timeline.comment.cancel":
+		return s.Timeline.Comment.Cancel(), true
+	case "timeline.comment.copy_link_title":
+		return s.Timeline.Comment.CopyLinkTitle(), true
+	case "timeline.comment.delete_confirm":
+		return s.Timeline.Comment.DeleteConfirm(), true
+	case "timeline.comment.deleted":
+		return s.Timeline.Comment.Deleted(), true
+	case "timeline.comment.edited_suffix":
+		return s.Timeline.Comment.EditedSuffix(), true
+	case "timeline.comment.image_alt":
+		return s.Timeline.Comment.ImageAlt(), true
+	case "timeline.comment.image_draft":
+		return s.Timeline.Comment.ImageDraft(), true
+	case "timeline.comment.menu_delete":
+		return s.Timeline.Comment.MenuDelete(), true
+	case "timeline.comment.menu_edit":
+		return s.Timeline.Comment.MenuEdit(), true
+	case "timeline.comment.menu_excerpt":
+		return s.Timeline.Comment.MenuExcerpt(), true
+	case "timeline.comment.menu_no_test":
+		return s.Timeline.Comment.MenuNoTest(), true
+	case "timeline.comment.menu_react":
+		return s.Timeline.Comment.MenuReact(), true
+	case "timeline.comment.menu_reply":
+		return s.Timeline.Comment.MenuReply(), true
+	case "timeline.comment.menu_title":
+		return s.Timeline.Comment.MenuTitle(), true
+	case "timeline.comment.offline":
+		return s.Timeline.Comment.Offline(), true
+	case "timeline.comment.remove_image_title":
+		return s.Timeline.Comment.RemoveImageTitle(), true
+	case "timeline.comment.save":
+		return s.Timeline.Comment.Save(), true
+	case "timeline.diff.no_changes":
+		return s.Timeline.Diff.NoChanges(), true
+	case "timeline.event.attach_add":
+		return s.Timeline.Event.AttachAdd(), true
+	case "timeline.event.attach_remove":
+		return s.Timeline.Event.AttachRemove(), true
+	case "timeline.event.attach_replace":
+		return s.Timeline.Event.AttachReplace(), true
+	case "timeline.event.comment":
+		return s.Timeline.Event.Comment(), true
+	case "timeline.event.desc_edit":
+		return s.Timeline.Event.DescEdit(), true
+	case "timeline.event.label_add":
+		return s.Timeline.Event.LabelAdd(), true
+	case "timeline.event.label_remove":
+		return s.Timeline.Event.LabelRemove(), true
+	case "timeline.event.reaction":
+		return s.Timeline.Event.Reaction(), true
+	case "timeline.excerpt.badge":
+		return s.Timeline.Excerpt.Badge(), true
+	case "timeline.excerpt.download":
+		return s.Timeline.Excerpt.Download(), true
+	case "timeline.excerpt.file_fallback":
+		return s.Timeline.Excerpt.FileFallback(), true
+	case "timeline.missing_dk":
+		return s.Timeline.MissingDk(), true
+	case "timeline.reaction.add_title":
+		return s.Timeline.Reaction.AddTitle(), true
+	case "timeline.reaction.emoji_prompt":
+		return s.Timeline.Reaction.EmojiPrompt(), true
+	case "timeline.reaction.offline":
+		return s.Timeline.Reaction.Offline(), true
+	case "timeline.reaction.other":
+		return s.Timeline.Reaction.Other(), true
+	case "timeline.reply.deleted_parent":
+		return s.Timeline.Reply.DeletedParent(), true
+	case "timeline.reply.unknown_parent":
+		return s.Timeline.Reply.UnknownParent(), true
+	case "timeline.thread.open_title":
+		return s.Timeline.Thread.OpenTitle(), true
+	}
 	return "", false
 }
 
 // Defines reports whether the Catalog holds the id at all, templated or not.
 func (Strings) Defines(id string) bool {
+	switch id {
+	case "attachments.confirm.remove", "attachments.error.blob_download_failed", "attachments.error.download_failed", "attachments.error.offline_unavailable", "attachments.error.replace_failed", "attachments.error.upload_failed", "attachments.lightbox.close", "attachments.lightbox.dialog_label", "attachments.list.actions_title", "attachments.list.excerpt_badge", "attachments.list.fallback_name", "attachments.menu.delete", "attachments.menu.excerpt", "attachments.menu.replace", "attachments.name.default_stem", "attachments.name.paste_default", "attachments.status.encrypting", "attachments.status.offline_delete", "attachments.status.offline_edit", "attachments.status.offline_upload", "auth.login.fields_required", "auth.login.invalid", "auth.page.title", "auth.password.current_wrong", "auth.password.length", "auth.profile.cities_too_long", "auth.profile.name_too_long", "auth.profile.timezone_too_long", "auth.tg.code_missing", "auth.tg.password_wrong", "auth.tg.telegram_taken", "auth.tg.username_format", "auth.tg.username_reserved", "auth.token.forbidden", "auth.username.already_set", "auth.username.taken", "auth.username.too_long", "auth.username.too_short", "board.accent.hint", "board.accent.run", "board.accent.title", "board.actions.cancel", "board.actions.close", "board.actions.copy", "board.actions.done", "board.actions.move", "board.actions.save", "board.bell.label", "board.bell.title", "board.card.add_version_label", "board.card.add_version_title", "board.card.alias_label", "board.card.alias_placeholder", "board.card.attachments_label", "board.card.compress", "board.card.copy_title", "board.card.delete", "board.card.desc_label", "board.card.excerpts_view", "board.card.feed_label", "board.card.handout_title", "board.card.kind_heading", "board.card.kind_label", "board.card.kind_meta", "board.card.kind_other", "board.card.kind_question", "board.card.label_add", "board.card.link_label", "board.card.link_title", "board.card.mark_test", "board.card.move_label", "board.card.new_label_placeholder", "board.card.new_label_title", "board.card.playings_label", "board.card.preview_dblclick", "board.card.screen_label", "board.card.screen_title", "board.card.stress_label", "board.card.stress_title", "board.card.tab_fields", "board.card.tab_preview", "board.card.tab_text", "board.card.test_lead", "board.card.test_mid", "board.card.to4s_title", "board.card.typo_label", "board.card.typo_title", "board.card.upload", "board.card.versions_title", "board.changepass.copied", "board.changepass.danger", "board.changepass.generate", "board.changepass.placeholder", "board.changepass.saved", "board.changepass.submit", "board.changepass.title", "board.count.filtered", "board.count.questions", "board.delete.continue_q", "board.delete.failed", "board.delete.label", "board.delete.list_confirm", "board.delete.list_label", "board.delete.list_tail", "board.delete.list_untitled", "board.delete.mismatch", "board.delete.offline", "board.delete.title", "board.delete.type_name", "board.delete.warn", "board.dirty.discard", "board.dirty.hint", "board.dirty.title", "board.error.no_key", "board.error.no_label", "board.error.no_list", "board.error.no_test", "board.excerpts.title", "board.export.fmt4s_title", "board.export.handouts_label", "board.export.handouts_title", "board.export.overlay_label", "board.export.pdf_mobile_label", "board.export.pdf_mobile_title", "board.export.run", "board.export.select_all", "board.export.title", "board.feed.comment_placeholder", "board.feed.diff_view", "board.feed.expand_label", "board.feed.expand_title", "board.feed.filter_title", "board.feed.opt_all", "board.feed.opt_brief", "board.feed.opt_comments", "board.feed.opt_edits", "board.feed.opt_full", "board.feed.opt_meta", "board.feed.opt_new", "board.feed.opt_old", "board.feed.order_label", "board.feed.order_title", "board.feed.show", "board.feed.submit", "board.feed.title", "board.fields.board", "board.fields.list", "board.fields.position", "board.filter.title", "board.forget.label", "board.forget.title", "board.handouts.download", "board.handouts.generate", "board.handouts.splitfit_title", "board.handouts.src_label", "board.handouts.title", "board.importpick.hint", "board.importpick.split_label", "board.importpick.split_title", "board.importpick.submit", "board.importpick.title", "board.importverify.src_label", "board.importverify.title", "board.labels.name", "board.leave.confirm", "board.leave.failed", "board.leave.label", "board.leave.offline", "board.leave.target_named", "board.leave.target_this", "board.leave.title", "board.list.add_card", "board.list.add_placeholder", "board.list.create", "board.list.group_fallback", "board.list.group_title", "board.list.menu_title", "board.list.untitled", "board.listsmanage.link_label", "board.listsmanage.link_title", "board.listsmanage.move_label", "board.listsmanage.move_title", "board.listsmanage.title", "board.mass.board_locked", "board.mass.copy_offline", "board.mass.delete_hint", "board.mass.exit_label", "board.mass.hint", "board.mass.menu_title", "board.mass.name", "board.mass.no_labels", "board.mass.no_tests", "board.mass.pick_test", "board.mass.progress", "board.mass.run", "board.mass.select_card", "board.mass.select_list", "board.mass.selected_count", "board.members.add", "board.members.create_invite", "board.members.invites", "board.members.load_failed", "board.members.menu_pending", "board.members.menu_title", "board.members.name", "board.members.name_placeholder", "board.members.remove_confirm", "board.members.remove_fallback", "board.members.remove_title", "board.members.requests", "board.members.role_editor", "board.members.role_owner", "board.movelist.title", "board.page.home", "board.page.name", "board.page.offline", "board.page.offline_hint", "board.page.title", "board.panel.title", "board.passcheck.backup", "board.passcheck.forgot", "board.passcheck.hint_lead", "board.passcheck.hint_mid", "board.passcheck.saved_hint", "board.passcheck.submit", "board.passcheck.title", "board.paste.name_placeholder", "board.paste.title", "board.preview.edit_title", "board.preview.empty", "board.preview.group", "board.preview.list", "board.preview.title", "board.rename.board_label", "board.rename.board_offline", "board.rename.board_prompt", "board.rename.board_title", "board.rename.failed", "board.rename.list_label", "board.rename.list_prompt", "board.replace.case", "board.replace.find", "board.replace.next", "board.replace.prev", "board.replace.replace_with", "board.replace.run", "board.replace.scope_board", "board.replace.title", "board.sessionedit.title", "board.sessions.add", "board.sessions.add_title", "board.sessions.fallback", "board.sessions.menu_title", "board.sessions.name", "board.testmode.badge", "board.testmode.stop", "board.thread.placeholder", "board.thread.submit", "board.thread.title", "board.timer.label", "board.timer.title", "board.unlock.exit_hint", "board.unlock.forgot", "board.unlock.pass_placeholder", "board.unlock.submit", "board.unlock.title", "board.unread.comments", "board.unread.dot", "board.unread.mention", "boardsync.config.empty_url", "boardsync.config.unrecognized", "boardsync.fetch.card", "boardsync.fetch.list", "boardsync.upload.default_caption", "boardsync.upload.list_missing", "boardsync.upload.no_lists", "boardsync.upload.posted", "boardsync.upload.uploading", "bot.login.hint", "bot.register.done", "bot.register.expired", "bot.texts.down", "bot.texts.help", "card.add.labels_all_added", "card.add.labels_none", "card.add.labels_placeholder", "card.add.no_match", "card.add.playings_all_marked", "card.add.playings_none", "card.add.playings_placeholder", "card.authors.caption_title", "card.authors.placeholder", "card.chip.remove_aria", "card.copy.card_link", "card.copy.comment_link", "card.copy.done", "card.copy.failed", "card.create.failed", "card.delete.confirm", "card.dirty.comment_failed", "card.dirty.save_failed", "card.error.card_not_open", "card.error.clipboard_unavailable", "card.error.image_not_found", "card.error.no_board_key", "card.error.no_image_copy_support", "card.error.reencode_failed", "card.field.add", "card.field.add_row", "card.field.add_title", "card.field.answer", "card.field.comment", "card.field.handout", "card.field.hndt", "card.field.nezachet", "card.field.question", "card.field.remove_row_title", "card.field.remove_title", "card.field.source", "card.field.zachet", "card.handout.attach", "card.handout.attach_title", "card.handout.mode_image", "card.handout.mode_text", "card.kind.changed", "card.labels.empty", "card.labels.remove_title", "card.move.copied", "card.move.loading", "card.move.moved", "card.move.no_lists", "card.move.offline", "card.move.position", "card.move.reencrypting", "card.move.saving", "card.move.to_end", "card.move.untitled_list", "card.playings.empty", "card.playings.label_add_title", "card.playings.label_remove_title", "card.playings.remove_aria", "card.playings.remove_confirm", "card.playings.remove_confirm_scoped", "card.playings.remove_title", "card.preview.empty", "card.save.saved", "card.seen.common_tester_title", "card.seen.copy_title", "card.seen.label", "card.seen.label_except_common", "card.seen.show_all", "card.to4s.failed", "card.to4s.offline", "card.version.fallback_name", "card.version.promote_aria", "card.version.promote_title", "card.version.remove_aria", "card.version.remove_title", "card.version.rename_aria", "card.version.rename_prompt", "card.version.rename_title", "card.view.back", "card.view.close", "card.view.desc_label", "card.view.tab_text", "chgk.author.default", "chgk.author.feminine", "chgk.author.feminine_plural", "chgk.author.plural", "chgk.copy.handout", "chgk.copy.image_handout_note", "chgk.copy.question", "chgk.copy.question_numbered", "chgk.copy.question_piece", "chgk.copy.question_unnumbered", "chgk.copy.question_whole", "chgk.copy.question_with_answer", "chgk.label.answer", "chgk.label.author", "chgk.label.comment", "chgk.label.date", "chgk.label.editor", "chgk.label.handout", "chgk.label.nezachet", "chgk.label.question", "chgk.label.source", "chgk.label.source_plural", "chgk.label.zachet", "chgk.preview.image_missing", "chgk.zip.corrupt", "chgk.zip.file_corrupt", "chgk.zip.method_unsupported", "chgk.zip.not_zip", "chgk.zip.too_large", "chgk.zip.zip64_unsupported", "chgkcli.add_stats.custom_csv_flag", "chgkcli.docx.no_paragraph_flag", "chgkcli.docx.only_question_number_flag", "chgkcli.lj.genimp_flag", "chgkcli.parse.tour_numbers_as_words_flag", "chgkcli.shared.replace_no_break_hyphens_flag", "chgkcli.telegram.done", "chgkcli.telegram.posting", "chgkcli.telegram.stop_if_no_stats_flag", "chgkimport.error.no_4s", "chgkimport.error.no_questions", "chgkimport.error.too_big", "chrome.bell.empty", "chrome.bell.loading", "chrome.bell.mention", "chrome.bell.mention_reply", "chrome.bell.read_all", "chrome.bell.title", "chrome.card.title_empty", "chrome.colorpick.button_title", "chrome.home.board_locked_name", "chrome.home.create_offline", "chrome.home.empty_all", "chrome.home.empty_named", "chrome.home.role_editor", "chrome.home.role_owner", "chrome.home.unread_mention_title", "chrome.home.unread_title", "chrome.offline_page.body", "chrome.passphrase.too_few_words", "chrome.passphrase.too_short", "chrome.passphrase.wrong", "chrome.prewarm.done", "chrome.prewarm.locked_note", "chrome.prewarm.menu_label", "chrome.prewarm.menu_title", "chrome.prewarm.offline", "chrome.prewarm.progress", "chrome.search.comments", "chrome.search.note_all", "chrome.search.note_no_boards", "chrome.search.note_none", "chrome.search.note_partial", "chrome.search.questions", "chrome.store.upgrade_blocked", "chrome.sync.offline", "chrome.sync.offline_pending", "chrome.sync.saved", "chrome.sync.saving", "chrome.sync.syncing", "chrome.sync.syncing_pending", "chrome.sync.write_error", "chrome.tokens.copied", "chrome.tokens.copy", "chrome.tokens.label_unnamed", "chrome.tokens.meta_dates", "chrome.tokens.meta_unused", "chrome.tokens.meta_used", "chrome.tokens.revoke", "chrome.tokens.revoke_confirm", "chrome.tokens.status_active", "chrome.tokens.status_expired", "chrome.tokens.status_revoked", "chrome.typograph.confirm", "chrome.typograph.done", "chrome.typograph.failed", "chrome.typograph.menu_label", "chrome.typograph.menu_title", "chrome.typograph.nothing_to_do", "cli.attachment.summary", "cli.board.only_show", "cli.board.summary", "cli.board.usage", "cli.boards.summary", "cli.boards.usage", "cli.card.add_empty", "cli.card.add_kind_flag", "cli.card.add_list_flag", "cli.card.add_text_flag", "cli.card.add_usage", "cli.card.after_flag", "cli.card.alias_flag", "cli.card.before_flag", "cli.card.changed", "cli.card.created", "cli.card.expect_flag", "cli.card.file_flag", "cli.card.get_header", "cli.card.get_usage", "cli.card.moved", "cli.card.mv_list_flag", "cli.card.need_list", "cli.card.rank_after_missing", "cli.card.rank_before_missing", "cli.card.removed", "cli.card.rm_usage", "cli.card.set_empty", "cli.card.set_kind_flag", "cli.card.set_text_flag", "cli.card.set_usage", "cli.card.summary", "cli.card.unchanged", "cli.card.updated", "cli.client.token_rejected", "cli.comment.add_file_flag", "cli.comment.add_text_flag", "cli.comment.add_usage", "cli.comment.added", "cli.comment.all_flag", "cli.comment.deleted", "cli.comment.edit_file_flag", "cli.comment.edit_text_flag", "cli.comment.edit_usage", "cli.comment.edited", "cli.comment.empty", "cli.comment.ls_usage", "cli.comment.mentioned", "cli.comment.removed", "cli.comment.reply_to_flag", "cli.comment.rm_usage", "cli.comment.summary", "cli.export.summary", "cli.label.summary", "cli.list.add_after_flag", "cli.list.add_title_flag", "cli.list.add_usage", "cli.list.created", "cli.list.need_id_title", "cli.list.need_title", "cli.list.removed", "cli.list.rename_title_flag", "cli.list.rename_usage", "cli.list.renamed", "cli.list.rm_usage", "cli.list.summary", "cli.lock.all_done", "cli.lock.all_flag", "cli.lock.done", "cli.lock.need_ref", "cli.lock.summary", "cli.lock.usage", "cli.login.done", "cli.login.empty_token", "cli.login.need_url", "cli.login.rejected", "cli.login.summary", "cli.login.token_flag", "cli.login.token_prompt", "cli.login.url_flag", "cli.login.usage", "cli.logout.done", "cli.logout.summary", "cli.logout.usage", "cli.run.commands_head", "cli.run.example_boards", "cli.run.example_login", "cli.run.example_unlock", "cli.run.flags_head", "cli.run.footer_4s", "cli.run.footer_help", "cli.run.json_flag", "cli.run.start_head", "cli.run.state_unreadable", "cli.run.title", "cli.run.unknown_command", "cli.search.bad_regex", "cli.search.cards_flag", "cli.search.comments_flag", "cli.search.need_query", "cli.search.nothing", "cli.search.regex_flag", "cli.search.summary", "cli.search.usage", "cli.shared.ambiguous", "cli.shared.board_flag", "cli.shared.login_first", "cli.shared.need_board", "cli.shared.need_id", "cli.shared.no_key", "cli.shared.not_found", "cli.shared.numeric_id", "cli.shared.see_boards", "cli.shared.unknown_action", "cli.shared.what_board", "cli.shared.what_card", "cli.shared.what_comment", "cli.shared.what_label", "cli.shared.what_list", "cli.shared.what_unlocked_board", "cli.snapshot.card", "cli.snapshot.card_alias", "cli.snapshot.card_not_found", "cli.snapshot.group", "cli.snapshot.label", "cli.snapshot.label_color", "cli.snapshot.list", "cli.snapshot.list_not_found", "cli.source.summary", "cli.unlock.done", "cli.unlock.need_ref", "cli.unlock.passphrase_prompt", "cli.unlock.summary", "cli.unlock.usage", "cli.unlock.wrong_passphrase", "cli.versions.field_label", "cli.versions.question_label", "docs.docx.host_version", "docs.docx.screen_version", "docs.handout.bad_markup", "docs.handout.image_missing", "docs.handout.language_missing", "docs.handout.pack_multiple", "docs.handout.pack_no_grid", "docs.handout.pack_none", "docs.handout.rotate_image_missing", "docs.handout_list.by_number_lead", "docs.handout_list.by_tour_lead", "docs.handout_list.heading", "docs.handout_list.tour_none", "docs.handout_list.tour_numbers", "docs.image.missing", "docs.markdown.answer", "docs.markdown.author", "docs.markdown.comment", "docs.markdown.image_link", "docs.markdown.nezachet", "docs.markdown.question", "docs.markdown.source", "docs.markdown.zachet", "docs.pptx.question_caps", "docs.print.measure", "docs.print.measure_no_size", "docs.print.measure_zero_height", "docs.print.pdf", "docs.print.png", "docs.print.width_missing", "docs.typst.line_error", "docs.typst.line_not_pair", "export.form.deselect_all", "export.form.select_all", "export.menu.label", "export.menu.label_grouped", "export.notes.no_handouts", "export.notes.offline", "export.run.failed", "export.run.missing_images_confirm", "export.run.offline_formats", "export.run.progress", "export.run.progress_handouts", "fsource.theme.default_label", "gallery.bars.filter_hint", "gallery.bars.filter_reset", "gallery.bars.filter_what", "gallery.bars.mass_delete", "gallery.bars.mass_done", "gallery.bars.mass_move", "gallery.bars.mass_selected", "gallery.bars.note", "gallery.bars.title", "gallery.buttons.add_title", "gallery.buttons.cancel", "gallery.buttons.delete", "gallery.buttons.minor", "gallery.buttons.note", "gallery.buttons.save", "gallery.buttons.title", "gallery.card.handout_title", "gallery.card.heading", "gallery.card.note", "gallery.card.question", "gallery.card.title", "gallery.feed.event_comment", "gallery.feed.event_meta", "gallery.feed.note", "gallery.feed.title", "gallery.fields.plain_placeholder", "gallery.fields.select_option", "gallery.fields.title", "gallery.labels.long", "gallery.labels.not_taken", "gallery.labels.note", "gallery.labels.rewrite", "gallery.labels.taken", "gallery.labels.title", "gallery.layout.box_1", "gallery.layout.box_2", "gallery.layout.box_3", "gallery.layout.note", "gallery.layout.title", "gallery.list_rows.member_name", "gallery.list_rows.member_role", "gallery.list_rows.note", "gallery.list_rows.title", "gallery.page.hint", "gallery.page.home", "gallery.page.name", "gallery.page.title", "gallery.segment.all", "gallery.segment.any", "gallery.segment.none", "gallery.segment.note", "gallery.segment.title", "gallery.text.danger", "gallery.text.empty", "gallery.text.heading", "gallery.text.hint", "gallery.text.note", "gallery.text.title", "import.apply.attach_failed", "import.apply.attachments", "import.apply.cards", "import.apply.history", "import.archive.hint", "import.archive.subhead", "import.board.cancel", "import.board.gen_pass", "import.board.name_placeholder", "import.board.pass_copied", "import.board.pass_danger", "import.board.pass_hint", "import.board.pass_placeholder", "import.board.pass_saved", "import.board.submit", "import.bundle.creating", "import.bundle.missing_attachment", "import.bundle.no_board_json", "import.bundle.quota", "import.bundle.reading", "import.bundle.rollback", "import.bundle.summary", "import.bundle.summary_skipped", "import.export.attach_failed", "import.export.collecting", "import.export.decrypting", "import.export.downloaded", "import.export.downloading", "import.export.failed", "import.export.hint_body", "import.export.label", "import.export.menu_title", "import.export.modal_title", "import.export.none_picked", "import.export.not_encrypted", "import.export.select_all", "import.export.submit", "import.export.zipping", "import.pack.aborted", "import.pack.block_count", "import.pack.default_title", "import.pack.done_grouped", "import.pack.done_single", "import.pack.images_failed", "import.pack.label", "import.pack.menu_title", "import.pack.no_questions", "import.pack.no_tours_note", "import.pack.offline", "import.pack.parse_failed", "import.pack.preamble", "import.pack.prompt_group", "import.pack.prompt_list", "import.pack.reading_file", "import.pack.sniffed_archive", "import.pack.sniffed_package", "import.pack.tour_fallback", "import.pack.verify_title", "import.page.home", "import.page.name", "import.page.title", "import.picker.all_boards", "import.picker.no_boards", "import.run.aborted", "import.run.history", "import.run.importing", "import.run.load_failed", "import.run.loading", "import.run.need_source", "import.run.not_trello_export", "import.run.report_failed", "import.run.report_summary", "import.run.token_rejected", "import.run.token_required", "import.trello.all_hint", "import.trello.attachment_fallback", "import.trello.board_label", "import.trello.board_name_default", "import.trello.connect", "import.trello.intro_lead", "import.trello.intro_mid", "import.trello.json_hint", "import.trello.label_fallback", "import.trello.label_no_color", "import.trello.list_fallback", "import.trello.reset", "import.trello.subhead", "import.trello.test_session_fallback", "import.trello.testers_lead", "import.trello.token_hint", "import.trello.token_placeholder", "import.trello.token_submit", "import.versions.label", "import.versions.question", "install.archive_escape", "install.browser.archive_no_shell", "install.browser.downloading", "install.browser.no_build", "install.browser.no_sandbox", "install.browser.not_found", "install.browser.not_installed", "install.browser.platform_missing", "install.browser.releases_failed", "install.browser.releases_no_stable", "install.browser.symlink_escape", "install.installed", "install.typst.archive_no_binary", "install.typst.downloading", "install.typst.not_found", "install.typst.platform_missing", "install.typst.release_no_build", "install.typst.releases_failed", "install.typst.unknown_archive", "invite.facts.approval", "invite.form.approval", "invite.form.label_placeholder", "invite.form.submit", "invite.form.ttl_day", "invite.form.ttl_hour", "invite.form.ttl_label", "invite.form.ttl_never", "invite.form.ttl_week", "invite.form.uses_label", "invite.form.uses_unlimited", "invite.message.copied", "invite.request.approve", "invite.request.decline", "invite.row.copy", "invite.row.default_label", "invite.row.joined", "invite.row.remove", "invite.row.remove_confirm", "invite.row.revoke", "invite.state.active", "invite.state.exhausted", "invite.state.expired", "invite.state.revoked", "invite.time.days", "invite.time.expired", "invite.time.hours", "invite.time.under_hour", "invite.usage.left", "invite.usage.used", "lj.error.fault", "lj.error.malformed", "lj.error.no_challenge", "lj.error.nothing", "lj.error.status", "notify.join.board_named", "notify.join.board_unnamed", "notify.join.text", "notify.mention.board_named", "notify.mention.board_unnamed", "notify.mention.verb_mentioned", "notify.mention.verb_replied", "passphrase.change.label", "passphrase.change.offline", "passphrase.change.title", "passphrase.check.title", "passphrase.exit.delete", "passphrase.exit.leave", "profile.account.logout", "profile.account.tokens", "profile.author.hint", "profile.author.name", "profile.author.placeholder", "profile.cancel", "profile.card_title.answer", "profile.card_title.hint", "profile.card_title.name", "profile.card_title.question", "profile.feed.all", "profile.feed.comments", "profile.feed.edits", "profile.feed.hint", "profile.feed.meta", "profile.feed.name", "profile.home", "profile.name", "profile.password.current", "profile.password.name", "profile.password.new", "profile.password.repeat", "profile.password.submit", "profile.save", "profile.sizes.board_w", "profile.sizes.board_w_hint", "profile.sizes.card_h", "profile.sizes.card_h_hint", "profile.sizes.close", "profile.sizes.font", "profile.sizes.font_hint", "profile.sizes.list_w", "profile.sizes.name", "profile.sizes.reset", "profile.storage.hint_lead", "profile.storage.hint_mid", "profile.title", "profile.tz.cities_hint", "profile.tz.cities_label", "profile.tz.cities_placeholder", "profile.tz.hint", "profile.tz.mode_date", "profile.tz.mode_date_title", "profile.tz.mode_title", "profile.tz.name", "profile.tz.title_mode_label", "profile.username.hint", "profile.username.placeholder", "profile.whoami.hint_lead", "profile.whoami.hint_mid", "search.blank", "server.attachment.not_found", "server.board.delete_owner_only", "server.board.deleted", "server.board.keymeta_owner_only", "server.board.leave_owner_only", "server.board.no_access", "server.board.not_found", "server.bundle.event_without_target", "server.bundle.too_many_events", "server.card.question_not_marked", "server.card.scope_exactly_one", "server.child.card_foreign", "server.child.card_not_found", "server.child.group_foreign", "server.child.group_not_found", "server.child.label_foreign", "server.child.label_not_found", "server.child.list_foreign", "server.child.list_not_found", "server.child.session_foreign", "server.child.session_not_found", "server.comment.delete_owner_only", "server.comment.edit_owner_only", "server.comment.foreign", "server.comment.not_found", "server.import.file_no_questions", "server.import.no_file", "server.import.parse_failed", "server.import.read_failed", "server.import.text_no_questions", "server.import.unsupported", "server.internal", "server.invite.decision_invalid", "server.invite.label_too_long", "server.invite.limits_out_of_range", "server.invite.no_seats_left", "server.invite.not_found", "server.invite.owner_only", "server.invite.request_not_found", "server.list.group_needs_two", "server.list.not_on_board", "server.member.add_owner_only", "server.member.remove_owner_only", "server.member.user_not_found", "server.quota.exceeded", "server.reaction.delete_owner_only", "server.reaction.not_found", "server.refusal.broken", "server.refusal.declined", "server.refusal.exhausted", "server.refusal.expired", "server.refusal.revoked", "server.refusal.spent", "sessions.cities.add_placeholder", "sessions.cities.copy", "sessions.cities.label", "sessions.cities.remove", "sessions.cities.remove_named", "sessions.delete.confirm", "sessions.delete.label", "sessions.feed.at_question", "sessions.feed.empty", "sessions.feed.label", "sessions.feed.placeholder", "sessions.feed.send", "sessions.form.alias", "sessions.form.alias_placeholder", "sessions.form.date", "sessions.form.date_placeholder", "sessions.form.time", "sessions.form.time_placeholder", "sessions.form.timezone", "sessions.list.empty", "sessions.list.invite", "sessions.list.invite_title", "sessions.list.no_date", "sessions.list.open", "sessions.list.origin", "sessions.list.origin_at", "sessions.list.origin_title", "sessions.list.played", "sessions.list.players", "sessions.list.teams", "sessions.message.create_failed", "sessions.message.delete_failed", "sessions.message.note_add_failed", "sessions.message.notes_load_failed", "sessions.message.save_failed", "sessions.seen.partial", "sessions.summary.players", "sessions.summary.teams_also", "sessions.summary.teams_only", "sessions.testers.add", "sessions.testers.label", "sessions.testers.name_placeholder", "sessions.testers.player", "sessions.testers.remove_row", "sessions.testers.team", "sessions.testmode.start_title", "sessions.testmode.stop_title", "stats.options.label", "stats.question.line", "stats.question.takers", "stats.range.bad", "stats.rating.decode", "stats.rating.status", "stats.results.empty", "stats.table.disputed", "stats.table.header_missing", "stats.xlsx.no_sheets", "stats.xlsx.part_missing", "stats.xlsx.sheet_missing", "tg.resolve.done", "tg.resolve.forward", "tg.resolve.group_code", "tg.resolve.group_code_hint", "tg.resolve.private_code", "tg.resolve.same_channel", "tg.verify.not_admin", "tg.verify.not_member", "tg.verify.what_channel", "tg.verify.what_chat", "timeline.comment.cancel", "timeline.comment.copy_link_title", "timeline.comment.delete_confirm", "timeline.comment.deleted", "timeline.comment.edited_suffix", "timeline.comment.image_alt", "timeline.comment.image_draft", "timeline.comment.menu_delete", "timeline.comment.menu_edit", "timeline.comment.menu_excerpt", "timeline.comment.menu_no_test", "timeline.comment.menu_react", "timeline.comment.menu_reply", "timeline.comment.menu_title", "timeline.comment.offline", "timeline.comment.remove_image_title", "timeline.comment.save", "timeline.diff.no_changes", "timeline.diff.version_fallback", "timeline.event.attach_add", "timeline.event.attach_remove", "timeline.event.attach_replace", "timeline.event.comment", "timeline.event.desc_edit", "timeline.event.label_add", "timeline.event.label_remove", "timeline.event.reaction", "timeline.excerpt.badge", "timeline.excerpt.count", "timeline.excerpt.download", "timeline.excerpt.file_fallback", "timeline.feed.card_created", "timeline.feed.desc_edit_meta", "timeline.missing_dk", "timeline.reaction.add_title", "timeline.reaction.emoji_prompt", "timeline.reaction.offline", "timeline.reaction.other", "timeline.reply.deleted_parent", "timeline.reply.in_reply_to", "timeline.reply.unknown_parent", "timeline.thread.open_title", "timeline.thread.replies":
+		return true
+	}
 	return false
 }

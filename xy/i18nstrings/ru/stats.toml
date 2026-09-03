@@ -1,0 +1,42 @@
+# xy — the add_stats tool (internal/chgk/stats): the question-table readers,
+# the per-question stats line appended to comments, and the errors of the
+# rating.chgk.info and xlsx readers. The header literals the readers match
+# ("Название", "Тур") are functional and stay in the code.
+
+[table]
+# ReadTable's warning when no header row with the «Название» column exists.
+header_missing = "Не удалось найти заголовок вопросной таблицы (строку со столбцом «Название»)."
+# ReadTable's warning when the расплюсовка holds cells that are neither 0 nor 1.
+disputed = 'В расплюсовке найдены нерассмотренные спорные или неожиданные значения ({{.n}} шт.), они засчитаны как неверные. Например: значение="{{.value}}", команда="{{.team}}".'
+
+[question]
+# The per-question line appended to a comment: label, taken, of total, percent.
+line = '{{.label}}: {{.taken}}/{{.total}} ({{.percent}}%)'
+# The "(Иванов, Петров)" suffix naming the takers when few took the question.
+takers = ' ({{.names}})'
+
+[options]
+# The default Label heading the stats line (DefaultOptions).
+label = "Взятия"
+
+[results]
+# Add, when the results hold no team with a mask.
+empty = "в результатах нет ни одной команды с расплюсовкой"
+
+[range]
+# parseRange, for a --question_range value that is not "from-to" (both branches).
+bad = '--question_range "{{.value}}": нужен диапазон вида 25-36'
+
+[rating]
+# The rating.chgk.info reader, when the API answers with a non-200 status.
+status = 'турнир {{.id}}: рейтинг ответил {{.status}}'
+# The rating.chgk.info reader, when the response body fails to decode.
+decode = 'турнир {{.id}}: {{.err}}'
+
+[xlsx]
+# openPart, when a workbook part is missing.
+part_missing = '{{.name}}: нет в книге'
+# firstSheetPart, when workbook.xml lists no sheets.
+no_sheets = "в книге нет листов"
+# firstSheetPart, when the first sheet's rels entry is gone.
+sheet_missing = 'лист "{{.id}}" не найден'

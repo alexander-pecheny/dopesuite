@@ -1,0 +1,61 @@
+# The .xlsx export (dope/dope/export/xlsxexport): the archive workbook's sheet
+# names, column headers and cell copy — the OD rating.chgk.info layout, the
+# KSI/Multi detailed and results sheets, the EK match and per-player sheets,
+# and the Troika match sheets.
+
+[sheet]
+# The KSI and Multi detailed sheet (Sheet1 renamed).
+detailed = "Подробно"
+# The KSI and Multi results sheet, added beside the detailed one.
+results = "Итог"
+# The EK per-player overview sheet, placed first so it opens by default.
+stats = "Статистика"
+# The fallback sheet name when a stage title sanitizes to nothing.
+fallback = "Лист"
+
+[col]
+# The team column header in every detailed, results, match and stats sheet.
+team = "Команда"
+# The place column header of the KSI and Multi results sheets.
+place = "Место"
+# The place column header of the EK match block (the short form of место).
+match_place = "М"
+# The total column header of the Multi results sheet.
+total = "Итог"
+# The player column header of the EK stats sheet.
+player = "Игрок"
+# The battles column header of the EK stats sheet.
+battles = "Бои"
+# The share-of-team-points column header of the EK stats sheet.
+team_share = "% от команды"
+# The chair column header of the Troika match sheet.
+chair = "Кресло"
+# The merged theme header "Т1".."Тn" of the KSI and EK sheets.
+theme_n = 'Т{{.n}}'
+# The merged shootout header "П1".."Пn" of the EK sheet.
+shootout_n = 'П{{.n}}'
+# The per-question header "Т<theme>.<question>" of the Troika sheet.
+theme_question = 'Т{{.theme}}.{{.question}}'
+
+[name]
+# The fallback name for a KSI/Multi participant or a Troika side with no name.
+team_n = 'Команда {{.n}}'
+
+[od]
+# The rating.chgk.info "tournament-tours" layout's header columns.
+name = "Название"
+city = "Город"
+tour = "Тур"
+
+[multi]
+# The Multi results header's suffix for a minigame normalized out of 100;
+# {{.name}} is the minigame's name.
+normalized_name = '{{.name}} (из 100)'
+
+[error]
+# BuildMultiSheets: the game's scheme JSON does not parse.
+multi_scheme = 'parse Мультиигры scheme: {{.err}}'
+# BuildMultiSheets: the game's state JSON does not parse.
+multi_state = 'parse Мультиигры state: {{.err}}'
+# writeTroikaMatch: a match's state does not parse; {{.code}} names the match.
+troika_state = 'parse Тройка state of {{.code}}: {{.err}}'

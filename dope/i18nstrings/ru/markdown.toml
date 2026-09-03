@@ -1,0 +1,6 @@
+# The markdown :::details extension (dope/dope/platform/markdown): what the
+# renderer writes for a host-authored disclosure on a public fest page.
+
+[details]
+# The <summary> label when a :::details fence carries no summary text.
+default_summary = "Подробнее"

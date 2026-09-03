@@ -3,4 +3,1586 @@
 /** One language's Catalog: a key per Surface, a nested object per group,
  * a function per string. */
 export type Strings = {
+  attachments: {
+    confirm: {
+      remove: (name: string) => string;
+    };
+    error: {
+      blobDownloadFailed: () => string;
+      downloadFailed: () => string;
+      offlineUnavailable: () => string;
+      replaceFailed: () => string;
+      uploadFailed: () => string;
+    };
+    lightbox: {
+      close: () => string;
+      dialogLabel: () => string;
+    };
+    list: {
+      actionsTitle: () => string;
+      excerptBadge: () => string;
+      fallbackName: () => string;
+    };
+    menu: {
+      delete: () => string;
+      excerpt: () => string;
+      replace: () => string;
+    };
+    name: {
+      defaultStem: () => string;
+      pasteDefault: (ext: string) => string;
+    };
+    status: {
+      encrypting: () => string;
+      offlineDelete: () => string;
+      offlineEdit: () => string;
+      offlineUpload: () => string;
+    };
+  };
+  auth: {
+    login: {
+      fieldsRequired: () => string;
+      invalid: () => string;
+    };
+    page: {
+      title: () => string;
+    };
+    password: {
+      currentWrong: () => string;
+      length: () => string;
+    };
+    profile: {
+      citiesTooLong: () => string;
+      nameTooLong: () => string;
+      timezoneTooLong: () => string;
+    };
+    tg: {
+      codeMissing: () => string;
+      passwordWrong: () => string;
+      telegramTaken: () => string;
+      usernameFormat: () => string;
+      usernameReserved: () => string;
+    };
+    token: {
+      forbidden: () => string;
+    };
+    username: {
+      alreadySet: () => string;
+      taken: () => string;
+      tooLong: () => string;
+      tooShort: () => string;
+    };
+  };
+  board: {
+    accent: {
+      hint: () => string;
+      run: () => string;
+      title: () => string;
+    };
+    actions: {
+      cancel: () => string;
+      close: () => string;
+      copy: () => string;
+      done: () => string;
+      move: () => string;
+      save: () => string;
+    };
+    bell: {
+      label: () => string;
+      title: () => string;
+    };
+    card: {
+      addVersionLabel: () => string;
+      addVersionTitle: () => string;
+      aliasLabel: () => string;
+      aliasPlaceholder: () => string;
+      attachmentsLabel: () => string;
+      compress: () => string;
+      copyTitle: () => string;
+      delete: () => string;
+      descLabel: () => string;
+      excerptsView: () => string;
+      feedLabel: () => string;
+      handoutTitle: () => string;
+      kindHeading: () => string;
+      kindLabel: () => string;
+      kindMeta: () => string;
+      kindOther: () => string;
+      kindQuestion: () => string;
+      labelAdd: () => string;
+      linkLabel: () => string;
+      linkTitle: () => string;
+      markTest: () => string;
+      moveLabel: () => string;
+      newLabelPlaceholder: () => string;
+      newLabelTitle: () => string;
+      playingsLabel: () => string;
+      previewDblclick: () => string;
+      screenLabel: () => string;
+      screenTitle: () => string;
+      stressLabel: () => string;
+      stressTitle: () => string;
+      tabFields: () => string;
+      tabPreview: () => string;
+      tabText: () => string;
+      testLead: () => string;
+      testMid: () => string;
+      to4sTitle: () => string;
+      typoLabel: () => string;
+      typoTitle: () => string;
+      upload: () => string;
+      versionsTitle: (n: string) => string;
+    };
+    changepass: {
+      copied: () => string;
+      danger: () => string;
+      generate: () => string;
+      placeholder: () => string;
+      saved: () => string;
+      submit: () => string;
+      title: () => string;
+    };
+    count: {
+      filtered: (shown: string, total: string) => string;
+      questions: (n: number) => string;
+    };
+    delete: {
+      continueQ: () => string;
+      failed: (error: string) => string;
+      label: () => string;
+      listConfirm: (title: string, tail: string) => string;
+      listLabel: () => string;
+      listTail: (n: string) => string;
+      listUntitled: () => string;
+      mismatch: () => string;
+      offline: () => string;
+      title: () => string;
+      typeName: (name: string) => string;
+      warn: () => string;
+    };
+    dirty: {
+      discard: () => string;
+      hint: () => string;
+      title: () => string;
+    };
+    error: {
+      noKey: () => string;
+      noLabel: () => string;
+      noList: () => string;
+      noTest: () => string;
+    };
+    excerpts: {
+      title: () => string;
+    };
+    export: {
+      fmt4sTitle: () => string;
+      handoutsLabel: () => string;
+      handoutsTitle: () => string;
+      overlayLabel: () => string;
+      pdfMobileLabel: () => string;
+      pdfMobileTitle: () => string;
+      run: () => string;
+      selectAll: () => string;
+      title: () => string;
+    };
+    feed: {
+      commentPlaceholder: () => string;
+      diffView: () => string;
+      expandLabel: () => string;
+      expandTitle: () => string;
+      filterTitle: () => string;
+      optAll: () => string;
+      optBrief: () => string;
+      optComments: () => string;
+      optEdits: () => string;
+      optFull: () => string;
+      optMeta: () => string;
+      optNew: () => string;
+      optOld: () => string;
+      orderLabel: () => string;
+      orderTitle: () => string;
+      show: () => string;
+      submit: () => string;
+      title: () => string;
+    };
+    fields: {
+      board: () => string;
+      list: () => string;
+      position: () => string;
+    };
+    filter: {
+      title: () => string;
+    };
+    forget: {
+      label: () => string;
+      title: () => string;
+    };
+    handouts: {
+      download: () => string;
+      generate: () => string;
+      splitfitTitle: () => string;
+      srcLabel: () => string;
+      title: () => string;
+    };
+    importpick: {
+      hint: () => string;
+      splitLabel: () => string;
+      splitTitle: () => string;
+      submit: () => string;
+      title: () => string;
+    };
+    importverify: {
+      srcLabel: () => string;
+      title: () => string;
+    };
+    labels: {
+      name: () => string;
+    };
+    leave: {
+      confirm: (target: string) => string;
+      failed: (error: string) => string;
+      label: () => string;
+      offline: () => string;
+      targetNamed: (name: string) => string;
+      targetThis: () => string;
+      title: () => string;
+    };
+    list: {
+      addCard: () => string;
+      addPlaceholder: () => string;
+      create: () => string;
+      groupFallback: () => string;
+      groupTitle: () => string;
+      menuTitle: () => string;
+      untitled: () => string;
+    };
+    listsmanage: {
+      linkLabel: () => string;
+      linkTitle: () => string;
+      moveLabel: () => string;
+      moveTitle: () => string;
+      title: () => string;
+    };
+    mass: {
+      boardLocked: () => string;
+      copyOffline: () => string;
+      deleteHint: () => string;
+      exitLabel: () => string;
+      hint: () => string;
+      menuTitle: () => string;
+      name: () => string;
+      noLabels: () => string;
+      noTests: () => string;
+      pickTest: () => string;
+      progress: (done: string, total: string) => string;
+      run: () => string;
+      selectCard: () => string;
+      selectList: () => string;
+      selectedCount: (count: string) => string;
+    };
+    members: {
+      add: () => string;
+      createInvite: () => string;
+      invites: () => string;
+      loadFailed: () => string;
+      menuPending: (n: string) => string;
+      menuTitle: () => string;
+      name: () => string;
+      namePlaceholder: () => string;
+      removeConfirm: (name: string) => string;
+      removeFallback: () => string;
+      removeTitle: () => string;
+      requests: () => string;
+      roleEditor: () => string;
+      roleOwner: () => string;
+    };
+    movelist: {
+      title: () => string;
+    };
+    page: {
+      home: () => string;
+      name: () => string;
+      offline: () => string;
+      offlineHint: () => string;
+      title: () => string;
+    };
+    panel: {
+      title: () => string;
+    };
+    passcheck: {
+      backup: () => string;
+      forgot: () => string;
+      hintLead: () => string;
+      hintMid: () => string;
+      savedHint: () => string;
+      submit: () => string;
+      title: () => string;
+    };
+    paste: {
+      namePlaceholder: () => string;
+      title: () => string;
+    };
+    preview: {
+      editTitle: () => string;
+      empty: () => string;
+      group: () => string;
+      list: () => string;
+      title: () => string;
+    };
+    rename: {
+      boardLabel: () => string;
+      boardOffline: () => string;
+      boardPrompt: () => string;
+      boardTitle: () => string;
+      failed: (error: string) => string;
+      listLabel: () => string;
+      listPrompt: () => string;
+    };
+    replace: {
+      case: () => string;
+      find: () => string;
+      next: () => string;
+      prev: () => string;
+      replaceWith: () => string;
+      run: () => string;
+      scopeBoard: () => string;
+      title: () => string;
+    };
+    sessionedit: {
+      title: () => string;
+    };
+    sessions: {
+      add: () => string;
+      addTitle: () => string;
+      fallback: () => string;
+      menuTitle: () => string;
+      name: () => string;
+    };
+    testmode: {
+      badge: (name: string) => string;
+      stop: () => string;
+    };
+    thread: {
+      placeholder: () => string;
+      submit: () => string;
+      title: () => string;
+    };
+    timer: {
+      label: () => string;
+      title: () => string;
+    };
+    unlock: {
+      exitHint: () => string;
+      forgot: () => string;
+      passPlaceholder: () => string;
+      submit: () => string;
+      title: () => string;
+    };
+    unread: {
+      comments: () => string;
+      dot: () => string;
+      mention: () => string;
+    };
+  };
+  boardsync: {
+    config: {
+      emptyUrl: () => string;
+      unrecognized: (url: string) => string;
+    };
+    fetch: {
+      card: (id: string, err: string) => string;
+      list: (id: string, err: string) => string;
+    };
+    upload: {
+      defaultCaption: () => string;
+      listMissing: (name: string, known: string) => string;
+      noLists: () => string;
+      posted: (caption: string) => string;
+      uploading: (name: string) => string;
+    };
+  };
+  bot: {
+    login: {
+      hint: (url: string) => string;
+    };
+    register: {
+      done: () => string;
+      expired: () => string;
+    };
+    texts: {
+      down: () => string;
+      help: () => string;
+    };
+  };
+  card: {
+    add: {
+      labelsAllAdded: () => string;
+      labelsNone: () => string;
+      labelsPlaceholder: () => string;
+      noMatch: () => string;
+      playingsAllMarked: () => string;
+      playingsNone: () => string;
+      playingsPlaceholder: () => string;
+    };
+    authors: {
+      captionTitle: () => string;
+      placeholder: () => string;
+    };
+    chip: {
+      removeAria: (title: string, name: string) => string;
+    };
+    copy: {
+      cardLink: () => string;
+      commentLink: () => string;
+      done: (what: string) => string;
+      failed: (error: string) => string;
+    };
+    create: {
+      failed: (error: string) => string;
+    };
+    delete: {
+      confirm: () => string;
+    };
+    dirty: {
+      commentFailed: () => string;
+      saveFailed: () => string;
+    };
+    error: {
+      cardNotOpen: () => string;
+      clipboardUnavailable: () => string;
+      imageNotFound: () => string;
+      noBoardKey: () => string;
+      noImageCopySupport: () => string;
+      reencodeFailed: () => string;
+    };
+    field: {
+      add: (field: string) => string;
+      addRow: () => string;
+      addTitle: () => string;
+      answer: () => string;
+      comment: () => string;
+      handout: () => string;
+      hndt: () => string;
+      nezachet: () => string;
+      question: () => string;
+      removeRowTitle: () => string;
+      removeTitle: () => string;
+      source: () => string;
+      zachet: () => string;
+    };
+    handout: {
+      attach: () => string;
+      attachTitle: () => string;
+      modeImage: () => string;
+      modeText: () => string;
+    };
+    kind: {
+      changed: () => string;
+    };
+    labels: {
+      empty: () => string;
+      removeTitle: () => string;
+    };
+    move: {
+      copied: () => string;
+      loading: () => string;
+      moved: () => string;
+      noLists: () => string;
+      offline: () => string;
+      position: (n: string) => string;
+      reencrypting: () => string;
+      saving: () => string;
+      toEnd: () => string;
+      untitledList: () => string;
+    };
+    playings: {
+      empty: () => string;
+      labelAddTitle: () => string;
+      labelRemoveTitle: () => string;
+      removeAria: (name: string) => string;
+      removeConfirm: (name: string) => string;
+      removeConfirmScoped: (name: string, n: number) => string;
+      removeTitle: () => string;
+    };
+    preview: {
+      empty: () => string;
+    };
+    save: {
+      saved: () => string;
+    };
+    seen: {
+      commonTesterTitle: () => string;
+      copyTitle: () => string;
+      label: () => string;
+      labelExceptCommon: () => string;
+      showAll: () => string;
+    };
+    to4s: {
+      failed: (error: string) => string;
+      offline: () => string;
+    };
+    version: {
+      fallbackName: (n: string) => string;
+      promoteAria: () => string;
+      promoteTitle: () => string;
+      removeAria: () => string;
+      removeTitle: () => string;
+      renameAria: () => string;
+      renamePrompt: () => string;
+      renameTitle: () => string;
+    };
+    view: {
+      back: () => string;
+      close: () => string;
+      descLabel: () => string;
+      tabText: () => string;
+    };
+  };
+  chgk: {
+    author: {
+      default: () => string;
+      feminine: () => string;
+      femininePlural: () => string;
+      plural: () => string;
+    };
+    copy: {
+      handout: () => string;
+      imageHandoutNote: (label: string) => string;
+      question: () => string;
+      questionNumbered: (number: string) => string;
+      questionPiece: (n: string) => string;
+      questionUnnumbered: () => string;
+      questionWhole: () => string;
+      questionWithAnswer: () => string;
+    };
+    label: {
+      answer: () => string;
+      author: () => string;
+      comment: () => string;
+      date: () => string;
+      editor: () => string;
+      handout: () => string;
+      nezachet: () => string;
+      question: () => string;
+      source: () => string;
+      sourcePlural: () => string;
+      zachet: () => string;
+    };
+    preview: {
+      imageMissing: (name: string) => string;
+    };
+    zip: {
+      corrupt: () => string;
+      fileCorrupt: (name: string) => string;
+      methodUnsupported: (method: string) => string;
+      notZip: () => string;
+      tooLarge: () => string;
+      zip64Unsupported: () => string;
+    };
+  };
+  chgkcli: {
+    addStats: {
+      customCsvFlag: () => string;
+    };
+    docx: {
+      noParagraphFlag: () => string;
+      onlyQuestionNumberFlag: () => string;
+    };
+    lj: {
+      genimpFlag: () => string;
+    };
+    parse: {
+      tourNumbersAsWordsFlag: () => string;
+    };
+    shared: {
+      replaceNoBreakHyphensFlag: () => string;
+    };
+    telegram: {
+      done: (duration: string) => string;
+      posting: (channel: string, chat: string) => string;
+      stopIfNoStatsFlag: () => string;
+    };
+  };
+  chgkimport: {
+    error: {
+      no4s: () => string;
+      noQuestions: () => string;
+      tooBig: () => string;
+    };
+  };
+  chrome: {
+    bell: {
+      empty: () => string;
+      loading: () => string;
+      mention: () => string;
+      mentionReply: () => string;
+      readAll: () => string;
+      title: () => string;
+    };
+    card: {
+      titleEmpty: () => string;
+    };
+    colorpick: {
+      buttonTitle: () => string;
+    };
+    home: {
+      boardLockedName: (id: string) => string;
+      createOffline: () => string;
+      emptyAll: () => string;
+      emptyNamed: () => string;
+      roleEditor: () => string;
+      roleOwner: () => string;
+      unreadMentionTitle: () => string;
+      unreadTitle: () => string;
+    };
+    offlinePage: {
+      body: () => string;
+    };
+    passphrase: {
+      tooFewWords: (n: string) => string;
+      tooShort: (n: string) => string;
+      wrong: () => string;
+    };
+    prewarm: {
+      done: (done: string, total: string) => string;
+      lockedNote: () => string;
+      menuLabel: () => string;
+      menuTitle: () => string;
+      offline: () => string;
+      progress: (done: string, total: string) => string;
+    };
+    search: {
+      comments: () => string;
+      noteAll: (what: string, total: string) => string;
+      noteNoBoards: () => string;
+      noteNone: (what: string) => string;
+      notePartial: (what: string, total: string, shown: string) => string;
+      questions: () => string;
+    };
+    store: {
+      upgradeBlocked: () => string;
+    };
+    sync: {
+      offline: () => string;
+      offlinePending: (n: string) => string;
+      saved: () => string;
+      saving: () => string;
+      syncing: () => string;
+      syncingPending: (n: string) => string;
+      writeError: () => string;
+    };
+    tokens: {
+      copied: () => string;
+      copy: () => string;
+      labelUnnamed: () => string;
+      metaDates: (created: string, expires: string) => string;
+      metaUnused: () => string;
+      metaUsed: (used: string) => string;
+      revoke: () => string;
+      revokeConfirm: () => string;
+      statusActive: () => string;
+      statusExpired: () => string;
+      statusRevoked: () => string;
+    };
+    typograph: {
+      confirm: (n: string, total: string) => string;
+      done: (n: string, total: string) => string;
+      failed: (error: string) => string;
+      menuLabel: () => string;
+      menuTitle: () => string;
+      nothingToDo: () => string;
+    };
+  };
+  cli: {
+    attachment: {
+      summary: () => string;
+    };
+    board: {
+      onlyShow: () => string;
+      summary: () => string;
+      usage: () => string;
+    };
+    boards: {
+      summary: () => string;
+      usage: () => string;
+    };
+    card: {
+      addEmpty: () => string;
+      addKindFlag: () => string;
+      addListFlag: () => string;
+      addTextFlag: () => string;
+      addUsage: () => string;
+      afterFlag: () => string;
+      aliasFlag: () => string;
+      beforeFlag: () => string;
+      changed: (id: string, now: string, expected: string) => string;
+      created: (id: string) => string;
+      expectFlag: () => string;
+      fileFlag: () => string;
+      getHeader: (id: string, list: string, hash: string) => string;
+      getUsage: () => string;
+      moved: (id: string, list: string) => string;
+      mvListFlag: () => string;
+      needList: () => string;
+      rankAfterMissing: (id: string) => string;
+      rankBeforeMissing: (id: string) => string;
+      removed: (id: string) => string;
+      rmUsage: () => string;
+      setEmpty: () => string;
+      setKindFlag: () => string;
+      setTextFlag: () => string;
+      setUsage: () => string;
+      summary: () => string;
+      unchanged: (id: string) => string;
+      updated: (id: string, hash: string) => string;
+    };
+    client: {
+      tokenRejected: () => string;
+    };
+    comment: {
+      addFileFlag: () => string;
+      addTextFlag: () => string;
+      addUsage: () => string;
+      added: (id: string) => string;
+      allFlag: () => string;
+      deleted: () => string;
+      editFileFlag: () => string;
+      editTextFlag: () => string;
+      editUsage: () => string;
+      edited: (id: string) => string;
+      empty: () => string;
+      lsUsage: () => string;
+      mentioned: (n: string) => string;
+      removed: (id: string) => string;
+      replyToFlag: () => string;
+      rmUsage: () => string;
+      summary: () => string;
+    };
+    export: {
+      summary: () => string;
+    };
+    label: {
+      summary: () => string;
+    };
+    list: {
+      addAfterFlag: () => string;
+      addTitleFlag: () => string;
+      addUsage: () => string;
+      created: (id: string, title: string) => string;
+      needIdTitle: () => string;
+      needTitle: () => string;
+      removed: (id: string, title: string) => string;
+      renameTitleFlag: () => string;
+      renameUsage: () => string;
+      renamed: (id: string) => string;
+      rmUsage: () => string;
+      summary: () => string;
+    };
+    lock: {
+      allDone: () => string;
+      allFlag: () => string;
+      done: (id: string, name: string) => string;
+      needRef: () => string;
+      summary: () => string;
+      usage: () => string;
+    };
+    login: {
+      done: (username: string, url: string, path: string) => string;
+      emptyToken: () => string;
+      needUrl: () => string;
+      rejected: (err: string) => string;
+      summary: () => string;
+      tokenFlag: () => string;
+      tokenPrompt: () => string;
+      urlFlag: () => string;
+      usage: () => string;
+    };
+    logout: {
+      done: () => string;
+      summary: () => string;
+      usage: () => string;
+    };
+    run: {
+      commandsHead: () => string;
+      exampleBoards: () => string;
+      exampleLogin: () => string;
+      exampleUnlock: () => string;
+      flagsHead: (name: string, usage: string) => string;
+      footer4s: () => string;
+      footerHelp: () => string;
+      jsonFlag: () => string;
+      startHead: () => string;
+      stateUnreadable: (err: string) => string;
+      title: () => string;
+      unknownCommand: (name: string) => string;
+    };
+    search: {
+      badRegex: (err: string) => string;
+      cardsFlag: () => string;
+      commentsFlag: () => string;
+      needQuery: () => string;
+      nothing: () => string;
+      regexFlag: () => string;
+      summary: () => string;
+      usage: () => string;
+    };
+    shared: {
+      ambiguous: (ref: string, found: string) => string;
+      boardFlag: () => string;
+      loginFirst: () => string;
+      needBoard: () => string;
+      needId: (what: string) => string;
+      noKey: (id: string) => string;
+      notFound: (what: string, ref: string) => string;
+      numericId: (what: string, raw: string) => string;
+      seeBoards: (err: string) => string;
+      unknownAction: (verb: string, known: string) => string;
+      whatBoard: () => string;
+      whatCard: () => string;
+      whatComment: () => string;
+      whatLabel: () => string;
+      whatList: () => string;
+      whatUnlockedBoard: () => string;
+    };
+    snapshot: {
+      card: (id: string, err: string) => string;
+      cardAlias: (id: string, err: string) => string;
+      cardNotFound: (id: string) => string;
+      group: (id: string, err: string) => string;
+      label: (id: string, err: string) => string;
+      labelColor: (id: string, err: string) => string;
+      list: (id: string, err: string) => string;
+      listNotFound: (id: string) => string;
+    };
+    source: {
+      summary: () => string;
+    };
+    unlock: {
+      done: (id: string, name: string) => string;
+      needRef: () => string;
+      passphrasePrompt: (name: string) => string;
+      summary: () => string;
+      usage: () => string;
+      wrongPassphrase: () => string;
+    };
+    versions: {
+      fieldLabel: (n: string) => string;
+      questionLabel: (n: string) => string;
+    };
+  };
+  docs: {
+    docx: {
+      hostVersion: () => string;
+      screenVersion: () => string;
+    };
+    handout: {
+      badMarkup: () => string;
+      imageMissing: () => string;
+      languageMissing: (language: string) => string;
+      packMultiple: () => string;
+      packNoGrid: () => string;
+      packNone: () => string;
+      rotateImageMissing: (name: string) => string;
+    };
+    handoutList: {
+      byNumberLead: () => string;
+      byTourLead: () => string;
+      heading: () => string;
+      tourNone: (n: string) => string;
+      tourNumbers: (n: string, numbers: string) => string;
+    };
+    image: {
+      missing: (name: string) => string;
+    };
+    markdown: {
+      answer: () => string;
+      author: () => string;
+      comment: () => string;
+      imageLink: () => string;
+      nezachet: () => string;
+      question: (n: string) => string;
+      source: () => string;
+      zachet: () => string;
+    };
+    pptx: {
+      questionCaps: (n: string) => string;
+    };
+    print: {
+      measure: (err: string) => string;
+      measureNoSize: () => string;
+      measureZeroHeight: () => string;
+      pdf: (err: string) => string;
+      png: (err: string) => string;
+      widthMissing: () => string;
+    };
+    typst: {
+      lineError: (n: string, err: string) => string;
+      lineNotPair: (n: string) => string;
+    };
+  };
+  export: {
+    form: {
+      deselectAll: () => string;
+      selectAll: () => string;
+    };
+    menu: {
+      label: () => string;
+      labelGrouped: () => string;
+    };
+    notes: {
+      noHandouts: () => string;
+      offline: () => string;
+    };
+    run: {
+      failed: (error: string) => string;
+      missingImagesConfirm: (names: string) => string;
+      offlineFormats: () => string;
+      progress: () => string;
+      progressHandouts: () => string;
+    };
+  };
+  fsource: {
+    theme: {
+      defaultLabel: (n: string, name: string) => string;
+    };
+  };
+  gallery: {
+    bars: {
+      filterHint: () => string;
+      filterReset: () => string;
+      filterWhat: () => string;
+      massDelete: () => string;
+      massDone: () => string;
+      massMove: () => string;
+      massSelected: (n: number) => string;
+      note: () => string;
+      title: () => string;
+    };
+    buttons: {
+      addTitle: () => string;
+      cancel: () => string;
+      delete: () => string;
+      minor: () => string;
+      note: () => string;
+      save: () => string;
+      title: () => string;
+    };
+    card: {
+      handoutTitle: () => string;
+      heading: () => string;
+      note: () => string;
+      question: () => string;
+      title: () => string;
+    };
+    feed: {
+      eventComment: () => string;
+      eventMeta: () => string;
+      note: () => string;
+      title: () => string;
+    };
+    fields: {
+      plainPlaceholder: () => string;
+      selectOption: () => string;
+      title: () => string;
+    };
+    labels: {
+      long: () => string;
+      notTaken: () => string;
+      note: () => string;
+      rewrite: () => string;
+      taken: () => string;
+      title: () => string;
+    };
+    layout: {
+      box1: () => string;
+      box2: () => string;
+      box3: () => string;
+      note: () => string;
+      title: () => string;
+    };
+    listRows: {
+      memberName: () => string;
+      memberRole: () => string;
+      note: () => string;
+      title: () => string;
+    };
+    page: {
+      hint: () => string;
+      home: () => string;
+      name: () => string;
+      title: () => string;
+    };
+    segment: {
+      all: () => string;
+      any: () => string;
+      none: () => string;
+      note: () => string;
+      title: () => string;
+    };
+    text: {
+      danger: () => string;
+      empty: () => string;
+      heading: () => string;
+      hint: () => string;
+      note: () => string;
+      title: () => string;
+    };
+  };
+  import: {
+    apply: {
+      attachFailed: (name: string, status: string) => string;
+      attachments: (title: string, done: string, total: string) => string;
+      cards: (title: string, done: string, total: string) => string;
+      history: (title: string, done: string, total: string) => string;
+    };
+    archive: {
+      hint: () => string;
+      subhead: () => string;
+    };
+    board: {
+      cancel: () => string;
+      genPass: () => string;
+      namePlaceholder: () => string;
+      passCopied: () => string;
+      passDanger: () => string;
+      passHint: () => string;
+      passPlaceholder: () => string;
+      passSaved: () => string;
+      submit: () => string;
+    };
+    bundle: {
+      creating: () => string;
+      missingAttachment: (path: string) => string;
+      noBoardJson: (file: string) => string;
+      quota: (need: string, left: string) => string;
+      reading: () => string;
+      rollback: () => string;
+      summary: (cards: string, lists: string, tests: string, events: string, attachments: string) => string;
+      summarySkipped: (n: string) => string;
+    };
+    export: {
+      attachFailed: (name: string, status: string) => string;
+      collecting: () => string;
+      decrypting: (n: string) => string;
+      downloaded: () => string;
+      downloading: (done: string, total: string) => string;
+      failed: (error: string) => string;
+      hintBody: () => string;
+      label: () => string;
+      menuTitle: () => string;
+      modalTitle: () => string;
+      nonePicked: () => string;
+      notEncrypted: () => string;
+      selectAll: () => string;
+      submit: () => string;
+      zipping: () => string;
+    };
+    pack: {
+      aborted: (done: string, error: string) => string;
+      blockCount: (blocks: string, questions: string) => string;
+      defaultTitle: () => string;
+      doneGrouped: (lists: string, cards: string, images: string) => string;
+      doneSingle: (cards: string, images: string) => string;
+      imagesFailed: (n: string) => string;
+      label: () => string;
+      menuTitle: () => string;
+      noQuestions: () => string;
+      noToursNote: () => string;
+      offline: () => string;
+      parseFailed: (error: string) => string;
+      preamble: () => string;
+      promptGroup: () => string;
+      promptList: () => string;
+      readingFile: () => string;
+      sniffedArchive: (name: string, date: string) => string;
+      sniffedPackage: () => string;
+      tourFallback: (n: string) => string;
+      verifyTitle: (name: string) => string;
+    };
+    page: {
+      home: () => string;
+      name: () => string;
+      title: () => string;
+    };
+    picker: {
+      allBoards: (n: string) => string;
+      noBoards: () => string;
+    };
+    run: {
+      aborted: (error: string) => string;
+      history: (n: string) => string;
+      importing: () => string;
+      loadFailed: (error: string) => string;
+      loading: () => string;
+      needSource: () => string;
+      notTrelloExport: () => string;
+      reportFailed: (name: string, error: string) => string;
+      reportSummary: (done: string, total: string) => string;
+      tokenRejected: () => string;
+      tokenRequired: () => string;
+    };
+    trello: {
+      allHint: () => string;
+      attachmentFallback: () => string;
+      boardLabel: () => string;
+      boardNameDefault: () => string;
+      connect: () => string;
+      introLead: () => string;
+      introMid: () => string;
+      jsonHint: () => string;
+      labelFallback: (color: string) => string;
+      labelNoColor: () => string;
+      listFallback: () => string;
+      reset: () => string;
+      subhead: () => string;
+      testSessionFallback: () => string;
+      testersLead: (testers: string) => string;
+      tokenHint: () => string;
+      tokenPlaceholder: () => string;
+      tokenSubmit: () => string;
+    };
+    versions: {
+      label: (n: string) => string;
+      question: (n: string, question: string) => string;
+    };
+  };
+  install: {
+    archiveEscape: (name: string) => string;
+    browser: {
+      archiveNoShell: () => string;
+      downloading: (version: string, platform: string) => string;
+      noBuild: (platform: string) => string;
+      noSandbox: () => string;
+      notFound: () => string;
+      notInstalled: () => string;
+      platformMissing: (platform: string) => string;
+      releasesFailed: (status: string) => string;
+      releasesNoStable: () => string;
+      symlinkEscape: (name: string, dest: string) => string;
+    };
+    installed: (path: string) => string;
+    typst: {
+      archiveNoBinary: (binary: string) => string;
+      downloading: (version: string) => string;
+      notFound: () => string;
+      platformMissing: (platform: string) => string;
+      releaseNoBuild: (build: string) => string;
+      releasesFailed: (status: string) => string;
+      unknownArchive: (archive: string) => string;
+    };
+  };
+  invite: {
+    facts: {
+      approval: () => string;
+    };
+    form: {
+      approval: () => string;
+      labelPlaceholder: () => string;
+      submit: () => string;
+      ttlDay: () => string;
+      ttlHour: () => string;
+      ttlLabel: () => string;
+      ttlNever: () => string;
+      ttlWeek: () => string;
+      usesLabel: () => string;
+      usesUnlimited: () => string;
+    };
+    message: {
+      copied: () => string;
+    };
+    request: {
+      approve: () => string;
+      decline: () => string;
+    };
+    row: {
+      copy: () => string;
+      defaultLabel: () => string;
+      joined: (names: string) => string;
+      remove: () => string;
+      removeConfirm: () => string;
+      revoke: () => string;
+    };
+    state: {
+      active: () => string;
+      exhausted: () => string;
+      expired: () => string;
+      revoked: () => string;
+    };
+    time: {
+      days: (n: string) => string;
+      expired: () => string;
+      hours: (n: string) => string;
+      underHour: () => string;
+    };
+    usage: {
+      left: (n: string, left: string) => string;
+      used: (n: string) => string;
+    };
+  };
+  lj: {
+    error: {
+      fault: (message: string, code: string) => string;
+      malformed: (err: string) => string;
+      noChallenge: () => string;
+      nothing: () => string;
+      status: (status: string) => string;
+    };
+  };
+  notify: {
+    join: {
+      boardNamed: (board: string) => string;
+      boardUnnamed: () => string;
+      text: (requester: string, where: string, link: string) => string;
+    };
+    mention: {
+      boardNamed: (board: string) => string;
+      boardUnnamed: () => string;
+      verbMentioned: () => string;
+      verbReplied: () => string;
+    };
+  };
+  passphrase: {
+    change: {
+      label: () => string;
+      offline: () => string;
+      title: () => string;
+    };
+    check: {
+      title: () => string;
+    };
+    exit: {
+      delete: () => string;
+      leave: () => string;
+    };
+  };
+  profile: {
+    account: {
+      logout: () => string;
+      tokens: () => string;
+    };
+    author: {
+      hint: () => string;
+      name: () => string;
+      placeholder: () => string;
+    };
+    cancel: () => string;
+    cardTitle: {
+      answer: () => string;
+      hint: () => string;
+      name: () => string;
+      question: () => string;
+    };
+    feed: {
+      all: () => string;
+      comments: () => string;
+      edits: () => string;
+      hint: () => string;
+      meta: () => string;
+      name: () => string;
+    };
+    home: () => string;
+    name: () => string;
+    password: {
+      current: () => string;
+      name: () => string;
+      new: () => string;
+      repeat: () => string;
+      submit: () => string;
+    };
+    save: () => string;
+    sizes: {
+      boardW: () => string;
+      boardWHint: () => string;
+      cardH: () => string;
+      cardHHint: () => string;
+      close: () => string;
+      font: () => string;
+      fontHint: () => string;
+      listW: () => string;
+      name: () => string;
+      reset: () => string;
+    };
+    storage: {
+      hintLead: () => string;
+      hintMid: () => string;
+    };
+    title: () => string;
+    tz: {
+      citiesHint: () => string;
+      citiesLabel: () => string;
+      citiesPlaceholder: () => string;
+      hint: () => string;
+      modeDate: () => string;
+      modeDateTitle: () => string;
+      modeTitle: () => string;
+      name: () => string;
+      titleModeLabel: () => string;
+    };
+    username: {
+      hint: () => string;
+      placeholder: () => string;
+    };
+    whoami: {
+      hintLead: () => string;
+      hintMid: () => string;
+    };
+  };
+  search: {
+    blank: () => string;
+  };
+  server: {
+    attachment: {
+      notFound: () => string;
+    };
+    board: {
+      deleteOwnerOnly: () => string;
+      deleted: () => string;
+      keymetaOwnerOnly: () => string;
+      leaveOwnerOnly: () => string;
+      noAccess: () => string;
+      notFound: () => string;
+    };
+    bundle: {
+      eventWithoutTarget: () => string;
+      tooManyEvents: () => string;
+    };
+    card: {
+      questionNotMarked: () => string;
+      scopeExactlyOne: () => string;
+    };
+    child: {
+      cardForeign: () => string;
+      cardNotFound: () => string;
+      groupForeign: () => string;
+      groupNotFound: () => string;
+      labelForeign: () => string;
+      labelNotFound: () => string;
+      listForeign: () => string;
+      listNotFound: () => string;
+      sessionForeign: () => string;
+      sessionNotFound: () => string;
+    };
+    comment: {
+      deleteOwnerOnly: () => string;
+      editOwnerOnly: () => string;
+      foreign: () => string;
+      notFound: () => string;
+    };
+    import: {
+      fileNoQuestions: () => string;
+      noFile: () => string;
+      parseFailed: (reason: string) => string;
+      readFailed: () => string;
+      textNoQuestions: () => string;
+      unsupported: () => string;
+    };
+    internal: () => string;
+    invite: {
+      decisionInvalid: () => string;
+      labelTooLong: () => string;
+      limitsOutOfRange: () => string;
+      noSeatsLeft: () => string;
+      notFound: () => string;
+      ownerOnly: () => string;
+      requestNotFound: () => string;
+    };
+    list: {
+      groupNeedsTwo: () => string;
+      notOnBoard: () => string;
+    };
+    member: {
+      addOwnerOnly: () => string;
+      removeOwnerOnly: () => string;
+      userNotFound: () => string;
+    };
+    quota: {
+      exceeded: (mb: string) => string;
+    };
+    reaction: {
+      deleteOwnerOnly: () => string;
+      notFound: () => string;
+    };
+    refusal: {
+      broken: () => string;
+      declined: () => string;
+      exhausted: () => string;
+      expired: () => string;
+      revoked: () => string;
+      spent: () => string;
+    };
+  };
+  sessions: {
+    cities: {
+      addPlaceholder: () => string;
+      copy: () => string;
+      label: () => string;
+      remove: () => string;
+      removeNamed: (name: string) => string;
+    };
+    delete: {
+      confirm: () => string;
+      label: () => string;
+    };
+    feed: {
+      atQuestion: () => string;
+      empty: () => string;
+      label: () => string;
+      placeholder: () => string;
+      send: () => string;
+    };
+    form: {
+      alias: () => string;
+      aliasPlaceholder: () => string;
+      date: () => string;
+      datePlaceholder: () => string;
+      time: () => string;
+      timePlaceholder: () => string;
+      timezone: () => string;
+    };
+    list: {
+      empty: () => string;
+      invite: () => string;
+      inviteTitle: () => string;
+      noDate: () => string;
+      open: () => string;
+      origin: (board: string) => string;
+      originAt: (board: string, date: string) => string;
+      originTitle: () => string;
+      played: (n: string) => string;
+      players: (n: string) => string;
+      teams: (n: string) => string;
+    };
+    message: {
+      createFailed: () => string;
+      deleteFailed: () => string;
+      noteAddFailed: () => string;
+      notesLoadFailed: () => string;
+      saveFailed: () => string;
+    };
+    seen: {
+      partial: (parts: string) => string;
+    };
+    summary: {
+      players: (names: string) => string;
+      teamsAlso: (teams: string) => string;
+      teamsOnly: (teams: string) => string;
+    };
+    testers: {
+      add: () => string;
+      label: () => string;
+      namePlaceholder: () => string;
+      player: () => string;
+      removeRow: () => string;
+      team: () => string;
+    };
+    testmode: {
+      startTitle: () => string;
+      stopTitle: () => string;
+    };
+  };
+  stats: {
+    options: {
+      label: () => string;
+    };
+    question: {
+      line: (label: string, taken: string, total: string, percent: string) => string;
+      takers: (names: string) => string;
+    };
+    range: {
+      bad: (value: string) => string;
+    };
+    rating: {
+      decode: (id: string, err: string) => string;
+      status: (id: string, status: string) => string;
+    };
+    results: {
+      empty: () => string;
+    };
+    table: {
+      disputed: (n: string, value: string, team: string) => string;
+      headerMissing: () => string;
+    };
+    xlsx: {
+      noSheets: () => string;
+      partMissing: (name: string) => string;
+      sheetMissing: (id: string) => string;
+    };
+  };
+  tg: {
+    resolve: {
+      done: () => string;
+      forward: (name: string) => string;
+      groupCode: (name: string, code: string) => string;
+      groupCodeHint: () => string;
+      privateCode: (code: string) => string;
+      sameChannel: () => string;
+    };
+    verify: {
+      notAdmin: (what: string) => string;
+      notMember: (what: string, err: string) => string;
+      whatChannel: () => string;
+      whatChat: () => string;
+    };
+  };
+  timeline: {
+    comment: {
+      cancel: () => string;
+      copyLinkTitle: () => string;
+      deleteConfirm: () => string;
+      deleted: () => string;
+      editedSuffix: () => string;
+      imageAlt: () => string;
+      imageDraft: () => string;
+      menuDelete: () => string;
+      menuEdit: () => string;
+      menuExcerpt: () => string;
+      menuNoTest: () => string;
+      menuReact: () => string;
+      menuReply: () => string;
+      menuTitle: () => string;
+      offline: () => string;
+      removeImageTitle: () => string;
+      save: () => string;
+    };
+    diff: {
+      noChanges: () => string;
+      versionFallback: (n: string) => string;
+    };
+    event: {
+      attachAdd: () => string;
+      attachRemove: () => string;
+      attachReplace: () => string;
+      comment: () => string;
+      descEdit: () => string;
+      labelAdd: () => string;
+      labelRemove: () => string;
+      reaction: () => string;
+    };
+    excerpt: {
+      badge: () => string;
+      count: (n: string) => string;
+      download: () => string;
+      fileFallback: () => string;
+    };
+    feed: {
+      cardCreated: (when: string) => string;
+      descEditMeta: (when: string) => string;
+    };
+    missingDk: () => string;
+    reaction: {
+      addTitle: () => string;
+      emojiPrompt: () => string;
+      offline: () => string;
+      other: () => string;
+    };
+    reply: {
+      deletedParent: () => string;
+      inReplyTo: (who: string) => string;
+      unknownParent: () => string;
+    };
+    thread: {
+      openTitle: () => string;
+      replies: (n: number) => string;
+    };
+  };
 };

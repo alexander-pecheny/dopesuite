@@ -1,0 +1,34 @@
+# xy — export: the list-scope "Экспорт" panel (export.ts) that renders a
+# list's cards into .4s/.docx/.pdf/handouts packs. (The .zip archive flow is
+# the import surface's [export] table, not this one.)
+
+[menu]
+# The list-menu item; the grouped variant is shown when the list sits inside
+# a group.
+label = "Экспорт"
+label_grouped = "Экспорт группы"
+
+[form]
+# The export modal's format-checkbox row.
+# The toggle-all button, in both directions (the call site also compares
+# against these to know which way to toggle).
+select_all = "Выбрать все"
+deselect_all = "Снять выделение"
+
+[notes]
+# Pre-flight notes the modal opens with.
+offline = "Офлайн: доступен только .4s, без изображений."
+no_handouts = "В списке нет вопросов с раздаточным материалом."
+
+[run]
+# Running the export.
+# Offline guard when a server-rendered format is ticked.
+offline_formats = "Эти форматы доступны только онлайн."
+# Progress line, plain and with the handouts-typesetting caveat.
+progress = "Экспорт…"
+progress_handouts = "Экспорт… (вёрстка раздаток может занять время)"
+# Confirm when images a format needs are missing from the attachments;
+# names is the comma-joined list of missing names.
+missing_images_confirm = 'Не найдены изображения: {{.names}}. Продолжить?'
+# Failure line; error is the message of whatever threw.
+failed = 'Экспорт не удался: {{.error}}'

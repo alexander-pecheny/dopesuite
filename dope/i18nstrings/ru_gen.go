@@ -2,5 +2,1808 @@
 
 package i18nstrings
 
+import (
+	"fmt"
+
+	core "pecheny.me/dopecore/i18nstrings"
+)
+
 // RU is the ru Catalog.
-var RU = Strings{}
+var RU = Strings{
+	Admin: AdminStrings{
+		CreateUsers: AdminCreateUsersStrings{
+			Name:  func() string { return "Создать пользователей" },
+			Title: func() string { return "Создать пользователей · Админка" },
+		},
+		Page: AdminPageStrings{
+			Title: func() string { return "Админка" },
+		},
+		Users: AdminUsersStrings{
+			ColActivity: func() string { return "Активность" },
+			ColCreated:  func() string { return "Создан" },
+			ColLogin:    func() string { return "Логин" },
+			Empty:       func() string { return "Пользователей нет." },
+			Name:        func() string { return "Пользователи" },
+			SystemTag:   func() string { return "(система)" },
+			Title:       func() string { return "Пользователи · Админка" },
+		},
+	},
+	Brain: BrainStrings{
+		Bout: BrainBoutStrings{
+			Finished: func() string { return "Закончен" },
+		},
+		Mark: BrainMarkStrings{
+			Title: func(team string, row string) string { return fmt.Sprintf("%s, вопрос %s", team, row) },
+		},
+		Pod: BrainPodStrings{
+			Round: func(n string) string { return fmt.Sprintf("Раунд %s", n) },
+		},
+		Protocol: BrainProtocolStrings{
+			Empty: func() string { return "Бои ещё не загружены." },
+		},
+		Reseed: BrainReseedStrings{
+			CalculateFailed: func() string { return "Не удалось рассчитать пересев" },
+			PendingMany:     func(names string) string { return fmt.Sprintf("Бои %s не закончены", names) },
+			PendingOne:      func(names string) string { return fmt.Sprintf("Бой %s не закончен", names) },
+		},
+		Row: BrainRowStrings{
+			Tiebreak:  func() string { return "П" },
+			TiebreakN: func(n string) string { return fmt.Sprintf("П%s", n) },
+		},
+		Seed: BrainSeedStrings{
+			Draw:  func() string { return "Провести жребий" },
+			Empty: func() string { return "Посев ещё не импортирован." },
+			ImportFrom: func(source string) string {
+				return fmt.Sprintf("Импортировать посев из %s", source)
+			},
+			NoFile:   func() string { return "Выберите файл" },
+			Upload:   func() string { return "Загрузить посев из xlsx" },
+			Waitlist: func() string { return "запас" },
+		},
+		SeedHead: BrainSeedHeadStrings{
+			City:     func() string { return "Город" },
+			Declined: func() string { return "Отказ" },
+			Rank:     func() string { return "Место в источнике" },
+			Seed:     func() string { return "Посев" },
+			Team:     func() string { return "Команда" },
+		},
+		Stats: BrainStatsStrings{
+			Attempts: func() string { return "Попытки" },
+			Empty:    func() string { return "Пока никто не жал на кнопку." },
+			Player:   func() string { return "Игрок" },
+			Right:    func() string { return "Верно" },
+			Share:    func() string { return "% верных" },
+			Team:     func() string { return "Команда" },
+			Wrong:    func() string { return "Неверно" },
+		},
+		Team: BrainTeamStrings{
+			Fallback: func(n string) string { return fmt.Sprintf("Команда %s", n) },
+		},
+		Tiebreak: BrainTiebreakStrings{
+			Add:        func() string { return "+ П" },
+			AddHint:    func() string { return "Добавить вопрос перестрелки" },
+			Remove:     func() string { return "− П" },
+			RemoveHint: func() string { return "Убрать пустой вопрос перестрелки" },
+		},
+		Title: func() string { return "Брейн" },
+	},
+	Crosstable: CrosstableStrings{
+		Columns: CrosstableColumnsStrings{
+			Name:   func() string { return "Команда" },
+			Place:  func() string { return "М" },
+			Points: func() string { return "О" },
+		},
+		Empty: func() string { return "В этой схеме нет групповых таблиц." },
+	},
+	Edit: EditStrings{
+		Roster: EditRosterStrings{
+			Immutable: func() string {
+				return "команды загружаются из rating.chgk.info; чтобы изменить список, переимпортируйте участников"
+			},
+		},
+	},
+	Ek: EkStrings{
+		Answer: EkAnswerStrings{
+			Title: func(team string, theme string, q string) string { return fmt.Sprintf("%s, %s, %s", team, theme, q) },
+		},
+		Bout: EkBoutStrings{
+			Finished: func() string { return "Закончен" },
+		},
+		Crumb: EkCrumbStrings{
+			SeedImport: func() string { return "Импорт команд" },
+			Stats:      func() string { return "Статистика" },
+			Venues:     func() string { return "Площадки" },
+		},
+		Seed: EkSeedStrings{
+			DeclineFailed: func() string { return "Не удалось сохранить отказ" },
+			DeclinedAria:  func(name string) string { return fmt.Sprintf("Отказалась: %s", name) },
+			Empty:         func() string { return "Команды ещё не импортированы." },
+			Error:         func(reason string) string { return fmt.Sprintf("Ошибка: %s", reason) },
+			ErrorPrefix:   func() string { return "Ошибка:" },
+			Import:        func() string { return "Импортировать из КСИ" },
+			ImportFailed:  func() string { return "Не удалось импортировать команды" },
+			Imported:      func(n string) string { return fmt.Sprintf("Импортировано команд: %s.", n) },
+			Summary: func(active string, size string, total string) string {
+				return fmt.Sprintf("В основном посеве: %s из %s. Всего активных команд: %s.", active, size, total)
+			},
+			TeamPlaceholder: func() string { return "команда" },
+			Waitlist:        func() string { return "Лист ожидания" },
+		},
+		SeedHead: EkSeedHeadStrings{
+			Declined: func() string { return "Отказалась" },
+			Seed:     func() string { return "Посев" },
+			Team:     func() string { return "Команда" },
+		},
+		Shootout: EkShootoutStrings{
+			Add:           func() string { return "Добавить тему перестрелки" },
+			AddLabel:      func() string { return "+П" },
+			Column:        func(n string) string { return fmt.Sprintf("П%s", n) },
+			Letter:        func() string { return "П" },
+			Remove:        func() string { return "Удалить тему перестрелки" },
+			RemoveConfirm: func() string { return "Удалить тему перестрелки?" },
+			RemoveLabel:   func() string { return "−П" },
+		},
+		Stage: EkStageStrings{
+			Empty:         func() string { return "В этом этапе нет боёв." },
+			MatchFallback: func(code string) string { return fmt.Sprintf("Бой %s", code) },
+		},
+		Stats: EkStatsStrings{
+			Battles: func() string { return "Бои" },
+			Empty: func() string {
+				return "Пока нет данных: ни одного ответа не отмечено."
+			},
+			IndividualEmpty: func() string { return "Пока нет ни одной сыгранной темы." },
+			Player:          func() string { return "Игрок" },
+			Share:           func() string { return "% от команды" },
+			Team:            func() string { return "Команда" },
+		},
+		Theme: EkThemeStrings{
+			Column: func(n string) string { return fmt.Sprintf("Т%s", n) },
+		},
+		Title: func() string { return "ЭК" },
+		Venue: EkVenueStrings{
+			Cancel: func() string { return "Отмена" },
+			Edit:   func() string { return "Изменить площадку" },
+			Save:   func() string { return "Сохранить" },
+		},
+	},
+	Export: ExportStrings{
+		Col: ExportColStrings{
+			Battles:       func() string { return "Бои" },
+			Chair:         func() string { return "Кресло" },
+			MatchPlace:    func() string { return "М" },
+			Place:         func() string { return "Место" },
+			Player:        func() string { return "Игрок" },
+			ShootoutN:     func(n string) string { return fmt.Sprintf("П%s", n) },
+			Team:          func() string { return "Команда" },
+			TeamShare:     func() string { return "% от команды" },
+			ThemeN:        func(n string) string { return fmt.Sprintf("Т%s", n) },
+			ThemeQuestion: func(theme string, question string) string { return fmt.Sprintf("Т%s.%s", theme, question) },
+			Total:         func() string { return "Итог" },
+		},
+		Error: ExportErrorStrings{
+			MultiScheme: func(err string) string { return fmt.Sprintf("parse Мультиигры scheme: %s", err) },
+			MultiState:  func(err string) string { return fmt.Sprintf("parse Мультиигры state: %s", err) },
+			TroikaState: func(code string, err string) string {
+				return fmt.Sprintf("parse Тройка state of %s: %s", code, err)
+			},
+		},
+		Multi: ExportMultiStrings{
+			NormalizedName: func(name string) string { return fmt.Sprintf("%s (из 100)", name) },
+		},
+		Name: ExportNameStrings{
+			TeamN: func(n string) string { return fmt.Sprintf("Команда %s", n) },
+		},
+		Od: ExportOdStrings{
+			City: func() string { return "Город" },
+			Name: func() string { return "Название" },
+			Tour: func() string { return "Тур" },
+		},
+		Sheet: ExportSheetStrings{
+			Detailed: func() string { return "Подробно" },
+			Fallback: func() string { return "Лист" },
+			Results:  func() string { return "Итог" },
+			Stats:    func() string { return "Статистика" },
+		},
+	},
+	Fest: FestStrings{
+		Grid: FestGridStrings{
+			ColPlace:         func() string { return "М" },
+			MatchDefault:     func(code string) string { return fmt.Sprintf("Бой %s", code) },
+			SlotBasket:       func(basket string, number string) string { return fmt.Sprintf("К%s-%s", basket, number) },
+			SlotReseed:       func() string { return "Пересев" },
+			SlotReseedRanked: func(rank string) string { return fmt.Sprintf("Пересев-%s", rank) },
+			Venue:            func(n string) string { return fmt.Sprintf("пл. %s", n) },
+			VenueTitled:      func(n string, title string) string { return fmt.Sprintf("пл. %s (%s)", n, title) },
+		},
+		Metric: FestMetricStrings{
+			Bouts:       func() string { return "Боёв" },
+			Draw:        func() string { return "Жребий" },
+			PlaceSum:    func() string { return "Σ мест" },
+			Points:      func() string { return "Очки" },
+			PointsShare: func() string { return "% очков" },
+			Rating:      func() string { return "Р" },
+			Taken:       func() string { return "Взятые" },
+			TakenBase:   func() string { return "Взятые б/п" },
+			TakenShare:  func() string { return "% взятых" },
+			Tiebreak:    func() string { return "П" },
+		},
+		MetricShort: FestMetricShortStrings{
+			Bouts:  func() string { return "Б" },
+			Points: func() string { return "О" },
+			Taken:  func() string { return "В" },
+		},
+		Reseed: FestReseedStrings{
+			BlockedDefault: func() string { return "Исходные бои ещё не закончены" },
+			BlockedMany:    func(matches string) string { return fmt.Sprintf("Бои %s не закончены", matches) },
+			BlockedOne:     func(match string) string { return fmt.Sprintf("Бой %s не закончен", match) },
+			Calculate:      func() string { return "Рассчитать" },
+			ColMatch:       func() string { return "Бой" },
+			ColPlace:       func() string { return "Место" },
+			ColTeam:        func() string { return "Команда" },
+			Empty:          func() string { return "Пересев пока не рассчитан." },
+			Recalculate:    func() string { return "Пересчитать" },
+		},
+		Roster: FestRosterStrings{
+			ColPlayers: func() string { return "Игроки" },
+			ColTeam:    func() string { return "Команда" },
+			Empty:      func() string { return "Составы пока не заданы." },
+			LoadFailed: func() string { return "Не удалось загрузить составы." },
+			Loading:    func() string { return "Загрузка составов…" },
+		},
+	},
+	Festaccess: FestaccessStrings{
+		Add: FestaccessAddStrings{
+			CreatorExists:    func() string { return "создатель уже есть в доступе" },
+			NicknameRequired: func() string { return "введите никнейм" },
+			RoleInvalid:      func() string { return "для нового доступа выберите admin или host" },
+			UserNotFound: func(name string) string {
+				return fmt.Sprintf("пользователь \"%s\" не найден", name)
+			},
+		},
+		Bulk: FestaccessBulkStrings{
+			Empty:      func() string { return "вставьте хотя бы одну строку" },
+			LinePrefix: func(n string, msg string) string { return fmt.Sprintf("строка %s: %s", n, msg) },
+			UserNotFound: func(n string, name string) string {
+				return fmt.Sprintf("строка %s: пользователь \"%s\" не найден", n, name)
+			},
+		},
+		Manage: FestaccessManageStrings{
+			Denied: func() string { return "нет прав менять доступ" },
+		},
+		Member: FestaccessMemberStrings{
+			CreatorProtected: func() string { return "создателя нельзя удалить или изменить" },
+			RoleInvalid:      func() string { return "роль должна быть admin или host" },
+		},
+	},
+	Gallery: GalleryStrings{
+		Brain: GalleryBrainStrings{
+			Title: func() string { return "Ведущий · Брейн" },
+		},
+		Ek: GalleryEkStrings{
+			Title: func() string { return "ЭК · Фест" },
+		},
+		Multi: GalleryMultiStrings{
+			Title: func() string { return "Ведущий · Мультиигры" },
+		},
+		Od: GalleryOdStrings{
+			Title: func() string { return "Ведущий · ОД" },
+		},
+		Page: GalleryPageStrings{
+			Title: func() string { return "Галерея · dope" },
+		},
+		Section: GallerySectionStrings{
+			EkStats:         func() string { return "Статистика ЭК" },
+			FestGrid:        func() string { return "Сетка" },
+			GroupStandings:  func() string { return "Групповой этап" },
+			IndividualStats: func() string { return "Статистика личной СИ" },
+			Reseed:          func() string { return "Пересев" },
+			Roster:          func() string { return "Составы" },
+			Venues:          func() string { return "Площадки" },
+			VenuesHost:      func() string { return "Площадки, ведущий" },
+		},
+		Si: GallerySiStrings{
+			Title: func() string { return "Ведущий · СИ" },
+		},
+		Topbar: GalleryTopbarStrings{
+			Title: func() string { return "Галерея" },
+		},
+		Troika: GalleryTroikaStrings{
+			Title: func() string { return "Ведущий · Тройка" },
+		},
+	},
+	Gamebuild: GamebuildStrings{
+		Clear: GamebuildClearStrings{
+			ParsePasted: func(err string) string {
+				return fmt.Sprintf("не удалось разобрать схему ЭК: %s", err)
+			},
+			Unsupported: func() string {
+				return "очистка не поддерживается для этого типа игры"
+			},
+		},
+		Create: GamebuildCreateStrings{
+			EkNoScheme: func() string { return "Вставьте JSON-схему ЭК или опишите её схемой" },
+			JsonTypeMismatch: func(described string, created string) string {
+				return fmt.Sprintf("JSON-схема описывает игру %s, а создаётся %s", described, created)
+			},
+			MultiFromScheme: func() string {
+				return "Мультиигры описываются списком мини-игр, а не схемой"
+			},
+			PastedTeams: func() string {
+				return "команды загружаются отдельным импортом посева; уберите teams из JSON-схемы"
+			},
+			SchemeRequired: func() string { return "опишите схему игры" },
+			SeedUnknown: func(seed string) string {
+				return fmt.Sprintf("seed: %s — не random, не xlsx и не код игры этого феста", seed)
+			},
+		},
+		Recompile: GamebuildRecompileStrings{
+			StartedBouts: func(names string) string {
+				return fmt.Sprintf("нельзя менять начатые бои: %s — уберите их изменения или снимите отметку «Закончен» и очистите протокол", names)
+			},
+		},
+		Seating: GamebuildSeatingStrings{
+			KindPlayer: func(name string) string {
+				return fmt.Sprintf("%s — игрок, а в этой игре за столом сидят команды", name)
+			},
+			KindTeam: func(name string) string {
+				return fmt.Sprintf("%s — команда, а в этой игре за столом сидят игроки", name)
+			},
+			NeedPlayers: func() string {
+				return "для личной игры нужны игроки в ростере феста"
+			},
+			NeedTwo: func() string {
+				return "для схемы нужны хотя бы два участника в фесте"
+			},
+			UnknownParticipant: func(n string) string { return fmt.Sprintf("участника %s нет в этом фесте", n) },
+			Unnumbered: func() string {
+				return "перед созданием игры пронумеруйте участников феста"
+			},
+		},
+		Titles: GamebuildTitlesStrings{
+			Ksi:   func() string { return "КСИ" },
+			Multi: func() string { return "Мультиигры" },
+			Od:    func() string { return "ОД" },
+		},
+	},
+	Games: GamesStrings{
+		Brain: GamesBrainStrings{
+			Label: func() string { return "Брейн" },
+		},
+		Ek: GamesEkStrings{
+			Label: func() string { return "ЭК" },
+		},
+		Ksi: GamesKsiStrings{
+			Label: func() string { return "КСИ" },
+		},
+		Multi: GamesMultiStrings{
+			BarNoTasksAfter: func(n string, name string) string {
+				return fmt.Sprintf("строка %s, %s: «|» без заданий после него", n, name)
+			},
+			BarNoTasksBefore: func(n string, name string) string {
+				return fmt.Sprintf("строка %s, %s: «|» без заданий перед ним", n, name)
+			},
+			DomainEmpty: func() string { return "пустой домен {}" },
+			Label:       func() string { return "Мультиигры" },
+			LineExpected: func(n string) string {
+				return fmt.Sprintf("строка %s: жду «Имя: {значения}xN»", n)
+			},
+			LinePrefix: func(n string, name string, msg string) string {
+				return fmt.Sprintf("строка %s, %s: %s", n, name, msg)
+			},
+			MetricUnknown: func(metric string, known string) string {
+				return fmt.Sprintf("%s не считается — есть %s", metric, known)
+			},
+			NoGames: func() string { return "ни одной мини-игры" },
+			NoTasks: func(n string, name string) string {
+				return fmt.Sprintf("строка %s, %s: ни одного задания", n, name)
+			},
+			NotANumber: func(domain string, item string) string {
+				return fmt.Sprintf("%s — \"%s\" не число", domain, item)
+			},
+			RangeDescending: func(domain string) string {
+				return fmt.Sprintf("%s — диапазон читается снизу вверх", domain)
+			},
+			RangeTooWide: func(domain string, max string) string {
+				return fmt.Sprintf("%s — диапазон шире %s значений", domain, max)
+			},
+			RepeatCount: func(spec string) string {
+				return fmt.Sprintf("\"%s\" — повтор xN считается от 1", spec)
+			},
+			SpecExpected: func(spec string) string {
+				return fmt.Sprintf("\"%s\" — жду {значения} или {a-b}, можно с xN", spec)
+			},
+		},
+		Od: GamesOdStrings{
+			Label: func() string { return "ЧГК" },
+		},
+		Si: GamesSiStrings{
+			Label: func() string { return "Личная СИ" },
+		},
+		Troika: GamesTroikaStrings{
+			Label: func() string { return "Тройка" },
+		},
+	},
+	Host: HostStrings{
+		Dash: HostDashStrings{
+			AccessSavedNotice: func() string { return "Доступ сохранён." },
+			AccessSubhead:     func() string { return "Доступ" },
+			AddBtn:            func() string { return "Добавить" },
+			AddGameBtn:        func() string { return "Добавить игру" },
+			AuditLink:         func() string { return "История изменений" },
+			AuditMuted:        func() string { return "откат состояния" },
+			BulkApply:         func() string { return "Применить" },
+			BulkDataLabel:     func() string { return "Данные" },
+			BulkDoneNotice: func(n string) string {
+				return fmt.Sprintf("Массовое действие выполнено: %s.", n)
+			},
+			BulkLabel: func() string { return "Массовое действие" },
+			CancelBtn: func() string { return "Отмена" },
+			ClearBtn:  func() string { return "Очистить" },
+			ClearConfirm: func() string {
+				return "Очистить игру? Все результаты, импортированные команды и посев будут удалены, игра вернётся в исходное состояние. Настройки и ссылка сохранятся."
+			},
+			ColNickname:         func() string { return "Никнейм" },
+			ColRole:             func() string { return "Роль" },
+			DeleteAccessConfirm: func(name string) string { return fmt.Sprintf("Удалить доступ для %s?", name) },
+			DeleteBtn:           func() string { return "Удалить" },
+			DeleteConfirm: func() string {
+				return "Удалить турнир? Все игры, команды и результаты будут удалены."
+			},
+			DeleteGameConfirm: func() string {
+				return "Удалить игру? Все результаты этой игры будут потеряны."
+			},
+			DeleteNote: func() string {
+				return "Удаление убирает фест со всеми играми, командами и результатами."
+			},
+			DeleteSubhead:        func() string { return "Удаление" },
+			DeleteSubmit:         func() string { return "Удалить фест" },
+			DescriptionLabel:     func() string { return "Описание (markdown)" },
+			EndDateLabel:         func() string { return "Дата окончания" },
+			ErrorSlugInvalid:     func(err string) string { return fmt.Sprintf("Slug: %s", err) },
+			ErrorSlugTaken:       func() string { return "Slug уже занят." },
+			ErrorTitleRequired:   func() string { return "Название обязательно." },
+			GamesEmpty:           func() string { return "Игр пока нет." },
+			GamesSubhead:         func() string { return "Игры" },
+			JumpLabel:            func() string { return "Страница зрителя" },
+			JumpTitle:            func() string { return "Открыть зрительскую страницу" },
+			NumbersLink:          func() string { return "Номера команд" },
+			NumbersStatusDone:    func() string { return "готово" },
+			NumbersStatusPartial: func(done string, total string) string { return fmt.Sprintf("%s из %s", done, total) },
+			NumbersStatusUnset:   func() string { return "не выставлены" },
+			PageTitle:            func(title string) string { return fmt.Sprintf("%s · ведущий", title) },
+			PublicLabel:          func() string { return "Публичный" },
+			RatingStatusNone:     func() string { return "нет rating ID" },
+			RosterImportLink:     func() string { return "Загрузить команды и игроков" },
+			RosterPlayersLink:    func() string { return "Игроки" },
+			RosterSubhead:        func() string { return "Участники" },
+			RosterTeamsLink:      func() string { return "Команды" },
+			SaveSubmit:           func() string { return "Сохранить" },
+			SettingsBtn:          func() string { return "Свойства" },
+			SlugLabel: func() string {
+				return "Slug (необязательно; задайте, чтобы получить URL вида /fest/{slug})"
+			},
+			StartDateLabel: func() string { return "Дата начала" },
+			TitleLabel:     func() string { return "Название" },
+		},
+		Games: HostGamesStrings{
+			BrainHint: func() string {
+				return "Формат описан в docs/scheme-dsl.md: блоки [scheme] через ---, kind: roundrobin / single_elimination / double_elimination."
+			},
+			CreateCrumb:  func() string { return "Добавить игру" },
+			CreateSubmit: func() string { return "Создать" },
+			CreateTitle:  func(title string) string { return fmt.Sprintf("%s · новая игра", title) },
+			EkHint: func() string {
+				return "Либо схемой, либо готовым JSON ниже — что заполнено, то и используется."
+			},
+			EkJsonLabel: func() string { return "JSON-схема" },
+			EntrantsHint: func() string {
+				return "Отметьте, кто играет в этой игре. Если не отметить никого, играют все — а номера игра раздаёт свои, с единицы, так что одна и та же команда бывает второй в ЭК и четвёртой в ОД. Командная игра сажает за стол команды, личная — игроков; сначала команды, потом игроки."
+			},
+			EntrantsSummary:      func() string { return "Состав игры" },
+			ErrorEkSchemeMissing: func() string { return "Вставьте JSON-схему ЭК или опишите её схемой" },
+			ErrorJsonParse:       func(err string) string { return fmt.Sprintf("Не удалось разобрать JSON: %s", err) },
+			ErrorMinigames:       func(err string) string { return fmt.Sprintf("Мини-игры: %s", err) },
+			ErrorMultiSorting: func(err string) string {
+				return fmt.Sprintf("Что решает при равном итоге: %s", err)
+			},
+			ErrorSlugInvalid:   func(err string) string { return fmt.Sprintf("Slug: %s", err) },
+			ErrorSlugTaken:     func() string { return "Slug уже занят в этом фесте." },
+			ErrorTitleRequired: func() string { return "Название обязательно." },
+			ErrorTypeMissing:   func() string { return "выберите тип игры" },
+			MinigamesHint: func() string {
+				return "По строке на мини-игру: «Название: {значения}xN». {0,1} — задание на 0 или 1 балл, {-1,0,1} — со штрафом, {0-12} — любое целое от 0 до 12. Несколько описаний в строке идут подряд: «{0,3}x2 {0,5}» — три задания на 3, 3 и 5 баллов. «|» закрывает блок листа: «{0,1}x10 | {0,1}x10» — два блока по десять, с зазором и сквозной нумерацией."
+			},
+			MinigamesLabel: func() string { return "Мини-игры" },
+			MinigamesPlaceholder: func() string {
+				return "Фоторяд: {0,1}x10\nЛогика: {0,3}x2 {0,5}\nШтрафной: {-1,0,1}x10\nПесни →0..100: {0,1}x72"
+			},
+			MinigamesShareHint: func() string {
+				return "«Название →0..100: …» — мини-игра идёт в итог не своими баллами, а долей от лучшего результата в ней, из ста. Так мини-игры разного масштаба весят в итоге поровну; ушедшим в минус засчитывается ноль."
+			},
+			MultiSortingHint: func() string {
+				return "Через запятую: total — итог, plus — сумма положительных, game1, game2… — подытоги мини-игр по порядку. Пусто — команды с равным итогом делят место."
+			},
+			MultiSortingLabel: func() string {
+				return "Что решает при равном итоге (необязательно)"
+			},
+			OdQuestionsLabel: func() string { return "Количество вопросов в туре" },
+			OdToursLabel:     func() string { return "Количество туров" },
+			RebuildHint: func() string {
+				return "Пересборка меняет только не начатые бои: можно поменять число вопросов или добавить блок, но начатый бой должен сохраниться без изменений."
+			},
+			SaveSubmit:  func() string { return "Сохранить" },
+			SchemeLabel: func() string { return "Схема" },
+			SiHint: func() string {
+				return "Тот же язык схем: за столом сидят игроки, а не команды. Бой на троих — match_size: 3, проходят двое — winning_places: 2."
+			},
+			SlugLabel:            func() string { return "Slug (необязательно, a-z, 0-9, дефис)" },
+			StickerEmptywrong:    func() string { return "Пустой = минус" },
+			StickerEmptywrongRow: func() string { return "Пустой = минус (пустые = −номинал)" },
+			StickerMaxField:      func() string { return "Максимум стикеров" },
+			StickerMaxLabel:      func() string { return "Макс." },
+			StickerNeutral:       func() string { return "Обычный" },
+			StickerNowrong:       func() string { return "Без минуса" },
+			StickerNowrongRow:    func() string { return "Без минуса (неправильные = 0)" },
+			StickerX2Row:         func() string { return "×2 (правильные и неправильные удваиваются)" },
+			StickersHint: func() string {
+				return "Для каждого стикера задайте, сколько штук есть у команды (0 — стикер не используется) и цвет для подсветки. «Обычный» стикер работает как стандартная тема КСИ."
+			},
+			ThemesLabel: func() string { return "Количество тем" },
+			TitleLabel:  func() string { return "Название" },
+			TroikaHint: func() string {
+				return "Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50."
+			},
+			TypeBrain:       func() string { return "Брейн" },
+			TypeEk:          func() string { return "ЭК" },
+			TypeKsi:         func() string { return "КСИ" },
+			TypeKsiStickers: func() string { return "КСИ со стикерами" },
+			TypeLabel:       func() string { return "Тип игры" },
+			TypeMulti:       func() string { return "Мультиигры" },
+			TypeOd:          func() string { return "ОД" },
+			TypeSi:          func() string { return "Личная СИ" },
+			TypeTroika:      func() string { return "Тройка" },
+		},
+		Pages: HostPagesStrings{
+			CreateFestSummary: func() string { return "Создать фест" },
+			CreateSubmit:      func() string { return "Создать" },
+			DescriptionLabel:  func() string { return "Описание (markdown)" },
+			EndDateLabel:      func() string { return "Дата окончания" },
+			ErrorIntRange: func(field string, min string, max string) string {
+				return fmt.Sprintf("%s должно быть от %s до %s", field, min, max)
+			},
+			FestGamesEmpty:             func() string { return "В этом фесте пока нет игр." },
+			FestRowUnlisted:            func(title string) string { return fmt.Sprintf("%s · непубличный", title) },
+			FestsEmpty:                 func() string { return "Фестов пока нет." },
+			GamesSubhead:               func() string { return "Игры" },
+			GroupCurrent:               func() string { return "Текущие" },
+			GroupFuture:                func() string { return "Будущие" },
+			GroupPast:                  func() string { return "Прошедшие" },
+			HomeCrumbLabel:             func() string { return "Главная" },
+			IdentityUsernameLead:       func() string { return "Вы вошли как " },
+			JumpHostLabel:              func() string { return "Режим ведущего" },
+			JumpHostTitleFest:          func() string { return "Открыть в режиме ведущего" },
+			JumpHostTitleIndex:         func() string { return "Перейти в режим ведущего" },
+			JumpLabel:                  func() string { return "Страница зрителя" },
+			JumpTitle:                  func() string { return "Открыть зрительскую страницу" },
+			LandingCrumb:               func() string { return "Мои фесты" },
+			LandingTitle:               func(name string) string { return fmt.Sprintf("Мои фесты · %s", name) },
+			LogoutSubmit:               func() string { return "Разлогиниться" },
+			PasswordChangeSubmit:       func() string { return "Сменить пароль" },
+			PasswordConfirmPlaceholder: func() string { return "Повторите новый пароль" },
+			PasswordCurrentPlaceholder: func() string { return "Текущий пароль" },
+			PasswordNewPlaceholder:     func() string { return "Новый пароль" },
+			PasswordSetSubmit:          func() string { return "Установить пароль" },
+			ProfileCrumb:               func() string { return "Профиль" },
+			ProfileTitle:               func() string { return "Профиль" },
+			PublicIndexCrumb:           func() string { return "Фесты" },
+			PublicIndexEmpty:           func() string { return "Нет публичных фестов." },
+			PublicIndexTitle:           func() string { return "Фесты" },
+			PublicLabel:                func() string { return "Публичный" },
+			RatingIdLabel:              func() string { return "rating.chgk.info ID (опционально)" },
+			StartDateLabel:             func() string { return "Дата начала (YYYY-MM-DD)" },
+			TitleLabel:                 func() string { return "Название" },
+			UsernameFallback:           func() string { return "Профиль" },
+		},
+		Roster: HostRosterStrings{
+			AddOverrideBtn:        func() string { return "Добавить оверрайд для игры" },
+			CancelBtn:             func() string { return "Отмена" },
+			ColCity:               func() string { return "Город" },
+			ColFromTeam:           func() string { return "Из команды" },
+			ColPlayers:            func() string { return "Игроков" },
+			ColToTeam:             func() string { return "В команду" },
+			DeleteBtn:             func() string { return "Удалить" },
+			DeleteOverrideConfirm: func() string { return "Удалить оверрайд?" },
+			EditOverrideLabel:     func() string { return "Редактировать оверрайд" },
+			ErrorJsonEmpty:        func() string { return "Вставьте JSON схемы." },
+			ErrorJsonParse:        func(err string) string { return fmt.Sprintf("Не удалось разобрать JSON: %s", err) },
+			ErrorObjPlayer:        func() string { return "игрока" },
+			ErrorObjSourceTeam:    func() string { return "исходную команду" },
+			ErrorObjTeam:          func() string { return "команду" },
+			GamesLabel:            func() string { return "Игры" },
+			ImportDoneCounts: func(teams string, players string, od string, ksi string) string {
+				return fmt.Sprintf("Загружено команд: %s, игроков: %s. Обновлено игр ЧГК: %s, КСИ: %s.", teams, players, od, ksi)
+			},
+			ImportDoneNotice: func() string { return "Импорт выполнен." },
+			ImportSubmit:     func() string { return "Загрузить команды и игроков" },
+			ImportUnchangedNotice: func(teams string, players string) string {
+				return fmt.Sprintf("Списки уже совпадают с рейтингом — изменений нет. Команд: %s, игроков: %s.", teams, players)
+			},
+			NeedRatingNote: func() string {
+				return "Сначала сохраните rating.chgk.info ID в свойствах феста."
+			},
+			NewTeamLabel:      func() string { return "Новая команда" },
+			NoOverrideGames:   func() string { return "В фесте пока нет игр КСИ или ЭК." },
+			OverrideTitle:     func() string { return "Оверрайд игрока" },
+			OverridesSubhead:  func() string { return "Оверрайды" },
+			PlayerLabel:       func() string { return "Игрок" },
+			PlayersCrumb:      func() string { return "Игроки" },
+			PlayersEmpty:      func() string { return "Игроки пока не загружены." },
+			PlayersTitle:      func(title string) string { return fmt.Sprintf("%s · игроки", title) },
+			RatingImportCrumb: func() string { return "Импорт участников" },
+			RatingImportNote: func() string {
+				return "Импорт заменит списки команд и игроков феста и обновит список команд в играх ЧГК и КСИ."
+			},
+			RatingImportTitle: func(title string) string { return fmt.Sprintf("%s · импорт участников", title) },
+			RatingSource:      func(id string) string { return fmt.Sprintf("Источник: rating.chgk.info ID %s", id) },
+			SaveSubmit:        func() string { return "Сохранить" },
+			SchemeImportCrumb: func() string { return "Импорт схемы" },
+			SchemeImportNote: func() string {
+				return "Импорт пересоздаёт игру феста из JSON-схемы. Существующие игры этого феста будут заменены."
+			},
+			SchemeImportSubmit: func() string { return "Импортировать" },
+			SchemeImportTitle:  func(title string) string { return fmt.Sprintf("%s · импорт схемы", title) },
+			SchemeJsonLabel:    func() string { return "JSON-схема" },
+			TeamLabel:          func() string { return "Команда" },
+			TeamsCrumb:         func() string { return "Команды" },
+			TeamsEmpty:         func() string { return "Команды пока не загружены." },
+			TeamsTitle:         func(title string) string { return fmt.Sprintf("%s · команды", title) },
+		},
+	},
+	Imports: ImportsStrings{
+		EkRestore: ImportsEkRestoreStrings{
+			MatchHeader: func(code string, status string) string { return fmt.Sprintf("-- Бой %s [%s]", code, status) },
+		},
+		Rating: ImportsRatingStrings{
+			ApiError: func(detail string) string { return fmt.Sprintf("рейтинг вернул ошибку: %s", detail) },
+			DecodeFailed: func(err string) string {
+				return fmt.Sprintf("не удалось разобрать ответ рейтинга: %s", err)
+			},
+			FetchFailed: func(err string) string {
+				return fmt.Sprintf("не удалось запросить рейтинг: %s", err)
+			},
+			NoTeams: func() string { return "рейтинг не вернул команды" },
+			SquadTooBig: func(name string) string {
+				return fmt.Sprintf("состав \"%s\" больше 9 игроков", name)
+			},
+		},
+		Seed: ImportsSeedStrings{
+			GameMissing: func(code string) string { return fmt.Sprintf("в фесте нет игры с кодом %s", code) },
+			KsiMissing:  func() string { return "в фесте нет игры КСИ" },
+			MetricUnknown: func(metric string, code string) string {
+				return fmt.Sprintf("sorting: %s — игра %s такой метрики не считает", metric, code)
+			},
+			MultipleStandings: func(code string, n int) string {
+				return fmt.Sprintf("у игры %s %d %s — посев берётся из игры с одной", code, n, core.Plural("ru", n, "таблиц", "таблиц", "таблиц"))
+			},
+			NoNumberedTeams: func() string { return "в фесте нет пронумерованных команд" },
+			NoStandings:     func(code string) string { return fmt.Sprintf("у игры %s ещё нет таблицы", code) },
+			NothingImported: func() string { return "сначала импортируйте посев" },
+			SchemeMissing:   func() string { return "схема игры не объявляет посев ([init] seed)" },
+			SchemeXlsx: func() string {
+				return "посев из xlsx: загрузите файл на вкладке посева"
+			},
+			SourceNoTeams: func() string { return "в игре-источнике нет команд" },
+			TeamNotFound:  func() string { return "команда не найдена в импорте посева" },
+			TeamTwice: func(source string, name string, first string) string {
+				return fmt.Sprintf("%s содержит команду \"%s\" больше одного раза (первое имя: \"%s\")", source, name, first)
+			},
+			XlsxBasketMissing: func(name string, n string) string {
+				return fmt.Sprintf("команда \"%s\" без корзины, а лист корзинный (строка %s)", name, n)
+			},
+			XlsxBasketNotNumber: func(n string, basket string) string {
+				return fmt.Sprintf("строка %s: корзина \"%s\" — не число", n, basket)
+			},
+			XlsxNoSheets: func() string { return "в xlsx нет листов" },
+			XlsxNoTeams:  func() string { return "в xlsx нет команд" },
+			XlsxOpen:     func(err string) string { return fmt.Sprintf("не удалось открыть xlsx: %s", err) },
+			XlsxTeamUnknown: func(n string, name string) string {
+				return fmt.Sprintf("строка %s: команда \"%s\" не найдена в фесте", n, name)
+			},
+		},
+		SeedPlayers: ImportsSeedPlayersStrings{
+			AggregateExpected: func(name string) string {
+				return fmt.Sprintf("seed.%s: жду mean(метрика), min, max, sum или count", name)
+			},
+			MetricMissing: func(name string, over string) string {
+				return fmt.Sprintf("seed.%s: %s — такой метрики игрока нет", name, over)
+			},
+			MetricUnknown: func(metric string, known string) string {
+				return fmt.Sprintf("sorting: %s не считается — есть %s", metric, known)
+			},
+			MultipleStandings: func(code string) string {
+				return fmt.Sprintf("у игры %s несколько таблиц — посев по игрокам берётся из игры с одной", code)
+			},
+			NoGames: func() string {
+				return "посев по игрокам: схема не называет игры-источники"
+			},
+			NoRoster: func(name string) string {
+				return fmt.Sprintf("посев по игрокам: у команды %s нет состава", name)
+			},
+			NoRosters: func() string {
+				return "посев по игрокам: у команд этой игры нет составов"
+			},
+			NoSorting: func() string {
+				return "посев по игрокам: схема не говорит, чем сортировать ([init] sorting)"
+			},
+			SelfReference: func(grain string, name string) string {
+				return fmt.Sprintf("%s.%s: правило зависит от самого себя", grain, name)
+			},
+		},
+		SeedSource: ImportsSeedSourceStrings{
+			Ksi:     func() string { return "КСИ" },
+			Players: func() string { return "по игрокам" },
+			Random:  func() string { return "жребий" },
+		},
+	},
+	Journal: JournalStrings{
+		Ek: JournalEkStrings{
+			Answer: func(match string, team string, theme string, question string, mark string) string {
+				return fmt.Sprintf("%s%s, тема %s, вопрос %s: %s", match, team, theme, question, mark)
+			},
+			MatchFinished:  func() string { return "матч завершён" },
+			MatchPrefix:    func(code string) string { return fmt.Sprintf("матч %s, ", code) },
+			MatchReopened:  func() string { return "матч открыт заново" },
+			MatchUpdate:    func() string { return "редактирование матча" },
+			PlayerAssigned: func() string { return "назначен игрок" },
+			PlayerPlays:    func(name string) string { return fmt.Sprintf("играет %s", name) },
+			PlayerRemoved:  func() string { return "игрок снят" },
+			Rank: func(match string, team string, rank string) string {
+				return fmt.Sprintf("%s%s: место %s", match, team, rank)
+			},
+			TeamUnnamed: func() string { return "команда" },
+			ThemePrefix: func(match string, team string, theme string) string {
+				return fmt.Sprintf("%s%s, тема %s: ", match, team, theme)
+			},
+		},
+		Event: JournalEventStrings{
+			FestAccess:     func() string { return "изменение доступа" },
+			FestNumbers:    func() string { return "изменены номера команд" },
+			GameClear:      func() string { return "игра очищена" },
+			GameCreate:     func() string { return "игра создана" },
+			GameDelete:     func() string { return "игра удалена" },
+			GameRevert:     func() string { return "откат игры к более раннему состоянию" },
+			PlayerOverride: func() string { return "переопределение игрока в составе" },
+			RatingImport:   func() string { return "импорт ростера из rating.chgk.info" },
+			Reseed:         func() string { return "пересчёт посева этапа" },
+			SchemeImport:   func() string { return "импорт схемы" },
+			SeedDecline:    func() string { return "отказ команды от посева" },
+			SeedImportKsi:  func() string { return "импорт посева из КСИ" },
+			StateReplaced:  func() string { return "состояние игры заменено целиком" },
+			Venue:          func() string { return "изменена площадка" },
+		},
+		Index: JournalIndexStrings{
+			Empty: func() string { return "В этом фестивале пока нет игр." },
+			Note: func() string {
+				return "История и откат ведутся отдельно по каждой игре."
+			},
+			Title: func() string { return "История изменений" },
+		},
+		Ksi: JournalKsiStrings{
+			Answer: func(theme string, player string, question string, mark string) string {
+				return fmt.Sprintf("тема %s, %s, вопрос %s: %s", theme, player, question, mark)
+			},
+			Declined:            func() string { return "отказ от участия" },
+			Finished:            func() string { return "завершение матча" },
+			ParticipantFallback: func(n string) string { return fmt.Sprintf("участник %s", n) },
+			Rename: func(n string, name string) string {
+				return fmt.Sprintf("переименование участника %s → %s", n, name)
+			},
+		},
+		Mark: JournalMarkStrings{
+			None:  func() string { return "снято" },
+			Right: func() string { return "верно" },
+			Wrong: func() string { return "неверно" },
+		},
+		Od: JournalOdStrings{
+			AnswerClear: func(question string) string {
+				return fmt.Sprintf("вопрос %s: отметка снята", question)
+			},
+			AnswerSet: func(question string, team string) string {
+				return fmt.Sprintf("вопрос %s: засчитана %s", question, team)
+			},
+			EntriesChanged: func() string { return "ответы изменены" },
+			EntryChanged:   func(question string) string { return fmt.Sprintf("вопрос %s изменён", question) },
+			Readiness: func(question string, value string) string {
+				return fmt.Sprintf("вопрос %s: готовность → %s", question, value)
+			},
+			Shootout:    func() string { return "перестрелка" },
+			TeamNamed:   func(name string, n string) string { return fmt.Sprintf("«%s» (№%s)", name, n) },
+			TeamUnnamed: func(n string) string { return fmt.Sprintf("команда №%s", n) },
+		},
+		Page: JournalPageStrings{
+			ColChanges:   func() string { return "изменения" },
+			ColWhen:      func() string { return "когда" },
+			ColWho:       func() string { return "кто" },
+			DefaultTitle: func(n string) string { return fmt.Sprintf("игра %s", n) },
+			Empty:        func() string { return "Изменений пока нет." },
+			More:         func(n string) string { return fmt.Sprintf("+ ещё %s", n) },
+			RevertConfirm: func() string {
+				return "Откатить игру до состояния перед этим изменением? Все последующие изменения этой игры будут отменены."
+			},
+			RevertDone:   func() string { return "Откат выполнен." },
+			RevertFailed: func(err string) string { return fmt.Sprintf("Не удалось откатить: %s", err) },
+			RevertSubmit: func() string { return "откатить сюда" },
+			Title:        func(game string) string { return fmt.Sprintf("История игры · %s", game) },
+		},
+		Patch: JournalPatchStrings{
+			GenericRemoved: func(path string) string { return fmt.Sprintf("%s: снято", path) },
+			GenericSet:     func(path string, value string) string { return fmt.Sprintf("%s → %s", path, value) },
+			StateFallback:  func() string { return "изменение состояния игры" },
+		},
+		Value: JournalValueStrings{
+			Empty: func() string { return "пусто" },
+		},
+	},
+	Markdown: MarkdownStrings{
+		Details: MarkdownDetailsStrings{
+			DefaultSummary: func() string { return "Подробнее" },
+		},
+	},
+	Multi: MultiStrings{
+		Game: MultiGameStrings{
+			UniformPrice: func(name string, n string) string { return fmt.Sprintf("%s (по %s)", name, n) },
+		},
+		Refusals: MultiRefusalsStrings{
+			Declined: func() string { return "Отказ" },
+			Team:     func() string { return "Команда" },
+		},
+		Results: MultiResultsStrings{
+			Place: func() string { return "М" },
+			Team:  func() string { return "Команда" },
+			Total: func() string { return "Итог" },
+		},
+		Sheet: MultiSheetStrings{
+			Team:  func() string { return "Команда" },
+			Total: func() string { return "Итог" },
+		},
+		Tabs: MultiTabsStrings{
+			Detailed: func() string { return "Подробно" },
+			Refusals: func() string { return "Отказы" },
+			Results:  func() string { return "Итог" },
+			Roster:   func() string { return "Составы" },
+		},
+		Title: func() string { return "Мультиигры" },
+	},
+	Numbers: NumbersStrings{
+		Action: NumbersActionStrings{
+			Auto:    func() string { return "Проставить автоматически" },
+			Cancel:  func() string { return "Отмена" },
+			Clear:   func() string { return "Очистить" },
+			Import:  func() string { return "Импорт номеров" },
+			Replace: func() string { return "Замена номера" },
+			Save:    func() string { return "Сохранить" },
+		},
+		Apply: NumbersApplyStrings{
+			ForeignTeam: func() string { return "Команда не из этого феста." },
+			NumberRange: func(max string) string {
+				return fmt.Sprintf("Номер должен быть целым от 1 до %s.", max)
+			},
+			ReadFailed:   func() string { return "Не удалось прочитать данные." },
+			TeamRepeated: func() string { return "Команда выбрана несколько раз." },
+		},
+		Error: NumbersErrorStrings{
+			NumberTwoRows: func(number string, first string, second string) string {
+				return fmt.Sprintf("Номер %s указан сразу в строках %s и %s.", number, first, second)
+			},
+			RowForeignTeam: func(n string) string {
+				return fmt.Sprintf("Строка %s: команда не из этого феста.", n)
+			},
+			RowNoTeam: func(n string) string {
+				return fmt.Sprintf("Строка %s: укажите команду или удалите номер.", n)
+			},
+			RowRange: func(n string, max string) string {
+				return fmt.Sprintf("Строка %s: номер должен быть целым от 1 до %s.", n, max)
+			},
+			TeamTwoRows: func(first string, second string) string {
+				return fmt.Sprintf("Команда выбрана сразу в строках %s и %s.", first, second)
+			},
+		},
+		Help: NumbersHelpStrings{
+			Edit: func() string {
+				return "Меняйте номер прямо в строке. Когда сохраните, все упоминания старого номера в ОД заменятся на новый — удобно, чтобы перевести команду на резервный номер (101 и т. п.), не задевая остальных."
+			},
+		},
+		Import: NumbersImportStrings{
+			LineDup: func(n string, number string, prev string) string {
+				return fmt.Sprintf("Строка %s: номер %s уже указан в строке %s.", n, number, prev)
+			},
+			LineFormat: func(n string) string {
+				return fmt.Sprintf("Строка %s: ожидается «номер<таб>команда».", n)
+			},
+			LineRange: func(n string, max string) string {
+				return fmt.Sprintf("Строка %s: номер должен быть целым от 1 до %s.", n, max)
+			},
+		},
+		Notice: NumbersNoticeStrings{
+			Auto: func() string {
+				return "Номера проставлены автоматически по алфавиту."
+			},
+			Cleared: func() string { return "Номера очищены." },
+			Saved:   func() string { return "Номера сохранены." },
+			SavedPartial: func(n string) string {
+				return fmt.Sprintf("Сохранено. Осталось без номера: %s.", n)
+			},
+		},
+		Page: NumbersPageStrings{
+			Crumb: func() string { return "Номера команд" },
+			Empty: func() string {
+				return "Сначала загрузите команды на странице феста."
+			},
+			NoTeams: func() string { return "Сначала загрузите команды." },
+			Title:   func(fest string) string { return fmt.Sprintf("%s · номера команд", fest) },
+		},
+	},
+	Octobearfest: OctobearfestStrings{
+		Error: OctobearfestErrorStrings{
+			AssortiStep: func(err string) string { return fmt.Sprintf("ассорти: %s", err) },
+			DbMissing:   func() string { return "укажите -db" },
+			FestExists: func(slug string) string {
+				return fmt.Sprintf("фест %s в этой базе уже есть — удалите его или возьмите другой slug", slug)
+			},
+			Finish:       func(at string, err string) string { return fmt.Sprintf("%s: доигрыш: %s", at, err) },
+			MultiBout:    func(err string) string { return fmt.Sprintf("бой мультиигр: %s", err) },
+			NoBoutAt:     func() string { return "нет боя по координате" },
+			NoSystemUser: func() string { return "в базе нет системного пользователя" },
+			NotSeated:    func() string { return "не сидит в этом бою" },
+			TroikaStep:   func(err string) string { return fmt.Sprintf("троечка: %s", err) },
+		},
+		Flag: OctobearfestFlagStrings{
+			Db: func() string { return "путь к базе dope" },
+			Root: func() string {
+				return "корень модуля: откуда читать стенограмму, схему и набор"
+			},
+			Slug: func() string { return "slug феста" },
+		},
+		Log: OctobearfestLogStrings{
+			AssortiStart: func(game string, minigames string, teams string) string {
+				return fmt.Sprintf("ассорти: игра %s, мини-игр %s, команд %s", game, minigames, teams)
+			},
+			Fest:       func(id string, slug string) string { return fmt.Sprintf("фест %s (%s)", id, slug) },
+			Organizers: func(err string) string { return fmt.Sprintf("организаторы: %s (пропущено)", err) },
+			Registry:   func(n string) string { return fmt.Sprintf("реестр: %s команд", n) },
+			TroikaDone: func() string { return "троечка: сыграна" },
+			TroikaStart: func(game string, bouts string) string {
+				return fmt.Sprintf("троечка: игра %s, боёв %s", game, bouts)
+			},
+		},
+	},
+	Od: OdStrings{
+		Detailed: OdDetailedStrings{
+			Tour: func(n string) string { return fmt.Sprintf("Т%s", n) },
+		},
+		Guard: OdGuardStrings{
+			Lead:    func() string { return "Чтобы ввод работал, надо заполнить " },
+			Missing: func(names string) string { return fmt.Sprintf("Без номера: %s.", names) },
+			Numbers: func() string { return "номера команд" },
+		},
+		Head: OdHeadStrings{
+			Place:      func() string { return "Место" },
+			PlaceShort: func() string { return "М" },
+			Team:       func() string { return "Команда" },
+		},
+		Invert: OdInvertStrings{
+			Label: func() string { return "Инвертировать" },
+		},
+		Progress: OdProgressStrings{
+			Entered:    func(n string) string { return fmt.Sprintf("Введён вопрос %s", n) },
+			NotStarted: func() string { return "Игра не началась" },
+		},
+		Results: OdResultsStrings{
+			ShootoutCollapse: func() string { return "Свернуть перестрелку" },
+			ShootoutExpand:   func() string { return "Показать вопросы перестрелки" },
+			TourCollapse:     func() string { return "Свернуть тур" },
+			TourExpand:       func() string { return "Показать вопросы тура" },
+		},
+		Screen: OdScreenStrings{
+			Bg:          func() string { return "Цвет фона" },
+			ChromeHide:  func() string { return "Скрыть оформление" },
+			ChromeShow:  func() string { return "Показать оформление" },
+			Columns:     func() string { return "Столбцы (0 — авто)" },
+			Fg:          func() string { return "Цвет текста" },
+			Font:        func() string { return "Размер шрифта" },
+			Muted:       func() string { return "Цвет подписей" },
+			NoTeams:     func() string { return "Команды не заданы" },
+			Reset:       func() string { return "Сбросить" },
+			Settings:    func() string { return "Настройки" },
+			ShowCity:    func() string { return "Показывать город" },
+			ShowCountry: func() string { return "Показывать страну" },
+		},
+		Shootout: OdShootoutStrings{
+			AddQuestion:     func() string { return "Добавить вопрос" },
+			AddRound:        func() string { return "Добавить раунд перестрелки" },
+			AddRoundBlocked: func() string { return "Сначала заполните номера команд" },
+			Cancel:          func() string { return "Отмена" },
+			Create:          func() string { return "Создать" },
+			EntryTitle: func(team string, round string, q string) string {
+				return fmt.Sprintf("%s, %s, вопрос %s", team, round, q)
+			},
+			RemoveQuestion:        func() string { return "Удалить вопрос" },
+			RemoveQuestionConfirm: func() string { return "Удалить последний вопрос перестрелки?" },
+			RemoveRoundConfirm:    func() string { return "Удалить раунд перестрелки?" },
+			Round:                 func(n string) string { return fmt.Sprintf("П%s", n) },
+			RoundDialog:           func() string { return "Раунд перестрелки" },
+			Title:                 func() string { return "Перестрелка" },
+		},
+		Team: OdTeamStrings{
+			Fallback: func(n string) string { return fmt.Sprintf("Команда %s", n) },
+		},
+		Title: func() string { return "ОД" },
+	},
+	Override: OverrideStrings{
+		Entry: OverrideEntryStrings{
+			GameInvalid:   func() string { return "Некорректная игра." },
+			GameTypeWrong: func() string { return "Игра для оверрайда должна быть КСИ или ЭК." },
+			PickFromHint:  func(label string) string { return fmt.Sprintf("Выберите %s из подсказки.", label) },
+			PickGames:     func() string { return "Выберите хотя бы одну игру." },
+			PickPlayer:    func() string { return "Выберите игрока из подсказки." },
+			PickTeam:      func() string { return "Выберите новую команду из подсказки." },
+		},
+		Lookup: OverrideLookupStrings{
+			NotFound:       func() string { return "Оверрайд не найден." },
+			PlayerNotFound: func() string { return "Игрок не найден в активном составе феста." },
+			TeamNotFound: func() string {
+				return "Команда не найдена в активном составе феста."
+			},
+		},
+		Save: OverrideSaveStrings{
+			TeamSame: func() string {
+				return "Новая команда совпадает с командой игрока в рейтинге."
+			},
+			TeamTooBig: func(team string) string {
+				return fmt.Sprintf("В команде \"%s\" после оверрайдов больше 9 игроков.", team)
+			},
+		},
+	},
+	Pages: PagesStrings{
+		Crumbs: PagesCrumbsStrings{
+			Admin:        func() string { return "Админка" },
+			FestFallback: func(n string) string { return fmt.Sprintf("Фест %s", n) },
+			Home:         func() string { return "Главная" },
+			Host:         func() string { return "Мои фесты" },
+		},
+	},
+	Replay: ReplayStrings{
+		Codec: ReplayCodecStrings{
+			StatAttempts: func() string { return "попытки" },
+			StatBouts:    func() string { return "бои" },
+			StatRight:    func() string { return "верно" },
+			StatThemes:   func() string { return "темы" },
+			StatWrong:    func() string { return "неверно" },
+		},
+		Parse: ReplayParseStrings{
+			BoutHeaderExtra: func(rest string) string {
+				return fmt.Sprintf("после координаты можно писать только «жребий», а не \"%s\"", rest)
+			},
+			BoutNoSeats: func(at string) string {
+				return fmt.Sprintf("бой %s без единого места — оборванная стенограмма прошла бы молча", at)
+			},
+			CoordExpected: func(raw string) string {
+				return fmt.Sprintf("координата — это блок[/группа]/круг/заход/бой, например s1/r1/w1/m1 или s1/g3/r1/w1/m1, а не \"%s\"", raw)
+			},
+			CoordNoBlock: func(raw string) string { return fmt.Sprintf("координата без блока: \"%s\"", raw) },
+			CoordTable:   func(stage string) string { return fmt.Sprintf("таблица %s", stage) },
+			CoordTaken: func(at string, n string) string {
+				return fmt.Sprintf("%s уже есть на строке %s — на одной координате одна запись, иначе одна из них молча пропадёт", at, n)
+			},
+			CountsDigit: func(name string, raw string) string {
+				return fmt.Sprintf("у %s в теме \"%s\" — жду 0..3 или «.», сколько из троих ответили верно", name, raw)
+			},
+			CountsThemeSize: func(name string, n string, raw string) string {
+				return fmt.Sprintf("у %s тема из %s вопросов, а написано \"%s\"", name, n, raw)
+			},
+			EntrantExpected: func(raw string) string {
+				return fmt.Sprintf("участник — «номер | название | город», а не \"%s\"", raw)
+			},
+			EntrantNoName: func() string { return "участник без названия" },
+			EntrantNumber: func(raw string) string {
+				return fmt.Sprintf("номер участника — целое от 1, а не \"%s\"", raw)
+			},
+			GameNoCodec: func(game string) string {
+				return fmt.Sprintf("у игры \"%s\" нет формы боя в стенограмме", game)
+			},
+			GamePairExpected: func(raw string) string {
+				return fmt.Sprintf("в [game] нужны пары «ключ: значение», а не \"%s\"", raw)
+			},
+			GameUnknownKey: func(key string) string { return fmt.Sprintf("[game] не знает ключа \"%s\"", key) },
+			GroupExpected: func(raw string) string {
+				return fmt.Sprintf("группа пишется как g3, а не \"%s\"", raw)
+			},
+			HeadTableExpected: func(stage string) string {
+				return fmt.Sprintf("таблица — это блок или группа в нём, например «таблица s1» или «таблица s1/g3», а не \"%s\"", stage)
+			},
+			HeaderUnclosed:     func(raw string) string { return fmt.Sprintf("не закрыта скобка в \"%s\"", raw) },
+			LineOutsideSection: func(raw string) string { return fmt.Sprintf("строка вне секции: \"%s\"", raw) },
+			LinePrefix:         func(n string, msg string) string { return fmt.Sprintf("строка %s: %s", n, msg) },
+			LineupEmptyName:    func(team string) string { return fmt.Sprintf("в составе %s пустое имя", team) },
+			LineupExpected: func(raw string) string {
+				return fmt.Sprintf("состав — «команда | игрок, игрок, …», а не \"%s\"", raw)
+			},
+			LineupNoPlayers: func(team string) string {
+				return fmt.Sprintf("состав %s без единого игрока", team)
+			},
+			LineupPlayerTwice: func(team string, name string) string {
+				return fmt.Sprintf("в составе %s игрок \"%s\" записан дважды", team, name)
+			},
+			LineupTwice: func(team string) string { return fmt.Sprintf("состав %s записан дважды", team) },
+			LineupUnknownTeam: func(team string) string {
+				return fmt.Sprintf("состав команды \"%s\", которой нет в [roster]", team)
+			},
+			LineupsIndividual: func() string {
+				return "в личной игре нет составов — участник и есть игрок"
+			},
+			OverrideExpected: func() string {
+				return "расхождение пишется как «override [координата] поле [участник]: почему листу верить нельзя» — без причины это молча спрятанная ошибка"
+			},
+			PartExpected: func(what string, prefix string, raw string) string {
+				return fmt.Sprintf("%s пишется как %s1, а не \"%s\"", what, prefix, raw)
+			},
+			PartMatch: func() string { return "бой" },
+			PartNumberExpected: func(what string, raw string) string {
+				return fmt.Sprintf("%s должен быть номером от 1, а не \"%s\"", what, raw)
+			},
+			PartRound: func() string { return "круг" },
+			PartWave:  func() string { return "заход" },
+			QuestionEmpty: func(name string) string {
+				return fmt.Sprintf("у %s пустой вопрос — незаданный пишется как -", name)
+			},
+			QuestionMark: func(name string, raw string) string {
+				return fmt.Sprintf("вопрос у %s начинается с R, W или -, а не с \"%s\"", name, raw)
+			},
+			QuestionNone: func(name string) string { return fmt.Sprintf("у %s нет ни одного вопроса", name) },
+			RosterNameTwice: func(name string) string {
+				return fmt.Sprintf("участник \"%s\" записан в [roster] дважды", name)
+			},
+			RosterNumberTaken: func(n string, held string, entrant string) string {
+				return fmt.Sprintf("номер %s занят и \"%s\", и \"%s\"", n, held, entrant)
+			},
+			SeatBrainPlayerField: func() string {
+				return "у брейна игрок пишется в самом вопросе, а не пятым полем"
+			},
+			SeatCommaNotBrain: func(name string) string {
+				return fmt.Sprintf("у %s вопросы через запятую — так пишут брейн, а эта игра играет темы", name)
+			},
+			SeatExpected: func(raw string) string {
+				return fmt.Sprintf("место в бою — «кто | метки | Σ | место», а не \"%s\"", raw)
+			},
+			SeatIndividualPlayer: func() string {
+				return "в личной игре игрок не пишется — участник и есть игрок"
+			},
+			SeatNoName:   func() string { return "место без участника" },
+			SeatNoThemes: func(name string) string { return fmt.Sprintf("у %s нет ни одной темы", name) },
+			SeatPlace: func(name string, raw string) string {
+				return fmt.Sprintf("место у %s — число от 1 (делённое место пишется как 1.5, поставленное вручную — как 3!, а не напечатанное листом — как -), а не \"%s\"", name, raw)
+			},
+			SeatPlayersMismatch: func(name string, themes string, players string) string {
+				return fmt.Sprintf("у %s тем %s, а игроков %s — игроки пишутся по одному на тему, «-» где лист никого не назвал", name, themes, players)
+			},
+			SeatSum: func(name string, raw string) string {
+				return fmt.Sprintf("Σ у %s — целое число, а не \"%s\"", name, raw)
+			},
+			SeatUnknown: func(at string, name string) string {
+				return fmt.Sprintf("в бою %s сидит \"%s\", которого нет в [roster]", at, name)
+			},
+			ShootoutExpected: func(raw string) string {
+				return fmt.Sprintf("перестрелка пишется как «перестрелка Ктулху: 60», а не \"%s\"", raw)
+			},
+			ShootoutNotNumber: func(name string, raw string) string {
+				return fmt.Sprintf("перестрелка у %s — ненулевое целое, а не \"%s\"", name, raw)
+			},
+			ShootoutTwice: func(name string) string {
+				return fmt.Sprintf("перестрелка у %s записана дважды", name)
+			},
+			ShootoutUnknown: func(name string, at string) string {
+				return fmt.Sprintf("перестрелка у %s, которого нет в бою %s", name, at)
+			},
+			StatFields: func(n string, raw string) string {
+				return fmt.Sprintf("строка статистики — %s полей через |, а не \"%s\"", n, raw)
+			},
+			StatNoPlayer: func() string { return "строка статистики без игрока" },
+			StatNoTeam: func(player string) string {
+				return fmt.Sprintf("статистика %s без команды", player)
+			},
+			StatNotInLineup: func(player string, team string) string {
+				return fmt.Sprintf("статистика \"%s\", которого нет в составе %s", player, team)
+			},
+			StatNotNumbers: func(player string, raw string) string {
+				return fmt.Sprintf("статистика %s — числа, а не \"%s\"", player, raw)
+			},
+			StatUnknown: func(player string) string {
+				return fmt.Sprintf("статистика \"%s\", которого нет в [roster]", player)
+			},
+			StatUnknownTeam: func(team string) string {
+				return fmt.Sprintf("статистика команды \"%s\", которой нет в [roster]", team)
+			},
+			TableNameTwice: func(at string, name string, n string) string {
+				return fmt.Sprintf("%s: \"%s\" уже стоит на строке %s", at, name, n)
+			},
+			TableNoRows: func(at string) string {
+				return fmt.Sprintf("%s без единой строки — оборванная стенограмма прошла бы молча", at)
+			},
+			TableRowExpected: func(raw string) string {
+				return fmt.Sprintf("строка таблицы — «место | участник» (делённое место как 1.5), а не \"%s\"", raw)
+			},
+			TableTrailing: func(rest string) string {
+				return fmt.Sprintf("после таблицы ничего не пишут, а тут \"%s\"", rest)
+			},
+			TableUnknown: func(at string, name string) string {
+				return fmt.Sprintf("в %s стоит \"%s\", которого нет в [roster]", at, name)
+			},
+			ThemeFive: func(raw string, n string) string {
+				return fmt.Sprintf("в теме пять ответов, а в \"%s\" — %s", raw, n)
+			},
+			ThemeMark: func(raw string, char string) string {
+				return fmt.Sprintf("в теме \"%s\" знак \"%s\" — бывают только R, W и -", raw, char)
+			},
+			ThemePlayerUnknown: func(theme string, seat string, player string) string {
+				return fmt.Sprintf("тему %s у %s играет \"%s\", которого нет в его составе", theme, seat, player)
+			},
+		},
+		Report: ReplayReportStrings{
+			ColBout:       func() string { return "Бой" },
+			ColWhat:       func() string { return "Что" },
+			ColWho:        func() string { return "У кого" },
+			ColWhy:        func() string { return "Почему листу верить нельзя" },
+			CollectedLead: func() string { return "Файл собирается из " },
+			CollectedMid: func() string {
+				return " в стенограммах — правьте стенограмму, не эту страницу."
+			},
+			Intro: func() string {
+				return "Здесь то, в чём dope не согласен с гугл-таблицами турнира и где решено верить dope."
+			},
+			NoneYet: func() string {
+				return "Пока ни одного: всё, что переиграно, сошлось с листами."
+			},
+			Title:  func() string { return "Расхождения с протоколами" },
+			WhoAll: func() string { return "весь бой" },
+		},
+		Run: ReplayRunStrings{
+			AllAgreed:     func() string { return "здесь всё сошлось" },
+			FieldExtra:    func() string { return "лишний участник" },
+			FieldOutcome:  func() string { return "итог" },
+			FieldPlace:    func() string { return "место" },
+			FieldSeating:  func() string { return "посадка" },
+			FieldStats:    func() string { return "статистика" },
+			FieldTable:    func() string { return "таблица" },
+			FieldUnneeded: func() string { return "лишнее расхождение" },
+			Finding: func(at string, who string, field string, sheet string, ours string) string {
+				return fmt.Sprintf("%s%s: %s — лист %s, у нас %s", at, who, field, sheet, ours)
+			},
+			FinishWrap: func(at string, err string) string { return fmt.Sprintf("%s: закрытие боя: %s", at, err) },
+			LineupsUnwritable: func() string {
+				return "в стенограмме есть составы, а игра не умеет их записывать"
+			},
+			LineupsWrap: func(err string) string { return fmt.Sprintf("составы: %s", err) },
+			NoRow:       func() string { return "нет строки" },
+			NotSeated:   func() string { return "не сидел" },
+			Nothing:     func() string { return "ничего" },
+			OutcomeWrap: func(at string, err string) string { return fmt.Sprintf("%s: итог боя: %s", at, err) },
+			PinWrap: func(at string, name string, err string) string {
+				return fmt.Sprintf("%s, %s: место вручную: %s", at, name, err)
+			},
+			PlayWrap: func(at string, name string, err string) string {
+				return fmt.Sprintf("%s, %s: отметки: %s", at, name, err)
+			},
+			SeatDrawWrap: func(at string, err string) string {
+				return fmt.Sprintf("%s: посадка жребием: %s", at, err)
+			},
+			SeatedWrap: func(at string, err string) string { return fmt.Sprintf("%s: кто посажен: %s", at, err) },
+			SheetScore: func(total string, place string) string { return fmt.Sprintf("Σ%s, место %s", total, place) },
+			StatsUncomputable: func() string {
+				return "в стенограмме есть статистика, а игре не из чего её посчитать"
+			},
+			StatsWrap: func(err string) string { return fmt.Sprintf("статистика: %s", err) },
+			TableUnrankable: func() string {
+				return "в стенограмме есть таблица, а игра не умеет ранжировать блок"
+			},
+		},
+	},
+	Resolver: ResolverStrings{
+		Reseed: ResolverReseedStrings{
+			NotReady: func() string {
+				return "пересев можно рассчитать после завершения всех исходных боёв"
+			},
+			Pending: func(n int, codes string) string {
+				return fmt.Sprintf("%s %s %s", core.Plural("ru", n, "Бой", "Бои", "Бои"), codes, core.Plural("ru", n, "не закончен", "не закончены", "не закончены"))
+			},
+		},
+	},
+	Roles: RolesStrings{
+		Bulk: RolesBulkStrings{
+			ActionUnknown: func(n string) string {
+				return fmt.Sprintf("строка %s: действие должно быть host, admin или remove", n)
+			},
+			FormatExpected: func(n string) string { return fmt.Sprintf("строка %s: нужен формат username:role", n) },
+		},
+	},
+	Route: RouteStrings{
+		Guard: RouteGuardStrings{
+			Unnumbered: func() string {
+				return "сначала присвойте номера всем командам — без номеров результаты нельзя редактировать"
+			},
+		},
+	},
+	Scheme: SchemeStrings{
+		Entrants: SchemeEntrantsStrings{
+			CountMismatch: func(need string, have string) string {
+				return fmt.Sprintf("схеме нужно %s участников, а посеяно %s", need, have)
+			},
+			ProceedingMissing: func() string {
+				return "предыдущему блоку нужен proceeding_participants, чтобы продолжить схему"
+			},
+			SupplyMismatch: func(have string, need string) string {
+				return fmt.Sprintf("из предыдущего блока выходят %s участников, а блоку нужно %s", have, need)
+			},
+		},
+		Error: SchemeErrorStrings{
+			LinePrefix: func(n string, msg string) string { return fmt.Sprintf("строка %s: %s", n, msg) },
+		},
+		Keys: SchemeKeysStrings{
+			MatchSizeRound: func(key string) string {
+				return fmt.Sprintf("%s: размер боя задаётся по номеру раунда, match_size.rN", key)
+			},
+			UnknownBlock: func(key string, known string) string {
+				return fmt.Sprintf("неизвестный ключ %s (есть %s)", key, known)
+			},
+			UnknownDefaults: func(key string, known string) string {
+				return fmt.Sprintf("неизвестный ключ %s в [defaults] (есть %s)", key, known)
+			},
+			UnknownDotted: func(key string, known string) string {
+				return fmt.Sprintf("неизвестный ключ %s (раунд дописывают к %s)", key, known)
+			},
+			UnknownInit: func(key string, known string) string {
+				return fmt.Sprintf("неизвестный ключ %s в [init] (есть %s)", key, known)
+			},
+			UnknownRound: func(key string, round string, known string) string {
+				return fmt.Sprintf("%s: в этом блоке нет раунда %s (есть %s)", key, round, known)
+			},
+		},
+		Parse: SchemeParseStrings{
+			DuplicateKey: func(key string, n string) string {
+				return fmt.Sprintf("ключ %s уже задан на строке %s", key, n)
+			},
+			IntExpected: func(key string, raw string) string {
+				return fmt.Sprintf("%s: жду целое число, а не \"%s\"", key, raw)
+			},
+			KeyOutsideSection: func() string {
+				return "ключ вне секции — начните с [defaults], [init] или [scheme]"
+			},
+			ListExpected: func(key string) string {
+				return fmt.Sprintf("%s: жду список в скобках [a, b, c]", key)
+			},
+			NotANumber: func(key string, item string) string { return fmt.Sprintf("%s: \"%s\" — не число", key, item) },
+			Separator:  func() string { return "--- разделяет блоки только внутри [scheme]" },
+			SortDirection: func(key string, dir string) string {
+				return fmt.Sprintf("%s: направление \"%s\" — жду asc или desc", key, dir)
+			},
+			SortToken: func(key string, item string) string { return fmt.Sprintf("%s: не понимаю \"%s\"", key, item) },
+			UnknownSection: func(name string) string {
+				return fmt.Sprintf("неизвестная секция [%s] — есть [defaults], [init], [scheme]", name)
+			},
+			UnparsedLine: func(raw string) string {
+				return fmt.Sprintf("не понимаю строку \"%s\" — жду key: value", raw)
+			},
+		},
+		Reseed: SchemeReseedStrings{
+			MetricUnknown: func(metric string, known string) string {
+				return fmt.Sprintf("sorting: %s не считается на пересеве — ни протокол, ни правила подсчёта такой метрики не дают (есть %s)", metric, known)
+			},
+			NeedsReseed: func(why string) string { return fmt.Sprintf("%s — добавьте reseed: true", why) },
+			NoTemplate:  func() string { return "нет шаблона рассадки из этих групп" },
+			PreviousTerminal: func() string {
+				return "предыдущий блок кончается серией боёв — за ним нельзя продолжить схему"
+			},
+			ProceedingTwo: func() string {
+				return "детерминированная рассадка определена для proceeding_participants: 2"
+			},
+			RoundUnknown: func(round string) string {
+				return fmt.Sprintf("reseed: в этом блоке нет раунда %s — только true/false", round)
+			},
+			StatsFromBounds: func(block string, last string) string {
+				return fmt.Sprintf("stats_from: %s — доступны блоки s1..s%s", block, last)
+			},
+			StatsFromNeedsReseed: func() string { return "stats_from работает только вместе с reseed" },
+		},
+		Seed: SchemeSeedStrings{
+			PlayersNeedGames: func() string {
+				return "seed: players — нужен games: [игра, игра], откуда берутся места игроков"
+			},
+			PlayersNeedSeed: func() string {
+				return "seed: players — нужен хотя бы один seed.<метрика>: mean(<метрика игрока>)"
+			},
+		},
+		Structure: SchemeStructureStrings{
+			KindMissing: func() string { return "блоку нужен kind" },
+			KindUnknown: func(kind string, known string) string {
+				return fmt.Sprintf("неизвестный kind %s (есть %s)", kind, known)
+			},
+			KindUnregistered: func(kind string) string {
+				return fmt.Sprintf("%s не зарегистрирован в реестре видов", kind)
+			},
+			MatchCodeDup: func(match string, held_stage string, stage string) string {
+				return fmt.Sprintf("бой \"%s\" есть и в этапе \"%s\", и в \"%s\"", match, held_stage, stage)
+			},
+			NoBlocks: func() string { return "в [scheme] нет ни одного блока" },
+			SlugCharset: func(slug string) string {
+				return fmt.Sprintf("slug — латиница, цифры и дефис, а не \"%s\"", slug)
+			},
+			SlugIsStageCode: func(slug string) string {
+				return fmt.Sprintf("slug \"%s\" совпадает с кодом этапа — вкладки перепутаются", slug)
+			},
+			SlugTwoBlocks: func(slug string) string {
+				return fmt.Sprintf("slug \"%s\" носят два блока — вкладки перепутаются", slug)
+			},
+			StageCodeDup: func(code string) string {
+				return fmt.Sprintf("этап \"%s\" собран дважды — у схемы столкнулись коды", code)
+			},
+		},
+		Titles: SchemeTitlesStrings{
+			BlockGroupN: func(block string, n string) string { return fmt.Sprintf("%s. Группа %s", block, n) },
+			Group:       func() string { return "Группа" },
+			GroupN:      func(n string) string { return fmt.Sprintf("Группа %s", n) },
+			ReseedStage: func() string { return "Пересев" },
+			Seed:        func(n string) string { return fmt.Sprintf("Посев %s", n) },
+			Venue:       func(n string) string { return fmt.Sprintf("Стол %s", n) },
+			Wave:        func(title string, n string) string { return fmt.Sprintf("%s, заход %s", title, n) },
+		},
+		Venues: SchemeVenuesStrings{
+			Count: func() string { return "venues: нужен хотя бы один стол" },
+			Empty: func(key string) string { return fmt.Sprintf("%s: пустой список столов", key) },
+			Undeclared: func(key string, venue string) string {
+				return fmt.Sprintf("%s: стол \"%s\" не объявлен в venues", key, venue)
+			},
+		},
+	},
+	Screen: ScreenStrings{
+		Banner: ScreenBannerStrings{
+			Assign: func() string { return "Присвоить номера" },
+			UnassignedLead: func() string {
+				return "Командам не присвоены номера — редактирование результатов заблокировано. "
+			},
+		},
+		Downloads: ScreenDownloadsStrings{
+			Archive: func() string { return "Скачать .json.gz" },
+			ArchiveTitle: func() string {
+				return "Скачать текущее состояние игры и историю правок"
+			},
+			Xlsx:      func() string { return "Скачать XLSX" },
+			XlsxTitle: func() string { return "Скачать таблицу игры в формате XLSX" },
+		},
+		Jump: ScreenJumpStrings{
+			Edit:        func() string { return "Редактировать" },
+			EditTitle:   func() string { return "Открыть в режиме редактирования" },
+			Viewer:      func() string { return "Страница зрителя" },
+			ViewerTitle: func() string { return "Открыть зрительскую страницу" },
+		},
+		Tabs: ScreenTabsStrings{
+			BlockGroup:      func() string { return "Групповой этап" },
+			Detailed:        func() string { return "Подробно" },
+			Final:           func() string { return "Финал" },
+			Grid:            func() string { return "Сетка" },
+			GroupN:          func(n string) string { return fmt.Sprintf("Группа %s", n) },
+			IndividualStats: func() string { return "Индивидуальная статистика" },
+			Input:           func() string { return "Ввод" },
+			Playoff:         func() string { return "Плей-офф" },
+			Protocol:        func(block string) string { return fmt.Sprintf("%s (протоколы)", block) },
+			Refusals:        func() string { return "Отказы" },
+			Reseed:          func() string { return "Пересев" },
+			Results:         func() string { return "Итог" },
+			Roster:          func() string { return "Составы" },
+			Round:           func(n string) string { return fmt.Sprintf("Круг %s", n) },
+			Screen:          func() string { return "Экран" },
+			Seed:            func() string { return "Посев" },
+			SeedImport:      func() string { return "Импорт команд" },
+			Stats:           func() string { return "Статистика" },
+			Venues:          func() string { return "Площадки" },
+		},
+		Title: ScreenTitleStrings{
+			Fest: func() string { return "Фест" },
+			Game: func() string { return "Игра" },
+		},
+		Trail: ScreenTrailStrings{
+			Home: func() string { return "Главная" },
+			Host: func() string { return "Мои фесты" },
+		},
+	},
+	Server: ServerStrings{
+		Bot: ServerBotStrings{
+			Down: func() string {
+				return "Произошла ошибка. Попробуй еще раз через минуту."
+			},
+			Help: func() string {
+				return "Этот бот подтверждает вход на dope.pecheny.me.\n\nОткройте https://dope.pecheny.me/login, нажмите «Войти через телеграм» и пришлите мне код, который покажет сайт."
+			},
+		},
+		Login: ServerLoginStrings{
+			Title: func() string { return "Вход · Фест" },
+		},
+		Migration: ServerMigrationStrings{
+			V14: func() string { return "participants.number, ЭК participant numbers backfilled" },
+		},
+		PublicFests: ServerPublicFestsStrings{
+			Current: func() string { return "Текущие" },
+			Future:  func() string { return "Будущие" },
+			Past:    func() string { return "Прошедшие" },
+		},
+		SeedImport: ServerSeedImportStrings{
+			FileMissing: func() string { return "нет файла" },
+		},
+	},
+	Si: SiStrings{
+		Battle: SiBattleStrings{
+			FallbackTitle: func() string { return "Бой" },
+			Finished:      func() string { return "Закончен" },
+		},
+		Participant: SiParticipantStrings{
+			FallbackPlayer: func(n string) string { return fmt.Sprintf("Игрок %s", n) },
+			FallbackTeam:   func(n string) string { return fmt.Sprintf("Команда %s", n) },
+		},
+		Refusals: SiRefusalsStrings{
+			Declined:     func() string { return "Отказалась" },
+			DeclinedAria: func(name string) string { return fmt.Sprintf("Отказалась: %s", name) },
+			Team:         func() string { return "Команда" },
+		},
+		Results: SiResultsStrings{
+			Place: func() string { return "Место" },
+			Team:  func() string { return "Команда" },
+		},
+		Sheet: SiSheetStrings{
+			AnswerTitle:  func(name string, n string, value string) string { return fmt.Sprintf("%s, Т%s, %s", name, n, value) },
+			SortByName:   func() string { return "Сортировать по названию" },
+			SortByNumber: func() string { return "Сортировать по номеру" },
+			Team:         func() string { return "Команда" },
+		},
+		Sticker: SiStickerStrings{
+			Title: func(name string, n string) string { return fmt.Sprintf("%s, Т%s: стикер", name, n) },
+		},
+		Theme: SiThemeStrings{
+			Label: func(n string) string { return fmt.Sprintf("Т%s", n) },
+		},
+		Title: SiTitleStrings{
+			Ksi: func() string { return "КСИ" },
+			Si:  func() string { return "СИ" },
+		},
+	},
+	Standings: StandingsStrings{
+		Columns: StandingsColumnsStrings{
+			Place:  func() string { return "М" },
+			Player: func() string { return "Игрок" },
+			Points: func() string { return "Очки" },
+			Round:  func(n string) string { return fmt.Sprintf("Круг %s", n) },
+		},
+	},
+	Storage: StorageStrings{
+		Match: StorageMatchStrings{
+			DefaultTitle: func() string { return "Бой A" },
+		},
+		Slot: StorageSlotStrings{
+			Placeholder:      func() string { return "Ожидает команды" },
+			Reseed:           func(n string) string { return fmt.Sprintf("Пересев-%s", n) },
+			SeedBasket:       func(basket string, number string) string { return fmt.Sprintf("К%s-%s", basket, number) },
+			SeedLegacyPrefix: func() string { return "Посев-" },
+			SeedUnlabelled:   func(n string) string { return fmt.Sprintf("Посев-%s", n) },
+		},
+	},
+	Structure: StructureStrings{
+		De: StructureDeStrings{
+			BadGroups: func(groups string, size string) string {
+				return fmt.Sprintf("double_elimination: %s групп по %s — так не бывает", groups, size)
+			},
+			GroupsNeeded:       func() string { return "double_elimination: нужен groups (или participants, кратный 4)" },
+			ParticipantsNeeded: func() string { return "double_elimination: нужен participants (или groups и group_size)" },
+			Playoff:            func() string { return "Плей-офф" },
+			ReseedRoundUnknown: func(round string) string {
+				return fmt.Sprintf("reseed: в этом блоке нет раунда %s — только true/false", round)
+			},
+		},
+		Elimination: StructureEliminationStrings{
+			BoutCannotOutput: func(size string, winning string) string {
+				return fmt.Sprintf("бой на %s мест не может выводить %s — победителей не меньше, чем мест", size, winning)
+			},
+			BracketNotDivisible: func(entrants string, size string, winning string) string {
+				return fmt.Sprintf("%s участников не делятся на бои не больше чем по %s, из которых выходит %s", entrants, size, winning)
+			},
+			LivesMin:     func() string { return "нужна хотя бы одна жизнь" },
+			MatchSizeMin: func() string { return "match_size должен быть хотя бы 2" },
+			RoundBracket: func(round string, bracket string, err string) string {
+				return fmt.Sprintf("раунд %s, сетка %s: %s", round, bracket, err)
+			},
+			RoundEliminateNothing: func(round string, entrants string, proceeding string) string {
+				return fmt.Sprintf("раунд %s никого не выбивает: %s участников, %s проходит", round, entrants, proceeding)
+			},
+			RoundNotDivisible: func(round string, entrants string, size string) string {
+				return fmt.Sprintf("раунд %s: %s участников не делятся на бои по %s", round, entrants, size)
+			},
+			TooManyRounds: func() string {
+				return "слишком много раундов — проверьте match_size и winning_places"
+			},
+			WinningPlacesMin: func() string { return "winning_places должен быть хотя бы 1" },
+		},
+		Flat: StructureFlatStrings{
+			Game:                func() string { return "Игра" },
+			NoEntrants:          func() string { return "flat: за столом никого" },
+			ParticipantsMissing: func() string { return "flat: нужен participants" },
+		},
+		Macro: StructureMacroStrings{
+			ReseedRank:   func(n string) string { return fmt.Sprintf("Пересев-%s", n) },
+			SeatFromBout: func(bout string, place string) string { return fmt.Sprintf("%s, м. %s", bout, place) },
+			UnrankableMetric: func(metric string, known string) string {
+				return fmt.Sprintf("sorting: %s не считается — ни протокол, ни правила подсчёта такой метрики не дают (есть %s)", metric, known)
+			},
+		},
+		Rr: StructureRrStrings{
+			GroupFeed:       func(n string) string { return fmt.Sprintf("Гр. %s", n) },
+			GroupSizeNeeded: func() string { return "roundrobin: нужен group_size" },
+			NoSchedule: func(entrants string, size string) string {
+				return fmt.Sprintf("rr: нет расписания на %s участников по %s за столом", entrants, size)
+			},
+			PointsList: func() string { return "points: жду [победа, ничья, поражение]" },
+			TooManyRounds: func(rounds string, entrants string, size string, have string) string {
+				return fmt.Sprintf("rr: %s кругов на %s участников по %s — есть только %s", rounds, entrants, size, have)
+			},
+		},
+		Se: StructureSeStrings{
+			BestOfFinalOnly: func() string {
+				return "best_of: серия возможна только в финале или матче за 3-е место"
+			},
+			BestOfParity: func() string {
+				return "best_of: серия играется до большинства побед — нечётное число боёв от 3"
+			},
+			Bronze:              func() string { return "Матч за 3-е место" },
+			BronzeBout:          func(n string) string { return fmt.Sprintf("Матч за 3-е место. Бой %s", n) },
+			FinalBout:           func(n string) string { return fmt.Sprintf("Финал. Бой %s", n) },
+			MatchNthRound:       func(n string, index string) string { return fmt.Sprintf("1/%s финала %s", n, index) },
+			MatchSemifinal:      func(index string) string { return fmt.Sprintf("Полуфинал %s", index) },
+			ParticipantsMissing: func() string { return "single_elimination: нужен participants" },
+			ProceedingMissing: func() string {
+				return "предыдущему блоку нужен proceeding_participants, чтобы продолжить схему"
+			},
+			ReseedFirstRound: func(round string) string {
+				return fmt.Sprintf("reseed: %s — первый раунд, пишите reseed: true", round)
+			},
+			ReseedRoundUnknown: func(round string) string {
+				return fmt.Sprintf("reseed: в этом блоке нет раунда %s", round)
+			},
+			RoundNth:        func(n string) string { return fmt.Sprintf("1/%s финала", n) },
+			RoundSemifinals: func() string { return "Полуфиналы" },
+			TemplateGroups: func() string {
+				return "нет шаблона рассадки из этих групп — добавьте reseed: true"
+			},
+			TemplateSize: func(size string) string {
+				return fmt.Sprintf("нет шаблона рассадки в бои по %s из предыдущего блока — добавьте reseed: true", size)
+			},
+		},
+		Titles: StructureTitlesStrings{
+			Bout:  func(n string) string { return fmt.Sprintf("Бой %s", n) },
+			Final: func() string { return "Финал" },
+			Round: func(n string) string { return fmt.Sprintf("Раунд %s", n) },
+		},
+	},
+	Telegram: TelegramStrings{
+		Reply: TelegramReplyStrings{
+			CodeConsumed: func() string {
+				return "Этот код уже использован. Запроси новый на сайте."
+			},
+			CodeExpired: func(url string) string {
+				return fmt.Sprintf("Срок действия кода истек. Запроси новый на %s.", url)
+			},
+			CodeMissing: func() string {
+				return "Такого кода нет. Проверь, что скопировал его без пробелов и не дольше минуты прошло."
+			},
+			CodeWrong: func(url string) string {
+				return fmt.Sprintf("Этот код не для входа. Открой %s и начни заново.", url)
+			},
+			GenericError: func() string {
+				return "Произошла ошибка. Попробуй еще раз через минуту."
+			},
+			LoginOnSite: func(url string) string {
+				return fmt.Sprintf("Пришлите код со страницы входа. Если его нет — откройте %s и нажмите «Войти через телеграм».", url)
+			},
+			RegisterSuccess: func() string {
+				return "Готово! Вернись на сайт — там уже видна твоя регистрация."
+			},
+		},
+	},
+	Troika: TroikaStrings{
+		Bout: TroikaBoutStrings{
+			Finished: func() string { return "Закончен" },
+		},
+		Chair: TroikaChairStrings{
+			Lead:     func() string { return "Коренной" },
+			Outrider: func(n string) string { return fmt.Sprintf("Пристяжной %s", n) },
+		},
+		Groups: TroikaGroupsStrings{
+			Rating: func() string { return "Р" },
+		},
+		Protocol: TroikaProtocolStrings{
+			Seating: func() string { return "Рассадка" },
+			Team:    func() string { return "Команда" },
+		},
+		Stats: TroikaStatsStrings{
+			Bouts:      func() string { return "Бои" },
+			First:      func() string { return "Взял первым" },
+			Player:     func() string { return "Игрок" },
+			Points:     func() string { return "Очки" },
+			Repeat:     func() string { return "Повторил" },
+			RepeatRate: func() string { return "Удачные повторы" },
+			Team:       func() string { return "Команда" },
+		},
+		Team: TroikaTeamStrings{
+			Fallback: func(n string) string { return fmt.Sprintf("Команда %s", n) },
+		},
+		Theme: TroikaThemeStrings{
+			Head: func(n string, value string) string { return fmt.Sprintf("Тема %s (за %s)", n, value) },
+			Seat: func(n string) string { return fmt.Sprintf("Поменять рассадку с темы %s", n) },
+			Unseat: func(n string) string {
+				return fmt.Sprintf("Убрать смену рассадки перед темой %s", n)
+			},
+		},
+		Title: func() string { return "Тройка" },
+	},
+	Ui: UiStrings{
+		Crumbs: UiCrumbsStrings{
+			Label: func() string { return "Навигация" },
+		},
+		Palette: UiPaletteStrings{
+			Label: func() string { return "Цвет" },
+		},
+		Sync: UiSyncStrings{
+			Label: func() string { return "Синхронизация" },
+		},
+	},
+	Widgets: WidgetsStrings{
+		CellNav: WidgetsCellNavStrings{
+			Next: func() string { return "Следующая ячейка" },
+			Prev: func() string { return "Предыдущая ячейка" },
+		},
+		Keypad: WidgetsKeypadStrings{
+			Backspace:  func() string { return "Удалить" },
+			NextColumn: func() string { return "Следующая колонка" },
+			NextRow:    func() string { return "Следующая строка" },
+			PrevColumn: func() string { return "Предыдущая колонка" },
+			PrevRow:    func() string { return "Предыдущая строка" },
+		},
+		Menu: WidgetsMenuStrings{
+			Login:   func() string { return "Вход для ведущего" },
+			Profile: func() string { return "Профиль ведущего" },
+		},
+		Profile: WidgetsProfileStrings{
+			Changed:  func() string { return "Пароль изменён." },
+			Mismatch: func() string { return "Пароли не совпадают." },
+		},
+		Recorder: WidgetsRecorderStrings{
+			Label: func() string { return "Скачать лог" },
+			Title: func() string {
+				return "Скачать журнал состояния этой вкладки (для диагностики)"
+			},
+		},
+		ScoreTable: WidgetsScoreTableStrings{
+			Place: func() string { return "М" },
+		},
+		Status: WidgetsStatusStrings{
+			Error:        func() string { return "Ошибка" },
+			Reconnecting: func() string { return "Переподключение" },
+			Saved:        func() string { return "Синхронизировано" },
+			Saving:       func() string { return "Синхронизация" },
+		},
+		Venue: WidgetsVenueStrings{
+			Battle:      func(n string, name string) string { return fmt.Sprintf("пл. %s (%s)", n, name) },
+			BattleShort: func(n string) string { return fmt.Sprintf("пл. %s", n) },
+			NameColumn:  func() string { return "Название" },
+		},
+		Viewers: WidgetsViewersStrings{
+			Label: func() string { return "Зрителей онлайн" },
+			Title: func(n string) string { return fmt.Sprintf("Зрителей онлайн: %s", n) },
+		},
+	},
+}

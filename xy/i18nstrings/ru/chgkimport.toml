@@ -1,0 +1,11 @@
+# xy — the server-side question-package import (internal/chgk/chgkimport):
+# the errors the /import upload and the in-board import picker show. The TS
+# side of the same screens lives in import.toml; these are the Go pipeline's.
+
+[error]
+# validate, when the 4s parser finds no questions in the file.
+no_questions = "в файле не найдено вопросов"
+# The archive path, when the zip holds no .4s member.
+no_4s = "в архиве нет файла .4s"
+# readZipEntry, when an entry busts the decompression budget.
+too_big = "архив слишком велик в распакованном виде"

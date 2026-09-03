@@ -1,0 +1,300 @@
+# The xy CLI (xy/internal/xycli): everything the terminal shows — the usage
+# screen, per-command --help headers and flag descriptions, command output and
+# the errors a person reads. Tables follow the `commands` list in cmd.go (one
+# per command), then the components outside the command layer: the API client,
+# the decrypted snapshot, the argument plumbing every command leans on, and the
+# export composition in source.go.
+
+[run]
+# The bare `xy-cli` / `xy-cli help` invocation: the usage screen (cmd.go).
+title = "xy-cli — доски xy из командной строки, для агента."
+# The getting-started heading, printed with its leading blank line.
+start_head = "\nНачало работы:"
+# The three getting-started examples; the run of spaces aligns the description column.
+example_login = "  xy-cli login --url https://xy.example        токен из /profile/tokens"
+example_boards = "  xy-cli boards                                какие доски видно"
+example_unlock = "  xy-cli unlock 12                             пароль доски — ключ хранится локально"
+# Heading above the command list.
+commands_head = "\nКоманды:"
+# Footer line one: per-command --help and the --board rule.
+footer_help = "\nУ каждой команды свой --help. Доска называется всегда: --board <id|имя>."
+# Footer line two: what card content is.
+footer_4s = "Содержимое карточки — это 4s: `card get` печатает его как есть, `card set` читает со stdin."
+# The --json flag description, carried by every command (app.flags).
+json_flag = "вывести JSON вместо текста"
+# The per-command --help header: command name, its usage line(s), then the flags.
+flags_head = "xy-cli {{.name}}\n{{.usage}}\n\nФлаги:\n"
+# Printed when the state file cannot be read, with the reason.
+state_unreadable = 'не читается файл состояния: {{.err}}'
+# Printed for an unknown first argument, before the usage screen.
+unknown_command = "неизвестная команда \"{{.name}}\"\n"
+
+[login]
+# The `xy-cli login` command (cmd_auth.go): its line on the usage screen.
+summary = "сохранить адрес xy и API-токен (создать токен: /profile/tokens)"
+# Its --help header.
+usage = "Сохранить адрес xy и API-токен. Токен создаётся в браузере: /profile/tokens."
+# --url flag description.
+url_flag = "адрес instance, например https://xy.pecheny.me"
+# --token flag description.
+token_flag = "токен (иначе XY_TOKEN или запрос в терминале)"
+# Error when neither --url nor XY_URL nor the stored state carries an address.
+need_url = "нужен --url (или XY_URL)"
+# The no-echo prompt for the token when none was given.
+token_prompt = "Токен из /profile/tokens: "
+# Error when the token came out empty.
+empty_token = "пустой токен"
+# Error when the server refuses the token; the server's own reason follows.
+rejected = 'токен не принят: {{.err}}'
+# Success line: username, instance address, state-file path.
+done = "вошли как {{.username}} на {{.url}} (состояние: {{.path}})\n"
+
+[logout]
+# The `xy-cli logout` command: its line on the usage screen.
+summary = "забыть токен и все ключи досок"
+# Its --help header.
+usage = "Забыть токен и ключи всех досок."
+# Success line.
+done = "токен и ключи забыты\n"
+
+[boards]
+# The `xy-cli boards` command: its line on the usage screen.
+summary = "список досок аккаунта (🔓 = ключ есть)"
+# Its --help header.
+usage = "Доски аккаунта. 🔓 — ключ доски есть на этой машине."
+
+[unlock]
+# The `xy-cli unlock` command: its line on the usage screen.
+summary = "ввести пароль доски и запомнить её ключ"
+# Its --help header.
+usage = "xy-cli unlock <id|имя>\nСпрашивает пароль доски и запоминает её ключ."
+# Error when no board id or name was given.
+need_ref = "нужен id или имя доски: xy-cli unlock 12"
+# The no-echo passphrase prompt, with the board's name.
+passphrase_prompt = 'Пароль доски «{{.name}}»: '
+# The wrong-passphrase message (envelope.go's ErrWrongPassphrase): a failed unwrap
+# and a failed verify say the same, and `xy-cli unlock` prints it.
+wrong_passphrase = "неверный пароль доски"
+done = "доска {{.id}} «{{.name}}» разблокирована\n"
+
+[lock]
+# The `xy-cli lock` command: its line on the usage screen.
+summary = "забыть ключ доски"
+# Its --help header.
+usage = "xy-cli lock <id|имя> | --all\nЗабыть ключ доски."
+# --all flag description.
+all_flag = "забыть ключи всех досок"
+# Success line of `lock --all`.
+all_done = "ключи всех досок забыты\n"
+# Error when no board id or name (and no --all) was given.
+need_ref = "нужен id или имя доски (или --all)"
+# Success line for one board.
+done = "ключ доски {{.id}} «{{.name}}» забыт\n"
+
+[board]
+# The `xy-cli board` command: its line on the usage screen.
+summary = "board show — списки и карточки доски"
+# The `board show` --help header.
+usage = "Списки и карточки доски, в порядке доски."
+# Error for every other board subcommand: show is all there is.
+only_show = "пока есть только `xy-cli board show --board <id|имя>`"
+
+[list]
+# The `xy-cli list` command: its line on the usage screen.
+summary = "list add|rename|rm — списки"
+# `list add` --help header.
+add_usage = "Создать список в конце доски (или после указанного)."
+# `list add` --title flag description.
+add_title_flag = "название списка"
+# `list add` --after flag description.
+add_after_flag = "id списка, после которого встать"
+# Error when `list add` has no --title.
+need_title = "нужен --title"
+# Success line of `list add`.
+created = "список {{.id}} «{{.title}}» создан\n"
+# `list rename` --help header.
+rename_usage = "xy-cli list rename <id> --board B --title «Новое»"
+# `list rename` --title flag description.
+rename_title_flag = "новое название"
+# Error when `list rename` lacks the id or --title.
+need_id_title = "нужен id списка и --title"
+# Success line of `list rename`.
+renamed = "список {{.id}} переименован\n"
+# `list rm` --help header.
+rm_usage = "xy-cli list rm <id> --board B\nУдаление — надгробие на 14 дней (ADR-0002)."
+# Success line of `list rm`, with the list's title.
+removed = "список {{.id}} «{{.title}}» удалён\n"
+
+[card]
+# The `xy-cli card` command: its line on the usage screen.
+summary = "card get|set|add|mv|rm — карточки (4s на stdin/stdout)"
+# `card get` --help header.
+get_usage = "xy-cli card get <id> --board B\nПечатает 4s карточки как есть; хэш для --expect уходит в stderr."
+# The stderr header `card get` writes above the 4s: card id, list id, desc hash.
+get_header = "# карточка {{.id}}, список {{.list}}, hash {{.hash}}\n"
+# `card set` --help header.
+set_usage = "xy-cli card set <id> --board B [--expect hash] < новый.4s\nВсегда пишет правку в ленту (desc_edit)."
+# `card set` --text flag description.
+set_text_flag = "новый 4s (иначе stdin)"
+# --file flag description, shared by `card set` and `card add`.
+file_flag = "файл с 4s (иначе stdin)"
+# `card set` --expect flag description.
+expect_flag = "хэш из `card get` — записать, только если карточка не менялась"
+# --alias flag description, shared by `card set` and `card add`.
+alias_flag = "короткое имя карточки"
+# `card set` --kind flag description, with the kinds it takes.
+set_kind_flag = "тип карточки: normal|question|test|meta|heading|other"
+# Error when --expect does not match: the card changed since it was read.
+changed = 'карточка {{.id}} изменилась с момента чтения (сейчас {{.now}}, ожидалось {{.expected}})'
+# Error when `card set` is given empty content: a card is never silently erased.
+set_empty = "пустой 4s: карточка не стирается молча — дайте текст на stdin, --text или --file"
+# Success line when a `card set` changed nothing.
+unchanged = "карточка {{.id}} уже такая — ничего не записано\n"
+# Success line of `card set`, with the new desc hash.
+updated = "карточка {{.id}} обновлена (hash {{.hash}})\n"
+# `card add` --help header.
+add_usage = "xy-cli card add --board B --list L [--after id|--before id] < вопрос.4s"
+# `card add` --list flag description.
+add_list_flag = "id списка"
+# `card add` --text flag description.
+add_text_flag = "4s карточки (иначе stdin)"
+# `card add` --kind flag description.
+add_kind_flag = "тип карточки"
+# --after flag description, shared by `card add` and `card mv`.
+after_flag = "id карточки, после которой встать"
+# --before flag description, shared by `card add` and `card mv`.
+before_flag = "id карточки, перед которой встать"
+# Error when `card add` has no --list.
+need_list = "нужен --list"
+# Error when `card add` is given no content at all.
+add_empty = "пустая карточка: дайте 4s на stdin или --text"
+# Success line of `card add`.
+created = "карточка {{.id}} создана\n"
+# `card mv` --list flag description.
+mv_list_flag = "id списка назначения (по умолчанию тот же)"
+# Success line of `card mv`: the card now sits in this list.
+moved = "карточка {{.id}} в списке {{.list}}\n"
+# `card rm` --help header.
+rm_usage = "xy-cli card rm <id> --board B\nУдаление — надгробие на 14 дней (ADR-0002)."
+# Success line of `card rm`.
+removed = "карточка {{.id}} удалена\n"
+# rankFor error: the --after neighbour is not on this list.
+rank_after_missing = 'после чего вставлять: {{.id}} здесь нет'
+# rankFor error: the --before neighbour is not on this list.
+rank_before_missing = 'перед чем вставлять: {{.id}} здесь нет'
+
+[comment]
+# The `xy-cli comment` command: its line on the usage screen.
+summary = "comment ls|add|edit|rm — лента карточки"
+# `comment ls` --help header.
+ls_usage = "xy-cli comment ls <id карточки> --board B\nПо умолчанию — только комментарии."
+# `comment ls` --all flag description.
+all_flag = "вся лента: правки описания и метаданные тоже"
+# Text of a timeline row whose event was deleted.
+deleted = "(удалён)"
+# `comment add` --help header.
+add_usage = "xy-cli comment add <id карточки> --board B [--reply-to N] < текст\n@логин в тексте становится упоминанием (ADR-0009)."
+# `comment add` --text flag description.
+add_text_flag = "текст комментария (иначе stdin)"
+# `comment add` --file flag description.
+add_file_flag = "файл с текстом (иначе stdin)"
+# `comment add` --reply-to flag description.
+reply_to_flag = "id комментария, на который отвечаем"
+# Error when a comment is added or edited with no text.
+empty = "пустой комментарий"
+# Success line of `comment add`.
+added = 'комментарий добавлен к карточке {{.id}}'
+# Appended to that line when the comment mentioned members; the final newline stays at the call site.
+mentioned = ' (упомянуто: {{.n}})'
+# `comment edit` --help header.
+edit_usage = "xy-cli comment edit <id комментария> --board B < новый текст"
+# `comment edit` --text flag description.
+edit_text_flag = "новый текст (иначе stdin)"
+# `comment edit` --file flag description.
+edit_file_flag = "файл с текстом (иначе stdin)"
+# Success line of `comment edit`.
+edited = "комментарий {{.id}} изменён\n"
+# `comment rm` --help header.
+rm_usage = "xy-cli comment rm <id комментария> --board B"
+# Success line of `comment rm`.
+removed = "комментарий {{.id}} удалён\n"
+
+[label]
+# The `xy-cli label` command: its line on the usage screen.
+summary = "label ls|add|assign — метки"
+
+[search]
+# The `xy-cli search` command: its line on the usage screen.
+summary = "поиск по карточкам и комментариям доски"
+# Its --help header.
+usage = "xy-cli search «Гоголь» --board B [--regex] [--cards|--comments]"
+# --regex flag description.
+regex_flag = "запрос — регулярное выражение (по свёрнутому тексту)"
+# --cards flag description.
+cards_flag = "искать только в карточках"
+# --comments flag description.
+comments_flag = "искать только в комментариях"
+# Error when the query is missing or duplicated.
+need_query = "нужен запрос: xy-cli search «Гоголь» --board 12"
+# Error when --regex does not compile; the regexp error follows.
+bad_regex = 'не разбирается регулярное выражение: {{.err}}'
+# Printed to stderr when the search found nothing.
+nothing = "ничего не нашлось\n"
+
+[source]
+# The `xy-cli source` command: its line on the usage screen.
+summary = "4s списка (или всей группы) целиком"
+
+[export]
+# The `xy-cli export` command: its line on the usage screen.
+summary = "экспорт списка в docx/pdf/4s/раздатки"
+
+[attachment]
+# The `xy-cli attachment` command: its line on the usage screen.
+summary = "attachment ls|get|add — вложения карточки"
+
+[client]
+# The API client (client.go): the message it substitutes for a server's 401 body,
+# because a dead token is the one failure it can name for a human.
+token_rejected = "токен не принят: истёк, отозван или сменился пароль аккаунта — `xy-cli login` заново"
+
+[snapshot]
+# The decrypted board snapshot (board.go): the context LoadBoard wraps around
+# each field decrypt failure, and the Board's own not-found lookups.
+group = 'группа {{.id}}: {{.err}}'
+list = 'список {{.id}}: {{.err}}'
+card = 'карточка {{.id}}: {{.err}}'
+card_alias = 'карточка {{.id}} (алиас): {{.err}}'
+label = 'метка {{.id}}: {{.err}}'
+label_color = 'метка {{.id}} (цвет): {{.err}}'
+list_not_found = 'список {{.id}} не найден на доске'
+card_not_found = 'карточка {{.id}} не найдена на доске'
+
+[shared]
+# The argument plumbing every command leans on (cmd.go): boardFlag, oneArg,
+# dispatch, pickOne, parseID, boardRef and client — plus the nouns each command
+# passes them as `what`.
+board_flag = "доска: id или имя"
+need_id = 'нужен id: {{.what}}'
+unknown_action = 'неизвестное действие "{{.verb}}" ({{.known}})'
+not_found = '{{.what}} "{{.ref}}" не найдено'
+ambiguous = 'под "{{.ref}}" подходит несколько: {{.found}}'
+numeric_id = '{{.what}}: нужен числовой id, а не "{{.raw}}"'
+what_list = "список"
+what_card = "карточка"
+what_comment = "комментарий"
+what_label = "метка"
+what_board = "доска"
+what_unlocked_board = "разблокированная доска"
+need_board = "нужен --board <id|имя>"
+no_key = "ключа доски {{.id}} нет: `xy-cli unlock {{.id}}`"
+see_boards = '{{.err}} — см. `xy-cli boards`'
+login_first = "сначала `xy-cli login` (токен создаётся на /profile/tokens)"
+
+[versions]
+# The export composition (source.go): labels written when a card's versions are
+# folded back into one question. The trailing space is part of each label.
+# Prefixed to a field value that disagrees between versions.
+field_label = 'версия {{.n}}: '
+# Heads each version's question block in the composed document.
+question_label = 'Версия {{.n}}: '

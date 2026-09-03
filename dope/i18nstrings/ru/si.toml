@@ -1,0 +1,51 @@
+# The КСИ/СИ game page (dope/dope/web/ts/si.ts) and the КСИ Protocol
+# (dope/dope/web/ts/ksi-protocol.ts): the answer sheet, the results and
+# refusals tabs, the sticker picker, and the protocol's default names.
+
+[title]
+# The page title when neither the fest view nor the scheme names the game:
+# the team variant (КСИ) and its solo variant (СИ).
+ksi = "КСИ"
+si = "СИ"
+
+[participant]
+# The placeholder name of a team with no name on the sheet (Команда 1, Команда 2).
+fallback_team = 'Команда {{.n}}'
+# The placeholder name of a player with no name; also the default names of a
+# fresh solo game in ksi-protocol.ts (Игрок 1…Игрок 4).
+fallback_player = 'Игрок {{.n}}'
+
+[theme]
+# The n-th theme column of the answer sheet.
+label = 'Т{{.n}}'
+
+[sheet]
+# The «Подробно» sheet: the team column's header button, and the sort orders
+# it and the number button switch between (each button's tooltip and aria-label).
+team = "Команда"
+sort_by_number = "Сортировать по номеру"
+sort_by_name = "Сортировать по названию"
+# An answer cell's hover tooltip: the team, the theme, the question's value.
+answer_title = '{{.name}}, Т{{.n}}, {{.value}}'
+
+[sticker]
+# The sticker dropdown's tooltip on the «Подробно» sheet: the team, the theme.
+title = '{{.name}}, Т{{.n}}: стикер'
+
+[battle]
+# The solo sheet: the battle title when the scheme does not name it, and the
+# «Закончен» checkbox in the battle header.
+fallback_title = "Бой"
+finished = "Закончен"
+
+[results]
+# The «Итог» tab: the place and team column headers.
+place = "Место"
+team = "Команда"
+
+[refusals]
+# The «Отказы» tab: the team column header, the declined column header, and
+# the declined checkbox's aria-label naming the team.
+team = "Команда"
+declined = "Отказалась"
+declined_aria = 'Отказалась: {{.name}}'

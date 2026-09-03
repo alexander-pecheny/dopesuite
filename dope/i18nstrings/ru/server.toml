@@ -1,0 +1,34 @@
+# dope — the server surface (dope/dope/server): strings a person reads outside
+# the game pages — the /login tab title, the public fests index headings, a
+# seed-import HTTP error, the Telegram login bot's replies, and a
+# schema-migration name an operator reads in a boot-failure log.
+
+[login]
+# Browser tab title of the /login page (pages.go, kit.LoginPage); a successful
+# login lands on /host.
+title = "Вход · Фест"
+
+[public_fests]
+# Heading of the "running now" bucket on the public fests index (pages_public.go).
+current = "Текущие"
+# Heading of the "not started yet" bucket on the public fests index.
+future = "Будущие"
+# Heading of the "over" bucket on the public fests index; fests without a
+# usable start date land here too.
+past = "Прошедшие"
+
+[seed_import]
+# The XLSX seed-import POST arrived without a file part (routes_api.go,
+# seedXLSXSource); the HTTP edge shows it to the host verbatim.
+file_missing = "нет файла"
+
+[bot]
+# The login bot's /start reply: how to sign in through Telegram (bot.go).
+help = "Этот бот подтверждает вход на dope.pecheny.me.\n\nОткройте https://dope.pecheny.me/login, нажмите «Войти через телеграм» и пришлите мне код, который покажет сайт."
+# The login bot's reply when the registration/login backend call fails.
+down = "Произошла ошибка. Попробуй еще раз через минуту."
+
+[migration]
+# Name of schema migration v14 (migrations.go); the runner wraps it into the
+# boot-failure error an operator reads ("schema: migration 14 (…): …").
+v14 = "participants.number, ЭК participant numbers backfilled"

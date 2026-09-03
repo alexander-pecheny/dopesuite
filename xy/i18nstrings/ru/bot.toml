@@ -1,0 +1,20 @@
+# xy — the Telegram login bot's copy (xy/internal/server/bot.go): the texts of
+# the login conversation a person reads in the chat, in the order the bot sends
+# them.
+
+[texts]
+# Reply to anything that is not a registration code or /login (tgbot.Texts.Help).
+help = "Не понял. Пришли код регистрации с сайта или /login."
+# Reply when the server behind the bot cannot take writes (tgbot.Texts.Down).
+down = "Сервер недоступен, попробуй позже."
+
+[register]
+# A code that matches no pending site login: unknown, consumed or expired.
+expired = "Код не найден или истёк. Начни вход на сайте заново."
+# The code matched and the site login is confirmed.
+done = "Готово! Вернись на сайт — вход подтверждён."
+
+[login]
+# Bare /start or /login: where to find the code (botRegistrar.Login); the
+# site's base URL rides in mid-sentence.
+hint = 'Пришлите код со страницы входа. Если его нет — откройте {{.url}}/login и нажмите «Войти через телеграм».'

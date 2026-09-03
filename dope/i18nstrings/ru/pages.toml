@@ -1,0 +1,12 @@
+# The breadcrumb trail shared by every dope page (crumbs.go): the roots of the
+# two page trees and the fest-crumb fallback.
+
+[crumbs]
+# The home crumb every trail starts with.
+home = "Главная"
+# The editing tree's root crumb (/host).
+host = "Мои фесты"
+# The admin tree's root crumb (/admin).
+admin = "Админка"
+# A fest crumb's fallback when the fest has no title in the DB.
+fest_fallback = 'Фест {{.n}}'

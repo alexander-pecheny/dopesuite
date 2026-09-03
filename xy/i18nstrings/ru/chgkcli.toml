@@ -1,0 +1,42 @@
+# The chgksuite CLI (xy/cmd/chgksuite): the flag help that quotes the package
+# format's own Russian markers, and the compose-telegram progress lines. One
+# table per command (compose subcommands included), in the order the CLI
+# offers them; [shared] holds the flag declared once for every compose
+# subcommand. The «...» markers inside help text name the package's Russian
+# vocabulary and stay as-is in every translation.
+
+[parse]
+# Help of --tour_numbers_as_words: the tour section names it rewrites.
+tour_numbers_as_words_flag = "rename the tours «Первый тур», «Второй тур»…: on|off"
+
+[docx]
+# Help of --noparagraph: "Вопрос N." is the printed question header.
+no_paragraph_flag = 'no line break after "Вопрос N."'
+# Help of --only_question_number.
+only_question_number_flag = 'label questions "N." instead of "Вопрос N."'
+
+[add_stats]
+# Help of --custom_csv: «результаты» is rating.chgk.info's own name for its
+# results table.
+custom_csv_flag = "a csv/xlsx результаты table in rating.chgk.info's format, comma-separated"
+
+[lj]
+# Help of --genimp: the title of the extra closing post.
+genimp_flag = "add the «Общие впечатления» post"
+
+[telegram]
+# Help of --stop_if_no_stats: the stats line the check requires on every
+# question.
+stop_if_no_stats_flag = "refuse to publish a package whose questions carry no «Взятия:»"
+# Progress note once the target resolves (reportNote): the channel to post to,
+# then the linked discussion group; both are Telegram's "-100…" ids.
+posting = 'публикую в {{.channel}}, комментарии в {{.chat}}'
+# Closing line of a successful publish (reportDone): the wall-clock time the
+# export took, rounded to whole seconds.
+done = 'готово за {{.duration}}'
+
+[shared]
+# Help of --replace_no_break_hyphens, declared once in noBreakFlags for every
+# compose subcommand: а is the Russian short word the rule glues to what
+# follows.
+replace_no_break_hyphens_flag = "make the hyphen of а short word non-breaking: on|off"

@@ -5,15 +5,3051 @@ package i18nstrings
 // Strings is one language's Catalog: a field per Surface, a nested struct
 // per group, a func per string.
 type Strings struct {
+	Admin        AdminStrings
+	Brain        BrainStrings
+	Crosstable   CrosstableStrings
+	Edit         EditStrings
+	Ek           EkStrings
+	Export       ExportStrings
+	Fest         FestStrings
+	Festaccess   FestaccessStrings
+	Gallery      GalleryStrings
+	Gamebuild    GamebuildStrings
+	Games        GamesStrings
+	Host         HostStrings
+	Imports      ImportsStrings
+	Journal      JournalStrings
+	Markdown     MarkdownStrings
+	Multi        MultiStrings
+	Numbers      NumbersStrings
+	Octobearfest OctobearfestStrings
+	Od           OdStrings
+	Override     OverrideStrings
+	Pages        PagesStrings
+	Replay       ReplayStrings
+	Resolver     ResolverStrings
+	Roles        RolesStrings
+	Route        RouteStrings
+	Scheme       SchemeStrings
+	Screen       ScreenStrings
+	Server       ServerStrings
+	Si           SiStrings
+	Standings    StandingsStrings
+	Storage      StorageStrings
+	Structure    StructureStrings
+	Telegram     TelegramStrings
+	Troika       TroikaStrings
+	Ui           UiStrings
+	Widgets      WidgetsStrings
+}
+
+// AdminStrings is the admin Surface.
+type AdminStrings struct {
+	CreateUsers AdminCreateUsersStrings
+	Page        AdminPageStrings
+	Users       AdminUsersStrings
+}
+
+type AdminCreateUsersStrings struct {
+	Name  func() string
+	Title func() string
+}
+
+type AdminPageStrings struct {
+	Title func() string
+}
+
+type AdminUsersStrings struct {
+	ColActivity func() string
+	ColCreated  func() string
+	ColLogin    func() string
+	Empty       func() string
+	Name        func() string
+	SystemTag   func() string
+	Title       func() string
+}
+
+// BrainStrings is the brain Surface.
+type BrainStrings struct {
+	Bout     BrainBoutStrings
+	Mark     BrainMarkStrings
+	Pod      BrainPodStrings
+	Protocol BrainProtocolStrings
+	Reseed   BrainReseedStrings
+	Row      BrainRowStrings
+	Seed     BrainSeedStrings
+	SeedHead BrainSeedHeadStrings
+	Stats    BrainStatsStrings
+	Team     BrainTeamStrings
+	Tiebreak BrainTiebreakStrings
+	Title    func() string
+}
+
+type BrainBoutStrings struct {
+	Finished func() string
+}
+
+type BrainMarkStrings struct {
+	Title func(team string, row string) string
+}
+
+type BrainPodStrings struct {
+	Round func(n string) string
+}
+
+type BrainProtocolStrings struct {
+	Empty func() string
+}
+
+type BrainReseedStrings struct {
+	CalculateFailed func() string
+	PendingMany     func(names string) string
+	PendingOne      func(names string) string
+}
+
+type BrainRowStrings struct {
+	Tiebreak  func() string
+	TiebreakN func(n string) string
+}
+
+type BrainSeedStrings struct {
+	Draw       func() string
+	Empty      func() string
+	ImportFrom func(source string) string
+	NoFile     func() string
+	Upload     func() string
+	Waitlist   func() string
+}
+
+type BrainSeedHeadStrings struct {
+	City     func() string
+	Declined func() string
+	Rank     func() string
+	Seed     func() string
+	Team     func() string
+}
+
+type BrainStatsStrings struct {
+	Attempts func() string
+	Empty    func() string
+	Player   func() string
+	Right    func() string
+	Share    func() string
+	Team     func() string
+	Wrong    func() string
+}
+
+type BrainTeamStrings struct {
+	Fallback func(n string) string
+}
+
+type BrainTiebreakStrings struct {
+	Add        func() string
+	AddHint    func() string
+	Remove     func() string
+	RemoveHint func() string
+}
+
+// CrosstableStrings is the crosstable Surface.
+type CrosstableStrings struct {
+	Columns CrosstableColumnsStrings
+	Empty   func() string
+}
+
+type CrosstableColumnsStrings struct {
+	Name   func() string
+	Place  func() string
+	Points func() string
+}
+
+// EditStrings is the edit Surface.
+type EditStrings struct {
+	Roster EditRosterStrings
+}
+
+type EditRosterStrings struct {
+	Immutable func() string
+}
+
+// EkStrings is the ek Surface.
+type EkStrings struct {
+	Answer   EkAnswerStrings
+	Bout     EkBoutStrings
+	Crumb    EkCrumbStrings
+	Seed     EkSeedStrings
+	SeedHead EkSeedHeadStrings
+	Shootout EkShootoutStrings
+	Stage    EkStageStrings
+	Stats    EkStatsStrings
+	Theme    EkThemeStrings
+	Title    func() string
+	Venue    EkVenueStrings
+}
+
+type EkAnswerStrings struct {
+	Title func(team string, theme string, q string) string
+}
+
+type EkBoutStrings struct {
+	Finished func() string
+}
+
+type EkCrumbStrings struct {
+	SeedImport func() string
+	Stats      func() string
+	Venues     func() string
+}
+
+type EkSeedStrings struct {
+	DeclineFailed   func() string
+	DeclinedAria    func(name string) string
+	Empty           func() string
+	Error           func(reason string) string
+	ErrorPrefix     func() string
+	Import          func() string
+	ImportFailed    func() string
+	Imported        func(n string) string
+	Summary         func(active string, size string, total string) string
+	TeamPlaceholder func() string
+	Waitlist        func() string
+}
+
+type EkSeedHeadStrings struct {
+	Declined func() string
+	Seed     func() string
+	Team     func() string
+}
+
+type EkShootoutStrings struct {
+	Add           func() string
+	AddLabel      func() string
+	Column        func(n string) string
+	Letter        func() string
+	Remove        func() string
+	RemoveConfirm func() string
+	RemoveLabel   func() string
+}
+
+type EkStageStrings struct {
+	Empty         func() string
+	MatchFallback func(code string) string
+}
+
+type EkStatsStrings struct {
+	Battles         func() string
+	Empty           func() string
+	IndividualEmpty func() string
+	Player          func() string
+	Share           func() string
+	Team            func() string
+}
+
+type EkThemeStrings struct {
+	Column func(n string) string
+}
+
+type EkVenueStrings struct {
+	Cancel func() string
+	Edit   func() string
+	Save   func() string
+}
+
+// ExportStrings is the export Surface.
+type ExportStrings struct {
+	Col   ExportColStrings
+	Error ExportErrorStrings
+	Multi ExportMultiStrings
+	Name  ExportNameStrings
+	Od    ExportOdStrings
+	Sheet ExportSheetStrings
+}
+
+type ExportColStrings struct {
+	Battles       func() string
+	Chair         func() string
+	MatchPlace    func() string
+	Place         func() string
+	Player        func() string
+	ShootoutN     func(n string) string
+	Team          func() string
+	TeamShare     func() string
+	ThemeN        func(n string) string
+	ThemeQuestion func(theme string, question string) string
+	Total         func() string
+}
+
+type ExportErrorStrings struct {
+	MultiScheme func(err string) string
+	MultiState  func(err string) string
+	TroikaState func(code string, err string) string
+}
+
+type ExportMultiStrings struct {
+	NormalizedName func(name string) string
+}
+
+type ExportNameStrings struct {
+	TeamN func(n string) string
+}
+
+type ExportOdStrings struct {
+	City func() string
+	Name func() string
+	Tour func() string
+}
+
+type ExportSheetStrings struct {
+	Detailed func() string
+	Fallback func() string
+	Results  func() string
+	Stats    func() string
+}
+
+// FestStrings is the fest Surface.
+type FestStrings struct {
+	Grid        FestGridStrings
+	Metric      FestMetricStrings
+	MetricShort FestMetricShortStrings
+	Reseed      FestReseedStrings
+	Roster      FestRosterStrings
+}
+
+type FestGridStrings struct {
+	ColPlace         func() string
+	MatchDefault     func(code string) string
+	SlotBasket       func(basket string, number string) string
+	SlotReseed       func() string
+	SlotReseedRanked func(rank string) string
+	Venue            func(n string) string
+	VenueTitled      func(n string, title string) string
+}
+
+type FestMetricStrings struct {
+	Bouts       func() string
+	Draw        func() string
+	PlaceSum    func() string
+	Points      func() string
+	PointsShare func() string
+	Rating      func() string
+	Taken       func() string
+	TakenBase   func() string
+	TakenShare  func() string
+	Tiebreak    func() string
+}
+
+type FestMetricShortStrings struct {
+	Bouts  func() string
+	Points func() string
+	Taken  func() string
+}
+
+type FestReseedStrings struct {
+	BlockedDefault func() string
+	BlockedMany    func(matches string) string
+	BlockedOne     func(match string) string
+	Calculate      func() string
+	ColMatch       func() string
+	ColPlace       func() string
+	ColTeam        func() string
+	Empty          func() string
+	Recalculate    func() string
+}
+
+type FestRosterStrings struct {
+	ColPlayers func() string
+	ColTeam    func() string
+	Empty      func() string
+	LoadFailed func() string
+	Loading    func() string
+}
+
+// FestaccessStrings is the festaccess Surface.
+type FestaccessStrings struct {
+	Add    FestaccessAddStrings
+	Bulk   FestaccessBulkStrings
+	Manage FestaccessManageStrings
+	Member FestaccessMemberStrings
+}
+
+type FestaccessAddStrings struct {
+	CreatorExists    func() string
+	NicknameRequired func() string
+	RoleInvalid      func() string
+	UserNotFound     func(name string) string
+}
+
+type FestaccessBulkStrings struct {
+	Empty        func() string
+	LinePrefix   func(n string, msg string) string
+	UserNotFound func(n string, name string) string
+}
+
+type FestaccessManageStrings struct {
+	Denied func() string
+}
+
+type FestaccessMemberStrings struct {
+	CreatorProtected func() string
+	RoleInvalid      func() string
+}
+
+// GalleryStrings is the gallery Surface.
+type GalleryStrings struct {
+	Brain   GalleryBrainStrings
+	Ek      GalleryEkStrings
+	Multi   GalleryMultiStrings
+	Od      GalleryOdStrings
+	Page    GalleryPageStrings
+	Section GallerySectionStrings
+	Si      GallerySiStrings
+	Topbar  GalleryTopbarStrings
+	Troika  GalleryTroikaStrings
+}
+
+type GalleryBrainStrings struct {
+	Title func() string
+}
+
+type GalleryEkStrings struct {
+	Title func() string
+}
+
+type GalleryMultiStrings struct {
+	Title func() string
+}
+
+type GalleryOdStrings struct {
+	Title func() string
+}
+
+type GalleryPageStrings struct {
+	Title func() string
+}
+
+type GallerySectionStrings struct {
+	EkStats         func() string
+	FestGrid        func() string
+	GroupStandings  func() string
+	IndividualStats func() string
+	Reseed          func() string
+	Roster          func() string
+	Venues          func() string
+	VenuesHost      func() string
+}
+
+type GallerySiStrings struct {
+	Title func() string
+}
+
+type GalleryTopbarStrings struct {
+	Title func() string
+}
+
+type GalleryTroikaStrings struct {
+	Title func() string
+}
+
+// GamebuildStrings is the gamebuild Surface.
+type GamebuildStrings struct {
+	Clear     GamebuildClearStrings
+	Create    GamebuildCreateStrings
+	Recompile GamebuildRecompileStrings
+	Seating   GamebuildSeatingStrings
+	Titles    GamebuildTitlesStrings
+}
+
+type GamebuildClearStrings struct {
+	ParsePasted func(err string) string
+	Unsupported func() string
+}
+
+type GamebuildCreateStrings struct {
+	EkNoScheme       func() string
+	JsonTypeMismatch func(described string, created string) string
+	MultiFromScheme  func() string
+	PastedTeams      func() string
+	SchemeRequired   func() string
+	SeedUnknown      func(seed string) string
+}
+
+type GamebuildRecompileStrings struct {
+	StartedBouts func(names string) string
+}
+
+type GamebuildSeatingStrings struct {
+	KindPlayer         func(name string) string
+	KindTeam           func(name string) string
+	NeedPlayers        func() string
+	NeedTwo            func() string
+	UnknownParticipant func(n string) string
+	Unnumbered         func() string
+}
+
+type GamebuildTitlesStrings struct {
+	Ksi   func() string
+	Multi func() string
+	Od    func() string
+}
+
+// GamesStrings is the games Surface.
+type GamesStrings struct {
+	Brain  GamesBrainStrings
+	Ek     GamesEkStrings
+	Ksi    GamesKsiStrings
+	Multi  GamesMultiStrings
+	Od     GamesOdStrings
+	Si     GamesSiStrings
+	Troika GamesTroikaStrings
+}
+
+type GamesBrainStrings struct {
+	Label func() string
+}
+
+type GamesEkStrings struct {
+	Label func() string
+}
+
+type GamesKsiStrings struct {
+	Label func() string
+}
+
+type GamesMultiStrings struct {
+	BarNoTasksAfter  func(n string, name string) string
+	BarNoTasksBefore func(n string, name string) string
+	DomainEmpty      func() string
+	Label            func() string
+	LineExpected     func(n string) string
+	LinePrefix       func(n string, name string, msg string) string
+	MetricUnknown    func(metric string, known string) string
+	NoGames          func() string
+	NoTasks          func(n string, name string) string
+	NotANumber       func(domain string, item string) string
+	RangeDescending  func(domain string) string
+	RangeTooWide     func(domain string, max string) string
+	RepeatCount      func(spec string) string
+	SpecExpected     func(spec string) string
+}
+
+type GamesOdStrings struct {
+	Label func() string
+}
+
+type GamesSiStrings struct {
+	Label func() string
+}
+
+type GamesTroikaStrings struct {
+	Label func() string
+}
+
+// HostStrings is the host Surface.
+type HostStrings struct {
+	Dash   HostDashStrings
+	Games  HostGamesStrings
+	Pages  HostPagesStrings
+	Roster HostRosterStrings
+}
+
+type HostDashStrings struct {
+	AccessSavedNotice    func() string
+	AccessSubhead        func() string
+	AddBtn               func() string
+	AddGameBtn           func() string
+	AuditLink            func() string
+	AuditMuted           func() string
+	BulkApply            func() string
+	BulkDataLabel        func() string
+	BulkDoneNotice       func(n string) string
+	BulkLabel            func() string
+	CancelBtn            func() string
+	ClearBtn             func() string
+	ClearConfirm         func() string
+	ColNickname          func() string
+	ColRole              func() string
+	DeleteAccessConfirm  func(name string) string
+	DeleteBtn            func() string
+	DeleteConfirm        func() string
+	DeleteGameConfirm    func() string
+	DeleteNote           func() string
+	DeleteSubhead        func() string
+	DeleteSubmit         func() string
+	DescriptionLabel     func() string
+	EndDateLabel         func() string
+	ErrorSlugInvalid     func(err string) string
+	ErrorSlugTaken       func() string
+	ErrorTitleRequired   func() string
+	GamesEmpty           func() string
+	GamesSubhead         func() string
+	JumpLabel            func() string
+	JumpTitle            func() string
+	NumbersLink          func() string
+	NumbersStatusDone    func() string
+	NumbersStatusPartial func(done string, total string) string
+	NumbersStatusUnset   func() string
+	PageTitle            func(title string) string
+	PublicLabel          func() string
+	RatingStatusNone     func() string
+	RosterImportLink     func() string
+	RosterPlayersLink    func() string
+	RosterSubhead        func() string
+	RosterTeamsLink      func() string
+	SaveSubmit           func() string
+	SettingsBtn          func() string
+	SlugLabel            func() string
+	StartDateLabel       func() string
+	TitleLabel           func() string
+}
+
+type HostGamesStrings struct {
+	BrainHint            func() string
+	CreateCrumb          func() string
+	CreateSubmit         func() string
+	CreateTitle          func(title string) string
+	EkHint               func() string
+	EkJsonLabel          func() string
+	EntrantsHint         func() string
+	EntrantsSummary      func() string
+	ErrorEkSchemeMissing func() string
+	ErrorJsonParse       func(err string) string
+	ErrorMinigames       func(err string) string
+	ErrorMultiSorting    func(err string) string
+	ErrorSlugInvalid     func(err string) string
+	ErrorSlugTaken       func() string
+	ErrorTitleRequired   func() string
+	ErrorTypeMissing     func() string
+	MinigamesHint        func() string
+	MinigamesLabel       func() string
+	MinigamesPlaceholder func() string
+	MinigamesShareHint   func() string
+	MultiSortingHint     func() string
+	MultiSortingLabel    func() string
+	OdQuestionsLabel     func() string
+	OdToursLabel         func() string
+	RebuildHint          func() string
+	SaveSubmit           func() string
+	SchemeLabel          func() string
+	SiHint               func() string
+	SlugLabel            func() string
+	StickerEmptywrong    func() string
+	StickerEmptywrongRow func() string
+	StickerMaxField      func() string
+	StickerMaxLabel      func() string
+	StickerNeutral       func() string
+	StickerNowrong       func() string
+	StickerNowrongRow    func() string
+	StickerX2Row         func() string
+	StickersHint         func() string
+	ThemesLabel          func() string
+	TitleLabel           func() string
+	TroikaHint           func() string
+	TypeBrain            func() string
+	TypeEk               func() string
+	TypeKsi              func() string
+	TypeKsiStickers      func() string
+	TypeLabel            func() string
+	TypeMulti            func() string
+	TypeOd               func() string
+	TypeSi               func() string
+	TypeTroika           func() string
+}
+
+type HostPagesStrings struct {
+	CreateFestSummary          func() string
+	CreateSubmit               func() string
+	DescriptionLabel           func() string
+	EndDateLabel               func() string
+	ErrorIntRange              func(field string, min string, max string) string
+	FestGamesEmpty             func() string
+	FestRowUnlisted            func(title string) string
+	FestsEmpty                 func() string
+	GamesSubhead               func() string
+	GroupCurrent               func() string
+	GroupFuture                func() string
+	GroupPast                  func() string
+	HomeCrumbLabel             func() string
+	IdentityUsernameLead       func() string
+	JumpHostLabel              func() string
+	JumpHostTitleFest          func() string
+	JumpHostTitleIndex         func() string
+	JumpLabel                  func() string
+	JumpTitle                  func() string
+	LandingCrumb               func() string
+	LandingTitle               func(name string) string
+	LogoutSubmit               func() string
+	PasswordChangeSubmit       func() string
+	PasswordConfirmPlaceholder func() string
+	PasswordCurrentPlaceholder func() string
+	PasswordNewPlaceholder     func() string
+	PasswordSetSubmit          func() string
+	ProfileCrumb               func() string
+	ProfileTitle               func() string
+	PublicIndexCrumb           func() string
+	PublicIndexEmpty           func() string
+	PublicIndexTitle           func() string
+	PublicLabel                func() string
+	RatingIdLabel              func() string
+	StartDateLabel             func() string
+	TitleLabel                 func() string
+	UsernameFallback           func() string
+}
+
+type HostRosterStrings struct {
+	AddOverrideBtn        func() string
+	CancelBtn             func() string
+	ColCity               func() string
+	ColFromTeam           func() string
+	ColPlayers            func() string
+	ColToTeam             func() string
+	DeleteBtn             func() string
+	DeleteOverrideConfirm func() string
+	EditOverrideLabel     func() string
+	ErrorJsonEmpty        func() string
+	ErrorJsonParse        func(err string) string
+	ErrorObjPlayer        func() string
+	ErrorObjSourceTeam    func() string
+	ErrorObjTeam          func() string
+	GamesLabel            func() string
+	ImportDoneCounts      func(teams string, players string, od string, ksi string) string
+	ImportDoneNotice      func() string
+	ImportSubmit          func() string
+	ImportUnchangedNotice func(teams string, players string) string
+	NeedRatingNote        func() string
+	NewTeamLabel          func() string
+	NoOverrideGames       func() string
+	OverrideTitle         func() string
+	OverridesSubhead      func() string
+	PlayerLabel           func() string
+	PlayersCrumb          func() string
+	PlayersEmpty          func() string
+	PlayersTitle          func(title string) string
+	RatingImportCrumb     func() string
+	RatingImportNote      func() string
+	RatingImportTitle     func(title string) string
+	RatingSource          func(id string) string
+	SaveSubmit            func() string
+	SchemeImportCrumb     func() string
+	SchemeImportNote      func() string
+	SchemeImportSubmit    func() string
+	SchemeImportTitle     func(title string) string
+	SchemeJsonLabel       func() string
+	TeamLabel             func() string
+	TeamsCrumb            func() string
+	TeamsEmpty            func() string
+	TeamsTitle            func(title string) string
+}
+
+// ImportsStrings is the imports Surface.
+type ImportsStrings struct {
+	EkRestore   ImportsEkRestoreStrings
+	Rating      ImportsRatingStrings
+	Seed        ImportsSeedStrings
+	SeedPlayers ImportsSeedPlayersStrings
+	SeedSource  ImportsSeedSourceStrings
+}
+
+type ImportsEkRestoreStrings struct {
+	MatchHeader func(code string, status string) string
+}
+
+type ImportsRatingStrings struct {
+	ApiError     func(detail string) string
+	DecodeFailed func(err string) string
+	FetchFailed  func(err string) string
+	NoTeams      func() string
+	SquadTooBig  func(name string) string
+}
+
+type ImportsSeedStrings struct {
+	GameMissing         func(code string) string
+	KsiMissing          func() string
+	MetricUnknown       func(metric string, code string) string
+	MultipleStandings   func(code string, n int) string
+	NoNumberedTeams     func() string
+	NoStandings         func(code string) string
+	NothingImported     func() string
+	SchemeMissing       func() string
+	SchemeXlsx          func() string
+	SourceNoTeams       func() string
+	TeamNotFound        func() string
+	TeamTwice           func(source string, name string, first string) string
+	XlsxBasketMissing   func(name string, n string) string
+	XlsxBasketNotNumber func(n string, basket string) string
+	XlsxNoSheets        func() string
+	XlsxNoTeams         func() string
+	XlsxOpen            func(err string) string
+	XlsxTeamUnknown     func(n string, name string) string
+}
+
+type ImportsSeedPlayersStrings struct {
+	AggregateExpected func(name string) string
+	MetricMissing     func(name string, over string) string
+	MetricUnknown     func(metric string, known string) string
+	MultipleStandings func(code string) string
+	NoGames           func() string
+	NoRoster          func(name string) string
+	NoRosters         func() string
+	NoSorting         func() string
+	SelfReference     func(grain string, name string) string
+}
+
+type ImportsSeedSourceStrings struct {
+	Ksi     func() string
+	Players func() string
+	Random  func() string
+}
+
+// JournalStrings is the journal Surface.
+type JournalStrings struct {
+	Ek    JournalEkStrings
+	Event JournalEventStrings
+	Index JournalIndexStrings
+	Ksi   JournalKsiStrings
+	Mark  JournalMarkStrings
+	Od    JournalOdStrings
+	Page  JournalPageStrings
+	Patch JournalPatchStrings
+	Value JournalValueStrings
+}
+
+type JournalEkStrings struct {
+	Answer         func(match string, team string, theme string, question string, mark string) string
+	MatchFinished  func() string
+	MatchPrefix    func(code string) string
+	MatchReopened  func() string
+	MatchUpdate    func() string
+	PlayerAssigned func() string
+	PlayerPlays    func(name string) string
+	PlayerRemoved  func() string
+	Rank           func(match string, team string, rank string) string
+	TeamUnnamed    func() string
+	ThemePrefix    func(match string, team string, theme string) string
+}
+
+type JournalEventStrings struct {
+	FestAccess     func() string
+	FestNumbers    func() string
+	GameClear      func() string
+	GameCreate     func() string
+	GameDelete     func() string
+	GameRevert     func() string
+	PlayerOverride func() string
+	RatingImport   func() string
+	Reseed         func() string
+	SchemeImport   func() string
+	SeedDecline    func() string
+	SeedImportKsi  func() string
+	StateReplaced  func() string
+	Venue          func() string
+}
+
+type JournalIndexStrings struct {
+	Empty func() string
+	Note  func() string
+	Title func() string
+}
+
+type JournalKsiStrings struct {
+	Answer              func(theme string, player string, question string, mark string) string
+	Declined            func() string
+	Finished            func() string
+	ParticipantFallback func(n string) string
+	Rename              func(n string, name string) string
+}
+
+type JournalMarkStrings struct {
+	None  func() string
+	Right func() string
+	Wrong func() string
+}
+
+type JournalOdStrings struct {
+	AnswerClear    func(question string) string
+	AnswerSet      func(question string, team string) string
+	EntriesChanged func() string
+	EntryChanged   func(question string) string
+	Readiness      func(question string, value string) string
+	Shootout       func() string
+	TeamNamed      func(name string, n string) string
+	TeamUnnamed    func(n string) string
+}
+
+type JournalPageStrings struct {
+	ColChanges    func() string
+	ColWhen       func() string
+	ColWho        func() string
+	DefaultTitle  func(n string) string
+	Empty         func() string
+	More          func(n string) string
+	RevertConfirm func() string
+	RevertDone    func() string
+	RevertFailed  func(err string) string
+	RevertSubmit  func() string
+	Title         func(game string) string
+}
+
+type JournalPatchStrings struct {
+	GenericRemoved func(path string) string
+	GenericSet     func(path string, value string) string
+	StateFallback  func() string
+}
+
+type JournalValueStrings struct {
+	Empty func() string
+}
+
+// MarkdownStrings is the markdown Surface.
+type MarkdownStrings struct {
+	Details MarkdownDetailsStrings
+}
+
+type MarkdownDetailsStrings struct {
+	DefaultSummary func() string
+}
+
+// MultiStrings is the multi Surface.
+type MultiStrings struct {
+	Game     MultiGameStrings
+	Refusals MultiRefusalsStrings
+	Results  MultiResultsStrings
+	Sheet    MultiSheetStrings
+	Tabs     MultiTabsStrings
+	Title    func() string
+}
+
+type MultiGameStrings struct {
+	UniformPrice func(name string, n string) string
+}
+
+type MultiRefusalsStrings struct {
+	Declined func() string
+	Team     func() string
+}
+
+type MultiResultsStrings struct {
+	Place func() string
+	Team  func() string
+	Total func() string
+}
+
+type MultiSheetStrings struct {
+	Team  func() string
+	Total func() string
+}
+
+type MultiTabsStrings struct {
+	Detailed func() string
+	Refusals func() string
+	Results  func() string
+	Roster   func() string
+}
+
+// NumbersStrings is the numbers Surface.
+type NumbersStrings struct {
+	Action NumbersActionStrings
+	Apply  NumbersApplyStrings
+	Error  NumbersErrorStrings
+	Help   NumbersHelpStrings
+	Import NumbersImportStrings
+	Notice NumbersNoticeStrings
+	Page   NumbersPageStrings
+}
+
+type NumbersActionStrings struct {
+	Auto    func() string
+	Cancel  func() string
+	Clear   func() string
+	Import  func() string
+	Replace func() string
+	Save    func() string
+}
+
+type NumbersApplyStrings struct {
+	ForeignTeam  func() string
+	NumberRange  func(max string) string
+	ReadFailed   func() string
+	TeamRepeated func() string
+}
+
+type NumbersErrorStrings struct {
+	NumberTwoRows  func(number string, first string, second string) string
+	RowForeignTeam func(n string) string
+	RowNoTeam      func(n string) string
+	RowRange       func(n string, max string) string
+	TeamTwoRows    func(first string, second string) string
+}
+
+type NumbersHelpStrings struct {
+	Edit func() string
+}
+
+type NumbersImportStrings struct {
+	LineDup    func(n string, number string, prev string) string
+	LineFormat func(n string) string
+	LineRange  func(n string, max string) string
+}
+
+type NumbersNoticeStrings struct {
+	Auto         func() string
+	Cleared      func() string
+	Saved        func() string
+	SavedPartial func(n string) string
+}
+
+type NumbersPageStrings struct {
+	Crumb   func() string
+	Empty   func() string
+	NoTeams func() string
+	Title   func(fest string) string
+}
+
+// OctobearfestStrings is the octobearfest Surface.
+type OctobearfestStrings struct {
+	Error OctobearfestErrorStrings
+	Flag  OctobearfestFlagStrings
+	Log   OctobearfestLogStrings
+}
+
+type OctobearfestErrorStrings struct {
+	AssortiStep  func(err string) string
+	DbMissing    func() string
+	FestExists   func(slug string) string
+	Finish       func(at string, err string) string
+	MultiBout    func(err string) string
+	NoBoutAt     func() string
+	NoSystemUser func() string
+	NotSeated    func() string
+	TroikaStep   func(err string) string
+}
+
+type OctobearfestFlagStrings struct {
+	Db   func() string
+	Root func() string
+	Slug func() string
+}
+
+type OctobearfestLogStrings struct {
+	AssortiStart func(game string, minigames string, teams string) string
+	Fest         func(id string, slug string) string
+	Organizers   func(err string) string
+	Registry     func(n string) string
+	TroikaDone   func() string
+	TroikaStart  func(game string, bouts string) string
+}
+
+// OdStrings is the od Surface.
+type OdStrings struct {
+	Detailed OdDetailedStrings
+	Guard    OdGuardStrings
+	Head     OdHeadStrings
+	Invert   OdInvertStrings
+	Progress OdProgressStrings
+	Results  OdResultsStrings
+	Screen   OdScreenStrings
+	Shootout OdShootoutStrings
+	Team     OdTeamStrings
+	Title    func() string
+}
+
+type OdDetailedStrings struct {
+	Tour func(n string) string
+}
+
+type OdGuardStrings struct {
+	Lead    func() string
+	Missing func(names string) string
+	Numbers func() string
+}
+
+type OdHeadStrings struct {
+	Place      func() string
+	PlaceShort func() string
+	Team       func() string
+}
+
+type OdInvertStrings struct {
+	Label func() string
+}
+
+type OdProgressStrings struct {
+	Entered    func(n string) string
+	NotStarted func() string
+}
+
+type OdResultsStrings struct {
+	ShootoutCollapse func() string
+	ShootoutExpand   func() string
+	TourCollapse     func() string
+	TourExpand       func() string
+}
+
+type OdScreenStrings struct {
+	Bg          func() string
+	ChromeHide  func() string
+	ChromeShow  func() string
+	Columns     func() string
+	Fg          func() string
+	Font        func() string
+	Muted       func() string
+	NoTeams     func() string
+	Reset       func() string
+	Settings    func() string
+	ShowCity    func() string
+	ShowCountry func() string
+}
+
+type OdShootoutStrings struct {
+	AddQuestion           func() string
+	AddRound              func() string
+	AddRoundBlocked       func() string
+	Cancel                func() string
+	Create                func() string
+	EntryTitle            func(team string, round string, q string) string
+	RemoveQuestion        func() string
+	RemoveQuestionConfirm func() string
+	RemoveRoundConfirm    func() string
+	Round                 func(n string) string
+	RoundDialog           func() string
+	Title                 func() string
+}
+
+type OdTeamStrings struct {
+	Fallback func(n string) string
+}
+
+// OverrideStrings is the override Surface.
+type OverrideStrings struct {
+	Entry  OverrideEntryStrings
+	Lookup OverrideLookupStrings
+	Save   OverrideSaveStrings
+}
+
+type OverrideEntryStrings struct {
+	GameInvalid   func() string
+	GameTypeWrong func() string
+	PickFromHint  func(label string) string
+	PickGames     func() string
+	PickPlayer    func() string
+	PickTeam      func() string
+}
+
+type OverrideLookupStrings struct {
+	NotFound       func() string
+	PlayerNotFound func() string
+	TeamNotFound   func() string
+}
+
+type OverrideSaveStrings struct {
+	TeamSame   func() string
+	TeamTooBig func(team string) string
+}
+
+// PagesStrings is the pages Surface.
+type PagesStrings struct {
+	Crumbs PagesCrumbsStrings
+}
+
+type PagesCrumbsStrings struct {
+	Admin        func() string
+	FestFallback func(n string) string
+	Home         func() string
+	Host         func() string
+}
+
+// ReplayStrings is the replay Surface.
+type ReplayStrings struct {
+	Codec  ReplayCodecStrings
+	Parse  ReplayParseStrings
+	Report ReplayReportStrings
+	Run    ReplayRunStrings
+}
+
+type ReplayCodecStrings struct {
+	StatAttempts func() string
+	StatBouts    func() string
+	StatRight    func() string
+	StatThemes   func() string
+	StatWrong    func() string
+}
+
+type ReplayParseStrings struct {
+	BoutHeaderExtra      func(rest string) string
+	BoutNoSeats          func(at string) string
+	CoordExpected        func(raw string) string
+	CoordNoBlock         func(raw string) string
+	CoordTable           func(stage string) string
+	CoordTaken           func(at string, n string) string
+	CountsDigit          func(name string, raw string) string
+	CountsThemeSize      func(name string, n string, raw string) string
+	EntrantExpected      func(raw string) string
+	EntrantNoName        func() string
+	EntrantNumber        func(raw string) string
+	GameNoCodec          func(game string) string
+	GamePairExpected     func(raw string) string
+	GameUnknownKey       func(key string) string
+	GroupExpected        func(raw string) string
+	HeadTableExpected    func(stage string) string
+	HeaderUnclosed       func(raw string) string
+	LineOutsideSection   func(raw string) string
+	LinePrefix           func(n string, msg string) string
+	LineupEmptyName      func(team string) string
+	LineupExpected       func(raw string) string
+	LineupNoPlayers      func(team string) string
+	LineupPlayerTwice    func(team string, name string) string
+	LineupTwice          func(team string) string
+	LineupUnknownTeam    func(team string) string
+	LineupsIndividual    func() string
+	OverrideExpected     func() string
+	PartExpected         func(what string, prefix string, raw string) string
+	PartMatch            func() string
+	PartNumberExpected   func(what string, raw string) string
+	PartRound            func() string
+	PartWave             func() string
+	QuestionEmpty        func(name string) string
+	QuestionMark         func(name string, raw string) string
+	QuestionNone         func(name string) string
+	RosterNameTwice      func(name string) string
+	RosterNumberTaken    func(n string, held string, entrant string) string
+	SeatBrainPlayerField func() string
+	SeatCommaNotBrain    func(name string) string
+	SeatExpected         func(raw string) string
+	SeatIndividualPlayer func() string
+	SeatNoName           func() string
+	SeatNoThemes         func(name string) string
+	SeatPlace            func(name string, raw string) string
+	SeatPlayersMismatch  func(name string, themes string, players string) string
+	SeatSum              func(name string, raw string) string
+	SeatUnknown          func(at string, name string) string
+	ShootoutExpected     func(raw string) string
+	ShootoutNotNumber    func(name string, raw string) string
+	ShootoutTwice        func(name string) string
+	ShootoutUnknown      func(name string, at string) string
+	StatFields           func(n string, raw string) string
+	StatNoPlayer         func() string
+	StatNoTeam           func(player string) string
+	StatNotInLineup      func(player string, team string) string
+	StatNotNumbers       func(player string, raw string) string
+	StatUnknown          func(player string) string
+	StatUnknownTeam      func(team string) string
+	TableNameTwice       func(at string, name string, n string) string
+	TableNoRows          func(at string) string
+	TableRowExpected     func(raw string) string
+	TableTrailing        func(rest string) string
+	TableUnknown         func(at string, name string) string
+	ThemeFive            func(raw string, n string) string
+	ThemeMark            func(raw string, char string) string
+	ThemePlayerUnknown   func(theme string, seat string, player string) string
+}
+
+type ReplayReportStrings struct {
+	ColBout       func() string
+	ColWhat       func() string
+	ColWho        func() string
+	ColWhy        func() string
+	CollectedLead func() string
+	CollectedMid  func() string
+	Intro         func() string
+	NoneYet       func() string
+	Title         func() string
+	WhoAll        func() string
+}
+
+type ReplayRunStrings struct {
+	AllAgreed         func() string
+	FieldExtra        func() string
+	FieldOutcome      func() string
+	FieldPlace        func() string
+	FieldSeating      func() string
+	FieldStats        func() string
+	FieldTable        func() string
+	FieldUnneeded     func() string
+	Finding           func(at string, who string, field string, sheet string, ours string) string
+	FinishWrap        func(at string, err string) string
+	LineupsUnwritable func() string
+	LineupsWrap       func(err string) string
+	NoRow             func() string
+	NotSeated         func() string
+	Nothing           func() string
+	OutcomeWrap       func(at string, err string) string
+	PinWrap           func(at string, name string, err string) string
+	PlayWrap          func(at string, name string, err string) string
+	SeatDrawWrap      func(at string, err string) string
+	SeatedWrap        func(at string, err string) string
+	SheetScore        func(total string, place string) string
+	StatsUncomputable func() string
+	StatsWrap         func(err string) string
+	TableUnrankable   func() string
+}
+
+// ResolverStrings is the resolver Surface.
+type ResolverStrings struct {
+	Reseed ResolverReseedStrings
+}
+
+type ResolverReseedStrings struct {
+	NotReady func() string
+	Pending  func(n int, codes string) string
+}
+
+// RolesStrings is the roles Surface.
+type RolesStrings struct {
+	Bulk RolesBulkStrings
+}
+
+type RolesBulkStrings struct {
+	ActionUnknown  func(n string) string
+	FormatExpected func(n string) string
+}
+
+// RouteStrings is the route Surface.
+type RouteStrings struct {
+	Guard RouteGuardStrings
+}
+
+type RouteGuardStrings struct {
+	Unnumbered func() string
+}
+
+// SchemeStrings is the scheme Surface.
+type SchemeStrings struct {
+	Entrants  SchemeEntrantsStrings
+	Error     SchemeErrorStrings
+	Keys      SchemeKeysStrings
+	Parse     SchemeParseStrings
+	Reseed    SchemeReseedStrings
+	Seed      SchemeSeedStrings
+	Structure SchemeStructureStrings
+	Titles    SchemeTitlesStrings
+	Venues    SchemeVenuesStrings
+}
+
+type SchemeEntrantsStrings struct {
+	CountMismatch     func(need string, have string) string
+	ProceedingMissing func() string
+	SupplyMismatch    func(have string, need string) string
+}
+
+type SchemeErrorStrings struct {
+	LinePrefix func(n string, msg string) string
+}
+
+type SchemeKeysStrings struct {
+	MatchSizeRound  func(key string) string
+	UnknownBlock    func(key string, known string) string
+	UnknownDefaults func(key string, known string) string
+	UnknownDotted   func(key string, known string) string
+	UnknownInit     func(key string, known string) string
+	UnknownRound    func(key string, round string, known string) string
+}
+
+type SchemeParseStrings struct {
+	DuplicateKey      func(key string, n string) string
+	IntExpected       func(key string, raw string) string
+	KeyOutsideSection func() string
+	ListExpected      func(key string) string
+	NotANumber        func(key string, item string) string
+	Separator         func() string
+	SortDirection     func(key string, dir string) string
+	SortToken         func(key string, item string) string
+	UnknownSection    func(name string) string
+	UnparsedLine      func(raw string) string
+}
+
+type SchemeReseedStrings struct {
+	MetricUnknown        func(metric string, known string) string
+	NeedsReseed          func(why string) string
+	NoTemplate           func() string
+	PreviousTerminal     func() string
+	ProceedingTwo        func() string
+	RoundUnknown         func(round string) string
+	StatsFromBounds      func(block string, last string) string
+	StatsFromNeedsReseed func() string
+}
+
+type SchemeSeedStrings struct {
+	PlayersNeedGames func() string
+	PlayersNeedSeed  func() string
+}
+
+type SchemeStructureStrings struct {
+	KindMissing      func() string
+	KindUnknown      func(kind string, known string) string
+	KindUnregistered func(kind string) string
+	MatchCodeDup     func(match string, held_stage string, stage string) string
+	NoBlocks         func() string
+	SlugCharset      func(slug string) string
+	SlugIsStageCode  func(slug string) string
+	SlugTwoBlocks    func(slug string) string
+	StageCodeDup     func(code string) string
+}
+
+type SchemeTitlesStrings struct {
+	BlockGroupN func(block string, n string) string
+	Group       func() string
+	GroupN      func(n string) string
+	ReseedStage func() string
+	Seed        func(n string) string
+	Venue       func(n string) string
+	Wave        func(title string, n string) string
+}
+
+type SchemeVenuesStrings struct {
+	Count      func() string
+	Empty      func(key string) string
+	Undeclared func(key string, venue string) string
+}
+
+// ScreenStrings is the screen Surface.
+type ScreenStrings struct {
+	Banner    ScreenBannerStrings
+	Downloads ScreenDownloadsStrings
+	Jump      ScreenJumpStrings
+	Tabs      ScreenTabsStrings
+	Title     ScreenTitleStrings
+	Trail     ScreenTrailStrings
+}
+
+type ScreenBannerStrings struct {
+	Assign         func() string
+	UnassignedLead func() string
+}
+
+type ScreenDownloadsStrings struct {
+	Archive      func() string
+	ArchiveTitle func() string
+	Xlsx         func() string
+	XlsxTitle    func() string
+}
+
+type ScreenJumpStrings struct {
+	Edit        func() string
+	EditTitle   func() string
+	Viewer      func() string
+	ViewerTitle func() string
+}
+
+type ScreenTabsStrings struct {
+	BlockGroup      func() string
+	Detailed        func() string
+	Final           func() string
+	Grid            func() string
+	GroupN          func(n string) string
+	IndividualStats func() string
+	Input           func() string
+	Playoff         func() string
+	Protocol        func(block string) string
+	Refusals        func() string
+	Reseed          func() string
+	Results         func() string
+	Roster          func() string
+	Round           func(n string) string
+	Screen          func() string
+	Seed            func() string
+	SeedImport      func() string
+	Stats           func() string
+	Venues          func() string
+}
+
+type ScreenTitleStrings struct {
+	Fest func() string
+	Game func() string
+}
+
+type ScreenTrailStrings struct {
+	Home func() string
+	Host func() string
+}
+
+// ServerStrings is the server Surface.
+type ServerStrings struct {
+	Bot         ServerBotStrings
+	Login       ServerLoginStrings
+	Migration   ServerMigrationStrings
+	PublicFests ServerPublicFestsStrings
+	SeedImport  ServerSeedImportStrings
+}
+
+type ServerBotStrings struct {
+	Down func() string
+	Help func() string
+}
+
+type ServerLoginStrings struct {
+	Title func() string
+}
+
+type ServerMigrationStrings struct {
+	V14 func() string
+}
+
+type ServerPublicFestsStrings struct {
+	Current func() string
+	Future  func() string
+	Past    func() string
+}
+
+type ServerSeedImportStrings struct {
+	FileMissing func() string
+}
+
+// SiStrings is the si Surface.
+type SiStrings struct {
+	Battle      SiBattleStrings
+	Participant SiParticipantStrings
+	Refusals    SiRefusalsStrings
+	Results     SiResultsStrings
+	Sheet       SiSheetStrings
+	Sticker     SiStickerStrings
+	Theme       SiThemeStrings
+	Title       SiTitleStrings
+}
+
+type SiBattleStrings struct {
+	FallbackTitle func() string
+	Finished      func() string
+}
+
+type SiParticipantStrings struct {
+	FallbackPlayer func(n string) string
+	FallbackTeam   func(n string) string
+}
+
+type SiRefusalsStrings struct {
+	Declined     func() string
+	DeclinedAria func(name string) string
+	Team         func() string
+}
+
+type SiResultsStrings struct {
+	Place func() string
+	Team  func() string
+}
+
+type SiSheetStrings struct {
+	AnswerTitle  func(name string, n string, value string) string
+	SortByName   func() string
+	SortByNumber func() string
+	Team         func() string
+}
+
+type SiStickerStrings struct {
+	Title func(name string, n string) string
+}
+
+type SiThemeStrings struct {
+	Label func(n string) string
+}
+
+type SiTitleStrings struct {
+	Ksi func() string
+	Si  func() string
+}
+
+// StandingsStrings is the standings Surface.
+type StandingsStrings struct {
+	Columns StandingsColumnsStrings
+}
+
+type StandingsColumnsStrings struct {
+	Place  func() string
+	Player func() string
+	Points func() string
+	Round  func(n string) string
+}
+
+// StorageStrings is the storage Surface.
+type StorageStrings struct {
+	Match StorageMatchStrings
+	Slot  StorageSlotStrings
+}
+
+type StorageMatchStrings struct {
+	DefaultTitle func() string
+}
+
+type StorageSlotStrings struct {
+	Placeholder      func() string
+	Reseed           func(n string) string
+	SeedBasket       func(basket string, number string) string
+	SeedLegacyPrefix func() string
+	SeedUnlabelled   func(n string) string
+}
+
+// StructureStrings is the structure Surface.
+type StructureStrings struct {
+	De          StructureDeStrings
+	Elimination StructureEliminationStrings
+	Flat        StructureFlatStrings
+	Macro       StructureMacroStrings
+	Rr          StructureRrStrings
+	Se          StructureSeStrings
+	Titles      StructureTitlesStrings
+}
+
+type StructureDeStrings struct {
+	BadGroups          func(groups string, size string) string
+	GroupsNeeded       func() string
+	ParticipantsNeeded func() string
+	Playoff            func() string
+	ReseedRoundUnknown func(round string) string
+}
+
+type StructureEliminationStrings struct {
+	BoutCannotOutput      func(size string, winning string) string
+	BracketNotDivisible   func(entrants string, size string, winning string) string
+	LivesMin              func() string
+	MatchSizeMin          func() string
+	RoundBracket          func(round string, bracket string, err string) string
+	RoundEliminateNothing func(round string, entrants string, proceeding string) string
+	RoundNotDivisible     func(round string, entrants string, size string) string
+	TooManyRounds         func() string
+	WinningPlacesMin      func() string
+}
+
+type StructureFlatStrings struct {
+	Game                func() string
+	NoEntrants          func() string
+	ParticipantsMissing func() string
+}
+
+type StructureMacroStrings struct {
+	ReseedRank       func(n string) string
+	SeatFromBout     func(bout string, place string) string
+	UnrankableMetric func(metric string, known string) string
+}
+
+type StructureRrStrings struct {
+	GroupFeed       func(n string) string
+	GroupSizeNeeded func() string
+	NoSchedule      func(entrants string, size string) string
+	PointsList      func() string
+	TooManyRounds   func(rounds string, entrants string, size string, have string) string
+}
+
+type StructureSeStrings struct {
+	BestOfFinalOnly     func() string
+	BestOfParity        func() string
+	Bronze              func() string
+	BronzeBout          func(n string) string
+	FinalBout           func(n string) string
+	MatchNthRound       func(n string, index string) string
+	MatchSemifinal      func(index string) string
+	ParticipantsMissing func() string
+	ProceedingMissing   func() string
+	ReseedFirstRound    func(round string) string
+	ReseedRoundUnknown  func(round string) string
+	RoundNth            func(n string) string
+	RoundSemifinals     func() string
+	TemplateGroups      func() string
+	TemplateSize        func(size string) string
+}
+
+type StructureTitlesStrings struct {
+	Bout  func(n string) string
+	Final func() string
+	Round func(n string) string
+}
+
+// TelegramStrings is the telegram Surface.
+type TelegramStrings struct {
+	Reply TelegramReplyStrings
+}
+
+type TelegramReplyStrings struct {
+	CodeConsumed    func() string
+	CodeExpired     func(url string) string
+	CodeMissing     func() string
+	CodeWrong       func(url string) string
+	GenericError    func() string
+	LoginOnSite     func(url string) string
+	RegisterSuccess func() string
+}
+
+// TroikaStrings is the troika Surface.
+type TroikaStrings struct {
+	Bout     TroikaBoutStrings
+	Chair    TroikaChairStrings
+	Groups   TroikaGroupsStrings
+	Protocol TroikaProtocolStrings
+	Stats    TroikaStatsStrings
+	Team     TroikaTeamStrings
+	Theme    TroikaThemeStrings
+	Title    func() string
+}
+
+type TroikaBoutStrings struct {
+	Finished func() string
+}
+
+type TroikaChairStrings struct {
+	Lead     func() string
+	Outrider func(n string) string
+}
+
+type TroikaGroupsStrings struct {
+	Rating func() string
+}
+
+type TroikaProtocolStrings struct {
+	Seating func() string
+	Team    func() string
+}
+
+type TroikaStatsStrings struct {
+	Bouts      func() string
+	First      func() string
+	Player     func() string
+	Points     func() string
+	Repeat     func() string
+	RepeatRate func() string
+	Team       func() string
+}
+
+type TroikaTeamStrings struct {
+	Fallback func(n string) string
+}
+
+type TroikaThemeStrings struct {
+	Head   func(n string, value string) string
+	Seat   func(n string) string
+	Unseat func(n string) string
+}
+
+// UiStrings is the ui Surface.
+type UiStrings struct {
+	Crumbs  UiCrumbsStrings
+	Palette UiPaletteStrings
+	Sync    UiSyncStrings
+}
+
+type UiCrumbsStrings struct {
+	Label func() string
+}
+
+type UiPaletteStrings struct {
+	Label func() string
+}
+
+type UiSyncStrings struct {
+	Label func() string
+}
+
+// WidgetsStrings is the widgets Surface.
+type WidgetsStrings struct {
+	CellNav    WidgetsCellNavStrings
+	Keypad     WidgetsKeypadStrings
+	Menu       WidgetsMenuStrings
+	Profile    WidgetsProfileStrings
+	Recorder   WidgetsRecorderStrings
+	ScoreTable WidgetsScoreTableStrings
+	Status     WidgetsStatusStrings
+	Venue      WidgetsVenueStrings
+	Viewers    WidgetsViewersStrings
+}
+
+type WidgetsCellNavStrings struct {
+	Next func() string
+	Prev func() string
+}
+
+type WidgetsKeypadStrings struct {
+	Backspace  func() string
+	NextColumn func() string
+	NextRow    func() string
+	PrevColumn func() string
+	PrevRow    func() string
+}
+
+type WidgetsMenuStrings struct {
+	Login   func() string
+	Profile func() string
+}
+
+type WidgetsProfileStrings struct {
+	Changed  func() string
+	Mismatch func() string
+}
+
+type WidgetsRecorderStrings struct {
+	Label func() string
+	Title func() string
+}
+
+type WidgetsScoreTableStrings struct {
+	Place func() string
+}
+
+type WidgetsStatusStrings struct {
+	Error        func() string
+	Reconnecting func() string
+	Saved        func() string
+	Saving       func() string
+}
+
+type WidgetsVenueStrings struct {
+	Battle      func(n string, name string) string
+	BattleShort func(n string) string
+	NameColumn  func() string
+}
+
+type WidgetsViewersStrings struct {
+	Label func() string
+	Title func(n string) string
 }
 
 // Lookup returns an untemplated string by its String Id, for `@surface.key`
 // in a .dopeui page.
 func (s Strings) Lookup(id string) (string, bool) {
+	switch id {
+	case "admin.create_users.name":
+		return s.Admin.CreateUsers.Name(), true
+	case "admin.create_users.title":
+		return s.Admin.CreateUsers.Title(), true
+	case "admin.page.title":
+		return s.Admin.Page.Title(), true
+	case "admin.users.col_activity":
+		return s.Admin.Users.ColActivity(), true
+	case "admin.users.col_created":
+		return s.Admin.Users.ColCreated(), true
+	case "admin.users.col_login":
+		return s.Admin.Users.ColLogin(), true
+	case "admin.users.empty":
+		return s.Admin.Users.Empty(), true
+	case "admin.users.name":
+		return s.Admin.Users.Name(), true
+	case "admin.users.system_tag":
+		return s.Admin.Users.SystemTag(), true
+	case "admin.users.title":
+		return s.Admin.Users.Title(), true
+	case "brain.bout.finished":
+		return s.Brain.Bout.Finished(), true
+	case "brain.protocol.empty":
+		return s.Brain.Protocol.Empty(), true
+	case "brain.reseed.calculate_failed":
+		return s.Brain.Reseed.CalculateFailed(), true
+	case "brain.row.tiebreak":
+		return s.Brain.Row.Tiebreak(), true
+	case "brain.seed.draw":
+		return s.Brain.Seed.Draw(), true
+	case "brain.seed.empty":
+		return s.Brain.Seed.Empty(), true
+	case "brain.seed.no_file":
+		return s.Brain.Seed.NoFile(), true
+	case "brain.seed.upload":
+		return s.Brain.Seed.Upload(), true
+	case "brain.seed.waitlist":
+		return s.Brain.Seed.Waitlist(), true
+	case "brain.seed_head.city":
+		return s.Brain.SeedHead.City(), true
+	case "brain.seed_head.declined":
+		return s.Brain.SeedHead.Declined(), true
+	case "brain.seed_head.rank":
+		return s.Brain.SeedHead.Rank(), true
+	case "brain.seed_head.seed":
+		return s.Brain.SeedHead.Seed(), true
+	case "brain.seed_head.team":
+		return s.Brain.SeedHead.Team(), true
+	case "brain.stats.attempts":
+		return s.Brain.Stats.Attempts(), true
+	case "brain.stats.empty":
+		return s.Brain.Stats.Empty(), true
+	case "brain.stats.player":
+		return s.Brain.Stats.Player(), true
+	case "brain.stats.right":
+		return s.Brain.Stats.Right(), true
+	case "brain.stats.share":
+		return s.Brain.Stats.Share(), true
+	case "brain.stats.team":
+		return s.Brain.Stats.Team(), true
+	case "brain.stats.wrong":
+		return s.Brain.Stats.Wrong(), true
+	case "brain.tiebreak.add":
+		return s.Brain.Tiebreak.Add(), true
+	case "brain.tiebreak.add_hint":
+		return s.Brain.Tiebreak.AddHint(), true
+	case "brain.tiebreak.remove":
+		return s.Brain.Tiebreak.Remove(), true
+	case "brain.tiebreak.remove_hint":
+		return s.Brain.Tiebreak.RemoveHint(), true
+	case "brain.title":
+		return s.Brain.Title(), true
+	case "crosstable.columns.name":
+		return s.Crosstable.Columns.Name(), true
+	case "crosstable.columns.place":
+		return s.Crosstable.Columns.Place(), true
+	case "crosstable.columns.points":
+		return s.Crosstable.Columns.Points(), true
+	case "crosstable.empty":
+		return s.Crosstable.Empty(), true
+	case "edit.roster.immutable":
+		return s.Edit.Roster.Immutable(), true
+	case "ek.bout.finished":
+		return s.Ek.Bout.Finished(), true
+	case "ek.crumb.seed_import":
+		return s.Ek.Crumb.SeedImport(), true
+	case "ek.crumb.stats":
+		return s.Ek.Crumb.Stats(), true
+	case "ek.crumb.venues":
+		return s.Ek.Crumb.Venues(), true
+	case "ek.seed.decline_failed":
+		return s.Ek.Seed.DeclineFailed(), true
+	case "ek.seed.empty":
+		return s.Ek.Seed.Empty(), true
+	case "ek.seed.error_prefix":
+		return s.Ek.Seed.ErrorPrefix(), true
+	case "ek.seed.import":
+		return s.Ek.Seed.Import(), true
+	case "ek.seed.import_failed":
+		return s.Ek.Seed.ImportFailed(), true
+	case "ek.seed.team_placeholder":
+		return s.Ek.Seed.TeamPlaceholder(), true
+	case "ek.seed.waitlist":
+		return s.Ek.Seed.Waitlist(), true
+	case "ek.seed_head.declined":
+		return s.Ek.SeedHead.Declined(), true
+	case "ek.seed_head.seed":
+		return s.Ek.SeedHead.Seed(), true
+	case "ek.seed_head.team":
+		return s.Ek.SeedHead.Team(), true
+	case "ek.shootout.add":
+		return s.Ek.Shootout.Add(), true
+	case "ek.shootout.add_label":
+		return s.Ek.Shootout.AddLabel(), true
+	case "ek.shootout.letter":
+		return s.Ek.Shootout.Letter(), true
+	case "ek.shootout.remove":
+		return s.Ek.Shootout.Remove(), true
+	case "ek.shootout.remove_confirm":
+		return s.Ek.Shootout.RemoveConfirm(), true
+	case "ek.shootout.remove_label":
+		return s.Ek.Shootout.RemoveLabel(), true
+	case "ek.stage.empty":
+		return s.Ek.Stage.Empty(), true
+	case "ek.stats.battles":
+		return s.Ek.Stats.Battles(), true
+	case "ek.stats.empty":
+		return s.Ek.Stats.Empty(), true
+	case "ek.stats.individual_empty":
+		return s.Ek.Stats.IndividualEmpty(), true
+	case "ek.stats.player":
+		return s.Ek.Stats.Player(), true
+	case "ek.stats.share":
+		return s.Ek.Stats.Share(), true
+	case "ek.stats.team":
+		return s.Ek.Stats.Team(), true
+	case "ek.title":
+		return s.Ek.Title(), true
+	case "ek.venue.cancel":
+		return s.Ek.Venue.Cancel(), true
+	case "ek.venue.edit":
+		return s.Ek.Venue.Edit(), true
+	case "ek.venue.save":
+		return s.Ek.Venue.Save(), true
+	case "export.col.battles":
+		return s.Export.Col.Battles(), true
+	case "export.col.chair":
+		return s.Export.Col.Chair(), true
+	case "export.col.match_place":
+		return s.Export.Col.MatchPlace(), true
+	case "export.col.place":
+		return s.Export.Col.Place(), true
+	case "export.col.player":
+		return s.Export.Col.Player(), true
+	case "export.col.team":
+		return s.Export.Col.Team(), true
+	case "export.col.team_share":
+		return s.Export.Col.TeamShare(), true
+	case "export.col.total":
+		return s.Export.Col.Total(), true
+	case "export.od.city":
+		return s.Export.Od.City(), true
+	case "export.od.name":
+		return s.Export.Od.Name(), true
+	case "export.od.tour":
+		return s.Export.Od.Tour(), true
+	case "export.sheet.detailed":
+		return s.Export.Sheet.Detailed(), true
+	case "export.sheet.fallback":
+		return s.Export.Sheet.Fallback(), true
+	case "export.sheet.results":
+		return s.Export.Sheet.Results(), true
+	case "export.sheet.stats":
+		return s.Export.Sheet.Stats(), true
+	case "fest.grid.col_place":
+		return s.Fest.Grid.ColPlace(), true
+	case "fest.grid.slot_reseed":
+		return s.Fest.Grid.SlotReseed(), true
+	case "fest.metric.bouts":
+		return s.Fest.Metric.Bouts(), true
+	case "fest.metric.draw":
+		return s.Fest.Metric.Draw(), true
+	case "fest.metric.place_sum":
+		return s.Fest.Metric.PlaceSum(), true
+	case "fest.metric.points":
+		return s.Fest.Metric.Points(), true
+	case "fest.metric.points_share":
+		return s.Fest.Metric.PointsShare(), true
+	case "fest.metric.rating":
+		return s.Fest.Metric.Rating(), true
+	case "fest.metric.taken":
+		return s.Fest.Metric.Taken(), true
+	case "fest.metric.taken_base":
+		return s.Fest.Metric.TakenBase(), true
+	case "fest.metric.taken_share":
+		return s.Fest.Metric.TakenShare(), true
+	case "fest.metric.tiebreak":
+		return s.Fest.Metric.Tiebreak(), true
+	case "fest.metric_short.bouts":
+		return s.Fest.MetricShort.Bouts(), true
+	case "fest.metric_short.points":
+		return s.Fest.MetricShort.Points(), true
+	case "fest.metric_short.taken":
+		return s.Fest.MetricShort.Taken(), true
+	case "fest.reseed.blocked_default":
+		return s.Fest.Reseed.BlockedDefault(), true
+	case "fest.reseed.calculate":
+		return s.Fest.Reseed.Calculate(), true
+	case "fest.reseed.col_match":
+		return s.Fest.Reseed.ColMatch(), true
+	case "fest.reseed.col_place":
+		return s.Fest.Reseed.ColPlace(), true
+	case "fest.reseed.col_team":
+		return s.Fest.Reseed.ColTeam(), true
+	case "fest.reseed.empty":
+		return s.Fest.Reseed.Empty(), true
+	case "fest.reseed.recalculate":
+		return s.Fest.Reseed.Recalculate(), true
+	case "fest.roster.col_players":
+		return s.Fest.Roster.ColPlayers(), true
+	case "fest.roster.col_team":
+		return s.Fest.Roster.ColTeam(), true
+	case "fest.roster.empty":
+		return s.Fest.Roster.Empty(), true
+	case "fest.roster.load_failed":
+		return s.Fest.Roster.LoadFailed(), true
+	case "fest.roster.loading":
+		return s.Fest.Roster.Loading(), true
+	case "festaccess.add.creator_exists":
+		return s.Festaccess.Add.CreatorExists(), true
+	case "festaccess.add.nickname_required":
+		return s.Festaccess.Add.NicknameRequired(), true
+	case "festaccess.add.role_invalid":
+		return s.Festaccess.Add.RoleInvalid(), true
+	case "festaccess.bulk.empty":
+		return s.Festaccess.Bulk.Empty(), true
+	case "festaccess.manage.denied":
+		return s.Festaccess.Manage.Denied(), true
+	case "festaccess.member.creator_protected":
+		return s.Festaccess.Member.CreatorProtected(), true
+	case "festaccess.member.role_invalid":
+		return s.Festaccess.Member.RoleInvalid(), true
+	case "gallery.brain.title":
+		return s.Gallery.Brain.Title(), true
+	case "gallery.ek.title":
+		return s.Gallery.Ek.Title(), true
+	case "gallery.multi.title":
+		return s.Gallery.Multi.Title(), true
+	case "gallery.od.title":
+		return s.Gallery.Od.Title(), true
+	case "gallery.page.title":
+		return s.Gallery.Page.Title(), true
+	case "gallery.section.ek_stats":
+		return s.Gallery.Section.EkStats(), true
+	case "gallery.section.fest_grid":
+		return s.Gallery.Section.FestGrid(), true
+	case "gallery.section.group_standings":
+		return s.Gallery.Section.GroupStandings(), true
+	case "gallery.section.individual_stats":
+		return s.Gallery.Section.IndividualStats(), true
+	case "gallery.section.reseed":
+		return s.Gallery.Section.Reseed(), true
+	case "gallery.section.roster":
+		return s.Gallery.Section.Roster(), true
+	case "gallery.section.venues":
+		return s.Gallery.Section.Venues(), true
+	case "gallery.section.venues_host":
+		return s.Gallery.Section.VenuesHost(), true
+	case "gallery.si.title":
+		return s.Gallery.Si.Title(), true
+	case "gallery.topbar.title":
+		return s.Gallery.Topbar.Title(), true
+	case "gallery.troika.title":
+		return s.Gallery.Troika.Title(), true
+	case "gamebuild.clear.unsupported":
+		return s.Gamebuild.Clear.Unsupported(), true
+	case "gamebuild.create.ek_no_scheme":
+		return s.Gamebuild.Create.EkNoScheme(), true
+	case "gamebuild.create.multi_from_scheme":
+		return s.Gamebuild.Create.MultiFromScheme(), true
+	case "gamebuild.create.pasted_teams":
+		return s.Gamebuild.Create.PastedTeams(), true
+	case "gamebuild.create.scheme_required":
+		return s.Gamebuild.Create.SchemeRequired(), true
+	case "gamebuild.seating.need_players":
+		return s.Gamebuild.Seating.NeedPlayers(), true
+	case "gamebuild.seating.need_two":
+		return s.Gamebuild.Seating.NeedTwo(), true
+	case "gamebuild.seating.unnumbered":
+		return s.Gamebuild.Seating.Unnumbered(), true
+	case "gamebuild.titles.ksi":
+		return s.Gamebuild.Titles.Ksi(), true
+	case "gamebuild.titles.multi":
+		return s.Gamebuild.Titles.Multi(), true
+	case "gamebuild.titles.od":
+		return s.Gamebuild.Titles.Od(), true
+	case "games.brain.label":
+		return s.Games.Brain.Label(), true
+	case "games.ek.label":
+		return s.Games.Ek.Label(), true
+	case "games.ksi.label":
+		return s.Games.Ksi.Label(), true
+	case "games.multi.domain_empty":
+		return s.Games.Multi.DomainEmpty(), true
+	case "games.multi.label":
+		return s.Games.Multi.Label(), true
+	case "games.multi.no_games":
+		return s.Games.Multi.NoGames(), true
+	case "games.od.label":
+		return s.Games.Od.Label(), true
+	case "games.si.label":
+		return s.Games.Si.Label(), true
+	case "games.troika.label":
+		return s.Games.Troika.Label(), true
+	case "host.dash.access_saved_notice":
+		return s.Host.Dash.AccessSavedNotice(), true
+	case "host.dash.access_subhead":
+		return s.Host.Dash.AccessSubhead(), true
+	case "host.dash.add_btn":
+		return s.Host.Dash.AddBtn(), true
+	case "host.dash.add_game_btn":
+		return s.Host.Dash.AddGameBtn(), true
+	case "host.dash.audit_link":
+		return s.Host.Dash.AuditLink(), true
+	case "host.dash.audit_muted":
+		return s.Host.Dash.AuditMuted(), true
+	case "host.dash.bulk_apply":
+		return s.Host.Dash.BulkApply(), true
+	case "host.dash.bulk_data_label":
+		return s.Host.Dash.BulkDataLabel(), true
+	case "host.dash.bulk_label":
+		return s.Host.Dash.BulkLabel(), true
+	case "host.dash.cancel_btn":
+		return s.Host.Dash.CancelBtn(), true
+	case "host.dash.clear_btn":
+		return s.Host.Dash.ClearBtn(), true
+	case "host.dash.clear_confirm":
+		return s.Host.Dash.ClearConfirm(), true
+	case "host.dash.col_nickname":
+		return s.Host.Dash.ColNickname(), true
+	case "host.dash.col_role":
+		return s.Host.Dash.ColRole(), true
+	case "host.dash.delete_btn":
+		return s.Host.Dash.DeleteBtn(), true
+	case "host.dash.delete_confirm":
+		return s.Host.Dash.DeleteConfirm(), true
+	case "host.dash.delete_game_confirm":
+		return s.Host.Dash.DeleteGameConfirm(), true
+	case "host.dash.delete_note":
+		return s.Host.Dash.DeleteNote(), true
+	case "host.dash.delete_subhead":
+		return s.Host.Dash.DeleteSubhead(), true
+	case "host.dash.delete_submit":
+		return s.Host.Dash.DeleteSubmit(), true
+	case "host.dash.description_label":
+		return s.Host.Dash.DescriptionLabel(), true
+	case "host.dash.end_date_label":
+		return s.Host.Dash.EndDateLabel(), true
+	case "host.dash.error_slug_taken":
+		return s.Host.Dash.ErrorSlugTaken(), true
+	case "host.dash.error_title_required":
+		return s.Host.Dash.ErrorTitleRequired(), true
+	case "host.dash.games_empty":
+		return s.Host.Dash.GamesEmpty(), true
+	case "host.dash.games_subhead":
+		return s.Host.Dash.GamesSubhead(), true
+	case "host.dash.jump_label":
+		return s.Host.Dash.JumpLabel(), true
+	case "host.dash.jump_title":
+		return s.Host.Dash.JumpTitle(), true
+	case "host.dash.numbers_link":
+		return s.Host.Dash.NumbersLink(), true
+	case "host.dash.numbers_status_done":
+		return s.Host.Dash.NumbersStatusDone(), true
+	case "host.dash.numbers_status_unset":
+		return s.Host.Dash.NumbersStatusUnset(), true
+	case "host.dash.public_label":
+		return s.Host.Dash.PublicLabel(), true
+	case "host.dash.rating_status_none":
+		return s.Host.Dash.RatingStatusNone(), true
+	case "host.dash.roster_import_link":
+		return s.Host.Dash.RosterImportLink(), true
+	case "host.dash.roster_players_link":
+		return s.Host.Dash.RosterPlayersLink(), true
+	case "host.dash.roster_subhead":
+		return s.Host.Dash.RosterSubhead(), true
+	case "host.dash.roster_teams_link":
+		return s.Host.Dash.RosterTeamsLink(), true
+	case "host.dash.save_submit":
+		return s.Host.Dash.SaveSubmit(), true
+	case "host.dash.settings_btn":
+		return s.Host.Dash.SettingsBtn(), true
+	case "host.dash.slug_label":
+		return s.Host.Dash.SlugLabel(), true
+	case "host.dash.start_date_label":
+		return s.Host.Dash.StartDateLabel(), true
+	case "host.dash.title_label":
+		return s.Host.Dash.TitleLabel(), true
+	case "host.games.brain_hint":
+		return s.Host.Games.BrainHint(), true
+	case "host.games.create_crumb":
+		return s.Host.Games.CreateCrumb(), true
+	case "host.games.create_submit":
+		return s.Host.Games.CreateSubmit(), true
+	case "host.games.ek_hint":
+		return s.Host.Games.EkHint(), true
+	case "host.games.ek_json_label":
+		return s.Host.Games.EkJsonLabel(), true
+	case "host.games.entrants_hint":
+		return s.Host.Games.EntrantsHint(), true
+	case "host.games.entrants_summary":
+		return s.Host.Games.EntrantsSummary(), true
+	case "host.games.error_ek_scheme_missing":
+		return s.Host.Games.ErrorEkSchemeMissing(), true
+	case "host.games.error_slug_taken":
+		return s.Host.Games.ErrorSlugTaken(), true
+	case "host.games.error_title_required":
+		return s.Host.Games.ErrorTitleRequired(), true
+	case "host.games.error_type_missing":
+		return s.Host.Games.ErrorTypeMissing(), true
+	case "host.games.minigames_hint":
+		return s.Host.Games.MinigamesHint(), true
+	case "host.games.minigames_label":
+		return s.Host.Games.MinigamesLabel(), true
+	case "host.games.minigames_placeholder":
+		return s.Host.Games.MinigamesPlaceholder(), true
+	case "host.games.minigames_share_hint":
+		return s.Host.Games.MinigamesShareHint(), true
+	case "host.games.multi_sorting_hint":
+		return s.Host.Games.MultiSortingHint(), true
+	case "host.games.multi_sorting_label":
+		return s.Host.Games.MultiSortingLabel(), true
+	case "host.games.od_questions_label":
+		return s.Host.Games.OdQuestionsLabel(), true
+	case "host.games.od_tours_label":
+		return s.Host.Games.OdToursLabel(), true
+	case "host.games.rebuild_hint":
+		return s.Host.Games.RebuildHint(), true
+	case "host.games.save_submit":
+		return s.Host.Games.SaveSubmit(), true
+	case "host.games.scheme_label":
+		return s.Host.Games.SchemeLabel(), true
+	case "host.games.si_hint":
+		return s.Host.Games.SiHint(), true
+	case "host.games.slug_label":
+		return s.Host.Games.SlugLabel(), true
+	case "host.games.sticker_emptywrong":
+		return s.Host.Games.StickerEmptywrong(), true
+	case "host.games.sticker_emptywrong_row":
+		return s.Host.Games.StickerEmptywrongRow(), true
+	case "host.games.sticker_max_field":
+		return s.Host.Games.StickerMaxField(), true
+	case "host.games.sticker_max_label":
+		return s.Host.Games.StickerMaxLabel(), true
+	case "host.games.sticker_neutral":
+		return s.Host.Games.StickerNeutral(), true
+	case "host.games.sticker_nowrong":
+		return s.Host.Games.StickerNowrong(), true
+	case "host.games.sticker_nowrong_row":
+		return s.Host.Games.StickerNowrongRow(), true
+	case "host.games.sticker_x2_row":
+		return s.Host.Games.StickerX2Row(), true
+	case "host.games.stickers_hint":
+		return s.Host.Games.StickersHint(), true
+	case "host.games.themes_label":
+		return s.Host.Games.ThemesLabel(), true
+	case "host.games.title_label":
+		return s.Host.Games.TitleLabel(), true
+	case "host.games.troika_hint":
+		return s.Host.Games.TroikaHint(), true
+	case "host.games.type_brain":
+		return s.Host.Games.TypeBrain(), true
+	case "host.games.type_ek":
+		return s.Host.Games.TypeEk(), true
+	case "host.games.type_ksi":
+		return s.Host.Games.TypeKsi(), true
+	case "host.games.type_ksi_stickers":
+		return s.Host.Games.TypeKsiStickers(), true
+	case "host.games.type_label":
+		return s.Host.Games.TypeLabel(), true
+	case "host.games.type_multi":
+		return s.Host.Games.TypeMulti(), true
+	case "host.games.type_od":
+		return s.Host.Games.TypeOd(), true
+	case "host.games.type_si":
+		return s.Host.Games.TypeSi(), true
+	case "host.games.type_troika":
+		return s.Host.Games.TypeTroika(), true
+	case "host.pages.create_fest_summary":
+		return s.Host.Pages.CreateFestSummary(), true
+	case "host.pages.create_submit":
+		return s.Host.Pages.CreateSubmit(), true
+	case "host.pages.description_label":
+		return s.Host.Pages.DescriptionLabel(), true
+	case "host.pages.end_date_label":
+		return s.Host.Pages.EndDateLabel(), true
+	case "host.pages.fest_games_empty":
+		return s.Host.Pages.FestGamesEmpty(), true
+	case "host.pages.fests_empty":
+		return s.Host.Pages.FestsEmpty(), true
+	case "host.pages.games_subhead":
+		return s.Host.Pages.GamesSubhead(), true
+	case "host.pages.group_current":
+		return s.Host.Pages.GroupCurrent(), true
+	case "host.pages.group_future":
+		return s.Host.Pages.GroupFuture(), true
+	case "host.pages.group_past":
+		return s.Host.Pages.GroupPast(), true
+	case "host.pages.home_crumb_label":
+		return s.Host.Pages.HomeCrumbLabel(), true
+	case "host.pages.identity_username_lead":
+		return s.Host.Pages.IdentityUsernameLead(), true
+	case "host.pages.jump_host_label":
+		return s.Host.Pages.JumpHostLabel(), true
+	case "host.pages.jump_host_title_fest":
+		return s.Host.Pages.JumpHostTitleFest(), true
+	case "host.pages.jump_host_title_index":
+		return s.Host.Pages.JumpHostTitleIndex(), true
+	case "host.pages.jump_label":
+		return s.Host.Pages.JumpLabel(), true
+	case "host.pages.jump_title":
+		return s.Host.Pages.JumpTitle(), true
+	case "host.pages.landing_crumb":
+		return s.Host.Pages.LandingCrumb(), true
+	case "host.pages.logout_submit":
+		return s.Host.Pages.LogoutSubmit(), true
+	case "host.pages.password_change_submit":
+		return s.Host.Pages.PasswordChangeSubmit(), true
+	case "host.pages.password_confirm_placeholder":
+		return s.Host.Pages.PasswordConfirmPlaceholder(), true
+	case "host.pages.password_current_placeholder":
+		return s.Host.Pages.PasswordCurrentPlaceholder(), true
+	case "host.pages.password_new_placeholder":
+		return s.Host.Pages.PasswordNewPlaceholder(), true
+	case "host.pages.password_set_submit":
+		return s.Host.Pages.PasswordSetSubmit(), true
+	case "host.pages.profile_crumb":
+		return s.Host.Pages.ProfileCrumb(), true
+	case "host.pages.profile_title":
+		return s.Host.Pages.ProfileTitle(), true
+	case "host.pages.public_index_crumb":
+		return s.Host.Pages.PublicIndexCrumb(), true
+	case "host.pages.public_index_empty":
+		return s.Host.Pages.PublicIndexEmpty(), true
+	case "host.pages.public_index_title":
+		return s.Host.Pages.PublicIndexTitle(), true
+	case "host.pages.public_label":
+		return s.Host.Pages.PublicLabel(), true
+	case "host.pages.rating_id_label":
+		return s.Host.Pages.RatingIdLabel(), true
+	case "host.pages.start_date_label":
+		return s.Host.Pages.StartDateLabel(), true
+	case "host.pages.title_label":
+		return s.Host.Pages.TitleLabel(), true
+	case "host.pages.username_fallback":
+		return s.Host.Pages.UsernameFallback(), true
+	case "host.roster.add_override_btn":
+		return s.Host.Roster.AddOverrideBtn(), true
+	case "host.roster.cancel_btn":
+		return s.Host.Roster.CancelBtn(), true
+	case "host.roster.col_city":
+		return s.Host.Roster.ColCity(), true
+	case "host.roster.col_from_team":
+		return s.Host.Roster.ColFromTeam(), true
+	case "host.roster.col_players":
+		return s.Host.Roster.ColPlayers(), true
+	case "host.roster.col_to_team":
+		return s.Host.Roster.ColToTeam(), true
+	case "host.roster.delete_btn":
+		return s.Host.Roster.DeleteBtn(), true
+	case "host.roster.delete_override_confirm":
+		return s.Host.Roster.DeleteOverrideConfirm(), true
+	case "host.roster.edit_override_label":
+		return s.Host.Roster.EditOverrideLabel(), true
+	case "host.roster.error_json_empty":
+		return s.Host.Roster.ErrorJsonEmpty(), true
+	case "host.roster.error_obj_player":
+		return s.Host.Roster.ErrorObjPlayer(), true
+	case "host.roster.error_obj_source_team":
+		return s.Host.Roster.ErrorObjSourceTeam(), true
+	case "host.roster.error_obj_team":
+		return s.Host.Roster.ErrorObjTeam(), true
+	case "host.roster.games_label":
+		return s.Host.Roster.GamesLabel(), true
+	case "host.roster.import_done_notice":
+		return s.Host.Roster.ImportDoneNotice(), true
+	case "host.roster.import_submit":
+		return s.Host.Roster.ImportSubmit(), true
+	case "host.roster.need_rating_note":
+		return s.Host.Roster.NeedRatingNote(), true
+	case "host.roster.new_team_label":
+		return s.Host.Roster.NewTeamLabel(), true
+	case "host.roster.no_override_games":
+		return s.Host.Roster.NoOverrideGames(), true
+	case "host.roster.override_title":
+		return s.Host.Roster.OverrideTitle(), true
+	case "host.roster.overrides_subhead":
+		return s.Host.Roster.OverridesSubhead(), true
+	case "host.roster.player_label":
+		return s.Host.Roster.PlayerLabel(), true
+	case "host.roster.players_crumb":
+		return s.Host.Roster.PlayersCrumb(), true
+	case "host.roster.players_empty":
+		return s.Host.Roster.PlayersEmpty(), true
+	case "host.roster.rating_import_crumb":
+		return s.Host.Roster.RatingImportCrumb(), true
+	case "host.roster.rating_import_note":
+		return s.Host.Roster.RatingImportNote(), true
+	case "host.roster.save_submit":
+		return s.Host.Roster.SaveSubmit(), true
+	case "host.roster.scheme_import_crumb":
+		return s.Host.Roster.SchemeImportCrumb(), true
+	case "host.roster.scheme_import_note":
+		return s.Host.Roster.SchemeImportNote(), true
+	case "host.roster.scheme_import_submit":
+		return s.Host.Roster.SchemeImportSubmit(), true
+	case "host.roster.scheme_json_label":
+		return s.Host.Roster.SchemeJsonLabel(), true
+	case "host.roster.team_label":
+		return s.Host.Roster.TeamLabel(), true
+	case "host.roster.teams_crumb":
+		return s.Host.Roster.TeamsCrumb(), true
+	case "host.roster.teams_empty":
+		return s.Host.Roster.TeamsEmpty(), true
+	case "imports.rating.no_teams":
+		return s.Imports.Rating.NoTeams(), true
+	case "imports.seed.ksi_missing":
+		return s.Imports.Seed.KsiMissing(), true
+	case "imports.seed.no_numbered_teams":
+		return s.Imports.Seed.NoNumberedTeams(), true
+	case "imports.seed.nothing_imported":
+		return s.Imports.Seed.NothingImported(), true
+	case "imports.seed.scheme_missing":
+		return s.Imports.Seed.SchemeMissing(), true
+	case "imports.seed.scheme_xlsx":
+		return s.Imports.Seed.SchemeXlsx(), true
+	case "imports.seed.source_no_teams":
+		return s.Imports.Seed.SourceNoTeams(), true
+	case "imports.seed.team_not_found":
+		return s.Imports.Seed.TeamNotFound(), true
+	case "imports.seed.xlsx_no_sheets":
+		return s.Imports.Seed.XlsxNoSheets(), true
+	case "imports.seed.xlsx_no_teams":
+		return s.Imports.Seed.XlsxNoTeams(), true
+	case "imports.seed_players.no_games":
+		return s.Imports.SeedPlayers.NoGames(), true
+	case "imports.seed_players.no_rosters":
+		return s.Imports.SeedPlayers.NoRosters(), true
+	case "imports.seed_players.no_sorting":
+		return s.Imports.SeedPlayers.NoSorting(), true
+	case "imports.seed_source.ksi":
+		return s.Imports.SeedSource.Ksi(), true
+	case "imports.seed_source.players":
+		return s.Imports.SeedSource.Players(), true
+	case "imports.seed_source.random":
+		return s.Imports.SeedSource.Random(), true
+	case "journal.ek.match_finished":
+		return s.Journal.Ek.MatchFinished(), true
+	case "journal.ek.match_reopened":
+		return s.Journal.Ek.MatchReopened(), true
+	case "journal.ek.match_update":
+		return s.Journal.Ek.MatchUpdate(), true
+	case "journal.ek.player_assigned":
+		return s.Journal.Ek.PlayerAssigned(), true
+	case "journal.ek.player_removed":
+		return s.Journal.Ek.PlayerRemoved(), true
+	case "journal.ek.team_unnamed":
+		return s.Journal.Ek.TeamUnnamed(), true
+	case "journal.event.fest_access":
+		return s.Journal.Event.FestAccess(), true
+	case "journal.event.fest_numbers":
+		return s.Journal.Event.FestNumbers(), true
+	case "journal.event.game_clear":
+		return s.Journal.Event.GameClear(), true
+	case "journal.event.game_create":
+		return s.Journal.Event.GameCreate(), true
+	case "journal.event.game_delete":
+		return s.Journal.Event.GameDelete(), true
+	case "journal.event.game_revert":
+		return s.Journal.Event.GameRevert(), true
+	case "journal.event.player_override":
+		return s.Journal.Event.PlayerOverride(), true
+	case "journal.event.rating_import":
+		return s.Journal.Event.RatingImport(), true
+	case "journal.event.reseed":
+		return s.Journal.Event.Reseed(), true
+	case "journal.event.scheme_import":
+		return s.Journal.Event.SchemeImport(), true
+	case "journal.event.seed_decline":
+		return s.Journal.Event.SeedDecline(), true
+	case "journal.event.seed_import_ksi":
+		return s.Journal.Event.SeedImportKsi(), true
+	case "journal.event.state_replaced":
+		return s.Journal.Event.StateReplaced(), true
+	case "journal.event.venue":
+		return s.Journal.Event.Venue(), true
+	case "journal.index.empty":
+		return s.Journal.Index.Empty(), true
+	case "journal.index.note":
+		return s.Journal.Index.Note(), true
+	case "journal.index.title":
+		return s.Journal.Index.Title(), true
+	case "journal.ksi.declined":
+		return s.Journal.Ksi.Declined(), true
+	case "journal.ksi.finished":
+		return s.Journal.Ksi.Finished(), true
+	case "journal.mark.none":
+		return s.Journal.Mark.None(), true
+	case "journal.mark.right":
+		return s.Journal.Mark.Right(), true
+	case "journal.mark.wrong":
+		return s.Journal.Mark.Wrong(), true
+	case "journal.od.entries_changed":
+		return s.Journal.Od.EntriesChanged(), true
+	case "journal.od.shootout":
+		return s.Journal.Od.Shootout(), true
+	case "journal.page.col_changes":
+		return s.Journal.Page.ColChanges(), true
+	case "journal.page.col_when":
+		return s.Journal.Page.ColWhen(), true
+	case "journal.page.col_who":
+		return s.Journal.Page.ColWho(), true
+	case "journal.page.empty":
+		return s.Journal.Page.Empty(), true
+	case "journal.page.revert_confirm":
+		return s.Journal.Page.RevertConfirm(), true
+	case "journal.page.revert_done":
+		return s.Journal.Page.RevertDone(), true
+	case "journal.page.revert_submit":
+		return s.Journal.Page.RevertSubmit(), true
+	case "journal.patch.state_fallback":
+		return s.Journal.Patch.StateFallback(), true
+	case "journal.value.empty":
+		return s.Journal.Value.Empty(), true
+	case "markdown.details.default_summary":
+		return s.Markdown.Details.DefaultSummary(), true
+	case "multi.refusals.declined":
+		return s.Multi.Refusals.Declined(), true
+	case "multi.refusals.team":
+		return s.Multi.Refusals.Team(), true
+	case "multi.results.place":
+		return s.Multi.Results.Place(), true
+	case "multi.results.team":
+		return s.Multi.Results.Team(), true
+	case "multi.results.total":
+		return s.Multi.Results.Total(), true
+	case "multi.sheet.team":
+		return s.Multi.Sheet.Team(), true
+	case "multi.sheet.total":
+		return s.Multi.Sheet.Total(), true
+	case "multi.tabs.detailed":
+		return s.Multi.Tabs.Detailed(), true
+	case "multi.tabs.refusals":
+		return s.Multi.Tabs.Refusals(), true
+	case "multi.tabs.results":
+		return s.Multi.Tabs.Results(), true
+	case "multi.tabs.roster":
+		return s.Multi.Tabs.Roster(), true
+	case "multi.title":
+		return s.Multi.Title(), true
+	case "numbers.action.auto":
+		return s.Numbers.Action.Auto(), true
+	case "numbers.action.cancel":
+		return s.Numbers.Action.Cancel(), true
+	case "numbers.action.clear":
+		return s.Numbers.Action.Clear(), true
+	case "numbers.action.import":
+		return s.Numbers.Action.Import(), true
+	case "numbers.action.replace":
+		return s.Numbers.Action.Replace(), true
+	case "numbers.action.save":
+		return s.Numbers.Action.Save(), true
+	case "numbers.apply.foreign_team":
+		return s.Numbers.Apply.ForeignTeam(), true
+	case "numbers.apply.read_failed":
+		return s.Numbers.Apply.ReadFailed(), true
+	case "numbers.apply.team_repeated":
+		return s.Numbers.Apply.TeamRepeated(), true
+	case "numbers.help.edit":
+		return s.Numbers.Help.Edit(), true
+	case "numbers.notice.auto":
+		return s.Numbers.Notice.Auto(), true
+	case "numbers.notice.cleared":
+		return s.Numbers.Notice.Cleared(), true
+	case "numbers.notice.saved":
+		return s.Numbers.Notice.Saved(), true
+	case "numbers.page.crumb":
+		return s.Numbers.Page.Crumb(), true
+	case "numbers.page.empty":
+		return s.Numbers.Page.Empty(), true
+	case "numbers.page.no_teams":
+		return s.Numbers.Page.NoTeams(), true
+	case "octobearfest.error.db_missing":
+		return s.Octobearfest.Error.DbMissing(), true
+	case "octobearfest.error.no_bout_at":
+		return s.Octobearfest.Error.NoBoutAt(), true
+	case "octobearfest.error.no_system_user":
+		return s.Octobearfest.Error.NoSystemUser(), true
+	case "octobearfest.error.not_seated":
+		return s.Octobearfest.Error.NotSeated(), true
+	case "octobearfest.flag.db":
+		return s.Octobearfest.Flag.Db(), true
+	case "octobearfest.flag.root":
+		return s.Octobearfest.Flag.Root(), true
+	case "octobearfest.flag.slug":
+		return s.Octobearfest.Flag.Slug(), true
+	case "octobearfest.log.troika_done":
+		return s.Octobearfest.Log.TroikaDone(), true
+	case "od.guard.lead":
+		return s.Od.Guard.Lead(), true
+	case "od.guard.numbers":
+		return s.Od.Guard.Numbers(), true
+	case "od.head.place":
+		return s.Od.Head.Place(), true
+	case "od.head.place_short":
+		return s.Od.Head.PlaceShort(), true
+	case "od.head.team":
+		return s.Od.Head.Team(), true
+	case "od.invert.label":
+		return s.Od.Invert.Label(), true
+	case "od.progress.not_started":
+		return s.Od.Progress.NotStarted(), true
+	case "od.results.shootout_collapse":
+		return s.Od.Results.ShootoutCollapse(), true
+	case "od.results.shootout_expand":
+		return s.Od.Results.ShootoutExpand(), true
+	case "od.results.tour_collapse":
+		return s.Od.Results.TourCollapse(), true
+	case "od.results.tour_expand":
+		return s.Od.Results.TourExpand(), true
+	case "od.screen.bg":
+		return s.Od.Screen.Bg(), true
+	case "od.screen.chrome_hide":
+		return s.Od.Screen.ChromeHide(), true
+	case "od.screen.chrome_show":
+		return s.Od.Screen.ChromeShow(), true
+	case "od.screen.columns":
+		return s.Od.Screen.Columns(), true
+	case "od.screen.fg":
+		return s.Od.Screen.Fg(), true
+	case "od.screen.font":
+		return s.Od.Screen.Font(), true
+	case "od.screen.muted":
+		return s.Od.Screen.Muted(), true
+	case "od.screen.no_teams":
+		return s.Od.Screen.NoTeams(), true
+	case "od.screen.reset":
+		return s.Od.Screen.Reset(), true
+	case "od.screen.settings":
+		return s.Od.Screen.Settings(), true
+	case "od.screen.show_city":
+		return s.Od.Screen.ShowCity(), true
+	case "od.screen.show_country":
+		return s.Od.Screen.ShowCountry(), true
+	case "od.shootout.add_question":
+		return s.Od.Shootout.AddQuestion(), true
+	case "od.shootout.add_round":
+		return s.Od.Shootout.AddRound(), true
+	case "od.shootout.add_round_blocked":
+		return s.Od.Shootout.AddRoundBlocked(), true
+	case "od.shootout.cancel":
+		return s.Od.Shootout.Cancel(), true
+	case "od.shootout.create":
+		return s.Od.Shootout.Create(), true
+	case "od.shootout.remove_question":
+		return s.Od.Shootout.RemoveQuestion(), true
+	case "od.shootout.remove_question_confirm":
+		return s.Od.Shootout.RemoveQuestionConfirm(), true
+	case "od.shootout.remove_round_confirm":
+		return s.Od.Shootout.RemoveRoundConfirm(), true
+	case "od.shootout.round_dialog":
+		return s.Od.Shootout.RoundDialog(), true
+	case "od.shootout.title":
+		return s.Od.Shootout.Title(), true
+	case "od.title":
+		return s.Od.Title(), true
+	case "override.entry.game_invalid":
+		return s.Override.Entry.GameInvalid(), true
+	case "override.entry.game_type_wrong":
+		return s.Override.Entry.GameTypeWrong(), true
+	case "override.entry.pick_games":
+		return s.Override.Entry.PickGames(), true
+	case "override.entry.pick_player":
+		return s.Override.Entry.PickPlayer(), true
+	case "override.entry.pick_team":
+		return s.Override.Entry.PickTeam(), true
+	case "override.lookup.not_found":
+		return s.Override.Lookup.NotFound(), true
+	case "override.lookup.player_not_found":
+		return s.Override.Lookup.PlayerNotFound(), true
+	case "override.lookup.team_not_found":
+		return s.Override.Lookup.TeamNotFound(), true
+	case "override.save.team_same":
+		return s.Override.Save.TeamSame(), true
+	case "pages.crumbs.admin":
+		return s.Pages.Crumbs.Admin(), true
+	case "pages.crumbs.home":
+		return s.Pages.Crumbs.Home(), true
+	case "pages.crumbs.host":
+		return s.Pages.Crumbs.Host(), true
+	case "replay.codec.stat_attempts":
+		return s.Replay.Codec.StatAttempts(), true
+	case "replay.codec.stat_bouts":
+		return s.Replay.Codec.StatBouts(), true
+	case "replay.codec.stat_right":
+		return s.Replay.Codec.StatRight(), true
+	case "replay.codec.stat_themes":
+		return s.Replay.Codec.StatThemes(), true
+	case "replay.codec.stat_wrong":
+		return s.Replay.Codec.StatWrong(), true
+	case "replay.parse.entrant_no_name":
+		return s.Replay.Parse.EntrantNoName(), true
+	case "replay.parse.lineups_individual":
+		return s.Replay.Parse.LineupsIndividual(), true
+	case "replay.parse.override_expected":
+		return s.Replay.Parse.OverrideExpected(), true
+	case "replay.parse.part_match":
+		return s.Replay.Parse.PartMatch(), true
+	case "replay.parse.part_round":
+		return s.Replay.Parse.PartRound(), true
+	case "replay.parse.part_wave":
+		return s.Replay.Parse.PartWave(), true
+	case "replay.parse.seat_brain_player_field":
+		return s.Replay.Parse.SeatBrainPlayerField(), true
+	case "replay.parse.seat_individual_player":
+		return s.Replay.Parse.SeatIndividualPlayer(), true
+	case "replay.parse.seat_no_name":
+		return s.Replay.Parse.SeatNoName(), true
+	case "replay.parse.stat_no_player":
+		return s.Replay.Parse.StatNoPlayer(), true
+	case "replay.report.col_bout":
+		return s.Replay.Report.ColBout(), true
+	case "replay.report.col_what":
+		return s.Replay.Report.ColWhat(), true
+	case "replay.report.col_who":
+		return s.Replay.Report.ColWho(), true
+	case "replay.report.col_why":
+		return s.Replay.Report.ColWhy(), true
+	case "replay.report.collected_lead":
+		return s.Replay.Report.CollectedLead(), true
+	case "replay.report.collected_mid":
+		return s.Replay.Report.CollectedMid(), true
+	case "replay.report.intro":
+		return s.Replay.Report.Intro(), true
+	case "replay.report.none_yet":
+		return s.Replay.Report.NoneYet(), true
+	case "replay.report.title":
+		return s.Replay.Report.Title(), true
+	case "replay.report.who_all":
+		return s.Replay.Report.WhoAll(), true
+	case "replay.run.all_agreed":
+		return s.Replay.Run.AllAgreed(), true
+	case "replay.run.field_extra":
+		return s.Replay.Run.FieldExtra(), true
+	case "replay.run.field_outcome":
+		return s.Replay.Run.FieldOutcome(), true
+	case "replay.run.field_place":
+		return s.Replay.Run.FieldPlace(), true
+	case "replay.run.field_seating":
+		return s.Replay.Run.FieldSeating(), true
+	case "replay.run.field_stats":
+		return s.Replay.Run.FieldStats(), true
+	case "replay.run.field_table":
+		return s.Replay.Run.FieldTable(), true
+	case "replay.run.field_unneeded":
+		return s.Replay.Run.FieldUnneeded(), true
+	case "replay.run.lineups_unwritable":
+		return s.Replay.Run.LineupsUnwritable(), true
+	case "replay.run.no_row":
+		return s.Replay.Run.NoRow(), true
+	case "replay.run.not_seated":
+		return s.Replay.Run.NotSeated(), true
+	case "replay.run.nothing":
+		return s.Replay.Run.Nothing(), true
+	case "replay.run.stats_uncomputable":
+		return s.Replay.Run.StatsUncomputable(), true
+	case "replay.run.table_unrankable":
+		return s.Replay.Run.TableUnrankable(), true
+	case "resolver.reseed.not_ready":
+		return s.Resolver.Reseed.NotReady(), true
+	case "route.guard.unnumbered":
+		return s.Route.Guard.Unnumbered(), true
+	case "scheme.entrants.proceeding_missing":
+		return s.Scheme.Entrants.ProceedingMissing(), true
+	case "scheme.parse.key_outside_section":
+		return s.Scheme.Parse.KeyOutsideSection(), true
+	case "scheme.parse.separator":
+		return s.Scheme.Parse.Separator(), true
+	case "scheme.reseed.no_template":
+		return s.Scheme.Reseed.NoTemplate(), true
+	case "scheme.reseed.previous_terminal":
+		return s.Scheme.Reseed.PreviousTerminal(), true
+	case "scheme.reseed.proceeding_two":
+		return s.Scheme.Reseed.ProceedingTwo(), true
+	case "scheme.reseed.stats_from_needs_reseed":
+		return s.Scheme.Reseed.StatsFromNeedsReseed(), true
+	case "scheme.seed.players_need_games":
+		return s.Scheme.Seed.PlayersNeedGames(), true
+	case "scheme.seed.players_need_seed":
+		return s.Scheme.Seed.PlayersNeedSeed(), true
+	case "scheme.structure.kind_missing":
+		return s.Scheme.Structure.KindMissing(), true
+	case "scheme.structure.no_blocks":
+		return s.Scheme.Structure.NoBlocks(), true
+	case "scheme.titles.group":
+		return s.Scheme.Titles.Group(), true
+	case "scheme.titles.reseed_stage":
+		return s.Scheme.Titles.ReseedStage(), true
+	case "scheme.venues.count":
+		return s.Scheme.Venues.Count(), true
+	case "screen.banner.assign":
+		return s.Screen.Banner.Assign(), true
+	case "screen.banner.unassigned_lead":
+		return s.Screen.Banner.UnassignedLead(), true
+	case "screen.downloads.archive":
+		return s.Screen.Downloads.Archive(), true
+	case "screen.downloads.archive_title":
+		return s.Screen.Downloads.ArchiveTitle(), true
+	case "screen.downloads.xlsx":
+		return s.Screen.Downloads.Xlsx(), true
+	case "screen.downloads.xlsx_title":
+		return s.Screen.Downloads.XlsxTitle(), true
+	case "screen.jump.edit":
+		return s.Screen.Jump.Edit(), true
+	case "screen.jump.edit_title":
+		return s.Screen.Jump.EditTitle(), true
+	case "screen.jump.viewer":
+		return s.Screen.Jump.Viewer(), true
+	case "screen.jump.viewer_title":
+		return s.Screen.Jump.ViewerTitle(), true
+	case "screen.tabs.block_group":
+		return s.Screen.Tabs.BlockGroup(), true
+	case "screen.tabs.detailed":
+		return s.Screen.Tabs.Detailed(), true
+	case "screen.tabs.final":
+		return s.Screen.Tabs.Final(), true
+	case "screen.tabs.grid":
+		return s.Screen.Tabs.Grid(), true
+	case "screen.tabs.individual_stats":
+		return s.Screen.Tabs.IndividualStats(), true
+	case "screen.tabs.input":
+		return s.Screen.Tabs.Input(), true
+	case "screen.tabs.playoff":
+		return s.Screen.Tabs.Playoff(), true
+	case "screen.tabs.refusals":
+		return s.Screen.Tabs.Refusals(), true
+	case "screen.tabs.reseed":
+		return s.Screen.Tabs.Reseed(), true
+	case "screen.tabs.results":
+		return s.Screen.Tabs.Results(), true
+	case "screen.tabs.roster":
+		return s.Screen.Tabs.Roster(), true
+	case "screen.tabs.screen":
+		return s.Screen.Tabs.Screen(), true
+	case "screen.tabs.seed":
+		return s.Screen.Tabs.Seed(), true
+	case "screen.tabs.seed_import":
+		return s.Screen.Tabs.SeedImport(), true
+	case "screen.tabs.stats":
+		return s.Screen.Tabs.Stats(), true
+	case "screen.tabs.venues":
+		return s.Screen.Tabs.Venues(), true
+	case "screen.title.fest":
+		return s.Screen.Title.Fest(), true
+	case "screen.title.game":
+		return s.Screen.Title.Game(), true
+	case "screen.trail.home":
+		return s.Screen.Trail.Home(), true
+	case "screen.trail.host":
+		return s.Screen.Trail.Host(), true
+	case "server.bot.down":
+		return s.Server.Bot.Down(), true
+	case "server.bot.help":
+		return s.Server.Bot.Help(), true
+	case "server.login.title":
+		return s.Server.Login.Title(), true
+	case "server.migration.v14":
+		return s.Server.Migration.V14(), true
+	case "server.public_fests.current":
+		return s.Server.PublicFests.Current(), true
+	case "server.public_fests.future":
+		return s.Server.PublicFests.Future(), true
+	case "server.public_fests.past":
+		return s.Server.PublicFests.Past(), true
+	case "server.seed_import.file_missing":
+		return s.Server.SeedImport.FileMissing(), true
+	case "si.battle.fallback_title":
+		return s.Si.Battle.FallbackTitle(), true
+	case "si.battle.finished":
+		return s.Si.Battle.Finished(), true
+	case "si.refusals.declined":
+		return s.Si.Refusals.Declined(), true
+	case "si.refusals.team":
+		return s.Si.Refusals.Team(), true
+	case "si.results.place":
+		return s.Si.Results.Place(), true
+	case "si.results.team":
+		return s.Si.Results.Team(), true
+	case "si.sheet.sort_by_name":
+		return s.Si.Sheet.SortByName(), true
+	case "si.sheet.sort_by_number":
+		return s.Si.Sheet.SortByNumber(), true
+	case "si.sheet.team":
+		return s.Si.Sheet.Team(), true
+	case "si.title.ksi":
+		return s.Si.Title.Ksi(), true
+	case "si.title.si":
+		return s.Si.Title.Si(), true
+	case "standings.columns.place":
+		return s.Standings.Columns.Place(), true
+	case "standings.columns.player":
+		return s.Standings.Columns.Player(), true
+	case "standings.columns.points":
+		return s.Standings.Columns.Points(), true
+	case "storage.match.default_title":
+		return s.Storage.Match.DefaultTitle(), true
+	case "storage.slot.placeholder":
+		return s.Storage.Slot.Placeholder(), true
+	case "storage.slot.seed_legacy_prefix":
+		return s.Storage.Slot.SeedLegacyPrefix(), true
+	case "structure.de.groups_needed":
+		return s.Structure.De.GroupsNeeded(), true
+	case "structure.de.participants_needed":
+		return s.Structure.De.ParticipantsNeeded(), true
+	case "structure.de.playoff":
+		return s.Structure.De.Playoff(), true
+	case "structure.elimination.lives_min":
+		return s.Structure.Elimination.LivesMin(), true
+	case "structure.elimination.match_size_min":
+		return s.Structure.Elimination.MatchSizeMin(), true
+	case "structure.elimination.too_many_rounds":
+		return s.Structure.Elimination.TooManyRounds(), true
+	case "structure.elimination.winning_places_min":
+		return s.Structure.Elimination.WinningPlacesMin(), true
+	case "structure.flat.game":
+		return s.Structure.Flat.Game(), true
+	case "structure.flat.no_entrants":
+		return s.Structure.Flat.NoEntrants(), true
+	case "structure.flat.participants_missing":
+		return s.Structure.Flat.ParticipantsMissing(), true
+	case "structure.rr.group_size_needed":
+		return s.Structure.Rr.GroupSizeNeeded(), true
+	case "structure.rr.points_list":
+		return s.Structure.Rr.PointsList(), true
+	case "structure.se.best_of_final_only":
+		return s.Structure.Se.BestOfFinalOnly(), true
+	case "structure.se.best_of_parity":
+		return s.Structure.Se.BestOfParity(), true
+	case "structure.se.bronze":
+		return s.Structure.Se.Bronze(), true
+	case "structure.se.participants_missing":
+		return s.Structure.Se.ParticipantsMissing(), true
+	case "structure.se.proceeding_missing":
+		return s.Structure.Se.ProceedingMissing(), true
+	case "structure.se.round_semifinals":
+		return s.Structure.Se.RoundSemifinals(), true
+	case "structure.se.template_groups":
+		return s.Structure.Se.TemplateGroups(), true
+	case "structure.titles.final":
+		return s.Structure.Titles.Final(), true
+	case "telegram.reply.code_consumed":
+		return s.Telegram.Reply.CodeConsumed(), true
+	case "telegram.reply.code_missing":
+		return s.Telegram.Reply.CodeMissing(), true
+	case "telegram.reply.generic_error":
+		return s.Telegram.Reply.GenericError(), true
+	case "telegram.reply.register_success":
+		return s.Telegram.Reply.RegisterSuccess(), true
+	case "troika.bout.finished":
+		return s.Troika.Bout.Finished(), true
+	case "troika.chair.lead":
+		return s.Troika.Chair.Lead(), true
+	case "troika.groups.rating":
+		return s.Troika.Groups.Rating(), true
+	case "troika.protocol.seating":
+		return s.Troika.Protocol.Seating(), true
+	case "troika.protocol.team":
+		return s.Troika.Protocol.Team(), true
+	case "troika.stats.bouts":
+		return s.Troika.Stats.Bouts(), true
+	case "troika.stats.first":
+		return s.Troika.Stats.First(), true
+	case "troika.stats.player":
+		return s.Troika.Stats.Player(), true
+	case "troika.stats.points":
+		return s.Troika.Stats.Points(), true
+	case "troika.stats.repeat":
+		return s.Troika.Stats.Repeat(), true
+	case "troika.stats.repeat_rate":
+		return s.Troika.Stats.RepeatRate(), true
+	case "troika.stats.team":
+		return s.Troika.Stats.Team(), true
+	case "troika.title":
+		return s.Troika.Title(), true
+	case "ui.crumbs.label":
+		return s.Ui.Crumbs.Label(), true
+	case "ui.palette.label":
+		return s.Ui.Palette.Label(), true
+	case "ui.sync.label":
+		return s.Ui.Sync.Label(), true
+	case "widgets.cell_nav.next":
+		return s.Widgets.CellNav.Next(), true
+	case "widgets.cell_nav.prev":
+		return s.Widgets.CellNav.Prev(), true
+	case "widgets.keypad.backspace":
+		return s.Widgets.Keypad.Backspace(), true
+	case "widgets.keypad.next_column":
+		return s.Widgets.Keypad.NextColumn(), true
+	case "widgets.keypad.next_row":
+		return s.Widgets.Keypad.NextRow(), true
+	case "widgets.keypad.prev_column":
+		return s.Widgets.Keypad.PrevColumn(), true
+	case "widgets.keypad.prev_row":
+		return s.Widgets.Keypad.PrevRow(), true
+	case "widgets.menu.login":
+		return s.Widgets.Menu.Login(), true
+	case "widgets.menu.profile":
+		return s.Widgets.Menu.Profile(), true
+	case "widgets.profile.changed":
+		return s.Widgets.Profile.Changed(), true
+	case "widgets.profile.mismatch":
+		return s.Widgets.Profile.Mismatch(), true
+	case "widgets.recorder.label":
+		return s.Widgets.Recorder.Label(), true
+	case "widgets.recorder.title":
+		return s.Widgets.Recorder.Title(), true
+	case "widgets.score_table.place":
+		return s.Widgets.ScoreTable.Place(), true
+	case "widgets.status.error":
+		return s.Widgets.Status.Error(), true
+	case "widgets.status.reconnecting":
+		return s.Widgets.Status.Reconnecting(), true
+	case "widgets.status.saved":
+		return s.Widgets.Status.Saved(), true
+	case "widgets.status.saving":
+		return s.Widgets.Status.Saving(), true
+	case "widgets.venue.name_column":
+		return s.Widgets.Venue.NameColumn(), true
+	case "widgets.viewers.label":
+		return s.Widgets.Viewers.Label(), true
+	}
 	return "", false
 }
 
 // Defines reports whether the Catalog holds the id at all, templated or not.
 func (Strings) Defines(id string) bool {
+	switch id {
+	case "admin.create_users.name", "admin.create_users.title", "admin.page.title", "admin.users.col_activity", "admin.users.col_created", "admin.users.col_login", "admin.users.empty", "admin.users.name", "admin.users.system_tag", "admin.users.title", "brain.bout.finished", "brain.mark.title", "brain.pod.round", "brain.protocol.empty", "brain.reseed.calculate_failed", "brain.reseed.pending_many", "brain.reseed.pending_one", "brain.row.tiebreak", "brain.row.tiebreak_n", "brain.seed.draw", "brain.seed.empty", "brain.seed.import_from", "brain.seed.no_file", "brain.seed.upload", "brain.seed.waitlist", "brain.seed_head.city", "brain.seed_head.declined", "brain.seed_head.rank", "brain.seed_head.seed", "brain.seed_head.team", "brain.stats.attempts", "brain.stats.empty", "brain.stats.player", "brain.stats.right", "brain.stats.share", "brain.stats.team", "brain.stats.wrong", "brain.team.fallback", "brain.tiebreak.add", "brain.tiebreak.add_hint", "brain.tiebreak.remove", "brain.tiebreak.remove_hint", "brain.title", "crosstable.columns.name", "crosstable.columns.place", "crosstable.columns.points", "crosstable.empty", "edit.roster.immutable", "ek.answer.title", "ek.bout.finished", "ek.crumb.seed_import", "ek.crumb.stats", "ek.crumb.venues", "ek.seed.decline_failed", "ek.seed.declined_aria", "ek.seed.empty", "ek.seed.error", "ek.seed.error_prefix", "ek.seed.import", "ek.seed.import_failed", "ek.seed.imported", "ek.seed.summary", "ek.seed.team_placeholder", "ek.seed.waitlist", "ek.seed_head.declined", "ek.seed_head.seed", "ek.seed_head.team", "ek.shootout.add", "ek.shootout.add_label", "ek.shootout.column", "ek.shootout.letter", "ek.shootout.remove", "ek.shootout.remove_confirm", "ek.shootout.remove_label", "ek.stage.empty", "ek.stage.match_fallback", "ek.stats.battles", "ek.stats.empty", "ek.stats.individual_empty", "ek.stats.player", "ek.stats.share", "ek.stats.team", "ek.theme.column", "ek.title", "ek.venue.cancel", "ek.venue.edit", "ek.venue.save", "export.col.battles", "export.col.chair", "export.col.match_place", "export.col.place", "export.col.player", "export.col.shootout_n", "export.col.team", "export.col.team_share", "export.col.theme_n", "export.col.theme_question", "export.col.total", "export.error.multi_scheme", "export.error.multi_state", "export.error.troika_state", "export.multi.normalized_name", "export.name.team_n", "export.od.city", "export.od.name", "export.od.tour", "export.sheet.detailed", "export.sheet.fallback", "export.sheet.results", "export.sheet.stats", "fest.grid.col_place", "fest.grid.match_default", "fest.grid.slot_basket", "fest.grid.slot_reseed", "fest.grid.slot_reseed_ranked", "fest.grid.venue", "fest.grid.venue_titled", "fest.metric.bouts", "fest.metric.draw", "fest.metric.place_sum", "fest.metric.points", "fest.metric.points_share", "fest.metric.rating", "fest.metric.taken", "fest.metric.taken_base", "fest.metric.taken_share", "fest.metric.tiebreak", "fest.metric_short.bouts", "fest.metric_short.points", "fest.metric_short.taken", "fest.reseed.blocked_default", "fest.reseed.blocked_many", "fest.reseed.blocked_one", "fest.reseed.calculate", "fest.reseed.col_match", "fest.reseed.col_place", "fest.reseed.col_team", "fest.reseed.empty", "fest.reseed.recalculate", "fest.roster.col_players", "fest.roster.col_team", "fest.roster.empty", "fest.roster.load_failed", "fest.roster.loading", "festaccess.add.creator_exists", "festaccess.add.nickname_required", "festaccess.add.role_invalid", "festaccess.add.user_not_found", "festaccess.bulk.empty", "festaccess.bulk.line_prefix", "festaccess.bulk.user_not_found", "festaccess.manage.denied", "festaccess.member.creator_protected", "festaccess.member.role_invalid", "gallery.brain.title", "gallery.ek.title", "gallery.multi.title", "gallery.od.title", "gallery.page.title", "gallery.section.ek_stats", "gallery.section.fest_grid", "gallery.section.group_standings", "gallery.section.individual_stats", "gallery.section.reseed", "gallery.section.roster", "gallery.section.venues", "gallery.section.venues_host", "gallery.si.title", "gallery.topbar.title", "gallery.troika.title", "gamebuild.clear.parse_pasted", "gamebuild.clear.unsupported", "gamebuild.create.ek_no_scheme", "gamebuild.create.json_type_mismatch", "gamebuild.create.multi_from_scheme", "gamebuild.create.pasted_teams", "gamebuild.create.scheme_required", "gamebuild.create.seed_unknown", "gamebuild.recompile.started_bouts", "gamebuild.seating.kind_player", "gamebuild.seating.kind_team", "gamebuild.seating.need_players", "gamebuild.seating.need_two", "gamebuild.seating.unknown_participant", "gamebuild.seating.unnumbered", "gamebuild.titles.ksi", "gamebuild.titles.multi", "gamebuild.titles.od", "games.brain.label", "games.ek.label", "games.ksi.label", "games.multi.bar_no_tasks_after", "games.multi.bar_no_tasks_before", "games.multi.domain_empty", "games.multi.label", "games.multi.line_expected", "games.multi.line_prefix", "games.multi.metric_unknown", "games.multi.no_games", "games.multi.no_tasks", "games.multi.not_a_number", "games.multi.range_descending", "games.multi.range_too_wide", "games.multi.repeat_count", "games.multi.spec_expected", "games.od.label", "games.si.label", "games.troika.label", "host.dash.access_saved_notice", "host.dash.access_subhead", "host.dash.add_btn", "host.dash.add_game_btn", "host.dash.audit_link", "host.dash.audit_muted", "host.dash.bulk_apply", "host.dash.bulk_data_label", "host.dash.bulk_done_notice", "host.dash.bulk_label", "host.dash.cancel_btn", "host.dash.clear_btn", "host.dash.clear_confirm", "host.dash.col_nickname", "host.dash.col_role", "host.dash.delete_access_confirm", "host.dash.delete_btn", "host.dash.delete_confirm", "host.dash.delete_game_confirm", "host.dash.delete_note", "host.dash.delete_subhead", "host.dash.delete_submit", "host.dash.description_label", "host.dash.end_date_label", "host.dash.error_slug_invalid", "host.dash.error_slug_taken", "host.dash.error_title_required", "host.dash.games_empty", "host.dash.games_subhead", "host.dash.jump_label", "host.dash.jump_title", "host.dash.numbers_link", "host.dash.numbers_status_done", "host.dash.numbers_status_partial", "host.dash.numbers_status_unset", "host.dash.page_title", "host.dash.public_label", "host.dash.rating_status_none", "host.dash.roster_import_link", "host.dash.roster_players_link", "host.dash.roster_subhead", "host.dash.roster_teams_link", "host.dash.save_submit", "host.dash.settings_btn", "host.dash.slug_label", "host.dash.start_date_label", "host.dash.title_label", "host.games.brain_hint", "host.games.create_crumb", "host.games.create_submit", "host.games.create_title", "host.games.ek_hint", "host.games.ek_json_label", "host.games.entrants_hint", "host.games.entrants_summary", "host.games.error_ek_scheme_missing", "host.games.error_json_parse", "host.games.error_minigames", "host.games.error_multi_sorting", "host.games.error_slug_invalid", "host.games.error_slug_taken", "host.games.error_title_required", "host.games.error_type_missing", "host.games.minigames_hint", "host.games.minigames_label", "host.games.minigames_placeholder", "host.games.minigames_share_hint", "host.games.multi_sorting_hint", "host.games.multi_sorting_label", "host.games.od_questions_label", "host.games.od_tours_label", "host.games.rebuild_hint", "host.games.save_submit", "host.games.scheme_label", "host.games.si_hint", "host.games.slug_label", "host.games.sticker_emptywrong", "host.games.sticker_emptywrong_row", "host.games.sticker_max_field", "host.games.sticker_max_label", "host.games.sticker_neutral", "host.games.sticker_nowrong", "host.games.sticker_nowrong_row", "host.games.sticker_x2_row", "host.games.stickers_hint", "host.games.themes_label", "host.games.title_label", "host.games.troika_hint", "host.games.type_brain", "host.games.type_ek", "host.games.type_ksi", "host.games.type_ksi_stickers", "host.games.type_label", "host.games.type_multi", "host.games.type_od", "host.games.type_si", "host.games.type_troika", "host.pages.create_fest_summary", "host.pages.create_submit", "host.pages.description_label", "host.pages.end_date_label", "host.pages.error_int_range", "host.pages.fest_games_empty", "host.pages.fest_row_unlisted", "host.pages.fests_empty", "host.pages.games_subhead", "host.pages.group_current", "host.pages.group_future", "host.pages.group_past", "host.pages.home_crumb_label", "host.pages.identity_username_lead", "host.pages.jump_host_label", "host.pages.jump_host_title_fest", "host.pages.jump_host_title_index", "host.pages.jump_label", "host.pages.jump_title", "host.pages.landing_crumb", "host.pages.landing_title", "host.pages.logout_submit", "host.pages.password_change_submit", "host.pages.password_confirm_placeholder", "host.pages.password_current_placeholder", "host.pages.password_new_placeholder", "host.pages.password_set_submit", "host.pages.profile_crumb", "host.pages.profile_title", "host.pages.public_index_crumb", "host.pages.public_index_empty", "host.pages.public_index_title", "host.pages.public_label", "host.pages.rating_id_label", "host.pages.start_date_label", "host.pages.title_label", "host.pages.username_fallback", "host.roster.add_override_btn", "host.roster.cancel_btn", "host.roster.col_city", "host.roster.col_from_team", "host.roster.col_players", "host.roster.col_to_team", "host.roster.delete_btn", "host.roster.delete_override_confirm", "host.roster.edit_override_label", "host.roster.error_json_empty", "host.roster.error_json_parse", "host.roster.error_obj_player", "host.roster.error_obj_source_team", "host.roster.error_obj_team", "host.roster.games_label", "host.roster.import_done_counts", "host.roster.import_done_notice", "host.roster.import_submit", "host.roster.import_unchanged_notice", "host.roster.need_rating_note", "host.roster.new_team_label", "host.roster.no_override_games", "host.roster.override_title", "host.roster.overrides_subhead", "host.roster.player_label", "host.roster.players_crumb", "host.roster.players_empty", "host.roster.players_title", "host.roster.rating_import_crumb", "host.roster.rating_import_note", "host.roster.rating_import_title", "host.roster.rating_source", "host.roster.save_submit", "host.roster.scheme_import_crumb", "host.roster.scheme_import_note", "host.roster.scheme_import_submit", "host.roster.scheme_import_title", "host.roster.scheme_json_label", "host.roster.team_label", "host.roster.teams_crumb", "host.roster.teams_empty", "host.roster.teams_title", "imports.ek_restore.match_header", "imports.rating.api_error", "imports.rating.decode_failed", "imports.rating.fetch_failed", "imports.rating.no_teams", "imports.rating.squad_too_big", "imports.seed.game_missing", "imports.seed.ksi_missing", "imports.seed.metric_unknown", "imports.seed.multiple_standings", "imports.seed.no_numbered_teams", "imports.seed.no_standings", "imports.seed.nothing_imported", "imports.seed.scheme_missing", "imports.seed.scheme_xlsx", "imports.seed.source_no_teams", "imports.seed.team_not_found", "imports.seed.team_twice", "imports.seed.xlsx_basket_missing", "imports.seed.xlsx_basket_not_number", "imports.seed.xlsx_no_sheets", "imports.seed.xlsx_no_teams", "imports.seed.xlsx_open", "imports.seed.xlsx_team_unknown", "imports.seed_players.aggregate_expected", "imports.seed_players.metric_missing", "imports.seed_players.metric_unknown", "imports.seed_players.multiple_standings", "imports.seed_players.no_games", "imports.seed_players.no_roster", "imports.seed_players.no_rosters", "imports.seed_players.no_sorting", "imports.seed_players.self_reference", "imports.seed_source.ksi", "imports.seed_source.players", "imports.seed_source.random", "journal.ek.answer", "journal.ek.match_finished", "journal.ek.match_prefix", "journal.ek.match_reopened", "journal.ek.match_update", "journal.ek.player_assigned", "journal.ek.player_plays", "journal.ek.player_removed", "journal.ek.rank", "journal.ek.team_unnamed", "journal.ek.theme_prefix", "journal.event.fest_access", "journal.event.fest_numbers", "journal.event.game_clear", "journal.event.game_create", "journal.event.game_delete", "journal.event.game_revert", "journal.event.player_override", "journal.event.rating_import", "journal.event.reseed", "journal.event.scheme_import", "journal.event.seed_decline", "journal.event.seed_import_ksi", "journal.event.state_replaced", "journal.event.venue", "journal.index.empty", "journal.index.note", "journal.index.title", "journal.ksi.answer", "journal.ksi.declined", "journal.ksi.finished", "journal.ksi.participant_fallback", "journal.ksi.rename", "journal.mark.none", "journal.mark.right", "journal.mark.wrong", "journal.od.answer_clear", "journal.od.answer_set", "journal.od.entries_changed", "journal.od.entry_changed", "journal.od.readiness", "journal.od.shootout", "journal.od.team_named", "journal.od.team_unnamed", "journal.page.col_changes", "journal.page.col_when", "journal.page.col_who", "journal.page.default_title", "journal.page.empty", "journal.page.more", "journal.page.revert_confirm", "journal.page.revert_done", "journal.page.revert_failed", "journal.page.revert_submit", "journal.page.title", "journal.patch.generic_removed", "journal.patch.generic_set", "journal.patch.state_fallback", "journal.value.empty", "markdown.details.default_summary", "multi.game.uniform_price", "multi.refusals.declined", "multi.refusals.team", "multi.results.place", "multi.results.team", "multi.results.total", "multi.sheet.team", "multi.sheet.total", "multi.tabs.detailed", "multi.tabs.refusals", "multi.tabs.results", "multi.tabs.roster", "multi.title", "numbers.action.auto", "numbers.action.cancel", "numbers.action.clear", "numbers.action.import", "numbers.action.replace", "numbers.action.save", "numbers.apply.foreign_team", "numbers.apply.number_range", "numbers.apply.read_failed", "numbers.apply.team_repeated", "numbers.error.number_two_rows", "numbers.error.row_foreign_team", "numbers.error.row_no_team", "numbers.error.row_range", "numbers.error.team_two_rows", "numbers.help.edit", "numbers.import.line_dup", "numbers.import.line_format", "numbers.import.line_range", "numbers.notice.auto", "numbers.notice.cleared", "numbers.notice.saved", "numbers.notice.saved_partial", "numbers.page.crumb", "numbers.page.empty", "numbers.page.no_teams", "numbers.page.title", "octobearfest.error.assorti_step", "octobearfest.error.db_missing", "octobearfest.error.fest_exists", "octobearfest.error.finish", "octobearfest.error.multi_bout", "octobearfest.error.no_bout_at", "octobearfest.error.no_system_user", "octobearfest.error.not_seated", "octobearfest.error.troika_step", "octobearfest.flag.db", "octobearfest.flag.root", "octobearfest.flag.slug", "octobearfest.log.assorti_start", "octobearfest.log.fest", "octobearfest.log.organizers", "octobearfest.log.registry", "octobearfest.log.troika_done", "octobearfest.log.troika_start", "od.detailed.tour", "od.guard.lead", "od.guard.missing", "od.guard.numbers", "od.head.place", "od.head.place_short", "od.head.team", "od.invert.label", "od.progress.entered", "od.progress.not_started", "od.results.shootout_collapse", "od.results.shootout_expand", "od.results.tour_collapse", "od.results.tour_expand", "od.screen.bg", "od.screen.chrome_hide", "od.screen.chrome_show", "od.screen.columns", "od.screen.fg", "od.screen.font", "od.screen.muted", "od.screen.no_teams", "od.screen.reset", "od.screen.settings", "od.screen.show_city", "od.screen.show_country", "od.shootout.add_question", "od.shootout.add_round", "od.shootout.add_round_blocked", "od.shootout.cancel", "od.shootout.create", "od.shootout.entry_title", "od.shootout.remove_question", "od.shootout.remove_question_confirm", "od.shootout.remove_round_confirm", "od.shootout.round", "od.shootout.round_dialog", "od.shootout.title", "od.team.fallback", "od.title", "override.entry.game_invalid", "override.entry.game_type_wrong", "override.entry.pick_from_hint", "override.entry.pick_games", "override.entry.pick_player", "override.entry.pick_team", "override.lookup.not_found", "override.lookup.player_not_found", "override.lookup.team_not_found", "override.save.team_same", "override.save.team_too_big", "pages.crumbs.admin", "pages.crumbs.fest_fallback", "pages.crumbs.home", "pages.crumbs.host", "replay.codec.stat_attempts", "replay.codec.stat_bouts", "replay.codec.stat_right", "replay.codec.stat_themes", "replay.codec.stat_wrong", "replay.parse.bout_header_extra", "replay.parse.bout_no_seats", "replay.parse.coord_expected", "replay.parse.coord_no_block", "replay.parse.coord_table", "replay.parse.coord_taken", "replay.parse.counts_digit", "replay.parse.counts_theme_size", "replay.parse.entrant_expected", "replay.parse.entrant_no_name", "replay.parse.entrant_number", "replay.parse.game_no_codec", "replay.parse.game_pair_expected", "replay.parse.game_unknown_key", "replay.parse.group_expected", "replay.parse.head_table_expected", "replay.parse.header_unclosed", "replay.parse.line_outside_section", "replay.parse.line_prefix", "replay.parse.lineup_empty_name", "replay.parse.lineup_expected", "replay.parse.lineup_no_players", "replay.parse.lineup_player_twice", "replay.parse.lineup_twice", "replay.parse.lineup_unknown_team", "replay.parse.lineups_individual", "replay.parse.override_expected", "replay.parse.part_expected", "replay.parse.part_match", "replay.parse.part_number_expected", "replay.parse.part_round", "replay.parse.part_wave", "replay.parse.question_empty", "replay.parse.question_mark", "replay.parse.question_none", "replay.parse.roster_name_twice", "replay.parse.roster_number_taken", "replay.parse.seat_brain_player_field", "replay.parse.seat_comma_not_brain", "replay.parse.seat_expected", "replay.parse.seat_individual_player", "replay.parse.seat_no_name", "replay.parse.seat_no_themes", "replay.parse.seat_place", "replay.parse.seat_players_mismatch", "replay.parse.seat_sum", "replay.parse.seat_unknown", "replay.parse.shootout_expected", "replay.parse.shootout_not_number", "replay.parse.shootout_twice", "replay.parse.shootout_unknown", "replay.parse.stat_fields", "replay.parse.stat_no_player", "replay.parse.stat_no_team", "replay.parse.stat_not_in_lineup", "replay.parse.stat_not_numbers", "replay.parse.stat_unknown", "replay.parse.stat_unknown_team", "replay.parse.table_name_twice", "replay.parse.table_no_rows", "replay.parse.table_row_expected", "replay.parse.table_trailing", "replay.parse.table_unknown", "replay.parse.theme_five", "replay.parse.theme_mark", "replay.parse.theme_player_unknown", "replay.report.col_bout", "replay.report.col_what", "replay.report.col_who", "replay.report.col_why", "replay.report.collected_lead", "replay.report.collected_mid", "replay.report.intro", "replay.report.none_yet", "replay.report.title", "replay.report.who_all", "replay.run.all_agreed", "replay.run.field_extra", "replay.run.field_outcome", "replay.run.field_place", "replay.run.field_seating", "replay.run.field_stats", "replay.run.field_table", "replay.run.field_unneeded", "replay.run.finding", "replay.run.finish_wrap", "replay.run.lineups_unwritable", "replay.run.lineups_wrap", "replay.run.no_row", "replay.run.not_seated", "replay.run.nothing", "replay.run.outcome_wrap", "replay.run.pin_wrap", "replay.run.play_wrap", "replay.run.seat_draw_wrap", "replay.run.seated_wrap", "replay.run.sheet_score", "replay.run.stats_uncomputable", "replay.run.stats_wrap", "replay.run.table_unrankable", "resolver.reseed.not_ready", "resolver.reseed.pending", "roles.bulk.action_unknown", "roles.bulk.format_expected", "route.guard.unnumbered", "scheme.entrants.count_mismatch", "scheme.entrants.proceeding_missing", "scheme.entrants.supply_mismatch", "scheme.error.line_prefix", "scheme.keys.match_size_round", "scheme.keys.unknown_block", "scheme.keys.unknown_defaults", "scheme.keys.unknown_dotted", "scheme.keys.unknown_init", "scheme.keys.unknown_round", "scheme.parse.duplicate_key", "scheme.parse.int_expected", "scheme.parse.key_outside_section", "scheme.parse.list_expected", "scheme.parse.not_a_number", "scheme.parse.separator", "scheme.parse.sort_direction", "scheme.parse.sort_token", "scheme.parse.unknown_section", "scheme.parse.unparsed_line", "scheme.reseed.metric_unknown", "scheme.reseed.needs_reseed", "scheme.reseed.no_template", "scheme.reseed.previous_terminal", "scheme.reseed.proceeding_two", "scheme.reseed.round_unknown", "scheme.reseed.stats_from_bounds", "scheme.reseed.stats_from_needs_reseed", "scheme.seed.players_need_games", "scheme.seed.players_need_seed", "scheme.structure.kind_missing", "scheme.structure.kind_unknown", "scheme.structure.kind_unregistered", "scheme.structure.match_code_dup", "scheme.structure.no_blocks", "scheme.structure.slug_charset", "scheme.structure.slug_is_stage_code", "scheme.structure.slug_two_blocks", "scheme.structure.stage_code_dup", "scheme.titles.block_group_n", "scheme.titles.group", "scheme.titles.group_n", "scheme.titles.reseed_stage", "scheme.titles.seed", "scheme.titles.venue", "scheme.titles.wave", "scheme.venues.count", "scheme.venues.empty", "scheme.venues.undeclared", "screen.banner.assign", "screen.banner.unassigned_lead", "screen.downloads.archive", "screen.downloads.archive_title", "screen.downloads.xlsx", "screen.downloads.xlsx_title", "screen.jump.edit", "screen.jump.edit_title", "screen.jump.viewer", "screen.jump.viewer_title", "screen.tabs.block_group", "screen.tabs.detailed", "screen.tabs.final", "screen.tabs.grid", "screen.tabs.group_n", "screen.tabs.individual_stats", "screen.tabs.input", "screen.tabs.playoff", "screen.tabs.protocol", "screen.tabs.refusals", "screen.tabs.reseed", "screen.tabs.results", "screen.tabs.roster", "screen.tabs.round", "screen.tabs.screen", "screen.tabs.seed", "screen.tabs.seed_import", "screen.tabs.stats", "screen.tabs.venues", "screen.title.fest", "screen.title.game", "screen.trail.home", "screen.trail.host", "server.bot.down", "server.bot.help", "server.login.title", "server.migration.v14", "server.public_fests.current", "server.public_fests.future", "server.public_fests.past", "server.seed_import.file_missing", "si.battle.fallback_title", "si.battle.finished", "si.participant.fallback_player", "si.participant.fallback_team", "si.refusals.declined", "si.refusals.declined_aria", "si.refusals.team", "si.results.place", "si.results.team", "si.sheet.answer_title", "si.sheet.sort_by_name", "si.sheet.sort_by_number", "si.sheet.team", "si.sticker.title", "si.theme.label", "si.title.ksi", "si.title.si", "standings.columns.place", "standings.columns.player", "standings.columns.points", "standings.columns.round", "storage.match.default_title", "storage.slot.placeholder", "storage.slot.reseed", "storage.slot.seed_basket", "storage.slot.seed_legacy_prefix", "storage.slot.seed_unlabelled", "structure.de.bad_groups", "structure.de.groups_needed", "structure.de.participants_needed", "structure.de.playoff", "structure.de.reseed_round_unknown", "structure.elimination.bout_cannot_output", "structure.elimination.bracket_not_divisible", "structure.elimination.lives_min", "structure.elimination.match_size_min", "structure.elimination.round_bracket", "structure.elimination.round_eliminate_nothing", "structure.elimination.round_not_divisible", "structure.elimination.too_many_rounds", "structure.elimination.winning_places_min", "structure.flat.game", "structure.flat.no_entrants", "structure.flat.participants_missing", "structure.macro.reseed_rank", "structure.macro.seat_from_bout", "structure.macro.unrankable_metric", "structure.rr.group_feed", "structure.rr.group_size_needed", "structure.rr.no_schedule", "structure.rr.points_list", "structure.rr.too_many_rounds", "structure.se.best_of_final_only", "structure.se.best_of_parity", "structure.se.bronze", "structure.se.bronze_bout", "structure.se.final_bout", "structure.se.match_nth_round", "structure.se.match_semifinal", "structure.se.participants_missing", "structure.se.proceeding_missing", "structure.se.reseed_first_round", "structure.se.reseed_round_unknown", "structure.se.round_nth", "structure.se.round_semifinals", "structure.se.template_groups", "structure.se.template_size", "structure.titles.bout", "structure.titles.final", "structure.titles.round", "telegram.reply.code_consumed", "telegram.reply.code_expired", "telegram.reply.code_missing", "telegram.reply.code_wrong", "telegram.reply.generic_error", "telegram.reply.login_on_site", "telegram.reply.register_success", "troika.bout.finished", "troika.chair.lead", "troika.chair.outrider", "troika.groups.rating", "troika.protocol.seating", "troika.protocol.team", "troika.stats.bouts", "troika.stats.first", "troika.stats.player", "troika.stats.points", "troika.stats.repeat", "troika.stats.repeat_rate", "troika.stats.team", "troika.team.fallback", "troika.theme.head", "troika.theme.seat", "troika.theme.unseat", "troika.title", "ui.crumbs.label", "ui.palette.label", "ui.sync.label", "widgets.cell_nav.next", "widgets.cell_nav.prev", "widgets.keypad.backspace", "widgets.keypad.next_column", "widgets.keypad.next_row", "widgets.keypad.prev_column", "widgets.keypad.prev_row", "widgets.menu.login", "widgets.menu.profile", "widgets.profile.changed", "widgets.profile.mismatch", "widgets.recorder.label", "widgets.recorder.title", "widgets.score_table.place", "widgets.status.error", "widgets.status.reconnecting", "widgets.status.saved", "widgets.status.saving", "widgets.venue.battle", "widgets.venue.battle_short", "widgets.venue.name_column", "widgets.viewers.label", "widgets.viewers.title":
+		return true
+	}
 	return false
 }

@@ -1,0 +1,31 @@
+# The result-override feature (dope/dope/domain/overrides): the host's override
+# form — parsing the hint-picked ids, looking the player and team up in the
+# active fest roster, and the save-time guards.
+
+[entry]
+# A hint-picked id field that failed to parse; label names the field.
+pick_from_hint = 'Выберите {{.label}} из подсказки.'
+# A picked game id that is not a positive integer.
+game_invalid = "Некорректная игра."
+# The player field left without a hint pick.
+pick_player = "Выберите игрока из подсказки."
+# The new-team field left without a hint pick.
+pick_team = "Выберите новую команду из подсказки."
+# The override saved with no game ticked.
+pick_games = "Выберите хотя бы одну игру."
+# A game picked for the override that is neither KSI nor EK.
+game_type_wrong = "Игра для оверрайда должна быть КСИ или ЭК."
+
+[lookup]
+# The player is not on any active team of this fest.
+player_not_found = "Игрок не найден в активном составе феста."
+# The team is not an active team of this fest.
+team_not_found = "Команда не найдена в активном составе феста."
+# The override row to edit or delete does not exist.
+not_found = "Оверрайд не найден."
+
+[save]
+# The picked new team equals the player's rating team.
+team_same = "Новая команда совпадает с командой игрока в рейтинге."
+# After the overrides the team would carry more than nine players.
+team_too_big = 'В команде "{{.team}}" после оверрайдов больше 9 игроков.'

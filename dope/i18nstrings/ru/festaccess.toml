@@ -1,0 +1,33 @@
+# The fest access page (host settings): saving the member list, the
+# add-by-nickname form and the bulk paste-a-list import
+# (dope/dope/storage/festaccess).
+
+[manage]
+# The signed-in role may not manage access; both the form save and the bulk
+# import stop here.
+denied = "нет прав менять доступ"
+
+[add]
+# The add-by-nickname form submitted with an empty nickname.
+nickname_required = "введите никнейм"
+# The add form's role is not one the page can hand out.
+role_invalid = "для нового доступа выберите admin или host"
+# The nickname typed into the add form matches no user; the quotes are the
+# Go %q the call site renders.
+user_not_found = 'пользователь "{{.name}}" не найден'
+# The nickname typed into the add form is the fest's creator.
+creator_exists = "создатель уже есть в доступе"
+
+[bulk]
+# The paste box holds no parsable line.
+empty = "вставьте хотя бы одну строку"
+# A pasted line names a user that does not exist.
+user_not_found = 'строка {{.n}}: пользователь "{{.name}}" не найден'
+# An error from one pasted line, prefixed with its line number.
+line_prefix = 'строка {{.n}}: {{.msg}}'
+
+[member]
+# Trying to delete or change the fest creator's row.
+creator_protected = "создателя нельзя удалить или изменить"
+# A member row's new role is not admin or host.
+role_invalid = "роль должна быть admin или host"

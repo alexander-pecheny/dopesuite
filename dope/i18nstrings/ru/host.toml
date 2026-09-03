@@ -1,0 +1,290 @@
+# The hostpages surface (dope/dope/web/hostpages): the game create/settings
+# forms ([games]), the fest roster pages ([roster]: teams, players, overrides
+# and the two imports), the fest dashboard ([dash]) and the host landing,
+# profile and public viewer pages ([pages]).
+
+[games]
+# The create-game form (hostGameCreateDoc) and the game settings page
+# (hostGameSettingsDoc), plus the validation errors both render above the form.
+# Page title of the create-game page: "<fest title> · новая игра".
+create_title = '{{.title}} · новая игра'
+# Breadcrumb trail entry on the create-game page.
+create_crumb = "Добавить игру"
+# Submit button of the create-game form.
+create_submit = "Создать"
+# Label of the game-type picker (create form) and of the read-only type field
+# (settings page).
+type_label = "Тип игры"
+# The game-type names: picker radios on the create form, and a game's type
+# label wherever the type is shown (also the Spec.Label values gameSpecFromForm
+# writes).
+type_od = "ОД"
+type_ksi = "КСИ"
+type_ksi_stickers = "КСИ со стикерами"
+type_brain = "Брейн"
+type_ek = "ЭК"
+type_si = "Личная СИ"
+type_multi = "Мультиигры"
+type_troika = "Тройка"
+# The OD settings fields; also the field names their out-of-range errors name.
+od_tours_label = "Количество туров"
+od_questions_label = "Количество вопросов в туре"
+# The KSI themes field (plain and stickers KSI); also its error name.
+themes_label = "Количество тем"
+# Hint above the sticker rows of the stickers-KSI section.
+stickers_hint = "Для каждого стикера задайте, сколько штук есть у команды (0 — стикер не используется) и цвет для подсветки. «Обычный» стикер работает как стандартная тема КСИ."
+# Label of one sticker row's max-count field.
+sticker_max_label = "Макс."
+# The neutral sticker's name: the create-form row and the sticker label the
+# scheme config stores.
+sticker_neutral = "Обычный"
+# Row labels of the three special stickers on the stickers-KSI create form.
+sticker_x2_row = "×2 (правильные и неправильные удваиваются)"
+sticker_nowrong_row = "Без минуса (неправильные = 0)"
+sticker_emptywrong_row = "Пустой = минус (пустые = −номинал)"
+# Sticker labels the scheme config stores for the special stickers.
+sticker_nowrong = "Без минуса"
+sticker_emptywrong = "Пустой = минус"
+# Label of the scheme editor (brain / SI / troika / EK sections, settings page).
+scheme_label = "Схема"
+# Hint under the brain scheme editor.
+brain_hint = "Формат описан в docs/scheme-dsl.md: блоки [scheme] через ---, kind: roundrobin / single_elimination / double_elimination."
+# Hint under the personal-SI scheme editor.
+si_hint = "Тот же язык схем: за столом сидят игроки, а не команды. Бой на троих — match_size: 3, проходят двое — winning_places: 2."
+# The mini-games section of the multi create form.
+minigames_label = "Мини-игры"
+# Placeholder of the mini-games editor (one sample line per mini-game).
+minigames_placeholder = "Фоторяд: {0,1}x10\nЛогика: {0,3}x2 {0,5}\nШтрафной: {-1,0,1}x10\nПесни →0..100: {0,1}x72"
+# Hint under the mini-games editor: the line grammar.
+minigames_hint = "По строке на мини-игру: «Название: {значения}xN». {0,1} — задание на 0 или 1 балл, {-1,0,1} — со штрафом, {0-12} — любое целое от 0 до 12. Несколько описаний в строке идут подряд: «{0,3}x2 {0,5}» — три задания на 3, 3 и 5 баллов. «|» закрывает блок листа: «{0,1}x10 | {0,1}x10» — два блока по десять, с зазором и сквозной нумерацией."
+# Hint under the mini-games editor: the →0..100 share syntax.
+minigames_share_hint = "«Название →0..100: …» — мини-игра идёт в итог не своими баллами, а долей от лучшего результата в ней, из ста. Так мини-игры разного масштаба весят в итоге поровну; ушедшим в минус засчитывается ноль."
+# The tie-break field of the multi create form and its hint.
+multi_sorting_label = "Что решает при равном итоге (необязательно)"
+multi_sorting_hint = "Через запятую: total — итог, plus — сумма положительных, game1, game2… — подытоги мини-игр по порядку. Пусто — команды с равным итогом делят место."
+# Hint under the troika scheme editor.
+troika_hint = "Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50."
+# Hint under the EK scheme editor (before the pasted-JSON field).
+ek_hint = "Либо схемой, либо готовым JSON ниже — что заполнено, то и используется."
+# Label of the EK pasted-JSON editor.
+ek_json_label = "JSON-схема"
+# Hint at the top of the entrant picker.
+entrants_hint = "Отметьте, кто играет в этой игре. Если не отметить никого, играют все — а номера игра раздаёт свои, с единицы, так что одна и та же команда бывает второй в ЭК и четвёртой в ОД. Командная игра сажает за стол команды, личная — игроков; сначала команды, потом игроки."
+# Summary of the entrant-picker disclosure.
+entrants_summary = "Состав игры"
+# The settings-page form: name and slug fields, the scheme-rebuild hint, submit.
+title_label = "Название"
+slug_label = "Slug (необязательно, a-z, 0-9, дефис)"
+rebuild_hint = "Пересборка меняет только не начатые бои: можно поменять число вопросов или добавить блок, но начатый бой должен сохраниться без изменений."
+save_submit = "Сохранить"
+# Field name the sticker max-count validation errors use.
+sticker_max_field = "Максимум стикеров"
+# Validation errors rendered above the create/settings forms.
+error_title_required = "Название обязательно."
+error_slug_invalid = 'Slug: {{.err}}'
+error_slug_taken = "Slug уже занят в этом фесте."
+error_minigames = 'Мини-игры: {{.err}}'
+error_multi_sorting = 'Что решает при равном итоге: {{.err}}'
+error_ek_scheme_missing = "Вставьте JSON-схему ЭК или опишите её схемой"
+error_json_parse = 'Не удалось разобрать JSON: {{.err}}'
+error_type_missing = "выберите тип игры"
+
+[roster]
+# The fest roster pages: teams table (hostTeamsDoc), players page with the
+# override dialogs (hostPlayersDoc), and the two import pages
+# (hostRatingImportDoc, hostSchemeImportDoc).
+# Teams page title and crumb: "<fest title> · команды".
+teams_title = '{{.title}} · команды'
+teams_crumb = "Команды"
+# Column headers / labels naming a team, a city and a players count.
+team_label = "Команда"
+col_city = "Город"
+col_players = "Игроков"
+# Empty state of the teams table.
+teams_empty = "Команды пока не загружены."
+# Players page title and crumb: "<fest title> · игроки".
+players_title = '{{.title}} · игроки'
+players_crumb = "Игроки"
+# Label naming a player: players/overrides column headers and the override
+# dialog's player field.
+player_label = "Игрок"
+# Empty state of the players table.
+players_empty = "Игроки пока не загружены."
+# Button opening the add-override dialog.
+add_override_btn = "Добавить оверрайд для игры"
+# Subhead of both override dialogs (add and edit).
+override_title = "Оверрайд игрока"
+# The override dialog's new-team field.
+new_team_label = "Новая команда"
+# Label of the games pickgroup in both override dialogs and the overrides
+# table's games column.
+games_label = "Игры"
+# The override dialogs' buttons.
+save_submit = "Сохранить"
+cancel_btn = "Отмена"
+# The from/to team labels: overrides table columns and the edit dialog summary.
+col_from_team = "Из команды"
+col_to_team = "В команду"
+# The add-override dialog when the fest has no KSI/EK games to pick.
+no_override_games = "В фесте пока нет игр КСИ или ЭК."
+# Icon-button label opening one override's edit dialog.
+edit_override_label = "Редактировать оверрайд"
+# Subhead of the overrides table section.
+overrides_subhead = "Оверрайды"
+# The edit dialog's delete button and its confirm.
+delete_override_confirm = "Удалить оверрайд?"
+delete_btn = "Удалить"
+# Rating import page title and crumb: "<fest title> · импорт участников".
+rating_import_title = '{{.title}} · импорт участников'
+rating_import_crumb = "Импорт участников"
+# The source line above the import form: which rating id the roster comes from.
+rating_source = 'Источник: rating.chgk.info ID {{.id}}'
+# Note above the rating-import form.
+rating_import_note = "Импорт заменит списки команд и игроков феста и обновит список команд в играх ЧГК и КСИ."
+# Submit button of the rating-import form.
+import_submit = "Загрузить команды и игроков"
+# Shown (as note and as error) when the fest has no rating id yet.
+need_rating_note = "Сначала сохраните rating.chgk.info ID в свойствах феста."
+# Scheme import page title and crumb: "<fest title> · импорт схемы".
+scheme_import_title = '{{.title}} · импорт схемы'
+scheme_import_crumb = "Импорт схемы"
+# Note above the scheme-import form.
+scheme_import_note = "Импорт пересоздаёт игру феста из JSON-схемы. Существующие игры этого феста будут заменены."
+# The scheme-import form: JSON field and submit.
+scheme_json_label = "JSON-схема"
+scheme_import_submit = "Импортировать"
+# Scheme-import errors and notices.
+error_json_empty = "Вставьте JSON схемы."
+error_json_parse = 'Не удалось разобрать JSON: {{.err}}'
+import_done_notice = "Импорт выполнен."
+import_unchanged_notice = 'Списки уже совпадают с рейтингом — изменений нет. Команд: {{.teams}}, игроков: {{.players}}.'
+import_done_counts = 'Загружено команд: {{.teams}}, игроков: {{.players}}. Обновлено игр ЧГК: {{.od}}, КСИ: {{.ksi}}.'
+# Object words the override-id validation errors name ("Выберите … из
+# подсказки."): player, team, source team.
+error_obj_player = "игрока"
+error_obj_team = "команду"
+error_obj_source_team = "исходную команду"
+
+[dash]
+# The fest dashboard (hostFestDashDoc): the fest-edit form, the games list, the
+# access section, the participants links and the delete section.
+# Dashboard page title: "<fest title> · ведущий".
+page_title = '{{.title}} · ведущий'
+# Body data-jump-* attrs menu.js reads to offer the jump to this fest's viewer
+# page.
+jump_label = "Страница зрителя"
+jump_title = "Открыть зрительскую страницу"
+# The delete-fest section.
+delete_subhead = "Удаление"
+delete_confirm = "Удалить турнир? Все игры, команды и результаты будут удалены."
+delete_note = "Удаление убирает фест со всеми играми, командами и результатами."
+delete_submit = "Удалить фест"
+# The fest-edit form: fields and submit.
+public_label = "Публичный"
+title_label = "Название"
+description_label = "Описание (markdown)"
+slug_label = "Slug (необязательно; задайте, чтобы получить URL вида /fest/{slug})"
+start_date_label = "Дата начала"
+end_date_label = "Дата окончания"
+save_submit = "Сохранить"
+# The games list: subhead, per-row controls, empty state and the add button.
+games_subhead = "Игры"
+settings_btn = "Свойства"
+clear_confirm = "Очистить игру? Все результаты, импортированные команды и посев будут удалены, игра вернётся в исходное состояние. Настройки и ссылка сохранятся."
+clear_btn = "Очистить"
+delete_game_confirm = "Удалить игру? Все результаты этой игры будут потеряны."
+delete_btn = "Удалить"
+games_empty = "Игр пока нет."
+add_game_btn = "Добавить игру"
+# The access section: subhead, bulk dialog, roster table.
+access_subhead = "Доступ"
+bulk_label = "Массовое действие"
+bulk_data_label = "Данные"
+bulk_apply = "Применить"
+cancel_btn = "Отмена"
+# The access roster table.
+col_nickname = "Никнейм"
+col_role = "Роль"
+delete_access_confirm = 'Удалить доступ для {{.name}}?'
+add_btn = "Добавить"
+# The participants links: subhead and list rows.
+roster_subhead = "Участники"
+roster_teams_link = "Команды"
+roster_players_link = "Игроки"
+numbers_link = "Номера команд"
+# The team-numbers row's status note.
+numbers_status_unset = "не выставлены"
+numbers_status_done = "готово"
+numbers_status_partial = '{{.done}} из {{.total}}'
+# The rating-import row's status note.
+rating_status_none = "нет rating ID"
+roster_import_link = "Загрузить команды и игроков"
+# The audit-log row.
+audit_link = "История изменений"
+audit_muted = "откат состояния"
+# Dashboard errors and notices.
+error_title_required = "Название обязательно."
+error_slug_invalid = 'Slug: {{.err}}'
+error_slug_taken = "Slug уже занят."
+bulk_done_notice = 'Массовое действие выполнено: {{.n}}.'
+access_saved_notice = "Доступ сохранён."
+
+[pages]
+# The host landing (/host), the profile page (/profile) and the two public
+# viewer pages (/, /fest/{ref}).
+# Body data-jump-* attrs menu.js reads to offer the jump to the viewer page
+# from the host landing.
+jump_label = "Страница зрителя"
+jump_title = "Открыть зрительскую страницу"
+# Host landing title and crumb: "Мои фесты · <username>".
+landing_title = 'Мои фесты · {{.name}}'
+landing_crumb = "Мои фесты"
+# The landing page's fest-group headings, authored by groupHostFests in
+# host_dash.go.
+group_current = "Текущие"
+group_future = "Будущие"
+group_past = "Прошедшие"
+# A fest row title on the landing marked not public.
+fest_row_unlisted = '{{.title}} · непубличный'
+# Empty state of the landing's fest list.
+fests_empty = "Фестов пока нет."
+# The create-fest disclosure on the landing and its form.
+create_fest_summary = "Создать фест"
+title_label = "Название"
+description_label = "Описание (markdown)"
+start_date_label = "Дата начала (YYYY-MM-DD)"
+end_date_label = "Дата окончания"
+rating_id_label = "rating.chgk.info ID (опционально)"
+public_label = "Публичный"
+create_submit = "Создать"
+# Lead of the identity hint "Вы вошли как <username>." — the strong-wrapped
+# username sits between the lead and the trailing dot, which stays in code.
+identity_username_lead = "Вы вошли как "
+# The profile password form: the submit depends on whether a password exists,
+# the three placeholders, and the logout button.
+password_set_submit = "Установить пароль"
+password_change_submit = "Сменить пароль"
+password_current_placeholder = "Текущий пароль"
+password_new_placeholder = "Новый пароль"
+password_confirm_placeholder = "Повторите новый пароль"
+# Profile page title and crumb.
+profile_title = "Профиль"
+profile_crumb = "Профиль"
+# The landing title's fallback username when the account has none.
+username_fallback = "Профиль"
+# Logout button.
+logout_submit = "Разлогиниться"
+# The out-of-range error parsePositiveFormInt/parseNonNegativeFormInt build:
+# "<field> должно быть от <min> до <max>".
+error_int_range = '{{.field}} должно быть от {{.min}} до {{.max}}'
+# The public fest index (/): title, jump-to-host nav, crumbs, empty state.
+public_index_title = "Фесты"
+jump_host_label = "Режим ведущего"
+jump_host_title_index = "Перейти в режим ведущего"
+home_crumb_label = "Главная"
+public_index_crumb = "Фесты"
+public_index_empty = "Нет публичных фестов."
+# A fest's public page: jump-to-host nav, empty games state, games subhead.
+jump_host_title_fest = "Открыть в режиме ведущего"
+fest_games_empty = "В этом фесте пока нет игр."
+games_subhead = "Игры"

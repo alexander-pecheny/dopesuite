@@ -1,0 +1,91 @@
+# The roster and seed imports (dope/dope/domain/imports): the seed ladder's
+# source resolution and uploaded-sheet parsing, the composing "by players"
+# seeding, the rating.chgk.net roster sync, and the one-shot
+# `dope import-ek-results` restore CLI. Every error here reaches a person —
+# the seed tab, the roster import button or the restore CLI's printout.
+
+[seed_source]
+# The seed source's label, as the import's messages name it (the source in
+# "<source> содержит команду … больше одного раза"). FromKSI is the ЭК
+# page's «Импорт из КСИ» button.
+ksi = "КСИ"
+# The scheme's seed: random lot.
+random = "жребий"
+# The scheme's seed: players — the composing seeding from source games.
+players = "по игрокам"
+
+[seed]
+# Importing the seed when the fest has no КСИ game to rank.
+ksi_missing = "в фесте нет игры КСИ"
+# The game's scheme declares no [init] seed at all.
+scheme_missing = "схема игры не объявляет посев ([init] seed)"
+# The scheme declares seed: xlsx, which only an uploaded sheet provides.
+scheme_xlsx = "посев из xlsx: загрузите файл на вкладке посева"
+# parseSeedXLSX: the uploaded seeding sheet (column A team, column B basket).
+xlsx_open = 'не удалось открыть xlsx: {{.err}}'
+xlsx_no_sheets = "в xlsx нет листов"
+# A sheet row naming a team the fest roster does not have; {{.n}} is the
+# 1-based sheet row, {{.name}} the cell's text.
+xlsx_team_unknown = 'строка {{.n}}: команда "{{.name}}" не найдена в фесте'
+# A row's basket column that is not a number.
+xlsx_basket_not_number = 'строка {{.n}}: корзина "{{.basket}}" — не число'
+xlsx_no_teams = "в xlsx нет команд"
+# A team row without a basket on a sheet where other rows carry baskets.
+xlsx_basket_missing = 'команда "{{.name}}" без корзины, а лист корзинный (строка {{.n}})'
+# importCandidatesTx: the source names one fest team twice; {{.first}} is the
+# name it carried the first time.
+team_twice = '{{.source}} содержит команду "{{.name}}" больше одного раза (первое имя: "{{.first}}")'
+# SetSeedImportDeclined on the seed tab before any import ran, or for a team
+# the import does not hold.
+nothing_imported = "сначала импортируйте посев"
+team_not_found = "команда не найдена в импорте посева"
+# standingsCandidates and loadSeedSourceGame: the source game lookup.
+game_missing = 'в фесте нет игры с кодом {{.code}}'
+# A source game with no, or more than one, ranked table to seed from.
+no_standings = 'у игры {{.code}} ещё нет таблицы'
+multiple_standings = 'у игры {{.code}} {{.n}} {{plural .n "таблиц" "таблиц" "таблиц"}} — посев берётся из игры с одной'
+source_no_teams = "в игре-источнике нет команд"
+# The [init] sorting naming a metric the source game's table does not carry.
+metric_unknown = 'sorting: {{.metric}} — игра {{.code}} такой метрики не считает'
+# The random lot over a fest with no numbered teams.
+no_numbered_teams = "в фесте нет пронумерованных команд"
+
+[seed_players]
+# The fromPlayers source ([init] seed: players): checks on the scheme's
+# declarations, before anything is read.
+no_games = "посев по игрокам: схема не называет игры-источники"
+no_sorting = "посев по игрокам: схема не говорит, чем сортировать ([init] sorting)"
+# The [init] sorting naming a metric the seed rules never compute; {{.known}}
+# lists the ones they do.
+metric_unknown = 'sorting: {{.metric}} не считается — есть {{.known}}'
+no_rosters = "посев по игрокам: у команд этой игры нет составов"
+# A seed.<metric> rule aggregating a player metric no rule defines; {{.over}}
+# is that metric's name.
+metric_missing = 'seed.{{.name}}: {{.over}} — такой метрики игрока нет'
+# A named rule (player.<name> or seed.<name>) reading itself; {{.grain}} is
+# the rules' prefix ("player" or "seed").
+self_reference = '{{.grain}}.{{.name}}: правило зависит от самого себя'
+# A seed.<metric> rule that is not mean/min/max/sum/count of a metric.
+aggregate_expected = 'seed.{{.name}}: жду mean(метрика), min, max, sum или count'
+# A source game with more than one ranked table: no single place per team.
+multiple_standings = 'у игры {{.code}} несколько таблиц — посев по игрокам берётся из игры с одной'
+# A participant whose team shows no players in this game.
+no_roster = 'посев по игрокам: у команды {{.name}} нет состава'
+
+[rating]
+# The roster import button's request to rating.chgk.net.
+fetch_failed = 'не удалось запросить рейтинг: {{.err}}'
+# A non-200 answer; {{.detail}} is the body snippet or the HTTP status.
+api_error = 'рейтинг вернул ошибку: {{.detail}}'
+# An answer that is not the expected JSON.
+decode_failed = 'не удалось разобрать ответ рейтинга: {{.err}}'
+# A team with more than nine players.
+squad_too_big = 'состав "{{.name}}" больше 9 игроков'
+# An import run on an empty roster.
+no_teams = "рейтинг не вернул команды"
+
+[ek_restore]
+# The one-shot `dope import-ek-results` CLI prints the standings after the
+# replay; this header opens each match's block. {{.status}} is the match's
+# status code ("pending"/"active"/"finished").
+match_header = '-- Бой {{.code}} [{{.status}}]'

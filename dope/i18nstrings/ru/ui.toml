@@ -1,0 +1,14 @@
+# The server-side expander's own labels (dope/dope/web/ui): the bits of game
+# chrome the Go expanders write themselves rather than take from a .dopeui page.
+
+[crumbs]
+# aria-label of the game page's breadcrumb nav.
+label = "Навигация"
+
+[sync]
+# aria-label and title of the topbar's sync-state dot.
+label = "Синхронизация"
+
+[palette]
+# The sticker palette: the visible label and the radiogroup's aria-label.
+label = "Цвет"

@@ -1,0 +1,90 @@
+# The shared game-screen chrome: the tab bar every game page renders
+# (game-tabs.ts), the header breadcrumb trail, the ☰ menu's jump and download
+# items, the unnumbered-teams banner (game-page.ts), and the fallback titles
+# the trail and the document title share (game-page.ts, game-shell.ts).
+
+# Fallback titles for an untitled fest or game (game-page.ts trail,
+# game-shell.ts document title).
+[title]
+# An untitled fest.
+fest = "Фест"
+# An untitled game.
+game = "Игра"
+
+# The game's tab bar (game-tabs.ts): the fixed tabs each game kind shows,
+# plus the block, group and round labels those tabs are named from.
+[tabs]
+# The crosstab-of-bouts tab (ЭК, брейн).
+grid = "Сетка"
+# The ЭК tab listing the scheme's venues (tables).
+venues = "Площадки"
+# The ЭК host-only tab for importing team seeds.
+seed_import = "Импорт команд"
+# The statistics tab (ЭК; also the троечка's stats tab).
+stats = "Статистика"
+# The брейн per-player statistics tab.
+individual_stats = "Индивидуальная статистика"
+# The rosters tab (ЭК, КСИ, ОД, брейн).
+roster = "Составы"
+# The per-question detailed results tab (КСИ, ОД).
+detailed = "Подробно"
+# The results tab (КСИ, ОД).
+results = "Итог"
+# The КСИ host-only tab of refused questions.
+refusals = "Отказы"
+# The ОД entry tab.
+input = "Ввод"
+# The ОД host-only projector-screen tab.
+screen = "Экран"
+# The брейн seeded-entrants tab.
+seed = "Посев"
+# The label of a multi-stage group block whose title reduces to nothing.
+block_group = "Групповой этап"
+# The label of a multi-stage play-off block whose stages share no title prefix.
+playoff = "Плей-офф"
+# A group tab for a stage with no «Группа …» title of its own.
+group_n = 'Группа {{.n}}'
+# A per-round tab inside a multi-group block.
+round = 'Круг {{.n}}'
+# The reseed tab: a folded run of reseeds, a lone reseed stage, or a block's reseeds.
+reseed = "Пересев"
+# The final stage tab.
+final = "Финал"
+# A block's protocols tab: the block label, then the protocols mark.
+protocol = '{{.block}} (протоколы)'
+
+# The header breadcrumb trail (game-page.ts).
+[trail]
+# The home crumb: a house glyph carrying this aria-label and tooltip.
+home = "Главная"
+# The host trail's crumb back to the fest list (/host).
+host = "Мои фесты"
+
+# The ☰ menu's jump items (game-page.ts).
+[jump]
+# The host's jump into the page's editor.
+edit = "Редактировать"
+# Its tooltip.
+edit_title = "Открыть в режиме редактирования"
+# The host's jump to the public viewer page.
+viewer = "Страница зрителя"
+# Its tooltip.
+viewer_title = "Открыть зрительскую страницу"
+
+# The sticky banner when some teams have no numbers (game-page.ts).
+[banner]
+# The warning text; the assign link follows it inline.
+unassigned_lead = "Командам не присвоены номера — редактирование результатов заблокировано. "
+# The link to the fest's numbers page.
+assign = "Присвоить номера"
+
+# The game's download links in the ☰ menu (game-page.ts).
+[downloads]
+# The XLSX export, for everyone.
+xlsx = "Скачать XLSX"
+# Its tooltip.
+xlsx_title = "Скачать таблицу игры в формате XLSX"
+# The .json.gz archive (current state + edit history), hosts only.
+archive = "Скачать .json.gz"
+# Its tooltip.
+archive_title = "Скачать текущее состояние игры и историю правок"

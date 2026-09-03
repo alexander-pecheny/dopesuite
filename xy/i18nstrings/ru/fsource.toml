@@ -1,0 +1,6 @@
+# xy — the package model's parser (internal/chgk/fsource/parse.go): the theme
+# label numberThemes writes into the parsed structure (SI/troika inline games).
+
+[theme]
+# The label a theme gets when its own line carries no "тема N." prefix.
+default_label = 'Тема {{.n}}. {{.name}}'

@@ -1,0 +1,90 @@
+# The ОД/ЧГК game page (dope/dope/web/ts/od.ts): the entry sheets and their
+# shootout controls, the numbering guard, the detailed per-question table,
+# the results sheet and the projector board (Экран) with its settings panel.
+
+# The page's fallback game title when neither the fest view nor the scheme names it.
+title = "ОД"
+
+[progress]
+# The header progress line before any question is entered, then naming the
+# last entered question.
+not_started = "Игра не началась"
+entered = 'Введён вопрос {{.n}}'
+
+[invert]
+# The floating yin-yang button flipping the active entry column's marks: its
+# tooltip and aria-label.
+label = "Инвертировать"
+
+[guard]
+# The numbering guard replacing the entry sheet while a team lacks a number:
+# the lead, then the phrase — a link on the host page, plain text for a viewer.
+lead = "Чтобы ввод работал, надо заполнить "
+numbers = "номера команд"
+# The teams still missing a number.
+missing = 'Без номера: {{.names}}.'
+
+[team]
+# The placeholder label of a nameless team: Команда 1.
+fallback = 'Команда {{.n}}'
+
+[head]
+# The team column's header, shared by the detailed, results and screen tables.
+team = "Команда"
+# The results table's place column header.
+place = "Место"
+# The screen board's short place column header.
+place_short = "М"
+
+[detailed]
+# The tour column's label in the detailed table: Т1, Т2, …
+tour = 'Т{{.n}}'
+
+[shootout]
+# The label of the n-th shootout round — the entry sheet's column head, the
+# detailed table's theme label and the results sheet's toggle: П1, П2, …
+round = 'П{{.n}}'
+# The entry sheet's shootout block's title cell.
+title = "Перестрелка"
+# An entry cell's hover tooltip: the team's label, the round's label and the
+# question's number within the round.
+entry_title = '{{.team}}, {{.round}}, вопрос {{.q}}'
+# The round controls: add a round (its label and enabled tooltip), the hint
+# while adding is blocked, then add and remove a question.
+add_round = "Добавить раунд перестрелки"
+add_round_blocked = "Сначала заполните номера команд"
+add_question = "Добавить вопрос"
+remove_question = "Удалить вопрос"
+# The dialog that creates a round, and its buttons.
+round_dialog = "Раунд перестрелки"
+cancel = "Отмена"
+create = "Создать"
+# The confirms for removing a whole round and for removing only its last question.
+remove_round_confirm = "Удалить раунд перестрелки?"
+remove_question_confirm = "Удалить последний вопрос перестрелки?"
+
+[screen]
+# The projector board's floating controls: the settings toggle, then the
+# chrome toggle in both states.
+settings = "Настройки"
+chrome_hide = "Скрыть оформление"
+chrome_show = "Показать оформление"
+# The settings panel's fields, named after the settings they edit.
+bg = "Цвет фона"
+fg = "Цвет текста"
+muted = "Цвет подписей"
+font = "Размер шрифта"
+columns = "Столбцы (0 — авто)"
+show_city = "Показывать город"
+show_country = "Показывать страну"
+reset = "Сбросить"
+# The board before any team is defined.
+no_teams = "Команды не заданы"
+
+[results]
+# The tour toggle's tooltip: expanded, then collapsed.
+tour_collapse = "Свернуть тур"
+tour_expand = "Показать вопросы тура"
+# The shootout toggle's tooltip.
+shootout_collapse = "Свернуть перестрелку"
+shootout_expand = "Показать вопросы перестрелки"

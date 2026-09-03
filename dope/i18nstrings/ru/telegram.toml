@@ -1,0 +1,19 @@
+# The Telegram registration/login bridge (dope/dope/web/telegrambridge): the
+# bot's replies, sent in the Telegram chat during the site's login handshake.
+# The login URL itself stays a Go constant; it fills {{.url}}.
+
+[reply]
+# Any bot-side failure (database error etc.).
+generic_error = "Произошла ошибка. Попробуй еще раз через минуту."
+# The register code consumed successfully.
+register_success = "Готово! Вернись на сайт — там уже видна твоя регистрация."
+# /start or /login without a code: point the user back at the site's login page.
+login_on_site = 'Пришлите код со страницы входа. Если его нет — откройте {{.url}} и нажмите «Войти через телеграм».'
+# The code sent to the bot matches no pending code.
+code_missing = "Такого кода нет. Проверь, что скопировал его без пробелов и не дольше минуты прошло."
+# The code was already consumed by an earlier visit.
+code_consumed = "Этот код уже использован. Запроси новый на сайте."
+# The code exists but is a login code, not a register code.
+code_wrong = 'Этот код не для входа. Открой {{.url}} и начни заново.'
+# The code existed but its validity window has passed.
+code_expired = 'Срок действия кода истек. Запроси новый на {{.url}}.'

@@ -1,0 +1,141 @@
+# The game history area: the fest's per-game history index page (audit.go) and
+# the per-game edit journal with per-row revert (journal.go).
+
+[index]
+# The history index page's title — also its trail leaf, and the crumb the
+# journal page uses to link back to it.
+title = "История изменений"
+# The index's intro note above the game list.
+note = "История и откат ведутся отдельно по каждой игре."
+# The index's empty state when the fest has no games.
+empty = "В этом фестивале пока нет игр."
+
+[page]
+# The journal page's title; the game's title (or the numbered default_title)
+# follows the dot.
+title = 'История игры · {{.game}}'
+# The journal table's column headers.
+col_when = "когда"
+col_who = "кто"
+col_changes = "изменения"
+# The journal's empty state.
+empty = "Изменений пока нет."
+# The trailing note when a group shows only some of its lines.
+more = '+ ещё {{.n}}'
+# The per-row revert form's data-confirm text, wired by pageforms.js.
+revert_confirm = "Откатить игру до состояния перед этим изменением? Все последующие изменения этой игры будут отменены."
+# The per-row revert submit button.
+revert_submit = "откатить сюда"
+# The error banner when the revert fails; .err is the underlying error text.
+revert_failed = 'Не удалось откатить: {{.err}}'
+# The success notice when the revert lands.
+revert_done = "Откат выполнен."
+# A game's fallback title when it has neither title nor code.
+default_title = 'игра {{.n}}'
+
+[event]
+# Coarse journal lines for events that carry no row-level detail, plus the
+# whole-state replacement (describeEvent and the OpEvGameState arm).
+state_replaced = "состояние игры заменено целиком"
+# A stage reseed was recalculated.
+reseed = "пересчёт посева этапа"
+# A roster import from rating.chgk.info.
+rating_import = "импорт ростера из rating.chgk.info"
+# A seed import from KSI.
+seed_import_ksi = "импорт посева из КСИ"
+# A team declined its seeded slot.
+seed_decline = "отказ команды от посева"
+# A game was created.
+game_create = "игра создана"
+# A game was cleared.
+game_clear = "игра очищена"
+# A game was deleted.
+game_delete = "игра удалена"
+# The fest's team numbers changed.
+fest_numbers = "изменены номера команд"
+# A venue was updated (the fest's venues, or a bout's venue).
+venue = "изменена площадка"
+# A roster override placed or edited a player.
+player_override = "переопределение игрока в составе"
+# The fest's access changed.
+fest_access = "изменение доступа"
+# A tournament scheme was imported.
+scheme_import = "импорт схемы"
+# A game was reverted to an earlier state.
+game_revert = "откат игры к более раннему состоянию"
+
+[patch]
+# The fallback line when a game-state patch payload fails to parse.
+state_fallback = "изменение состояния игры"
+# A generic patch line the per-game renderers have no words for; the path
+# segments arrive joined with " · ".
+generic_removed = '{{.path}}: снято'
+# The set (non-remove) twin of generic_removed.
+generic_set = '{{.path}} → {{.value}}'
+
+[value]
+# How an empty or null patch value displays in a patch line.
+empty = "пусто"
+
+[mark]
+# KSI/EK answer marks as the journal spells them.
+right = "верно"
+wrong = "неверно"
+# The empty mark — the answer was withdrawn.
+none = "снято"
+
+[ksi]
+# A KSI answer edit: theme, the participant (or the numbered fallback below),
+# question, mark.
+answer = 'тема {{.theme}}, {{.player}}, вопрос {{.question}}: {{.mark}}'
+# A participant with no name in the state yet.
+participant_fallback = 'участник {{.n}}'
+# A participant renamed in the KSI state.
+rename = 'переименование участника {{.n}} → {{.name}}'
+# The match was finished from the KSI state.
+finished = "завершение матча"
+# A team declined participation from the KSI state.
+declined = "отказ от участия"
+
+[od]
+# An OD answer cleared on a question.
+answer_clear = 'вопрос {{.question}}: отметка снята'
+# An OD answer awarded to a team; .team is team_named or team_unnamed below.
+answer_set = 'вопрос {{.question}}: засчитана {{.team}}'
+# One OD grid entry changed.
+entry_changed = 'вопрос {{.question}} изменён'
+# The whole entries grid changed.
+entries_changed = "ответы изменены"
+# A team's readiness toggle; .value is the raw readiness word.
+readiness = 'вопрос {{.question}}: готовность → {{.value}}'
+# A shootout round edit.
+shootout = "перестрелка"
+# A team identified by its printed number, name known.
+team_named = '«{{.name}}» (№{{.n}})'
+# A team identified by its printed number, name unknown.
+team_unnamed = 'команда №{{.n}}'
+
+[ek]
+# The bout prefix EK lines carry when the bout code is known.
+match_prefix = 'матч {{.code}}, '
+# The fallback team name when a row references no known team.
+team_unnamed = "команда"
+# An EK answer edit; .match is match_prefix or empty, .team the team's name or
+# the fallback above.
+answer = '{{.match}}{{.team}}, тема {{.theme}}, вопрос {{.question}}: {{.mark}}'
+# A bout-result rank.
+rank = '{{.match}}{{.team}}: место {{.rank}}'
+# The prefix of a theme's player-assignment line.
+theme_prefix = '{{.match}}{{.team}}, тема {{.theme}}: '
+# A player takes the theme's answer slot; .name follows.
+player_plays = 'играет {{.name}}'
+# A player assigned with no name known.
+player_assigned = "назначен игрок"
+# A player removed from the theme's answer slot.
+player_removed = "игрок снят"
+# A bout reopened.
+match_reopened = "матч открыт заново"
+# A bout finished.
+match_finished = "матч завершён"
+# A bout edited with no row-level detail.
+match_update = "редактирование матча"

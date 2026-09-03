@@ -1,0 +1,117 @@
+# xy — the HTTP API's server-side error texts (xy/internal/server): the
+# child-access family (access.go), boards and members (boards.go), invite
+# links (boardinvites.go), attachments, cards, comments, reactions, lists,
+# the bundle event import, the .4s/.zip/.docx import endpoints (import4s.go),
+# the storage quota and the generic 500 (errors.go, tokens.go). The HTTP edge
+# writes these verbatim; tables follow the resource hierarchy.
+
+# The generic 500 handleErr falls back to (errors.go); the same line backs the
+# 500s in auth.go's handleSetPassword and tokens.go's create handler.
+internal = "ошибка сервера"
+
+[child]
+# access.go's child{} family: a card, list, list group, label or test named in
+# the path (boardOf) or body (onBoard). not_found = absent or tombstoned;
+# foreign = live but on another board. Shared by the card, list, label,
+# session, comment, reaction and bundle handlers.
+card_not_found = "карточка не найдена"
+card_foreign = "карточка с другой доски"
+list_not_found = "список не найден"
+list_foreign = "список с другой доски"
+group_not_found = "группа списков не найдена"
+group_foreign = "группа с другой доски"
+label_not_found = "метка не найдена"
+label_foreign = "метка с другой доски"
+session_not_found = "тест не найден"
+session_foreign = "тест с другой доски"
+
+[board]
+# Board lookup in boardRole: missing board, tombstoned board, non-member.
+not_found = "доска не найдена"
+deleted = "доска удалена"
+no_access = "нет доступа к доске"
+# Board-menu actions reserved to the owner (handleDeleteBoard, handleLeaveBoard,
+# handlePutKeymeta).
+delete_owner_only = "только владелец может удалить доску"
+leave_owner_only = "владелец не может покинуть доску — её можно только удалить"
+keymeta_owner_only = "только владелец может менять пароль доски"
+
+[member]
+# Membership management (handleAddMember / handleRemoveMember): the two
+# owner-only gates and the unknown username being added.
+add_owner_only = "только владелец может добавлять участников"
+remove_owner_only = "только владелец может удалять участников"
+user_not_found = "пользователь не найден"
+
+[invite]
+# Invite-link management (boardinvites.go): the owner gate on every /invites
+# endpoint, create-time range and label checks, and lookup failures.
+owner_only = "только владелец управляет ссылками"
+limits_out_of_range = "ограничения вне допустимого диапазона"
+label_too_long = "название слишком длинное"
+not_found = "ссылка не найдена"
+# handleDecideJoinRequest's decision field validation.
+decision_invalid = "решение должно быть approve или decline"
+# Approving a join request after the link's seats filled up meanwhile.
+no_seats_left = "в ссылке не осталось мест"
+# A join request the decider cannot find on this board.
+request_not_found = "заявка не найдена"
+
+[refusal]
+# inviteRefusal: why a dead link refuses the person holding it (handleJoinInvite).
+revoked = "ссылка отозвана"
+expired = "срок ссылки истёк"
+exhausted = "ссылка исчерпана"
+declined = "владелец отклонил заявку"
+spent = "по этой ссылке вы уже проходили — попросите новую"
+broken = "ссылка не работает"
+
+[attachment]
+# Attachment lookup by id (list/replace/get/delete handlers).
+not_found = "вложение не найдено"
+
+[card]
+# handleSetCardLabels: a label scoped to a test the question was not played on.
+question_not_marked = "вопрос не отмечен этим тестом"
+# handleSetTourTesters: the request must name exactly one scope.
+scope_exactly_one = "нужен ровно один из list_id / group_id"
+
+[comment]
+# Comment lookup and ownership (threadRoot, handleGetComment, patch/delete
+# gates, handleAddReaction's target check).
+not_found = "комментарий не найден"
+foreign = "комментарий с другой карточки"
+edit_owner_only = "редактировать может только автор"
+delete_owner_only = "удалить может только автор"
+
+[reaction]
+# handleDeleteReaction: unknown reaction, and the author-only removal gate.
+not_found = "реакция не найдена"
+delete_owner_only = "убрать может только автор"
+
+[list]
+# handleCreateListGroup: a group needs at least two lists to fold together…
+group_needs_two = "нужно минимум два списка"
+# …and every named list must live on this board.
+not_on_board = "список не найден на этой доске"
+
+[bundle]
+# handleImportEvents (bundle event import): request-level caps and the
+# neither-card-nor-test event.
+too_many_events = "слишком много событий в одном запросе"
+event_without_target = "событие ни на карточке, ни на тесте"
+
+[import]
+# The server side of question-package import (import4s.go): the parse-text
+# endpoint and the .4s/.zip/.docx upload parser.
+text_no_questions = "в тексте не найдено вопросов"
+read_failed = "не удалось прочитать файл"
+no_file = "файл не выбран"
+unsupported = "поддерживаются только .4s, .zip и .docx"
+# The parser's own error detail rides along after the colon.
+parse_failed = 'не удалось разобрать файл: {{.reason}}'
+file_no_questions = "в файле не найдено вопросов"
+
+[quota]
+# enforceQuota: an upload that would outgrow the owner's storage remainder.
+exceeded = 'превышен лимит хранилища ({{.mb}} МБ)'

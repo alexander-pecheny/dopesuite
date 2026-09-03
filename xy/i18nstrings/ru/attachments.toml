@@ -1,0 +1,60 @@
+# xy — attachments: the board's attachment kernel (attachments.ts) — the
+# attachment rows under the open card, their ⋯ menu, the upload/replace/paste
+# flows, the image lightbox, and the filename defaults.
+
+[name]
+# Filename defaults; "вставка" (a pasted-in image) is xy's stand-in name for
+# a file that has none.
+# The stem withExt falls back to when a name is empty; the call site appends
+# "." and the extension itself.
+default_stem = "вставка"
+# The name pre-filled in the paste-to-attach modal; ext is the extension
+# matching the pasted format.
+paste_default = 'вставка.{{.ext}}'
+
+[list]
+# The attachment rows under the open card.
+# Shown name when the decrypted filename is empty.
+fallback_name = "файл"
+# Badge marking an attachment flagged as an excerpt.
+excerpt_badge = "выписка"
+# Title of the ⋯ button opening the attachment menu.
+actions_title = "Действия с вложением"
+
+[menu]
+# The ⋯ popup menu on an attachment row.
+replace = "Заменить"
+delete = "Удалить"
+# The excerpt toggle item.
+excerpt = "Выписка"
+
+[status]
+# Progress and guard messages, shown in the card editor's message line.
+# Offline guards (row edits / upload / deletion).
+offline_edit = "Правка вложений доступна только онлайн."
+offline_upload = "Загрузка вложений доступна только онлайн."
+offline_delete = "Удаление вложений доступно только онлайн."
+# Shown while bytes are being encrypted before upload or replace.
+encrypting = "Шифрование…"
+
+[confirm]
+# Confirm before deleting an attachment; name is the decrypted filename.
+remove = 'Удалить вложение «{{.name}}»?'
+
+[error]
+# Errors thrown client-side; the card editor shows the message. The call
+# sites change in a later phase.
+blob_download_failed = "не удалось скачать вложение"
+# download()'s own fetch, before its offline-mirror fallback.
+download_failed = "не удалось скачать"
+# download() with neither network nor offline mirror.
+offline_unavailable = "вложение недоступно офлайн"
+replace_failed = "ошибка замены"
+upload_failed = "ошибка загрузки"
+
+[lightbox]
+# The image lightbox.
+# The × button (its title and its aria-label).
+close = "Закрыть"
+# The dialog's aria-label.
+dialog_label = "Просмотр изображения"

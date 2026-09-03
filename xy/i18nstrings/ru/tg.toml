@@ -1,0 +1,27 @@
+# xy — the telegram publisher's target resolution (internal/chgk/tg/resolve.go):
+# the dialogue walking a person through introducing the bot to the channel and
+# its discussion group, plus the access-check errors.
+
+[resolve]
+# The prompt to forward the bot any message from the channel.
+forward = 'Перешлите боту любое сообщение из канала «{{.name}}».'
+# The forwarded chat turned out to be the channel itself.
+same_channel = "Это тот же канал, а нужна группа обсуждения — напишите в неё, не в канал."
+# The one-time code prompt for the discussion group.
+group_code = 'Напишите в группе обсуждения «{{.name}}» сообщение: {{.code}}'
+# The hint under the group code prompt.
+group_code_hint = "Бот должен быть в группе и быть администратором, иначе он не увидит."
+# The one-time code prompt for the bot's private chat.
+private_code = 'Отправьте боту в личном чате код: {{.code}}'
+# The ack sent once the code arrives.
+done = "✅ Готово, продолжаем."
+
+[verify]
+# verifyAccess, when the bot is not in the chat at all.
+not_member = 'бот не добавлен к {{.what}}: {{.err}}'
+# verifyAccess, when the bot is in the chat but lacks administrator rights.
+not_admin = 'бот не администратор в {{.what}}'
+# The what fragment for the channel (dative).
+what_channel = "каналу"
+# The what fragment for the discussion group (dative).
+what_chat = "группе обсуждения"

@@ -1,0 +1,58 @@
+# The fest team-numbers editor (numbers.go) and the two mass-import modals it
+# opens: paste matching (import) and apply confirmation (apply), both driven
+# from numbers_import.go.
+
+[page]
+# The editor page's title: the fest's title, then the page name.
+title = '{{.fest}} · номера команд'
+# The trail leaf naming this page.
+crumb = "Номера команд"
+# The editor's empty state when the fest has no teams.
+empty = "Сначала загрузите команды на странице феста."
+# The handler error when an action runs against a fest with no teams.
+no_teams = "Сначала загрузите команды."
+
+[action]
+# The actions cluster and the save/cancel row beneath the number list.
+clear = "Очистить"
+auto = "Проставить автоматически"
+import = "Импорт номеров"
+replace = "Замена номера"
+save = "Сохранить"
+cancel = "Отмена"
+
+[help]
+# The hidden note numbers.js reveals for the in-place edit.
+edit = "Меняйте номер прямо в строке. Когда сохраните, все упоминания старого номера в ОД заменятся на новый — удобно, чтобы перевести команду на резервный номер (101 и т. п.), не задевая остальных."
+
+[error]
+# Save-time row validation; .n is the form row number.
+row_no_team = 'Строка {{.n}}: укажите команду или удалите номер.'
+row_foreign_team = 'Строка {{.n}}: команда не из этого феста.'
+# The same team picked on two rows.
+team_two_rows = 'Команда выбрана сразу в строках {{.first}} и {{.second}}.'
+# A number outside 1..max.
+row_range = 'Строка {{.n}}: номер должен быть целым от 1 до {{.max}}.'
+# The same number given on two rows.
+number_two_rows = 'Номер {{.number}} указан сразу в строках {{.first}} и {{.second}}.'
+
+[notice]
+# The save/auto/clear outcomes shown as the page note.
+saved = "Номера сохранены."
+saved_partial = 'Сохранено. Осталось без номера: {{.n}}.'
+auto = "Номера проставлены автоматически по алфавиту."
+cleared = "Номера очищены."
+
+[import]
+# Pasted-text parse errors, listed in the match modal; .n is the pasted line.
+line_format = 'Строка {{.n}}: ожидается «номер<таб>команда».'
+line_range = 'Строка {{.n}}: номер должен быть целым от 1 до {{.max}}.'
+# A number already claimed by the earlier line .prev.
+line_dup = 'Строка {{.n}}: номер {{.number}} уже указан в строке {{.prev}}.'
+
+[apply]
+# The apply call's JSON errors, shown in the confirmation modal.
+read_failed = "Не удалось прочитать данные."
+foreign_team = "Команда не из этого феста."
+number_range = 'Номер должен быть целым от 1 до {{.max}}.'
+team_repeated = "Команда выбрана несколько раз."

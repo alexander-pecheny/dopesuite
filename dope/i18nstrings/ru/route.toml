@@ -1,0 +1,6 @@
+# The HTTP edge (dope/dope/web/route): the numbering guard's refusal, returned
+# as the API's 409 for the host to read.
+
+[guard]
+# Editing results while some teams of the game still have no entrant numbers.
+unnumbered = "сначала присвойте номера всем командам — без номеров результаты нельзя редактировать"

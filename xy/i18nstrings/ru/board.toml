@@ -1,0 +1,494 @@
+# xy — the board surface: the ЧГК board screen (board.dopeui) plus the
+# board-level TypeScript that fills it in — board.ts (board, lists, cards,
+# feed wiring), masspanel.ts (mass actions) and boardmembers.ts (the roster).
+# Tables follow the order a reader meets the strings; the shared chrome
+# vocabulary ([fields], [actions], [error]) sits at the end.
+
+[page]
+# Browser tab title of a board page.
+title = "Доска · xy"
+# Topbar heading and the current-page crumb before the board's real name
+# arrives (the crumb is then replaced by the board name).
+name = "Доска"
+# The "all boards" crumb back to /.
+home = "Все доски"
+# Crumb text when the board cannot be shown without the network (board.ts).
+offline = "Доска недоступна офлайн"
+# Tooltip of the sync-status dot in that state.
+offline_hint = "Нет сохранённой копии — откройте доску при подключении"
+
+[bell]
+# Label of the topbar events button.
+label = "События"
+# Its tooltip.
+title = "События других участников"
+
+[timer]
+# Label of the topbar timer button.
+label = "Таймер"
+# Its tooltip.
+title = "Таймер ЧГК"
+
+[unlock]
+# Title and aria-label of the unlock dialog and of the passphrase-check
+# dialog — both are introduced as just "the board's password".
+title = "Пароль доски"
+# Placeholder of the passphrase field on both dialogs.
+pass_placeholder = "Пароль доски"
+# Submit button of the unlock form.
+submit = "Открыть"
+# Ghost button offering the way out when the passphrase is lost.
+forgot = "Не помню пароль"
+# Danger hint of the exit block: the content is gone without the password.
+exit_hint = "Содержимое доски без пароля не восстановить."
+
+[passcheck]
+# Title of the monthly passphrase-check dialog.
+title = "Помните пароль доски?"
+# Two-node hint naming the check's purpose (the kit joins the nodes with a
+# space; the split keeps each node byte-identical).
+hint_lead = "Раз в месяц xy спрашивает пароль доски: на этом устройстве она открывается"
+hint_mid = "без него, и забытый пароль обнаружится только тогда, когда будет поздно."
+# Submit button of the check form.
+submit = "ОК"
+# Ghost button handing over to the passphrase change.
+forgot = "Не помню пароль, поменять"
+# Hint of step 2, after the passphrase checked out.
+saved_hint = "Пароль сохранён. А ещё сейчас хорошее время, чтобы сохранить бэкап."
+# Primary button starting the backup flow.
+backup = "Сохранить бэкап"
+
+[changepass]
+# Title of the change-passphrase dialog.
+title = "Сменить пароль доски"
+# Placeholder of the new-passphrase field.
+placeholder = "Новый пароль доски"
+# Label of the dice icon button that generates a passphrase.
+generate = "Сгенерировать пароль"
+# Muted line shown once the generated passphrase has been copied.
+copied = "Пароль уже скопирован"
+# Danger hint under the field.
+danger = "Сохраните этот пароль прямо сейчас — восстановить его будет невозможно."
+# Checkbox where the reader confirms the passphrase is stored safely.
+saved = "Я сохранил(а) пароль в надёжное место и обещаю его не терять"
+# Submit button (disabled until the checkbox is ticked).
+submit = "Сменить"
+
+[card]
+# Card detail overlay (cardOverlay): the kind picker and its options.
+kind_label = "Тип карточки"
+kind_question = "Вопрос"
+kind_meta = "Метаинформация"
+kind_heading = "Заголовок"
+kind_other = "Другое"
+# Header-row link button: tooltip and aria-label.
+link_title = "Скопировать прямую ссылку на карточку"
+link_label = "Ссылка на карточку"
+# Header-row copy button: tooltip.
+copy_title = "Скопировать вопрос или раздатку"
+# Header-row add-version button: tooltip and aria-label.
+add_version_title = "Добавить версию — копию текущей формулировки, которую можно переписать"
+add_version_label = "Добавить версию"
+# The view switch tabs.
+tab_preview = "Просмотр"
+tab_fields = "Поля"
+tab_text = "Формат 4s"
+# Editing tools row: stress mark, typographer, 4s converter.
+stress_title = "Вставить знак ударения (ставится на гласную слева от курсора)"
+stress_label = "◌́ ударение"
+typo_title = "Типографика: кавычки-ёлочки, тире, неразрывные пробелы и дефисы, раскодирование ссылок"
+typo_label = "типограф"
+to4s_title = "Разобрать простой текст вопроса в формат 4s"
+# The screen-mode checkbox (also the list-preview overlay's identical toggle).
+screen_title = "Экранный режим: убрать пометки ведущему [в скобках] и ударения"
+screen_label = " для экрана"
+# Tooltip of the preview body: double-click edits.
+preview_dblclick = "Двойной клик — редактировать"
+# Label above the raw-text editor.
+desc_label = "Описание"
+# Danger button deleting the card.
+delete = "Удалить карточку"
+# Label section: add button and the new-label form.
+label_add = "Добавить метку…"
+new_label_placeholder = "Новая метка"
+new_label_title = "Создать и добавить метку"
+# Alias section.
+alias_label = "Алиас"
+alias_placeholder = "короткое имя карточки — показывается в списке вместо текста"
+# Excerpts row: the view button (the count is a runtime mount).
+excerpts_view = "Смотреть"
+# Attachments section.
+attachments_label = "Вложения"
+# The WebP compression checkbox (also the paste-image dialog's).
+compress = " сжать (WebP)"
+# Upload button.
+upload = "Загрузить"
+# Move/copy section: heading.
+move_label = "Переместить / копировать"
+# Handout badge on a kanban card: tooltip.
+handout_title = "Раздаточный материал"
+# Versions badge on a kanban card: tooltip.
+versions_title = 'Версий: {{.n}}'
+# Test-flask tooltip on a kanban card: "Тест: <name>" then, when verdicts
+# exist, the mid fragment followed by the comma-joined verdict names.
+test_lead = "Тест: "
+test_mid = " — "
+# Section heading above the card's test playings.
+playings_label = "Тесты"
+# Add-playing button.
+mark_test = "Отметить тестом…"
+# Section heading of the feed strip (trailing space keeps the dot apart).
+feed_label = "Лента "
+
+[labels]
+# Name of the labels feature: the card's section heading and the
+# rename/recolour dialog's title.
+name = "Метки"
+
+[unread]
+# Tooltip of the blue unread dot (cards and the card header).
+dot = "Непрочитанные изменения"
+# Tooltip of the unread dot over the comments strip.
+comments = "Непрочитанные комментарии"
+# Tooltip of the red mention dot.
+mention = "Вас упомянули"
+
+[feed]
+# aria-label of the expanded-feed overlay.
+title = "Лента"
+# Label of the filter select (both the card strip and the expanded feed).
+show = "Показать"
+# Tooltip of that select.
+filter_title = "Что показывать в ленте"
+opt_all = "всё"
+opt_comments = "комментарии"
+opt_edits = "правки"
+opt_meta = "метки и вложения"
+# Label and tooltip of the edit-view select.
+diff_view = "Вид правок"
+opt_brief = "краткий"
+opt_full = "подробный"
+# Expand button: tooltip and aria-label.
+expand_title = "Развернуть ленту на весь экран"
+expand_label = "Развернуть ленту"
+# Label and tooltip of the order select (expanded feed).
+order_label = "Порядок"
+order_title = "Порядок событий"
+opt_new = "сначала новое"
+opt_old = "сначала старое"
+# Placeholder of the comment editor and its submit button.
+comment_placeholder = "Комментарий…"
+submit = "Отправить"
+
+[preview]
+# Heading of the list-preview overlay, the fallback when the list is untitled,
+# and the list-menu label for a standalone list.
+title = "Предпросмотр"
+# aria-label of the overlay and the list-menu label for a grouped list.
+list = "Предпросмотр списка"
+# List-menu label previewing the whole group.
+group = "Предпросмотр всей группы"
+# Tooltip/aria-label of the inline edit button on each preview block.
+edit_title = "Редактировать карточку"
+# Empty-list message.
+empty = "В списке нет карточек."
+
+[export]
+# aria-label and title of the export-picker dialog.
+overlay_label = "Экспорт списка"
+title = "Экспорт"
+# Tooltip of the .4s checkbox.
+fmt4s_title = "Исходник chgksuite; изображения кладутся рядом в архив"
+# Mobile-PDF checkbox: tooltip and visible label (leading space).
+pdf_mobile_title = "Вёрстка под узкий экран"
+pdf_mobile_label = " .pdf для телефона"
+# Handouts checkbox: tooltip and visible label (leading space).
+handouts_title = "Раздатки по одной на страницу, свёрстанные по размеру (split-fit)"
+handouts_label = " раздатки в pdf"
+# Ghost button ticking every format.
+select_all = "Выбрать все"
+# Submit button.
+run = "Экспорт"
+
+[replace]
+# Title of the find-and-replace dialog.
+title = "Найти и заменить"
+# Scope option covering the whole board.
+scope_board = "Вся доска"
+# Case-sensitivity checkbox.
+case = "Учитывать регистр"
+# The two text fields' placeholders.
+find = "Найти"
+replace_with = "Заменить на"
+# Paging buttons over the hits.
+prev = "Назад"
+next = "Дальше"
+# The run button.
+run = "Заменить"
+
+[accent]
+# Title of the stress-review dialog.
+title = "Ударения"
+# Hint above the picks.
+hint = "Проверьте ударения — снимите галочку там, где заглавная буква не означает ударение."
+# Run button.
+run = "Типографить"
+
+[importpick]
+# Title of the in-board package-import picker.
+title = "Импорт"
+# Hint above the file field.
+hint = "Пакет вопросов (.4s, .docx) или архив xy (.zip) — что именно, разберёмся сами."
+# Split-by-tours checkbox: tooltip and visible label (leading space).
+split_title = "Каждый тур станет отдельным списком; списки будут связаны в группу со сквозной нумерацией и общим экспортом"
+split_label = " разбить по турам"
+# Submit button (the picker and the verify overlay share it).
+submit = "Импортировать"
+
+[importverify]
+# Title of the .docx verification overlay.
+title = "Проверка импорта"
+# aria-label of the editable source editor.
+src_label = "Исходник 4s"
+
+[handouts]
+# Title of the handouts-generation overlay.
+title = "Генерация раздаток"
+# Label above the .hndt source editor.
+src_label = "Источник (.hndt)"
+# Generate button.
+generate = "Сгенерировать PDF"
+# Split-fit button tooltip.
+splitfit_title = "Подобрать раскладку (split-fit) и скачать zip со всеми PDF"
+# Download button once the PDF is ready.
+download = "Скачать"
+
+[movelist]
+# Title of the move/copy-list dialog.
+title = "Переместить список"
+
+[filter]
+# Title of the label-filter dialog.
+title = "Фильтр по меткам"
+
+[mass]
+# Name of the mass-action feature: the bar's idle caption, the ☰ row label
+# and the dialog's title.
+name = "Массовое действие"
+# The dialog's run button.
+run = "Выполнить"
+# Bar hint before anything is ticked.
+hint = "Отметьте карточки"
+# Bar caption once cards are ticked; the count text comes from the mass
+# engine (massaction.ts).
+selected_count = 'Выбрано: {{.count}}'
+# Hint shown in the delete dialog (no pickers needed).
+delete_hint = "Карточки будут удалены. Их можно восстановить в течение 14 дней."
+# Empty-state lines of the label and test pickers.
+no_labels = "На доске нет меток."
+no_tests = "На доске нет тестов."
+# Placeholder option of the test picker.
+pick_test = "— выберите тест —"
+# Placeholder option when the target board's key is not known.
+board_locked = "— пароль доски неизвестен —"
+# Offline guard for cross-board copy/move.
+copy_offline = "Копирование и перенос между досками доступны только онлайн."
+# Per-card progress line while the action runs.
+progress = '{{.done}} из {{.total}}…'
+# aria-label of the select-all checkbox in a list head.
+select_list = "Отметить весь список"
+# aria-label of a card's tickbox in mass mode.
+select_card = "Отметить карточку"
+# ☰ row label while the mode is on (the row is also the way out).
+exit_label = "Выйти из режима отметок"
+# ☰ row tooltip.
+menu_title = "Отметить карточки на всей доске и сделать с ними одно действие"
+
+[listsmanage]
+# Title of the lists-management dialog.
+title = "Управление списками"
+# Link-into-group button: tooltip and label.
+link_title = "Выберите подряд идущие списки и свяжите их в группу"
+link_label = "Связать списки"
+# Move-to-position button: tooltip and label.
+move_title = "Переместить выбранные на указанную позицию"
+move_label = "Переместить выбранные"
+
+[sessions]
+# Name of the tests feature: the ☰ row label and the dialog title.
+name = "Тесты"
+# ☰ row tooltip.
+menu_title = "Тест-сессии доски: кто когда играл, приглашение со временем начала"
+# Add button and its tooltip.
+add = "＋ Новый тест"
+add_title = "Создать тест-сессию"
+# Fallback name shown where a test's meta is gone (badges, tooltips).
+fallback = "тест"
+
+[sessionedit]
+# Title of the single-test edit dialog.
+title = "Тест-сессия"
+
+[testmode]
+# Menu item that stops the live test session.
+stop = "Завершить тест-режим"
+# Badge tooltip while a test session is live.
+badge = 'Тест-режим: «{{.name}}». Завершить — по клику'
+
+[panel]
+# Placeholder title of the generic panel dialog (panels.ts sets the real one).
+title = "Панель"
+
+[members]
+# Name of the members dialog; the ☰ row label when nobody waits.
+name = "Участники доски"
+# ☰ row label while join requests wait.
+menu_pending = 'Участники доски · {{.n}}'
+# ☰ row tooltip.
+menu_title = "Поделиться доской: добавить или убрать участников"
+# Placeholder of the add-member field.
+name_placeholder = "Имя пользователя"
+# Submit button of the add form.
+add = "Добавить"
+# Subheads of the join-requests and invite-links sections.
+requests = "Заявки"
+invites = "Ссылки-приглашения"
+# Mint-invite button.
+create_invite = "+ Создать ссылку"
+# Roster role names.
+role_owner = "владелец"
+role_editor = "редактор"
+# Tooltip of the remove button on a roster row.
+remove_title = "Убрать из доски"
+# Confirm before removing; the name falls back to the next id.
+remove_confirm = 'Убрать {{.name}} из доски?'
+remove_fallback = "участника"
+# Roster load failure (offline).
+load_failed = "Не удалось загрузить участников — нужно подключение к сети."
+
+[thread]
+# Title of the thread viewer.
+title = "Ответы"
+# Reply editor placeholder and submit button.
+placeholder = "Ответить…"
+submit = "Ответить"
+
+[excerpts]
+# Title of the excerpts viewer.
+title = "Выписки"
+
+[paste]
+# Title of the paste-image dialog.
+title = "Вставить изображение"
+# Placeholder of the file-name field.
+name_placeholder = "Имя файла"
+
+[dirty]
+# Title of the unsaved-changes prompt.
+title = "Несохранённые изменения"
+# Hint naming what is at stake.
+hint = "В карточке есть несохранённые изменения."
+# Danger button discarding the changes.
+discard = "Не сохранять"
+
+[rename]
+# ☰ row: rename the board.
+board_label = "Переименовать доску"
+board_title = "Изменить название доски"
+# prompt() title for the new board name.
+board_prompt = "Новое название доски:"
+board_offline = "Переименование доски доступно только онлайн."
+# List ⋯ row: rename the list; prompt() title for the new name.
+list_label = "Переименовать список"
+list_prompt = "Новое название списка:"
+# Alert when either rename failed; the server error follows.
+failed = 'Не удалось переименовать: {{.error}}'
+
+[delete]
+# ☰ row and the unlock-exit button: delete the whole board.
+label = "Удалить доску"
+# ☰ row tooltip.
+title = "Удалить доску со всеми списками и карточками"
+offline = "Удаление доски доступно только онлайн."
+# The warning that heads both confirms.
+warn = "Доска со всеми списками, карточками и вложениями будет скрыта сразу и безвозвратно удалена через 14 дней."
+# Second line of the typed-name confirm (after the warning and a blank line).
+type_name = 'Чтобы подтвердить, введите название доски — «{{.name}}»:'
+# Tail of the no-name confirm (after the warning and a space).
+continue_q = "Продолжить?"
+# Alert when the typed name did not match.
+mismatch = "Название не совпало — удаление отменено."
+# Alert when the delete request failed; the server error follows.
+failed = 'Не удалось удалить: {{.error}}'
+# List ⋯ row: delete the list.
+list_label = "Удалить список"
+# Fallback name inside the list confirm.
+list_untitled = "без названия"
+# Card-count tail (before the question mark), empty when the list has none.
+list_tail = ' и {{.n}} карточк(и) в нём'
+# The confirm itself; {{.title}} is the list name, {{.tail}} the tail above.
+list_confirm = 'Удалить список «{{.title}}»{{.tail}}? Это действие необратимо.'
+
+[leave]
+# ☰ row: leave the board.
+label = "Покинуть доску"
+# ☰ row tooltip.
+title = "Выйти из доски — у остальных участников она останется"
+offline = "Выход из доски доступен только онлайн."
+# Confirm; {{.target}} is one of the two objects below.
+confirm = 'Покинуть {{.target}}? У остальных участников она останется, а чтобы вернуться, понадобится новое приглашение.'
+target_named = 'доску «{{.name}}»'
+target_this = "эту доску"
+# Alert when the leave request failed; the server error follows.
+failed = 'Не удалось покинуть доску: {{.error}}'
+
+[forget]
+# ☰ row: drop the board key on this device.
+label = "Забыть пароль доски"
+title = "Забыть пароль доски на этом устройстве"
+
+[list]
+# Column-head + button: add a card to the list.
+add_card = "Добавить карточку"
+# Tooltip of the ⋯ button opening the list menu.
+menu_title = "Меню списка"
+# Fallback title of an untitled list column.
+untitled = "(без названия)"
+# Tooltip of the 🔗 group tag under a grouped list's head.
+group_title = "Список входит в группу — сквозная нумерация и общий экспорт"
+# Fallback name of an untitled group.
+group_fallback = "связанные списки"
+# Placeholder of the add-list field and the ✓ submit button.
+add_placeholder = "+ Новый список"
+create = "Создать список"
+
+[count]
+# Question count under a list head ("5 вопросов").
+questions = '{{.n}} {{plural .n "вопрос" "вопроса" "вопросов"}}'
+# Filtered count ("1 из 4") shown while a label filter is on.
+filtered = '{{.shown}} из {{.total}}'
+
+[error]
+# Error thrown when a board action needs the key and it is not unlocked.
+no_key = "нет ключа доски"
+# Guards thrown by the mass run (defensive: the buttons stay disabled until
+# a pick is made).
+no_label = "не выбрана метка"
+no_test = "не выбран тест"
+no_list = "не выбран список"
+
+[fields]
+# Labels of the board/list/position pickers: the card's move/copy row, the
+# move-list dialog and the mass target picker.
+board = "Доска"
+list = "Список"
+position = "Позиция"
+
+[actions]
+# Chrome verbs shared by the dialogs on this screen.
+close = "Закрыть"
+cancel = "Отмена"
+done = "Готово"
+save = "Сохранить"
+copy = "Копировать"
+move = "Переместить"

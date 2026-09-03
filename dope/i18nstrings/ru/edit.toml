@@ -1,0 +1,7 @@
+# The game-document patch layer (dope/dope/domain/edit): the refusal a host
+# reads when trying to hand-edit an imported roster.
+
+[roster]
+# The team list is owned by a rating.chgk.info import; only a re-import
+# changes it.
+immutable = "команды загружаются из rating.chgk.info; чтобы изменить список, переимпортируйте участников"

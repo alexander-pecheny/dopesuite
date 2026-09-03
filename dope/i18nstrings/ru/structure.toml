@@ -1,0 +1,117 @@
+# The tournament structure builders (dope/dope/domain/structure): the titles
+# they write into stages, bouts and seating labels, and the errors a scheme
+# author reads when a block's config does not fit.
+
+# Default names shared by several kinds: a bout, a bracket round, the final.
+[titles]
+# The n-th bout of a stage — a match title in a drawn stage, a feed label of a
+# block that offers its bouts on, and the rr default match title.
+bout = 'Бой {{.n}}'
+# The n-th round of a multi-round bracket: a single-bracket DE round, and the
+# non-terminal rounds of an elimination.
+round = 'Раунд {{.n}}'
+# The final: the knockout bracket's last round, the single final match of the
+# legacy static schedule, and the feed label of the group the final feeds on.
+final = "Финал"
+
+[se]
+# The single_elimination block. Round titles first, then the config errors
+# the scheme author reads on the game settings page.
+# The round of semifinals: four entrants remain, two bouts play.
+round_semifinals = "Полуфиналы"
+# An earlier round, named by the fraction it leaves: "1/4 финала" when eight
+# remain (n is remaining/2).
+round_nth = '1/{{.n}} финала'
+# A semifinal match of the legacy static schedule, one per semifinal bout.
+match_semifinal = 'Полуфинал {{.index}}'
+# A match of an earlier round of the legacy static schedule, one per bout.
+match_nth_round = '1/{{.n}} финала {{.index}}'
+# A bout of the best-of final series.
+final_bout = 'Финал. Бой {{.n}}'
+# The bronze bout, and the bronze stage title when it is a single bout.
+bronze = "Матч за 3-е место"
+# A bout of the best-of bronze series.
+bronze_bout = 'Матч за 3-е место. Бой {{.n}}'
+# A block without the participants key.
+participants_missing = "single_elimination: нужен participants"
+# A reseed naming a round the block does not have.
+reseed_round_unknown = 'reseed: в этом блоке нет раунда {{.round}}'
+# A reseed naming the opening round, which needs reseed: true instead.
+reseed_first_round = 'reseed: {{.round}} — первый раунд, пишите reseed: true'
+# A best_of value that is not an odd number of bouts from 3.
+best_of_parity = "best_of: серия играется до большинства побед — нечётное число боёв от 3"
+# A best_of set on a round that is not the final or the bronze.
+best_of_final_only = "best_of: серия возможна только в финале или матче за 3-е место"
+# The block follows one that declared no proceeding_participants.
+proceeding_missing = "предыдущему блоку нужен proceeding_participants, чтобы продолжить схему"
+# The previous block's seating template does not fit bouts of this size.
+template_size = 'нет шаблона рассадки в бои по {{.size}} из предыдущего блока — добавьте reseed: true'
+# The previous block's groups do not pair into a bracket template.
+template_groups = "нет шаблона рассадки из этих групп — добавьте reseed: true"
+
+[elimination]
+# The shared elimination-round planner behind single_elimination and
+# double_elimination: how the rounds, bouts and lives fit together.
+# winning_places below one.
+winning_places_min = "winning_places должен быть хотя бы 1"
+# match_size below two.
+match_size_min = "match_size должен быть хотя бы 2"
+# A bout whose seat count does not exceed the winners it must produce.
+bout_cannot_output = 'бой на {{.size}} мест не может выводить {{.winning}} — победителей не меньше, чем мест'
+# A round whose entrants do not split evenly into bouts of the asked size.
+round_not_divisible = 'раунд {{.round}}: {{.entrants}} участников не делятся на бои по {{.size}}'
+# A round whose winners would be as many as its entrants.
+round_eliminate_nothing = 'раунд {{.round}} никого не выбивает: {{.entrants}} участников, {{.proceeding}} проходит'
+# The bracket did not terminate within a sane number of rounds.
+too_many_rounds = "слишком много раундов — проверьте match_size и winning_places"
+# An elimination with lives set below one.
+lives_min = "нужна хотя бы одна жизнь"
+# A complaint of one bracket of a lives elimination, pinned to its round.
+round_bracket = 'раунд {{.round}}, сетка {{.bracket}}: {{.err}}'
+# A bracket whose members do not split evenly into bouts of the asked size.
+bracket_not_divisible = '{{.entrants}} участников не делятся на бои не больше чем по {{.size}}, из которых выходит {{.winning}}'
+
+[de]
+# The double_elimination block: pods of four, or one bracket with lives.
+# Neither groups nor group_size nor a participants count divisible by four.
+groups_needed = "double_elimination: нужен groups (или participants, кратный 4)"
+# No headcount the block could work from.
+participants_needed = "double_elimination: нужен participants (или groups и group_size)"
+# The resolved group count or group size is too small to play.
+bad_groups = 'double_elimination: {{.groups}} групп по {{.size}} — так не бывает'
+# A reseed: value naming a round — the block only takes true/false.
+reseed_round_unknown = 'reseed: в этом блоке нет раунда {{.round}} — только true/false'
+# The stage title of a single-bracket elimination.
+playoff = "Плей-офф"
+
+[rr]
+# The roundrobin block: groups seated from the incoming edge, ranked by the
+# block's comparators.
+# No group_size given.
+group_size_needed = "roundrobin: нужен group_size"
+# The feed label of the block's n-th group, as the next block's seating reads it.
+group_feed = 'Гр. {{.n}}'
+# A points list that is not exactly win, draw, loss.
+points_list = "points: жду [победа, ничья, поражение]"
+# More rounds asked than the schedule construction can provide.
+too_many_rounds = 'rr: {{.rounds}} кругов на {{.entrants}} участников по {{.size}} — есть только {{.have}}'
+# No schedule construction exists for this headcount and seat count.
+no_schedule = 'rr: нет расписания на {{.entrants}} участников по {{.size}} за столом'
+
+[flat]
+# The flat kind: one match seating every entrant.
+# No participants key and nothing seeded.
+participants_missing = "flat: нужен participants"
+# The stage title of a flat game.
+game = "Игра"
+# The schedule ran with nobody seated.
+no_entrants = "flat: за столом никого"
+
+[macro]
+# Helpers every kind shares: seating labels and the sorting complaint.
+# The label of a seat fed from a bout: "<bout label>, м. <place>".
+seat_from_bout = '{{.bout}}, м. {{.place}}'
+# The label of a seat fed from a reseed ranking.
+reseed_rank = 'Пересев-{{.n}}'
+# A sorting key neither the protocol nor the scoring rules measure.
+unrankable_metric = 'sorting: {{.metric}} не считается — ни протокол, ни правила подсчёта такой метрики не дают (есть {{.known}})'

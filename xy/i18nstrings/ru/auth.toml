@@ -1,0 +1,51 @@
+# xy — the auth surface (xy/internal/server/auth.go + assets.go): the login
+# page chrome, every error the login/Telegram-claim/username/password/profile
+# handlers write, and the API-token gate on cookie-only endpoints. Tables
+# follow the order a visitor meets them.
+
+[page]
+# Browser tab / page title of the login page (kit.LoginPage in assets.go).
+title = "Вход · xy"
+
+[token]
+# requireCookieUser: an API token may not reach the cookie-only endpoints
+# (password, username, admin) even as its owner.
+forbidden = "сюда API-токен не пускают — нужен вход в браузере"
+
+[tg]
+# handleTgClaim — claiming a Telegram login code from the site.
+# Username format gate, shared with first-Telegram-login signup.
+username_format = "логин: 3–64 символа, латиница, цифры, . _ -"
+# The code the site showed is unknown or already consumed.
+code_missing = "код не найден, начните заново"
+# The username names an existing password account and the password is wrong.
+password_wrong = "неверный пароль"
+# The Telegram account is already linked to a different xy account.
+telegram_taken = "этот телеграм уже привязан к другому аккаунту"
+# First Telegram login: the chosen username is reserved (admin names).
+username_reserved = "этот логин зарезервирован"
+
+[login]
+# handleLoginPassword — password login.
+fields_required = "логин и пароль обязательны"
+# Unknown username or wrong password: one line for both, by design.
+invalid = "неверный логин или пароль"
+
+[username]
+# handleSetUsername — first-time username pick.
+too_short = "логин слишком короткий"
+too_long = "логин слишком длинный"
+already_set = "логин уже задан"
+taken = "логин занят"
+
+[password]
+# handleSetPassword — password change.
+length = "пароль должен быть от 8 до 72 символов"
+current_wrong = "неверный текущий пароль"
+
+[profile]
+# Profile defaults (handleSetDefaultAuthor, handleSetProfileDefaults,
+# handleSetAnnounceCities): length caps on the free-text fields.
+name_too_long = "слишком длинное имя"
+timezone_too_long = "слишком длинный часовой пояс"
+cities_too_long = "слишком длинный список городов"

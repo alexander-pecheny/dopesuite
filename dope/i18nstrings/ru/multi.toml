@@ -1,0 +1,34 @@
+# The Мультиигры screen (dope/dope/web/ts/multi.ts): the sheet of мини-игры
+# column blocks with their subtotals and Итог, the ranked «Итог» table, the
+# refusals tab and the tab bar.
+
+# The page title when neither the fest view nor the scheme names the game.
+title = "Мультиигры"
+
+[tabs]
+# The tab bar labels.
+detailed = "Подробно"
+results = "Итог"
+refusals = "Отказы"
+roster = "Составы"
+
+[sheet]
+# The «Подробно» sheet: the team and total column headers.
+team = "Команда"
+total = "Итог"
+
+[game]
+# A мини-игра column block's head when its tasks all pay the same:
+# «Не только песни (по 1)».
+uniform_price = '{{.name}} (по {{.n}})'
+
+[results]
+# The «Итог» table: the place (М for место), team and total column headers.
+place = "М"
+team = "Команда"
+total = "Итог"
+
+[refusals]
+# The «Отказы» tab: the team and refused-to-play column headers.
+team = "Команда"
+declined = "Отказ"

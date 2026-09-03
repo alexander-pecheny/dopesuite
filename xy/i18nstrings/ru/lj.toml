@@ -1,0 +1,14 @@
+# xy — the LiveJournal publisher (internal/chgk/lj): the errors the post run
+# reports when the XML-RPC endpoint refuses or misbehaves.
+
+[error]
+# Publish with no posts to send.
+nothing = "нечего публиковать"
+# challenge, when getchallenge returns no challenge string.
+no_challenge = "livejournal не выдал challenge"
+# call, when the endpoint answers with a non-200 status.
+status = 'livejournal ответил {{.status}}'
+# decodeResponse, when the reply fails to parse as XML-RPC.
+malformed = 'ответ livejournal: {{.err}}'
+# decodeResponse, when the server returns an XML-RPC fault.
+fault = 'livejournal: {{.message}} (код {{.code}})'

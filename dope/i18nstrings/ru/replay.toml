@@ -1,0 +1,218 @@
+# The replay package (dope/dope/domain/replay): the transcript the hosts write
+# in their Google-Sheets flavour, the parser errors that stop a bad transcript,
+# the findings the replay run reports, the codecs' stats column names, and the
+# discrepancies page the tournament's author reviews.
+
+[parse]
+# Every parse error is prefixed with the transcript line it points at.
+line_prefix = 'строка {{.n}}: {{.msg}}'
+# How Coord renders a Block's or Group's standings coordinate, e.g. "таблица s1".
+coord_table = 'таблица {{.stage}}'
+# A [game]/[roster]-style section header with no seats under it.
+bout_no_seats = 'бой {{.at}} без единого места — оборванная стенограмма прошла бы молча'
+# A second record at a coordinate that already has one.
+coord_taken = '{{.at}} уже есть на строке {{.n}} — на одной координате одна запись, иначе одна из них молча пропадёт'
+# Non-empty text after a [таблица …] header.
+table_trailing = 'после таблицы ничего не пишут, а тут "{{.rest}}"'
+# Non-empty text after a bout coordinate that is neither empty nor жребий.
+bout_header_extra = 'после координаты можно писать только «жребий», а не "{{.rest}}"'
+# A [game] line that is not a key: value pair.
+game_pair_expected = 'в [game] нужны пары «ключ: значение», а не "{{.raw}}"'
+# An unknown key in [game].
+game_unknown_key = '[game] не знает ключа "{{.key}}"'
+# A [составы] line in an individual game.
+lineups_individual = "в личной игре нет составов — участник и есть игрок"
+# A bout line in a game the transcript form does not know.
+game_no_codec = 'у игры "{{.game}}" нет формы боя в стенограмме'
+# A data line before any section header.
+line_outside_section = 'строка вне секции: "{{.raw}}"'
+# A [таблица …] header with no rows under it.
+table_no_rows = '{{.at}} без единой строки — оборванная стенограмма прошла бы молча'
+# One participant holding two rows of the same table.
+table_name_twice = '{{.at}}: "{{.name}}" уже стоит на строке {{.n}}'
+# The same participant written twice in [roster].
+roster_name_twice = 'участник "{{.name}}" записан в [roster] дважды'
+# Two participants sharing one roster number.
+roster_number_taken = 'номер {{.n}} занят и "{{.held}}", и "{{.entrant}}"'
+# A seat naming a participant the roster does not know.
+seat_unknown = 'в бою {{.at}} сидит "{{.name}}", которого нет в [roster]'
+# A table row naming a participant the roster does not know.
+table_unknown = 'в {{.at}} стоит "{{.name}}", которого нет в [roster]'
+# A lineup for a team the roster does not know.
+lineup_unknown_team = 'состав команды "{{.team}}", которой нет в [roster]'
+# A team with two lineups.
+lineup_twice = 'состав {{.team}} записан дважды'
+# A theme played by somebody outside the team's lineup.
+theme_player_unknown = 'тему {{.theme}} у {{.seat}} играет "{{.player}}", которого нет в его составе'
+# A stats row naming a participant the roster does not know.
+stat_unknown = 'статистика "{{.player}}", которого нет в [roster]'
+# A stats row naming a team the roster does not know.
+stat_unknown_team = 'статистика команды "{{.team}}", которой нет в [roster]'
+# A stats row naming a player outside his team's lineup.
+stat_not_in_lineup = 'статистика "{{.player}}", которого нет в составе {{.team}}'
+# A section header whose closing bracket is missing.
+header_unclosed = 'не закрыта скобка в "{{.raw}}"'
+# A [таблица …] header pointing at neither a block nor a group.
+head_table_expected = 'таблица — это блок или группа в нём, например «таблица s1» или «таблица s1/g3», а не "{{.stage}}"'
+# A malformed table row.
+table_row_expected = 'строка таблицы — «место | участник» (делённое место как 1.5), а не "{{.raw}}"'
+# A group token not written as g3.
+group_expected = 'группа пишется как g3, а не "{{.raw}}"'
+# A coordinate with the wrong number of parts.
+coord_expected = 'координата — это блок[/группа]/круг/заход/бой, например s1/r1/w1/m1 или s1/g3/r1/w1/m1, а не "{{.raw}}"'
+# A coordinate whose block part is empty.
+coord_no_block = 'координата без блока: "{{.raw}}"'
+# The Cyrillic names of the coordinate parts, as the errors name them.
+part_round = "круг"
+part_wave = "заход"
+part_match = "бой"
+# A coordinate part missing its r/w/m prefix.
+part_expected = '{{.what}} пишется как {{.prefix}}1, а не "{{.raw}}"'
+# A coordinate part whose number is below one.
+part_number_expected = '{{.what}} должен быть номером от 1, а не "{{.raw}}"'
+# A malformed lineup line.
+lineup_expected = 'состав — «команда | игрок, игрок, …», а не "{{.raw}}"'
+# An empty player name in a lineup.
+lineup_empty_name = 'в составе {{.team}} пустое имя'
+# The same player written twice in one lineup.
+lineup_player_twice = 'в составе {{.team}} игрок "{{.name}}" записан дважды'
+# A lineup with no players.
+lineup_no_players = 'состав {{.team}} без единого игрока'
+# A stats row with the wrong number of fields.
+stat_fields = 'строка статистики — {{.n}} полей через |, а не "{{.raw}}"'
+# A stats row with an empty player name.
+stat_no_player = "строка статистики без игрока"
+# A stats row with an empty team name.
+stat_no_team = 'статистика {{.player}} без команды'
+# A stats row whose value field is not a number.
+stat_not_numbers = 'статистика {{.player}} — числа, а не "{{.raw}}"'
+# A roster line with the wrong number of fields.
+entrant_expected = 'участник — «номер | название | город», а не "{{.raw}}"'
+# A roster number that is not an integer of at least one.
+entrant_number = 'номер участника — целое от 1, а не "{{.raw}}"'
+# A roster line with an empty name.
+entrant_no_name = "участник без названия"
+# A fifth field on a брейн seat line, where the player lives in the questions.
+seat_brain_player_field = "у брейна игрок пишется в самом вопросе, а не пятым полем"
+# A fifth field on an individual game's seat line.
+seat_individual_player = "в личной игре игрок не пишется — участник и есть игрок"
+# A malformed seat line.
+seat_expected = 'место в бою — «кто | метки | Σ | место», а не "{{.raw}}"'
+# A seat line with an empty participant name.
+seat_no_name = "место без участника"
+# Comma-separated questions in a game that plays themes, not questions.
+seat_comma_not_brain = 'у {{.name}} вопросы через запятую — так пишут брейн, а эта игра играет темы'
+# A seat whose middle field holds no theme groups at all.
+seat_no_themes = 'у {{.name}} нет ни одной темы'
+# A fifth field whose player count disagrees with the theme count.
+seat_players_mismatch = 'у {{.name}} тем {{.themes}}, а игроков {{.players}} — игроки пишутся по одному на тему, «-» где лист никого не назвал'
+# A seat's Σ that is not an integer.
+seat_sum = 'Σ у {{.name}} — целое число, а не "{{.raw}}"'
+# A seat's place that is neither a number of at least one, nor 3!, nor -.
+seat_place = 'место у {{.name}} — число от 1 (делённое место пишется как 1.5, поставленное вручную — как 3!, а не напечатанное листом — как -), а не "{{.raw}}"'
+# A malformed перестрелка line.
+shootout_expected = 'перестрелка пишется как «перестрелка Ктулху: 60», а не "{{.raw}}"'
+# A перестрелка result that is not a non-zero integer.
+shootout_not_number = 'перестрелка у {{.name}} — ненулевое целое, а не "{{.raw}}"'
+# Two перестрелка lines for one seat.
+shootout_twice = 'перестрелка у {{.name}} записана дважды'
+# A перестрелка line for a participant not seated in the bout.
+shootout_unknown = 'перестрелка у {{.name}}, которого нет в бою {{.at}}'
+# A theme cell row that does not hold exactly five marks.
+theme_five = 'в теме пять ответов, а в "{{.raw}}" — {{.n}}'
+# A theme cell holding a character other than R, W and -.
+theme_mark = 'в теме "{{.raw}}" знак "{{.char}}" — бывают только R, W и -'
+# An override line with no reason.
+override_expected = "расхождение пишется как «override [координата] поле [участник]: почему листу верить нельзя» — без причины это молча спрятанная ошибка"
+# A Троечка theme group with the wrong number of questions.
+counts_theme_size = 'у {{.name}} тема из {{.n}} вопросов, а написано "{{.raw}}"'
+# A Троечка theme cell holding something other than 0..3 or ".".
+counts_digit = 'у {{.name}} в теме "{{.raw}}" — жду 0..3 или «.», сколько из троих ответили верно'
+# An empty entry in a брейн seat's question list.
+question_empty = 'у {{.name}} пустой вопрос — незаданный пишется как -'
+# A брейн question entry not starting with R, W or -.
+question_mark = 'вопрос у {{.name}} начинается с R, W или -, а не с "{{.raw}}"'
+# A брейн seat whose question list is empty.
+question_none = 'у {{.name}} нет ни одного вопроса'
+
+[run]
+# One disagreement as the host reads it: the coordinate, the field, and both
+# sides — what the sheet claims and what dope computed.
+finding = '{{.at}}{{.who}}: {{.field}} — лист {{.sheet}}, у нас {{.ours}}'
+# A transcript with [составы] against a Game that cannot register lineups.
+lineups_unwritable = "в стенограмме есть составы, а игра не умеет их записывать"
+# Wrapper for an error returned while writing the lineups.
+lineups_wrap = 'составы: {{.err}}'
+# Wrapper for an error returned while writing a Draw seating.
+seat_draw_wrap = '{{.at}}: посадка жребием: {{.err}}'
+# Wrapper for an error returned while reading who is seated.
+seated_wrap = '{{.at}}: кто посажен: {{.err}}'
+# Wrapper for an error returned while entering one participant's play.
+play_wrap = '{{.at}}, {{.name}}: отметки: {{.err}}'
+# Wrapper for an error returned while pinning a hand-set place.
+pin_wrap = '{{.at}}, {{.name}}: место вручную: {{.err}}'
+# Wrapper for an error returned while closing a bout.
+finish_wrap = '{{.at}}: закрытие боя: {{.err}}'
+# Wrapper for an error returned while reading a bout's outcome.
+outcome_wrap = '{{.at}}: итог боя: {{.err}}'
+# The field label of a seating disagreement.
+field_seating = "посадка"
+# The field label of a participant dope scored that the sheet never seated.
+field_extra = "лишний участник"
+# The sheet's side of a finding about a participant it never seated.
+not_seated = "не сидел"
+# The sheet's claimed Σ and place for one seat, as both sides of a finding render it.
+sheet_score = 'Σ{{.total}}, место {{.place}}'
+# The field label of a bout outcome disagreement.
+field_outcome = "итог"
+# Our side of a finding where dope produced nothing at all.
+nothing = "ничего"
+# The field label of a place disagreement, in a bout and in a table.
+field_place = "место"
+# A transcript with [статистика] against a Game that cannot compute it.
+stats_uncomputable = "в стенограмме есть статистика, а игре не из чего её посчитать"
+# Wrapper for an error returned while reading the computed statistics.
+stats_wrap = 'статистика: {{.err}}'
+# The field label of a statistics disagreement.
+field_stats = "статистика"
+# The side of a finding whose row the other party does not list.
+no_row = "нет строки"
+# A transcript with [таблица] against a Game that cannot rank a block.
+table_unrankable = "в стенограмме есть таблица, а игра не умеет ранжировать блок"
+# The field label of a standings disagreement.
+field_table = "таблица"
+# The field label of an override that matched no disagreement.
+field_unneeded = "лишнее расхождение"
+# Our side of a finding the sheet's override predicted but dope does not reproduce.
+all_agreed = "здесь всё сошлось"
+
+[codec]
+# The third stats column of ЭК: themes the player took positive.
+stat_themes = "темы"
+# The third stats column of личная СИ: bouts the player sat.
+stat_bouts = "бои"
+# The first stats column of брейн: buzzer attempts.
+stat_attempts = "попытки"
+# The second stats column of брейн: right answers.
+stat_right = "верно"
+# The third stats column of брейн: wrong answers.
+stat_wrong = "неверно"
+
+[report]
+# The title of the generated discrepancies page.
+title = "Расхождения с протоколами"
+# The page's opening line.
+intro = "Здесь то, в чём dope не согласен с гугл-таблицами турнира и где решено верить dope."
+# The line naming the transcript's override keyword the page is built from:
+# lead before the keyword, mid after it.
+collected_lead = "Файл собирается из "
+collected_mid = " в стенограммах — правьте стенограмму, не эту страницу."
+# The four columns of a script's override table.
+col_bout = "Бой"
+col_what = "Что"
+col_who = "У кого"
+col_why = "Почему листу верить нельзя"
+# The who cell of an override ruling that covers the whole bout.
+who_all = "весь бой"
+# The page's closing line when no override exists at all.
+none_yet = "Пока ни одного: всё, что переиграно, сошлось с листами."

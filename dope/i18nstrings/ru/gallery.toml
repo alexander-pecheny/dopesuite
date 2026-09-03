@@ -1,0 +1,55 @@
+# The dev-only /gallery page (web/assets/ui/gallery.dopeui +
+# web/ts/gallery.ts) — the skin sheet every shared table is judged on —
+# plus the static page titles of the game-kind .dopeui shells
+# (ek, od, si, multi, troika, brain).
+
+[page]
+# The <title> of the dev-only /gallery page.
+title = "Галерея · dope"
+
+[topbar]
+# The topbar heading of the dev-only /gallery page.
+title = "Галерея"
+
+[section]
+# The <h2> headings above /gallery's demo tables, in page order.
+# The section drawing the Сетка (the fest grid) from fixtures.
+fest_grid = "Сетка"
+# The section drawing the reseed stage panel.
+reseed = "Пересев"
+# The section drawing the group-standings view.
+group_standings = "Групповой этап"
+# The section drawing the EK per-player stats table.
+ek_stats = "Статистика ЭК"
+# The section drawing the individual (личная) SI stats table.
+individual_stats = "Статистика личной СИ"
+# The section drawing the venues table as the spectator reads it.
+venues = "Площадки"
+# The section drawing the venues table as the host edits it.
+venues_host = "Площадки, ведущий"
+# The section drawing the fest roster table.
+roster = "Составы"
+
+[ek]
+# The <title> of the ЭК game page (static/ek.html), host and spectator alike.
+title = "ЭК · Фест"
+
+[od]
+# The <title> of the ОД page's host shell (static/od.html).
+title = "Ведущий · ОД"
+
+[si]
+# The <title> of the СИ page's host shell (static/si.html).
+title = "Ведущий · СИ"
+
+[multi]
+# The <title> of the Мультиигры page's host shell (static/multi.html).
+title = "Ведущий · Мультиигры"
+
+[troika]
+# The <title> of the Тройка page's host shell (static/troika.html).
+title = "Ведущий · Тройка"
+
+[brain]
+# The <title> of the Брейн page's host shell (static/brain.html).
+title = "Ведущий · Брейн"

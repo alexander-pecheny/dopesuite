@@ -1,0 +1,26 @@
+# The admin area (admin.go): the /admin landing page, the bulk-create-users
+# chrome and the users table.
+
+[page]
+# The /admin landing page: its title and its trail leaf.
+title = "Админка"
+
+[create_users]
+# The create-users tool's name: the landing list row and the trail leaf.
+name = "Создать пользователей"
+# The create-users page's title.
+title = "Создать пользователей · Админка"
+
+[users]
+# The users page's name: the landing list row and the trail leaf.
+name = "Пользователи"
+# The users page's title.
+title = "Пользователи · Админка"
+# The table's column headers.
+col_login = "Логин"
+col_activity = "Активность"
+col_created = "Создан"
+# The muted tag after a system account's name.
+system_tag = "(система)"
+# The users page's empty state.
+empty = "Пользователей нет."

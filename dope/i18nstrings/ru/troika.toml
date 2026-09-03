@@ -1,0 +1,47 @@
+# The Тройка screen (dope/dope/web/ts/troika.ts): the per-бой protocol sheets
+# with their seating columns, the group cross-tables, and the per-player
+# statistics (dope/dope/web/ts/troika-stats.ts).
+
+# The page title when neither the fest view nor the scheme names the game.
+title = "Тройка"
+
+[team]
+# The placeholder name of a side no participant is seated in (Команда 1, Команда 2).
+fallback = 'Команда {{.n}}'
+
+[protocol]
+# The per-бой sheet: the team column header, and the «рассадка» column's
+# header, which stands before every тема a side turned round at.
+team = "Команда"
+seating = "Рассадка"
+
+[theme]
+# A тема block's head: its number and its нарицательная («Тема 2 (за 3)»).
+head = 'Тема {{.n}} (за {{.value}})'
+# The × button undoing the seating change before the n-th тема.
+unseat = 'Убрать смену рассадки перед темой {{.n}}'
+# The ⇅ button opening a seating column before the n-th тема.
+seat = 'Поменять рассадку с темы {{.n}}'
+
+[chair]
+# The seat pickers' tooltips: the lead horse's seat, and the n-th outrider's.
+lead = "Коренной"
+outrider = 'Пристяжной {{.n}}'
+
+[bout]
+# The «Закончен» checkbox in a бой's head row.
+finished = "Закончен"
+
+[groups]
+# The rating-ball column the group tables put in front of the canon columns.
+rating = "Р"
+
+[stats]
+# The per-player statistics tab: the column headers.
+player = "Игрок"
+team = "Команда"
+bouts = "Бои"
+first = "Взял первым"
+repeat = "Повторил"
+repeat_rate = "Удачные повторы"
+points = "Очки"

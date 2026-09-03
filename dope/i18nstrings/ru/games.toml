@@ -1,0 +1,63 @@
+# Game kinds (dope/dope/domain/games): the display name each format carries
+# in the games registry — fest pages, host dashboards, game creation and
+# build errors — and, for Мультиигры, the sheet-spec parse errors a host
+# reads on the game settings page.
+
+[multi]
+# The kind's display name (the games registry Label).
+label = "Мультиигры"
+# A sheet line that is not `Имя: {значения}xN`; n is the 1-based source line.
+line_expected = 'строка {{.n}}: жду «Имя: {значения}xN»'
+# A task spec inside a game line that failed to parse: the line, the game's
+# name, then the spec's own complaint (msg).
+line_prefix = 'строка {{.n}}, {{.name}}: {{.msg}}'
+# A `|` block separator with no tasks before it.
+bar_no_tasks_before = 'строка {{.n}}, {{.name}}: «|» без заданий перед ним'
+# A `|` block separator with no tasks after it.
+bar_no_tasks_after = 'строка {{.n}}, {{.name}}: «|» без заданий после него'
+# A game line that assembled no tasks at all.
+no_tasks = 'строка {{.n}}, {{.name}}: ни одного задания'
+# A sheet with no game lines at all.
+no_games = "ни одной мини-игры"
+# A task spec that is neither {values} nor {a-b} with an xN repeat; spec is
+# the Go-quoted spec token.
+spec_expected = '"{{.spec}}" — жду {значения} или {a-b}, можно с xN'
+# An xN repeat smaller than one; spec is the Go-quoted spec token.
+repeat_count = '"{{.spec}}" — повтор xN считается от 1'
+# A domain with nothing between the braces.
+domain_empty = "пустой домен {}"
+# A range domain written high-to-low; domain is the braced spec as written.
+range_descending = '{{.domain}} — диапазон читается снизу вверх'
+# A range domain wider than the cap; domain is the braced spec, max the cap.
+range_too_wide = '{{.domain}} — диапазон шире {{.max}} значений'
+# A domain list item that is not a number; domain is the braced spec, item
+# the Go-quoted token.
+not_a_number = '{{.domain}} — "{{.item}}" не число'
+# A sorting comparator naming no metric these mini-games measure; known is
+# the comma-joined list of countable names.
+metric_unknown = '{{.metric}} не считается — есть {{.known}}'
+
+[troika]
+# The kind's display name (the games registry Label).
+label = "Тройка"
+
+[brain]
+# The kind's display name (the games registry Label).
+label = "Брейн"
+
+[od]
+# The kind's display name (the games registry Label).
+label = "ЧГК"
+
+[ek]
+# The kind's display name (the games registry Label).
+label = "ЭК"
+
+[ksi]
+# The kind's display name (the games registry Label).
+label = "КСИ"
+
+[si]
+# The kind's display name (the games registry Label): the individual version
+# of КСИ, shown wherever a format names its kind.
+label = "Личная СИ"

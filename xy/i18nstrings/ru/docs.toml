@@ -1,0 +1,83 @@
+# xy — the document-export surface: the strings the chgksuite exporters print
+# and write — handout generation (internal/chgk/handout), the docx, pptx, typst
+# and markdown exports (internal/chgk/docx, pptx, typstdoc, markdown), and the
+# PDF/PNG printing htmlshot drives. Install copy (typst binary, browser) lives
+# in install.toml. The docx/pptx/typstdoc field labels («Вопрос N», «Источник»)
+# come from the chgk/i18n labels_*.toml parity files and are out of scope
+# (docs/adr/0006). Tables follow the order a reader meets the strings.
+
+[handout]
+# `handouts generate` (handout/gen.go): the error when the export language has
+# no handout_short expression to find the handout brackets with.
+language_missing = 'язык "{{.language}}": нет выражения handout_short'
+# Warning: the picture file a handout names is not in the package directory.
+image_missing = "файл картинки не найден, добавьте раздатку вручную"
+# Warning: a question mentions a handout but carries no readable bracket.
+bad_markup = "раздатка, похоже, размечена неправильно"
+# `handouts pack` (handout/pack.go): a split-fitted file must hold exactly one
+# handout laid out on a columns × rows grid.
+pack_multiple = "больше одной раздатки: pack берёт только файлы после split_fit"
+pack_none = "в файле нет раздаток"
+pack_no_grid = "нет columns или rows: pack берёт только файлы после split_fit"
+# The `rotate:` block key (handout/rotate.go): the picture to turn is missing.
+rotate_image_missing = 'rotate: нет картинки "{{.name}}"'
+
+[handout_list]
+# The _handouts_list.txt report `handouts generate` writes when asked to list
+# the handouts (handout/gen.go handoutsList): its heading and section leads.
+heading = "ВОПРОСЫ С РАЗДАТОЧНЫМ МАТЕРИАЛОМ:\n\n"
+by_number_lead = "Сквозная нумерация:\n"
+by_tour_lead = "По турам:\n"
+# One tour's line of that report, with and without handouts in it.
+tour_none = "Тур {{.n}}: нет раздаток\n"
+tour_numbers = "Тур {{.n}}: {{.numbers}}\n"
+
+[docx]
+# The two per-question copies the add_versions screen mode prints
+# (docx/docx.go screenVersions).
+host_version = "Версия для ведущего"
+screen_version = "Версия для экрана"
+
+[image]
+# The bold placeholder an export writes for a picture it could not read —
+# shared verbatim by the docx (docx/images.go) and typst (typstdoc/images.go)
+# exporters.
+missing = '[нет изображения: {{.name}}]'
+
+[pptx]
+# The slide's question number when the number format is caps
+# (pptx/slides.go setQuestionNumber).
+question_caps = 'ВОПРОС {{.n}}'
+
+[typst]
+# The typst document exporter's config parse errors (typstdoc/config.go): a
+# line that is not a `key = value` pair, and a value ParseFloat rejected (the
+# wrapped error is appended).
+line_not_pair = 'строка {{.n}}: не пара ключ = значение'
+line_error = 'строка {{.n}}: {{.err}}'
+
+[markdown]
+# The question line the markdown export writes (markdown/markdown.go): the
+# caller adds the __…:__ bold markup around it.
+question = 'Вопрос {{.n}}'
+# The field labels of a question block; the caller adds the __…:__ markup.
+answer = "Ответ"
+zachet = "Зачёт"
+nezachet = "Незачёт"
+comment = "Комментарий"
+source = "Источник"
+author = "Автор"
+# The link text that stands in for a picture in the Reddit-flavoured export.
+image_link = "картинка"
+
+[print]
+# htmlshot, the PDF/PNG half of an export (htmlshot/htmlshot.go): the error
+# when the body width is missing from the CSS, and what failed while rendering.
+width_missing = 'не нашёл "width: <N>mm" — ширина тела должна быть задана в миллиметрах'
+pdf = 'печать PDF: {{.err}}'
+png = 'снимок PNG: {{.err}}'
+measure = 'измерение: {{.err}}'
+# The page-size probe came back without the measured element.
+measure_no_size = "измерение: браузер не вернул размеры страницы"
+# The probe measured the page as zero height.
+measure_zero_height = "измерение: нулевая высота"

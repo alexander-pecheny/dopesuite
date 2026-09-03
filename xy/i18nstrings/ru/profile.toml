@@ -1,0 +1,127 @@
+# The /profile page (profile.dopeui): account info, the ghost-button actions,
+# and the settings dialogs those buttons open. A dialog's name is one id,
+# shared by its opener button and the modal's label/title.
+
+# Browser-tab title of /profile (page title attribute).
+title = "Профиль · xy"
+# Topbar heading and the current-page crumb.
+name = "Профиль"
+# The "all boards" home crumb back to /.
+home = "Все доски"
+# Submit button shared by the page's settings forms: username, default author,
+# timezone, default feed, card title.
+save = "Сохранить"
+# Cancel button shared by every settings dialog.
+cancel = "Отмена"
+
+[whoami]
+# "Вы вошли как <strong>login</strong>." under the topbar — split around the
+# bold login the page fills in.
+hint_lead = "Вы вошли как "
+hint_mid = "."
+
+[storage]
+# "Хранилище: <strong>used</strong>." under the whoami line — split around the
+# used-space figure the page fills in.
+hint_lead = "Хранилище: "
+hint_mid = "."
+
+[username]
+# The one-time "set your login" section, hidden once a login exists.
+hint = "Задайте логин (один раз)."
+# Placeholder of the login field.
+placeholder = "Логин"
+
+[account]
+# The two actions that are not dialogs: the token-page link and logout.
+tokens = "API-токены"
+logout = "Выйти"
+
+[password]
+# Change-password dialog (passwordOverlay); the opener button reuses name.
+name = "Изменить пароль"
+# Placeholder of the current-password field.
+current = "Текущий пароль (если установлен)"
+# Placeholder of the new-password field.
+new = "Новый пароль"
+# Placeholder of the repeat field.
+repeat = "Повторите пароль"
+# Submit button of the dialog.
+submit = "Сохранить пароль"
+
+[sizes]
+# Board-sizes dialog (sizesOverlay): workspace width, list width, card text
+# height and card font; the opener button reuses name.
+name = "Настройка ширины / высоты"
+# Label of the workspace-width slider.
+board_w = "Ширина рабочей области"
+# Hint under that slider.
+board_w_hint = "Доска центрируется на экране — на широком мониторе не приходится смотреть в край."
+# Label of the list-width slider.
+list_w = "Ширина списка"
+# Label of the card-text-height slider.
+card_h = "Текст карточки"
+# Hint under that slider.
+card_h_hint = "Сколько строк вопроса показывать на карточке. На максимуме — весь текст."
+# Label of the card-font slider.
+font = "Шрифт карточки"
+# Hint under that slider.
+font_hint = "Размер шрифта текста на карточке — мельче шрифт, больше вопросов на экране."
+# Ghost button restoring the defaults.
+reset = "Сбросить по умолчанию"
+# Button closing the dialog.
+close = "Готово"
+
+[author]
+# Default-author dialog (authorOverlay); the opener button reuses name.
+name = "Автор по умолчанию"
+# Placeholder of the author-name field.
+placeholder = "Имя автора"
+# Hint under the field.
+hint = "Подставляется в новые карточки-вопросы (поле Автор и строка «@» в Тексте). Пустое — не подставлять."
+
+[tz]
+# Timezone-and-cities dialog (tzOverlay); the opener button reuses name.
+name = "Часовой пояс и города"
+# Hint under the timezone field.
+hint = "Часовой пояс, в котором записывается время новых тестов."
+# Label above the cities field.
+cities_label = "Города для приглашения"
+# Placeholder of the cities field.
+cities_placeholder = "Москва, Берлин, Алматы"
+# Hint under the cities field.
+cities_hint = "Через запятую. Строка со временем начала выглядит так: 20 июля, 19:00 (Москва) / 18:00 (Берлин)."
+# Label and select title of the session-title-mode picker.
+title_mode_label = "Названия меток тестов"
+# Option: session titles carry date and title.
+mode_date_title = "дата и название"
+# Option: session titles carry the title only.
+mode_title = "только название"
+# Option: session titles carry the date only.
+mode_date = "только дата"
+
+[feed]
+# Default-feed dialog (feedDefaultOverlay): which kind of entry an opened
+# card's feed starts on; the opener button reuses name.
+name = "Лента"
+# Radio option: every kind of entry.
+all = "Всё"
+# Radio option: comments.
+comments = "Комментарии"
+# Radio option: edit history.
+edits = "Правки"
+# Radio option: labels and attachments.
+meta = "Метки и вложения"
+# Hint under the radios.
+hint = "С чего начинается лента открытой карточки. В самой карточке это можно переключить — до её закрытия."
+
+[card_title]
+# Card-title dialog (cardTitleOverlay): what a board list shows on a card; the
+# opener button reuses name.
+name = "Заголовок карточки"
+# Radio option: the question text.
+question = "Текст вопроса"
+# Radio option: the answer.
+answer = "Ответ"
+# Hint under the radios.
+hint = "По ответу вопрос часто узнаётся быстрее, чем по началу текста. Если у карточки задан алиас, показывается он — в любом режиме."

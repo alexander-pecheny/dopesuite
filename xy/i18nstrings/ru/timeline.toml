@@ -1,0 +1,106 @@
+# xy — the timeline surface: the board activity feed (xy/web/ts/timeline.ts) —
+# the card panel's feed and the expanded full-screen feed, comment rows with
+# their ⋯ menu, reply threads, desc-edit diffs, reactions, and the excerpts
+# overlay. Tables follow the order a reader meets the strings.
+
+# mustDK's error when the board decryption key is missing; it surfaces in the
+# open card's message line (reactions, replies and comment edits all need it).
+missing_dk = "нет ключа доски"
+
+[event]
+# The neutral noun phrase naming an event kind in a feed row; eventVerb is
+# shared with the bell list in board.js and stays gender-agnostic, since the
+# author's grammatical gender is unknown.
+comment = "комментарий"
+desc_edit = "правка описания"
+# A label added to / removed from the card; the label name follows after ": ".
+label_add = "добавлена метка"
+label_remove = "снята метка"
+# An attachment added to / removed from / replaced on the card; the file name
+# follows after ": ".
+attach_add = "вложение добавлено"
+attach_remove = "вложение удалено"
+attach_replace = "вложение заменено"
+# Somebody reacted to the card or a comment.
+reaction = "реакция"
+
+[feed]
+# The line closing the feed: when the card itself was created.
+card_created = 'карточка создана · {{.when}}'
+# A desc-edit row's meta line; the call site prepends the editor's name when
+# the imported (Trello) edit carries one.
+desc_edit_meta = 'правка описания · {{.when}}'
+
+[comment]
+# A deleted comment's tombstone row (kept because replies hang off it), in the
+# feed and in the thread modal.
+deleted = "комментарий удалён"
+# Appended to a comment's timestamp after an edit, in the feed and in threads.
+edited_suffix = " · изменён"
+# Alt text of an image a comment carries.
+image_alt = "картинка из комментария"
+# Tooltip of the ⋯ button on a comment row.
+menu_title = "Действия с комментарием"
+# Tooltip of the link button on a comment row, copying a direct link.
+copy_link_title = "Копировать ссылку на комментарий"
+# Message shown when a comment mutation is attempted offline.
+offline = "Правка комментариев доступна только онлайн."
+# The ⋯ menu items on a comment row.
+menu_reply = "Ответить"
+menu_react = "Реакция…"
+menu_edit = "Редактировать"
+menu_delete = "Удалить"
+menu_excerpt = "Выписка"
+# The radio item clearing the comment's test-session tag.
+menu_no_test = "без теста"
+# confirm() before deleting a comment.
+delete_confirm = "Удалить комментарий?"
+# The in-place comment editor's buttons.
+save = "Сохранить"
+cancel = "Отмена"
+# Tooltip of the × on a pasted-image chip under the composer.
+remove_image_title = "Убрать из комментария"
+# The pending-comment placeholder in the leave prompt when only images are
+# attached.
+image_draft = "картинка"
+
+[reply]
+# The reply row's "in answer to" line, naming the parent comment's author.
+in_reply_to = '↳ в ответ {{.who}}'
+# The line's who-slot when the parent comment was deleted.
+deleted_parent = "удалённый комментарий"
+# The line's who-slot when the parent comment is not among the loaded events.
+unknown_parent = "комментарий"
+
+[thread]
+# Tooltip of the reply-count button and of the parent-quote button, both
+# opening the thread modal.
+open_title = "Открыть ветку"
+# The reply-count button on a comment row.
+replies = '{{.n}} {{plural .n "ответ" "ответа" "ответов"}}'
+
+[reaction]
+# Message shown when reacting offline.
+offline = "Реакции доступны только онлайн."
+# Tooltip of the add-reaction button in the chips row.
+add_title = "Реакция"
+# The reaction-picker item opening the custom-emoji prompt…
+other = "Другой…"
+# …whose question that prompt asks.
+emoji_prompt = "Эмодзи:"
+
+[diff]
+# Fallback name of a card-description version that carries no name.
+version_fallback = 'Версия {{.n}}'
+# Shown for an edit that changed only whitespace.
+no_changes = "без видимых изменений"
+
+[excerpt]
+# The badge marking a comment as an excerpt, in the feed and in threads.
+badge = "выписка"
+# The counter on the excerpts button of the card panel.
+count = 'Выписок: {{.n}}'
+# Fallback name of an excerpted attachment with no stored name.
+file_fallback = "файл"
+# The download button of a non-image excerpted attachment.
+download = "Скачать"

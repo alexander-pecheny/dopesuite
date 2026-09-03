@@ -1,0 +1,27 @@
+# xy — the board-sync tool (internal/chgk/board): parsing a board link,
+# pulling a Trello/xy board over the API, and uploading a .4s to it. The /board
+# screen's own surface is board.toml.
+
+[config]
+# ParseURL on an empty string.
+empty_url = "пустая ссылка на доску"
+# ParseURL when the link is neither a Trello nor an xy board link.
+unrecognized = 'не понял, какая доска: {{.url}}'
+
+[fetch]
+# fetchXY, when a list's name fails to decrypt.
+list = 'список {{.id}}: {{.err}}'
+# fetchXY, when a card's text fails to decrypt.
+card = 'карточка {{.id}}: {{.err}}'
+
+[upload]
+# Cards, the caption of a card whose text has no ! answer line.
+default_caption = "вопрос"
+# Upload's progress line before the cards go to the chosen list.
+uploading = 'загружаю в список «{{.name}}»'
+# Upload's progress line after each card lands.
+posted = 'отправлено: {{.caption}}'
+# pickList on a board with no lists at all.
+no_lists = "на доске нет списков"
+# pickList when the named list does not exist; the known names follow.
+list_missing = 'список «{{.name}}» не найден; есть: {{.known}}'

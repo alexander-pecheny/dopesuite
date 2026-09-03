@@ -1,0 +1,82 @@
+# The Брейн-ринг screen (dope/dope/web/ts/brain.ts): the per-bout protocol
+# sheets, the group cross-table, the reseed panels, the individual player
+# statistics and the seeding tab.
+
+# The game page's title when neither the fest view nor the scheme names it.
+title = "Брейн"
+
+[team]
+# The placeholder name of a side no participant is seated in (Команда 1, Команда 2).
+fallback = 'Команда {{.n}}'
+
+[row]
+# The marker column of a protocol sheet: the first appended tiebreak row reads П.
+tiebreak = "П"
+# A later tiebreak row: П2, П3, …
+tiebreak_n = 'П{{.n}}'
+
+[protocol]
+# The protocols tab before any bout of the game has loaded.
+empty = "Бои ещё не загружены."
+
+[mark]
+# A mark cell's hover tooltip: the team's name over the question row's label.
+title = '{{.team}}, вопрос {{.row}}'
+
+[tiebreak]
+# The buttons under a bout that must produce a winner: + П appends one row.
+add = "+ П"
+# The + П button's tooltip.
+add_hint = "Добавить вопрос перестрелки"
+# − П removes the last tiebreak row while both sides left it empty.
+remove = "− П"
+# The − П button's tooltip.
+remove_hint = "Убрать пустой вопрос перестрелки"
+
+[bout]
+# The «Закончен» checkbox in a bout's head row.
+finished = "Закончен"
+
+[pod]
+# The column title of a pod round on the pod detail tab.
+round = 'Раунд {{.n}}'
+
+[reseed]
+# The reseed panel when the calculate request itself fails.
+calculate_failed = "Не удалось рассчитать пересев"
+# The blocked-calculate message naming the one unfinished bout…
+pending_one = 'Бой {{.names}} не закончен'
+# …and the same message when several bouts stay unfinished.
+pending_many = 'Бои {{.names}} не закончены'
+
+[stats]
+# The individual player statistics tab: the column headers, then its empty state.
+player = "Игрок"
+team = "Команда"
+attempts = "Попытки"
+right = "Верно"
+wrong = "Неверно"
+share = "% верных"
+empty = "Пока никто не жал на кнопку."
+
+[seed]
+# The seeding tab: the import controls and their messages.
+upload = "Загрузить посев из xlsx"
+# The xlsx upload clicked with no file chosen.
+no_file = "Выберите файл"
+# The import button when the scheme's seeding source is random.
+draw = "Провести жребий"
+# The import button naming any other source the scheme declares.
+import_from = 'Импортировать посев из {{.source}}'
+# The ladder before any import has run.
+empty = "Посев ещё не импортирован."
+# The seed cell of a waitlisted team.
+waitlist = "запас"
+
+[seed_head]
+# The seeding ladder's column headers.
+seed = "Посев"
+team = "Команда"
+city = "Город"
+rank = "Место в источнике"
+declined = "Отказ"

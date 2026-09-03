@@ -1,0 +1,8 @@
+# The bulk access parser (dope/dope/platform/roles): the line-numbered errors
+# the host reads verbatim under the fest's access textarea.
+
+[bulk]
+# A line with no "username:role" shape, or an empty username or role.
+format_expected = 'строка {{.n}}: нужен формат username:role'
+# An action word that is neither host, admin nor remove.
+action_unknown = 'строка {{.n}}: действие должно быть host, admin или remove'

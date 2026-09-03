@@ -1,0 +1,122 @@
+# xy — the sessions surface: the board's test-session panel (sessionspanel.ts)
+# — the list rows, the test-mode toggle, and the per-test editor with its
+# invite builder and debrief feed — plus the pure tester-list helpers the
+# panel and the test cards share (sessions.ts). Tables follow the order a
+# reader meets the strings.
+
+[list]
+# Empty state of the sessions list on a board with no test sessions yet.
+empty = "Тестов пока нет."
+# Per-row count of tester players, appended to the row's meta line.
+players = '{{.n}} игр.'
+# Per-row count of tester teams, appended to the row's meta line.
+teams = '{{.n}} ком.'
+# Per-row count of questions already played at this session.
+played = '{{.n}} вопр.'
+# Fallback row title when the session carries no date at all.
+no_date = "(без даты)"
+# Tooltip of the copy marker on a session that arrived from another board.
+origin_title = "Скопирована с другой доски: список тестеров с тех пор мог измениться"
+# That marker when the copy carries no transfer date.
+origin = 'копия с «{{.board}}»'
+# The same marker with the date the session was copied at.
+origin_at = 'копия с «{{.board}}» от {{.date}}'
+# Button on a session row that opens the test's editor dialog.
+open = "Открыть"
+# Tooltip of the row's clipboard button that copies the invite line.
+invite_title = "Скопировать строку со временем начала для мессенджера"
+# Accessible label of that clipboard icon button.
+invite = "Приглашение"
+
+[testmode]
+# Tooltip of the row's ▶ button that turns test mode on for this session.
+start_title = "Тест-режим: минута на открытом вопросе или комментарий отмечают его этим тестом. Только на этом устройстве; час без действий выключает"
+# Tooltip of the same button once the session is the active test (it turns to ⏹).
+stop_title = "Завершить тест-режим"
+
+[form]
+# Label above the date field of the test editor.
+date = "Дата"
+# Label above the time field of the test editor.
+time = "Время (необязательно)"
+# Label above the timezone field of the test editor.
+timezone = "Часовой пояс"
+# Label above the alias field of the test editor.
+alias = "Алиас"
+# Placeholder of the date field, which takes 23.02.2026-style input.
+date_placeholder = "дд.мм.гггг"
+# Placeholder of the time field, which takes 19:00-style input.
+time_placeholder = "чч:мм"
+# Placeholder of the alias field.
+alias_placeholder = "короткое имя теста — напр. «Иван Иванов и др.»"
+
+[cities]
+# Label above the invite cities editor of the test editor.
+label = "Города для приглашения"
+# Placeholder of the city input that adds one more announce city.
+add_placeholder = "+ город…"
+# Tooltip of the × that removes a city chip.
+remove = "Убрать город"
+# Accessible label of that ×, naming the city it removes.
+remove_named = 'Убрать {{.name}}'
+# Accessible label of the clipboard button copying the invite preview.
+copy = "Скопировать приглашение"
+
+[testers]
+# Label above the tester rows of the test editor.
+label = "Тестировали"
+# Player/team toggle of a tester row, player side.
+player = "игрок"
+# Player/team toggle of a tester row, team side.
+team = "команда"
+# Placeholder of a tester row's name input.
+name_placeholder = "имя…"
+# Tooltip of the × that removes a tester row.
+remove_row = "Удалить строку"
+# Button appending one more empty tester row.
+add = "+ тестер"
+
+[feed]
+# Label above the debrief feed of the test editor.
+label = "Лента"
+# Placeholder of the debrief note input.
+placeholder = "Комментарий…"
+# Submit button under that input.
+send = "Отправить"
+# Empty state of the debrief feed before the first note.
+empty = "Комментариев пока нет."
+# Meta fragment marking a note that was left on a specific question.
+at_question = "к вопросу"
+
+[delete]
+# Label of the test editor's danger button (trash icon).
+label = "Удалить тест"
+# confirm() shown before the deletion; the session's per-question marks vanish.
+confirm = "Удалить тест-сессию? Её метки исчезнут с карточек."
+
+[message]
+# Message in the list dialog when creating a session fails.
+create_failed = "Не удалось создать тест."
+# Message in the editor when saving on the way out fails.
+save_failed = "Не удалось сохранить."
+# Message in the editor when deleting the session fails.
+delete_failed = "Не удалось удалить."
+# Message replacing the debrief feed when loading its notes fails.
+notes_load_failed = "Не удалось загрузить."
+# Message in the editor when posting a debrief note fails.
+note_add_failed = "Не удалось добавить заметку."
+
+[summary]
+# The «Вопросы тестировали» line a tester list flattens into (the editor's
+# summary copy appends the terminating period; the card's copy does not):
+# the players clause, with players joined by ", ".
+players = 'Вопросы тестировали: {{.names}}'
+# The teams clause continuing a players clause.
+teams_also = ', а также команды: {{.teams}}'
+# The teams clause when no players played, so it leads the line instead.
+teams_only = 'Вопросы тестировали команды: {{.teams}}'
+
+[seen]
+# The warning naming who saw individual questions of a tour and which ones:
+# parts are "name: 1, 2" clauses joined by "; ".
+partial = 'Видели отдельные вопросы: {{.parts}}.'

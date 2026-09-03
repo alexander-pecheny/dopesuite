@@ -1,0 +1,204 @@
+# xy — the card surface: the card-detail modal (xy/web/ts/carddetail.ts) and
+# its labels panel (xy/web/ts/cardlabels.ts): the Просмотр/Поля/Формат 4s
+# views over one card, the version strip, the edit tools, direct links and
+# question copying, the move/copy dialog, and the Метки/Тесты/Видели sections
+# under the card body. Tables follow the order a reader meets the strings.
+
+[view]
+# The third tab's label — the raw-4s editor is called "Формат 4s".
+tab_text = "Формат 4s"
+# The label above the raw 4s editor in that view.
+desc_label = "Описание"
+# Title of the modal's ✕ button when the card was opened from the board.
+close = "Закрыть"
+# Title of the same button (drawn as ←) when the card was opened from a list
+# preview's ✏️, where closing lands back in that preview.
+back = "Назад"
+
+[preview]
+# The read-only Просмотр pane's placeholder while the card has no text.
+empty = "Пусто."
+
+# The Поля editor: one entry per field, then the shared pills and rows.
+[field]
+# Field labels, shown as the head of each present field.
+question = "Текст вопроса"
+answer = "Ответ"
+zachet = "Зачёт"
+nezachet = "Незачёт"
+comment = "Комментарий"
+handout = "Раздаточный материал"
+source = "Источник"
+# The muted last field: handout-generator markup, bound to the draft's meta,
+# not to the 4s.
+hndt = "Доп. разметка для генерации раздаток"
+# The "+ <field>" pill that adds an absent field; .field is the field's label
+# above (for the Автор field, the default caption from chgk.toml's
+# [author] table, which the caption select also defaults to).
+add = '+ {{.field}}'
+# Tooltip of that pill.
+add_title = "Добавить поле"
+# Tooltip of the "×" that returns a present field to absent.
+remove_title = "Убрать поле"
+# The button adding one more source row to the Источник field.
+add_row = "+ строка"
+# Tooltip of a source row's "×".
+remove_row_title = "Удалить строку"
+
+[handout]
+# The текст/картинка segment toggle of the handout field.
+mode_text = "текст"
+mode_image = "картинка"
+# The row button under the picture picker: uploads a picture and selects it
+# as this handout in one gesture.
+attach = "Прикрепить…"
+attach_title = "Загрузить картинку и подставить её сюда"
+
+[authors]
+# Placeholder of the author tag input.
+placeholder = "имя автора…"
+# Tooltip of the caption <select> (Автор / Авторка / … — chgk.toml [author]).
+caption_title = "Подпись поля в экспорте"
+
+[version]
+# Fallback name of a version tab its author has not named.
+fallback_name = 'Версия {{.n}}'
+# Tooltip of the ↑ action on the selected version tab.
+promote_title = "Сделать первой — первая версия и есть та, которую видно на доске"
+promote_aria = "Сделать первой"
+# Tooltip of the ✎ action, which opens the rename prompt below; a version
+# name is visible only here, never in an export.
+rename_title = "Назвать версию — название видно только здесь, ни в один экспорт оно не попадёт"
+rename_aria = "Назвать версию"
+rename_prompt = "Название версии:"
+# Tooltip of the 🗑 action on the selected version tab.
+remove_title = "Удалить эту версию целиком"
+remove_aria = "Удалить версию"
+
+[to4s]
+# The →.4s tool: runs the editor's plain prose through the server's chgk
+# text parser, which is online-only.
+offline = "Разбор текста доступен только онлайн."
+failed = 'Не удалось разобрать текст: {{.error}}'
+
+[copy]
+# Flash messages under the direct-link and copy buttons (showCopyMsg).
+card_link = "Ссылка на карточку скопирована"
+comment_link = "Ссылка на комментарий скопирована"
+# Success flash after copying a question piece; .what is the copy target's
+# name, lowercased by the call site (the labels live in chgk.toml [copy]).
+done = 'Скопировано: {{.what}}'
+# Failure flash shared by every copy path: links, pieces, clipboard writes.
+failed = 'Не удалось скопировать: {{.error}}'
+
+# The card detail's move/copy dialog.
+[move]
+# Placeholder option while the target board's lists load.
+loading = "загрузка…"
+# Fallback option text for a target list with no title.
+untitled_list = "(без названия)"
+# Option shown when the target board has no lists at all.
+no_lists = "нет списков"
+# The position <select>: the last slot, then one slot per existing card.
+to_end = "в конец"
+position = 'позиция {{.n}}'
+# Offline gate: only an intra-board move works offline.
+offline = "Копирование и перенос между досками доступны только онлайн."
+# Progress line on the message line while an intra-board move is written.
+saving = "Сохранение…"
+# Progress line while a cross-board transfer re-encrypts.
+reencrypting = "Перешифровка…"
+# Success line of a move.
+moved = "Перемещено."
+# Success line of a copy.
+copied = "Скопировано."
+
+[kind]
+# Message line after the kind <select> changes the card's kind.
+changed = "Тип изменён."
+
+[save]
+# Message line after a successful save; the dirty-state check clears it by
+# matching, so rewording happens here or nowhere.
+saved = "Карточка сохранена."
+
+[create]
+# Alert (on the board, the modal is not open yet) when persisting a new card
+# failed.
+failed = 'Не удалось создать карточку: {{.error}}'
+
+[dirty]
+# The unsaved-changes dialog's messages when its Сохранить could not land.
+save_failed = "Не удалось сохранить — карточка осталась открытой."
+comment_failed = "Не удалось отправить комментарий — карточка осталась открытой."
+
+[delete]
+# confirm() before deleting the open card.
+confirm = "Удалить карточку?"
+
+[error]
+# Errors thrown inside the module that a user may read through the errMsg
+# report paths (alerts, the message line, the copy flash). Error-creation
+# strings: their call sites become catalog-backed errors in a later phase.
+no_board_key = "нет ключа доски"
+clipboard_unavailable = "буфер обмена недоступен"
+card_not_open = "карточка не открыта"
+image_not_found = "картинка не найдена среди вложений"
+reencode_failed = "не удалось перекодировать"
+no_image_copy_support = "браузер не умеет копировать картинки"
+
+# ---- the labels panel (cardlabels.ts) ----
+
+[chip]
+# aria-label of a label chip's ×: .title is one of the two remove titles
+# below (labels.remove_title / playings.label_remove_title), .name the
+# label's name.
+remove_aria = '{{.title}}: {{.name}}'
+
+[labels]
+# The Метки section: the author's view of the question.
+empty = "меток нет"
+# Tooltip of a chip's × in this section.
+remove_title = "Снять метку"
+
+[playings]
+# The Тесты section: where the question was played.
+empty = "тестов нет"
+# Tooltip of a playing's ×.
+remove_title = "Убрать тест с вопроса"
+# aria-label of that ×; .name is the session's name.
+remove_aria = 'Убрать тест {{.name}}'
+# Tooltip of a chip's × scoped to one playing.
+label_remove_title = "Снять отметку теста"
+# Tooltip of the ＋ that opens the label popup for one playing.
+label_add_title = "Добавить метку этого теста"
+# confirm() before removing a playing no test-scoped label hangs on.
+remove_confirm = 'Снять тест «{{.name}}» с вопроса?'
+# The same confirm when the playing carries labels; .n is their count and
+# reuses the exact forms the call site picks today.
+remove_confirm_scoped = 'Снять тест «{{.name}}» и {{.n}} {{plural .n "метку" "метки" "меток"}} на нём?'
+
+[seen]
+# The Видели section: who saw this question beyond the tour's named testers.
+# Lead-in before the names; the trailing space is part of the label.
+label = 'Видели: '
+# The same lead-in while the list's common testers are folded away.
+label_except_common = 'Видели вопрос, кроме общих тестеров списка: '
+# Tooltip on a name the tour's picked sessions already cover.
+common_tester_title = "Общий тестер списка"
+# The checkbox that folds the common testers back in.
+show_all = "Показать всех тестеров"
+# Tooltip of the clipboard button copying the whole line.
+copy_title = "Скопировать"
+
+[add]
+# The two add-popups (labels / tests) over one filtered dropdown.
+no_match = "ничего не найдено"
+# Filter placeholder and the two empty states of the label popup.
+labels_placeholder = "Фильтр меток…"
+labels_all_added = "все метки доски уже добавлены"
+labels_none = "меток на доске нет"
+# Filter placeholder and the two empty states of the test popup.
+playings_placeholder = "Фильтр тестов…"
+playings_all_marked = "все тесты доски уже отмечены"
+playings_none = "тестов на доске нет"

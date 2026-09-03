@@ -1,0 +1,85 @@
+# The fest grid page (dope/dope/web/ts/fest-grid.ts) and the fest roster tab
+# (fest-roster.ts): bout boxes and group tables on the grid, the reseed
+# panel, and the team-to-players roster.
+
+[reseed]
+# The calculate button before the reseed has any rows.
+calculate = "Рассчитать"
+# The same button once rows exist.
+recalculate = "Пересчитать"
+# Tooltip on the disabled button when no more specific reason is known.
+blocked_default = "Исходные бои ещё не закончены"
+# The blocked-reason line naming the one pending bout.
+blocked_one = 'Бой {{.match}} не закончен'
+# The blocked-reason line naming the pending bouts, comma-joined.
+blocked_many = 'Бои {{.matches}} не закончены'
+# The reseed standings table's place column.
+col_place = "Место"
+# The reseed standings table's team column.
+col_team = "Команда"
+# The reseed standings table's source-bout column, present only when the
+# entries come from more than one bout.
+col_match = "Бой"
+# The panel's empty state before the first calculation.
+empty = "Пересев пока не рассчитан."
+
+[grid]
+# The place column head of a bout box or group table.
+col_place = "М"
+# The default title of a bout without its own: the sheet letter, else the code.
+match_default = 'Бой {{.code}}'
+# A slot seated from a seed basket.
+slot_basket = 'К{{.basket}}-{{.number}}'
+# A slot fed by the reseed stage when its rank is not known yet.
+slot_reseed = "Пересев"
+# A slot fed by the reseed stage, with the rank.
+slot_reseed_ranked = 'Пересев-{{.rank}}'
+# The table a bout plays at.
+venue = 'пл. {{.n}}'
+# The table a bout plays at, when the venue has its own title.
+venue_titled = 'пл. {{.n}} ({{.title}})'
+
+[metric]
+# Column names the reseed panel uses, keyed by the sort metric. The symbol
+# labels (Σ, Σ+, the ± point tallies, +/−) stay in the code.
+# The sum of places.
+place_sum = "Σ мест"
+# The tie-break metric.
+tiebreak = "П"
+# The share of points taken.
+points_share = "% очков"
+# The share of questions taken.
+taken_share = "% взятых"
+# Points taken without penalties.
+taken_base = "Взятые б/п"
+# The rating points.
+points = "Очки"
+# The rating metric.
+rating = "Р"
+# The questions taken.
+taken = "Взятые"
+# The bouts played.
+bouts = "Боёв"
+# The draw metric.
+draw = "Жребий"
+
+[metric_short]
+# One-letter grid forms for the metrics whose names do not fit a column.
+# Points.
+points = "О"
+# Taken.
+taken = "В"
+# Bouts.
+bouts = "Б"
+
+[roster]
+# The roster tab on any game page, before the roster arrives.
+empty = "Составы пока не заданы."
+# The line shown while the roster is loading.
+loading = "Загрузка составов…"
+# The line shown when the roster request fails.
+load_failed = "Не удалось загрузить составы."
+# The roster table's team column.
+col_team = "Команда"
+# The roster table's players column.
+col_players = "Игроки"

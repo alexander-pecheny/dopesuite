@@ -3,4 +3,1338 @@
 /** One language's Catalog: a key per Surface, a nested object per group,
  * a function per string. */
 export type Strings = {
+  admin: {
+    createUsers: {
+      name: () => string;
+      title: () => string;
+    };
+    page: {
+      title: () => string;
+    };
+    users: {
+      colActivity: () => string;
+      colCreated: () => string;
+      colLogin: () => string;
+      empty: () => string;
+      name: () => string;
+      systemTag: () => string;
+      title: () => string;
+    };
+  };
+  brain: {
+    bout: {
+      finished: () => string;
+    };
+    mark: {
+      title: (team: string, row: string) => string;
+    };
+    pod: {
+      round: (n: string) => string;
+    };
+    protocol: {
+      empty: () => string;
+    };
+    reseed: {
+      calculateFailed: () => string;
+      pendingMany: (names: string) => string;
+      pendingOne: (names: string) => string;
+    };
+    row: {
+      tiebreak: () => string;
+      tiebreakN: (n: string) => string;
+    };
+    seed: {
+      draw: () => string;
+      empty: () => string;
+      importFrom: (source: string) => string;
+      noFile: () => string;
+      upload: () => string;
+      waitlist: () => string;
+    };
+    seedHead: {
+      city: () => string;
+      declined: () => string;
+      rank: () => string;
+      seed: () => string;
+      team: () => string;
+    };
+    stats: {
+      attempts: () => string;
+      empty: () => string;
+      player: () => string;
+      right: () => string;
+      share: () => string;
+      team: () => string;
+      wrong: () => string;
+    };
+    team: {
+      fallback: (n: string) => string;
+    };
+    tiebreak: {
+      add: () => string;
+      addHint: () => string;
+      remove: () => string;
+      removeHint: () => string;
+    };
+    title: () => string;
+  };
+  crosstable: {
+    columns: {
+      name: () => string;
+      place: () => string;
+      points: () => string;
+    };
+    empty: () => string;
+  };
+  edit: {
+    roster: {
+      immutable: () => string;
+    };
+  };
+  ek: {
+    answer: {
+      title: (team: string, theme: string, q: string) => string;
+    };
+    bout: {
+      finished: () => string;
+    };
+    crumb: {
+      seedImport: () => string;
+      stats: () => string;
+      venues: () => string;
+    };
+    seed: {
+      declineFailed: () => string;
+      declinedAria: (name: string) => string;
+      empty: () => string;
+      error: (reason: string) => string;
+      errorPrefix: () => string;
+      import: () => string;
+      importFailed: () => string;
+      imported: (n: string) => string;
+      summary: (active: string, size: string, total: string) => string;
+      teamPlaceholder: () => string;
+      waitlist: () => string;
+    };
+    seedHead: {
+      declined: () => string;
+      seed: () => string;
+      team: () => string;
+    };
+    shootout: {
+      add: () => string;
+      addLabel: () => string;
+      column: (n: string) => string;
+      letter: () => string;
+      remove: () => string;
+      removeConfirm: () => string;
+      removeLabel: () => string;
+    };
+    stage: {
+      empty: () => string;
+      matchFallback: (code: string) => string;
+    };
+    stats: {
+      battles: () => string;
+      empty: () => string;
+      individualEmpty: () => string;
+      player: () => string;
+      share: () => string;
+      team: () => string;
+    };
+    theme: {
+      column: (n: string) => string;
+    };
+    title: () => string;
+    venue: {
+      cancel: () => string;
+      edit: () => string;
+      save: () => string;
+    };
+  };
+  export: {
+    col: {
+      battles: () => string;
+      chair: () => string;
+      matchPlace: () => string;
+      place: () => string;
+      player: () => string;
+      shootoutN: (n: string) => string;
+      team: () => string;
+      teamShare: () => string;
+      themeN: (n: string) => string;
+      themeQuestion: (theme: string, question: string) => string;
+      total: () => string;
+    };
+    error: {
+      multiScheme: (err: string) => string;
+      multiState: (err: string) => string;
+      troikaState: (code: string, err: string) => string;
+    };
+    multi: {
+      normalizedName: (name: string) => string;
+    };
+    name: {
+      teamN: (n: string) => string;
+    };
+    od: {
+      city: () => string;
+      name: () => string;
+      tour: () => string;
+    };
+    sheet: {
+      detailed: () => string;
+      fallback: () => string;
+      results: () => string;
+      stats: () => string;
+    };
+  };
+  fest: {
+    grid: {
+      colPlace: () => string;
+      matchDefault: (code: string) => string;
+      slotBasket: (basket: string, number: string) => string;
+      slotReseed: () => string;
+      slotReseedRanked: (rank: string) => string;
+      venue: (n: string) => string;
+      venueTitled: (n: string, title: string) => string;
+    };
+    metric: {
+      bouts: () => string;
+      draw: () => string;
+      placeSum: () => string;
+      points: () => string;
+      pointsShare: () => string;
+      rating: () => string;
+      taken: () => string;
+      takenBase: () => string;
+      takenShare: () => string;
+      tiebreak: () => string;
+    };
+    metricShort: {
+      bouts: () => string;
+      points: () => string;
+      taken: () => string;
+    };
+    reseed: {
+      blockedDefault: () => string;
+      blockedMany: (matches: string) => string;
+      blockedOne: (match: string) => string;
+      calculate: () => string;
+      colMatch: () => string;
+      colPlace: () => string;
+      colTeam: () => string;
+      empty: () => string;
+      recalculate: () => string;
+    };
+    roster: {
+      colPlayers: () => string;
+      colTeam: () => string;
+      empty: () => string;
+      loadFailed: () => string;
+      loading: () => string;
+    };
+  };
+  festaccess: {
+    add: {
+      creatorExists: () => string;
+      nicknameRequired: () => string;
+      roleInvalid: () => string;
+      userNotFound: (name: string) => string;
+    };
+    bulk: {
+      empty: () => string;
+      linePrefix: (n: string, msg: string) => string;
+      userNotFound: (n: string, name: string) => string;
+    };
+    manage: {
+      denied: () => string;
+    };
+    member: {
+      creatorProtected: () => string;
+      roleInvalid: () => string;
+    };
+  };
+  gallery: {
+    brain: {
+      title: () => string;
+    };
+    ek: {
+      title: () => string;
+    };
+    multi: {
+      title: () => string;
+    };
+    od: {
+      title: () => string;
+    };
+    page: {
+      title: () => string;
+    };
+    section: {
+      ekStats: () => string;
+      festGrid: () => string;
+      groupStandings: () => string;
+      individualStats: () => string;
+      reseed: () => string;
+      roster: () => string;
+      venues: () => string;
+      venuesHost: () => string;
+    };
+    si: {
+      title: () => string;
+    };
+    topbar: {
+      title: () => string;
+    };
+    troika: {
+      title: () => string;
+    };
+  };
+  gamebuild: {
+    clear: {
+      parsePasted: (err: string) => string;
+      unsupported: () => string;
+    };
+    create: {
+      ekNoScheme: () => string;
+      jsonTypeMismatch: (described: string, created: string) => string;
+      multiFromScheme: () => string;
+      pastedTeams: () => string;
+      schemeRequired: () => string;
+      seedUnknown: (seed: string) => string;
+    };
+    recompile: {
+      startedBouts: (names: string) => string;
+    };
+    seating: {
+      kindPlayer: (name: string) => string;
+      kindTeam: (name: string) => string;
+      needPlayers: () => string;
+      needTwo: () => string;
+      unknownParticipant: (n: string) => string;
+      unnumbered: () => string;
+    };
+    titles: {
+      ksi: () => string;
+      multi: () => string;
+      od: () => string;
+    };
+  };
+  games: {
+    brain: {
+      label: () => string;
+    };
+    ek: {
+      label: () => string;
+    };
+    ksi: {
+      label: () => string;
+    };
+    multi: {
+      barNoTasksAfter: (n: string, name: string) => string;
+      barNoTasksBefore: (n: string, name: string) => string;
+      domainEmpty: () => string;
+      label: () => string;
+      lineExpected: (n: string) => string;
+      linePrefix: (n: string, name: string, msg: string) => string;
+      metricUnknown: (metric: string, known: string) => string;
+      noGames: () => string;
+      noTasks: (n: string, name: string) => string;
+      notANumber: (domain: string, item: string) => string;
+      rangeDescending: (domain: string) => string;
+      rangeTooWide: (domain: string, max: string) => string;
+      repeatCount: (spec: string) => string;
+      specExpected: (spec: string) => string;
+    };
+    od: {
+      label: () => string;
+    };
+    si: {
+      label: () => string;
+    };
+    troika: {
+      label: () => string;
+    };
+  };
+  host: {
+    dash: {
+      accessSavedNotice: () => string;
+      accessSubhead: () => string;
+      addBtn: () => string;
+      addGameBtn: () => string;
+      auditLink: () => string;
+      auditMuted: () => string;
+      bulkApply: () => string;
+      bulkDataLabel: () => string;
+      bulkDoneNotice: (n: string) => string;
+      bulkLabel: () => string;
+      cancelBtn: () => string;
+      clearBtn: () => string;
+      clearConfirm: () => string;
+      colNickname: () => string;
+      colRole: () => string;
+      deleteAccessConfirm: (name: string) => string;
+      deleteBtn: () => string;
+      deleteConfirm: () => string;
+      deleteGameConfirm: () => string;
+      deleteNote: () => string;
+      deleteSubhead: () => string;
+      deleteSubmit: () => string;
+      descriptionLabel: () => string;
+      endDateLabel: () => string;
+      errorSlugInvalid: (err: string) => string;
+      errorSlugTaken: () => string;
+      errorTitleRequired: () => string;
+      gamesEmpty: () => string;
+      gamesSubhead: () => string;
+      jumpLabel: () => string;
+      jumpTitle: () => string;
+      numbersLink: () => string;
+      numbersStatusDone: () => string;
+      numbersStatusPartial: (done: string, total: string) => string;
+      numbersStatusUnset: () => string;
+      pageTitle: (title: string) => string;
+      publicLabel: () => string;
+      ratingStatusNone: () => string;
+      rosterImportLink: () => string;
+      rosterPlayersLink: () => string;
+      rosterSubhead: () => string;
+      rosterTeamsLink: () => string;
+      saveSubmit: () => string;
+      settingsBtn: () => string;
+      slugLabel: () => string;
+      startDateLabel: () => string;
+      titleLabel: () => string;
+    };
+    games: {
+      brainHint: () => string;
+      createCrumb: () => string;
+      createSubmit: () => string;
+      createTitle: (title: string) => string;
+      ekHint: () => string;
+      ekJsonLabel: () => string;
+      entrantsHint: () => string;
+      entrantsSummary: () => string;
+      errorEkSchemeMissing: () => string;
+      errorJsonParse: (err: string) => string;
+      errorMinigames: (err: string) => string;
+      errorMultiSorting: (err: string) => string;
+      errorSlugInvalid: (err: string) => string;
+      errorSlugTaken: () => string;
+      errorTitleRequired: () => string;
+      errorTypeMissing: () => string;
+      minigamesHint: () => string;
+      minigamesLabel: () => string;
+      minigamesPlaceholder: () => string;
+      minigamesShareHint: () => string;
+      multiSortingHint: () => string;
+      multiSortingLabel: () => string;
+      odQuestionsLabel: () => string;
+      odToursLabel: () => string;
+      rebuildHint: () => string;
+      saveSubmit: () => string;
+      schemeLabel: () => string;
+      siHint: () => string;
+      slugLabel: () => string;
+      stickerEmptywrong: () => string;
+      stickerEmptywrongRow: () => string;
+      stickerMaxField: () => string;
+      stickerMaxLabel: () => string;
+      stickerNeutral: () => string;
+      stickerNowrong: () => string;
+      stickerNowrongRow: () => string;
+      stickerX2Row: () => string;
+      stickersHint: () => string;
+      themesLabel: () => string;
+      titleLabel: () => string;
+      troikaHint: () => string;
+      typeBrain: () => string;
+      typeEk: () => string;
+      typeKsi: () => string;
+      typeKsiStickers: () => string;
+      typeLabel: () => string;
+      typeMulti: () => string;
+      typeOd: () => string;
+      typeSi: () => string;
+      typeTroika: () => string;
+    };
+    pages: {
+      createFestSummary: () => string;
+      createSubmit: () => string;
+      descriptionLabel: () => string;
+      endDateLabel: () => string;
+      errorIntRange: (field: string, min: string, max: string) => string;
+      festGamesEmpty: () => string;
+      festRowUnlisted: (title: string) => string;
+      festsEmpty: () => string;
+      gamesSubhead: () => string;
+      groupCurrent: () => string;
+      groupFuture: () => string;
+      groupPast: () => string;
+      homeCrumbLabel: () => string;
+      identityUsernameLead: () => string;
+      jumpHostLabel: () => string;
+      jumpHostTitleFest: () => string;
+      jumpHostTitleIndex: () => string;
+      jumpLabel: () => string;
+      jumpTitle: () => string;
+      landingCrumb: () => string;
+      landingTitle: (name: string) => string;
+      logoutSubmit: () => string;
+      passwordChangeSubmit: () => string;
+      passwordConfirmPlaceholder: () => string;
+      passwordCurrentPlaceholder: () => string;
+      passwordNewPlaceholder: () => string;
+      passwordSetSubmit: () => string;
+      profileCrumb: () => string;
+      profileTitle: () => string;
+      publicIndexCrumb: () => string;
+      publicIndexEmpty: () => string;
+      publicIndexTitle: () => string;
+      publicLabel: () => string;
+      ratingIdLabel: () => string;
+      startDateLabel: () => string;
+      titleLabel: () => string;
+      usernameFallback: () => string;
+    };
+    roster: {
+      addOverrideBtn: () => string;
+      cancelBtn: () => string;
+      colCity: () => string;
+      colFromTeam: () => string;
+      colPlayers: () => string;
+      colToTeam: () => string;
+      deleteBtn: () => string;
+      deleteOverrideConfirm: () => string;
+      editOverrideLabel: () => string;
+      errorJsonEmpty: () => string;
+      errorJsonParse: (err: string) => string;
+      errorObjPlayer: () => string;
+      errorObjSourceTeam: () => string;
+      errorObjTeam: () => string;
+      gamesLabel: () => string;
+      importDoneCounts: (teams: string, players: string, od: string, ksi: string) => string;
+      importDoneNotice: () => string;
+      importSubmit: () => string;
+      importUnchangedNotice: (teams: string, players: string) => string;
+      needRatingNote: () => string;
+      newTeamLabel: () => string;
+      noOverrideGames: () => string;
+      overrideTitle: () => string;
+      overridesSubhead: () => string;
+      playerLabel: () => string;
+      playersCrumb: () => string;
+      playersEmpty: () => string;
+      playersTitle: (title: string) => string;
+      ratingImportCrumb: () => string;
+      ratingImportNote: () => string;
+      ratingImportTitle: (title: string) => string;
+      ratingSource: (id: string) => string;
+      saveSubmit: () => string;
+      schemeImportCrumb: () => string;
+      schemeImportNote: () => string;
+      schemeImportSubmit: () => string;
+      schemeImportTitle: (title: string) => string;
+      schemeJsonLabel: () => string;
+      teamLabel: () => string;
+      teamsCrumb: () => string;
+      teamsEmpty: () => string;
+      teamsTitle: (title: string) => string;
+    };
+  };
+  imports: {
+    ekRestore: {
+      matchHeader: (code: string, status: string) => string;
+    };
+    rating: {
+      apiError: (detail: string) => string;
+      decodeFailed: (err: string) => string;
+      fetchFailed: (err: string) => string;
+      noTeams: () => string;
+      squadTooBig: (name: string) => string;
+    };
+    seed: {
+      gameMissing: (code: string) => string;
+      ksiMissing: () => string;
+      metricUnknown: (metric: string, code: string) => string;
+      multipleStandings: (code: string, n: number) => string;
+      noNumberedTeams: () => string;
+      noStandings: (code: string) => string;
+      nothingImported: () => string;
+      schemeMissing: () => string;
+      schemeXlsx: () => string;
+      sourceNoTeams: () => string;
+      teamNotFound: () => string;
+      teamTwice: (source: string, name: string, first: string) => string;
+      xlsxBasketMissing: (name: string, n: string) => string;
+      xlsxBasketNotNumber: (n: string, basket: string) => string;
+      xlsxNoSheets: () => string;
+      xlsxNoTeams: () => string;
+      xlsxOpen: (err: string) => string;
+      xlsxTeamUnknown: (n: string, name: string) => string;
+    };
+    seedPlayers: {
+      aggregateExpected: (name: string) => string;
+      metricMissing: (name: string, over: string) => string;
+      metricUnknown: (metric: string, known: string) => string;
+      multipleStandings: (code: string) => string;
+      noGames: () => string;
+      noRoster: (name: string) => string;
+      noRosters: () => string;
+      noSorting: () => string;
+      selfReference: (grain: string, name: string) => string;
+    };
+    seedSource: {
+      ksi: () => string;
+      players: () => string;
+      random: () => string;
+    };
+  };
+  journal: {
+    ek: {
+      answer: (match: string, team: string, theme: string, question: string, mark: string) => string;
+      matchFinished: () => string;
+      matchPrefix: (code: string) => string;
+      matchReopened: () => string;
+      matchUpdate: () => string;
+      playerAssigned: () => string;
+      playerPlays: (name: string) => string;
+      playerRemoved: () => string;
+      rank: (match: string, team: string, rank: string) => string;
+      teamUnnamed: () => string;
+      themePrefix: (match: string, team: string, theme: string) => string;
+    };
+    event: {
+      festAccess: () => string;
+      festNumbers: () => string;
+      gameClear: () => string;
+      gameCreate: () => string;
+      gameDelete: () => string;
+      gameRevert: () => string;
+      playerOverride: () => string;
+      ratingImport: () => string;
+      reseed: () => string;
+      schemeImport: () => string;
+      seedDecline: () => string;
+      seedImportKsi: () => string;
+      stateReplaced: () => string;
+      venue: () => string;
+    };
+    index: {
+      empty: () => string;
+      note: () => string;
+      title: () => string;
+    };
+    ksi: {
+      answer: (theme: string, player: string, question: string, mark: string) => string;
+      declined: () => string;
+      finished: () => string;
+      participantFallback: (n: string) => string;
+      rename: (n: string, name: string) => string;
+    };
+    mark: {
+      none: () => string;
+      right: () => string;
+      wrong: () => string;
+    };
+    od: {
+      answerClear: (question: string) => string;
+      answerSet: (question: string, team: string) => string;
+      entriesChanged: () => string;
+      entryChanged: (question: string) => string;
+      readiness: (question: string, value: string) => string;
+      shootout: () => string;
+      teamNamed: (name: string, n: string) => string;
+      teamUnnamed: (n: string) => string;
+    };
+    page: {
+      colChanges: () => string;
+      colWhen: () => string;
+      colWho: () => string;
+      defaultTitle: (n: string) => string;
+      empty: () => string;
+      more: (n: string) => string;
+      revertConfirm: () => string;
+      revertDone: () => string;
+      revertFailed: (err: string) => string;
+      revertSubmit: () => string;
+      title: (game: string) => string;
+    };
+    patch: {
+      genericRemoved: (path: string) => string;
+      genericSet: (path: string, value: string) => string;
+      stateFallback: () => string;
+    };
+    value: {
+      empty: () => string;
+    };
+  };
+  markdown: {
+    details: {
+      defaultSummary: () => string;
+    };
+  };
+  multi: {
+    game: {
+      uniformPrice: (name: string, n: string) => string;
+    };
+    refusals: {
+      declined: () => string;
+      team: () => string;
+    };
+    results: {
+      place: () => string;
+      team: () => string;
+      total: () => string;
+    };
+    sheet: {
+      team: () => string;
+      total: () => string;
+    };
+    tabs: {
+      detailed: () => string;
+      refusals: () => string;
+      results: () => string;
+      roster: () => string;
+    };
+    title: () => string;
+  };
+  numbers: {
+    action: {
+      auto: () => string;
+      cancel: () => string;
+      clear: () => string;
+      import: () => string;
+      replace: () => string;
+      save: () => string;
+    };
+    apply: {
+      foreignTeam: () => string;
+      numberRange: (max: string) => string;
+      readFailed: () => string;
+      teamRepeated: () => string;
+    };
+    error: {
+      numberTwoRows: (number: string, first: string, second: string) => string;
+      rowForeignTeam: (n: string) => string;
+      rowNoTeam: (n: string) => string;
+      rowRange: (n: string, max: string) => string;
+      teamTwoRows: (first: string, second: string) => string;
+    };
+    help: {
+      edit: () => string;
+    };
+    import: {
+      lineDup: (n: string, number: string, prev: string) => string;
+      lineFormat: (n: string) => string;
+      lineRange: (n: string, max: string) => string;
+    };
+    notice: {
+      auto: () => string;
+      cleared: () => string;
+      saved: () => string;
+      savedPartial: (n: string) => string;
+    };
+    page: {
+      crumb: () => string;
+      empty: () => string;
+      noTeams: () => string;
+      title: (fest: string) => string;
+    };
+  };
+  octobearfest: {
+    error: {
+      assortiStep: (err: string) => string;
+      dbMissing: () => string;
+      festExists: (slug: string) => string;
+      finish: (at: string, err: string) => string;
+      multiBout: (err: string) => string;
+      noBoutAt: () => string;
+      noSystemUser: () => string;
+      notSeated: () => string;
+      troikaStep: (err: string) => string;
+    };
+    flag: {
+      db: () => string;
+      root: () => string;
+      slug: () => string;
+    };
+    log: {
+      assortiStart: (game: string, minigames: string, teams: string) => string;
+      fest: (id: string, slug: string) => string;
+      organizers: (err: string) => string;
+      registry: (n: string) => string;
+      troikaDone: () => string;
+      troikaStart: (game: string, bouts: string) => string;
+    };
+  };
+  od: {
+    detailed: {
+      tour: (n: string) => string;
+    };
+    guard: {
+      lead: () => string;
+      missing: (names: string) => string;
+      numbers: () => string;
+    };
+    head: {
+      place: () => string;
+      placeShort: () => string;
+      team: () => string;
+    };
+    invert: {
+      label: () => string;
+    };
+    progress: {
+      entered: (n: string) => string;
+      notStarted: () => string;
+    };
+    results: {
+      shootoutCollapse: () => string;
+      shootoutExpand: () => string;
+      tourCollapse: () => string;
+      tourExpand: () => string;
+    };
+    screen: {
+      bg: () => string;
+      chromeHide: () => string;
+      chromeShow: () => string;
+      columns: () => string;
+      fg: () => string;
+      font: () => string;
+      muted: () => string;
+      noTeams: () => string;
+      reset: () => string;
+      settings: () => string;
+      showCity: () => string;
+      showCountry: () => string;
+    };
+    shootout: {
+      addQuestion: () => string;
+      addRound: () => string;
+      addRoundBlocked: () => string;
+      cancel: () => string;
+      create: () => string;
+      entryTitle: (team: string, round: string, q: string) => string;
+      removeQuestion: () => string;
+      removeQuestionConfirm: () => string;
+      removeRoundConfirm: () => string;
+      round: (n: string) => string;
+      roundDialog: () => string;
+      title: () => string;
+    };
+    team: {
+      fallback: (n: string) => string;
+    };
+    title: () => string;
+  };
+  override: {
+    entry: {
+      gameInvalid: () => string;
+      gameTypeWrong: () => string;
+      pickFromHint: (label: string) => string;
+      pickGames: () => string;
+      pickPlayer: () => string;
+      pickTeam: () => string;
+    };
+    lookup: {
+      notFound: () => string;
+      playerNotFound: () => string;
+      teamNotFound: () => string;
+    };
+    save: {
+      teamSame: () => string;
+      teamTooBig: (team: string) => string;
+    };
+  };
+  pages: {
+    crumbs: {
+      admin: () => string;
+      festFallback: (n: string) => string;
+      home: () => string;
+      host: () => string;
+    };
+  };
+  replay: {
+    codec: {
+      statAttempts: () => string;
+      statBouts: () => string;
+      statRight: () => string;
+      statThemes: () => string;
+      statWrong: () => string;
+    };
+    parse: {
+      boutHeaderExtra: (rest: string) => string;
+      boutNoSeats: (at: string) => string;
+      coordExpected: (raw: string) => string;
+      coordNoBlock: (raw: string) => string;
+      coordTable: (stage: string) => string;
+      coordTaken: (at: string, n: string) => string;
+      countsDigit: (name: string, raw: string) => string;
+      countsThemeSize: (name: string, n: string, raw: string) => string;
+      entrantExpected: (raw: string) => string;
+      entrantNoName: () => string;
+      entrantNumber: (raw: string) => string;
+      gameNoCodec: (game: string) => string;
+      gamePairExpected: (raw: string) => string;
+      gameUnknownKey: (key: string) => string;
+      groupExpected: (raw: string) => string;
+      headTableExpected: (stage: string) => string;
+      headerUnclosed: (raw: string) => string;
+      lineOutsideSection: (raw: string) => string;
+      linePrefix: (n: string, msg: string) => string;
+      lineupEmptyName: (team: string) => string;
+      lineupExpected: (raw: string) => string;
+      lineupNoPlayers: (team: string) => string;
+      lineupPlayerTwice: (team: string, name: string) => string;
+      lineupTwice: (team: string) => string;
+      lineupUnknownTeam: (team: string) => string;
+      lineupsIndividual: () => string;
+      overrideExpected: () => string;
+      partExpected: (what: string, prefix: string, raw: string) => string;
+      partMatch: () => string;
+      partNumberExpected: (what: string, raw: string) => string;
+      partRound: () => string;
+      partWave: () => string;
+      questionEmpty: (name: string) => string;
+      questionMark: (name: string, raw: string) => string;
+      questionNone: (name: string) => string;
+      rosterNameTwice: (name: string) => string;
+      rosterNumberTaken: (n: string, held: string, entrant: string) => string;
+      seatBrainPlayerField: () => string;
+      seatCommaNotBrain: (name: string) => string;
+      seatExpected: (raw: string) => string;
+      seatIndividualPlayer: () => string;
+      seatNoName: () => string;
+      seatNoThemes: (name: string) => string;
+      seatPlace: (name: string, raw: string) => string;
+      seatPlayersMismatch: (name: string, themes: string, players: string) => string;
+      seatSum: (name: string, raw: string) => string;
+      seatUnknown: (at: string, name: string) => string;
+      shootoutExpected: (raw: string) => string;
+      shootoutNotNumber: (name: string, raw: string) => string;
+      shootoutTwice: (name: string) => string;
+      shootoutUnknown: (name: string, at: string) => string;
+      statFields: (n: string, raw: string) => string;
+      statNoPlayer: () => string;
+      statNoTeam: (player: string) => string;
+      statNotInLineup: (player: string, team: string) => string;
+      statNotNumbers: (player: string, raw: string) => string;
+      statUnknown: (player: string) => string;
+      statUnknownTeam: (team: string) => string;
+      tableNameTwice: (at: string, name: string, n: string) => string;
+      tableNoRows: (at: string) => string;
+      tableRowExpected: (raw: string) => string;
+      tableTrailing: (rest: string) => string;
+      tableUnknown: (at: string, name: string) => string;
+      themeFive: (raw: string, n: string) => string;
+      themeMark: (raw: string, char: string) => string;
+      themePlayerUnknown: (theme: string, seat: string, player: string) => string;
+    };
+    report: {
+      colBout: () => string;
+      colWhat: () => string;
+      colWho: () => string;
+      colWhy: () => string;
+      collectedLead: () => string;
+      collectedMid: () => string;
+      intro: () => string;
+      noneYet: () => string;
+      title: () => string;
+      whoAll: () => string;
+    };
+    run: {
+      allAgreed: () => string;
+      fieldExtra: () => string;
+      fieldOutcome: () => string;
+      fieldPlace: () => string;
+      fieldSeating: () => string;
+      fieldStats: () => string;
+      fieldTable: () => string;
+      fieldUnneeded: () => string;
+      finding: (at: string, who: string, field: string, sheet: string, ours: string) => string;
+      finishWrap: (at: string, err: string) => string;
+      lineupsUnwritable: () => string;
+      lineupsWrap: (err: string) => string;
+      noRow: () => string;
+      notSeated: () => string;
+      nothing: () => string;
+      outcomeWrap: (at: string, err: string) => string;
+      pinWrap: (at: string, name: string, err: string) => string;
+      playWrap: (at: string, name: string, err: string) => string;
+      seatDrawWrap: (at: string, err: string) => string;
+      seatedWrap: (at: string, err: string) => string;
+      sheetScore: (total: string, place: string) => string;
+      statsUncomputable: () => string;
+      statsWrap: (err: string) => string;
+      tableUnrankable: () => string;
+    };
+  };
+  resolver: {
+    reseed: {
+      notReady: () => string;
+      pending: (n: number, codes: string) => string;
+    };
+  };
+  roles: {
+    bulk: {
+      actionUnknown: (n: string) => string;
+      formatExpected: (n: string) => string;
+    };
+  };
+  route: {
+    guard: {
+      unnumbered: () => string;
+    };
+  };
+  scheme: {
+    entrants: {
+      countMismatch: (need: string, have: string) => string;
+      proceedingMissing: () => string;
+      supplyMismatch: (have: string, need: string) => string;
+    };
+    error: {
+      linePrefix: (n: string, msg: string) => string;
+    };
+    keys: {
+      matchSizeRound: (key: string) => string;
+      unknownBlock: (key: string, known: string) => string;
+      unknownDefaults: (key: string, known: string) => string;
+      unknownDotted: (key: string, known: string) => string;
+      unknownInit: (key: string, known: string) => string;
+      unknownRound: (key: string, round: string, known: string) => string;
+    };
+    parse: {
+      duplicateKey: (key: string, n: string) => string;
+      intExpected: (key: string, raw: string) => string;
+      keyOutsideSection: () => string;
+      listExpected: (key: string) => string;
+      notANumber: (key: string, item: string) => string;
+      separator: () => string;
+      sortDirection: (key: string, dir: string) => string;
+      sortToken: (key: string, item: string) => string;
+      unknownSection: (name: string) => string;
+      unparsedLine: (raw: string) => string;
+    };
+    reseed: {
+      metricUnknown: (metric: string, known: string) => string;
+      needsReseed: (why: string) => string;
+      noTemplate: () => string;
+      previousTerminal: () => string;
+      proceedingTwo: () => string;
+      roundUnknown: (round: string) => string;
+      statsFromBounds: (block: string, last: string) => string;
+      statsFromNeedsReseed: () => string;
+    };
+    seed: {
+      playersNeedGames: () => string;
+      playersNeedSeed: () => string;
+    };
+    structure: {
+      kindMissing: () => string;
+      kindUnknown: (kind: string, known: string) => string;
+      kindUnregistered: (kind: string) => string;
+      matchCodeDup: (match: string, held_stage: string, stage: string) => string;
+      noBlocks: () => string;
+      slugCharset: (slug: string) => string;
+      slugIsStageCode: (slug: string) => string;
+      slugTwoBlocks: (slug: string) => string;
+      stageCodeDup: (code: string) => string;
+    };
+    titles: {
+      blockGroupN: (block: string, n: string) => string;
+      group: () => string;
+      groupN: (n: string) => string;
+      reseedStage: () => string;
+      seed: (n: string) => string;
+      venue: (n: string) => string;
+      wave: (title: string, n: string) => string;
+    };
+    venues: {
+      count: () => string;
+      empty: (key: string) => string;
+      undeclared: (key: string, venue: string) => string;
+    };
+  };
+  screen: {
+    banner: {
+      assign: () => string;
+      unassignedLead: () => string;
+    };
+    downloads: {
+      archive: () => string;
+      archiveTitle: () => string;
+      xlsx: () => string;
+      xlsxTitle: () => string;
+    };
+    jump: {
+      edit: () => string;
+      editTitle: () => string;
+      viewer: () => string;
+      viewerTitle: () => string;
+    };
+    tabs: {
+      blockGroup: () => string;
+      detailed: () => string;
+      final: () => string;
+      grid: () => string;
+      groupN: (n: string) => string;
+      individualStats: () => string;
+      input: () => string;
+      playoff: () => string;
+      protocol: (block: string) => string;
+      refusals: () => string;
+      reseed: () => string;
+      results: () => string;
+      roster: () => string;
+      round: (n: string) => string;
+      screen: () => string;
+      seed: () => string;
+      seedImport: () => string;
+      stats: () => string;
+      venues: () => string;
+    };
+    title: {
+      fest: () => string;
+      game: () => string;
+    };
+    trail: {
+      home: () => string;
+      host: () => string;
+    };
+  };
+  server: {
+    bot: {
+      down: () => string;
+      help: () => string;
+    };
+    login: {
+      title: () => string;
+    };
+    migration: {
+      v14: () => string;
+    };
+    publicFests: {
+      current: () => string;
+      future: () => string;
+      past: () => string;
+    };
+    seedImport: {
+      fileMissing: () => string;
+    };
+  };
+  si: {
+    battle: {
+      fallbackTitle: () => string;
+      finished: () => string;
+    };
+    participant: {
+      fallbackPlayer: (n: string) => string;
+      fallbackTeam: (n: string) => string;
+    };
+    refusals: {
+      declined: () => string;
+      declinedAria: (name: string) => string;
+      team: () => string;
+    };
+    results: {
+      place: () => string;
+      team: () => string;
+    };
+    sheet: {
+      answerTitle: (name: string, n: string, value: string) => string;
+      sortByName: () => string;
+      sortByNumber: () => string;
+      team: () => string;
+    };
+    sticker: {
+      title: (name: string, n: string) => string;
+    };
+    theme: {
+      label: (n: string) => string;
+    };
+    title: {
+      ksi: () => string;
+      si: () => string;
+    };
+  };
+  standings: {
+    columns: {
+      place: () => string;
+      player: () => string;
+      points: () => string;
+      round: (n: string) => string;
+    };
+  };
+  storage: {
+    match: {
+      defaultTitle: () => string;
+    };
+    slot: {
+      placeholder: () => string;
+      reseed: (n: string) => string;
+      seedBasket: (basket: string, number: string) => string;
+      seedLegacyPrefix: () => string;
+      seedUnlabelled: (n: string) => string;
+    };
+  };
+  structure: {
+    de: {
+      badGroups: (groups: string, size: string) => string;
+      groupsNeeded: () => string;
+      participantsNeeded: () => string;
+      playoff: () => string;
+      reseedRoundUnknown: (round: string) => string;
+    };
+    elimination: {
+      boutCannotOutput: (size: string, winning: string) => string;
+      bracketNotDivisible: (entrants: string, size: string, winning: string) => string;
+      livesMin: () => string;
+      matchSizeMin: () => string;
+      roundBracket: (round: string, bracket: string, err: string) => string;
+      roundEliminateNothing: (round: string, entrants: string, proceeding: string) => string;
+      roundNotDivisible: (round: string, entrants: string, size: string) => string;
+      tooManyRounds: () => string;
+      winningPlacesMin: () => string;
+    };
+    flat: {
+      game: () => string;
+      noEntrants: () => string;
+      participantsMissing: () => string;
+    };
+    macro: {
+      reseedRank: (n: string) => string;
+      seatFromBout: (bout: string, place: string) => string;
+      unrankableMetric: (metric: string, known: string) => string;
+    };
+    rr: {
+      groupFeed: (n: string) => string;
+      groupSizeNeeded: () => string;
+      noSchedule: (entrants: string, size: string) => string;
+      pointsList: () => string;
+      tooManyRounds: (rounds: string, entrants: string, size: string, have: string) => string;
+    };
+    se: {
+      bestOfFinalOnly: () => string;
+      bestOfParity: () => string;
+      bronze: () => string;
+      bronzeBout: (n: string) => string;
+      finalBout: (n: string) => string;
+      matchNthRound: (n: string, index: string) => string;
+      matchSemifinal: (index: string) => string;
+      participantsMissing: () => string;
+      proceedingMissing: () => string;
+      reseedFirstRound: (round: string) => string;
+      reseedRoundUnknown: (round: string) => string;
+      roundNth: (n: string) => string;
+      roundSemifinals: () => string;
+      templateGroups: () => string;
+      templateSize: (size: string) => string;
+    };
+    titles: {
+      bout: (n: string) => string;
+      final: () => string;
+      round: (n: string) => string;
+    };
+  };
+  telegram: {
+    reply: {
+      codeConsumed: () => string;
+      codeExpired: (url: string) => string;
+      codeMissing: () => string;
+      codeWrong: (url: string) => string;
+      genericError: () => string;
+      loginOnSite: (url: string) => string;
+      registerSuccess: () => string;
+    };
+  };
+  troika: {
+    bout: {
+      finished: () => string;
+    };
+    chair: {
+      lead: () => string;
+      outrider: (n: string) => string;
+    };
+    groups: {
+      rating: () => string;
+    };
+    protocol: {
+      seating: () => string;
+      team: () => string;
+    };
+    stats: {
+      bouts: () => string;
+      first: () => string;
+      player: () => string;
+      points: () => string;
+      repeat: () => string;
+      repeatRate: () => string;
+      team: () => string;
+    };
+    team: {
+      fallback: (n: string) => string;
+    };
+    theme: {
+      head: (n: string, value: string) => string;
+      seat: (n: string) => string;
+      unseat: (n: string) => string;
+    };
+    title: () => string;
+  };
+  ui: {
+    crumbs: {
+      label: () => string;
+    };
+    palette: {
+      label: () => string;
+    };
+    sync: {
+      label: () => string;
+    };
+  };
+  widgets: {
+    cellNav: {
+      next: () => string;
+      prev: () => string;
+    };
+    keypad: {
+      backspace: () => string;
+      nextColumn: () => string;
+      nextRow: () => string;
+      prevColumn: () => string;
+      prevRow: () => string;
+    };
+    menu: {
+      login: () => string;
+      profile: () => string;
+    };
+    profile: {
+      changed: () => string;
+      mismatch: () => string;
+    };
+    recorder: {
+      label: () => string;
+      title: () => string;
+    };
+    scoreTable: {
+      place: () => string;
+    };
+    status: {
+      error: () => string;
+      reconnecting: () => string;
+      saved: () => string;
+      saving: () => string;
+    };
+    venue: {
+      battle: (n: string, name: string) => string;
+      battleShort: (n: string) => string;
+      nameColumn: () => string;
+    };
+    viewers: {
+      label: () => string;
+      title: (n: string) => string;
+    };
+  };
 };

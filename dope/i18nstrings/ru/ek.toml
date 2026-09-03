@@ -1,0 +1,94 @@
+# The ЭК game page (dope/dope/web/ts/ek.ts) and its statistics table
+# (ek-stats.ts): the bout score sheets and their controls, the stage panes,
+# the seed-import tab, the stats tab and the breadcrumb crumbs.
+
+# The page's fallback game title when neither the fest view nor the scheme names it.
+title = "ЭК"
+
+[crumb]
+# The breadcrumb crumb naming the current sub-page: the venues tab, the stats
+# tab and the seed-import tab.
+venues = "Площадки"
+stats = "Статистика"
+seed_import = "Импорт команд"
+
+[stage]
+# The empty message of a stage pane with no bouts at all.
+empty = "В этом этапе нет боёв."
+# The fallback title of a bout the scheme neither titled nor named: «Бой A».
+match_fallback = 'Бой {{.code}}'
+
+[theme]
+# The score sheet's column label of the n-th regular theme: Т1, Т2, …
+column = 'Т{{.n}}'
+
+[shootout]
+# The score sheet's column label of the n-th shootout theme: П1, П2, …
+column = 'П{{.n}}'
+# The shootout sum column's bare head letter.
+letter = "П"
+# The + П button: its label, then its tooltip and aria-label.
+add_label = "+П"
+add = "Добавить тему перестрелки"
+# The − П button: its label, then its tooltip and aria-label, and the confirm
+# its click raises.
+remove_label = "−П"
+remove = "Удалить тему перестрелки"
+remove_confirm = "Удалить тему перестрелки?"
+
+[bout]
+# The «Закончен» checkbox in the bout head.
+finished = "Закончен"
+
+[venue]
+# The pencil button opening the venue dialog, then the dialog's buttons.
+edit = "Изменить площадку"
+cancel = "Отмена"
+save = "Сохранить"
+
+[answer]
+# An answer cell's hover tooltip: the team's name, the theme column's label
+# (regular or shootout) and the question's nominal.
+title = '{{.team}}, {{.theme}}, {{.q}}'
+
+[seed]
+# The seed-import tab's import button.
+import = "Импортировать из КСИ"
+# The panel before any import has run.
+empty = "Команды ещё не импортированы."
+# The counts line above the table: the teams in the main draw out of the draw
+# size, then the active total.
+summary = 'В основном посеве: {{.active}} из {{.size}}. Всего активных команд: {{.total}}.'
+# The success notice after an import.
+imported = 'Импортировано команд: {{.n}}.'
+# The failure notice: the server's error text, or the fallback below.
+error = 'Ошибка: {{.reason}}'
+import_failed = "Не удалось импортировать команды"
+# The fallback when saving a team's declined checkbox fails.
+decline_failed = "Не удалось сохранить отказ"
+# The prefix the page tests notices against to colour them as errors
+# (renderSeedImport's startsWith check).
+error_prefix = "Ошибка:"
+# The divider row before the waitlisted teams.
+waitlist = "Лист ожидания"
+# The declined checkbox's aria-label, and the placeholder for a nameless team.
+declined_aria = 'Отказалась: {{.name}}'
+team_placeholder = "команда"
+
+[seed_head]
+# The seed-import table's column headers.
+seed = "Посев"
+team = "Команда"
+declined = "Отказалась"
+
+[stats]
+# The per-player statistics table's column headers.
+player = "Игрок"
+team = "Команда"
+battles = "Бои"
+# The team-share column.
+share = "% от команды"
+# The per-player table before any answer is marked.
+empty = "Пока нет данных: ни одного ответа не отмечено."
+# The individual (personal-game) table before any theme is played.
+individual_empty = "Пока нет ни одной сыгранной темы."

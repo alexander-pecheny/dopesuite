@@ -1,0 +1,46 @@
+# The one-off octobearfest build script (dope/scripts/octobearfest): the flag
+# help, progress lines and errors the operator running it reads. The fest's
+# own content — the game labels Троечка and Ассорти — is data written into the
+# database, not chrome, so it stays out of the catalog.
+
+[flag]
+# -db: path to the dope SQLite database.
+db = "путь к базе dope"
+# -slug: the fest slug to build.
+slug = "slug феста"
+# -root: where the transcript, scheme and fixture are read from.
+root = "корень модуля: откуда читать стенограмму, схему и набор"
+
+[log]
+# The fest row created.
+fest = 'фест {{.id}} ({{.slug}})'
+# The team registry added.
+registry = 'реестр: {{.n}} команд'
+# The organizer-grant pass.
+organizers = 'организаторы: {{.err}} (пропущено)'
+# The Троечка game created, bouts still to replay.
+troika_start = 'троечка: игра {{.game}}, боёв {{.bouts}}'
+# The Троечка replay finished.
+troika_done = "троечка: сыграна"
+# The Ассорти game created, with its minigame and team counts.
+assorti_start = 'ассорти: игра {{.game}}, мини-игр {{.minigames}}, команд {{.teams}}'
+
+[error]
+# -db not given.
+db_missing = "укажите -db"
+# A fest with this slug already exists in the database.
+fest_exists = 'фест {{.slug}} в этой базе уже есть — удалите его или возьмите другой slug'
+# No is_system user row to own the fest.
+no_system_user = "в базе нет системного пользователя"
+# The Троечка build step failed.
+troika_step = 'троечка: {{.err}}'
+# The Ассорти build step failed.
+assorti_step = 'ассорти: {{.err}}'
+# No match sits at a transcript coordinate.
+no_bout_at = "нет боя по координате"
+# A roster seat is not in the bout the coordinate named.
+not_seated = "не сидит в этом бою"
+# FlatMatchID failed for the Ассорти game.
+multi_bout = 'бой мультиигр: {{.err}}'
+# Patching or finishing a bout failed; at names the transcript coordinate.
+finish = '{{.at}}: доигрыш: {{.err}}'

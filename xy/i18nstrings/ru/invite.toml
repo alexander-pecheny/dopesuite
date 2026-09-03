@@ -1,0 +1,64 @@
+# Board invite links (ADR-0017) inside the members dialog (boardinvites.ts):
+# the link rows, the join-request queue above them, and the mint form behind
+# «+ Создать ссылку».
+
+[state]
+# The server's word on why a link works or does not — the row's first fact.
+active = "активна"
+revoked = "отозвана"
+expired = "просрочена"
+exhausted = "исчерпана"
+
+[usage]
+# How much of a link is spent (inviteUsage): the spent count alone, or the
+# same count followed by what is left on a capped link.
+used = 'использований: {{.n}}'
+left = 'использований: {{.n}}, осталось: {{.left}}'
+
+[time]
+# The coarse remainder a deciding editor sees (inviteTimeLeft); "" when the
+# link has no expiry.
+expired = "срок истёк"
+days = 'осталось {{.n}} дн'
+hours = 'осталось {{.n}} ч'
+under_hour = "осталось меньше часа"
+
+[facts]
+# Extra fact pushed onto a link that collects join requests.
+approval = "с одобрением"
+
+[request]
+# A waiting join request: the owner's two decision buttons.
+approve = "Принять"
+decline = "Отклонить"
+
+[row]
+# One link row (renderInvites): fallback name, who joined, the owner actions.
+default_label = "Ссылка"
+joined = 'вошли: {{.names}}'
+copy = "Копировать"
+revoke = "Отозвать"
+remove = "Удалить"
+# confirm() text before the link and its join history are deleted.
+remove_confirm = "Удалить ссылку вместе с историей входов по ней?"
+
+[message]
+# Status line after the link was copied to the clipboard.
+copied = "Ссылка скопирована."
+
+[form]
+# The mint form (buildForm): name, expiry, use cap, approval checkbox.
+label_placeholder = "Название, например «тестерам»"
+submit = "Создать"
+ttl_label = "Срок"
+# Expiry chips: one hour, one day, one week, no expiry.
+ttl_hour = "час"
+ttl_day = "сутки"
+ttl_week = "неделя"
+ttl_never = "без срока"
+# Label of the use-cap chip row.
+uses_label = "Использований"
+# The uncapped chip of that row.
+uses_unlimited = "без ограничения"
+# Approval checkbox caption.
+approval = "С одобрением владельца"

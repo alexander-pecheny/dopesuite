@@ -1,0 +1,10 @@
+# The group-standings table of the sheets' Groups view: one table per group,
+# a player, his points and his per-round split.
+
+[columns]
+# The column headers, in table order: place, name, total points, then one
+# per round.
+place = "М"
+player = "Игрок"
+points = "Очки"
+round = 'Круг {{.n}}'

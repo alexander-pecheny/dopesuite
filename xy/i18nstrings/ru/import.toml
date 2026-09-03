@@ -1,0 +1,218 @@
+# xy — the import surface: the /import page (import.dopeui + import.ts), the
+# in-board package import (importpack.ts), and the Bundle flows that share the
+# screen set (bundleimport.ts, bundleapply.ts, bundleexport.ts, versions.ts).
+# Tables follow the order a reader meets the strings.
+
+[page]
+# Browser tab title of /import (page title attribute).
+title = "Импорт · xy"
+# Topbar heading and the current-page crumb of /import.
+name = "Импорт"
+# The "all boards" crumb and the back-arrow icon link to /.
+home = "Все доски"
+
+[archive]
+# Subhead of the "from an xy archive (.zip)" section of /import.
+subhead = "Из архива xy (.zip)"
+# Hint under that subhead explaining what a board archive carries.
+hint = "Архив со страницы доски (☰ «Экспорт (.zip)…»). Переносится всё, что было отмечено: списки, карточки, метки, тесты, комментарии, история правок и вложения. Здесь из него получается новая доска — чтобы добавить списки к уже существующей, откройте её и возьмите там ☰ «Импорт»."
+
+[trello]
+# Subhead of the "from Trello" section of /import.
+subhead = "Из Trello"
+# Hint introducing what a Trello import carries; the lead ends right before the
+# inline (code "_tests") token, which the page keeps as markup, not a string.
+intro_lead = "Импортируются карточки, списки, метки, все комментарии (без лимита в 1000) и вложения (файлы и фото). Списки, оканчивающиеся на "
+# Hint continuation right after the inline (code "_tests") token.
+intro_mid = ", становятся тест-списками."
+# Primary button opening Trello's authorize page.
+connect = "Подключить Trello"
+# Hint above the token paste field.
+token_hint = "Нажмите «Allow», скопируйте показанный токен и вставьте его сюда."
+# Placeholder of the token field.
+token_placeholder = "Токен из Trello"
+# Button confirming the pasted token.
+token_submit = "Подтвердить токен"
+# Label above the Trello board picker.
+board_label = "Доска в Trello"
+# Hint under the board picker explaining the "all boards" option.
+all_hint = "«Все доски» перенесёт каждую открытую доску Trello в отдельную доску xy — все под одним паролем; названия берутся из Trello."
+# Ghost button resetting the stored Trello token.
+reset = "Подключить другой аккаунт"
+# Hint about the JSON-export fallback, above the JSON file field.
+json_hint = "Без подключения сгодится сохранённый JSON-экспорт: меню доски Trello → «Печать, экспорт и общий доступ» → «Экспортировать как JSON». Из файла берутся до 1000 последних комментариев; вложения так не переносятся."
+
+# Fallback list title for a Trello list with no name (import.ts).
+list_fallback = "(без названия)"
+# Fallback label name when the Trello label has none.
+label_fallback = 'метка ({{.color}})'
+# Fallback inside that fallback: the label's colour is unknown too.
+label_no_color = "без цвета"
+# Fallback datetime of a test card whose title (the date) is empty.
+test_session_fallback = "тест-сессия"
+# Comment event recorded on a test card, before the testers' names.
+testers_lead = 'Тестировали: {{.testers}}'
+# Fallback attachment filename when Trello gives none.
+attachment_fallback = "файл"
+# Default name of the board created by a Trello import.
+board_name_default = "Импорт из Trello"
+
+[board]
+# Placeholder of the board-name field on /import.
+name_placeholder = "Название доски (по умолчанию — из архива или из Trello)"
+# Placeholder of the passphrase field on /import.
+pass_placeholder = "Пароль доски (для шифрования)"
+# Label of the dice icon button that generates and copies a passphrase.
+gen_pass = "Сгенерировать пароль"
+# Muted line shown once the generated passphrase has been copied.
+pass_copied = "Пароль уже скопирован"
+# Hint under the passphrase field.
+pass_hint = "Пароль нужен для E2E-шифрования."
+# Danger hint warning that the passphrase cannot be recovered.
+pass_danger = "Сохраните этот пароль прямо сейчас — восстановить его будет невозможно."
+# Checkbox where the reader confirms the passphrase is stored safely.
+pass_saved = "Я сохранил(а) пароль в надёжное место и обещаю его не терять"
+# Submit button of the import form.
+submit = "Импортировать"
+# Ghost cancel button back to /.
+cancel = "Отмена"
+
+[picker]
+# Synthetic "import every open board" option of the Trello board picker.
+all_boards = '★ Все доски ({{.n}})'
+# Placeholder option shown when the Trello account has no open boards.
+no_boards = "(нет открытых досок)"
+
+[run]
+# Progress line while Trello action pages are being fetched (import.ts).
+history = 'Загружаю историю из Trello… ({{.n}} событий)'
+# Progress line while the chosen board is pulled from Trello before its import.
+loading = "Загружаю доску из Trello…"
+# Progress line shown per board inside the all-boards import loop.
+importing = "загружаю из Trello…"
+# Message above the error when an import dies mid-run.
+aborted = 'Импорт прерван: {{.error}}'
+# Message when pulling the chosen board from Trello failed.
+load_failed = 'Не удалось загрузить доску из Trello: {{.error}}'
+# Message when the chosen JSON file is not a Trello board export.
+not_trello_export = "Это не похоже на экспорт доски Trello (нет массива lists)."
+# Message when the form is submitted with no Trello board and no file chosen.
+need_source = "Подключите Trello и выберите доску — или выберите JSON-файл ниже."
+# Message when the token field is submitted empty.
+token_required = "Вставьте токен из Trello."
+# Message when Trello rejects the pasted token.
+token_rejected = "Токен не подошёл. Проверьте и вставьте снова."
+# Final line of the all-boards run, before the per-board report lines.
+report_summary = "Импортировано досок: {{.done}} из {{.total}}.\n\n"
+# One failing board's line of that report.
+report_failed = '«{{.name}}» — НЕ ИМПОРТИРОВАНА: {{.error}}'
+
+[pack]
+# Board-menu item that opens the in-board import picker (importpack.ts).
+label = "Импорт…"
+# Tooltip of that menu item.
+menu_title = "Импортировать пакет вопросов (.4s, .docx) или архив xy (.zip)"
+# Picker line while the chosen file is being sniffed.
+reading_file = "Читаю файл…"
+# Picker line when the file is recognised as an xy board archive.
+sniffed_archive = 'Архив xy — доска «{{.name}}», выгружена {{.date}}. Списки из неё добавятся к этой доске.'
+# Picker line when the file is a question package, not an archive.
+sniffed_package = "Пакет вопросов — станет новым списком на этой доске."
+# Offline guard shown when importing while the board is not syncing.
+offline = "Импорт доступен только онлайн."
+# Alert when the package could not be parsed.
+parse_failed = 'Не удалось разобрать файл: {{.error}}'
+# Title of the .docx verification modal, with the package name appended.
+verify_title = 'Проверка импорта: {{.name}}'
+# Counter under the verification preview.
+block_count = '{{.blocks}} блоков, {{.questions}} вопросов'
+# Fallback title of a tour whose section line is empty.
+tour_fallback = 'Тур {{.n}}'
+# Title of the list collecting the blocks before the first tour section.
+preamble = "Преамбула"
+# Alert when the package contains no question blocks.
+no_questions = "В файле не найдено вопросов."
+# prompt() title when the tours become a list group.
+prompt_group = "Название группы списков:"
+# prompt() title for a single new list.
+prompt_list = "Название нового списка:"
+# prompt() default value when the package carries no name.
+default_title = "Импорт"
+# Success alert after a grouped (per-tour) import.
+done_grouped = 'Импортировано: {{.lists}} списков (по турам), {{.cards}} карточек, {{.images}} изображений.'
+# Success alert after a single-list import.
+done_single = 'Импортировано: {{.cards}} карточек, {{.images}} изображений.'
+# Note appended when split-by-tours found no "## " sections in the file.
+no_tours_note = "\nТуры («## …») в файле не найдены — создан один список."
+# Note appended when the server refused some of the package's images.
+images_failed = "\n\nНе удалось загрузить изображения ({{.n}}): "
+# Alert when the import died part-way; the partial list stays on the board.
+aborted = "Импорт прерван после {{.done}} карточек: {{.error}}\n\nЧастично импортированный список остался на доске — удалите его перед повторным импортом."
+
+[bundle]
+# Progress line while the archive file is being read (bundleimport.ts).
+reading = "Читаю архив…"
+# Error when the zip holds no board.json.
+no_board_json = 'в архиве нет {{.file}} — это не экспорт доски xy'
+# Error when an attachment listed in the bundle is missing from the zip.
+missing_attachment = 'в архиве нет файла {{.path}}'
+# Error when the archive does not fit the account's storage quota.
+quota = 'архив (~{{.need}} МБ) не помещается в остаток хранилища ({{.left}} МБ)'
+# Progress line while the target board is being created.
+creating = "Создаю доску…"
+# Progress line while a failed import deletes the half-made board.
+rollback = "Импорт прерван, удаляю недосозданную доску…"
+# Final summary line after applying the bundle.
+summary = 'Готово: {{.cards}} карточек, {{.lists}} списков/групп, {{.tests}} тестов, {{.events}} событий, {{.attachments}} вложений.'
+# Summary continuation listing the attachments that did not transfer.
+summary_skipped = "\nНе перенеслись вложения ({{.n}}): "
+
+[apply]
+# Progress line while a unit's cards are posted, every 20 cards (bundleapply.ts).
+cards = '{{.title}}: карточки… ({{.done}}/{{.total}})'
+# Progress line while a unit's timeline events are posted.
+history = '{{.title}}: история… ({{.done}}/{{.total}})'
+# Progress line while a unit's attachments are uploaded.
+attachments = '{{.title}}: вложения… ({{.done}}/{{.total}})'
+# Error when the server refuses one attachment upload.
+attach_failed = 'вложение «{{.name}}»: {{.status}}'
+
+[export]
+# Board-menu item that opens the archive export panel (bundleexport.ts).
+label = "Выгрузить архив (.zip)…"
+# Tooltip of that menu item.
+menu_title = "Выгрузить доску или отдельные списки одним архивом — для переноса на другой сервер xy"
+# Title of the export panel modal.
+modal_title = "Выгрузить архив (.zip)"
+# Hint explaining what the archive carries and where it can be imported.
+hint_body = "В архив попадут отмеченные списки со всем, до чего они дотягиваются: карточки, их метки, тесты, на которых их играли, комментарии, историю правок и вложения. Импортировать его можно на другом сервере xy — целиком в новую доску (страница «Импорт») или списками в существующую (☰ «Импорт»)."
+# Danger hint under that hint.
+not_encrypted = "Этот файл НЕ зашифрован."
+# Ghost button ticking every list.
+select_all = "Выбрать все"
+# Primary button starting the export.
+submit = "Экспортировать"
+# Status line when submitting with no list ticked.
+none_picked = "Отметьте хотя бы один список."
+# Progress line while board data is being fetched.
+collecting = "Собираю данные доски…"
+# Progress line while the timeline is being decrypted.
+decrypting = 'Расшифровываю историю… ({{.n}})'
+# Progress line while attachment bytes are downloaded.
+downloading = 'Скачиваю вложения… ({{.done}}/{{.total}})'
+# Progress line while the zip is assembled.
+zipping = "Собираю архив…"
+# Status line after the download has started.
+downloaded = "Готово — архив скачан."
+# Status line when the export failed.
+failed = 'Не получилось: {{.error}}'
+# Error when one attachment's download gets a bad HTTP status.
+attach_failed = 'вложение «{{.name}}»: {{.status}}'
+
+[versions]
+# "версия N: " label prefixed to a field value when versions disagree
+# (versions.ts mergeField/mergeSources/mergeAuthors); the trailing space is
+# part of the label.
+label = 'версия {{.n}}: '
+# Head of each version's question block in the composed multi-version export.
+question = 'Версия {{.n}}: {{.question}}'

@@ -1,0 +1,22 @@
+# Labels the storage layer writes for people to read (dope/dope/storage/store):
+# the default title a match with none gets, and the label an empty seated slot
+# shows for each slot kind (SlotRef).
+
+[match]
+# The title stored for a match whose state carries none (NormalizeState),
+# shown wherever the match is listed.
+default_title = "Бой A"
+
+[slot]
+# The label stored for a scheme seed with neither basket nor name (SlotRefOf).
+seed_unlabelled = 'Посев-{{.n}}'
+# The display prefix replacing a legacy scheme's baked-in English "seed-"
+# label (DisplayLabel).
+seed_legacy_prefix = "Посев-"
+# The display label of an empty seed slot with a basket: the basket, then the
+# seed's place in it (DisplayLabel).
+seed_basket = 'К{{.basket}}-{{.number}}'
+# The display label of an empty slot filled by a reseed rank (DisplayLabel).
+reseed = 'Пересев-{{.n}}'
+# The display label of an empty placeholder slot with no text (DisplayLabel).
+placeholder = "Ожидает команды"

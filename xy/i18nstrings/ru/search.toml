@@ -1,0 +1,4 @@
+# The board's Ctrl-F search (xy/web/ts/searchindex.ts): how a row names a card.
+
+# The title of a card whose preview is empty (cardTitle's blank fallback).
+blank = "(пусто)"

@@ -1,0 +1,58 @@
+# Shared game-page chrome and small page configs, in the order the widgets
+# appear: the touch cell-nav bar and on-screen keypad, the sync-status dot,
+# the spectator tally, the diagnostics recorder button, then one table each
+# for the score-table header fallback, the venues widget, the host profile
+# password form and the menu's host account entry.
+
+[cell_nav]
+# The floating ↑/↓ bar above the on-screen keyboard: the two buttons' aria-labels.
+prev = "Предыдущая ячейка"
+next = "Следующая ячейка"
+
+[keypad]
+# The on-screen numeric keypad: the nav row's and backspace key's aria-labels.
+prev_column = "Предыдущая колонка"
+prev_row = "Предыдущая строка"
+next_row = "Следующая строка"
+next_column = "Следующая колонка"
+backspace = "Удалить"
+
+[status]
+# The sync-status dot's tooltip/aria-label, one per connection state.
+saved = "Синхронизировано"
+saving = "Синхронизация"
+reconnecting = "Переподключение"
+error = "Ошибка"
+
+[viewers]
+# The live spectator tally beside the sync-status dot: the aria-label, then
+# the hover title with the current count.
+label = "Зрителей онлайн"
+title = 'Зрителей онлайн: {{.n}}'
+
+[recorder]
+# The fixed diagnostics button that downloads this tab's state journal.
+label = "Скачать лог"
+title = "Скачать журнал состояния этой вкладки (для диагностики)"
+
+[score_table]
+# The score table's place-column header, the default when a page passes none.
+place = "М"
+
+[venue]
+# The venues table's name column header.
+name_column = "Название"
+# A bout's venue with a title: the table number, then the title.
+battle = 'пл. {{.n}} ({{.name}})'
+# A bout's venue without a title, and the short form.
+battle_short = 'пл. {{.n}}'
+
+[profile]
+# The host profile page's password form messages.
+mismatch = "Пароли не совпадают."
+changed = "Пароль изменён."
+
+[menu]
+# The ☰ menu's host account entries (window.dopeMenuConfig).
+profile = "Профиль ведущего"
+login = "Вход для ведущего"

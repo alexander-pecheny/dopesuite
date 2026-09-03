@@ -1,0 +1,53 @@
+# Building a game (dope/dope/domain/gamebuild): the titles the pre-DSL flat
+# formats are created under, and the errors a host can read while creating a
+# game, seating it, recompiling its scheme or clearing it.
+
+[titles]
+# The default title under which each pre-DSL flat format is created (a
+# colliding title gets a numeric suffix at creation).
+od = "ОД"
+# The default title under which each pre-DSL flat format is created (a
+# colliding title gets a numeric suffix at creation).
+ksi = "КСИ"
+# The default title under which each pre-DSL flat format is created (a
+# colliding title gets a numeric suffix at creation).
+multi = "Мультиигры"
+
+[create]
+# Creating Мультиигры from a scheme DSL: they have no scheme shape.
+multi_from_scheme = "Мультиигры описываются списком мини-игр, а не схемой"
+# Creating ЭК with neither a pasted JSON scheme nor a DSL.
+ek_no_scheme = "Вставьте JSON-схему ЭК или опишите её схемой"
+# Creating any game with nothing describing it at all.
+scheme_required = "опишите схему игры"
+# A pasted JSON scheme describing a different game type than the one being
+# created.
+json_type_mismatch = 'JSON-схема описывает игру {{.described}}, а создаётся {{.created}}'
+# A pasted JSON scheme that carries teams, which travel by seed import.
+pasted_teams = "команды загружаются отдельным импортом посева; уберите teams из JSON-схемы"
+# A seed: source that is neither random, xlsx nor this fest's game code.
+seed_unknown = 'seed: {{.seed}} — не random, не xlsx и не код игры этого феста'
+
+[seating]
+# A chosen participant whose id is not in this fest.
+unknown_participant = 'участника {{.n}} нет в этом фесте'
+# A chosen participant that is a team where the individual game seats players.
+kind_team = '{{.name}} — команда, а в этой игре за столом сидят игроки'
+# A chosen participant that is a player where the team game seats teams.
+kind_player = '{{.name}} — игрок, а в этой игре за столом сидят команды'
+# A team-format scheme seeded from a fest with fewer than two participants.
+need_two = "для схемы нужны хотя бы два участника в фесте"
+# Creating a game while the fest's participants carry no numbers yet.
+unnumbered = "перед созданием игры пронумеруйте участников феста"
+# An individual game seeded from a fest with fewer than three players.
+need_players = "для личной игры нужны игроки в ростере феста"
+
+[recompile]
+# A recompile that would change bouts already started; the bout codes follow.
+started_bouts = 'нельзя менять начатые бои: {{.names}} — уберите их изменения или снимите отметку «Закончен» и очистите протокол'
+
+[clear]
+# Clearing a game type that has no clear path.
+unsupported = "очистка не поддерживается для этого типа игры"
+# Rebuilding a game from its stored pasted ЭК scheme.
+parse_pasted = 'не удалось разобрать схему ЭК: {{.err}}'

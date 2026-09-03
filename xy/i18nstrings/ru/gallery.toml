@@ -1,0 +1,133 @@
+# xy — the gallery surface: the dev-only /gallery primitive showcase
+# (gallery.dopeui + gallery.ts). Tables follow the page from the top: the page
+# chrome, then one table per section of the showcase.
+
+[page]
+# Browser tab title of /gallery (page title attribute).
+title = "Галерея · xy"
+# Topbar heading and the current-page crumb of /gallery.
+name = "Галерея"
+# The "all boards" crumb (icon "house", href "/") leading the crumb trail.
+home = "Все доски"
+# The page hint under the topbar: what the showcase is for, and that it is dev-only.
+hint = "Каждый примитив, из которых собираются панели: сюда смотрят перед тем, как завести новый класс, и на нём же судят правку скина. Только в dev."
+
+[layout]
+# Title of the layout-utilities section: the .u-* classes.
+title = "Раскладка — .u-*"
+# Note under that title.
+note = "Композиция вместо нового класса: display:flex + gap + align-items уже написан."
+# Filler text of the demo boxes showing row/column/gap spacing.
+box_1 = "один"
+box_2 = "два"
+box_3 = "три"
+
+[text]
+# Title of the text section.
+title = "Текст"
+# Note under that title.
+note = ".hint несёт margin:0 — отступы даёт контейнер, не ребёнок."
+# The demo section heading rendered as .gal-h2.
+heading = "Заголовок раздела"
+# The demo hint paragraph.
+hint = "Пояснение под контролом: приглушённое, того же кегля."
+# The demo danger hint paragraph.
+danger = "Предупреждение, которое нельзя прочесть как подсказку."
+# The demo empty state shown as .label-empty.
+empty = "меток нет — пустое состояние внутри панели"
+
+[buttons]
+# Title of the buttons section.
+title = "Кнопки"
+# Note under that title.
+note = "Одна кнопка на действие; btn-ghost — второстепенное, btn-danger — необратимое."
+# The demo primary button.
+save = "Сохранить"
+# The demo ghost button.
+cancel = "Отмена"
+# The demo danger button.
+delete = "Удалить"
+# The demo small ghost button.
+minor = "Мелкое действие"
+# Tooltip of the demo .kadd plus button.
+add_title = "плюс"
+
+[fields]
+# Title of the fields section (it has no note).
+title = "Поля"
+# Placeholder of the demo text input.
+plain_placeholder = "Обычное поле"
+# The blank default option of the demo select.
+select_option = "Выбор"
+
+[segment]
+# Title of the segmented-control section.
+title = "Сегмент — .seg"
+# Note under that title.
+note = "Выбор одного из немногих: режим, вид, версия."
+# The three demo segment buttons.
+all = "все"
+any = "любая"
+none = "ни одной"
+
+[labels]
+# Title of the label-chip section.
+title = "Метки"
+# Note under that title.
+note = "Один чип на всё: карточка, «Массовое действие», «Фильтр по меткам»."
+# The demo chips: a selected green one, a purple one, a red one, a long one.
+taken = "взяли"
+rewrite = "надо переписать"
+not_taken = "не взяли"
+long = "длинная метка на две строки"
+
+[list_rows]
+# Title of the list-row section.
+title = "Строки списков"
+# Note under that title.
+note = "Одна форма на строку сущности: участник, вложение, ссылка."
+# The demo member row's name and role spans.
+member_name = "аня"
+member_role = "редактор"
+
+[bars]
+# Title of the bars-over-the-board section.
+title = "Полосы над доской"
+# Note under that title.
+note = "Мода доски объявляет себя строкой .board-main, а не наложением поверх карточек."
+# The mass-bar count chip, shown for a demo selection of three cards; the
+# plural forms are exactly the ones massaction.ts cardCount picks.
+mass_selected = 'Выбрано: {{.n}} {{plural .n "карточка" "карточки" "карточек"}}'
+# The mass-bar action buttons.
+mass_move = "Переместить"
+mass_delete = "Удалить"
+# The mass-bar ghost button leaving mass mode.
+mass_done = "Готово"
+# The filter bar's summary of the demo "all labels" filter.
+filter_what = "Со всеми метками: взяли"
+# The filter bar's hint that dragging within the list is off.
+filter_hint = "перетаскивание внутри списка выключено"
+# The filter bar's reset button.
+filter_reset = "Сбросить"
+
+[feed]
+# Title of the timeline section.
+title = "Лента"
+# Note under that title.
+note = "Событие и его скелет: у скелета та же высота, чтобы панель не прыгала."
+# The demo event's meta line (author · when).
+event_meta = "аня · вчера"
+# The demo event's comment text.
+event_comment = "Комментарий в ленте."
+
+[card]
+# Title of the card section.
+title = "Карточка"
+# Note under that title.
+note = "Вопрос и заголовок: модификатор есть только у тех видов, у которых он что-то меняет."
+# Tooltip of the demo card's handout icon chip.
+handout_title = "Раздаточный материал"
+# The demo card's question text (the "7. " number span stays at the call site).
+question = "Текст вопроса, обрезанный по числу строк из «Изменить размеры»."
+# The demo heading card's title.
+heading = "Заголовок тура"

@@ -1,0 +1,22 @@
+# xy — the Telegram nudges (xy/internal/server/notify.go): the best-effort
+# knocks sent when a comment mentions someone (or replies to them) and when
+# someone asks to join a board through an approval link. Each nudge composes a
+# who/verb/where sentence with a board link appended.
+
+[mention]
+# Verb fragment when the recipient is @-mentioned in the new comment.
+verb_mentioned = "упомянул(а) вас"
+# Verb fragment when the recipient is the parent comment's author instead.
+verb_replied = "ответил(а) на ваш комментарий"
+# Where fragment when the board's name is not available (legacy ciphertext).
+board_unnamed = "на доске"
+# Where fragment when the board name is plaintext (schema_version 2).
+board_named = 'на доске «{{.board}}»'
+
+[join]
+# Where fragment when the board's name is not available (legacy ciphertext).
+board_unnamed = "в доску"
+# Where fragment when the board name is plaintext (boardDisplayName).
+board_named = 'в доску «{{.board}}»'
+# The owner's nudge sentence: who is asking, through where, with the board link.
+text = '{{.requester}} просится {{.where}} по ссылке-приглашению: {{.link}}'

@@ -1,0 +1,13 @@
+# The group cross-table shared by every two-seat format: the empty-state
+# text, then the header columns — the canon standings metrics beside the
+# entrant-name column.
+
+# Shown when a scheme has no group tables at all.
+empty = "В этой схеме нет групповых таблиц."
+
+[columns]
+# The canon standings column headers printed after the bout grid.
+points = "О"
+place = "М"
+# The entrant-name column header.
+name = "Команда"

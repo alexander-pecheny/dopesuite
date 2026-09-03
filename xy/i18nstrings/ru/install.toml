@@ -1,0 +1,44 @@
+# xy — the install surface: what the CLI prints to a human while it fetches the
+# typst binary (internal/chgk/typstinstall) and the headless Chromium the
+# exports drive (internal/chgk/htmlshot). Export copy lives in docs.toml.
+# Tables follow the order a reader meets the strings.
+
+# Shared by both installers: where the fetched binary now lives, and the
+# archive-safety guard both unpack paths enforce.
+installed = 'установлен: {{.path}}'
+archive_escape = 'архив пытается писать за пределы каталога: {{.name}}'
+
+[typst]
+# Downloading and placing the typst binary (typstinstall.Install).
+downloading = 'качаю typst {{.version}}…'
+archive_no_binary = 'в архиве нет {{.binary}}'
+# FindOrInstall: the machine has neither a working nor a cached typst.
+not_found = "typst на этой машине нет"
+# latestAsset: the GitHub release listing could not be read, or the release
+# publishes no build for this machine's triple.
+releases_failed = 'список сборок typst: {{.status}}'
+release_no_build = 'в релизе typst нет сборки {{.build}}'
+# assetPrefix: no release asset exists for this GOARCH / GOOS.
+platform_missing = 'для {{.platform}} сборки typst нет'
+# extract: the downloaded file is neither a zip nor a tar.xz / tar.gz.
+unknown_archive = 'непонятный архив: {{.archive}}'
+
+[browser]
+# Downloading and placing chrome-headless-shell (htmlshot/install.go Install).
+downloading = 'качаю chromium {{.version}} для {{.platform}}…'
+archive_no_shell = "в архиве нет chrome-headless-shell"
+# latestHeadlessShell: the Chrome-for-Testing listing could not be read, has
+# no stable channel, or no download for this platform.
+releases_failed = 'список сборок chromium: {{.status}}'
+releases_no_stable = "список сборок chromium: нет стабильного канала"
+platform_missing = 'для {{.platform}} сборки нет'
+# chromePlatform: no prebuilt browser for this OS/arch — what to do instead.
+no_build = 'для {{.platform}} готовой сборки chromium нет — поставьте браузер системой (apt install chromium / brew install chromium) и укажите его через --browser или $CHGKSUITE_BROWSER'
+# unzip: a symlink inside the archive points out of the target directory.
+symlink_escape = 'архив ссылается за пределы каталога: {{.name}} → {{.dest}}'
+# FindBrowser: nothing usable on PATH, in $CHGKSUITE_BROWSER or in the cache.
+not_found = "не нашёл браузер: поставьте chromium, укажите его через --browser или $CHGKSUITE_BROWSER"
+# FindOrInstall: about to download, because the machine has no browser yet.
+not_installed = "браузера на этой машине нет"
+# A distro that forbids user namespaces leaves the browser without a sandbox.
+no_sandbox = "система запрещает песочницу chromium, запускаю с --no-sandbox"

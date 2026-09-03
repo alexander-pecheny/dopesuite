@@ -1,0 +1,21 @@
+# Board-passphrase surfaces: the unlock overlay's «Не помню пароль» exit
+# (unlock.ts), the owner's change-passphrase dialog (changepass.ts), and the
+# monthly passphrase check (passcheck.ts).
+
+[exit]
+# The danger button «Не помню пароль» reveals: an owner deletes the board,
+# a member leaves it (unlock.ts).
+delete = "Удалить доску"
+leave = "Покинуть доску"
+
+[change]
+# The «Сменить пароль доски» ☰ panel (changepass.ts): menu label, its tooltip,
+# and the guard shown when the form is submitted offline.
+label = "Сменить пароль доски"
+title = "Задать доске новый пароль — старый спрашивать не нужно"
+offline = "Смена пароля доски доступна только онлайн."
+
+[check]
+# Title the passphrase-check modal takes once the words are proved
+# (passcheck.ts proved()); the typing step keeps the opener's title.
+title = "Пароль доски"

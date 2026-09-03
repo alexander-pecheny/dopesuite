@@ -1,0 +1,119 @@
+# The tournament-scheme DSL (dope/dope/domain/schemedsl): parse and compile
+# errors the host reads on the game settings page, plus the titles the
+# compiler writes into the scheme (stages, groups, venues, seeded entrants).
+
+[error]
+# Every line-pinned error, as the host reads it: the source line, then the message.
+line_prefix = 'строка {{.n}}: {{.msg}}'
+
+[parse]
+# A `[word]` header naming none of the three sections.
+unknown_section = 'неизвестная секция [{{.name}}] — есть [defaults], [init], [scheme]'
+# A `---` separator line outside the [scheme] section.
+separator = "--- разделяет блоки только внутри [scheme]"
+# A line that is not a `key: value` pair.
+unparsed_line = 'не понимаю строку "{{.raw}}" — жду key: value'
+# The same key written twice in one section.
+duplicate_key = 'ключ {{.key}} уже задан на строке {{.n}}'
+# A `key: value` line before any section header.
+key_outside_section = "ключ вне секции — начните с [defaults], [init] или [scheme]"
+# An integer key whose value is not an integer.
+int_expected = '{{.key}}: жду целое число, а не "{{.raw}}"'
+# A list key whose value is not a bracketed list.
+list_expected = '{{.key}}: жду список в скобках [a, b, c]'
+# A numeric list item that is not a number.
+not_a_number = '{{.key}}: "{{.item}}" — не число'
+# A sorting token whose direction suffix is neither asc nor desc.
+sort_direction = '{{.key}}: направление "{{.dir}}" — жду asc или desc'
+# A sorting token the parser cannot read.
+sort_token = '{{.key}}: не понимаю "{{.item}}"'
+
+[keys]
+# An unknown key in [defaults].
+unknown_defaults = 'неизвестный ключ {{.key}} в [defaults] (есть {{.known}})'
+# An unknown key in [init].
+unknown_init = 'неизвестный ключ {{.key}} в [init] (есть {{.known}})'
+# A dotted key whose base is none of the dotted keys.
+unknown_dotted = 'неизвестный ключ {{.key}} (раунд дописывают к {{.known}})'
+# An unknown key in a [scheme] block.
+unknown_block = 'неизвестный ключ {{.key}} (есть {{.known}})'
+# A dotted override whose suffix names no round of this block.
+unknown_round = '{{.key}}: в этом блоке нет раунда {{.round}} (есть {{.known}})'
+# A match_size override not addressed by round number.
+match_size_round = '{{.key}}: размер боя задаётся по номеру раунда, match_size.rN'
+
+[structure]
+# A [scheme] section with no blocks at all.
+no_blocks = "в [scheme] нет ни одного блока"
+# A block slug equal to a real stage code — tabs would collide.
+slug_is_stage_code = 'slug "{{.slug}}" совпадает с кодом этапа — вкладки перепутаются'
+# One slug carried by two blocks — tabs would collide.
+slug_two_blocks = 'slug "{{.slug}}" носят два блока — вкладки перепутаются'
+# Two stages assembled with the same code.
+stage_code_dup = 'этап "{{.code}}" собран дважды — у схемы столкнулись коды'
+# One bout code appearing in two stages.
+match_code_dup = 'бой "{{.match}}" есть и в этапе "{{.held_stage}}", и в "{{.stage}}"'
+# A block with no kind: line.
+kind_missing = "блоку нужен kind"
+# An unknown kind: token.
+kind_unknown = 'неизвестный kind {{.kind}} (есть {{.known}})'
+# A stage kind the kind registry does not know at emit time.
+kind_unregistered = '{{.kind}} не зарегистрирован в реестре видов'
+# A slug with characters outside latin letters, digits and hyphen.
+slug_charset = 'slug — латиница, цифры и дефис, а не "{{.slug}}"'
+
+[venues]
+# [defaults] venues with a count below one.
+count = "venues: нужен хотя бы один стол"
+# A block's venue list naming a venue that venues never declared.
+undeclared = '{{.key}}: стол "{{.venue}}" не объявлен в venues'
+# A block's venue list that resolves to nothing.
+empty = '{{.key}}: пустой список столов'
+
+[seed]
+# seed: players without the games list player places are read from.
+players_need_games = "seed: players — нужен games: [игра, игра], откуда берутся места игроков"
+# seed: players without a single seed.<metric> rule.
+players_need_seed = "seed: players — нужен хотя бы один seed.<метрика>: mean(<метрика игрока>)"
+
+[entrants]
+# The scheme's entrant count disagrees with the seeded entrant list.
+count_mismatch = 'схеме нужно {{.need}} участников, а посеяно {{.have}}'
+# A block after one that declared no proceeding_participants.
+proceeding_missing = "предыдущему блоку нужен proceeding_participants, чтобы продолжить схему"
+# The previous block supplies a different headcount than the block needs.
+supply_mismatch = 'из предыдущего блока выходят {{.have}} участников, а блоку нужно {{.need}}'
+
+[reseed]
+# A stats_from block reference past the last stage.
+stats_from_bounds = 'stats_from: {{.block}} — доступны блоки s1..s{{.last}}'
+# stats_from on a block that has no reseed.
+stats_from_needs_reseed = "stats_from работает только вместе с reseed"
+# A deterministic-seating complaint; the hint to add reseed: true is appended.
+needs_reseed = '{{.why}} — добавьте reseed: true'
+# The deterministic seating template is defined for two proceeding participants.
+proceeding_two = "детерминированная рассадка определена для proceeding_participants: 2"
+# No deterministic seating template fits these groups.
+no_template = "нет шаблона рассадки из этих групп"
+# The previous block ends in a bout series, so the scheme cannot continue past it.
+previous_terminal = "предыдущий блок кончается серией боёв — за ним нельзя продолжить схему"
+# A reseed: value naming a round the block does not have.
+round_unknown = 'reseed: в этом блоке нет раунда {{.round}} — только true/false'
+# A sorting metric neither the protocol nor the scoring rules provide for a reseed.
+metric_unknown = 'sorting: {{.metric}} не считается на пересеве — ни протокол, ни правила подсчёта такой метрики не дают (есть {{.known}})'
+
+[titles]
+# The default title of the n-th venue (table) in the scheme.
+venue = 'Стол {{.n}}'
+# The label of a seeded but not yet named entrant.
+seed = 'Посев {{.n}}'
+# The title of the reseed stage.
+reseed_stage = "Пересев"
+# The single group of a one-block, one-group scheme.
+group = "Группа"
+# The n-th group of an untitled block.
+group_n = 'Группа {{.n}}'
+# The n-th group of a titled block: "<block>. Группа n".
+block_group_n = '{{.block}}. Группа {{.n}}'
+# A wave-split stage: the round title, then the turn at the tables.
+wave = '{{.title}}, заход {{.n}}'

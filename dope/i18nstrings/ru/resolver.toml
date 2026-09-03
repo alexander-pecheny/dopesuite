@@ -1,0 +1,9 @@
+# The bracket resolver (dope/dope/domain/resolver): the reseed gate a host
+# meets when calculating a reseed stage before its source bouts are finished.
+
+[reseed]
+# The explicit-calculate gate: source bouts are still unfinished.
+not_ready = "пересев можно рассчитать после завершения всех исходных боёв"
+# The readiness message naming the pending bouts: n of them, codes
+# comma-joined at the call site.
+pending = '{{plural .n "Бой" "Бои" "Бои"}} {{.codes}} {{plural .n "не закончен" "не закончены" "не закончены"}}'

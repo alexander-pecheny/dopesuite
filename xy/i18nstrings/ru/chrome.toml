@@ -1,0 +1,162 @@
+# xy — screen chrome: furniture shared across screens rather than one feature's
+# surface. Feeds app.ts (the header sync badge, the derived card title),
+# index.ts (the home page: board grid, search, prewarm, create-board),
+# bell.ts (the notifications panel), crypto.ts (board-passphrase messages),
+# tokens.ts (the /tokens page), rewrites.ts (the board-wide typography pass),
+# colorpick.ts (the label color field), store.ts (IndexedDB) and sw.ts (the
+# service worker's offline response). people.ts, testmode.ts, namedurl.ts,
+# carddraft.ts and trellomodel.ts carry Russian comments only — no strings
+# of their own.
+
+[sync]
+# The header's sync badge (app.ts); its title attribute spells the state out.
+# Offline with nothing queued.
+offline = "Офлайн"
+# Offline with a queued-edit backlog; n = edits waiting to send.
+offline_pending = 'Офлайн · {{.n}} изм. ждут отправки'
+# Syncing with no backlog.
+syncing = "Синхронизация…"
+# Syncing with a backlog; n = edits still to send.
+syncing_pending = 'Синхронизация · осталось {{.n}}'
+# The last write failed.
+write_error = "Ошибка"
+# A write is in flight.
+saving = "Подождите"
+# The last write has synced.
+saved = "Готово"
+
+[card]
+# The short title derived from a card's description (app.ts deriveTitle), also
+# used for bell panel previews.
+# Placeholder when the description is empty.
+title_empty = "(пусто)"
+
+[home]
+# The home page's board grid (index.ts).
+# Placeholder name of a legacy board whose real name is still encrypted;
+# id is the board's numeric id.
+board_locked_name = 'доска #{{.id}}'
+# The role line under a board card's name.
+role_owner = "владелец"
+role_editor = "редактор"
+# Tooltip of the unread dot on a board card, plain and mention variants.
+unread_title = "Есть непрочитанные изменения"
+unread_mention_title = "Вас упомянули"
+# Empty grid: the name search matched no board.
+empty_named = "Досок с таким названием нет."
+# Empty grid: the account has no boards at all.
+empty_all = "Пока нет досок. Нажмите + чтобы создать."
+# Offline guard on the create-board form.
+create_offline = "Создание доски доступно только онлайн."
+
+[search]
+# The home page's search sections (index.ts).
+# The two count-line labels, passed as the {{.what}} of the note templates
+# below.
+questions = "Вопросы"
+comments = "Комментарии"
+# The count line when the query matched nothing.
+note_none = '{{.what}}: ничего не найдено.'
+# The count line when only the first page of hits shows; total = matches,
+# shown = rendered.
+note_partial = '{{.what}}: {{.total}}, показаны {{.shown}}.'
+# The count line when every hit is on screen.
+note_all = '{{.what}}: {{.total}}.'
+# The count line when this device has no downloaded boards to search through.
+note_no_boards = "Ни одна доска не скачана на это устройство — «Прогрев поиска» в меню ☰ сделает их искомыми."
+
+[prewarm]
+# "Прогрев поиска" (index.ts): downloading every board the device holds a key
+# for, so search works offline and over boards never opened.
+# The site-wide burger menu item, and its tooltip.
+menu_label = "Прогрев поиска"
+menu_title = "Скачать все доски, от которых есть ключ, чтобы искать по ним и офлайн"
+# Offline guard.
+offline = "Прогрев доступен только онлайн."
+# Progress line while boards download; done/total count boards.
+progress = 'Прогрев: {{.done}} из {{.total}}…'
+# Completion line; done/total count boards.
+done = 'Прогрев закончен: досок скачано {{.done}} из {{.total}}.'
+# Appended to done when some boards stayed locked; the leading space is part
+# of the concatenation.
+locked_note = " Остальные заперты — их пароль на этом устройстве не сохранён."
+
+[bell]
+# The 🔔 notifications panel on the board page (bell.ts). Row verbs for
+# ordinary events come from timeline.ts (eventVerb), not this surface.
+# Panel heading.
+title = "События"
+# The mark-everything-read button.
+read_all = "Прочитать всё"
+# The panel body while the activity request is in flight.
+loading = "Загрузка…"
+# The panel body when the board has no recent activity.
+empty = "Нет новых событий"
+# Row verb when the event is a reply to my comment.
+mention_reply = "ответ вам"
+# Row verb when the event mentions me otherwise.
+mention = "упомянул(а) вас"
+
+[passphrase]
+# Board-passphrase messages (crypto.ts). The two validation returns are shown
+# inline by the forms that set a passphrase (create, import); wrong is thrown
+# when a passphrase does not unlock the board.
+# n = the minimum length in characters.
+too_short = 'Пароль доски должен быть не короче {{.n}} символов.'
+# n = the minimum word count.
+too_few_words = 'Пароль доски должен содержать минимум {{.n}} слова (через пробел, «-» или «_»).'
+# Thrown on both unlock failures (key unwrap and verify token).
+wrong = "Неверный пароль доски"
+
+[tokens]
+# The /tokens page (tokens.ts): API tokens for the Trello-compatible API.
+# The status word on each row.
+status_revoked = "отозван"
+status_expired = "истёк"
+status_active = "активен"
+# The meta line; created/expires are formatted dates.
+meta_dates = 'создан {{.created}} · действует до {{.expires}}'
+# Appended when the token has been used; used is a formatted date. The
+# leading space is part of the concatenation.
+meta_used = ' · использован {{.used}}'
+# Appended when the token has never been used; the leading space is part of
+# the concatenation.
+meta_unused = " · не использовался"
+# Row label when the token has no name.
+label_unnamed = "(без названия)"
+# The revoke confirm, and the button that triggers it.
+revoke_confirm = "Отозвать токен? Приложения, использующие его, потеряют доступ."
+revoke = "Отозвать"
+# The copy button after a copy, and its reset back.
+copied = "Скопировано"
+copy = "Скопировать"
+
+[typograph]
+# The board-wide typography pass (rewrites.ts), a ☰ menu item on the board.
+# The menu item, and its tooltip.
+menu_label = "Типографить всю доску"
+menu_title = "Кавычки-ёлочки, тире, неразрывные пробелы и раскодированные ссылки — во всех карточках и всех версиях"
+# Alert when the pass would change nothing.
+nothing_to_do = "Нечего типографить — вся доска уже в порядке."
+# First-run confirm; n = cards the pass would rewrite, total = cards on the
+# board.
+confirm = 'Типографить {{.n}} из {{.total}}? В остальных карточках менять нечего.'
+# Completion alert; same counts.
+done = 'Оттипографлено карточек: {{.n}} из {{.total}}.'
+# Failure alert; error is the message of whatever threw.
+failed = 'Ошибка при типографике: {{.error}}'
+
+[colorpick]
+# The label color field (colorpick.ts): the swatch button that opens the
+# color popup. Used for both its title and its aria-label.
+button_title = "Цвет метки"
+
+[store]
+# IndexedDB open (store.ts): the error when another tab holds the old
+# database version during an upgrade.
+upgrade_blocked = "Другая вкладка xy держит старую версию хранилища — закройте её и обновите страницу."
+
+[offline_page]
+# The service worker (sw.ts): the plain-text body of the 503 response it
+# serves when a navigation fails offline with nothing cached.
+body = "Офлайн"
