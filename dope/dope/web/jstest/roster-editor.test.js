@@ -7,6 +7,7 @@ import {
   parseRoster,
   rosterWarning,
   serializeRoster,
+  nextTeamName,
   setCaptain,
   slugify,
   suggestLabel,
@@ -85,4 +86,17 @@ Deno.test("slugify derives a URL from a Russian venue name", () => {
   // by the server anyway.
   assertEquals(slugify("2026"), "");
   assertEquals(slugify("!!!"), "");
+});
+
+// The rating id names the team, but a name typed by hand belongs to whoever
+// typed it.
+Deno.test("nextTeamName overwrites only what the id put there", () => {
+  assertEquals(nextTeamName("", "", "Gay Guerrilla"), "Gay Guerrilla");
+  assertEquals(nextTeamName("   ", "", "Gay Guerrilla"), "Gay Guerrilla");
+  assertEquals(nextTeamName("Мантисса", "Мантисса", "Gay Guerrilla"), "Gay Guerrilla");
+  assertEquals(nextTeamName("Наша команда", "", "Gay Guerrilla"), "Наша команда");
+  assertEquals(nextTeamName("Наша команда", "Мантисса", "Gay Guerrilla"), "Наша команда");
+  // An id buff does not know leaves the box alone rather than emptying it.
+  assertEquals(nextTeamName("Наша команда", "", ""), "Наша команда");
+  assertEquals(nextTeamName("", "", ""), "");
 });

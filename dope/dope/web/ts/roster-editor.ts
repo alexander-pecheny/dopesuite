@@ -295,23 +295,37 @@ export function mountRosterEditor(container: HTMLElement): void {
 type BuffTeam = {id: number; name: string; town: string};
 type BuffTournament = {id: number; name: string; type: string};
 
-// mountBuffTeamField names the team a rating id stands for as it is typed,
-// which is how a Representative tells 5723 from 5732.
 const MANUAL = "\u0000manual";
 
+// nextTeamName is what «Название команды» should say once a rating id resolves.
+// The id names the team, but a name typed by hand is the submitter's: it is
+// overwritten only while it is empty or still the answer to the last id.
+export function nextTeamName(current: string, previous: string, found: string): string {
+  if (found === "") return current;
+  if (current.trim() === "" || current === previous) return found;
+  return current;
+}
+
+// mountBuffTeamField names the team a rating id stands for as it is typed,
+// which is how a Representative tells 5723 from 5732.
 export function mountBuffTeamField(field: HTMLInputElement): void {
-  const hint = document.createElement("p");
-  hint.className = "hint";
-  field.after(hint);
+  const warning = document.createElement("p");
+  warning.className = "hint";
+  field.after(warning);
+  const name = field.form?.elements.namedItem("team_name") as HTMLInputElement | null;
   let timer = 0;
+  let previous = "";
   const show = (): void => {
     const id = Number(field.value.trim());
     if (!id) {
-      hint.textContent = "";
+      warning.textContent = "";
       return;
     }
     void fetchJSON<BuffTeam>(`/api/buff/team/${encodeURIComponent(id)}`).then((team) => {
-      hint.textContent = team ? [team.name, team.town].filter(Boolean).join(" · ") : "Буфф не знает такой команды";
+      warning.textContent = team ? "" : "Буфф не знает такой команды";
+      if (!team || !name) return;
+      name.value = nextTeamName(name.value, previous, team.name);
+      previous = team.name;
     });
   };
   field.addEventListener("input", () => {
