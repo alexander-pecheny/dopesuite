@@ -44,6 +44,8 @@ icons-add name:
 # Regenerate every module's Catalog from its TOML (root docs/adr/0006).
 generate-strings:
     cd dopeuikit && go generate ./i18nstrings
+    cd xy && go generate ./i18nstrings
+    cd dope && go generate ./i18nstrings
 
 # Regenerate the icon set into Go, the vocabulary and both apps' TypeScript.
 icons-gen:
@@ -166,7 +168,8 @@ generate-check: build-web
     # (./palette emits into two stylesheets, a Go file and a TypeScript one), and
     # checking only the first would let the others go stale silently.
     for target in "dopeuikit ./kit kit/tags_gen.go" \
-                  "dopeuikit ./i18nstrings i18nstrings/types_gen.go i18nstrings/ru_gen.go assets/ts/i18nstrings_plural_gen.ts assets/ts/i18nstrings_types_gen.ts assets/ts/i18nstrings_ru_gen.ts" \
+                  "xy ./i18nstrings i18nstrings/types_gen.go i18nstrings/ru_gen.go web/ts/i18nstrings_plural_gen.ts web/ts/i18nstrings_types_gen.ts web/ts/i18nstrings_ru_gen.ts" \
+                  "dope ./i18nstrings i18nstrings/types_gen.go i18nstrings/ru_gen.go dope/web/ts/i18nstrings_plural_gen.ts dope/web/ts/i18nstrings_types_gen.ts dope/web/ts/i18nstrings_ru_gen.ts" \
                   "dopeuikit ./palette assets/core.css palette/sets_gen.go ../dope/dope/web/assets/static/styles.css ../xy/web/ts/palette_gen.ts" \
                   "dope ./dope/web/ui dope/web/ui/tags_gen.go" \
                   "xy ./internal/ui internal/ui/tags_gen.go" \

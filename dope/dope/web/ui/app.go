@@ -11,6 +11,7 @@ import (
 	_ "embed"
 
 	base "pecheny.me/dopeuikit/kit"
+	dopestrings "dope/i18nstrings"
 )
 
 //go:embed vocab.json
@@ -32,6 +33,7 @@ var dopeApp = mustApp()
 
 func mustApp() *base.App {
 	app, err := base.NewApp(base.Options{
+		Strings:      dopestrings.Default, // dope's Catalog; the kit's answers what it does not
 		VocabOverlay: overlayVocab,
 		ExtendProps: map[string][]base.PropSpec{
 			"page":     {{Name: "init"}, {Name: "refresh"}},

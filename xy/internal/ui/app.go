@@ -12,6 +12,7 @@ import (
 	_ "embed"
 
 	base "pecheny.me/dopeuikit/kit"
+	xystrings "xy/i18nstrings"
 )
 
 //go:embed vocab.json
@@ -24,6 +25,7 @@ var xyApp = mustApp()
 
 func mustApp() *base.App {
 	app, err := base.NewApp(base.Options{
+		Strings:      xystrings.Default, // xy's Catalog; the kit's answers what it does not
 		VocabOverlay: overlayVocab,
 		Expand: map[string]base.ExpandFunc{
 			"checkbox": expandCheckbox,
