@@ -1,3 +1,5 @@
+import S from "./i18nstrings_ru_gen.js";
+
 // store.ts — xy's offline persistence layer (IndexedDB). Mirrors board
 // ciphertext snapshots, the board list, per-card timelines and attachment bytes
 // so a board can be opened and edited with no network, plus an ordered mutation
@@ -153,7 +155,7 @@ function db(): Promise<IDBDatabase> {
     // tab step aside for a newer one; onblocked says so rather than waiting
     // forever, since a rejected promise surfaces as an error the reader can act
     // on and a pending one looks like a spinner that never ends.
-    req.onblocked = () => reject(new Error("Другая вкладка xy держит старую версию хранилища — закройте её и обновите страницу."));
+    req.onblocked = () => reject(new Error(S.chrome.store.upgradeBlocked()));
     req.onsuccess = () => {
       req.result.onversionchange = () => { req.result.close(); dbPromise = null; };
       resolve(req.result);

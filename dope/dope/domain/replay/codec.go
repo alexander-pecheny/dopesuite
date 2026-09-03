@@ -9,7 +9,7 @@ import (
 )
 
 // Codec is how one Protocol's Matches read in a transcript and how its
-// [статистика] section is counted: the seat form, the three stat columns, and the
+// [statistics] section (statistika) is counted: the seat form, the three stat columns, and the
 // aggregate over the finished Matches. One per game type, so neither the parser
 // nor a Game adapter switches on a name.
 type Codec struct {

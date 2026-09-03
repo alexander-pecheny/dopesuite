@@ -6,13 +6,13 @@ import (
 	"dope/dope/web/route"
 	ui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	"pecheny.me/dopecore/session"
 )
 
@@ -232,7 +232,7 @@ func parsePositiveFormInt(form url.Values, key, label string, min, max int) (int
 	raw := strings.TrimSpace(form.Get(key))
 	value, err := strconv.Atoi(raw)
 	if err != nil || value < min || value > max {
-		return 0, fmt.Errorf("%s должно быть от %d до %d", label, min, max)
+		return 0, corei18n.User(dopestrings.Default.Host.Pages.ErrorIntRange(label, strconv.Itoa(min), strconv.Itoa(max)))
 	}
 	return value, nil
 }
@@ -247,7 +247,7 @@ func parseNonNegativeFormInt(form url.Values, key, label string, min, max int) (
 	}
 	value, err := strconv.Atoi(raw)
 	if err != nil || value < min || value > max {
-		return 0, fmt.Errorf("%s должно быть от %d до %d", label, min, max)
+		return 0, corei18n.User(dopestrings.Default.Host.Pages.ErrorIntRange(label, strconv.Itoa(min), strconv.Itoa(max)))
 	}
 	return value, nil
 }

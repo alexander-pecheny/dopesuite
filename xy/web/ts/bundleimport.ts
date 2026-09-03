@@ -33,7 +33,7 @@ export async function checkQuota(bundle: Bundle): Promise<void> {
   const left = s.quota_bytes - s.used_bytes;
   if (need > left) {
     const mb = (n: number): string => (n / (1 << 20)).toFixed(1);
-    throw new Error(`архив (~${mb(need)} МБ) не помещается в остаток хранилища (${mb(Math.max(left, 0))} МБ)`);
+    throw new Error(S.import.bundle.quota(mb(need), mb(Math.max(left, 0))));
   }
 }
 
@@ -43,11 +43,11 @@ export async function readBundleFile(file: File): Promise<{ bundle: Bundle; byte
   const entries = await zipRead(new Uint8Array(await file.arrayBuffer()));
   const files = new Map(entries.map((e) => [e.name, e.data]));
   const boardJson = files.get(BOARD_JSON);
-  if (!boardJson) throw new Error(`в архиве нет ${BOARD_JSON} — это не экспорт доски xy`);
+  if (!boardJson) throw new Error(S.import.bundle.noBoardJson(BOARD_JSON));
   const bundle = parseBundle(new TextDecoder().decode(boardJson));
   const bytesOf: AttachmentBytes = (a) => {
     const bytes = files.get(a.path);
-    if (!bytes) throw new Error(`в архиве нет файла ${a.path}`);
+    if (!bytes) throw new Error(S.import.bundle.missingAttachment(a.path));
     return Promise.resolve(bytes);
   };
   return { bundle, bytesOf };

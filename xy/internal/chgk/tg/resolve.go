@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
 
@@ -114,10 +115,10 @@ func ResolveTarget(ctx context.Context, bot *Bot, channelRef, chatRef string, sa
 	saveResolveCache(cache)
 
 	t = Target{ChannelID: prefixed(channelID), ChatID: prefixed(chatID)}
-	if err := verifyAccess(ctx, bot, t.ChannelID, "каналу"); err != nil {
+	if err := verifyAccess(ctx, bot, t.ChannelID, s.Tg.Verify.WhatChannel()); err != nil {
 		return t, err
 	}
-	return t, verifyAccess(ctx, bot, t.ChatID, "группе обсуждения")
+	return t, verifyAccess(ctx, bot, t.ChatID, s.Tg.Verify.WhatChat())
 }
 
 // introduce is chgksuite's authenticate_user: before asking the person to do
@@ -139,7 +140,7 @@ func introduce(ctx context.Context, bot *Bot, say Prompter) error {
 func verifyAccess(ctx context.Context, bot *Bot, chatID, what string) error {
 	res, err := bot.Client().Call(ctx, "getChatAdministrators", map[string]any{"chat_id": chatID})
 	if err != nil {
-		return fmt.Errorf("бот не добавлен к %s: %w", what, err)
+		return corei18n.User(xystrings.Default.Tg.Verify.NotMember(what, err.Error()))
 	}
 	var admins []struct {
 		User struct {
@@ -164,7 +165,7 @@ func verifyAccess(ctx context.Context, bot *Bot, chatID, what string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("бот не администратор в %s", what)
+	return corei18n.User(xystrings.Default.Tg.Verify.NotAdmin(what))
 }
 
 // shortCode is a one-off word the person types back, so the bot knows which

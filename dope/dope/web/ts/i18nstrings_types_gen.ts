@@ -703,17 +703,29 @@ export type Strings = {
   numbers: {
     action: {
       auto: () => string;
+      autoConfirm: () => string;
       cancel: () => string;
       clear: () => string;
+      clearConfirm: () => string;
       import: () => string;
       replace: () => string;
       save: () => string;
     };
     apply: {
+      back: () => string;
+      badgeExact: () => string;
+      badgeUnmatched: () => string;
+      empty: () => string;
       foreignTeam: () => string;
+      noAssignments: () => string;
       numberRange: (max: string) => string;
       readFailed: () => string;
+      saveFailed: () => string;
+      skip: () => string;
+      submit: () => string;
       teamRepeated: () => string;
+      teamRepeatedClient: () => string;
+      title: () => string;
     };
     error: {
       numberTwoRows: (number: string, first: string, second: string) => string;
@@ -726,9 +738,17 @@ export type Strings = {
       edit: () => string;
     };
     import: {
+      cancel: () => string;
+      emptyInput: () => string;
+      hint: () => string;
       lineDup: (n: string, number: string, prev: string) => string;
       lineFormat: (n: string) => string;
       lineRange: (n: string, max: string) => string;
+      matchFailed: () => string;
+      placeholder: () => string;
+      serverError: (status: string) => string;
+      submit: () => string;
+      title: () => string;
     };
     notice: {
       auto: () => string;
@@ -1048,6 +1068,7 @@ export type Strings = {
       groupN: (n: string) => string;
       reseedStage: () => string;
       seed: (n: string) => string;
+      stage: (block: string, title: string) => string;
       venue: (n: string) => string;
       wave: (title: string, n: string) => string;
     };
@@ -1108,6 +1129,10 @@ export type Strings = {
     bot: {
       down: () => string;
       help: () => string;
+    };
+    error: {
+      badRequest: () => string;
+      internal: () => string;
     };
     login: {
       title: () => string;
@@ -1299,6 +1324,11 @@ export type Strings = {
       next: () => string;
       prev: () => string;
     };
+    groupStats: {
+      noToken: (token: string) => string;
+      paren: () => string;
+      truncated: () => string;
+    };
     keypad: {
       backspace: () => string;
       nextColumn: () => string;
@@ -1317,6 +1347,9 @@ export type Strings = {
     recorder: {
       label: () => string;
       title: () => string;
+    };
+    roster: {
+      pickSuggestion: () => string;
     };
     scoreTable: {
       place: () => string;

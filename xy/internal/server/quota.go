@@ -20,7 +20,7 @@ func mbNum(b int64) string {
 }
 
 // humanMB is mbNum with the unit, for a standalone user-facing string.
-func humanMB(b int64) string { return mbNum(b) + " МБ" }
+func humanMB(b int64) string { return xystrings.Default.Server.Quota.HumanMb(mbNum(b)) }
 
 // storageUsageSQL sums the bytes a user's own boards hold: attachment blobs plus
 // every encrypted content column. Tombstones don't count, including everything

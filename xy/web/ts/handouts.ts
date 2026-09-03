@@ -1,7 +1,7 @@
-// handouts.ts — «Генерация раздаток» (chgksuite .hndt → PDF): the port of
+// handouts.ts — "Handout generation" (chgksuite .hndt -> PDF): the port of
 // `chgksuite handouts 4s2hndt` (hndt.ts) builds an editable .hndt source from
 // the list's questions, merging each question's saved layout settings
-// (handout_meta) with its live handout text. «Сгенерировать PDF» posts the
+// (handout_meta) with its live handout text. "Generate PDF" posts the
 // source + referenced images to the server, which typesets and streams an
 // ephemeral PDF. On close the per-question settings (everything but the handout
 // text) are persisted back.
@@ -47,7 +47,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
   // Dock app / iOS home-screen PWA — the preview pane comes up blank), and on
   // iOS even the in-browser iframe shows at most a flat first page. No Safari
   // setting changes this; the working path there is a top-level navigation, so
-  // those contexts get an «Открыть PDF» button instead of the inline preview.
+  // those contexts get an "Open PDF" button instead of the inline preview.
   function pdfInlinePreviewBroken(): boolean {
     const ua = navigator.userAgent;
     const ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -72,8 +72,8 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     if (handoutsDlUrl) { URL.revokeObjectURL(handoutsDlUrl); handoutsDlUrl = null; }
   }
 
-  // handoutFileBase names a generated раздатка after the board and the list it came
-  // from — «Моя_доска_Тур_1_handouts» — rather than after nothing in particular
+  // handoutFileBase names a generated handout after the board and the list it came
+  // from — "My_board_Tour_1_handouts" — rather than after nothing in particular
   // (issue #43). Only path separators and whitespace are folded away: the name is
   // the one the editor typed, Cyrillic included, and every download it rides on
   // spells it in UTF-8.
@@ -252,7 +252,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
   return {
     id: "handouts", menu: "list", icon: "file-text",
     label: (scope) => scope.grouped ? "Генерация раздаток (вся группа)" : "Генерация раздаток",
-    // Раздатки are the exception, not the rule: a tour without one has nothing
+    // Handouts are the exception, not the rule: a tour without one has nothing
     // for this panel to open, and the row would only say so after the click.
     offered: (scope) => xyHndt.hndtOf(scope.cards).source.trim() !== "",
     open: openHandouts,

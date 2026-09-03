@@ -86,9 +86,9 @@ type missingListError struct {
 
 func (e *missingListError) Error() string {
 	if e.name == "" {
-		return "на доске нет списков"
+		return xystrings.Default.Boardsync.Upload.NoLists()
 	}
-	return "список «" + e.name + "» не найден; есть: " + strings.Join(e.known, ", ")
+	return xystrings.Default.Boardsync.Upload.ListMissing(e.name, strings.Join(e.known, ", "))
 }
 
 func listNames(lists []List) []string {

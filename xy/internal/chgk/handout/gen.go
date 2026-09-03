@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 	"xy/internal/chgk/fsource"
 	"xy/internal/chgk/i18n"
@@ -52,7 +53,7 @@ func Generate(doc fsource.Doc, base, dir string, o GenerateOptions) ([]File, []W
 	}
 	short := rx.Get("handout_short")
 	if short == nil {
-		return nil, nil, fmt.Errorf("язык %q: нет выражения handout_short", o.Language)
+		return nil, nil, corei18n.User(s.Docs.Handout.LanguageMissing(o.Language))
 	}
 	handoutRe, err := regexp.Compile(`(?s)\[` + short.String() + `.+?:( |\n)(?P<handout_text>.+?)\]`)
 	if err != nil {

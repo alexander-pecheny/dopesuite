@@ -20,6 +20,10 @@ import = "Импорт номеров"
 replace = "Замена номера"
 save = "Сохранить"
 cancel = "Отмена"
+# Confirm before auto-numbering teams 1..N alphabetically.
+auto_confirm = "Команды будут перенумерованы 1..N по алфавиту. Если бланки ответов уже напечатаны со старыми номерами — они станут невалидными. Продолжить?"
+# Confirm before clearing all team numbers.
+clear_confirm = "Очистить все номера команд?"
 
 [help]
 # The hidden note numbers.js reveals for the in-place edit.
@@ -50,9 +54,43 @@ line_range = 'Строка {{.n}}: номер должен быть целым �
 # A number already claimed by the earlier line .prev.
 line_dup = 'Строка {{.n}}: номер {{.number}} уже указан в строке {{.prev}}.'
 
+# The mass-import paste modal's copy (openImportDialog in numbers.ts).
+title = "Импорт номеров"
+# Hint above the paste textarea explaining format.
+hint = "Вставьте строки в формате «номер⇥команда» (через табуляцию), по одной на строку. Имена сопоставятся с командами феста; неточные совпадения можно будет поправить."
+# Example lines shown in the empty textarea.
+placeholder = '1\tНазвание команды\n2\tДругая команда'
+# The modal's cancel and submit buttons.
+cancel = "Отмена"
+submit = "Сопоставить"
+# Validation error when submitting an empty or whitespace-only paste box.
+empty_input = "Вставьте данные для импорта."
+# Match request non-200 HTTP response.
+server_error = 'Ошибка сервера ({{.status}}).'
+# Generic failure when matching fetch rejects.
+match_failed = "Не удалось сопоставить."
+
 [apply]
 # The apply call's JSON errors, shown in the confirmation modal.
 read_failed = "Не удалось прочитать данные."
 foreign_team = "Команда не из этого феста."
 number_range = 'Номер должен быть целым от 1 до {{.max}}.'
 team_repeated = "Команда выбрана несколько раз."
+# The mass-import match-confirmation modal's copy (openConfirmDialog in numbers.ts).
+title = "Подтвердите сопоставление"
+# Shown when the parser found zero matching lines.
+empty = "Не удалось разобрать ни одной строки."
+# Option to skip assigning a number to any team.
+skip = "— пропустить —"
+# Badges next to matches in the list: unmatched, exact match.
+badge_unmatched = "нет совпадения"
+badge_exact = "точно"
+# Dialog navigation buttons.
+back = "Назад"
+submit = "Применить"
+# Validation error when a user picks the same team in more than one dropdown.
+team_repeated_client = "Одна команда выбрана несколько раз — поправьте сопоставление."
+# Validation error when every row is skipped.
+no_assignments = "Нет ни одного подтверждённого сопоставления."
+# Generic save failure when applying assignments fails.
+save_failed = "Не удалось сохранить."

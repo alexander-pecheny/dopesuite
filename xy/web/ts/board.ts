@@ -103,7 +103,7 @@ let dkFromCache = false;
 // A ?card=… link: the reader came for one question, not for a quiz.
 const deepLink = new URLSearchParams(location.search).has("card");
 function mustDK(): DataKey {
-  if (!dk) throw new Error("нет ключа доски");
+  if (!dk) throw new Error(S.board.error.noKey());
   return dk;
 }
 // One-shot guard per card-drag gesture: set true the moment a drop commits the

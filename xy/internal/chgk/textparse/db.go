@@ -9,7 +9,7 @@ import (
 )
 
 // ParseDB is parser_db.chgk_parse_db: db.chgk.info's own text export, the format
-// a file that opens «Чемпионат:» is in. chgksuite reads it with a PLY lexer of
+// a file opening with the Championship header is in. chgksuite reads it with a PLY lexer of
 // fifteen exclusive states; this is that lexer, rule for rule and in the order
 // PLY tries them — definition order, first match at the position wins.
 //

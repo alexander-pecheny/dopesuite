@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
 
@@ -58,7 +59,7 @@ var reWidthMM = regexp.MustCompile(`width:\s*([\d.]+)mm`)
 func WidthMM(html string) (float64, error) {
 	m := reWidthMM.FindStringSubmatch(html)
 	if m == nil {
-		return 0, fmt.Errorf(`не нашёл "width: <N>mm" — ширина тела должна быть задана в миллиметрах`)
+		return 0, corei18n.User(xystrings.Default.Docs.Print.WidthMissing())
 	}
 	return strconv.ParseFloat(m[1], 64)
 }
@@ -118,7 +119,7 @@ func Render(ctx context.Context, path string, o Options) (Result, error) {
 		"--print-to-pdf=" + res.PDF, "--no-pdf-header-footer",
 		fileURL(paged),
 	}); err != nil {
-		return Result{}, fmt.Errorf("печать PDF: %w", err)
+		return Result{}, corei18n.User(xystrings.Default.Docs.Print.Pdf(err.Error()))
 	}
 	if err := run(ctx, browser, &o, []string{
 		"--screenshot=" + res.PNG,
@@ -127,7 +128,7 @@ func Render(ctx context.Context, path string, o Options) (Result, error) {
 		"--hide-scrollbars", "--default-background-color=ffffffff",
 		fileURL(abs),
 	}); err != nil {
-		return Result{}, fmt.Errorf("снимок PNG: %w", err)
+		return Result{}, corei18n.User(xystrings.Default.Docs.Print.Png(err.Error()))
 	}
 	return res, nil
 }
@@ -145,16 +146,16 @@ func measure(ctx context.Context, browser, html string, widthPx int, scratch str
 		"--virtual-time-budget=5000", fileURL(probe),
 	})
 	if err != nil {
-		return 0, 0, fmt.Errorf("измерение: %w", err)
+		return 0, 0, corei18n.User(xystrings.Default.Docs.Print.Measure(err.Error()))
 	}
 	m := reMeasured.FindStringSubmatch(out)
 	if m == nil {
-		return 0, 0, fmt.Errorf("измерение: браузер не вернул размеры страницы")
+		return 0, 0, corei18n.User(xystrings.Default.Docs.Print.MeasureNoSize())
 	}
 	height, _ = strconv.Atoi(m[1])
 	width, _ = strconv.Atoi(m[2])
 	if height <= 0 {
-		return 0, 0, fmt.Errorf("измерение: нулевая высота")
+		return 0, 0, corei18n.User(xystrings.Default.Docs.Print.MeasureZeroHeight())
 	}
 	return height, max(width, widthPx), nil
 }
@@ -199,7 +200,7 @@ func FindBrowser(named string) (string, error) {
 	if path, ok := findBrowser(named); ok {
 		return path, nil
 	}
-	return "", fmt.Errorf("не нашёл браузер: поставьте chromium, укажите его через --browser или $CHGKSUITE_BROWSER")
+	return "", corei18n.User(xystrings.Default.Install.Browser.NotFound())
 }
 
 func findBrowser(named string) (string, bool) {

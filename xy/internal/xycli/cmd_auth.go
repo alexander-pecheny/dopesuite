@@ -2,11 +2,11 @@ package xycli
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 
 	"golang.org/x/term"
@@ -33,7 +33,7 @@ func cmdLogin(a *app, args []string) error {
 		base = os.Getenv("XY_URL")
 	}
 	if base == "" {
-		return errors.New("нужен --url (или XY_URL)")
+		return corei18n.User(s.Cli.Login.NeedUrl())
 	}
 	raw := *token
 	if raw == "" {
@@ -46,13 +46,13 @@ func cmdLogin(a *app, args []string) error {
 		}
 	}
 	if raw == "" {
-		return errors.New("пустой токен")
+		return corei18n.User(s.Cli.Login.EmptyToken())
 	}
 
 	c := NewClient(base, raw)
 	username, err := c.Me()
 	if err != nil {
-		return fmt.Errorf("токен не принят: %w", err)
+		return corei18n.User(s.Cli.Login.Rejected(err.Error()))
 	}
 	a.st.URL, a.st.Token = strings.TrimRight(base, "/"), raw
 	if err := a.st.Save(); err != nil {
@@ -135,7 +135,7 @@ func cmdUnlock(a *app, args []string) error {
 		return err
 	}
 	if len(rest) != 1 {
-		return errors.New("нужен id или имя доски: xy-cli unlock 12")
+		return corei18n.User(s.Cli.Unlock.NeedRef())
 	}
 	c, err := a.client()
 	if err != nil {
@@ -192,7 +192,7 @@ func cmdLock(a *app, args []string) error {
 		return a.emit(map[string]any{"ok": true}, func() { a.printf("%s", s.Cli.Lock.AllDone()) })
 	}
 	if len(rest) != 1 {
-		return errors.New("нужен id или имя доски (или --all)")
+		return corei18n.User(s.Cli.Lock.NeedRef())
 	}
 	id, _, err := a.boardRef(rest[0])
 	if err != nil {

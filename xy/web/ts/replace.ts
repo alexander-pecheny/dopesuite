@@ -1,4 +1,4 @@
-// replace.ts — «Найти и заменить»: one replacement over the whole board, one
+// replace.ts — "Find and replace": one replacement over the whole board, one
 // list or one group. The matching is literal (find.ts) and the structure is out
 // of its reach, so what is left to judge is context: the same needle in two
 // places can want two different answers, which is why the preview ticks
@@ -75,7 +75,7 @@ export function createReplacePanel(board: Board, rewrites: Pick<Rewrites, "apply
     }
     // A fresh plan is a fresh set of occurrences, so everything starts ticked —
     // which is why only the three inputs that CHANGE what was found re-plan; the
-    // «Заменить на» field merely redraws (see the wiring below), or an editor's
+    // "Replace with" field merely redraws (see the wiring below), or an editor's
     // unticking would be undone by fixing a typo in it.
     replacePicked = new Set(occurrences.map((o) => o.i));
     replacePageNo = 0;
@@ -130,7 +130,7 @@ export function createReplacePanel(board: Board, rewrites: Pick<Rewrites, "apply
     const cards = new Set(picked.map((o) => o.card.id)).size;
     const run = byId<HTMLButtonElement>("replaceRun");
     run.disabled = picked.length === 0;
-    // An empty «на» deletes, and the button says so rather than promising a
+    // An empty "with" deletes, and the button says so rather than promising a
     // replacement with nothing.
     const verb = replaceTo.value ? "Заменить" : "Удалить";
     run.textContent = picked.length ? `${verb} ${picked.length} в ${xyMass.cardCount(cards)}` : verb;

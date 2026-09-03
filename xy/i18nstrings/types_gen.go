@@ -5,6 +5,7 @@ package i18nstrings
 // Strings is one language's Catalog: a field per Surface, a nested struct
 // per group, a func per string.
 type Strings struct {
+	Admin       AdminStrings
 	Attachments AttachmentsStrings
 	Auth        AuthStrings
 	Board       BoardStrings
@@ -33,6 +34,31 @@ type Strings struct {
 	Stats       StatsStrings
 	Tg          TgStrings
 	Timeline    TimelineStrings
+}
+
+// AdminStrings is the admin Surface.
+type AdminStrings struct {
+	CreateUsers AdminCreateUsersStrings
+	Page        AdminPageStrings
+	Users       AdminUsersStrings
+}
+
+type AdminCreateUsersStrings struct {
+	Name  func() string
+	Title func() string
+}
+
+type AdminPageStrings struct {
+	Title func() string
+}
+
+type AdminUsersStrings struct {
+	ColActivity func() string
+	ColStorage  func() string
+	ColUser     func() string
+	Empty       func() string
+	Name        func() string
+	Title       func() string
 }
 
 // AttachmentsStrings is the attachments Surface.
@@ -797,7 +823,9 @@ type ChgkZipStrings struct {
 // ChgkcliStrings is the chgkcli Surface.
 type ChgkcliStrings struct {
 	AddStats ChgkcliAddStatsStrings
+	Board    ChgkcliBoardStrings
 	Docx     ChgkcliDocxStrings
+	Handouts ChgkcliHandoutsStrings
 	Lj       ChgkcliLjStrings
 	Parse    ChgkcliParseStrings
 	Shared   ChgkcliSharedStrings
@@ -808,9 +836,36 @@ type ChgkcliAddStatsStrings struct {
 	CustomCsvFlag func() string
 }
 
+type ChgkcliBoardStrings struct {
+	BoardUrlPrompt          func() string
+	EmptyToken              func() string
+	InitialPassphrasePrompt func() string
+	NeedBoardUrl            func() string
+	NoAnswersFlag           func() string
+	NoToken                 func(host string, url string) string
+	NothingToUpload         func() string
+	OnlyAnswersFlag         func() string
+	OpenBrowser             func() string
+	OpenBrowserTokens       func(url string) string
+	PassphrasePrompt        func() string
+	TokenPrompt             func() string
+}
+
 type ChgkcliDocxStrings struct {
 	NoParagraphFlag        func() string
 	OnlyQuestionNumberFlag func() string
+}
+
+type ChgkcliHandoutsStrings struct {
+	AlreadyExists    func(file string) string
+	ColourSuffix     func() string
+	DimensionsNote   func(width string, height string) string
+	HtmlGeometryNote func(width string, share string) string
+	PagesNote        func(file string, pages string, colour string) string
+	ScaleNote        func(scale string) string
+	SkipWarning      func(file string, err string) string
+	WarnQuestion     func(number string, text string) string
+	WatchNote        func(file string) string
 }
 
 type ChgkcliLjStrings struct {
@@ -844,18 +899,18 @@ type ChgkimportErrorStrings struct {
 
 // ChromeStrings is the chrome Surface.
 type ChromeStrings struct {
-	Bell        ChromeBellStrings
-	Card        ChromeCardStrings
-	Colorpick   ChromeColorpickStrings
-	Home        ChromeHomeStrings
-	OfflinePage ChromeOfflinePageStrings
-	Passphrase  ChromePassphraseStrings
-	Prewarm     ChromePrewarmStrings
-	Search      ChromeSearchStrings
-	Store       ChromeStoreStrings
-	Sync        ChromeSyncStrings
-	Tokens      ChromeTokensStrings
-	Typograph   ChromeTypographStrings
+	Bell       ChromeBellStrings
+	Card       ChromeCardStrings
+	Colorpick  ChromeColorpickStrings
+	Home       ChromeHomeStrings
+	Page       ChromePageStrings
+	Passphrase ChromePassphraseStrings
+	Prewarm    ChromePrewarmStrings
+	Search     ChromeSearchStrings
+	Store      ChromeStoreStrings
+	Sync       ChromeSyncStrings
+	Tokens     ChromeTokensStrings
+	Typograph  ChromeTypographStrings
 }
 
 type ChromeBellStrings struct {
@@ -886,8 +941,10 @@ type ChromeHomeStrings struct {
 	UnreadTitle        func() string
 }
 
-type ChromeOfflinePageStrings struct {
-	Body func() string
+type ChromePageStrings struct {
+	IndexTitle  func() string
+	JoinTitle   func() string
+	TokensTitle func() string
 }
 
 type ChromePassphraseStrings struct {
@@ -975,7 +1032,18 @@ type CliStrings struct {
 }
 
 type CliAttachmentStrings struct {
-	Summary func() string
+	AddNameFlag    func() string
+	AddUsage       func() string
+	Added          func(id string, name string, card_id string) string
+	DecryptFailed  func(id string, err string) string
+	GetCardFlag    func() string
+	GetDone        func(path string, bytes string) string
+	GetOutFlag     func() string
+	GetUsage       func() string
+	LsUsage        func() string
+	NeedCardFile   func() string
+	Summary        func() string
+	UnreadableName func() string
 }
 
 type CliBoardStrings struct {
@@ -1045,11 +1113,34 @@ type CliCommentStrings struct {
 }
 
 type CliExportStrings struct {
-	Summary func() string
+	AttachmentError func(name string, err string) string
+	Done            func(path string, bytes string) string
+	FormatFlag      func() string
+	ListFlag        func() string
+	NeedList        func() string
+	OutFlag         func() string
+	Summary         func() string
+	Usage           func() string
 }
 
 type CliLabelStrings struct {
-	Summary func() string
+	AddColorFlag     func() string
+	AddNameFlag      func() string
+	AddUsage         func() string
+	AlreadySet       func(name string) string
+	AlreadyUnset     func(name string) string
+	AssignLabelFlag  func() string
+	AssignRemoveFlag func() string
+	AssignUsage      func() string
+	Assigned         func(name string, verb string, id string) string
+	Created          func(id string, name string) string
+	LsCardFlag       func() string
+	LsUsage          func() string
+	NeedCardLabel    func() string
+	NeedName         func() string
+	Summary          func() string
+	VerbRemoved      func() string
+	VerbSet          func() string
 }
 
 type CliListStrings struct {
@@ -1131,6 +1222,7 @@ type CliSharedStrings struct {
 	NumericId         func(what string, raw string) string
 	SeeBoards         func(err string) string
 	UnknownAction     func(verb string, known string) string
+	WhatAttachment    func() string
 	WhatBoard         func() string
 	WhatCard          func() string
 	WhatComment       func() string
@@ -1151,7 +1243,11 @@ type CliSnapshotStrings struct {
 }
 
 type CliSourceStrings struct {
-	Summary func() string
+	ListFlag func() string
+	NeedList func() string
+	Note     func(title string, count string) string
+	Summary  func() string
+	Usage    func() string
 }
 
 type CliUnlockStrings struct {
@@ -1560,6 +1656,7 @@ type InviteStrings struct {
 	Facts   InviteFactsStrings
 	Form    InviteFormStrings
 	Message InviteMessageStrings
+	Page    InvitePageStrings
 	Request InviteRequestStrings
 	Row     InviteRowStrings
 	State   InviteStateStrings
@@ -1586,6 +1683,11 @@ type InviteFormStrings struct {
 
 type InviteMessageStrings struct {
 	Copied func() string
+}
+
+type InvitePageStrings struct {
+	BoardFallback func() string
+	BoardWrapper  func(name string) string
 }
 
 type InviteRequestStrings struct {
@@ -1682,6 +1784,7 @@ type ProfileStrings struct {
 	Cancel    func() string
 	CardTitle ProfileCardTitleStrings
 	Feed      ProfileFeedStrings
+	Firstrun  ProfileFirstrunStrings
 	Home      func() string
 	Name      func() string
 	Password  ProfilePasswordStrings
@@ -1719,6 +1822,10 @@ type ProfileFeedStrings struct {
 	Hint     func() string
 	Meta     func() string
 	Name     func() string
+}
+
+type ProfileFirstrunStrings struct {
+	AuthorPlaceholder func() string
 }
 
 type ProfilePasswordStrings struct {
@@ -1782,6 +1889,7 @@ type ServerStrings struct {
 	Card       ServerCardStrings
 	Child      ServerChildStrings
 	Comment    ServerCommentStrings
+	Error      ServerErrorStrings
 	Import     ServerImportStrings
 	Internal   func() string
 	Invite     ServerInviteStrings
@@ -1835,6 +1943,10 @@ type ServerCommentStrings struct {
 	NotFound        func() string
 }
 
+type ServerErrorStrings struct {
+	BadRequest func() string
+}
+
 type ServerImportStrings struct {
 	FileNoQuestions func() string
 	NoFile          func() string
@@ -1867,6 +1979,7 @@ type ServerMemberStrings struct {
 
 type ServerQuotaStrings struct {
 	Exceeded func(mb string) string
+	HumanMb  func(mb string) string
 }
 
 type ServerReactionStrings struct {
@@ -2123,6 +2236,24 @@ type TimelineThreadStrings struct {
 // in a .dopeui page.
 func (s Strings) Lookup(id string) (string, bool) {
 	switch id {
+	case "admin.create_users.name":
+		return s.Admin.CreateUsers.Name(), true
+	case "admin.create_users.title":
+		return s.Admin.CreateUsers.Title(), true
+	case "admin.page.title":
+		return s.Admin.Page.Title(), true
+	case "admin.users.col_activity":
+		return s.Admin.Users.ColActivity(), true
+	case "admin.users.col_storage":
+		return s.Admin.Users.ColStorage(), true
+	case "admin.users.col_user":
+		return s.Admin.Users.ColUser(), true
+	case "admin.users.empty":
+		return s.Admin.Users.Empty(), true
+	case "admin.users.name":
+		return s.Admin.Users.Name(), true
+	case "admin.users.title":
+		return s.Admin.Users.Title(), true
 	case "attachments.error.blob_download_failed":
 		return s.Attachments.Error.BlobDownloadFailed(), true
 	case "attachments.error.download_failed":
@@ -2831,10 +2962,32 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Chgk.Zip.Zip64Unsupported(), true
 	case "chgkcli.add_stats.custom_csv_flag":
 		return s.Chgkcli.AddStats.CustomCsvFlag(), true
+	case "chgkcli.board.board_url_prompt":
+		return s.Chgkcli.Board.BoardUrlPrompt(), true
+	case "chgkcli.board.empty_token":
+		return s.Chgkcli.Board.EmptyToken(), true
+	case "chgkcli.board.initial_passphrase_prompt":
+		return s.Chgkcli.Board.InitialPassphrasePrompt(), true
+	case "chgkcli.board.need_board_url":
+		return s.Chgkcli.Board.NeedBoardUrl(), true
+	case "chgkcli.board.no_answers_flag":
+		return s.Chgkcli.Board.NoAnswersFlag(), true
+	case "chgkcli.board.nothing_to_upload":
+		return s.Chgkcli.Board.NothingToUpload(), true
+	case "chgkcli.board.only_answers_flag":
+		return s.Chgkcli.Board.OnlyAnswersFlag(), true
+	case "chgkcli.board.open_browser":
+		return s.Chgkcli.Board.OpenBrowser(), true
+	case "chgkcli.board.passphrase_prompt":
+		return s.Chgkcli.Board.PassphrasePrompt(), true
+	case "chgkcli.board.token_prompt":
+		return s.Chgkcli.Board.TokenPrompt(), true
 	case "chgkcli.docx.no_paragraph_flag":
 		return s.Chgkcli.Docx.NoParagraphFlag(), true
 	case "chgkcli.docx.only_question_number_flag":
 		return s.Chgkcli.Docx.OnlyQuestionNumberFlag(), true
+	case "chgkcli.handouts.colour_suffix":
+		return s.Chgkcli.Handouts.ColourSuffix(), true
 	case "chgkcli.lj.genimp_flag":
 		return s.Chgkcli.Lj.GenimpFlag(), true
 	case "chgkcli.parse.tour_numbers_as_words_flag":
@@ -2879,8 +3032,12 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Chrome.Home.UnreadMentionTitle(), true
 	case "chrome.home.unread_title":
 		return s.Chrome.Home.UnreadTitle(), true
-	case "chrome.offline_page.body":
-		return s.Chrome.OfflinePage.Body(), true
+	case "chrome.page.index_title":
+		return s.Chrome.Page.IndexTitle(), true
+	case "chrome.page.join_title":
+		return s.Chrome.Page.JoinTitle(), true
+	case "chrome.page.tokens_title":
+		return s.Chrome.Page.TokensTitle(), true
 	case "chrome.passphrase.wrong":
 		return s.Chrome.Passphrase.Wrong(), true
 	case "chrome.prewarm.locked_note":
@@ -2933,8 +3090,24 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Chrome.Typograph.MenuTitle(), true
 	case "chrome.typograph.nothing_to_do":
 		return s.Chrome.Typograph.NothingToDo(), true
+	case "cli.attachment.add_name_flag":
+		return s.Cli.Attachment.AddNameFlag(), true
+	case "cli.attachment.add_usage":
+		return s.Cli.Attachment.AddUsage(), true
+	case "cli.attachment.get_card_flag":
+		return s.Cli.Attachment.GetCardFlag(), true
+	case "cli.attachment.get_out_flag":
+		return s.Cli.Attachment.GetOutFlag(), true
+	case "cli.attachment.get_usage":
+		return s.Cli.Attachment.GetUsage(), true
+	case "cli.attachment.ls_usage":
+		return s.Cli.Attachment.LsUsage(), true
+	case "cli.attachment.need_card_file":
+		return s.Cli.Attachment.NeedCardFile(), true
 	case "cli.attachment.summary":
 		return s.Cli.Attachment.Summary(), true
+	case "cli.attachment.unreadable_name":
+		return s.Cli.Attachment.UnreadableName(), true
 	case "cli.board.only_show":
 		return s.Cli.Board.OnlyShow(), true
 	case "cli.board.summary":
@@ -3011,10 +3184,44 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Cli.Comment.RmUsage(), true
 	case "cli.comment.summary":
 		return s.Cli.Comment.Summary(), true
+	case "cli.export.format_flag":
+		return s.Cli.Export.FormatFlag(), true
+	case "cli.export.list_flag":
+		return s.Cli.Export.ListFlag(), true
+	case "cli.export.need_list":
+		return s.Cli.Export.NeedList(), true
+	case "cli.export.out_flag":
+		return s.Cli.Export.OutFlag(), true
 	case "cli.export.summary":
 		return s.Cli.Export.Summary(), true
+	case "cli.export.usage":
+		return s.Cli.Export.Usage(), true
+	case "cli.label.add_color_flag":
+		return s.Cli.Label.AddColorFlag(), true
+	case "cli.label.add_name_flag":
+		return s.Cli.Label.AddNameFlag(), true
+	case "cli.label.add_usage":
+		return s.Cli.Label.AddUsage(), true
+	case "cli.label.assign_label_flag":
+		return s.Cli.Label.AssignLabelFlag(), true
+	case "cli.label.assign_remove_flag":
+		return s.Cli.Label.AssignRemoveFlag(), true
+	case "cli.label.assign_usage":
+		return s.Cli.Label.AssignUsage(), true
+	case "cli.label.ls_card_flag":
+		return s.Cli.Label.LsCardFlag(), true
+	case "cli.label.ls_usage":
+		return s.Cli.Label.LsUsage(), true
+	case "cli.label.need_card_label":
+		return s.Cli.Label.NeedCardLabel(), true
+	case "cli.label.need_name":
+		return s.Cli.Label.NeedName(), true
 	case "cli.label.summary":
 		return s.Cli.Label.Summary(), true
+	case "cli.label.verb_removed":
+		return s.Cli.Label.VerbRemoved(), true
+	case "cli.label.verb_set":
+		return s.Cli.Label.VerbSet(), true
 	case "cli.list.add_after_flag":
 		return s.Cli.List.AddAfterFlag(), true
 	case "cli.list.add_title_flag":
@@ -3101,6 +3308,8 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Cli.Shared.LoginFirst(), true
 	case "cli.shared.need_board":
 		return s.Cli.Shared.NeedBoard(), true
+	case "cli.shared.what_attachment":
+		return s.Cli.Shared.WhatAttachment(), true
 	case "cli.shared.what_board":
 		return s.Cli.Shared.WhatBoard(), true
 	case "cli.shared.what_card":
@@ -3113,8 +3322,14 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Cli.Shared.WhatList(), true
 	case "cli.shared.what_unlocked_board":
 		return s.Cli.Shared.WhatUnlockedBoard(), true
+	case "cli.source.list_flag":
+		return s.Cli.Source.ListFlag(), true
+	case "cli.source.need_list":
+		return s.Cli.Source.NeedList(), true
 	case "cli.source.summary":
 		return s.Cli.Source.Summary(), true
+	case "cli.source.usage":
+		return s.Cli.Source.Usage(), true
 	case "cli.unlock.need_ref":
 		return s.Cli.Unlock.NeedRef(), true
 	case "cli.unlock.summary":
@@ -3455,6 +3670,8 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Invite.Form.UsesUnlimited(), true
 	case "invite.message.copied":
 		return s.Invite.Message.Copied(), true
+	case "invite.page.board_fallback":
+		return s.Invite.Page.BoardFallback(), true
 	case "invite.request.approve":
 		return s.Invite.Request.Approve(), true
 	case "invite.request.decline":
@@ -3537,6 +3754,8 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Profile.Feed.Meta(), true
 	case "profile.feed.name":
 		return s.Profile.Feed.Name(), true
+	case "profile.firstrun.author_placeholder":
+		return s.Profile.Firstrun.AuthorPlaceholder(), true
 	case "profile.home":
 		return s.Profile.Home(), true
 	case "profile.name":
@@ -3657,6 +3876,8 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Server.Comment.Foreign(), true
 	case "server.comment.not_found":
 		return s.Server.Comment.NotFound(), true
+	case "server.error.bad_request":
+		return s.Server.Error.BadRequest(), true
 	case "server.import.file_no_questions":
 		return s.Server.Import.FileNoQuestions(), true
 	case "server.import.no_file":
@@ -3882,7 +4103,7 @@ func (s Strings) Lookup(id string) (string, bool) {
 // Defines reports whether the Catalog holds the id at all, templated or not.
 func (Strings) Defines(id string) bool {
 	switch id {
-	case "attachments.confirm.remove", "attachments.error.blob_download_failed", "attachments.error.download_failed", "attachments.error.offline_unavailable", "attachments.error.replace_failed", "attachments.error.upload_failed", "attachments.lightbox.close", "attachments.lightbox.dialog_label", "attachments.list.actions_title", "attachments.list.excerpt_badge", "attachments.list.fallback_name", "attachments.menu.delete", "attachments.menu.excerpt", "attachments.menu.replace", "attachments.name.default_stem", "attachments.name.paste_default", "attachments.status.encrypting", "attachments.status.offline_delete", "attachments.status.offline_edit", "attachments.status.offline_upload", "auth.login.fields_required", "auth.login.invalid", "auth.page.title", "auth.password.current_wrong", "auth.password.length", "auth.profile.cities_too_long", "auth.profile.name_too_long", "auth.profile.timezone_too_long", "auth.tg.code_missing", "auth.tg.password_wrong", "auth.tg.telegram_taken", "auth.tg.username_format", "auth.tg.username_reserved", "auth.token.forbidden", "auth.username.already_set", "auth.username.taken", "auth.username.too_long", "auth.username.too_short", "board.accent.hint", "board.accent.run", "board.accent.title", "board.actions.cancel", "board.actions.close", "board.actions.copy", "board.actions.done", "board.actions.move", "board.actions.save", "board.bell.label", "board.bell.title", "board.card.add_version_label", "board.card.add_version_title", "board.card.alias_label", "board.card.alias_placeholder", "board.card.attachments_label", "board.card.compress", "board.card.copy_title", "board.card.delete", "board.card.desc_label", "board.card.excerpts_view", "board.card.feed_label", "board.card.handout_title", "board.card.kind_heading", "board.card.kind_label", "board.card.kind_meta", "board.card.kind_other", "board.card.kind_question", "board.card.label_add", "board.card.link_label", "board.card.link_title", "board.card.mark_test", "board.card.move_label", "board.card.new_label_placeholder", "board.card.new_label_title", "board.card.playings_label", "board.card.preview_dblclick", "board.card.screen_label", "board.card.screen_title", "board.card.stress_label", "board.card.stress_title", "board.card.tab_fields", "board.card.tab_preview", "board.card.tab_text", "board.card.test_lead", "board.card.test_mid", "board.card.to4s_title", "board.card.typo_label", "board.card.typo_title", "board.card.upload", "board.card.versions_title", "board.changepass.copied", "board.changepass.danger", "board.changepass.generate", "board.changepass.placeholder", "board.changepass.saved", "board.changepass.submit", "board.changepass.title", "board.count.filtered", "board.count.questions", "board.delete.continue_q", "board.delete.failed", "board.delete.label", "board.delete.list_confirm", "board.delete.list_label", "board.delete.list_tail", "board.delete.list_untitled", "board.delete.mismatch", "board.delete.offline", "board.delete.title", "board.delete.type_name", "board.delete.warn", "board.dirty.discard", "board.dirty.hint", "board.dirty.title", "board.error.no_key", "board.error.no_label", "board.error.no_list", "board.error.no_test", "board.excerpts.title", "board.export.fmt4s_title", "board.export.handouts_label", "board.export.handouts_title", "board.export.overlay_label", "board.export.pdf_mobile_label", "board.export.pdf_mobile_title", "board.export.run", "board.export.select_all", "board.export.title", "board.feed.comment_placeholder", "board.feed.diff_view", "board.feed.expand_label", "board.feed.expand_title", "board.feed.filter_title", "board.feed.opt_all", "board.feed.opt_brief", "board.feed.opt_comments", "board.feed.opt_edits", "board.feed.opt_full", "board.feed.opt_meta", "board.feed.opt_new", "board.feed.opt_old", "board.feed.order_label", "board.feed.order_title", "board.feed.show", "board.feed.submit", "board.feed.title", "board.fields.board", "board.fields.list", "board.fields.position", "board.filter.title", "board.forget.label", "board.forget.title", "board.handouts.download", "board.handouts.generate", "board.handouts.splitfit_title", "board.handouts.src_label", "board.handouts.title", "board.importpick.hint", "board.importpick.split_label", "board.importpick.split_title", "board.importpick.submit", "board.importpick.title", "board.importverify.src_label", "board.importverify.title", "board.labels.name", "board.leave.confirm", "board.leave.failed", "board.leave.label", "board.leave.offline", "board.leave.target_named", "board.leave.target_this", "board.leave.title", "board.list.add_card", "board.list.add_placeholder", "board.list.create", "board.list.group_fallback", "board.list.group_title", "board.list.menu_title", "board.list.untitled", "board.listsmanage.link_label", "board.listsmanage.link_title", "board.listsmanage.move_label", "board.listsmanage.move_title", "board.listsmanage.title", "board.mass.board_locked", "board.mass.copy_offline", "board.mass.delete_hint", "board.mass.exit_label", "board.mass.hint", "board.mass.menu_title", "board.mass.name", "board.mass.no_labels", "board.mass.no_tests", "board.mass.pick_test", "board.mass.progress", "board.mass.run", "board.mass.select_card", "board.mass.select_list", "board.mass.selected_count", "board.members.add", "board.members.create_invite", "board.members.invites", "board.members.load_failed", "board.members.menu_pending", "board.members.menu_title", "board.members.name", "board.members.name_placeholder", "board.members.remove_confirm", "board.members.remove_fallback", "board.members.remove_title", "board.members.requests", "board.members.role_editor", "board.members.role_owner", "board.movelist.title", "board.page.home", "board.page.name", "board.page.offline", "board.page.offline_hint", "board.page.title", "board.panel.title", "board.passcheck.backup", "board.passcheck.forgot", "board.passcheck.hint_lead", "board.passcheck.hint_mid", "board.passcheck.saved_hint", "board.passcheck.submit", "board.passcheck.title", "board.paste.name_placeholder", "board.paste.title", "board.preview.edit_title", "board.preview.empty", "board.preview.group", "board.preview.list", "board.preview.title", "board.rename.board_label", "board.rename.board_offline", "board.rename.board_prompt", "board.rename.board_title", "board.rename.failed", "board.rename.list_label", "board.rename.list_prompt", "board.replace.case", "board.replace.find", "board.replace.next", "board.replace.prev", "board.replace.replace_with", "board.replace.run", "board.replace.scope_board", "board.replace.title", "board.sessionedit.title", "board.sessions.add", "board.sessions.add_title", "board.sessions.fallback", "board.sessions.menu_title", "board.sessions.name", "board.testmode.badge", "board.testmode.stop", "board.thread.placeholder", "board.thread.submit", "board.thread.title", "board.timer.label", "board.timer.title", "board.unlock.exit_hint", "board.unlock.forgot", "board.unlock.pass_placeholder", "board.unlock.submit", "board.unlock.title", "board.unread.comments", "board.unread.dot", "board.unread.mention", "boardsync.config.empty_url", "boardsync.config.unrecognized", "boardsync.fetch.card", "boardsync.fetch.list", "boardsync.upload.default_caption", "boardsync.upload.list_missing", "boardsync.upload.no_lists", "boardsync.upload.posted", "boardsync.upload.uploading", "bot.login.hint", "bot.register.done", "bot.register.expired", "bot.texts.down", "bot.texts.help", "card.add.labels_all_added", "card.add.labels_none", "card.add.labels_placeholder", "card.add.no_match", "card.add.playings_all_marked", "card.add.playings_none", "card.add.playings_placeholder", "card.authors.caption_title", "card.authors.placeholder", "card.chip.remove_aria", "card.copy.card_link", "card.copy.comment_link", "card.copy.done", "card.copy.failed", "card.create.failed", "card.delete.confirm", "card.dirty.comment_failed", "card.dirty.save_failed", "card.error.card_not_open", "card.error.clipboard_unavailable", "card.error.image_not_found", "card.error.no_board_key", "card.error.no_image_copy_support", "card.error.reencode_failed", "card.field.add", "card.field.add_row", "card.field.add_title", "card.field.answer", "card.field.comment", "card.field.handout", "card.field.hndt", "card.field.nezachet", "card.field.question", "card.field.remove_row_title", "card.field.remove_title", "card.field.source", "card.field.zachet", "card.handout.attach", "card.handout.attach_title", "card.handout.mode_image", "card.handout.mode_text", "card.kind.changed", "card.labels.empty", "card.labels.remove_title", "card.move.copied", "card.move.loading", "card.move.moved", "card.move.no_lists", "card.move.offline", "card.move.position", "card.move.reencrypting", "card.move.saving", "card.move.to_end", "card.move.untitled_list", "card.playings.empty", "card.playings.label_add_title", "card.playings.label_remove_title", "card.playings.remove_aria", "card.playings.remove_confirm", "card.playings.remove_confirm_scoped", "card.playings.remove_title", "card.preview.empty", "card.save.saved", "card.seen.common_tester_title", "card.seen.copy_title", "card.seen.label", "card.seen.label_except_common", "card.seen.show_all", "card.to4s.failed", "card.to4s.offline", "card.version.fallback_name", "card.version.promote_aria", "card.version.promote_title", "card.version.remove_aria", "card.version.remove_title", "card.version.rename_aria", "card.version.rename_prompt", "card.version.rename_title", "card.view.back", "card.view.close", "card.view.desc_label", "card.view.tab_text", "chgk.author.default", "chgk.author.feminine", "chgk.author.feminine_plural", "chgk.author.plural", "chgk.copy.handout", "chgk.copy.image_handout_note", "chgk.copy.question", "chgk.copy.question_numbered", "chgk.copy.question_piece", "chgk.copy.question_unnumbered", "chgk.copy.question_whole", "chgk.copy.question_with_answer", "chgk.label.answer", "chgk.label.author", "chgk.label.comment", "chgk.label.date", "chgk.label.editor", "chgk.label.handout", "chgk.label.nezachet", "chgk.label.question", "chgk.label.source", "chgk.label.source_plural", "chgk.label.zachet", "chgk.preview.image_missing", "chgk.zip.corrupt", "chgk.zip.file_corrupt", "chgk.zip.method_unsupported", "chgk.zip.not_zip", "chgk.zip.too_large", "chgk.zip.zip64_unsupported", "chgkcli.add_stats.custom_csv_flag", "chgkcli.docx.no_paragraph_flag", "chgkcli.docx.only_question_number_flag", "chgkcli.lj.genimp_flag", "chgkcli.parse.tour_numbers_as_words_flag", "chgkcli.shared.replace_no_break_hyphens_flag", "chgkcli.telegram.done", "chgkcli.telegram.posting", "chgkcli.telegram.stop_if_no_stats_flag", "chgkimport.error.no_4s", "chgkimport.error.no_questions", "chgkimport.error.too_big", "chrome.bell.empty", "chrome.bell.loading", "chrome.bell.mention", "chrome.bell.mention_reply", "chrome.bell.read_all", "chrome.bell.title", "chrome.card.title_empty", "chrome.colorpick.button_title", "chrome.home.board_locked_name", "chrome.home.create_offline", "chrome.home.empty_all", "chrome.home.empty_named", "chrome.home.role_editor", "chrome.home.role_owner", "chrome.home.unread_mention_title", "chrome.home.unread_title", "chrome.offline_page.body", "chrome.passphrase.too_few_words", "chrome.passphrase.too_short", "chrome.passphrase.wrong", "chrome.prewarm.done", "chrome.prewarm.locked_note", "chrome.prewarm.menu_label", "chrome.prewarm.menu_title", "chrome.prewarm.offline", "chrome.prewarm.progress", "chrome.search.comments", "chrome.search.note_all", "chrome.search.note_no_boards", "chrome.search.note_none", "chrome.search.note_partial", "chrome.search.questions", "chrome.store.upgrade_blocked", "chrome.sync.offline", "chrome.sync.offline_pending", "chrome.sync.saved", "chrome.sync.saving", "chrome.sync.syncing", "chrome.sync.syncing_pending", "chrome.sync.write_error", "chrome.tokens.copied", "chrome.tokens.copy", "chrome.tokens.label_unnamed", "chrome.tokens.meta_dates", "chrome.tokens.meta_unused", "chrome.tokens.meta_used", "chrome.tokens.revoke", "chrome.tokens.revoke_confirm", "chrome.tokens.status_active", "chrome.tokens.status_expired", "chrome.tokens.status_revoked", "chrome.typograph.confirm", "chrome.typograph.done", "chrome.typograph.failed", "chrome.typograph.menu_label", "chrome.typograph.menu_title", "chrome.typograph.nothing_to_do", "cli.attachment.summary", "cli.board.only_show", "cli.board.summary", "cli.board.usage", "cli.boards.summary", "cli.boards.usage", "cli.card.add_empty", "cli.card.add_kind_flag", "cli.card.add_list_flag", "cli.card.add_text_flag", "cli.card.add_usage", "cli.card.after_flag", "cli.card.alias_flag", "cli.card.before_flag", "cli.card.changed", "cli.card.created", "cli.card.expect_flag", "cli.card.file_flag", "cli.card.get_header", "cli.card.get_usage", "cli.card.moved", "cli.card.mv_list_flag", "cli.card.need_list", "cli.card.rank_after_missing", "cli.card.rank_before_missing", "cli.card.removed", "cli.card.rm_usage", "cli.card.set_empty", "cli.card.set_kind_flag", "cli.card.set_text_flag", "cli.card.set_usage", "cli.card.summary", "cli.card.unchanged", "cli.card.updated", "cli.client.token_rejected", "cli.comment.add_file_flag", "cli.comment.add_text_flag", "cli.comment.add_usage", "cli.comment.added", "cli.comment.all_flag", "cli.comment.deleted", "cli.comment.edit_file_flag", "cli.comment.edit_text_flag", "cli.comment.edit_usage", "cli.comment.edited", "cli.comment.empty", "cli.comment.ls_usage", "cli.comment.mentioned", "cli.comment.removed", "cli.comment.reply_to_flag", "cli.comment.rm_usage", "cli.comment.summary", "cli.export.summary", "cli.label.summary", "cli.list.add_after_flag", "cli.list.add_title_flag", "cli.list.add_usage", "cli.list.created", "cli.list.need_id_title", "cli.list.need_title", "cli.list.removed", "cli.list.rename_title_flag", "cli.list.rename_usage", "cli.list.renamed", "cli.list.rm_usage", "cli.list.summary", "cli.lock.all_done", "cli.lock.all_flag", "cli.lock.done", "cli.lock.need_ref", "cli.lock.summary", "cli.lock.usage", "cli.login.done", "cli.login.empty_token", "cli.login.need_url", "cli.login.rejected", "cli.login.summary", "cli.login.token_flag", "cli.login.token_prompt", "cli.login.url_flag", "cli.login.usage", "cli.logout.done", "cli.logout.summary", "cli.logout.usage", "cli.run.commands_head", "cli.run.example_boards", "cli.run.example_login", "cli.run.example_unlock", "cli.run.flags_head", "cli.run.footer_4s", "cli.run.footer_help", "cli.run.json_flag", "cli.run.start_head", "cli.run.state_unreadable", "cli.run.title", "cli.run.unknown_command", "cli.search.bad_regex", "cli.search.cards_flag", "cli.search.comments_flag", "cli.search.need_query", "cli.search.nothing", "cli.search.regex_flag", "cli.search.summary", "cli.search.usage", "cli.shared.ambiguous", "cli.shared.board_flag", "cli.shared.login_first", "cli.shared.need_board", "cli.shared.need_id", "cli.shared.no_key", "cli.shared.not_found", "cli.shared.numeric_id", "cli.shared.see_boards", "cli.shared.unknown_action", "cli.shared.what_board", "cli.shared.what_card", "cli.shared.what_comment", "cli.shared.what_label", "cli.shared.what_list", "cli.shared.what_unlocked_board", "cli.snapshot.card", "cli.snapshot.card_alias", "cli.snapshot.card_not_found", "cli.snapshot.group", "cli.snapshot.label", "cli.snapshot.label_color", "cli.snapshot.list", "cli.snapshot.list_not_found", "cli.source.summary", "cli.unlock.done", "cli.unlock.need_ref", "cli.unlock.passphrase_prompt", "cli.unlock.summary", "cli.unlock.usage", "cli.unlock.wrong_passphrase", "cli.versions.field_label", "cli.versions.question_label", "docs.docx.host_version", "docs.docx.screen_version", "docs.handout.bad_markup", "docs.handout.image_missing", "docs.handout.language_missing", "docs.handout.pack_multiple", "docs.handout.pack_no_grid", "docs.handout.pack_none", "docs.handout.rotate_image_missing", "docs.handout_list.by_number_lead", "docs.handout_list.by_tour_lead", "docs.handout_list.heading", "docs.handout_list.tour_none", "docs.handout_list.tour_numbers", "docs.image.missing", "docs.markdown.answer", "docs.markdown.author", "docs.markdown.comment", "docs.markdown.image_link", "docs.markdown.nezachet", "docs.markdown.question", "docs.markdown.source", "docs.markdown.zachet", "docs.pptx.question_caps", "docs.print.measure", "docs.print.measure_no_size", "docs.print.measure_zero_height", "docs.print.pdf", "docs.print.png", "docs.print.width_missing", "docs.typst.line_error", "docs.typst.line_not_pair", "export.form.deselect_all", "export.form.select_all", "export.menu.label", "export.menu.label_grouped", "export.notes.no_handouts", "export.notes.offline", "export.run.failed", "export.run.missing_images_confirm", "export.run.offline_formats", "export.run.progress", "export.run.progress_handouts", "fsource.theme.default_label", "gallery.bars.filter_hint", "gallery.bars.filter_reset", "gallery.bars.filter_what", "gallery.bars.mass_delete", "gallery.bars.mass_done", "gallery.bars.mass_move", "gallery.bars.mass_selected", "gallery.bars.note", "gallery.bars.title", "gallery.buttons.add_title", "gallery.buttons.cancel", "gallery.buttons.delete", "gallery.buttons.minor", "gallery.buttons.note", "gallery.buttons.save", "gallery.buttons.title", "gallery.card.handout_title", "gallery.card.heading", "gallery.card.note", "gallery.card.question", "gallery.card.title", "gallery.feed.event_comment", "gallery.feed.event_meta", "gallery.feed.note", "gallery.feed.title", "gallery.fields.plain_placeholder", "gallery.fields.select_option", "gallery.fields.title", "gallery.labels.long", "gallery.labels.not_taken", "gallery.labels.note", "gallery.labels.rewrite", "gallery.labels.taken", "gallery.labels.title", "gallery.layout.box_1", "gallery.layout.box_2", "gallery.layout.box_3", "gallery.layout.note", "gallery.layout.title", "gallery.list_rows.member_name", "gallery.list_rows.member_role", "gallery.list_rows.note", "gallery.list_rows.title", "gallery.page.hint", "gallery.page.home", "gallery.page.name", "gallery.page.title", "gallery.segment.all", "gallery.segment.any", "gallery.segment.none", "gallery.segment.note", "gallery.segment.title", "gallery.text.danger", "gallery.text.empty", "gallery.text.heading", "gallery.text.hint", "gallery.text.note", "gallery.text.title", "import.apply.attach_failed", "import.apply.attachments", "import.apply.cards", "import.apply.history", "import.archive.hint", "import.archive.subhead", "import.board.cancel", "import.board.gen_pass", "import.board.name_placeholder", "import.board.pass_copied", "import.board.pass_danger", "import.board.pass_hint", "import.board.pass_placeholder", "import.board.pass_saved", "import.board.submit", "import.bundle.creating", "import.bundle.missing_attachment", "import.bundle.no_board_json", "import.bundle.quota", "import.bundle.reading", "import.bundle.rollback", "import.bundle.summary", "import.bundle.summary_skipped", "import.export.attach_failed", "import.export.collecting", "import.export.decrypting", "import.export.downloaded", "import.export.downloading", "import.export.failed", "import.export.hint_body", "import.export.label", "import.export.menu_title", "import.export.modal_title", "import.export.none_picked", "import.export.not_encrypted", "import.export.select_all", "import.export.submit", "import.export.zipping", "import.pack.aborted", "import.pack.block_count", "import.pack.default_title", "import.pack.done_grouped", "import.pack.done_single", "import.pack.images_failed", "import.pack.label", "import.pack.menu_title", "import.pack.no_questions", "import.pack.no_tours_note", "import.pack.offline", "import.pack.parse_failed", "import.pack.preamble", "import.pack.prompt_group", "import.pack.prompt_list", "import.pack.reading_file", "import.pack.sniffed_archive", "import.pack.sniffed_package", "import.pack.tour_fallback", "import.pack.verify_title", "import.page.home", "import.page.name", "import.page.title", "import.picker.all_boards", "import.picker.no_boards", "import.run.aborted", "import.run.history", "import.run.importing", "import.run.load_failed", "import.run.loading", "import.run.need_source", "import.run.not_trello_export", "import.run.report_failed", "import.run.report_summary", "import.run.token_rejected", "import.run.token_required", "import.trello.all_hint", "import.trello.attachment_fallback", "import.trello.board_label", "import.trello.board_name_default", "import.trello.connect", "import.trello.intro_lead", "import.trello.intro_mid", "import.trello.json_hint", "import.trello.label_fallback", "import.trello.label_no_color", "import.trello.list_fallback", "import.trello.reset", "import.trello.subhead", "import.trello.test_session_fallback", "import.trello.testers_lead", "import.trello.token_hint", "import.trello.token_placeholder", "import.trello.token_submit", "import.versions.label", "import.versions.question", "install.archive_escape", "install.browser.archive_no_shell", "install.browser.downloading", "install.browser.no_build", "install.browser.no_sandbox", "install.browser.not_found", "install.browser.not_installed", "install.browser.platform_missing", "install.browser.releases_failed", "install.browser.releases_no_stable", "install.browser.symlink_escape", "install.installed", "install.typst.archive_no_binary", "install.typst.downloading", "install.typst.not_found", "install.typst.platform_missing", "install.typst.release_no_build", "install.typst.releases_failed", "install.typst.unknown_archive", "invite.facts.approval", "invite.form.approval", "invite.form.label_placeholder", "invite.form.submit", "invite.form.ttl_day", "invite.form.ttl_hour", "invite.form.ttl_label", "invite.form.ttl_never", "invite.form.ttl_week", "invite.form.uses_label", "invite.form.uses_unlimited", "invite.message.copied", "invite.request.approve", "invite.request.decline", "invite.row.copy", "invite.row.default_label", "invite.row.joined", "invite.row.remove", "invite.row.remove_confirm", "invite.row.revoke", "invite.state.active", "invite.state.exhausted", "invite.state.expired", "invite.state.revoked", "invite.time.days", "invite.time.expired", "invite.time.hours", "invite.time.under_hour", "invite.usage.left", "invite.usage.used", "lj.error.fault", "lj.error.malformed", "lj.error.no_challenge", "lj.error.nothing", "lj.error.status", "notify.join.board_named", "notify.join.board_unnamed", "notify.join.text", "notify.mention.board_named", "notify.mention.board_unnamed", "notify.mention.verb_mentioned", "notify.mention.verb_replied", "passphrase.change.label", "passphrase.change.offline", "passphrase.change.title", "passphrase.check.title", "passphrase.exit.delete", "passphrase.exit.leave", "profile.account.logout", "profile.account.tokens", "profile.author.hint", "profile.author.name", "profile.author.placeholder", "profile.cancel", "profile.card_title.answer", "profile.card_title.hint", "profile.card_title.name", "profile.card_title.question", "profile.feed.all", "profile.feed.comments", "profile.feed.edits", "profile.feed.hint", "profile.feed.meta", "profile.feed.name", "profile.home", "profile.name", "profile.password.current", "profile.password.name", "profile.password.new", "profile.password.repeat", "profile.password.submit", "profile.save", "profile.sizes.board_w", "profile.sizes.board_w_hint", "profile.sizes.card_h", "profile.sizes.card_h_hint", "profile.sizes.close", "profile.sizes.font", "profile.sizes.font_hint", "profile.sizes.list_w", "profile.sizes.name", "profile.sizes.reset", "profile.storage.hint_lead", "profile.storage.hint_mid", "profile.title", "profile.tz.cities_hint", "profile.tz.cities_label", "profile.tz.cities_placeholder", "profile.tz.hint", "profile.tz.mode_date", "profile.tz.mode_date_title", "profile.tz.mode_title", "profile.tz.name", "profile.tz.title_mode_label", "profile.username.hint", "profile.username.placeholder", "profile.whoami.hint_lead", "profile.whoami.hint_mid", "search.blank", "server.attachment.not_found", "server.board.delete_owner_only", "server.board.deleted", "server.board.keymeta_owner_only", "server.board.leave_owner_only", "server.board.no_access", "server.board.not_found", "server.bundle.event_without_target", "server.bundle.too_many_events", "server.card.question_not_marked", "server.card.scope_exactly_one", "server.child.card_foreign", "server.child.card_not_found", "server.child.group_foreign", "server.child.group_not_found", "server.child.label_foreign", "server.child.label_not_found", "server.child.list_foreign", "server.child.list_not_found", "server.child.session_foreign", "server.child.session_not_found", "server.comment.delete_owner_only", "server.comment.edit_owner_only", "server.comment.foreign", "server.comment.not_found", "server.import.file_no_questions", "server.import.no_file", "server.import.parse_failed", "server.import.read_failed", "server.import.text_no_questions", "server.import.unsupported", "server.internal", "server.invite.decision_invalid", "server.invite.label_too_long", "server.invite.limits_out_of_range", "server.invite.no_seats_left", "server.invite.not_found", "server.invite.owner_only", "server.invite.request_not_found", "server.list.group_needs_two", "server.list.not_on_board", "server.member.add_owner_only", "server.member.remove_owner_only", "server.member.user_not_found", "server.quota.exceeded", "server.reaction.delete_owner_only", "server.reaction.not_found", "server.refusal.broken", "server.refusal.declined", "server.refusal.exhausted", "server.refusal.expired", "server.refusal.revoked", "server.refusal.spent", "sessions.cities.add_placeholder", "sessions.cities.copy", "sessions.cities.label", "sessions.cities.remove", "sessions.cities.remove_named", "sessions.delete.confirm", "sessions.delete.label", "sessions.feed.at_question", "sessions.feed.empty", "sessions.feed.label", "sessions.feed.placeholder", "sessions.feed.send", "sessions.form.alias", "sessions.form.alias_placeholder", "sessions.form.date", "sessions.form.date_placeholder", "sessions.form.time", "sessions.form.time_placeholder", "sessions.form.timezone", "sessions.list.empty", "sessions.list.invite", "sessions.list.invite_title", "sessions.list.no_date", "sessions.list.open", "sessions.list.origin", "sessions.list.origin_at", "sessions.list.origin_title", "sessions.list.played", "sessions.list.players", "sessions.list.teams", "sessions.message.create_failed", "sessions.message.delete_failed", "sessions.message.note_add_failed", "sessions.message.notes_load_failed", "sessions.message.save_failed", "sessions.seen.partial", "sessions.summary.players", "sessions.summary.teams_also", "sessions.summary.teams_only", "sessions.testers.add", "sessions.testers.label", "sessions.testers.name_placeholder", "sessions.testers.player", "sessions.testers.remove_row", "sessions.testers.team", "sessions.testmode.start_title", "sessions.testmode.stop_title", "stats.options.label", "stats.question.line", "stats.question.takers", "stats.range.bad", "stats.rating.decode", "stats.rating.status", "stats.results.empty", "stats.table.disputed", "stats.table.header_missing", "stats.xlsx.no_sheets", "stats.xlsx.part_missing", "stats.xlsx.sheet_missing", "tg.resolve.done", "tg.resolve.forward", "tg.resolve.group_code", "tg.resolve.group_code_hint", "tg.resolve.private_code", "tg.resolve.same_channel", "tg.verify.not_admin", "tg.verify.not_member", "tg.verify.what_channel", "tg.verify.what_chat", "timeline.comment.cancel", "timeline.comment.copy_link_title", "timeline.comment.delete_confirm", "timeline.comment.deleted", "timeline.comment.edited_suffix", "timeline.comment.image_alt", "timeline.comment.image_draft", "timeline.comment.menu_delete", "timeline.comment.menu_edit", "timeline.comment.menu_excerpt", "timeline.comment.menu_no_test", "timeline.comment.menu_react", "timeline.comment.menu_reply", "timeline.comment.menu_title", "timeline.comment.offline", "timeline.comment.remove_image_title", "timeline.comment.save", "timeline.diff.no_changes", "timeline.diff.version_fallback", "timeline.event.attach_add", "timeline.event.attach_remove", "timeline.event.attach_replace", "timeline.event.comment", "timeline.event.desc_edit", "timeline.event.label_add", "timeline.event.label_remove", "timeline.event.reaction", "timeline.excerpt.badge", "timeline.excerpt.count", "timeline.excerpt.download", "timeline.excerpt.file_fallback", "timeline.feed.card_created", "timeline.feed.desc_edit_meta", "timeline.missing_dk", "timeline.reaction.add_title", "timeline.reaction.emoji_prompt", "timeline.reaction.offline", "timeline.reaction.other", "timeline.reply.deleted_parent", "timeline.reply.in_reply_to", "timeline.reply.unknown_parent", "timeline.thread.open_title", "timeline.thread.replies":
+	case "admin.create_users.name", "admin.create_users.title", "admin.page.title", "admin.users.col_activity", "admin.users.col_storage", "admin.users.col_user", "admin.users.empty", "admin.users.name", "admin.users.title", "attachments.confirm.remove", "attachments.error.blob_download_failed", "attachments.error.download_failed", "attachments.error.offline_unavailable", "attachments.error.replace_failed", "attachments.error.upload_failed", "attachments.lightbox.close", "attachments.lightbox.dialog_label", "attachments.list.actions_title", "attachments.list.excerpt_badge", "attachments.list.fallback_name", "attachments.menu.delete", "attachments.menu.excerpt", "attachments.menu.replace", "attachments.name.default_stem", "attachments.name.paste_default", "attachments.status.encrypting", "attachments.status.offline_delete", "attachments.status.offline_edit", "attachments.status.offline_upload", "auth.login.fields_required", "auth.login.invalid", "auth.page.title", "auth.password.current_wrong", "auth.password.length", "auth.profile.cities_too_long", "auth.profile.name_too_long", "auth.profile.timezone_too_long", "auth.tg.code_missing", "auth.tg.password_wrong", "auth.tg.telegram_taken", "auth.tg.username_format", "auth.tg.username_reserved", "auth.token.forbidden", "auth.username.already_set", "auth.username.taken", "auth.username.too_long", "auth.username.too_short", "board.accent.hint", "board.accent.run", "board.accent.title", "board.actions.cancel", "board.actions.close", "board.actions.copy", "board.actions.done", "board.actions.move", "board.actions.save", "board.bell.label", "board.bell.title", "board.card.add_version_label", "board.card.add_version_title", "board.card.alias_label", "board.card.alias_placeholder", "board.card.attachments_label", "board.card.compress", "board.card.copy_title", "board.card.delete", "board.card.desc_label", "board.card.excerpts_view", "board.card.feed_label", "board.card.handout_title", "board.card.kind_heading", "board.card.kind_label", "board.card.kind_meta", "board.card.kind_other", "board.card.kind_question", "board.card.label_add", "board.card.link_label", "board.card.link_title", "board.card.mark_test", "board.card.move_label", "board.card.new_label_placeholder", "board.card.new_label_title", "board.card.playings_label", "board.card.preview_dblclick", "board.card.screen_label", "board.card.screen_title", "board.card.stress_label", "board.card.stress_title", "board.card.tab_fields", "board.card.tab_preview", "board.card.tab_text", "board.card.test_lead", "board.card.test_mid", "board.card.to4s_title", "board.card.typo_label", "board.card.typo_title", "board.card.upload", "board.card.versions_title", "board.changepass.copied", "board.changepass.danger", "board.changepass.generate", "board.changepass.placeholder", "board.changepass.saved", "board.changepass.submit", "board.changepass.title", "board.count.filtered", "board.count.questions", "board.delete.continue_q", "board.delete.failed", "board.delete.label", "board.delete.list_confirm", "board.delete.list_label", "board.delete.list_tail", "board.delete.list_untitled", "board.delete.mismatch", "board.delete.offline", "board.delete.title", "board.delete.type_name", "board.delete.warn", "board.dirty.discard", "board.dirty.hint", "board.dirty.title", "board.error.no_key", "board.error.no_label", "board.error.no_list", "board.error.no_test", "board.excerpts.title", "board.export.fmt4s_title", "board.export.handouts_label", "board.export.handouts_title", "board.export.overlay_label", "board.export.pdf_mobile_label", "board.export.pdf_mobile_title", "board.export.run", "board.export.select_all", "board.export.title", "board.feed.comment_placeholder", "board.feed.diff_view", "board.feed.expand_label", "board.feed.expand_title", "board.feed.filter_title", "board.feed.opt_all", "board.feed.opt_brief", "board.feed.opt_comments", "board.feed.opt_edits", "board.feed.opt_full", "board.feed.opt_meta", "board.feed.opt_new", "board.feed.opt_old", "board.feed.order_label", "board.feed.order_title", "board.feed.show", "board.feed.submit", "board.feed.title", "board.fields.board", "board.fields.list", "board.fields.position", "board.filter.title", "board.forget.label", "board.forget.title", "board.handouts.download", "board.handouts.generate", "board.handouts.splitfit_title", "board.handouts.src_label", "board.handouts.title", "board.importpick.hint", "board.importpick.split_label", "board.importpick.split_title", "board.importpick.submit", "board.importpick.title", "board.importverify.src_label", "board.importverify.title", "board.labels.name", "board.leave.confirm", "board.leave.failed", "board.leave.label", "board.leave.offline", "board.leave.target_named", "board.leave.target_this", "board.leave.title", "board.list.add_card", "board.list.add_placeholder", "board.list.create", "board.list.group_fallback", "board.list.group_title", "board.list.menu_title", "board.list.untitled", "board.listsmanage.link_label", "board.listsmanage.link_title", "board.listsmanage.move_label", "board.listsmanage.move_title", "board.listsmanage.title", "board.mass.board_locked", "board.mass.copy_offline", "board.mass.delete_hint", "board.mass.exit_label", "board.mass.hint", "board.mass.menu_title", "board.mass.name", "board.mass.no_labels", "board.mass.no_tests", "board.mass.pick_test", "board.mass.progress", "board.mass.run", "board.mass.select_card", "board.mass.select_list", "board.mass.selected_count", "board.members.add", "board.members.create_invite", "board.members.invites", "board.members.load_failed", "board.members.menu_pending", "board.members.menu_title", "board.members.name", "board.members.name_placeholder", "board.members.remove_confirm", "board.members.remove_fallback", "board.members.remove_title", "board.members.requests", "board.members.role_editor", "board.members.role_owner", "board.movelist.title", "board.page.home", "board.page.name", "board.page.offline", "board.page.offline_hint", "board.page.title", "board.panel.title", "board.passcheck.backup", "board.passcheck.forgot", "board.passcheck.hint_lead", "board.passcheck.hint_mid", "board.passcheck.saved_hint", "board.passcheck.submit", "board.passcheck.title", "board.paste.name_placeholder", "board.paste.title", "board.preview.edit_title", "board.preview.empty", "board.preview.group", "board.preview.list", "board.preview.title", "board.rename.board_label", "board.rename.board_offline", "board.rename.board_prompt", "board.rename.board_title", "board.rename.failed", "board.rename.list_label", "board.rename.list_prompt", "board.replace.case", "board.replace.find", "board.replace.next", "board.replace.prev", "board.replace.replace_with", "board.replace.run", "board.replace.scope_board", "board.replace.title", "board.sessionedit.title", "board.sessions.add", "board.sessions.add_title", "board.sessions.fallback", "board.sessions.menu_title", "board.sessions.name", "board.testmode.badge", "board.testmode.stop", "board.thread.placeholder", "board.thread.submit", "board.thread.title", "board.timer.label", "board.timer.title", "board.unlock.exit_hint", "board.unlock.forgot", "board.unlock.pass_placeholder", "board.unlock.submit", "board.unlock.title", "board.unread.comments", "board.unread.dot", "board.unread.mention", "boardsync.config.empty_url", "boardsync.config.unrecognized", "boardsync.fetch.card", "boardsync.fetch.list", "boardsync.upload.default_caption", "boardsync.upload.list_missing", "boardsync.upload.no_lists", "boardsync.upload.posted", "boardsync.upload.uploading", "bot.login.hint", "bot.register.done", "bot.register.expired", "bot.texts.down", "bot.texts.help", "card.add.labels_all_added", "card.add.labels_none", "card.add.labels_placeholder", "card.add.no_match", "card.add.playings_all_marked", "card.add.playings_none", "card.add.playings_placeholder", "card.authors.caption_title", "card.authors.placeholder", "card.chip.remove_aria", "card.copy.card_link", "card.copy.comment_link", "card.copy.done", "card.copy.failed", "card.create.failed", "card.delete.confirm", "card.dirty.comment_failed", "card.dirty.save_failed", "card.error.card_not_open", "card.error.clipboard_unavailable", "card.error.image_not_found", "card.error.no_board_key", "card.error.no_image_copy_support", "card.error.reencode_failed", "card.field.add", "card.field.add_row", "card.field.add_title", "card.field.answer", "card.field.comment", "card.field.handout", "card.field.hndt", "card.field.nezachet", "card.field.question", "card.field.remove_row_title", "card.field.remove_title", "card.field.source", "card.field.zachet", "card.handout.attach", "card.handout.attach_title", "card.handout.mode_image", "card.handout.mode_text", "card.kind.changed", "card.labels.empty", "card.labels.remove_title", "card.move.copied", "card.move.loading", "card.move.moved", "card.move.no_lists", "card.move.offline", "card.move.position", "card.move.reencrypting", "card.move.saving", "card.move.to_end", "card.move.untitled_list", "card.playings.empty", "card.playings.label_add_title", "card.playings.label_remove_title", "card.playings.remove_aria", "card.playings.remove_confirm", "card.playings.remove_confirm_scoped", "card.playings.remove_title", "card.preview.empty", "card.save.saved", "card.seen.common_tester_title", "card.seen.copy_title", "card.seen.label", "card.seen.label_except_common", "card.seen.show_all", "card.to4s.failed", "card.to4s.offline", "card.version.fallback_name", "card.version.promote_aria", "card.version.promote_title", "card.version.remove_aria", "card.version.remove_title", "card.version.rename_aria", "card.version.rename_prompt", "card.version.rename_title", "card.view.back", "card.view.close", "card.view.desc_label", "card.view.tab_text", "chgk.author.default", "chgk.author.feminine", "chgk.author.feminine_plural", "chgk.author.plural", "chgk.copy.handout", "chgk.copy.image_handout_note", "chgk.copy.question", "chgk.copy.question_numbered", "chgk.copy.question_piece", "chgk.copy.question_unnumbered", "chgk.copy.question_whole", "chgk.copy.question_with_answer", "chgk.label.answer", "chgk.label.author", "chgk.label.comment", "chgk.label.date", "chgk.label.editor", "chgk.label.handout", "chgk.label.nezachet", "chgk.label.question", "chgk.label.source", "chgk.label.source_plural", "chgk.label.zachet", "chgk.preview.image_missing", "chgk.zip.corrupt", "chgk.zip.file_corrupt", "chgk.zip.method_unsupported", "chgk.zip.not_zip", "chgk.zip.too_large", "chgk.zip.zip64_unsupported", "chgkcli.add_stats.custom_csv_flag", "chgkcli.board.board_url_prompt", "chgkcli.board.empty_token", "chgkcli.board.initial_passphrase_prompt", "chgkcli.board.need_board_url", "chgkcli.board.no_answers_flag", "chgkcli.board.no_token", "chgkcli.board.nothing_to_upload", "chgkcli.board.only_answers_flag", "chgkcli.board.open_browser", "chgkcli.board.open_browser_tokens", "chgkcli.board.passphrase_prompt", "chgkcli.board.token_prompt", "chgkcli.docx.no_paragraph_flag", "chgkcli.docx.only_question_number_flag", "chgkcli.handouts.already_exists", "chgkcli.handouts.colour_suffix", "chgkcli.handouts.dimensions_note", "chgkcli.handouts.html_geometry_note", "chgkcli.handouts.pages_note", "chgkcli.handouts.scale_note", "chgkcli.handouts.skip_warning", "chgkcli.handouts.warn_question", "chgkcli.handouts.watch_note", "chgkcli.lj.genimp_flag", "chgkcli.parse.tour_numbers_as_words_flag", "chgkcli.shared.replace_no_break_hyphens_flag", "chgkcli.telegram.done", "chgkcli.telegram.posting", "chgkcli.telegram.stop_if_no_stats_flag", "chgkimport.error.no_4s", "chgkimport.error.no_questions", "chgkimport.error.too_big", "chrome.bell.empty", "chrome.bell.loading", "chrome.bell.mention", "chrome.bell.mention_reply", "chrome.bell.read_all", "chrome.bell.title", "chrome.card.title_empty", "chrome.colorpick.button_title", "chrome.home.board_locked_name", "chrome.home.create_offline", "chrome.home.empty_all", "chrome.home.empty_named", "chrome.home.role_editor", "chrome.home.role_owner", "chrome.home.unread_mention_title", "chrome.home.unread_title", "chrome.page.index_title", "chrome.page.join_title", "chrome.page.tokens_title", "chrome.passphrase.too_few_words", "chrome.passphrase.too_short", "chrome.passphrase.wrong", "chrome.prewarm.done", "chrome.prewarm.locked_note", "chrome.prewarm.menu_label", "chrome.prewarm.menu_title", "chrome.prewarm.offline", "chrome.prewarm.progress", "chrome.search.comments", "chrome.search.note_all", "chrome.search.note_no_boards", "chrome.search.note_none", "chrome.search.note_partial", "chrome.search.questions", "chrome.store.upgrade_blocked", "chrome.sync.offline", "chrome.sync.offline_pending", "chrome.sync.saved", "chrome.sync.saving", "chrome.sync.syncing", "chrome.sync.syncing_pending", "chrome.sync.write_error", "chrome.tokens.copied", "chrome.tokens.copy", "chrome.tokens.label_unnamed", "chrome.tokens.meta_dates", "chrome.tokens.meta_unused", "chrome.tokens.meta_used", "chrome.tokens.revoke", "chrome.tokens.revoke_confirm", "chrome.tokens.status_active", "chrome.tokens.status_expired", "chrome.tokens.status_revoked", "chrome.typograph.confirm", "chrome.typograph.done", "chrome.typograph.failed", "chrome.typograph.menu_label", "chrome.typograph.menu_title", "chrome.typograph.nothing_to_do", "cli.attachment.add_name_flag", "cli.attachment.add_usage", "cli.attachment.added", "cli.attachment.decrypt_failed", "cli.attachment.get_card_flag", "cli.attachment.get_done", "cli.attachment.get_out_flag", "cli.attachment.get_usage", "cli.attachment.ls_usage", "cli.attachment.need_card_file", "cli.attachment.summary", "cli.attachment.unreadable_name", "cli.board.only_show", "cli.board.summary", "cli.board.usage", "cli.boards.summary", "cli.boards.usage", "cli.card.add_empty", "cli.card.add_kind_flag", "cli.card.add_list_flag", "cli.card.add_text_flag", "cli.card.add_usage", "cli.card.after_flag", "cli.card.alias_flag", "cli.card.before_flag", "cli.card.changed", "cli.card.created", "cli.card.expect_flag", "cli.card.file_flag", "cli.card.get_header", "cli.card.get_usage", "cli.card.moved", "cli.card.mv_list_flag", "cli.card.need_list", "cli.card.rank_after_missing", "cli.card.rank_before_missing", "cli.card.removed", "cli.card.rm_usage", "cli.card.set_empty", "cli.card.set_kind_flag", "cli.card.set_text_flag", "cli.card.set_usage", "cli.card.summary", "cli.card.unchanged", "cli.card.updated", "cli.client.token_rejected", "cli.comment.add_file_flag", "cli.comment.add_text_flag", "cli.comment.add_usage", "cli.comment.added", "cli.comment.all_flag", "cli.comment.deleted", "cli.comment.edit_file_flag", "cli.comment.edit_text_flag", "cli.comment.edit_usage", "cli.comment.edited", "cli.comment.empty", "cli.comment.ls_usage", "cli.comment.mentioned", "cli.comment.removed", "cli.comment.reply_to_flag", "cli.comment.rm_usage", "cli.comment.summary", "cli.export.attachment_error", "cli.export.done", "cli.export.format_flag", "cli.export.list_flag", "cli.export.need_list", "cli.export.out_flag", "cli.export.summary", "cli.export.usage", "cli.label.add_color_flag", "cli.label.add_name_flag", "cli.label.add_usage", "cli.label.already_set", "cli.label.already_unset", "cli.label.assign_label_flag", "cli.label.assign_remove_flag", "cli.label.assign_usage", "cli.label.assigned", "cli.label.created", "cli.label.ls_card_flag", "cli.label.ls_usage", "cli.label.need_card_label", "cli.label.need_name", "cli.label.summary", "cli.label.verb_removed", "cli.label.verb_set", "cli.list.add_after_flag", "cli.list.add_title_flag", "cli.list.add_usage", "cli.list.created", "cli.list.need_id_title", "cli.list.need_title", "cli.list.removed", "cli.list.rename_title_flag", "cli.list.rename_usage", "cli.list.renamed", "cli.list.rm_usage", "cli.list.summary", "cli.lock.all_done", "cli.lock.all_flag", "cli.lock.done", "cli.lock.need_ref", "cli.lock.summary", "cli.lock.usage", "cli.login.done", "cli.login.empty_token", "cli.login.need_url", "cli.login.rejected", "cli.login.summary", "cli.login.token_flag", "cli.login.token_prompt", "cli.login.url_flag", "cli.login.usage", "cli.logout.done", "cli.logout.summary", "cli.logout.usage", "cli.run.commands_head", "cli.run.example_boards", "cli.run.example_login", "cli.run.example_unlock", "cli.run.flags_head", "cli.run.footer_4s", "cli.run.footer_help", "cli.run.json_flag", "cli.run.start_head", "cli.run.state_unreadable", "cli.run.title", "cli.run.unknown_command", "cli.search.bad_regex", "cli.search.cards_flag", "cli.search.comments_flag", "cli.search.need_query", "cli.search.nothing", "cli.search.regex_flag", "cli.search.summary", "cli.search.usage", "cli.shared.ambiguous", "cli.shared.board_flag", "cli.shared.login_first", "cli.shared.need_board", "cli.shared.need_id", "cli.shared.no_key", "cli.shared.not_found", "cli.shared.numeric_id", "cli.shared.see_boards", "cli.shared.unknown_action", "cli.shared.what_attachment", "cli.shared.what_board", "cli.shared.what_card", "cli.shared.what_comment", "cli.shared.what_label", "cli.shared.what_list", "cli.shared.what_unlocked_board", "cli.snapshot.card", "cli.snapshot.card_alias", "cli.snapshot.card_not_found", "cli.snapshot.group", "cli.snapshot.label", "cli.snapshot.label_color", "cli.snapshot.list", "cli.snapshot.list_not_found", "cli.source.list_flag", "cli.source.need_list", "cli.source.note", "cli.source.summary", "cli.source.usage", "cli.unlock.done", "cli.unlock.need_ref", "cli.unlock.passphrase_prompt", "cli.unlock.summary", "cli.unlock.usage", "cli.unlock.wrong_passphrase", "cli.versions.field_label", "cli.versions.question_label", "docs.docx.host_version", "docs.docx.screen_version", "docs.handout.bad_markup", "docs.handout.image_missing", "docs.handout.language_missing", "docs.handout.pack_multiple", "docs.handout.pack_no_grid", "docs.handout.pack_none", "docs.handout.rotate_image_missing", "docs.handout_list.by_number_lead", "docs.handout_list.by_tour_lead", "docs.handout_list.heading", "docs.handout_list.tour_none", "docs.handout_list.tour_numbers", "docs.image.missing", "docs.markdown.answer", "docs.markdown.author", "docs.markdown.comment", "docs.markdown.image_link", "docs.markdown.nezachet", "docs.markdown.question", "docs.markdown.source", "docs.markdown.zachet", "docs.pptx.question_caps", "docs.print.measure", "docs.print.measure_no_size", "docs.print.measure_zero_height", "docs.print.pdf", "docs.print.png", "docs.print.width_missing", "docs.typst.line_error", "docs.typst.line_not_pair", "export.form.deselect_all", "export.form.select_all", "export.menu.label", "export.menu.label_grouped", "export.notes.no_handouts", "export.notes.offline", "export.run.failed", "export.run.missing_images_confirm", "export.run.offline_formats", "export.run.progress", "export.run.progress_handouts", "fsource.theme.default_label", "gallery.bars.filter_hint", "gallery.bars.filter_reset", "gallery.bars.filter_what", "gallery.bars.mass_delete", "gallery.bars.mass_done", "gallery.bars.mass_move", "gallery.bars.mass_selected", "gallery.bars.note", "gallery.bars.title", "gallery.buttons.add_title", "gallery.buttons.cancel", "gallery.buttons.delete", "gallery.buttons.minor", "gallery.buttons.note", "gallery.buttons.save", "gallery.buttons.title", "gallery.card.handout_title", "gallery.card.heading", "gallery.card.note", "gallery.card.question", "gallery.card.title", "gallery.feed.event_comment", "gallery.feed.event_meta", "gallery.feed.note", "gallery.feed.title", "gallery.fields.plain_placeholder", "gallery.fields.select_option", "gallery.fields.title", "gallery.labels.long", "gallery.labels.not_taken", "gallery.labels.note", "gallery.labels.rewrite", "gallery.labels.taken", "gallery.labels.title", "gallery.layout.box_1", "gallery.layout.box_2", "gallery.layout.box_3", "gallery.layout.note", "gallery.layout.title", "gallery.list_rows.member_name", "gallery.list_rows.member_role", "gallery.list_rows.note", "gallery.list_rows.title", "gallery.page.hint", "gallery.page.home", "gallery.page.name", "gallery.page.title", "gallery.segment.all", "gallery.segment.any", "gallery.segment.none", "gallery.segment.note", "gallery.segment.title", "gallery.text.danger", "gallery.text.empty", "gallery.text.heading", "gallery.text.hint", "gallery.text.note", "gallery.text.title", "import.apply.attach_failed", "import.apply.attachments", "import.apply.cards", "import.apply.history", "import.archive.hint", "import.archive.subhead", "import.board.cancel", "import.board.gen_pass", "import.board.name_placeholder", "import.board.pass_copied", "import.board.pass_danger", "import.board.pass_hint", "import.board.pass_placeholder", "import.board.pass_saved", "import.board.submit", "import.bundle.creating", "import.bundle.missing_attachment", "import.bundle.no_board_json", "import.bundle.quota", "import.bundle.reading", "import.bundle.rollback", "import.bundle.summary", "import.bundle.summary_skipped", "import.export.attach_failed", "import.export.collecting", "import.export.decrypting", "import.export.downloaded", "import.export.downloading", "import.export.failed", "import.export.hint_body", "import.export.label", "import.export.menu_title", "import.export.modal_title", "import.export.none_picked", "import.export.not_encrypted", "import.export.select_all", "import.export.submit", "import.export.zipping", "import.pack.aborted", "import.pack.block_count", "import.pack.default_title", "import.pack.done_grouped", "import.pack.done_single", "import.pack.images_failed", "import.pack.label", "import.pack.menu_title", "import.pack.no_questions", "import.pack.no_tours_note", "import.pack.offline", "import.pack.parse_failed", "import.pack.preamble", "import.pack.prompt_group", "import.pack.prompt_list", "import.pack.reading_file", "import.pack.sniffed_archive", "import.pack.sniffed_package", "import.pack.tour_fallback", "import.pack.verify_title", "import.page.home", "import.page.name", "import.page.title", "import.picker.all_boards", "import.picker.no_boards", "import.run.aborted", "import.run.history", "import.run.importing", "import.run.load_failed", "import.run.loading", "import.run.need_source", "import.run.not_trello_export", "import.run.report_failed", "import.run.report_summary", "import.run.token_rejected", "import.run.token_required", "import.trello.all_hint", "import.trello.attachment_fallback", "import.trello.board_label", "import.trello.board_name_default", "import.trello.connect", "import.trello.intro_lead", "import.trello.intro_mid", "import.trello.json_hint", "import.trello.label_fallback", "import.trello.label_no_color", "import.trello.list_fallback", "import.trello.reset", "import.trello.subhead", "import.trello.test_session_fallback", "import.trello.testers_lead", "import.trello.token_hint", "import.trello.token_placeholder", "import.trello.token_submit", "import.versions.label", "import.versions.question", "install.archive_escape", "install.browser.archive_no_shell", "install.browser.downloading", "install.browser.no_build", "install.browser.no_sandbox", "install.browser.not_found", "install.browser.not_installed", "install.browser.platform_missing", "install.browser.releases_failed", "install.browser.releases_no_stable", "install.browser.symlink_escape", "install.installed", "install.typst.archive_no_binary", "install.typst.downloading", "install.typst.not_found", "install.typst.platform_missing", "install.typst.release_no_build", "install.typst.releases_failed", "install.typst.unknown_archive", "invite.facts.approval", "invite.form.approval", "invite.form.label_placeholder", "invite.form.submit", "invite.form.ttl_day", "invite.form.ttl_hour", "invite.form.ttl_label", "invite.form.ttl_never", "invite.form.ttl_week", "invite.form.uses_label", "invite.form.uses_unlimited", "invite.message.copied", "invite.page.board_fallback", "invite.page.board_wrapper", "invite.request.approve", "invite.request.decline", "invite.row.copy", "invite.row.default_label", "invite.row.joined", "invite.row.remove", "invite.row.remove_confirm", "invite.row.revoke", "invite.state.active", "invite.state.exhausted", "invite.state.expired", "invite.state.revoked", "invite.time.days", "invite.time.expired", "invite.time.hours", "invite.time.under_hour", "invite.usage.left", "invite.usage.used", "lj.error.fault", "lj.error.malformed", "lj.error.no_challenge", "lj.error.nothing", "lj.error.status", "notify.join.board_named", "notify.join.board_unnamed", "notify.join.text", "notify.mention.board_named", "notify.mention.board_unnamed", "notify.mention.verb_mentioned", "notify.mention.verb_replied", "passphrase.change.label", "passphrase.change.offline", "passphrase.change.title", "passphrase.check.title", "passphrase.exit.delete", "passphrase.exit.leave", "profile.account.logout", "profile.account.tokens", "profile.author.hint", "profile.author.name", "profile.author.placeholder", "profile.cancel", "profile.card_title.answer", "profile.card_title.hint", "profile.card_title.name", "profile.card_title.question", "profile.feed.all", "profile.feed.comments", "profile.feed.edits", "profile.feed.hint", "profile.feed.meta", "profile.feed.name", "profile.firstrun.author_placeholder", "profile.home", "profile.name", "profile.password.current", "profile.password.name", "profile.password.new", "profile.password.repeat", "profile.password.submit", "profile.save", "profile.sizes.board_w", "profile.sizes.board_w_hint", "profile.sizes.card_h", "profile.sizes.card_h_hint", "profile.sizes.close", "profile.sizes.font", "profile.sizes.font_hint", "profile.sizes.list_w", "profile.sizes.name", "profile.sizes.reset", "profile.storage.hint_lead", "profile.storage.hint_mid", "profile.title", "profile.tz.cities_hint", "profile.tz.cities_label", "profile.tz.cities_placeholder", "profile.tz.hint", "profile.tz.mode_date", "profile.tz.mode_date_title", "profile.tz.mode_title", "profile.tz.name", "profile.tz.title_mode_label", "profile.username.hint", "profile.username.placeholder", "profile.whoami.hint_lead", "profile.whoami.hint_mid", "search.blank", "server.attachment.not_found", "server.board.delete_owner_only", "server.board.deleted", "server.board.keymeta_owner_only", "server.board.leave_owner_only", "server.board.no_access", "server.board.not_found", "server.bundle.event_without_target", "server.bundle.too_many_events", "server.card.question_not_marked", "server.card.scope_exactly_one", "server.child.card_foreign", "server.child.card_not_found", "server.child.group_foreign", "server.child.group_not_found", "server.child.label_foreign", "server.child.label_not_found", "server.child.list_foreign", "server.child.list_not_found", "server.child.session_foreign", "server.child.session_not_found", "server.comment.delete_owner_only", "server.comment.edit_owner_only", "server.comment.foreign", "server.comment.not_found", "server.error.bad_request", "server.import.file_no_questions", "server.import.no_file", "server.import.parse_failed", "server.import.read_failed", "server.import.text_no_questions", "server.import.unsupported", "server.internal", "server.invite.decision_invalid", "server.invite.label_too_long", "server.invite.limits_out_of_range", "server.invite.no_seats_left", "server.invite.not_found", "server.invite.owner_only", "server.invite.request_not_found", "server.list.group_needs_two", "server.list.not_on_board", "server.member.add_owner_only", "server.member.remove_owner_only", "server.member.user_not_found", "server.quota.exceeded", "server.quota.human_mb", "server.reaction.delete_owner_only", "server.reaction.not_found", "server.refusal.broken", "server.refusal.declined", "server.refusal.exhausted", "server.refusal.expired", "server.refusal.revoked", "server.refusal.spent", "sessions.cities.add_placeholder", "sessions.cities.copy", "sessions.cities.label", "sessions.cities.remove", "sessions.cities.remove_named", "sessions.delete.confirm", "sessions.delete.label", "sessions.feed.at_question", "sessions.feed.empty", "sessions.feed.label", "sessions.feed.placeholder", "sessions.feed.send", "sessions.form.alias", "sessions.form.alias_placeholder", "sessions.form.date", "sessions.form.date_placeholder", "sessions.form.time", "sessions.form.time_placeholder", "sessions.form.timezone", "sessions.list.empty", "sessions.list.invite", "sessions.list.invite_title", "sessions.list.no_date", "sessions.list.open", "sessions.list.origin", "sessions.list.origin_at", "sessions.list.origin_title", "sessions.list.played", "sessions.list.players", "sessions.list.teams", "sessions.message.create_failed", "sessions.message.delete_failed", "sessions.message.note_add_failed", "sessions.message.notes_load_failed", "sessions.message.save_failed", "sessions.seen.partial", "sessions.summary.players", "sessions.summary.teams_also", "sessions.summary.teams_only", "sessions.testers.add", "sessions.testers.label", "sessions.testers.name_placeholder", "sessions.testers.player", "sessions.testers.remove_row", "sessions.testers.team", "sessions.testmode.start_title", "sessions.testmode.stop_title", "stats.options.label", "stats.question.line", "stats.question.takers", "stats.range.bad", "stats.rating.decode", "stats.rating.status", "stats.results.empty", "stats.table.disputed", "stats.table.header_missing", "stats.xlsx.no_sheets", "stats.xlsx.part_missing", "stats.xlsx.sheet_missing", "tg.resolve.done", "tg.resolve.forward", "tg.resolve.group_code", "tg.resolve.group_code_hint", "tg.resolve.private_code", "tg.resolve.same_channel", "tg.verify.not_admin", "tg.verify.not_member", "tg.verify.what_channel", "tg.verify.what_chat", "timeline.comment.cancel", "timeline.comment.copy_link_title", "timeline.comment.delete_confirm", "timeline.comment.deleted", "timeline.comment.edited_suffix", "timeline.comment.image_alt", "timeline.comment.image_draft", "timeline.comment.menu_delete", "timeline.comment.menu_edit", "timeline.comment.menu_excerpt", "timeline.comment.menu_no_test", "timeline.comment.menu_react", "timeline.comment.menu_reply", "timeline.comment.menu_title", "timeline.comment.offline", "timeline.comment.remove_image_title", "timeline.comment.save", "timeline.diff.no_changes", "timeline.diff.version_fallback", "timeline.event.attach_add", "timeline.event.attach_remove", "timeline.event.attach_replace", "timeline.event.comment", "timeline.event.desc_edit", "timeline.event.label_add", "timeline.event.label_remove", "timeline.event.reaction", "timeline.excerpt.badge", "timeline.excerpt.count", "timeline.excerpt.download", "timeline.excerpt.file_fallback", "timeline.feed.card_created", "timeline.feed.desc_edit_meta", "timeline.missing_dk", "timeline.reaction.add_title", "timeline.reaction.emoji_prompt", "timeline.reaction.offline", "timeline.reaction.other", "timeline.reply.deleted_parent", "timeline.reply.in_reply_to", "timeline.reply.unknown_parent", "timeline.thread.open_title", "timeline.thread.replies":
 		return true
 	}
 	return false

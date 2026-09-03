@@ -10,6 +10,23 @@ import (
 
 // RU is the ru Catalog.
 var RU = Strings{
+	Admin: AdminStrings{
+		CreateUsers: AdminCreateUsersStrings{
+			Name:  func() string { return "Создать пользователей" },
+			Title: func() string { return "Создать пользователей · Админка" },
+		},
+		Page: AdminPageStrings{
+			Title: func() string { return "Админка" },
+		},
+		Users: AdminUsersStrings{
+			ColActivity: func() string { return "Активность" },
+			ColStorage:  func() string { return "Хранилище" },
+			ColUser:     func() string { return "Пользователь" },
+			Empty:       func() string { return "Пользователей нет." },
+			Name:        func() string { return "Пользователи" },
+			Title:       func() string { return "Пользователи · Админка" },
+		},
+	},
 	Attachments: AttachmentsStrings{
 		Confirm: AttachmentsConfirmStrings{
 			Remove: func(name string) string { return fmt.Sprintf("Удалить вложение «%s»?", name) },
@@ -705,9 +722,50 @@ var RU = Strings{
 				return "a csv/xlsx результаты table in rating.chgk.info's format, comma-separated"
 			},
 		},
+		Board: ChgkcliBoardStrings{
+			BoardUrlPrompt: func() string { return "Вставьте ссылку на доску: " },
+			EmptyToken:     func() string { return "пустой токен" },
+			InitialPassphrasePrompt: func() string {
+				return "Введите пароль доски xy (он будет сохранён в board_metadata.toml): "
+			},
+			NeedBoardUrl: func() string {
+				return "Чтобы работать с доской, нужна ссылка на неё. Примеры:"
+			},
+			NoAnswersFlag: func() string { return "СИ .docx: drop the answer lines" },
+			NoToken: func(host string, url string) string {
+				return fmt.Sprintf("нет сохранённого токена для %s. Сначала выполните:\n  chgksuite board token %s", host, url)
+			},
+			NothingToUpload: func() string { return "нечего загружать" },
+			OnlyAnswersFlag: func() string { return "СИ .docx: keep only the answer lines" },
+			OpenBrowser:     func() string { return "Откройте в браузере:" },
+			OpenBrowserTokens: func(url string) string {
+				return fmt.Sprintf("Откройте в браузере %s/profile/tokens,\nсоздайте токен и вставьте его сюда.\n", url)
+			},
+			PassphrasePrompt: func() string { return "Пароль доски xy: " },
+			TokenPrompt:      func() string { return "Токен: " },
+		},
 		Docx: ChgkcliDocxStrings{
 			NoParagraphFlag:        func() string { return "no line break after \"Вопрос N.\"" },
 			OnlyQuestionNumberFlag: func() string { return "label questions \"N.\" instead of \"Вопрос N.\"" },
+		},
+		Handouts: ChgkcliHandoutsStrings{
+			AlreadyExists: func(file string) string {
+				return fmt.Sprintf("%s уже есть: удалите его или возьмите другое имя", file)
+			},
+			ColourSuffix:   func() string { return ", цветных" },
+			DimensionsNote: func(width string, height string) string { return fmt.Sprintf("%s × %s мм", width, height) },
+			HtmlGeometryNote: func(width string, share string) string {
+				return fmt.Sprintf("ширина %s мм — %s листа A4", width, share)
+			},
+			PagesNote: func(file string, pages string, colour string) string {
+				return fmt.Sprintf("%s: %s страниц%s", file, pages, colour)
+			},
+			ScaleNote:    func(scale string) string { return fmt.Sprintf("масштаб ×%s", scale) },
+			SkipWarning:  func(file string, err string) string { return fmt.Sprintf("%s: %s — пропускаем", file, err) },
+			WarnQuestion: func(number string, text string) string { return fmt.Sprintf("вопрос %s: %s", number, text) },
+			WatchNote: func(file string) string {
+				return fmt.Sprintf("слежу за %s — Ctrl-C, чтобы закончить", file)
+			},
 		},
 		Lj: ChgkcliLjStrings{
 			GenimpFlag: func() string { return "add the «Общие впечатления» post" },
@@ -758,8 +816,10 @@ var RU = Strings{
 			UnreadMentionTitle: func() string { return "Вас упомянули" },
 			UnreadTitle:        func() string { return "Есть непрочитанные изменения" },
 		},
-		OfflinePage: ChromeOfflinePageStrings{
-			Body: func() string { return "Офлайн" },
+		Page: ChromePageStrings{
+			IndexTitle:  func() string { return "Мои доски · xy" },
+			JoinTitle:   func() string { return "Приглашение · xy" },
+			TokensTitle: func() string { return "API-токены · xy" },
 		},
 		Passphrase: ChromePassphraseStrings{
 			TooFewWords: func(n string) string {
@@ -848,7 +908,26 @@ var RU = Strings{
 	},
 	Cli: CliStrings{
 		Attachment: CliAttachmentStrings{
-			Summary: func() string { return "attachment ls|get|add — вложения карточки" },
+			AddNameFlag: func() string {
+				return "имя файла на доске (по умолчанию — как на диске)"
+			},
+			AddUsage: func() string { return "xy-cli attachment add <id карточки> --board B <файл>" },
+			Added: func(id string, name string, card_id string) string {
+				return fmt.Sprintf("вложение %s «%s» добавлено к карточке %s\n", id, name, card_id)
+			},
+			DecryptFailed: func(id string, err string) string {
+				return fmt.Sprintf("вложение %s не расшифровывается: %s", id, err)
+			},
+			GetCardFlag: func() string { return "id карточки (чтобы узнать имя файла)" },
+			GetDone:     func(path string, bytes string) string { return fmt.Sprintf("%s (%s байт)\n", path, bytes) },
+			GetOutFlag: func() string {
+				return "куда сохранить (по умолчанию — имя из доски, в текущем каталоге)"
+			},
+			GetUsage:       func() string { return "xy-cli attachment get <id вложения> --board B [-o файл]" },
+			LsUsage:        func() string { return "xy-cli attachment ls <id карточки> --board B" },
+			NeedCardFile:   func() string { return "нужен id карточки и путь к файлу" },
+			Summary:        func() string { return "attachment ls|get|add — вложения карточки" },
+			UnreadableName: func() string { return "(имя не читается)" },
 		},
 		Board: CliBoardStrings{
 			OnlyShow: func() string { return "пока есть только `xy-cli board show --board <id|имя>`" },
@@ -950,10 +1029,41 @@ var RU = Strings{
 			Summary:     func() string { return "comment ls|add|edit|rm — лента карточки" },
 		},
 		Export: CliExportStrings{
-			Summary: func() string { return "экспорт списка в docx/pdf/4s/раздатки" },
+			AttachmentError: func(name string, err string) string { return fmt.Sprintf("вложение «%s»: %s", name, err) },
+			Done:            func(path string, bytes string) string { return fmt.Sprintf("%s (%s байт)\n", path, bytes) },
+			FormatFlag:      func() string { return "форматы через запятую" },
+			ListFlag:        func() string { return "id списка (группа берётся целиком)" },
+			NeedList:        func() string { return "нужен --list" },
+			OutFlag:         func() string { return "каталог для файлов" },
+			Summary:         func() string { return "экспорт списка в docx/pdf/4s/раздатки" },
+			Usage: func() string {
+				return "xy-cli export --board B --list L --format docx,pdf [--out каталог]\nФорматы: 4s, docx, pdf, pdf_mobile, handouts."
+			},
 		},
 		Label: CliLabelStrings{
-			Summary: func() string { return "label ls|add|assign — метки" },
+			AddColorFlag:     func() string { return "цвет метки (hex)" },
+			AddNameFlag:      func() string { return "название метки" },
+			AddUsage:         func() string { return "Создать метку на доске." },
+			AlreadySet:       func(name string) string { return fmt.Sprintf("метка «%s» и так стоит\n", name) },
+			AlreadyUnset:     func(name string) string { return fmt.Sprintf("метка «%s» и так не стоит\n", name) },
+			AssignLabelFlag:  func() string { return "метка: id или название" },
+			AssignRemoveFlag: func() string { return "снять метку вместо того, чтобы поставить" },
+			AssignUsage: func() string {
+				return "xy-cli label assign <id карточки> --board B --label «готово» [--remove]"
+			},
+			Assigned: func(name string, verb string, id string) string {
+				return fmt.Sprintf("метка «%s» %s на карточке %s\n", name, verb, id)
+			},
+			Created: func(id string, name string) string {
+				return fmt.Sprintf("метка %s «%s» создана\n", id, name)
+			},
+			LsCardFlag:    func() string { return "показать метки этой карточки" },
+			LsUsage:       func() string { return "Метки доски; с --card — метки одной карточки." },
+			NeedCardLabel: func() string { return "нужен id карточки и --label" },
+			NeedName:      func() string { return "нужен --name" },
+			Summary:       func() string { return "label ls|add|assign — метки" },
+			VerbRemoved:   func() string { return "снята" },
+			VerbSet:       func() string { return "поставлена" },
 		},
 		List: CliListStrings{
 			AddAfterFlag: func() string { return "id списка, после которого встать" },
@@ -1072,6 +1182,7 @@ var RU = Strings{
 			UnknownAction: func(verb string, known string) string {
 				return fmt.Sprintf("неизвестное действие \"%s\" (%s)", verb, known)
 			},
+			WhatAttachment:    func() string { return "вложение" },
 			WhatBoard:         func() string { return "доска" },
 			WhatCard:          func() string { return "карточка" },
 			WhatComment:       func() string { return "комментарий" },
@@ -1094,7 +1205,15 @@ var RU = Strings{
 			ListNotFound: func(id string) string { return fmt.Sprintf("список %s не найден на доске", id) },
 		},
 		Source: CliSourceStrings{
+			ListFlag: func() string { return "id списка (группа берётся целиком)" },
+			NeedList: func() string { return "нужен --list" },
+			Note: func(title string, count string) string {
+				return fmt.Sprintf("# «%s», карточек: %s\n", title, count)
+			},
 			Summary: func() string { return "4s списка (или всей группы) целиком" },
+			Usage: func() string {
+				return "xy-cli source --board B --list L\n4s списка целиком: версии свёрнуты в один вопрос, как в экспорте."
+			},
 		},
 		Unlock: CliUnlockStrings{
 			Done: func(id string, name string) string {
@@ -1571,6 +1690,10 @@ var RU = Strings{
 		Message: InviteMessageStrings{
 			Copied: func() string { return "Ссылка скопирована." },
 		},
+		Page: InvitePageStrings{
+			BoardFallback: func() string { return "доску" },
+			BoardWrapper:  func(name string) string { return fmt.Sprintf("«%s»", name) },
+		},
 		Request: InviteRequestStrings{
 			Approve: func() string { return "Принять" },
 			Decline: func() string { return "Отклонить" },
@@ -1677,6 +1800,9 @@ var RU = Strings{
 			Meta: func() string { return "Метки и вложения" },
 			Name: func() string { return "Лента" },
 		},
+		Firstrun: ProfileFirstrunStrings{
+			AuthorPlaceholder: func() string { return "Иванов Иван" },
+		},
 		Home: func() string { return "Все доски" },
 		Name: func() string { return "Профиль" },
 		Password: ProfilePasswordStrings{
@@ -1777,6 +1903,9 @@ var RU = Strings{
 			Foreign:         func() string { return "комментарий с другой карточки" },
 			NotFound:        func() string { return "комментарий не найден" },
 		},
+		Error: ServerErrorStrings{
+			BadRequest: func() string { return "Некорректный запрос." },
+		},
 		Import: ServerImportStrings{
 			FileNoQuestions: func() string { return "в файле не найдено вопросов" },
 			NoFile:          func() string { return "файл не выбран" },
@@ -1812,6 +1941,7 @@ var RU = Strings{
 			Exceeded: func(mb string) string {
 				return fmt.Sprintf("превышен лимит хранилища (%s МБ)", mb)
 			},
+			HumanMb: func(mb string) string { return fmt.Sprintf("%s МБ", mb) },
 		},
 		Reaction: ServerReactionStrings{
 			DeleteOwnerOnly: func() string { return "убрать может только автор" },

@@ -307,7 +307,7 @@ export async function applyBundle(
         const cipher = await xyCrypto.encBytes(dk, plain);
         fd.append("blob", new Blob([cipher], { type: "application/octet-stream" }), "blob");
         const res = await fetch(`/api/cards/${cardMap.get(a.card_id)}/attachments`, { method: "POST", credentials: "same-origin", body: fd });
-        if (!res.ok) throw new Error(`вложение «${a.filename}»: ${res.status}`);
+        if (!res.ok) throw new Error(S.import.apply.attachFailed(a.filename, String(res.status)));
         result.attachments++;
         log(S.import.apply.attachments(unit.title, String(++attDone), String(atts.length)));
       }

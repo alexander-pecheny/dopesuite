@@ -1,4 +1,4 @@
-// listsmanage.ts — «Управление списками»: one row per list (and a bordered block
+// listsmanage.ts — "Manage lists": one row per list (and a bordered block
 // per group). Lists can be reordered by dragging a row or by entering a target
 // position; checking several rows lets you move them together or — when the
 // checked rows are consecutive, ungrouped lists — link them into a group.

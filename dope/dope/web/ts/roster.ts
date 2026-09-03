@@ -1,3 +1,5 @@
+import S from "./i18nstrings_ru_gen.js";
+
 // Add-player-override dialog: bind each datalist input to its hidden id field
 // (only a value chosen from the suggestions is valid) and block submit until both
 // the player and the team resolve to an id. Dialog open/close, the delete confirm,
@@ -18,7 +20,7 @@
     const sync = () => {
       const found = options.find((option) => option.value === input.value);
       hidden.value = found?.dataset.id || "";
-      input.setCustomValidity(hidden.value ? "" : "Выберите значение из подсказки");
+      input.setCustomValidity(hidden.value ? "" : S.widgets.roster.pickSuggestion());
     };
     input.addEventListener("input", sync);
     input.addEventListener("change", sync);

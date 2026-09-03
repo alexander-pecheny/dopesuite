@@ -17,6 +17,13 @@ future = "Будущие"
 # usable start date land here too.
 past = "Прошедшие"
 
+[error]
+# route.WriteError's fallback: an internal failure whose real text goes to
+# the log while the person sees this one line (root docs/adr/0006).
+internal = "ошибка сервера"
+# route.BadUser's fallback: a request-failing error that is not a UserError.
+bad_request = "Некорректный запрос."
+
 [seed_import]
 # The XLSX seed-import POST arrived without a file part (routes_api.go,
 # seedXLSXSource); the HTTP edge shows it to the host verbatim.

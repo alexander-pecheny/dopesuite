@@ -4,6 +4,23 @@ import { plural } from "./i18nstrings_plural_gen.js";
 import type { Strings } from "./i18nstrings_types_gen.js";
 
 export const RU: Strings = {
+  admin: {
+    createUsers: {
+      name: () => "Создать пользователей",
+      title: () => "Создать пользователей · Админка",
+    },
+    page: {
+      title: () => "Админка",
+    },
+    users: {
+      colActivity: () => "Активность",
+      colStorage: () => "Хранилище",
+      colUser: () => "Пользователь",
+      empty: () => "Пользователей нет.",
+      name: () => "Пользователи",
+      title: () => "Пользователи · Админка",
+    },
+  },
   attachments: {
     confirm: {
       remove: (name: string) => `Удалить вложение «${name}»?`,
@@ -585,9 +602,37 @@ export const RU: Strings = {
     addStats: {
       customCsvFlag: () => "a csv/xlsx результаты table in rating.chgk.info's format, comma-separated",
     },
+    board: {
+      boardUrlPrompt: () => "Вставьте ссылку на доску: ",
+      emptyToken: () => "пустой токен",
+      initialPassphrasePrompt: () => "Введите пароль доски xy (он будет сохранён в board_metadata.toml): ",
+      needBoardUrl: () => "Чтобы работать с доской, нужна ссылка на неё. Примеры:",
+      noAnswersFlag: () => "СИ .docx: drop the answer lines",
+      noToken: (host: string, url: string) => `нет сохранённого токена для ${host}. Сначала выполните:
+  chgksuite board token ${url}`,
+      nothingToUpload: () => "нечего загружать",
+      onlyAnswersFlag: () => "СИ .docx: keep only the answer lines",
+      openBrowser: () => "Откройте в браузере:",
+      openBrowserTokens: (url: string) => `Откройте в браузере ${url}/profile/tokens,
+создайте токен и вставьте его сюда.
+`,
+      passphrasePrompt: () => "Пароль доски xy: ",
+      tokenPrompt: () => "Токен: ",
+    },
     docx: {
       noParagraphFlag: () => "no line break after \"Вопрос N.\"",
       onlyQuestionNumberFlag: () => "label questions \"N.\" instead of \"Вопрос N.\"",
+    },
+    handouts: {
+      alreadyExists: (file: string) => `${file} уже есть: удалите его или возьмите другое имя`,
+      colourSuffix: () => ", цветных",
+      dimensionsNote: (width: string, height: string) => `${width} × ${height} мм`,
+      htmlGeometryNote: (width: string, share: string) => `ширина ${width} мм — ${share} листа A4`,
+      pagesNote: (file: string, pages: string, colour: string) => `${file}: ${pages} страниц${colour}`,
+      scaleNote: (scale: string) => `масштаб ×${scale}`,
+      skipWarning: (file: string, err: string) => `${file}: ${err} — пропускаем`,
+      warnQuestion: (number: string, text: string) => `вопрос ${number}: ${text}`,
+      watchNote: (file: string) => `слежу за ${file} — Ctrl-C, чтобы закончить`,
     },
     lj: {
       genimpFlag: () => "add the «Общие впечатления» post",
@@ -636,8 +681,10 @@ export const RU: Strings = {
       unreadMentionTitle: () => "Вас упомянули",
       unreadTitle: () => "Есть непрочитанные изменения",
     },
-    offlinePage: {
-      body: () => "Офлайн",
+    page: {
+      indexTitle: () => "Мои доски · xy",
+      joinTitle: () => "Приглашение · xy",
+      tokensTitle: () => "API-токены · xy",
     },
     passphrase: {
       tooFewWords: (n: string) => `Пароль доски должен содержать минимум ${n} слова (через пробел, «-» или «_»).`,
@@ -696,7 +743,20 @@ export const RU: Strings = {
   },
   cli: {
     attachment: {
+      addNameFlag: () => "имя файла на доске (по умолчанию — как на диске)",
+      addUsage: () => "xy-cli attachment add <id карточки> --board B <файл>",
+      added: (id: string, name: string, card_id: string) => `вложение ${id} «${name}» добавлено к карточке ${card_id}
+`,
+      decryptFailed: (id: string, err: string) => `вложение ${id} не расшифровывается: ${err}`,
+      getCardFlag: () => "id карточки (чтобы узнать имя файла)",
+      getDone: (path: string, bytes: string) => `${path} (${bytes} байт)
+`,
+      getOutFlag: () => "куда сохранить (по умолчанию — имя из доски, в текущем каталоге)",
+      getUsage: () => "xy-cli attachment get <id вложения> --board B [-o файл]",
+      lsUsage: () => "xy-cli attachment ls <id карточки> --board B",
+      needCardFile: () => "нужен id карточки и путь к файлу",
       summary: () => "attachment ls|get|add — вложения карточки",
+      unreadableName: () => "(имя не читается)",
     },
     board: {
       onlyShow: () => "пока есть только `xy-cli board show --board <id|имя>`",
@@ -768,10 +828,38 @@ export const RU: Strings = {
       summary: () => "comment ls|add|edit|rm — лента карточки",
     },
     export: {
+      attachmentError: (name: string, err: string) => `вложение «${name}»: ${err}`,
+      done: (path: string, bytes: string) => `${path} (${bytes} байт)
+`,
+      formatFlag: () => "форматы через запятую",
+      listFlag: () => "id списка (группа берётся целиком)",
+      needList: () => "нужен --list",
+      outFlag: () => "каталог для файлов",
       summary: () => "экспорт списка в docx/pdf/4s/раздатки",
+      usage: () => "xy-cli export --board B --list L --format docx,pdf [--out каталог]\nФорматы: 4s, docx, pdf, pdf_mobile, handouts.",
     },
     label: {
+      addColorFlag: () => "цвет метки (hex)",
+      addNameFlag: () => "название метки",
+      addUsage: () => "Создать метку на доске.",
+      alreadySet: (name: string) => `метка «${name}» и так стоит
+`,
+      alreadyUnset: (name: string) => `метка «${name}» и так не стоит
+`,
+      assignLabelFlag: () => "метка: id или название",
+      assignRemoveFlag: () => "снять метку вместо того, чтобы поставить",
+      assignUsage: () => "xy-cli label assign <id карточки> --board B --label «готово» [--remove]",
+      assigned: (name: string, verb: string, id: string) => `метка «${name}» ${verb} на карточке ${id}
+`,
+      created: (id: string, name: string) => `метка ${id} «${name}» создана
+`,
+      lsCardFlag: () => "показать метки этой карточки",
+      lsUsage: () => "Метки доски; с --card — метки одной карточки.",
+      needCardLabel: () => "нужен id карточки и --label",
+      needName: () => "нужен --name",
       summary: () => "label ls|add|assign — метки",
+      verbRemoved: () => "снята",
+      verbSet: () => "поставлена",
     },
     list: {
       addAfterFlag: () => "id списка, после которого встать",
@@ -856,6 +944,7 @@ ${usage}
       numericId: (what: string, raw: string) => `${what}: нужен числовой id, а не "${raw}"`,
       seeBoards: (err: string) => `${err} — см. \`xy-cli boards\``,
       unknownAction: (verb: string, known: string) => `неизвестное действие "${verb}" (${known})`,
+      whatAttachment: () => "вложение",
       whatBoard: () => "доска",
       whatCard: () => "карточка",
       whatComment: () => "комментарий",
@@ -874,7 +963,12 @@ ${usage}
       listNotFound: (id: string) => `список ${id} не найден на доске`,
     },
     source: {
+      listFlag: () => "id списка (группа берётся целиком)",
+      needList: () => "нужен --list",
+      note: (title: string, count: string) => `# «${title}», карточек: ${count}
+`,
       summary: () => "4s списка (или всей группы) целиком",
+      usage: () => "xy-cli source --board B --list L\n4s списка целиком: версии свёрнуты в один вопрос, как в экспорте.",
     },
     unlock: {
       done: (id: string, name: string) => `доска ${id} «${name}» разблокирована
@@ -1219,6 +1313,10 @@ ${usage}
     message: {
       copied: () => "Ссылка скопирована.",
     },
+    page: {
+      boardFallback: () => "доску",
+      boardWrapper: (name: string) => `«${name}»`,
+    },
     request: {
       approve: () => "Принять",
       decline: () => "Отклонить",
@@ -1309,6 +1407,9 @@ ${usage}
       meta: () => "Метки и вложения",
       name: () => "Лента",
     },
+    firstrun: {
+      authorPlaceholder: () => "Иванов Иван",
+    },
     home: () => "Все доски",
     name: () => "Профиль",
     password: {
@@ -1397,6 +1498,9 @@ ${usage}
       foreign: () => "комментарий с другой карточки",
       notFound: () => "комментарий не найден",
     },
+    error: {
+      badRequest: () => "Некорректный запрос.",
+    },
     import: {
       fileNoQuestions: () => "в файле не найдено вопросов",
       noFile: () => "файл не выбран",
@@ -1426,6 +1530,7 @@ ${usage}
     },
     quota: {
       exceeded: (mb: string) => `превышен лимит хранилища (${mb} МБ)`,
+      humanMb: (mb: string) => `${mb} МБ`,
     },
     reaction: {
       deleteOwnerOnly: () => "убрать может только автор",

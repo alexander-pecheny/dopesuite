@@ -4,10 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"strings"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 
 	"xy/internal/rank"
@@ -17,7 +16,7 @@ import (
 
 func cmdBoard(a *app, args []string) error {
 	if len(args) == 0 || args[0] != "show" {
-		return errors.New("пока есть только `xy-cli board show --board <id|имя>`")
+		return corei18n.User(xystrings.Default.Cli.Board.OnlyShow())
 	}
 	s := xystrings.Default
 	fs := a.flags("board show", s.Cli.Board.Usage())
@@ -103,7 +102,7 @@ func listAdd(a *app, args []string) error {
 		return err
 	}
 	if *title == "" {
-		return errors.New("нужен --title")
+		return corei18n.User(s.Cli.List.NeedTitle())
 	}
 	c, b, err := a.open(*board)
 	if err != nil {
@@ -139,7 +138,7 @@ func listRename(a *app, args []string) error {
 		return err
 	}
 	if len(rest) != 1 || *title == "" {
-		return errors.New("нужен id списка и --title")
+		return corei18n.User(s.Cli.List.NeedIdTitle())
 	}
 	listID, err := parseID(rest[0], s.Cli.Shared.WhatList())
 	if err != nil {
@@ -249,7 +248,7 @@ func cardSet(a *app, args []string) error {
 		return err
 	}
 	if *expect != "" && descHash(card.Desc) != *expect {
-		return fmt.Errorf("карточка %d изменилась с момента чтения (сейчас %s, ожидалось %s)", cardID, descHash(card.Desc), *expect)
+		return corei18n.User(s.Cli.Card.Changed(itoa(cardID), descHash(card.Desc), *expect))
 	}
 	body := map[string]any{}
 	desc := card.Desc
@@ -260,7 +259,7 @@ func cardSet(a *app, args []string) error {
 			return err
 		}
 		if strings.TrimSpace(desc) == "" {
-			return errors.New("пустой 4s: карточка не стирается молча — дайте текст на stdin, --text или --file")
+			return corei18n.User(s.Cli.Card.SetEmpty())
 		}
 		if desc != card.Desc {
 			descEnc, err := b.DK.EncField(desc)
@@ -322,7 +321,7 @@ func cardAdd(a *app, args []string) error {
 		return err
 	}
 	if *list == 0 {
-		return errors.New("нужен --list")
+		return corei18n.User(s.Cli.Card.NeedList())
 	}
 	c, b, err := a.open(*board)
 	if err != nil {
@@ -336,7 +335,7 @@ func cardAdd(a *app, args []string) error {
 		return err
 	}
 	if strings.TrimSpace(desc) == "" {
-		return errors.New("пустая карточка: дайте 4s на stdin или --text")
+		return corei18n.User(s.Cli.Card.AddEmpty())
 	}
 	cards := b.CardsOf(*list)
 	ranks := make([]string, len(cards))
@@ -454,7 +453,7 @@ func rankFor(ranks []string, ids []int64, after, before int64) (string, error) {
 	case after != 0:
 		i := at(after)
 		if i < 0 {
-			return "", fmt.Errorf("после чего вставлять: %d здесь нет", after)
+			return "", corei18n.User(xystrings.Default.Cli.Card.RankAfterMissing(itoa(after)))
 		}
 		next := ""
 		if i+1 < len(ranks) {
@@ -464,7 +463,7 @@ func rankFor(ranks []string, ids []int64, after, before int64) (string, error) {
 	case before != 0:
 		i := at(before)
 		if i < 0 {
-			return "", fmt.Errorf("перед чем вставлять: %d здесь нет", before)
+			return "", corei18n.User(xystrings.Default.Cli.Card.RankBeforeMissing(itoa(before)))
 		}
 		prev := ""
 		if i > 0 {

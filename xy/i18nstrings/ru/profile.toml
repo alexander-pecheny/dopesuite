@@ -80,6 +80,11 @@ placeholder = "Имя автора"
 # Hint under the field.
 hint = "Подставляется в новые карточки-вопросы (поле Автор и строка «@» в Тексте). Пустое — не подставлять."
 
+[firstrun]
+# First-run onboarding dialog (firstrun.ts).
+# Author name placeholder.
+author_placeholder = "Иванов Иван"
+
 [tz]
 # Timezone-and-cities dialog (tzOverlay); the opener button reuses name.
 name = "Часовой пояс и города"

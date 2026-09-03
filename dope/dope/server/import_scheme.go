@@ -36,7 +36,7 @@ func (s *server) importScheme(w http.ResponseWriter, r *http.Request, _ route.Sc
 		return err
 	}
 	if err := s.importSchemeIntoFest(r.Context(), festID, scheme); err != nil {
-		return route.BadRequest(err.Error())
+		return route.BadUser(err)
 	}
 	gameID, err := defaultGameID(r.Context(), s.eng.DB, festID)
 	if err != nil {

@@ -1,4 +1,4 @@
-// authorcount.ts — «Счётчик авторов»: per author, how many of a tour's questions
+// authorcount.ts — "Author count": per author, how many of a tour's questions
 // up to a chosen number carry their name (count) and their 1/n split of
 // co-authored ones (share, shown as a percentage of the tour) — the share is
 // what a fee is divided by.
@@ -21,7 +21,7 @@ export interface AuthorCount {
   cutoffFound: boolean;
 }
 
-// Stress marks, spaces, case and ё/е are how one name gets typed on two cards,
+// Stress marks, spaces, case and yo/e are how one name gets typed on two cards,
 // not two people; the row shows the most common spelling, stress marks dropped.
 function authorKey(name: string): string {
   return xyFind.foldSearch(name).replace(/\s+/g, " ").trim();
@@ -77,9 +77,9 @@ export function formatShare(share: number, questions: number): string {
 
 export const xyAuthorCount = { countAuthors, formatShare };
 
-// The panel: a cutoff field, a «считать нулевые» toggle shown only when there
-// are нулевые, and the table — the 1/n split is what a fee is divided by, and
-// нулевые are usually not paid.
+// The panel: a cutoff field, a "count zero questions" toggle shown only when there
+// are zero questions, and the table — the 1/n split is what a fee is divided by, and
+// zero questions are usually not paid.
 export function createAuthorCountPanel(shell: PanelShell, deps: { copyPlain(text: string): Promise<void> }): ListPanel {
   return {
     id: "author-count", menu: "list", icon: "calculator",

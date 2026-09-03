@@ -11,6 +11,8 @@ import (
 	"dope/dope/domain/games"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
+	dopestrings "dope/i18nstrings"
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // Clear resets a Game to its just-created state: every game-scoped derived
@@ -122,7 +124,7 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 			return "", err
 		}
 	default:
-		return "", errors.New("очистка не поддерживается для этого типа игры")
+		return "", corei18n.User(dopestrings.Default.Gamebuild.Clear.Unsupported())
 	}
 	if _, err := tx.ExecContext(ctx, `
 update games set scheme_json = ?, state_json = '{}', status = ?,

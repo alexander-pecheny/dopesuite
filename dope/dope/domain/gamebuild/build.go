@@ -13,7 +13,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -28,6 +27,8 @@ import (
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
 	"dope/dope/storage/storeutil"
+	dopestrings "dope/i18nstrings"
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 type gameIdentity struct {
@@ -104,7 +105,7 @@ func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 		// has no way to say what they are — so a scheme for one would compile
 		// to a game that scores nothing. Refuse it rather than build it.
 		if spec.Type == games.Multi {
-			return 0, errors.New("Мультиигры описываются списком мини-игр, а не схемой")
+			return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.MultiFromScheme())
 		}
 		return createSchemeGame(ctx, tx, spec.FestID, spec.Type, spec.Label, spec.DSL, spec.Entrants)
 	}
@@ -114,7 +115,7 @@ func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 			scheme.GameType = spec.Type
 		}
 		if scheme.GameType != spec.Type {
-			return 0, fmt.Errorf("JSON-схема описывает игру %s, а создаётся %s", games.Label(scheme.GameType), games.Label(spec.Type))
+			return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.JsonTypeMismatch(games.Label(scheme.GameType), games.Label(spec.Type)))
 		}
 		return Materialise(ctx, tx, spec.FestID, scheme)
 	}
@@ -126,9 +127,9 @@ func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 	case games.Multi:
 		return createMultiGameTx(ctx, tx, spec.FestID, spec.Minigames, spec.MultiSorting)
 	case games.EK:
-		return 0, errors.New("Вставьте JSON-схему ЭК или опишите её схемой")
+		return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.EkNoScheme())
 	}
-	return 0, errors.New("опишите схему игры")
+	return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.SchemeRequired())
 }
 
 // Materialise makes a Game from a pasted detailed scheme, in the fest given:
@@ -144,7 +145,7 @@ func Materialise(ctx context.Context, tx *sql.Tx, festID int64, scheme store.Fes
 		return 0, err
 	}
 	if len(scheme.Teams) > 0 {
-		return 0, errors.New("команды загружаются отдельным импортом посева; уберите teams из JSON-схемы")
+		return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.PastedTeams())
 	}
 	title := strings.TrimSpace(scheme.Title)
 	if title == "" {
@@ -263,7 +264,7 @@ values(?, ?, ?, ?, ?, ?, ?, ?, '{}', 'active', 'fest', 'fest', 1, ?, ?)`,
 
 func schemeForEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType, slug, title, dsl string, chosen []int64) (store.FestScheme, error) {
 	if strings.TrimSpace(dsl) == "" {
-		return store.FestScheme{}, errors.New("опишите схему игры")
+		return store.FestScheme{}, corei18n.User(dopestrings.Default.Gamebuild.Create.SchemeRequired())
 	}
 	doc, err := schemedsl.Parse(dsl)
 	if err != nil {
@@ -282,7 +283,7 @@ func schemeForEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType
 			return store.FestScheme{}, err
 		}
 		if known == 0 {
-			return store.FestScheme{}, fmt.Errorf("seed: %s — не random, не xlsx и не код игры этого феста", seed)
+			return store.FestScheme{}, corei18n.User(dopestrings.Default.Gamebuild.Create.SeedUnknown(seed))
 		}
 	}
 	return schemedsl.Compile(doc, input)
@@ -489,7 +490,7 @@ select id, stage_id, code, status, coalesce(state_json, '{}') from matches where
 	}
 	if len(blocked) > 0 {
 		sort.Strings(blocked)
-		return fmt.Errorf("нельзя менять начатые бои: %s — уберите их изменения или снимите отметку «Закончен» и очистите протокол", strings.Join(blocked, ", "))
+		return corei18n.User(dopestrings.Default.Gamebuild.Recompile.StartedBouts(strings.Join(blocked, ", ")))
 	}
 
 	seat, err := seedSeaterTx(ctx, tx, festID, gameID, gameType)
@@ -666,7 +667,7 @@ func rebuildTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType, 
 	}
 	var scheme store.FestScheme
 	if err := json.Unmarshal([]byte(schemeJSON), &scheme); err != nil {
-		return nil, fmt.Errorf("не удалось разобрать схему ЭК: %w", err)
+		return nil, corei18n.User(dopestrings.Default.Gamebuild.Clear.ParsePasted(err.Error()))
 	}
 	scheme.Teams = nil // seeded teams come from a fresh import, not the scheme
 	if scheme.GameType == "" {

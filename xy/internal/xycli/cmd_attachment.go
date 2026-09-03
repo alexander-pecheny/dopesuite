@@ -2,12 +2,15 @@ package xycli
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
 	"mime"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+
+	"fmt"
+	corei18n "pecheny.me/dopecore/i18nstrings"
+	xystrings "xy/i18nstrings"
 )
 
 // Attachments are ciphertext on the server like everything else: the CLI seals
@@ -21,9 +24,10 @@ func cmdAttachment(a *app, args []string) error {
 }
 
 func attachmentList(a *app, args []string) error {
-	fs := a.flags("attachment ls", "xy-cli attachment ls <id карточки> --board B")
+	s := xystrings.Default
+	fs := a.flags("attachment ls", s.Cli.Attachment.LsUsage())
 	board := a.boardFlag(fs)
-	cardID, err := a.oneID(fs, args, "карточка")
+	cardID, err := a.oneID(fs, args, s.Cli.Shared.WhatCard())
 	if err != nil {
 		return err
 	}
@@ -45,7 +49,7 @@ func attachmentList(a *app, args []string) error {
 	for _, att := range atts {
 		name, err := b.DK.DecField(att.FilenameEnc)
 		if err != nil {
-			name = "(имя не читается)"
+			name = s.Cli.Attachment.UnreadableName()
 		}
 		rows = append(rows, row{ID: att.ID, Filename: name, Mime: att.Mime, Size: att.Size})
 	}
@@ -57,11 +61,12 @@ func attachmentList(a *app, args []string) error {
 }
 
 func attachmentGet(a *app, args []string) error {
-	fs := a.flags("attachment get", "xy-cli attachment get <id вложения> --board B [-o файл]")
+	s := xystrings.Default
+	fs := a.flags("attachment get", s.Cli.Attachment.GetUsage())
 	board := a.boardFlag(fs)
-	card := fs.Int64("card", 0, "id карточки (чтобы узнать имя файла)")
-	out := fs.String("o", "", "куда сохранить (по умолчанию — имя из доски, в текущем каталоге)")
-	attID, err := a.oneID(fs, args, "вложение")
+	card := fs.Int64("card", 0, s.Cli.Attachment.GetCardFlag())
+	out := fs.String("o", "", s.Cli.Attachment.GetOutFlag())
+	attID, err := a.oneID(fs, args, s.Cli.Shared.WhatAttachment())
 	if err != nil {
 		return err
 	}
@@ -89,7 +94,7 @@ func attachmentGet(a *app, args []string) error {
 	}
 	plain, err := b.DK.DecBytes(raw)
 	if err != nil {
-		return fmt.Errorf("вложение %d не расшифровывается: %w", attID, err)
+		return corei18n.User(s.Cli.Attachment.DecryptFailed(itoa(attID), err.Error()))
 	}
 	path := *out
 	if path == "" {
@@ -102,22 +107,23 @@ func attachmentGet(a *app, args []string) error {
 		return err
 	}
 	return a.emit(map[string]any{"path": path, "bytes": len(plain)}, func() {
-		a.printf("%s (%d байт)\n", path, len(plain))
+		a.printf("%s", s.Cli.Attachment.GetDone(path, strconv.Itoa(len(plain))))
 	})
 }
 
 func attachmentAdd(a *app, args []string) error {
-	fs := a.flags("attachment add", "xy-cli attachment add <id карточки> --board B <файл>")
+	s := xystrings.Default
+	fs := a.flags("attachment add", s.Cli.Attachment.AddUsage())
 	board := a.boardFlag(fs)
-	name := fs.String("name", "", "имя файла на доске (по умолчанию — как на диске)")
+	name := fs.String("name", "", s.Cli.Attachment.AddNameFlag())
 	rest, err := a.parse(fs, args)
 	if err != nil {
 		return err
 	}
 	if len(rest) != 2 {
-		return errors.New("нужен id карточки и путь к файлу")
+		return corei18n.User(s.Cli.Attachment.NeedCardFile())
 	}
-	cardID, err := parseID(rest[0], "карточка")
+	cardID, err := parseID(rest[0], s.Cli.Shared.WhatCard())
 	if err != nil {
 		return err
 	}
@@ -145,7 +151,7 @@ func attachmentAdd(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	// The лента entry that says an attachment arrived, in the browser's shape.
+	// The timeline entry that says an attachment arrived, in the browser's shape.
 	event, err := json.Marshal(map[string]string{"file": filename})
 	if err != nil {
 		return err
@@ -165,6 +171,6 @@ func attachmentAdd(a *app, args []string) error {
 		return err
 	}
 	return a.emit(map[string]any{"id": id, "filename": filename}, func() {
-		a.printf("вложение %d «%s» добавлено к карточке %d\n", id, filename, cardID)
+		a.printf("%s", s.Cli.Attachment.Added(itoa(id), filename, itoa(cardID)))
 	})
 }

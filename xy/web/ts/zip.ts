@@ -1,3 +1,5 @@
+import S from "./i18nstrings_ru_gen.js";
+
 // zip.ts — a minimal zip writer/reader for Board Bundles (ADR-0013).
 //
 // Just enough of the format for our own artifact: UTF-8 names, store or
@@ -101,7 +103,7 @@ export async function zipWrite(entries: ZipEntry[], compress: (name: string) => 
   const localSize = baked.reduce((n, e) => n + 30 + e.nameBytes.length + e.compressed.length, 0);
   const centralSize = baked.reduce((n, e) => n + 46 + e.nameBytes.length, 0);
   const total = localSize + centralSize + 22;
-  if (total >= 0xffffffff) throw new Error("архив больше 4 ГБ");
+  if (total >= 0xffffffff) throw new Error(S.chgk.zip.tooLarge());
   const out = new Uint8Array(total);
   const v = new DataView(out.buffer);
   let o = 0;
@@ -136,13 +138,13 @@ export async function zipRead(data: Uint8Array<ArrayBuffer>): Promise<ZipEntry[]
   for (let i = data.length - 22; i >= 0 && i >= data.length - 22 - 0xffff; i--) {
     if (v.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
   }
-  if (eocd < 0) throw new Error("это не zip-архив");
+  if (eocd < 0) throw new Error(S.chgk.zip.notZip());
   const count = v.getUint16(eocd + 10, true);
   let o = v.getUint32(eocd + 16, true);
   const dec = new TextDecoder();
   const out: ZipEntry[] = [];
   for (let i = 0; i < count; i++) {
-    if (v.getUint32(o, true) !== 0x02014b50) throw new Error("повреждённый zip-архив");
+    if (v.getUint32(o, true) !== 0x02014b50) throw new Error(S.chgk.zip.corrupt());
     const method = v.getUint16(o + 10, true);
     const crc = v.getUint32(o + 16, true);
     const compSize = v.getUint32(o + 20, true);
@@ -154,14 +156,14 @@ export async function zipRead(data: Uint8Array<ArrayBuffer>): Promise<ZipEntry[]
     const name = dec.decode(data.subarray(o + 46, o + 46 + nameLen));
     o += 46 + nameLen + extraLen + commentLen;
     if (name.endsWith("/") && rawSize === 0) continue;
-    if (method !== 0 && method !== 8) throw new Error(`неподдерживаемый метод сжатия (${method})`);
-    if (compSize === 0xffffffff || rawSize === 0xffffffff) throw new Error("zip64 не поддерживается");
+    if (method !== 0 && method !== 8) throw new Error(S.chgk.zip.methodUnsupported(String(method)));
+    if (compSize === 0xffffffff || rawSize === 0xffffffff) throw new Error(S.chgk.zip.zip64Unsupported());
     // The local header's name/extra lengths may differ from the central copy.
-    if (v.getUint32(offset, true) !== 0x04034b50) throw new Error("повреждённый zip-архив");
+    if (v.getUint32(offset, true) !== 0x04034b50) throw new Error(S.chgk.zip.corrupt());
     const dataAt = offset + 30 + v.getUint16(offset + 26, true) + v.getUint16(offset + 28, true);
     const compressed = data.slice(dataAt, dataAt + compSize);
     const raw = method === 8 ? await inflateRaw(compressed) : compressed;
-    if (raw.length !== rawSize || crc32(raw) !== crc) throw new Error(`повреждённый файл в архиве: ${name}`);
+    if (raw.length !== rawSize || crc32(raw) !== crc) throw new Error(S.chgk.zip.fileCorrupt(name));
     out.push({ name, data: raw });
   }
   return out;

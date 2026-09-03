@@ -1,7 +1,7 @@
-// labelfilter.ts — «Фильтр по меткам»: a way of LOOKING at the board, never a
-// way of changing it. Pick labels, pick все/любая/ни одной, and every list draws
+// labelfilter.ts — "Label filter": a way of LOOKING at the board, never a
+// way of changing it. Pick labels, pick all/any/none, and every list draws
 // only the cards that match. Nothing is written, and nothing downstream of the
-// drawing is touched: numbering, the exports, «Переместить список» and transfer
+// drawing is touched: numbering, the exports, "Move list" and transfer
 // all still see every card, so a package can never quietly ship short.
 //
 // The decisions are pure (jstest covers them); the modal, the bar and the board
@@ -12,7 +12,7 @@ import type { Board, BoardPanel } from "./panels.js";
 
 const { el, byId } = xyApp;
 
-// все — the card carries every picked label; любая — at least one; ни одной —
+// all — the card carries every picked label; any — at least one; none —
 // none of them. With one label picked the first two are the same filter.
 export type FilterMode = "all" | "any" | "none";
 
@@ -38,7 +38,7 @@ export function matches(f: FilterState, cardLabels: ReadonlySet<number>): boolea
 }
 
 // shownCards is what one list draws. The numbers are computed over the WHOLE
-// list and then carried across, so a filtered тур reads «1, 4, 7» — the number
+// list and then carried across, so a filtered tour reads "1, 4, 7" — the number
 // belongs to the question, not to the view. `keep` null means no filter, and
 // then the arrays are handed straight back.
 export function shownCards<C>(
@@ -73,7 +73,7 @@ export function createLabelFilter(deps: FilterDeps) {
   let mode: FilterMode = "all";
   let picked = new Set<number>();
 
-  // A label the filter names may be deleted from the board under it («Метки»).
+  // A label the filter names may be deleted from the board under it ("Labels").
   // Only the ones that still exist count, so the last one going takes the filter
   // with it and the board comes back whole rather than emptying out.
   const state = (): FilterState => ({

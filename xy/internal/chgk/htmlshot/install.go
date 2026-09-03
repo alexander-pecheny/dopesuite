@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
 
@@ -88,7 +89,7 @@ func Install(ctx context.Context, progress func(string)) (string, error) {
 	}
 	exe := headlessShellIn(root)
 	if exe == "" {
-		return "", fmt.Errorf("в архиве нет chrome-headless-shell")
+		return "", corei18n.User(s.Install.Browser.ArchiveNoShell())
 	}
 	say("%s", s.Install.Installed(exe))
 	return exe, nil
@@ -105,7 +106,7 @@ func latestHeadlessShell(ctx context.Context, platform string) (version, url str
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", "", fmt.Errorf("список сборок chromium: %s", resp.Status)
+		return "", "", corei18n.User(xystrings.Default.Install.Browser.ReleasesFailed(resp.Status))
 	}
 	var body struct {
 		Channels map[string]struct {
@@ -121,14 +122,14 @@ func latestHeadlessShell(ctx context.Context, platform string) (version, url str
 	}
 	stable, ok := body.Channels["Stable"]
 	if !ok {
-		return "", "", fmt.Errorf("список сборок chromium: нет стабильного канала")
+		return "", "", corei18n.User(xystrings.Default.Install.Browser.ReleasesNoStable())
 	}
 	for _, d := range stable.Downloads["chrome-headless-shell"] {
 		if d.Platform == platform {
 			return stable.Version, d.URL, nil
 		}
 	}
-	return "", "", fmt.Errorf("для %s сборки нет", platform)
+	return "", "", corei18n.User(xystrings.Default.Install.Browser.PlatformMissing(platform))
 }
 
 // chromePlatform is the name Chrome for Testing publishes this machine under.
@@ -147,9 +148,7 @@ func chromePlatform() (string, error) {
 	}
 	// Chrome for Testing publishes x86-64 and Apple silicon only; a Linux ARM
 	// machine has to use its distribution's chromium.
-	return "", fmt.Errorf("для %s/%s готовой сборки chromium нет — поставьте браузер системой "+
-		"(apt install chromium / brew install chromium) и укажите его через --browser или $CHGKSUITE_BROWSER",
-		runtime.GOOS, runtime.GOARCH)
+	return "", corei18n.User(xystrings.Default.Install.Browser.NoBuild(runtime.GOOS + "/" + runtime.GOARCH))
 }
 
 func download(ctx context.Context, url string) (string, error) {
@@ -190,7 +189,7 @@ func unzip(archive, dir string) error {
 	for _, f := range zr.File {
 		target := filepath.Join(dir, filepath.FromSlash(f.Name)) //nolint:gosec // checked below
 		if !strings.HasPrefix(target, filepath.Clean(dir)+string(os.PathSeparator)) {
-			return fmt.Errorf("архив пытается писать за пределы каталога: %s", f.Name)
+			return corei18n.User(xystrings.Default.Install.ArchiveEscape(f.Name))
 		}
 		if f.FileInfo().IsDir() {
 			if err := os.MkdirAll(target, 0o755); err != nil {
@@ -254,7 +253,7 @@ func writeSymlink(f *zip.File, dir, target string) error {
 		resolved = filepath.Join(filepath.Dir(target), dest)
 	}
 	if !strings.HasPrefix(filepath.Clean(resolved), filepath.Clean(dir)+string(os.PathSeparator)) {
-		return fmt.Errorf("архив ссылается за пределы каталога: %s → %s", f.Name, dest)
+		return corei18n.User(xystrings.Default.Install.Browser.SymlinkEscape(f.Name, dest))
 	}
 	return os.Symlink(dest, target)
 }

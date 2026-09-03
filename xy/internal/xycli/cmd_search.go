@@ -1,17 +1,16 @@
 package xycli
 
 import (
-	"errors"
-	"fmt"
 	"regexp"
 	"strings"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
 
 // Search reads what the browser's Search Index reads — each Card's 4s, its Alias
 // and the comments on it — and matches through xy's Folding, so a stress mark or
-// a «ёлочка» the typography pass wrote cannot hide a question from the editor
+// guillemet quotes the typography pass wrote cannot hide a question from the editor
 // who typed it plainly. Matching is per line: a hit is a line an editor can act on.
 
 type searchHit struct {
@@ -33,7 +32,7 @@ func cmdSearch(a *app, args []string) error {
 		return err
 	}
 	if len(rest) != 1 {
-		return errors.New("нужен запрос: xy-cli search «Гоголь» --board 12")
+		return corei18n.User(s.Cli.Search.NeedQuery())
 	}
 	query := rest[0]
 
@@ -41,7 +40,7 @@ func cmdSearch(a *app, args []string) error {
 	if *useRegex {
 		var err error
 		if re, err = regexp.Compile(Fold(query)); err != nil {
-			return fmt.Errorf("не разбирается регулярное выражение: %w", err)
+			return corei18n.User(s.Cli.Search.BadRegex(err.Error()))
 		}
 	}
 	matches := func(line string) bool {

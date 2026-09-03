@@ -118,7 +118,7 @@ export async function buildBundle(
 
   const bytesOf: AttachmentBytes = async (a) => {
     const res = await fetch(`/api/attachments/${a.id}`, { credentials: "same-origin" });
-    if (!res.ok) throw new Error(`вложение «${a.filename}»: ${res.status}`);
+    if (!res.ok) throw new Error(S.import.export.attachFailed(a.filename, String(res.status)));
     return await xyCrypto.decBytes(dk, new Uint8Array(await res.arrayBuffer()));
   };
   return {

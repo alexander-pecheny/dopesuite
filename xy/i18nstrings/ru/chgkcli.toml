@@ -35,6 +35,52 @@ posting = 'публикую в {{.channel}}, комментарии в {{.chat}}
 # export took, rounded to whole seconds.
 done = 'готово за {{.duration}}'
 
+
+[board]
+# Open in browser lead for Trello token connect URL or browser fallback.
+open_browser = "Откройте в браузере:"
+# Instructions to open /profile/tokens for xy token.
+open_browser_tokens = "Откройте в браузере {{.url}}/profile/tokens,\nсоздайте токен и вставьте его сюда.\n"
+# Prompt for token.
+token_prompt = "Токен: "
+# Error on empty token.
+empty_token = "пустой токен"
+# Help for --onlyanswers flag.
+only_answers_flag = "СИ .docx: keep only the answer lines"
+# Help for --noanswers flag.
+no_answers_flag = "СИ .docx: drop the answer lines"
+# Error when no package files found to upload.
+nothing_to_upload = "нечего загружать"
+# Lead-in when asking for board URL.
+need_board_url = "Чтобы работать с доской, нужна ссылка на неё. Примеры:"
+# Prompt for board URL.
+board_url_prompt = "Вставьте ссылку на доску: "
+# Prompt for initial xy board passphrase.
+initial_passphrase_prompt = "Введите пароль доски xy (он будет сохранён в board_metadata.toml): "
+# Error when no saved token exists for board host.
+no_token = "нет сохранённого токена для {{.host}}. Сначала выполните:\n  chgksuite board token {{.url}}"
+# Prompt for xy board passphrase.
+passphrase_prompt = "Пароль доски xy: "
+
+[handouts]
+# Warning when generating handouts for a question.
+warn_question = "вопрос {{.number}}: {{.text}}"
+# Note when watching a file.
+watch_note = "слежу за {{.file}} — Ctrl-C, чтобы закончить"
+# Error when output file already exists.
+already_exists = "{{.file}} уже есть: удалите его или возьмите другое имя"
+# Note for create_html geometry.
+html_geometry_note = "ширина {{.width}} мм — {{.share}} листа A4"
+# Note for html2img dimensions.
+dimensions_note = "{{.width}} × {{.height}} мм"
+# Note for html2img scale.
+scale_note = "масштаб ×{{.scale}}"
+# Warning when skipping an unreadable/unpackable handout in pack.
+skip_warning = "{{.file}}: {{.err}} — пропускаем"
+# Note for packed pages count.
+pages_note = "{{.file}}: {{.pages}} страниц{{.colour}}"
+# Suffix for colour note.
+colour_suffix = ", цветных"
 [shared]
 # Help of --replace_no_break_hyphens, declared once in noBreakFlags for every
 # compose subcommand: а is the Russian short word the rule glues to what

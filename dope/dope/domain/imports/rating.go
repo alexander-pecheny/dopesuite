@@ -19,6 +19,8 @@ import (
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 const ratingResultsURL = "https://api.rating.chgk.net/tournaments/%d/results.json?includeTeamMembers=1"
@@ -83,7 +85,7 @@ func fetchRatingFestRoster(ctx context.Context, ratingID int64) ([]roster.FestRo
 	client := &http.Client{Timeout: 20 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("не удалось запросить рейтинг: %w", err)
+		return nil, corei18n.User(dopestrings.Default.Imports.Rating.FetchFailed(err.Error()))
 	}
 	defer resp.Body.Close()
 
@@ -93,12 +95,12 @@ func fetchRatingFestRoster(ctx context.Context, ratingID int64) ([]roster.FestRo
 		if detail == "" {
 			detail = resp.Status
 		}
-		return nil, fmt.Errorf("рейтинг вернул ошибку: %s", detail)
+		return nil, corei18n.User(dopestrings.Default.Imports.Rating.ApiError(detail))
 	}
 
 	var results []ratingFestResult
 	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
-		return nil, fmt.Errorf("не удалось разобрать ответ рейтинга: %w", err)
+		return nil, corei18n.User(dopestrings.Default.Imports.Rating.DecodeFailed(err.Error()))
 	}
 	return ratingResultsToFestRoster(results)
 }
@@ -136,7 +138,7 @@ func ratingResultsToFestRoster(results []ratingFestResult) ([]roster.FestRosterI
 			})
 		}
 		if len(team.Players) > 9 {
-			return nil, fmt.Errorf("состав %q больше 9 игроков", name)
+			return nil, corei18n.User(dopestrings.Default.Imports.Rating.SquadTooBig(name))
 		}
 		teams = append(teams, team)
 	}
@@ -158,7 +160,7 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 		return RatingRosterImportResult{}, errors.New("bad fest id")
 	}
 	if len(teams) == 0 {
-		return RatingRosterImportResult{}, errors.New("рейтинг не вернул команды")
+		return RatingRosterImportResult{}, corei18n.User(dopestrings.Default.Imports.Rating.NoTeams())
 	}
 	teams = roster.SortedFestRosterImportTeams(teams)
 

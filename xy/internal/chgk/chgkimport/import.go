@@ -19,6 +19,9 @@ import (
 	"regexp"
 	"strings"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
+	xystrings "xy/i18nstrings"
+
 	"xy/internal/chgk/docxread"
 	"xy/internal/chgk/fsource"
 	"xy/internal/chgk/textparse"
@@ -84,7 +87,7 @@ func ParseText(text string) string {
 // list. A .docx skips this: it came out of Compose and is 4s by construction.
 func validate(r *Result) error {
 	if len(fsource.Parse(r.Source, "chgk")) == 0 {
-		return errors.New("в файле не найдено вопросов")
+		return corei18n.User(xystrings.Default.Chgkimport.Error.NoQuestions())
 	}
 	return nil
 }
@@ -163,7 +166,7 @@ func parseZip(base string, data []byte) (*Result, error) {
 		}
 	}
 	if len(sources) == 0 {
-		return nil, errors.New("в архиве нет файла .4s")
+		return nil, corei18n.User(xystrings.Default.Chgkimport.Error.No4s())
 	}
 	res.Source = strings.Join(sources, "\n\n")
 	// A directive may point at the archive path ("(img images/q3.png)") while the
@@ -263,7 +266,7 @@ func readZipEntry(f *zip.File, budget *int64) ([]byte, error) {
 		return nil, fmt.Errorf("read %s: %w", f.Name, err)
 	}
 	if int64(len(body)) > *budget {
-		return nil, errors.New("архив слишком велик в распакованном виде")
+		return nil, corei18n.User(xystrings.Default.Chgkimport.Error.TooBig())
 	}
 	*budget -= int64(len(body))
 	return body, nil

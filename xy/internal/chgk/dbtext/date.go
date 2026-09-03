@@ -54,7 +54,7 @@ var monthNames = map[string]time.Month{
 }
 
 // parseDate reads the shapes a package's date actually comes in, anchored at the
-// start the way dateparser is: trailing words ("… 2015 года)") are ignored, a
+// start the way dateparser is: trailing words (e.g. "... 2015 year)") are ignored, a
 // leading town is not.
 func parseDate(s string) (time.Time, bool) {
 	if m := reISODate.FindStringSubmatch(s); m != nil {

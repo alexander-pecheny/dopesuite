@@ -194,7 +194,7 @@ create index if not exists idx_api_tokens_user on api_tokens(user_id);`)},
 	// v4 adds cards.handout_meta_enc: an optional encrypted blob holding the
 	// per-question handout-generation settings (the .hndt block minus the live
 	// handout text — columns/rows/grouping/etc.), edited on the card or round-tripped
-	// through the "Генерация раздаток" modal. NULL means "no saved settings".
+	// through the handout generation modal. NULL means "no saved settings".
 	{Version: 4, Name: "cards.handout_meta_enc", Up: schema.Exec(`
 alter table cards add column handout_meta_enc blob;`)},
 	// v5 drops the unused board_player_map table. It backed the abandoned
@@ -265,7 +265,7 @@ alter table users add column sizes text;`)},
 alter table boards add column name text;
 alter table boards add column schema_version integer not null default 1;`)},
 	// v11 adds users.default_author: the author name pre-filled into new
-	// question cards (the Текст-tab stub's "@" line and the Поля editor's Автор
+	// question cards (the Text-tab stub's "@" line and the Fields editor's Author
 	// field). A display default, not question content, so it lives plaintext like
 	// users.sizes. NULL/empty = no default.
 	{Version: 11, Name: "users.default_author", Up: schema.Exec(`
@@ -286,7 +286,7 @@ alter table cards add column alias_enc blob;`)},
 	{Version: 13, Name: "users.card_title", Up: schema.Exec(`
 alter table users add column card_title text;`)},
 	// v14 makes comments editable/deletable and lets a comment or an
-	// attachment be flagged as a «выписка» — an excerpt from a source, kept beside
+	// attachment be flagged as an excerpt from a source, kept beside
 	// the question so it can be checked at a glance during a quick edit.
 	//
 	// timeline_events was append-only until now: deleted_at tombstones a comment
@@ -301,7 +301,7 @@ alter table users add column card_title text;`)},
 	// items are excerpts (one bit each) without learning what they say. That is the
 	// same accepted metadata leak as attachments.mime/size; it buys a countable,
 	// filterable flag instead of forcing the client to decrypt every comment and
-	// filename just to render «Выписок: N».
+	// filename just to render an excerpt count.
 	{Version: 14, Name: "editable comments, excerpts, attachment rev", Up: schema.Exec(`
 alter table timeline_events add column deleted_at text;
 alter table timeline_events add column edited_at text;
@@ -316,7 +316,7 @@ alter table attachments add column rev integer not null default 0;`)},
 	//
 	// It also scrubs payload_enc from already-tombstoned comments. Deleting a
 	// comment now clears its text rather than merely hiding it, because a deleted
-	// parent that still has replies is RENDERED (as «комментарий удалён») to keep
+	// parent that still has replies is RENDERED (as a tombstone placeholder) to keep
 	// the discussion reachable — and a tombstone that still carried its ciphertext
 	// would hand the client text the author asked to destroy.
 	{Version: 15, Name: "timeline_events.reply_to_id", Up: schema.Exec(`
@@ -375,9 +375,9 @@ pragma foreign_keys = on;`)},
 	// board-level entity, and rebuilds how a label reaches a question.
 	//
 	// A label is no longer bound to a session (ADR-0004): a label ASSIGNMENT carries
-	// an optional session, so «взяли» is one ordinary board label composed onto a
+	// an optional session, so "took" is one ordinary board label composed onto a
 	// Playing rather than one label per sitting. Being played at a test is its own
-	// fact — card_sessions — because that, not a label, is what «Видели» reads.
+	// fact — card_sessions — because that, not a label, is what "Seen" reads.
 	//
 	// Nothing here decrypts. A test card's description_enc holds the session's JSON
 	// under the board key, so the ciphertext moves verbatim into
@@ -410,14 +410,14 @@ create table if not exists test_sessions(
 );
 
 -- A Playing: this question was played at that test. Its own fact, not a side
--- effect of labelling — «Видели» reads this, and a scoped label hangs off it.
+-- effect of labelling — "Seen" reads this, and a scoped label hangs off it.
 create table if not exists card_sessions(
   card_id integer not null references cards(id) on delete cascade,
   session_id integer not null references test_sessions(id) on delete cascade,
   primary key (card_id, session_id)
 );
 
--- Which labels were the auto-created «взяли»/«не взяли» ones, captured while
+-- Which labels were the auto-created "took"/"did not take" ones, captured while
 -- labels.kind still exists: the data half needs it to tell a session's own
 -- labels from a hand-made label that happens to sit on a test card, and the
 -- rebuild below is about to drop the column.
@@ -514,10 +514,10 @@ pragma foreign_keys = on;
 
 		return nil
 	}},
-	// v19 stores a tour's Declaration: which Test Sessions its «Вопросы
-	// тестировали» line names. Board data rather than a per-reader preference —
+	// v19 stores a tour's Declaration: which Test Sessions its testers
+	// line names. Board data rather than a per-reader preference —
 	// the preamble ships with the package, so two editors preparing it must see one
-	// answer. Undeclared, a tour falls back to the ЧГК custom (everyone who saw more
+	// answer. Undeclared, a tour falls back to the CHGK custom (everyone who saw more
 	// than half its questions), which is why absence is meaningful and a row per
 	// named session is enough.
 	//
@@ -701,11 +701,11 @@ func migrateV18Sessions(db *sql.DB) error {
 		if err != nil {
 			return err
 		}
-		// The auto-created «взяли»/«не взяли» pair was assigned to the test card
+		// The auto-created "took"/"did not take" pair was assigned to the test card
 		// itself, so card_labels already records which labels are this session's.
 		// Every question carrying one of them was PLAYED at this session — that is
 		// the Playing the new model needs, and the label assignment stays unscoped
-		// because its name already says which test it was («… · взяли»).
+		// because its name already says which test it was ("… · took").
 		if _, err := tx.Exec(`
 insert or ignore into card_sessions(card_id, session_id)
 select distinct cl.card_id, ?

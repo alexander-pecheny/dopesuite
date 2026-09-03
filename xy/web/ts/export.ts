@@ -145,7 +145,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
       exportModal.close();
     } catch (err) {
       board.setStatus("error");
-      msg.textContent = "Экспорт не удался: " + errMsg(err);
+      msg.textContent = S.export.run.failed(errMsg(err));
     } finally {
       btn.disabled = false;
       syncExportForm();

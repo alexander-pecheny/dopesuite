@@ -394,7 +394,7 @@ func (s *Server) SaveFestNumbers(reqCtx context.Context, festID int64, assignmen
 			entryRemap = nil
 		}
 		// Every flat Protocol carries the universal Number, so a reassignment
-		// flows into each one's document; КСИ's answers follow their team.
+		// flows into each one's document; KSI's answers follow their team.
 		if updates, err = roster.PropagateRosterTx(ctx, tx, festID, teams, entryRemap); err != nil {
 			return err
 		}

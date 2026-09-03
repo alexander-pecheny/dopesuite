@@ -7,13 +7,15 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"sort"
+	"strconv"
 
 	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/roster"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // hasAssignmentsTx reports whether the Game's seats are already claimed.
@@ -121,15 +123,15 @@ func chosenEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType st
 		if err := tx.QueryRowContext(ctx, `
 select name, roster from participants where id = ? and fest_id = ?`, participantID, festID).Scan(&name, &roster); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return nil, fmt.Errorf("участника %d нет в этом фесте", participantID)
+				return nil, corei18n.User(dopestrings.Default.Gamebuild.Seating.UnknownParticipant(strconv.FormatInt(participantID, 10)))
 			}
 			return nil, err
 		}
 		if roster != want {
 			if want == "player" {
-				return nil, fmt.Errorf("%s — команда, а в этой игре за столом сидят игроки", name)
+				return nil, corei18n.User(dopestrings.Default.Gamebuild.Seating.KindTeam(name))
 			}
-			return nil, fmt.Errorf("%s — игрок, а в этой игре за столом сидят команды", name)
+			return nil, corei18n.User(dopestrings.Default.Gamebuild.Seating.KindPlayer(name))
 		}
 		entrants[i] = store.SchemeSlot{Seed: &store.SchemeSeedRef{Basket: 1, Number: i + 1}, Label: name}
 	}
@@ -148,13 +150,13 @@ func seedEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType stri
 		return nil, err
 	}
 	if len(teams) < 2 {
-		return nil, errors.New("для схемы нужны хотя бы два участника в фесте")
+		return nil, corei18n.User(dopestrings.Default.Gamebuild.Seating.NeedTwo())
 	}
 	sort.Slice(teams, func(i, j int) bool { return teams[i].Number < teams[j].Number })
 	entrants := make([]store.SchemeSlot, len(teams))
 	for i, team := range teams {
 		if team.Number <= 0 {
-			return nil, errors.New("перед созданием игры пронумеруйте участников феста")
+			return nil, corei18n.User(dopestrings.Default.Gamebuild.Seating.Unnumbered())
 		}
 		entrants[i] = store.SchemeSlot{Seed: &store.SchemeSeedRef{Basket: 1, Number: int(team.Number)}, Label: team.Name}
 	}
@@ -293,7 +295,7 @@ order by p.id`, festID)
 		return nil, err
 	}
 	if len(entrants) < 3 {
-		return nil, errors.New("для личной игры нужны игроки в ростере феста")
+		return nil, corei18n.User(dopestrings.Default.Gamebuild.Seating.NeedPlayers())
 	}
 	return entrants, nil
 }

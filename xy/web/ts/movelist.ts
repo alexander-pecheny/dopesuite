@@ -1,4 +1,4 @@
-// movelist.ts — «Переместить список…»: move or copy a whole list. Within the
+// movelist.ts — "Move list…": move or copy a whole list. Within the
 // board a move is a plain re-rank; everything else — a copy here, a copy or a
 // move to another board — goes out as a Bundle and back in through applyBundle
 // (ADR-0014), so a list that travels carries what an exported one carries:
@@ -58,8 +58,8 @@ export function createMoveListPanel(board: Board, transfer: Pick<Transfer, "load
   }
 
   // onMoveListBoardChange loads the destination board (prompting for its password
-  // when it isn't unlocked — see loadMoveBoard→ensureDK) and rebuilds the position
-  // <select> with one slot per existing list ("в конец" appends).
+  // when it isn't unlocked — see loadMoveBoard->ensureDK) and rebuilds the position
+  // <select> with one slot per existing list ("to the end" appends).
   async function onMoveListBoardChange(): Promise<void> {
     const posSel = byId<HTMLSelectElement>("moveListPos");
     const bid = Number(byId<HTMLSelectElement>("moveListBoard").value);
@@ -101,7 +101,7 @@ export function createMoveListPanel(board: Board, transfer: Pick<Transfer, "load
     const slot = byId<HTMLSelectElement>("moveListPos").value;
 
     // A grouped list must stay consecutive with its group, so reordering it on the
-    // same board goes through «Управление списками» (which moves the whole group as
+    // same board goes through "Manage lists" (which moves the whole group as
     // a unit). Copying it, or moving it to another board, is still fine.
     if (sameBoard && remove && src.groupId != null) {
       msg.textContent = "Список входит в группу — измените порядок через «Управление списками».";

@@ -56,3 +56,13 @@ changed = "Пароль изменён."
 # The ☰ menu's host account entries (window.dopeMenuConfig).
 profile = "Профиль ведущего"
 login = "Вход для ведущего"
+
+[group_stats]
+# Arithmetic parser errors in evalScoringRule (group-stats.ts).
+paren = "скобка"
+truncated = "обрыв"
+no_token = 'нет {{.token}}'
+
+[roster]
+# Validation error when a datalist input was not picked from suggestions (roster.ts).
+pick_suggestion = "Выберите значение из подсказки"

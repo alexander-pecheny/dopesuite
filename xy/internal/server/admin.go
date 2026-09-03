@@ -17,6 +17,7 @@ import (
 	"pecheny.me/dopecore/sqlitex"
 	kit "pecheny.me/dopeuikit/kit"
 
+	xystrings "xy/i18nstrings"
 	"xy/internal/ui"
 )
 
@@ -54,16 +55,17 @@ func validNewUsername(name string) bool {
 
 // adminIndexDoc builds the /admin landing page: a link list of admin tools.
 func adminIndexDoc() *ui.Doc {
+	s := xystrings.Default
 	return &ui.Doc{Nodes: []ui.Node{
-		ui.Page(ui.Title("Админка"), ui.PageSheet,
-			ui.Topbar(ui.Title("Админка")),
+		ui.Page(ui.Title(s.Admin.Page.Title()), ui.PageSheet,
+			ui.Topbar(ui.Title(s.Admin.Page.Title())),
 			ui.Section(
 				ui.List(
 					ui.Listrow(ui.Href("/admin/create_users"),
-						ui.Listtitle(ui.Text("Создать пользователей")),
+						ui.Listtitle(ui.Text(s.Admin.CreateUsers.Name())),
 					),
 					ui.Listrow(ui.Href("/admin/users"),
-						ui.Listtitle(ui.Text("Пользователи")),
+						ui.Listtitle(ui.Text(s.Admin.Users.Name())),
 					),
 				),
 			),
@@ -73,10 +75,11 @@ func adminIndexDoc() *ui.Doc {
 
 // adminCreateUsersDoc wraps the kit's create-users body in xy's admin chrome.
 func adminCreateUsersDoc(data adminusers.CreateUsersData) *ui.Doc {
+	s := xystrings.Default
 	items := []ui.Item{
-		ui.Title("Создать пользователей · Админка"), ui.PageSheet,
-		ui.Topbar(ui.Title("Создать пользователей"),
-			ui.Iconlink(ui.Href("/admin"), ui.Label("Админка"), ui.Text("↩️")),
+		ui.Title(s.Admin.CreateUsers.Title()), ui.PageSheet,
+		ui.Topbar(ui.Title(s.Admin.CreateUsers.Name()),
+			ui.Iconlink(ui.Href("/admin"), ui.Label(s.Admin.Page.Title()), ui.Text("↩️")),
 		),
 	}
 	return &ui.Doc{Nodes: []ui.Node{ui.Page(append(items, kit.AdminCreateUsers(data)...)...)}}
@@ -112,7 +115,7 @@ func sortAdminUsers(users []adminUserRow, s adminusers.Sort) {
 	})
 }
 
-// storageCell reads "0.16 / 25 МБ" — the unit is stated once, and the admin's
+// storageCell reads "0.16 / 25 MB" — the unit is stated once, and the admin's
 // own uncapped account says so instead of naming a limit.
 func storageCell(u adminUserRow) string {
 	if u.Unlimited {
@@ -126,12 +129,13 @@ func storageCell(u adminUserRow) string {
 // column — two lines of the same fact, and three columns fit a phone where five
 // did not.
 func adminUsersDoc(users []adminUserRow, s adminusers.Sort) *ui.Doc {
+	str := xystrings.Default
 	var body ui.Item
 	if len(users) > 0 {
 		rows := []ui.Item{ui.Scroll(), ui.ID("adminUsers"), ui.Trow(
-			ui.Hcell(ui.Text("Пользователь")),
-			kit.SortHeader("last", "Активность", s),
-			kit.SortHeader("used", "Хранилище", s),
+			ui.Hcell(ui.Text(str.Admin.Users.ColUser())),
+			kit.SortHeader("last", str.Admin.Users.ColActivity(), s),
+			kit.SortHeader("used", str.Admin.Users.ColStorage(), s),
 		)}
 		for _, u := range users {
 			who := ui.Cell(ui.Text(u.Username))
@@ -146,12 +150,12 @@ func adminUsersDoc(users []adminUserRow, s adminusers.Sort) *ui.Doc {
 		}
 		body = ui.Section(ui.Table(rows...))
 	} else {
-		body = ui.Section(ui.Hint(ui.Text("Пользователей нет.")))
+		body = ui.Section(ui.Hint(ui.Text(str.Admin.Users.Empty())))
 	}
 	return &ui.Doc{Nodes: []ui.Node{
-		ui.Page(ui.Title("Пользователи · Админка"), ui.PageSheet,
-			ui.Topbar(ui.Title("Пользователи"),
-				ui.Iconlink(ui.Href("/admin"), ui.Label("Админка"), ui.Text("↩️")),
+		ui.Page(ui.Title(str.Admin.Users.Title()), ui.PageSheet,
+			ui.Topbar(ui.Title(str.Admin.Users.Name()),
+				ui.Iconlink(ui.Href("/admin"), ui.Label(str.Admin.Page.Title()), ui.Text("↩️")),
 			),
 			body,
 		),
@@ -159,7 +163,7 @@ func adminUsersDoc(users []adminUserRow, s adminusers.Sort) *ui.Doc {
 }
 
 // HandleAdminUsers serves /admin/users — the account list, ordered by ?sort/?dir.
-// "Активность" is the newest session's last_seen_at, not its created_at: sessions
+// Activity is the newest session's last_seen_at, not its created_at: sessions
 // slide, so someone who visits daily on the same cookie never logs in again.
 func (s *server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireAdmin(w, r); !ok {

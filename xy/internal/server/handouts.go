@@ -2,12 +2,15 @@ package server
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"xy/internal/chgk/handout"
+
+	xystrings "xy/i18nstrings"
 )
 
 // Handout PDF generation. The client builds a chgksuite ".hndt" handouts file
@@ -29,7 +32,7 @@ func (s *server) handleHandoutsPDF(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxExportRequest)
 	form, err := readMultipart(r, maxExportRequest)
 	if err != nil {
-		httpError(w, http.StatusBadRequest, err.Error())
+		handleUser(w, err)
 		return
 	}
 	source := normalizeNewlines(form.Value("source"))
@@ -57,7 +60,8 @@ func (s *server) handleHandoutsPDF(w http.ResponseWriter, r *http.Request) {
 
 	ts, err := s.typesetter()
 	if err != nil {
-		httpError(w, http.StatusInternalServerError, "typst unavailable: "+err.Error())
+		log.Printf("typst unavailable: %v", err)
+		httpError(w, http.StatusInternalServerError, xystrings.Default.Server.Internal())
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), handoutTimeout)
@@ -68,7 +72,8 @@ func (s *server) handleHandoutsPDF(w http.ResponseWriter, r *http.Request) {
 			httpError(w, http.StatusGatewayTimeout, "typst timed out")
 			return
 		}
-		httpError(w, http.StatusInternalServerError, "handout render failed: "+err.Error())
+		log.Printf("handout render failed: %v", err)
+		httpError(w, http.StatusInternalServerError, xystrings.Default.Server.Internal())
 		return
 	}
 
@@ -94,7 +99,7 @@ func (s *server) handleHandoutsSplitFit(w http.ResponseWriter, r *http.Request) 
 	r.Body = http.MaxBytesReader(w, r.Body, maxExportRequest)
 	form, err := readMultipart(r, maxExportRequest)
 	if err != nil {
-		httpError(w, http.StatusBadRequest, err.Error())
+		handleUser(w, err)
 		return
 	}
 	source := normalizeNewlines(form.Value("source"))
@@ -121,7 +126,8 @@ func (s *server) handleHandoutsSplitFit(w http.ResponseWriter, r *http.Request) 
 
 	ts, err := s.typesetter()
 	if err != nil {
-		httpError(w, http.StatusInternalServerError, "typst unavailable: "+err.Error())
+		log.Printf("typst unavailable: %v", err)
+		httpError(w, http.StatusInternalServerError, xystrings.Default.Server.Internal())
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), splitFitTimeout)
@@ -132,7 +138,8 @@ func (s *server) handleHandoutsSplitFit(w http.ResponseWriter, r *http.Request) 
 			httpError(w, http.StatusGatewayTimeout, "split_fit timed out")
 			return
 		}
-		httpError(w, http.StatusInternalServerError, "split_fit failed: "+err.Error())
+		log.Printf("split_fit failed: %v", err)
+		httpError(w, http.StatusInternalServerError, xystrings.Default.Server.Internal())
 		return
 	}
 	w.Header().Set("Content-Type", "application/zip")

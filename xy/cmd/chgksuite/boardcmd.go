@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 
+	xystrings "xy/i18nstrings"
 	"xy/internal/chgk/board"
 	"xy/internal/chgk/docx"
 )
@@ -47,20 +48,20 @@ func boardToken(args []string) error {
 	host := board.ServiceHost(serviceURL)
 	if host == "trello.com" {
 		if *noBrowser {
-			fmt.Println("Откройте в браузере:", board.TrelloConnectURL)
+			fmt.Println(xystrings.Default.Chgkcli.Board.OpenBrowser(), board.TrelloConnectURL)
 		} else {
 			openBrowser(board.TrelloConnectURL)
 		}
 	} else {
 		base := strings.TrimSuffix(withScheme(serviceURL), "/")
-		fmt.Printf("Откройте в браузере %s/profile/tokens,\nсоздайте токен и вставьте его сюда.\n", base)
+		fmt.Print(xystrings.Default.Chgkcli.Board.OpenBrowserTokens(base))
 	}
-	token, err := prompt("Токен: ")
+	token, err := prompt(xystrings.Default.Chgkcli.Board.TokenPrompt())
 	if err != nil {
 		return err
 	}
 	if token == "" {
-		return fmt.Errorf("пустой токен")
+		return fmt.Errorf("%s", xystrings.Default.Chgkcli.Board.EmptyToken())
 	}
 	return board.SetTokenFor(host, token)
 }
@@ -70,8 +71,8 @@ func boardDownload(args []string) error {
 	lists := fs.String("lists", "", "download only these lists, comma-separated")
 	si := fs.Bool("si", false, "also write a .docx per list, with the card captions as headings")
 	qb := fs.String("qb", "", "pair two lists into a quizbowl .docx: --qb tossups,bonuses")
-	onlyAnswers := fs.Bool("onlyanswers", false, "СИ .docx: keep only the answer lines")
-	noAnswers := fs.Bool("noanswers", false, "СИ .docx: drop the answer lines")
+	onlyAnswers := fs.Bool("onlyanswers", false, xystrings.Default.Chgkcli.Board.OnlyAnswersFlag())
+	noAnswers := fs.Bool("noanswers", false, xystrings.Default.Chgkcli.Board.NoAnswersFlag())
 	singleFile := fs.Bool("singlefile", false, "one .4s for the whole board")
 	labels := fs.Bool("labels", false, "also write a file per label")
 	replaceBreaks := fs.Bool("replace_double_line_breaks", false, "collapse the double line breaks Trello's editor added")
@@ -165,7 +166,7 @@ func boardUpload(args []string) error {
 		return err
 	}
 	if len(files) == 0 {
-		return fmt.Errorf("нечего загружать")
+		return fmt.Errorf("%s", xystrings.Default.Chgkcli.Board.NothingToUpload())
 	}
 	ctx := context.Background()
 	for _, path := range files {
@@ -226,11 +227,11 @@ func resolveBoard(folder string) (board.Board, error) {
 		return board.Board{}, err
 	}
 	if !ok {
-		fmt.Println("Чтобы работать с доской, нужна ссылка на неё. Примеры:")
+		fmt.Println(xystrings.Default.Chgkcli.Board.NeedBoardUrl())
 		fmt.Println("  https://trello.com/b/Bi0z2H49/title-of-your-board")
 		fmt.Println("  https://xy.pecheny.me/board/2")
 		fmt.Println()
-		url, err := prompt("Вставьте ссылку на доску: ")
+		url, err := prompt(xystrings.Default.Chgkcli.Board.BoardUrlPrompt())
 		if err != nil {
 			return board.Board{}, err
 		}
@@ -245,7 +246,7 @@ func resolveBoard(folder string) (board.Board, error) {
 		return board.Board{}, err
 	}
 	if b.Service == board.XY && b.Passphrase == "" {
-		if b.Passphrase, err = prompt("Введите пароль доски xy (он будет сохранён в board_metadata.toml): "); err != nil {
+		if b.Passphrase, err = prompt(xystrings.Default.Chgkcli.Board.InitialPassphrasePrompt()); err != nil {
 			return board.Board{}, err
 		}
 	}
@@ -265,8 +266,7 @@ func attachToken(b *board.Board) error {
 		return err
 	}
 	if token == "" {
-		return fmt.Errorf("нет сохранённого токена для %s. Сначала выполните:\n  chgksuite board token %s",
-			b.Host, b.BaseURL)
+		return fmt.Errorf("%s", xystrings.Default.Chgkcli.Board.NoToken(b.Host, b.BaseURL))
 	}
 	b.Token = token
 	if b.Service == board.Trello {
@@ -285,7 +285,7 @@ func unlockXY(c *board.Client, b *board.Board, passphrase string) error {
 		passphrase = b.Passphrase
 	}
 	if passphrase == "" {
-		if passphrase, err = prompt("Пароль доски xy: "); err != nil {
+		if passphrase, err = prompt(xystrings.Default.Chgkcli.Board.PassphrasePrompt()); err != nil {
 			return err
 		}
 	}
@@ -333,6 +333,6 @@ func openBrowser(url string) {
 		cmd = "xdg-open"
 	}
 	if err := exec.Command(cmd, url).Start(); err != nil {
-		fmt.Println("Откройте в браузере:", url)
+		fmt.Println(xystrings.Default.Chgkcli.Board.OpenBrowser(), url)
 	}
 }

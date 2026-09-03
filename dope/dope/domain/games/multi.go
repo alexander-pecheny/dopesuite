@@ -7,6 +7,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	dopestrings "dope/i18nstrings"
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // Multi (Daugavpils, media games, handout contests) pure domain logic.
@@ -94,14 +97,14 @@ func ParseMultiGames(src string) ([]MultiGame, error) {
 			name = strings.TrimSpace(multiNormalRe.ReplaceAllString(name, ""))
 		}
 		if !ok || name == "" {
-			return nil, fmt.Errorf("строка %d: жду «Имя: {значения}xN»", n+1)
+			return nil, corei18n.User(dopestrings.Default.Games.Multi.LineExpected(strconv.Itoa(n + 1)))
 		}
 		game := MultiGame{Name: name, Normalized: normalized}
 		block, sinceBar := 0, 0
 		for _, spec := range strings.Fields(specs) {
 			if spec == "|" {
 				if sinceBar == 0 {
-					return nil, fmt.Errorf("строка %d, %s: «|» без заданий перед ним", n+1, name)
+					return nil, corei18n.User(dopestrings.Default.Games.Multi.BarNoTasksBefore(strconv.Itoa(n+1), name))
 				}
 				block++
 				sinceBar = 0
@@ -109,7 +112,7 @@ func ParseMultiGames(src string) ([]MultiGame, error) {
 			}
 			columns, err := parseMultiSpec(spec)
 			if err != nil {
-				return nil, fmt.Errorf("строка %d, %s: %w", n+1, name, err)
+				return nil, corei18n.User(dopestrings.Default.Games.Multi.LinePrefix(strconv.Itoa(n+1), name, err.Error()))
 			}
 			for i := range columns {
 				columns[i].Block = block
@@ -118,15 +121,15 @@ func ParseMultiGames(src string) ([]MultiGame, error) {
 			sinceBar += len(columns)
 		}
 		if block > 0 && sinceBar == 0 {
-			return nil, fmt.Errorf("строка %d, %s: «|» без заданий после него", n+1, name)
+			return nil, corei18n.User(dopestrings.Default.Games.Multi.BarNoTasksAfter(strconv.Itoa(n+1), name))
 		}
 		if len(game.Columns) == 0 {
-			return nil, fmt.Errorf("строка %d, %s: ни одного задания", n+1, name)
+			return nil, corei18n.User(dopestrings.Default.Games.Multi.NoTasks(strconv.Itoa(n+1), name))
 		}
 		games = append(games, game)
 	}
 	if len(games) == 0 {
-		return nil, fmt.Errorf("ни одной мини-игры")
+		return nil, corei18n.User(dopestrings.Default.Games.Multi.NoGames())
 	}
 	return games, nil
 }
@@ -134,7 +137,7 @@ func ParseMultiGames(src string) ([]MultiGame, error) {
 func parseMultiSpec(spec string) ([]MultiColumn, error) {
 	parts := multiSpecRe.FindStringSubmatch(spec)
 	if parts == nil {
-		return nil, fmt.Errorf("%q — жду {значения} или {a-b}, можно с xN", spec)
+		return nil, corei18n.User(dopestrings.Default.Games.Multi.SpecExpected(spec))
 	}
 	values, err := parseMultiDomain(parts[1])
 	if err != nil {
@@ -143,7 +146,7 @@ func parseMultiSpec(spec string) ([]MultiColumn, error) {
 	count := 1
 	if parts[2] != "" {
 		if count, err = strconv.Atoi(parts[2]); err != nil || count < 1 {
-			return nil, fmt.Errorf("%q — повтор xN считается от 1", spec)
+			return nil, corei18n.User(dopestrings.Default.Games.Multi.RepeatCount(spec))
 		}
 	}
 	columns := make([]MultiColumn, count)
@@ -156,17 +159,17 @@ func parseMultiSpec(spec string) ([]MultiColumn, error) {
 func parseMultiDomain(inner string) ([]int, error) {
 	inner = strings.TrimSpace(inner)
 	if inner == "" {
-		return nil, fmt.Errorf("пустой домен {}")
+		return nil, corei18n.User(dopestrings.Default.Games.Multi.DomainEmpty())
 	}
 	if !strings.Contains(inner, ",") {
 		if ends := multiRangeRe.FindStringSubmatch(inner); ends != nil {
 			from, _ := strconv.Atoi(ends[1])
 			to, _ := strconv.Atoi(ends[2])
 			if to < from {
-				return nil, fmt.Errorf("{%s} — диапазон читается снизу вверх", inner)
+				return nil, corei18n.User(dopestrings.Default.Games.Multi.RangeDescending("{" + inner + "}"))
 			}
 			if to-from > multiRangeSpan {
-				return nil, fmt.Errorf("{%s} — диапазон шире %d значений", inner, multiRangeSpan)
+				return nil, corei18n.User(dopestrings.Default.Games.Multi.RangeTooWide("{"+inner+"}", strconv.Itoa(multiRangeSpan)))
 			}
 			values := make([]int, 0, to-from+1)
 			for v := from; v <= to; v++ {
@@ -181,7 +184,7 @@ func parseMultiDomain(inner string) ([]int, error) {
 		item = strings.TrimSpace(item)
 		v, err := strconv.Atoi(item)
 		if err != nil {
-			return nil, fmt.Errorf("{%s} — %q не число", inner, item)
+			return nil, corei18n.User(dopestrings.Default.Games.Multi.NotANumber("{"+inner+"}", item))
 		}
 		if seen[v] {
 			continue
@@ -277,8 +280,8 @@ func ParseMultiSorting(minigames []MultiGame, raw string) ([]string, error) {
 			continue
 		}
 		if !known[item] {
-			return nil, fmt.Errorf("%s не считается — есть %s", item,
-				strings.Join(MultiMetricNames(minigames), ", "))
+			return nil, corei18n.User(dopestrings.Default.Games.Multi.MetricUnknown(item,
+				strings.Join(MultiMetricNames(minigames), ", ")))
 		}
 		order = append(order, item)
 	}

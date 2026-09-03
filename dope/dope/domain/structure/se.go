@@ -42,7 +42,7 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 	s := dopestrings.Default
 	participants, ok := b.Int("participants")
 	if !ok {
-		return Outputs{}, errors.New("single_elimination: нужен participants")
+		return Outputs{}, errors.New(s.Structure.Se.ParticipantsMissing())
 	}
 	winning := 1
 	if v, ok := b.Int("winning_places"); ok {
@@ -89,10 +89,10 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 			}
 		}
 		if boundaryAt == 0 {
-			return Outputs{}, Keyf("reseed", "reseed: в этом блоке нет раунда %s", boundary)
+			return Outputs{}, Keyf("reseed", "%s", s.Structure.Se.ReseedRoundUnknown(boundary))
 		}
 		if boundaryAt == participants {
-			return Outputs{}, Keyf("reseed", "reseed: %s — первый раунд, пишите reseed: true", boundary)
+			return Outputs{}, Keyf("reseed", "%s", s.Structure.Se.ReseedFirstRound(boundary))
 		}
 	}
 
@@ -119,14 +119,14 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 			}
 			if ok {
 				if v < 3 || v%2 == 0 {
-					return Outputs{}, errors.New("best_of: серия играется до большинства побед — нечётное число боёв от 3")
+					return Outputs{}, errors.New(s.Structure.Se.BestOfParity())
 				}
 				bestOf = v
 			}
 		} else {
 			for _, name := range names {
 				if _, ok := b.Int("best_of." + name); ok {
-					return Outputs{}, Keyf("best_of."+name, "best_of: серия возможна только в финале или матче за 3-е место")
+					return Outputs{}, Keyf("best_of."+name, "%s", s.Structure.Se.BestOfFinalOnly())
 				}
 			}
 		}
@@ -284,7 +284,7 @@ func appendBronze(b Block, pair []store.SchemeSlot, round int) error {
 	bouts := 1
 	if v, ok := b.Int("best_of.bronze"); ok {
 		if v < 3 || v%2 == 0 {
-			return Keyf("best_of.bronze", "best_of: серия играется до большинства побед — нечётное число боёв от 3")
+			return Keyf("best_of.bronze", "%s", s.Structure.Se.BestOfParity())
 		}
 		bouts = v
 	}
@@ -385,6 +385,7 @@ func seDirectBronze(b Block, participants int, bronze bool) ([]store.SchemeSlot,
 // seFirstRound seats the opening round: bracket order over seeds, or the
 // winner-meets-runner-up template over the previous block's paired groups.
 func seFirstRound(b Block, opening elimRound, winning int) ([][]store.SchemeSlot, error) {
+	s := dopestrings.Default
 	participants, count := opening.entering, opening.bouts
 	if b.First() {
 		seeds, err := b.Seeds(participants)
@@ -402,7 +403,7 @@ func seFirstRound(b Block, opening elimRound, winning int) ([][]store.SchemeSlot
 	}
 	prev, _ := b.Prev()
 	if prev.Proceeding <= 0 {
-		return nil, errors.New("предыдущему блоку нужен proceeding_participants, чтобы продолжить схему")
+		return nil, errors.New(s.Structure.Se.ProceedingMissing())
 	}
 	// A reseed makes the Match's size irrelevant: it hands over a ranking, and
 	// the snake deals that ranking into Matches of any size — TPSH opens on
@@ -420,10 +421,10 @@ func seFirstRound(b Block, opening elimRound, winning int) ([][]store.SchemeSlot
 		return [][]store.SchemeSlot{{prev.Groups[0].Place(1), prev.Groups[1].Place(1)}}, nil
 	}
 	if opening.size != 2 || winning != 1 {
-		return nil, fmt.Errorf("нет шаблона рассадки в бои по %d из предыдущего блока — добавьте reseed: true", opening.size)
+		return nil, fmt.Errorf("%s", s.Structure.Se.TemplateSize(strconv.Itoa(opening.size)))
 	}
 	if prev.Proceeding != 2 || len(prev.Groups)%2 != 0 || len(prev.Groups)*2 != participants {
-		return nil, errors.New("нет шаблона рассадки из этих групп — добавьте reseed: true")
+		return nil, errors.New(s.Structure.Se.TemplateGroups())
 	}
 	// Pods (paired groups) fill opposite bracket halves: winners' matches
 	// first, runners-up-led rematches in the second half, so pod survivors

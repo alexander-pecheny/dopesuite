@@ -1,5 +1,5 @@
 // Package i18n carries chgksuite's ten language sets: the labels an export
-// prints («Вопрос», "Question", …) and the field-marker regexes a parser reads a
+// prints ("Question", ...) and the field-marker regexes a parser reads a
 // package by. Both files are chgksuite's own, embedded verbatim, so the two
 // tools cannot drift apart on a label or a marker.
 package i18n

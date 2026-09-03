@@ -13,6 +13,7 @@ import { xyApp } from "./app.js";
 import { guessZone } from "./sessions.js";
 import { autocomplete, zoneChoices } from "./suggest.js";
 import type { AuthMe } from "./app.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const { jpost, el } = xyApp;
 
@@ -22,7 +23,7 @@ function build(zone: string, author: string): { overlay: HTMLElement; read: () =
     autocomplete: "off", maxlength: "64", id: "firstRunTz",
   }) as HTMLInputElement;
   const authorInput = el("input", {
-    class: "input", type: "text", value: author, placeholder: "Иванов Иван",
+    class: "input", type: "text", value: author, placeholder: S.profile.firstrun.authorPlaceholder(),
     autocomplete: "off", maxlength: "200", id: "firstRunAuthor",
   }) as HTMLInputElement;
 

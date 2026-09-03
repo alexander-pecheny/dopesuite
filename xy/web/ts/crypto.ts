@@ -184,14 +184,14 @@ async function unlockBoard(passphrase: string, keymeta: BoardKeymeta): Promise<D
   try {
     dkRaw = await open(kek, fromB64(keymeta.wrapped_key));
   } catch (_) {
-    throw new Error("Неверный пароль доски");
+    throw new Error(S.chrome.passphrase.wrong());
   }
   const dk = await importDK(dkRaw);
   try {
     const verify = await open(dk, fromB64(keymeta.verify_token));
     if (td.decode(verify) !== VERIFY_PLAINTEXT) throw new Error("verify mismatch");
   } catch (_) {
-    throw new Error("Неверный пароль доски");
+    throw new Error(S.chrome.passphrase.wrong());
   }
   return { key: dk, raw: dkRaw };
 }

@@ -62,3 +62,10 @@ uses_label = "Использований"
 uses_unlimited = "без ограничения"
 # Approval checkbox caption.
 approval = "С одобрением владельца"
+
+[page]
+# Invite landing page (join.ts).
+# Board name wrapper: names the board inside quotes.
+board_wrapper = '«{{.name}}»'
+# Board name fallback when board name is empty.
+board_fallback = "доску"

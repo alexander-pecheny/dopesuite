@@ -1,8 +1,8 @@
-// massaction.ts — the decision half of «Массовое действие»: which cards are
+// massaction.ts — the decision half of "Mass action": which cards are
 // selected, what a select-all does, and how a partly-failed run reads.
 //
-// Board-wide rather than per-list, because the chore that wants it — «собрать
-// все забракованные вопросы из трёх туров в Запас» — spans lists. The DOM, the
+// Board-wide rather than per-list, because the chore that wants it — "collect
+// all rejected questions from three tours into Reserve" — spans lists. The DOM, the
 // pickers and the writes are masspanel.ts; everything here is pure so jstest
 // can exercise the rules without a board.
 
@@ -46,7 +46,7 @@ export function ordered<T extends SelectableCard>(selected: ReadonlySet<number>,
   return cards.filter((c) => selected.has(c.id));
 }
 
-// plural picks the Russian declension for n (1 карточка, 2 карточки, 12 карточек).
+// plural picks the Russian declension for n (1 card, 2 cards, 12 cards).
 export function plural(n: number, one: string, few: string, many: string): string {
   const m10 = n % 10, m100 = n % 100;
   return m100 >= 11 && m100 <= 14 ? many : m10 === 1 ? one : m10 >= 2 && m10 <= 4 ? few : many;
@@ -58,7 +58,7 @@ export function cardCount(n: number): string {
 
 // runSummary reports a finished run. A bulk write is not a transaction — one
 // card failing must not undo the rest — so the count that failed is said out
-// loud rather than folded into a single «готово».
+// loud rather than folded into a single "done".
 export function runSummary(ok: number, failed: number): string {
   if (!failed) return `Готово: ${cardCount(ok)}.`;
   return `Готово: ${ok}. Не удалось: ${failed} — они остались отмеченными.`;
@@ -73,7 +73,7 @@ export interface MassAction {
   title: string;
   needs: MassNeed;
   danger?: boolean;
-  // The dialog's primary button — «Удалить 7 карточек», not «ОК».
+  // The dialog's primary button — "Delete 7 cards", not "OK".
   verb: string;
 }
 

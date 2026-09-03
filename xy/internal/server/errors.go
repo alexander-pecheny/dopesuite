@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
+
 	xystrings "xy/i18nstrings"
 )
 
@@ -34,7 +36,24 @@ func handleErr(w http.ResponseWriter, err error) bool {
 		httpError(w, ae.status, ae.msg)
 		return true
 	}
+	if msg, ok := corei18n.AsUser(err); ok {
+		httpError(w, http.StatusBadRequest, msg)
+		return true
+	}
 	log.Printf("internal error: %v", err)
 	httpError(w, http.StatusInternalServerError, xystrings.Default.Server.Internal())
 	return true
+}
+
+// handleUser writes a 400 for a domain error a person may read: a UserError
+// verbatim, anything else as one generic line (its real text goes to the log).
+// The edge shows only messages written for the person who caused them
+// (root docs/adr/0006).
+func handleUser(w http.ResponseWriter, err error) {
+	if msg, ok := corei18n.AsUser(err); ok {
+		httpError(w, http.StatusBadRequest, msg)
+		return
+	}
+	log.Printf("bad request: %v", err)
+	httpError(w, http.StatusBadRequest, xystrings.Default.Server.Error.BadRequest())
 }

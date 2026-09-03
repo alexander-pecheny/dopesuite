@@ -60,7 +60,7 @@ func (pod) Expand(b Block) (Outputs, error) {
 	case hasTeams && size == 2 && winning == 1:
 		// The classic pod: four to a group unless the scheme says otherwise.
 		if participants%4 != 0 {
-			return Outputs{}, errors.New("double_elimination: нужен groups (или participants, кратный 4)")
+			return Outputs{}, errors.New(s.Structure.De.GroupsNeeded())
 		}
 		groups, perGroup = participants/4, 4
 	case hasGroups && !hasTeams && !hasSize && size == 2 && winning == 1:
@@ -68,10 +68,10 @@ func (pod) Expand(b Block) (Outputs, error) {
 	case hasTeams:
 		groups, perGroup = 1, participants
 	default:
-		return Outputs{}, errors.New("double_elimination: нужен participants (или groups и group_size)")
+		return Outputs{}, errors.New(s.Structure.De.ParticipantsNeeded())
 	}
 	if groups < 1 || perGroup < 2 {
-		return Outputs{}, fmt.Errorf("double_elimination: %d групп по %d — так не бывает", groups, perGroup)
+		return Outputs{}, fmt.Errorf("%s", s.Structure.De.BadGroups(strconv.Itoa(groups), strconv.Itoa(perGroup)))
 	}
 	proceeding := 1
 	if v, ok := b.Proceeding(); ok {
@@ -97,7 +97,7 @@ func (pod) Expand(b Block) (Outputs, error) {
 		return Outputs{}, err
 	}
 	if _, round := b.Reseed(); round != "" {
-		return Outputs{}, Keyf("reseed", "reseed: в этом блоке нет раунда %s — только true/false", round)
+		return Outputs{}, Keyf("reseed", "%s", s.Structure.De.ReseedRoundUnknown(round))
 	}
 	lanes, err := b.Venues(roundNames...)
 	if err != nil {

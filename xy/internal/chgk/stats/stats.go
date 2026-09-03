@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 
 	"xy/internal/chgk/fsource"
@@ -75,7 +76,7 @@ func Add(doc fsource.Doc, results []Result, o Options) error {
 		}
 	}
 	if total == 0 {
-		return fmt.Errorf("в результатах нет ни одной команды с расплюсовкой")
+		return corei18n.User(s.Stats.Results.Empty())
 	}
 
 	qnumber := 1
@@ -145,12 +146,12 @@ func parseRange(s string) (int, int, error) {
 	}
 	from, to, ok := strings.Cut(s, "-")
 	if !ok {
-		return 0, 0, fmt.Errorf("--question_range %q: нужен диапазон вида 25-36", s)
+		return 0, 0, corei18n.User(xystrings.Default.Stats.Range.Bad(s))
 	}
 	start, err1 := strconv.Atoi(strings.TrimSpace(from))
 	end, err2 := strconv.Atoi(strings.TrimSpace(to))
 	if err1 != nil || err2 != nil {
-		return 0, 0, fmt.Errorf("--question_range %q: нужен диапазон вида 25-36", s)
+		return 0, 0, corei18n.User(xystrings.Default.Stats.Range.Bad(s))
 	}
 	return start, end, nil
 }

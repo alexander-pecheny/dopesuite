@@ -117,3 +117,5 @@ group_n = 'Группа {{.n}}'
 block_group_n = '{{.block}}. Группа {{.n}}'
 # A wave-split stage: the round title, then the turn at the tables.
 wave = '{{.title}}, заход {{.n}}'
+# A round of a titled block in a multi-block scheme: "<block>. <title>".
+stage = '{{.block}}. {{.title}}'

@@ -265,7 +265,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   const state = deps.getState;
   function mustDK(): DataKey {
     const dk = deps.getDK();
-    if (!dk) throw new Error("нет ключа доски");
+    if (!dk) throw new Error(S.card.error.noBoardKey());
     return dk;
   }
 
@@ -1290,7 +1290,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     ta.select();
     const ok = document.execCommand("copy");
     ta.remove();
-    if (!ok) throw new Error("буфер обмена недоступен");
+    if (!ok) throw new Error(S.card.error.clipboardUnavailable());
   }
 
   // showCopyMsg flashes the copy result right under the button (auto-hiding) so the
@@ -1310,9 +1310,9 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // likely a WebP (that is what the upload offers), which neither will take.
   async function imagePng(name: string): Promise<Blob> {
     const card = openCardCard();
-    if (!card) throw new Error("карточка не открыта");
+    if (!card) throw new Error(S.card.error.cardNotOpen());
     const blob = await deps.attachments.imageBlob(card.id, name);
-    if (!blob) throw new Error("картинка не найдена среди вложений");
+    if (!blob) throw new Error(S.card.error.imageNotFound());
     if (blob.type === "image/png") return blob;
     const bmp = await createImageBitmap(blob);
     const canvas = document.createElement("canvas");
@@ -1320,7 +1320,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     canvas.height = bmp.height;
     canvas.getContext("2d")!.drawImage(bmp, 0, 0);
     return await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("не удалось перекодировать"))), "image/png");
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error(S.card.error.reencodeFailed()))), "image/png");
     });
   }
 
@@ -1332,7 +1332,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   async function runCopy(t: CopyTarget): Promise<void> {
     if (!t.image) { await copyText(t.text || ""); return; }
     if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) {
-      throw new Error("браузер не умеет копировать картинки");
+      throw new Error(S.card.error.noImageCopySupport());
     }
     const png = imagePng(t.image);
     try {

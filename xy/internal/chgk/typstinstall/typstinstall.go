@@ -20,6 +20,7 @@ import (
 
 	"github.com/ulikunitz/xz"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
 
@@ -104,7 +105,7 @@ func Install(ctx context.Context, progress func(string)) (string, error) {
 	// The binary sits inside a per-target directory in the archive.
 	found := findBinary(staging)
 	if found == "" {
-		return "", fmt.Errorf("в архиве нет %s", binaryName())
+		return "", corei18n.User(s.Install.Typst.ArchiveNoBinary(binaryName()))
 	}
 	target := filepath.Join(dir, binaryName())
 	if err := move(found, target); err != nil {
@@ -142,7 +143,7 @@ func latestAsset(ctx context.Context) (version, url string, err error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", "", fmt.Errorf("список сборок typst: %s", resp.Status)
+		return "", "", corei18n.User(xystrings.Default.Install.Typst.ReleasesFailed(resp.Status))
 	}
 	var body struct {
 		Tag    string `json:"tag_name"`
@@ -163,7 +164,7 @@ func latestAsset(ctx context.Context) (version, url string, err error) {
 			return body.Tag, a.URL, nil
 		}
 	}
-	return "", "", fmt.Errorf("в релизе typst нет сборки %s", want)
+	return "", "", corei18n.User(xystrings.Default.Install.Typst.ReleaseNoBuild(want))
 }
 
 // assetPrefix is the "typst-<arch>-<target>" a release asset is named by.
@@ -179,7 +180,7 @@ func assetPrefix() (string, error) {
 	case "riscv64":
 		arch = "riscv64gc"
 	default:
-		return "", fmt.Errorf("для %s сборки typst нет", runtime.GOARCH)
+		return "", corei18n.User(xystrings.Default.Install.Typst.PlatformMissing(runtime.GOARCH))
 	}
 	switch runtime.GOOS {
 	case "darwin":
@@ -195,7 +196,7 @@ func assetPrefix() (string, error) {
 		}
 		return "typst-" + arch + "-unknown-linux-musl", nil
 	}
-	return "", fmt.Errorf("для %s сборки typst нет", runtime.GOOS)
+	return "", corei18n.User(xystrings.Default.Install.Typst.PlatformMissing(runtime.GOOS))
 }
 
 func isArchive(name string) bool {
@@ -244,7 +245,7 @@ func extract(archive, dir string) error {
 	case strings.HasSuffix(archive, ".tar.xz"), strings.HasSuffix(archive, ".tar.gz"):
 		return extractTar(archive, dir)
 	}
-	return fmt.Errorf("непонятный архив: %s", archive)
+	return corei18n.User(xystrings.Default.Install.Typst.UnknownArchive(archive))
 }
 
 // extractTar unpacks the .tar.xz every platform but Windows publishes. Go has
@@ -327,7 +328,7 @@ func extractZip(archive, dir string) error {
 func safeJoin(dir, name string) (string, error) {
 	target := filepath.Join(dir, filepath.FromSlash(name)) //nolint:gosec // checked here
 	if !strings.HasPrefix(target, filepath.Clean(dir)+string(os.PathSeparator)) {
-		return "", fmt.Errorf("архив пытается писать за пределы каталога: %s", name)
+		return "", corei18n.User(xystrings.Default.Install.ArchiveEscape(name))
 	}
 	return target, nil
 }

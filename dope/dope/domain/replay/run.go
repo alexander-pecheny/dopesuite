@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	dopestrings "dope/i18nstrings"
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // Result is what dope made of a Match for one participant.
@@ -34,21 +35,21 @@ type Game interface {
 	Outcome(at Coord) (map[string]Result, error)
 }
 
-// LineupWriter is the half of Game a transcript with [составы] needs: register
+// LineupWriter is the half of Game a transcript with [lineups] (sostavy) needs: register
 // each team's players before the first Match, so the theme players have somebody
 // to be. Optional — a Game that cannot take lineups fails such a script.
 type LineupWriter interface {
 	Lineups(lineups []Lineup) error
 }
 
-// StatsReader is the half of Game a transcript with [статистика] needs: the
+// StatsReader is the half of Game a transcript with [statistics] (statistika) needs: the
 // per-player aggregates dope computed over the whole game, in the same three
 // columns the transcript's section carries. Optional, like LineupWriter.
 type StatsReader interface {
 	PlayerStats() ([]Stat, error)
 }
 
-// StandingsReader is the half of Game a transcript with [таблица] needs: the
+// StandingsReader is the half of Game a transcript with [standings] (tablitsa) needs: the
 // table dope ranked for a Block, or a Group in it, as rows of the place it
 // shows (shared when level) and who holds it. Optional, like StatsReader.
 type StandingsReader interface {
@@ -126,10 +127,10 @@ func Run(script Script, game Game) ([]Finding, error) {
 	if len(script.Lineups) > 0 {
 		writer, ok := game.(LineupWriter)
 		if !ok {
-			return findings, fmt.Errorf("в стенограмме есть составы, а игра не умеет их записывать")
+			return findings, corei18n.User(s.Replay.Run.LineupsUnwritable())
 		}
 		if err := writer.Lineups(script.Lineups); err != nil {
-			return findings, fmt.Errorf("составы: %w", err)
+			return findings, corei18n.User(s.Replay.Run.LineupsWrap(err.Error()))
 		}
 	}
 
@@ -140,12 +141,12 @@ func Run(script Script, game Game) ([]Finding, error) {
 		}
 		if bout.Draw {
 			if err := game.Seat(bout.At, names); err != nil {
-				return findings, fmt.Errorf("%s: посадка жребием: %w", bout.At, err)
+				return findings, corei18n.User(s.Replay.Run.SeatDrawWrap(fmt.Sprint(bout.At), err.Error()))
 			}
 		} else {
 			seated, err := game.Seats(bout.At)
 			if err != nil {
-				return findings, fmt.Errorf("%s: кто посажен: %w", bout.At, err)
+				return findings, corei18n.User(s.Replay.Run.SeatedWrap(fmt.Sprint(bout.At), err.Error()))
 			}
 			if !sameSeating(seated, names) {
 				report(Finding{
@@ -159,7 +160,7 @@ func Run(script Script, game Game) ([]Finding, error) {
 		}
 		for _, seat := range bout.Seats {
 			if err := game.Play(bout.At, seat.Name, Play{Themes: seat.Marks, Players: seat.Players, Questions: seat.Questions, Counts: seat.Counts, Shootout: seat.Shootout}); err != nil {
-				return findings, fmt.Errorf("%s, %s: отметки: %w", bout.At, seat.Name, err)
+				return findings, corei18n.User(s.Replay.Run.PlayWrap(fmt.Sprint(bout.At), seat.Name, err.Error()))
 			}
 		}
 		for _, seat := range bout.Seats {
@@ -167,15 +168,15 @@ func Run(script Script, game Game) ([]Finding, error) {
 				continue
 			}
 			if err := game.Pin(bout.At, seat.Name, seat.Place); err != nil {
-				return findings, fmt.Errorf("%s, %s: место вручную: %w", bout.At, seat.Name, err)
+				return findings, corei18n.User(s.Replay.Run.PinWrap(fmt.Sprint(bout.At), seat.Name, err.Error()))
 			}
 		}
 		if err := game.Finish(bout.At); err != nil {
-			return findings, fmt.Errorf("%s: закрытие боя: %w", bout.At, err)
+			return findings, corei18n.User(s.Replay.Run.FinishWrap(fmt.Sprint(bout.At), err.Error()))
 		}
 		outcome, err := game.Outcome(bout.At)
 		if err != nil {
-			return findings, fmt.Errorf("%s: итог боя: %w", bout.At, err)
+			return findings, corei18n.User(s.Replay.Run.OutcomeWrap(fmt.Sprint(bout.At), err.Error()))
 		}
 		// Whom dope scored that the sheet never seated. Checking only the sheet's
 		// own names would accept a Match with an extra participant in it.
@@ -212,11 +213,11 @@ func Run(script Script, game Game) ([]Finding, error) {
 	if len(script.Stats) > 0 {
 		reader, ok := game.(StatsReader)
 		if !ok {
-			return findings, fmt.Errorf("в стенограмме есть статистика, а игре не из чего её посчитать")
+			return findings, corei18n.User(s.Replay.Run.StatsUncomputable())
 		}
 		ours, err := reader.PlayerStats()
 		if err != nil {
-			return findings, fmt.Errorf("статистика: %w", err)
+			return findings, corei18n.User(s.Replay.Run.StatsWrap(err.Error()))
 		}
 		codec, _ := CodecFor(script.Game)
 		columns := codec.Columns
@@ -253,7 +254,7 @@ func Run(script Script, game Game) ([]Finding, error) {
 	if len(script.Tables) > 0 {
 		reader, ok := game.(StandingsReader)
 		if !ok {
-			return findings, fmt.Errorf("в стенограмме есть таблица, а игра не умеет ранжировать блок")
+			return findings, corei18n.User(s.Replay.Run.TableUnrankable())
 		}
 		for _, table := range script.Tables {
 			ours, err := reader.Standings(table.At)

@@ -877,20 +877,38 @@ var RU = Strings{
 	},
 	Numbers: NumbersStrings{
 		Action: NumbersActionStrings{
-			Auto:    func() string { return "Проставить автоматически" },
-			Cancel:  func() string { return "Отмена" },
-			Clear:   func() string { return "Очистить" },
-			Import:  func() string { return "Импорт номеров" },
-			Replace: func() string { return "Замена номера" },
-			Save:    func() string { return "Сохранить" },
+			Auto: func() string { return "Проставить автоматически" },
+			AutoConfirm: func() string {
+				return "Команды будут перенумерованы 1..N по алфавиту. Если бланки ответов уже напечатаны со старыми номерами — они станут невалидными. Продолжить?"
+			},
+			Cancel:       func() string { return "Отмена" },
+			Clear:        func() string { return "Очистить" },
+			ClearConfirm: func() string { return "Очистить все номера команд?" },
+			Import:       func() string { return "Импорт номеров" },
+			Replace:      func() string { return "Замена номера" },
+			Save:         func() string { return "Сохранить" },
 		},
 		Apply: NumbersApplyStrings{
-			ForeignTeam: func() string { return "Команда не из этого феста." },
+			Back:           func() string { return "Назад" },
+			BadgeExact:     func() string { return "точно" },
+			BadgeUnmatched: func() string { return "нет совпадения" },
+			Empty:          func() string { return "Не удалось разобрать ни одной строки." },
+			ForeignTeam:    func() string { return "Команда не из этого феста." },
+			NoAssignments: func() string {
+				return "Нет ни одного подтверждённого сопоставления."
+			},
 			NumberRange: func(max string) string {
 				return fmt.Sprintf("Номер должен быть целым от 1 до %s.", max)
 			},
 			ReadFailed:   func() string { return "Не удалось прочитать данные." },
+			SaveFailed:   func() string { return "Не удалось сохранить." },
+			Skip:         func() string { return "— пропустить —" },
+			Submit:       func() string { return "Применить" },
 			TeamRepeated: func() string { return "Команда выбрана несколько раз." },
+			TeamRepeatedClient: func() string {
+				return "Одна команда выбрана несколько раз — поправьте сопоставление."
+			},
+			Title: func() string { return "Подтвердите сопоставление" },
 		},
 		Error: NumbersErrorStrings{
 			NumberTwoRows: func(number string, first string, second string) string {
@@ -915,6 +933,11 @@ var RU = Strings{
 			},
 		},
 		Import: NumbersImportStrings{
+			Cancel:     func() string { return "Отмена" },
+			EmptyInput: func() string { return "Вставьте данные для импорта." },
+			Hint: func() string {
+				return "Вставьте строки в формате «номер⇥команда» (через табуляцию), по одной на строку. Имена сопоставятся с командами феста; неточные совпадения можно будет поправить."
+			},
 			LineDup: func(n string, number string, prev string) string {
 				return fmt.Sprintf("Строка %s: номер %s уже указан в строке %s.", n, number, prev)
 			},
@@ -924,6 +947,11 @@ var RU = Strings{
 			LineRange: func(n string, max string) string {
 				return fmt.Sprintf("Строка %s: номер должен быть целым от 1 до %s.", n, max)
 			},
+			MatchFailed: func() string { return "Не удалось сопоставить." },
+			Placeholder: func() string { return "1\\tНазвание команды\\n2\\tДругая команда" },
+			ServerError: func(status string) string { return fmt.Sprintf("Ошибка сервера (%s).", status) },
+			Submit:      func() string { return "Сопоставить" },
+			Title:       func() string { return "Импорт номеров" },
 		},
 		Notice: NumbersNoticeStrings{
 			Auto: func() string {
@@ -1453,6 +1481,7 @@ var RU = Strings{
 			GroupN:      func(n string) string { return fmt.Sprintf("Группа %s", n) },
 			ReseedStage: func() string { return "Пересев" },
 			Seed:        func(n string) string { return fmt.Sprintf("Посев %s", n) },
+			Stage:       func(block string, title string) string { return fmt.Sprintf("%s. %s", block, title) },
 			Venue:       func(n string) string { return fmt.Sprintf("Стол %s", n) },
 			Wave:        func(title string, n string) string { return fmt.Sprintf("%s, заход %s", title, n) },
 		},
@@ -1523,6 +1552,10 @@ var RU = Strings{
 			Help: func() string {
 				return "Этот бот подтверждает вход на dope.pecheny.me.\n\nОткройте https://dope.pecheny.me/login, нажмите «Войти через телеграм» и пришлите мне код, который покажет сайт."
 			},
+		},
+		Error: ServerErrorStrings{
+			BadRequest: func() string { return "Некорректный запрос." },
+			Internal:   func() string { return "ошибка сервера" },
 		},
 		Login: ServerLoginStrings{
 			Title: func() string { return "Вход · Фест" },
@@ -1766,6 +1799,11 @@ var RU = Strings{
 			Next: func() string { return "Следующая ячейка" },
 			Prev: func() string { return "Предыдущая ячейка" },
 		},
+		GroupStats: WidgetsGroupStatsStrings{
+			NoToken:   func(token string) string { return fmt.Sprintf("нет %s", token) },
+			Paren:     func() string { return "скобка" },
+			Truncated: func() string { return "обрыв" },
+		},
 		Keypad: WidgetsKeypadStrings{
 			Backspace:  func() string { return "Удалить" },
 			NextColumn: func() string { return "Следующая колонка" },
@@ -1786,6 +1824,9 @@ var RU = Strings{
 			Title: func() string {
 				return "Скачать журнал состояния этой вкладки (для диагностики)"
 			},
+		},
+		Roster: WidgetsRosterStrings{
+			PickSuggestion: func() string { return "Выберите значение из подсказки" },
 		},
 		ScoreTable: WidgetsScoreTableStrings{
 			Place: func() string { return "М" },

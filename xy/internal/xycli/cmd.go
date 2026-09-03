@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
 
@@ -124,7 +125,7 @@ func (a *app) oneArg(fs *flag.FlagSet, args []string, what string) (string, erro
 		return "", err
 	}
 	if len(rest) != 1 {
-		return "", fmt.Errorf("нужен id: %s", what)
+		return "", corei18n.User(xystrings.Default.Cli.Shared.NeedId(what))
 	}
 	return rest[0], nil
 }
@@ -150,7 +151,7 @@ func dispatch(family string, verbs map[string]func(*app, []string) error, a *app
 	}
 	verb, ok := verbs[args[0]]
 	if !ok {
-		return fmt.Errorf("неизвестное действие %q (%s)", args[0], strings.Join(names, ", "))
+		return corei18n.User(xystrings.Default.Cli.Shared.UnknownAction(args[0], strings.Join(names, ", ")))
 	}
 	return verb(a, args[1:])
 }
@@ -172,13 +173,13 @@ func pickOne[T any](items []T, ref, what string, id func(T) int64, name func(T) 
 		return found[0], nil
 	}
 	if len(found) == 0 {
-		return zero, fmt.Errorf("%s %q не найдено", what, ref)
+		return zero, corei18n.User(xystrings.Default.Cli.Shared.NotFound(what, ref))
 	}
 	labels := make([]string, len(found))
 	for i, item := range found {
 		labels[i] = fmt.Sprintf("%d %s", id(item), name(item))
 	}
-	return zero, fmt.Errorf("под %q подходит несколько: %s", ref, strings.Join(labels, ", "))
+	return zero, corei18n.User(xystrings.Default.Cli.Shared.Ambiguous(ref, strings.Join(labels, ", ")))
 }
 
 // parse handles flags and positional arguments in any order — an agent writes
@@ -199,7 +200,7 @@ func (a *app) parse(fs *flag.FlagSet, args []string) ([]string, error) {
 
 func (a *app) client() (*Client, error) {
 	if a.st.URL == "" || a.st.Token == "" {
-		return nil, errors.New("сначала `xy-cli login` (токен создаётся на /profile/tokens)")
+		return nil, corei18n.User(xystrings.Default.Cli.Shared.LoginFirst())
 	}
 	return NewClient(a.st.URL, a.st.Token), nil
 }
@@ -209,7 +210,7 @@ func (a *app) client() (*Client, error) {
 // board can be read anyway.
 func (a *app) boardRef(ref string) (int64, DataKey, error) {
 	if ref == "" {
-		return 0, nil, errors.New("нужен --board <id|имя>")
+		return 0, nil, corei18n.User(xystrings.Default.Cli.Shared.NeedBoard())
 	}
 	held := make([]HeldKey, 0, len(a.st.Boards))
 	for idStr, board := range a.st.Boards {
@@ -221,9 +222,9 @@ func (a *app) boardRef(ref string) (int64, DataKey, error) {
 		func(h HeldKey) int64 { return h.id }, func(h HeldKey) string { return h.Name })
 	if err != nil {
 		if id, convErr := strconv.ParseInt(ref, 10, 64); convErr == nil {
-			return 0, nil, fmt.Errorf("ключа доски %d нет: `xy-cli unlock %d`", id, id)
+			return 0, nil, corei18n.User(xystrings.Default.Cli.Shared.NoKey(itoa(id)))
 		}
-		return 0, nil, fmt.Errorf("%w — см. `xy-cli boards`", err)
+		return 0, nil, corei18n.User(xystrings.Default.Cli.Shared.SeeBoards(err.Error()))
 	}
 	dk, _ := a.st.Key(board.id)
 	return board.id, dk, nil
@@ -272,7 +273,7 @@ func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 func parseID(s, what string) (int64, error) {
 	id, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("%s: нужен числовой id, а не %q", what, s)
+		return 0, corei18n.User(xystrings.Default.Cli.Shared.NumericId(what, s))
 	}
 	return id, nil
 }

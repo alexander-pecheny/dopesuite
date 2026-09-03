@@ -1,10 +1,10 @@
-// testerlist.ts — «Список тестеров» («Вопросы тестировали» for one tour). The
-// test list used to BE this list, one per tour. A board-level Тесты panel can
+// testerlist.ts — "Tester list" ("Questions tested by" for one tour). The
+// test list used to BE this list, one per tour. A board-level Tests panel can
 // only say who tested at all, so a tour compiles its own: each session with how
-// many of the tour's questions it saw. The ЧГК custom names those who tested MOST
+// many of the tour's questions it saw. The ChGK custom names those who tested MOST
 // of a tour (they should not play it); someone who saw one or two questions still
 // may, skipping what they know — so a flat list cannot serve. tourPicked is that
-// rule, shared with the card's «кроме общих тестеров» line.
+// rule, shared with the card's "except common testers" line.
 
 import { xyApp } from "./app.js";
 import { partialSeen, type SeenQuestion, type SessionMeta, whoSaw } from "./sessions.js";
@@ -68,7 +68,7 @@ export function createTesterList(board: Board, shell: PanelShell, deps: { copyPl
   }
 
   // Undeclared, a tour falls back to the custom: everyone who saw MORE than half
-  // its questions. Shared with the card's «кроме общих тестеров» line.
+  // its questions. Shared with the card's "except common testers" line.
   function tourPicked(list: BoardList): Set<number> {
     const { cards, rows } = tourCoverage(list);
     const declared = declaredFor(list);

@@ -2,8 +2,8 @@
 // re-rank or a duplicate; to another board a client-side re-encryption of the
 // description, the alias, the handout settings, the comments and the
 // attachments, with labels reconciled by name and colour and Playings by the
-// Test Session's key (ADR-0003). The card editor, «Массовое действие» and
-// «Переместить список…» all transfer through here, so a bulk move behaves like
+// Test Session's key (ADR-0003). The card editor, "Mass action" and
+// "Move list…" all transfer through here, so a bulk move behaves like
 // the card's own move done once per card.
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
@@ -216,7 +216,7 @@ export function createTransfer(deps: TransferDeps): Transfer {
   // The session itself has to be copied: boards share no key, so nothing can be
   // referenced across one. The copy carries an `origin` stamp because it diverges
   // from its original the moment either is edited, and its tester list is what
-  // «Видели» reads. ctx is the target board's running state, mutated so a batch
+  // "Seen" reads. ctx is the target board's running state, mutated so a batch
   // of copies reuses what it just created.
   async function reconcileLabels(srcCardId: number, targetBid: number, targetDk: DataKey, ctx: MoveCtx): Promise<Array<{ label_id: number; session_id: number | null }>> {
     const out: Array<{ label_id: number; session_id: number | null }> = [];
@@ -275,7 +275,7 @@ export function createTransfer(deps: TransferDeps): Transfer {
 
   // transferCard moves or copies ONE card to the end of `ctx`'s target list —
   // the same re-encrypt/reconcile path the card's own move/copy takes, minus the
-  // modal. «Массовое действие» drives it once per card, so a bulk move behaves
+  // modal. "Mass action" drives it once per card, so a bulk move behaves
   // exactly like doing them one at a time, only without the clicking.
   // It appends to ctx.cardsByList as it goes, so a run of cards keeps its order
   // in the destination instead of piling onto one rank.

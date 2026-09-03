@@ -3,6 +3,7 @@
 // carries membership only: what you get here is the right to fetch the board's
 // ciphertext, and the passphrase still has to reach you from a person.
 import { xyApp } from "./app.js";
+import S from "./i18nstrings_ru_gen.js";
 
 const { jpost, el, byId, errMsg } = xyApp;
 
@@ -36,7 +37,7 @@ export interface JoinView {
 }
 
 export function joinView(peek: InvitePeek): JoinView {
-  const board = peek.board_name ? `«${peek.board_name}»` : "доску";
+  const board = peek.board_name ? S.invite.page.boardWrapper(peek.board_name) : S.invite.page.boardFallback();
   switch (peek.state) {
     case "active":
       return peek.requires_approval

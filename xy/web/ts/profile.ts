@@ -1,6 +1,6 @@
 // profile.ts — username management, logout, and the settings dialogs: change
 // password, board sizes (with a pseudo-board preview), default author, card
-// title, timezone, and which kind of entry an opened card's лента shows.
+// title, timezone, and which kind of entry an opened card's feed shows.
 import { xyApp, xySizes } from "./app.js";
 import { type Modal, modal } from "./modal.js";
 import { COMMON_CITIES, guessZone } from "./sessions.js";
@@ -34,7 +34,7 @@ function wireModal(stem: string, openBtnId: string, onOpen?: () => void | Promis
 let sizes: Sizes = { ...xySizes.DEFAULT };
 let defaultAuthor = "";
 let cardTitle = "question"; // which field a card's board preview shows
-let feedDefault = "all"; // which kind of entry an opened card's лента shows
+let feedDefault = "all"; // which kind of entry an opened card's feed shows
 let timezone = "";
 let announceCities: Array<{ zone: string; name: string }> = [];
 let sessionTitleMode = "date-title";
@@ -121,7 +121,7 @@ const sizesCardFont = byId<HTMLInputElement>("sizesCardFont");
 const preview = byId("sizesPreview");
 
 // The pretend monitor the preview scales against: wide enough that the default
-// 1512px board visibly centres, and «вся ширина» visibly fills.
+// 1512px board visibly centres, and "full width" visibly fills.
 const PREVIEW_SCREEN_W = 2000;
 // Fake cards, as question lengths in text lines — varied so the card-height
 // clamp visibly cuts some cards and not others.
@@ -250,7 +250,7 @@ function citiesFromNames(raw: string, ownZone: string): Array<{ zone: string; na
 }
 
 // The same pickers the session form uses: a bare box here meant typing an IANA
-// id from memory, and «алматы» finding nothing.
+// id from memory, and "almaty" finding nothing.
 autocomplete(byId<HTMLInputElement>("tzValue"), zoneChoices);
 autocomplete(byId<HTMLInputElement>("tzCities"), (q) => {
   // The field is a comma-separated list, so complete only its LAST entry.
@@ -302,7 +302,7 @@ cardTitleForm.addEventListener("submit", async (e) => {
   }
 });
 
-// ---- лента (which kind of entry an opened card's лента shows) ----
+// ---- feed (which kind of entry an opened card's feed shows) ----
 const feedDefaultForm = byId<HTMLFormElement>("feedDefaultForm");
 const feedDefaultMessage = byId("feedDefaultMessage");
 const feedDefaultRadios = () => feedDefaultForm.querySelectorAll<HTMLInputElement>('input[name="feedDefault"]');

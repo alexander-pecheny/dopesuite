@@ -45,8 +45,9 @@ func (r elimRound) survivors(winning int) int {
 // maxRounds stops the bracket short of a final. TPSH plays two: three Matches
 // of four each send two on, and those six are the winners — nobody plays again.
 func planElimRounds(entrants, winning, maxRounds int, sizeFor func(round, entering int) int) ([]elimRound, error) {
+	s := dopestrings.Default
 	if winning < 1 {
-		return nil, fmt.Errorf("winning_places должен быть хотя бы 1")
+		return nil, fmt.Errorf("%s", s.Structure.Elimination.WinningPlacesMin())
 	}
 	var rounds []elimRound
 	entering := entrants
@@ -56,27 +57,27 @@ func planElimRounds(entrants, winning, maxRounds int, sizeFor func(round, enteri
 		}
 		size := sizeFor(round, entering)
 		if size < 2 {
-			return nil, fmt.Errorf("match_size должен быть хотя бы 2")
+			return nil, fmt.Errorf("%s", s.Structure.Elimination.MatchSizeMin())
 		}
 		if size <= winning {
-			return nil, fmt.Errorf("бой на %d мест не может выводить %d — победителей не меньше, чем мест", size, winning)
+			return nil, fmt.Errorf("%s", s.Structure.Elimination.BoutCannotOutput(strconv.Itoa(size), strconv.Itoa(winning)))
 		}
 		if entering <= size {
 			rounds = append(rounds, elimRound{entering: entering, size: entering, bouts: 1, terminal: true})
 			return rounds, nil
 		}
 		if entering%size != 0 {
-			return nil, fmt.Errorf("раунд %d: %d участников не делятся на бои по %d", round, entering, size)
+			return nil, fmt.Errorf("%s", s.Structure.Elimination.RoundNotDivisible(strconv.Itoa(round), strconv.Itoa(entering), strconv.Itoa(size)))
 		}
 		bouts := entering / size
 		rounds = append(rounds, elimRound{entering: entering, size: size, bouts: bouts})
 		next := bouts * winning
 		if next >= entering {
-			return nil, fmt.Errorf("раунд %d никого не выбивает: %d участников, %d проходит", round, entering, next)
+			return nil, fmt.Errorf("%s", s.Structure.Elimination.RoundEliminateNothing(strconv.Itoa(round), strconv.Itoa(entering), strconv.Itoa(next)))
 		}
 		entering = next
 		if len(rounds) > 64 {
-			return nil, fmt.Errorf("слишком много раундов — проверьте match_size и winning_places")
+			return nil, fmt.Errorf("%s", s.Structure.Elimination.TooManyRounds())
 		}
 	}
 }
@@ -214,11 +215,12 @@ func planLives(entrants, lives, winning, proceeding int, sizeFor func(round, mem
 // previous block's template takes its entrants in the order that template
 // already balanced them.
 func planLivesDrawn(entrants, lives, winning, proceeding int, sizeFor func(round, members int) int, opening func(n, bouts int) [][]int) (*dePlan, error) {
+	s := dopestrings.Default
 	if lives < 1 {
-		return nil, fmt.Errorf("нужна хотя бы одна жизнь")
+		return nil, fmt.Errorf("%s", s.Structure.Elimination.LivesMin())
 	}
 	if winning < 1 {
-		return nil, fmt.Errorf("winning_places должен быть хотя бы 1")
+		return nil, fmt.Errorf("%s", s.Structure.Elimination.WinningPlacesMin())
 	}
 	if proceeding < 1 {
 		proceeding = 1
@@ -275,7 +277,7 @@ func planLivesDrawn(entrants, lives, winning, proceeding int, sizeFor func(round
 			}
 			size, err := bracketBoutSize(len(members), winning, sizeFor(round, len(members)))
 			if err != nil {
-				return nil, fmt.Errorf("раунд %d, сетка %d: %w", round, b+1, err)
+				return nil, fmt.Errorf("%s", s.Structure.Elimination.RoundBracket(strconv.Itoa(round), strconv.Itoa(b+1), err.Error()))
 			}
 			count := len(members) / size
 			chunks := snakeChunks(len(members), count)
@@ -318,7 +320,7 @@ func planLivesDrawn(entrants, lives, winning, proceeding int, sizeFor func(round
 		plan.aliveBands = append(plan.aliveBands, bandsNow)
 		brackets = next
 		if round > 64 {
-			return nil, fmt.Errorf("слишком много раундов — проверьте match_size и winning_places")
+			return nil, fmt.Errorf("%s", s.Structure.Elimination.TooManyRounds())
 		}
 	}
 }
@@ -336,7 +338,7 @@ func bracketBoutSize(members, winning, want int) (int, error) {
 			return size, nil
 		}
 	}
-	return 0, fmt.Errorf("%d участников не делятся на бои не больше чем по %d, из которых выходит %d", members, want, winning)
+	return 0, fmt.Errorf("%s", dopestrings.Default.Structure.Elimination.BracketNotDivisible(strconv.Itoa(members), strconv.Itoa(want), strconv.Itoa(winning)))
 }
 
 func flattenBrackets(brackets [][]deSource) []deSource {

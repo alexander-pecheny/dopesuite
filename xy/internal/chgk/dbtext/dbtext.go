@@ -56,9 +56,9 @@ func Export(doc fsource.Doc, images map[string][]byte, host imghost.Host, o Opti
 	return out.String(), nil
 }
 
-// hoistWarmups is the first half of DbExporter.export: consecutive «Инфо» blocks
+// hoistWarmups is the first half of DbExporter.export: consecutive "Info" blocks
 // are merged, and a warm-up question is moved to the top of its tour under a
-// «Нулевой вопрос N» heading of its own. chgksuite walks the structure while
+// "Question 0 N" heading of its own. chgksuite walks the structure while
 // rearranging it, so this does too.
 func hoistWarmups(doc fsource.Doc) fsource.Doc {
 	d := append(fsource.Doc(nil), doc...)
@@ -86,7 +86,7 @@ func hoistWarmups(doc fsource.Doc) fsource.Doc {
 	return d
 }
 
-// foldNezachet moves a «незачёт» onto the end of the зачёт (or of the answer):
+// foldNezachet moves an unaccepted answer onto the end of the accepted answer (or of the answer):
 // the base has no field for it.
 func foldNezachet(e *exporter, q *fsource.Question) {
 	if !q.Has("nezachet") {
@@ -182,8 +182,8 @@ func (e *exporter) question(q *fsource.Question) (string, error) {
 		if f.field != "answer" && !q.Has(f.field) {
 			continue
 		}
-		// chgksuite prints the зачёт under the «Незачет» header too. Unreachable,
-		// since the незачёт is folded away before this runs, but faithfully so.
+		// chgksuite prints the accepted answer under the "Nezachet" header too. Unreachable,
+		// since the unaccepted answer is folded away before this runs, but faithfully so.
 		from := f.field
 		if from == "nezachet" {
 			from = "zachet"

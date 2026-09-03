@@ -16,6 +16,7 @@ import (
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/migrate"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
 
 	"pecheny.me/dopecore/schema"
 )
@@ -541,7 +542,7 @@ create index if not exists game_player_team_overrides_game_idx on game_player_te
 		}
 		return nil
 	}},
-	{Version: 14, Name: "participants.number, ЭК participant numbers backfilled", Up: func(db *sql.DB) error {
+	{Version: 14, Name: dopestrings.Default.Server.Migration.V14(), Up: func(db *sql.DB) error {
 		// v14: give the EK game-scoped `teams` table a `number` natural key (the same
 		// universal team identity OD/KSI use). teams.id stays the physical FK for
 		// gameplay rows (ON DELETE CASCADE preserved); number drives seed matching so

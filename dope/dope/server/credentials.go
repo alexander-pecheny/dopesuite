@@ -2,6 +2,8 @@ package dopeserver
 
 import (
 	"dope/dope/web/route"
+	dopestrings "dope/i18nstrings"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -9,7 +11,8 @@ import (
 
 func writeJSONValue(w http.ResponseWriter, value any) {
 	if err := route.JSON(w, value); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("internal error: %v", err)
+		http.Error(w, dopestrings.Default.Server.Error.Internal(), http.StatusInternalServerError)
 	}
 }
 

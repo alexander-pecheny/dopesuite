@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -25,6 +26,7 @@ import (
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	"pecheny.me/dopecore/session"
 )
 
@@ -368,8 +370,10 @@ func Forbid(msg string) error       { return &Status{Code: http.StatusForbidden,
 // NotFound is the handler's 404; sql.ErrNoRows from a lookup reads the same.
 var NotFound = &Status{Code: http.StatusNotFound, Msg: "not found"}
 
-// WriteError writes err: a *Status as itself, sql.ErrNoRows as 404, the rest
-// as 500 with the message.
+// WriteError writes err: a *Status as itself, a UserError as a 400 carrying
+// its message (written for the person who caused it), sql.ErrNoRows as 404,
+// and the rest as one generic line over a log entry (root docs/adr/0006 —
+// the edge shows only what a person may read).
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	var st *Status
 	switch {
@@ -379,11 +383,31 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 			return
 		}
 		http.Error(w, st.Msg, st.Code)
+	case isUser(err):
+		msg, _ := corei18n.AsUser(err)
+		http.Error(w, msg, http.StatusBadRequest)
 	case errors.Is(err, sql.ErrNoRows):
 		http.NotFound(w, r)
 	default:
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("internal error: %v", err)
+		http.Error(w, dopestrings.Default.Server.Error.Internal(), http.StatusInternalServerError)
 	}
+}
+
+// BadUser maps a request failure to a 400: a UserError's message verbatim
+// (it was written for the person who caused the failure), anything else one
+// generic line over a log entry (root docs/adr/0006).
+func BadUser(err error) error {
+	if msg, ok := corei18n.AsUser(err); ok {
+		return BadRequest(msg)
+	}
+	log.Printf("bad request: %v", err)
+	return BadRequest(dopestrings.Default.Server.Error.BadRequest())
+}
+
+func isUser(err error) bool {
+	_, ok := corei18n.AsUser(err)
+	return ok
 }
 
 // JSON writes v as the response body.

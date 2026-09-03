@@ -11,6 +11,9 @@ import (
 	"errors"
 	"fmt"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
+	xystrings "xy/i18nstrings"
+
 	"golang.org/x/crypto/scrypt"
 	"golang.org/x/text/unicode/norm"
 )
@@ -142,7 +145,7 @@ func Unlock(passphrase string, km Keymeta) (DataKey, error) {
 
 // ErrWrongPassphrase is what a failed unwrap or a failed verify both say: the
 // difference is never the user's business.
-var ErrWrongPassphrase = errors.New("неверный пароль доски")
+var ErrWrongPassphrase = corei18n.User(xystrings.Default.Cli.Unlock.WrongPassphrase())
 
 // EncField seals a string into the base64 Envelope the API carries.
 func (dk DataKey) EncField(s string) (string, error) {

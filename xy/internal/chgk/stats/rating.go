@@ -7,6 +7,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
+	xystrings "xy/i18nstrings"
 )
 
 // RatingAPI is the endpoint StatsAdder.get_tournament_results calls.
@@ -42,7 +45,7 @@ func fetchTournament(ctx context.Context, id string) ([]Result, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("турнир %s: рейтинг ответил %s", id, resp.Status)
+		return nil, corei18n.User(xystrings.Default.Stats.Rating.Status(id, resp.Status))
 	}
 	var body []struct {
 		Mask    string `json:"mask"`
@@ -54,7 +57,7 @@ func fetchTournament(ctx context.Context, id string) ([]Result, error) {
 		} `json:"team"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return nil, fmt.Errorf("турнир %s: %w", id, err)
+		return nil, corei18n.User(xystrings.Default.Stats.Rating.Decode(id, err.Error()))
 	}
 	out := make([]Result, 0, len(body))
 	for _, r := range body {

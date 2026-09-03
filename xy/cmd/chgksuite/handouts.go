@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	xystrings "xy/i18nstrings"
 	"xy/internal/chgk/fsource"
 	"xy/internal/chgk/handout"
 	"xy/internal/chgk/htmlshot"
@@ -43,7 +44,7 @@ func handouts(args []string) error {
 	}
 }
 
-// handoutsGenerate is 4s2hndt: a package's «[Раздаточный материал: …]» brackets
+// handoutsGenerate is 4s2hndt: a package's handout brackets
 // into the .hndt the renderer reads.
 func handoutsGenerate(args []string) error {
 	fs := flag.NewFlagSet("handouts generate", flag.ContinueOnError)
@@ -74,7 +75,7 @@ func handoutsGenerate(args []string) error {
 		return err
 	}
 	for _, w := range warnings {
-		warn("вопрос %s: %s", w.Number, w.Text)
+		warn("%s", xystrings.Default.Chgkcli.Handouts.WarnQuestion(w.Number, w.Text))
 	}
 	for _, f := range files {
 		out := filepath.Join(dir, f.Name)
@@ -167,7 +168,7 @@ func handoutsRun(args []string) error {
 	}
 	// chgksuite watches with watchdog; a second's poll on the file's own
 	// timestamp is the same thing for one file, and needs nothing.
-	reportNote("слежу за %s — Ctrl-C, чтобы закончить", in)
+	reportNote("%s", xystrings.Default.Chgkcli.Handouts.WatchNote(in))
 	last := modTime(in)
 	for {
 		time.Sleep(time.Second)
@@ -238,7 +239,7 @@ func handoutsCreateHTML(args []string) error {
 		name = "handout_" + strings.ReplaceAll(fs.Arg(0), "/", "_") + ".html"
 	}
 	if _, err := os.Stat(name); err == nil {
-		return fmt.Errorf("%s уже есть: удалите его или возьмите другое имя", name)
+		return fmt.Errorf("%s", xystrings.Default.Chgkcli.Handouts.AlreadyExists(name))
 	}
 	family := *font
 	if family == "" {
@@ -249,7 +250,7 @@ func handoutsCreateHTML(args []string) error {
 		return err
 	}
 	reportOutput(name)
-	reportNote("ширина %.1f мм — %s листа A4", widthMM, fs.Arg(0))
+	reportNote("%s", xystrings.Default.Chgkcli.Handouts.HtmlGeometryNote(strconv.FormatFloat(widthMM, 'f', 1, 64), fs.Arg(0)))
 	return nil
 }
 
@@ -278,9 +279,9 @@ func handoutsHTML2Img(args []string) error {
 		return err
 	}
 	reportOutput(res.PDF)
-	reportNote("%.1f × %.1f мм", res.WidthMM, res.HeightMM)
+	reportNote("%s", xystrings.Default.Chgkcli.Handouts.DimensionsNote(strconv.FormatFloat(res.WidthMM, 'f', 1, 64), strconv.FormatFloat(res.HeightMM, 'f', 1, 64)))
 	reportOutput(res.PNG)
-	reportNote("масштаб ×%s", strconv.FormatFloat(*scale, 'g', -1, 64))
+	reportNote("%s", xystrings.Default.Chgkcli.Handouts.ScaleNote(strconv.FormatFloat(*scale, 'g', -1, 64)))
 	return nil
 }
 
@@ -432,19 +433,19 @@ func handoutsPack(args []string) error {
 		path := filepath.Join(folder, name)
 		hndt, images, err := readHandoutSource(path)
 		if err != nil {
-			warn("%s: %v — пропускаем", name, err)
+			warn("%s", xystrings.Default.Chgkcli.Handouts.SkipWarning(name, err.Error()))
 			continue
 		}
 		pages, isColour, err := handout.PackPages(hndt, *nTeams)
 		if err != nil {
-			warn("%s: %v — пропускаем", name, err)
+			warn("%s", xystrings.Default.Chgkcli.Handouts.SkipWarning(name, err.Error()))
 			continue
 		}
 		pdf, err := handout.Render(context.Background(), hndt, images, a, ts)
 		if err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
-		reportNote("%s: %d страниц%s", name, pages, colourNote(isColour))
+		reportNote("%s", xystrings.Default.Chgkcli.Handouts.PagesNote(name, strconv.Itoa(pages), colourNote(isColour)))
 		for range pages {
 			if isColour {
 				colour = append(colour, pdf)
@@ -475,7 +476,7 @@ func handoutsPack(args []string) error {
 
 func colourNote(colour bool) string {
 	if colour {
-		return ", цветных"
+		return xystrings.Default.Chgkcli.Handouts.ColourSuffix()
 	}
 	return ""
 }

@@ -1,10 +1,11 @@
 package typstdoc
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
+	xystrings "xy/i18nstrings"
 	"xy/internal/chgk/i18n"
 	"xy/internal/chgk/inline"
 )
@@ -113,7 +114,7 @@ func ParseConfig(text string) (Config, error) {
 		}
 		key, value, ok := strings.Cut(line, "=")
 		if !ok {
-			return c, fmt.Errorf("строка %d: не пара ключ = значение", n+1)
+			return c, corei18n.User(xystrings.Default.Docs.Typst.LineNotPair(strconv.Itoa(n + 1)))
 		}
 		field, known := fields[table+"."+strings.TrimSpace(key)]
 		if !known {
@@ -121,7 +122,7 @@ func ParseConfig(text string) (Config, error) {
 		}
 		v, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
 		if err != nil {
-			return c, fmt.Errorf("строка %d: %w", n+1, err)
+			return c, corei18n.User(xystrings.Default.Docs.Typst.LineError(strconv.Itoa(n+1), err.Error()))
 		}
 		*field = v
 	}

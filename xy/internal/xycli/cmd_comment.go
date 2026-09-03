@@ -1,12 +1,12 @@
 package xycli
 
 import (
-	"errors"
 	"fmt"
 	"regexp"
 	"sort"
 	"strings"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
 
@@ -111,7 +111,7 @@ func commentAdd(a *app, args []string) error {
 	}
 	body = strings.TrimRight(body, "\n")
 	if strings.TrimSpace(body) == "" {
-		return errors.New("пустой комментарий")
+		return corei18n.User(s.Cli.Comment.Empty())
 	}
 	payloadEnc, err := b.DK.EncField(body)
 	if err != nil {
@@ -158,7 +158,7 @@ func commentEdit(a *app, args []string) error {
 	}
 	body = strings.TrimRight(body, "\n")
 	if strings.TrimSpace(body) == "" {
-		return errors.New("пустой комментарий")
+		return corei18n.User(s.Cli.Comment.Empty())
 	}
 	payloadEnc, err := b.DK.EncField(body)
 	if err != nil {

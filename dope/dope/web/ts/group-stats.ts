@@ -1,3 +1,5 @@
+import S from "./i18nstrings_ru_gen.js";
+
 // The client mirror of a Block's per-match scoring rule (ADR-0008), for the
 // group-stage tab: the source sheets show a player's points split by round,
 // and the split exists nowhere server-side — only the matches do. Kept pure so
@@ -15,14 +17,14 @@ export function evalScoringRule(expr: string, vars: Record<string, number>): num
     const token = take();
     if (token === "(") {
       const value = sum();
-      if (take() !== ")") throw new Error("скобка");
+      if (take() !== ")") throw new Error(S.widgets.groupStats.paren());
       return value;
     }
     if (token === "-") return -primary();
-    if (token === undefined) throw new Error("обрыв");
+    if (token === undefined) throw new Error(S.widgets.groupStats.truncated());
     if (/^\d/.test(token)) return Number(token);
     const value = vars[token];
-    if (value === undefined) throw new Error(`нет ${token}`);
+    if (value === undefined) throw new Error(S.widgets.groupStats.noToken(token));
     return value;
   }
   function product(): number {

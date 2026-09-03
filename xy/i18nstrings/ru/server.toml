@@ -9,6 +9,11 @@
 # 500s in auth.go's handleSetPassword and tokens.go's create handler.
 internal = "ошибка сервера"
 
+[error]
+# handleUser's fallback: a request-failing error that is not a UserError —
+# its real text goes to the log, the person sees this one line.
+bad_request = "Некорректный запрос."
+
 [child]
 # access.go's child{} family: a card, list, list group, label or test named in
 # the path (boardOf) or body (onBoard). not_found = absent or tombstoned;
@@ -115,3 +120,5 @@ file_no_questions = "в файле не найдено вопросов"
 [quota]
 # enforceQuota: an upload that would outgrow the owner's storage remainder.
 exceeded = 'превышен лимит хранилища ({{.mb}} МБ)'
+# humanMB: MiB number with unit for user-facing storage display.
+human_mb = '{{.mb}} МБ'

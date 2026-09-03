@@ -71,7 +71,7 @@ func (b *blockHandle) NumList(key string) ([]float64, bool, error) {
 func (b *blockHandle) Rounds(names []string) error {
 	if len(names) == 0 {
 		if _, round := blockReseedSpec(b.blk); round != "" {
-			return errAt(b.blk.Values["reseed"].Line, "reseed: в этом блоке нет раунда %s — только true/false", round)
+			return errAt(b.blk.Values["reseed"].Line, "%s", dopestrings.Default.Scheme.Reseed.RoundUnknown(round))
 		}
 	}
 	return b.c.rejectRoundKeys(b.blk, names)
@@ -125,7 +125,7 @@ func (b *blockHandle) Entrants(groups, size int) ([][]store.SchemeSlot, error) {
 
 func (b *blockHandle) Seeds(count int) ([]store.SchemeSlot, error) {
 	if len(b.c.in.Entrants) > 0 && len(b.c.in.Entrants) != count {
-		return nil, errAt(b.blk.Line, "схеме нужно %d участников, а посеяно %d", count, len(b.c.in.Entrants))
+		return nil, errAt(b.blk.Line, "%s", dopestrings.Default.Scheme.Entrants.CountMismatch(strconv.Itoa(count), strconv.Itoa(len(b.c.in.Entrants))))
 	}
 	seeds := make([]store.SchemeSlot, count)
 	for rank := 1; rank <= count; rank++ {
@@ -148,14 +148,14 @@ func (b *blockHandle) Emit(s structure.Stage) ([]string, error) {
 	}
 	for _, r := range s.Slug {
 		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' {
-			return nil, errAt(b.blk.Line, "slug — латиница, цифры и дефис, а не %q", s.Slug)
+			return nil, errAt(b.blk.Line, "%s", dopestrings.Default.Scheme.Structure.SlugCharset(s.Slug))
 		}
 	}
 	where := b.at(s.At)
 	if s.Matches == nil {
 		expander, ok := structure.ExpanderFor(s.Kind)
 		if !ok {
-			return nil, errAt(0, "%s не зарегистрирован в реестре видов", s.Kind)
+			return nil, errAt(0, "%s", dopestrings.Default.Scheme.Structure.KindUnregistered(s.Kind))
 		}
 		configJSON, err := b.c.stageConfig(s.Config, b.blk, s.Rounds)
 		if err != nil {

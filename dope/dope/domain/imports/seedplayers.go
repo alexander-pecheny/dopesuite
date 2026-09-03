@@ -13,6 +13,7 @@ import (
 	"dope/dope/domain/expr"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // The seeding an assembled-team format needs: a Participant here is three
@@ -59,10 +60,10 @@ type seedPlayer struct {
 
 func (f fromPlayers) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope) (seeding, error) {
 	if f.spec == nil || len(f.spec.Games) == 0 {
-		return seeding{}, errors.New("посев по игрокам: схема не называет игры-источники")
+		return seeding{}, corei18n.User(dopestrings.Default.Imports.SeedPlayers.NoGames())
 	}
 	if len(f.sort) == 0 {
-		return seeding{}, errors.New("посев по игрокам: схема не говорит, чем сортировать ([init] sorting)")
+		return seeding{}, corei18n.User(dopestrings.Default.Imports.SeedPlayers.NoSorting())
 	}
 
 	playerRules, err := compileNamedExprs("player", f.spec.Player)
@@ -75,11 +76,9 @@ func (f fromPlayers) resolve(ctx context.Context, tx *sql.Tx, scope core.FestSco
 	}
 	for _, rule := range f.sort {
 		if _, ok := aggregates[rule.Metric]; !ok {
-			return seeding{}, fmt.Errorf("sorting: %s не считается — есть %s",
-				rule.Metric, strings.Join(sortedKeys(aggregates), ", "))
+			return seeding{}, corei18n.User(dopestrings.Default.Imports.SeedPlayers.MetricUnknown(rule.Metric, strings.Join(sortedKeys(aggregates), ", ")))
 		}
 	}
-
 	sources := make([]seedSourceGame, len(f.spec.Games))
 	for i, code := range f.spec.Games {
 		if sources[i], err = loadSeedSourceGame(ctx, tx, scope.FestID, code); err != nil {
@@ -92,7 +91,7 @@ func (f fromPlayers) resolve(ctx context.Context, tx *sql.Tx, scope core.FestSco
 		return seeding{}, err
 	}
 	if len(entries) == 0 {
-		return seeding{}, errors.New("посев по игрокам: у команд этой игры нет составов")
+		return seeding{}, corei18n.User(dopestrings.Default.Imports.SeedPlayers.NoRosters())
 	}
 
 	type scored struct {
@@ -121,7 +120,7 @@ func (f fromPlayers) resolve(ctx context.Context, tx *sql.Tx, scope core.FestSco
 		for name, agg := range aggregates {
 			values, ok := perPlayer[agg.over]
 			if !ok {
-				return seeding{}, fmt.Errorf("seed.%s: %s — такой метрики игрока нет", name, agg.over)
+				return seeding{}, corei18n.User(dopestrings.Default.Imports.SeedPlayers.MetricMissing(name, agg.over))
 			}
 			metrics[name] = agg.fold(values)
 		}
@@ -174,7 +173,7 @@ func compileNamedExprs(grain string, sources map[string]string) ([]namedExpr, er
 		case 2:
 			return nil
 		case 1:
-			return fmt.Errorf("%s.%s: правило зависит от самого себя", grain, name)
+			return corei18n.User(dopestrings.Default.Imports.SeedPlayers.SelfReference(grain, name))
 		}
 		state[name] = 1
 		for _, dep := range parsed[name].Vars() {
@@ -206,7 +205,7 @@ func parseSeedAggregates(sources map[string]string) (map[string]seedAggregate, e
 	for name, src := range sources {
 		parts := seedAggRe.FindStringSubmatch(strings.TrimSpace(src))
 		if parts == nil {
-			return nil, fmt.Errorf("seed.%s: жду mean(метрика), min, max, sum или count", name)
+			return nil, corei18n.User(dopestrings.Default.Imports.SeedPlayers.AggregateExpected(name))
 		}
 		out[name] = seedAggregate{over: parts[2], fold: seedFolds[parts[1]]}
 	}
@@ -266,7 +265,7 @@ func loadSeedSourceGame(ctx context.Context, q store.Queryer, festID int64, code
 	var gameID int64
 	if err := q.QueryRowContext(ctx, `select id from games where fest_id = ? and code = ?`, festID, code).Scan(&gameID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return seedSourceGame{}, fmt.Errorf("в фесте нет игры с кодом %s", code)
+			return seedSourceGame{}, corei18n.User(dopestrings.Default.Imports.Seed.GameMissing(code))
 		}
 		return seedSourceGame{}, err
 	}
@@ -297,14 +296,14 @@ order by st.rank`, []any{festID, code}, func(rs *sql.Rows) ([2]int64, error) {
 		return nil, err
 	}
 	if len(rows) == 0 {
-		return nil, fmt.Errorf("у игры %s ещё нет таблицы", code)
+		return nil, corei18n.User(dopestrings.Default.Imports.Seed.NoStandings(code))
 	}
 	places := make(map[int64]float64, len(rows))
 	worst := 0.0
 	for _, pair := range rows {
 		place := float64(pair[1])
 		if _, seen := places[pair[0]]; seen {
-			return nil, fmt.Errorf("у игры %s несколько таблиц — посев по игрокам берётся из игры с одной", code)
+			return nil, corei18n.User(dopestrings.Default.Imports.SeedPlayers.MultipleStandings(code))
 		}
 		places[pair[0]] = place
 		if place > worst {
@@ -408,7 +407,7 @@ order by ga.number, p.id`, []any{scope.GameID, scope.FestID}, func(rs *sql.Rows)
 			entry.players = append(entry.players, player)
 		}
 		if len(entry.players) == 0 {
-			return nil, fmt.Errorf("посев по игрокам: у команды %s нет состава", row.name)
+			return nil, corei18n.User(dopestrings.Default.Imports.SeedPlayers.NoRoster(row.name))
 		}
 		entries = append(entries, entry)
 	}

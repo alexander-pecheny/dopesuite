@@ -1,4 +1,4 @@
-page title="Мои доски · xy" kind="full" scripts="dist/index.js"
+page title=@chrome.page.index_title kind="full" scripts="dist/index.js"
   topbar title="Доски"
     crumbs
       crumb home icon="house" label="Все доски"

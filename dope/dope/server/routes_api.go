@@ -169,7 +169,7 @@ func (s *server) scopedVenuePut(w http.ResponseWriter, r *http.Request, sc route
 	}
 	venues, revision, err := s.updateVenue(r.Context(), sc.FestID, number, req.Title)
 	if err != nil {
-		return route.BadRequest(err.Error())
+		return route.BadUser(err)
 	}
 	data, _ := json.Marshal(venues)
 	s.eng.BroadcastState(sc.FestID, fmt.Sprintf("venues:%d", sc.FestID), revision, data)
@@ -216,7 +216,7 @@ func (s *server) scopedMatchPatch(w http.ResponseWriter, r *http.Request, sc rou
 	}
 	data, _, err := s.editor().SubmitMatchEdit(r.Context(), sc.Fest(), mscope.MatchID, mscope.Code, req, raw, &sample)
 	if err != nil {
-		return route.BadRequest(err.Error())
+		return route.BadUser(err)
 	}
 	if err := route.JSONBytes(w, data); err != nil {
 		return err
@@ -232,7 +232,7 @@ func readPatch(r *http.Request) (string, edit.PatchRequest, error) {
 	defer r.Body.Close()
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
-		return "", edit.PatchRequest{}, route.BadRequest(err.Error())
+		return "", edit.PatchRequest{}, route.BadUser(err)
 	}
 	var req edit.PatchRequest
 	if err := json.Unmarshal(raw, &req); err != nil {
@@ -258,7 +258,7 @@ func (s *server) scopedMatchFinish(w http.ResponseWriter, r *http.Request, sc ro
 	}
 	data, _, err := s.editor().SubmitMatchFinish(r.Context(), sc.Fest(), mscope.MatchID, mscope.Code, *req.Finished)
 	if err != nil {
-		return route.BadRequest(err.Error())
+		return route.BadUser(err)
 	}
 	return route.JSONBytes(w, data)
 }
@@ -278,7 +278,7 @@ func (s *server) scopedMatchVenue(w http.ResponseWriter, r *http.Request, sc rou
 	}
 	data, _, err := s.editor().SubmitMatchVenue(r.Context(), sc.Fest(), mscope.MatchID, mscope.Code, number)
 	if err != nil {
-		return route.BadRequest(err.Error())
+		return route.BadUser(err)
 	}
 	return route.JSONBytes(w, data)
 }
@@ -309,7 +309,7 @@ func (s *server) scopedReseed(w http.ResponseWriter, r *http.Request, sc route.S
 	case errors.Is(err, resolver.ErrReseedStageNotFound):
 		return route.NotFound
 	case errors.Is(err, resolver.ErrReseedNotReady):
-		return route.BadRequest(err.Error())
+		return route.BadUser(err)
 	case err != nil:
 		return err
 	}
@@ -345,7 +345,7 @@ func (s *server) scopedGameStatePut(w http.ResponseWriter, r *http.Request, sc r
 	defer r.Body.Close()
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
-		return route.BadRequest(err.Error())
+		return route.BadUser(err)
 	}
 	if !json.Valid(raw) {
 		return route.BadRequest("bad json")
@@ -358,7 +358,7 @@ func (s *server) scopedGameStatePut(w http.ResponseWriter, r *http.Request, sc r
 	}
 	revision, err := s.replaceGameState(r.Context(), sc.Fest(), raw)
 	if errors.Is(err, edit.ErrRatingRosterImmutable) {
-		return route.BadRequest(err.Error())
+		return route.BadUser(err)
 	}
 	if err != nil {
 		return err
@@ -381,7 +381,7 @@ func (s *server) scopedGameStatePatch(w http.ResponseWriter, r *http.Request, sc
 		return route.NotFound
 	}
 	if err != nil {
-		return route.BadRequest(err.Error())
+		return route.BadUser(err)
 	}
 	if err := route.JSONBytes(w, next); err != nil {
 		return err
@@ -425,7 +425,7 @@ func (s *server) scopedScreenSettingsPut(w http.ResponseWriter, r *http.Request,
 	defer r.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<16))
 	if err != nil {
-		return route.BadRequest(err.Error())
+		return route.BadUser(err)
 	}
 	if len(bytes.TrimSpace(raw)) == 0 {
 		raw = []byte("{}")
@@ -459,7 +459,7 @@ func (s *server) seedImportRoute(source func(*http.Request) (imports.SeedSource,
 		}
 		view, revision, stateJSON, err := imports.ImportSeeds(&s.eng, r.Context(), sc.Fest(), src)
 		if err != nil {
-			return route.BadRequest(err.Error())
+			return route.BadUser(err)
 		}
 		s.eng.InvalidateFestViewCache(sc.FestID)
 		s.eng.BroadcastState(sc.FestID, gameStateScopeKey(sc.GameID), revision, stateJSON)
@@ -485,7 +485,7 @@ func (s *server) scopedSeedDecline(w http.ResponseWriter, r *http.Request, sc ro
 	}
 	view, revision, stateJSON, err := imports.SetSeedImportDeclined(&s.eng, r.Context(), sc.Fest(), req)
 	if err != nil {
-		return route.BadRequest(err.Error())
+		return route.BadUser(err)
 	}
 	s.eng.BroadcastState(sc.FestID, gameStateScopeKey(sc.GameID), revision, stateJSON)
 	return route.JSON(w, view)

@@ -206,6 +206,5 @@ func SortedNames(set map[string]bool) []string {
 // UnrankableMetric is the complaint every Kind makes about a sorting key
 // nothing measures.
 func UnrankableMetric(metric string, known map[string]bool) error {
-	return fmt.Errorf("sorting: %s не считается — ни протокол, ни правила подсчёта такой метрики не дают (есть %s)",
-		metric, strings.Join(SortedNames(known), ", "))
+	return fmt.Errorf("%s", dopestrings.Default.Structure.Macro.UnrankableMetric(metric, strings.Join(SortedNames(known), ", ")))
 }

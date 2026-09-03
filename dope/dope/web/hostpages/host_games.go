@@ -23,6 +23,7 @@ import (
 	dopeui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	"pecheny.me/dopeuikit/palette"
 )
 
@@ -544,10 +545,10 @@ func gameSpecFromForm(festID int64, gameType string, form url.Values) (gamebuild
 	case games.Multi:
 		spec.Label = s.Host.Games.TypeMulti()
 		if spec.Minigames, err = games.ParseMultiGames(form.Get("multi_games")); err != nil {
-			return spec, fmt.Errorf("Мини-игры: %w", err)
+			return spec, corei18n.User(s.Host.Games.ErrorMinigames(err.Error()))
 		}
 		if spec.MultiSorting, err = games.ParseMultiSorting(spec.Minigames, form.Get("multi_sorting")); err != nil {
-			return spec, fmt.Errorf("Что решает при равном итоге: %w", err)
+			return spec, corei18n.User(s.Host.Games.ErrorMultiSorting(err.Error()))
 		}
 	case games.Troika:
 		spec.Label = s.Host.Games.TypeTroika()
@@ -563,11 +564,11 @@ func gameSpecFromForm(festID int64, gameType string, form url.Values) (gamebuild
 		if spec.DSL == "" {
 			raw := strings.TrimSpace(form.Get("ek_scheme"))
 			if raw == "" {
-				return spec, errors.New("Вставьте JSON-схему ЭК или опишите её схемой")
+				return spec, corei18n.User(s.Host.Games.ErrorEkSchemeMissing())
 			}
 			var scheme store.FestScheme
 			if err := json.Unmarshal([]byte(raw), &scheme); err != nil {
-				return spec, fmt.Errorf("Не удалось разобрать JSON: %w", err)
+				return spec, corei18n.User(s.Host.Games.ErrorJsonParse(err.Error()))
 			}
 			spec.Pasted = &scheme
 		}
@@ -581,7 +582,7 @@ func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType s
 	}
 	gameType = strings.TrimSpace(gameType)
 	if !games.Known(gameType) && gameType != ksiStickersGameType {
-		return 0, errors.New("выберите тип игры")
+		return 0, corei18n.User(dopestrings.Default.Host.Games.ErrorTypeMissing())
 	}
 
 	var gameID int64

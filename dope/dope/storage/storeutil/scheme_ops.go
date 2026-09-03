@@ -6,13 +6,24 @@ import (
 	"strings"
 
 	"dope/dope/storage/store"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // ValidateScheme checks that a parsed fest scheme is internally consistent
 // before it is materialised into the database (unique stage/match codes, valid
 // seed slots, non-colliding team basket/number assignments). It is a pure
 // validation over the scheme data shapes and carries no DB/server dependency.
+// Every failure is one a host importing the scheme may read, so they leave as
+// UserErrors the edge shows verbatim (root docs/adr/0006).
 func ValidateScheme(scheme store.FestScheme) error {
+	if err := validateScheme(scheme); err != nil {
+		return corei18n.User(err.Error())
+	}
+	return nil
+}
+
+func validateScheme(scheme store.FestScheme) error {
 	if strings.TrimSpace(scheme.Slug) == "" {
 		return errors.New("schema slug is required")
 	}

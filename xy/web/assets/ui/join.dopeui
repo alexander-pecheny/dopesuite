@@ -1,4 +1,4 @@
-page title="Приглашение · xy" kind="sheet" scripts="dist/join.js"
+page title=@chrome.page.join_title kind="sheet" scripts="dist/join.js"
   topbar title="Приглашение"
     crumbs
       crumb home href="/" icon="house" label="Все доски"

@@ -33,7 +33,12 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	dopestrings "dope/i18nstrings"
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
+
+var s = dopestrings.Default
 
 // Mark is one answer cell: taken, lost, or never played.
 type Mark byte
@@ -68,7 +73,7 @@ func (c Coord) String() string {
 		if c.Block == StatsCoord.Block {
 			return c.Block
 		}
-		return "таблица " + c.stage()
+		return dopestrings.Default.Replay.Parse.CoordTable(c.stage())
 	}
 	if c.Group == "" {
 		return fmt.Sprintf("%s/r%d/w%d/m%d", c.Block, c.Round, c.Wave, c.Match)
@@ -211,8 +216,8 @@ func (s Script) individual() bool {
 	return codec.Individual
 }
 
-func errAt(line int, format string, args ...any) error {
-	return fmt.Errorf("строка %d: %s", line, fmt.Sprintf(format, args...))
+func errAt(line int, msg string) error {
+	return corei18n.User(dopestrings.Default.Replay.Parse.LinePrefix(strconv.Itoa(line), msg))
 }
 
 // Parse reads a transcript. It is strict on purpose: a cell it cannot read is
@@ -233,7 +238,7 @@ func Parse(src string) (Script, error) {
 			return
 		}
 		if len(bout.Seats) == 0 && failure == nil {
-			failure = errAt(bout.Line, "бой %s без единого места — оборванная стенограмма прошла бы молча", bout.At)
+			failure = errAt(bout.Line, s.Replay.Parse.BoutNoSeats(fmt.Sprint(bout.At)))
 		}
 		script.Bouts = append(script.Bouts, *bout)
 		bout = nil
@@ -272,12 +277,12 @@ func Parse(src string) (Script, error) {
 				}
 				if prev, taken := seen[at.String()]; taken {
 					return Script{}, errAt(line,
-						"%s уже есть на строке %d — на одной координате одна запись, иначе одна из них молча пропадёт", at, prev)
+						s.Replay.Parse.CoordTaken(fmt.Sprint(at), strconv.Itoa(prev)))
 				}
 				seen[at.String()] = line
 				if at.Round == 0 {
 					if rest != "" {
-						return Script{}, errAt(line, "после таблицы ничего не пишут, а тут %q", rest)
+						return Script{}, errAt(line, s.Replay.Parse.TableTrailing(rest))
 					}
 					section = "таблица"
 					script.Tables = append(script.Tables, Table{At: at, Line: line})
@@ -286,13 +291,13 @@ func Parse(src string) (Script, error) {
 				section = "бой"
 				bout = &Bout{At: at, Draw: rest == "жребий", Line: line}
 				if rest != "" && rest != "жребий" {
-					return Script{}, errAt(line, "после координаты можно писать только «жребий», а не %q", rest)
+					return Script{}, errAt(line, s.Replay.Parse.BoutHeaderExtra(rest))
 				}
 			}
 		case section == "game":
 			key, value, ok := strings.Cut(text, ":")
 			if !ok {
-				return Script{}, errAt(line, "в [game] нужны пары «ключ: значение», а не %q", text)
+				return Script{}, errAt(line, s.Replay.Parse.GamePairExpected(text))
 			}
 			key, value = strings.TrimSpace(key), strings.TrimSpace(value)
 			switch key {
@@ -303,7 +308,7 @@ func Parse(src string) (Script, error) {
 			case "scheme":
 				script.Scheme = value
 			default:
-				return Script{}, errAt(line, "[game] не знает ключа %q", key)
+				return Script{}, errAt(line, s.Replay.Parse.GameUnknownKey(key))
 			}
 		case section == "roster":
 			entrant, err := parseEntrant(text, line)
@@ -313,7 +318,7 @@ func Parse(src string) (Script, error) {
 			script.Roster = append(script.Roster, entrant)
 		case section == "составы":
 			if script.individual() {
-				return Script{}, errAt(line, "в личной игре нет составов — участник и есть игрок")
+				return Script{}, errAt(line, s.Replay.Parse.LineupsIndividual())
 			}
 			lineup, err := parseLineup(text, line)
 			if err != nil {
@@ -340,7 +345,7 @@ func Parse(src string) (Script, error) {
 		case section == "бой":
 			codec, ok := CodecFor(script.Game)
 			if !ok {
-				return Script{}, errAt(line, "у игры %q нет формы боя в стенограмме", script.Game)
+				return Script{}, errAt(line, s.Replay.Parse.GameNoCodec(script.Game))
 			}
 			seat, err := parseSeat(text, line, codec)
 			if err != nil {
@@ -348,7 +353,7 @@ func Parse(src string) (Script, error) {
 			}
 			bout.Seats = append(bout.Seats, seat)
 		default:
-			return Script{}, errAt(line, "строка вне секции: %q", text)
+			return Script{}, errAt(line, s.Replay.Parse.LineOutsideSection(text))
 		}
 	}
 	flush()
@@ -369,12 +374,12 @@ func Parse(src string) (Script, error) {
 func checkTables(script Script) error {
 	for _, table := range script.Tables {
 		if len(table.Rows) == 0 {
-			return errAt(table.Line, "%s без единой строки — оборванная стенограмма прошла бы молча", table.At)
+			return errAt(table.Line, s.Replay.Parse.TableNoRows(fmt.Sprint(table.At)))
 		}
 		seen := map[string]int{}
 		for _, row := range table.Rows {
 			if prev, taken := seen[row.Name]; taken {
-				return errAt(row.Line, "%s: %q уже стоит на строке %d", table.At, row.Name, prev)
+				return errAt(row.Line, s.Replay.Parse.TableNameTwice(fmt.Sprint(table.At), row.Name, strconv.Itoa(prev)))
 			}
 			seen[row.Name] = row.Line
 		}
@@ -403,10 +408,10 @@ func checkRoster(script Script) error {
 	numbers := make(map[int]string, len(script.Roster))
 	for _, entrant := range script.Roster {
 		if known[entrant.Name] {
-			return fmt.Errorf("участник %q записан в [roster] дважды", entrant.Name)
+			return corei18n.User(s.Replay.Parse.RosterNameTwice(entrant.Name))
 		}
 		if prev, taken := numbers[entrant.Number]; taken {
-			return fmt.Errorf("номер %d занят и %q, и %q", entrant.Number, prev, entrant.Name)
+			return corei18n.User(s.Replay.Parse.RosterNumberTaken(strconv.Itoa(entrant.Number), prev, entrant.Name))
 		}
 		known[entrant.Name] = true
 		numbers[entrant.Number] = entrant.Name
@@ -414,14 +419,14 @@ func checkRoster(script Script) error {
 	for _, bout := range script.Bouts {
 		for _, seat := range bout.Seats {
 			if !known[seat.Name] {
-				return errAt(seat.Line, "в бою %s сидит %q, которого нет в [roster]", bout.At, seat.Name)
+				return errAt(seat.Line, s.Replay.Parse.SeatUnknown(fmt.Sprint(bout.At), seat.Name))
 			}
 		}
 	}
 	for _, table := range script.Tables {
 		for _, row := range table.Rows {
 			if !known[row.Name] {
-				return errAt(row.Line, "в %s стоит %q, которого нет в [roster]", table.At, row.Name)
+				return errAt(row.Line, s.Replay.Parse.TableUnknown(fmt.Sprint(table.At), row.Name))
 			}
 		}
 	}
@@ -437,10 +442,10 @@ func checkLineups(script Script, teams map[string]bool) error {
 	players := map[string]map[string]bool{}
 	for _, lineup := range script.Lineups {
 		if !teams[lineup.Team] {
-			return errAt(lineup.Line, "состав команды %q, которой нет в [roster]", lineup.Team)
+			return errAt(lineup.Line, s.Replay.Parse.LineupUnknownTeam(lineup.Team))
 		}
 		if players[lineup.Team] != nil {
-			return errAt(lineup.Line, "состав %s записан дважды", lineup.Team)
+			return errAt(lineup.Line, s.Replay.Parse.LineupTwice(lineup.Team))
 		}
 		names := make(map[string]bool, len(lineup.Players))
 		for _, name := range lineup.Players {
@@ -453,7 +458,7 @@ func checkLineups(script Script, teams map[string]bool) error {
 			for _, seat := range bout.Seats {
 				for theme, name := range seat.Players {
 					if name != "" && !players[seat.Name][name] {
-						return errAt(seat.Line, "тему %d у %s играет %q, которого нет в его составе", theme+1, seat.Name, name)
+						return errAt(seat.Line, s.Replay.Parse.ThemePlayerUnknown(strconv.Itoa(theme+1), seat.Name, name))
 					}
 				}
 			}
@@ -462,15 +467,15 @@ func checkLineups(script Script, teams map[string]bool) error {
 	for _, stat := range script.Stats {
 		if stat.Team == "" {
 			if !teams[stat.Player] {
-				return errAt(stat.Line, "статистика %q, которого нет в [roster]", stat.Player)
+				return errAt(stat.Line, s.Replay.Parse.StatUnknown(stat.Player))
 			}
 			continue
 		}
 		if !teams[stat.Team] {
-			return errAt(stat.Line, "статистика команды %q, которой нет в [roster]", stat.Team)
+			return errAt(stat.Line, s.Replay.Parse.StatUnknownTeam(stat.Team))
 		}
 		if len(script.Lineups) > 0 && !players[stat.Team][stat.Player] {
-			return errAt(stat.Line, "статистика %q, которого нет в составе %s", stat.Player, stat.Team)
+			return errAt(stat.Line, s.Replay.Parse.StatNotInLineup(stat.Player, stat.Team))
 		}
 	}
 	return nil
@@ -481,7 +486,7 @@ func checkLineups(script Script, teams map[string]bool) error {
 func splitHeader(text string, line int) (string, string, error) {
 	end := strings.IndexByte(text, ']')
 	if end < 0 {
-		return "", "", errAt(line, "не закрыта скобка в %q", text)
+		return "", "", errAt(line, s.Replay.Parse.HeaderUnclosed(text))
 	}
 	return strings.TrimSpace(text[1:end]), strings.TrimSpace(text[end+1:]), nil
 }
@@ -496,7 +501,7 @@ func parseHead(head string, line int) (Coord, error) {
 	if stage, ok := strings.CutPrefix(head, "таблица "); ok {
 		block, group, _ := strings.Cut(strings.TrimSpace(stage), "/")
 		if block == "" || (group != "" && (!strings.HasPrefix(group, "g") || len(group) < 2 || strings.Contains(group, "/"))) {
-			return Coord{}, errAt(line, "таблица — это блок или группа в нём, например «таблица s1» или «таблица s1/g3», а не %q", stage)
+			return Coord{}, errAt(line, s.Replay.Parse.HeadTableExpected(stage))
 		}
 		return Coord{Block: block, Group: strings.TrimPrefix(group, "g")}, nil
 	}
@@ -508,7 +513,7 @@ func parseTableRow(text string, line int) (TableRow, error) {
 	name = strings.TrimSpace(name)
 	place, err := strconv.ParseFloat(strings.TrimSpace(placeText), 64)
 	if !ok || name == "" || err != nil || place <= 0 {
-		return TableRow{}, errAt(line, "строка таблицы — «место | участник» (делённое место как 1.5), а не %q", text)
+		return TableRow{}, errAt(line, s.Replay.Parse.TableRowExpected(text))
 	}
 	return TableRow{Place: place, Name: name, Line: line}, nil
 }
@@ -521,34 +526,34 @@ func parseCoord(text string, line int) (Coord, error) {
 	coord := Coord{Block: parts[0]}
 	if len(parts) == 5 {
 		if !strings.HasPrefix(parts[1], "g") || len(parts[1]) < 2 {
-			return Coord{}, errAt(line, "группа пишется как g3, а не %q", parts[1])
+			return Coord{}, errAt(line, s.Replay.Parse.GroupExpected(parts[1]))
 		}
 		coord.Group = parts[1][1:]
 		parts = append(parts[:1], parts[2:]...)
 	}
 	if len(parts) != 4 {
 		return Coord{}, errAt(line,
-			"координата — это блок[/группа]/круг/заход/бой, например s1/r1/w1/m1 или s1/g3/r1/w1/m1, а не %q", text)
+			s.Replay.Parse.CoordExpected(text))
 	}
 	if coord.Block == "" {
-		return Coord{}, errAt(line, "координата без блока: %q", text)
+		return Coord{}, errAt(line, s.Replay.Parse.CoordNoBlock(text))
 	}
 	for i, part := range []struct {
 		prefix string
 		into   *int
 		what   string
 	}{
-		{"r", &coord.Round, "круг"},
-		{"w", &coord.Wave, "заход"},
-		{"m", &coord.Match, "бой"},
+		{"r", &coord.Round, s.Replay.Parse.PartRound()},
+		{"w", &coord.Wave, s.Replay.Parse.PartWave()},
+		{"m", &coord.Match, s.Replay.Parse.PartMatch()},
 	} {
 		field := parts[i+1]
 		if !strings.HasPrefix(field, part.prefix) {
-			return Coord{}, errAt(line, "%s пишется как %s1, а не %q", part.what, part.prefix, field)
+			return Coord{}, errAt(line, s.Replay.Parse.PartExpected(part.what, part.prefix, field))
 		}
 		n, err := strconv.Atoi(field[len(part.prefix):])
 		if err != nil || n < 1 {
-			return Coord{}, errAt(line, "%s должен быть номером от 1, а не %q", part.what, field)
+			return Coord{}, errAt(line, s.Replay.Parse.PartNumberExpected(part.what, field))
 		}
 		*part.into = n
 	}
@@ -561,22 +566,22 @@ func parseLineup(text string, line int) (Lineup, error) {
 	team, rest, ok := strings.Cut(text, "|")
 	lineup := Lineup{Team: strings.TrimSpace(team), Line: line}
 	if !ok || lineup.Team == "" {
-		return Lineup{}, errAt(line, "состав — «команда | игрок, игрок, …», а не %q", text)
+		return Lineup{}, errAt(line, s.Replay.Parse.LineupExpected(text))
 	}
 	seen := map[string]bool{}
 	for _, name := range strings.Split(rest, ",") {
 		name = strings.TrimSpace(name)
 		if name == "" {
-			return Lineup{}, errAt(line, "в составе %s пустое имя", lineup.Team)
+			return Lineup{}, errAt(line, s.Replay.Parse.LineupEmptyName(lineup.Team))
 		}
 		if seen[name] {
-			return Lineup{}, errAt(line, "в составе %s игрок %q записан дважды", lineup.Team, name)
+			return Lineup{}, errAt(line, s.Replay.Parse.LineupPlayerTwice(lineup.Team, name))
 		}
 		seen[name] = true
 		lineup.Players = append(lineup.Players, name)
 	}
 	if len(lineup.Players) == 0 {
-		return Lineup{}, errAt(line, "состав %s без единого игрока", lineup.Team)
+		return Lineup{}, errAt(line, s.Replay.Parse.LineupNoPlayers(lineup.Team))
 	}
 	return lineup, nil
 }
@@ -591,24 +596,24 @@ func parseStat(text string, line int, individual bool) (Stat, error) {
 		want = 4
 	}
 	if len(fields) != want {
-		return Stat{}, errAt(line, "строка статистики — %d полей через |, а не %q", want, text)
+		return Stat{}, errAt(line, s.Replay.Parse.StatFields(strconv.Itoa(want), text))
 	}
 	stat := Stat{Player: strings.TrimSpace(fields[0]), Line: line}
 	if stat.Player == "" {
-		return Stat{}, errAt(line, "строка статистики без игрока")
+		return Stat{}, errAt(line, s.Replay.Parse.StatNoPlayer())
 	}
 	numbers := fields[1:]
 	if !individual {
 		stat.Team = strings.TrimSpace(fields[1])
 		if stat.Team == "" {
-			return Stat{}, errAt(line, "статистика %s без команды", stat.Player)
+			return Stat{}, errAt(line, s.Replay.Parse.StatNoTeam(stat.Player))
 		}
 		numbers = fields[2:]
 	}
 	for i, field := range numbers {
 		value, err := strconv.Atoi(strings.TrimSpace(field))
 		if err != nil {
-			return Stat{}, errAt(line, "статистика %s — числа, а не %q", stat.Player, strings.TrimSpace(field))
+			return Stat{}, errAt(line, s.Replay.Parse.StatNotNumbers(stat.Player, strings.TrimSpace(field)))
 		}
 		stat.Values[i] = value
 	}
@@ -621,15 +626,15 @@ func parseStat(text string, line int, individual bool) (Stat, error) {
 func parseEntrant(text string, line int) (Entrant, error) {
 	fields := strings.Split(text, "|")
 	if len(fields) < 2 || len(fields) > 3 {
-		return Entrant{}, errAt(line, "участник — «номер | название | город», а не %q", text)
+		return Entrant{}, errAt(line, s.Replay.Parse.EntrantExpected(text))
 	}
 	number, err := strconv.Atoi(strings.TrimSpace(fields[0]))
 	if err != nil || number < 1 {
-		return Entrant{}, errAt(line, "номер участника — целое от 1, а не %q", strings.TrimSpace(fields[0]))
+		return Entrant{}, errAt(line, s.Replay.Parse.EntrantNumber(strings.TrimSpace(fields[0])))
 	}
 	entrant := Entrant{Number: number, Name: strings.TrimSpace(fields[1])}
 	if entrant.Name == "" {
-		return Entrant{}, errAt(line, "участник без названия")
+		return Entrant{}, errAt(line, s.Replay.Parse.EntrantNoName())
 	}
 	if len(fields) == 3 {
 		entrant.City = strings.TrimSpace(fields[2])
@@ -645,17 +650,17 @@ func parseSeat(text string, line int, codec Codec) (Seat, error) {
 	fields := strings.Split(text, "|")
 	if len(fields) == 5 {
 		if codec.Questions {
-			return Seat{}, errAt(line, "у брейна игрок пишется в самом вопросе, а не пятым полем")
+			return Seat{}, errAt(line, s.Replay.Parse.SeatBrainPlayerField())
 		}
 		if codec.Individual {
-			return Seat{}, errAt(line, "в личной игре игрок не пишется — участник и есть игрок")
+			return Seat{}, errAt(line, s.Replay.Parse.SeatIndividualPlayer())
 		}
 	} else if len(fields) != 4 {
-		return Seat{}, errAt(line, "место в бою — «кто | метки | Σ | место», а не %q", text)
+		return Seat{}, errAt(line, s.Replay.Parse.SeatExpected(text))
 	}
 	seat := Seat{Name: strings.TrimSpace(fields[0]), Line: line}
 	if seat.Name == "" {
-		return Seat{}, errAt(line, "место без участника")
+		return Seat{}, errAt(line, s.Replay.Parse.SeatNoName())
 	}
 	if codec.Questions {
 		questions, err := parseQuestions(fields[1], seat.Name, line)
@@ -671,7 +676,7 @@ func parseSeat(text string, line int, codec Codec) (Seat, error) {
 		seat.Counts = counts
 	} else {
 		if strings.Contains(fields[1], ",") {
-			return Seat{}, errAt(line, "у %s вопросы через запятую — так пишут брейн, а эта игра играет темы", seat.Name)
+			return Seat{}, errAt(line, s.Replay.Parse.SeatCommaNotBrain(seat.Name))
 		}
 		for _, theme := range strings.Fields(fields[1]) {
 			marks, err := parseTheme(theme, line)
@@ -681,7 +686,7 @@ func parseSeat(text string, line int, codec Codec) (Seat, error) {
 			seat.Marks = append(seat.Marks, marks)
 		}
 		if len(seat.Marks) == 0 {
-			return Seat{}, errAt(line, "у %s нет ни одной темы", seat.Name)
+			return Seat{}, errAt(line, s.Replay.Parse.SeatNoThemes(seat.Name))
 		}
 		if len(fields) == 5 {
 			for _, name := range strings.Split(fields[4], ",") {
@@ -692,14 +697,13 @@ func parseSeat(text string, line int, codec Codec) (Seat, error) {
 				seat.Players = append(seat.Players, name)
 			}
 			if len(seat.Players) != len(seat.Marks) {
-				return Seat{}, errAt(line, "у %s тем %d, а игроков %d — игроки пишутся по одному на тему, «-» где лист никого не назвал",
-					seat.Name, len(seat.Marks), len(seat.Players))
+				return Seat{}, errAt(line, s.Replay.Parse.SeatPlayersMismatch(seat.Name, strconv.Itoa(len(seat.Marks)), strconv.Itoa(len(seat.Players))))
 			}
 		}
 	}
 	total, err := strconv.Atoi(strings.TrimSpace(fields[2]))
 	if err != nil {
-		return Seat{}, errAt(line, "Σ у %s — целое число, а не %q", seat.Name, strings.TrimSpace(fields[2]))
+		return Seat{}, errAt(line, s.Replay.Parse.SeatSum(seat.Name, strings.TrimSpace(fields[2])))
 	}
 	seat.Total = total
 	placeText := strings.TrimSpace(fields[3])
@@ -712,8 +716,7 @@ func parseSeat(text string, line int, codec Codec) (Seat, error) {
 	}
 	place, err := strconv.ParseFloat(placeText, 64)
 	if err != nil || place <= 0 {
-		return Seat{}, errAt(line, "место у %s — число от 1 (делённое место пишется как 1.5, поставленное вручную — как 3!, а не напечатанное листом — как -), а не %q",
-			seat.Name, strings.TrimSpace(fields[3]))
+		return Seat{}, errAt(line, s.Replay.Parse.SeatPlace(seat.Name, strings.TrimSpace(fields[3])))
 	}
 	seat.Place = place
 	return seat, nil
@@ -727,30 +730,30 @@ func parseShootout(text string, line int, bout *Bout) error {
 	name, points, ok := strings.Cut(strings.TrimPrefix(text, "перестрелка "), ":")
 	name = strings.TrimSpace(name)
 	if !ok || name == "" {
-		return errAt(line, "перестрелка пишется как «перестрелка Ктулху: 60», а не %q", text)
+		return errAt(line, s.Replay.Parse.ShootoutExpected(text))
 	}
 	value, err := strconv.Atoi(strings.TrimSpace(points))
 	if err != nil || value == 0 {
-		return errAt(line, "перестрелка у %s — ненулевое целое, а не %q", name, strings.TrimSpace(points))
+		return errAt(line, s.Replay.Parse.ShootoutNotNumber(name, strings.TrimSpace(points)))
 	}
 	for i := range bout.Seats {
 		if bout.Seats[i].Name != name {
 			continue
 		}
 		if bout.Seats[i].Shootout != 0 {
-			return errAt(line, "перестрелка у %s записана дважды", name)
+			return errAt(line, s.Replay.Parse.ShootoutTwice(name))
 		}
 		bout.Seats[i].Shootout = value
 		return nil
 	}
-	return errAt(line, "перестрелка у %s, которого нет в бою %s", name, bout.At)
+	return errAt(line, s.Replay.Parse.ShootoutUnknown(name, fmt.Sprint(bout.At)))
 }
 
 // parseTheme reads one theme's five cells: R taken, W lost, - never played.
 func parseTheme(text string, line int) ([5]Mark, error) {
 	var marks [5]Mark
 	if len(text) != 5 {
-		return marks, errAt(line, "в теме пять ответов, а в %q — %d", text, len(text))
+		return marks, errAt(line, s.Replay.Parse.ThemeFive(text, strconv.Itoa(len(text))))
 	}
 	for i := 0; i < 5; i++ {
 		switch text[i] {
@@ -761,7 +764,7 @@ func parseTheme(text string, line int) ([5]Mark, error) {
 		case 'W', 'w':
 			marks[i] = Wrong
 		default:
-			return marks, errAt(line, "в теме %q знак %q — бывают только R, W и -", text, text[i:i+1])
+			return marks, errAt(line, s.Replay.Parse.ThemeMark(text, text[i:i+1]))
 		}
 	}
 	return marks, nil
@@ -784,7 +787,7 @@ func parseOverride(text string, line int) (Override, error) {
 	subject, reason = strings.TrimSpace(subject), strings.TrimSpace(reason)
 	if !ok || subject == "" || reason == "" {
 		return Override{}, errAt(line,
-			"расхождение пишется как «override [координата] поле [участник]: почему листу верить нельзя» — без причины это молча спрятанная ошибка")
+			s.Replay.Parse.OverrideExpected())
 	}
 	field, participant, _ := strings.Cut(subject, " ")
 	return Override{At: at, Field: field, Participant: strings.TrimSpace(participant), Reason: reason, Line: line}, nil
@@ -801,7 +804,7 @@ func parseCounts(field, who string, line, size int) ([][]int, error) {
 	var out [][]int
 	for _, theme := range strings.Fields(field) {
 		if len(theme) != size {
-			return nil, errAt(line, "у %s тема из %d вопросов, а написано %q", who, size, theme)
+			return nil, errAt(line, s.Replay.Parse.CountsThemeSize(who, strconv.Itoa(size), theme))
 		}
 		counts := make([]int, 0, size)
 		for _, r := range theme {
@@ -811,13 +814,13 @@ func parseCounts(field, who string, line, size int) ([][]int, error) {
 			case r >= '0' && r <= '3':
 				counts = append(counts, int(r-'0'))
 			default:
-				return nil, errAt(line, "у %s в теме %q — жду 0..3 или «.», сколько из троих ответили верно", who, theme)
+				return nil, errAt(line, s.Replay.Parse.CountsDigit(who, theme))
 			}
 		}
 		out = append(out, counts)
 	}
 	if len(out) == 0 {
-		return nil, errAt(line, "у %s нет ни одной темы", who)
+		return nil, errAt(line, s.Replay.Parse.SeatNoThemes(who))
 	}
 	return out, nil
 }
@@ -831,7 +834,7 @@ func parseQuestions(field, who string, line int) ([]Answer, error) {
 	for _, entry := range strings.Split(field, ",") {
 		entry = strings.TrimSpace(entry)
 		if entry == "" {
-			return nil, errAt(line, "у %s пустой вопрос — незаданный пишется как -", who)
+			return nil, errAt(line, s.Replay.Parse.QuestionEmpty(who))
 		}
 		if entry == "-" {
 			out = append(out, Answer{})
@@ -845,12 +848,12 @@ func parseQuestions(field, who string, line int) ([]Answer, error) {
 		case "W":
 			answer.Mark = Wrong
 		default:
-			return nil, errAt(line, "вопрос у %s начинается с R, W или -, а не с %q", who, mark)
+			return nil, errAt(line, s.Replay.Parse.QuestionMark(who, mark))
 		}
 		out = append(out, answer)
 	}
 	if len(out) == 0 {
-		return nil, errAt(line, "у %s нет ни одного вопроса", who)
+		return nil, errAt(line, s.Replay.Parse.QuestionNone(who))
 	}
 	return out, nil
 }

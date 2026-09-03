@@ -22,6 +22,7 @@ import (
 	"dope/dope/domain/games"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // --- OD: rating.chgk.info "tournament-tours" layout ---------------------------
@@ -719,13 +720,13 @@ func BuildMultiSheets(f *excelize.File, schemeJSON, stateJSON string) error {
 	var scheme games.MultiScheme
 	if strings.TrimSpace(schemeJSON) != "" {
 		if err := json.Unmarshal([]byte(schemeJSON), &scheme); err != nil {
-			return fmt.Errorf("parse Мультиигры scheme: %w", err)
+			return corei18n.User(dopestrings.Default.Export.Error.MultiScheme(err.Error()))
 		}
 	}
 	var state games.MultiState
 	if strings.TrimSpace(stateJSON) != "" {
 		if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
-			return fmt.Errorf("parse Мультиигры state: %w", err)
+			return corei18n.User(dopestrings.Default.Export.Error.MultiState(err.Error()))
 		}
 	}
 	if err := buildMultiDetailedSheet(f, &scheme, &state); err != nil {
@@ -893,7 +894,7 @@ func writeTroikaMatch(f *excelize.File, sheet string, row int, match store.Match
 	var state games.TroikaState
 	if len(match.State) > 0 {
 		if err := json.Unmarshal(match.State, &state); err != nil {
-			return row, fmt.Errorf("parse Тройка state of %s: %w", match.Code, err)
+			return row, corei18n.User(s.Export.Error.TroikaState(match.Code, err.Error()))
 		}
 	}
 	if err := setRow(f, sheet, row, []interface{}{match.Title}); err != nil {

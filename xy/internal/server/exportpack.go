@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"log"
 	"net/http"
 	"strings"
 
@@ -11,6 +12,8 @@ import (
 	"xy/internal/chgk/fsource"
 	"xy/internal/chgk/handout"
 	"xy/internal/chgk/typstdoc"
+
+	xystrings "xy/i18nstrings"
 )
 
 // The pack export: one request, several formats, one download. The export modal
@@ -79,7 +82,8 @@ func (s *server) handleExportPack(w http.ResponseWriter, r *http.Request) {
 	if formats.needsTypst() {
 		var err error
 		if ts, err = s.typesetter(); err != nil {
-			httpError(w, http.StatusInternalServerError, "typst unavailable: "+err.Error())
+			log.Printf("typst unavailable: %v", err)
+			httpError(w, http.StatusInternalServerError, xystrings.Default.Server.Internal())
 			return
 		}
 	}
@@ -99,7 +103,8 @@ func (s *server) handleExportPack(w http.ResponseWriter, r *http.Request) {
 			httpError(w, http.StatusGatewayTimeout, "export timed out")
 			return
 		}
-		httpError(w, http.StatusInternalServerError, "export failed: "+err.Error())
+		log.Printf("export failed: %v", err)
+		httpError(w, http.StatusInternalServerError, xystrings.Default.Server.Internal())
 		return
 	}
 	if len(files) == 0 {
@@ -112,7 +117,8 @@ func (s *server) handleExportPack(w http.ResponseWriter, r *http.Request) {
 	}
 	zipped, err := zipPack(files)
 	if err != nil {
-		httpError(w, http.StatusInternalServerError, "zip failed: "+err.Error())
+		log.Printf("zip failed: %v", err)
+		httpError(w, http.StatusInternalServerError, xystrings.Default.Server.Internal())
 		return
 	}
 	serveDownload(w, zipped, req.name+".zip", "application/zip")

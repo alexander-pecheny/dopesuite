@@ -2,7 +2,7 @@ package server
 
 import "testing"
 
-// TestHumanMB pins the rounding: a handful of bytes must read as "0 МБ" rather
+// TestHumanMB pins the rounding: a handful of bytes must read as "0 MB" rather
 // than spelling out a float's worth of decimals.
 func TestHumanMB(t *testing.T) {
 	cases := map[int64]string{

@@ -251,7 +251,7 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
         return;
       case "label-add":
       case "label-del": {
-        if (massPick == null) throw new Error("не выбрана метка");
+        if (massPick == null) throw new Error(S.board.error.noLabel());
         const own = board.state.cardLabels.filter((a) => a.cardId === card.id);
         const keep = action.key === "label-del"
           ? own.filter((a) => !(a.labelId === massPick && a.sessionId == null))
@@ -262,7 +262,7 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
       }
       case "session-add":
       case "session-del": {
-        if (massPick == null) throw new Error("не выбран тест");
+        if (massPick == null) throw new Error(S.board.error.noTest());
         const plays = board.playingsOf(card.id);
         const next = action.key === "session-del"
           ? plays.filter((id) => id !== massPick)
@@ -278,7 +278,7 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
       }
       case "move":
       case "copy": {
-        if (!massTarget) throw new Error("не выбран список");
+        if (!massTarget) throw new Error(S.board.error.noList());
         await deps.transfer.transferCard(card, massTarget.listId, massTarget.ctx, action.key === "move");
         return;
       }

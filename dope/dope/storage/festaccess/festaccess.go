@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"dope/dope/domain/core"
@@ -13,6 +14,8 @@ import (
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 type HostAccessMember struct {
@@ -144,7 +147,7 @@ func SaveFestAccess(eng *core.Engine, ctx context.Context, festID, actorID int64
 		return err
 	}
 	if !roles.CanManageAccess(actorRole) {
-		return errors.New("нет прав менять доступ")
+		return corei18n.User(dopestrings.Default.Festaccess.Manage.Denied())
 	}
 
 	creatorID, err := syncFestCreatorAccessTx(ctx, tx, festID)
@@ -171,22 +174,22 @@ func SaveFestAccess(eng *core.Engine, ctx context.Context, festID, actorID int64
 	addClicked := form.Get("add_access") == "1"
 	nickname := strings.TrimSpace(form.Get("new_nickname"))
 	if addClicked && nickname == "" {
-		return errors.New("введите никнейм")
+		return corei18n.User(dopestrings.Default.Festaccess.Add.NicknameRequired())
 	}
 	if addClicked {
 		role := roles.Normalize(form.Get("new_role"))
 		if !roles.Assignable(role) {
-			return errors.New("для нового доступа выберите admin или host")
+			return corei18n.User(dopestrings.Default.Festaccess.Add.RoleInvalid())
 		}
 		userID, err := lookupUserIDByNicknameTx(ctx, tx, nickname)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return fmt.Errorf("пользователь %q не найден", nickname)
+				return corei18n.User(dopestrings.Default.Festaccess.Add.UserNotFound(nickname))
 			}
 			return err
 		}
 		if userID == creatorID {
-			return errors.New("создатель уже есть в доступе")
+			return corei18n.User(dopestrings.Default.Festaccess.Add.CreatorExists())
 		}
 		if err := applyFestAccessMemberTx(ctx, tx, festID, creatorID, userID, current[userID], role, false, now); err != nil {
 			return err
@@ -205,7 +208,7 @@ func SaveFestAccessBulk(eng *core.Engine, ctx context.Context, festID, actorID i
 		return 0, err
 	}
 	if len(changes) == 0 {
-		return 0, errors.New("вставьте хотя бы одну строку")
+		return 0, corei18n.User(dopestrings.Default.Festaccess.Bulk.Empty())
 	}
 
 	tx, err := eng.BeginWriteTx(ctx)
@@ -219,7 +222,7 @@ func SaveFestAccessBulk(eng *core.Engine, ctx context.Context, festID, actorID i
 		return 0, err
 	}
 	if !roles.CanManageAccess(actorRole) {
-		return 0, errors.New("нет прав менять доступ")
+		return 0, corei18n.User(dopestrings.Default.Festaccess.Manage.Denied())
 	}
 
 	creatorID, err := syncFestCreatorAccessTx(ctx, tx, festID)
@@ -236,12 +239,12 @@ func SaveFestAccessBulk(eng *core.Engine, ctx context.Context, festID, actorID i
 		userID, err := lookupUserIDByNicknameTx(ctx, tx, change.Nickname)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return 0, fmt.Errorf("строка %d: пользователь %q не найден", change.Line, change.Nickname)
+				return 0, corei18n.User(dopestrings.Default.Festaccess.Bulk.UserNotFound(strconv.Itoa(change.Line), change.Nickname))
 			}
 			return 0, err
 		}
 		if err := applyFestAccessMemberTx(ctx, tx, festID, creatorID, userID, current[userID], change.Role, change.Delete, now); err != nil {
-			return 0, fmt.Errorf("строка %d: %w", change.Line, err)
+			return 0, corei18n.User(dopestrings.Default.Festaccess.Bulk.LinePrefix(strconv.Itoa(change.Line), err.Error()))
 		}
 		if change.Delete {
 			delete(current, userID)
@@ -292,7 +295,7 @@ where o.fest_id = ?`, creatorID, creatorID, festID)
 func applyFestAccessMemberTx(ctx context.Context, tx *sql.Tx, festID, creatorID, userID int64, currentRole, nextRole string, deleteMember bool, now string) error {
 	if userID == creatorID || currentRole == roles.Creator {
 		if deleteMember || (nextRole != "" && nextRole != roles.Creator) {
-			return errors.New("создателя нельзя удалить или изменить")
+			return corei18n.User(dopestrings.Default.Festaccess.Member.CreatorProtected())
 		}
 		_, err := tx.ExecContext(ctx, `
 update fest_organizers set role = 'creator' where fest_id = ? and user_id = ?`, festID, userID)
@@ -307,7 +310,7 @@ delete from fest_organizers where fest_id = ? and user_id = ?`, festID, userID)
 		nextRole = currentRole
 	}
 	if !roles.Assignable(nextRole) {
-		return errors.New("роль должна быть admin или host")
+		return corei18n.User(dopestrings.Default.Festaccess.Member.RoleInvalid())
 	}
 	_, err := tx.ExecContext(ctx, `
 insert into fest_organizers(fest_id, user_id, role, added_at)

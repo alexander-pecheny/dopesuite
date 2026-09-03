@@ -2,8 +2,10 @@ package xycli
 
 import (
 	"encoding/json"
-	"errors"
 	"strings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
+	xystrings "xy/i18nstrings"
 )
 
 // Labels. An assignment may be scoped to a Playing (what the testers thought at
@@ -17,9 +19,10 @@ func cmdLabel(a *app, args []string) error {
 }
 
 func labelList(a *app, args []string) error {
-	fs := a.flags("label ls", "Метки доски; с --card — метки одной карточки.")
+	s := xystrings.Default
+	fs := a.flags("label ls", s.Cli.Label.LsUsage())
 	board := a.boardFlag(fs)
-	card := fs.Int64("card", 0, "показать метки этой карточки")
+	card := fs.Int64("card", 0, s.Cli.Label.LsCardFlag())
 	_, err := a.parse(fs, args)
 	if err != nil {
 		return err
@@ -55,16 +58,17 @@ func labelList(a *app, args []string) error {
 }
 
 func labelAdd(a *app, args []string) error {
-	fs := a.flags("label add", "Создать метку на доске.")
+	s := xystrings.Default
+	fs := a.flags("label add", s.Cli.Label.AddUsage())
 	board := a.boardFlag(fs)
-	name := fs.String("name", "", "название метки")
-	color := fs.String("color", "#8ec7ff", "цвет метки (hex)")
+	name := fs.String("name", "", s.Cli.Label.AddNameFlag())
+	color := fs.String("color", "#8ec7ff", s.Cli.Label.AddColorFlag())
 	_, err := a.parse(fs, args)
 	if err != nil {
 		return err
 	}
 	if *name == "" {
-		return errors.New("нужен --name")
+		return corei18n.User(s.Cli.Label.NeedName())
 	}
 	c, b, err := a.open(*board)
 	if err != nil {
@@ -82,22 +86,23 @@ func labelAdd(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	return a.emit(map[string]any{"id": id}, func() { a.printf("метка %d «%s» создана\n", id, *name) })
+	return a.emit(map[string]any{"id": id}, func() { a.printf("%s", s.Cli.Label.Created(itoa(id), *name)) })
 }
 
 func labelAssign(a *app, args []string) error {
-	fs := a.flags("label assign", "xy-cli label assign <id карточки> --board B --label «готово» [--remove]")
+	s := xystrings.Default
+	fs := a.flags("label assign", s.Cli.Label.AssignUsage())
 	board := a.boardFlag(fs)
-	label := fs.String("label", "", "метка: id или название")
-	remove := fs.Bool("remove", false, "снять метку вместо того, чтобы поставить")
+	label := fs.String("label", "", s.Cli.Label.AssignLabelFlag())
+	remove := fs.Bool("remove", false, s.Cli.Label.AssignRemoveFlag())
 	rest, err := a.parse(fs, args)
 	if err != nil {
 		return err
 	}
 	if len(rest) != 1 || *label == "" {
-		return errors.New("нужен id карточки и --label")
+		return corei18n.User(s.Cli.Label.NeedCardLabel())
 	}
-	cardID, err := parseID(rest[0], "карточка")
+	cardID, err := parseID(rest[0], s.Cli.Shared.WhatCard())
 	if err != nil {
 		return err
 	}
@@ -132,16 +137,16 @@ func labelAssign(a *app, args []string) error {
 	}
 	if *remove && !had {
 		return a.emit(map[string]any{"card_id": cardID, "label_id": target.ID, "changed": false}, func() {
-			a.printf("метка «%s» и так не стоит\n", target.Name)
+			a.printf("%s", s.Cli.Label.AlreadyUnset(target.Name))
 		})
 	}
 	if !*remove && had {
 		return a.emit(map[string]any{"card_id": cardID, "label_id": target.ID, "changed": false}, func() {
-			a.printf("метка «%s» и так стоит\n", target.Name)
+			a.printf("%s", s.Cli.Label.AlreadySet(target.Name))
 		})
 	}
 
-	// The metadata trail: the лента says which label came and went, in the same
+	// The metadata trail: the timeline says which label came and went, in the same
 	// shape the browser writes.
 	eventType := "label_add"
 	if *remove {
@@ -159,11 +164,11 @@ func labelAssign(a *app, args []string) error {
 	if err := c.SetCardLabels(cardID, next, events); err != nil {
 		return err
 	}
-	verb := "поставлена"
+	verb := s.Cli.Label.VerbSet()
 	if *remove {
-		verb = "снята"
+		verb = s.Cli.Label.VerbRemoved()
 	}
 	return a.emit(map[string]any{"card_id": cardID, "label_id": target.ID, "changed": true}, func() {
-		a.printf("метка «%s» %s на карточке %d\n", strings.TrimSpace(target.Name), verb, cardID)
+		a.printf("%s", s.Cli.Label.Assigned(strings.TrimSpace(target.Name), verb, itoa(cardID)))
 	})
 }

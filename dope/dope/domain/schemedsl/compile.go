@@ -55,11 +55,11 @@ func uniqueSlugs(scheme store.FestScheme) error {
 			continue
 		}
 		if codes[stage.Slug] {
-			return fmt.Errorf("slug %q совпадает с кодом этапа — вкладки перепутаются", stage.Slug)
+			return fmt.Errorf("%s", dopestrings.Default.Scheme.Structure.SlugIsStageCode(stage.Slug))
 		}
 		block := stage.Grain.Block
 		if held, taken := owner[stage.Slug]; taken && held != block {
-			return fmt.Errorf("slug %q носят два блока — вкладки перепутаются", stage.Slug)
+			return fmt.Errorf("%s", dopestrings.Default.Scheme.Structure.SlugTwoBlocks(stage.Slug))
 		}
 		owner[stage.Slug] = block
 	}
@@ -74,12 +74,12 @@ func uniqueCodes(scheme store.FestScheme) error {
 	matches := map[string]string{}
 	for _, stage := range scheme.Stages {
 		if stages[stage.Code] {
-			return fmt.Errorf("этап %q собран дважды — у схемы столкнулись коды", stage.Code)
+			return fmt.Errorf("%s", dopestrings.Default.Scheme.Structure.StageCodeDup(stage.Code))
 		}
 		stages[stage.Code] = true
 		for _, match := range stage.Matches {
 			if where, taken := matches[match.Code]; taken {
-				return fmt.Errorf("бой %q есть и в этапе %q, и в %q", match.Code, where, stage.Code)
+				return fmt.Errorf("%s", dopestrings.Default.Scheme.Structure.MatchCodeDup(match.Code, where, stage.Code))
 			}
 			matches[match.Code] = stage.Code
 		}
@@ -135,7 +135,7 @@ type compiler struct {
 
 func (c *compiler) run() error {
 	if len(c.doc.Blocks) == 0 {
-		return errAt(0, "в [scheme] нет ни одного блока")
+		return errAt(0, "%s", dopestrings.Default.Scheme.Structure.NoBlocks())
 	}
 	if err := c.checkKeys(); err != nil {
 		return err
@@ -234,7 +234,7 @@ func (c *compiler) checkKeys() error {
 	}
 	for key, v := range c.doc.Defaults.Values {
 		if !inDefaults[key] {
-			return errAt(v.Line, "неизвестный ключ %s в [defaults] (есть %s)", key, strings.Join(structure.SortedNames(inDefaults), ", "))
+			return errAt(v.Line, "%s", dopestrings.Default.Scheme.Keys.UnknownDefaults(key, strings.Join(structure.SortedNames(inDefaults), ", ")))
 		}
 	}
 	for key, v := range c.doc.Init.Values {
@@ -242,7 +242,7 @@ func (c *compiler) checkKeys() error {
 			continue
 		}
 		if !initKeys[key] {
-			return errAt(v.Line, "неизвестный ключ %s в [init] (есть %s)", key, strings.Join(structure.SortedNames(initKeys), ", "))
+			return errAt(v.Line, "%s", dopestrings.Default.Scheme.Keys.UnknownInit(key, strings.Join(structure.SortedNames(initKeys), ", ")))
 		}
 	}
 	for _, blk := range c.doc.Blocks {
@@ -263,12 +263,12 @@ func (c *compiler) checkKeys() error {
 			base, _, isDotted := strings.Cut(key, ".")
 			if isDotted {
 				if !dotted[base] {
-					return errAt(v.Line, "неизвестный ключ %s (раунд дописывают к %s)", key, strings.Join(structure.SortedNames(dotted), ", "))
+					return errAt(v.Line, "%s", dopestrings.Default.Scheme.Keys.UnknownDotted(key, strings.Join(structure.SortedNames(dotted), ", ")))
 				}
 				continue // round suffixes are validated by the block's kind
 			}
 			if !known[key] {
-				return errAt(v.Line, "неизвестный ключ %s (есть %s)", key, strings.Join(structure.SortedNames(known), ", "))
+				return errAt(v.Line, "%s", dopestrings.Default.Scheme.Keys.UnknownBlock(key, strings.Join(structure.SortedNames(known), ", ")))
 			}
 		}
 	}
@@ -285,7 +285,7 @@ func (c *compiler) readPlayerSeed() (*store.SchemePlayerSeed, error) {
 		return nil, err
 	}
 	if !ok || len(games) == 0 {
-		return nil, errAt(line, "seed: players — нужен games: [игра, игра], откуда берутся места игроков")
+		return nil, errAt(line, "%s", dopestrings.Default.Scheme.Seed.PlayersNeedGames())
 	}
 	out := &store.SchemePlayerSeed{Games: games, Player: map[string]string{}, Seed: map[string]string{}}
 	for key, v := range c.doc.Init.Values {
@@ -307,7 +307,7 @@ func (c *compiler) readPlayerSeed() (*store.SchemePlayerSeed, error) {
 		}
 	}
 	if len(out.Seed) == 0 {
-		return nil, errAt(line, "seed: players — нужен хотя бы один seed.<метрика>: mean(<метрика игрока>)")
+		return nil, errAt(line, "%s", dopestrings.Default.Scheme.Seed.PlayersNeedSeed())
 	}
 	return out, nil
 }
@@ -344,7 +344,7 @@ func (c *compiler) readVenues() error {
 	s := dopestrings.Default
 	if count, ok := c.doc.Defaults.Int("venues"); ok {
 		if count < 1 {
-			return errAt(c.doc.Defaults.Values["venues"].Line, "venues: нужен хотя бы один стол")
+			return errAt(c.doc.Defaults.Values["venues"].Line, "%s", dopestrings.Default.Scheme.Venues.Count())
 		}
 		for i := 1; i <= count; i++ {
 			c.scheme.Venues = append(c.scheme.Venues, store.SchemeVenue{Number: i, Title: s.Scheme.Titles.Venue(strconv.Itoa(i))})
@@ -403,11 +403,11 @@ func (c *compiler) blockVenues(blk Section, rounds []string) ([]int, error) {
 				}
 			}
 			if nums[i] == 0 {
-				return nil, errAt(blk.Values[key].Line, "%s: стол %q не объявлен в venues", key, item)
+				return nil, errAt(blk.Values[key].Line, "%s", dopestrings.Default.Scheme.Venues.Undeclared(key, item))
 			}
 		}
 		if len(nums) == 0 {
-			return nil, errAt(blk.Values[key].Line, "%s: пустой список столов", key)
+			return nil, errAt(blk.Values[key].Line, "%s", dopestrings.Default.Scheme.Venues.Empty(key))
 		}
 		return nums, nil
 	}
@@ -584,17 +584,17 @@ func (c *compiler) blockEntrants(index int, blk Section, groups, size int) ([][]
 	total := groups * size
 	if index == 0 {
 		if len(c.in.Entrants) > 0 && len(c.in.Entrants) != total {
-			return nil, errAt(blk.Line, "схеме нужно %d участников, а посеяно %d", total, len(c.in.Entrants))
+			return nil, errAt(blk.Line, "%s", dopestrings.Default.Scheme.Entrants.CountMismatch(strconv.Itoa(total), strconv.Itoa(len(c.in.Entrants))))
 		}
 		return c.dealSeeds(groups, size), nil
 	}
 	prev := c.prev
 	if prev.Proceeding <= 0 {
-		return nil, errAt(blk.Line, "предыдущему блоку нужен proceeding_participants, чтобы продолжить схему")
+		return nil, errAt(blk.Line, "%s", dopestrings.Default.Scheme.Entrants.ProceedingMissing())
 	}
 	supply := len(prev.Groups) * prev.Proceeding
 	if supply != total {
-		return nil, errAt(blk.Line, "из предыдущего блока выходят %d участников, а блоку нужно %d", supply, total)
+		return nil, errAt(blk.Line, "%s", dopestrings.Default.Scheme.Entrants.SupplyMismatch(strconv.Itoa(supply), strconv.Itoa(total)))
 	}
 	if incoming, _ := blockReseedSpec(blk); incoming {
 		return c.dealReseed(index, blk, groups, size)
@@ -634,8 +634,7 @@ func (c *compiler) reseedSortRules(blk Section) ([]store.SchemeSortRule, error) 
 	known := c.rankable("reseed", blk)
 	for _, token := range tokens {
 		if !known[token.Metric] {
-			return nil, errAt(blk.Line, "sorting: %s не считается на пересеве — ни протокол, ни правила подсчёта такой метрики не дают (есть %s)",
-				token.Metric, strings.Join(structure.SortedNames(known), ", "))
+			return nil, errAt(blk.Line, "%s", dopestrings.Default.Scheme.Reseed.MetricUnknown(token.Metric, strings.Join(structure.SortedNames(known), ", ")))
 		}
 		rules = append(rules, store.SchemeSortRule{Metric: token.Metric, Dir: sortDir(token)})
 	}
@@ -707,7 +706,7 @@ func (c *compiler) reseedSources(index int, blk Section, otherwise, self []strin
 			last++
 		}
 		if _, err := fmt.Sscanf(token, "s%d", &n); err != nil || n < 1 || n > last {
-			return nil, errAt(blk.Values["stats_from"].Line, "stats_from: %s — доступны блоки s1..s%d", token, last)
+			return nil, errAt(blk.Values["stats_from"].Line, "%s", dopestrings.Default.Scheme.Reseed.StatsFromBounds(token, strconv.Itoa(last)))
 		}
 		if n == index+1 {
 			sources = append(sources, self...)
@@ -734,7 +733,7 @@ func (c *compiler) prevPlaceSlots() []store.SchemeSlot {
 // previous group, then a snake deal of its ranks.
 func (c *compiler) dealReseed(index int, blk Section, groups, size int) ([][]store.SchemeSlot, error) {
 	if supply := len(c.prev.Groups) * c.prev.Proceeding; supply != groups*size {
-		return nil, errAt(blk.Line, "из предыдущего блока выходят %d участников, а блоку нужно %d", supply, groups*size)
+		return nil, errAt(blk.Line, "%s", dopestrings.Default.Scheme.Entrants.SupplyMismatch(strconv.Itoa(supply), strconv.Itoa(groups*size)))
 	}
 	sources, err := c.reseedSources(index, blk, c.prevStageCodes(), nil)
 	if err != nil {
@@ -762,16 +761,16 @@ func (c *compiler) dealDeterministic(blk Section, groups, size int) ([][]store.S
 	sourceGroups := len(prev.Groups)
 	rows := sourceGroups / groups
 	needsReseed := func(why string) error {
-		return errAt(blk.Line, "%s — добавьте reseed: true", why)
+		return errAt(blk.Line, "%s", dopestrings.Default.Scheme.Reseed.NeedsReseed(why))
 	}
 	if prev.Proceeding != 2 {
-		return nil, needsReseed("детерминированная рассадка определена для proceeding_participants: 2")
+		return nil, needsReseed(dopestrings.Default.Scheme.Reseed.ProceedingTwo())
 	}
 	if rows*groups != sourceGroups || groups%2 != 0 {
-		return nil, needsReseed("нет шаблона рассадки из этих групп")
+		return nil, needsReseed(dopestrings.Default.Scheme.Reseed.NoTemplate())
 	}
 	if size != 2*rows {
-		return nil, needsReseed("нет шаблона рассадки из этих групп")
+		return nil, needsReseed(dopestrings.Default.Scheme.Reseed.NoTemplate())
 	}
 	out := make([][]store.SchemeSlot, groups)
 	for g := 0; g < groups; g++ {
@@ -798,20 +797,20 @@ func (c *compiler) dealDeterministic(blk Section, groups, size int) ([][]store.S
 func (c *compiler) expandBlock(index int) error {
 	blk := c.doc.Blocks[index]
 	if index > 0 && c.prev.Terminal {
-		return errAt(blk.Line, "предыдущий блок кончается серией боёв — за ним нельзя продолжить схему")
+		return errAt(blk.Line, "%s", dopestrings.Default.Scheme.Reseed.PreviousTerminal())
 	}
 	if v, present := blk.Values["stats_from"]; present {
 		if incoming, boundary := blockReseedSpec(blk); !incoming && boundary == "" {
-			return errAt(v.Line, "stats_from работает только вместе с reseed")
+			return errAt(v.Line, "%s", dopestrings.Default.Scheme.Reseed.StatsFromNeedsReseed())
 		}
 	}
 	kind, _ := blk.Str("kind")
 	if kind == "" {
-		return errAt(blk.Line, "блоку нужен kind")
+		return errAt(blk.Line, "%s", dopestrings.Default.Scheme.Structure.KindMissing())
 	}
 	macro, ok := structure.MacroFor(kind)
 	if !ok {
-		return errAt(blk.Line, "неизвестный kind %s (есть %s)", kind, strings.Join(structure.Words(), ", "))
+		return errAt(blk.Line, "%s", dopestrings.Default.Scheme.Structure.KindUnknown(kind, strings.Join(structure.Words(), ", ")))
 	}
 	firstStage := len(c.scheme.Stages)
 	out, err := c.expandThrough(index, blk, macro)
@@ -868,7 +867,7 @@ func (c *compiler) roundTitle(blk Section, names []string, derived string) strin
 		}
 	}
 	if block, ok := blk.Str("title"); ok && len(c.doc.Blocks) > 1 {
-		return block + ". " + title
+		return dopestrings.Default.Scheme.Titles.Stage(block, title)
 	}
 	return title
 }
@@ -954,10 +953,10 @@ func (c *compiler) rejectRoundKeys(blk Section, rounds []string) error {
 			continue // a scoring rule's suffix is a metric name, not a round
 		}
 		if !known[suffix] {
-			return errAt(v.Line, "%s: в этом блоке нет раунда %s (есть %s)", key, suffix, strings.Join(structure.SortedNames(known), ", "))
+			return errAt(v.Line, "%s", dopestrings.Default.Scheme.Keys.UnknownRound(key, suffix, strings.Join(structure.SortedNames(known), ", ")))
 		}
 		if prefix == "match_size" && !strings.HasPrefix(suffix, "r") {
-			return errAt(v.Line, "%s: размер боя задаётся по номеру раунда, match_size.r%s", key, "N")
+			return errAt(v.Line, "%s", dopestrings.Default.Scheme.Keys.MatchSizeRound(key))
 		}
 	}
 	return nil

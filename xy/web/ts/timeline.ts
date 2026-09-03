@@ -927,7 +927,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
 
   function mustDK(): DataKey {
     const dk = deps.getDK();
-    if (!dk) throw new Error("нет ключа доски");
+    if (!dk) throw new Error(S.timeline.missingDk());
     return dk;
   }
 

@@ -80,13 +80,13 @@ func Parse(src string) (*Doc, error) {
 				section = name
 				block = nil
 			default:
-				return nil, errAt(lineNo, "неизвестная секция [%s] — есть [defaults], [init], [scheme]", name)
+				return nil, errAt(lineNo, "%s", dopestrings.Default.Scheme.Parse.UnknownSection(name))
 			}
 			continue
 		}
 		if line == "---" {
 			if section != "scheme" {
-				return nil, errAt(lineNo, "--- разделяет блоки только внутри [scheme]")
+				return nil, errAt(lineNo, "%s", dopestrings.Default.Scheme.Parse.Separator())
 			}
 			block = nil
 			continue
@@ -94,14 +94,14 @@ func Parse(src string) (*Doc, error) {
 		key, value, ok := strings.Cut(line, ":")
 		key = strings.TrimSpace(key)
 		if !ok || key == "" || strings.ContainsAny(key, " \t") {
-			return nil, errAt(lineNo, "не понимаю строку %q — жду key: value", line)
+			return nil, errAt(lineNo, "%s", dopestrings.Default.Scheme.Parse.UnparsedLine(line))
 		}
 		target, err := doc.sectionFor(section, &block, lineNo)
 		if err != nil {
 			return nil, err
 		}
 		if prev, dup := target.Values[key]; dup {
-			return nil, errAt(lineNo, "ключ %s уже задан на строке %d", key, prev.Line)
+			return nil, errAt(lineNo, "%s", dopestrings.Default.Scheme.Parse.DuplicateKey(key, strconv.Itoa(prev.Line)))
 		}
 		target.Values[key] = Value{Line: lineNo, Raw: strings.TrimSpace(value)}
 	}
@@ -121,7 +121,7 @@ func (doc *Doc) sectionFor(section string, block **Section, lineNo int) (*Sectio
 		}
 		return *block, nil
 	default:
-		return nil, errAt(lineNo, "ключ вне секции — начните с [defaults], [init] или [scheme]")
+		return nil, errAt(lineNo, "%s", dopestrings.Default.Scheme.Parse.KeyOutsideSection())
 	}
 }
 
@@ -175,7 +175,7 @@ func (s Section) IntErr(key string) (int, error) {
 	}
 	n, err := strconv.Atoi(v.Raw)
 	if err != nil {
-		return 0, errAt(v.Line, "%s: жду целое число, а не %q", key, v.Raw)
+		return 0, errAt(v.Line, "%s", dopestrings.Default.Scheme.Parse.IntExpected(key, v.Raw))
 	}
 	return n, nil
 }
@@ -203,7 +203,7 @@ func (s Section) List(key string) ([]string, bool, error) {
 		return nil, false, nil
 	}
 	if !strings.HasPrefix(v.Raw, "[") || !strings.HasSuffix(v.Raw, "]") {
-		return nil, false, errAt(v.Line, "%s: жду список в скобках [a, b, c]", key)
+		return nil, false, errAt(v.Line, "%s", dopestrings.Default.Scheme.Parse.ListExpected(key))
 	}
 	inner := strings.TrimSpace(v.Raw[1 : len(v.Raw)-1])
 	if inner == "" {
@@ -228,7 +228,7 @@ func (s Section) IntList(key string) ([]int, bool, error) {
 	for i, item := range items {
 		n, err := strconv.Atoi(item)
 		if err != nil {
-			return nil, true, errAt(v.Line, "%s: %q — не число", key, item)
+			return nil, true, errAt(v.Line, "%s", dopestrings.Default.Scheme.Parse.NotANumber(key, item))
 		}
 		nums[i] = n
 	}
@@ -247,7 +247,7 @@ func (s Section) NumList(key string) ([]float64, bool, error) {
 	for i, item := range items {
 		n, err := strconv.ParseFloat(item, 64)
 		if err != nil {
-			return nil, true, errAt(v.Line, "%s: %q — не число", key, item)
+			return nil, true, errAt(v.Line, "%s", dopestrings.Default.Scheme.Parse.NotANumber(key, item))
 		}
 		nums[i] = n
 	}
@@ -274,11 +274,11 @@ func (s Section) Sorting(key string) ([]SortRule, bool, error) {
 		case 2:
 			rule.Metric = fields[0]
 			if fields[1] != "asc" && fields[1] != "desc" {
-				return nil, true, errAt(v.Line, "%s: направление %q — жду asc или desc", key, fields[1])
+				return nil, true, errAt(v.Line, "%s", dopestrings.Default.Scheme.Parse.SortDirection(key, fields[1]))
 			}
 			rule.Dir = fields[1]
 		default:
-			return nil, true, errAt(v.Line, "%s: не понимаю %q", key, item)
+			return nil, true, errAt(v.Line, "%s", dopestrings.Default.Scheme.Parse.SortToken(key, item))
 		}
 		rules[i] = rule
 	}

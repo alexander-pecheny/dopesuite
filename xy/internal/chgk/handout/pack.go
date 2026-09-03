@@ -2,11 +2,13 @@ package handout
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"math"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
+	xystrings "xy/i18nstrings"
 )
 
 // The `pack` half of handouts (chgksuite/handouter/pack.py): a folder of
@@ -40,12 +42,12 @@ func PackPages(hndt string, teams int) (pages int, colour bool, err error) {
 			continue
 		}
 		if only != nil {
-			return 0, false, errors.New("больше одной раздатки: pack берёт только файлы после split_fit")
+			return 0, false, corei18n.User(xystrings.Default.Docs.Handout.PackMultiple())
 		}
 		only = b
 	}
 	if only == nil {
-		return 0, false, errors.New("в файле нет раздаток")
+		return 0, false, corei18n.User(xystrings.Default.Docs.Handout.PackNone())
 	}
 	perTeam := 3
 	if v, ok := only.intVal("handouts_per_team"); ok && v != 0 {
@@ -55,7 +57,7 @@ func PackPages(hndt string, teams int) (pages int, colour bool, err error) {
 	rows, _ := only.intVal("rows")
 	perPage := columns * rows
 	if perPage == 0 {
-		return 0, false, errors.New("нет columns или rows: pack берёт только файлы после split_fit")
+		return 0, false, corei18n.User(xystrings.Default.Docs.Handout.PackNoGrid())
 	}
 	if c, ok := only.intVal("color"); ok && c != 0 {
 		colour = true

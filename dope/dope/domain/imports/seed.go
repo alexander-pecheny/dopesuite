@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	"sort"
 	"strconv"
 	"strings"
@@ -135,7 +136,7 @@ func (fromKSI) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope) (s
 	err := tx.QueryRowContext(ctx, `
 select code from games where fest_id = ? and game_type = 'ksi' order by position, id limit 1`, scope.FestID).Scan(&code)
 	if errors.Is(err, sql.ErrNoRows) {
-		return seeding{}, errors.New("в фесте нет игры КСИ")
+		return seeding{}, corei18n.User(dopestrings.Default.Imports.Seed.KsiMissing())
 	}
 	if err != nil {
 		return seeding{}, err
@@ -153,9 +154,9 @@ func (fromScheme) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope)
 	}
 	switch declared.Source {
 	case "":
-		return seeding{}, errors.New("схема игры не объявляет посев ([init] seed)")
+		return seeding{}, corei18n.User(dopestrings.Default.Imports.Seed.SchemeMissing())
 	case "xlsx":
-		return seeding{}, errors.New("посев из xlsx: загрузите файл на вкладке посева")
+		return seeding{}, corei18n.User(dopestrings.Default.Imports.Seed.SchemeXlsx())
 	case "random":
 		candidates, err := randomSeedCandidates(ctx, tx, scope)
 		return seeding{source: "random", label: dopestrings.Default.Imports.SeedSource.Random(), candidates: candidates}, err
@@ -205,12 +206,12 @@ func ImportSeeds(eng *core.Engine, ctx context.Context, scope core.FestScope, sr
 func parseSeedXLSX(file io.Reader, gameID int64, roster []seedRosterTeam) ([]seedCandidate, error) {
 	book, err := excelize.OpenReader(file)
 	if err != nil {
-		return nil, fmt.Errorf("не удалось открыть xlsx: %w", err)
+		return nil, corei18n.User(dopestrings.Default.Imports.Seed.XlsxOpen(err.Error()))
 	}
 	defer book.Close()
 	sheets := book.GetSheetList()
 	if len(sheets) == 0 {
-		return nil, errors.New("в xlsx нет листов")
+		return nil, corei18n.User(dopestrings.Default.Imports.Seed.XlsxNoSheets())
 	}
 	cells, err := book.GetRows(sheets[0])
 	if err != nil {
@@ -253,24 +254,24 @@ func parseSeedXLSX(file io.Reader, gameID int64, roster []seedRosterTeam) ([]see
 			if headerish {
 				continue
 			}
-			return nil, fmt.Errorf("строка %d: команда %q не найдена в фесте", i+1, key)
+			return nil, corei18n.User(dopestrings.Default.Imports.Seed.XlsxTeamUnknown(strconv.Itoa(i+1), key))
 		}
 		basket := 0
 		if len(row) > 1 && strings.TrimSpace(row[1]) != "" {
 			if basket, err = strconv.Atoi(strings.TrimSpace(row[1])); err != nil {
-				return nil, fmt.Errorf("строка %d: корзина %q — не число", i+1, row[1])
+				return nil, corei18n.User(dopestrings.Default.Imports.Seed.XlsxBasketNotNumber(strconv.Itoa(i+1), row[1]))
 			}
 			baskets = true
 		}
 		parsed = append(parsed, parsedRow{team: team, basket: basket})
 	}
 	if len(parsed) == 0 {
-		return nil, errors.New("в xlsx нет команд")
+		return nil, corei18n.User(dopestrings.Default.Imports.Seed.XlsxNoTeams())
 	}
 	if baskets {
 		for i, row := range parsed {
 			if row.basket <= 0 {
-				return nil, fmt.Errorf("команда %q без корзины, а лист корзинный (строка %d)", row.team.Name, i+1)
+				return nil, corei18n.User(dopestrings.Default.Imports.Seed.XlsxBasketMissing(row.team.Name, strconv.Itoa(i+1)))
 			}
 		}
 		sort.SliceStable(parsed, func(i, j int) bool {
@@ -349,7 +350,7 @@ func importCandidatesTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, g
 			return SeedImportView{}, 0, nil, err
 		}
 		if previous, exists := seenTeams[teamID]; exists {
-			return SeedImportView{}, 0, nil, fmt.Errorf("%s содержит команду %q больше одного раза (первое имя: %q)", sourceLabel, candidate.Name, previous)
+			return SeedImportView{}, 0, nil, corei18n.User(dopestrings.Default.Imports.Seed.TeamTwice(sourceLabel, candidate.Name, previous))
 		}
 		seenTeams[teamID] = candidate.Name
 		// A team that refused to play at the source lands pre-declined on the
@@ -399,7 +400,7 @@ func SetSeedImportDeclined(eng *core.Engine, ctx context.Context, scope core.Fes
 		return SeedImportView{}, 0, nil, err
 	}
 	if len(state.Rows) == 0 {
-		return SeedImportView{}, 0, nil, errors.New("сначала импортируйте посев")
+		return SeedImportView{}, 0, nil, corei18n.User(dopestrings.Default.Imports.Seed.NothingImported())
 	}
 	found := false
 	for i := range state.Rows {
@@ -411,7 +412,7 @@ func SetSeedImportDeclined(eng *core.Engine, ctx context.Context, scope core.Fes
 		break
 	}
 	if !found {
-		return SeedImportView{}, 0, nil, errors.New("команда не найдена в импорте посева")
+		return SeedImportView{}, 0, nil, corei18n.User(dopestrings.Default.Imports.Seed.TeamNotFound())
 	}
 
 	view, revision, stateJSON, err := saveSeedImportState(ctx, tx, scope, gameType, rawState, state, "seed-import:decline")
@@ -718,7 +719,7 @@ func seedRefKey(sourceRef string) (int, int) {
 func standingsCandidates(ctx context.Context, q store.Queryer, festID int64, gameCode string, rules []store.SchemeSortRule) (int64, []seedCandidate, error) {
 	doc, err := store.LoadGameDocByCode(ctx, q, festID, gameCode)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, nil, fmt.Errorf("в фесте нет игры с кодом %s", gameCode)
+		return 0, nil, corei18n.User(dopestrings.Default.Imports.Seed.GameMissing(gameCode))
 	}
 	if err != nil {
 		return 0, nil, err
@@ -736,9 +737,9 @@ select distinct stage_id from stage_standings st join stages s on s.id = st.stag
 	}
 	switch {
 	case len(stages) == 0:
-		return 0, nil, fmt.Errorf("у игры %s ещё нет таблицы", gameCode)
+		return 0, nil, corei18n.User(dopestrings.Default.Imports.Seed.NoStandings(gameCode))
 	case len(stages) > 1:
-		return 0, nil, fmt.Errorf("у игры %s %d таблиц — посев берётся из игры с одной", gameCode, len(stages))
+		return 0, nil, corei18n.User(dopestrings.Default.Imports.Seed.MultipleStandings(gameCode, len(stages)))
 	}
 	type row struct {
 		name   string
@@ -761,7 +762,7 @@ where st.stage_id = ? order by st.rank`, []any{stages[0]}, func(rs *sql.Rows) (r
 		return 0, nil, err
 	}
 	if len(rows) == 0 {
-		return 0, nil, errors.New("в игре-источнике нет команд")
+		return 0, nil, corei18n.User(dopestrings.Default.Imports.Seed.SourceNoTeams())
 	}
 	// The table's own rank comes first (the Structure ranked it, ADR-0011);
 	// the [init] sorting rules, when a scheme names some, re-sort within it
@@ -787,7 +788,7 @@ where st.stage_id = ? order by st.rank`, []any{stages[0]}, func(rs *sql.Rows) (r
 			}
 		}
 		if !known {
-			return 0, nil, fmt.Errorf("sorting: %s — игра %s такой метрики не считает", rule.Metric, gameCode)
+			return 0, nil, corei18n.User(dopestrings.Default.Imports.Seed.MetricUnknown(rule.Metric, gameCode))
 		}
 	}
 	less := structure.LessBy(order)
@@ -826,7 +827,7 @@ func randomSeedCandidates(ctx context.Context, q store.Queryer, scope core.FestS
 		lots = append(lots, lotted{team: team, lot: seedLot(scope.GameID, team.Number)})
 	}
 	if len(lots) == 0 {
-		return nil, errors.New("в фесте нет пронумерованных команд")
+		return nil, corei18n.User(dopestrings.Default.Imports.Seed.NoNumberedTeams())
 	}
 	sort.Slice(lots, func(i, j int) bool { return lots[i].lot < lots[j].lot })
 	candidates := make([]seedCandidate, len(lots))

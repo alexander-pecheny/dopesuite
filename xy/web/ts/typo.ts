@@ -1,6 +1,6 @@
-// typo.ts — the typography pass the card editor's «типограф» button and the
-// board's «Типографить всю доску» run: chgksuite's typotools (quotes → «ёлочки»,
-// hyphen runs → em dashes, percent-escapes → the text they encode) plus the
+// typo.ts — the typography pass the card editor's "typograph" button and the
+// board's "Typograph whole board" run: chgksuite's typotools (quotes -> guillemets,
+// hyphen runs -> em dashes, percent-escapes -> the text they encode) plus the
 // non-breaking-space/hyphen gluing, applied to 4s SOURCE.
 //
 // It runs in the browser because everything it touches is question text, and
@@ -21,7 +21,7 @@
 // non-breaking-hyphen rule. Go's inline.ReplaceNoBreak matches
 // `[а-яё]{0,3}-[а-яё]{0,3}`, which — the bounds being zero — glues nearly every
 // surviving hyphen; chgk.ts's replaceNoBreak requires `{1,3}` on both sides, so
-// «раз- два» keeps a plain hyphen here and gets a non-breaking one there. The Go
+// "raz- dva" keeps a plain hyphen here and gets a non-breaking one there. The Go
 // side feeds the docx/PDF exporters, whose output is byte-parity-tested against
 // chgksuite, so aligning them is a decision about which is right rather than a
 // typo to fix. Until it is made, the fixtures deliberately avoid hyphens that
@@ -89,7 +89,7 @@ function fixQuotes(src: string): string {
 function getQuotesRight(s: string): string {
   if (s.includes('"') || (s.includes("“") && !s.includes("„"))) s = fixQuotes(s);
   // JS \w is ASCII-only, like Go's RE2 and unlike Python's re.UNICODE: without
-  // the class spelled out a Ukrainian apostrophe (Слов'янська) keeps its quote.
+  // the class spelled out a Ukrainian apostrophe (Slov'yans'ka) keeps its quote.
   return s.replace(/([\p{L}\p{N}_])'/gu, "$1’").replace(/'([\p{L}\p{N}_])/gu, "‘$1");
 }
 
@@ -152,11 +152,11 @@ function percentDecode(s: string): string {
 }
 
 // ── stress accents ──────────────────────────────────────────────────────────
-// chgk marks stress by capitalising the vowel («брАзер»), and detect_accent
-// turns that into a real combining acute («бра́зер»). It is a HEURISTIC on
+// chgk marks stress by capitalising the vowel ("brAzer"), and detect_accent
+// turns that into a real combining acute ("brazer" + acute). It is a HEURISTIC on
 // capitalisation, so its guards are the whole substance: an all-caps word is a
 // word in caps, not a stressed one; a capital next to another capital is part of
-// a run; «Мак…» and «О'…» are name prefixes, not stress.
+// a run; "Mac..." and "O'..." are name prefixes, not stress.
 const COMB_ACUTE = "\u0301";
 const LOWER_RU = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя";
 const UPPER_RU = "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ";
@@ -204,7 +204,7 @@ function detectAccent(s: string, seen?: Map<string, AccentPick>, allow?: Set<str
 }
 
 // cyrLatCheckChar: a Latin letter wedged between Cyrillic ones and carrying a
-// combining accent is a homoglyph typo — «мoсквá» typed with a Latin "o".
+// combining accent is a homoglyph typo — "moskva" typed with a Latin "o".
 function cyrLatCheckChar(i: number, word: string[]): string {
   const char = word[i];
   if (isCyrillic(char)) return "";
@@ -292,7 +292,7 @@ export function passAccents(source: string | null | undefined, o: AccentOpts = {
 
 // accentPicks reports every word the pass WOULD accent in these texts, without
 // touching them: the board's review list, where an editor drops the compound
-// nouns the heuristic cannot tell from a stress mark («ГазпромИнвест»). Keyed by
+// nouns the heuristic cannot tell from a stress mark ("GazpromInvest"). Keyed by
 // the original word, so the same word across thirty cards is one decision.
 export function accentPicks(texts: ReadonlyArray<string>): AccentPick[] {
   const seen = new Map<string, AccentPick>();

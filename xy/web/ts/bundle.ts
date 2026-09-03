@@ -96,7 +96,7 @@ export interface Bundle {
 }
 
 // attachmentPath names an attachment's file inside the zip: the source id keeps
-// two «раздатка.png» apart; the filename keeps the archive browsable. Path
+// two "handout.png" apart; the filename keeps the archive browsable. Path
 // separators and control characters go, everything else (unicode included) stays.
 export function attachmentPath(id: number, filename: string): string {
   // deno-lint-ignore no-control-regex

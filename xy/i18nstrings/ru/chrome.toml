@@ -8,6 +8,14 @@
 # carddraft.ts and trellomodel.ts carry Russian comments only — no strings
 # of their own.
 
+[page]
+# Browser tab / page title of the home page (index.dopeui).
+index_title = "Мои доски · xy"
+# Browser tab / page title of the join invite page (join.dopeui).
+join_title = "Приглашение · xy"
+# Browser tab / page title of the API tokens page (tokens.dopeui).
+tokens_title = "API-токены · xy"
+
 [sync]
 # The header's sync badge (app.ts); its title attribute spells the state out.
 # Offline with nothing queued.
@@ -155,8 +163,3 @@ button_title = "Цвет метки"
 # IndexedDB open (store.ts): the error when another tab holds the old
 # database version during an upgrade.
 upgrade_blocked = "Другая вкладка xy держит старую версию хранилища — закройте её и обновите страницу."
-
-[offline_page]
-# The service worker (sw.ts): the plain-text body of the 503 response it
-# serves when a navigation fails offline with nothing cached.
-body = "Офлайн"

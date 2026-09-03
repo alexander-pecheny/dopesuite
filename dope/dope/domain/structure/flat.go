@@ -31,7 +31,7 @@ func (flat) Expand(b Block) (Outputs, error) {
 	participants, ok := b.Int("participants")
 	if !ok {
 		if b.Seeded() == 0 {
-			return Outputs{}, errors.New("flat: нужен participants")
+			return Outputs{}, errors.New(s.Structure.Flat.ParticipantsMissing())
 		}
 		participants = b.Seeded()
 	}
@@ -87,7 +87,7 @@ func (flat) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 		return nil, fmt.Errorf("flat config: %w", err)
 	}
 	if len(conf.Entrants) == 0 {
-		return nil, fmt.Errorf("flat: за столом никого")
+		return nil, fmt.Errorf("%s", s.Structure.Flat.NoEntrants())
 	}
 	title := conf.Title
 	if title == "" {

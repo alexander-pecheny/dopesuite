@@ -6,6 +6,8 @@ import (
 	"path"
 	"strings"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
+	xystrings "xy/i18nstrings"
 	"xy/internal/chgk/imgconv"
 )
 
@@ -39,7 +41,7 @@ func ApplyRotation(hndt string, images map[string][]byte) (string, map[string][]
 		}
 		data, ok := images[name]
 		if !ok {
-			return "", nil, fmt.Errorf("rotate: нет картинки %q", name)
+			return "", nil, corei18n.User(xystrings.Default.Docs.Handout.RotateImageMissing(name))
 		}
 		turned := rotatedName(name, dir)
 		if _, done := out[turned]; !done {

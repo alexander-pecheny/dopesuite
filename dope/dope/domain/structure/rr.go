@@ -35,7 +35,7 @@ func (roundRobin) Expand(b Block) (Outputs, error) {
 	s := dopestrings.Default
 	size, ok := b.Int("group_size")
 	if !ok {
-		return Outputs{}, errors.New("roundrobin: нужен group_size")
+		return Outputs{}, errors.New(s.Structure.Rr.GroupSizeNeeded())
 	}
 	groups, ok := b.Int("groups")
 	if !ok {
@@ -145,7 +145,7 @@ func rrPoints(b Block) ([]float64, error) {
 		return []float64{2, 1, 0}, nil
 	}
 	if len(points) != 3 {
-		return nil, Keyf("points", "points: жду [победа, ничья, поражение]")
+		return nil, Keyf("points", "%s", dopestrings.Default.Structure.Rr.PointsList())
 	}
 	return points, nil
 }
@@ -196,7 +196,7 @@ func (roundRobin) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 	}
 	if conf.Rounds > 0 {
 		if conf.Rounds > len(rounds) {
-			return nil, fmt.Errorf("rr: %d кругов на %d участников по %d — есть только %d", conf.Rounds, n, size, len(rounds))
+			return nil, fmt.Errorf("%s", s.Structure.Rr.TooManyRounds(strconv.Itoa(conf.Rounds), strconv.Itoa(n), strconv.Itoa(size), strconv.Itoa(len(rounds))))
 		}
 		rounds = rounds[:conf.Rounds]
 	}
@@ -257,7 +257,7 @@ func rrRounds(n, size int, conf RRConfig) ([][][]int, error) {
 	}
 	rounds, ok := affineRounds(n, size)
 	if !ok {
-		return nil, fmt.Errorf("rr: нет расписания на %d участников по %d за столом", n, size)
+		return nil, fmt.Errorf("%s", dopestrings.Default.Structure.Rr.NoSchedule(strconv.Itoa(n), strconv.Itoa(size)))
 	}
 	return rounds, nil
 }

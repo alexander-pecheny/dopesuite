@@ -140,7 +140,7 @@ async function attachmentBlob(att: Attachment): Promise<Blob> {
     cipher = cached.bytes instanceof Uint8Array ? cached.bytes : new Uint8Array(cached.bytes);
   } else {
     const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
-    if (!res.ok) throw new Error("не удалось скачать вложение");
+    if (!res.ok) throw new Error(S.attachments.error.blobDownloadFailed());
     cipher = new Uint8Array(await res.arrayBuffer());
     try { await xySync.putAttachment(att.id, { mime: att.mime, bytes: cipher, rev }); } catch (_) {}
   }
@@ -278,7 +278,7 @@ function pickReplacement(att: NamedAttachment, name: string): void {
       }));
       fd.append("blob", new Blob([await xyCrypto.encBytes(key, bytes)], { type: "application/octet-stream" }), "blob");
       const res = await fetch(`/api/attachments/${att.id}`, { method: "PUT", credentials: "same-origin", body: fd });
-      if (!res.ok) throw new Error((await res.text()) || "ошибка замены");
+      if (!res.ok) throw new Error((await res.text()) || S.attachments.error.replaceFailed());
     });
   });
   picker.click();
@@ -323,7 +323,7 @@ async function uploadAttachment(file: File, lossless: boolean, name: string): Pr
   }));
   fd.append("blob", new Blob([cipher], { type: "application/octet-stream" }), "blob");
   const res = await fetch(`/api/cards/${oc}/attachments`, { method: "POST", credentials: "same-origin", body: fd });
-  if (!res.ok) throw new Error((await res.text()) || "ошибка загрузки");
+  if (!res.ok) throw new Error((await res.text()) || S.attachments.error.uploadFailed());
   const made = (await res.json().catch(() => null)) as { id?: number } | null;
   msg.textContent = "";
   await loadAttachments(oc);
@@ -501,12 +501,12 @@ async function download(att: NamedAttachment, name: string): Promise<void> {
     let cipher: Uint8Array<ArrayBuffer>;
     try {
       const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
-      if (!res.ok) throw new Error("не удалось скачать");
+      if (!res.ok) throw new Error(S.attachments.error.downloadFailed());
       cipher = new Uint8Array(await res.arrayBuffer());
       try { await xySync.putAttachment(att.id, { mime: att.mime, bytes: cipher }); } catch (_) {}
     } catch (netErr) {
       const cached = await xySync.getAttachment(att.id);
-      if (!cached) throw new Error("вложение недоступно офлайн");
+      if (!cached) throw new Error(S.attachments.error.offlineUnavailable());
       cipher = cached.bytes instanceof Uint8Array ? cached.bytes : new Uint8Array(cached.bytes);
     }
     const plain = await xyCrypto.decBytes(deps.mustDK(), cipher);

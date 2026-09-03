@@ -1,7 +1,7 @@
-// labelsedit.ts — «Метки»: the board's label editor. Every label is editable
+// labelsedit.ts — "Labels": the board's label editor. Every label is editable
 // (issue #25) — there is no such thing as a test label whose name comes from
 // somewhere else (ADR-0004). Like the session form, the editor has no per-row
-// Сохранить: Готово commits the lot. sortLabels is the board's one ordering of
+// Save: Done commits the lot. sortLabels is the board's one ordering of
 // labels, shared with the card's add-label popup.
 
 import { xyApp } from "./app.js";
@@ -48,7 +48,7 @@ export interface LabelsEditor {
 export function createLabelsEditor(board: Board): LabelsEditor {
   // Every label is editable (issue #25) — there is no such thing as a test label
   // whose name comes from somewhere else (ADR-0004). Like the session form, the
-  // editor has no per-row Сохранить: Готово commits the lot.
+  // editor has no per-row Save: Done commits the lot.
   interface LabelRow { lbl: BoardLabel; name: HTMLInputElement; color: ColorField }
   let labelRows: LabelRow[] = [];
   let labelDraft: { name: HTMLInputElement; color: ColorField } | null = null;
@@ -87,7 +87,7 @@ export function createLabelsEditor(board: Board): LabelsEditor {
     const newColor = colorField(el("div"), LABEL_COLORS[0]);
     labelDraft = { name: newName, color: newColor };
     const add = el("button", { class: "input", type: "button", text: "Добавить" });
-    // Добавить is the create affordance, not a save — it commits now so you can
+    // Add is the create affordance, not a save — it commits now so you can
     // type the next one. Leaving with a name still in the box creates it too.
     const submit = async (): Promise<void> => {
       if (!newName.value.trim()) return;

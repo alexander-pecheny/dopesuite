@@ -13,6 +13,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
+	xystrings "xy/i18nstrings"
 )
 
 // The posting half of lj.py: LiveJournal's XML-RPC interface, whose
@@ -61,7 +64,7 @@ type Result struct {
 // on it.
 func (c *Client) Publish(ctx context.Context, posts []Post) (Result, error) {
 	if len(posts) == 0 {
-		return Result{}, fmt.Errorf("нечего публиковать")
+		return Result{}, corei18n.User(xystrings.Default.Lj.Error.Nothing())
 	}
 	res, err := c.postEvent(ctx, posts[0], 0)
 	if err != nil {
@@ -159,7 +162,7 @@ func (c *Client) challenge(ctx context.Context) (string, string, error) {
 	}
 	chal := fields["challenge"]
 	if chal == "" {
-		return "", "", fmt.Errorf("livejournal не выдал challenge")
+		return "", "", corei18n.User(xystrings.Default.Lj.Error.NoChallenge())
 	}
 	pw := md5.Sum([]byte(c.account.Password))                //nolint:gosec // the scheme is theirs
 	sum := md5.Sum([]byte(chal + hex.EncodeToString(pw[:]))) //nolint:gosec
@@ -188,7 +191,7 @@ func (c *Client) call(ctx context.Context, method string, params map[string]any)
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("livejournal ответил %s", resp.Status)
+		return nil, corei18n.User(xystrings.Default.Lj.Error.Status(resp.Status))
 	}
 	if c.Pause > 0 {
 		select {
@@ -243,11 +246,11 @@ func decodeResponse(raw []byte) (map[string]string, error) {
 		Members []member `xml:"params>param>value>struct>member"`
 	}
 	if err := xml.Unmarshal(raw, &doc); err != nil {
-		return nil, fmt.Errorf("ответ livejournal: %w", err)
+		return nil, corei18n.User(xystrings.Default.Lj.Error.Malformed(err.Error()))
 	}
 	if doc.Fault != nil {
 		fields := flatten(doc.Fault.Members)
-		return nil, fmt.Errorf("livejournal: %s (код %s)", fields["faultString"], fields["faultCode"])
+		return nil, corei18n.User(xystrings.Default.Lj.Error.Fault(fields["faultString"], fields["faultCode"]))
 	}
 	return flatten(doc.Members), nil
 }

@@ -222,7 +222,38 @@ removed = "комментарий {{.id}} удалён\n"
 [label]
 # The `xy-cli label` command: its line on the usage screen.
 summary = "label ls|add|assign — метки"
-
+# `label ls` --help header.
+ls_usage = "Метки доски; с --card — метки одной карточки."
+# `label ls` --card flag description.
+ls_card_flag = "показать метки этой карточки"
+# `label add` --help header.
+add_usage = "Создать метку на доске."
+# `label add` --name flag description.
+add_name_flag = "название метки"
+# `label add` --color flag description.
+add_color_flag = "цвет метки (hex)"
+# Error when `label add` has no --name.
+need_name = "нужен --name"
+# Success line of `label add`.
+created = "метка {{.id}} «{{.name}}» создана\n"
+# `label assign` --help header.
+assign_usage = "xy-cli label assign <id карточки> --board B --label «готово» [--remove]"
+# `label assign` --label flag description.
+assign_label_flag = "метка: id или название"
+# `label assign` --remove flag description.
+assign_remove_flag = "снять метку вместо того, чтобы поставить"
+# Error when `label assign` has no card id or --label.
+need_card_label = "нужен id карточки и --label"
+# Status when the label is already absent.
+already_unset = "метка «{{.name}}» и так не стоит\n"
+# Status when the label is already set.
+already_set = "метка «{{.name}}» и так стоит\n"
+# Verb for applied label.
+verb_set = "поставлена"
+# Verb for removed label.
+verb_removed = "снята"
+# Success line of `label assign`.
+assigned = "метка «{{.name}}» {{.verb}} на карточке {{.id}}\n"
 [search]
 # The `xy-cli search` command: its line on the usage screen.
 summary = "поиск по карточкам и комментариям доски"
@@ -244,15 +275,58 @@ nothing = "ничего не нашлось\n"
 [source]
 # The `xy-cli source` command: its line on the usage screen.
 summary = "4s списка (или всей группы) целиком"
+# Its --help header.
+usage = "xy-cli source --board B --list L\n4s списка целиком: версии свёрнуты в один вопрос, как в экспорте."
+# --list flag description.
+list_flag = "id списка (группа берётся целиком)"
+# Error when --list is missing.
+need_list = "нужен --list"
+# Stderr note with the title and card count.
+note = "# «{{.title}}», карточек: {{.count}}\n"
 
 [export]
 # The `xy-cli export` command: its line on the usage screen.
 summary = "экспорт списка в docx/pdf/4s/раздатки"
+# Its --help header.
+usage = "xy-cli export --board B --list L --format docx,pdf [--out каталог]\nФорматы: 4s, docx, pdf, pdf_mobile, handouts."
+# --list flag description.
+list_flag = "id списка (группа берётся целиком)"
+# --format flag description.
+format_flag = "форматы через запятую"
+# --out flag description.
+out_flag = "каталог для файлов"
+# Error when --list is missing.
+need_list = "нужен --list"
+# Output line for saved export file.
+done = "{{.path}} ({{.bytes}} байт)\n"
+# Error when decrypting an attachment fails during export.
+attachment_error = 'вложение «{{.name}}»: {{.err}}'
 
 [attachment]
 # The `xy-cli attachment` command: its line on the usage screen.
 summary = "attachment ls|get|add — вложения карточки"
-
+# `attachment ls` --help header.
+ls_usage = "xy-cli attachment ls <id карточки> --board B"
+# Fallback filename when decoding encrypted filename fails.
+unreadable_name = "(имя не читается)"
+# `attachment get` --help header.
+get_usage = "xy-cli attachment get <id вложения> --board B [-o файл]"
+# `attachment get` --card flag description.
+get_card_flag = "id карточки (чтобы узнать имя файла)"
+# `attachment get` -o flag description.
+get_out_flag = "куда сохранить (по умолчанию — имя из доски, в текущем каталоге)"
+# Error when attachment ciphertext cannot be decrypted.
+decrypt_failed = 'вложение {{.id}} не расшифровывается: {{.err}}'
+# Output line for downloaded attachment.
+get_done = "{{.path}} ({{.bytes}} байт)\n"
+# `attachment add` --help header.
+add_usage = "xy-cli attachment add <id карточки> --board B <файл>"
+# `attachment add` --name flag description.
+add_name_flag = "имя файла на доске (по умолчанию — как на диске)"
+# Error when `attachment add` lacks card id or file path.
+need_card_file = "нужен id карточки и путь к файлу"
+# Success line of `attachment add`.
+added = "вложение {{.id}} «{{.name}}» добавлено к карточке {{.card_id}}\n"
 [client]
 # The API client (client.go): the message it substitutes for a server's 401 body,
 # because a dead token is the one failure it can name for a human.
@@ -284,6 +358,7 @@ what_list = "список"
 what_card = "карточка"
 what_comment = "комментарий"
 what_label = "метка"
+what_attachment = "вложение"
 what_board = "доска"
 what_unlocked_board = "разблокированная доска"
 need_board = "нужен --board <id|имя>"

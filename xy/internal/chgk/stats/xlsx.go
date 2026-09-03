@@ -3,10 +3,12 @@ package stats
 import (
 	"archive/zip"
 	"encoding/xml"
-	"fmt"
 	"io"
 	"strconv"
 	"strings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
+	xystrings "xy/i18nstrings"
 )
 
 // The xlsx side of the question table. openpyxl reads these for chgksuite;
@@ -43,7 +45,7 @@ func openPart(z *zip.Reader, name string) (io.ReadCloser, error) {
 			return f.Open()
 		}
 	}
-	return nil, fmt.Errorf("%s: нет в книге", name)
+	return nil, corei18n.User(xystrings.Default.Stats.Xlsx.PartMissing(name))
 }
 
 // firstSheetPart follows workbook.xml's first <sheet> through the rels to its
@@ -63,7 +65,7 @@ func firstSheetPart(z *zip.Reader) (string, error) {
 		return "", err
 	}
 	if len(book.Sheets) == 0 {
-		return "", fmt.Errorf("в книге нет листов")
+		return "", corei18n.User(xystrings.Default.Stats.Xlsx.NoSheets())
 	}
 	rels, err := openPart(z, "xl/_rels/workbook.xml.rels")
 	if err != nil {
@@ -84,7 +86,7 @@ func firstSheetPart(z *zip.Reader) (string, error) {
 			return "xl/" + strings.TrimPrefix(r.Target, "/xl/"), nil
 		}
 	}
-	return "", fmt.Errorf("лист %q не найден", book.Sheets[0].ID)
+	return "", corei18n.User(xystrings.Default.Stats.Xlsx.SheetMissing(book.Sheets[0].ID))
 }
 
 func sharedStrings(z *zip.Reader) ([]string, error) {

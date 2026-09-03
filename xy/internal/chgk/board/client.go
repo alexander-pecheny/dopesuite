@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
+	xystrings "xy/i18nstrings"
 	"xy/internal/xycli"
 )
 
@@ -115,14 +117,14 @@ func (c *Client) fetchXY(ctx context.Context, b Board) (*JSON, error) {
 	for i := range out.Lists {
 		name, err := c.dk.DecField(out.Lists[i].Name)
 		if err != nil {
-			return nil, fmt.Errorf("список %s: %w", out.Lists[i].ID, err)
+			return nil, corei18n.User(xystrings.Default.Boardsync.Fetch.List(out.Lists[i].ID, err.Error()))
 		}
 		out.Lists[i].Name = name
 	}
 	for i := range out.Cards {
 		desc, err := c.dk.DecField(out.Cards[i].Desc)
 		if err != nil {
-			return nil, fmt.Errorf("карточка %s: %w", out.Cards[i].ID, err)
+			return nil, corei18n.User(xystrings.Default.Boardsync.Fetch.Card(out.Cards[i].ID, err.Error()))
 		}
 		out.Cards[i].Desc = desc
 		// xy has no card titles of its own; it derives them from the text.

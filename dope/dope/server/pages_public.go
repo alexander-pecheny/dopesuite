@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"sort"
 	"time"
@@ -62,7 +63,8 @@ func (s *server) handlePublicIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	summaries, err := s.loadPublicFestSummaries(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("internal error: %v", err)
+		http.Error(w, dopestrings.Default.Server.Error.Internal(), http.StatusInternalServerError)
 		return
 	}
 	groups := groupPublicFests(summaries, time.Now().Format("2006-01-02"))
@@ -131,7 +133,8 @@ func (s *server) renderPublicFestPage(w http.ResponseWriter, r *http.Request, id
 		return
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("internal error: %v", err)
+		http.Error(w, dopestrings.Default.Server.Error.Internal(), http.StatusInternalServerError)
 		return
 	}
 	pages.RenderDoc(w, s.eng.AssetETags, hostpages.PublicFestDoc(hostpages.PublicFestDetail{

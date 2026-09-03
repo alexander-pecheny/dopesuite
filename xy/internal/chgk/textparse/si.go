@@ -9,20 +9,20 @@ import (
 	"xy/internal/chgk/typo"
 )
 
-// СИ and троика are read by a different parser from ЧГК's, and by nearly the
+// SI and troika are read by a different parser from CHGK's, and by nearly the
 // same one as each other: parser.py's TroikaParser is SiParser with a handful of
 // overrides. Both walk the text line by line, deciding from the line's own shape
 // what it is — a battle, a theme, a question's point value, a field label — and
 // leaning on the document's outline, which docxread hands over as "$$HN$$"
 // markers. This port keeps the two in one parser with a mode flag, because the
-// overrides are interleaved: троика's line handling falls through to СИ's.
+// overrides are interleaved: troika's line handling falls through to SI's.
 
-// ParseSI reads a Своя игра package. None of ЧГК's own knobs mean anything to
+// ParseSI reads a Svoya Igra package. None of CHGK's own knobs mean anything to
 // these two, so they take the typography modes and nothing else.
 func ParseSI(text string, o SIOptions) fsource.Doc { return newSI(false, o).parse(text) }
 
-// SIOptions are the switches the СИ and троика parsers read: the typography
-// pass and where the labels and field markers come from. None of ЧГК's own
+// SIOptions are the switches the SI and troika parsers read: the typography
+// pass and where the labels and field markers come from. None of CHGK's own
 // knobs mean anything to these two.
 type SIOptions struct {
 	Typo       typo.Options
@@ -30,7 +30,7 @@ type SIOptions struct {
 	LabelsFile string
 }
 
-// ParseTroika reads a троика package.
+// ParseTroika reads a troika package.
 func ParseTroika(text string, o SIOptions) fsource.Doc { return newSI(true, o).parse(text) }
 
 // element is one [type, value] pair on the way to a document.
@@ -55,7 +55,7 @@ type siParser struct {
 	lastThemeHeading string
 	hasLastTheme     bool
 
-	// троика only
+	// troika only
 	lastLineBlank  bool
 	sourceListMode bool
 	multiforaMode  bool
@@ -131,7 +131,7 @@ func (p *siParser) handleLine(line string) {
 	p.siLine(line, false)
 }
 
-// siLine is SiParser._handle_line. headingRead says троика already took the
+// siLine is SiParser._handle_line. headingRead says troika already took the
 // marker off the line, so it is not parsed twice.
 func (p *siParser) siLine(line string, headingRead bool) {
 	stripped := typo.REW(line)
@@ -332,7 +332,7 @@ func (p *siParser) dispatchAuthor(stripped string) bool {
 	return true
 }
 
-// dispatchAuthorGratitude: «Автор благодарит…» after an author's name is a note
+// dispatchAuthorGratitude: "Author thanks..." after an author's name is a note
 // about the package, not more of the name.
 func (p *siParser) dispatchAuthorGratitude(stripped string) bool {
 	if p.currentField != "author" || !reAuthorGratitudeMeta.MatchString(stripped) {
@@ -362,7 +362,7 @@ func (p *siParser) dispatchQuestionNum(stripped string) bool {
 	}
 	// An inline theme header, "N. Name (Author)", with an index too small to be
 	// a point value. Not while reading a source list, though: an empty
-	// "Источник:" followed by numbered URLs is not a theme.
+	// "Source:" followed by numbered URLs is not a theme.
 	if p.currentField == "source" && strings.TrimSpace(p.currentContent) == "" {
 		return false
 	}

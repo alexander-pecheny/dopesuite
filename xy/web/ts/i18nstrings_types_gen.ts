@@ -3,6 +3,23 @@
 /** One language's Catalog: a key per Surface, a nested object per group,
  * a function per string. */
 export type Strings = {
+  admin: {
+    createUsers: {
+      name: () => string;
+      title: () => string;
+    };
+    page: {
+      title: () => string;
+    };
+    users: {
+      colActivity: () => string;
+      colStorage: () => string;
+      colUser: () => string;
+      empty: () => string;
+      name: () => string;
+      title: () => string;
+    };
+  };
   attachments: {
     confirm: {
       remove: (name: string) => string;
@@ -584,9 +601,34 @@ export type Strings = {
     addStats: {
       customCsvFlag: () => string;
     };
+    board: {
+      boardUrlPrompt: () => string;
+      emptyToken: () => string;
+      initialPassphrasePrompt: () => string;
+      needBoardUrl: () => string;
+      noAnswersFlag: () => string;
+      noToken: (host: string, url: string) => string;
+      nothingToUpload: () => string;
+      onlyAnswersFlag: () => string;
+      openBrowser: () => string;
+      openBrowserTokens: (url: string) => string;
+      passphrasePrompt: () => string;
+      tokenPrompt: () => string;
+    };
     docx: {
       noParagraphFlag: () => string;
       onlyQuestionNumberFlag: () => string;
+    };
+    handouts: {
+      alreadyExists: (file: string) => string;
+      colourSuffix: () => string;
+      dimensionsNote: (width: string, height: string) => string;
+      htmlGeometryNote: (width: string, share: string) => string;
+      pagesNote: (file: string, pages: string, colour: string) => string;
+      scaleNote: (scale: string) => string;
+      skipWarning: (file: string, err: string) => string;
+      warnQuestion: (number: string, text: string) => string;
+      watchNote: (file: string) => string;
     };
     lj: {
       genimpFlag: () => string;
@@ -635,8 +677,10 @@ export type Strings = {
       unreadMentionTitle: () => string;
       unreadTitle: () => string;
     };
-    offlinePage: {
-      body: () => string;
+    page: {
+      indexTitle: () => string;
+      joinTitle: () => string;
+      tokensTitle: () => string;
     };
     passphrase: {
       tooFewWords: (n: string) => string;
@@ -695,7 +739,18 @@ export type Strings = {
   };
   cli: {
     attachment: {
+      addNameFlag: () => string;
+      addUsage: () => string;
+      added: (id: string, name: string, card_id: string) => string;
+      decryptFailed: (id: string, err: string) => string;
+      getCardFlag: () => string;
+      getDone: (path: string, bytes: string) => string;
+      getOutFlag: () => string;
+      getUsage: () => string;
+      lsUsage: () => string;
+      needCardFile: () => string;
       summary: () => string;
+      unreadableName: () => string;
     };
     board: {
       onlyShow: () => string;
@@ -759,10 +814,33 @@ export type Strings = {
       summary: () => string;
     };
     export: {
+      attachmentError: (name: string, err: string) => string;
+      done: (path: string, bytes: string) => string;
+      formatFlag: () => string;
+      listFlag: () => string;
+      needList: () => string;
+      outFlag: () => string;
       summary: () => string;
+      usage: () => string;
     };
     label: {
+      addColorFlag: () => string;
+      addNameFlag: () => string;
+      addUsage: () => string;
+      alreadySet: (name: string) => string;
+      alreadyUnset: (name: string) => string;
+      assignLabelFlag: () => string;
+      assignRemoveFlag: () => string;
+      assignUsage: () => string;
+      assigned: (name: string, verb: string, id: string) => string;
+      created: (id: string, name: string) => string;
+      lsCardFlag: () => string;
+      lsUsage: () => string;
+      needCardLabel: () => string;
+      needName: () => string;
       summary: () => string;
+      verbRemoved: () => string;
+      verbSet: () => string;
     };
     list: {
       addAfterFlag: () => string;
@@ -837,6 +915,7 @@ export type Strings = {
       numericId: (what: string, raw: string) => string;
       seeBoards: (err: string) => string;
       unknownAction: (verb: string, known: string) => string;
+      whatAttachment: () => string;
       whatBoard: () => string;
       whatCard: () => string;
       whatComment: () => string;
@@ -855,7 +934,11 @@ export type Strings = {
       listNotFound: (id: string) => string;
     };
     source: {
+      listFlag: () => string;
+      needList: () => string;
+      note: (title: string, count: string) => string;
       summary: () => string;
+      usage: () => string;
     };
     unlock: {
       done: (id: string, name: string) => string;
@@ -1190,6 +1273,10 @@ export type Strings = {
     message: {
       copied: () => string;
     };
+    page: {
+      boardFallback: () => string;
+      boardWrapper: (name: string) => string;
+    };
     request: {
       approve: () => string;
       decline: () => string;
@@ -1280,6 +1367,9 @@ export type Strings = {
       meta: () => string;
       name: () => string;
     };
+    firstrun: {
+      authorPlaceholder: () => string;
+    };
     home: () => string;
     name: () => string;
     password: {
@@ -1368,6 +1458,9 @@ export type Strings = {
       foreign: () => string;
       notFound: () => string;
     };
+    error: {
+      badRequest: () => string;
+    };
     import: {
       fileNoQuestions: () => string;
       noFile: () => string;
@@ -1397,6 +1490,7 @@ export type Strings = {
     };
     quota: {
       exceeded: (mb: string) => string;
+      humanMb: (mb: string) => string;
     };
     reaction: {
       deleteOwnerOnly: () => string;

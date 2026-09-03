@@ -1,0 +1,24 @@
+# The admin area (xy/internal/server/admin.go): the /admin landing page,
+# the bulk-create-users chrome, and the users table.
+
+[page]
+# The /admin landing page title and topbar heading, and the back-link label.
+title = "Админка"
+
+[create_users]
+# The create-users tool's name: the landing list row and topbar heading.
+name = "Создать пользователей"
+# The create-users page title.
+title = "Создать пользователей · Админка"
+
+[users]
+# The users page's name: the landing list row and topbar heading.
+name = "Пользователи"
+# The users page's title.
+title = "Пользователи · Админка"
+# The table's column headers.
+col_user = "Пользователь"
+col_activity = "Активность"
+col_storage = "Хранилище"
+# The users page's empty state.
+empty = "Пользователей нет."

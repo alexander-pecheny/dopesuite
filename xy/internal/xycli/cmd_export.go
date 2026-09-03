@@ -1,11 +1,13 @@
 package xycli
 
 import (
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
+	xystrings "xy/i18nstrings"
 )
 
 // `source` prints the 4s a List (or its whole List Group) exports as — a whole
@@ -14,15 +16,16 @@ import (
 // or a zip of them.
 
 func cmdSource(a *app, args []string) error {
-	fs := a.flags("source", "xy-cli source --board B --list L\n4s списка целиком: версии свёрнуты в один вопрос, как в экспорте.")
+	s := xystrings.Default
+	fs := a.flags("source", s.Cli.Source.Usage())
 	board := a.boardFlag(fs)
-	list := fs.Int64("list", 0, "id списка (группа берётся целиком)")
+	list := fs.Int64("list", 0, s.Cli.Source.ListFlag())
 	_, err := a.parse(fs, args)
 	if err != nil {
 		return err
 	}
 	if *list == 0 {
-		return errors.New("нужен --list")
+		return corei18n.User(s.Cli.Source.NeedList())
 	}
 	_, b, err := a.open(*board)
 	if err != nil {
@@ -35,7 +38,7 @@ func cmdSource(a *app, args []string) error {
 	source := ExportSource(descsOf(cards))
 	return a.emit(map[string]any{"list_id": *list, "title": title, "source": source}, func() {
 		a.printf("%s", source)
-		a.note("# «%s», карточек: %d\n", title, len(cards))
+		a.note("%s", s.Cli.Source.Note(title, strconv.Itoa(len(cards))))
 	})
 }
 
@@ -48,17 +51,18 @@ func descsOf(cards []Card) []string {
 }
 
 func cmdExport(a *app, args []string) error {
-	fs := a.flags("export", "xy-cli export --board B --list L --format docx,pdf [--out каталог]\nФорматы: 4s, docx, pdf, pdf_mobile, handouts.")
+	s := xystrings.Default
+	fs := a.flags("export", s.Cli.Export.Usage())
 	board := a.boardFlag(fs)
-	list := fs.Int64("list", 0, "id списка (группа берётся целиком)")
-	formats := fs.String("format", "docx", "форматы через запятую")
-	out := fs.String("out", ".", "каталог для файлов")
+	list := fs.Int64("list", 0, s.Cli.Export.ListFlag())
+	formats := fs.String("format", "docx", s.Cli.Export.FormatFlag())
+	out := fs.String("out", ".", s.Cli.Export.OutFlag())
 	_, err := a.parse(fs, args)
 	if err != nil {
 		return err
 	}
 	if *list == 0 {
-		return errors.New("нужен --list")
+		return corei18n.User(s.Cli.Export.NeedList())
 	}
 	c, b, err := a.open(*board)
 	if err != nil {
@@ -85,7 +89,7 @@ func cmdExport(a *app, args []string) error {
 		return err
 	}
 	return a.emit(map[string]any{"path": path, "bytes": len(data)}, func() {
-		a.printf("%s (%d байт)\n", path, len(data))
+		a.printf("%s", s.Cli.Export.Done(path, strconv.Itoa(len(data))))
 	})
 }
 
@@ -96,6 +100,7 @@ func gatherImages(c *Client, b *Board, cards []Card, source string) (map[string]
 	for _, name := range imageRefs(source) {
 		wanted[name] = true
 	}
+	s := xystrings.Default
 	if len(wanted) == 0 {
 		return nil, nil
 	}
@@ -112,11 +117,11 @@ func gatherImages(c *Client, b *Board, cards []Card, source string) (map[string]
 			}
 			raw, err := c.AttachmentBytes(att.ID)
 			if err != nil {
-				return nil, fmt.Errorf("вложение «%s»: %w", name, err)
+				return nil, corei18n.User(s.Cli.Export.AttachmentError(name, err.Error()))
 			}
 			plain, err := b.DK.DecBytes(raw)
 			if err != nil {
-				return nil, fmt.Errorf("вложение «%s»: %w", name, err)
+				return nil, corei18n.User(s.Cli.Export.AttachmentError(name, err.Error()))
 			}
 			images[name] = plain
 		}

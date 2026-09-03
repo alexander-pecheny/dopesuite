@@ -1,5 +1,5 @@
 // bundleimportpanel.ts — a Bundle appended to the board that is open. It has no
-// menu entry of its own: «Импорт» picks one file, recognises what it is, and
+// menu entry of its own: "Import" picks one file, recognises what it is, and
 // hands an xy archive here. It lives on the board page rather than on /import
 // because appending re-encrypts under this board's key, which only its own
 // page holds.

@@ -124,7 +124,7 @@ export function createRewrites(board: Board): Rewrites {
     } catch (err) {
       // Nothing is lost by failing: the cards keep their old spelling and the next
       // load tries again.
-      console.error("не удалось перевести версии карточек", err);
+      console.error("failed to convert card versions", err);
     }
   }
 

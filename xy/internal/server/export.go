@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -12,6 +13,8 @@ import (
 	"xy/internal/chgk/docx"
 	"xy/internal/chgk/fsource"
 	"xy/internal/chgk/typstdoc"
+
+	xystrings "xy/i18nstrings"
 )
 
 // Export turns the client-supplied chgksuite "4s" source (the list's decrypted
@@ -85,7 +88,7 @@ func (s *server) readExportForm(w http.ResponseWriter, r *http.Request, ext stri
 	r.Body = http.MaxBytesReader(w, r.Body, maxExportRequest)
 	form, err := readMultipart(r, maxExportRequest)
 	if err != nil {
-		httpError(w, http.StatusBadRequest, err.Error())
+		handleUser(w, err)
 		return exportRequest{}, nil, false
 	}
 	source := normalizeNewlines(form.Value("source"))
@@ -172,7 +175,8 @@ func (s *server) handleExportDocx(w http.ResponseWriter, r *http.Request) {
 	}
 	b, err := docx.Export(fsource.Parse(req.source, "chgk"), req.images, docx.Options{})
 	if err != nil {
-		httpError(w, http.StatusInternalServerError, "docx export failed: "+err.Error())
+		log.Printf("docx export failed: %v", err)
+		httpError(w, http.StatusInternalServerError, xystrings.Default.Server.Internal())
 		return
 	}
 	serveDownload(w, b, req.name+".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
@@ -192,7 +196,8 @@ func (s *server) handleExportPDF(w http.ResponseWriter, r *http.Request) {
 	}
 	ts, err := s.typesetter()
 	if err != nil {
-		httpError(w, http.StatusInternalServerError, "typst unavailable: "+err.Error())
+		log.Printf("typst unavailable: %v", err)
+		httpError(w, http.StatusInternalServerError, xystrings.Default.Server.Internal())
 		return
 	}
 	device := typstdoc.Desktop
@@ -207,7 +212,8 @@ func (s *server) handleExportPDF(w http.ResponseWriter, r *http.Request) {
 			httpError(w, http.StatusGatewayTimeout, "typst timed out")
 			return
 		}
-		httpError(w, http.StatusInternalServerError, "pdf export failed: "+err.Error())
+		log.Printf("pdf export failed: %v", err)
+		httpError(w, http.StatusInternalServerError, xystrings.Default.Server.Internal())
 		return
 	}
 	serveDownload(w, b, req.name+".pdf", "application/pdf")

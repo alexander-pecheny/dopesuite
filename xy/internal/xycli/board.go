@@ -2,10 +2,10 @@ package xycli
 
 import (
 	"encoding/json"
-	"fmt"
 	"sort"
 	"strings"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
 
@@ -56,29 +56,30 @@ func LoadBoard(c *Client, dk DataKey, boardID int64) (*Board, error) {
 	}
 	b := &Board{ID: snap.ID, Name: snap.Name, Role: snap.Role, DK: dk,
 		Groups: map[int64]string{}, CardLabels: snap.CardLabels}
+	s := xystrings.Default
 	for _, g := range snap.Groups {
 		name, err := dk.DecField(g.NameEnc)
 		if err != nil {
-			return nil, fmt.Errorf("группа %d: %w", g.ID, err)
+			return nil, corei18n.User(s.Cli.Snapshot.Group(itoa(g.ID), err.Error()))
 		}
 		b.Groups[g.ID] = name
 	}
 	for _, l := range snap.Lists {
 		title, err := dk.DecField(l.TitleEnc)
 		if err != nil {
-			return nil, fmt.Errorf("список %d: %w", l.ID, err)
+			return nil, corei18n.User(s.Cli.Snapshot.List(itoa(l.ID), err.Error()))
 		}
 		b.Lists = append(b.Lists, List{ID: l.ID, Title: title, Rank: l.Rank, Type: l.Type, GroupID: l.GroupID})
 	}
 	for _, c := range snap.Cards {
 		desc, err := dk.DecField(c.DescEnc)
 		if err != nil {
-			return nil, fmt.Errorf("карточка %d: %w", c.ID, err)
+			return nil, corei18n.User(s.Cli.Snapshot.Card(itoa(c.ID), err.Error()))
 		}
 		card := Card{ID: c.ID, ListID: c.ListID, Kind: c.Kind, Desc: desc, Rank: c.Rank, CreatedAt: c.CreatedAt}
 		if c.AliasEnc != nil {
 			if card.Alias, err = dk.DecField(*c.AliasEnc); err != nil {
-				return nil, fmt.Errorf("карточка %d (алиас): %w", c.ID, err)
+				return nil, corei18n.User(s.Cli.Snapshot.CardAlias(itoa(c.ID), err.Error()))
 			}
 		}
 		b.Cards = append(b.Cards, card)
@@ -86,11 +87,11 @@ func LoadBoard(c *Client, dk DataKey, boardID int64) (*Board, error) {
 	for _, l := range snap.Labels {
 		name, err := dk.DecField(l.NameEnc)
 		if err != nil {
-			return nil, fmt.Errorf("метка %d: %w", l.ID, err)
+			return nil, corei18n.User(s.Cli.Snapshot.Label(itoa(l.ID), err.Error()))
 		}
 		color, err := dk.DecField(l.ColorEnc)
 		if err != nil {
-			return nil, fmt.Errorf("метка %d (цвет): %w", l.ID, err)
+			return nil, corei18n.User(s.Cli.Snapshot.LabelColor(itoa(l.ID), err.Error()))
 		}
 		b.Labels = append(b.Labels, Label{ID: l.ID, Name: name, Color: color})
 	}
@@ -134,7 +135,7 @@ func (b *Board) List(id int64) (List, error) {
 			return l, nil
 		}
 	}
-	return List{}, fmt.Errorf("список %d не найден на доске", id)
+	return List{}, corei18n.User(xystrings.Default.Cli.Snapshot.ListNotFound(itoa(id)))
 }
 
 func (b *Board) Card(id int64) (Card, error) {
@@ -143,7 +144,7 @@ func (b *Board) Card(id int64) (Card, error) {
 			return c, nil
 		}
 	}
-	return Card{}, fmt.Errorf("карточка %d не найдена на доске", id)
+	return Card{}, corei18n.User(xystrings.Default.Cli.Snapshot.CardNotFound(itoa(id)))
 }
 
 // Label resolves a label by id or by name, the forgiving way a search matches.

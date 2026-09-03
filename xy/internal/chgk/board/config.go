@@ -5,12 +5,14 @@
 package board
 
 import (
-	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
+	xystrings "xy/i18nstrings"
 )
 
 // Service is which of the two a URL names.
@@ -42,7 +44,7 @@ var reXYBoard = regexp.MustCompile(`/board/([^/?#]+)`)
 func ParseURL(raw string) (Board, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return Board{}, fmt.Errorf("пустая ссылка на доску")
+		return Board{}, corei18n.User(xystrings.Default.Boardsync.Config.EmptyUrl())
 	}
 	if !strings.Contains(raw, "/") && !strings.Contains(raw, ".") {
 		return Board{Service: Trello, Host: trelloHost, ID: raw, BaseURL: "https://trello.com"}, nil
@@ -61,7 +63,7 @@ func ParseURL(raw string) (Board, error) {
 	}
 	m := reXYBoard.FindStringSubmatch(u.Path)
 	if m == nil {
-		return Board{}, fmt.Errorf("не понял, какая доска: %s", raw)
+		return Board{}, corei18n.User(xystrings.Default.Boardsync.Config.Unrecognized(raw))
 	}
 	return Board{Service: XY, Host: host, ID: m[1], BaseURL: u.Scheme + "://" + u.Host}, nil
 }

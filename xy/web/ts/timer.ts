@@ -1,4 +1,4 @@
-// timer.ts — a ЧГК (trivia) play timer that floats bottom-right of the board.
+// timer.ts — a ChGK (trivia) play timer that floats bottom-right of the board.
 // Toggled by the ⏰ button in the header. Counts a question's minute (or its
 // duplet/blitz sub-segments) down to zero with audible cues, then runs the
 // 10-second answer-writing countdown.
@@ -392,7 +392,7 @@ function build(): void {
   labelNode = el("div", { class: "timer-label", text: "" });
 
   // Icons, not captions — three worded buttons overflowed the 240px box
-  // («Продолжить» alone nearly filled it). The word lives in title/aria-label.
+  // ("Continue" alone nearly filled it). The word lives in title/aria-label.
   startBtn = el("button", { class: "btn btn-small", type: "button", title: "Старт", "aria-label": "Старт", onclick: () => timer!.start() }, playIcon()) as HTMLButtonElement;
   pauseBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", title: "Пауза", "aria-label": "Пауза", onclick: () => timer!.pause() }, pauseIcon()) as HTMLButtonElement;
   const resetBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", title: "Сброс", "aria-label": "Сброс", onclick: () => timer!.reset() }, resetIcon());

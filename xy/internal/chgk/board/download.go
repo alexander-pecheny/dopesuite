@@ -16,11 +16,11 @@ type DownloadOptions struct {
 	// Lists narrows the download to these list names.
 	Lists []string
 	// SI writes a .docx per list with the card captions as headings, which is
-	// how a Своя игра package is edited.
+	// how a Svoya Igra package is edited.
 	SI bool
 	// QB pairs two lists into a quizbowl .docx: --qb takes the two list names.
 	QB []string
-	// OnlyAnswers / NoAnswers filter a card's lines, for the СИ .docx.
+	// OnlyAnswers / NoAnswers filter a card's lines, for the SI .docx.
 	OnlyAnswers, NoAnswers bool
 	// SingleFile writes one .4s for the whole board instead of one per list.
 	SingleFile bool
@@ -59,7 +59,7 @@ func Download(j *JSON, o DownloadOptions) ([]File, error) {
 	lists := map[string][]string{}
 	var listOrder []string
 	counters := map[string]int{}
-	// The СИ .docx is built per list, in the order the lists' cards arrive.
+	// The SI .docx is built per list, in the order the lists' cards arrive.
 	siDocs := map[string][]docx.Block{}
 	siThemes := map[string][]string{}
 	var siOrder []string
@@ -175,7 +175,7 @@ func Download(j *JSON, o DownloadOptions) ([]File, error) {
 
 var reHeadingCard = regexp.MustCompile(`(#+)\s*(.*)`)
 
-// themesList is add_themes_list: the «Темы:» paragraph a СИ document closes a
+// themesList is add_themes_list: the "Themes:" paragraph an SI document closes a
 // section with, or nothing when the section had none.
 func themesList(themes []string) []docx.Block {
 	if len(themes) == 0 {

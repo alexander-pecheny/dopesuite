@@ -1,4 +1,6 @@
-// Fest team-numbers page: edit-in-place toggle (Замена номера) and the two mass
+import S from "./i18nstrings_ru_gen.js";
+
+// Fest team-numbers page: edit-in-place toggle (number replacement) and the two mass
 // number-import <dialog> modals (paste → confirm → apply). Extracted verbatim
 // from the page's former inline <script>; keyed on the #numbers-* ids and
 // #numbers-form's data-has-numbers.
@@ -63,13 +65,13 @@ interface ImportApplyResponse {
   if (cancelBtn) cancelBtn.addEventListener("click", exitEdit);
   if (autoBtn && hasNumbers) {
     autoBtn.addEventListener("click", (event) => {
-      const ok = window.confirm("Команды будут перенумерованы 1..N по алфавиту. Если бланки ответов уже напечатаны со старыми номерами — они станут невалидными. Продолжить?");
+      const ok = window.confirm(S.numbers.action.autoConfirm());
       if (!ok) event.preventDefault();
     });
   }
   if (clearBtn) {
     clearBtn.addEventListener("click", (event) => {
-      const ok = window.confirm("Очистить все номера команд?");
+      const ok = window.confirm(S.numbers.action.clearConfirm());
       if (!ok) event.preventDefault();
     });
   }
@@ -87,14 +89,14 @@ interface ImportApplyResponse {
     const dform = document.createElement("form");
     dform.className = "numbers-import-form";
     const title = document.createElement("h2");
-    title.textContent = "Импорт номеров";
+    title.textContent = S.numbers.import.title();
     const hint = document.createElement("p");
     hint.className = "muted";
-    hint.textContent = "Вставьте строки в формате «номер⇥команда» (через табуляцию), по одной на строку. Имена сопоставятся с командами феста; неточные совпадения можно будет поправить.";
+    hint.textContent = S.numbers.import.hint();
     const textarea = document.createElement("textarea");
     textarea.className = "numbers-import-textarea";
     textarea.rows = 12;
-    textarea.placeholder = "1\tНазвание команды\n2\tДругая команда";
+    textarea.placeholder = S.numbers.import.placeholder();
     const err = document.createElement("p");
     err.className = "empty";
     err.hidden = true;
@@ -103,19 +105,19 @@ interface ImportApplyResponse {
     const cancel = document.createElement("button");
     cancel.type = "button";
     cancel.className = "btn";
-    cancel.textContent = "Отмена";
+    cancel.textContent = S.numbers.import.cancel();
     cancel.addEventListener("click", () => closeDialog(dialog));
     const submit = document.createElement("button");
     submit.type = "submit";
     submit.className = "btn";
-    submit.textContent = "Сопоставить";
+    submit.textContent = S.numbers.import.submit();
     actions.append(cancel, submit);
     dform.append(title, hint, textarea, err, actions);
     dform.addEventListener("submit", (event) => {
       event.preventDefault();
       const text = textarea.value;
       if (!text.trim()) {
-        err.textContent = "Вставьте данные для импорта.";
+        err.textContent = S.numbers.import.emptyInput();
         err.hidden = false;
         return;
       }
@@ -127,7 +129,7 @@ interface ImportApplyResponse {
         body: new URLSearchParams({ text }),
       })
         .then((resp) => {
-          if (!resp.ok) throw new Error("Ошибка сервера (" + resp.status + ").");
+          if (!resp.ok) throw new Error(S.numbers.import.serverError(String(resp.status)));
           return resp.json() as Promise<ImportMatchResponse>;
         })
         .then((data) => {
@@ -136,7 +138,7 @@ interface ImportApplyResponse {
         })
         .catch((e: unknown) => {
           submit.disabled = false;
-          err.textContent = (e instanceof Error && e.message) || "Не удалось сопоставить.";
+          err.textContent = (e instanceof Error && e.message) || S.numbers.import.matchFailed();
           err.hidden = false;
         });
     });
@@ -157,7 +159,7 @@ interface ImportApplyResponse {
     const dform = document.createElement("form");
     dform.className = "numbers-import-form";
     const title = document.createElement("h2");
-    title.textContent = "Подтвердите сопоставление";
+    title.textContent = S.numbers.apply.title();
 
     dform.append(title);
 
@@ -175,7 +177,7 @@ interface ImportApplyResponse {
     if (!matches.length) {
       const empty = document.createElement("p");
       empty.className = "empty";
-      empty.textContent = "Не удалось разобрать ни одной строки.";
+      empty.textContent = S.numbers.apply.empty();
       dform.appendChild(empty);
     }
 
@@ -184,7 +186,7 @@ interface ImportApplyResponse {
       select.className = "numbers-import-select";
       const skip = document.createElement("option");
       skip.value = "";
-      skip.textContent = "— пропустить —";
+      skip.textContent = S.numbers.apply.skip();
       select.appendChild(skip);
       teams.forEach((team) => {
         const opt = document.createElement("option");
@@ -222,8 +224,8 @@ interface ImportApplyResponse {
 
         const badge = document.createElement("span");
         badge.className = "numbers-import-badge";
-        if (!m.teamId) badge.textContent = "нет совпадения";
-        else if (m.exact) badge.textContent = "точно";
+        if (!m.teamId) badge.textContent = S.numbers.apply.badgeUnmatched();
+        else if (m.exact) badge.textContent = S.numbers.apply.badgeExact();
         else badge.textContent = "≈ (" + m.distance + ")";
 
         li.append(num, raw, arrow, select, badge);
@@ -243,7 +245,7 @@ interface ImportApplyResponse {
     const back = document.createElement("button");
     back.type = "button";
     back.className = "btn";
-    back.textContent = "Назад";
+    back.textContent = S.numbers.apply.back();
     back.addEventListener("click", () => {
       closeDialog(dialog);
       openImportDialog();
@@ -251,7 +253,7 @@ interface ImportApplyResponse {
     const apply = document.createElement("button");
     apply.type = "submit";
     apply.className = "btn";
-    apply.textContent = "Применить";
+    apply.textContent = S.numbers.apply.submit();
     if (!matches.length) apply.disabled = true;
     actions.append(back, apply);
     dform.appendChild(actions);
@@ -265,7 +267,7 @@ interface ImportApplyResponse {
         if (!val) continue;
         const teamId = Number(val);
         if (usedTeams.has(teamId)) {
-          err.textContent = "Одна команда выбрана несколько раз — поправьте сопоставление.";
+          err.textContent = S.numbers.apply.teamRepeatedClient();
           err.hidden = false;
           return;
         }
@@ -273,7 +275,7 @@ interface ImportApplyResponse {
         assignments.push({ teamId, number: row.number });
       }
       if (!assignments.length) {
-        err.textContent = "Нет ни одного подтверждённого сопоставления.";
+        err.textContent = S.numbers.apply.noAssignments();
         err.hidden = false;
         return;
       }
@@ -286,12 +288,12 @@ interface ImportApplyResponse {
       })
         .then((resp) => resp.json() as Promise<ImportApplyResponse>)
         .then((res) => {
-          if (!res.ok) throw new Error(res.error || "Не удалось сохранить.");
+          if (!res.ok) throw new Error(res.error || S.numbers.apply.saveFailed());
           location.reload();
         })
         .catch((e: unknown) => {
           apply.disabled = false;
-          err.textContent = (e instanceof Error && e.message) || "Не удалось сохранить.";
+          err.textContent = (e instanceof Error && e.message) || S.numbers.apply.saveFailed();
           err.hidden = false;
         });
     });
