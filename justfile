@@ -41,6 +41,10 @@ icons-add name:
     just icons-gen
     echo "vendored {{name}} from lucide-static $ver"
 
+# Regenerate every module's Catalog from its TOML (root docs/adr/0006).
+generate-strings:
+    cd dopeuikit && go generate ./i18nstrings
+
 # Regenerate the icon set into Go, the vocabulary and both apps' TypeScript.
 icons-gen:
     cd dopeuikit && go generate ./icons && go generate ./kit
@@ -57,8 +61,8 @@ class-check: fmt-scripts
     go -C scripts/classcheck test ./...
     go -C scripts/classcheck run .
 
-# scripts/ holds two Go modules (webbuild, classcheck) that no module recipe
-# reaches, so they had no fmt or vet until this.
+# scripts/ holds four Go modules (webbuild, classcheck, i18nstringsgen,
+# cyrillic) that no module recipe reaches, so they had no fmt or vet until this.
 fmt-scripts:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -148,6 +152,7 @@ generate-check: build-web
     # (./palette emits into two stylesheets, a Go file and a TypeScript one), and
     # checking only the first would let the others go stale silently.
     for target in "dopeuikit ./kit kit/tags_gen.go" \
+                  "dopeuikit ./i18nstrings i18nstrings/types_gen.go i18nstrings/ru_gen.go assets/ts/i18nstrings_plural_gen.ts assets/ts/i18nstrings_types_gen.ts assets/ts/i18nstrings_ru_gen.ts" \
                   "dopeuikit ./palette assets/core.css palette/sets_gen.go ../dope/dope/web/assets/static/styles.css ../xy/web/ts/palette_gen.ts" \
                   "dope ./dope/web/ui dope/web/ui/tags_gen.go" \
                   "xy ./internal/ui internal/ui/tags_gen.go" \

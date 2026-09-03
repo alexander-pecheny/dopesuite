@@ -1,0 +1,6 @@
+# The kit's shared words: a screen uses one only when it means exactly this.
+save = "Сохранить"
+cancel = "Отмена"
+
+[selection]
+count = 'Выбрано {{.n}} {{plural .n "элемент" "элемента" "элементов"}}'
