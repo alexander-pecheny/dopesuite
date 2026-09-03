@@ -39,9 +39,19 @@ type Slot struct {
 	RegToken           string
 	RegOpensAt         string
 	RegClosed          bool
+	LinkVisible        bool
 	GameSlug           string
 	Accepted           int
 	Pending            int
+}
+
+// GameRef is how a Слот's Game is named in a URL: its slug when it has one,
+// its id otherwise.
+func (s Slot) GameRef() string {
+	if s.GameSlug != "" {
+		return s.GameSlug
+	}
+	return strconv.FormatInt(s.GameID, 10)
 }
 
 type Application struct {
@@ -101,22 +111,27 @@ func PublicVenues(ctx context.Context, q store.Queryer) ([]Venue, error) {
 
 const slotSelect = `
 select s.id, s.fest_id, s.game_id, coalesce(s.starts_at, ''), coalesce(s.rating_tournament_id, 0),
-       s.reg_token, coalesce(s.reg_opens_at, ''), s.reg_closed, coalesce(g.slug, ''),
+       s.reg_token, coalesce(s.reg_opens_at, ''), s.reg_closed, s.link_visible, coalesce(g.slug, ''),
        (select count(*) from slot_applications a where a.slot_id = s.id and a.status = 'accepted'),
        (select count(*) from slot_applications a where a.slot_id = s.id and a.status = 'pending')
 from slots s join games g on g.id = s.game_id where `
 
 func scanSlot(row interface{ Scan(...any) error }) (Slot, error) {
 	var s Slot
-	var closed int
+	var closed, visible int
 	err := row.Scan(&s.ID, &s.FestID, &s.GameID, &s.StartsAt, &s.RatingTournamentID,
-		&s.RegToken, &s.RegOpensAt, &closed, &s.GameSlug, &s.Accepted, &s.Pending)
+		&s.RegToken, &s.RegOpensAt, &closed, &visible, &s.GameSlug, &s.Accepted, &s.Pending)
 	s.RegClosed = closed == 1
+	s.LinkVisible = visible == 1
 	return s, err
 }
 
 func LoadSlot(ctx context.Context, q store.Queryer, slotID int64) (Slot, error) {
 	return scanSlot(q.QueryRowContext(ctx, slotSelect+`s.id = ?`, slotID))
+}
+
+func SlotByGameID(ctx context.Context, q store.Queryer, gameID int64) (Slot, error) {
+	return scanSlot(q.QueryRowContext(ctx, slotSelect+`s.game_id = ?`, gameID))
 }
 
 func SlotByToken(ctx context.Context, q store.Queryer, token string) (Slot, error) {
@@ -133,6 +148,9 @@ order by case when s.starts_at = '' then 1 else 0 end, s.starts_at, s.id`, []any
 		func(rows *sql.Rows) (Slot, error) { return scanSlot(rows) })
 }
 
+// CreateSlotTx makes a Слот with its registration shut and its link hidden.
+// The reg token exists from the first moment, so a Слот open on creation would
+// take Заявки before its Representative had picked the турнир or the date.
 func CreateSlotTx(ctx context.Context, tx *sql.Tx, festID int64, startsAt string, tournamentID int64, opensAt string, tourComp []int) (int64, error) {
 	gameID, err := gamebuild.Create(ctx, tx, gamebuild.Spec{
 		FestID: festID, Type: games.OD, ODTourComp: tourComp, OwnTeams: true,
@@ -142,17 +160,18 @@ func CreateSlotTx(ctx context.Context, tx *sql.Tx, festID int64, startsAt string
 	}
 	now := util.UtcNow()
 	return store.InsertReturningID(ctx, tx, `
-insert into slots(fest_id, game_id, starts_at, rating_tournament_id, reg_token, reg_opens_at, reg_closed, created_at, updated_at)
-values(?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+insert into slots(fest_id, game_id, starts_at, rating_tournament_id, reg_token, reg_opens_at, reg_closed, link_visible, created_at, updated_at)
+values(?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`,
 		festID, gameID, FormatTime(startsAt), util.NullableInt64(tournamentID), NewToken(),
 		util.NullableString(FormatTime(opensAt)), now, now)
 }
 
-func UpdateSlotTx(ctx context.Context, tx *sql.Tx, slotID int64, startsAt string, tournamentID int64, opensAt string, closed bool) error {
+func UpdateSlotTx(ctx context.Context, tx *sql.Tx, slotID int64, startsAt string, tournamentID int64, opensAt string, closed, linkVisible bool) error {
 	_, err := tx.ExecContext(ctx, `
-update slots set starts_at = ?, rating_tournament_id = ?, reg_opens_at = ?, reg_closed = ?, updated_at = ?
+update slots set starts_at = ?, rating_tournament_id = ?, reg_opens_at = ?, reg_closed = ?, link_visible = ?, updated_at = ?
 where id = ?`, FormatTime(startsAt), util.NullableInt64(tournamentID),
-		util.NullableString(FormatTime(opensAt)), util.BoolToInt(closed), util.UtcNow(), slotID)
+		util.NullableString(FormatTime(opensAt)), util.BoolToInt(closed), util.BoolToInt(linkVisible),
+		util.UtcNow(), slotID)
 	return err
 }
 

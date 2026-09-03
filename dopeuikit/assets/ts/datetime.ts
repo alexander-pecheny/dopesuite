@@ -1,8 +1,9 @@
 // The datetime field (kit's `datetimefield`): a text input that takes a typed
 // or pasted «2026-09-04 19:00», with the kit's own Monday-first calendar
-// popping beside it. The browser's built-in picker follows the browser locale
-// and cannot be told otherwise, so the kit draws the calendar — the text input
-// stays what the form posts, and the calendar only ever writes into it.
+// popping beside it. The browser's built-in controls follow the browser locale
+// and cannot be told otherwise — a Monday-first grid and a 24-hour clock are
+// not on offer — so the kit draws both. The text input stays what the form
+// posts, and the calendar only ever writes into it.
 
 const TEXT = "[data-datetime-text]";
 const OPEN = "[data-datetime-open]";
@@ -46,6 +47,32 @@ export function gridOf(year: number, month: number): {lead: number; days: number
 }
 
 const pad2 = (n: number): string => String(n).padStart(2, "0");
+
+// A time is complete once it carries its minutes: «19:00», «19.00», «1900».
+const WHOLE_TIME = /^(\d{1,2}\D\d{2}|\d{4})$/;
+
+// normalizeTime reads a 24-hour wall clock out of whatever was typed — «19:00»,
+// «19.30», «1930», «9». The browser's own time input is the one control the kit
+// cannot make speak 24 hours: it follows the browser locale and offers AM/PM,
+// which nobody writing these times uses. "" is what does not parse.
+export function normalizeTime(raw: string): string {
+  const text = raw.trim();
+  if (!text) return "";
+  let hours = "";
+  let minutes = "";
+  const split = text.match(/^(\d{1,2})\D(\d{1,2})$/);
+  if (split) {
+    [, hours, minutes] = split;
+  } else {
+    if (!/^\d{1,4}$/.test(text)) return "";
+    hours = text.length <= 2 ? text : text.slice(0, text.length - 2);
+    minutes = text.length <= 2 ? "0" : text.slice(-2);
+  }
+  const h = Number(hours);
+  const m = Number(minutes);
+  if (h > 23 || m > 59) return "";
+  return `${pad2(h)}:${pad2(m)}`;
+}
 
 export function mountDatetimeField(field: HTMLElement): void {
   const text = field.querySelector<HTMLInputElement>(TEXT);
@@ -186,18 +213,36 @@ export function mountDatetimeField(field: HTMLElement): void {
     timeLabel.className = "calendar-tz";
     timeLabel.textContent = "Время";
     timeInput = document.createElement("input");
-    timeInput.type = "time";
+    timeInput.type = "text";
     timeInput.className = "calendar-time-input";
+    timeInput.inputMode = "numeric";
+    timeInput.maxLength = 5;
+    timeInput.size = 5;
+    timeInput.placeholder = "19:00";
+    timeInput.setAttribute("aria-label", "Время");
     timeInput.value = parseValue(text.value)?.time || "";
-    timeInput.addEventListener("input", () => {
+    const writeTime = (time: string): void => {
       const date = parseValue(text.value)?.date;
-      if (date && timeInput) {
-        commit(composeValue(date, timeInput.value));
+      if (date) commit(composeValue(date, time));
+    };
+    timeInput.addEventListener("input", () => {
+      if (timeInput && WHOLE_TIME.test(timeInput.value.trim())) {
+        writeTime(normalizeTime(timeInput.value));
       }
+    });
+    // Half a time — «9», «19:0» — is finished for the person on the way out.
+    timeInput.addEventListener("change", () => {
+      if (!timeInput) return;
+      timeInput.value = normalizeTime(timeInput.value);
+      writeTime(timeInput.value);
     });
     timeInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
+        if (timeInput) {
+          timeInput.value = normalizeTime(timeInput.value);
+          writeTime(timeInput.value);
+        }
         finish();
       }
     });

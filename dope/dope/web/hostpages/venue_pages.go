@@ -24,7 +24,6 @@ type SlotRow struct {
 	Date         string
 	Tournament   string
 	Registration string
-	RegHref      string
 	Accepted     int
 }
 
@@ -93,7 +92,7 @@ func VenuesIndexDoc(rows []VenueRow) *ui.Doc {
 		ui.Textfield(ui.Data("filter-rows", "venues"), ui.Placeholder("город, название…"), ui.Autocomplete("off"))))
 
 	table := []ui.Item{ui.ID("venues"), ui.Scroll(), ui.Trow(
-		ui.Hcell(ui.Text("Площадка")), ui.Hcell(ui.Text("Город")), ui.Hcell(ui.Text("Ближайший слот")),
+		ui.Hcell(ui.Text("Площадка")), ui.Hcell(ui.Text("Город")), ui.Hcell(ui.Text("Ближайшая игра")),
 		ui.Hcell(ui.Text("Регистрация")), ui.Hcell(ui.Text("Команд")), ui.Hcell(ui.Text("Рейтинг")),
 	)}
 	for _, v := range rows {
@@ -120,13 +119,9 @@ func slotTable(title string, rows []SlotRow) *ui.Element {
 		ui.Hcell(ui.Text("Регистрация")), ui.Hcell(ui.Text("Команд")),
 	)}
 	for _, s := range rows {
-		reg := ui.Cell(ui.Text(s.Registration))
-		if s.RegHref != "" {
-			reg = ui.Cell(ui.Link(ui.Href(s.RegHref), ui.Text(s.Registration)))
-		}
 		table = append(table, ui.Trow(
-			ui.Cell(ui.Text(s.Date)), ui.Cell(ui.Text(s.Tournament)), reg,
-			ui.Cell(ui.Text(strconv.Itoa(s.Accepted))),
+			ui.Cell(ui.Text(s.Date)), ui.Cell(ui.Text(s.Tournament)),
+			ui.Cell(ui.Text(s.Registration)), ui.Cell(ui.Text(strconv.Itoa(s.Accepted))),
 		))
 	}
 	return ui.Section(ui.Subhead(ui.Text(title)), ui.Table(table...))
@@ -151,13 +146,13 @@ func VenueDoc(d VenueDetail) *ui.Doc {
 		page = append(page, ui.Richtext(ui.Raw(string(d.Description))))
 	}
 	if len(d.Upcoming) == 0 && len(d.Past) == 0 {
-		page = append(page, ui.Empty(ui.Text("Слотов пока нет.")))
+		page = append(page, ui.Empty(ui.Text("Игр пока нет.")))
 	}
 	if len(d.Upcoming) > 0 {
-		page = append(page, slotTable("Ближайшие слоты", d.Upcoming))
+		page = append(page, slotTable("Ближайшие игры", d.Upcoming))
 	}
 	if len(d.Past) > 0 {
-		page = append(page, slotTable("Прошедшие слоты", d.Past))
+		page = append(page, slotTable("Прошедшие игры", d.Past))
 	}
 	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
 }
@@ -249,6 +244,10 @@ func RegDoc(p RegPage) *ui.Doc {
 	switch {
 	case p.State == venues.RegScheduled:
 		page = append(page, ui.Empty(ui.Text("Регистрация откроется "+p.OpensAt+".")))
+	// A closed registration is what a Слот starts with, so the page says so
+	// before it asks anyone to log in for a заявка they cannot file.
+	case p.State == venues.RegClosed && !p.LoggedIn:
+		page = append(page, ui.Empty(ui.Text("Регистрация закрыта.")))
 	case !p.LoggedIn:
 		page = append(page, ui.Section(
 			ui.Hint(ui.Text("Чтобы подать заявку, войдите через Telegram.")),
@@ -270,7 +269,7 @@ func applicationSection(p RegPage) *ui.Element {
 		}
 		sect = append(sect, ui.Note(ui.Text(joinDots("Статус: "+p.Application.StatusLabel, number))))
 		if p.Application.Status == venues.StatusAccepted && p.GameHref != "" {
-			sect = append(sect, ui.Row(ui.Button(ui.Primary, ui.Href(p.GameHref), ui.Text("Страница игры"))))
+			sect = append(sect, ui.Row(ui.Button(ui.Primary, ui.Href(p.GameHref), ui.Text("Таблица игры"))))
 		}
 		if len(p.Application.Roster) > 0 {
 			sect = append(sect, rosterFlagsTable(p.Application.Roster, p.Application.Flags))

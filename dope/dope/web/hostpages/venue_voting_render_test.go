@@ -19,7 +19,7 @@ func samplePoll() venues.Voting {
 
 func TestSlotVotingSectionOffersTheCandidatesThenTheTally(t *testing.T) {
 	venue := venues.Venue{ID: 1, Slug: "tbilisi", Title: "Площадка"}
-	slot := venues.Slot{ID: 7, FestID: 1, StartsAt: "2026-09-04 19:00", RegToken: "tok"}
+	slot := venues.Slot{ID: 7, FestID: 1, GameID: 3, StartsAt: "2026-09-04 19:00", RegToken: "tok"}
 
 	// No poll yet: the form offers what buff knows about the Слот's date.
 	body := renderPublic(t, slotPageDoc(slotPageData{
@@ -45,7 +45,7 @@ func TestSlotVotingSectionOffersTheCandidatesThenTheTally(t *testing.T) {
 		`value="https://dope.test/vote/vtok"`,
 		`data-copy-target="voteLink"`,
 		"Вид: три по порядку · до 2026-09-04 18:00",
-		`/host/venue/tbilisi/slot/7/voting/ballot/5`,
+		`/host/venue/tbilisi/game/3/voting/ballot/5`,
 		"Отклонить",
 		"По голосованию уже голосовали",
 		`name="kind" value="ranked"`,

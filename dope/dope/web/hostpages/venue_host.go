@@ -65,7 +65,7 @@ func venueDashDoc(data venueDashData) *ui.Doc {
 		page = append(page, ui.Section(
 			ui.Subhead(ui.Text("Удаление")),
 			ui.Form(ui.DirCol, ui.Method("post"), ui.Action(VenueBase(v)+"/delete"), ui.Autocomplete("off"),
-				ui.Data("confirm", "Удалить площадку? Все слоты, заявки и результаты будут удалены."),
+				ui.Data("confirm", "Удалить площадку? Все игры, заявки и результаты будут удалены."),
 				ui.Row(ui.Button(ui.Danger, ui.Submit(), ui.Text("Удалить площадку"))),
 			),
 		))
@@ -95,9 +95,9 @@ func venueSettingsForm(v venues.Venue) *ui.Element {
 
 func venueSlotsSection(data venueDashData) *ui.Element {
 	ref := VenueBase(data.Venue)
-	sect := []ui.Item{ui.Subhead(ui.Text("Слоты"))}
+	sect := []ui.Item{ui.Subhead(ui.Text("Игры"))}
 	if len(data.Slots) == 0 {
-		sect = append(sect, ui.Empty(ui.Text("Слотов пока нет.")))
+		sect = append(sect, ui.Empty(ui.Text("Игр пока нет.")))
 	} else {
 		rows := make([]ui.Item, 0, len(data.Slots))
 		for _, s := range data.Slots {
@@ -121,12 +121,12 @@ func venueSlotsSection(data venueDashData) *ui.Element {
 	}
 	if data.CanManage {
 		sect = append(sect, ui.Details(
-			ui.Summary(ui.Btn(), ui.Text("Новый слот")),
-			ui.Form(ui.DirCol, ui.Method("post"), ui.Action(ref+"/slot/new"), ui.Autocomplete("off"),
+			ui.Summary(ui.Btn(), ui.Text("Новая игра")),
+			ui.Form(ui.DirCol, ui.Method("post"), ui.Action(ref+"/game/new"), ui.Autocomplete("off"),
 				ui.Field(ui.Label("Дата и время"),
 					ui.Datetimefield(ui.Name("starts_at"), ui.Placeholder("2026-09-04 19:00"), ui.Required(),
 						ui.Data("datetime-tz", data.Tz))),
-				ui.Row(ui.Button(ui.Submit(), ui.Text("Создать слот"))),
+				ui.Row(ui.Button(ui.Submit(), ui.Text("Создать игру"))),
 			),
 		))
 	}
@@ -160,7 +160,7 @@ type slotPageData struct {
 
 func slotTitle(slot venues.Slot) string {
 	if slot.StartsAt == "" {
-		return "Слот без даты"
+		return "Игра без даты"
 	}
 	return slot.StartsAt
 }
@@ -170,7 +170,7 @@ func slotTitle(slot venues.Slot) string {
 func VenueBase(v venues.Venue) string { return "/host/venue/" + v.Ref() }
 
 func slotBase(v venues.Venue, slot venues.Slot) string {
-	return VenueBase(v) + "/slot/" + strconv.FormatInt(slot.ID, 10)
+	return VenueBase(v) + "/game/" + slot.GameRef()
 }
 
 func slotPageDoc(data slotPageData) *ui.Doc {
@@ -186,6 +186,9 @@ func slotPageDoc(data slotPageData) *ui.Doc {
 	}
 	page = append(page, slotHeaderSection(data), slotLinksSection(data), slotApplicationsSection(data),
 		slotVotingSection(data), slotContestedSection(data), slotDownloadsSection(data))
+	if data.CanManage {
+		page = append(page, slotDeleteSection(data))
+	}
 	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
 }
 
@@ -196,9 +199,9 @@ func slotHeaderSection(data slotPageData) *ui.Element {
 		tournamentID = strconv.FormatInt(data.Slot.RatingTournamentID, 10)
 	}
 	sect := []ui.Item{
-		ui.Subhead(ui.Text("Слот")),
+		ui.Subhead(ui.Text("Игра")),
 		ui.Note(ui.Text(joinDots(slotTitle(data.Slot), data.Tournament, data.GameStatus))),
-		ui.Row(ui.Button(ui.Ghost, ui.Small(), ui.Href(data.GameHref), ui.Text("Страница игры"))),
+		ui.Row(ui.Button(ui.Ghost, ui.Small(), ui.Href(data.GameHref), ui.Text("Таблица игры"))),
 	}
 	if !data.CanManage {
 		return ui.Section(sect...)
@@ -206,6 +209,10 @@ func slotHeaderSection(data slotPageData) *ui.Element {
 	closed := []ui.Item{ui.Name("reg_closed"), ui.Value("1"), ui.Text("Регистрация закрыта")}
 	if data.Slot.RegClosed {
 		closed = append(closed, ui.Checked())
+	}
+	visible := []ui.Item{ui.Name("link_visible"), ui.Value("1"), ui.Text("Ссылка видна")}
+	if data.Slot.LinkVisible {
+		visible = append(visible, ui.Checked())
 	}
 	sect = append(sect,
 		ui.Form(ui.DirCol, ui.Method("post"), ui.Action(base), ui.Autocomplete("off"),
@@ -218,14 +225,15 @@ func slotHeaderSection(data slotPageData) *ui.Element {
 				ui.Datetimefield(ui.Name("reg_opens_at"), ui.Value(data.Slot.RegOpensAt), ui.Placeholder("сразу"),
 					ui.Data("datetime-tz", data.Tz))),
 			ui.Checkbox(closed...),
+			ui.Checkbox(visible...),
 			ui.Row(ui.Button(ui.Submit(), ui.Text("Сохранить"))),
 		),
 		ui.Row(ui.Button(ui.Ghost, ui.Data("dialog-open", "cloneSlot"), ui.Text("Клонировать"))),
 		ui.Dialog(ui.ID("cloneSlot"),
 			ui.Form(ui.DirCol, ui.Method("post"), ui.Action(base+"/clone"), ui.Autocomplete("off"),
-				ui.Subhead(ui.Text("Клонировать слот")),
+				ui.Subhead(ui.Text("Клонировать игру")),
 				ui.Note(ui.Text("Копируются настройки игры и новая ссылка: без турнира, заявок и голосования.")),
-				ui.Field(ui.Label("Дата и время нового слота"),
+				ui.Field(ui.Label("Дата и время новой игры"),
 					ui.Datetimefield(ui.Name("starts_at"), ui.Value(venues.Shift(data.Slot.StartsAt, 7*24*time.Hour)),
 						ui.Required(), ui.Data("datetime-tz", data.Tz))),
 				ui.Row(
@@ -238,14 +246,31 @@ func slotHeaderSection(data slotPageData) *ui.Element {
 	return ui.Section(sect...)
 }
 
+func slotDeleteSection(data slotPageData) *ui.Element {
+	return ui.Section(
+		ui.Subhead(ui.Text("Удаление")),
+		ui.Form(ui.DirCol, ui.Method("post"), ui.Action(slotBase(data.Venue, data.Slot)+"/delete"), ui.Autocomplete("off"),
+			ui.Data("confirm", "Удалить игру? Заявки, составы, голосование и результаты будут удалены."),
+			ui.Row(ui.Button(ui.Danger, ui.Submit(), ui.Text("Удалить игру"))),
+		),
+	)
+}
+
 func slotLinksSection(data slotPageData) *ui.Element {
 	base := slotBase(data.Venue, data.Slot)
-	sect := []ui.Item{ui.Subhead(ui.Text("Ссылка на регистрацию")),
+	sect := []ui.Item{ui.Subhead(ui.Text("Ссылка на регистрацию"))}
+	// The link is handed over only when its Слот says so. It is the one place
+	// it is handed over at all, so «Ссылка видна» is the whole switch.
+	if !data.Slot.LinkVisible {
+		return ui.Section(append(sect,
+			ui.Empty(ui.Text("Отметьте «Ссылка видна», чтобы получить ссылку.")))...)
+	}
+	sect = append(sect,
 		ui.Row(ui.SpaceSM, ui.AlignCenter, ui.Wrap(),
 			ui.Textfield(ui.ID("regLink"), ui.Value(data.RegURL), ui.Readonly(), ui.Data("select-all", "")),
 			ui.Button(ui.Ghost, ui.Small(), ui.Data("copy-target", "regLink"), ui.Text("Копировать")),
 		),
-	}
+	)
 	if data.CanManage {
 		sect = append(sect, ui.Form(ui.Method("post"), ui.Action(base+"/token"),
 			ui.Data("confirm", "Сменить ссылку? Старая перестанет работать."),

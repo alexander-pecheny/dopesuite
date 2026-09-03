@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"dope/dope/domain/games"
+	"dope/dope/domain/venues"
 	"dope/dope/domain/view"
 	"dope/dope/platform/roles"
 	"dope/dope/platform/util"
@@ -398,6 +399,16 @@ func (s *Server) festRefOrID(ctx context.Context, festID int64) string {
 		return slug
 	}
 	return fmt.Sprintf("%d", festID)
+}
+
+// hostFestBase is the tree a Fest's host pages live in — a Venue keeps one of
+// its own, and the two trees never serve each other's fests.
+func (s *Server) hostFestBase(ctx context.Context, festID int64) string {
+	tree := "/host/fest/"
+	if venues.IsVenue(ctx, s.h.Engine().DB, festID) {
+		tree = "/host/venue/"
+	}
+	return tree + s.festRefOrID(ctx, festID)
 }
 
 func (s *Server) gameRefOrID(ctx context.Context, gameID int64) string {
