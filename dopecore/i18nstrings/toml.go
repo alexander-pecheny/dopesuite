@@ -18,7 +18,8 @@ type Pair struct {
 }
 
 // Parse reads the TOML subset both users need: [table] headers, key = "string",
-// # comments, the basic-string escapes and """ multi-line basic strings.
+// # comments, the basic-string escapes, """ multi-line basic strings and
+// 'literal strings', which a template full of quoted plural forms wants.
 func Parse(text string) ([]Pair, error) {
 	var out []Pair
 	lines := strings.Split(text, "\n")
@@ -61,6 +62,9 @@ func isMultiline(v string) bool {
 }
 
 func unquote(v string) (string, error) {
+	if len(v) >= 2 && v[0] == '\'' && v[len(v)-1] == '\'' {
+		return v[1 : len(v)-1], nil
+	}
 	body := ""
 	switch {
 	case isMultiline(v):

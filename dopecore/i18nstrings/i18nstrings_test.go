@@ -18,6 +18,7 @@ escaped = "a\tb\nc\"d"
 long = """
 first
 second"""
+literal = 'no \\escapes "here"'
 
 [other]
 plain = "elsewhere"
@@ -30,7 +31,8 @@ plain = "elsewhere"
 		{Table: "general", Key: "plain", Value: "text", Line: 6},
 		{Table: "general", Key: "escaped", Value: "a\tb\nc\"d", Line: 7},
 		{Table: "general", Key: "long", Value: "first\nsecond", Line: 8},
-		{Table: "other", Key: "plain", Value: "elsewhere", Line: 13},
+		{Table: "general", Key: "literal", Value: `no \\escapes "here"`, Line: 11},
+		{Table: "other", Key: "plain", Value: "elsewhere", Line: 14},
 	}
 	if len(pairs) != len(want) {
 		t.Fatalf("got %d pairs, want %d: %+v", len(pairs), len(want), pairs)
