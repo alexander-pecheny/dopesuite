@@ -824,8 +824,14 @@
           "enum": "icon-name"
         },
         {
-          "name": "view",
-          "required": true
+          "name": "view"
+        },
+        {
+          "name": "href"
+        },
+        {
+          "name": "active",
+          "kind": "bare"
         }
       ],
       "children": "text"

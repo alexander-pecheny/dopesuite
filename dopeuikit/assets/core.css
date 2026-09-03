@@ -1838,7 +1838,8 @@ input[type="radio"]:focus-visible {
    THE either/or switch: the tabs primitive (the card-detail view switch), the
    appearance modal's theme/contrast rows, xy's editor toggles. A recessed
    track holding flat buttons; the active one lifts to a surface card
-   (.active, toggled by the page's JS). .seg-grow splits the row equally. */
+   (.active, set by the page's JS, or server-side on a strip of links).
+   .seg-grow splits the row equally. */
 .seg {
   display: inline-flex;
   gap: var(--space-0-5);
@@ -1853,6 +1854,11 @@ input[type="radio"]:focus-visible {
 .seg-grow .seg-btn { flex: 1 1 0; }
 
 .seg-btn {
+  /* inline-flex and no underline because a tab whose choices are pages is an
+     <a>, not a <button>, and an anchor centres nothing by itself. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: var(--space-1-5) var(--space-3);
   border: 0;
   border-radius: var(--radius-sm);
@@ -1860,6 +1866,7 @@ input[type="radio"]:focus-visible {
   color: var(--muted);
   font: inherit;
   font-size: var(--text-sm);
+  text-decoration: none;
   cursor: var(--cursor-action);
 }
 

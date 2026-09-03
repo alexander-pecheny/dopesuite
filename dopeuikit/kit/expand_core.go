@@ -349,9 +349,22 @@ func expandDetails(c *ExpandCtx, p *Element) []Node {
 }
 
 func expandTab(c *ExpandCtx, p *Element) []Node {
-	view, _ := Get(p, "view")
-	attrs := []Attr{ClassAttr("seg-btn")}
+	classes := []string{"seg-btn"}
+	if Flag(p, "active") {
+		classes = append(classes, "active")
+	}
+	attrs := []Attr{ClassAttr(classes...)}
 	attrs = append(attrs, IDAttr(p)...)
+	// A tab whose choices are pages is a link, like a button with an href: it
+	// needs no script, and it opens in a new tab like any other.
+	if href, ok := Get(p, "href"); ok {
+		attrs = append(attrs, At("href", href))
+		if Flag(p, "active") {
+			attrs = append(attrs, At("aria-current", "page"))
+		}
+		return one(&Element{Tag: "a", Attrs: attrs, Inline: withIcon(p, c.Items(p.Inline))})
+	}
+	view, _ := Get(p, "view")
 	attrs = append(attrs, At("type", "button"), At("role", "tab"), At("data-view", view))
 	return one(&Element{Tag: "button", Attrs: attrs, Inline: withIcon(p, c.Items(p.Inline))})
 }

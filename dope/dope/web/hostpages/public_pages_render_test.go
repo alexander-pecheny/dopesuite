@@ -40,6 +40,28 @@ func TestPublicIndexDocTrail(t *testing.T) {
 	}
 }
 
+// Both public pages carry the same strip of tabs, and each lights its own.
+func TestPublicTabsOnBothPages(t *testing.T) {
+	fests := renderPublic(t, PublicIndexDoc(nil))
+	venues := renderPublic(t, VenuesIndexDoc(nil))
+	for _, want := range []string{
+		`<a class="seg-btn active" href="/" aria-current="page">Фесты</a>`,
+		`<a class="seg-btn" href="/venues">Площадки</a>`,
+	} {
+		if !strings.Contains(fests, want) {
+			t.Errorf("the fest index is missing %q", want)
+		}
+	}
+	for _, want := range []string{
+		`<a class="seg-btn" href="/">Фесты</a>`,
+		`<a class="seg-btn active" href="/venues" aria-current="page">Площадки</a>`,
+	} {
+		if !strings.Contains(venues, want) {
+			t.Errorf("the venue index is missing %q", want)
+		}
+	}
+}
+
 func TestPublicIndexDocEmpty(t *testing.T) {
 	body := renderPublic(t, PublicIndexDoc(nil))
 	if !strings.Contains(body, "Нет публичных фестов.") {

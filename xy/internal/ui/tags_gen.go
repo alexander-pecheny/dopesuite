@@ -137,6 +137,7 @@ var Done = base.Done
 var Doneid = base.Doneid
 var Open = base.Open
 var View = base.View
+var Active = base.Active
 var Scroll = base.Scroll
 
 // Base enum constants, re-exported.

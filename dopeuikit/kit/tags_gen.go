@@ -453,6 +453,10 @@ func View(v string) Attr {
 	return Attr{Name: "view", Value: v}
 }
 
+func Active() Attr {
+	return Attr{Name: "active", Bare: true}
+}
+
 func Scroll() Attr {
 	return Attr{Name: "scroll", Bare: true}
 }
