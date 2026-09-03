@@ -17,7 +17,7 @@ import (
 
 func (s *Server) handleSlotToursExport(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	festID := sc.FestID
-	_, slot, err := s.slotOf(r, festID)
+	_, slot, err := s.slotOf(r, sc)
 	if err != nil {
 		return err
 	}
@@ -40,7 +40,7 @@ func (s *Server) handleSlotToursExport(w http.ResponseWriter, r *http.Request, s
 
 func (s *Server) handleSlotPlayersExport(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	festID := sc.FestID
-	venue, slot, err := s.slotOf(r, festID)
+	venue, slot, err := s.slotOf(r, sc)
 	if err != nil {
 		return err
 	}

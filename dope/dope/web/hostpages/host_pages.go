@@ -200,7 +200,7 @@ func profileDoc(data profileData) *ui.Doc {
 		ui.ID("tzForm"), ui.DirCol, ui.Autocomplete("off"),
 		ui.Textfield(ui.ID("tzValue"), ui.Name("timezone"), ui.Placeholder("Europe/Moscow"),
 			ui.Value(data.Timezone), ui.Autocomplete("off"), ui.Maxlength("64")),
-		ui.Hint(ui.Text("В этом поясе записывается время слотов и голосований; календарь показывает его под сеткой.")),
+		ui.Hint(ui.Text("В этом поясе записывается время игр и голосований; календарь показывает его под сеткой.")),
 		ui.Row(ui.Button(ui.Submit(), ui.Text("Сохранить"))),
 	}
 	page = append(page,

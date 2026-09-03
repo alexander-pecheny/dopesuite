@@ -96,13 +96,13 @@ func (s *Server) buildRoutes() *route.Table {
 	// A Venue is a Fest of its own kind, so it answers to every per-fest page
 	// under a tree of its own; the handlers are the same, only the patterns
 	// differ, and the router keeps each kind on its own prefix.
-	s.handleFestRoutes(t, "/host/fest/{fest}")
-	s.handleFestRoutes(t, "/host/venue/{venue}")
+	s.handleFestRoutes(t, "/host/fest/{fest}", false)
+	s.handleFestRoutes(t, "/host/venue/{venue}", true)
 	s.handleSlotRoutes(t, "/host/venue/{venue}")
 	return t
 }
 
-func (s *Server) handleFestRoutes(t *route.Table, fest string) {
+func (s *Server) handleFestRoutes(t *route.Table, fest string, venue bool) {
 	game := fest + "/game/{game}"
 	page := func(f func(http.ResponseWriter, *http.Request, int64)) route.Handler {
 		return func(w http.ResponseWriter, r *http.Request, sc route.Scope) error { f(w, r, sc.FestID); return nil }
@@ -140,8 +140,10 @@ func (s *Server) handleFestRoutes(t *route.Table, fest string) {
 		s.handleHostDeleteFest(w, r, sc.FestID, sc.User.UserID)
 		return nil
 	})
-	t.Handle("GET "+fest+"/game/new", route.Manager, page(func(w http.ResponseWriter, r *http.Request, id int64) { s.renderHostCreateGamePage(w, r, id, "", "") }))
-	t.Handle("POST "+fest+"/game/new", route.Manager, page(s.handleHostCreateGame))
+	if !venue {
+		t.Handle("GET "+fest+"/game/new", route.Manager, page(func(w http.ResponseWriter, r *http.Request, id int64) { s.renderHostCreateGamePage(w, r, id, "", "") }))
+		t.Handle("POST "+fest+"/game/new", route.Manager, page(s.handleHostCreateGame))
+	}
 	t.Handle("POST "+game+"/delete", route.Manager, gamePage(s.handleHostDeleteGame))
 	t.Handle("POST "+game+"/clear", route.Manager, gamePage(s.handleHostClearGame))
 	t.Handle("GET "+game+"/settings", route.Manager, gamePage(func(w http.ResponseWriter, r *http.Request, id, gid int64) {
@@ -169,9 +171,13 @@ func (s *Server) handleFestRoutes(t *route.Table, fest string) {
 	t.Handle("GET "+fest+"/game/{rest...}", route.Member, s.serveHostGamePage)
 }
 
+// handleSlotRoutes hangs a Venue's Слот off its Game: /host/venue/{v}/game/{g}
+// is the Слот — its date, registration, Заявки, голосование — and the table it
+// is played on is /table under it. A Venue's Games are made here and not by
+// the фест's /game/new: every one of them is a Слот.
 func (s *Server) handleSlotRoutes(t *route.Table, venue string) {
-	slot := venue + "/slot/{slot}"
-	t.Handle("POST "+venue+"/slot/new", route.Manager, s.handleHostCreateSlot)
+	slot := venue + "/game/{game}"
+	t.Handle("POST "+venue+"/game/new", route.Manager, s.handleHostCreateSlot)
 	t.Handle("GET "+slot, route.Member, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 		return s.renderSlotPage(w, r, sc, "", "")
 	})

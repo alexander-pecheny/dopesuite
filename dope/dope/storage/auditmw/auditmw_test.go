@@ -24,7 +24,7 @@ func TestAuditFestIDFromPath(t *testing.T) {
 	}{
 		{"/api/fest/12/games/3/state", 12},
 		{"/host/fest/12/numbers/auto", 12},
-		{"/host/venue/12/slot/4", 12},
+		{"/host/venue/12/game/4", 12},
 		{"/host/venue/12/numbers/auto", 12},
 		{"/fest/12/game/3", 12},
 		{"/host/venue", 0},

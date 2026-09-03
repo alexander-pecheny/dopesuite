@@ -114,7 +114,7 @@ func (s *Server) loadContestedRows(ctx context.Context, festID, gameID int64) ([
 func (s *Server) contestedWrite(w http.ResponseWriter, r *http.Request, sc route.Scope,
 	apply func(ctx context.Context, tx *sql.Tx, question int, number int64) error) error {
 	festID := sc.FestID
-	_, slot, err := s.slotOf(r, festID)
+	_, slot, err := s.slotOf(r, sc)
 	if err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func (s *Server) contestedWrite(w http.ResponseWriter, r *http.Request, sc route
 
 func (s *Server) handleContestedAccept(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	festID := sc.FestID
-	_, slot, err := s.slotOf(r, festID)
+	_, slot, err := s.slotOf(r, sc)
 	if err != nil {
 		return err
 	}
@@ -151,7 +151,7 @@ func (s *Server) handleContestedAccept(w http.ResponseWriter, r *http.Request, s
 
 func (s *Server) handleContestedDelete(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	festID := sc.FestID
-	_, slot, err := s.slotOf(r, festID)
+	_, slot, err := s.slotOf(r, sc)
 	if err != nil {
 		return err
 	}

@@ -2752,9 +2752,11 @@ function currentRoute(): EKRoute {
     festApi: `/api/fest/${festID}`,
   };
   // A trailing /static segment forces the static snapshot server-side (see
-  // handleFestRouter) but leaves the URL in the bar. Strip it before matching
-  // the sub-route, else the injected snapshot is rejected as a "missing" route.
-  const rest = path.slice(prefix[0].length).replace(/\/static$/, "").replace(/\/$/, "");
+  // handleFestRouter) but leaves the URL in the bar, and /table names the game
+  // itself where a Слот owns the bare path. Strip both before matching the
+  // sub-route, else the injected snapshot is rejected as a "missing" route.
+  const rest = path.slice(prefix[0].length)
+    .replace(/\/static$/, "").replace(/\/table$/, "").replace(/\/$/, "");
   if (rest === "" || rest === "/") return {mode: "grid", ...at};
   if (rest === "/venues") return {mode: "venues", ...at};
   if (rest === "/roster") return {mode: "roster", ...at};

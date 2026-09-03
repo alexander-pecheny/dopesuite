@@ -406,7 +406,7 @@ limit 1`, festID).Scan(&nextGameID, &nextMatchCode); err != nil && !errors.Is(er
 			s.h.Engine().ActiveMatchCode = ""
 		}
 	}
-	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s", s.festRefOrID(r.Context(), festID)), http.StatusSeeOther)
+	http.Redirect(w, r, s.hostFestBase(r.Context(), festID), http.StatusSeeOther)
 }
 
 // handleHostClearGame resets a game to its just-created state: it drops every

@@ -51,7 +51,7 @@ func (s *Server) playableCandidates(ctx context.Context, slot venues.Slot) []ven
 
 func (s *Server) handleVotingSave(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	festID := sc.FestID
-	_, slot, err := s.slotOf(r, festID)
+	_, slot, err := s.slotOf(r, sc)
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func (s *Server) candidateByID(ctx context.Context, id int64) venues.Candidate {
 
 func (s *Server) handleVotingBallot(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	festID := sc.FestID
-	_, slot, err := s.slotOf(r, festID)
+	_, slot, err := s.slotOf(r, sc)
 	if err != nil {
 		return err
 	}

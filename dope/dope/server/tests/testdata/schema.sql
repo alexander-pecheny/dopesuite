@@ -371,7 +371,7 @@ CREATE TABLE slots(
   reg_opens_at text,
   reg_closed integer not null default 0,
   created_at text not null,
-  updated_at text not null,
+  updated_at text not null, link_visible INTEGER NOT NULL DEFAULT 0,
   unique(game_id)
 );
 

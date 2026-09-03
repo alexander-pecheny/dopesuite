@@ -44,7 +44,7 @@ values(900, 'kubok', 'Кубок', '', 'fest', null, 1, ?, ?, 1)`, now, now); er
 		location string
 	}{
 		{"/host/fest/" + venueRef, http.StatusMovedPermanently, "/host/venue/" + venueRef},
-		{"/host/fest/" + venueRef + "/slot/1", http.StatusMovedPermanently, "/host/venue/" + venueRef + "/slot/1"},
+		{"/host/fest/" + venueRef + "/game/1", http.StatusMovedPermanently, "/host/venue/" + venueRef + "/game/1"},
 		{"/host/fest/" + venueRef + "/game/1/", http.StatusMovedPermanently, "/host/venue/" + venueRef + "/game/1/"},
 		{"/host/venue/kubok", http.StatusNotFound, ""},
 		{"/host/venue/kubok/numbers", http.StatusNotFound, ""},
@@ -60,6 +60,52 @@ values(900, 'kubok', 'Кубок', '', 'fest', null, 1, ?, ?, 1)`, now, now); er
 		}
 		if c.location != "" && rec.Header().Get("Location") != c.location {
 			t.Errorf("%s: Location %q, want %q", c.path, rec.Header().Get("Location"), c.location)
+		}
+	}
+}
+
+// Deleting an игра takes its Слот with it — the Заявки, their versions and the
+// Game all hang off the same row — and lands the Representative on the Venue,
+// not on the /host/fest tree a Venue is never served from.
+func TestDeletingAVenueGameTakesTheSlot(t *testing.T) {
+	db := venueTestDB(t)
+	festID, slot := newVenueSlot(t, db, []int{2})
+	srv := dopeserver.NewTestServer(func(e *core.Engine) {
+		e.DB = db
+		e.RT = realtime.NewManager()
+	})
+	applicant := newVenueUser(t, db, "applicant")
+	fileApplication(t, db, slot, applicant, "Мантисса", 0, nil)
+
+	userID := newVenueUser(t, db, "organizer")
+	if _, err := db.Exec(`insert into fest_organizers(fest_id, user_id, role, added_at) values(?, ?, 'creator', ?)`,
+		festID, userID, util.UtcNow()); err != nil {
+		t.Fatal(err)
+	}
+	ref := strconv.FormatInt(festID, 10)
+	req := httptest.NewRequest(http.MethodPost,
+		"/host/venue/"+ref+"/game/"+slot.GameRef()+"/delete", strings.NewReader(""))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: session.CookieName, Value: createTestSession(t, srv, userID)})
+	rec := httptest.NewRecorder()
+	srv.HostPageServer().HandleHostRouter(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("delete = %d: %s", rec.Code, rec.Body.String())
+	}
+	if got, want := rec.Header().Get("Location"), "/host/venue/"+ref; got != want {
+		t.Errorf("Location %q, want %q", got, want)
+	}
+	for _, q := range []string{
+		`select count(*) from games where id = ?`,
+		`select count(*) from slots where game_id = ?`,
+		`select count(*) from slot_applications where slot_id in (select id from slots where game_id = ?)`,
+	} {
+		var n int
+		if err := db.QueryRow(q, slot.GameID).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Errorf("%s left %d rows", q, n)
 		}
 	}
 }

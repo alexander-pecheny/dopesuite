@@ -384,6 +384,11 @@ func GamePagePath(parts []string, host bool) bool {
 	if len(parts) == 2 {
 		return true
 	}
+	// /table is the Game itself, spelled out: a Venue's bare /game/{g} is its
+	// Слот's page, so the table it is played on needs a segment of its own.
+	if len(parts) == 3 && parts[2] == "table" {
+		return true
+	}
 	switch parts[2] {
 	case "venues", "stats", "roster":
 		return len(parts) == 3

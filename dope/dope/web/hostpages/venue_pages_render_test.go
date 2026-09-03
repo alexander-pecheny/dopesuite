@@ -34,23 +34,27 @@ func TestVenueDocSplitsUpcomingFromPast(t *testing.T) {
 	body := renderPublic(t, VenueDoc(VenueDetail{
 		Ref: "tbilisi", Title: "Площадка Тбилиси", City: "Тбилиси", RatingVenueID: 123,
 		Description: "<p>Привет</p>",
-		Upcoming:    []SlotRow{{Date: "2026-09-04 19:00", Registration: "открыта", RegHref: "/reg/tok"}},
+		Upcoming:    []SlotRow{{Date: "2026-09-04 19:00", Registration: "открыта"}},
 		Past:        []SlotRow{{Date: "2026-08-28 19:00", Tournament: "Синхрон"}},
 	}))
 	for _, want := range []string{
 		`href="/venues"`,
 		`<p>Привет</p>`,
-		`Ближайшие слоты`,
-		`href="/reg/tok"`,
-		`Прошедшие слоты`,
+		`Ближайшие игры`,
+		`Прошедшие игры`,
 		`Синхрон`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q", want)
 		}
 	}
+	// The reg token is handed out from the Слот's page and nowhere else, so a
+	// public Площадка says a registration is open without linking to it.
+	if strings.Contains(body, "/reg/") {
+		t.Error("the venue page hands out a reg link")
+	}
 	bare := renderPublic(t, VenueDoc(VenueDetail{Ref: "x", Title: "X"}))
-	if !strings.Contains(bare, "Слотов пока нет.") {
+	if !strings.Contains(bare, "Игр пока нет.") {
 		t.Error("missing the empty note")
 	}
 }
@@ -130,6 +134,18 @@ func TestRegDocSaysWhatEachStateAllows(t *testing.T) {
 	if body := renderPublic(t, RegDoc(stranger)); !strings.Contains(body, "Регистрация закрыта.") {
 		t.Error("a stranger is told it is closed")
 	}
+	// A Слот starts closed, so this is the first thing most links show: say it
+	// is closed rather than send someone through Telegram for nothing.
+	shut := base
+	shut.State = venues.RegClosed
+	shut.LoginHref = "/login?next=%2Freg%2Ftok"
+	body = renderPublic(t, RegDoc(shut))
+	if !strings.Contains(body, "Регистрация закрыта.") {
+		t.Error("an anonymous visitor is told it is closed")
+	}
+	if strings.Contains(body, `href="/login?next=%2Freg%2Ftok"`) {
+		t.Error("a closed registration must not invite a login")
+	}
 }
 
 // A Слот has more applicants than seats, so the Состав is asked for only once
@@ -160,10 +176,10 @@ func TestRegDocAsksForTheRosterOnlyOnceAccepted(t *testing.T) {
 
 func TestSlotPageDocCarriesTheLinkAndTheQueue(t *testing.T) {
 	venue := venues.Venue{ID: 1, Slug: "tbilisi", Title: "Площадка", City: "Тбилиси"}
-	slot := venues.Slot{ID: 7, FestID: 1, GameID: 3, StartsAt: "2026-09-04 19:00", RegToken: "tok"}
+	slot := venues.Slot{ID: 7, FestID: 1, GameID: 3, StartsAt: "2026-09-04 19:00", RegToken: "tok", LinkVisible: true}
 	body := renderPublic(t, slotPageDoc(slotPageData{
 		Venue: venue, Slot: slot, Tournament: "Синхрон", CanManage: true,
-		GameHref: "/host/venue/tbilisi/game/3/", RegURL: "https://dope.test/reg/tok",
+		GameHref: "/host/venue/tbilisi/game/3/table", RegURL: "https://dope.test/reg/tok",
 		Applications: []SlotApplicationRow{{
 			App: venues.Application{ID: 9, Status: venues.StatusPending, TeamName: "Мантисса",
 				RatingTeamID: 5723, Number: 1, CreatedAt: "2026-09-02T13:10:36Z", UpdatedAt: "2026-09-02T13:10:36Z"},
@@ -174,18 +190,20 @@ func TestSlotPageDocCarriesTheLinkAndTheQueue(t *testing.T) {
 	for _, want := range []string{
 		`value="https://dope.test/reg/tok"`,
 		`data-copy-target="regLink"`,
-		`/host/venue/tbilisi/slot/7/token`,
-		`/host/venue/tbilisi/slot/7/clone`,
-		`/host/venue/tbilisi/slot/7/application/9/status`,
-		`/host/venue/tbilisi/slot/7/application/9/revert`,
-		`/host/venue/tbilisi/slot/7/application/9/edit`,
-		`/host/venue/tbilisi/slot/7/export/tours.xlsx`,
-		`/host/venue/tbilisi/slot/7/export/players.xlsx`,
+		`/host/venue/tbilisi/game/3/token`,
+		`/host/venue/tbilisi/game/3/clone`,
+		`/host/venue/tbilisi/game/3/application/9/status`,
+		`/host/venue/tbilisi/game/3/application/9/revert`,
+		`/host/venue/tbilisi/game/3/application/9/edit`,
+		`/host/venue/tbilisi/game/3/export/tours.xlsx`,
+		`/host/venue/tbilisi/game/3/export/players.xlsx`,
 		`rating.chgk.info/teams/5723`,
 		`https://t.me/tester`,
 		`2026-09-02 13:10`,
 		`Принять`,
 		`Отклонить`,
+		`/host/venue/tbilisi/game/3/delete`,
+		`Удалить игру`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q", want)
@@ -195,19 +213,50 @@ func TestSlotPageDocCarriesTheLinkAndTheQueue(t *testing.T) {
 	if strings.Contains(body, "Вернуть в ожидание") {
 		t.Error("a pending заявка should not offer the status it already has")
 	}
+
+	viewer := renderPublic(t, slotPageDoc(slotPageData{Venue: venue, Slot: slot}))
+	if strings.Contains(viewer, "Удалить игру") {
+		t.Error("a host without manage rights is offered the delete")
+	}
+}
+
+// «Ссылка видна» is the whole switch: the Слот's page is the only place the
+// reg token is handed over, and it hands it over only when told to.
+func TestSlotPageHandsTheRegLinkOverOnlyWhenTold(t *testing.T) {
+	venue := venues.Venue{ID: 1, Slug: "tbilisi", Title: "Площадка"}
+	slot := venues.Slot{ID: 7, FestID: 1, GameID: 3, RegToken: "tok"}
+	data := slotPageData{Venue: venue, Slot: slot, CanManage: true, RegURL: "https://dope.test/reg/tok"}
+
+	body := renderPublic(t, slotPageDoc(data))
+	if strings.Contains(body, "https://dope.test/reg/tok") {
+		t.Error("a hidden link is still handed out")
+	}
+	if !strings.Contains(body, "Отметьте «Ссылка видна»") {
+		t.Error("the section must say how to get the link")
+	}
+
+	// Open is not enough — the tick is what shows it.
+	data.Slot.RegClosed = false
+	if body := renderPublic(t, slotPageDoc(data)); strings.Contains(body, "https://dope.test/reg/tok") {
+		t.Error("an open registration shows the link without the tick")
+	}
+	data.Slot.LinkVisible = true
+	if body := renderPublic(t, slotPageDoc(data)); !strings.Contains(body, "https://dope.test/reg/tok") {
+		t.Error("the tick did not hand the link over")
+	}
 }
 
 func TestVenueDashDocListsSlotsAndAccess(t *testing.T) {
 	body := renderPublic(t, venueDashDoc(venueDashData{
 		Venue:     venues.Venue{ID: 1, Slug: "tbilisi", Title: "Площадка", City: "Тбилиси", IsPublic: true},
-		Slots:     []VenueDashSlot{{ID: 7, Date: "2026-09-04 19:00", Tournament: "Синхрон", Accepted: 2, Pending: 1, Href: "/host/venue/tbilisi/slot/7"}},
+		Slots:     []VenueDashSlot{{ID: 7, Date: "2026-09-04 19:00", Tournament: "Синхрон", Accepted: 2, Pending: 1, Href: "/host/venue/tbilisi/game/3"}},
 		CanManage: true,
 	}))
 	for _, want := range []string{
 		`data-jump-href="/venue/tbilisi"`,
-		`href="/host/venue/tbilisi/slot/7"`,
+		`href="/host/venue/tbilisi/game/3"`,
 		`принято 2, ждут 1`,
-		`/host/venue/tbilisi/slot/new`,
+		`/host/venue/tbilisi/game/new`,
 		`id="access"`,
 	} {
 		if !strings.Contains(body, want) {
@@ -215,7 +264,7 @@ func TestVenueDashDocListsSlotsAndAccess(t *testing.T) {
 		}
 	}
 	viewer := renderPublic(t, venueDashDoc(venueDashData{Venue: venues.Venue{ID: 1, Title: "Площадка"}}))
-	if strings.Contains(viewer, "Новый слот") || strings.Contains(viewer, `id="access"`) {
+	if strings.Contains(viewer, "Новая игра") || strings.Contains(viewer, `id="access"`) {
 		t.Error("a host without manage rights gets no forms")
 	}
 }

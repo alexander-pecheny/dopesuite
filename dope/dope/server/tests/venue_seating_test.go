@@ -6,6 +6,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/xuri/excelize/v2"
 
@@ -146,7 +147,7 @@ func inTx(t *testing.T, db *sql.DB, fn func(context.Context, *sql.Tx) error) err
 	return tx.Commit()
 }
 
-func newVenueSlot(t *testing.T, db *sql.DB, comp []int) (int64, venues.Slot) {
+func newVenueFest(t *testing.T, db *sql.DB) int64 {
 	t.Helper()
 	now := util.UtcNow()
 	result, err := db.Exec(`
@@ -159,6 +160,12 @@ values(null, 'Площадка', '', 'venue', 'Тбилиси', null, 1, ?, ?, 1
 	if err != nil {
 		t.Fatal(err)
 	}
+	return festID
+}
+
+func newVenueSlot(t *testing.T, db *sql.DB, comp []int) (int64, venues.Slot) {
+	t.Helper()
+	festID := newVenueFest(t, db)
 	var slotID int64
 	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
 		var err error
@@ -167,11 +174,41 @@ values(null, 'Площадка', '', 'venue', 'Тбилиси', null, 1, ?, ?, 1
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// A Слот is born with its registration shut; these tests are about what
+	// happens after a Representative opens it.
+	if _, err := db.Exec(`update slots set reg_closed = 0 where id = ?`, slotID); err != nil {
+		t.Fatal(err)
+	}
 	slot, err := venues.LoadSlot(t.Context(), db, slotID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return festID, slot
+}
+
+// A new Слот has a reg token from the first moment, so it must not also have an
+// open registration: the Representative picks the турнир and the date first.
+func TestNewSlotStartsWithRegistrationClosed(t *testing.T) {
+	db := venueTestDB(t)
+	festID := newVenueFest(t, db)
+	var slotID int64
+	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+		var err error
+		slotID, err = venues.CreateSlotTx(ctx, tx, festID, "2026-09-04 19:00", 0, "", []int{2})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	slot, err := venues.LoadSlot(t.Context(), db, slotID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slot.RegClosed {
+		t.Error("a fresh Слот takes заявки before anyone opened it")
+	}
+	if venues.Registration(slot.RegOpensAt, slot.RegClosed, time.Now().UTC()) != venues.RegClosed {
+		t.Error("the registration state disagrees with the flag")
+	}
 }
 
 func newVenueUser(t *testing.T, db *sql.DB, name string) int64 {

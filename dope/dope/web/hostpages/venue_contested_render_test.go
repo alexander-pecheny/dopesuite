@@ -25,7 +25,7 @@ func TestContestedRowsNumberByTour(t *testing.T) {
 func TestSlotContestedSectionOffersTheToggleAndTheDelete(t *testing.T) {
 	data := slotPageData{
 		Venue: venues.Venue{ID: 1, Slug: "tbilisi", Title: "Площадка"},
-		Slot:  venues.Slot{ID: 7, FestID: 1},
+		Slot:  venues.Slot{ID: 7, FestID: 1, GameID: 3},
 		Contested: []ContestedRow{{
 			ContestedAnswer: store.ContestedAnswer{Question: 1, Number: 3, Answer: "Текст"},
 			Tour:            1, InTour: 2, TeamName: "Вторая",
@@ -35,8 +35,8 @@ func TestSlotContestedSectionOffersTheToggleAndTheDelete(t *testing.T) {
 	body := renderPublic(t, slotPageDoc(data))
 	for _, want := range []string{
 		"Спорные", "Текст", "3 · Вторая",
-		"/host/venue/tbilisi/slot/7/contested/accept",
-		"/host/venue/tbilisi/slot/7/contested/delete",
+		"/host/venue/tbilisi/game/3/contested/accept",
+		"/host/venue/tbilisi/game/3/contested/delete",
 		"Принять на площадке",
 	} {
 		if !strings.Contains(body, want) {

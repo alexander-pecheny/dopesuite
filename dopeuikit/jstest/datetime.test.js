@@ -86,7 +86,8 @@ globalThis.Event = class {
   }
 };
 
-const {parseValue, composeValue, gridOf, mountDatetimeField} = await import("../assets/dist/esm/datetime.js");
+const {parseValue, composeValue, gridOf, normalizeTime, mountDatetimeField} =
+  await import("../assets/dist/esm/datetime.js");
 
 test("parseValue reads a date with an optional time", () => {
   assert.deepEqual(parseValue("2026-09-04 19:00"), {date: "2026-09-04", time: "19:00"});
@@ -100,6 +101,22 @@ test("composeValue merges date and time", () => {
   assert.equal(composeValue("2026-09-03", "19:00"), "2026-09-03 19:00");
   assert.equal(composeValue("2026-09-03", ""), "2026-09-03");
   assert.equal(composeValue("2026-09-03", "  "), "2026-09-03");
+});
+
+test("normalizeTime reads a 24-hour clock out of what was typed", () => {
+  assert.equal(normalizeTime("19:00"), "19:00");
+  assert.equal(normalizeTime(" 19.30 "), "19:30");
+  assert.equal(normalizeTime("1930"), "19:30");
+  assert.equal(normalizeTime("9:5"), "09:05");
+  assert.equal(normalizeTime("9"), "09:00");
+  assert.equal(normalizeTime("930"), "09:30");
+  assert.equal(normalizeTime("00:00"), "00:00");
+  assert.equal(normalizeTime("23:59"), "23:59");
+  // Nothing here is a time, and «7 pm» least of all: the field speaks 24 hours.
+  assert.equal(normalizeTime("24:00"), "");
+  assert.equal(normalizeTime("19:60"), "");
+  assert.equal(normalizeTime("7 pm"), "");
+  assert.equal(normalizeTime(""), "");
 });
 
 test("gridOf lays months out Monday-first", () => {
@@ -169,6 +186,21 @@ test("a pick writes the date and keeps popover open until Готово", () => {
   doneBtn.dispatchEvent(new Event("click"));
   assert.equal(pop(f.span), undefined, "Готово closes the popover");
   assert.ok(f.text.focused, "text input focused after finish");
+});
+
+test("the time field is the kit's own, and finishes a half-typed time on the way out", () => {
+  const f = field("2026-09-04 19:00");
+  f.button.dispatchEvent(new Event("click"));
+  const p = pop(f.span);
+  const timeInput = timeRow(p).children.find((c) => c.tag === "input");
+  // A native time input would offer AM/PM in a browser whose locale wants it.
+  assert.equal(timeInput.type, "text");
+  timeInput.value = "9";
+  timeInput.dispatchEvent(new Event("input"));
+  assert.equal(f.text.value, "2026-09-04 19:00", "half a time is not written");
+  timeInput.dispatchEvent(new Event("change"));
+  assert.equal(timeInput.value, "09:00");
+  assert.equal(f.text.value, "2026-09-04 09:00");
 });
 
 test("the month arrows move without touching the value", () => {

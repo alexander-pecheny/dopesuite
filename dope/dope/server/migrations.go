@@ -902,6 +902,18 @@ create table if not exists od_contested(
 			{Name: "timezone", Type: "TEXT"},
 		})
 	}},
+	{Version: 32, Name: "slots.link_visible", Up: func(db *sql.DB) error {
+		// Whether the Слот hands its registration link over. A Слот is made
+		// with the link hidden; a Слот whose registration is already open was
+		// handing it over before this column existed, so it keeps doing so.
+		if err := store.AddColumnsIfMissing(db, "slots", []store.ColumnSpec{
+			{Name: "link_visible", Type: "INTEGER NOT NULL DEFAULT 0"},
+		}); err != nil {
+			return err
+		}
+		_, err := db.Exec(`update slots set link_visible = 1 where reg_closed = 0`)
+		return err
+	}},
 }
 
 func migrateDB(db *sql.DB) error { return schema.Apply(db, migrations) }
