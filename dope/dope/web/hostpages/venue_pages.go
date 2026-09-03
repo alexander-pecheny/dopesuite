@@ -84,6 +84,7 @@ func VenuesIndexDoc(rows []VenueRow) *ui.Doc {
 	page := []ui.Item{ui.Title("Площадки"), ui.PagePublic, ui.Classicscripts("dist/pageforms.js")}
 	page = append(page, jumpHostNav("/host", "Режим организатора", "Перейти в режим организатора")...)
 	page = append(page, ui.Publictopbar(pages.Trail([]ui.Item{pages.HomeCrumb()}, "Площадки")))
+	page = append(page, PublicTabs("/venues"))
 	if len(rows) == 0 {
 		page = append(page, ui.Empty(ui.Text("Публичных площадок пока нет.")))
 		return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
