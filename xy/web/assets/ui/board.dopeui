@@ -25,6 +25,41 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
       row
         button kind="danger" id="unlockExitBtn" "Удалить доску"
 
+  -- the Passphrase Check. No ✕ and no «Позже»: the two ways out are typing the
+  -- pass and setting a new one (passcheck.ts vetoes every other dismissal).
+  modal id="passCheckOverlay" label="Пароль доски" title="Помните пароль доски?"
+    col id="passCheckStep1" gap="sm"
+      hint
+        "Раз в месяц xy спрашивает пароль доски: на этом устройстве она открывается"
+        "без него, и забытый пароль обнаружится только тогда, когда будет поздно."
+      form id="passCheckForm" dir="col"
+        password id="passCheckPass" placeholder="Пароль доски" autocomplete="off" required
+        row gap="sm" wrap
+          button submit "ОК"
+          button kind="ghost" id="passCheckForgot" "Не помню пароль, поменять"
+    col id="passCheckStep2" gap="sm" hidden
+      hint "Пароль сохранён. А ещё сейчас хорошее время, чтобы сохранить бэкап."
+      row gap="sm" wrap
+        button kind="primary" id="passCheckBackup" "Сохранить бэкап"
+        button kind="ghost" id="passCheckClose" "Закрыть"
+    message id="passCheckMessage"
+
+  -- «Сменить пароль доски»: the creation form again, minus the old passphrase.
+  -- The device holds the key, so the change only re-wraps it.
+  modal id="changePassOverlay" label="Сменить пароль доски" title="Сменить пароль доски"
+    form id="changePassForm" dir="col"
+      row gap="sm" align="center"
+        textfield id="changePassInput" placeholder="Новый пароль доски" autocomplete="new-password" required grow
+        iconbtn id="changePassGen" icon="dices" label="Сгенерировать пароль"
+      muted id="changePassCopied" hidden "Пароль уже скопирован"
+      hint kind="danger" "Сохраните этот пароль прямо сейчас — восстановить его будет невозможно."
+      hint "У соавторов доска останется открытой там, где она уже открыта: новые слова понадобятся только на новом устройстве."
+      checkbox id="changePassSaved" "Я сохранил(а) пароль в надёжное место и обещаю его не терять"
+      row gap="sm" wrap
+        button submit id="changePassSubmit" disabled "Сменить"
+        button kind="ghost" id="changePassCancel" "Отмена"
+    message id="changePassMessage"
+
   -- card detail overlay
   docoverlay id="cardOverlay" kind="detail"
     headrow kind="detail"

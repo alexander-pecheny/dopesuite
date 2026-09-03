@@ -8,6 +8,7 @@
 
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
+import { stampPassCheck } from "./passcheck.js";
 import { applyBundle } from "./bundleapply.js";
 import type { AttachmentBytes, ApplyResult } from "./bundleapply.js";
 import { BOARD_JSON, contentBytes, parseBundle } from "./bundle.js";
@@ -94,6 +95,7 @@ export async function createBoardFromBundle(
       throw new Error(`«${bad.title}»: ${bad.error}`);
     }
     await xyCrypto.cacheDK(boardId, dk);
+    stampPassCheck(boardId); // the words are known today; the check is a month off
     const summary = summarize(bundle, result);
     log(summary);
     return { id: boardId, summary };

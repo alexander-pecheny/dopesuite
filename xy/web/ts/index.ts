@@ -6,6 +6,7 @@ import { xyFind } from "./find.js";
 import { xySearchIndex } from "./searchindex.js";
 import type { BoardIndex, Hit } from "./searchindex.js";
 import { xySync } from "./sync.js";
+import { stampPassCheck } from "./passcheck.js";
 import { iconed } from "./icons_gen.js";
 
 const { fetchJSON, jpost, el, escapeHtml } = xyApp;
@@ -386,6 +387,7 @@ createForm.addEventListener("submit", async (e) => {
     const { keymeta, dk } = await xyCrypto.createBoardKeys(pass);
     const res = (await jpost("/api/boards", { ...keymeta, name })) as { id: number };
     await xyCrypto.cacheDK(res.id, dk);
+    stampPassCheck(res.id); // the words are known today; the check is a month off
     window.location.href = `/board/${res.id}`;
   } catch (err) {
     createMessage.textContent = errMsg(err);

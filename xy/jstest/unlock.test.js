@@ -80,7 +80,7 @@ function makeDeps(opts = {}) {
       onSync: (st) => calls.syncStatus.push(st),
     },
     applySizes: (s) => calls.sizes.push(s),
-    onDK: (k) => calls.dks.push(k),
+    onDK: (k, from) => calls.dks.push([k, from]),
     onState: (state, info) => calls.states.push({ state, info }),
     onUnavailable: () => calls.unavailable++,
     exit: {
@@ -112,7 +112,8 @@ test("cached-DK fast path: no overlay, onDK + decrypted onState, mirror written,
   assert.equal(ui.pass.focused, 0);
   assert.equal(calls.started, 1);
   assert.equal(calls.dks.length, 1);
-  assert.notEqual(dk, calls.dks[0]); // the cached DK, not the unlock one
+  assert.notEqual(dk, calls.dks[0][0]); // the cached DK, not the unlock one
+  assert.equal(calls.dks[0][1], "cached"); // nobody typed anything (passcheck.ts)
   assert.equal(calls.states.length, 1);
 
   const { state, info } = calls.states[0];
@@ -161,7 +162,7 @@ test("successful unlock: submit fetches keymeta, caches DK, hides overlay, loads
   assert.ok(calls.fetches.includes("/api/boards/7/keymeta"));
   assert.deepEqual(calls.cacheDK, [7, dk]);
   assert.equal(ui.overlay.hidden, true);
-  assert.deepEqual(calls.dks, [dk]);
+  assert.deepEqual(calls.dks, [[dk, "passphrase"]]); // the words were just proved
   assert.equal(calls.states.length, 1);
   assert.equal(ui.message.textContent, "");
 });

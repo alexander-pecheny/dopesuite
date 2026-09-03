@@ -149,6 +149,14 @@ function item<S>(p: Entry<S>, scope: S): PanelMenuItem {
   };
 }
 
+// openPanel runs a registered board panel by id, for the rare cross-reference:
+// the Passphrase Check offering the archive panel without importing it.
+export function openPanel(id: string): void {
+  const p = registry.find((r): r is BoardPanel => r.menu === "board" && r.id === id);
+  if (!p) throw new Error(`no board panel ${id}`);
+  p.open();
+}
+
 // The tests build the registry afresh.
 export function resetPanels(): void { registry.length = 0; }
 

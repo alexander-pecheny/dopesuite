@@ -2,7 +2,7 @@
 // drag-reorder with fractional ranks, card detail + timeline + labels.
 import { overlayStack } from "./overlaystack.js";
 import { modal } from "./modal.js";
-import { type Board, boardMenu, createPanelShell, listMenu, listNumbers, listScope, type Panel, registerPanel } from "./panels.js";
+import { type Board, boardMenu, createPanelShell, listMenu, listNumbers, listScope, openPanel, type Panel, registerPanel } from "./panels.js";
 import { createRewrites } from "./rewrites.js";
 import { createReplacePanel } from "./replace.js";
 import { createMoveListPanel } from "./movelist.js";
@@ -34,6 +34,8 @@ import { boardOrder, byRank, dragAfterIn, dragAfterInX, rankAfterMove, rankForSl
 import { createTimeline, decodeCommentPayload, eventAuthor } from "./timeline.js";
 import { createCardDetail, nowStamp } from "./carddetail.js";
 import { createDwell, liveTestMode } from "./testmode.js";
+import { createChangePass } from "./changepass.js";
+import { createPassCheck, passCheckStore } from "./passcheck.js";
 import { createTransfer } from "./transfer.js";
 import { type AnnounceCity, parseSession, type SessionMeta, sessionLabel, type TitleMode, whoSaw } from "./sessions.js";
 import * as people from "./people.js";
@@ -42,7 +44,7 @@ import { colorField, labelFill, labelInk, LABEL_COLORS } from "./colorpick.js";
 import { anchorPopup } from "./popup.js";
 import { plural, xyMass } from "./massaction.js";
 import { xySearchIndex } from "./searchindex.js";
-import type { DataKey } from "./crypto.js";
+import type { BoardKeymeta, DataKey } from "./crypto.js";
 import { xyStore } from "./store.js";
 import type { OpBody } from "./store.js";
 import type { BoardCard, BoardLabel, BoardList, BoardState, CardLabel } from "./unlock.js";
@@ -94,6 +96,11 @@ type LiveState = BoardState & MembersState;
 
 const state: LiveState = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], sessions: [], cardLabels: [], cardSessions: [], tourTesters: [], members: [], memberNames: {}, me: null, unread: {}, sizes: { ...xySizes.DEFAULT }, defaultAuthor: "", cardTitle: "question", feedDefault: "all", timezone: "", announceCities: null, sessionTitleMode: "" };
 let dk: DataKey | null = null;
+// Whether that key came out of the cache rather than off the unlock overlay —
+// the Passphrase Check's one question (passcheck.ts).
+let dkFromCache = false;
+// A ?card=… link: the reader came for one question, not for a quiz.
+const deepLink = new URLSearchParams(location.search).has("card");
 function mustDK(): DataKey {
   if (!dk) throw new Error("нет ключа доски");
   return dk;
@@ -130,7 +137,11 @@ const unlock = createUnlock({
   net: xyApp,
   status: badge,
   applySizes: xySizes.apply,
-  onDK: (k) => { dk = k; },
+  onDK: (k, from) => {
+    dk = k;
+    dkFromCache = from === "cached";
+    if (!dkFromCache) passCheck.stamp(); // they just typed the words, correctly
+  },
   exit: { deleteBoard, leaveBoard },
   onName: (name) => {
     titleNode.textContent = name;
@@ -152,6 +163,13 @@ const unlock = createUnlock({
     void rewrites.convertLegacyVersions();
     if (dk) void xySearchIndex.refreshComments(boardId, dk);
     cardDetail.maybeOpenDeepLink(); // open a ?card=… / &comment=… deep link on first load
+    passCheck.maybe({
+      owner: state.role === "owner",
+      cached: dkFromCache,
+      online: xySync.isOnline(),
+      testMode: testMode.sessionFor(boardId) != null,
+      deepLink,
+    });
   },
   onUnavailable: () => {
     kanban.hidden = true;
@@ -1356,6 +1374,58 @@ const sessionsPanel = createSessionsPanel({
 });
 
 
+// ---- the board passphrase ----
+// Two surfaces over one fact: the words that wrap this board's key are known to
+// a person, not to this device. changePass sets new ones; passCheck asks for the
+// old ones once a month, and hands over to changePass when they are gone.
+const changePassModal = modal("changePass");
+const changePass = createChangePass({
+  boardId,
+  owner: () => state.role === "owner",
+  dk: mustDK,
+  ui: {
+    modal: changePassModal,
+    form: byId<HTMLFormElement>("changePassForm"),
+    input: byId<HTMLInputElement>("changePassInput"),
+    setup: xyApp.wirePassphraseSetup({
+      input: byId<HTMLInputElement>("changePassInput"),
+      dice: byId("changePassGen"),
+      copied: byId("changePassCopied"),
+      saved: byId<HTMLInputElement>("changePassSaved"),
+      submit: byId<HTMLButtonElement>("changePassSubmit"),
+    }, xyCrypto.generatePassphrase),
+  },
+  crypto: xyCrypto,
+  requireOnline: (msg) => xySync.requireOnline(msg, byId("changePassMessage")),
+  jput,
+  errMsg,
+  onChanged: () => passCheck.stamp(),
+});
+
+const passCheckClock = passCheckStore(localStorage);
+const passCheckModal = modal("passCheck");
+const passCheck = createPassCheck({
+  ui: {
+    modal: passCheckModal,
+    title: q("#passCheckOverlay .appearance-modal-title"),
+    step1: byId("passCheckStep1"),
+    step2: byId("passCheckStep2"),
+    form: byId<HTMLFormElement>("passCheckForm"),
+    pass: byId<HTMLInputElement>("passCheckPass"),
+    forgot: byId("passCheckForgot"),
+    backup: byId("passCheckBackup"),
+  },
+  now: () => Date.now(),
+  read: () => passCheckClock.read(boardId),
+  write: (at) => passCheckClock.write(boardId, at),
+  verify: async (pass) => {
+    const keymeta = (await fetchJSON(`/api/boards/${boardId}/keymeta`)) as BoardKeymeta;
+    await xyCrypto.unlockBoard(pass, keymeta);
+  },
+  changePass: (onDone) => changePass.open(onDone),
+  backup: () => openPanel("bundle-export"),
+});
+
 // ---- the panels ----
 // Every feature the ☰ and the list ⋯ menus offer lives in its own module and
 // registers here, in menu order (panels.ts). The two menus render the registry.
@@ -1408,6 +1478,7 @@ registerPanel(
       location.reload();
     },
   },
+  changePass.panel,
   { id: "delete-board", menu: "board", icon: "trash-2", label: "Удалить доску", title: "Удалить доску со всеми списками и карточками", offered: () => state.role === "owner", open: () => { void deleteBoard(state.name); } },
   { id: "leave-board", menu: "board", icon: "unlink", label: "Покинуть доску", title: "Выйти из доски — у остальных участников она останется", offered: () => state.role !== "" && state.role !== "owner", open: () => { void leaveBoard(state.name); } },
 

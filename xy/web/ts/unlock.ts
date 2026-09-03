@@ -207,7 +207,10 @@ export interface UnlockDeps {
   net: UnlockNet;
   status: UnlockStatus;
   applySizes(sizes: Sizes): void;
-  onDK(dk: DataKey): void;
+  // "cached": the key came out of IndexedDB and nobody typed anything — the
+  // board is readable by a device whose owner may have forgotten the words.
+  // "passphrase": they were just typed, correctly, on the overlay.
+  onDK(dk: DataKey, from: "cached" | "passphrase"): void;
   // The way off a board this device cannot open. board.js owns both acts (the
   // call plus everything the device must forget); the overlay only asks who the
   // caller is and offers the matching verb.
@@ -253,7 +256,7 @@ export function createUnlock(deps: UnlockDeps): Unlock {
       showUnlock();
       return;
     }
-    deps.onDK(dk);
+    deps.onDK(dk, "cached");
     await load();
   }
 
@@ -270,7 +273,7 @@ export function createUnlock(deps: UnlockDeps): Unlock {
       dk = await crypto.unlockBoard(ui.pass.value, keymeta);
       await crypto.cacheDK(boardId, dk);
       ui.overlay.hidden = true;
-      deps.onDK(dk);
+      deps.onDK(dk, "passphrase");
       await load();
     } catch (err) {
       ui.message.textContent = err instanceof Error ? err.message : String(err);
