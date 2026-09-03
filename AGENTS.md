@@ -65,6 +65,28 @@ The two mistakes that keep recurring, and their guards:
 xy has `/gallery` and dope has `/gallery`, both dev-only: every primitive on one
 page, which is what makes "look at it beside its twin" cheap.
 
+## User-facing strings
+
+Every string a person reads comes from a Catalog, never from the call site
+(root `docs/adr/0006`, terms in root `CONTEXT.md`).
+
+- One TOML file per Surface under `<module>/i18nstrings/<lang>/`, `ru` the
+  default; `common.toml` is the module's shared words. A `[table]` groups keys.
+  Ids are snake_case and name the string's ROLE: `board.delete.confirm`, never
+  `board.delete.are_you_sure`. Rewording never renames.
+- Templates are `text/template`, restricted to `{{.name}}` (a string) and
+  `{{plural .n "one" "few" "many"}}` (an int). Anything else fails generation.
+  Write the template as a `'literal string'` so the forms need no escapes.
+- Add one: edit the TOML, run `just generate-strings`, commit the `*_gen` files
+  beside it. `just generate-check` fails on a stale one. Callers hold a
+  `Strings` value (`i18nstrings.Default`) and write `s.Board.Delete.Confirm(n)`.
+- An error a person may read is `i18nstrings.User(s.Board.Delete.Locked())`;
+  the HTTP edge shows those verbatim and everything else as one generic line.
+- `just cyrillic-check` fails on Cyrillic in any `.go`/`.ts`/`.dopeui` outside
+  the catalogs, generated files and tests. What still has some is listed in
+  `scripts/cyrillic/allowlist.txt` — the migration's burn-down, so a listed
+  file with no Cyrillic left fails too. Never add a line to it to land a string.
+
 ## Toolchain
 
 - **Go** ≥ 1.26 — all four modules.

@@ -22,7 +22,7 @@ vet: vet-core vet-uikit
 # the kit's own gate are things no single module can run for itself.
 #
 # The gate, wherever you are. A module's own faster one is `just check`.
-pre-commit: pre-commit-core pre-commit-uikit class-check
+pre-commit: pre-commit-core pre-commit-uikit class-check cyrillic-check strings-gen-check
     cd xy && just check
     cd dope && just check
 
@@ -61,8 +61,22 @@ class-check: fmt-scripts
     go -C scripts/classcheck test ./...
     go -C scripts/classcheck run .
 
-# scripts/ holds four Go modules (webbuild, classcheck, i18nstringsgen,
-# cyrillic) that no module recipe reaches, so they had no fmt or vet until this.
+# The generator's own gate; the catalogs it writes are checked by generate-check.
+strings-gen-check: fmt-scripts
+    go -C scripts/i18nstringsgen vet ./...
+    go -C scripts/i18nstringsgen test ./...
+
+# User-facing Russian belongs in a Catalog (root docs/adr/0006). Fail on any
+# Cyrillic in .go/.ts/.dopeui outside the catalogs, the generated files, the
+# tests and scripts/cyrillic/allowlist.txt — which is the migration's burn-down,
+# so a listed file that has no Cyrillic left fails too.
+cyrillic-check: fmt-scripts
+    go -C scripts/cyrillic vet ./...
+    go -C scripts/cyrillic test ./...
+    go -C scripts/cyrillic run .
+
+# scripts/ holds Go modules (webbuild, classcheck, i18nstringsgen, cyrillic)
+# that no module recipe reaches, so they had no fmt or vet until this.
 fmt-scripts:
     #!/usr/bin/env bash
     set -euo pipefail
