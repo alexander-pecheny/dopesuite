@@ -19,6 +19,7 @@ const defaultLang = "ru"
 func main() {
 	dir := flag.String("dir", "", "catalog and Go output directory, relative to the repo root")
 	ts := flag.String("ts", "", "TypeScript output directory, relative to the repo root")
+	unused := flag.Bool("unused", true, "fail when the module's tree references none of a generated id")
 	flag.Parse()
 	if *dir == "" {
 		fatal("-dir is required")
@@ -31,12 +32,12 @@ func main() {
 			fatal("run from the repo root or via `go -C scripts/i18nstringsgen run .`")
 		}
 	}
-	if err := generate(*dir, *ts); err != nil {
+	if err := generate(*dir, *ts, *unused); err != nil {
 		fatal(err.Error())
 	}
 }
 
-func generate(dir, ts string) error {
+func generate(dir, ts string, unused bool) error {
 	langs, err := languages(dir)
 	if err != nil {
 		return err
@@ -79,6 +80,9 @@ func generate(dir, ts string) error {
 		if err := os.WriteFile(path, body, 0o644); err != nil {
 			return err
 		}
+	}
+	if unused {
+		return checkUnused(dir, ts, ref)
 	}
 	return nil
 }

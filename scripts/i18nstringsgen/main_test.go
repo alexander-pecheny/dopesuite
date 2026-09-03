@@ -43,7 +43,7 @@ func copyFile(t *testing.T, from, to string) {
 
 func TestGolden(t *testing.T) {
 	dir, ts := stage(t)
-	if err := generate(dir, ts); err != nil {
+	if err := generate(dir, ts, false); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{
@@ -80,7 +80,7 @@ func TestGolden(t *testing.T) {
 // collides or a param the two languages disagree about only shows up here.
 func TestGeneratedGoCompiles(t *testing.T) {
 	dir, ts := stage(t)
-	if err := generate(dir, ts); err != nil {
+	if err := generate(dir, ts, false); err != nil {
 		t.Fatal(err)
 	}
 	core, err := filepath.Abs("../../dopecore")
@@ -158,7 +158,7 @@ func TestLanguagesMustAgree(t *testing.T) {
 		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if err := generate(dir, ts); err == nil {
+		if err := generate(dir, ts, false); err == nil {
 			t.Errorf("an id set that differs from ru was accepted (extra=%q)", extra)
 		}
 	}
@@ -174,7 +174,7 @@ percent = "100% done"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	err := generate(dir, ts)
+	err := generate(dir, ts, false)
 	if err == nil || !strings.Contains(err.Error(), "board.delete.confirm") {
 		t.Errorf("a renamed parameter was accepted: %v", err)
 	}
@@ -185,7 +185,44 @@ func TestDefaultLanguageIsRequired(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "en"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := generate(root, ""); err == nil {
+	if err := generate(root, "", false); err == nil {
 		t.Error("a catalog without ru/ was accepted")
+	}
+}
+
+func TestUnusedStringsFail(t *testing.T) {
+	dir, ts := stage(t)
+	module := filepath.Dir(dir)
+	if err := os.WriteFile(filepath.Join(module, "page.go"), []byte("package p\n\nvar _ = s.Common.Save()\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := generate(dir, ts, true)
+	if err == nil {
+		t.Fatal("an unreferenced string was accepted")
+	}
+	if strings.Contains(err.Error(), "common.save") {
+		t.Errorf("common.save is referenced but was reported: %v", err)
+	}
+	if !strings.Contains(err.Error(), "board.delete.title") {
+		t.Errorf("the unreferenced ids are not named: %v", err)
+	}
+}
+
+func TestReferencesFromEveryLanguage(t *testing.T) {
+	dir, ts := stage(t)
+	module := filepath.Dir(dir)
+	files := map[string]string{
+		"page.go":      "package p\n\nvar _ = s.Board.Delete.Confirm(1) + s.Board.Delete.Title()\n",
+		"page.ts":      "const x = s.board.delete.percent() + s.common.selection.count(1);\n",
+		"page.dopeui":  "page title=@common.save\n",
+		"stale_gen.go": "package p\n\nvar _ = s.Board.Delete.Ignored()\n",
+	}
+	for name, body := range files {
+		if err := os.WriteFile(filepath.Join(module, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := generate(dir, ts, true); err != nil {
+		t.Fatalf("a fully referenced catalog was rejected: %v", err)
 	}
 }
