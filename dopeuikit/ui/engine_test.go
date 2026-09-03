@@ -103,3 +103,61 @@ func TestEngine_OverlayAddsButNeverRedeclares(t *testing.T) {
 		t.Error("a nil Base was accepted")
 	}
 }
+
+type mapSet map[string]string
+
+func (m mapSet) Lookup(id string) (string, bool) { s, ok := m[id]; return s, ok && s != "" }
+func (m mapSet) Defines(id string) bool          { _, ok := m[id]; return ok }
+
+func stringsApp(t *testing.T, set StringSet) *App {
+	t.Helper()
+	base, err := LoadVocab([]byte(tinyVocab))
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := NewApp(Options{
+		Base:    base,
+		Strings: set,
+		Expand: map[string]ExpandFunc{
+			"page": func(c *ExpandCtx, p *Element) []Node {
+				title, _ := Get(p, "title")
+				return []Node{El("html", []Attr{At("title", title)}, c.Nodes(p.Block)...)}
+			},
+			"note": func(c *ExpandCtx, p *Element) []Node { return []Node{Inl("p", nil, c.Items(p.Inline)...)} },
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return app
+}
+
+// An @id resolves as an attribute value and as a text item; a quoted string is
+// always a literal, so a leading @ inside quotes stays.
+func TestEngine_StringIDsResolve(t *testing.T) {
+	set := mapSet{"page.title": "Вход", "note.hint": "Привет", "note.count": ""}
+	out, err := stringsApp(t, set).Compile("t.dopeui", []byte("page title=@page.title\n  note @note.hint \"@literal\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`title="Вход"`, "Привет", "@literal"} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("compiled page lacks %q:\n%s", want, out)
+		}
+	}
+	for name, src := range map[string]string{
+		"unknown id":   "page title=@page.missing\n",
+		"templated id": "page title=@note.count\n",
+		"bad id":       "page title=@Page\n",
+	} {
+		if _, err := stringsApp(t, set).Compile("t.dopeui", []byte(src)); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+	if _, err := stringsApp(t, nil).Compile("t.dopeui", []byte("page title=@page.title\n")); err == nil || !strings.Contains(err.Error(), "no Catalog") {
+		t.Errorf("an App without a Catalog resolved an @id: %v", err)
+	}
+	if got := Chain(nil, set).(chain); len(got) != 1 {
+		t.Errorf("Chain kept a nil set: %v", got)
+	}
+}

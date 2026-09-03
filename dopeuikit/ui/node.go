@@ -27,6 +27,9 @@ type Attr struct {
 	Name  string
 	Value string
 	Bare  bool
+	// Ref marks a value parsed as a String Id (`label=@common.save`): it holds
+	// the id until the App resolves it against its Catalog.
+	Ref bool
 }
 
 func (Attr) item() {}
@@ -52,6 +55,7 @@ func (*Element) node() {}
 type TextNode struct {
 	Value string
 	Line  int
+	Ref   bool // a String Id, like Attr.Ref
 }
 
 func (*TextNode) item() {}

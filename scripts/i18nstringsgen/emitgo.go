@@ -36,7 +36,49 @@ func emitGoTypes(ref *catalog) ([]byte, error) {
 			b.WriteString("}\n")
 		}
 	}
+	emitGoLookup(&b, ref)
 	return format.Source([]byte(b.String()))
+}
+
+// emitGoLookup is the .dopeui side: `label=@common.save` resolves through these
+// two, so the expander needs no reflection and the id set is closed here.
+func emitGoLookup(b *strings.Builder, ref *catalog) {
+	byID := ref.byID()
+	var plain, all []string
+	for _, id := range ref.ids() {
+		all = append(all, id)
+		if len(byID[id].params) == 0 {
+			plain = append(plain, id)
+		}
+	}
+	b.WriteString("\n// Lookup returns an untemplated string by its String Id, for `@surface.key`\n// in a .dopeui page.\nfunc (s Strings) Lookup(id string) (string, bool) {\n")
+	if len(plain) > 0 {
+		b.WriteString("\tswitch id {\n")
+		for _, id := range plain {
+			fmt.Fprintf(b, "\tcase %q:\n\t\treturn s.%s(), true\n", id, goPath(id))
+		}
+		b.WriteString("\t}\n")
+	}
+	b.WriteString("\treturn \"\", false\n}\n")
+	b.WriteString("\n// Defines reports whether the Catalog holds the id at all, templated or not.\nfunc (Strings) Defines(id string) bool {\n")
+	if len(all) > 0 {
+		b.WriteString("\tswitch id {\n\tcase ")
+		quoted := make([]string, len(all))
+		for i, id := range all {
+			quoted[i] = fmt.Sprintf("%q", id)
+		}
+		b.WriteString(strings.Join(quoted, ", ") + ":\n\t\treturn true\n\t}\n")
+	}
+	b.WriteString("\treturn false\n}\n")
+}
+
+// goPath turns surface.group.key into the Strings field path Board.Delete.Confirm.
+func goPath(id string) string {
+	parts := strings.Split(id, ".")
+	for i, p := range parts {
+		parts[i] = pascal(p)
+	}
+	return strings.Join(parts, ".")
 }
 
 func emitGoCatalog(c *catalog) ([]byte, error) {

@@ -139,7 +139,7 @@ func (p *parser) parseSiblings(i *int, depth int) ([]Node, error) {
 			}
 			nodes = append(nodes, com)
 
-		case strings.HasPrefix(ln.content, `"`) || strings.HasPrefix(ln.content, "("):
+		case strings.HasPrefix(ln.content, `"`), strings.HasPrefix(ln.content, "("), strings.HasPrefix(ln.content, "@"):
 			items, err := p.parseItems(ln.content, ln.no)
 			if err != nil {
 				return nil, err
@@ -256,6 +256,21 @@ func (hp *headParser) parseIdent() (string, error) {
 	return ident, nil
 }
 
+// parseRef reads an unquoted `@surface.group.key` String Id. A quoted string is
+// always a literal, so a page needing a leading @ writes it in quotes.
+func (hp *headParser) parseRef() (string, error) {
+	hp.pos++ // consume '@'
+	start := hp.pos
+	for hp.pos < len(hp.s) && (hp.s[hp.pos] == '.' || hp.s[hp.pos] == '_' || isIdentRune(hp.s[hp.pos])) {
+		hp.pos++
+	}
+	id := string(hp.s[start:hp.pos])
+	if !stringIDRe.MatchString(id) {
+		return "", hp.p.errf(hp.line, "invalid string id @%s (expected @surface.key)", id)
+	}
+	return id, nil
+}
+
 func isIdentRune(r rune) bool {
 	return r == '-' || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
 }
@@ -271,7 +286,7 @@ func (hp *headParser) parseAttrsAndItems() ([]Attr, []Item, error) {
 			return attrs, nil, nil
 		}
 		c := hp.s[hp.pos]
-		if c == '"' || c == '(' {
+		if c == '"' || c == '(' || c == '@' {
 			items, err := hp.parseItemsRest()
 			if err != nil {
 				return nil, nil, err
@@ -284,8 +299,16 @@ func (hp *headParser) parseAttrsAndItems() ([]Attr, []Item, error) {
 		}
 		if !hp.atEnd() && hp.s[hp.pos] == '=' {
 			hp.pos++
-			if hp.atEnd() || hp.s[hp.pos] != '"' {
-				return nil, nil, hp.p.errf(hp.line, "attribute %q: expected a quoted value", name)
+			if hp.atEnd() || (hp.s[hp.pos] != '"' && hp.s[hp.pos] != '@') {
+				return nil, nil, hp.p.errf(hp.line, "attribute %q: expected a quoted value or a @string.id", name)
+			}
+			if hp.s[hp.pos] == '@' {
+				id, err := hp.parseRef()
+				if err != nil {
+					return nil, nil, err
+				}
+				attrs = append(attrs, Attr{Name: name, Value: id, Ref: true})
+				continue
 			}
 			val, err := hp.parseQuoted()
 			if err != nil {
@@ -318,6 +341,12 @@ func (hp *headParser) parseItemsRest() ([]Item, error) {
 				return nil, err
 			}
 			items = append(items, elem)
+		case '@':
+			id, err := hp.parseRef()
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, &TextNode{Value: id, Ref: true, Line: hp.line})
 		default:
 			return nil, hp.p.errf(hp.line, "expected an inline item, found %q", string(hp.s[hp.pos:]))
 		}

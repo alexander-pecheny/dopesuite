@@ -29,3 +29,26 @@ type CommonStrings struct {
 type CommonSelectionStrings struct {
 	Count func(n int) string
 }
+
+// Lookup returns an untemplated string by its String Id, for `@surface.key`
+// in a .dopeui page.
+func (s Strings) Lookup(id string) (string, bool) {
+	switch id {
+	case "board.delete.percent":
+		return s.Board.Delete.Percent(), true
+	case "board.delete.title":
+		return s.Board.Delete.Title(), true
+	case "common.save":
+		return s.Common.Save(), true
+	}
+	return "", false
+}
+
+// Defines reports whether the Catalog holds the id at all, templated or not.
+func (Strings) Defines(id string) bool {
+	switch id {
+	case "board.delete.confirm", "board.delete.percent", "board.delete.title", "common.save", "common.selection.count":
+		return true
+	}
+	return false
+}

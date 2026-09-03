@@ -25,16 +25,18 @@ type Options struct {
 	Inline       map[string]InlineFunc
 	Mounts       map[string]MountSpec
 	Env          any
+	Strings      StringSet // resolves the `@surface.key` a page may write
 }
 
 // App is a configured DSL instance: a merged vocabulary plus the expander
 // tables that turn a primitive tree into HTML.
 type App struct {
-	vocab  *Vocab
-	expand map[string]ExpandFunc
-	inline map[string]InlineFunc
-	mounts map[string]MountSpec
-	env    any
+	vocab   *Vocab
+	expand  map[string]ExpandFunc
+	inline  map[string]InlineFunc
+	mounts  map[string]MountSpec
+	env     any
+	strings StringSet
 }
 
 // NewApp builds an App from opts.Base plus the given overlay. Expand/Inline are
@@ -57,11 +59,12 @@ func NewApp(opts Options) (*App, error) {
 		vocab = vocab.WithExtraProps(opts.ExtendProps)
 	}
 	app := &App{
-		vocab:  vocab,
-		expand: map[string]ExpandFunc{},
-		inline: map[string]InlineFunc{},
-		mounts: map[string]MountSpec{},
-		env:    opts.Env,
+		vocab:   vocab,
+		expand:  map[string]ExpandFunc{},
+		inline:  map[string]InlineFunc{},
+		mounts:  map[string]MountSpec{},
+		env:     opts.Env,
+		strings: opts.Strings,
 	}
 	for k, v := range opts.Expand {
 		app.expand[k] = v
@@ -87,6 +90,9 @@ func (a *App) Compile(name string, src []byte) ([]byte, error) {
 		return nil, err
 	}
 	if err := requireRoot(name, doc, a.vocab.Root); err != nil {
+		return nil, err
+	}
+	if err := resolveStrings(name, doc, a.strings); err != nil {
 		return nil, err
 	}
 	if err := Validate(a.vocab, name, doc); err != nil {

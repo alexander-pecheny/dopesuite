@@ -9,6 +9,7 @@ import base "pecheny.me/dopeuikit/ui"
 
 // Framework types.
 type (
+	StringSet     = base.StringSet
 	ExpandCtx     = base.ExpandCtx
 	ExpandFunc    = base.ExpandFunc
 	InlineFunc    = base.InlineFunc

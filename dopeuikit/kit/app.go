@@ -6,7 +6,10 @@
 // top; apps import kit, never ui directly.
 package kit
 
-import base "pecheny.me/dopeuikit/ui"
+import (
+	kitstrings "pecheny.me/dopeuikit/i18nstrings"
+	base "pecheny.me/dopeuikit/ui"
+)
 
 // Options configures a kit App: the app's vocab overlay (merged over the core),
 // its expander overrides / additions, mount kinds, and page Chrome. It mirrors
@@ -18,6 +21,7 @@ type Options struct {
 	Inline       map[string]InlineFunc
 	Mounts       map[string]MountSpec
 	Chrome       Chrome
+	Strings      StringSet // the app's Catalog; the kit's answers what it does not
 }
 
 // NewApp builds an App with the core pre-registered and the app's overlay on
@@ -47,6 +51,7 @@ func NewApp(opts Options) (*App, error) {
 		Inline:       inline,
 		Mounts:       opts.Mounts,
 		Env:          opts.Chrome.withDefaults(),
+		Strings:      base.Chain(opts.Strings, kitstrings.Default),
 	})
 }
 
@@ -64,7 +69,7 @@ func CoreChrome() Chrome {
 			"sheet": {Body: []string{"host"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame"}},
 			"full":  {Body: []string{"host"}, Main: []string{"match-main"}},
 		},
-		TopbarSync: SyncSpec{ID: "status", Class: "sync-status", State: "saved", Label: "Готово"},
+		TopbarSync: SyncSpec{ID: "status", Class: "sync-status", State: "saved", Label: kitstrings.Default.Chrome.Sync.Saved()},
 	}
 }
 
