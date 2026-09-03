@@ -53,7 +53,6 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
         iconbtn id="changePassGen" icon="dices" label="Сгенерировать пароль"
       muted id="changePassCopied" hidden "Пароль уже скопирован"
       hint kind="danger" "Сохраните этот пароль прямо сейчас — восстановить его будет невозможно."
-      hint "У соавторов доска останется открытой там, где она уже открыта: новые слова понадобятся только на новом устройстве."
       checkbox id="changePassSaved" "Я сохранил(а) пароль в надёжное место и обещаю его не терять"
       row gap="sm" wrap
         button submit id="changePassSubmit" disabled "Сменить"
