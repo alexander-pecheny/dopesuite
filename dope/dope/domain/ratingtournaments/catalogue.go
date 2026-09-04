@@ -184,28 +184,19 @@ func (c *Catalogue) get(ctx context.Context, path string, into any) error {
 	return json.Unmarshal(body, into)
 }
 
-// people names a tournament's editors the way a Representative reads them:
-// surname first, then initials, in the order the site lists them.
+// people names a tournament's editors the way one editor introduces another:
+// given name then surname, no patronymic, in the order the site lists them.
 func people(list []apiPerson) []string {
 	out := make([]string, 0, len(list))
 	for _, p := range list {
-		if name := Initials(p.Surname, p.Name, p.Patronymic); name != "" {
+		if name := Name(p.Name, p.Surname); name != "" {
 			out = append(out, name)
 		}
 	}
 	return out
 }
 
-// Initials is a surname followed by whatever initials fit beside it.
-func Initials(surname, name, patronymic string) string {
-	parts := []string{strings.TrimSpace(surname)}
-	for _, p := range []string{name, patronymic} {
-		if r := []rune(strings.TrimSpace(p)); len(r) > 0 {
-			parts = append(parts, string(r[0])+".")
-		}
-	}
-	if parts[0] == "" {
-		parts = parts[1:]
-	}
-	return strings.TrimSpace(strings.Join(parts, " "))
+// Name is a person as they are spoken of, given name first.
+func Name(name, surname string) string {
+	return strings.TrimSpace(strings.TrimSpace(name) + " " + strings.TrimSpace(surname))
 }

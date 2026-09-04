@@ -283,6 +283,14 @@ func Richtext(items ...Item) *Element {
 	return base.New("richtext", items...)
 }
 
+func Cardgrid(items ...Item) *Element {
+	return base.New("cardgrid", items...)
+}
+
+func Fact(items ...Item) *Element {
+	return base.New("fact", items...)
+}
+
 // Prop constructors.
 
 func Index(v string) Attr {
@@ -340,6 +348,7 @@ var PageMulti = Attr{Name: "kind", Value: "multi"}
 var PageTroika = Attr{Name: "kind", Value: "troika"}
 var PagePublic = Attr{Name: "kind", Value: "public"}
 var PageGallery = Attr{Name: "kind", Value: "gallery"}
+var PagePublicwide = Attr{Name: "kind", Value: "publicwide"}
 var SwatchWhite = Attr{Name: "color", Value: "white"}
 var SwatchYellow = Attr{Name: "color", Value: "yellow"}
 var SwatchGreen = Attr{Name: "color", Value: "green"}

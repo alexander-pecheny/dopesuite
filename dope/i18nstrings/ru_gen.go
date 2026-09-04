@@ -2086,30 +2086,27 @@ var RU = Strings{
 		},
 		Tournaments: VenuesTournamentsStrings{
 			Chosen:          func() string { return "выбран" },
-			Difficulty:      func(n string) string { return fmt.Sprintf("сложность %s", n) },
+			DeselectAll:     func() string { return "Снять все" },
 			DifficultyFrom:  func() string { return "от" },
 			DifficultyLabel: func() string { return "Сложность" },
 			DifficultyTo:    func() string { return "до" },
 			Empty: func() string {
 				return "Буфф не знает турниров, которые можно сыграть в это время."
 			},
-			KeepLabel:          func() string { return "подходит" },
-			NoDifficulty:       func() string { return "сложность не указана" },
-			NoTeams:            func() string { return "заявок ещё нет" },
+			KeepAria:           func() string { return "Рассматриваю этот турнир" },
 			PickBtn:            func() string { return "Выбрать турнир" },
 			PickSubmit:         func() string { return "Выбрать" },
+			SelectAll:          func() string { return "Отметить все" },
 			SortDifficultyDown: func() string { return "сложность по убыванию" },
 			SortDifficultyUp:   func() string { return "сложность по возрастанию" },
 			SortLabel:          func() string { return "Сортировка" },
 			SortTeams:          func() string { return "больше команд" },
 			Subhead:            func() string { return "Выбор турнира" },
-			Teams: func(n int) string {
-				return fmt.Sprintf("~%d %s", n, core.Plural("ru", n, "команда", "команды", "команд"))
-			},
-			TypeAll:   func() string { return "Все турниры" },
-			TypeAsync: func() string { return "Только асинхроны" },
-			TypeLabel: func() string { return "Тип" },
-			TypeSync:  func() string { return "Только синхроны" },
+			TeamsTitle:         func() string { return "Заявлено команд" },
+			TypeAll:            func() string { return "Все турниры" },
+			TypeAsync:          func() string { return "Только асинхроны" },
+			TypeLabel:          func() string { return "Тип" },
+			TypeSync:           func() string { return "Только синхроны" },
 		},
 		Voting: VenuesVotingStrings{
 			AddByIdLabel:   func() string { return "Добавить турнир по id" },

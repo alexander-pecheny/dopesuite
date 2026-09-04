@@ -10,7 +10,8 @@
         "multi",
         "troika",
         "public",
-        "gallery"
+        "gallery",
+        "publicwide"
       ]
     },
     "mount-kind": {
@@ -216,6 +217,22 @@
       "name": "richtext",
       "props": [],
       "children": "any"
+    },
+    {
+      "name": "cardgrid",
+      "props": [],
+      "children": "any"
+    },
+    {
+      "name": "fact",
+      "props": [
+        {
+          "name": "icon",
+          "enum": "icon-name",
+          "required": true
+        }
+      ],
+      "children": "text"
     }
   ]
 }

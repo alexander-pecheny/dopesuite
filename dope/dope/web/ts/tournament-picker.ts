@@ -77,25 +77,52 @@ function readControls(scope: ParentNode): Controls {
   };
 }
 
+// allLabel is what the one select-all button should say next: it offers to
+// clear the list while anything on screen is still ticked, and to fill it
+// otherwise, so the button is never a no-op.
+export function allLabel(visible: Card[]): "all" | "none" {
+  return visible.some((c) => c.keep) ? "none" : "all";
+}
+
 export function mountTournamentPicker(list: HTMLElement, scope: ParentNode): void {
   const rows = new Map<string, HTMLElement>();
   for (const row of list.querySelectorAll<HTMLElement>("[data-tournament]")) {
     rows.set(row.getAttribute("data-tournament") || "", row);
   }
+  const tick = (row: HTMLElement): HTMLInputElement | null =>
+    row.querySelector<HTMLInputElement>("[data-tournament-keep] input");
+  const all = scope.querySelector<HTMLElement>("[data-tournament-all]");
+
   const draw = (): void => {
     const cards = [...rows.values()].map(readCard);
     const controls = readControls(scope);
+    const visible: Card[] = [];
     for (const card of order(cards, controls)) {
       const row = rows.get(card.id);
       if (!row) continue;
       row.hidden = !shows(card, controls);
+      if (!row.hidden) visible.push(card);
       // A poll offers what the Representative can see: a card the filters took
       // away must not go on the ballot just because its tick survived.
-      const keep = row.querySelector<HTMLInputElement>("[data-tournament-keep] input");
+      const keep = tick(row);
       if (keep) keep.disabled = row.hidden;
       list.append(row);
     }
+    if (all) {
+      const way = allLabel(visible);
+      all.textContent = all.getAttribute(`data-tournament-${way}`) || "";
+      all.setAttribute("data-way", way);
+    }
   };
+
+  all?.addEventListener("click", () => {
+    const want = all.getAttribute("data-way") === "all";
+    for (const row of rows.values()) {
+      const keep = tick(row);
+      if (keep && !row.hidden) keep.checked = want;
+    }
+    draw();
+  });
   scope.addEventListener("input", draw);
   scope.addEventListener("change", draw);
   draw();
