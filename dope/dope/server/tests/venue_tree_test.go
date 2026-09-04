@@ -110,6 +110,56 @@ func TestDeletingAVenueGameTakesTheSlot(t *testing.T) {
 	}
 }
 
+// The registration opens and shuts through its own button, and the save beside
+// it — which says nothing about the state — leaves the state where it was.
+func TestRegistrationOpensAndShutsByButton(t *testing.T) {
+	db := venueTestDB(t)
+	festID, slot := newVenueSlot(t, db, []int{2})
+	srv := dopeserver.NewTestServer(func(e *core.Engine) {
+		e.DB = db
+		e.RT = realtime.NewManager()
+	})
+	userID := newVenueUser(t, db, "organizer")
+	if _, err := db.Exec(`insert into fest_organizers(fest_id, user_id, role, added_at) values(?, ?, 'creator', ?)`,
+		festID, userID, util.UtcNow()); err != nil {
+		t.Fatal(err)
+	}
+	cookie := createTestSession(t, srv, userID)
+	path := "/host/venue/" + strconv.FormatInt(festID, 10) + "/game/" + slot.GameRef() + "/reg"
+	post := func(form url.Values) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(&http.Cookie{Name: session.CookieName, Value: cookie})
+		rec := httptest.NewRecorder()
+		srv.HostPageServer().HandleHostRouter(rec, req)
+		if rec.Code != http.StatusSeeOther {
+			t.Fatalf("%s = %d: %s", form.Encode(), rec.Code, rec.Body.String())
+		}
+	}
+	state := func() venues.Slot {
+		t.Helper()
+		got, err := venues.LoadSlot(t.Context(), db, slot.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+
+	post(url.Values{"reg": {"open"}, "link_visible": {"1"}})
+	if got := state(); got.RegClosed || !got.LinkVisible {
+		t.Fatalf("open left closed=%v visible=%v", got.RegClosed, got.LinkVisible)
+	}
+	post(url.Values{"reg_opens_at": {"2026-09-04 19:00"}})
+	if got := state(); got.RegClosed || got.RegOpensAt != "2026-09-04 19:00" || got.LinkVisible {
+		t.Fatalf("save changed the state: %+v", got)
+	}
+	post(url.Values{"reg": {"close"}})
+	if !state().RegClosed {
+		t.Error("close left the registration open")
+	}
+}
+
 // The viewer side moves with it: a Venue's Game is watched under /venue/.
 func TestViewerVenueGameRedirect(t *testing.T) {
 	db := venueTestDB(t)

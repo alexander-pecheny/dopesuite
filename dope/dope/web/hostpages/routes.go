@@ -182,6 +182,7 @@ func (s *Server) handleSlotRoutes(t *route.Table, venue string) {
 		return s.renderSlotPage(w, r, sc, "", "")
 	})
 	t.Handle("POST "+slot, route.Manager, s.handleSlotSave)
+	t.Handle("POST "+slot+"/reg", route.Manager, s.handleSlotReg)
 	t.Handle("POST "+slot+"/token", route.Manager, s.handleSlotToken)
 	t.Handle("POST "+slot+"/clone", route.Manager, s.handleSlotClone)
 	t.Handle("POST "+slot+"/application/{app}/status", route.Manager, s.handleApplicationStatus)

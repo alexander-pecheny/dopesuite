@@ -246,6 +246,24 @@ func TestSlotPageHandsTheRegLinkOverOnlyWhenTold(t *testing.T) {
 	}
 }
 
+// The registration is a state, so the page offers the move it is not in.
+func TestSlotPageOffersTheOtherWayRound(t *testing.T) {
+	venue := venues.Venue{ID: 1, Slug: "tbilisi", Title: "Площадка"}
+	data := slotPageData{Venue: venue, Slot: venues.Slot{ID: 7, FestID: 1, GameID: 3, RegClosed: true}, CanManage: true}
+
+	body := renderPublic(t, slotPageDoc(data))
+	if !strings.Contains(body, "Открыть регистрацию") || strings.Contains(body, "Закрыть регистрацию") {
+		t.Error("a shut registration must offer to open")
+	}
+	if !strings.Contains(body, `action="/host/venue/tbilisi/game/3/reg"`) {
+		t.Error("the registration form posts to its own route")
+	}
+	data.Slot.RegClosed = false
+	if body := renderPublic(t, slotPageDoc(data)); !strings.Contains(body, "Закрыть регистрацию") {
+		t.Error("an open registration must offer to shut")
+	}
+}
+
 func TestVenueDashDocListsSlotsAndAccess(t *testing.T) {
 	body := renderPublic(t, venueDashDoc(venueDashData{
 		Venue:     venues.Venue{ID: 1, Slug: "tbilisi", Title: "Площадка", City: "Тбилиси", IsPublic: true},

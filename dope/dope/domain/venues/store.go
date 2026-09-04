@@ -168,10 +168,16 @@ values(?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`,
 		util.NullableString(FormatTime(opensAt)), now, now)
 }
 
-func UpdateSlotTx(ctx context.Context, tx *sql.Tx, slotID int64, startsAt string, tournamentID int64, opensAt string, closed, linkVisible bool) error {
+func UpdateSlotTx(ctx context.Context, tx *sql.Tx, slotID int64, startsAt string, tournamentID int64) error {
 	_, err := tx.ExecContext(ctx, `
-update slots set starts_at = ?, rating_tournament_id = ?, reg_opens_at = ?, reg_closed = ?, link_visible = ?, updated_at = ?
-where id = ?`, FormatTime(startsAt), util.NullableInt64(tournamentID),
+update slots set starts_at = ?, rating_tournament_id = ?, updated_at = ? where id = ?`,
+		FormatTime(startsAt), util.NullableInt64(tournamentID), util.UtcNow(), slotID)
+	return err
+}
+
+func UpdateSlotRegTx(ctx context.Context, tx *sql.Tx, slotID int64, opensAt string, closed, linkVisible bool) error {
+	_, err := tx.ExecContext(ctx, `
+update slots set reg_opens_at = ?, reg_closed = ?, link_visible = ?, updated_at = ? where id = ?`,
 		util.NullableString(FormatTime(opensAt)), util.BoolToInt(closed), util.BoolToInt(linkVisible),
 		util.UtcNow(), slotID)
 	return err
