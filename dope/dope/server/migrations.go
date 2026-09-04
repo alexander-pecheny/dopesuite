@@ -914,6 +914,18 @@ create table if not exists od_contested(
 		_, err := db.Exec(`update slots set link_visible = 1 where reg_closed = 0`)
 		return err
 	}},
+	{Version: 33, Name: "slots.reg_closes_at", Up: func(db *sql.DB) error {
+		// The registration became a window a Representative sets up, and
+		// link_visible became whether the Venue's public page carries the link
+		// — which nobody has chosen yet, so it starts off for everyone.
+		if err := store.AddColumnsIfMissing(db, "slots", []store.ColumnSpec{
+			{Name: "reg_closes_at", Type: "TEXT"},
+		}); err != nil {
+			return err
+		}
+		_, err := db.Exec(`update slots set link_visible = 0`)
+		return err
+	}},
 }
 
 func migrateDB(db *sql.DB) error { return schema.Apply(db, migrations) }

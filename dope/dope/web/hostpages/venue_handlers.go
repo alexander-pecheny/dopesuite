@@ -90,7 +90,7 @@ func (s *Server) renderVenuesIndex(w http.ResponseWriter, r *http.Request, _ rou
 }
 
 func registrationLabel(slot venues.Slot, now time.Time) string {
-	switch venues.Registration(slot.RegOpensAt, slot.RegClosed, now) {
+	switch venues.Registration(slot.RegOpensAt, slot.RegClosesAt, slot.RegSetUp, now) {
 	case venues.RegClosed:
 		return strs.Venues.Public.RegClosed()
 	case venues.RegScheduled:
@@ -129,6 +129,11 @@ func (s *Server) renderVenuePage(w http.ResponseWriter, r *http.Request, _ route
 			continue
 		}
 		row.Registration = registrationLabel(slot, now)
+		// A Representative decides whether this page carries the invitation; the
+		// link exists either way, and is theirs to hand out from the game's own page.
+		if slot.LinkVisible && venues.Registration(slot.RegOpensAt, slot.RegClosesAt, slot.RegSetUp, now) != venues.RegClosed {
+			row.RegHref = "/reg/" + slot.RegToken
+		}
 		detail.Upcoming = append(detail.Upcoming, row)
 	}
 	pages.RenderDoc(w, s.h.Engine().AssetETags, VenueDoc(detail))
@@ -164,7 +169,7 @@ func (s *Server) renderRegPage(w http.ResponseWriter, r *http.Request, token, er
 	now := time.Now().UTC()
 	page := RegPage{
 		Token: slot.RegToken, VenueTitle: venue.Title, VenueRef: venue.Ref(), City: venue.City,
-		Date: slot.StartsAt, State: venues.Registration(slot.RegOpensAt, slot.RegClosed, now),
+		Date: slot.StartsAt, State: venues.Registration(slot.RegOpensAt, slot.RegClosesAt, slot.RegSetUp, now),
 		OpensAt: slot.RegOpensAt, Error: errMsg, Notice: notice,
 		LoginHref: "/login?next=" + url.QueryEscape("/reg/"+slot.RegToken),
 	}
@@ -216,7 +221,7 @@ func (s *Server) handleRegSubmit(w http.ResponseWriter, r *http.Request, sc rout
 		return route.BadRequest("bad form")
 	}
 	now := time.Now().UTC()
-	state := venues.Registration(slot.RegOpensAt, slot.RegClosed, now)
+	state := venues.Registration(slot.RegOpensAt, slot.RegClosesAt, slot.RegSetUp, now)
 	if state == venues.RegScheduled {
 		return s.renderRegPage(w, r, token, strs.Venues.Reg.ErrorNotOpen(), "")
 	}
@@ -506,6 +511,7 @@ func (s *Server) renderSlotPage(w http.ResponseWriter, r *http.Request, sc route
 		GameHref:   VenueBase(venue) + "/game/" + slot.GameRef() + "/table",
 		RegURL:     publicURL(r, "/reg/"+slot.RegToken),
 		CanManage:  roles.CanManageFest(sc.Role),
+		RegState:   venues.Registration(slot.RegOpensAt, slot.RegClosesAt, slot.RegSetUp, time.Now().UTC()),
 		Tz:         s.userTimezone(r.Context(), sc.User.UserID),
 		Error:      errMsg, Notice: notice,
 	}
@@ -572,9 +578,9 @@ func (s *Server) handleSlotSave(w http.ResponseWriter, r *http.Request, sc route
 	return s.redirectToSlot(w, r, festID, slot.ID)
 }
 
-// handleSlotReg is the registration's own form: when it opens, whether its link
-// is handed over, and the button that opens or shuts it. The button says which
-// way it means; the save button says nothing and leaves the state alone.
+// handleSlotReg is what the registration dialog saves: the window it takes
+// applications in and whether the Venue's page carries its link. Saving it is
+// what sets it up, so the first save is also what opens it.
 func (s *Server) handleSlotReg(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	festID := sc.FestID
 	_, slot, err := s.slotOf(r, sc)
@@ -584,22 +590,24 @@ func (s *Server) handleSlotReg(w http.ResponseWriter, r *http.Request, sc route.
 	if err := r.ParseForm(); err != nil {
 		return route.BadRequest("bad form")
 	}
-	closed := slot.RegClosed
-	switch r.Form.Get("reg") {
-	case "open":
-		closed = false
-	case "close":
-		closed = true
-	}
 	err = s.h.Engine().WithWriteTx(r.Context(), festID, "slot-reg", func(ctx context.Context, tx *sql.Tx) error {
-		return venues.UpdateSlotRegTx(ctx, tx, slot.ID, r.Form.Get("reg_opens_at"), closed,
-			r.Form.Get("link_visible") == "1")
+		return venues.UpdateSlotRegTx(ctx, tx, slot.ID, when(r.Form, "reg_opens"),
+			when(r.Form, "reg_closes"), r.Form.Get("link_visible") == "1")
 	})
 	if err != nil {
 		return s.renderSlotPage(w, r, sc, err.Error(), "")
 	}
 	s.h.Engine().InvalidateFestViewCache(festID)
 	return s.redirectToSlot(w, r, festID, slot.ID)
+}
+
+// when reads one end of the registration's window: the radio says whether there
+// is one at all, so the calendar beside it is read only when it is.
+func when(form url.Values, group string) string {
+	if form.Get(group) != "at" {
+		return ""
+	}
+	return form.Get(group + "_at")
 }
 
 // redirectToSlot sends the host back to the Slot's page, which is named by its

@@ -125,8 +125,13 @@ const (
 	RegClosed
 )
 
-func Registration(opensAt string, closed bool, now time.Time) RegState {
-	if closed {
+// Registration is the window a Slot takes applications in. One never set up
+// takes none; after that the two ends say when, and either may be left off.
+func Registration(opensAt, closesAt string, setUp bool, now time.Time) RegState {
+	if !setUp {
+		return RegClosed
+	}
+	if closes, ok := ParseTime(closesAt); ok && !now.Before(closes) {
 		return RegClosed
 	}
 	if opens, ok := ParseTime(opensAt); ok && now.Before(opens) {

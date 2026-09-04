@@ -40,7 +40,8 @@ type Slot struct {
 	RatingTournamentID int64
 	RegToken           string
 	RegOpensAt         string
-	RegClosed          bool
+	RegClosesAt        string
+	RegSetUp           bool
 	LinkVisible        bool
 	GameSlug           string
 	Accepted           int
@@ -113,7 +114,7 @@ func PublicVenues(ctx context.Context, q store.Queryer) ([]Venue, error) {
 
 const slotSelect = `
 select s.id, s.fest_id, s.game_id, coalesce(s.starts_at, ''), coalesce(s.rating_tournament_id, 0),
-       s.reg_token, coalesce(s.reg_opens_at, ''), s.reg_closed, s.link_visible, coalesce(g.slug, ''),
+       s.reg_token, coalesce(s.reg_opens_at, ''), coalesce(s.reg_closes_at, ''), s.reg_closed, s.link_visible, coalesce(g.slug, ''),
        (select count(*) from slot_applications a where a.slot_id = s.id and a.status = 'accepted'),
        (select count(*) from slot_applications a where a.slot_id = s.id and a.status = 'pending')
 from slots s join games g on g.id = s.game_id where `
@@ -122,8 +123,8 @@ func scanSlot(row interface{ Scan(...any) error }) (Slot, error) {
 	var s Slot
 	var closed, visible int
 	err := row.Scan(&s.ID, &s.FestID, &s.GameID, &s.StartsAt, &s.RatingTournamentID,
-		&s.RegToken, &s.RegOpensAt, &closed, &visible, &s.GameSlug, &s.Accepted, &s.Pending)
-	s.RegClosed = closed == 1
+		&s.RegToken, &s.RegOpensAt, &s.RegClosesAt, &closed, &visible, &s.GameSlug, &s.Accepted, &s.Pending)
+	s.RegSetUp = closed == 0
 	s.LinkVisible = visible == 1
 	return s, err
 }
@@ -150,9 +151,9 @@ order by case when s.starts_at = '' then 1 else 0 end, s.starts_at, s.id`, []any
 		func(rows *sql.Rows) (Slot, error) { return scanSlot(rows) })
 }
 
-// CreateSlotTx makes a Slot with its registration shut and its link hidden.
-// The reg token exists from the first moment, so a Slot open on creation would
-// take applications before its Representative had picked the tournament or the date.
+// CreateSlotTx makes a Slot whose registration is not set up yet: the reg token
+// exists from the first moment, so a Slot open on creation would take
+// applications before its Representative had picked the tournament or the date.
 func CreateSlotTx(ctx context.Context, tx *sql.Tx, festID int64, startsAt string, tournamentID int64, opensAt string, tourComp []int) (int64, error) {
 	gameID, err := gamebuild.Create(ctx, tx, gamebuild.Spec{
 		FestID: festID, Type: games.OD, ODTourComp: tourComp, OwnTeams: true,
@@ -175,11 +176,14 @@ update slots set starts_at = ?, rating_tournament_id = ?, updated_at = ? where i
 	return err
 }
 
-func UpdateSlotRegTx(ctx context.Context, tx *sql.Tx, slotID int64, opensAt string, closed, linkVisible bool) error {
+// UpdateSlotRegTx is what the registration dialog saves. Setting it up is what
+// opens it: reg_closed carries whether it was ever set up, and the window from
+// here on says whether it takes applications.
+func UpdateSlotRegTx(ctx context.Context, tx *sql.Tx, slotID int64, opensAt, closesAt string, linkVisible bool) error {
 	_, err := tx.ExecContext(ctx, `
-update slots set reg_opens_at = ?, reg_closed = ?, link_visible = ?, updated_at = ? where id = ?`,
-		util.NullableString(FormatTime(opensAt)), util.BoolToInt(closed), util.BoolToInt(linkVisible),
-		util.UtcNow(), slotID)
+update slots set reg_opens_at = ?, reg_closes_at = ?, reg_closed = 0, link_visible = ?, updated_at = ? where id = ?`,
+		util.NullableString(FormatTime(opensAt)), util.NullableString(FormatTime(closesAt)),
+		util.BoolToInt(linkVisible), util.UtcNow(), slotID)
 	return err
 }
 

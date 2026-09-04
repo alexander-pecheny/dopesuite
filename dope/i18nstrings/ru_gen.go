@@ -1922,8 +1922,8 @@ var RU = Strings{
 		Game: VenuesGameStrings{
 			ApplicationsEmpty:   func() string { return "Заявок пока нет." },
 			ApplicationsSubhead: func() string { return "Заявки" },
+			Cancel:              func() string { return "Отмена" },
 			CloneBtn:            func() string { return "Клонировать" },
-			CloneCancel:         func() string { return "Отмена" },
 			CloneDatetimeLabel:  func() string { return "Дата и время новой игры" },
 			CloneNote: func() string {
 				return "Копируются настройки игры и новая ссылка: без турнира, заявок и голосования."
@@ -1947,20 +1947,27 @@ var RU = Strings{
 			DownloadTours:    func() string { return "Туры (xlsx)" },
 			DownloadsSubhead: func() string { return "Выгрузки" },
 			LinkCopy:         func() string { return "Копировать" },
-			LinkHidden: func() string {
-				return "Отметьте «Ссылка видна», чтобы получить ссылку."
-			},
-			LinkLabel:  func() string { return "Ссылка на регистрацию" },
-			LinkRotate: func() string { return "Сменить ссылку" },
+			LinkLabel:        func() string { return "Ссылка на регистрацию" },
+			LinkPublicLabel:  func() string { return "Показывать ссылку на странице площадки" },
+			LinkRotate:       func() string { return "Сменить ссылку" },
 			LinkRotateConfirm: func() string {
 				return "Сменить ссылку? Старая перестанет работать."
 			},
-			LinkVisibleLabel:      func() string { return "Ссылка видна" },
-			RegCloseBtn:           func() string { return "Закрыть регистрацию" },
-			RegOpenBtn:            func() string { return "Открыть регистрацию" },
+			RegClosesAtLabel:      func() string { return "до указанного времени" },
+			RegClosesLabel:        func() string { return "Регистрация закрывается" },
+			RegClosesNever:        func() string { return "никогда" },
+			RegDialogTitle:        func() string { return "Настройки регистрации" },
+			RegLinkPublic:         func() string { return "ссылка на странице площадки" },
+			RegNone:               func() string { return "Регистрация не настроена." },
+			RegOpensAtLabel:       func() string { return "с указанного времени" },
 			RegOpensLabel:         func() string { return "Регистрация открывается" },
-			RegOpensPlaceholder:   func() string { return "сразу" },
+			RegOpensNow:           func() string { return "сразу" },
+			RegSetupBtn:           func() string { return "Настроить регистрацию" },
+			RegStateClosed:        func() string { return "Закрыта" },
+			RegStateOpen:          func() string { return "Открыта" },
+			RegStateScheduled:     func(at string) string { return fmt.Sprintf("Откроется %s", at) },
 			RegSubhead:            func() string { return "Регистрация" },
+			RegUntil:              func(at string) string { return fmt.Sprintf("до %s", at) },
 			StatusAccept:          func() string { return "Принять" },
 			StatusDecline:         func() string { return "Отклонить" },
 			StatusPending:         func() string { return "Вернуть в ожидание" },

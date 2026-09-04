@@ -25,6 +25,7 @@ type SlotRow struct {
 	Date         string
 	Tournament   string
 	Registration string
+	RegHref      string
 	Accepted     int
 }
 
@@ -120,9 +121,13 @@ func slotTable(title string, rows []SlotRow) *ui.Element {
 		ui.Hcell(ui.Text(strs.Venues.Public.ColRegistration())), ui.Hcell(ui.Text(strs.Venues.Public.ColTeams())),
 	)}
 	for _, s := range rows {
+		reg := ui.Cell(ui.Text(s.Registration))
+		if s.RegHref != "" {
+			reg = ui.Cell(ui.Link(ui.Href(s.RegHref), ui.Text(s.Registration)))
+		}
 		table = append(table, ui.Trow(
 			ui.Cell(ui.Text(s.Date)), ui.Cell(ui.Text(s.Tournament)),
-			ui.Cell(ui.Text(s.Registration)), ui.Cell(ui.Text(strconv.Itoa(s.Accepted))),
+			reg, ui.Cell(ui.Text(strconv.Itoa(s.Accepted))),
 		))
 	}
 	return ui.Section(ui.Subhead(ui.Text(title)), ui.Table(table...))
