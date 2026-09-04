@@ -322,26 +322,34 @@ export function mountBuffTeamField(field: HTMLInputElement): void {
   show();
 }
 
-// mountBuffTournamentField turns the tournament id into a suggest over the
-// tournaments buff knows to be playable at the Slot's time.
+// mountBuffTournamentField is the one tournament field: what is typed searches
+// buff by name or by id, and what is kept is the id, so the field names the
+// tournament it holds underneath itself.
 export function mountBuffTournamentField(field: HTMLInputElement): void {
-  const query = document.createElement("input");
-  query.type = "text";
-  query.className = "input";
-  query.autocomplete = "off";
-  query.placeholder = S.venues.rosterEditor.teamPlaceholder();
-  field.after(query);
+  const chosen = document.createElement("p");
+  chosen.className = "hint";
+  field.after(chosen);
   const on = field.getAttribute("data-buff-tournament") || "";
-  autocomplete(query, async (text) => {
+  const seen = new Map<number, BuffTournament>();
+
+  const find = async (text: string): Promise<BuffTournament[]> => {
     const rows = await fetchJSON<BuffTournament[]>(
       `/api/buff/tournaments?q=${encodeURIComponent(text)}&on=${encodeURIComponent(on)}`,
     );
-    return (rows || []).map((t) => ({value: String(t.id), label: t.name, hint: `${t.type} · ${t.id}`}));
-  }, (choice) => {
-    field.value = choice.value;
-    field.dispatchEvent(new Event("input", {bubbles: true}));
-    query.value = choice.label;
-  });
+    for (const t of rows || []) seen.set(t.id, t);
+    return rows || [];
+  };
+  const name = (t: BuffTournament | undefined): void => {
+    chosen.textContent = t ? `${t.name} · ${t.type}` : "";
+  };
+
+  autocomplete(field, async (text) => {
+    const rows = await find(text);
+    return rows.map((t) => ({value: String(t.id), label: t.name, hint: `${t.type} · ${t.id}`}));
+  }, (choice) => name(seen.get(Number(choice.value))));
+
+  const id = Number(field.value.trim());
+  if (id) void find(String(id)).then(() => name(seen.get(id)));
 }
 
 export function mountRosterEditors(doc: Document): void {

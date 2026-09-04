@@ -557,15 +557,43 @@ func (s *Server) handleSlotSave(w http.ResponseWriter, r *http.Request, sc route
 	}
 	tournamentID := formInt64(r.Form, "rating_tournament_id")
 	err = s.h.Engine().WithWriteTx(r.Context(), festID, "slot-save", func(ctx context.Context, tx *sql.Tx) error {
-		if err := venues.UpdateSlotTx(ctx, tx, slot.ID, r.Form.Get("starts_at"), tournamentID,
-			r.Form.Get("reg_opens_at"), r.Form.Get("reg_closed") == "1",
-			r.Form.Get("link_visible") == "1"); err != nil {
+		if err := venues.UpdateSlotTx(ctx, tx, slot.ID, r.Form.Get("starts_at"), tournamentID); err != nil {
 			return err
 		}
 		if tournamentID <= 0 || tournamentID == slot.RatingTournamentID {
 			return nil
 		}
 		return venues.RetourTx(ctx, tx, festID, slot.GameID, s.tourComposition(ctx, tournamentID, ""))
+	})
+	if err != nil {
+		return s.renderSlotPage(w, r, sc, err.Error(), "")
+	}
+	s.h.Engine().InvalidateFestViewCache(festID)
+	return s.redirectToSlot(w, r, festID, slot.ID)
+}
+
+// handleSlotReg is the registration's own form: when it opens, whether its link
+// is handed over, and the button that opens or shuts it. The button says which
+// way it means; the save button says nothing and leaves the state alone.
+func (s *Server) handleSlotReg(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	festID := sc.FestID
+	_, slot, err := s.slotOf(r, sc)
+	if err != nil {
+		return err
+	}
+	if err := r.ParseForm(); err != nil {
+		return route.BadRequest("bad form")
+	}
+	closed := slot.RegClosed
+	switch r.Form.Get("reg") {
+	case "open":
+		closed = false
+	case "close":
+		closed = true
+	}
+	err = s.h.Engine().WithWriteTx(r.Context(), festID, "slot-reg", func(ctx context.Context, tx *sql.Tx) error {
+		return venues.UpdateSlotRegTx(ctx, tx, slot.ID, r.Form.Get("reg_opens_at"), closed,
+			r.Form.Get("link_visible") == "1")
 	})
 	if err != nil {
 		return s.renderSlotPage(w, r, sc, err.Error(), "")

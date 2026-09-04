@@ -242,6 +242,16 @@ func TestPlayableTournamentsPutSynchronsFirst(t *testing.T) {
 	}
 }
 
+// The tournament field is one box: an id typed into it names that tournament
+// even when the date asked about would have filtered it out.
+func TestSearchTournamentsAnswersAnID(t *testing.T) {
+	s := fixture(t)
+	got := s.SearchTournaments(context.Background(), "10233", at(t, "2026-09-05 18:00"), 10)
+	if len(got) != 1 || got[0].ID != 10233 {
+		t.Fatalf("search by id %+v", got)
+	}
+}
+
 func TestSearchAndLoadTournament(t *testing.T) {
 	s := fixture(t)
 	// Three: «Синхрон августа», «Аsync tournament августа» and «Старый sync tournament» — the

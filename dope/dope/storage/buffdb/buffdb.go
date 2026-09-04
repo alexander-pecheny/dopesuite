@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -335,12 +336,15 @@ func (s *Store) SearchTournaments(ctx context.Context, q string, at time.Time, l
 	}
 	when := instant(at)
 	where, args := likeAny("name", q, likeInfix)
+	// An id is typed to name one tournament and no other, so it answers even
+	// when that tournament is not playable at the time asked about.
+	id, _ := strconv.ParseInt(q, 10, 64)
+	args = append([]any{id}, args...)
 	args = append(args, when, when, when, capLimit(limit))
 	rows, err := s.db.QueryContext(ctx, `
 select id, coalesce(name, ''), coalesce(tournament_type, ''), coalesce(questions_by_tour, ''), coalesce(date_start, '')
 from tournaments
-where `+where+`
-  and `+withinWindow+`
+where id = ? or (`+where+` and `+withinWindow+`)
 order by date_start desc, id
 limit ?`, args...)
 	if err != nil {

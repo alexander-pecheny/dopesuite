@@ -213,26 +213,14 @@ func slotHeaderSection(data slotPageData) *ui.Element {
 	if !data.CanManage {
 		return ui.Section(sect...)
 	}
-	closed := []ui.Item{ui.Name("reg_closed"), ui.Value("1"), ui.Text(strs.Venues.Game.RegClosedLabel())}
-	if data.Slot.RegClosed {
-		closed = append(closed, ui.Checked())
-	}
-	visible := []ui.Item{ui.Name("link_visible"), ui.Value("1"), ui.Text(strs.Venues.Game.LinkVisibleLabel())}
-	if data.Slot.LinkVisible {
-		visible = append(visible, ui.Checked())
-	}
 	sect = append(sect,
 		ui.Form(ui.DirCol, ui.Method("post"), ui.Action(base), ui.Autocomplete("off"),
 			ui.Field(ui.Label(strs.Venues.Game.DatetimeLabel()), ui.Datetimefield(ui.Name("starts_at"), ui.Value(data.Slot.StartsAt),
 				ui.Data("datetime-tz", data.Tz))),
 			ui.Field(ui.Label(strs.Venues.Game.TournamentLabel()),
-				ui.Textfield(ui.Name("rating_tournament_id"), ui.Value(tournamentID), ui.Inputmode("numeric"),
+				ui.Textfield(ui.Name("rating_tournament_id"), ui.Value(tournamentID),
+					ui.Placeholder(strs.Venues.Game.TournamentPlaceholder()),
 					ui.Data("buff-tournament", data.Slot.StartsAt), ui.Autocomplete("off"))),
-			ui.Field(ui.Label(strs.Venues.Game.RegOpensLabel()),
-				ui.Datetimefield(ui.Name("reg_opens_at"), ui.Value(data.Slot.RegOpensAt), ui.Placeholder(strs.Venues.Game.RegOpensPlaceholder()),
-					ui.Data("datetime-tz", data.Tz))),
-			ui.Checkbox(closed...),
-			ui.Checkbox(visible...),
 			ui.Row(ui.Button(ui.Submit(), ui.Text(strs.Venues.Host.SaveSubmit()))),
 		),
 		ui.Row(ui.Button(ui.Ghost, ui.Data("dialog-open", "cloneSlot"), ui.Text(strs.Venues.Game.CloneBtn()))),
@@ -265,18 +253,21 @@ func slotDeleteSection(data slotPageData) *ui.Element {
 
 func slotLinksSection(data slotPageData) *ui.Element {
 	base := slotBase(data.Venue, data.Slot)
-	sect := []ui.Item{ui.Subhead(ui.Text(strs.Venues.Game.LinkSubhead()))}
+	sect := []ui.Item{ui.Subhead(ui.Text(strs.Venues.Game.RegSubhead()))}
+	if data.CanManage {
+		sect = append(sect, slotRegForm(data, base))
+	}
 	// The link is handed over only when the game says so. This page is the one
 	// place it is handed over at all, so the tickbox is the whole switch.
 	if !data.Slot.LinkVisible {
-		return ui.Section(append(sect,
-			ui.Empty(ui.Text(strs.Venues.Game.LinkHidden())))...)
+		return ui.Section(append(sect, ui.Empty(ui.Text(strs.Venues.Game.LinkHidden())))...)
 	}
 	sect = append(sect,
-		ui.Row(ui.SpaceSM, ui.AlignCenter, ui.Wrap(),
-			ui.Textfield(ui.ID("regLink"), ui.Value(data.RegURL), ui.Readonly(), ui.Data("select-all", "")),
-			ui.Button(ui.Ghost, ui.Small(), ui.Data("copy-target", "regLink"), ui.Text(strs.Venues.Game.LinkCopy())),
-		),
+		ui.Field(ui.Label(strs.Venues.Game.LinkLabel()),
+			ui.Row(ui.SpaceSM, ui.AlignCenter, ui.Wrap(),
+				ui.Textfield(ui.ID("regLink"), ui.Value(data.RegURL), ui.Readonly(), ui.Data("select-all", "")),
+				ui.Button(ui.Ghost, ui.Small(), ui.Data("copy-target", "regLink"), ui.Text(strs.Venues.Game.LinkCopy())),
+			)),
 	)
 	if data.CanManage {
 		sect = append(sect, ui.Form(ui.Method("post"), ui.Action(base+"/token"),
@@ -285,6 +276,30 @@ func slotLinksSection(data slotPageData) *ui.Element {
 		))
 	}
 	return ui.Section(sect...)
+}
+
+// slotRegForm opens and shuts the registration. Whether it is open is a state,
+// not a setting: the button names the move, and the save beside it says nothing
+// about the state and so leaves it where it was.
+func slotRegForm(data slotPageData, base string) *ui.Element {
+	visible := []ui.Item{ui.Name("link_visible"), ui.Value("1"), ui.Text(strs.Venues.Game.LinkVisibleLabel())}
+	if data.Slot.LinkVisible {
+		visible = append(visible, ui.Checked())
+	}
+	toggle, way, kind := strs.Venues.Game.RegCloseBtn(), "close", ui.Ghost
+	if data.Slot.RegClosed {
+		toggle, way, kind = strs.Venues.Game.RegOpenBtn(), "open", ui.Primary
+	}
+	return ui.Form(ui.DirCol, ui.Method("post"), ui.Action(base+"/reg"), ui.Autocomplete("off"),
+		ui.Field(ui.Label(strs.Venues.Game.RegOpensLabel()),
+			ui.Datetimefield(ui.Name("reg_opens_at"), ui.Value(data.Slot.RegOpensAt),
+				ui.Placeholder(strs.Venues.Game.RegOpensPlaceholder()), ui.Data("datetime-tz", data.Tz))),
+		ui.Checkbox(visible...),
+		ui.Row(
+			ui.Button(ui.Submit(), ui.Text(strs.Venues.Host.SaveSubmit())),
+			ui.Button(kind, ui.Submit(), ui.Name("reg"), ui.Value(way), ui.Text(toggle)),
+		),
+	)
 }
 
 func applicationActions(base string, row SlotApplicationRow) *ui.Element {

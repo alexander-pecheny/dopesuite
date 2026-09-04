@@ -75,14 +75,10 @@ undated_title = "Игра без даты"
 subhead = "Игра"
 # The button through to the table the game is played on.
 table_btn = "Таблица игры"
-# The game's own form: when it plays, which tournament, when registration opens
-# and whether it is shut, and whether the link is handed over at all.
+# The game's own form: when it plays and which tournament it plays.
 datetime_label = "Дата и время"
-tournament_label = "ID турнира на rating.chgk.info"
-reg_opens_label = "Регистрация открывается"
-reg_opens_placeholder = "сразу"
-reg_closed_label = "Регистрация закрыта"
-link_visible_label = "Ссылка видна"
+tournament_label = "Турнир на rating.chgk.info"
+tournament_placeholder = "название или id"
 # Cloning a game into the next week's sitting.
 clone_btn = "Клонировать"
 clone_title = "Клонировать игру"
@@ -92,9 +88,18 @@ clone_cancel = "Отмена"
 # Deleting the game, which takes its Слот and everything hanging off it.
 delete_confirm = "Удалить игру? Заявки, составы, голосование и результаты будут удалены."
 delete_submit = "Удалить игру"
-# The registration link: the section, what stands in for the link while it is
-# not handed over, and the two things a Representative does with it.
-link_subhead = "Ссылка на регистрацию"
+# The registration: when it opens, whether the link is handed over at all, and
+# the button that opens or shuts it — a registration is a state, not a setting,
+# so the button names the move rather than ticking a box.
+reg_subhead = "Регистрация"
+reg_opens_label = "Регистрация открывается"
+reg_opens_placeholder = "сразу"
+link_visible_label = "Ссылка видна"
+reg_open_btn = "Открыть регистрацию"
+reg_close_btn = "Закрыть регистрацию"
+# The link itself, what stands in for it while it is not handed over, and the
+# two things a Representative does with it.
+link_label = "Ссылка на регистрацию"
 link_hidden = "Отметьте «Ссылка видна», чтобы получить ссылку."
 link_copy = "Копировать"
 link_rotate_confirm = "Сменить ссылку? Старая перестанет работать."
@@ -265,7 +270,6 @@ games_count = '{{.n}} {{plural .n "игра" "игры" "игр"}}'
 too_many = 'В составе больше {{.n}} игроков.'
 no_captain = "Отметьте капитана."
 team_unknown = "Буфф не знает такой команды"
-team_placeholder = "поиск по названию"
 
 [od_contested]
 # The спорный dialog on the ОД page (web/ts/od.ts): a host records an answer
