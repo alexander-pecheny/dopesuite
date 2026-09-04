@@ -84,23 +84,37 @@ clone_btn = "Клонировать"
 clone_title = "Клонировать игру"
 clone_note = "Копируются настройки игры и новая ссылка: без турнира, заявок и голосования."
 clone_datetime_label = "Дата и время новой игры"
-clone_cancel = "Отмена"
+# Backing out of a dialog without saving it — the clone's and the registration's.
+cancel = "Отмена"
 # Deleting the game, which takes its Слот and everything hanging off it.
 delete_confirm = "Удалить игру? Заявки, составы, голосование и результаты будут удалены."
 delete_submit = "Удалить игру"
-# The registration: when it opens, whether the link is handed over at all, and
-# the button that opens or shuts it — a registration is a state, not a setting,
-# so the button names the move rather than ticking a box.
+# The registration. A game is made without one, so the section is this note and
+# a button until a Representative sets one up.
 reg_subhead = "Регистрация"
+reg_none = "Регистрация не настроена."
+reg_setup_btn = "Настроить регистрацию"
+# Where the registration stands, once there is one: whether it takes заявки, the
+# end of its window, and whether the venue's page carries its link.
+reg_state_open = "Открыта"
+reg_state_closed = "Закрыта"
+reg_state_scheduled = 'Откроется {{.at}}'
+reg_until = 'до {{.at}}'
+reg_link_public = "ссылка на странице площадки"
+# The dialog that sets it up and changes it afterwards.
+reg_dialog_title = "Настройки регистрации"
+# Each end of the window is a pair of radios: it either has no such end at all
+# or has a moment, and the calendar belongs to the second of the two.
 reg_opens_label = "Регистрация открывается"
-reg_opens_placeholder = "сразу"
-link_visible_label = "Ссылка видна"
-reg_open_btn = "Открыть регистрацию"
-reg_close_btn = "Закрыть регистрацию"
-# The link itself, what stands in for it while it is not handed over, and the
-# two things a Representative does with it.
+reg_opens_now = "сразу"
+reg_opens_at_label = "с указанного времени"
+reg_closes_label = "Регистрация закрывается"
+reg_closes_never = "никогда"
+reg_closes_at_label = "до указанного времени"
+link_public_label = "Показывать ссылку на странице площадки"
+# The link itself, which the Слот has had since it was made, and the two things
+# a Representative does with it.
 link_label = "Ссылка на регистрацию"
-link_hidden = "Отметьте «Ссылка видна», чтобы получить ссылку."
 link_copy = "Копировать"
 link_rotate_confirm = "Сменить ссылку? Старая перестанет работать."
 link_rotate = "Сменить ссылку"

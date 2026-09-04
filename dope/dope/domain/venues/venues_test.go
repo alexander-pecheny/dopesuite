@@ -55,17 +55,23 @@ func TestParseRosterKeepsOneCaptain(t *testing.T) {
 
 func TestRegistrationState(t *testing.T) {
 	now := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
-	if Registration("", false, now) != RegOpen {
-		t.Fatal("no opens_at means open")
+	if Registration("", "", true, now) != RegOpen {
+		t.Fatal("a set-up registration with no window is open")
 	}
-	if Registration("2026-09-03 10:00", false, now) != RegScheduled {
+	if Registration("2026-09-03 10:00", "", true, now) != RegScheduled {
 		t.Fatal("a future opens_at is scheduled")
 	}
-	if Registration("2026-09-01 10:00", false, now) != RegOpen {
+	if Registration("2026-09-01 10:00", "", true, now) != RegOpen {
 		t.Fatal("a past opens_at is open")
 	}
-	if Registration("", true, now) != RegClosed {
-		t.Fatal("closed wins")
+	if Registration("", "2026-09-03 10:00", true, now) != RegOpen {
+		t.Fatal("a future closes_at is still open")
+	}
+	if Registration("", "2026-09-01 10:00", true, now) != RegClosed {
+		t.Fatal("a past closes_at closes it")
+	}
+	if Registration("", "", false, now) != RegClosed {
+		t.Fatal("a registration nobody set up takes nothing")
 	}
 }
 

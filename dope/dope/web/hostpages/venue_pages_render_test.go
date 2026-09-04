@@ -176,7 +176,7 @@ func TestRegDocAsksForTheRosterOnlyOnceAccepted(t *testing.T) {
 
 func TestSlotPageDocCarriesTheLinkAndTheQueue(t *testing.T) {
 	venue := venues.Venue{ID: 1, Slug: "tbilisi", Title: "Площадка", City: "Тбилиси"}
-	slot := venues.Slot{ID: 7, FestID: 1, GameID: 3, StartsAt: "2026-09-04 19:00", RegToken: "tok", LinkVisible: true}
+	slot := venues.Slot{ID: 7, FestID: 1, GameID: 3, StartsAt: "2026-09-04 19:00", RegToken: "tok", RegSetUp: true}
 	body := renderPublic(t, slotPageDoc(slotPageData{
 		Venue: venue, Slot: slot, Tournament: "Синхрон", CanManage: true,
 		GameHref: "/host/venue/tbilisi/game/3/table", RegURL: "https://dope.test/reg/tok",
@@ -220,47 +220,63 @@ func TestSlotPageDocCarriesTheLinkAndTheQueue(t *testing.T) {
 	}
 }
 
-// «Ссылка видна» is the whole switch: the Slot's page is the only place the
-// reg token is handed over, and it hands it over only when told to.
-func TestSlotPageHandsTheRegLinkOverOnlyWhenTold(t *testing.T) {
+// A Слот is made without a registration: the section is a button until one is
+// set up, and the dialog behind it is where the link lives.
+func TestSlotPageSetsTheRegistrationUpInADialog(t *testing.T) {
 	venue := venues.Venue{ID: 1, Slug: "tbilisi", Title: "Площадка"}
 	slot := venues.Slot{ID: 7, FestID: 1, GameID: 3, RegToken: "tok"}
-	data := slotPageData{Venue: venue, Slot: slot, CanManage: true, RegURL: "https://dope.test/reg/tok"}
+	data := slotPageData{Venue: venue, Slot: slot, CanManage: true, RegURL: "https://dope.test/reg/tok",
+		RegState: venues.RegClosed}
 
 	body := renderPublic(t, slotPageDoc(data))
-	if strings.Contains(body, "https://dope.test/reg/tok") {
-		t.Error("a hidden link is still handed out")
-	}
-	if !strings.Contains(body, "Отметьте «Ссылка видна»") {
-		t.Error("the section must say how to get the link")
+	for _, want := range []string{
+		"Регистрация не настроена.",
+		"Настроить регистрацию",
+		`data-dialog-open="slotReg"`,
+		`action="/host/venue/tbilisi/game/3/reg"`,
+		"Показывать ссылку на странице площадки",
+		"Регистрация закрывается",
+		// The link is the Слот's from the moment it is made, set up or not.
+		`value="https://dope.test/reg/tok"`,
+		`data-copy-target="regLink"`,
+		"/game/3/token",
+		// Each end of the window is a radio pair, and its calendar is hidden
+		// until the dated one is picked.
+		`name="reg_closes" value="never" checked`,
+		`hidden data-when="reg_closes=at"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q", want)
+		}
 	}
 
-	// Open is not enough — the tick is what shows it.
-	data.Slot.RegClosed = false
-	if body := renderPublic(t, slotPageDoc(data)); strings.Contains(body, "https://dope.test/reg/tok") {
-		t.Error("an open registration shows the link without the tick")
-	}
+	data.Slot.RegSetUp = true
+	data.Slot.RegClosesAt = "2026-09-04 18:00"
 	data.Slot.LinkVisible = true
-	if body := renderPublic(t, slotPageDoc(data)); !strings.Contains(body, "https://dope.test/reg/tok") {
-		t.Error("the tick did not hand the link over")
+	data.RegState = venues.RegOpen
+	body = renderPublic(t, slotPageDoc(data))
+	for _, want := range []string{"Открыта", "до 2026-09-04 18:00", "ссылка на странице площадки",
+		`name="reg_closes" value="at" checked`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("set up: missing %q", want)
+		}
+	}
+	if strings.Contains(body, "Регистрация не настроена.") {
+		t.Error("a set-up registration still reads as unset")
 	}
 }
 
-// The registration is a state, so the page offers the move it is not in.
-func TestSlotPageOffersTheOtherWayRound(t *testing.T) {
-	venue := venues.Venue{ID: 1, Slug: "tbilisi", Title: "Площадка"}
-	data := slotPageData{Venue: venue, Slot: venues.Slot{ID: 7, FestID: 1, GameID: 3, RegClosed: true}, CanManage: true}
-
-	body := renderPublic(t, slotPageDoc(data))
-	if !strings.Contains(body, "Открыть регистрацию") || strings.Contains(body, "Закрыть регистрацию") {
-		t.Error("a shut registration must offer to open")
+// A Representative decides whether the public page carries the invitation.
+func TestVenuePageCarriesTheLinkOnlyWhenTold(t *testing.T) {
+	body := renderPublic(t, VenueDoc(VenueDetail{Ref: "tbilisi", Title: "Площадка",
+		Upcoming: []SlotRow{{Date: "2026-09-04 19:00", Registration: "открыта"}}}))
+	if strings.Contains(body, "/reg/") {
+		t.Error("the venue page hands out a link nobody published")
 	}
-	if !strings.Contains(body, `action="/host/venue/tbilisi/game/3/reg"`) {
-		t.Error("the registration form posts to its own route")
-	}
-	data.Slot.RegClosed = false
-	if body := renderPublic(t, slotPageDoc(data)); !strings.Contains(body, "Закрыть регистрацию") {
-		t.Error("an open registration must offer to shut")
+	body = renderPublic(t, VenueDoc(VenueDetail{Ref: "tbilisi", Title: "Площадка",
+		Upcoming: []SlotRow{{Date: "2026-09-04 19:00", Registration: "открыта", RegHref: "/reg/tok"}}}))
+	if !strings.Contains(body, `href="/reg/tok"`) {
+		t.Error("a published link is not on the page")
 	}
 }
 

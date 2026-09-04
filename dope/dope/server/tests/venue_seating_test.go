@@ -203,10 +203,10 @@ func TestNewSlotStartsWithRegistrationClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slot.RegClosed {
-		t.Error("a fresh Слот takes заявки before anyone opened it")
+	if slot.RegSetUp {
+		t.Error("a fresh Слот takes заявки before anyone set its registration up")
 	}
-	if venues.Registration(slot.RegOpensAt, slot.RegClosed, time.Now().UTC()) != venues.RegClosed {
+	if venues.Registration(slot.RegOpensAt, slot.RegClosesAt, slot.RegSetUp, time.Now().UTC()) != venues.RegClosed {
 		t.Error("the registration state disagrees with the flag")
 	}
 }

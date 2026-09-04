@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/venues"
@@ -110,9 +111,9 @@ func TestDeletingAVenueGameTakesTheSlot(t *testing.T) {
 	}
 }
 
-// The registration opens and shuts through its own button, and the save beside
-// it — which says nothing about the state — leaves the state where it was.
-func TestRegistrationOpensAndShutsByButton(t *testing.T) {
+// A Слот takes no заявки until its registration is set up; the dialog's first
+// save is what opens it, and the window it saves is what shuts it again.
+func TestRegistrationIsSetUpByItsDialog(t *testing.T) {
 	db := venueTestDB(t)
 	festID, slot := newVenueSlot(t, db, []int{2})
 	srv := dopeserver.NewTestServer(func(e *core.Engine) {
@@ -146,17 +147,37 @@ func TestRegistrationOpensAndShutsByButton(t *testing.T) {
 		return got
 	}
 
-	post(url.Values{"reg": {"open"}, "link_visible": {"1"}})
-	if got := state(); got.RegClosed || !got.LinkVisible {
-		t.Fatalf("open left closed=%v visible=%v", got.RegClosed, got.LinkVisible)
+	// newVenueSlot opens the registration for the tests that need one open; this
+	// one is about the Слот as it is made.
+	if _, err := db.Exec(`update slots set reg_closed = 1 where id = ?`, slot.ID); err != nil {
+		t.Fatal(err)
 	}
-	post(url.Values{"reg_opens_at": {"2026-09-04 19:00"}})
-	if got := state(); got.RegClosed || got.RegOpensAt != "2026-09-04 19:00" || got.LinkVisible {
-		t.Fatalf("save changed the state: %+v", got)
+	if state().RegSetUp {
+		t.Fatal("a fresh Слот has a registration nobody set up")
 	}
-	post(url.Values{"reg": {"close"}})
-	if !state().RegClosed {
-		t.Error("close left the registration open")
+	post(url.Values{"link_visible": {"1"}})
+	got := state()
+	if !got.RegSetUp || !got.LinkVisible {
+		t.Fatalf("the first save left setUp=%v visible=%v", got.RegSetUp, got.LinkVisible)
+	}
+	if venues.Registration(got.RegOpensAt, got.RegClosesAt, got.RegSetUp, time.Now().UTC()) != venues.RegOpen {
+		t.Error("setting it up did not open it")
+	}
+	post(url.Values{"reg_opens": {"at"}, "reg_opens_at": {"2026-09-04 19:00"},
+		"reg_closes": {"at"}, "reg_closes_at": {"2026-09-05 19:00"}})
+	got = state()
+	if got.RegOpensAt != "2026-09-04 19:00" || got.RegClosesAt != "2026-09-05 19:00" || got.LinkVisible {
+		t.Fatalf("the window did not save: %+v", got)
+	}
+	if venues.Registration(got.RegOpensAt, got.RegClosesAt, got.RegSetUp,
+		time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC)) != venues.RegClosed {
+		t.Error("a window that has run out still takes заявки")
+	}
+	// The radio, not the calendar, says whether an end exists: a date left in
+	// the field of an unpicked end is not one.
+	post(url.Values{"reg_opens": {"never"}, "reg_opens_at": {"2026-09-04 19:00"}})
+	if got := state(); got.RegOpensAt != "" || got.RegClosesAt != "" {
+		t.Fatalf("an unpicked end kept its date: %+v", got)
 	}
 }
 

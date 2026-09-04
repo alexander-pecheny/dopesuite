@@ -10,6 +10,8 @@
 //   - [data-filter-rows="tableId"] on an input: hide the rows of that table
 //     that do not contain what was typed.
 //   - [data-copy-target="id"] on a button: copy that field's value.
+//   - [data-when="name=value"] on a container: shown only while the radio group
+//     `name` holds `value` (the server renders the first state; this keeps it).
 
 type SelectableField = HTMLElement & { select?: () => void };
 type FormControl = HTMLElement & {
@@ -86,6 +88,19 @@ document.addEventListener("input", (event) => {
   if (!id) return;
   const table = document.getElementById(id);
   if (table) filterRows(table, (el as HTMLInputElement).value || "");
+});
+
+export function syncWhen(scope: ParentNode): void {
+  scope.querySelectorAll<HTMLElement>("[data-when]").forEach((el) => {
+    const [name, value] = (el.getAttribute("data-when") || "").split("=");
+    const picked = scope.querySelector<HTMLInputElement>(`input[name="${name}"]:checked`);
+    el.hidden = !picked || picked.value !== value;
+  });
+}
+
+document.addEventListener("change", (event) => {
+  const el = event.target;
+  if (el instanceof HTMLInputElement && el.type === "radio") syncWhen(el.form || document);
 });
 
 document.addEventListener("click", (event) => {

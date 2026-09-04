@@ -159,6 +159,7 @@ type slotPageData struct {
 	Voting       VotingView
 	Contested    []ContestedRow
 	RegURL       string
+	RegState     venues.RegState
 	CanManage    bool
 	Tz           string
 	Error        string
@@ -191,7 +192,7 @@ func slotPageDoc(data slotPageData) *ui.Doc {
 	if data.Notice != "" {
 		page = append(page, ui.Hint(ui.Text(data.Notice)))
 	}
-	page = append(page, slotHeaderSection(data), slotLinksSection(data), slotApplicationsSection(data),
+	page = append(page, slotHeaderSection(data), slotRegSection(data), slotApplicationsSection(data),
 		slotVotingSection(data), slotContestedSection(data), slotDownloadsSection(data))
 	if data.CanManage {
 		page = append(page, slotDeleteSection(data))
@@ -233,7 +234,7 @@ func slotHeaderSection(data slotPageData) *ui.Element {
 						ui.Required(), ui.Data("datetime-tz", data.Tz))),
 				ui.Row(
 					ui.Button(ui.Submit(), ui.Text(strs.Venues.Game.CloneBtn())),
-					ui.Button(ui.Data("dialog-close", ""), ui.Text(strs.Venues.Game.CloneCancel())),
+					ui.Button(ui.Data("dialog-close", ""), ui.Text(strs.Venues.Game.Cancel())),
 				),
 			),
 		),
@@ -251,16 +252,16 @@ func slotDeleteSection(data slotPageData) *ui.Element {
 	)
 }
 
-func slotLinksSection(data slotPageData) *ui.Element {
+// slotRegSection is the whole registration in one place. The link exists from
+// the moment the Slot does and is the Representative's to hand out either way;
+// what a registration has to be set up for is when it takes applications.
+func slotRegSection(data slotPageData) *ui.Element {
 	base := slotBase(data.Venue, data.Slot)
 	sect := []ui.Item{ui.Subhead(ui.Text(strs.Venues.Game.RegSubhead()))}
-	if data.CanManage {
-		sect = append(sect, slotRegForm(data, base))
-	}
-	// The link is handed over only when the game says so. This page is the one
-	// place it is handed over at all, so the tickbox is the whole switch.
-	if !data.Slot.LinkVisible {
-		return ui.Section(append(sect, ui.Empty(ui.Text(strs.Venues.Game.LinkHidden())))...)
+	if data.Slot.RegSetUp {
+		sect = append(sect, ui.Note(ui.Text(regStateLine(data))))
+	} else {
+		sect = append(sect, ui.Empty(ui.Text(strs.Venues.Game.RegNone())))
 	}
 	sect = append(sect,
 		ui.Field(ui.Label(strs.Venues.Game.LinkLabel()),
@@ -269,35 +270,81 @@ func slotLinksSection(data slotPageData) *ui.Element {
 				ui.Button(ui.Ghost, ui.Small(), ui.Data("copy-target", "regLink"), ui.Text(strs.Venues.Game.LinkCopy())),
 			)),
 	)
-	if data.CanManage {
-		sect = append(sect, ui.Form(ui.Method("post"), ui.Action(base+"/token"),
-			ui.Data("confirm", strs.Venues.Game.LinkRotateConfirm()),
-			ui.Button(ui.Ghost, ui.Small(), ui.Submit(), ui.Text(strs.Venues.Game.LinkRotate())),
-		))
+	if !data.CanManage {
+		return ui.Section(sect...)
 	}
+	sect = append(sect,
+		ui.Row(ui.SpaceSM, ui.AlignCenter, ui.Wrap(),
+			ui.Button(ui.Primary, ui.Data("dialog-open", "slotReg"), ui.Text(strs.Venues.Game.RegSetupBtn())),
+			ui.Form(ui.Method("post"), ui.Action(base+"/token"),
+				ui.Data("confirm", strs.Venues.Game.LinkRotateConfirm()),
+				ui.Button(ui.Ghost, ui.Small(), ui.Submit(), ui.Text(strs.Venues.Game.LinkRotate())),
+			),
+		),
+		slotRegDialog(data, base),
+	)
 	return ui.Section(sect...)
 }
 
-// slotRegForm opens and shuts the registration. Whether it is open is a state,
-// not a setting: the button names the move, and the save beside it says nothing
-// about the state and so leaves it where it was.
-func slotRegForm(data slotPageData, base string) *ui.Element {
-	visible := []ui.Item{ui.Name("link_visible"), ui.Value("1"), ui.Text(strs.Venues.Game.LinkVisibleLabel())}
+// regStateLine is where the registration stands: whether it takes applications
+// now, and the ends of the window that decide it.
+func regStateLine(data slotPageData) string {
+	state := strs.Venues.Game.RegStateOpen()
+	switch data.RegState {
+	case venues.RegScheduled:
+		state = strs.Venues.Game.RegStateScheduled(data.Slot.RegOpensAt)
+	case venues.RegClosed:
+		state = strs.Venues.Game.RegStateClosed()
+	}
+	until := ""
+	if data.Slot.RegClosesAt != "" && data.RegState != venues.RegClosed {
+		until = strs.Venues.Game.RegUntil(data.Slot.RegClosesAt)
+	}
+	public := ""
+	if data.Slot.LinkVisible {
+		public = strs.Venues.Game.RegLinkPublic()
+	}
+	return joinDots(state, until, public)
+}
+
+// whenField is one end of the registration's window: a Slot either has no such
+// end at all or has a moment for it, so the two are radios and the calendar
+// belongs to the second of them.
+func whenField(label, group, never, dated, value, tz string) *ui.Element {
+	atItems := []ui.Item{ui.Name(group), ui.Value("at"), ui.Text(dated)}
+	neverItems := []ui.Item{ui.Name(group), ui.Value("never"), ui.Text(never)}
+	pick := []ui.Item{ui.Data("when", group+"=at")}
+	if value == "" {
+		neverItems = append(neverItems, ui.Checked())
+		pick = append(pick, ui.Hidden())
+	} else {
+		atItems = append(atItems, ui.Checked())
+	}
+	return ui.Pickgroup(ui.Label(label),
+		ui.Row(ui.SpaceSM, ui.AlignCenter, ui.Wrap(),
+			ui.Radio(neverItems...), ui.Radio(atItems...),
+			ui.Col(append(pick, ui.Datetimefield(ui.Name(group+"_at"), ui.Value(value),
+				ui.Data("datetime-tz", tz)))...),
+		))
+}
+
+func slotRegDialog(data slotPageData, base string) *ui.Element {
+	visible := []ui.Item{ui.Name("link_visible"), ui.Value("1"), ui.Text(strs.Venues.Game.LinkPublicLabel())}
 	if data.Slot.LinkVisible {
 		visible = append(visible, ui.Checked())
 	}
-	toggle, way, kind := strs.Venues.Game.RegCloseBtn(), "close", ui.Ghost
-	if data.Slot.RegClosed {
-		toggle, way, kind = strs.Venues.Game.RegOpenBtn(), "open", ui.Primary
-	}
-	return ui.Form(ui.DirCol, ui.Method("post"), ui.Action(base+"/reg"), ui.Autocomplete("off"),
-		ui.Field(ui.Label(strs.Venues.Game.RegOpensLabel()),
-			ui.Datetimefield(ui.Name("reg_opens_at"), ui.Value(data.Slot.RegOpensAt),
-				ui.Placeholder(strs.Venues.Game.RegOpensPlaceholder()), ui.Data("datetime-tz", data.Tz))),
-		ui.Checkbox(visible...),
-		ui.Row(
-			ui.Button(ui.Submit(), ui.Text(strs.Venues.Host.SaveSubmit())),
-			ui.Button(kind, ui.Submit(), ui.Name("reg"), ui.Value(way), ui.Text(toggle)),
+	return ui.Dialog(ui.ID("slotReg"),
+		ui.Form(ui.DirCol, ui.Method("post"), ui.Action(base+"/reg"), ui.Autocomplete("off"),
+			ui.Subhead(ui.Text(strs.Venues.Game.RegDialogTitle())),
+			whenField(strs.Venues.Game.RegOpensLabel(), "reg_opens", strs.Venues.Game.RegOpensNow(),
+				strs.Venues.Game.RegOpensAtLabel(), data.Slot.RegOpensAt, data.Tz),
+			whenField(strs.Venues.Game.RegClosesLabel(), "reg_closes", strs.Venues.Game.RegClosesNever(),
+				strs.Venues.Game.RegClosesAtLabel(), data.Slot.RegClosesAt, data.Tz),
+			ui.Checkbox(visible...),
+			ui.Row(
+				ui.Button(ui.Submit(), ui.Text(strs.Venues.Host.SaveSubmit())),
+				ui.Button(ui.Ghost, ui.Data("dialog-close", ""), ui.Text(strs.Venues.Game.Cancel())),
+			),
 		),
 	)
 }
