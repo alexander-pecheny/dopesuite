@@ -182,7 +182,7 @@ func targets() []target {
 				// Builder-page classic scripts: self-contained IIFE bundles, one per script.
 				{
 					EntryPointsAdvanced: entries("dope/dope/web/ts/",
-						"pageforms", "menu-config", "gamecreate", "numbers", "profile", "roster", "roster-editor"),
+						"pageforms", "menu-config", "gamecreate", "numbers", "profile", "roster", "roster-editor", "tournament-picker"),
 					Bundle: true,
 					Format: api.FormatIIFE,
 					Outdir: "dope/dope/web/assets/static/dist",
@@ -202,7 +202,7 @@ func targets() []target {
 				// roster-editor reaches into the kit's suggest, so its test
 				// module is bundled rather than left with a path outside dist.
 				{
-					EntryPointsAdvanced: entries("dope/dope/web/ts/", "roster-editor"),
+					EntryPointsAdvanced: entries("dope/dope/web/ts/", "roster-editor", "tournament-picker"),
 					Bundle:              true,
 					Format:              api.FormatESModule,
 					Outdir:              "dope/dope/web/jstest/dist",

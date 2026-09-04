@@ -355,3 +355,53 @@ func TestHostLandingKeepsARefusedForm(t *testing.T) {
 		t.Error("a fresh form must be blank")
 	}
 }
+
+// The picker is one screen twice: the cards carry what they are sorted and
+// filtered by, and the mode decides what a Representative does with one.
+func TestTournamentPickerIsOneListInTwoModes(t *testing.T) {
+	p := TournamentPicker{
+		Venue: venues.Venue{ID: 1, Slug: "tbilisi", Title: "Площадка"},
+		Slot:  venues.Slot{ID: 7, FestID: 1, GameID: 3, StartsAt: "2026-09-04 19:00", RatingTournamentID: 10233},
+		Base:  "/host/venue/tbilisi/game/3",
+		Cards: []TournamentCard{
+			{ID: 10233, Name: "Синхрон августа", Type: "Синхрон", Editors: "Мерзляков М. П.", Difficulty: 3.5, Teams: 86, Chosen: true},
+			{ID: 10234, Name: "Асинхрон", Type: "Асинхрон"},
+		},
+	}
+	body := renderPublic(t, TournamentPickerDoc(p))
+	for _, want := range []string{
+		`data-tournament="10233"`, `data-difficulty="3.5"`, `data-teams="86"`, `data-kind="sync"`,
+		`data-kind="async"`,
+		"Мерзляков М. П.", "сложность 3.5", "~86 команд", "выбран",
+		// A tournament rating.chgk.info said nothing about is still a card.
+		"сложность не указана", "заявок ещё нет",
+		`action="/host/venue/tbilisi/game/3/tournament"`,
+		"Только синхроны", "Сортировка",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("pick: missing %q", want)
+		}
+	}
+	if strings.Contains(body, "/game/3/voting") {
+		t.Error("pick mode offers to save a poll")
+	}
+
+	p.Poll = true
+	body = renderPublic(t, TournamentPickerDoc(p))
+	if !strings.Contains(body, `action="/host/venue/tbilisi/game/3/voting"`) {
+		t.Error("poll mode does not save a poll")
+	}
+	if !strings.Contains(body, `name="candidate" value="10233" checked`) {
+		t.Error("the cards are the poll's candidates")
+	}
+	if strings.Contains(body, "/game/3/tournament") {
+		t.Error("poll mode names the game's tournament outright")
+	}
+	// A Slot with no date has nothing playable, and says so rather than
+	// rendering an empty list with controls over it.
+	p.Cards = nil
+	if body := renderPublic(t, TournamentPickerDoc(p)); !strings.Contains(body, "Буфф не знает турниров") ||
+		strings.Contains(body, "Сортировка") {
+		t.Error("an empty picker still draws its controls")
+	}
+}

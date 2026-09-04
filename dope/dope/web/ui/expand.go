@@ -211,11 +211,11 @@ func expandPickgroup(c *base.ExpandCtx, p *base.Element) []base.Node {
 // expandActionlist / expandActionrow / expandRowlink build a list whose rows pair
 // a growing link with trailing action controls (the dashboard games list).
 func expandActionlist(c *base.ExpandCtx, p *base.Element) []base.Node {
-	return one(base.El("ul", []base.Attr{base.ClassAttr("list")}, c.Nodes(p.Block)...))
+	return one(base.El("ul", base.RootAttrs([]string{"list"}, p), c.Nodes(p.Block)...))
 }
 
 func expandActionrow(c *base.ExpandCtx, p *base.Element) []base.Node {
-	return one(base.El("li", []base.Attr{base.ClassAttr("list-action-row")}, c.Nodes(p.Block)...))
+	return one(base.El("li", base.RootAttrs([]string{"list-action-row"}, p), c.Nodes(p.Block)...))
 }
 
 func expandRowlink(c *base.ExpandCtx, p *base.Element) []base.Node {
