@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"dope/dope/domain/ratingtournaments"
 	"dope/dope/domain/ratingvenues"
 	"dope/dope/platform/realtime"
 	"dope/dope/storage/buffdb"
@@ -61,6 +62,9 @@ type Engine struct {
 	Buff *buffdb.Store
 	// Rating is rating.chgk.info's venue catalogue; nil means the shared one.
 	Rating *ratingvenues.Catalogue
+	// Tournaments is what rating.chgk.info says about a tournament beyond what
+	// buff mirrors; nil means the shared one.
+	Tournaments *ratingtournaments.Catalogue
 
 	// Mu guards game/DB writes (writers win contention over viewer reads).
 	Mu sync.RWMutex
@@ -95,6 +99,14 @@ func (e *Engine) RatingVenues() *ratingvenues.Catalogue {
 		return ratingvenues.Default()
 	}
 	return e.Rating
+}
+
+// RatingTournaments is the tournament detail the picker shows, never nil.
+func (e *Engine) RatingTournaments() *ratingtournaments.Catalogue {
+	if e.Tournaments == nil {
+		return ratingtournaments.Default()
+	}
+	return e.Tournaments
 }
 
 // BuffMirror is the buff store, never nil: a Disabled one answers empty when

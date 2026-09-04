@@ -293,6 +293,10 @@ order by s.date_start desc`, teamID, at.Format("2006-01-02"))
 // on its own week, an async tournament any time inside its window.
 var playableTypes = []string{"Синхрон", "Строго синхронный", "Асинхрон"}
 
+// IsAsync says a tournament is played any time inside its window rather than on
+// its own week — the one distinction a caller outside this package draws.
+func IsAsync(kind string) bool { return kind == playableTypes[2] }
+
 // ratingClock is the clock rating.chgk.info keeps: a sync tournament's window runs
 // from Saturday 10:00 to the next Saturday 10:00 Moscow time. A Slot's wall
 // time carries no zone, so it is read on the same clock.

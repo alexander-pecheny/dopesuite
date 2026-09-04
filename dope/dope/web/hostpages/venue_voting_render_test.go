@@ -21,15 +21,24 @@ func TestSlotVotingSectionOffersTheCandidatesThenTheTally(t *testing.T) {
 	venue := venues.Venue{ID: 1, Slug: "tbilisi", Title: "Площадка"}
 	slot := venues.Slot{ID: 7, FestID: 1, GameID: 3, StartsAt: "2026-09-04 19:00", RegToken: "tok"}
 
-	// No poll yet: the form offers what buff knows about the Slot's date.
+	// No poll yet: the section offers the two ways into the picker, which is
+	// where the candidates are and where both ways start.
 	body := renderPublic(t, slotPageDoc(slotPageData{
 		Venue: venue, Slot: slot, CanManage: true,
 		Voting: VotingView{Candidates: []venues.Candidate{{ID: 1, Name: "Синхрон А", Type: "Синхрон"}}},
 	}))
-	for _, want := range []string{"Создать голосование", `name="candidate"`, "Синхрон А · Синхрон", `name="extra_candidate"`} {
+	for _, want := range []string{
+		"Выбор турнира",
+		`href="/host/venue/tbilisi/game/3/tournaments"`,
+		`href="/host/venue/tbilisi/game/3/tournaments?mode=poll"`,
+		"Выбрать турнир", "Создать голосование",
+	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q", want)
 		}
+	}
+	if strings.Contains(body, `name="candidate"`) {
+		t.Error("the игра page still carries the candidate list")
 	}
 
 	// Once created: the link, the tally, the ballots.

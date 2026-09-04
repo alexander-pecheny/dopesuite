@@ -1569,6 +1569,29 @@ export type Strings = {
       teamUnknown: () => string;
       tooMany: (n: string) => string;
     };
+    tournaments: {
+      chosen: () => string;
+      difficulty: (n: string) => string;
+      difficultyFrom: () => string;
+      difficultyLabel: () => string;
+      difficultyTo: () => string;
+      empty: () => string;
+      keepLabel: () => string;
+      noDifficulty: () => string;
+      noTeams: () => string;
+      pickBtn: () => string;
+      pickSubmit: () => string;
+      sortDifficultyDown: () => string;
+      sortDifficultyUp: () => string;
+      sortLabel: () => string;
+      sortTeams: () => string;
+      subhead: () => string;
+      teams: (n: number) => string;
+      typeAll: () => string;
+      typeAsync: () => string;
+      typeLabel: () => string;
+      typeSync: () => string;
+    };
     voting: {
       addByIdLabel: () => string;
       ballotDecline: () => string;

@@ -2084,6 +2084,33 @@ var RU = Strings{
 			TeamUnknown:       func() string { return "Буфф не знает такой команды" },
 			TooMany:           func(n string) string { return fmt.Sprintf("В составе больше %s игроков.", n) },
 		},
+		Tournaments: VenuesTournamentsStrings{
+			Chosen:          func() string { return "выбран" },
+			Difficulty:      func(n string) string { return fmt.Sprintf("сложность %s", n) },
+			DifficultyFrom:  func() string { return "от" },
+			DifficultyLabel: func() string { return "Сложность" },
+			DifficultyTo:    func() string { return "до" },
+			Empty: func() string {
+				return "Буфф не знает турниров, которые можно сыграть в это время."
+			},
+			KeepLabel:          func() string { return "подходит" },
+			NoDifficulty:       func() string { return "сложность не указана" },
+			NoTeams:            func() string { return "заявок ещё нет" },
+			PickBtn:            func() string { return "Выбрать турнир" },
+			PickSubmit:         func() string { return "Выбрать" },
+			SortDifficultyDown: func() string { return "сложность по убыванию" },
+			SortDifficultyUp:   func() string { return "сложность по возрастанию" },
+			SortLabel:          func() string { return "Сортировка" },
+			SortTeams:          func() string { return "больше команд" },
+			Subhead:            func() string { return "Выбор турнира" },
+			Teams: func(n int) string {
+				return fmt.Sprintf("~%d %s", n, core.Plural("ru", n, "команда", "команды", "команд"))
+			},
+			TypeAll:   func() string { return "Все турниры" },
+			TypeAsync: func() string { return "Только асинхроны" },
+			TypeLabel: func() string { return "Тип" },
+			TypeSync:  func() string { return "Только синхроны" },
+		},
 		Voting: VenuesVotingStrings{
 			AddByIdLabel:   func() string { return "Добавить турнир по id" },
 			BallotDecline:  func() string { return "Отклонить" },

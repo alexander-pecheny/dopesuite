@@ -165,6 +165,14 @@
   min-height: 100%;
 }
 
+/* a tournament card is three lines tall, so its controls sit level with the
+   name rather than stretching the whole height the way a one-line row's do */
+.list-action-row[data-tournament] .btn,
+.list-action-row[data-tournament] .checkbox {
+  min-height: 0;
+  align-self: center;
+}
+
 /* a title plus three buttons can't fit a phone: the link takes its own line,
    the buttons line up beneath it */
 @media (max-width: 760px) {

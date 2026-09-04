@@ -66,6 +66,24 @@ func votingForm(base string, view VotingView, tz string) *ui.Element {
 	if len(picks) == 0 {
 		picks = append(picks, ui.Empty(ui.Text(strs.Venues.Voting.BuffEmpty())))
 	}
+	submit := strs.Venues.Voting.CreateSubmit()
+	if v.ID != 0 {
+		submit = strs.Venues.Voting.SaveSubmit()
+	}
+	form := []ui.Item{ui.DirCol, ui.Method("post"), ui.Action(base + "/voting"), ui.Autocomplete("off")}
+	form = append(form, ui.Fieldset(append([]ui.Item{ui.Subhead(ui.Text(strs.Venues.Voting.TournamentsLabel()))}, picks...)...))
+	if v.Frozen {
+		form = append(form, ui.Hint(ui.Text(strs.Venues.Voting.FrozenNote())))
+	}
+	form = append(form, votingSettings(v, tz)...)
+	form = append(form, ui.Row(ui.Button(ui.Submit(), ui.Text(submit))))
+	return ui.Form(form...)
+}
+
+// votingSettings is everything a poll is besides its candidates: what a ballot
+// may say and when it may be cast. The picker page renders the candidates as
+// cards and this below them, so the two screens save the same poll.
+func votingSettings(v venues.Voting, tz string) []ui.Item {
 	kinds := make([]ui.Item, 0, len(kindLabels))
 	for _, k := range kindLabels {
 		items := []ui.Item{ui.Name("kind"), ui.Value(k.kind), ui.Text(k.label)}
@@ -85,35 +103,25 @@ func votingForm(base string, view VotingView, tz string) *ui.Element {
 		kinds = []ui.Item{ui.Note(ui.Text(KindLabel(v.Kind))), ui.Hiddenfield(ui.Name("kind"), ui.Value(v.Kind))}
 		perTeam = nil
 	}
-	submit := strs.Venues.Voting.CreateSubmit()
-	if v.ID != 0 {
-		submit = strs.Venues.Voting.SaveSubmit()
-	}
-	form := []ui.Item{ui.DirCol, ui.Method("post"), ui.Action(base + "/voting"), ui.Autocomplete("off")}
-	form = append(form, ui.Fieldset(append([]ui.Item{ui.Subhead(ui.Text(strs.Venues.Voting.TournamentsLabel()))}, picks...)...))
-	if v.Frozen {
-		form = append(form, ui.Hint(ui.Text(strs.Venues.Voting.FrozenNote())))
-	}
+	out := []ui.Item{}
 	if !v.Frozen {
-		form = append(form, ui.Field(ui.Label(strs.Venues.Voting.AddByIdLabel()),
+		out = append(out, ui.Field(ui.Label(strs.Venues.Voting.AddByIdLabel()),
 			ui.Textfield(ui.Name("extra_candidate"), ui.Inputmode("numeric"))))
 	}
-	form = append(form, ui.Pickgroup(append([]ui.Item{ui.Label(strs.Venues.Voting.KindLabel())}, kinds...)...))
+	out = append(out, ui.Pickgroup(append([]ui.Item{ui.Label(strs.Venues.Voting.KindLabel())}, kinds...)...))
 	if perTeam != nil {
-		form = append(form, ui.Checkbox(perTeam...))
+		out = append(out, ui.Checkbox(perTeam...))
 	} else if v.PerTeam {
-		form = append(form,
+		out = append(out,
 			ui.Note(ui.Text(strs.Venues.Voting.PerTeamLabel())),
 			ui.Hiddenfield(ui.Name("per_team"), ui.Value("1")))
 	}
-	form = append(form,
+	return append(out,
 		ui.Field(ui.Label(strs.Venues.Voting.OpensLabel()), ui.Datetimefield(ui.Name("opens_at"), ui.Value(v.OpensAt),
 			ui.Placeholder(strs.Venues.Voting.OpensPlaceholder()), ui.Data("datetime-tz", tz))),
 		ui.Field(ui.Label(strs.Venues.Voting.ClosesLabel()), ui.Datetimefield(ui.Name("closes_at"), ui.Value(v.ClosesAt),
 			ui.Placeholder("2026-09-04 18:00"), ui.Data("datetime-tz", tz))),
-		ui.Row(ui.Button(ui.Submit(), ui.Text(submit))),
 	)
-	return ui.Form(form...)
 }
 
 func votingTally(rows []venues.TallyRow) *ui.Element {
@@ -168,7 +176,7 @@ func joinList(parts []string) string { return strings.Join(parts, ", ") }
 func slotVotingSection(data slotPageData) *ui.Element {
 	base := slotBase(data.Venue, data.Slot)
 	view := data.Voting
-	sect := []ui.Item{ui.Subhead(ui.Text(strs.Venues.Voting.Subhead()))}
+	sect := []ui.Item{ui.Subhead(ui.Text(strs.Venues.Tournaments.Subhead()))}
 	if !data.CanManage {
 		if view.Voting.ID == 0 {
 			return ui.Section(append(sect, ui.Empty(ui.Text(strs.Venues.Voting.Empty())))...)
@@ -188,10 +196,22 @@ func slotVotingSection(data slotPageData) *ui.Element {
 			sect = append(sect, votingBallots(base, view))
 		}
 		sect = append(sect, ui.Details(ui.Summary(ui.Btn(), ui.Text(strs.Venues.Voting.SettingsSummary())), votingForm(base, view, data.Tz)))
-		return ui.Section(sect...)
+		return ui.Section(append(sect, tournamentWays(base, false))...)
 	}
-	sect = append(sect, ui.Details(ui.Summary(ui.Btn(), ui.Text(strs.Venues.Voting.CreateSubmit())), votingForm(base, view, data.Tz)))
-	return ui.Section(sect...)
+	return ui.Section(append(sect, tournamentWays(base, true))...)
+}
+
+// tournamentWays are the two ways into the picker: name the tournament outright
+// or put the same list to a poll. A Slot that already has a poll is not offered
+// a second one.
+func tournamentWays(base string, poll bool) *ui.Element {
+	row := []ui.Item{ui.SpaceSM, ui.AlignCenter, ui.Wrap(),
+		ui.Button(ui.Href(base+"/tournaments"), ui.Text(strs.Venues.Tournaments.PickBtn()))}
+	if poll {
+		row = append(row, ui.Button(ui.Ghost, ui.Href(base+"/tournaments?mode=poll"),
+			ui.Text(strs.Venues.Voting.CreateSubmit())))
+	}
+	return ui.Row(row...)
 }
 
 func votingWindowLabel(v venues.Voting) string {

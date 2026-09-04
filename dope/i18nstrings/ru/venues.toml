@@ -182,6 +182,7 @@ error_not_open = "Регистрация ещё не открыта."
 [voting]
 # The голосование that picks which турнир a game plays: the Representative's
 # section on the game page, and the public ballot page (/vote/{token}).
+# The word a voter sees: the public ballot page's crumb.
 subhead = "Голосование"
 empty = "Голосования нет."
 create_submit = "Создать голосование"
@@ -296,3 +297,35 @@ remove = "Удалить"
 save = "Сохранить"
 no_such_team = "Нет такой команды"
 save_failed = "Не удалось сохранить спорный ответ"
+
+[tournaments]
+# The tournament picker (dope/dope/web/hostpages/venue_tournaments.go): every
+# tournament playable at the игра's time as a card, which a Representative
+# either picks one of or offers whole to a голосование. What buff mirrors is
+# the name and the type; the editors, the forecast difficulty and the teams
+# already signed up come from rating.chgk.info.
+subhead = "Выбор турнира"
+pick_btn = "Выбрать турнир"
+pick_submit = "Выбрать"
+empty = "Буфф не знает турниров, которые можно сыграть в это время."
+# The controls over the list: which types to show, what range of difficulty,
+# and in what order.
+type_label = "Тип"
+type_sync = "Только синхроны"
+type_async = "Только асинхроны"
+type_all = "Все турниры"
+difficulty_label = "Сложность"
+difficulty_from = "от"
+difficulty_to = "до"
+sort_label = "Сортировка"
+sort_difficulty_up = "сложность по возрастанию"
+sort_difficulty_down = "сложность по убыванию"
+sort_teams = "больше команд"
+# One card. The tick keeps it among the options; unticking sinks it to the
+# bottom, and in the голосование drops it from the ballot.
+keep_label = "подходит"
+difficulty = 'сложность {{.n}}'
+no_difficulty = "сложность не указана"
+teams = '~{{.n}} {{plural .n "команда" "команды" "команд"}}'
+no_teams = "заявок ещё нет"
+chosen = "выбран"
