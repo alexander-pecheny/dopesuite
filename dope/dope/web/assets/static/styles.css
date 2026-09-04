@@ -165,12 +165,30 @@
   min-height: 100%;
 }
 
-/* a tournament card is three lines tall, so its controls sit level with the
-   name rather than stretching the whole height the way a one-line row's do */
-.list-action-row[data-tournament] .btn,
-.list-action-row[data-tournament] .checkbox {
-  min-height: 0;
-  align-self: center;
+/* a list read across rather than down: as many cards abreast as the screen
+   affords, one on a phone, every card the height of the tallest in its row */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: var(--space-3);
+}
+
+.card-grid > .section {
+  margin-top: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  gap: var(--space-2);
+}
+
+/* a measurement with a glyph for a label: the number is what is read, the
+   glyph says which number it is */
+.fact {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
 }
 
 /* a title plus three buttons can't fit a phone: the link takes its own line,
@@ -4129,6 +4147,11 @@ body:not(.embedded-match) .grid-match {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
+}
+
+/* a page laid out across rather than down needs more than a reading column */
+.public-wide {
+  max-width: 1160px;
 }
 
 /* ── fest lists (public index + host landing): collapsible groups + stacked rows ──── */

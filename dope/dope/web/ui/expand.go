@@ -73,6 +73,23 @@ func expandPublicTopbar(c *base.ExpandCtx, p *base.Element) []base.Node {
 	return one(base.El("header", []base.Attr{base.ClassAttr("public-top")}, kids...))
 }
 
+// expandCardgrid is a grid of cards as wide as the screen affords — three
+// abreast on a desktop, one on a phone — for a list a Representative reads
+// across rather than down. The cards are sections, so a card is styled by
+// where it sits rather than by a shape of its own.
+func expandCardgrid(c *base.ExpandCtx, p *base.Element) []base.Node {
+	return one(base.El("div", base.RootAttrs([]string{"card-grid"}, p), c.Nodes(p.Block)...))
+}
+
+// expandFact is one measurement about the thing a card is about: a glyph and a
+// number, no label. A word for every number would crowd a card out; the glyph
+// carries the meaning and its title says it in words.
+func expandFact(c *base.ExpandCtx, p *base.Element) []base.Node {
+	items := []base.Item{base.IconItem(p)}
+	items = append(items, c.Items(p.Inline)...)
+	return one(&base.Element{Tag: "span", Attrs: base.RootAttrs([]string{"fact"}, p), Inline: items})
+}
+
 // expandRichtext wraps markup the app already rendered — a fest's markdown
 // description — in the prose section the public pages style. Its child is a
 // ui.Raw node, which is why this primitive exists at all: everything else in

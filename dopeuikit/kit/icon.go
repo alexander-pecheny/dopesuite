@@ -17,6 +17,10 @@ import (
 // which happens at server start, not per request.
 func iconItem(p *Element) Item { return iconItemClass(p, "ico") }
 
+// IconItem is iconItem for an app overlay building an icon-bearing primitive of
+// its own: the vocabulary is per app, the glyphs are the kit's.
+func IconItem(p *Element) Item { return iconItem(p) }
+
 func iconItemClass(p *Element, class string) Item {
 	name, ok := Get(p, "icon")
 	if !ok || name == "" {

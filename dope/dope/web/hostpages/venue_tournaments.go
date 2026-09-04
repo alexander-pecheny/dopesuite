@@ -58,7 +58,7 @@ func tournamentTitle(p TournamentPicker) string {
 
 func TournamentPickerDoc(p TournamentPicker) *ui.Doc {
 	title := tournamentTitle(p)
-	page := []ui.Item{ui.Title(title + " · " + p.Venue.Title), ui.PagePublic,
+	page := []ui.Item{ui.Title(title + " · " + p.Venue.Title), ui.PagePublicwide,
 		ui.Classicscripts("dist/pageforms.js dist/tournament-picker.js")}
 	page = append(page, ui.Publictopbar(ui.Crumbs(
 		append(venueCrumbs(p.Venue),
@@ -95,55 +95,72 @@ func tournamentControls() *ui.Element {
 				ui.Option(ui.Value(sortDifficultyDown), ui.Text(strs.Venues.Tournaments.SortDifficultyDown())),
 				ui.Option(ui.Value(sortTeams), ui.Text(strs.Venues.Tournaments.SortTeams())),
 			)),
+		// One button for both ways: it says which way it would go, and the
+		// picker rewrites it as the ticks change.
+		ui.Button(ui.Ghost, ui.ID("tournamentsAll"), ui.Data("tournament-all", strs.Venues.Tournaments.SelectAll()),
+			ui.Data("tournament-none", strs.Venues.Tournaments.DeselectAll()),
+			ui.Text(strs.Venues.Tournaments.DeselectAll())),
 	))
 }
 
 func tournamentList(p TournamentPicker) *ui.Element {
-	rows := make([]ui.Item, 0, len(p.Cards))
+	cards := make([]ui.Item, 0, len(p.Cards))
 	for _, c := range p.Cards {
-		rows = append(rows, tournamentCard(p, c))
+		cards = append(cards, tournamentCard(p, c))
 	}
-	list := ui.Actionlist(append([]ui.Item{ui.ID("tournaments")}, rows...)...)
+	grid := ui.Cardgrid(append([]ui.Item{ui.ID("tournaments")}, cards...)...)
 	if !p.Poll {
-		return ui.Section(ui.Subhead(ui.Text(tournamentTitle(p))), list)
+		return ui.Section(ui.Subhead(ui.Text(tournamentTitle(p))), grid)
 	}
-	// In poll mode the cards are the poll's candidates, so the list and the
+	// In poll mode the cards are the poll's candidates, so the grid and the
 	// poll's own settings are one form and one save.
 	form := []ui.Item{ui.DirCol, ui.Method("post"), ui.Action(p.Base + "/voting"), ui.Autocomplete("off"),
-		ui.Subhead(ui.Text(tournamentTitle(p))), list}
+		ui.Subhead(ui.Text(tournamentTitle(p))), grid}
 	form = append(form, votingSettings(p.Voting, p.Tz)...)
 	form = append(form, ui.Row(ui.Button(ui.Submit(), ui.Text(strs.Venues.Voting.CreateSubmit()))))
 	return ui.Section(ui.Form(form...))
 }
 
-// tournamentCard is the dashboard's own row shape: a link that grows beside the
-// controls that act on it. The tick is what keeps a card among the real
-// options — unticking sinks it to the bottom, and in poll mode drops it from
+// tournamentCard carries everything about one tournament and everything a
+// Representative does with it. The tick is what keeps a card among the real
+// options — unticking sinks it below the rest, and in poll mode drops it from
 // the ballot.
 func tournamentCard(p TournamentPicker, c TournamentCard) *ui.Element {
 	id := strconv.FormatInt(c.ID, 10)
-	meta := []ui.Item{ui.Href("https://rating.chgk.info/tournament/" + id),
-		ui.Col(ui.SpaceXS,
-			ui.Listtitle(ui.Text(c.Name)),
-			ui.Muted(ui.Text(joinDots(c.Type, c.Editors))),
-			ui.Muted(ui.Text(joinDots(difficultyLabel(c.Difficulty), teamsLabel(c.Teams), chosenLabel(c.Chosen)))),
-		)}
-	keep := []ui.Item{ui.Name("candidate"), ui.Value(id), ui.Checked(),
-		ui.Data("tournament-keep", ""), ui.Text(strs.Venues.Tournaments.KeepLabel())}
-	row := []ui.Item{
+	card := []ui.Item{
 		ui.Data("tournament", id),
 		ui.Data("difficulty", strconv.FormatFloat(c.Difficulty, 'f', -1, 64)),
 		ui.Data("teams", strconv.Itoa(c.Teams)),
 		ui.Data("kind", cardKind(c.Type)),
-		ui.Checkbox(keep...),
-		ui.Rowlink(meta...),
+		ui.Link(ui.Href("https://rating.chgk.info/tournament/"+id), ui.Newtab(), ui.Text(c.Name)),
 	}
+	if c.Editors != "" {
+		card = append(card, ui.Muted(ui.Text(c.Editors)))
+	}
+	facts := []ui.Item{ui.SpaceMD, ui.AlignCenter, ui.Wrap()}
+	if c.Difficulty > 0 {
+		facts = append(facts, ui.Fact(ui.IconFlaskConical, ui.Title(strs.Venues.Tournaments.DifficultyLabel()),
+			ui.Text(strconv.FormatFloat(c.Difficulty, 'f', -1, 64))))
+	}
+	if c.Teams > 0 {
+		facts = append(facts, ui.Fact(ui.IconUsers, ui.Title(strs.Venues.Tournaments.TeamsTitle()),
+			ui.Text("~"+strconv.Itoa(c.Teams))))
+	}
+	if c.Chosen {
+		facts = append(facts, ui.Fact(ui.IconCheck, ui.Text(strs.Venues.Tournaments.Chosen())))
+	}
+	card = append(card, ui.Muted(ui.Text(c.Type)), ui.Row(facts...), ui.Spacer())
+	// The tick and the button are the card's own foot, so a card is read and
+	// acted on in one place rather than across a row.
+	foot := []ui.Item{ui.SpaceSM, ui.AlignCenter, ui.Wrap(),
+		ui.Checkbox(ui.Name("candidate"), ui.Value(id), ui.Checked(),
+			ui.Data("tournament-keep", ""), ui.Aria("label", strs.Venues.Tournaments.KeepAria()))}
 	if !p.Poll {
-		row = append(row, ui.Form(ui.Method("post"), ui.Action(p.Base+"/tournament"),
+		foot = append(foot, ui.Form(ui.Method("post"), ui.Action(p.Base+"/tournament"),
 			ui.Hiddenfield(ui.Name("rating_tournament_id"), ui.Value(id)),
-			ui.Button(ui.Submit(), ui.Text(strs.Venues.Tournaments.PickSubmit()))))
+			ui.Button(ui.Small(), ui.Submit(), ui.Text(strs.Venues.Tournaments.PickSubmit()))))
 	}
-	return ui.Actionrow(row...)
+	return ui.Section(append(card, ui.Row(foot...))...)
 }
 
 // The type dropdown tells the two apart because a Venue that plays sync
@@ -153,27 +170,6 @@ func cardKind(kind string) string {
 		return typeAsync
 	}
 	return typeSync
-}
-
-func difficultyLabel(d float64) string {
-	if d <= 0 {
-		return strs.Venues.Tournaments.NoDifficulty()
-	}
-	return strs.Venues.Tournaments.Difficulty(strconv.FormatFloat(d, 'f', -1, 64))
-}
-
-func teamsLabel(n int) string {
-	if n <= 0 {
-		return strs.Venues.Tournaments.NoTeams()
-	}
-	return strs.Venues.Tournaments.Teams(n)
-}
-
-func chosenLabel(chosen bool) string {
-	if !chosen {
-		return ""
-	}
-	return strs.Venues.Tournaments.Chosen()
 }
 
 // renderTournamentPicker builds the card list. What buff mirrors is here in the

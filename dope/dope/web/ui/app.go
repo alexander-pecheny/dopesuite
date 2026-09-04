@@ -55,6 +55,8 @@ func mustApp() *base.App {
 			"numberrow":    expandNumberrow,
 			"festgroup":    expandFestgroup,
 			"pickgroup":    expandPickgroup,
+			"cardgrid":     expandCardgrid,
+			"fact":         expandFact,
 			"actionlist":   expandActionlist,
 			"actionrow":    expandActionrow,
 			"rowlink":      expandRowlink,
@@ -69,6 +71,9 @@ func mustApp() *base.App {
 			BootScripts: []string{"/static/dist/menu-config.js", "/static/menu.js"},
 			PageKinds: map[string]base.PageKind{
 				"public": {Body: []string{"public"}, Main: []string{"public-main"}},
+				// A page whose content is read across rather than down — a grid of
+				// cards — is worth more than the reading column the rest keep.
+				"publicwide": {Body: []string{"public"}, Main: []string{"public-main", "public-wide"}},
 				// The gallery scrolls like a public page but takes the whole width;
 				// each of its sections is its own horizontal scroller.
 				"gallery": {Body: []string{"public"}, Main: []string{"public-main", "gallery-main"}},

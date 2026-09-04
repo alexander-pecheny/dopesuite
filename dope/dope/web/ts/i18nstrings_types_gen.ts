@@ -1571,22 +1571,21 @@ export type Strings = {
     };
     tournaments: {
       chosen: () => string;
-      difficulty: (n: string) => string;
+      deselectAll: () => string;
       difficultyFrom: () => string;
       difficultyLabel: () => string;
       difficultyTo: () => string;
       empty: () => string;
-      keepLabel: () => string;
-      noDifficulty: () => string;
-      noTeams: () => string;
+      keepAria: () => string;
       pickBtn: () => string;
       pickSubmit: () => string;
+      selectAll: () => string;
       sortDifficultyDown: () => string;
       sortDifficultyUp: () => string;
       sortLabel: () => string;
       sortTeams: () => string;
       subhead: () => string;
-      teams: (n: number) => string;
+      teamsTitle: () => string;
       typeAll: () => string;
       typeAsync: () => string;
       typeLabel: () => string;

@@ -321,11 +321,13 @@ sort_label = "Сортировка"
 sort_difficulty_up = "сложность по возрастанию"
 sort_difficulty_down = "сложность по убыванию"
 sort_teams = "больше команд"
-# One card. The tick keeps it among the options; unticking sinks it to the
-# bottom, and in the голосование drops it from the ballot.
-keep_label = "подходит"
-difficulty = 'сложность {{.n}}'
-no_difficulty = "сложность не указана"
-teams = '~{{.n}} {{plural .n "команда" "команды" "команд"}}'
-no_teams = "заявок ещё нет"
+# One card. The tick keeps it among the options; unticking sinks it below the
+# rest, and in the голосование drops it from the ballot. It carries no words —
+# a checkbox on a card is self-evident — so this is what a screen reader says.
+keep_aria = "Рассматриваю этот турнир"
+select_all = "Отметить все"
+deselect_all = "Снять все"
+# A card's numbers are read off glyphs rather than labelled: what the flask
+# means is the forecast difficulty, what the people mean is the teams signed up.
+teams_title = "Заявлено команд"
 chosen = "выбран"

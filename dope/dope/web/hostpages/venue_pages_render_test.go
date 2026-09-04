@@ -364,7 +364,7 @@ func TestTournamentPickerIsOneListInTwoModes(t *testing.T) {
 		Slot:  venues.Slot{ID: 7, FestID: 1, GameID: 3, StartsAt: "2026-09-04 19:00", RatingTournamentID: 10233},
 		Base:  "/host/venue/tbilisi/game/3",
 		Cards: []TournamentCard{
-			{ID: 10233, Name: "Синхрон августа", Type: "Синхрон", Editors: "Мерзляков М. П.", Difficulty: 3.5, Teams: 86, Chosen: true},
+			{ID: 10233, Name: "Синхрон августа", Type: "Синхрон", Editors: "Максим Мерзляков", Difficulty: 3.5, Teams: 86, Chosen: true},
 			{ID: 10234, Name: "Асинхрон", Type: "Асинхрон"},
 		},
 	}
@@ -372,11 +372,11 @@ func TestTournamentPickerIsOneListInTwoModes(t *testing.T) {
 	for _, want := range []string{
 		`data-tournament="10233"`, `data-difficulty="3.5"`, `data-teams="86"`, `data-kind="sync"`,
 		`data-kind="async"`,
-		"Мерзляков М. П.", "сложность 3.5", "~86 команд", "выбран",
-		// A tournament rating.chgk.info said nothing about is still a card.
-		"сложность не указана", "заявок ещё нет",
+		"Максим Мерзляков", "выбран",
+		// The numbers are read off glyphs, not off words beside them.
+		`class="fact" title="Сложность"`, ">3.5<", `class="fact" title="Заявлено команд"`, ">~86<",
 		`action="/host/venue/tbilisi/game/3/tournament"`,
-		"Только синхроны", "Сортировка",
+		"Только синхроны", "Сортировка", "Снять все",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("pick: missing %q", want)
@@ -384,6 +384,12 @@ func TestTournamentPickerIsOneListInTwoModes(t *testing.T) {
 	}
 	if strings.Contains(body, "/game/3/voting") {
 		t.Error("pick mode offers to save a poll")
+	}
+	// A tournament rating.chgk.info said nothing about is still a card, with no
+	// number where it has none.
+	card := body[strings.Index(body, `data-tournament="10234"`):]
+	if strings.Contains(card[:strings.Index(card, "</section>")], `class="fact"`) {
+		t.Error("a tournament with no forecast still shows a number")
 	}
 
 	p.Poll = true

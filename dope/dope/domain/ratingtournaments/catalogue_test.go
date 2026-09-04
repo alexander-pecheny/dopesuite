@@ -37,7 +37,7 @@ func TestDetailsSumsTheRequestsAndNamesTheEditors(t *testing.T) {
 	if d.Difficulty != 3.5 || d.Teams != 7 {
 		t.Errorf("difficulty %v teams %d", d.Difficulty, d.Teams)
 	}
-	if strings.Join(d.Editors, ", ") != "Мерзляков М. П., Коробейникова А." {
+	if strings.Join(d.Editors, ", ") != "Максим Мерзляков, Анна Коробейникова" {
 		t.Errorf("editors %q", d.Editors)
 	}
 	// An id the site will not answer for is left out; the rest still answer.
@@ -55,15 +55,15 @@ func TestDetailsSumsTheRequestsAndNamesTheEditors(t *testing.T) {
 	}
 }
 
-func TestInitials(t *testing.T) {
-	for _, c := range []struct{ surname, name, patronymic, want string }{
-		{"Мерзляков", "Максим", "Петрович", "Мерзляков М. П."},
-		{"Голуб", "Эмиль", "", "Голуб Э."},
-		{"", "Максим", "Петрович", "М. П."},
-		{"", "", "", ""},
+func TestName(t *testing.T) {
+	for _, c := range []struct{ name, surname, want string }{
+		{"Максим", "Мерзляков", "Максим Мерзляков"},
+		{"Эмиль", "", "Эмиль"},
+		{"", "Голуб", "Голуб"},
+		{"", "", ""},
 	} {
-		if got := Initials(c.surname, c.name, c.patronymic); got != c.want {
-			t.Errorf("Initials(%q,%q,%q) = %q, want %q", c.surname, c.name, c.patronymic, got, c.want)
+		if got := Name(c.name, c.surname); got != c.want {
+			t.Errorf("Name(%q,%q) = %q, want %q", c.name, c.surname, got, c.want)
 		}
 	}
 }
