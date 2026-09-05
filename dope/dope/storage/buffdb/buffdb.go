@@ -45,11 +45,14 @@ type Team struct {
 }
 
 type Tournament struct {
-	ID              int64  `json:"id"`
-	Name            string `json:"name"`
-	Type            string `json:"type"`
-	QuestionsByTour string `json:"questionsByTour"`
-	DateStart       string `json:"dateStart"`
+	ID              int64   `json:"id"`
+	Name            string  `json:"name"`
+	Type            string  `json:"type"`
+	QuestionsByTour string  `json:"questionsByTour"`
+	DateStart       string  `json:"dateStart"`
+	Editors         string  `json:"editors"`
+	Difficulty      float64 `json:"difficulty"`
+	Teams           int     `json:"teams"`
 }
 
 func Disabled() *Store { return &Store{} }
@@ -312,7 +315,21 @@ func instant(wall time.Time) string {
 	return at.UTC().Format("2006-01-02 15:04:05")
 }
 
-const withinWindow = "(? = '' or (datetime(date_start) <= ? and datetime(date_end) > ?))"
+const withinWindow = "(? = '' or (datetime(t.date_start) <= ? and datetime(t.date_end) > ?))"
+
+// tournamentCols is everything the picker shows about a tournament. The editors
+// are a list of player ids in the mirror, so their names are joined here rather
+// than asked for a second time, and the requests count is buff's own sum of
+// what the venues declared.
+const tournamentCols = `
+t.id, coalesce(t.name, ''), coalesce(t.tournament_type, ''), coalesce(t.questions_by_tour, ''), coalesce(t.date_start, ''),
+coalesce((select group_concat(trim(coalesce(p.name, '') || ' ' || coalesce(p.surname, '')), ', ')
+          from json_each(case when json_valid(t.editors) then t.editors else '[]' end) e
+          join players p on p.id = e.value), ''),
+coalesce(t.difficulty_forecast, 0), coalesce(r.teams, 0)`
+
+const tournamentFrom = `
+from tournaments t left join tournament_requests r on r.tournament_id = t.id`
 
 func (s *Store) PlayableTournaments(ctx context.Context, at time.Time) []Tournament {
 	if !s.Enabled() || at.IsZero() {
@@ -320,11 +337,10 @@ func (s *Store) PlayableTournaments(ctx context.Context, at time.Time) []Tournam
 	}
 	when := instant(at)
 	rows, err := s.db.QueryContext(ctx, `
-select id, coalesce(name, ''), coalesce(tournament_type, ''), coalesce(questions_by_tour, ''), coalesce(date_start, '')
-from tournaments
-where tournament_type in (?, ?, ?)
+select `+tournamentCols+tournamentFrom+`
+where t.tournament_type in (?, ?, ?)
   and `+withinWindow+`
-order by case when tournament_type = 'Асинхрон' then 1 else 0 end, date_start, id`,
+order by case when t.tournament_type = 'Асинхрон' then 1 else 0 end, t.date_start, t.id`,
 		playableTypes[0], playableTypes[1], playableTypes[2], when, when, when)
 	if err != nil {
 		return nil
@@ -339,17 +355,16 @@ func (s *Store) SearchTournaments(ctx context.Context, q string, at time.Time, l
 		return nil
 	}
 	when := instant(at)
-	where, args := likeAny("name", q, likeInfix)
+	where, args := likeAny("t.name", q, likeInfix)
 	// An id is typed to name one tournament and no other, so it answers even
 	// when that tournament is not playable at the time asked about.
 	id, _ := strconv.ParseInt(q, 10, 64)
 	args = append([]any{id}, args...)
 	args = append(args, when, when, when, capLimit(limit))
 	rows, err := s.db.QueryContext(ctx, `
-select id, coalesce(name, ''), coalesce(tournament_type, ''), coalesce(questions_by_tour, ''), coalesce(date_start, '')
-from tournaments
-where id = ? or (`+where+` and `+withinWindow+`)
-order by date_start desc, id
+select `+tournamentCols+tournamentFrom+`
+where t.id = ? or (`+where+` and `+withinWindow+`)
+order by t.date_start desc, t.id
 limit ?`, args...)
 	if err != nil {
 		return nil
@@ -362,10 +377,10 @@ func (s *Store) Tournament(ctx context.Context, id int64) (Tournament, bool) {
 	if !s.Enabled() || id <= 0 {
 		return Tournament{}, false
 	}
-	t := Tournament{ID: id}
+	var t Tournament
 	err := s.db.QueryRowContext(ctx, `
-select coalesce(name, ''), coalesce(tournament_type, ''), coalesce(questions_by_tour, ''), coalesce(date_start, '')
-from tournaments where id = ?`, id).Scan(&t.Name, &t.Type, &t.QuestionsByTour, &t.DateStart)
+select `+tournamentCols+tournamentFrom+`
+where t.id = ?`, id).Scan(scanTargets(&t)...)
 	if err != nil {
 		return Tournament{}, false
 	}
@@ -376,12 +391,16 @@ func scanTournaments(rows *sql.Rows) []Tournament {
 	var out []Tournament
 	for rows.Next() {
 		var t Tournament
-		if err := rows.Scan(&t.ID, &t.Name, &t.Type, &t.QuestionsByTour, &t.DateStart); err != nil {
+		if err := rows.Scan(scanTargets(&t)...); err != nil {
 			return out
 		}
 		out = append(out, t)
 	}
 	return out
+}
+
+func scanTargets(t *Tournament) []any {
+	return []any{&t.ID, &t.Name, &t.Type, &t.QuestionsByTour, &t.DateStart, &t.Editors, &t.Difficulty, &t.Teams}
 }
 
 func capLimit(limit int) int {

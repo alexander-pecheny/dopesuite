@@ -28,8 +28,10 @@ func GrowClasses(base []string, p *Element) []string {
 }
 
 // FlexClasses builds the col/row class list: base + gap + align + justify + wrap.
+// A row that says nothing about its gap gets one: two controls side by side
+// always want air between them, and a row that truly wants none says SpaceNone.
 func FlexClasses(base string, p *Element) []string {
-	classes := []string{base, gapClass(p, "")}
+	classes := []string{base, gapClass(p, "sm")}
 	if a, ok := Get(p, "align"); ok && a != "stretch" {
 		classes = append(classes, "u-align-"+a)
 	}

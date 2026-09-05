@@ -77,10 +77,11 @@ function readControls(scope: ParentNode): Controls {
   };
 }
 
-// allLabel is what the one select-all button should say next: it offers to
-// clear the list while anything on screen is still ticked, and to fill it
-// otherwise, so the button is never a no-op.
-export function allLabel(visible: Card[]): "all" | "none" {
+// allWay is what the one select-all button would do next: it clears the list
+// while anything on screen is still ticked, and fills it otherwise, so the
+// button is never a no-op. Its words do not change with it — a label that moved
+// under the cursor mid-click was worse than one that never says which way.
+export function allWay(visible: Card[]): "all" | "none" {
   return visible.some((c) => c.keep) ? "none" : "all";
 }
 
@@ -108,11 +109,7 @@ export function mountTournamentPicker(list: HTMLElement, scope: ParentNode): voi
       if (keep) keep.disabled = row.hidden;
       list.append(row);
     }
-    if (all) {
-      const way = allLabel(visible);
-      all.textContent = all.getAttribute(`data-tournament-${way}`) || "";
-      all.setAttribute("data-way", way);
-    }
+    all?.setAttribute("data-way", allWay(visible));
   };
 
   all?.addEventListener("click", () => {

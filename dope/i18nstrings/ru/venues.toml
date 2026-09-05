@@ -89,11 +89,10 @@ cancel = "Отмена"
 # Deleting the game, which takes its Слот and everything hanging off it.
 delete_confirm = "Удалить игру? Заявки, составы, голосование и результаты будут удалены."
 delete_submit = "Удалить игру"
-# The registration. A game is made without one, so the section is this note and
-# a button until a Representative sets one up.
+# The registration. The link works from the moment the game exists, so the
+# section never says there is no registration — only where the window stands
+# once a Representative has set one.
 reg_subhead = "Регистрация"
-reg_none = "Регистрация не настроена."
-reg_setup_btn = "Настроить регистрацию"
 # Where the registration stands, once there is one: whether it takes заявки, the
 # end of its window, and whether the venue's page carries its link.
 reg_state_open = "Открыта"
@@ -101,7 +100,8 @@ reg_state_closed = "Закрыта"
 reg_state_scheduled = 'Откроется {{.at}}'
 reg_until = 'до {{.at}}'
 reg_link_public = "ссылка на странице площадки"
-# The dialog that sets it up and changes it afterwards.
+# The dialog that sets it up and changes it afterwards, and the button that
+# opens it: one name, so the button says where it leads.
 reg_dialog_title = "Настройки регистрации"
 # Each end of the window is a pair of radios: it either has no such end at all
 # or has a moment, and the calendar belongs to the second of the two.
@@ -325,9 +325,10 @@ sort_teams = "больше команд"
 # rest, and in the голосование drops it from the ballot. It carries no words —
 # a checkbox on a card is self-evident — so this is what a screen reader says.
 keep_aria = "Рассматриваю этот турнир"
-select_all = "Отметить все"
-deselect_all = "Снять все"
-# A card's numbers are read off glyphs rather than labelled: what the flask
+# One button ticks and unticks the whole visible list. Its words stay put: a
+# label that rewrote itself as the ticks changed moved under the cursor.
+select_all = "Выбрать все"
+# A card's numbers are read off glyphs rather than labelled: what the weight
 # means is the forecast difficulty, what the people mean is the teams signed up.
 teams_title = "Заявлено команд"
 chosen = "выбран"

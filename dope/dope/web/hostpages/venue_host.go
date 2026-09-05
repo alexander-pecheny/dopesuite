@@ -260,14 +260,13 @@ func slotRegSection(data slotPageData) *ui.Element {
 	sect := []ui.Item{ui.Subhead(ui.Text(strs.Venues.Game.RegSubhead()))}
 	if data.Slot.RegSetUp {
 		sect = append(sect, ui.Note(ui.Text(regStateLine(data))))
-	} else {
-		sect = append(sect, ui.Empty(ui.Text(strs.Venues.Game.RegNone())))
 	}
 	sect = append(sect,
 		ui.Field(ui.Label(strs.Venues.Game.LinkLabel()),
-			ui.Row(ui.SpaceSM, ui.AlignCenter, ui.Wrap(),
-				ui.Textfield(ui.ID("regLink"), ui.Value(data.RegURL), ui.Readonly(), ui.Data("select-all", "")),
-				ui.Button(ui.Ghost, ui.Small(), ui.Data("copy-target", "regLink"), ui.Text(strs.Venues.Game.LinkCopy())),
+			ui.Row(ui.SpaceSM, ui.AlignCenter,
+				ui.Textfield(ui.Grow(), ui.ID("regLink"), ui.Value(data.RegURL), ui.Readonly(), ui.Data("select-all", "")),
+				ui.Button(ui.Ghost, ui.IconCopy, ui.Data("copy-target", "regLink"),
+					ui.Title(strs.Venues.Game.LinkCopy()), ui.Aria("label", strs.Venues.Game.LinkCopy())),
 			)),
 	)
 	if !data.CanManage {
@@ -275,10 +274,10 @@ func slotRegSection(data slotPageData) *ui.Element {
 	}
 	sect = append(sect,
 		ui.Row(ui.SpaceSM, ui.AlignCenter, ui.Wrap(),
-			ui.Button(ui.Primary, ui.Data("dialog-open", "slotReg"), ui.Text(strs.Venues.Game.RegSetupBtn())),
+			ui.Button(ui.Primary, ui.Data("dialog-open", "slotReg"), ui.Text(strs.Venues.Game.RegDialogTitle())),
 			ui.Form(ui.Method("post"), ui.Action(base+"/token"),
 				ui.Data("confirm", strs.Venues.Game.LinkRotateConfirm()),
-				ui.Button(ui.Ghost, ui.Small(), ui.Submit(), ui.Text(strs.Venues.Game.LinkRotate())),
+				ui.Button(ui.Ghost, ui.Submit(), ui.Text(strs.Venues.Game.LinkRotate())),
 			),
 		),
 		slotRegDialog(data, base),

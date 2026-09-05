@@ -1449,11 +1449,9 @@ export type Strings = {
       regClosesNever: () => string;
       regDialogTitle: () => string;
       regLinkPublic: () => string;
-      regNone: () => string;
       regOpensAtLabel: () => string;
       regOpensLabel: () => string;
       regOpensNow: () => string;
-      regSetupBtn: () => string;
       regStateClosed: () => string;
       regStateOpen: () => string;
       regStateScheduled: (at: string) => string;
@@ -1571,7 +1569,6 @@ export type Strings = {
     };
     tournaments: {
       chosen: () => string;
-      deselectAll: () => string;
       difficultyFrom: () => string;
       difficultyLabel: () => string;
       difficultyTo: () => string;
