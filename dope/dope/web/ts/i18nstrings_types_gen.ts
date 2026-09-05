@@ -1439,7 +1439,6 @@ export type Strings = {
       cloneDatetimeLabel: () => string;
       cloneNote: () => string;
       cloneTitle: () => string;
-      colEdited: () => string;
       colFiled: () => string;
       colFlags: () => string;
       colNumber: () => string;
@@ -1454,6 +1453,7 @@ export type Strings = {
       downloadPlayers: () => string;
       downloadTours: () => string;
       downloadsSubhead: () => string;
+      editedTitle: (at: string) => string;
       linkCopy: () => string;
       linkLabel: () => string;
       linkPublicLabel: () => string;
@@ -1525,6 +1525,8 @@ export type Strings = {
       colVenue: () => string;
       editBtn: () => string;
       empty: () => string;
+      hereSubhead: () => string;
+      openGame: () => string;
       subhead: () => string;
     };
     odContested: {

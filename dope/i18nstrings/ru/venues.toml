@@ -135,11 +135,15 @@ applications_empty = "Заявок пока нет."
 col_number = "№"
 col_team = "Команда"
 col_submitter = "Кто подал"
+# One column, not two: a заявка nobody edited was filed and changed at the same
+# moment, and the edit time is the cell's tooltip when it differs.
 col_filed = "Подана"
-col_edited = "Изменена"
+edited_title = 'изменена {{.at}}'
 col_roster = "Состав"
 col_flags = "Флаги"
 col_status = "Статус"
+# Accepting and declining are a ✓ and a × on the заявка's own row: they used to
+# be buttons inside a fold under the table, which is a long way to go to say yes.
 status_accept = "Принять"
 status_decline = "Отклонить"
 status_pending = "Вернуть в ожидание"
@@ -176,6 +180,11 @@ col_venue = "Площадка"
 col_team = "Команда"
 col_status = "Статус"
 edit_btn = "Изменить"
+# The same заявки narrowed to one площадка, on that площадка's own page. «Мои
+# заявки» on the index answers «where am I playing»; this answers «have I been
+# here before».
+here_subhead = "Мои игры на этой площадке"
+open_game = "Таблица"
 
 [reg]
 # The registration page a Заявка is filed on (/reg/{token}): its title, what it

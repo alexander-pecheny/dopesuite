@@ -251,14 +251,27 @@ type FiledApplication struct {
 	Application
 	SlotStartsAt string
 	RegToken     string
+	FestID       int64
+	GameID       int64
+	GameSlug     string
 	VenueRef     string
 	VenueTitle   string
 }
 
+// GameRef is how a game is named in a URL: its slug, or its id when it has none.
+func (f FiledApplication) GameRef() string {
+	if f.GameSlug != "" {
+		return f.GameSlug
+	}
+	return strconv.FormatInt(f.GameID, 10)
+}
+
 func UserApplications(ctx context.Context, q store.Queryer, userID int64) ([]FiledApplication, error) {
 	query := applicationCols + `, coalesce(sl.starts_at, ''), sl.reg_token,
+       sl.fest_id, sl.game_id, coalesce(g.slug, ''),
        coalesce(nullif(f.slug, ''), cast(f.id as text)), f.title` + applicationJoins + `
 join fests f on f.id = sl.fest_id
+join games g on g.id = sl.game_id
 where a.user_id = ?
 order by case when sl.starts_at = '' then 1 else 0 end, sl.starts_at, a.id`
 	return store.CollectRows(ctx, q, query, []any{userID},
@@ -267,7 +280,7 @@ order by case when sl.starts_at = '' then 1 else 0 end, sl.starts_at, a.id`
 			var roster string
 			err := rows.Scan(&f.ID, &f.SlotID, &f.UserID, &f.Status, &f.ParticipantID, &f.CreatedAt, &f.UpdatedAt,
 				&f.Submitter, &f.SubmitterTgID, &f.Seq, &f.TeamName, &f.Alias, &f.RatingTeamID, &roster, &f.Number,
-				&f.SlotStartsAt, &f.RegToken, &f.VenueRef, &f.VenueTitle)
+				&f.SlotStartsAt, &f.RegToken, &f.FestID, &f.GameID, &f.GameSlug, &f.VenueRef, &f.VenueTitle)
 			f.Roster = ParseRoster(roster)
 			return f, err
 		})

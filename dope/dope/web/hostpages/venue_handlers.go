@@ -189,8 +189,39 @@ func (s *Server) renderVenuePage(w http.ResponseWriter, r *http.Request, _ route
 		}
 		detail.Upcoming = append(detail.Upcoming, row)
 	}
+	detail.Mine = s.myGamesHere(r, festID, venue.Ref())
 	pages.RenderDoc(w, s.h.Engine().AssetETags, VenueDoc(detail))
 	return nil
+}
+
+// myGamesHere is this reader's own history at one Venue: what they played and
+// what they are signed up for. The page is public, so it asks for the session
+// itself, and a stranger's page carries none of this.
+func (s *Server) myGamesHere(r *http.Request, festID int64, ref string) []MineHereRow {
+	user, ok := s.h.Engine().LookupSession(r)
+	if !ok {
+		return nil
+	}
+	filed, err := venues.UserApplications(r.Context(), s.h.Engine().DB, user.UserID)
+	if err != nil {
+		return nil
+	}
+	now := time.Now().UTC()
+	var rows []MineHereRow
+	for _, f := range filed {
+		if f.FestID != festID {
+			continue
+		}
+		row := MineHereRow{Date: f.SlotStartsAt, Team: f.TeamName, Status: StatusLabel(f.Status), RegToken: f.RegToken}
+		// A game already played is a table to read rather than an application
+		// to edit.
+		if at, dated := venues.ParseTime(f.SlotStartsAt); dated && !at.After(now) && f.Status == venues.StatusAccepted {
+			row.GameHref = "/venue/" + ref + "/game/" + f.GameRef() + "/table"
+			row.RegToken = ""
+		}
+		rows = append(rows, row)
+	}
+	return rows
 }
 
 func (s *Server) tournamentNames(ctx context.Context, slots []venues.Slot) map[int64]string {

@@ -191,7 +191,9 @@ func slotBase(v venues.Venue, slot venues.Slot) string {
 }
 
 func slotPageDoc(data slotPageData) *ui.Doc {
-	page := []ui.Item{ui.Title(slotTitle(data.Slot) + " · " + data.Venue.Title), ui.PagePublic,
+	// Wide: the applications table is a Representative's working surface — nine
+	// columns and a verdict on every row — not a column of prose.
+	page := []ui.Item{ui.Title(slotTitle(data.Slot) + " · " + data.Venue.Title), ui.PagePublicwide,
 		ui.Classicscripts("dist/pageforms.js dist/roster-editor.js")}
 	page = append(page, ui.Publictopbar(ui.Crumbs(
 		append(venueCrumbs(data.Venue), pages.Leaf(slotTitle(data.Slot)))...)))
@@ -376,20 +378,26 @@ func slotRegDialog(data slotPageData, base string) *ui.Element {
 	)
 }
 
-func applicationActions(base string, row SlotApplicationRow) *ui.Element {
-	actions := []ui.Item{ui.Method("post"), ui.Action(base + "/application/" + strconv.FormatInt(row.App.ID, 10) + "/status")}
-	for _, a := range []struct{ status, label string }{
-		{venues.StatusAccepted, strs.Venues.Game.StatusAccept()},
-		{venues.StatusDeclined, strs.Venues.Game.StatusDecline()},
-		{venues.StatusPending, strs.Venues.Game.StatusPending()},
-	} {
-		if a.status == row.App.Status {
-			continue
+// applicationVerdict is the ✓ and the × on an application's own row. Saying yes
+// used to mean opening a fold under the table and finding a button in it.
+func applicationVerdict(base string, row SlotApplicationRow) *ui.Element {
+	action := base + "/application/" + strconv.FormatInt(row.App.ID, 10) + "/status"
+	verdict := func(status string, icon ui.Item, label string) ui.Item {
+		// The move an application is already on is not a move: an accepted one
+		// offers only the decline, and the other way about.
+		if row.App.Status == status {
+			return ui.Empty(ui.Text(""))
 		}
-		actions = append(actions, ui.Button(ui.Ghost, ui.Small(), ui.Submit(),
-			ui.Name("status"), ui.Value(a.status), ui.Text(a.label)))
+		return ui.Form(ui.Method("post"), ui.Action(action),
+			ui.Button(ui.Ghost, ui.Small(), ui.Submit(), ui.Name("status"), ui.Value(status),
+				icon, ui.Title(label), ui.Aria("label", label)))
 	}
-	return ui.Form(actions...)
+	return ui.Row(ui.SpaceXS, ui.AlignCenter,
+		verdict(venues.StatusAccepted, ui.IconCheck, strs.Venues.Game.StatusAccept()),
+		verdict(venues.StatusDeclined, ui.IconX, strs.Venues.Game.StatusDecline()),
+		// Only ever shown on an application that has had a verdict, so the
+		// common row is the two the Representative came for.
+		verdict(venues.StatusPending, ui.IconTimer, strs.Venues.Game.StatusPending()))
 }
 
 func applicationVersions(base string, row SlotApplicationRow) *ui.Element {
@@ -422,11 +430,15 @@ func slotApplicationsSection(data slotPageData) *ui.Element {
 	if len(data.Applications) == 0 {
 		return ui.Section(append(sect, ui.Empty(ui.Text(strs.Venues.Game.ApplicationsEmpty())))...)
 	}
-	table := []ui.Item{ui.Scroll(), ui.Trow(
+	head := []ui.Item{
 		ui.Hcell(ui.Text(strs.Venues.Game.ColNumber())), ui.Hcell(ui.Text(strs.Venues.Game.ColTeam())), ui.Hcell(ui.Text(strs.Venues.Public.ColRating())),
-		ui.Hcell(ui.Text(strs.Venues.Game.ColSubmitter())), ui.Hcell(ui.Text(strs.Venues.Game.ColFiled())), ui.Hcell(ui.Text(strs.Venues.Game.ColEdited())),
+		ui.Hcell(ui.Text(strs.Venues.Game.ColSubmitter())), ui.Hcell(ui.Text(strs.Venues.Game.ColFiled())),
 		ui.Hcell(ui.Text(strs.Venues.Game.ColRoster())), ui.Hcell(ui.Text(strs.Venues.Game.ColFlags())), ui.Hcell(ui.Text(strs.Venues.Game.ColStatus())),
-	)}
+	}
+	if data.CanManage {
+		head = append(head, ui.Hcell(ui.Text("")))
+	}
+	table := []ui.Item{ui.Scroll(), ui.Trow(head...)}
 	for _, row := range data.Applications {
 		number := ""
 		if row.App.Number > 0 {
@@ -441,25 +453,32 @@ func slotApplicationsSection(data slotPageData) *ui.Element {
 		if row.SubmitterTg != "" {
 			submitter = ui.Cell(ui.Link(ui.Href(row.SubmitterTg), ui.Newtab(), ui.Text(row.Submitter)))
 		}
-		table = append(table, ui.Trow(
+		// One time column: an application nobody edited was filed and changed at
+		// the same moment, and an edited one says when as its tooltip.
+		filed := []ui.Item{ui.Text(venues.HumanTime(row.App.CreatedAt))}
+		if row.App.UpdatedAt != row.App.CreatedAt {
+			filed = append(filed, ui.Title(strs.Venues.Game.EditedTitle(venues.HumanTime(row.App.UpdatedAt))))
+		}
+		cells := []ui.Item{
 			ui.Cell(ui.Text(number)),
 			ui.Cell(ui.Text(row.App.TeamName)),
 			rating,
 			submitter,
-			ui.Cell(ui.Text(venues.HumanTime(row.App.CreatedAt))),
-			ui.Cell(ui.Text(venues.HumanTime(row.App.UpdatedAt))),
+			ui.Cell(filed...),
 			ui.Cell(ui.Text(strconv.Itoa(len(row.App.Roster)))),
 			ui.Cell(ui.Text(row.FlagSummary)),
 			ui.Cell(ui.Text(StatusLabel(row.App.Status))),
-		))
+		}
+		if data.CanManage {
+			cells = append(cells, ui.Cell(applicationVerdict(base, row)))
+		}
+		table = append(table, ui.Trow(cells...))
 	}
 	sect = append(sect, ui.Table(table...))
 	if data.CanManage {
 		for _, row := range data.Applications {
 			sect = append(sect, ui.Details(
 				ui.Summary(ui.Text(row.App.TeamName+" · "+StatusLabel(row.App.Status))),
-				rosterFlagsTable(row.App.Roster, row.Flags),
-				applicationActions(base, row),
 				applicationVersions(base, row),
 				applicationForm(base+"/application/"+strconv.FormatInt(row.App.ID, 10)+"/edit",
 					&ApplicationView{TeamName: row.App.TeamName, RatingTeamID: row.App.RatingTeamID, Roster: row.App.Roster},
