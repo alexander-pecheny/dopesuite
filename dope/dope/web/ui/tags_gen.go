@@ -199,6 +199,7 @@ var IconUnlink = base.IconUnlink
 var IconUser = base.IconUser
 var IconUsers = base.IconUsers
 var IconWandSparkles = base.IconWandSparkles
+var IconWeight = base.IconWeight
 var IconX = base.IconX
 var JustifyStart = base.JustifyStart
 var JustifyCenter = base.JustifyCenter

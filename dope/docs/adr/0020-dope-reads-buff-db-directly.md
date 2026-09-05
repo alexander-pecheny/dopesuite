@@ -35,3 +35,8 @@ a cache (fresh, but slow on first touch and rate-limited).
 - dope's schema coupling to buff lives in one package and fails soft: a
   missing file or table gives an empty suggest and Л flags, never an error
   page.
+- The tournament picker follows the same rule (2026-09-05). It used to ask
+  rating.chgk.info for each card's editors, forecast and requests — two
+  calls per tournament, a few hundred per screen, seconds before the page
+  drew. buff mirrors all three (`editors`, `difficulty_forecast`,
+  `tournament_requests`), so the picker is now one query.

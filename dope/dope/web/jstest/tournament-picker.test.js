@@ -1,5 +1,5 @@
 import {assertEquals} from "jsr:@std/assert";
-import {allLabel, order, shows} from "./dist/tournament-picker.js";
+import {allWay, order, shows} from "./dist/tournament-picker.js";
 
 const card = (id, difficulty, teams, kind = "sync", keep = true) => ({id, difficulty, teams, kind, keep});
 
@@ -43,8 +43,8 @@ Deno.test("a card ticked off sinks below every card still in play", () => {
 });
 
 Deno.test("the one select-all button offers the move that changes something", () => {
-  assertEquals(allLabel([card("1", 3, 10), card("2", 3, 10, "sync", false)]), "none");
-  assertEquals(allLabel([card("1", 3, 10, "sync", false)]), "all");
+  assertEquals(allWay([card("1", 3, 10), card("2", 3, 10, "sync", false)]), "none");
+  assertEquals(allWay([card("1", 3, 10, "sync", false)]), "all");
   // Nothing on screen: clearing an empty list is a no-op either way.
-  assertEquals(allLabel([]), "all");
+  assertEquals(allWay([]), "all");
 });

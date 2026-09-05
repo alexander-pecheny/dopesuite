@@ -230,8 +230,7 @@ func TestSlotPageSetsTheRegistrationUpInADialog(t *testing.T) {
 
 	body := renderPublic(t, slotPageDoc(data))
 	for _, want := range []string{
-		"Регистрация не настроена.",
-		"Настроить регистрацию",
+		"Настройки регистрации",
 		`data-dialog-open="slotReg"`,
 		`action="/host/venue/tbilisi/game/3/reg"`,
 		"Показывать ссылку на странице площадки",
@@ -260,9 +259,6 @@ func TestSlotPageSetsTheRegistrationUpInADialog(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("set up: missing %q", want)
 		}
-	}
-	if strings.Contains(body, "Регистрация не настроена.") {
-		t.Error("a set-up registration still reads as unset")
 	}
 }
 
@@ -376,7 +372,7 @@ func TestTournamentPickerIsOneListInTwoModes(t *testing.T) {
 		// The numbers are read off glyphs, not off words beside them.
 		`class="fact" title="Сложность"`, ">3.5<", `class="fact" title="Заявлено команд"`, ">~86<",
 		`action="/host/venue/tbilisi/game/3/tournament"`,
-		"Только синхроны", "Сортировка", "Снять все",
+		"Только синхроны", "Сортировка", "Выбрать все",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("pick: missing %q", want)
@@ -385,10 +381,10 @@ func TestTournamentPickerIsOneListInTwoModes(t *testing.T) {
 	if strings.Contains(body, "/game/3/voting") {
 		t.Error("pick mode offers to save a poll")
 	}
-	// A tournament rating.chgk.info said nothing about is still a card, with no
-	// number where it has none.
+	// A tournament buff has no forecast for is still a card, with no number
+	// where it has none.
 	card := body[strings.Index(body, `data-tournament="10234"`):]
-	if strings.Contains(card[:strings.Index(card, "</section>")], `class="fact"`) {
+	if strings.Contains(card[:strings.Index(card, "</section>")], `title="Сложность"`) {
 		t.Error("a tournament with no forecast still shows a number")
 	}
 

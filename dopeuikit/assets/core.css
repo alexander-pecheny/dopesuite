@@ -1916,6 +1916,11 @@ input[type="radio"]:focus-visible {
 
 .subhead { margin: 0; font-size: var(--text-md); font-weight: var(--fw-semibold); color: var(--text-strong); }
 
+/* A heading that is also a link reads as a heading: blue and underlined is what
+   prose links look like, and a card's title is not prose. */
+.subhead a { color: inherit; text-decoration: none; }
+.subhead a:hover { text-decoration: underline; }
+
 /* ── segmented control ────────────────────────────────────────────────────
    THE either/or switch: the tabs primitive (the card-detail view switch), the
    appearance modal's theme/contrast rows, xy's editor toggles. A recessed

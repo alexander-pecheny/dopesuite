@@ -521,6 +521,7 @@ var IconUnlink = Attr{Name: "icon", Value: "unlink"}
 var IconUser = Attr{Name: "icon", Value: "user"}
 var IconUsers = Attr{Name: "icon", Value: "users"}
 var IconWandSparkles = Attr{Name: "icon", Value: "wand-sparkles"}
+var IconWeight = Attr{Name: "icon", Value: "weight"}
 var IconX = Attr{Name: "icon", Value: "x"}
 var JustifyStart = Attr{Name: "justify", Value: "start"}
 var JustifyCenter = Attr{Name: "justify", Value: "center"}

@@ -18,7 +18,8 @@ func fixtureAt(t *testing.T, path string) *Store {
 	}
 	if _, err := db.Exec(`
 create table players(id integer primary key, name text, patronymic text, surname text);
-create table tournaments(id integer primary key, name text, date_start text, date_end text, tournament_type text, questions_by_tour text);
+create table tournaments(id integer primary key, name text, date_start text, date_end text, tournament_type text, questions_by_tour text, editors text, difficulty_forecast real);
+create table tournament_requests(tournament_id integer primary key, teams integer, venues integer);
 create table tournament_results(id integer, team_id integer, team_current_name text, team_current_town text);
 create table seasons(id integer primary key, date_start text, date_end text);
 create table team_seasons(team_id integer, season_id integer, player_id integer, date_added text, date_removed text, player_number integer);
@@ -36,10 +37,12 @@ insert into players values
 insert into player_games values (24850, 500), (25121, 412), (25122, 7), (25123, 900);
 
 insert into tournaments values
-  (10233, 'Синхрон августа', '2026-08-29T07:00:00+00:00', '2026-09-05T10:00:00+03:00', 'Синхрон', '12,12,12'),
-  (10234, 'Асинхрон августа', '2026-08-01T00:00:00+00:00', '2026-09-30T00:00:00+00:00', 'Асинхрон', '12,12'),
-  (10235, 'Обычный турнир', '2026-08-28T00:00:00+00:00', '2026-09-03T00:00:00+00:00', 'Обычный', '12'),
-  (10100, 'Старый синхрон', '2025-01-01T00:00:00+00:00', '2025-01-07T00:00:00+00:00', 'Синхрон', '12');
+  (10233, 'Синхрон августа', '2026-08-29T07:00:00+00:00', '2026-09-05T10:00:00+03:00', 'Синхрон', '12,12,12', '[24850, 3438]', 3.5),
+  (10234, 'Асинхрон августа', '2026-08-01T00:00:00+00:00', '2026-09-30T00:00:00+00:00', 'Асинхрон', '12,12', null, null),
+  (10235, 'Обычный турнир', '2026-08-28T00:00:00+00:00', '2026-09-03T00:00:00+00:00', 'Обычный', '12', '', null),
+  (10100, 'Старый синхрон', '2025-01-01T00:00:00+00:00', '2025-01-07T00:00:00+00:00', 'Синхрон', '12', null, null);
+
+insert into tournament_requests values (10233, 86, 12);
 
 insert into tournament_results values
   (10100, 62868, 'Гей Гериллья', 'сборная'),
@@ -262,6 +265,23 @@ func TestSearchAndLoadTournament(t *testing.T) {
 	tournament, ok := s.Tournament(context.Background(), 10233)
 	if !ok || tournament.Name != "Синхрон августа" || tournament.QuestionsByTour != "12,12,12" {
 		t.Fatalf("tournament %+v ok=%v", tournament, ok)
+	}
+}
+
+// The picker's card is one row of the mirror: the editors named rather than
+// listed as ids, the forecast, and buff's own count of the teams asked for. A
+// tournament the mirror knows nothing of the sort about still answers.
+func TestTournamentsCarryWhatThePickerShows(t *testing.T) {
+	s := fixture(t)
+	got := s.PlayableTournaments(context.Background(), day(t, "2026-09-02"))
+	if len(got) != 2 {
+		t.Fatalf("playable %+v", got)
+	}
+	if got[0].Editors != "Александр Печеный, Игорь Биткин" || got[0].Difficulty != 3.5 || got[0].Teams != 86 {
+		t.Fatalf("card %+v", got[0])
+	}
+	if got[1].Editors != "" || got[1].Difficulty != 0 || got[1].Teams != 0 {
+		t.Fatalf("a tournament with nothing said about it %+v", got[1])
 	}
 }
 

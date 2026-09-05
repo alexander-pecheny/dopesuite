@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"dope/dope/domain/venues"
 	"dope/dope/storage/buffdb"
@@ -75,7 +74,7 @@ func TournamentPickerDoc(p TournamentPicker) *ui.Doc {
 // the page: the whole week's tournaments are already here, and a Representative
 // runs through several orderings before settling on one.
 func tournamentControls() *ui.Element {
-	return ui.Section(ui.Row(ui.SpaceMD, ui.AlignCenter, ui.Wrap(),
+	return ui.Section(ui.Row(ui.SpaceMD, ui.AlignEnd, ui.Wrap(),
 		ui.Field(ui.Label(strs.Venues.Tournaments.TypeLabel()),
 			ui.Selectfield(ui.Compact(), ui.Data("tournament-filter", "kind"),
 				ui.Option(ui.Value(typeSync), ui.Selected(), ui.Text(strs.Venues.Tournaments.TypeSync())),
@@ -95,11 +94,10 @@ func tournamentControls() *ui.Element {
 				ui.Option(ui.Value(sortDifficultyDown), ui.Text(strs.Venues.Tournaments.SortDifficultyDown())),
 				ui.Option(ui.Value(sortTeams), ui.Text(strs.Venues.Tournaments.SortTeams())),
 			)),
-		// One button for both ways: it says which way it would go, and the
-		// picker rewrites it as the ticks change.
-		ui.Button(ui.Ghost, ui.ID("tournamentsAll"), ui.Data("tournament-all", strs.Venues.Tournaments.SelectAll()),
-			ui.Data("tournament-none", strs.Venues.Tournaments.DeselectAll()),
-			ui.Text(strs.Venues.Tournaments.DeselectAll())),
+		// One button for both ways. Its words stay put — a label that rewrote
+		// itself as the ticks changed moved under the cursor mid-click.
+		ui.Button(ui.Ghost, ui.ID("tournamentsAll"), ui.Data("tournament-all", ""),
+			ui.Text(strs.Venues.Tournaments.SelectAll())),
 	))
 }
 
@@ -132,14 +130,33 @@ func tournamentCard(p TournamentPicker, c TournamentCard) *ui.Element {
 		ui.Data("difficulty", strconv.FormatFloat(c.Difficulty, 'f', -1, 64)),
 		ui.Data("teams", strconv.Itoa(c.Teams)),
 		ui.Data("kind", cardKind(c.Type)),
-		ui.Link(ui.Href("https://rating.chgk.info/tournament/"+id), ui.Newtab(), ui.Text(c.Name)),
+		ui.Subhead(ui.Link(ui.Href("https://rating.chgk.info/tournament/"+id), ui.Newtab(), ui.Text(c.Name))),
 	}
 	if c.Editors != "" {
 		card = append(card, ui.Muted(ui.Text(c.Editors)))
 	}
-	facts := []ui.Item{ui.SpaceMD, ui.AlignCenter, ui.Wrap()}
+	card = append(card, ui.Spacer())
+	// The tick, the button and the card's few numbers are its foot, so a card is
+	// read and acted on in one place and its facts cost no line of their own.
+	foot := []ui.Item{ui.SpaceSM, ui.AlignCenter, ui.Wrap(),
+		ui.Checkbox(ui.Name("candidate"), ui.Value(id), ui.Checked(),
+			ui.Data("tournament-keep", ""), ui.Aria("label", strs.Venues.Tournaments.KeepAria()))}
+	if !p.Poll {
+		foot = append(foot, ui.Form(ui.Method("post"), ui.Action(p.Base+"/tournament"),
+			ui.Hiddenfield(ui.Name("rating_tournament_id"), ui.Value(id)),
+			ui.Button(ui.Small(), ui.Submit(), ui.Text(strs.Venues.Tournaments.PickSubmit()))))
+	}
+	foot = append(foot, cardFacts(c)...)
+	return ui.Section(append(card, ui.Row(foot...))...)
+}
+
+// cardFacts are the card's numbers: what kind of tournament it is, how hard its
+// editors expect it to be, how many teams have asked to play. Each is a glyph
+// and a value, so all three fit beside the button.
+func cardFacts(c TournamentCard) []ui.Item {
+	facts := []ui.Item{ui.Fact(ui.IconCalendar, ui.Title(strs.Venues.Tournaments.TypeLabel()), ui.Text(c.Type))}
 	if c.Difficulty > 0 {
-		facts = append(facts, ui.Fact(ui.IconFlaskConical, ui.Title(strs.Venues.Tournaments.DifficultyLabel()),
+		facts = append(facts, ui.Fact(ui.IconWeight, ui.Title(strs.Venues.Tournaments.DifficultyLabel()),
 			ui.Text(strconv.FormatFloat(c.Difficulty, 'f', -1, 64))))
 	}
 	if c.Teams > 0 {
@@ -149,18 +166,7 @@ func tournamentCard(p TournamentPicker, c TournamentCard) *ui.Element {
 	if c.Chosen {
 		facts = append(facts, ui.Fact(ui.IconCheck, ui.Text(strs.Venues.Tournaments.Chosen())))
 	}
-	card = append(card, ui.Muted(ui.Text(c.Type)), ui.Row(facts...), ui.Spacer())
-	// The tick and the button are the card's own foot, so a card is read and
-	// acted on in one place rather than across a row.
-	foot := []ui.Item{ui.SpaceSM, ui.AlignCenter, ui.Wrap(),
-		ui.Checkbox(ui.Name("candidate"), ui.Value(id), ui.Checked(),
-			ui.Data("tournament-keep", ""), ui.Aria("label", strs.Venues.Tournaments.KeepAria()))}
-	if !p.Poll {
-		foot = append(foot, ui.Form(ui.Method("post"), ui.Action(p.Base+"/tournament"),
-			ui.Hiddenfield(ui.Name("rating_tournament_id"), ui.Value(id)),
-			ui.Button(ui.Small(), ui.Submit(), ui.Text(strs.Venues.Tournaments.PickSubmit()))))
-	}
-	return ui.Section(append(card, ui.Row(foot...))...)
+	return facts
 }
 
 // The type dropdown tells the two apart because a Venue that plays sync
@@ -172,9 +178,9 @@ func cardKind(kind string) string {
 	return typeSync
 }
 
-// renderTournamentPicker builds the card list. What buff mirrors is here in the
-// database; the forecast and the requests are one call per tournament to
-// rating.chgk.info, so a tournament it will not answer for still gets a card.
+// renderTournamentPicker builds the card list, all of it out of buff's mirror:
+// the tournaments playable at the Slot's time, their editors, the forecast and
+// how many teams have asked to play.
 func (s *Server) renderTournamentPicker(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	venue, slot, err := s.slotOf(r, sc)
 	if err != nil {
@@ -190,17 +196,11 @@ func (s *Server) renderTournamentPicker(w http.ResponseWriter, r *http.Request, 
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
-	candidates := s.playableCandidates(r.Context(), slot)
-	ids := make([]int64, 0, len(candidates))
-	for _, c := range candidates {
-		ids = append(ids, c.ID)
-	}
-	details := s.h.Engine().RatingTournaments().Details(r.Context(), ids)
-	for _, c := range candidates {
-		d := details[c.ID]
+	at, _ := venues.ParseTime(slot.StartsAt)
+	for _, t := range s.h.Engine().BuffMirror().PlayableTournaments(r.Context(), at) {
 		p.Cards = append(p.Cards, TournamentCard{
-			ID: c.ID, Name: c.Name, Type: c.Type, Editors: strings.Join(d.Editors, ", "),
-			Difficulty: d.Difficulty, Teams: d.Teams, Chosen: c.ID == slot.RatingTournamentID,
+			ID: t.ID, Name: t.Name, Type: t.Type, Editors: t.Editors,
+			Difficulty: t.Difficulty, Teams: t.Teams, Chosen: t.ID == slot.RatingTournamentID,
 		})
 	}
 	pages.RenderDoc(w, s.h.Engine().AssetETags, TournamentPickerDoc(p))
