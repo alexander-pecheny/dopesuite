@@ -163,13 +163,20 @@ values(null, 'Площадка', '', 'venue', 'Тбилиси', null, 1, ?, ?, 1
 	return festID
 }
 
+// venueSlotTime is when the seeded game is played, weeks from now, so a test
+// about a game still to come does not quietly become a test about a game
+// already played the day the date it was written with goes past.
+func venueSlotTime(weeks int) string {
+	return time.Now().UTC().AddDate(0, 0, 7*weeks).Format("2006-01-02 15:04")
+}
+
 func newVenueSlot(t *testing.T, db *sql.DB, comp []int) (int64, venues.Slot) {
 	t.Helper()
 	festID := newVenueFest(t, db)
 	var slotID int64
 	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
 		var err error
-		slotID, err = venues.CreateSlotTx(ctx, tx, festID, "2026-09-04 19:00", 0, "", comp)
+		slotID, err = venues.CreateSlotTx(ctx, tx, festID, venueSlotTime(1), 0, "", comp)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -194,7 +201,7 @@ func TestNewSlotStartsWithRegistrationClosed(t *testing.T) {
 	var slotID int64
 	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
 		var err error
-		slotID, err = venues.CreateSlotTx(ctx, tx, festID, "2026-09-04 19:00", 0, "", []int{2})
+		slotID, err = venues.CreateSlotTx(ctx, tx, festID, venueSlotTime(1), 0, "", []int{2})
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -303,7 +310,7 @@ func TestTwoSlotsBothNumberFromOne(t *testing.T) {
 
 	var second venues.Slot
 	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
-		_, err := venues.CreateSlotTx(ctx, tx, festID, "2026-09-11 19:00", 0, "", []int{2})
+		_, err := venues.CreateSlotTx(ctx, tx, festID, venueSlotTime(2), 0, "", []int{2})
 		return err
 	}); err != nil {
 		t.Fatal(err)
