@@ -586,8 +586,8 @@ func (s *Server) handleSlotSave(w http.ResponseWriter, r *http.Request, sc route
 }
 
 // handleSlotReg is what the registration dialog saves: the window it takes
-// applications in and whether the Venue's page carries its link. Saving it is
-// what sets it up, so the first save is also what opens it.
+// applications in and whether the Venue's page carries its link. Whether it is
+// shut right now is the button beside the dialog, not this.
 func (s *Server) handleSlotReg(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	festID := sc.FestID
 	_, slot, err := s.slotOf(r, sc)
@@ -600,6 +600,29 @@ func (s *Server) handleSlotReg(w http.ResponseWriter, r *http.Request, sc route.
 	err = s.h.Engine().WithWriteTx(r.Context(), festID, "slot-reg", func(ctx context.Context, tx *sql.Tx) error {
 		return venues.UpdateSlotRegTx(ctx, tx, slot.ID, when(r.Form, "reg_opens"),
 			when(r.Form, "reg_closes"), r.Form.Get("link_visible") == "1")
+	})
+	if err != nil {
+		return s.renderSlotPage(w, r, sc, err.Error(), "")
+	}
+	s.h.Engine().InvalidateFestViewCache(festID)
+	return s.redirectToSlot(w, r, festID, slot.ID)
+}
+
+// handleSlotShut is the Representative closing заявки on the spot, or opening
+// them again. The window is untouched: reopening a Слот whose window has run
+// out leaves it closed, which is what the window is for.
+func (s *Server) handleSlotShut(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	festID := sc.FestID
+	_, slot, err := s.slotOf(r, sc)
+	if err != nil {
+		return err
+	}
+	if err := r.ParseForm(); err != nil {
+		return route.BadRequest("bad form")
+	}
+	shut := r.Form.Get("shut") == "1"
+	err = s.h.Engine().WithWriteTx(r.Context(), festID, "slot-reg-shut", func(ctx context.Context, tx *sql.Tx) error {
+		return venues.ShutSlotRegTx(ctx, tx, slot.ID, shut)
 	})
 	if err != nil {
 		return s.renderSlotPage(w, r, sc, err.Error(), "")

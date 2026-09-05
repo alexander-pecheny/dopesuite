@@ -284,6 +284,7 @@ func slotRegSection(data slotPageData) *ui.Element {
 	sect = append(sect,
 		ui.Row(ui.SpaceSM, ui.AlignCenter, ui.Wrap(),
 			ui.Button(ui.Primary, ui.Data("dialog-open", "slotReg"), ui.Text(strs.Venues.Game.RegDialogTitle())),
+			shutForm(data, base),
 			ui.Form(ui.Method("post"), ui.Action(base+"/token"),
 				ui.Data("confirm", strs.Venues.Game.LinkRotateConfirm()),
 				ui.Button(ui.Ghost, ui.Submit(), ui.Text(strs.Venues.Game.LinkRotate())),
@@ -294,14 +295,32 @@ func slotRegSection(data slotPageData) *ui.Element {
 	return ui.Section(sect...)
 }
 
+// shutForm is the one button that closes заявки now and the one that opens them
+// again: which of the two it is is which way the registration currently stands,
+// so the button is never a no-op.
+func shutForm(data slotPageData, base string) *ui.Element {
+	form := []ui.Item{ui.Method("post"), ui.Action(base + "/shut")}
+	if data.Slot.RegShut {
+		return ui.Form(append(form,
+			ui.Hiddenfield(ui.Name("shut"), ui.Value("0")),
+			ui.Button(ui.Ghost, ui.Submit(), ui.Text(strs.Venues.Game.RegOpenBtn())))...)
+	}
+	return ui.Form(append(form,
+		ui.Data("confirm", strs.Venues.Game.RegShutConfirm()),
+		ui.Hiddenfield(ui.Name("shut"), ui.Value("1")),
+		ui.Button(ui.Ghost, ui.Submit(), ui.Text(strs.Venues.Game.RegShutBtn())))...)
+}
+
 // regStateLine is where the registration stands: whether it takes applications
 // now, and the ends of the window that decide it.
 func regStateLine(data slotPageData) string {
 	state := strs.Venues.Game.RegStateOpen()
-	switch data.RegState {
-	case venues.RegScheduled:
+	switch {
+	case data.Slot.RegShut:
+		state = strs.Venues.Game.RegStateShut()
+	case data.RegState == venues.RegScheduled:
 		state = strs.Venues.Game.RegStateScheduled(data.Slot.RegOpensAt)
-	case venues.RegClosed:
+	case data.RegState == venues.RegClosed:
 		state = strs.Venues.Game.RegStateClosed()
 	}
 	until := ""
