@@ -1,6 +1,10 @@
 package kit
 
-import kitstrings "pecheny.me/dopeuikit/i18nstrings"
+import (
+	"strings"
+
+	kitstrings "pecheny.me/dopeuikit/i18nstrings"
+)
 
 // coreExpanders maps each core primitive to its HTML expansion. App overlays
 // override an entry (checkbox/editor in xy) or add new ones (docoverlay …).
@@ -389,6 +393,7 @@ func expandListrow(c *ExpandCtx, p *Element) []Node {
 
 func expandTable(c *ExpandCtx, p *Element) []Node {
 	var headRows, bodyRows []Node
+	var labels []string
 	for _, ch := range p.Block {
 		row, ok := ch.(*Element)
 		if !ok || row.Tag != "trow" {
@@ -396,8 +401,12 @@ func expandTable(c *ExpandCtx, p *Element) []Node {
 		}
 		tr := c.Expand(row)
 		if allHeaderCells(row) {
+			if labels == nil {
+				labels = headerLabels(c, row)
+			}
 			headRows = append(headRows, tr...)
 		} else {
+			labelCells(tr, labels)
 			bodyRows = append(bodyRows, tr...)
 		}
 	}
@@ -413,6 +422,58 @@ func expandTable(c *ExpandCtx, p *Element) []Node {
 		return one(El("div", []Attr{ClassAttr("table-scroll")}, table))
 	}
 	return one(table)
+}
+
+// headerLabels is what each column is called, so a body cell can carry its own
+// column's name. On a phone the table stops being a grid and each row becomes a
+// block of «label: value» lines — a table that scrolls sideways on a 393px
+// screen is a table nobody reads the right-hand half of.
+func headerLabels(c *ExpandCtx, row *Element) []string {
+	var out []string
+	for _, ch := range row.Block {
+		cell, ok := ch.(*Element)
+		if !ok || cell.Tag != "hcell" {
+			continue
+		}
+		out = append(out, strings.TrimSpace(cellText(cell)))
+	}
+	return out
+}
+
+// cellText is a header cell's words, which is all a label needs: a header that
+// holds anything but text has no name to lend its column.
+func cellText(cell *Element) string {
+	var b strings.Builder
+	for _, item := range cell.Inline {
+		if t, ok := item.(*TextNode); ok {
+			b.WriteString(t.Value)
+		}
+	}
+	return b.String()
+}
+
+// labelCells stamps a rendered body row's cells with their column names.
+func labelCells(rows []Node, labels []string) {
+	if len(labels) == 0 {
+		return
+	}
+	for _, node := range rows {
+		tr, ok := node.(*Element)
+		if !ok || tr.Tag != "tr" {
+			continue
+		}
+		i := 0
+		for _, kid := range tr.Block {
+			cell, ok := kid.(*Element)
+			if !ok || cell.Tag != "td" {
+				continue
+			}
+			if i < len(labels) && labels[i] != "" {
+				cell.Attrs = append(cell.Attrs, At("data-label", labels[i]))
+			}
+			i++
+		}
+	}
 }
 
 func allHeaderCells(row *Element) bool {
