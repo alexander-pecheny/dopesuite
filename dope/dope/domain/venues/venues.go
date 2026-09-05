@@ -40,7 +40,15 @@ type RosterPlayer struct {
 	Surname    string `json:"surname"`
 	Name       string `json:"name"`
 	Patronymic string `json:"patronymic"`
-	Captain    bool   `json:"captain"`
+	// Flag is the mark this player carries in the roster: captain, base-roster
+	// player or legionnaire, in the letters the Catalog spells them. It starts
+	// as whatever the base roster says and is the filer's to change, because
+	// the mirror is a day behind and a player who joined this week is in the
+	// team's base roster before it is in buff's copy of it.
+	Flag string `json:"flag,omitempty"`
+	// Captain is what a roster stored before the flag was a field. Read only:
+	// ParseRoster folds it into Flag and nothing writes it again.
+	Captain bool `json:"captain,omitempty"`
 }
 
 func (p RosterPlayer) FullName() string {
@@ -63,10 +71,20 @@ func ParseRoster(raw string) []RosterPlayer {
 		if p.FullName() == "" {
 			continue
 		}
-		if p.Captain && captain {
-			p.Captain = false
+		if p.Flag == "" && p.Captain {
+			p.Flag = FlagCaptain
 		}
-		captain = captain || p.Captain
+		p.Captain = false
+		switch p.Flag {
+		case FlagCaptain, FlagBase, FlagLegion:
+		default:
+			p.Flag = ""
+		}
+		// A team has one captain or none: the second one marked is not one.
+		if p.Flag == FlagCaptain && captain {
+			p.Flag = ""
+		}
+		captain = captain || p.Flag == FlagCaptain
 		out = append(out, p)
 	}
 	return out
@@ -83,25 +101,34 @@ func MarshalRoster(players []RosterPlayer) string {
 	return string(data)
 }
 
-// Flags are the captain/base/legion marks of a roster, aligned with players. base is the
-// team's base roster for the Slot's season, nil when the mirror knows none —
-// which reads as legionnaire for a real team and as base-roster player for a team without
-// a rating id, since it has no base roster to be outside of.
+// Flags are the marks of a roster, aligned with players: what each player was
+// given, and for a roster stored before the flag was a field, what the base
+// roster says. base is the team's base roster for the Slot's season, nil when
+// the mirror knows none — which reads as legionnaire for a real team and as
+// base-roster player for a team without a rating id, since it has no base
+// roster to be outside of.
 func Flags(players []RosterPlayer, ratingTeamID int64, base map[int64]bool) []string {
 	out := make([]string, len(players))
 	for i, p := range players {
 		switch {
-		case p.Captain:
-			out[i] = FlagCaptain
-		case ratingTeamID == 0:
-			out[i] = FlagBase
-		case base[p.PlayerID]:
+		case p.Flag != "":
+			out[i] = p.Flag
+		case ratingTeamID == 0, base[p.PlayerID]:
 			out[i] = FlagBase
 		default:
 			out[i] = FlagLegion
 		}
 	}
 	return out
+}
+
+// DefaultFlag is the mark a player gets before anyone says otherwise: in the
+// team's base roster or not.
+func DefaultFlag(playerID, ratingTeamID int64, base map[int64]bool) string {
+	if ratingTeamID == 0 || base[playerID] {
+		return FlagBase
+	}
+	return FlagLegion
 }
 
 func FlagSummary(flags []string) string {

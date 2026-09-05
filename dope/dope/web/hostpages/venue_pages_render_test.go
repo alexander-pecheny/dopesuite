@@ -152,16 +152,17 @@ func TestRegDocSaysWhatEachStateAllows(t *testing.T) {
 	open.Application = &ApplicationView{
 		Status: venues.StatusAccepted, StatusLabel: StatusLabel(venues.StatusAccepted),
 		TeamName: "Мантисса", RatingTeamID: 5723, Number: 4,
-		Roster: []venues.RosterPlayer{{PlayerID: 1033, Surname: "Ковалёва", Name: "Елена", Captain: true}},
+		Roster: []venues.RosterPlayer{{PlayerID: 1033, Surname: "Ковалёва", Name: "Елена", Flag: venues.FlagCaptain}},
 		Flags:  []string{venues.FlagCaptain},
 	}
 	body = renderPublic(t, RegDoc(open))
 	for _, want := range []string{
 		`Статус: принята · номер команды 4`,
-		`Ковалёва Елена`,
-		`>К<`,
+		// The roster is the editor's and nowhere else: a read-only copy of it
+		// above the form was the same six names twice.
 		`data-roster-editor`,
 		`name="roster_json"`,
+		`Ковалёва`,
 		`value="Мантисса"`,
 		`Сохранить заявку`,
 	} {

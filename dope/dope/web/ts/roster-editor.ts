@@ -1,15 +1,24 @@
 // The roster editor: rows of a suggest over buff's player mirror, a
-// not-in-the-base fallback that turns a row into three typed name fields with id
-// 0, and one captain. Flags are derived server-side on save, so the editor
-// never offers them. The whole roster travels in one hidden field, which is
-// what the application form posts.
+// not-in-the-base fallback that turns a row into three typed name fields with
+// id 0, and a flag per player. The flag starts as whatever the team's base
+// roster says and is the filer's to change — the mirror is a day behind, and a
+// player who joined this week is in the base roster before buff knows it. The
+// whole roster travels in one hidden field, which is what the form posts.
 
 export type RosterPlayer = {
   player_id: number;
   surname: string;
   name: string;
   patronymic: string;
-  captain: boolean;
+  flag: string;
+  // What a roster stored before the flag was a field. Read on the way in only.
+  captain?: boolean;
+};
+
+export const FLAGS = {
+  captain: S.venues.flags.captain(),
+  base: S.venues.flags.base(),
+  legion: S.venues.flags.legion(),
 };
 
 // A suggested player carries how many games the mirror knows them by, which is
@@ -31,7 +40,7 @@ import type {Choice} from "../../../../dopeuikit/assets/ts/suggest.js";
 export const MAX_ROSTER = 6;
 
 export function emptyPlayer(): RosterPlayer {
-  return { player_id: 0, surname: "", name: "", patronymic: "", captain: false };
+  return { player_id: 0, surname: "", name: "", patronymic: "", flag: "" };
 }
 
 export function parseRoster(raw: string): RosterPlayer[] {
@@ -49,7 +58,8 @@ export function parseRoster(raw: string): RosterPlayer[] {
       surname: String(p.surname ?? "").trim(),
       name: String(p.name ?? "").trim(),
       patronymic: String(p.patronymic ?? "").trim(),
-      captain: Boolean(p.captain),
+      // A roster stored before the flag was a field carries a captain instead.
+      flag: String(p.flag ?? "") || (p.captain ? FLAGS.captain : ""),
     };
   });
 }
@@ -73,9 +83,19 @@ export function suggestLabel(p: SuggestedPlayer): string {
     : `${name} (${p.player_id})`;
 }
 
-// setCaptain keeps exactly one captain: picking a new one clears the old.
-export function setCaptain(players: RosterPlayer[], index: number): RosterPlayer[] {
-  return players.map((p, i) => ({ ...p, captain: i === index }));
+// setFlag marks one player. A team has one captain or none, so naming a new one
+// sends the old back to whatever the base roster says of them.
+export function setFlag(
+  players: RosterPlayer[],
+  index: number,
+  flag: string,
+  fallback: (p: RosterPlayer) => string,
+): RosterPlayer[] {
+  return players.map((p, i) => {
+    if (i === index) return {...p, flag};
+    if (flag === FLAGS.captain && p.flag === FLAGS.captain) return {...p, flag: fallback(p)};
+    return p;
+  });
 }
 
 // rosterWarning is what the form says about the roster's size; "" when it is
@@ -83,7 +103,6 @@ export function setCaptain(players: RosterPlayer[], index: number): RosterPlayer
 export function rosterWarning(players: RosterPlayer[]): string {
   const filled = players.filter((p) => fullName(p) !== "");
   if (filled.length > MAX_ROSTER) return S.venues.rosterEditor.tooMany(String(MAX_ROSTER));
-  if (filled.length > 0 && !filled.some((p) => p.captain)) return S.venues.rosterEditor.noCaptain();
   return "";
 }
 
@@ -125,7 +144,7 @@ function asRosterPlayers(rows: MirrorPlayer[] | null): SuggestedPlayer[] {
     surname: r.surname ?? "",
     name: r.name ?? "",
     patronymic: r.patronymic ?? "",
-    captain: false,
+    flag: "",
     games: Number(r.games) || 0,
   }));
 }
@@ -160,9 +179,42 @@ export function mountRosterEditor(container: HTMLElement): void {
   fillRow.append(add, fillBase, fillPrevious);
   container.append(rows, warning, fillRow);
 
+  // Which players the team has in its base roster, so a row can flag itself.
+  // Fetched once per team; until it answers a player is nothing in particular
+  // and the filer's own choice is all there is.
+  let base: Set<number> | null = null;
+  const teamID = (): number =>
+    Number(container.closest("form")?.querySelector<HTMLInputElement>("[data-team-id]")?.value || "");
+  const defaultFlag = (p: RosterPlayer): string => {
+    if (!teamID()) return FLAGS.base;
+    if (!base) return "";
+    return base.has(p.player_id) ? FLAGS.base : FLAGS.legion;
+  };
+  const loadBase = async (): Promise<void> => {
+    const id = teamID();
+    if (!id) return;
+    const rows = await fetchJSON<MirrorPlayer[]>(
+      `/api/buff/team/${id}/roster?on=${encodeURIComponent(container.getAttribute("data-roster-editor") || "")}`,
+    );
+    base = new Set((rows || []).map((r) => r.id));
+  };
+
   const sync = (): void => {
     field.value = serializeRoster(players);
     warning.textContent = rosterWarning(players);
+  };
+
+  // A player with no flag yet takes the one the base roster implies.
+  const flagUnflagged = (): void => {
+    let changed = false;
+    players = players.map((p) => {
+      if (p.flag !== "" || fullName(p) === "") return p;
+      const flag = defaultFlag(p);
+      if (flag === "") return p;
+      changed = true;
+      return {...p, flag};
+    });
+    if (changed) draw();
   };
 
   const draw = (): void => {
@@ -182,7 +234,7 @@ export function mountRosterEditor(container: HTMLElement): void {
       ? drawSuggest(player, index)
       : drawTyped(player, index);
     name.classList.add("u-grow");
-    row.append(name, drawCaptain(player, index), drawRemove(index));
+    row.append(name, drawFlag(player, index), drawRemove(index));
     return row;
   };
 
@@ -212,9 +264,9 @@ export function mountRosterEditor(container: HTMLElement): void {
   const fill = (found: RosterPlayer[]): void => {
     if (found.length === 0) return;
     players = found.map((p) => ({...p}));
-    if (!players.some((p) => p.captain)) players[0].captain = true;
     players.push(emptyPlayer());
     draw();
+    flagUnflagged();
   };
 
   const say = (message: string): void => {
@@ -264,8 +316,11 @@ export function mountRosterEditor(container: HTMLElement): void {
     }, (choice, typed) => {
       const manual = choice.value === MANUAL;
       players[index] = manual
-        ? {...emptyPlayer(), surname: typed.trim(), captain: players[index].captain}
-        : {...(JSON.parse(choice.value) as SuggestedPlayer), captain: players[index].captain};
+        ? {...emptyPlayer(), surname: typed.trim(), flag: players[index].flag}
+        : {...(JSON.parse(choice.value) as SuggestedPlayer), flag: players[index].flag};
+      // A player only just named has no flag of their own yet, and the base
+      // roster has an opinion about them the moment they have a name.
+      if (players[index].flag === "") players[index].flag = defaultFlag(players[index]);
       draw();
       // A hand-typed player still has to be named; the next row waits for that.
       if (manual) focusRow(index);
@@ -296,20 +351,26 @@ export function mountRosterEditor(container: HTMLElement): void {
     return box;
   };
 
-  const drawCaptain = (player: RosterPlayer, index: number): HTMLElement => {
-    const label = el("label", "u-row u-gap-sm u-align-center");
-    const radio = document.createElement("input");
-    radio.type = "radio";
-    radio.name = `${field.name}-captain`;
-    radio.checked = player.captain;
-    radio.addEventListener("change", () => {
-      players = setCaptain(players, index);
+  const drawFlag = (player: RosterPlayer, index: number): HTMLElement => {
+    const select = document.createElement("select");
+    select.className = "input";
+    select.setAttribute("aria-label", S.venues.flags.label());
+    for (const [value, label] of [
+      [FLAGS.base, S.venues.flags.baseOption()],
+      [FLAGS.legion, S.venues.flags.legionOption()],
+      [FLAGS.captain, S.venues.flags.captainOption()],
+    ]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      select.append(option);
+    }
+    select.value = player.flag || defaultFlag(player) || FLAGS.base;
+    select.addEventListener("change", () => {
+      players = setFlag(players, index, select.value, defaultFlag);
       draw();
     });
-    const caption = document.createElement("span");
-    caption.textContent = S.venues.rosterEditor.captain();
-    label.append(radio, caption);
-    return label;
+    return select;
   };
 
   const drawRemove = (index: number): HTMLElement => {
@@ -329,7 +390,20 @@ export function mountRosterEditor(container: HTMLElement): void {
     players.push(emptyPlayer());
     draw();
   });
+  // The team decides what a flag defaults to, so a changed team re-asks and the
+  // rows nobody has marked by hand follow it.
+  container.closest("form")?.addEventListener("change", (event) => {
+    const el = event.target;
+    if (el instanceof HTMLInputElement && (el.name === "team_kind" || el.hasAttribute("data-team-field"))) {
+      base = null;
+      void loadBase().then(() => {
+        players = players.map((p) => ({...p, flag: p.flag === FLAGS.captain ? p.flag : ""}));
+        flagUnflagged();
+      });
+    }
+  });
   draw();
+  void loadBase().then(flagUnflagged);
 }
 
 type BuffTeam = {id: number; name: string; town: string};

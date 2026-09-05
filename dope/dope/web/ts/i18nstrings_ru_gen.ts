@@ -1414,8 +1414,12 @@ export const RU: Strings = {
     },
     flags: {
       base: () => "Б",
+      baseOption: () => "Б — в базовом составе",
       captain: () => "К",
+      captainOption: () => "К — капитан",
+      label: () => "Флаг",
       legion: () => "Л",
+      legionOption: () => "Л — легионер",
     },
     game: {
       applicationsEmpty: () => "Заявок пока нет.",
@@ -1579,7 +1583,6 @@ export const RU: Strings = {
     },
     rosterEditor: {
       addPlayer: () => "Добавить игрока",
-      captain: () => "капитан",
       fillBase: () => "Добавить базовый состав",
       fillBaseNone: () => "Базовый состав неизвестен.",
       fillPrevious: () => "Выбрать из предыдущих составов",
@@ -1587,7 +1590,6 @@ export const RU: Strings = {
       fillPreviousTitle: () => "Предыдущие составы",
       gamesCount: (n: number) => `${n} ${plural("ru", n, "игра", "игры", "игр")}`,
       name: () => "Имя",
-      noCaptain: () => "Отметьте капитана.",
       notInBase: () => "нет в базе",
       patronymic: () => "Отчество",
       playerPlaceholder: () => "Фамилия Имя",

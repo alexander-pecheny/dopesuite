@@ -379,9 +379,6 @@ func applicationSection(p RegPage) *ui.Element {
 		if p.Application.Status == venues.StatusAccepted && p.GameHref != "" {
 			sect = append(sect, ui.Row(ui.Button(ui.Primary, ui.Href(p.GameHref), ui.Text(strs.Venues.Reg.TableBtn()))))
 		}
-		if len(p.Application.Roster) > 0 {
-			sect = append(sect, rosterFlagsTable(p.Application.Roster, p.Application.Flags))
-		}
 	}
 	if p.State == venues.RegClosed && p.Application == nil {
 		sect = append(sect, ui.Empty(ui.Text(strs.Venues.Reg.Closed())))
