@@ -1539,7 +1539,6 @@ export type Strings = {
       errorNotOpen: () => string;
       loginBtn: () => string;
       loginHint: () => string;
-      ratingTeamLabel: () => string;
       rosterLabel: () => string;
       scheduled: (at: string) => string;
       statusAccepted: () => string;
@@ -1549,8 +1548,13 @@ export type Strings = {
       submitEdit: () => string;
       submitNew: () => string;
       tableBtn: () => string;
+      teamKindExisting: () => string;
+      teamKindLabel: () => string;
+      teamKindNew: () => string;
       teamNameLabel: () => string;
       teamNumber: (n: string) => string;
+      teamPickRequired: () => string;
+      teamSearchPlaceholder: () => string;
       title: (venue: string) => string;
     };
     rosterEditor: {
@@ -1564,7 +1568,6 @@ export type Strings = {
       playerPlaceholder: () => string;
       remove: () => string;
       surname: () => string;
-      teamUnknown: () => string;
       tooMany: (n: string) => string;
     };
     tournaments: {

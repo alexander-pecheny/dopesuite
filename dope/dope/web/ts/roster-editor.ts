@@ -284,42 +284,53 @@ type BuffTournament = {id: number; name: string; type: string};
 
 const MANUAL = "\u0000manual";
 
-// nextTeamName is what the team-name field should say once a rating id resolves.
-// The id names the team, but a name typed by hand is the submitter's: it is
-// overwritten only while it is empty or still the answer to the last id.
-export function nextTeamName(current: string, previous: string, found: string): string {
-  if (found === "") return current;
-  if (current.trim() === "" || current === previous) return found;
-  return current;
-}
+// mountTeamField is the one team box. Which team an application is for is a
+// choice before it — a team rating.chgk.info already knows, or a new one — and
+// the box obeys that choice: a suggest over buff by name or by id, whose pick
+// fills the hidden rating id, or a plain name with no id at all.
+export function mountTeamField(field: HTMLInputElement): void {
+  const form = field.form;
+  const id = form?.querySelector<HTMLInputElement>("[data-team-id]") ?? null;
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  field.after(hint);
+  const seen = new Map<Choice, BuffTeam>();
+  const existing = (): boolean =>
+    form?.querySelector<HTMLInputElement>('input[name="team_kind"]:checked')?.value !== "new";
 
-// mountBuffTeamField names the team a rating id stands for as it is typed,
-// which is how a Representative tells 5723 from 5732.
-export function mountBuffTeamField(field: HTMLInputElement): void {
-  const warning = document.createElement("p");
-  warning.className = "hint";
-  field.after(warning);
-  const name = field.form?.elements.namedItem("team_name") as HTMLInputElement | null;
-  let timer = 0;
-  let previous = "";
-  const show = (): void => {
-    const id = Number(field.value.trim());
-    if (!id) {
-      warning.textContent = "";
-      return;
-    }
-    void fetchJSON<BuffTeam>(`/api/buff/team/${encodeURIComponent(id)}`).then((team) => {
-      warning.textContent = team ? "" : S.venues.rosterEditor.teamUnknown();
-      if (!team || !name) return;
-      name.value = nextTeamName(name.value, previous, team.name);
-      previous = team.name;
-    });
+  const say = (): void => {
+    // A team nobody picked from the list has no id, and under «Существующая
+    // команда» that is the one thing the form cannot save.
+    hint.textContent = existing() && !Number(id?.value) ? S.venues.reg.teamPickRequired() : "";
   };
-  field.addEventListener("input", () => {
-    window.clearTimeout(timer);
-    timer = window.setTimeout(show, 200);
+
+  autocomplete(field, async (text) => {
+    if (!existing() || text.trim() === "") return [];
+    const teams = (await fetchJSON<BuffTeam[]>(`/api/buff/teams?q=${encodeURIComponent(text)}`)) || [];
+    return teams.map((team) => {
+      const choice: Choice = {value: team.name, label: team.name, hint: `${team.id}${team.town ? ` · ${team.town}` : ""}`};
+      seen.set(choice, team);
+      return choice;
+    });
+  }, (choice) => {
+    const team = seen.get(choice);
+    if (id && team) id.value = String(team.id);
+    say();
   });
-  show();
+
+  // Typing past a pick unpicks it: the box no longer says what the id says.
+  field.addEventListener("input", () => {
+    const team = [...seen.values()].find((t) => t.name === field.value);
+    if (id && !team) id.value = "";
+    say();
+  });
+  form?.addEventListener("change", (event) => {
+    const el = event.target;
+    if (!(el instanceof HTMLInputElement) || el.name !== "team_kind") return;
+    if (id && !existing()) id.value = "";
+    say();
+  });
+  say();
 }
 
 // mountBuffTournamentField is the one tournament field: what is typed searches
@@ -354,7 +365,7 @@ export function mountBuffTournamentField(field: HTMLInputElement): void {
 
 export function mountRosterEditors(doc: Document): void {
   doc.querySelectorAll<HTMLElement>("[data-roster-editor]").forEach(mountRosterEditor);
-  doc.querySelectorAll<HTMLInputElement>("input[data-buff-team]").forEach(mountBuffTeamField);
+  doc.querySelectorAll<HTMLInputElement>("input[data-team-field]").forEach(mountTeamField);
   doc.querySelectorAll<HTMLInputElement>("input[data-buff-tournament]").forEach(mountBuffTournamentField);
   doc.querySelectorAll<HTMLInputElement>("input[data-rating-venue]").forEach(mountRatingVenueField);
 }

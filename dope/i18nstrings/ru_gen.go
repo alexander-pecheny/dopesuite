@@ -2052,7 +2052,6 @@ var RU = Strings{
 			ErrorNotOpen:       func() string { return "Регистрация ещё не открыта." },
 			LoginBtn:           func() string { return "Войти" },
 			LoginHint:          func() string { return "Чтобы подать заявку, войдите через Telegram." },
-			RatingTeamLabel:    func() string { return "ID команды на rating.chgk.info (0 — разовая команда)" },
 			RosterLabel:        func() string { return "Состав" },
 			Scheduled:          func(at string) string { return fmt.Sprintf("Регистрация откроется %s.", at) },
 			StatusAccepted:     func() string { return "принята" },
@@ -2062,9 +2061,16 @@ var RU = Strings{
 			SubmitEdit:         func() string { return "Сохранить заявку" },
 			SubmitNew:          func() string { return "Подать заявку" },
 			TableBtn:           func() string { return "Таблица игры" },
+			TeamKindExisting:   func() string { return "Существующая команда" },
+			TeamKindLabel:      func() string { return "Команда" },
+			TeamKindNew:        func() string { return "Новая команда" },
 			TeamNameLabel:      func() string { return "Название команды" },
 			TeamNumber:         func(n string) string { return fmt.Sprintf("номер команды %s", n) },
-			Title:              func(venue string) string { return fmt.Sprintf("Регистрация · %s", venue) },
+			TeamPickRequired: func() string {
+				return "Выберите команду из списка или подайте заявку новой командой."
+			},
+			TeamSearchPlaceholder: func() string { return "название или id на rating.chgk.info" },
+			Title:                 func(venue string) string { return fmt.Sprintf("Регистрация · %s", venue) },
 		},
 		RosterEditor: VenuesRosterEditorStrings{
 			AddPlayer: func() string { return "Добавить игрока" },
@@ -2079,7 +2085,6 @@ var RU = Strings{
 			PlayerPlaceholder: func() string { return "Фамилия Имя" },
 			Remove:            func() string { return "Убрать" },
 			Surname:           func() string { return "Фамилия" },
-			TeamUnknown:       func() string { return "Буфф не знает такой команды" },
 			TooMany:           func(n string) string { return fmt.Sprintf("В составе больше %s игроков.", n) },
 		},
 		Tournaments: VenuesTournamentsStrings{

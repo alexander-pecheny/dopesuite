@@ -28,3 +28,18 @@ func TestHumanizeFestDates(t *testing.T) {
 		})
 	}
 }
+
+// A moment as it is said out loud, weekday and all — a Representative picks a
+// game by which evening it is.
+func TestHumanizeDateTime(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"2026-09-05 18:45", "5 сентября 2026 (суббота), 18:45"},
+		{"2026-01-01 09:00", "1 января 2026 (четверг), 09:00"},
+		{"", ""},
+		{"не дата", "не дата"},
+	} {
+		if got := HumanizeDateTime(c.in); got != c.want {
+			t.Errorf("HumanizeDateTime(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

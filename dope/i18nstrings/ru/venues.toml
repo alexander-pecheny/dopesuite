@@ -164,9 +164,16 @@ team_number = 'номер команды {{.n}}'
 table_btn = "Таблица игры"
 submit_new = "Подать заявку"
 submit_edit = "Сохранить заявку"
-# The заявка's own fields, and the состав table under an accepted one.
+# The заявка's own fields, and the состав table under an accepted one. A team
+# either plays under a name rating.chgk.info already knows or under a new one,
+# and that is one choice with one box after it rather than two boxes to fill in
+# some combination of.
+team_kind_label = "Команда"
+team_kind_existing = "Существующая команда"
+team_kind_new = "Новая команда"
 team_name_label = "Название команды"
-rating_team_label = "ID команды на rating.chgk.info (0 — разовая команда)"
+team_search_placeholder = "название или id на rating.chgk.info"
+team_pick_required = "Выберите команду из списка или подайте заявку новой командой."
 roster_label = "Состав"
 col_player = "Игрок"
 col_id = "ID"
@@ -284,7 +291,6 @@ games_count = '{{.n}} {{plural .n "игра" "игры" "игр"}}'
 # What the editor refuses to save, and what it says about an unknown team.
 too_many = 'В составе больше {{.n}} игроков.'
 no_captain = "Отметьте капитана."
-team_unknown = "Буфф не знает такой команды"
 
 [od_contested]
 # The спорный dialog on the ОД page (web/ts/od.ts): a host records an answer

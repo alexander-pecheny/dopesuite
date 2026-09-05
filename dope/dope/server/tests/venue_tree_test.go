@@ -147,21 +147,18 @@ func TestRegistrationIsSetUpByItsDialog(t *testing.T) {
 		return got
 	}
 
-	// newVenueSlot opens the registration for the tests that need one open; this
-	// one is about the Слот as it is made.
-	if _, err := db.Exec(`update slots set reg_closed = 1 where id = ?`, slot.ID); err != nil {
-		t.Fatal(err)
-	}
-	if state().RegSetUp {
-		t.Fatal("a fresh Слот has a registration nobody set up")
+	// A fresh Слот takes заявки on the link it was born with; what it does not
+	// do is put that link on the Venue's page.
+	if fresh := state(); fresh.RegShut || fresh.LinkVisible {
+		t.Fatalf("a fresh Слот: shut=%v visible=%v", fresh.RegShut, fresh.LinkVisible)
 	}
 	post(url.Values{"link_visible": {"1"}})
 	got := state()
-	if !got.RegSetUp || !got.LinkVisible {
-		t.Fatalf("the first save left setUp=%v visible=%v", got.RegSetUp, got.LinkVisible)
+	if got.RegShut || !got.LinkVisible {
+		t.Fatalf("the first save left shut=%v visible=%v", got.RegShut, got.LinkVisible)
 	}
-	if venues.Registration(got.RegOpensAt, got.RegClosesAt, got.RegSetUp, time.Now().UTC()) != venues.RegOpen {
-		t.Error("setting it up did not open it")
+	if venues.Registration(got.RegOpensAt, got.RegClosesAt, got.RegShut, time.Now().UTC()) != venues.RegOpen {
+		t.Error("the registration is not open")
 	}
 	post(url.Values{"reg_opens": {"at"}, "reg_opens_at": {"2026-09-04 19:00"},
 		"reg_closes": {"at"}, "reg_closes_at": {"2026-09-05 19:00"}})
@@ -169,7 +166,7 @@ func TestRegistrationIsSetUpByItsDialog(t *testing.T) {
 	if got.RegOpensAt != "2026-09-04 19:00" || got.RegClosesAt != "2026-09-05 19:00" || got.LinkVisible {
 		t.Fatalf("the window did not save: %+v", got)
 	}
-	if venues.Registration(got.RegOpensAt, got.RegClosesAt, got.RegSetUp,
+	if venues.Registration(got.RegOpensAt, got.RegClosesAt, got.RegShut,
 		time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC)) != venues.RegClosed {
 		t.Error("a window that has run out still takes заявки")
 	}

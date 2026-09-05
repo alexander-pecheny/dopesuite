@@ -32,9 +32,12 @@ test: build-web
     go test -short ./...
     deno test --parallel dope/web/jstest/
 
+# -count=1 because this is the gate: go caches a pass on unchanged inputs, and a
+# test that reads the clock can rot into a false pass that the cache keeps
+# serving. The inner loop above stays cached.
 test-full: build-web
     cd .. && just typecheck
-    go test ./...
+    go test -count=1 ./...
     deno test --parallel dope/web/jstest/
 
 # Frontend unit tests only (runs against the built dist — see build-web).
