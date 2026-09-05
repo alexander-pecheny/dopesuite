@@ -317,7 +317,7 @@ CREATE TABLE slot_application_versions(
   rating_team_id integer not null default 0,
   roster_json text not null default '[]',
   created_by integer references users(id),
-  created_at text not null,
+  created_at text not null, team_alias TEXT NOT NULL DEFAULT '',
   unique(application_id, seq)
 );
 

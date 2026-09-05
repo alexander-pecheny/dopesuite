@@ -69,9 +69,12 @@ type Application struct {
 	SubmitterTgID int64
 	Seq           int64
 	TeamName      string
-	RatingTeamID  int64
-	Roster        []RosterPlayer
-	Number        int64
+	// Alias is the one-off name as its filer typed it, empty when the team plays
+	// under its own; TeamName is what the game calls the team either way.
+	Alias        string
+	RatingTeamID int64
+	Roster       []RosterPlayer
+	Number       int64
 }
 
 type Version struct {
@@ -189,7 +192,7 @@ update slots set reg_opens_at = ?, reg_closes_at = ?, link_visible = ?, updated_
 }
 
 // ShutSlotRegTx closes a registration on the spot, or opens one that was shut.
-// It is the Representative's own hand on it, apart from the window: a Слот that
+// It is the Representative's own hand on it, apart from the window: a Slot that
 // filled up tonight is shut tonight, not by editing a date to be in the past.
 func ShutSlotRegTx(ctx context.Context, tx *sql.Tx, slotID int64, shut bool) error {
 	_, err := tx.ExecContext(ctx, `update slots set reg_closed = ?, updated_at = ? where id = ?`,
@@ -203,25 +206,32 @@ func NewTokenTx(ctx context.Context, tx *sql.Tx, slotID int64) error {
 	return err
 }
 
-const applicationSelect = `
+// An application is read in two shapes: on its own, and with the Slot and Venue
+// it was filed at, which is what a person's own list needs. The two share their
+// columns and their joins so a change to either reaches both.
+const applicationCols = `
 select a.id, a.slot_id, a.user_id, a.status, coalesce(a.participant_id, 0), a.created_at, a.updated_at,
        coalesce(nullif(u.telegram_username, ''), nullif(u.username, ''), ''),
        coalesce(u.telegram_user_id, 0),
-       coalesce(v.seq, 0), coalesce(v.team_name, ''), coalesce(v.rating_team_id, 0), coalesce(v.roster_json, '[]'),
-       coalesce(gp.number, 0)
+       coalesce(v.seq, 0), coalesce(v.team_name, ''), coalesce(v.team_alias, ''), coalesce(v.rating_team_id, 0), coalesce(v.roster_json, '[]'),
+       coalesce(gp.number, 0)`
+
+const applicationJoins = `
 from slot_applications a
 join users u on u.id = a.user_id
 join slots sl on sl.id = a.slot_id
 left join game_participants gp on gp.participant_id = a.participant_id and gp.game_id = sl.game_id
 left join slot_application_versions v on v.application_id = a.id
-  and v.seq = (select max(seq) from slot_application_versions w where w.application_id = a.id)
+  and v.seq = (select max(seq) from slot_application_versions w where w.application_id = a.id)`
+
+const applicationSelect = applicationCols + applicationJoins + `
 where `
 
 func scanApplication(row interface{ Scan(...any) error }) (Application, error) {
 	var a Application
 	var roster string
 	err := row.Scan(&a.ID, &a.SlotID, &a.UserID, &a.Status, &a.ParticipantID, &a.CreatedAt, &a.UpdatedAt,
-		&a.Submitter, &a.SubmitterTgID, &a.Seq, &a.TeamName, &a.RatingTeamID, &roster, &a.Number)
+		&a.Submitter, &a.SubmitterTgID, &a.Seq, &a.TeamName, &a.Alias, &a.RatingTeamID, &roster, &a.Number)
 	a.Roster = ParseRoster(roster)
 	return a, err
 }
@@ -233,6 +243,66 @@ func SlotApplications(ctx context.Context, q store.Queryer, slotID int64) ([]App
 
 func UserApplication(ctx context.Context, q store.Queryer, slotID, userID int64) (Application, error) {
 	return scanApplication(q.QueryRowContext(ctx, applicationSelect+`a.slot_id = ? and a.user_id = ?`, slotID, userID))
+}
+
+// FiledApplication is one of a person's own applications as their list shows
+// it: the application, and which game at which Venue it is for.
+type FiledApplication struct {
+	Application
+	SlotStartsAt string
+	RegToken     string
+	VenueRef     string
+	VenueTitle   string
+}
+
+func UserApplications(ctx context.Context, q store.Queryer, userID int64) ([]FiledApplication, error) {
+	query := applicationCols + `, coalesce(sl.starts_at, ''), sl.reg_token,
+       coalesce(nullif(f.slug, ''), cast(f.id as text)), f.title` + applicationJoins + `
+join fests f on f.id = sl.fest_id
+where a.user_id = ?
+order by case when sl.starts_at = '' then 1 else 0 end, sl.starts_at, a.id`
+	return store.CollectRows(ctx, q, query, []any{userID},
+		func(rows *sql.Rows) (FiledApplication, error) {
+			var f FiledApplication
+			var roster string
+			err := rows.Scan(&f.ID, &f.SlotID, &f.UserID, &f.Status, &f.ParticipantID, &f.CreatedAt, &f.UpdatedAt,
+				&f.Submitter, &f.SubmitterTgID, &f.Seq, &f.TeamName, &f.Alias, &f.RatingTeamID, &roster, &f.Number,
+				&f.SlotStartsAt, &f.RegToken, &f.VenueRef, &f.VenueTitle)
+			f.Roster = ParseRoster(roster)
+			return f, err
+		})
+}
+
+// RecentRoster is a roster this person has named before, with the team it was
+// named for. Most people play with much the same six week after week, so the
+// last few are a better starting point than an empty form.
+type RecentRoster struct {
+	TeamName string         `json:"teamName"`
+	At       string         `json:"at"`
+	Roster   []RosterPlayer `json:"roster"`
+}
+
+func RecentRosters(ctx context.Context, q store.Queryer, userID int64, limit int) ([]RecentRoster, error) {
+	if limit <= 0 || limit > 20 {
+		limit = 10
+	}
+	// One per application, its latest version: the list wants the six people,
+	// not every edit that got to them.
+	return store.CollectRows(ctx, q, `
+select coalesce(v.team_name, ''), v.created_at, coalesce(v.roster_json, '[]')
+from slot_application_versions v
+join slot_applications a on a.id = v.application_id
+where a.user_id = ?
+  and v.seq = (select max(seq) from slot_application_versions w where w.application_id = a.id)
+  and v.roster_json not in ('', '[]')
+order by v.created_at desc
+limit ?`, []any{userID, limit}, func(rows *sql.Rows) (RecentRoster, error) {
+		var r RecentRoster
+		var roster string
+		err := rows.Scan(&r.TeamName, &r.At, &roster)
+		r.Roster = ParseRoster(roster)
+		return r, err
+	})
 }
 
 func LoadApplication(ctx context.Context, q store.Queryer, appID int64) (Application, error) {
@@ -257,7 +327,7 @@ order by v.seq desc`, []any{appID}, func(rows *sql.Rows) (Version, error) {
 
 var ErrNoTeamName = errors.New(dopestrings.Default.Venues.Errors.NoTeamName())
 
-func SaveVersionTx(ctx context.Context, tx *sql.Tx, slotID, userID, authorID int64, teamName string, ratingTeamID int64, roster []RosterPlayer) (int64, error) {
+func SaveVersionTx(ctx context.Context, tx *sql.Tx, slotID, userID, authorID int64, teamName, alias string, ratingTeamID int64, roster []RosterPlayer) (int64, error) {
 	teamName = strings.TrimSpace(teamName)
 	if teamName == "" {
 		return 0, ErrNoTeamName
@@ -282,8 +352,8 @@ values(?, ?, 'pending', ?, ?)`, slotID, userID, now, now); err != nil {
 		return 0, err
 	}
 	if _, err := tx.ExecContext(ctx, `
-insert into slot_application_versions(application_id, seq, team_name, rating_team_id, roster_json, created_by, created_at)
-values(?, ?, ?, ?, ?, ?, ?)`, appID, seq, teamName, ratingTeamID, MarshalRoster(roster), authorID, now); err != nil {
+insert into slot_application_versions(application_id, seq, team_name, team_alias, rating_team_id, roster_json, created_by, created_at)
+values(?, ?, ?, ?, ?, ?, ?, ?)`, appID, seq, teamName, alias, ratingTeamID, MarshalRoster(roster), authorID, now); err != nil {
 		return 0, err
 	}
 	return appID, nil

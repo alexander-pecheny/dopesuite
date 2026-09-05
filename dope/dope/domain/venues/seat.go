@@ -64,6 +64,20 @@ func SetStatusTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string, a
 	return err
 }
 
+// WithdrawApplicationTx takes an application back: its filer changed their
+// mind, or the team is not coming. It goes through the same unseating a host's
+// decline does, so a seat with results in it refuses to go, and then the
+// application itself is gone rather than sitting there declined — the person is
+// free to file again.
+func WithdrawApplicationTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string, appID int64) error {
+	if err := SetStatusTx(ctx, tx, slot, venueCity, appID, StatusDeclined); err != nil {
+		return err
+	}
+	// slot_application_versions cascades on the delete.
+	_, err := tx.ExecContext(ctx, `delete from slot_applications where id = ?`, appID)
+	return err
+}
+
 // ReseatTx folds the accepted applications into the Slot's Game: each keeps the
 // Number it holds, a newly accepted one takes the lowest free one. A team the
 // host seated by hand is left where it is — a application owns its own seat and no

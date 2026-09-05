@@ -199,6 +199,7 @@ func Main() {
 	srv.authRoutes(srv.api())
 	mux.Handle("/api/auth/", srv.api().Mux)
 	mux.Handle("/api/buff/", srv.api().Mux)
+	mux.Handle("/api/venues/", srv.api().Mux)
 	mux.Handle("/api/rating/", srv.api().Mux)
 	mux.HandleFunc("/events", srv.handleEvents)
 	mux.HandleFunc("/host-events", srv.handleHostEvents)

@@ -60,6 +60,8 @@ type ApplicationView struct {
 	Status       string
 	StatusLabel  string
 	TeamName     string
+	Alias        string
+	RealTeamName string
 	RatingTeamID int64
 	Roster       []venues.RosterPlayer
 	Flags        []string
@@ -81,11 +83,25 @@ func ratingVenueLink(id int64) ui.Item {
 		ui.Text(strs.Venues.Public.RatingLink()))
 }
 
-func VenuesIndexDoc(rows []VenueRow) *ui.Doc {
+// MineRow is one of the reader's own applications as the index lists it.
+type MineRow struct {
+	Date      string
+	VenueRef  string
+	VenueName string
+	Team      string
+	Status    string
+	RegToken  string
+	AppID     int64
+}
+
+func VenuesIndexDoc(rows []VenueRow, mine []MineRow, loggedIn bool) *ui.Doc {
 	page := []ui.Item{ui.Title(strs.Venues.Public.IndexTitle()), ui.PagePublic, ui.Classicscripts("dist/pageforms.js")}
 	page = append(page, jumpHostNav("/host", dopestrings.Default.Host.Pages.JumpHostLabel(), dopestrings.Default.Host.Pages.JumpHostTitleIndex())...)
 	page = append(page, ui.Publictopbar(pages.Trail([]ui.Item{pages.HomeCrumb()}, strs.Venues.Public.IndexTitle())))
 	page = append(page, PublicTabs("/venues"))
+	if loggedIn {
+		page = append(page, mineSection(mine))
+	}
 	if len(rows) == 0 {
 		page = append(page, ui.Empty(ui.Text(strs.Venues.Public.IndexEmpty())))
 		return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
@@ -113,6 +129,36 @@ func VenuesIndexDoc(rows []VenueRow) *ui.Doc {
 	}
 	page = append(page, ui.Table(table...))
 	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
+}
+
+// mineSection is every application the reader has out, at every Venue: they
+// file at several and would otherwise have to keep the registration links to
+// find them again. Each row leads back to its own form, or withdraws it.
+func mineSection(rows []MineRow) *ui.Element {
+	sect := []ui.Item{ui.Subhead(ui.Text(strs.Venues.Mine.Subhead()))}
+	if len(rows) == 0 {
+		return ui.Section(append(sect, ui.Empty(ui.Text(strs.Venues.Mine.Empty())))...)
+	}
+	table := []ui.Item{ui.Scroll(), ui.Trow(
+		ui.Hcell(ui.Text(strs.Venues.Mine.ColGame())), ui.Hcell(ui.Text(strs.Venues.Mine.ColVenue())),
+		ui.Hcell(ui.Text(strs.Venues.Mine.ColTeam())), ui.Hcell(ui.Text(strs.Venues.Mine.ColStatus())),
+		ui.Hcell(ui.Text("")),
+	)}
+	for _, m := range rows {
+		reg := "/reg/" + m.RegToken
+		table = append(table, ui.Trow(
+			ui.Cell(ui.Link(ui.Href(reg), ui.Text(venues.HumanDate(m.Date)))),
+			ui.Cell(ui.Link(ui.Href("/venue/"+m.VenueRef), ui.Text(m.VenueName))),
+			ui.Cell(ui.Text(m.Team)),
+			ui.Cell(ui.Text(m.Status)),
+			ui.Cell(ui.Row(ui.SpaceSM, ui.AlignCenter, ui.Wrap(),
+				ui.Button(ui.Ghost, ui.Small(), ui.Href(reg), ui.Text(strs.Venues.Mine.EditBtn())),
+				ui.Form(ui.Method("post"), ui.Action(reg+"/withdraw"),
+					ui.Data("confirm", strs.Venues.Reg.WithdrawConfirm()),
+					ui.Button(ui.Danger, ui.Small(), ui.Submit(), ui.Text(strs.Venues.Reg.WithdrawBtn()))))),
+		))
+	}
+	return ui.Section(append(sect, ui.Table(table...))...)
 }
 
 func slotTable(title string, rows []SlotRow) *ui.Element {
@@ -181,20 +227,27 @@ func rosterFlagsTable(players []venues.RosterPlayer, flags []string) *ui.Element
 	return ui.Table(table...)
 }
 
-func rosterEditor(players []venues.RosterPlayer) *ui.Element {
-	return ui.Col(ui.SpaceSM, ui.Data("roster-editor", ""),
+func rosterEditor(players []venues.RosterPlayer, at string) *ui.Element {
+	return ui.Col(ui.SpaceSM, ui.Data("roster-editor", at),
 		ui.Hiddenfield(ui.Data("roster-json", ""), ui.Name("roster_json"), ui.Value(venues.MarshalRoster(players))),
 	)
 }
 
-// applicationForm is the application as its submitter edits it. The roster is asked
-// for only once the application is accepted — before that a Slot has more applicants
-// than seats, and naming six players is work for a team that has one.
-func applicationForm(action string, app *ApplicationView, submit string, roster bool) *ui.Element {
-	teamName, ratingID := "", ""
+// applicationForm is the application as its submitter edits it, roster and all.
+// Naming six players used to wait for the seat, on the grounds that it is work;
+// it is not, once the base roster and the last one used are each one button
+// away.
+func applicationForm(action string, app *ApplicationView, submit, at string) *ui.Element {
+	teamName, alias, ratingID := "", "", ""
 	var players []venues.RosterPlayer
 	if app != nil {
+		// TeamName is the alias when there is one, and the box above the alias
+		// is for the team itself, so it shows what the rating id names instead.
 		teamName = app.TeamName
+		alias = app.Alias
+		if alias != "" {
+			teamName = app.RealTeamName
+		}
 		if app.RatingTeamID > 0 {
 			ratingID = strconv.FormatInt(app.RatingTeamID, 10)
 		}
@@ -202,20 +255,52 @@ func applicationForm(action string, app *ApplicationView, submit string, roster 
 	}
 	form := []ui.Item{ui.DirCol, ui.Method("post"), ui.Action(action), ui.Autocomplete("off"),
 		teamKindField(app),
-		// One box either way. Under «Существующая команда» it is a suggest over
-		// buff by name or by id and the id it settles on goes in the hidden
-		// field; under «Новая команда» it is just the name.
+		// One box either way. For an existing team it is a suggest over buff by
+		// name or by id and the id it settles on goes in the hidden field; for a
+		// new one it is just the name.
 		ui.Field(ui.Label(strs.Venues.Reg.TeamNameLabel()),
 			ui.Textfield(ui.Name("team_name"), ui.Value(teamName), ui.Required(),
 				ui.Placeholder(strs.Venues.Reg.TeamSearchPlaceholder()),
 				ui.Data("team-field", ""), ui.Autocomplete("off"))),
 		ui.Hiddenfield(ui.Data("team-id", ""), ui.Name("rating_team_id"), ui.Value(ratingID)),
+		aliasField(teamKind(app), alias),
 	}
-	if roster {
-		form = append(form, ui.Field(ui.Label(strs.Venues.Reg.RosterLabel()), rosterEditor(players)))
-	}
+	form = append(form, ui.Field(ui.Label(strs.Venues.Reg.RosterLabel()), rosterEditor(players, at)))
 	form = append(form, ui.Row(ui.Button(ui.Submit(), ui.Text(submit))))
 	return ui.Form(form...)
+}
+
+// teamKind is which of the two an application is for: a team with no rating id
+// behind it was typed by hand, and a form nobody has filed yet starts on the
+// one that most applications are.
+func teamKind(app *ApplicationView) string {
+	if app != nil && app.RatingTeamID == 0 && app.TeamName != "" {
+		return "new"
+	}
+	return "existing"
+}
+
+// aliasField is the name a team is announced under for this one game, when it
+// is not the name it plays under. It belongs to an existing team only — a new
+// team's one-off name is simply its name — and sits behind a tick, because an
+// empty box beside the team's own name only invites the question of which of
+// the two counts.
+func aliasField(kind, alias string) *ui.Element {
+	toggle := []ui.Item{ui.Name("team_alias_on"), ui.Value("1"), ui.Text(strs.Venues.Reg.TeamAliasToggle())}
+	field := []ui.Item{ui.Data("when", "team_alias_on")}
+	outer := []ui.Item{ui.SpaceSM, ui.Data("when", "team_kind=existing")}
+	if alias != "" {
+		toggle = append(toggle, ui.Checked())
+	} else {
+		field = append(field, ui.Hidden())
+	}
+	if kind != "existing" {
+		outer = append(outer, ui.Hidden())
+	}
+	return ui.Col(append(outer, ui.Checkbox(toggle...),
+		ui.Col(append(field, ui.Field(ui.Label(strs.Venues.Reg.TeamAliasLabel()),
+			ui.Textfield(ui.Name("team_alias"), ui.Value(alias),
+				ui.Placeholder(strs.Venues.Reg.TeamAliasPlaceholder()), ui.Autocomplete("off"))))...))...)
 }
 
 // teamKindField is the choice the box after it obeys. An application already
@@ -223,7 +308,7 @@ func applicationForm(action string, app *ApplicationView, submit string, roster 
 func teamKindField(app *ApplicationView) *ui.Element {
 	existing := []ui.Item{ui.Name("team_kind"), ui.Value("existing"), ui.Text(strs.Venues.Reg.TeamKindExisting())}
 	fresh := []ui.Item{ui.Name("team_kind"), ui.Value("new"), ui.Text(strs.Venues.Reg.TeamKindNew())}
-	if app != nil && app.RatingTeamID == 0 && app.TeamName != "" {
+	if teamKind(app) == "new" {
 		fresh = append(fresh, ui.Checked())
 	} else {
 		existing = append(existing, ui.Checked())
@@ -303,11 +388,9 @@ func applicationSection(p RegPage) *ui.Element {
 		return ui.Section(sect...)
 	}
 	submit := strs.Venues.Reg.SubmitNew()
-	accepted := false
 	if p.Application != nil {
 		submit = strs.Venues.Reg.SubmitEdit()
-		accepted = p.Application.Status == venues.StatusAccepted
 	}
-	sect = append(sect, applicationForm(action, p.Application, submit, accepted))
+	sect = append(sect, applicationForm(action, p.Application, submit, p.Date))
 	return ui.Section(sect...)
 }

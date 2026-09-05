@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -242,6 +243,28 @@ limit ?`, id, likeInfix(strings.ToLower(query)), id, capLimit(limit))
 		}
 		out = append(out, t)
 	}
+	return out
+}
+
+// BasePlayers is the base roster as people rather than ids: the составы form
+// offers it as a starting point, and a list of numbers would be no offer.
+func (s *Store) BasePlayers(ctx context.Context, teamID int64, at time.Time) []Player {
+	ids, ok := s.BaseRoster(ctx, teamID, at)
+	if !ok {
+		return nil
+	}
+	out := make([]Player, 0, len(ids))
+	for id := range ids {
+		if p, ok := s.Player(ctx, id); ok {
+			out = append(out, p)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Surname != out[j].Surname {
+			return out[i].Surname < out[j].Surname
+		}
+		return out[i].Name < out[j].Name
+	})
 	return out
 }
 

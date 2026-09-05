@@ -233,11 +233,48 @@ func newVenueUser(t *testing.T, db *sql.DB, name string) int64 {
 func fileApplication(t *testing.T, db *sql.DB, slot venues.Slot, userID int64, name string, ratingID int64, roster []venues.RosterPlayer) {
 	t.Helper()
 	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
-		_, err := venues.SaveVersionTx(ctx, tx, slot.ID, userID, userID, name, ratingID, roster)
+		_, err := venues.SaveVersionTx(ctx, tx, slot.ID, userID, userID, name, "", ratingID, roster)
 		return err
 	}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// A person takes their own заявка back, and it is gone rather than declined —
+// the seat it held goes with it, and they are free to file again.
+func TestWithdrawnApplicationLeavesNoSeat(t *testing.T) {
+	db := venueTestDB(t)
+	festID, slot := newVenueSlot(t, db, []int{2})
+	alice := newVenueUser(t, db, "alice")
+	fileApplication(t, db, slot, alice, "Мантисса", 0, nil)
+	setStatus(t, db, slot, alice, venues.StatusAccepted)
+
+	app, err := venues.UserApplication(t.Context(), db, slot.ID, alice)
+	if err != nil || app.Number == 0 {
+		t.Fatalf("accepted %+v %v", app, err)
+	}
+	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+		return venues.WithdrawApplicationTx(ctx, tx, slot, "", app.ID)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := venues.UserApplication(t.Context(), db, slot.ID, alice); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("the заявка survived: %v", err)
+	}
+	var seats int
+	if err := db.QueryRow(`select count(*) from participants where game_id = ?`, slot.GameID).Scan(&seats); err != nil {
+		t.Fatal(err)
+	}
+	if seats != 0 {
+		t.Errorf("the seat outlived the заявка: %d", seats)
+	}
+	// And filing again works, which is the point of taking it back rather than
+	// leaving it declined.
+	fileApplication(t, db, slot, alice, "Мантисса", 0, nil)
+	if _, err := venues.UserApplication(t.Context(), db, slot.ID, alice); err != nil {
+		t.Fatalf("could not file again: %v", err)
+	}
+	_ = festID
 }
 
 func fileApplicationFor(t *testing.T, db *sql.DB, slot venues.Slot, username, name string, ratingID int64, roster []venues.RosterPlayer) {

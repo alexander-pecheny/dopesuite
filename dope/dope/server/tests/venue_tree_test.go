@@ -335,9 +335,9 @@ func TestVenueLandingKeepsTheRegToken(t *testing.T) {
 	}
 }
 
-// The roster is asked for after the application is accepted, so a POST that carries
-// one before then is not believed.
-func TestPendingApplicationStoresNoRoster(t *testing.T) {
+// The roster is the filer's from the first moment: a team that knows its six
+// says so when it applies, and does not have to come back once it has a seat.
+func TestApplicationKeepsItsRosterFromTheStart(t *testing.T) {
 	db := venueTestDB(t)
 	_, slot := newVenueSlot(t, db, []int{2})
 	srv := dopeserver.NewTestServer(func(e *core.Engine) {
@@ -365,8 +365,8 @@ func TestPendingApplicationStoresNoRoster(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(app.Roster) != 0 {
-		t.Fatalf("a pending заявка kept a roster: %+v", app.Roster)
+	if len(app.Roster) != 1 || app.Roster[0].Surname != "Иванов" {
+		t.Fatalf("a pending application lost its roster: %+v", app.Roster)
 	}
 
 	setStatus(t, db, slot, userID, venues.StatusAccepted)
@@ -376,6 +376,6 @@ func TestPendingApplicationStoresNoRoster(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(app.Roster) != 1 || app.Roster[0].Surname != "Иванов" {
-		t.Fatalf("an accepted заявка should keep its roster: %+v", app.Roster)
+		t.Fatalf("an accepted application should keep its roster: %+v", app.Roster)
 	}
 }

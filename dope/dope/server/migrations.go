@@ -934,6 +934,15 @@ create table if not exists od_contested(
 		_, err := db.Exec(`update slots set reg_closed = 0`)
 		return err
 	}},
+	{Version: 35, Name: "slot_application_versions.team_alias", Up: func(db *sql.DB) error {
+		// The name a team is announced under for one game when it is not the
+		// name it plays under. team_name stays what the game calls the team —
+		// everything downstream seats and displays by it — and this is what the
+		// filer typed, so the form they come back to still shows their choice.
+		return store.AddColumnsIfMissing(db, "slot_application_versions", []store.ColumnSpec{
+			{Name: "team_alias", Type: "TEXT NOT NULL DEFAULT ''"},
+		})
+	}},
 }
 
 func migrateDB(db *sql.DB) error { return schema.Apply(db, migrations) }
