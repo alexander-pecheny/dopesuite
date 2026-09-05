@@ -176,8 +176,8 @@ func NewToken() string {
 	return base64.RawURLEncoding.EncodeToString(buf)
 }
 
-// HumanDate is a Slot's own time as a person says it: «5 сентября 2026
-// (суббота), 18:45». A Slot with no time yet has nothing to say.
+// HumanDate is a Slot's own time as a person says it, weekday and all. A Slot
+// with no time yet has nothing to say.
 func HumanDate(startsAt string) string {
 	return util.HumanizeDateTime(FormatTime(startsAt))
 }

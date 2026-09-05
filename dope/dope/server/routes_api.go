@@ -79,12 +79,25 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("DELETE "+game+"/contested", route.Editor, s.scopedContestedDelete)
 	t.Handle("GET /api/rating/venues", route.Session, s.ratingVenues)
 	s.buffRoutes(t)
+	s.venueApiRoutes(t)
 	return t
 }
 
 // buffRoutes are the thin JSON reads over buff's mirror the roster and
 // tournament suggests type against (ADR-0020). A session is all they ask:
 // they expose nothing dope's users cannot read on rating.chgk.info.
+// venueApiRoutes are the ones a person filing an application reaches: their own
+// past rosters, and nobody else's.
+func (s *server) venueApiRoutes(t *route.Table) {
+	t.Handle("GET /api/venues/my-rosters", route.Session, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+		rosters, err := venues.RecentRosters(r.Context(), s.eng.DB, sc.User.UserID, 10)
+		if err != nil {
+			return err
+		}
+		return route.JSON(w, rosters)
+	})
+}
+
 func (s *server) buffRoutes(t *route.Table) {
 	buff := func() *buffdb.Store { return s.eng.BuffMirror() }
 	t.Handle("GET /api/buff/players", route.Session, func(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
@@ -92,6 +105,19 @@ func (s *server) buffRoutes(t *route.Table) {
 	})
 	t.Handle("GET /api/buff/teams", route.Session, func(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
 		return route.JSON(w, buff().Teams(r.Context(), r.URL.Query().Get("q"), suggestLimit(r)))
+	})
+	// The base roster as people, for the button that fills a roster from it: the
+	// date decides which season's roster counts, so the form passes the game's.
+	t.Handle("GET /api/buff/team/{id}/roster", route.Session, func(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			return route.BadRequest("bad team id")
+		}
+		at, ok := venues.ParseTime(r.URL.Query().Get("on"))
+		if !ok {
+			at = time.Now().UTC()
+		}
+		return route.JSON(w, buff().BasePlayers(r.Context(), id, at))
 	})
 	t.Handle("GET /api/buff/team/{id}", route.Session, func(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
 		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)

@@ -45,6 +45,7 @@ func (s *Server) VenueRoutes() *route.Table {
 			return s.renderRegPage(w, r, r.PathValue("token"), "", "")
 		})
 		t.Handle("POST /reg/{token}", route.Session, s.handleRegSubmit)
+		t.Handle("POST /reg/{token}/withdraw", route.Session, s.handleRegWithdraw)
 		t.Handle("GET /vote/{token}", route.Public, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 			return s.renderVotePage(w, r, r.PathValue("token"), "")
 		})
@@ -85,7 +86,59 @@ func (s *Server) renderVenuesIndex(w http.ResponseWriter, r *http.Request, _ rou
 		}
 		return a < b
 	})
-	pages.RenderDoc(w, s.h.Engine().AssetETags, VenuesIndexDoc(rows))
+	// The index is public, so the dispatcher has not looked anybody up: the
+	// reader's own applications ask for themselves.
+	user, signedIn := s.h.Engine().LookupSession(r)
+	mine := []MineRow(nil)
+	if signedIn {
+		mine = s.myApplications(r, user.UserID)
+	}
+	pages.RenderDoc(w, s.h.Engine().AssetETags, VenuesIndexDoc(rows, mine, signedIn))
+	return nil
+}
+
+// myApplications is what the index lists back to its reader. It is their own
+// and nobody else's, so a page served to a stranger simply has none.
+func (s *Server) myApplications(r *http.Request, userID int64) []MineRow {
+	filed, err := venues.UserApplications(r.Context(), s.h.Engine().DB, userID)
+	if err != nil {
+		return nil
+	}
+	rows := make([]MineRow, 0, len(filed))
+	for _, f := range filed {
+		rows = append(rows, MineRow{
+			Date: f.SlotStartsAt, VenueRef: f.VenueRef, VenueName: f.VenueTitle,
+			Team: f.TeamName, Status: StatusLabel(f.Status), RegToken: f.RegToken, AppID: f.ID,
+		})
+	}
+	return rows
+}
+
+// handleRegWithdraw takes the reader's own application back. Only their own:
+// the token names the Slot, the session names the person, and the two together
+// name the one application they may withdraw.
+func (s *Server) handleRegWithdraw(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	token := r.PathValue("token")
+	slot, err := venues.SlotByToken(r.Context(), s.h.Engine().DB, token)
+	if err != nil {
+		return route.NotFound
+	}
+	app, err := venues.UserApplication(r.Context(), s.h.Engine().DB, slot.ID, sc.User.UserID)
+	if err != nil {
+		return route.NotFound
+	}
+	venue, err := venues.LoadVenue(r.Context(), s.h.Engine().DB, slot.FestID)
+	if err != nil {
+		return err
+	}
+	err = s.h.Engine().WithWriteTx(r.Context(), slot.FestID, "slot-application-withdraw", func(ctx context.Context, tx *sql.Tx) error {
+		return venues.WithdrawApplicationTx(ctx, tx, slot, venue.City, app.ID)
+	})
+	if err != nil {
+		return s.renderRegPage(w, r, token, err.Error(), "")
+	}
+	s.h.Engine().InvalidateFestViewCache(slot.FestID)
+	http.Redirect(w, r, "/venues", http.StatusSeeOther)
 	return nil
 }
 
@@ -197,6 +250,7 @@ func (s *Server) renderRegPage(w http.ResponseWriter, r *http.Request, token, er
 func (s *Server) applicationView(ctx context.Context, app venues.Application, slot venues.Slot) ApplicationView {
 	return ApplicationView{
 		Status: app.Status, StatusLabel: StatusLabel(app.Status), TeamName: app.TeamName,
+		Alias: app.Alias, RealTeamName: s.h.Engine().BuffMirror().TeamName(ctx, app.RatingTeamID),
 		RatingTeamID: app.RatingTeamID,
 		Roster:       app.Roster, Flags: s.rosterFlags(ctx, app, slot), Number: app.Number,
 	}
@@ -225,7 +279,7 @@ func (s *Server) handleRegSubmit(w http.ResponseWriter, r *http.Request, sc rout
 	if state == venues.RegScheduled {
 		return s.renderRegPage(w, r, token, strs.Venues.Reg.ErrorNotOpen(), "")
 	}
-	current, err := venues.UserApplication(r.Context(), s.h.Engine().DB, slot.ID, sc.User.UserID)
+	_, err = venues.UserApplication(r.Context(), s.h.Engine().DB, slot.ID, sc.User.UserID)
 	has := err == nil
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
@@ -233,22 +287,26 @@ func (s *Server) handleRegSubmit(w http.ResponseWriter, r *http.Request, sc rout
 	if state == venues.RegClosed && !has {
 		return s.renderRegPage(w, r, token, strs.Venues.Reg.Closed(), "")
 	}
-	// «Существующая команда» means one rating.chgk.info has: a name typed over
-	// the suggest without settling on a team is not one, and saving it anyway
-	// would file a разовая команда nobody asked for.
+	// An existing team means one rating.chgk.info has: a name typed over the
+	// suggest without settling on a team is not one, and saving it anyway would
+	// file a one-off team nobody asked for.
 	ratingTeamID := formInt64(r.Form, "rating_team_id")
 	if r.Form.Get("team_kind") == "existing" && ratingTeamID <= 0 {
 		return s.renderRegPage(w, r, token, strs.Venues.Reg.TeamPickRequired(), "")
 	}
-	// The roster is asked for only once the application is accepted, so a pending
-	// one stores an empty roster whatever the request carries.
-	var roster []venues.RosterPlayer
-	if has && current.Status == venues.StatusAccepted {
-		roster = venues.ParseRoster(r.Form.Get("roster_json"))
+	// A one-off name is what this game calls the team, so it is the name
+	// everything downstream seats and announces by; the team it belongs to is
+	// still the one the rating id names.
+	teamName, alias := r.Form.Get("team_name"), ""
+	if r.Form.Get("team_kind") == "existing" && r.Form.Get("team_alias_on") == "1" {
+		if alias = strings.TrimSpace(r.Form.Get("team_alias")); alias != "" {
+			teamName = alias
+		}
 	}
+	roster := venues.ParseRoster(r.Form.Get("roster_json"))
 	err = s.h.Engine().WithWriteTx(r.Context(), slot.FestID, "slot-application", func(ctx context.Context, tx *sql.Tx) error {
 		_, err := venues.SaveVersionTx(ctx, tx, slot.ID, sc.User.UserID, sc.User.UserID,
-			r.Form.Get("team_name"), ratingTeamID, roster)
+			teamName, alias, ratingTeamID, roster)
 		return err
 	})
 	if err != nil {
@@ -608,9 +666,9 @@ func (s *Server) handleSlotReg(w http.ResponseWriter, r *http.Request, sc route.
 	return s.redirectToSlot(w, r, festID, slot.ID)
 }
 
-// handleSlotShut is the Representative closing заявки on the spot, or opening
-// them again. The window is untouched: reopening a Слот whose window has run
-// out leaves it closed, which is what the window is for.
+// handleSlotShut is the Representative closing applications on the spot, or
+// opening them again. The window is untouched: reopening a Slot whose window
+// has run out leaves it closed, which is what the window is for.
 func (s *Server) handleSlotShut(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	festID := sc.FestID
 	_, slot, err := s.slotOf(r, sc)
@@ -749,7 +807,7 @@ func (s *Server) handleApplicationEdit(w http.ResponseWriter, r *http.Request, s
 	}
 	err = s.h.Engine().WithWriteTx(r.Context(), festID, "slot-application-edit", func(ctx context.Context, tx *sql.Tx) error {
 		_, err := venues.SaveVersionTx(ctx, tx, slot.ID, app.UserID, authorID,
-			r.Form.Get("team_name"), formInt64(r.Form, "rating_team_id"), venues.ParseRoster(r.Form.Get("roster_json")))
+			r.Form.Get("team_name"), app.Alias, formInt64(r.Form, "rating_team_id"), venues.ParseRoster(r.Form.Get("roster_json")))
 		return err
 	})
 	if err != nil {
@@ -794,7 +852,7 @@ func (s *Server) handleApplicationRevert(w http.ResponseWriter, r *http.Request,
 		return route.NotFound
 	}
 	err = s.h.Engine().WithWriteTx(r.Context(), festID, "slot-application-revert", func(ctx context.Context, tx *sql.Tx) error {
-		_, err := venues.SaveVersionTx(ctx, tx, slot.ID, app.UserID, authorID, chosen.TeamName, chosen.RatingTeamID, chosen.Roster)
+		_, err := venues.SaveVersionTx(ctx, tx, slot.ID, app.UserID, authorID, chosen.TeamName, app.Alias, chosen.RatingTeamID, chosen.Roster)
 		return err
 	})
 	if err != nil {

@@ -113,14 +113,12 @@ async function fetchJSON<T>(url: string): Promise<T | null> {
   }
 }
 
-async function fetchPlayers(query: string): Promise<SuggestedPlayer[]> {
-  const response = await fetch(`/api/buff/players?q=${encodeURIComponent(query)}`, {
-    headers: { Accept: "application/json" },
-  });
-  if (!response.ok) return [];
-  const rows = (await response.json()) as
-    | Array<{ id: number; surname: string; name: string; patronymic: string; games?: number }>
-    | null;
+// buff names a player's id `id`; a роль in a состав names it `player_id`, and a
+// row that loses it stops being a mirror player and turns into three typed
+// fields. Every buff answer goes through here.
+type MirrorPlayer = {id: number; surname: string; name: string; patronymic: string; games?: number};
+
+function asRosterPlayers(rows: MirrorPlayer[] | null): SuggestedPlayer[] {
   if (!Array.isArray(rows)) return [];
   return rows.map((r) => ({
     player_id: r.id,
@@ -130,6 +128,10 @@ async function fetchPlayers(query: string): Promise<SuggestedPlayer[]> {
     captain: false,
     games: Number(r.games) || 0,
   }));
+}
+
+async function fetchPlayers(query: string): Promise<SuggestedPlayer[]> {
+  return asRosterPlayers(await fetchJSON<MirrorPlayer[]>(`/api/buff/players?q=${encodeURIComponent(query)}`));
 }
 
 // mountRosterEditor draws the editor over one [data-roster-editor] container.
@@ -142,11 +144,21 @@ export function mountRosterEditor(container: HTMLElement): void {
   if (players.length === 0 || fullName(players[players.length - 1]) !== "") players.push(emptyPlayer());
   const rows = el("div", "u-col u-gap-sm");
   const warning = el("p", "hint");
-  const add = document.createElement("button");
-  add.type = "button";
-  add.className = "btn btn-ghost";
-  add.textContent = S.venues.rosterEditor.addPlayer();
-  container.append(rows, warning, add);
+  const button = (label: string): HTMLButtonElement => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn btn-ghost";
+    b.textContent = label;
+    return b;
+  };
+  const add = button(S.venues.rosterEditor.addPlayer());
+  // Two ways not to type six names: what rating.chgk.info has the team down as,
+  // and whatever this person named last time. Most составы are one of the two.
+  const fillBase = button(S.venues.rosterEditor.fillBase());
+  const fillPrevious = button(S.venues.rosterEditor.fillPrevious());
+  const fillRow = el("div", "u-row u-gap-sm u-wrap u-align-center");
+  fillRow.append(add, fillBase, fillPrevious);
+  container.append(rows, warning, fillRow);
 
   const sync = (): void => {
     field.value = serializeRoster(players);
@@ -194,6 +206,47 @@ export function mountRosterEditor(container: HTMLElement): void {
     }
     focusRow(players.length - 1);
   };
+
+  // A filled состав replaces whatever was there: the buttons are a starting
+  // point, and half a roster from two sources is nobody's team.
+  const fill = (found: RosterPlayer[]): void => {
+    if (found.length === 0) return;
+    players = found.map((p) => ({...p}));
+    if (!players.some((p) => p.captain)) players[0].captain = true;
+    players.push(emptyPlayer());
+    draw();
+  };
+
+  const say = (message: string): void => {
+    warning.textContent = message;
+  };
+
+  fillBase.addEventListener("click", () => {
+    const id = Number(container.closest("form")?.querySelector<HTMLInputElement>("[data-team-id]")?.value || "");
+    const on = container.getAttribute("data-roster-editor") || "";
+    if (!id) {
+      say(S.venues.rosterEditor.fillBaseNone());
+      return;
+    }
+    void fetchJSON<MirrorPlayer[]>(`/api/buff/team/${id}/roster?on=${encodeURIComponent(on)}`).then((rows) => {
+      const found = asRosterPlayers(rows);
+      if (found.length === 0) {
+        say(S.venues.rosterEditor.fillBaseNone());
+        return;
+      }
+      fill(found);
+    });
+  });
+
+  fillPrevious.addEventListener("click", () => {
+    void fetchJSON<RecentRoster[]>("/api/venues/my-rosters").then((found) => {
+      if (!found || found.length === 0) {
+        say(S.venues.rosterEditor.fillPreviousNone());
+        return;
+      }
+      pickPrevious(found, fillPrevious, fill);
+    });
+  });
 
   const drawSuggest = (player: RosterPlayer, index: number): HTMLElement => {
     const box = el("div", "u-col u-gap-sm");
@@ -366,6 +419,49 @@ export function mountBuffTournamentField(field: HTMLInputElement): void {
 
   const id = Number(field.value.trim());
   if (id) void find(String(id)).then(() => name(seen.get(id)));
+}
+
+export interface RecentRoster {
+  teamName: string;
+  at: string;
+  roster: RosterPlayer[];
+}
+
+// pickPrevious offers the составы this person has named before, newest first,
+// as the same dropdown every other suggest in the app uses.
+function pickPrevious(
+  found: RecentRoster[],
+  anchor: HTMLElement,
+  take: (players: RosterPlayer[]) => void,
+): void {
+  const pop = el("div", "menu-dropdown suggest-pop");
+  const dismiss = (): void => pop.remove();
+  found.forEach((r) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "menu-item";
+    const label = el("span");
+    label.textContent = r.teamName || S.venues.rosterEditor.fillPreviousTitle();
+    const hint = el("span", "suggest-hint");
+    hint.textContent = r.roster.map(fullName).filter(Boolean).join(", ");
+    item.append(label, hint);
+    item.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      dismiss();
+      take(r.roster);
+    });
+    pop.append(item);
+  });
+  const host = anchor.parentElement;
+  if (!host) return;
+  host.classList.add("suggest-anchor");
+  host.append(pop);
+  const hostBox = host.getBoundingClientRect();
+  const box = anchor.getBoundingClientRect();
+  pop.style.top = `${Math.round(box.bottom - hostBox.top)}px`;
+  pop.style.left = `${Math.round(box.left - hostBox.left)}px`;
+  pop.style.minWidth = `${Math.round(box.width)}px`;
+  setTimeout(() => document.addEventListener("click", dismiss, {once: true}), 0);
 }
 
 export function mountRosterEditors(doc: Document): void {

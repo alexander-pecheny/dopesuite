@@ -290,9 +290,11 @@ fest_games_empty = "В этом фесте пока нет игр."
 games_subhead = "Игры"
 
 [public_tabs]
-# The public tree's two halves, as the tab strip over both names them.
+# The public tree's two halves, as the tab strip over both names them. The
+# second is «Синхроны» rather than «Площадки»: a reader comes to it for the
+# games on offer, not for the rooms they are played in.
 fests = "Фесты"
-venues = "Площадки"
+venues = "Синхроны"
 
 [profile]
 # The profile page's timezone form: its heading, the hint under the field, its

@@ -91,4 +91,5 @@ archive_title = "Скачать текущее состояние игры и и
 
 [venue]
 # The crumb a Venue's game pages hang off, in the trail every game page paints.
-trail = "Площадки"
+# It leads to /venues, which the public reads as the синхроны on offer.
+trail = "Синхроны"

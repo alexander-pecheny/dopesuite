@@ -295,9 +295,9 @@ func slotRegSection(data slotPageData) *ui.Element {
 	return ui.Section(sect...)
 }
 
-// shutForm is the one button that closes заявки now and the one that opens them
-// again: which of the two it is is which way the registration currently stands,
-// so the button is never a no-op.
+// shutForm is the one button that closes applications now and the one that
+// opens them again: which of the two it is is which way the registration
+// currently stands, so the button is never a no-op.
 func shutForm(data slotPageData, base string) *ui.Element {
 	form := []ui.Item{ui.Method("post"), ui.Action(base + "/shut")}
 	if data.Slot.RegShut {
@@ -463,7 +463,7 @@ func slotApplicationsSection(data slotPageData) *ui.Element {
 				applicationVersions(base, row),
 				applicationForm(base+"/application/"+strconv.FormatInt(row.App.ID, 10)+"/edit",
 					&ApplicationView{TeamName: row.App.TeamName, RatingTeamID: row.App.RatingTeamID, Roster: row.App.Roster},
-					strs.Venues.Game.VersionSave(), true),
+					strs.Venues.Game.VersionSave(), data.Slot.StartsAt),
 			))
 		}
 	}

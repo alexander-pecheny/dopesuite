@@ -1,13 +1,14 @@
 # The Площадка surface (dope/dope/web/hostpages/venue_*.go): the public venue
 # index and a venue's own page ([public]), the Representative's venue dashboard
 # and the игра page under it ([host]), the registration link a Заявка is filed
-# through ([reg]), the голосование that picks the турнир ([voting]) and the
+# through ([reg]), a person's own заявки ([mine]), the голосование that picks
+# the турнир ([voting]) and the
 # спорные a жюри still has to rule on ([contested]).
 
 [public]
 # The /venues index: page title, the search field over the table, the table's
 # columns, and what it says when there is no public venue at all.
-index_title = "Площадки"
+index_title = "Синхроны"
 index_empty = "Публичных площадок пока нет."
 search_label = "Поиск"
 search_placeholder = "город, название…"
@@ -60,6 +61,10 @@ new_game_summary = "Новая игра"
 new_game_submit = "Создать игру"
 # The create-venue form on the host landing.
 # The Площадки a user represents, on the host landing.
+# The Representative's own площадки. A Representative manages площадки; the
+# public browses the синхроны played at them, which is why the two headings
+# differ.
+venues_subhead = "Площадки"
 venues_empty = "Площадок пока нет."
 venue_unlisted = "непубличная"
 create_venue_summary = "Создать площадку"
@@ -155,6 +160,18 @@ captain = "К"
 base = "Б"
 legion = "Л"
 
+[mine]
+# «Мои заявки» on the /venues index: every заявка this person has out, at every
+# площадка, because they file at several and want them in one place rather than
+# one registration link at a time.
+subhead = "Мои заявки"
+empty = "Вы пока не подали ни одной заявки."
+col_game = "Игра"
+col_venue = "Площадка"
+col_team = "Команда"
+col_status = "Статус"
+edit_btn = "Изменить"
+
 [reg]
 # The registration page a Заявка is filed on (/reg/{token}): its title, what it
 # says in each state of the registration, and the form itself.
@@ -170,6 +187,10 @@ team_number = 'номер команды {{.n}}'
 table_btn = "Таблица игры"
 submit_new = "Подать заявку"
 submit_edit = "Сохранить заявку"
+# Taking a заявка back. It goes for good rather than sitting there declined, so
+# the person is free to file again.
+withdraw_btn = "Отозвать заявку"
+withdraw_confirm = "Отозвать заявку? Её придётся подавать заново."
 # The заявка's own fields, and the состав table under an accepted one. A team
 # either plays under a name rating.chgk.info already knows or under a new one,
 # and that is one choice with one box after it rather than two boxes to fill in
@@ -179,6 +200,12 @@ team_kind_existing = "Существующая команда"
 team_kind_new = "Новая команда"
 team_name_label = "Название команды"
 team_search_placeholder = "название или id на rating.chgk.info"
+# A team that plays one game under another name — a склейка, a сборная for the
+# evening — is still that team on rating.chgk.info, so the разовое название sits
+# beside the team rather than instead of it.
+team_alias_toggle = "Добавить разовое название"
+team_alias_label = "Разовое название"
+team_alias_placeholder = "как объявить команду на этой игре"
 team_pick_required = "Выберите команду из списка или подайте заявку новой командой."
 roster_label = "Состав"
 col_player = "Игрок"
@@ -297,6 +324,14 @@ games_count = '{{.n}} {{plural .n "игра" "игры" "игр"}}'
 # What the editor refuses to save, and what it says about an unknown team.
 too_many = 'В составе больше {{.n}} игроков.'
 no_captain = "Отметьте капитана."
+
+# The two ways to fill a состав without typing six names: the team's base roster
+# from rating.chgk.info, and whatever this person named last time.
+fill_base = "Добавить базовый состав"
+fill_base_none = "Базовый состав неизвестен."
+fill_previous = "Выбрать из предыдущих составов"
+fill_previous_none = "Прежних составов нет."
+fill_previous_title = "Предыдущие составы"
 
 [od_contested]
 # The спорный dialog on the ОД page (web/ts/od.ts): a host records an answer

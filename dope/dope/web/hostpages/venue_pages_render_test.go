@@ -8,11 +8,60 @@ import (
 	"dope/dope/domain/venues"
 )
 
+// «Мои заявки» is the reader's own and nobody else's: a stranger's index does
+// not carry the section at all, and each row leads back to its own form or
+// takes the заявка back.
+func TestVenuesIndexListsTheReadersOwnApplications(t *testing.T) {
+	rows := []VenueRow{{Ref: "tbilisi", Title: "Площадка"}}
+	mine := []MineRow{{Date: "2026-09-04 19:00", VenueRef: "tbilisi", VenueName: "Площадка",
+		Team: "Мантисса", Status: "принята", RegToken: "tok", AppID: 7}}
+
+	body := renderPublic(t, VenuesIndexDoc(rows, mine, true))
+	for _, want := range []string{
+		"Мои заявки", "Мантисса", "принята",
+		"4 сентября 2026 (пятница), 19:00",
+		`href="/reg/tok"`, `action="/reg/tok/withdraw"`, "Отозвать заявку",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("mine: missing %q", want)
+		}
+	}
+	if stranger := renderPublic(t, VenuesIndexDoc(rows, nil, false)); strings.Contains(stranger, "Мои заявки") {
+		t.Error("a stranger is offered their applications")
+	}
+	if none := renderPublic(t, VenuesIndexDoc(rows, nil, true)); !strings.Contains(none, "Вы пока не подали ни одной заявки.") {
+		t.Error("missing the empty note")
+	}
+}
+
+// A разовое название sits beside the team rather than instead of it: the box
+// above keeps the team, and the tick is what reveals the one-off name.
+func TestApplicationFormCarriesAOneOffName(t *testing.T) {
+	app := &ApplicationView{Status: venues.StatusPending, TeamName: "Сборная вечера",
+		Alias: "Сборная вечера", RealTeamName: "Мантисса", RatingTeamID: 62868}
+	body := renderPublic(t, RegDoc(RegPage{Token: "tok", VenueTitle: "Площадка", LoggedIn: true,
+		State: venues.RegOpen, Application: app}))
+	for _, want := range []string{
+		"Добавить разовое название", `name="team_alias"`, `data-when="team_alias_on"`,
+		`value="Сборная вечера"`, `value="Мантисса"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("alias: missing %q", want)
+		}
+	}
+	// Without one, the box holds the team and the alias field is put away.
+	plain := renderPublic(t, RegDoc(RegPage{Token: "tok", VenueTitle: "Площадка", LoggedIn: true,
+		State: venues.RegOpen, Application: &ApplicationView{Status: venues.StatusPending, TeamName: "Мантисса"}}))
+	if !strings.Contains(plain, `hidden data-when="team_alias_on"`) {
+		t.Error("the alias field is open on a application that has none")
+	}
+}
+
 func TestVenuesIndexDocIsOneFilteredTable(t *testing.T) {
 	body := renderPublic(t, VenuesIndexDoc([]VenueRow{
 		{Ref: "tbilisi", Title: "Площадка Тбилиси", City: "Тбилиси", NextSlot: "2026-09-04 19:00",
 			Registration: "открыта", Accepted: 3, RatingVenueID: 123},
-	}))
+	}, nil, false))
 	for _, want := range []string{
 		`data-filter-rows="venues"`,
 		`id="venues"`,
@@ -25,7 +74,7 @@ func TestVenuesIndexDocIsOneFilteredTable(t *testing.T) {
 			t.Errorf("missing %q", want)
 		}
 	}
-	if empty := renderPublic(t, VenuesIndexDoc(nil)); !strings.Contains(empty, "Публичных площадок пока нет.") {
+	if empty := renderPublic(t, VenuesIndexDoc(nil, nil, false)); !strings.Contains(empty, "Публичных площадок пока нет.") {
 		t.Error("missing the empty note")
 	}
 }
@@ -64,7 +113,7 @@ func TestVenueDocSplitsUpcomingFromPast(t *testing.T) {
 func TestVenuePagesOfferTheOrganizerMode(t *testing.T) {
 	for name, body := range map[string]string{
 		"landing": renderPublic(t, VenueDoc(VenueDetail{Ref: "tbilisi", Title: "Площадка"})),
-		"index":   renderPublic(t, VenuesIndexDoc([]VenueRow{{Ref: "tbilisi", Title: "Площадка"}})),
+		"index":   renderPublic(t, VenuesIndexDoc([]VenueRow{{Ref: "tbilisi", Title: "Площадка"}}, nil, false)),
 	} {
 		want := `data-jump-href="/host/venue/tbilisi"`
 		if name == "index" {
@@ -148,29 +197,21 @@ func TestRegDocSaysWhatEachStateAllows(t *testing.T) {
 	}
 }
 
-// A Slot has more applicants than seats, so the roster is asked for only once
-// the application is accepted.
-func TestRegDocAsksForTheRosterOnlyOnceAccepted(t *testing.T) {
-	base := RegPage{Token: "tok", VenueTitle: "Площадка", VenueRef: "tbilisi", LoggedIn: true}
+// The состав is asked for from the first moment: a team that knows its six can
+// say so, and the two fill buttons mean nobody types them from nothing.
+func TestRegDocAsksForTheRosterFromTheStart(t *testing.T) {
+	base := RegPage{Token: "tok", VenueTitle: "Площадка", VenueRef: "tbilisi", LoggedIn: true,
+		Date: "2026-09-04 19:00"}
 
-	fresh := renderPublic(t, RegDoc(base))
-	if strings.Contains(fresh, "data-roster-editor") {
-		t.Error("a new заявка asks for a team, not a состав")
-	}
-
-	for _, status := range []string{venues.StatusPending, venues.StatusDeclined} {
+	for _, status := range []string{"", venues.StatusPending, venues.StatusDeclined, venues.StatusAccepted} {
 		p := base
-		p.Application = &ApplicationView{Status: status, StatusLabel: StatusLabel(status), TeamName: "Мантисса"}
-		if body := renderPublic(t, RegDoc(p)); strings.Contains(body, "data-roster-editor") {
-			t.Errorf("%s: no состав before acceptance", status)
+		if status != "" {
+			p.Application = &ApplicationView{Status: status, StatusLabel: StatusLabel(status), TeamName: "Мантисса"}
 		}
-	}
-
-	p := base
-	p.Application = &ApplicationView{Status: venues.StatusAccepted, StatusLabel: StatusLabel(venues.StatusAccepted), TeamName: "Мантисса"}
-	body := renderPublic(t, RegDoc(p))
-	if !strings.Contains(body, "data-roster-editor") || !strings.Contains(body, `name="roster_json"`) {
-		t.Error("an accepted заявка gets the состав editor")
+		body := renderPublic(t, RegDoc(p))
+		if !strings.Contains(body, `data-roster-editor="2026-09-04 19:00"`) || !strings.Contains(body, `name="roster_json"`) {
+			t.Errorf("%q: no состав editor", status)
+		}
 	}
 }
 

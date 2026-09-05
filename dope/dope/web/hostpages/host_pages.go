@@ -122,7 +122,7 @@ func checkboxKept(name, label string, on bool) *ui.Element {
 // hostLandingVenues is the Venues the user represents, and the form that
 // makes one.
 func hostLandingVenues(data hostLandingData) *ui.Element {
-	sect := []ui.Item{ui.Subhead(ui.Text(strs.Venues.Public.IndexTitle()))}
+	sect := []ui.Item{ui.Subhead(ui.Text(strs.Venues.Host.VenuesSubhead()))}
 	if len(data.Venues) == 0 {
 		sect = append(sect, ui.Empty(ui.Text(strs.Venues.Host.VenuesEmpty())))
 	} else {

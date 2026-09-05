@@ -1501,6 +1501,16 @@ export type Strings = {
       titleLabel: () => string;
       venueUnlisted: () => string;
       venuesEmpty: () => string;
+      venuesSubhead: () => string;
+    };
+    mine: {
+      colGame: () => string;
+      colStatus: () => string;
+      colTeam: () => string;
+      colVenue: () => string;
+      editBtn: () => string;
+      empty: () => string;
+      subhead: () => string;
     };
     odContested: {
       acceptedLabel: () => string;
@@ -1552,6 +1562,9 @@ export type Strings = {
       submitEdit: () => string;
       submitNew: () => string;
       tableBtn: () => string;
+      teamAliasLabel: () => string;
+      teamAliasPlaceholder: () => string;
+      teamAliasToggle: () => string;
       teamKindExisting: () => string;
       teamKindLabel: () => string;
       teamKindNew: () => string;
@@ -1560,10 +1573,17 @@ export type Strings = {
       teamPickRequired: () => string;
       teamSearchPlaceholder: () => string;
       title: (venue: string) => string;
+      withdrawBtn: () => string;
+      withdrawConfirm: () => string;
     };
     rosterEditor: {
       addPlayer: () => string;
       captain: () => string;
+      fillBase: () => string;
+      fillBaseNone: () => string;
+      fillPrevious: () => string;
+      fillPreviousNone: () => string;
+      fillPreviousTitle: () => string;
       gamesCount: (n: number) => string;
       name: () => string;
       noCaptain: () => string;
