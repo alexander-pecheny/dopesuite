@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"dope/dope/platform/util"
 	dopestrings "dope/i18nstrings"
 )
 
@@ -127,8 +128,8 @@ const (
 
 // Registration is the window a Slot takes applications in. One never set up
 // takes none; after that the two ends say when, and either may be left off.
-func Registration(opensAt, closesAt string, setUp bool, now time.Time) RegState {
-	if !setUp {
+func Registration(opensAt, closesAt string, shut bool, now time.Time) RegState {
+	if shut {
 		return RegClosed
 	}
 	if closes, ok := ParseTime(closesAt); ok && !now.Before(closes) {
@@ -173,6 +174,12 @@ func NewToken() string {
 		return base64.RawURLEncoding.EncodeToString([]byte(time.Now().UTC().Format(time.RFC3339Nano)))
 	}
 	return base64.RawURLEncoding.EncodeToString(buf)
+}
+
+// HumanDate is a Slot's own time as a person says it: «5 сентября 2026
+// (суббота), 18:45». A Slot with no time yet has nothing to say.
+func HumanDate(startsAt string) string {
+	return util.HumanizeDateTime(FormatTime(startsAt))
 }
 
 func HumanTime(stored string) string {

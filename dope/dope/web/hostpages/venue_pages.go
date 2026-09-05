@@ -201,18 +201,35 @@ func applicationForm(action string, app *ApplicationView, submit string, roster 
 		players = app.Roster
 	}
 	form := []ui.Item{ui.DirCol, ui.Method("post"), ui.Action(action), ui.Autocomplete("off"),
-		ui.Field(ui.Label(strs.Venues.Reg.TeamNameLabel()), ui.Textfield(ui.Name("team_name"), ui.Value(teamName), ui.Required())),
-		// The id names the team: roster-editor.js writes what buff answers into
-		// the box above rather than printing it under this one.
-		ui.Field(ui.Label(strs.Venues.Reg.RatingTeamLabel()),
-			ui.Textfield(ui.Name("rating_team_id"), ui.Value(ratingID),
-				ui.Inputmode("numeric"), ui.Data("buff-team", ""), ui.Autocomplete("off"))),
+		teamKindField(app),
+		// One box either way. Under «Существующая команда» it is a suggest over
+		// buff by name or by id and the id it settles on goes in the hidden
+		// field; under «Новая команда» it is just the name.
+		ui.Field(ui.Label(strs.Venues.Reg.TeamNameLabel()),
+			ui.Textfield(ui.Name("team_name"), ui.Value(teamName), ui.Required(),
+				ui.Placeholder(strs.Venues.Reg.TeamSearchPlaceholder()),
+				ui.Data("team-field", ""), ui.Autocomplete("off"))),
+		ui.Hiddenfield(ui.Data("team-id", ""), ui.Name("rating_team_id"), ui.Value(ratingID)),
 	}
 	if roster {
 		form = append(form, ui.Field(ui.Label(strs.Venues.Reg.RosterLabel()), rosterEditor(players)))
 	}
 	form = append(form, ui.Row(ui.Button(ui.Submit(), ui.Text(submit))))
 	return ui.Form(form...)
+}
+
+// teamKindField is the choice the box after it obeys. An application already
+// filed picks whichever it was: a team with a rating id is an existing one.
+func teamKindField(app *ApplicationView) *ui.Element {
+	existing := []ui.Item{ui.Name("team_kind"), ui.Value("existing"), ui.Text(strs.Venues.Reg.TeamKindExisting())}
+	fresh := []ui.Item{ui.Name("team_kind"), ui.Value("new"), ui.Text(strs.Venues.Reg.TeamKindNew())}
+	if app != nil && app.RatingTeamID == 0 && app.TeamName != "" {
+		fresh = append(fresh, ui.Checked())
+	} else {
+		existing = append(existing, ui.Checked())
+	}
+	return ui.Pickgroup(ui.Label(strs.Venues.Reg.TeamKindLabel()),
+		ui.Row(ui.SpaceSM, ui.AlignCenter, ui.Wrap(), ui.Radio(existing...), ui.Radio(fresh...)))
 }
 
 var statusLabels = map[string]string{
@@ -237,7 +254,7 @@ func RegDoc(p RegPage) *ui.Doc {
 
 	page = append(page, ui.Section(
 		ui.Subhead(ui.Text(p.VenueTitle)),
-		ui.Note(ui.Text(joinDots(p.Date, p.City, p.Tournament))),
+		ui.Note(ui.Text(joinDots(venues.HumanDate(p.Date), p.City, p.Tournament))),
 	))
 
 	if p.Error != "" {

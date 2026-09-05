@@ -166,11 +166,20 @@ type slotPageData struct {
 	Notice       string
 }
 
+// slotTitle is short, for a crumb and a tab; slotHuman is the same moment
+// spelled out, for the one line on the page that says which evening this is.
 func slotTitle(slot venues.Slot) string {
 	if slot.StartsAt == "" {
 		return strs.Venues.Game.UndatedTitle()
 	}
 	return slot.StartsAt
+}
+
+func slotHuman(slot venues.Slot) string {
+	if slot.StartsAt == "" {
+		return strs.Venues.Game.UndatedTitle()
+	}
+	return venues.HumanDate(slot.StartsAt)
 }
 
 // VenueBase is the Representative's tree for one Venue; a Venue is a Fest
@@ -208,7 +217,7 @@ func slotHeaderSection(data slotPageData) *ui.Element {
 	}
 	sect := []ui.Item{
 		ui.Subhead(ui.Text(strs.Venues.Game.Subhead())),
-		ui.Note(ui.Text(joinDots(slotTitle(data.Slot), data.Tournament, data.GameStatus))),
+		ui.Note(ui.Text(joinDots(slotHuman(data.Slot), data.Tournament, data.GameStatus))),
 		ui.Row(ui.Button(ui.Ghost, ui.Small(), ui.Href(data.GameHref), ui.Text(strs.Venues.Game.TableBtn()))),
 	}
 	if !data.CanManage {
@@ -253,13 +262,13 @@ func slotDeleteSection(data slotPageData) *ui.Element {
 }
 
 // slotRegSection is the whole registration in one place. The link exists from
-// the moment the Slot does and is the Representative's to hand out either way;
-// what a registration has to be set up for is when it takes applications.
+// the moment the Slot does and works from it; what the dialog decides is the
+// window it runs on and whether the Venue's public page carries it.
 func slotRegSection(data slotPageData) *ui.Element {
 	base := slotBase(data.Venue, data.Slot)
-	sect := []ui.Item{ui.Subhead(ui.Text(strs.Venues.Game.RegSubhead()))}
-	if data.Slot.RegSetUp {
-		sect = append(sect, ui.Note(ui.Text(regStateLine(data))))
+	sect := []ui.Item{
+		ui.Subhead(ui.Text(strs.Venues.Game.RegSubhead())),
+		ui.Note(ui.Text(regStateLine(data))),
 	}
 	sect = append(sect,
 		ui.Field(ui.Label(strs.Venues.Game.LinkLabel()),

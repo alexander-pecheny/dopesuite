@@ -90,7 +90,7 @@ func (s *Server) renderVenuesIndex(w http.ResponseWriter, r *http.Request, _ rou
 }
 
 func registrationLabel(slot venues.Slot, now time.Time) string {
-	switch venues.Registration(slot.RegOpensAt, slot.RegClosesAt, slot.RegSetUp, now) {
+	switch venues.Registration(slot.RegOpensAt, slot.RegClosesAt, slot.RegShut, now) {
 	case venues.RegClosed:
 		return strs.Venues.Public.RegClosed()
 	case venues.RegScheduled:
@@ -131,7 +131,7 @@ func (s *Server) renderVenuePage(w http.ResponseWriter, r *http.Request, _ route
 		row.Registration = registrationLabel(slot, now)
 		// A Representative decides whether this page carries the invitation; the
 		// link exists either way, and is theirs to hand out from the game's own page.
-		if slot.LinkVisible && venues.Registration(slot.RegOpensAt, slot.RegClosesAt, slot.RegSetUp, now) != venues.RegClosed {
+		if slot.LinkVisible && venues.Registration(slot.RegOpensAt, slot.RegClosesAt, slot.RegShut, now) != venues.RegClosed {
 			row.RegHref = "/reg/" + slot.RegToken
 		}
 		detail.Upcoming = append(detail.Upcoming, row)
@@ -169,7 +169,7 @@ func (s *Server) renderRegPage(w http.ResponseWriter, r *http.Request, token, er
 	now := time.Now().UTC()
 	page := RegPage{
 		Token: slot.RegToken, VenueTitle: venue.Title, VenueRef: venue.Ref(), City: venue.City,
-		Date: slot.StartsAt, State: venues.Registration(slot.RegOpensAt, slot.RegClosesAt, slot.RegSetUp, now),
+		Date: slot.StartsAt, State: venues.Registration(slot.RegOpensAt, slot.RegClosesAt, slot.RegShut, now),
 		OpensAt: slot.RegOpensAt, Error: errMsg, Notice: notice,
 		LoginHref: "/login?next=" + url.QueryEscape("/reg/"+slot.RegToken),
 	}
@@ -221,7 +221,7 @@ func (s *Server) handleRegSubmit(w http.ResponseWriter, r *http.Request, sc rout
 		return route.BadRequest("bad form")
 	}
 	now := time.Now().UTC()
-	state := venues.Registration(slot.RegOpensAt, slot.RegClosesAt, slot.RegSetUp, now)
+	state := venues.Registration(slot.RegOpensAt, slot.RegClosesAt, slot.RegShut, now)
 	if state == venues.RegScheduled {
 		return s.renderRegPage(w, r, token, strs.Venues.Reg.ErrorNotOpen(), "")
 	}
@@ -233,6 +233,13 @@ func (s *Server) handleRegSubmit(w http.ResponseWriter, r *http.Request, sc rout
 	if state == venues.RegClosed && !has {
 		return s.renderRegPage(w, r, token, strs.Venues.Reg.Closed(), "")
 	}
+	// «Существующая команда» means one rating.chgk.info has: a name typed over
+	// the suggest without settling on a team is not one, and saving it anyway
+	// would file a разовая команда nobody asked for.
+	ratingTeamID := formInt64(r.Form, "rating_team_id")
+	if r.Form.Get("team_kind") == "existing" && ratingTeamID <= 0 {
+		return s.renderRegPage(w, r, token, strs.Venues.Reg.TeamPickRequired(), "")
+	}
 	// The roster is asked for only once the application is accepted, so a pending
 	// one stores an empty roster whatever the request carries.
 	var roster []venues.RosterPlayer
@@ -241,7 +248,7 @@ func (s *Server) handleRegSubmit(w http.ResponseWriter, r *http.Request, sc rout
 	}
 	err = s.h.Engine().WithWriteTx(r.Context(), slot.FestID, "slot-application", func(ctx context.Context, tx *sql.Tx) error {
 		_, err := venues.SaveVersionTx(ctx, tx, slot.ID, sc.User.UserID, sc.User.UserID,
-			r.Form.Get("team_name"), formInt64(r.Form, "rating_team_id"), roster)
+			r.Form.Get("team_name"), ratingTeamID, roster)
 		return err
 	})
 	if err != nil {
@@ -511,7 +518,7 @@ func (s *Server) renderSlotPage(w http.ResponseWriter, r *http.Request, sc route
 		GameHref:   VenueBase(venue) + "/game/" + slot.GameRef() + "/table",
 		RegURL:     publicURL(r, "/reg/"+slot.RegToken),
 		CanManage:  roles.CanManageFest(sc.Role),
-		RegState:   venues.Registration(slot.RegOpensAt, slot.RegClosesAt, slot.RegSetUp, time.Now().UTC()),
+		RegState:   venues.Registration(slot.RegOpensAt, slot.RegClosesAt, slot.RegShut, time.Now().UTC()),
 		Tz:         s.userTimezone(r.Context(), sc.User.UserID),
 		Error:      errMsg, Notice: notice,
 	}

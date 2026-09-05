@@ -41,7 +41,7 @@ type Slot struct {
 	RegToken           string
 	RegOpensAt         string
 	RegClosesAt        string
-	RegSetUp           bool
+	RegShut            bool
 	LinkVisible        bool
 	GameSlug           string
 	Accepted           int
@@ -124,7 +124,7 @@ func scanSlot(row interface{ Scan(...any) error }) (Slot, error) {
 	var closed, visible int
 	err := row.Scan(&s.ID, &s.FestID, &s.GameID, &s.StartsAt, &s.RatingTournamentID,
 		&s.RegToken, &s.RegOpensAt, &s.RegClosesAt, &closed, &visible, &s.GameSlug, &s.Accepted, &s.Pending)
-	s.RegSetUp = closed == 0
+	s.RegShut = closed == 1
 	s.LinkVisible = visible == 1
 	return s, err
 }
@@ -151,9 +151,10 @@ order by case when s.starts_at = '' then 1 else 0 end, s.starts_at, s.id`, []any
 		func(rows *sql.Rows) (Slot, error) { return scanSlot(rows) })
 }
 
-// CreateSlotTx makes a Slot whose registration is not set up yet: the reg token
-// exists from the first moment, so a Slot open on creation would take
-// applications before its Representative had picked the tournament or the date.
+// CreateSlotTx makes a Slot whose registration is already running: the link
+// exists from the first moment and works from it, so a Representative can hand
+// it to a team before touching anything else. What waits for them is the link
+// on the Venue's public page, which is off until they tick it.
 func CreateSlotTx(ctx context.Context, tx *sql.Tx, festID int64, startsAt string, tournamentID int64, opensAt string, tourComp []int) (int64, error) {
 	gameID, err := gamebuild.Create(ctx, tx, gamebuild.Spec{
 		FestID: festID, Type: games.OD, ODTourComp: tourComp, OwnTeams: true,
@@ -164,7 +165,7 @@ func CreateSlotTx(ctx context.Context, tx *sql.Tx, festID int64, startsAt string
 	now := util.UtcNow()
 	return store.InsertReturningID(ctx, tx, `
 insert into slots(fest_id, game_id, starts_at, rating_tournament_id, reg_token, reg_opens_at, reg_closed, link_visible, created_at, updated_at)
-values(?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`,
+values(?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`,
 		festID, gameID, FormatTime(startsAt), util.NullableInt64(tournamentID), NewToken(),
 		util.NullableString(FormatTime(opensAt)), now, now)
 }
@@ -176,9 +177,9 @@ update slots set starts_at = ?, rating_tournament_id = ?, updated_at = ? where i
 	return err
 }
 
-// UpdateSlotRegTx is what the registration dialog saves. Setting it up is what
-// opens it: reg_closed carries whether it was ever set up, and the window from
-// here on says whether it takes applications.
+// UpdateSlotRegTx is what the registration dialog saves: the window it runs on
+// and whether the Venue's page carries the link. It reopens a registration a
+// Representative had shut.
 func UpdateSlotRegTx(ctx context.Context, tx *sql.Tx, slotID int64, opensAt, closesAt string, linkVisible bool) error {
 	_, err := tx.ExecContext(ctx, `
 update slots set reg_opens_at = ?, reg_closes_at = ?, reg_closed = 0, link_visible = ?, updated_at = ? where id = ?`,

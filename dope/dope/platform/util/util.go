@@ -173,6 +173,25 @@ var festMonthsGenitive = [...]string{
 	"июля", "августа", "сентября", "октября", "ноября", "декабря",
 }
 
+var weekdays = [...]string{
+	"воскресенье", "понедельник", "вторник", "среда",
+	"четверг", "пятница", "суббота",
+}
+
+// HumanizeDateTime is a moment as it is said out loud: «5 сентября 2026
+// (суббота), 18:45». The day of the week is the point — a Representative picks
+// a game by which evening it falls on, not by its ISO date. Input is the wall
+// time a Slot stores, "YYYY-MM-DD HH:MM"; anything else comes back untouched.
+func HumanizeDateTime(stored string) string {
+	stored = strings.TrimSpace(stored)
+	at, err := time.Parse("2006-01-02 15:04", stored)
+	if err != nil {
+		return stored
+	}
+	return fmt.Sprintf("%d %s %d (%s), %s",
+		at.Day(), festMonthsGenitive[at.Month()-1], at.Year(), weekdays[at.Weekday()], at.Format("15:04"))
+}
+
 // parseFestYMD parses a "YYYY-MM-DD" date, returning the components and whether
 // it is a valid in-range calendar date.
 func parseFestYMD(s string) (year, month, day int, ok bool) {

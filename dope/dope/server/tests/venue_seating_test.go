@@ -181,11 +181,6 @@ func newVenueSlot(t *testing.T, db *sql.DB, comp []int) (int64, venues.Slot) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// A Slot is born with its registration shut; these tests are about what
-	// happens after a Representative opens it.
-	if _, err := db.Exec(`update slots set reg_closed = 0 where id = ?`, slotID); err != nil {
-		t.Fatal(err)
-	}
 	slot, err := venues.LoadSlot(t.Context(), db, slotID)
 	if err != nil {
 		t.Fatal(err)
@@ -210,11 +205,14 @@ func TestNewSlotStartsWithRegistrationClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if slot.RegSetUp {
-		t.Error("a fresh Слот takes заявки before anyone set its registration up")
+	if slot.RegShut {
+		t.Error("a fresh Слот was made with its registration shut")
 	}
-	if venues.Registration(slot.RegOpensAt, slot.RegClosesAt, slot.RegSetUp, time.Now().UTC()) != venues.RegClosed {
-		t.Error("the registration state disagrees with the flag")
+	if venues.Registration(slot.RegOpensAt, slot.RegClosesAt, slot.RegShut, time.Now().UTC()) != venues.RegOpen {
+		t.Error("the link a fresh Слот hands out does not take заявки")
+	}
+	if slot.LinkVisible {
+		t.Error("a fresh Слот puts its link on the Venue's page before anyone said to")
 	}
 }
 

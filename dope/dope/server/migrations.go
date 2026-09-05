@@ -926,6 +926,14 @@ create table if not exists od_contested(
 		_, err := db.Exec(`update slots set link_visible = 0`)
 		return err
 	}},
+	{Version: 34, Name: "slots.reg-open-from-birth", Up: func(db *sql.DB) error {
+		// reg_closed = 1 only ever meant "nobody has set this registration up",
+		// and there is no such state any more: a Slot's link works from the
+		// moment the Slot exists. Nothing ever shut a registration by hand, so
+		// every shut one is a Slot nobody had got to yet.
+		_, err := db.Exec(`update slots set reg_closed = 0`)
+		return err
+	}},
 }
 
 func migrateDB(db *sql.DB) error { return schema.Apply(db, migrations) }

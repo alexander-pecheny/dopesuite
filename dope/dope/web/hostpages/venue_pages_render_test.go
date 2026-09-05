@@ -176,7 +176,7 @@ func TestRegDocAsksForTheRosterOnlyOnceAccepted(t *testing.T) {
 
 func TestSlotPageDocCarriesTheLinkAndTheQueue(t *testing.T) {
 	venue := venues.Venue{ID: 1, Slug: "tbilisi", Title: "Площадка", City: "Тбилиси"}
-	slot := venues.Slot{ID: 7, FestID: 1, GameID: 3, StartsAt: "2026-09-04 19:00", RegToken: "tok", RegSetUp: true}
+	slot := venues.Slot{ID: 7, FestID: 1, GameID: 3, StartsAt: "2026-09-04 19:00", RegToken: "tok"}
 	body := renderPublic(t, slotPageDoc(slotPageData{
 		Venue: venue, Slot: slot, Tournament: "Синхрон", CanManage: true,
 		GameHref: "/host/venue/tbilisi/game/3/table", RegURL: "https://dope.test/reg/tok",
@@ -249,7 +249,7 @@ func TestSlotPageSetsTheRegistrationUpInADialog(t *testing.T) {
 		}
 	}
 
-	data.Slot.RegSetUp = true
+	data.Slot.RegShut = true
 	data.Slot.RegClosesAt = "2026-09-04 18:00"
 	data.Slot.LinkVisible = true
 	data.RegState = venues.RegOpen
