@@ -1413,8 +1413,12 @@ export type Strings = {
     };
     flags: {
       base: () => string;
+      baseOption: () => string;
       captain: () => string;
+      captainOption: () => string;
+      label: () => string;
       legion: () => string;
+      legionOption: () => string;
     };
     game: {
       applicationsEmpty: () => string;
@@ -1578,7 +1582,6 @@ export type Strings = {
     };
     rosterEditor: {
       addPlayer: () => string;
-      captain: () => string;
       fillBase: () => string;
       fillBaseNone: () => string;
       fillPrevious: () => string;
@@ -1586,7 +1589,6 @@ export type Strings = {
       fillPreviousTitle: () => string;
       gamesCount: (n: number) => string;
       name: () => string;
-      noCaptain: () => string;
       notInBase: () => string;
       patronymic: () => string;
       playerPlaceholder: () => string;

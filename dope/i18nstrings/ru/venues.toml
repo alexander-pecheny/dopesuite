@@ -154,11 +154,16 @@ download_tours = "Туры (xlsx)"
 download_players = "Игроки (xlsx)"
 
 [flags]
-# A player's mark in a Состав, derived from the team's base roster: captain,
-# base-roster player, legionnaire. One letter each — they head a narrow column.
+# A player's mark in a Состав: captain, base-roster player, legionnaire. One
+# letter each — they head a narrow column. The дропдаун that sets one spells it
+# out, because three bare letters are three riddles.
 captain = "К"
 base = "Б"
 legion = "Л"
+captain_option = "К — капитан"
+base_option = "Б — в базовом составе"
+legion_option = "Л — легионер"
+label = "Флаг"
 
 [mine]
 # «Мои заявки» on the /venues index: every заявка this person has out, at every
@@ -317,13 +322,12 @@ not_in_base = "нет в базе"
 surname = "Фамилия"
 name = "Имя"
 patronymic = "Отчество"
-captain = "капитан"
 remove = "Убрать"
 # How many games buff has this player in, beside their name in the suggest.
 games_count = '{{.n}} {{plural .n "игра" "игры" "игр"}}'
-# What the editor refuses to save, and what it says about an unknown team.
+# What the editor refuses to save. A капитан is optional: a team that has not
+# said who theirs is still has a состав.
 too_many = 'В составе больше {{.n}} игроков.'
-no_captain = "Отметьте капитана."
 
 # The two ways to fill a состав without typing six names: the team's base roster
 # from rating.chgk.info, and whatever this person named last time.

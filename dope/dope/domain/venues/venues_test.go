@@ -7,13 +7,24 @@ import (
 	"dope/dope/domain/protocol"
 )
 
-func TestFlagsAreDerived(t *testing.T) {
+// A flag the filer gave stands; one they did not is derived from the base
+// roster, which is what a roster stored before the flag was a field carries.
+func TestFlagsAreGivenOrDerived(t *testing.T) {
+	given := []RosterPlayer{
+		{PlayerID: 1, Surname: "Печеный", Name: "Александр", Flag: FlagCaptain},
+		{PlayerID: 3, Surname: "Биткин", Name: "Игорь", Flag: FlagBase},
+	}
+	base := map[int64]bool{1: true, 2: true}
+	// 3 is not in the base roster, and is still Б because someone said so.
+	if got := Flags(given, 62868, base); got[0] != FlagCaptain || got[1] != FlagBase {
+		t.Fatalf("given flags %v", got)
+	}
+
 	players := []RosterPlayer{
-		{PlayerID: 1, Surname: "Печеный", Name: "Александр", Captain: true},
+		{PlayerID: 1, Surname: "Печеный", Name: "Александр", Flag: FlagCaptain},
 		{PlayerID: 2, Surname: "Плотников", Name: "Дмитрий"},
 		{PlayerID: 3, Surname: "Биткин", Name: "Игорь"},
 	}
-	base := map[int64]bool{1: true, 2: true}
 	got := Flags(players, 62868, base)
 	if got[0] != FlagCaptain || got[1] != FlagBase || got[2] != FlagLegion {
 		t.Fatalf("flags %v", got)
@@ -22,12 +33,18 @@ func TestFlagsAreDerived(t *testing.T) {
 	if got := Flags(players, 0, nil); got[0] != FlagCaptain || got[1] != FlagBase || got[2] != FlagBase {
 		t.Fatalf("id-0 flags %v", got)
 	}
-	// A team the mirror has not caught up with reads as legionnaireы.
+	// A team the mirror has not caught up with reads as legionnaires.
 	if got := Flags(players, 62868, nil); got[1] != FlagLegion || got[2] != FlagLegion {
 		t.Fatalf("unmirrored flags %v", got)
 	}
 	if s := FlagSummary(got); s != "1К 1Б 1Л" {
 		t.Fatalf("summary %q", s)
+	}
+	if DefaultFlag(1, 62868, base) != FlagBase || DefaultFlag(3, 62868, base) != FlagLegion {
+		t.Fatal("the default is the base roster")
+	}
+	if DefaultFlag(3, 0, nil) != FlagBase {
+		t.Fatal("a team with no rating id has no legionnaires")
 	}
 }
 
@@ -35,12 +52,20 @@ func TestParseRosterKeepsOneCaptain(t *testing.T) {
 	got := ParseRoster(`[
       {"player_id":1,"surname":"А","name":"Б","captain":true},
       {"player_id":0,"surname":" ","name":" "},
-      {"player_id":2,"surname":"В","name":"Г","captain":true}]`)
+      {"player_id":2,"surname":"В","name":"Г","flag":"К"}]`)
 	if len(got) != 2 {
 		t.Fatalf("roster %+v", got)
 	}
-	if !got[0].Captain || got[1].Captain {
+	// The stored captain becomes a К, and the second К is not a second captain.
+	if got[0].Flag != FlagCaptain || got[1].Flag != "" {
 		t.Fatalf("captains %+v", got)
+	}
+	if got[0].Captain {
+		t.Fatal("the legacy field is read, never written again")
+	}
+	// A flag nobody defined is dropped rather than stored as itself.
+	if one := ParseRoster(`[{"surname":"А","flag":"Ж"}]`); one[0].Flag != "" {
+		t.Fatalf("unknown flag %+v", one)
 	}
 	if got[0].FullName() != "А Б" {
 		t.Fatalf("name %q", got[0].FullName())

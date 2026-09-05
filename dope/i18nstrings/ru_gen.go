@@ -1915,9 +1915,13 @@ var RU = Strings{
 			TitleRequired: func() string { return "Название обязательно." },
 		},
 		Flags: VenuesFlagsStrings{
-			Base:    func() string { return "Б" },
-			Captain: func() string { return "К" },
-			Legion:  func() string { return "Л" },
+			Base:          func() string { return "Б" },
+			BaseOption:    func() string { return "Б — в базовом составе" },
+			Captain:       func() string { return "К" },
+			CaptainOption: func() string { return "К — капитан" },
+			Label:         func() string { return "Флаг" },
+			Legion:        func() string { return "Л" },
+			LegionOption:  func() string { return "Л — легионер" },
 		},
 		Game: VenuesGameStrings{
 			ApplicationsEmpty:   func() string { return "Заявок пока нет." },
@@ -2097,7 +2101,6 @@ var RU = Strings{
 		},
 		RosterEditor: VenuesRosterEditorStrings{
 			AddPlayer:         func() string { return "Добавить игрока" },
-			Captain:           func() string { return "капитан" },
 			FillBase:          func() string { return "Добавить базовый состав" },
 			FillBaseNone:      func() string { return "Базовый состав неизвестен." },
 			FillPrevious:      func() string { return "Выбрать из предыдущих составов" },
@@ -2107,7 +2110,6 @@ var RU = Strings{
 				return fmt.Sprintf("%d %s", n, core.Plural("ru", n, "игра", "игры", "игр"))
 			},
 			Name:              func() string { return "Имя" },
-			NoCaptain:         func() string { return "Отметьте капитана." },
 			NotInBase:         func() string { return "нет в базе" },
 			Patronymic:        func() string { return "Отчество" },
 			PlayerPlaceholder: func() string { return "Фамилия Имя" },
