@@ -188,21 +188,15 @@ from players where id = ?`, id).Scan(&p.ID, &p.Surname, &p.Name, &p.Patronymic)
 	return p, true
 }
 
+// A team is what it is currently called: buff keeps one row per team carrying
+// the name and town of its latest tournament, because tournament_results names
+// a team per result and a team may have played under a dozen names.
 func (s *Store) TeamName(ctx context.Context, teamID int64) string {
-	if !s.Enabled() || teamID <= 0 {
+	team, ok := s.Team(ctx, teamID)
+	if !ok {
 		return ""
 	}
-	var name string
-	err := s.db.QueryRowContext(ctx, `
-select coalesce(r.team_current_name, '')
-from tournament_results r join tournaments t on t.id = r.id
-where r.team_id = ?
-order by t.date_start desc
-limit 1`, teamID).Scan(&name)
-	if err != nil {
-		return ""
-	}
-	return name
+	return team.Name
 }
 
 func (s *Store) Team(ctx context.Context, teamID int64) (Team, bool) {
@@ -210,43 +204,32 @@ func (s *Store) Team(ctx context.Context, teamID int64) (Team, bool) {
 		return Team{}, false
 	}
 	team := Team{ID: teamID}
-	err := s.db.QueryRowContext(ctx, `
-select coalesce(r.team_current_name, ''), coalesce(r.team_current_town, '')
-from tournament_results r join tournaments t on t.id = r.id
-where r.team_id = ?
-order by t.date_start desc
-limit 1`, teamID).Scan(&team.Name, &team.Town)
+	err := s.db.QueryRowContext(ctx,
+		`select name, town from teams where id = ?`, teamID).Scan(&team.Name, &team.Town)
 	if err != nil {
 		return Team{}, false
 	}
 	return team, true
 }
 
-// Teams suggests by name, and by id: a captain who knows their team's number
-// types it, and one who does not types the name.
-//
-// The two are a UNION rather than an OR because SQLite plans an OR of an
-// indexed and an unindexed branch as a scan of the whole table — 941k rows, and
-// the suggest took three and a half seconds. Apart, each branch is a seek.
+// Teams suggests over that same table: by id for a captain who knows their
+// team's number, and by any part of the name for one who does not. 74k rows
+// scan in about ten milliseconds, which the 941k результатов behind them did
+// not — an infix match cannot use an index either way, so the size is the
+// whole trick.
 func (s *Store) Teams(ctx context.Context, query string, limit int) []Team {
 	query = strings.TrimSpace(query)
 	if !s.Enabled() || query == "" {
 		return nil
 	}
-	where, args := likeAny("r.team_current_name", query, likePrefix)
+	// Folded in Go, which lowercases Cyrillic; SQLite's own lower() and LIKE
+	// fold ASCII only, so «мангаз» would never find «Мангазея».
 	id, _ := strconv.ParseInt(query, 10, 64)
-	args = append(args, id, capLimit(limit))
 	rows, err := s.db.QueryContext(ctx, `
-select team_id, name, town from (
-  select r.team_id as team_id, r.team_current_name as name,
-         coalesce(r.team_current_town, '') as town, 0 as exact
-  from tournament_results r where `+where+`
-  union all
-  select r.team_id, r.team_current_name, coalesce(r.team_current_town, ''), 1
-  from tournament_results r where r.team_id = ?)
-group by team_id
-order by max(exact) desc, name, team_id
-limit ?`, args...)
+select id, name, town from teams
+where id = ? or name_fold like ? escape '\'
+order by id = ? desc, name, id
+limit ?`, id, likeInfix(strings.ToLower(query)), id, capLimit(limit))
 	if err != nil {
 		return nil
 	}
