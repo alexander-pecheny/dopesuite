@@ -271,6 +271,20 @@ func TestSearchAndLoadTournament(t *testing.T) {
 // The picker's card is one row of the mirror: the editors named rather than
 // listed as ids, the forecast, and buff's own count of the teams asked for. A
 // tournament the mirror knows nothing of the sort about still answers.
+// A captain who knows their team's number types it; one who does not types the
+// name, in whatever case they please. Both answer, and the number first.
+func TestTeamsAnswerByNameAndByID(t *testing.T) {
+	s := fixture(t)
+	byName := s.Teams(context.Background(), "гей", 10)
+	if len(byName) != 1 || byName[0].ID != 62868 {
+		t.Fatalf("by name %+v", byName)
+	}
+	byID := s.Teams(context.Background(), "52916", 10)
+	if len(byID) != 1 || byID[0].Name != "Неловко" {
+		t.Fatalf("by id %+v", byID)
+	}
+}
+
 func TestTournamentsCarryWhatThePickerShows(t *testing.T) {
 	s := fixture(t)
 	got := s.PlayableTournaments(context.Background(), day(t, "2026-09-02"))

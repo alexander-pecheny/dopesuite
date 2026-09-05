@@ -224,6 +224,10 @@ limit 1`, teamID).Scan(&team.Name, &team.Town)
 
 // Teams suggests by name, and by id: a captain who knows their team's number
 // types it, and one who does not types the name.
+//
+// The two are a UNION rather than an OR because SQLite plans an OR of an
+// indexed and an unindexed branch as a scan of the whole table — 941k rows, and
+// the suggest took three and a half seconds. Apart, each branch is a seek.
 func (s *Store) Teams(ctx context.Context, query string, limit int) []Team {
 	query = strings.TrimSpace(query)
 	if !s.Enabled() || query == "" {
@@ -231,14 +235,18 @@ func (s *Store) Teams(ctx context.Context, query string, limit int) []Team {
 	}
 	where, args := likeAny("r.team_current_name", query, likePrefix)
 	id, _ := strconv.ParseInt(query, 10, 64)
-	args = append([]any{id}, args...)
+	args = append(args, id, capLimit(limit))
 	rows, err := s.db.QueryContext(ctx, `
-select r.team_id, r.team_current_name, coalesce(r.team_current_town, '')
-from tournament_results r
-where r.team_id = ? or `+where+`
-group by r.team_id
-order by r.team_id = ? desc, r.team_current_name, r.team_id
-limit ?`, append(append(args, id), capLimit(limit))...)
+select team_id, name, town from (
+  select r.team_id as team_id, r.team_current_name as name,
+         coalesce(r.team_current_town, '') as town, 0 as exact
+  from tournament_results r where `+where+`
+  union all
+  select r.team_id, r.team_current_name, coalesce(r.team_current_town, ''), 1
+  from tournament_results r where r.team_id = ?)
+group by team_id
+order by max(exact) desc, name, team_id
+limit ?`, args...)
 	if err != nil {
 		return nil
 	}
