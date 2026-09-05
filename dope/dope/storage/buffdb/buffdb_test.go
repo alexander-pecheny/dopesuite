@@ -21,6 +21,7 @@ create table players(id integer primary key, name text, patronymic text, surname
 create table tournaments(id integer primary key, name text, date_start text, date_end text, tournament_type text, questions_by_tour text, editors text, difficulty_forecast real);
 create table tournament_requests(tournament_id integer primary key, teams integer, venues integer);
 create table tournament_results(id integer, team_id integer, team_current_name text, team_current_town text);
+create table teams(id integer primary key, name text, name_fold text, town text, last_tournament_id integer);
 create table seasons(id integer primary key, date_start text, date_end text);
 create table team_seasons(team_id integer, season_id integer, player_id integer, date_added text, date_removed text, player_number integer);
 
@@ -48,6 +49,13 @@ insert into tournament_results values
   (10100, 62868, 'Гей Гериллья', 'сборная'),
   (10233, 62868, 'Gay Guerrilla', 'сборная'),
   (10233, 52916, 'Неловко', 'сборная');
+
+-- buff's own roll-up of the above: one row per team, named as it was at its
+-- latest tournament, with the name folded for a search that is case-blind
+-- beyond ASCII.
+insert into teams values
+  (62868, 'Gay Guerrilla', 'gay guerrilla', 'сборная', 10233),
+  (52916, 'Неловко', 'неловко', 'сборная', 10233);
 
 insert into seasons values
   (60, '2025-08-28T00:00:00+00:00', '2026-08-26T00:00:00+00:00'),
@@ -140,8 +148,12 @@ func TestSuggestsIgnoreCase(t *testing.T) {
 			t.Errorf("%q: %+v", typed, got)
 		}
 	}
-	if got := s.Teams(context.Background(), "гей", 10); len(got) != 1 || got[0].ID != 62868 {
-		t.Errorf("teams: %+v", got)
+	// The team is «Gay Guerrilla» now, and any part of that finds it whatever
+	// case it is typed in.
+	for _, typed := range []string{"guerrilla", "GUERRILLA", "gay guer"} {
+		if got := s.Teams(context.Background(), typed, 10); len(got) != 1 || got[0].ID != 62868 {
+			t.Errorf("teams %q: %+v", typed, got)
+		}
 	}
 }
 
@@ -185,7 +197,7 @@ func TestTeamNameIsTheLatest(t *testing.T) {
 	if name := s.TeamName(context.Background(), 999); name != "" {
 		t.Fatalf("unknown team %q", name)
 	}
-	teams := s.Teams(context.Background(), "Не", 10)
+	teams := s.Teams(context.Background(), "лов", 10)
 	if len(teams) != 1 || teams[0].ID != 52916 {
 		t.Fatalf("teams %+v", teams)
 	}
@@ -275,7 +287,7 @@ func TestSearchAndLoadTournament(t *testing.T) {
 // name, in whatever case they please. Both answer, and the number first.
 func TestTeamsAnswerByNameAndByID(t *testing.T) {
 	s := fixture(t)
-	byName := s.Teams(context.Background(), "гей", 10)
+	byName := s.Teams(context.Background(), "guerr", 10)
 	if len(byName) != 1 || byName[0].ID != 62868 {
 		t.Fatalf("by name %+v", byName)
 	}
