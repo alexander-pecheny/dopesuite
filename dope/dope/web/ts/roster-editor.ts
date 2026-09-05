@@ -298,10 +298,13 @@ export function mountTeamField(field: HTMLInputElement): void {
   const existing = (): boolean =>
     form?.querySelector<HTMLInputElement>('input[name="team_kind"]:checked')?.value !== "new";
 
+  // A team nobody picked from the list has no id, and under «Существующая
+  // команда» that is the one thing the form cannot save. It is said once the
+  // person has stopped typing, never while they are: the suggest draws in this
+  // exact spot, and a nag sitting under a live list reads as «no results».
   const say = (): void => {
-    // A team nobody picked from the list has no id, and under «Существующая
-    // команда» that is the one thing the form cannot save.
-    hint.textContent = existing() && !Number(id?.value) ? S.venues.reg.teamPickRequired() : "";
+    const wanted = existing() && !Number(id?.value) && field.value.trim() !== "";
+    hint.textContent = wanted && document.activeElement !== field ? S.venues.reg.teamPickRequired() : "";
   };
 
   autocomplete(field, async (text) => {
@@ -324,6 +327,8 @@ export function mountTeamField(field: HTMLInputElement): void {
     if (id && !team) id.value = "";
     say();
   });
+  field.addEventListener("focus", say);
+  field.addEventListener("blur", () => setTimeout(say, 200));
   form?.addEventListener("change", (event) => {
     const el = event.target;
     if (!(el instanceof HTMLInputElement) || el.name !== "team_kind") return;
