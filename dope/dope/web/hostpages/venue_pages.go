@@ -29,6 +29,16 @@ type SlotRow struct {
 	Accepted     int
 }
 
+// MineHereRow is one of the reader's own games at this Venue: what they played
+// or signed up for, and the way back to either.
+type MineHereRow struct {
+	Date     string
+	Team     string
+	Status   string
+	RegToken string
+	GameHref string
+}
+
 type VenueDetail struct {
 	Ref           string
 	Title         string
@@ -37,6 +47,7 @@ type VenueDetail struct {
 	Description   template.HTML
 	Upcoming      []SlotRow
 	Past          []SlotRow
+	Mine          []MineHereRow
 }
 
 type RegPage struct {
@@ -179,6 +190,31 @@ func slotTable(title string, rows []SlotRow) *ui.Element {
 	return ui.Section(ui.Subhead(ui.Text(title)), ui.Table(table...))
 }
 
+// mineHereSection is what this reader has played here and signed up for next.
+// It is only ever their own, so a page served to a stranger does not carry it.
+func mineHereSection(rows []MineHereRow) *ui.Element {
+	table := []ui.Item{ui.Scroll(), ui.Trow(
+		ui.Hcell(ui.Text(strs.Venues.Mine.ColGame())), ui.Hcell(ui.Text(strs.Venues.Mine.ColTeam())),
+		ui.Hcell(ui.Text(strs.Venues.Mine.ColStatus())), ui.Hcell(ui.Text("")),
+	)}
+	for _, m := range rows {
+		// A game already played is a table to read; one still to come is an
+		// application to edit.
+		open := ui.Cell(ui.Text(""))
+		switch {
+		case m.GameHref != "":
+			open = ui.Cell(ui.Link(ui.Href(m.GameHref), ui.Text(strs.Venues.Mine.OpenGame())))
+		case m.RegToken != "":
+			open = ui.Cell(ui.Link(ui.Href("/reg/"+m.RegToken), ui.Text(strs.Venues.Mine.EditBtn())))
+		}
+		table = append(table, ui.Trow(
+			ui.Cell(ui.Text(venues.HumanDate(m.Date))), ui.Cell(ui.Text(m.Team)),
+			ui.Cell(ui.Text(m.Status)), open,
+		))
+	}
+	return ui.Section(ui.Subhead(ui.Text(strs.Venues.Mine.HereSubhead())), ui.Table(table...))
+}
+
 func VenueDoc(d VenueDetail) *ui.Doc {
 	page := []ui.Item{ui.Title(d.Title), ui.PagePublic}
 	page = append(page, jumpHostNav("/host/venue/"+d.Ref, dopestrings.Default.Host.Pages.JumpHostLabel(), dopestrings.Default.Host.Pages.JumpHostTitleFest())...)
@@ -205,6 +241,9 @@ func VenueDoc(d VenueDetail) *ui.Doc {
 	}
 	if len(d.Past) > 0 {
 		page = append(page, slotTable(strs.Venues.Public.PastGames(), d.Past))
+	}
+	if len(d.Mine) > 0 {
+		page = append(page, mineHereSection(d.Mine))
 	}
 	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
 }

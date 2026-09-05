@@ -317,6 +317,35 @@ func TestSlotPageSetsTheRegistrationUpInADialog(t *testing.T) {
 	}
 }
 
+// A venue's page tells its reader what they have played here and what they are
+// signed up for next — their own and nobody else's.
+func TestVenuePageListsTheReadersOwnGamesHere(t *testing.T) {
+	d := VenueDetail{Ref: "tbilisi", Title: "Площадка",
+		Past: []SlotRow{{Date: "2026-09-04 19:00"}},
+		Mine: []MineHereRow{
+			{Date: "2026-09-04 19:00", Team: "Мантисса", Status: "принята",
+				GameHref: "/venue/tbilisi/game/3/table"},
+			{Date: "2026-09-11 19:00", Team: "Мантисса", Status: "на рассмотрении", RegToken: "tok"},
+		}}
+	body := renderPublic(t, VenueDoc(d))
+	for _, want := range []string{
+		"Мои игры на этой площадке",
+		"4 сентября 2026 (пятница), 19:00",
+		// A game already played is a table to read; one still to come is a
+		// заявка to edit.
+		`href="/venue/tbilisi/game/3/table"`, "Таблица",
+		`href="/reg/tok"`, "Изменить",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("mine here: missing %q", want)
+		}
+	}
+	d.Mine = nil
+	if stranger := renderPublic(t, VenueDoc(d)); strings.Contains(stranger, "Мои игры на этой площадке") {
+		t.Error("a stranger is shown somebody's games")
+	}
+}
+
 // A Representative decides whether the public page carries the invitation.
 func TestVenuePageCarriesTheLinkOnlyWhenTold(t *testing.T) {
 	body := renderPublic(t, VenueDoc(VenueDetail{Ref: "tbilisi", Title: "Площадка",
