@@ -837,6 +837,17 @@ export type Strings = {
     detailed: {
       tour: (n: string) => string;
     };
+    entry: {
+      contestedAdd: () => string;
+      modeQuestion: () => string;
+      modeTable: () => string;
+      next: () => string;
+      noTeams: () => string;
+      prev: () => string;
+      questionOf: (n: string, total: string) => string;
+      tourQuestion: (tour: string, n: string, total: string) => string;
+      whoTookIt: () => string;
+    };
     guard: {
       lead: () => string;
       missing: (names: string) => string;

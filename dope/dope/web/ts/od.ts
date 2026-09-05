@@ -445,14 +445,222 @@ function buildInputView(): HTMLElement {
     wrapper.appendChild(buildNumberingGuard());
     return wrapper;
   }
+  // A form is not a grid: the wrap is min-width:max-content for the wide entry
+  // tables, which would make this panel's own width the pane's minimum.
+  if (!viewer && entryMode === "question") {
+    wrapper.classList.add("od-input-wrap-guard");
+    const panel = document.createElement("div");
+    panel.className = "od-input-panel u-col u-gap-md";
+    panel.append(buildEntryModeSwitch(), buildQuestionEntryView());
+    wrapper.appendChild(panel);
+    return wrapper;
+  }
+  if (!viewer) {
+    const bar = document.createElement("div");
+    bar.className = "od-input-panel";
+    bar.appendChild(buildEntryModeSwitch());
+    wrapper.appendChild(bar);
+  }
   const tables = document.createElement("div");
   tables.className = "od-input-tables";
   tables.appendChild(buildInputTable());
   const shootout = buildInputShootoutTable();
   if (shootout) tables.appendChild(shootout);
   wrapper.appendChild(tables);
+  if (!viewer) wrapper.appendChild(buildEntryTools());
   updateEntrySelectionSoon();
   return wrapper;
+}
+
+// buildEntryTools is what the grid cannot say for itself. Typing «?» into a
+// cell has always opened the contested-answer dialog and nobody ever found it.
+function buildEntryTools(): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "u-row u-gap-sm u-wrap u-align-center";
+  const contested = document.createElement("button");
+  contested.type = "button";
+  contested.className = "btn btn-ghost";
+  contested.textContent = S.od.entry.contestedAdd();
+  contested.addEventListener("click", () => {
+    const cell = sheet.focus ? entryCellNode(sheet.focus.col, sheet.focus.row) : null;
+    if (cell) openContestedDialog(cell);
+  });
+  row.appendChild(contested);
+  return row;
+}
+
+// The entry tab is one question at a time or the whole grid at once: six teams
+// at a venue are ticked off a list, forty are typed into a grid. The choice is
+// the reader's own and stays theirs between visits.
+type EntryMode = "table" | "question";
+const ENTRY_MODE_KEY = "dope-od-entry-mode";
+
+function readEntryMode(): EntryMode {
+  try {
+    return window.localStorage.getItem(ENTRY_MODE_KEY) === "question" ? "question" : "table";
+  } catch {
+    return "table";
+  }
+}
+
+let entryMode: EntryMode = readEntryMode();
+// Which question the one-at-a-time view is on. Kept across re-renders, and
+// clamped whenever the game's length changes under it.
+let entryQuestion = 0;
+
+function buildEntryModeSwitch(): HTMLElement {
+  const field = document.createElement("div");
+  field.className = "u-row u-gap-sm u-align-center u-wrap";
+  const seg = document.createElement("div");
+  seg.className = "seg";
+  for (const [mode, label] of [["table", S.od.entry.modeTable()], ["question", S.od.entry.modeQuestion()]] as const) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "seg-btn" + (entryMode === mode ? " active" : "");
+    button.textContent = label;
+    button.addEventListener("click", () => {
+      if (entryMode === mode) return;
+      entryMode = mode;
+      try {
+        window.localStorage.setItem(ENTRY_MODE_KEY, mode);
+      } catch {
+        // A browser that refuses storage still switches, just not next time.
+      }
+      invalidateTabCache("input");
+      render();
+    });
+    seg.appendChild(button);
+  }
+  field.append(seg);
+  return field;
+}
+
+// buildQuestionEntryView is the entry tab with one question in it: every team
+// on its own line with a tick for having taken it. Nothing is written until the
+// operator moves on — prev and next are the confirm, so a question half-entered
+// while the jury argues never reaches the table.
+function buildQuestionEntryView(): HTMLElement {
+  const view = document.createElement("div");
+  view.className = "u-col u-gap-md";
+  entryQuestion = Math.min(Math.max(entryQuestion, 0), Math.max(totalQuestions - 1, 0));
+  if (totalQuestions === 0 || state.teams.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = S.od.entry.noTeams();
+    view.appendChild(empty);
+    return view;
+  }
+
+  // What is ticked right now, before anything is saved: the question's own
+  // column read as a set of team numbers.
+  const taken = new Set((state.entries[entryQuestion] || []).filter((n) => Number.isInteger(n) && n > 0));
+
+  const head = document.createElement("div");
+  head.className = "u-row u-gap-sm u-align-center u-wrap";
+  const title = document.createElement("h2");
+  title.className = "subhead";
+  title.textContent = questionCaption(entryQuestion);
+  head.appendChild(title);
+  view.appendChild(head);
+
+  const prompt = document.createElement("p");
+  prompt.className = "section-label";
+  prompt.textContent = S.od.entry.whoTookIt();
+  view.appendChild(prompt);
+
+  const list = document.createElement("div");
+  list.className = "u-col u-gap-sm";
+  state.teams.forEach((_, index) => {
+    const number = teamNumber(index);
+    if (!Number.isInteger(number) || number <= 0) return;
+    const row = document.createElement("label");
+    row.className = "checkbox";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = taken.has(number);
+    box.addEventListener("change", () => {
+      if (box.checked) taken.add(number);
+      else taken.delete(number);
+    });
+    const caption = document.createElement("span");
+    caption.textContent = `${number}. ${teamLabel(index)}`;
+    row.append(box, caption);
+    list.appendChild(row);
+  });
+  view.appendChild(list);
+
+  const commit = (step: number): void => {
+    saveQuestionEntries(entryQuestion, taken);
+    entryQuestion = Math.min(Math.max(entryQuestion + step, 0), totalQuestions - 1);
+    invalidateTabCache("input");
+    render();
+  };
+
+  const actions = document.createElement("div");
+  actions.className = "u-row u-gap-sm u-wrap u-align-center";
+  const prev = document.createElement("button");
+  prev.type = "button";
+  prev.className = "btn btn-ghost";
+  prev.textContent = S.od.entry.prev();
+  prev.disabled = entryQuestion === 0;
+  prev.addEventListener("click", () => commit(-1));
+  const next = document.createElement("button");
+  next.type = "button";
+  next.className = "btn btn-primary";
+  next.textContent = S.od.entry.next();
+  next.disabled = entryQuestion >= totalQuestions - 1;
+  next.addEventListener("click", () => commit(1));
+  // The same invert the grid has: what is ticked becomes what is not, which is
+  // how an operator enters "all but two" by naming the two.
+  const invert = document.createElement("button");
+  invert.type = "button";
+  invert.className = "btn btn-ghost yy";
+  invert.title = S.od.invert.label();
+  invert.setAttribute("aria-label", S.od.invert.label());
+  invert.innerHTML = YINYANG_SVG;
+  invert.addEventListener("click", () => {
+    for (const [index] of state.teams.entries()) {
+      const number = teamNumber(index);
+      if (!Number.isInteger(number) || number <= 0) continue;
+      if (taken.has(number)) taken.delete(number);
+      else taken.add(number);
+    }
+    invalidateTabCache("input");
+    render();
+    saveQuestionEntries(entryQuestion, taken);
+  });
+  actions.append(prev, next, invert);
+  view.appendChild(actions);
+  return view;
+}
+
+// questionCaption names the question the way the operator hears it announced:
+// which tour, and where in the game.
+function questionCaption(qIndex: number): string {
+  const total = String(totalQuestions);
+  let seen = 0;
+  for (const [tourIndex, length] of tourLengths.entries()) {
+    if (qIndex < seen + length) {
+      return S.od.entry.tourQuestion(String(tourIndex + 1), String(qIndex + 1), total);
+    }
+    seen += length;
+  }
+  return S.od.entry.questionOf(String(qIndex + 1), total);
+}
+
+// saveQuestionEntries writes one question's ticks as the column the grid keeps:
+// the team numbers that took it, packed from the top, zeroes after.
+function saveQuestionEntries(qIndex: number, taken: Set<number>): void {
+  if (viewer || state.completed[qIndex]) return;
+  const next = entryModel.packColumn(taken, state.teams.length);
+  const current = state.entries[qIndex] || [];
+  if (entryModel.sameColumn(current, next)) return;
+  const previous = current.slice();
+  while (previous.length < state.teams.length) previous.push(0);
+  state.entries[qIndex] = next;
+  pushUndoEntry({kind: "entry-column", qIndex, previous});
+  invalidateScoreCaches();
+  saveState(["entries", qIndex], next);
 }
 
 function updateEntrySelectionSoon(): void {
@@ -474,7 +682,7 @@ function ensureInvertOverlay(): HTMLButtonElement {
   if (invertOverlay) return invertOverlay;
   const button = document.createElement("button");
   button.type = "button";
-  button.className = "entry-invert";
+  button.className = "entry-invert yy";
   button.title = S.od.invert.label();
   button.setAttribute("aria-label", S.od.invert.label());
   button.hidden = true;

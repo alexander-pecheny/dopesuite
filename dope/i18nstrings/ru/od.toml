@@ -16,6 +16,24 @@ entered = 'Введён вопрос {{.n}}'
 # tooltip and aria-label.
 label = "Инвертировать"
 
+[entry]
+# The Ввод tab is one question at a time or the whole grid at once. A площадка
+# with six teams reads out one вопрос and ticks who took it; one with forty
+# types numbers into the grid. The same game, two hands at work.
+mode_table = "Таблица"
+mode_question = "Повопросный"
+# The one-question view: which вопрос this is, and the two ways out of it. Prev
+# and next are the confirm — what is ticked is written on the way past.
+question_of = 'Вопрос {{.n}} из {{.total}}'
+tour_question = 'Тур {{.tour}} — вопрос {{.n}} из {{.total}}'
+who_took_it = "Кто взял?"
+prev = "Назад"
+next = "Далее"
+no_teams = "Ни одной команды с номером."
+# The спорный button beside the grid: the dialog used to open only by typing
+# «?» into a cell, which nobody discovers.
+contested_add = "Добавить спорный"
+
 [guard]
 # The numbering guard replacing the entry sheet while a team lacks a number:
 # the lead, then the phrase — a link on the host page, plain text for a viewer.

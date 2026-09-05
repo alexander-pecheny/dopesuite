@@ -59,4 +59,25 @@ export function invertColumn(
   return same ? null : next;
 }
 
-export const DopeEntryModel = { parseClipboard, coerceValue, invertColumn };
+// packColumn is a question's column as the grid keeps it: the team numbers that
+// took it, ascending, packed from the top into teamCount slots with zeroes
+// after. The one-question entry mode holds its ticks as a set and writes them
+// through this, so both modes store the same shape.
+export function packColumn(taken: Iterable<number>, teamCount: number): number[] {
+  const next = new Array<number>(Math.max(teamCount, 0)).fill(0);
+  const numbers = [...new Set(taken)].filter((n) => Number.isInteger(n) && n > 0).sort((a, b) => a - b);
+  numbers.forEach((n, i) => {
+    if (i < next.length) next[i] = n;
+  });
+  return next;
+}
+
+// sameColumn says whether a column is already what it would be set to, so an
+// operator stepping through questions they did not touch writes nothing.
+export function sameColumn(current: readonly number[] | null | undefined, next: readonly number[]): boolean {
+  const cur = current || [];
+  if (cur.length > next.length) return false;
+  return next.every((value, i) => (cur[i] || 0) === value);
+}
+
+export const DopeEntryModel = { parseClipboard, coerceValue, invertColumn, packColumn, sameColumn };

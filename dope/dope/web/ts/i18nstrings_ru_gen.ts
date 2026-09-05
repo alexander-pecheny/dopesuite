@@ -838,6 +838,17 @@ export const RU: Strings = {
     detailed: {
       tour: (n: string) => `Т${n}`,
     },
+    entry: {
+      contestedAdd: () => "Добавить спорный",
+      modeQuestion: () => "Повопросный",
+      modeTable: () => "Таблица",
+      next: () => "Далее",
+      noTeams: () => "Ни одной команды с номером.",
+      prev: () => "Назад",
+      questionOf: (n: string, total: string) => `Вопрос ${n} из ${total}`,
+      tourQuestion: (tour: string, n: string, total: string) => `Тур ${tour} — вопрос ${n} из ${total}`,
+      whoTookIt: () => "Кто взял?",
+    },
     guard: {
       lead: () => "Чтобы ввод работал, надо заполнить ",
       missing: (names: string) => `Без номера: ${names}.`,
