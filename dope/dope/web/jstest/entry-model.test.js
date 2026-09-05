@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {parseClipboard, coerceValue, invertColumn} from "./dist/entry-model.js";
+import {parseClipboard, coerceValue, invertColumn, packColumn, sameColumn} from "./dist/entry-model.js";
 
 test("parseClipboard splits rows by newline and cols by tab", () => {
   assert.deepEqual(parseClipboard("1\t2\t3\n4\t5\t6"), [["1", "2", "3"], ["4", "5", "6"]]);
@@ -50,4 +50,26 @@ test("invertColumn of a fully-placed column is the empty column", () => {
 test("invertColumn returns null when the invert equals the current column (no-op)", () => {
   // empty column, no team numbers → complement is empty → same as current
   assert.equal(invertColumn([0, 0, 0, 0], [], 4), null);
+});
+
+// The one-question mode holds its ticks as a set; the grid keeps a packed
+// column. Both modes must store the same shape or they disagree about a game.
+test("packColumn packs the ticked numbers from the top, ascending", () => {
+  assert.deepEqual(packColumn([5, 1, 3], 6), [1, 3, 5, 0, 0, 0]);
+  assert.deepEqual(packColumn([], 3), [0, 0, 0]);
+  // A duplicate, a zero and a non-number are not teams.
+  assert.deepEqual(packColumn([2, 2, 0, -1], 4), [2, 0, 0, 0]);
+  // More ticks than slots keeps the lowest numbers rather than overflowing.
+  assert.deepEqual(packColumn([9, 8, 7], 2), [7, 8]);
+  assert.deepEqual(packColumn([1], 0), []);
+});
+
+test("sameColumn spots a column that already says what it would be set to", () => {
+  assert.equal(sameColumn([1, 3, 0], [1, 3, 0]), true);
+  // A shorter stored column padded with zeroes is still the same column.
+  assert.equal(sameColumn([1, 3], [1, 3, 0]), true);
+  assert.equal(sameColumn(null, [0, 0]), true);
+  assert.equal(sameColumn([1, 3, 0], [1, 4, 0]), false);
+  // A longer stored column has something in it the new one does not.
+  assert.equal(sameColumn([1, 3, 5], [1, 3]), false);
 });

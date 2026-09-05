@@ -1791,11 +1791,17 @@ body:not(.embedded-match) .grid-match {
    and wraps. .od-input-wrap is min-width:max-content for the wide input tables
    it normally holds, which would otherwise make this sentence the pane's
    minimum width and push the whole frame sideways. */
-.od-input-gate {
-  margin: 24px;
+/* The two things the input wrap holds that are not a score table: the numbering
+   guard, and the one-question entry form. Both are prose rather than a grid, so
+   both take the same measure and the same inset. */
+.od-input-gate,
+.od-input-panel {
+  margin: var(--space-5);
   font-size: var(--text-base);
   color: var(--text);
 }
+
+.od-input-panel { max-width: 32rem; }
 
 /* .od-input-wrap is min-width:max-content for the wide input tables it normally
    holds. The guard's message is prose, so when the wrap holds that instead, the
@@ -1873,6 +1879,16 @@ body:not(.embedded-match) .grid-match {
 
 .entry-q-head { font-size: var(--text-xs); }
 
+/* The yin-yang glyph itself, wherever it is drawn: floating over the entry
+   grid's active column, and inline among the per-question mode's buttons. */
+.yy svg { display: block; width: 16px; height: 16px; }
+
+.yy .yy-light { fill: var(--surface); }
+
+.yy .yy-dark { fill: currentColor; }
+
+.yy .yy-ring { stroke: currentColor; stroke-width: 4; }
+
 /* Floating "Инвертировать" button: a small yin-yang parked in the gap above the
    active column's number. Fixed-positioned (placed by positionInvertOverlay) so
    the entry table's `contain: paint` doesn't clip it. */
@@ -1892,14 +1908,6 @@ body:not(.embedded-match) .grid-match {
 .entry-invert[hidden] { display: none; }
 
 .entry-invert:hover { color: var(--blue); }
-
-.entry-invert svg { display: block; width: 16px; height: 16px; }
-
-.entry-invert .yy-light { fill: var(--surface); }
-
-.entry-invert .yy-dark { fill: currentColor; }
-
-.entry-invert .yy-ring { stroke: currentColor; stroke-width: 4; }
 
 .entry-invert.spinning { animation: yinyang-spin 0.45s ease; }
 

@@ -1056,6 +1056,19 @@ var RU = Strings{
 		Detailed: OdDetailedStrings{
 			Tour: func(n string) string { return fmt.Sprintf("Т%s", n) },
 		},
+		Entry: OdEntryStrings{
+			ContestedAdd: func() string { return "Добавить спорный" },
+			ModeQuestion: func() string { return "Повопросный" },
+			ModeTable:    func() string { return "Таблица" },
+			Next:         func() string { return "Далее" },
+			NoTeams:      func() string { return "Ни одной команды с номером." },
+			Prev:         func() string { return "Назад" },
+			QuestionOf:   func(n string, total string) string { return fmt.Sprintf("Вопрос %s из %s", n, total) },
+			TourQuestion: func(tour string, n string, total string) string {
+				return fmt.Sprintf("Тур %s — вопрос %s из %s", tour, n, total)
+			},
+			WhoTookIt: func() string { return "Кто взял?" },
+		},
 		Guard: OdGuardStrings{
 			Lead:    func() string { return "Чтобы ввод работал, надо заполнить " },
 			Missing: func(names string) string { return fmt.Sprintf("Без номера: %s.", names) },
