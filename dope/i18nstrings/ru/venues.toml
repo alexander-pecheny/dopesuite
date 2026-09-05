@@ -100,6 +100,12 @@ reg_state_closed = "Закрыта"
 reg_state_scheduled = 'Откроется {{.at}}'
 reg_until = 'до {{.at}}'
 reg_link_public = "ссылка на странице площадки"
+# Shutting заявки on the spot, apart from the window: a Слот that filled up
+# tonight is shut tonight rather than by backdating a calendar.
+reg_shut_btn = "Закрыть регистрацию"
+reg_shut_confirm = "Закрыть регистрацию? Заявки перестанут приниматься."
+reg_open_btn = "Открыть регистрацию"
+reg_state_shut = "Закрыта вручную"
 # The dialog that sets it up and changes it afterwards, and the button that
 # opens it: one name, so the button says where it leads.
 reg_dialog_title = "Настройки регистрации"

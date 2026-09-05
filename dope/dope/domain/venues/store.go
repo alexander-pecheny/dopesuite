@@ -182,9 +182,18 @@ update slots set starts_at = ?, rating_tournament_id = ?, updated_at = ? where i
 // Representative had shut.
 func UpdateSlotRegTx(ctx context.Context, tx *sql.Tx, slotID int64, opensAt, closesAt string, linkVisible bool) error {
 	_, err := tx.ExecContext(ctx, `
-update slots set reg_opens_at = ?, reg_closes_at = ?, reg_closed = 0, link_visible = ?, updated_at = ? where id = ?`,
+update slots set reg_opens_at = ?, reg_closes_at = ?, link_visible = ?, updated_at = ? where id = ?`,
 		util.NullableString(FormatTime(opensAt)), util.NullableString(FormatTime(closesAt)),
 		util.BoolToInt(linkVisible), util.UtcNow(), slotID)
+	return err
+}
+
+// ShutSlotRegTx closes a registration on the spot, or opens one that was shut.
+// It is the Representative's own hand on it, apart from the window: a Слот that
+// filled up tonight is shut tonight, not by editing a date to be in the past.
+func ShutSlotRegTx(ctx context.Context, tx *sql.Tx, slotID int64, shut bool) error {
+	_, err := tx.ExecContext(ctx, `update slots set reg_closed = ?, updated_at = ? where id = ?`,
+		util.BoolToInt(shut), util.UtcNow(), slotID)
 	return err
 }
 

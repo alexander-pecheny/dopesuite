@@ -185,6 +185,7 @@ func (s *Server) handleSlotRoutes(t *route.Table, venue string) {
 	t.Handle("GET "+slot+"/tournaments", route.Manager, s.renderTournamentPicker)
 	t.Handle("POST "+slot+"/tournament", route.Manager, s.handleSlotTournament)
 	t.Handle("POST "+slot+"/reg", route.Manager, s.handleSlotReg)
+	t.Handle("POST "+slot+"/shut", route.Manager, s.handleSlotShut)
 	t.Handle("POST "+slot+"/token", route.Manager, s.handleSlotToken)
 	t.Handle("POST "+slot+"/clone", route.Manager, s.handleSlotClone)
 	t.Handle("POST "+slot+"/application/{app}/status", route.Manager, s.handleApplicationStatus)

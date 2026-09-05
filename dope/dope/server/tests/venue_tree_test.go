@@ -126,10 +126,11 @@ func TestRegistrationIsSetUpByItsDialog(t *testing.T) {
 		t.Fatal(err)
 	}
 	cookie := createTestSession(t, srv, userID)
-	path := "/host/venue/" + strconv.FormatInt(festID, 10) + "/game/" + slot.GameRef() + "/reg"
-	post := func(form url.Values) {
+	base := "/host/venue/" + strconv.FormatInt(festID, 10) + "/game/" + slot.GameRef()
+	path := base + "/reg"
+	postTo := func(to string, form url.Values) {
 		t.Helper()
-		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
+		req := httptest.NewRequest(http.MethodPost, to, strings.NewReader(form.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req.AddCookie(&http.Cookie{Name: session.CookieName, Value: cookie})
 		rec := httptest.NewRecorder()
@@ -138,6 +139,7 @@ func TestRegistrationIsSetUpByItsDialog(t *testing.T) {
 			t.Fatalf("%s = %d: %s", form.Encode(), rec.Code, rec.Body.String())
 		}
 	}
+	post := func(form url.Values) { t.Helper(); postTo(path, form) }
 	state := func() venues.Slot {
 		t.Helper()
 		got, err := venues.LoadSlot(t.Context(), db, slot.ID)
@@ -175,6 +177,26 @@ func TestRegistrationIsSetUpByItsDialog(t *testing.T) {
 	post(url.Values{"reg_opens": {"never"}, "reg_opens_at": {"2026-09-04 19:00"}})
 	if got := state(); got.RegOpensAt != "" || got.RegClosesAt != "" {
 		t.Fatalf("an unpicked end kept its date: %+v", got)
+	}
+
+	// Shutting заявки is its own button, and saving the dialog afterwards does
+	// not quietly undo it: a Слот that filled up stays shut while its
+	// Representative edits the window.
+	postTo(base+"/shut", url.Values{"shut": {"1"}})
+	shut := state()
+	if !shut.RegShut {
+		t.Fatal("the button did not shut the registration")
+	}
+	if venues.Registration(shut.RegOpensAt, shut.RegClosesAt, shut.RegShut, time.Now().UTC()) != venues.RegClosed {
+		t.Error("a shut registration still takes заявки")
+	}
+	post(url.Values{"link_visible": {"1"}})
+	if !state().RegShut {
+		t.Error("saving the dialog reopened a registration nobody asked to reopen")
+	}
+	postTo(base+"/shut", url.Values{"shut": {"0"}})
+	if state().RegShut {
+		t.Error("the button did not open it again")
 	}
 }
 

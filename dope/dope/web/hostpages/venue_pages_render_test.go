@@ -249,16 +249,29 @@ func TestSlotPageSetsTheRegistrationUpInADialog(t *testing.T) {
 		}
 	}
 
-	data.Slot.RegShut = true
 	data.Slot.RegClosesAt = "2026-09-04 18:00"
 	data.Slot.LinkVisible = true
 	data.RegState = venues.RegOpen
 	body = renderPublic(t, slotPageDoc(data))
 	for _, want := range []string{"Открыта", "до 2026-09-04 18:00", "ссылка на странице площадки",
-		`name="reg_closes" value="at" checked`} {
+		`name="reg_closes" value="at" checked`,
+		// An open registration offers the one move that changes something.
+		"Закрыть регистрацию", `action="/host/venue/tbilisi/game/3/shut"`, `name="shut" value="1"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("set up: missing %q", want)
 		}
+	}
+
+	// Shut by hand, the page says so and offers the other way.
+	data.Slot.RegShut = true
+	body = renderPublic(t, slotPageDoc(data))
+	for _, want := range []string{"Закрыта вручную", "Открыть регистрацию", `name="shut" value="0"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("shut: missing %q", want)
+		}
+	}
+	if strings.Contains(body, "Закрыть регистрацию") {
+		t.Error("a shut registration still offers to shut it")
 	}
 }
 
