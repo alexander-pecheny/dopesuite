@@ -228,6 +228,7 @@ export const RU: Strings = {
       pptxTitle: () => "Презентация, по слайду на вопрос",
       run: () => "Экспорт",
       selectAll: () => "Выбрать все",
+      telegramLabel: () => "телеграм-канал",
       title: () => "Экспорт",
     },
     feed: {
@@ -506,6 +507,21 @@ export const RU: Strings = {
     testmode: {
       badge: (name: string) => `Тест-режим: «${name}». Завершить — по клику`,
       stop: () => "Завершить тест-режим",
+    },
+    tgexport: {
+      adminHint: () => "Бот должен быть администратором и в канале, и в группе.",
+      channelLabel: () => "Канал",
+      channelPlaceholder: () => "@channel, ссылка или id",
+      chatLabel: () => "Группа обсуждения",
+      chatPlaceholder: () => "@group, ссылка или id",
+      done: () => "Опубликовано.",
+      hint: () => "Бот публикует вопросы в канал, а обсуждение — в связанную группу. Токен уходит на сервер xy: публикует он.",
+      interrupted: () => "Связь оборвалась. Часть вопросов могла уйти — проверьте канал.",
+      run: () => "Опубликовать",
+      running: () => "Публикуем…",
+      title: () => "Публикация в телеграм",
+      tokenLabel: () => "Токен бота",
+      tokenPlaceholder: () => "123456:AA…",
     },
     thread: {
       placeholder: () => "Ответить…",
@@ -1882,6 +1898,12 @@ ${usage}
     },
   },
   tg: {
+    export: {
+      connecting: () => "Подключаемся к боту…",
+      failed: () => "Не удалось опубликовать в телеграм.",
+      missingFields: () => "Нужны токен бота, канал и группа обсуждения.",
+      posting: (channel: string, chat: string) => `Публикуем в ${channel}, обсуждение ${chat}…`,
+    },
     resolve: {
       done: () => "✅ Готово, продолжаем.",
       forward: (name: string) => `Перешлите боту любое сообщение из канала «${name}».`,
@@ -1891,8 +1913,10 @@ ${usage}
       sameChannel: () => "Это тот же канал, а нужна группа обсуждения — напишите в неё, не в канал.",
     },
     verify: {
-      notAdmin: (what: string) => `бот не администратор в ${what}`,
+      notAdmin: (what: string) => `бот не администратор ${what}`,
       notMember: (what: string, err: string) => `бот не добавлен к ${what}: ${err}`,
+      ofChannel: () => "канала",
+      ofChat: () => "группы обсуждения",
       whatChannel: () => "каналу",
       whatChat: () => "группе обсуждения",
     },

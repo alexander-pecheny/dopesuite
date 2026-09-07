@@ -12,6 +12,7 @@ import { xyChgk } from "./chgk.js";
 import { xyVersions } from "./versions.js";
 import { xyHndt } from "./hndt.js";
 import { modal } from "./modal.js";
+import { createTelegramExport } from "./tgexport.js";
 import type { Attachments } from "./attachments.js";
 import type { Board, ListPanel, ListScope } from "./panels.js";
 import type { BoardCard } from "./unlock.js";
@@ -59,6 +60,9 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     { key: "pptx", box: "exportFmtPptx", server: true },
     { key: "openquiz", box: "exportFmtOpenquiz", server: true },
     { key: "handouts", box: "exportFmtHandouts", server: true },
+    // Telegram publishes rather than downloads, so it cannot join a zip of
+    // files: it is offered in the dropdown and has no tick box of its own.
+    { key: "telegram", box: "", server: true },
   ] as const;
 
   const exportModal = modal("export");
@@ -68,12 +72,16 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
   function oneFormat(): HTMLSelectElement { return byId<HTMLSelectElement>("exportOneFormat"); }
   function manyMode(): boolean { return byId<HTMLInputElement>("exportModeMany").checked; }
 
+  // unavailable is what this list cannot be exported as right now, computed
+  // once per open: it governs the tick boxes and the dropdown's options alike.
+  let unavailable = new Set<string>();
+
   function exportChosen(): string[] {
     if (!manyMode()) {
-      const f = EXPORT_FORMATS.find((f) => f.key === oneFormat().value);
-      return f && !exportBox(f.box).disabled ? [f.key] : [];
+      const key = oneFormat().value;
+      return EXPORT_FORMATS.some((f) => f.key === key) && !unavailable.has(key) ? [key] : [];
     }
-    return EXPORT_FORMATS.filter((f) => exportBox(f.box).checked && !exportBox(f.box).disabled).map((f) => f.key);
+    return EXPORT_FORMATS.filter((f) => f.box && exportBox(f.box).checked && !unavailable.has(f.key)).map((f) => f.key);
   }
 
   // syncExportForm keeps the form honest: the tick boxes belong to the zip and
@@ -83,7 +91,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     byId("exportFormats").hidden = !manyMode();
     const chosen = exportChosen();
     byId<HTMLButtonElement>("exportRun").disabled = chosen.length === 0;
-    const available = EXPORT_FORMATS.filter((f) => !exportBox(f.box).disabled);
+    const available = EXPORT_FORMATS.filter((f) => f.box && !unavailable.has(f.key));
     const allOn = available.length > 0 && chosen.length === available.length;
     byId("exportToggleAll").textContent = allOn ? S.export.form.deselectAll() : S.export.form.selectAll();
   }
@@ -95,17 +103,20 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     // Offline everything but the .4s is unreachable: the other formats render
     // server-side, and even the .4s ships without its images (they are fetched).
     const offline = !xySync.isOnline();
-    const off = new Set<string>();
+    unavailable = new Set(EXPORT_FORMATS
+      .filter((f) => (offline && f.server) || (f.key === "handouts" && !hndt.trim()))
+      .map((f) => f.key));
     for (const f of EXPORT_FORMATS) {
+      if (!f.box) continue;
       const box = exportBox(f.box);
-      box.disabled = (offline && f.server) || (f.key === "handouts" && !hndt.trim());
-      if (box.disabled) { box.checked = false; off.add(f.key); }
+      box.disabled = unavailable.has(f.key);
+      if (box.disabled) box.checked = false;
     }
     // The dropdown offers the same formats, so it drops the same ones, and a
     // selection standing on one moves to the first that survived.
     const one = oneFormat();
-    for (const opt of Array.from(one.options)) opt.disabled = off.has(opt.value);
-    if (off.has(one.value)) one.value = EXPORT_FORMATS.find((f) => !off.has(f.key))?.key ?? "";
+    for (const opt of Array.from(one.options)) opt.disabled = unavailable.has(opt.value);
+    if (unavailable.has(one.value)) one.value = EXPORT_FORMATS.find((f) => !unavailable.has(f.key))?.key ?? "";
     const notes: string[] = [];
     if (offline) notes.push(S.export.notes.offline());
     if (!hndt.trim()) notes.push(S.export.notes.noHandouts());
@@ -113,6 +124,24 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     exportModal.open({ onClose: () => { exportCtx = null; } });
     exportModal.message(notes.join(" "));
   }
+
+  // packForm is the body every export sends: the 4s, the name to hand back and
+  // the pictures the chosen formats need. null is the reader calling it off over
+  // pictures the board no longer has.
+  async function packForm(): Promise<FormData | null> {
+    if (!exportCtx) return null;
+    const { cards, title } = exportCtx;
+    const fd = new FormData();
+    fd.append("source", exportSource(cards));
+    fd.append("filename", title);
+    const needed = xySync.isOnline() ? xyChgk.imageRefs(cards) : new Set<string>();
+    const found = await attachments.appendImages(fd, cards, needed);
+    const missing = [...needed].filter((n) => !found.has(n));
+    if (missing.length && !confirm(S.export.run.missingImagesConfirm(missing.join(", ")))) return null;
+    return fd;
+  }
+
+  const telegram = createTelegramExport({ boardId: () => board.id });
 
   // runExport renders the chosen formats. A bare .4s with no images never touches
   // the network — it is the one export that works offline.
@@ -135,28 +164,29 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
 
     const msg = byId("exportMessage");
     if (!xySync.requireOnline(S.export.run.offlineFormats(), msg)) return;
+    // Telegram is a conversation, not a download: it hands over to its own
+    // dialog, which asks where to post and then reports what the bot is doing.
+    if (formats.length === 1 && formats[0] === "telegram") {
+      msg.textContent = S.export.run.progress();
+      const pack = await packForm();
+      if (!pack) { msg.textContent = ""; return; }
+      exportModal.close();
+      await telegram.open(pack);
+      return;
+    }
     const btn = byId<HTMLButtonElement>("exportRun");
     btn.disabled = true;
     msg.textContent = formats.includes("handouts") ? S.export.run.progressHandouts() : S.export.run.progress();
     board.setStatus("saving");
     try {
-      const fd = new FormData();
-      fd.append("source", source);
-      fd.append("filename", title);
-      fd.append("formats", formats.join(","));
-      if (formats.includes("handouts")) fd.append("hndt", hndt);
-
-      // Images are only shipped for the .4s (which references them by name);
-      // docx and pdf embed their own copies, so nothing else needs the upload.
-      const needed = new Set<string>();
-      if (formats.some((f) => f !== "4s") || wantsImages) for (const n of wanted) needed.add(n);
-      const found = await attachments.appendImages(fd, cards, needed);
-      const missing = [...needed].filter((n) => !found.has(n));
-      if (missing.length && !confirm(S.export.run.missingImagesConfirm(missing.join(", ")))) {
+      const fd = await packForm();
+      if (!fd) {
         board.setStatus("saved");
         msg.textContent = "";
         return;
       }
+      fd.append("formats", formats.join(","));
+      if (formats.includes("handouts")) fd.append("hndt", hndt);
       const res = await fetch("/api/export/pack", { method: "POST", credentials: "same-origin", body: fd });
       if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
       downloadBlob(await res.blob(), filenameFromResponse(res) || `${title}.zip`);
@@ -183,12 +213,13 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
   byId("exportToggleAll").addEventListener("click", () => {
     const target = byId("exportToggleAll").textContent === S.export.form.selectAll();
     for (const f of EXPORT_FORMATS) {
+      if (!f.box) continue;
       const box = exportBox(f.box);
       if (!box.disabled) box.checked = target;
     }
     syncExportForm();
   });
-  for (const f of EXPORT_FORMATS) exportBox(f.box).addEventListener("change", syncExportForm);
+  for (const f of EXPORT_FORMATS) if (f.box) exportBox(f.box).addEventListener("change", syncExportForm);
   for (const id of ["exportModeOne", "exportModeMany", "exportOneFormat"]) byId(id).addEventListener("change", syncExportForm);
 
 

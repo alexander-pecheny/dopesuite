@@ -48,9 +48,15 @@ type waiter struct {
 }
 
 // NewBot prepares the poller for a token. Start it before waiting on anything.
-func NewBot(token string) *Bot {
+func NewBot(token string) *Bot { return NewBotAt(token, "") }
+
+// NewBotAt is NewBot against another Bot API host; "" is Telegram's own. The
+// export is the one caller that reaches Telegram from a server, so it is also
+// the one that has to be testable against a stub.
+func NewBotAt(token, apiBase string) *Bot {
 	return &Bot{client: tgbot.New(tgbot.Config{
 		Token:          token,
+		APIBase:        apiBase,
 		PollTimeout:    30 * time.Second,
 		AllowedUpdates: []string{"message", "channel_post"},
 	})}

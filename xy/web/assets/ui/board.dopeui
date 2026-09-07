@@ -231,6 +231,7 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
           option value="pptx" @board.export.pptx_label
           option value="openquiz" @board.export.openquiz_label
           option value="handouts" @board.export.handouts_label
+          option value="telegram" @board.export.telegram_label
       radio id="exportModeMany" name="exportMode" value="many" @board.export.mode_many
       col id="exportFormats" gap="xs" hidden
         checkbox id="exportFmt4s" checked title=@board.export.fmt4s_title ".4s"
@@ -247,6 +248,23 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
         button submit id="exportRun" @board.export.run
         button kind="ghost" id="exportCancel" @board.actions.cancel
     message id="exportMessage"
+
+  -- publishing to telegram: the one export that posts rather than downloads,
+  -- so it asks where to post and then reports what the bot is waiting for.
+  modal id="tgExportOverlay" label=@board.tgexport.title title=@board.tgexport.title
+    form id="tgExportForm" dir="col"
+      hint @board.tgexport.hint
+      label for="tgExportToken" @board.tgexport.token_label
+      password id="tgExportToken" placeholder=@board.tgexport.token_placeholder autocomplete="off" required
+      label for="tgExportChannel" @board.tgexport.channel_label
+      textfield id="tgExportChannel" placeholder=@board.tgexport.channel_placeholder autocomplete="off" spellcheck="false" required
+      label for="tgExportChat" @board.tgexport.chat_label
+      textfield id="tgExportChat" placeholder=@board.tgexport.chat_placeholder autocomplete="off" spellcheck="false" required
+      hint @board.tgexport.admin_hint
+      row gap="sm" align="center" wrap
+        button submit id="tgExportRun" @board.tgexport.run
+        button kind="ghost" id="tgExportCancel" @board.actions.cancel
+    message id="tgExportMessage"
 
   -- The board-wide typographer stops here when the pass wants to add stress marks:
   -- chgk writes stress by capitalising the stressed vowel ("brAzer"), and a

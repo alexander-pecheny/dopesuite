@@ -122,6 +122,15 @@ export interface AttachmentRecord {
   bytes: Uint8Array<ArrayBuffer>;
 }
 
+// TgTarget is where a board was last published: what the person typed, and what
+// Telegram turned it into.
+export interface TgTarget {
+  channel: string;
+  chat: string;
+  channelId?: string;
+  chatId?: string;
+}
+
 const DB_NAME = "xy-offline";
 const DB_VERSION = 2;
 
@@ -132,7 +141,7 @@ const DB_VERSION = 2;
 //   attachments key=attId(number)    → { mime, bytes:Uint8Array, rev }
 //   outbox     keyPath="seq" auto    → queued mutation op
 //   idmap      key=tempId(number<0)  → realId(number)
-//   meta       key=string            → scalar (e.g. tempCounter)
+//   meta       key=string            → scalar (tempCounter, the telegram target…)
 //   searchindex key=boardId(number)  → one board's Search Index, PLAINTEXT (ADR-0008)
 const STORES = ["snapshots", "boardlist", "timeline", "attachments", "outbox", "idmap", "meta", "searchindex"];
 
@@ -270,6 +279,20 @@ const getMembers = (boardId: number | string): Promise<unknown[] | undefined> =>
 const putMembers = (boardId: number | string, members: unknown[]): Promise<IDBValidKey> =>
   tx("meta", "readwrite", (s) => req(s.put(members, "members:" + Number(boardId))));
 
+// ---- telegram publishing (per device) ----
+// The bot is one per device and the target is one per board, so they are two
+// keys rather than one record: a person publishes several packages through the
+// same bot, into a channel each. Both are what the modal fills in, and the ids
+// come back resolved so the next export skips the conversation.
+const getTgBot = (): Promise<string | undefined> =>
+  tx("meta", "readonly", (s) => req<string | undefined>(s.get("tg:bot")));
+const putTgBot = (token: string): Promise<IDBValidKey> =>
+  tx("meta", "readwrite", (s) => req(s.put(token, "tg:bot")));
+const getTgTarget = (boardId: number | string): Promise<TgTarget | undefined> =>
+  tx("meta", "readonly", (s) => req<TgTarget | undefined>(s.get("tg:" + Number(boardId))));
+const putTgTarget = (boardId: number | string, target: TgTarget): Promise<IDBValidKey> =>
+  tx("meta", "readwrite", (s) => req(s.put(target, "tg:" + Number(boardId))));
+
 // ---- meta / temp-id counter ----
 async function nextTempId(): Promise<number> {
   return tx("meta", "readwrite", async (s) => {
@@ -286,6 +309,7 @@ export const xyStore = {
   getIndex, putIndex, deleteIndex, allIndexes,
   getTimeline, putTimeline,
   getMembers, putMembers,
+  getTgBot, putTgBot, getTgTarget, putTgTarget,
   getAttachment, putAttachment,
   addOp, allOps, deleteOp, putOp, countOps,
   putIdMap, allIdMap, clearIdMap,

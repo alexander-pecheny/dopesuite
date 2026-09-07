@@ -150,6 +150,16 @@ internal/server/       package server — the whole HTTP server
                        (4s/docx/docx_spoilers/pdf/pdf_mobile/pptx/openquiz/handouts) rendered by composing the above + handout.SplitFit,
                        returned as the bare file when one was asked for or a zip when more. Images ride along
                        only for the .4s (docx/pdf embed their own); split-fit's PDFs land under раздатки/
+  exporttg.go          POST /api/export/telegram — the export that publishes instead of downloading
+                       (internal/chgk/tg). Unlike every other it is a conversation: a channel named
+                       by @username cannot be looked up by a bot, so the person driving it shows the
+                       bot the channel and the group from the inside while the bot polls. The answer
+                       is therefore a stream of NDJSON lines — notes, then a last one carrying the
+                       resolved ids the browser remembers so the next export skips the dialogue.
+                       ResolveTarget also checks the bot is an administrator of both, which is what
+                       Telegram requires and the commonest thing to have missed. The bot token passes
+                       through the server (posting is Go, and the CSP forbids the page reaching
+                       api.telegram.org) and is stored nowhere
   import4s.go          POST /api/import/parse — .4s/.zip/.docx → 4s source + images (chgk/chgkimport),
                        parsed in memory, nothing persisted; the client encrypts the result into a new list.
                        POST /api/import/text — the same pipeline without the file: one card's plain text
@@ -423,9 +433,15 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        dropdown, or several ticked into a zip: .docx, .docx со
                        спойлерами (the screen's text, answers behind dots, for a
                        written tour), .pdf, .pdf для телефона, .pptx, openquiz
-                       JSON, раздатки; a bare .4s
+                       JSON, раздатки, or the telegram channel (tgexport.ts, which is not a
+                       download and so is offered in the dropdown alone); a bare .4s
                        with no images is written in the browser, the one export that
                        works offline
+    tgexport.ts        «Публикация в телеграм»: the dialog the export hands over to when the
+                       chosen format is the channel — the bot, the channel and its discussion
+                       group, then the NDJSON stream rendered as a log. What was typed is kept
+                       in IndexedDB (store.ts «meta»): the bot per device, the target per board,
+                       and beside it the ids Telegram resolved
     handouts.ts        «Генерация раздаток»: hndtOf (hndt.ts) → editable .hndt →
                        /api/handouts/{pdf,split_fit}; images staged once per open
                        (handoutsession.ts); per-question layout settings persisted to

@@ -227,6 +227,7 @@ export type Strings = {
       pptxTitle: () => string;
       run: () => string;
       selectAll: () => string;
+      telegramLabel: () => string;
       title: () => string;
     };
     feed: {
@@ -505,6 +506,21 @@ export type Strings = {
     testmode: {
       badge: (name: string) => string;
       stop: () => string;
+    };
+    tgexport: {
+      adminHint: () => string;
+      channelLabel: () => string;
+      channelPlaceholder: () => string;
+      chatLabel: () => string;
+      chatPlaceholder: () => string;
+      done: () => string;
+      hint: () => string;
+      interrupted: () => string;
+      run: () => string;
+      running: () => string;
+      title: () => string;
+      tokenLabel: () => string;
+      tokenPlaceholder: () => string;
     };
     thread: {
       placeholder: () => string;
@@ -1842,6 +1858,12 @@ export type Strings = {
     };
   };
   tg: {
+    export: {
+      connecting: () => string;
+      failed: () => string;
+      missingFields: () => string;
+      posting: (channel: string, chat: string) => string;
+    };
     resolve: {
       done: () => string;
       forward: (name: string) => string;
@@ -1853,6 +1875,8 @@ export type Strings = {
     verify: {
       notAdmin: (what: string) => string;
       notMember: (what: string, err: string) => string;
+      ofChannel: () => string;
+      ofChat: () => string;
       whatChannel: () => string;
       whatChat: () => string;
     };

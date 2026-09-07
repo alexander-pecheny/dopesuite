@@ -115,10 +115,10 @@ func ResolveTarget(ctx context.Context, bot *Bot, channelRef, chatRef string, sa
 	saveResolveCache(cache)
 
 	t = Target{ChannelID: prefixed(channelID), ChatID: prefixed(chatID)}
-	if err := verifyAccess(ctx, bot, t.ChannelID, s.Tg.Verify.WhatChannel()); err != nil {
+	if err := verifyAccess(ctx, bot, t.ChannelID, s.Tg.Verify.WhatChannel(), s.Tg.Verify.OfChannel()); err != nil {
 		return t, err
 	}
-	return t, verifyAccess(ctx, bot, t.ChatID, s.Tg.Verify.WhatChat())
+	return t, verifyAccess(ctx, bot, t.ChatID, s.Tg.Verify.WhatChat(), s.Tg.Verify.OfChat())
 }
 
 // introduce is chgksuite's authenticate_user: before asking the person to do
@@ -137,10 +137,11 @@ func introduce(ctx context.Context, bot *Bot, say Prompter) error {
 
 // verifyAccess checks the bot is an administrator where it is about to post,
 // which is what Telegram requires of it and the commonest thing to have missed.
-func verifyAccess(ctx context.Context, bot *Bot, chatID, what string) error {
+// The place is named twice because the two failures decline it differently.
+func verifyAccess(ctx context.Context, bot *Bot, chatID, dative, genitive string) error {
 	res, err := bot.Client().Call(ctx, "getChatAdministrators", map[string]any{"chat_id": chatID})
 	if err != nil {
-		return corei18n.User(xystrings.Default.Tg.Verify.NotMember(what, err.Error()))
+		return corei18n.User(xystrings.Default.Tg.Verify.NotMember(dative, err.Error()))
 	}
 	var admins []struct {
 		User struct {
@@ -165,7 +166,7 @@ func verifyAccess(ctx context.Context, bot *Bot, chatID, what string) error {
 			return nil
 		}
 	}
-	return corei18n.User(xystrings.Default.Tg.Verify.NotAdmin(what))
+	return corei18n.User(xystrings.Default.Tg.Verify.NotAdmin(genitive))
 }
 
 // shortCode is a one-off word the person types back, so the bot knows which

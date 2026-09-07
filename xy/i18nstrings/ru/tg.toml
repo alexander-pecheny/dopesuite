@@ -1,6 +1,7 @@
-# xy — the telegram publisher's target resolution (internal/chgk/tg/resolve.go):
-# the dialogue walking a person through introducing the bot to the channel and
-# its discussion group, plus the access-check errors.
+# xy — the telegram publisher: the target resolution (internal/chgk/tg/resolve.go)
+# that walks a person through introducing the bot to the channel and its
+# discussion group, the access-check errors, and the board export that drives
+# both (internal/server/exporttg.go).
 
 [resolve]
 # The prompt to forward the bot any message from the channel.
@@ -20,8 +21,22 @@ done = "✅ Готово, продолжаем."
 # verifyAccess, when the bot is not in the chat at all.
 not_member = 'бот не добавлен к {{.what}}: {{.err}}'
 # verifyAccess, when the bot is in the chat but lacks administrator rights.
-not_admin = 'бот не администратор в {{.what}}'
-# The what fragment for the channel (dative).
+not_admin = 'бот не администратор {{.what}}'
+# The what fragment for the channel, dative («не добавлен к …»).
 what_channel = "каналу"
-# The what fragment for the discussion group (dative).
+# The what fragment for the discussion group, dative.
 what_chat = "группе обсуждения"
+# The same two in the genitive («не администратор …»).
+of_channel = "канала"
+of_chat = "группы обсуждения"
+
+[export]
+# The export endpoint's own lines, streamed to the modal that watches it.
+# Nothing to post to.
+missing_fields = "Нужны токен бота, канал и группа обсуждения."
+# The first line, before the bot has said anything.
+connecting = "Подключаемся к боту…"
+# Resolution is over and the questions start going out.
+posting = 'Публикуем в {{.channel}}, обсуждение {{.chat}}…'
+# A failure that was not written for the reader.
+failed = "Не удалось опубликовать в телеграм."

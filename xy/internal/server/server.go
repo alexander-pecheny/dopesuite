@@ -54,6 +54,10 @@ type server struct {
 	typstOnce sync.Once
 	typst     handout.Typesetter
 	typstErr  error
+
+	// tgAPIBase is where the telegram export's own bot reaches the Bot API;
+	// empty is Telegram's. Tests point it at a stub.
+	tgAPIBase string
 }
 
 func openDB(path string) (*sql.DB, error) { return sqlitex.Open(path, migrate) }

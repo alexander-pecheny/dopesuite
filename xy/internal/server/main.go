@@ -235,6 +235,7 @@ func routes(srv *server) *http.ServeMux {
 	mux.HandleFunc("POST /api/export/docx", srv.handleExportDocx)
 	mux.HandleFunc("POST /api/export/pdf", srv.handleExportPDF)
 	mux.HandleFunc("POST /api/export/pack", srv.handleExportPack)
+	mux.HandleFunc("POST /api/export/telegram", srv.handleExportTelegram)
 
 	// ---- import (.4s / .zip / .docx → 4s source + images; plain text → 4s) ----
 	mux.HandleFunc("POST /api/import/parse", srv.handleImportParse)

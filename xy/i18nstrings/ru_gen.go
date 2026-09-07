@@ -274,6 +274,7 @@ var RU = Strings{
 			PptxTitle:      func() string { return "Презентация, по слайду на вопрос" },
 			Run:            func() string { return "Экспорт" },
 			SelectAll:      func() string { return "Выбрать все" },
+			TelegramLabel:  func() string { return "телеграм-канал" },
 			Title:          func() string { return "Экспорт" },
 		},
 		Feed: BoardFeedStrings{
@@ -638,6 +639,27 @@ var RU = Strings{
 				return fmt.Sprintf("Тест-режим: «%s». Завершить — по клику", name)
 			},
 			Stop: func() string { return "Завершить тест-режим" },
+		},
+		Tgexport: BoardTgexportStrings{
+			AdminHint: func() string {
+				return "Бот должен быть администратором и в канале, и в группе."
+			},
+			ChannelLabel:       func() string { return "Канал" },
+			ChannelPlaceholder: func() string { return "@channel, ссылка или id" },
+			ChatLabel:          func() string { return "Группа обсуждения" },
+			ChatPlaceholder:    func() string { return "@group, ссылка или id" },
+			Done:               func() string { return "Опубликовано." },
+			Hint: func() string {
+				return "Бот публикует вопросы в канал, а обсуждение — в связанную группу. Токен уходит на сервер xy: публикует он."
+			},
+			Interrupted: func() string {
+				return "Связь оборвалась. Часть вопросов могла уйти — проверьте канал."
+			},
+			Run:              func() string { return "Опубликовать" },
+			Running:          func() string { return "Публикуем…" },
+			Title:            func() string { return "Публикация в телеграм" },
+			TokenLabel:       func() string { return "Токен бота" },
+			TokenPlaceholder: func() string { return "123456:AA…" },
 		},
 		Thread: BoardThreadStrings{
 			Placeholder: func() string { return "Ответить…" },
@@ -2407,6 +2429,16 @@ var RU = Strings{
 		},
 	},
 	Tg: TgStrings{
+		Export: TgExportStrings{
+			Connecting: func() string { return "Подключаемся к боту…" },
+			Failed:     func() string { return "Не удалось опубликовать в телеграм." },
+			MissingFields: func() string {
+				return "Нужны токен бота, канал и группа обсуждения."
+			},
+			Posting: func(channel string, chat string) string {
+				return fmt.Sprintf("Публикуем в %s, обсуждение %s…", channel, chat)
+			},
+		},
 		Resolve: TgResolveStrings{
 			Done: func() string { return "✅ Готово, продолжаем." },
 			Forward: func(name string) string {
@@ -2426,10 +2458,12 @@ var RU = Strings{
 			},
 		},
 		Verify: TgVerifyStrings{
-			NotAdmin: func(what string) string { return fmt.Sprintf("бот не администратор в %s", what) },
+			NotAdmin: func(what string) string { return fmt.Sprintf("бот не администратор %s", what) },
 			NotMember: func(what string, err string) string {
 				return fmt.Sprintf("бот не добавлен к %s: %s", what, err)
 			},
+			OfChannel:   func() string { return "канала" },
+			OfChat:      func() string { return "группы обсуждения" },
 			WhatChannel: func() string { return "каналу" },
 			WhatChat:    func() string { return "группе обсуждения" },
 		},

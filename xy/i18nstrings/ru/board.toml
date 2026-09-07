@@ -254,10 +254,38 @@ openquiz_label = "openquiz (.json)"
 # Handouts checkbox: tooltip and visible label.
 handouts_title = "Раздатки по одной на страницу, свёрстанные по размеру (split-fit)"
 handouts_label = "раздатки в pdf"
+# Telegram: the option that publishes instead of downloading, so it is
+# offered in the dropdown only — a zip of files cannot contain a channel.
+telegram_label = "телеграм-канал"
 # Ghost button ticking every format.
 select_all = "Выбрать все"
 # Submit button.
 run = "Экспорт"
+
+[tgexport]
+# The dialog that opens when the export is «телеграм-канал»: where to post,
+# and the bot that will do it.
+title = "Публикация в телеграм"
+# The lead paragraph. The token reaches the server because the posting is
+# done there; say so rather than let a reader assume otherwise.
+hint = "Бот публикует вопросы в канал, а обсуждение — в связанную группу. Токен уходит на сервер xy: публикует он."
+# The three fields.
+token_label = "Токен бота"
+token_placeholder = "123456:AA…"
+channel_label = "Канал"
+channel_placeholder = "@channel, ссылка или id"
+chat_label = "Группа обсуждения"
+chat_placeholder = "@group, ссылка или id"
+# The bot has to be an administrator in both, which is the commonest thing
+# to have missed.
+admin_hint = "Бот должен быть администратором и в канале, и в группе."
+# The submit button, and what it says while the export runs.
+run = "Опубликовать"
+running = "Публикуем…"
+# The last line, once the package is out.
+done = "Опубликовано."
+# The connection dropped mid-publication; some questions may already be out.
+interrupted = "Связь оборвалась. Часть вопросов могла уйти — проверьте канал."
 
 [replace]
 # Title of the find-and-replace dialog.
