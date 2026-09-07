@@ -151,9 +151,12 @@ roster_hide = "Скрыть составы"
 status_accept = "Принять"
 status_decline = "Отклонить"
 status_pending = "Вернуть в ожидание"
-# The fold under the table that edits one заявка. Named by who filed it: two
-# заявки from one team under one team name are two folds nobody can tell apart.
-edit_summary = 'Правка заявки · {{.who}}'
+# The заявка's own page, reached by the pencil on its row: it edits the team
+# and the Состав, and holds the version history. Named by who filed it, because
+# a team may file twice and the two заявки are told apart by nothing else.
+edit_link = "Редактировать заявку"
+edit_title = 'Заявка · {{.team}}'
+edit_summary = 'Подал {{.who}}'
 # One заявка's edit history: every version is dated and can be restored.
 versions_summary = "Версии и правка"
 col_who = "Кто"

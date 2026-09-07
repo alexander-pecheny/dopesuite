@@ -397,7 +397,34 @@ func applicationVerdict(base string, row SlotApplicationRow) *ui.Element {
 		verdict(venues.StatusDeclined, ui.IconX, strs.Venues.Game.StatusDecline()),
 		// Only ever shown on an application that has had a verdict, so the
 		// common row is the two the Representative came for.
-		verdict(venues.StatusPending, ui.IconTimer, strs.Venues.Game.StatusPending()))
+		verdict(venues.StatusPending, ui.IconTimer, strs.Venues.Game.StatusPending()),
+		ui.Button(ui.Ghost, ui.Small(), ui.IconPencil, ui.Data("dialog-open", applicationDialogID(row.App)),
+			ui.Title(strs.Venues.Game.EditLink()), ui.Aria("label", strs.Venues.Game.EditLink())))
+}
+
+func applicationDialogID(app venues.Application) string {
+	return "app-" + strconv.FormatInt(app.ID, 10)
+}
+
+// applicationDialog edits one application: its team, its roster, and the
+// versions it has been through. It used to be a fold under the table, which
+// repeated the team and the status the row already carried — two rows for one
+// application, and two indistinguishable ones when a team files twice.
+func applicationDialog(base string, row SlotApplicationRow, at string) *ui.Element {
+	app := row.App
+	return ui.Dialog(ui.ID(applicationDialogID(app)),
+		ui.Col(ui.SpaceMD,
+			ui.Subhead(ui.Text(strs.Venues.Game.EditTitle(app.TeamName))),
+			ui.Muted(ui.Text(strs.Venues.Game.EditSummary(row.Submitter))),
+			applicationForm(base+"/application/"+strconv.FormatInt(app.ID, 10)+"/edit",
+				&ApplicationView{TeamName: app.TeamName, RatingTeamID: app.RatingTeamID, Roster: app.Roster},
+				strs.Venues.Game.VersionSave(), at),
+			// The fold last: saving and closing are what the Representative came
+			// for, and the history is there to be read, not acted on.
+			ui.Row(ui.Button(ui.Ghost, ui.Data("dialog-close", ""), ui.Text(strs.Venues.Game.Cancel()))),
+			applicationVersions(base, row),
+		),
+	)
 }
 
 func applicationVersions(base string, row SlotApplicationRow) *ui.Element {
@@ -496,16 +523,7 @@ func slotApplicationsSection(data slotPageData) *ui.Element {
 	sect = append(sect, ui.Table(table...))
 	if data.CanManage {
 		for _, row := range data.Applications {
-			// Named by who filed it, not by the team: two applications from one
-			// team under one name are two folds nobody can tell apart, and the
-			// team and its status are the row above anyway.
-			sect = append(sect, ui.Details(
-				ui.Summary(ui.Text(strs.Venues.Game.EditSummary(row.Submitter))),
-				applicationVersions(base, row),
-				applicationForm(base+"/application/"+strconv.FormatInt(row.App.ID, 10)+"/edit",
-					&ApplicationView{TeamName: row.App.TeamName, RatingTeamID: row.App.RatingTeamID, Roster: row.App.Roster},
-					strs.Venues.Game.VersionSave(), data.Slot.StartsAt),
-			))
+			sect = append(sect, applicationDialog(base, row, data.Slot.StartsAt))
 		}
 	}
 	return ui.Section(sect...)
