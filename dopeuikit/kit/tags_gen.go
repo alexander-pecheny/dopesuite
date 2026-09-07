@@ -487,6 +487,7 @@ var IconBell = Attr{Name: "icon", Value: "bell"}
 var IconCalculator = Attr{Name: "icon", Value: "calculator"}
 var IconCalendar = Attr{Name: "icon", Value: "calendar"}
 var IconCheck = Attr{Name: "icon", Value: "check"}
+var IconCircleQuestionMark = Attr{Name: "icon", Value: "circle-question-mark"}
 var IconClipboard = Attr{Name: "icon", Value: "clipboard"}
 var IconCloudDownload = Attr{Name: "icon", Value: "cloud-download"}
 var IconColumns3 = Attr{Name: "icon", Value: "columns-3"}

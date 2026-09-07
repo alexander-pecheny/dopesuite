@@ -162,6 +162,7 @@ var IconBell = base.IconBell
 var IconCalculator = base.IconCalculator
 var IconCalendar = base.IconCalendar
 var IconCheck = base.IconCheck
+var IconCircleQuestionMark = base.IconCircleQuestionMark
 var IconClipboard = base.IconClipboard
 var IconCloudDownload = base.IconCloudDownload
 var IconColumns3 = base.IconColumns3

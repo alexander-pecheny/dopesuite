@@ -377,6 +377,9 @@ fill_previous_title = "Предыдущие составы"
 dialog_title = 'Спорный ответ · вопрос {{.n}}'
 number_label = "Номер команды"
 answer_label = "Ответ"
+# The same thing on the one-question entry view, where the line is a team and
+# what it is being argued over — «Ответ» there reads as the answer it gave.
+contested_label = "Спорный"
 accepted_label = "Принят на площадке"
 remove = "Удалить"
 save = "Сохранить"

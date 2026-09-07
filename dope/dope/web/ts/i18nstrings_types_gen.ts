@@ -1544,6 +1544,7 @@ export type Strings = {
     odContested: {
       acceptedLabel: () => string;
       answerLabel: () => string;
+      contestedLabel: () => string;
       dialogTitle: (n: string) => string;
       noSuchTeam: () => string;
       numberLabel: () => string;

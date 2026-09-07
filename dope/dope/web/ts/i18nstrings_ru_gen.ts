@@ -1545,6 +1545,7 @@ export const RU: Strings = {
     odContested: {
       acceptedLabel: () => "Принят на площадке",
       answerLabel: () => "Ответ",
+      contestedLabel: () => "Спорный",
       dialogTitle: (n: string) => `Спорный ответ · вопрос ${n}`,
       noSuchTeam: () => "Нет такой команды",
       numberLabel: () => "Номер команды",

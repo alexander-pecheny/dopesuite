@@ -573,12 +573,12 @@ function buildQuestionEntryView(): HTMLElement {
   const drafts = new Map<number, ContestedDraft>();
 
   const list = document.createElement("div");
-  list.className = "u-col u-gap-sm";
+  list.className = "od-question-list";
   state.teams.forEach((_, index) => {
     const number = teamNumber(index);
     if (!Number.isInteger(number) || number <= 0) return;
     const row = document.createElement("div");
-    row.className = "u-row u-gap-sm u-align-center u-wrap";
+    row.className = "od-question-row";
     const tick = document.createElement("label");
     tick.className = "checkbox";
     const box = document.createElement("input");
@@ -588,9 +588,14 @@ function buildQuestionEntryView(): HTMLElement {
       if (box.checked) taken.add(number);
       else taken.delete(number);
     });
+    // A contested answer is not a take yet: the jury has not ruled, so the box
+    // that says "took it" gives way to the mark that says "being argued over".
+    const disputed = document.createElement("span");
+    disputed.className = "od-question-mark";
+    disputed.append(icon("circle-question-mark"));
     const caption = document.createElement("span");
     caption.textContent = `${number}. ${teamLabel(index)}`;
-    tick.append(box, caption);
+    tick.append(box, disputed, caption);
 
     const existing = contestedFor(entryQuestion, number);
     const draft: ContestedDraft = {
@@ -602,9 +607,9 @@ function buildQuestionEntryView(): HTMLElement {
     drafts.set(number, draft);
     const answer = document.createElement("input");
     answer.type = "text";
-    answer.className = "input u-grow";
+    answer.className = "input";
     answer.autocomplete = "off";
-    answer.placeholder = S.venues.odContested.answerLabel();
+    answer.placeholder = S.venues.odContested.contestedLabel();
     answer.value = draft.answer;
     const accept = document.createElement("label");
     accept.className = "checkbox";
@@ -614,10 +619,16 @@ function buildQuestionEntryView(): HTMLElement {
     const acceptCaption = document.createElement("span");
     acceptCaption.textContent = S.venues.odContested.acceptedLabel();
     accept.append(acceptBox, acceptCaption);
-    accept.hidden = draft.answer.trim() === "";
+    const markDisputed = (): void => {
+      const on = draft.answer.trim() !== "";
+      accept.hidden = !on;
+      box.hidden = on;
+      disputed.hidden = !on;
+    };
+    markDisputed();
     answer.addEventListener("input", () => {
       draft.answer = answer.value;
-      accept.hidden = answer.value.trim() === "";
+      markDisputed();
     });
     acceptBox.addEventListener("change", () => {
       draft.accepted = acceptBox.checked;

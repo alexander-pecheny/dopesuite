@@ -1804,6 +1804,32 @@ body:not(.embedded-match) .grid-match {
 /* Wide enough for a team, its contested answer and the jury's box on one line.
    The wrap is align-items:flex-start, so without a width the panel shrinks to
    its widest row and the answer fields never line up. */
+/* The one-question entry view's teams: who, what is being argued over, and the
+   jury's ruling. One grid over the whole list rather than a row per team —
+   a row of its own leaves every answer field starting wherever its team name
+   happened to end. */
+.od-question-list {
+  display: grid;
+  grid-template-columns: minmax(0, 20rem) minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.od-question-row {
+  display: contents;
+}
+
+@media (max-width: 760px) {
+  .od-question-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The mark that replaces the tick while a contested answer is unresolved. */
+.od-question-mark {
+  color: var(--muted);
+}
+
 /* A card, like .card-grid > .section: the kit's fields are filled rather than
    outlined, so they only read as recessed on --surface. The ОД pane paints a
    lighter ground than the page, where a bare field disappears.
