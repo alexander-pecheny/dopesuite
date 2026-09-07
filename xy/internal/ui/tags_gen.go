@@ -136,6 +136,7 @@ var Formnovalidate = base.Formnovalidate
 var Done = base.Done
 var Doneid = base.Doneid
 var Open = base.Open
+var Wide = base.Wide
 var View = base.View
 var Active = base.Active
 var Scroll = base.Scroll

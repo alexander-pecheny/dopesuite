@@ -491,3 +491,60 @@ func TestTournamentPickerIsOneListInTwoModes(t *testing.T) {
 		t.Error("an empty picker still draws its controls")
 	}
 }
+
+// Only a real telegram handle becomes a t.me link. Submitter falls back to the
+// site username, and t.me/<site username> is a page that does not exist —
+// whoever linked telegram without a handle is written to through the bot.
+func TestSubmitterIsALinkOnlyWithATelegramHandle(t *testing.T) {
+	tg := venues.Application{ID: 9, Submitter: "tester", SubmitterTg: "tester", SubmitterTgID: 777}
+	if got := submitterName(tg); got != "@tester" {
+		t.Errorf("name = %q", got)
+	}
+	if got := submitterLink(tg); got != "https://t.me/tester" {
+		t.Errorf("link = %q", got)
+	}
+	// Linked telegram, no handle: no link, and the @ would claim one.
+	bare := venues.Application{ID: 9, Submitter: "player", SubmitterTgID: 12345}
+	if got := submitterName(bare); got != "player" {
+		t.Errorf("name = %q", got)
+	}
+	if got := submitterLink(bare); got != "" {
+		t.Errorf("link = %q", got)
+	}
+	row := SlotApplicationRow{App: bare, Submitter: submitterName(bare), SubmitterTg: submitterLink(bare)}
+	if !canWriteTo(row, true) {
+		t.Error("someone reachable only through the bot should be writable to")
+	}
+	if canWriteTo(row, false) {
+		t.Error("an instance with no bot offers no way to write")
+	}
+	if canWriteTo(SlotApplicationRow{App: tg, SubmitterTg: submitterLink(tg)}, true) {
+		t.Error("someone with a handle is reached by the link, not the bot")
+	}
+}
+
+func TestSlotPageWritesThroughTheBotWhenThereIsNoHandle(t *testing.T) {
+	venue := venues.Venue{ID: 1, Slug: "tbilisi", Title: "Площадка"}
+	slot := venues.Slot{ID: 7, FestID: 1, GameID: 3, RegToken: "tok"}
+	app := venues.Application{ID: 9, Status: venues.StatusPending, TeamName: "Мантисса",
+		Submitter: "player", SubmitterTgID: 12345, CreatedAt: "2026-09-02T13:10:36Z", UpdatedAt: "2026-09-02T13:10:36Z"}
+	data := slotPageData{Venue: venue, Slot: slot, CanManage: true, CanNotify: true,
+		Applications: []SlotApplicationRow{{App: app, Submitter: submitterName(app)}}}
+	body := renderPublic(t, slotPageDoc(data))
+	for _, want := range []string{
+		`/host/venue/tbilisi/game/3/application/9/message`,
+		`data-dialog-open="msg-9"`,
+		"Сообщение для player",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if strings.Contains(body, "https://t.me/player") {
+		t.Error("a site username must not become a t.me link")
+	}
+	data.CanNotify = false
+	if strings.Contains(renderPublic(t, slotPageDoc(data)), `data-dialog-open="msg-9"`) {
+		t.Error("an instance with no bot offers no way to write")
+	}
+}

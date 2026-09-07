@@ -161,9 +161,13 @@ type slotPageData struct {
 	RegURL       string
 	RegState     venues.RegState
 	CanManage    bool
-	Tz           string
-	Error        string
-	Notice       string
+	// CanNotify is whether this instance runs a bot at all: staging has no
+	// token, and offering to send a message that goes nowhere is worse than
+	// not offering it.
+	CanNotify bool
+	Tz        string
+	Error     string
+	Notice    string
 }
 
 // slotTitle is short, for a crumb and a tab; slotHuman is the same moment
@@ -402,6 +406,47 @@ func applicationVerdict(base string, row SlotApplicationRow) *ui.Element {
 			ui.Title(strs.Venues.Game.EditLink()), ui.Aria("label", strs.Venues.Game.EditLink())))
 }
 
+// canWriteTo: someone who linked telegram but has no handle cannot be reached
+// by a link, and the bot they already talk to can carry a message instead.
+func canWriteTo(row SlotApplicationRow, canNotify bool) bool {
+	return canNotify && row.SubmitterTg == "" && row.App.SubmitterTgID > 0
+}
+
+func submitterCell(row SlotApplicationRow, canNotify bool) *ui.Element {
+	switch {
+	case row.SubmitterTg != "":
+		return ui.Cell(ui.Link(ui.Href(row.SubmitterTg), ui.Newtab(), ui.Text(row.Submitter)))
+	case canWriteTo(row, canNotify):
+		// Line, not a bare Text: a row partitions its children as blocks, and a
+		// naked text leaf among them is dropped.
+		return ui.Cell(ui.Row(ui.SpaceXS, ui.AlignCenter, ui.Line(ui.Text(row.Submitter)),
+			ui.Button(ui.Ghost, ui.Small(), ui.IconMessageCircle,
+				ui.Data("dialog-open", messageDialogID(row.App)),
+				ui.Title(strs.Venues.Game.MessageBtn()), ui.Aria("label", strs.Venues.Game.MessageBtn()))))
+	}
+	return ui.Cell(ui.Text(row.Submitter))
+}
+
+func messageDialogID(app venues.Application) string {
+	return "msg-" + strconv.FormatInt(app.ID, 10)
+}
+
+func applicationMessageDialog(base string, row SlotApplicationRow) *ui.Element {
+	app := row.App
+	return ui.Dialog(ui.ID(messageDialogID(app)),
+		ui.Form(ui.DirCol, ui.Method("post"), ui.Action(base+"/application/"+strconv.FormatInt(app.ID, 10)+"/message"),
+			ui.Subhead(ui.Text(strs.Venues.Game.MessageTitle(row.Submitter))),
+			ui.Hint(ui.Text(strs.Venues.Game.MessageHint())),
+			ui.Field(ui.Label(strs.Venues.Game.MessageLabel()),
+				ui.Editor(ui.Name("text"), ui.Rows("4"), ui.Required())),
+			ui.Row(
+				ui.Button(ui.Submit(), ui.Text(strs.Venues.Game.MessageSend())),
+				ui.Button(ui.Ghost, ui.Data("dialog-close", ""), ui.Text(strs.Venues.Game.Cancel())),
+			),
+		),
+	)
+}
+
 func applicationDialogID(app venues.Application) string {
 	return "app-" + strconv.FormatInt(app.ID, 10)
 }
@@ -412,7 +457,7 @@ func applicationDialogID(app venues.Application) string {
 // application, and two indistinguishable ones when a team files twice.
 func applicationDialog(base string, row SlotApplicationRow, at string) *ui.Element {
 	app := row.App
-	return ui.Dialog(ui.ID(applicationDialogID(app)),
+	return ui.Dialog(ui.ID(applicationDialogID(app)), ui.Wide(),
 		ui.Col(ui.SpaceMD,
 			ui.Subhead(ui.Text(strs.Venues.Game.EditTitle(app.TeamName))),
 			ui.Muted(ui.Text(strs.Venues.Game.EditSummary(row.Submitter))),
@@ -495,10 +540,7 @@ func slotApplicationsSection(data slotPageData) *ui.Element {
 			id := strconv.FormatInt(row.App.RatingTeamID, 10)
 			rating = ui.Cell(ui.Link(ui.Href("https://rating.chgk.info/teams/"+id), ui.Newtab(), ui.Text(id)))
 		}
-		submitter := ui.Cell(ui.Text(row.Submitter))
-		if row.SubmitterTg != "" {
-			submitter = ui.Cell(ui.Link(ui.Href(row.SubmitterTg), ui.Newtab(), ui.Text(row.Submitter)))
-		}
+		submitter := submitterCell(row, data.CanNotify)
 		// One time column: an application nobody edited was filed and changed at
 		// the same moment, and an edited one says when as its tooltip.
 		filed := []ui.Item{ui.Text(venues.HumanTime(row.App.CreatedAt))}
@@ -524,6 +566,9 @@ func slotApplicationsSection(data slotPageData) *ui.Element {
 	if data.CanManage {
 		for _, row := range data.Applications {
 			sect = append(sect, applicationDialog(base, row, data.Slot.StartsAt))
+			if canWriteTo(row, data.CanNotify) {
+				sect = append(sect, applicationMessageDialog(base, row))
+			}
 		}
 	}
 	return ui.Section(sect...)

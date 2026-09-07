@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"sort"
@@ -620,6 +621,7 @@ func (s *Server) renderSlotPage(w http.ResponseWriter, r *http.Request, sc route
 		GameHref:   VenueBase(venue) + "/game/" + slot.GameRef() + "/table",
 		RegURL:     publicURL(r, "/reg/"+slot.RegToken),
 		CanManage:  roles.CanManageFest(sc.Role),
+		CanNotify:  s.h.Engine().Notify != nil,
 		RegState:   venues.Registration(slot.RegOpensAt, slot.RegClosesAt, slot.RegShut, time.Now().UTC()),
 		Tz:         s.userTimezone(r.Context(), sc.User.UserID),
 		Error:      errMsg, Notice: notice,
@@ -633,9 +635,14 @@ func (s *Server) renderSlotPage(w http.ResponseWriter, r *http.Request, sc route
 	return nil
 }
 
+// The @ belongs to a telegram handle; a site username wearing one reads as a
+// telegram account that is not there.
 func submitterName(app venues.Application) string {
+	if app.SubmitterTg != "" {
+		return "@" + app.SubmitterTg
+	}
 	if app.Submitter != "" {
-		return "@" + app.Submitter
+		return app.Submitter
 	}
 	if app.SubmitterTgID > 0 {
 		return "tg:" + strconv.FormatInt(app.SubmitterTgID, 10)
@@ -643,14 +650,16 @@ func submitterName(app venues.Application) string {
 	return "—"
 }
 
+// submitterLink is a t.me link only for someone who actually has a telegram
+// handle. Submitter falls back to the site username, and t.me/<site username>
+// is a page that does not exist — a link to nowhere reads as a way to reach
+// them. Whoever linked telegram without a handle is written to through the bot
+// instead; see applicationMessageDialog.
 func submitterLink(app venues.Application) string {
-	if app.Submitter != "" {
-		return "https://t.me/" + app.Submitter
+	if app.SubmitterTg == "" {
+		return ""
 	}
-	if app.SubmitterTgID > 0 {
-		return "tg://user?id=" + strconv.FormatInt(app.SubmitterTgID, 10)
-	}
-	return ""
+	return "https://t.me/" + app.SubmitterTg
 }
 
 func publicURL(r *http.Request, path string) string {
@@ -906,6 +915,47 @@ func (s *Server) handleApplicationRevert(w http.ResponseWriter, r *http.Request,
 		return err
 	}
 	return s.redirectToSlot(w, r, festID, slot.ID)
+}
+
+// applicationOf resolves the {app} of a slot route, refusing one filed against
+// another Slot.
+func (s *Server) applicationOf(r *http.Request, slot venues.Slot) (venues.Application, error) {
+	appID, err := strconv.ParseInt(r.PathValue("app"), 10, 64)
+	if err != nil {
+		return venues.Application{}, route.NotFound
+	}
+	app, err := venues.LoadApplication(r.Context(), s.h.Engine().DB, appID)
+	if err != nil || app.SlotID != slot.ID {
+		return venues.Application{}, route.NotFound
+	}
+	return app, nil
+}
+
+// handleApplicationMessage carries a Representative's words to someone who
+// linked telegram but has no @handle to be linked to. The bot they already
+// talk to is the channel; an instance without one never offers the button.
+func (s *Server) handleApplicationMessage(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	venue, slot, err := s.slotOf(r, sc)
+	if err != nil {
+		return err
+	}
+	if err := r.ParseForm(); err != nil {
+		return route.BadRequest("bad form")
+	}
+	app, err := s.applicationOf(r, slot)
+	if err != nil {
+		return err
+	}
+	text := strings.TrimSpace(r.Form.Get("text"))
+	notify := s.h.Engine().Notify
+	if text == "" || notify == nil || app.SubmitterTgID == 0 {
+		return route.BadRequest("no message")
+	}
+	if err := notify(r.Context(), app.SubmitterTgID, strs.Venues.Game.MessageBody(venue.Title, text)); err != nil {
+		log.Printf("venue message: %v", err)
+		return s.renderSlotPage(w, r, sc, strs.Venues.Game.MessageFailed(), "")
+	}
+	return s.redirectToSlot(w, r, sc.FestID, slot.ID)
 }
 
 func (s *Server) loadHostVenues(ctx context.Context, userID int64) ([]venues.Venue, error) {

@@ -449,6 +449,10 @@ func Open() Attr {
 	return Attr{Name: "open", Bare: true}
 }
 
+func Wide() Attr {
+	return Attr{Name: "wide", Bare: true}
+}
+
 func View(v string) Attr {
 	return Attr{Name: "view", Value: v}
 }

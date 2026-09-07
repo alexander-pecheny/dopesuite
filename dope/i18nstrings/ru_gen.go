@@ -1973,6 +1973,15 @@ var RU = Strings{
 			LinkRotateConfirm: func() string {
 				return "Сменить ссылку? Старая перестанет работать."
 			},
+			MessageBody: func(venue string, text string) string {
+				return fmt.Sprintf("Вы получили сообщение от организатора площадки %s: «%s»", venue, text)
+			},
+			MessageBtn:       func() string { return "Написать" },
+			MessageFailed:    func() string { return "Не удалось отправить сообщение." },
+			MessageHint:      func() string { return "Придёт в телеграм от бота." },
+			MessageLabel:     func() string { return "Текст" },
+			MessageSend:      func() string { return "Отправить" },
+			MessageTitle:     func(who string) string { return fmt.Sprintf("Сообщение для %s", who) },
 			RegClosesAtLabel: func() string { return "до указанного времени" },
 			RegClosesLabel:   func() string { return "Регистрация закрывается" },
 			RegClosesNever:   func() string { return "никогда" },
@@ -2003,8 +2012,8 @@ var RU = Strings{
 			TournamentPlaceholder: func() string { return "название или id" },
 			UndatedTitle:          func() string { return "Игра без даты" },
 			VersionRestore:        func() string { return "Вернуть эту версию" },
-			VersionSave:           func() string { return "Сохранить как новую версию" },
-			VersionsSummary:       func() string { return "Версии и правка" },
+			VersionSave:           func() string { return "Сохранить" },
+			VersionsSummary:       func() string { return "История изменений" },
 		},
 		Host: VenuesHostStrings{
 			CityLabel:          func() string { return "Город" },

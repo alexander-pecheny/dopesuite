@@ -191,6 +191,7 @@ func (s *Server) handleSlotRoutes(t *route.Table, venue string) {
 	t.Handle("POST "+slot+"/application/{app}/status", route.Manager, s.handleApplicationStatus)
 	t.Handle("POST "+slot+"/application/{app}/edit", route.Manager, s.handleApplicationEdit)
 	t.Handle("POST "+slot+"/application/{app}/revert", route.Manager, s.handleApplicationRevert)
+	t.Handle("POST "+slot+"/application/{app}/message", route.Manager, s.handleApplicationMessage)
 	t.Handle("POST "+slot+"/contested/accept", route.Editor, s.handleContestedAccept)
 	t.Handle("POST "+slot+"/contested/delete", route.Editor, s.handleContestedDelete)
 	t.Handle("POST "+slot+"/voting", route.Manager, s.handleVotingSave)

@@ -65,7 +65,11 @@ type Application struct {
 	ParticipantID int64
 	CreatedAt     string
 	UpdatedAt     string
+	// Submitter is a display name and may be the site username; SubmitterTg is
+	// the telegram handle and is empty for an account that never linked one, so
+	// only it may become a t.me link.
 	Submitter     string
+	SubmitterTg   string
 	SubmitterTgID int64
 	Seq           int64
 	TeamName      string
@@ -212,6 +216,7 @@ func NewTokenTx(ctx context.Context, tx *sql.Tx, slotID int64) error {
 const applicationCols = `
 select a.id, a.slot_id, a.user_id, a.status, coalesce(a.participant_id, 0), a.created_at, a.updated_at,
        coalesce(nullif(u.telegram_username, ''), nullif(u.username, ''), ''),
+       coalesce(u.telegram_username, ''),
        coalesce(u.telegram_user_id, 0),
        coalesce(v.seq, 0), coalesce(v.team_name, ''), coalesce(v.team_alias, ''), coalesce(v.rating_team_id, 0), coalesce(v.roster_json, '[]'),
        coalesce(gp.number, 0)`
@@ -231,7 +236,7 @@ func scanApplication(row interface{ Scan(...any) error }) (Application, error) {
 	var a Application
 	var roster string
 	err := row.Scan(&a.ID, &a.SlotID, &a.UserID, &a.Status, &a.ParticipantID, &a.CreatedAt, &a.UpdatedAt,
-		&a.Submitter, &a.SubmitterTgID, &a.Seq, &a.TeamName, &a.Alias, &a.RatingTeamID, &roster, &a.Number)
+		&a.Submitter, &a.SubmitterTg, &a.SubmitterTgID, &a.Seq, &a.TeamName, &a.Alias, &a.RatingTeamID, &roster, &a.Number)
 	a.Roster = ParseRoster(roster)
 	return a, err
 }
@@ -279,7 +284,7 @@ order by case when sl.starts_at = '' then 1 else 0 end, sl.starts_at, a.id`
 			var f FiledApplication
 			var roster string
 			err := rows.Scan(&f.ID, &f.SlotID, &f.UserID, &f.Status, &f.ParticipantID, &f.CreatedAt, &f.UpdatedAt,
-				&f.Submitter, &f.SubmitterTgID, &f.Seq, &f.TeamName, &f.Alias, &f.RatingTeamID, &roster, &f.Number,
+				&f.Submitter, &f.SubmitterTg, &f.SubmitterTgID, &f.Seq, &f.TeamName, &f.Alias, &f.RatingTeamID, &roster, &f.Number,
 				&f.SlotStartsAt, &f.RegToken, &f.FestID, &f.GameID, &f.GameSlug, &f.VenueRef, &f.VenueTitle)
 			f.Roster = ParseRoster(roster)
 			return f, err

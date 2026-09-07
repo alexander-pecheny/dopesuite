@@ -7,6 +7,7 @@
 package core
 
 import (
+	"context"
 	"database/sql"
 	"io/fs"
 	"strconv"
@@ -61,6 +62,10 @@ type Engine struct {
 	Buff *buffdb.Store
 	// Rating is rating.chgk.info's venue catalogue; nil means the shared one.
 	Rating *ratingvenues.Catalogue
+	// Notify sends one message to a person's telegram through the login bot.
+	// nil on an instance that runs no bot (staging has no token), and the
+	// surfaces that offer it say so rather than pretending they sent anything.
+	Notify func(ctx context.Context, tgUserID int64, text string) error
 
 	// Mu guards game/DB writes (writers win contention over viewer reads).
 	Mu sync.RWMutex

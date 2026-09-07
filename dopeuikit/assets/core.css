@@ -862,6 +862,12 @@ input[type="radio"]:focus-visible {
   box-shadow: var(--shadow-modal);
 }
 
+/* A dialog holding a table or a roster: the default measure is for a form of
+   short fields, and a full three-part name plus its flag does not fit in it. */
+.modal-dialog-wide {
+  width: min(880px, calc(100vw - var(--space-6)));
+}
+
 .modal-dialog::backdrop {
   background: var(--backdrop);
 }

@@ -154,6 +154,16 @@ roster_hide = "Скрыть составы"
 status_accept = "Принять"
 status_decline = "Отклонить"
 status_pending = "Вернуть в ожидание"
+# Writing to someone who linked telegram but has no @handle: there is no t.me
+# page to send a Representative to, so the bot they already talk to carries the
+# message instead.
+message_btn = "Написать"
+message_title = 'Сообщение для {{.who}}'
+message_hint = "Придёт в телеграм от бота."
+message_label = "Текст"
+message_send = "Отправить"
+message_body = 'Вы получили сообщение от организатора площадки {{.venue}}: «{{.text}}»'
+message_failed = "Не удалось отправить сообщение."
 # The заявка's own page, reached by the pencil on its row: it edits the team
 # and the Состав, and holds the version history. Named by who filed it, because
 # a team may file twice and the two заявки are told apart by nothing else.
@@ -161,10 +171,10 @@ edit_link = "Редактировать заявку"
 edit_title = 'Заявка · {{.team}}'
 edit_summary = 'Подал {{.who}}'
 # One заявка's edit history: every version is dated and can be restored.
-versions_summary = "Версии и правка"
+versions_summary = "История изменений"
 col_who = "Кто"
 version_restore = "Вернуть эту версию"
-version_save = "Сохранить как новую версию"
+version_save = "Сохранить"
 # The two spreadsheets a Representative takes away.
 downloads_subhead = "Выгрузки"
 download_tours = "Туры (xlsx)"

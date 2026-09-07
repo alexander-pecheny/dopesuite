@@ -806,6 +806,10 @@
         {
           "name": "open",
           "kind": "bare"
+        },
+        {
+          "name": "wide",
+          "kind": "bare"
         }
       ],
       "children": "any"

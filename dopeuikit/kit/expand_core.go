@@ -339,7 +339,11 @@ func expandModal(c *ExpandCtx, p *Element) []Node {
 }
 
 func expandDialog(c *ExpandCtx, p *Element) []Node {
-	attrs := []Attr{ClassAttr("modal-dialog")}
+	classes := []string{"modal-dialog"}
+	if Flag(p, "wide") {
+		classes = append(classes, "modal-dialog-wide")
+	}
+	attrs := []Attr{ClassAttr(classes...)}
 	attrs = append(attrs, IDAttr(p)...)
 	attrs = append(attrs, CopyFlags(p, "open")...)
 	attrs = append(attrs, MetaAttrs(p)...)

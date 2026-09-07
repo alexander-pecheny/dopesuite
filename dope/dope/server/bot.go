@@ -45,6 +45,13 @@ func (s *server) startBot(ctx context.Context) {
 		PollTimeout:    30 * time.Second,
 		AllowedUpdates: []string{"message"},
 	})
+	// The same client the login conversation runs on is what carries a
+	// Representative's message to a person who linked telegram but has no
+	// public handle to be reached at.
+	s.eng.Notify = func(ctx context.Context, tgUserID int64, text string) error {
+		_, err := s.bot.Call(ctx, "sendMessage", map[string]any{"chat_id": tgUserID, "text": text})
+		return err
+	}
 	log.Printf("telegram bot %s polling (token %s)", buildinfo.Version(), tgbot.TokenHash(token))
 	go func() {
 		defer release()

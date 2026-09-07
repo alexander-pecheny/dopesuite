@@ -34,6 +34,7 @@ export function playerChoice(p: SuggestedPlayer): Choice {
 }
 
 import S from "./i18nstrings.js";
+import {icon} from "./icons_gen.js";
 import {autocomplete} from "../../../../dopeuikit/assets/ts/suggest.js";
 import type {Choice} from "../../../../dopeuikit/assets/ts/suggest.js";
 
@@ -373,11 +374,15 @@ export function mountRosterEditor(container: HTMLElement): void {
     return select;
   };
 
+  // An icon, not a word: the row is a name, a flag and this, and «Убрать»
+  // spelled out takes the width the name needs.
   const drawRemove = (index: number): HTMLElement => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "btn btn-ghost";
-    button.textContent = S.venues.rosterEditor.remove();
+    button.className = "btn btn-ghost btn-small";
+    button.title = S.venues.rosterEditor.remove();
+    button.setAttribute("aria-label", S.venues.rosterEditor.remove());
+    button.append(icon("trash-2"));
     button.addEventListener("click", () => {
       players.splice(index, 1);
       if (players.length === 0) players.push(emptyPlayer());
