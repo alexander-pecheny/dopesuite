@@ -142,11 +142,18 @@ edited_title = 'изменена {{.at}}'
 col_roster = "Состав"
 col_flags = "Флаги"
 col_status = "Статус"
+# The Состав column says how many folded and who unfolded, for every заявка at
+# once: a Representative reading the queue wants the names, not twenty clicks.
+roster_show = "Показать составы"
+roster_hide = "Скрыть составы"
 # Accepting and declining are a ✓ and a × on the заявка's own row: they used to
 # be buttons inside a fold under the table, which is a long way to go to say yes.
 status_accept = "Принять"
 status_decline = "Отклонить"
 status_pending = "Вернуть в ожидание"
+# The fold under the table that edits one заявка. Named by who filed it: two
+# заявки from one team under one team name are two folds nobody can tell apart.
+edit_summary = 'Правка заявки · {{.who}}'
 # One заявка's edit history: every version is dated and can be restored.
 versions_summary = "Версии и правка"
 col_who = "Кто"

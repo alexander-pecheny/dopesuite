@@ -424,11 +424,30 @@ func applicationVersions(base string, row SlotApplicationRow) *ui.Element {
 	return ui.Details(append(items, ui.Table(append([]ui.Item{ui.Scroll()}, table...)...))...)
 }
 
+// The one button over the applications table that shows every roster at once:
+// the count is what the column says folded, the names are what it says open.
+const rosterToggleID = "roster-toggle"
+
+func rosterCell(app venues.Application) *ui.Element {
+	id := strconv.FormatInt(app.ID, 10)
+	names := make([]string, 0, len(app.Roster))
+	for _, p := range app.Roster {
+		names = append(names, p.FullName())
+	}
+	return ui.Cell(
+		ui.Muted(ui.ID("roster-count-"+id), ui.Text(strconv.Itoa(len(app.Roster)))),
+		ui.Muted(ui.ID("roster-names-"+id), ui.Hidden(), ui.Text(strings.Join(names, ", "))),
+	)
+}
+
 func slotApplicationsSection(data slotPageData) *ui.Element {
 	base := slotBase(data.Venue, data.Slot)
-	sect := []ui.Item{ui.Subhead(ui.Text(strs.Venues.Game.ApplicationsSubhead()))}
+	sect := []ui.Item{ui.Row(ui.SpaceSM, ui.AlignCenter, ui.Wrap(),
+		ui.Subhead(ui.Text(strs.Venues.Game.ApplicationsSubhead())),
+		ui.Button(ui.Ghost, ui.Small(), ui.ID(rosterToggleID), ui.Text(strs.Venues.Game.RosterShow())))}
 	if len(data.Applications) == 0 {
-		return ui.Section(append(sect, ui.Empty(ui.Text(strs.Venues.Game.ApplicationsEmpty())))...)
+		return ui.Section(ui.Subhead(ui.Text(strs.Venues.Game.ApplicationsSubhead())),
+			ui.Empty(ui.Text(strs.Venues.Game.ApplicationsEmpty())))
 	}
 	head := []ui.Item{
 		ui.Hcell(ui.Text(strs.Venues.Game.ColNumber())), ui.Hcell(ui.Text(strs.Venues.Game.ColTeam())), ui.Hcell(ui.Text(strs.Venues.Public.ColRating())),
@@ -465,7 +484,7 @@ func slotApplicationsSection(data slotPageData) *ui.Element {
 			rating,
 			submitter,
 			ui.Cell(filed...),
-			ui.Cell(ui.Text(strconv.Itoa(len(row.App.Roster)))),
+			rosterCell(row.App),
 			ui.Cell(ui.Text(row.FlagSummary)),
 			ui.Cell(ui.Text(StatusLabel(row.App.Status))),
 		}
@@ -477,8 +496,11 @@ func slotApplicationsSection(data slotPageData) *ui.Element {
 	sect = append(sect, ui.Table(table...))
 	if data.CanManage {
 		for _, row := range data.Applications {
+			// Named by who filed it, not by the team: two applications from one
+			// team under one name are two folds nobody can tell apart, and the
+			// team and its status are the row above anyway.
 			sect = append(sect, ui.Details(
-				ui.Summary(ui.Text(row.App.TeamName+" · "+StatusLabel(row.App.Status))),
+				ui.Summary(ui.Text(strs.Venues.Game.EditSummary(row.Submitter))),
 				applicationVersions(base, row),
 				applicationForm(base+"/application/"+strconv.FormatInt(row.App.ID, 10)+"/edit",
 					&ApplicationView{TeamName: row.App.TeamName, RatingTeamID: row.App.RatingTeamID, Roster: row.App.Roster},

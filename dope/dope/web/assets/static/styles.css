@@ -1801,7 +1801,24 @@ body:not(.embedded-match) .grid-match {
   color: var(--text);
 }
 
-.od-input-panel { max-width: 32rem; }
+/* Wide enough for a team, its contested answer and the jury's box on one line.
+   The wrap is align-items:flex-start, so without a width the panel shrinks to
+   its widest row and the answer fields never line up. */
+/* A card, like .card-grid > .section: the kit's fields are filled rather than
+   outlined, so they only read as recessed on --surface. The ОД pane paints a
+   lighter ground than the page, where a bare field disappears.
+   align-self, because the wrap is align-items:flex-start and the panel would
+   otherwise shrink to its widest row and never line the answers up. The panes
+   are display:contents, so the host they share is as wide as the widest one's
+   grid — wider than the screen. Hence the viewport in the cap: 100% here is
+   that host, not what the reader can see. */
+.od-input-panel {
+  align-self: stretch;
+  max-width: min(48rem, calc(100vw - 2 * var(--space-5)));
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
 
 /* .od-input-wrap is min-width:max-content for the wide input tables it normally
    holds. The guard's message is prose, so when the wrap holds that instead, the
@@ -1810,6 +1827,7 @@ body:not(.embedded-match) .grid-match {
    relaxes. */
 .od-input-wrap.od-input-wrap-guard {
   min-width: 0;
+  width: 100%;
 }
 
 .od-input-gate a {
@@ -2225,6 +2243,7 @@ body:not(.embedded-match) .grid-match {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  gap: var(--space-3);
   min-width: max-content;
 }
 

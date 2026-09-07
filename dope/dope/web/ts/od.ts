@@ -445,21 +445,27 @@ function buildInputView(): HTMLElement {
     wrapper.appendChild(buildNumberingGuard());
     return wrapper;
   }
+  const question = !viewer && entryMode === "question";
+  if (!viewer) {
+    // One toolbar over both modes, in the same place in each: the mode switch,
+    // and — over the grid — the thing the grid cannot say for itself. Typing
+    // «?» into a cell has always opened the contested dialog and nobody ever
+    // found it. The one-question view has no cell to type it into.
+    const bar = document.createElement("div");
+    bar.className = "u-row u-gap-sm u-wrap u-align-center";
+    bar.appendChild(buildEntryModeSwitch());
+    if (!question) bar.appendChild(buildContestedButton());
+    wrapper.appendChild(bar);
+  }
   // A form is not a grid: the wrap is min-width:max-content for the wide entry
   // tables, which would make this panel's own width the pane's minimum.
-  if (!viewer && entryMode === "question") {
+  if (question) {
     wrapper.classList.add("od-input-wrap-guard");
     const panel = document.createElement("div");
     panel.className = "od-input-panel u-col u-gap-md";
-    panel.append(buildEntryModeSwitch(), buildQuestionEntryView());
+    panel.appendChild(buildQuestionEntryView());
     wrapper.appendChild(panel);
     return wrapper;
-  }
-  if (!viewer) {
-    const bar = document.createElement("div");
-    bar.className = "od-input-panel";
-    bar.appendChild(buildEntryModeSwitch());
-    wrapper.appendChild(bar);
   }
   const tables = document.createElement("div");
   tables.className = "od-input-tables";
@@ -467,16 +473,11 @@ function buildInputView(): HTMLElement {
   const shootout = buildInputShootoutTable();
   if (shootout) tables.appendChild(shootout);
   wrapper.appendChild(tables);
-  if (!viewer) wrapper.appendChild(buildEntryTools());
   updateEntrySelectionSoon();
   return wrapper;
 }
 
-// buildEntryTools is what the grid cannot say for itself. Typing «?» into a
-// cell has always opened the contested-answer dialog and nobody ever found it.
-function buildEntryTools(): HTMLElement {
-  const row = document.createElement("div");
-  row.className = "u-row u-gap-sm u-wrap u-align-center";
+function buildContestedButton(): HTMLElement {
   const contested = document.createElement("button");
   contested.type = "button";
   contested.className = "btn btn-ghost";
@@ -485,8 +486,7 @@ function buildEntryTools(): HTMLElement {
     const cell = sheet.focus ? entryCellNode(sheet.focus.col, sheet.focus.row) : null;
     if (cell) openContestedDialog(cell);
   });
-  row.appendChild(contested);
-  return row;
+  return contested;
 }
 
 // The entry tab is one question at a time or the whole grid at once: six teams
@@ -568,13 +568,19 @@ function buildQuestionEntryView(): HTMLElement {
   prompt.textContent = S.od.entry.whoTookIt();
   view.appendChild(prompt);
 
+  // A contested answer is the same line as the tick: typing the answer is what
+  // makes one, and the jury's ruling here is the box beside it.
+  const drafts = new Map<number, ContestedDraft>();
+
   const list = document.createElement("div");
   list.className = "u-col u-gap-sm";
   state.teams.forEach((_, index) => {
     const number = teamNumber(index);
     if (!Number.isInteger(number) || number <= 0) return;
-    const row = document.createElement("label");
-    row.className = "checkbox";
+    const row = document.createElement("div");
+    row.className = "u-row u-gap-sm u-align-center u-wrap";
+    const tick = document.createElement("label");
+    tick.className = "checkbox";
     const box = document.createElement("input");
     box.type = "checkbox";
     box.checked = taken.has(number);
@@ -584,13 +590,47 @@ function buildQuestionEntryView(): HTMLElement {
     });
     const caption = document.createElement("span");
     caption.textContent = `${number}. ${teamLabel(index)}`;
-    row.append(box, caption);
+    tick.append(box, caption);
+
+    const existing = contestedFor(entryQuestion, number);
+    const draft: ContestedDraft = {
+      answer: existing?.answer || "",
+      accepted: Boolean(existing?.acceptedHere),
+      was: existing?.answer || "",
+      wasAccepted: Boolean(existing?.acceptedHere),
+    };
+    drafts.set(number, draft);
+    const answer = document.createElement("input");
+    answer.type = "text";
+    answer.className = "input u-grow";
+    answer.autocomplete = "off";
+    answer.placeholder = S.venues.odContested.answerLabel();
+    answer.value = draft.answer;
+    const accept = document.createElement("label");
+    accept.className = "checkbox";
+    const acceptBox = document.createElement("input");
+    acceptBox.type = "checkbox";
+    acceptBox.checked = draft.accepted;
+    const acceptCaption = document.createElement("span");
+    acceptCaption.textContent = S.venues.odContested.acceptedLabel();
+    accept.append(acceptBox, acceptCaption);
+    accept.hidden = draft.answer.trim() === "";
+    answer.addEventListener("input", () => {
+      draft.answer = answer.value;
+      accept.hidden = answer.value.trim() === "";
+    });
+    acceptBox.addEventListener("change", () => {
+      draft.accepted = acceptBox.checked;
+    });
+
+    row.append(tick, answer, accept);
     list.appendChild(row);
   });
   view.appendChild(list);
 
   const commit = (step: number): void => {
     saveQuestionEntries(entryQuestion, taken);
+    void saveQuestionContested(entryQuestion, drafts);
     entryQuestion = Math.min(Math.max(entryQuestion + step, 0), totalQuestions - 1);
     invalidateTabCache("input");
     render();
@@ -632,6 +672,37 @@ function buildQuestionEntryView(): HTMLElement {
   actions.append(prev, next, invert);
   view.appendChild(actions);
   return view;
+}
+
+// ContestedDraft is one team's contested answer as the one-question view holds
+// it before prev or next writes it: what it says now, and what it said when the
+// question opened, so an untouched line costs no request.
+interface ContestedDraft {
+  answer: string;
+  accepted: boolean;
+  was: string;
+  wasAccepted: boolean;
+}
+
+function contestedFor(qIndex: number, number: number): ContestedAnswer | undefined {
+  return (state.contested || []).find((item) => item.question === qIndex && item.number === number);
+}
+
+// saveQuestionContested writes one question's contested answers: an emptied one
+// deletes, a changed one posts, and the list the server answers with is adopted
+// once at the end rather than after every line.
+async function saveQuestionContested(question: number, drafts: Map<number, ContestedDraft>): Promise<void> {
+  if (viewer) return;
+  let list: ContestedAnswer[] | null = null;
+  for (const [number, draft] of drafts) {
+    const answer = draft.answer.trim();
+    if (answer === draft.was && draft.accepted === draft.wasAccepted) continue;
+    list = answer === ""
+      ? await contestedRequest("DELETE", {question, number})
+      : await contestedRequest("POST", {question, number, answer, acceptedHere: draft.accepted});
+    if (!list) return;
+  }
+  if (list) applyContested(list);
 }
 
 // questionCaption names the question the way the operator hears it announced:

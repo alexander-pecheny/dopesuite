@@ -538,7 +538,30 @@ function pickPrevious(
   setTimeout(() => document.addEventListener("click", dismiss, {once: true}), 0);
 }
 
+// The applications table keeps every roster folded to its count; this is the
+// one button that unfolds them all.
+export function mountRosterToggle(doc: Document): void {
+  const button = doc.getElementById("roster-toggle");
+  if (!button) return;
+  let shown = false;
+  const apply = (): void => {
+    doc.querySelectorAll<HTMLElement>('[id^="roster-names-"]').forEach((el) => {
+      el.hidden = !shown;
+    });
+    doc.querySelectorAll<HTMLElement>('[id^="roster-count-"]').forEach((el) => {
+      el.hidden = shown;
+    });
+    button.textContent = shown ? S.venues.game.rosterHide() : S.venues.game.rosterShow();
+  };
+  button.addEventListener("click", () => {
+    shown = !shown;
+    apply();
+  });
+  apply();
+}
+
 export function mountRosterEditors(doc: Document): void {
+  mountRosterToggle(doc);
   doc.querySelectorAll<HTMLElement>("[data-roster-editor]").forEach(mountRosterEditor);
   doc.querySelectorAll<HTMLInputElement>("input[data-team-field]").forEach(mountTeamField);
   doc.querySelectorAll<HTMLInputElement>("input[data-buff-tournament]").forEach(mountBuffTournamentField);
