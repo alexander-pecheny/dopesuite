@@ -1977,6 +1977,13 @@ input[type="radio"]:focus-visible {
 .subhead a { color: inherit; text-decoration: none; }
 .subhead a:hover { text-decoration: underline; }
 
+/* There is no base rule for a bare <a>: every link is styled by what holds it,
+   and one held by nothing falls through to the browser's blue-and-purple. A
+   link in secondary text takes that text's colour and size — the underline is
+   what says it is a link, and hover brings it up to the body colour. */
+.muted a { color: inherit; text-decoration: underline; }
+.muted a:hover { color: var(--text); }
+
 /* ── segmented control ────────────────────────────────────────────────────
    THE either/or switch: the tabs primitive (the card-detail view switch), the
    appearance modal's theme/contrast rows, xy's editor toggles. A recessed
