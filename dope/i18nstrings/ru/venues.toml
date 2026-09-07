@@ -18,8 +18,11 @@ col_next_game = "Ближайшая игра"
 col_registration = "Регистрация"
 col_teams = "Команд"
 col_rating = "Рейтинг"
-# The link out to this venue on rating.chgk.info.
-rating_link = "рейтинг"
+# The link out to this venue on rating.chgk.info, and — for a Representative
+# reading their own Venue's public page — the way into the host view without
+# going through the burger menu.
+rating_link = "страница площадки на турнирном сайте"
+host_link = "режим организатора"
 # A venue's own page: the two lists of its games, and the note when it has none.
 upcoming_games = "Ближайшие игры"
 past_games = "Прошедшие игры"

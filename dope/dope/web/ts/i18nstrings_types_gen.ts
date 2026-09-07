@@ -1554,6 +1554,7 @@ export type Strings = {
       colVenue: () => string;
       colWhen: () => string;
       gamesEmpty: () => string;
+      hostLink: () => string;
       indexEmpty: () => string;
       indexTitle: () => string;
       pastGames: () => string;

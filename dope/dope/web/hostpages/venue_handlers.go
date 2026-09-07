@@ -190,8 +190,21 @@ func (s *Server) renderVenuePage(w http.ResponseWriter, r *http.Request, _ route
 		detail.Upcoming = append(detail.Upcoming, row)
 	}
 	detail.Mine = s.myGamesHere(r, festID, venue.Ref())
+	detail.IsHost = s.isVenueHost(r, festID)
 	pages.RenderDoc(w, s.h.Engine().AssetETags, VenueDoc(detail))
 	return nil
+}
+
+// isVenueHost says whether the reader of this public page also runs the Venue.
+// The burger menu already offers the host view; a Representative reading their
+// own page wants it under the title, not two clicks away.
+func (s *Server) isVenueHost(r *http.Request, festID int64) bool {
+	user, ok := s.h.Engine().LookupSession(r)
+	if !ok {
+		return false
+	}
+	role, err := festaccess.FestUserRoleFromQuery(r.Context(), s.h.Engine().DB, festID, user.UserID)
+	return err == nil && roles.CanManageFest(role)
 }
 
 // myGamesHere is this reader's own history at one Venue: what they played and

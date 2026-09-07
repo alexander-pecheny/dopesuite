@@ -48,6 +48,7 @@ type VenueDetail struct {
 	Upcoming      []SlotRow
 	Past          []SlotRow
 	Mine          []MineHereRow
+	IsHost        bool
 }
 
 type RegPage struct {
@@ -215,20 +216,42 @@ func mineHereSection(rows []MineHereRow) *ui.Element {
 	return ui.Section(ui.Subhead(ui.Text(strs.Venues.Mine.HereSubhead())), ui.Table(table...))
 }
 
+// venueHeadLine is the one line under a Venue's name: where it is, the venue on
+// the rating site, and — for a Representative reading their own page — the way
+// back into the host view. One muted span, so the links are the same size as
+// the town beside them and the dots between are the kit's own separator.
+func venueHeadLine(d VenueDetail) *ui.Element {
+	var parts []ui.Item
+	add := func(item ui.Item) {
+		if len(parts) > 0 {
+			parts = append(parts, ui.Text(" · "))
+		}
+		parts = append(parts, item)
+	}
+	if d.City != "" {
+		add(ui.Text(d.City))
+	}
+	if d.RatingVenueID > 0 {
+		add(ratingVenueLink(d.RatingVenueID))
+	}
+	if d.IsHost {
+		add(ui.Link(ui.Href("/host/venue/"+d.Ref), ui.Text(strs.Venues.Public.HostLink())))
+	}
+	if len(parts) == 0 {
+		return nil
+	}
+	// Inline, because text mixed with links has no unambiguous reading; Row,
+	// because a bare inline is not a block and needs somewhere to sit.
+	return ui.Row(ui.AlignCenter, ui.Wrap(), ui.Muted(ui.Inline(parts...)))
+}
+
 func VenueDoc(d VenueDetail) *ui.Doc {
 	page := []ui.Item{ui.Title(d.Title), ui.PagePublic}
 	page = append(page, jumpHostNav("/host/venue/"+d.Ref, dopestrings.Default.Host.Pages.JumpHostLabel(), dopestrings.Default.Host.Pages.JumpHostTitleFest())...)
 	page = append(page, ui.Publictopbar(ui.Crumbs(
 		pages.HomeCrumb(), ui.Crumb(ui.Href("/venues"), ui.Text(strs.Venues.Public.IndexTitle())), pages.Leaf(d.Title))))
-	head := []ui.Item{ui.SpaceSM, ui.AlignCenter, ui.Wrap()}
-	if d.City != "" {
-		head = append(head, ui.Muted(ui.Text(d.City)))
-	}
-	if d.RatingVenueID > 0 {
-		head = append(head, ratingVenueLink(d.RatingVenueID))
-	}
-	if len(head) > 3 {
-		page = append(page, ui.Row(head...))
+	if line := venueHeadLine(d); line != nil {
+		page = append(page, line)
 	}
 	if d.Description != "" {
 		page = append(page, ui.Richtext(ui.Raw(string(d.Description))))
