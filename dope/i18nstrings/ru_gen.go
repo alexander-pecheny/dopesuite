@@ -1058,7 +1058,7 @@ var RU = Strings{
 		},
 		Entry: OdEntryStrings{
 			ContestedAdd: func() string { return "Добавить спорный" },
-			ModeQuestion: func() string { return "Повопросный" },
+			ModeQuestion: func() string { return "Повопросный ввод" },
 			ModeTable:    func() string { return "Таблица" },
 			Next:         func() string { return "Далее" },
 			NoTeams:      func() string { return "Ни одной команды с номером." },

@@ -452,7 +452,7 @@ function buildInputView(): HTMLElement {
     // «?» into a cell has always opened the contested dialog and nobody ever
     // found it. The one-question view has no cell to type it into.
     const bar = document.createElement("div");
-    bar.className = "u-row u-gap-sm u-wrap u-align-center";
+    bar.className = "od-input-bar u-row u-gap-sm u-wrap u-align-center";
     bar.appendChild(buildEntryModeSwitch());
     if (!question) bar.appendChild(buildContestedButton());
     wrapper.appendChild(bar);
@@ -647,6 +647,7 @@ function buildQuestionEntryView(): HTMLElement {
   const commit = (step: number): void => {
     saveQuestionEntries(entryQuestion, taken);
     void saveQuestionContested(entryQuestion, drafts);
+    markQuestionDone(entryQuestion);
     entryQuestion = Math.min(Math.max(entryQuestion + step, 0), totalQuestions - 1);
     invalidateTabCache("input");
     render();
@@ -735,10 +736,23 @@ function questionCaption(qIndex: number): string {
   return S.od.entry.questionOf(String(qIndex + 1), total);
 }
 
-// saveQuestionEntries writes one question's ticks as the column the grid keeps:
-// the team numbers that took it, packed from the top, zeroes after.
-function saveQuestionEntries(qIndex: number, taken: Set<number>): void {
+// markQuestionDone ticks the question the operator has just moved past. Prev and
+// next are the confirm here, so passing a question is what says it is entered —
+// the same tick the grid's own box sets.
+function markQuestionDone(qIndex: number): void {
   if (viewer || state.completed[qIndex]) return;
+  state.completed[qIndex] = true;
+  invalidateScoreCaches();
+  updateHeaderProgress();
+  saveState(["completed", qIndex], true);
+}
+
+// saveQuestionEntries writes one question's ticks as the column the grid keeps:
+// the team numbers that took it, packed from the top, zeroes after. Unlike the
+// grid it does not refuse a completed question: this view has no lock to open,
+// and coming back to a question is how a jury's late ruling gets entered.
+function saveQuestionEntries(qIndex: number, taken: Set<number>): void {
+  if (viewer) return;
   const next = entryModel.packColumn(taken, state.teams.length);
   const current = state.entries[qIndex] || [];
   if (entryModel.sameColumn(current, next)) return;

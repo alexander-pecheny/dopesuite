@@ -21,7 +21,7 @@ label = "Инвертировать"
 # with six teams reads out one вопрос and ticks who took it; one with forty
 # types numbers into the grid. The same game, two hands at work.
 mode_table = "Таблица"
-mode_question = "Повопросный"
+mode_question = "Повопросный ввод"
 # The one-question view: which вопрос this is, and the two ways out of it. Prev
 # and next are the confirm — what is ticked is written on the way past.
 question_of = 'Вопрос {{.n}} из {{.total}}'

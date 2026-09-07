@@ -840,7 +840,7 @@ export const RU: Strings = {
     },
     entry: {
       contestedAdd: () => "Добавить спорный",
-      modeQuestion: () => "Повопросный",
+      modeQuestion: () => "Повопросный ввод",
       modeTable: () => "Таблица",
       next: () => "Далее",
       noTeams: () => "Ни одной команды с номером.",

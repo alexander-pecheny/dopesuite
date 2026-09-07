@@ -1838,6 +1838,17 @@ body:not(.embedded-match) .grid-match {
    are display:contents, so the host they share is as wide as the widest one's
    grid — wider than the screen. Hence the viewport in the cap: 100% here is
    that host, not what the reader can see. */
+/* The toolbar over the grid needs a ground of its own for the same reason: the
+   .seg track is --structure, which is exactly what the ОД sheet frame is
+   painted, so the control reads as two bare words with no track at all. */
+.od-input-bar {
+  align-self: stretch;
+  max-width: min(48rem, calc(100vw - 2 * var(--space-5)));
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
 .od-input-panel {
   align-self: stretch;
   max-width: min(48rem, calc(100vw - 2 * var(--space-5)));
