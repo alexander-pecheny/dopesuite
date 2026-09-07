@@ -123,20 +123,17 @@ func VenuesIndexDoc(rows []VenueRow, mine []MineRow, loggedIn bool) *ui.Doc {
 
 	table := []ui.Item{ui.ID("venues"), ui.Scroll(), ui.Trow(
 		ui.Hcell(ui.Text(strs.Venues.Public.ColVenue())), ui.Hcell(ui.Text(strs.Venues.Public.ColCity())), ui.Hcell(ui.Text(strs.Venues.Public.ColNextGame())),
-		ui.Hcell(ui.Text(strs.Venues.Public.ColRegistration())), ui.Hcell(ui.Text(strs.Venues.Public.ColTeams())), ui.Hcell(ui.Text(strs.Venues.Public.ColRating())),
+		ui.Hcell(ui.Text(strs.Venues.Public.ColRegistration())), ui.Hcell(ui.Text(strs.Venues.Public.ColTeams())),
 	)}
+	// No column for the rating site here: the index is a list to pick from, and
+	// the venue's page is where the link out belongs.
 	for _, v := range rows {
-		rating := ui.Cell(ui.Text(""))
-		if v.RatingVenueID > 0 {
-			rating = ui.Cell(ratingVenueLink(v.RatingVenueID))
-		}
 		table = append(table, ui.Trow(
 			ui.Cell(ui.Link(ui.Href("/venue/"+v.Ref), ui.Text(v.Title))),
 			ui.Cell(ui.Text(v.City)),
 			ui.Cell(ui.Text(v.NextSlot)),
 			ui.Cell(ui.Text(v.Registration)),
 			ui.Cell(ui.Text(strconv.Itoa(v.Accepted))),
-			rating,
 		))
 	}
 	page = append(page, ui.Table(table...))
@@ -307,7 +304,9 @@ func applicationForm(action string, app *ApplicationView, submit, at string) *ui
 		// is for the team itself, so it shows what the rating id names instead.
 		teamName = app.TeamName
 		alias = app.Alias
-		if alias != "" {
+		// Only when buff knows the team: an id it has never heard of would
+		// blank the box, and the next save would blank the name with it.
+		if alias != "" && app.RealTeamName != "" {
 			teamName = app.RealTeamName
 		}
 		if app.RatingTeamID > 0 {

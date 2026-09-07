@@ -146,7 +146,10 @@ type SlotApplicationRow struct {
 	FlagSummary string
 	Submitter   string
 	SubmitterTg string
-	Versions    []venues.Version
+	// RealTeamName is what the rating site calls the team, which the edit form
+	// shows above the one-off name when the application carries one.
+	RealTeamName string
+	Versions     []venues.Version
 }
 
 type slotPageData struct {
@@ -462,7 +465,8 @@ func applicationDialog(base string, row SlotApplicationRow, at string) *ui.Eleme
 			ui.Subhead(ui.Text(strs.Venues.Game.EditTitle(app.TeamName))),
 			ui.Muted(ui.Text(strs.Venues.Game.EditSummary(row.Submitter))),
 			applicationForm(base+"/application/"+strconv.FormatInt(app.ID, 10)+"/edit",
-				&ApplicationView{TeamName: app.TeamName, RatingTeamID: app.RatingTeamID, Roster: app.Roster},
+				&ApplicationView{TeamName: app.TeamName, Alias: app.Alias, RealTeamName: row.RealTeamName,
+					RatingTeamID: app.RatingTeamID, Roster: app.Roster},
 				strs.Venues.Game.VersionSave(), at),
 			// The fold last: saving and closing are what the Representative came
 			// for, and the history is there to be read, not acted on.

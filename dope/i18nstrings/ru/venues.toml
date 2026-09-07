@@ -17,6 +17,8 @@ col_city = "Город"
 col_next_game = "Ближайшая игра"
 col_registration = "Регистрация"
 col_teams = "Команд"
+# The rating team id on a заявка's row. The index has no rating column: the
+# link out to the venue's page on the rating site lives on the venue's own page.
 col_rating = "Рейтинг"
 # The link out to this venue on rating.chgk.info, and — for a Representative
 # reading their own Venue's public page — the way into the host view without

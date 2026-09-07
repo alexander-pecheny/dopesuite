@@ -339,15 +339,7 @@ func (s *Server) handleRegSubmit(w http.ResponseWriter, r *http.Request, sc rout
 	if r.Form.Get("team_kind") == "existing" && ratingTeamID <= 0 {
 		return s.renderRegPage(w, r, token, strs.Venues.Reg.TeamPickRequired(), "")
 	}
-	// A one-off name is what this game calls the team, so it is the name
-	// everything downstream seats and announces by; the team it belongs to is
-	// still the one the rating id names.
-	teamName, alias := r.Form.Get("team_name"), ""
-	if r.Form.Get("team_kind") == "existing" && r.Form.Get("team_alias_on") == "1" {
-		if alias = strings.TrimSpace(r.Form.Get("team_alias")); alias != "" {
-			teamName = alias
-		}
-	}
+	teamName, alias := teamFromForm(r.Form)
 	roster := venues.ParseRoster(r.Form.Get("roster_json"))
 	err = s.h.Engine().WithWriteTx(r.Context(), slot.FestID, "slot-application", func(ctx context.Context, tx *sql.Tx) error {
 		_, err := venues.SaveVersionTx(ctx, tx, slot.ID, sc.User.UserID, sc.User.UserID,
@@ -605,6 +597,7 @@ func (s *Server) renderSlotPage(w http.ResponseWriter, r *http.Request, sc route
 		rows = append(rows, SlotApplicationRow{
 			App: app, Flags: flags, FlagSummary: venues.FlagSummary(flags),
 			Submitter: submitterName(app), SubmitterTg: submitterLink(app), Versions: versions,
+			RealTeamName: s.h.Engine().BuffMirror().TeamName(r.Context(), app.RatingTeamID),
 		})
 	}
 	voting, err := s.loadVotingView(r, slot)
@@ -637,6 +630,21 @@ func (s *Server) renderSlotPage(w http.ResponseWriter, r *http.Request, sc route
 
 // The @ belongs to a telegram handle; a site username wearing one reads as a
 // telegram account that is not there.
+// teamFromForm reads the team box the same way for whoever submits it — the
+// person filing and the Representative editing share one form. A one-off name
+// is what this game calls the team, so it is the name everything downstream
+// seats and announces by; the team it belongs to is still the one the rating id
+// names.
+func teamFromForm(form url.Values) (teamName, alias string) {
+	teamName = form.Get("team_name")
+	if form.Get("team_kind") == "existing" && form.Get("team_alias_on") == "1" {
+		if alias = strings.TrimSpace(form.Get("team_alias")); alias != "" {
+			teamName = alias
+		}
+	}
+	return teamName, alias
+}
+
 func submitterName(app venues.Application) string {
 	if app.SubmitterTg != "" {
 		return "@" + app.SubmitterTg
@@ -859,8 +867,9 @@ func (s *Server) handleApplicationEdit(w http.ResponseWriter, r *http.Request, s
 		return route.NotFound
 	}
 	err = s.h.Engine().WithWriteTx(r.Context(), festID, "slot-application-edit", func(ctx context.Context, tx *sql.Tx) error {
+		teamName, alias := teamFromForm(r.Form)
 		_, err := venues.SaveVersionTx(ctx, tx, slot.ID, app.UserID, authorID,
-			r.Form.Get("team_name"), app.Alias, formInt64(r.Form, "rating_team_id"), venues.ParseRoster(r.Form.Get("roster_json")))
+			teamName, alias, formInt64(r.Form, "rating_team_id"), venues.ParseRoster(r.Form.Get("roster_json")))
 		return err
 	})
 	if err != nil {

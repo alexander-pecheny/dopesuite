@@ -68,11 +68,15 @@ func TestVenuesIndexDocIsOneFilteredTable(t *testing.T) {
 		`href="/venue/tbilisi"`,
 		`Площадка Тбилиси`,
 		`2026-09-04 19:00`,
-		`rating.chgk.info/venues/123`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q", want)
 		}
+	}
+	// The index is a list to pick from; the link out to the rating site is on
+	// the venue's own page, where it has room to say what it opens.
+	if strings.Contains(body, "rating.chgk.info/venues/123") {
+		t.Error("the index carries the rating link")
 	}
 	if empty := renderPublic(t, VenuesIndexDoc(nil, nil, false)); !strings.Contains(empty, "Публичных площадок пока нет.") {
 		t.Error("missing the empty note")
@@ -546,5 +550,26 @@ func TestSlotPageWritesThroughTheBotWhenThereIsNoHandle(t *testing.T) {
 	data.CanNotify = false
 	if strings.Contains(renderPublic(t, slotPageDoc(data)), `data-dialog-open="msg-9"`) {
 		t.Error("an instance with no bot offers no way to write")
+	}
+}
+
+// The team box reads the same whoever submits it: the person filing and the
+// Representative editing share one form, and a Representative who ticks the
+// one-off name must be able to change it.
+func TestTeamFromFormReadsTheOneOffName(t *testing.T) {
+	existing := url.Values{"team_kind": {"existing"}, "team_name": {"Мантисса"},
+		"team_alias_on": {"1"}, "team_alias": {"  Мантисса-дубль  "}}
+	if name, alias := teamFromForm(existing); name != "Мантисса-дубль" || alias != "Мантисса-дубль" {
+		t.Errorf("existing+alias = %q, %q", name, alias)
+	}
+	// The box unticked: the team's own name, and no alias to carry.
+	off := url.Values{"team_kind": {"existing"}, "team_name": {"Мантисса"}, "team_alias": {"Мантисса-дубль"}}
+	if name, alias := teamFromForm(off); name != "Мантисса" || alias != "" {
+		t.Errorf("alias off = %q, %q", name, alias)
+	}
+	// A brand-new team has no team to be an alias of.
+	fresh := url.Values{"team_kind": {"new"}, "team_name": {"Ландскнехты"}, "team_alias_on": {"1"}, "team_alias": {"x"}}
+	if name, alias := teamFromForm(fresh); name != "Ландскнехты" || alias != "" {
+		t.Errorf("new = %q, %q", name, alias)
 	}
 }
