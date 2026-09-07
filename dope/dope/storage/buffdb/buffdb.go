@@ -200,6 +200,16 @@ func (s *Store) TeamName(ctx context.Context, teamID int64) string {
 	return team.Name
 }
 
+// TeamTown is where a team is from, which is the team's own answer and not the
+// venue's: teams travel, and a сборная is from nowhere in particular.
+func (s *Store) TeamTown(ctx context.Context, teamID int64) string {
+	team, ok := s.Team(ctx, teamID)
+	if !ok {
+		return ""
+	}
+	return team.Town
+}
+
 func (s *Store) Team(ctx context.Context, teamID int64) (Team, bool) {
 	if !s.Enabled() || teamID <= 0 {
 		return Team{}, false

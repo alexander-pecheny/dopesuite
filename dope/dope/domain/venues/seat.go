@@ -21,7 +21,18 @@ import (
 
 var ErrHasResults = errors.New(dopestrings.Default.Venues.Errors.TeamHasResults())
 
-func SetStatusTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string, appID int64, status string) error {
+// Towns answers where a team is from. A team's town is its own — teams travel
+// to play, and an all-star side belongs to no town at all — so it is the rating
+// site's answer, and the Venue's own city only stands in for a team the rating
+// site has never heard of.
+type Towns func(ratingTeamID int64) string
+
+// FixedTown is the Towns of a Venue whose teams the rating site does not know.
+func FixedTown(city string) Towns {
+	return func(int64) string { return city }
+}
+
+func SetStatusTx(ctx context.Context, tx *sql.Tx, slot Slot, towns Towns, appID int64, status string) error {
 	app, err := LoadApplication(ctx, tx, appID)
 	if err != nil {
 		return err
@@ -47,14 +58,14 @@ func SetStatusTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string, a
 		return err
 	}
 	if !unseating {
-		return reseatTx(ctx, tx, slot, venueCity, 0)
+		return reseatTx(ctx, tx, slot, towns, 0)
 	}
 	if _, err := tx.ExecContext(ctx, `update slot_applications set participant_id = null where id = ?`, appID); err != nil {
 		return err
 	}
 	// Reseat first: it is what clears the Game's rows for that seat, and the
 	// Participant cannot go while they still point at it.
-	if err := reseatTx(ctx, tx, slot, venueCity, app.Number); err != nil {
+	if err := reseatTx(ctx, tx, slot, towns, app.Number); err != nil {
 		return err
 	}
 	if app.ParticipantID <= 0 {
@@ -69,8 +80,8 @@ func SetStatusTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string, a
 // decline does, so a seat with results in it refuses to go, and then the
 // application itself is gone rather than sitting there declined — the person is
 // free to file again.
-func WithdrawApplicationTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string, appID int64) error {
-	if err := SetStatusTx(ctx, tx, slot, venueCity, appID, StatusDeclined); err != nil {
+func WithdrawApplicationTx(ctx context.Context, tx *sql.Tx, slot Slot, towns Towns, appID int64) error {
+	if err := SetStatusTx(ctx, tx, slot, towns, appID, StatusDeclined); err != nil {
 		return err
 	}
 	// slot_application_versions cascades on the delete.
@@ -82,11 +93,11 @@ func WithdrawApplicationTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity
 // Number it holds, a newly accepted one takes the lowest free one. A team the
 // host seated by hand is left where it is — a application owns its own seat and no
 // other.
-func ReseatTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string) error {
-	return reseatTx(ctx, tx, slot, venueCity, 0)
+func ReseatTx(ctx context.Context, tx *sql.Tx, slot Slot, towns Towns) error {
+	return reseatTx(ctx, tx, slot, towns, 0)
 }
 
-func reseatTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string, drop int64) error {
+func reseatTx(ctx context.Context, tx *sql.Tx, slot Slot, towns Towns, drop int64) error {
 	apps, err := SlotApplications(ctx, tx, slot.ID)
 	if err != nil {
 		return err
@@ -108,7 +119,7 @@ func reseatTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string, drop
 	delete(seated, drop)
 	assignNumbers(accepted, seated)
 	for _, a := range accepted {
-		seated[a.Number] = protocol.RosterTeam{Name: a.TeamName, City: venueCity, Number: a.Number}
+		seated[a.Number] = protocol.RosterTeam{Name: a.TeamName, City: towns(a.RatingTeamID), Number: a.Number}
 	}
 
 	teams := make([]protocol.RosterTeam, 0, len(seated))
@@ -134,7 +145,7 @@ func reseatTx(ctx context.Context, tx *sql.Tx, slot Slot, venueCity string, drop
 		if participantID == 0 {
 			continue
 		}
-		if err := linkRegistryTeamTx(ctx, tx, slot.FestID, participantID, a, venueCity); err != nil {
+		if err := linkRegistryTeamTx(ctx, tx, slot.FestID, participantID, a, towns(a.RatingTeamID)); err != nil {
 			return err
 		}
 		if err := writeGameRosterTx(ctx, tx, slot.FestID, slot.GameID, participantID, a.Roster); err != nil {
@@ -306,7 +317,7 @@ func participantByNumber(ctx context.Context, q store.Queryer, festID, gameID, n
 	return id, err
 }
 
-func linkRegistryTeamTx(ctx context.Context, tx *sql.Tx, festID, participantID int64, app Application, city string) error {
+func linkRegistryTeamTx(ctx context.Context, tx *sql.Tx, festID, participantID int64, app Application, town string) error {
 	if app.RatingTeamID <= 0 {
 		return nil
 	}
@@ -320,12 +331,15 @@ func linkRegistryTeamTx(ctx context.Context, tx *sql.Tx, festID, participantID i
 		}
 		if teamID, err = store.InsertReturningID(ctx, tx, `
 insert into fest_teams(fest_id, rating_id, name, city, position, deleted)
-values(?, ?, ?, ?, ?, 0)`, festID, app.RatingTeamID, app.TeamName, city, position); err != nil {
+values(?, ?, ?, ?, ?, 0)`, festID, app.RatingTeamID, app.TeamName, town, position); err != nil {
 			return err
 		}
 	} else if err != nil {
 		return err
-	} else if _, err := tx.ExecContext(ctx, `update fest_teams set name = ? where id = ?`, app.TeamName, teamID); err != nil {
+		// The town comes from the rating site, and a Venue that used to stamp
+		// its own city on every team it seated leaves rows to correct.
+	} else if _, err := tx.ExecContext(ctx, `
+update fest_teams set name = ?, city = coalesce(nullif(?, ''), city) where id = ?`, app.TeamName, town, teamID); err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `update participants set fest_team_id = ? where id = ?`, teamID, participantID)

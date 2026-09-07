@@ -133,7 +133,7 @@ func (s *Server) handleRegWithdraw(w http.ResponseWriter, r *http.Request, sc ro
 		return err
 	}
 	err = s.h.Engine().WithWriteTx(r.Context(), slot.FestID, "slot-application-withdraw", func(ctx context.Context, tx *sql.Tx) error {
-		return venues.WithdrawApplicationTx(ctx, tx, slot, venue.City, app.ID)
+		return venues.WithdrawApplicationTx(ctx, tx, slot, s.townsOf(ctx, venue), app.ID)
 	})
 	if err != nil {
 		return s.renderRegPage(w, r, token, err.Error(), "")
@@ -383,7 +383,7 @@ func (s *Server) reseatSlot(reqCtx context.Context, slot venues.Slot) error {
 		return err
 	}
 	err = s.h.Engine().WithWriteTx(reqCtx, slot.FestID, "slot-reseat", func(ctx context.Context, tx *sql.Tx) error {
-		return venues.ReseatTx(ctx, tx, slot, venue.City)
+		return venues.ReseatTx(ctx, tx, slot, s.townsOf(ctx, venue))
 	})
 	if err == nil {
 		s.h.Engine().InvalidateFestViewCache(slot.FestID)
@@ -645,6 +645,18 @@ func teamFromForm(form url.Values) (teamName, alias string) {
 	return teamName, alias
 }
 
+// townsOf says where each seated team is from: the rating site's answer for a
+// team it knows, and the Venue's own city only for one it does not. An online
+// Venue used to make every team that played there online too.
+func (s *Server) townsOf(ctx context.Context, venue venues.Venue) venues.Towns {
+	return func(ratingTeamID int64) string {
+		if town := s.h.Engine().BuffMirror().TeamTown(ctx, ratingTeamID); town != "" {
+			return town
+		}
+		return venue.City
+	}
+}
+
 func submitterName(app venues.Application) string {
 	if app.SubmitterTg != "" {
 		return "@" + app.SubmitterTg
@@ -837,7 +849,7 @@ func (s *Server) handleApplicationStatus(w http.ResponseWriter, r *http.Request,
 		return route.BadRequest("unknown status")
 	}
 	err = s.h.Engine().WithWriteTx(r.Context(), festID, "slot-application-status", func(ctx context.Context, tx *sql.Tx) error {
-		return venues.SetStatusTx(ctx, tx, slot, venue.City, appID, status)
+		return venues.SetStatusTx(ctx, tx, slot, s.townsOf(ctx, venue), appID, status)
 	})
 	if errors.Is(err, venues.ErrHasResults) {
 		return route.Conflict(venues.ErrHasResults.Error())

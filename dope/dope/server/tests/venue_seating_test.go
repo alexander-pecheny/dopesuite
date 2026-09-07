@@ -86,7 +86,7 @@ where game_id = ? and code = 'main'`,
 		t.Fatal(err)
 	}
 	err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
-		return venues.SetStatusTx(ctx, tx, slot, "", applicationID(t, db, slot, alice), venues.StatusDeclined)
+		return venues.SetStatusTx(ctx, tx, slot, venues.FixedTown(""), applicationID(t, db, slot, alice), venues.StatusDeclined)
 	})
 	if !errors.Is(err, venues.ErrHasResults) {
 		t.Fatalf("err = %v, want ErrHasResults", err)
@@ -104,7 +104,7 @@ func TestRosterVersionAfterAcceptanceRewritesTheRoster(t *testing.T) {
 		{PlayerID: 3, Surname: "Новиков", Name: "Новик", Captain: true},
 	})
 	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
-		return venues.ReseatTx(ctx, tx, slot, "Тбилиси")
+		return venues.ReseatTx(ctx, tx, slot, venues.FixedTown("Тбилиси"))
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +254,7 @@ func TestWithdrawnApplicationLeavesNoSeat(t *testing.T) {
 		t.Fatalf("accepted %+v %v", app, err)
 	}
 	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
-		return venues.WithdrawApplicationTx(ctx, tx, slot, "", app.ID)
+		return venues.WithdrawApplicationTx(ctx, tx, slot, venues.FixedTown(""), app.ID)
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -298,7 +298,7 @@ func applicationID(t *testing.T, db *sql.DB, slot venues.Slot, userID int64) int
 func setStatus(t *testing.T, db *sql.DB, slot venues.Slot, userID int64, status string) {
 	t.Helper()
 	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
-		return venues.SetStatusTx(ctx, tx, slot, "Тбилиси", applicationID(t, db, slot, userID), status)
+		return venues.SetStatusTx(ctx, tx, slot, venues.FixedTown("Тбилиси"), applicationID(t, db, slot, userID), status)
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -384,7 +384,7 @@ func TestHandSeatedTeamSurvivesAnApplication(t *testing.T) {
 	db := venueTestDB(t)
 	festID, slot := newVenueSlot(t, db, []int{2})
 	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
-		return venues.ReseatTx(ctx, tx, slot, "Тбилиси")
+		return venues.ReseatTx(ctx, tx, slot, venues.FixedTown("Тбилиси"))
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -401,7 +401,7 @@ where game_id = ? and code = 'main'`,
 	fileApplication(t, db, slot, alice, "Мантисса", 0, nil)
 	// A pending application touches nothing.
 	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
-		return venues.ReseatTx(ctx, tx, slot, "Тбилиси")
+		return venues.ReseatTx(ctx, tx, slot, venues.FixedTown("Тбилиси"))
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -438,7 +438,7 @@ func TestContestedBlocksAnUnseat(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
-		return venues.SetStatusTx(ctx, tx, slot, "", applicationID(t, db, slot, alice), venues.StatusDeclined)
+		return venues.SetStatusTx(ctx, tx, slot, venues.FixedTown(""), applicationID(t, db, slot, alice), venues.StatusDeclined)
 	})
 	if !errors.Is(err, venues.ErrHasResults) {
 		t.Fatalf("err = %v, want ErrHasResults", err)
@@ -465,14 +465,14 @@ func TestReseatFollowsARenumberedTeam(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
-		return venues.ReseatTx(ctx, tx, slot, "Тбилиси")
+		return venues.ReseatTx(ctx, tx, slot, venues.FixedTown("Тбилиси"))
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	// A roster edit reseats again; the team must still be one row at 3.
 	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
-		return venues.ReseatTx(ctx, tx, slot, "Тбилиси")
+		return venues.ReseatTx(ctx, tx, slot, venues.FixedTown("Тбилиси"))
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -528,7 +528,7 @@ func TestContestedFollowARenumberedTeam(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
-		return venues.ReseatTx(ctx, tx, slot, "Тбилиси")
+		return venues.ReseatTx(ctx, tx, slot, venues.FixedTown("Тбилиси"))
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -607,5 +607,60 @@ select first_name, last_name, patronymic from players where fest_id = ? and last
 	// No patronymic: the fest's own «Имя Фамилия», as before.
 	if plain := teams[0].Players[1]; plain.Name != "Пётр Новичок" || plain.Patronymic != "" {
 		t.Fatalf("player without a patronymic %+v", plain)
+	}
+}
+
+// A team's town is its own. A Venue marked «Онлайн» used to stamp Онлайн on
+// every team that played there; teams travel, and a сборная is from nowhere in
+// particular, so the rating site's answer wins and the Venue's city only stands
+// in for a team it has never heard of.
+func TestSeatedTeamsTakeTheirOwnTown(t *testing.T) {
+	db := venueTestDB(t)
+	festID, slot := newVenueSlot(t, db, []int{2})
+	alice := newVenueUser(t, db, "alice")
+	bob := newVenueUser(t, db, "bob")
+	fileApplication(t, db, slot, alice, "Мантисса", 5723, nil)
+	fileApplication(t, db, slot, bob, "Разовая", 0, nil)
+
+	towns := func(ratingTeamID int64) string {
+		if ratingTeamID == 5723 {
+			return "Казань"
+		}
+		return "Онлайн"
+	}
+	for _, userID := range []int64{alice, bob} {
+		id := applicationID(t, db, slot, userID)
+		if err := inTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+			return venues.SetStatusTx(ctx, tx, slot, towns, id, venues.StatusAccepted)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := map[string]string{}
+	rows, err := db.Query(`select name, city from participants where fest_id = ? and roster = 'team'`, festID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name, city string
+		if err := rows.Scan(&name, &city); err != nil {
+			t.Fatal(err)
+		}
+		got[name] = city
+	}
+	if got["Мантисса"] != "Казань" {
+		t.Errorf("a team the rating site knows: %q", got["Мантисса"])
+	}
+	// No rating id, so nothing to ask: the Venue's own city stands in.
+	if got["Разовая"] != "Онлайн" {
+		t.Errorf("a team it does not: %q", got["Разовая"])
+	}
+	var registry string
+	if err := db.QueryRow(`select city from fest_teams where fest_id = ? and rating_id = 5723`, festID).Scan(&registry); err != nil {
+		t.Fatal(err)
+	}
+	if registry != "Казань" {
+		t.Errorf("the registry row: %q", registry)
 	}
 }
