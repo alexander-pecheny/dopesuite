@@ -34,7 +34,7 @@ type packFile struct {
 
 // packFormats is the set of formats one pack request asks for.
 type packFormats struct {
-	fourS, docx, pdf, pdfMobile, handouts bool
+	fourS, docx, docxSpoilers, pdf, pdfMobile, handouts bool
 }
 
 func parsePackFormats(v string) packFormats {
@@ -45,6 +45,8 @@ func parsePackFormats(v string) packFormats {
 			f.fourS = true
 		case "docx":
 			f.docx = true
+		case "docx_spoilers":
+			f.docxSpoilers = true
 		case "pdf":
 			f.pdf = true
 		case "pdf_mobile":
@@ -57,7 +59,7 @@ func parsePackFormats(v string) packFormats {
 }
 
 func (f packFormats) empty() bool {
-	return !f.fourS && !f.docx && !f.pdf && !f.pdfMobile && !f.handouts
+	return !f.fourS && !f.docx && !f.docxSpoilers && !f.pdf && !f.pdfMobile && !f.handouts
 }
 
 // needsTypst reports whether any selected format goes through the typst pool,
@@ -145,12 +147,24 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 			files = append(files, packFile{name, data})
 		}
 	}
-	if formats.docx {
-		b, err := docx.Export(structure(), req.images, docx.Options{})
+	// The written-testing copy: the screen's text (no stress marks, no reading
+	// notes) with the answers pushed behind dots. The suffix is chgksuite's own.
+	for _, v := range []struct {
+		want   bool
+		opts   docx.Options
+		suffix string
+	}{
+		{formats.docx, docx.Options{}, ".docx"},
+		{formats.docxSpoilers, docx.Options{ScreenMode: docx.ScreenReplaceAll, Spoilers: docx.SpoilersDots}, "_screen_spoilers.docx"},
+	} {
+		if !v.want {
+			continue
+		}
+		b, err := docx.Export(structure(), req.images, v.opts)
 		if err != nil {
 			return nil, err
 		}
-		files = append(files, packFile{req.name + ".docx", b})
+		files = append(files, packFile{req.name + v.suffix, b})
 	}
 	for _, v := range []struct {
 		want   bool

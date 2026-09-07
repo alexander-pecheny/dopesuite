@@ -2,10 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fakeBoard, installDOM } from "./dom.js";
 
-const ids = ["exportOverlay", "exportForm", "exportFmt4s", "exportFmtDocx", "exportFmtPdf", "exportFmtPdfMobile", "exportFmtHandouts", "exportToggleAll", "exportRun", "exportCancel", "exportMessage"];
+const ids = ["exportOverlay", "exportForm", "exportModeOne", "exportModeMany", "exportOneFormat", "exportFormats", "exportFmt4s", "exportFmtDocx", "exportFmtDocxSpoilers", "exportFmtPdf", "exportFmtPdfMobile", "exportFmtHandouts", "exportToggleAll", "exportRun", "exportCancel", "exportMessage"];
 const p = installDOM(ids);
 p.node("exportOverlay").hidden = true;
 p.node("exportFmt4s").checked = true;
+p.node("exportModeOne").checked = true;
+// The dropdown the "one format" mode reads, as board.dopeui declares it.
+const one = p.node("exportOneFormat");
+one.options = ["4s", "docx", "docx_spoilers", "pdf", "pdf_mobile", "handouts"].map((value) => ({ value, disabled: false }));
+one.value = "docx";
 // The panel binds these at import, so they are swapped before it loads.
 const { xyApp } = await import("../web/assets/static/dist/app.js");
 const { xySync } = await import("../web/assets/static/dist/sync.js");
@@ -48,14 +53,15 @@ test("a blank line before a marker just goes — the field after it stays in the
   assert.equal(exportSource(c), "? Вопрос\n! Ответ\n^ Источник\n");
 });
 
-test("offline, only the .4s is offered and it downloads without the network", async () => {
+test("offline, only the .4s is offered — the dropdown drops the rest and moves onto it", async () => {
   online = false;
   const panel = createExportPanel(fakeBoard(), { appendImages: async () => new Set() });
   panel.open(scope);
   assert.equal(p.node("exportFmtDocx").disabled, true);
   assert.equal(p.node("exportFmt4s").disabled, false);
   assert.match(p.node("exportMessage").textContent, /^Офлайн/);
-  assert.equal(p.node("exportToggleAll").text, "Снять выделение", "the one available format is ticked");
+  assert.equal(one.value, "4s", "the .docx it stood on is unreachable offline");
+  assert.deepEqual(one.options.filter((o) => !o.disabled).map((o) => o.value), ["4s"]);
   p.node("exportForm").fire("submit");
   await new Promise((r) => setTimeout(r, 0));
   assert.equal(downloads.length, 1);
@@ -63,6 +69,27 @@ test("offline, only the .4s is offered and it downloads without the network", as
   assert.equal(await downloads[0][0].text(), exportSource(cards));
   assert.equal(p.node("exportOverlay").hidden, true, "a finished export closes the dialog");
   online = true;
+});
+
+test("the tick boxes belong to the zip: hidden under «один формат», back under «несколько»", () => {
+  const panel = createExportPanel(fakeBoard(), { appendImages: async () => new Set() });
+  panel.open(scope);
+  assert.equal(p.node("exportFormats").hidden, true);
+  assert.equal(p.node("exportRun").disabled, false, "the dropdown's format is what runs");
+
+  p.node("exportModeOne").checked = false;
+  p.node("exportModeMany").checked = true;
+  p.node("exportModeMany").fire("change");
+  assert.equal(p.node("exportFormats").hidden, false);
+
+  for (const id of ["exportFmt4s", "exportFmtDocx", "exportFmtDocxSpoilers", "exportFmtPdf", "exportFmtPdfMobile", "exportFmtHandouts"]) p.node(id).checked = false;
+  p.node("exportFmt4s").fire("change");
+  assert.equal(p.node("exportRun").disabled, true, "nothing ticked is nothing to do");
+
+  p.node("exportModeMany").checked = false;
+  p.node("exportModeOne").checked = true;
+  p.node("exportModeOne").fire("change");
+  assert.equal(p.node("exportRun").disabled, false);
 });
 
 test("the export label says «группы» for a grouped list, and an empty list is not offered it", () => {

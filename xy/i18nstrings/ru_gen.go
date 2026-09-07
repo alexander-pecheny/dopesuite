@@ -249,15 +249,22 @@ var RU = Strings{
 			Title: func() string { return "Выписки" },
 		},
 		Export: BoardExportStrings{
+			DocxSpoilersLabel: func() string { return ".docx со спойлерами" },
+			DocxSpoilersTitle: func() string {
+				return "Экранный текст, ответы за точками — для письменного тура"
+			},
 			Fmt4sTitle: func() string {
 				return "Исходник chgksuite; изображения кладутся рядом в архив"
 			},
-			HandoutsLabel: func() string { return " раздатки в pdf" },
+			HandoutsLabel: func() string { return "раздатки в pdf" },
 			HandoutsTitle: func() string {
 				return "Раздатки по одной на страницу, свёрстанные по размеру (split-fit)"
 			},
+			ModeMany:       func() string { return "Несколько форматов в .zip" },
+			ModeOne:        func() string { return "Один формат" },
+			OneTitle:       func() string { return "Что скачать" },
 			OverlayLabel:   func() string { return "Экспорт списка" },
-			PdfMobileLabel: func() string { return " .pdf для телефона" },
+			PdfMobileLabel: func() string { return ".pdf для телефона" },
 			PdfMobileTitle: func() string { return "Вёрстка под узкий экран" },
 			Run:            func() string { return "Экспорт" },
 			SelectAll:      func() string { return "Выбрать все" },

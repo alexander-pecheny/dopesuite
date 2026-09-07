@@ -210,9 +210,14 @@ export type Strings = {
       title: () => string;
     };
     export: {
+      docxSpoilersLabel: () => string;
+      docxSpoilersTitle: () => string;
       fmt4sTitle: () => string;
       handoutsLabel: () => string;
       handoutsTitle: () => string;
+      modeMany: () => string;
+      modeOne: () => string;
+      oneTitle: () => string;
       overlayLabel: () => string;
       pdfMobileLabel: () => string;
       pdfMobileTitle: () => string;

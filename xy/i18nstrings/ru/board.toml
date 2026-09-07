@@ -230,14 +230,23 @@ empty = "В списке нет карточек."
 # aria-label and title of the export-picker dialog.
 overlay_label = "Экспорт списка"
 title = "Экспорт"
+# The two ways to ask: one format from the dropdown, or several ticked into
+# a zip. The tick boxes only appear under the second.
+mode_one = "Один формат"
+mode_many = "Несколько форматов в .zip"
+# Tooltip of the format dropdown.
+one_title = "Что скачать"
 # Tooltip of the .4s checkbox.
 fmt4s_title = "Исходник chgksuite; изображения кладутся рядом в архив"
-# Mobile-PDF checkbox: tooltip and visible label (leading space).
+# The written-testing copy: tooltip and label.
+docx_spoilers_title = "Экранный текст, ответы за точками — для письменного тура"
+docx_spoilers_label = ".docx со спойлерами"
+# Mobile-PDF checkbox: tooltip and visible label.
 pdf_mobile_title = "Вёрстка под узкий экран"
-pdf_mobile_label = " .pdf для телефона"
-# Handouts checkbox: tooltip and visible label (leading space).
+pdf_mobile_label = ".pdf для телефона"
+# Handouts checkbox: tooltip and visible label.
 handouts_title = "Раздатки по одной на страницу, свёрстанные по размеру (split-fit)"
-handouts_label = " раздатки в pdf"
+handouts_label = "раздатки в pdf"
 # Ghost button ticking every format.
 select_all = "Выбрать все"
 # Submit button.

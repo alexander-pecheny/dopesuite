@@ -2,7 +2,7 @@
 // order) into a chgksuite "4s" document, gather any images referenced by
 // `(img …)` directives from the cards' attachments, and hand both to the server,
 // which composes the requested formats in memory and streams back one file — or
-// a zip of all of them. The .docx and the .pdf render the same document: the PDF
+// a zip of the several that were ticked. The .docx and the .pdf render the same document: the PDF
 // is typeset by typst to look like the docx (same layout, same non-breaking
 // spaces/hyphens, same keep-together questions). See internal/server/exportpack.go.
 
@@ -47,11 +47,13 @@ function foldBlankLines(desc: string): string {
 
 export function createExportPanel(board: Board, attachments: Pick<Attachments, "appendImages">): ListPanel {
 
-  // The export modal's five formats, in the order they are offered. `server` marks
+  // The export modal's six formats, in the order they are offered — the same
+  // order in the one-format dropdown and in the zip's tick boxes. `server` marks
   // the ones that need the server to render, so offline can disable exactly those.
   const EXPORT_FORMATS = [
     { key: "4s", box: "exportFmt4s", server: false },
     { key: "docx", box: "exportFmtDocx", server: true },
+    { key: "docx_spoilers", box: "exportFmtDocxSpoilers", server: true },
     { key: "pdf", box: "exportFmtPdf", server: true },
     { key: "pdf_mobile", box: "exportFmtPdfMobile", server: true },
     { key: "handouts", box: "exportFmtHandouts", server: true },
@@ -61,13 +63,22 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
   let exportCtx: { cards: BoardCard[]; title: string; hndt: string } | null = null;
 
   function exportBox(box: string): HTMLInputElement { return byId<HTMLInputElement>(box); }
+  function oneFormat(): HTMLSelectElement { return byId<HTMLSelectElement>("exportOneFormat"); }
+  function manyMode(): boolean { return byId<HTMLInputElement>("exportModeMany").checked; }
+
   function exportChosen(): string[] {
+    if (!manyMode()) {
+      const f = EXPORT_FORMATS.find((f) => f.key === oneFormat().value);
+      return f && !exportBox(f.box).disabled ? [f.key] : [];
+    }
     return EXPORT_FORMATS.filter((f) => exportBox(f.box).checked && !exportBox(f.box).disabled).map((f) => f.key);
   }
 
-  // syncExportForm keeps the button row honest: nothing ticked is nothing to do,
-  // and the toggle-all label says which way it will go.
+  // syncExportForm keeps the form honest: the tick boxes belong to the zip and
+  // are gone without it, nothing chosen is nothing to do, and the toggle-all
+  // label says which way it will go.
   function syncExportForm(): void {
+    byId("exportFormats").hidden = !manyMode();
     const chosen = exportChosen();
     byId<HTMLButtonElement>("exportRun").disabled = chosen.length === 0;
     const available = EXPORT_FORMATS.filter((f) => !exportBox(f.box).disabled);
@@ -82,11 +93,17 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     // Offline everything but the .4s is unreachable: the other formats render
     // server-side, and even the .4s ships without its images (they are fetched).
     const offline = !xySync.isOnline();
+    const off = new Set<string>();
     for (const f of EXPORT_FORMATS) {
       const box = exportBox(f.box);
       box.disabled = (offline && f.server) || (f.key === "handouts" && !hndt.trim());
-      if (box.disabled) box.checked = false;
+      if (box.disabled) { box.checked = false; off.add(f.key); }
     }
+    // The dropdown offers the same formats, so it drops the same ones, and a
+    // selection standing on one moves to the first that survived.
+    const one = oneFormat();
+    for (const opt of Array.from(one.options)) opt.disabled = off.has(opt.value);
+    if (off.has(one.value)) one.value = EXPORT_FORMATS.find((f) => !off.has(f.key))?.key ?? "";
     const notes: string[] = [];
     if (offline) notes.push(S.export.notes.offline());
     if (!hndt.trim()) notes.push(S.export.notes.noHandouts());
@@ -95,7 +112,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     exportModal.message(notes.join(" "));
   }
 
-  // runExport renders the ticked formats. A bare .4s with no images never touches
+  // runExport renders the chosen formats. A bare .4s with no images never touches
   // the network — it is the one export that works offline.
   async function runExport(): Promise<void> {
     if (!exportCtx) return;
@@ -170,6 +187,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     syncExportForm();
   });
   for (const f of EXPORT_FORMATS) exportBox(f.box).addEventListener("change", syncExportForm);
+  for (const id of ["exportModeOne", "exportModeMany", "exportOneFormat"]) byId(id).addEventListener("change", syncExportForm);
 
 
   return {

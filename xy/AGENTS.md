@@ -147,7 +147,7 @@ internal/server/       package server — the whole HTTP server
                        in-process (chgk/docx, chgk/typstdoc), images included; no Python. The PDF goes through
                        the shared typst (wasm) pool (typst.go), so it too writes nothing anywhere
   exportpack.go        POST /api/export/pack — the export modal's request: one 4s source, several formats
-                       (4s/docx/pdf/pdf_mobile/handouts) rendered by composing the above + handout.SplitFit,
+                       (4s/docx/docx_spoilers/pdf/pdf_mobile/handouts) rendered by composing the above + handout.SplitFit,
                        returned as the bare file when one was asked for or a zip when more. Images ride along
                        only for the .4s (docx/pdf embed their own); split-fit's PDFs land under раздатки/
   import4s.go          POST /api/import/parse — .4s/.zip/.docx → 4s source + images (chgk/chgkimport),
@@ -239,7 +239,7 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        typst.wasm is //go:embed-ed but NOT in git (30 MB): `just build-wasm` compiles
                        typst-wasm/ (Rust) into it — once per clone, then only on a typst bump. Every Go
                        recipe (build/dev/test) depends on a guard that says so if the file is missing.
-  docx/                parsed structure → .docx (OOXML), reusing chgksuite's template.docx; byte-parity tested (document.xml body + rels: spacing, run boundaries, hyperlinks) vs chgksuite, for every `compose docx` switch (docx.Options: spoilers, screen mode, noanswers/noparagraph/only_question_number). xy passes Options{} — the switches are the CLI's for now; regenerate the oracles with scripts/gen_docx_oracles.sh.
+  docx/                parsed structure → .docx (OOXML), reusing chgksuite's template.docx; byte-parity tested (document.xml body + rels: spacing, run boundaries, hyperlinks) vs chgksuite, for every `compose docx` switch (docx.Options: spoilers, screen mode, noanswers/noparagraph/only_question_number). xy passes Options{} for the host's copy and screen mode + spoilers=dots for the written-testing one; the rest of the switches are the CLI's; regenerate the oracles with scripts/gen_docx_oracles.sh.
                        (img …) images go through imgconv.ForExport like the PDF's — see below (images.go)
   typstdoc/            parsed structure → .typ → PDF via typst (the same wasm pool handouts use): the docx
                        export in the other format. template.docx's page setup transcribed into the preamble
@@ -417,9 +417,12 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        (img …) attached to the card that references it; a .docx first opens
                        the verification screen (editable 4s left, live preview right)
     export.ts          «Экспорт»: exportSource (the cards' 4s, versions folded) + the
-                       referenced images to /api/export/pack for .docx/.pdf/.pdf для
-                       телефона/раздатки; a bare .4s with no images is written in the
-                       browser, the one export that works offline
+                       referenced images to /api/export/pack — one format from the
+                       dropdown, or several ticked into a zip: .docx, .docx со
+                       спойлерами (the screen's text, answers behind dots, for a
+                       written tour), .pdf, .pdf для телефона, раздатки; a bare .4s
+                       with no images is written in the browser, the one export that
+                       works offline
     handouts.ts        «Генерация раздаток»: hndtOf (hndt.ts) → editable .hndt →
                        /api/handouts/{pdf,split_fit}; images staged once per open
                        (handoutsession.ts); per-question layout settings persisted to
