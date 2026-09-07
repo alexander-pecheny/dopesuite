@@ -619,6 +619,11 @@ function buildQuestionEntryView(): HTMLElement {
     const acceptCaption = document.createElement("span");
     acceptCaption.textContent = S.venues.odContested.acceptedLabel();
     accept.append(acceptBox, acceptCaption);
+    // The ruling keeps its cell whether or not it is showing: the rows are
+    // display:contents, so a child that disappears takes its grid cell with it
+    // and the next team's name slides up into the gap.
+    const ruling = document.createElement("div");
+    ruling.append(accept);
     const markDisputed = (): void => {
       const on = draft.answer.trim() !== "";
       accept.hidden = !on;
@@ -634,7 +639,7 @@ function buildQuestionEntryView(): HTMLElement {
       draft.accepted = acceptBox.checked;
     });
 
-    row.append(tick, answer, accept);
+    row.append(tick, answer, ruling);
     list.appendChild(row);
   });
   view.appendChild(list);
