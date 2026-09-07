@@ -11,6 +11,9 @@ import (
 	"xy/internal/chgk/docx"
 	"xy/internal/chgk/fsource"
 	"xy/internal/chgk/handout"
+	"xy/internal/chgk/imghost"
+	"xy/internal/chgk/openquiz"
+	"xy/internal/chgk/pptx"
 	"xy/internal/chgk/typstdoc"
 
 	xystrings "xy/i18nstrings"
@@ -34,7 +37,7 @@ type packFile struct {
 
 // packFormats is the set of formats one pack request asks for.
 type packFormats struct {
-	fourS, docx, docxSpoilers, pdf, pdfMobile, handouts bool
+	fourS, docx, docxSpoilers, pdf, pdfMobile, pptx, openquiz, handouts bool
 }
 
 func parsePackFormats(v string) packFormats {
@@ -51,6 +54,10 @@ func parsePackFormats(v string) packFormats {
 			f.pdf = true
 		case "pdf_mobile":
 			f.pdfMobile = true
+		case "pptx":
+			f.pptx = true
+		case "openquiz":
+			f.openquiz = true
 		case "handouts":
 			f.handouts = true
 		}
@@ -59,7 +66,7 @@ func parsePackFormats(v string) packFormats {
 }
 
 func (f packFormats) empty() bool {
-	return !f.fourS && !f.docx && !f.docxSpoilers && !f.pdf && !f.pdfMobile && !f.handouts
+	return !f.fourS && !f.docx && !f.docxSpoilers && !f.pdf && !f.pdfMobile && !f.pptx && !f.openquiz && !f.handouts
 }
 
 // needsTypst reports whether any selected format goes through the typst pool,
@@ -90,10 +97,11 @@ func (s *server) handleExportPack(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// One timeout for the whole pack: split-fit binary-searches every block and
+	// One timeout for the whole pack: split-fit binary-searches every block, and
+	// openquiz uploads every picture with chgksuite's ten retries, so either one
 	// dominates whenever it is selected.
 	timeout := exportPDFTimeout
-	if formats.handouts {
+	if formats.handouts || formats.openquiz {
 		timeout = splitFitTimeout
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), timeout)
@@ -183,6 +191,20 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 		}
 		files = append(files, packFile{req.name + v.suffix, b})
 	}
+	if formats.pptx {
+		b, err := pptx.Export(structure(), req.images, pptx.Options{OptimizeSize: true})
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, packFile{req.name + ".pptx", b})
+	}
+	if formats.openquiz {
+		b, err := openquiz.Export(structure(), req.images, imgurHost(), openquiz.Options{})
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, packFile{req.name + ".json", b})
+	}
 	if formats.handouts && strings.TrimSpace(hndt) != "" {
 		zipped, err := handout.SplitFit(ctx, hndt, req.images, handout.DefaultArgs(), ts)
 		if err != nil {
@@ -195,6 +217,16 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 		files = append(files, inner...)
 	}
 	return files, nil
+}
+
+// imgurHost is where openquiz's pictures go: it publishes text, so a picture has
+// to be a URL, and imgur is the host chgksuite registered for that. The cache is
+// a hash→URL map beside the database (ProtectHome puts chgksuite's own out of
+// reach), so a package exported twice uploads nothing the second time.
+func imgurHost() *imghost.Imgur {
+	h := imghost.NewImgur("")
+	h.CachePath = "imgur-cache.json"
+	return h
 }
 
 // unzipInto reads split-fit's zip back out so its PDFs join the pack under one
@@ -248,6 +280,10 @@ func contentTypeFor(name string) string {
 		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 	case strings.HasSuffix(name, ".pdf"):
 		return "application/pdf"
+	case strings.HasSuffix(name, ".pptx"):
+		return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+	case strings.HasSuffix(name, ".json"):
+		return "application/json"
 	case strings.HasSuffix(name, ".zip"):
 		return "application/zip"
 	}

@@ -244,6 +244,13 @@ docx_spoilers_label = ".docx со спойлерами"
 # Mobile-PDF checkbox: tooltip and visible label.
 pdf_mobile_title = "Вёрстка под узкий экран"
 pdf_mobile_label = ".pdf для телефона"
+# Slide-deck checkbox: tooltip and label.
+pptx_title = "Презентация, по слайду на вопрос"
+pptx_label = ".pptx"
+# OpenQuiz checkbox: tooltip and label. The pictures are published, because
+# open-quiz.com reads them by URL and cannot be handed bytes.
+openquiz_title = "JSON для open-quiz.com; картинки выкладываются на imgur"
+openquiz_label = "openquiz (.json)"
 # Handouts checkbox: tooltip and visible label.
 handouts_title = "Раздатки по одной на страницу, свёрстанные по размеру (split-fit)"
 handouts_label = "раздатки в pdf"

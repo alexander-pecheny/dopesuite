@@ -147,7 +147,7 @@ internal/server/       package server — the whole HTTP server
                        in-process (chgk/docx, chgk/typstdoc), images included; no Python. The PDF goes through
                        the shared typst (wasm) pool (typst.go), so it too writes nothing anywhere
   exportpack.go        POST /api/export/pack — the export modal's request: one 4s source, several formats
-                       (4s/docx/docx_spoilers/pdf/pdf_mobile/handouts) rendered by composing the above + handout.SplitFit,
+                       (4s/docx/docx_spoilers/pdf/pdf_mobile/pptx/openquiz/handouts) rendered by composing the above + handout.SplitFit,
                        returned as the bare file when one was asked for or a zip when more. Images ride along
                        only for the .4s (docx/pdf embed their own); split-fit's PDFs land under раздатки/
   import4s.go          POST /api/import/parse — .4s/.zip/.docx → 4s source + images (chgk/chgkimport),
@@ -215,7 +215,9 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        covers the shapes packages use, not by chgksuite's dateparser
   openquiz/            `compose openquiz`: open-quiz.com's JSON, one object per question
   imghost/             what those three need and the .docx/.pdf ones do not: a picture as
-                       a URL. Imgur, sharing chgksuite's own ~/.chgksuite/image_cache.json
+                       a URL. Imgur, sharing chgksuite's own ~/.chgksuite/image_cache.json;
+                       the server's openquiz export keeps its own cache beside the DB,
+                       since ProtectHome puts that one out of reach
   chgkimport/          the import entry point: .docx/.4s/.zip → 4s source + its images.
                        Byte-parity with chgksuite's `parse` on all 12 chgk .docx fixtures
   handout/             .hndt → .typ (byte-exact vs chgksuite) → PDF via typst; embeds the typst template + Noto Sans.
@@ -420,7 +422,8 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        referenced images to /api/export/pack — one format from the
                        dropdown, or several ticked into a zip: .docx, .docx со
                        спойлерами (the screen's text, answers behind dots, for a
-                       written tour), .pdf, .pdf для телефона, раздатки; a bare .4s
+                       written tour), .pdf, .pdf для телефона, .pptx, openquiz
+                       JSON, раздатки; a bare .4s
                        with no images is written in the browser, the one export that
                        works offline
     handouts.ts        «Генерация раздаток»: hndtOf (hndt.ts) → editable .hndt →

@@ -228,6 +228,8 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
           option value="docx_spoilers" @board.export.docx_spoilers_label
           option value="pdf" ".pdf"
           option value="pdf_mobile" @board.export.pdf_mobile_label
+          option value="pptx" @board.export.pptx_label
+          option value="openquiz" @board.export.openquiz_label
           option value="handouts" @board.export.handouts_label
       radio id="exportModeMany" name="exportMode" value="many" @board.export.mode_many
       col id="exportFormats" gap="xs" hidden
@@ -236,6 +238,8 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
         checkbox id="exportFmtDocxSpoilers" title=@board.export.docx_spoilers_title @board.export.docx_spoilers_label
         checkbox id="exportFmtPdf" ".pdf"
         checkbox id="exportFmtPdfMobile" title=@board.export.pdf_mobile_title @board.export.pdf_mobile_label
+        checkbox id="exportFmtPptx" title=@board.export.pptx_title @board.export.pptx_label
+        checkbox id="exportFmtOpenquiz" title=@board.export.openquiz_title @board.export.openquiz_label
         checkbox id="exportFmtHandouts" title=@board.export.handouts_title @board.export.handouts_label
         row
           button small kind="ghost" id="exportToggleAll" @board.export.select_all

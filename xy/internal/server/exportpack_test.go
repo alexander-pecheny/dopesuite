@@ -140,6 +140,21 @@ func TestExportPackSpoilersDocxIsItsOwnFile(t *testing.T) {
 	}
 }
 
+// TestExportPackDeckAndOpenquiz: the two formats that are neither a document nor
+// a PDF land under their own extensions. No image is sent, so openquiz has
+// nothing to publish and the test never reaches imgur.
+func TestExportPackDeckAndOpenquiz(t *testing.T) {
+	ts, srv := newTestServer(t)
+	c := registerUser(t, srv, ts, 770216, "packdeck")
+
+	b, _ := postPack(t, ts, c, "pptx,openquiz", false)
+	got := zipNames(t, b)
+	want := []string{"Тур 1.json", "Тур 1.pptx"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("zip entries = %v, want %v", got, want)
+	}
+}
+
 // TestExportPackRejectsNoFormats: an empty selection is a client bug, not an
 // empty download.
 func TestExportPackRejectsNoFormats(t *testing.T) {

@@ -2,14 +2,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fakeBoard, installDOM } from "./dom.js";
 
-const ids = ["exportOverlay", "exportForm", "exportModeOne", "exportModeMany", "exportOneFormat", "exportFormats", "exportFmt4s", "exportFmtDocx", "exportFmtDocxSpoilers", "exportFmtPdf", "exportFmtPdfMobile", "exportFmtHandouts", "exportToggleAll", "exportRun", "exportCancel", "exportMessage"];
+const ids = ["exportOverlay", "exportForm", "exportModeOne", "exportModeMany", "exportOneFormat", "exportFormats", "exportFmt4s", "exportFmtDocx", "exportFmtDocxSpoilers", "exportFmtPdf", "exportFmtPdfMobile", "exportFmtPptx", "exportFmtOpenquiz", "exportFmtHandouts", "exportToggleAll", "exportRun", "exportCancel", "exportMessage"];
 const p = installDOM(ids);
 p.node("exportOverlay").hidden = true;
 p.node("exportFmt4s").checked = true;
 p.node("exportModeOne").checked = true;
 // The dropdown the "one format" mode reads, as board.dopeui declares it.
 const one = p.node("exportOneFormat");
-one.options = ["4s", "docx", "docx_spoilers", "pdf", "pdf_mobile", "handouts"].map((value) => ({ value, disabled: false }));
+one.options = ["4s", "docx", "docx_spoilers", "pdf", "pdf_mobile", "pptx", "openquiz", "handouts"].map((value) => ({ value, disabled: false }));
 one.value = "docx";
 // The panel binds these at import, so they are swapped before it loads.
 const { xyApp } = await import("../web/assets/static/dist/app.js");
@@ -82,7 +82,7 @@ test("the tick boxes belong to the zip: hidden under «один формат», 
   p.node("exportModeMany").fire("change");
   assert.equal(p.node("exportFormats").hidden, false);
 
-  for (const id of ["exportFmt4s", "exportFmtDocx", "exportFmtDocxSpoilers", "exportFmtPdf", "exportFmtPdfMobile", "exportFmtHandouts"]) p.node(id).checked = false;
+  for (const id of ["exportFmt4s", "exportFmtDocx", "exportFmtDocxSpoilers", "exportFmtPdf", "exportFmtPdfMobile", "exportFmtPptx", "exportFmtOpenquiz", "exportFmtHandouts"]) p.node(id).checked = false;
   p.node("exportFmt4s").fire("change");
   assert.equal(p.node("exportRun").disabled, true, "nothing ticked is nothing to do");
 

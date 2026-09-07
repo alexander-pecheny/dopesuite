@@ -260,12 +260,18 @@ var RU = Strings{
 			HandoutsTitle: func() string {
 				return "Раздатки по одной на страницу, свёрстанные по размеру (split-fit)"
 			},
-			ModeMany:       func() string { return "Несколько форматов в .zip" },
-			ModeOne:        func() string { return "Один формат" },
-			OneTitle:       func() string { return "Что скачать" },
+			ModeMany:      func() string { return "Несколько форматов в .zip" },
+			ModeOne:       func() string { return "Один формат" },
+			OneTitle:      func() string { return "Что скачать" },
+			OpenquizLabel: func() string { return "openquiz (.json)" },
+			OpenquizTitle: func() string {
+				return "JSON для open-quiz.com; картинки выкладываются на imgur"
+			},
 			OverlayLabel:   func() string { return "Экспорт списка" },
 			PdfMobileLabel: func() string { return ".pdf для телефона" },
 			PdfMobileTitle: func() string { return "Вёрстка под узкий экран" },
+			PptxLabel:      func() string { return ".pptx" },
+			PptxTitle:      func() string { return "Презентация, по слайду на вопрос" },
 			Run:            func() string { return "Экспорт" },
 			SelectAll:      func() string { return "Выбрать все" },
 			Title:          func() string { return "Экспорт" },
