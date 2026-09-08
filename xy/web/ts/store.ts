@@ -110,6 +110,9 @@ export interface TimelineEvent {
   id: number;
   type: string;
   author_user_id: number | null;
+  // The author's name as the server knows it, mirrored offline with the rest of
+  // the event so a cached timeline names its authors too (timeline.ts#eventAuthor).
+  author_username?: string | null;
   created_at: string;
   reply_to_id?: number | null;
   payload_enc?: string;

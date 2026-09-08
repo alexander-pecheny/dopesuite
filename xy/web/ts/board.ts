@@ -1354,7 +1354,8 @@ const sessionsPanel = createSessionsPanel({
   setTestMode,
   loadNotes: async (sessionId) => {
     const raw = (await fetchJSON(`/api/sessions/${sessionId}/timeline`)) as Array<{
-      payload_enc: string; card_id?: number; created_at: string; author_user_id?: number | null;
+      id?: number; payload_enc: string; card_id?: number; created_at: string;
+      author_user_id?: number | null; author_username?: string | null;
     }>;
     const out: Array<{ text: string; card: number | null; when: string; author: string }> = [];
     for (const e of raw) {

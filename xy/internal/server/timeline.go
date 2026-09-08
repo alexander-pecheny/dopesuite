@@ -65,8 +65,16 @@ func appendEvent(ctx context.Context, tx *sql.Tx, boardID, cardID int64, typ str
 }
 
 // timelineColumns is what scanTimelineEvent reads, from `timeline_events e`.
+// The author's name is read here rather than left to the board's member roster:
+// an author need not be a member, and after an archive import usually is not
+// (the roster is the importer alone, while the events carry the authors the
+// import matched by name). A subselect, not a join, so the callers that append
+// their own joins to this stay free to.
 const timelineColumns = `
-select e.id, e.type, e.author_user_id, e.created_at, e.edited_at, e.is_excerpt,
+select e.id, e.type, e.author_user_id,
+       (select coalesce(nullif(u.username, ''), u.telegram_username)
+          from users u where u.id = e.author_user_id),
+       e.created_at, e.edited_at, e.is_excerpt,
        e.reply_to_id, e.deleted_at is not null,
        (select count(*) from timeline_events r
           where r.reply_to_id = e.id and r.deleted_at is null),
@@ -76,12 +84,15 @@ from timeline_events e`
 func scanTimelineEvent(rows *sql.Rows) (timelineEventDTO, error) {
 	var e timelineEventDTO
 	var author, replyTo, sessionID, cardRef sql.NullInt64
-	var edited sql.NullString
+	var authorName, edited sql.NullString
 	var excerpt, deleted int
 	var payload []byte
-	if err := rows.Scan(&e.ID, &e.Type, &author, &e.CreatedAt, &edited, &excerpt,
+	if err := rows.Scan(&e.ID, &e.Type, &author, &authorName, &e.CreatedAt, &edited, &excerpt,
 		&replyTo, &deleted, &e.ReplyCount, &payload, &sessionID, &cardRef); err != nil {
 		return e, err
+	}
+	if authorName.Valid {
+		e.AuthorUsername = &authorName.String
 	}
 	if sessionID.Valid {
 		e.SessionID = &sessionID.Int64

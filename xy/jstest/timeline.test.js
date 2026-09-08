@@ -26,8 +26,26 @@ test("eventAuthor shows #id for an unknown member", () => {
   assert.equal(eventAuthor({ author_user_id: 5 }, me, names), "#5");
 });
 
+test("eventAuthor prefers the name the server sent over the roster", () => {
+  assert.equal(eventAuthor({ id: 9, author_user_id: 2, author_username: "vasya" }, me, names), "vasya");
+});
+
+// The case an archive import produces: the author matched a local login, so the
+// event has an id, but that person is not a member of the imported board and the
+// roster cannot name them. Before author_username this read "#7".
+test("eventAuthor names an author who is not a member of this board", () => {
+  assert.equal(eventAuthor({ id: 9, author_user_id: 7, author_username: "petya" }, me, names), "petya");
+});
+
 test("eventAuthor attributes pending (authorless) events to me", () => {
-  assert.equal(eventAuthor({ author_user_id: null }, me, names), "Я");
+  assert.equal(eventAuthor({ id: -1, author_user_id: null }, me, names), "Я");
+  assert.equal(eventAuthor({ author_user_id: null }, me, names), "Я"); // id-less shapes count as pending
+});
+
+// A SYNCED authorless event is an import whose author matched nobody here.
+// Falling back to "me" would sign someone else's comment with the reader's name.
+test("eventAuthor leaves a synced authorless event unattributed", () => {
+  assert.equal(eventAuthor({ id: 42, author_user_id: null }, me, names), "");
 });
 
 test("eventAuthor is blank with no author and no me", () => {

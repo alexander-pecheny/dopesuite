@@ -174,16 +174,25 @@ const EVENT_VERBS: Record<string, string> = {
 };
 export function eventVerb(type: string): string { return EVENT_VERBS[type] || type; }
 
-// eventAuthor resolves a timeline event's author to a display name. Pending
-// (offline, un-synced) events carry no author_user_id yet — they're authored by
-// the current user, so fall back to "me".
+// eventAuthor resolves a timeline event's author to a display name. The server
+// sends the name (author_username) beside the id, because the board's member
+// roster cannot name an author who is not a member of THIS board — which is
+// every collaborator whose comments came in through an archive import.
+//
+// Pending (offline, un-synced) events carry no author_user_id yet — they're
+// authored by the current user, so fall back to "me". Only those: a pending
+// event has a negative id (sync.ts#pendingTimeline). A SYNCED event with no
+// author is one whose author this server could not name — an import that
+// matched nobody — and answering "me" there would put the reader's name on a
+// comment someone else wrote.
 export function eventAuthor(
-  ev: { author_user_id?: number | null },
+  ev: { id?: number; author_user_id?: number | null; author_username?: string | null },
   me: AuthMe | null | undefined,
   memberNames: Record<number, string> | undefined,
 ): string {
+  if (ev.author_username) return ev.author_username;
   let uid = ev.author_user_id;
-  if (uid == null && me) uid = me.user_id;
+  if (uid == null && me && (ev.id == null || ev.id < 0)) uid = me.user_id;
   if (uid == null) return "";
   const names = memberNames || {};
   if (names[uid]) return names[uid];
@@ -439,7 +448,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   const threadModal = modal("thread");
   const excerptsModal = modal("excerpts");
 
-  const author = (ev: { author_user_id?: number | null }): string => {
+  const author = (ev: { id?: number; author_user_id?: number | null; author_username?: string | null }): string => {
     const st = state();
     return eventAuthor(ev, st.me, st.memberNames);
   };

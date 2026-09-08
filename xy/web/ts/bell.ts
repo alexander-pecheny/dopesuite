@@ -49,6 +49,7 @@ export function createBell(board: Board, ui: BellUI, deps: BellDeps): Bell {
     reply_to_id?: number | null;
     payload_enc?: string;
     author_user_id?: number | null;
+    author_username?: string | null;
   }
 
   let notifPanelEl: HTMLElement | null = null;

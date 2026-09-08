@@ -12,14 +12,18 @@ import (
 )
 
 type timelineEventDTO struct {
-	ID         int64   `json:"id"`
-	Type       string  `json:"type"`
-	AuthorID   *int64  `json:"author_user_id"`
-	CreatedAt  string  `json:"created_at"`
-	EditedAt   *string `json:"edited_at,omitempty"`
-	IsExcerpt  bool    `json:"is_excerpt"`
-	ReplyToID  *int64  `json:"reply_to_id,omitempty"`
-	ReplyCount int     `json:"reply_count"`
+	ID       int64  `json:"id"`
+	Type     string `json:"type"`
+	AuthorID *int64 `json:"author_user_id"`
+	// AuthorUsername is the author's login as this server knows it. The client
+	// prefers it to looking AuthorID up in the board's member roster, which
+	// cannot name an author who is not (or is no longer) a member.
+	AuthorUsername *string `json:"author_username,omitempty"`
+	CreatedAt      string  `json:"created_at"`
+	EditedAt       *string `json:"edited_at,omitempty"`
+	IsExcerpt      bool    `json:"is_excerpt"`
+	ReplyToID      *int64  `json:"reply_to_id,omitempty"`
+	ReplyCount     int     `json:"reply_count"`
 	// Deleted marks a tombstone: a comment whose text is gone but which is still
 	// rendered because live replies hang off it. PayloadEnc is empty for these.
 	Deleted    bool   `json:"deleted,omitempty"`

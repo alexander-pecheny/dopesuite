@@ -221,3 +221,81 @@ func TestBoardBundleEndpoints(t *testing.T) {
 }
 
 func payloadKey(e bundleEventDTO) string { return ":" + dec(e.PayloadEnc) }
+
+// TestImportedAuthorIsNamedWithoutMembership covers what an archive import
+// leaves behind: events authored by people who are not members of the board the
+// import created. The card timeline must name them anyway — the member roster
+// cannot, which is what used to render them as "#7" — and must not invent a name
+// for an author this instance never matched.
+func TestImportedAuthorIsNamedWithoutMembership(t *testing.T) {
+	ts, srv := newTestServer(t)
+	owner := registerUser(t, srv, ts, 772001, "importer")
+	// A user of this instance who is not on the board: exactly the co-author
+	// whose comments an archive carries over.
+	registerUser(t, srv, ts, 772002, "stranger")
+
+	resp := owner.do("POST", "/api/boards", map[string]string{
+		"name": "imported", "kdf_salt": enc("s"), "kdf_params": "{}", "wrapped_key": enc("w"), "verify_token": enc("v"),
+	})
+	mustStatus(t, resp, 200)
+	var b struct {
+		ID int64 `json:"id"`
+	}
+	owner.decode(resp, &b)
+	board := itoa(b.ID)
+
+	resp = owner.do("POST", "/api/boards/"+board+"/lists", map[string]string{"title_enc": enc("l"), "rank": "m"})
+	mustStatus(t, resp, 200)
+	var list struct {
+		ID int64 `json:"id"`
+	}
+	owner.decode(resp, &list)
+	resp = owner.do("POST", "/api/lists/"+itoa(list.ID)+"/cards", map[string]string{"description_enc": enc("d"), "rank": "m"})
+	mustStatus(t, resp, 200)
+	var card struct {
+		ID int64 `json:"id"`
+	}
+	owner.decode(resp, &card)
+
+	resp = owner.do("POST", "/api/boards/"+board+"/timeline/import", map[string]any{"events": []map[string]any{
+		{"src_id": 1, "card_id": card.ID, "type": "comment", "author_username": "stranger",
+			"created_at": "2026-01-01T10:00:00Z", "payload_enc": enc("чужой комментарий")},
+		{"src_id": 2, "card_id": card.ID, "type": "comment", "author_username": "never-heard-of-them",
+			"created_at": "2026-01-01T11:00:00Z", "payload_enc": enc("ничей комментарий")},
+	}})
+	mustStatus(t, resp, 200)
+
+	// The roster is the importer alone — the name cannot come from there.
+	resp = owner.do("GET", "/api/boards/"+board+"/members", nil)
+	mustStatus(t, resp, 200)
+	var members []memberDTO
+	owner.decode(resp, &members)
+	if len(members) != 1 {
+		t.Fatalf("imported board has %d members, want just the importer", len(members))
+	}
+
+	resp = owner.do("GET", "/api/cards/"+itoa(card.ID)+"/timeline", nil)
+	mustStatus(t, resp, 200)
+	var tl []timelineEventDTO
+	owner.decode(resp, &tl)
+	if len(tl) != 2 {
+		t.Fatalf("card timeline: %d events, want 2", len(tl))
+	}
+	got := map[string]timelineEventDTO{}
+	for _, e := range tl {
+		got[dec(e.PayloadEnc)] = e
+	}
+	e := got["чужой комментарий"]
+	if e.AuthorID == nil {
+		t.Fatalf("a known username should have matched a user: %+v", e)
+	}
+	if e.AuthorUsername == nil || *e.AuthorUsername != "stranger" {
+		t.Fatalf("non-member author not named: %+v", e)
+	}
+	if e.AuthorUsername != nil && *e.AuthorUsername == "importer" {
+		t.Fatalf("someone else's comment attributed to the importer: %+v", e)
+	}
+	if e := got["ничей комментарий"]; e.AuthorID != nil || e.AuthorUsername != nil {
+		t.Fatalf("unmatched author should stay unattributed, got id=%v name=%v", e.AuthorID, e.AuthorUsername)
+	}
+}
