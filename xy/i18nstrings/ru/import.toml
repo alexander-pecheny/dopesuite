@@ -11,15 +11,19 @@ name = "Импорт"
 # The "all boards" crumb and the back-arrow icon link to /.
 home = "Все доски"
 
+# The radio pair at the top of /import: everything below it belongs to the one
+# source picked here, so the page shows one source at a time.
+[source]
+# Radio choosing the xy-archive source; also the label of its section.
+archive = "Из архива xy (.zip)"
+# Radio choosing the Trello source; also the label of its section.
+trello = "Из Trello"
+
 [archive]
-# Subhead of the "from an xy archive (.zip)" section of /import.
-subhead = "Из архива xy (.zip)"
 # Hint under that subhead explaining what a board archive carries.
 hint = "Архив со страницы доски (☰ «Экспорт (.zip)…»). Переносится всё, что было отмечено: списки, карточки, метки, тесты, комментарии, история правок и вложения. Здесь из него получается новая доска — чтобы добавить списки к уже существующей, откройте её и возьмите там ☰ «Импорт»."
 
 [trello]
-# Subhead of the "from Trello" section of /import.
-subhead = "Из Trello"
 # Hint introducing what a Trello import carries; the lead ends right before the
 # inline (code "_tests") token, which the page keeps as markup, not a string.
 intro_lead = "Импортируются карточки, списки, метки, все комментарии (без лимита в 1000) и вложения (файлы и фото). Списки, оканчивающиеся на "
@@ -98,6 +102,8 @@ load_failed = 'Не удалось загрузить доску из Trello: {{
 not_trello_export = "Это не похоже на экспорт доски Trello (нет массива lists)."
 # Message when the form is submitted with no Trello board and no file chosen.
 need_source = "Подключите Trello и выберите доску — или выберите JSON-файл ниже."
+# Message when the archive source is submitted with no file chosen.
+need_archive = "Выберите файл архива (.zip)."
 # Message when the token field is submitted empty.
 token_required = "Вставьте токен из Trello."
 # Message when Trello rejects the pasted token.

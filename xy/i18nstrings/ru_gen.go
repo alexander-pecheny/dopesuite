@@ -1734,7 +1734,6 @@ var RU = Strings{
 			Hint: func() string {
 				return "Архив со страницы доски (☰ «Экспорт (.zip)…»). Переносится всё, что было отмечено: списки, карточки, метки, тесты, комментарии, история правок и вложения. Здесь из него получается новая доска — чтобы добавить списки к уже существующей, откройте её и возьмите там ☰ «Импорт»."
 			},
-			Subhead: func() string { return "Из архива xy (.zip)" },
 		},
 		Board: ImportBoardStrings{
 			Cancel:  func() string { return "Отмена" },
@@ -1876,7 +1875,8 @@ var RU = Strings{
 			LoadFailed: func(error string) string {
 				return fmt.Sprintf("Не удалось загрузить доску из Trello: %s", error)
 			},
-			Loading: func() string { return "Загружаю доску из Trello…" },
+			Loading:     func() string { return "Загружаю доску из Trello…" },
+			NeedArchive: func() string { return "Выберите файл архива (.zip)." },
 			NeedSource: func() string {
 				return "Подключите Trello и выберите доску — или выберите JSON-файл ниже."
 			},
@@ -1893,6 +1893,10 @@ var RU = Strings{
 				return "Токен не подошёл. Проверьте и вставьте снова."
 			},
 			TokenRequired: func() string { return "Вставьте токен из Trello." },
+		},
+		Source: ImportSourceStrings{
+			Archive: func() string { return "Из архива xy (.zip)" },
+			Trello:  func() string { return "Из Trello" },
 		},
 		Trello: ImportTrelloStrings{
 			AllHint: func() string {
@@ -1913,7 +1917,6 @@ var RU = Strings{
 			LabelNoColor:        func() string { return "без цвета" },
 			ListFallback:        func() string { return "(без названия)" },
 			Reset:               func() string { return "Подключить другой аккаунт" },
-			Subhead:             func() string { return "Из Trello" },
 			TestSessionFallback: func() string { return "тест-сессия" },
 			TestersLead:         func(testers string) string { return fmt.Sprintf("Тестировали: %s", testers) },
 			TokenHint: func() string {

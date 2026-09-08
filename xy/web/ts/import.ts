@@ -440,6 +440,19 @@ async function loadBoards(token: string): Promise<void> {
   for (const b of openBoards) option(b.id, b.name || b.id);
 }
 
+// syncSource shows the fields of the picked source and hides the other's, so
+// the page asks for one thing at a time. The submit handler branches on the
+// same radio, never on which file input happens to be filled.
+function archiveMode(): boolean {
+  return byId<HTMLInputElement>("sourceArchive").checked;
+}
+function syncSource(): void {
+  const archive = archiveMode();
+  byId("archiveSection").hidden = !archive;
+  byId("trelloSection").hidden = archive;
+  log("");
+}
+
 // stage switches the connect area between: "connect" (offer the button),
 // "token" (paste the token Trello showed), "picker" (choose a board).
 function stage(s: "connect" | "token" | "picker"): void {
@@ -468,15 +481,14 @@ form.addEventListener("submit", async (e) => {
     return;
   }
 
-  const token = sessionStorage.getItem("trelloToken");
-  const boardSel = byId<HTMLSelectElement>("trelloBoard");
-  const pickerActive = !byId("trelloPickArea").hidden;
-  const file = byId<HTMLInputElement>("trelloFile").files?.[0];
-  const bundleFile = byId<HTMLInputElement>("bundleFile").files?.[0];
-
   // A Board Bundle from another xy instance (ADR-0013) — its own import path,
   // sharing only the name/passphrase fields with the Trello flows.
-  if (bundleFile) {
+  if (archiveMode()) {
+    const bundleFile = byId<HTMLInputElement>("bundleFile").files?.[0];
+    if (!bundleFile) {
+      log(S.import.run.needArchive());
+      return;
+    }
     importBtn.disabled = true;
     setStatus("saving");
     try {
@@ -490,6 +502,11 @@ form.addEventListener("submit", async (e) => {
     }
     return;
   }
+
+  const token = sessionStorage.getItem("trelloToken");
+  const boardSel = byId<HTMLSelectElement>("trelloBoard");
+  const pickerActive = !byId("trelloPickArea").hidden;
+  const file = byId<HTMLInputElement>("trelloFile").files?.[0];
 
   // "All boards": import each open board in turn, under the one passphrase. A
   // board that fails is reported and the rest still go through.
@@ -535,6 +552,9 @@ form.addEventListener("submit", async (e) => {
 
 (async () => {
   await xyApp.requireLogin();
+
+  for (const id of ["sourceArchive", "sourceTrello"]) byId(id).addEventListener("change", syncSource);
+  syncSource();
 
   // Connect opens Trello's authorize page in a new tab and reveals the paste box.
   const connectBtn = byId<HTMLAnchorElement>("trelloConnectBtn");

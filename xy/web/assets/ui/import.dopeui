@@ -5,14 +5,18 @@ page title=@import.page.title kind="wide" scripts="dist/import.js"
       crumb @import.page.name
     iconlink href="/" icon="arrow-left" label=@import.page.home
 
+  -- Two sources that share nothing but the name and the passphrase, so the
+  -- radio picks one and the page shows only that one's fields (import.ts).
   form id="importForm" dir="col"
-    section
-      subhead @import.archive.subhead
+    fieldset
+      radio id="sourceArchive" name="importSource" value="archive" checked @import.source.archive
+      radio id="sourceTrello" name="importSource" value="trello" @import.source.trello
+
+    section id="archiveSection"
       hint @import.archive.hint
       filefield id="bundleFile" accept=".zip,application/zip"
 
-    section
-      subhead @import.trello.subhead
+    section id="trelloSection" hidden
       hint @import.trello.intro_lead (code "_tests") @import.trello.intro_mid
       button kind="primary" id="trelloConnectBtn" href="#" @import.trello.connect
       col id="trelloTokenArea" gap="sm" hidden

@@ -1321,7 +1321,6 @@ export type Strings = {
     };
     archive: {
       hint: () => string;
-      subhead: () => string;
     };
     board: {
       cancel: () => string;
@@ -1412,12 +1411,17 @@ export type Strings = {
       importing: () => string;
       loadFailed: (error: string) => string;
       loading: () => string;
+      needArchive: () => string;
       needSource: () => string;
       notTrelloExport: () => string;
       reportFailed: (name: string, error: string) => string;
       reportSummary: (done: string, total: string) => string;
       tokenRejected: () => string;
       tokenRequired: () => string;
+    };
+    source: {
+      archive: () => string;
+      trello: () => string;
     };
     trello: {
       allHint: () => string;
@@ -1432,7 +1436,6 @@ export type Strings = {
       labelNoColor: () => string;
       listFallback: () => string;
       reset: () => string;
-      subhead: () => string;
       testSessionFallback: () => string;
       testersLead: (testers: string) => string;
       tokenHint: () => string;
