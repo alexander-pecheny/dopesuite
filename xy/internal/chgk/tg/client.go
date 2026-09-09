@@ -8,6 +8,7 @@ import (
 	"image"
 	"image/jpeg"
 	"log"
+	"math"
 	"strconv"
 	"time"
 
@@ -86,7 +87,7 @@ func (c *client) PostRich(ctx context.Context, chatID, html string, media []Medi
 	var files []tgbot.FilePart
 	var items []richMedia
 	for _, m := range media {
-		data, err := prepareImage(m.Data, richImgHeightP)
+		data, err := prepareImage(m.Data, richImgAspect)
 		if err != nil {
 			return 0, fmt.Errorf("picture %s: %w", m.Name, err)
 		}
@@ -181,19 +182,16 @@ func messageID(res json.RawMessage) (int64, error) {
 	return msg.MessageID, nil
 }
 
-// prepareImage is prepare_image_for_telegram: hold the picture to a height, keep
-// it away from the aspect ratio and pixel count Telegram refuses, and send it as
-// a JPEG. The resampling is Go's rather than Pillow's, so the bytes differ from
-// chgksuite's while the rules do not.
-func prepareImage(raw []byte, maxHeight int) ([]byte, error) {
+// prepareImage is prepare_image_for_telegram: pad the picture out to an aspect
+// ratio, keep it away from the aspect ratio and pixel count Telegram refuses,
+// and send it as a JPEG. The resampling is Go's rather than Pillow's, so the
+// bytes differ from chgksuite's while the rules do not.
+func prepareImage(raw []byte, padAspect float64) ([]byte, error) {
 	img, err := imgconv.Decode(raw)
 	if err != nil {
 		return nil, err
 	}
-	if b := img.Bounds(); maxHeight > 0 && b.Dy() > maxHeight {
-		w := max(b.Dx()*maxHeight/b.Dy(), 1)
-		img = scale(img, w, maxHeight)
-	}
+	img = padToAspect(img, padAspect)
 	img = padExtremeRatio(img)
 	if b := img.Bounds(); b.Dx()+b.Dy() >= 10000 {
 		f := 10000.0 / float64(b.Dx()+b.Dy())
@@ -208,6 +206,31 @@ func prepareImage(raw []byte, maxHeight int) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// padMaxHeight is the tallest picture padToAspect pads as it is: 16:9 of it is
+// 2560, the largest photo side Telegram stores.
+const padMaxHeight = 1440
+
+// padToAspect pads a picture with black bars until it is at least that wide,
+// because rich messages draw a photo at its intrinsic size.
+func padToAspect(img image.Image, aspect float64) image.Image {
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if aspect <= 0 || w == 0 || h == 0 || float64(w) >= float64(h)*aspect {
+		return img
+	}
+	if h > padMaxHeight {
+		img = scale(img, max(w*padMaxHeight/h, 1), padMaxHeight)
+		b = img.Bounds()
+		w, h = b.Dx(), b.Dy()
+	}
+	nw := int(math.Round(float64(h) * aspect))
+	dst := image.NewRGBA(image.Rect(0, 0, nw, h))
+	draw.Draw(dst, dst.Bounds(), image.Black, image.Point{}, draw.Src)
+	at := (nw - w) / 2
+	draw.Draw(dst, image.Rect(at, 0, at+w, h), img, b.Min, draw.Src)
+	return dst
 }
 
 // padExtremeRatio pads a sliver of an image with white until it is squarer than

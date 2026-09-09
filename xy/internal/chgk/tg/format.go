@@ -35,7 +35,9 @@ type Options struct {
 	LabelsFile string
 }
 
-const richImgHeightP = 200
+// richImgAspect is what a picture is padded out to: rich messages ignore an
+// <img>'s width and height, so a tall one would otherwise fill the column.
+const richImgAspect = 16.0 / 9.0
 
 // imgSentinel marks an image inside a message's text until the payload is
 // finalized and the picture becomes an <img> and an upload.

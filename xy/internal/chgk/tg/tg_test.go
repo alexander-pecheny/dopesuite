@@ -110,12 +110,20 @@ func TestBotWaitTimesOut(t *testing.T) {
 	}
 }
 
-// TestPrepareImageRules checks the two shapes Telegram refuses: a picture taller
-// than the message shows, and a sliver.
+// TestPrepareImageRules checks that a tall picture is padded out to 16:9 rather
+// than shrunk, that a big one is capped first, and that a sliver is squared up.
 func TestPrepareImageRules(t *testing.T) {
-	tall := prepared(t, 400, 1200, 200)
-	if tall.Dy() != 200 || tall.Dx() != 66 {
-		t.Errorf("tall image → %dx%d, want 66x200", tall.Dx(), tall.Dy())
+	tall := prepared(t, 400, 1200, richImgAspect)
+	if tall.Dx() != 2133 || tall.Dy() != 1200 {
+		t.Errorf("tall image → %dx%d, want 2133x1200", tall.Dx(), tall.Dy())
+	}
+	big := prepared(t, 2000, 3000, richImgAspect)
+	if big.Dx() != 2560 || big.Dy() != 1440 {
+		t.Errorf("big image → %dx%d, want 2560x1440", big.Dx(), big.Dy())
+	}
+	wide := prepared(t, 1920, 1080, richImgAspect)
+	if wide.Dx() != 1920 || wide.Dy() != 1080 {
+		t.Errorf("16:9 image → %dx%d, want it untouched", wide.Dx(), wide.Dy())
 	}
 	sliver := prepared(t, 1000, 20, 0)
 	ratio := float64(sliver.Dx()) / float64(sliver.Dy())
@@ -124,13 +132,13 @@ func TestPrepareImageRules(t *testing.T) {
 	}
 }
 
-func prepared(t *testing.T, w, h, maxHeight int) image.Rectangle {
+func prepared(t *testing.T, w, h int, padAspect float64) image.Rectangle {
 	t.Helper()
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, w, h))); err != nil {
 		t.Fatal(err)
 	}
-	out, err := prepareImage(buf.Bytes(), maxHeight)
+	out, err := prepareImage(buf.Bytes(), padAspect)
 	if err != nil {
 		t.Fatal(err)
 	}
