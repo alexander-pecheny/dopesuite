@@ -30,8 +30,11 @@ export function createCopyBoardPanel(board: Board, shell: PanelShell): BoardPane
         value: board.state.name + S.board.copy.nameSuffix(),
         autocomplete: "off", spellcheck: "false",
       }) as HTMLInputElement;
+      // u-grow, like the create dialog's own passphrase row: the generated words
+      // are the one thing on this form that must be readable in full, and an
+      // input at its intrinsic width clips them.
       const passInput = el("input", {
-        class: "input", type: "text",
+        class: "input u-grow", type: "text",
         autocomplete: "new-password", spellcheck: "false",
       }) as HTMLInputElement;
       const dice = el("button", {
