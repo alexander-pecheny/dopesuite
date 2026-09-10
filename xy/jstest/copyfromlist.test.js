@@ -191,6 +191,28 @@ test("a legacy board (name_enc) drops its real name into the prefill once the ke
   await promise;
 });
 
+// Neither a rename nor the name backfill clears name_enc, so a migrated board's
+// row still carries the ciphertext of whatever it used to be called. The prefill
+// must ignore it, or a renamed board clones itself under its old name.
+test("a migrated board ignores its leftover name_enc", async () => {
+  const { dk } = await xyCrypto.createBoardKeys(BOARD_PASS);
+  routes["/api/boards/7"] = await makeSnap(dk, "Переименованная");
+  xyCrypto.loadCachedDK = async () => dk;
+  calls.length = 0;
+
+  const promise = copyBoardFromList({
+    id: 7, name: "Переименованная", schema_version: 2,
+    name_enc: await xyCrypto.encField(dk, "Старое имя"),
+  });
+  await until(() => !node("copyOverlay").hidden, "the copy form opens");
+  // The decrypt would resolve on a later microtask, so give it room to misfire.
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(node("copyName").value, "Переименованная (копия)", "the plaintext name wins");
+
+  node("copyCancel").click();
+  await promise;
+});
+
 test("the unlock prompt abandoned: no copy, nothing written", async () => {
   const { keymeta, dk } = await xyCrypto.createBoardKeys(BOARD_PASS);
   routes["/api/boards/7/keymeta"] = keymeta;

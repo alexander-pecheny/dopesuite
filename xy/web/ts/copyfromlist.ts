@@ -1,4 +1,5 @@
-// copyfromlist.ts — "copy a board" from the / board list. The board page's ☰
+// copyfromlist.ts — clone a board from the / board list (the string ids say
+// copy; only the wording is clone). The board page's ☰
 // copy panel works because its source is already decrypted; here the device may
 // not hold this board's key, so the flow asks its passphrase first, then the
 // copy form (a create-board twin: a copy is a new board under a fresh key, only
@@ -29,11 +30,15 @@ const { byId, fetchJSON, errMsg } = xyApp;
 
 // A copy's source as the list knows it: the id, and the name the tile shows
 // (plaintext for migrated boards; the "board #id" placeholder for legacy ones,
-// whose name is still name_enc on the row).
+// whose name is still name_enc on the row). schema_version is what tells the two
+// apart: a migrated board keeps its old name_enc on the row — neither the rename
+// nor the backfill clears it — so the ciphertext alone would resurrect a name the
+// board was renamed away from.
 interface CopySource {
   id: number;
   name: string;
   name_enc?: string;
+  schema_version?: number;
 }
 
 const unlockModal = modal("copyUnlock");
@@ -65,15 +70,26 @@ let current: CopySource | null = null;
 let currentDk: DataKey | null = null;
 let busy = false;
 let unlockResult: DataKey | null = null;
+// One attempt at a time. Both forms are static nodes with module-wide state, and
+// modal.open() is a no-op on an already-open modal — so a second entrant would
+// steal `current` and wait on a dismissal that already belongs to the first.
+// A double-click on a tile's button is enough: the key lookup below is async.
+let running = false;
 
 export async function copyBoardFromList(b: CopySource): Promise<void> {
+  if (running) return;
   if (!xySync.requireOnline(S.board.copy.offline(), byId("message"))) return;
-  let dk: DataKey | null = await xyCrypto.loadCachedDK(b.id).catch(() => null);
-  if (!dk) {
-    dk = await askUnlock(b);
-    if (!dk) return;
+  running = true;
+  try {
+    let dk: DataKey | null = await xyCrypto.loadCachedDK(b.id).catch(() => null);
+    if (!dk) {
+      dk = await askUnlock(b);
+      if (!dk) return;
+    }
+    await askCopy(b, dk);
+  } finally {
+    running = false;
   }
-  await askCopy(b, dk);
 }
 
 // ---- the unlock prompt: only a board whose key this device hasn't got stops
@@ -102,6 +118,7 @@ unlockForm.addEventListener("submit", (e) => {
       const dk = await xyCrypto.unlockBoard(unlockPass.value, keymeta);
       await xyCrypto.cacheDK(board.id, dk);
       unlockResult = dk;
+      unlockPass.value = ""; // done its work; the page outlives the prompt
       unlockModal.close(); // onClose settles the wait with dk
     } catch (err) {
       unlockMessage.textContent = errMsg(err);
@@ -119,8 +136,10 @@ function askCopy(b: CopySource, dk: DataKey): Promise<void> {
   copyForm.reset();
   copyName.value = b.name + S.board.copy.nameSuffix();
   // A legacy board's tile name is the "board #id" placeholder; now that we hold
-  // the key, drop its real name in once decrypted.
-  if (b.name_enc) {
+  // the key, drop its real name in once decrypted. Only a legacy board: a
+  // migrated one already shows the authoritative plaintext name, and its
+  // leftover name_enc is whatever it was called before the migration.
+  if (b.name_enc && (b.schema_version ?? 0) < 2) {
     xyCrypto.decField(dk, b.name_enc).then((n) => { if (n) copyName.value = n + S.board.copy.nameSuffix(); }).catch(() => {});
   }
   // The passphrase is rolled inside this click, like create's: the clipboard

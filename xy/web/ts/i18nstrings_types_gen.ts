@@ -175,11 +175,6 @@ export type Strings = {
       submit: () => string;
       title: () => string;
     };
-    count: {
-      cards: (n: number) => string;
-      filtered: (shown: string, total: string) => string;
-      questions: (n: number) => string;
-    };
     copy: {
       done: () => string;
       failed: (error: string) => string;
@@ -195,6 +190,11 @@ export type Strings = {
       passSaved: () => string;
       submit: () => string;
       title: () => string;
+    };
+    count: {
+      cards: (n: number) => string;
+      filtered: (shown: string, total: string) => string;
+      questions: (n: number) => string;
     };
     delete: {
       continueQ: () => string;

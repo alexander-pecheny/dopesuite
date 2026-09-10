@@ -670,18 +670,18 @@ list_tail = ' и {{.n}} карточк(и) в нём'
 list_confirm = 'Удалить список «{{.title}}»{{.tail}}? Это действие необратимо.'
 
 [copy]
-# ☰ row: copy the board.
-label = "Копировать доску"
+# ☰ row: clone the board.
+label = "Клонировать доску"
 # ☰ row tooltip.
 title = "Создать копию доски со всеми списками и карточками"
-# Default name suffix when copying.
+# Default name suffix a clone's prefilled name carries.
 name_suffix = " (копия)"
 # Label above the name field.
 name_label = "Название новой доски"
 # Empty-name guard.
 name_required = "Введите название доски."
 # Offline guard.
-offline = "Копирование доски доступно только онлайн."
+offline = "Клонирование доски доступно только онлайн."
 # Hint above the passphrase field.
 pass_hint = "Пароль нужен для E2E-шифрования новой доски."
 # Danger hint warning that the passphrase cannot be recovered.
@@ -693,11 +693,11 @@ gen_pass = "Сгенерировать пароль"
 # Muted line shown once the generated passphrase has been copied.
 pass_copied = "Пароль уже скопирован"
 # Submit button.
-submit = "Копировать"
-# Status line after the copy has succeeded.
-done = "Доска скопирована."
-# Status line when the copy failed.
-failed = 'Не удалось скопировать: {{.error}}'
+submit = "Клонировать"
+# Status line after the clone has succeeded.
+done = "Доска клонирована."
+# Status line when the clone failed.
+failed = 'Не удалось клонировать: {{.error}}'
 
 [leave]
 # ☰ row: leave the board.

@@ -1,4 +1,5 @@
-// copyboard.ts — "Copy Board": a new board holding a full replica of this one.
+// copyboard.ts — "Clone Board": a new board holding a full replica of this one
+// (the string ids say copy; only the wording is clone).
 // The source is already decrypted here (the board page), so it becomes a Bundle
 // (buildBundle) through the same path an archive export or a cross-board list
 // move takes, and createBoardFromBundle re-encrypts it under a fresh key into a
@@ -34,7 +35,7 @@ export function createCopyBoardPanel(board: Board, shell: PanelShell): BoardPane
         autocomplete: "new-password", spellcheck: "false",
       }) as HTMLInputElement;
       const dice = el("button", {
-        type: "button", class: "btn btn-ghost btn-sm", title: S.board.copy.genPass(), "aria-label": S.board.copy.genPass(),
+        type: "button", class: "btn btn-ghost btn-small", title: S.board.copy.genPass(), "aria-label": S.board.copy.genPass(),
       }, icon("dices")) as HTMLButtonElement;
       const copied = el("p", { class: "muted", hidden: "hidden" }, S.board.copy.passCopied());
       const saved = el("label", {},
