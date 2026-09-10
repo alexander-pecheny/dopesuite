@@ -211,6 +211,22 @@ var RU = Strings{
 				return fmt.Sprintf("%d %s", n, core.Plural("ru", n, "вопрос", "вопроса", "вопросов"))
 			},
 		},
+		Copy: BoardCopyStrings{
+			Done:         func() string { return "Доска скопирована." },
+			Failed:       func(error string) string { return fmt.Sprintf("Не удалось скопировать: %s", error) },
+			GenPass:      func() string { return "Сгенерировать пароль" },
+			Label:        func() string { return "Копировать доску" },
+			NameLabel:    func() string { return "Название новой доски" },
+			NameRequired: func() string { return "Введите название доски." },
+			NameSuffix:   func() string { return " (копия)" },
+			Offline:      func() string { return "Копирование доски доступно только онлайн." },
+			PassCopied:   func() string { return "Пароль уже скопирован" },
+			PassDanger:   func() string { return "Сохраните этот пароль прямо сейчас — восстановить его будет невозможно." },
+			PassHint:     func() string { return "Пароль нужен для E2E-шифрования новой доски." },
+			PassSaved:    func() string { return "Я сохранил(а) пароль в надёжное место и обещаю его не терять" },
+			Submit:       func() string { return "Копировать" },
+			Title:        func() string { return "Создать копию доски со всеми списками и карточками" },
+		},
 		Delete: BoardDeleteStrings{
 			ContinueQ: func() string { return "Продолжить?" },
 			Failed:    func(error string) string { return fmt.Sprintf("Не удалось удалить: %s", error) },
@@ -1025,6 +1041,7 @@ var RU = Strings{
 		},
 		Home: ChromeHomeStrings{
 			BoardLockedName: func(id string) string { return fmt.Sprintf("доска #%s", id) },
+			CopyUnlockHint:  func(name string) string { return fmt.Sprintf("Введите пароль доски «%s», чтобы прочитать её содержимое.", name) },
 			CreateOffline:   func() string { return "Создание доски доступно только онлайн." },
 			CreateSubmit:    func() string { return "Создать" },
 			CreateTitle:     func() string { return "Новая доска" },

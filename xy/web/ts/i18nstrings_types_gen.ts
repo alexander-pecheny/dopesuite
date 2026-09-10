@@ -180,6 +180,22 @@ export type Strings = {
       filtered: (shown: string, total: string) => string;
       questions: (n: number) => string;
     };
+    copy: {
+      done: () => string;
+      failed: (error: string) => string;
+      genPass: () => string;
+      label: () => string;
+      nameLabel: () => string;
+      nameRequired: () => string;
+      nameSuffix: () => string;
+      offline: () => string;
+      passCopied: () => string;
+      passDanger: () => string;
+      passHint: () => string;
+      passSaved: () => string;
+      submit: () => string;
+      title: () => string;
+    };
     delete: {
       continueQ: () => string;
       failed: (error: string) => string;
@@ -832,6 +848,7 @@ export type Strings = {
     };
     home: {
       boardLockedName: (id: string) => string;
+      copyUnlockHint: (name: string) => string;
       createOffline: () => string;
       createSubmit: () => string;
       createTitle: () => string;

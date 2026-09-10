@@ -7,7 +7,8 @@ import { xySearchIndex } from "./searchindex.js";
 import type { BoardIndex, Hit } from "./searchindex.js";
 import { xySync } from "./sync.js";
 import { stampPassCheck } from "./passcheck.js";
-import { iconed } from "./icons_gen.js";
+import { icon, iconed } from "./icons_gen.js";
+import { copyBoardFromList } from "./copyfromlist.js";
 import S from "./i18nstrings.js";
 
 const { fetchJSON, jpost, el, escapeHtml } = xyApp;
@@ -253,10 +254,22 @@ async function renderBoards(boards: BoardListItem[]): Promise<void> {
     // boards need the cached DK for the name itself, so start with a placeholder.
     const migrated = b.schema_version >= 2;
     const name = migrated ? b.name : S.chrome.home.boardLockedName(String(b.id));
-    const card = el("a", { class: "board-card", href: `/board/${b.id}` },
-      el("span", { class: "board-card-name-wrap" },
-        el("span", { class: "board-card-name" }, ...(locked[i] ? iconed("lock", name) : [name]))),
-      el("span", { class: "board-card-role", text: b.role === "owner" ? S.chrome.home.roleOwner() : S.chrome.home.roleEditor() }),
+    // The tile is a div, not the link itself, because it carries a copy action:
+    // a button inside an <a> would navigate on click. The link stretches over
+    // the whole tile (.board-card-hit) and the copy button floats above it.
+    const card = el("div", { class: "board-card" },
+      el("a", { class: "board-card-hit", href: `/board/${b.id}` },
+        el("span", { class: "board-card-name-wrap" },
+          el("span", { class: "board-card-name" }, ...(locked[i] ? iconed("lock", name) : [name]))),
+        el("span", { class: "board-card-role", text: b.role === "owner" ? S.chrome.home.roleOwner() : S.chrome.home.roleEditor() }),
+      ),
+      el("button", {
+        type: "button",
+        class: "btn btn-small btn-ghost board-card-copybtn",
+        title: S.board.copy.title(),
+        "aria-label": S.board.copy.title(),
+        onClick: () => { void copyBoardFromList(b); },
+      }, icon("copy")),
     );
     if (b.unread) {
       const mention = b.unread_mentions ? " unread-dot-mention" : "";

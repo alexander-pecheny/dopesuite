@@ -236,6 +236,63 @@ export interface Unlock {
   showUnlock(): void;
 }
 
+// decryptSnapshot turns a ciphertext snapshot into the BoardState render() draws,
+// under a key the caller already holds. load() below is one caller; the list
+// page's copy flow (copyfromlist.ts) reuses it to read a board this device never
+// opened — the same GET /api/boards/{id}, a held DK, and buildBundle needs no
+// board page. migrated=false marks a legacy (schema_version 1) board whose name
+// still came out of name_enc: the caller may backfill it.
+export async function decryptSnapshot(
+  key: DataKey,
+  snap: Snapshot,
+  crypto: UnlockCrypto,
+): Promise<{ state: BoardState; name: string; migrated: boolean }> {
+  const migrated = (snap.schema_version ?? 0) >= 2;
+  const name = migrated ? (snap.name ?? "") : await crypto.decField(key, snap.name_enc ?? "");
+  const state: BoardState = {
+    role: snap.role || "editor",
+    name,
+    cardLabels: (snap.card_labels || []).map((a) => ({
+      cardId: a.card_id, labelId: a.label_id, sessionId: a.session_id != null ? a.session_id : null,
+    })),
+    cardSessions: (snap.card_sessions || []).map((p) => ({ cardId: p.card_id, sessionId: p.session_id })),
+    tourTesters: (snap.tour_testers || []).map((d) => ({
+      listId: d.list_id ?? null, groupId: d.group_id ?? null, sessionId: d.session_id ?? null,
+    })),
+    unread: snap.unread || {},
+    sizes: xySizes.sanitize(snap.sizes),
+    defaultAuthor: snap.default_author || "",
+    cardTitle: snap.card_title || "question",
+    feedDefault: snap.feed_default || "all",
+    timezone: snap.timezone || "",
+    sessionTitleMode: snap.session_title_mode || "",
+    announceCities: snap.announce_cities ?? null,
+    lists: await Promise.all((snap.lists || []).map(async (l) => ({
+      id: l.id, type: l.type, rank: l.rank, groupId: l.group_id != null ? l.group_id : null,
+      title: await crypto.decField(key, l.title_enc),
+    }))),
+    groups: await Promise.all((snap.groups || []).map(async (g) => ({
+      id: g.id, name: await crypto.decField(key, g.name_enc),
+    }))),
+    cards: await Promise.all((snap.cards || []).map(async (c) => ({
+      id: c.id, listId: c.list_id, kind: c.kind, rank: c.rank,
+      desc: await crypto.decField(key, c.description_enc),
+      handoutMeta: c.handout_meta_enc ? await crypto.decField(key, c.handout_meta_enc) : null,
+      alias: c.alias_enc ? await crypto.decField(key, c.alias_enc) : null,
+      createdAt: c.created_at || null,
+    }))),
+    labels: await Promise.all((snap.labels || []).map(async (l) => ({
+      id: l.id,
+      name: await crypto.decField(key, l.name_enc),
+      color: await crypto.decField(key, l.color_enc),
+    }))),
+    sessions: await Promise.all((snap.sessions || []).map(async (s) => ({
+      id: s.id, meta: await crypto.decField(key, s.meta_enc), createdAt: s.created_at || null,
+    }))),
+  };
+  return { state, name, migrated };
+}
+
 export function createUnlock(deps: UnlockDeps): Unlock {
   const { boardId, ui, crypto, sync, net, status } = deps;
   let dk: DataKey | null = null;
@@ -347,60 +404,13 @@ export function createUnlock(deps: UnlockDeps): Unlock {
         return;
       }
       const key = dk as DataKey;
+      const { state, name, migrated } = await decryptSnapshot(key, snap, crypto);
       // The caller's per-user display prefs (same on every board); absent (never
       // set) → defaults. Apply now so the board renders at the user's saved sizes.
-      const sizes = xySizes.sanitize(snap.sizes);
-      deps.applySizes(sizes);
-      // Migrated boards (schema_version 2) carry a plaintext name; legacy boards still
-      // need the DK to decrypt name_enc — and, since we now hold it, get backfilled.
-      let name: string;
-      if ((snap.schema_version ?? 0) >= 2) {
-        name = snap.name ?? "";
-      } else {
-        name = await crypto.decField(key, snap.name_enc ?? "");
-        migrateBoardName(name);
-      }
-      const state: BoardState = {
-        role: snap.role || "editor",
-        name,
-        cardLabels: (snap.card_labels || []).map((a) => ({
-          cardId: a.card_id, labelId: a.label_id, sessionId: a.session_id != null ? a.session_id : null,
-        })),
-        cardSessions: (snap.card_sessions || []).map((p) => ({ cardId: p.card_id, sessionId: p.session_id })),
-        tourTesters: (snap.tour_testers || []).map((d) => ({
-          listId: d.list_id ?? null, groupId: d.group_id ?? null, sessionId: d.session_id ?? null,
-        })),
-        unread: snap.unread || {},
-        sizes,
-        defaultAuthor: snap.default_author || "",
-        cardTitle: snap.card_title || "question",
-        feedDefault: snap.feed_default || "all",
-        timezone: snap.timezone || "",
-        sessionTitleMode: snap.session_title_mode || "",
-        announceCities: snap.announce_cities ?? null,
-        lists: await Promise.all((snap.lists || []).map(async (l) => ({
-          id: l.id, type: l.type, rank: l.rank, groupId: l.group_id != null ? l.group_id : null,
-          title: await crypto.decField(key, l.title_enc),
-        }))),
-        groups: await Promise.all((snap.groups || []).map(async (g) => ({
-          id: g.id, name: await crypto.decField(key, g.name_enc),
-        }))),
-        cards: await Promise.all((snap.cards || []).map(async (c) => ({
-          id: c.id, listId: c.list_id, kind: c.kind, rank: c.rank,
-          desc: await crypto.decField(key, c.description_enc),
-          handoutMeta: c.handout_meta_enc ? await crypto.decField(key, c.handout_meta_enc) : null,
-          alias: c.alias_enc ? await crypto.decField(key, c.alias_enc) : null,
-          createdAt: c.created_at || null,
-        }))),
-        labels: await Promise.all((snap.labels || []).map(async (l) => ({
-          id: l.id,
-          name: await crypto.decField(key, l.name_enc),
-          color: await crypto.decField(key, l.color_enc),
-        }))),
-        sessions: await Promise.all((snap.sessions || []).map(async (s) => ({
-          id: s.id, meta: await crypto.decField(key, s.meta_enc), createdAt: s.created_at || null,
-        }))),
-      };
+      deps.applySizes(state.sizes);
+      // A legacy (schema_version 1) board still carried its name encrypted: backfill
+      // the plaintext one now that we've decrypted it. Best-effort, online-only.
+      if (!migrated) migrateBoardName(name);
       deps.onState(state, { offline: fromMirror });
       status.set("saved");
       pingVisit(); // stamp last-visit so the board list can order by it (online-only, once)

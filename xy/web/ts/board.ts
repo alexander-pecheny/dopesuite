@@ -16,6 +16,7 @@ import { createLabelsEditor, sortLabels } from "./labelsedit.js";
 import { createTesterList } from "./testerlist.js";
 import { createBundleExportPanel } from "./bundleexport.js";
 import { createBundleImport } from "./bundleimportpanel.js";
+import { createCopyBoardPanel } from "./copyboard.js";
 import { createAuthorCountPanel } from "./authorcount.js";
 import { xyApp, xySizes } from "./app.js";
 import { xyCrypto } from "./crypto.js";
@@ -1438,6 +1439,7 @@ const testerList = createTesterList(board, shell, cardDetail);
 const listsManage = createListsManage(board);
 const mass = createMassPanel(board, { kanban, transfer, forgetCardLabels, paintLabels, refreshMenu: refreshBoardMenu });
 const labelFilter = createLabelFilter({ board, paintLabels, onChange: () => { refreshBoardMenu(); render(); } });
+const copyBoard = createCopyBoardPanel(board, shell);
 
 // starts marks the head of a cluster: the menu draws a rule above it. Order and
 // clustering are this file's business — a panel module has no idea what it will
@@ -1462,6 +1464,7 @@ registerPanel(
 
   // The board itself
   starts({ id: "rename-board", menu: "board", icon: "pencil", label: S.board.rename.boardLabel(), title: S.board.rename.boardTitle(), open: () => { void renameBoard(); } }),
+  copyBoard,
   // The waiting count rides the row: a join request is board-level plaintext, so
   // it has no place in the 🔔 (which reads encrypted card events), and the owner
   // would otherwise never learn someone is queued (ADR-0017).

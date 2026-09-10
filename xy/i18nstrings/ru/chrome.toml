@@ -79,6 +79,9 @@ pass_hint = "Пароль нужен для E2E-шифрования."
 pass_warning = "Сохраните этот пароль прямо сейчас — восстановить его будет невозможно."
 pass_saved = "Я сохранил(а) пароль в надёжное место и обещаю его не терять"
 create_submit = "Создать"
+# The copy flow's unlock hint: a board whose key this device hasn't got still
+# lets a copy be made — the passphrase is asked first, {name} is the board.
+copy_unlock_hint = "Введите пароль доски «{{.name}}», чтобы прочитать её содержимое."
 
 [search]
 # The home page's search sections (index.ts).

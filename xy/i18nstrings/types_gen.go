@@ -173,6 +173,7 @@ type BoardStrings struct {
 	Card         BoardCardStrings
 	Changepass   BoardChangepassStrings
 	Count        BoardCountStrings
+	Copy         BoardCopyStrings
 	Delete       BoardDeleteStrings
 	Dirty        BoardDirtyStrings
 	Error        BoardErrorStrings
@@ -304,6 +305,23 @@ type BoardCountStrings struct {
 	Cards     func(n int) string
 	Filtered  func(shown string, total string) string
 	Questions func(n int) string
+}
+
+type BoardCopyStrings struct {
+	Done         func() string
+	Failed       func(error string) string
+	GenPass      func() string
+	Label        func() string
+	NameLabel    func() string
+	NameRequired func() string
+	NameSuffix   func() string
+	Offline      func() string
+	PassCopied   func() string
+	PassDanger   func() string
+	PassHint     func() string
+	PassSaved    func() string
+	Submit       func() string
+	Title        func() string
 }
 
 type BoardDeleteStrings struct {
@@ -1103,6 +1121,7 @@ type ChromeColorpickStrings struct {
 
 type ChromeHomeStrings struct {
 	BoardLockedName    func(id string) string
+	CopyUnlockHint     func(name string) string
 	CreateOffline      func() string
 	CreateSubmit       func() string
 	CreateTitle        func() string

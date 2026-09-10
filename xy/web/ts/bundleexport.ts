@@ -17,6 +17,7 @@ import type { AttachmentBytes } from "./bundleapply.js";
 import { zipWrite } from "./zip.js";
 import type { ZipEntry } from "./zip.js";
 import type { Board, BoardPanel, PanelShell } from "./panels.js";
+import type { BoardState } from "./unlock.js";
 import S from "./i18nstrings.js";
 
 const { fetchJSON, downloadBlob, el, errMsg } = xyApp;
@@ -48,10 +49,21 @@ interface AttachmentRow {
   is_excerpt: boolean;
 }
 
+// A board as far as a Bundle reaches: its id (for the members/timeline/
+// attachments API calls), its key, its decrypted state. The live Board
+// satisfies this; the list page's copy flow (copyfromlist.ts) builds a lone
+// instance around a decrypted snapshot — unlock.ts#decryptSnapshot — with none
+// of the board page's render machinery.
+export interface BundleBoard {
+  id: number;
+  dk(): DataKey;
+  state: BoardState;
+}
+
 // buildBundle turns the live board into a Bundle holding the ticked Lists and
 // everything they reach (sliceBundle's rule). listIds null means every List.
 export async function buildBundle(
-  board: Board,
+  board: BundleBoard,
   listIds: number[] | null,
   log: (line: string) => void,
 ): Promise<{ bundle: Bundle; bytesOf: AttachmentBytes }> {
