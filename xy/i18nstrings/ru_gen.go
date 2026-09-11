@@ -210,6 +210,7 @@ var RU = Strings{
 			NameLabel:    func() string { return "Название новой доски" },
 			NameRequired: func() string { return "Введите название доски." },
 			NameSuffix:   func() string { return " (копия)" },
+			NameSuffixN:  func(n string) string { return fmt.Sprintf(" (копия %s)", n) },
 			Offline: func() string {
 				return "Клонирование доски доступно только онлайн."
 			},

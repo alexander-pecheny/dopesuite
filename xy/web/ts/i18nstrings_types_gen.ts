@@ -183,6 +183,7 @@ export type Strings = {
       nameLabel: () => string;
       nameRequired: () => string;
       nameSuffix: () => string;
+      nameSuffixN: (n: string) => string;
       offline: () => string;
       passCopied: () => string;
       passDanger: () => string;

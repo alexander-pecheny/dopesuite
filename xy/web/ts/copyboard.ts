@@ -11,6 +11,7 @@ import type { PassphraseSetup } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { buildBundle } from "./bundleexport.js";
 import { createBoardFromBundle } from "./bundleimport.js";
+import { suggestCopyName, takenBoardNames } from "./copyname.js";
 import type { Board, BoardPanel, PanelShell } from "./panels.js";
 import { icon } from "./icons_gen.js";
 import { xySync } from "./sync.js";
@@ -25,11 +26,20 @@ export function createCopyBoardPanel(board: Board, shell: PanelShell): BoardPane
     title: S.board.copy.title(),
     open() {
       const nameId = "copyName";
+      const prefill = board.state.name + S.board.copy.nameSuffix();
       const nameInput = el("input", {
         id: nameId, class: "input", type: "text",
-        value: board.state.name + S.board.copy.nameSuffix(),
+        value: prefill,
         autocomplete: "off", spellcheck: "false",
       }) as HTMLInputElement;
+      // The counted suffix — "copy 2" when the plain one is already a board's
+      // name — needs the other boards' names, a round trip away. The field opens on the plain
+      // one and settles when they arrive, and only while it still holds the
+      // prefill: a reader who started typing keeps what they typed.
+      void (async () => {
+        const suggested = suggestCopyName(board.state.name, await takenBoardNames());
+        if (nameInput.value === prefill) nameInput.value = suggested;
+      })();
       // u-grow, like the create dialog's own passphrase row: the generated words
       // are the one thing on this form that must be readable in full, and an
       // input at its intrinsic width clips them.

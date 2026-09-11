@@ -24,6 +24,7 @@ import { decryptSnapshot } from "./unlock.js";
 import type { BoardKeymeta, Snapshot } from "./unlock.js";
 import { buildBundle } from "./bundleexport.js";
 import { createBoardFromBundle } from "./bundleimport.js";
+import { suggestCopyName, takenBoardNames } from "./copyname.js";
 import S from "./i18nstrings.js";
 
 const { byId, fetchJSON, errMsg } = xyApp;
@@ -135,12 +136,20 @@ function askCopy(b: CopySource, dk: DataKey): Promise<void> {
   busy = false;
   copyForm.reset();
   copyName.value = b.name + S.board.copy.nameSuffix();
+  // The counted suffix needs the other boards' names, which is a round trip, so
+  // the field opens on the plain one and settles a moment later — refined only
+  // while it still holds what this function put there, never over typing.
+  void refineName(b.name);
   // A legacy board's tile name is the "board #id" placeholder; now that we hold
   // the key, drop its real name in once decrypted. Only a legacy board: a
   // migrated one already shows the authoritative plaintext name, and its
   // leftover name_enc is whatever it was called before the migration.
   if (b.name_enc && (b.schema_version ?? 0) < 2) {
-    xyCrypto.decField(dk, b.name_enc).then((n) => { if (n) copyName.value = n + S.board.copy.nameSuffix(); }).catch(() => {});
+    xyCrypto.decField(dk, b.name_enc).then((n) => {
+      if (!n) return;
+      copyName.value = n + S.board.copy.nameSuffix();
+      void refineName(n);
+    }).catch(() => {});
   }
   // The passphrase is rolled inside this click, like create's: the clipboard
   // only answers to a user gesture, and this is the one moment the words are
@@ -151,6 +160,16 @@ function askCopy(b: CopySource, dk: DataKey): Promise<void> {
     copyModal.open({ onClose: () => settle() });
     copyName.focus();
   });
+}
+
+// refineName swaps the plain copy suffix for a counted one once the names are
+// known. It writes only over the prefill it is refining: a reader who started
+// typing during the round trip keeps what they typed.
+async function refineName(base: string): Promise<void> {
+  const prefill = base + S.board.copy.nameSuffix();
+  if (copyName.value !== prefill) return;
+  const suggested = suggestCopyName(base, await takenBoardNames());
+  if (copyName.value === prefill) copyName.value = suggested;
 }
 
 copyForm.addEventListener("submit", (e) => {

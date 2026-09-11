@@ -676,6 +676,8 @@ label = "Клонировать доску"
 title = "Создать копию доски со всеми списками и карточками"
 # Default name suffix a clone's prefilled name carries.
 name_suffix = " (копия)"
+# The suffix when the plain one is already a board's name; {{.n}} is 2, 3, …
+name_suffix_n = ' (копия {{.n}})'
 # Label above the name field.
 name_label = "Название новой доски"
 # Empty-name guard.

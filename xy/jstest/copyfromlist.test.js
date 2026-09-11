@@ -117,6 +117,9 @@ test("no cached key: unlock prompt → copy form → a fresh board re-encrypted 
   routes["/api/boards/7/timeline"] = [];
   routes["/api/boards/7/attachments"] = [];
   routes["/api/auth/storage"] = { unlimited: true };
+  // What the counted suffix reads: no board is called "Доска (копия)" yet, so
+  // the plain one stands.
+  routes["/api/boards"] = [{ id: 7, name: "Доска", schema_version: 2 }];
   calls.length = 0;
   cachedDks.length = 0;
 
@@ -129,7 +132,7 @@ test("no cached key: unlock prompt → copy form → a fresh board re-encrypted 
   node("copyUnlockForm").fire("submit", { preventDefault() {} });
   await until(() => !node("copyOverlay").hidden, "the unlock resolves into the copy form");
   assert.equal(node("copyUnlockOverlay").hidden, true);
-  assert.equal(node("copyName").value, "Доска (копия)", "the name is prefilled");
+  await until(() => node("copyName").value === "Доска (копия)", "the name is prefilled");
 
   const copyPass = () => node("copyPass").value;
   node("copyForm").fire("submit", { preventDefault() {} });
@@ -137,6 +140,7 @@ test("no cached key: unlock prompt → copy form → a fresh board re-encrypted 
 
   assert.deepEqual(calls.filter((c) => c[0] === "GET").map((c) => c[1]), [
     "/api/boards/7/keymeta",
+    "/api/boards", // the names the prefill's suffix has to avoid
     "/api/boards/7",
     "/api/boards/7/members", "/api/boards/7/timeline", "/api/boards/7/attachments",
     "/api/auth/storage",
@@ -163,6 +167,7 @@ test("no cached key: unlock prompt → copy form → a fresh board re-encrypted 
 test("a held key skips the unlock prompt; a dismissed copy mints nothing", async () => {
   const { dk } = await xyCrypto.createBoardKeys(BOARD_PASS);
   routes["/api/boards/7"] = await makeSnap(dk, "Вторая");
+  routes["/api/boards"] = [{ id: 7, name: "Вторая", schema_version: 2 }];
   xyCrypto.loadCachedDK = async () => dk;
   calls.length = 0;
 
@@ -170,7 +175,7 @@ test("a held key skips the unlock prompt; a dismissed copy mints nothing", async
   await until(() => !node("copyOverlay").hidden, "the copy form opens straight away");
   assert.equal(node("copyUnlockOverlay").hidden, true, "no unlock prompt");
   assert.ok(!calls.some((c) => c[1] === "/api/boards/7/keymeta"), "no keymeta read — the key came from the cache");
-  assert.equal(node("copyName").value, "Вторая (копия)");
+  await until(() => node("copyName").value === "Вторая (копия)", "the prefill settles");
 
   node("copyCancel").click(); // the ghost button, the same gesture as ✕ and back
   await promise;
@@ -180,6 +185,7 @@ test("a held key skips the unlock prompt; a dismissed copy mints nothing", async
 test("a legacy board (name_enc) drops its real name into the prefill once the key is held", async () => {
   const { dk } = await xyCrypto.createBoardKeys(BOARD_PASS);
   routes["/api/boards/7"] = await makeSnap(dk, "Старая");
+  routes["/api/boards"] = [];
   xyCrypto.loadCachedDK = async () => dk;
   calls.length = 0;
 
@@ -197,6 +203,7 @@ test("a legacy board (name_enc) drops its real name into the prefill once the ke
 test("a migrated board ignores its leftover name_enc", async () => {
   const { dk } = await xyCrypto.createBoardKeys(BOARD_PASS);
   routes["/api/boards/7"] = await makeSnap(dk, "Переименованная");
+  routes["/api/boards"] = [];
   xyCrypto.loadCachedDK = async () => dk;
   calls.length = 0;
 
@@ -217,6 +224,7 @@ test("the unlock prompt abandoned: no copy, nothing written", async () => {
   const { keymeta, dk } = await xyCrypto.createBoardKeys(BOARD_PASS);
   routes["/api/boards/7/keymeta"] = keymeta;
   routes["/api/boards/7"] = await makeSnap(dk, "Третья");
+  routes["/api/boards"] = [];
   xyCrypto.loadCachedDK = async () => null;
   calls.length = 0;
 
@@ -241,4 +249,25 @@ test("offline: the whole flow stops at the gate, nothing opens", async () => {
   } finally {
     xySync.requireOnline = real;
   }
+});
+
+// Cloning the same board twice used to prefill "X (копия)" both times, leaving
+// two boards of one name and nothing in the list to tell them apart.
+test("the prefill counts past a copy name the reader already has", async () => {
+  const { dk } = await xyCrypto.createBoardKeys(BOARD_PASS);
+  routes["/api/boards/7"] = await makeSnap(dk, "Доска");
+  routes["/api/boards"] = [
+    { id: 7, name: "Доска", schema_version: 2 },
+    { id: 8, name: "Доска (копия)", schema_version: 2 },
+    { id: 9, name: "Доска (копия 2)", schema_version: 2 },
+  ];
+  xyCrypto.loadCachedDK = async () => dk;
+  calls.length = 0;
+
+  const promise = copyBoardFromList({ id: 7, name: "Доска" });
+  await until(() => node("copyName").value === "Доска (копия 3)",
+    `the first free suffix, got ${node("copyName").value}`);
+
+  node("copyCancel").click();
+  await promise;
 });
