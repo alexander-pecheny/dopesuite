@@ -162,3 +162,40 @@ func TestSeedSourceIsAGamesTable(t *testing.T) {
 		t.Errorf("a two-table source: %d %s, want a refusal naming the tables", resp.Code, resp.Body.String())
 	}
 }
+
+// The «новая игра» form holds every format's section at once and only hides the
+// ones not picked — a hidden field still posts. A host picking ОД therefore sent
+// the брейн section's prefilled scheme along, and the Game was built from it
+// (or, once a Protocol's params were its own, refused for a `questions` ОД does
+// not have). Each section's editor has its own name, and the type picked says
+// which one is the scheme.
+func TestCreateIgnoresTheOtherFormatsSchemeEditors(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	token := createTestSession(t, srv, systemUserID(t, db))
+	seedFestTeams(t, db, festID, 4)
+	// What the page posts when ОД is picked: the ОД knobs plus every other
+	// section's prefill.
+	fields := map[string]string{
+		"game_type": "od", "od_tours": "2", "od_questions": "12",
+		"brain_dsl":  "[defaults]\nquestions: 5\n\n[scheme]\nkind: roundrobin\ngroup_size: 4\n",
+		"si_dsl":     "[scheme]\nkind: flat\nthemes: 6\n",
+		"troika_dsl": "[scheme]\nkind: roundrobin\ngroup_size: 4\n",
+		"ksi_themes": "20", "multi_games": "",
+	}
+	gameID := createGameThroughForm(t, srv, festID, token, fields)
+	var gameType, scheme, dsl string
+	if err := db.QueryRow(`select game_type, scheme_json, scheme_dsl from games where id = ?`, gameID).Scan(&gameType, &scheme, &dsl); err != nil {
+		t.Fatal(err)
+	}
+	if gameType != "od" {
+		t.Fatalf("game_type = %q, want od", gameType)
+	}
+	if dsl != "" {
+		t.Errorf("scheme_dsl = %q, want the ОД knobs to build the Game, not another section's scheme", dsl)
+	}
+	if !strings.Contains(scheme, "[12,12]") {
+		t.Errorf("scheme = %s, want the form's two tours of 12", scheme)
+	}
+}

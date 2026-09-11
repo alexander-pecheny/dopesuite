@@ -45,6 +45,7 @@ type hostGameCreateData struct {
 	BrainDSL     string
 	SIDSL        string
 	TroikaDSL    string
+	EKDSL        string
 	// Entrants is the fest's registry offered as this Game's entrant list.
 	// A Game numbers whom it seats from 1 (ADR-0009), so a fest of 65 can hold
 	// an EK of 48 and a brain of a different 48.
@@ -167,7 +168,7 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 		),
 		gameSettings("si", sel,
 			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
-				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("14"), dopeui.Spellcheck("false"), dopeui.Text(data.SIDSL))),
+				dopeui.Editor(dopeui.Name("si_dsl"), dopeui.Rows("14"), dopeui.Spellcheck("false"), dopeui.Text(data.SIDSL))),
 			dopeui.Hint(dopeui.Text(s.Host.Games.SiHint())),
 		),
 		gameSettings("multi", sel,
@@ -182,12 +183,12 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 		),
 		gameSettings("troika", sel,
 			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
-				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("16"), dopeui.Spellcheck("false"), dopeui.Text(data.TroikaDSL))),
+				dopeui.Editor(dopeui.Name("troika_dsl"), dopeui.Rows("16"), dopeui.Spellcheck("false"), dopeui.Text(data.TroikaDSL))),
 			dopeui.Hint(dopeui.Text(s.Host.Games.TroikaHint())),
 		),
 		gameSettings("ek", sel,
 			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
-				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("10"), dopeui.Spellcheck("false"), dopeui.Placeholder("[scheme]\nkind: single_elimination\nparticipants: 48\nmatch_size: 4\nwinning_places: 2"))),
+				dopeui.Editor(dopeui.Name("ek_dsl"), dopeui.Rows("10"), dopeui.Spellcheck("false"), dopeui.Text(data.EKDSL), dopeui.Placeholder("[scheme]\nkind: single_elimination\nparticipants: 48\nmatch_size: 4\nwinning_places: 2"))),
 			dopeui.Hint(dopeui.Text(s.Host.Games.EkHint())),
 			dopeui.Field(dopeui.Label(s.Host.Games.EkJsonLabel()),
 				dopeui.Editor(dopeui.Name("ek_scheme"), dopeui.Rows("14"), dopeui.Placeholder(`{"slug":"...","title":"...","gameType":"ek","stages":[...]}`))),
@@ -455,9 +456,11 @@ func (s *Server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request
 	s.festPage(w, r, festID, func(fest view.HostFest) (*dopeui.Doc, error) {
 		var teamCount int
 		_ = s.h.Engine().DB.QueryRowContext(r.Context(), `select count(*) from fest_teams where fest_id = ?`, festID).Scan(&teamCount)
-		brainDSL := strings.TrimSpace(r.Form.Get("brain_dsl"))
-		if brainDSL == "" {
-			brainDSL = gamebuild.DefaultBrainDSL(teamCount, 5)
+		kept := func(field, fallback string) string {
+			if v := strings.TrimSpace(r.Form.Get(field)); v != "" {
+				return v
+			}
+			return fallback
 		}
 		entrants, err := festEntrantOptions(r.Context(), s.h.Engine().DB, festID)
 		if err != nil {
@@ -465,7 +468,11 @@ func (s *Server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request
 		}
 		return hostGameCreateDoc(hostGameCreateData{
 			Fest: fest, Error: errMsg, SelectedType: selectedType,
-			BrainDSL: brainDSL, SIDSL: defaultSIDSL(teamCount), TroikaDSL: defaultTroikaDSL(teamCount), Entrants: entrants,
+			BrainDSL:  kept("brain_dsl", gamebuild.DefaultBrainDSL(teamCount, 5)),
+			SIDSL:     kept("si_dsl", defaultSIDSL(teamCount)),
+			TroikaDSL: kept("troika_dsl", defaultTroikaDSL(teamCount)),
+			EKDSL:     kept("ek_dsl", ""),
+			Entrants:  entrants,
 		}), nil
 	})
 }
@@ -517,11 +524,23 @@ func (s *Server) handleHostCreateGame(w http.ResponseWriter, r *http.Request, fe
 	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s/game/%s/", s.festRefOrID(r.Context(), festID), s.gameRefOrID(r.Context(), gameID)), http.StatusSeeOther)
 }
 
+// dslField names each format's scheme editor on the creation form. Every section
+// is in the document at once and the page merely hides the ones not picked — a
+// hidden field still posts — so one shared name would have handed a брейн's
+// prefilled scheme to whatever type the host actually chose. A format absent
+// here has no scheme of its own and its DSL is empty.
+var dslField = map[string]string{
+	games.Brain:  "brain_dsl",
+	games.SI:     "si_dsl",
+	games.Troika: "troika_dsl",
+	games.EK:     "ek_dsl",
+}
+
 // gameSpecFromForm reads the creation form into what gamebuild needs: the
 // format's label and DSL, the entrants ticked, and for the three pre-DSL
 // formats their own knobs.
 func gameSpecFromForm(festID int64, gameType string, form url.Values) (gamebuild.Spec, error) {
-	spec := gamebuild.Spec{FestID: festID, Type: gameType, Entrants: chosenEntrantIDs(form), DSL: strings.TrimSpace(form.Get("brain_dsl"))}
+	spec := gamebuild.Spec{FestID: festID, Type: gameType, Entrants: chosenEntrantIDs(form), DSL: strings.TrimSpace(form.Get(dslField[gameType]))}
 	s := dopestrings.Default
 	var err error
 	switch gameType {
