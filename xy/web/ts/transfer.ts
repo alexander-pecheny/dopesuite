@@ -164,21 +164,22 @@ export function createTransfer(deps: TransferDeps): Transfer {
     // under the destination key but carrying the source author + created_at.
     let events: CardEvent[] = [];
     try { events = (await fetchJSON(`/api/cards/${srcCardId}/timeline`)) as CardEvent[]; } catch (_) { events = []; }
-    const comments: Array<Record<string, unknown>> = [];
-    for (const ev of events) {
-      if (ev.type !== "comment") continue;
-      let text: string;
-      try { text = await xyCrypto.decField(dk, ev.payload_enc || ""); } catch (_) { continue; }
-      comments.push({
-        // src ids travel so the server can rebuild threading under fresh ids
-        src_id: ev.id,
-        reply_to_src_id: ev.reply_to_id != null ? ev.reply_to_id : null,
-        author_user_id: ev.author_user_id != null ? ev.author_user_id : null,
-        created_at: ev.created_at,
-        is_excerpt: !!ev.is_excerpt,
-        payload_enc: await xyCrypto.encField(targetDk, text),
-      });
-    }
+    // Two batches for the whole card — decrypt under the source key, re-encrypt
+    // under the destination's — rather than a pair of round trips per comment.
+    // A comment that will not open is dropped, as it was before.
+    const srcComments = events.filter((ev) => ev.type === "comment");
+    const texts = await xyCrypto.decFields(dk, srcComments.map((ev) => ev.payload_enc || ""));
+    const carried = srcComments.filter((_, i) => texts[i] !== null);
+    const reEnc = await xyCrypto.encFields(targetDk, texts.filter((t): t is string => t !== null));
+    const comments: Array<Record<string, unknown>> = carried.map((ev, i) => ({
+      // src ids travel so the server can rebuild threading under fresh ids
+      src_id: ev.id,
+      reply_to_src_id: ev.reply_to_id != null ? ev.reply_to_id : null,
+      author_user_id: ev.author_user_id != null ? ev.author_user_id : null,
+      created_at: ev.created_at,
+      is_excerpt: !!ev.is_excerpt,
+      payload_enc: reEnc[i],
+    }));
     if (comments.length) {
       try { await jpost(`/api/cards/${newCardId}/timeline/import`, { events: comments }); } catch (_) {}
     }

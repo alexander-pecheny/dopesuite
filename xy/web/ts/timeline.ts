@@ -430,6 +430,21 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // is dropped when the card closes (resetFilter), so a card always opens the way
   // /profile says — the selects are a look at this card, not a stored preference.
   let filter: FeedFilter = "all";
+  // decPayloads decrypts a whole run of events in one call — a card with a long
+  // history used to cost one WebCrypto round trip per event on every open, every
+  // feed render and every thread. A payload that will not open (or a board with
+  // no key yet) comes back null and renders as empty, which is what the
+  // per-event try/catch this replaces did.
+  async function decPayloads(events: readonly CardEvent[]): Promise<(string | null)[]> {
+    const dk = deps.getDK();
+    if (!dk) return events.map(() => null);
+    try {
+      return await xyCrypto.decFields(dk, events.map((e) => e.payload_enc || ""));
+    } catch (_) {
+      return events.map(() => null);
+    }
+  }
+
   // Reactions never make rows — they render as chips on their target.
   const shown = (events: readonly CardEvent[]): CardEvent[] =>
     events.filter((e) => e.type !== "reaction" && feedFilterKeeps(e.type, filter));
@@ -505,11 +520,8 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     // Every payload is decrypted up front: a reply quotes its parent and a
     // reaction chip needs its emoji, whichever of the two the filter shows.
     const payloads = new Map<number, string>();
-    for (const ev of events) {
-      try {
-        const dk = deps.getDK();
-        if (dk) payloads.set(ev.id, await xyCrypto.decField(dk, ev.payload_enc || ""));
-      } catch (_) {}
+    for (const [i, text] of (await decPayloads(events)).entries()) {
+      if (text !== null) payloads.set(events[i].id, text);
     }
     if (cardId === deps.card.openCardId()) {
       openCardEvents = events;
@@ -832,15 +844,9 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     const frag = document.createDocumentFragment();
     // openCardEvents is oldest→newest (by id), so "newest first" is the reverse.
     const ordered = orderFeedEvents(shown(openCardEvents || []), feedOrder());
-    for (const ev of ordered) {
-      let payload = "";
-      if (!ev.deleted) {
-        try {
-          const dk = deps.getDK();
-          if (dk) payload = await xyCrypto.decField(dk, ev.payload_enc || "");
-        } catch (_) {}
-      }
-      const node = renderEvent(ev, payload);
+    const texts = await decPayloads(ordered);
+    for (const [i, ev] of ordered.entries()) {
+      const node = renderEvent(ev, ev.deleted ? "" : texts[i] || "");
       // The panel's timeline already owns tlev-{id}; these are a SECOND rendering of
       // the same events, so they must not duplicate those ids — deep links and
       // highlightComment resolve by id and would land on whichever came first.
@@ -886,16 +892,10 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     const replies = orderThreadReplies(events, rootId);
     const body = ui.threadBody;
     const frag = document.createDocumentFragment();
-    for (const ev of [root, ...replies]) {
-      if (!ev) continue;
-      let text = "";
-      if (!ev.deleted) {
-        try {
-          const dk = deps.getDK();
-          if (dk) text = await xyCrypto.decField(dk, ev.payload_enc || "");
-        } catch (_) {}
-      }
-      const decoded = decodeCommentPayload(text);
+    const shownEvents = [root, ...replies].filter((ev): ev is CardEvent => !!ev);
+    const texts = await decPayloads(shownEvents);
+    for (const [i, ev] of shownEvents.entries()) {
+      const decoded = decodeCommentPayload(ev.deleted ? "" : texts[i] || "");
       const node = el("div", { class: "thread-item" + (ev.id === rootId ? " thread-root" : "") },
         el("div", { class: "tl-meta" },
           ev.deleted ? S.timeline.comment.deleted()
@@ -1162,12 +1162,10 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   async function openExcerpts(): Promise<void> {
     const body = ui.excerptsBody;
     body.replaceChildren();
-    for (const ev of excerptComments(openCardEvents || [])) {
-      let text = "";
-      try {
-        const dk = deps.getDK();
-        if (dk) text = await xyCrypto.decField(dk, ev.payload_enc || "");
-      } catch (_) {}
+    const excerpts = excerptComments(openCardEvents || []);
+    const texts = await decPayloads(excerpts);
+    for (const [i, ev] of excerpts.entries()) {
+      const text = texts[i] || "";
       body.append(el("div", { class: "excerpt" },
         el("div", { class: "excerpt-meta", text: `${author(ev)} · ${new Date(ev.created_at).toLocaleString("ru-RU")}` }),
         el("div", { class: "excerpt-text", text })));

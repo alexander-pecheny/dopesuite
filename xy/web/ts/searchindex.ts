@@ -135,48 +135,58 @@ export async function refreshComments(boardId: number, dk: DataKey): Promise<voi
 // come out in board order — lists by rank, cards by rank within a list — so the
 // result list reads in the order the board does.
 export async function decrypt(dk: DataKey, snap: BoardSnapshot): Promise<{ lists: IndexList[]; cards: IndexCard[] }> {
-  const dec = async (b64: string | null | undefined): Promise<string> => {
-    if (!b64) return "";
-    try { return await xyCrypto.decField(dk, b64); } catch (_) { return ""; }
-  };
   // byRank, not localeCompare: a rank is a base-62 fractional index and only
   // codepoint order sorts it right («aA» sorts before «aa», which a locale
   // comparison reverses).
   const ranked = (v: { rank?: unknown }): { rank: string } => ({ rank: String(v.rank ?? "") });
   const rawLists = [...(snap.lists || [])].sort((a, b) => byRank(ranked(a), ranked(b)));
-  const lists: IndexList[] = [];
-  for (const l of rawLists) lists.push({ id: l.id, title: await dec(l.title_enc) });
+  const listTitles = await decAll(dk, rawLists.map((l) => l.title_enc));
+  const lists: IndexList[] = rawLists.map((l, i) => ({ id: l.id, title: listTitles[i] }));
   const order = new Map(lists.map((l, i) => [l.id, i]));
   const rawCards = [...(snap.cards || [])].sort((a, b) =>
     (order.get(a.list_id ?? -1) ?? 0) - (order.get(b.list_id ?? -1) ?? 0) ||
     byRank(ranked(a), ranked(b))
   );
-  const cards: IndexCard[] = [];
-  for (const c of rawCards) {
-    cards.push({
-      id: c.id,
-      list: c.list_id ?? 0,
-      kind: String(c.kind || "question"),
-      desc: await dec(c.description_enc),
-      alias: await dec(c.alias_enc),
-    });
-  }
+  // One concurrent batch for the whole board, rather than an await per field:
+  // these two columns are every card on the board, and nothing about them needs
+  // to be decrypted in order.
+  const fields = await decAll(dk, [
+    ...rawCards.map((c) => c.description_enc),
+    ...rawCards.map((c) => c.alias_enc),
+  ]);
+  const n = rawCards.length;
+  const cards: IndexCard[] = rawCards.map((c, i) => ({
+    id: c.id,
+    list: c.list_id ?? 0,
+    kind: String(c.kind || "question"),
+    desc: fields[i],
+    alias: fields[n + i],
+  }));
   return { lists, cards };
+}
+
+// decAll decrypts a column of fields in one go. A field that is absent or will
+// not open reads as "" — an index is a best-effort artefact, and a single
+// unreadable card must not cost the board its search.
+async function decAll(dk: DataKey, b64s: (string | null | undefined)[]): Promise<string[]> {
+  const decoded = await xyCrypto.decFields(dk, b64s.map((b) => b || ""));
+  return decoded.map((text) => text ?? "");
 }
 
 // What GET /api/boards/{id}/comments returns, per comment.
 interface CommentRow { id: number; card_id: number; payload_enc: string }
 
 async function decryptComments(dk: DataKey, rows: CommentRow[]): Promise<IndexComment[]> {
+  const live = rows.filter((row) => row.card_id && row.payload_enc);
+  const payloads = await xyCrypto.decFields(dk, live.map((row) => row.payload_enc));
   const out: IndexComment[] = [];
-  for (const row of rows) {
-    if (!row.card_id || !row.payload_enc) continue;
+  for (let i = 0; i < live.length; i++) {
+    const payload = payloads[i];
+    if (payload === null) continue;
     // decodeCommentPayload: a comment carrying images stores {text, refs} —
     // search wants the words, not the envelope.
-    try {
-      const text = decodeCommentPayload(await xyCrypto.decField(dk, row.payload_enc)).text;
-      if (text) out.push({ card: row.card_id, id: row.id, text });
-    } catch (_) {}
+    const text = decodeCommentPayload(payload).text;
+    if (text) out.push({ card: live[i].card_id, id: live[i].id, text });
   }
   return out;
 }

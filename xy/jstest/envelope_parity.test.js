@@ -1,8 +1,8 @@
-// The Envelope has two implementations — crypto.ts and Go's internal/xycli.
-// This half opens what Go sealed; internal/xycli/envelope_test.go opens what
-// this sealed. Corpus: internal/xycli/testdata/envelope.json, written by
-// scripts/gen_envelope_fixture.js (TS half) and `go test ./internal/xycli
-// -run TestEnvelopeParity -update` (Go half).
+// The Envelope has two implementations — crypto.ts and Go's internal/xycli. This
+// half opens what Go sealed; internal/xycli/envelope_test.go opens what this
+// sealed. Corpus: internal/xycli/testdata/envelope.json, written by
+// scripts/gen_envelope_fixture.js (TS half) and `go test ./internal/xycli -run
+// TestEnvelopeParity -update` (Go half).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { xyCrypto } from "../web/assets/static/dist/crypto.js";

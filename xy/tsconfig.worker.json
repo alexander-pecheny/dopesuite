@@ -1,0 +1,7 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["es2021", "webworker"]
+  },
+  "include": ["web/ts/cryptoworker.ts", "web/ts/vendor.d.ts"]
+}

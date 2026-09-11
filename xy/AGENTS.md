@@ -27,7 +27,16 @@ Russian-language UI.
   panel registry (panels.ts), and the card, the лента, attachments, unlock and
   the rest are `create(deps)` kernels with jstest coverage. Its map is below.
 - **Crypto**: scrypt KEK (vendored `@noble/hashes`, pure JS, **no WASM** → runs
-  under iOS Lockdown Mode) + native AES-256-GCM via WebCrypto.
+  under iOS Lockdown Mode) + native AES-256-GCM via WebCrypto. The KDF runs in a
+  dedicated **worker** (`cryptoworker.ts`): N=2^16 is ~330 ms of solid compute
+  and every unlock used to pay it as a frozen tab. A browser that cannot start
+  the worker derives the key on the main thread, as before.
+  Neither half wants wasm, and both were measured: WebCrypto reaches the CPU's
+  AES instructions and wasm has none, so a wasm envelope only matched it on small
+  fields and lost 19× on attachments; a wasm scrypt was ~1.5× faster, which buys
+  nothing once the work is off the thread that draws — and cost a Rust toolchain
+  on the build path and a `'wasm-unsafe-eval'` CSP. WebCrypto has **no scrypt**
+  (`PBKDF2`/`HKDF` only), so the KDF cannot be native.
 - **Tests**: Go (`go test`) + frontend (`deno test --parallel jstest/`).
 - **Build/run**: `justfile`.
 - **UI markup**: no hand-written HTML (or CSS classes) anywhere. **DopeUIKit**
@@ -285,7 +294,16 @@ internal/blobstore/    attachment bytes ON DISK (random-ref, sharded, write-once
                        alone and every attachment is a dangling ref. See README "Deployment & backups".
 web/ts/                strict-TS ES-module sources; built by `just build-web` into
                        the gitignored web/assets/static/dist/ (see Stack above)
-    crypto.ts          envelope format + board key lifecycle + IndexedDB key cache
+    crypto.ts          envelope format + board key lifecycle + IndexedDB key cache;
+                       runs the KDF in the worker when there is one, on this
+                       thread when there is not, and owns the encFields/decFields
+                       batch forms every per-board loop uses
+    cryptoworker.ts    the KDF worker — scrypt and nothing else, so an unlock
+                       never freezes the tab. Typechecked against the webworker
+                       lib (tsconfig.worker.json): no DOM in its import graph
+    cryptoworkerclient.ts  the main thread's half of it. Every way a worker can
+                       fail to exist resolves to null, and the caller then derives
+                       the key itself (cryptoworkerclient.test.js is that contract)
     find.ts            the matching rules behind search and find-and-replace, all pure:
                        folding (search sees through the accents/NBSP/«ёлочки» the typography
                        pass wrote), literal matching for a replacement (space matches NBSP,

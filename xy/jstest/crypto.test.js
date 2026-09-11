@@ -1,5 +1,11 @@
 // Crypto round-trip + envelope tests. Run with: node --test jstest/
 // (or `just test-js`). Uses node's built-in test runner + global WebCrypto.
+//
+// These run on the in-thread path: there is no origin to load a worker script
+// from under deno, so crypto.ts derives the KEK itself — which is also the
+// fallback every browser keeps when a worker will not start. The worker is the
+// same scrypt behind a postMessage; its client's contract is covered in
+// cryptoworkerclient.test.js.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { xyCrypto } from "../web/assets/static/dist/crypto.js";
@@ -82,4 +88,35 @@ test("bytes round-trip for attachments", async () => {
   const data = new Uint8Array([0, 1, 2, 250, 255]);
   const env = await xyCrypto.encBytes(dk, data);
   assert.deepEqual([...(await xyCrypto.decBytes(dk, env))], [...data]);
+});
+
+// ---- the batch forms ----
+//
+// encFields/decFields are what every loop over a board's cards, comments or
+// events calls. They must behave exactly like a loop of encField/decField would,
+// order included — the callers pair the results back up by index.
+
+test("encFields/decFields round-trip a whole column, in order", async () => {
+  const { dk } = await xyCrypto.createBoardKeys("pw");
+  const texts = ["", "один", "два", "…три", "x".repeat(3000)];
+  assert.deepEqual(await xyCrypto.decFields(dk, await xyCrypto.encFields(dk, texts)), texts);
+  assert.deepEqual(await xyCrypto.encFields(dk, []), []);
+  assert.deepEqual(await xyCrypto.decFields(dk, []), []);
+});
+
+test("a batch of wildly different sizes keeps the caller's order", async () => {
+  const { dk } = await xyCrypto.createBoardKeys("pw");
+  const texts = ["мал", "y".repeat(100000), "ещё мал", "z".repeat(9000)];
+  assert.deepEqual(await xyCrypto.decFields(dk, await xyCrypto.encFields(dk, texts)), texts);
+});
+
+test("one bad field in a batch does not take down the others", async () => {
+  const { dk } = await xyCrypto.createBoardKeys("pw");
+  const cts = await xyCrypto.encFields(dk, ["ok1", "bad", "ok2"]);
+  const broken = xyCrypto.fromB64(cts[1]);
+  broken[broken.length - 1] ^= 0xff;
+  assert.deepEqual(
+    await xyCrypto.decFields(dk, [cts[0], xyCrypto.toB64(broken), cts[2], "", "not base64!!"]),
+    ["ok1", null, "ok2", null, null],
+  );
 });

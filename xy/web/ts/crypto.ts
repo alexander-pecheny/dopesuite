@@ -1,12 +1,23 @@
-// crypto.ts — xy's client-side encryption layer. Sole owner of the wire
-// envelope format and the per-board key lifecycle. Pure JS scrypt (vendored
-// @noble/hashes, no WASM → runs under iOS Lockdown Mode) + native AES-256-GCM
-// via WebCrypto.
+// crypto.ts — xy's client-side encryption layer. Sole owner of the wire envelope
+// format and the per-board key lifecycle.
+//
+// The cipher is native AES-256-GCM through WebCrypto, and stays there: it reaches
+// the CPU's AES instructions, which nothing compiled to wasm can. That was
+// measured rather than assumed — a wasm AES-GCM only matched WebCrypto on a batch
+// of small fields in Chrome (23 ms against 20 for 2000 of them) and lost 19× on an
+// attachment-sized buffer, because WebCrypto's per-call overhead there is ~14 µs,
+// not the ~90 µs node reports. Measure in a BROWSER before believing otherwise.
+//
+// What DID move is scrypt, into a worker (cryptoworker.ts). N=2^16 is ~330 ms of
+// solid compute, and every board unlock used to pay it as a frozen tab. Nothing
+// about the result changes — same scrypt, same key — only which thread waits. A
+// browser that cannot start a worker derives it here, exactly as before.
 //
 // Loaded as an ES module (CSP script-src 'self'); consumers import from it.
-import { scrypt } from "../vendor/scrypt.js";
+import { scrypt as scryptJS } from "../vendor/scrypt.js";
 import { WORDLIST } from "./wordlist.js";
 import S from "./i18nstrings.js";
+import { start as startWorker, type CryptoWorker } from "./cryptoworkerclient.js";
 
 // scrypt KDF parameters, stored (JSON-encoded) per board.
 export interface KdfParams {
@@ -26,8 +37,9 @@ export interface BoardKeymeta {
   verify_token: string;
 }
 
-// A live board data key: the imported WebCrypto handle plus the raw bytes
-// (kept for caching and passphrase re-wraps).
+// A live board data key: the imported WebCrypto handle plus the raw bytes. Both
+// are needed — WebCrypto takes the handle, wasm takes the bytes — and the raw
+// key is also what the IndexedDB cache and a passphrase re-wrap store.
 export interface DataKey {
   key: CryptoKey;
   raw: Uint8Array<ArrayBuffer>;
@@ -116,11 +128,51 @@ function fromB64(b64: string): Uint8Array<ArrayBuffer> {
   return out;
 }
 
+// ---- where the KDF runs ----
+
+// Absolute path, not import.meta.url: the app is served from the site root, and
+// the build targets ES2019.
+const WORKER_URL = "/static/dist/cryptoworker.js";
+
+let worker: CryptoWorker | null = null;
+let started: Promise<void> | null = null;
+
+// inBrowser gates the worker: under node/deno — the test runner — there is no
+// origin to load a worker script from, and the in-thread path below is what runs
+// there. It is also the fallback every browser keeps, so nothing goes untested.
+function inBrowser(): boolean {
+  return typeof location !== "undefined" && /^https?:$/.test(location.protocol);
+}
+
+// init starts the worker once. It never rejects: every way this can fail is a way
+// of saying "derive the key on this thread instead".
+function init(): Promise<void> {
+  if (started) return started;
+  started = inBrowser()
+    ? startWorker(WORKER_URL).then((w) => { worker = w; })
+    : Promise.resolve();
+  return started;
+}
+
+// warm starts the worker up front, so its module graph loads alongside the rest
+// of the page rather than in front of the passphrase prompt. Safe to call from
+// anywhere, any number of times.
+function warm(): void { void init(); }
+
 // ---- KEK derivation ----
+
 async function deriveKEK(passphrase: string, salt: Uint8Array<ArrayBuffer>, params: KdfParams): Promise<CryptoKey> {
-  const raw = scrypt(te.encode(passphrase.normalize("NFKC")), salt, {
-    N: params.N, r: params.r, p: params.p, dkLen: params.dkLen || 32,
-  });
+  await init();
+  const pass = te.encode(passphrase.normalize("NFKC"));
+  const p = { N: params.N, r: params.r, p: params.p, dkLen: params.dkLen || 32 };
+  let raw: Uint8Array<ArrayBuffer>;
+  if (worker) {
+    // A worker that dies mid-derive is a reason to be slower, never to fail:
+    // it is the same function either side of the postMessage.
+    try { raw = await worker.scrypt(pass, salt, p); } catch (_) { raw = scryptJS(pass, salt, p); }
+  } else {
+    raw = scryptJS(pass, salt, p);
+  }
   return subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
@@ -207,12 +259,32 @@ async function rewrapKey(newPassphrase: string, dk: DataKey): Promise<Omit<Board
 }
 
 // ---- field helpers (string <-> base64 envelope) ----
+
 async function encField(dk: DataKey, str: string): Promise<string> {
   return toB64(await seal(dk.key, te.encode(str)));
 }
 async function decField(dk: DataKey, b64: string): Promise<string> {
   return td.decode(await open(dk.key, fromB64(b64)));
 }
+
+// encFields/decFields are the batch forms, and the ones any loop over a board's
+// cards, comments or events should call. They are concurrent rather than serial,
+// which is worth ~30% on a board-sized column (2000 fields: 20 ms against 29) —
+// not a transformation, but the awaits in those loops were serialising work that
+// has no reason to be ordered.
+//
+// decFields yields null for a field that will not open, mirroring the try/catch
+// the per-field callers wrap decField in: one unreadable card must not cost a
+// board its search index or its export.
+async function encFields(dk: DataKey, strs: string[]): Promise<string[]> {
+  return Promise.all(strs.map((str) => encField(dk, str)));
+}
+async function decFields(dk: DataKey, b64s: string[]): Promise<(string | null)[]> {
+  return Promise.all(b64s.map(async (b64) => {
+    try { return await decField(dk, b64 || ""); } catch (_) { return null; }
+  }));
+}
+
 async function encBytes(dk: DataKey, bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
   return await seal(dk.key, bytes);
 }
@@ -266,9 +338,16 @@ async function forgetDK(boardId: number | string): Promise<void> {
 export const xyCrypto = {
   toB64, fromB64,
   createBoardKeys, unlockBoard, rewrapKey, validatePassphrase, generatePassphrase,
-  encField, decField, encBytes, decBytes,
+  encField, decField, encFields, decFields, encBytes, decBytes,
   cacheDK, loadCachedDK, forgetDK,
+  warm,
   // low-level, exposed for tests
   _seal: seal, _open: open, _deriveKEK: deriveKEK, _importDK: importDK,
   DEFAULT_KDF,
 };
+
+// Starting the worker at import time, not at first use: every page that imports
+// this module is a page that will decrypt something, so its startup is the right
+// moment to pay for the worker rather than the passphrase prompt. Under node/deno
+// this is a no-op.
+warm();

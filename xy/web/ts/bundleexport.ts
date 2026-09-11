@@ -69,7 +69,16 @@ export async function buildBundle(
 ): Promise<{ bundle: Bundle; bytesOf: AttachmentBytes }> {
   const dk: DataKey = board.dk();
   const state = board.state;
-  const dec = (b64: string): Promise<string> => xyCrypto.decField(dk, b64);
+  // decAll: one engine round trip for a whole column of fields, and a hard
+  // failure if any of them will not open — an export that quietly dropped a
+  // comment would be a bundle that silently lost work.
+  const decAll = async (b64s: string[]): Promise<string[]> => {
+    const out = await xyCrypto.decFields(dk, b64s);
+    return out.map((text) => {
+      if (text === null) throw new Error("decrypt failed");
+      return text;
+    });
+  };
 
   log(S.import.export.collecting());
   const members = (await fetchJSON(`/api/boards/${board.id}/members`)) as MemberRow[];
@@ -81,32 +90,29 @@ export async function buildBundle(
   const kept = listIds == null ? null : new Set(state.cards.filter((c) => listIds.includes(c.listId)).map((c) => c.id));
   const mine = (cardId: number | null | undefined): boolean => kept == null || (cardId != null && kept.has(cardId));
 
-  const timeline: BundleEvent[] = [];
-  for (const e of rawEvents.filter((e) => mine(e.card_id) || e.card_id == null)) {
-    timeline.push({
-      id: e.id,
-      card_id: e.card_id ?? null,
-      session_id: e.session_id ?? null,
-      type: e.type,
-      author: e.author_username ?? null,
-      created_at: e.created_at,
-      edited_at: e.edited_at ?? null,
-      is_excerpt: !!e.is_excerpt,
-      reply_to_id: e.reply_to_id ?? null,
-      payload: await dec(e.payload_enc),
-    });
-    if (timeline.length % 200 === 0) log(S.import.export.decrypting(String(timeline.length)));
-  }
+  const keptEvents = rawEvents.filter((e) => mine(e.card_id) || e.card_id == null);
+  log(S.import.export.decrypting(String(keptEvents.length)));
+  const payloads = await decAll(keptEvents.map((e) => e.payload_enc));
+  const timeline: BundleEvent[] = keptEvents.map((e, i) => ({
+    id: e.id,
+    card_id: e.card_id ?? null,
+    session_id: e.session_id ?? null,
+    type: e.type,
+    author: e.author_username ?? null,
+    created_at: e.created_at,
+    edited_at: e.edited_at ?? null,
+    is_excerpt: !!e.is_excerpt,
+    reply_to_id: e.reply_to_id ?? null,
+    payload: payloads[i],
+  }));
 
-  const attachments: BundleAttachment[] = [];
-  for (const a of rawAtts.filter((a) => mine(a.card_id))) {
-    const filename = await dec(a.filename_enc);
-    attachments.push({
-      id: a.id, card_id: a.card_id, filename, mime: a.mime,
-      size: a.size, lossless: !!a.lossless, is_excerpt: !!a.is_excerpt,
-      path: attachmentPath(a.id, filename),
-    });
-  }
+  const keptAtts = rawAtts.filter((a) => mine(a.card_id));
+  const filenames = await decAll(keptAtts.map((a) => a.filename_enc));
+  const attachments: BundleAttachment[] = keptAtts.map((a, i) => ({
+    id: a.id, card_id: a.card_id, filename: filenames[i], mime: a.mime,
+    size: a.size, lossless: !!a.lossless, is_excerpt: !!a.is_excerpt,
+    path: attachmentPath(a.id, filenames[i]),
+  }));
 
   const bundle: Bundle = {
     format: BUNDLE_FORMAT,

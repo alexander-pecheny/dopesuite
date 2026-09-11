@@ -1358,10 +1358,11 @@ const sessionsPanel = createSessionsPanel({
       id?: number; payload_enc: string; card_id?: number; created_at: string;
       author_user_id?: number | null; author_username?: string | null;
     }>;
+    const texts = await xyCrypto.decFields(mustDK(), raw.map((e) => e.payload_enc || ""));
     const out: Array<{ text: string; card: number | null; when: string; author: string }> = [];
-    for (const e of raw) {
-      let text = "";
-      try { text = await xyCrypto.decField(mustDK(), e.payload_enc || ""); } catch (_) { continue; }
+    for (const [i, e] of raw.entries()) {
+      const text = texts[i];
+      if (text === null) continue;
       // Same author resolution the card's feed uses, so the two read alike.
       out.push({ text, card: e.card_id ?? null, when: e.created_at, author: eventAuthor(e, state.me, state.memberNames) });
     }

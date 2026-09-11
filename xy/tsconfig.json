@@ -1,5 +1,5 @@
 {
   "extends": "../tsconfig.base.json",
   "include": ["web/ts/**/*.ts", "../dopeuikit/assets/ts/globals.d.ts"],
-  "exclude": ["web/ts/sw.ts"]
+  "exclude": ["web/ts/sw.ts", "web/ts/cryptoworker.ts"]
 }
