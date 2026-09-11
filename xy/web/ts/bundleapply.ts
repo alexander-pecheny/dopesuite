@@ -28,6 +28,46 @@ const { keyBetween } = xyRank;
 // One import batch stays well under the server's per-request event cap.
 const EVENT_CHUNK = 400;
 
+// How many independent writes this apply keeps in flight. The write path is
+// latency-bound, not CPU- or server-bound: it costs one HTTP round trip per
+// card, so a 40-question board is 40 × RTT — 0.6s on localhost and two minutes
+// on a slow link, for the same work. The server serialises writes behind one
+// mutex anyway (withWriteTx), so concurrency here buys nothing on the server
+// and everything on the wire: it keeps the pipe full instead of idling a whole
+// round trip between cards.
+const WRITE_POOL = 8;
+// Attachments carry their bytes through memory — downloaded, decrypted under
+// the source key, re-encrypted under the target's — so they get a smaller one.
+const ATTACH_POOL = 3;
+
+// pooled runs fn over items with at most `limit` in flight, preserving nothing
+// about order (every caller here addresses its target by id, never by position).
+// A task that throws stops new ones from starting, and the ones already in
+// flight are awaited before the first error is rethrown — so a unit's rollback
+// never races a write it does not know about.
+type PoolOutcome = { failed: false } | { failed: true; err: unknown };
+
+async function pooled<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  let stop = false;
+  const worker = async (): Promise<PoolOutcome> => {
+    while (!stop) {
+      const i = next++;
+      if (i >= items.length) break;
+      try {
+        await fn(items[i]);
+      } catch (err) {
+        stop = true;
+        return { failed: true, err };
+      }
+    }
+    return { failed: false };
+  };
+  const outcomes = await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  const bad = outcomes.find((o) => o.failed);
+  if (bad && bad.failed) throw bad.err;
+}
+
 export interface TargetLabel {
   id: number;
   name: string;
@@ -212,16 +252,18 @@ export async function applyBundle(
         groupId = res.id;
       }
 
+      // Every card carries its own rank, so nothing downstream depends on the
+      // order the server sees them in — they go out together.
       const cards = bundle.cards.filter((c) => unit.listIds.includes(c.list_id));
       let done = 0;
-      for (const c of cards) {
+      await pooled(cards, WRITE_POOL, async (c) => {
         const body: Record<string, unknown> = { description_enc: await enc(c.description), rank: c.rank, kind: c.kind };
         if (c.handout_meta) body.handout_meta_enc = await enc(c.handout_meta);
         if (c.alias) body.alias_enc = await enc(c.alias);
         const res = (await jpost(`/api/lists/${listMap.get(c.list_id)}/cards`, body)) as { id: number };
         cardMap.set(c.id, res.id);
         if (++done % 20 === 0) log(S.import.apply.cards(unit.title, String(done), String(cards.length)));
-      }
+      });
       const ours = new Set(cards.map((c) => c.id));
 
       // Sessions this unit is the first to bring across — their own Timeline rides
@@ -241,9 +283,12 @@ export async function applyBundle(
         if (!playings.has(p.card_id)) playings.set(p.card_id, []);
         playings.get(p.card_id)!.push(await session(p.session_id));
       }
-      for (const [cardId, sessionIds] of playings) {
+      // The reconcile above stays serial — it is what decides whether a Session
+      // is created or matched, and two workers racing one srcId would mint two.
+      // The PUTs it feeds are per-card and independent.
+      await pooled([...playings], WRITE_POOL, async ([cardId, sessionIds]) => {
         await jput(`/api/cards/${cardMap.get(cardId)}/sessions`, { session_ids: sessionIds });
-      }
+      });
 
       const assignments = new Map<number, Array<{ label_id: number; session_id: number | null }>>();
       for (const a of bundle.card_labels) {
@@ -254,9 +299,9 @@ export async function applyBundle(
           session_id: a.session_id == null ? null : await session(a.session_id),
         });
       }
-      for (const [cardId, labels] of assignments) {
+      await pooled([...assignments], WRITE_POOL, async ([cardId, labels]) => {
         await jput(`/api/cards/${cardMap.get(cardId)}/labels`, { labels });
-      }
+      });
 
       // Declarations, one PUT per tour; a tour with no session rows is the
       // declared-nobody marker, i.e. an empty set.
@@ -288,9 +333,11 @@ export async function applyBundle(
         unit.title,
       );
 
+      // Each attachment is a download, a re-encrypt and an upload — two round
+      // trips of its own, and nothing between them touches another attachment.
       const atts = bundle.attachments.filter((a) => ours.has(a.card_id));
       let attDone = 0;
-      for (const a of atts) {
+      await pooled(atts, ATTACH_POOL, async (a) => {
         const fd = new FormData();
         fd.append("meta", JSON.stringify({
           filename_enc: await enc(a.filename),
@@ -302,7 +349,7 @@ export async function applyBundle(
         const plain = await bytesOf(a);
         if (!plain) {
           result.skipped.push(a.filename);
-          continue;
+          return;
         }
         const cipher = await xyCrypto.encBytes(dk, plain);
         fd.append("blob", new Blob([cipher], { type: "application/octet-stream" }), "blob");
@@ -310,7 +357,7 @@ export async function applyBundle(
         if (!res.ok) throw new Error(S.import.apply.attachFailed(a.filename, String(res.status)));
         result.attachments++;
         log(S.import.apply.attachments(unit.title, String(++attDone), String(atts.length)));
-      }
+      });
 
       result.cards += cards.length;
       return cards.length;

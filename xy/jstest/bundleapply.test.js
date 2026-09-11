@@ -13,10 +13,25 @@ let calls = [];
 let nextId = 500;
 let failCardAt = 0; // refuse the nth card create (1-based); 0 = refuse nothing
 let cardPosts = 0;
+// A card create that actually yields, so the applier's in-flight window is
+// observable: peakCardsInFlight is what tells a pooled write path from a serial
+// one (a serial one never gets past 1).
+let cardDelayMs = 0;
+let cardsInFlight = 0;
+let peakCardsInFlight = 0;
 xyApp.fetchJSON = async (url) => { calls.push(["GET", String(url)]); return []; };
 xyApp.jpost = async (url, body) => {
   calls.push(["POST", String(url), body]);
-  if (String(url).endsWith("/cards") && ++cardPosts === failCardAt) throw new Error("сеть недоступна");
+  if (String(url).endsWith("/cards")) {
+    peakCardsInFlight = Math.max(peakCardsInFlight, ++cardsInFlight);
+    try {
+      if (cardDelayMs) await new Promise((r) => setTimeout(r, cardDelayMs));
+      if (++cardPosts === failCardAt) throw new Error("сеть недоступна");
+    } finally {
+      cardsInFlight--;
+    }
+    return { id: ++nextId };
+  }
   if (String(url).endsWith("/timeline/import")) {
     const ids = {};
     for (const e of body.events) ids[String(e.src_id)] = ++nextId;
@@ -63,7 +78,14 @@ function bundle(overrides = {}) {
 
 const quiet = () => {};
 const noBytes = async () => null;
-const reset = () => { calls = []; failCardAt = 0; cardPosts = 0; };
+const reset = () => {
+  calls = [];
+  failCardAt = 0;
+  cardPosts = 0;
+  cardDelayMs = 0;
+  cardsInFlight = 0;
+  peakCardsInFlight = 0;
+};
 const posts = (suffix) => calls.filter((c) => c[0] === "POST" && c[1].endsWith(suffix));
 
 test("a fresh board takes the bundle verbatim — every label and session created, ranks kept", async () => {
@@ -176,4 +198,56 @@ test("an attachment the producer cannot hand over is skipped and named", async (
   assert.equal(r.failed, false);
   assert.deepEqual(r.skipped, ["раздатка.png"]);
   assert.equal(r.attachments, 0);
+});
+
+// The write path is latency-bound — one HTTP round trip per card — so a board
+// of forty questions used to cost forty round trips end to end: 0.6s against
+// localhost and over a minute on a slow link. The cards go out together now.
+test("cards go out concurrently, and every one still lands with its own rank", async () => {
+  reset();
+  cardDelayMs = 5; // each create yields, so a serial applier would peak at 1
+  const cards = Array.from({ length: 40 }, (_, i) => ({
+    id: 100 + i, list_id: 1, kind: "question", description: `? ${i}`,
+    rank: `a${String(i).padStart(3, "0")}`, handout_meta: null, alias: null, created_at: null,
+  }));
+  const b = bundle({
+    lists: [{ id: 1, type: "normal", title: "Тур 1", rank: "a0", group_id: null }],
+    groups: [], cards, card_labels: [], card_sessions: [], sessions: [], labels: [], timeline: [],
+  });
+
+  const r = await applyBundle(b, { boardId: 902, dk, append: null }, noBytes, quiet);
+
+  assert.equal(r.failed, false);
+  assert.equal(r.cards, 40);
+  assert.ok(peakCardsInFlight > 1, `cards were sent one at a time (peak ${peakCardsInFlight})`);
+  assert.ok(peakCardsInFlight <= 8, `more in flight than the pool allows (peak ${peakCardsInFlight})`);
+  assert.deepEqual(
+    posts("/cards").map((c) => c[2].rank).sort(),
+    cards.map((c) => c.rank).sort(),
+    "every card created exactly once, carrying its own rank",
+  );
+});
+
+// Concurrency must not cost the unit its atomicity: the writes already in
+// flight are awaited before the rollback runs, so the DELETE cannot race one.
+test("a failure mid-flight still rolls the unit back, after the in-flight writes settle", async () => {
+  reset();
+  cardDelayMs = 5;
+  failCardAt = 3;
+  const cards = Array.from({ length: 20 }, (_, i) => ({
+    id: 100 + i, list_id: 1, kind: "question", description: `? ${i}`,
+    rank: `a${String(i).padStart(3, "0")}`, handout_meta: null, alias: null, created_at: null,
+  }));
+  const b = bundle({
+    lists: [{ id: 1, type: "normal", title: "Тур 1", rank: "a0", group_id: null }],
+    groups: [], cards, card_labels: [], card_sessions: [], sessions: [], labels: [], timeline: [],
+  });
+
+  const r = await applyBundle(b, { boardId: 903, dk, append: null }, noBytes, quiet);
+
+  assert.equal(r.failed, true);
+  assert.match(r.units[0].error, /сеть/);
+  assert.equal(cardsInFlight, 0, "the rollback waited for the writes already sent");
+  assert.equal(calls.filter((c) => c[0] === "DELETE").length, 1, "the unit's list is gone");
+  assert.ok(cardPosts < cards.length, "the pool stopped launching once one failed");
 });
