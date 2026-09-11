@@ -853,7 +853,6 @@ export const RU: Strings = {
     },
     home: {
       boardLockedName: (id: string) => `доска #${id}`,
-      copyUnlockHint: (name: string) => `Введите пароль доски «${name}», чтобы прочитать её содержимое.`,
       createOffline: () => "Создание доски доступно только онлайн.",
       createSubmit: () => "Создать",
       createTitle: () => "Новая доска",

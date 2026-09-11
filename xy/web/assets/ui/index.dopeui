@@ -44,33 +44,3 @@ page title=@chrome.page.index_title kind="full" scripts="dist/index.js"
         button kind="ghost" id="createCancel" @board.actions.cancel
     message id="createMessage"
 
-  -- copy-board dialogues: a board whose key this device hasn't got asks its
-  -- passphrase first — the copy runs in the browser (decrypt → Bundle → new
-  -- key), so the source must decrypt here. Then the copy form is the create
-  -- form's twin: a copy is a new board under a fresh key, only its name is
-  -- prefilled and the verb differs.
-  modal id="copyUnlockOverlay" label=@board.unlock.title title=@board.unlock.title
-    muted id="copyUnlockHint"
-    form id="copyUnlockForm" dir="col"
-      password id="copyUnlockPass" placeholder=@board.unlock.pass_placeholder autocomplete="off" required autofocus
-      button submit @board.unlock.submit
-    row gap="sm" wrap
-      button kind="ghost" id="copyUnlockCancel" @board.actions.cancel
-    message id="copyUnlockMessage"
-
-  modal id="copyOverlay" label=@board.copy.label title=@board.copy.label
-    form id="copyForm" dir="col"
-      textfield id="copyName" placeholder=@chrome.home.name_placeholder required
-      -- the same unmasked passphrase row as the create dialog: a copy is a new
-      -- board, and its password deserves the same visible handling
-      row gap="sm" align="center"
-        textfield id="copyPass" placeholder=@chrome.home.pass_placeholder autocomplete="new-password" required grow
-        iconbtn id="copyGenPassBtn" icon="dices" label=@chrome.home.pass_generate
-      muted id="copyPassCopied" hidden @chrome.home.pass_copied
-      hint @chrome.home.pass_hint
-      hint kind="danger" @chrome.home.pass_warning
-      checkbox id="copyPassSaved" @chrome.home.pass_saved
-      row gap="sm" wrap
-        button submit id="copySubmit" disabled @board.copy.submit
-        button kind="ghost" id="copyCancel" @board.actions.cancel
-    message id="copyMessage"

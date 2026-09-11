@@ -849,7 +849,6 @@ export type Strings = {
     };
     home: {
       boardLockedName: (id: string) => string;
-      copyUnlockHint: (name: string) => string;
       createOffline: () => string;
       createSubmit: () => string;
       createTitle: () => string;

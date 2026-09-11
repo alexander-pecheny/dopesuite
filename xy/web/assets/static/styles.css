@@ -213,27 +213,6 @@
 }
 .board-card-name-popover.visible { display: block; }
 .board-card-role { font-size: var(--text-xs); color: var(--muted); }
-/* A tile is a stretched link with the copy action at its bottom-right corner.
-   The button cannot live inside the link (a click on it would navigate), so the
-   tile is a div: the anchor fills it, the button floats above the anchor. The
-   anchor repeats the tile's padding so content and highlight match the old
-   <a class=board-card> exactly. */
-.board-card-hit {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-4);
-  text-decoration: none;
-  color: var(--text);
-}
-.board-card-copybtn {
-  position: absolute;
-  right: var(--space-2);
-  bottom: var(--space-2);
-  padding: var(--space-1);
-}
 /* blue "unread" dot — a board has changes by another member the user hasn't
    read. The kit's .unread-dot(-corner); a touch bigger on the large tile. */
 .board-card-unread {

@@ -1050,9 +1050,6 @@ var RU = Strings{
 		},
 		Home: ChromeHomeStrings{
 			BoardLockedName: func(id string) string { return fmt.Sprintf("доска #%s", id) },
-			CopyUnlockHint: func(name string) string {
-				return fmt.Sprintf("Введите пароль доски «%s», чтобы прочитать её содержимое.", name)
-			},
 			CreateOffline:   func() string { return "Создание доски доступно только онлайн." },
 			CreateSubmit:    func() string { return "Создать" },
 			CreateTitle:     func() string { return "Новая доска" },
