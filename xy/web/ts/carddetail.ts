@@ -15,6 +15,7 @@ import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
 import { xyChgk } from "./chgk.js";
 import { xyVersions } from "./versions.js";
+import { blankTheme, composeTheme, isFilled, splitTheme, swapSlots, withSlot, type Theme } from "./themes.js";
 import { xyTypo } from "./typo.js";
 import { parseSession, serializeSession } from "./sessions.js";
 import { normalizeAlias, xyCardDraft } from "./carddraft.js";
@@ -319,6 +320,9 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // keeps the DOM and drives `draft`.
   const draft = xyCardDraft.create();
   let cardFieldReaders: FieldReaders | null = null; // per-field read() closures for the fields view
+  // A theme reads back as one closure over its whole ladder rather than a field
+  // record: its shape is the 4s's own, not a fixed set of slots.
+  let themeReader: (() => string) | null = null;
   // Blocks the fields editor doesn't render but must not eat: the pre-question
   // markup (№/№№ and friends) and anything else unmodelled. Both are captured at
   // render time and re-emitted verbatim on recompose; the text view edits them.
@@ -337,14 +341,19 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   async function addCard(list: BoardList): Promise<void> {
     const existing = deps.cardsOf(list.id);
     const rank = keyBetween(existing.length ? existing[existing.length - 1].rank : null, null);
-    const kind = "question";
+    // What the list holds decides which card this is, and nothing else: both
+    // kinds stay offered on the card itself.
+    const kind = list.type === "si" ? "theme" : "question";
+    // A question opens blank and grows its markers as it is typed; a theme is
+    // born as its whole ladder, which is the template an editor fills in.
+    const desc = kind === "theme" ? blankTheme(state().defaultAuthor || null) : "";
     try {
       const dk = mustDK();
       const res = await verbs.create("createCard", `/api/lists/${list.id}/cards`, {
-        description_enc: await xyCrypto.encField(dk, ""), rank, kind,
+        description_enc: await xyCrypto.encField(dk, desc), rank, kind,
       });
       const card: BoardCard = {
-        id: res.id as number, listId: list.id, kind, rank, desc: "",
+        id: res.id as number, listId: list.id, kind, rank, desc,
         handoutMeta: null, alias: null, createdAt: nowStamp(),
       };
       state().cards.push(card);
@@ -385,7 +394,10 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const c = openCardCard();
     return c ? c.kind : cardKindEl.value || "question";
   }
-  function fieldsAvailable(): boolean { return draftKind() === "question"; }
+  function isTheme(): boolean { return draftKind() === "theme"; }
+  // Both card kinds that hold question fields get the Fields tab; a theme fills it
+  // with a ladder of them instead of one.
+  function fieldsAvailable(): boolean { return draftKind() === "question" || isTheme(); }
 
   // boardAuthors / boardSources collect the author names and source lines already
   // used across the board's question cards (deduped, sorted) — the autocomplete
@@ -394,16 +406,30 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // what the board already says beats retyping it.
   function boardFieldValues(pick: (f: CardFields) => string[] | null): string[] {
     const set = new Set<string>();
-    for (const c of state().cards) {
-      if (c.kind !== "question") continue;
-      for (const v of pick(xyChgk.splitFields(c.desc)) || []) {
-        const s = (v || "").trim();
-        if (s) set.add(s);
+    const add = (vs: string[] | null): void => {
+      for (const v of vs || []) {
+        const t = (v || "").trim();
+        if (t) set.add(t);
       }
+    };
+    for (const c of state().cards) {
+      if (c.kind === "question") add(pick(xyChgk.splitFields(c.desc)));
+      // A theme's authors and sources are those of the questions inside it.
+      else if (c.kind === "theme") for (const slot of splitTheme(c.desc).slots) add(pick(slot.fields));
     }
     return [...set].sort((a, b) => a.localeCompare(b, "ru"));
   }
-  function boardAuthors(): string[] { return boardFieldValues((f) => f.authors); }
+  // Plus, for authors, every theme's own — the commonest place an SI package
+  // names one, and the field the theme head suggests from.
+  function boardAuthors(): string[] {
+    const names = new Set(boardFieldValues((f) => f.authors));
+    for (const c of state().cards) {
+      if (c.kind !== "theme") continue;
+      const a = (splitTheme(c.desc).author || "").trim();
+      if (a) names.add(a);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b, "ru"));
+  }
   function boardSources(): string[] { return boardFieldValues((f) => f.sources); }
 
   // suggestWrap wraps an input in a hand-drawn autocomplete dropdown (substring
@@ -459,6 +485,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // switching views never loses unsaved input.
   function captureDraft(): void {
     if (cardView === "text") writeVersionDesc(cardDescEl.value);
+    else if (cardView === "fields" && themeReader) writeVersionDesc(themeReader());
     else if (cardView === "fields" && cardFieldReaders) {
       const r = readCardFields(cardFieldReaders);
       writeVersionDesc(r.desc);
@@ -501,10 +528,10 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // The tools edit text, so they follow the two edit views. →.4s additionally
     // needs the raw 4s editor it types into.
     ui.editTools.hidden = view === "preview";
-    ui.addVersion.hidden = !fieldsAvailable();
+    ui.addVersion.hidden = !fieldsAvailable() || isTheme();
     renderVersionTabs();
     ui.typo.hidden = false;
-    ui.to4s.hidden = view !== "text" || !fieldsAvailable();
+    ui.to4s.hidden = view !== "text" || !fieldsAvailable() || isTheme();
     ui.descLabel.textContent = S.card.view.descLabel();
     if (view === "text") {
       const ta = cardDescEl;
@@ -529,7 +556,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
 
   // buildField is the generic absent/present field control: a "+ label" pill when
   // absent, a labelled input with a "×" (back to absent) when present.
-  function buildField(label: string, kind: "area" | "input", initial: string | null | undefined, opts: { muted?: boolean; open?: boolean; rows?: number } = {}): FieldReader<string | null> {
+  function buildField(label: string, kind: "area" | "input", initial: string | null | undefined, opts: { muted?: boolean; open?: boolean; rows?: number; suggest?: string[] } = {}): FieldReader<string | null> {
     const wrap = el("div", { class: "fld" + (opts.muted ? " fld-muted" : "") });
     const addBtn = el("button", { class: "fld-add", type: "button", text: S.card.field.add(label), title: S.card.field.addTitle() });
     const rmBtn = el("button", { class: "fld-rm", type: "button", text: "×", title: S.card.field.removeTitle() });
@@ -537,7 +564,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const input = (kind === "area"
       ? el("textarea", { class: "card-desc fld-input", spellcheck: "false", rows: String(opts.rows || 1) })
       : el("input", { class: "input fld-input", type: "text" })) as HTMLTextAreaElement | HTMLInputElement;
-    const body = el("div", { class: "fld-body" }, input);
+    const body = el("div", { class: "fld-body" },
+      opts.suggest && kind === "input" ? suggestWrap(input as HTMLInputElement, opts.suggest) : input);
     if (kind === "area") autoGrow(input as HTMLTextAreaElement);
     let present = initial !== null && initial !== undefined;
     if (present) input.value = initial as string;
@@ -715,6 +743,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // renderCardFields rebuilds the fields editor from the current draft (and handout
   // settings). The last field (handout-gen markup) binds to draft.meta, not the 4s.
   function renderCardFields(): void {
+    if (isTheme()) { renderThemeFields(); return; }
     const f = xyChgk.splitFields(versionDesc());
     // A brand-new card pre-fills the user's default author (a /profile setting)
     // and opens the two fields every question has, ready to type into.
@@ -724,10 +753,26 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     cardFieldsExtra = f.extra;
     const box = cardFieldsEl;
     box.replaceChildren();
+    const R = buildQuestionFields(f, { open: fresh });
+    themeReader = null;
+    box.append(...R.nodes, R.hndt.node);
+    // Size pre-filled fields now they're in the live DOM (scrollHeight is 0 while
+    // detached, so the fit during buildField is a no-op for visible content).
+    for (const ta of box.querySelectorAll("textarea")) fitTextarea(ta);
+    cardFieldReaders = R.readers;
+  }
+
+  // buildQuestionFields is one question's field set — the whole of Fields on an OD
+  // card, and one rung of the ladder on a SI one. The handout-generation markup
+  // rides along as its own node rather than inside `nodes`: it binds to the
+  // draft's meta rather than to the 4s, and a theme does not show it at all
+  // (the handouts panel keys its settings by question number, and every theme
+  // has a № 10).
+  function buildQuestionFields(f: CardFields, opts: { open?: boolean } = {}): { nodes: HTMLElement[]; hndt: FieldReader<string | null>; readers: FieldReaders } {
     const R: FieldReaders = {
       handout: buildHandoutField(f.handout),
-      question: buildField(S.card.field.question(), "area", f.question, { open: fresh }),
-      answer: buildField(S.card.field.answer(), "area", f.answer, { open: fresh }),
+      question: buildField(S.card.field.question(), "area", f.question, { open: opts.open }),
+      answer: buildField(S.card.field.answer(), "area", f.answer, { open: opts.open }),
       // Three lines, and growing: a zachet is a list of accepted wordings, and
       // one line of it was a slot you wrote a paragraph through.
       zachet: buildField(S.card.field.zachet(), "area", f.zachet, { rows: 3 }),
@@ -737,11 +782,100 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       authors: buildAuthorsField(f.authors, boardAuthors(), f.authorLabel),
       hndt: buildField(S.card.field.hndt(), "area", draft.meta, { muted: true }),
     };
-    for (const k of ["handout", "question", "answer", "zachet", "nezachet", "comment", "sources", "authors", "hndt"] as const) box.append(R[k].node);
-    // Size pre-filled fields now they're in the live DOM (scrollHeight is 0 while
-    // detached, so the fit during buildField is a no-op for visible content).
+    const order = ["handout", "question", "answer", "zachet", "nezachet", "comment", "sources", "authors"] as const;
+    return { nodes: order.map((k) => R[k].node), hndt: R.hndt, readers: R };
+  }
+
+  // readQuestionFields collapses one field set back into a field record. `pre` is
+  // the markup the editor doesn't model (a № line and friends) — nothing on a
+  // theme's rung, whose № the ladder owns.
+  function readQuestionFields(R: FieldReaders, pre: string | null, extra: string | null): CardFields {
+    const authors = R.authors.read();
+    return {
+      preMarkup: pre,
+      handout: R.handout.read(),
+      question: R.question.read(),
+      answer: R.answer.read(),
+      zachet: R.zachet.read(),
+      nezachet: R.nezachet.read(),
+      comment: R.comment.read(),
+      sources: R.sources.read(),
+      authors: authors.names,
+      authorLabel: authors.label,
+      extra,
+    };
+  }
+
+  // ---- SI themes ----
+  // renderThemeFields draws a theme: its head, then one flat block per rung of
+  // the ladder, each the ordinary field set under a № head carrying ↑ / ↓ / 🗑.
+  // It draws the slots the 4s holds and no others — the creation template writes
+  // five, an import brings what it brought, and nothing here invents one.
+  function renderThemeFields(): void {
+    const t = splitTheme(versionDesc());
+    const fresh = freshCard && !draft.desc.trim();
+    if (fresh && t.author === null && state().defaultAuthor) t.author = state().defaultAuthor;
+    const box = cardFieldsEl;
+    box.replaceChildren();
+    cardFieldReaders = null;
+    cardFieldsPre = cardFieldsExtra = null;
+
+    const nameInput = el("input", { class: "input fld-input", type: "text", value: t.name }) as HTMLInputElement;
+    box.append(el("div", { class: "fld fld-present" },
+      el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: S.card.field.themeName() })),
+      el("div", { class: "fld-body" }, nameInput)));
+    const author = buildField(S.card.field.themeAuthor(), "input", t.author, { suggest: boardAuthors() });
+    const comment = buildField(S.card.field.themeComment(), "area", t.comment);
+    box.append(author.node, comment.node);
+
+    // Reading the whole theme back before every structural change is what keeps
+    // an in-flight edit from being reshuffled away — the discipline applyVersions
+    // follows on an OD card.
+    const readers: FieldReaders[] = [];
+    const current = (): Theme => ({
+      name: nameInput.value,
+      author: author.read(),
+      comment: comment.read(),
+      headExtra: t.headExtra,
+      slots: t.slots.map((s, i) => ({
+        number: s.number,
+        fields: readers[i] ? readQuestionFields(readers[i], null, s.fields.extra) : s.fields,
+      })),
+    });
+    const redraw = (next: Theme): void => { writeVersionDesc(composeTheme(next)); renderThemeFields(); refreshSaveState(); };
+
+    t.slots.forEach((slot, i) => {
+      const act = (glyph: "arrow-up" | "arrow-down" | "trash-2", title: string, aria: string, run: () => Theme): HTMLElement => {
+        const b = el("button", { class: "vtab-act", type: "button", title, "aria-label": aria }, icon(glyph));
+        b.addEventListener("click", () => redraw(run()));
+        return b;
+      };
+      const acts: HTMLElement[] = [];
+      if (i > 0) acts.push(act("arrow-up", S.card.slot.upTitle(), S.card.slot.upAria(), () => swapSlots(current(), i, i - 1)));
+      if (i < t.slots.length - 1) acts.push(act("arrow-down", S.card.slot.downTitle(), S.card.slot.downAria(), () => swapSlots(current(), i, i + 1)));
+      acts.push(act("trash-2", S.card.slot.removeTitle(), S.card.slot.removeAria(), () => {
+        const c = current();
+        return { ...c, slots: c.slots.filter((_, j) => j !== i) };
+      }));
+      box.append(el("div", { class: "fld-wide slot-head u-row u-gap-sm u-align-center u-justify-between" },
+        el("span", { class: "slot-points", text: S.card.slot.head(slot.number) }),
+        el("div", { class: "u-row u-gap-xs" }, ...acts)));
+      const R = buildQuestionFields(slot.fields);
+      readers.push(R.readers);
+      box.append(el("div", { class: "card-fields fld-wide" }, ...R.nodes));
+    });
+
+    const addBtn = (label: string, title: string, reserve: boolean): HTMLElement => {
+      const b = el("button", { class: "fld-add", type: "button", text: label, title });
+      b.addEventListener("click", () => redraw(withSlot(current(), reserve)));
+      return b;
+    };
+    box.append(el("div", { class: "fld-wide u-row u-gap-sm" },
+      addBtn(S.card.slot.add(), S.card.slot.addTitle(), false),
+      addBtn(S.card.slot.addReserve(), S.card.slot.addReserveTitle(), true)));
+
     for (const ta of box.querySelectorAll("textarea")) fitTextarea(ta);
-    cardFieldReaders = R;
+    themeReader = (): string => composeTheme(current());
   }
 
   // ---- versions ----
@@ -787,6 +921,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   function selectVersion(i: number): void {
     versionIdx = i;
     cardFieldReaders = null;
+    themeReader = null;
     cardDescEl.value = versionDesc();
     setCardView(cardView || "fields");
     refreshSaveState();
@@ -804,7 +939,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     if (versionIdx >= n) versionIdx = n - 1;
     // All three views are scoped to one version now, text included, so the strip
     // belongs above every one of them.
-    const show = n > 1 && fieldsAvailable();
+    const show = n > 1 && fieldsAvailable() && !isTheme();
     box.hidden = !show;
     if (!show) { box.replaceChildren(); return; }
     const nodes: HTMLElement[] = [];
@@ -840,21 +975,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // readCardFields collapses the fields editor back into a 4s description + handout
   // settings, preserving the pre-question and unmodelled blocks captured at render time.
   function readCardFields(R: FieldReaders): { desc: string; meta: string | null } {
-    const authors = R.authors.read();
-    const rec: Partial<CardFields> = {
-      preMarkup: cardFieldsPre,
-      handout: R.handout.read(),
-      question: R.question.read(),
-      answer: R.answer.read(),
-      zachet: R.zachet.read(),
-      nezachet: R.nezachet.read(),
-      comment: R.comment.read(),
-      sources: R.sources.read(),
-      authors: authors.names,
-      authorLabel: authors.label,
-      extra: cardFieldsExtra,
-    };
-    return { desc: xyChgk.composeFields(rec), meta: R.hndt.read() };
+    return { desc: xyChgk.composeFields(readQuestionFields(R, cardFieldsPre, cardFieldsExtra)), meta: R.hndt.read() };
   }
 
   // renderCardPreview renders the open card's draft the docx way (single-card
@@ -864,7 +985,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     if (!draft.desc.trim()) { body.replaceChildren(el("p", { class: "pv-empty", text: S.card.preview.empty() })); return; }
     const c = openCardCard();
     const card: PreviewCardLike = { id: c ? c.id : 0, kind: draftKind(), desc: versionDesc(), listId: c ? c.listId : 0 };
-    const number = card.kind === "question" ? deps.questionNumberFor(card) : null;
+    const number = card.kind === "question" || card.kind === "theme" ? deps.questionNumberFor(card) : null;
     const reqId = openCardId;
     const screen = ui.previewScreen.checked;
     const imgMap = new Map<string, string>();
@@ -1057,7 +1178,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     ui.title.hidden = true;
     // The "copy for testing" action only makes sense for question cards (it shares
     // the numbered, screen-mode question text); hide it otherwise.
-    ui.copy.hidden = card.kind !== "question";
+    ui.copy.hidden = card.kind !== "question" && card.kind !== "theme";
     ui.copyMsg.hidden = true;
     // The exit says what it does: opened from a list preview, closing lands back
     // in that preview, so it is ← (back); opened from the board, it is × (close).
@@ -1356,10 +1477,33 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const card = openCardCard();
     if (!card) return;
     captureDraft(); // copy what is on screen, not what was last saved
-    const targets = xyChgk.copyTargets(versionDesc(), deps.questionNumberFor(card));
+    const targets = isTheme()
+      ? themeCopyTargets(versionDesc(), deps.questionNumberFor(card))
+      : xyChgk.copyTargets(versionDesc(), deps.questionNumberFor(card));
     if (targets.length === 1) { copyAndReport(targets[0]); return; }
     deps.popupMenu(ui.copy, targets.map((t) => ({ label: t.label, onClick: () => copyAndReport(t) })));
   });
+
+  // themeCopyTargets is a theme's send order: the theme itself, then every written
+  // question's own targets — handout first, blitz legs apart — each prefixed by
+  // its rung so the list says what is being pasted. A theme is sent to testers a
+  // question at a time, like everything else here.
+  function themeCopyTargets(desc: string, number: string | null): CopyTarget[] {
+    const t = splitTheme(desc);
+    const label = S.fsource.theme.defaultLabel(number ?? "", t.name);
+    const out: CopyTarget[] = [{ label: S.card.slot.copyTheme(), text: label }];
+    const whole: string[] = [label];
+    for (const slot of t.slots) {
+      if (!isFilled(slot)) continue;
+      const head = S.card.slot.head(slot.number);
+      for (const c of xyChgk.copyTargets(xyChgk.composeFields(slot.fields), slot.number)) {
+        out.push({ ...c, label: `${head}: ${c.label}` });
+      }
+      whole.push(S.card.slot.copyQuestion(slot.number, xyChgk.screenText(slot.fields.question ?? "")));
+    }
+    out.push({ label: S.card.slot.copyWhole(), text: whole.join("\n\n") });
+    return out;
+  }
 
   // hideCard is the card's teardown, run by the overlay stack when the card is
   // dismissed — by ↩️, Escape, Android's back button or the backdrop, all of

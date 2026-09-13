@@ -26,6 +26,9 @@ type Config struct {
 	BodyPt, Heading1Pt, Heading2Pt, SourcePt float64
 	HeadingAbove, HeadingBelow               float64
 	QuestionAbove, AnswerAbove, SourceGap    float64
+	// SI only: a theme is a Heading 3, and its questions sit tighter under it
+	// than a ChGK question does under its own label.
+	Heading3Pt, ThemeAbove, SIQuestionAbove float64
 }
 
 // DefaultConfig is the pdf_config.toml chgksuite ships.
@@ -36,6 +39,7 @@ func DefaultConfig() Config {
 		BodyPt: 12, Heading1Pt: 16, Heading2Pt: 14, SourcePt: 10,
 		HeadingAbove: 12, HeadingBelow: 3,
 		QuestionAbove: 18, AnswerAbove: 6,
+		Heading3Pt: 13, ThemeAbove: 24, SIQuestionAbove: 12,
 		// The shrunk source block starts one body line below: 2pt × Noto Sans's
 		// 1.362em line box (ascender 1.069 + descender 0.293).
 		SourceGap: 2.72,
@@ -59,7 +63,13 @@ type Options struct {
 	// LabelsFile is --labels_file: a labels TOML of one's own, in place of the
 	// language's.
 	LabelsFile string
+	// Game is --game: "si"/"troika" lay the package out as SI, with themes,
+	// battles and rounds as headings. See docx.Options.Game.
+	Game string
 }
+
+// siMode reports whether the game lays a package out as SI does.
+func (o Options) siMode() bool { return o.Game == "si" || o.Game == "troika" }
 
 func (o Options) resolve() Options {
 	if o.Config == (Config{}) {
@@ -97,7 +107,9 @@ func ParseConfig(text string) (Config, error) {
 		"font.heading2_pt": &c.Heading2Pt, "font.source_pt": &c.SourcePt,
 		"spacing.heading_above": &c.HeadingAbove, "spacing.heading_below": &c.HeadingBelow,
 		"spacing.question_above": &c.QuestionAbove, "spacing.answer_above": &c.AnswerAbove,
-		"spacing.source_gap": &c.SourceGap,
+		"spacing.source_gap":  &c.SourceGap,
+		"font.heading3_pt":    &c.Heading3Pt,
+		"spacing.theme_above": &c.ThemeAbove, "spacing.si_question_above": &c.SIQuestionAbove,
 	}
 	table := ""
 	for n, line := range strings.Split(text, "\n") {

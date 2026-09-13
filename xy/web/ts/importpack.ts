@@ -40,7 +40,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
   interface ImportPkg { name: string; source: string; images?: ImportImage[] }
 
   // importCtx holds the package awaiting confirmation on the verification screen.
-  let importCtx: { name: string; images: ImportImage[]; imgMap: Map<string, string>; splitTours: boolean } | null = null;
+  let importCtx: { name: string; images: ImportImage[]; imgMap: Map<string, string>; splitTours: boolean; game: string } | null = null;
 
   const importPickModal = modal("importPick");
 
@@ -82,28 +82,32 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     const file = files && files[0];
     if (!file) return;
     const splitTours = byId<HTMLInputElement>("importSplitTours").checked;
+    const game = byId<HTMLSelectElement>("importGame").value;
     importPickModal.close();
     const bundle = sniffed ?? await sniffBundle(file);
     if (bundle) {
       bundles.openWith(file, bundle.bundle, bundle.bytesOf);
       return;
     }
-    await importFile(file, splitTours);
+    await importFile(file, splitTours, game);
   });
 
-  async function importFile(file: File, splitTours: boolean): Promise<void> {
+  async function importFile(file: File, splitTours: boolean, game: string): Promise<void> {
     if (!xySync.requireOnline(S.import.pack.offline())) return;
     board.setStatus("saving");
     try {
       const fd = new FormData();
       fd.append("file", file, file.name);
+      // SI themes are read by a different parser off the document's own outline,
+      // so the choice is the reader's rather than a guess about the file.
+      fd.append("game", game === "si" ? "si" : "chgk");
       const res = await fetch("/api/import/parse", { method: "POST", credentials: "same-origin", body: fd });
       if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
       const pkg = (await res.json()) as ImportPkg;
       board.setStatus("saved");
       // A .docx parse is a guess; let the user check it before it becomes a list.
-      if (/\.docx$/i.test(file.name)) openImportVerify(pkg, splitTours);
-      else await commitImport(pkg.name, pkg.source, pkg.images, splitTours);
+      if (/\.docx$/i.test(file.name)) openImportVerify(pkg, splitTours, game);
+      else await commitImport(pkg.name, pkg.source, pkg.images, splitTours, game);
     } catch (err) {
       board.setStatus("error");
       alert(S.import.pack.parseFailed(errMsg(err)));
@@ -116,12 +120,26 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
 
   // importCards splits 4s source the way the export path joins it: one card per
   // blank-line-separated block. Each card's kind comes from its leading marker.
-  function importCards(source: string): ImportCard[] {
-    return source
-      .split(/\n[ \t]*\n/)
-      .map((b) => b.trim())
-      .filter(Boolean)
-      .map((desc, i) => ({ id: -(i + 1), kind: importKind(desc), desc }));
+  function importCards(source: string, game: string): ImportCard[] {
+    const blocks = source.split(/\n[ \t]*\n/).map((b) => b.trim()).filter(Boolean);
+    // A SI package is one card per theme, not per question: a "#T …" block opens
+    // one and every block after it belongs to it until the next.
+    const joined = game === "si" ? joinThemes(blocks) : blocks;
+    return joined.map((desc, i) => ({ id: -(i + 1), kind: importKind(desc), desc }));
+  }
+
+  // joinThemes folds a SI package's blocks back into whole themes. Blocks before
+  // the first "#T" are the package's own preamble and stay one card each.
+  function joinThemes(blocks: string[]): string[] {
+    const out: string[] = [];
+    let open = false;
+    for (const b of blocks) {
+      const opensTheme = xyChgk.parseBlocks(b).some((x) => x.type === "theme");
+      if (opensTheme) { out.push(b); open = true; continue; }
+      if (open) out[out.length - 1] += "\n\n" + b;
+      else out.push(b);
+    }
+    return out;
   }
 
   // importKind maps a 4s block to an xy card kind. A question is recognised by its
@@ -130,6 +148,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
   // didn't prefix it.
   function importKind(desc: string): string {
     const blocks = xyChgk.parseBlocks(desc);
+    if (blocks.some((b) => b.type === "theme")) return "theme";
     if (blocks.some((b) => b.type === "question" || b.type === "answer" || b.type === "pre")) return "question";
     if (blocks.some((b) => b.type === "heading" || b.type === "ljheading")) return "heading";
     return "meta";
@@ -146,9 +165,9 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     return map;
   }
 
-  function openImportVerify(pkg: ImportPkg, splitTours: boolean): void {
+  function openImportVerify(pkg: ImportPkg, splitTours: boolean, game: string): void {
     importModal.close();
-    importCtx = { name: pkg.name, images: pkg.images || [], imgMap: importImgMap(pkg.images), splitTours };
+    importCtx = { name: pkg.name, images: pkg.images || [], imgMap: importImgMap(pkg.images), splitTours, game };
     byId("importTitle").textContent = S.import.pack.verifyTitle(pkg.name);
     const src = byId<HTMLTextAreaElement>("importSource");
     src.value = pkg.source;
@@ -166,11 +185,11 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     const ctx = importCtx;
     if (!ctx) return;
     const body = byId("importPreview");
-    const cards = importCards(byId<HTMLTextAreaElement>("importSource").value);
+    const cards = importCards(byId<HTMLTextAreaElement>("importSource").value, importCtx?.game ?? "chgk");
     const numbers = xyChgk.numberQuestionCards(cards);
     body.replaceChildren();
     cards.forEach((card, i) => body.append(renderPreviewCard(card, numbers[i], ctx.imgMap, false)));
-    const qs = cards.filter((c) => c.kind === "question").length;
+    const qs = cards.filter((c) => c.kind === "question" || c.kind === "theme").length;
     byId("importCount").textContent = S.import.pack.blockCount(String(cards.length), String(qs));
   }
 
@@ -183,10 +202,10 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
   byId("importSource").addEventListener("input", debounceImportPreview());
   byId("importCommit").addEventListener("click", async () => {
     if (!importCtx) return;
-    const { name, images, splitTours } = importCtx;
+    const { name, images, splitTours, game } = importCtx;
     const source = byId<HTMLTextAreaElement>("importSource").value;
     importModal.close();
-    await commitImport(name, source, images, splitTours);
+    await commitImport(name, source, images, splitTours, game);
   });
 
   // Re-rendering the whole preview on every keystroke is wasteful on a big package.
@@ -230,8 +249,8 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
   // outbox: an import is online-only anyway, and mutate() hands back a negative
   // temp id whenever the queue is non-empty — which the attachment upload, a plain
   // POST to /api/cards/{id}/attachments, cannot use. Going direct keeps every id real.
-  async function commitImport(name: string, source: string, images: ImportImage[] | undefined, splitTours: boolean): Promise<void> {
-    const cards = importCards(source);
+  async function commitImport(name: string, source: string, images: ImportImage[] | undefined, splitTours: boolean, game: string): Promise<void> {
+    const cards = importCards(source, game);
     if (!cards.length) { alert(S.import.pack.noQuestions()); return; }
     if (!xySync.requireOnline(S.import.pack.offline())) return;
     const tours = splitTours ? splitCardsByTours(cards) : [];
@@ -242,6 +261,9 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     const parts = grouped ? tours : [{ title, cards }];
 
     board.setStatus("saving");
+    // The lists this makes are typed by what was imported, so the add-card
+    // button goes on making the right kind of card afterwards.
+    const listType = game === "si" ? "si" : "normal";
     const byName = new Map((images || []).map((i): [string, ImportImage] => [i.name, i]));
     let done = 0, attached = 0;
     const failed: string[] = []; // images the server refused — the card would keep a dead (img …)
@@ -253,10 +275,10 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
       for (const part of parts) {
         rank = keyBetween(rank, null);
         const lres = (await jpost(`/api/boards/${board.id}/lists`, {
-          title_enc: await xyCrypto.encField(key, part.title), rank, type: "normal",
+          title_enc: await xyCrypto.encField(key, part.title), rank, type: listType,
         })) as { id: number };
         listIds.push(lres.id);
-        board.state.lists.push({ id: lres.id, type: "normal", rank, groupId: null, title: part.title });
+        board.state.lists.push({ id: lres.id, type: listType, rank, groupId: null, title: part.title });
 
         let cardRank: string | null = null;
         for (const c of part.cards) {

@@ -1945,3 +1945,41 @@ body {
 .replace-hit-text { font-size: var(--text-sm); color: var(--text-muted); }
 .replace-hit-text del { color: var(--muted); }
 .replace-hit-text ins { font-weight: var(--fw-bold); text-decoration: none; }
+
+/* ── темы СИ: the ladder inside Поля ──────────────────────────────────────── */
+/* A theme card's Поля is the ordinary field grid repeated once per rung, each
+   under a rule carrying its point value and the two buttons that move it. The
+   rule is the only thing separating one question from the next in a flat form
+   that can run to five field sets, so it is a real line, not a gap. Layout is
+   .fld-wide (a full row of the field grid) and the kit's .u-row — nothing here
+   re-invents either. */
+.slot-head {
+  border-top: 1px solid var(--grid-dark);
+  padding-top: var(--space-2);
+  margin-top: var(--space-2);
+}
+.slot-points {
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* «3/5» on a theme card: how much of it is written. Muted and pushed to the end
+   of the title line, so it reads as a gauge beside the name rather than as part
+   of it. */
+.kcard-progress {
+  float: right;
+  margin-left: var(--space-2);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A theme in Просмотр: its questions sit under the theme's heading, indented
+   just enough to say they belong to it — and spaced apart from each other. The
+   card preview zeroes .pv-q's bottom margin because an ОД card shows exactly one
+   question and the margin would be a trailing gap; a theme shows five, so the
+   gap between them is the only thing telling one from the next. */
+.pv-theme .pv-q { margin-left: var(--space-3); }
+.card-preview-body .pv-theme .pv-q { margin-bottom: var(--space-4); }
+.card-preview-body .pv-theme .pv-q:last-child { margin-bottom: 0; }

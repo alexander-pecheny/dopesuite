@@ -93,7 +93,7 @@ func (s *server) handleCreateList(w http.ResponseWriter, r *http.Request) {
 	if typ == "" {
 		typ = "normal"
 	}
-	if typ != "normal" && typ != "test" {
+	if !validListType(typ) {
 		httpError(w, http.StatusBadRequest, "bad list type")
 		return
 	}
@@ -115,9 +115,22 @@ insert into lists(board_id, type, title_enc, rank, created_at, updated_at) value
 	writeJSON(w, map[string]any{"id": id})
 }
 
+// validListType allowlists the list types the client may set (mirrors the
+// lists.type CHECK constraint). 'si' is a list of SI theme's, 'normal' one of OD
+// questions; the type decides what kind of card the add-card button makes, and
+// nothing else.
+func validListType(typ string) bool {
+	switch typ {
+	case "normal", "test", "si":
+		return true
+	}
+	return false
+}
+
 type patchListRequest struct {
 	TitleEnc *string `json:"title_enc"`
 	Rank     *string `json:"rank"`
+	Type     *string `json:"type"`
 }
 
 func (s *server) handlePatchList(w http.ResponseWriter, r *http.Request) {
@@ -140,6 +153,12 @@ func (s *server) handlePatchList(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Rank != nil {
 			p.set("rank", *req.Rank)
+		}
+		if req.Type != nil {
+			if !validListType(*req.Type) {
+				return corei18n.User("bad list type")
+			}
+			p.set("type", *req.Type)
 		}
 		return p.apply(ctx, tx, "lists", listID)
 	})

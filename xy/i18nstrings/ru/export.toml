@@ -16,6 +16,9 @@ select_all = "Выбрать все"
 deselect_all = "Снять выделение"
 
 [notes]
+# Said on a СИ tour: pptx, openquiz, telegram and раздатки drop theme headings,
+# so they are greyed out rather than quietly shipping a flat package.
+si_formats = "Темы СИ пока умеют только .si4s, .docx и .pdf — остальные форматы теряют заголовки тем."
 # Pre-flight notes the modal opens with.
 offline = "Офлайн: доступен только .4s, без изображений."
 no_handouts = "В списке нет вопросов с раздаточным материалом."

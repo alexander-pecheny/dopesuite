@@ -64,6 +64,7 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
     headrow kind="detail"
       selectfield id="cardKind" compact aria-label=@board.card.kind_label
         option value="question" @board.card.kind_question
+        option value="theme" @board.card.kind_theme
         option value="meta" @board.card.kind_meta
         option value="heading" @board.card.kind_heading
         option value="other" @board.card.kind_other
@@ -307,8 +308,11 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
   modal id="importPickOverlay" label=@board.importpick.title title=@board.importpick.title
     form id="importPickForm" dir="col"
       hint @board.importpick.hint
-      filefield id="importFile" accept=".4s,.zip,.docx" required
+      filefield id="importFile" accept=".4s,.si4s,.zip,.docx" required
       hint id="importPickWhat"
+      selectfield id="importGame" title=@board.list.type_label
+        option value="normal" @board.list.type_chgk
+        option value="si" @board.list.type_si
       checkbox id="importSplitTours" title=@board.importpick.split_title @board.importpick.split_label
       row gap="sm" wrap
         button submit @board.importpick.submit

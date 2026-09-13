@@ -142,6 +142,7 @@ export type Strings = {
       kindMeta: () => string;
       kindOther: () => string;
       kindQuestion: () => string;
+      kindTheme: () => string;
       labelAdd: () => string;
       linkLabel: () => string;
       linkTitle: () => string;
@@ -193,9 +194,11 @@ export type Strings = {
       title: () => string;
     };
     count: {
+      both: (questions: string, themes: string) => string;
       cards: (n: number) => string;
       filtered: (shown: string, total: string) => string;
       questions: (n: number) => string;
+      themes: (n: number) => string;
     };
     delete: {
       continueQ: () => string;
@@ -352,6 +355,12 @@ export type Strings = {
       groupFallback: () => string;
       groupTitle: () => string;
       menuTitle: () => string;
+      typeChange: () => string;
+      typeChgk: () => string;
+      typeConfirm: (to: string, hint: string) => string;
+      typeHint: () => string;
+      typeLabel: () => string;
+      typeSi: () => string;
       untitled: () => string;
     };
     listsmanage: {
@@ -665,6 +674,9 @@ export type Strings = {
       removeRowTitle: () => string;
       removeTitle: () => string;
       source: () => string;
+      themeAuthor: () => string;
+      themeComment: () => string;
+      themeName: () => string;
       zachet: () => string;
     };
     handout: {
@@ -713,6 +725,24 @@ export type Strings = {
       label: () => string;
       labelExceptCommon: () => string;
       showAll: () => string;
+    };
+    slot: {
+      add: () => string;
+      addReserve: () => string;
+      addReserveTitle: () => string;
+      addTitle: () => string;
+      copyQuestion: (points: string, text: string) => string;
+      copyTheme: () => string;
+      copyWhole: () => string;
+      downAria: () => string;
+      downTitle: () => string;
+      head: (points: string) => string;
+      progress: (filled: string, total: string) => string;
+      progressTitle: () => string;
+      removeAria: () => string;
+      removeTitle: () => string;
+      upAria: () => string;
+      upTitle: () => string;
     };
     to4s: {
       failed: (error: string) => string;
@@ -1219,6 +1249,7 @@ export type Strings = {
     notes: {
       noHandouts: () => string;
       offline: () => string;
+      siFormats: () => string;
     };
     run: {
       failed: (error: string) => string;
@@ -1231,6 +1262,7 @@ export type Strings = {
   fsource: {
     theme: {
       defaultLabel: (n: string, name: string) => string;
+      reserveNumber: (n: string) => string;
     };
   };
   gallery: {

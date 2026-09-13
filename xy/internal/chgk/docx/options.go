@@ -29,7 +29,14 @@ type Options struct {
 	Font string
 	// Template is --docx_template: a .docx to build on. nil is the embedded one.
 	Template []byte
+	// Game is --game. "si" and "troika" switch on si_mode: themes, battles and
+	// rounds become headings, a stand-alone author or comment is a theme-level
+	// field, and a question is labelled by its bare point value under its theme.
+	Game string
 }
+
+// siMode reports whether the game lays a package out as SI does.
+func (o Options) siMode() bool { return o.Game == "si" || o.Game == "troika" }
 
 // Spoilers says how the answers are hidden from a reader of the printout.
 type Spoilers string

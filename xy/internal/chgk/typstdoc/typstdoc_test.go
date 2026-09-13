@@ -212,3 +212,50 @@ func testPNG(t *testing.T) []byte {
 	}
 	return b
 }
+
+const siSample = `#B 1/16 финала. 1 бой
+
+#R Открытый раунд
+
+#T Острова Тихого океана
+@ Александр Рождествин
+/ вся тема про острова.
+
+№ 10
+? Первый вопрос.
+! Гавайи.
+
+№ 20
+? Второй вопрос.
+! Сахалин.
+
+#T Холодное оружие
+
+№ 10
+? Третий вопрос.
+! Швейцарский нож.
+`
+
+// The СИ layout the docx export gained has to reach the PDF too: a theme is a
+// heading rather than a dropped element, and a question is labelled by its bare
+// point value and runs on from it.
+func TestGenerateTypSI(t *testing.T) {
+	doc := fsource.Parse(siSample, "si")
+	typ := typstdoc.GenerateTyp(doc, nil, typstdoc.Options{Game: "si"})
+
+	for _, want := range []string{
+		`text("1/16 финала. 1 бой")`,
+		`text("Открытый раунд")`,
+		`text("Тема 1. Острова Тихого океана")`,
+		`text("Тема 2. Холодное оружие")`,
+		`text("Александр Рождествин")`, // the theme's own author
+		`weight: "bold", "10. "`,       // the bare point value, not «Вопрос 1.»
+	} {
+		if !strings.Contains(typ, want) {
+			t.Errorf("generated source is missing %q\n---\n%s", want, typ)
+		}
+	}
+	if strings.Contains(typ, "Вопрос 1. ") {
+		t.Errorf("СИ questions must not carry the ЧГК question label\n---\n%s", typ)
+	}
+}

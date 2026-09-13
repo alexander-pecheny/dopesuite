@@ -162,3 +162,38 @@ func TestDocxBodyParity(t *testing.T) {
 		})
 	}
 }
+
+// TestDocxSIParity is the same two checks on the СИ layout: themes, battles,
+// rounds and the theme-level author/comment, against chgksuite's own output for
+// the same source read as a .si4s (which is how its CLI picks the game up).
+func TestDocxSIParity(t *testing.T) {
+	files, _ := filepath.Glob("testdata/si/*.4s")
+	if len(files) == 0 {
+		t.Skip("no si testdata")
+	}
+	for _, f := range files {
+		name := strings.TrimSuffix(filepath.Base(f), ".4s")
+		t.Run(name, func(t *testing.T) {
+			oracle, err := os.ReadFile(filepath.Join("testdata", "si", name+".docx"))
+			if err != nil {
+				t.Skipf("no oracle: %v", err)
+			}
+			src, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			mine, err := Export(fsource.Parse(string(src), "si"), nil, Options{Game: "si"})
+			if err != nil {
+				t.Fatalf("export: %v", err)
+			}
+			if want, got := docText(t, oracle), docText(t, mine); want != got {
+				t.Errorf("text mismatch\n--- chgksuite ---\n%q\n--- go ---\n%q", want, got)
+			}
+			want := stripSrcSz(bodyXML(documentXML(t, oracle)))
+			got := stripSrcSz(bodyXML(documentXML(t, mine)))
+			if want != got {
+				t.Errorf("body XML mismatch\n--- chgksuite ---\n%s\n--- go ---\n%s", want, got)
+			}
+		})
+	}
+}

@@ -11,7 +11,18 @@ One encrypted workspace: lists of cards under a single passphrase-derived key, w
 One ordered column of Cards on a Board.
 
 **Card**:
-One question (or note): encrypted content in 4s form, plus Labels, Timeline, Attachments, and an optional Alias.
+One question, one Theme, or a note: encrypted content in 4s form, plus Labels, Timeline, Attachments, and an optional Alias.
+
+**Theme (тема СИ)**:
+One Своя игра theme, as one Card: a name, an optional author and comment of its own, and a **Ladder** of questions. Its questions are ordinary questions in every way but their number, which is their point value. A theme is written, tested and judged as a set — the 30 being easier than the 20 is a fault of the theme, not of either question — which is why it is one Card and not five (ADR-0018).
+_Avoid_: round, category, block
+
+**Ladder**:
+A Theme's questions in order, each under its own `№`. The order IS the points: the first is worth what its `№` says, and moving a question up swaps it with its neighbour's CONTENT while the `№` values stay where they are — so a theme numbered 10/30/50 by an import, or one running past 50, survives being reordered. Past the five that are played, the rungs are `запас1`, `запас2`. A blank rung is real 4s and holds its place, which is what lets the 50 be written before the 10.
+_Avoid_: slot order as separate from points (they are one thing)
+
+**List Type**:
+What a List holds — вопросы ОД or темы СИ. It decides which kind of Card «Добавить карточку» makes and nothing else: both kinds stay offered on every Card, a mixed List is legal, and changing the type rewrites nothing.
 
 **Alias**:
 A Card's own short display label, stored as its own encrypted column — deliberately NOT a 4s marker, because markers mirror chgksuite byte-for-byte and an invented one would break import/export parity.

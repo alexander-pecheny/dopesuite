@@ -55,21 +55,23 @@ var imageExts = map[string]string{
 }
 
 // Parse imports one uploaded file. filename decides the format and gives the
-// package (and image-prefix) its name.
-func Parse(filename string, data []byte) (*Result, error) {
+// package (and image-prefix) its name; game is "" / "chgk" for OD questions and
+// "si" for SI themes, which are read by a different parser off the document's own
+// outline (textparse.ParseSI).
+func Parse(filename string, data []byte, game string) (*Result, error) {
 	base := strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename))
 	switch strings.ToLower(filepath.Ext(filename)) {
-	case ".4s":
+	case ".4s", ".si4s":
 		res := &Result{Name: base, Source: normalizeNewlines(string(data))}
-		return res, validate(res)
+		return res, validate(res, game)
 	case ".docx":
-		return parseDocx(base, data)
+		return parseDocx(base, data, game)
 	case ".zip":
 		res, err := parseZip(base, data)
 		if err != nil {
 			return nil, err
 		}
-		return res, validate(res)
+		return res, validate(res, game)
 	}
 	return nil, fmt.Errorf("%w: %s", ErrUnsupported, filepath.Ext(filename))
 }
@@ -85,23 +87,44 @@ func ParseText(text string) string {
 // validate runs a .4s through the 4s parser so a file that isn't really 4s
 // (or that holds nothing importable) fails here rather than becoming an empty
 // list. A .docx skips this: it came out of Compose and is 4s by construction.
-func validate(r *Result) error {
-	if len(fsource.Parse(r.Source, "chgk")) == 0 {
+func validate(r *Result, game string) error {
+	if len(fsource.Parse(r.Source, gameOrDefault(game))) == 0 {
 		return corei18n.User(xystrings.Default.Chgkimport.Error.NoQuestions())
 	}
 	return nil
 }
 
+// gameOrDefault maps an empty game onto ChGK, which is what every import was
+// before SI themes existed.
+func gameOrDefault(game string) string {
+	if game == "si" {
+		return "si"
+	}
+	return "chgk"
+}
+
 // parseDocx runs the full chgksuite pipeline: docx → plain text → structure → 4s.
-func parseDocx(base string, data []byte) (*Result, error) {
+// SI takes a different route through the same pipeline: its parser reads the
+// document's outline, so the reader marks headings and keeps a numbered list's
+// own start (the point values), and every number is written out (NumbersAll)
+// because a SI question's number IS its point value.
+func parseDocx(base string, data []byte, game string) (*Result, error) {
 	// chgksuite prefixes extracted image names with the source's basename, so the
 	// (img …) directives and the image names below agree.
 	prefix := strings.ReplaceAll(base, " ", "_") + "_"
-	text, imgs, err := docxread.ToText(data, docxread.Options{ImagePrefix: prefix})
+	si := gameOrDefault(game) == "si"
+	text, imgs, err := docxread.ToText(data, docxread.Options{
+		ImagePrefix:       prefix,
+		HeadingMarkers:    si,
+		PreserveListStart: si,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("read docx: %w", err)
 	}
 	source := fsource.Compose(textparse.Parse(text, textparse.Options{}), fsource.NumbersDefault)
+	if si {
+		source = fsource.Compose(textparse.ParseSI(text, textparse.SIOptions{}), fsource.NumbersAll)
+	}
 	res := &Result{Name: base, Source: source}
 	for _, img := range imgs {
 		res.Images = append(res.Images, Image{

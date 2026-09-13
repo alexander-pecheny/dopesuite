@@ -86,7 +86,7 @@ func (s *server) handleImportParse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := chgkimport.Parse(files[0].Filename, files[0].Data)
+	res, err := chgkimport.Parse(files[0].Filename, files[0].Data, exportGame(form.Value("game")))
 	if err != nil {
 		if errors.Is(err, chgkimport.ErrUnsupported) {
 			httpError(w, http.StatusBadRequest, xystrings.Default.Server.Import.Unsupported())

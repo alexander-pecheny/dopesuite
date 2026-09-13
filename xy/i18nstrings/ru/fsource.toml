@@ -4,3 +4,7 @@
 [theme]
 # The label a theme gets when its own line carries no "тема N." prefix.
 default_label = 'Тема {{.n}}. {{.name}}'
+# A theme's reserve questions: the № of the ones past the five that are played.
+# 4s content, not chrome — it is written into the question source and read back
+# out of an imported one, which is why it lives beside the theme label.
+reserve_number = 'запас{{.n}}'

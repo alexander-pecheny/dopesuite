@@ -99,6 +99,8 @@ submit = "Сменить"
 # Card detail overlay (cardOverlay): the kind picker and its options.
 kind_label = "Тип карточки"
 kind_question = "Вопрос"
+# A СИ theme: one card holding a ladder of questions, each worth its № in points.
+kind_theme = "Тема СИ"
 kind_meta = "Метаинформация"
 kind_heading = "Заголовок"
 kind_other = "Другое"
@@ -733,10 +735,24 @@ group_fallback = "связанные списки"
 # Placeholder of the add-list field and the ✓ submit button.
 add_placeholder = "+ Новый список"
 create = "Создать список"
+# What a list holds — the choice beside the name field, and the ⋯ entry that
+# changes it later. It decides which card «Добавить карточку» makes, nothing else:
+# both kinds stay offered on every card.
+type_label = "Что в списке"
+type_chgk = "Вопросы ОД"
+type_si = "Темы СИ"
+type_change = "Тип списка…"
+# Confirm before the swap; .hint is type_hint below.
+type_confirm = 'Список станет: {{.to}}. {{.hint}}'
+type_hint = "На уже созданные карточки не влияет."
 
 [count]
 # Question count under a list head ("5 вопросов").
 questions = '{{.n}} {{plural .n "вопрос" "вопроса" "вопросов"}}'
+# SI themes, counted where questions are: under a list head and in the crumb.
+themes = '{{.n}} {{plural .n "тема" "темы" "тем"}}'
+# Said by a board holding both — «12 вопросов, 4 темы».
+both = '{{.questions}}, {{.themes}}'
 # Filtered count ("1 из 4") shown while a label filter is on.
 filtered = '{{.shown}} из {{.total}}'
 # Card count, said wherever a bulk action reports on what it touched.

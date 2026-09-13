@@ -43,6 +43,38 @@ var docxFixtures = []string{
 	"СЧР_Шередега_Ермишкин.docx",
 }
 
+// siDocxFixtures are the СИ packages in chgksuite's corpus. They go through the
+// same endpoint with game "si", which is a different parser reading the
+// document's own outline — so the same byte-equality check is the guard.
+var siDocxFixtures = []string{
+	"schr16_ek_all.docx",
+	"schr18_otbor_ssi_all.docx",
+}
+
+// TestSIDocxCanonParity is TestDocxCanonParity for темы СИ.
+func TestSIDocxCanonParity(t *testing.T) {
+	dir := chgksuiteTests(t)
+	for _, name := range siDocxFixtures {
+		t.Run(name, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join(dir, name))
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, err := os.ReadFile(filepath.Join(dir, name+".canon"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			res, err := Parse(name, data, "si")
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if got, w := res.Source, strings.ReplaceAll(string(want), "\r\n", "\n"); got != w {
+				t.Errorf("source mismatch:\n%s", firstDiff(w, got))
+			}
+		})
+	}
+}
+
 // TestDocxCanonParity runs the whole pipeline the import endpoint runs — raw
 // .docx bytes in, 4s source out — and requires byte-equality with chgksuite.
 func TestDocxCanonParity(t *testing.T) {
@@ -57,7 +89,7 @@ func TestDocxCanonParity(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			res, err := Parse(name, data)
+			res, err := Parse(name, data, "")
 			if err != nil {
 				t.Fatalf("Parse: %v", err)
 			}
@@ -92,7 +124,7 @@ func TestSafeImageNamesFixesUnreadableDirectives(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := Parse(name, data)
+	res, err := Parse(name, data, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +163,7 @@ func TestZipRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := Parse("pack.zip", buf.Bytes())
+	res, err := Parse("pack.zip", buf.Bytes(), "")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -147,7 +179,7 @@ func TestZipRoundTrip(t *testing.T) {
 }
 
 func TestUnsupported(t *testing.T) {
-	if _, err := Parse("notes.pdf", []byte("x")); err == nil {
+	if _, err := Parse("notes.pdf", []byte("x"), ""); err == nil {
 		t.Fatal("want an error for .pdf")
 	}
 }
@@ -210,10 +242,10 @@ func itoa(i int) string {
 // TestRejectsNon4sText: a .4s that holds no questions must fail at import rather
 // than quietly become an empty list.
 func TestRejectsNon4sText(t *testing.T) {
-	if _, err := Parse("notes.4s", []byte("просто заметки\nбез единого маркера\n")); err == nil {
+	if _, err := Parse("notes.4s", []byte("просто заметки\nбез единого маркера\n"), ""); err == nil {
 		t.Fatal("want an error for a .4s with no 4s markers")
 	}
-	if _, err := Parse("ok.4s", []byte("? Вопрос\n! Ответ\n")); err != nil {
+	if _, err := Parse("ok.4s", []byte("? Вопрос\n! Ответ\n"), ""); err != nil {
 		t.Fatalf("a minimal valid .4s must import: %v", err)
 	}
 }
@@ -244,7 +276,7 @@ func TestZipRelativeImageRefs(t *testing.T) {
 	res, err := Parse("p.zip", zipOf(t, map[string][]byte{
 		"q.4s":          []byte("? Вопрос (img images/q3.png)\n! Ответ\n"),
 		"images/q3.png": {1, 2, 3},
-	}))
+	}), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +296,7 @@ func TestZipDuplicateBasenames(t *testing.T) {
 		"q.4s":      []byte("? Вопрос (img pic.png)\n! Ответ\n"),
 		"a/pic.png": {0xaa},
 		"b/pic.png": {0xbb},
-	}))
+	}), "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -71,6 +71,7 @@ type exportRequest struct {
 	source string
 	name   string
 	device string // "" (desktop) or "mobile" — PDF export only
+	game   string // "" (ChGK) or "si" — taken from the exported List's type
 	images map[string][]byte
 }
 
@@ -104,6 +105,7 @@ func (s *server) readExportForm(w http.ResponseWriter, r *http.Request, ext stri
 		source: source,
 		name:   strings.TrimSuffix(name, ext),
 		device: form.Value("device"),
+		game:   exportGame(form.Value("game")),
 		images: map[string][]byte{},
 	}
 	for _, f := range form.Files("img") {
@@ -112,6 +114,15 @@ func (s *server) readExportForm(w http.ResponseWriter, r *http.Request, ext stri
 		}
 	}
 	return req, form, true
+}
+
+// exportGame allowlists the game the client may ask for: anything but SI lays
+// out as ChGK, which is what every board did before SI themes existed.
+func exportGame(v string) string {
+	if v == "si" {
+		return "si"
+	}
+	return "chgk"
 }
 
 // attrChar reports whether r may appear unescaped in an RFC 5987 ext-value.
@@ -173,7 +184,7 @@ func (s *server) handleExportDocx(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	b, err := docx.Export(fsource.Parse(req.source, "chgk"), req.images, docx.Options{})
+	b, err := docx.Export(fsource.Parse(req.source, req.game), req.images, docx.Options{Game: req.game})
 	if err != nil {
 		log.Printf("docx export failed: %v", err)
 		httpError(w, http.StatusInternalServerError, xystrings.Default.Server.Internal())
@@ -206,7 +217,7 @@ func (s *server) handleExportPDF(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), exportPDFTimeout)
 	defer cancel()
-	b, err := typstdoc.Export(ctx, fsource.Parse(req.source, "chgk"), req.images, ts, typstdoc.Options{Device: device})
+	b, err := typstdoc.Export(ctx, fsource.Parse(req.source, req.game), req.images, ts, typstdoc.Options{Device: device, Game: req.game})
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			httpError(w, http.StatusGatewayTimeout, "typst timed out")

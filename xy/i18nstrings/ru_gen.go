@@ -159,6 +159,7 @@ var RU = Strings{
 			KindMeta:            func() string { return "Метаинформация" },
 			KindOther:           func() string { return "Другое" },
 			KindQuestion:        func() string { return "Вопрос" },
+			KindTheme:           func() string { return "Тема СИ" },
 			LabelAdd:            func() string { return "Добавить метку…" },
 			LinkLabel:           func() string { return "Ссылка на карточку" },
 			LinkTitle:           func() string { return "Скопировать прямую ссылку на карточку" },
@@ -228,12 +229,16 @@ var RU = Strings{
 			},
 		},
 		Count: BoardCountStrings{
+			Both: func(questions string, themes string) string { return fmt.Sprintf("%s, %s", questions, themes) },
 			Cards: func(n int) string {
 				return fmt.Sprintf("%d %s", n, core.Plural("ru", n, "карточка", "карточки", "карточек"))
 			},
 			Filtered: func(shown string, total string) string { return fmt.Sprintf("%s из %s", shown, total) },
 			Questions: func(n int) string {
 				return fmt.Sprintf("%d %s", n, core.Plural("ru", n, "вопрос", "вопроса", "вопросов"))
+			},
+			Themes: func(n int) string {
+				return fmt.Sprintf("%d %s", n, core.Plural("ru", n, "тема", "темы", "тем"))
 			},
 		},
 		Delete: BoardDeleteStrings{
@@ -432,8 +437,14 @@ var RU = Strings{
 			GroupTitle: func() string {
 				return "Список входит в группу — сквозная нумерация и общий экспорт"
 			},
-			MenuTitle: func() string { return "Меню списка" },
-			Untitled:  func() string { return "(без названия)" },
+			MenuTitle:   func() string { return "Меню списка" },
+			TypeChange:  func() string { return "Тип списка…" },
+			TypeChgk:    func() string { return "Вопросы ОД" },
+			TypeConfirm: func(to string, hint string) string { return fmt.Sprintf("Список станет: %s. %s", to, hint) },
+			TypeHint:    func() string { return "На уже созданные карточки не влияет." },
+			TypeLabel:   func() string { return "Что в списке" },
+			TypeSi:      func() string { return "Темы СИ" },
+			Untitled:    func() string { return "(без названия)" },
 		},
 		Listsmanage: BoardListsmanageStrings{
 			Drag:          func() string { return "Перетащить" },
@@ -830,6 +841,9 @@ var RU = Strings{
 			RemoveRowTitle: func() string { return "Удалить строку" },
 			RemoveTitle:    func() string { return "Убрать поле" },
 			Source:         func() string { return "Источник" },
+			ThemeAuthor:    func() string { return "Автор темы" },
+			ThemeComment:   func() string { return "Комментарий к теме" },
+			ThemeName:      func() string { return "Тема" },
 			Zachet:         func() string { return "Зачёт" },
 		},
 		Handout: CardHandoutStrings{
@@ -884,6 +898,30 @@ var RU = Strings{
 				return "Видели вопрос, кроме общих тестеров списка: "
 			},
 			ShowAll: func() string { return "Показать всех тестеров" },
+		},
+		Slot: CardSlotStrings{
+			Add:        func() string { return "+ вопрос" },
+			AddReserve: func() string { return "+ запас" },
+			AddReserveTitle: func() string {
+				return "Добавить запасной вопрос — сверх пяти основных"
+			},
+			AddTitle:     func() string { return "Добавить вопрос на следующую стоимость" },
+			CopyQuestion: func(points string, text string) string { return fmt.Sprintf("%s. %s", points, text) },
+			CopyTheme:    func() string { return "Тема" },
+			CopyWhole:    func() string { return "Тема целиком" },
+			DownAria:     func() string { return "Опустить вопрос" },
+			DownTitle: func() string {
+				return "Опустить ниже — вопросы поменяются местами и стоимостью"
+			},
+			Head:          func(points string) string { return fmt.Sprintf("№ %s", points) },
+			Progress:      func(filled string, total string) string { return fmt.Sprintf("%s/%s", filled, total) },
+			ProgressTitle: func() string { return "Сколько вопросов темы уже написано" },
+			RemoveAria:    func() string { return "Удалить вопрос" },
+			RemoveTitle:   func() string { return "Удалить этот вопрос из темы" },
+			UpAria:        func() string { return "Поднять вопрос" },
+			UpTitle: func() string {
+				return "Поднять выше — вопросы поменяются местами и стоимостью"
+			},
 		},
 		To4s: CardTo4sStrings{
 			Failed: func(error string) string {
@@ -1588,6 +1626,9 @@ var RU = Strings{
 			Offline: func() string {
 				return "Офлайн: доступен только .4s, без изображений."
 			},
+			SiFormats: func() string {
+				return "Темы СИ пока умеют только .si4s, .docx и .pdf — остальные форматы теряют заголовки тем."
+			},
 		},
 		Run: ExportRunStrings{
 			Failed: func(error string) string { return fmt.Sprintf("Экспорт не удался: %s", error) },
@@ -1603,7 +1644,8 @@ var RU = Strings{
 	},
 	Fsource: FsourceStrings{
 		Theme: FsourceThemeStrings{
-			DefaultLabel: func(n string, name string) string { return fmt.Sprintf("Тема %s. %s", n, name) },
+			DefaultLabel:  func(n string, name string) string { return fmt.Sprintf("Тема %s. %s", n, name) },
+			ReserveNumber: func(n string) string { return fmt.Sprintf("запас%s", n) },
 		},
 	},
 	Gallery: GalleryStrings{
