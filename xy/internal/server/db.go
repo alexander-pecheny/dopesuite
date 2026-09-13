@@ -649,6 +649,52 @@ create table if not exists board_invite_uses(
   decided_at text,
   unique(invite_id, user_id)
 );`)},
+	// v24 admits SI: a List may be typed 'si' (SI themes) beside the default
+	// 'normal' (OD questions), and a Card may be a 'theme' — one SI theme holding a
+	// ladder of questions, each worth its own points. Both CHECKs are rebuilt the
+	// way v2 rebuilt cards.kind, since SQLite cannot ALTER one in place. 'test'
+	// stays in both lists: v18 retired the concept but the value is still what an
+	// un-migrated row could hold, and widening a CHECK must never narrow it.
+	{Version: 24, Name: "lists.type si and cards.kind theme", Up: schema.Exec(`
+pragma foreign_keys=off;
+create table lists_v24(
+  id integer primary key,
+  board_id integer not null references boards(id) on delete cascade,
+  type text not null check (type in ('normal','test','si')) default 'normal',
+  title_enc blob not null,
+  rank text not null,
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text,
+  group_id integer references list_groups(id)
+);
+insert into lists_v24(id, board_id, type, title_enc, rank, created_at, updated_at, deleted_at, group_id)
+  select id, board_id, type, title_enc, rank, created_at, updated_at, deleted_at, group_id from lists;
+drop table lists;
+alter table lists_v24 rename to lists;
+create index if not exists idx_lists_board on lists(board_id);
+create index if not exists idx_lists_group on lists(group_id);
+
+create table cards_v24(
+  id integer primary key,
+  board_id integer not null references boards(id) on delete cascade,
+  list_id integer not null references lists(id) on delete cascade,
+  kind text not null check (kind in ('normal','question','test','meta','heading','other','theme')) default 'normal',
+  description_enc blob not null,
+  rank text not null,
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text,
+  handout_meta_enc blob,
+  alias_enc blob
+);
+insert into cards_v24(id, board_id, list_id, kind, description_enc, rank, created_at, updated_at, deleted_at, handout_meta_enc, alias_enc)
+  select id, board_id, list_id, kind, description_enc, rank, created_at, updated_at, deleted_at, handout_meta_enc, alias_enc from cards;
+drop table cards;
+alter table cards_v24 rename to cards;
+create index if not exists idx_cards_list on cards(list_id);
+create index if not exists idx_cards_board on cards(board_id);
+pragma foreign_keys=on;`)},
 }
 
 func migrate(db *sql.DB) error { return schema.Apply(db, migrations) }

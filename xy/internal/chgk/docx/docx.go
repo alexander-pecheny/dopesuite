@@ -203,6 +203,9 @@ func (e *exporter) renderBody(doc fsource.Doc) string {
 	firstSection := true // chgk: only sections after the first page-break
 	headingPB := false   // sticky page_break_before_heading
 	prevType := ""
+	si := e.opts.siMode()
+	firstBattle := true // si: every battle but the first opens a page
+	firstTheme := true  // si: the first theme under a battle keeps the heading's spacing
 
 	// flushLead emits the template's leftover empty Normal para0 when the first
 	// content paragraph is one that does not reuse it (meta / Question).
@@ -239,7 +242,8 @@ func (e *exporter) renderBody(doc fsource.Doc) string {
 			switch el.Type {
 			case "heading":
 				p.style = "Heading1"
-				if !wasNone {
+				// SI reads a heading as a parenthetical note, so it never opens a page.
+				if !wasNone && !si {
 					headingPB = true
 				}
 				if headingPB {
@@ -252,6 +256,7 @@ func (e *exporter) renderBody(doc fsource.Doc) string {
 				} else {
 					firstSection = false
 				}
+				firstTheme = true
 			}
 			e.addValue(p, el.Content, textOpts{nbsp: true})
 			p.addRaw("\n", "")
@@ -262,8 +267,56 @@ func (e *exporter) renderBody(doc fsource.Doc) string {
 				e.renderQuestion(q)
 			}
 
+		case "battle":
+			if !si {
+				break
+			}
+			flushLead()
+			p := e.addPara()
+			p.style, p.keepNext = "Heading1", true
+			if !firstBattle {
+				p.pageBreakBefore = true
+			}
+			firstBattle = false
+			e.addValue(p, el.Content, textOpts{nbsp: true})
+			p.addRaw("\n", "")
+			firstTheme = true
+
+		case "round":
+			if !si {
+				break
+			}
+			flushLead()
+			p := e.addPara()
+			p.style, p.keepNext = "Heading2", true
+			e.addValue(p, el.Content, textOpts{nbsp: true})
+
+		case "theme":
+			if !si {
+				break
+			}
+			flushLead()
+			p := e.addPara()
+			p.style, p.keepNext = "Heading3", true
+			if !firstTheme {
+				p.spacingBefore = 480
+			}
+			firstTheme = false
+			e.addValue(p, themeLabel(el.Content), textOpts{nbsp: true})
+
+		case "author", "comment":
+			// Loose at document level, these are a theme's own author or note —
+			// fsource only ever leaves them here for SI and troika.
+			if !si {
+				break
+			}
+			flushLead()
+			p := e.addPara()
+			p.addRaw(e.labels.Field(el.Type)+": ", "bold")
+			e.addValue(p, el.Content, textOpts{nbsp: true})
+
 		default:
-			// battle/round/theme/number/setcounter etc. — SI's, not chgk's
+			// number/setcounter etc. — scaffolding, not content
 		}
 		prevType = el.Type
 	}
@@ -325,15 +378,22 @@ func (e *exporter) renderQuestionInto(q *fsource.Question, into *para, screen bo
 		p = e.addPara()
 	}
 	p.keepLines = true
-	p.spacingBefore = 360
+	// A SI question sits under its theme's heading and is spaced tighter than a
+	// ChGK one, which headlines its own paragraph.
+	if e.opts.siMode() {
+		p.spacingBefore = 240
+	} else {
+		p.spacingBefore = 360
+	}
 
-	p.addRaw(e.questionLabel(q, e.opts.OnlyQuestionNumber)+". ", "bold")
+	p.addRaw(e.questionLabel(q, e.opts.OnlyQuestionNumber || e.opts.siMode())+". ", "bold")
 	if h := q.Get("handout"); h != nil {
 		p.addRaw("\n["+e.labelFor(q, "handout")+": ", "")
 		e.addValue(p, h, textOpts{removeAccents: screen, removeBrackets: screen})
 		p.addRaw("\n]", "")
 	}
-	if !e.opts.NoParagraph {
+	// SI runs the question on from its point value; ChGK breaks the line after the label.
+	if !e.opts.NoParagraph && !e.opts.siMode() {
 		p.addRaw("\n", "")
 	}
 	e.addValue(p, q.Get("question"), textOpts{nbsp: true, removeAccents: screen, removeBrackets: screen})
@@ -437,6 +497,15 @@ func (e *exporter) questionLabel(q *fsource.Question, onlyNumber bool) string {
 		return num
 	}
 	return i18n.QuestionLabel(e.labelFor(q, "question"), num, e.opts.Language)
+}
+
+// themeLabel is what a theme prints: fsource.numberThemes rewrote the #T line
+// into a Question carrying the numbered label, and an unparsed one is its own text.
+func themeLabel(v any) any {
+	if q, ok := v.(*fsource.Question); ok {
+		return q.Get("label")
+	}
+	return v
 }
 
 // labelFor returns the field label, honouring per-question overrides and the

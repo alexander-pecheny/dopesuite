@@ -146,6 +146,9 @@ function titleSource(kind: string, desc: string | null | undefined, mode: string
     if (a !== "") return a;
   }
   if (kind === "question") return questionText(desc);
+  // A тема is shown by its name; the questions inside it are the card's content,
+  // not its title.
+  if (kind === "theme") return blockText(desc, "theme");
   if (kind === "meta") return blockText(desc, "meta");
   if (kind === "heading") return blockText(desc, "heading");
   return (desc || "").trim();
@@ -167,8 +170,18 @@ function isZeroNumber(value: string | number): boolean {
 // are ignored entirely. Returns an array aligned with `cards`.
 export function numberQuestionCards(cards: ReadonlyArray<ChgkCard>): Array<string | null> {
   let next = 1;
+  // Темы СИ run a sequence of their own — «Тема 3» is the third theme, whatever
+  // ЧГК questions sit beside it — and a Заголовок restarts it, mirroring
+  // chgksuite's reset on a battle or a section (fsource.numberThemes).
+  let nextTheme = 1;
   const out: Array<string | null> = [];
   for (const c of cards) {
+    if (c.kind === "theme") {
+      out.push(String(nextTheme));
+      nextTheme++;
+      continue;
+    }
+    if (c.kind === "heading") nextTheme = 1;
     if (c.kind === "question") {
       const dir = numberDirective(parseBlocks(c.desc));
       let num: string;

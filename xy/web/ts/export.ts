@@ -51,22 +51,26 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
   // The export modal's eight formats, in the order they are offered — the same
   // order in the one-format dropdown and in the zip's tick boxes. `server` marks
   // the ones that need the server to render, so offline can disable exactly those.
+  // `si: false` marks a format that cannot yet set a SI package: its composer
+  // drops #T/#B/#R outright, so it would hand back a flat run of questions with
+  // no theme headings and say nothing about it. Offered on a ChGK tour, greyed
+  // out on a SI one — the same mechanism offline uses on the server formats.
   const EXPORT_FORMATS = [
-    { key: "4s", box: "exportFmt4s", server: false },
-    { key: "docx", box: "exportFmtDocx", server: true },
-    { key: "docx_spoilers", box: "exportFmtDocxSpoilers", server: true },
-    { key: "pdf", box: "exportFmtPdf", server: true },
-    { key: "pdf_mobile", box: "exportFmtPdfMobile", server: true },
-    { key: "pptx", box: "exportFmtPptx", server: true },
-    { key: "openquiz", box: "exportFmtOpenquiz", server: true },
-    { key: "handouts", box: "exportFmtHandouts", server: true },
+    { key: "4s", box: "exportFmt4s", server: false, si: true },
+    { key: "docx", box: "exportFmtDocx", server: true, si: true },
+    { key: "docx_spoilers", box: "exportFmtDocxSpoilers", server: true, si: true },
+    { key: "pdf", box: "exportFmtPdf", server: true, si: true },
+    { key: "pdf_mobile", box: "exportFmtPdfMobile", server: true, si: true },
+    { key: "pptx", box: "exportFmtPptx", server: true, si: false },
+    { key: "openquiz", box: "exportFmtOpenquiz", server: true, si: false },
+    { key: "handouts", box: "exportFmtHandouts", server: true, si: false },
     // Telegram publishes rather than downloads, so it cannot join a zip of
     // files: it is offered in the dropdown and has no tick box of its own.
-    { key: "telegram", box: "", server: true },
+    { key: "telegram", box: "", server: true, si: false },
   ] as const;
 
   const exportModal = modal("export");
-  let exportCtx: { cards: BoardCard[]; title: string; hndt: string } | null = null;
+  let exportCtx: { cards: BoardCard[]; title: string; hndt: string; game: string } | null = null;
 
   function exportBox(box: string): HTMLInputElement { return byId<HTMLInputElement>(box); }
   function oneFormat(): HTMLSelectElement { return byId<HTMLSelectElement>("exportOneFormat"); }
@@ -98,13 +102,14 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
 
   function openExport(scope: ListScope): void {
     const hndt = xyHndt.hndtOf(scope.cards).source;
-    exportCtx = { cards: scope.cards, title: scope.title, hndt };
+    exportCtx = { cards: scope.cards, title: scope.title, hndt, game: scope.game };
 
     // Offline everything but the .4s is unreachable: the other formats render
     // server-side, and even the .4s ships without its images (they are fetched).
     const offline = !xySync.isOnline();
+    const si = scope.game === "si";
     unavailable = new Set(EXPORT_FORMATS
-      .filter((f) => (offline && f.server) || (f.key === "handouts" && !hndt.trim()))
+      .filter((f) => (offline && f.server) || (si && !f.si) || (f.key === "handouts" && !hndt.trim()))
       .map((f) => f.key));
     for (const f of EXPORT_FORMATS) {
       if (!f.box) continue;
@@ -119,7 +124,8 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     if (unavailable.has(one.value)) one.value = EXPORT_FORMATS.find((f) => !unavailable.has(f.key))?.key ?? "";
     const notes: string[] = [];
     if (offline) notes.push(S.export.notes.offline());
-    if (!hndt.trim()) notes.push(S.export.notes.noHandouts());
+    if (si) notes.push(S.export.notes.siFormats());
+    else if (!hndt.trim()) notes.push(S.export.notes.noHandouts());
     syncExportForm();
     exportModal.open({ onClose: () => { exportCtx = null; } });
     exportModal.message(notes.join(" "));
@@ -134,6 +140,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     const fd = new FormData();
     fd.append("source", exportSource(cards));
     fd.append("filename", title);
+    fd.append("game", exportCtx.game);
     const needed = xySync.isOnline() ? xyChgk.imageRefs(cards) : new Set<string>();
     const found = await attachments.appendImages(fd, cards, needed);
     const missing = [...needed].filter((n) => !found.has(n));
@@ -147,7 +154,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
   // the network — it is the one export that works offline.
   async function runExport(): Promise<void> {
     if (!exportCtx) return;
-    const { cards, title, hndt } = exportCtx;
+    const { cards, title, hndt, game } = exportCtx;
     const formats = exportChosen();
     if (!formats.length) return;
     const source = exportSource(cards);
@@ -157,7 +164,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     const wantsImages = formats.includes("4s") && wanted.size > 0;
 
     if (formats.length === 1 && formats[0] === "4s" && !wantsImages) {
-      downloadBlob(new Blob([source], { type: "text/plain;charset=utf-8" }), `${title}.4s`);
+      downloadBlob(new Blob([source], { type: "text/plain;charset=utf-8" }), `${title}${game === "si" ? ".si4s" : ".4s"}`);
       exportModal.close();
       return;
     }

@@ -143,6 +143,7 @@ export const RU: Strings = {
       kindMeta: () => "Метаинформация",
       kindOther: () => "Другое",
       kindQuestion: () => "Вопрос",
+      kindTheme: () => "Тема СИ",
       labelAdd: () => "Добавить метку…",
       linkLabel: () => "Ссылка на карточку",
       linkTitle: () => "Скопировать прямую ссылку на карточку",
@@ -194,9 +195,11 @@ export const RU: Strings = {
       title: () => "Создать копию доски со всеми списками и карточками",
     },
     count: {
+      both: (questions: string, themes: string) => `${questions}, ${themes}`,
       cards: (n: number) => `${n} ${plural("ru", n, "карточка", "карточки", "карточек")}`,
       filtered: (shown: string, total: string) => `${shown} из ${total}`,
       questions: (n: number) => `${n} ${plural("ru", n, "вопрос", "вопроса", "вопросов")}`,
+      themes: (n: number) => `${n} ${plural("ru", n, "тема", "темы", "тем")}`,
     },
     delete: {
       continueQ: () => "Продолжить?",
@@ -353,6 +356,12 @@ export const RU: Strings = {
       groupFallback: () => "связанные списки",
       groupTitle: () => "Список входит в группу — сквозная нумерация и общий экспорт",
       menuTitle: () => "Меню списка",
+      typeChange: () => "Тип списка…",
+      typeChgk: () => "Вопросы ОД",
+      typeConfirm: (to: string, hint: string) => `Список станет: ${to}. ${hint}`,
+      typeHint: () => "На уже созданные карточки не влияет.",
+      typeLabel: () => "Что в списке",
+      typeSi: () => "Темы СИ",
       untitled: () => "(без названия)",
     },
     listsmanage: {
@@ -666,6 +675,9 @@ export const RU: Strings = {
       removeRowTitle: () => "Удалить строку",
       removeTitle: () => "Убрать поле",
       source: () => "Источник",
+      themeAuthor: () => "Автор темы",
+      themeComment: () => "Комментарий к теме",
+      themeName: () => "Тема",
       zachet: () => "Зачёт",
     },
     handout: {
@@ -714,6 +726,24 @@ export const RU: Strings = {
       label: () => "Видели: ",
       labelExceptCommon: () => "Видели вопрос, кроме общих тестеров списка: ",
       showAll: () => "Показать всех тестеров",
+    },
+    slot: {
+      add: () => "+ вопрос",
+      addReserve: () => "+ запас",
+      addReserveTitle: () => "Добавить запасной вопрос — сверх пяти основных",
+      addTitle: () => "Добавить вопрос на следующую стоимость",
+      copyQuestion: (points: string, text: string) => `${points}. ${text}`,
+      copyTheme: () => "Тема",
+      copyWhole: () => "Тема целиком",
+      downAria: () => "Опустить вопрос",
+      downTitle: () => "Опустить ниже — вопросы поменяются местами и стоимостью",
+      head: (points: string) => `№ ${points}`,
+      progress: (filled: string, total: string) => `${filled}/${total}`,
+      progressTitle: () => "Сколько вопросов темы уже написано",
+      removeAria: () => "Удалить вопрос",
+      removeTitle: () => "Удалить этот вопрос из темы",
+      upAria: () => "Поднять вопрос",
+      upTitle: () => "Поднять выше — вопросы поменяются местами и стоимостью",
     },
     to4s: {
       failed: (error: string) => `Не удалось разобрать текст: ${error}`,
@@ -1252,6 +1282,7 @@ ${usage}
     notes: {
       noHandouts: () => "В списке нет вопросов с раздаточным материалом.",
       offline: () => "Офлайн: доступен только .4s, без изображений.",
+      siFormats: () => "Темы СИ пока умеют только .si4s, .docx и .pdf — остальные форматы теряют заголовки тем.",
     },
     run: {
       failed: (error: string) => `Экспорт не удался: ${error}`,
@@ -1264,6 +1295,7 @@ ${usage}
   fsource: {
     theme: {
       defaultLabel: (n: string, name: string) => `Тема ${n}. ${name}`,
+      reserveNumber: (n: string) => `запас${n}`,
     },
   },
   gallery: {

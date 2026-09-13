@@ -7,6 +7,7 @@ import S from "./i18nstrings.js";
 import { xyChgk, type ChgkCard } from "./chgk.js";
 import { xyVersions } from "./versions.js";
 import { xyFind } from "./find.js";
+import { authorsOf as themeAuthorsOf, splitTheme } from "./themes.js";
 import { xyApp } from "./app.js";
 import { iconed } from "./icons_gen.js";
 import type { ListPanel, PanelShell } from "./panels.js";
@@ -38,8 +39,22 @@ function authorsOf(card: ChgkCard): string[] {
 
 export function countAuthors(cards: ReadonlyArray<ChgkCard>, upTo: string, includeZero: boolean): AuthorCount {
   const numbers = xyChgk.numberQuestionCards(cards);
-  const questions: Array<{ card: ChgkCard; number: string }> = [];
-  cards.forEach((card, i) => { const n = numbers[i]; if (n != null) questions.push({ card, number: n }); });
+  const questions: Array<{ names: string[]; number: string }> = [];
+  cards.forEach((card, i) => {
+    const n = numbers[i];
+    if (n == null) return;
+    if (card.kind !== "theme") { questions.push({ names: authorsOf(card), number: n }); return; }
+    // A theme is not one question: it is paid by the questions inside it, each
+    // numbered «theme.points» so the cutoff and the numbers column still read as
+    // positions in the tour. A question's own author wins over the theme's.
+    const t = splitTheme(card.desc);
+    for (const slot of t.slots) {
+      questions.push({
+        names: themeAuthorsOf(t, slot).filter((x) => authorKey(x)),
+        number: `${n}.${slot.number}`,
+      });
+    }
+  });
   const hasZero = questions.some((q) => xyChgk.isZeroNumber(q.number));
   let end = -1;
   questions.forEach((q, i) => { if (q.number === upTo.trim()) end = i; });
@@ -48,7 +63,7 @@ export function countAuthors(cards: ReadonlyArray<ChgkCard>, upTo: string, inclu
   const tally = new Map<string, { spellings: Map<string, number>; row: AuthorRow }>();
   const unauthored: AuthorRow = { name: S.board.authorcount.unauthored(), count: 0, share: 0, numbers: [] };
   for (const q of picked) {
-    const names = authorsOf(q.card);
+    const names = q.names;
     if (!names.length) { unauthored.count++; unauthored.share++; unauthored.numbers.push(q.number); continue; }
     const share = 1 / names.length;
     for (const name of names) {
@@ -85,7 +100,7 @@ export function createAuthorCountPanel(shell: PanelShell, deps: { copyPlain(text
   return {
     id: "author-count", menu: "list", icon: "calculator",
     label: S.board.authorcount.name(),
-    offered: (scope) => scope.cards.some((c) => c.kind === "question"),
+    offered: (scope) => scope.cards.some((c) => c.kind === "question" || c.kind === "theme"),
     open(scope) {
       const cards = scope.cards;
       const numbers = scope.numbers.filter((n): n is string => n != null);

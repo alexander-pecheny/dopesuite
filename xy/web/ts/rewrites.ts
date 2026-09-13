@@ -35,7 +35,7 @@ export function createRewrites(board: Board): Rewrites {
   function collect(next: (c: BoardCard) => string | null): DescChange[] {
     const out: DescChange[] = [];
     for (const c of board.state.cards) {
-      if (c.kind !== "question") continue;
+      if (c.kind !== "question" && c.kind !== "theme") continue;
       const desc = next(c);
       if (desc !== null && desc !== c.desc) out.push({ card: c, desc });
     }

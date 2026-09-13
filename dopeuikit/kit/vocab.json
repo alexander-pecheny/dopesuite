@@ -4,6 +4,7 @@
     "icon-name": {
       "prefix": "Icon",
       "values": [
+        "arrow-down",
         "arrow-left",
         "arrow-left-right",
         "arrow-up",
@@ -25,6 +26,7 @@
         "funnel",
         "house",
         "link",
+        "list",
         "list-checks",
         "lock",
         "log-in",

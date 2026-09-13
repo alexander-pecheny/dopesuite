@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fakeBoard, fakeNode, installDOM } from "./dom.js";
 
-const p = installDOM(["importPickOverlay", "importPickForm", "importFile", "importPickWhat", "importSplitTours", "importPickCancel", "importOverlay", "importTitle", "importSource", "importPreview", "importCount", "importCommit", "importClose"]);
+const p = installDOM(["importPickOverlay", "importPickForm", "importFile", "importPickWhat", "importGame", "importSplitTours", "importPickCancel", "importOverlay", "importTitle", "importSource", "importPreview", "importCount", "importCommit", "importClose"]);
 for (const id of ["importPickOverlay", "importOverlay"]) p.node(id).hidden = true;
 p.node("importPickForm").reset = () => {};
 // The server's parse of the upload, then the lists and cards the client posts.
@@ -55,4 +55,53 @@ test("split by tours makes one list per «## …» section and links them into a
   const group = posts.find((x) => x[0] === "/api/boards/7/list-groups");
   assert.equal(group[1].name_enc, "e:Импорт");
   assert.equal(board.reloads, 1);
+});
+
+// A СИ package is one card per тема, not per question: every block after a
+// "#T …" belongs to it until the next one, and the list it lands in is typed СИ
+// so «Добавить карточку» goes on making themes.
+test("СИ import folds each #T block and its questions into one theme card", async () => {
+  posts.length = 0;
+  parsed = {
+    name: "ЭК",
+    source: [
+      "### Чемпионат",
+      "",
+      "#T Острова",
+      "",
+      "№ 10",
+      "? Раз?",
+      "! А",
+      "",
+      "№ 20",
+      "? Два?",
+      "! Б",
+      "",
+      "#T Оружие",
+      "",
+      "№ 10",
+      "? Три?",
+      "! В",
+      "",
+    ].join("\n"),
+    images: [],
+  };
+  panel.open();
+  p.node("importFile").files = [{ name: "ek.docx" }];
+  p.node("importGame").value = "si";
+  p.node("importSplitTours").checked = false;
+  p.node("importPickForm").fire("submit");
+  await settle();
+  // .docx opens the verification screen first; commit from there.
+  p.node("importSource").value = parsed.source;
+  p.node("importCommit").fire("click");
+  await settle();
+
+  const [list, ...cards] = posts;
+  assert.equal(list[0], "/api/boards/7/lists");
+  assert.equal(list[1].type, "si");
+  assert.deepEqual(cards.map((c) => c[1].kind), ["heading", "theme", "theme"]);
+  assert.match(cards[1][1].description_enc, /^e:#T Острова/);
+  assert.match(cards[1][1].description_enc, /№ 20/);
+  assert.match(cards[2][1].description_enc, /^e:#T Оружие/);
 });

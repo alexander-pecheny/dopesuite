@@ -7,6 +7,7 @@
 // card editor's Preview view and the import preview all draw through it.
 import { xyApp } from "./app.js";
 import { xyChgk } from "./chgk.js";
+import { splitTheme } from "./themes.js";
 import S from "./i18nstrings.js";
 import type { ScreenValue } from "./chgk.js";
 import type { BoardCard } from "./unlock.js";
@@ -130,28 +131,55 @@ function pvField(field: string, text: string, imgMap: Map<string, string>, scree
 // section/editor/date cards become their corresponding paragraphs/headings.
 // `edit` builds the ✏️ jump-to-editor button — only the list preview passes
 // one; the card-detail preview (already inside the editor) leaves it off.
+// pvQuestion renders one question — a whole OD card, or one rung of a SI theme,
+// where `number` is the rung's point value rather than a position in the tour.
+function pvQuestion(card: PvCard, desc: string, number: string | null, imgMap: Map<string, string>, screen: boolean, edit?: (card: BoardCard) => HTMLElement, bareNumber?: boolean): HTMLElement {
+  const find = (t: string): { type: string; text: string } | undefined => xyChgk.parseBlocks(desc).find((b) => b.type === t);
+  const wrap = el("article", { class: "pv-q", dataset: { cardId: card.id } });
+  const handout = find("handout");
+  if (handout) wrap.append(pvField("handout", handout.text, imgMap, screen, "pv-handout"));
+  // Question line: small inline ✏️ (edit lists only) + bold "Question N." label
+  // (overridable) + question text (which may itself be a blitz/duplet list).
+  const qov = xyChgk.applyOverride(xyChgk.questionText(desc));
+  // A rung of a theme is labelled by its bare point value, the way si_mode sets
+  // it; an OD question by its «question N» label.
+  const qLabel = bareNumber ? "" : qov.label || S.chgk.label.question();
+  const qline = el("div", { class: "pv-q-text" });
+  if (edit) qline.append(edit(card as BoardCard));
+  qline.append(el("strong", { class: "pv-label", text: `${qLabel}${number ? (qLabel ? " " : "") + number : ""}. ` }));
+  qline.append(renderFieldBody(qov.text, imgMap, fieldOpts("question", screen)));
+  wrap.append(qline);
+  for (const f of ["answer", "zachet", "nezachet", "comment", "source", "author"]) {
+    const b = find(f);
+    if (b) wrap.append(pvField(f, b.text, imgMap, screen, pvSmallCls(f)));
+  }
+  return wrap;
+}
+
 export function renderPreviewCard(card: PvCard, number: string | null, imgMap: Map<string, string>, screen: boolean, edit?: (card: BoardCard) => HTMLElement): HTMLElement {
   const blocks = xyChgk.parseBlocks(card.desc);
   const find = (t: string) => blocks.find((b) => b.type === t);
 
-  if (card.kind === "question" || find("question")) {
-    const wrap = el("article", { class: "pv-q", dataset: { cardId: card.id } });
-    const handout = find("handout");
-    if (handout) wrap.append(pvField("handout", handout.text, imgMap, screen, "pv-handout"));
-    // Question line: small inline ✏️ (edit lists only) + bold "Question N." label
-    // (overridable) + question text (which may itself be a blitz/duplet list).
-    const qov = xyChgk.applyOverride(xyChgk.questionText(card.desc));
-    const qLabel = qov.label || S.chgk.label.question();
-    const qline = el("div", { class: "pv-q-text" });
-    if (edit) qline.append(edit(card as BoardCard));
-    qline.append(el("strong", { class: "pv-label", text: `${qLabel}${number ? " " + number : ""}. ` }));
-    qline.append(renderFieldBody(qov.text, imgMap, fieldOpts("question", screen)));
-    wrap.append(qline);
-    for (const f of ["answer", "zachet", "nezachet", "comment", "source", "author"]) {
-      const b = find(f);
-      if (b) wrap.append(pvField(f, b.text, imgMap, screen, pvSmallCls(f)));
+  // A an SI theme is a heading and a ladder of questions, each labelled by its bare
+  // point value — the layout chgksuite's si_mode sets, which is what the .docx
+  // and the .pdf of this card will look like.
+  if (card.kind === "theme" || find("theme")) {
+    const t = splitTheme(card.desc);
+    const wrap = el("div", { class: "pv-theme", dataset: { cardId: card.id } });
+    const head = el("h3", { class: "pv-section" });
+    if (edit) head.append(edit(card as BoardCard));
+    head.append(renderRich(S.fsource.theme.defaultLabel(number ?? "", t.name), imgMap, { nbsp: true }));
+    wrap.append(head);
+    if (t.author !== null) wrap.append(pvField("author", t.author, imgMap, screen, ""));
+    if (t.comment !== null) wrap.append(pvField("comment", t.comment, imgMap, screen, pvSmallCls("comment")));
+    for (const slot of t.slots) {
+      wrap.append(pvQuestion(card, xyChgk.composeFields(slot.fields), slot.number, imgMap, screen, undefined, true));
     }
     return wrap;
+  }
+
+  if (card.kind === "question" || find("question")) {
+    return pvQuestion(card, card.desc, number, imgMap, screen, edit);
   }
 
   // Non-question card: render each block by type (never screen-transformed).

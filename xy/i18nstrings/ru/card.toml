@@ -32,6 +32,10 @@ source = "Источник"
 # The muted last field: handout-generator markup, bound to the draft's meta,
 # not to the 4s.
 hndt = "Доп. разметка для генерации раздаток"
+# The head of a СИ theme card, above its ladder of questions.
+theme_name = "Тема"
+theme_author = "Автор темы"
+theme_comment = "Комментарий к теме"
 # The "+ <field>" pill that adds an absent field; .field is the field's label
 # above (for the Автор field, the default caption from chgk.toml's
 # [author] table, which the caption select also defaults to).
@@ -74,6 +78,32 @@ rename_prompt = "Название версии:"
 # Tooltip of the 🗑 action on the selected version tab.
 remove_title = "Удалить эту версию целиком"
 remove_aria = "Удалить версию"
+
+[slot]
+# One rung of a СИ theme's ladder: the head above each question, carrying its
+# point value and the two buttons that move it. Moving swaps the two questions'
+# CONTENT — the № values themselves never move, so an imported 10/30/50 theme
+# survives a nudge.
+head = '№ {{.points}}'
+up_title = "Поднять выше — вопросы поменяются местами и стоимостью"
+up_aria = "Поднять вопрос"
+down_title = "Опустить ниже — вопросы поменяются местами и стоимостью"
+down_aria = "Опустить вопрос"
+remove_title = "Удалить этот вопрос из темы"
+remove_aria = "Удалить вопрос"
+# The two buttons at the foot of the ladder.
+add = "+ вопрос"
+add_reserve = "+ запас"
+add_title = "Добавить вопрос на следующую стоимость"
+add_reserve_title = "Добавить запасной вопрос — сверх пяти основных"
+# «3/5» on a theme card: how many of its questions are written.
+progress = '{{.filled}}/{{.total}}'
+progress_title = "Сколько вопросов темы уже написано"
+# The copy-for-tester menu of a theme card: the theme's own line, and the whole
+# theme as one paste. Each question's own targets keep their names under «№ 30: ».
+copy_theme = "Тема"
+copy_whole = "Тема целиком"
+copy_question = '{{.points}}. {{.text}}'
 
 [to4s]
 # The →.4s tool: runs the editor's plain prose through the server's chgk

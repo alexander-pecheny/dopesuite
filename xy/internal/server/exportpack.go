@@ -142,13 +142,15 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 	var parsedOK bool
 	structure := func() fsource.Doc {
 		if !parsedOK {
-			parsed, parsedOK = fsource.Parse(req.source, "chgk"), true
+			parsed, parsedOK = fsource.Parse(req.source, req.game), true
 		}
 		return parsed
 	}
 
 	if formats.fourS {
-		files = append(files, packFile{req.name + ".4s", []byte(req.source)})
+		// .si4s, not .4s: chgksuite's CLI reads the game off the extension, so a
+		// theme's-SI package handed to it composes as SI without a flag.
+		files = append(files, packFile{req.name + fourSExt(req.game), []byte(req.source)})
 		// The .4s references its images by base name and cannot embed them, so
 		// they ride alongside; docx/pdf embed their own copies.
 		for name, data := range req.images {
@@ -162,8 +164,8 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 		opts   docx.Options
 		suffix string
 	}{
-		{formats.docx, docx.Options{}, ".docx"},
-		{formats.docxSpoilers, docx.Options{ScreenMode: docx.ScreenReplaceAll, Spoilers: docx.SpoilersDots}, "_screen_spoilers.docx"},
+		{formats.docx, docx.Options{Game: req.game}, ".docx"},
+		{formats.docxSpoilers, docx.Options{Game: req.game, ScreenMode: docx.ScreenReplaceAll, Spoilers: docx.SpoilersDots}, "_screen_spoilers.docx"},
 	} {
 		if !v.want {
 			continue
@@ -185,7 +187,7 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 		if !v.want {
 			continue
 		}
-		b, err := typstdoc.Export(ctx, structure(), req.images, ts, typstdoc.Options{Device: v.device})
+		b, err := typstdoc.Export(ctx, structure(), req.images, ts, typstdoc.Options{Device: v.device, Game: req.game})
 		if err != nil {
 			return nil, err
 		}
@@ -217,6 +219,14 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 		files = append(files, inner...)
 	}
 	return files, nil
+}
+
+// fourSExt is the 4s extension the game is recognised by (composer_common.ext_to_game).
+func fourSExt(game string) string {
+	if game == "si" {
+		return ".si4s"
+	}
+	return ".4s"
 }
 
 // imgurHost is where openquiz's pictures go: it publishes text, so a picture has

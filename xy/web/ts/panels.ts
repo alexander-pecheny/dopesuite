@@ -51,6 +51,10 @@ export interface ListScope {
   cards: BoardCard[];
   numbers: Array<string | null>;
   title: string;
+  // What this tour is: "si" when its lists hold SI themes, "chgk" otherwise. The
+  // exports send it so chgksuite's SI layout is used, and the .4s goes out as
+  // .si4s, which is how its CLI reads the game back.
+  game: string;
 }
 
 export function listScope(board: Board, list: BoardList): ListScope {
@@ -61,7 +65,10 @@ export function listScope(board: Board, list: BoardList): ListScope {
     if (group && group.name) title = group.name;
   }
   const cards = lists.flatMap((l) => board.cardsOf(l.id));
-  return { list, grouped: list.groupId != null, group, lists, cards, numbers: xyChgk.numberQuestionCards(cards), title };
+  // A group is one tour and exports as one document, so one list typed SI makes
+  // the whole scope SI — a mixed group would otherwise lose its theme headings.
+  const game = lists.some((l) => l.type === "si") ? "si" : "chgk";
+  return { list, grouped: list.groupId != null, group, lists, cards, numbers: xyChgk.numberQuestionCards(cards), title, game };
 }
 
 // listNumbers is one list's slice of its scope's numbering, parallel to

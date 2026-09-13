@@ -7,6 +7,7 @@ import { createRewrites } from "./rewrites.js";
 import { createReplacePanel } from "./replace.js";
 import { createMoveListPanel } from "./movelist.js";
 import { createListsManage, unitsOf } from "./listsmanage.js";
+import { progress } from "./themes.js";
 import { createImportPanel } from "./importpack.js";
 import { createExportPanel } from "./export.js";
 import { createHandoutsPanel } from "./handouts.js";
@@ -439,10 +440,13 @@ const bell = createBell(board, { toggle: byId("notifToggle"), badge: byId("notif
 });
 const renderNotifBadge = (): void => bell.renderBadge();
 
-// questionCountLabel renders the question count with the Russian plural the
-// Catalog's count template picks for n.
-function questionCountLabel(n: number): string {
-  return S.board.count.questions(n);
+// countLabel says what is on a board or in a list — questions, SI themes, or
+// both — with the Russian plural the Catalog's template picks for each. A list
+// of one kind says only its own, which is the usual case.
+function countLabel(questions: number, themes: number): string {
+  if (!themes) return S.board.count.questions(questions);
+  if (!questions) return S.board.count.themes(themes);
+  return S.board.count.both(S.board.count.questions(questions), S.board.count.themes(themes));
 }
 
 // renderBoardTitle writes the crumb: the board's name, then how many questions
@@ -451,8 +455,9 @@ function questionCountLabel(n: number): string {
 // nothing on it does not need telling.
 function renderBoardTitle(): void {
   const n = state.cards.filter((c) => c.kind === "question").length;
+  const themes = state.cards.filter((c) => c.kind === "theme").length;
   titleNode.replaceChildren(state.name);
-  if (n) titleNode.append(el("span", { class: "board-qcount", text: questionCountLabel(n) }));
+  if (n || themes) titleNode.append(el("span", { class: "board-qcount", text: countLabel(n, themes) }));
 }
 
 // The Search Index is written by whoever holds the key (ADR-0008), and on this
@@ -549,15 +554,18 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   const allNumbers = precomputedNumbers || xyChgk.numberQuestionCards(cards);
   const view = shownCards(cards, allNumbers, labelFilter.keep());
   const shown = view.cards;
-  const qCount = cards.filter((c) => c.kind === "question").length;
-  const qShown = shown.filter((c) => c.kind === "question").length;
+  const counted = (cs: ReadonlyArray<BoardCard>): number => cs.filter((c) => c.kind === "question" || c.kind === "theme").length;
+  const qCount = counted(cards);
+  const qShown = counted(shown);
   if (qCount) {
     headMain.append(el("span", {
       class: "klist-count",
       // "1 of 4", not "1 of 4 questions": the word cannot agree with both numbers.
       // The "of" form appears whenever a filter is on, even where it happens to
       // hide nothing, so the head reads the same way across the board.
-      text: labelFilter.active() ? S.board.count.filtered(String(qShown), String(qCount)) : questionCountLabel(qCount),
+      text: labelFilter.active()
+        ? S.board.count.filtered(String(qShown), String(qCount))
+        : countLabel(cards.filter((c) => c.kind === "question").length, cards.filter((c) => c.kind === "theme").length),
     }));
   }
   const headKids: HTMLElement[] = [];
@@ -652,6 +660,22 @@ async function renameList(list: BoardList): Promise<void> {
   } catch (err) { setStatus("error"); alert(S.board.rename.failed(errMsg(err))); }
 }
 
+// retypeList swaps what the list holds — OD questions or SI themes. It reaches the
+// next card the add-card button makes and nothing else: the cards already in the
+// list keep their kinds, and both kinds stay offered on every one of them.
+async function retypeList(list: BoardList): Promise<void> {
+  const next = list.type === "si" ? "normal" : "si";
+  const to = next === "si" ? S.board.list.typeSi() : S.board.list.typeChgk();
+  if (!confirm(S.board.list.typeConfirm(to, S.board.list.typeHint()))) return;
+  setStatus("saving");
+  try {
+    await patch("patchList", `/api/lists/${list.id}`, { type: next });
+    list.type = next;
+    setStatus("saved");
+    render();
+  } catch (err) { setStatus("error"); alert(S.board.rename.failed(errMsg(err))); }
+}
+
 // deleteList soft-deletes the list and its cards (server cascades the cards),
 // offline-capable via the sync outbox.
 async function deleteList(list: BoardList): Promise<void> {
@@ -699,7 +723,7 @@ const aliasOf = (card: BoardCard | null | undefined): string => ((card && card.a
 // below is the DOM form.
 function cardTitle(card: BoardCard, number?: string | null): string {
   const body = cardBody(card);
-  if (card.kind === "question" && number) return `${number}. ${body}`;
+  if ((card.kind === "question" || card.kind === "theme") && number) return `${number}. ${body}`;
   return body;
 }
 
@@ -710,10 +734,19 @@ function renderCardTitle(card: BoardCard, number?: string | null): HTMLElement {
   // An aliased card gets a modifier class: the alias is a label, not an excerpt,
   // so it should not be line-clamped down to nothing by --kcard-lines.
   const cls = "kcard-title" + (aliasOf(card) ? " kcard-title-alias" : "");
-  if (card.kind === "question" && number) {
-    return el("div", { class: cls },
+  if ((card.kind === "question" || card.kind === "theme") && number) {
+    const title = el("div", { class: cls },
       el("span", { class: "kcard-num", text: `${number}. ` }),
       cardBody(card));
+    // A tour in progress is read by which themes are still short, so a theme
+    // says how many of its questions are written right where it is looked at.
+    if (card.kind !== "theme") return title;
+    const p = progress(card.desc);
+    title.append(el("span", {
+      class: "kcard-progress", title: S.card.slot.progressTitle(),
+      text: S.card.slot.progress(String(p.filled), String(p.total)),
+    }));
+    return title;
   }
   return el("div", { class: cls, text: cardTitle(card, number) });
 }
@@ -926,14 +959,19 @@ function renderAddList(): HTMLElement {
     class: "kadd kadd-ok", type: "submit", title: S.board.list.create(), "aria-label": S.board.list.create(), hidden: true,
   }, icon("check")) as HTMLButtonElement;
   input.addEventListener("input", () => { okBtn.hidden = !input.value.trim(); });
-  // Every list is a question list now: a test session is board-level, not a
-  // column, so the old question/test picker has nothing left to pick.
-  form.append(el("div", { class: "u-row u-gap-sm" }, input, okBtn));
+  // What the list holds. It decides which card the add-card button makes and
+  // nothing else — both kinds stay offered on every card, and the type is
+  // changeable later from the ⋯ menu.
+  const typeSel = el("select", { class: "input", "aria-label": S.board.list.typeLabel() },
+    el("option", { value: "normal", text: S.board.list.typeChgk() }),
+    el("option", { value: "si", text: S.board.list.typeSi() })) as HTMLSelectElement;
+  form.append(el("div", { class: "u-col u-gap-sm" },
+    el("div", { class: "u-row u-gap-sm" }, input, okBtn), typeSel));
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const title = input.value.trim();
     if (!title) return;
-    const type = "normal";
+    const type = typeSel.value;
     const ranks = [...state.lists].sort(byRank);
     const rank = keyBetween(ranks.length ? ranks[ranks.length - 1].rank : null, null);
     try {
@@ -941,6 +979,7 @@ function renderAddList(): HTMLElement {
       const res = await create("createList", `/api/boards/${boardId}/lists`, { title_enc: titleEnc, rank, type });
       state.lists.push({ id: res.id as number, type, rank, groupId: null, title });
       input.value = "";
+      typeSel.value = type; // the next list is usually the same kind of list
       okBtn.hidden = true;
       render();
     } catch (err) { setStatus("error"); }
@@ -1136,7 +1175,7 @@ async function commitCardTo(cardId: number, targetListId: number, rank: string):
 // questionNumberFor returns the display number this question card would show on
 // the board (auto-assigned or directive-driven), matching the kanban preview.
 function questionNumberFor(card: PreviewCardLike): string | null {
-  if (!card || card.kind !== "question") return null;
+  if (!card || (card.kind !== "question" && card.kind !== "theme")) return null;
   const list = state.lists.find((l) => l.id === card.listId);
   if (!list) return null;
   const idx = cardsOf(list.id).findIndex((c) => c.id === card.id);
@@ -1503,6 +1542,7 @@ registerPanel(
 
   // The list itself
   starts({ id: "rename-list", menu: "list", icon: "pencil", label: S.board.rename.listLabel(), open: (s) => { void renameList(s.list); } }),
+  { id: "retype-list", menu: "list", icon: "list", label: S.board.list.typeChange(), open: (s) => { void retypeList(s.list); } },
   createMoveListPanel(board, transfer),
   { id: "delete-list", menu: "list", icon: "trash-2", label: S.board.delete.listLabel(), open: (s) => { void deleteList(s.list); } },
 );

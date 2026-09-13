@@ -553,14 +553,15 @@
 .klist-add:hover .kadd-form { color: var(--text); }
 .kadd-form { width: 100%; }
 /* the ✓ that creates the list (the Android soft keyboard has no Enter): a
-   control-height touch target in the topbar tick's green, not the muted
-   hover-reveal of the other .kadd buttons — on touch there is no hover */
+   control-height touch target that stays visible rather than hover-revealing
+   like the other .kadd buttons — on touch there is no hover. Ink, not green:
+   green in this UI means a state (saved), and this is a button. */
 .kadd-ok {
   min-width: var(--control-h);
   min-height: var(--control-h);
   font-size: var(--text-xl);
 }
-.klist-add .kadd-form .kadd-ok, .klist-add:hover .kadd-form .kadd-ok { color: var(--green-dark); }
+.klist-add .kadd-form .kadd-ok, .klist-add:hover .kadd-form .kadd-ok { color: var(--text); }
 /* The Тип row under the new-list field: breathe away from the field, and the
    select shrinks to the row's xs type scale instead of full .input chrome.
    min-height too — .input's --control-h floor is what kept the select
@@ -1945,3 +1946,45 @@ body {
 .replace-hit-text { font-size: var(--text-sm); color: var(--text-muted); }
 .replace-hit-text del { color: var(--muted); }
 .replace-hit-text ins { font-weight: var(--fw-bold); text-decoration: none; }
+
+/* ── темы СИ: the ladder inside Поля ──────────────────────────────────────── */
+/* A theme card's Поля is the ordinary field grid repeated once per rung, each
+   under a rule carrying its point value and the two buttons that move it. The
+   rule is the only thing separating one question from the next in a flat form
+   that can run to five field sets, so it is a real line, not a gap. Layout is
+   .fld-wide (a full row of the field grid) and the kit's .u-row — nothing here
+   re-invents either. */
+.slot-head {
+  border-top: 1px solid var(--grid-dark);
+  padding-top: var(--space-2);
+  margin-top: var(--space-2);
+}
+.slot-points {
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* «3/5» on a theme card: how much of it is written. Muted and pushed to the end
+   of the title line, so it reads as a gauge beside the name rather than as part
+   of it. */
+.kcard-progress {
+  float: right;
+  margin-left: var(--space-2);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A theme in Просмотр is five questions under one heading, so the only thing
+   telling one from the next is the space around it: a question and its answer
+   sit tight together, and the questions sit well apart. The card preview zeroes
+   .pv-q's bottom margin because an ОД card shows exactly one and the margin
+   would be a trailing gap — a theme needs it back, on all but the last.
+   The theme's own author and comment are the theme's, not a question's, so they
+   keep body size (pvSmallCls shrinks a question's to match the exports' 10pt)
+   and the first question starts a clear step below them. */
+.pv-theme .pv-q .pv-q-text { margin-bottom: var(--space-1); }
+.pv-theme .pv-q:first-of-type { margin-top: var(--space-4); }
+.card-preview-body .pv-theme .pv-q { margin-bottom: var(--space-5); }
+.card-preview-body .pv-theme .pv-q:last-child { margin-bottom: 0; }
