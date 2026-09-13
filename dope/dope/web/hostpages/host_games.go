@@ -526,7 +526,7 @@ func (s *Server) handleHostCreateGame(w http.ResponseWriter, r *http.Request, fe
 
 // dslField names each format's scheme editor on the creation form. Every section
 // is in the document at once and the page merely hides the ones not picked — a
-// hidden field still posts — so one shared name would have handed a брейн's
+// hidden field still posts — so one shared name would have handed a brain game's
 // prefilled scheme to whatever type the host actually chose. A format absent
 // here has no scheme of its own and its DSL is empty.
 var dslField = map[string]string{
