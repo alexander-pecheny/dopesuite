@@ -553,14 +553,15 @@
 .klist-add:hover .kadd-form { color: var(--text); }
 .kadd-form { width: 100%; }
 /* the ✓ that creates the list (the Android soft keyboard has no Enter): a
-   control-height touch target in the topbar tick's green, not the muted
-   hover-reveal of the other .kadd buttons — on touch there is no hover */
+   control-height touch target that stays visible rather than hover-revealing
+   like the other .kadd buttons — on touch there is no hover. Ink, not green:
+   green in this UI means a state (saved), and this is a button. */
 .kadd-ok {
   min-width: var(--control-h);
   min-height: var(--control-h);
   font-size: var(--text-xl);
 }
-.klist-add .kadd-form .kadd-ok, .klist-add:hover .kadd-form .kadd-ok { color: var(--green-dark); }
+.klist-add .kadd-form .kadd-ok, .klist-add:hover .kadd-form .kadd-ok { color: var(--text); }
 /* The Тип row under the new-list field: breathe away from the field, and the
    select shrinks to the row's xs type scale instead of full .input chrome.
    min-height too — .input's --control-h floor is what kept the select
@@ -1975,11 +1976,15 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* A theme in Просмотр: its questions sit under the theme's heading, indented
-   just enough to say they belong to it — and spaced apart from each other. The
-   card preview zeroes .pv-q's bottom margin because an ОД card shows exactly one
-   question and the margin would be a trailing gap; a theme shows five, so the
-   gap between them is the only thing telling one from the next. */
-.pv-theme .pv-q { margin-left: var(--space-3); }
-.card-preview-body .pv-theme .pv-q { margin-bottom: var(--space-4); }
+/* A theme in Просмотр is five questions under one heading, so the only thing
+   telling one from the next is the space around it: a question and its answer
+   sit tight together, and the questions sit well apart. The card preview zeroes
+   .pv-q's bottom margin because an ОД card shows exactly one and the margin
+   would be a trailing gap — a theme needs it back, on all but the last.
+   The theme's own author and comment are the theme's, not a question's, so they
+   keep body size (pvSmallCls shrinks a question's to match the exports' 10pt)
+   and the first question starts a clear step below them. */
+.pv-theme .pv-q .pv-q-text { margin-bottom: var(--space-1); }
+.pv-theme .pv-q:first-of-type { margin-top: var(--space-4); }
+.card-preview-body .pv-theme .pv-q { margin-bottom: var(--space-5); }
 .card-preview-body .pv-theme .pv-q:last-child { margin-bottom: 0; }

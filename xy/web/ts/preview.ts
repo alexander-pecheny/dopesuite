@@ -170,7 +170,7 @@ export function renderPreviewCard(card: PvCard, number: string | null, imgMap: M
     if (edit) head.append(edit(card as BoardCard));
     head.append(renderRich(S.fsource.theme.defaultLabel(number ?? "", t.name), imgMap, { nbsp: true }));
     wrap.append(head);
-    if (t.author !== null) wrap.append(pvField("author", t.author, imgMap, screen, pvSmallCls("author")));
+    if (t.author !== null) wrap.append(pvField("author", t.author, imgMap, screen, ""));
     if (t.comment !== null) wrap.append(pvField("comment", t.comment, imgMap, screen, pvSmallCls("comment")));
     for (const slot of t.slots) {
       wrap.append(pvQuestion(card, xyChgk.composeFields(slot.fields), slot.number, imgMap, screen, undefined, true));
