@@ -94,6 +94,31 @@ func (ts *TestServer) Login(userID int64) *http.Cookie {
 	return &http.Cookie{Name: session.CookieName, Value: token}
 }
 
+// TgCode writes a telegram login code the way the handshake and the bot between
+// them would leave it: Start mints the row, and the bot fills in who forwarded
+// it. telegramUserID 0 leaves it as Start left it — nobody has written back
+// yet. lifetime is how long the code has left, so a test can hand over a lapsed
+// one without waiting for it.
+func (ts *TestServer) TgCode(code string, telegramUserID int64, handle string, lifetime time.Duration) {
+	ts.t.Helper()
+	now := time.Now()
+	var (
+		tgUser   any
+		tgHandle any
+		consumed any
+	)
+	if telegramUserID != 0 {
+		tgUser, tgHandle, consumed = telegramUserID, handle, rfc3339(now)
+	}
+	_, err := ts.s.db.Exec(`
+insert into telegram_login_codes(code, kind, telegram_user_id, telegram_username, created_at, expires_at, consumed_at)
+values(?, 'register', ?, ?, ?, ?, ?)`,
+		code, tgUser, tgHandle, rfc3339(now), rfc3339(now.Add(lifetime)), consumed)
+	if err != nil {
+		ts.t.Fatalf("mint code %s: %v", code, err)
+	}
+}
+
 // SeedRates writes a Rate table for a day, so no test ever opens a socket.
 func (ts *TestServer) SeedRates(day string, table map[string]string) {
 	ts.t.Helper()

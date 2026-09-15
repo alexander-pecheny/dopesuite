@@ -248,6 +248,44 @@ var EN = Strings{
 			Upload:            func() string { return "Attach a photo" },
 		},
 	},
+	Profile: ProfileStrings{
+		Logout: func() string { return "Log out" },
+		Password: ProfilePasswordStrings{
+			Current:      func() string { return "Current password (if set)" },
+			CurrentWrong: func() string { return "That is not your current password." },
+			Hint: func() string {
+				return "A password is 8 to 72 characters long. Changing it logs out every other browser you are signed in on."
+			},
+			Length:   func() string { return "A password is 8 to 72 characters long." },
+			Mismatch: func() string { return "The two new passwords do not match." },
+			New:      func() string { return "New password" },
+			Repeat:   func() string { return "Repeat the new password" },
+			Saved:    func() string { return "Password saved. Every other session has been logged out." },
+			Submit:   func() string { return "Save the password" },
+			Title:    func() string { return "Change password" },
+		},
+		Telegram: ProfileTelegramStrings{
+			AccountTaken: func() string { return "This account already has a Telegram account linked." },
+			BotLead:      func() string { return "If the link does not open, write to the bot " },
+			BotMid:       func() string { return " and send it this code:" },
+			Expired:      func() string { return "The code has expired. Start again." },
+			Hint:         func() string { return "Link a Telegram account and you can log in with it instead of the password." },
+			LinkHint:     func() string { return "Follow this link to link your account:" },
+			Linked:       func() string { return "Telegram linked." },
+			LinkedLead:   func() string { return "Telegram: " },
+			LinkedTail:   func() string { return "." },
+			None:         func() string { return "No Telegram account is linked." },
+			Start:        func() string { return "Link Telegram" },
+			TimedOut:     func() string { return "The wait ran out. Reload the page." },
+			Title:        func() string { return "Link Telegram" },
+			Waiting:      func() string { return "Waiting for the bot to confirm…" },
+		},
+		Title: func() string { return "Your account" },
+		Whoami: ProfileWhoamiStrings{
+			Lead: func() string { return "You are logged in as " },
+			Tail: func() string { return "." },
+		},
+	},
 	Server: ServerStrings{
 		Error: ServerErrorStrings{
 			BadRequest: func() string { return "That request did not make sense." },

@@ -39,6 +39,9 @@ func routes(s *server) *http.ServeMux {
 	// The join landing is public on purpose: an anonymous visitor sees the
 	// Group's name and a log-in button whose `next` brings them back here.
 	pages.Handle("GET /join/{code}", route.Public, s.servePage("ui/join.dopeui"))
+	// The account page: the chrome menu's own entry, and the only way to change
+	// a password or add a Telegram to an account that came in by the other door.
+	pages.Handle("GET /profile", route.LoggedIn, s.servePage("ui/profile.dopeui"))
 
 	// ---- auth ----
 	api.Handle("GET /api/auth/methods", route.Public, s.handleLoginMethods)
@@ -48,6 +51,12 @@ func routes(s *server) *http.ServeMux {
 	api.Handle("POST /api/auth/login-password", route.Public, s.handleLoginPassword)
 	api.Handle("GET /api/auth/me", route.LoggedIn, s.handleMe)
 	api.Handle("POST /api/auth/logout", route.LoggedIn, s.handleLogout)
+	api.Handle("POST /api/auth/password", route.LoggedIn, s.handleSetPassword)
+	// Linking starts with the very same mint: the bot cannot tell a code meant
+	// for logging in from one meant for linking, and neither can the code. Only
+	// the ending differs — Link, not Resolve, and no session out of it.
+	api.Handle("POST /api/auth/tg/link/start", route.LoggedIn, s.handleTgStart)
+	api.Handle("GET /api/auth/tg/link/status", route.LoggedIn, s.handleTgLinkStatus)
 
 	// ---- groups ----
 	api.Handle("GET /api/currencies", route.LoggedIn, s.handleCurrencies)

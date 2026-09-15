@@ -593,6 +593,7 @@ func TestPagesServe(t *testing.T) {
 		"/login?next=%2Fjoin%2FABC",
 		"/group/" + strconv.FormatInt(w.group, 10),
 		"/group/" + strconv.FormatInt(w.group, 10) + "/new",
+		"/profile",
 	} {
 		resp := w.alice.Do(http.MethodGet, path, nil)
 		if resp.Code != http.StatusOK {

@@ -1,0 +1,47 @@
+# The /profile page: who you are, the password, the Telegram link, the way out.
+# An account is reached by a password or by Telegram, and this is the one page
+# where somebody who came in by one adds the other.
+
+title = "Your account"
+logout = "Log out"
+
+[whoami]
+# "You are logged in as <strong>pecheny</strong>."
+lead = "You are logged in as "
+tail = "."
+
+[password]
+title = "Change password"
+# An account made through Telegram has no password, so the current one is
+# asked for and not insisted on.
+current = "Current password (if set)"
+new = "New password"
+repeat = "Repeat the new password"
+submit = "Save the password"
+hint = "A password is 8 to 72 characters long. Changing it logs out every other browser you are signed in on."
+# The two refusals the server writes.
+length = "A password is 8 to 72 characters long."
+current_wrong = "That is not your current password."
+# The two the page can answer on its own.
+mismatch = "The two new passwords do not match."
+saved = "Password saved. Every other session has been logged out."
+
+[telegram]
+# The account line, when there is a Telegram handle on it:
+# "Telegram: <strong>@pecheny</strong>."
+linked_lead = "Telegram: "
+linked_tail = "."
+none = "No Telegram account is linked."
+title = "Link Telegram"
+hint = "Link a Telegram account and you can log in with it instead of the password."
+start = "Link Telegram"
+# The code step, in the order it appears — the same handshake as the login page.
+link_hint = "Follow this link to link your account:"
+bot_lead = "If the link does not open, write to the bot "
+bot_mid = " and send it this code:"
+waiting = "Waiting for the bot to confirm…"
+# How it ends.
+linked = "Telegram linked."
+account_taken = "This account already has a Telegram account linked."
+expired = "The code has expired. Start again."
+timed_out = "The wait ran out. Reload the page."

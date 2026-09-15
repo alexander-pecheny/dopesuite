@@ -1,0 +1,44 @@
+page title=@profile.title kind="sheet" scripts="dist/profile.js"
+  -- A topbar with crumbs uses the trail as its heading, so no title prop here.
+  topbar
+    crumbs
+      crumb home href="/" icon="house" label=@page.common.home
+      crumb @profile.title
+
+  -- Who you are, and which of the two ways in this account has. Both lines are
+  -- hidden until /api/auth/me answers: an account has a Telegram or it has not,
+  -- and guessing before the answer flickers the wrong one.
+  section
+    hint @profile.whoami.lead (strong id="whoami" "…") @profile.whoami.tail
+    hint id="telegramLinked" hidden @profile.telegram.linked_lead (strong id="telegramHandle" "@…") @profile.telegram.linked_tail
+    hint id="telegramNone" hidden @profile.telegram.none
+
+  section
+    subhead @profile.password.title
+    form id="passwordForm" dir="col"
+      password id="currentPassword" placeholder=@profile.password.current autocomplete="current-password"
+      password id="newPassword" placeholder=@profile.password.new autocomplete="new-password" required
+      password id="repeatPassword" placeholder=@profile.password.repeat autocomplete="new-password" required
+      hint @profile.password.hint
+      row gap="sm" wrap
+        button kind="primary" submit @profile.password.submit
+    message id="passwordMessage"
+
+  -- The link handshake, in the shape the login page shows it: a deep link
+  -- first, the code itself for a browser that cannot open t.me.
+  section id="telegramSection" hidden
+    subhead @profile.telegram.title
+    hint id="telegramHint" @profile.telegram.hint
+    row gap="sm" wrap
+      button kind="primary" id="linkBtn" icon="link" @profile.telegram.start
+    col gap="sm" id="linkCodeBlock" hidden
+      hint @profile.telegram.link_hint
+      button id="linkDeepLink" href="#" "t.me/…"
+      hint @profile.telegram.bot_lead (strong id="linkBotName" "@…") @profile.telegram.bot_mid
+      bigcode id="linkCode"
+      hint @profile.telegram.waiting
+    message id="telegramMessage"
+
+  section
+    row gap="sm" wrap
+      button kind="ghost" id="logoutBtn" @profile.logout

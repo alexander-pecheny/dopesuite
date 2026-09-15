@@ -30,6 +30,7 @@ var pagePaths = []string{
 	"ui/group.dopeui",
 	"ui/transaction.dopeui",
 	"ui/join.dopeui",
+	"ui/profile.dopeui",
 }
 
 // servePage compiles and serves a .dopeui page with asset-ref versioning and

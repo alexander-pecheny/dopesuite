@@ -132,7 +132,12 @@ func (s *server) handleLoginMethods(w http.ResponseWriter, _ *http.Request, _ ro
 
 // ---- the telegram handshake ----
 
-func (s *server) handshake() tglogin.Handshake { return tglogin.Handshake{Users: spliffUsers{}} }
+// The handshake carries Accounts as well as Users: /profile links a telegram
+// onto the account a person is already in, and that is the one step that has to
+// read the account it is about.
+func (s *server) handshake() tglogin.Handshake {
+	return tglogin.Handshake{Users: spliffUsers{}, Accounts: spliffUsers{}}
+}
 
 type tgStartResponse struct {
 	Code        string `json:"code"`
@@ -220,19 +225,28 @@ func writeOutcome(w http.ResponseWriter, out tglogin.Outcome, err error) error {
 // spliffUsers is Spliff's users table as the handshake needs it.
 type spliffUsers struct{}
 
+// accountColumns is the users row as the handshake reads it, in Account's own
+// field order, so one scan serves all three lookups.
+const accountColumns = `id, username, password_hash, password_salt, telegram_user_id`
+
 func (spliffUsers) ByTelegram(ctx context.Context, tx tglogin.Tx, tg int64) (tglogin.Account, bool, error) {
 	return scanAccount(tx.QueryRowContext(ctx,
-		`select id, username, password_hash, password_salt from users where telegram_user_id = ?`, tg))
+		`select `+accountColumns+` from users where telegram_user_id = ?`, tg))
 }
 
 func (spliffUsers) ByUsername(ctx context.Context, tx tglogin.Tx, username string) (tglogin.Account, bool, error) {
 	return scanAccount(tx.QueryRowContext(ctx,
-		`select id, username, password_hash, password_salt from users where username = ?`, username))
+		`select `+accountColumns+` from users where username = ?`, username))
+}
+
+func (spliffUsers) ByID(ctx context.Context, tx tglogin.Tx, userID int64) (tglogin.Account, bool, error) {
+	return scanAccount(tx.QueryRowContext(ctx,
+		`select `+accountColumns+` from users where id = ?`, userID))
 }
 
 func scanAccount(row *sql.Row) (tglogin.Account, bool, error) {
 	var a tglogin.Account
-	switch err := row.Scan(&a.ID, &a.Username, &a.PasswordHash, &a.PasswordSalt); {
+	switch err := row.Scan(&a.ID, &a.Username, &a.PasswordHash, &a.PasswordSalt, &a.TelegramUserID); {
 	case errors.Is(err, sql.ErrNoRows):
 		return a, false, nil
 	case err != nil:

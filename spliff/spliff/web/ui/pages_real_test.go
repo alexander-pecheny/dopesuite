@@ -18,7 +18,7 @@ func TestRealPages(t *testing.T) {
 		Compile:   Compile,
 		PagesDir:  "../assets/ui",
 		StaticDir: "../assets/static",
-		Pages:     4,
+		Pages:     5,
 		Provided:  map[string][]byte{"login": kit.LoginPage(spliffstrings.Default.Auth.Page.Title(), "/")},
 	}.Run(t)
 }

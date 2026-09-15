@@ -220,14 +220,14 @@ func targets() []target {
 		{"spliff", func() []api.BuildOptions {
 			return []api.BuildOptions{
 				{
-					EntryPointsAdvanced: entries("spliff/spliff/web/ts/pages/", "index", "group", "transaction", "join"),
+					EntryPointsAdvanced: entries("spliff/spliff/web/ts/pages/", "index", "group", "transaction", "join", "profile"),
 					Bundle:              true,
 					Format:              api.FormatIIFE,
 					Outdir:              "spliff/spliff/web/assets/static/dist",
 				},
 				{
 					EntryPointsAdvanced: entries("spliff/spliff/web/ts/",
-						"txform", "money",
+						"txform", "money", "profile-model",
 						// the TS Catalog: the pages import i18nstrings, it the rest
 						"i18nstrings", "i18nstrings_plural_gen", "i18nstrings_types_gen", "i18nstrings_en_gen"),
 					Format: api.FormatESModule,

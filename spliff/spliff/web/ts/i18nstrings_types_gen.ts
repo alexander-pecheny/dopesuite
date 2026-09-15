@@ -227,6 +227,42 @@ export type Strings = {
       upload: () => string;
     };
   };
+  profile: {
+    logout: () => string;
+    password: {
+      current: () => string;
+      currentWrong: () => string;
+      hint: () => string;
+      length: () => string;
+      mismatch: () => string;
+      new: () => string;
+      repeat: () => string;
+      saved: () => string;
+      submit: () => string;
+      title: () => string;
+    };
+    telegram: {
+      accountTaken: () => string;
+      botLead: () => string;
+      botMid: () => string;
+      expired: () => string;
+      hint: () => string;
+      linkHint: () => string;
+      linked: () => string;
+      linkedLead: () => string;
+      linkedTail: () => string;
+      none: () => string;
+      start: () => string;
+      timedOut: () => string;
+      title: () => string;
+      waiting: () => string;
+    };
+    title: () => string;
+    whoami: {
+      lead: () => string;
+      tail: () => string;
+    };
+  };
   server: {
     error: {
       badRequest: () => string;

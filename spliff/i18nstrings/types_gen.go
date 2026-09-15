@@ -13,6 +13,7 @@ type Strings struct {
 	Invite      InviteStrings
 	Notify      NotifyStrings
 	Page        PageStrings
+	Profile     ProfileStrings
 	Server      ServerStrings
 	Transaction TransactionStrings
 }
@@ -299,6 +300,50 @@ type PageTransactionStrings struct {
 	Total                  func() string
 	UnclaimedNote          func(amount string) string
 	Upload                 func() string
+}
+
+// ProfileStrings is the profile Surface.
+type ProfileStrings struct {
+	Logout   func() string
+	Password ProfilePasswordStrings
+	Telegram ProfileTelegramStrings
+	Title    func() string
+	Whoami   ProfileWhoamiStrings
+}
+
+type ProfilePasswordStrings struct {
+	Current      func() string
+	CurrentWrong func() string
+	Hint         func() string
+	Length       func() string
+	Mismatch     func() string
+	New          func() string
+	Repeat       func() string
+	Saved        func() string
+	Submit       func() string
+	Title        func() string
+}
+
+type ProfileTelegramStrings struct {
+	AccountTaken func() string
+	BotLead      func() string
+	BotMid       func() string
+	Expired      func() string
+	Hint         func() string
+	LinkHint     func() string
+	Linked       func() string
+	LinkedLead   func() string
+	LinkedTail   func() string
+	None         func() string
+	Start        func() string
+	TimedOut     func() string
+	Title        func() string
+	Waiting      func() string
+}
+
+type ProfileWhoamiStrings struct {
+	Lead func() string
+	Tail func() string
 }
 
 // ServerStrings is the server Surface.
@@ -635,6 +680,62 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Page.Transaction.Total(), true
 	case "page.transaction.upload":
 		return s.Page.Transaction.Upload(), true
+	case "profile.logout":
+		return s.Profile.Logout(), true
+	case "profile.password.current":
+		return s.Profile.Password.Current(), true
+	case "profile.password.current_wrong":
+		return s.Profile.Password.CurrentWrong(), true
+	case "profile.password.hint":
+		return s.Profile.Password.Hint(), true
+	case "profile.password.length":
+		return s.Profile.Password.Length(), true
+	case "profile.password.mismatch":
+		return s.Profile.Password.Mismatch(), true
+	case "profile.password.new":
+		return s.Profile.Password.New(), true
+	case "profile.password.repeat":
+		return s.Profile.Password.Repeat(), true
+	case "profile.password.saved":
+		return s.Profile.Password.Saved(), true
+	case "profile.password.submit":
+		return s.Profile.Password.Submit(), true
+	case "profile.password.title":
+		return s.Profile.Password.Title(), true
+	case "profile.telegram.account_taken":
+		return s.Profile.Telegram.AccountTaken(), true
+	case "profile.telegram.bot_lead":
+		return s.Profile.Telegram.BotLead(), true
+	case "profile.telegram.bot_mid":
+		return s.Profile.Telegram.BotMid(), true
+	case "profile.telegram.expired":
+		return s.Profile.Telegram.Expired(), true
+	case "profile.telegram.hint":
+		return s.Profile.Telegram.Hint(), true
+	case "profile.telegram.link_hint":
+		return s.Profile.Telegram.LinkHint(), true
+	case "profile.telegram.linked":
+		return s.Profile.Telegram.Linked(), true
+	case "profile.telegram.linked_lead":
+		return s.Profile.Telegram.LinkedLead(), true
+	case "profile.telegram.linked_tail":
+		return s.Profile.Telegram.LinkedTail(), true
+	case "profile.telegram.none":
+		return s.Profile.Telegram.None(), true
+	case "profile.telegram.start":
+		return s.Profile.Telegram.Start(), true
+	case "profile.telegram.timed_out":
+		return s.Profile.Telegram.TimedOut(), true
+	case "profile.telegram.title":
+		return s.Profile.Telegram.Title(), true
+	case "profile.telegram.waiting":
+		return s.Profile.Telegram.Waiting(), true
+	case "profile.title":
+		return s.Profile.Title(), true
+	case "profile.whoami.lead":
+		return s.Profile.Whoami.Lead(), true
+	case "profile.whoami.tail":
+		return s.Profile.Whoami.Tail(), true
 	case "server.error.bad_request":
 		return s.Server.Error.BadRequest(), true
 	case "server.error.internal":
@@ -674,7 +775,7 @@ func (s Strings) Lookup(id string) (string, bool) {
 // Defines reports whether the Catalog holds the id at all, templated or not.
 func (Strings) Defines(id string) bool {
 	switch id {
-	case "admin.create_users.name", "admin.create_users.title", "admin.page.title", "auth.login.fields_required", "auth.login.invalid", "auth.page.title", "auth.tg.code_missing", "auth.tg.not_configured", "auth.tg.telegram_taken", "auth.username.format", "auth.username.reserved", "bot.login.hint", "bot.register.done", "bot.register.expired", "bot.texts.down", "bot.texts.help", "common.cancel", "common.save", "group.error.currency_unknown", "group.error.name_required", "group.error.name_too_long", "group.error.not_a_member", "group.error.not_settled", "group.error.owner_must_hand_over", "group.error.owner_only", "group.error.still_named", "invite.error.decision_invalid", "invite.error.label_too_long", "invite.error.limits_out_of_range", "invite.error.no_seats_left", "invite.error.not_found", "invite.error.request_not_found", "invite.refusal.declined", "invite.refusal.exhausted", "invite.refusal.expired", "invite.refusal.generic", "invite.refusal.revoked", "invite.refusal.spent", "notify.involved.created", "notify.involved.edited", "notify.join.text", "notify.unclaimed.text", "page.common.home", "page.group.add", "page.group.balances", "page.group.confirm_delete", "page.group.confirm_kick", "page.group.confirm_leave", "page.group.currency_label", "page.group.debts", "page.group.delete", "page.group.deleted", "page.group.hand_over", "page.group.hand_over_label", "page.group.history", "page.group.invites", "page.group.kick", "page.group.leave", "page.group.members", "page.group.name_label", "page.group.new_invite", "page.group.no_rates", "page.group.no_transactions", "page.group.owner_tag", "page.group.settings", "page.group.settled", "page.group.title", "page.group.transactions", "page.group.transfer", "page.group.unclaimed", "page.group.you", "page.history.created", "page.history.deleted", "page.history.edited", "page.history.field_day", "page.history.field_description", "page.history.field_total", "page.history.field_unclaimed", "page.history.photo_added", "page.history.photo_removed", "page.history.restored", "page.history.somebody", "page.index.create_submit", "page.index.create_title", "page.index.currency_label", "page.index.empty", "page.index.heading", "page.index.name_label", "page.index.name_placeholder", "page.index.new_group", "page.index.settled", "page.index.title", "page.invite.approval", "page.invite.approve", "page.invite.copied", "page.invite.copy", "page.invite.decline", "page.invite.label_label", "page.invite.label_placeholder", "page.invite.max_uses_label", "page.invite.mint", "page.invite.remove", "page.invite.revoke", "page.invite.state_active", "page.invite.state_exhausted", "page.invite.state_expired", "page.invite.state_revoked", "page.invite.ttl_label", "page.invite.waiting", "page.join.already_member", "page.join.anonymous", "page.join.dead", "page.join.invited", "page.join.join", "page.join.login", "page.join.needs_approval", "page.join.open", "page.join.pending", "page.join.title", "page.join.unnamed", "page.transaction.col_for", "page.transaction.col_paid", "page.transaction.col_percent", "page.transaction.col_share", "page.transaction.confirm_delete", "page.transaction.confirm_remove_photo", "page.transaction.currency", "page.transaction.day", "page.transaction.delete", "page.transaction.description", "page.transaction.description_placeholder", "page.transaction.fully_claimed", "page.transaction.hint_claim", "page.transaction.hint_even", "page.transaction.hint_exact", "page.transaction.hint_percent", "page.transaction.hint_settlement", "page.transaction.hint_simple", "page.transaction.history", "page.transaction.mode", "page.transaction.mode_claim", "page.transaction.mode_even", "page.transaction.mode_exact", "page.transaction.mode_percent", "page.transaction.mode_settlement", "page.transaction.mode_simple", "page.transaction.need_members", "page.transaction.need_payee", "page.transaction.need_payer", "page.transaction.need_payments_match", "page.transaction.need_percents", "page.transaction.need_shares_fit", "page.transaction.new_title", "page.transaction.no_photos", "page.transaction.photo_alt", "page.transaction.photos", "page.transaction.pick_photo", "page.transaction.rate_as_of", "page.transaction.remove_photo", "page.transaction.restore", "page.transaction.title", "page.transaction.total", "page.transaction.unclaimed_note", "page.transaction.upload", "server.error.bad_request", "server.error.internal", "server.error.not_found", "transaction.error.currency_invalid", "transaction.error.day_invalid", "transaction.error.deleted", "transaction.error.description_required", "transaction.error.description_too_long", "transaction.error.duplicate_member", "transaction.error.negative_amount", "transaction.error.not_a_member", "transaction.error.payment_required", "transaction.error.payments_mismatch", "transaction.error.photo_missing", "transaction.error.photo_not_an_image", "transaction.error.photo_too_large", "transaction.error.shares_overdraw", "transaction.error.total_positive":
+	case "admin.create_users.name", "admin.create_users.title", "admin.page.title", "auth.login.fields_required", "auth.login.invalid", "auth.page.title", "auth.tg.code_missing", "auth.tg.not_configured", "auth.tg.telegram_taken", "auth.username.format", "auth.username.reserved", "bot.login.hint", "bot.register.done", "bot.register.expired", "bot.texts.down", "bot.texts.help", "common.cancel", "common.save", "group.error.currency_unknown", "group.error.name_required", "group.error.name_too_long", "group.error.not_a_member", "group.error.not_settled", "group.error.owner_must_hand_over", "group.error.owner_only", "group.error.still_named", "invite.error.decision_invalid", "invite.error.label_too_long", "invite.error.limits_out_of_range", "invite.error.no_seats_left", "invite.error.not_found", "invite.error.request_not_found", "invite.refusal.declined", "invite.refusal.exhausted", "invite.refusal.expired", "invite.refusal.generic", "invite.refusal.revoked", "invite.refusal.spent", "notify.involved.created", "notify.involved.edited", "notify.join.text", "notify.unclaimed.text", "page.common.home", "page.group.add", "page.group.balances", "page.group.confirm_delete", "page.group.confirm_kick", "page.group.confirm_leave", "page.group.currency_label", "page.group.debts", "page.group.delete", "page.group.deleted", "page.group.hand_over", "page.group.hand_over_label", "page.group.history", "page.group.invites", "page.group.kick", "page.group.leave", "page.group.members", "page.group.name_label", "page.group.new_invite", "page.group.no_rates", "page.group.no_transactions", "page.group.owner_tag", "page.group.settings", "page.group.settled", "page.group.title", "page.group.transactions", "page.group.transfer", "page.group.unclaimed", "page.group.you", "page.history.created", "page.history.deleted", "page.history.edited", "page.history.field_day", "page.history.field_description", "page.history.field_total", "page.history.field_unclaimed", "page.history.photo_added", "page.history.photo_removed", "page.history.restored", "page.history.somebody", "page.index.create_submit", "page.index.create_title", "page.index.currency_label", "page.index.empty", "page.index.heading", "page.index.name_label", "page.index.name_placeholder", "page.index.new_group", "page.index.settled", "page.index.title", "page.invite.approval", "page.invite.approve", "page.invite.copied", "page.invite.copy", "page.invite.decline", "page.invite.label_label", "page.invite.label_placeholder", "page.invite.max_uses_label", "page.invite.mint", "page.invite.remove", "page.invite.revoke", "page.invite.state_active", "page.invite.state_exhausted", "page.invite.state_expired", "page.invite.state_revoked", "page.invite.ttl_label", "page.invite.waiting", "page.join.already_member", "page.join.anonymous", "page.join.dead", "page.join.invited", "page.join.join", "page.join.login", "page.join.needs_approval", "page.join.open", "page.join.pending", "page.join.title", "page.join.unnamed", "page.transaction.col_for", "page.transaction.col_paid", "page.transaction.col_percent", "page.transaction.col_share", "page.transaction.confirm_delete", "page.transaction.confirm_remove_photo", "page.transaction.currency", "page.transaction.day", "page.transaction.delete", "page.transaction.description", "page.transaction.description_placeholder", "page.transaction.fully_claimed", "page.transaction.hint_claim", "page.transaction.hint_even", "page.transaction.hint_exact", "page.transaction.hint_percent", "page.transaction.hint_settlement", "page.transaction.hint_simple", "page.transaction.history", "page.transaction.mode", "page.transaction.mode_claim", "page.transaction.mode_even", "page.transaction.mode_exact", "page.transaction.mode_percent", "page.transaction.mode_settlement", "page.transaction.mode_simple", "page.transaction.need_members", "page.transaction.need_payee", "page.transaction.need_payer", "page.transaction.need_payments_match", "page.transaction.need_percents", "page.transaction.need_shares_fit", "page.transaction.new_title", "page.transaction.no_photos", "page.transaction.photo_alt", "page.transaction.photos", "page.transaction.pick_photo", "page.transaction.rate_as_of", "page.transaction.remove_photo", "page.transaction.restore", "page.transaction.title", "page.transaction.total", "page.transaction.unclaimed_note", "page.transaction.upload", "profile.logout", "profile.password.current", "profile.password.current_wrong", "profile.password.hint", "profile.password.length", "profile.password.mismatch", "profile.password.new", "profile.password.repeat", "profile.password.saved", "profile.password.submit", "profile.password.title", "profile.telegram.account_taken", "profile.telegram.bot_lead", "profile.telegram.bot_mid", "profile.telegram.expired", "profile.telegram.hint", "profile.telegram.link_hint", "profile.telegram.linked", "profile.telegram.linked_lead", "profile.telegram.linked_tail", "profile.telegram.none", "profile.telegram.start", "profile.telegram.timed_out", "profile.telegram.title", "profile.telegram.waiting", "profile.title", "profile.whoami.lead", "profile.whoami.tail", "server.error.bad_request", "server.error.internal", "server.error.not_found", "transaction.error.currency_invalid", "transaction.error.day_invalid", "transaction.error.deleted", "transaction.error.description_required", "transaction.error.description_too_long", "transaction.error.duplicate_member", "transaction.error.negative_amount", "transaction.error.not_a_member", "transaction.error.payment_required", "transaction.error.payments_mismatch", "transaction.error.photo_missing", "transaction.error.photo_not_an_image", "transaction.error.photo_too_large", "transaction.error.shares_overdraw", "transaction.error.total_positive":
 		return true
 	}
 	return false
