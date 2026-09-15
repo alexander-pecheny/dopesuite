@@ -48,6 +48,14 @@ func (m *memUsers) ByTelegram(_ context.Context, _ Tx, tg int64) (Account, bool,
 	return *m.accts[id], true, nil
 }
 
+func (m *memUsers) ByID(_ context.Context, _ Tx, userID int64) (Account, bool, error) {
+	a, ok := m.accts[userID]
+	if !ok {
+		return Account{}, false, nil
+	}
+	return *a, true, nil
+}
+
 func (m *memUsers) ByUsername(_ context.Context, _ Tx, username string) (Account, bool, error) {
 	for _, a := range m.accts {
 		if a.Username.String == username {
@@ -65,7 +73,7 @@ func (m *memUsers) Create(_ context.Context, _ Tx, id Identity, username string,
 		return 0, errors.New("UNIQUE constraint failed: users.username")
 	}
 	uid := m.add(username, "")
-	m.telegrams[id.TelegramUserID] = uid
+	m.link(uid, id.TelegramUserID)
 	return uid, nil
 }
 
@@ -77,7 +85,17 @@ func (m *memUsers) Attach(_ context.Context, _ Tx, userID int64, id Identity, _ 
 		return errors.New("UNIQUE constraint failed: users.telegram_user_id")
 	}
 	m.telegrams[id.TelegramUserID] = userID
+	if a, ok := m.accts[userID]; ok {
+		a.TelegramUserID = sql.NullInt64{Int64: id.TelegramUserID, Valid: true}
+	}
 	return nil
+}
+
+// link is the account fixture's other half: a telegram already on an account,
+// as both the index and the row itself, the way a users table holds it.
+func (m *memUsers) link(userID, tg int64) {
+	m.telegrams[tg] = userID
+	m.accts[userID].TelegramUserID = sql.NullInt64{Int64: tg, Valid: true}
 }
 
 func openDB(t *testing.T) *sql.DB {
@@ -109,7 +127,7 @@ type fixture struct {
 
 func newFixture(t *testing.T) *fixture {
 	u := newUsers()
-	return &fixture{t: t, db: openDB(t), users: u, h: Handshake{Users: u}, now: time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)}
+	return &fixture{t: t, db: openDB(t), users: u, h: Handshake{Users: u, Accounts: u}, now: time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)}
 }
 
 // tx runs fn in a transaction and commits it, like both apps' write wrappers.
@@ -157,6 +175,16 @@ func (f *fixture) resolve(code string) Outcome {
 	return out
 }
 
+func (f *fixture) link(code string, userID int64) (Outcome, error) {
+	var out Outcome
+	var lerr error
+	f.tx(func(tx *sql.Tx) error {
+		out, lerr = f.h.Link(context.Background(), tx, code, userID, f.now)
+		return nil
+	})
+	return out, lerr
+}
+
 func (f *fixture) claim(code, username, password string) (Outcome, error) {
 	var out Outcome
 	var cerr error
@@ -200,7 +228,7 @@ func TestResolveStates(t *testing.T) {
 
 	// A known telegram logs straight in, once: the code is burned.
 	uid := f.users.add("alice", "")
-	f.users.telegrams[555] = uid
+	f.users.link(uid, 555)
 	want(t, f.resolve(code), Ready, "alice")
 	want(t, f.resolve(code), NotFound, "")
 	if f.sessions() != 1 {
@@ -286,7 +314,7 @@ func TestClaimDoubleSubmitLogsTheSameAccountIn(t *testing.T) {
 	code := f.start()
 	f.bot(code, 701, "tg")
 	uid := f.users.add("carol", "")
-	f.users.telegrams[701] = uid
+	f.users.link(uid, 701)
 	out, err := f.claim(code, "whatever", "")
 	if err != nil {
 		t.Fatal(err)
@@ -367,5 +395,100 @@ func TestClaimPassesTheAppsOwnRefusalThrough(t *testing.T) {
 	f.bot(code, 706, "tg")
 	if _, err := f.claim(code, "admin", ""); !errors.Is(err, reserved) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// ---- Link: the handshake read by somebody who is already logged in ----
+
+func TestLinkAttachesTheTelegramToTheAccountAndBurnsTheCode(t *testing.T) {
+	f := newFixture(t)
+	uid := f.users.add("pecheny", "hash")
+	code := f.start()
+
+	// Until the bot writes back there is nothing to link, and nothing is said
+	// about the account either.
+	out, err := f.link(code, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want(t, out, Pending, "")
+
+	f.bot(code, 900, "pecheny_tg")
+	out, err = f.link(code, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want(t, out, Linked, "pecheny")
+	if out.Telegram == nil || *out.Telegram != "pecheny_tg" {
+		t.Fatalf("telegram = %v, want pecheny_tg", out.Telegram)
+	}
+	if f.users.telegrams[900] != uid {
+		t.Fatal("telegram not attached")
+	}
+	// No session: the caller already had one.
+	if f.sessions() != 0 {
+		t.Fatalf("sessions = %d", f.sessions())
+	}
+	// Burned: the replay finds nothing, and the account keeps what it has.
+	out, err = f.link(code, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want(t, out, NotFound, "")
+}
+
+func TestLinkRefusesATelegramThatIsAlreadySomebodyElses(t *testing.T) {
+	f := newFixture(t)
+	other := f.users.add("alice", "")
+	f.users.link(other, 901)
+	uid := f.users.add("pecheny", "hash")
+	code := f.start()
+	f.bot(code, 901, "alice_tg")
+
+	if _, err := f.link(code, uid); !errors.Is(err, ErrTelegramLinked) {
+		t.Fatalf("err = %v", err)
+	}
+	if f.users.telegrams[901] != other {
+		t.Fatal("the telegram moved")
+	}
+}
+
+func TestLinkRefusesAnAccountThatAlreadyHasATelegram(t *testing.T) {
+	f := newFixture(t)
+	uid := f.users.add("pecheny", "hash")
+	f.users.link(uid, 902)
+	code := f.start()
+	f.bot(code, 903, "second_tg")
+
+	if _, err := f.link(code, uid); !errors.Is(err, ErrAccountLinked) {
+		t.Fatalf("err = %v", err)
+	}
+	if f.users.telegrams[902] != uid || len(f.users.telegrams) != 1 {
+		t.Fatalf("telegrams = %v", f.users.telegrams)
+	}
+}
+
+func TestLinkRefusesALapsedCodeEvenOnceTheBotHasAnswered(t *testing.T) {
+	f := newFixture(t)
+	uid := f.users.add("pecheny", "hash")
+	code := f.start()
+	f.bot(code, 904, "late_tg")
+	f.now = f.now.Add(2 * time.Minute)
+
+	out, err := f.link(code, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want(t, out, Expired, "")
+	if len(f.users.telegrams) != 0 {
+		t.Fatalf("telegrams = %v", f.users.telegrams)
+	}
+}
+
+func TestLinkNeedsAnAccountsReader(t *testing.T) {
+	f := newFixture(t)
+	f.h = Handshake{Users: f.users}
+	if _, err := f.link("WHATEVER", 1); err == nil {
+		t.Fatal("a Handshake with no Accounts linked something")
 	}
 }
