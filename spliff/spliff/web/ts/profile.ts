@@ -37,15 +37,24 @@ async function load(): Promise<void> {
 function showAccount(me: MeDTO): void {
   setText(byId("whoami"), whoami(me));
   const handle = handleOf(me.telegram);
-  show(telegramLinked, handle !== "");
-  show(telegramNone, handle === "");
   if (handle) {
-    setText(telegramHandle, "@" + handle);
+    linked(handle);
     show(telegramSection, false);
     return;
   }
+  show(telegramLinked, false);
+  show(telegramNone, true);
   show(telegramSection, true);
   void showTelegramAvailability();
+}
+
+// linked draws the account line for a Telegram that is now on the account, and
+// puts the offer to link one away.
+function linked(handle: string): void {
+  setText(telegramHandle, "@" + handle);
+  show(telegramLinked, true);
+  show(telegramNone, false);
+  linkBtn.hidden = true;
 }
 
 // An instance that holds no bot token advertises no way to link: the button
@@ -130,8 +139,12 @@ async function poll(): Promise<void> {
   code = "";
   show(linkCodeBlock, false);
   if (outcome.kind === "linked") {
+    // The section stays, emptied of everything but its heading and the
+    // confirmation: that is where the person is looking. A reload finds an
+    // account with a Telegram on it and drops the section altogether.
+    show(telegramHint, false);
+    linked(outcome.telegram);
     setText(telegramMessage, S.profile.telegram.linked());
-    void load();
     return;
   }
   setText(telegramMessage, outcome.text);
