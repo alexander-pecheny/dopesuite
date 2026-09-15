@@ -146,7 +146,7 @@ Set `XY_TYPST_TEST_BIN` to a typst binary to run those tests.
 
 ## Deployment & backups
 
-**Attachment bytes are files on disk, not rows in SQLite** (`internal/blobstore`:
+**Attachment bytes are files on disk, not rows in SQLite** (`dopecore/blobstore`:
 random-ref, sharded, write-once). The DB only stores a `blob_ref`. So a
 backup has **two halves, and a restore needs both** — restore `xy.db` alone and
 every attachment becomes a dangling ref:

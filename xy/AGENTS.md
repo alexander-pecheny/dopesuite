@@ -125,7 +125,9 @@ internal/server/       package server — the whole HTTP server
                        the passphrase overlay reads before a key exists), members, leaving a board,
                        /api/collaborators (who I share boards with), ACL helpers
   boardinvites.go      invite links (ADR-0017): owner mints/revokes/deletes and decides join requests;
-                       the invitee peeks at a code and joins. A link grants membership, never the key
+                       the invitee peeks at a code and joins. A link grants membership, never the key.
+                       The machine is dopecore/invitelink; this file is the adapter — the routes, the
+                       DTOs, the write tx, the Russian, and a Scope that says what a board is
   timeline.go          the Timeline's one writer (insertEvent: every kind's columns; appendEvent for the
                        metadata trail) and one reader (timelineColumns + scanTimelineEvent, readTimeline)
   unread.go            the unread rule as SQL fragments (the two buckets, the watermark, the Mention) that
