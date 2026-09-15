@@ -132,22 +132,47 @@ the бой — the регламент turns the пристяжные round at th
 swap oftener — and it is what tells a first correct answer from a repeat of
 one already on the table.
 
+**Выход на тему (Seating)**:
+The players a team sends to play one theme of an ЭК-family бой. In ЭК it is
+one player; in **Эрудит-Секстет** it is up to three, and the регламент's cap
+per theme is a rule of the game, not of the format (Полифест-2025 says «от
+одного до трёх»). The seated players answer together and the theme's marks are
+the team's; a player's own statistics take the theme's points in equal shares
+among the seated, while a taken or missed question is counted whole for each
+of them — a third of a question is nonsense. The order in which the seated are
+listed carries no meaning. Эрудит-Секстет is its own game type in the app, as
+личная СИ is, and otherwise ЭК in every rule: twelve themes of five, the same
+values, the same перестрелка.
+
 **Рассадка**:
 The order of a side's three кресла for a тема — who is пристяжной first and
 second, and who коренной. A side's рассадка holds from the тема it is set at
 until it is set again; a тема whose рассадка differs from the one before is
 where that side turned round.
 
-**Зачёт**:
+**Зачёт (Division)**:
 A standings a team competes in. A tournament may run several зачёты at once on
 the same questions — an Открытый чемпионат Польши where Polish teams fight for
 the national medals while every team fights for the festival's — and «вне
 зачёта» is a зачёт in its own right, typically adult teams playing a school or
-student championship for fun. Source sheets usually mark a team's зачёт in a
-column of its own. Each зачёт ranks its own teams; вне-зачёта teams are shown
-beneath the ranked ones, in full and unmuted, so they inform without
-distracting. Not yet modelled: today a game ranks everyone in one зачёт, and
-marking a team out of it is not an [[Отказ]].
+student championship for fun. A Division is the set of teams carrying one
+[[Flag]], ranked among themselves: places are dealt afresh inside it, while
+whatever a question is worth (ОД's рейтинг) is still reckoned over everyone,
+since everyone played it. «Все» is the общий зачёт. A viewer looks at one
+Division at a time; a team with two Flags stands in both. Source sheets usually
+mark a team's зачёт in a column of its own. Вне-зачёта teams are shown beneath
+the ranked ones, in full and unmuted, so they inform without distracting.
+Marking a team out of a Division is not an [[Отказ]].
+
+**Flag (Флаг)**:
+A mark a fest team carries, the rating site's word for it: «Школьная команда»,
+«Студенческая команда», also regional ones like «Европа». Imported with the
+roster or typed by an organizer, and every distinct Flag among a fest's teams
+offers a [[Зачёт (Division)]] to look at — the app does not judge which Flags
+deserve to. Known by its short name (Школ, Студ, Е) wherever it is shown or
+linked.
+_Avoid_: the country-flag emoji on the ОД Экран — that is a decoration derived
+from the city, not a Flag.
 
 **Отказ**:
 A team's refusal to play a Game or мини-игра. The team keeps its row so the
