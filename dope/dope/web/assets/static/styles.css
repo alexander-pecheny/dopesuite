@@ -1767,6 +1767,20 @@ body:not(.embedded-match) .grid-match {
   display: none;
 }
 
+/* The зачёт chips above a results or detailed sheet (ADR-0020). They are the
+   tab strip's own .match-tab — one chip per Division is the same gesture one
+   tab per pane is — in a row of their own at the top of the sheet, which is
+   what they filter. The sheet scrolls sideways under them, so the row is only
+   as wide as its chips and sticks to the frame's left edge. */
+.division-chips {
+  position: sticky;
+  left: 0;
+  width: max-content;
+  max-width: 100%;
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--space-2) var(--space-1);
+}
+
 /* The numbering guard's message is prose, not a score table: it fits the frame
    and wraps. .od-input-wrap is min-width:max-content for the wide input tables
    it normally holds, which would otherwise make this sentence the pane's
@@ -2734,6 +2748,25 @@ body:not(.embedded-match) .grid-match {
 .results-team-city {
   color: var(--muted);
   font-size: var(--text-xs);
+}
+
+/* A team's зачёты, after its name in a results or detailed row (ADR-0020).
+   They state a fact about the team, so they are quiet: the same fill a resting
+   tab has, muted ink, the smallest type on the sheet. Never wider than their
+   text, and never wrapping mid-зачёт. */
+.team-flags {
+  flex: 0 0 auto;
+}
+
+.team-flag {
+  flex: 0 0 auto;
+  padding: var(--space-0-5) var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--action-bg);
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+  white-space: nowrap;
 }
 
 .results-num,

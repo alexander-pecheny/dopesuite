@@ -1571,6 +1571,10 @@ var RU = Strings{
 				return "Командам не присвоены номера — редактирование результатов заблокировано. "
 			},
 		},
+		Division: ScreenDivisionStrings{
+			All:   func() string { return "Все" },
+			Label: func() string { return "Зачёт" },
+		},
 		Downloads: ScreenDownloadsStrings{
 			Archive: func() string { return "Скачать .json.gz" },
 			ArchiveTitle: func() string {

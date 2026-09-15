@@ -34,7 +34,7 @@ export interface KSIScheme {
 // Participants are {number, name} objects in team mode — the Number is the
 // universal team identity — and bare name strings in player mode and legacy
 // states. Every reader takes either shape.
-export type ParticipantEntry = string | {number?: unknown; name?: unknown} | null | undefined;
+export type ParticipantEntry = string | {number?: unknown; name?: unknown; flags?: unknown} | null | undefined;
 
 export interface KSIState {
   participants: ParticipantEntry[];
@@ -147,6 +147,14 @@ export function participantName(state: KSIState, index: number): string {
 export function participantNumber(state: KSIState, index: number): number {
   const p = state.participants?.[index];
   return p && typeof p === "object" ? Number(p.number) || 0 : 0;
+}
+
+// participantFlags is the Divisions a team carries, by short name (ADR-0020).
+// Empty for a player-mode game and for a legacy name-only participant.
+export function participantFlags(state: KSIState, index: number): string[] {
+  const p = state.participants?.[index];
+  if (!p || typeof p !== "object" || !Array.isArray(p.flags)) return [];
+  return p.flags.filter((flag): flag is string => typeof flag === "string" && flag !== "");
 }
 
 // declinedKey is the identity the refused-to-play map is keyed on: the team
@@ -302,10 +310,13 @@ export function sameResultMetrics(a: ResultMetrics, b: ResultMetrics): boolean {
 // play, in rank order, with a shared place label ("2–3") where the metrics
 // tie. A declined team takes no place and shifts nobody; it appears in
 // the refusals tab alone. label names a team for the tie-break and the row.
-export function rankedResultRows(state: KSIState, rules: KSIRules, label: (index: number) => string): ResultRow[] {
+// members narrows the table to a Division, whose places are dealt afresh among
+// its own teams (ADR-0020); undefined is the whole field.
+export function rankedResultRows(state: KSIState, rules: KSIRules, label: (index: number) => string, members?: readonly number[]): ResultRow[] {
+  const taken = members ? new Set(members) : null;
   const rows = state.participants
     .map((_, index) => ({index, name: label(index), metrics: resultMetrics(state, rules, index), placeText: ""}))
-    .filter((row) => !participantDeclined(state, row.index));
+    .filter((row) => !participantDeclined(state, row.index) && (!taken || taken.has(row.index)));
   rows.sort(compareResultRows);
   let i = 0;
   while (i < rows.length) {

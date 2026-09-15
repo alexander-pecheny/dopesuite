@@ -69,3 +69,40 @@ test("rankedResultRows skips a declined team and shares a place on equal metrics
   assert.equal(ksi.declinedKey(state, 2), "n3");
   assert.equal(ksi.declinedKey(ksi.parseState({participants: ["Гость"]}, ksi.rulesOf({}), []), 0), "sгость");
 });
+
+// A Division is ranked within itself (ADR-0020): the rows outside it are gone
+// from the table, and places are dealt afresh among the ones left. A declined
+// team stays out of both, as it always was.
+test("rankedResultRows ranks a Division among its own teams", () => {
+  const rules = ksi.rulesOf({gameType: "ksi", themes: 1});
+  const state = ksi.parseState({
+    participants: [
+      {number: 1, name: "A", flags: ["Школ"]},
+      {number: 2, name: "B", flags: ["Студ", "Школ"]},
+      {number: 3, name: "C"},
+      {number: 4, name: "D", flags: ["Школ"]},
+    ],
+    themes: [{answers: [["right", "right"], ["right"], ["right", "right", "right"], []]}],
+    declined: {n4: true},
+  }, rules, []);
+  const label = (i) => ksi.participantName(state, i);
+  assert.deepEqual(
+    ksi.rankedResultRows(state, rules, label).map((r) => [r.name, r.placeText]),
+    [["C", "1"], ["A", "2"], ["B", "3"]],
+  );
+  // The школьный зачёт is A and B (D declined): C's 60 no longer sets the top.
+  assert.deepEqual(
+    ksi.rankedResultRows(state, rules, label, [0, 1, 3]).map((r) => [r.name, r.placeText]),
+    [["A", "1"], ["B", "2"]],
+  );
+});
+
+test("participantFlags reads the зачёты the roster put on a participant", () => {
+  const rules = ksi.rulesOf({gameType: "ksi", themes: 1});
+  const state = ksi.parseState({
+    participants: [{number: 1, name: "A", flags: ["Школ", "", 7]}, {number: 2, name: "B"}, "Гость"],
+  }, rules, []);
+  assert.deepEqual(ksi.participantFlags(state, 0), ["Школ"]);
+  assert.deepEqual(ksi.participantFlags(state, 1), []);
+  assert.deepEqual(ksi.participantFlags(state, 2), []);
+});

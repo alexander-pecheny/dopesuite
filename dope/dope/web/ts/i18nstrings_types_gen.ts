@@ -1128,6 +1128,10 @@ export type Strings = {
       assign: () => string;
       unassignedLead: () => string;
     };
+    division: {
+      all: () => string;
+      label: () => string;
+    };
     downloads: {
       archive: () => string;
       archiveTitle: () => string;

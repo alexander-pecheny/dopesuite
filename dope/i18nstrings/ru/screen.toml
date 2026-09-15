@@ -53,6 +53,14 @@ final = "Финал"
 # A block's protocols tab: the block label, then the protocols mark.
 protocol = '{{.block}} (протоколы)'
 
+# The зачёт chip row on the ОД and КСИ results and detailed tabs
+# (divisions.ts): one chip per зачёт the game's teams carry, «Все» first.
+[division]
+# The chip standing for the общий зачёт — every team, nothing filtered out.
+all = "Все"
+# The row's aria-label, naming what the chips choose between.
+label = "Зачёт"
+
 # The header breadcrumb trail (game-page.ts).
 [trail]
 # The home crumb: a house glyph carrying this aria-label and tooltip.
