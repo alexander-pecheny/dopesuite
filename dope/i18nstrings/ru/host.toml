@@ -23,6 +23,7 @@ type_ksi = "КСИ"
 type_ksi_stickers = "КСИ со стикерами"
 type_brain = "Брейн"
 type_ek = "ЭК"
+type_es = "Эрудит-Секстет"
 type_si = "Личная СИ"
 type_multi = "Мультиигры"
 type_troika = "Тройка"
@@ -66,6 +67,9 @@ multi_sorting_hint = "Через запятую: total — итог, plus — с
 troika_hint = "Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50."
 # Hint under the EK scheme editor (before the pasted-JSON field).
 ek_hint = "Либо схемой, либо готовым JSON ниже — что заполнено, то и используется."
+# Hint under the Эрудит-Секстет scheme editor: the same language, plus the
+# per-theme seat cap the format adds.
+es_hint = "Тот же язык схем, что у ЭК. players — сколько игроков команда выводит на тему (по умолчанию 3, можно по раундам: players.r3: 2)."
 # Label of the EK pasted-JSON editor.
 ek_json_label = "JSON-схема"
 # Hint at the top of the entrant picker.

@@ -18,7 +18,17 @@ type ek struct{}
 
 func (ek) Code() string { return "ek" }
 
-func (ek) Params() []Param { return []Param{{Key: "themes", Config: "themes"}} }
+// Params: how many themes a Block's matches play, and how many players a team
+// seats on one — one in EK, where the quartet sends a player per theme.
+func (ek) Params() []Param {
+	return []Param{
+		{Key: "themes", Config: "themes"},
+		{Key: "players", Config: "players", Default: EKPlayersPerTheme},
+	}
+}
+
+// EKPlayersPerTheme is EK's seat cap: one player answers a theme.
+const EKPlayersPerTheme = 1
 
 func (ek) TeamBlob() bool { return true }
 

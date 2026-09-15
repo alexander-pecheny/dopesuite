@@ -161,7 +161,7 @@ func importEKMatch(ctx context.Context, tx *sql.Tx, plan ekPlan, code string) er
 			}
 			for _, th := range t.Themes {
 				if th.PlayerID != nil {
-					blob.SetPlayer(t.TeamID, "regular", th.ThemeIndex, *th.PlayerID)
+					blob.SetPlayers(t.TeamID, "regular", th.ThemeIndex, []int64{*th.PlayerID})
 				}
 				for ai, mark := range th.Marks {
 					blob.SetAnswer(t.TeamID, "regular", th.ThemeIndex, ai, mark)

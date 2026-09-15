@@ -14,6 +14,9 @@ import (
 
 	"dope/dope/domain/edit"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // maxShootoutThemes bounds the shootout grid so a bad index can't inflate the
@@ -99,22 +102,25 @@ func applyOne(blob *store.MatchBlob, match store.DBMatchState, op edit.PatchOp, 
 		return errors.New("bad theme path")
 	}
 	switch path[4].Key {
-	case "player":
+	// `player` is the pre-Sextet spelling, one id where there is now a list
+	// (ADR-0007): a browser holding a cached bundle mid-tournament, and every
+	// journal record written before, keeps working.
+	case "player", "players":
 		if len(path) != 5 {
 			return errors.New("bad player path")
 		}
 		if remove {
-			blob.SetPlayer(participantID, kind, themeIndex, 0)
+			blob.SetPlayers(participantID, kind, themeIndex, nil)
 			return nil
 		}
-		playerID, err := decodeInt(op.Value)
+		seated, err := decodeSeating(path[4].Key, op.Value)
 		if err != nil {
-			return errors.New("bad player id")
+			return err
 		}
-		if playerID != 0 && !inRoster(match, slot, playerID) {
-			return errors.New("player is not in roster")
+		if err := checkSeating(match, slot, seated); err != nil {
+			return err
 		}
-		blob.SetPlayer(participantID, kind, themeIndex, playerID)
+		blob.SetPlayers(participantID, kind, themeIndex, seated)
 		return nil
 	case "answers":
 		if len(path) != 6 || !path[5].IsIndex {
@@ -173,6 +179,58 @@ func checkThemeIndex(kind string, index int) error {
 	}
 	if index < 0 || index >= limit {
 		return errors.New("bad theme index")
+	}
+	return nil
+}
+
+// decodeSeating reads a seating value in either spelling: a list of player ids
+// under `players`, one id under the legacy `player` (0 clearing the theme).
+func decodeSeating(key string, raw json.RawMessage) ([]int64, error) {
+	if key == "player" {
+		playerID, err := decodeInt(raw)
+		if err != nil {
+			return nil, errors.New("bad player id")
+		}
+		if playerID == 0 {
+			return nil, nil
+		}
+		return []int64{playerID}, nil
+	}
+	var seated []int64
+	if err := json.Unmarshal(raw, &seated); err != nil {
+		return nil, errors.New("bad player ids")
+	}
+	out := make([]int64, 0, len(seated))
+	for _, id := range seated {
+		if id != 0 {
+			out = append(out, id)
+		}
+	}
+	return out, nil
+}
+
+// checkSeating holds a theme's seating to what the game allows: no more
+// players than the match seats, nobody twice, nobody who is not in the team's
+// roster. All three are things a host can do by hand, so all three read as
+// user errors rather than as a broken request.
+func checkSeating(match store.DBMatchState, slot int, seated []int64) error {
+	s := dopestrings.Default
+	cap := match.Players
+	if cap <= 0 {
+		cap = store.SeatCap(match.GameType)
+	}
+	if len(seated) > cap {
+		return corei18n.User(s.Matchops.Seating.TooMany(cap))
+	}
+	seen := make(map[int64]bool, len(seated))
+	for _, id := range seated {
+		if seen[id] {
+			return corei18n.User(s.Matchops.Seating.Repeated())
+		}
+		seen[id] = true
+		if !inRoster(match, slot, id) {
+			return corei18n.User(s.Matchops.Seating.NotInRoster())
+		}
 	}
 	return nil
 }

@@ -10,9 +10,11 @@ import (
 // SSE layer broadcasts. They are pure data (no DB/server dependency), so they
 // live in the store leaf as the shared persistence/view vocabulary.
 
-// ThemeEntry is one player's raw answer marks for a theme (persisted state).
+// ThemeEntry is one theme's seating and raw answer marks (persisted state).
+// Players names whoever the team sent to the theme — one in EK, up to three in
+// Erudit-Sextet — in no meaningful order.
 type ThemeEntry struct {
-	Player  string    `json:"player"`
+	Players []string  `json:"players"`
 	Answers [5]string `json:"answers"`
 }
 
@@ -64,9 +66,10 @@ type MatchState struct {
 	Participants []ParticipantState `json:"participants"`
 }
 
-// ThemeView is a scored theme row (raw marks plus the computed score).
+// ThemeView is a scored theme row (the seating and raw marks plus the computed
+// score).
 type ThemeView struct {
-	Player  string    `json:"player"`
+	Players []string  `json:"players"`
 	Answers [5]string `json:"answers"`
 	Score   int       `json:"score"`
 }
@@ -189,17 +192,21 @@ type MatchParticipantSummary struct {
 
 // MatchView is the scored, client-facing projection of a match.
 type MatchView struct {
-	Title          string            `json:"title"`
-	Code           string            `json:"code,omitempty"`
-	StageCode      string            `json:"stageCode,omitempty"`
-	StageTitle     string            `json:"stageTitle,omitempty"`
-	Venue          *VenueView        `json:"venue,omitempty"`
-	Finished       bool              `json:"finished"`
-	Revision       int64             `json:"revision"`
-	UpdatedAt      string            `json:"updatedAt"`
-	QuestionValues [5]int            `json:"questionValues"`
-	Participants   []ParticipantView `json:"participants"`
-	Standings      []StandingView    `json:"standings"`
+	Title          string     `json:"title"`
+	Code           string     `json:"code,omitempty"`
+	StageCode      string     `json:"stageCode,omitempty"`
+	StageTitle     string     `json:"stageTitle,omitempty"`
+	Venue          *VenueView `json:"venue,omitempty"`
+	Finished       bool       `json:"finished"`
+	Revision       int64      `json:"revision"`
+	UpdatedAt      string     `json:"updatedAt"`
+	QuestionValues [5]int     `json:"questionValues"`
+	// Players is how many of a team may sit on one theme of this match — one
+	// in EK, three in Erudit-Sextet unless the Block says otherwise. The page
+	// draws a native select at one and a seat picker above it.
+	Players      int               `json:"players,omitempty"`
+	Participants []ParticipantView `json:"participants"`
+	Standings    []StandingView    `json:"standings"`
 	// State carries a non-EK match's Protocol document verbatim; the per-protocol
 	// renderer owns its shape. Empty for EK, whose state is projected into Participants.
 	State json.RawMessage `json:"state,omitempty"`

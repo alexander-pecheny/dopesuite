@@ -8,10 +8,10 @@ func TestScoreTeam(t *testing.T) {
 	team := ParticipantState{
 		Name: "A",
 		Themes: []ThemeEntry{
-			{Player: "p1", Answers: [5]string{"right", "wrong", "right", "", ""}},
+			{Players: []string{"p1"}, Answers: [5]string{"right", "wrong", "right", "", ""}},
 		},
 		ShootoutThemes: []ThemeEntry{
-			{Player: "p1", Answers: [5]string{"right", "", "", "", ""}}, // +10 shootout
+			{Players: []string{"p1"}, Answers: [5]string{"right", "", "", "", ""}}, // +10 shootout
 		},
 	}
 	tv := ScoreParticipant(team)

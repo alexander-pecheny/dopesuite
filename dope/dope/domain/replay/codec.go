@@ -2,9 +2,11 @@ package replay
 
 import (
 	"encoding/json"
+	"math"
 	"sort"
 	"strconv"
 
+	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 )
 
@@ -45,7 +47,10 @@ type BoutState struct {
 }
 
 var codecs = map[string]Codec{
-	"ek":    {Columns: [3]string{"Σ", "Σ+", dopestrings.Default.Replay.Codec.StatThemes()}, Aggregate: ekStats},
+	"ek": {Columns: [3]string{"Σ", "Σ+", dopestrings.Default.Replay.Codec.StatThemes()}, Aggregate: ekStats},
+	// Erudit-Sextet's sheet is EK's: the same columns, the same aggregate —
+	// a theme's Σ merely divides among the two or three who sat it.
+	"es":    {Columns: [3]string{"Σ", "Σ+", dopestrings.Default.Replay.Codec.StatThemes()}, Aggregate: ekStats},
 	"si":    {Individual: true, Columns: [3]string{"Σ", "Σ+", dopestrings.Default.Replay.Codec.StatBouts()}, Aggregate: individualStats},
 	"brain": {Questions: true, ScoreMetric: "taken", Columns: [3]string{dopestrings.Default.Replay.Codec.StatAttempts(), dopestrings.Default.Replay.Codec.StatRight(), dopestrings.Default.Replay.Codec.StatWrong()}, Aggregate: brainStats},
 	// Troika's sheet keeps no per-player row — it never records which seat
@@ -84,13 +89,14 @@ func entryIn(acc map[[2]string]*[3]int, player, team string) *[3]int {
 // he played.
 func ekStats(bouts []BoutState) ([]Stat, error) {
 	acc := map[[2]string]*[3]int{}
+	// A theme's Σ divides among whoever sat it — one player in EK, up to three
+	// in Erudit-Sextet — so it is summed as a fraction and rounded once, at
+	// the end; the themes taken and played are whole for each of them.
+	sums := map[[2]string]float64{}
 	for _, bout := range bouts {
 		var blob struct {
 			Participants map[string]struct {
-				Themes []struct {
-					Player  int64     `json:"player"`
-					Answers [5]string `json:"answers"`
-				} `json:"themes"`
+				Themes []store.BlobTheme `json:"themes"`
 			} `json:"participants"`
 		}
 		if err := json.Unmarshal([]byte(bout.State), &blob); err != nil {
@@ -102,18 +108,25 @@ func ekStats(bouts []BoutState) ([]Stat, error) {
 				return nil, err
 			}
 			for _, theme := range section.Themes {
-				if theme.Player == 0 {
+				if len(theme.Players) == 0 {
 					continue
 				}
-				entry := entryIn(acc, bout.Players[theme.Player], bout.Names[id])
 				sum := themeSum(theme.Answers)
-				entry[0] += sum
-				if sum > 0 {
-					entry[1]++
+				share := float64(sum) / float64(len(theme.Players))
+				for _, playerID := range theme.Players {
+					key := [2]string{bout.Players[playerID], bout.Names[id]}
+					entry := entryIn(acc, key[0], key[1])
+					sums[key] += share
+					if sum > 0 {
+						entry[1]++
+					}
+					entry[2]++
 				}
-				entry[2]++
 			}
 		}
+	}
+	for key, sum := range sums {
+		entryIn(acc, key[0], key[1])[0] = int(math.Round(sum))
 	}
 	return statRows(acc), nil
 }

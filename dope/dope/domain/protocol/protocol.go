@@ -131,7 +131,20 @@ func Register(p Protocol) {
 	if seater, ok := p.(SeatsPlayers); ok && seater.SeatsPlayers() {
 		store.RegisterSeatRoster(p.Code())
 	}
+	// How many players a theme seats when no stage config says: the store
+	// loads matches without knowing Protocols, so the default travels down
+	// with the registration rather than being looked up by game type.
+	for _, param := range p.Params() {
+		if param.Key == SeatsParam && param.Default > 0 {
+			store.RegisterSeatCap(p.Code(), param.Default)
+		}
+	}
 }
+
+// SeatsParam is the DSL key naming how many players a team sends to one theme
+// — the seating. A Protocol that has the notion declares it with a Default,
+// which is the cap a match plays at when no Block overrides it.
+const SeatsParam = "players"
 
 // Get looks up a registered protocol by code.
 func Get(code string) (Protocol, bool) {

@@ -53,6 +53,13 @@ label = "ЧГК"
 # The kind's display name (the games registry Label).
 label = "ЭК"
 
+[es]
+# The kind's display name (the games registry Label): ЭК's bout with one to
+# three players sent to each theme.
+label = "Эрудит-Секстет"
+# The short name, said wherever ЭК is said short — tabs, sheet heads, exports.
+short = "ЭС"
+
 [ksi]
 # The kind's display name (the games registry Label).
 label = "КСИ"

@@ -126,6 +126,10 @@ export type Strings = {
       stats: () => string;
       venues: () => string;
     };
+    seats: {
+      empty: () => string;
+      label: () => string;
+    };
     seed: {
       declineFailed: () => string;
       declinedAria: (name: string) => string;
@@ -351,6 +355,10 @@ export type Strings = {
     ek: {
       label: () => string;
     };
+    es: {
+      label: () => string;
+      short: () => string;
+    };
     ksi: {
       label: () => string;
     };
@@ -447,6 +455,7 @@ export type Strings = {
       errorSlugTaken: () => string;
       errorTitleRequired: () => string;
       errorTypeMissing: () => string;
+      esHint: () => string;
       minigamesHint: () => string;
       minigamesLabel: () => string;
       minigamesPlaceholder: () => string;
@@ -474,6 +483,7 @@ export type Strings = {
       troikaHint: () => string;
       typeBrain: () => string;
       typeEk: () => string;
+      typeEs: () => string;
       typeKsi: () => string;
       typeKsiStickers: () => string;
       typeLabel: () => string;
@@ -696,6 +706,13 @@ export type Strings = {
   markdown: {
     details: {
       defaultSummary: () => string;
+    };
+  };
+  matchops: {
+    seating: {
+      notInRoster: () => string;
+      repeated: () => string;
+      tooMany: (n: number) => string;
     };
   };
   multi: {

@@ -126,7 +126,7 @@ func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 		return createKSIGameTx(ctx, tx, spec.FestID, spec.KSIThemes, spec.KSIStickers)
 	case games.Multi:
 		return createMultiGameTx(ctx, tx, spec.FestID, spec.Minigames, spec.MultiSorting)
-	case games.EK:
+	case games.EK, games.ES:
 		return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.EkNoScheme())
 	}
 	return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.SchemeRequired())

@@ -118,7 +118,7 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 		if err := insertFlatMatchTx(ctx, tx, festID, gameID, title, string(state), now); err != nil {
 			return "", err
 		}
-	case gameType == games.EK:
+	case games.EKShaped(gameType):
 		status = "pending"
 		if newScheme, err = rebuildTx(ctx, tx, festID, gameID, gameType, "", schemeJSON, nil); err != nil {
 			return "", err

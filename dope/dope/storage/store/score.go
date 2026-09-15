@@ -53,7 +53,7 @@ func ScoreParticipant(team ParticipantState) ParticipantView {
 
 	for i, theme := range team.Themes {
 		tv := ThemeView{
-			Player:  theme.Player,
+			Players: theme.Players,
 			Answers: theme.Answers,
 		}
 		for answerIndex, mark := range theme.Answers {
@@ -84,7 +84,7 @@ func ScoreParticipant(team ParticipantState) ParticipantView {
 // ScoreTheme scores one theme's answer marks into a ThemeView.
 func ScoreTheme(theme ThemeEntry) ThemeView {
 	view := ThemeView{
-		Player:  theme.Player,
+		Players: theme.Players,
 		Answers: theme.Answers,
 	}
 	for answerIndex, mark := range theme.Answers {

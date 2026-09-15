@@ -37,7 +37,7 @@ func TestFoldCheckpointThemes(t *testing.T) {
 		t.Fatalf("folded blob: %v", err)
 	}
 	team := blob.Participants["7"]
-	if team == nil || team.Themes[0].Player != 55 || team.Themes[0].Answers[2] != "right" {
+	if team == nil || len(team.Themes[0].Players) != 1 || team.Themes[0].Players[0] != 55 || team.Themes[0].Answers[2] != "right" {
 		t.Fatalf("folded blob = %s", raw)
 	}
 }
@@ -87,7 +87,7 @@ func TestConvertEKMatchBlobs(t *testing.T) {
 	if team7 == nil || len(team7.Themes) != 1 || len(team7.ShootoutThemes) != 1 {
 		t.Fatalf("team 7 = %+v", team7)
 	}
-	if team7.Themes[0].Player != 55 || team7.Themes[0].Answers[0] != "right" || team7.Themes[0].Answers[2] != "wrong" {
+	if len(team7.Themes[0].Players) != 1 || team7.Themes[0].Players[0] != 55 || team7.Themes[0].Answers[0] != "right" || team7.Themes[0].Answers[2] != "wrong" {
 		t.Fatalf("team 7 theme 0 = %+v", team7.Themes[0])
 	}
 	if team7.ShootoutThemes[0].Answers[4] != "right" {

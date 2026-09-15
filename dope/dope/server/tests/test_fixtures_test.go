@@ -134,8 +134,8 @@ values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
 
 		if _, err := store.MutateMatchBlobTx(ctx, tx, matchID, func(blob *store.MatchBlob) error {
 			for themeIndex, theme := range team.Themes {
-				if id := playerIDs[theme.Player]; id != 0 {
-					blob.SetPlayer(teamID, "regular", themeIndex, id)
+				if ids := fixtureSeating(playerIDs, theme.Players); len(ids) != 0 {
+					blob.SetPlayers(teamID, "regular", themeIndex, ids)
 				}
 				blob.EnsureTheme(teamID, "regular", themeIndex)
 				for ai, mark := range theme.Answers {
@@ -143,8 +143,8 @@ values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
 				}
 			}
 			for themeIndex, theme := range team.ShootoutThemes {
-				if id := playerIDs[theme.Player]; id != 0 {
-					blob.SetPlayer(teamID, "shootout", themeIndex, id)
+				if ids := fixtureSeating(playerIDs, theme.Players); len(ids) != 0 {
+					blob.SetPlayers(teamID, "shootout", themeIndex, ids)
 				}
 				blob.EnsureTheme(teamID, "shootout", themeIndex)
 				for ai, mark := range theme.Answers {
@@ -169,6 +169,18 @@ values(?, ?, ?)`, matchID, teamID, team.Place); err != nil {
 		t.Fatalf("commit fixture: %v", err)
 	}
 	return festID
+}
+
+// fixtureSeating turns a fixture theme's seated names into the player ids the
+// blob stores, dropping anyone the fixture never rostered.
+func fixtureSeating(playerIDs map[string]int64, names []string) []int64 {
+	ids := make([]int64, 0, len(names))
+	for _, name := range names {
+		if id := playerIDs[name]; id != 0 {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
 
 func createRosterPropagationFixture(t *testing.T, db *sql.DB) (int64, int64, int64) {

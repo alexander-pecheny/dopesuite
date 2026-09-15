@@ -3,6 +3,8 @@ package protocol
 import (
 	"encoding/json"
 	"testing"
+
+	"dope/dope/storage/store"
 )
 
 // Worked example (values 10..50, computed by hand): team A's theme is
@@ -15,8 +17,8 @@ func TestEKScore(t *testing.T) {
 		t.Fatal("ek protocol not registered")
 	}
 	state := `{"participants":[
-		{"name":"A","place":2,"themes":[{"player":"P1","answers":["right","wrong","right","",""]}]},
-		{"name":"B","place":1,"themes":[{"player":"P2","answers":["wrong","","","","right"]}]}
+		{"name":"A","place":2,"themes":[{"players":["P1"],"answers":["right","wrong","right","",""]}]},
+		{"name":"B","place":1,"themes":[{"players":["P2"],"answers":["wrong","","","","right"]}]}
 	]}`
 	outcomes, err := p.Score(nil, json.RawMessage(state))
 	if err != nil {
@@ -46,6 +48,7 @@ func TestEKScore(t *testing.T) {
 func TestEveryProtocolDeclaresWhatItWrites(t *testing.T) {
 	states := map[string]string{
 		"ek":    `{"participants":[{"name":"A","place":1,"themes":[{"answers":["right","","","",""]}]}]}`,
+		"es":    `{"participants":[{"name":"A","place":1,"themes":[{"players":["P1","P2"],"answers":["right","","","",""]}]}]}`,
 		"si":    `{"participants":[{"name":"A","themes":[{"answers":["right","","","",""]}]}]}`,
 		"brain": `{"teams":[{"rows":[{"mark":"right"}]},{"rows":[{"mark":""}]}]}`,
 		"ksi":   `{"participants":[{"name":"A","themes":[{"answers":["right","","","",""]}]}]}`,
@@ -71,7 +74,7 @@ func TestEveryProtocolDeclaresWhatItWrites(t *testing.T) {
 				}
 			}
 		}
-		if p.TeamBlob() != (code == "ek" || code == "si") {
+		if p.TeamBlob() != (code == "ek" || code == "es" || code == "si") {
 			t.Errorf("%s: TeamBlob = %v", code, p.TeamBlob())
 		}
 	}
@@ -307,5 +310,36 @@ func TestSIShootoutBreaksTies(t *testing.T) {
 	}
 	if outcomes[1].Metrics["shootoutTotal"] != 20 || outcomes[0].Metrics["shootoutTotal"] != 0 {
 		t.Errorf("перестрелка = %v и %v, want 20 и 0", outcomes[1].Metrics["shootoutTotal"], outcomes[0].Metrics["shootoutTotal"])
+	}
+}
+
+// Эрудит-Секстет is ЭК in everything but the seating: the same metrics, the
+// same scoring, a different default выход на тему — and the store learns the
+// cap from the registration rather than by asking a registry it cannot see.
+func TestSextetIsQuartetWithThreeSeats(t *testing.T) {
+	es, ok := Get("es")
+	if !ok {
+		t.Fatal("es protocol not registered")
+	}
+	ek, _ := Get("ek")
+	if got, want := es.Metrics(nil), ek.Metrics(nil); len(got) != len(want) {
+		t.Fatalf("metrics = %v, want ЭК's %v", got, want)
+	}
+	seats := map[string]int{}
+	for _, p := range []Protocol{ek, es} {
+		for _, param := range p.Params() {
+			if param.Key == SeatsParam {
+				seats[p.Code()] = param.Default
+			}
+		}
+	}
+	if seats["ek"] != 1 || seats["es"] != ESPlayersPerTheme {
+		t.Fatalf("seat defaults = %v", seats)
+	}
+	if got := store.SeatCap("es"); got != ESPlayersPerTheme {
+		t.Fatalf("store.SeatCap(es) = %d, want %d", got, ESPlayersPerTheme)
+	}
+	if got := store.SeatCap("ek"); got != 1 {
+		t.Fatalf("store.SeatCap(ek) = %d, want 1", got)
 	}
 }

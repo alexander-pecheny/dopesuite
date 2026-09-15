@@ -46,6 +46,7 @@ type hostGameCreateData struct {
 	SIDSL        string
 	TroikaDSL    string
 	EKDSL        string
+	ESDSL        string
 	// Entrants is the fest's registry offered as this Game's entrant list.
 	// A Game numbers whom it seats from 1 (ADR-0009), so a fest of 65 can hold
 	// an EK of 48 and a brain of a different 48.
@@ -142,6 +143,7 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 			gameTypeRadio("ksi_stickers", s.Host.Games.TypeKsiStickers(), sel),
 			gameTypeRadio("brain", s.Host.Games.TypeBrain(), sel),
 			gameTypeRadio("ek", s.Host.Games.TypeEk(), sel),
+			gameTypeRadio("es", s.Host.Games.TypeEs(), sel),
 			gameTypeRadio("si", s.Host.Games.TypeSi(), sel),
 			gameTypeRadio("multi", s.Host.Games.TypeMulti(), sel),
 			gameTypeRadio("troika", s.Host.Games.TypeTroika(), sel),
@@ -192,6 +194,13 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 			dopeui.Hint(dopeui.Text(s.Host.Games.EkHint())),
 			dopeui.Field(dopeui.Label(s.Host.Games.EkJsonLabel()),
 				dopeui.Editor(dopeui.Name("ek_scheme"), dopeui.Rows("14"), dopeui.Placeholder(`{"slug":"...","title":"...","gameType":"ek","stages":[...]}`))),
+		),
+		gameSettings("es", sel,
+			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
+				dopeui.Editor(dopeui.Name("es_dsl"), dopeui.Rows("10"), dopeui.Spellcheck("false"), dopeui.Text(data.ESDSL), dopeui.Placeholder("[scheme]\nkind: single_elimination\nparticipants: 48\nmatch_size: 4\nwinning_places: 2\nplayers: 3"))),
+			dopeui.Hint(dopeui.Text(s.Host.Games.EsHint())),
+			dopeui.Field(dopeui.Label(s.Host.Games.EkJsonLabel()),
+				dopeui.Editor(dopeui.Name("es_scheme"), dopeui.Rows("14"), dopeui.Placeholder(`{"slug":"...","title":"...","gameType":"es","stages":[...]}`))),
 		),
 		entrantPicker(data),
 		dopeui.Row(submit...),
@@ -472,6 +481,7 @@ func (s *Server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request
 			SIDSL:     kept("si_dsl", defaultSIDSL(teamCount)),
 			TroikaDSL: kept("troika_dsl", defaultTroikaDSL(teamCount)),
 			EKDSL:     kept("ek_dsl", ""),
+			ESDSL:     kept("es_dsl", ""),
 			Entrants:  entrants,
 		}), nil
 	})
@@ -534,6 +544,14 @@ var dslField = map[string]string{
 	games.SI:     "si_dsl",
 	games.Troika: "troika_dsl",
 	games.EK:     "ek_dsl",
+	games.ES:     "es_dsl",
+}
+
+// schemeJSONField names each format's pasted-JSON editor, for the two that
+// take a detailed scheme instead of a DSL.
+var schemeJSONField = map[string]string{
+	games.EK: "ek_scheme",
+	games.ES: "es_scheme",
 }
 
 // gameSpecFromForm reads the creation form into what gamebuild needs: the
@@ -577,13 +595,17 @@ func gameSpecFromForm(festID int64, gameType string, form url.Values) (gamebuild
 		spec.Label = s.Host.Games.TypeBrain()
 	case games.SI:
 		spec.Label = s.Host.Games.TypeSi()
-	case games.EK:
+	case games.EK, games.ES:
 		// EK's bracket is describable in the scheme language now that an
 		// elimination counts Losses rather than seats, so a DSL wins over
-		// the pasted JSON when both are offered.
+		// the pasted JSON when both are offered. Erudit-Sextet plays the
+		// same bracket and takes the same two ways of describing one.
 		spec.Label = s.Host.Games.TypeEk()
+		if gameType == games.ES {
+			spec.Label = s.Host.Games.TypeEs()
+		}
 		if spec.DSL == "" {
-			raw := strings.TrimSpace(form.Get("ek_scheme"))
+			raw := strings.TrimSpace(form.Get(schemeJSONField[gameType]))
 			if raw == "" {
 				return spec, corei18n.User(s.Host.Games.ErrorEkSchemeMissing())
 			}

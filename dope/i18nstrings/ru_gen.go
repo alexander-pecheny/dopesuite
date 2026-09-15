@@ -137,6 +137,10 @@ var RU = Strings{
 			Stats:      func() string { return "Статистика" },
 			Venues:     func() string { return "Площадки" },
 		},
+		Seats: EkSeatsStrings{
+			Empty: func() string { return "Состав команды не заполнен" },
+			Label: func() string { return "Кто выходит на тему" },
+		},
 		Seed: EkSeedStrings{
 			DeclineFailed: func() string { return "Не удалось сохранить отказ" },
 			DeclinedAria:  func(name string) string { return fmt.Sprintf("Отказалась: %s", name) },
@@ -396,6 +400,10 @@ var RU = Strings{
 		Ek: GamesEkStrings{
 			Label: func() string { return "ЭК" },
 		},
+		Es: GamesEsStrings{
+			Label: func() string { return "Эрудит-Секстет" },
+			Short: func() string { return "ЭС" },
+		},
 		Ksi: GamesKsiStrings{
 			Label: func() string { return "КСИ" },
 		},
@@ -534,6 +542,9 @@ var RU = Strings{
 			ErrorSlugTaken:     func() string { return "Slug уже занят в этом фесте." },
 			ErrorTitleRequired: func() string { return "Название обязательно." },
 			ErrorTypeMissing:   func() string { return "выберите тип игры" },
+			EsHint: func() string {
+				return "Тот же язык схем, что у ЭК. players — сколько игроков команда выводит на тему (по умолчанию 3, можно по раундам: players.r3: 2)."
+			},
 			MinigamesHint: func() string {
 				return "По строке на мини-игру: «Название: {значения}xN». {0,1} — задание на 0 или 1 балл, {-1,0,1} — со штрафом, {0-12} — любое целое от 0 до 12. Несколько описаний в строке идут подряд: «{0,3}x2 {0,5}» — три задания на 3, 3 и 5 баллов. «|» закрывает блок листа: «{0,1}x10 | {0,1}x10» — два блока по десять, с зазором и сквозной нумерацией."
 			},
@@ -579,6 +590,7 @@ var RU = Strings{
 			},
 			TypeBrain:       func() string { return "Брейн" },
 			TypeEk:          func() string { return "ЭК" },
+			TypeEs:          func() string { return "Эрудит-Секстет" },
 			TypeKsi:         func() string { return "КСИ" },
 			TypeKsiStickers: func() string { return "КСИ со стикерами" },
 			TypeLabel:       func() string { return "Тип игры" },
@@ -871,6 +883,15 @@ var RU = Strings{
 	Markdown: MarkdownStrings{
 		Details: MarkdownDetailsStrings{
 			DefaultSummary: func() string { return "Подробнее" },
+		},
+	},
+	Matchops: MatchopsStrings{
+		Seating: MatchopsSeatingStrings{
+			NotInRoster: func() string { return "Этого игрока нет в составе команды." },
+			Repeated:    func() string { return "Игрок выходит на тему один раз." },
+			TooMany: func(n int) string {
+				return fmt.Sprintf("На тему выходит не больше %d %s.", n, core.Plural("ru", n, "игрока", "игроков", "игроков"))
+			},
 		},
 	},
 	Multi: MultiStrings{

@@ -33,11 +33,34 @@ type BlobOp struct {
 	Parts []json.RawMessage `json:"pp,omitempty"`
 }
 
-// BlobTheme is one theme's state in a match blob: the fielded player (id,
-// 0 = none) and the raw answer marks.
+// BlobTheme is one theme's state in a match blob: the players fielded on it
+// (ids, empty = nobody) and the raw answer marks. A team sends one player to a
+// theme in EK and up to three in Erudit-Sextet, so the seating is a list; the
+// order in it carries no meaning.
 type BlobTheme struct {
-	Player  int64     `json:"player,omitempty"`
+	Players []int64   `json:"players,omitempty"`
 	Answers [5]string `json:"answers"`
+}
+
+// UnmarshalJSON reads both spellings of the seating: `players`, written since
+// Erudit-Sextet, and the single `player` every EK row written before it
+// carries — a one-element list. Nothing rewrites those rows: they are read as
+// they are and written back in the new shape only when the seating is edited.
+func (t *BlobTheme) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Players []int64   `json:"players"`
+		Player  int64     `json:"player"`
+		Answers [5]string `json:"answers"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	t.Answers = raw.Answers
+	t.Players = raw.Players
+	if len(t.Players) == 0 && raw.Player != 0 {
+		t.Players = []int64{raw.Player}
+	}
+	return nil
 }
 
 // ParticipantBlob is one Participant's section of a match blob. Pin, when set,
@@ -147,15 +170,18 @@ func (b *MatchBlob) SetAnswer(participantID int64, kind string, themeIndex, answ
 		normalized)
 }
 
-// SetPlayer assigns the fielded player (by id, 0 clears) on a Participant's theme.
-func (b *MatchBlob) SetPlayer(participantID int64, kind string, themeIndex int, playerID int64) {
-	b.Participant(participantID).theme(kind, themeIndex).Player = playerID
-	path := "/participants/" + participantKey(participantID) + "/" + kindSegment(kind) + "/" + strconv.Itoa(themeIndex) + "/player"
-	if playerID == 0 {
+// SetPlayers seats players (by id) on a Participant's theme — the whole list
+// at once, an empty one clearing it. A team seats one player in EK and up to
+// three in Erudit-Sextet; the cap is the caller's to hold.
+func (b *MatchBlob) SetPlayers(participantID int64, kind string, themeIndex int, playerIDs []int64) {
+	seated := append([]int64(nil), playerIDs...)
+	b.Participant(participantID).theme(kind, themeIndex).Players = seated
+	path := "/participants/" + participantKey(participantID) + "/" + kindSegment(kind) + "/" + strconv.Itoa(themeIndex) + "/players"
+	if len(seated) == 0 {
 		b.record("remove", path, nil)
-	} else {
-		b.record("set", path, playerID)
+		return
 	}
+	b.record("set", path, seated)
 }
 
 // SetPin sets (or, with nil, clears) a Participant's manual place.
@@ -261,8 +287,12 @@ func ParticipantStateFromBlob(section *ParticipantBlob, participantID int64, nam
 			for len(out) <= i {
 				out = append(out, ThemeEntry{})
 			}
-			if theme.Player != 0 && playerName != nil {
-				out[i].Player = playerName(theme.Player)
+			if playerName != nil {
+				for _, id := range theme.Players {
+					if id != 0 {
+						out[i].Players = append(out[i].Players, playerName(id))
+					}
+				}
 			}
 			for a, mark := range theme.Answers {
 				out[i].Answers[a] = NormalizeMark(mark)
