@@ -14,6 +14,7 @@ import {bindScrollEdges, clamp, createTeamNameOverflowController, fitScrollFade,
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {gameTabs} from "./game-tabs.js";
+import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
 import * as ksi from "./ksi-protocol.js";
 import {KSI_THEMES, QUESTION_VALUES, RESULT_VALUES, STICKER_NEUTRAL} from "./ksi-protocol.js";
 import S from "./i18nstrings.js";
@@ -119,15 +120,10 @@ const tabScroll = new Map<string, {top: number; left: number}>();
 // The refusals tab is a host-only control surface; its effect — declined teams
 // dropping out of the results ranking — is visible to spectators in that tab.
 const TABS = gameTabs([], {game: "ksi", viewer});
-let activeTab = tabFromHash() || "detailed";
+let activeTab = tabFromHash(TABS) || "detailed";
 
-function tabFromHash(): string | null {
-  const key = (window.location.hash || "").replace(/^#/, "");
-  return TABS.some((t) => t.key === key) ? key : null;
-}
-
-window.addEventListener("hashchange", () => {
-  const next = tabFromHash();
+onNavigate(() => {
+  const next = tabFromHash(TABS);
   if (next && next !== activeTab) {
     activeTab = next;
     render();
@@ -216,6 +212,7 @@ function render(options: {preserveScroll?: boolean} = {}): void {
           : buildTable();
     renderedTable = activeTab === "detailed" ? node : null;
     if (activeTab !== "detailed") resetTableIndex();
+    siRoot.replaceChildren(node);
     // The roster tab fits the frame and wraps rather than scrolling sideways like a
     // score board, so the host drops its max-content sizing.
     siRoot.classList.toggle("fits-frame", activeTab === "roster");
@@ -490,9 +487,7 @@ function renderTabs(): void {
   siTabsRoot.hidden = false;
   renderTabBar(siTabsRoot, TABS, activeTab, (key) => {
     activeTab = key;
-    if (window.location.hash.replace(/^#/, "") !== key) {
-      history.replaceState(null, "", `#${key}`);
-    }
+    setHashTab(key);
     render();
   });
 }

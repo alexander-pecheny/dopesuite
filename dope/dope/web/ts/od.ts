@@ -20,6 +20,7 @@ import * as od from "./od-protocol.js";
 import type {ODScheme, ODState, ODTeam, QuestionStat, RankKey, ShootoutMark, ShootoutRound} from "./od-protocol.js";
 import {SCREEN_DEFAULTS, normalizeScreenSettings, planScreen, teamFlag} from "./screen-board.js";
 import type {ScreenSettings} from "./screen-board.js";
+import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
 import S from "./i18nstrings.js";
 
 interface ODPageGlobals {
@@ -149,17 +150,13 @@ const YINYANG_SVG = '<svg viewBox="0 0 100 100" aria-hidden="true" focusable="fa
   + '</svg>';
 const UNDO_LIMIT = 100;
 
-// Screen (the projector board) is a host-only tab; tabFromHash() filters against
+// Screen (the projector board) is a host-only tab; tabFromHash filters against
 // TABS, so a viewer can't reach it by hash either.
 const TABS = gameTabs([], {game: "od", viewer});
 
-function tabFromHash(): string | null {
-  const key = (window.location.hash || "").replace(/^#/, "");
-  return TABS.some((t) => t.key === key) ? key : null;
-}
-let activeTab = tabFromHash() || (viewer ? "results" : "input");
-window.addEventListener("hashchange", () => {
-  const next = tabFromHash();
+let activeTab = tabFromHash(TABS) || (viewer ? "results" : "input");
+onNavigate(() => {
+  const next = tabFromHash(TABS);
   if (next && next !== activeTab) {
     activeTab = next;
     render();
@@ -410,9 +407,7 @@ function updateHeaderProgress(): void {
 function renderTabs(): void {
   renderTabBar(odTabsRoot, TABS, activeTab, (key) => {
     activeTab = key;
-    if (window.location.hash.replace(/^#/, "") !== key) {
-      history.replaceState(null, "", `#${key}`);
-    }
+    setHashTab(key);
     render();
   });
 }
@@ -706,9 +701,7 @@ function performUndo(): boolean {
     saveState(["entries", qIndex], restored);
     if (activeTab !== "input") {
       activeTab = "input";
-      if (window.location.hash.replace(/^#/, "") !== "input") {
-        history.replaceState(null, "", "#input");
-      }
+      setHashTab("input");
     }
     render();
     sheet.select({row: 0, col: qIndex}, {row: Math.max(0, state.teams.length - 1), col: qIndex}, {focus: true});
@@ -2158,9 +2151,7 @@ function createShootoutRound(numbers: number[]): void {
   invalidateShootoutCaches();
   saveState(["shootoutRounds"], state.shootoutRounds);
   activeTab = "input";
-  if (window.location.hash.replace(/^#/, "") !== "input") {
-    history.replaceState(null, "", "#input");
-  }
+  setHashTab("input");
   render();
   focusShootoutInput(state.shootoutRounds.length - 1, 0, 0);
 }

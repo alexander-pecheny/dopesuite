@@ -25,6 +25,7 @@ import {buildFestGrid} from "./fest-grid.js";
 import type {FestGridStage} from "./fest-grid.js";
 import {gameTabs, groupLabel} from "./game-tabs.js";
 import type {GameTab} from "./game-tabs.js";
+import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
 import * as troika from "./troika-protocol.js";
 import type {Mark, TroikaState} from "./troika-protocol.js";
 import {buildTroikaStatsTable, computeTroikaPlayerStats} from "./troika-stats.js";
@@ -150,15 +151,10 @@ function stageKind(stage: SchemeStage): string {
   return stage.kind || stage.stage_type || "";
 }
 
-function tabFromHash(): string | null {
-  const key = (window.location.hash || "").replace(/^#/, "");
-  return tabs().some((tab) => tab.key === key) ? key : null;
-}
+let activeTab = tabFromHash(tabs()) || "grid";
 
-let activeTab = tabFromHash() || "grid";
-
-window.addEventListener("hashchange", () => {
-  const next = tabFromHash();
+onNavigate(() => {
+  const next = tabFromHash(tabs());
   if (next && next !== activeTab) {
     activeTab = next;
     render();
@@ -679,7 +675,7 @@ function render(): void {
     tabsRoot.hidden = false;
     renderTabBar(tabsRoot, tabs(), activeTab, (key) => {
       activeTab = key;
-      if (window.location.hash.replace(/^#/, "") !== key) history.replaceState(null, "", `#${key}`);
+      setHashTab(key);
       render();
     });
   }
