@@ -215,6 +215,26 @@ func targets() []target {
 				},
 			}
 		}},
+		// Spliff ships native ES modules like xy: one bundle per page, plus the
+		// pure kernels as ESM for the deno tests.
+		{"spliff", func() []api.BuildOptions {
+			return []api.BuildOptions{
+				{
+					EntryPointsAdvanced: entries("spliff/spliff/web/ts/pages/", "index", "group", "transaction", "join"),
+					Bundle:              true,
+					Format:              api.FormatIIFE,
+					Outdir:              "spliff/spliff/web/assets/static/dist",
+				},
+				{
+					EntryPointsAdvanced: entries("spliff/spliff/web/ts/",
+						"txform", "money",
+						// the TS Catalog: the pages import i18nstrings, it the rest
+						"i18nstrings", "i18nstrings_plural_gen", "i18nstrings_types_gen", "i18nstrings_en_gen"),
+					Format: api.FormatESModule,
+					Outdir: "spliff/spliff/web/jstest/dist",
+				},
+			}
+		}},
 		{"xy", func() []api.BuildOptions {
 			return []api.BuildOptions{
 				{

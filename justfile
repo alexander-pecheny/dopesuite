@@ -1,30 +1,34 @@
-# Monorepo fan-out. xy/ and dope/ keep their own justfiles (run those directly
-# when working inside one); dopeuikit/ and dopecore/ have none, so their recipes
-# live here.
+# Monorepo fan-out. xy/, dope/ and spliff/ keep their own justfiles (run those
+# directly when working inside one); dopeuikit/ and dopecore/ have none, so
+# their recipes live here.
 
 default:
     @just --list
 
-# Go tests + frontend (deno) tests, all four modules.
+# Go tests + frontend (deno) tests, all five modules.
 test: test-core test-uikit
     cd xy && just test
     cd dope && just test
+    cd spliff && just test
 
 fmt: fmt-core fmt-uikit fmt-scripts
     cd xy && just fmt
     cd dope && just fmt
+    cd spliff && just fmt
 
 vet: vet-core vet-uikit
     cd xy && just vet
     cd dope && just vet
+    cd spliff && just vet
 
-# `just pre-commit` inside xy/ or dope/ comes back here, because class-check and
-# the kit's own gate are things no single module can run for itself.
+# `just pre-commit` inside an app comes back here, because class-check and the
+# kit's own gate are things no single module can run for itself.
 #
 # The gate, wherever you are. A module's own faster one is `just check`.
 pre-commit: pre-commit-core pre-commit-uikit class-check cyrillic-check strings-check
     cd xy && just check
     cd dope && just check
+    cd spliff && just check
 
 # Vendor one more Lucide icon and regenerate every consumer. Icons are vendored
 # rather than depended on: the build stays offline, and only shapes we actually
@@ -46,6 +50,7 @@ generate-strings:
     cd dopeuikit && go generate ./i18nstrings
     cd xy && go generate ./i18nstrings
     cd dope && go generate ./i18nstrings
+    cd spliff && go generate ./i18nstrings
 
 # Regenerate the icon set into Go, the vocabulary and both apps' TypeScript.
 icons-gen:
@@ -54,7 +59,7 @@ icons-gen:
     cd dope && go generate ./dope/web/ui
 
 # The Vocabulary is closed where Go emits markup, but ~72% of the class names
-# are written in TypeScript and core.css is shared by both apps, so no single
+# are written in TypeScript and core.css is shared by every app, so no single
 # module can check either half. (xy's own dead-CSS test covers only the xy layer.)
 #
 # Fail when the two drift: a rule nothing emits, or a name nothing styles.
@@ -116,7 +121,7 @@ typecheck:
     tsc=$(find node_modules -path '*@typescript/typescript-*/lib/tsc' -type f | head -1)
     [ -n "$tsc" ] || { echo "native tsc not found — run 'deno install'" >&2; exit 1; }
     pids=()
-    for p in dopeuikit dope xy xy/tsconfig.sw.json xy/tsconfig.worker.json; do "$tsc" -p "$p" & pids+=($!); done
+    for p in dopeuikit dope xy spliff xy/tsconfig.sw.json xy/tsconfig.worker.json; do "$tsc" -p "$p" & pids+=($!); done
     rc=0
     for pid in "${pids[@]}"; do wait "$pid" || rc=1; done
     exit $rc

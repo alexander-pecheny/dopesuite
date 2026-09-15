@@ -16,7 +16,7 @@ import (
 	"unicode"
 )
 
-var roots = []string{"dopecore", "dopeuikit", "xy", "dope", "scripts"}
+var roots = []string{"dopecore", "dopeuikit", "xy", "dope", "spliff", "scripts"}
 
 // Skipped wholesale: generated files carry what a Catalog put there, tests
 // name a string to assert on it, the chgksuite parity labels mirror upstream,

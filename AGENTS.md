@@ -1,6 +1,6 @@
 # dopesuite — monorepo
 
-Five Go modules, one repo: two apps (xy, dope) on two shared layers
+Six Go modules, one repo: three apps (xy, dope, spliff) on two shared layers
 (dopeuikit, dopecore), plus a desktop GUI. The apps have their own `AGENTS.md`;
 start there.
 
@@ -16,33 +16,38 @@ dopecore/    pecheny.me/dopecore — the shared platform layer extracted out of
              conversation — and the login handshake (tglogin)
 xy/          ЧГК question-editing boards (encrypted, Trello-style)
 dope/        tournament management (EK/OD/KSI) + realtime web UI
+spliff/      shared expenses: who paid for whom, in any currency, and who owes
+             whom — the only English-only module
 chgksuite-gui/
              a Fyne window over xy's chgksuite CLI, generated from the flags
              that CLI declares (`chgksuite spec`)
 ```
 
-- xy and dope consume the shared layers via `replace pecheny.me/dopeuikit =>
+- xy, dope and spliff consume the shared layers via `replace pecheny.me/dopeuikit =>
   ../dopeuikit` and `replace pecheny.me/dopecore => ../dopecore` — the monorepo
   preserves the sibling layout, so builds need nothing extra. The kit imports
   dopecore the same way; dopecore imports no other module (`docs/adr/0004`).
 - `chgksuite-gui` is deliberately outside the fan-out below: it needs cgo and a
   desktop toolchain, and neither server depends on it. Build and test it with
   its own `just check`, which also guards the seam between it and the CLI.
-- xy and dope each keep a `justfile` (`just dev`, `just test`, `just check`);
-  dopeuikit and dopecore have none — their recipes live in the root `justfile`,
-  which also fans `test`/`fmt`/`vet` out across all four. `just pre-commit` is
-  the root gate from anywhere: the module ones delegate up to it, because
-  class-check needs both apps' TypeScript and the shared core.css at once.
+- xy, dope and spliff each keep a `justfile` (`just dev`, `just test`, `just
+  check`); dopeuikit and dopecore have none — their recipes live in the root
+  `justfile`, which also fans `test`/`fmt`/`vet` out across all five. `just
+  pre-commit` is the root gate from anywhere: the module ones delegate up to it,
+  because class-check needs every app's TypeScript and the shared core.css at
+  once.
 - **Deploy** is one script for the whole repo: `deploy.py`, a target table
-  (`dope-server`, `dopetest`, `xy-server`, `xytest`) naming each unit's module,
-  package, binary, systemd unit and **host** — xy is on `vps-he`, dope on
-  `vps2day-ee`. Each app's `just deploy` calls it with its own targets.
+  (`dope-server`, `dopetest`, `xy-server`, `xytest`, `spliff-server`,
+  `splifftest`) naming each unit's module, package, binary, systemd unit and
+  **host** — xy and spliff are on `vps-he`, dope on `vps2day-ee`. Each app's
+  `just deploy` calls it with its own targets.
   If you are already on the target production host, do **not** `ssh` to it —
   run the commands directly.
 - **Production deploys come from `main` only, and from a `main` that is
   pushed. NEVER deploy a branch to prod.** Merge, `git push origin main`, then
   deploy from `main`. A branch may go to the staging targets
-  (`xytest`, `dopetest`; `just deploy-staging`) to live-test a feature. On
+  (`xytest`, `dopetest`, `splifftest`; `just deploy-staging`) to live-test a
+  feature. On
   2026-08-16 a branch deploy overwrote a fix that lived only on another branch
   and put a fixed bug back into xy prod.
 - Full pre-merge history is preserved under each subdirectory (git log/blame
@@ -110,7 +115,7 @@ Every string a person reads comes from a Catalog, never from the call site
 
 ## Toolchain
 
-- **Go** ≥ 1.26 — all four modules.
+- **Go** ≥ 1.26 — all five modules.
 - **just** — the task runner (root + per-app justfiles).
 - **deno** ≥ 2 — fetches the native tsc binary (`deno install`, root
   `package.json`) and runs the frontend tests (`deno test --parallel`). Bundling

@@ -3,13 +3,15 @@
 
 One script, one target table. Each target names its module, its Go package, the
 binary it installs, the systemd unit it restarts, and the host it lives on —
-xy and dope are on DIFFERENT hosts, so the host is per-target, not global.
+xy and spliff live on one host and dope on another, so the host is per-target,
+not global.
 
 Each app is one binary: the login bot polls inside the server process, so there
 is no bot unit to deploy alongside it.
 
   ./deploy.py --target dope-server           # the default for `just deploy` in dope/
   ./deploy.py --target xy-server             # the default for `just deploy` in xy/
+  ./deploy.py --target spliff-server         # the default for `just deploy` in spliff/
   ./deploy.py --target dopetest              # dope staging (`just deploy-staging`)
   ./deploy.py --target dope-server --skip-tests
   ./deploy.py --target xy-server --dry-run   # builds, uploads nothing
@@ -96,6 +98,31 @@ TARGETS: dict[str, dict] = {
         "package": "./cmd/xy-server",
         "binary": "xy-server",
         "env_prefix": "XYTEST",
+    },
+    "spliff-server": {
+        "host": "vps-he",
+        "remote_dir": "/opt/spliff",
+        "service": "spliff.service",
+        "service_env": "SPLIFF_DEPLOY_SERVICE",
+        "module": "spliff",
+        "package": "./spliff/cmd/spliff-server",
+        "binary": "spliff-server",
+        "env_prefix": "SPLIFF",
+    },
+    # Staging: the same spliff binary, on the same box as prod, against a copy
+    # of prod's DB (/var/lib/splifftest) with prod's photo blobs hardlinked in.
+    # Deploy here first whenever a release touches the schema or a migration.
+    # No telegram bot and no litestream — bootstrap accounts with
+    # `spliff-server adduser`.
+    "splifftest": {
+        "host": "vps-he",
+        "remote_dir": "/opt/splifftest",
+        "service": "splifftest.service",
+        "service_env": "SPLIFFTEST_DEPLOY_SERVICE",
+        "module": "spliff",
+        "package": "./spliff/cmd/spliff-server",
+        "binary": "spliff-server",
+        "env_prefix": "SPLIFFTEST",
     },
 }
 

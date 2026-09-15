@@ -1,0 +1,67 @@
+set dotenv-load := true
+
+default: dev
+
+# The shared toolchain (root ADR-0001) builds the gitignored dist trees the Go
+# build embeds (Spliff's own + the kit's), so every compiling recipe wants it.
+build-web:
+    cd .. && just build-web spliff uikit
+
+build: build-web
+    CGO_ENABLED=0 go build -o spliff-server ./spliff/cmd/spliff-server
+
+dev: build-web
+    go run ./spliff/cmd/spliff-server
+
+fmt:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t files < <(find spliff i18nstrings -type f -name '*.go')
+    ((${#files[@]} == 0)) || gofmt -w "${files[@]}"
+
+vet: build-web
+    go vet ./...
+
+tidy-check:
+    go mod tidy -diff
+
+# Go tests + frontend (deno) tests; typecheck gates here, not in build-web.
+test: build-web
+    cd .. && just typecheck
+    go test ./...
+    deno test --parallel spliff/web/jstest/
+
+test-js: build-web
+    deno test --parallel spliff/web/jstest/
+
+# Spliff has no generated builder of its own (its pages are .dopeui and the
+# /admin pages use the kit's), so the only generated files are the Catalog's —
+# and those are the root's `just strings-check`, which regenerates every
+# module's. Nothing here to guard on its own.
+
+# check cannot see what only the monorepo can: the kit's and dopecore's gates,
+# and class-check, which needs every app's TypeScript and the shared core.css at
+# once. This module's own gate: fast, and all you need mid-change.
+check:
+    just fmt
+    just vet
+    just tidy-check
+    just test
+
+# The whole repo, from wherever you are.
+pre-commit:
+    cd .. && just pre-commit
+
+# Mint a password account (registration is otherwise telegram-only).
+# Usage: printf '<password>' | just adduser <username>
+adduser username: build-web
+    go run ./spliff/cmd/spliff-server adduser {{username}}
+
+# Build + deploy via the monorepo's ../deploy.py. One unit: the login bot polls
+# inside the server (SPLIFF_BOT_TOKEN in /etc/spliff.env).
+deploy *args: build-web
+    python3 ../deploy.py --target spliff-server {{args}}
+
+# Staging at splifftest: a copy of prod's DB, same box, no bot.
+deploy-staging *args: build-web
+    python3 ../deploy.py --target splifftest {{args}}

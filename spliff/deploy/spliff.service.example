@@ -1,0 +1,42 @@
+# The unit Spliff runs under on vps-he, as an example to copy to
+# /etc/systemd/system/spliff.service. Staging is the same file with `spliff`
+# read as `splifftest` throughout, a different PORT, and no SPLIFF_BOT_TOKEN in
+# its environment file.
+#
+# Two ReadWritePaths are load-bearing under ProtectSystem=strict:
+#
+#   /var/lib/spliff  the SQLite database AND the Photo blobs, which are files on
+#                    disk and not rows (dopecore/blobstore).
+#   /run/lock        tgbot.AcquirePollLock holds an flock named after the bot
+#                    token's hash for as long as the process polls, so that two
+#                    binaries on one host cannot split Telegram's updates
+#                    between them (root ADR-0005). Without this path the lock
+#                    cannot be taken and the instance quietly stops offering
+#                    telegram login.
+
+[Unit]
+Description=spliff
+After=network.target
+
+[Service]
+Type=simple
+User=spliff
+Group=spliff
+WorkingDirectory=/var/lib/spliff
+EnvironmentFile=/etc/spliff.env
+ExecStart=/opt/spliff/spliff-server
+Restart=on-failure
+RestartSec=2
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/spliff /run/lock
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
