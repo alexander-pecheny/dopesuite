@@ -3,7 +3,8 @@
 // `viewer` flag), the way brain.ts serves both. Bundled by pages/ek.ts.
 
 import {cssEscape, formatNumber, formatPlace, isFormControl, option, td, th} from "./cells.js";
-import {buildFlatScoreTable, buildTwoRowScoreTable, canPatchScoreShape, createScoreTableIndex, patchScoreTable, setMarkClass} from "./score-table.js";
+import {buildFlatScoreTable, buildTwoRowScoreTable, canPatchScoreShape, createScoreTableIndex, patchScoreTable, seatingText, setMarkClass} from "./score-table.js";
+import {seatedNames} from "./ek-seating.js";
 import type {NodeIndex, ParticipantView, ThemeView} from "./score-table.js";
 import {buildVenuesTable, formatBattleVenue, formatBattleVenueShort, formatVenue} from "./venue.js";
 import type {Venue} from "./venue.js";
@@ -46,7 +47,9 @@ interface EKRoute {
 }
 
 interface HostThemeView extends ThemeView {
-  player: string;
+  // Whoever the team sent to the theme: one player in EK, up to three in
+  // Erudit-Sextet. Never the singular field the wire used to carry.
+  players: string[];
   answers: string[];
 }
 
@@ -66,6 +69,8 @@ interface HostParticipantView extends ParticipantView {
 interface HostMatchView extends CachedMatchView {
   title?: string;
   finished: boolean;
+  // The seat cap of this match's themes — one in EK, up to three in ES.
+  players?: number;
   revision?: number;
   stageCode?: string;
   venue?: {number: number; title?: string} | null;
@@ -152,7 +157,9 @@ type EKCellPayload = {
   theme?: number;
   answer?: number;
   mark?: string;
-  player?: string;
+  // The theme's whole seating, by display name — a seat edit sends the list it
+  // leaves behind, never a difference.
+  players?: string[];
   place?: number;
   shootout?: boolean;
 };
@@ -197,7 +204,7 @@ const shell = mountGamePage({
   init: pageWindow.__EK_INIT__ ? {...pageWindow.__EK_INIT__, gameID: pageWindow.__EK_INIT__.route?.gameID} : null,
   embedded,
   chrome: () => {
-    const gameTitle = fest?.gameName || currentGameTitle() || S.ek.title();
+    const gameTitle = fest?.gameName || currentGameTitle() || (sextetGame() ? S.games.es.short() : S.ek.title());
     return {
       festTitle: fest?.title || "",
       gameTitle,
@@ -207,7 +214,7 @@ const shell = mountGamePage({
   },
   cursorKinds: {
     answer: {selector: ".answer-cell", keys: ["matchCode", "team", "shootout", "theme", "answer"]},
-    player: {selector: "[data-player-select]", keys: ["matchCode", "team", "shootout", "theme"]},
+    player: {selector: "[data-player-select], [data-player-seats]", keys: ["matchCode", "team", "shootout", "theme"]},
     place: {selector: ".place-input", keys: ["matchCode", "team"]},
     finish: {selector: ".finish-toggle", keys: ["matchCode"]},
     venue: {selector: ".venue-edit-button", keys: ["matchCode"]},
@@ -225,6 +232,26 @@ let venues: Venue[] = [];
 // a team's takes two.
 function individualGame(): boolean {
   return fest?.gameType === "si";
+}
+
+// Erudit-Sextet plays this page too, differing in one thing: a team seats up
+// to three players on a theme instead of exactly one.
+function sextetGame(): boolean {
+  return fest?.gameType === "es";
+}
+
+// The tabs and the page title come from the format: EK and ES show the same
+// tabs (personal SI has no roster tab of its own), and a game the fest never named
+// falls back to its format's short name.
+function gameKind(): "ek" | "es" | "si" {
+  return individualGame() ? "si" : sextetGame() ? "es" : "ek";
+}
+
+// seatCap is how many players the match on screen seats on one theme: what the
+// server put on the match view, one where it said nothing (every EK match, and
+// any older view a cache is still holding).
+function seatCap(matchState: HostMatchView | null = state): number {
+  return Math.max(1, matchState?.players || 1);
 }
 
 function seatRowSpan(): number {
@@ -329,7 +356,15 @@ const floatingPopoverSpecs = [
   {
     trigger: ".player-select-truncated",
     popover: ".player-select-popover",
-    anchor: "[data-player-select]",
+    anchor: "[data-player-select], [data-player-seats]",
+  },
+  // A seating printed as cut surnames always owes the full names, whether or
+  // not it also overflows its cell — the cut is the point, not an accident of
+  // width. Host and spectator alike carry the class.
+  {
+    trigger: ".player-seats-abbreviated",
+    popover: ".player-select-popover, .readonly-player-popover",
+    anchor: "[data-player-seats], .readonly-player-text-wrap",
   },
 ];
 
@@ -900,14 +935,14 @@ function recoverMatchPendingEdits(): void {
 function payloadToOpPath(payload: EKCellPayload): Array<string | number> | null {
   if (payload.place !== undefined) return ["participants", payload.team, "place"];
   const themesKey = payload.shootout ? "shootoutThemes" : "themes";
-  if (payload.player !== undefined) return ["participants", payload.team, themesKey, payload.theme!, "player"];
+  if (payload.players !== undefined) return ["participants", payload.team, themesKey, payload.theme!, "players"];
   if (payload.mark !== undefined) return ["participants", payload.team, themesKey, payload.theme!, "answers", payload.answer!];
   return null;
 }
 
 function payloadToOpValue(payload: EKCellPayload): unknown {
   if (payload.place !== undefined) return payload.place;
-  if (payload.player !== undefined) return payload.player;
+  if (payload.players !== undefined) return payload.players;
   return payload.mark;
 }
 
@@ -927,11 +962,15 @@ function opToBlobOp(op: PendingOp, view: HostMatchView): BlobOp | null {
     const path = ["participants", teamKey, "pin"];
     return op.value ? {path, value: op.value} : {op: "remove", path};
   }
-  if (leaf === "player") {
-    const name = op.value as string;
-    const member = (team.roster || []).find((player) => player.name === name);
-    if (name && !member) return null;
-    return {path: ["participants", teamKey, key as string, theme as number, "player"], value: member?.id ?? 0};
+  if (leaf === "players") {
+    const names = (op.value as string[]) || [];
+    const ids: number[] = [];
+    for (const name of names) {
+      const member = (team.roster || []).find((player) => player.name === name);
+      if (!member) return null; // a seating the view can no longer resolve: drop it
+      ids.push(member.id);
+    }
+    return {path: ["participants", teamKey, key as string, theme as number, "players"], value: ids};
   }
   return {path: ["participants", teamKey, key as string, theme as number, "answers", answer as number], value: op.value};
 }
@@ -1178,7 +1217,7 @@ function stageCodeForMatch(matchCode: string | undefined): string {
 }
 
 function ekTabs(): GameTab[] {
-  return gameTabs(rawSchemeStages() as StageRef[], {game: individualGame() ? "si" : "ek", viewer});
+  return gameTabs(rawSchemeStages() as StageRef[], {game: gameKind(), viewer});
 }
 
 // ekSchemeStages is what the tabs show, in tab order — a round-robin round or
@@ -1312,15 +1351,29 @@ function updateEKTeamNameOverflow(root: ParentNode = ekRoot): void {
   }
 }
 
+// updatePlayerSelectOverflow marks the seat cells whose text is wider than the
+// cell, which is what turns on the fade and the popover. A cell holds either a
+// native <select> (one seat) or the seat picker's button (more), and both are
+// measured the same way — their own box against their own text. A seating
+// already cut to surnames keeps its popover through .player-seats-abbreviated,
+// which the builders set; this only adds the ones that also overflow.
 function updatePlayerSelectOverflow(root: ParentNode = ekRoot): void {
   const wraps = root.querySelectorAll<HTMLElement>(".player-select-wrap");
   const measurements: Array<{wrap: HTMLElement; popover: HTMLElement | null; label: string; truncated: boolean}> = [];
   for (const wrap of wraps) {
     if (wrap.closest(".ek-stage-table") && !isVisibleInScrollFrame(wrap)) continue;
+    const seats = wrap.querySelector<HTMLElement>("[data-player-seats]");
     const select = wrap.querySelector<HTMLSelectElement>("[data-player-select]");
     const popover = wrap.querySelector<HTMLElement>(".player-select-popover");
-    const label = selectedPlayerLabel(select);
-    measurements.push({wrap, popover, label, truncated: Boolean(label && playerSelectTextOverflows(select, label))});
+    const label = seats ? seats.textContent || "" : selectedPlayerLabel(select);
+    measurements.push({
+      wrap,
+      // A seat picker's popover lists the full names and is the panel's
+      // business, not the measurement's.
+      popover: seats ? null : popover,
+      label,
+      truncated: Boolean(label && playerSelectTextOverflows(seats || select, label)),
+    });
   }
   for (const m of measurements) {
     if (m.popover) m.popover.textContent = m.label;
@@ -1333,7 +1386,7 @@ function selectedPlayerLabel(select: HTMLSelectElement | null): string {
   return select.selectedOptions?.[0]?.textContent || select.value || "";
 }
 
-function playerSelectTextOverflows(select: HTMLSelectElement | null, label: string): boolean {
+function playerSelectTextOverflows(select: HTMLElement | null, label: string): boolean {
   if (!select || !label) return false;
   const style = getComputedStyle(select);
   const available = select.clientWidth - parseFloat(style.paddingLeft || "0") - parseFloat(style.paddingRight || "0");
@@ -2269,7 +2322,7 @@ function themeCells(team: HostParticipantView, teamIndex: number, theme: HostThe
   const matchCode = currentMatchCode();
   // A player seats himself: his match row needs no player cell at all.
   const playerCell = individualGame() ? null
-    : viewer ? readonlyPlayerCell(teamIndex, theme, themeIndex, isShootout)
+    : viewer ? readonlyPlayerCell(team, teamIndex, theme, themeIndex, isShootout)
     : buildPlayerSelectCell(team, teamIndex, theme, themeIndex, isShootout, matchCode);
   const scoreCell = td(theme.score, "number theme-score theme-block theme-block-score", {rowSpan: seatRowSpan()});
   scoreCell.dataset.team = String(teamIndex);
@@ -2310,11 +2363,14 @@ function themeCells(team: HostParticipantView, teamIndex: number, theme: HostThe
 // readonlyPlayerCell is the spectator's player: a name, not a <select>. Its
 // coordinates let patchScoreTable's playerText sync update it in place, and the
 // popover is always there so the sync keeps it in step from and to blank.
-function readonlyPlayerCell(teamIndex: number, theme: HostThemeView, themeIndex: number, isShootout: boolean): HTMLElement {
+function readonlyPlayerCell(team: HostParticipantView, teamIndex: number, theme: HostThemeView, themeIndex: number, isShootout: boolean): HTMLElement {
   const playerCell = document.createElement("td");
   playerCell.colSpan = state!.questionValues.length;
   playerCell.className = "readonly-player theme-block theme-block-top-left";
-  const playerLabel = theme.player || "";
+  const seated = seatedNames(theme.players);
+  const playerLabel = seatingText(theme, team, state!);
+  // A cut seating owes its full names to a hover, however wide the cell is.
+  if (playerLabel !== seated.join(" ")) playerCell.classList.add("player-seats-abbreviated");
   const playerWrap = document.createElement("span");
   playerWrap.className = "readonly-player-text-wrap";
   const playerText = document.createElement("span");
@@ -2327,7 +2383,7 @@ function readonlyPlayerCell(teamIndex: number, theme: HostThemeView, themeIndex:
   playerCell.appendChild(playerWrap);
   const playerPopover = document.createElement("span");
   playerPopover.className = "popover popover-inline readonly-player-popover";
-  playerPopover.textContent = playerLabel;
+  playerPopover.textContent = seated.join("\n");
   playerCell.appendChild(playerPopover);
   return playerCell;
 }
@@ -2375,6 +2431,21 @@ function buildPlayerSelectCell(team: HostParticipantView, teamIndex: number, the
 
   const selectWrap = document.createElement("span");
   selectWrap.className = "player-select-wrap";
+  // One seat is a <select>, which the platform already draws well on every
+  // phone; more than one is a panel of tickboxes, because a multiple <select>
+  // is unusable on a touch screen.
+  if (seatCap() > 1) {
+    const seated = seatedNames(theme.players);
+    if (seatingText(theme, team, state!) !== seated.join(" ")) selectWrap.classList.add("player-seats-abbreviated");
+    selectWrap.appendChild(seatsTrigger(team, teamIndex, theme, themeIndex, isShootout, matchCode));
+    const seatsPopover = document.createElement("span");
+    seatsPopover.className = "popover popover-inline player-select-popover";
+    seatsPopover.textContent = seated.join("\n");
+    selectWrap.appendChild(seatsPopover);
+    editor.appendChild(selectWrap);
+    playerCell.appendChild(editor);
+    return playerCell;
+  }
   const select = document.createElement("select");
   select.dataset.playerSelect = "";
   select.dataset.matchCode = matchCode;
@@ -2383,14 +2454,15 @@ function buildPlayerSelectCell(team: HostParticipantView, teamIndex: number, the
   select.dataset.theme = String(themeIndex);
   select.appendChild(option("", ""));
   const roster = team.roster || [];
+  const seated = seatedNames(theme.players)[0] || "";
   roster.forEach((player) => select.appendChild(option(player.name, player.name)));
-  if (theme.player && !roster.some((player) => player.name === theme.player)) {
-    select.appendChild(option(theme.player, theme.player));
+  if (seated && !roster.some((player) => player.name === seated)) {
+    select.appendChild(option(seated, seated));
   }
-  select.value = theme.player;
+  select.value = seated;
   select.disabled = state!.finished;
   select.addEventListener("change", () => {
-    const payload: EKCellPayload = {team: teamIndex, theme: themeIndex, player: select.value};
+    const payload: EKCellPayload = {team: teamIndex, theme: themeIndex, players: select.value ? [select.value] : []};
     if (isShootout) payload.shootout = true;
     updatePlayerSelectOverflow(selectWrap);
     queueEKEdits(matchCode, [payload]);
@@ -2408,6 +2480,202 @@ function buildPlayerSelectCell(team: HostParticipantView, teamIndex: number, the
 
   playerCell.appendChild(editor);
   return playerCell;
+}
+
+// --- the seating: the seat picker -----------------------------------------
+//
+// Where a theme seats more than one player (Erudit-Sextet), the cell holds a
+// button that reads the seating and opens one panel of the team's roster with
+// a tickbox each. The panel is a single node parked on <body>, moved to
+// whichever cell asked for it: a match draws 48 of these cells and none of them
+// needs its own copy of the roster.
+
+// seatsTrigger is the closed state of one theme's seating.
+function seatsTrigger(team: HostParticipantView, teamIndex: number, theme: HostThemeView, themeIndex: number, isShootout: boolean, matchCode: string): HTMLElement {
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "player-seats";
+  trigger.dataset.playerSeats = "";
+  trigger.dataset.matchCode = matchCode;
+  trigger.dataset.team = String(teamIndex);
+  trigger.dataset.shootout = isShootout ? "1" : "0";
+  trigger.dataset.theme = String(themeIndex);
+  trigger.disabled = state!.finished;
+  trigger.setAttribute("aria-haspopup", "true");
+  trigger.setAttribute("aria-expanded", "false");
+  trigger.setAttribute("aria-label", S.ek.seats.label());
+  const text = document.createElement("span");
+  text.className = "player-seats-text";
+  text.textContent = seatingText(theme, team, state!);
+  trigger.appendChild(text);
+  trigger.addEventListener("click", (event) => {
+    event.preventDefault();
+    toggleSeatsPanel(trigger);
+  });
+  return trigger;
+}
+
+let seatsPanelNode: HTMLElement | null = null;
+let seatsPanelTrigger: HTMLElement | null = null;
+
+function toggleSeatsPanel(trigger: HTMLElement): void {
+  if (seatsPanelTrigger === trigger) {
+    closeSeatsPanel();
+    return;
+  }
+  openSeatsPanel(trigger);
+}
+
+// openSeatsPanel fills the panel from the team the trigger names and shows it
+// under the cell. Everything it needs it reads back out of the match view, so
+// a panel opened after an SSE update is never stale.
+function openSeatsPanel(trigger: HTMLElement): void {
+  const matchCode = trigger.dataset.matchCode || currentMatchCode();
+  const matchState = matchStateFor(matchCode);
+  const teamIndex = Number(trigger.dataset.team);
+  const themeIndex = Number(trigger.dataset.theme);
+  const isShootout = trigger.dataset.shootout === "1";
+  const team = matchState?.participants?.[teamIndex];
+  if (!matchState || !team) return;
+  const themes = isShootout ? shootoutThemesFor(team) : team.themes;
+  const theme = themes?.[themeIndex];
+  if (!theme) return;
+
+  closeSeatsPanel();
+  const panel = document.createElement("div");
+  panel.className = "popover menu-dropdown player-seats-panel";
+  panel.setAttribute("role", "group");
+  panel.setAttribute("aria-label", S.ek.seats.label());
+  const cap = seatCap(matchState);
+  const seated = seatedNames(theme.players);
+  const boxes: HTMLInputElement[] = [];
+  const refreshDisabled = (): void => {
+    const picked = boxes.filter((box) => box.checked).length;
+    for (const box of boxes) box.disabled = !box.checked && picked >= cap;
+  };
+  for (const member of team.roster || []) {
+    const row = document.createElement("label");
+    row.className = "menu-item player-seats-option";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.value = member.name;
+    box.checked = seated.includes(member.name);
+    box.addEventListener("change", () => {
+      refreshDisabled();
+      const picked = boxes.filter((item) => item.checked).map((item) => item.value);
+      seatPlayers(matchCode, teamIndex, themeIndex, isShootout, picked);
+    });
+    boxes.push(box);
+    const name = document.createElement("span");
+    name.textContent = member.name;
+    row.append(box, name);
+    panel.appendChild(row);
+  }
+  if (boxes.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "menu-item muted";
+    empty.textContent = S.ek.seats.empty();
+    panel.appendChild(empty);
+  }
+  refreshDisabled();
+  document.body.appendChild(panel);
+  seatsPanelNode = panel;
+  seatsPanelTrigger = trigger;
+  trigger.setAttribute("aria-expanded", "true");
+  // The hover popovers stand down while a panel is open: two floating surfaces
+  // over one cell is one too many.
+  document.documentElement.classList.add("seats-panel-open");
+  floatingPopover.hide();
+  positionSeatsPanel();
+  boxes[0]?.focus();
+  document.addEventListener("pointerdown", onSeatsPointerDown, true);
+  document.addEventListener("keydown", onSeatsKeydown, true);
+  window.addEventListener("scroll", positionSeatsPanel, {capture: true, passive: true});
+  window.addEventListener("resize", positionSeatsPanel);
+}
+
+function closeSeatsPanel(): void {
+  if (!seatsPanelNode) return;
+  seatsPanelNode.remove();
+  seatsPanelNode = null;
+  seatsPanelTrigger?.setAttribute("aria-expanded", "false");
+  seatsPanelTrigger = null;
+  document.documentElement.classList.remove("seats-panel-open");
+  document.removeEventListener("pointerdown", onSeatsPointerDown, true);
+  document.removeEventListener("keydown", onSeatsKeydown, true);
+  window.removeEventListener("scroll", positionSeatsPanel, {capture: true} as EventListenerOptions);
+  window.removeEventListener("resize", positionSeatsPanel);
+}
+
+function onSeatsPointerDown(event: PointerEvent): void {
+  if (!(event.target instanceof Node)) return;
+  if (seatsPanelNode?.contains(event.target) || seatsPanelTrigger?.contains(event.target)) return;
+  closeSeatsPanel();
+}
+
+// Esc closes the panel and hands the focus back to the cell it belongs to, so
+// the next arrow key moves the sheet cursor rather than the tickboxes.
+function onSeatsKeydown(event: KeyboardEvent): void {
+  if (event.key !== "Escape" || !seatsPanelNode) return;
+  const trigger = seatsPanelTrigger;
+  event.preventDefault();
+  event.stopPropagation();
+  closeSeatsPanel();
+  trigger?.focus();
+}
+
+// positionSeatsPanel parks the panel under its cell, kept inside the viewport
+// and flipped above when the cell is near the bottom — the sheet scrolls in
+// both directions, so no fixed side can be assumed.
+function positionSeatsPanel(): void {
+  const panel = seatsPanelNode;
+  const trigger = seatsPanelTrigger;
+  if (!panel || !trigger) return;
+  if (!document.body.contains(trigger)) {
+    closeSeatsPanel();
+    return;
+  }
+  const rect = trigger.getBoundingClientRect();
+  const margin = 8;
+  panel.style.position = "fixed";
+  panel.style.maxHeight = `${Math.max(120, window.innerHeight - 2 * margin)}px`;
+  const width = panel.offsetWidth;
+  const height = panel.offsetHeight;
+  const left = clamp(rect.left, margin, Math.max(margin, window.innerWidth - width - margin));
+  const below = rect.bottom + margin + height <= window.innerHeight;
+  const top = below ? rect.bottom + 2 : Math.max(margin, rect.top - height - 2);
+  panel.style.left = `${left}px`;
+  panel.style.top = `${top}px`;
+}
+
+// seatPlayers queues one edit carrying the theme's whole seating and repaints
+// the cell it came from. It repaints that cell alone rather than the match: a
+// seating moves no points, and rebuilding the sheet under an open panel would
+// pull the panel's own button out of the document.
+function seatPlayers(matchCode: string, teamIndex: number, themeIndex: number, isShootout: boolean, names: string[]): void {
+  const payload: EKCellPayload = {team: teamIndex, theme: themeIndex, players: names};
+  if (isShootout) payload.shootout = true;
+  const matchState = matchStateFor(matchCode);
+  const team = matchState?.participants?.[teamIndex];
+  const themes = team ? (isShootout ? shootoutThemesFor(team) : team.themes) : null;
+  const theme = themes?.[themeIndex];
+  if (theme) theme.players = names;
+  queueEKEdits(matchCode, [payload]);
+  if (seatsPanelTrigger && theme && team && matchState) refreshSeatsTrigger(seatsPanelTrigger, theme, team, matchState);
+}
+
+// refreshSeatsTrigger repaints one closed seating: its line, its popover and
+// whether it owes one at all.
+function refreshSeatsTrigger(trigger: HTMLElement, theme: HostThemeView, team: HostParticipantView, matchState: HostMatchView): void {
+  const seated = seatedNames(theme.players);
+  const label = seatingText(theme, team, matchState);
+  const text = trigger.querySelector<HTMLElement>(".player-seats-text");
+  if (text) text.textContent = label;
+  const wrap = trigger.closest(".player-select-wrap");
+  const popover = wrap?.querySelector(".player-select-popover");
+  if (popover) popover.textContent = seated.join("\n");
+  wrap?.classList.toggle("player-seats-abbreviated", label !== seated.join(" "));
+  updatePlayerSelectOverflow(wrap || ekRoot);
 }
 
 function trailingCells(team: HostParticipantView, teamIndex: number, hasShootout: boolean): HTMLElement[] {

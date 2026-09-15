@@ -70,7 +70,9 @@
   font-size: var(--text-xs);
   font-weight: var(--fw-regular);
   line-height: var(--leading-snug);
-  white-space: normal;
+  /* pre-line, not normal: a seating popover lists the players it stands for
+     one per line, and every other name popover holds a single line anyway. */
+  white-space: pre-line;
   pointer-events: none;
 }
 
@@ -122,7 +124,13 @@
 .match-table .ek-team-cell.od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
 .match-table .ek-team-cell.od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover,
 .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:hover .readonly-player-popover,
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:focus-within .readonly-player-popover {
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:focus-within .readonly-player-popover,
+/* A seating cut to surnames owes its full names whether or not it also
+   overflows — the cut is the point, not an accident of width. */
+.player-seats-abbreviated:hover .player-select-popover,
+.player-seats-abbreviated:focus-within .player-select-popover,
+.player-seats-abbreviated:hover .readonly-player-popover,
+.player-seats-abbreviated:focus-within .readonly-player-popover {
   display: block;
 }
 
@@ -143,7 +151,11 @@
 .floating-popovers-enabled .readonly-player-cell-truncated:hover .readonly-player-popover,
 .floating-popovers-enabled .readonly-player-cell-truncated:focus-within .readonly-player-popover,
 .ek-page .readonly-player-cell-truncated:hover .readonly-player-popover,
-.ek-page .readonly-player-cell-truncated:focus-within .readonly-player-popover {
+.ek-page .readonly-player-cell-truncated:focus-within .readonly-player-popover,
+.floating-popovers-enabled .player-seats-abbreviated:hover .player-select-popover,
+.floating-popovers-enabled .player-seats-abbreviated:focus-within .player-select-popover,
+.floating-popovers-enabled .player-seats-abbreviated:hover .readonly-player-popover,
+.floating-popovers-enabled .player-seats-abbreviated:focus-within .readonly-player-popover {
   display: none;
 }
 
@@ -744,7 +756,12 @@
   z-index: var(--z-popover);
 }
 
-.player-cell select {
+/* The seat control: a <select> where a theme seats one player (ЭК), a button
+   opening the tickbox panel where it seats up to three (Эрудит-Секстет). They
+   are the same box — same height, same chevron, same focus ring — because they
+   sit in the same cell and mean the same thing. */
+.player-cell select,
+.player-cell .player-seats {
   appearance: none;
   -webkit-appearance: none;
   width: 100%;
@@ -758,8 +775,49 @@
   font-size: var(--text-sm);
 }
 
-.player-cell select:focus {
+.player-cell .player-seats {
+  display: block;
+  text-align: left;
+  font-family: inherit;
+  cursor: var(--cursor-action);
+}
+
+.player-seats-text {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.player-cell select:focus,
+.player-cell .player-seats:focus {
   box-shadow: inset 0 0 0 2px var(--blue);
+}
+
+/* The panel of the team's состав, parked on <body> and positioned by the page
+   (the sheet scrolls in both directions, so no cell can own it). The kit's
+   .menu-dropdown gives it its surface and its rows; only the scroll cap and
+   the pointer-through of a spent tickbox are the seating's own. */
+.player-seats-panel {
+  overflow-y: auto;
+  min-width: 180px;
+}
+
+/* The row is .menu-item — its box, its gap, its hover are the ☰ menu's. What
+   a seat adds is that it is a choice you can spend: the row a full theme will
+   not take reads as unavailable. */
+.player-seats-option {
+  cursor: var(--cursor-action);
+}
+
+.player-seats-option:has(input:disabled) {
+  color: var(--muted);
+  cursor: var(--cursor-disabled);
+}
+
+/* While the panel is open, the hover name popovers stand down: two floating
+   surfaces over one cell is one too many. */
+.seats-panel-open .floating-name-popover {
+  display: none;
 }
 
 .match-table .readonly-player {
@@ -1574,7 +1632,8 @@ body:not(.embedded-match) .grid-match {
     width: 26px;
   }
 
-  .player-cell select {
+  .player-cell select,
+  .player-cell .player-seats {
     height: 22px;
     padding-left: 5px;
     padding-right: 18px;

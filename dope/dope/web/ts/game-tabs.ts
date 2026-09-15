@@ -4,7 +4,7 @@ import S from "./i18nstrings.js";
 // Which tabs a Game page shows is Block / Round / Group knowledge, held here
 // once; pages render the array and derive nothing of their own.
 
-export type GameKind = "ek" | "si" | "brain" | "ksi" | "od" | "troika";
+export type GameKind = "ek" | "es" | "si" | "brain" | "ksi" | "od" | "troika";
 
 export type TabKind =
   | "grid" | "block" | "pods" | "round" | "protocol" | "reseed" | "stage"
@@ -32,11 +32,12 @@ export function gameTabs(stages: StageRef[], options: GameTabsOptions): GameTab[
   const host = !options.viewer;
   switch (options.game) {
   case "ek":
+  case "es":
   case "si":
     return [
       ...fixedTabs(["grid", S.screen.tabs.grid()], ["venues", S.screen.tabs.venues()], ...when(host, ["seedImport", S.screen.tabs.seedImport()])),
       ...foldReseeds(stages.flatMap((stage) => roundTabs(stage, stages))),
-      ...fixedTabs(["stats", S.screen.tabs.stats()], ...when(options.game === "ek", ["roster", S.screen.tabs.roster()])),
+      ...fixedTabs(["stats", S.screen.tabs.stats()], ...when(options.game !== "si", ["roster", S.screen.tabs.roster()])),
     ];
   case "brain":
     return brainTabs(stages, host && Boolean(options.seeded), S.screen.tabs.individualStats());

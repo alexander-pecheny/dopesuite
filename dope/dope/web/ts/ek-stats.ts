@@ -2,6 +2,7 @@
 // stages' marks (the sibling of brain-stats and group-stats), and their tables.
 
 import type {MatchView} from "./score-table.js";
+import {seatedNames} from "./ek-seating.js";
 import {standingsTable} from "./standings.js";
 import S from "./i18nstrings.js";
 
@@ -13,6 +14,8 @@ export interface EKStage {
 export interface EKPlayerStatsRow {
   player: string;
   team: string;
+  // Σ and Σ+ are a player's share of the themes he sat: whole in EK, a third
+  // or a half of a theme's points in Erudit-Sextet, so both may be fractional.
   sum: number;
   plus: number;
   battles: number;
@@ -43,44 +46,50 @@ export function computeEKPlayerStats(stages: EKStage[] | null | undefined): EKPl
       for (const team of match.participants || []) {
         const teamName = team.name || "";
         for (const theme of team.themes || []) {
-          const playerName = String(theme.player || "").trim();
-          if (!playerName) continue;
-          const key = `${teamName}\x1f${playerName}`;
-          let row = players.get(key);
-          let seen = battleSeen.get(key);
-          if (!row || !seen) {
-            row = {
-              player: playerName,
-              team: teamName,
-              sum: 0,
-              plus: 0,
-              battles: 0,
-              right: [0, 0, 0, 0, 0],
-              wrong: [0, 0, 0, 0, 0],
-              rightTotal: 0,
-              share: 0,
-            };
-            players.set(key, row);
-            seen = new Set();
-            battleSeen.set(key, seen);
-          }
-          if (!seen.has(battleID)) {
-            seen.add(battleID);
-            row.battles++;
-          }
-          const statRow = row;
-          (theme.answers || []).forEach((mark, i) => {
-            const value = values[i] || 0;
-            if (mark === "right") {
-              statRow.sum += value;
-              statRow.plus += value;
-              statRow.right[i]++;
-              statRow.rightTotal++;
-            } else if (mark === "wrong") {
-              statRow.sum -= value;
-              statRow.wrong[i]++;
+          const seated = seatedNames(theme.players);
+          if (seated.length === 0) continue;
+          // The theme's points are the team's, so they divide equally among
+          // whoever sat it; a question taken or missed counts whole for each
+          // of them, a third of a question being nonsense.
+          const share = 1 / seated.length;
+          for (const playerName of seated) {
+            const key = `${teamName}\x1f${playerName}`;
+            let row = players.get(key);
+            let seen = battleSeen.get(key);
+            if (!row || !seen) {
+              row = {
+                player: playerName,
+                team: teamName,
+                sum: 0,
+                plus: 0,
+                battles: 0,
+                right: [0, 0, 0, 0, 0],
+                wrong: [0, 0, 0, 0, 0],
+                rightTotal: 0,
+                share: 0,
+              };
+              players.set(key, row);
+              seen = new Set();
+              battleSeen.set(key, seen);
             }
-          });
+            if (!seen.has(battleID)) {
+              seen.add(battleID);
+              row.battles++;
+            }
+            const statRow = row;
+            (theme.answers || []).forEach((mark, i) => {
+              const value = (values[i] || 0) * share;
+              if (mark === "right") {
+                statRow.sum += value;
+                statRow.plus += value;
+                statRow.right[i]++;
+                statRow.rightTotal++;
+              } else if (mark === "wrong") {
+                statRow.sum -= value;
+                statRow.wrong[i]++;
+              }
+            });
+          }
         }
       }
     }
@@ -153,6 +162,14 @@ export function computeIndividualPlayerStats(stages: EKStage[] | null | undefine
   return rows;
 }
 
+// statNumber prints a divided Σ: a whole number where the split came out
+// whole (every EK row, and a Sextet theme sat by one), one decimal otherwise.
+// Trailing «.0» is noise in a column of integers.
+export function statNumber(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
 // The EK nominals, high to low — the order the stats tables list them; the
 // stat rows count them by answer position, 10 first.
 const EK_VALUES = [50, 40, 30, 20, 10];
@@ -216,8 +233,8 @@ export function buildEKStatsTable(rows: EKPlayerStatsRow[] | null | undefined): 
     rows: rows.map((row) => [
       row.player,
       row.team,
-      row.sum,
-      row.plus,
+      statNumber(row.sum),
+      statNumber(row.plus),
       row.battles,
       ...byNominal(row.right),
       ...byNominal(row.wrong),

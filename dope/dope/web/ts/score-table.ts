@@ -3,6 +3,7 @@
 
 import {applyAttrs, cellFromSpec, formatDisplayText, formatPlace, sameArray, td, th} from "./cells.js";
 import type {CellAttrs, CellContent, CellSpec} from "./cells.js";
+import {seatedNames, seatingLabel} from "./ek-seating.js";
 import S from "./i18nstrings.js";
 
 export interface ScoreTableTheme {
@@ -299,12 +300,16 @@ export function computePlaces(totals: readonly number[], opts: ComputePlacesOpti
 
 export interface ThemeView {
   score?: number | string | null;
-  player?: string | null;
+  // Whoever the team sent to the theme — one player in EK, up to three in
+  // Erudit-Sextet. The order carries no meaning.
+  players?: Array<string | null | undefined> | null;
   answers?: Array<string | null | undefined>;
 }
 
 export interface ParticipantView {
   name?: string;
+  // The team's roster, which is what a seating is cut against.
+  roster?: Array<{name?: string}>;
   total?: number | string | null;
   plus?: number | string | null;
   tiebreak?: number | string | null;
@@ -319,12 +324,15 @@ export interface MatchView {
   code?: string;
   finished?: boolean;
   questionValues?: unknown[];
+  // How many players a team may seat on one theme — one in EK, up to three in
+  // Erudit-Sextet. Absent means one.
+  players?: number;
   participants?: ParticipantView[];
 }
 
 export interface PatchScoreTableOptions {
   formatNumber?: (value: unknown) => string;
-  onPlayerSelectSynced?: (node: HTMLSelectElement) => void;
+  onPlayerSelectSynced?: (node: HTMLElement) => void;
 }
 
 export interface NodeIndexSpec {
@@ -388,6 +396,15 @@ function scoreTeamOf(node: HTMLElement, matchState: MatchView): ParticipantView 
   return (matchState.participants || [])[Number(node.dataset.team)] || null;
 }
 
+// seatingText is a theme's seating as a cell prints it: the one player's whole
+// name where a theme seats one (EK, and personal SI on its borrowed page), and the cut
+// surnames where it seats more — three full names never fit five columns.
+export function seatingText(theme: ThemeView, team: ParticipantView | null, matchState: MatchView): string {
+  const seated = seatedNames(theme.players);
+  if ((matchState.players || 1) <= 1) return seated[0] || "";
+  return seatingLabel(seated, (team?.roster || []).map((member) => member?.name || ""));
+}
+
 function scoreThemeOf(node: HTMLElement, matchState: MatchView): ThemeView | null {
   const team = scoreTeamOf(node, matchState);
   if (!team) return null;
@@ -427,21 +444,39 @@ export function scoreCellSpecs(options: ScoreCellSpecsOptions = {}): NodeIndexSp
       sync: (node, ms) => {
         const theme = scoreThemeOf(node, ms);
         if (!theme) return;
-        setNodeText(node, theme.player);
+        const team = scoreTeamOf(node, ms);
+        setNodeText(node, seatingText(theme, team, ms));
         const popover = node.closest(".readonly-player")?.querySelector(".readonly-player-popover");
-        if (popover) setNodeText(popover, theme.player);
+        if (popover) setNodeText(popover, seatedNames(theme.players).join("\n"));
       }},
     {name: "playerSelect", selector: "[data-player-select]", keys: themeKeys,
       sync: (node, ms, o) => {
         const select = node as HTMLSelectElement;
         const theme = scoreThemeOf(select, ms);
         if (!theme || document.activeElement === select) return; // don't clobber an open select
-        const value = theme.player || "";
+        const value = seatedNames(theme.players)[0] || "";
         if (value && !Array.from(select.options).some((opt) => opt.value === value)) {
           select.appendChild(new Option(value, value));
         }
         if (select.value !== value) select.value = value;
         o.onPlayerSelectSynced?.(select);
+      }},
+    // The seat picker's closed state — a match of Erudit-Sextet, where a theme
+    // holds up to three. The panel itself is the page's; here only the button's
+    // line and its popover follow the state.
+    {name: "playerSeats", selector: "[data-player-seats]", keys: themeKeys,
+      sync: (node, ms, o) => {
+        const theme = scoreThemeOf(node, ms);
+        if (!theme) return;
+        const team = scoreTeamOf(node, ms);
+        const seated = seatedNames(theme.players);
+        const label = seatingText(theme, team, ms);
+        setNodeText(node.querySelector(".player-seats-text") || node, label);
+        const wrap = node.closest(".player-select-wrap");
+        const popover = wrap?.querySelector(".player-select-popover");
+        if (popover) setNodeText(popover, seated.join("\n"));
+        wrap?.classList.toggle("player-seats-abbreviated", label !== seated.join(" "));
+        o.onPlayerSelectSynced?.(node);
       }},
     {name: "total", selector: ".total-cell", keys: teamKeys,
       sync: (node, ms, o) => { const t = scoreTeamOf(node, ms); if (t) setNodeText(node, t.total, o.formatNumber); }},
