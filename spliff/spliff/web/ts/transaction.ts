@@ -451,10 +451,32 @@ function renderPhotos(list: PhotoDTO[]): void {
     link.target = "_blank";
     link.rel = "noopener";
     link.append(image);
-    strip.append(link);
+
+    // Any Member adds a Photo and any Member removes one: trust is social, and
+    // History records who did which.
+    const remove = el("button", "btn btn-ghost btn-xs", S.page.transaction.removePhoto());
+    remove.type = "button";
+    remove.addEventListener("click", () => {
+      if (!window.confirm(S.page.transaction.confirmRemovePhoto())) return;
+      void removePhoto(photo.id);
+    });
+
+    const cell = el("span", "u-col u-gap-xs u-align-center");
+    cell.append(link, remove);
+    strip.append(cell);
   }
   photos.append(strip);
   show(photosEmpty, list.length === 0);
+}
+
+async function removePhoto(id: number): Promise<void> {
+  setText(photoMessage, "");
+  try {
+    await request("DELETE", `/api/photos/${id}`);
+    window.location.reload();
+  } catch (error) {
+    setText(photoMessage, errorText(error));
+  }
 }
 
 function renderHistory(entries: HistoryDTO[]): void {
