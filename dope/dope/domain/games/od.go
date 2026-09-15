@@ -15,6 +15,9 @@ type ODTeam struct {
 	Name   string `json:"name"`
 	City   string `json:"city"`
 	Number int64  `json:"number"`
+	// Flags are the team's Divisions by short name, propagated with the roster
+	// (ADR-0020). The page filters and re-ranks on them; nothing here does.
+	Flags []string `json:"flags,omitempty"`
 }
 
 type ODState struct {
