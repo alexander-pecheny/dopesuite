@@ -1,5 +1,7 @@
-page title=@page.group.title kind="sheet" scripts="dist/group.js"
-  topbar titleid="groupTitle"
+page title=@page.group.title kind="wide" scripts="dist/group.js"
+  -- A topbar with crumbs uses the trail as its heading, so there is no title
+  -- prop here: the last crumb is the Group's name and the script fills it in.
+  topbar
     crumbs
       crumb home href="/" icon="house" label=@page.common.home
       crumb id="groupCrumb" @page.group.title
@@ -49,7 +51,7 @@ page title=@page.group.title kind="sheet" scripts="dist/group.js"
       field label=@page.group.currency_label
         selectfield id="groupCurrencyField" grow
       row gap="sm" wrap
-        button submit @common.save
+        button kind="primary" submit @common.save
         button kind="ghost" id="settingsCancel" @common.cancel
     col gap="sm" id="ownerControls" hidden
       field label=@page.group.hand_over_label
@@ -71,6 +73,6 @@ page title=@page.group.title kind="sheet" scripts="dist/group.js"
         numfield id="inviteTTL" min="0" max="8784" step="1" narrow
       checkbox id="inviteApproval" @page.invite.approval
       row gap="sm" wrap
-        button submit @page.invite.mint
+        button kind="primary" submit @page.invite.mint
         button kind="ghost" id="inviteCancel" @common.cancel
     message id="inviteMessage"

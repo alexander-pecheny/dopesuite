@@ -13,7 +13,7 @@ import {
   type PhotoDTO,
   type TransactionViewDTO,
 } from "./api";
-import { byId, clear, el, maybe, setText, show } from "./dom";
+import { byId, clear, el, group as rowGroup, maybe, setText, show, stamp } from "./dom";
 import { formatMinor, parseAmount } from "./money";
 import { allocateByPercent, allocateEven, buildDraft, payerOrder, type FormState, type Mode } from "./txform";
 
@@ -26,7 +26,7 @@ const creating = path[0] === "group";
 let groupID = creating ? Number(path[1]) : 0;
 const txID = creating ? 0 : Number(path[1]);
 
-const title = maybe("txTitle");
+const txCrumb = maybe("txCrumb");
 const groupCrumb = maybe<HTMLAnchorElement>("groupCrumb");
 const form = byId<HTMLFormElement>("txForm");
 const description = byId<HTMLInputElement>("description");
@@ -67,6 +67,10 @@ interface Row {
   percent: HTMLInputElement;
   payee: HTMLInputElement;
   computed: HTMLElement;
+  shareField: HTMLElement;
+  percentField: HTMLElement;
+  payeeField: HTMLElement;
+  computedField: HTMLElement;
 }
 
 let rows: Row[] = [];
@@ -127,7 +131,7 @@ async function load(): Promise<void> {
       groupName = group.name;
       fillCurrencies(baseCurrency);
       dayField.value = new Date().toISOString().slice(0, 10);
-      setText(title, S.page.transaction.newTitle());
+      setText(txCrumb, S.page.transaction.newTitle());
       show(photoSection, false);
       show(historySection, false);
     } else {
@@ -155,7 +159,7 @@ async function load(): Promise<void> {
 function fill(view: TransactionViewDTO): void {
   const tx = view.transaction;
   document.title = tx.description;
-  setText(title, tx.description);
+  setText(txCrumb, tx.description);
   description.value = tx.description;
   dayField.value = tx.day;
   totalField.value = tx.total;
@@ -211,37 +215,27 @@ function fillCurrencies(selected: string): void {
   })();
 }
 
+// buildRows draws one card per Member: their name, what they put in, and what
+// they answer for. Each field carries its own little caption (the kit's
+// .field), so there is no header row to fall apart when the card wraps — which
+// is what the phone does with it, and what the grid this replaced could not do.
 function buildRows(): void {
   clear(editorBody);
   rows = [];
-  editorBody.append(
-    el("span", "split-head", S.page.transaction.colMember()),
-    el("span", "split-head", S.page.transaction.colPaid()),
-    el("span", "split-head", S.page.transaction.colShare()),
-  );
   for (const member of members) {
+    const row = el("div", "split-row");
+
     const include = el("input");
     include.type = "checkbox";
     include.checked = true;
     include.addEventListener("change", recompute);
 
-    const name = el("label", "split-name");
+    const name = el("label", "split-name u-grow");
     name.append(include, document.createTextNode(` ${member.name}`));
 
-    const paid = el("input", "input");
-    paid.inputMode = "decimal";
-    paid.placeholder = "0";
-    paid.addEventListener("input", recompute);
-
-    const share = el("input", "input");
-    share.inputMode = "decimal";
-    share.placeholder = "0";
-    share.addEventListener("input", recompute);
-
-    const percent = el("input", "input");
-    percent.inputMode = "decimal";
-    percent.placeholder = "%";
-    percent.addEventListener("input", recompute);
+    const paid = amountInput();
+    const share = amountInput();
+    const percent = amountInput("%");
 
     const payee = el("input");
     payee.type = "radio";
@@ -251,11 +245,29 @@ function buildRows(): void {
 
     const computed = el("span", "amount");
 
-    const cell = el("span", "u-row u-gap-sm u-align-center");
-    cell.append(share, percent, payee, computed);
+    const paidField = captioned(S.page.transaction.colPaid(), paid);
+    const shareField = captioned(S.page.transaction.colShare(), share);
+    const percentField = captioned(S.page.transaction.colPercent(), percent);
+    const computedField = captioned(S.page.transaction.colShare(), computed);
+    const payeeField = el("label", "checkbox");
+    payeeField.append(payee, el("span", undefined, S.page.transaction.colFor()));
 
-    editorBody.append(name, paid, cell);
-    rows.push({ member, include, paid, share, percent, payee, computed });
+    // Every control says whose row it is and what it does, so the card is
+    // legible to a person reading the DOM and addressable by a test.
+    for (const [role, node] of [
+      ["include", include], ["paid", paid], ["share", share],
+      ["percent", percent], ["payee", payee], ["computed", computed],
+    ] as Array<[string, HTMLElement]>) {
+      node.dataset.role = role;
+      node.dataset.member = String(member.user_id);
+    }
+
+    row.append(name, paidField, shareField, percentField, computedField, payeeField);
+    editorBody.append(row);
+    rows.push({
+      member, include, paid, share, percent, payee, computed,
+      shareField, percentField, payeeField, computedField,
+    });
 
     if (prefilled) {
       const paidMinor = prefilled.payments.get(member.user_id);
@@ -265,6 +277,21 @@ function buildRows(): void {
       include.checked = Boolean(shareMinor);
     }
   }
+}
+
+function amountInput(placeholder = "0"): HTMLInputElement {
+  const input = el("input", "input");
+  input.inputMode = "decimal";
+  input.placeholder = placeholder;
+  input.addEventListener("input", recompute);
+  return input;
+}
+
+// captioned is the kit's field: a small caption over the control it names.
+function captioned(caption: string, control: HTMLElement): HTMLElement {
+  const field = el("label", "field split-field");
+  field.append(el("span", undefined, caption), control);
+  return field;
 }
 
 function mode(): Mode {
@@ -286,10 +313,10 @@ function applyMode(): void {
   setText(modeHint, hints[m]);
   for (const row of rows) {
     show(row.include, m === "even" || m === "percent");
-    show(row.share, m === "exact" || m === "claim");
-    show(row.percent, m === "percent");
-    show(row.payee, m === "simple" || m === "settlement");
-    show(row.computed, m === "even" || m === "percent");
+    show(row.shareField, m === "exact" || m === "claim");
+    show(row.percentField, m === "percent");
+    show(row.payeeField, m === "simple" || m === "settlement");
+    show(row.computedField, m === "even" || m === "percent");
     row.share.disabled = m === "claim" && row.member.user_id !== me;
   }
 }
@@ -434,17 +461,15 @@ function renderHistory(entries: HistoryDTO[]): void {
   clear(historyList);
   for (const entry of entries) {
     const row = el("li", "list-row");
-    row.append(el("span", "list-row-title split-name", entry.actor || S.page.history.somebody()));
-    row.append(el("span", "muted", historyVerb(entry.kind)));
-    row.append(el("span", "u-spacer"));
-    row.append(el("span", "muted", entry.at));
-    historyList.append(row);
+    const left = rowGroup(true);
+    left.append(el("span", "list-row-title split-name", entry.actor || S.page.history.somebody()));
+    left.append(el("span", "muted", historyVerb(entry.kind)));
+    // What changed, when there is something to say: the two JSON snapshots
+    // History keeps, read as the fields that differ.
     const diff = describe(entry);
-    if (diff) {
-      const detail = el("li", "list-row");
-      detail.append(el("span", "muted", diff));
-      historyList.append(detail);
-    }
+    if (diff) left.append(el("span", "muted", diff));
+    row.append(left, el("span", "muted", stamp(entry.at)));
+    historyList.append(row);
   }
 }
 
@@ -472,6 +497,7 @@ interface Snapshot {
   day: string;
   currency: string;
   total_minor: number;
+  shares: Array<{ member_id: number; minor: number }>;
 }
 
 // describe says what changed, in the words of the fields that changed. It reads
@@ -492,7 +518,23 @@ function describe(entry: HistoryDTO): string {
       `${formatMinor(after.total_minor, after.currency)} ${after.currency}`,
     ));
   }
+  // A Claim changes no field a person typed into the header — it changes what
+  // is left for the others, which is the number they came to see.
+  const was = left(before);
+  const now = left(after);
+  if (was !== now) {
+    parts.push(S.page.history.fieldUnclaimed(
+      `${formatMinor(was, before.currency)} ${before.currency}`,
+      `${formatMinor(now, after.currency)} ${after.currency}`,
+    ));
+  }
   return parts.join("; ");
+}
+
+function left(snapshot: Snapshot): number {
+  const claimed = (snapshot.shares ?? []).reduce(
+    (sum, e) => sum + (Number.isFinite(e?.minor) ? e.minor : 0), 0);
+  return Math.max(0, snapshot.total_minor - claimed);
 }
 
 function parse(raw: string): Snapshot | null {

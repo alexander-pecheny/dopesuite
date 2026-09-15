@@ -130,6 +130,7 @@ export const EN: Strings = {
       fieldDay: (before: string, after: string) => `date: ${before} → ${after}`,
       fieldDescription: (before: string, after: string) => `what for: ${before} → ${after}`,
       fieldTotal: (before: string, after: string) => `total: ${before} → ${after}`,
+      fieldUnclaimed: (before: string, after: string) => `unclaimed: ${before} → ${after}`,
       photoAdded: () => "attached a photo",
       photoRemoved: () => "removed a photo",
       restored: () => "restored it",
@@ -180,8 +181,9 @@ export const EN: Strings = {
       unnamed: () => "A group on Spliff",
     },
     transaction: {
-      colMember: () => "Member",
+      colFor: () => "For them",
       colPaid: () => "Paid",
+      colPercent: () => "Percent",
       colShare: () => "Share",
       confirmDelete: () => "Delete this transaction? It stays in the history and can be restored.",
       currency: () => "Currency",

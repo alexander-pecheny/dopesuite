@@ -1,21 +1,21 @@
-page title=@page.transaction.title kind="sheet" scripts="dist/transaction.js"
-  topbar titleid="txTitle"
+page title=@page.transaction.title kind="wide" scripts="dist/transaction.js"
+  topbar
     crumbs
       crumb home href="/" icon="house" label=@page.common.home
       crumb id="groupCrumb" href="/" @page.group.title
-      crumb @page.transaction.title
+      crumb id="txCrumb" @page.transaction.title
 
   section
     form id="txForm" dir="col"
       field label=@page.transaction.description
         textfield id="description" placeholder=@page.transaction.description_placeholder required autofocus grow
-      row gap="sm" wrap
-        field label=@page.transaction.day
-          textfield id="day" required
-        field label=@page.transaction.currency
+      row gap="sm" wrap align="end"
+        field label=@page.transaction.day grow
+          textfield id="day" required grow
+        field label=@page.transaction.currency grow
           selectfield id="currency" grow
-        field label=@page.transaction.total
-          textfield id="total" inputmode="decimal" required
+        field label=@page.transaction.total grow
+          textfield id="total" inputmode="decimal" placeholder="0.00" required grow
       hint id="rateLine" hidden
       field label=@page.transaction.mode
         selectfield id="mode" grow
@@ -29,7 +29,7 @@ page title=@page.transaction.title kind="sheet" scripts="dist/transaction.js"
       mount id="editorBody" kind="transaction-body"
       hint id="totalsLine"
       row gap="sm" wrap
-        button submit id="saveBtn" @common.save
+        button kind="primary" submit id="saveBtn" @common.save
         button kind="ghost" id="cancelBtn" @common.cancel
         button kind="danger" id="deleteBtn" hidden icon="trash-2" @page.transaction.delete
         button kind="ghost" id="restoreBtn" hidden @page.transaction.restore

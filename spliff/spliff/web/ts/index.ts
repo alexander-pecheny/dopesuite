@@ -4,7 +4,7 @@
 
 import S from "./i18nstrings.js";
 import { errorText, get, request, type GroupSummaryDTO } from "./api";
-import { amountNode, byId, clear, el, setText, show, tag } from "./dom";
+import { amountNode, byId, clear, el, group as rowGroup, setText, show, tag } from "./dom";
 
 const list = byId("groupList");
 const emptyNote = byId("groupsEmpty");
@@ -77,19 +77,23 @@ async function load(): Promise<void> {
 function render(groups: GroupSummaryDTO[]): void {
   clear(list);
   show(emptyNote, groups.length === 0);
+  // The whole card is the link, not a word inside it: on a phone that is the
+  // difference between opening a Group and missing it.
   for (const group of groups) {
-    const row = el("li", "list-row");
-    const link = el("a", "list-row-title", group.name);
-    link.href = `/group/${group.id}`;
-    row.append(link);
-    if (group.is_owner) row.append(tag(S.page.group.ownerTag()));
-    row.append(el("span", "u-spacer"));
+    const item = el("li");
+    const row = el("a", "list-row");
+    row.href = `/group/${group.id}`;
+    const left = rowGroup(true);
+    left.append(el("span", "list-row-title split-name", group.name));
+    if (group.is_owner) left.append(tag(S.page.group.ownerTag()));
+    row.append(left);
     if (group.balance_minor === 0) {
       row.append(el("span", "muted", S.page.index.settled()));
     } else {
       row.append(amountNode(`${group.balance} ${group.base_currency}`, group.balance_minor));
     }
-    list.append(row);
+    item.append(row);
+    list.append(item);
   }
 }
 

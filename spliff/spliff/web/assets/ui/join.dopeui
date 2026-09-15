@@ -6,5 +6,5 @@ page title=@page.join.title kind="sheet" scripts="dist/join.js"
     row gap="sm" wrap
       button kind="primary" id="joinBtn" hidden @page.join.join
       button kind="primary" id="loginBtn" hidden icon="log-in" @page.join.login
-      button kind="ghost" id="openBtn" hidden @page.join.open
+      button kind="primary" id="openBtn" hidden @page.join.open
     message id="joinMessage"

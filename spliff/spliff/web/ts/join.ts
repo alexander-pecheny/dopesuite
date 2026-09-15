@@ -64,7 +64,7 @@ async function load(): Promise<void> {
 
 function render(link: InvitePeekDTO, loggedIn: boolean): void {
   clear(body);
-  body.append(el("p", "join-lead", link.group_name || S.page.join.unnamed()));
+  body.append(el("h2", "subhead", link.group_name || S.page.join.unnamed()));
   if (!loggedIn) {
     body.append(el("p", "hint", S.page.join.anonymous()));
     show(loginBtn, true);

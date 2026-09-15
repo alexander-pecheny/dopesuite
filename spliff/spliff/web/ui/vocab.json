@@ -14,6 +14,12 @@
         "transaction-photos",
         "join-body"
       ]
+    },
+    "page-kind": {
+      "prefix": "Page",
+      "values": [
+        "wide"
+      ]
     }
   },
   "primitives": []

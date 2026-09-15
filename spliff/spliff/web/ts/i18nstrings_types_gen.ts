@@ -130,6 +130,7 @@ export type Strings = {
       fieldDay: (before: string, after: string) => string;
       fieldDescription: (before: string, after: string) => string;
       fieldTotal: (before: string, after: string) => string;
+      fieldUnclaimed: (before: string, after: string) => string;
       photoAdded: () => string;
       photoRemoved: () => string;
       restored: () => string;
@@ -180,8 +181,9 @@ export type Strings = {
       unnamed: () => string;
     };
     transaction: {
-      colMember: () => string;
+      colFor: () => string;
       colPaid: () => string;
+      colPercent: () => string;
       colShare: () => string;
       confirmDelete: () => string;
       currency: () => string;

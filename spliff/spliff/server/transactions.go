@@ -131,29 +131,41 @@ func checkEntries(in []entryRequest, current map[int64]bool, currency string, al
 
 // snapshot is what History keeps of a Transaction: everything a person can
 // change, as JSON, so a diff can be shown without a second schema.
+//
+// The field names are the API's, snake_case, because the page that reads a
+// History entry back is the same page that reads a Transaction — one shape to
+// know, not two. That is also why the entries are a type of their own rather
+// than store.Entry: a storage struct's field names are nobody's wire format.
 type snapshot struct {
-	Description string        `json:"description"`
-	Day         string        `json:"day"`
-	Currency    string        `json:"currency"`
-	TotalMinor  int64         `json:"total_minor"`
-	Payments    []store.Entry `json:"payments"`
-	Shares      []store.Entry `json:"shares"`
-	Photos      int           `json:"photos"`
+	Description string          `json:"description"`
+	Day         string          `json:"day"`
+	Currency    string          `json:"currency"`
+	TotalMinor  int64           `json:"total_minor"`
+	Payments    []snapshotEntry `json:"payments"`
+	Shares      []snapshotEntry `json:"shares"`
+	Photos      int             `json:"photos"`
+}
+
+type snapshotEntry struct {
+	MemberID int64 `json:"member_id"`
+	Minor    int64 `json:"minor"`
+}
+
+func snapshotEntries(in []store.Entry) []snapshotEntry {
+	out := make([]snapshotEntry, 0, len(in))
+	for _, e := range in {
+		out = append(out, snapshotEntry{MemberID: e.MemberID, Minor: e.Minor})
+	}
+	return out
 }
 
 func snapshotOf(t store.Transaction) string {
-	s := snapshot{
+	body, err := json.Marshal(snapshot{
 		Description: t.Description, Day: t.Day, Currency: t.Currency,
-		TotalMinor: t.TotalMinor, Payments: t.Payments, Shares: t.Shares,
+		TotalMinor: t.TotalMinor,
+		Payments:   snapshotEntries(t.Payments), Shares: snapshotEntries(t.Shares),
 		Photos: len(t.Photos),
-	}
-	if s.Payments == nil {
-		s.Payments = []store.Entry{}
-	}
-	if s.Shares == nil {
-		s.Shares = []store.Entry{}
-	}
-	body, err := json.Marshal(s)
+	})
 	if err != nil {
 		return ""
 	}

@@ -147,6 +147,7 @@ var EN = Strings{
 			FieldDay:         func(before string, after string) string { return fmt.Sprintf("date: %s → %s", before, after) },
 			FieldDescription: func(before string, after string) string { return fmt.Sprintf("what for: %s → %s", before, after) },
 			FieldTotal:       func(before string, after string) string { return fmt.Sprintf("total: %s → %s", before, after) },
+			FieldUnclaimed:   func(before string, after string) string { return fmt.Sprintf("unclaimed: %s → %s", before, after) },
 			PhotoAdded:       func() string { return "attached a photo" },
 			PhotoRemoved:     func() string { return "removed a photo" },
 			Restored:         func() string { return "restored it" },
@@ -197,8 +198,9 @@ var EN = Strings{
 			Unnamed:       func() string { return "A group on Spliff" },
 		},
 		Transaction: PageTransactionStrings{
-			ColMember:              func() string { return "Member" },
+			ColFor:                 func() string { return "For them" },
 			ColPaid:                func() string { return "Paid" },
+			ColPercent:             func() string { return "Percent" },
 			ColShare:               func() string { return "Share" },
 			ConfirmDelete:          func() string { return "Delete this transaction? It stays in the history and can be restored." },
 			Currency:               func() string { return "Currency" },

@@ -1,4 +1,4 @@
-page title=@page.index.title kind="sheet" scripts="dist/index.js"
+page title=@page.index.title kind="wide" scripts="dist/index.js"
   topbar title=@page.index.heading
     iconbtn id="newGroupBtn" icon="plus" label=@page.index.new_group
 
@@ -14,6 +14,6 @@ page title=@page.index.title kind="sheet" scripts="dist/index.js"
       field label=@page.index.currency_label
         selectfield id="groupCurrency" name="currency" grow
       row gap="sm" wrap
-        button submit @page.index.create_submit
+        button kind="primary" submit @page.index.create_submit
         button kind="ghost" id="createCancel" @common.cancel
     message id="createMessage"

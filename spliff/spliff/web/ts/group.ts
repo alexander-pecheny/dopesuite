@@ -12,11 +12,10 @@ import {
   type InviteDTO,
   type TransactionDTO,
 } from "./api";
-import { amountNode, byId, clear, el, maybe, setText, show, tag } from "./dom";
+import { amountNode, byId, clear, el, group as rowGroup, maybe, setText, show, stamp, tag } from "./dom";
 
 const groupID = Number(window.location.pathname.split("/")[2] ?? 0);
 
-const title = maybe("groupTitle");
 const crumb = maybe("groupCrumb");
 const balances = byId("balances");
 const transfers = byId("transfers");
@@ -183,28 +182,26 @@ async function load(): Promise<void> {
 
 function render(g: GroupDTO): void {
   document.title = g.name;
-  setText(title, g.name);
   setText(crumb, g.name);
   show(ratesNote, g.no_rates);
 
   clear(balances);
   for (const member of g.members) {
     const row = el("li", "list-row");
-    const name = el("span", "list-row-title split-name", member.name);
-    row.append(name);
-    if (member.is_owner) row.append(tag(S.page.group.ownerTag()));
-    if (member.user_id === g.me) row.append(tag(S.page.group.you()));
-    row.append(el("span", "u-spacer"));
-    row.append(amountNode(`${member.balance} ${g.base_currency}`, member.balance_minor));
+    const left = rowGroup(true);
+    left.append(el("span", "list-row-title split-name", member.name));
+    if (member.is_owner) left.append(tag(S.page.group.ownerTag()));
+    if (member.user_id === g.me) left.append(tag(S.page.group.you()));
+    row.append(left, amountNode(`${member.balance} ${g.base_currency}`, member.balance_minor));
     balances.append(row);
   }
 
   clear(transfers);
   for (const transfer of g.transfers) {
     const row = el("li", "list-row");
-    row.append(el("span", "split-name", S.page.group.transfer(transfer.from_name, transfer.to_name)));
-    row.append(el("span", "u-spacer"));
-    row.append(el("span", "amount", `${transfer.amount} ${g.base_currency}`));
+    const left = rowGroup(true);
+    left.append(el("span", undefined, S.page.group.transfer(transfer.from_name, transfer.to_name)));
+    row.append(left, el("span", "amount", `${transfer.amount} ${g.base_currency}`));
     transfers.append(row);
   }
   show(settledNote, g.transfers.length === 0 && !g.no_rates);
@@ -219,24 +216,32 @@ function render(g: GroupDTO): void {
   show(inviteSection, g.is_owner);
 }
 
+// A feed row is one link, not a link inside a row: the whole card is the tap
+// target, which on a phone is the difference between opening a bill and missing
+// it.
 function renderFeed(into: HTMLElement, list: TransactionDTO[], g: GroupDTO): void {
   clear(into);
   for (const tx of list) {
-    const row = el("li", "list-row");
-    const link = el("a", "list-row-title split-name", tx.description);
-    link.href = `/transaction/${tx.id}`;
-    row.append(link);
-    row.append(el("span", "muted", tx.day));
+    const item = el("li");
+    const row = el("a", "list-row");
+    row.href = `/transaction/${tx.id}`;
+
+    const left = rowGroup(true);
+    left.append(el("span", "list-row-title split-name", tx.description));
+    left.append(el("span", "muted", tx.day));
     if (tx.unclaimed_minor > 0) {
-      row.append(tag(S.page.group.unclaimed(`${tx.unclaimed} ${tx.currency}`)));
+      left.append(tag(S.page.group.unclaimed(`${tx.unclaimed} ${tx.currency}`)));
     }
-    row.append(el("span", "u-spacer"));
-    const amount = el("span", "amount", `${tx.total} ${tx.currency}`);
-    row.append(amount);
+
+    const right = rowGroup();
+    right.append(el("span", "amount", `${tx.total} ${tx.currency}`));
     if (tx.in_base && tx.currency !== g.base_currency) {
-      row.append(el("span", "muted", `= ${tx.in_base} ${g.base_currency}`));
+      right.append(el("span", "muted", `= ${tx.in_base} ${g.base_currency}`));
     }
-    into.append(row);
+
+    row.append(left, right);
+    item.append(row);
+    into.append(item);
   }
 }
 
@@ -244,9 +249,10 @@ function renderMembers(g: GroupDTO): void {
   clear(membersList);
   for (const member of g.members) {
     const row = el("li", "list-row");
-    row.append(el("span", "list-row-title split-name", member.name));
-    if (member.is_owner) row.append(tag(S.page.group.ownerTag()));
-    row.append(el("span", "u-spacer"));
+    const left = rowGroup(true);
+    left.append(el("span", "list-row-title split-name", member.name));
+    if (member.is_owner) left.append(tag(S.page.group.ownerTag()));
+    row.append(left);
     if (g.is_owner && !member.is_owner) {
       const kick = el("button", "btn btn-ghost", S.page.group.kick());
       kick.type = "button";
@@ -263,16 +269,15 @@ function renderMembers(g: GroupDTO): void {
 function renderHistory(into: HTMLElement, entries: HistoryDTO[]): void {
   clear(into);
   for (const entry of entries) {
-    const row = el("li", "list-row");
-    row.append(el("span", "split-name", `${entry.actor} — ${historyVerb(entry.kind)}`));
-    if (entry.description) {
-      const link = el("a", "list-row-title split-name", entry.description);
-      link.href = `/transaction/${entry.transaction_id}`;
-      row.append(link);
-    }
-    row.append(el("span", "u-spacer"));
-    row.append(el("span", "muted", entry.at));
-    into.append(row);
+    const item = el("li");
+    const row = el("a", "list-row");
+    row.href = `/transaction/${entry.transaction_id}`;
+    const left = rowGroup(true);
+    left.append(el("span", "list-row-title split-name", entry.description || entry.actor));
+    left.append(el("span", "muted", `${entry.actor} ${historyVerb(entry.kind)}`));
+    row.append(left, el("span", "muted", stamp(entry.at)));
+    item.append(row);
+    into.append(item);
   }
 }
 
@@ -307,13 +312,14 @@ async function loadInvites(): Promise<void> {
 function renderInvites(invites: InviteDTO[]): void {
   clear(invitesList);
   for (const invite of invites) {
-    const row = el("li", "list-row");
-    const head = el("span", "list-row-title split-name", invite.label || invite.code);
-    row.append(head);
-    row.append(tag(inviteState(invite.state), invite.state !== "active"));
-    row.append(el("span", "invite-code", invite.url));
-    row.append(el("span", "u-spacer"));
+    const row = el("li", "list-row u-wrap");
+    const left = rowGroup(true);
+    left.append(el("span", "list-row-title split-name", invite.label || invite.code));
+    left.append(tag(inviteState(invite.state), invite.state !== "active"));
+    left.append(el("code", "invite-code", invite.url));
+    row.append(left);
 
+    const actions = rowGroup();
     const copy = el("button", "btn btn-ghost", S.page.invite.copy());
     copy.type = "button";
     copy.addEventListener("click", () => {
@@ -321,7 +327,7 @@ function renderInvites(invites: InviteDTO[]): void {
         copy.textContent = S.page.invite.copied();
       }).catch(() => undefined);
     });
-    row.append(copy);
+    actions.append(copy);
 
     if (invite.state === "active") {
       const revoke = el("button", "btn btn-ghost", S.page.invite.revoke());
@@ -329,21 +335,24 @@ function renderInvites(invites: InviteDTO[]): void {
       revoke.addEventListener("click", () => {
         void act("POST", `/api/invites/${invite.id}/revoke`, undefined, message);
       });
-      row.append(revoke);
+      actions.append(revoke);
     }
     const drop = el("button", "btn btn-danger", S.page.invite.remove());
     drop.type = "button";
     drop.addEventListener("click", () => {
       void act("DELETE", `/api/invites/${invite.id}`, undefined, message);
     });
-    row.append(drop);
+    actions.append(drop);
+    row.append(actions);
     invitesList.append(row);
 
     for (const person of invite.pending) {
       const waiting = el("li", "list-row");
-      waiting.append(el("span", "split-name", person.name));
-      waiting.append(tag(S.page.invite.waiting()));
-      waiting.append(el("span", "u-spacer"));
+      const who = rowGroup(true);
+      who.append(el("span", "split-name", person.name));
+      who.append(tag(S.page.invite.waiting()));
+      waiting.append(who);
+      const decisions = rowGroup();
       for (const decision of ["approve", "decline"] as const) {
         const button = el("button", decision === "approve" ? "btn" : "btn btn-ghost",
           decision === "approve" ? S.page.invite.approve() : S.page.invite.decline());
@@ -351,8 +360,9 @@ function renderInvites(invites: InviteDTO[]): void {
         button.addEventListener("click", () => {
           void act("POST", `/api/groups/${groupID}/join-requests/${person.user_id}`, { decision }, message);
         });
-        waiting.append(button);
+        decisions.append(button);
       }
+      waiting.append(decisions);
       invitesList.append(waiting);
     }
   }
