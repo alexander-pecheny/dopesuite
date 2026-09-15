@@ -90,6 +90,17 @@ Deno.test("claim your part sets only your own share and leaves the rest unclaime
   assertEquals(unclaimed(1000, result.draft.shares), 600);
 });
 
+// A Claim on somebody ELSE's bill must not throw away the Shares they and
+// everybody else already have: the form disables the other rows, and the model
+// keeps whatever is in them.
+Deno.test("a claim on an existing bill leaves the other shares alone", () => {
+  const result = buildDraft(state({
+    mode: "claim", me: 2, exact: new Map([[1, 300], [2, 250]]),
+  }));
+  assertEquals(result.draft.shares, [{member_id: 1, minor: 300}, {member_id: 2, minor: 250}]);
+  assertEquals(unclaimed(1000, result.draft.shares), 450);
+});
+
 Deno.test("exact amounts are taken as typed, and what is left stays unclaimed", () => {
   const result = buildDraft(state({mode: "exact", exact: new Map([[2, 250], [3, 250]])}));
   assertEquals(result.draft.shares, [{member_id: 2, minor: 250}, {member_id: 3, minor: 250}]);

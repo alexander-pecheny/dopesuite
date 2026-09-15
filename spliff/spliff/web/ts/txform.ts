@@ -205,19 +205,18 @@ export function buildDraft(state: FormState): DraftResult {
       shares = zip(state.chosen, amounts);
       break;
     }
-    case "exact": {
-      for (const id of state.chosen) {
+    // "I paid, claim your part" is the exact-amounts model with one field
+    // editable: everybody else's Share is whatever it already was, which is
+    // what makes a Claim on somebody else's bill a claim and not a rewrite.
+    // On a fresh bill the others are empty, so the payer states their own
+    // Share and the rest stays Unclaimed — which is the mode's whole point.
+    case "exact":
+    case "claim": {
+      for (const id of state.members) {
         const minor = state.exact.get(id) ?? 0;
         if (minor < 0) return { error: "bad_percent" };
         if (minor > 0) shares.push({ member_id: id, minor });
       }
-      break;
-    }
-    case "claim": {
-      // "I paid, claim your part": the payer states the total and their own
-      // Share, and the rest stays Unclaimed until somebody takes it.
-      const mine = state.exact.get(state.me) ?? 0;
-      if (mine > 0) shares.push({ member_id: state.me, minor: mine });
       break;
     }
     case "simple":
