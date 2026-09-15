@@ -1,0 +1,15 @@
+# /admin/create_users, served by both apps.
+[create]
+usernames_label = "Usernames (one per line)"
+submit = "Create"
+skipped_lead = "Already exist (skipped): "
+empty = "No username was given."
+
+[created]
+username = "Username"
+password = "Password"
+hint = "The passwords are shown once. Copy them and send them out — people will change them themselves."
+copy_label = "For copying (username ⇥ password)"
+
+[errors]
+title = "Errors:"

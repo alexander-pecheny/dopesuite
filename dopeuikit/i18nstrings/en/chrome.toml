@@ -1,0 +1,8 @@
+# The page shell every screen shares: the sync dot and the breadcrumbs.
+[sync]
+saved = "Saved"
+saving = "Saving…"
+error = "Error"
+
+[crumbs]
+label = "Navigation"

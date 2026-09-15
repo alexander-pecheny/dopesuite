@@ -22,6 +22,11 @@ type Options struct {
 	Mounts       map[string]MountSpec
 	Chrome       Chrome
 	Strings      StringSet // the app's Catalog; the kit's answers what it does not
+	// KitStrings is WHICH kit Catalog answers those ids — the login page's
+	// labels, the breadcrumb's aria-label, the words on /admin/create_users.
+	// Empty means the kit's own default (Russian); an app written in another
+	// language names the catalog it wants, e.g. kitstrings.EN.
+	KitStrings StringSet
 }
 
 // NewApp builds an App with the core pre-registered and the app's overlay on
@@ -51,8 +56,17 @@ func NewApp(opts Options) (*App, error) {
 		Inline:       inline,
 		Mounts:       opts.Mounts,
 		Env:          opts.Chrome.withDefaults(),
-		Strings:      base.Chain(opts.Strings, kitstrings.Default),
+		Strings:      base.Chain(opts.Strings, kitCatalog(opts.KitStrings)),
 	})
+}
+
+// kitCatalog is the kit Catalog an App falls back on: the one the app named,
+// else the kit's own default.
+func kitCatalog(s StringSet) StringSet {
+	if s == nil {
+		return kitstrings.Default
+	}
+	return s
 }
 
 // CoreChrome is the design system's default page shell (sheet/full kinds, the

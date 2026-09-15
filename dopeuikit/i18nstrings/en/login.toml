@@ -1,0 +1,38 @@
+# The shared /login page, in the order a visitor meets it.
+title = "Log in"
+
+[field]
+username = "Username"
+password = "Password"
+
+[method]
+hint = "Log in to continue."
+telegram = "Log in with Telegram"
+password = "Log in with a password"
+
+[code]
+link_hint = "Follow this link to log in:"
+bot_hint_lead = "If the link does not open, write to the bot "
+bot_hint_mid = " and send it the code "
+waiting = "Waiting for the bot to confirm…"
+
+[username]
+hint = "Choose a username. It cannot be changed later."
+submit = "Continue"
+
+[link]
+hint = "That user already exists. If it is you, enter the password to link the account."
+submit = "Link"
+cancel = "That is not me, I will choose another username"
+
+[password]
+hint = "Logging in with a password."
+submit = "Log in"
+
+[message]
+tg_misconfigured = "Telegram login is set up wrongly."
+tg_unreachable = "The Telegram login bot is unreachable."
+code_expired = "The code has expired. Start again."
+timed_out = "The wait ran out. Reload the page."
+username_taken = "That username is taken, choose another."
+failed = "Something went wrong, try again."

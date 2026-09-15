@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	kitstrings "pecheny.me/dopeuikit/i18nstrings"
 )
 
 func TestPageSetCachesOnlyInEmbedMode(t *testing.T) {
@@ -101,5 +103,48 @@ func TestSafeLoginRedirect(t *testing.T) {
 	}
 	if !strings.Contains(string(html), `data-login-redirect="/join/x?y=z"`) {
 		t.Errorf("the destination did not reach the attribute:\n%s", html)
+	}
+}
+
+// TestKitStringsPicksTheFallbackLanguage: the kit's Catalog answers the ids an
+// app's does not, and WHICH kit Catalog is the app's to choose. An app with no
+// Russian in it names kitstrings.EN and the shared login page comes out in
+// English, without a single string of its own.
+func TestKitStringsPicksTheFallbackLanguage(t *testing.T) {
+	english, err := NewApp(Options{Chrome: CoreChrome(), KitStrings: kitstrings.EN})
+	if err != nil {
+		t.Fatal(err)
+	}
+	html, err := english.Compile("ui/login.dopeui", LoginPage("Log in · test", "/"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Log in with Telegram", "Log in to continue.", "Username", "Password"} {
+		if !strings.Contains(string(html), want) {
+			t.Errorf("the English login page is missing %q", want)
+		}
+	}
+	for _, unwanted := range []string{"Войти", "Логин", "Пароль"} {
+		if strings.Contains(string(html), unwanted) {
+			t.Errorf("the English login page still says %q", unwanted)
+		}
+	}
+	// The kit's own default is unchanged for an app that names nothing.
+	russian, err := Compile("ui/login.dopeui", LoginPage("Вход · test", "/"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(russian), "Войти через телеграм") {
+		t.Error("the default kit Catalog is no longer Russian")
+	}
+	// And EN defines exactly what RU does: one catalog cannot answer an id the
+	// other leaves open.
+	for _, id := range []string{
+		"login.title", "login.method.telegram", "login.field.username",
+		"menu.appearance.done", "chrome.crumbs.label", "admin.create.submit",
+	} {
+		if !kitstrings.EN.Defines(id) || !kitstrings.RU.Defines(id) {
+			t.Errorf("%q is not in both kit catalogs", id)
+		}
 	}
 }

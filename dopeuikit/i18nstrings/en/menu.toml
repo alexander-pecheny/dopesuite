@@ -1,0 +1,18 @@
+# The topbar menu and its appearance dialog.
+trigger = "Menu"
+jump = "Go to"
+
+[account]
+profile = "Profile"
+login = "Log in"
+
+[appearance]
+title = "Appearance"
+theme = "Theme"
+theme_system = "System"
+theme_light = "Light"
+theme_dark = "Dark"
+contrast = "Contrast"
+contrast_regular = "Regular"
+contrast_high = "High"
+done = "Done"
