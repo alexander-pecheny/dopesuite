@@ -125,6 +125,19 @@ export interface TransactionViewDTO {
   history: HistoryDTO[];
 }
 
+// ApiError is a refusal the server WROTE — its own words, for the person who
+// caused them. A request that never arrived rejects with whatever fetch threw
+// instead, which is how a poll tells "stop, you cannot" from "try again".
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 export async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   const init: RequestInit = { method };
   if (body !== undefined) {
@@ -134,7 +147,7 @@ export async function request<T>(method: string, url: string, body?: unknown): P
   const response = await fetch(url, init);
   if (!response.ok) {
     const text = (await response.text()).trim();
-    throw new Error(text || `HTTP ${response.status}`);
+    throw new ApiError(text || `HTTP ${response.status}`, response.status);
   }
   if (response.status === 204) return null as T;
   const text = await response.text();
