@@ -19,7 +19,7 @@ _Avoid_: message key, translation key
 The one Surface of a module for words shared across screens («Сохранить», «Отмена»). A screen uses a common string only when it means exactly the common thing.
 
 **Default language**:
-The language a module renders in when nothing chose one: Russian. Places without a reader's preference — the CLI, exports, logs — always use it.
+The language a module renders in when nothing chose one: Russian, unless the module says otherwise (Spliff is English-only). Places without a reader's preference — the CLI, exports, logs — always use it.
 
 **User Error**:
 A failure whose message was written for the person who caused it and may be shown verbatim. Every other error is an internal one: the person sees a generic line, the log sees the detail.
