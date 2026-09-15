@@ -296,6 +296,7 @@ export const RU: Strings = {
       title: () => "Галерея · dope",
     },
     section: {
+      divisions: () => "Зачёты",
       ekStats: () => "Статистика ЭК",
       festGrid: () => "Сетка",
       groupStandings: () => "Групповой этап",

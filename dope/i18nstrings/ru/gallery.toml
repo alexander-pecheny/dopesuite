@@ -29,6 +29,9 @@ venues = "Площадки"
 venues_host = "Площадки, ведущий"
 # The section drawing the fest roster table.
 roster = "Составы"
+# The section drawing the зачёт chips over a results table whose teams wear
+# their зачёты as badges.
+divisions = "Зачёты"
 
 [ek]
 # The <title> of the ЭК game page (static/ek.html), host and spectator alike.

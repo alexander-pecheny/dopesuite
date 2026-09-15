@@ -3064,11 +3064,18 @@ body:not(.embedded-match) .grid-match {
 .match-table.od-detailed .od-detailed-team-layout,
 .match-table .ek-team-cell .od-detailed-team-layout {
   display: grid;
-  grid-template-columns: var(--od-detailed-number-col) minmax(0, 1fr);
+  /* Third column: the зачёт badges, beside the name rather than inside the
+     white pill it clips and fades within. A row that carries none leaves the
+     column empty, and an empty auto column is zero wide. */
+  grid-template-columns: var(--od-detailed-number-col) minmax(0, 1fr) auto;
   align-items: stretch;
   width: 100%;
   height: 100%;
   min-width: 0;
+}
+
+.match-table.od-detailed .od-detailed-team-cell .team-flags {
+  padding: 0 var(--space-1);
 }
 
 .match-table .ek-team-cell .od-detailed-team-layout {

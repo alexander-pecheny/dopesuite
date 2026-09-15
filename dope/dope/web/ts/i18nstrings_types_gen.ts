@@ -295,6 +295,7 @@ export type Strings = {
       title: () => string;
     };
     section: {
+      divisions: () => string;
       ekStats: () => string;
       festGrid: () => string;
       groupStandings: () => string;

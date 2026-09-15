@@ -2090,6 +2090,8 @@ function nameCell(teamIndex: number): HTMLTableCellElement {
   name.setAttribute("aria-label", label);
   nameWrap.appendChild(name);
   layout.appendChild(nameWrap);
+  // The badges are the layout grid's third column — beside the name, outside
+  // the pill it clips and fades inside.
   const badges = teamFlagBadges(teamBadges(teamIndex));
   if (badges) layout.appendChild(badges);
   cell.appendChild(layout);

@@ -316,6 +316,7 @@ var RU = Strings{
 			Title: func() string { return "Галерея · dope" },
 		},
 		Section: GallerySectionStrings{
+			Divisions:       func() string { return "Зачёты" },
 			EkStats:         func() string { return "Статистика ЭК" },
 			FestGrid:        func() string { return "Сетка" },
 			GroupStandings:  func() string { return "Групповой этап" },
