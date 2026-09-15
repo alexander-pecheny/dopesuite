@@ -1928,8 +1928,11 @@ input[type="radio"]:focus-visible {
 }
 
 /* The dash IS the affordance here (a tear-off code box), so it takes --grid-dark
-   directly rather than the transparent --border. */
-.bigcode { font-family: var(--font-mono); font-size: var(--text-2xl); font-weight: var(--fw-bold); letter-spacing: 0.08em; text-align: center; padding: var(--space-3); border: 1px dashed var(--grid-dark); border-radius: var(--radius-md); }
+   directly rather than the transparent --border. Sized to hold a 20-character
+   login code on one line at the 420px a sheet section is capped to — a box that
+   cannot hold the thing it is for is the wrong size — and it breaks anywhere, so
+   on a phone the code takes a second line instead of pushing the column wide. */
+.bigcode { margin: 0; font-family: var(--font-mono); font-size: var(--text-xl); font-weight: var(--fw-bold); letter-spacing: 0.08em; text-align: center; padding: var(--space-3); border: 1px dashed var(--grid-dark); border-radius: var(--radius-md); overflow-wrap: anywhere; }
 
 /* Click-to-copy inline token (login: bot handle + code). The dashed underline
    marks it actionable; .copied (set by JS for ~1s) floats a confirmation. The

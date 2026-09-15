@@ -37,7 +37,9 @@ page title=@profile.title kind="sheet" scripts="dist/profile.js"
       hint @profile.telegram.bot_lead (strong id="linkBotName" "@…") @profile.telegram.bot_mid
       bigcode id="linkCode"
       hint @profile.telegram.waiting
-    message id="telegramMessage"
+  -- Outside the section on purpose: linking ENDS the section, and a
+  -- confirmation inside it would go down with the thing it confirms.
+  message id="telegramMessage"
 
   section
     row gap="sm" wrap
