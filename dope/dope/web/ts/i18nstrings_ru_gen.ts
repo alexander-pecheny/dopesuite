@@ -300,6 +300,7 @@ export const RU: Strings = {
       title: () => "Галерея · dope",
     },
     section: {
+      divisions: () => "Зачёты",
       ekStats: () => "Статистика ЭК",
       festGrid: () => "Сетка",
       groupStandings: () => "Групповой этап",
@@ -536,6 +537,7 @@ export const RU: Strings = {
       addOverrideBtn: () => "Добавить оверрайд для игры",
       cancelBtn: () => "Отмена",
       colCity: () => "Город",
+      colFlags: () => "Зачёты",
       colFromTeam: () => "Из команды",
       colPlayers: () => "Игроков",
       colToTeam: () => "В команду",
@@ -547,6 +549,9 @@ export const RU: Strings = {
       errorObjPlayer: () => "игрока",
       errorObjSourceTeam: () => "исходную команду",
       errorObjTeam: () => "команду",
+      flagsHint: () => "Зачёты команды — через запятую: «Школ, Студ». Их видно на страницах ОД и КСИ, где по зачёту можно отфильтровать таблицу. Импорт из rating.chgk.info перезаписывает их.",
+      flagsPlaceholder: () => "Школ, Студ",
+      flagsSavedNotice: () => "Зачёты сохранены.",
       gamesLabel: () => "Игры",
       importDoneCounts: (teams: string, players: string, od: string, ksi: string) => `Загружено команд: ${teams}, игроков: ${players}. Обновлено игр ЧГК: ${od}, КСИ: ${ksi}.`,
       importDoneNotice: () => "Импорт выполнен.",
@@ -1141,6 +1146,10 @@ export const RU: Strings = {
     banner: {
       assign: () => "Присвоить номера",
       unassignedLead: () => "Командам не присвоены номера — редактирование результатов заблокировано. ",
+    },
+    division: {
+      all: () => "Все",
+      label: () => "Зачёт",
     },
     downloads: {
       archive: () => "Скачать .json.gz",

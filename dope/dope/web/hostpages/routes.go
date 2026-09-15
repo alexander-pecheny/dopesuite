@@ -56,6 +56,7 @@ func (s *Server) buildRoutes() *route.Table {
 	})
 	t.Handle("POST "+fest, route.Manager, page(s.handleHostUpdateFest))
 	t.Handle("GET "+fest+"/teams", route.Manager, page(s.renderHostFestTeams))
+	t.Handle("POST "+fest+"/teams", route.Manager, page(s.handleHostSaveFestTeamFlags))
 	t.Handle("GET "+fest+"/players", route.Manager, page(s.renderHostFestPlayers))
 	t.Handle("POST "+fest+"/players/overrides", route.Manager, page(s.handleHostAddPlayerOverride))
 	t.Handle("GET "+fest+"/import", route.Manager, page(func(w http.ResponseWriter, r *http.Request, id int64) { s.renderHostSchemeImportPage(w, r, id, "", "") }))

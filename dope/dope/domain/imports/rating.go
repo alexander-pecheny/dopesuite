@@ -23,7 +23,7 @@ import (
 	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
-const ratingResultsURL = "https://api.rating.chgk.net/tournaments/%d/results.json?includeTeamMembers=1"
+const ratingResultsURL = "https://api.rating.chgk.net/tournaments/%d/results.json?includeTeamMembers=1&includeTeamFlags=1"
 
 type RatingRosterImportResult struct {
 	TeamCount    int
@@ -41,6 +41,16 @@ type ratingFestResult struct {
 	Team        ratingTeam         `json:"team"`
 	Current     ratingTeam         `json:"current"`
 	TeamMembers []ratingTeamMember `json:"teamMembers"`
+	// Flags are the team's Divisions as the rating site marks them: an id, a
+	// full name and the short name everything shows. Every one is kept — the app
+	// does not judge which Flags deserve a Division (ADR-0020).
+	Flags []ratingTeamFlag `json:"flags"`
+}
+
+type ratingTeamFlag struct {
+	ID        int64  `json:"id"`
+	FullName  string `json:"fullName"`
+	ShortName string `json:"shortName"`
 }
 
 type ratingTeam struct {
@@ -137,6 +147,14 @@ func ratingResultsToFestRoster(results []ratingFestResult) ([]roster.FestRosterI
 				LastName:  lastName,
 			})
 		}
+		for _, flag := range result.Flags {
+			team.Flags = append(team.Flags, roster.FestRosterFlag{
+				RatingID: flag.ID,
+				Short:    strings.TrimSpace(flag.ShortName),
+				Full:     strings.TrimSpace(flag.FullName),
+			})
+		}
+		team.Flags = roster.NormalizeFlags(team.Flags)
 		if len(team.Players) > 9 {
 			return nil, corei18n.User(dopestrings.Default.Imports.Rating.SquadTooBig(name))
 		}
@@ -369,6 +387,10 @@ order by position, id`, []any{festID}, func(rows *sql.Rows) (teamRow, error) {
 	if err != nil {
 		return nil, err
 	}
+	flagsByTeam, err := roster.LoadFestTeamFlags(ctx, q, festID)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]roster.FestRosterImportTeam, 0, len(teamRows))
 	for _, t := range teamRows {
 		players, err := store.CollectRows(ctx, q, `
@@ -389,13 +411,14 @@ order by ftp.roster_order, p.id`, []any{t.id}, func(rows *sql.Rows) (roster.Fest
 			City:     t.city,
 			Number:   t.number,
 			Players:  players,
+			Flags:    flagsByTeam[t.id],
 		})
 	}
 	return out, nil
 }
 
 // festRostersEqual reports whether two rosters are identical after canonical
-// sorting: the same teams (rating_id/name/city/number) in the same order, each
+// sorting: the same teams (rating_id/name/city/number/flags) in the same order, each
 // with the same players (rating_id/first/last) in the same order. When true a
 // re-import would rewrite every row to its current value and re-derive identical
 // game state, so the whole import can be skipped. Callers must pass both sides
@@ -405,9 +428,7 @@ func festRostersEqual(a, b []roster.FestRosterImportTeam) bool {
 		return false
 	}
 	for i := range a {
-		if a[i].RatingID != b[i].RatingID || a[i].Name != b[i].Name ||
-			a[i].City != b[i].City || a[i].Number != b[i].Number ||
-			len(a[i].Players) != len(b[i].Players) {
+		if !teamEqual(a[i], b[i]) || len(a[i].Players) != len(b[i].Players) {
 			return false
 		}
 		for j := range a[i].Players {
@@ -415,6 +436,24 @@ func festRostersEqual(a, b []roster.FestRosterImportTeam) bool {
 			if pa.RatingID != pb.RatingID || pa.FirstName != pb.FirstName || pa.LastName != pb.LastName {
 				return false
 			}
+		}
+	}
+	return true
+}
+
+// teamEqual compares two roster entries at the TEAM level: identity, name,
+// city, number and Flags. Flags are part of it — an import that brings a new
+// Flag must not be mistaken for a no-op, and must re-propagate the documents.
+func teamEqual(a, b roster.FestRosterImportTeam) bool {
+	if a.RatingID != b.RatingID || a.Name != b.Name || a.City != b.City || a.Number != b.Number {
+		return false
+	}
+	if len(a.Flags) != len(b.Flags) {
+		return false
+	}
+	for i := range a.Flags {
+		if a.Flags[i].RatingID != b.Flags[i].RatingID || a.Flags[i].Short != b.Flags[i].Short || a.Flags[i].Full != b.Flags[i].Full {
+			return false
 		}
 	}
 	return true
@@ -434,7 +473,7 @@ func distinctPlayerCount(teams []roster.FestRosterImportTeam) int {
 }
 
 // teamLevelEqual reports whether two rosters match at the TEAM level
-// (rating_id/name/city/number, same order), ignoring players. OD and KSI game
+// (rating_id/name/city/number/flags, same order), ignoring players. OD and KSI game
 // state is a pure function of the team list, so when this holds their
 // propagation would produce identical state and can be skipped. Both sides must
 // be canonically sorted.
@@ -443,8 +482,7 @@ func teamLevelEqual(a, b []roster.FestRosterImportTeam) bool {
 		return false
 	}
 	for i := range a {
-		if a[i].RatingID != b[i].RatingID || a[i].Name != b[i].Name ||
-			a[i].City != b[i].City || a[i].Number != b[i].Number {
+		if !teamEqual(a[i], b[i]) {
 			return false
 		}
 	}
@@ -511,6 +549,15 @@ values(?, ?, ?, ?, ?, ?, 0)`, festID, util.NullableInt64(team.RatingID), team.Na
 				return err
 			}
 			teamIDs[i] = id
+		}
+	}
+
+	// A team's Flags are replaced wholesale on every import: the rating site is
+	// the source of truth for the fest it was imported from, and a Flag has no
+	// per-row history worth diffing.
+	for i, team := range teams {
+		if err := roster.ReplaceTeamFlagsTx(ctx, tx, teamIDs[i], team.Flags); err != nil {
+			return err
 		}
 	}
 

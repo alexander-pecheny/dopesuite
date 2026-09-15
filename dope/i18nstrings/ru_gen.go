@@ -320,6 +320,7 @@ var RU = Strings{
 			Title: func() string { return "Галерея · dope" },
 		},
 		Section: GallerySectionStrings{
+			Divisions:       func() string { return "Зачёты" },
 			EkStats:         func() string { return "Статистика ЭК" },
 			FestGrid:        func() string { return "Сетка" },
 			GroupStandings:  func() string { return "Групповой этап" },
@@ -644,6 +645,7 @@ var RU = Strings{
 			AddOverrideBtn:        func() string { return "Добавить оверрайд для игры" },
 			CancelBtn:             func() string { return "Отмена" },
 			ColCity:               func() string { return "Город" },
+			ColFlags:              func() string { return "Зачёты" },
 			ColFromTeam:           func() string { return "Из команды" },
 			ColPlayers:            func() string { return "Игроков" },
 			ColToTeam:             func() string { return "В команду" },
@@ -655,7 +657,12 @@ var RU = Strings{
 			ErrorObjPlayer:        func() string { return "игрока" },
 			ErrorObjSourceTeam:    func() string { return "исходную команду" },
 			ErrorObjTeam:          func() string { return "команду" },
-			GamesLabel:            func() string { return "Игры" },
+			FlagsHint: func() string {
+				return "Зачёты команды — через запятую: «Школ, Студ». Их видно на страницах ОД и КСИ, где по зачёту можно отфильтровать таблицу. Импорт из rating.chgk.info перезаписывает их."
+			},
+			FlagsPlaceholder: func() string { return "Школ, Студ" },
+			FlagsSavedNotice: func() string { return "Зачёты сохранены." },
+			GamesLabel:       func() string { return "Игры" },
 			ImportDoneCounts: func(teams string, players string, od string, ksi string) string {
 				return fmt.Sprintf("Загружено команд: %s, игроков: %s. Обновлено игр ЧГК: %s, КСИ: %s.", teams, players, od, ksi)
 			},
@@ -1585,6 +1592,10 @@ var RU = Strings{
 			UnassignedLead: func() string {
 				return "Командам не присвоены номера — редактирование результатов заблокировано. "
 			},
+		},
+		Division: ScreenDivisionStrings{
+			All:   func() string { return "Все" },
+			Label: func() string { return "Зачёт" },
 		},
 		Downloads: ScreenDownloadsStrings{
 			Archive: func() string { return "Скачать .json.gz" },

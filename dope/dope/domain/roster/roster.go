@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"fmt"
 	"sort"
+	"strings"
 
 	"dope/dope/domain/flatgame"
 	"dope/dope/domain/protocol"
@@ -23,6 +24,32 @@ type FestRosterImportTeam struct {
 	City     string
 	Number   int64
 	Players  []FestRosterImportPlayer
+	// Flags are the team's Divisions, in the order the source listed them
+	// (ADR-0020). Every distinct short name among a fest's teams offers a
+	// Division to look at; the app keeps them all and curates none.
+	Flags []FestRosterFlag
+}
+
+// FestRosterFlag is one Flag a team carries: the rating site's id when it came
+// from there (0 for a hand-typed one), the short name every page shows and
+// links on, and the full name the source spells out.
+type FestRosterFlag struct {
+	RatingID int64
+	Short    string
+	Full     string
+}
+
+// FlagShortNames is a team's Flags as the documents and the pages carry them:
+// the short names alone, in position order.
+func FlagShortNames(flags []FestRosterFlag) []string {
+	if len(flags) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(flags))
+	for _, flag := range flags {
+		out = append(out, flag.Short)
+	}
+	return out
 }
 
 type GameStateBroadcast struct {
@@ -36,6 +63,7 @@ func SortedFestRosterImportTeams(teams []FestRosterImportTeam) []FestRosterImpor
 	for i, team := range teams {
 		out[i] = team
 		out[i].Players = append([]FestRosterImportPlayer(nil), team.Players...)
+		out[i].Flags = append([]FestRosterFlag(nil), team.Flags...)
 		sort.SliceStable(out[i].Players, func(a, b int) bool {
 			return util.CompareAlpha(importPlayerName(out[i].Players[a]), importPlayerName(out[i].Players[b])) < 0
 		})
@@ -89,7 +117,12 @@ where id = ? and fest_id = ?`, string(schemeJSON), util.UtcNow(), doc.GameID, fe
 func RosterTeams(teams []FestRosterImportTeam) []protocol.RosterTeam {
 	out := make([]protocol.RosterTeam, 0, len(teams))
 	for _, team := range teams {
-		out = append(out, protocol.RosterTeam{Name: team.Name, City: team.City, Number: team.Number})
+		out = append(out, protocol.RosterTeam{
+			Name:   team.Name,
+			City:   team.City,
+			Number: team.Number,
+			Flags:  FlagShortNames(team.Flags),
+		})
 	}
 	return out
 }
@@ -113,6 +146,8 @@ type FestRosterTeamView struct {
 	City     string                 `json:"city,omitempty"`
 	RatingID int64                  `json:"ratingID,omitempty"`
 	Players  []FestRosterPlayerView `json:"players"`
+	// Flags are the team's Divisions by short name (ADR-0020).
+	Flags []string `json:"flags,omitempty"`
 }
 
 // LoadFestRosterView loads every active team of a fest with its ordered players,
@@ -133,6 +168,7 @@ order by tt.position, tt.id, ttp.roster_order, p.id`, festID)
 	defer rows.Close()
 
 	var teams []FestRosterTeamView
+	var teamIDs []int64
 	byID := make(map[int64]int)
 	for rows.Next() {
 		var teamID, number, teamRatingID, playerRatingID int64
@@ -145,6 +181,7 @@ order by tt.position, tt.id, ttp.roster_order, p.id`, festID)
 			teams = append(teams, FestRosterTeamView{Number: number, Name: name, City: city, RatingID: teamRatingID})
 			idx = len(teams) - 1
 			byID[teamID] = idx
+			teamIDs = append(teamIDs, teamID)
 		}
 		if player := store.JoinPlayerName(firstName, lastName); player != "" {
 			teams[idx].Players = append(teams[idx].Players, FestRosterPlayerView{Name: player, RatingID: playerRatingID})
@@ -153,23 +190,113 @@ order by tt.position, tt.id, ttp.roster_order, p.id`, festID)
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	flags, err := LoadFestTeamFlags(ctx, q, festID)
+	if err != nil {
+		return nil, err
+	}
+	for i, teamID := range teamIDs {
+		teams[i].Flags = FlagShortNames(flags[teamID])
+	}
 	return teams, nil
 }
 
+// LoadFestTeamFlags reads every active team's Flags in position order, by
+// fest_team id. One query for the whole fest: a page that lists teams wants
+// them all, and a per-team query would be one more round trip each.
+func LoadFestTeamFlags(ctx context.Context, q store.Queryer, festID int64) (map[int64][]FestRosterFlag, error) {
+	rows, err := q.QueryContext(ctx, `
+select f.team_id, coalesce(f.rating_flag_id, 0), f.short, f.full
+from fest_team_flags f
+join fest_teams tt on tt.id = f.team_id
+where tt.fest_id = ? and tt.deleted = 0
+order by f.team_id, f.position, f.id`, festID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[int64][]FestRosterFlag)
+	for rows.Next() {
+		var teamID int64
+		var flag FestRosterFlag
+		if err := rows.Scan(&teamID, &flag.RatingID, &flag.Short, &flag.Full); err != nil {
+			return nil, err
+		}
+		out[teamID] = append(out[teamID], flag)
+	}
+	return out, rows.Err()
+}
+
+// ReplaceTeamFlagsTx rewrites one team's Flags. An import replaces a team's
+// Flags wholesale, and so does a hand edit, so this is the only writer: the old
+// rows go, the new ones are inserted in the order given.
+func ReplaceTeamFlagsTx(ctx context.Context, tx *sql.Tx, teamID int64, flags []FestRosterFlag) error {
+	if _, err := tx.ExecContext(ctx, `delete from fest_team_flags where team_id = ?`, teamID); err != nil {
+		return err
+	}
+	for position, flag := range flags {
+		if _, err := tx.ExecContext(ctx, `
+insert into fest_team_flags(team_id, position, rating_flag_id, short, full) values(?, ?, ?, ?, ?)`,
+			teamID, position, util.NullableInt64(flag.RatingID), flag.Short, flag.Full); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// NormalizeFlags drops the blank ones, trims both names, fills a missing full
+// name from the short one (a hand-typed Flag is only ever short), and keeps the
+// first of any two that share a short name — the table's unique key.
+func NormalizeFlags(flags []FestRosterFlag) []FestRosterFlag {
+	var out []FestRosterFlag
+	seen := make(map[string]struct{}, len(flags))
+	for _, flag := range flags {
+		short := strings.TrimSpace(flag.Short)
+		full := strings.TrimSpace(flag.Full)
+		if short == "" {
+			short = full
+		}
+		if short == "" {
+			continue
+		}
+		if full == "" {
+			full = short
+		}
+		if _, dup := seen[short]; dup {
+			continue
+		}
+		seen[short] = struct{}{}
+		out = append(out, FestRosterFlag{RatingID: flag.RatingID, Short: short, Full: full})
+	}
+	return out
+}
+
 func LoadFestRosterImportTeamsTx(ctx context.Context, q store.Queryer, festID int64) ([]FestRosterImportTeam, error) {
-	teams, err := store.CollectRows(ctx, q, `
-select coalesce(rating_id, 0), name, city, coalesce(number, 0)
+	type loaded struct {
+		id   int64
+		team FestRosterImportTeam
+	}
+	rows, err := store.CollectRows(ctx, q, `
+select id, coalesce(rating_id, 0), name, city, coalesce(number, 0)
 from fest_teams
 where fest_id = ? and deleted = 0
-order by position, id`, []any{festID}, func(rows *sql.Rows) (FestRosterImportTeam, error) {
-		var team FestRosterImportTeam
-		if err := rows.Scan(&team.RatingID, &team.Name, &team.City, &team.Number); err != nil {
-			return team, err
+order by position, id`, []any{festID}, func(rows *sql.Rows) (loaded, error) {
+		var row loaded
+		if err := rows.Scan(&row.id, &row.team.RatingID, &row.team.Name, &row.team.City, &row.team.Number); err != nil {
+			return row, err
 		}
-		return team, nil
+		return row, nil
 	})
 	if err != nil {
 		return nil, err
+	}
+	flags, err := LoadFestTeamFlags(ctx, q, festID)
+	if err != nil {
+		return nil, err
+	}
+	teams := make([]FestRosterImportTeam, 0, len(rows))
+	for _, row := range rows {
+		row.team.Flags = flags[row.id]
+		teams = append(teams, row.team)
 	}
 	return SortedFestRosterImportTeams(teams), nil
 }

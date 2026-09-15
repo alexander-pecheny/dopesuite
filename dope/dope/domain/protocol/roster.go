@@ -14,6 +14,10 @@ type RosterTeam struct {
 	Name   string
 	City   string
 	Number int64
+	// Flags are the team's Divisions by short name (ADR-0020). They ride with
+	// the name and the city: the document carries them so the page can offer a
+	// Division without a second fetch.
+	Flags []string
 }
 
 // RosterFolder is a flat Protocol whose scheme and document carry the fest
@@ -65,9 +69,10 @@ func (ksi) FoldRoster(schemeJSON, stateJSON string, teams []RosterTeam, _ map[in
 // re-import reorders never misattribute scores — the entries stay valid as long
 // as a team keeps its number (sticky across re-import).
 type ChgkTeamJSON struct {
-	Name   string `json:"name"`
-	City   string `json:"city,omitempty"`
-	Number int64  `json:"number,omitempty"`
+	Name   string   `json:"name"`
+	City   string   `json:"city,omitempty"`
+	Number int64    `json:"number,omitempty"`
+	Flags  []string `json:"flags,omitempty"`
 }
 
 func odRosterScheme(raw string, teams []RosterTeam) ([]byte, error) {
@@ -263,7 +268,7 @@ func RawJSONObject(raw string) (map[string]json.RawMessage, error) {
 func chgkTeamsFromRoster(teams []RosterTeam) []ChgkTeamJSON {
 	out := make([]ChgkTeamJSON, 0, len(teams))
 	for _, team := range teams {
-		out = append(out, ChgkTeamJSON{Name: team.Name, City: team.City, Number: team.Number})
+		out = append(out, ChgkTeamJSON{Name: team.Name, City: team.City, Number: team.Number, Flags: team.Flags})
 	}
 	return out
 }
@@ -271,7 +276,7 @@ func chgkTeamsFromRoster(teams []RosterTeam) []ChgkTeamJSON {
 func teamParticipantsFromRoster(teams []RosterTeam) []games.KSIParticipant {
 	out := make([]games.KSIParticipant, 0, len(teams))
 	for _, team := range teams {
-		out = append(out, games.KSIParticipant{Number: int(team.Number), Name: team.Name})
+		out = append(out, games.KSIParticipant{Number: int(team.Number), Name: team.Name, Flags: team.Flags})
 	}
 	return out
 }

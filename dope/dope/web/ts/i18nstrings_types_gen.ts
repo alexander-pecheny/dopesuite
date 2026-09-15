@@ -299,6 +299,7 @@ export type Strings = {
       title: () => string;
     };
     section: {
+      divisions: () => string;
       ekStats: () => string;
       festGrid: () => string;
       groupStandings: () => string;
@@ -535,6 +536,7 @@ export type Strings = {
       addOverrideBtn: () => string;
       cancelBtn: () => string;
       colCity: () => string;
+      colFlags: () => string;
       colFromTeam: () => string;
       colPlayers: () => string;
       colToTeam: () => string;
@@ -546,6 +548,9 @@ export type Strings = {
       errorObjPlayer: () => string;
       errorObjSourceTeam: () => string;
       errorObjTeam: () => string;
+      flagsHint: () => string;
+      flagsPlaceholder: () => string;
+      flagsSavedNotice: () => string;
       gamesLabel: () => string;
       importDoneCounts: (teams: string, players: string, od: string, ksi: string) => string;
       importDoneNotice: () => string;
@@ -1140,6 +1145,10 @@ export type Strings = {
     banner: {
       assign: () => string;
       unassignedLead: () => string;
+    };
+    division: {
+      all: () => string;
+      label: () => string;
     };
     downloads: {
       archive: () => string;

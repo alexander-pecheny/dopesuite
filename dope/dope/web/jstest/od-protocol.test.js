@@ -69,3 +69,43 @@ test("a shootout breaks a tie on the total; a team that skipped a round ranks be
   assert.deepEqual(rows.map((r) => [r.index, r.place]), [[1, "1"], [0, "2"], [2, "3"]]);
   assert.deepEqual(od.shootoutTiebreakForTeam(tied, 2), [-1]);
 });
+
+// A Division is ranked within itself: given the rows one зачёт takes, places
+// are dealt afresh among those and every other row is left blank. What a
+// question was worth — the rating — is still reckoned over the whole field,
+// because everyone played it (ADR-0020).
+test("a Division is ranked among its own rows, and the rating still counts everyone", () => {
+  const all = od.rows(played, [2, 2]);
+  const school = od.rows(played, [2, 2], [1, 2]);
+  assert.deepEqual(school.map((r) => [r.index, r.total, r.rating, r.place]), [
+    [1, 2, 2 + 1, "1"],
+    [2, 1, 1, "2"],
+  ]);
+  // The rating of a team is what it was in the undivided table.
+  for (const row of school) {
+    assert.equal(row.rating, all.find((r) => r.index === row.index).rating);
+  }
+});
+
+test("places blank out for every row a Division does not take", () => {
+  const stats = od.questionStats(played, 4);
+  const totals = played.teams.map((_, i) => od.sumRow(stats, i));
+  assert.deepEqual(od.placesFor(played, stats, totals), ["1", "2", "3"]);
+  assert.deepEqual(od.placesFor(played, stats, totals, [0, 2]), ["1", "", "2"]);
+});
+
+test("a tie inside a Division is shared, the way it is in the whole table", () => {
+  const tied = od.parseState({
+    teams: [
+      {name: "A", number: 1, flags: ["Школ"]},
+      {name: "B", number: 2, flags: ["Школ", "Студ"]},
+      {name: "C", number: 3},
+    ],
+    entries: [[1, 2, 0], [0, 0, 3]],
+    completed: [true, true],
+  }, {}, 2);
+  // Whole field: C also has one, so all three share first.
+  assert.deepEqual(od.rows(tied, [2]).map((r) => r.place), ["1–3", "1–3", "1–3"]);
+  // The школьный зачёт is A and B alone, and they share first between them.
+  assert.deepEqual(od.rows(tied, [2], [0, 1]).map((r) => [r.index, r.place]), [[0, "1–2"], [1, "1–2"]]);
+});
