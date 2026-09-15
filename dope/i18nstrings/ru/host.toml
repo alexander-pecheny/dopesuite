@@ -102,6 +102,12 @@ col_city = "Город"
 col_players = "Игроков"
 # Empty state of the teams table.
 teams_empty = "Команды пока не загружены."
+# The зачёты column of the teams table: its header, the hint above the form and
+# the notice after a save.
+col_flags = "Зачёты"
+flags_hint = "Зачёты команды — через запятую: «Школ, Студ». Их видно на страницах ОД и КСИ, где по зачёту можно отфильтровать таблицу. Импорт из rating.chgk.info перезаписывает их."
+flags_placeholder = "Школ, Студ"
+flags_saved_notice = "Зачёты сохранены."
 # Players page title and crumb: "<fest title> · игроки".
 players_title = '{{.title}} · игроки'
 players_crumb = "Игроки"
