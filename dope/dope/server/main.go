@@ -171,7 +171,7 @@ func Main() {
 	mux.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusMovedPermanently)
 	})
-	mux.HandleFunc("/login", srv.serveCompiledPage("static/login.html"))
+	mux.HandleFunc("/login", srv.handleLogin)
 	if srv.assets.NoCache {
 		mux.HandleFunc("/gallery", srv.serveCompiledPage("static/gallery.html"))
 	}

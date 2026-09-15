@@ -76,6 +76,40 @@ func LoginPage(title, redirect string) []byte {
 	return []byte(strings.NewReplacer("{{title}}", title, "{{redirect}}", redirect).Replace(string(assets.LoginPage)))
 }
 
+// loginRedirectChars is every character a destination may be written with: the
+// unreserved set, the sub-delimiters, and the few separators a path and a query
+// need. Notably absent are `"` and `\`, and that is not URL business but HTML —
+// the destination is substituted into the page SOURCE above, before it is
+// parsed, so a quote in it would let its holder close the attribute and write
+// attributes of their own.
+const loginRedirectChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" +
+	"-._~" + "!$&'()*+,;=" + "/?:@%#"
+
+// maxLoginRedirect is longer than any destination an app has and short enough
+// that nobody stuffs a page through it.
+const maxLoginRedirect = 512
+
+// SafeLoginRedirect is the rule for a post-login destination an app was handed
+// rather than chose — the `next` query parameter on /login, which an invitee
+// arrives with and an attacker can write. It is accepted only when it is a path
+// on this very site: it begins with a single "/", so it carries no scheme and no
+// "//host" authority either, and is written in loginRedirectChars alone.
+// Anything else answers "", and the app keeps its own default destination.
+//
+// The rule lives here because the attribute does: both apps stamp the answer
+// into LoginPage, and one place to be wrong is better than two.
+func SafeLoginRedirect(next string) string {
+	if len(next) == 0 || len(next) > maxLoginRedirect || next[0] != '/' || strings.HasPrefix(next, "//") {
+		return ""
+	}
+	for _, r := range next {
+		if !strings.ContainsRune(loginRedirectChars, r) {
+			return ""
+		}
+	}
+	return next
+}
+
 // NewPageSet takes the app's ui.Compile, which carries its vocabulary overlay.
 func NewPageSet(source fs.FS, noCache bool, compile func(name string, src []byte) ([]byte, error)) *PageSet {
 	return &PageSet{source: source, noCache: noCache, compile: compile, cache: map[string][]byte{}, provided: map[string][]byte{}}

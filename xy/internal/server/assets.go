@@ -5,8 +5,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"strings"
-
 	kit "pecheny.me/dopeuikit/kit"
 
 	"pecheny.me/dopecore/webassets"
@@ -49,10 +47,11 @@ func (s *server) servePage(name string) http.HandlerFunc {
 	}
 }
 
-// handleLogin serves the shared login page. An invitee who followed a link while
-// logged out arrives as /login?next=/join/<code>, and the page has to send them
-// back there afterwards — so that one case compiles a copy with its own
-// destination, and everything else gets the page compiled at startup.
+// handleLogin serves the shared login page. Someone who was sent to /login from
+// a page of ours — an invitee who followed a link while logged out arrives as
+// /login?next=/join/<code> — has to land back there afterwards, so that case
+// compiles a copy carrying its own destination (the shared page reads it off
+// data-login-redirect); everything else gets the page compiled at startup.
 func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	next := safeLoginNext(r.URL.Query().Get("next"))
 	if next == "" {
@@ -67,21 +66,9 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	s.writePage(w, r, body)
 }
 
-// safeLoginNext allows exactly one shape of post-login destination: an invite
-// link's own page. `next` is whatever the URL carried, so an allow-list of one
-// pattern is the whole defence against turning /login into an open redirect.
-func safeLoginNext(next string) string {
-	code, ok := strings.CutPrefix(next, "/join/")
-	if !ok || code == "" || len(code) > 64 {
-		return ""
-	}
-	for _, r := range code {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
-			return ""
-		}
-	}
-	return next
-}
+// safeLoginNext is the kit's rule, named for the query parameter it reads: a
+// destination is honoured only when it is a path on this very site.
+func safeLoginNext(next string) string { return kit.SafeLoginRedirect(next) }
 
 // writePage sends compiled page HTML with asset-ref versioning and the CSP.
 func (s *server) writePage(w http.ResponseWriter, r *http.Request, body []byte) {

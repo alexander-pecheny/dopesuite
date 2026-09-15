@@ -1,9 +1,7 @@
 package server
 
 import (
-	"bytes"
 	"net/http/httptest"
-	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -221,30 +219,6 @@ func TestInviteLinkDelete(t *testing.T) {
 	}
 	mustStatus(t, b.do("GET", "/api/boards/"+boardID+"/members", nil), 200)
 	mustStatus(t, b.do("GET", "/api/board-invites/code/"+inv.Code, nil), 404)
-}
-
-// TestLoginNextOnlyJoinPaths: a logged-out invitee is sent to /login and must
-// land back on the link. Only a /join/ path is honoured — `next` is attacker
-// input, and anything else is an open redirect.
-func TestLoginNextOnlyJoinPaths(t *testing.T) {
-	ts, _ := newTestServer(t)
-	c := &apiClient{t: t, base: ts.URL}
-	body := func(path string) string {
-		resp := c.do("GET", path, nil)
-		mustStatus(t, resp, 200)
-		defer resp.Body.Close()
-		buf := new(bytes.Buffer)
-		buf.ReadFrom(resp.Body)
-		return buf.String()
-	}
-	if got := body("/login?next=/join/ABC123"); !strings.Contains(got, `data-login-redirect="/join/ABC123"`) {
-		t.Fatalf("login page did not carry the join destination")
-	}
-	for _, bad := range []string{"https://evil.example", "//evil.example", "/admin", "/join/../admin", "/join/x?y=z"} {
-		if got := body("/login?next=" + url.QueryEscape(bad)); !strings.Contains(got, `data-login-redirect="/"`) {
-			t.Fatalf("next=%q was honoured, want the default destination", bad)
-		}
-	}
 }
 
 // TestInviteLinkOnePersonOneRequest: waiting is board-wide. Two links must not

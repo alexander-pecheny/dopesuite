@@ -28,6 +28,26 @@ func (s *server) serveCompiledPage(path string) http.HandlerFunc {
 	}
 }
 
+// handleLogin serves the shared login page. Someone sent here from a page of
+// ours arrives as /login?next=<path> and has to land back there afterwards, so
+// that case compiles a copy carrying its own destination (the shared page reads
+// it off data-login-redirect); everything else gets the cached page, whose
+// destination is /host. `next` is attacker input, and kit.SafeLoginRedirect is
+// the rule that keeps it from turning /login into an open redirect.
+func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	next := kit.SafeLoginRedirect(r.URL.Query().Get("next"))
+	if next == "" {
+		s.serveCompiledPage("static/login.html")(w, r)
+		return
+	}
+	body, err := dopeui.Compile("ui/login.dopeui", kit.LoginPage(dopestrings.Default.Server.Login.Title(), next))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	s.writeAppHTML(w, r, body)
+}
+
 // pageSources maps a served HTML shell path to its .dopeui source. These
 // pages are authored in the constrained UI DSL (dope/web/assets/ui) and compiled
 // to HTML — at startup in embed mode, per request in disk/dev mode. Their

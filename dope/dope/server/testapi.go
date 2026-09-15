@@ -159,6 +159,7 @@ func (s *Server) HandleAuthUsername(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleEvents(w http.ResponseWriter, r *http.Request)     { s.handleEvents(w, r) }
 func (s *Server) HandleFestRouter(w http.ResponseWriter, r *http.Request) { s.handleFestRouter(w, r) }
 func (s *Server) HandleImport(w http.ResponseWriter, r *http.Request)     { s.handleImport(w, r) }
+func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request)      { s.handleLogin(w, r) }
 func (s *Server) HandleScopedAPI(w http.ResponseWriter, r *http.Request)  { s.handleScopedAPI(w, r) }
 
 func (s *Server) LoadFestViewLocked(festID, gameID int64) (store.FestView, error) {

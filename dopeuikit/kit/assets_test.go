@@ -62,3 +62,44 @@ func TestLoginPageCompilesUnderCoreAndIsProvided(t *testing.T) {
 		t.Fatalf("provided source lost: %v\n%s", err, body)
 	}
 }
+
+// TestSafeLoginRedirect is the acceptance rule on its own: a destination handed
+// to an app on /login?next= is taken only when it is a path on that very site,
+// written in characters that cannot escape the attribute it is stamped into.
+func TestSafeLoginRedirect(t *testing.T) {
+	for _, ok := range []string{
+		"/", "/host", "/join/ABC123", "/board/42", "/profile/tokens",
+		"/join/x?y=z", "/admin", "/search?q=a%20b&sort=new", "/board/42#card-7",
+		"/join/../admin", // same site whatever it normalises to
+	} {
+		if got := SafeLoginRedirect(ok); got != ok {
+			t.Errorf("SafeLoginRedirect(%q) = %q, want it kept", ok, got)
+		}
+	}
+	for _, bad := range []string{
+		"",
+		"https://evil.example",          // a scheme
+		"HTTP://evil.example",           // and in either case
+		"//evil.example",                // an authority with the scheme left off
+		"/\\evil.example",               // which browsers fold a backslash into
+		"javascript:alert(1)",           // not a path at all
+		"host/1",                        // relative: would resolve under /login
+		` onload="x"`,                   // not a path, and would be markup
+		`/x" data-login-redirect="/y`,   // the attribute break the charset stops
+		"/café",                         // paths reach an app percent-encoded
+		"/x\nSet-Cookie: a=b",           // a newline is not path material
+		"/" + strings.Repeat("a", 1024), // longer than any page of ours
+	} {
+		if got := SafeLoginRedirect(bad); got != "" {
+			t.Errorf("SafeLoginRedirect(%q) = %q, want it ignored", bad, got)
+		}
+	}
+	// And what it accepts survives the page it is stamped into.
+	html, err := Compile("ui/login.dopeui", LoginPage("t", SafeLoginRedirect("/join/x?y=z")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(html), `data-login-redirect="/join/x?y=z"`) {
+		t.Errorf("the destination did not reach the attribute:\n%s", html)
+	}
+}
