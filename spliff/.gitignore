@@ -1,0 +1,10 @@
+/spliff.db
+*.db
+*.db-wal
+*.db-shm
+/blobs/
+.env
+/spliff-server
+# built by `just build-web` (root ADR-0001)
+/spliff/web/assets/static/dist/
+.tmp/
