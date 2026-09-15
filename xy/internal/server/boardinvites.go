@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"pecheny.me/dopecore/authcred"
+	"pecheny.me/dopecore/invitelink"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
@@ -19,10 +20,78 @@ import (
 // is the one field xy keeps in plaintext anyway. Owner-only to mint, revoke and
 // approve, exactly like adding a member by username.
 //
-// A link may cap uses, expire, or require the owner's approval. Only a use that
-// reached 'joined' spends the cap, so a queue of hopefuls behind a one-seat link
-// costs nothing and a decline refunds nothing. A declined row stays, and its
-// unique(invite_id, user_id) is what stops the declined asking again.
+// The link's own machine — the use cap, the expiry, the approval queue, the
+// states and the SQL on board_invites/board_invite_uses — is dopecore's
+// (invitelink, root docs/adr/0004). This file is the adapter: xy's routes, xy's
+// DTOs, xy's write transaction, xy's words and what a board is.
+
+// boardScope teaches invitelink what an xy board is.
+type boardScope struct{ s *server }
+
+func (b boardScope) IsMember(ctx context.Context, q invitelink.Querier, bid, userID int64) (bool, error) {
+	var role string
+	err := q.QueryRowContext(ctx, `
+select role from board_members where board_id = ? and user_id = ?`, bid, userID).Scan(&role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func (b boardScope) AddMember(ctx context.Context, tx invitelink.Tx, bid, userID int64) error {
+	_, err := tx.ExecContext(ctx, `
+insert into board_members(board_id, user_id, role) values(?, ?, 'editor')
+on conflict(board_id, user_id) do nothing`, bid, userID)
+	return err
+}
+
+func (b boardScope) DisplayName(ctx context.Context, q invitelink.Querier, bid int64) (string, error) {
+	return boardDisplayName(ctx, q, bid)
+}
+
+// Names is how a person is written in the owner's list: their username, else
+// the telegram one they arrived with.
+func (b boardScope) Names(ctx context.Context, q invitelink.Querier, ids []int64) (map[int64]string, error) {
+	out := map[int64]string{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := q.QueryContext(ctx, `
+select id, coalesce(nullif(username, ''), telegram_username, '') from users
+where id in (`+strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")+`)`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		out[id] = name
+	}
+	return out, rows.Err()
+}
+
+func (b boardScope) NudgeOwner(bid, requesterID int64) { b.s.notifyJoinRequest(bid, requesterID) }
+
+// invites is the shared machine bound to xy's tables. The join is what keeps a
+// deleted board's links from resolving: they live in board_invites alone and
+// would never see boards.deleted_at.
+func (s *server) invites() invitelink.Links {
+	return invitelink.Links{
+		Invites:   "board_invites",
+		Uses:      "board_invite_uses",
+		ScopeID:   "board_id",
+		ScopeJoin: "join boards b on b.id = i.board_id and b.deleted_at is null",
+		Scope:     boardScope{s},
+	}
+}
 
 type invitePersonDTO struct {
 	UserID   int64  `json:"user_id"`
@@ -54,81 +123,21 @@ type boardInvitePeekDTO struct {
 	RequiresApproval bool   `json:"requires_approval"`
 }
 
-// inviteRow is one link as the DB holds it, with the counts a state needs.
-type inviteRow struct {
-	id               int64
-	boardID          int64
-	code             string
-	label            sql.NullString
-	createdAt        string
-	expiresAt        sql.NullString
-	maxUses          sql.NullInt64
-	requiresApproval bool
-	revokedAt        sql.NullString
-	used             int64
+func inviteDTO(lk invitelink.Link, now time.Time) boardInviteDTO {
+	return boardInviteDTO{
+		ID: lk.ID, Code: lk.Code, Label: lk.Label, CreatedAt: lk.CreatedAt,
+		ExpiresAt: lk.ExpiresAt, MaxUses: lk.MaxUses, Used: lk.Used, Left: lk.Left(),
+		RequiresApproval: lk.RequiresApproval, State: string(lk.State(now)),
+		Joined: people(lk.Joined), Pending: people(lk.Waiting),
+	}
 }
 
-const inviteSelect = `
-select i.id, i.board_id, i.code, i.label, i.created_at, i.expires_at, i.max_uses,
-       i.requires_approval, i.revoked_at,
-       (select count(*) from board_invite_uses u where u.invite_id = i.id and u.status = 'joined')
-from board_invites i
-join boards b on b.id = i.board_id and b.deleted_at is null`
-
-func scanInvite(sc interface{ Scan(...any) error }) (inviteRow, error) {
-	var iv inviteRow
-	err := sc.Scan(&iv.id, &iv.boardID, &iv.code, &iv.label, &iv.createdAt, &iv.expiresAt,
-		&iv.maxUses, &iv.requiresApproval, &iv.revokedAt, &iv.used)
-	return iv, err
-}
-
-// state is why a link does or does not work, in the order the reasons override
-// each other: a revoked link is revoked whether or not it also expired.
-func (iv inviteRow) state(now time.Time) string {
-	switch {
-	case iv.revokedAt.Valid:
-		return "revoked"
-	case iv.expiresAt.Valid && !now.Before(mustTime(iv.expiresAt.String)):
-		return "expired"
-	case iv.maxUses.Valid && iv.used >= iv.maxUses.Int64:
-		return "exhausted"
+func people(in []invitelink.Person) []invitePersonDTO {
+	out := []invitePersonDTO{}
+	for _, p := range in {
+		out = append(out, invitePersonDTO{UserID: p.UserID, Username: p.Name, At: p.At})
 	}
-	return "active"
-}
-
-func (iv inviteRow) left() *int64 {
-	if !iv.maxUses.Valid {
-		return nil
-	}
-	n := iv.maxUses.Int64 - iv.used
-	if n < 0 {
-		n = 0
-	}
-	return &n
-}
-
-// mustTime parses a stored RFC3339 stamp; an unparseable one reads as long past,
-// which fails a link closed rather than open.
-func mustTime(s string) time.Time {
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		return time.Time{}
-	}
-	return t
-}
-
-func (iv inviteRow) dto(now time.Time) boardInviteDTO {
-	d := boardInviteDTO{
-		ID: iv.id, Code: iv.code, Label: iv.label.String, CreatedAt: iv.createdAt,
-		ExpiresAt: iv.expiresAt.String, Used: iv.used, Left: iv.left(),
-		RequiresApproval: iv.requiresApproval, State: iv.state(now),
-		Joined: []invitePersonDTO{}, Pending: []invitePersonDTO{},
-	}
-	if iv.maxUses.Valid {
-		n := iv.maxUses.Int64
-		d.MaxUses = &n
-	}
-	return d
+	return out
 }
 
 // ---- owner side ----
@@ -152,78 +161,17 @@ func (s *server) handleListBoardInvites(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	out, err := s.boardInvites(r.Context(), bid)
+	links, err := s.invites().List(r.Context(), s.db, bid)
 	if handleErr(w, err) {
 		return
 	}
-	writeJSON(w, out)
-}
-
-// boardInvites lists a board's links newest first, each with who joined through
-// it and who is still waiting.
-func (s *server) boardInvites(ctx context.Context, bid int64) ([]boardInviteDTO, error) {
-	rows, err := s.db.QueryContext(ctx, inviteSelect+`
-where i.board_id = ? order by i.id desc`, bid)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
 	now := time.Now()
 	out := []boardInviteDTO{}
-	byID := map[int64]int{}
-	for rows.Next() {
-		iv, err := scanInvite(rows)
-		if err != nil {
-			return nil, err
-		}
-		byID[iv.id] = len(out)
-		out = append(out, iv.dto(now))
+	for _, lk := range links {
+		out = append(out, inviteDTO(lk, now))
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if len(out) == 0 {
-		return out, nil
-	}
-	useRows, err := s.db.QueryContext(ctx, `
-select u.invite_id, u.user_id, coalesce(nullif(us.username, ''), us.telegram_username, ''), u.status,
-       coalesce(u.decided_at, u.requested_at)
-from board_invite_uses u
-join board_invites i on i.id = u.invite_id
-join users us on us.id = u.user_id
-where i.board_id = ? and u.status in ('joined','pending')
-order by u.id`, bid)
-	if err != nil {
-		return nil, err
-	}
-	defer useRows.Close()
-	for useRows.Next() {
-		var inviteID int64
-		var m invitePersonDTO
-		var status string
-		if err := useRows.Scan(&inviteID, &m.UserID, &m.Username, &status, &m.At); err != nil {
-			return nil, err
-		}
-		i, ok := byID[inviteID]
-		if !ok {
-			continue
-		}
-		if status == "joined" {
-			out[i].Joined = append(out[i].Joined, m)
-		} else {
-			out[i].Pending = append(out[i].Pending, m)
-		}
-	}
-	return out, useRows.Err()
+	writeJSON(w, out)
 }
-
-// A year is longer than any link should live, and short enough that the hours
-// cannot overflow the Duration they become. The label cap mirrors the field's
-// own maxlength, which is a hint and not a check.
-const (
-	maxTTLHours    = 24 * 366
-	maxInviteLabel = 100
-)
 
 type createInviteRequest struct {
 	Label            string `json:"label"`
@@ -241,12 +189,12 @@ func (s *server) handleCreateBoardInvite(w http.ResponseWriter, r *http.Request)
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if req.MaxUses < 0 || req.TTLHours < 0 || req.TTLHours > maxTTLHours {
-		httpError(w, http.StatusBadRequest, xystrings.Default.Server.Invite.LimitsOutOfRange())
-		return
+	opt := invitelink.Options{
+		Label: req.Label, MaxUses: req.MaxUses, TTLHours: req.TTLHours,
+		RequiresApproval: req.RequiresApproval,
 	}
-	if len([]rune(req.Label)) > maxInviteLabel {
-		httpError(w, http.StatusBadRequest, xystrings.Default.Server.Invite.LabelTooLong())
+	if err := opt.Validate(); err != nil {
+		httpError(w, http.StatusBadRequest, inviteBadRequest(err))
 		return
 	}
 	code, err := authcred.NewInviteCode()
@@ -254,77 +202,68 @@ func (s *server) handleCreateBoardInvite(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	now := time.Now()
-	var expires, maxUses any
-	if req.TTLHours > 0 {
-		expires = rfc3339(now.Add(time.Duration(req.TTLHours) * time.Hour))
-	}
-	if req.MaxUses > 0 {
-		maxUses = req.MaxUses
-	}
+	links := s.invites()
 	var id int64
 	err = s.withWriteTx(r.Context(), "create-board-invite", func(ctx context.Context, tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `
-insert into board_invites(board_id, code, label, created_by, created_at, expires_at, max_uses, requires_approval)
-values(?, ?, ?, ?, ?, ?, ?, ?)`,
-			bid, code, nullStr(strings.TrimSpace(req.Label)), uid, rfc3339(now), expires, maxUses, req.RequiresApproval)
-		if err != nil {
-			return err
-		}
-		id, err = res.LastInsertId()
+		var err error
+		id, err = links.Mint(ctx, tx, bid, uid, code, opt, now)
 		return err
 	})
 	if handleErr(w, err) {
 		return
 	}
-	iv, err := s.inviteByID(r.Context(), id)
+	lk, err := links.ByID(r.Context(), s.db, id)
 	if handleErr(w, err) {
 		return
 	}
-	writeJSON(w, iv.dto(now))
+	writeJSON(w, inviteDTO(lk, now))
 }
 
-func (s *server) inviteByID(ctx context.Context, id int64) (inviteRow, error) {
-	return scanInvite(s.db.QueryRowContext(ctx, inviteSelect+` where i.id = ?`, id))
+// inviteBadRequest words the two settings a link's own limits must respect.
+func inviteBadRequest(err error) string {
+	if errors.Is(err, invitelink.ErrLabelTooLong) {
+		return xystrings.Default.Server.Invite.LabelTooLong()
+	}
+	return xystrings.Default.Server.Invite.LimitsOutOfRange()
 }
 
 // requireOwnedInvite resolves the {id} link and checks the caller owns its board.
-func (s *server) requireOwnedInvite(w http.ResponseWriter, r *http.Request) (inviteRow, bool) {
+func (s *server) requireOwnedInvite(w http.ResponseWriter, r *http.Request) (invitelink.Link, bool) {
 	u, ok := s.requireUser(w, r)
 	if !ok {
-		return inviteRow{}, false
+		return invitelink.Link{}, false
 	}
 	id, ok := pathInt(w, r, "id")
 	if !ok {
-		return inviteRow{}, false
+		return invitelink.Link{}, false
 	}
-	iv, err := s.inviteByID(r.Context(), id)
-	if errors.Is(err, sql.ErrNoRows) {
+	lk, err := s.invites().ByID(r.Context(), s.db, id)
+	if errors.Is(err, invitelink.ErrNotFound) {
 		httpError(w, http.StatusNotFound, xystrings.Default.Server.Invite.NotFound())
-		return inviteRow{}, false
+		return invitelink.Link{}, false
 	}
 	if handleErr(w, err) {
-		return inviteRow{}, false
+		return invitelink.Link{}, false
 	}
-	role, err := boardRole(r.Context(), s.db, iv.boardID, u.UserID)
+	role, err := boardRole(r.Context(), s.db, lk.ScopeID, u.UserID)
 	if handleErr(w, err) {
-		return inviteRow{}, false
+		return invitelink.Link{}, false
 	}
 	if role != "owner" {
 		httpError(w, http.StatusForbidden, xystrings.Default.Server.Invite.OwnerOnly())
-		return inviteRow{}, false
+		return invitelink.Link{}, false
 	}
-	return iv, true
+	return lk, true
 }
 
 func (s *server) handleRevokeBoardInvite(w http.ResponseWriter, r *http.Request) {
-	iv, ok := s.requireOwnedInvite(w, r)
+	lk, ok := s.requireOwnedInvite(w, r)
 	if !ok {
 		return
 	}
+	links := s.invites()
 	err := s.withWriteTx(r.Context(), "revoke-board-invite", func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `
-update board_invites set revoked_at = ? where id = ? and revoked_at is null`, rfc3339(time.Now()), iv.id)
-		return err
+		return links.Revoke(ctx, tx, lk.ID, time.Now())
 	})
 	if handleErr(w, err) {
 		return
@@ -335,16 +274,13 @@ update board_invites set revoked_at = ? where id = ? and revoked_at is null`, rf
 // handleDeleteBoardInvite drops the row and its use history. The members it
 // admitted stay members: a link is how they arrived, not what keeps them in.
 func (s *server) handleDeleteBoardInvite(w http.ResponseWriter, r *http.Request) {
-	iv, ok := s.requireOwnedInvite(w, r)
+	lk, ok := s.requireOwnedInvite(w, r)
 	if !ok {
 		return
 	}
+	links := s.invites()
 	err := s.withWriteTx(r.Context(), "delete-board-invite", func(ctx context.Context, tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `delete from board_invite_uses where invite_id = ?`, iv.id); err != nil {
-			return err
-		}
-		_, err := tx.ExecContext(ctx, `delete from board_invites where id = ?`, iv.id)
-		return err
+		return links.Delete(ctx, tx, lk.ID)
 	})
 	if handleErr(w, err) {
 		return
@@ -373,134 +309,47 @@ func (s *server) handleDecideJoinRequest(w http.ResponseWriter, r *http.Request)
 		httpError(w, http.StatusBadRequest, xystrings.Default.Server.Invite.DecisionInvalid())
 		return
 	}
+	links := s.invites()
 	now := time.Now()
 	err := s.withWriteTx(r.Context(), "decide-join-request", func(ctx context.Context, tx *sql.Tx) error {
-		iv, use, err := pendingRequest(ctx, tx, bid, requesterID)
-		if err != nil {
-			return err
-		}
-		if req.Decision == "decline" {
-			_, err := tx.ExecContext(ctx, `
-update board_invite_uses set status = 'declined', decided_at = ? where id = ?`, rfc3339(now), use)
-			return err
-		}
-		// Approving still has to fit under the cap: the queue was allowed to grow
-		// past it, so the seats may have gone to earlier approvals in the meantime.
-		if iv.maxUses.Valid && iv.used >= iv.maxUses.Int64 {
-			return corei18n.User(xystrings.Default.Server.Invite.NoSeatsLeft())
-		}
-		if _, err := tx.ExecContext(ctx, `
-update board_invite_uses set status = 'joined', decided_at = ? where id = ?`, rfc3339(now), use); err != nil {
-			return err
-		}
-		return addMember(ctx, tx, bid, requesterID)
+		return links.Decide(ctx, tx, bid, requesterID, req.Decision == "approve", now)
 	})
-	if handleErr(w, err) {
+	if handleErr(w, inviteDecideError(err)) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// pendingRequest finds the one waiting request this user has on this board, and
-// the link it came in through.
-func pendingRequest(ctx context.Context, tx *sql.Tx, bid, userID int64) (inviteRow, int64, error) {
-	iv, err := scanInvite(tx.QueryRowContext(ctx, inviteSelect+`
-join board_invite_uses u on u.invite_id = i.id
-where i.board_id = ? and u.user_id = ? and u.status = 'pending'`, bid, userID))
-	if errors.Is(err, sql.ErrNoRows) {
-		return iv, 0, corei18n.User(xystrings.Default.Server.Invite.RequestNotFound())
+// inviteDecideError gives the package's two refusals their xy wording; anything
+// else passes through as itself.
+func inviteDecideError(err error) error {
+	switch {
+	case errors.Is(err, invitelink.ErrRequestNotFound):
+		return corei18n.User(xystrings.Default.Server.Invite.RequestNotFound())
+	case errors.Is(err, invitelink.ErrNoSeatsLeft):
+		return corei18n.User(xystrings.Default.Server.Invite.NoSeatsLeft())
 	}
-	if err != nil {
-		return iv, 0, err
-	}
-	var useID int64
-	err = tx.QueryRowContext(ctx, `
-select id from board_invite_uses where invite_id = ? and user_id = ?`, iv.id, userID).Scan(&useID)
-	return iv, useID, err
-}
-
-func addMember(ctx context.Context, tx *sql.Tx, bid, userID int64) error {
-	_, err := tx.ExecContext(ctx, `
-insert into board_members(board_id, user_id, role) values(?, ?, 'editor')
-on conflict(board_id, user_id) do nothing`, bid, userID)
 	return err
 }
 
 // ---- invitee side ----
-
-// inviteState is what the link does for THIS caller: the link's own state,
-// unless their history overrides it.
-//
-// Waiting is board-wide, not per-link: one person is one Join Request, and the
-// owner decides about a person. Scoped to the link, someone could queue twice
-// through two links and be approved into two seats — and a decide would pick
-// between their rows arbitrarily.
-//
-// A refusal and a spent passage are per-link, because both are about this link:
-// a decline is final for it (another link lets the owner change their mind), and
-// a link that already admitted someone the owner has since removed must not
-// quietly let them back in.
-func inviteState(ctx context.Context, q rowQuerier, iv inviteRow, userID int64, now time.Time) (string, error) {
-	var role string
-	err := q.QueryRowContext(ctx, `
-select role from board_members where board_id = ? and user_id = ?`, iv.boardID, userID).Scan(&role)
-	if err == nil {
-		return "member", nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return "", err
-	}
-	var waiting int
-	if err := q.QueryRowContext(ctx, `
-select count(*) from board_invite_uses u join board_invites i on i.id = u.invite_id
-where i.board_id = ? and u.user_id = ? and u.status = 'pending'`, iv.boardID, userID).Scan(&waiting); err != nil {
-		return "", err
-	}
-	if waiting > 0 {
-		return "pending", nil
-	}
-	var status string
-	err = q.QueryRowContext(ctx, `
-select status from board_invite_uses where invite_id = ? and user_id = ?`, iv.id, userID).Scan(&status)
-	if err == nil {
-		if status == "declined" {
-			return "declined", nil
-		}
-		return "spent", nil // 'joined', and they are not a member: the owner removed them
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return "", err
-	}
-	return iv.state(now), nil
-}
-
-func (s *server) inviteByCode(ctx context.Context, code string) (inviteRow, error) {
-	return scanInvite(s.db.QueryRowContext(ctx, inviteSelect+` where i.code = ?`, code))
-}
 
 func (s *server) handlePeekInvite(w http.ResponseWriter, r *http.Request) {
 	u, ok := s.requireUser(w, r)
 	if !ok {
 		return
 	}
-	iv, err := s.inviteByCode(r.Context(), r.PathValue("code"))
-	if errors.Is(err, sql.ErrNoRows) {
+	peek, err := s.invites().PeekCode(r.Context(), s.db, r.PathValue("code"), u.UserID, time.Now())
+	if errors.Is(err, invitelink.ErrNotFound) {
 		httpError(w, http.StatusNotFound, xystrings.Default.Server.Invite.NotFound())
 		return
 	}
 	if handleErr(w, err) {
 		return
 	}
-	state, err := inviteState(r.Context(), s.db, iv, u.UserID, time.Now())
-	if handleErr(w, err) {
-		return
-	}
-	name, err := boardDisplayName(r.Context(), s.db, iv.boardID)
-	if handleErr(w, err) {
-		return
-	}
 	writeJSON(w, boardInvitePeekDTO{
-		BoardID: iv.boardID, BoardName: name, State: state, RequiresApproval: iv.requiresApproval,
+		BoardID: peek.ScopeID, BoardName: peek.ScopeName,
+		State: string(peek.State), RequiresApproval: peek.RequiresApproval,
 	})
 }
 
@@ -531,86 +380,48 @@ func (s *server) handleJoinInvite(w http.ResponseWriter, r *http.Request) {
 	}
 	code := r.PathValue("code")
 	now := time.Now()
-	var out joinInviteResponse
-	var notify *joinRequestNudge
+	links := s.invites()
+	var res invitelink.Result
 	err := s.withWriteTx(r.Context(), "join-invite", func(ctx context.Context, tx *sql.Tx) error {
-		iv, err := scanInvite(tx.QueryRowContext(ctx, inviteSelect+` where i.code = ?`, code))
-		if errors.Is(err, sql.ErrNoRows) {
-			return &appError{status: http.StatusNotFound, msg: xystrings.Default.Server.Invite.NotFound()}
-		}
-		if err != nil {
-			return err
-		}
-		out.BoardID = iv.boardID
-		// The state is re-read inside the write tx, so two people racing the last
-		// seat cannot both take it.
-		state, err := inviteState(ctx, tx, iv, u.UserID, now)
-		if err != nil {
-			return err
-		}
-		switch state {
-		case "member":
-			out.State = "member"
-			return nil
-		case "pending":
-			out.State = "pending"
-			return nil
-		case "active":
-		default:
-			return corei18n.User(inviteRefusal(state))
-		}
-		status := "joined"
-		if iv.requiresApproval {
-			status = "pending"
-		}
-		if _, err := tx.ExecContext(ctx, `
-insert into board_invite_uses(invite_id, user_id, status, requested_at, decided_at)
-values(?, ?, ?, ?, ?)`, iv.id, u.UserID, status, rfc3339(now), nullIf(status == "pending", rfc3339(now))); err != nil {
-			return err
-		}
-		out.State = "member"
-		if status == "pending" {
-			out.State = "pending"
-			notify = &joinRequestNudge{boardID: iv.boardID, requester: u.UserID}
-			return nil
-		}
-		return addMember(ctx, tx, iv.boardID, u.UserID)
+		var err error
+		res, err = links.Join(ctx, tx, code, u.UserID, now)
+		return err
 	})
-	if handleErr(w, err) {
+	if handleErr(w, inviteJoinError(err)) {
 		return
 	}
-	if notify != nil {
-		s.notifyJoinRequest(notify.boardID, notify.requester)
+	if res.Nudge {
+		links.Nudge(res.ScopeID, u.UserID)
 	}
-	writeJSON(w, out)
+	writeJSON(w, joinInviteResponse{BoardID: res.ScopeID, State: string(res.State)})
 }
 
-type joinRequestNudge struct {
-	boardID   int64
-	requester int64
-}
-
-// nullIf writes NULL when the condition holds — a pending row has no decision yet.
-func nullIf(cond bool, v string) any {
-	if cond {
-		return nil
+// inviteJoinError maps the package's answers onto xy's edge: a missing link is
+// a 404, a dead one is a 400 worded for the person holding it.
+func inviteJoinError(err error) error {
+	if errors.Is(err, invitelink.ErrNotFound) {
+		return &appError{status: http.StatusNotFound, msg: xystrings.Default.Server.Invite.NotFound()}
 	}
-	return v
+	var refused *invitelink.Refused
+	if errors.As(err, &refused) {
+		return corei18n.User(inviteRefusal(refused.State))
+	}
+	return err
 }
 
 // inviteRefusal words a dead link for the person holding it.
-func inviteRefusal(state string) string {
+func inviteRefusal(state invitelink.State) string {
 	str := xystrings.Default
 	switch state {
-	case "revoked":
+	case invitelink.Revoked:
 		return str.Server.Refusal.Revoked()
-	case "expired":
+	case invitelink.Expired:
 		return str.Server.Refusal.Expired()
-	case "exhausted":
+	case invitelink.Exhausted:
 		return str.Server.Refusal.Exhausted()
-	case "declined":
+	case invitelink.Declined:
 		return str.Server.Refusal.Declined()
-	case "spent":
+	case invitelink.Spent:
 		return str.Server.Refusal.Spent()
 	}
 	return str.Server.Refusal.Broken()

@@ -103,3 +103,37 @@ for its «go to the site» reply; text that cannot be a code gets the app's
 `Help` without a round trip; an unreachable server gets `Down`. Each `main.go`
 keeps its env names and its two texts. dope's bare `/start` now answers with
 the server's text (the same instruction its greeting carried), sent plain.
+
+## Addendum (15 Sep 2026, before Spliff: `dopecore/invitelink`)
+
+Spliff's Groups admit people exactly as xy's boards do — a link the owner mints
+that may cap uses, expire or hold the joiner for approval — so the 617 lines of
+`xy/internal/server/boardinvites.go` were about to be copied for the third
+piece of plumbing in a row. `pecheny.me/dopecore/invitelink` is the machine:
+the two tables' SQL, the state ladder (`active`/`revoked`/`expired`/
+`exhausted`, overridden per caller by `member`/`pending`/`declined`/`spent`),
+the rule that only a use which reached `joined` spends a seat, the scope-wide
+one-person-one-request invariant, and the mint/revoke/delete/decide/peek/join
+steps over a `Tx` the app opens.
+
+Two things the adapter supplies, because they are not the machine's. The table
+names — `Links{Invites, Uses, ScopeID, ScopeJoin}` — since xy keeps
+`board_invites`/`board_invite_uses` and its v23 schema unchanged (no migration:
+the SQL was already shareable, only the identifiers were xy's). And `Scope`,
+which is what a board or a Group *is*: `IsMember`, `AddMember`, `DisplayName`
+(empty for a legacy xy board whose name is still ciphertext — better than a
+lie), `Names` for the who-came-in list, and `NudgeOwner`, called after the
+commit so nobody is told about a join that rolled back. `ScopeJoin` deserves
+its own line: a link resolves off its own table, so without the join that drops
+a deleted board a dead board's links would go on working — that was already an
+xy test, and it is now the package's.
+
+Strings stay where `tglogin` put them. The package answers a `State` or one of
+five sentinels (`ErrNotFound`, `ErrRequestNotFound`, `ErrNoSeatsLeft`,
+`ErrLimitsOutOfRange`, `ErrLabelTooLong`) plus a `*Refused` carrying the state;
+xy's adapter maps each to its own status and its own catalog entry, so
+`inviteRefusal` still reads the six Russian lines it always did. xy's HTTP
+handlers are thin adapters now, and `boardinvite_test.go` passed unchanged
+through the whole move — it is the gate the extraction was checked against.
+The package's own tests are the tglogin shape: an in-memory SQLite holding the
+two tables under names no app uses, and a map-backed `Scope`.
