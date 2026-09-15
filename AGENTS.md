@@ -11,9 +11,9 @@ dopeuikit/   pecheny.me/dopeuikit — the shared UI system:
 dopecore/    pecheny.me/dopecore — the shared platform layer extracted out of
              xy and dope (no AGENTS/CONTEXT of its own): sessions, credentials,
              the SQLite pool conventions and the migration runner (schema),
-             webassets, the admin bulk-create,
-             the Telegram bot — client, poll lock and the login conversation —
-             and the login handshake (tglogin)
+             webassets, the admin bulk-create, the on-disk blob store
+             (blobstore), the Telegram bot — client, poll lock and the login
+             conversation — and the login handshake (tglogin)
 xy/          ЧГК question-editing boards (encrypted, Trello-style)
 dope/        tournament management (EK/OD/KSI) + realtime web UI
 chgksuite-gui/

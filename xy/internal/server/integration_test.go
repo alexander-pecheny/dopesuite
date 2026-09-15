@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"xy/internal/blobstore"
+	"pecheny.me/dopecore/blobstore"
 )
 
 // newTestServer spins up a server backed by a temp SQLite DB and an httptest

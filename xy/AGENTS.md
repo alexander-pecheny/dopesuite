@@ -288,8 +288,9 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        of PNG — most of the exported file. Don't "simplify" this back to a plain ToPNG.
   *_test.go            full-flow integration test (register→board→card→label→timeline+ACL)
 internal/session/      cookie + session.User (ported from dope/platform/session)
-internal/blobstore/    attachment bytes ON DISK (random-ref, sharded, write-once); the DB
-                       stores only a blob_ref. NB: backups therefore have two halves — litestream
+(dopecore/blobstore)   attachment bytes ON DISK (random-ref, sharded, write-once); the DB
+                       stores only a blob_ref. It was internal/blobstore until it moved down a
+                       layer, content-agnostic as it always was. NB: backups therefore have two halves — litestream
                        replicates xy.db, an hourly `rclone sync --backup-dir` replicates blobs/ (deletions go to a dated trash prefix, pruned after 14d). Restore the DB
                        alone and every attachment is a dangling ref. See README "Deployment & backups".
 web/ts/                strict-TS ES-module sources; built by `just build-web` into

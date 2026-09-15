@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"xy/internal/blobstore"
+	"pecheny.me/dopecore/blobstore"
 )
 
 func TestBackupCopiesBothHalves(t *testing.T) {

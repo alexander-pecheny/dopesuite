@@ -15,12 +15,11 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"pecheny.me/dopecore/blobstore"
 	"pecheny.me/dopecore/sqlitex"
 	"pecheny.me/dopecore/tgbot"
 	"pecheny.me/dopecore/webassets"
 	kit "pecheny.me/dopeuikit/kit"
-
-	"xy/internal/blobstore"
 
 	"xy/internal/chgk/handout"
 )

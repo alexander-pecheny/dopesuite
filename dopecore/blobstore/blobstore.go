@@ -1,7 +1,7 @@
-// Package blobstore stores encrypted attachment bytes on disk. It is content-
-// agnostic: the bytes it receives are already an xy encryption envelope, so the
-// store never sees plaintext. Files are named by a random ref under a sharded
-// directory tree.
+// Package blobstore stores opaque bytes on disk, named by a random ref under a
+// sharded directory tree. It is content-agnostic: it never looks at what it is
+// given, so xy hands it an encryption envelope and never shows it plaintext,
+// while another app may hand it a re-encoded photo.
 package blobstore
 
 import (
