@@ -1,0 +1,18 @@
+# Invite Links: what the Owner's panel says, and every way a link can refuse
+# the person holding it.
+
+[error]
+decision_invalid = "Approve or decline — there is no third answer."
+label_too_long = "That label is too long."
+limits_out_of_range = "Check the number of uses and the expiry."
+no_seats_left = "That link has no seats left. Mint another one."
+not_found = "There is no such invite link."
+request_not_found = "There is no join request waiting from that person."
+
+[refusal]
+declined = "You were declined from this group through this link."
+exhausted = "That link has been used up."
+expired = "That link has expired."
+generic = "That link does not work any more."
+revoked = "That link has been revoked."
+spent = "You already used that link once. Ask for a new one."

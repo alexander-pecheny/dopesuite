@@ -1,0 +1,18 @@
+# A Transaction: everything a write can refuse.
+
+[error]
+currency_invalid = "Pick a currency."
+day_invalid = "Pick a date."
+deleted = "That transaction is deleted. Restore it before editing it."
+description_required = "Say what the money was for."
+description_too_long = "That description is too long."
+duplicate_member = "Somebody is listed twice."
+negative_amount = "Amounts cannot be negative."
+not_a_member = "That person is not a member of this group."
+payment_required = "Say who paid."
+payments_mismatch = 'The payments add up to {{.paid}}, not {{.total}}.'
+photo_missing = "Pick a picture to attach."
+photo_not_an_image = "That file is not a picture."
+photo_too_large = "That picture is too big — 15 MB is the limit."
+shares_overdraw = 'The shares are {{.over}} more than the total.'
+total_positive = "The total has to be more than nothing."

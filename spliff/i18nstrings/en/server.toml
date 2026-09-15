@@ -1,0 +1,6 @@
+# What the HTTP edge says when something goes wrong.
+
+[error]
+bad_request = "That request did not make sense."
+internal = "Something went wrong on our side. Try again."
+not_found = "Not found."

@@ -1,0 +1,9 @@
+# The /admin tooling. Its body comes from the kit; these are the page's own
+# words.
+
+[page]
+title = "Admin"
+
+[create_users]
+name = "Create users"
+title = "Create users — Spliff"

@@ -1,0 +1,11 @@
+# A Group: its page, and everything it can refuse.
+
+[error]
+currency_unknown = "We have no exchange rate for that currency."
+name_required = "Give the group a name."
+name_too_long = "That name is too long."
+not_a_member = "That person is not a member of this group."
+not_settled = '{{.name}} is not settled up yet: {{.amount}}.'
+owner_must_hand_over = "Hand the group to somebody else first."
+owner_only = "Only the group's owner can do that."
+still_named = '{{.name}} is still named on a live transaction.'

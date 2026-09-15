@@ -1,0 +1,20 @@
+{
+  "enums": {
+    "mount-kind": {
+      "prefix": "Mount",
+      "values": [
+        "groups-list",
+        "group-balances",
+        "group-transfers",
+        "group-feed",
+        "group-members",
+        "group-invites",
+        "transaction-body",
+        "transaction-history",
+        "transaction-photos",
+        "join-body"
+      ]
+    }
+  },
+  "primitives": []
+}

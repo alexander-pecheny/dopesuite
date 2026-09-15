@@ -1,0 +1,12 @@
+# What the login bot says on its own. Every other reply comes from the server.
+
+[texts]
+help = "Send me the code the login page showed you, and I will log you in."
+down = "Spliff is not answering right now. Try again in a minute."
+
+[register]
+done = "Done. Go back to the page you started from — you are logged in."
+expired = "That code has expired. Open the login page again for a fresh one."
+
+[login]
+hint = 'Open {{.url}} and press "Log in with Telegram" — the page will show you a code to send me.'

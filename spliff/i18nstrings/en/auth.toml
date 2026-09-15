@@ -1,0 +1,17 @@
+# The login page's title and everything the handshake can refuse with.
+
+[page]
+title = "Log in to Spliff"
+
+[login]
+fields_required = "Enter a username and a password."
+invalid = "Wrong username or password."
+
+[tg]
+code_missing = "That code is not waiting for anyone. Start again."
+not_configured = "Telegram login is not set up on this instance."
+telegram_taken = "That Telegram account is already linked to another user."
+
+[username]
+format = "A username is 3–64 characters of letters, digits and . _ -"
+reserved = "That username is taken."

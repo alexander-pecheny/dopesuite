@@ -1,0 +1,12 @@
+# The three DMs Spliff sends (spliff/docs/spec-v1.md). There is no settings
+# page: these are the only ones, and each names the Group and carries a link.
+
+[join]
+text = '{{.name}} wants to join {{.group}}. Approve or decline: {{.link}}'
+
+[unclaimed]
+text = 'New in {{.group}}: "{{.description}}". Part of it is unclaimed — claim your share: {{.link}}'
+
+[involved]
+created = '{{.group}}: "{{.description}}" was added, and it names you. {{.link}}'
+edited = '{{.group}}: "{{.description}}" was changed, and it names you. {{.link}}'

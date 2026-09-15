@@ -1,0 +1,4 @@
+# Words shared across screens. A screen uses one only when it means exactly the
+# common thing.
+cancel = "Cancel"
+save = "Save"
