@@ -22,7 +22,7 @@ just check          # this module: fmt + vet + tidy-check + test
 just pre-commit     # the whole repo, incl. class-check — run before a commit
 ```
 
-Server listens on `$PORT` (default 9674); database at `$SPLIFF_DB` (default
+Server listens on `$PORT` (default 9676); database at `$SPLIFF_DB` (default
 `spliff.db`). Config via `.env` (copy from [`.env.example`](.env.example)).
 
 Registration is telegram-only, so an instance with no bot needs a password
@@ -121,7 +121,7 @@ deploy-staging` (target `splifftest` in `deploy.py`).
 
 | | prod | staging |
 | --- | --- | --- |
-| unit / port | `spliff.service`, 9674 | `splifftest.service`, 9684 |
+| unit / port | `spliff.service`, 9676 | `splifftest.service`, 9686 |
 | binary / env | `/opt/spliff`, `/etc/spliff.env` | `/opt/splifftest`, `/etc/splifftest.env` |
 | data | `/var/lib/spliff` | `/var/lib/splifftest` |
 | litestream | replicated | **no** — staging must never write to prod's replica |

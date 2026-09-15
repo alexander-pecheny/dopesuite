@@ -51,7 +51,7 @@ func Main() {
 
 	port := strings.TrimPrefix(os.Getenv("PORT"), ":")
 	if port == "" {
-		port = "9674"
+		port = "9676"
 	}
 	addr := ":" + port
 	listener, err := net.Listen("tcp", addr)

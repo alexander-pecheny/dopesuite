@@ -91,7 +91,7 @@ just pre-commit   # the whole repo, incl. class-check — run before a commit
 printf 'secret12' | just adduser someone   # a password account, for an instance with no bot
 ```
 
-Server listens on `$PORT` (default 9674); database at `$SPLIFF_DB` (default
+Server listens on `$PORT` (default 9676); database at `$SPLIFF_DB` (default
 `spliff.db`), Photos under `$SPLIFF_BLOBS` (default `blobs`). Config via `.env`
 (copy from `.env.example`).
 
