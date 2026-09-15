@@ -1,0 +1,110 @@
+/* Spliff's app CSS layer. The design system — tokens, controls, buttons,
+   chrome, utilities, themes — is DopeUIKit's assets/core.css, which the server
+   serves concatenated ahead of this file. Nothing here restates a control or a
+   layout: the kit ships .u-row/.u-col/.u-gap-* for arrangement, and what is
+   below is only what the design system has no name for yet — how an amount is
+   set, and the two shapes a bill takes on screen.
+
+   Every value comes from a kit token. */
+
+/* An amount is a number people compare down a column, so it is set in lining,
+   tabular figures and never wraps: 1 234.56 broken across two lines is two
+   numbers. */
+.amount {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+
+/* What a balance means, in the two directions it can go. The colours are the
+   kit's semantic pair, so high contrast and dark mode follow without a second
+   rule. */
+.amount-positive { color: var(--success); }
+.amount-negative { color: var(--danger-text); }
+.amount-zero { color: var(--muted); }
+
+/* The name a row is about, beside its amount: it may be long, and it is the
+   part that gives way. */
+.split-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The Transaction editor's member rows: a name, what they paid, what they
+   answer for. One grid so the three columns line up down the form however long
+   the names are, and it collapses to two on a phone. */
+.split-rows {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: var(--space-3);
+  row-gap: var(--space-2);
+}
+
+.split-rows > .split-head {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* An entry cell in the editor is narrow on purpose: an amount, not a sentence. */
+.split-rows input {
+  max-width: 7rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+@media (max-width: 30rem) {
+  .split-rows { grid-template-columns: minmax(0, 1fr) auto; }
+  .split-rows input { max-width: 5.5rem; }
+}
+
+/* The Photos of one Transaction, side by side and scrollable rather than
+   reflowing: a receipt is read by tapping it, and a wrapping grid of three
+   thumbnails pushes the History off a phone screen. */
+.photo-strip {
+  overflow-x: auto;
+  padding-bottom: var(--space-1);
+}
+
+.photo-thumb {
+  height: 6rem;
+  width: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  object-fit: cover;
+}
+
+/* What an anonymous visitor at an Invite Link is shown: the Group's name, large
+   enough to be the page rather than a line on it. */
+.join-lead {
+  font-size: var(--text-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--text-strong);
+}
+
+/* An Invite Link's URL in the Owner's panel, meant to be selected and sent. */
+.invite-code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  word-break: break-all;
+  color: var(--text-muted);
+}
+
+/* Who owns the Group, and what state a link is in: the same small tag, tinted
+   by what it says. */
+.tag {
+  display: inline-block;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--wash-emphasis);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tag-dead { background: var(--wash-negative); }

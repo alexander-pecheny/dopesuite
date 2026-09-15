@@ -1,0 +1,10 @@
+page title=@page.join.title kind="sheet" scripts="dist/join.js"
+  topbar title=@page.join.title
+
+  section
+    mount id="joinBody" kind="join-body"
+    row gap="sm" wrap
+      button kind="primary" id="joinBtn" hidden @page.join.join
+      button kind="primary" id="loginBtn" hidden icon="log-in" @page.join.login
+      button kind="ghost" id="openBtn" hidden @page.join.open
+    message id="joinMessage"

@@ -1,0 +1,19 @@
+page title=@page.index.title kind="sheet" scripts="dist/index.js"
+  topbar title=@page.index.heading
+    iconbtn id="newGroupBtn" icon="plus" label=@page.index.new_group
+
+  section
+    mount id="groupList" kind="groups-list"
+    empty id="groupsEmpty" hidden @page.index.empty
+  message id="message"
+
+  modal id="createOverlay" label=@page.index.create_title title=@page.index.create_title
+    form id="createForm" dir="col"
+      field label=@page.index.name_label
+        textfield id="groupName" placeholder=@page.index.name_placeholder required autofocus grow
+      field label=@page.index.currency_label
+        selectfield id="groupCurrency" name="currency" grow
+      row gap="sm" wrap
+        button submit @page.index.create_submit
+        button kind="ghost" id="createCancel" @common.cancel
+    message id="createMessage"

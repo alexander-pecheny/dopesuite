@@ -1,0 +1,49 @@
+page title=@page.transaction.title kind="sheet" scripts="dist/transaction.js"
+  topbar titleid="txTitle"
+    crumbs
+      crumb home href="/" icon="house" label=@page.common.home
+      crumb id="groupCrumb" href="/" @page.group.title
+      crumb @page.transaction.title
+
+  section
+    form id="txForm" dir="col"
+      field label=@page.transaction.description
+        textfield id="description" placeholder=@page.transaction.description_placeholder required autofocus grow
+      row gap="sm" wrap
+        field label=@page.transaction.day
+          textfield id="day" required
+        field label=@page.transaction.currency
+          selectfield id="currency" grow
+        field label=@page.transaction.total
+          textfield id="total" inputmode="decimal" required
+      hint id="rateLine" hidden
+      field label=@page.transaction.mode
+        selectfield id="mode" grow
+          option value="simple" @page.transaction.mode_simple
+          option value="even" @page.transaction.mode_even
+          option value="percent" @page.transaction.mode_percent
+          option value="exact" @page.transaction.mode_exact
+          option value="claim" @page.transaction.mode_claim
+          option value="settlement" @page.transaction.mode_settlement
+      hint id="modeHint"
+      mount id="editorBody" kind="transaction-body"
+      hint id="totalsLine"
+      row gap="sm" wrap
+        button submit id="saveBtn" @common.save
+        button kind="ghost" id="cancelBtn" @common.cancel
+        button kind="danger" id="deleteBtn" hidden icon="trash-2" @page.transaction.delete
+        button kind="ghost" id="restoreBtn" hidden @page.transaction.restore
+    message id="message"
+
+  section id="photoSection" hidden
+    subhead @page.transaction.photos
+    mount id="photos" kind="transaction-photos"
+    empty id="photosEmpty" hidden @page.transaction.no_photos
+    row gap="sm" align="center" wrap
+      filefield id="photoInput" accept="image/*"
+      button kind="ghost" id="uploadBtn" icon="paperclip" @page.transaction.upload
+    message id="photoMessage"
+
+  section id="historySection" hidden
+    subhead @page.transaction.history
+    mount id="history" kind="transaction-history"

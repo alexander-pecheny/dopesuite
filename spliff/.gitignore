@@ -5,6 +5,7 @@
 /blobs/
 .env
 /spliff-server
-# built by `just build-web` (root ADR-0001)
-/spliff/web/assets/static/dist/
+# built by `just build-web` (root ADR-0001): the served bundles, and the ESM
+# the deno tests import
+dist/
 .tmp/

@@ -1,0 +1,76 @@
+page title=@page.group.title kind="sheet" scripts="dist/group.js"
+  topbar titleid="groupTitle"
+    crumbs
+      crumb home href="/" icon="house" label=@page.common.home
+      crumb id="groupCrumb" @page.group.title
+    iconbtn id="settingsBtn" icon="settings" label=@page.group.settings
+
+  -- Balances and the Debt graph come first: at the table, "what do I owe" is
+  -- the whole question, and the feed is the evidence for the answer.
+  section
+    subhead @page.group.balances
+    mount id="balances" kind="group-balances"
+    subhead @page.group.debts
+    mount id="transfers" kind="group-transfers"
+    empty id="settledNote" hidden @page.group.settled
+    hint id="ratesNote" hidden @page.group.no_rates
+    row gap="sm" wrap
+      button kind="primary" id="addBtn" icon="plus" @page.group.add
+
+  section
+    subhead @page.group.transactions
+    mount id="feed" kind="group-feed"
+    empty id="feedEmpty" hidden @page.group.no_transactions
+
+  section
+    subhead @page.group.members
+    mount id="members" kind="group-members"
+
+  section id="inviteSection" hidden
+    subhead @page.group.invites
+    mount id="invites" kind="group-invites"
+    row gap="sm" wrap
+      button kind="ghost" id="newInviteBtn" icon="link" @page.group.new_invite
+
+  section
+    details id="deletedBlock"
+      summary @page.group.deleted
+      mount id="deletedFeed" kind="group-feed"
+    details id="historyBlock"
+      summary @page.group.history
+      mount id="groupHistory" kind="transaction-history"
+
+  message id="message"
+
+  modal id="settingsOverlay" label=@page.group.settings title=@page.group.settings
+    form id="settingsForm" dir="col"
+      field label=@page.group.name_label
+        textfield id="groupNameField" required grow
+      field label=@page.group.currency_label
+        selectfield id="groupCurrencyField" grow
+      row gap="sm" wrap
+        button submit @common.save
+        button kind="ghost" id="settingsCancel" @common.cancel
+    col gap="sm" id="ownerControls" hidden
+      field label=@page.group.hand_over_label
+        selectfield id="handOverSelect" grow
+      row gap="sm" wrap
+        button kind="ghost" id="handOverBtn" @page.group.hand_over
+        button kind="danger" id="deleteGroupBtn" icon="trash-2" @page.group.delete
+    row gap="sm" wrap
+      button kind="danger" id="leaveBtn" @page.group.leave
+    message id="settingsMessage"
+
+  modal id="inviteOverlay" label=@page.group.new_invite title=@page.group.new_invite
+    form id="inviteForm" dir="col"
+      field label=@page.invite.label_label
+        textfield id="inviteLabel" placeholder=@page.invite.label_placeholder grow
+      field label=@page.invite.max_uses_label
+        numfield id="inviteMaxUses" min="0" max="1000" step="1" narrow
+      field label=@page.invite.ttl_label
+        numfield id="inviteTTL" min="0" max="8784" step="1" narrow
+      checkbox id="inviteApproval" @page.invite.approval
+      row gap="sm" wrap
+        button submit @page.invite.mint
+        button kind="ghost" id="inviteCancel" @common.cancel
+    message id="inviteMessage"
