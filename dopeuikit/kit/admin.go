@@ -29,22 +29,31 @@ func AdminTime(ts string) string {
 	return t.Local().Format("2006-01-02 15:04")
 }
 
-// AdminCreateUsers is the body of the /admin/create_users page both apps serve
+// AdminCreateUsers is the body of the /admin/create_users page every app serves
 // over dopecore/adminusers: the bulk-create form, plus (after a submit) the
 // outcome — created credentials shown once, skipped usernames, validation
 // errors. Each app wraps it in its own page chrome.
+//
+// It renders in the kit's default language. An app written in another one says
+// so with AdminCreateUsersIn, the way it names Options.KitStrings for its
+// pages — the two knobs exist for the same reason and neither can stand in for
+// the other, because this is a package function and not a method on the App.
 func AdminCreateUsers(data adminusers.CreateUsersData) []Item {
-	s := kitstrings.Default
+	return AdminCreateUsersIn(kitstrings.Default, data)
+}
+
+// AdminCreateUsersIn is AdminCreateUsers in a named Catalog.
+func AdminCreateUsersIn(s kitstrings.Strings, data adminusers.CreateUsersData) []Item {
 	var main []Item
 	if data.Submitted {
 		if len(data.Created) > 0 {
-			main = append(main, createdSection(data))
+			main = append(main, createdSection(s, data))
 		}
 		if len(data.Skipped) > 0 {
 			main = append(main, Section(Empty(Text(s.Admin.Create.SkippedLead()+strings.Join(data.Skipped, ", ")))))
 		}
 		if len(data.Errors) > 0 {
-			main = append(main, errorsSection(data.Errors))
+			main = append(main, errorsSection(s, data.Errors))
 		}
 		if len(data.Created) == 0 && len(data.Skipped) == 0 && len(data.Errors) == 0 {
 			main = append(main, Empty(Text(s.Admin.Create.Empty())))
@@ -62,8 +71,7 @@ func AdminCreateUsers(data adminusers.CreateUsersData) []Item {
 
 // createdSection is the one-time credentials table plus a copy-paste textarea
 // (data-select-all: dope's pageforms.js selects it on click; inert elsewhere).
-func createdSection(data adminusers.CreateUsersData) *Element {
-	s := kitstrings.Default
+func createdSection(s kitstrings.Strings, data adminusers.CreateUsersData) *Element {
 	rows := []Item{Trow(Hcell(Text(s.Admin.Created.Username())), Hcell(Text(s.Admin.Created.Password())))}
 	for _, u := range data.Created {
 		rows = append(rows, Trow(Cell(Text(u.Username)), Cell(Code(Text(u.Password)))))
@@ -77,10 +85,10 @@ func createdSection(data adminusers.CreateUsersData) *Element {
 	)
 }
 
-func errorsSection(errs []adminusers.RowError) *Element {
+func errorsSection(s kitstrings.Strings, errs []adminusers.RowError) *Element {
 	rows := make([]Item, len(errs))
 	for i, e := range errs {
 		rows[i] = Listrow(Listtitle(Text(e.Username)), Muted(Text(e.Reason)))
 	}
-	return Section(Empty(Text(kitstrings.Default.Admin.Errors.Title())), List(rows...))
+	return Section(Empty(Text(s.Admin.Errors.Title())), List(rows...))
 }
