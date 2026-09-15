@@ -12,13 +12,15 @@ import (
 	"sort"
 )
 
-// defaultLang is the reference: every other language must define exactly its
-// ids, with the same parameters.
-const defaultLang = "ru"
+// fallbackLang is the default language a module gets when its go:generate line
+// does not say otherwise. Russian, because that is what the two apps are
+// written in; a module whose UI is in another one passes -default-lang.
+const fallbackLang = "ru"
 
 func main() {
 	dir := flag.String("dir", "", "catalog and Go output directory, relative to the repo root")
 	ts := flag.String("ts", "", "TypeScript output directory, relative to the repo root")
+	defLang := flag.String("default-lang", fallbackLang, "the module's default language: the catalog every other must agree with, and the one its Default renders in")
 	flag.Parse()
 	if *dir == "" {
 		fatal("-dir is required")
@@ -31,13 +33,15 @@ func main() {
 			fatal("run from the repo root or via `go -C scripts/i18nstringsgen run .`")
 		}
 	}
-	if err := generate(*dir, *ts, true); err != nil {
+	if err := generate(*dir, *ts, *defLang, true); err != nil {
 		fatal(err.Error())
 	}
 }
 
-func generate(dir, ts string, unused bool) error {
-	langs, err := languages(dir)
+// generate writes a module's Catalog. defLang is the reference: every other
+// language must define exactly its ids, with the same parameters.
+func generate(dir, ts, defLang string, unused bool) error {
+	langs, err := languages(dir, defLang)
 	if err != nil {
 		return err
 	}
@@ -49,7 +53,7 @@ func generate(dir, ts string, unused bool) error {
 		}
 		cats = append(cats, c)
 	}
-	ref := cats[0] // languages() puts defaultLang first
+	ref := cats[0] // languages() puts the default language first
 	for _, c := range cats[1:] {
 		if err := c.agrees(ref); err != nil {
 			return fmt.Errorf("%s: %w", dir, err)
@@ -90,7 +94,7 @@ func generate(dir, ts string, unused bool) error {
 }
 
 // languages lists the catalog's language directories, the default one first.
-func languages(dir string) ([]string, error) {
+func languages(dir, defLang string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
@@ -102,13 +106,13 @@ func languages(dir string) ([]string, error) {
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
-		if (out[i] == defaultLang) != (out[j] == defaultLang) {
-			return out[i] == defaultLang
+		if (out[i] == defLang) != (out[j] == defLang) {
+			return out[i] == defLang
 		}
 		return out[i] < out[j]
 	})
-	if len(out) == 0 || out[0] != defaultLang {
-		return nil, fmt.Errorf("%s: no %s/ catalog", dir, defaultLang)
+	if len(out) == 0 || out[0] != defLang {
+		return nil, fmt.Errorf("%s: no %s/ catalog", dir, defLang)
 	}
 	return out, nil
 }

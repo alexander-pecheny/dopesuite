@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -23,7 +24,12 @@ func emitTSPlural(langs []string) []byte {
  * English one/other shape out of one and many. */
 export function plural(lang: Lang, n: number, one: string, few: string, many: string): string {
   const abs = Math.abs(n);
-  if (lang === "ru") {
+`)
+	// The Russian one/few/many rule ships only to a module that has a ru
+	// catalog: to one that has not, `lang === "ru"` is a comparison between
+	// types with no overlap, which is a tsc error rather than dead code.
+	if slices.Contains(langs, "ru") {
+		b.WriteString(`  if (lang === "ru") {
     const rest = abs % 100;
     if (rest >= 11 && rest <= 14) return many;
     const last = abs % 10;
@@ -31,7 +37,9 @@ export function plural(lang: Lang, n: number, one: string, few: string, many: st
     if (last >= 2 && last <= 4) return few;
     return many;
   }
-  return abs === 1 ? one : many;
+`)
+	}
+	b.WriteString(`  return abs === 1 ? one : many;
 }
 `)
 	return []byte(b.String())

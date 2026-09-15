@@ -43,7 +43,7 @@ func copyFile(t *testing.T, from, to string) {
 
 func TestGolden(t *testing.T) {
 	dir, ts := stage(t)
-	if err := generate(dir, ts, false); err != nil {
+	if err := generate(dir, ts, "ru", false); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{
@@ -80,7 +80,7 @@ func TestGolden(t *testing.T) {
 // collides or a param the two languages disagree about only shows up here.
 func TestGeneratedGoCompiles(t *testing.T) {
 	dir, ts := stage(t)
-	if err := generate(dir, ts, false); err != nil {
+	if err := generate(dir, ts, "ru", false); err != nil {
 		t.Fatal(err)
 	}
 	core, err := filepath.Abs("../../dopecore")
@@ -158,7 +158,7 @@ func TestLanguagesMustAgree(t *testing.T) {
 		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if err := generate(dir, ts, false); err == nil {
+		if err := generate(dir, ts, "ru", false); err == nil {
 			t.Errorf("an id set that differs from ru was accepted (extra=%q)", extra)
 		}
 	}
@@ -174,7 +174,7 @@ percent = "100% done"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	err := generate(dir, ts, false)
+	err := generate(dir, ts, "ru", false)
 	if err == nil || !strings.Contains(err.Error(), "board.delete.confirm") {
 		t.Errorf("a renamed parameter was accepted: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestDefaultLanguageIsRequired(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "en"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := generate(root, "", false); err == nil {
+	if err := generate(root, "", "ru", false); err == nil {
 		t.Error("a catalog without ru/ was accepted")
 	}
 }
@@ -196,7 +196,7 @@ func TestUnusedStringsFail(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(module, "page.go"), []byte("package p\n\nvar _ = s.Common.Save()\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	err := generate(dir, ts, true)
+	err := generate(dir, ts, "ru", true)
 	if err == nil {
 		t.Fatal("an unreferenced string was accepted")
 	}
@@ -222,7 +222,7 @@ func TestReferencesFromEveryLanguage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := generate(dir, ts, true); err != nil {
+	if err := generate(dir, ts, "ru", true); err != nil {
 		t.Fatalf("a fully referenced catalog was rejected: %v", err)
 	}
 }
@@ -247,7 +247,7 @@ func TestTailOfALongerPathIsNotAReference(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(module, "page.go"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	err := generate(dir, ts, true)
+	err := generate(dir, ts, "ru", true)
 	if err == nil || !strings.Contains(err.Error(), "common.title.save") {
 		t.Errorf("a tail match passed for common.title.save: %v", err)
 	}
@@ -260,7 +260,7 @@ func TestTestFilesAreNotReferences(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(module, "page_test.go"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	err := generate(dir, ts, true)
+	err := generate(dir, ts, "ru", true)
 	if err == nil || !strings.Contains(err.Error(), "board.delete.title") {
 		t.Errorf("a test-only reference counted: %v", err)
 	}
@@ -268,7 +268,7 @@ func TestTestFilesAreNotReferences(t *testing.T) {
 
 func TestFailedGenerateWritesNothing(t *testing.T) {
 	dir, ts := stage(t)
-	if err := generate(dir, ts, true); err == nil {
+	if err := generate(dir, ts, "ru", true); err == nil {
 		t.Fatal("an unreferenced catalog was accepted")
 	}
 	if _, err := os.Stat(filepath.Join(dir, "types_gen.go")); !os.IsNotExist(err) {
@@ -282,4 +282,94 @@ func TestBadParameterName(t *testing.T) {
 			t.Errorf("%s was accepted as a parameter name", tmpl)
 		}
 	}
+}
+
+// stageEnglishOnly is a module with no ru/ at all — Spliff's shape.
+func stageEnglishOnly(t *testing.T) (dir, ts string) {
+	t.Helper()
+	root := t.TempDir()
+	dir, ts = filepath.Join(root, "i18nstrings"), filepath.Join(root, "ts")
+	if err := os.MkdirAll(filepath.Join(dir, "en"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(ts, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"board.toml", "common.toml"} {
+		copyFile(t, filepath.Join("testdata/catalog/en", name), filepath.Join(dir, "en", name))
+	}
+	return dir, ts
+}
+
+// TestEnglishOnlyModule: -default-lang en is how a module says it has no
+// Russian. Its Catalog is EN, its TypeScript knows only "en", and the Russian
+// one/few/many rule does not ship — to a module without a ru catalog,
+// `lang === "ru"` is a comparison tsc rejects, not dead code.
+func TestEnglishOnlyModule(t *testing.T) {
+	dir, ts := stageEnglishOnly(t)
+	if err := generate(dir, ts, "en", false); err != nil {
+		t.Fatalf("an English-only catalog was rejected: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "ru_gen.go")); !os.IsNotExist(err) {
+		t.Errorf("a Russian catalog was written for a module that has none: %v", err)
+	}
+	goCat := read(t, filepath.Join(dir, "en_gen.go"))
+	if !strings.Contains(goCat, "var EN = Strings{") {
+		t.Errorf("the Go catalog is not EN:\n%s", goCat)
+	}
+	plural := read(t, filepath.Join(ts, "i18nstrings_plural_gen.ts"))
+	if !strings.Contains(plural, `export type Lang = "en";`) {
+		t.Errorf("Lang is not just en:\n%s", plural)
+	}
+	if strings.Contains(plural, `lang === "ru"`) {
+		t.Errorf("the Russian rule shipped to a module with no ru catalog:\n%s", plural)
+	}
+	if !strings.Contains(plural, "return abs === 1 ? one : many;") {
+		t.Errorf("the English one/other rule is missing:\n%s", plural)
+	}
+	// And the same rule at the other end: the generated Go really says "item"
+	// once and "items" twice.
+	if got := runCatalog(t, dir, `fmt.Print(i.EN.Common.Selection.Count(1), "|", i.EN.Common.Selection.Count(2))`); got != "Selected 1 item|Selected 2 items" {
+		t.Errorf("English plurals = %q", got)
+	}
+}
+
+func read(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// runCatalog builds a throwaway module around the generated package and runs
+// one expression against it.
+func runCatalog(t *testing.T, dir, expr string) string {
+	t.Helper()
+	core, err := filepath.Abs("../../dopecore")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Dir(dir)
+	mod := "module proof\n\ngo 1.26\n\nrequire pecheny.me/dopecore v0.0.0\n\nreplace pecheny.me/dopecore => " + core + "\n"
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte(mod), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	main := "package main\n\nimport (\n\t\"fmt\"\n\n\ti \"proof/i18nstrings\"\n)\n\nfunc main() { " + expr + " }\n"
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte(main), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"mod", "tidy"}, {"run", "."}} {
+		cmd := exec.Command("go", args...)
+		cmd.Dir = root
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("go %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+		if args[0] == "run" {
+			return string(out)
+		}
+	}
+	return ""
 }

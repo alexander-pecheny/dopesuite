@@ -78,7 +78,9 @@ Every string a person reads comes from a Catalog, never from the call site
 (root `docs/adr/0006`, terms in root `CONTEXT.md`).
 
 - One TOML file per Surface under `<module>/i18nstrings/<lang>/`, `ru` the
-  default; `common.toml` is the module's shared words. A `[table]` groups keys.
+  default — a module whose UI is in another language says so with
+  `-default-lang` on its `go:generate` line, and then needs no `ru/` at all;
+  `common.toml` is the module's shared words. A `[table]` groups keys.
   Ids are snake_case and name the string's ROLE: `board.delete.confirm`, never
   `board.delete.are_you_sure`. Rewording never renames.
 - Templates are `text/template`, restricted to `{{.name}}` (a string) and
