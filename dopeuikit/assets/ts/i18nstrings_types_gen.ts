@@ -48,6 +48,7 @@ export type Strings = {
     };
     message: {
       codeExpired: () => string;
+      copied: () => string;
       failed: () => string;
       tgMisconfigured: () => string;
       tgUnreachable: () => string;

@@ -32,6 +32,7 @@ submit = "Log in"
 [message]
 tg_misconfigured = "Telegram login is set up wrongly."
 tg_unreachable = "The Telegram login bot is unreachable."
+copied = "copied"
 code_expired = "The code has expired. Start again."
 timed_out = "The wait ran out. Reload the page."
 username_taken = "That username is taken, choose another."

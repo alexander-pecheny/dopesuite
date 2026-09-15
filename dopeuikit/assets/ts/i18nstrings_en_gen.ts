@@ -48,6 +48,7 @@ export const EN: Strings = {
     },
     message: {
       codeExpired: () => "The code has expired. Start again.",
+      copied: () => "copied",
       failed: () => "Something went wrong, try again.",
       tgMisconfigured: () => "Telegram login is set up wrongly.",
       tgUnreachable: () => "The Telegram login bot is unreachable.",

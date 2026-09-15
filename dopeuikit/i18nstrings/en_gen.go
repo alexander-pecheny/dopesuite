@@ -53,6 +53,7 @@ var EN = Strings{
 		},
 		Message: LoginMessageStrings{
 			CodeExpired:     func() string { return "The code has expired. Start again." },
+			Copied:          func() string { return "copied" },
 			Failed:          func() string { return "Something went wrong, try again." },
 			TgMisconfigured: func() string { return "Telegram login is set up wrongly." },
 			TgUnreachable:   func() string { return "The Telegram login bot is unreachable." },

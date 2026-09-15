@@ -130,6 +130,9 @@ function showCode(view: ReturnType<typeof tgStartView>): void {
 // "copied" confirmation (the .copied CSS tooltip).
 function makeCopyable(el: HTMLElement): void {
   el.classList.add("copyable");
+  // The floating confirmation is drawn by CSS from this attribute, because a
+  // stylesheet shared by every app cannot hold a word in one language.
+  el.dataset.copied = S.login.message.copied();
   el.setAttribute("role", "button");
   el.setAttribute("tabindex", "0");
   const copy = async (): Promise<void> => {

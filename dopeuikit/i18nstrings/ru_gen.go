@@ -53,6 +53,7 @@ var RU = Strings{
 		},
 		Message: LoginMessageStrings{
 			CodeExpired:     func() string { return "Код истёк. Начните вход заново." },
+			Copied:          func() string { return "скопировано" },
 			Failed:          func() string { return "Что-то пошло не так, попробуйте снова." },
 			TgMisconfigured: func() string { return "Телеграм-логин настроен неверно." },
 			TgUnreachable:   func() string { return "Бот для телеграм-логина недоступен." },

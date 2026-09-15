@@ -84,6 +84,7 @@ type LoginLinkStrings struct {
 
 type LoginMessageStrings struct {
 	CodeExpired     func() string
+	Copied          func() string
 	Failed          func() string
 	TgMisconfigured func() string
 	TgUnreachable   func() string
@@ -182,6 +183,8 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Login.Link.Submit(), true
 	case "login.message.code_expired":
 		return s.Login.Message.CodeExpired(), true
+	case "login.message.copied":
+		return s.Login.Message.Copied(), true
 	case "login.message.failed":
 		return s.Login.Message.Failed(), true
 	case "login.message.tg_misconfigured":
@@ -241,7 +244,7 @@ func (s Strings) Lookup(id string) (string, bool) {
 // Defines reports whether the Catalog holds the id at all, templated or not.
 func (Strings) Defines(id string) bool {
 	switch id {
-	case "admin.create.empty", "admin.create.skipped_lead", "admin.create.submit", "admin.create.usernames_label", "admin.created.copy_label", "admin.created.hint", "admin.created.password", "admin.created.username", "admin.errors.title", "chrome.crumbs.label", "chrome.sync.error", "chrome.sync.saved", "chrome.sync.saving", "login.code.bot_hint_lead", "login.code.bot_hint_mid", "login.code.link_hint", "login.code.waiting", "login.field.password", "login.field.username", "login.link.cancel", "login.link.hint", "login.link.submit", "login.message.code_expired", "login.message.failed", "login.message.tg_misconfigured", "login.message.tg_unreachable", "login.message.timed_out", "login.message.username_taken", "login.method.hint", "login.method.password", "login.method.telegram", "login.password.hint", "login.password.submit", "login.title", "login.username.hint", "login.username.submit", "menu.account.login", "menu.account.profile", "menu.appearance.contrast", "menu.appearance.contrast_high", "menu.appearance.contrast_regular", "menu.appearance.done", "menu.appearance.theme", "menu.appearance.theme_dark", "menu.appearance.theme_light", "menu.appearance.theme_system", "menu.appearance.title", "menu.jump", "menu.trigger":
+	case "admin.create.empty", "admin.create.skipped_lead", "admin.create.submit", "admin.create.usernames_label", "admin.created.copy_label", "admin.created.hint", "admin.created.password", "admin.created.username", "admin.errors.title", "chrome.crumbs.label", "chrome.sync.error", "chrome.sync.saved", "chrome.sync.saving", "login.code.bot_hint_lead", "login.code.bot_hint_mid", "login.code.link_hint", "login.code.waiting", "login.field.password", "login.field.username", "login.link.cancel", "login.link.hint", "login.link.submit", "login.message.code_expired", "login.message.copied", "login.message.failed", "login.message.tg_misconfigured", "login.message.tg_unreachable", "login.message.timed_out", "login.message.username_taken", "login.method.hint", "login.method.password", "login.method.telegram", "login.password.hint", "login.password.submit", "login.title", "login.username.hint", "login.username.submit", "menu.account.login", "menu.account.profile", "menu.appearance.contrast", "menu.appearance.contrast_high", "menu.appearance.contrast_regular", "menu.appearance.done", "menu.appearance.theme", "menu.appearance.theme_dark", "menu.appearance.theme_light", "menu.appearance.theme_system", "menu.appearance.title", "menu.jump", "menu.trigger":
 		return true
 	}
 	return false
