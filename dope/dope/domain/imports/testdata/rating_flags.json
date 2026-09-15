@@ -1,0 +1,29 @@
+[
+  {
+    "team": {"id": 20, "name": "Бета", "town": {"name": "Тбилиси"}},
+    "current": {"name": "Бета", "town": {"name": "Тбилиси"}},
+    "position": 1,
+    "teamMembers": [{"player": {"id": 200, "name": "Иван", "patronymic": "Иванович", "surname": "Петров"}}],
+    "flags": [
+      {"id": 3, "fullName": "Школьная команда", "shortName": "Школ"},
+      {"id": 13, "fullName": "Европа", "shortName": "Е"}
+    ]
+  },
+  {
+    "team": {"id": 10, "name": "Альфа", "town": {"name": "Ереван"}},
+    "current": {"name": "Альфа"},
+    "position": 2,
+    "teamMembers": [{"player": {"id": 100, "name": "Анна", "surname": "Сидорова"}}],
+    "flags": [
+      {"id": 3, "fullName": "Школьная команда", "shortName": "Школ"},
+      {"id": 3, "fullName": "Школьная команда", "shortName": "Школ"},
+      {"id": 0, "fullName": "Студенческая команда", "shortName": "  "}
+    ]
+  },
+  {
+    "team": {"id": 30, "name": "Гамма", "town": {"name": "Ереван"}},
+    "current": {"name": "Гамма"},
+    "position": 3,
+    "teamMembers": [{"player": {"id": 300, "name": "Пётр", "surname": "Кузнецов"}}]
+  }
+]

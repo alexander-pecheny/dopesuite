@@ -3,8 +3,56 @@ package imports
 import (
 	"dope/dope/storage/store"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 )
+
+// A rating.chgk.info result carries the team's Flags when the import asks for
+// them (includeTeamFlags=1). Every one is kept, in the order the site listed
+// them; a duplicate short name and a blank one are the two shapes the
+// normaliser has to survive.
+func TestRatingResultsCarryTeamFlags(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "rating_flags.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var results []ratingFestResult
+	if err := json.Unmarshal(raw, &results); err != nil {
+		t.Fatalf("decode rating json: %v", err)
+	}
+	teams, err := ratingResultsToFestRoster(results)
+	if err != nil {
+		t.Fatalf("normalize rating results: %v", err)
+	}
+	byName := map[string][]string{}
+	full := map[string]map[string]string{}
+	for _, team := range teams {
+		for _, flag := range team.Flags {
+			byName[team.Name] = append(byName[team.Name], flag.Short)
+			if full[team.Name] == nil {
+				full[team.Name] = map[string]string{}
+			}
+			full[team.Name][flag.Short] = flag.Full
+		}
+	}
+	if got := byName["Бета"]; len(got) != 2 || got[0] != "Школ" || got[1] != "Е" {
+		t.Fatalf("Beta flags = %#v, want both in source order", got)
+	}
+	// The duplicate is dropped; the blank short name falls back to the full one.
+	if got := byName["Альфа"]; len(got) != 2 || got[0] != "Школ" || got[1] != "Студенческая команда" {
+		t.Fatalf("Alpha flags = %#v, want the duplicate dropped and the blank short filled", got)
+	}
+	if got := full["Бета"]["Школ"]; got != "Школьная команда" {
+		t.Fatalf("Beta full name = %q", got)
+	}
+	// A team the site flags with nothing carries no Flags at all.
+	for _, team := range teams {
+		if team.Name == "Гамма" && len(team.Flags) != 0 {
+			t.Fatalf("unflagged team carries %#v", team.Flags)
+		}
+	}
+}
 
 func TestRatingResultsToFestRoster(t *testing.T) {
 	raw := `[
