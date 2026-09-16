@@ -9,6 +9,14 @@ export interface EntryDTO {
   amount: string;
 }
 
+// One row of /api/currencies: the code a form submits, and the English name
+// that says what it is. The set is the newest Rate table's, so it is only ever
+// currencies a Transaction could actually be converted out of.
+export interface CurrencyDTO {
+  code: string;
+  name: string;
+}
+
 export interface PhotoDTO {
   id: number;
   url: string;

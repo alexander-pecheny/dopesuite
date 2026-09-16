@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -265,8 +266,17 @@ func (s *server) checkedCurrency(ctx context.Context, raw string) (string, error
 	return code, nil
 }
 
-// handleCurrencies is the base-currency picker's list: the codes the newest
-// Rate table actually carries.
+// CurrencyDTO is one row of the currency picker: the code the form submits and
+// the name that says what it is. The name comes from money's table, which is
+// ISO 4217; the SET of codes comes from the Rate table, because a currency
+// nobody quotes is one no Transaction could be converted out of.
+type CurrencyDTO struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+// handleCurrencies is the currency picker's list: the codes the newest Rate
+// table actually carries, in code order, each with its English name.
 func (s *server) handleCurrencies(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
 	book, err := s.rates.Book(r.Context())
 	if err != nil {
@@ -276,10 +286,12 @@ func (s *server) handleCurrencies(w http.ResponseWriter, r *http.Request, _ rout
 	if err != nil {
 		return err
 	}
-	if codes == nil {
-		codes = []string{}
+	sort.Strings(codes)
+	out := make([]CurrencyDTO, 0, len(codes))
+	for _, code := range codes {
+		out = append(out, CurrencyDTO{Code: code, Name: money.Name(code)})
 	}
-	return writeJSON(w, codes)
+	return writeJSON(w, out)
 }
 
 // ---- the Group page ----

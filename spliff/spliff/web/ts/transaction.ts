@@ -8,6 +8,7 @@ import {
   errorText,
   get,
   request,
+  type CurrencyDTO,
   type HistoryDTO,
   type MemberDTO,
   type PhotoDTO,
@@ -201,23 +202,25 @@ function prefill(payments: { member_id: number; minor: number }[], shares: { mem
   if (shares.length === 1) payee = shares[0].member_id;
 }
 
-let currencies: string[] | null = null;
+let currencies: CurrencyDTO[] | null = null;
 
 function fillCurrencies(selected: string): void {
   void (async () => {
     if (!currencies) {
       try {
-        currencies = (await get<string[]>("/api/currencies")).sort();
+        currencies = await get<CurrencyDTO[]>("/api/currencies");
       } catch {
         currencies = [];
       }
     }
-    if (!currencies.includes(selected)) currencies.unshift(selected);
+    if (!currencies.some((c) => c.code === selected)) {
+      currencies.unshift({ code: selected, name: "" });
+    }
     clear(currencyField);
-    for (const code of currencies) {
-      const option = el("option", undefined, code);
-      option.value = code;
-      option.selected = code === selected;
+    for (const currency of currencies) {
+      const option = el("option", undefined, currency.code);
+      option.value = currency.code;
+      option.selected = currency.code === selected;
       currencyField.append(option);
     }
     recompute();

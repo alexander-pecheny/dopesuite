@@ -7,6 +7,7 @@ import {
   errorText,
   get,
   request,
+  type CurrencyDTO,
   type GroupDTO,
   type HistoryDTO,
   type InviteDTO,
@@ -161,21 +162,21 @@ async function mintInvite(): Promise<void> {
   }, inviteMessage);
 }
 
-let currencies: string[] | null = null;
+let currencies: CurrencyDTO[] | null = null;
 
 async function fillCurrencies(selected: string): Promise<void> {
   if (!currencies) {
     try {
-      currencies = (await get<string[]>("/api/currencies")).sort();
+      currencies = await get<CurrencyDTO[]>("/api/currencies");
     } catch {
       currencies = [];
     }
   }
   clear(currencyField);
-  for (const code of currencies) {
-    const option = el("option", undefined, code);
-    option.value = code;
-    option.selected = code === selected;
+  for (const currency of currencies) {
+    const option = el("option", undefined, currency.code);
+    option.value = currency.code;
+    option.selected = currency.code === selected;
     currencyField.append(option);
   }
 }

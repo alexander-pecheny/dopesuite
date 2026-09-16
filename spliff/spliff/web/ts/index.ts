@@ -3,7 +3,7 @@
 // alone is a list of holidays.
 
 import S from "./i18nstrings.js";
-import { errorText, get, request, type GroupSummaryDTO } from "./api";
+import { errorText, get, request, type CurrencyDTO, type GroupSummaryDTO } from "./api";
 import { amountNode, badge, byId, clear, el, group as rowGroup, setText, show } from "./dom";
 
 const list = byId("groupList");
@@ -46,21 +46,21 @@ async function create(): Promise<void> {
 // The currencies are the ones the newest Rate table actually carries, asked of
 // the server rather than listed here: a list of our own would go stale the day
 // the source adds one.
-let currencies: string[] | null = null;
+let currencies: CurrencyDTO[] | null = null;
 
 async function fillCurrencies(): Promise<void> {
   if (!currencies) {
     try {
-      currencies = (await get<string[]>("/api/currencies")).sort();
+      currencies = await get<CurrencyDTO[]>("/api/currencies");
     } catch {
       currencies = [];
     }
   }
   clear(currencyField);
-  for (const code of currencies) {
-    const option = el("option", undefined, code);
-    option.value = code;
-    if (code === "EUR") option.selected = true;
+  for (const currency of currencies) {
+    const option = el("option", undefined, currency.code);
+    option.value = currency.code;
+    if (currency.code === "EUR") option.selected = true;
     currencyField.append(option);
   }
 }

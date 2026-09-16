@@ -4,9 +4,11 @@
 // ends up owing, and the whole point of the Debt graph is that two people
 // reading it see the same numbers.
 //
-// The exponent table lives in code rather than the database because it is not
+// The currency table lives in code rather than the database because it is not
 // data anybody edits: it is ISO 4217, it changes once a decade, and a rate
-// table that arrives without it would leave every amount unreadable.
+// table that arrives without it would leave every amount unreadable. It is in
+// currencies.go, and it carries the English name beside the exponent — the
+// picker needs to say what a code MEANS, and that is the same fact.
 package money
 
 import (
@@ -31,23 +33,13 @@ var ErrBadAmount = errors.New("money: not an amount in this currency")
 // also means the rate tables do not carry it, so nothing could be converted.
 var ErrUnknownCurrency = errors.New("money: unknown currency")
 
-// exponents holds every ISO 4217 code whose exponent is NOT 2. Everything else
-// — the overwhelming majority, and every code a rate table hands us — is two
-// decimal places, so listing the exceptions keeps the table honest and short.
-var exponents = map[string]int{
-	// No minor unit at all.
-	"BIF": 0, "CLP": 0, "DJF": 0, "GNF": 0, "ISK": 0, "JPY": 0, "KMF": 0,
-	"KRW": 0, "PYG": 0, "RWF": 0, "UGX": 0, "UYI": 0, "VND": 0, "VUV": 0,
-	"XAF": 0, "XOF": 0, "XPF": 0,
-	// Three minor digits.
-	"BHD": 3, "IQD": 3, "JOD": 3, "KWD": 3, "LYD": 3, "OMR": 3, "TND": 3,
-}
-
 // Exponent is how many minor digits a currency has: 0 for JPY, 3 for KWD and
-// its five siblings, 2 for everything else.
+// its five siblings, 2 for everything else — including a code the table does
+// not carry, which is what a currency added to ISO 4217 after this table was
+// written will be.
 func Exponent(currency string) int {
-	if e, ok := exponents[Normalise(currency)]; ok {
-		return e
+	if c, ok := Lookup(currency); ok {
+		return c.Exponent
 	}
 	return 2
 }
