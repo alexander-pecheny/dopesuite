@@ -13,7 +13,7 @@ page title=@page.transaction.title kind="wide" scripts="dist/transaction.js"
         field label=@page.transaction.day grow
           textfield id="day" required grow
         field label=@page.transaction.currency grow
-          suggestfield id="currency" maxlength="3" caps grow
+          suggestfield id="currency" caps grow
           hint id="currencyError" kind="danger" hidden
         field label=@page.transaction.total grow
           textfield id="total" inputmode="decimal" placeholder="0.00" required grow

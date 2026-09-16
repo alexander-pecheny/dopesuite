@@ -12,7 +12,7 @@ page title=@page.index.title kind="wide" scripts="dist/index.js"
       field label=@page.index.name_label
         textfield id="groupName" placeholder=@page.index.name_placeholder required autofocus grow
       field label=@page.index.currency_label
-        suggestfield id="groupCurrency" name="currency" maxlength="3" caps grow
+        suggestfield id="groupCurrency" name="currency" caps grow
         hint id="groupCurrencyError" kind="danger" hidden
       row gap="sm" wrap
         button kind="primary" submit @page.index.create_submit

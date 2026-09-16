@@ -82,10 +82,31 @@ export function autocomplete(
     rows[active].scrollIntoView({ block: "nearest" });
   }
 
+  // A row is taken on pointerdown, which is before the click that would follow
+  // it — and by then the row is gone, so that click lands on whatever the
+  // popover was covering. Under the currency field that is the next input;
+  // under some other field it could be a button. So the pick swallows the one
+  // click it caused. The window is short enough that a second, deliberate click
+  // cannot fall inside it.
+  function swallowGhostClick(): void {
+    const stop = (event: Event): void => {
+      event.preventDefault();
+      event.stopPropagation();
+      done();
+    };
+    const done = (): void => {
+      clearTimeout(timer);
+      document.removeEventListener("click", stop, true);
+    };
+    const timer = setTimeout(done, 400);
+    document.addEventListener("click", stop, true);
+  }
+
   function take(choice: Choice): void {
     inp.value = choice.value;
     inp.dispatchEvent(new Event("input", { bubbles: true }));
     dismiss();
+    swallowGhostClick();
     if (onPick) onPick(choice);
   }
 

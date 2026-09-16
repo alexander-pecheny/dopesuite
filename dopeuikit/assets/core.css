@@ -1948,6 +1948,13 @@ input[type="radio"]:focus-visible {
    field, because moving it would blur the field and take the popup down. */
 .suggest-pop .menu-item[aria-selected="true"] { background: var(--hover-bg); }
 
+/* A row whose label is an IDENTIFIER — a currency code — wears the mono face.
+   Not decoration: three proportional letters are three different widths, so
+   without it the names beside them start wherever the last glyph happened to
+   end instead of lining up into a column. Same reason .menu-item gives the
+   emoji a column of its own. */
+.suggest-pop .menu-item > strong { font-family: var(--font-mono); }
+
 /* The second half of a row: what the code MEANS, after the code itself. */
 .suggest-hint { color: var(--muted); font-size: var(--text-sm); margin-left: var(--space-2); }
 
