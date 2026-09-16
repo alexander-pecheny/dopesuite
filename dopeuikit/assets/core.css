@@ -1530,11 +1530,22 @@ input[type="radio"]:focus-visible {
   --action-border: transparent;
   --action-disabled-border: transparent;
   /* lifted clear of --structure and --paper: with no outline the fill is the
-     only thing that makes a control a control. The field stays recessed to
-     --structure, which is the split light deliberately does not make. */
+     only thing that makes a control a control.
+
+     The field shares that fill, exactly as light does. Dark used to split them
+     — --field-bg named --structure, "recessed" — and the split could not be
+     expressed on this ramp: --structure IS the chrome. .host, .host-top,
+     .match-main and .sheet-frame all paint it, and xy's --canvas names it too,
+     so a field on any sheet page was the frame's own colour with a transparent
+     outline over it. xy's login page had an invisible password box for as long
+     as the theme existed. Between yin-9 (--paper) and yin-8 (--structure) the
+     ramp offers nothing to move the field to, so the direction that was left is
+     the one light already takes: shape and typography tell a field from a
+     button, and the fill only has to say "control". High contrast still recesses
+     it to --page, where the brightened ink wants the darkest ground. */
   --action-bg: oklch(from var(--uchu-yin-7) l var(--tint-c) var(--tint-h));
   --action-hover-bg: oklch(from var(--uchu-yin-6) l var(--tint-c) var(--tint-h));
-  --field-bg: var(--structure);
+  --field-bg: var(--action-bg);
   --action-disabled-bg: var(--paper);
 
   /* text — off-white high-emphasis, dimmer for muted (avoids halation). Read up

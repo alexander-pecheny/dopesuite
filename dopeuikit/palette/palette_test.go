@@ -655,3 +655,77 @@ func TestHighContrastStretchesTheLadder(t *testing.T) {
 		})
 	}
 }
+
+// ── a field has to look like a field ──────────────────────────────────────
+
+// ruleBackgroundRe reads the role a rule paints itself with: `background` or
+// `background-color`, naming one custom property.
+var ruleBackgroundRe = regexp.MustCompile(`background(?:-color)?\s*:\s*var\(\s*--([a-z0-9-]+)\s*\)`)
+
+// groundOf is the role a kit rule paints, read out of core.css rather than
+// restated here — so moving a surface moves the test with it. A selector may
+// open several rules (.sheet-frame sets its scroll-fade vars in one and its
+// fill in another), so every one of them is looked at.
+func groundOf(t *testing.T, css, selector string) string {
+	t.Helper()
+	for at := 0; ; {
+		i := strings.Index(css[at:], "\n"+selector+" {")
+		if i < 0 {
+			break
+		}
+		at += i + 1
+		if m := ruleBackgroundRe.FindStringSubmatch(block(t, css[at-1:], selector)); m != nil {
+			return m[1]
+		}
+	}
+	t.Fatalf("%s paints no background from a token", selector)
+	return ""
+}
+
+// TestFieldReadsOnEveryGroundItSitsOn is the invariant the dark theme broke for
+// as long as it existed: --field-bg named --structure, and --structure is what
+// .sheet-frame, .host, .host-top and .match-main all paint. With the outlines
+// off in the regular themes, the fill IS the field — so a field on a sheet page
+// was the page's own colour, and xy's login page had a password box nobody could
+// see (spliff's Transaction editor showed the same thing on three fields).
+//
+// The grounds are read out of core.css: the sheet page's scrolling frame, the
+// card a list row is, and the backdrop. A field sits on all three.
+//
+// Two ways to be visible, and high contrast uses the second one deliberately:
+// the fill differs from the ground, or a real outline separates them. Light high
+// contrast keeps the field paper-white ON its paper card and lets --border carry
+// it, which is the one mode where an outline earns its keep.
+func TestFieldReadsOnEveryGroundItSitsOn(t *testing.T) {
+	const minGap = 0.03
+	css := core(t)
+	grounds := []string{
+		groundOf(t, css, ".sheet-frame"), // the sheet page's frame
+		groundOf(t, css, ".list-row"),    // a card in a list
+		"page",                           // the backdrop
+	}
+	for _, th := range themes {
+		t.Run(th.name, func(t *testing.T) {
+			tokens := tokensFor(t, css, th.selector)
+			field, derived, ok := resolve(tokens, "field-bg")
+			if !ok || derived {
+				t.Fatal("--field-bg does not resolve to an opaque colour")
+			}
+			outline, _, hasOutline := resolve(tokens, "border")
+			for _, ground := range grounds {
+				bg, d, ok := resolve(tokens, ground)
+				if !ok || d {
+					t.Fatalf("--%s does not resolve to an opaque colour", ground)
+				}
+				if math.Abs(field.L-bg.L) >= minGap {
+					continue
+				}
+				if hasOutline && Contrast(outline, bg) >= 3 {
+					continue // separated by its outline instead
+				}
+				t.Errorf("--field-bg (L %.3f) sits on --%s (L %.3f) with neither a ΔL %.2f fill difference nor an outline — the field is invisible there",
+					field.L, ground, bg.L, minGap)
+			}
+		})
+	}
+}
