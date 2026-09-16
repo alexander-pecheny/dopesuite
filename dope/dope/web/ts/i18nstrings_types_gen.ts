@@ -314,6 +314,7 @@ export type Strings = {
       individualStats: () => string;
       reseed: () => string;
       roster: () => string;
+      suggest: () => string;
       venues: () => string;
       venuesHost: () => string;
     };

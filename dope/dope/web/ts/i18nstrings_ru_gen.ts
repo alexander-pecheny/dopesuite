@@ -315,6 +315,7 @@ export const RU: Strings = {
       individualStats: () => "Статистика личной СИ",
       reseed: () => "Пересев",
       roster: () => "Составы",
+      suggest: () => "Поле с подсказками",
       venues: () => "Площадки",
       venuesHost: () => "Площадки, ведущий",
     },

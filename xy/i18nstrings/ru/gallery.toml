@@ -59,6 +59,9 @@ title = "Поля"
 plain_placeholder = "Обычное поле"
 # The blank default option of the demo select.
 select_option = "Выбор"
+# Placeholder of the demo suggestfield — the filtered dropdown a list too long
+# for a native <select> goes in. Its choices are the town list.
+suggest_placeholder = "Город — начните печатать"
 
 [segment]
 # Title of the segmented-control section.

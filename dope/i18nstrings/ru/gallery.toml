@@ -31,6 +31,9 @@ venues_host = "Площадки, ведущий"
 chips = "Значки, суммы, карточки"
 # The section drawing the fest roster table.
 roster = "Составы"
+# The section drawing the kit's suggestfield — the filtered dropdown a list too
+# long for a native <select> goes in.
+suggest = "Поле с подсказками"
 
 [ek]
 # The <title> of the ЭК game page (static/ek.html), host and spectator alike.

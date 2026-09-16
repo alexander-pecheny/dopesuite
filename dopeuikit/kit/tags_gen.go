@@ -127,6 +127,10 @@ func Textfield(items ...Item) *Element {
 	return base.New("textfield", items...)
 }
 
+func Suggestfield(items ...Item) *Element {
+	return base.New("suggestfield", items...)
+}
+
 func Password(items ...Item) *Element {
 	return base.New("password", items...)
 }
@@ -383,6 +387,10 @@ func Readonly() Attr {
 
 func Disabled() Attr {
 	return Attr{Name: "disabled", Bare: true}
+}
+
+func Caps() Attr {
+	return Attr{Name: "caps", Bare: true}
 }
 
 func Accept(v string) Attr {

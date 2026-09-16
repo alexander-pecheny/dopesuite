@@ -335,6 +335,7 @@ var RU = Strings{
 			IndividualStats: func() string { return "Статистика личной СИ" },
 			Reseed:          func() string { return "Пересев" },
 			Roster:          func() string { return "Составы" },
+			Suggest:         func() string { return "Поле с подсказками" },
 			Venues:          func() string { return "Площадки" },
 			VenuesHost:      func() string { return "Площадки, ведущий" },
 		},

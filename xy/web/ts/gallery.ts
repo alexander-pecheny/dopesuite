@@ -8,6 +8,8 @@
 // design-review skill), and here again to judge a change to the skin.
 import { xyApp } from "./app.js";
 import { icon } from "./icons_gen.js";
+import { autocomplete } from "./kit/suggest.js";
+import { townChoices } from "./suggest.js";
 import S from "./i18nstrings.js";
 
 const { el, byId } = xyApp;
@@ -43,6 +45,21 @@ function row(cls: string, ...kids: HTMLElement[]): HTMLElement {
 function seg(...words: string[]): HTMLElement {
   return el("div", { class: "seg" }, ...words.map((w, i) =>
     el("button", { class: "seg-btn" + (i === 0 ? " active" : ""), type: "button", text: w })));
+}
+
+// The suggestfield primitive: an input in a .suggest-anchor with the kit's
+// filtered dropdown bound to it. It is what a list goes in when a native
+// <select> cannot hold it — on a phone that picker cannot be typed into, so
+// anything past a dozen rows is a wheel to spin. Focus it to see the popover;
+// the choices here are the real town list.
+function suggestField(): HTMLElement {
+  const input = el("input", {
+    class: "input", type: "text", autocomplete: "off", spellcheck: "false",
+    placeholder: S.gallery.fields.suggestPlaceholder(),
+  }) as HTMLInputElement;
+  const anchor = el("span", { class: "suggest-anchor u-col" }, input);
+  autocomplete(input, townChoices);
+  return anchor;
 }
 
 // The layout utilities are the thing most often re-invented, so they lead — and
@@ -82,7 +99,8 @@ function build(): void {
 
     section(S.gallery.fields.title(), "", el("div", { class: "u-col u-gap-sm" },
       el("input", { class: "input", type: "text", placeholder: S.gallery.fields.plainPlaceholder() }),
-      el("select", { class: "input" }, el("option", { value: "", text: S.gallery.fields.selectOption() })))),
+      el("select", { class: "input" }, el("option", { value: "", text: S.gallery.fields.selectOption() })),
+      suggestField())),
 
     section(S.gallery.segment.title(), S.gallery.segment.note(), seg(S.gallery.segment.all(), S.gallery.segment.any(), S.gallery.segment.none())),
 

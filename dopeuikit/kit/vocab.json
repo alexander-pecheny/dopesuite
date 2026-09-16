@@ -501,6 +501,51 @@
       "children": "none"
     },
     {
+      "name": "suggestfield",
+      "props": [
+        {
+          "name": "id",
+          "required": true
+        },
+        {
+          "name": "name"
+        },
+        {
+          "name": "placeholder"
+        },
+        {
+          "name": "value"
+        },
+        {
+          "name": "maxlength"
+        },
+        {
+          "name": "inputmode"
+        },
+        {
+          "name": "caps",
+          "kind": "bare"
+        },
+        {
+          "name": "required",
+          "kind": "bare"
+        },
+        {
+          "name": "autofocus",
+          "kind": "bare"
+        },
+        {
+          "name": "readonly",
+          "kind": "bare"
+        },
+        {
+          "name": "disabled",
+          "kind": "bare"
+        }
+      ],
+      "children": "none"
+    },
+    {
       "name": "password",
       "props": [
         {

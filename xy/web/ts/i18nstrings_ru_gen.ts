@@ -1349,6 +1349,7 @@ ${usage}
     fields: {
       plainPlaceholder: () => "Обычное поле",
       selectOption: () => "Выбор",
+      suggestPlaceholder: () => "Город — начните печатать",
       title: () => "Поля",
     },
     labels: {

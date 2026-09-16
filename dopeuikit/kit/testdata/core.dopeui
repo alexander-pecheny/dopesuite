@@ -13,6 +13,8 @@ page title="Core catalog" kind="full"
       datalist id="dl"
         option value="a" "A"
         option value="b" selected "B"
+      field label="Валюта"
+        suggestfield id="cur" name="cur" placeholder="EUR" maxlength="3" caps grow
       checkbox id="agree" checked " Согласен"
       radio name="kind" value="od" checked " ОД"
       radio name="kind" value="ek" " ЭК"

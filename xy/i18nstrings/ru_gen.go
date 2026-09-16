@@ -1711,9 +1711,10 @@ var RU = Strings{
 			Title: func() string { return "Лента" },
 		},
 		Fields: GalleryFieldsStrings{
-			PlainPlaceholder: func() string { return "Обычное поле" },
-			SelectOption:     func() string { return "Выбор" },
-			Title:            func() string { return "Поля" },
+			PlainPlaceholder:   func() string { return "Обычное поле" },
+			SelectOption:       func() string { return "Выбор" },
+			SuggestPlaceholder: func() string { return "Город — начните печатать" },
+			Title:              func() string { return "Поля" },
 		},
 		Labels: GalleryLabelsStrings{
 			Long:     func() string { return "длинная метка на две строки" },

@@ -48,6 +48,7 @@ var coreExpanders = map[string]ExpandFunc{
 	"textfield": func(c *ExpandCtx, p *Element) []Node {
 		return one(Input(c, "text", p, "name", "placeholder", "autocomplete", "spellcheck", "autocapitalize", "autocorrect", "value", "maxlength", "minlength", "inputmode", "pattern", "list"))
 	},
+	"suggestfield": expandSuggestfield,
 	"password": func(c *ExpandCtx, p *Element) []Node {
 		return one(Input(c, "password", p, "name", "placeholder", "autocomplete", "spellcheck", "autocapitalize", "autocorrect", "value", "maxlength", "minlength", "inputmode", "pattern"))
 	},
@@ -321,6 +322,33 @@ func expandButton(c *ExpandCtx, p *Element) []Node {
 	attrs = append(attrs, CopyFlags(p, "formnovalidate", "disabled")...)
 	attrs = append(attrs, MetaAttrs(p)...)
 	return one(&Element{Tag: "button", Attrs: attrs, Inline: withIcon(p, c.Items(p.Inline))})
+}
+
+// A suggestfield is a text field with the kit's filtered dropdown under it, and
+// the answer to every list a native <select> cannot hold: on a phone that
+// picker cannot be typed into, so 160 currency codes are a wheel to spin rather
+// than three letters to type.
+//
+// The markup is the anchor the popup is appended to, plus the input the page's
+// script binds by id — which is why the id is required here and nowhere else in
+// the vocabulary. The browser's own helpers are all turned off: the only list
+// that belongs under this field is the one the script draws, and an
+// autocomplete history or a spell-check squiggle over a currency code is noise
+// on top of it. `caps` opens the phone keyboard in capitals, for a field whose
+// values are codes.
+func expandSuggestfield(c *ExpandCtx, p *Element) []Node {
+	attrs := []Attr{ClassAttr("input")}
+	attrs = append(attrs, IDAttr(p)...)
+	attrs = append(attrs, At("type", "text"), At("autocomplete", "off"), At("spellcheck", "false"), At("autocorrect", "off"))
+	if Flag(p, "caps") {
+		attrs = append(attrs, At("autocapitalize", "characters"))
+	}
+	attrs = append(attrs, CopyProps(p, "name", "placeholder", "value", "maxlength", "inputmode")...)
+	attrs = append(attrs, CopyFlags(p, "required", "autofocus", "readonly", "disabled")...)
+	attrs = append(attrs, MetaAttrs(p)...)
+	// u-col, not a class of its own: the anchor's only layout job is to let the
+	// input fill the width the field gives it.
+	return one(El("span", []Attr{ClassAttr(GrowClasses([]string{"suggest-anchor", "u-col"}, p)...)}, El("input", attrs)))
 }
 
 func expandField(c *ExpandCtx, p *Element) []Node {

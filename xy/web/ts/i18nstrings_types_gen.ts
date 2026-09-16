@@ -1316,6 +1316,7 @@ export type Strings = {
     fields: {
       plainPlaceholder: () => string;
       selectOption: () => string;
+      suggestPlaceholder: () => string;
       title: () => string;
     };
     labels: {

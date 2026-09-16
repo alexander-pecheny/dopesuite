@@ -13,6 +13,7 @@ import {buildEKStatsTable, buildIndividualStatsTable} from "./ek-stats.js";
 import type {EKPlayerStatsRow, IndividualStatsRow} from "./ek-stats.js";
 import {markNameOverflow} from "./widgets.js";
 import { buildFestGrid, buildReseedStagePanel } from "./fest-grid.js";
+import { autocomplete } from "../../../../dopeuikit/assets/ts/suggest.js";
 import type { FestGridMatch, FestGridStage } from "./fest-grid.js";
 import S from "./i18nstrings.js";
 
@@ -143,6 +144,35 @@ function chips(): HTMLElement {
   return card;
 }
 
+// The suggestfield primitive: an input in a .suggest-anchor with the kit's
+// filtered dropdown bound to it — where a list goes when a native <select>
+// cannot hold it, because that picker cannot be typed into on a phone. Focus
+// the field to see the popover.
+const SUGGEST_TOWNS = [
+  {value: "Тбилиси", label: "Тбилиси", hint: "Грузия"},
+  {value: "Ереван", label: "Ереван", hint: "Армения"},
+  {value: "Белград", label: "Белград", hint: "Сербия"},
+  {value: "Алматы", label: "Алматы", hint: "Казахстан"},
+  {value: "Стамбул", label: "Стамбул", hint: "Турция"},
+];
+
+function suggestField(): HTMLElement {
+  const input = document.createElement("input");
+  input.className = "input";
+  input.type = "text";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.placeholder = "Город — начните печатать";
+  const anchor = document.createElement("span");
+  anchor.className = "suggest-anchor u-col";
+  anchor.append(input);
+  autocomplete(input, (q) => {
+    const needle = q.trim().toLowerCase();
+    return SUGGEST_TOWNS.filter((c) => c.label.toLowerCase().startsWith(needle));
+  });
+  return anchor;
+}
+
 function section(title: string, host: string, node: HTMLElement): HTMLElement {
   const wrap = document.createElement("section");
   wrap.className = "gallery-section";
@@ -172,6 +202,7 @@ function render(root: HTMLElement): void {
     section(S.gallery.section.venuesHost(), "table-host", buildVenuesTable(venues, {editable: true, onTitleChange: () => {}})),
     section(S.gallery.section.roster(), "table-host fits-frame", buildRosterTable(roster)),
     section(S.gallery.section.chips(), "fits-frame", chips()),
+    section(S.gallery.section.suggest(), "fits-frame", suggestField()),
   );
   requestAnimationFrame(() => markNameOverflow(root, {
     cellSelector: ".results-team",
