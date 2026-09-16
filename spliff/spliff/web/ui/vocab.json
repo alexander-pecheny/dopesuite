@@ -9,7 +9,8 @@
         "group-feed",
         "group-members",
         "group-invites",
-        "transaction-body",
+        "transaction-payers",
+        "transaction-shares",
         "transaction-history",
         "transaction-photos",
         "join-body"

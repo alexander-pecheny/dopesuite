@@ -36,6 +36,37 @@ export interface FormState {
   me: number;
   /** The Member a settlement hands the money to. */
   payee: number;
+  /**
+   * The one Member who handed the whole of it over, in the modes whose shape
+   * IS one payer. `paid` is ignored there: a picker cannot half-fill a field,
+   * so there is nothing to reconcile.
+   */
+  payer: number;
+}
+
+/**
+ * singlePayer says whether "Who paid" is a picker rather than a column of
+ * amount fields. Two modes are one person handing the whole amount over —
+ * "A paid for B" and settling up — and saying so is the form's business, which
+ * is why it lives here beside the mode and not in the page.
+ *
+ * "I paid, claim your part" is deliberately NOT one of them: it is used on a
+ * bill somebody else entered, which may already carry two Payments, and a
+ * picker would silently rewrite them.
+ */
+export function singlePayer(mode: Mode): boolean {
+  return mode === "simple" || mode === "settlement";
+}
+
+/**
+ * paidLeft is what the total still has no payer for — negative when the
+ * payments overshoot it. The form's payments line is this number in words.
+ */
+export function paidLeft(state: FormState): number {
+  const paid = paymentsOf(state);
+  let sum = 0;
+  for (const id of state.members) sum += paid.get(id) ?? 0;
+  return state.totalMinor - sum;
 }
 
 /**
@@ -44,12 +75,24 @@ export interface FormState {
  * then everybody else in split order.
  */
 export function payerOrder(state: FormState): number[] {
-  const payers = state.members.filter((id) => (state.paid.get(id) ?? 0) > 0);
+  const paid = paymentsOf(state);
+  const payers = state.members.filter((id) => (paid.get(id) ?? 0) > 0);
   return payers.sort((a, b) => {
-    const diff = (state.paid.get(b) ?? 0) - (state.paid.get(a) ?? 0);
+    const diff = (paid.get(b) ?? 0) - (paid.get(a) ?? 0);
     if (diff !== 0) return diff;
     return state.members.indexOf(a) - state.members.indexOf(b);
   });
+}
+
+/**
+ * paymentsOf is what the form says was handed over, whichever way it asked:
+ * the picker's one Member for the whole total, or the amounts typed against
+ * each. Everything that reasons about Payments reads it, so the two shapes can
+ * never disagree about who paid what.
+ */
+function paymentsOf(state: FormState): Map<number, number> {
+  if (!singlePayer(state.mode)) return state.paid;
+  return state.payer ? new Map([[state.payer, state.totalMinor]]) : new Map();
 }
 
 /**
@@ -181,8 +224,9 @@ export interface DraftResult {
  */
 export function buildDraft(state: FormState): DraftResult {
   const payments: Entry[] = [];
+  const paid = paymentsOf(state);
   for (const id of state.members) {
-    const minor = state.paid.get(id) ?? 0;
+    const minor = paid.get(id) ?? 0;
     if (minor > 0) payments.push({ member_id: id, minor });
   }
   if (payments.length === 0) return { error: "no_payer" };

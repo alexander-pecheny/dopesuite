@@ -198,7 +198,6 @@ var EN = Strings{
 			Unnamed:       func() string { return "A group on Spliff" },
 		},
 		Transaction: PageTransactionStrings{
-			ColFor:                 func() string { return "For them" },
 			ColPaid:                func() string { return "Paid" },
 			ColPercent:             func() string { return "Percent" },
 			ColShare:               func() string { return "Share" },
@@ -209,6 +208,7 @@ var EN = Strings{
 			Delete:                 func() string { return "Delete" },
 			Description:            func() string { return "What for" },
 			DescriptionPlaceholder: func() string { return "Dinner at Shavi Lomi" },
+			ForWhom:                func() string { return "For whom" },
 			FullyClaimed:           func() string { return "Every part of it is claimed." },
 			HintClaim:              func() string { return "You paid and set your own share; the rest waits for the others to claim it." },
 			HintEven: func() string {
@@ -236,6 +236,9 @@ var EN = Strings{
 			NeedSharesFit:     func() string { return "The shares add up to more than the total." },
 			NewTitle:          func() string { return "New transaction" },
 			NoPhotos:          func() string { return "No photos yet." },
+			PaidDone:          func() string { return "The payments add up to the total." },
+			PaidLeft:          func(amount string) string { return fmt.Sprintf("%s of the total has no payer yet", amount) },
+			PaidOver:          func(amount string) string { return fmt.Sprintf("The payments are %s more than the total", amount) },
 			PhotoAlt:          func() string { return "Photo attached to this transaction" },
 			Photos:            func() string { return "Photos" },
 			PickPhoto:         func() string { return "Pick a picture first." },
@@ -246,6 +249,7 @@ var EN = Strings{
 			Total:             func() string { return "Total" },
 			UnclaimedNote:     func(amount string) string { return fmt.Sprintf("%s still unclaimed", amount) },
 			Upload:            func() string { return "Attach a photo" },
+			WhoPaid:           func() string { return "Who paid" },
 		},
 	},
 	Profile: ProfileStrings{

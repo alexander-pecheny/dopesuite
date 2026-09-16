@@ -3,7 +3,9 @@ import {
   allocateByPercent,
   allocateEven,
   buildDraft,
+  paidLeft,
   payerOrder,
+  singlePayer,
   unclaimed,
 } from "./dist/txform.js";
 
@@ -23,6 +25,7 @@ function state(over) {
     exact: new Map(),
     me: 1,
     payee: 0,
+    payer: 0,
     ...over,
   };
 }
@@ -75,13 +78,42 @@ Deno.test("a percentage split past 100 is refused", () => {
   assertEquals(allocateByPercent(1000, [1], pct([1, "-1"]), []), null);
 });
 
+// "A paid for B" and settling up ARE one person handing the whole amount over,
+// so the form picks the payer rather than asking for an amount — and the model
+// reads the pick, not the (empty, unaskable) amount fields.
 Deno.test("simple and settlement put the whole of it on one person", () => {
   for (const mode of ["simple", "settlement"]) {
-    const result = buildDraft(state({mode, payee: 2}));
+    const result = buildDraft(state({mode, payer: 1, payee: 2, paid: new Map()}));
     assertEquals(result.error, undefined);
     assertEquals(result.draft.payments, [{member_id: 1, minor: 1000}]);
     assertEquals(result.draft.shares, [{member_id: 2, minor: 1000}]);
   }
+});
+
+// The picker cannot half-fill a field, so a single-payer mode never reports a
+// mismatch: it is either picked, for the whole of it, or not picked at all.
+Deno.test("a single-payer mode ignores what was typed into the amount fields", () => {
+  const typed = new Map([[2, 400], [3, 600]]);
+  const result = buildDraft(state({mode: "simple", payer: 1, payee: 2, paid: typed}));
+  assertEquals(result.draft.payments, [{member_id: 1, minor: 1000}]);
+  // And what was typed is still there, for the mode that asks for it again.
+  assertEquals(typed.get(3), 600);
+});
+
+Deno.test("singlePayer names the two modes whose shape is one payer", () => {
+  assertEquals(["simple", "settlement"].map(singlePayer), [true, true]);
+  assertEquals(["even", "percent", "exact", "claim"].map(singlePayer), [false, false, false, false]);
+});
+
+// The line under "Who paid" is this number in words: what the total still has
+// no payer for, negative when the payments overshoot it.
+Deno.test("paidLeft is what the total still has no payer for", () => {
+  assertEquals(paidLeft(state({paid: new Map([[1, 1000]])})), 0);
+  assertEquals(paidLeft(state({paid: new Map([[1, 400]])})), 600);
+  assertEquals(paidLeft(state({paid: new Map([[1, 400], [2, 900]])})), -300);
+  // A picker is all-or-nothing.
+  assertEquals(paidLeft(state({mode: "simple", payer: 0, paid: new Map()})), 1000);
+  assertEquals(paidLeft(state({mode: "simple", payer: 2, paid: new Map()})), 0);
 });
 
 Deno.test("claim your part sets only your own share and leaves the rest unclaimed", () => {
@@ -111,7 +143,8 @@ Deno.test("every mode refuses what the server would refuse", () => {
   assertEquals(buildDraft(state({paid: new Map()})).error, "no_payer");
   assertEquals(buildDraft(state({paid: new Map([[1, 900]])})).error, "payments_mismatch");
   assertEquals(buildDraft(state({mode: "even", chosen: []})).error, "no_members");
-  assertEquals(buildDraft(state({mode: "settlement", payee: 0})).error, "no_payee");
+  assertEquals(buildDraft(state({mode: "settlement", payer: 0})).error, "no_payer");
+  assertEquals(buildDraft(state({mode: "settlement", payer: 1, payee: 0})).error, "no_payee");
   assertEquals(
     buildDraft(state({mode: "exact", exact: new Map([[1, 700], [2, 700]])})).error,
     "shares_overdraw",

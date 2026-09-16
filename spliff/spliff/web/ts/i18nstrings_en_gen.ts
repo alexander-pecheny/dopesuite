@@ -181,7 +181,6 @@ export const EN: Strings = {
       unnamed: () => "A group on Spliff",
     },
     transaction: {
-      colFor: () => "For them",
       colPaid: () => "Paid",
       colPercent: () => "Percent",
       colShare: () => "Share",
@@ -192,6 +191,7 @@ export const EN: Strings = {
       delete: () => "Delete",
       description: () => "What for",
       descriptionPlaceholder: () => "Dinner at Shavi Lomi",
+      forWhom: () => "For whom",
       fullyClaimed: () => "Every part of it is claimed.",
       hintClaim: () => "You paid and set your own share; the rest waits for the others to claim it.",
       hintEven: () => "Everybody ticked splits it equally. The odd minor units go to whoever paid most.",
@@ -215,6 +215,9 @@ export const EN: Strings = {
       needSharesFit: () => "The shares add up to more than the total.",
       newTitle: () => "New transaction",
       noPhotos: () => "No photos yet.",
+      paidDone: () => "The payments add up to the total.",
+      paidLeft: (amount: string) => `${amount} of the total has no payer yet`,
+      paidOver: (amount: string) => `The payments are ${amount} more than the total`,
       photoAlt: () => "Photo attached to this transaction",
       photos: () => "Photos",
       pickPhoto: () => "Pick a picture first.",
@@ -225,6 +228,7 @@ export const EN: Strings = {
       total: () => "Total",
       unclaimedNote: (amount: string) => `${amount} still unclaimed`,
       upload: () => "Attach a photo",
+      whoPaid: () => "Who paid",
     },
   },
   profile: {

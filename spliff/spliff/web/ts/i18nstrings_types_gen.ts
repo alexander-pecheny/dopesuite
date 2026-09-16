@@ -181,7 +181,6 @@ export type Strings = {
       unnamed: () => string;
     };
     transaction: {
-      colFor: () => string;
       colPaid: () => string;
       colPercent: () => string;
       colShare: () => string;
@@ -192,6 +191,7 @@ export type Strings = {
       delete: () => string;
       description: () => string;
       descriptionPlaceholder: () => string;
+      forWhom: () => string;
       fullyClaimed: () => string;
       hintClaim: () => string;
       hintEven: () => string;
@@ -215,6 +215,9 @@ export type Strings = {
       needSharesFit: () => string;
       newTitle: () => string;
       noPhotos: () => string;
+      paidDone: () => string;
+      paidLeft: (amount: string) => string;
+      paidOver: (amount: string) => string;
       photoAlt: () => string;
       photos: () => string;
       pickPhoto: () => string;
@@ -225,6 +228,7 @@ export type Strings = {
       total: () => string;
       unclaimedNote: (amount: string) => string;
       upload: () => string;
+      whoPaid: () => string;
     };
   };
   profile: {

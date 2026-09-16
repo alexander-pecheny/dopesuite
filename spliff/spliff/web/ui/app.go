@@ -66,8 +66,10 @@ var mounts = map[string]base.MountSpec{
 	"group-members":       {Tag: "ul", Classes: []string{"list"}},
 	"group-invites":       {Tag: "ul", Classes: []string{"list"}},
 	"transaction-history": {Tag: "ul", Classes: []string{"list"}},
-	// The editor's member rows are cards of their own, stacked.
-	"transaction-body": {Tag: "div", Classes: []string{"u-col", "u-gap-sm"}},
+	// The editor's two questions — who paid, and who it was for — are each a
+	// stack of cards, one per Member.
+	"transaction-payers": {Tag: "div", Classes: []string{"u-col", "u-gap-sm"}},
+	"transaction-shares": {Tag: "div", Classes: []string{"u-col", "u-gap-sm"}},
 	// The Photos side by side and scrollable, rather than reflowing.
 	"transaction-photos": {Tag: "div", Classes: []string{"photo-strip"}},
 	"join-body":          {Tag: "div", Classes: []string{"u-col", "u-gap-sm"}},

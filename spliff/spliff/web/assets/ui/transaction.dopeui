@@ -26,7 +26,17 @@ page title=@page.transaction.title kind="wide" scripts="dist/transaction.js"
           option value="claim" @page.transaction.mode_claim
           option value="settlement" @page.transaction.mode_settlement
       hint id="modeHint"
-      mount id="editorBody" kind="transaction-body"
+      -- The two questions a bill answers, each its own block: who handed the
+      -- money over, and who it was for. They sit side by side on a desktop and
+      -- stack on a phone, which is the only thing `wrap` is here for.
+      row gap="md" wrap align="start"
+        col gap="sm" grow
+          subhead @page.transaction.who_paid
+          mount id="payerBody" kind="transaction-payers"
+          hint id="paidLine"
+        col gap="sm" grow
+          subhead @page.transaction.for_whom
+          mount id="shareBody" kind="transaction-shares"
       hint id="totalsLine"
       row gap="sm" wrap
         button kind="primary" submit id="saveBtn" @common.save
