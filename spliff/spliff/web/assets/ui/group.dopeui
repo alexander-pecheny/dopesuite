@@ -53,7 +53,8 @@ page title=@page.group.title kind="wide" scripts="dist/group.js"
       field label=@page.group.name_label
         textfield id="groupNameField" required grow
       field label=@page.group.currency_label
-        selectfield id="groupCurrencyField" grow
+        suggestfield id="groupCurrencyField" maxlength="3" caps grow
+        hint id="groupCurrencyError" kind="danger" hidden
       row gap="sm" wrap
         button kind="primary" submit @common.save
         button kind="ghost" id="settingsCancel" @common.cancel

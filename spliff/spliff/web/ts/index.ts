@@ -3,7 +3,8 @@
 // alone is a list of holidays.
 
 import S from "./i18nstrings.js";
-import { errorText, get, request, type CurrencyDTO, type GroupSummaryDTO } from "./api";
+import { errorText, get, request, type GroupSummaryDTO } from "./api";
+import { bindCurrency } from "./currency-field";
 import { amountNode, badge, byId, clear, el, group as rowGroup, setText, show } from "./dom";
 
 const list = byId("groupList");
@@ -12,13 +13,14 @@ const message = byId("message");
 const overlay = byId("createOverlay");
 const form = byId<HTMLFormElement>("createForm");
 const nameField = byId<HTMLInputElement>("groupName");
-const currencyField = byId<HTMLSelectElement>("groupCurrency");
+const currency = bindCurrency(byId<HTMLInputElement>("groupCurrency"), byId("groupCurrencyError"));
 const createMessage = byId("createMessage");
 
 byId("newGroupBtn").addEventListener("click", () => {
   setText(createMessage, "");
   form.reset();
-  void fillCurrencies();
+  // A first Group has no history to open the list on, so the shortlist leads.
+  void currency.fill("EUR");
   show(overlay, true);
   nameField.focus();
 });
@@ -32,36 +34,16 @@ form.addEventListener("submit", (event) => {
 
 async function create(): Promise<void> {
   setText(createMessage, "");
+  // A code nobody quotes is said here, under the field, and not by a 400.
+  if (!currency.ok()) return;
   try {
     const created = await request<{ id: number }>("POST", "/api/groups", {
       name: nameField.value,
-      base_currency: currencyField.value,
+      base_currency: currency.value(),
     });
     window.location.href = `/group/${created.id}`;
   } catch (error) {
     setText(createMessage, errorText(error));
-  }
-}
-
-// The currencies are the ones the newest Rate table actually carries, asked of
-// the server rather than listed here: a list of our own would go stale the day
-// the source adds one.
-let currencies: CurrencyDTO[] | null = null;
-
-async function fillCurrencies(): Promise<void> {
-  if (!currencies) {
-    try {
-      currencies = await get<CurrencyDTO[]>("/api/currencies");
-    } catch {
-      currencies = [];
-    }
-  }
-  clear(currencyField);
-  for (const currency of currencies) {
-    const option = el("option", undefined, currency.code);
-    option.value = currency.code;
-    if (currency.code === "EUR") option.selected = true;
-    currencyField.append(option);
   }
 }
 

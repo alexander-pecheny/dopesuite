@@ -8,12 +8,12 @@ import {
   errorText,
   get,
   request,
-  type CurrencyDTO,
   type HistoryDTO,
   type MemberDTO,
   type PhotoDTO,
   type TransactionViewDTO,
 } from "./api";
+import { bindCurrency } from "./currency-field";
 import { amountPlain, byId, clear, el, group as rowGroup, maybe, setText, show, stamp } from "./dom";
 import { formatMinor, parseAmount } from "./money";
 import {
@@ -41,7 +41,8 @@ const groupCrumb = maybe<HTMLAnchorElement>("groupCrumb");
 const form = byId<HTMLFormElement>("txForm");
 const description = byId<HTMLInputElement>("description");
 const dayField = byId<HTMLInputElement>("day");
-const currencyField = byId<HTMLSelectElement>("currency");
+const currencyInput = byId<HTMLInputElement>("currency");
+const currencyField = bindCurrency(currencyInput, byId("currencyError"));
 const totalField = byId<HTMLInputElement>("total");
 const rateLine = byId("rateLine");
 const modeField = byId<HTMLSelectElement>("mode");
@@ -78,7 +79,7 @@ modeField.addEventListener("change", () => {
   renderBody();
 });
 
-currencyField.addEventListener("change", recompute);
+currencyInput.addEventListener("input", recompute);
 totalField.addEventListener("input", recompute);
 
 form.addEventListener("submit", (event) => {
@@ -133,12 +134,15 @@ async function load(): Promise<void> {
         base_currency: string;
         me: number;
         members: MemberDTO[];
+        live: { currency: string }[];
       }>(`/api/groups/${groupID}`);
       members = group.members;
       me = group.me;
       baseCurrency = group.base_currency;
       groupName = group.name;
-      fillCurrencies(baseCurrency);
+      // The picker opens on what this Group deals in: its Base currency, then
+      // the currencies its Transactions are already written in.
+      fillCurrencies(baseCurrency, [baseCurrency, ...group.live.map((t) => t.currency)]);
       dayField.value = new Date().toISOString().slice(0, 10);
       setText(txCrumb, S.page.transaction.newTitle());
       show(photoSection, false);
@@ -150,7 +154,9 @@ async function load(): Promise<void> {
       baseCurrency = view.group.base_currency;
       groupName = view.group.name;
       groupID = view.group.id;
-      fillCurrencies(view.transaction.currency);
+      // Reading one Transaction does not fetch the Group's others, so the
+      // history here is the two currencies this page is sure of.
+      fillCurrencies(view.transaction.currency, [view.transaction.currency, baseCurrency]);
       fill(view);
     }
     if (groupCrumb) {
@@ -202,29 +208,8 @@ function prefill(payments: { member_id: number; minor: number }[], shares: { mem
   if (shares.length === 1) payee = shares[0].member_id;
 }
 
-let currencies: CurrencyDTO[] | null = null;
-
-function fillCurrencies(selected: string): void {
-  void (async () => {
-    if (!currencies) {
-      try {
-        currencies = await get<CurrencyDTO[]>("/api/currencies");
-      } catch {
-        currencies = [];
-      }
-    }
-    if (!currencies.some((c) => c.code === selected)) {
-      currencies.unshift({ code: selected, name: "" });
-    }
-    clear(currencyField);
-    for (const currency of currencies) {
-      const option = el("option", undefined, currency.code);
-      option.value = currency.code;
-      option.selected = currency.code === selected;
-      currencyField.append(option);
-    }
-    recompute();
-  })();
+function fillCurrencies(selected: string, recent: string[]): void {
+  void currencyField.fill(selected, recent).then(recompute);
 }
 
 // ── the two blocks ─────────────────────────────────────────────────────────
@@ -271,7 +256,7 @@ function mode(): Mode {
 }
 
 function currency(): string {
-  return currencyField.value || baseCurrency;
+  return currencyField.value() || baseCurrency;
 }
 
 // card is the kit's block of content, laid out as a row that wraps: a name, and
@@ -548,6 +533,8 @@ function draftError(error: string): string {
 
 async function save(): Promise<void> {
   setText(message, "");
+  // A code nobody quotes is said under the field, before the bill is sent.
+  if (!currencyField.ok()) return;
   const st = state();
   const result = buildDraft(st);
   if (!result.draft) {

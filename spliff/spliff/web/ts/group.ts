@@ -7,12 +7,12 @@ import {
   errorText,
   get,
   request,
-  type CurrencyDTO,
   type GroupDTO,
   type HistoryDTO,
   type InviteDTO,
   type TransactionDTO,
 } from "./api";
+import { bindCurrency } from "./currency-field";
 import { amountNode, amountPlain, badge, byId, clear, el, group as rowGroup, maybe, setText, show, stamp } from "./dom";
 
 const groupID = Number(window.location.pathname.split("/")[2] ?? 0);
@@ -34,7 +34,7 @@ const message = byId("message");
 const settingsOverlay = byId("settingsOverlay");
 const settingsForm = byId<HTMLFormElement>("settingsForm");
 const nameField = byId<HTMLInputElement>("groupNameField");
-const currencyField = byId<HTMLSelectElement>("groupCurrencyField");
+const currency = bindCurrency(byId<HTMLInputElement>("groupCurrencyField"), byId("groupCurrencyError"));
 const ownerControls = byId("ownerControls");
 const handOverSelect = byId<HTMLSelectElement>("handOverSelect");
 const settingsMessage = byId("settingsMessage");
@@ -63,7 +63,7 @@ byId("settingsBtn").addEventListener("click", () => {
   if (!group) return;
   setText(settingsMessage, "");
   nameField.value = group.name;
-  void fillCurrencies(group.base_currency);
+  void currency.fill(group.base_currency, usedCurrencies(group));
   fillHandOver();
   show(ownerControls, group.is_owner);
   show(settingsOverlay, true);
@@ -73,7 +73,8 @@ byId("settingsCancel").addEventListener("click", () => show(settingsOverlay, fal
 
 settingsForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  void patch({ name: nameField.value, base_currency: currencyField.value });
+  if (!currency.ok()) return;
+  void patch({ name: nameField.value, base_currency: currency.value() });
 });
 
 byId("handOverBtn").addEventListener("click", () => {
@@ -162,23 +163,15 @@ async function mintInvite(): Promise<void> {
   }, inviteMessage);
 }
 
-let currencies: CurrencyDTO[] | null = null;
-
-async function fillCurrencies(selected: string): Promise<void> {
-  if (!currencies) {
-    try {
-      currencies = await get<CurrencyDTO[]>("/api/currencies");
-    } catch {
-      currencies = [];
-    }
+// What the picker opens on: the Base currency, then every currency this
+// Group's Transactions are already in — the ones its people actually deal in,
+// which is a far shorter list than the alphabet and usually the right one.
+function usedCurrencies(g: GroupDTO): string[] {
+  const out = [g.base_currency];
+  for (const tx of [...g.live, ...g.deleted]) {
+    if (!out.includes(tx.currency)) out.push(tx.currency);
   }
-  clear(currencyField);
-  for (const currency of currencies) {
-    const option = el("option", undefined, currency.code);
-    option.value = currency.code;
-    option.selected = currency.code === selected;
-    currencyField.append(option);
-  }
+  return out;
 }
 
 function fillHandOver(): void {
