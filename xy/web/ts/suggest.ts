@@ -1,75 +1,12 @@
-// The one filtered dropdown for free-text fields: testers, towns, timezones —
-// wherever a native <select> cannot go because the list is too long to scroll or
-// has to be searched. Shared so a field cannot silently ship without one, which
-// is how /profile and the first-run modal ended up with a bare timezone box
-// while the session form had a working picker.
+// The choice sources xy's suggest fields draw from: timezones and towns. The
+// picker itself is the kit's (dopeuikit/assets/ts/suggest.ts, imported here as
+// ./kit/suggest.js) — it is shared so a field cannot silently ship without one,
+// which is how /profile and the first-run modal ended up with a bare timezone
+// box while the session form had a working picker.
 
-import { xyApp } from "./app.js";
 import { allZones, zoneOffset } from "./sessions.js";
 import { TOWNS } from "./towns.js";
-
-const { el } = xyApp;
-
-export interface Choice {
-  value: string;
-  label: string;
-  hint?: string;
-}
-
-export function autocomplete(
-  inp: HTMLInputElement,
-  choices: (q: string) => Choice[],
-  onPick?: (c: Choice) => void,
-): void {
-  let pop: HTMLElement | null = null;
-  const dismiss = (): void => {
-    if (pop) {
-      pop.remove();
-      pop = null;
-    }
-  };
-  inp.addEventListener("blur", () => setTimeout(dismiss, 150));
-
-  const draw = (): void => {
-    dismiss();
-    const hits = choices(inp.value);
-    if (!hits.length) return;
-    pop = el("div", { class: "menu-dropdown suggest-pop" });
-    for (const h of hits) {
-      pop.append(el("button", {
-        class: "menu-item", type: "button",
-        onmousedown: (e: Event) => {
-          e.preventDefault();
-          inp.value = h.value;
-          inp.dispatchEvent(new Event("input", { bubbles: true }));
-          dismiss();
-          if (onPick) onPick(h);
-        },
-      },
-        el("span", { text: h.label }),
-        h.hint ? el("span", { class: "suggest-hint", text: h.hint }) : el("span"),
-      ));
-    }
-    // The popup is absolutely positioned, so its parent must be the positioning
-    // context — marked here rather than at bind time, because a field is often
-    // wired before it is appended to anything.
-    const host = inp.parentElement;
-    if (!host) return;
-    host.classList.add("suggest-anchor");
-    host.append(pop);
-    // top:100% would mean the bottom of the ANCHOR, which is only the field on a
-    // form that wraps each one. /profile puts every input in a single column, so
-    // the popup landed under the whole form. Measure from the input's own box.
-    const hostBox = host.getBoundingClientRect();
-    const inpBox = inp.getBoundingClientRect();
-    pop.style.top = `${Math.round(inpBox.bottom - hostBox.top)}px`;
-    pop.style.left = `${Math.round(inpBox.left - hostBox.left)}px`;
-    pop.style.minWidth = `${Math.round(inpBox.width)}px`;
-  };
-
-  inp.addEventListener("input", draw);
-  inp.addEventListener("focus", draw);
-}
+import type { Choice } from "./kit/suggest.js";
 
 // Nobody should have to know that Almaty is Asia/Almaty, so the zone picker
 // searches Russian city names as well as IANA ids.

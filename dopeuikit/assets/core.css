@@ -1925,6 +1925,32 @@ input[type="radio"]:focus-visible {
   cursor: var(--cursor-action);
 }
 
+/* ── suggest: the filtered dropdown under a text field ────────────────────
+   The suggestfield primitive's own box, and the one any hand-bound input gets
+   when suggest.ts marks its parent. The anchor is what the popup is appended
+   to, so the list paints in the field's own stacking context — inside a modal
+   it is above the modal rather than behind it. */
+.suggest-anchor { position: relative; }
+
+/* position:fixed, not absolute: the field is routinely inside a scrolling
+   frame (.sheet-frame) or a card, and an absolutely positioned popup is cut
+   off by the first of those it meets. suggest.ts writes top/left in viewport
+   coordinates and keeps them current while the page scrolls. right:auto undoes
+   .menu-dropdown's right:0, which would otherwise fight the measured left. */
+.suggest-pop {
+  position: fixed;
+  right: auto;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+/* The keyboard's place in the list. It is not :focus — focus stays in the
+   field, because moving it would blur the field and take the popup down. */
+.suggest-pop .menu-item[aria-selected="true"] { background: var(--hover-bg); }
+
+/* The second half of a row: what the code MEANS, after the code itself. */
+.suggest-hint { color: var(--muted); font-size: var(--text-sm); margin-left: var(--space-2); }
+
 /* === ui layout utilities (internal/ui render.go) ============================
    The closed set of flex utilities the v2 UI primitives (col/row/spacer)
    compile to. Gap tokens map onto the existing --space-* scale, calibrated so

@@ -12,7 +12,7 @@ import { xyApp } from "./app.js";
 import type { AuthMe } from "./app.js";
 import { xySync } from "./sync.js";
 import { xyStore } from "./store.js";
-import { autocomplete } from "./suggest.js";
+import { autocomplete } from "./kit/suggest.js";
 import { createBoardInvites } from "./boardinvites.js";
 import S from "./i18nstrings.js";
 

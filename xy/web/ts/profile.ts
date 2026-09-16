@@ -6,7 +6,8 @@ import S from "./i18nstrings.js";
 import { xyApp, xySizes } from "./app.js";
 import { type Modal, modal } from "./modal.js";
 import { COMMON_CITIES, guessZone } from "./sessions.js";
-import { autocomplete, townChoices, zoneChoices } from "./suggest.js";
+import { autocomplete } from "./kit/suggest.js";
+import { townChoices, zoneChoices } from "./suggest.js";
 import type { AuthMe, Sizes } from "./app.js";
 
 const { fetchJSON, jpost, fetchVoid, el, byId, errMsg } = xyApp;

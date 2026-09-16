@@ -13,7 +13,8 @@ import {
 import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
 import { TOWNS } from "./towns.js";
-import { autocomplete, type Choice, townChoices, zoneChoices } from "./suggest.js";
+import { autocomplete, type Choice } from "./kit/suggest.js";
+import { townChoices, zoneChoices } from "./suggest.js";
 import type { BoardSession } from "./unlock.js";
 import type { Tester } from "./sessions.js";
 import * as people from "./people.js";

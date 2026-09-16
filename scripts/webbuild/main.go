@@ -94,6 +94,11 @@ func xyPrecache() (urls []string, version string) {
 	}
 	addURL("/static/menu.js")
 	addURL("/static/login.js")
+	// The kit modules xy imports rather than bundles (dist/kit/*.js). Their
+	// sources are hashed with the rest of the kit's TS just below.
+	for _, name := range xyKitModules {
+		addURL("/static/dist/kit/" + name + ".js")
+	}
 	kitTS, err := filepath.Glob("dopeuikit/assets/ts/*.ts")
 	if err != nil || len(kitTS) == 0 {
 		fatal("no kit ts sources found for the precache hash")
@@ -140,6 +145,13 @@ func xyPrecache() (urls []string, version string) {
 	}
 	return urls, "xy-shell-" + hex.EncodeToString(h.Sum(nil))[:10]
 }
+
+// xyKitModules are the kit's own TS modules xy loads as modules of its own.
+// xy bundles nothing (every source transforms per-file so the emitted graph
+// mirrors the source graph), so a shared module cannot be inlined the way dope
+// and spliff inline it: it is built beside xy's, under dist/kit/, and imported
+// from "./kit/<name>.js". web/ts/kit/<name>.d.ts is how tsc follows that URL.
+var xyKitModules = []string{"suggest"}
 
 func xySWBuild() api.BuildOptions {
 	urls, version := xyPrecache()
@@ -241,6 +253,11 @@ func targets() []target {
 					EntryPoints: xySources(),
 					Format:      api.FormatESModule,
 					Outdir:      "xy/web/assets/static/dist",
+				},
+				{
+					EntryPointsAdvanced: entries("dopeuikit/assets/ts/", xyKitModules...),
+					Format:              api.FormatESModule,
+					Outdir:              "xy/web/assets/static/dist/kit",
 				},
 				xySWBuild(),
 			}

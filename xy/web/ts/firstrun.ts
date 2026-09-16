@@ -11,7 +11,8 @@
 
 import { xyApp } from "./app.js";
 import { guessZone } from "./sessions.js";
-import { autocomplete, zoneChoices } from "./suggest.js";
+import { autocomplete } from "./kit/suggest.js";
+import { zoneChoices } from "./suggest.js";
 import type { AuthMe } from "./app.js";
 import S from "./i18nstrings.js";
 
