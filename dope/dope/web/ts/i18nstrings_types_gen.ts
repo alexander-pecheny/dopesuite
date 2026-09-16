@@ -282,6 +282,18 @@ export type Strings = {
     brain: {
       title: () => string;
     };
+    chips: {
+      amountNegative: () => string;
+      amountPlain: () => string;
+      amountPositive: () => string;
+      amountZero: () => string;
+      badgeEmphasis: () => string;
+      badgeNegative: () => string;
+      badgeNeutral: () => string;
+      badgePositive: () => string;
+      name: () => string;
+      thumbAlt: () => string;
+    };
     ek: {
       title: () => string;
     };
@@ -295,6 +307,7 @@ export type Strings = {
       title: () => string;
     };
     section: {
+      chips: () => string;
       ekStats: () => string;
       festGrid: () => string;
       groupStandings: () => string;

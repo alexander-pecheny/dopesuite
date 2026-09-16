@@ -1,10 +1,11 @@
 /* Spliff's app CSS layer. The design system — tokens, controls, buttons,
-   chrome, utilities, themes — is DopeUIKit's assets/core.css, which the server
-   serves concatenated ahead of this file. Nothing here restates a control: the
-   kit ships .u-row/.u-col/.u-gap-* for arrangement and .list-row for a row on a
-   card, and what is below is only what the design system has no name for yet.
+   chrome, surfaces, utilities, themes — is DopeUIKit's assets/core.css, which
+   the server serves concatenated ahead of this file.
 
-   Every value comes from a kit token. */
+   Nothing here picks a colour, a fill or an edge: a chip is the kit's .badge, a
+   figure is its .amount, a block of content is its .card and a picture is its
+   .thumb. What is left is typography and measure — how wide a thing is read at,
+   and what happens to it when it does not fit. */
 
 /* The reading measure of Spliff's content pages. The kit's sheet frame caps a
    section at a form's 420px, which is right for the login page and leaves a
@@ -16,22 +17,6 @@
   width: 100%;
 }
 
-/* An amount is a number people compare down a column, so it is set in lining,
-   tabular figures and never wraps: 1 234.56 broken across two lines is two
-   numbers. */
-.amount {
-  font-variant-numeric: tabular-nums lining-nums;
-  font-weight: var(--fw-semibold);
-  white-space: nowrap;
-}
-
-/* What a balance means, in the two directions it can go. The colours are the
-   kit's semantic pair, so high contrast and dark mode follow without a second
-   rule. */
-.amount-positive { color: var(--success); }
-.amount-negative { color: var(--danger-text); }
-.amount-zero { color: var(--muted); }
-
 /* The name a row is about: it may be long, and it is the part that gives way. */
 .split-name {
   overflow: hidden;
@@ -39,29 +24,15 @@
   white-space: nowrap;
 }
 
-/* One Member's line in the Transaction editor. It is .list-row's card with one
-   difference that matters on a phone: it WRAPS, so a name, what they paid and
-   what they answer for fall onto as many lines as they need instead of
-   squeezing the name into an ellipsis. */
-.split-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-}
-
-/* An amount field in that row is narrow on purpose: a number, not a sentence.
-   The kit's .field gives it its little caption, so the columns need no header
+/* An amount field is narrow on purpose: a number, not a sentence. The kit's
+   .field gives it its own little caption, so a column of them needs no header
    row — which is what let the grid this replaced fall apart at 393px. */
-.split-field {
+.amount-field {
   width: 6.5rem;
   flex: 0 0 auto;
 }
 
-.split-field input {
+.amount-field input {
   text-align: right;
   font-variant-numeric: tabular-nums lining-nums;
 }
@@ -74,39 +45,14 @@
   padding-bottom: var(--space-1);
 }
 
-.photo-thumb {
-  height: 6rem;
-  width: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  object-fit: cover;
-}
-
 /* An Invite Link's URL in the Owner's panel, meant to be selected and sent. It
-   is a <code>, so the kit's own rule gives it the mono face; what is left is
-   the wrapping a 40-character URL needs inside a list row. */
+   is a <code class="invite-code muted">, so the mono face and the quiet ink are
+   both the kit's; what is left is the size it is read at and the wrapping a
+   40-character URL needs inside a list row. */
 .invite-code {
   font-size: var(--text-xs);
   word-break: break-all;
-  color: var(--text-muted);
 }
-
-/* Who owns the Group, what is still unclaimed, what state a link is in: the
-   same small tag, tinted by what it says. */
-.tag {
-  display: inline-block;
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-xs);
-  background: var(--wash-emphasis);
-  color: var(--text-muted);
-  font-size: var(--text-2xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-}
-
-.tag-dead { background: var(--wash-negative); }
 
 /* The kit hides the native disclosure marker and leaves the affordance to the
    app. Deleted transactions and the History feed are both folds a Member opens

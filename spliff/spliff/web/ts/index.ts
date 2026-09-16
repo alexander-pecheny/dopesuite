@@ -4,7 +4,7 @@
 
 import S from "./i18nstrings.js";
 import { errorText, get, request, type GroupSummaryDTO } from "./api";
-import { amountNode, byId, clear, el, group as rowGroup, setText, show, tag } from "./dom";
+import { amountNode, badge, byId, clear, el, group as rowGroup, setText, show } from "./dom";
 
 const list = byId("groupList");
 const emptyNote = byId("groupsEmpty");
@@ -85,7 +85,7 @@ function render(groups: GroupSummaryDTO[]): void {
     row.href = `/group/${group.id}`;
     const left = rowGroup(true);
     left.append(el("span", "list-row-title split-name", group.name));
-    if (group.is_owner) left.append(tag(S.page.group.ownerTag()));
+    if (group.is_owner) left.append(badge(S.page.group.ownerTag()));
     row.append(left);
     if (group.balance_minor === 0) {
       row.append(el("span", "muted", S.page.index.settled()));

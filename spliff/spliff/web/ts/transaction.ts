@@ -13,7 +13,7 @@ import {
   type PhotoDTO,
   type TransactionViewDTO,
 } from "./api";
-import { byId, clear, el, group as rowGroup, maybe, setText, show, stamp } from "./dom";
+import { amountPlain, byId, clear, el, group as rowGroup, maybe, setText, show, stamp } from "./dom";
 import { formatMinor, parseAmount } from "./money";
 import { allocateByPercent, allocateEven, buildDraft, payerOrder, type FormState, type Mode } from "./txform";
 
@@ -223,7 +223,7 @@ function buildRows(): void {
   clear(editorBody);
   rows = [];
   for (const member of members) {
-    const row = el("div", "split-row");
+    const row = el("div", "card u-row u-wrap u-align-center u-gap-sm");
 
     const include = el("input");
     include.type = "checkbox";
@@ -243,7 +243,7 @@ function buildRows(): void {
     payee.value = String(member.user_id);
     payee.addEventListener("change", recompute);
 
-    const computed = el("span", "amount");
+    const computed = amountPlain("");
 
     const paidField = captioned(S.page.transaction.colPaid(), paid);
     const shareField = captioned(S.page.transaction.colShare(), share);
@@ -289,7 +289,7 @@ function amountInput(placeholder = "0"): HTMLInputElement {
 
 // captioned is the kit's field: a small caption over the control it names.
 function captioned(caption: string, control: HTMLElement): HTMLElement {
-  const field = el("label", "field split-field");
+  const field = el("label", "field amount-field");
   field.append(el("span", undefined, caption), control);
   return field;
 }
@@ -441,7 +441,7 @@ function renderPhotos(list: PhotoDTO[]): void {
   clear(photos);
   const strip = el("span", "u-row u-gap-sm");
   for (const photo of list) {
-    const image = el("img", "photo-thumb");
+    const image = el("img", "thumb");
     image.src = photo.url;
     image.alt = S.page.transaction.photoAlt();
     image.width = photo.width;

@@ -771,14 +771,26 @@ samp {
   gap: var(--space-2);
 }
 
+/* The card: one block of content lifted onto the page, with the radius and the
+   padding every such block shares. It carries no layout of its own — put
+   u-row/u-col on it or inside it — so the same box is a row in a list on a
+   desktop and a stack of fields on a phone.
+
+   .list-row IS that box with a row's layout baked in, and shares the rule
+   rather than restating it: the two must never drift apart, because a list and
+   a hand-built card sit on the same page. */
+.card,
+.list-row {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
 .list-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  background: var(--surface);
   text-decoration: none;
   color: inherit;
 }
@@ -790,6 +802,58 @@ a.list-row:hover { background: var(--hover-bg); }
 .muted {
   color: var(--muted);
   font-size: var(--text-sm);
+}
+
+/* The badge: one upright word pinned beside a name, saying what the thing IS —
+   OWNER, ACTIVE, PHANTOM, UNCLAIMED. It is not a button and never takes a
+   click; that is what the shape (small, uppercase, barely padded) has to say.
+
+   The tone is its ground. Neutral names a fact and takes the control fill, the
+   one neutral that reads on a card AND on the page chrome; the other three are
+   the kit's three washes, so a badge says what a row's wash would say in the
+   one place a whole row cannot be tinted. */
+.badge {
+  display: inline-block;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--action-bg);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.badge-emphasis { background: var(--wash-emphasis); }
+.badge-positive { background: var(--wash-positive); }
+.badge-negative { background: var(--wash-negative); }
+
+/* An amount is a number people compare down a column, so it is set in lining,
+   tabular figures and never wraps: 1 234.56 broken over two lines is two
+   numbers. A bare .amount is a figure in the body ink — a total, a price. A
+   tone is for a figure that points somewhere: what you are owed, what you owe,
+   and the settled zero that is neither. */
+.amount {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+
+.amount-positive { color: var(--success); }
+.amount-negative { color: var(--danger-text); }
+.amount-zero { color: var(--muted); }
+
+/* A thumbnail: a picture at a fixed row height, cropped rather than reflowed,
+   so a strip of them is one line to scan. The outline is the picture's edge —
+   a photo that ends in white against white ends nowhere — so it names --border
+   and turns real only where outlines do. */
+.thumb {
+  height: 6rem;
+  width: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  object-fit: cover;
 }
 
 .table-scroll {
@@ -877,6 +941,12 @@ select.input,
   padding-top: 0;
   padding-bottom: 0;
 }
+
+/* `numfield narrow` — a field that holds a small integer (a use cap, a number
+   of hours) and should not be as wide as a sentence. The width lived in xy's
+   layer while the kit's own expander emitted the class, so the same primitive
+   was narrow in xy and full width in every other app. */
+.input-narrow { width: 4.5rem; }
 
 .checkbox {
   display: inline-flex;

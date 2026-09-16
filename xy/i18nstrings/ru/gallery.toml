@@ -131,3 +131,24 @@ handout_title = "Раздаточный материал"
 question = "Текст вопроса, обрезанный по числу строк из «Изменить размеры»."
 # The demo heading card's title.
 heading = "Заголовок тура"
+
+[chips]
+# Title of the section showing the kit primitives a row of names and numbers is
+# built from: badge, amount, card, thumb.
+title = "Значки, суммы, карточки"
+# Note under that title.
+note = "Значок говорит, чем строка ЯВЛЯЕТСЯ, и никогда не нажимается; тон суммы говорит, куда указывает число; карточка — коробка, в которой они лежат."
+# The four badge tones in order: neutral, emphasis, positive, negative.
+badge_neutral = "владелец"
+badge_emphasis = "это вы"
+badge_positive = "действует"
+badge_negative = "отозвано"
+# The name the demo card's row is about.
+name = "аня"
+# A plain amount (a total), then the three tones: owed to you, owed by you, settled.
+amount_plain = "60,00"
+amount_positive = "+12,30"
+amount_negative = "−4,00"
+amount_zero = "0,00"
+# Alt text of the demo thumbnail.
+thumb_alt = "чек"

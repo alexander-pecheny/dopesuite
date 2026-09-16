@@ -283,6 +283,18 @@ export const RU: Strings = {
     brain: {
       title: () => "Ведущий · Брейн",
     },
+    chips: {
+      amountNegative: () => "−04",
+      amountPlain: () => "120",
+      amountPositive: () => "+12",
+      amountZero: () => "0",
+      badgeEmphasis: () => "это вы",
+      badgeNegative: () => "снята",
+      badgeNeutral: () => "ведущий",
+      badgePositive: () => "идёт",
+      name: () => "Ктулху",
+      thumbAlt: () => "фото",
+    },
     ek: {
       title: () => "ЭК · Фест",
     },
@@ -296,6 +308,7 @@ export const RU: Strings = {
       title: () => "Галерея · dope",
     },
     section: {
+      chips: () => "Значки, суммы, карточки",
       ekStats: () => "Статистика ЭК",
       festGrid: () => "Сетка",
       groupStandings: () => "Групповой этап",

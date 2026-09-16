@@ -111,6 +111,14 @@ func Muted(items ...Item) *Element {
 	return base.New("muted", items...)
 }
 
+func Badge(items ...Item) *Element {
+	return base.New("badge", items...)
+}
+
+func Amount(items ...Item) *Element {
+	return base.New("amount", items...)
+}
+
 func Form(items ...Item) *Element {
 	return base.New("form", items...)
 }
@@ -217,6 +225,14 @@ func Listrow(items ...Item) *Element {
 
 func Listtitle(items ...Item) *Element {
 	return base.New("listtitle", items...)
+}
+
+func Card(items ...Item) *Element {
+	return base.New("card", items...)
+}
+
+func Thumb(items ...Item) *Element {
+	return base.New("thumb", items...)
 }
 
 func Table(items ...Item) *Element {
@@ -449,6 +465,22 @@ func View(v string) Attr {
 	return Attr{Name: "view", Value: v}
 }
 
+func Src(v string) Attr {
+	return Attr{Name: "src", Value: v}
+}
+
+func Alt(v string) Attr {
+	return Attr{Name: "alt", Value: v}
+}
+
+func Width(v string) Attr {
+	return Attr{Name: "width", Value: v}
+}
+
+func Height(v string) Attr {
+	return Attr{Name: "height", Value: v}
+}
+
 func Scroll() Attr {
 	return Attr{Name: "scroll", Bare: true}
 }
@@ -459,6 +491,13 @@ var AlignStart = Attr{Name: "align", Value: "start"}
 var AlignCenter = Attr{Name: "align", Value: "center"}
 var AlignEnd = Attr{Name: "align", Value: "end"}
 var AlignStretch = Attr{Name: "align", Value: "stretch"}
+var AmountPositive = Attr{Name: "tone", Value: "positive"}
+var AmountNegative = Attr{Name: "tone", Value: "negative"}
+var AmountZero = Attr{Name: "tone", Value: "zero"}
+var BadgeNeutral = Attr{Name: "tone", Value: "neutral"}
+var BadgeEmphasis = Attr{Name: "tone", Value: "emphasis"}
+var BadgePositive = Attr{Name: "tone", Value: "positive"}
+var BadgeNegative = Attr{Name: "tone", Value: "negative"}
 var Primary = Attr{Name: "kind", Value: "primary"}
 var Ghost = Attr{Name: "kind", Value: "ghost"}
 var Danger = Attr{Name: "kind", Value: "danger"}

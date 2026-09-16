@@ -1293,6 +1293,20 @@ export type Strings = {
       question: () => string;
       title: () => string;
     };
+    chips: {
+      amountNegative: () => string;
+      amountPlain: () => string;
+      amountPositive: () => string;
+      amountZero: () => string;
+      badgeEmphasis: () => string;
+      badgeNegative: () => string;
+      badgeNeutral: () => string;
+      badgePositive: () => string;
+      name: () => string;
+      note: () => string;
+      thumbAlt: () => string;
+      title: () => string;
+    };
     feed: {
       eventComment: () => string;
       eventMeta: () => string;

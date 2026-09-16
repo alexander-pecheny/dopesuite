@@ -42,6 +42,8 @@ var coreExpanders = map[string]ExpandFunc{
 	"strong":  func(c *ExpandCtx, p *Element) []Node { return one(inlineStrong(c, p).(*Element)) },
 	"code":    func(c *ExpandCtx, p *Element) []Node { return one(inlineCode(c, p).(*Element)) },
 	"muted":   func(c *ExpandCtx, p *Element) []Node { return one(inlineMuted(c, p).(*Element)) },
+	"badge":   func(c *ExpandCtx, p *Element) []Node { return one(inlineBadge(c, p).(*Element)) },
+	"amount":  func(c *ExpandCtx, p *Element) []Node { return one(inlineAmount(c, p).(*Element)) },
 	"form":    expandForm,
 	"textfield": func(c *ExpandCtx, p *Element) []Node {
 		return one(Input(c, "text", p, "name", "placeholder", "autocomplete", "spellcheck", "autocapitalize", "autocorrect", "value", "maxlength", "minlength", "inputmode", "pattern", "list"))
@@ -87,17 +89,27 @@ var coreExpanders = map[string]ExpandFunc{
 	},
 	"listrow":   expandListrow,
 	"listtitle": func(c *ExpandCtx, p *Element) []Node { return one(Leaf(c, "span", []string{"list-row-title"}, nil, p)) },
-	"table":     expandTable,
-	"trow":      func(c *ExpandCtx, p *Element) []Node { return one(El("tr", RootAttrs(nil, p), c.Nodes(p.Block)...)) },
-	"hcell":     func(c *ExpandCtx, p *Element) []Node { return one(Leaf(c, "th", nil, nil, p)) },
-	"cell":      func(c *ExpandCtx, p *Element) []Node { return one(Leaf(c, "td", nil, nil, p)) },
-	"mount":     expandMount,
+	"card": func(c *ExpandCtx, p *Element) []Node {
+		dir := "u-col"
+		if d, _ := Get(p, "dir"); d == "row" {
+			dir = "u-row"
+		}
+		return one(El("div", RootAttrs(append([]string{"card"}, FlexClasses(dir, p)...), p), c.Nodes(p.Block)...))
+	},
+	"thumb": expandThumb,
+	"table": expandTable,
+	"trow":  func(c *ExpandCtx, p *Element) []Node { return one(El("tr", RootAttrs(nil, p), c.Nodes(p.Block)...)) },
+	"hcell": func(c *ExpandCtx, p *Element) []Node { return one(Leaf(c, "th", nil, nil, p)) },
+	"cell":  func(c *ExpandCtx, p *Element) []Node { return one(Leaf(c, "td", nil, nil, p)) },
+	"mount": expandMount,
 }
 
 var coreInline = map[string]InlineFunc{
 	"strong":    inlineStrong,
 	"code":      inlineCode,
 	"muted":     inlineMuted,
+	"badge":     inlineBadge,
+	"amount":    inlineAmount,
 	"unreaddot": func(c *ExpandCtx, p *Element) Item { return El("span", unreadAttrs(p)) },
 }
 
@@ -109,6 +121,40 @@ func inlineCode(c *ExpandCtx, p *Element) Item {
 }
 func inlineMuted(c *ExpandCtx, p *Element) Item {
 	return &Element{Tag: "span", Attrs: RootAttrs([]string{"muted"}, p), Inline: c.Items(p.Inline)}
+}
+
+// A badge's tone is its ground: neutral is the bare chip and needs no class,
+// the other three are the kit's three washes.
+func inlineBadge(c *ExpandCtx, p *Element) Item {
+	classes := []string{"badge"}
+	if t, ok := Get(p, "tone"); ok && t != "neutral" {
+		classes = append(classes, "badge-"+t)
+	}
+	return &Element{Tag: "span", Attrs: RootAttrs(classes, p), Inline: c.Items(p.Inline)}
+}
+
+// An amount with no tone is a plain figure in the body ink — a total, a rate.
+// A tone says which way it points, which only a balance has.
+func inlineAmount(c *ExpandCtx, p *Element) Item {
+	classes := []string{"amount"}
+	if t, ok := Get(p, "tone"); ok {
+		classes = append(classes, "amount-"+t)
+	}
+	return &Element{Tag: "span", Attrs: RootAttrs(classes, p), Inline: c.Items(p.Inline)}
+}
+
+// A thumb with an href is the link: the picture IS the tap target, and wrapping
+// it here keeps the page from having to say so.
+func expandThumb(c *ExpandCtx, p *Element) []Node {
+	src, _ := Get(p, "src")
+	alt, _ := Get(p, "alt")
+	attrs := []Attr{ClassAttr("thumb"), At("src", src), At("alt", alt)}
+	attrs = append(attrs, CopyProps(p, "width", "height")...)
+	img := El("img", attrs)
+	if href, ok := Get(p, "href"); ok {
+		return one(El("a", RootAttrs(nil, dropAttrPrim(p, "href"), At("href", href)), img))
+	}
+	return one(El("span", RootAttrs(nil, p), img))
 }
 
 func expandIconbtn(c *ExpandCtx, p *Element) []Node {
@@ -145,7 +191,7 @@ func expandForm(c *ExpandCtx, p *Element) []Node {
 func expandNumfield(c *ExpandCtx, p *Element) []Node {
 	base := []string{"input"}
 	if Flag(p, "narrow") {
-		base = append(base, "lists-move-pos")
+		base = append(base, "input-narrow")
 	}
 	attrs := []Attr{ClassAttr(GrowClasses(base, p)...)}
 	attrs = append(attrs, IDAttr(p)...)

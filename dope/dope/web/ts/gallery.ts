@@ -108,6 +108,41 @@ const roster: RosterTeam[] = [
   {number: 3, name: "Bikes for Peace", players: []},
 ];
 
+// A stand-in picture for the thumb: the gallery draws from fixtures and reaches
+// no network, so the demo photo is a rectangle it carries itself.
+const THUMB = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='96'%3E%3Crect width='120' height='96' fill='%2399a3b0'/%3E%3C/svg%3E";
+
+// The kit's badge / amount / card / thumb, the primitives a row of names and
+// numbers is built from. dope draws none of them today; they are here because a
+// primitive nobody can look at is one every app re-invents.
+function chips(): HTMLElement {
+  const span = (cls: string, text: string): HTMLElement => {
+    const node = document.createElement("span");
+    node.className = cls;
+    node.textContent = text;
+    return node;
+  };
+  const card = document.createElement("div");
+  card.className = "card u-row u-gap-sm u-align-center u-wrap";
+  card.append(
+    span("list-row-title", S.gallery.chips.name()),
+    span("badge", S.gallery.chips.badgeNeutral()),
+    span("badge badge-emphasis", S.gallery.chips.badgeEmphasis()),
+    span("badge badge-positive", S.gallery.chips.badgePositive()),
+    span("badge badge-negative", S.gallery.chips.badgeNegative()),
+    span("amount", S.gallery.chips.amountPlain()),
+    span("amount amount-positive", S.gallery.chips.amountPositive()),
+    span("amount amount-negative", S.gallery.chips.amountNegative()),
+    span("amount amount-zero", S.gallery.chips.amountZero()),
+  );
+  const image = document.createElement("img");
+  image.className = "thumb";
+  image.src = THUMB;
+  image.alt = S.gallery.chips.thumbAlt();
+  card.append(image);
+  return card;
+}
+
 function section(title: string, host: string, node: HTMLElement): HTMLElement {
   const wrap = document.createElement("section");
   wrap.className = "gallery-section";
@@ -136,6 +171,7 @@ function render(root: HTMLElement): void {
     section(S.gallery.section.venues(), "table-host", buildVenuesTable(venues)),
     section(S.gallery.section.venuesHost(), "table-host", buildVenuesTable(venues, {editable: true, onTitleChange: () => {}})),
     section(S.gallery.section.roster(), "table-host fits-frame", buildRosterTable(roster)),
+    section(S.gallery.section.chips(), "fits-frame", chips()),
   );
   requestAnimationFrame(() => markNameOverflow(root, {
     cellSelector: ".results-team",

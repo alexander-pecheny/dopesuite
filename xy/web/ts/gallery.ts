@@ -32,6 +32,10 @@ function chip(name: string, color: string, on = false): HTMLElement {
   return c;
 }
 
+// A stand-in picture for the thumb: the gallery draws from fixtures and reaches
+// no network, so the demo receipt is a rectangle it carries itself.
+const THUMB = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='96'%3E%3Crect width='120' height='96' fill='%2399a3b0'/%3E%3C/svg%3E";
+
 function row(cls: string, ...kids: HTMLElement[]): HTMLElement {
   return el("div", { class: cls }, ...kids);
 }
@@ -84,6 +88,21 @@ function build(): void {
 
     section(S.gallery.labels.title(), S.gallery.labels.note(),
       el("div", { class: "label-picker" }, chip(S.gallery.labels.taken(), "green", true), chip(S.gallery.labels.rewrite(), "purple"), chip(S.gallery.labels.notTaken(), "red"), chip(S.gallery.labels.long(), "blue"))),
+
+    section(S.gallery.chips.title(), S.gallery.chips.note(),
+      el("div", { class: "u-col u-gap-sm" },
+        el("div", { class: "card u-row u-gap-sm u-align-center u-wrap" },
+          el("span", { class: "list-row-title", text: S.gallery.chips.name() }),
+          el("span", { class: "badge", text: S.gallery.chips.badgeNeutral() }),
+          el("span", { class: "badge badge-emphasis", text: S.gallery.chips.badgeEmphasis() }),
+          el("span", { class: "badge badge-positive", text: S.gallery.chips.badgePositive() }),
+          el("span", { class: "badge badge-negative", text: S.gallery.chips.badgeNegative() })),
+        el("div", { class: "card u-row u-gap-md u-align-center u-wrap" },
+          el("span", { class: "amount", text: S.gallery.chips.amountPlain() }),
+          el("span", { class: "amount amount-positive", text: S.gallery.chips.amountPositive() }),
+          el("span", { class: "amount amount-negative", text: S.gallery.chips.amountNegative() }),
+          el("span", { class: "amount amount-zero", text: S.gallery.chips.amountZero() }),
+          el("img", { class: "thumb", src: THUMB, alt: S.gallery.chips.thumbAlt() })))),
 
     section(S.gallery.listRows.title(), S.gallery.listRows.note(),
       el("div", { class: "u-col u-gap-xs" },

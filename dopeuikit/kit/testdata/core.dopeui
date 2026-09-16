@@ -30,6 +30,19 @@ page title="Core catalog" kind="full"
     empty "Ничего нет"
     muted "приглушённый блок"
 
+    subhead "Значки, суммы, карточки"
+    card dir="row" gap="sm" align="center" wrap
+      listtitle "Аня"
+      badge "владелец"
+      badge tone="emphasis" "это вы"
+      badge tone="positive" "действует"
+      badge tone="negative" "отозвано"
+      amount "60,00 ₽"
+      amount tone="positive" "+12,30 ₽"
+      amount tone="negative" "−4,00 ₽"
+      amount tone="zero" "0,00 ₽"
+    thumb src="/p.jpg" alt="чек" href="/p.jpg" width="120" height="96"
+
     table scroll
       trow
         hcell "Ключ"

@@ -12,7 +12,7 @@ import {
   type InviteDTO,
   type TransactionDTO,
 } from "./api";
-import { amountNode, byId, clear, el, group as rowGroup, maybe, setText, show, stamp, tag } from "./dom";
+import { amountNode, amountPlain, badge, byId, clear, el, group as rowGroup, maybe, setText, show, stamp } from "./dom";
 
 const groupID = Number(window.location.pathname.split("/")[2] ?? 0);
 
@@ -190,8 +190,8 @@ function render(g: GroupDTO): void {
     const row = el("li", "list-row");
     const left = rowGroup(true);
     left.append(el("span", "list-row-title split-name", member.name));
-    if (member.is_owner) left.append(tag(S.page.group.ownerTag()));
-    if (member.user_id === g.me) left.append(tag(S.page.group.you()));
+    if (member.is_owner) left.append(badge(S.page.group.ownerTag()));
+    if (member.user_id === g.me) left.append(badge(S.page.group.you(), "emphasis"));
     row.append(left, amountNode(`${member.balance} ${g.base_currency}`, member.balance_minor));
     balances.append(row);
   }
@@ -201,7 +201,7 @@ function render(g: GroupDTO): void {
     const row = el("li", "list-row");
     const left = rowGroup(true);
     left.append(el("span", undefined, S.page.group.transfer(transfer.from_name, transfer.to_name)));
-    row.append(left, el("span", "amount", `${transfer.amount} ${g.base_currency}`));
+    row.append(left, amountPlain(`${transfer.amount} ${g.base_currency}`));
     transfers.append(row);
   }
   show(settledNote, g.transfers.length === 0 && !g.no_rates);
@@ -230,11 +230,11 @@ function renderFeed(into: HTMLElement, list: TransactionDTO[], g: GroupDTO): voi
     left.append(el("span", "list-row-title split-name", tx.description));
     left.append(el("span", "muted", tx.day));
     if (tx.unclaimed_minor > 0) {
-      left.append(tag(S.page.group.unclaimed(`${tx.unclaimed} ${tx.currency}`)));
+      left.append(badge(S.page.group.unclaimed(`${tx.unclaimed} ${tx.currency}`), "negative"));
     }
 
     const right = rowGroup();
-    right.append(el("span", "amount", `${tx.total} ${tx.currency}`));
+    right.append(amountPlain(`${tx.total} ${tx.currency}`));
     if (tx.in_base && tx.currency !== g.base_currency) {
       right.append(el("span", "muted", `= ${tx.in_base} ${g.base_currency}`));
     }
@@ -251,7 +251,7 @@ function renderMembers(g: GroupDTO): void {
     const row = el("li", "list-row");
     const left = rowGroup(true);
     left.append(el("span", "list-row-title split-name", member.name));
-    if (member.is_owner) left.append(tag(S.page.group.ownerTag()));
+    if (member.is_owner) left.append(badge(S.page.group.ownerTag()));
     row.append(left);
     if (g.is_owner && !member.is_owner) {
       const kick = el("button", "btn btn-ghost", S.page.group.kick());
@@ -315,8 +315,8 @@ function renderInvites(invites: InviteDTO[]): void {
     const row = el("li", "list-row u-wrap");
     const left = rowGroup(true);
     left.append(el("span", "list-row-title split-name", invite.label || invite.code));
-    left.append(tag(inviteState(invite.state), invite.state !== "active"));
-    left.append(el("code", "invite-code", invite.url));
+    left.append(badge(inviteState(invite.state), invite.state === "active" ? "positive" : "negative"));
+    left.append(el("code", "invite-code muted", invite.url));
     row.append(left);
 
     const actions = rowGroup();
@@ -350,7 +350,7 @@ function renderInvites(invites: InviteDTO[]): void {
       const waiting = el("li", "list-row");
       const who = rowGroup(true);
       who.append(el("span", "split-name", person.name));
-      who.append(tag(S.page.invite.waiting()));
+      who.append(badge(S.page.invite.waiting(), "emphasis"));
       waiting.append(who);
       const decisions = rowGroup();
       for (const decision of ["approve", "decline"] as const) {

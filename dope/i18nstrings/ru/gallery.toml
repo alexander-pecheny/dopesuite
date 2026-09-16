@@ -27,6 +27,8 @@ individual_stats = "Статистика личной СИ"
 venues = "Площадки"
 # The section drawing the venues table as the host edits it.
 venues_host = "Площадки, ведущий"
+# The section drawing the kit's badge / amount / card / thumb primitives.
+chips = "Значки, суммы, карточки"
 # The section drawing the fest roster table.
 roster = "Составы"
 
@@ -53,3 +55,19 @@ title = "Ведущий · Тройка"
 [brain]
 # The <title> of the Брейн page's host shell (static/brain.html).
 title = "Ведущий · Брейн"
+
+[chips]
+# The demo card's four badges, one per tone: neutral, emphasis, positive, negative.
+badge_neutral = "ведущий"
+badge_emphasis = "это вы"
+badge_positive = "идёт"
+badge_negative = "снята"
+# The name the demo card's row is about.
+name = "Ктулху"
+# A plain figure, then the three tones: ahead, behind, and level.
+amount_plain = "120"
+amount_positive = "+12"
+amount_negative = "−04"
+amount_zero = "0"
+# Alt text of the demo thumbnail.
+thumb_alt = "фото"

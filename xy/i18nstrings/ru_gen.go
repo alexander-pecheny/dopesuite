@@ -1686,6 +1686,22 @@ var RU = Strings{
 			},
 			Title: func() string { return "Карточка" },
 		},
+		Chips: GalleryChipsStrings{
+			AmountNegative: func() string { return "−4,00" },
+			AmountPlain:    func() string { return "60,00" },
+			AmountPositive: func() string { return "+12,30" },
+			AmountZero:     func() string { return "0,00" },
+			BadgeEmphasis:  func() string { return "это вы" },
+			BadgeNegative:  func() string { return "отозвано" },
+			BadgeNeutral:   func() string { return "владелец" },
+			BadgePositive:  func() string { return "действует" },
+			Name:           func() string { return "аня" },
+			Note: func() string {
+				return "Значок говорит, чем строка ЯВЛЯЕТСЯ, и никогда не нажимается; тон суммы говорит, куда указывает число; карточка — коробка, в которой они лежат."
+			},
+			ThumbAlt: func() string { return "чек" },
+			Title:    func() string { return "Значки, суммы, карточки" },
+		},
 		Feed: GalleryFeedStrings{
 			EventComment: func() string { return "Комментарий в ленте." },
 			EventMeta:    func() string { return "аня · вчера" },

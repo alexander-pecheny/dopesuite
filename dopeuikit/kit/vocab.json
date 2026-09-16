@@ -123,6 +123,23 @@
         "danger"
       ]
     },
+    "badge-tone": {
+      "prefix": "Badge",
+      "values": [
+        "neutral",
+        "emphasis",
+        "positive",
+        "negative"
+      ]
+    },
+    "amount-tone": {
+      "prefix": "Amount",
+      "values": [
+        "positive",
+        "negative",
+        "zero"
+      ]
+    },
     "modal-variant": {
       "prefix": "ModalVar",
       "values": [
@@ -377,6 +394,28 @@
     {
       "name": "muted",
       "props": [],
+      "inline": true,
+      "children": "text"
+    },
+    {
+      "name": "badge",
+      "props": [
+        {
+          "name": "tone",
+          "enum": "badge-tone"
+        }
+      ],
+      "inline": true,
+      "children": "text"
+    },
+    {
+      "name": "amount",
+      "props": [
+        {
+          "name": "tone",
+          "enum": "amount-tone"
+        }
+      ],
       "inline": true,
       "children": "text"
     },
@@ -861,6 +900,55 @@
       "name": "listtitle",
       "props": [],
       "children": "text"
+    },
+    {
+      "name": "card",
+      "props": [
+        {
+          "name": "dir",
+          "enum": "form-dir"
+        },
+        {
+          "name": "gap",
+          "enum": "space"
+        },
+        {
+          "name": "align",
+          "enum": "align"
+        },
+        {
+          "name": "justify",
+          "enum": "justify"
+        },
+        {
+          "name": "wrap",
+          "kind": "bare"
+        }
+      ],
+      "children": "any"
+    },
+    {
+      "name": "thumb",
+      "props": [
+        {
+          "name": "src",
+          "required": true
+        },
+        {
+          "name": "alt",
+          "required": true
+        },
+        {
+          "name": "href"
+        },
+        {
+          "name": "width"
+        },
+        {
+          "name": "height"
+        }
+      ],
+      "children": "none"
     },
     {
       "name": "table",

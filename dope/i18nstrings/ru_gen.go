@@ -303,6 +303,18 @@ var RU = Strings{
 		Brain: GalleryBrainStrings{
 			Title: func() string { return "Ведущий · Брейн" },
 		},
+		Chips: GalleryChipsStrings{
+			AmountNegative: func() string { return "−04" },
+			AmountPlain:    func() string { return "120" },
+			AmountPositive: func() string { return "+12" },
+			AmountZero:     func() string { return "0" },
+			BadgeEmphasis:  func() string { return "это вы" },
+			BadgeNegative:  func() string { return "снята" },
+			BadgeNeutral:   func() string { return "ведущий" },
+			BadgePositive:  func() string { return "идёт" },
+			Name:           func() string { return "Ктулху" },
+			ThumbAlt:       func() string { return "фото" },
+		},
 		Ek: GalleryEkStrings{
 			Title: func() string { return "ЭК · Фест" },
 		},
@@ -316,6 +328,7 @@ var RU = Strings{
 			Title: func() string { return "Галерея · dope" },
 		},
 		Section: GallerySectionStrings{
+			Chips:           func() string { return "Значки, суммы, карточки" },
 			EkStats:         func() string { return "Статистика ЭК" },
 			FestGrid:        func() string { return "Сетка" },
 			GroupStandings:  func() string { return "Групповой этап" },

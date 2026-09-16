@@ -36,18 +36,26 @@ export function setText(node: HTMLElement | null, text: string): void {
   if (node) node.textContent = text;
 }
 
-// amountNode is the one place an amount becomes an element: lining figures, and
-// a colour that says which way it points. Zero is neither owed nor owing, and
-// says so by being neither colour.
+// The kit's amount primitive: lining figures, and a tone that says which way the
+// number points. A balance gets one — zero is neither owed nor owing and says so
+// by being neither colour; a total or a transfer is a plain figure and gets none.
 export function amountNode(text: string, minor: number): HTMLElement {
-  let cls = "amount amount-zero";
-  if (minor > 0) cls = "amount amount-positive";
-  else if (minor < 0) cls = "amount amount-negative";
-  return el("span", cls, text);
+  let tone = "amount-zero";
+  if (minor > 0) tone = "amount-positive";
+  else if (minor < 0) tone = "amount-negative";
+  return el("span", `amount ${tone}`, text);
 }
 
-export function tag(text: string, dead = false): HTMLElement {
-  return el("span", dead ? "tag tag-dead" : "tag", text);
+export function amountPlain(text: string): HTMLElement {
+  return el("span", "amount", text);
+}
+
+export type BadgeTone = "neutral" | "emphasis" | "positive" | "negative";
+
+// The kit's badge: one upright word saying what a row IS. Neutral is the bare
+// chip, so it carries no tone class.
+export function badge(text: string, tone: BadgeTone = "neutral"): HTMLElement {
+  return el("span", tone === "neutral" ? "badge" : `badge badge-${tone}`, text);
 }
 
 // stamp turns a stored RFC3339 time into what a person reads: the date and the
