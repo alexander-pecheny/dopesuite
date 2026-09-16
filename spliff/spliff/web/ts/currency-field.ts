@@ -61,7 +61,9 @@ export function bindCurrency(input: HTMLInputElement, error: HTMLElement): Curre
       input.value = normaliseCode(code);
       clear();
     },
-    value: () => normaliseCode(input.value),
+    // A half-typed "ge" is not a currency yet: the readouts that ask keep the
+    // last code they had rather than printing the fragment.
+    value: () => (isKnownCode(list, input.value) ? normaliseCode(input.value) : ""),
     ok() {
       const fine = isKnownCode(list, input.value);
       setText(error, fine ? "" : S.transaction.error.currencyInvalid());
