@@ -52,6 +52,10 @@ _Avoid_: simplified debts (there is no unsimplified view)
 **Member**:
 A person with a place in a Group. Every Share and every Payment names a current Member: nobody leaves or is removed while their Net balance is non-zero, so the Debt graph never names a ghost.
 
+**Phantom**:
+A Member with a name and no account: someone at the table who is not on Spliff yet, or a stand-in for testing. The Owner makes one; it pays and holds Shares like anyone. A person who joins through an Invite Link may claim a Phantom, and its Payments, Shares and History become theirs; a Phantom at zero balance can be removed like any Member.
+_Avoid_: placeholder, ghost (a ghost is what the zero-balance rule prevents), fake user
+
 **Owner**:
 The Member who made the Group, or was handed it since. The Owner alone removes Members, mints and revokes Invite Links, decides Join Requests, deletes the Group and hands ownership on; the Owner cannot leave without handing over. Everything else — every Transaction, the Group's name and Base currency — belongs to every Member alike.
 _Avoid_: admin, creator (the creator may no longer be the Owner)

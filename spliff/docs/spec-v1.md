@@ -2,8 +2,8 @@
 
 The grilling session's outcome. Terms are defined in `spliff/CONTEXT.md`; this
 file is the product and engineering shape, not the glossary. Anything not here
-is out of v1 (categories, recurring expenses, comments, CSV export, placeholder
-Members, cross-Group summaries); the per-Transaction pinned rate is out of v1
+is out of v1 (categories, recurring expenses, comments, CSV export, cross-Group
+summaries); the per-Transaction pinned rate is out of v1
 but designed for, see Rates.
 
 ## Where it lives
@@ -49,6 +49,14 @@ an Invite Link sees the Group's name and a "log in with Telegram" button, comes
 back to the link via `next`, and joins in one tap.
 
 ## Groups and Members
+
+- Phantoms (added 16 Sep 2026, see CONTEXT.md): a Member row with a display
+  name and no user. Owner-only to add. Same table as Members so every Payment
+  and Share still names a Member; the Debt graph lists it by name. A joiner at
+  an Invite Link may pick "I am <phantom>"; claiming re-points the Phantom's
+  membership, Payments, Shares and History rows to the joiner's account in one
+  transaction (refused if the joiner is already a Member). Removal follows the
+  zero-balance rule.
 
 - A Group: name, base currency (any ISO 4217 the rate table carries), Owner,
   Members, Invite Links.
@@ -155,6 +163,5 @@ Messages come from the catalog and carry the Group name and a link built from
 
 ## Out of scope in v1
 
-Categories, recurring expenses, comments, CSV export, placeholder Members,
-per-Transaction pinned rates, cross-Group personal summaries, a second
+Categories, recurring expenses, comments, CSV export, per-Transaction pinned rates, cross-Group personal summaries, a second
 language.
