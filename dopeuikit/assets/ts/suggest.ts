@@ -12,6 +12,10 @@ export interface Choice {
   value: string;
   label: string;
   hint?: string;
+  // The label is an IDENTIFIER rather than a name — a currency code, where the
+  // hint beside it is what the code means. Set, the label is drawn bold, so the
+  // eye runs down the codes and not down the sentence after them.
+  strong?: boolean;
 }
 
 export interface Suggest {
@@ -95,7 +99,7 @@ export function autocomplete(
       const row = document.createElement("button");
       row.className = "menu-item";
       row.type = "button";
-      const label = document.createElement("span");
+      const label = document.createElement(hit.strong ? "strong" : "span");
       label.textContent = hit.label;
       const hint = document.createElement("span");
       if (hit.hint) {
