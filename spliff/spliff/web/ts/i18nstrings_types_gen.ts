@@ -56,15 +56,20 @@ export type Strings = {
       notSettled: (name: string, amount: string) => string;
       ownerMustHandOver: () => string;
       ownerOnly: () => string;
+      phantomNameRequired: () => string;
+      phantomNameTooLong: () => string;
       stillNamed: (name: string) => string;
     };
   };
   invite: {
     error: {
+      alreadyAMember: () => string;
+      claimNeedsDirectLink: () => string;
       decisionInvalid: () => string;
       labelTooLong: () => string;
       limitsOutOfRange: () => string;
       noSeatsLeft: () => string;
+      notAPhantom: () => string;
       notFound: () => string;
       requestNotFound: () => string;
     };
@@ -95,6 +100,8 @@ export type Strings = {
     };
     group: {
       add: () => string;
+      addPhantom: () => string;
+      addPhantomSubmit: () => string;
       balances: () => string;
       confirmDelete: () => string;
       confirmKick: (name: string) => string;
@@ -115,6 +122,10 @@ export type Strings = {
       noRates: () => string;
       noTransactions: () => string;
       ownerTag: () => string;
+      phantomHint: () => string;
+      phantomNameLabel: () => string;
+      phantomNamePlaceholder: () => string;
+      phantomTag: () => string;
       settings: () => string;
       settled: () => string;
       title: () => string;
@@ -170,13 +181,16 @@ export type Strings = {
     join: {
       alreadyMember: () => string;
       anonymous: () => string;
+      asYourself: () => string;
       dead: () => string;
+      iAm: (name: string) => string;
       invited: () => string;
       join: () => string;
       login: () => string;
       needsApproval: () => string;
       open: () => string;
       pending: () => string;
+      pickWho: () => string;
       title: () => string;
       unnamed: () => string;
     };

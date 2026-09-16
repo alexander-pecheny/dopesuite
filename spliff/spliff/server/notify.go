@@ -101,13 +101,25 @@ func (s *server) notifyTransaction(n transactionNotice) {
 		}
 
 		str := spliffstrings.Default
+		// A Payment and a Share name a member ROW; a DM needs the account
+		// behind it. A Phantom has none — there is nobody to knock on — so it
+		// simply drops out of this map, which is the whole of "DMs: Phantoms
+		// have no Telegram; skip them".
+		account := map[int64]int64{}
+		for _, m := range members {
+			if !m.IsPhantom() {
+				account[m.ID] = m.UserID
+			}
+		}
 		// involved first, so that somebody who is both involved and merely
 		// nearby gets the message that actually concerns them.
 		text := map[int64]string{}
 		if n.Created && tx.Unclaimed() > 0 {
 			line := str.Notify.Unclaimed.Text(group.Name, tx.Description, transactionLink(n.TxID))
 			for _, m := range members {
-				text[m.UserID] = line
+				if !m.IsPhantom() {
+					text[m.UserID] = line
+				}
 			}
 		}
 		involved := map[int64]bool{}
@@ -122,7 +134,9 @@ func (s *server) notifyTransaction(n transactionNotice) {
 			line = str.Notify.Involved.Created(group.Name, tx.Description, transactionLink(n.TxID))
 		}
 		for member := range involved {
-			text[member] = line
+			if user, ok := account[member]; ok {
+				text[user] = line
+			}
 		}
 		// Nobody is told about their own act.
 		delete(text, n.ActorID)

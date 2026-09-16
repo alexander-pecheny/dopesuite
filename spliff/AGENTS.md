@@ -74,6 +74,13 @@ spliff/                  module root (go.mod: module "spliff")
 - **Nobody leaves owing.** Leaving, being kicked and deleting a Group are all
   refused while a balance is non-zero, and the refusal names the amount. That is
   what keeps the Debt graph from naming a ghost.
+- **A Member is a ROW, not an account.** `transaction_payments.member_id` and
+  `transaction_shares.member_id` name a `group_members` row, and the account
+  behind it is nullable — that is what a Phantom is. So the API's `member_id`
+  is never a user id, claiming a Phantom is one UPDATE of one row (nothing is
+  re-pointed, so no balance can move), and `group_members.id` is AUTOINCREMENT
+  so a removed row's id is never handed to somebody else. History's `actor_id`
+  is still a USER: a Phantom cannot act.
 - **One Payment and one Share per Member per Transaction.** An edit states what
   the Transaction IS, so the entries are replaced whole.
 - **A Photo is re-encoded, never stored as sent.** The EXIF a phone writes

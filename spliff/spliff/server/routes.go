@@ -67,7 +67,10 @@ func routes(s *server) *http.ServeMux {
 	api.Handle("DELETE /api/groups/{group}", route.Owner, s.handleDeleteGroup)
 	api.Handle("POST /api/groups/{group}/owner", route.Owner, s.handleHandOver)
 	api.Handle("DELETE /api/groups/{group}/members/me", route.Member, s.handleLeaveGroup)
-	api.Handle("DELETE /api/groups/{group}/members/{userId}", route.Owner, s.handleKickMember)
+	// A member row, not an account: a Phantom is removed the same way anybody is.
+	api.Handle("DELETE /api/groups/{group}/members/{memberId}", route.Owner, s.handleKickMember)
+	// A Phantom is a name only its maker can vouch for, so the Owner alone adds one.
+	api.Handle("POST /api/groups/{group}/phantoms", route.Owner, s.handleAddPhantom)
 
 	// ---- invite links ----
 	api.Handle("GET /api/groups/{group}/invites", route.Owner, s.handleListInvites)

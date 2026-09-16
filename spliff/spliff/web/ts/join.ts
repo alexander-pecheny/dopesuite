@@ -14,6 +14,9 @@ const loginBtn = byId<HTMLButtonElement>("loginBtn");
 const openBtn = byId<HTMLButtonElement>("openBtn");
 
 let peek: InvitePeekDTO | null = null;
+// Which seat the joiner says is theirs: 0 is "I am myself", anything else is
+// the member row of a Phantom whose Payments, Shares and History become theirs.
+let claim = 0;
 
 loginBtn.addEventListener("click", () => {
   window.location.href = `/login?next=${encodeURIComponent(`/join/${code}`)}`;
@@ -31,7 +34,7 @@ async function join(): Promise<void> {
   setText(message, "");
   try {
     const result = await request<{ group_id: number; state: string }>(
-      "POST", `/api/invites/code/${code}/join`);
+      "POST", `/api/invites/code/${code}/join`, { claim });
     if (result.state === "member") {
       window.location.href = `/group/${result.group_id}`;
       return;
@@ -62,6 +65,35 @@ async function load(): Promise<void> {
   render(peek, loggedIn);
 }
 
+// whoAmI is the picker the Phantoms make possible: join as yourself, or say
+// you are one of the names already at this table and take everything it holds.
+function whoAmI(link: InvitePeekDTO): void {
+  const phantoms = link.phantoms ?? [];
+  if (phantoms.length === 0) return;
+  claim = 0;
+  body.append(el("p", "hint", S.page.join.pickWho()));
+  const options: Array<{ id: number; label: string }> = [
+    { id: 0, label: S.page.join.asYourself() },
+    ...phantoms.map((p) => ({ id: p.id, label: S.page.join.iAm(p.name) })),
+  ];
+  for (const option of options) {
+    const card = el("div", "card u-row u-wrap u-align-center u-gap-sm");
+    const pick = el("input");
+    pick.type = "radio";
+    pick.name = "claim";
+    pick.value = String(option.id);
+    pick.checked = option.id === claim;
+    pick.dataset.claim = String(option.id);
+    pick.addEventListener("change", () => {
+      claim = option.id;
+    });
+    const label = el("label", "split-name u-grow");
+    label.append(pick, document.createTextNode(` ${option.label}`));
+    card.append(label);
+    body.append(card);
+  }
+}
+
 function render(link: InvitePeekDTO, loggedIn: boolean): void {
   clear(body);
   body.append(el("h2", "subhead", link.group_name || S.page.join.unnamed()));
@@ -74,6 +106,9 @@ function render(link: InvitePeekDTO, loggedIn: boolean): void {
     case "active":
       body.append(el("p", "hint",
         link.requires_approval ? S.page.join.needsApproval() : S.page.join.invited()));
+      // A link that waits for the owner's approval cannot hand over a Phantom:
+      // the decision comes later, and there is nowhere to keep what was claimed.
+      if (!link.requires_approval) whoAmI(link);
       show(joinBtn, true);
       return;
     case "member":

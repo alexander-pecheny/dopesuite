@@ -262,19 +262,19 @@ func SetDeleted(ctx context.Context, tx Tx, id int64, at string) error {
 	return err
 }
 
-// MemberHasEntries reports whether this person holds a Payment or a Share on
-// any LIVE Transaction of the Group. Their Net balance being zero is the rule
-// that lets them go; this is the second half of it, because a pair of amounts
-// that cancel is still a name the History and the feed would be left pointing
-// at nobody.
-func MemberHasEntries(ctx context.Context, q Querier, groupID, userID int64) (bool, error) {
+// MemberHasEntries reports whether this member row holds a Payment or a Share
+// on any LIVE Transaction of the Group. Their Net balance being zero is the
+// rule that lets them go; this is the second half of it, because a pair of
+// amounts that cancel is still a name the History and the feed would be left
+// pointing at nobody.
+func MemberHasEntries(ctx context.Context, q Querier, groupID, memberID int64) (bool, error) {
 	var n int
 	err := q.QueryRowContext(ctx, `
 select count(*) from transactions t
 where t.group_id = ? and t.deleted_at is null and (
   exists(select 1 from transaction_payments p where p.transaction_id = t.id and p.member_id = ?)
   or exists(select 1 from transaction_shares s where s.transaction_id = t.id and s.member_id = ?)
-)`, groupID, userID, userID).Scan(&n)
+)`, groupID, memberID, memberID).Scan(&n)
 	return n > 0, err
 }
 

@@ -94,14 +94,16 @@ type GroupStrings struct {
 }
 
 type GroupErrorStrings struct {
-	CurrencyUnknown   func() string
-	NameRequired      func() string
-	NameTooLong       func() string
-	NotAMember        func() string
-	NotSettled        func(name string, amount string) string
-	OwnerMustHandOver func() string
-	OwnerOnly         func() string
-	StillNamed        func(name string) string
+	CurrencyUnknown     func() string
+	NameRequired        func() string
+	NameTooLong         func() string
+	NotAMember          func() string
+	NotSettled          func(name string, amount string) string
+	OwnerMustHandOver   func() string
+	OwnerOnly           func() string
+	PhantomNameRequired func() string
+	PhantomNameTooLong  func() string
+	StillNamed          func(name string) string
 }
 
 // InviteStrings is the invite Surface.
@@ -111,12 +113,15 @@ type InviteStrings struct {
 }
 
 type InviteErrorStrings struct {
-	DecisionInvalid  func() string
-	LabelTooLong     func() string
-	LimitsOutOfRange func() string
-	NoSeatsLeft      func() string
-	NotFound         func() string
-	RequestNotFound  func() string
+	AlreadyAMember       func() string
+	ClaimNeedsDirectLink func() string
+	DecisionInvalid      func() string
+	LabelTooLong         func() string
+	LimitsOutOfRange     func() string
+	NoSeatsLeft          func() string
+	NotAPhantom          func() string
+	NotFound             func() string
+	RequestNotFound      func() string
 }
 
 type InviteRefusalStrings struct {
@@ -164,34 +169,40 @@ type PageCommonStrings struct {
 }
 
 type PageGroupStrings struct {
-	Add            func() string
-	Balances       func() string
-	ConfirmDelete  func() string
-	ConfirmKick    func(name string) string
-	ConfirmLeave   func() string
-	CurrencyLabel  func() string
-	Debts          func() string
-	Delete         func() string
-	Deleted        func() string
-	HandOver       func() string
-	HandOverLabel  func() string
-	History        func() string
-	Invites        func() string
-	Kick           func() string
-	Leave          func() string
-	Members        func() string
-	NameLabel      func() string
-	NewInvite      func() string
-	NoRates        func() string
-	NoTransactions func() string
-	OwnerTag       func() string
-	Settings       func() string
-	Settled        func() string
-	Title          func() string
-	Transactions   func() string
-	Transfer       func(from string, to string) string
-	Unclaimed      func(amount string) string
-	You            func() string
+	Add                    func() string
+	AddPhantom             func() string
+	AddPhantomSubmit       func() string
+	Balances               func() string
+	ConfirmDelete          func() string
+	ConfirmKick            func(name string) string
+	ConfirmLeave           func() string
+	CurrencyLabel          func() string
+	Debts                  func() string
+	Delete                 func() string
+	Deleted                func() string
+	HandOver               func() string
+	HandOverLabel          func() string
+	History                func() string
+	Invites                func() string
+	Kick                   func() string
+	Leave                  func() string
+	Members                func() string
+	NameLabel              func() string
+	NewInvite              func() string
+	NoRates                func() string
+	NoTransactions         func() string
+	OwnerTag               func() string
+	PhantomHint            func() string
+	PhantomNameLabel       func() string
+	PhantomNamePlaceholder func() string
+	PhantomTag             func() string
+	Settings               func() string
+	Settled                func() string
+	Title                  func() string
+	Transactions           func() string
+	Transfer               func(from string, to string) string
+	Unclaimed              func(amount string) string
+	You                    func() string
 }
 
 type PageHistoryStrings struct {
@@ -244,13 +255,16 @@ type PageInviteStrings struct {
 type PageJoinStrings struct {
 	AlreadyMember func() string
 	Anonymous     func() string
+	AsYourself    func() string
 	Dead          func() string
+	IAm           func(name string) string
 	Invited       func() string
 	Join          func() string
 	Login         func() string
 	NeedsApproval func() string
 	Open          func() string
 	Pending       func() string
+	PickWho       func() string
 	Title         func() string
 	Unnamed       func() string
 }
@@ -434,6 +448,14 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Group.Error.OwnerMustHandOver(), true
 	case "group.error.owner_only":
 		return s.Group.Error.OwnerOnly(), true
+	case "group.error.phantom_name_required":
+		return s.Group.Error.PhantomNameRequired(), true
+	case "group.error.phantom_name_too_long":
+		return s.Group.Error.PhantomNameTooLong(), true
+	case "invite.error.already_a_member":
+		return s.Invite.Error.AlreadyAMember(), true
+	case "invite.error.claim_needs_direct_link":
+		return s.Invite.Error.ClaimNeedsDirectLink(), true
 	case "invite.error.decision_invalid":
 		return s.Invite.Error.DecisionInvalid(), true
 	case "invite.error.label_too_long":
@@ -442,6 +464,8 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Invite.Error.LimitsOutOfRange(), true
 	case "invite.error.no_seats_left":
 		return s.Invite.Error.NoSeatsLeft(), true
+	case "invite.error.not_a_phantom":
+		return s.Invite.Error.NotAPhantom(), true
 	case "invite.error.not_found":
 		return s.Invite.Error.NotFound(), true
 	case "invite.error.request_not_found":
@@ -462,6 +486,10 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Page.Common.Home(), true
 	case "page.group.add":
 		return s.Page.Group.Add(), true
+	case "page.group.add_phantom":
+		return s.Page.Group.AddPhantom(), true
+	case "page.group.add_phantom_submit":
+		return s.Page.Group.AddPhantomSubmit(), true
 	case "page.group.balances":
 		return s.Page.Group.Balances(), true
 	case "page.group.confirm_delete":
@@ -500,6 +528,14 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Page.Group.NoTransactions(), true
 	case "page.group.owner_tag":
 		return s.Page.Group.OwnerTag(), true
+	case "page.group.phantom_hint":
+		return s.Page.Group.PhantomHint(), true
+	case "page.group.phantom_name_label":
+		return s.Page.Group.PhantomNameLabel(), true
+	case "page.group.phantom_name_placeholder":
+		return s.Page.Group.PhantomNamePlaceholder(), true
+	case "page.group.phantom_tag":
+		return s.Page.Group.PhantomTag(), true
 	case "page.group.settings":
 		return s.Page.Group.Settings(), true
 	case "page.group.settled":
@@ -582,6 +618,8 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Page.Join.AlreadyMember(), true
 	case "page.join.anonymous":
 		return s.Page.Join.Anonymous(), true
+	case "page.join.as_yourself":
+		return s.Page.Join.AsYourself(), true
 	case "page.join.dead":
 		return s.Page.Join.Dead(), true
 	case "page.join.invited":
@@ -596,6 +634,8 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Page.Join.Open(), true
 	case "page.join.pending":
 		return s.Page.Join.Pending(), true
+	case "page.join.pick_who":
+		return s.Page.Join.PickWho(), true
 	case "page.join.title":
 		return s.Page.Join.Title(), true
 	case "page.join.unnamed":
@@ -783,7 +823,7 @@ func (s Strings) Lookup(id string) (string, bool) {
 // Defines reports whether the Catalog holds the id at all, templated or not.
 func (Strings) Defines(id string) bool {
 	switch id {
-	case "admin.create_users.name", "admin.create_users.title", "admin.page.title", "auth.login.fields_required", "auth.login.invalid", "auth.page.title", "auth.tg.code_missing", "auth.tg.not_configured", "auth.tg.telegram_taken", "auth.username.format", "auth.username.reserved", "bot.login.hint", "bot.register.done", "bot.register.expired", "bot.texts.down", "bot.texts.help", "common.cancel", "common.save", "group.error.currency_unknown", "group.error.name_required", "group.error.name_too_long", "group.error.not_a_member", "group.error.not_settled", "group.error.owner_must_hand_over", "group.error.owner_only", "group.error.still_named", "invite.error.decision_invalid", "invite.error.label_too_long", "invite.error.limits_out_of_range", "invite.error.no_seats_left", "invite.error.not_found", "invite.error.request_not_found", "invite.refusal.declined", "invite.refusal.exhausted", "invite.refusal.expired", "invite.refusal.generic", "invite.refusal.revoked", "invite.refusal.spent", "notify.involved.created", "notify.involved.edited", "notify.join.text", "notify.unclaimed.text", "page.common.home", "page.group.add", "page.group.balances", "page.group.confirm_delete", "page.group.confirm_kick", "page.group.confirm_leave", "page.group.currency_label", "page.group.debts", "page.group.delete", "page.group.deleted", "page.group.hand_over", "page.group.hand_over_label", "page.group.history", "page.group.invites", "page.group.kick", "page.group.leave", "page.group.members", "page.group.name_label", "page.group.new_invite", "page.group.no_rates", "page.group.no_transactions", "page.group.owner_tag", "page.group.settings", "page.group.settled", "page.group.title", "page.group.transactions", "page.group.transfer", "page.group.unclaimed", "page.group.you", "page.history.created", "page.history.deleted", "page.history.edited", "page.history.field_day", "page.history.field_description", "page.history.field_total", "page.history.field_unclaimed", "page.history.photo_added", "page.history.photo_removed", "page.history.restored", "page.history.somebody", "page.index.create_submit", "page.index.create_title", "page.index.currency_label", "page.index.empty", "page.index.heading", "page.index.name_label", "page.index.name_placeholder", "page.index.new_group", "page.index.settled", "page.index.title", "page.invite.approval", "page.invite.approve", "page.invite.copied", "page.invite.copy", "page.invite.decline", "page.invite.label_label", "page.invite.label_placeholder", "page.invite.max_uses_label", "page.invite.mint", "page.invite.remove", "page.invite.revoke", "page.invite.state_active", "page.invite.state_exhausted", "page.invite.state_expired", "page.invite.state_revoked", "page.invite.ttl_label", "page.invite.waiting", "page.join.already_member", "page.join.anonymous", "page.join.dead", "page.join.invited", "page.join.join", "page.join.login", "page.join.needs_approval", "page.join.open", "page.join.pending", "page.join.title", "page.join.unnamed", "page.transaction.col_paid", "page.transaction.col_percent", "page.transaction.col_share", "page.transaction.confirm_delete", "page.transaction.confirm_remove_photo", "page.transaction.currency", "page.transaction.day", "page.transaction.delete", "page.transaction.description", "page.transaction.description_placeholder", "page.transaction.for_whom", "page.transaction.fully_claimed", "page.transaction.hint_claim", "page.transaction.hint_even", "page.transaction.hint_exact", "page.transaction.hint_percent", "page.transaction.hint_settlement", "page.transaction.hint_simple", "page.transaction.history", "page.transaction.mode", "page.transaction.mode_claim", "page.transaction.mode_even", "page.transaction.mode_exact", "page.transaction.mode_percent", "page.transaction.mode_settlement", "page.transaction.mode_simple", "page.transaction.need_members", "page.transaction.need_payee", "page.transaction.need_payer", "page.transaction.need_payments_match", "page.transaction.need_percents", "page.transaction.need_shares_fit", "page.transaction.new_title", "page.transaction.no_photos", "page.transaction.paid_done", "page.transaction.paid_left", "page.transaction.paid_over", "page.transaction.photo_alt", "page.transaction.photos", "page.transaction.pick_photo", "page.transaction.rate_as_of", "page.transaction.remove_photo", "page.transaction.restore", "page.transaction.title", "page.transaction.total", "page.transaction.unclaimed_note", "page.transaction.upload", "page.transaction.who_paid", "profile.logout", "profile.password.current", "profile.password.current_wrong", "profile.password.hint", "profile.password.length", "profile.password.mismatch", "profile.password.new", "profile.password.repeat", "profile.password.saved", "profile.password.submit", "profile.password.title", "profile.telegram.account_taken", "profile.telegram.bot_lead", "profile.telegram.bot_mid", "profile.telegram.expired", "profile.telegram.hint", "profile.telegram.link_hint", "profile.telegram.linked", "profile.telegram.linked_lead", "profile.telegram.linked_tail", "profile.telegram.none", "profile.telegram.start", "profile.telegram.timed_out", "profile.telegram.title", "profile.telegram.waiting", "profile.title", "profile.whoami.lead", "profile.whoami.tail", "server.error.bad_request", "server.error.internal", "server.error.not_found", "transaction.error.currency_invalid", "transaction.error.day_invalid", "transaction.error.deleted", "transaction.error.description_required", "transaction.error.description_too_long", "transaction.error.duplicate_member", "transaction.error.negative_amount", "transaction.error.not_a_member", "transaction.error.payment_required", "transaction.error.payments_mismatch", "transaction.error.photo_missing", "transaction.error.photo_not_an_image", "transaction.error.photo_too_large", "transaction.error.shares_overdraw", "transaction.error.total_positive":
+	case "admin.create_users.name", "admin.create_users.title", "admin.page.title", "auth.login.fields_required", "auth.login.invalid", "auth.page.title", "auth.tg.code_missing", "auth.tg.not_configured", "auth.tg.telegram_taken", "auth.username.format", "auth.username.reserved", "bot.login.hint", "bot.register.done", "bot.register.expired", "bot.texts.down", "bot.texts.help", "common.cancel", "common.save", "group.error.currency_unknown", "group.error.name_required", "group.error.name_too_long", "group.error.not_a_member", "group.error.not_settled", "group.error.owner_must_hand_over", "group.error.owner_only", "group.error.phantom_name_required", "group.error.phantom_name_too_long", "group.error.still_named", "invite.error.already_a_member", "invite.error.claim_needs_direct_link", "invite.error.decision_invalid", "invite.error.label_too_long", "invite.error.limits_out_of_range", "invite.error.no_seats_left", "invite.error.not_a_phantom", "invite.error.not_found", "invite.error.request_not_found", "invite.refusal.declined", "invite.refusal.exhausted", "invite.refusal.expired", "invite.refusal.generic", "invite.refusal.revoked", "invite.refusal.spent", "notify.involved.created", "notify.involved.edited", "notify.join.text", "notify.unclaimed.text", "page.common.home", "page.group.add", "page.group.add_phantom", "page.group.add_phantom_submit", "page.group.balances", "page.group.confirm_delete", "page.group.confirm_kick", "page.group.confirm_leave", "page.group.currency_label", "page.group.debts", "page.group.delete", "page.group.deleted", "page.group.hand_over", "page.group.hand_over_label", "page.group.history", "page.group.invites", "page.group.kick", "page.group.leave", "page.group.members", "page.group.name_label", "page.group.new_invite", "page.group.no_rates", "page.group.no_transactions", "page.group.owner_tag", "page.group.phantom_hint", "page.group.phantom_name_label", "page.group.phantom_name_placeholder", "page.group.phantom_tag", "page.group.settings", "page.group.settled", "page.group.title", "page.group.transactions", "page.group.transfer", "page.group.unclaimed", "page.group.you", "page.history.created", "page.history.deleted", "page.history.edited", "page.history.field_day", "page.history.field_description", "page.history.field_total", "page.history.field_unclaimed", "page.history.photo_added", "page.history.photo_removed", "page.history.restored", "page.history.somebody", "page.index.create_submit", "page.index.create_title", "page.index.currency_label", "page.index.empty", "page.index.heading", "page.index.name_label", "page.index.name_placeholder", "page.index.new_group", "page.index.settled", "page.index.title", "page.invite.approval", "page.invite.approve", "page.invite.copied", "page.invite.copy", "page.invite.decline", "page.invite.label_label", "page.invite.label_placeholder", "page.invite.max_uses_label", "page.invite.mint", "page.invite.remove", "page.invite.revoke", "page.invite.state_active", "page.invite.state_exhausted", "page.invite.state_expired", "page.invite.state_revoked", "page.invite.ttl_label", "page.invite.waiting", "page.join.already_member", "page.join.anonymous", "page.join.as_yourself", "page.join.dead", "page.join.i_am", "page.join.invited", "page.join.join", "page.join.login", "page.join.needs_approval", "page.join.open", "page.join.pending", "page.join.pick_who", "page.join.title", "page.join.unnamed", "page.transaction.col_paid", "page.transaction.col_percent", "page.transaction.col_share", "page.transaction.confirm_delete", "page.transaction.confirm_remove_photo", "page.transaction.currency", "page.transaction.day", "page.transaction.delete", "page.transaction.description", "page.transaction.description_placeholder", "page.transaction.for_whom", "page.transaction.fully_claimed", "page.transaction.hint_claim", "page.transaction.hint_even", "page.transaction.hint_exact", "page.transaction.hint_percent", "page.transaction.hint_settlement", "page.transaction.hint_simple", "page.transaction.history", "page.transaction.mode", "page.transaction.mode_claim", "page.transaction.mode_even", "page.transaction.mode_exact", "page.transaction.mode_percent", "page.transaction.mode_settlement", "page.transaction.mode_simple", "page.transaction.need_members", "page.transaction.need_payee", "page.transaction.need_payer", "page.transaction.need_payments_match", "page.transaction.need_percents", "page.transaction.need_shares_fit", "page.transaction.new_title", "page.transaction.no_photos", "page.transaction.paid_done", "page.transaction.paid_left", "page.transaction.paid_over", "page.transaction.photo_alt", "page.transaction.photos", "page.transaction.pick_photo", "page.transaction.rate_as_of", "page.transaction.remove_photo", "page.transaction.restore", "page.transaction.title", "page.transaction.total", "page.transaction.unclaimed_note", "page.transaction.upload", "page.transaction.who_paid", "profile.logout", "profile.password.current", "profile.password.current_wrong", "profile.password.hint", "profile.password.length", "profile.password.mismatch", "profile.password.new", "profile.password.repeat", "profile.password.saved", "profile.password.submit", "profile.password.title", "profile.telegram.account_taken", "profile.telegram.bot_lead", "profile.telegram.bot_mid", "profile.telegram.expired", "profile.telegram.hint", "profile.telegram.link_hint", "profile.telegram.linked", "profile.telegram.linked_lead", "profile.telegram.linked_tail", "profile.telegram.none", "profile.telegram.start", "profile.telegram.timed_out", "profile.telegram.title", "profile.telegram.waiting", "profile.title", "profile.whoami.lead", "profile.whoami.tail", "server.error.bad_request", "server.error.internal", "server.error.not_found", "transaction.error.currency_invalid", "transaction.error.day_invalid", "transaction.error.deleted", "transaction.error.description_required", "transaction.error.description_too_long", "transaction.error.duplicate_member", "transaction.error.negative_amount", "transaction.error.not_a_member", "transaction.error.payment_required", "transaction.error.payments_mismatch", "transaction.error.photo_missing", "transaction.error.photo_not_an_image", "transaction.error.photo_too_large", "transaction.error.shares_overdraw", "transaction.error.total_positive":
 		return true
 	}
 	return false

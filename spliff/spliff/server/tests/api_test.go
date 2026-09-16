@@ -89,7 +89,9 @@ func (w *world) path(suffix string) string {
 }
 
 type memberView struct {
+	ID           int64  `json:"id"`
 	UserID       int64  `json:"user_id"`
+	IsPhantom    bool   `json:"is_phantom"`
 	Name         string `json:"name"`
 	IsOwner      bool   `json:"is_owner"`
 	BalanceMinor int64  `json:"balance_minor"`
@@ -150,6 +152,20 @@ func balanceOf(t *testing.T, view groupView, name string) int64 {
 	return 0
 }
 
+// mem is the group_members row the server keys Payments and Shares by. It is
+// deliberately NOT the account id: a Phantom has no account, and the two only
+// look alike in a fixture where everybody joined in the order they registered.
+func (w *world) mem(t *testing.T, name string) int64 {
+	t.Helper()
+	for _, m := range w.read(t, w.alice).Members {
+		if m.Name == name {
+			return m.ID
+		}
+	}
+	t.Fatalf("%s is not a member of the group", name)
+	return 0
+}
+
 func entry(member int64, minor int64) map[string]any {
 	return map[string]any{"member_id": member, "minor": minor}
 }
@@ -175,7 +191,7 @@ func TestTwoPayersUnclaimedClaimAndSettle(t *testing.T) {
 	bill := w.addBill(t, w.alice, map[string]any{
 		"description": "Dinner", "day": spliffserver.Today(), "currency": "EUR",
 		"total_minor": 9000,
-		"payments":    []map[string]any{entry(w.alice.UserID, 6000), entry(w.bob.UserID, 3000)},
+		"payments":    []map[string]any{entry(w.mem(t, "alice"), 6000), entry(w.mem(t, "bob"), 3000)},
 		"shares":      []map[string]any{},
 	})
 	view := w.read(t, w.alice)
@@ -195,8 +211,8 @@ func TestTwoPayersUnclaimedClaimAndSettle(t *testing.T) {
 	w.bob.JSON(http.MethodPut, "/api/transactions/"+strconv.FormatInt(bill, 10), map[string]any{
 		"description": "Dinner", "day": spliffserver.Today(), "currency": "EUR",
 		"total_minor": 9000,
-		"payments":    []map[string]any{entry(w.alice.UserID, 6000), entry(w.bob.UserID, 3000)},
-		"shares":      []map[string]any{entry(w.bob.UserID, 3000)},
+		"payments":    []map[string]any{entry(w.mem(t, "alice"), 6000), entry(w.mem(t, "bob"), 3000)},
+		"shares":      []map[string]any{entry(w.mem(t, "bob"), 3000)},
 	}, nil)
 
 	view = w.read(t, w.bob)
@@ -217,8 +233,8 @@ func TestTwoPayersUnclaimedClaimAndSettle(t *testing.T) {
 	w.addBill(t, w.bob, map[string]any{
 		"description": "Settling up", "day": spliffserver.Today(), "currency": "EUR",
 		"total_minor": 2000,
-		"payments":    []map[string]any{entry(w.bob.UserID, 2000)},
-		"shares":      []map[string]any{entry(w.alice.UserID, 2000)},
+		"payments":    []map[string]any{entry(w.mem(t, "bob"), 2000)},
+		"shares":      []map[string]any{entry(w.mem(t, "alice"), 2000)},
 	})
 	view = w.read(t, w.alice)
 	for _, name := range []string{"alice", "bob"} {
@@ -238,7 +254,7 @@ func TestConversionUsesTheRateDate(t *testing.T) {
 	w.addBill(t, w.alice, map[string]any{
 		"description": "Taxi", "day": spliffserver.Today(), "currency": "GEL",
 		"total_minor": 5000,
-		"payments":    []map[string]any{entry(w.alice.UserID, 5000)},
+		"payments":    []map[string]any{entry(w.mem(t, "alice"), 5000)},
 		"shares":      []map[string]any{},
 	})
 	view := w.read(t, w.alice)
@@ -259,8 +275,8 @@ func TestBaseCurrencyChangeIsAReRead(t *testing.T) {
 	w.addBill(t, w.alice, map[string]any{
 		"description": "Hotel", "day": spliffserver.Today(), "currency": "EUR",
 		"total_minor": 2000,
-		"payments":    []map[string]any{entry(w.alice.UserID, 2000)},
-		"shares":      []map[string]any{entry(w.bob.UserID, 1000), entry(w.alice.UserID, 1000)},
+		"payments":    []map[string]any{entry(w.mem(t, "alice"), 2000)},
+		"shares":      []map[string]any{entry(w.mem(t, "bob"), 1000), entry(w.mem(t, "alice"), 1000)},
 	})
 	if got := balanceOf(t, w.read(t, w.alice), "alice"); got != 1000 {
 		t.Fatalf("alice in EUR = %d, want 1000", got)
@@ -288,7 +304,7 @@ func TestWriteRefusals(t *testing.T) {
 		body := map[string]any{
 			"description": "Lunch", "day": spliffserver.Today(), "currency": "EUR",
 			"total_minor": 1000,
-			"payments":    []map[string]any{entry(w.alice.UserID, 1000)},
+			"payments":    []map[string]any{entry(w.mem(t, "alice"), 1000)},
 			"shares":      []map[string]any{},
 		}
 		for k, v := range over {
@@ -302,16 +318,18 @@ func TestWriteRefusals(t *testing.T) {
 		says string
 	}{
 		{"payments that do not add up", base(map[string]any{
-			"payments": []map[string]any{entry(w.alice.UserID, 900)},
+			"payments": []map[string]any{entry(w.mem(t, "alice"), 900)},
 		}), "9.00"},
 		{"shares past the total", base(map[string]any{
-			"shares": []map[string]any{entry(w.alice.UserID, 700), entry(w.bob.UserID, 700)},
+			"shares": []map[string]any{entry(w.mem(t, "alice"), 700), entry(w.mem(t, "bob"), 700)},
 		}), "4.00"},
 		{"two shares for one member", base(map[string]any{
-			"shares": []map[string]any{entry(w.bob.UserID, 100), entry(w.bob.UserID, 100)},
+			"shares": []map[string]any{entry(w.mem(t, "bob"), 100), entry(w.mem(t, "bob"), 100)},
 		}), "twice"},
+		// Carol is not in the Group, so no member row of it names her; the id
+		// is a plausible one from another Group's counting.
 		{"somebody who is not a member", base(map[string]any{
-			"shares": []map[string]any{entry(w.carol.UserID, 100)},
+			"shares": []map[string]any{entry(w.mem(t, "bob")+1000, 100)},
 		}), "member"},
 		{"no payer at all", base(map[string]any{
 			"payments": []map[string]any{},
@@ -343,8 +361,8 @@ func TestSoftDeleteAndRestore(t *testing.T) {
 	id := w.addBill(t, w.alice, map[string]any{
 		"description": "Museum", "day": spliffserver.Today(), "currency": "EUR",
 		"total_minor": 1000,
-		"payments":    []map[string]any{entry(w.alice.UserID, 1000)},
-		"shares":      []map[string]any{entry(w.bob.UserID, 1000)},
+		"payments":    []map[string]any{entry(w.mem(t, "alice"), 1000)},
+		"shares":      []map[string]any{entry(w.mem(t, "bob"), 1000)},
 	})
 	if got := balanceOf(t, w.read(t, w.alice), "alice"); got != 1000 {
 		t.Fatalf("alice = %d before the delete, want 1000", got)
@@ -397,8 +415,8 @@ func TestLeavingIsRefusedWhileTheBalanceIsNotZero(t *testing.T) {
 	id := w.addBill(t, w.alice, map[string]any{
 		"description": "Wine", "day": spliffserver.Today(), "currency": "EUR",
 		"total_minor": 1000,
-		"payments":    []map[string]any{entry(w.alice.UserID, 1000)},
-		"shares":      []map[string]any{entry(w.bob.UserID, 1000)},
+		"payments":    []map[string]any{entry(w.mem(t, "alice"), 1000)},
+		"shares":      []map[string]any{entry(w.mem(t, "bob"), 1000)},
 	})
 
 	resp := w.bob.Do(http.MethodDelete, w.path("/members/me"), nil)
@@ -410,7 +428,7 @@ func TestLeavingIsRefusedWhileTheBalanceIsNotZero(t *testing.T) {
 	}
 	// Nor may the Owner kick him.
 	if resp := w.alice.Do(http.MethodDelete,
-		w.path("/members/"+strconv.FormatInt(w.bob.UserID, 10)), nil); resp.Code != http.StatusBadRequest {
+		w.path("/members/"+strconv.FormatInt(w.mem(t, "bob"), 10)), nil); resp.Code != http.StatusBadRequest {
 		t.Errorf("kicking = %d, want 400", resp.Code)
 	}
 	// Nor delete the Group.
@@ -435,8 +453,8 @@ func TestALevelMemberStillNamedCannotLeave(t *testing.T) {
 	w.addBill(t, w.alice, map[string]any{
 		"description": "Split down the middle", "day": spliffserver.Today(), "currency": "EUR",
 		"total_minor": 2000,
-		"payments":    []map[string]any{entry(w.alice.UserID, 1000), entry(w.bob.UserID, 1000)},
-		"shares":      []map[string]any{entry(w.alice.UserID, 1000), entry(w.bob.UserID, 1000)},
+		"payments":    []map[string]any{entry(w.mem(t, "alice"), 1000), entry(w.mem(t, "bob"), 1000)},
+		"shares":      []map[string]any{entry(w.mem(t, "alice"), 1000), entry(w.mem(t, "bob"), 1000)},
 	})
 	if got := balanceOf(t, w.read(t, w.alice), "bob"); got != 0 {
 		t.Fatalf("bob = %d, want 0", got)
@@ -533,7 +551,7 @@ func TestPhotoIsReencodedAndMembersOnly(t *testing.T) {
 	id := w.addBill(t, w.alice, map[string]any{
 		"description": "Receipt", "day": spliffserver.Today(), "currency": "EUR",
 		"total_minor": 1000,
-		"payments":    []map[string]any{entry(w.alice.UserID, 1000)},
+		"payments":    []map[string]any{entry(w.mem(t, "alice"), 1000)},
 		"shares":      []map[string]any{},
 	})
 	path := "/api/transactions/" + strconv.FormatInt(id, 10) + "/photos"

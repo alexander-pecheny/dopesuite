@@ -306,7 +306,7 @@ function captioned(caption: string, control: HTMLElement): HTMLElement {
 
 function mark(node: HTMLElement, role: string, member: MemberDTO): void {
   node.dataset.role = role;
-  node.dataset.member = String(member.user_id);
+  node.dataset.member = String(member.id);
 }
 
 function tickbox(kind: "checkbox" | "radio", name: string, on: boolean): HTMLInputElement {
@@ -329,9 +329,9 @@ function renderPayers(): void {
     const row = card();
     const entry: PayerRow = { member };
     if (picker) {
-      const pick = tickbox("radio", "payer", payer === member.user_id);
+      const pick = tickbox("radio", "payer", payer === member.id);
       pick.addEventListener("change", () => {
-        payer = member.user_id;
+        payer = member.id;
         recompute();
       });
       mark(pick, "pick-payer", member);
@@ -339,9 +339,9 @@ function renderPayers(): void {
       entry.whole = amountPlain("");
       row.append(named(member, pick), entry.whole);
     } else {
-      const input = amountInput(paidText.get(member.user_id) ?? "");
+      const input = amountInput(paidText.get(member.id) ?? "");
       input.addEventListener("input", () => {
-        paidText.set(member.user_id, input.value);
+        paidText.set(member.id, input.value);
         recompute();
       });
       mark(input, "paid", member);
@@ -363,7 +363,7 @@ function renderShares(): void {
   for (const member of members) {
     const row = card();
     const entry: ShareRow = { member };
-    const id = member.user_id;
+    const id = member.id;
     switch (m) {
       case "simple":
       case "settlement": {
@@ -453,7 +453,7 @@ function state(): FormState {
   const paid = new Map<number, number>();
   const exact = new Map<number, number>();
   for (const member of members) {
-    const id = member.user_id;
+    const id = member.id;
     const value = parseAmount(paidText.get(id) ?? "", code);
     if (value && value > 0) paid.set(id, value);
     const shareValue = parseAmount(shareText.get(id) ?? "", code);
@@ -462,10 +462,10 @@ function state(): FormState {
   return {
     mode: mode(),
     totalMinor: total,
-    members: members.map((m) => m.user_id),
+    members: members.map((m) => m.id),
     paid,
-    chosen: members.map((m) => m.user_id).filter((id) => chosen.has(id)),
-    percents: new Map(members.map((m) => [m.user_id, percentText.get(m.user_id) ?? ""])),
+    chosen: members.map((m) => m.id).filter((id) => chosen.has(id)),
+    percents: new Map(members.map((m) => [m.id, percentText.get(m.id) ?? ""])),
     exact,
     me,
     payee,
@@ -482,7 +482,7 @@ function recompute(): void {
 
   for (const row of payerRows) {
     if (!row.whole) continue;
-    row.whole.textContent = payer === row.member.user_id ? formatMinor(st.totalMinor, code) : "";
+    row.whole.textContent = payer === row.member.id ? formatMinor(st.totalMinor, code) : "";
   }
 
   const derived = new Map<number, number>();
@@ -494,7 +494,7 @@ function recompute(): void {
   }
   for (const row of shareRows) {
     if (!row.derived) continue;
-    const id = row.member.user_id;
+    const id = row.member.id;
     if (st.mode === "simple" || st.mode === "settlement") {
       row.derived.textContent = payee === id ? formatMinor(st.totalMinor, code) : "";
       continue;

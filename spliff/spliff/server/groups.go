@@ -26,13 +26,62 @@ const MaxNameRunes = 80
 
 // ---- what the browser is handed ----
 
+// memberDTO is one place in a Group. ID is the member ROW — what every Payment
+// and Share names, and what the editor and the kick route address. UserID is
+// the account behind it, and is 0 for a Phantom.
 type memberDTO struct {
+	ID           int64  `json:"id"`
 	UserID       int64  `json:"user_id"`
+	IsPhantom    bool   `json:"is_phantom"`
 	Name         string `json:"name"`
 	JoinedAt     string `json:"joined_at"`
 	IsOwner      bool   `json:"is_owner"`
 	BalanceMinor int64  `json:"balance_minor"`
 	Balance      string `json:"balance"`
+}
+
+func memberDTOs(members []store.Member) []memberDTO {
+	out := make([]memberDTO, 0, len(members))
+	for _, m := range members {
+		out = append(out, memberDTO{
+			ID: m.ID, UserID: m.UserID, IsPhantom: m.IsPhantom(),
+			Name: m.Name, JoinedAt: m.JoinedAt, IsOwner: m.IsOwner,
+		})
+	}
+	return out
+}
+
+// memberNames is member row -> the name the Group calls them; userNames is
+// account -> the same, for the places that name an ACTOR (who made a change,
+// who uploaded a picture) rather than a party to the money. A Phantom is in the
+// first and never in the second.
+func memberNames(members []store.Member) map[int64]string {
+	out := map[int64]string{}
+	for _, m := range members {
+		out[m.ID] = m.Name
+	}
+	return out
+}
+
+func userNames(members []store.Member) map[int64]string {
+	out := map[int64]string{}
+	for _, m := range members {
+		if !m.IsPhantom() {
+			out[m.UserID] = m.Name
+		}
+	}
+	return out
+}
+
+// meMember is the caller's own member row in this Group — what the page compares
+// a Member against to know which row is theirs.
+func meMember(members []store.Member, userID int64) int64 {
+	for _, m := range members {
+		if m.UserID == userID {
+			return m.ID
+		}
+	}
+	return 0
 }
 
 type transferDTO struct {
@@ -130,12 +179,13 @@ func (s *server) handleListGroups(w http.ResponseWriter, r *http.Request, sc rou
 			ID: g.ID, Name: g.Name, BaseCurrency: g.BaseCurrency,
 			IsOwner: g.OwnerID == sc.User.UserID,
 		}
-		balances, _, err := s.balancesOf(r.Context(), g, book)
+		balances, members, err := s.balancesOf(r.Context(), g, book)
 		if err != nil && !errors.Is(err, rates.ErrNoTable) {
 			return err
 		}
+		mine := meMember(members, sc.User.UserID)
 		for _, b := range balances {
-			if b.MemberID == sc.User.UserID {
+			if b.MemberID == mine {
 				row.BalanceMinor = b.Minor
 				row.Balance = money.Format(b.Minor, g.BaseCurrency)
 			}
@@ -293,23 +343,21 @@ func (s *server) handleGetGroup(w http.ResponseWriter, r *http.Request, sc route
 
 	out := groupDTO{
 		ID: g.ID, Name: g.Name, BaseCurrency: g.BaseCurrency,
-		IsOwner: g.OwnerID == sc.User.UserID, Me: sc.User.UserID,
+		IsOwner: g.OwnerID == sc.User.UserID, Me: meMember(members, sc.User.UserID),
 		NoRates:   book.Empty(),
-		Members:   []memberDTO{},
+		Members:   memberDTOs(members),
 		Transfers: []transferDTO{},
 	}
-	names := map[int64]string{}
+	names := memberNames(members)
+	actors := userNames(members)
 	byMember := map[int64]int64{}
 	for _, b := range balances {
 		byMember[b.MemberID] = b.Minor
 	}
-	for _, m := range members {
-		names[m.UserID] = m.Name
-		out.Members = append(out.Members, memberDTO{
-			UserID: m.UserID, Name: m.Name, JoinedAt: m.JoinedAt, IsOwner: m.IsOwner,
-			BalanceMinor: byMember[m.UserID],
-			Balance:      money.Format(byMember[m.UserID], g.BaseCurrency),
-		})
+	for i := range out.Members {
+		id := out.Members[i].ID
+		out.Members[i].BalanceMinor = byMember[id]
+		out.Members[i].Balance = money.Format(byMember[id], g.BaseCurrency)
 	}
 	for _, t := range ledger.Transfers(balances) {
 		out.Transfers = append(out.Transfers, transferDTO{
@@ -318,17 +366,17 @@ func (s *server) handleGetGroup(w http.ResponseWriter, r *http.Request, sc route
 		})
 	}
 
-	if out.Live, err = s.feed(ctx, g, book, names, true); err != nil {
+	if out.Live, err = s.feed(ctx, g, book, names, actors, true); err != nil {
 		return err
 	}
-	if out.Deleted, err = s.feed(ctx, g, book, names, false); err != nil {
+	if out.Deleted, err = s.feed(ctx, g, book, names, actors, false); err != nil {
 		return err
 	}
 	history, err := store.GroupHistory(ctx, s.db, g.ID, 200)
 	if err != nil {
 		return err
 	}
-	out.History = historyDTOs(history, names, s.descriptions(out.Live, out.Deleted))
+	out.History = historyDTOs(history, actors, s.descriptions(out.Live, out.Deleted))
 	return writeJSON(w, out)
 }
 
@@ -342,14 +390,14 @@ func (s *server) descriptions(lists ...[]transactionDTO) map[int64]string {
 	return out
 }
 
-func (s *server) feed(ctx context.Context, g store.Group, book *Book, names map[int64]string, live bool) ([]transactionDTO, error) {
+func (s *server) feed(ctx context.Context, g store.Group, book *Book, names, actors map[int64]string, live bool) ([]transactionDTO, error) {
 	txs, err := store.GroupTransactions(ctx, s.db, g.ID, live)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]transactionDTO, 0, len(txs))
 	for _, t := range txs {
-		dto, err := s.transactionDTO(t, g, book, names)
+		dto, err := s.transactionDTO(t, g, book, names, actors)
 		if err != nil {
 			return nil, err
 		}
@@ -361,17 +409,17 @@ func (s *server) feed(ctx context.Context, g store.Group, book *Book, names map[
 // transactionDTO is one Transaction as a page reads it: its own amounts in its
 // own currency, plus the Rate date it converts with and its total restated in
 // the Group's Base currency — "rate as of <date>" is the line this feeds.
-func (s *server) transactionDTO(t store.Transaction, g store.Group, book *Book, names map[int64]string) (transactionDTO, error) {
+func (s *server) transactionDTO(t store.Transaction, g store.Group, book *Book, names, actors map[int64]string) (transactionDTO, error) {
 	out := transactionDTO{
 		ID: t.ID, GroupID: t.GroupID, Description: t.Description, Day: t.Day,
 		Currency: t.Currency, TotalMinor: t.TotalMinor,
 		Total:          money.Format(t.TotalMinor, t.Currency),
 		UnclaimedMinor: t.Unclaimed(),
 		Unclaimed:      money.Format(t.Unclaimed(), t.Currency),
-		Deleted:        t.Deleted(), CreatedBy: names[t.CreatedBy], UpdatedAt: t.UpdatedAt,
+		Deleted:        t.Deleted(), CreatedBy: actors[t.CreatedBy], UpdatedAt: t.UpdatedAt,
 		Payments: entryDTOs(t.Payments, t.Currency, names),
 		Shares:   entryDTOs(t.Shares, t.Currency, names),
-		Photos:   photoDTOs(t.Photos, names),
+		Photos:   photoDTOs(t.Photos, actors),
 	}
 	if book.Empty() {
 		return out, nil
@@ -471,7 +519,8 @@ func (s *server) handlePatchGroup(w http.ResponseWriter, r *http.Request, sc rou
 	return nil
 }
 
-// handOverRequest names the Member the Group is being handed to.
+// handOverRequest names the Member the Group is being handed to. It is a USER
+// id, not a member row: a Phantom has nobody to hand a Group to.
 type handOverRequest struct {
 	UserID int64 `json:"user_id"`
 }
@@ -515,10 +564,7 @@ func (s *server) handleDeleteGroup(w http.ResponseWriter, r *http.Request, sc ro
 	if err != nil && !errors.Is(err, rates.ErrNoTable) {
 		return err
 	}
-	names := map[int64]string{}
-	for _, m := range members {
-		names[m.UserID] = m.Name
-	}
+	names := memberNames(members)
 	for _, b := range balances {
 		if b.Minor != 0 {
 			return corei18n.User(spliffstrings.Default.Group.Error.NotSettled(
@@ -546,11 +592,21 @@ func (s *server) handleDeleteGroup(w http.ResponseWriter, r *http.Request, sc ro
 // ---- leaving and being kicked ----
 
 func (s *server) handleLeaveGroup(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	return s.removeMember(w, r, sc, sc.User.UserID, false)
+	members, err := store.Members(r.Context(), s.db, sc.GroupID)
+	if err != nil {
+		return err
+	}
+	mine := meMember(members, sc.User.UserID)
+	if mine == 0 {
+		return corei18n.User(spliffstrings.Default.Group.Error.NotAMember())
+	}
+	return s.removeMember(w, r, sc, mine, false)
 }
 
+// handleKickMember takes a MEMBER ROW id, not an account: a Phantom has no
+// account, and removing one is the same act under the same rule.
 func (s *server) handleKickMember(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	id, err := strconv.ParseInt(r.PathValue("userId"), 10, 64)
+	id, err := strconv.ParseInt(r.PathValue("memberId"), 10, 64)
 	if err != nil {
 		return route.NotFound(spliffstrings.Default.Group.Error.NotAMember())
 	}
@@ -560,61 +616,94 @@ func (s *server) handleKickMember(w http.ResponseWriter, r *http.Request, sc rou
 // removeMember is the one rule both ways round: nobody goes while their Net
 // balance is non-zero, and the Owner cannot go at all without handing the Group
 // on first. A Member who is level but still named on a live Transaction stays
-// too — the Debt graph must never name somebody who is not there.
-func (s *server) removeMember(w http.ResponseWriter, r *http.Request, sc route.Scope, userID int64, kick bool) error {
+// too — the Debt graph must never name somebody who is not there. A Phantom is
+// held to all of it, which is what keeps one from being deleted mid-trip.
+func (s *server) removeMember(w http.ResponseWriter, r *http.Request, sc route.Scope, memberID int64, kick bool) error {
 	ctx := r.Context()
 	str := spliffstrings.Default
 	g, err := store.GroupByID(ctx, s.db, sc.GroupID)
 	if err != nil {
 		return notFound(err)
 	}
-	if g.OwnerID == userID {
-		return corei18n.User(str.Group.Error.OwnerMustHandOver())
-	}
 	if kick && !sc.IsOwner {
 		return route.Forbidden(str.Group.Error.OwnerOnly())
 	}
-	member, err := store.IsMember(ctx, s.db, sc.GroupID, userID)
+	member, err := store.MemberByID(ctx, s.db, sc.GroupID, memberID)
+	if errors.Is(err, store.ErrNotFound) {
+		return corei18n.User(str.Group.Error.NotAMember())
+	}
 	if err != nil {
 		return err
 	}
-	if !member {
-		return corei18n.User(str.Group.Error.NotAMember())
+	if member.IsOwner {
+		return corei18n.User(str.Group.Error.OwnerMustHandOver())
 	}
 	book, err := s.rates.Book(ctx)
 	if err != nil {
 		return err
 	}
-	balances, members, err := s.balancesOf(ctx, g, book)
+	balances, _, err := s.balancesOf(ctx, g, book)
 	if err != nil && !errors.Is(err, rates.ErrNoTable) {
 		return err
 	}
-	name := ""
-	for _, m := range members {
-		if m.UserID == userID {
-			name = m.Name
-		}
-	}
 	for _, b := range balances {
-		if b.MemberID == userID && b.Minor != 0 {
+		if b.MemberID == memberID && b.Minor != 0 {
 			return corei18n.User(str.Group.Error.NotSettled(
-				name, money.Format(b.Minor, g.BaseCurrency)+" "+g.BaseCurrency))
+				member.Name, money.Format(b.Minor, g.BaseCurrency)+" "+g.BaseCurrency))
 		}
 	}
-	named, err := store.MemberHasEntries(ctx, s.db, sc.GroupID, userID)
+	named, err := store.MemberHasEntries(ctx, s.db, sc.GroupID, memberID)
 	if err != nil {
 		return err
 	}
 	if named {
-		return corei18n.User(str.Group.Error.StillNamed(name))
+		return corei18n.User(str.Group.Error.StillNamed(member.Name))
 	}
 	if err := s.withWriteTx(ctx, "remove-member", func(ctx context.Context, tx *sql.Tx) error {
-		return store.RemoveMember(ctx, tx, sc.GroupID, userID)
+		return store.RemoveMember(ctx, tx, sc.GroupID, memberID)
 	}); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
 	return nil
+}
+
+// ---- Phantoms ----
+
+// MaxPhantomNameRunes bounds the name the Owner types. It is a person's name at
+// a table, not a description.
+const MaxPhantomNameRunes = 60
+
+type addPhantomRequest struct {
+	Name string `json:"name"`
+}
+
+// handleAddPhantom seats somebody who is not on Spliff. The Owner alone may:
+// a Phantom is a name only its maker can vouch for, and everybody else in the
+// Group will be settling up with it.
+func (s *server) handleAddPhantom(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	var req addPhantomRequest
+	if err := readJSON(r, &req); err != nil {
+		return err
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return corei18n.User(spliffstrings.Default.Group.Error.PhantomNameRequired())
+	}
+	if len([]rune(name)) > MaxPhantomNameRunes {
+		return corei18n.User(spliffstrings.Default.Group.Error.PhantomNameTooLong())
+	}
+	now := rfc3339(time.Now())
+	var id int64
+	err := s.withWriteTx(r.Context(), "add-phantom", func(ctx context.Context, tx *sql.Tx) error {
+		var err error
+		id, err = store.AddPhantom(ctx, tx, sc.GroupID, name, now)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, map[string]any{"id": id})
 }
 
 // notFound turns the store's missing-row answer into a 404 in our words.

@@ -36,12 +36,14 @@ CREATE TABLE group_invites(
 );
 
 -- table group_members
-CREATE TABLE group_members(
-  id integer primary key,
+CREATE TABLE "group_members"(
+  id integer primary key autoincrement,
   group_id integer not null references groups(id) on delete cascade,
-  user_id integer not null references users(id) on delete cascade,
+  user_id integer references users(id) on delete cascade,
+  display_name text,
   joined_at text not null,
-  unique(group_id, user_id)
+  unique(group_id, user_id),
+  check (user_id is not null or display_name is not null)
 );
 
 -- table groups
@@ -110,10 +112,10 @@ CREATE TABLE transaction_history(
 );
 
 -- table transaction_payments
-CREATE TABLE transaction_payments(
+CREATE TABLE "transaction_payments"(
   id integer primary key,
   transaction_id integer not null references transactions(id) on delete cascade,
-  member_id integer not null references users(id),
+  member_id integer not null,
   amount_minor integer not null,
   unique(transaction_id, member_id)
 );
@@ -131,10 +133,10 @@ CREATE TABLE transaction_photos(
 );
 
 -- table transaction_shares
-CREATE TABLE transaction_shares(
+CREATE TABLE "transaction_shares"(
   id integer primary key,
   transaction_id integer not null references transactions(id) on delete cascade,
-  member_id integer not null references users(id),
+  member_id integer not null,
   amount_minor integer not null,
   unique(transaction_id, member_id)
 );

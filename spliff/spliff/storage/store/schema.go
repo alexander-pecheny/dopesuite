@@ -193,6 +193,73 @@ create table if not exists rate_fetches(
   fetched_at text not null
 );
 `)},
+
+	// Phantoms (spliff/CONTEXT.md): a Member with a name and no account.
+	//
+	// The choice this step makes is that THE MEMBER ROW IS THE IDENTITY. A
+	// Payment, a Share and a Photo used to name a user; they now name a
+	// group_members row, which may or may not have a user behind it. That is
+	// what keeps "every Payment and Share names a current Member" literally
+	// true for a Phantom, and it is what makes claiming one a single UPDATE of
+	// one row: the Payments, Shares and History already point at the member
+	// row, so giving that row a user_id re-points all of them at once and no
+	// balance moves by construction.
+	//
+	// transaction_history.actor_id stays a USER: a Phantom cannot act, and
+	// somebody who has left the Group still made the change they made.
+	//
+	// Two details the shape forces. group_members.id is AUTOINCREMENT, so a
+	// removed member's id is never handed to somebody else — a deleted
+	// Transaction any Member may restore still names whoever it always named.
+	// And member_id declares no foreign key, for the same reason it never did
+	// when it named a user: leaving is allowed once the balance is zero and no
+	// LIVE Transaction names you, and a real reference would refuse exactly
+	// that departure on the strength of a Transaction that has left the ledger.
+	{Version: 2, Name: "phantoms: a Member may have a name instead of an account", Up: schema.Exec(`
+create table group_members_new(
+  id integer primary key autoincrement,
+  group_id integer not null references groups(id) on delete cascade,
+  user_id integer references users(id) on delete cascade,
+  display_name text,
+  joined_at text not null,
+  unique(group_id, user_id),
+  check (user_id is not null or display_name is not null)
+);
+insert into group_members_new(id, group_id, user_id, display_name, joined_at)
+  select id, group_id, user_id, null, joined_at from group_members;
+drop table group_members;
+alter table group_members_new rename to group_members;
+
+create table transaction_payments_new(
+  id integer primary key,
+  transaction_id integer not null references transactions(id) on delete cascade,
+  member_id integer not null,
+  amount_minor integer not null,
+  unique(transaction_id, member_id)
+);
+insert into transaction_payments_new(id, transaction_id, member_id, amount_minor)
+  select p.id, p.transaction_id, m.id, p.amount_minor
+  from transaction_payments p
+  join transactions t on t.id = p.transaction_id
+  join group_members m on m.group_id = t.group_id and m.user_id = p.member_id;
+drop table transaction_payments;
+alter table transaction_payments_new rename to transaction_payments;
+
+create table transaction_shares_new(
+  id integer primary key,
+  transaction_id integer not null references transactions(id) on delete cascade,
+  member_id integer not null,
+  amount_minor integer not null,
+  unique(transaction_id, member_id)
+);
+insert into transaction_shares_new(id, transaction_id, member_id, amount_minor)
+  select s.id, s.transaction_id, m.id, s.amount_minor
+  from transaction_shares s
+  join transactions t on t.id = s.transaction_id
+  join group_members m on m.group_id = t.group_id and m.user_id = s.member_id;
+drop table transaction_shares;
+alter table transaction_shares_new rename to transaction_shares;
+`)},
 }
 
 // Migrate applies the list. sqlitex.Open calls it on the single pinned

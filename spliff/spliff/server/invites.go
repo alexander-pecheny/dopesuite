@@ -24,14 +24,26 @@ import (
 // there. This file is the adapter — Spliff's routes, Spliff's DTOs, Spliff's
 // write transaction, Spliff's words, and what a Group is.
 
-// groupScope teaches invitelink what a Spliff Group is.
-type groupScope struct{ s *server }
+// groupScope teaches invitelink what a Spliff Group is. claim carries the one
+// thing the package has no opinion about: the joiner may be stepping into a
+// Phantom's shoes rather than taking a new seat.
+type groupScope struct {
+	s     *server
+	claim int64
+}
 
 func (g groupScope) IsMember(ctx context.Context, q invitelink.Querier, groupID, userID int64) (bool, error) {
 	return store.IsMember(ctx, q, groupID, userID)
 }
 
+// AddMember seats the joiner. Claiming a Phantom is not a second seat: the
+// member row already exists, holding its Payments, its Shares and its place in
+// join order, and all it gains is an account. So nothing is inserted and no
+// balance moves.
 func (g groupScope) AddMember(ctx context.Context, tx invitelink.Tx, groupID, userID int64) error {
+	if g.claim != 0 {
+		return store.ClaimPhantom(ctx, tx, groupID, g.claim, userID)
+	}
 	return store.AddMember(ctx, tx, groupID, userID, rfc3339(time.Now()))
 }
 
@@ -56,13 +68,17 @@ func (g groupScope) NudgeOwner(groupID, requesterID int64) {
 // invites is the shared machine bound to Spliff's tables. The join is what
 // keeps a deleted Group's links from resolving: they live in group_invites
 // alone and, but for it, a link would go on answering after its Group had gone.
-func (s *server) invites() invitelink.Links {
+func (s *server) invites() invitelink.Links { return s.invitesClaiming(0) }
+
+// invitesClaiming is the same machine with the joiner's "I am …" answer bound
+// to the seat it takes.
+func (s *server) invitesClaiming(claim int64) invitelink.Links {
 	return invitelink.Links{
 		Invites:   "group_invites",
 		Uses:      "group_invite_uses",
 		ScopeID:   "group_id",
 		ScopeJoin: "join groups g on g.id = i.group_id",
-		Scope:     groupScope{s},
+		Scope:     groupScope{s: s, claim: claim},
 	}
 }
 
@@ -89,12 +105,33 @@ type inviteDTO struct {
 }
 
 // invitePeekDTO is all an invitee learns before joining: which Group this is,
-// and whether the link still works for them.
+// whether the link still works for them, and the Phantoms they might be. The
+// last is deliberately public — a name at the table is what the joiner has to
+// recognise before they have an account, and it is the Owner who typed it.
 type invitePeekDTO struct {
-	GroupID          int64  `json:"group_id"`
-	GroupName        string `json:"group_name"`
-	State            string `json:"state"`
-	RequiresApproval bool   `json:"requires_approval"`
+	GroupID          int64        `json:"group_id"`
+	GroupName        string       `json:"group_name"`
+	State            string       `json:"state"`
+	RequiresApproval bool         `json:"requires_approval"`
+	Phantoms         []phantomDTO `json:"phantoms"`
+}
+
+// phantomDTO is one "I am …" the join page can offer.
+type phantomDTO struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+func (s *server) phantomsOf(ctx context.Context, groupID int64) ([]phantomDTO, error) {
+	list, err := store.Phantoms(ctx, s.db, groupID)
+	if err != nil {
+		return nil, err
+	}
+	out := []phantomDTO{}
+	for _, m := range list {
+		out = append(out, phantomDTO{ID: m.ID, Name: m.Name})
+	}
+	return out, nil
 }
 
 func toInviteDTO(lk invitelink.Link, now time.Time) inviteDTO {
@@ -289,9 +326,14 @@ func (s *server) handlePeekInvite(w http.ResponseWriter, r *http.Request, sc rou
 	if err != nil {
 		return err
 	}
+	phantoms, err := s.phantomsOf(r.Context(), peek.ScopeID)
+	if err != nil {
+		return err
+	}
 	return writeJSON(w, invitePeekDTO{
 		GroupID: peek.ScopeID, GroupName: peek.ScopeName,
 		State: string(peek.State), RequiresApproval: peek.RequiresApproval,
+		Phantoms: phantoms,
 	})
 }
 
@@ -306,13 +348,18 @@ func (s *server) handlePublicPeek(w http.ResponseWriter, r *http.Request, _ rout
 	if err != nil {
 		return err
 	}
-	name, err := groupScope{s}.DisplayName(r.Context(), s.db, lk.ScopeID)
+	name, err := groupScope{s: s}.DisplayName(r.Context(), s.db, lk.ScopeID)
+	if err != nil {
+		return err
+	}
+	phantoms, err := s.phantomsOf(r.Context(), lk.ScopeID)
 	if err != nil {
 		return err
 	}
 	return writeJSON(w, invitePeekDTO{
 		GroupID: lk.ScopeID, GroupName: name,
 		State: string(lk.State(time.Now())), RequiresApproval: lk.RequiresApproval,
+		Phantoms: phantoms,
 	})
 }
 
@@ -321,12 +368,29 @@ type joinResponse struct {
 	State   string `json:"state"` // member | pending
 }
 
+// joinRequest is what the join page sends. Claim is the member row of the
+// Phantom the joiner says they are; 0 is "I am myself".
+type joinRequest struct {
+	Claim int64 `json:"claim"`
+}
+
 func (s *server) handleJoinInvite(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	code := r.PathValue("code")
+	var req joinRequest
+	if r.ContentLength > 0 {
+		if err := readJSON(r, &req); err != nil {
+			return err
+		}
+	}
 	now := time.Now()
-	links := s.invites()
+	links := s.invitesClaiming(req.Claim)
 	var res invitelink.Result
 	err := s.withWriteTx(r.Context(), "join-invite", func(ctx context.Context, tx *sql.Tx) error {
+		if req.Claim != 0 {
+			if err := s.checkClaimable(ctx, tx, code, req.Claim, sc.User.UserID); err != nil {
+				return err
+			}
+		}
 		var err error
 		res, err = links.Join(ctx, tx, code, sc.User.UserID, now)
 		return err
@@ -338,6 +402,42 @@ func (s *server) handleJoinInvite(w http.ResponseWriter, r *http.Request, sc rou
 		links.Nudge(res.ScopeID, sc.User.UserID)
 	}
 	return writeJSON(w, joinResponse{GroupID: res.ScopeID, State: string(res.State)})
+}
+
+// checkClaimable is every way "I am <phantom>" can be wrong, checked inside the
+// write transaction so that two people cannot claim the same Phantom. The
+// refusals are the three the spec names, plus the one the approval queue forces:
+// a Join Request is decided later, with nowhere to keep what the joiner claimed.
+func (s *server) checkClaimable(ctx context.Context, tx *sql.Tx, code string, claim, userID int64) error {
+	str := spliffstrings.Default
+	lk, err := s.invites().ByCode(ctx, tx, code)
+	if errors.Is(err, invitelink.ErrNotFound) {
+		return route.NotFound(str.Invite.Error.NotFound())
+	}
+	if err != nil {
+		return err
+	}
+	if lk.RequiresApproval {
+		return corei18n.User(str.Invite.Error.ClaimNeedsDirectLink())
+	}
+	already, err := store.IsMember(ctx, tx, lk.ScopeID, userID)
+	if err != nil {
+		return err
+	}
+	if already {
+		return corei18n.User(str.Invite.Error.AlreadyAMember())
+	}
+	member, err := store.MemberByID(ctx, tx, lk.ScopeID, claim)
+	if errors.Is(err, store.ErrNotFound) {
+		return corei18n.User(str.Invite.Error.NotAPhantom())
+	}
+	if err != nil {
+		return err
+	}
+	if !member.IsPhantom() {
+		return corei18n.User(str.Invite.Error.NotAPhantom())
+	}
+	return nil
 }
 
 // joinError maps the package's answers onto Spliff's edge: a missing link is a

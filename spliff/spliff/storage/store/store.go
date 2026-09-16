@@ -30,14 +30,21 @@ type Group struct {
 	CreatedAt    string
 }
 
-// Member is one person's place in a Group. Name is what the Group calls them:
-// their username, else the telegram one they arrived with.
+// Member is one person's place in a Group. ID is the group_members row, and it
+// is the identity every Payment and Share names — a Phantom has no account, so
+// a user id could not serve. Name is what the Group calls them: their username,
+// else the telegram one they arrived with, else the name the Owner gave the
+// Phantom.
 type Member struct {
-	UserID   int64
+	ID       int64
+	UserID   int64 // 0 for a Phantom
 	Name     string
 	JoinedAt string
 	IsOwner  bool
 }
+
+// IsPhantom reports whether this Member has no account behind it.
+func (m Member) IsPhantom() bool { return m.UserID == 0 }
 
 // CreateGroup writes the Group and seats its Owner as its first Member, so join
 // order starts with the person who made it.
@@ -114,13 +121,46 @@ func DeleteGroup(ctx context.Context, tx Tx, groupID int64) error {
 // Members is the Group's people in join order — joined_at, then id, which is
 // the tie-break the Debt graph and every derived split are sorted by.
 func Members(ctx context.Context, q Querier, groupID int64) ([]Member, error) {
+	return memberRows(ctx, q, `where m.group_id = ? order by m.joined_at, m.id`, groupID)
+}
+
+// MemberByID reads one Member of one Group; ErrNotFound when the row is not
+// there or belongs to another Group.
+func MemberByID(ctx context.Context, q Querier, groupID, memberID int64) (Member, error) {
+	list, err := memberRows(ctx, q, `where m.group_id = ? and m.id = ?`, groupID, memberID)
+	if err != nil {
+		return Member{}, err
+	}
+	if len(list) == 0 {
+		return Member{}, ErrNotFound
+	}
+	return list[0], nil
+}
+
+// Phantoms is the Group's Members with no account, in join order — what a join
+// page offers as "I am …".
+func Phantoms(ctx context.Context, q Querier, groupID int64) ([]Member, error) {
+	return memberRows(ctx, q,
+		`where m.group_id = ? and m.user_id is null order by m.joined_at, m.id`, groupID)
+}
+
+// memberRows is the one shape a Member is read in: join order is joined_at then
+// id, which is the tie-break the Debt graph and every derived split are sorted
+// by — and it is the member ROW's join time whether or not an account is behind
+// it, so a claimed Phantom keeps the place it has always had.
+//
+// The join to users is a LEFT join because a Phantom has none, and the name
+// falls back through the account's two names to the one the Owner typed.
+func memberRows(ctx context.Context, q Querier, where string, args ...any) ([]Member, error) {
 	rows, err := q.QueryContext(ctx, `
-select m.user_id, coalesce(nullif(u.username, ''), u.telegram_username, ''), m.joined_at,
-       (g.owner_id = m.user_id)
+select m.id, coalesce(m.user_id, 0),
+       coalesce(nullif(u.username, ''), nullif(u.telegram_username, ''), m.display_name, ''),
+       m.joined_at,
+       (m.user_id is not null and g.owner_id = m.user_id)
 from group_members m
-join users u on u.id = m.user_id
+left join users u on u.id = m.user_id
 join groups g on g.id = m.group_id
-where m.group_id = ? order by m.joined_at, m.id`, groupID)
+`+where, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +168,7 @@ where m.group_id = ? order by m.joined_at, m.id`, groupID)
 	out := []Member{}
 	for rows.Next() {
 		var m Member
-		if err := rows.Scan(&m.UserID, &m.Name, &m.JoinedAt, &m.IsOwner); err != nil {
+		if err := rows.Scan(&m.ID, &m.UserID, &m.Name, &m.JoinedAt, &m.IsOwner); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -136,11 +176,12 @@ where m.group_id = ? order by m.joined_at, m.id`, groupID)
 	return out, rows.Err()
 }
 
-// MemberIDs is Members reduced to the join-ordered id list the ledger takes.
+// MemberIDs is Members reduced to the join-ordered id list the ledger takes —
+// member rows, not accounts.
 func MemberIDs(members []Member) []int64 {
 	out := make([]int64, len(members))
 	for i, m := range members {
-		out[i] = m.UserID
+		out[i] = m.ID
 	}
 	return out
 }
@@ -162,12 +203,50 @@ on conflict(group_id, user_id) do nothing`, groupID, userID, now)
 	return err
 }
 
-// RemoveMember takes somebody out. The caller has already proved their Net
-// balance is zero — nobody leaves owing, so the Debt graph never names a ghost.
-func RemoveMember(ctx context.Context, tx Tx, groupID, userID int64) error {
+// RemoveMember takes one member row out, Phantom or person alike. The caller
+// has already proved their Net balance is zero — nobody leaves owing, so the
+// Debt graph never names a ghost.
+func RemoveMember(ctx context.Context, tx Tx, groupID, memberID int64) error {
 	_, err := tx.ExecContext(ctx,
-		`delete from group_members where group_id = ? and user_id = ?`, groupID, userID)
+		`delete from group_members where group_id = ? and id = ?`, groupID, memberID)
 	return err
+}
+
+// AddPhantom seats somebody who is not on Spliff: a member row with a name and
+// no account. Everything else about it is a Member — it pays, it holds Shares,
+// it is in the Debt graph, and it cannot be removed while it owes anything.
+func AddPhantom(ctx context.Context, tx Tx, groupID int64, name, now string) (int64, error) {
+	res, err := tx.ExecContext(ctx, `
+insert into group_members(group_id, user_id, display_name, joined_at) values(?, null, ?, ?)`,
+		groupID, name, now)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// ClaimPhantom gives a Phantom's member row to the account that just joined. It
+// is one UPDATE of one row on purpose: the Payments, the Shares and the History
+// already name that row, so they are re-pointed by it and nothing else moves —
+// every balance in the Group is the same before and after.
+//
+// The `user_id is null` guard makes it safe to race: the second writer claims
+// nothing and is told so.
+func ClaimPhantom(ctx context.Context, tx Tx, groupID, memberID, userID int64) error {
+	res, err := tx.ExecContext(ctx, `
+update group_members set user_id = ?, display_name = null
+where id = ? and group_id = ? and user_id is null`, userID, memberID, groupID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // UserNames is how the invite list writes a person: username, else the telegram

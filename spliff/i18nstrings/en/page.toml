@@ -46,6 +46,12 @@ unclaimed = '{{.amount}} unclaimed'
 confirm_delete = "Delete this group and everything in it? This cannot be undone."
 confirm_leave = "Leave this group?"
 confirm_kick = 'Remove {{.name}} from the group?'
+add_phantom = "Add a phantom"
+add_phantom_submit = "Add them"
+phantom_name_label = "Their name"
+phantom_name_placeholder = "Nino"
+phantom_hint = "Somebody at the table who is not on Spliff. They pay and hold shares like anybody; when they join through an invite link they can say \"I am Nino\" and take it all over."
+phantom_tag = "phantom"
 
 [invite]
 label_label = "Label"
@@ -117,6 +123,9 @@ need_payee = "Say who the money is for."
 confirm_delete = "Delete this transaction? It stays in the history and can be restored."
 
 [join]
+as_yourself = "Join as yourself"
+i_am = 'I am {{.name}}'
+pick_who = "Somebody at this table is already in the group under a name. If one of them is you, say so and everything they paid and owe becomes yours."
 title = "Invitation"
 join = "Join the group"
 login = "Log in to join"

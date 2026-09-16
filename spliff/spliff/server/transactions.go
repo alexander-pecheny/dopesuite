@@ -67,9 +67,11 @@ func validate(req transactionRequest, members []store.Member) (store.Write, erro
 		return out, corei18n.User(str.Transaction.Error.TotalPositive())
 	}
 
+	// Every Payment and Share names a current MEMBER ROW — which is what lets a
+	// Phantom hold one.
 	current := map[int64]bool{}
 	for _, m := range members {
-		current[m.UserID] = true
+		current[m.ID] = true
 	}
 
 	payments, paid, err := checkEntries(req.Payments, current, currency, false)
@@ -303,7 +305,7 @@ type groupHeadDTO struct {
 	Name         string `json:"name"`
 	BaseCurrency string `json:"base_currency"`
 	IsOwner      bool   `json:"is_owner"`
-	Me           int64  `json:"me"`
+	Me           int64  `json:"me"` // the caller's own member row
 }
 
 func (s *server) handleGetTransaction(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
@@ -320,32 +322,26 @@ func (s *server) handleGetTransaction(w http.ResponseWriter, r *http.Request, sc
 	if err != nil {
 		return err
 	}
-	names := map[int64]string{}
+	names, actors := memberNames(members), userNames(members)
 	out := transactionViewDTO{
 		Group: groupHeadDTO{
 			ID: g.ID, Name: g.Name, BaseCurrency: g.BaseCurrency,
-			IsOwner: g.OwnerID == sc.User.UserID, Me: sc.User.UserID,
+			IsOwner: g.OwnerID == sc.User.UserID, Me: meMember(members, sc.User.UserID),
 		},
-		Members: []memberDTO{},
-	}
-	for _, m := range members {
-		names[m.UserID] = m.Name
-		out.Members = append(out.Members, memberDTO{
-			UserID: m.UserID, Name: m.Name, JoinedAt: m.JoinedAt, IsOwner: m.IsOwner,
-		})
+		Members: memberDTOs(members),
 	}
 	book, err := s.rates.Book(ctx)
 	if err != nil {
 		return err
 	}
-	if out.Transaction, err = s.transactionDTO(t, g, book, names); err != nil {
+	if out.Transaction, err = s.transactionDTO(t, g, book, names, actors); err != nil {
 		return err
 	}
 	history, err := store.TransactionHistory(ctx, s.db, sc.TxID)
 	if err != nil {
 		return err
 	}
-	out.History = historyDTOs(history, names, map[int64]string{t.ID: t.Description})
+	out.History = historyDTOs(history, actors, map[int64]string{t.ID: t.Description})
 	return writeJSON(w, out)
 }
 

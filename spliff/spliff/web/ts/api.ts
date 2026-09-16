@@ -37,8 +37,15 @@ export interface TransactionDTO {
   updated_at: string;
 }
 
+/**
+ * One place in a Group. `id` is the member ROW — what every Payment and Share
+ * names, what the editor keys on and what the kick route addresses. `user_id`
+ * is the account behind it and is 0 for a Phantom, who has none.
+ */
 export interface MemberDTO {
+  id: number;
   user_id: number;
+  is_phantom: boolean;
   name: string;
   joined_at: string;
   is_owner: boolean;
@@ -71,6 +78,7 @@ export interface GroupDTO {
   name: string;
   base_currency: string;
   is_owner: boolean;
+  /** The caller's own member row. */
   me: number;
   members: MemberDTO[];
   transfers: TransferDTO[];
@@ -111,16 +119,23 @@ export interface InviteDTO {
   pending: InvitePersonDTO[];
 }
 
+export interface PhantomDTO {
+  id: number;
+  name: string;
+}
+
 export interface InvitePeekDTO {
   group_id: number;
   group_name: string;
   state: string;
   requires_approval: boolean;
+  phantoms: PhantomDTO[];
 }
 
 export interface TransactionViewDTO {
   transaction: TransactionDTO;
   group: { id: number; name: string; base_currency: string; is_owner: boolean; me: number };
+
   members: MemberDTO[];
   history: HistoryDTO[];
 }

@@ -27,6 +27,10 @@ page title=@page.group.title kind="wide" scripts="dist/group.js"
   section
     subhead @page.group.members
     mount id="members" kind="group-members"
+    -- The Owner alone seats somebody who is not on Spliff yet: a Phantom is a
+    -- name only its maker can vouch for.
+    row gap="sm" wrap id="phantomControls" hidden
+      button kind="ghost" id="addPhantomBtn" icon="user" @page.group.add_phantom
 
   section id="inviteSection" hidden
     subhead @page.group.invites
@@ -62,6 +66,16 @@ page title=@page.group.title kind="wide" scripts="dist/group.js"
     row gap="sm" wrap
       button kind="danger" id="leaveBtn" @page.group.leave
     message id="settingsMessage"
+
+  modal id="phantomOverlay" label=@page.group.add_phantom title=@page.group.add_phantom
+    form id="phantomForm" dir="col"
+      field label=@page.group.phantom_name_label
+        textfield id="phantomName" placeholder=@page.group.phantom_name_placeholder required grow
+      hint @page.group.phantom_hint
+      row gap="sm" wrap
+        button kind="primary" submit @page.group.add_phantom_submit
+        button kind="ghost" id="phantomCancel" @common.cancel
+    message id="phantomMessage"
 
   modal id="inviteOverlay" label=@page.group.new_invite title=@page.group.new_invite
     form id="inviteForm" dir="col"

@@ -38,6 +38,12 @@ const ownerControls = byId("ownerControls");
 const handOverSelect = byId<HTMLSelectElement>("handOverSelect");
 const settingsMessage = byId("settingsMessage");
 
+const phantomControls = byId("phantomControls");
+const phantomOverlay = byId("phantomOverlay");
+const phantomForm = byId<HTMLFormElement>("phantomForm");
+const phantomName = byId<HTMLInputElement>("phantomName");
+const phantomMessage = byId("phantomMessage");
+
 const inviteOverlay = byId("inviteOverlay");
 const inviteForm = byId<HTMLFormElement>("inviteForm");
 const inviteLabel = byId<HTMLInputElement>("inviteLabel");
@@ -85,6 +91,20 @@ byId("leaveBtn").addEventListener("click", () => {
   void leaveFor("DELETE", `/api/groups/${groupID}/members/me`);
 });
 
+byId("addPhantomBtn").addEventListener("click", () => {
+  setText(phantomMessage, "");
+  phantomForm.reset();
+  show(phantomOverlay, true);
+  phantomName.focus();
+});
+
+byId("phantomCancel").addEventListener("click", () => show(phantomOverlay, false));
+
+phantomForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  void act("POST", `/api/groups/${groupID}/phantoms`, { name: phantomName.value }, phantomMessage);
+});
+
 byId("newInviteBtn").addEventListener("click", () => {
   setText(inviteMessage, "");
   inviteForm.reset();
@@ -115,6 +135,7 @@ async function act(method: string, url: string, body: unknown, into: HTMLElement
     await request(method, url, body);
     show(settingsOverlay, false);
     show(inviteOverlay, false);
+    show(phantomOverlay, false);
     await load();
   } catch (error) {
     setText(into, errorText(error));
@@ -162,8 +183,10 @@ async function fillCurrencies(selected: string): Promise<void> {
 function fillHandOver(): void {
   clear(handOverSelect);
   if (!group) return;
+  // A Group can only be handed to somebody with an account, so a Phantom is
+  // not on this list.
   for (const member of group.members) {
-    if (member.user_id === group.me) continue;
+    if (member.id === group.me || member.is_phantom) continue;
     const option = el("option", undefined, member.name);
     option.value = String(member.user_id);
     handOverSelect.append(option);
@@ -191,7 +214,7 @@ function render(g: GroupDTO): void {
     const left = rowGroup(true);
     left.append(el("span", "list-row-title split-name", member.name));
     if (member.is_owner) left.append(badge(S.page.group.ownerTag()));
-    if (member.user_id === g.me) left.append(badge(S.page.group.you(), "emphasis"));
+    if (member.id === g.me) left.append(badge(S.page.group.you(), "emphasis"));
     row.append(left, amountNode(`${member.balance} ${g.base_currency}`, member.balance_minor));
     balances.append(row);
   }
@@ -212,6 +235,7 @@ function render(g: GroupDTO): void {
   show(byId("deletedBlock"), g.deleted.length > 0);
 
   renderMembers(g);
+  show(phantomControls, g.is_owner);
   renderHistory(groupHistory, g.history);
   show(inviteSection, g.is_owner);
 }
@@ -252,13 +276,14 @@ function renderMembers(g: GroupDTO): void {
     const left = rowGroup(true);
     left.append(el("span", "list-row-title split-name", member.name));
     if (member.is_owner) left.append(badge(S.page.group.ownerTag()));
+    if (member.is_phantom) left.append(badge(S.page.group.phantomTag()));
     row.append(left);
     if (g.is_owner && !member.is_owner) {
       const kick = el("button", "btn btn-ghost", S.page.group.kick());
       kick.type = "button";
       kick.addEventListener("click", () => {
         if (!window.confirm(S.page.group.confirmKick(member.name))) return;
-        void act("DELETE", `/api/groups/${groupID}/members/${member.user_id}`, undefined, message);
+        void act("DELETE", `/api/groups/${groupID}/members/${member.id}`, undefined, message);
       });
       row.append(kick);
     }

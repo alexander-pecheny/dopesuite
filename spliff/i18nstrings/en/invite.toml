@@ -8,6 +8,9 @@ limits_out_of_range = "Check the number of uses and the expiry."
 no_seats_left = "That link has no seats left. Mint another one."
 not_found = "There is no such invite link."
 request_not_found = "There is no join request waiting from that person."
+already_a_member = "You are already in this group, so there is nobody to become."
+not_a_phantom = "That is not a phantom of this group."
+claim_needs_direct_link = "This link waits for the owner's approval, so it cannot hand you a phantom. Ask for a direct link."
 
 [refusal]
 declined = "You were declined from this group through this link."
