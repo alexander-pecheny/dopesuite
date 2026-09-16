@@ -84,8 +84,8 @@ export function autocomplete(
     rows[active].scrollIntoView({ block: "nearest" });
   }
 
-  // A row is taken on pointerdown, which is before the click that would follow
-  // it — and by then the row is gone, so that click lands on whatever the
+  // A row taken with the pointer is taken on pointerdown, which is before the
+  // click that would follow it — and by then the row is gone, so that click lands on whatever the
   // popover was covering. Under the currency field that is the next input;
   // under some other field it could be a button. So the pick swallows the one
   // click it caused. The window is short enough that a second, deliberate click
@@ -104,11 +104,11 @@ export function autocomplete(
     document.addEventListener("click", stop, true);
   }
 
-  function take(choice: Choice): void {
+  function take(choice: Choice, clicked: boolean): void {
     inp.value = choice.value;
     inp.dispatchEvent(new Event("input", { bubbles: true }));
     dismiss();
-    swallowGhostClick();
+    if (clicked) swallowGhostClick();
     if (onPick) onPick(choice);
   }
 
@@ -137,7 +137,7 @@ export function autocomplete(
       // mouse.
       row.addEventListener("pointerdown", (event) => {
         event.preventDefault();
-        take(hit);
+        take(hit, true);
       });
       rows.push(row);
       shown.push(hit);
@@ -183,7 +183,7 @@ export function autocomplete(
       // Only when a row is picked out: Enter on a field nobody has arrowed
       // through still submits the form.
       event.preventDefault();
-      take(shown[active]);
+      take(shown[active], false);
     }
   });
 

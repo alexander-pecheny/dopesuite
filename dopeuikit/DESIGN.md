@@ -149,10 +149,13 @@ call site. Never build one from request data.
 
 Chrome: `page topbar crumbs/crumb iconbtn iconlink`. Layout: `col row spacer section`. Text:
 `text hint subhead label bigcode message empty muted strong code`. Forms:
-`form textfield password filefield hiddenfield numfield sliderrow
+`form textfield suggestfield password filefield hiddenfield numfield sliderrow
 checkbox radio selectfield/option editor button field`. Notable form props:
 `textfield`/`password` carry `minlength`/`maxlength`/`pattern`; `selectfield`
-takes `name`; `button` supports multi-target form submission via
+takes `name`; `suggestfield` is a text field with the kit's filtered dropdown
+under it (`assets/ts/suggest.ts`), for a list a native `<select>` cannot hold —
+its `id` is REQUIRED because the page's script binds the input by it, and `caps`
+opens the phone keyboard in capitals for a field whose values are codes; `button` supports multi-target form submission via
 `formaction`/`formnovalidate` plus `name`/`value` (a `submit` button that posts to
 a different action or carries a named value — the numbers page's per-action
 buttons). Overlays/compound:
