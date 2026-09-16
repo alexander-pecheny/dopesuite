@@ -67,8 +67,10 @@ export function autocomplete(
     if (top + pop.offsetHeight > window.innerHeight - PAD) {
       top = Math.max(PAD, box.top - pop.offsetHeight);
     }
-    pop.style.left = `${Math.round(left)}px`;
-    pop.style.top = `${Math.round(top)}px`;
+    // Not rounded: the field's own box is where the list belongs, and snapping
+    // it to whole pixels moves it off the field by up to one of them.
+    pop.style.left = `${left}px`;
+    pop.style.top = `${top}px`;
   }
 
   // The highlighted row wraps around the ends of the list, and -1 is "none of
