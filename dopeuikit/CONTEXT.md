@@ -20,7 +20,7 @@ The closed set of Primitives, props, and enum values, declared in `vocab.json`. 
 One typed element of the Vocabulary (`page`, `topbar`, `button`, `modal`, `mount`, …), expanded into markup by an expander.
 
 **Chrome**:
-The site-wide shell the Kit provides: menu, theme/contrast toggle, account links. It also holds the reader's own preferences — theme, contrast and body font — in this browser, and applies them (and preloads the chosen font) from the head before first paint; an app's own page may offer a picker for one, as xy's profile does for the font.
+The site-wide shell the Kit provides: menu, theme/contrast toggle, account links. It also applies the reader's preferences from the head, before first paint, and preloads the body face they name. Theme and contrast are this browser's and live here; the body font is the account's (xy's `users.ui_font`, stated by `/api/auth/me`, which the Chrome already fetches) and what the Chrome keeps is a copy, reconciled on every page. Choosing is an app page's job — xy's profile has the picker.
 
 **Mount**:
 A placeholder Primitive marking where the app's JS takes over at runtime; each app registers its own mount kinds.

@@ -22,10 +22,20 @@ const ROMAN: Record<FontPref, string> = {
 };
 
 // fontPreload is the href the chrome preloads for a choice. It is a function of
-// the STORED preference rather than a fixed line in the head, so that a reader
+// the KNOWN preference rather than a fixed line in the head, so that a reader
 // who switched fonts fetches one body face and not two.
 export function fontPreload(pref: FontPref): string {
   return ROMAN[pref] ?? ROMAN["noto"];
+}
+
+// fontFromMe is the signed-in account's font, as /api/auth/me states it, and the
+// truth the browser's own copy is reconciled against on every page. null means
+// the account has no answer for this: nobody is signed in, the app serves no
+// such field (dope has no picker), or the value is one this build cannot set.
+export function fontFromMe(ok: boolean, data: unknown): FontPref | null {
+  if (!ok) return null;
+  const raw = (data as { ui_font?: unknown } | null)?.ui_font;
+  return typeof raw === "string" && FONTS.includes(raw as FontPref) ? (raw as FontPref) : null;
 }
 
 export interface MenuJump {

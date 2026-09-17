@@ -13,6 +13,7 @@ import {
   type MenuJump,
   type ThemePref,
   accountFromMe,
+  fontFromMe,
   fontPreload,
   jumpFromDataset,
   menuItems,
@@ -24,6 +25,10 @@ import S from "./i18nstrings.js";
 
 const THEME_KEY = "dope-theme";
 const CONTRAST_KEY = "dope-contrast";
+// The font is the one preference here that is NOT this browser's to decide: it
+// belongs to the account (xy's users.ui_font), and /api/auth/me states it. This
+// key is a cache of that answer, kept because the face has to be on <html>
+// before first paint, when no fetch has returned yet.
 const FONT_KEY = "dope-font";
 const root = document.documentElement;
 
@@ -107,17 +112,34 @@ try {
 let jump: MenuJump | null = null;
 let extras: MenuExtra[] = [];
 let account: MenuAccount | null = null;
+// What /api/auth/me answered, before the model reads either half out of it: the
+// account for the menu's own entry, and the font that account is set in.
+interface MeAnswer {
+  ok: boolean;
+  data: unknown;
+}
 let renderItems: (() => void) | null = null;
 let openModalFn: (() => void) | null = null;
 
 // Fetch the signed-in user once so the menu can show a profile link (logged
 // in) or a login link (anonymous). Network error = leave the entry out.
+// The same answer carries the account's body font, which is why this runs on
+// every page and not only where the picker is: signing in on a new browser has
+// to bring the font with it, and the cached copy has to correct itself when the
+// account's answer has moved on — or belongs to somebody else.
 function loadAccount(): void {
   fetch("/api/auth/me", { headers: { Accept: "application/json" }, credentials: "same-origin" })
-    .then((res) => (res.ok ? res.json().then((data) => accountFromMe(true, data)) : accountFromMe(false, null)))
-    .catch(() => null)
-    .then((next) => {
-      account = next;
+    .then((res): Promise<MeAnswer> =>
+      res.ok ? res.json().then((data: unknown) => ({ ok: true, data })) : Promise.resolve({ ok: false, data: null }))
+    .catch((): MeAnswer | null => null)
+    .then((answer) => {
+      account = answer ? accountFromMe(answer.ok, answer.data) : null;
+      const stated = answer ? fontFromMe(answer.ok, answer.data) : null;
+      if (stated && stated !== font) {
+        font = stated;
+        writePref(FONT_KEY, font);
+        applyFont();
+      }
       renderItems?.();
     });
 }
@@ -148,7 +170,9 @@ window.dopeMenu = {
     return font;
   },
   // The picker itself is a page's to draw — xy puts it in the profile, with its
-  // own words for each face — so the chrome publishes only the choice.
+  // own words for each face — and that page is what PERSISTS the choice against
+  // the account. This applies it and caches it, so the next page paints in the
+  // right face without waiting for a fetch.
   setFont: (value: string) => {
     font = pickPref(value, FONTS, "noto");
     writePref(FONT_KEY, font);

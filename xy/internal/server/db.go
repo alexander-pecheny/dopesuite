@@ -695,6 +695,14 @@ alter table cards_v24 rename to cards;
 create index if not exists idx_cards_list on cards(list_id);
 create index if not exists idx_cards_board on cards(board_id);
 pragma foreign_keys=on;`)},
+	// v25 adds users.ui_font: which body face the site is set in — "" / "noto"
+	// (Noto Sans, the default) or "inter-fix-ra". Server-side for the reason v20
+	// gives: it is the reader's own answer wherever they sign in, not this
+	// device's. The browser still keeps a copy (the kit's chrome applies it before
+	// first paint, when no fetch has answered yet), but this column is the truth it
+	// reconciles against.
+	{Version: 25, Name: "users.ui_font", Up: schema.Exec(`
+alter table users add column ui_font text;`)},
 }
 
 func migrate(db *sql.DB) error { return schema.Apply(db, migrations) }

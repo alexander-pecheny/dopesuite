@@ -180,12 +180,15 @@ type meResponse struct {
 	// Display preferences, editable on /profile: the board layout (see
 	// handleSetSizes) and the author name pre-filled into new question cards
 	// (see handleSetDefaultAuthor), which field a card's list preview
-	// derives its title from (see handleSetCardTitle), and which kind of
-	// timeline entry an opened card's timeline shows (see handleSetFeedDefault).
+	// derives its title from (see handleSetCardTitle), which kind of
+	// timeline entry an opened card's timeline shows (see handleSetFeedDefault),
+	// and the body face the site is set in (see handleSetUIFont) — that last one
+	// is read by the kit's chrome on every page, not just by /profile.
 	Sizes         json.RawMessage `json:"sizes,omitempty"`
 	DefaultAuthor string          `json:"default_author,omitempty"`
 	CardTitle     string          `json:"card_title,omitempty"`
 	FeedDefault   string          `json:"feed_default,omitempty"`
+	UIFont        string          `json:"ui_font,omitempty"`
 	// The test-session preferences, and the first-run stamp every page checks.
 	Timezone         string          `json:"timezone,omitempty"`
 	AnnounceCities   json.RawMessage `json:"announce_cities,omitempty"`
@@ -212,6 +215,7 @@ type userPrefs struct {
 	DefaultAuthor    sql.NullString
 	CardTitle        sql.NullString
 	FeedDefault      sql.NullString
+	UIFont           sql.NullString
 	Timezone         sql.NullString
 	AnnounceCities   sql.NullString
 	SessionTitleMode sql.NullString
@@ -221,9 +225,9 @@ type userPrefs struct {
 func loadUserPrefs(ctx context.Context, q rowQuerier, uid int64) (userPrefs, error) {
 	var p userPrefs
 	err := q.QueryRowContext(ctx, `
-select sizes, default_author, card_title, feed_default, timezone, announce_cities, session_title_mode, onboarded_at
+select sizes, default_author, card_title, feed_default, ui_font, timezone, announce_cities, session_title_mode, onboarded_at
 from users where id = ?`, uid).
-		Scan(&p.Sizes, &p.DefaultAuthor, &p.CardTitle, &p.FeedDefault, &p.Timezone, &p.AnnounceCities, &p.SessionTitleMode, &p.OnboardedAt)
+		Scan(&p.Sizes, &p.DefaultAuthor, &p.CardTitle, &p.FeedDefault, &p.UIFont, &p.Timezone, &p.AnnounceCities, &p.SessionTitleMode, &p.OnboardedAt)
 	return p, err
 }
 
@@ -246,6 +250,7 @@ func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
 	resp.DefaultAuthor = p.DefaultAuthor.String
 	resp.CardTitle = p.CardTitle.String
 	resp.FeedDefault = p.FeedDefault.String
+	resp.UIFont = p.UIFont.String
 	resp.Timezone = p.Timezone.String
 	resp.SessionTitleMode = p.SessionTitleMode.String
 	resp.OnboardedAt = p.OnboardedAt.String
@@ -813,6 +818,41 @@ func (s *server) handleSetFeedDefault(w http.ResponseWriter, r *http.Request) {
 	err := s.withWriteTx(r.Context(), "set-feed-default", func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `update users set feed_default = ?, updated_at = ? where id = ?`,
 			mode, rfc3339(time.Now()), u.UserID)
+		return err
+	})
+	if handleErr(w, err) {
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// uiFonts allowlists the values of users.ui_font (see schema v25): the body face
+// the site is set in. "" means the default, "noto". The ids are the kit's — they
+// are what <html data-font> carries and what core.css switches --font-sans on.
+var uiFonts = map[string]bool{"": true, "noto": true, "inter-fix-ra": true}
+
+// handleSetUIFont stores which body face the reader has chosen (users.ui_font,
+// see schema v25). It reaches every page through /api/auth/me, which the kit's
+// chrome already fetches for the account link.
+func (s *server) handleSetUIFont(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.requireUser(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		UIFont string `json:"ui_font"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	face := strings.TrimSpace(req.UIFont)
+	if !uiFonts[face] {
+		httpError(w, http.StatusBadRequest, "bad ui_font")
+		return
+	}
+	err := s.withWriteTx(r.Context(), "set-ui-font", func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `update users set ui_font = ?, updated_at = ? where id = ?`,
+			face, rfc3339(time.Now()), u.UserID)
 		return err
 	})
 	if handleErr(w, err) {

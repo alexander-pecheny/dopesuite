@@ -37,6 +37,7 @@ let sizes: Sizes = { ...xySizes.DEFAULT };
 let defaultAuthor = "";
 let cardTitle = "question"; // which field a card's board preview shows
 let feedDefault = "all"; // which kind of entry an opened card's feed shows
+let uiFont = "noto"; // the body face the whole site is set in (users.ui_font)
 let timezone = "";
 let announceCities: Array<{ zone: string; name: string }> = [];
 let sessionTitleMode = "date-title";
@@ -51,6 +52,7 @@ async function boot(): Promise<void> {
   defaultAuthor = m.default_author || "";
   cardTitle = m.card_title || "question";
   feedDefault = m.feed_default || "all";
+  uiFont = m.ui_font || "noto";
   timezone = m.timezone || "";
   announceCities = Array.isArray(m.announce_cities) ? (m.announce_cities as Array<{ zone: string; name: string }>) : [];
   sessionTitleMode = m.session_title_mode || "date-title";
@@ -206,20 +208,39 @@ wireModal("sizes", "sizesBtn", async () => {
 });
 
 // ---- interface font ----
-// The odd one out on this page: the face is a chrome preference the kit keeps
-// per browser (menu.js writes it on <html> before first paint), not a column of
-// the account, so there is nothing to POST and nothing to save — picking applies
-// to the whole page at once, which is the only preview a font wants. The second
-// face is fetched by that same click and never before it.
+// Two halves, and they are not the same thing: users.ui_font is where the choice
+// LIVES (it is the reader's answer wherever they sign in, like the feed default
+// beside it), and the kit's chrome is what APPLIES it — on <html> before first
+// paint, from its own cached copy, on every page of the site. So a pick does
+// both: the chrome at once, because a font wants no preview but the page itself,
+// and the POST behind it. The second face is fetched by that same click and
+// never before it.
 const fontRadios = () => byId("fontOverlay").querySelectorAll<HTMLInputElement>('input[name="uiFont"]');
-wireModal("font", "fontBtn", () => {
-  const current = window.dopeMenu?.font || "noto";
-  for (const r of fontRadios()) r.checked = r.value === current;
+const fontMessage = byId("fontMessage");
+wireModal("font", "fontBtn", async () => {
+  await booted;
+  for (const r of fontRadios()) r.checked = r.value === uiFont;
+  setText(fontMessage, "");
 });
 
 for (const radio of fontRadios()) {
-  radio.addEventListener("change", () => {
-    if (radio.checked) window.dopeMenu?.setFont(radio.value);
+  radio.addEventListener("change", async () => {
+    if (!radio.checked) return;
+    const previous = uiFont;
+    uiFont = radio.value;
+    window.dopeMenu?.setFont(uiFont);
+    setText(fontMessage, "");
+    try {
+      await jpost("/api/auth/ui-font", { ui_font: uiFont });
+    } catch (err) {
+      // The face is already on the page; what failed is the part that makes it
+      // follow the reader, so say so and put the radios back where the account
+      // still stands.
+      uiFont = previous;
+      window.dopeMenu?.setFont(uiFont);
+      for (const r of fontRadios()) r.checked = r.value === uiFont;
+      setText(fontMessage, errMsg(err));
+    }
   });
 }
 

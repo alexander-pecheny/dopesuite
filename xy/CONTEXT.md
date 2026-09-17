@@ -100,6 +100,10 @@ A Card's or a Test Session's history, in three kinds of entry: comments (the dis
 Which kind of Timeline entry a reader's лента shows when a Card opens. Theirs, not the Board's — one editor reads for the discussion, another for what the question used to say, and they read the same Card side by side. Narrowing the лента inside an open Card is a look at that Card, not a change of the default: it dies when the Card closes.
 _Avoid_: feed filter, view mode (the narrowing is transient; only the default is a preference)
 
+**Interface Font**:
+Which of the Kit's two body faces the whole site is set in for a reader — Noto Sans, or Inter Fix RA, which fixes what Inter does to Russian. Theirs and not this device's, so it lives on the account (`users.ui_font`) the way a Feed Default does; the browser keeps a copy only because the face must be on the page before it paints. Nothing about a Board, and nothing an export ever sees: a PDF is typeset in the fonts the handout pipeline embeds, whatever the reader is reading in.
+_Avoid_: theme (that is light/dark, and the Kit's own), card font (that is the size of a Card's text on the board, a Board Size)
+
 **4s**:
 chgksuite's plain-text question format — xy's interchange format for import, export, and the card editor's Текст view. Parity with chgksuite is byte-for-byte and oracle-tested; never extend the format unilaterally.
 

@@ -9,6 +9,9 @@ export interface AuthMe {
   default_author?: string | null;
   card_title?: string | null;
   feed_default?: string | null;
+  // The body face the whole site is set in. The kit's chrome (menu.js) reads it
+  // off this same payload on every page; /profile is only where it is CHOSEN.
+  ui_font?: string | null;
   sizes?: unknown;
   timezone?: string | null;
   announce_cities?: unknown;

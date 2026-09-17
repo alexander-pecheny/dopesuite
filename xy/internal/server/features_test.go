@@ -676,6 +676,40 @@ func TestCardTitlePreference(t *testing.T) {
 	}
 }
 
+// TestUIFontPreference covers users.ui_font (schema v25): the body face the site
+// is set in. Unlike the two above it never reaches a board snapshot — it is
+// chrome, not board content — so /api/auth/me is the only way it travels, and
+// the kit's menu.js reads it from there on every page.
+func TestUIFontPreference(t *testing.T) {
+	ts, srv := newTestServer(t)
+	c := registerUser(t, srv, ts, 770125, "font")
+
+	me := func() meResponse {
+		resp := c.do("GET", "/api/auth/me", nil)
+		mustStatus(t, resp, 200)
+		var out meResponse
+		c.decode(resp, &out)
+		return out
+	}
+
+	if got := me().UIFont; got != "" {
+		t.Fatalf("ui_font should start unset, got %q", got)
+	}
+
+	mustStatus(t, c.do("POST", "/api/auth/ui-font", map[string]string{"ui_font": "inter-fix-ra"}), 204)
+	if got := me().UIFont; got != "inter-fix-ra" {
+		t.Fatalf("me ui_font = %q, want inter-fix-ra", got)
+	}
+
+	// Back to the default, and a face this build cannot set is refused rather
+	// than stored — the column feeds an attribute on <html>.
+	mustStatus(t, c.do("POST", "/api/auth/ui-font", map[string]string{"ui_font": "noto"}), 204)
+	mustStatus(t, c.do("POST", "/api/auth/ui-font", map[string]string{"ui_font": "comic"}), 400)
+	if got := me().UIFont; got != "noto" {
+		t.Fatalf("ui_font = %q, want noto", got)
+	}
+}
+
 // TestBoardComments covers the прогрев endpoint: every comment on the board in
 // one response, and nothing else — a desc_edit carries the whole before/after
 // text and has no business in a search index.

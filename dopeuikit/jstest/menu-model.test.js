@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   FONTS,
   accountFromMe,
+  fontFromMe,
   fontPreload,
   jumpFromDataset,
   menuItems,
@@ -31,6 +32,19 @@ test("fontPreload names one roman face per choice, and Noto for anything else", 
   assert.equal(fontPreload("comic"), "/static/fonts/noto-sans-var.woff2");
   assert.equal(pickPref("comic", FONTS, "noto"), "noto");
   assert.equal(pickPref("inter-fix-ra", FONTS, "noto"), "inter-fix-ra");
+});
+
+test("fontFromMe takes the account's face, and nothing else's word for it", () => {
+  assert.equal(fontFromMe(true, { ui_font: "inter-fix-ra" }), "inter-fix-ra");
+  assert.equal(fontFromMe(true, { ui_font: "noto" }), "noto");
+  // No answer: nobody signed in, an app that has no such preference (dope), an
+  // account that never chose, or a face this build cannot set. The browser's
+  // own copy stands in all four.
+  assert.equal(fontFromMe(false, null), null);
+  assert.equal(fontFromMe(true, {}), null);
+  assert.equal(fontFromMe(true, { ui_font: "" }), null);
+  assert.equal(fontFromMe(true, { ui_font: "comic" }), null);
+  assert.equal(fontFromMe(true, { ui_font: 7 }), null);
 });
 
 test("menuItems starts with appearance and keeps jump before extras", () => {
