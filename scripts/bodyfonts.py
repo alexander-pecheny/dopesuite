@@ -62,6 +62,7 @@ from pathlib import Path
 from typing import Callable
 
 from fontTools import subset
+from fontTools.pens.boundsPen import BoundsPen
 from fontTools.ttLib import TTFont
 from fontTools.varLib import instancer
 
@@ -430,6 +431,31 @@ def web(font: TTFont, path: Path) -> None:
           f"{font['maxp'].numGlyphs} glyphs, {len(covered)} codepoints)")
 
 
+def xheight(path: Path) -> float:
+    """The height of x at weight 400, as a fraction of the em.
+
+    Not OS/2.sxHeight, which a font may round, leave stale or not set at all: the
+    ink is what a reader sees, so the ink is what is measured.
+    """
+    font = instancer.instantiateVariableFont(TTFont(path), {"wght": 400}, updateFontNames=False)
+    glyphs = font.getGlyphSet()
+    pen = BoundsPen(glyphs)
+    glyphs[font.getBestCmap()[ord("x")]].draw(pen)
+    return pen.bounds[3] / font["head"].unitsPerEm
+
+
+def size_adjust(path: Path) -> float:
+    """What core.css must scale this face by to read as the same size as the default.
+
+    Two faces at one font-size look the same size when their x-heights agree, not
+    when their ems do — STIX sets x at 0.473 of the em against Noto Sans's 0.536,
+    and at 17px that is text a reader reads as smaller. The number belongs in the
+    @font-face as `size-adjust`, and this prints it on every build so the
+    stylesheet can be checked against the file it describes.
+    """
+    return xheight(REFERENCE) / xheight(path) * 100
+
+
 def build(face: Face, model, pairs) -> None:
     from respacing import space, summary
 
@@ -440,7 +466,12 @@ def build(face: Face, model, pairs) -> None:
         stats = space(font, model, pairs)
         style = "italic" if is_italic else "roman"
         print(f"{face.id} {style:6s} {report}\n        {summary(stats)}", flush=True)
-        web(font, OUT / f"{face.id}{'-italic' if is_italic else ''}.woff2")
+        path = OUT / f"{face.id}{'-italic' if is_italic else ''}.woff2"
+        web(font, path)
+        if not is_italic:
+            # One value per family, read off the roman: an italic run inside a
+            # roman one must not change size, whatever its own x-height does.
+            print(f"        size-adjust: {size_adjust(path):.1f}%  (core.css)", flush=True)
 
 
 def main() -> None:
