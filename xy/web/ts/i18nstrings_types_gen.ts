@@ -1667,6 +1667,14 @@ export type Strings = {
       tzHint: () => string;
       tzLabel: () => string;
     };
+    font: {
+      close: () => string;
+      faceHint: () => string;
+      hint: () => string;
+      inter: () => string;
+      name: () => string;
+      noto: () => string;
+    };
     home: () => string;
     name: () => string;
     password: {

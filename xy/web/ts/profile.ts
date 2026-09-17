@@ -1,6 +1,7 @@
 // profile.ts — username management, logout, and the settings dialogs: change
-// password, board sizes (with a pseudo-board preview), default author, card
-// title, timezone, and which kind of entry an opened card's feed shows.
+// password, board sizes (with a pseudo-board preview), interface font, default
+// author, card title, timezone, and which kind of entry an opened card's feed
+// shows.
 import S from "./i18nstrings.js";
 import { xyApp, xySizes } from "./app.js";
 import { type Modal, modal } from "./modal.js";
@@ -203,6 +204,24 @@ wireModal("sizes", "sizesBtn", async () => {
   await booted;
   syncSizesUI();
 });
+
+// ---- interface font ----
+// The odd one out on this page: the face is a chrome preference the kit keeps
+// per browser (menu.js writes it on <html> before first paint), not a column of
+// the account, so there is nothing to POST and nothing to save — picking applies
+// to the whole page at once, which is the only preview a font wants. The second
+// face is fetched by that same click and never before it.
+const fontRadios = () => byId("fontOverlay").querySelectorAll<HTMLInputElement>('input[name="uiFont"]');
+wireModal("font", "fontBtn", () => {
+  const current = window.dopeMenu?.font || "noto";
+  for (const r of fontRadios()) r.checked = r.value === current;
+});
+
+for (const radio of fontRadios()) {
+  radio.addEventListener("change", () => {
+    if (radio.checked) window.dopeMenu?.setFont(radio.value);
+  });
+}
 
 // ---- default author ----
 const authorForm = byId<HTMLFormElement>("authorForm");

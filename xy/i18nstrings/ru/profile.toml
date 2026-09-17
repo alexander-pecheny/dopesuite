@@ -86,6 +86,22 @@ board_w_max = "вся ширина"
 card_h_max = "весь текст"
 card_lines = '{{.n}} {{plural .n "строка" "строки" "строк"}}'
 
+[font]
+# Interface-font dialog (fontOverlay): which face the whole site is set in.
+# Named for the interface because [sizes].font next to it is the card's font
+# SIZE, and the two buttons stand in the same column. The opener reuses name.
+name = "Шрифт интерфейса"
+# Radio option: the default face.
+noto = "Noto Sans (по умолчанию)"
+# Radio option: the alternative face.
+inter = "Inter Fix RA"
+# What that alternative is, under the radios.
+face_hint = "Inter Fix RA — Inter с починенными ударениями и кириллическим кернингом."
+# How the choice behaves, under that.
+hint = "Применяется сразу ко всему сайту — эта страница и есть образец. Шрифт скачивается, только когда выбран, и хранится в этом браузере: на другом устройстве выбирается заново."
+# Button closing the dialog.
+close = "Готово"
+
 [author]
 # Default-author dialog (authorOverlay); the opener button reuses name.
 name = "Автор по умолчанию"

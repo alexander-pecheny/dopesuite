@@ -2206,6 +2206,18 @@ var RU = Strings{
 			},
 			TzLabel: func() string { return "Часовой пояс" },
 		},
+		Font: ProfileFontStrings{
+			Close: func() string { return "Готово" },
+			FaceHint: func() string {
+				return "Inter Fix RA — Inter с починенными ударениями и кириллическим кернингом."
+			},
+			Hint: func() string {
+				return "Применяется сразу ко всему сайту — эта страница и есть образец. Шрифт скачивается, только когда выбран, и хранится в этом браузере: на другом устройстве выбирается заново."
+			},
+			Inter: func() string { return "Inter Fix RA" },
+			Name:  func() string { return "Шрифт интерфейса" },
+			Noto:  func() string { return "Noto Sans (по умолчанию)" },
+		},
 		Home: func() string { return "Все доски" },
 		Name: func() string { return "Профиль" },
 		Password: ProfilePasswordStrings{

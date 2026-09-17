@@ -20,6 +20,7 @@ page title=@profile.title kind="sheet" scripts="dist/profile.js"
   section
     button kind="ghost" id="passwordBtn" @profile.password.name
     button kind="ghost" id="sizesBtn" @profile.sizes.name
+    button kind="ghost" id="fontBtn" @profile.font.name
     button kind="ghost" id="authorBtn" @profile.author.name
     button kind="ghost" id="cardTitleBtn" @profile.card_title.name
     button kind="ghost" id="feedDefaultBtn" @profile.feed.name
@@ -49,6 +50,16 @@ page title=@profile.title kind="sheet" scripts="dist/profile.js"
     row gap="sm" align="center" justify="between"
       button small kind="ghost" id="sizesReset" @profile.sizes.reset
       button id="sizesClose" @profile.sizes.close
+
+  -- interface-font dialog: which face the whole site is set in. A chrome
+  -- preference (menu.js keeps it per browser), so it saves nothing and has no
+  -- message line: picking applies at once and the page itself is the preview.
+  modal id="fontOverlay" label=@profile.font.name title=@profile.font.name done=@profile.font.close doneid="fontClose"
+    fieldset
+      radio name="uiFont" value="noto" @profile.font.noto
+      radio name="uiFont" value="inter-fix-ra" @profile.font.inter
+    hint @profile.font.face_hint
+    hint @profile.font.hint
 
   -- default-author dialog: pre-filled into new question cards
   modal id="authorOverlay" label=@profile.author.name title=@profile.author.name
