@@ -93,10 +93,14 @@ card_lines = '{{.n}} {{plural .n "строка" "строки" "строк"}}'
 name = "Шрифт интерфейса"
 # Radio option: the default face.
 noto = "Noto Sans (по умолчанию)"
-# Radio option: the alternative face.
+# Radio options: the five alternatives, sans first, then serif.
 inter = "Inter Fix RA"
-# What that alternative is, under the radios.
-face_hint = "Inter Fix RA — Inter с починенными ударениями и кириллическим кернингом."
+plex_sans = "IBM Plex Sans Fix"
+literata = "Literata Fix"
+plex_serif = "IBM Plex Serif Fix"
+stix = "STIX Two Text Fix"
+# What those alternatives are, under the radios.
+face_hint = "Первые три — без засечек, остальные — с засечками. Всё, кроме Noto Sans, — версии с починенными ударениями и перекерненной кириллицей."
 # How the choice behaves, under that.
 hint = "Применяется сразу ко всему сайту — эта страница и есть образец — и сохраняется в профиле, так что на другом устройстве будет тот же. Сам шрифт скачивается, только когда выбран."
 # Button closing the dialog.

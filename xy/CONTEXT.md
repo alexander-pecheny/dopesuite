@@ -101,7 +101,7 @@ Which kind of Timeline entry a reader's лента shows when a Card opens. Thei
 _Avoid_: feed filter, view mode (the narrowing is transient; only the default is a preference)
 
 **Interface Font**:
-Which of the Kit's two body faces the whole site is set in for a reader — Noto Sans, or Inter Fix RA, which fixes what Inter does to Russian. Theirs and not this device's, so it lives on the account (`users.ui_font`) the way a Feed Default does; the browser keeps a copy only because the face must be on the page before it paints. Nothing about a Board, and nothing an export ever sees: a PDF is typeset in the fonts the handout pipeline embeds, whatever the reader is reading in.
+Which of the Kit's six body faces the whole site is set in for a reader — Noto Sans, or one of the five that fix what their upstream does to Russian (Inter Fix RA, IBM Plex Sans Fix, Literata Fix, IBM Plex Serif Fix, STIX Two Text Fix). Theirs and not this device's, so it lives on the account (`users.ui_font`) the way a Feed Default does; the browser keeps a copy only because the face must be on the page before it paints. Nothing about a Board, and nothing an export ever sees: a PDF is typeset in the fonts the handout pipeline embeds, whatever the reader is reading in.
 _Avoid_: theme (that is light/dark, and the Kit's own), card font (that is the size of a Card's text on the board, a Board Size)
 
 **4s**:

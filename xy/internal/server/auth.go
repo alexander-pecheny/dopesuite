@@ -828,8 +828,17 @@ func (s *server) handleSetFeedDefault(w http.ResponseWriter, r *http.Request) {
 
 // uiFonts allowlists the values of users.ui_font (see schema v25): the body face
 // the site is set in. "" means the default, "noto". The ids are the kit's — they
-// are what <html data-font> carries and what core.css switches --font-sans on.
-var uiFonts = map[string]bool{"": true, "noto": true, "inter-fix-ra": true}
+// are what <html data-font> carries and what core.css switches --font-sans on,
+// so this list is the one in dopeuikit/assets/ts/menu-model.ts and grows with it.
+var uiFonts = map[string]bool{
+	"":                   true,
+	"noto":               true,
+	"inter-fix-ra":       true,
+	"ibm-plex-sans-fix":  true,
+	"literata-fix":       true,
+	"ibm-plex-serif-fix": true,
+	"stix-two-text-fix":  true,
+}
 
 // handleSetUIFont stores which body face the reader has chosen (users.ui_font,
 // see schema v25). It reaches every page through /api/auth/me, which the kit's

@@ -58,6 +58,10 @@ page title=@profile.title kind="sheet" scripts="dist/profile.js"
     fieldset
       radio name="uiFont" value="noto" @profile.font.noto
       radio name="uiFont" value="inter-fix-ra" @profile.font.inter
+      radio name="uiFont" value="ibm-plex-sans-fix" @profile.font.plex_sans
+      radio name="uiFont" value="literata-fix" @profile.font.literata
+      radio name="uiFont" value="ibm-plex-serif-fix" @profile.font.plex_serif
+      radio name="uiFont" value="stix-two-text-fix" @profile.font.stix
     hint @profile.font.face_hint
     hint @profile.font.hint
     message id="fontMessage"

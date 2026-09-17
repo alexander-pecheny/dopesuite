@@ -1672,8 +1672,12 @@ export type Strings = {
       faceHint: () => string;
       hint: () => string;
       inter: () => string;
+      literata: () => string;
       name: () => string;
       noto: () => string;
+      plexSans: () => string;
+      plexSerif: () => string;
+      stix: () => string;
     };
     home: () => string;
     name: () => string;

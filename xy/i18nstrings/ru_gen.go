@@ -2209,14 +2209,18 @@ var RU = Strings{
 		Font: ProfileFontStrings{
 			Close: func() string { return "Готово" },
 			FaceHint: func() string {
-				return "Inter Fix RA — Inter с починенными ударениями и кириллическим кернингом."
+				return "Первые три — без засечек, остальные — с засечками. Всё, кроме Noto Sans, — версии с починенными ударениями и перекерненной кириллицей."
 			},
 			Hint: func() string {
 				return "Применяется сразу ко всему сайту — эта страница и есть образец — и сохраняется в профиле, так что на другом устройстве будет тот же. Сам шрифт скачивается, только когда выбран."
 			},
-			Inter: func() string { return "Inter Fix RA" },
-			Name:  func() string { return "Шрифт интерфейса" },
-			Noto:  func() string { return "Noto Sans (по умолчанию)" },
+			Inter:     func() string { return "Inter Fix RA" },
+			Literata:  func() string { return "Literata Fix" },
+			Name:      func() string { return "Шрифт интерфейса" },
+			Noto:      func() string { return "Noto Sans (по умолчанию)" },
+			PlexSans:  func() string { return "IBM Plex Sans Fix" },
+			PlexSerif: func() string { return "IBM Plex Serif Fix" },
+			Stix:      func() string { return "STIX Two Text Fix" },
 		},
 		Home: func() string { return "Все доски" },
 		Name: func() string { return "Профиль" },

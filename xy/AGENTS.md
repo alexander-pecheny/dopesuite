@@ -608,8 +608,9 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        card title (POST /api/auth/card-title — question text vs answer),
                        лента (POST /api/auth/feed-default — which kind of timeline
                        entry an opened card starts on), interface font (POST
-                       /api/auth/ui-font — Noto Sans or Inter Fix RA, the site-wide
-                       body face; applied through the kit's window.dopeMenu.setFont
+                       /api/auth/ui-font — Noto Sans or one of the kit's five fixed
+                       faces, the site-wide body face; applied through
+                       window.dopeMenu.setFont
                        the moment it is picked and saved behind that, since the page
                        itself is the only preview a font wants).
                        Shared defaults/ranges/sanitize/apply live in app.ts (xySizes)
