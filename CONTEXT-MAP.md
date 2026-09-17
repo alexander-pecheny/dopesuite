@@ -1,6 +1,13 @@
 # Context map
 
-Four bounded contexts, one per app/UI module (`dopecore` is a shared platform layer with no domain glossary). Root [`CONTEXT.md`](CONTEXT.md) holds the few terms that hold across all three: Catalog, Surface, String Id, User Error. Read the `CONTEXT.md` of whichever you're working in; root `docs/adr/` holds system-wide decisions, `<module>/docs/adr/` module-scoped ones.
+There are four bounded contexts, one for each app and for the UI module.
+`dopecore` is a shared platform layer and has no glossary of its own.
+
+The root [`CONTEXT.md`](CONTEXT.md) holds the few terms that mean the same thing
+everywhere: Catalog, Surface, String Id and User Error. Read the `CONTEXT.md` of
+whichever module you are working in. System-wide decisions are recorded in the
+root `docs/adr/`, and decisions that affect only one module in that module's own
+`<module>/docs/adr/`.
 
 - [`dope/CONTEXT.md`](dope/CONTEXT.md) — tournament scoring: Fest, Game, Structure × Protocol, Match, Slot.
 - [`xy/CONTEXT.md`](xy/CONTEXT.md) — encrypted ЧГК question-editing boards: Board, Card, 4s, List Group.

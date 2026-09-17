@@ -1,36 +1,41 @@
 # DopeUIKit — Agent Notes
 
-The shared UI system for xy and dope: a typed `.dopeui` DSL and the design system
-it renders. `README.md` is the tour, `DESIGN.md` is the spec — read them first.
+This is the shared UI system for xy and dope: a typed `.dopeui` DSL and the
+design system it renders into. Read `README.md` first for the tour, and
+`DESIGN.md` for the specification.
 
-## Layers (the one rule that matters)
+## Layers
 
-`ui/` is the **generic engine** (parser, validator, expansion framework, printer,
-typed-builder machinery, codegen) and knows no CSS class names or vocabulary.
-`kit/` is the **shared design system** (core `vocab.json`, expanders, Chrome,
-`assets/core.css` + fonts) and is the first overlay on the engine.
+This is the rule that matters most. `ui/` is the **generic engine**: the parser,
+the validator, the expansion framework, the printer, the typed-builder machinery
+and the codegen. It knows no CSS class names and no vocabulary. `kit/` is the
+**shared design system**: the core `vocab.json`, the expanders, Chrome, and
+`assets/core.css` with the fonts. It is the first overlay on top of the engine.
 
 - Apps import `kit`, **never** `ui` directly. Each app adds a thin overlay
   (`xy/internal/ui`, `dope/dope/web/ui`) with its own primitives and mount kinds.
-- Design opinions belong in `kit/`, never in `ui/` — the engine is slated to split
-  into its own module. The page Chrome (`kit.Chrome`, `PageKind`, `SyncSpec`,
-  `HeadLink`) is a kit type the engine carries opaquely as `Options.Env`;
-  expanders read it back with `kit.ChromeOf(ctx)`. An app states its Chrome as
-  `kit.CoreChrome().With(delta)`. `ui/engine_test.go` is the engine's own
-  contract over a two-primitive vocabulary.
+- Design opinions belong in `kit/` and never in `ui/`, because the engine is
+  going to be split out into its own module. The page Chrome (`kit.Chrome`,
+  `PageKind`, `SyncSpec`, `HeadLink`) is a kit type, and the engine carries it
+  without looking inside, as `Options.Env`. Expanders read it back out with
+  `kit.ChromeOf(ctx)`. An app declares its own Chrome by writing
+  `kit.CoreChrome().With(delta)`. `ui/engine_test.go` tests the engine on its
+  own, against a vocabulary of just two primitives.
 - Both apps consume this module via `replace pecheny.me/dopeuikit => ../dopeuikit`,
   so a change here lands in xy and dope on their next build. Check both.
-- The kit imports `dopecore`; dopecore imports neither the kit nor `ui`. So
-  app-facing plumbing that needs kit knowledge lives in `kit/` rather than
-  being copied into both apps (root `docs/adr/0004`): `kit.Assets` (the
-  webassets config with core.css, fonts, login.js, menu.js wired in),
-  `kit.PageSet` (compile-once-or-per-request for `.dopeui` pages; `Provide`
-  registers a source that is not a file), `kit.LoginPage(title, redirect)` (the
-  login page source, `assets/ui/login.dopeui`, beside the `login.ts` whose ids
-  it must carry — both apps serve it at /login), `kit.AdminCreateUsers`,
-  `kit.SortHeader` and `kit.AdminTime` (the /admin pages' shared pieces), and
-  `uitest.PageContract` (the test each app runs over its real pages plus the
-  `Provided` ones: compiles, ids and load-bearing markup its scripts look up).
+- The kit imports `dopecore`, and dopecore imports neither the kit nor `ui`.
+  That is why plumbing which faces the apps but needs to know about the kit lives
+  in `kit/` instead of being copied into both apps (root `docs/adr/0004`). It
+  consists of: `kit.Assets`, the webassets config with core.css, the fonts,
+  login.js and menu.js already wired in; `kit.PageSet`, which compiles `.dopeui`
+  pages either once or per request, and whose `Provide` registers a source that
+  is not a file on disk; `kit.LoginPage(title, redirect)`, the login page source
+  in `assets/ui/login.dopeui`, which sits next to the `login.ts` whose ids it has
+  to carry, and which both apps serve at /login; `kit.AdminCreateUsers`,
+  `kit.SortHeader` and `kit.AdminTime`, which the /admin pages share; and
+  `uitest.PageContract`, the test each app runs over its own real pages plus the
+  provided ones, checking that they compile and that the ids and the markup its
+  scripts look for are there.
 
 ## Codegen
 
@@ -56,9 +61,10 @@ just pre-commit-uikit   # fmt + vet + tidy + generate-check + test
 
 ## Colour
 
-Colour is uchu (uchu.style), vendored in `palette/uchu.json`. **A role names a
-rung, never a hex** — see `docs/adr/0001-colour-is-a-rung-on-the-uchu-ladder.md`
-for the rule and its three exemptions.
+The colours come from uchu (uchu.style) and are vendored in
+`palette/uchu.json`. **A role always names a rung on that ladder, never a hex
+value.** See `docs/adr/0001-colour-is-a-rung-on-the-uchu-ladder.md` for the rule
+itself and the three cases exempt from it.
 
 ```
 go generate ./palette      # ramps -> core.css, sets -> Go + TS + dope's layer
@@ -71,7 +77,9 @@ line in `palette/palette.go` names `dope/dope/web/assets/static/styles.css`,
 runs inside this monorepo layout. Anything that moves `dopeuikit` out of the
 repo has to move those app-side outputs behind per-app `go:generate` lines first.
 
-`palette_test.go` is the design's test surface: monotone ladder per theme, ΔL
-0.03 between adjacent surfaces, AA for every ink-on-fill pair, high contrast
-never compressing. If a colour change fails it, the change is wrong — the
-assertions are cheaper to re-read than the four theme blocks are to re-derive.
+`palette_test.go` is where the design itself is tested. It checks that the
+ladder is monotone within each theme, that adjacent surfaces differ by ΔL 0.03,
+that every pairing of ink on fill passes AA, and that the high-contrast theme
+never compresses the range. If a colour change makes that test fail, the change
+is wrong. It is much quicker to read the assertions than to work the four theme
+blocks out again.

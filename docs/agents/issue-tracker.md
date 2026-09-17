@@ -1,6 +1,6 @@
 # Issue tracker: Forgejo
 
-Issues for this repo live on code.pecheny.me (Forgejo), repo `pecheny/dopesuite`. Use the `fj` CLI for all operations — it is authenticated against the host and infers the repo from the git remote. For anything `fj` can't do, call the Forgejo API (Gitea-compatible) with the token from `~/.config/forgejo/token`.
+The issues for this repo are on code.pecheny.me, which runs Forgejo, in the repo `pecheny/dopesuite`. Use the `fj` CLI for everything: it is already authenticated against that host, and it works out which repo you mean from the git remote. If there is something `fj` cannot do, call the Forgejo API, which is Gitea-compatible, using the token in `~/.config/forgejo/token`.
 
 ## Conventions
 
@@ -26,11 +26,11 @@ Run `fj issue view <n>` and `fj issue view <n> comments`.
 
 ## Wayfinding operations
 
-Used by `/wayfinder`. The **map** is a single issue with child issues as tickets.
+These are used by `/wayfinder`. The **map** is a single issue, and the tickets are issues that hang off it as children.
 
 - **Map**: a single issue labelled `wayfinder:map`, holding the Notes / Decisions-so-far / Fog body.
-- **Child ticket**: an issue with `Part of #<map>` at the top of its body, listed in a task list in the map body. Labels: `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once claimed, assign the ticket to the driving dev.
-- **Blocking**: Forgejo's native issue dependencies — `POST /repos/pecheny/dopesuite/issues/<child>/dependencies` with body `{"index": <blocker-number>}` via the API fallback. A ticket is unblocked when every blocker is closed.
-- **Frontier query**: list the map's open children (`fj issue search -s open -l wayfinder:task` etc.), drop any with an open blocker (`GET .../issues/<n>/dependencies`) or an assignee; first in map order wins.
+- **Child ticket**: an issue whose body starts with `Part of #<map>`, and which is listed in a task list in the map's body. Its label is `wayfinder:<type>`, where the type is `research`, `prototype`, `grilling` or `task`. Once somebody claims a ticket, assign it to them.
+- **Blocking**: use Forgejo's own issue dependencies. Through the API, that is `POST /repos/pecheny/dopesuite/issues/<child>/dependencies` with the body `{"index": <blocker-number>}`. A ticket is unblocked once every one of its blockers is closed.
+- **Frontier query**: list the map's open children with something like `fj issue search -s open -l wayfinder:task`, then drop any that still have an open blocker (`GET .../issues/<n>/dependencies`) or that already have an assignee. Take the first one in map order.
 - **Claim**: `fj issue assign <n> pecheny` — the session's first write.
-- **Resolve**: comment the answer, close the issue, then append a context pointer to the map's Decisions-so-far.
+- **Resolve**: post the answer as a comment, close the issue, and then add a pointer to it in the map's Decisions-so-far section.

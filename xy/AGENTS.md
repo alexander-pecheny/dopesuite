@@ -1,80 +1,109 @@
 # xy — Codebase Map
 
 ## What this is
-A Trello-style board app for ЧГК (trivia) question editing. Every piece of
-user-entered data (list/card/label/comment/attachment) is **encrypted
-client-side** with a per-board passphrase; the server only ever stores and
-serves ciphertext plus the structural metadata needed to order, sync, and
-authorize. **Board names are the one exception** — plaintext, server-visible, so
-the board list is readable without unlocking each board (per-board
-`schema_version`: 1 = legacy `name_enc`, 2 = plaintext `name`; legacy boards
-backfilled lazily via `POST /api/boards/{id}/migrate-name`; see `migrateV10`). Built by reusing patterns and frontend assets from `../dope`, its
-sibling in the dopesuite monorepo (the root `AGENTS.md` has the monorepo rules).
-Russian-language UI.
+A Trello-style board app for editing ЧГК (trivia) questions. Everything a user
+types — lists, cards, labels, comments, attachments — is **encrypted in the
+browser** with a passphrase that belongs to that board. The server only ever
+stores and serves the ciphertext, plus the structural metadata it needs in order
+to sort, sync and authorise.
+
+**Board names are the one exception.** They are stored as plaintext and the
+server can read them, so that the board list can be shown without unlocking
+every board first. Each board records a `schema_version`: 1 means the old
+encrypted `name_enc`, and 2 means the plaintext `name`. Old boards are converted
+when they are next used, through `POST /api/boards/{id}/migrate-name`; see
+`migrateV10`.
+
+xy was built by reusing patterns and frontend assets from `../dope`, its sibling
+in the dopesuite monorepo. The rules for the monorepo itself are in the root
+`AGENTS.md`. The UI is in Russian.
 
 ## Stack
-- **Backend**: Go 1.26, SQLite (WAL, `modernc.org/sqlite`, pure Go, no cgo).
-  **No external runtime dependencies**: docx/import/handouts are all in-process,
-  and typst is linked in as a wasm module run under wazero (pure Go, so the binary
-  stays CGO_ENABLED=0 and cross-compilable).
-- **Frontend**: strict-TypeScript ES modules (root ADR-0001) + the DopeUIKit
-  design system, embedded in the binary. Sources in `web/ts/*.ts`; the
-  shared root toolchain (`just build-web`, esbuild per-file transform + native
-  tsc) emits same-named ESM into the gitignored `web/assets/static/dist/`,
-  which the pages load and the SW precaches. board.ts (≈1700 lines) is the
-  board page's boot, render loop, drag, list preview and card pickers; every
-  feature the ☰ and the list ⋯ menus offer is its own module registered in the
-  panel registry (panels.ts), and the card, the лента, attachments, unlock and
-  the rest are `create(deps)` kernels with jstest coverage. Its map is below.
-- **Crypto**: scrypt KEK (vendored `@noble/hashes`, pure JS, **no WASM** → runs
-  under iOS Lockdown Mode) + native AES-256-GCM via WebCrypto. The KDF runs in a
-  dedicated **worker** (`cryptoworker.ts`): N=2^16 is ~330 ms of solid compute
-  and every unlock used to pay it as a frozen tab. A browser that cannot start
-  the worker derives the key on the main thread, as before.
-  Neither half wants wasm, and both were measured: WebCrypto reaches the CPU's
-  AES instructions and wasm has none, so a wasm envelope only matched it on small
-  fields and lost 19× on attachments; a wasm scrypt was ~1.5× faster, which buys
-  nothing once the work is off the thread that draws — and cost a Rust toolchain
-  on the build path and a `'wasm-unsafe-eval'` CSP. WebCrypto has **no scrypt**
-  (`PBKDF2`/`HKDF` only), so the KDF cannot be native.
+- **Backend**: Go 1.26 and SQLite in WAL mode, through `modernc.org/sqlite`,
+  which is pure Go and needs no cgo. **The server needs nothing installed
+  alongside it.** docx, import and handouts all run in-process, and typst is
+  linked in as a wasm module executed by wazero. That is also pure Go, so the
+  binary stays `CGO_ENABLED=0` and can be cross-compiled.
+- **Frontend**: strict-TypeScript ES modules (root ADR-0001) plus the DopeUIKit
+  design system, all embedded in the binary. The sources are in `web/ts/*.ts`.
+  The shared root toolchain (`just build-web`, which transforms each file with
+  esbuild and type-checks with the native tsc) writes ESM files of the same names
+  into `web/assets/static/dist/`, which is gitignored. The pages load those files
+  and the service worker precaches them. `board.ts` is about 1700 lines and
+  contains the board page's boot, its render loop, dragging, the list preview and
+  the card pickers. Every feature offered by the ☰ menu or a list's ⋯ menu is its
+  own module, registered in the panel registry in `panels.ts`. The card, the
+  лента, attachments, unlock and the rest are `create(deps)` kernels, and they
+  have jstest coverage. There is a map of all of it below.
+- **Crypto**: the key-encryption key is derived with scrypt, using a vendored
+  copy of `@noble/hashes`. That code is pure JavaScript and uses **no WASM**, so
+  it still runs under iOS Lockdown Mode. The data itself is encrypted with native
+  AES-256-GCM through WebCrypto.
+
+  The key derivation runs in a dedicated **worker**, `cryptoworker.ts`. With
+  N=2^16 it is about 330 ms of uninterrupted computation, and before the worker
+  existed every unlock paid that as a frozen tab. If a browser cannot start the
+  worker, the key is derived on the main thread, the way it used to be.
+
+  Neither half of this wants wasm, and both were measured. WebCrypto uses the
+  CPU's AES instructions and wasm has no access to them, so a wasm envelope only
+  drew level on small fields and was 19 times slower on attachments. A wasm
+  scrypt was about 1.5 times faster, which gains nothing once the work is off the
+  thread that draws, and it would have cost a Rust toolchain on the build path
+  and a `'wasm-unsafe-eval'` entry in the CSP. WebCrypto itself has **no
+  scrypt** — only `PBKDF2` and `HKDF` — so the key derivation cannot be
+  native.
 - **Tests**: Go (`go test`) + frontend (`deno test --parallel jstest/`).
 - **Build/run**: `justfile`.
-- **UI markup**: no hand-written HTML (or CSS classes) anywhere. **DopeUIKit**
-  (`pecheny.me/dopeuikit`, vendored via `replace => ../dopeuikit`) has two layers:
-  `ui/` is the generic DSL **engine** (parser, validator, expansion framework,
-  printer, builder machinery, codegen — no vocabulary, no CSS class names) and
-  `kit/` is the shared **design system** (core vocab + expanders + Chrome +
-  generated builder + `core.css`/fonts). `internal/ui` is xy's thin **overlay**
-  on the `kit` (imports `pecheny.me/dopeuikit/kit`). Pages are authored in
-  `.dopeui` (`web/assets/ui/`) as typed AppKit-style primitives — `page`,
-  `topbar`, `crumbs`, `col`/`row`, `button`, `modal`, `mount`… — compiled to HTML at server
-  startup by the xy `App` (`internal/ui/app.go`, `Compile`); the dynamic /admin
-  pages use the same package's builder (`Render`). The overlay adds xy primitives
-  (`docoverlay`/`headrow`/`headactions`/`split`/`pane`/`previewtitle`), overrides
-  `checkbox`/`editor`, and supplies the board mount kinds + PWA chrome
-  (`internal/ui/vocab.json`, `expand.go`). The vocabulary is closed; unknown
-  primitive/prop, bad enum value, or duplicate id is a compile error. Spec:
-  DopeUIKit `DESIGN.md` (engine + kit) + `internal/ui/DESIGN.md` (xy overlay).
-- **Header path**: every page's `topbar` carries a `crumbs` trail — 🏠 / доска,
-  🏠 / Профиль / API-токены — replacing the old 🏠 + title pair. An open card is
-  a modal, not a place, so it adds no crumb. The primitive and its CSS are the
-  kit's; dope renders the same trail.
-- **Before adding UI, run the `design-review` skill.** `.dopeui` is a closed,
-  compile-checked vocabulary, but `mount` is a hole in it — 41 mount kinds in xy,
-  and every panel body, modal and bar is hand-written TS inside one, where
-  nothing checks you. Two habits carry most of it: the kit already ships the
-  layout utilities (`.u-col`/`.u-row`/`.u-gap-*`/`.u-align-*`/`.u-justify-*` in
-  `core.css`) so a class whose whole body is flex+gap+alignment is re-invention
-  (classcheck's layout ratchet now refuses new ones), and **spacing is the
-  container's job** — `.hint` carries `margin: 0` on purpose, so a margin on a
-  child buys one gap and leaves the rest at zero. `/gallery` (dev only) shows
-  every primitive on one page; look there before minting a name, and look at
-  your surface beside its twin before you ship it.
-- **CSS**: the shared design system is DopeUIKit's `assets/core.css` (served via
-  `kit.CoreCSS`); xy's `web/assets/static/styles.css` is only the xy layer
-  (kanban/card/board + xy vars + PWA overrides). The server serves
-  `/static/styles.css` as core + xy concatenated; `/static/fonts/*` come from the
-  kit (`kit.Fonts`, no local font copies).
+- **UI markup**: never write HTML, or a CSS class, by hand. **DopeUIKit**
+  (`pecheny.me/dopeuikit`, used through `replace => ../dopeuikit`) has two
+  layers. `ui/` is the generic DSL **engine**: the parser, the validator, the
+  expansion framework, the printer, the builder machinery and the codegen. It
+  contains no vocabulary and no CSS class names. `kit/` is the shared **design
+  system**: the core vocabulary, the expanders, Chrome, the generated builder,
+  `core.css` and the fonts. `internal/ui` is xy's thin **overlay** on the kit,
+  and it imports `pecheny.me/dopeuikit/kit`.
+
+  Pages are written in `.dopeui` files in `web/assets/ui/`, using typed
+  AppKit-style primitives such as `page`, `topbar`, `crumbs`, `col`, `row`,
+  `button`, `modal` and `mount`. xy's `App` compiles them to HTML when the server
+  starts (`internal/ui/app.go`, `Compile`). The dynamic /admin pages use the
+  builder from the same package instead (`Render`).
+
+  The overlay adds xy's own primitives (`docoverlay`, `headrow`, `headactions`,
+  `split`, `pane`, `previewtitle`), overrides `checkbox` and `editor`, and
+  supplies the board mount kinds and the PWA chrome. Those live in
+  `internal/ui/vocab.json` and `expand.go`. The vocabulary is closed: an unknown
+  primitive or prop, an invalid enum value or a duplicate id is a compile error.
+  The engine and kit are specified in DopeUIKit's `DESIGN.md`, and xy's overlay
+  in `internal/ui/DESIGN.md`.
+- **Header path**: the `topbar` of every page carries a `crumbs` trail, such as
+  🏠 / доска, or 🏠 / Профиль / API-токены. It replaced the old pairing of a 🏠
+  icon and a title. An open card is a modal rather than a place of its own, so it
+  adds no crumb. The primitive and its CSS belong to the kit, and dope draws the
+  same trail.
+- **Run the `design-review` skill before you add UI.** `.dopeui` is a closed
+  vocabulary and the compiler checks it, but `mount` is a hole in that. xy has 41
+  mount kinds, and every panel body, modal and bar is hand-written TypeScript
+  inside one of them, where nothing checks what you write.
+
+  Two habits account for most of the damage. First, the kit already ships layout
+  utilities in `core.css` — `.u-col`, `.u-row`, `.u-gap-*`, `.u-align-*` and
+  `.u-justify-*` — so a class whose entire body is flex, gap and alignment is
+  re-inventing them, and classcheck's layout ratchet now rejects new ones.
+  Second, **spacing is the container's job**: `.hint` has `margin: 0` on purpose,
+  so putting a margin on one child gives you a single gap and leaves every other
+  gap at zero.
+
+  `/gallery`, which only works in dev mode, shows every primitive on one page.
+  Look there before you invent a name, and look at your new surface next to the
+  one it should resemble before you ship it.
+- **CSS**: the shared design system is DopeUIKit's `assets/core.css`, served
+  through `kit.CoreCSS`. xy's own `web/assets/static/styles.css` holds only xy's
+  layer: the kanban, card and board rules, xy's variables and the PWA overrides.
+  The server serves `/static/styles.css` as those two concatenated, core first.
+  The files under `/static/fonts/*` come from the kit as well (`kit.Fonts`);
+  there are no local copies of the fonts.
 
 ## Layout
 ```
@@ -124,10 +153,12 @@ internal/server/       package server — the whole HTTP server
   boards.go            boards CRUD, keymeta (passphrase re-wrap), /meta (role + plaintext name, what
                        the passphrase overlay reads before a key exists), members, leaving a board,
                        /api/collaborators (who I share boards with), ACL helpers
-  boardinvites.go      invite links (ADR-0017): owner mints/revokes/deletes and decides join requests;
-                       the invitee peeks at a code and joins. A link grants membership, never the key.
-                       The machine is dopecore/invitelink; this file is the adapter — the routes, the
-                       DTOs, the write tx, the Russian, and a Scope that says what a board is
+  boardinvites.go      invite links (ADR-0017). The owner creates, revokes and deletes them and
+                       decides on join requests; the invitee looks up a code and joins. A link
+                       grants membership only, never the key. The state machine is in
+                       dopecore/invitelink, and this file adapts it to xy: the routes, the DTOs,
+                       the write transaction, the Russian strings, and a Scope that describes
+                       what a board is
   timeline.go          the Timeline's one writer (insertEvent: every kind's columns; appendEvent for the
                        metadata trail) and one reader (timelineColumns + scanTimelineEvent, readTimeline)
   unread.go            the unread rule as SQL fragments (the two buckets, the watermark, the Mention) that
@@ -139,38 +170,45 @@ internal/server/       package server — the whole HTTP server
   lists.go             lists + list groups: DTOs/scanners and handlers
   cards.go             cards: DTOs/scanners, create/patch/delete, card labels, Playings, tour testers
   labels.go            labels CRUD
-  comments.go          the Timeline's DTOs and handlers: GET /api/boards/{id}/comments returns every
-                       live comment on a board in one response (ciphertext, comments only) — what
-                       прогрев indexes; a desc_edit payload carries a whole question's before/after
-                       and is deliberately excluded; comments add/patch/delete, mentions, import
+  comments.go          the Timeline's DTOs and handlers. GET /api/boards/{id}/comments returns
+                       every live comment on a board in one response, as ciphertext, and only
+                       comments; this is what прогрев indexes. desc_edit events are deliberately
+                       left out, because their payload holds a whole question before and after
+                       the edit. The file also has add, patch and delete for comments, plus
+                       mentions and import
   bundle.go            the Bundle's server half (ADR-0013): whole-board timeline and
                        attachment reads (ciphertext) for the export, board-level timeline
                        import (all event kinds, authors matched by username, src→new id map
                        returned so batches chain) for the re-encrypting importer
-  tokens.go            API tokens: month-lived bearer creds (manage at /profile/tokens). A token
-                       IS the user on every route but the password, the username and /admin
-                       (ADR-0015, auth.go: bearerToken/lookupAPIToken/requireCookieUser); changing
-                       the password revokes every token and every other session
+  tokens.go            API tokens: bearer credentials that live for a month, managed at
+                       /profile/tokens. A token counts as the user on every route except the
+                       password, the username and /admin (ADR-0015; see bearerToken,
+                       lookupAPIToken and requireCookieUser in auth.go). Changing the password
+                       revokes every token and every other session
   trello_compat.go     Trello-compatible API for chgksuite (token-authed via key+token)
   invite.go            invite minting (subcommand)
   admin.go             /admin + /admin/create_users (gated on XY_ADMIN_USER, default "pecheny"); the create-users body is kit.AdminCreateUsers, xy wraps its chrome
-  export.go            POST /api/export/{docx,pdf} — one 4s source + images, exported two ways, both fully
-                       in-process (chgk/docx, chgk/typstdoc), images included; no Python. The PDF goes through
-                       the shared typst (wasm) pool (typst.go), so it too writes nothing anywhere
-  exportpack.go        POST /api/export/pack — the export modal's request: one 4s source, several formats
-                       (4s/docx/docx_spoilers/pdf/pdf_mobile/pptx/openquiz/handouts) rendered by composing the above + handout.SplitFit,
-                       returned as the bare file when one was asked for or a zip when more. Images ride along
-                       only for the .4s (docx/pdf embed their own); split-fit's PDFs land under раздатки/
-  exporttg.go          POST /api/export/telegram — the export that publishes instead of downloading
-                       (internal/chgk/tg). Unlike every other it is a conversation: a channel named
-                       by @username cannot be looked up by a bot, so the person driving it shows the
-                       bot the channel and the group from the inside while the bot polls. The answer
-                       is therefore a stream of NDJSON lines — notes, then a last one carrying the
-                       resolved ids the browser remembers so the next export skips the dialogue.
-                       ResolveTarget also checks the bot is an administrator of both, which is what
-                       Telegram requires and the commonest thing to have missed. The bot token passes
-                       through the server (posting is Go, and the CSP forbids the page reaching
-                       api.telegram.org) and is stored nowhere
+  export.go            POST /api/export/{docx,pdf}. One 4s source plus its images, exported two
+                       ways. Both run entirely in-process (chgk/docx and chgk/typstdoc) and
+                       include the images; no Python is involved. The PDF goes through the shared
+                       typst wasm pool (typst.go), so it writes nothing to disk either
+  exportpack.go        POST /api/export/pack, which is what the export modal calls. It takes one 4s
+                       source and several formats (4s, docx, docx_spoilers, pdf, pdf_mobile, pptx,
+                       openquiz, handouts), renders them by composing the functions above with
+                       handout.SplitFit, and returns a bare file if one format was asked for or a
+                       zip if several were. The images are sent separately only for the .4s, since
+                       docx and pdf embed their own. The PDFs from split-fit go into раздатки/
+  exporttg.go          POST /api/export/telegram, the export that publishes instead of downloading
+                       (internal/chgk/tg). It is the only export that is a conversation. A bot
+                       cannot look up a channel by its @username, so the person running the export
+                       has to show the bot the channel and the group from the inside while the bot
+                       polls. The response is therefore a stream of NDJSON lines: progress notes,
+                       and then a final line with the resolved ids, which the browser remembers so
+                       that the next export can skip the dialogue. ResolveTarget also checks that
+                       the bot is an administrator of both, which Telegram requires and which is
+                       the thing people most often forget. The bot token is passed through the
+                       server, because the posting is done in Go and the CSP does not let the page
+                       reach api.telegram.org. It is never stored
   import4s.go          POST /api/import/parse — .4s/.zip/.docx → 4s source + images (chgk/chgkimport),
                        parsed in memory, nothing persisted; the client encrypts the result into a new list.
                        POST /api/import/text — the same pipeline without the file: one card's plain text
@@ -187,7 +225,12 @@ internal/server/       package server — the whole HTTP server
                        loop (+ `xy-server gc` on demand) hard-deletes expired ones, destroys their blobs,
                        and sweeps orphaned blob files
   staging.go           handout image staging: /api/handouts/{stage,heartbeat,DELETE stage} — client uploads referenced images once on modal open; pdf/split_fit reuse them via a session id (reaped after ~1min of no heartbeat) instead of re-uploading each generate. Staged images live in memory only, never on disk
-  multipart.go         readMultipart: in-memory multipart parsing for every endpoint that receives plaintext (export/handouts/staging/import). ParseMultipartForm spills parts over its budget into an unmanaged temp file — plaintext on disk is exactly what xy must not do. (attachments.go still uses it: those uploads are ciphertext.)
+  multipart.go         readMultipart parses multipart bodies in memory, for every endpoint that
+                       receives plaintext: export, handouts, staging and import. It exists because
+                       ParseMultipartForm writes any part over its budget into a temp file nobody
+                       manages, and putting plaintext on disk is exactly what xy must never do.
+                       attachments.go still uses ParseMultipartForm, because those uploads are
+                       already ciphertext
   debug.go             [timing] logs on export/handout endpoints, gated by XY_DEBUG_TIMING
 internal/chgk/         Go port of chgksuite's core (xy no longer shells out to Python for docx/handouts)
   fsource/             the "4s" format, both ways: parse.go = parse_4s (oracle-tested vs
@@ -200,15 +243,16 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        one marker table: `go generate` writes web/ts/markers_gen.ts
   typo/                typotools.py: the typography pass (quotes/dashes/stress accents/
                        %-decoding) + URL-aware underscore escaping
-  typoedit/            the typography pass: typo (quotes/dashes/%-decoding — every knob but
-                       accents, which have their own button) + inline's nbsp/nbhyphen gluing,
-                       applied to 4s SOURCE rather than to a field's value.
-                       Every line is split at its marker first (fsource.SplitMarker) — a pass
-                       let loose on raw 4s reads a list item's leading "-" as a stray hyphen
-                       and turns it into an em dash, eating the list.
-                       NO PRODUCTION CALLER: the button runs the TypeScript port (web/ts/typo.ts),
-                       because question text must not be posted to a server that may not see it.
-                       This package is the parity ORACLE — both suites read testdata/pass_cases.json
+  typoedit/            the typography pass: typo (quotes, dashes and %-decoding, which is every
+                       knob except accents, as those have their own button), plus inline's gluing
+                       of nbsp and nbhyphen. It is applied to the 4s SOURCE, not to the value of a
+                       field. Every line is split at its marker first (fsource.SplitMarker),
+                       because a pass run over raw 4s reads a list item's leading "-" as a stray
+                       hyphen, turns it into an em dash, and destroys the list.
+                       NOTHING IN PRODUCTION CALLS THIS. The button runs the TypeScript port in
+                       web/ts/typo.ts instead, because question text must not be sent to a server
+                       that may not be allowed to see it. This package is the parity oracle, and
+                       both test suites read testdata/pass_cases.json
   docxread/            .docx → plain text — a hand-rolled python-docx (zip/OPC, runs,
                        hyperlinks, numbering, tables, image extraction, in memory, no fs)
   textparse/           parser.py's parsers: plain text → structure. Literal ports, quirks
@@ -254,11 +298,13 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        bots) for the two things a token alone cannot do: hearing the person who
                        started it, and seeing a post reach the discussion group. Oracle-tested
                        call-for-call against chgksuite (scripts/gen_tg_oracle.py)
-  typstwasm/           typst linked in as a library, compiled to wasm32-wasip1, run under wazero with its
-                       World (= typst's filesystem abstraction) served from memory. Removes the last place xy
-                       had to hand decrypted questions to a filesystem. A pool of instances, since split_fit
-                       fits blocks in parallel; fonts parsed once, images once per generation.
-                       ~8× faster per probe than spawning the CLI (1.4ms vs 11.3ms).
+  typstwasm/           typst linked in as a library, compiled to wasm32-wasip1 and run under wazero,
+                       with its World (typst's filesystem abstraction) served out of memory. This
+                       removed the last place where xy had to hand decrypted questions to a
+                       filesystem. It keeps a pool of instances, because split_fit fits blocks in
+                       parallel; fonts are parsed once and images once per generation.
+                       Each probe is about 8 times faster than spawning the CLI: 1.4ms against
+                       11.3ms.
                        typst.wasm is //go:embed-ed but NOT in git (30 MB): `just build-wasm` compiles
                        typst-wasm/ (Rust) into it — once per clone, then only on a typst bump. Every Go
                        recipe (build/dev/test) depends on a guard that says so if the file is missing.
@@ -640,29 +686,39 @@ The app is an installable PWA that works offline and resyncs on reconnect.
 - **App shell**: `sw.js` (served at `/sw.js`, scope `/`) precaches the static
   assets + page routes; navigations are network-first→cache, versioned `?v=`
   assets cache-first, others stale-while-revalidate. `/api/*` is never SW-cached.
-- **Data mirror**: `store.ts` keeps a per-board ciphertext snapshot, per-card
-  timelines, the board list and downloaded attachment bytes in IndexedDB
-  (DB `xy-offline`). Everything stored is ciphertext (same as the server) except
-  plaintext board names — and the Search Index, which is deliberately plaintext
-  (ADR-0008: the raw DK already sits in `xy-keys`, so plaintext beside it adds no
-  exposure; it is purged whenever the key is).
-- **Outbox + resync**: every board mutation flows through `sync.ts#mutate`. Online
-  with an empty queue it's sent immediately; otherwise it's queued. Entities
-  created offline get **negative temp ids** (which flow transparently through the
-  numeric-id code in board.ts); on `flush` each create's response yields temp→real,
-  and later ops have their temp-id references (URL path + JSON body) rewritten
-  before sending. After a board's queue drains, the UI reloads a fresh snapshot.
-  Cross-board copy/move, board creation, and attachment upload/delete stay online-only.
+- **Data mirror**: `store.ts` keeps a ciphertext snapshot per board, the
+  timelines of individual cards, the board list and any downloaded attachment
+  bytes in IndexedDB, in the database `xy-offline`. Everything it stores is
+  ciphertext, just as on the server, with two exceptions: board names, which are
+  plaintext anyway, and the Search Index, which is plaintext on purpose. ADR-0008
+  explains why: the raw data key already sits in `xy-keys` on the same device, so
+  plaintext next to it adds no exposure, and the index is deleted whenever the
+  key is.
+- **Outbox and resync**: every board mutation goes through `sync.ts#mutate`. If
+  the app is online and the queue is empty, it is sent straight away; otherwise it
+  is queued. Anything created while offline gets a **negative temporary id**,
+  which the numeric-id code in board.ts handles without knowing the difference.
+  When the queue is flushed, the response to each create gives the real id for
+  that temporary one, and any later operation that referred to it has the
+  reference rewritten, both in the URL path and in the JSON body, before it is
+  sent. Once a board's queue is empty, the UI loads a fresh snapshot. Three things
+  still require a connection: copying or moving between boards, creating a board,
+  and uploading or deleting an attachment.
 
 ## Crypto model
-Each board has a random 32-byte data key (DK). The passphrase derives a KEK
-(scrypt) that only wraps/unwraps DK; a `verify_token` lets the client confirm a
-passphrase on unlock. Changing the passphrase re-wraps DK (no data re-encrypt).
-DK is cached per board in IndexedDB. Wire envelope: `magic("xy1") | alg(1) |
-nonce(12) | ct+tag`, base64 over JSON. `crypto.ts` is the sole owner of this
-format. **XSS = total compromise**, so the app serves a strict CSP (script-src
-'self', no inline/eval/wasm, no third-party origins); the one JS dependency is
-vendored same-origin under that CSP.
+Each board has a random 32-byte data key, the DK. The passphrase is run through
+scrypt to derive a key-encryption key, and that KEK is used for nothing except
+wrapping and unwrapping the DK. A `verify_token` lets the client check a
+passphrase during unlock. Changing the passphrase re-wraps the DK, so no data has
+to be re-encrypted. The DK is cached per board in IndexedDB.
+
+The wire envelope is `magic("xy1") | alg(1) | nonce(12) | ct+tag`, base64-encoded
+inside JSON, and `crypto.ts` is the only file that knows this format.
+
+**An XSS would compromise everything**, so the app serves a strict CSP:
+`script-src 'self'`, no inline script, no eval, no wasm and no third-party
+origins. The one JavaScript dependency is vendored and served from our own
+origin, so it fits under that CSP.
 
 ## Run / build / test
 ```
@@ -679,11 +735,13 @@ just test           # go test + deno frontend tests
 #   oracle the in-process wasm typst is checked against). typst is NOT needed to
 #   run xy — only to run those tests.
 just check          # this module: fmt + vet + tidy-check + test
-just pre-commit     # the whole repo (the root justfile), incl. the kit's gate and
-                    #   class-check, which no single module can run for itself
+just pre-commit     # the whole repo, via the root justfile. It includes the kit's
+                    #   own gate and class-check, neither of which a single module
+                    #   can run on its own.
 just deploy-staging # a branch may go to xytest.pecheny.me for a live test
-just deploy         # prod: from `main` ONLY, merged AND pushed to origin first —
-                    #   never from a branch (a branch deploy once undid another's fix)
+just deploy         # production. Only from `main`, and only after the branch is
+                    #   merged AND `main` is pushed to origin. Never deploy a branch:
+                    #   doing that once undid a fix that lived on another branch.
 ```
 Server listens on `$PORT` (default 9673); DB at `$XY_DB` (default xy.db).
 Config via `.env` (see `.env.example`). Telegram register/login needs
@@ -691,15 +749,18 @@ Config via `.env` (see `.env.example`). Telegram register/login needs
 without a token does not poll and does not offer telegram login.
 
 ## Conventions
-- **Reuse the design system** (`styles.css` CSS variables, components) — extend
-  it, don't inline one-off styles. Frontend modules are strict-TS ES modules in
-  `web/ts/` — exports are the wiring, no `window.xy*` globals; the jstest suite
-  imports the built `static/dist/*.js`.
-- **Write discipline**: every mutation goes through `s.withWriteTx` (pulls the
-  pooled conn before the lock, bounds the tx). Ported from dope.
-- **Server never sees plaintext content**: content columns are `_enc` BLOB
-  envelopes; handlers validate structure + ACL only. The lone plaintext exception
-  is `boards.name` (a deliberate carve-out — see "What this is").
+- **Reuse the design system**: its CSS variables and components, in
+  `styles.css`. If something is missing, extend it rather than writing a one-off
+  style. The frontend modules are strict-TypeScript ES modules in `web/ts/`.
+  Modules are wired together by their exports; there are no `window.xy*` globals.
+  The jstest suite imports the built files from `static/dist/`.
+- **Writes**: every mutation goes through `s.withWriteTx`, which takes the
+  connection out of the pool before it takes the lock, and puts a bound on the
+  transaction. This was ported from dope.
+- **The server never sees plaintext content**: the content columns hold `_enc`
+  BLOB envelopes, and the handlers only validate the structure and the ACL. The
+  one exception is `boards.name`, which is plaintext on purpose; see "What this
+  is" above.
 
 ## Testing
 Go integration tests (`internal/server/*_test.go`) cover the full
@@ -708,29 +769,32 @@ deno tests (`jstest/`) cover crypto round-trips/tamper/rewrap, rank ordering,
 and the offline sync engine (temp-id remapping, snapshot apply, and a full
 offline→online resync against an in-memory IndexedDB).
 
-**Browser testing**: use the `verify` skill (repo root `.claude/skills/verify/`) —
-`agent-browser` drives a persistent headless Chrome from the shell, with the xy
-login / board-create / unlock / card flows and their gotchas documented there.
-Run the built binary from `/tmp` (not the repo dir) to get embed mode + `?v=`
-asset versioning. Still worth a manual pass before release: the full board/card
-UI flows and service-worker install/offline behaviour.
+**Browser testing**: use the `verify` skill, in `.claude/skills/verify/` at the
+repo root. It drives a persistent headless Chrome from the shell with
+`agent-browser`, and documents the xy flows — login, creating a board, unlocking
+and working with a card — along with the traps in each. Run the built binary from
+`/tmp` rather than from the repo directory, so that you get embed mode and `?v=`
+asset versioning. Two things are still worth checking by hand before a release:
+the full board and card UI flows, and installing the service worker and using the
+app offline.
 
-**Search** is client-side and local-only (ADR-0008, `searchindex.ts`); server-side
-encrypted search stays out of scope.
+**Search** runs in the browser and never leaves the device (ADR-0008,
+`searchindex.ts`). Searching encrypted data on the server is out of scope.
 
 ## List groups (list_of_lists)
-A named, ordered run of **consecutive** lists, sharing one question-numbering
-sequence and a combined export. Schema: `list_groups(name_enc)` + nullable
-`lists.group_id` (migrateV6); the board snapshot adds a `groups[]` array and each
-list carries `group_id`. Endpoints: `POST /api/boards/{id}/list-groups`
+A list group is a named, ordered run of lists that must be **next to each
+other**. The lists in it share one question-numbering sequence and export
+together. In the schema it is `list_groups(name_enc)` plus a nullable
+`lists.group_id` (added by migrateV6). The board snapshot gains a `groups[]`
+array, and each list carries its `group_id`. Endpoints: `POST /api/boards/{id}/list-groups`
 {name_enc, list_ids} (≥2 lists, folds them in), `PATCH /api/list-groups/{id}`
 (rename), `DELETE` (dissolve → members released to group_id NULL). The
 «Управление списками» modal (☰ menu, `board.ts`) is the editing surface: one row
 per list, drag / position-input reorder, multi-select move-together, and
-🔗 Связать when the checked rows are consecutive ungrouped lists. Orderable units
-are standalone lists and whole groups (a group always moves as one block, keeping
-its members consecutive — the invariant the board render relies on; the
-single-list move modal refuses to reorder a grouped list on the same board).
+🔗 Связать when the checked rows are consecutive ungrouped lists. What can be reordered is a standalone list or a whole group. A group always
+moves as one block, which keeps its members next to each other; the board
+rendering depends on that staying true. For the same reason, the single-list move
+modal refuses to reorder a list that belongs to a group within its own board.
 On the board grouped lists render as ordinary columns, each with a small
 `🔗group-name` tag underneath (`.klist-group-tag`); numbering flows across
 the group (`numberQuestionCards` over the concatenated cards), and per-list

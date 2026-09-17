@@ -1,138 +1,161 @@
 # dopesuite — monorepo
 
-Six Go modules, one repo: three apps (xy, dope, spliff) on two shared layers
-(dopeuikit, dopecore), plus a desktop GUI. The apps have their own `AGENTS.md`;
-start there.
+This repo holds six Go modules: three apps (xy, dope, spliff), two shared
+layers they are built on (dopeuikit, dopecore), and one desktop GUI. Each app
+has its own `AGENTS.md`, so start there.
 
 ```
 dopeuikit/   pecheny.me/dopeuikit — the shared UI system:
              ui/ = generic DSL engine (no design opinions), kit/ = the design
              system (core vocabulary + expansions + core.css + fonts)
-dopecore/    pecheny.me/dopecore — the shared platform layer extracted out of
-             xy and dope (no AGENTS/CONTEXT of its own): sessions, credentials,
-             the SQLite pool conventions and the migration runner (schema),
-             webassets, the admin bulk-create, the on-disk blob store
-             (blobstore), the Telegram bot — client, poll lock and the login
-             conversation — and the login handshake (tglogin)
+dopecore/    pecheny.me/dopecore — the shared platform layer that was extracted
+             out of xy and dope. It has no AGENTS or CONTEXT of its own, and
+             contains: sessions, credentials, the SQLite pool conventions and
+             the migration runner (schema), webassets, the admin bulk-create,
+             the on-disk blob store (blobstore), the Telegram bot (client, poll
+             lock and the login conversation) and the login handshake (tglogin)
 xy/          ЧГК question-editing boards (encrypted, Trello-style)
 dope/        tournament management (EK/OD/KSI) + realtime web UI
 spliff/      shared expenses: who paid for whom, in any currency, and who owes
-             whom — the only English-only module
+             whom. This is the only module whose UI is in English.
 chgksuite-gui/
              a Fyne window over xy's chgksuite CLI, generated from the flags
              that CLI declares (`chgksuite spec`)
 ```
 
-- xy, dope and spliff consume the shared layers via `replace pecheny.me/dopeuikit =>
-  ../dopeuikit` and `replace pecheny.me/dopecore => ../dopecore` — the monorepo
-  preserves the sibling layout, so builds need nothing extra. The kit imports
-  dopecore the same way; dopecore imports no other module (`docs/adr/0004`).
-- `chgksuite-gui` is deliberately outside the fan-out below: it needs cgo and a
-  desktop toolchain, and neither server depends on it. Build and test it with
-  its own `just check`, which also guards the seam between it and the CLI.
-- xy, dope and spliff each keep a `justfile` (`just dev`, `just test`, `just
-  check`); dopeuikit and dopecore have none — their recipes live in the root
-  `justfile`, which also fans `test`/`fmt`/`vet` out across all five. `just
-  pre-commit` is the root gate from anywhere: the module ones delegate up to it,
-  because class-check needs every app's TypeScript and the shared core.css at
-  once.
-- **Deploy** is one script for the whole repo: `deploy.py`, a target table
-  (`dope-server`, `dopetest`, `xy-server`, `xytest`, `spliff-server`,
-  `splifftest`) naming each unit's module, package, binary, systemd unit and
-  **host** — xy and spliff are on `vps-he`, dope on `vps2day-ee`. Each app's
-  `just deploy` calls it with its own targets.
-  If you are already on the target production host, do **not** `ssh` to it —
-  run the commands directly.
-- **Production deploys come from `main` only, and from a `main` that is
-  pushed. NEVER deploy a branch to prod.** Merge, `git push origin main`, then
-  deploy from `main`. A branch may go to the staging targets
-  (`xytest`, `dopetest`, `splifftest`; `just deploy-staging`) to live-test a
-  feature. On
-  2026-08-16 a branch deploy overwrote a fix that lived only on another branch
-  and put a fixed bug back into xy prod.
-- Full pre-merge history is preserved under each subdirectory (git log/blame
-  work with subdir paths).
-- Plan of record: when the DSL engine matures, `dopeuikit/ui` (engine only,
-  NOT the design system) splits into its own repo/module; `kit/` + assets stay
-  here.
-- Legacy remotes (xy, dope, dopeuikit projects on GitLab) are frozen as of the
-  merge; this repo is the source of truth.
+- xy, dope and spliff use the shared layers through `replace
+  pecheny.me/dopeuikit => ../dopeuikit` and `replace pecheny.me/dopecore =>
+  ../dopecore`. The monorepo keeps the modules as siblings, which is the layout
+  those paths expect, so a build needs no extra setup. The kit imports dopecore
+  the same way. dopecore imports no other module of ours (`docs/adr/0004`).
+- `chgksuite-gui` is deliberately left out of the cross-module recipes below. It
+  needs cgo and a desktop toolchain, and neither server depends on it. Build and
+  test it with its own `just check`, which also checks that it still matches the
+  CLI it wraps.
+- xy, dope and spliff each have a `justfile` with `just dev`, `just test` and
+  `just check`. dopeuikit and dopecore have none: their recipes live in the root
+  `justfile`, which also runs `test`, `fmt` and `vet` across all five modules at
+  once. `just pre-commit` is the gate for the whole repo and you can run it from
+  anywhere. The per-module `pre-commit` recipes just call the root one, because
+  class-check needs every app's TypeScript and the shared core.css together.
+- **Deploying** is done by one script for the whole repo, `deploy.py`. It has a
+  table of targets (`dope-server`, `dopetest`, `xy-server`, `xytest`,
+  `spliff-server`, `splifftest`), and each row says which module, package,
+  binary, systemd unit and **host** that target uses. xy and spliff run on
+  `vps-he`, dope runs on `vps2day-ee`. Each app's `just deploy` calls the script
+  with its own targets. If you are already logged in to the production host you
+  are deploying to, do **not** `ssh` to it again — just run the commands.
+- **Only deploy to production from `main`, and only when `main` is pushed.
+  NEVER deploy a branch to production.** Merge the branch, run `git push origin
+  main`, then deploy from `main`. If you want to test a feature live, deploy the
+  branch to one of the staging targets instead (`xytest`, `dopetest`,
+  `splifftest`, via `just deploy-staging`). On 2026-08-16 someone deployed a
+  branch to production. It overwrote a fix that existed only on a different
+  branch, and a bug that had already been fixed came back in xy production.
+- The full history from before the merge is kept under each subdirectory, so
+  `git log` and `git blame` work on paths inside them.
+- The plan is that once the DSL engine is mature, `dopeuikit/ui` (the engine
+  only, not the design system) moves to its own repo and module. `kit/` and the
+  assets stay here.
+- The old remotes (the xy, dope and dopeuikit projects on GitLab) were frozen
+  when the repos were merged. This repo is now the only source of truth.
 
-## Frontend work is not done until it has been looked at
+## Frontend work is not finished until you have looked at it
 
-Behaviour checks pass while a surface looks bolted on: overflow 0, counts right,
-elements present, and the spacing still wrong. Run the `design-review` skill
-after building any panel, modal, bar or row, and the `verify` skill to drive it
-in a browser at both sizes. Both live in `.claude/skills/`.
+Automated checks can all pass while the screen still looks wrong: overflow is 0,
+the counts are right, every element is present, and the spacing is still off.
+So after you build any panel, modal, bar or row, run the `design-review` skill,
+and use the `verify` skill to open it in a browser at both screen sizes. Both
+skills are in `.claude/skills/`.
 
-The two mistakes that keep recurring, and their guards:
+Two mistakes keep happening. Each one has a guard:
 
-- **Re-inventing layout.** The kit ships `.u-col`/`.u-row`/`.u-gap-*`/
-  `.u-align-*`/`.u-justify-*`. `scripts/classcheck` refuses a NEW class whose
-  body is only those (the ratchet in `layout.go`; what exists is grandfathered
-  in `layout-baseline.txt`).
-- **Spacing children instead of containers.** Text primitives carry `margin: 0`
-  deliberately. Give the container a `gap` from the `--space-*` scale.
+- **Re-inventing layout.** The kit already provides `.u-col`, `.u-row`,
+  `.u-gap-*`, `.u-align-*` and `.u-justify-*`. If you write a new class whose
+  body contains nothing but those rules, `scripts/classcheck` will reject it.
+  The check is in `layout.go`, and the classes that already existed when it was
+  added are listed in `layout-baseline.txt`.
+- **Spacing the children instead of the container.** Text primitives are given
+  `margin: 0` on purpose. To space them out, put a `gap` on the container and
+  take the value from the `--space-*` scale.
 
-xy has `/gallery` and dope has `/gallery`, both dev-only: every primitive on one
-page, which is what makes "look at it beside its twin" cheap.
+xy and dope both have a `/gallery` page that only works in dev mode. It shows
+every primitive on one page, which makes it easy to compare a new thing with
+the one it should look like.
 
 ## User-facing strings
 
-Every string a person reads comes from a Catalog, never from the call site
-(root `docs/adr/0006`, terms in root `CONTEXT.md`).
+Every string a person reads comes from a Catalog, never from the place in the
+code that shows it (see root `docs/adr/0006`, and the terms in root
+`CONTEXT.md`).
 
-- One TOML file per Surface under `<module>/i18nstrings/<lang>/`, `ru` the
-  default — a module whose UI is in another language says so with
-  `-default-lang` on its `go:generate` line, and then needs no `ru/` at all;
-  `common.toml` is the module's shared words. A `[table]` groups keys.
-  Ids are snake_case and name the string's ROLE: `board.delete.confirm`, never
-  `board.delete.are_you_sure`. Rewording never renames.
-- Templates are `text/template`, restricted to `{{.name}}` (a string) and
-  `{{plural .n "one" "few" "many"}}` (an int). Anything else fails generation.
-  Write the template as a `'literal string'` so the forms need no escapes.
-- Add one: edit the TOML, run `just generate-strings`, commit the `*_gen` files
-  beside it. `just generate-check` fails on a stale one. Callers hold a
-  `Strings` value (`i18nstrings.Default`) and write `s.Board.Delete.Confirm(n)`.
-- Write the full path from the `Strings` value at every call site, never
-  `c := s.Board.Delete`: the generator fails on any id no `.go`, `.ts` or
-  `.dopeui` file names in full, so a string nobody reads cannot linger.
-- A `.dopeui` page writes an untemplated string as `label=@board.delete.title`
-  or a bare `@board.delete.hint` item; a quoted value is always a literal. The
-  kit's Catalog answers any id the app's does not.
-- An error a person may read is `i18nstrings.User(s.Board.Delete.Locked())`;
-  the HTTP edge shows those verbatim and everything else as one generic line.
-- `just cyrillic-check` fails on Cyrillic in any `.go`/`.ts`/`.dopeui` outside
-  the catalogs, generated files and tests. Every file still listed in
-  `scripts/cyrillic/allowlist.txt` is one whose Cyrillic is functional —
-  regexes that match Russian input, data tables, the chgksuite-parity format
-  strings — plus `xy/web/ts/sw.ts`, a classic worker with no import graph. A
-  listed file that goes clean fails too. Never add a line to it to land a
-  string.
-- `just strings-check` regenerates every module's Catalog and fails on a stale
-  `*_gen`. The apps' own `generate-check` knows only their `tags_gen.go`, and
-  no module can regenerate the kit's Catalog for itself.
+- Each Surface has one TOML file, under `<module>/i18nstrings/<lang>/`. The
+  default language is `ru`. If a module's UI is in another language it says so
+  with `-default-lang` on its `go:generate` line, and then it needs no `ru/`
+  directory at all. `common.toml` holds the words that module shares between
+  screens, and a `[table]` inside a file groups related keys.
+  Ids are snake_case and describe what the string is FOR: `board.delete.confirm`,
+  not `board.delete.are_you_sure`. That way rewording a string never renames it.
+- Templates use `text/template`, but only two things are allowed in them:
+  `{{.name}}` for a string and `{{plural .n "one" "few" "many"}}` for a number.
+  Anything else fails generation. Write the template inside `'single quotes'` so
+  the plural forms don't need escaping.
+- To add a string: edit the TOML file, run `just generate-strings`, and commit
+  the `*_gen` files next to it. `just generate-check` fails if one of them is
+  out of date. To read a string, take a `Strings` value (`i18nstrings.Default`)
+  and write the full path, like `s.Board.Delete.Confirm(n)`.
+- Always write that full path at the call site. Never shorten it with something
+  like `c := s.Board.Delete`. The generator fails if no `.go`, `.ts` or
+  `.dopeui` file mentions an id in full, and that is what stops unused strings
+  from piling up.
+- In a `.dopeui` page, write an untemplated string as `label=@board.delete.title`,
+  or as a bare `@board.delete.hint` item. A value in quotes is always taken
+  literally. If the app's Catalog has no such id, the kit's Catalog is asked.
+- If a person may need to read an error, build it with
+  `i18nstrings.User(s.Board.Delete.Locked())`. The HTTP layer shows those
+  errors as they are, and replaces every other error with one generic line.
+- `just cyrillic-check` fails if it finds Cyrillic in any `.go`, `.ts` or
+  `.dopeui` file outside the catalogs, the generated files and the tests. The
+  files still listed in `scripts/cyrillic/allowlist.txt` are ones where the
+  Cyrillic does a job: regexes that match Russian input, data tables, and the
+  format strings that keep chgksuite parity. The list also has `xy/web/ts/sw.ts`,
+  which is a classic worker and has no import graph. The check also fails if a
+  listed file no longer has any Cyrillic in it, so the list only shrinks. Never
+  add a line to it just to get a string committed.
+- `just strings-check` regenerates every module's Catalog and fails if any
+  `*_gen` file is out of date. It exists because the apps' own `generate-check`
+  only knows about their `tags_gen.go`, and because no module can regenerate the
+  kit's Catalog for itself.
+
+### Write the strings plainly
+
+The Russian in the catalogs is interface copy, not literature. Use normal word
+order and ordinary words. Don't invert a sentence for effect, don't write
+aphorisms, and use a full stop where you were about to use a dash. A hint should
+read like one person explaining something to another. The same goes for commit
+messages, code comments and test names, in Russian and in English.
 
 ## Toolchain
 
-- **Go** ≥ 1.26 — all five modules.
-- **just** — the task runner (root + per-app justfiles).
-- **deno** ≥ 2 — fetches the native tsc binary (`deno install`, root
-  `package.json`) and runs the frontend tests (`deno test --parallel`). Bundling
-  itself is pure Go (`just build-web [target...]` → `scripts/webbuild/`,
-  esbuild-as-library; see `docs/adr/0001`), so no JS runtime is on the build or
-  server dev path.
-- **Rust** + the `wasm32-wasip1` target — xy only, and only to build typst into
-  `xy/internal/chgk/typstwasm/typst.wasm` (`cd xy && just build-wasm`): a 30 MB
-  artifact that is `//go:embed`-ed but not in git, so every xy Go recipe fails
-  with an instruction until you build it once.
-- **Python + uv** — `deploy.py` and the dope scripts. Python only ever through
-  `uv` (`uv run python`).
+- **Go** 1.26 or newer, for all five modules.
+- **just**, the task runner. There is a root justfile and one per app.
+- **deno** 2 or newer. It downloads the native tsc binary (`deno install`, see
+  the root `package.json`) and runs the frontend tests (`deno test --parallel`).
+  Bundling itself is written in Go (`just build-web [target...]`, in
+  `scripts/webbuild/`, using esbuild as a library — see `docs/adr/0001`), so
+  neither building nor running the server needs a JS runtime.
+- **Rust** with the `wasm32-wasip1` target. Only xy needs it, and only to build
+  typst into `xy/internal/chgk/typstwasm/typst.wasm` (`cd xy && just
+  build-wasm`). That file is 30 MB, it is embedded with `//go:embed`, and it is
+  not in git, so every Go recipe in xy fails with an instruction until you have
+  built it once.
+- **Python with uv**, for `deploy.py` and the dope scripts. Only ever run
+  Python through `uv` (`uv run python`).
 
 ## Git
 
-Plain `git`. Branch, commit and merge with raw git commands — no `gitbutler`, no
-`graphite`, no wrapper scripts.
+Use plain `git`. Branch, commit and merge with ordinary git commands. Don't use
+`gitbutler`, `graphite` or any wrapper script.
 
 ## Agent skills
 
@@ -142,8 +165,9 @@ Forgejo issues on code.pecheny.me, via the `fj` CLI. See `docs/agents/issue-trac
 
 ### Triage labels
 
-Default five-role vocabulary; label string = role name. See `docs/agents/triage-labels.md`.
+Default five-role vocabulary; the label string is the role name. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
-Multi-context: root `CONTEXT-MAP.md` pointing at per-module `CONTEXT.md` files. See `docs/agents/domain.md`.
+There are several contexts: the root `CONTEXT-MAP.md` points at a `CONTEXT.md`
+per module. See `docs/agents/domain.md`.

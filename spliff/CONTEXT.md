@@ -1,6 +1,6 @@
 # Spliff — shared expenses
 
-Splitwise-shaped expense sharing for a circle of friends: people in a Group record who paid for whom, in any currency, and the Group always knows who owes whom. Terms decided 2026-09-15.
+Expense sharing for a circle of friends, shaped like Splitwise. People in a Group record who paid for whom, in any currency, and the Group always knows who owes whom. These terms were decided on 2026-09-15.
 
 ## Language
 
@@ -8,61 +8,61 @@ Splitwise-shaped expense sharing for a circle of friends: people in a Group reco
 A circle of people who share expenses with each other. Every Transaction belongs to exactly one Group, and debts never cross Groups.
 
 **Base currency**:
-The one currency a Group states its balances and debts in. Chosen when the Group is made, changeable at any time; changing it restates every balance, it rewrites nothing.
+The single currency a Group shows its balances and debts in. It is chosen when the Group is created and can be changed at any time. Changing it only restates the balances; nothing stored is rewritten.
 
 **Transaction**:
-One dated movement of money recorded in a Group, in the currency it actually happened in. It keeps its own currency and amount forever and is converted to the Base currency only when read.
+One dated movement of money recorded in a Group, in the currency it actually took place in. It keeps that currency and that amount permanently, and is converted to the Base currency only when someone reads it.
 
 **Rate table**:
-Every currency's rate on one calendar day, as fetched from the rate source that day. Tables exist only for days one was fetched.
+The rate of every currency on one calendar day, as fetched from the rate source on that day. A table exists only for a day on which one was actually fetched.
 
 **Rate date**:
-The day whose Rate table a Transaction converts with: the Transaction's own date when a table exists for it, else the nearest day that has one (the earlier one on a tie). A person who backdates a Transaction gets whatever table is nearest.
+The day whose Rate table is used to convert a Transaction. That is the Transaction's own date if a table exists for it, and otherwise the nearest day that has one; if two days are equally near, the earlier one is used. Someone who backdates a Transaction therefore gets whichever table is nearest to that date.
 
 **Pinned rate**:
-A rate a person writes onto one Transaction because it is the one their bank really charged: a target currency and a number. It takes precedence over the Rate table for that Transaction, and when the Group's Base currency is not the one it names, the amount goes through the Pinned rate first and the Rate table for the rest of the way. Designed for from the start; not offered in v1.
+A rate that someone writes onto one particular Transaction, because it is the rate their bank actually charged. It consists of a target currency and a number. For that Transaction it wins over the Rate table. If the Group's Base currency is not the currency the Pinned rate names, the amount is converted through the Pinned rate first and then through the Rate table for the remaining step. The design allows for this from the start, but v1 does not offer it.
 
 **Payment**:
-One Member's part of handing over a Transaction's money: who paid and how much. A Transaction has one or more Payments, summing to its total; a restaurant bill two people paid is one Transaction with two Payments.
-_Avoid_: payer (as a field — a Transaction has Payments, and "a payer" is whoever holds one)
+One Member's part in handing over the money for a Transaction: who paid, and how much. A Transaction has one or more Payments, and they add up to its total. A restaurant bill that two people paid is one Transaction with two Payments.
+_Avoid_: a `payer` field. A Transaction has Payments, and "a payer" is simply whoever holds one.
 
 **Share**:
-The part of a Transaction's total one member is answerable for, as an amount in the Transaction's currency. An even split is a way of typing amounts, never what is kept; the odd minor units of a derived split go one each to the payers in descending Payment order, then the others in split order.
+The part of a Transaction's total that one member is responsible for, stored as an amount in the Transaction's own currency. An even split is only a quick way of entering amounts; what gets stored is always the amounts themselves. When a split leaves odd minor units over, they are given out one each, first to the payers in order of descending Payment, and then to everyone else in split order.
 
 **Unclaimed**:
-The part of a Transaction's total no Share accounts for. It belongs to nobody and is owed by nobody: the payers absorb it, pro rata to their Payments, until Members claim it by setting their own Shares. Shares may never exceed the total.
-_Avoid_: remainder, residue (those suggest an error; Unclaimed is a normal state)
+The part of a Transaction's total that no Share accounts for. It belongs to nobody and nobody owes it. The payers absorb it in proportion to their Payments, until Members claim it by setting Shares of their own. Shares may never add up to more than the total.
+_Avoid_: remainder, residue. Both suggest that something has gone wrong, and being Unclaimed is a perfectly normal state.
 
 **Settlement**:
-A Transaction with one Payment and one Share, the whole amount each: B hands A the cash, so B's Payment and A's Share are both the total. Not a separate kind of record.
+A Transaction with exactly one Payment and one Share, each for the whole amount. B hands A the cash, so B's Payment is the total and A's Share is the total. It is not a separate kind of record.
 
 **Claim**:
-A member setting their own Share on a Transaction someone else paid. Every member may edit every field of every Transaction in their Group; a Claim is just the common case.
+A member setting their own Share on a Transaction that somebody else paid for. Every member is allowed to edit every field of every Transaction in their Group, and a Claim is simply the most common case of that.
 
 **History**:
-The record of every change to a Transaction — who, when, what — visible to every member of the Group. Trust is social; History is what makes it auditable.
+A record of every change made to a Transaction: who made it, when, and what changed. Every member of the Group can see it. The app lets everyone edit everything because the group trusts each other, and History is what makes that checkable afterwards.
 
 **Net balance**:
-One Member's Payments minus their Shares minus their absorbed Unclaimed, across the Group, in the Base currency, each amount converted at its Transaction's Rate date. A Group's Net balances always sum to zero.
+For one Member, their Payments minus their Shares minus the Unclaimed they have absorbed, added up across the whole Group and expressed in the Base currency. Each amount is converted using its own Transaction's Rate date. The Net balances of a Group always add up to zero.
 
 **Debt graph**:
-The Group's Net balances resolved into the fewest transfers the greedy pairing yields: largest creditor against largest debtor, repeat, ties by join order. Computed whenever asked, a pure function of the ledger, never edited by hand.
-_Avoid_: simplified debts (there is no unsimplified view)
+The Group's Net balances turned into a small number of transfers, by greedy pairing: take the largest creditor and the largest debtor, settle as much as possible between them, and repeat; ties are broken by the order people joined. It is computed whenever it is asked for, it is a pure function of the ledger, and it is never edited by hand.
+_Avoid_: "simplified debts", since there is no unsimplified view to contrast it with.
 
 **Member**:
-A person with a place in a Group. Every Share and every Payment names a current Member: nobody leaves or is removed while their Net balance is non-zero, so the Debt graph never names a ghost.
+A person who belongs to a Group. Every Share and every Payment names a Member who is currently in the Group. Nobody may leave or be removed while their Net balance is non-zero, which is what stops the Debt graph from naming somebody who is no longer there.
 
 **Phantom**:
-A Member with a name and no account: someone at the table who is not on Spliff yet, or a stand-in for testing. The Owner makes one; it pays and holds Shares like anyone. A person who joins through an Invite Link may claim a Phantom, and its Payments, Shares and History become theirs; a Phantom at zero balance can be removed like any Member.
-_Avoid_: placeholder, ghost (a ghost is what the zero-balance rule prevents), fake user
+A Member that has a name but no account: someone at the table who has not joined Spliff yet, or a stand-in used for testing. The Owner creates one, and it can pay and hold Shares like anybody else. Somebody who joins through an Invite Link may claim a Phantom, and its Payments, Shares and History then become theirs. A Phantom whose balance is zero can be removed, like any other Member.
+_Avoid_: placeholder, fake user, and ghost. A ghost is exactly what the zero-balance rule exists to prevent.
 
 **Owner**:
-The Member who made the Group, or was handed it since. The Owner alone removes Members, mints and revokes Invite Links, decides Join Requests, deletes the Group and hands ownership on; the Owner cannot leave without handing over. Everything else — every Transaction, the Group's name and Base currency — belongs to every Member alike.
-_Avoid_: admin, creator (the creator may no longer be the Owner)
+The Member who created the Group, or who has been given it since. Only the Owner can remove Members, create and revoke Invite Links, decide Join Requests, delete the Group and hand ownership to somebody else. The Owner cannot leave without handing it over first. Everything else — every Transaction, and the Group's name and Base currency — is equally open to every Member.
+_Avoid_: admin, and creator, since the person who created the Group may not be the Owner any more.
 
 **Invite Link**:
-As in xy: a URL the Owner mints that admits its holder to the Group as a Member. It may cap uses, expire or hold the joiner for approval as a Join Request, and it is revocable. It grants Membership, never a role.
+The same idea as in xy: a URL the Owner creates, which lets whoever holds it join the Group as a Member. It can have a limit on how many times it is used, it can expire, and it can hold the joiner for approval as a Join Request. It can also be revoked. It grants Membership and never a role.
 
 **Photo**:
-A picture a Member attaches to a Transaction for the others' reference — the receipt, the bill. Kept as the app re-encodes it, never as the phone sent it, so nothing but the picture travels. A Transaction may carry several; any Member adds or removes one.
-_Avoid_: attachment (xy's word; a Photo is always an image), receipt (it may be anything)
+A picture that a Member attaches to a Transaction so the others can see it, usually the receipt or the bill. It is stored as the app re-encodes it, never as the phone sent it, so that nothing but the picture itself is kept. A Transaction may have several, and any Member may add or remove one.
+_Avoid_: attachment, which is xy's word and covers any file, whereas a Photo is always an image; and receipt, since the picture may be of anything.

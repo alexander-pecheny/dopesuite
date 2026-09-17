@@ -1,37 +1,38 @@
 # chgksuite-gui — agent notes
 
-A Fyne window over the `chgksuite` CLI in `../xy/cmd/chgksuite`, for people who
-would rather not type flags. Nothing about the commands is written here: the CLI
-prints its own flags as JSON (`chgksuite spec`), and this program draws a form
-from that. Add a flag to a command and it appears in the window; nothing to edit
-on this side.
+This is a Fyne window over the `chgksuite` CLI in `../xy/cmd/chgksuite`, for
+people who would rather not type flags. Nothing about the commands is written
+here. The CLI prints its own flags as JSON when you run `chgksuite spec`, and
+this program draws a form from that output. If you add a flag to a command, it
+appears in the window, and you don't have to edit anything on this side.
 
 ## Why it is a module of its own, and a subprocess
 
-- Fyne needs cgo and pulls in a GPU stack. `xy` is a server, and its `go.mod`
-  has no business carrying that, so this is a separate module and stays out of
-  the root `justfile`'s fan-out.
-- The CLI runs as a subprocess rather than linked in. Output streams into the
-  log pane a line at a time, `Stop` kills it, and a command that panics or calls
-  `os.Exit` cannot take the window down.
+- Fyne needs cgo and brings a GPU stack with it. `xy` is a server and its
+  `go.mod` should not have to carry any of that, so this is a separate module,
+  and the root `justfile` leaves it out of its cross-module recipes.
+- The CLI is run as a subprocess instead of being linked in. Its output is
+  streamed into the log pane one line at a time, `Stop` kills it, and a command
+  that panics or calls `os.Exit` cannot bring the window down with it.
 - The GUI finds the binary at `$CHGKSUITE`, then beside its own executable
   (which is where `just app` puts it), then on the `PATH`.
 
 ## The seam
 
-`spec.go` on each side has to agree. `spec_test.go` here reads a real
-`chgksuite spec` and builds a form for every command it names — `just test`
-builds the CLI first and points the test at it, so the two cannot drift apart
-unnoticed.
+The `spec.go` on each side has to agree with the other. `spec_test.go` in this
+module reads the output of a real `chgksuite spec` and builds a form for every
+command in it. `just test` builds the CLI first and points the test at it, so the
+two sides cannot drift apart without someone noticing.
 
-Widgets follow what a flag says it is: a bool is a checkbox, a flag with
-choices is a radio row (a `Select` past four of them), a flag naming a file or
-a folder gets a picker, anything with "password" or "token" in its name is
-masked in the entry and in the command-line preview. The CLI's `spec.go`
-decides which is which; this side only draws.
+The widget is chosen from what the flag says it is. A bool becomes a checkbox.
+A flag with a fixed set of choices becomes a row of radio buttons, or a `Select`
+if there are more than four. A flag that names a file or a folder gets a picker.
+Anything whose name contains "password" or "token" is masked, both in the input
+and in the preview of the command line. The CLI's `spec.go` decides which is
+which, and this side only draws them.
 
 ## Building
 
-`just build` builds both binaries into `build/`. `just app` wraps them in a
-double-clickable `build/chgksuite.app`. The app is unsigned, so shipping it to
-anyone else needs `codesign` and notarisation first.
+`just build` builds both binaries into `build/`. `just app` wraps them into a
+double-clickable `build/chgksuite.app`. That app is unsigned, so before you can
+give it to anyone else it needs to be signed with `codesign` and notarised.
