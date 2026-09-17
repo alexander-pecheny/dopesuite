@@ -178,8 +178,8 @@
 .board-card:hover { background: var(--action-bg); }
 /* dope's truncated-cell fade+popover: a long title stays on one line, clipped
    (no ellipsis) with a right-edge fade; the .board-card-name-truncated flag (set
-   by index.js only when it overflows) turns the fade on, and index.js floats the
-   full name below on hover/focus. The fade is a mask on the text so it needs no
+   by nameoverflow.js only when it overflows) turns the fade on, and the same
+   module floats the full name below on hover/focus. The fade is a mask on the text so it needs no
    bg-matched gradient and survives the tile/hover/dark fills paper rows never see. */
 .board-card-name-wrap { position: relative; display: block; min-width: 0; }
 /* The lock on a board whose name is readable but whose content still needs the
@@ -198,9 +198,10 @@
   -webkit-mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
   mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
 }
-/* One shared node, appended to <body> and positioned by index.js (position:fixed),
-   so the grid's scroll clip and neighbouring tiles never crop it. */
-.board-card-name-popover {
+/* One shared node per scope, appended to <body> and positioned by
+   nameoverflow.js (position:fixed), so a scroller's clip and the tiles or
+   columns beside it never crop it. */
+.floating-name-popover {
   position: fixed;
   z-index: var(--z-tooltip);
   display: none;
@@ -211,7 +212,7 @@
   overflow-wrap: anywhere;
   pointer-events: none;
 }
-.board-card-name-popover.visible { display: block; }
+.floating-name-popover.visible { display: block; }
 .board-card-role { font-size: var(--text-xs); color: var(--muted); }
 /* blue "unread" dot — a board has changes by another member the user hasn't
    read. The kit's .unread-dot(-corner); a touch bigger on the large tile. */
@@ -451,8 +452,12 @@
   --kcard-lines: none;    /* none = card shows the whole question, unclamped */
   --kcard-font: 14px;     /* card text size — smaller packs more questions on screen */
 }
+/* min-width: 0 because a flex item's automatic minimum is its CONTENT: without
+   it a list whose title is one long unbroken word grew past --klist-w and the
+   whole column came out wider than its neighbours. */
 .klist {
   flex: 0 0 var(--klist-w);
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -463,7 +468,21 @@
 }
 .klist.dragging { opacity: 0.5; }
 .klist-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); padding: var(--space-1) var(--space-2); }
-.klist-title { font-weight: var(--fw-semibold); }
+/* One line, clipped with no ellipsis; board.js flags the heads whose title
+   overflows, which turns on the right-edge fade and the hover popover with the
+   full title (dope's fade+popover — the mask is on the text, so it survives
+   whatever fill the column has). */
+.klist-title {
+  font-weight: var(--fw-semibold);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+.klist-head-truncated .klist-title {
+  -webkit-mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
+  mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
+}
 /* title + question count share a text BASELINE (centring would drop the smaller
    count's baseline below the title's), and the count wraps to its own line when
    a long title leaves it no room; the ⋯ menu stays pinned top-right. */

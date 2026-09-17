@@ -8,6 +8,7 @@ import type { BoardIndex, Hit } from "./searchindex.js";
 import { xySync } from "./sync.js";
 import { stampPassCheck } from "./passcheck.js";
 import { iconed } from "./icons_gen.js";
+import { createNameOverflow } from "./nameoverflow.js";
 import S from "./i18nstrings.js";
 
 const { fetchJSON, jpost, el, escapeHtml } = xyApp;
@@ -274,66 +275,22 @@ async function renderBoards(boards: BoardListItem[]): Promise<void> {
     }
     listNode.append(card);
   });
-  measureNames();
+  boardNames.measure();
 }
+
+// A board tile's name is one line: the ones that overflow fade at the right edge
+// and float their full name on hover/focus (nameoverflow.ts).
+const boardNames = createNameOverflow({
+  root: listNode,
+  item: ".board-card",
+  name: ".board-card-name",
+  truncatedClass: "board-card-name-truncated",
+});
 
 function setCardName(card: HTMLElement, text: string): void {
   card.querySelector(".board-card-name")!.textContent = text;
-  measureNames();
+  boardNames.measure();
 }
-// Flag every card whose one-line title overflows, so the CSS fade turns on only
-// there (dope's -truncated flag) — and so hover knows which cards get a tooltip.
-function measureNames(): void {
-  requestAnimationFrame(() => {
-    for (const card of listNode.querySelectorAll(".board-card")) {
-      const name = card.querySelector(".board-card-name")!;
-      card.classList.toggle("board-card-name-truncated", name.scrollWidth > name.clientWidth + 1);
-    }
-  });
-}
-let measureRaf = false;
-window.addEventListener("resize", () => {
-  hideTip();
-  if (measureRaf) return;
-  measureRaf = true;
-  requestAnimationFrame(() => { measureRaf = false; measureNames(); });
-});
-
-// The full name floats in one shared node appended to <body> (position:fixed), so
-// the grid's scroll clip and neighbouring tiles never crop it — dope's floating
-// popover, pared to xy's single trigger. Shown below the title, flipped above when
-// it would fall off the bottom, clamped into the viewport.
-let tipEl: HTMLElement | null = null, tipCard: HTMLElement | null = null;
-function showTip(card: HTMLElement): void {
-  if (tipCard === card) return;
-  tipCard = card;
-  const name = card.querySelector(".board-card-name")!;
-  if (!tipEl) { tipEl = el("div", { class: "popover board-card-name-popover" }); document.body.append(tipEl); }
-  tipEl.textContent = name.textContent;
-  tipEl.classList.add("visible");
-  const r = name.getBoundingClientRect();
-  const left = Math.max(8, Math.min(r.left, window.innerWidth - tipEl.offsetWidth - 8));
-  let top = r.bottom + 2;
-  if (top + tipEl.offsetHeight > window.innerHeight - 8) top = r.top - tipEl.offsetHeight - 2;
-  tipEl.style.left = `${left}px`;
-  tipEl.style.top = `${top}px`;
-}
-function hideTip(): void { if (tipEl) tipEl.classList.remove("visible"); tipCard = null; }
-
-listNode.addEventListener("pointerover", (e) => {
-  const card = e.target instanceof Element ? e.target.closest<HTMLElement>(".board-card") : null;
-  if (card && card.classList.contains("board-card-name-truncated")) showTip(card);
-});
-listNode.addEventListener("pointerout", (e) => {
-  const card = e.target instanceof Element ? e.target.closest<HTMLElement>(".board-card") : null;
-  if (card && !card.contains(e.relatedTarget instanceof Node ? e.relatedTarget : null)) hideTip();
-});
-listNode.addEventListener("focusin", (e) => {
-  const card = e.target instanceof Element ? e.target.closest<HTMLElement>(".board-card") : null;
-  if (card && card.classList.contains("board-card-name-truncated")) showTip(card);
-});
-listNode.addEventListener("focusout", hideTip);
-window.addEventListener("scroll", hideTip, true);
 
 async function decryptName(b: BoardListItem): Promise<string | null> {
   try {

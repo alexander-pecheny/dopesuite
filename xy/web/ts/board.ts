@@ -38,6 +38,7 @@ import { createCardDetail, nowStamp } from "./carddetail.js";
 import { createDwell, liveTestMode } from "./testmode.js";
 import { createChangePass } from "./changepass.js";
 import { createPassCheck, passCheckStore } from "./passcheck.js";
+import { createNameOverflow } from "./nameoverflow.js";
 import { createTransfer } from "./transfer.js";
 import { type AnnounceCity, parseSession, type SessionMeta, sessionLabel, type TitleMode, whoSaw } from "./sessions.js";
 import * as people from "./people.js";
@@ -530,7 +531,18 @@ function render(): void {
     const top = listScroll.get(b.dataset.listId);
     if (top != null) b.scrollTop = top;
   }
+  listNames.measure();
 }
+
+// A list title is one line in a column of fixed width: a long one used to widen
+// the column itself. The ones that overflow fade at the right edge and float
+// their full title on hover (nameoverflow.ts).
+const listNames = createNameOverflow({
+  root: kanban,
+  item: ".klist-headmain",
+  name: ".klist-title",
+  truncatedClass: "klist-head-truncated",
+});
 
 function renderList(list: BoardList, precomputedNumbers?: Array<string | null>): HTMLElement {
   const col = el("div", { class: "klist", draggable: "true", dataset: { listId: list.id } });
