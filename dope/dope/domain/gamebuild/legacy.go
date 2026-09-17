@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strings"
 
 	"dope/dope/domain/flatgame"
 	"dope/dope/domain/games"
@@ -16,8 +17,19 @@ import (
 	dopestrings "dope/i18nstrings"
 )
 
-func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, tours, questions int) (int64, error) {
-	identity, err := nextGameIdentityTx(ctx, tx, festID, "od", dopestrings.Default.Gamebuild.Titles.Od())
+// titleOr is the Label the Spec asked for, else the format's own title. A flat
+// format used to take its title from the Catalog and nothing else, so a host
+// who named the game — and the stickers variant, which is a KSI under another
+// name — got a numeric suffix instead.
+func titleOr(label, fallback string) string {
+	if strings.TrimSpace(label) != "" {
+		return label
+	}
+	return fallback
+}
+
+func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, label string, tours, questions int) (int64, error) {
+	identity, err := nextGameIdentityTx(ctx, tx, festID, "od", titleOr(label, dopestrings.Default.Gamebuild.Titles.Od()))
 	if err != nil {
 		return 0, err
 	}
@@ -33,8 +45,8 @@ func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, tours, questi
 	return insertJSONGameTx(ctx, tx, festID, identity, "od", schemeJSON, stateJSON)
 }
 
-func createKSIGameTx(ctx context.Context, tx *sql.Tx, festID int64, themesCount int, stickers json.RawMessage) (int64, error) {
-	identity, err := nextGameIdentityTx(ctx, tx, festID, "ksi", dopestrings.Default.Gamebuild.Titles.Ksi())
+func createKSIGameTx(ctx context.Context, tx *sql.Tx, festID int64, label string, themesCount int, stickers json.RawMessage) (int64, error) {
+	identity, err := nextGameIdentityTx(ctx, tx, festID, "ksi", titleOr(label, dopestrings.Default.Gamebuild.Titles.Ksi()))
 	if err != nil {
 		return 0, err
 	}
@@ -46,8 +58,8 @@ func createKSIGameTx(ctx context.Context, tx *sql.Tx, festID int64, themesCount 
 	return insertJSONGameTx(ctx, tx, festID, identity, "ksi", schemeJSON, stateJSON)
 }
 
-func createMultiGameTx(ctx context.Context, tx *sql.Tx, festID int64, minigames []games.MultiGame, sorting []string) (int64, error) {
-	identity, err := nextGameIdentityTx(ctx, tx, festID, "multi", dopestrings.Default.Gamebuild.Titles.Multi())
+func createMultiGameTx(ctx context.Context, tx *sql.Tx, festID int64, label string, minigames []games.MultiGame, sorting []string) (int64, error) {
+	identity, err := nextGameIdentityTx(ctx, tx, festID, "multi", titleOr(label, dopestrings.Default.Gamebuild.Titles.Multi()))
 	if err != nil {
 		return 0, err
 	}

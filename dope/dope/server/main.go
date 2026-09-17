@@ -26,6 +26,7 @@ import (
 	"dope/dope/web/route"
 
 	"dope/dope/domain/core"
+	"dope/dope/domain/fixture"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/resolver"
 	"dope/dope/platform/metrics"
@@ -150,6 +151,10 @@ func Main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "archive-journal" {
 		runArchiveJournal(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "seed-fixture" {
+		runSeedFixture(os.Args[2:])
 		return
 	}
 
@@ -754,6 +759,47 @@ func runResolveBracket(args []string) {
 		log.Fatalf("commit: %v", err)
 	}
 	log.Printf("resolve-bracket: reconciled game %d in %s", *gameID, *dbPath)
+}
+
+// runSeedFixture writes the screenshot matrix's fest into a database it
+// creates — the one road from nothing to a fest worth shooting, because
+// openFestDB is what creates and migrates a file and the fixture needs a
+// migrated one. It is deliberately a server subcommand rather than a script:
+// a script would need a database somebody else made first.
+func runSeedFixture(args []string) {
+	fs := flag.NewFlagSet("seed-fixture", flag.ExitOnError)
+	dbPath := fs.String("db", "", "path to the sqlite database to create and seed")
+	slug := fs.String("slug", "fixture", "slug of the fest to build")
+	_ = fs.Parse(args)
+	if *dbPath == "" {
+		log.Fatal("seed-fixture: --db is required")
+	}
+
+	db, err := openFestDB(*dbPath)
+	if err != nil {
+		log.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		log.Fatalf("begin tx: %v", err)
+	}
+	owner, err := ensureSystemUser(ctx, tx)
+	if err != nil {
+		tx.Rollback()
+		log.Fatalf("system user: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		log.Fatalf("commit: %v", err)
+	}
+
+	festID, err := fixture.Build(ctx, db, fixture.Options{Slug: *slug, Owner: owner})
+	if err != nil {
+		log.Fatalf("seed-fixture: %v", err)
+	}
+	log.Printf("seed-fixture: fest %d (%s) in %s", festID, *slug, *dbPath)
 }
 
 // runArchiveJournal folds settled hot journal rows into cold segments offline.

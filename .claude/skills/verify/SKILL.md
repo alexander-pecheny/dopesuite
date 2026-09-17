@@ -234,48 +234,66 @@ A change to a table skin, the Сетка or a game page is not verified until it
 has been looked at in every cell of this matrix, and the report to the user
 names the cells that were looked at:
 
-| | phone (393 px, DPR 3) | desktop (1280 × 800) |
+| | phone (393 px) | desktop (1280 × 800) |
 |---|---|---|
 | light | screenshot | screenshot |
 | dark | screenshot | screenshot |
 
-…for every game type the change touches — ЭК, Личная СИ, ТПШ (both on the
-ЭК page), КИнСБФ, ОД, КСИ — as spectator (`/fest/…`) and, where it edits, as
-host (`/host/fest/…`).
+…for every game type the change touches — ЭК, Личная СИ, Тройка, брейн, ОД,
+КСИ (plain and with stickers), Мультиигры — as spectator (`/fest/…`) and,
+where it edits, as host (`/host/fest/…`).
 
 **Run it, do not hand-drive it: `cd dope && just matrix`.** That is
-`scripts/matrix.py run`: it checks HEAD out into `.tmp/verify/head-wt`,
-builds it and the working tree, serves both on a copy of
-`.tmp/verify/fest.db` (a dopetest snapshot — see the dopetest memory note;
-HEAD on 9783, the tree on 9782), shoots 22 pages × the four cells on each
-through eight workers on one Chrome, pixel-diffs the pairs and prints a
-table; about 2.5 minutes, of which the two builds are most. Two runs of the
-same tree are 88/88 identical, so a differing pair is a finding. The first
-page is `/gallery` (dev mode only): every shared table and the Сетка from
-fixtures on one page — a table-skin change is judged there first, four
-shots instead of 84. `scripts/matrix.py shoot --label X --host URL` shoots
-any host (dopetest, prod) and `diff A B` re-diffs; `--pages file` takes a
-`name|/path` list for another fest.
+`scripts/matrix.py run`: it builds the working tree, seeds a fixture database
+with `dope-server seed-fixture`, serves it on 9782, shoots 27 pages × the four
+cells through workers on one Chrome, and pixel-diffs each against the golden
+committed in `dope/scripts/matrix-goldens`. About a minute with `--split 2`,
+of which the build is most — it is a per-commit gate, not a pre-merge one.
+
+- **It depends on nothing but this checkout.** The fest it shoots is built by
+  `dope/dope/domain/fixture` in about a second: one game of every format, every
+  document dealt from an arithmetic pattern. There is no snapshot to fetch and
+  no staging database to keep in step, and a schema change needs neither.
+- **An intended change lands with `just matrix --bless`**, and the goldens it
+  rewrites belong in the same commit — that diff is the review artefact.
+- The first page is `/gallery` (dev mode only): every shared table and the
+  Сетка from fixtures on one page — a table-skin change is judged there
+  first, four shots instead of 108.
+- `scripts/matrix.py shoot --label X --host URL` shoots any host (dopetest,
+  prod) and `diff A B` re-diffs — `goldens` names the committed set.
+  `--pages file` takes a `name|/path` list for another fest.
 
 What the tool knows that a hand-driven run learns the hard way:
 
-- The baseline is HEAD built locally, never dopetest: dopetest lags the
-  branch, and every unrelated commit shows up as a diff.
-- Eight workers on one Chrome (`agent-browser connect` to a hub's CDP URL)
-  cost tabs, not browsers; more workers than cores buys only CDP timeouts —
-  rendering is software GL at DPR 3. Leaked Chromes from old sessions swap
-  the box (7 GB RSS was seen); the tool kills the hub by pid at the end.
+- **The fixture pins every game's `random_seed`.** A Block separates entrants
+  tied on every metric with a lot drawn from it, and that column is a random
+  blob a trigger writes at creation — so two seedings sent different teams on
+  and no golden ever agreed with itself. The seed is pinned before anything is
+  played, not after: pinning afterwards only re-ranks standings, while the
+  bracket has already advanced the wrong people.
+- **Goldens are DPR 1 and one viewport tall.** At DPR 3 and full page height a
+  page costs about a megabyte across the four cells, which is not a thing to
+  commit on every UI change; this is about fifty kilobytes. It trades away
+  hairline rendering detail — for a change that is about rendering rather than
+  layout, `shoot` a deployed host and `diff` by hand.
+- **A page counts as unchanged below 64 differing pixels.** The Сетка on a
+  phone antialiases a handful of pixels differently between two runs of one
+  tree; its layout is measured in JS and the last fraction of a pixel depends
+  on when that ran. A 1px padding change moves hundreds to thousands, so the
+  floor costs nothing.
+- Workers on one Chrome cost tabs, not browsers; more workers than cores buys
+  only CDP timeouts. Leaked Chromes from old sessions swap the box (7 GB RSS
+  was seen); the tool kills them by pid at the end.
 - Every page opens in a fresh tab. Over plain HTTP/1.1 (a local server) the
   previous page's SSE stream outlives an in-place navigation and starves the
-  next one of Chrome's six connections per host — `Page.navigate` times out
-  on the same three transitions every run. dopetest is h2 and never shows it.
-- No `screenshot --full`: it resizes the viewport under CDP and the Сетка
-  re-lays out on resize, so captures never settle. The tool sets the viewport
-  to the page height, waits for the page to be quiet again, and takes a plain
-  capture; a shot counts only when two captures 300 ms apart agree.
-- `content-visibility: auto` boxes can capture blank; the tool forces
-  `visible` for the shot. Readiness is fonts loaded + a content node + no DOM
-  mutation for 400 ms + two painted frames — not a per-page selector.
+  next one of Chrome's six connections per host. dopetest is h2 and never
+  shows it.
+- **Every agent-browser call is a process**, and at ten of them a shot the CLI
+  round trips cost more than the rendering does — which is why the settle step
+  is one `eval` that turns `content-visibility` off (an `auto` box can capture
+  blank), resets every scroll offset, waits two painted frames and reports
+  where the page starts, all at once. Readiness before it is fonts loaded + a
+  content node + no DOM mutation for 400 ms, not a per-page selector.
 - The header (viewer count, tab strip scroll) is cropped off: it changes
   between two shots of one page and is never the subject.
 

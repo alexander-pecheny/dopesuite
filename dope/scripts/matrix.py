@@ -1,31 +1,35 @@
 #!/usr/bin/env python3
-"""The verify skill's hand-over matrix, as a tool.
+"""The verify skill's hand-over matrix, as a per-commit gate.
 
-Shoots every page of the matrix (phone × desktop × light × dark) through
-agent-browser, many workers on ONE Chrome, and pixel-diffs two runs.
+Seeds a fixture database, serves the working tree on it, shoots every page of
+the matrix (phone × desktop × light × dark) through agent-browser, and
+pixel-diffs each shot against the golden committed beside this script.
 
-    uv run --with pillow scripts/matrix.py run --db .tmp/verify/fest.db
-    uv run --with pillow scripts/matrix.py shoot --label after --host http://127.0.0.1:9782
-    uv run --with pillow scripts/matrix.py diff before after
+    uv run --with pillow scripts/matrix.py run
+    uv run --with pillow scripts/matrix.py run --bless      # adopt what it saw
+    uv run --with pillow scripts/matrix.py shoot --label after --host https://dopetest.pecheny.me
+    uv run --with pillow scripts/matrix.py diff goldens after
 
-`run` is the whole gate: HEAD checked out into a second worktree and built,
-both servers started on a copy of the DB (HEAD on 9783, the working tree on
-9782), both shot, diffed, everything cleaned up. `shoot` and `diff` are its
-halves for a deployed host or a re-diff. `just matrix` wraps `run`.
+`just matrix` wraps `run`. It depends on nothing but this checkout: the fest it
+shoots is built by `dope-server seed-fixture` (dope/domain/fixture) in about a
+second, so there is no snapshot to fetch and no staging database to keep in
+step. A differing page is a finding; `--bless` is how an intended change lands,
+and the diff in the goldens is then part of the commit that caused it.
 
-Pages default to the studchr-2026 fest of the dopetest DB (see the
-dopetest memory note for how to snapshot it); `--pages` takes a file of
-`name|/path` lines instead.
+Goldens are shot at DPR 1 and cropped to one viewport, which is what keeps them
+small enough to commit on every UI change. That trades away the DPR-3
+hairline detail — run `shoot` against a deployed host and `diff` by hand when a
+change is about rendering rather than layout.
 
-Readiness is a contract the tool can check, not a guess per page: fonts
-loaded, a content node present, no DOM mutation for a while, two painted
-frames. Each worker session has a Chrome of its own, launched one at a time
-(agent-browser 0.34's `connect` does not outlive the command that ran it, and
-sessions sharing a browser race on tab binding); the Chromes are killed by
-pid at the end because `close` does not always take one with it. Every page opens in
-a fresh tab: over plain HTTP/1.1 (a local dev server; dopetest is h2) the
-previous page's SSE stream outlives an in-place navigation and starves the
-next one of connections. MATRIX_DEBUG=1 dumps a failed page's request log.
+Readiness is a contract the tool can check, not a guess per page: fonts loaded,
+a content node present, no DOM mutation for a while, two painted frames. Each
+worker session has a Chrome of its own, launched one at a time (agent-browser
+0.34's `connect` does not outlive the command that ran it, and sessions sharing
+a browser race on tab binding); the Chromes are killed by pid at the end
+because `close` does not always take one with it. Every page opens in a fresh
+tab: over plain HTTP/1.1 (a local dev server) the previous page's SSE stream
+outlives an in-place navigation and starves the next one of connections.
+MATRIX_DEBUG=1 dumps a failed page's request log.
 """
 
 import argparse
@@ -42,32 +46,43 @@ from pathlib import Path
 DOPE = Path(__file__).resolve().parent.parent
 REPO = DOPE.parent
 OUT = REPO / ".tmp" / "verify"
+GOLDENS = DOPE / "scripts" / "matrix-goldens"
+
+# The fixture's fest and its games, in the order dope/domain/fixture builds
+# them. A game is reached by id because the fixture gives none of them a slug.
+FEST = "fixture"
 
 # The gallery is every shared table on one page from fixtures; dev servers only.
 GALLERY = "gallery|/gallery"
 
-PAGES = """
-ek-grid|/fest/studchr-2026/game/2/
-ek-venues|/fest/studchr-2026/game/2/venues
-ek-reseed|/fest/studchr-2026/game/2/stage/s1-reseed
-ek-stats|/fest/studchr-2026/game/2/stats
-ek-roster|/fest/studchr-2026/game/2/roster
-brain-grid|/fest/studchr-2026/game/3/#grid
-brain-block1|/fest/studchr-2026/game/3/#block:s1
-brain-de|/fest/studchr-2026/game/3/#block:s2
-brain-reseed|/fest/studchr-2026/game/3/#reseed
-brain-stats|/fest/studchr-2026/game/3/#stats
-brain-roster|/fest/studchr-2026/game/3/#roster
-si-grid|/fest/studchr-2026/game/4/
-si-venues|/fest/studchr-2026/game/4/venues
-si-groups|/fest/studchr-2026/game/4/stage/group-stage
-si-reseed|/fest/studchr-2026/game/4/stage/reseeds
-si-stats|/fest/studchr-2026/game/4/stats
-tpsh-grid|/fest/studchr-2026/game/5/
-tpsh-venues|/fest/studchr-2026/game/5/venues
-tpsh-otbor|/fest/studchr-2026/game/5/stage/s1
-tpsh-reseed|/fest/studchr-2026/game/5/stage/reseeds
-tpsh-stats|/fest/studchr-2026/game/5/stats
+PAGES = f"""
+ek-grid|/fest/{FEST}/game/1/
+ek-venues|/fest/{FEST}/game/1/venues
+ek-stats|/fest/{FEST}/game/1/stats
+ek-roster|/fest/{FEST}/game/1/roster
+brain-grid|/fest/{FEST}/game/2/#grid
+brain-block1|/fest/{FEST}/game/2/#block:s1
+brain-protocol|/fest/{FEST}/game/2/#protocol:s1
+brain-reseed|/fest/{FEST}/game/2/#reseed
+brain-stats|/fest/{FEST}/game/2/#stats
+brain-roster|/fest/{FEST}/game/2/#roster
+si-grid|/fest/{FEST}/game/3/
+si-groups|/fest/{FEST}/game/3/stage/group-stage
+si-reseed|/fest/{FEST}/game/3/stage/reseeds
+si-stats|/fest/{FEST}/game/3/stats
+troika-grid|/fest/{FEST}/game/4/#grid
+troika-block1|/fest/{FEST}/game/4/#block:s1
+troika-stats|/fest/{FEST}/game/4/#stats
+od-results|/fest/{FEST}/game/5/#results
+od-detailed|/fest/{FEST}/game/5/#detailed
+od-roster|/fest/{FEST}/game/5/#roster
+ksi-detailed|/fest/{FEST}/game/6/#detailed
+ksi-results|/fest/{FEST}/game/6/#results
+ksi-roster|/fest/{FEST}/game/6/#roster
+ksi-stickers|/fest/{FEST}/game/7/#detailed
+multi-detailed|/fest/{FEST}/game/8/#detailed
+multi-results|/fest/{FEST}/game/8/#results
+fest|/fest/{FEST}
 """
 
 CELLS = [(device, theme) for device in ("phone", "desktop") for theme in ("light", "dark")]
@@ -76,11 +91,25 @@ CELLS = [(device, theme) for device in ("phone", "desktop") for theme in ("light
 # is installed on the first poll and reused.
 READY = (
     'document.fonts.status === "loaded"'
-    ' && document.querySelector(".grid-slot-cell, .results-table, .match-table, .roster-empty, .empty")'
+    ' && document.querySelector(".grid-slot-cell, .results-table, .match-table, .roster-empty, .empty,'
+    ' .list-row, .roster-team, .si-table, .standings-table")'
     " && (window.__quiet ||= (() => { let t = performance.now();"
     " new MutationObserver(() => { t = performance.now(); })"
     ".observe(document, {subtree: true, childList: true, attributes: true, characterData: true});"
     " return () => performance.now() - t > 400; })())()"
+)
+
+
+SETTLE = (
+    "document.head.appendChild(Object.assign(document.createElement('style'),"
+    " {textContent: '* { content-visibility: visible !important }'}));"
+    # A scrollable row settles wherever the page last put it, and half a pixel
+    # of horizontal scroll is a different antialiasing of the same text — the
+    # one thing that made two runs of an identical tree differ.
+    " document.querySelectorAll('*').forEach(el => { el.scrollLeft = 0; el.scrollTop = 0; });"
+    " window.scrollTo(0, 0);"
+    " new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() =>"
+    " r(Math.round(document.querySelector('main').getBoundingClientRect().top * devicePixelRatio)))))"
 )
 
 
@@ -144,7 +173,11 @@ def worker_host(host, index):
     return host.replace("127.0.0.1", f"127.0.0.{index + 1}") if "127.0.0.1" in host else host
 
 
-DEVICES = {"phone": ("393", "852", "3"), "desktop": ("1280", "800", "1")}
+# Goldens are DPR 1 and one viewport tall. At DPR 3 and full page height a
+# single page costs about a megabyte across the four cells, which is not a
+# thing to commit on every UI change; this is about forty kilobytes and still
+# catches layout, overflow and skin regressions.
+DEVICES = {"phone": ("393", "852", "1"), "desktop": ("1280", "800", "1")}
 
 
 def emulate(session, device, height=None):
@@ -182,35 +215,19 @@ def shoot_page(host, path, png, session, device):
     if ab(session, "eval", "Boolean(document.querySelector('main'))") != "true":
         raise RuntimeError("no page")
     ab(session, "wait", "--fn", READY)
-    # content-visibility:auto is a rendering hint, not appearance: a capture can
-    # run before Chrome has found a skipped box relevant and paint it blank.
-    # Off for the shot, then two painted frames.
-    ab(session, "eval", "document.head.appendChild(Object.assign(document.createElement('style'), {textContent: '* { content-visibility: visible !important }'})); new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
+    # One eval, not three: every agent-browser call is a process, and at ten of
+    # them per shot the CLI round trips cost more than the rendering does. It
+    # turns content-visibility off (a rendering hint, not appearance: a capture
+    # can run before Chrome has found a skipped box relevant and paint it
+    # blank), waits two painted frames, and reports where the page starts.
+    header = int(ab(session, "eval", SETTLE))
     # The page below its header: the topbar's viewer count (the workers
     # themselves move it) and the tab strip's scroll are not the subject, and
     # they are the two things that differ between two shots of one page.
-    # Not a "full page" capture: that resizes the viewport under CDP mid-shot,
-    # and the Сетка re-lays out on resize. The viewport becomes as tall as the
-    # page, the page settles again, and a plain capture follows.
-    height = ab(session, "eval", "String(Math.min(document.documentElement.scrollHeight, 16000))").strip('"')
-    emulate(session, device, height)
-    ab(session, "wait", "--fn", READY)
-    ab(session, "eval", "new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
-    header = int(ab(session, "eval", "Math.round(document.querySelector('main').getBoundingClientRect().top * devicePixelRatio)"))
-    # A settled page gives the same pixels twice in a row; a capture that
-    # outran the compositor does not — the shot counts when two captures agree.
-    again = png.with_suffix(".again.png")
+    # One viewport tall, not the whole page: a golden is a fingerprint of the
+    # skin, and the first screen carries it at a fraction of the bytes.
     ab(session, "screenshot", str(png))
     crop_top(png, header)
-    for _ in range(4):
-        ab(session, "wait", "300")
-        ab(session, "screenshot", str(again))
-        crop_top(again, header)
-        if diff_pair(png, again) == "identical":
-            again.unlink()
-            return
-        again.replace(png)
-    raise RuntimeError("capture never settled")
 
 
 def shoot(fleet, host, label, pages, out, split, log):
@@ -237,7 +254,14 @@ def crop_top(path, pixels):
     cropped.save(path)
 
 
-def diff_pair(before, after):
+# The Сетка on a phone antialiases a handful of pixels differently between two
+# runs of the same tree — the layout is measured in JS and the last fraction of
+# a pixel depends on when it ran. A real change to a skin moves thousands, so a
+# page counts as unchanged below this and the count is printed anyway.
+TOLERANCE = 64
+
+
+def diff_pair(before, after, tolerance=0):
     from PIL import Image, ImageChops
 
     a = Image.open(before).convert("RGB")
@@ -248,34 +272,62 @@ def diff_pair(before, after):
     box = mask.getbbox()
     if box is None:
         return "identical"
-    return f"{mask.histogram()[255]} px differ, bbox {box}"
+    pixels = mask.histogram()[255]
+    if pixels <= tolerance:
+        return f"identical ({pixels} px of noise)"
+    return f"{pixels} px differ, bbox {box}"
 
 
-def diff(before_dir, after_dir):
+def diff(before_dir, after_dir, expected=None):
     rows = []
     for after in sorted(Path(after_dir).glob("*.png")):
         before = Path(before_dir) / after.name
-        rows.append((after.name, diff_pair(before, after) if before.exists() else "no before"))
-    width = max(len(name) for name, _ in rows) if rows else 0
+        rows.append((after.name, diff_pair(before, after, TOLERANCE) if before.exists() else "no golden"))
+    shot = {name for name, _ in rows}
+    for golden in sorted(Path(before_dir).glob("*.png")):
+        if golden.name not in shot:
+            rows.append((golden.name, "not shot — the page is gone or it failed"))
+    width = max((len(name) for name, _ in rows), default=0)
     for name, result in rows:
         print(f"{name:<{width}}  {result}")
-    same = sum(1 for _, r in rows if r == "identical")
+    same = sum(1 for _, r in rows if r.startswith("identical"))
     print(f"\n{same} identical, {len(rows) - same} differ")
-    return 0 if same == len(rows) else 1
+    if expected and same != expected:
+        print(f"expected {expected} pages, saw {same} — run with --bless if that is the change")
+    return 0 if same == len(rows) and rows else 1
+
+
+def bless(shots, goldens):
+    shutil.rmtree(goldens, ignore_errors=True)
+    goldens.mkdir(parents=True)
+    count = 0
+    for png in sorted(Path(shots).glob("*.png")):
+        shutil.copy(png, goldens / png.name)
+        count += 1
+    print(f"blessed {count} goldens in {goldens}")
+    return 0
 
 
 class Server:
-    """A dope-server built from `tree` (a checkout of the module) on `port`."""
+    """A dope-server built from `tree` (a checkout of the module) on `port`,
+    serving a database it seeds itself."""
 
-    def __init__(self, tree, port, db, log):
+    def __init__(self, tree, port, log, db=None):
         self.tree, self.port, self.log = Path(tree), port, log
         self.db = OUT / f"fest-{port}.db"
-        shutil.copy(db, self.db)
         root = self.tree.parent
         self.log(f"building {self.tree} …")
         subprocess.run(["go", "-C", str(root / "scripts" / "webbuild"), "run", ".", "dope", "uikit"], check=True, capture_output=True)
         self.binary = OUT / f"dope-server-{port}"
         subprocess.run(["go", "build", "-o", str(self.binary), "./dope/cmd/dope-server"], cwd=self.tree, check=True)
+        for stale in OUT.glob(f"fest-{port}.db*"):
+            stale.unlink()
+        if db:
+            shutil.copy(db, self.db)
+        else:
+            # The fixture is the binary's own: seeded by the tree under test,
+            # so a schema change needs no snapshot refreshed anywhere.
+            subprocess.run([str(self.binary), "seed-fixture", "-db", str(self.db)], cwd=self.tree, check=True, capture_output=True)
         env = dict(os.environ, DOPE_DB=str(self.db), PORT=str(port), DOPE_ENV="development")
         self.proc = subprocess.Popen([str(self.binary)], cwd=self.tree, env=env, stdout=(OUT / f"server-{port}.log").open("w"), stderr=subprocess.STDOUT)
         for _ in range(100):
@@ -297,37 +349,33 @@ def run(args):
     log = lambda line: print(line, file=sys.stderr, flush=True)
     OUT.mkdir(parents=True, exist_ok=True)
     pages = pages_from(args.pages, gallery=True)
-    head_wt = OUT / "head-wt"
-    subprocess.run(["git", "worktree", "remove", "--force", str(head_wt)], cwd=REPO, check=False, capture_output=True)
-    subprocess.run(["git", "worktree", "add", "--detach", str(head_wt), args.base], cwd=REPO, check=True, capture_output=True)
-    (head_wt / "node_modules").symlink_to(REPO / "node_modules")
-    servers, hub = [], None
+    shots = OUT / "shots" / "now"
+    server, hub = None, None
     try:
-        before = Server(head_wt / "dope", 9783, args.db, log)
-        after = Server(DOPE, 9782, args.db, log)
-        servers = [before, after]
+        server = Server(DOPE, 9782, log, db=args.db)
         hub = Fleet()
         t0 = time.time()
-        # One host at a time: rendering is CPU-bound (software GL at DPR 3),
-        # so more tabs than cores only buys CDP timeouts.
-        shoot(hub, before.host, "before", pages, OUT / "shots" / "before", args.split, log)
-        shoot(hub, after.host, "after", pages, OUT / "shots" / "after", args.split, log)
-        log(f"shot {2 * len(pages) * len(CELLS)} pages in {time.time() - t0:.0f}s")
+        shoot(hub, server.host, "shot", pages, shots, args.split, log)
+        log(f"shot {len(pages) * len(CELLS)} pages in {time.time() - t0:.0f}s")
     finally:
         if hub:
             hub.close()
-        for server in servers:
+        if server:
             server.stop()
-        subprocess.run(["git", "worktree", "remove", "--force", str(head_wt)], cwd=REPO, check=False, capture_output=True)
-    return diff(OUT / "shots" / "before", OUT / "shots" / "after")
+    if args.bless:
+        return bless(shots, GOLDENS)
+    if not GOLDENS.exists():
+        print(f"no goldens yet in {GOLDENS} — run `just matrix --bless` once to adopt what you see")
+        return 1
+    return diff(GOLDENS, shots, expected=len(pages) * len(CELLS))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
-    p_run = sub.add_parser("run", help="HEAD against the working tree, end to end")
-    p_run.add_argument("--db", default=str(OUT / "fest.db"), help="a DB to copy for both servers")
-    p_run.add_argument("--base", default="HEAD", help="the git ref to shoot as before")
+    p_run = sub.add_parser("run", help="shoot the working tree and diff against the goldens")
+    p_run.add_argument("--bless", action="store_true", help="adopt what was shot as the new goldens")
+    p_run.add_argument("--db", help="serve this DB instead of a freshly seeded fixture")
     p_run.add_argument("--pages", help="file of name|/path lines")
     p_run.add_argument("--split", type=int, default=1, help="workers per matrix cell")
     p_shoot = sub.add_parser("shoot", help="one host into .tmp/verify/shots/<label>")
@@ -336,7 +384,7 @@ def main():
     p_shoot.add_argument("--pages")
     p_shoot.add_argument("--split", type=int, default=1)
     p_shoot.add_argument("--gallery", action="store_true", help="add /gallery (a dev server)")
-    p_diff = sub.add_parser("diff", help="pixel-diff two labels")
+    p_diff = sub.add_parser("diff", help="pixel-diff two labels; `goldens` names the committed set")
     p_diff.add_argument("before")
     p_diff.add_argument("after")
     args = parser.parse_args()
@@ -353,7 +401,8 @@ def main():
         finally:
             hub.close()
         return 0
-    return diff(OUT / "shots" / args.before, OUT / "shots" / args.after)
+    where = lambda label: GOLDENS if label == "goldens" else OUT / "shots" / label
+    return diff(where(args.before), where(args.after))
 
 
 if __name__ == "__main__":

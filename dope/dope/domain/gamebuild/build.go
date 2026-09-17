@@ -131,11 +131,11 @@ func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 	}
 	switch spec.Type {
 	case games.OD:
-		return createODGameTx(ctx, tx, spec.FestID, spec.ODTours, spec.ODQuestions)
+		return createODGameTx(ctx, tx, spec.FestID, spec.Label, spec.ODTours, spec.ODQuestions)
 	case games.KSI:
-		return createKSIGameTx(ctx, tx, spec.FestID, spec.KSIThemes, spec.KSIStickers)
+		return createKSIGameTx(ctx, tx, spec.FestID, spec.Label, spec.KSIThemes, spec.KSIStickers)
 	case games.Multi:
-		return createMultiGameTx(ctx, tx, spec.FestID, spec.Minigames, spec.MultiSorting)
+		return createMultiGameTx(ctx, tx, spec.FestID, spec.Label, spec.Minigames, spec.MultiSorting)
 	case games.EK:
 		return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.EkNoScheme())
 	}

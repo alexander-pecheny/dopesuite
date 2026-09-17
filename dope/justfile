@@ -58,12 +58,13 @@ deploy *args: build-web
 deploy-staging *args: build-web
     python3 ../deploy.py --target dopetest {{args}}
 
-# The verify skill's hand-over matrix: HEAD (a second worktree, port 9783)
-# against the working tree (9782), 84 pages × phone/desktop × light/dark,
-# eight workers on one Chrome, pixel-diffed. Needs a DB at
-# ../.tmp/verify/fest.db (a dopetest snapshot); about two minutes.
+# The verify skill's hand-over matrix: every page × phone/desktop × light/dark,
+# pixel-diffed against the goldens in scripts/matrix-goldens. It seeds its own
+# fixture fest (`dope-server seed-fixture`), so it needs nothing but this
+# checkout. `just matrix --bless` adopts what it saw as the new goldens; the
+# diff then belongs to the commit that caused it.
 matrix *args:
-    uv run --with pillow scripts/matrix.py run {{args}}
+    uv run --with pillow scripts/matrix.py run --split 2 {{args}}
 
 # Drive a realtime load test (wraps scripts/loadtest/realtime_demo.sh).
 # Raises the fd limit first so 1000s of SSE viewer connections fit.
