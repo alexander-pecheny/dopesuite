@@ -71,15 +71,18 @@ back to the link via `next`, and joins in one tap.
 
 ## Transactions
 
-One model, the UI has modes (simple "A paid X for B", split, "I paid, claim
-your part", settlement). Fields:
+One model, and the UI is that model: two tables of rows a person adds and
+deletes — who paid, and who it was for — with one person and one amount on each
+row. "A paid X for B" is one row on each side, a settlement is the same two rows
+read as cash changing hands, and claiming your part of somebody else's bill is
+adding a row with your name on it. Fields:
 
 - Group, description (free text), date (the expense date, default today),
   currency, total in minor units.
 - Payments: Member → amount, one or more, summing to the total.
 - Shares: Member → amount, zero or more, at most one per Member, summing to at
-  most the total. Only amounts are stored; percentages and even splits are
-  form conveniences.
+  most the total. Only amounts are stored; an even split is the one convenience
+  that writes them (a button under the "For whom" table).
 - Unclaimed = total − ΣShares ≥ 0. Enforced on every write; a Claim that
   overdraws is refused with a User Error naming what is left.
 - Photos: zero or more, via blobstore.
@@ -158,7 +161,7 @@ Messages come from the catalog and carry the Group name and a link built from
 - Kit primitives only (`design-review` skill after every surface; `verify`
   skill drives it in Chrome). Pages: groups list, group (balances, debt graph,
   transactions feed, members, invite links for the Owner), transaction
-  (view/edit with the modes above, photos, history), invite landing, login.
+  (view/edit as the two tables above, photos, history), invite landing, login.
 - Mobile-first: the audience enters bills at the table.
 
 ## Out of scope in v1

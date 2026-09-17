@@ -1,30 +1,31 @@
-// The Transaction editor. The modes are the form's — "A paid X for B", split
-// even, by percent, by exact amounts, "I paid, claim your part", settlement —
-// and they all produce the one model the server stores: Payments that sum to
-// the total, and Shares that do not exceed it.
+// The Transaction editor. A bill answers two questions — who handed the money
+// over, and who it was for — and the page asks each of them the same way: a
+// table of rows, one row per person, with the amount beside them and an × to
+// take the row away. What is typed IS what is stored (Payments and Shares, in
+// minor units), so there is nothing between the two tables and the ledger.
 
 import S from "./i18nstrings.js";
 import {
   errorText,
   get,
   request,
+  type EntryDTO,
   type HistoryDTO,
   type MemberDTO,
   type PhotoDTO,
   type TransactionViewDTO,
 } from "./api";
-import { bindCurrency } from "./currency-field";
-import { amountPlain, byId, clear, el, group as rowGroup, maybe, setText, show, stamp } from "./dom";
+import { icon } from "../../../../dopeuikit/assets/ts/icons_gen.js";
+import { bindCurrency, bindCurrencyCell } from "./currency-field";
+import { byId, clear, el, group as rowGroup, maybe, setText, show, stamp } from "./dom";
 import { formatMinor, parseAmount } from "./money";
 import {
-  allocateByPercent,
-  allocateEven,
   buildDraft,
+  evenShares,
   paidLeft,
-  payerOrder,
-  singlePayer,
+  type DraftError,
   type FormState,
-  type Mode,
+  type Row,
 } from "./txform";
 
 const path = window.location.pathname.split("/").filter(Boolean);
@@ -45,8 +46,6 @@ const currencyInput = byId<HTMLInputElement>("currency");
 const currencyField = bindCurrency(currencyInput, byId("currencyError"));
 const totalField = byId<HTMLInputElement>("total");
 const rateLine = byId("rateLine");
-const modeField = byId<HTMLSelectElement>("mode");
-const modeHint = byId("modeHint");
 const payerBody = byId("payerBody");
 const shareBody = byId("shareBody");
 const paidLine = byId("paidLine");
@@ -72,14 +71,11 @@ let me = 0;
 let baseCurrency = "EUR";
 let groupName = "";
 
-// A change of mode changes what each block IS, so both are rebuilt; what was
-// typed lives outside them and comes back.
-modeField.addEventListener("change", () => {
-  setText(modeHint, modeHints()[mode()]);
-  renderBody();
+currencyInput.addEventListener("input", () => {
+  const code = currencyField.value();
+  if (code) setCurrency(code);
+  recompute();
 });
-
-currencyInput.addEventListener("input", recompute);
 totalField.addEventListener("input", recompute);
 
 form.addEventListener("submit", (event) => {
@@ -104,16 +100,26 @@ byId("uploadBtn").addEventListener("click", () => {
   void upload();
 });
 
-function modeHints(): Record<Mode, string> {
-  return {
-    simple: S.page.transaction.hintSimple(),
-    even: S.page.transaction.hintEven(),
-    percent: S.page.transaction.hintPercent(),
-    exact: S.page.transaction.hintExact(),
-    claim: S.page.transaction.hintClaim(),
-    settlement: S.page.transaction.hintSettlement(),
-  };
-}
+byId("addPayer").addEventListener("click", () => {
+  // A second payer means the first one's amount is now a real answer to a real
+  // question, so the page stops writing the total into it.
+  payerFollowsTotal = false;
+  addRow(payerRows, payerBody, 0, "").person.focus();
+  recompute();
+});
+
+byId("addShare").addEventListener("click", () => {
+  addRow(shareRows, shareBody, 0, "").person.focus();
+  recompute();
+});
+
+byId("everyoneBtn").addEventListener("click", () => {
+  everyone();
+});
+
+byId("splitBtn").addEventListener("click", () => {
+  splitEvenly();
+});
 
 async function act(method: string, url: string): Promise<void> {
   setText(message, "");
@@ -147,6 +153,10 @@ async function load(): Promise<void> {
       setText(txCrumb, S.page.transaction.newTitle());
       show(photoSection, false);
       show(historySection, false);
+      // A new bill opens on the likeliest shape of one: the person entering it
+      // paid, and nobody has been named on the other side yet.
+      addRow(payerRows, payerBody, me, "");
+      addRow(shareRows, shareBody, 0, "");
     } else {
       const view = await get<TransactionViewDTO>(`/api/transactions/${txID}`);
       members = view.members;
@@ -163,8 +173,7 @@ async function load(): Promise<void> {
       groupCrumb.href = `/group/${groupID}`;
       groupCrumb.textContent = groupName;
     }
-    setText(modeHint, modeHints()[mode()]);
-    renderBody();
+    recompute();
   } catch (error) {
     setText(message, errorText(error));
   }
@@ -183,315 +192,198 @@ function fill(view: TransactionViewDTO): void {
     setText(rateLine, S.page.transaction.rateAsOf(tx.rate_date));
     show(rateLine, true);
   }
-  // A Transaction that exists is read back in the mode that states it exactly:
-  // the amounts are what is stored, so "by exact amounts" is the truthful one.
-  modeField.value = "exact";
   show(photoSection, true);
   show(historySection, true);
   renderPhotos(tx.photos);
   renderHistory(view.history);
-  prefill(tx.payments, tx.shares);
+  // A Transaction that exists is read back as the rows it is made of, which is
+  // also how it is stored: nothing is inferred and nothing is re-derived.
+  payerFollowsTotal = false;
+  seed(payerRows, payerBody, tx.payments, tx.currency);
+  seed(shareRows, shareBody, tx.shares, tx.currency);
 }
 
-// prefill seeds what was typed from what is stored, in every shape the mode
-// select can ask for it back: the amounts as text, who the sole payer and the
-// sole beneficiary are when there is one of each, and who already holds a
-// Share — so switching to "split evenly" starts from the people who are in it.
-function prefill(payments: { member_id: number; minor: number }[], shares: { member_id: number; minor: number }[]): void {
-  const code = currency();
-  for (const entry of payments) paidText.set(entry.member_id, formatMinor(entry.minor, code));
-  for (const entry of shares) {
-    shareText.set(entry.member_id, formatMinor(entry.minor, code));
-    if (entry.minor > 0) chosen.add(entry.member_id);
-  }
-  if (payments.length === 1) payer = payments[0].member_id;
-  if (shares.length === 1) payee = shares[0].member_id;
+function seed(list: Cell[], body: HTMLElement, entries: EntryDTO[], code: string): void {
+  for (const entry of entries) addRow(list, body, entry.member_id, formatMinor(entry.minor, code));
+  // Never an empty table: the shape of the answer is visible before it is given.
+  if (entries.length === 0) addRow(list, body, 0, "");
 }
 
 function fillCurrencies(selected: string, recent: string[]): void {
-  void currencyField.fill(selected, recent).then(recompute);
+  void currencyField.fill(selected, recent).then(() => {
+    setCurrency(currencyField.value() || selected);
+    recompute();
+  });
 }
 
-// ── the two blocks ─────────────────────────────────────────────────────────
+// ── the two tables ─────────────────────────────────────────────────────────
 //
-// A bill answers two questions, and the editor asks them in that order: who
-// handed the money over, and who it was for. The mode decides the SHAPE of each
-// answer — a picker, a column of amounts, ticks with the amounts derived — and
-// the model (txform.ts) decides what that shape means. Nothing below knows how
-// a split is computed; it only draws what the model says and hands back what
-// was typed.
+// One row is one person and one amount, on both sides of the bill. The rows
+// ARE the state: there is no model behind them to fall out of step with what is
+// on the screen, and reading one back (rowsOf) is reading the cells.
 //
-// What was typed is kept HERE, as text, and survives a change of mode: a person
-// who fills in three shares and then switches to percentages has not thrown
-// away three shares.
+// The currency cell is in every row because that is where the amount is — but a
+// Transaction happens in ONE currency (spliff/docs/adr/0001), so the cells are
+// one value: picking a code in any row is picking it for the bill, and every
+// other cell and the header follow.
 
-const paidText = new Map<number, string>();
-const shareText = new Map<number, string>();
-const percentText = new Map<number, string>();
-const chosen = new Set<number>();
-let payer = 0;
-let payee = 0;
-
-interface PayerRow {
-  member: MemberDTO;
-  pick?: HTMLInputElement;
-  input?: HTMLInputElement;
-  whole?: HTMLElement;
+interface Cell {
+  node: HTMLElement;
+  person: HTMLSelectElement;
+  currency: HTMLInputElement;
+  amount: HTMLInputElement;
 }
 
-interface ShareRow {
-  member: MemberDTO;
-  tick?: HTMLInputElement;
-  pick?: HTMLInputElement;
-  percent?: HTMLInputElement;
-  input?: HTMLInputElement;
-  derived?: HTMLElement;
-}
+let payerRows: Cell[] = [];
+let shareRows: Cell[] = [];
 
-let payerRows: PayerRow[] = [];
-let shareRows: ShareRow[] = [];
-
-function mode(): Mode {
-  return modeField.value as Mode;
-}
+// Most bills have one payer, and typing the same number twice is not entering a
+// bill: the single payer's row follows the Total until somebody says otherwise.
+let payerFollowsTotal = true;
 
 function currency(): string {
   return currencyField.value() || baseCurrency;
 }
 
-// card is the kit's block of content, laid out as a row that wraps: a name, and
-// whatever the mode asks about that person. It wraps rather than eliding so a
-// long name takes a second line on a phone instead of squeezing the field off.
-function card(): HTMLElement {
-  return el("div", "card u-row u-wrap u-align-center u-gap-sm");
-}
-
-// named is the row's left-hand side: the person the card is about, optionally
-// with the tick or the dot that picks them. The control lives inside the label
-// so the whole name is the tap target — at the table, on a phone.
-function named(member: MemberDTO, control?: HTMLInputElement): HTMLElement {
-  const name = el("label", "split-name u-grow");
-  if (control) name.append(control, document.createTextNode(" "));
-  name.append(document.createTextNode(member.name));
-  return name;
-}
-
-function amountInput(value: string, placeholder = "0"): HTMLInputElement {
-  const input = el("input", "input");
-  input.inputMode = "decimal";
-  input.placeholder = placeholder;
-  input.value = value;
-  return input;
-}
-
-// captioned is the kit's field: a small caption over the control it names, so a
-// column of them needs no header row to fall apart on a phone.
-function captioned(caption: string, control: HTMLElement): HTMLElement {
-  const field = el("label", "field amount-field");
-  field.append(el("span", undefined, caption), control);
-  return field;
-}
-
-function mark(node: HTMLElement, role: string, member: MemberDTO): void {
-  node.dataset.role = role;
-  node.dataset.member = String(member.id);
-}
-
-function tickbox(kind: "checkbox" | "radio", name: string, on: boolean): HTMLInputElement {
-  const input = el("input");
-  input.type = kind;
-  if (kind === "radio") input.name = name;
-  input.checked = on;
-  return input;
-}
-
-// Who paid. In the two modes that ARE one person handing the whole amount over
-// it is a picker and the chosen card says the total; everywhere else it is an
-// amount per Member, and the line under the block says what is still not
-// accounted for.
-function renderPayers(): void {
-  clear(payerBody);
-  payerRows = [];
-  const picker = singlePayer(mode());
-  for (const member of members) {
-    const row = card();
-    const entry: PayerRow = { member };
-    if (picker) {
-      const pick = tickbox("radio", "payer", payer === member.id);
-      pick.addEventListener("change", () => {
-        payer = member.id;
-        recompute();
-      });
-      mark(pick, "pick-payer", member);
-      entry.pick = pick;
-      entry.whole = amountPlain("");
-      row.append(named(member, pick), entry.whole);
-    } else {
-      const input = amountInput(paidText.get(member.id) ?? "");
-      input.addEventListener("input", () => {
-        paidText.set(member.id, input.value);
-        recompute();
-      });
-      mark(input, "paid", member);
-      entry.input = input;
-      row.append(named(member), captioned(S.page.transaction.colPaid(), input));
-    }
-    payerBody.append(row);
-    payerRows.push(entry);
+function setCurrency(code: string): void {
+  if (currencyInput.value !== code) currencyInput.value = code;
+  for (const row of [...payerRows, ...shareRows]) {
+    if (row.currency !== document.activeElement) row.currency.value = code;
   }
 }
 
-// For whom. Five shapes, one per mode: pick one, tick several and read the
-// split off, tick several and give each a percentage, type every share, or —
-// claiming — type your own and leave everybody else's alone.
-function renderShares(): void {
-  clear(shareBody);
-  shareRows = [];
-  const m = mode();
+function personSelect(selected: number): HTMLSelectElement {
+  // The one cell that gives way: a name can be read at half its width and an
+  // amount cannot, so the select takes what the two numbers leave.
+  const select = el("select", "input u-grow");
+  const none = el("option", undefined, S.page.transaction.pickPerson());
+  none.value = "0";
+  select.append(none);
   for (const member of members) {
-    const row = card();
-    const entry: ShareRow = { member };
-    const id = member.id;
-    switch (m) {
-      case "simple":
-      case "settlement": {
-        const pick = tickbox("radio", "payee", payee === id);
-        pick.addEventListener("change", () => {
-          payee = id;
-          recompute();
-        });
-        mark(pick, "pick-payee", member);
-        entry.pick = pick;
-        entry.derived = amountPlain("");
-        row.append(named(member, pick), entry.derived);
-        break;
-      }
-      case "even":
-      case "percent": {
-        const tick = tickbox("checkbox", "", chosen.has(id));
-        tick.addEventListener("change", () => {
-          if (tick.checked) chosen.add(id);
-          else chosen.delete(id);
-          recompute();
-        });
-        mark(tick, "tick", member);
-        entry.tick = tick;
-        row.append(named(member, tick));
-        if (m === "percent") {
-          const percent = amountInput(percentText.get(id) ?? "", "%");
-          percent.addEventListener("input", () => {
-            percentText.set(id, percent.value);
-            recompute();
-          });
-          mark(percent, "percent", member);
-          entry.percent = percent;
-          row.append(captioned(S.page.transaction.colPercent(), percent));
-        }
-        // The split is DERIVED, so it is read back rather than typed: what a
-        // person sees before saving is what the ledger will read afterwards.
-        entry.derived = amountPlain("");
-        row.append(captioned(S.page.transaction.colShare(), entry.derived));
-        break;
-      }
-      case "exact": {
-        const input = amountInput(shareText.get(id) ?? "");
-        input.addEventListener("input", () => {
-          shareText.set(id, input.value);
-          recompute();
-        });
-        mark(input, "share", member);
-        entry.input = input;
-        row.append(named(member), captioned(S.page.transaction.colShare(), input));
-        break;
-      }
-      case "claim": {
-        // Only your own share is yours to set. Everybody else's stands as it
-        // is — that is what makes a claim a claim and not a rewrite — and what
-        // nobody has claimed stays Unclaimed.
-        if (id === me) {
-          const input = amountInput(shareText.get(id) ?? "");
-          input.addEventListener("input", () => {
-            shareText.set(id, input.value);
-            recompute();
-          });
-          mark(input, "share", member);
-          entry.input = input;
-          row.append(named(member), captioned(S.page.transaction.colShare(), input));
-        } else {
-          entry.derived = amountPlain("");
-          row.append(named(member), captioned(S.page.transaction.colShare(), entry.derived));
-        }
-        break;
-      }
-    }
-    shareBody.append(row);
-    shareRows.push(entry);
+    const option = el("option", undefined, member.name);
+    option.value = String(member.id);
+    select.append(option);
   }
+  select.value = String(selected);
+  select.setAttribute("aria-label", S.page.transaction.rowPerson());
+  return select;
 }
 
-function renderBody(): void {
-  renderPayers();
-  renderShares();
-  recompute();
+function addRow(list: Cell[], body: HTMLElement, member: number, amount: string): Cell {
+  const node = el("div", "card split-row u-row u-wrap u-align-center u-gap-sm");
+  const person = personSelect(member);
+
+  // The suggest popover is appended to the input's own parent, so the cell is
+  // the anchor it needs and the list lands on the field rather than beside it.
+  const cell = el("span", "suggest-anchor u-col");
+  const code = el("input", "input input-narrow");
+  code.type = "text";
+  code.autocomplete = "off";
+  code.spellcheck = false;
+  code.setAttribute("autocapitalize", "characters");
+  code.setAttribute("aria-label", S.page.transaction.rowCurrency());
+  code.value = currency();
+  cell.append(code);
+  bindCurrencyCell(code, (picked) => {
+    setCurrency(picked);
+    recompute();
+  });
+
+  const value = el("input", "input amount-field");
+  value.inputMode = "decimal";
+  value.placeholder = "0.00";
+  value.value = amount;
+  value.setAttribute("aria-label", S.page.transaction.rowAmount());
+
+  const remove = el("button", "action-icon");
+  remove.type = "button";
+  remove.setAttribute("aria-label", S.page.transaction.removeRow());
+  remove.title = S.page.transaction.removeRow();
+  remove.append(icon("x"));
+
+  const entry: Cell = { node, person, currency: code, amount: value };
+  person.addEventListener("change", recompute);
+  value.addEventListener("input", () => {
+    if (list === payerRows) payerFollowsTotal = false;
+    recompute();
+  });
+  remove.addEventListener("click", () => {
+    const at = list.indexOf(entry);
+    if (at >= 0) list.splice(at, 1);
+    node.remove();
+    // A table with nothing in it cannot be added to by example, so the row a
+    // person deleted last comes back empty rather than leaving a hole.
+    if (list.length === 0) addRow(list, body, 0, "");
+    recompute();
+  });
+
+  node.append(person, cell, value, remove);
+  body.append(node);
+  list.push(entry);
+  return entry;
+}
+
+function rowsOf(list: Cell[]): Row[] {
+  const code = currency();
+  return list.map((row) => ({
+    member: Number(row.person.value),
+    minor: parseAmount(row.amount.value, code),
+  }));
 }
 
 function state(): FormState {
-  const code = currency();
-  const total = parseAmount(totalField.value, code) ?? 0;
-  const paid = new Map<number, number>();
-  const exact = new Map<number, number>();
-  for (const member of members) {
-    const id = member.id;
-    const value = parseAmount(paidText.get(id) ?? "", code);
-    if (value && value > 0) paid.set(id, value);
-    const shareValue = parseAmount(shareText.get(id) ?? "", code);
-    if (shareValue !== null) exact.set(id, shareValue);
-  }
   return {
-    mode: mode(),
-    totalMinor: total,
+    totalMinor: parseAmount(totalField.value, currency()) ?? 0,
     members: members.map((m) => m.id),
-    paid,
-    chosen: members.map((m) => m.id).filter((id) => chosen.has(id)),
-    percents: new Map(members.map((m) => [m.id, percentText.get(m.id) ?? ""])),
-    exact,
-    me,
-    payee,
-    payer,
+    payments: rowsOf(payerRows),
+    shares: rowsOf(shareRows),
   };
 }
 
-// recompute is what makes the form honest: every derived number is computed
-// here, on every keystroke, by exactly the rule the ledger reads them with.
-function recompute(): void {
-  const st = state();
+// Everybody in the Group, on the "For whom" side: the empty rows are used up
+// first, and the people already named are left where they are.
+function everyone(): void {
+  const named = new Set(rowsOf(shareRows).map((row) => row.member));
+  const blanks = shareRows.filter((row) => Number(row.person.value) === 0);
+  for (const member of members) {
+    if (named.has(member.id)) continue;
+    const row = blanks.shift() ?? addRow(shareRows, shareBody, 0, "");
+    row.person.value = String(member.id);
+  }
+  recompute();
+}
+
+// The one split the editor computes for you, by the same rule the ledger reads
+// it back with: equal parts, the odd minor units to whoever paid most.
+function splitEvenly(): void {
   const code = currency();
-  const priority = payerOrder(st);
+  const amounts = evenShares(state());
+  shareRows.forEach((row, i) => {
+    if (Number(row.person.value) === 0) return;
+    row.amount.value = formatMinor(amounts[i], code);
+  });
+  recompute();
+}
 
-  for (const row of payerRows) {
-    if (!row.whole) continue;
-    row.whole.textContent = payer === row.member.id ? formatMinor(st.totalMinor, code) : "";
+// recompute is what makes the form honest: every line under the tables is
+// computed here, on every keystroke, by exactly the rule the ledger reads the
+// bill with.
+function recompute(): void {
+  const code = currency();
+  if (payerFollowsTotal && payerRows.length === 1) {
+    payerRows[0].amount.value = totalField.value.trim();
   }
+  const st = state();
 
-  const derived = new Map<number, number>();
-  if (st.mode === "even" || st.mode === "percent") {
-    const amounts = st.mode === "even"
-      ? allocateEven(st.totalMinor, st.chosen, priority)
-      : allocateByPercent(st.totalMinor, st.chosen, st.percents, priority);
-    st.chosen.forEach((id, i) => derived.set(id, amounts ? amounts[i] : 0));
-  }
-  for (const row of shareRows) {
-    if (!row.derived) continue;
-    const id = row.member.id;
-    if (st.mode === "simple" || st.mode === "settlement") {
-      row.derived.textContent = payee === id ? formatMinor(st.totalMinor, code) : "";
-      continue;
-    }
-    if (st.mode === "claim") {
-      row.derived.textContent = formatMinor(st.exact.get(id) ?? 0, code);
-      continue;
-    }
-    row.derived.textContent = formatMinor(derived.get(id) ?? 0, code);
+  // A form nobody has typed into yet says nothing: "the payments add up to the
+  // total" is true of nothing and nothing, and it is not what somebody opening
+  // a blank bill needs to read.
+  const started = st.totalMinor !== 0 ||
+    [...st.payments, ...st.shares].some((row) => (row.minor ?? 0) !== 0);
+  if (!started) {
+    setText(paidLine, "");
+    setText(totalsLine, "");
+    return;
   }
 
   const left = paidLeft(st);
@@ -514,7 +406,7 @@ function recompute(): void {
     : S.page.transaction.fullyClaimed());
 }
 
-function draftError(error: string): string {
+function draftError(error: DraftError): string {
   switch (error) {
     case "no_payer":
       return S.page.transaction.needPayer();
@@ -522,12 +414,12 @@ function draftError(error: string): string {
       return S.page.transaction.needPaymentsMatch();
     case "shares_overdraw":
       return S.page.transaction.needSharesFit();
-    case "bad_percent":
-      return S.page.transaction.needPercents();
-    case "no_members":
-      return S.page.transaction.needMembers();
+    case "negative_amount":
+      return S.page.transaction.needPositive();
+    case "duplicate_member":
+      return S.page.transaction.needOnce();
     default:
-      return S.page.transaction.needPayee();
+      return S.page.transaction.needPerson();
   }
 }
 
@@ -538,7 +430,7 @@ async function save(): Promise<void> {
   const st = state();
   const result = buildDraft(st);
   if (!result.draft) {
-    setText(message, draftError(result.error ?? ""));
+    setText(message, draftError(result.error ?? "no_person"));
     return;
   }
   const body = {

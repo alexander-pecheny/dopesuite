@@ -27,7 +27,7 @@ One Member's part of handing over a Transaction's money: who paid and how much. 
 _Avoid_: payer (as a field — a Transaction has Payments, and "a payer" is whoever holds one)
 
 **Share**:
-The part of a Transaction's total one member is answerable for, as an amount in the Transaction's currency. Percentages and even splits are ways of typing amounts, never what is kept; the odd minor units of a derived split go one each to the payers in descending Payment order, then the others in split order.
+The part of a Transaction's total one member is answerable for, as an amount in the Transaction's currency. An even split is a way of typing amounts, never what is kept; the odd minor units of a derived split go one each to the payers in descending Payment order, then the others in split order.
 
 **Unclaimed**:
 The part of a Transaction's total no Share accounts for. It belongs to nobody and is owed by nobody: the payers absorb it, pro rata to their Payments, until Members claim it by setting their own Shares. Shares may never exceed the total.

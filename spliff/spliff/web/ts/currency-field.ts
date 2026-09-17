@@ -1,4 +1,4 @@
-// currency-field.ts — the three currency fields, bound the same way once.
+// currency-field.ts — every currency field on a page, bound the same way once.
 //
 // The field used to be a native <select> of every code the rate source
 // publishes. On a phone that picker cannot be typed into: entering GEL meant
@@ -25,6 +25,12 @@ function currencies(): Promise<CurrencyDTO[]> {
   return table;
 }
 
+// And one list per page, for the same reason the fetch is: the history that
+// puts GEL at the top of the list is the Group's, not one field's. The
+// Transaction editor draws a currency cell in every row of its two tables, and
+// they all open on the same rows in the same order.
+let pool: PickList = { all: [] };
+
 export interface CurrencyField {
   /**
    * Fill the field with `code` and say what this form's history is — the
@@ -42,33 +48,54 @@ export interface CurrencyField {
 }
 
 export function bindCurrency(input: HTMLInputElement, error: HTMLElement): CurrencyField {
-  let list: PickList = { all: [] };
-
   const clear = (): void => show(error, false);
 
-  autocomplete(input, (q) => currencyChoices(list, q), clear);
+  suggest(input);
   input.addEventListener("input", clear);
-  // What is sent is a code, so what is shown ends up spelled like one — but
-  // only once it IS one, or "dollar" would turn into "DOLLAR" under the hands
-  // of somebody halfway through typing the name.
-  input.addEventListener("blur", () => {
-    if (isKnownCode(list, input.value)) input.value = normaliseCode(input.value);
-  });
 
   return {
     async fill(code, recent) {
-      list = { all: await currencies(), recent: (recent ?? []).filter(Boolean) };
+      pool = { all: await currencies(), recent: (recent ?? []).filter(Boolean) };
       input.value = normaliseCode(code);
       clear();
     },
     // A half-typed "ge" is not a currency yet: the readouts that ask keep the
     // last code they had rather than printing the fragment.
-    value: () => (isKnownCode(list, input.value) ? normaliseCode(input.value) : ""),
+    value: () => (isKnownCode(pool, input.value) ? normaliseCode(input.value) : ""),
     ok() {
-      const fine = isKnownCode(list, input.value);
+      const fine = isKnownCode(pool, input.value);
       setText(error, fine ? "" : S.transaction.error.currencyInvalid());
       show(error, !fine);
       return fine;
     },
   };
+}
+
+/**
+ * A currency cell in a row of the Transaction editor: the same picker, with no
+ * refusal of its own to draw. A Transaction happens in ONE currency
+ * (spliff/docs/adr/0001), so a cell does not hold a code of its own — it
+ * reports the one that was picked and the page writes it into every other cell
+ * and into the header.
+ */
+export function bindCurrencyCell(input: HTMLInputElement, picked: (code: string) => void): void {
+  const tell = (): void => {
+    if (isKnownCode(pool, input.value)) picked(normaliseCode(input.value));
+  };
+  // Every keystroke, because the pick from the list arrives as one too: the
+  // moment what is typed IS a code, the bill is in it.
+  suggest(input);
+  input.addEventListener("input", tell);
+  input.addEventListener("blur", tell);
+}
+
+// The shared half of both bindings: the filtered list, and the spelling. What
+// is sent is a code, so what is shown ends up spelled like one — but only once
+// it IS one, or "dollar" would turn into "DOLLAR" under the hands of somebody
+// halfway through typing the name.
+function suggest(input: HTMLInputElement): void {
+  autocomplete(input, (q) => currencyChoices(pool, q));
+  input.addEventListener("blur", () => {
+    if (isKnownCode(pool, input.value)) input.value = normaliseCode(input.value);
+  });
 }

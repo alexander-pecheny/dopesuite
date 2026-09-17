@@ -24,15 +24,28 @@
   white-space: nowrap;
 }
 
-/* An amount field is narrow on purpose: a number, not a sentence. The kit's
-   .field gives it its own little caption, so a column of them needs no header
-   row — which is what let the grid this replaced fall apart at 393px. */
-.amount-field {
-  width: 6.5rem;
-  flex: 0 0 auto;
+/* One line of the Transaction editor's two tables: who, in what, how much, and
+   the × that takes the line away. It is the kit's .card laid out with the kit's
+   row utilities, and its cells are the kit's controls — the select takes
+   .u-grow and the currency the kit's own .input-narrow. What is left to say
+   here is the padding, because a stack of these IS the table: a standalone
+   card's padding puts four people on a phone screen and the total off it.
+
+   The widths add up inside a 393px card with the × beside them. */
+.split-row {
+  padding: var(--space-2) var(--space-3);
 }
 
-.amount-field input {
+/* An amount is narrow on purpose: a number, not a sentence — and set in the
+   kit's figures, right-aligned, so a column of them is compared down the edge.
+
+   The width is stated rather than left to a flex basis: a flex item's automatic
+   minimum size is its CONTENT's, and an <input>'s content is 20 characters wide
+   — which is how a 5rem cell first came out 228px and took a line of its own on
+   a phone. */
+.amount-field {
+  width: 5.75rem;
+  flex: 0 0 auto;
   text-align: right;
   font-variant-numeric: tabular-nums lining-nums;
 }

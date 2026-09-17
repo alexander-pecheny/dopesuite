@@ -1,13 +1,15 @@
 // The Transaction editor's model, with no DOM in it.
 //
-// The app stores amounts and nothing else: an even split and a percentage split
-// are ways of typing them (spliff/CONTEXT.md), and this is where the typing
-// becomes the amounts. It is the browser's copy of spliff/spliff/domain/split,
-// and it must agree with it minor unit for minor unit — the ordering rule
-// (payers by descending Payment, then split order) is what makes two phones
-// showing one bill show the same numbers.
-
-export type Mode = "simple" | "even" | "percent" | "exact" | "claim" | "settlement";
+// A bill answers two questions — who handed the money over, and who it was for
+// — and the editor asks each of them as a list of rows: a person, an amount.
+// That is also exactly what is stored (spliff/CONTEXT.md), so this file is
+// mostly the arithmetic the rows are checked and filled with; an even split is
+// a convenience that writes amounts into them, not a second kind of bill.
+//
+// The allocation is the browser's copy of spliff/spliff/domain/split, and it
+// must agree with it minor unit for minor unit — the ordering rule (payers by
+// descending Payment, then row order) is what makes two phones showing one bill
+// show the same numbers.
 
 export interface Entry {
   member_id: number;
@@ -19,65 +21,51 @@ export interface Draft {
   shares: Entry[];
 }
 
-export interface FormState {
-  mode: Mode;
-  totalMinor: number;
-  /** Every Member of the Group, in join order. */
-  members: number[];
-  /** What each Member put in, by member id. Absent means nothing. */
-  paid: Map<number, number>;
-  /** Who the split is across, in split order. */
-  chosen: number[];
-  /** The percentage typed against each chosen Member, as a string. */
-  percents: Map<number, string>;
-  /** The exact amount typed against each chosen Member. */
-  exact: Map<number, number>;
-  /** Who is filling the form in — the one whose Share "claim your part" sets. */
-  me: number;
-  /** The Member a settlement hands the money to. */
-  payee: number;
-  /**
-   * The one Member who handed the whole of it over, in the modes whose shape
-   * IS one payer. `paid` is ignored there: a picker cannot half-fill a field,
-   * so there is nothing to reconcile.
-   */
-  payer: number;
+/**
+ * One line of either table. `member` is 0 while nobody is picked, and `minor`
+ * is null while the amount cell is empty — a row somebody has not finished
+ * yet, which is a different thing from a row that says nothing was paid.
+ */
+export interface Row {
+  member: number;
+  minor: number | null;
 }
 
-/**
- * singlePayer says whether "Who paid" is a picker rather than a column of
- * amount fields. Two modes are one person handing the whole amount over —
- * "A paid for B" and settling up — and saying so is the form's business, which
- * is why it lives here beside the mode and not in the page.
- *
- * "I paid, claim your part" is deliberately NOT one of them: it is used on a
- * bill somebody else entered, which may already carry two Payments, and a
- * picker would silently rewrite them.
- */
-export function singlePayer(mode: Mode): boolean {
-  return mode === "simple" || mode === "settlement";
+export interface FormState {
+  totalMinor: number;
+  /** Every Member of the Group, in join order — the tie-break for the split. */
+  members: number[];
+  /** The rows under "Who paid", in the order they are on the page. */
+  payments: Row[];
+  /** The rows under "For whom", in the order they are on the page. */
+  shares: Row[];
+}
+
+/** The rows that actually say something: somebody, and more than nothing. */
+function filled(rows: Row[]): Row[] {
+  return rows.filter((row) => row.member > 0 && (row.minor ?? 0) > 0);
 }
 
 /**
  * paidLeft is what the total still has no payer for — negative when the
- * payments overshoot it. The form's payments line is this number in words.
+ * payments overshoot it. The line under "Who paid" is this number in words.
  */
 export function paidLeft(state: FormState): number {
-  const paid = paymentsOf(state);
   let sum = 0;
-  for (const id of state.members) sum += paid.get(id) ?? 0;
+  for (const row of filled(state.payments)) sum += row.minor ?? 0;
   return state.totalMinor - sum;
 }
 
 /**
  * payerOrder is the order spare minor units are handed out in: the payers by
- * descending Payment, ties by the order they appear in members (join order),
- * then everybody else in split order.
+ * descending Payment, ties by the order they appear in members (join order).
  */
 export function payerOrder(state: FormState): number[] {
-  const paid = paymentsOf(state);
-  const payers = state.members.filter((id) => (paid.get(id) ?? 0) > 0);
-  return payers.sort((a, b) => {
+  const paid = new Map<number, number>();
+  for (const row of filled(state.payments)) {
+    paid.set(row.member, (paid.get(row.member) ?? 0) + (row.minor ?? 0));
+  }
+  return [...paid.keys()].sort((a, b) => {
     const diff = (paid.get(b) ?? 0) - (paid.get(a) ?? 0);
     if (diff !== 0) return diff;
     return state.members.indexOf(a) - state.members.indexOf(b);
@@ -85,25 +73,14 @@ export function payerOrder(state: FormState): number[] {
 }
 
 /**
- * paymentsOf is what the form says was handed over, whichever way it asked:
- * the picker's one Member for the whole total, or the amounts typed against
- * each. Everything that reasons about Payments reads it, so the two shapes can
- * never disagree about who paid what.
- */
-function paymentsOf(state: FormState): Map<number, number> {
-  if (!singlePayer(state.mode)) return state.paid;
-  return state.payer ? new Map([[state.payer, state.totalMinor]]) : new Map();
-}
-
-/**
  * allocate splits total across members by largest remainder. Each Member's
  * weight is `nums[i] / den` — one denominator for the whole split, which is
- * what both callers actually have (n for an even split, a million for a
- * percentage one) and which keeps every comparison an integer one.
+ * what the caller actually has (n for an even split) and which keeps every
+ * comparison an integer one.
  *
  * The arithmetic runs in BigInt so that a fraction of a minor unit is exact and
  * not a float's idea of one. Leftovers go to the biggest remainders, ties by
- * the order in `priority` and then by split order.
+ * the order in `priority` and then by row order.
  */
 export function allocate(
   total: number,
@@ -131,7 +108,7 @@ export function allocate(
   }
 
   // What the shares SHOULD add up to: the whole total when the weights cover
-  // it, less when a percentage split leaves part of it Unclaimed.
+  // it, which an even split always does.
   const target = roundNearest(big * sum, den);
   let leftover = Number(target - allocated);
 
@@ -161,38 +138,36 @@ function rankOf(members: number[], priority: number[]): number[] {
   return members.map((id, i) => place.get(id) ?? priority.length + i);
 }
 
-/** Even splits total equally across the chosen Members. */
-export function allocateEven(total: number, chosen: number[], priority: number[]): number[] {
-  const n = BigInt(chosen.length || 1);
-  return allocate(total, chosen, chosen.map(() => BigInt(1)), n, priority);
+/** Even splits total equally across the given Members. */
+export function allocateEven(total: number, members: number[], priority: number[]): number[] {
+  const n = BigInt(members.length || 1);
+  return allocate(total, members, members.map(() => BigInt(1)), n, priority);
 }
 
-/** The denominator a percentage is taken over: four decimal places of a
- * percent, which is finer than any form offers and keeps the weight exact. */
-const PERCENT_DEN = BigInt(1000000);
-
 /**
- * allocateByPercent splits total by percentage. Percentages that do not reach
- * 100 leave the rest Unclaimed, which is a normal state; summing past 100 is a
- * refusal, because a Share may never exceed the total.
+ * evenShares is what "Split evenly" writes into the "For whom" table: the total
+ * shared out across the rows that name somebody, aligned with `state.shares` so
+ * the page can drop each amount into the cell it came from. A row with nobody
+ * picked gets nothing — it is not a person yet.
+ *
+ * Two rows naming the same Member are two rows: each gets its own equal part,
+ * which adds up to the same thing the one row would have had. The editor
+ * refuses to SAVE the duplicate; it does not have to refuse to divide.
  */
-export function allocateByPercent(
-  total: number,
-  chosen: number[],
-  percents: Map<number, string>,
-  priority: number[],
-): number[] | null {
-  const nums: bigint[] = [];
-  let sum = 0;
-  for (const id of chosen) {
-    const raw = (percents.get(id) ?? "").trim().replace(",", ".");
-    const value = raw === "" ? 0 : Number(raw);
-    if (!Number.isFinite(value) || value < 0) return null;
-    sum += value;
-    nums.push(BigInt(Math.round(value * 10000)));
-  }
-  if (sum > 100.0000001) return null;
-  return allocate(total, chosen, nums, PERCENT_DEN, priority);
+export function evenShares(state: FormState): number[] {
+  const at: number[] = [];
+  const members: number[] = [];
+  state.shares.forEach((row, i) => {
+    if (row.member <= 0) return;
+    at.push(i);
+    members.push(row.member);
+  });
+  const amounts = allocateEven(state.totalMinor, members, payerOrder(state));
+  const out = new Array<number>(state.shares.length).fill(0);
+  at.forEach((index, k) => {
+    out[index] = amounts[k];
+  });
+  return out;
 }
 
 export function totalOf(entries: Entry[]): number {
@@ -208,9 +183,9 @@ export type DraftError =
   | "no_payer"
   | "payments_mismatch"
   | "shares_overdraw"
-  | "bad_percent"
-  | "no_members"
-  | "no_payee";
+  | "negative_amount"
+  | "no_person"
+  | "duplicate_member";
 
 export interface DraftResult {
   draft?: Draft;
@@ -218,70 +193,40 @@ export interface DraftResult {
 }
 
 /**
- * buildDraft turns the form's state into the one model the server stores: a
- * list of Payments and a list of Shares. Every mode ends here — the modes are
- * the form's, the model is the app's.
+ * buildDraft turns the two tables into the one model the server stores: a list
+ * of Payments and a list of Shares. A row that says nothing — nobody picked and
+ * no amount typed — is not an error: it is the empty row the table always ends
+ * with, and it simply does not become an Entry.
  */
 export function buildDraft(state: FormState): DraftResult {
-  const payments: Entry[] = [];
-  const paid = paymentsOf(state);
-  for (const id of state.members) {
-    const minor = paid.get(id) ?? 0;
-    if (minor > 0) payments.push({ member_id: id, minor });
-  }
-  if (payments.length === 0) return { error: "no_payer" };
-  if (totalOf(payments) !== state.totalMinor) return { error: "payments_mismatch" };
+  const payments = entriesOf(state.payments);
+  if (payments.error) return { error: payments.error };
+  if (payments.entries.length === 0) return { error: "no_payer" };
+  if (totalOf(payments.entries) !== state.totalMinor) return { error: "payments_mismatch" };
 
-  const priority = payerOrder(state);
-  let shares: Entry[] = [];
+  const shares = entriesOf(state.shares);
+  if (shares.error) return { error: shares.error };
+  if (totalOf(shares.entries) > state.totalMinor) return { error: "shares_overdraw" };
 
-  switch (state.mode) {
-    case "even": {
-      if (state.chosen.length === 0) return { error: "no_members" };
-      const amounts = allocateEven(state.totalMinor, state.chosen, priority);
-      shares = zip(state.chosen, amounts);
-      break;
-    }
-    case "percent": {
-      if (state.chosen.length === 0) return { error: "no_members" };
-      const amounts = allocateByPercent(state.totalMinor, state.chosen, state.percents, priority);
-      if (!amounts) return { error: "bad_percent" };
-      shares = zip(state.chosen, amounts);
-      break;
-    }
-    // "I paid, claim your part" is the exact-amounts model with one field
-    // editable: everybody else's Share is whatever it already was, which is
-    // what makes a Claim on somebody else's bill a claim and not a rewrite.
-    // On a fresh bill the others are empty, so the payer states their own
-    // Share and the rest stays Unclaimed — which is the mode's whole point.
-    case "exact":
-    case "claim": {
-      for (const id of state.members) {
-        const minor = state.exact.get(id) ?? 0;
-        if (minor < 0) return { error: "bad_percent" };
-        if (minor > 0) shares.push({ member_id: id, minor });
-      }
-      break;
-    }
-    case "simple":
-    case "settlement": {
-      // "A paid X for B" and a Settlement are the same shape: one side answers
-      // for the whole of it. The two modes differ in what they MEAN, which is
-      // the form's business and not the model's.
-      if (!state.payee) return { error: "no_payee" };
-      shares = [{ member_id: state.payee, minor: state.totalMinor }];
-      break;
-    }
-  }
-
-  if (totalOf(shares) > state.totalMinor) return { error: "shares_overdraw" };
-  return { draft: { payments, shares } };
+  return { draft: { payments: payments.entries, shares: shares.entries } };
 }
 
-function zip(members: number[], amounts: number[]): Entry[] {
-  const out: Entry[] = [];
-  members.forEach((id, i) => {
-    if (amounts[i] > 0) out.push({ member_id: id, minor: amounts[i] });
-  });
-  return out;
+function entriesOf(rows: Row[]): { entries: Entry[]; error?: DraftError } {
+  const entries: Entry[] = [];
+  const seen = new Set<number>();
+  for (const row of rows) {
+    const minor = row.minor;
+    if (minor !== null && minor < 0) return { entries, error: "negative_amount" };
+    // An amount against nobody is a row somebody meant to finish. Silence would
+    // drop it on save, which is the one thing the editor must never do.
+    if (row.member <= 0) {
+      if (minor !== null && minor !== 0) return { entries, error: "no_person" };
+      continue;
+    }
+    if (minor === null || minor === 0) continue;
+    if (seen.has(row.member)) return { entries, error: "duplicate_member" };
+    seen.add(row.member);
+    entries.push({ member_id: row.member, minor });
+  }
+  return { entries };
 }

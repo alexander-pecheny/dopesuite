@@ -18,26 +18,31 @@ page title=@page.transaction.title kind="wide" scripts="dist/transaction.js"
         field label=@page.transaction.total grow
           textfield id="total" inputmode="decimal" placeholder="0.00" required grow
       hint id="rateLine" hidden
-      field label=@page.transaction.mode
-        selectfield id="mode" grow
-          option value="simple" @page.transaction.mode_simple
-          option value="even" @page.transaction.mode_even
-          option value="percent" @page.transaction.mode_percent
-          option value="exact" @page.transaction.mode_exact
-          option value="claim" @page.transaction.mode_claim
-          option value="settlement" @page.transaction.mode_settlement
-      hint id="modeHint"
       -- The two questions a bill answers, each its own block: who handed the
-      -- money over, and who it was for. They sit side by side on a desktop and
-      -- stack on a phone, which is the only thing `wrap` is here for.
-      row gap="md" wrap align="start"
-        col gap="sm" grow
+      -- money over, and who it was for. Each is a table of rows a person adds
+      -- and deletes — one row, one person, one amount — because that is also
+      -- exactly what is stored.
+      --
+      -- One under the other at every width. A row of four cells is as narrow as
+      -- it is going to get, and two of those tables side by side on a 44rem
+      -- page leave the name — the only cell that can flex — at a few
+      -- characters.
+      col gap="md"
+        col gap="sm"
           subhead @page.transaction.who_paid
+          hint @page.transaction.who_paid_hint
           mount id="payerBody" kind="transaction-payers"
+          row gap="sm" wrap
+            button kind="ghost" id="addPayer" icon="plus" @page.transaction.add_row
           hint id="paidLine"
-        col gap="sm" grow
+        col gap="sm"
           subhead @page.transaction.for_whom
+          hint @page.transaction.for_whom_hint
           mount id="shareBody" kind="transaction-shares"
+          row gap="sm" wrap
+            button kind="ghost" id="addShare" icon="plus" @page.transaction.add_row
+            button kind="ghost" id="everyoneBtn" icon="users" @page.transaction.add_everyone
+            button kind="ghost" id="splitBtn" icon="calculator" @page.transaction.split_evenly
       hint id="totalsLine"
       row gap="sm" wrap
         button kind="primary" submit id="saveBtn" @common.save
