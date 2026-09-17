@@ -22,7 +22,7 @@ ek_no_scheme = "Вставьте JSON-схему ЭК или опишите её
 scheme_required = "опишите схему игры"
 # A flat format created with a hand-picked entrant list: it seats the whole fest
 # roster and marks who did not play in its refusals tab.
-whole_roster = '{{.name}} сажает весь ростер феста под его же номерами — снимите отметки в «Составе игры», а кто не играет, отметьте в «Отказах» на странице игры'
+whole_roster = 'В игре «{{.name}}» играют все команды феста, под теми же номерами. Снимите отметки в «Составе игры», а тех, кто не играет, отметьте во вкладке «Отказы» на странице игры.'
 # A pasted JSON scheme describing a different game type than the one being
 # created.
 json_type_mismatch = 'JSON-схема описывает игру {{.described}}, а создаётся {{.created}}'

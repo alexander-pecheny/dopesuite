@@ -70,12 +70,12 @@ ek_hint = "Либо схемой, либо готовым JSON ниже — чт
 ek_json_label = "JSON-схема"
 # Hint at the top of the entrant picker. Shown only for the formats described by
 # a scheme: those deal their own numbers from one.
-entrants_hint = "Отметьте, кто играет в этой игре. Если не отметить никого, играют все — а номера игра раздаёт свои, с единицы, так что одна и та же команда бывает второй в ЭК и четвёртой в брейне. Командная игра сажает за стол команды, личная — игроков; сначала команды, потом игроки."
+entrants_hint = "Отметьте, кто играет в этой игре. Если никого не отметить, играют все. Номера эта игра раздаёт свои, начиная с единицы, поэтому одна и та же команда может быть второй в ЭК и четвёртой в брейне. Командная игра сажает за стол команды, личная — игроков: сначала идут команды, потом игроки."
 # Summary of the entrant-picker disclosure.
 entrants_summary = "Состав игры"
 # Hint under the settings of the flat formats, which have no entrant picker:
 # they seat the whole fest roster under the fest's numbers.
-whole_roster_hint = "Играют все команды феста, под его же номерами — кто не играл, отмечается в «Отказах» на странице игры."
+whole_roster_hint = "Играют все команды феста, под теми же номерами. Кто не играл, отмечается во вкладке «Отказы» на странице игры."
 # The settings-page form: name and slug fields, the scheme-rebuild hint, submit.
 title_label = "Название"
 slug_label = "Slug (необязательно, a-z, 0-9, дефис)"
