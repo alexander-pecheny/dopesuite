@@ -14,9 +14,9 @@ chrome, CSS layer).
   generated core builder (`tags_gen.go`, package `kit`), and the `core.css` +
   fonts API. `kit` registers the core through the same `ui.Options` the apps use
   — it is the first overlay. Apps import `kit`, never `ui` directly.
-- `assets/` — `core.css` + `fonts/` (Noto Sans and JetBrains Mono woff2, plus
-  Inter Fix RA, the body face a reader may switch to — `scripts/interfixra.py`);
-  `kit` is their API (`kit.CoreCSS`, `kit.Fonts`).
+- `assets/` — `core.css` + `fonts/` (Noto Sans and JetBrains Mono woff2, plus the
+  five body faces a reader may switch to — `scripts/bodyfonts.py`); `kit` is
+  their API (`kit.CoreCSS`, `kit.Fonts`).
 - `ui/uigen/`, `cmd/uigen/` — codegen for the typed builder (core + overlay modes).
 - `cmd/uic/` — compile one `.dopeui` file to HTML on stdout (kit core vocabulary).
 

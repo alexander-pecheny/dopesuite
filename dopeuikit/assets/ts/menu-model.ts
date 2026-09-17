@@ -7,18 +7,37 @@ export type ThemePref = "light" | "dark" | "system";
 export type Theme = "light" | "dark";
 export type Contrast = "regular" | "high";
 
-// The body fonts a reader may choose between. The id is what <html data-font>
-// carries and what core.css switches --font-sans on; "noto" is the default and
-// the one core.css states without a data-font at all.
-export type FontPref = "noto" | "inter-fix-ra";
-export const FONTS: readonly FontPref[] = ["noto", "inter-fix-ra"];
+// The body fonts a reader may choose between, in the order a picker should offer
+// them: the default, then the sans faces, then the serif ones. The id is what
+// <html data-font> carries and what core.css switches --font-sans on; "noto" is
+// the default and the one core.css states without a data-font at all.
+export type FontPref =
+  | "noto"
+  | "inter-fix-ra"
+  | "ibm-plex-sans-fix"
+  | "literata-fix"
+  | "ibm-plex-serif-fix"
+  | "stix-two-text-fix";
+export const FONTS: readonly FontPref[] = [
+  "noto",
+  "inter-fix-ra",
+  "ibm-plex-sans-fix",
+  "literata-fix",
+  "ibm-plex-serif-fix",
+  "stix-two-text-fix",
+];
 
 // The roman face of each font, which is the one a page is overwhelmingly set in
 // and therefore the only one worth preloading. The italics and the symbol
 // subset are left to the stylesheet: a page that sets none never asks for them.
+// Every file but Noto Sans's is named for its id (scripts/bodyfonts.py).
 const ROMAN: Record<FontPref, string> = {
   "noto": "/static/fonts/noto-sans-var.woff2",
-  "inter-fix-ra": "/static/fonts/inter-fix-ra-var.woff2",
+  "inter-fix-ra": "/static/fonts/inter-fix-ra.woff2",
+  "ibm-plex-sans-fix": "/static/fonts/ibm-plex-sans-fix.woff2",
+  "literata-fix": "/static/fonts/literata-fix.woff2",
+  "ibm-plex-serif-fix": "/static/fonts/ibm-plex-serif-fix.woff2",
+  "stix-two-text-fix": "/static/fonts/stix-two-text-fix.woff2",
 };
 
 // fontPreload is the href the chrome preloads for a choice. It is a function of

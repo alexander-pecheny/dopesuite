@@ -25,9 +25,11 @@ test("resolveTheme honours explicit prefs and maps system to the OS scheme", () 
 });
 
 test("fontPreload names one roman face per choice, and Noto for anything else", () => {
-  assert.deepEqual(FONTS, ["noto", "inter-fix-ra"]);
+  assert.equal(FONTS[0], "noto", "the default leads the list a picker draws");
+  for (const font of FONTS) assert.match(fontPreload(font), /^\/static\/fonts\/.+\.woff2$/);
+  assert.equal(new Set(FONTS.map(fontPreload)).size, FONTS.length, "one face each");
   assert.equal(fontPreload("noto"), "/static/fonts/noto-sans-var.woff2");
-  assert.equal(fontPreload("inter-fix-ra"), "/static/fonts/inter-fix-ra-var.woff2");
+  assert.equal(fontPreload("literata-fix"), "/static/fonts/literata-fix.woff2");
   // A preference written by an older build must still preload something.
   assert.equal(fontPreload("comic"), "/static/fonts/noto-sans-var.woff2");
   assert.equal(pickPref("comic", FONTS, "noto"), "noto");

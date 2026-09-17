@@ -65,23 +65,24 @@
   src: url("/static/fonts/jetbrains-mono-var.woff2") format("woff2");
 }
 
-/* The body font a reader may switch to instead (Appearance → the font picker,
-   stored per browser; menu.js writes data-font on <html> before first paint).
-   Inter Fix RA is Inter with the Russian faults fixed — the stress mark over Ю
-   and я, the spacing and kerning of the Cyrillic — plus Raveo's tailed a and
-   flagless 1; scripts/interfixra.py builds these two faces, cut to the same
-   400..700 and the same coverage as Noto Sans above.
+/* The five body faces a reader may set the site in instead (xy: Профиль → the
+   font picker; menu.js writes data-font on <html> before first paint). Each is a
+   variable upstream with its Russian faults fixed and both of fonts-fixing's
+   spacing models run over it — the stress anchors Plex and Inter never drew, the
+   Cyrillic kerning Literata had only for its Latin — then cut to the same
+   400..700 and the same coverage as Noto Sans above. scripts/bodyfonts.py builds
+   all ten files and says what each upstream was missing.
 
-   These two declarations cost NOTHING to a reader who keeps the default: a face
-   is fetched when text is set in it, and nothing is until --font-sans names it.
-   That is also why the preload of the body font is menu.js's and not the page's
-   — a <link rel=preload> in the head cannot know which of the two to ask for. */
+   They cost NOTHING to a reader who keeps the default: a face is fetched when
+   text is set in it, and nothing is until --font-sans names it. That is also why
+   the preload of the body font is menu.js's and not the page's — a
+   <link rel=preload> in the head cannot know which of the six to ask for. */
 @font-face {
   font-family: "Inter Fix RA";
   font-style: normal;
   font-weight: 400 700;
   font-display: swap;
-  src: url("/static/fonts/inter-fix-ra-var.woff2") format("woff2");
+  src: url("/static/fonts/inter-fix-ra.woff2") format("woff2");
 }
 
 @font-face {
@@ -89,7 +90,71 @@
   font-style: italic;
   font-weight: 400 700;
   font-display: swap;
-  src: url("/static/fonts/inter-fix-ra-var-italic.woff2") format("woff2");
+  src: url("/static/fonts/inter-fix-ra-italic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Sans Fix";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/static/fonts/ibm-plex-sans-fix.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Sans Fix";
+  font-style: italic;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/static/fonts/ibm-plex-sans-fix-italic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Serif Fix";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/static/fonts/ibm-plex-serif-fix.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Serif Fix";
+  font-style: italic;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/static/fonts/ibm-plex-serif-fix-italic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Literata Fix";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/static/fonts/literata-fix.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Literata Fix";
+  font-style: italic;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/static/fonts/literata-fix-italic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "STIX Two Text Fix";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/static/fonts/stix-two-text-fix.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "STIX Two Text Fix";
+  font-style: italic;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/static/fonts/stix-two-text-fix-italic.woff2") format("woff2");
 }
 
 :root {
@@ -528,10 +593,11 @@
   --inline-fade-bg: linear-gradient(to right, var(--paper-transparent), var(--paper));
 
   --font-sans: "Noto Sans", Arial, sans-serif;
-  /* The alternative body font, which a reader turns on for the whole site. Noto
-     Sans stays behind it: Inter answers 1793 of its 2028 codepoints, and the
-     ones it does not (archaic Cyrillic, the mathematical alphabets) then come
-     from the default face instead of from tofu. */
+  /* The alternative body faces, which a reader turns on for the whole site, are
+     below the palette. Noto Sans stays behind every one of them: none answers
+     all 2028 of its codepoints — Inter 1798, Literata 1134, Plex 845 — and what
+     they do not (archaic Cyrillic, the mathematical alphabets) then comes from
+     the default face instead of from tofu. */
   /* JetBrains Mono is shipped now (it was system-mono roulette before), but the
      stack keeps its fallbacks: the subset drops astral codepoints, so anything
      exotic in the 4s editor still lands on a system mono rather than tofu. */
@@ -540,6 +606,25 @@
 
 html[data-font="inter-fix-ra"] {
   --font-sans: "Inter Fix RA", "Noto Sans", Arial, sans-serif;
+}
+
+html[data-font="ibm-plex-sans-fix"] {
+  --font-sans: "IBM Plex Sans Fix", "Noto Sans", Arial, sans-serif;
+}
+
+/* A serif choice keeps Noto Sans behind it like the rest — one fallback, the one
+   with the most codepoints, and never a second webfont fetched to answer a
+   character — and ends on a serif generic so the system's answer matches too. */
+html[data-font="ibm-plex-serif-fix"] {
+  --font-sans: "IBM Plex Serif Fix", "Noto Sans", Georgia, serif;
+}
+
+html[data-font="literata-fix"] {
+  --font-sans: "Literata Fix", "Noto Sans", Georgia, serif;
+}
+
+html[data-font="stix-two-text-fix"] {
+  --font-sans: "STIX Two Text Fix", "Noto Sans", Georgia, serif;
 }
 
 /* ── scroll-fade utilities ────────────────────────────────

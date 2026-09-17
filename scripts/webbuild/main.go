@@ -101,12 +101,13 @@ func xyPrecache() (urls []string, version string) {
 	for _, p := range kitTS {
 		hashFile(p)
 	}
-	// The alternative body font is opt-in (the profile's font picker), and the
-	// shell is what every install downloads: precaching it would hand the second
-	// face to every reader, which is the cost the picker exists to avoid. A reader
-	// who does pick it fetches it once, and the runtime static rule caches it.
+	// The shell is what every install downloads, so it carries the default body
+	// face and the mono and nothing else: the five a reader may switch to (the
+	// profile's font picker) are ~1.3 MB together, and precaching them would hand
+	// every reader five faces to save one of them a fetch. A reader who does pick
+	// one fetches it once, and the runtime static rule caches it from there.
 	addDir("dopeuikit/assets/fonts", "/static/fonts/", func(name string) bool {
-		return strings.HasPrefix(name, "inter-fix-ra-")
+		return !strings.HasPrefix(name, "noto-") && !strings.HasPrefix(name, "jetbrains-")
 	})
 	// Walk static/ recursively so a future subdirectory can't silently miss the
 	// shell (the 504 class this derivation exists to kill). dist/ is skipped —
