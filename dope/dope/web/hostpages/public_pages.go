@@ -40,12 +40,15 @@ type PublicFestDetail struct {
 }
 
 // jumpHostNav are the body data-jump-* attrs menu.js reads to offer the host
-// view from a public page.
+// view from a public page. The icon is part of the contract: every row of the
+// menu is a glyph and a word, so a jump that names none leaves a hole in the
+// column.
 func jumpHostNav(href, label, title string) []ui.Item {
 	return []ui.Item{
 		ui.Data("jump-label", label),
 		ui.Data("jump-href", href),
 		ui.Data("jump-title", title),
+		ui.Data("jump-icon", "settings"),
 	}
 }
 

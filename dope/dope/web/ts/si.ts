@@ -201,46 +201,58 @@ function rankedResultRows(): ResultRow[] { return ksi.rankedResultRows(state!, r
 function render(options: {preserveScroll?: boolean} = {}): void {
   if (!scheme || !state) return;
   const defaultTitle = gameTitleFallback();
+  const team = isTeamMode();
   normalizeActiveCell();
   setHeading(scheme.title || defaultTitle);
-  if (isTeamMode()) {
+  if (team) {
     rememberTabScroll(renderedTab);
     if (!TABS.some((t) => t.key === activeTab)) activeTab = "detailed";
-    renderTabs();
-    const node = activeTab === "results"
-      ? buildResultsTable()
-      : activeTab === "refusals"
-        ? buildRefusalsTable()
-        : activeTab === "roster"
-          ? rosterView()
-          : buildTable();
-    renderedTable = activeTab === "detailed" ? node : null;
-    if (activeTab !== "detailed") resetTableIndex();
+  }
+  renderTabs();
+  // Player mode has no tabs to scroll back to, so it keeps the frame's own
+  // offsets across the rebuild instead.
+  const frame = team ? null : scrollFrame();
+  const scrollTop = frame?.scrollTop || 0;
+  const scrollLeft = frame?.scrollLeft || 0;
+
+  // The one mount. Whichever mode and tab built the node, it reaches the page
+  // here and nowhere else: KSI once had a mount of its own, one line in the
+  // middle of the team branch, and an edit to the comment beside it took the
+  // line too — every team sheet built itself and was dropped on the floor.
+  const node = team ? teamTabNode() : buildTable();
+  renderedTable = !team || activeTab === "detailed" ? node : null;
+  if (team && activeTab !== "detailed") resetTableIndex();
+  siRoot.replaceChildren(node);
+
+  if (team) {
     // The roster tab fits the frame and wraps rather than scrolling sideways like a
     // score board, so the host drops its max-content sizing.
     siRoot.classList.toggle("fits-frame", activeTab === "roster");
     renderedTab = activeTab;
     restoreTabScroll(activeTab);
-    updateResultsScrollState();
-    if (activeTab === "detailed" || activeTab === "results") teamNameOverflow.schedule();
-    if (activeTab === "detailed") refreshAllStickerLimits();
-    if (activeTab === "detailed") restoreCursor();
   } else {
-    renderTabs();
-    const frame = scrollFrame();
-    const scrollTop = frame?.scrollTop || 0;
-    const scrollLeft = frame?.scrollLeft || 0;
-    renderedTable = buildTable();
-    siRoot.replaceChildren(renderedTable);
     renderedTab = null;
     if (options.preserveScroll && frame) {
       frame.scrollTop = scrollTop;
       frame.scrollLeft = scrollLeft;
     }
-    updateResultsScrollState();
-    restoreCursor();
   }
+  updateResultsScrollState();
+  if (team && (activeTab === "detailed" || activeTab === "results")) teamNameOverflow.schedule();
+  if (team && activeTab === "detailed") refreshAllStickerLimits();
+  if (!team || activeTab === "detailed") restoreCursor();
   shell.presence.refresh();
+}
+
+// teamTabNode is what the active tab shows in team mode: the score sheet, the
+// results, the refusals list, or the fest roster.
+function teamTabNode(): HTMLElement {
+  switch (activeTab) {
+    case "results": return buildResultsTable();
+    case "refusals": return buildRefusalsTable();
+    case "roster": return rosterView();
+    default: return buildTable();
+  }
 }
 
 // restoreCursor re-points the sheet cursor at the active cell after a rebuild;

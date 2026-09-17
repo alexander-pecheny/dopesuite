@@ -120,6 +120,16 @@ func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 		return Materialise(ctx, tx, spec.FestID, scheme)
 	}
 	switch spec.Type {
+	case games.OD, games.KSI, games.Multi:
+		// A flat format is one Match seating the whole fest roster under the
+		// fest's own numbers, and who did not play is marked on its refusals
+		// tab. It has no way to seat a chosen few, so a chosen list is refused
+		// here rather than dropped on the floor.
+		if len(spec.Entrants) > 0 {
+			return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.WholeRoster(games.Label(spec.Type)))
+		}
+	}
+	switch spec.Type {
 	case games.OD:
 		return createODGameTx(ctx, tx, spec.FestID, spec.ODTours, spec.ODQuestions)
 	case games.KSI:

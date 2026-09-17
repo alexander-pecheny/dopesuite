@@ -62,7 +62,15 @@ export interface MenuJump {
   href: string;
   title?: string;
   external?: boolean;
+  // An icon NAME, as MenuExtra carries one. A page that names none still gets
+  // a glyph (JUMP_ICON): every row in the column has one, and a gap in the
+  // middle reads as a broken menu rather than as a plainer row.
+  icon?: string;
 }
+
+// The jump's glyph when the page names none: it leaves this page for a
+// counterpart of it, whichever direction that is.
+export const JUMP_ICON = "link";
 
 export interface MenuExtra {
   label: string;
@@ -124,7 +132,7 @@ export function menuItems(state: {
   // icons broke at the top and the bottom.
   const items: MenuItem[] = [{ kind: "appearance", icon: "palette" }];
   if (state.jump) {
-    items.push(link(state.jump.label, state.jump.href, state.jump.title, state.jump.external));
+    items.push(link(state.jump.label, state.jump.href, state.jump.title, state.jump.external, false, state.jump.icon || JUMP_ICON));
   }
   for (const extra of state.extras) {
     // A rule that would open the menu or double another separates nothing.
@@ -134,7 +142,7 @@ export function menuItems(state: {
     if (extra.onClick) {
       items.push({ kind: "action", label: extra.label, title: extra.title ?? "", onClick: extra.onClick, ...(extra.icon ? { icon: extra.icon } : {}) });
     } else {
-      items.push(link(extra.label, extra.href ?? "", extra.title, false, extra.download));
+      items.push(link(extra.label, extra.href ?? "", extra.title, false, extra.download, extra.icon));
     }
   }
   if (state.account) {
@@ -157,6 +165,7 @@ export function jumpFromDataset(d: Partial<Record<string, string>>): MenuJump | 
     href: d.jumpHref,
     title: d.jumpTitle || "",
     external: d.jumpExternal === "1",
+    ...(d.jumpIcon ? { icon: d.jumpIcon } : {}),
   };
 }
 

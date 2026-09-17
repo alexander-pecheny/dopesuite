@@ -13,6 +13,7 @@ export interface DopeMenuJump {
   href: string;
   title?: string;
   external?: boolean;
+  icon?: string;
 }
 
 export interface DopeMenuExtra {
@@ -20,6 +21,7 @@ export interface DopeMenuExtra {
   href: string;
   title?: string;
   download?: boolean;
+  icon?: string;
 }
 
 interface DopeMenuLike {
@@ -105,6 +107,7 @@ export function mountEditorLink(): {refresh(): void} {
     label: S.screen.jump.edit(),
     href: editorHrefForCurrentLocation(),
     title: S.screen.jump.editTitle(),
+    icon: "pencil",
   });
   set();
   return {refresh: set};
@@ -148,6 +151,7 @@ export function mountViewerLink(): {refresh(): void} {
     href: viewerHrefForCurrentLocation(),
     title: S.screen.jump.viewerTitle(),
     external: true,
+    icon: "eye",
   });
   set();
   return {refresh: set};
@@ -170,6 +174,7 @@ export function mountGameDownloads(opts: {apiBase?: string; canEdit?: boolean} |
     href: `${apiBase}/export.xlsx`,
     title: S.screen.downloads.xlsxTitle(),
     download: true,
+    icon: "file-down",
   }];
   if (opts.canEdit) {
     items.push({
@@ -177,6 +182,7 @@ export function mountGameDownloads(opts: {apiBase?: string; canEdit?: boolean} |
       href: `${apiBase}/export.json.gz`,
       title: S.screen.downloads.archiveTitle(),
       download: true,
+      icon: "package",
     });
   }
   menu.setExtras(items);

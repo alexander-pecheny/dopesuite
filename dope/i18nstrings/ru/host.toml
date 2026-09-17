@@ -68,10 +68,14 @@ troika_hint = "Тот же язык схем. themes — сколько тем �
 ek_hint = "Либо схемой, либо готовым JSON ниже — что заполнено, то и используется."
 # Label of the EK pasted-JSON editor.
 ek_json_label = "JSON-схема"
-# Hint at the top of the entrant picker.
-entrants_hint = "Отметьте, кто играет в этой игре. Если не отметить никого, играют все — а номера игра раздаёт свои, с единицы, так что одна и та же команда бывает второй в ЭК и четвёртой в ОД. Командная игра сажает за стол команды, личная — игроков; сначала команды, потом игроки."
+# Hint at the top of the entrant picker. Shown only for the formats described by
+# a scheme: those deal their own numbers from one.
+entrants_hint = "Отметьте, кто играет в этой игре. Если не отметить никого, играют все — а номера игра раздаёт свои, с единицы, так что одна и та же команда бывает второй в ЭК и четвёртой в брейне. Командная игра сажает за стол команды, личная — игроков; сначала команды, потом игроки."
 # Summary of the entrant-picker disclosure.
 entrants_summary = "Состав игры"
+# Hint under the settings of the flat formats, which have no entrant picker:
+# they seat the whole fest roster under the fest's numbers.
+whole_roster_hint = "Играют все команды феста, под его же номерами — кто не играл, отмечается в «Отказах» на странице игры."
 # The settings-page form: name and slug fields, the scheme-rebuild hint, submit.
 title_label = "Название"
 slug_label = "Slug (необязательно, a-z, 0-9, дефис)"

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -149,12 +150,15 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 		gameSettings("od", sel,
 			dopeui.Field(dopeui.Label(s.Host.Games.OdToursLabel()), dopeui.Textfield(dopeui.Name("od_tours"), dopeui.Inputmode("numeric"), dopeui.Value("3"))),
 			dopeui.Field(dopeui.Label(s.Host.Games.OdQuestionsLabel()), dopeui.Textfield(dopeui.Name("od_questions"), dopeui.Inputmode("numeric"), dopeui.Value("15"))),
+			dopeui.Hint(dopeui.Text(s.Host.Games.WholeRosterHint())),
 		),
 		gameSettings("ksi", sel,
 			dopeui.Field(dopeui.Label(s.Host.Games.ThemesLabel()), dopeui.Textfield(dopeui.Name("ksi_themes"), dopeui.Inputmode("numeric"), dopeui.Value("20"))),
+			dopeui.Hint(dopeui.Text(s.Host.Games.WholeRosterHint())),
 		),
 		gameSettings("ksi_stickers", sel,
 			dopeui.Field(dopeui.Label(s.Host.Games.ThemesLabel()), dopeui.Textfield(dopeui.Name("ksis_themes"), dopeui.Inputmode("numeric"), dopeui.Value("20"))),
+			dopeui.Hint(dopeui.Text(s.Host.Games.WholeRosterHint())),
 			dopeui.Hint(dopeui.Text(s.Host.Games.StickersHint())),
 			stickerRow(s.Host.Games.StickerNeutral(), "ksis_neutral_max", "20", "ksis_neutral_color", "#ffffff"),
 			stickerRow(s.Host.Games.StickerX2Row(), "ksis_x2_max", "2", "ksis_x2_color", "#fdf66f"),
@@ -177,6 +181,7 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 					dopeui.Placeholder(s.Host.Games.MinigamesPlaceholder()))),
 			dopeui.Hint(dopeui.Text(s.Host.Games.MinigamesHint())),
 			dopeui.Hint(dopeui.Text(s.Host.Games.MinigamesShareHint())),
+			dopeui.Hint(dopeui.Text(s.Host.Games.WholeRosterHint())),
 			dopeui.Field(dopeui.Label(s.Host.Games.MultiSortingLabel()),
 				dopeui.Textfield(dopeui.Name("multi_sorting"), dopeui.Placeholder("total, game2, plus"))),
 			dopeui.Hint(dopeui.Text(s.Host.Games.MultiSortingHint())),
@@ -199,9 +204,24 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
 }
 
+// entrantFormats are the formats whose creation seats the entrants a host ticks
+// — the ones described by a scheme. A flat format (OD, KSI, multi) seats the
+// whole fest roster under the fest's own numbers and marks who did not play on
+// its refusals tab, so it is not offered the picker at all and refuses a chosen
+// list rather than dropping it (gamebuild.Create).
+var entrantFormats = []string{games.Brain, games.SI, games.Troika, games.EK}
+
+// SeatsChosenEntrants reports whether a format seats the entrant list a host
+// picked, rather than the whole fest roster.
+func SeatsChosenEntrants(gameType string) bool {
+	return slices.Contains(entrantFormats, gameType)
+}
+
 // entrantPicker offers the fest's registry as this Game's entrant list. Ticking
 // nothing means everyone, which is what a one-game fest wants and what every
-// Game did before Games could differ.
+// Game did before Games could differ. gamecreate.js reveals it for the formats
+// named in data-game-entrants and disables its boxes for the rest — a hidden
+// checkbox still posts, and a format that cannot honour one says so.
 func entrantPicker(data hostGameCreateData) dopeui.Item {
 	s := dopestrings.Default
 	if len(data.Entrants) == 0 {
@@ -214,7 +234,12 @@ func entrantPicker(data hostGameCreateData) dopeui.Item {
 		boxes = append(boxes, dopeui.Checkbox(dopeui.Name("entrant_id"),
 			dopeui.Value(strconv.FormatInt(entrant.ID, 10)), dopeui.Text(entrant.Label)))
 	}
-	return dopeui.Details(dopeui.Summary(dopeui.Text(s.Host.Games.EntrantsSummary())), dopeui.Col(boxes...))
+	items := []dopeui.Item{dopeui.Data("game-entrants", strings.Join(entrantFormats, " "))}
+	if !SeatsChosenEntrants(data.SelectedType) {
+		items = append(items, dopeui.Hidden())
+	}
+	items = append(items, dopeui.Summary(dopeui.Text(s.Host.Games.EntrantsSummary())), dopeui.Col(boxes...))
+	return dopeui.Details(items...)
 }
 
 // hostGameSettingsDoc builds a game's settings page: a small form to rename the

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   FONTS,
+  JUMP_ICON,
   accountFromMe,
   fontFromMe,
   fontPreload,
@@ -52,9 +53,9 @@ test("fontFromMe takes the account's face, and nothing else's word for it", () =
 test("menuItems starts with appearance and keeps jump before extras", () => {
   const onClick = () => {};
   const items = menuItems({
-    jump: { label: "Редактировать", href: "/host", external: true },
+    jump: { label: "Редактировать", href: "/host", external: true, icon: "pencil" },
     extras: [
-      { label: "Скачать", href: "/x.xlsx", download: true },
+      { label: "Скачать", href: "/x.xlsx", download: true, icon: "file-down" },
       { label: "Сбросить", onClick },
     ],
     account: null,
@@ -62,11 +63,31 @@ test("menuItems starts with appearance and keeps jump before extras", () => {
   });
   assert.deepEqual(items[0], { kind: "appearance", icon: "palette" });
   assert.deepEqual(items[1], {
-    kind: "link", label: "Редактировать", href: "/host", title: "", external: true, download: false,
+    kind: "link", label: "Редактировать", href: "/host", title: "", external: true, download: false, icon: "pencil",
   });
   assert.equal(items[2].download, true);
   assert.deepEqual(items[3], { kind: "action", label: "Сбросить", title: "", onClick });
   assert.equal(items.length, 4);
+});
+
+// Every row of the menu is a glyph and a word. A link extra used to drop the
+// icon its page named, and the jump was built without one at all, so «Режим
+// ведущего» and the two download rows sat in the column with a hole where
+// their glyph belonged.
+test("every menu row carries a glyph", () => {
+  const items = menuItems({
+    jump: { label: "Режим ведущего", href: "/host" },
+    extras: [
+      { label: "Скачать XLSX", href: "/x.xlsx", download: true, icon: "file-down" },
+      { label: "Прогреть", onClick: () => {}, icon: "cloud-download" },
+    ],
+    account: { loggedIn: true },
+    config: {},
+  });
+  assert.deepEqual(items.map((i) => i.icon), ["palette", JUMP_ICON, "file-down", "cloud-download", "user"]);
+  // A jump that names its own keeps it.
+  const named = menuItems({ jump: { label: "Страница зрителя", href: "/", icon: "eye" }, extras: [], account: null, config: {} });
+  assert.equal(named[1].icon, "eye");
 });
 
 test("menuItems account entry uses config labels with kit defaults", () => {
@@ -91,6 +112,7 @@ test("jumpFromDataset reads the body data-jump-* contract", () => {
     label: "Перейти", href: "/f/1", title: "", external: true,
   });
   assert.equal(jumpFromDataset({ jumpHref: "/f/2", jumpLabel: "Смотреть" }).label, "Смотреть");
+  assert.equal(jumpFromDataset({ jumpHref: "/f/3", jumpIcon: "settings" }).icon, "settings");
 });
 
 test("accountFromMe mirrors the /api/auth/me contract", () => {

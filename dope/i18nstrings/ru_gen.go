@@ -373,6 +373,9 @@ var RU = Strings{
 			SeedUnknown: func(seed string) string {
 				return fmt.Sprintf("seed: %s — не random, не xlsx и не код игры этого феста", seed)
 			},
+			WholeRoster: func(name string) string {
+				return fmt.Sprintf("%s сажает весь ростер феста под его же номерами — снимите отметки в «Составе игры», а кто не играет, отметьте в «Отказах» на странице игры", name)
+			},
 		},
 		Recompile: GamebuildRecompileStrings{
 			StartedBouts: func(names string) string {
@@ -535,7 +538,7 @@ var RU = Strings{
 			},
 			EkJsonLabel: func() string { return "JSON-схема" },
 			EntrantsHint: func() string {
-				return "Отметьте, кто играет в этой игре. Если не отметить никого, играют все — а номера игра раздаёт свои, с единицы, так что одна и та же команда бывает второй в ЭК и четвёртой в ОД. Командная игра сажает за стол команды, личная — игроков; сначала команды, потом игроки."
+				return "Отметьте, кто играет в этой игре. Если не отметить никого, играют все — а номера игра раздаёт свои, с единицы, так что одна и та же команда бывает второй в ЭК и четвёртой в брейне. Командная игра сажает за стол команды, личная — игроков; сначала команды, потом игроки."
 			},
 			EntrantsSummary:      func() string { return "Состав игры" },
 			ErrorEkSchemeMissing: func() string { return "Вставьте JSON-схему ЭК или опишите её схемой" },
@@ -600,6 +603,9 @@ var RU = Strings{
 			TypeOd:          func() string { return "ОД" },
 			TypeSi:          func() string { return "Личная СИ" },
 			TypeTroika:      func() string { return "Тройка" },
+			WholeRosterHint: func() string {
+				return "Играют все команды феста, под его же номерами — кто не играл, отмечается в «Отказах» на странице игры."
+			},
 		},
 		Pages: HostPagesStrings{
 			CreateFestSummary: func() string { return "Создать фест" },

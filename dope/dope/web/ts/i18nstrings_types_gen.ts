@@ -340,6 +340,7 @@ export type Strings = {
       pastedTeams: () => string;
       schemeRequired: () => string;
       seedUnknown: (seed: string) => string;
+      wholeRoster: (name: string) => string;
     };
     recompile: {
       startedBouts: (names: string) => string;
@@ -495,6 +496,7 @@ export type Strings = {
       typeOd: () => string;
       typeSi: () => string;
       typeTroika: () => string;
+      wholeRosterHint: () => string;
     };
     pages: {
       createFestSummary: () => string;
