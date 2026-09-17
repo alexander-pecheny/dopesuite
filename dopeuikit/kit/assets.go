@@ -20,8 +20,8 @@ var (
 	LoginJS = assets.LoginJS
 	// MenuJS is the site-wide chrome script (theme boot + ☰ menu), /static/menu.js.
 	MenuJS = assets.MenuJS
-	// Fonts is the font directory (the variable noto-sans-*/jetbrains-mono-* woff2),
-	// served at /static/fonts/.
+	// Fonts is the font directory (the variable noto-sans-*/jetbrains-mono-*/
+	// inter-fix-ra-* woff2), served at /static/fonts/.
 	Fonts = assets.Fonts
 )
 

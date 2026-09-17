@@ -58,13 +58,16 @@ func NewApp(opts Options) (*App, error) {
 // CoreChrome is the design system's default page shell (sheet/full kinds, the
 // sync dot). Apps may start from it or supply their own Chrome.
 func CoreChrome() Chrome {
+	// No FontPreloads: the body face is a reader's choice (Noto Sans or Inter Fix
+	// RA, kept per browser), so the page cannot name the file. menu.js preloads
+	// whichever one is stored, from the <head> and before the body paints, and a
+	// line here would only fetch a font half the readers do not use.
 	return Chrome{
-		Lang:         "ru",
-		Viewport:     "width=device-width, initial-scale=1",
-		Stylesheets:  []string{"/static/styles.css"},
-		FontPreloads: []string{"/static/fonts/noto-sans-var.woff2"},
-		BootScripts:  []string{"/static/menu.js"},
-		DefaultKind:  "sheet",
+		Lang:        "ru",
+		Viewport:    "width=device-width, initial-scale=1",
+		Stylesheets: []string{"/static/styles.css"},
+		BootScripts: []string{"/static/menu.js"},
+		DefaultKind: "sheet",
 		PageKinds: map[string]PageKind{
 			"sheet": {Body: []string{"host"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame"}},
 			"full":  {Body: []string{"host"}, Main: []string{"match-main"}},

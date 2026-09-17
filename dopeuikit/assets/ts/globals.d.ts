@@ -1,5 +1,5 @@
 // The kit's published window contract, included by every module's typecheck.
-import type { Contrast, MenuConfig, MenuExtra, MenuJump } from "./menu-model";
+import type { Contrast, FontPref, MenuConfig, MenuExtra, MenuJump } from "./menu-model";
 
 declare global {
   interface Window {
@@ -11,6 +11,8 @@ declare global {
       openModal(): void;
       readonly theme: string;
       readonly contrast: Contrast;
+      readonly font: FontPref;
+      setFont(font: string): void;
     };
     dopeMenuConfig?: MenuConfig;
   }

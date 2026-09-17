@@ -65,6 +65,33 @@
   src: url("/static/fonts/jetbrains-mono-var.woff2") format("woff2");
 }
 
+/* The body font a reader may switch to instead (Appearance → the font picker,
+   stored per browser; menu.js writes data-font on <html> before first paint).
+   Inter Fix RA is Inter with the Russian faults fixed — the stress mark over Ю
+   and я, the spacing and kerning of the Cyrillic — plus Raveo's tailed a and
+   flagless 1; scripts/interfixra.py builds these two faces, cut to the same
+   400..700 and the same coverage as Noto Sans above.
+
+   These two declarations cost NOTHING to a reader who keeps the default: a face
+   is fetched when text is set in it, and nothing is until --font-sans names it.
+   That is also why the preload of the body font is menu.js's and not the page's
+   — a <link rel=preload> in the head cannot know which of the two to ask for. */
+@font-face {
+  font-family: "Inter Fix RA";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/static/fonts/inter-fix-ra-var.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Inter Fix RA";
+  font-style: italic;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/static/fonts/inter-fix-ra-var-italic.woff2") format("woff2");
+}
+
 :root {
   color-scheme: light;
 
@@ -501,10 +528,18 @@
   --inline-fade-bg: linear-gradient(to right, var(--paper-transparent), var(--paper));
 
   --font-sans: "Noto Sans", Arial, sans-serif;
+  /* The alternative body font, which a reader turns on for the whole site. Noto
+     Sans stays behind it: Inter answers 1793 of its 2028 codepoints, and the
+     ones it does not (archaic Cyrillic, the mathematical alphabets) then come
+     from the default face instead of from tofu. */
   /* JetBrains Mono is shipped now (it was system-mono roulette before), but the
      stack keeps its fallbacks: the subset drops astral codepoints, so anything
      exotic in the 4s editor still lands on a system mono rather than tofu. */
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+html[data-font="inter-fix-ra"] {
+  --font-sans: "Inter Fix RA", "Noto Sans", Arial, sans-serif;
 }
 
 /* ── scroll-fade utilities ────────────────────────────────

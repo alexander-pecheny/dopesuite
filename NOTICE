@@ -12,6 +12,7 @@ The shipped binaries embed third-party work under its own terms:
 | typst 0.15 | compiled into `typst.wasm` | Apache-2.0 — `licenses/Apache-2.0.txt` |
 | Noto Sans | `xy/internal/chgk/handout/assets/`, `dopeuikit/assets/fonts/` | OFL-1.1 — `licenses/OFL-1.1.txt` |
 | JetBrains Mono | `dopeuikit/assets/fonts/` | OFL-1.1 — `licenses/OFL-1.1.txt` |
+| Inter Fix RA (Inter + Raveo, rebuilt by `scripts/interfixra.py`) | `dopeuikit/assets/fonts/` | OFL-1.1 — `licenses/OFL-1.1.txt` |
 | @noble/hashes | `xy/web/assets/static/vendor/` | MIT — `licenses/MIT-noble-hashes.txt` |
 
 Go dependencies are declared in each module's `go.mod` and carry their own

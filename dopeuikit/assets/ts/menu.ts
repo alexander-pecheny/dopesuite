@@ -5,12 +5,15 @@
 // decisions live in menu-model.ts; this file is storage + DOM.
 import {
   type Contrast,
+  FONTS,
+  type FontPref,
   type MenuAccount,
   type MenuExtra,
   type MenuItem,
   type MenuJump,
   type ThemePref,
   accountFromMe,
+  fontPreload,
   jumpFromDataset,
   menuItems,
   pickPref,
@@ -21,6 +24,7 @@ import S from "./i18nstrings.js";
 
 const THEME_KEY = "dope-theme";
 const CONTRAST_KEY = "dope-contrast";
+const FONT_KEY = "dope-font";
 const root = document.documentElement;
 
 function storage(): Storage | null {
@@ -47,6 +51,7 @@ function writePref(key: string, value: string): void {
 
 let theme: ThemePref = readPref(THEME_KEY, ["light", "dark", "system"], "system");
 let contrast: Contrast = readPref(CONTRAST_KEY, ["regular", "high"], "regular");
+let font: FontPref = readPref(FONT_KEY, FONTS, "noto");
 
 function prefersDark(): boolean {
   try {
@@ -66,9 +71,26 @@ function syncThemeColor(): void {
   if (c) meta.setAttribute("content", c);
 }
 
+// The body font, and with it the one preload the page does not carry itself:
+// which face to fetch is a stored preference, so the head cannot name it and the
+// request is made here instead — still inside <head>, before the body paints.
+function applyFont(): void {
+  root.dataset.font = font;
+  const href = fontPreload(font);
+  if (document.querySelector(`link[rel="preload"][href="${href}"]`)) return;
+  const link = document.createElement("link");
+  link.rel = "preload";
+  link.as = "font";
+  link.type = "font/woff2";
+  link.crossOrigin = "anonymous";
+  link.href = href;
+  (document.head || root).appendChild(link);
+}
+
 function apply(): void {
   root.dataset.theme = resolveTheme(theme, prefersDark());
   root.dataset.contrast = contrast;
+  applyFont();
   syncThemeColor();
 }
 apply(); // synchronous — runs during <head> parse, before the body paints
@@ -121,6 +143,16 @@ window.dopeMenu = {
   },
   get contrast() {
     return contrast;
+  },
+  get font() {
+    return font;
+  },
+  // The picker itself is a page's to draw — xy puts it in the profile, with its
+  // own words for each face — so the chrome publishes only the choice.
+  setFont: (value: string) => {
+    font = pickPref(value, FONTS, "noto");
+    writePref(FONT_KEY, font);
+    applyFont();
   },
 };
 

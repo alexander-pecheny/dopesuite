@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  FONTS,
   accountFromMe,
+  fontPreload,
   jumpFromDataset,
   menuItems,
   pickPref,
@@ -19,6 +21,16 @@ test("resolveTheme honours explicit prefs and maps system to the OS scheme", () 
   assert.equal(resolveTheme("dark", false), "dark");
   assert.equal(resolveTheme("system", true), "dark");
   assert.equal(resolveTheme("system", false), "light");
+});
+
+test("fontPreload names one roman face per choice, and Noto for anything else", () => {
+  assert.deepEqual(FONTS, ["noto", "inter-fix-ra"]);
+  assert.equal(fontPreload("noto"), "/static/fonts/noto-sans-var.woff2");
+  assert.equal(fontPreload("inter-fix-ra"), "/static/fonts/inter-fix-ra-var.woff2");
+  // A preference written by an older build must still preload something.
+  assert.equal(fontPreload("comic"), "/static/fonts/noto-sans-var.woff2");
+  assert.equal(pickPref("comic", FONTS, "noto"), "noto");
+  assert.equal(pickPref("inter-fix-ra", FONTS, "noto"), "inter-fix-ra");
 });
 
 test("menuItems starts with appearance and keeps jump before extras", () => {

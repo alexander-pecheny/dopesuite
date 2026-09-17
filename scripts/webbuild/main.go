@@ -60,7 +60,10 @@ func xyPrecache() (urls []string, version string) {
 		}
 		h.Write(b)
 	}
-	addDir := func(fsDir, urlPrefix string) {
+	// skip names a file that ships but is NOT part of the shell: it still counts
+	// toward the cache version (a rebuilt file must invalidate), it is just not
+	// downloaded at install time.
+	addDir := func(fsDir, urlPrefix string, skip func(string) bool) {
 		ents, err := os.ReadDir(fsDir)
 		if err != nil {
 			fatal(err.Error())
@@ -69,7 +72,9 @@ func xyPrecache() (urls []string, version string) {
 			if e.IsDir() {
 				continue
 			}
-			addURL(urlPrefix + e.Name())
+			if skip == nil || !skip(e.Name()) {
+				addURL(urlPrefix + e.Name())
+			}
 			hashFile(fsDir + "/" + e.Name())
 		}
 	}
@@ -96,7 +101,13 @@ func xyPrecache() (urls []string, version string) {
 	for _, p := range kitTS {
 		hashFile(p)
 	}
-	addDir("dopeuikit/assets/fonts", "/static/fonts/")
+	// The alternative body font is opt-in (the profile's font picker), and the
+	// shell is what every install downloads: precaching it would hand the second
+	// face to every reader, which is the cost the picker exists to avoid. A reader
+	// who does pick it fetches it once, and the runtime static rule caches it.
+	addDir("dopeuikit/assets/fonts", "/static/fonts/", func(name string) bool {
+		return strings.HasPrefix(name, "inter-fix-ra-")
+	})
 	// Walk static/ recursively so a future subdirectory can't silently miss the
 	// shell (the 504 class this derivation exists to kill). dist/ is skipped —
 	// its URLs derive from xySources above; styles.css/manifest have their own

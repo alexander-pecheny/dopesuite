@@ -7,6 +7,27 @@ export type ThemePref = "light" | "dark" | "system";
 export type Theme = "light" | "dark";
 export type Contrast = "regular" | "high";
 
+// The body fonts a reader may choose between. The id is what <html data-font>
+// carries and what core.css switches --font-sans on; "noto" is the default and
+// the one core.css states without a data-font at all.
+export type FontPref = "noto" | "inter-fix-ra";
+export const FONTS: readonly FontPref[] = ["noto", "inter-fix-ra"];
+
+// The roman face of each font, which is the one a page is overwhelmingly set in
+// and therefore the only one worth preloading. The italics and the symbol
+// subset are left to the stylesheet: a page that sets none never asks for them.
+const ROMAN: Record<FontPref, string> = {
+  "noto": "/static/fonts/noto-sans-var.woff2",
+  "inter-fix-ra": "/static/fonts/inter-fix-ra-var.woff2",
+};
+
+// fontPreload is the href the chrome preloads for a choice. It is a function of
+// the STORED preference rather than a fixed line in the head, so that a reader
+// who switched fonts fetches one body face and not two.
+export function fontPreload(pref: FontPref): string {
+  return ROMAN[pref] ?? ROMAN["noto"];
+}
+
 export interface MenuJump {
   label: string;
   href: string;
