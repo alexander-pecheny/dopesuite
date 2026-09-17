@@ -25,12 +25,14 @@ Consequences we accept:
   release tarballs ship `LICENSE` and `NOTICE`, and `licenses/` holds the texts
   of the embedded third-party work (typst under Apache-2.0, Noto Sans and
   JetBrains Mono under OFL-1.1, @noble/hashes under MIT).
-- The choice is effectively one-way. Relicensing later needs every contributor's
-  agreement, which today is one person but will not stay that way.
-- Nothing in the dependency tree forces copyleft — this is a deliberate choice,
-  not an inherited one.
+- The choice is effectively one-way. Relicensing later would need the agreement
+  of every contributor, which today means one person, but that will not stay
+  true.
+- Nothing in the dependency tree obliges us to use copyleft. This is a
+  deliberate choice rather than an inherited one.
 
-We rejected MIT and Apache-2.0 (simplest and best understood, but they permit
-exactly the closed modified instance that the encryption story cannot tolerate)
-and a bare "you may run this" note in the README (no right to modify or
-redistribute, and legally thin next to GitHub's own terms).
+We rejected MIT and Apache-2.0. They are the simplest and the best understood,
+but they allow exactly the thing the encryption model cannot tolerate: a
+modified instance whose source nobody can see. We also rejected a bare "you may
+run this" note in the README, which grants no right to modify or redistribute
+and is legally thin next to GitHub's own terms.

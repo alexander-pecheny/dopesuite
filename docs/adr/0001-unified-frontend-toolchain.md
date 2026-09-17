@@ -6,11 +6,12 @@ date: 2026-07-23
 # One frontend toolchain and one paradigm: strict-TS ES modules everywhere
 
 After dope's unified-model redesign gave it a TypeScript stack (dope ADR-0003)
-the monorepo held three frontend conventions: dope's classic IIFE scripts wired
-through `window.*` globals, xy's untyped no-build ES modules, and dopeuikit's
-untyped, untested shared assets (menu.js, login.js). An audit found essentially
-no copy-pasted code between the apps — the drift was toolchain and convention,
-not duplication. We unify both:
+the monorepo had three different frontend conventions in it: dope's classic
+IIFE scripts wired together through `window.*` globals, xy's untyped ES modules
+with no build step, and dopeuikit's untyped and untested shared assets, menu.js
+and login.js. We audited the code and found almost nothing copy-pasted between
+the apps. What had drifted apart was the toolchain and the conventions, not the
+code itself. We are unifying both:
 
 - **Toolchain at the repo root**: one `package.json`, `tsconfig.base.json`, and
   `scripts/webbuild/` with per-module targets; `just build-web [target...]` is
@@ -32,18 +33,21 @@ not duplication. We unify both:
   carved into typed `create(deps)` kernels while converting) → dope (paradigm
   change + annotation).
 
-We rejected per-app toolchains (the drift engine this ADR exists to stop),
-lenient-then-ratchet typing (two strictness regimes to police), and unifying the
-apps' sync engines or CSS layers (genuinely different problems; the shared
-layers already live in dopeuikit/dopecore).
+We rejected three alternatives. Keeping a toolchain per app is what caused the
+drift this ADR exists to stop. Starting with lenient typing and tightening it
+later would mean policing two different strictness regimes at once. And unifying
+the apps' sync engines or CSS layers would be unifying things that genuinely
+solve different problems; what is actually shared already lives in dopeuikit and
+dopecore.
 
 ## Amendment (2026-07-23): node removed from the toolchain
 
 The original toolchain ran on node: `webbuild.mjs` drove esbuild's JS API, npm
 fetched packages, `npm run typecheck` spawned tsc per project, `node --test` ran
-the frontend tests. But esbuild is a Go library and tsc 7 is a native binary
-delivered through npm packaging — node was only ever glue, and it put ~1.5 s of
-runtime startup into every `just dev-web-only`. Node is now out entirely:
+the frontend tests. But esbuild is a Go library, and tsc 7 is a native binary that happens to be
+delivered through npm packaging. Node was never doing anything but gluing those
+together, and it added about 1.5 seconds of startup to every `just
+dev-web-only`. Node is now gone completely:
 
 - **Bundling is pure Go**: `scripts/webbuild/` (own module, esbuild pinned in
   `go.mod`) replaces `webbuild.mjs`, byte-identical output. The server dev path

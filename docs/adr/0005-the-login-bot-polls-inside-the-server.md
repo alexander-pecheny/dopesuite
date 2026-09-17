@@ -14,12 +14,13 @@ paths over loopback HTTP behind a shared secret (`/api/telegram/register`,
 second loopback endpoint, to send a DM and to ask whether the bot was still
 polling.
 
-Two processes, two bridges, one host. What the boundary bought was the DB
-discipline, and the server already had that: the writes the bot triggers are
-the server's own, under the server's own transaction rules. Everything else
-the boundary cost was real — two more units, two more env files, a shared
-secret, a health probe, four deploy targets, and one failure mode (server up,
-bot down or secret mismatch) that existed only because there were two.
+That is two processes and two bridges on one host. What the boundary bought us
+was the database discipline, and the server already had that anyway: the writes
+the bot causes are the server's own writes, under the server's own transaction
+rules. Everything the boundary cost us was real: two more systemd units, two
+more env files, a shared secret, a health probe, four deploy targets, and one
+failure mode that only existed because there were two processes — the server up
+with the bot down, or with the secret mismatched.
 
 ## Decision
 
@@ -32,22 +33,26 @@ bot down or secret mismatch) that existed only because there were two.
 - **The token is the switch.** An instance with `XY_BOT_TOKEN` /
   `TELEGRAM_BOT_TOKEN` polls; an instance without one does not, and says
   telegram login is not on offer. Staging and dev checkouts carry no token.
-- **One poller per token, enforced twice.** Telegram hands each update to
-  exactly one poller, and a second one does not fail loudly — it wins some
-  updates and loses the rest. On a host, `tgbot.AcquirePollLock` holds an
-  `flock` named after the token's hash for as long as the process polls
-  (check-and-hold in one syscall, dropped by the kernel on `kill -9`; a unit
-  under `ProtectSystem=strict` needs `ReadWritePaths=/run/lock`). Across
-  hosts, only Telegram knows, and it says so: a 409 is `tgbot.ErrConflict`,
-  which backs the loop off hard and reports the bot unusable rather than
-  retrying every three seconds in silence, as it used to.
+- **One poller per token, enforced in two places.** Telegram gives each update
+  to exactly one poller, and a second poller does not fail in any obvious way:
+  it simply wins some updates and loses the others. Within one host,
+  `tgbot.AcquirePollLock` holds an `flock` named after the hash of the token for
+  as long as the process is polling. It checks and holds in a single syscall,
+  and the kernel drops it even on `kill -9`. A unit running under
+  `ProtectSystem=strict` needs `ReadWritePaths=/run/lock` for this. Across
+  hosts, only Telegram knows, and it tells us: a 409 becomes
+  `tgbot.ErrConflict`, which backs the loop off hard and reports that the bot is
+  unusable, instead of retrying every three seconds in silence the way it used
+  to.
 
 ## Consequences
 
-Bot uptime is now server uptime: every deploy bounces it. Long polling is
-offset-based and the conversation holds no state, so no update is lost — an
-in-flight poll is dropped and reconnects. A panic while handling an update
-would take the web server down, so the handler is wrapped in a `recover`.
+The bot's uptime is now the server's uptime, so every deploy restarts it. Long
+polling works from an offset and the conversation keeps no state, so no update
+is lost: a poll that was in flight is dropped and then reconnects. A panic while
+handling an update would bring the web server down with it, so the handler is
+wrapped in a `recover`.
 
-If a server ever runs as more than one replica, in-process polling breaks and
-the bot has to come back out. Nothing in either app is near that.
+If a server is ever run as more than one replica, polling in-process stops
+working and the bot has to be moved back out. Neither app is anywhere near
+that.

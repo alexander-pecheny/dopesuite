@@ -1,36 +1,40 @@
 ---
 name: xy-cli
-description: Read and write xy boards from the shell with xy-cli — cards (4s), comments, labels, search, export. Use when a task involves the content of an xy board: reading questions, editing them, leaving comments, triaging with labels, or exporting a tour.
+description: Read and write xy boards from the shell with xy-cli: cards in 4s form, comments, labels, search and export. Use this when a task involves the content of an xy board, such as reading questions, editing them, leaving comments, triaging with labels, or exporting a tour.
 ---
 
 # Working on an xy board from the shell
 
-`xy-cli` is an ordinary xy client: it authenticates with an API token and
-decrypts board content locally with a key the user unlocked once. Everything it
-prints is plaintext that came out of ciphertext on this machine — the server
-never saw it.
+`xy-cli` is an ordinary xy client. It authenticates with an API token, and it
+decrypts board content on this machine, using a key the user unlocked once.
+Everything it prints is plaintext that was decrypted here, and the server never
+saw any of it.
 
 Build/install: `cd xy && just cli` → `~/.local/bin/xy-cli`.
 
 ## Before you can do anything
 
-Both steps are the **user's** — you cannot do them, so ask:
+Both of these steps are the **user's** to do. You cannot do them yourself, so
+ask:
 
 1. `xy-cli login --url https://xy.pecheny.me` — the token is minted in the
    browser at `/profile/tokens` and pasted in (or passed as `XY_TOKEN`).
-2. `xy-cli unlock <board>` — the board passphrase, typed once. The key is then
-   held in `~/.config/xy-cli/state.json` (0600) until `xy-cli lock`.
+2. `xy-cli unlock <board>`, which asks for the board passphrase once. The key is
+   then kept in `~/.config/xy-cli/state.json`, with mode 0600, until somebody
+   runs `xy-cli lock`.
 
-`xy-cli boards` shows which boards have a key (🔓). Without one, every content
-command fails and says so — do not try to work around it.
+`xy-cli boards` shows which boards currently have a key, marked 🔓. Without a
+key, every command that touches content fails and says so. Do not try to work
+around that.
 
 ## The shape of every command
 
-- **Name the board every time**: `--board <id|имя>`. There is no current board.
-- **Human text by default, `--json` when you need exactness** (ids to feed the
-  next command).
-- **Card content is raw 4s**: `card get` prints it verbatim, `card set` and
-  `card add` read it from stdin.
+- **Name the board every time**, with `--board <id|имя>`. There is no such
+  thing as a current board.
+- **Output is human-readable text by default.** Add `--json` when you need exact
+  values, such as ids to pass to the next command.
+- **Card content is raw 4s.** `card get` prints it exactly as stored, and
+  `card set` and `card add` read it from stdin.
 
 ```
 xy-cli board show --board 12                    # lists and cards, with ids
@@ -55,28 +59,33 @@ xy-cli attachment add 412 --board 12 картинка.png
 
 ## Rules that matter
 
-- **Always pass `--expect`** when rewriting a card: take the hash from
-  `card get` (stderr line, or the `hash` field with `--json`) and pass it back.
-  Without it you will silently overwrite an edit a human made in between.
-- **A `card set` that changes the 4s writes a `desc_edit` entry** to the лента
-  automatically — your edits are as reviewable as a human's. Don't try to
-  suppress it. Re-writing identical text changes nothing and records nothing.
-- **Never invent a 4s marker.** The format is chgksuite's and parity is
-  byte-for-byte: `?` question, `!` answer, `=` зачёт, `!=` незачёт, `/`
-  комментарий, `^` источник, `@` автор, `##` тур heading. A card may also carry
-  versions — separator lines `(hidden-comment xy-version: имя)` — and `source`
-  folds them back into one numbered question, as an export does.
-- **`@логин` in a comment is a Mention** only if the login is on the board;
-  xy-cli resolves it against the roster and the named member gets a
-  notification. Use it when you want a human to actually see something.
-- **Deletes are 14-day tombstones**, not instant destruction — but still ask
-  before deleting anything you did not create.
-- Comments and cards are **Russian-language content**. Write in Russian on a
+- **Always pass `--expect`** when you rewrite a card. Take the hash that
+  `card get` prints, either on its stderr line or in the `hash` field with
+  `--json`, and pass it back. Without it, you will silently overwrite any edit a
+  person made in the meantime.
+- **A `card set` that changes the 4s automatically writes a `desc_edit` entry**
+  to the лента, so your edits can be reviewed just like a person's. Do not try to
+  suppress that. Writing back identical text changes nothing and records
+  nothing.
+- **Never invent a 4s marker.** The format belongs to chgksuite and we match it
+  byte for byte. The markers are `?` for the question, `!` for the answer, `=`
+  for зачёт, `!=` for незачёт, `/` for комментарий, `^` for источник, `@` for
+  автор and `##` for a тур heading. A card may also hold several versions,
+  separated by lines reading `(hidden-comment xy-version: имя)`. `source` folds
+  those back into a single numbered question, the same way an export does.
+- **`@логин` in a comment is a Mention** only when that login belongs to
+  somebody on the board. xy-cli resolves it against the roster, and the member it
+  names gets a notification. Use it when you want a person to actually see
+  something.
+- **A delete creates a tombstone that lasts 14 days**, rather than destroying
+  anything immediately. Even so, ask before you delete anything you did not
+  create yourself.
+- Cards and comments are **in Russian**. Write in Russian when you write on a
   board.
 
 ## What xy-cli deliberately does not do
 
-Create or delete boards, change a board passphrase, manage members, or touch
-Test Sessions and Playings. Those stay in the browser. Read markers and the 🔔
-feed are not implemented either: reading a card with the CLI never clears a
-human's unread dot.
+It cannot create or delete boards, change a board passphrase, manage members, or
+touch Test Sessions and Playings. All of those stay in the browser. Read markers
+and the 🔔 feed are not implemented either, which means that reading a card with
+the CLI never clears somebody's unread dot.

@@ -5,11 +5,11 @@ date: 2026-09-03
 
 # User-facing strings live in TOML catalogs and are generated into typed code
 
-Both apps carried their copy inline: about 4,000 lines of Russian across Go
-handlers, dope's Go-built pages, TS modules, `.dopeui` attributes and export
-headers, with `http.Error(w, err.Error())` in dope showing internal errors to
-the browser. Prose written at the call site is prose nobody edits, and it
-cannot be translated.
+Both apps had their copy written inline: roughly 4,000 lines of Russian spread
+across Go handlers, dope's Go-built pages, TS modules, `.dopeui` attributes and
+export headers. On top of that, dope's `http.Error(w, err.Error())` was showing
+internal errors straight to the browser. Text written at the call site is text
+nobody ever goes back and edits, and it cannot be translated.
 
 ## Decision
 
@@ -39,11 +39,12 @@ cannot be translated.
   one generic line plus a log entry.
 - **`.dopeui` references strings as `@surface.group.key`**, resolved by the
   expander against the page's `Strings`; the validator rejects unknown ids.
-- **A Cyrillic lint** fails on any Cyrillic outside the catalogs, generated
-  files, tests and an explicit allowlist. The allowlist is the migration's
-  burn-down: strings move Surface by Surface, verbatim, and rewording happens
-  afterwards in TOML. It is line-based, so it cannot tell a Russian comment
-  from a Russian string; the comments were translated rather than exempted.
+- **A Cyrillic lint** fails on any Cyrillic outside the catalogs, the generated
+  files, the tests and an explicit allowlist. The allowlist is how we track the
+  migration: strings are moved Surface by Surface, word for word, and any
+  rewording happens afterwards in the TOML. The lint works line by line, so it
+  cannot tell a Russian comment from a Russian string. We translated the
+  comments rather than adding exemptions for them.
 
 ## Considered
 
@@ -51,7 +52,7 @@ cannot be translated.
 - Runtime lookup by id (`t("board.delete.confirm")`, i18next, go-i18n): one
   interpreter per language, ids checked only when the string is reached, and
   a rebuild is needed to ship a change anyway since the catalog is embedded.
-- Source string as key (gettext): keeps the Russian in the code, which is what
-  the change exists to remove.
-- Keying by domain concept rather than Surface: scatters one screen across
-  files, and «Сохранить» belongs to no concept.
+- Using the source string as the key, as gettext does: that keeps the Russian
+  in the code, which is exactly what this change exists to remove.
+- Keying by domain concept instead of by Surface: that would scatter one screen
+  across several files, and «Сохранить» does not belong to any concept.
