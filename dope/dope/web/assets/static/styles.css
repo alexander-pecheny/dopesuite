@@ -596,15 +596,23 @@
   height: calc(var(--question-size) + 11px);
 }
 
+/* The line-height is `em` and not a bare 1.1 on purpose. A bare number is
+   inherited as a number and each child resolves it against its own font size,
+   so a .q-num-wide number would get a shorter box than the number next to it
+   and, in a stack that sits on the cell's bottom edge, hang lower than it. An
+   `em` value is inherited as the length it computed to here, which gives every
+   number the same box whatever size it is printed at. The count opts back out:
+   its box is its own small line. */
 .od-detailed-qhead {
   display: flex;
   flex-direction: column;
   align-items: center;
-  line-height: 1.1;
+  line-height: 1.1em;
 }
 
 .od-detailed-qcount {
   font-size: 0.62em;
+  line-height: 1.1;
   color: var(--muted);
   min-height: 1em;
 }
