@@ -1,7 +1,7 @@
 // od.ts — the OD/ChGK game page (host + viewer): tabbed results/input sheets,
 // entry-cell navigation, shootout rounds, the Screen projector board, SSE state
 // sync. Converted from the legacy od.js; boots itself on import (ADR-0001).
-import {cssEscape, td, th} from "./cells.js";
+import {cssEscape, questionNumberNode, td, th} from "./cells.js";
 import {buildFlatScoreTable, computePlaces} from "./score-table.js";
 import type {ScoreTableRow, ScoreTableTheme, ScoreTableThemeRow} from "./score-table.js";
 import {resultsTeamCell} from "./standings.js";
@@ -754,11 +754,9 @@ function entryQuestionHeadCell(qIndex: number, displayNumber: number, className:
 // the detailed page's column headers. Before it's ticked, just the number shows.
 function applyEntryQuestionHeadContent(cell: HTMLElement, displayNumber: number, stat: QuestionStat | undefined): void {
   cell.textContent = "";
-  if (stat?.completed) {
-    cell.appendChild(detailedQuestionHeadLabel(displayNumber, stat));
-  } else {
-    cell.textContent = String(displayNumber);
-  }
+  cell.appendChild(stat?.completed
+    ? detailedQuestionHeadLabel(displayNumber, stat)
+    : questionNumberNode(displayNumber));
 }
 
 // refreshEntryQuestionHead re-renders one entry column header in place (the input
@@ -1875,9 +1873,7 @@ function detailedQuestionHeadLabel(displayNumber: number, stat: QuestionStat | u
   // Once the question is entered (ticked on the entry page) show the team count even when
   // it's 0; before that the slot stays empty.
   count.textContent = stat?.completed ? String(stat.validCount || 0) : "";
-  const num = document.createElement("span");
-  num.textContent = String(displayNumber);
-  wrap.append(count, num);
+  wrap.append(count, questionNumberNode(displayNumber));
   return wrap;
 }
 
@@ -2638,7 +2634,7 @@ function buildResultsTableInner(): HTMLTableElement {
     head.appendChild(resultsTourHeader(t));
     if (resultsExpandedTours.has(t)) {
       for (let q = 0; q < tourLengths[t]; q++) {
-        head.appendChild(th(tourStarts[t] + q + 1, "results-answer-head"));
+        head.appendChild(th(questionNumberNode(tourStarts[t] + q + 1), "results-answer-head"));
       }
     }
   }
@@ -2647,7 +2643,7 @@ function buildResultsTableInner(): HTMLTableElement {
     if (resultsExpandedShootouts.has(roundIndex)) {
       const round = state.shootoutRounds[roundIndex];
       for (let q = 0; q < (round?.answers || []).length; q++) {
-        head.appendChild(th(shootoutQuestionNumber(roundIndex, q), "results-answer-head results-shootout-answer-head"));
+        head.appendChild(th(questionNumberNode(shootoutQuestionNumber(roundIndex, q)), "results-answer-head results-shootout-answer-head"));
       }
     }
   }

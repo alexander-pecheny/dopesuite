@@ -6,7 +6,7 @@
 // cell you click through and a wider one is a cell you type into; either way
 // what may be entered is the scheme's, never the page's.
 
-import {cssEscape, td, th} from "./cells.js";
+import {cssEscape, questionNumberNode, td, th} from "./cells.js";
 import type {CellContent} from "./cells.js";
 import {resultsTeamCell, standingsTable} from "./standings.js";
 import {buildRosterView} from "./fest-roster.js";
@@ -243,15 +243,13 @@ function gameHead(game: MultiRules["minigames"][number]): CellContent {
 // A head is the question's number — with its nominal above, muted, where the
 // minigame pays unevenly (OD's qhead stack).
 function questionHead(num: number, nominal: number | null): CellContent {
-  if (nominal === null) return String(num);
+  if (nominal === null) return questionNumberNode(num);
   const wrap = document.createElement("span");
   wrap.className = "od-detailed-qhead";
   const price = document.createElement("span");
   price.className = "od-detailed-qcount";
   price.textContent = String(nominal);
-  const number = document.createElement("span");
-  number.textContent = String(num);
-  wrap.append(price, number);
+  wrap.append(price, questionNumberNode(num));
   return wrap;
 }
 

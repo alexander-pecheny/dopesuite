@@ -133,6 +133,19 @@ export function formatPlace(place: number | null | undefined): string {
   return place != null && place > 0 ? String(place) : "";
 }
 
+// questionNumberNode is the question number a column header shows. A question
+// column is one square wide, which fits two digits, so from 100 on the number
+// is printed a step smaller — otherwise the third digit fills the square edge
+// to edge and a row of headers reads as one run of digits ("100101102").
+// Always a span, never bare text: an element of its own is what lets the
+// smaller size win over the font-size the header's own rule sets.
+export function questionNumberNode(displayNumber: number): HTMLElement {
+  const node = document.createElement("span");
+  if (displayNumber >= 100) node.className = "q-num-wide";
+  node.textContent = String(displayNumber);
+  return node;
+}
+
 // nameNode is a link to `href` (an external rating page) when one is given,
 // otherwise a plain span — both carrying `className` so styling is the same.
 export function nameNode(text: string, href: string, className: string): HTMLElement {

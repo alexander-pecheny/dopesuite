@@ -580,6 +580,15 @@
   min-width: var(--question-col);
 }
 
+/* A question number from 100 on, in a column one square wide: a step smaller,
+   so the third digit doesn't fill the square edge to edge and a row of headers
+   doesn't read as one run of digits. The class goes on the number's own span
+   (questionNumberNode in cells.ts), which is how it wins over the font size the
+   header itself is given. */
+.q-num-wide {
+  font-size: var(--text-xs);
+}
+
 /* Подробно question header: count of teams that took the question, muted and
    smaller, stacked in the free space above the question number. */
 .match-table.od-detailed thead th.question-head:has(.od-detailed-qhead) {
