@@ -87,3 +87,15 @@ func TestFitRowsReal(t *testing.T) {
 	}
 	t.Logf("fitted rows: %v", rows)
 }
+
+func TestAllQIsOneTeamWhenColumnsExceedIt(t *testing.T) {
+	for hndt, want := range map[string]string{
+		"columns: 6\nhandouts_per_team: 3\n\nhandout": "columns: 3\nhandouts_per_team: 3\nrows: 1\nmax_width: 0.5\n\nhandout\n",
+		"columns: 3\nmax_width: 0.5\n\nhandout":       "columns: 3\nmax_width: 0.5\nrows: 1\n\nhandout\n",
+		"columns: 2\n\nhandout":                       "columns: 1\nrows: 3\nmax_width: 0.5\n\nhandout\n",
+	} {
+		if got := parseSFBlocks(hndt)[0].allQ(); got != want {
+			t.Errorf("allQ(%q) = %q, want %q", hndt, got, want)
+		}
+	}
+}

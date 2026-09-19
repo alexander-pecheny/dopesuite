@@ -134,8 +134,7 @@ func SplitFit(ctx context.Context, hndt string, images map[string][]byte, a Args
 	// all-questions, one team each
 	var allParts []string
 	for _, b := range blocks {
-		step := b.rowStep()
-		allParts = append(allParts, strings.TrimRight(b.with(map[string]*string{"rows": ptr(strconv.Itoa(step))}), "\n"))
+		allParts = append(allParts, strings.TrimRight(b.allQ(), "\n"))
 	}
 	allPDF, err := r.renderPDF(ctx, strings.Join(allParts, "\n---\n")+"\n")
 	if err != nil {
@@ -216,14 +215,15 @@ func (b sfBlock) handoutsPerTeam() int {
 	return 3
 }
 
-func (b sfBlock) maxWidthMultiplier() int {
-	mw := 1.0
-	if v, ok := b.meta["max_width"]; ok {
-		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
-			mw = f
-		}
+func (b sfBlock) maxWidth() float64 {
+	if f, err := strconv.ParseFloat(b.meta["max_width"], 64); err == nil && f > 0 {
+		return f
 	}
-	m := int(1.0/mw + 1e-9)
+	return 1
+}
+
+func (b sfBlock) maxWidthMultiplier() int {
+	m := int(1.0/b.maxWidth() + 1e-9)
 	if m < 1 {
 		m = 1
 	}
@@ -247,6 +247,25 @@ func gcd(a, b int) int {
 		return -a
 	}
 	return a
+}
+
+// allQ mirrors all_q_block_text: one team's worth of handouts, in the widest
+// divisor of handouts_per_team that fits the columns, with max_width scaled
+// down so a cell stays the size it has in the split version.
+func (b sfBlock) allQ() string {
+	columns, n := b.columns(), b.handoutsPerTeam()
+	one := 1
+	for d := 2; d <= n && d <= columns; d++ {
+		if n%d == 0 {
+			one = d
+		}
+	}
+	updates := map[string]*string{"rows": ptr(strconv.Itoa(n / one))}
+	if one != columns {
+		updates["columns"] = ptr(strconv.Itoa(one))
+		updates["max_width"] = ptr(formatFloat(b.maxWidth() * float64(one) / float64(columns)))
+	}
+	return upsertMeta(b.raw, updates)
 }
 
 // with returns the block's .hndt text with metadata updated/removed (a nil value
