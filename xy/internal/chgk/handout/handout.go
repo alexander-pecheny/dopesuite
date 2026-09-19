@@ -202,16 +202,17 @@ func parseHandouts(contents string) []block {
 	for _, raw := range splitBlocks(contents) {
 		b := block{}
 		var text []string
-		for _, line := range strings.Split(strings.TrimSpace(raw), "\n") {
+		// A blank line inside the text stays: it is an empty line on the
+		// handout. Only the ones around it, and the one under the settings, go.
+		for _, line := range strings.Split(raw, "\n") {
 			sp := strings.SplitN(line, ":", 2)
 			if len(sp) == 2 && reservedWords[sp[0]] {
 				b[sp[0]] = wrapVal(sp[0], sp[1])
-			} else if strings.TrimSpace(line) != "" {
+			} else {
 				text = append(text, strings.TrimSpace(line))
 			}
 		}
-		if len(text) > 0 {
-			t := strings.TrimSpace(strings.Join(text, "\n"))
+		if t := strings.TrimSpace(strings.Join(text, "\n")); t != "" {
 			if _, raw := b["raw_tex"]; !raw {
 				t = escapeTypst(t)
 			}

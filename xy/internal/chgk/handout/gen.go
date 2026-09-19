@@ -60,6 +60,8 @@ func Generate(doc fsource.Doc, base, dir string, o GenerateOptions) ([]File, []W
 		return nil, nil, err
 	}
 
+	label := labelRe(i18n.LabelsForOrDefault(o.Language, "").Field("handout"))
+
 	var handouts []handout
 	var warnings []Warning
 	for _, p := range doc {
@@ -69,30 +71,31 @@ func Generate(doc fsource.Doc, base, dir string, o GenerateOptions) ([]File, []W
 		}
 		number := fmt.Sprintf("%v", q.Get("number"))
 		text := questionText(q.Get("question"))
+		var h handout
 		if m := handoutRe.FindStringSubmatch(text); m != nil {
-			body := postprocess(m[handoutRe.SubexpIndex("handout_text")])
-			h := handout{number: number, text: body}
-			if name, ok := imageIn(body); ok {
-				// chgksuite writes the path its own image search resolved, which
-				// is an absolute one; the renderer on either side reads it back.
-				path, err := filepath.Abs(filepath.Join(dir, name))
-				if err != nil {
-					return nil, nil, err
-				}
-				if _, err := os.Stat(path); err != nil {
-					warnings = append(warnings, Warning{number, s.Docs.Handout.ImageMissing()})
-					continue
-				}
-				h.text, h.image = "", path
-			}
-			handouts = append(handouts, h)
+			h = handout{number: number, text: postprocess(m[handoutRe.SubexpIndex("handout_text")])}
+		} else if lower := strings.ToLower(text); strings.Contains(lower, "раздат") || strings.Contains(lower, "роздан") || strings.Contains(lower, "(img") {
+			// The label goes, a picture below it is the handout, and otherwise
+			// the whole text is offered for the author to cut down.
+			warnings = append(warnings, Warning{number, s.Docs.Handout.BadMarkup()})
+			h = handout{number: number, text: postprocess(strings.TrimSpace(label.ReplaceAllString(text, "")))}
+		} else {
 			continue
 		}
-		lower := strings.ToLower(text)
-		if strings.Contains(lower, "раздат") || strings.Contains(lower, "роздан") || strings.Contains(lower, "(img") {
-			warnings = append(warnings, Warning{number, s.Docs.Handout.BadMarkup()})
-			handouts = append(handouts, handout{number: number, text: postprocess(text)})
+		if name, ok := imageIn(h.text); ok {
+			// chgksuite writes the path its own image search resolved, which
+			// is an absolute one; the renderer on either side reads it back.
+			path, err := filepath.Abs(filepath.Join(dir, name))
+			if err != nil {
+				return nil, nil, err
+			}
+			if _, err := os.Stat(path); err != nil {
+				warnings = append(warnings, Warning{number, s.Docs.Handout.ImageMissing()})
+				continue
+			}
+			h.text, h.image = "", path
 		}
+		handouts = append(handouts, h)
 	}
 
 	byQuestion := map[string][]string{}
@@ -137,6 +140,12 @@ func Generate(doc fsource.Doc, base, dir string, o GenerateOptions) ([]File, []W
 }
 
 type handout struct{ number, text, image string }
+
+// labelRe matches the handout label opening the text, which is how a parsed
+// .docx usually puts it: «Раздаточный материал.» above the picture or the text.
+func labelRe(label string) *regexp.Regexp {
+	return regexp.MustCompile(`(?i)^` + regexp.QuoteMeta(label) + `[.:]?\s*`)
+}
 
 func postprocess(s string) string { return strings.ReplaceAll(s, `\_`, "_") }
 

@@ -41,3 +41,13 @@ test("parseHndtMetaByQuestion keeps question_label, so the style survives the mo
   const hndt = "for_question: 1\ncolumns: 3\nquestion_label: inside\n\nтекст";
   assert.equal(parseHndtMetaByQuestion(hndt)["1"], "columns: 3\nquestion_label: inside");
 });
+
+test("generateHndt reads a handout that has no bracket, as a parsed .docx writes it", () => {
+  const cards = [
+    { id: 1, kind: "question", desc: "? Раздаточный материал.\n(img pic.png)\nЧто изображено?\n! а" },
+    { id: 2, kind: "question", desc: "? Раздаточный материал\nThere is ******* of ******.\nВосстановите слова.\n! б" },
+    { id: 3, kind: "question", desc: "? Без картинки.\n! в" },
+  ];
+  const out = generateHndt(cards, ["1", "2", "3"], {});
+  assert.equal(out, "for_question: 1\ncolumns: 3\n\nimage: pic.png\n---\nfor_question: 2\ncolumns: 3\n\nThere is ******* of ******.\nВосстановите слова.");
+});

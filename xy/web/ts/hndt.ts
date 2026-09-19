@@ -3,6 +3,7 @@
 // internal/chgk/fsource/testdata/parity.json holds one document this writes
 // and the Go side parses.
 
+import S from "./i18nstrings.js";
 import { blockText, bracketSpans, dropHidden, imgInText, isHandoutBody, numberQuestionCards, parseBlocks, questionText } from "./chgk.js";
 import type { ChgkCard, Handout } from "./chgk.js";
 
@@ -42,7 +43,21 @@ function handoutForCard(desc: string | null | undefined): Handout | null {
     if (name) return { kind: "image", name };
     return { kind: "text", text: postprocessHandout(text) };
   }
-  return null;
+  return unbracketedHandout(q);
+}
+
+// unbracketedHandout is the handout of a question that opens with the label,
+// or carries a picture, without the bracket. A parsed .docx usually arrives
+// like this, «Раздаточный материал.» on a line of its own and the picture or
+// the text under it. The label goes, a picture is the handout, and otherwise
+// the whole text is offered for the author to cut down in the .hndt.
+const HANDOUT_LABEL = new RegExp(`^${S.chgk.label.handout()}[.:]?\\s*`, "i");
+function unbracketedHandout(q: string): Handout | null {
+  const name = imgInText(q);
+  if (name) return { kind: "image", name };
+  if (!HANDOUT_LABEL.test(q)) return null;
+  const text = postprocessHandout(q.replace(HANDOUT_LABEL, ""));
+  return text ? { kind: "text", text } : null;
 }
 
 // hndtBlock formats one .hndt block: a for_question header, the saved per-question
