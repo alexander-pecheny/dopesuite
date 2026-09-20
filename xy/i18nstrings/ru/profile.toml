@@ -65,7 +65,7 @@ name = "Настройка ширины / высоты"
 # Label of the workspace-width slider.
 board_w = "Ширина рабочей области"
 # Hint under that slider.
-board_w_hint = "Доска центрируется на экране — на широком мониторе не приходится смотреть в край."
+board_w_hint = "Пока списки помещаются в эту ширину, доска центрируется на экране. Если их больше, доска занимает весь экран."
 # Label of the list-width slider.
 list_w = "Ширина списка"
 # Label of the card-text-height slider.

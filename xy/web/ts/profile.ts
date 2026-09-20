@@ -131,16 +131,21 @@ const PREVIEW_SCREEN_W = 2000;
 // Fake cards, as question lengths in text lines — varied so the card-height
 // clamp visibly cuts some cards and not others.
 const PREVIEW_CARDS = [3, 6, 1, 9, 2, 4, 7, 2];
+// Few enough lists that they fit inside the default width, so the slider has
+// something to move: past the point where they stop fitting the board takes the
+// whole screen and the width no longer decides anything (.kanban in styles.css).
+const PREVIEW_LISTS = 4;
 
 function renderPreview(): void {
   const k = (preview.clientWidth || 360) / PREVIEW_SCREEN_W;
   preview.style.setProperty("--pv-board-w", sizes.boardW == null ? "none" : Math.round(sizes.boardW * k) + "px");
   preview.style.setProperty("--pv-list-w", Math.round(sizes.listW * k) + "px");
+  preview.style.setProperty("--pv-list-count", String(PREVIEW_LISTS));
   // A text line is ~1.4× the font size; scale it like everything else so the
   // font knob visibly re-packs the wireframe cards.
   preview.style.setProperty("--pvb-line-h", Math.max(1.5, sizes.cardFont * 1.4 * k).toFixed(1) + "px");
   const lists = [];
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < PREVIEW_LISTS; i++) {
     const cards = [];
     for (let j = 0; j < 3; j++) {
       const total = PREVIEW_CARDS[(i + j * 3) % PREVIEW_CARDS.length];

@@ -2254,7 +2254,7 @@ var RU = Strings{
 		Sizes: ProfileSizesStrings{
 			BoardW: func() string { return "Ширина рабочей области" },
 			BoardWHint: func() string {
-				return "Доска центрируется на экране — на широком мониторе не приходится смотреть в край."
+				return "Пока списки помещаются в эту ширину, доска центрируется на экране. Если их больше, доска занимает весь экран."
 			},
 			BoardWMax: func() string { return "вся ширина" },
 			CardH:     func() string { return "Текст карточки" },

@@ -518,6 +518,9 @@ function render(): void {
     }
   }
   kanban.append(renderAddList());
+  // The workspace width caps the board only while the lists fit inside it, and
+  // their number is the one thing the stylesheet cannot work out by itself.
+  kanban.style.setProperty("--klist-count", String(kanban.children.length));
   paintLabels();
   // Unconditional: renderBar is also what HIDES the bar, so guarding it on
   // mass.mode left "Done" with nothing to close.
