@@ -112,6 +112,9 @@ here when it needs type metadata.
   a seed source is `ImportSeeds(FromKSI()|FromScheme()|FromXLSX())`, and the
   `game` source reads the source Game's one table.
 - `numbering` — team-number assignment. `edit` — match-edit value types.
+- `towns` — which country a town is in, as the ISO code the screen draws a flag
+  from: buff answers for every town it has mirrored, and one it has not is asked
+  of rating.chgk.info directly, once, at import (ADR-0020).
 - `view` holds shared presentation DTOs such as `HostFest`. They are kept in a
   leaf package so that the server and the web handlers can both refer to them
   without importing each other.
@@ -131,6 +134,9 @@ here when it needs type metadata.
 - `festaccess` — per-fest access/role persistence (DB-backed authz).
 - `auditmw` — audit-log write middleware. `storeutil` — scheme/query helpers.
 - `sqlitez` — low-level SQLite helpers.
+- `buffdb` — buff's mirror of rating.chgk.info (`DOPE_BUFF_DB`), opened
+  read-only and failing soft: a missing file, table or query gives an empty
+  answer rather than an error (ADR-0020).
 
 ### `export/` — output generation
 

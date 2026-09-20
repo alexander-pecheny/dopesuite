@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 
 	"dope/dope/platform/realtime"
+	"dope/dope/storage/buffdb"
 	"dope/dope/storage/store"
 )
 
@@ -45,6 +46,10 @@ type Engine struct {
 	// Epoch is the per-process random token stamped on every SSE envelope/init so
 	// clients detect a restart (seq reset) and resync.
 	Epoch string
+	// Buff is buff's mirror of rating.chgk.info, opened read-only and failing
+	// soft (ADR-0020). It answers which country a town is in; with no mirror
+	// configured the screen falls back to its own list of cities.
+	Buff *buffdb.Store
 	// Assets is the embedded (or disk, in dev) static asset filesystem.
 	Assets fs.FS
 	// AssetNoCache is true in disk/dev mode (assets served no-cache).

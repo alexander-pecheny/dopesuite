@@ -33,6 +33,7 @@ import (
 	"dope/dope/platform/realtime"
 	"dope/dope/platform/roles"
 	"dope/dope/storage/auditmw"
+	"dope/dope/storage/buffdb"
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/journal"
 	"dope/dope/storage/migrate"
@@ -276,9 +277,16 @@ func newServer() (*server, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	// A mirror that is missing or unreadable opens as Disabled rather than as an
+	// error: dope runs without it, minus the flags on the screen.
+	buff, err := buffdb.Open(os.Getenv(buffdb.PathEnv))
+	if err != nil {
+		log.Printf("buff mirror not opened: %v", err)
+	}
 	srv := &server{
 		eng: core.Engine{
 			DB:              db,
+			Buff:            buff,
 			FestID:          festID,
 			ActiveGameID:    gameID,
 			ActiveMatchCode: matchCode,

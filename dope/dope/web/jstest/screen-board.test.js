@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {normalizeScreenSettings, packRows, planScreen, teamFlag} from "./dist/screen-board.js";
+import {normalizeScreenSettings, packRows, planScreen, readCityCountry, teamFlag} from "./dist/screen-board.js";
 
 const rows = (groups) => groups.map((group, i) => ({i, group}));
 const metrics = {headH: 10, rowH: 10, gapH: 4, colW: 100, gapPx: 0, availW: 300, availH: 100};
@@ -19,6 +19,14 @@ test("teamFlag: flag by city, globe for сборная, nothing for an unknown t
   assert.equal(teamFlag("Борский корабел", " Нижний Новгород "), "🇷🇺");
   assert.equal(teamFlag("Сборная мира", "Париж"), "🌍");
   assert.equal(teamFlag("X", "Гадюкино"), "");
+});
+
+test("teamFlag prefers what the server resolved over the built-in list", () => {
+  const known = readCityCountry({"Гадюкино": "ch", "Москва": "CHE", "Париж": 7});
+  assert.deepEqual(known, {"гадюкино": "CH"});
+  assert.equal(teamFlag("X", " Гадюкино ", known), "🇨🇭");
+  assert.equal(teamFlag("X", "Париж", known), "🇫🇷");
+  assert.deepEqual(readCityCountry(null), {});
 });
 
 test("packRows breaks columns by height and charges a gap between groups", () => {

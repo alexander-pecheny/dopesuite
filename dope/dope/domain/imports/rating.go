@@ -16,6 +16,7 @@ import (
 	"dope/dope/domain/games"
 	"dope/dope/domain/overrides"
 	"dope/dope/domain/roster"
+	"dope/dope/domain/towns"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
@@ -69,7 +70,23 @@ func FetchAndImportRatingRoster(eng *core.Engine, ctx context.Context, festID, r
 	if err != nil {
 		return RatingRosterImportResult{}, err
 	}
+	resolveTeamCountries(ctx, eng, teams)
 	return ImportFestRoster(eng, ctx, festID, ratingID, teams)
+}
+
+// resolveTeamCountries fills in the country each team's town is in, before the
+// import opens its write transaction: buff answers for every town it has
+// mirrored, and the towns it has not are asked about over HTTP, which has no
+// business inside a transaction.
+func resolveTeamCountries(ctx context.Context, eng *core.Engine, teams []roster.FestRosterImportTeam) {
+	townIDs := make([]int64, 0, len(teams))
+	for _, team := range teams {
+		townIDs = append(townIDs, team.TownID)
+	}
+	countries := towns.NewResolver(eng.Buff).Countries(ctx, townIDs)
+	for i := range teams {
+		teams[i].Country = countries[teams[i].TownID]
+	}
 }
 
 func fetchRatingFestRoster(ctx context.Context, ratingID int64) ([]roster.FestRosterImportTeam, error) {
@@ -115,14 +132,15 @@ func ratingResultsToFestRoster(results []ratingFestResult) ([]roster.FestRosterI
 		if name == "" {
 			return nil, fmt.Errorf("team %d has no name", index+1)
 		}
-		city := ratingTownName(result.Current.Town)
-		if city == "" {
-			city = ratingTownName(result.Team.Town)
+		town := result.Current.Town
+		if ratingTownName(town) == "" {
+			town = result.Team.Town
 		}
 		team := roster.FestRosterImportTeam{
 			RatingID: result.Team.ID,
 			Name:     name,
-			City:     city,
+			City:     ratingTownName(town),
+			TownID:   ratingTownID(town),
 			Players:  make([]roster.FestRosterImportPlayer, 0, len(result.TeamMembers)),
 		}
 		for memberIndex, member := range result.TeamMembers {
@@ -150,6 +168,13 @@ func ratingTownName(town *ratingTown) string {
 		return ""
 	}
 	return strings.TrimSpace(town.Name)
+}
+
+func ratingTownID(town *ratingTown) int64 {
+	if town == nil {
+		return 0
+	}
+	return town.ID
 }
 
 func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID int64, teams []roster.FestRosterImportTeam) (RatingRosterImportResult, error) {
@@ -406,7 +431,7 @@ func festRostersEqual(a, b []roster.FestRosterImportTeam) bool {
 	}
 	for i := range a {
 		if a[i].RatingID != b[i].RatingID || a[i].Name != b[i].Name ||
-			a[i].City != b[i].City || a[i].Number != b[i].Number ||
+			a[i].City != b[i].City || a[i].Country != b[i].Country || a[i].Number != b[i].Number ||
 			len(a[i].Players) != len(b[i].Players) {
 			return false
 		}
@@ -498,15 +523,15 @@ func applyFestRosterDiffTx(ctx context.Context, tx *sql.Tx, festID int64, teams 
 		}
 		if existing, ok := existingByRating[team.RatingID]; ok && team.RatingID > 0 {
 			if _, err := tx.ExecContext(ctx, `
-update fest_teams set name = ?, city = ?, position = ?, number = ?, deleted = 0
- where id = ?`, team.Name, team.City, importOrder, numberParam, existing.ID); err != nil {
+update fest_teams set name = ?, city = ?, country = ?, position = ?, number = ?, deleted = 0
+ where id = ?`, team.Name, team.City, team.Country, importOrder, numberParam, existing.ID); err != nil {
 				return err
 			}
 			teamIDs[i] = existing.ID
 		} else {
 			id, err := store.InsertReturningID(ctx, tx, `
-insert into fest_teams(fest_id, rating_id, name, city, position, number, deleted)
-values(?, ?, ?, ?, ?, ?, 0)`, festID, util.NullableInt64(team.RatingID), team.Name, team.City, importOrder, numberParam)
+insert into fest_teams(fest_id, rating_id, name, city, country, position, number, deleted)
+values(?, ?, ?, ?, ?, ?, ?, 0)`, festID, util.NullableInt64(team.RatingID), team.Name, team.City, team.Country, importOrder, numberParam)
 			if err != nil {
 				return err
 			}

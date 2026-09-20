@@ -37,9 +37,13 @@ export function normalizeScreenSettings(raw: unknown): ScreenSettings {
   return s;
 }
 
-// City → ISO-3166 alpha-2 lookup for the country-flag option. Russian-domain
-// tournaments are mostly RU/CIS with the occasional international team; unknown
-// cities simply get no flag. Extend freely as new cities appear.
+// City → ISO-3166 alpha-2 lookup for the country-flag option, and only the
+// fallback one: the server ships the fest's own cities in the init payload,
+// resolved through buff's mirror of rating.chgk.info, and that answer wins.
+// This list is what is left for a page served without a mirror. Extend it
+// freely, but follow api.rating.chgk.net/towns: a town it leaves without a
+// country — Crimea, Abkhazia, South Ossetia, Karabakh — gets no flag here
+// either.
 export const CITY_COUNTRY: Record<string, string> = {
   "москва": "RU", "мск": "RU", "санкт-петербург": "RU", "спб": "RU", "петербург": "RU",
   "питер": "RU", "новосибирск": "RU", "екатеринбург": "RU", "казань": "RU",
@@ -53,8 +57,8 @@ export const CITY_COUNTRY: Record<string, string> = {
   "пенза": "RU", "липецк": "RU", "тула": "RU", "киров": "RU", "чебоксары": "RU",
   "калининград": "RU", "брянск": "RU", "курск": "RU", "иваново": "RU",
   "магнитогорск": "RU", "тверь": "RU", "ставрополь": "RU", "белгород": "RU",
-  "сочи": "RU", "сургут": "RU", "владимир": "RU", "чита": "RU", "симферополь": "RU",
-  "севастополь": "RU", "калуга": "RU", "смоленск": "RU", "вологда": "RU",
+  "сочи": "RU", "сургут": "RU", "владимир": "RU", "чита": "RU",
+  "калуга": "RU", "смоленск": "RU", "вологда": "RU",
   "мурманск": "RU", "саранск": "RU", "тамбов": "RU", "грозный": "RU",
   "якутск": "RU", "кострома": "RU", "петрозаводск": "RU", "нальчик": "RU",
   "орёл": "RU", "орел": "RU", "новороссийск": "RU", "великий новгород": "RU",
@@ -106,11 +110,26 @@ export function flagEmoji(cc: string): string {
 
 // teamFlag is the leading emoji when "Show country" is on: a globe for a
 // national side (rating.chgk gives national/all-star sides that town), otherwise
-// the flag of the city's country, or "" when the city is unknown.
-export function teamFlag(name: string, city: string): string {
+// the flag of the city's country, or "" when the city is unknown. `known` is
+// what the server resolved for this fest's cities; CITY_COUNTRY answers for the
+// cities it did not.
+export function teamFlag(name: string, city: string, known?: Record<string, string>): string {
   if (`${name} ${city}`.toLowerCase().includes("сборн")) return "🌍";
-  const cc = CITY_COUNTRY[city.trim().toLowerCase()];
+  const key = city.trim().toLowerCase();
+  const cc = known?.[key] || CITY_COUNTRY[key];
   return cc ? flagEmoji(cc) : "";
+}
+
+// readCityCountry takes the init payload's city → ISO map as it arrives, which
+// is to say without trusting it: a page may be served by an older build, or by
+// one whose mirror answered nothing.
+export function readCityCountry(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [city, iso] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof iso === "string" && /^[A-Za-z]{2}$/.test(iso)) out[city.toLowerCase()] = iso.toUpperCase();
+  }
+  return out;
 }
 
 export interface Grouped {

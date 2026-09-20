@@ -62,7 +62,7 @@ CREATE TABLE fest_teams(
   position real not null,
   number integer,
   deleted integer not null default 0
-);
+, country TEXT);
 
 -- table fests
 CREATE TABLE fests(

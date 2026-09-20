@@ -5,6 +5,7 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/numbering"
+	"dope/dope/domain/towns"
 	"dope/dope/platform/roles"
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/store"
@@ -57,6 +58,10 @@ type gameInitPayload struct {
 	// (colours, font scale, columns, city/country toggles). Shared by all hosts
 	// of the game; the client seeds its settings panel from it on load.
 	ScreenSettings json.RawMessage `json:"screenSettings,omitempty"`
+	// CityCountry is the ISO-3166 code of each city on the fest's roster, so the
+	// screen draws its flags from rating.chgk.info's answer rather than from the
+	// list of cities the page carries as a fallback.
+	CityCountry map[string]string `json:"cityCountry,omitempty"`
 	// Seq is the game-state scope's seq at render time, so the SSE client seeds
 	// its lastSeq to exactly the state it was handed. Without it every viewer
 	// would start at 0 and the first remote edit would gap-resync them all at
@@ -203,6 +208,7 @@ func (s *server) buildGameInit(ctx context.Context, scope festScope) (gameInitPa
 	if unnumbered, err := numbering.HasUnnumbered(ctx, s.eng.DB, scope.FestID); err == nil {
 		payload.TeamsUnnumbered = unnumbered
 	}
+	payload.CityCountry = towns.FestCityCountries(ctx, s.eng.DB, s.eng.Buff, scope.FestID)
 	return payload, nil
 }
 

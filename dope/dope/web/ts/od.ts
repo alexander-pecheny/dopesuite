@@ -18,7 +18,7 @@ import { DopeEntryModel } from "./entry-model.js";
 import { icon } from "./icons_gen.js";
 import * as od from "./od-protocol.js";
 import type {ODScheme, ODState, ODTeam, QuestionStat, RankKey, ShootoutMark, ShootoutRound} from "./od-protocol.js";
-import {SCREEN_DEFAULTS, normalizeScreenSettings, planScreen, teamFlag} from "./screen-board.js";
+import {SCREEN_DEFAULTS, normalizeScreenSettings, planScreen, readCityCountry, teamFlag} from "./screen-board.js";
 import type {ScreenSettings} from "./screen-board.js";
 import S from "./i18nstrings.js";
 
@@ -97,6 +97,9 @@ const initScreenSettings: unknown = (gameInit?.screenSettings &&
   typeof gameInit.screenSettings === "object")
   ? gameInit.screenSettings
   : {};
+// The country of each city on the roster, as the server resolved it through
+// buff's mirror of rating.chgk.info.
+const cityCountry = readCityCountry(gameInit?.cityCountry);
 const shell = mountGamePage({
   app: "od",
   root: odRoot,
@@ -2222,7 +2225,7 @@ let screenPanelOpen = false;
 
 function teamFlagEmoji(index: number): string {
   const team: Partial<ODTeam> = state.teams[index] || {};
-  return teamFlag(team.name || "", team.city || "");
+  return teamFlag(team.name || "", team.city || "", cityCountry);
 }
 
 // saveScreenSettings persists the current settings to the server (shared per

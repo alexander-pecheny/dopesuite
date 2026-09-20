@@ -21,8 +21,14 @@ type FestRosterImportTeam struct {
 	RatingID int64
 	Name     string
 	City     string
-	Number   int64
-	Players  []FestRosterImportPlayer
+	// TownID and Country are the rating site's own town and the ISO-3166 code of
+	// the country it puts that town in, resolved at import. Country is what the
+	// screen draws a flag from; it is empty for a team typed by hand, and for one
+	// from a town the site leaves without a country.
+	TownID  int64
+	Country string
+	Number  int64
+	Players []FestRosterImportPlayer
 }
 
 type GameStateBroadcast struct {
@@ -158,12 +164,12 @@ order by tt.position, tt.id, ttp.roster_order, p.id`, festID)
 
 func LoadFestRosterImportTeamsTx(ctx context.Context, q store.Queryer, festID int64) ([]FestRosterImportTeam, error) {
 	teams, err := store.CollectRows(ctx, q, `
-select coalesce(rating_id, 0), name, city, coalesce(number, 0)
+select coalesce(rating_id, 0), name, city, coalesce(country, ''), coalesce(number, 0)
 from fest_teams
 where fest_id = ? and deleted = 0
 order by position, id`, []any{festID}, func(rows *sql.Rows) (FestRosterImportTeam, error) {
 		var team FestRosterImportTeam
-		if err := rows.Scan(&team.RatingID, &team.Name, &team.City, &team.Number); err != nil {
+		if err := rows.Scan(&team.RatingID, &team.Name, &team.City, &team.Country, &team.Number); err != nil {
 			return team, err
 		}
 		return team, nil

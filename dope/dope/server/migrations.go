@@ -778,6 +778,14 @@ where kind = 'rr' and block_code = '' and code glob 's[0-9]*-g[0-9]*'`); err != 
 		}
 		return nil
 	}},
+	{Version: 27, Name: "fest_teams.country", Up: func(db *sql.DB) error {
+		// v27: the ISO-3166 code of the team's town, so the screen draws a flag
+		// from what rating.chgk.info says rather than from a list of cities kept
+		// by hand. Filled on import; empty for every team imported before.
+		return store.AddColumnsIfMissing(db, "fest_teams", []store.ColumnSpec{
+			{Name: "country", Type: "TEXT"},
+		})
+	}},
 }
 
 func migrateDB(db *sql.DB) error { return schema.Apply(db, migrations) }
