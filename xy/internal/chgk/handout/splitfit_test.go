@@ -94,8 +94,16 @@ func TestAllQIsOneTeamWhenColumnsExceedIt(t *testing.T) {
 		"columns: 3\nmax_width: 0.5\n\nhandout":       "columns: 3\nmax_width: 0.5\nrows: 1\n\nhandout\n",
 		"columns: 2\n\nhandout":                       "columns: 1\nrows: 3\nmax_width: 0.5\n\nhandout\n",
 	} {
-		if got := parseSFBlocks(hndt)[0].allQ(); got != want {
+		if got := parseSFBlocks(hndt)[0].allQ(nil); got != want {
 			t.Errorf("allQ(%q) = %q, want %q", hndt, got, want)
 		}
+	}
+}
+
+func TestAllQCarriesTheFittedImageSize(t *testing.T) {
+	b := parseSFBlocks("columns: 3\nimage: pic.png\n\n")[0]
+	want := "columns: 3\nimage: pic.png\nrows: 1\nresize_image: 0.8\n"
+	if got := b.allQ(b.resizeUpdate(0.8)); got != want {
+		t.Errorf("allQ = %q, want %q", got, want)
 	}
 }

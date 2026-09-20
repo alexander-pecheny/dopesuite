@@ -89,6 +89,7 @@ func SplitFit(ctx context.Context, hndt string, images map[string][]byte, a Args
 	// Fit + render each block concurrently (bounded by CPU count), then the
 	// all-questions PDF. Outputs kept in block order.
 	outputs := make([]output, len(blocks)+1)
+	resizes := make([]map[string]*string, len(blocks))
 	workers := runtime.NumCPU()
 	if workers > len(blocks) {
 		workers = len(blocks)
@@ -124,6 +125,7 @@ func SplitFit(ctx context.Context, hndt string, images map[string][]byte, a Args
 				return
 			}
 			outputs[i] = output{fmt.Sprintf("q%s.pdf", b.qnum()), pdf}
+			resizes[i] = resize
 		}(i, b)
 	}
 	wg.Wait()
@@ -133,8 +135,8 @@ func SplitFit(ctx context.Context, hndt string, images map[string][]byte, a Args
 
 	// all-questions, one team each
 	var allParts []string
-	for _, b := range blocks {
-		allParts = append(allParts, strings.TrimRight(b.allQ(), "\n"))
+	for i, b := range blocks {
+		allParts = append(allParts, strings.TrimRight(b.allQ(resizes[i]), "\n"))
 	}
 	allPDF, err := r.renderPDF(ctx, strings.Join(allParts, "\n---\n")+"\n")
 	if err != nil {
@@ -252,7 +254,7 @@ func gcd(a, b int) int {
 // allQ mirrors all_q_block_text: one team's worth of handouts, in the widest
 // divisor of handouts_per_team that fits the columns, with max_width scaled
 // down so a cell stays the size it has in the split version.
-func (b sfBlock) allQ() string {
+func (b sfBlock) allQ(resize map[string]*string) string {
 	columns, n := b.columns(), b.handoutsPerTeam()
 	one := 1
 	for d := 2; d <= n && d <= columns; d++ {
@@ -260,7 +262,7 @@ func (b sfBlock) allQ() string {
 			one = d
 		}
 	}
-	updates := map[string]*string{"rows": ptr(strconv.Itoa(n / one))}
+	updates := withRows(resize, n/one)
 	if one != columns {
 		updates["columns"] = ptr(strconv.Itoa(one))
 		updates["max_width"] = ptr(formatFloat(b.maxWidth() * float64(one) / float64(columns)))
