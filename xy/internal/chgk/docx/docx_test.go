@@ -31,13 +31,29 @@ func docText(t *testing.T, docx []byte) string {
 		data, _ := io.ReadAll(rc)
 		rc.Close()
 		var b strings.Builder
-		for _, m := range reWT.FindAllStringSubmatch(string(data), -1) {
+		for _, m := range reWT.FindAllStringSubmatch(plainNoBreakHyphen(string(data)), -1) {
 			b.WriteString(unescapeXML(m[1]))
 		}
 		return b.String()
 	}
 	t.Fatal("no document.xml")
 	return ""
+}
+
+// reNBHyphenEl is the element xy writes for a non-breaking hyphen, with the
+// <w:t> it interrupts.
+var reNBHyphenEl = regexp.MustCompile(`</w:t><w:noBreakHyphen/><w:t(?: xml:space="preserve")?>`)
+
+// plainNoBreakHyphen writes both spellings of the non-breaking hyphen as U+2011,
+// so the parity checks can compare everything else. chgksuite fences a plain
+// hyphen with word joiners, which Noto Sans draws 0.6em wide; xy emits
+// <w:noBreakHyphen/>, and that ends the run's current <w:t> (issue #87, and
+// nbHyphenRune in docx.go).
+func plainNoBreakHyphen(s string) string {
+	s = reNBHyphenEl.ReplaceAllString(s, "\u2011")
+	// A hyphen at either end of a run has no <w:t> on that side to merge into.
+	s = strings.ReplaceAll(s, "<w:noBreakHyphen/>", "<w:t>\u2011</w:t>")
+	return strings.ReplaceAll(s, "\u2060-\u2060", "\u2011")
 }
 
 func unescapeXML(s string) string {
@@ -116,12 +132,13 @@ func TestDocxTextParity(t *testing.T) {
 	}
 }
 
-// stripSrcSz removes xy's deliberate source/author deviations — the 10pt run
-// props, the compensating paragraph gap, and the author-without-source paragraph
-// split — so the body parity check below still locks in everything else. Applied
-// to both sides: xy emits sz+szCs, chgksuite (python-docx) emits sz only, and
-// older oracles none.
+// stripSrcSz removes xy's deliberate deviations — the 10pt source/author run
+// props, the compensating paragraph gap, the author-without-source paragraph
+// split and the spelling of the non-breaking hyphen — so the body parity check
+// below still locks in everything else. Applied to both sides: xy emits
+// sz+szCs, chgksuite (python-docx) emits sz only, and older oracles none.
 func stripSrcSz(s string) string {
+	s = plainNoBreakHyphen(s)
 	for _, frag := range []string{`<w:sz w:val="20"/>`, `<w:szCs w:val="20"/>`, `<w:spacing w:before="46"/>`} {
 		s = strings.ReplaceAll(s, frag, "")
 	}
@@ -195,5 +212,26 @@ func TestDocxSIParity(t *testing.T) {
 				t.Errorf("body XML mismatch\n--- chgksuite ---\n%s\n--- go ---\n%s", want, got)
 			}
 		})
+	}
+}
+
+// TestNoBreakHyphenElement pins issue #87: a glued hyphen reaches the .docx as
+// <w:noBreakHyphen/>, which every reader draws with the font's own hyphen glyph.
+// Neither character that would need font coverage is written out — not U+2011
+// itself, and not the word joiners chgksuite fences a plain hyphen with.
+func TestNoBreakHyphenElement(t *testing.T) {
+	src := "### Турнир\n\n## Тур\n\n? Из-за чего появляются пробелы?\n! хз\n"
+	mine, err := Export(fsource.Parse(src, "chgk"), nil, Options{})
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	xml := documentXML(t, mine)
+	if !strings.Contains(xml, "<w:t>Из</w:t><w:noBreakHyphen/><w:t>за") {
+		t.Errorf("the glued hyphen is not a noBreakHyphen element:\n%s", bodyXML(xml))
+	}
+	for _, c := range []string{"\u2060", "\u2011"} {
+		if strings.Contains(xml, c) {
+			t.Errorf("%q is in the document:\n%s", c, bodyXML(xml))
+		}
 	}
 }

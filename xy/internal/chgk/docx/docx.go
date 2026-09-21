@@ -38,8 +38,14 @@ var templateDocx []byte
 const (
 	imageRelType     = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
 	hyperlinkRelType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
-	// NO_BREAK_HYPHEN_REPLACEMENT (docx.py): word-joiner + hyphen + word-joiner.
-	noBreakHyphenRepl = "⁠-⁠"
+	// nbHyphenRune is inline.NBHyphen, which runXML writes as the OOXML
+	// <w:noBreakHyphen/> element rather than as a character. Word and LibreOffice
+	// draw that with the font's ordinary hyphen glyph, so it needs no coverage of
+	// U+2011 — the point of chgksuite's NO_BREAK_HYPHEN_REPLACEMENT, which fenced
+	// a plain hyphen with word joiners instead. That replacement is what issue #87
+	// is about: in Noto Sans, the family the template embeds, U+2060 is not
+	// zero-width but 0.6em, so every glued hyphen came out with a gap on each side.
+	nbHyphenRune = '\u2011'
 	// srcSz: source/author runs are set 2pt below the 12pt body (half-points).
 	// A deliberate deviation from chgksuite's output.
 	srcSz = 20
@@ -162,13 +168,13 @@ func (p *para) leadEmpty() {
 }
 
 // addContent appends a run for editorial text, mirroring set_docx_run_text:
-// backtick accents, optional nbsp gluing, then the non-breaking-hyphen swap.
+// backtick accents and optional nbsp gluing. The non-breaking hyphen is left to
+// runXML, which writes it as <w:noBreakHyphen/>.
 func (e *exporter) addContent(p *para, text, kind string, o textOpts) {
 	text = inline.BacktickReplace(text)
 	if o.nbsp {
 		text = inline.ReplaceNoBreak(text, inline.NoBreak{})
 	}
-	text = strings.ReplaceAll(text, inline.NBHyphen, noBreakHyphenRepl)
 	p.runs = append(p.runs, runXML(text, rPr(kind, p.sz, o.whiten)))
 }
 
@@ -176,8 +182,7 @@ func (e *exporter) addContent(p *para, text, kind string, o textOpts) {
 // records the external relationship (URL-quoted target).
 func (e *exporter) addHyperlink(p *para, urlText string) {
 	relID := e.externalRel(inline.URLQuote(urlText))
-	text := strings.ReplaceAll(urlText, inline.NBHyphen, noBreakHyphenRepl)
-	inner := runXML(text, `<w:rPr><w:rStyle w:val="Hyperlink"/>`+szXML(p.sz)+`</w:rPr>`)
+	inner := runXML(urlText, `<w:rPr><w:rStyle w:val="Hyperlink"/>`+szXML(p.sz)+`</w:rPr>`)
 	p.runs = append(p.runs, `<w:hyperlink r:id="`+relID+`">`+inner+`</w:hyperlink>`)
 }
 
@@ -624,6 +629,9 @@ func runXML(text, rpr string) string {
 		case '\n', '\r':
 			flush()
 			content.WriteString("<w:br/>")
+		case nbHyphenRune:
+			flush()
+			content.WriteString("<w:noBreakHyphen/>")
 		default:
 			buf = append(buf, r)
 		}
