@@ -38,6 +38,15 @@ export function startsBlock(line: string): boolean {
   return matchMarker(line) !== null;
 }
 
+// opensQuestion reports whether a line opens a new question of a ladder — a `№`
+// rung or a `№№` counter reset. fsource ends a question at a BLANK LINE, so the
+// blank before one of these is the only thing that keeps the rungs apart
+// (export.ts's foldBlankLines).
+export function opensQuestion(line: string): boolean {
+  const m = matchMarker(line);
+  return !!m && (m.type === "number" || m.type === "setcounter");
+}
+
 // splitMarker cuts a 4s line into its leading marker (with the whitespace that
 // follows it) and the text after — the port of fsource.SplitMarker, and the
 // vocabulary lives here, so callers that must not touch a marker (the typography
@@ -1231,7 +1240,7 @@ export function composeFields(f: Partial<CardFields>): string {
 }
 
 export const xyChgk = {
-  parseBlocks, splitMarker, startsBlock, numberDirective, questionText, answerText, blockText, previewText, imgName, imgRefs, imageRefs,
+  parseBlocks, splitMarker, startsBlock, opensQuestion, numberDirective, questionText, answerText, blockText, previewText, imgName, imgRefs, imageRefs,
   isZeroNumber, numberQuestionCards,
   removeAccents, removeSquareBrackets, screenText, parse4sElem,
   printRuns, renderRuns, splitList, applyOverride, replaceNoBreak,

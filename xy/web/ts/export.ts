@@ -34,12 +34,21 @@ export function exportSource(cards: ReadonlyArray<BoardCard>): string {
 // of the line before, which keeps the field one element and the empty line
 // visible (the directive plus the newline the join keeps = two breaks). Before a
 // marker the blank line separates nothing that is printed, so it just goes.
+//
+// With one exception: the blank line before a `№`. A theme card is a ladder of
+// questions in ONE card, and a blank line is the only thing that ends a question
+// — drop it and the parser merges the rungs into a single question numbered
+// «1020», whose text is every question of the theme in a row and whose answer is
+// every answer (#81). So that one stays a blank line.
 function foldBlankLines(desc: string): string {
   const out: string[] = [];
   let blanks = 0;
   for (const line of desc.split("\n")) {
     if (!line.trim()) { blanks++; continue; }
-    if (blanks && out.length && !xyChgk.startsBlock(line)) out[out.length - 1] += "(LINEBREAK)".repeat(blanks);
+    if (blanks && out.length) {
+      if (xyChgk.opensQuestion(line)) out.push("");
+      else if (!xyChgk.startsBlock(line)) out[out.length - 1] += "(LINEBREAK)".repeat(blanks);
+    }
     out.push(line);
     blanks = 0;
   }

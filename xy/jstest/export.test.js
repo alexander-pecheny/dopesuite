@@ -55,6 +55,19 @@ test("a blank line before a marker just goes — the field after it stays in the
   assert.equal(exportSource(c), "? Вопрос\n! Ответ\n^ Источник\n");
 });
 
+// A theme card is a ladder of questions in ONE card, and the blank line before a
+// `№` is the only thing that ends the question above it (#81). See
+// fsource.TestBlankLineSeparatesTheRungsOfATheme for the parser side.
+test("the blank line before a № rung stays, so a theme exports as a ladder", () => {
+  const theme = { id: 9, listId: 1, kind: "theme", rank: "a", desc: "#T Острова\n@ Иванов\n\n№ 10\n? Раз?\n! А\n\n№ 20\n? Два?\n! Б\n" };
+  assert.equal(exportSource([theme]), "#T Острова\n@ Иванов\n\n№ 10\n? Раз?\n! А\n\n№ 20\n? Два?\n! Б\n");
+});
+
+test("a blank line inside a rung's own text still becomes a (LINEBREAK)", () => {
+  const theme = { id: 9, listId: 1, kind: "theme", rank: "a", desc: "#T Тема\n\n№ 10\n? Первый абзац\n\nВторой абзац\n! А\n" };
+  assert.equal(exportSource([theme]), "#T Тема\n\n№ 10\n? Первый абзац(LINEBREAK)\nВторой абзац\n! А\n");
+});
+
 test("offline, only the .4s is offered — the dropdown drops the rest and moves onto it", async () => {
   online = false;
   const panel = createExportPanel(fakeBoard(), { appendImages: async () => new Set() });

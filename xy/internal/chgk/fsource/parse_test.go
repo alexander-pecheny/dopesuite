@@ -60,6 +60,52 @@ func reindent(b []byte) string {
 // TestBlankLineEndsElement pins the 4s rule the export's fold exists for: a blank
 // line closes the element, and the lines after it belong to nothing and are lost.
 // (LINEBREAK) is how chgksuite writes such a break instead — see export.ts.
+// TestBlankLineSeparatesTheRungsOfATheme is the same rule seen from the СИ side,
+// and the reason the export keeps that one blank line (#81): a theme's ladder
+// lives in a single card, so without it every rung merges into one question
+// numbered «1020», holding every question of the theme and every answer.
+func TestBlankLineSeparatesTheRungsOfATheme(t *testing.T) {
+	const head = "#T Острова\n\n"
+	merged := Parse(head+"№ 10\n? Раз?\n! А\n№ 20\n? Два?\n! Б\n", "si")
+	if n := countQuestions(merged); n != 1 {
+		t.Errorf("without the blank line: %d questions, want the merge this test is named for", n)
+	}
+
+	ladder := Parse(head+"№ 10\n? Раз?\n! А\n\n№ 20\n? Два?\n! Б\n", "si")
+	if n := countQuestions(ladder); n != 2 {
+		t.Fatalf("with the blank line: %d questions, want 2", n)
+	}
+	for i, want := range []string{"10", "20"} {
+		q := questionAt(ladder, i)
+		if got := q.Get("number"); got != want {
+			t.Errorf("rung %d is numbered %v, want %q", i, got, want)
+		}
+	}
+}
+
+func countQuestions(d Doc) int {
+	n := 0
+	for _, p := range d {
+		if p.Type == "Question" {
+			n++
+		}
+	}
+	return n
+}
+
+func questionAt(d Doc, i int) *Question {
+	for _, p := range d {
+		if p.Type != "Question" {
+			continue
+		}
+		if i == 0 {
+			return p.Content.(*Question)
+		}
+		i--
+	}
+	return nil
+}
+
 func TestBlankLineEndsElement(t *testing.T) {
 	lost := Parse("? Первый абзац\n\nВторой абзац\n! А\n", "chgk")
 	q, ok := lost[0].Content.(*Question)
