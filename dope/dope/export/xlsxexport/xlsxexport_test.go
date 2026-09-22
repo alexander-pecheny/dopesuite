@@ -1,6 +1,7 @@
 package xlsxexport
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/xuri/excelize/v2"
@@ -409,5 +410,87 @@ func TestBuildEKSheets(t *testing.T) {
 	}
 	if got := cell(t, f, stats, "P3"); got != "0%" {
 		t.Fatalf("stats P3 share = %q, want 0%%", got)
+	}
+}
+
+// Хамса exports as it looks: a sheet per stage, a block per бой — the team,
+// then per тема the player who sat for it, his five marks and what the тема
+// paid, and after the sixteen of them the ставка, the перестрелка, the Σ and
+// the место.
+func TestBuildHamsaSheets(t *testing.T) {
+	state := `{"rounds":[
+		{"themes":1,"values":[100,200,300,400,500]},
+		{"themes":1,"values":[200,400,600,800,1000]}],
+	  "participants":{
+		"7":{"themes":[
+			{"player":11,"answers":["right","","","","wrong"]},
+			{"player":12,"answers":["","","right","",""]}],
+		  "bet":{"amount":300,"answer":"right"}},
+		"8":{"themes":[{"answers":["wrong","","","",""]},{"answers":["","","","",""]}],
+		  "bet":{"amount":100,"answer":"wrong"}}}}`
+	mv := store.MatchView{
+		Title:      "Бой 1",
+		Code:       "s1-r1-m1",
+		StageTitle: "Игра №1",
+		StageCode:  "s1-r1",
+		State:      json.RawMessage(state),
+		Participants: []store.ParticipantView{
+			{ID: 7, Name: "Сарепта", Roster: []store.RosterMember{{ID: 11, Name: "Анна Белова"}, {ID: 12, Name: "Борис Черных"}}},
+			{ID: 8, Name: "Ахтуба"},
+		},
+	}
+	f := excelize.NewFile()
+	defer f.Close()
+	if err := BuildHamsaSheets(f, []store.StageMatches{{Code: "s1-r1", Matches: []store.MatchView{mv}}}); err != nil {
+		t.Fatalf("BuildHamsaSheets: %v", err)
+	}
+
+	const sheet = "Игра №1"
+	if idx, err := f.GetSheetIndex(sheet); err != nil || idx < 0 {
+		t.Fatalf("нет листа %q (есть %v): %v", sheet, f.GetSheetList(), err)
+	}
+	if got := cell(t, f, sheet, "A1"); got != "Бой 1" {
+		t.Fatalf("A1 = %q", got)
+	}
+	// Header: Команда | Тема 1, игрок | Т1.1..Т1.5 | Т1 | Тема 2, игрок | … | Ставка | П | Σ | М
+	for at, want := range map[string]string{
+		"A2": "Команда", "B2": "Тема 1, игрок", "C2": "Т1.1", "H2": "Т1",
+		"I2": "Тема 2, игрок", "P2": "Ставка", "Q2": "П", "R2": "Σ", "S2": "М",
+	} {
+		if got := cell(t, f, sheet, at); got != want {
+			t.Fatalf("%s = %q, want %q", at, got, want)
+		}
+	}
+	// Сарепта: тема 1 = +100 − 500 = −400, тема 2 (×2) = +600, ставка +300.
+	if got := cell(t, f, sheet, "A3"); got != "Сарепта" {
+		t.Fatalf("A3 = %q", got)
+	}
+	if got := cell(t, f, sheet, "B3"); got != "Анна Белова" {
+		t.Fatalf("B3 = %q — игрок берётся из состава места", got)
+	}
+	if got := cell(t, f, sheet, "C3"); got != "+" {
+		t.Fatalf("C3 = %q", got)
+	}
+	if got := cell(t, f, sheet, "H3"); got != "-400" {
+		t.Fatalf("H3 = %q", got)
+	}
+	if got := cell(t, f, sheet, "O3"); got != "600" {
+		t.Fatalf("O3 = %q", got)
+	}
+	if got := cell(t, f, sheet, "P3"); got != "300" {
+		t.Fatalf("P3 ставка = %q", got)
+	}
+	if got := cell(t, f, sheet, "R3"); got != "500" {
+		t.Fatalf("R3 Σ = %q, want −400 + 600 + 300", got)
+	}
+	if got := cell(t, f, sheet, "S3"); got != "1" {
+		t.Fatalf("S3 место = %q", got)
+	}
+	// Ахтуба lost its ставка, so the sheet shows it taken away.
+	if got := cell(t, f, sheet, "P4"); got != "-100" {
+		t.Fatalf("P4 ставка = %q", got)
+	}
+	if got := cell(t, f, sheet, "R4"); got != "-200" {
+		t.Fatalf("R4 Σ = %q", got)
 	}
 }

@@ -432,7 +432,7 @@ test("a Round with drawn seats gets a Жеребьёвка panel under its бо�
   const grid = buildFestGrid({stages: [stage]},
     {stageHeaderLink: false, editable: true, onDraw: (slot, id) => chosen.push([slot, id])});
 
-  assert.equal(withClass(grid, "draw-panel").length, 1, "панель одна на раунд");
+  assert.equal(withClass(grid, "grid-draw-panel").length, 1, "панель одна на раунд");
   const selects = walk(grid).filter((n) => n.tag === "select");
   assert.equal(selects.length, 2, "по селекту на жеребьёвочное место");
   // The team already drawn is off the other seat's list: it plays one table
@@ -444,7 +444,7 @@ test("a Round with drawn seats gets a Жеребьёвка panel under its бо�
 
   // A viewer reads the seats off the боя boxes — «Жребий» — and gets no panel.
   const viewerGrid = buildFestGrid({stages: [stage]}, {stageHeaderLink: false});
-  assert.equal(withClass(viewerGrid, "draw-panel").length, 0);
+  assert.equal(withClass(viewerGrid, "grid-draw-panel").length, 0);
 });
 
 // Until the раунд it draws from is played out the server resolves no

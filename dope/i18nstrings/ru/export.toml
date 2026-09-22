@@ -34,8 +34,16 @@ chair = "Кресло"
 theme_n = 'Т{{.n}}'
 # The merged shootout header "П1".."Пn" of the EK sheet.
 shootout_n = 'П{{.n}}'
+# The player column header of the Hamsa sheet, one per тема.
+theme_player = 'Тема {{.n}}, игрок'
 # The per-question header "Т<theme>.<question>" of the Troika sheet.
 theme_question = 'Т{{.theme}}.{{.question}}'
+
+[hamsa]
+# The Хамса sheet's two columns after the темы: the Командный round's ставка,
+# and the перестрелка's net points.
+bet = "Ставка"
+shootout = "П"
 
 [name]
 # The fallback name for a KSI/Multi participant or a Troika side with no name.
@@ -53,6 +61,9 @@ tour = "Тур"
 normalized_name = '{{.name}} (из 100)'
 
 [error]
+# BuildHamsaSheets: a бой's document does not parse; match is its code.
+hamsa_state = 'бой {{.match}}: {{.err}}'
+
 # BuildMultiSheets: the game's scheme JSON does not parse.
 multi_scheme = 'parse Мультиигры scheme: {{.err}}'
 # BuildMultiSheets: the game's state JSON does not parse.

@@ -27,6 +27,33 @@ type drawSlotRow struct {
 	occupant int64
 }
 
+// Draw is one Draw Slot as a caller outside the resolver reads it: its code,
+// whoever is sitting in it, and whom it may still be filled from.
+type Draw struct {
+	Code       string
+	Occupant   int64
+	Candidates []store.DrawCandidateView
+}
+
+// Draws lists the Game's Draw Slots in schedule order, each with the
+// candidates the Round it draws from has produced — empty while that Round is
+// still being played.
+func Draws(ctx context.Context, q store.Queryer, gameID int64) ([]Draw, error) {
+	rows, err := drawSlotsTx(ctx, q, gameID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Draw, 0, len(rows))
+	for _, row := range rows {
+		candidates, err := store.LoadDrawCandidates(ctx, q, gameID, row.draw)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, Draw{Code: row.draw.Code, Occupant: row.occupant, Candidates: candidates})
+	}
+	return out, nil
+}
+
 // SetDrawTx seats a Participant in a Draw Slot, or clears it when participant
 // is zero. It refuses anyone the Slot does not name as a candidate, and anyone
 // already drawn into another Slot of the same stage: a team plays one table

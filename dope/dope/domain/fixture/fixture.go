@@ -42,8 +42,15 @@ var siDSL string
 //go:embed data/troika.dsl
 var troikaDSL string
 
+//go:embed data/hamsa.dsl
+var hamsaDSL string
+
 const (
-	lineupSize    = 4
+	lineupSize = 4
+	// hamsaSeats is what the group stage plays: twelve of the registry, four to
+	// a table, so the three places left over are a Draw rather than a fourth
+	// table's worth of derived seats.
+	hamsaSeats    = 12
 	ksiThemes     = 20
 	stickerThemes = 12
 	odTours       = 3
@@ -103,6 +110,7 @@ func Build(ctx context.Context, db *sql.DB, opts Options) (int64, error) {
 		{games.Brain, brainDSL, teams},
 		{games.SI, siDSL, players},
 		{games.Troika, troikaDSL, teams},
+		{games.Hamsa, hamsaDSL, teams[:hamsaSeats]},
 	} {
 		gameID, err := createGame(ctx, tx, gamebuild.Spec{
 			FestID: festID, Type: g.gameType, Label: games.Label(g.gameType),
@@ -168,6 +176,13 @@ func registerTeams(ctx context.Context, tx *sql.Tx, festID int64, people cast) (
 	if err != nil {
 		return nil, err
 	}
+	// The Participants' own people. A format that records who played a theme —
+	// Hamsa does — resolves the id through this list, so without it a sheet
+	// names nobody and the statistics tab has nothing to count.
+	participantPlayers, err := registerParticipantPlayers(ctx, tx, festID, people.Players)
+	if err != nil {
+		return nil, err
+	}
 	ids := make([]int64, 0, len(people.Teams))
 	for i, team := range people.Teams {
 		number := i + 1
@@ -178,6 +193,14 @@ insert into participants(fest_id, roster, name, city, number) values(?, 'team', 
 			return nil, err
 		}
 		ids = append(ids, id)
+		for seat := 0; seat < lineupSize; seat++ {
+			playerID := participantPlayers[(i*lineupSize+seat)%len(participantPlayers)]
+			if _, err := tx.ExecContext(ctx, `
+insert into participant_players(participant_id, player_id, roster_order) values(?, ?, ?)`,
+				id, playerID, seat); err != nil {
+				return nil, err
+			}
+		}
 		teamID, err := store.InsertReturningID(ctx, tx, `
 insert into fest_teams(fest_id, name, city, position, number) values(?, ?, ?, ?, ?)`,
 			festID, team.Name, team.City, number, number)
@@ -194,6 +217,22 @@ insert into fest_team_players(team_id, player_id, roster_order) values(?, ?, ?)`
 				return nil, err
 			}
 		}
+	}
+	return ids, nil
+}
+
+// registerParticipantPlayers writes the people a Participant fields — the
+// `players` table, which is what a Match's roster is read from.
+func registerParticipantPlayers(ctx context.Context, tx *sql.Tx, festID int64, names []string) ([]int64, error) {
+	ids := make([]int64, 0, len(names))
+	for _, name := range names {
+		first, last, _ := strings.Cut(name, " ")
+		id, err := store.InsertReturningID(ctx, tx, `
+insert into players(fest_id, first_name, last_name) values(?, ?, ?)`, festID, first, last)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
 	}
 	return ids, nil
 }

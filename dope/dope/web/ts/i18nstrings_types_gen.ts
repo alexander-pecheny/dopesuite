@@ -186,13 +186,19 @@ export type Strings = {
       team: () => string;
       teamShare: () => string;
       themeN: (n: string) => string;
+      themePlayer: (n: string) => string;
       themeQuestion: (theme: string, question: string) => string;
       total: () => string;
     };
     error: {
+      hamsaState: (match: string, err: string) => string;
       multiScheme: (err: string) => string;
       multiState: (err: string) => string;
       troikaState: (code: string, err: string) => string;
+    };
+    hamsa: {
+      bet: () => string;
+      shootout: () => string;
     };
     multi: {
       normalizedName: (name: string) => string;
@@ -242,6 +248,7 @@ export type Strings = {
     };
     metricShort: {
       bouts: () => string;
+      placeSum: () => string;
       points: () => string;
       taken: () => string;
     };
@@ -419,8 +426,7 @@ export type Strings = {
       finished: () => string;
       plus: () => string;
       seat: (n: string) => string;
-      shootoutTheme: (values: string) => string;
-      theme: (n: string, values: string) => string;
+      theme: (n: string) => string;
       unseated: () => string;
     };
     round: {

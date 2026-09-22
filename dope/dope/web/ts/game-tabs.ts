@@ -196,17 +196,18 @@ function brainTabs(stages: StageRef[], seeded: boolean, statsLabel: string): Gam
 // bar has no room for and the crumb trail says anyway.
 function hamsaTabs(stages: StageRef[], seeded: boolean): GameTab[] {
   const tabs = fixedTabs(["grid", S.screen.tabs.grid()]);
-  const reseeds: string[] = [];
   for (const stage of stages) {
+    // A пересев keeps its place in the chain rather than being folded to the
+    // end: Хамса has one, and it is played between the group stage and the
+    // final, which is where a reader looks for it.
     if (isReseed(stage)) {
-      reseeds.push(stage.code);
+      tabs.push({key: `reseed:${stage.code}`, label: S.screen.tabs.reseed(), kind: "reseed", stages: [stage.code], stage});
       continue;
     }
     const label = shortStageTitle(stage);
     const kind: TabKind = (stage.matches || []).length ? "protocol" : "block";
     tabs.push({key: `${kind}:${stage.code}`, label, kind, stages: [stage.code], stage});
   }
-  if (reseeds.length) tabs.push({key: "reseed", label: S.screen.tabs.reseed(), kind: "reseed", stages: reseeds});
   tabs.push(...fixedTabs(["stats", S.screen.tabs.stats()], ["roster", S.screen.tabs.roster()], ...when(seeded, ["seed", S.screen.tabs.seed()])));
   return tabs;
 }

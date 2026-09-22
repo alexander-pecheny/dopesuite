@@ -55,6 +55,11 @@ func HandleScopedGameExport(s Host, w http.ResponseWriter, r *http.Request, fest
 		if stages, err = s.LoadAllStageMatchViews(r.Context(), festID, gameID); err == nil {
 			err = xlsxexport.BuildTroikaSheets(f, stages)
 		}
+	case "hamsa":
+		var stages []store.StageMatches
+		if stages, err = s.LoadAllStageMatchViews(r.Context(), festID, gameID); err == nil {
+			err = xlsxexport.BuildHamsaSheets(f, stages)
+		}
 	case "ek":
 		var stages []store.StageMatches
 		if stages, err = s.LoadAllStageMatchViews(r.Context(), festID, gameID); err == nil {

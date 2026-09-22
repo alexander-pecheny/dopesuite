@@ -24,10 +24,10 @@ shootout = "Перестрелка"
 
 [protocol]
 # The бой sheet.
-# A тема's own header: its number and what its вопросы are worth.
-theme = 'Тема {{.n}} · {{.values}}'
-# A перестрелка тема's header.
-shootout_theme = 'Тема · {{.values}}'
+# A тема's own header. It stands over the тема's score, one column wide, so it
+# names the тема and nothing else — what the вопросы are worth is written
+# across their own headers.
+theme = 'Т{{.n}}'
 # The ставка cell, and what a reader hears on it.
 bet = "Ставка"
 bet_title = '{{.team}}: ставка'

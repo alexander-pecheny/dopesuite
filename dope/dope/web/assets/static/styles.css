@@ -20,8 +20,17 @@
   --hamsa-bout-w: 4400px;
   --hamsa-bout-h: 200px;
   --hamsa-bet-col: 72px;
-  /* The seat column of the Жеребьёвка panel on the Сетка. */
-  --draw-seat-col: 64px;
+  /* A Хамса вопрос is worth four figures in the last раунд and a бой's Σ five,
+     so the sheet's own columns are wider than the 10..50 ones. */
+  --hamsa-question-col: 46px;
+  --hamsa-total-col: 58px;
+  --hamsa-theme-score-col: 50px;
+  --hamsa-bet-score-col: 62px;
+  --hamsa-table-min: 720px;
+  /* A Хамса бой is scored in thousands, so its Сетка's number column holds a
+     figure more than every other game's. */
+  --hamsa-grid-num-col: 46px;
+  --hamsa-grid-num-col-mobile: 42px;
   --total-col: 38px;
   --place-col: 42px;
   --place-gap: 14px;
@@ -1634,6 +1643,7 @@ body:not(.embedded-match) .grid-match {
     --grid-title-text: var(--text-base);
     --grid-num-col: 30px;
     --grid-fade: 28px;
+    --hamsa-grid-num-col: var(--hamsa-grid-num-col-mobile);
   }
 
   .answer-cell:hover:not(.active),
@@ -2491,33 +2501,52 @@ body:not(.embedded-match) .grid-match {
   min-width: 720px;
 }
 
+/* The Block's own table: the same shape a пересев's is, and as wide as its
+   columns need rather than as wide as the screen. */
+.hamsa-table {
+  --results-place-col: 72px;
+  --results-team-col: 320px;
+  width: max-content;
+  min-width: var(--hamsa-table-min);
+}
+
+/* Every other game's Сетка counts in tens or hundreds; Хамса counts in
+   thousands, so its own grid takes a wider number column. The Сетка states no
+   length of its own (scripts/classcheck), so this is a token and nothing else. */
+.hamsa-page .fest-grid {
+  --grid-num-col: var(--hamsa-grid-num-col);
+}
+
 /* The Жеребьёвка panel stands under a Round's бои, where a reseed's calculate
    button stands: the seats above it are empty until a person fills them, and
-   the panel is the only thing on the Сетка that is an input. */
-.draw-panel {
+   the panel is the only thing on the Сетка that is an input. The Сетка's
+   columns hold a head and their boxes, so the panel takes a row of its own
+   below them. */
+.grid-draw-panel {
+  grid-row: 3;
   margin-top: var(--space-2);
   padding: var(--space-2);
   border-radius: var(--radius-sm);
   background: var(--surface-tint);
 }
 
-.draw-panel-head {
+.grid-draw-head {
   margin: var(--space-0);
-  font-size: var(--text-sm);
+  font-size: var(--grid-head-text);
   font-weight: var(--fw-semibold);
   color: var(--text-strong);
 }
 
-.draw-panel-seat {
-  min-width: var(--draw-seat-col);
-  font-size: var(--text-xs-plus);
-  color: var(--muted);
+/* A Сетка column is a glance wide, so the panel's fields wear the grid's own
+   type rather than a form's. */
+.grid-draw-row {
+  font-size: var(--grid-cell-text);
 }
 
-.draw-panel-select {
-  flex: 1;
-  min-width: var(--space-0);
-  font-size: var(--text-xs-plus);
+.grid-draw-row > select {
+  min-height: var(--control-h-sm);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--grid-cell-text);
 }
 
 .ek-stats-wrapper {
@@ -2627,6 +2656,8 @@ body:not(.embedded-match) .grid-match {
 .venues-results-table .results-team,
 .reseed-results-table thead th.results-team-head,
 .reseed-results-table .results-team,
+.hamsa-table thead th.results-team-head,
+.hamsa-table .results-team,
 .group-standings-table thead th.results-team-head,
 .group-standings-table .results-team {
   width: var(--results-team-col);
@@ -4822,6 +4853,15 @@ body.is-fullscreen.od-page .match-main {
   contain-intrinsic-size: auto var(--hamsa-bout-w) var(--hamsa-bout-h);
 }
 
+/* The bout names itself above its sheet, as Troika's does: the sheet's own
+   name column is 90px on a phone and holds the finished tick. */
+.hamsa-bout-head {
+  margin: var(--space-0);
+  font-size: var(--text-md);
+  font-weight: var(--fw-semibold);
+  color: var(--text-strong);
+}
+
 /* The раунды stand over their темы in a header row of their own: one cell per
    game round, spanning every column its темы take. The leading cell covers the
    sheet's own sticky columns and carries no words — the бой names itself in the
@@ -4867,4 +4907,80 @@ body.is-fullscreen.od-page .match-main {
 
 .hamsa-sheet .hamsa-player-select:disabled {
   color: var(--muted);
+}
+
+/* The sheet's geometry, stated on the columns because its first row spans
+   them: fixed layout divides a spanning width over the columns it covers, so
+   the round names above the тема heads would flatten every column to the same
+   width if the widths were left to the cells. */
+.hamsa-col-name {
+  width: var(--team-col);
+}
+
+.hamsa-col-total {
+  width: var(--hamsa-total-col);
+}
+
+.hamsa-col-place {
+  width: var(--place-col);
+}
+
+.hamsa-col-place-gap {
+  width: var(--place-gap);
+}
+
+.hamsa-col-q {
+  width: var(--hamsa-question-col);
+}
+
+.hamsa-col-bet {
+  width: var(--hamsa-bet-col);
+}
+
+.hamsa-col-score {
+  width: var(--hamsa-theme-score-col);
+}
+
+/* The bet's column is headed by a word, not a theme number. */
+.hamsa-col-bet-score {
+  width: var(--hamsa-bet-score-col);
+}
+
+.hamsa-sheet .hamsa-bet-score-head,
+.hamsa-sheet .hamsa-bet-score-head + .gap-head {
+  width: auto;
+  min-width: var(--hamsa-bet-score-col);
+  max-width: none;
+}
+
+.hamsa-col-gap {
+  width: var(--theme-gap-col);
+}
+
+/* The sticky columns hold the sheet's own widths, so their offsets follow. */
+.hamsa-sheet .sticky-total {
+  width: var(--hamsa-total-col);
+  min-width: var(--hamsa-total-col);
+  max-width: var(--hamsa-total-col);
+}
+
+.hamsa-sheet .sticky-place {
+  left: calc(var(--sheet-corner-col) + var(--team-col) + var(--hamsa-total-col));
+}
+
+.hamsa-sheet .sticky-place-gap {
+  left: calc(var(--sheet-corner-col) + var(--team-col) + var(--hamsa-total-col) + var(--place-col));
+}
+
+.hamsa-sheet .theme-head,
+.hamsa-sheet .theme-score {
+  width: var(--hamsa-theme-score-col);
+  min-width: var(--hamsa-theme-score-col);
+  max-width: var(--hamsa-theme-score-col);
+}
+
+.hamsa-sheet .question-head,
+.hamsa-sheet .answer-cell {
+  width: var(--hamsa-question-col);
+  min-width: var(--hamsa-question-col);
 }

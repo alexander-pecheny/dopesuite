@@ -941,6 +941,166 @@ func writeTroikaMatch(f *excelize.File, sheet string, row int, match store.Match
 	return row, nil
 }
 
+// --- Hamsa: a sheet per stage, a block per bout -------------------------------
+
+// BuildHamsaSheets writes a Hamsa game "as it looks": a sheet per stage, and
+// within it a block per bout — the team, the player who sat for each theme and
+// his five marks, a running score per theme, then the bet, the shootout, the
+// score and the place.
+func BuildHamsaSheets(f *excelize.File, stages []store.StageMatches) error {
+	if len(stages) == 0 {
+		return nil
+	}
+	first := true
+	for _, stage := range stages {
+		if len(stage.Matches) == 0 {
+			continue
+		}
+		name := uniqueSheetName(f, sanitizeSheetName(stage.Matches[0].StageTitle))
+		if first {
+			f.SetSheetName("Sheet1", name)
+			first = false
+		} else if _, err := f.NewSheet(name); err != nil {
+			return err
+		}
+		row := 1
+		for _, match := range stage.Matches {
+			next, err := writeHamsaMatch(f, name, row, match)
+			if err != nil {
+				return err
+			}
+			row = next + 1 // a blank line between bouts
+		}
+	}
+	return nil
+}
+
+func writeHamsaMatch(f *excelize.File, sheet string, row int, match store.MatchView) (int, error) {
+	s := dopestrings.Default
+	state, err := games.ParseHamsaState(string(match.State))
+	if err != nil {
+		return row, corei18n.User(s.Export.Error.HamsaState(match.Code, err.Error()))
+	}
+	if err := setRow(f, sheet, row, []interface{}{match.Title}); err != nil {
+		return row, err
+	}
+	row++
+
+	themes := games.HamsaThemeCount(state.Rounds)
+	header := []interface{}{s.Export.Col.Team()}
+	for t := 0; t < themes; t++ {
+		header = append(header, s.Export.Col.ThemePlayer(strconv.Itoa(t+1)))
+		for q := 1; q <= games.HamsaQuestions; q++ {
+			header = append(header, s.Export.Col.ThemeQuestion(strconv.Itoa(t+1), strconv.Itoa(q)))
+		}
+		header = append(header, s.Export.Col.ThemeN(strconv.Itoa(t+1)))
+	}
+	header = append(header, s.Export.Hamsa.Bet(), s.Export.Hamsa.Shootout(), "Σ", s.Export.Col.MatchPlace())
+	if err := setRow(f, sheet, row, header); err != nil {
+		return row, err
+	}
+	row++
+
+	seats := make([]int64, len(match.Participants))
+	for i, seat := range match.Participants {
+		seats[i] = seat.ID
+	}
+	results, err := games.ComputeHamsaResults(string(match.State), seats)
+	if err != nil {
+		return row, err
+	}
+	for index, seat := range match.Participants {
+		cells := []interface{}{hamsaSeatName(match, index)}
+		section := state.Participants[strconv.FormatInt(seat.ID, 10)]
+		for t := 0; t < themes; t++ {
+			cells = append(cells, hamsaPlayerName(seat, section, t))
+			for q := 0; q < games.HamsaQuestions; q++ {
+				cells = append(cells, hamsaMarkText(section, t, q))
+			}
+			cells = append(cells, hamsaThemeScore(state, seats[index], t))
+		}
+		cells = append(cells, hamsaBetText(section))
+		if index < len(results) {
+			cells = append(cells, results[index].ShootoutTotal, results[index].Total, results[index].Place)
+		}
+		if err := setRow(f, sheet, row, cells); err != nil {
+			return row, err
+		}
+		row++
+	}
+	return row, nil
+}
+
+func hamsaSeatName(match store.MatchView, index int) string {
+	if name := strings.TrimSpace(match.Participants[index].Name); name != "" {
+		return name
+	}
+	return dopestrings.Default.Export.Name.TeamN(strconv.Itoa(index + 1))
+}
+
+// hamsaPlayerName resolves the theme's player through the seat's own roster,
+// which is what the document names him by.
+func hamsaPlayerName(seat store.ParticipantView, section *games.HamsaParticipant, theme int) interface{} {
+	if section == nil || theme >= len(section.Themes) {
+		return nil
+	}
+	for _, member := range seat.Roster {
+		if member.ID == section.Themes[theme].Player {
+			return member.Name
+		}
+	}
+	return nil
+}
+
+func hamsaMarkText(section *games.HamsaParticipant, theme, question int) interface{} {
+	if section == nil || theme >= len(section.Themes) || question >= len(section.Themes[theme].Answers) {
+		return nil
+	}
+	switch section.Themes[theme].Answers[question] {
+	case "right":
+		return "+"
+	case "wrong":
+		return "−"
+	}
+	return nil
+}
+
+func hamsaThemeScore(state games.HamsaState, participant int64, theme int) interface{} {
+	section := state.Participants[strconv.FormatInt(participant, 10)]
+	if section == nil || theme >= len(section.Themes) {
+		return nil
+	}
+	values := games.HamsaGameRoundValues(state, theme)
+	score := 0
+	for q, mark := range section.Themes[theme].Answers {
+		if q >= len(values) {
+			break
+		}
+		switch mark {
+		case "right":
+			score += values[q]
+		case "wrong":
+			score -= values[q]
+		}
+	}
+	return score
+}
+
+// hamsaBetText is the bet as the sheet reads it: what the team wrote, signed by
+// whether the answer was accepted.
+func hamsaBetText(section *games.HamsaParticipant) interface{} {
+	if section == nil || section.Bet == nil || section.Bet.Amount == nil {
+		return nil
+	}
+	if section.Bet.Answer == games.HamsaBetWrong {
+		return -*section.Bet.Amount
+	}
+	if section.Bet.Answer == games.HamsaBetRight {
+		return *section.Bet.Amount
+	}
+	return *section.Bet.Amount
+}
+
 func troikaSideName(match store.MatchView, side int) string {
 	if side < len(match.Participants) {
 		if name := strings.TrimSpace(match.Participants[side].Name); name != "" {

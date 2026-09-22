@@ -613,6 +613,7 @@ function standingsMetricLabel(metric: string): string {
     points: S.fest.metricShort.points(),
     taken: S.fest.metricShort.taken(),
     bouts: S.fest.metricShort.bouts(),
+    place_sum: S.fest.metricShort.placeSum(),
   };
   return short[metric] || reseedMetricLabel(metric);
 }
@@ -644,8 +645,8 @@ function buildDrawPanel(section: GridBoxes, ctx: PaintContext): HTMLElement | nu
   if (!seats.length || !ctx.options.editable) return null;
 
   const panel = document.createElement("section");
-  panel.className = "draw-panel u-col u-gap-xs";
-  panel.appendChild(el("h3", "draw-panel-head", S.fest.draw.title()));
+  panel.className = "grid-draw-panel u-col u-gap-xs";
+  panel.appendChild(el("h3", "grid-draw-head", S.fest.draw.title()));
 
   const ready = seats.some((seat) => (seat.draw.candidates || []).length > 0);
   if (!ready) {
@@ -656,11 +657,12 @@ function buildDrawPanel(section: GridBoxes, ctx: PaintContext): HTMLElement | nu
   // plays one table per Round, and offering it twice would leave one short.
   const taken = new Set(seats.map((seat) => seat.draw.seated || 0).filter(Boolean));
   for (const seat of seats) {
-    const row = el("label", "draw-panel-row u-row u-gap-xs u-align-center", "");
-    row.appendChild(el("span", "draw-panel-seat",
+    // The kit's field: the label over the control, which is what a column
+    // 200px wide has room for.
+    const row = el("label", "field grid-draw-row", "");
+    row.appendChild(el("span", "",
       S.fest.draw.seat(ctx.letters?.get(seat.match.code || "") || seat.match.title || seat.match.code || "")));
     const select = document.createElement("select");
-    select.className = "draw-panel-select";
     const none = document.createElement("option");
     none.value = "0";
     none.textContent = S.fest.draw.none();

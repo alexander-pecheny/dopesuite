@@ -6,7 +6,7 @@
 // (PATCH /matches/{code}/state) and sync over match: scopes. A self-booting
 // side-effect module bundled by pages/hamsa.ts.
 
-import {cssEscape, option, td, th} from "./cells.js";
+import {cssEscape, option, questionNumberNode, td, th} from "./cells.js";
 import type {CellContent} from "./cells.js";
 import {festLetters, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
@@ -318,10 +318,6 @@ function roundHead(state: HamsaState, round: number): string {
     : S.hamsa.round.head(String(round + 1), name);
 }
 
-function valueList(values: number[]): string {
-  return `${values[0]}–${values[values.length - 1]}`;
-}
-
 // themeGroups are the sheet's column groups in order: the themes of the first
 // four game rounds, the team round's bet, and — where the block allows one —
 // the shootout theme. `theme` is the index into the document; `bet` and
@@ -348,15 +344,42 @@ function themeGroups(bout: BoutEntry): ThemeGroup[] {
   return groups;
 }
 
+// A group's own head is narrow — it stands over the theme's score, one column
+// wide — so it names the theme and nothing else; what the questions are worth
+// is written across their own headers.
 function groupLabelOf(group: ThemeGroup): string {
   switch (group.kind) {
   case "bet":
     return S.hamsa.protocol.bet();
   case "shootout":
-    return S.hamsa.protocol.shootoutTheme(valueList(group.values));
+    return S.hamsa.round.shootout();
   default:
-    return S.hamsa.protocol.theme(String(group.theme + 1), valueList(group.values));
+    return S.hamsa.protocol.theme(String(group.theme + 1));
   }
+}
+
+// columnGroup is the sheet's geometry, stated once. A table whose first row
+// spans columns — and the round names do — cannot take its widths from that
+// row (fixed layout divides a spanning width over the columns it covers), so
+// the sheet declares them instead, and every width is a token.
+function columnGroup(groups: ThemeGroup[]): HTMLElement {
+  const cols = document.createElement("colgroup");
+  const col = (className: string) => {
+    const node = document.createElement("col");
+    node.className = className;
+    cols.appendChild(node);
+  };
+  col("hamsa-col-name");
+  col("hamsa-col-total");
+  col("hamsa-col-place");
+  col("hamsa-col-place-gap");
+  for (const group of groups) {
+    for (let q = 0; q < group.questions; q++) col(group.kind === "bet" ? "hamsa-col-bet" : "hamsa-col-q");
+    col(group.kind === "bet" ? "hamsa-col-bet-score" : "hamsa-col-score");
+    col("hamsa-col-gap");
+  }
+  col("hamsa-col-total");
+  return cols;
 }
 
 // buildBout is one bout: the wide sheet, two rows per team.
@@ -368,18 +391,25 @@ function buildBout(bout: BoutEntry): HTMLElement {
   const rows = hamsa.rows(state, seats);
 
   const box = document.createElement("section");
-  box.className = "hamsa-bout";
+  box.className = "hamsa-bout u-col u-gap-sm";
+  const head = document.createElement("h3");
+  head.className = "hamsa-bout-head";
+  const letter = boutLetters.get(bout.code);
+  head.textContent = [letter, bout.view.title || bout.code].filter(Boolean).join(". ");
+  box.appendChild(head);
 
   const table = buildTwoRowScoreTable({
     className: "match-table hamsa-sheet",
     attrs: {dataset: {match: bout.code}},
     nameHeader: boutHeader(bout),
-    placeHeader: S.hamsa.table.place(),
     themes: groups.map((group) => ({
       label: groupLabelOf(group),
+      // The bet's head is a word rather than a theme number, so its column is
+      // wider than a score column and says so.
+      labelClassName: group.kind === "bet" ? "theme-head hamsa-bet-score-head" : undefined,
       questionLabels: group.kind === "bet"
         ? [S.hamsa.protocol.betAnswer()]
-        : group.values.map((value) => String(value)),
+        : group.values.map((value) => questionNumberNode(value)),
     })),
     afterThemeHeaders: [{content: S.hamsa.protocol.plus(), className: "number plus-head"}],
     rows: seats.map((id, seat) => ({
@@ -391,6 +421,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
     })),
   });
   table.classList.toggle("match-finished", Boolean(bout.view.finished));
+  table.insertBefore(columnGroup(groups), table.firstChild);
   table.tHead?.insertBefore(roundHeaderRow(bout, groups), table.tHead.firstChild);
 
   box.appendChild(table);
@@ -474,9 +505,10 @@ function playerSelect(bout: BoutEntry, id: number, seat: number, group: ThemeGro
     const path = group.kind === "shootout"
       ? ["participants", String(id), "shootout", 0, "player"]
       : ["participants", String(id), "themes", group.theme, "player"];
-    const theme = group.kind === "shootout"
-      ? hamsa.sectionOf(state, id)?.shootout[0]
-      : hamsa.sectionOf(state, id)?.themes[group.theme];
+    const section = hamsa.sectionOf(state, id);
+    const theme = section && group.kind === "shootout"
+      ? ensureShootout(bout.code, section, id)
+      : section?.themes[group.theme];
     if (theme) theme.player = value;
     patch(bout.code, path, value);
     select.blur();
@@ -531,22 +563,28 @@ function markCell(bout: BoutEntry, id: number, seat: number, theme: number, q: n
   return cell;
 }
 
+// ensureShootout is the shootout theme a seat plays, written into the document
+// the first time it is touched: a bout starts without one, because most blocks
+// never play one at all.
+function ensureShootout(code: string, section: hamsa.Participant, id: number): hamsa.Theme {
+  const existing = section.shootout[0];
+  if (existing) return existing;
+  const row: hamsa.Theme = {player: 0, answers: ["", "", "", "", ""]};
+  section.shootout[0] = row;
+  patch(code, ["participants", String(id), "shootout", 0], {player: 0, answers: ["", "", "", "", ""]});
+  return row;
+}
+
 function paintMark(cell: HTMLElement, mark: Mark): void {
   cell.classList.toggle("right", mark === "right");
   cell.classList.toggle("wrong", mark === "wrong");
 }
 
-// boutHeader is the sheet's name column head: the bout's letter and title, and
-// the finished tick. A finished bout is read-only until the host unticks it.
+// boutHeader is the sheet's name column head: the finished tick alone. The
+// bout names itself in the heading above the sheet, because the name column is
+// 90px on a phone and a title squeezed in beside a checkbox reads as neither.
+// A finished bout is read-only until the host unticks it.
 function boutHeader(bout: BoutEntry): CellContent {
-  const layout = document.createElement("span");
-  layout.className = "battle-layout";
-  const title = document.createElement("span");
-  title.className = "battle-title";
-  const letter = boutLetters.get(bout.code);
-  title.textContent = [letter, bout.view.title || bout.code].filter(Boolean).join(". ");
-  layout.appendChild(title);
-
   const label = document.createElement("label");
   label.className = "finish-control";
   const checkbox = document.createElement("input");
@@ -563,8 +601,7 @@ function boutHeader(bout: BoutEntry): CellContent {
   const text = document.createElement("span");
   text.textContent = S.hamsa.protocol.finished();
   label.append(checkbox, text);
-  layout.appendChild(label);
-  return layout;
+  return label;
 }
 
 // === the cursor ===
@@ -665,8 +702,10 @@ function applyMarks(edits: CellEdit[]): void {
       section.bet.answer = mark;
       patch(code, ["participants", String(id), "bet", "answer"], mark);
     } else if (cell.dataset.shootout === "1") {
-      const row = section.shootout[0];
-      if (!row || row.answers[q] === mark) continue;
+      // A block that allows a shootout draws its column from the first mark
+      // on, so the theme is written whole the first time somebody uses it.
+      const row = ensureShootout(code, section, id);
+      if (row.answers[q] === mark) continue;
       row.answers[q] = mark;
       patch(code, ["participants", String(id), "shootout", 0, "answers", q], mark);
     } else {

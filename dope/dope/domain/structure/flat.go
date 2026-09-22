@@ -179,10 +179,16 @@ func flatOrder(conf FlatConfig) []string {
 
 func (flat) Metrics() []string { return []string{"place"} }
 
+// Order names the columns a table of these standings shows. A Block that ranks
+// by the Match's own place alone shows none: the place column is already
+// there, and a second one headed "place" says nothing twice.
 func (flat) Order(cfg json.RawMessage) []SortRule {
 	var conf FlatConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil
 	}
-	return sortRules(flatOrder(conf))
+	if conf.Order == nil {
+		return nil
+	}
+	return sortRules(conf.Order)
 }

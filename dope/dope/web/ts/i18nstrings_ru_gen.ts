@@ -187,13 +187,19 @@ export const RU: Strings = {
       team: () => "Команда",
       teamShare: () => "% от команды",
       themeN: (n: string) => `Т${n}`,
+      themePlayer: (n: string) => `Тема ${n}, игрок`,
       themeQuestion: (theme: string, question: string) => `Т${theme}.${question}`,
       total: () => "Итог",
     },
     error: {
+      hamsaState: (match: string, err: string) => `бой ${match}: ${err}`,
       multiScheme: (err: string) => `parse Мультиигры scheme: ${err}`,
       multiState: (err: string) => `parse Мультиигры state: ${err}`,
       troikaState: (code: string, err: string) => `parse Тройка state of ${code}: ${err}`,
+    },
+    hamsa: {
+      bet: () => "Ставка",
+      shootout: () => "П",
     },
     multi: {
       normalizedName: (name: string) => `${name} (из 100)`,
@@ -243,6 +249,7 @@ export const RU: Strings = {
     },
     metricShort: {
       bouts: () => "Б",
+      placeSum: () => "ΣМ",
       points: () => "О",
       taken: () => "В",
     },
@@ -420,8 +427,7 @@ export const RU: Strings = {
       finished: () => "Закончен",
       plus: () => "Σ+",
       seat: (n: string) => `Место ${n}`,
-      shootoutTheme: (values: string) => `Тема · ${values}`,
-      theme: (n: string, values: string) => `Тема ${n} · ${values}`,
+      theme: (n: string) => `Т${n}`,
       unseated: () => "Мест ещё нет",
     },
     round: {

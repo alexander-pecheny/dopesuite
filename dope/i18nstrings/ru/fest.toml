@@ -82,6 +82,8 @@ points = "О"
 taken = "В"
 # Bouts.
 bouts = "Б"
+# The sum of places.
+place_sum = "ΣМ"
 
 [roster]
 # The roster tab on any game page, before the roster arrives.

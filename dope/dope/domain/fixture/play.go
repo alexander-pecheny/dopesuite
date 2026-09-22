@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 
 	"dope/dope/domain/flatgame"
 	"dope/dope/domain/gamebuild"
@@ -30,6 +31,11 @@ var multiSpec string
 func playBracket(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string) error {
 	for pass := 0; ; pass++ {
 		if _, err := resolver.ResolveGameSlotsAndReseedsTx(ctx, tx, gameID); err != nil {
+			return err
+		}
+		// The seats a Kind declares drawn fill from no result, so the organiser
+		// runs the lot before the round can be played at all.
+		if err := drawPending(ctx, tx, gameID); err != nil {
 			return err
 		}
 		matches, err := store.LoadMatchStates(ctx, tx, store.MatchSelector{FestID: festID, GameID: gameID})
@@ -55,6 +61,28 @@ func playBracket(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType
 			return fmt.Errorf("fixture: %s never ran out of matches to play", gameType)
 		}
 	}
+}
+
+// drawPending runs the Draw a host makes on the day, taking the first
+// candidate each empty Slot will accept — deterministic, which is what a
+// golden needs, and honest, since a blind lot has no better reason than any
+// other.
+func drawPending(ctx context.Context, tx *sql.Tx, gameID int64) error {
+	draws, err := resolver.Draws(ctx, tx, gameID)
+	if err != nil {
+		return err
+	}
+	for _, draw := range draws {
+		if draw.Occupant != 0 {
+			continue
+		}
+		for _, candidate := range draw.Candidates {
+			if _, err := resolver.SetDrawTx(ctx, tx, gameID, draw.Code, candidate.ID); err == nil {
+				break
+			}
+		}
+	}
+	return nil
 }
 
 // seated reports whether every slot of a match has somebody in it — an
@@ -162,6 +190,8 @@ func matchDocument(match store.DBMatchState) (string, error) {
 		return brainDocument(match)
 	case games.Troika:
 		return troikaDocument(match)
+	case games.Hamsa:
+		return hamsaDocument(match)
 	default:
 		return blobDocument(match)
 	}
@@ -196,6 +226,56 @@ func blobDocument(match store.DBMatchState) (string, error) {
 	}
 	return blob.JSON()
 }
+
+// hamsaDocument fills a Hamsa bout: a section per Participant, sixteen themes
+// of five answers with the player who sat for each, and the team round's bet.
+// The bet moves with the Participant so the fifth round is not the same
+// wherever it is read, and a lost one shows the sheet taking points away.
+func hamsaDocument(match store.DBMatchState) (string, error) {
+	state, err := games.ParseHamsaState(match.RawState)
+	if err != nil {
+		return "", err
+	}
+	if state.Participants == nil {
+		state.Participants = map[string]*games.HamsaParticipant{}
+	}
+	themes := games.HamsaThemeCount(state.Rounds)
+	for index, participantID := range match.ParticipantIDs {
+		if participantID == 0 {
+			continue
+		}
+		var roster []store.RosterMember
+		if index < len(match.State.Participants) {
+			roster = match.State.Participants[index].Roster
+		}
+		section := &games.HamsaParticipant{}
+		for theme := 0; theme < themes; theme++ {
+			row := games.HamsaTheme{Answers: make([]string, games.HamsaQuestions)}
+			if len(roster) > 0 {
+				row.Player = roster[theme%len(roster)].ID
+			}
+			for answer := range row.Answers {
+				row.Answers[answer] = mark(int(participantID), int(participantID), theme, answer)
+			}
+			section.Themes = append(section.Themes, row)
+		}
+		amount := hamsaBetStep * (int(participantID)%hamsaBetSpread + 1)
+		answer := games.HamsaBetRight
+		if int(participantID)%hamsaBetLost == 0 {
+			answer = games.HamsaBetWrong
+		}
+		section.Bet = &games.HamsaBet{Amount: &amount, Answer: answer}
+		state.Participants[strconv.FormatInt(participantID, 10)] = section
+	}
+	return marshal(state)
+}
+
+// The bet's dial: a few distinct sizes, and every third Participant losing it.
+const (
+	hamsaBetStep   = 100
+	hamsaBetSpread = 5
+	hamsaBetLost   = 3
+)
 
 func brainDocument(match store.DBMatchState) (string, error) {
 	var state games.BrainState

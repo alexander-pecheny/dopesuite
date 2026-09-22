@@ -150,6 +150,12 @@ func HamsaShootoutValues(rounds []HamsaGameRound) []int {
 	return HamsaValues
 }
 
+// HamsaGameRoundValues is what the theme at index i was worth in this bout —
+// the rounds walked in order, as the scorer walks them.
+func HamsaGameRoundValues(state HamsaState, theme int) []int {
+	return hamsaValues(state.Rounds, theme)
+}
+
 // HamsaEmptyStateJSON is the pristine document of one bout: the rounds it
 // plays, and no participants — a bout's seats come from its Slots and its marks
 // arrive as edits, so nothing is written for a team that has not played yet.

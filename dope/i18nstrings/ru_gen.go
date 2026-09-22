@@ -201,15 +201,21 @@ var RU = Strings{
 			Team:          func() string { return "Команда" },
 			TeamShare:     func() string { return "% от команды" },
 			ThemeN:        func(n string) string { return fmt.Sprintf("Т%s", n) },
+			ThemePlayer:   func(n string) string { return fmt.Sprintf("Тема %s, игрок", n) },
 			ThemeQuestion: func(theme string, question string) string { return fmt.Sprintf("Т%s.%s", theme, question) },
 			Total:         func() string { return "Итог" },
 		},
 		Error: ExportErrorStrings{
+			HamsaState:  func(match string, err string) string { return fmt.Sprintf("бой %s: %s", match, err) },
 			MultiScheme: func(err string) string { return fmt.Sprintf("parse Мультиигры scheme: %s", err) },
 			MultiState:  func(err string) string { return fmt.Sprintf("parse Мультиигры state: %s", err) },
 			TroikaState: func(code string, err string) string {
 				return fmt.Sprintf("parse Тройка state of %s: %s", code, err)
 			},
+		},
+		Hamsa: ExportHamsaStrings{
+			Bet:      func() string { return "Ставка" },
+			Shootout: func() string { return "П" },
 		},
 		Multi: ExportMultiStrings{
 			NormalizedName: func(name string) string { return fmt.Sprintf("%s (из 100)", name) },
@@ -260,9 +266,10 @@ var RU = Strings{
 			Tiebreak:    func() string { return "П" },
 		},
 		MetricShort: FestMetricShortStrings{
-			Bouts:  func() string { return "Б" },
-			Points: func() string { return "О" },
-			Taken:  func() string { return "В" },
+			Bouts:    func() string { return "Б" },
+			PlaceSum: func() string { return "ΣМ" },
+			Points:   func() string { return "О" },
+			Taken:    func() string { return "В" },
 		},
 		Reseed: FestReseedStrings{
 			BlockedDefault: func() string { return "Исходные бои ещё не закончены" },
@@ -486,15 +493,14 @@ var RU = Strings{
 			AnswerTitle: func(team string, theme string, value string) string {
 				return fmt.Sprintf("%s, тема %s, %s", team, theme, value)
 			},
-			Bet:           func() string { return "Ставка" },
-			BetAnswer:     func() string { return "Ответ" },
-			BetTitle:      func(team string) string { return fmt.Sprintf("%s: ставка", team) },
-			Finished:      func() string { return "Закончен" },
-			Plus:          func() string { return "Σ+" },
-			Seat:          func(n string) string { return fmt.Sprintf("Место %s", n) },
-			ShootoutTheme: func(values string) string { return fmt.Sprintf("Тема · %s", values) },
-			Theme:         func(n string, values string) string { return fmt.Sprintf("Тема %s · %s", n, values) },
-			Unseated:      func() string { return "Мест ещё нет" },
+			Bet:       func() string { return "Ставка" },
+			BetAnswer: func() string { return "Ответ" },
+			BetTitle:  func(team string) string { return fmt.Sprintf("%s: ставка", team) },
+			Finished:  func() string { return "Закончен" },
+			Plus:      func() string { return "Σ+" },
+			Seat:      func(n string) string { return fmt.Sprintf("Место %s", n) },
+			Theme:     func(n string) string { return fmt.Sprintf("Т%s", n) },
+			Unseated:  func() string { return "Мест ещё нет" },
 		},
 		Round: HamsaRoundStrings{
 			Dark:     func() string { return "Тёмный" },

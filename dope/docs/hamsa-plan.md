@@ -1,6 +1,8 @@
 # Хамса — implementation plan
 
-Status: agreed with the tournament author on 2026-09-22, not yet built.
+Status: agreed with the tournament author on 2026-09-22; built on branch
+`hamsa` the same day, steps 0 to 7. Where building it made a choice the plan
+left open, or found the plan wrong, that is written into the step as **Built**.
 Regulations: `.tmp/hamsa-regs.txt` at the repo root (exported from the
 organisers' Google Doc; tournament on 2026-10-03 in Волгоград).
 
@@ -11,7 +13,7 @@ Game round, Ставка, the `placement` Kind, and the mid-game Draw.
 
 | # | Decision |
 |---|----------|
-| 1 | The письменный отбор is a separate КСИ Game (`themes: 10`), and Хамса is seeded from it with `[init] seed: {ksi-game}` and the existing decline ladder. КСИ's ranking already matches the regulations (total, Σ+, correct at 50/40/30/20, mean shared places). Nothing changes in КСИ. |
+| 1 | The письменный отбор is a separate КСИ Game (`themes: 10`), and Хамса is seeded from it with `[init] seed: {ksi-game}` — the source Game's **code**, so `seed: ksi-1` — and the existing decline ladder. КСИ's ranking already matches the regulations (total, Σ+, correct at 50/40/30/20, mean shared places). Nothing changes in КСИ. |
 | 2 | Игра №2's three fourth-place seats are a **host-entered Draw**, made on the Сетка. |
 | 3 | Teams level in a ГЭ бой share the **averaged** place (1.5, 1.5, 3, 4). |
 | 4 | The Финал tiebreak (an extra Персональный game round on a reserve theme) is the Protocol's перестрелка, switched on per Block. |
@@ -304,6 +306,11 @@ Files, mirroring Тройка (commit `73f98ea1` is the checklist):
 
 - `export/xlsxexport`: a Хамса sheet — team, per-тема player and marks, per
   game-round Σ, ставка, П, Σ, место. `export/gameexport` JSON as for the others.
+
+  **Built:** a sheet per stage and a block per бой, as Тройка's export does;
+  the per-тема Σ is per тема rather than per game round, because that is the
+  column the sheet in front of a host has. The JSON archive needed nothing at
+  all: it is a dump of the Game's rows and knows no game type.
 - `domain/replay/codec.go`: a `hamsa` entry; `parse.go` seat form gains an
   optional `ставка ±N` token after the 16 theme groups. Transcript
   `testdata/hamsa2026/hamsa.transcript` with 12 invented teams: Игра №1, the
@@ -334,6 +341,14 @@ Files, mirroring Тройка (commit `73f98ea1` is the checklist):
   `seed-fixture`, the gallery and `just matrix` cover the page. Bless new
   goldens with `just matrix --bless` and commit them.
 
+  **Built:** the fixture seats **twelve** of its sixteen teams, so the fourth
+  places are a real Draw rather than a fourth table's worth of derived seats,
+  and it runs the lot itself — the first candidate each Slot will take, which
+  is deterministic and is what a golden needs. It also gives its Participants
+  people (`participant_players`), which nothing needed before: Хамса records
+  who played a тема, and without them the sheet names nobody and the
+  Статистика tab counts nothing.
+
 ## 8. Order of work
 
 0. Rename the structural Round to `BlockRound` in Go and TS (own commit, gates green). Done before anything below starts.
@@ -349,6 +364,49 @@ Files, mirroring Тройка (commit `73f98ea1` is the checklist):
 7. `just pre-commit` green; commit on branch `hamsa` in small steps with
    plain English messages; do not merge or deploy. Deploy to `dopetest` with
    `just deploy-staging` for the hand test only.
+
+**Built:** one commit per step, seven of them on `hamsa` after the rename.
+Nothing was merged, pushed or deployed — the staging hand test is still owed,
+and with it the two things a fixture cannot answer: whether a host can keep up
+with a бой on the wide sheet, and whether the Жеребьёвка panel is where the
+organiser looks for it when the lot is actually drawn.
+
+## What the design review and the four screen cells changed
+
+Looking at it found ten things the code was wrong about, all in step 4's page
+or the Сетка:
+
+- **A colgroup.** The round names span their темы, and a table whose first row
+  spans columns cannot take its widths from that row — fixed layout divides a
+  spanning width over the columns it covers. So the sheet declares its columns.
+- **Хамса counts in thousands.** Σ is five figures and a тема's score four, so
+  the sheet's own total, score and question columns are wider than the 10..50
+  ones, and the Сетка takes a wider number column on a `.hamsa-page`.
+- A тема's head is «Т1», not «Тема 1 · 100–500»: it stands over one column.
+  What the вопросы are worth is written across their own headers, and the
+  round's multiplier in the round head above them.
+- The **Ставка**'s head is a word, so its column is wider than a score column.
+- The **бой names itself above its sheet**, as Тройка's does. The sheet's name
+  column is 90px on a phone and holds the finished tick; a title squeezed in
+  beside a checkbox read as neither.
+- The **Пересев tab keeps its place in the chain** rather than being folded to
+  the end: it is played between the групповой этап and the Финал.
+- A **flat Block ranked on the бой's own place shows no metric column** — the
+  place column is already there, and a second one headed `place` said nothing
+  twice in the Финал's table.
+- The **Общий зачёт table is as wide as its columns need**, like a пересев's,
+  rather than stretched across the screen.
+- A **перестрелка тема is written the first time somebody marks it.** A бой
+  starts without one — most Блоки never play one — so the page created one and
+  patched it whole rather than dropping the edit on the floor, which is what it
+  was doing.
+- The **Жеребьёвка panel takes a row of its own** under the Round's бои (the
+  Сетка's columns hold a head and their boxes, so a third child landed at the
+  top of the next column), and its rows are the kit's `.field` rather than a
+  layout of their own.
+
+Cells looked at: the бой sheet, the Общий зачёт table, the Статистика tab and
+the Сетка with the panel, at 1280×800 and on an iPhone 16, light and dark.
 
 ## Out of scope
 
