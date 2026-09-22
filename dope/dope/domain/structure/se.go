@@ -21,18 +21,18 @@ type singleElim struct{}
 func (singleElim) Code() string { return "se" }
 func (singleElim) Word() string { return "single_elimination" }
 func (singleElim) Keys() []Key {
-	return []Key{{Name: "participants"}, {Name: "match_size", Round: true}, {Name: "winning_places"}, {Name: "rounds"}, {Name: "bronze"}, {Name: "best_of", Round: true}, {Name: "rollout", Round: true}, {Name: "points", Cascade: true}, {Name: "metric"}}
+	return []Key{{Name: "participants"}, {Name: "match_size", BlockRound: true}, {Name: "winning_places"}, {Name: "rounds"}, {Name: "bronze"}, {Name: "best_of", BlockRound: true}, {Name: "rollout", BlockRound: true}, {Name: "points", Cascade: true}, {Name: "metric"}}
 }
 
-func seRoundTitle(remaining int) string {
+func seBlockRoundTitle(remaining int) string {
 	s := dopestrings.Default
 	switch remaining {
 	case 2:
 		return s.Structure.Titles.Final()
 	case 4:
-		return s.Structure.Se.RoundSemifinals()
+		return s.Structure.Se.BlockRoundSemifinals()
 	}
-	return s.Structure.Se.RoundNth(strconv.Itoa(remaining / 2))
+	return s.Structure.Se.BlockRoundNth(strconv.Itoa(remaining / 2))
 }
 
 // Expand is the knockout: a bracket of Rounds, each round's winning places
@@ -50,67 +50,67 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 	}
 	// match_size may differ round by round — EK plays its 1/4 three to a table
 	// and everything else four — so the size is asked for per round.
-	sizeFor := func(round, entering int) int {
+	sizeFor := func(blockRound, entering int) int {
 		size := 2
 		if v, ok := b.Int("match_size"); ok {
 			size = v
 		}
-		if v, ok := b.Int(fmt.Sprintf("match_size.r%d", round)); ok {
+		if v, ok := b.Int(fmt.Sprintf("match_size.r%d", blockRound)); ok {
 			size = v
 		}
 		return size
 	}
-	maxRounds, _ := b.Int("rounds")
-	plan, err := planElimRounds(participants, winning, maxRounds, sizeFor)
+	maxBlockRounds, _ := b.Int("rounds")
+	plan, err := planElimBlockRounds(participants, winning, maxBlockRounds, sizeFor)
 	if err != nil {
 		return Outputs{}, fmt.Errorf("single_elimination: %s", err)
 	}
 	bronze, _ := b.Bool("bronze")
 	directBronze, hasDirect := seDirectBronze(b, participants, bronze)
-	rounds := []string{}
+	blockRounds := []string{}
 	for i, r := range plan {
-		rounds = append(rounds, elimRoundNames(r, i, winning)...)
+		blockRounds = append(blockRounds, elimBlockRoundNames(r, i, winning)...)
 	}
 	if bronze && (participants >= 4 || hasDirect) {
-		rounds = append(rounds, "bronze")
+		blockRounds = append(blockRounds, "bronze")
 	}
-	if err := b.Rounds(rounds); err != nil {
+	if err := b.BlockRounds(blockRounds); err != nil {
 		return Outputs{}, err
 	}
 	_, boundary := b.Reseed()
-	everyRound := boundary == ReseedEveryRound
+	everyBlockRound := boundary == ReseedEveryBlockRound
 	boundaryAt := 0
-	if boundary != "" && !everyRound {
+	if boundary != "" && !everyBlockRound {
 		for i, r := range plan {
-			for _, name := range elimRoundNames(r, i, winning) {
+			for _, name := range elimBlockRoundNames(r, i, winning) {
 				if name == boundary {
 					boundaryAt = r.entering
 				}
 			}
 		}
 		if boundaryAt == 0 {
-			return Outputs{}, Keyf("reseed", "%s", s.Structure.Se.ReseedRoundUnknown(boundary))
+			return Outputs{}, Keyf("reseed", "%s", s.Structure.Se.ReseedBlockRoundUnknown(boundary))
 		}
 		if boundaryAt == participants {
-			return Outputs{}, Keyf("reseed", "%s", s.Structure.Se.ReseedFirstRound(boundary))
+			return Outputs{}, Keyf("reseed", "%s", s.Structure.Se.ReseedFirstBlockRound(boundary))
 		}
 	}
 
-	first, err := seFirstRound(b, plan[0], winning)
+	first, err := seFirstBlockRound(b, plan[0], winning)
 	if err != nil {
 		return Outputs{}, err
 	}
 	blockCode := b.Code()
 	prevCodes := []string{}
-	var prevStages, roundStages []string
+	var prevStages, blockRoundStages []string
 	var semifinalCodes []string
 	seriesFinal := false
-	for roundIndex, round := range plan {
-		remaining, size, count := round.entering, round.size, round.bouts
-		names := elimRoundNames(round, roundIndex, winning)
+	for roundIndex, blockRound := range plan {
+		remaining, size, count := blockRound.entering, blockRound.size, blockRound.bouts
+		names := elimBlockRoundNames(blockRound, roundIndex, winning)
 		stageCode := fmt.Sprintf("%s-%s", blockCode, names[0])
 		bestOf := 0
-		if round.terminal {
+		if blockRound.terminal {
 			v, ok := b.Int("best_of")
 			for _, name := range names {
 				if dotted, dok := b.Int("best_of." + name); dok {
@@ -131,7 +131,7 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 			}
 		}
 		var reseedCode string
-		if (everyRound && roundIndex > 0) || remaining == boundaryAt {
+		if (everyBlockRound && roundIndex > 0) || remaining == boundaryAt {
 			// Every place that survived the round before, best Match first —
 			// the reseed's own sorting decides the rest.
 			alive := make([]store.SchemeSlot, 0, len(prevCodes)*winning)
@@ -141,10 +141,10 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 				}
 			}
 			code, where := blockCode+"-reseed", At{}
-			if everyRound {
-				code, where = fmt.Sprintf("%s-r%d-reseed", blockCode, roundIndex+1), At{Round: roundIndex + 1}
+			if everyBlockRound {
+				code, where = fmt.Sprintf("%s-r%d-reseed", blockCode, roundIndex+1), At{BlockRound: roundIndex + 1}
 			}
-			sources, err := b.Sources(prevStages, roundStages)
+			sources, err := b.Sources(prevStages, blockRoundStages)
 			if err != nil {
 				return Outputs{}, err
 			}
@@ -191,7 +191,7 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 		// The bronze Match is played before the final, so its stage stands
 		// before the final's: the grid draws it first, and it deals its letter
 		// first.
-		if round.terminal && bronze {
+		if blockRound.terminal && bronze {
 			var pair []store.SchemeSlot
 			switch {
 			case hasDirect:
@@ -219,8 +219,8 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 					Slots:            base.Slots,
 				}
 			}
-			stage := Stage{Code: stageCode, Title: b.RoundTitle(names, elimRoundTitle(round, roundIndex, winning)), Kind: "matches",
-				Rounds: names, At: At{Round: roundIndex + 1}, Matches: series}
+			stage := Stage{Code: stageCode, Title: b.BlockRoundTitle(names, elimBlockRoundTitle(blockRound, roundIndex, winning)), Kind: "matches",
+				BlockRounds: names, At: At{BlockRound: roundIndex + 1}, Matches: series}
 			if !seRolledOut(b, names) {
 				cfg, err := seSeriesConfig(b)
 				if err != nil {
@@ -235,12 +235,12 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 			prevCodes = codes
 			continue
 		}
-		prevStages, err = b.Emit(Stage{Code: stageCode, Title: b.RoundTitle(names, elimRoundTitle(round, roundIndex, winning)), Kind: "matches",
-			Rounds: names, At: At{Round: roundIndex + 1}, Matches: matches, Waves: true, Lanes: lanes})
+		prevStages, err = b.Emit(Stage{Code: stageCode, Title: b.BlockRoundTitle(names, elimBlockRoundTitle(blockRound, roundIndex, winning)), Kind: "matches",
+			BlockRounds: names, At: At{BlockRound: roundIndex + 1}, Matches: matches, Waves: true, Lanes: lanes})
 		if err != nil {
 			return Outputs{}, err
 		}
-		roundStages = append(roundStages, prevStages...)
+		blockRoundStages = append(blockRoundStages, prevStages...)
 		if remaining == 4 {
 			semifinalCodes = codes
 		}
@@ -274,7 +274,7 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 // appendBronze emits the bronze Match between the pair the block hands it —
 // the semifinal losers, or the places below the finalists out of the incoming
 // Edge — as one Match or, with best_of.bronze, as a series.
-func appendBronze(b Block, pair []store.SchemeSlot, round int) error {
+func appendBronze(b Block, pair []store.SchemeSlot, blockRound int) error {
 	s := dopestrings.Default
 	stageCode := b.Code() + "-bronze"
 	lanes, err := b.Venues("bronze")
@@ -304,8 +304,8 @@ func appendBronze(b Block, pair []store.SchemeSlot, round int) error {
 			Slots:            pair,
 		}
 	}
-	stage := Stage{Code: stageCode, Title: b.RoundTitle([]string{"bronze"}, s.Structure.Se.Bronze()), Kind: "matches",
-		Rounds: []string{"bronze"}, At: At{Round: round}, Matches: matches}
+	stage := Stage{Code: stageCode, Title: b.BlockRoundTitle([]string{"bronze"}, s.Structure.Se.Bronze()), Kind: "matches",
+		BlockRounds: []string{"bronze"}, At: At{BlockRound: blockRound}, Matches: matches}
 	if bouts > 1 && !seRolledOut(b, []string{"bronze"}) {
 		cfg, err := seSeriesConfig(b)
 		if err != nil {
@@ -382,9 +382,9 @@ func seDirectBronze(b Block, participants int, bronze bool) ([]store.SchemeSlot,
 	return []store.SchemeSlot{prev.Groups[0].Place(2), prev.Groups[1].Place(2)}, true
 }
 
-// seFirstRound seats the opening round: bracket order over seeds, or the
+// seFirstBlockRound seats the opening round: bracket order over seeds, or the
 // winner-meets-runner-up template over the previous block's paired groups.
-func seFirstRound(b Block, opening elimRound, winning int) ([][]store.SchemeSlot, error) {
+func seFirstBlockRound(b Block, opening elimBlockRound, winning int) ([][]store.SchemeSlot, error) {
 	s := dopestrings.Default
 	participants, count := opening.entering, opening.bouts
 	if b.First() {
@@ -467,13 +467,13 @@ func (singleElim) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 	}
 
 	var matches []store.SchemeMatch
-	code := func(round, index int) string { return fmt.Sprintf("%s-r%d-%d", conf.Code, round, index) }
-	emit := func(round int, matchCode, title string, slots [2]store.SchemeSlot) {
+	code := func(blockRound, index int) string { return fmt.Sprintf("%s-r%d-%d", conf.Code, blockRound, index) }
+	emit := func(blockRound int, matchCode, title string, slots [2]store.SchemeSlot) {
 		matches = append(matches, store.SchemeMatch{
 			Code:             matchCode,
 			Title:            title,
 			Venue:            conf.Venue,
-			Round:            round,
+			BlockRound:       blockRound,
 			ParticipantCount: 2,
 			Slots:            slots[:],
 		})
@@ -485,39 +485,39 @@ func (singleElim) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 		return store.SchemeSlot{FromMatch: &store.SchemeFromMatchRef{Match: matchCode, Place: 2}}
 	}
 
-	rounds := 0
+	blockRounds := 0
 	for size := n; size > 1; size /= 2 {
-		rounds++
+		blockRounds++
 	}
 	order := BracketOrder(n)
 	for i := 0; i < n/2; i++ {
-		emit(1, code(1, i+1), roundTitle(rounds, 1, i+1),
+		emit(1, code(1, i+1), blockRoundTitle(blockRounds, 1, i+1),
 			[2]store.SchemeSlot{conf.Entrants[order[2*i]-1], conf.Entrants[order[2*i+1]-1]})
 	}
-	for round := 2; round <= rounds; round++ {
-		count := n >> uint(round)
+	for blockRound := 2; blockRound <= blockRounds; blockRound++ {
+		count := n >> uint(blockRound)
 		for i := 0; i < count; i++ {
-			emit(round, code(round, i+1), roundTitle(rounds, round, i+1),
-				[2]store.SchemeSlot{winnerOf(code(round-1, 2*i+1)), winnerOf(code(round-1, 2*i+2))})
+			emit(blockRound, code(blockRound, i+1), blockRoundTitle(blockRounds, blockRound, i+1),
+				[2]store.SchemeSlot{winnerOf(code(blockRound-1, 2*i+1)), winnerOf(code(blockRound-1, 2*i+2))})
 		}
 	}
 	if conf.Bronze {
-		semi := rounds - 1
-		emit(rounds, fmt.Sprintf("%s-r%d-3p", conf.Code, rounds), s.Structure.Se.Bronze(),
+		semi := blockRounds - 1
+		emit(blockRounds, fmt.Sprintf("%s-r%d-3p", conf.Code, blockRounds), s.Structure.Se.Bronze(),
 			[2]store.SchemeSlot{loserOf(code(semi, 1)), loserOf(code(semi, 2))})
 	}
 	return matches, nil
 }
 
-func roundTitle(rounds, round, index int) string {
+func blockRoundTitle(blockRounds, blockRound, index int) string {
 	s := dopestrings.Default
-	switch rounds - round {
+	switch blockRounds - blockRound {
 	case 0:
 		return s.Structure.Titles.Final()
 	case 1:
 		return s.Structure.Se.MatchSemifinal(strconv.Itoa(index))
 	default:
-		return s.Structure.Se.MatchNthRound(strconv.Itoa(1<<uint(rounds-round)), strconv.Itoa(index))
+		return s.Structure.Se.MatchNthBlockRound(strconv.Itoa(1<<uint(blockRounds-blockRound)), strconv.Itoa(index))
 	}
 }
 

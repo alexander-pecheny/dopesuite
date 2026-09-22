@@ -564,20 +564,22 @@ function buildGrid(): HTMLElement {
 }
 
 // buildPodBoard is a pod Block's detail tab, the sheet's «Double Elimination»
-// view: one column per round, each match a box with its letter, teams and Σ. The
-// same boxes the grid once carried — moved where detail belongs. A pod is a
-// row band: its matches of every round sit in the band, so a round with one match
-// per pod leaves the pod's other slot blank and the columns read across.
+// view: one column per block round, each match a box with its letter, teams and
+// Σ. The same boxes the grid once carried — moved where detail belongs. A pod is
+// a row band: its matches of every block round sit in the band, so a block round
+// with one match per pod leaves the pod's other slot blank and the columns read
+// across.
 function buildPodBoard(pods: BrainSchemeStage[]): HTMLElement {
   type GridMatch = NonNullable<FestGridStage["matches"]>[number];
-  const byRound = new Map<number, GridMatch[]>();
-  const roundOf = (planned: BrainSchemeMatch) => Number((planned as {round?: number}).round || 1);
-  // slots[pod][i] is the match's slot within its pod's round; podRows the widest.
+  const byBlockRound = new Map<number, GridMatch[]>();
+  const blockRoundOf = (planned: BrainSchemeMatch) => Number((planned as {round?: number}).round || 1);
+  // slots[pod][i] is the match's slot within its pod's block round; podRows is
+  // the widest.
   const slots = pods.map((stage) => {
     const seen = new Map<number, number>();
     return (stage.matches || []).map((planned) => {
-      const slot = seen.get(roundOf(planned)) || 0;
-      seen.set(roundOf(planned), slot + 1);
+      const slot = seen.get(blockRoundOf(planned)) || 0;
+      seen.set(blockRoundOf(planned), slot + 1);
       return slot;
     });
   });
@@ -585,18 +587,18 @@ function buildPodBoard(pods: BrainSchemeStage[]): HTMLElement {
   pods.forEach((stage, pod) => {
     const live = new Map((festStages.get(stage.code || "")?.matches || []).map((m) => [m.code, m]));
     (stage.matches || []).forEach((planned, i) => {
-      const round = roundOf(planned);
+      const blockRound = blockRoundOf(planned);
       const merged = {...(planned as GridMatch), ...(live.get(planned.code) || {}), row: pod * podRows + slots[pod][i] + 1};
-      const list = byRound.get(round);
+      const list = byBlockRound.get(blockRound);
       if (list) list.push(merged);
-      else byRound.set(round, [merged]);
+      else byBlockRound.set(blockRound, [merged]);
     });
   });
-  const stages = Array.from(byRound.keys()).sort((a, b) => a - b).map((round): FestGridStage => ({
-    code: `round-${round}`,
-    title: S.brain.pod.round(String(round)),
+  const stages = Array.from(byBlockRound.keys()).sort((a, b) => a - b).map((blockRound): FestGridStage => ({
+    code: `round-${blockRound}`,
+    title: S.brain.pod.blockRound(String(blockRound)),
     stage_type: "matches",
-    matches: byRound.get(round),
+    matches: byBlockRound.get(blockRound),
   }));
   return buildFestGrid({stages}, {stageHeaderLink: false, matchTitleLink: false, letters: boutLetters});
 }

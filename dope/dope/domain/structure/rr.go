@@ -44,7 +44,7 @@ func (roundRobin) Expand(b Block) (Outputs, error) {
 	if groups < 1 || size < 2 {
 		return Outputs{}, errors.New("roundrobin: groups ≥ 1, group_size ≥ 2")
 	}
-	if err := b.Rounds(nil); err != nil {
+	if err := b.BlockRounds(nil); err != nil {
 		return Outputs{}, err
 	}
 	lanes, err := b.Venues()
@@ -84,7 +84,7 @@ func (roundRobin) Expand(b Block) (Outputs, error) {
 		if matchSize > 2 {
 			cfg.MatchSize = matchSize
 		}
-		cfg.Rounds, _ = b.Int("rounds")
+		cfg.BlockRounds, _ = b.Int("rounds")
 		if _, err := b.Emit(Stage{Code: code, Title: b.GroupTitle(g, groups), Kind: "rr", Slug: slug,
 			At: At{Group: GroupCode(groups, g)}, Config: cfg}); err != nil {
 			return Outputs{}, err
@@ -154,9 +154,9 @@ func (roundRobin) Metrics() []string {
 	return []string{"points", "h2h", "taken", "conceded", "diff", "place_sum", "bouts"}
 }
 
-// rrCanonRounds are the community's canonical KINSBF group schedules, retained
-// verbatim so existing sheets and dope groups agree bout-for-bout.
-var rrCanonRounds = map[int][][][]int{
+// rrCanonBlockRounds are the community's canonical KINSBF group schedules,
+// retained verbatim so existing sheets and dope groups agree bout-for-bout.
+var rrCanonBlockRounds = map[int][][][]int{
 	2: {{{1, 2}}},
 	3: {{{1, 2}}, {{1, 3}}, {{2, 3}}},
 	4: {{{1, 2}, {3, 4}}, {{1, 4}, {2, 3}}, {{1, 3}, {2, 4}}},
@@ -190,15 +190,15 @@ func (roundRobin) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 	if size <= 0 {
 		size = 2
 	}
-	rounds, err := rrRounds(n, size, conf)
+	blockRounds, err := rrBlockRounds(n, size, conf)
 	if err != nil {
 		return nil, err
 	}
-	if conf.Rounds > 0 {
-		if conf.Rounds > len(rounds) {
-			return nil, fmt.Errorf("%s", s.Structure.Rr.TooManyRounds(strconv.Itoa(conf.Rounds), strconv.Itoa(n), strconv.Itoa(size), strconv.Itoa(len(rounds))))
+	if conf.BlockRounds > 0 {
+		if conf.BlockRounds > len(blockRounds) {
+			return nil, fmt.Errorf("%s", s.Structure.Rr.TooManyBlockRounds(strconv.Itoa(conf.BlockRounds), strconv.Itoa(n), strconv.Itoa(size), strconv.Itoa(len(blockRounds))))
 		}
-		rounds = rounds[:conf.Rounds]
+		blockRounds = blockRounds[:conf.BlockRounds]
 	}
 	boutTitle := func(seq int) string {
 		if conf.Title == "" {
@@ -208,11 +208,11 @@ func (roundRobin) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 	}
 	var matches []store.SchemeMatch
 	seq := 0
-	for circle, round := range rounds {
+	for circle, blockRound := range blockRounds {
 		// A Group holds one table for the whole block, so the Matches of a
 		// circle-round are played one after another. Their order in the
 		// schedule is the Wave.
-		for wave, table := range round {
+		for wave, table := range blockRound {
 			seq++
 			slots := make([]store.SchemeSlot, 0, len(table))
 			for _, position := range table {
@@ -229,7 +229,7 @@ func (roundRobin) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 				Code:             fmt.Sprintf("%s-%d", conf.Code, seq),
 				Title:            boutTitle(seq),
 				Venue:            conf.Venue,
-				Round:            circle + 1,
+				BlockRound:       circle + 1,
 				Wave:             wave + 1,
 				ParticipantCount: len(slots),
 				Slots:            slots,
@@ -239,47 +239,47 @@ func (roundRobin) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 	return matches, nil
 }
 
-// rrRounds picks the group's schedule: the config's explicit pairings, the
+// rrBlockRounds picks the group's schedule: the config's explicit pairings, the
 // canon for its shape, else a construction — the circle method for Matches of two,
 // the affine plane for bigger tables.
-func rrRounds(n, size int, conf RRConfig) ([][][]int, error) {
+func rrBlockRounds(n, size int, conf RRConfig) ([][][]int, error) {
 	if conf.Pairings != nil {
 		return conf.Pairings, nil
 	}
-	if rounds, ok := rrCanonTables[[2]int{n, size}]; ok {
-		return rounds, nil
+	if blockRounds, ok := rrCanonTables[[2]int{n, size}]; ok {
+		return blockRounds, nil
 	}
 	if size == 2 {
-		if rounds, ok := rrCanonRounds[n]; ok {
-			return rounds, nil
+		if blockRounds, ok := rrCanonBlockRounds[n]; ok {
+			return blockRounds, nil
 		}
-		return circleRounds(n), nil
+		return circleBlockRounds(n), nil
 	}
-	rounds, ok := affineRounds(n, size)
+	blockRounds, ok := affineBlockRounds(n, size)
 	if !ok {
 		return nil, fmt.Errorf("%s", dopestrings.Default.Structure.Rr.NoSchedule(strconv.Itoa(n), strconv.Itoa(size)))
 	}
-	return rounds, nil
+	return blockRounds, nil
 }
 
-// affineRounds is the resolvable schedule of the affine plane AG(2,m): m²
+// affineBlockRounds is the resolvable schedule of the affine plane AG(2,m): m²
 // seats split into m tables of m, m+1 times over, and no two Participants ever
 // share a table twice. It exists exactly when m is prime — the sizes a real
 // group stage uses (3, 5, 7) — so any other m reports no schedule rather than a
 // broken one.
-func affineRounds(n, m int) ([][][]int, bool) {
+func affineBlockRounds(n, m int) ([][][]int, bool) {
 	if m < 2 || n != m*m || !isPrime(m) {
 		return nil, false
 	}
 	point := func(x, y int) int { return x*m + y + 1 }
-	rounds := make([][][]int, 0, m+1)
+	blockRounds := make([][][]int, 0, m+1)
 	vertical := make([][]int, m)
 	for x := 0; x < m; x++ {
 		for y := 0; y < m; y++ {
 			vertical[x] = append(vertical[x], point(x, y))
 		}
 	}
-	rounds = append(rounds, vertical)
+	blockRounds = append(blockRounds, vertical)
 	for slope := 0; slope < m; slope++ {
 		lines := make([][]int, m)
 		for c := 0; c < m; c++ {
@@ -287,9 +287,9 @@ func affineRounds(n, m int) ([][][]int, bool) {
 				lines[c] = append(lines[c], point(x, (slope*x+c)%m))
 			}
 		}
-		rounds = append(rounds, lines)
+		blockRounds = append(blockRounds, lines)
 	}
-	return rounds, true
+	return blockRounds, true
 }
 
 func isPrime(n int) bool {
@@ -304,10 +304,10 @@ func isPrime(n int) bool {
 	return true
 }
 
-// circleRounds is the classic circle method: entrant 1 stays fixed, the rest
-// rotate right one step per round, pairs form outside-in; odd counts get a
-// silent bye. Pairs are emitted low position first.
-func circleRounds(n int) [][][]int {
+// circleBlockRounds is the classic circle method: entrant 1 stays fixed, the
+// rest rotate right one step per round, pairs form outside-in; odd counts get
+// a silent bye. Pairs are emitted low position first.
+func circleBlockRounds(n int) [][][]int {
 	size := n
 	if size%2 == 1 {
 		size++ // position size == the bye
@@ -316,7 +316,7 @@ func circleRounds(n int) [][][]int {
 	for i := range rot {
 		rot[i] = i + 2
 	}
-	var rounds [][][]int
+	var blockRounds [][][]int
 	for r := 0; r < size-1; r++ {
 		arr := append([]int{1}, rot...)
 		var pairs [][]int
@@ -330,10 +330,10 @@ func circleRounds(n int) [][][]int {
 			}
 			pairs = append(pairs, []int{a, b})
 		}
-		rounds = append(rounds, pairs)
+		blockRounds = append(blockRounds, pairs)
 		copy(rot, append([]int{rot[len(rot)-1]}, rot[:len(rot)-1]...))
 	}
-	return rounds
+	return blockRounds
 }
 
 // multiSeatStandings ranks a group whose Matches seat more than two. There is

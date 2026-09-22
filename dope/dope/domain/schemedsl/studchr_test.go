@@ -162,8 +162,8 @@ func TestStudchrEK(t *testing.T) {
 	// Шесть столов: двенадцать боёв 1/16 играются в два захода, дальше всё
 	// умещается в один. Заход — это отдельный этап, у него своё название.
 	want := []struct {
-		title               string
-		round, bouts, seats int
+		title                    string
+		blockRound, bouts, seats int
 	}{
 		{"1/16 финала, заход 1", 1, 6, 4},
 		{"1/16 финала, заход 2", 1, 6, 4},
@@ -187,8 +187,8 @@ func TestStudchrEK(t *testing.T) {
 			if len(match.Slots) != w.seats {
 				t.Fatalf("%s, %s: %d мест, want %d", w.title, match.Code, len(match.Slots), w.seats)
 			}
-			if match.Round != w.round {
-				t.Fatalf("%s, %s: круг %d, want %d", w.title, match.Code, match.Round, w.round)
+			if match.BlockRound != w.blockRound {
+				t.Fatalf("%s, %s: круг %d, want %d", w.title, match.Code, match.BlockRound, w.blockRound)
 			}
 		}
 	}

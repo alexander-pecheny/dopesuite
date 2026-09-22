@@ -35,7 +35,7 @@ func (flat) Expand(b Block) (Outputs, error) {
 		}
 		participants = b.Seeded()
 	}
-	if err := b.Rounds(nil); err != nil {
+	if err := b.BlockRounds(nil); err != nil {
 		return Outputs{}, err
 	}
 	proceeding, _ := b.Proceeding()
@@ -101,7 +101,7 @@ func (flat) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 		Code:             code + "-m1",
 		Title:            title,
 		Venue:            conf.Venue,
-		Round:            1,
+		BlockRound:       1,
 		ParticipantCount: len(conf.Entrants),
 		Slots:            conf.Entrants,
 	}}, nil

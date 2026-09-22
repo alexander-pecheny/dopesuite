@@ -233,13 +233,13 @@ test("a legacy group without standings keeps its бои", () => {
 // Bracket rounds carry no group, so they keep a column each — ЭК's Сетка
 // stays a column per заход.
 test("rounds without groups keep their own columns", () => {
-  const round = (code, title) => ({
+  const blockRound = (code, title) => ({
     code, title, stage_type: "matches",
     grain: {block: "s1", wave: 1},
     matches: [{code: `${code}-m1`, participantCount: 2, slots: [{label: "А"}, {label: "Б"}]}],
   });
   const grid = buildFestGrid({
-    stages: [round("s1-r1-w1", "1/16, заход 1"), round("s1-r1-w2", "1/16, заход 2")],
+    stages: [blockRound("s1-r1-w1", "1/16, заход 1"), blockRound("s1-r1-w2", "1/16, заход 2")],
   }, {stageHeaderLink: false});
   assert.equal(withClass(grid, "grid-stage").length, 2);
 });
@@ -247,11 +247,11 @@ test("rounds without groups keep their own columns", () => {
 // A бой's venue used to vanish when the бой in the same row of the previous
 // column sat on the same table — readers took the blank for «no table».
 test("every бой names its venue, however the previous column read", () => {
-  const round = (code) => ({
+  const blockRound = (code) => ({
     code, title: code, stage_type: "matches",
     matches: [{code: `${code}-m1`, venue: 1, participantCount: 2, slots: [{label: "А"}, {label: "Б"}]}],
   });
-  const grid = buildFestGrid({stages: [round("s1-r1"), round("s1-r2")]}, {stageHeaderLink: false});
+  const grid = buildFestGrid({stages: [blockRound("s1-r1"), blockRound("s1-r2")]}, {stageHeaderLink: false});
   const venues = withClass(grid, "grid-match-venue").map((n) => n.textContent);
   assert.deepEqual(venues, ["пл. 1", "пл. 1"]);
 });

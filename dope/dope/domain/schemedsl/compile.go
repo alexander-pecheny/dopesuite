@@ -255,7 +255,7 @@ func (c *compiler) checkKeys() error {
 		dotted := keySet(dottedKeys, structure.SortedNames(params))
 		for _, key := range macro.Keys() {
 			known[key.Name] = true
-			if key.Round {
+			if key.BlockRound {
 				dotted[key.Name] = true
 			}
 		}
@@ -379,10 +379,10 @@ func (c *compiler) readVenues() error {
 
 // blockVenues resolves a block's (or, dotted, one round's) `venues` subset to
 // venue numbers, by title or number; nil = no restriction.
-func (c *compiler) blockVenues(blk Section, rounds []string) ([]int, error) {
+func (c *compiler) blockVenues(blk Section, blockRounds []string) ([]int, error) {
 	keys := []string{}
-	for _, round := range rounds {
-		keys = append(keys, "venues."+round)
+	for _, blockRound := range blockRounds {
+		keys = append(keys, "venues."+blockRound)
 	}
 	keys = append(keys, "venues")
 	for _, key := range keys {
@@ -418,9 +418,9 @@ func (c *compiler) blockVenues(blk Section, rounds []string) ([]int, error) {
 
 // paramInt resolves one protocol/config key through defaults < block < round;
 // rounds lists the stage's round code plus its aliases (r4 for semifinal).
-func paramInt(defaults, blk Section, key string, rounds []string) (int, bool) {
-	for _, round := range rounds {
-		if v, ok := blk.Int(key + "." + round); ok {
+func paramInt(defaults, blk Section, key string, blockRounds []string) (int, bool) {
+	for _, blockRound := range blockRounds {
+		if v, ok := blk.Int(key + "." + blockRound); ok {
 			return v, true
 		}
 	}
@@ -433,8 +433,8 @@ func paramInt(defaults, blk Section, key string, rounds []string) (int, bool) {
 	return 0, false
 }
 
-func paramIntList(defaults, blk Section, key string, rounds []string) ([]int, bool) {
-	for _, section := range append(roundSections(blk, key, rounds), blk, defaults) {
+func paramIntList(defaults, blk Section, key string, blockRounds []string) ([]int, bool) {
+	for _, section := range append(blockRoundSections(blk, key, blockRounds), blk, defaults) {
 		if v, ok, err := section.IntList(key); ok && err == nil {
 			return v, true
 		}
@@ -442,21 +442,21 @@ func paramIntList(defaults, blk Section, key string, rounds []string) ([]int, bo
 	return nil, false
 }
 
-// roundSections is a section per round override of key — the same cascade
+// blockRoundSections is a section per round override of key — the same cascade
 // paramInt walks by hand.
-func roundSections(blk Section, key string, rounds []string) []Section {
+func blockRoundSections(blk Section, key string, blockRounds []string) []Section {
 	var out []Section
-	for _, round := range rounds {
-		if v, ok := blk.Values[key+"."+round]; ok {
+	for _, blockRound := range blockRounds {
+		if v, ok := blk.Values[key+"."+blockRound]; ok {
 			out = append(out, Section{Line: v.Line, Values: map[string]Value{key: v}})
 		}
 	}
 	return out
 }
 
-func paramBool(defaults, blk Section, key string, rounds []string) (bool, bool) {
-	for _, round := range rounds {
-		if v, ok := blk.Bool(key + "." + round); ok {
+func paramBool(defaults, blk Section, key string, blockRounds []string) (bool, bool) {
+	for _, blockRound := range blockRounds {
+		if v, ok := blk.Bool(key + "." + blockRound); ok {
 			return v, true
 		}
 	}
@@ -471,8 +471,8 @@ func paramBool(defaults, blk Section, key string, rounds []string) (bool, bool) 
 
 // stageConfig is a stage's config on the wire: the Kind's typed config (nil
 // for a hand-drawn stage) with the Protocol's params beside it.
-func (c *compiler) stageConfig(cfg any, blk Section, rounds []string) (json.RawMessage, error) {
-	config := c.protocolConfig(blk, rounds)
+func (c *compiler) stageConfig(cfg any, blk Section, blockRounds []string) (json.RawMessage, error) {
+	config := c.protocolConfig(blk, blockRounds)
 	if cfg != nil {
 		data, err := json.Marshal(cfg)
 		if err != nil {
@@ -487,20 +487,20 @@ func (c *compiler) stageConfig(cfg any, blk Section, rounds []string) (json.RawM
 
 // protocolConfig collects the game's protocol params for one stage (rounds
 // empty means the block default).
-func (c *compiler) protocolConfig(blk Section, rounds []string) map[string]any {
+func (c *compiler) protocolConfig(blk Section, blockRounds []string) map[string]any {
 	config := map[string]any{}
 	for _, param := range protocol.Params(c.in.GameType) {
 		switch {
 		case param.Bool:
-			if v, ok := paramBool(c.doc.Defaults, blk, param.Key, rounds); ok {
+			if v, ok := paramBool(c.doc.Defaults, blk, param.Key, blockRounds); ok {
 				config[param.Config] = v
 			}
 		case param.List:
-			if v, ok := paramIntList(c.doc.Defaults, blk, param.Key, rounds); ok {
+			if v, ok := paramIntList(c.doc.Defaults, blk, param.Key, blockRounds); ok {
 				config[param.Config] = v
 			}
 		default:
-			if v, ok := paramInt(c.doc.Defaults, blk, param.Key, rounds); ok {
+			if v, ok := paramInt(c.doc.Defaults, blk, param.Key, blockRounds); ok {
 				config[param.Config] = v
 			}
 		}
@@ -606,13 +606,13 @@ func (c *compiler) blockEntrants(index int, blk Section, groups, size int) ([][]
 // round code re-ranks at that boundary inside the block (se only), and `every`
 // does both — the incoming Edge and every round after it, which is what TPSh
 // does and what `true` already means on a bracket with lives.
-func blockReseedSpec(blk Section) (incoming bool, round string) {
+func blockReseedSpec(blk Section) (incoming bool, blockRound string) {
 	if v, ok := blk.Bool("reseed"); ok {
 		return v, ""
 	}
 	if v, ok := blk.Str("reseed"); ok {
-		if v == structure.ReseedEveryRound {
-			return true, structure.ReseedEveryRound
+		if v == structure.ReseedEveryBlockRound {
+			return true, structure.ReseedEveryBlockRound
 		}
 		return false, v
 	}
@@ -850,7 +850,7 @@ func (c *compiler) expandThrough(index int, blk Section, macro structure.Macro) 
 	return &out, nil
 }
 
-// roundTitle lets a scheme name a round itself — `title.r1: Round of 16` —
+// blockRoundTitle lets a scheme name a round itself — `title.r1: Round of 16` —
 // falling back to the derived name. The traditional 1/N names are arithmetic
 // only in a bracket that halves; anywhere else they are the tournament's own
 // word for the round, so the scheme says them.
@@ -858,7 +858,7 @@ func (c *compiler) expandThrough(index int, blk Section, macro structure.Macro) 
 // A titled block among other blocks says whose round it is — "Play-off.
 // Stage 1" — the same way a Group carries its block's title. A scheme of one
 // block has nothing to tell apart, so EK's "Round of 16" stays bare.
-func (c *compiler) roundTitle(blk Section, names []string, derived string) string {
+func (c *compiler) blockRoundTitle(blk Section, names []string, derived string) string {
 	title := derived
 	for _, name := range names {
 		if named, ok := blk.Str("title." + name); ok {
@@ -898,10 +898,10 @@ func blockTitle(blk Section, fallback string) string {
 // A stage spanning several Rounds (a round-robin Group, a DE pod) leaves round
 // zero and lets each Match carry its own.
 type at struct {
-	block string
-	round int
-	wave  int
-	group string
+	block      string
+	blockRound int
+	wave       int
+	group      string
 }
 
 func (a at) grain() store.SchemeGrain {
@@ -914,16 +914,16 @@ func (a at) grain() store.SchemeGrain {
 
 // appendManualStage adds a hand-drawn stage: its Matches as the compiler laid
 // them out, no Kind config of its own.
-func (c *compiler) appendManualStage(blk Section, code, title string, rounds []string, where at, matches []store.SchemeMatch) {
-	c.appendDrawnStage("matches", nil, blk, code, title, rounds, where, matches)
+func (c *compiler) appendManualStage(blk Section, code, title string, blockRounds []string, where at, matches []store.SchemeMatch) {
+	c.appendDrawnStage("matches", nil, blk, code, title, blockRounds, where, matches)
 }
 
-func (c *compiler) appendDrawnStage(kind string, cfg any, blk Section, code, title string, rounds []string, where at, matches []store.SchemeMatch) {
-	configJSON, _ := c.stageConfig(cfg, blk, rounds)
-	if where.round > 0 {
+func (c *compiler) appendDrawnStage(kind string, cfg any, blk Section, code, title string, blockRounds []string, where at, matches []store.SchemeMatch) {
+	configJSON, _ := c.stageConfig(cfg, blk, blockRounds)
+	if where.blockRound > 0 {
 		for i := range matches {
-			if matches[i].Round == 0 {
-				matches[i].Round = where.round
+			if matches[i].BlockRound == 0 {
+				matches[i].BlockRound = where.blockRound
 			}
 		}
 	}
@@ -940,11 +940,11 @@ func (c *compiler) appendDrawnStage(kind string, cfg any, blk Section, code, tit
 	})
 }
 
-// rejectRoundKeys fails on dotted overrides whose suffix names no round of
+// rejectBlockRoundKeys fails on dotted overrides whose suffix names no round of
 // this block (rounds nil = the kind has no addressable rounds).
-func (c *compiler) rejectRoundKeys(blk Section, rounds []string) error {
+func (c *compiler) rejectBlockRoundKeys(blk Section, blockRounds []string) error {
 	known := map[string]bool{}
-	for _, code := range rounds {
+	for _, code := range blockRounds {
 		known[code] = true
 	}
 	for key, v := range blk.Values {
@@ -953,10 +953,10 @@ func (c *compiler) rejectRoundKeys(blk Section, rounds []string) error {
 			continue // a scoring rule's suffix is a metric name, not a round
 		}
 		if !known[suffix] {
-			return errAt(v.Line, "%s", dopestrings.Default.Scheme.Keys.UnknownRound(key, suffix, strings.Join(structure.SortedNames(known), ", ")))
+			return errAt(v.Line, "%s", dopestrings.Default.Scheme.Keys.UnknownBlockRound(key, suffix, strings.Join(structure.SortedNames(known), ", ")))
 		}
 		if prefix == "match_size" && !strings.HasPrefix(suffix, "r") {
-			return errAt(v.Line, "%s", dopestrings.Default.Scheme.Keys.MatchSizeRound(key))
+			return errAt(v.Line, "%s", dopestrings.Default.Scheme.Keys.MatchSizeBlockRound(key))
 		}
 	}
 	return nil

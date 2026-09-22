@@ -135,26 +135,26 @@ join matches m on m.stage_id = s.id where s.game_id = ? group by s.code order by
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	type round struct {
+	type blockRound struct {
 		code  string
 		bouts int
 		seats int
 	}
-	var rounds []round
+	var blockRounds []blockRound
 	for rows.Next() {
-		var r round
+		var r blockRound
 		if err := rows.Scan(&r.code, &r.bouts, &r.seats); err != nil {
 			t.Fatal(err)
 		}
-		rounds = append(rounds, r)
+		blockRounds = append(blockRounds, r)
 	}
 	want := []struct{ bouts, seats int }{{4, 4}, {2, 4}, {1, 4}}
-	if len(rounds) != len(want) {
-		t.Fatalf("раундов = %d (%v), want %d", len(rounds), rounds, len(want))
+	if len(blockRounds) != len(want) {
+		t.Fatalf("раундов = %d (%v), want %d", len(blockRounds), blockRounds, len(want))
 	}
 	for i, w := range want {
-		if rounds[i].bouts != w.bouts || rounds[i].seats != w.seats {
-			t.Fatalf("раунд %d = %d боёв по %d, want %d по %d", i+1, rounds[i].bouts, rounds[i].seats, w.bouts, w.seats)
+		if blockRounds[i].bouts != w.bouts || blockRounds[i].seats != w.seats {
+			t.Fatalf("раунд %d = %d боёв по %d, want %d по %d", i+1, blockRounds[i].bouts, blockRounds[i].seats, w.bouts, w.seats)
 		}
 	}
 
@@ -166,7 +166,7 @@ select ms.source_ref_json from match_slots ms
 join matches m on m.id = ms.match_id
 join stages s on s.id = m.stage_id
 where s.game_id = ? and s.code = ? and m.code like '%-m1'
-order by ms.slot_index`, gameID, rounds[1].code)
+order by ms.slot_index`, gameID, blockRounds[1].code)
 	if err != nil {
 		t.Fatal(err)
 	}

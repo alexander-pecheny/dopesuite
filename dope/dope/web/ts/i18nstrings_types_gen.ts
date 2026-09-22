@@ -52,7 +52,7 @@ export type Strings = {
       title: (team: string, row: string) => string;
     };
     pod: {
-      round: (n: string) => string;
+      blockRound: (n: string) => string;
     };
     protocol: {
       empty: () => string;
@@ -951,10 +951,10 @@ export type Strings = {
       lineupUnknownTeam: (team: string) => string;
       lineupsIndividual: () => string;
       overrideExpected: () => string;
+      partBlockRound: () => string;
       partExpected: (what: string, prefix: string, raw: string) => string;
       partMatch: () => string;
       partNumberExpected: (what: string, raw: string) => string;
-      partRound: () => string;
       partWave: () => string;
       questionEmpty: (name: string) => string;
       questionMark: (name: string, raw: string) => string;
@@ -1057,12 +1057,12 @@ export type Strings = {
       linePrefix: (n: string, msg: string) => string;
     };
     keys: {
-      matchSizeRound: (key: string) => string;
+      matchSizeBlockRound: (key: string) => string;
       unknownBlock: (key: string, known: string) => string;
+      unknownBlockRound: (key: string, round: string, known: string) => string;
       unknownDefaults: (key: string, known: string) => string;
       unknownDotted: (key: string, known: string) => string;
       unknownInit: (key: string, known: string) => string;
-      unknownRound: (key: string, round: string, known: string) => string;
     };
     parse: {
       duplicateKey: (key: string, n: string) => string;
@@ -1077,12 +1077,12 @@ export type Strings = {
       unparsedLine: (raw: string) => string;
     };
     reseed: {
+      blockRoundUnknown: (round: string) => string;
       metricUnknown: (metric: string, known: string) => string;
       needsReseed: (why: string) => string;
       noTemplate: () => string;
       previousTerminal: () => string;
       proceedingTwo: () => string;
-      roundUnknown: (round: string) => string;
       statsFromBounds: (block: string, last: string) => string;
       statsFromNeedsReseed: () => string;
     };
@@ -1154,6 +1154,7 @@ export type Strings = {
     };
     tabs: {
       blockGroup: () => string;
+      blockRound: (n: string) => string;
       detailed: () => string;
       final: () => string;
       grid: () => string;
@@ -1166,7 +1167,6 @@ export type Strings = {
       reseed: () => string;
       results: () => string;
       roster: () => string;
-      round: (n: string) => string;
       screen: () => string;
       seed: () => string;
       seedImport: () => string;
@@ -1243,10 +1243,10 @@ export type Strings = {
   };
   standings: {
     columns: {
+      blockRound: (n: string) => string;
       place: () => string;
       player: () => string;
       points: () => string;
-      round: (n: string) => string;
     };
   };
   storage: {
@@ -1267,17 +1267,17 @@ export type Strings = {
       groupsNeeded: () => string;
       participantsNeeded: () => string;
       playoff: () => string;
-      reseedRoundUnknown: (round: string) => string;
+      reseedBlockRoundUnknown: (round: string) => string;
     };
     elimination: {
+      blockRoundBracket: (round: string, bracket: string, err: string) => string;
+      blockRoundEliminateNothing: (round: string, entrants: string, proceeding: string) => string;
+      blockRoundNotDivisible: (round: string, entrants: string, size: string) => string;
       boutCannotOutput: (size: string, winning: string) => string;
       bracketNotDivisible: (entrants: string, size: string, winning: string) => string;
       livesMin: () => string;
       matchSizeMin: () => string;
-      roundBracket: (round: string, bracket: string, err: string) => string;
-      roundEliminateNothing: (round: string, entrants: string, proceeding: string) => string;
-      roundNotDivisible: (round: string, entrants: string, size: string) => string;
-      tooManyRounds: () => string;
+      tooManyBlockRounds: () => string;
       winningPlacesMin: () => string;
     };
     flat: {
@@ -1295,29 +1295,29 @@ export type Strings = {
       groupSizeNeeded: () => string;
       noSchedule: (entrants: string, size: string) => string;
       pointsList: () => string;
-      tooManyRounds: (rounds: string, entrants: string, size: string, have: string) => string;
+      tooManyBlockRounds: (rounds: string, entrants: string, size: string, have: string) => string;
     };
     se: {
       bestOfFinalOnly: () => string;
       bestOfParity: () => string;
+      blockRoundNth: (n: string) => string;
+      blockRoundSemifinals: () => string;
       bronze: () => string;
       bronzeBout: (n: string) => string;
       finalBout: (n: string) => string;
-      matchNthRound: (n: string, index: string) => string;
+      matchNthBlockRound: (n: string, index: string) => string;
       matchSemifinal: (index: string) => string;
       participantsMissing: () => string;
       proceedingMissing: () => string;
-      reseedFirstRound: (round: string) => string;
-      reseedRoundUnknown: (round: string) => string;
-      roundNth: (n: string) => string;
-      roundSemifinals: () => string;
+      reseedBlockRoundUnknown: (round: string) => string;
+      reseedFirstBlockRound: (round: string) => string;
       templateGroups: () => string;
       templateSize: (size: string) => string;
     };
     titles: {
+      blockRound: (n: string) => string;
       bout: (n: string) => string;
       final: () => string;
-      round: (n: string) => string;
     };
   };
   telegram: {

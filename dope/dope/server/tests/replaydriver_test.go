@@ -165,7 +165,7 @@ where s.game_id = ? and s.block_code = ? and s.group_code = ?
   and m.round = ?
 order by s.position, m.position
 limit 1 offset ?`,
-		g.gameID, at.Block, at.Group, at.Wave, at.Round, at.Match-1).Scan(&id, &code)
+		g.gameID, at.Block, at.Group, at.Wave, at.BlockRound, at.Match-1).Scan(&id, &code)
 	if err == sql.ErrNoRows {
 		return 0, "", fmt.Errorf("в игре нет боя по координате %s", at)
 	}

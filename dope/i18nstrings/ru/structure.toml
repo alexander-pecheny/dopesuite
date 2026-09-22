@@ -9,7 +9,7 @@
 bout = 'Бой {{.n}}'
 # The n-th round of a multi-round bracket: a single-bracket DE round, and the
 # non-terminal rounds of an elimination.
-round = 'Раунд {{.n}}'
+block_round = 'Раунд {{.n}}'
 # The final: the knockout bracket's last round, the single final match of the
 # legacy static schedule, and the feed label of the group the final feeds on.
 final = "Финал"
@@ -18,14 +18,14 @@ final = "Финал"
 # The single_elimination block. Round titles first, then the config errors
 # the scheme author reads on the game settings page.
 # The round of semifinals: four entrants remain, two bouts play.
-round_semifinals = "Полуфиналы"
+block_round_semifinals = "Полуфиналы"
 # An earlier round, named by the fraction it leaves: "1/4 финала" when eight
 # remain (n is remaining/2).
-round_nth = '1/{{.n}} финала'
+block_round_nth = '1/{{.n}} финала'
 # A semifinal match of the legacy static schedule, one per semifinal bout.
 match_semifinal = 'Полуфинал {{.index}}'
 # A match of an earlier round of the legacy static schedule, one per bout.
-match_nth_round = '1/{{.n}} финала {{.index}}'
+match_nth_block_round = '1/{{.n}} финала {{.index}}'
 # A bout of the best-of final series.
 final_bout = 'Финал. Бой {{.n}}'
 # The bronze bout, and the bronze stage title when it is a single bout.
@@ -35,9 +35,9 @@ bronze_bout = 'Матч за 3-е место. Бой {{.n}}'
 # A block without the participants key.
 participants_missing = "single_elimination: нужен participants"
 # A reseed naming a round the block does not have.
-reseed_round_unknown = 'reseed: в этом блоке нет раунда {{.round}}'
+reseed_block_round_unknown = 'reseed: в этом блоке нет раунда {{.round}}'
 # A reseed naming the opening round, which needs reseed: true instead.
-reseed_first_round = 'reseed: {{.round}} — первый раунд, пишите reseed: true'
+reseed_first_block_round = 'reseed: {{.round}} — первый раунд, пишите reseed: true'
 # A best_of value that is not an odd number of bouts from 3.
 best_of_parity = "best_of: серия играется до большинства побед — нечётное число боёв от 3"
 # A best_of set on a round that is not the final or the bronze.
@@ -59,15 +59,15 @@ match_size_min = "match_size должен быть хотя бы 2"
 # A bout whose seat count does not exceed the winners it must produce.
 bout_cannot_output = 'бой на {{.size}} мест не может выводить {{.winning}} — победителей не меньше, чем мест'
 # A round whose entrants do not split evenly into bouts of the asked size.
-round_not_divisible = 'раунд {{.round}}: {{.entrants}} участников не делятся на бои по {{.size}}'
+block_round_not_divisible = 'раунд {{.round}}: {{.entrants}} участников не делятся на бои по {{.size}}'
 # A round whose winners would be as many as its entrants.
-round_eliminate_nothing = 'раунд {{.round}} никого не выбивает: {{.entrants}} участников, {{.proceeding}} проходит'
+block_round_eliminate_nothing = 'раунд {{.round}} никого не выбивает: {{.entrants}} участников, {{.proceeding}} проходит'
 # The bracket did not terminate within a sane number of rounds.
-too_many_rounds = "слишком много раундов — проверьте match_size и winning_places"
+too_many_block_rounds = "слишком много раундов — проверьте match_size и winning_places"
 # An elimination with lives set below one.
 lives_min = "нужна хотя бы одна жизнь"
 # A complaint of one bracket of a lives elimination, pinned to its round.
-round_bracket = 'раунд {{.round}}, сетка {{.bracket}}: {{.err}}'
+block_round_bracket = 'раунд {{.round}}, сетка {{.bracket}}: {{.err}}'
 # A bracket whose members do not split evenly into bouts of the asked size.
 bracket_not_divisible = '{{.entrants}} участников не делятся на бои не больше чем по {{.size}}, из которых выходит {{.winning}}'
 
@@ -80,7 +80,7 @@ participants_needed = "double_elimination: нужен participants (или group
 # The resolved group count or group size is too small to play.
 bad_groups = 'double_elimination: {{.groups}} групп по {{.size}} — так не бывает'
 # A reseed: value naming a round — the block only takes true/false.
-reseed_round_unknown = 'reseed: в этом блоке нет раунда {{.round}} — только true/false'
+reseed_block_round_unknown = 'reseed: в этом блоке нет раунда {{.round}} — только true/false'
 # The stage title of a single-bracket elimination.
 playoff = "Плей-офф"
 
@@ -94,7 +94,7 @@ group_feed = 'Гр. {{.n}}'
 # A points list that is not exactly win, draw, loss.
 points_list = "points: жду [победа, ничья, поражение]"
 # More rounds asked than the schedule construction can provide.
-too_many_rounds = 'rr: {{.rounds}} кругов на {{.entrants}} участников по {{.size}} — есть только {{.have}}'
+too_many_block_rounds = 'rr: {{.rounds}} кругов на {{.entrants}} участников по {{.size}} — есть только {{.have}}'
 # No schedule construction exists for this headcount and seat count.
 no_schedule = 'rr: нет расписания на {{.entrants}} участников по {{.size}} за столом'
 

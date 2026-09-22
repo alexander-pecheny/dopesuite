@@ -75,7 +75,7 @@ func TestStudchrEKTranscriptShape(t *testing.T) {
 	// Первый круг — двенадцать боёв в два захода по шесть столов.
 	waves := map[int]int{}
 	for _, bout := range script.Bouts {
-		if bout.At.Round == 1 {
+		if bout.At.BlockRound == 1 {
 			waves[bout.At.Wave]++
 		}
 	}

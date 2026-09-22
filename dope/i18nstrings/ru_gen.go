@@ -59,7 +59,7 @@ var RU = Strings{
 			Title: func(team string, row string) string { return fmt.Sprintf("%s, вопрос %s", team, row) },
 		},
 		Pod: BrainPodStrings{
-			Round: func(n string) string { return fmt.Sprintf("Раунд %s", n) },
+			BlockRound: func(n string) string { return fmt.Sprintf("Раунд %s", n) },
 		},
 		Protocol: BrainProtocolStrings{
 			Empty: func() string { return "Бои ещё не загружены." },
@@ -1216,6 +1216,7 @@ var RU = Strings{
 			OverrideExpected: func() string {
 				return "расхождение пишется как «override [координата] поле [участник]: почему листу верить нельзя» — без причины это молча спрятанная ошибка"
 			},
+			PartBlockRound: func() string { return "круг" },
 			PartExpected: func(what string, prefix string, raw string) string {
 				return fmt.Sprintf("%s пишется как %s1, а не \"%s\"", what, prefix, raw)
 			},
@@ -1223,8 +1224,7 @@ var RU = Strings{
 			PartNumberExpected: func(what string, raw string) string {
 				return fmt.Sprintf("%s должен быть номером от 1, а не \"%s\"", what, raw)
 			},
-			PartRound: func() string { return "круг" },
-			PartWave:  func() string { return "заход" },
+			PartWave: func() string { return "заход" },
 			QuestionEmpty: func(name string) string {
 				return fmt.Sprintf("у %s пустой вопрос — незаданный пишется как -", name)
 			},
@@ -1420,11 +1420,14 @@ var RU = Strings{
 			LinePrefix: func(n string, msg string) string { return fmt.Sprintf("строка %s: %s", n, msg) },
 		},
 		Keys: SchemeKeysStrings{
-			MatchSizeRound: func(key string) string {
+			MatchSizeBlockRound: func(key string) string {
 				return fmt.Sprintf("%s: размер боя задаётся по номеру раунда, match_size.rN", key)
 			},
 			UnknownBlock: func(key string, known string) string {
 				return fmt.Sprintf("неизвестный ключ %s (есть %s)", key, known)
+			},
+			UnknownBlockRound: func(key string, round string, known string) string {
+				return fmt.Sprintf("%s: в этом блоке нет раунда %s (есть %s)", key, round, known)
 			},
 			UnknownDefaults: func(key string, known string) string {
 				return fmt.Sprintf("неизвестный ключ %s в [defaults] (есть %s)", key, known)
@@ -1434,9 +1437,6 @@ var RU = Strings{
 			},
 			UnknownInit: func(key string, known string) string {
 				return fmt.Sprintf("неизвестный ключ %s в [init] (есть %s)", key, known)
-			},
-			UnknownRound: func(key string, round string, known string) string {
-				return fmt.Sprintf("%s: в этом блоке нет раунда %s (есть %s)", key, round, known)
 			},
 		},
 		Parse: SchemeParseStrings{
@@ -1466,6 +1466,9 @@ var RU = Strings{
 			},
 		},
 		Reseed: SchemeReseedStrings{
+			BlockRoundUnknown: func(round string) string {
+				return fmt.Sprintf("reseed: в этом блоке нет раунда %s — только true/false", round)
+			},
 			MetricUnknown: func(metric string, known string) string {
 				return fmt.Sprintf("sorting: %s не считается на пересеве — ни протокол, ни правила подсчёта такой метрики не дают (есть %s)", metric, known)
 			},
@@ -1476,9 +1479,6 @@ var RU = Strings{
 			},
 			ProceedingTwo: func() string {
 				return "детерминированная рассадка определена для proceeding_participants: 2"
-			},
-			RoundUnknown: func(round string) string {
-				return fmt.Sprintf("reseed: в этом блоке нет раунда %s — только true/false", round)
 			},
 			StatsFromBounds: func(block string, last string) string {
 				return fmt.Sprintf("stats_from: %s — доступны блоки s1..s%s", block, last)
@@ -1601,6 +1601,7 @@ var RU = Strings{
 		},
 		Tabs: ScreenTabsStrings{
 			BlockGroup:      func() string { return "Групповой этап" },
+			BlockRound:      func(n string) string { return fmt.Sprintf("Круг %s", n) },
 			Detailed:        func() string { return "Подробно" },
 			Final:           func() string { return "Финал" },
 			Grid:            func() string { return "Сетка" },
@@ -1613,7 +1614,6 @@ var RU = Strings{
 			Reseed:          func() string { return "Пересев" },
 			Results:         func() string { return "Итог" },
 			Roster:          func() string { return "Составы" },
-			Round:           func(n string) string { return fmt.Sprintf("Круг %s", n) },
 			Screen:          func() string { return "Экран" },
 			Seed:            func() string { return "Посев" },
 			SeedImport:      func() string { return "Импорт команд" },
@@ -1694,10 +1694,10 @@ var RU = Strings{
 	},
 	Standings: StandingsStrings{
 		Columns: StandingsColumnsStrings{
-			Place:  func() string { return "М" },
-			Player: func() string { return "Игрок" },
-			Points: func() string { return "Очки" },
-			Round:  func(n string) string { return fmt.Sprintf("Круг %s", n) },
+			BlockRound: func(n string) string { return fmt.Sprintf("Круг %s", n) },
+			Place:      func() string { return "М" },
+			Player:     func() string { return "Игрок" },
+			Points:     func() string { return "Очки" },
 		},
 	},
 	Storage: StorageStrings{
@@ -1720,11 +1720,20 @@ var RU = Strings{
 			GroupsNeeded:       func() string { return "double_elimination: нужен groups (или participants, кратный 4)" },
 			ParticipantsNeeded: func() string { return "double_elimination: нужен participants (или groups и group_size)" },
 			Playoff:            func() string { return "Плей-офф" },
-			ReseedRoundUnknown: func(round string) string {
+			ReseedBlockRoundUnknown: func(round string) string {
 				return fmt.Sprintf("reseed: в этом блоке нет раунда %s — только true/false", round)
 			},
 		},
 		Elimination: StructureEliminationStrings{
+			BlockRoundBracket: func(round string, bracket string, err string) string {
+				return fmt.Sprintf("раунд %s, сетка %s: %s", round, bracket, err)
+			},
+			BlockRoundEliminateNothing: func(round string, entrants string, proceeding string) string {
+				return fmt.Sprintf("раунд %s никого не выбивает: %s участников, %s проходит", round, entrants, proceeding)
+			},
+			BlockRoundNotDivisible: func(round string, entrants string, size string) string {
+				return fmt.Sprintf("раунд %s: %s участников не делятся на бои по %s", round, entrants, size)
+			},
 			BoutCannotOutput: func(size string, winning string) string {
 				return fmt.Sprintf("бой на %s мест не может выводить %s — победителей не меньше, чем мест", size, winning)
 			},
@@ -1733,16 +1742,7 @@ var RU = Strings{
 			},
 			LivesMin:     func() string { return "нужна хотя бы одна жизнь" },
 			MatchSizeMin: func() string { return "match_size должен быть хотя бы 2" },
-			RoundBracket: func(round string, bracket string, err string) string {
-				return fmt.Sprintf("раунд %s, сетка %s: %s", round, bracket, err)
-			},
-			RoundEliminateNothing: func(round string, entrants string, proceeding string) string {
-				return fmt.Sprintf("раунд %s никого не выбивает: %s участников, %s проходит", round, entrants, proceeding)
-			},
-			RoundNotDivisible: func(round string, entrants string, size string) string {
-				return fmt.Sprintf("раунд %s: %s участников не делятся на бои по %s", round, entrants, size)
-			},
-			TooManyRounds: func() string {
+			TooManyBlockRounds: func() string {
 				return "слишком много раундов — проверьте match_size и winning_places"
 			},
 			WinningPlacesMin: func() string { return "winning_places должен быть хотя бы 1" },
@@ -1766,7 +1766,7 @@ var RU = Strings{
 				return fmt.Sprintf("rr: нет расписания на %s участников по %s за столом", entrants, size)
 			},
 			PointsList: func() string { return "points: жду [победа, ничья, поражение]" },
-			TooManyRounds: func(rounds string, entrants string, size string, have string) string {
+			TooManyBlockRounds: func(rounds string, entrants string, size string, have string) string {
 				return fmt.Sprintf("rr: %s кругов на %s участников по %s — есть только %s", rounds, entrants, size, have)
 			},
 		},
@@ -1777,23 +1777,23 @@ var RU = Strings{
 			BestOfParity: func() string {
 				return "best_of: серия играется до большинства побед — нечётное число боёв от 3"
 			},
-			Bronze:              func() string { return "Матч за 3-е место" },
-			BronzeBout:          func(n string) string { return fmt.Sprintf("Матч за 3-е место. Бой %s", n) },
-			FinalBout:           func(n string) string { return fmt.Sprintf("Финал. Бой %s", n) },
-			MatchNthRound:       func(n string, index string) string { return fmt.Sprintf("1/%s финала %s", n, index) },
-			MatchSemifinal:      func(index string) string { return fmt.Sprintf("Полуфинал %s", index) },
-			ParticipantsMissing: func() string { return "single_elimination: нужен participants" },
+			BlockRoundNth:        func(n string) string { return fmt.Sprintf("1/%s финала", n) },
+			BlockRoundSemifinals: func() string { return "Полуфиналы" },
+			Bronze:               func() string { return "Матч за 3-е место" },
+			BronzeBout:           func(n string) string { return fmt.Sprintf("Матч за 3-е место. Бой %s", n) },
+			FinalBout:            func(n string) string { return fmt.Sprintf("Финал. Бой %s", n) },
+			MatchNthBlockRound:   func(n string, index string) string { return fmt.Sprintf("1/%s финала %s", n, index) },
+			MatchSemifinal:       func(index string) string { return fmt.Sprintf("Полуфинал %s", index) },
+			ParticipantsMissing:  func() string { return "single_elimination: нужен participants" },
 			ProceedingMissing: func() string {
 				return "предыдущему блоку нужен proceeding_participants, чтобы продолжить схему"
 			},
-			ReseedFirstRound: func(round string) string {
-				return fmt.Sprintf("reseed: %s — первый раунд, пишите reseed: true", round)
-			},
-			ReseedRoundUnknown: func(round string) string {
+			ReseedBlockRoundUnknown: func(round string) string {
 				return fmt.Sprintf("reseed: в этом блоке нет раунда %s", round)
 			},
-			RoundNth:        func(n string) string { return fmt.Sprintf("1/%s финала", n) },
-			RoundSemifinals: func() string { return "Полуфиналы" },
+			ReseedFirstBlockRound: func(round string) string {
+				return fmt.Sprintf("reseed: %s — первый раунд, пишите reseed: true", round)
+			},
 			TemplateGroups: func() string {
 				return "нет шаблона рассадки из этих групп — добавьте reseed: true"
 			},
@@ -1802,9 +1802,9 @@ var RU = Strings{
 			},
 		},
 		Titles: StructureTitlesStrings{
-			Bout:  func(n string) string { return fmt.Sprintf("Бой %s", n) },
-			Final: func() string { return "Финал" },
-			Round: func(n string) string { return fmt.Sprintf("Раунд %s", n) },
+			BlockRound: func(n string) string { return fmt.Sprintf("Раунд %s", n) },
+			Bout:       func(n string) string { return fmt.Sprintf("Бой %s", n) },
+			Final:      func() string { return "Финал" },
 		},
 	},
 	Telegram: TelegramStrings{

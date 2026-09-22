@@ -86,18 +86,18 @@ type Contender struct {
 
 // RRConfig is a round-robin Group: its schedule and its cross-table rule.
 type RRConfig struct {
-	Code      string             `json:"code,omitempty"`
-	Label     string             `json:"label,omitempty"`
-	Title     string             `json:"title,omitempty"`
-	Venue     int                `json:"venue,omitempty"`
-	Entrants  []store.SchemeSlot `json:"entrants,omitempty"`
-	Pairings  [][][]int          `json:"pairings,omitempty"`
-	MatchSize int                `json:"matchSize,omitempty"`
-	Rounds    int                `json:"rounds,omitempty"`
-	Points    *RRPoints          `json:"points,omitempty"`
-	Metric    string             `json:"metric,omitempty"`
-	Order     []string           `json:"order,omitempty"`
-	Rules     *Rules             `json:"rules,omitempty"`
+	Code        string             `json:"code,omitempty"`
+	Label       string             `json:"label,omitempty"`
+	Title       string             `json:"title,omitempty"`
+	Venue       int                `json:"venue,omitempty"`
+	Entrants    []store.SchemeSlot `json:"entrants,omitempty"`
+	Pairings    [][][]int          `json:"pairings,omitempty"`
+	MatchSize   int                `json:"matchSize,omitempty"`
+	BlockRounds int                `json:"rounds,omitempty"`
+	Points      *RRPoints          `json:"points,omitempty"`
+	Metric      string             `json:"metric,omitempty"`
+	Order       []string           `json:"order,omitempty"`
+	Rules       *Rules             `json:"rules,omitempty"`
 }
 
 type RRPoints struct {

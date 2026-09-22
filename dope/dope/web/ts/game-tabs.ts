@@ -35,7 +35,7 @@ export function gameTabs(stages: StageRef[], options: GameTabsOptions): GameTab[
   case "si":
     return [
       ...fixedTabs(["grid", S.screen.tabs.grid()], ["venues", S.screen.tabs.venues()], ...when(host, ["seedImport", S.screen.tabs.seedImport()])),
-      ...foldReseeds(stages.flatMap((stage) => roundTabs(stage, stages))),
+      ...foldReseeds(stages.flatMap((stage) => blockRoundTabs(stage, stages))),
       ...fixedTabs(["stats", S.screen.tabs.stats()], ...when(options.game === "ek", ["roster", S.screen.tabs.roster()])),
     ];
   case "brain":
@@ -101,19 +101,19 @@ function stageTab(stage: StageRef, kind: TabKind, label = stage.title || stage.c
   };
 }
 
-// The sheets enter protocols by round — every group at once — because that is
-// the order the matches are played in; a tab per group is the crosstab's job.
-function roundTabs(stage: StageRef, stages: StageRef[]): GameTab[] {
+// The sheets enter protocols by block round — every group at once — because that
+// is the order the matches are played in; a tab per group is the crosstab's job.
+function blockRoundTabs(stage: StageRef, stages: StageRef[]): GameTab[] {
   const block = stage.grain?.block;
   if (!block || !stage.grain?.group) return [stageTab(stage, isReseed(stage) ? "reseed" : "stage", stageTabLabel(stage))];
   const groups = stages.filter((s) => s.grain?.block === block && s.grain?.group);
   if (groups.length < 2) return [stageTab(stage, "stage", stageTabLabel(stage))];
   if (stage !== groups[0]) return [];
-  const byRound = new Map<number, StageRefMatch[]>();
+  const byBlockRound = new Map<number, StageRefMatch[]>();
   for (const group of groups) {
     for (const match of group.matches || []) {
-      const round = Number(match.round || 1);
-      byRound.set(round, [...(byRound.get(round) || []), {...match, group: groupLabel(group)}]);
+      const blockRound = Number(match.round || 1);
+      byBlockRound.set(blockRound, [...(byBlockRound.get(blockRound) || []), {...match, group: groupLabel(group)}]);
     }
   }
   const members = groups.map((group) => group.code);
@@ -121,18 +121,18 @@ function roundTabs(stage: StageRef, stages: StageRef[]): GameTab[] {
   // where the scheme names one; the old `@` spellings ride along for bookmarks.
   const slug = groups[0].slug || "";
   const standings = {code: slug || `${block}-standings`, legacy: `${block}@standings`, title: blockLabel(groups), stage_type: "standings", members};
-  return [stageTab(standings, "block"), ...Array.from(byRound.keys()).sort((a, b) => a - b).map((round) => stageTab({
-    code: `${slug || block}-r${round}`,
-    legacy: `${block}@r${round}`,
-    title: S.screen.tabs.round(String(round)),
+  return [stageTab(standings, "block"), ...Array.from(byBlockRound.keys()).sort((a, b) => a - b).map((blockRound) => stageTab({
+    code: `${slug || block}-r${blockRound}`,
+    legacy: `${block}@r${blockRound}`,
+    title: S.screen.tabs.blockRound(String(blockRound)),
     stage_type: "matches",
-    matches: byRound.get(round) || [],
+    matches: byBlockRound.get(blockRound) || [],
     members,
   }, "round"))];
 }
 
-// Individual SI reseeds before every play-off round; seven identical tabs said
-// nothing six of them didn't. A lone reseed keeps its own tab.
+// Individual SI reseeds before every play-off block round; seven identical tabs
+// said nothing six of them didn't. A lone reseed keeps its own tab.
 function foldReseeds(tabs: GameTab[]): GameTab[] {
   const reseeds = tabs.filter((tab) => tab.kind === "reseed");
   if (reseeds.length < 2) return tabs;

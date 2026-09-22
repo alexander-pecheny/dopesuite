@@ -57,7 +57,7 @@ func TestParseBoutCoordinates(t *testing.T) {
 		t.Fatalf("боёв = %d, want 2", len(script.Bouts))
 	}
 	first := script.Bouts[0]
-	want := Coord{Block: "s1", Round: 1, Wave: 1, Match: 1}
+	want := Coord{Block: "s1", BlockRound: 1, Wave: 1, Match: 1}
 	if first.At != want {
 		t.Errorf("координата = %+v, want %+v", first.At, want)
 	}
@@ -101,7 +101,7 @@ func TestParseOverride(t *testing.T) {
 		t.Fatalf("расхождений = %d, want 1", len(script.Overrides))
 	}
 	over := script.Overrides[0]
-	if over.At.Round != 2 || over.Field != "место" {
+	if over.At.BlockRound != 2 || over.Field != "место" {
 		t.Errorf("расхождение = %+v", over)
 	}
 	if over.Reason == "" {

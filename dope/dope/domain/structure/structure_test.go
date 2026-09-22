@@ -112,12 +112,12 @@ func TestSingleElimScheduleEight(t *testing.T) {
 func TestSingleElimStandings(t *testing.T) {
 	kind, _ := RankerFor("se")
 	cfg := mustJSON(t, SEConfig{Code: "po", Bronze: true, Entrants: seeds(1, 2, 3, 4)})
-	round := func(r int, m MatchOutcome) MatchOutcome { m.Round = r; return m }
+	blockRound := func(r int, m MatchOutcome) MatchOutcome { m.BlockRound = r; return m }
 	full, err := kind.Standings(cfg, []MatchOutcome{
-		round(1, h2h("po-r1-1", true, 301, 302, 5, 2, 1, 2)),
-		round(1, h2h("po-r1-2", true, 303, 304, 6, 1, 1, 2)),
-		round(2, h2h("po-r2-1", true, 303, 301, 4, 3, 1, 2)),
-		round(2, h2h("po-r2-3p", true, 302, 304, 2, 1, 1, 2)),
+		blockRound(1, h2h("po-r1-1", true, 301, 302, 5, 2, 1, 2)),
+		blockRound(1, h2h("po-r1-2", true, 303, 304, 6, 1, 1, 2)),
+		blockRound(2, h2h("po-r2-1", true, 303, 301, 4, 3, 1, 2)),
+		blockRound(2, h2h("po-r2-3p", true, 302, 304, 2, 1, 1, 2)),
 	}, Inputs{})
 	if err != nil {
 		t.Fatalf("Standings: %v", err)
@@ -132,10 +132,10 @@ func TestSingleElimStandings(t *testing.T) {
 	// Mid-play the finalists are unplaced; the semifinal losers share third
 	// until the bronze splits them.
 	live, err := kind.Standings(cfg, []MatchOutcome{
-		round(1, h2h("po-r1-1", true, 301, 302, 5, 2, 1, 2)),
-		round(1, h2h("po-r1-2", true, 303, 304, 6, 1, 1, 2)),
-		round(2, h2h("po-r2-1", false, 301, 303, 0, 0, 0, 0)),
-		round(2, h2h("po-r2-3p", false, 302, 304, 0, 0, 0, 0)),
+		blockRound(1, h2h("po-r1-1", true, 301, 302, 5, 2, 1, 2)),
+		blockRound(1, h2h("po-r1-2", true, 303, 304, 6, 1, 1, 2)),
+		blockRound(2, h2h("po-r2-1", false, 301, 303, 0, 0, 0, 0)),
+		blockRound(2, h2h("po-r2-3p", false, 302, 304, 0, 0, 0, 0)),
 	}, Inputs{})
 	if err != nil {
 		t.Fatalf("Standings: %v", err)
@@ -149,7 +149,7 @@ func TestSingleElimStandings(t *testing.T) {
 
 	// A four-seat бой with two proceeding eliminates two at once.
 	cfg4 := mustJSON(t, SEConfig{Code: "ek", WinningPlaces: 2})
-	quad := MatchOutcome{Code: "ek-r1-1", Round: 1, Finished: true, Slots: []SlotOutcome{
+	quad := MatchOutcome{Code: "ek-r1-1", BlockRound: 1, Finished: true, Slots: []SlotOutcome{
 		{Participant: 1, Place: 1}, {Participant: 2, Place: 2}, {Participant: 3, Place: 3}, {Participant: 4, Place: 4},
 	}}
 	four, err := kind.Standings(cfg4, []MatchOutcome{quad}, Inputs{})
@@ -190,8 +190,8 @@ func TestPodStandings(t *testing.T) {
 	if !ok {
 		t.Fatal("de ranker not registered")
 	}
-	bout := func(code string, round int, a int64, pa float64, b int64, pb float64, finished bool) MatchOutcome {
-		return MatchOutcome{Code: code, Round: round, Finished: finished, Slots: []SlotOutcome{
+	bout := func(code string, blockRound int, a int64, pa float64, b int64, pb float64, finished bool) MatchOutcome {
+		return MatchOutcome{Code: code, BlockRound: blockRound, Finished: finished, Slots: []SlotOutcome{
 			{Participant: a, Place: pa}, {Participant: b, Place: pb},
 		}}
 	}

@@ -23,7 +23,7 @@ import { createStageCache } from "./stage-cache.js";
 import type { MatchDescriptor, MatchView as CachedMatchView, StageData } from "./stage-cache.js";
 import { create as createStatsSync } from "./stats-sync.js";
 import { buildFestGrid, buildReseedStagePanel, parseScheme } from "./fest-grid.js";
-import { computeGroupRounds } from "./group-stats.js";
+import { computeGroupBlockRounds } from "./group-stats.js";
 import { gameTabs, canonicalKey, groupLabel, RESEED_TAB_CODE } from "./game-tabs.js";
 import type { GameTab, TabKind } from "./game-tabs.js";
 import type { ReseedEntry } from "./fest-grid.js";
@@ -1193,25 +1193,25 @@ function canonicalStageCode(code: string): string {
 
 // buildGroupStandingsPane is the sheets' groups view: every group of the
 // Block on one tab — a player, his points, and the split by round-robin
-// round, computed from the cached matches by the Block's own scoring rule.
+// block round, computed from the cached matches by the Block's own scoring rule.
 function buildGroupStandingsPane(stage: HostStage): HTMLElement {
   const groups = ((stage.members as string[] | undefined) || []).map((code) => {
     const schemeStage = rawSchemeStages().find((s) => s.code === code);
     const config = (schemeStage?.config || {}) as {rules?: {bout?: {points?: string}}; entrants?: Array<{label?: string}>};
     const planned = (schemeStage?.matches || []) as Array<{code?: string; round?: number}>;
-    const roundCount = Math.max(1, ...planned.map((m) => Number(m.round || 1)));
+    const blockRoundCount = Math.max(1, ...planned.map((m) => Number(m.round || 1)));
     const matches = planned.map((m) => {
       const view = stageCache.matchState(m.code || "") as HostMatchView | null;
-      return {round: m.round, finished: Boolean(view?.finished), participants: view?.participants};
+      return {blockRound: m.round, finished: Boolean(view?.finished), participants: view?.participants};
     });
-    const rows = computeGroupRounds({matches, pointsRule: config.rules?.bout?.points, roundCount});
+    const rows = computeGroupBlockRounds({matches, pointsRule: config.rules?.bout?.points, blockRoundCount});
     if (!rows.length) {
       for (const entrant of config.entrants || []) {
-        if (entrant.label) rows.push({name: entrant.label, points: 0, rounds: new Array<number>(roundCount).fill(0)});
+        if (entrant.label) rows.push({name: entrant.label, points: 0, blockRounds: new Array<number>(blockRoundCount).fill(0)});
       }
     }
     const title = schemeStage ? groupLabel(schemeStage as StageRef) : code;
-    return {title, roundCount, rows};
+    return {title, blockRoundCount, rows};
   });
   return buildGroupStandingsView(groups);
 }

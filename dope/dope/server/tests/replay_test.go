@@ -193,7 +193,7 @@ func TestReplayDrawSurvivesRecompute(t *testing.T) {
 		t.Fatalf("прогон: %v", err)
 	}
 
-	final := replay.Coord{Block: "s1", Round: 2, Wave: 1, Match: 1}
+	final := replay.Coord{Block: "s1", BlockRound: 2, Wave: 1, Match: 1}
 	before, err := game.Seats(final)
 	if err != nil {
 		t.Fatal(err)
@@ -201,7 +201,7 @@ func TestReplayDrawSurvivesRecompute(t *testing.T) {
 
 	// Reopen and re-close the opening бой: the resolver re-seats everything
 	// downstream from its Edges.
-	first := replay.Coord{Block: "s1", Round: 1, Wave: 1, Match: 1}
+	first := replay.Coord{Block: "s1", BlockRound: 1, Wave: 1, Match: 1}
 	_, code, err := game.matchAt(first)
 	if err != nil {
 		t.Fatal(err)

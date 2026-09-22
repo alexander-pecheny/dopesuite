@@ -757,35 +757,35 @@ reseed: true
 sorting: [place_sum, total, plus]
 `
 	scheme := compileSrc(t, src, Input{GameType: "ksi"})
-	var rounds []store.SchemeStage
+	var blockRounds []store.SchemeStage
 	reseeds := 0
 	for _, stage := range scheme.Stages {
 		switch stage.StageType {
 		case "reseed":
 			reseeds++
 		default:
-			rounds = append(rounds, stage)
+			blockRounds = append(blockRounds, stage)
 		}
 	}
 	wantBouts := []int{6, 6, 5, 3, 2, 1, 1}
-	if len(rounds) != len(wantBouts) {
-		t.Fatalf("раундов = %d, want %d", len(rounds), len(wantBouts))
+	if len(blockRounds) != len(wantBouts) {
+		t.Fatalf("раундов = %d, want %d", len(blockRounds), len(wantBouts))
 	}
 	for i, want := range wantBouts {
-		if len(rounds[i].Matches) != want {
-			t.Fatalf("раунд %d: %d боёв, want %d", i+1, len(rounds[i].Matches), want)
+		if len(blockRounds[i].Matches) != want {
+			t.Fatalf("раунд %d: %d боёв, want %d", i+1, len(blockRounds[i].Matches), want)
 		}
 	}
-	if reseeds != len(rounds)-1 {
-		t.Fatalf("пересевов = %d, want %d — по одному между раундами", reseeds, len(rounds)-1)
+	if reseeds != len(blockRounds)-1 {
+		t.Fatalf("пересевов = %d, want %d — по одному между раундами", reseeds, len(blockRounds)-1)
 	}
 	// ПО-3 seats its upper bracket three to a table and its lower four.
-	third := rounds[2].Matches
+	third := blockRounds[2].Matches
 	if len(third[0].Slots) != 3 || len(third[2].Slots) != 4 {
 		t.Fatalf("ПО-3: верхняя по %d, нижняя по %d — want 3 и 4", len(third[0].Slots), len(third[2].Slots))
 	}
 	// The grand final seats four and hands out four places.
-	final := rounds[len(rounds)-1].Matches[0]
+	final := blockRounds[len(blockRounds)-1].Matches[0]
 	if len(final.Slots) != 4 {
 		t.Fatalf("грандфинал на %d мест, want 4", len(final.Slots))
 	}
@@ -892,7 +892,7 @@ sorting: [points, take_rate]
 // Раунд может назваться сам: у ЭК двенадцать боёв на четверых зовут «1/16
 // финала», потому что так их зовёт турнир, а не потому что это следует из
 // арифметики.
-func TestRoundTitleOverride(t *testing.T) {
+func TestBlockRoundTitleOverride(t *testing.T) {
 	src := `
 [scheme]
 kind: single_elimination

@@ -33,16 +33,16 @@ func TestGrainOfRoundRobinGroups(t *testing.T) {
 		}
 	}
 	// Nine at three seats is the affine plane: four круги of three бои.
-	rounds := map[int]int{}
+	blockRounds := map[int]int{}
 	for _, match := range stages[0].Matches {
-		rounds[match.Round]++
+		blockRounds[match.BlockRound]++
 	}
-	if len(rounds) != 4 {
-		t.Fatalf("кругов в группе = %d, want 4 (%v)", len(rounds), rounds)
+	if len(blockRounds) != 4 {
+		t.Fatalf("кругов в группе = %d, want 4 (%v)", len(blockRounds), blockRounds)
 	}
-	for round := 1; round <= 4; round++ {
-		if rounds[round] != 3 {
-			t.Errorf("круг %d: %d боёв, want 3", round, rounds[round])
+	for blockRound := 1; blockRound <= 4; blockRound++ {
+		if blockRounds[blockRound] != 3 {
+			t.Errorf("круг %d: %d боёв, want 3", blockRound, blockRounds[blockRound])
 		}
 	}
 }
@@ -55,20 +55,20 @@ func TestGrainOfWaveSplitElimination(t *testing.T) {
 	stages := matchStages(scheme)
 
 	type coord struct {
-		block string
-		wave  int
-		round int
+		block      string
+		wave       int
+		blockRound int
 	}
 	got := make([]coord, len(stages))
 	for i, stage := range stages {
-		round := 0
+		blockRound := 0
 		for _, match := range stage.Matches {
-			if round != 0 && match.Round != round {
-				t.Fatalf("%s: бои из разных кругов в одном заходе (%d и %d)", stage.Code, round, match.Round)
+			if blockRound != 0 && match.BlockRound != blockRound {
+				t.Fatalf("%s: бои из разных кругов в одном заходе (%d и %d)", stage.Code, blockRound, match.BlockRound)
 			}
-			round = match.Round
+			blockRound = match.BlockRound
 		}
-		got[i] = coord{stage.Grain.Block, stage.Grain.Wave, round}
+		got[i] = coord{stage.Grain.Block, stage.Grain.Wave, blockRound}
 	}
 	// Четвертьфиналы — четыре боя на двух столах, значит два захода; дальше
 	// всё умещается в один.
@@ -101,7 +101,7 @@ func TestGrainCoversEveryStudchrStage(t *testing.T) {
 				continue
 			}
 			for _, match := range stage.Matches {
-				if match.Round < 1 {
+				if match.BlockRound < 1 {
 					t.Errorf("%s: бой %s не знает своего круга", c.name, match.Code)
 					break
 				}

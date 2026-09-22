@@ -39,7 +39,7 @@ finished = "Закончен"
 
 [pod]
 # The column title of a pod round on the pod detail tab.
-round = 'Раунд {{.n}}'
+block_round = 'Раунд {{.n}}'
 
 [reseed]
 # The reseed panel when the calculate request itself fails.

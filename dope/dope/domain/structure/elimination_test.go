@@ -10,9 +10,9 @@ func fixedSize(size int) func(int, int) int {
 	return func(int, int) int { return size }
 }
 
-func shape(rounds []elimRound) string {
+func shape(blockRounds []elimBlockRound) string {
 	out := ""
-	for _, r := range rounds {
+	for _, r := range blockRounds {
 		out += fmt.Sprintf("%dx%d ", r.bouts, r.size)
 	}
 	return out
@@ -20,50 +20,50 @@ func shape(rounds []elimRound) string {
 
 // The classic halving bracket is the general engine at its smallest settings.
 func TestPlanClassicBracket(t *testing.T) {
-	rounds, err := planElimRounds(8, 1, 0, fixedSize(2))
+	blockRounds, err := planElimBlockRounds(8, 1, 0, fixedSize(2))
 	if err != nil {
-		t.Fatalf("planElimRounds: %v", err)
+		t.Fatalf("planElimBlockRounds: %v", err)
 	}
-	if got := shape(rounds); got != "4x2 2x2 1x2 " {
+	if got := shape(blockRounds); got != "4x2 2x2 1x2 " {
 		t.Fatalf("shape = %q", got)
 	}
-	if !rounds[len(rounds)-1].terminal {
+	if !blockRounds[len(blockRounds)-1].terminal {
 		t.Error("the final must be the terminal бой")
 	}
-	if rounds[0].survivors(1) != 4 {
-		t.Errorf("survivors = %d, want 4", rounds[0].survivors(1))
+	if blockRounds[0].survivors(1) != 4 {
+		t.Errorf("survivors = %d, want 4", blockRounds[0].survivors(1))
 	}
 }
 
 // ЭК: 48 играющих, бои по четыре, проходят двое — и четвертьфинал, который
 // регламент играет втроём.
 func TestPlanEKBracket(t *testing.T) {
-	sizeFor := func(round, entering int) int {
+	sizeFor := func(blockRound, entering int) int {
 		if entering == 12 {
 			return 3
 		}
 		return 4
 	}
-	rounds, err := planElimRounds(48, 2, 0, sizeFor)
+	blockRounds, err := planElimBlockRounds(48, 2, 0, sizeFor)
 	if err != nil {
-		t.Fatalf("planElimRounds: %v", err)
+		t.Fatalf("planElimBlockRounds: %v", err)
 	}
-	if got := shape(rounds); got != "12x4 6x4 4x3 2x4 1x4 " {
+	if got := shape(blockRounds); got != "12x4 6x4 4x3 2x4 1x4 " {
 		t.Fatalf("shape = %q, want 12x4 6x4 4x3 2x4 1x4", got)
 	}
-	if !rounds[4].terminal || rounds[4].entering != 4 {
-		t.Errorf("final = %+v, want a terminal бой of 4", rounds[4])
+	if !blockRounds[4].terminal || blockRounds[4].entering != 4 {
+		t.Errorf("final = %+v, want a terminal бой of 4", blockRounds[4])
 	}
 }
 
 func TestPlanRejectsImpossibleShapes(t *testing.T) {
-	if _, err := planElimRounds(10, 1, 0, fixedSize(4)); err == nil {
+	if _, err := planElimBlockRounds(10, 1, 0, fixedSize(4)); err == nil {
 		t.Error("10 into бои of 4 must not divide")
 	}
-	if _, err := planElimRounds(8, 2, 0, fixedSize(2)); err == nil {
+	if _, err := planElimBlockRounds(8, 2, 0, fixedSize(2)); err == nil {
 		t.Error("a бой of two cannot advance two")
 	}
-	if _, err := planElimRounds(8, 1, 0, fixedSize(1)); err == nil {
+	if _, err := planElimBlockRounds(8, 1, 0, fixedSize(1)); err == nil {
 		t.Error("a бой of one is not a бой")
 	}
 }
@@ -89,9 +89,9 @@ func TestSnakeChunksMatchTheStudchrSheets(t *testing.T) {
 	}
 }
 
-func ranksOf(plan *dePlan, round int) [][]int {
+func ranksOf(plan *dePlan, blockRound int) [][]int {
 	var out [][]int
-	for _, index := range plan.rounds[round] {
+	for _, index := range plan.blockRounds[blockRound] {
 		var ranks []int
 		for _, source := range plan.bouts[index].sources {
 			ranks = append(ranks, source.rank)
@@ -112,7 +112,7 @@ func TestPlanKinsbfPod(t *testing.T) {
 	if len(plan.bouts) != 5 {
 		t.Fatalf("боёв = %d, want 5", len(plan.bouts))
 	}
-	if got := fmt.Sprint(plan.rounds); got != "[[0 1] [2 3] [4]]" {
+	if got := fmt.Sprint(plan.blockRounds); got != "[[0 1] [2 3] [4]]" {
 		t.Fatalf("rounds = %s, want [[0 1] [2 3] [4]]", got)
 	}
 	// Бой 3 is the winners' бой, бой 4 the losers', бой 5 the cross: the бой-3
@@ -150,8 +150,8 @@ func TestPlanStudchrSIPlayoff(t *testing.T) {
 		{{3, 4, 5, 6}}, // финал нижней сетки
 		{{1, 2, 3, 4}}, // гранд-финал
 	}
-	if len(plan.rounds) != len(want) {
-		t.Fatalf("раундов = %d, want %d", len(plan.rounds), len(want))
+	if len(plan.blockRounds) != len(want) {
+		t.Fatalf("раундов = %d, want %d", len(plan.blockRounds), len(want))
 	}
 	names := []string{"ПО-1", "ПО-2", "ПО-3", "ПО-4", "ПО-5", "финал н/с", "грандфинал"}
 	for r := range want {

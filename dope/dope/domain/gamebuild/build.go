@@ -395,7 +395,7 @@ values(?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
 			matchID, err := store.InsertReturningID(ctx, tx, `
 insert into matches(fest_id, game_id, stage_id, code, title, letter, position, round, wave, participant_count, venue_id, status, revision, state_json)
 values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
-				festID, gameID, stageID, match.Code, match.Title, match.Letter, matchIndex+1, match.Round, match.Wave, seats, venueID, emptyState)
+				festID, gameID, stageID, match.Code, match.Title, match.Letter, matchIndex+1, match.BlockRound, match.Wave, seats, venueID, emptyState)
 			if err != nil {
 				return err
 			}
@@ -543,14 +543,14 @@ values(?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
 				if existing.Status == "finished" || protocol.Started(gameType, existing.State) {
 					if _, err := tx.ExecContext(ctx, `
 update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ? where id = ?`,
-						stageID, match.Title, match.Letter, matchIndex+1, match.Round, match.Wave, existing.ID); err != nil {
+						stageID, match.Title, match.Letter, matchIndex+1, match.BlockRound, match.Wave, existing.ID); err != nil {
 						return err
 					}
 					continue
 				}
 				if _, err := tx.ExecContext(ctx, `
 update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ?, participant_count = ?, status = 'active', state_json = ? where id = ?`,
-					stageID, match.Title, match.Letter, matchIndex+1, match.Round, match.Wave, len(match.Slots), emptyState, existing.ID); err != nil {
+					stageID, match.Title, match.Letter, matchIndex+1, match.BlockRound, match.Wave, len(match.Slots), emptyState, existing.ID); err != nil {
 					return err
 				}
 				if _, err := tx.ExecContext(ctx, `delete from match_slots where match_id = ?`, existing.ID); err != nil {
@@ -564,7 +564,7 @@ update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?,
 			matchID, err := store.InsertReturningID(ctx, tx, `
 insert into matches(fest_id, game_id, stage_id, code, title, letter, position, round, wave, participant_count, status, revision, state_json)
 values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
-				festID, gameID, stageID, match.Code, match.Title, match.Letter, matchIndex+1, match.Round, match.Wave, len(match.Slots), emptyState)
+				festID, gameID, stageID, match.Code, match.Title, match.Letter, matchIndex+1, match.BlockRound, match.Wave, len(match.Slots), emptyState)
 			if err != nil {
 				return err
 			}

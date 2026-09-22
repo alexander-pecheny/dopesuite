@@ -29,9 +29,9 @@ type Macro interface {
 // that takes a Round suffix (match_size.r3, best_of.final); Cascade one that
 // may also stand in [defaults] (rr's points).
 type Key struct {
-	Name    string
-	Round   bool
-	Cascade bool
+	Name       string
+	BlockRound bool
+	Cascade    bool
 }
 
 // Block is everything a Macro may touch: one Block as the compiler resolved
@@ -49,19 +49,19 @@ type Block interface {
 	Str(key string) (string, bool)
 	IntList(key string) ([]int, bool, error)
 	NumList(key string) ([]float64, bool, error)
-	Rounds(names []string) error // the Round names the Kind generates (none: it has no addressable Rounds); a dotted key naming another is refused
+	BlockRounds(names []string) error // the Round names the Kind generates (none: it has no addressable Rounds); a dotted key naming another is refused
 
 	Sorting() ([]store.SortRule, bool, error)
 	DefaultSorting() ([]store.SortRule, bool, error)
 	Rankable(ranker string) map[string]bool
 	Rules() *Rules
-	Reseed() (incoming bool, round string)
+	Reseed() (incoming bool, blockRound string)
 	Proceeding() (int, bool)
 	Prev() (Outputs, bool)
 
 	Title(fallback string) string
 	GroupTitle(group, groups int) string
-	RoundTitle(names []string, derived string) string
+	BlockRoundTitle(names []string, derived string) string
 
 	Venues(names ...string) (Lanes, error)
 	Entrants(groups, size int) ([][]store.SchemeSlot, error) // the incoming Edge dealt into groups
@@ -80,7 +80,7 @@ type Block interface {
 // stage into as many turns at the venues as it needs.
 type Stage struct {
 	Code, Title, Kind, Slug string
-	Rounds                  []string
+	BlockRounds             []string
 	At                      At
 	Config                  any
 	Matches                 []store.SchemeMatch
@@ -91,8 +91,8 @@ type Stage struct {
 // At is where a stage sits in its Block: which Round its Matches play (0 for a
 // stage spanning Rounds), which Group it ranks.
 type At struct {
-	Round int
-	Group string
+	BlockRound int
+	Group      string
 }
 
 // Outputs is what a Block offers the next Block's Edge: per Group, a way to
@@ -129,10 +129,10 @@ func (l Lanes) PerWave() int {
 	return len(l.Restricted)
 }
 
-// ReseedEveryRound is the `reseed:` word for a Block that re-ranks its incoming
-// Edge and every Round after it — what TPSH does, and what `true` already means
+// ReseedEveryBlockRound is the `reseed:` word for a Block that re-ranks its
+// incoming Edge and every Round after it — what TPSH does, and what `true` already means
 // on a bracket with lives.
-const ReseedEveryRound = "every"
+const ReseedEveryBlockRound = "every"
 
 // KeyError is a Kind's complaint about one key; the compiler pins it to that
 // key's line.

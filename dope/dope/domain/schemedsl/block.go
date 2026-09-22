@@ -68,13 +68,13 @@ func (b *blockHandle) NumList(key string) ([]float64, bool, error) {
 	return nil, false, nil
 }
 
-func (b *blockHandle) Rounds(names []string) error {
+func (b *blockHandle) BlockRounds(names []string) error {
 	if len(names) == 0 {
-		if _, round := blockReseedSpec(b.blk); round != "" {
-			return errAt(b.blk.Values["reseed"].Line, "%s", dopestrings.Default.Scheme.Reseed.RoundUnknown(round))
+		if _, blockRound := blockReseedSpec(b.blk); blockRound != "" {
+			return errAt(b.blk.Values["reseed"].Line, "%s", dopestrings.Default.Scheme.Reseed.BlockRoundUnknown(blockRound))
 		}
 	}
-	return b.c.rejectRoundKeys(b.blk, names)
+	return b.c.rejectBlockRoundKeys(b.blk, names)
 }
 
 func (b *blockHandle) Sorting() ([]store.SortRule, bool, error) { return sortRules(b.blk) }
@@ -110,8 +110,8 @@ func (b *blockHandle) Title(fallback string) string { return blockTitle(b.blk, f
 func (b *blockHandle) GroupTitle(group, groups int) string {
 	return b.c.groupTitle(b.blk, group, groups)
 }
-func (b *blockHandle) RoundTitle(names []string, derived string) string {
-	return b.c.roundTitle(b.blk, names, derived)
+func (b *blockHandle) BlockRoundTitle(names []string, derived string) string {
+	return b.c.blockRoundTitle(b.blk, names, derived)
 }
 
 func (b *blockHandle) Venues(names ...string) (structure.Lanes, error) {
@@ -157,7 +157,7 @@ func (b *blockHandle) Emit(s structure.Stage) ([]string, error) {
 		if !ok {
 			return nil, errAt(0, "%s", dopestrings.Default.Scheme.Structure.KindUnregistered(s.Kind))
 		}
-		configJSON, err := b.c.stageConfig(s.Config, b.blk, s.Rounds)
+		configJSON, err := b.c.stageConfig(s.Config, b.blk, s.BlockRounds)
 		if err != nil {
 			return nil, err
 		}
@@ -180,9 +180,9 @@ func (b *blockHandle) Emit(s structure.Stage) ([]string, error) {
 		return []string{s.Code}, nil
 	}
 	if s.Waves {
-		return b.c.appendSERound(b.blk, s.Code, s.Title, s.Rounds, s.Lanes.Restricted, where, s.Matches), nil
+		return b.c.appendSEBlockRound(b.blk, s.Code, s.Title, s.BlockRounds, s.Lanes.Restricted, where, s.Matches), nil
 	}
-	b.c.appendDrawnStage(s.Kind, s.Config, b.blk, s.Code, s.Title, s.Rounds, where, s.Matches)
+	b.c.appendDrawnStage(s.Kind, s.Config, b.blk, s.Code, s.Title, s.BlockRounds, where, s.Matches)
 	return []string{s.Code}, nil
 }
 
@@ -194,7 +194,7 @@ func (b *blockHandle) EmitReseed(code string, where structure.At, contenders []s
 }
 
 func (b *blockHandle) at(where structure.At) at {
-	return at{block: b.Code(), round: where.Round, group: where.Group}
+	return at{block: b.Code(), blockRound: where.BlockRound, group: where.Group}
 }
 
 // pin turns a Kind's complaint into a DSL error at the right line: a KeyError
@@ -217,16 +217,16 @@ func (b *blockHandle) pin(err error) error {
 	return errAt(b.blk.Line, "%s", err.Error())
 }
 
-// appendSERound emits one round as ⌈matches/venues⌉ Wave stages — one stage
+// appendSEBlockRound emits one round as ⌈matches/venues⌉ Wave stages — one stage
 // when everything fits, `-w{k}` codes when the venue count forces turns — and
 // returns the stage codes it created (a following reseed sources them).
-func (c *compiler) appendSERound(blk Section, stageCode, title string, rounds []string, venues []int, where at, matches []store.SchemeMatch) []string {
+func (c *compiler) appendSEBlockRound(blk Section, stageCode, title string, blockRounds []string, venues []int, where at, matches []store.SchemeMatch) []string {
 	perWave := len(venues)
 	if perWave == 0 {
 		perWave = c.venueCount
 	}
 	if len(matches) <= perWave {
-		c.appendManualStage(blk, stageCode, title, rounds, where, matches)
+		c.appendManualStage(blk, stageCode, title, blockRounds, where, matches)
 		return []string{stageCode}
 	}
 	var codes []string
@@ -240,7 +240,7 @@ func (c *compiler) appendSERound(blk Section, stageCode, title string, rounds []
 		waveAt.wave = wave + 1
 		c.appendManualStage(blk, code,
 			dopestrings.Default.Scheme.Titles.Wave(title, strconv.Itoa(wave+1)),
-			rounds, waveAt, matches[wave*perWave:end])
+			blockRounds, waveAt, matches[wave*perWave:end])
 		codes = append(codes, code)
 	}
 	return codes

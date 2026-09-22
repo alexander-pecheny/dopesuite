@@ -13,11 +13,11 @@ import (
 // Protocol scorer's per-slot output, in slot order. Questions is the match's
 // base question count (shootouts excluded) — the denominator for share metrics.
 type MatchOutcome struct {
-	Code      string
-	Finished  bool
-	Round     int
-	Questions int
-	Slots     []SlotOutcome
+	Code       string
+	Finished   bool
+	BlockRound int
+	Questions  int
+	Slots      []SlotOutcome
 }
 
 // SlotOutcome is one seat's result in a match: who sat there, the effective
@@ -63,7 +63,7 @@ select m.id, m.code, m.status, m.round, s.config_json
 from matches m join stages s on s.id = m.stage_id
 where m.id in (`+in+`)`, args, func(rows *sql.Rows) (matchRow, error) {
 		var m matchRow
-		return m, rows.Scan(&m.id, &m.outcome.Code, &m.status, &m.outcome.Round, &m.config)
+		return m, rows.Scan(&m.id, &m.outcome.Code, &m.status, &m.outcome.BlockRound, &m.config)
 	})
 	if err != nil {
 		return nil, err

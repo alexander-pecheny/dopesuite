@@ -45,7 +45,7 @@ playoff = "Плей-офф"
 # A group tab for a stage with no «Группа …» title of its own.
 group_n = 'Группа {{.n}}'
 # A per-round tab inside a multi-group block.
-round = 'Круг {{.n}}'
+block_round = 'Круг {{.n}}'
 # The reseed tab: a folded run of reseeds, a lone reseed stage, or a block's reseeds.
 reseed = "Пересев"
 # The final stage tab.

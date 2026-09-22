@@ -63,7 +63,7 @@ coord_expected = 'координата — это блок[/группа]/кру
 # A coordinate whose block part is empty.
 coord_no_block = 'координата без блока: "{{.raw}}"'
 # The Cyrillic names of the coordinate parts, as the errors name them.
-part_round = "круг"
+part_block_round = "круг"
 part_wave = "заход"
 part_match = "бой"
 # A coordinate part missing its r/w/m prefix.

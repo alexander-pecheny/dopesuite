@@ -31,11 +31,11 @@ export interface StageRefMatch {
 }
 
 // One group of the group-stage tab: its title and the rows the sheets'
-// Groups view draws — a player, his points, and the split by round.
+// Groups view draws — a player, his points, and the split by block round.
 export interface GroupStandingsGroup {
   title: string;
-  roundCount: number;
-  rows: Array<{name: string; points: number; rounds: number[]}>;
+  blockRoundCount: number;
+  rows: Array<{name: string; points: number; blockRounds: number[]}>;
 }
 
 export interface TeamCellOptions {
@@ -134,7 +134,7 @@ export function buildGroupStandingsView(groups: GroupStandingsGroup[]): HTMLElem
   const wrap = document.createElement("div");
   wrap.className = "group-standings";
   const score = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1));
-  const rounds = (group: GroupStandingsGroup) => Array.from({length: group.roundCount}, (_, round) => round);
+  const blockRounds = (group: GroupStandingsGroup) => Array.from({length: group.blockRoundCount}, (_, blockRound) => blockRound);
   for (const group of groups) {
     const item = document.createElement("section");
     item.className = "group-standings-item";
@@ -150,13 +150,13 @@ export function buildGroupStandingsView(groups: GroupStandingsGroup[]): HTMLElem
         {label: S.standings.columns.place(), kind: "place"},
         {label: S.standings.columns.player(), kind: "name"},
         {label: S.standings.columns.points(), kind: "num"},
-        ...rounds(group).map((round) => ({label: S.standings.columns.round(String(round + 1)), kind: "num" as const})),
+        ...blockRounds(group).map((blockRound) => ({label: S.standings.columns.blockRound(String(blockRound + 1)), kind: "num" as const})),
       ],
       rows: group.rows.map((row, index) => [
         index + 1,
         row.name,
         score(row.points),
-        ...rounds(group).map((round) => score(row.rounds[round] || 0)),
+        ...blockRounds(group).map((blockRound) => score(row.blockRounds[blockRound] || 0)),
       ]),
     }));
     item.appendChild(wrapper);

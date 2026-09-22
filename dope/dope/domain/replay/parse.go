@@ -59,15 +59,15 @@ const (
 // s1, Wave 1, Rounds 1..4, so without it one coordinate names six different
 // Matches and five of them are never checked.
 type Coord struct {
-	Block string
-	Group string
-	Round int
-	Wave  int
-	Match int
+	Block      string
+	Group      string
+	BlockRound int
+	Wave       int
+	Match      int
 }
 
 func (c Coord) String() string {
-	if c.Round == 0 {
+	if c.BlockRound == 0 {
 		// Not a Match at all (a real Round starts at 1): the stats
 		// pseudo-coordinate, or a Block's table.
 		if c.Block == StatsCoord.Block {
@@ -76,9 +76,9 @@ func (c Coord) String() string {
 		return dopestrings.Default.Replay.Parse.CoordTable(c.stage())
 	}
 	if c.Group == "" {
-		return fmt.Sprintf("%s/r%d/w%d/m%d", c.Block, c.Round, c.Wave, c.Match)
+		return fmt.Sprintf("%s/r%d/w%d/m%d", c.Block, c.BlockRound, c.Wave, c.Match)
 	}
-	return fmt.Sprintf("%s/g%s/r%d/w%d/m%d", c.Block, c.Group, c.Round, c.Wave, c.Match)
+	return fmt.Sprintf("%s/g%s/r%d/w%d/m%d", c.Block, c.Group, c.BlockRound, c.Wave, c.Match)
 }
 
 // stage names the Block, or the Group in it, a table coordinate points at.
@@ -280,7 +280,7 @@ func Parse(src string) (Script, error) {
 						s.Replay.Parse.CoordTaken(fmt.Sprint(at), strconv.Itoa(prev)))
 				}
 				seen[at.String()] = line
-				if at.Round == 0 {
+				if at.BlockRound == 0 {
 					if rest != "" {
 						return Script{}, errAt(line, s.Replay.Parse.TableTrailing(rest))
 					}
@@ -543,7 +543,7 @@ func parseCoord(text string, line int) (Coord, error) {
 		into   *int
 		what   string
 	}{
-		{"r", &coord.Round, s.Replay.Parse.PartRound()},
+		{"r", &coord.BlockRound, s.Replay.Parse.PartBlockRound()},
 		{"w", &coord.Wave, s.Replay.Parse.PartWave()},
 		{"m", &coord.Match, s.Replay.Parse.PartMatch()},
 	} {

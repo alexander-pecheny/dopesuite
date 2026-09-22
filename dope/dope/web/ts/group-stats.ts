@@ -1,9 +1,9 @@
 import S from "./i18nstrings.js";
 
 // The client mirror of a Block's per-match scoring rule (ADR-0008), for the
-// group-stage tab: the source sheets show a player's points split by round,
-// and the split exists nowhere server-side — only the matches do. Kept pure so
-// deno suite pins it.
+// group-stage tab: the source sheets show a player's points split by block
+// round, and the split exists nowhere server-side — only the matches do. Kept
+// pure so deno suite pins it.
 
 // evalScoringRule evaluates an arithmetic expression — numbers, named
 // variables, + - * / and parens — over a match's outcome. Anything it cannot
@@ -50,28 +50,28 @@ export function evalScoringRule(expr: string, vars: Record<string, number>): num
   }
 }
 
-export interface GroupRoundsMatch {
-  round?: number;
+export interface GroupBlockRoundsMatch {
+  blockRound?: number;
   finished?: boolean;
   participants?: Array<{name?: string; place?: number} | null> | null;
 }
 
-export interface GroupRoundsRow {
+export interface GroupBlockRoundsRow {
   name: string;
   points: number;
-  rounds: number[];
+  blockRounds: number[];
 }
 
-// computeGroupRounds folds one group's matches into points per round per
-// player — finished matches only, the way standings count them — sorted by
+// computeGroupBlockRounds folds one group's matches into points per block round
+// per player — finished matches only, the way standings count them — sorted by
 // points.
-export function computeGroupRounds(opts: {
-  matches: GroupRoundsMatch[];
+export function computeGroupBlockRounds(opts: {
+  matches: GroupBlockRoundsMatch[];
   pointsRule?: string;
-  roundCount: number;
-}): GroupRoundsRow[] {
+  blockRoundCount: number;
+}): GroupBlockRoundsRow[] {
   const rule = opts.pointsRule || "seats + 1 - place";
-  const rows = new Map<string, GroupRoundsRow>();
+  const rows = new Map<string, GroupBlockRoundsRow>();
   for (const match of opts.matches) {
     const seats = (match.participants || []).length;
     for (const seat of match.participants || []) {
@@ -79,14 +79,14 @@ export function computeGroupRounds(opts: {
       if (!name) continue;
       let row = rows.get(name);
       if (!row) {
-        row = {name, points: 0, rounds: new Array<number>(opts.roundCount).fill(0)};
+        row = {name, points: 0, blockRounds: new Array<number>(opts.blockRoundCount).fill(0)};
         rows.set(name, row);
       }
       if (!match.finished || !seat?.place) continue;
       const points = evalScoringRule(rule, {seats, place: seat.place});
       row.points += points;
-      const round = Number(match.round || 1) - 1;
-      if (round >= 0 && round < row.rounds.length) row.rounds[round] += points;
+      const blockRound = Number(match.blockRound || 1) - 1;
+      if (blockRound >= 0 && blockRound < row.blockRounds.length) row.blockRounds[blockRound] += points;
     }
   }
   return Array.from(rows.values()).sort((a, b) =>

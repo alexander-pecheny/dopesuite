@@ -126,7 +126,7 @@ join stages s on s.id = m.stage_id
 where s.game_id = ? and s.block_code = ? and s.group_code = ?
   and coalesce(nullif(m.wave, 0), s.wave_index) = ? and m.round = ?
 order by s.position, m.position
-limit 1 offset ?`, gameID, at.Block, at.Group, at.Wave, at.Round, at.Match-1).Scan(&id)
+limit 1 offset ?`, gameID, at.Block, at.Group, at.Wave, at.BlockRound, at.Match-1).Scan(&id)
 	if err == sql.ErrNoRows {
 		return 0, corestrings.User(dopestrings.Default.Octobearfest.Error.NoBoutAt())
 	}

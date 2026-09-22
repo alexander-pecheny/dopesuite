@@ -66,7 +66,7 @@ func TestParseGroupCoordinate(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 	at := script.Bouts[0].At
-	if at.Group != "3" || at.Round != 2 || at.Match != 4 {
+	if at.Group != "3" || at.BlockRound != 2 || at.Match != 4 {
 		t.Fatalf("координата = %+v", at)
 	}
 	if got := at.String(); got != "s1/g3/r2/w1/m4" {

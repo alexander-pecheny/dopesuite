@@ -38,9 +38,9 @@ unknown_dotted = 'неизвестный ключ {{.key}} (раунд допи�
 # An unknown key in a [scheme] block.
 unknown_block = 'неизвестный ключ {{.key}} (есть {{.known}})'
 # A dotted override whose suffix names no round of this block.
-unknown_round = '{{.key}}: в этом блоке нет раунда {{.round}} (есть {{.known}})'
+unknown_block_round = '{{.key}}: в этом блоке нет раунда {{.round}} (есть {{.known}})'
 # A match_size override not addressed by round number.
-match_size_round = '{{.key}}: размер боя задаётся по номеру раунда, match_size.rN'
+match_size_block_round = '{{.key}}: размер боя задаётся по номеру раунда, match_size.rN'
 
 [structure]
 # A [scheme] section with no blocks at all.
@@ -98,7 +98,7 @@ no_template = "нет шаблона рассадки из этих групп"
 # The previous block ends in a bout series, so the scheme cannot continue past it.
 previous_terminal = "предыдущий блок кончается серией боёв — за ним нельзя продолжить схему"
 # A reseed: value naming a round the block does not have.
-round_unknown = 'reseed: в этом блоке нет раунда {{.round}} — только true/false'
+block_round_unknown = 'reseed: в этом блоке нет раунда {{.round}} — только true/false'
 # A sorting metric neither the protocol nor the scoring rules provide for a reseed.
 metric_unknown = 'sorting: {{.metric}} не считается на пересеве — ни протокол, ни правила подсчёта такой метрики не дают (есть {{.known}})'
 

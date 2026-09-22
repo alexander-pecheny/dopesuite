@@ -115,7 +115,7 @@ type SchemeMatch struct {
 	Title            string       `json:"title"`
 	Letter           string       `json:"letter,omitempty"` // The match's letter, dealt at compile time; "" for a match that has none
 	Venue            int          `json:"venue"`
-	Round            int          `json:"round,omitempty"` // 1-based round within the Block
+	BlockRound       int          `json:"round,omitempty"` // 1-based Round within the Block
 	Wave             int          `json:"wave,omitempty"`  // 1-based wave, set where the stage spans several
 	ParticipantCount int          `json:"participantCount"`
 	Slots            []SchemeSlot `json:"slots"`

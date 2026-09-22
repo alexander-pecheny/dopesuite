@@ -17,11 +17,11 @@ import (
 // of four-seat Matches and KINSBF's pods of two-seat Matches are the same Kind
 // at different sizes (CONTEXT.md, "Loss").
 
-// elimRound is one round of an elimination: how many Participants enter it,
+// elimBlockRound is one round of an elimination: how many Participants enter it,
 // how many seats a Match has, and how many Matches there are. A round whose
 // Matches seat every survivor is terminal — it decides the block's final
 // places and nothing follows it.
-type elimRound struct {
+type elimBlockRound struct {
 	entering int
 	size     int
 	bouts    int
@@ -29,33 +29,34 @@ type elimRound struct {
 }
 
 // survivors is how many Participants a round sends on.
-func (r elimRound) survivors(winning int) int {
+func (r elimBlockRound) survivors(winning int) int {
 	if r.terminal {
 		return 0
 	}
 	return r.bouts * winning
 }
 
-// planElimRounds lays out the rounds one bracket plays: each round splits its
-// entrants into Matches of the size that round asks for, the winning places go
-// on, and the block ends when a single Match seats everyone left. sizeFor is
-// asked per round so a scheme can play its 1/4 three to a table and its 1/2
-// four, the way EK does.
+// planElimBlockRounds lays out the rounds one bracket plays: each round splits
+// its entrants into Matches of the size that round asks for, the winning
+// places go on, and the block ends when a single Match seats everyone left.
+// sizeFor is asked per round so a scheme can play its 1/4 three to a table and
+// its 1/2 four, the way EK does.
 //
-// maxRounds stops the bracket short of a final. TPSH plays two: three Matches
-// of four each send two on, and those six are the winners — nobody plays again.
-func planElimRounds(entrants, winning, maxRounds int, sizeFor func(round, entering int) int) ([]elimRound, error) {
+// maxBlockRounds stops the bracket short of a final. TPSH plays two: three
+// Matches of four each send two on, and those six are the winners — nobody
+// plays again.
+func planElimBlockRounds(entrants, winning, maxBlockRounds int, sizeFor func(blockRound, entering int) int) ([]elimBlockRound, error) {
 	s := dopestrings.Default
 	if winning < 1 {
 		return nil, fmt.Errorf("%s", s.Structure.Elimination.WinningPlacesMin())
 	}
-	var rounds []elimRound
+	var blockRounds []elimBlockRound
 	entering := entrants
-	for round := 1; ; round++ {
-		if maxRounds > 0 && len(rounds) == maxRounds {
-			return rounds, nil
+	for blockRound := 1; ; blockRound++ {
+		if maxBlockRounds > 0 && len(blockRounds) == maxBlockRounds {
+			return blockRounds, nil
 		}
-		size := sizeFor(round, entering)
+		size := sizeFor(blockRound, entering)
 		if size < 2 {
 			return nil, fmt.Errorf("%s", s.Structure.Elimination.MatchSizeMin())
 		}
@@ -63,31 +64,31 @@ func planElimRounds(entrants, winning, maxRounds int, sizeFor func(round, enteri
 			return nil, fmt.Errorf("%s", s.Structure.Elimination.BoutCannotOutput(strconv.Itoa(size), strconv.Itoa(winning)))
 		}
 		if entering <= size {
-			rounds = append(rounds, elimRound{entering: entering, size: entering, bouts: 1, terminal: true})
-			return rounds, nil
+			blockRounds = append(blockRounds, elimBlockRound{entering: entering, size: entering, bouts: 1, terminal: true})
+			return blockRounds, nil
 		}
 		if entering%size != 0 {
-			return nil, fmt.Errorf("%s", s.Structure.Elimination.RoundNotDivisible(strconv.Itoa(round), strconv.Itoa(entering), strconv.Itoa(size)))
+			return nil, fmt.Errorf("%s", s.Structure.Elimination.BlockRoundNotDivisible(strconv.Itoa(blockRound), strconv.Itoa(entering), strconv.Itoa(size)))
 		}
 		bouts := entering / size
-		rounds = append(rounds, elimRound{entering: entering, size: size, bouts: bouts})
+		blockRounds = append(blockRounds, elimBlockRound{entering: entering, size: size, bouts: bouts})
 		next := bouts * winning
 		if next >= entering {
-			return nil, fmt.Errorf("%s", s.Structure.Elimination.RoundEliminateNothing(strconv.Itoa(round), strconv.Itoa(entering), strconv.Itoa(next)))
+			return nil, fmt.Errorf("%s", s.Structure.Elimination.BlockRoundEliminateNothing(strconv.Itoa(blockRound), strconv.Itoa(entering), strconv.Itoa(next)))
 		}
 		entering = next
-		if len(rounds) > 64 {
-			return nil, fmt.Errorf("%s", s.Structure.Elimination.TooManyRounds())
+		if len(blockRounds) > 64 {
+			return nil, fmt.Errorf("%s", s.Structure.Elimination.TooManyBlockRounds())
 		}
 	}
 }
 
-// elimRoundNames are the dotted-override keys a round answers to: `r{N}` by
+// elimBlockRoundNames are the dotted-override keys a round answers to: `r{N}` by
 // its number in the block, always. A halving bracket's last two rounds are
 // the semifinal and the final by arithmetic, so those go by their names too,
 // and by them first (the stage code); a round of twelve four-seat Matches is
 // nobody's 1/16, so a scheme that wants that name writes it as a title.
-func elimRoundNames(r elimRound, index int, winning int) []string {
+func elimBlockRoundNames(r elimBlockRound, index int, winning int) []string {
 	ordinal := fmt.Sprintf("r%d", index+1)
 	if r.size == 2 && winning == 1 {
 		switch r.entering {
@@ -100,15 +101,15 @@ func elimRoundNames(r elimRound, index int, winning int) []string {
 	return []string{ordinal}
 }
 
-func elimRoundTitle(r elimRound, index int, winning int) string {
+func elimBlockRoundTitle(r elimBlockRound, index int, winning int) string {
 	s := dopestrings.Default
 	if r.size == 2 && winning == 1 {
-		return seRoundTitle(r.entering)
+		return seBlockRoundTitle(r.entering)
 	}
 	if r.terminal {
 		return s.Structure.Titles.Final()
 	}
-	return s.Structure.Titles.Round(strconv.Itoa(index + 1))
+	return s.Structure.Titles.BlockRound(strconv.Itoa(index + 1))
 }
 
 // snakeChunks splits 1..n into `bouts` Matches of equal size the way a group
@@ -184,7 +185,7 @@ type deBout struct {
 type dePlan struct {
 	lives, winning int
 	bouts          []deBout
-	rounds         [][]int
+	blockRounds    [][]int
 	// alive[r] is everyone still in at round r, in the rank order the reseed
 	// hands out — including the brackets that sit the round out, because they
 	// still hold their ranks and the Matches of that round are numbered around them.
@@ -206,7 +207,7 @@ type dePlan struct {
 // and place second, and a Participant just dropped from the bracket above
 // ranks ahead of one that survived the bracket below. Both are what «fewer
 // losses first» means, and both are what the StudChR sheets do.
-func planLives(entrants, lives, winning, proceeding int, sizeFor func(round, members int) int) (*dePlan, error) {
+func planLives(entrants, lives, winning, proceeding int, sizeFor func(blockRound, members int) int) (*dePlan, error) {
 	return planLivesDrawn(entrants, lives, winning, proceeding, sizeFor, snakeChunks)
 }
 
@@ -214,7 +215,7 @@ func planLives(entrants, lives, winning, proceeding int, sizeFor func(round, mem
 // bracket seeded from a ranking deals it as a snake, while one fed by the
 // previous block's template takes its entrants in the order that template
 // already balanced them.
-func planLivesDrawn(entrants, lives, winning, proceeding int, sizeFor func(round, members int) int, opening func(n, bouts int) [][]int) (*dePlan, error) {
+func planLivesDrawn(entrants, lives, winning, proceeding int, sizeFor func(blockRound, members int) int, opening func(n, bouts int) [][]int) (*dePlan, error) {
 	s := dopestrings.Default
 	if lives < 1 {
 		return nil, fmt.Errorf("%s", s.Structure.Elimination.LivesMin())
@@ -230,7 +231,7 @@ func planLivesDrawn(entrants, lives, winning, proceeding int, sizeFor func(round
 	for rank := 1; rank <= entrants; rank++ {
 		brackets[0] = append(brackets[0], deSource{entrant: rank})
 	}
-	for round := 1; ; round++ {
+	for blockRound := 1; ; blockRound++ {
 		alive := 0
 		for _, bracket := range brackets {
 			alive += len(bracket)
@@ -250,10 +251,10 @@ func planLivesDrawn(entrants, lives, winning, proceeding int, sizeFor func(round
 				bandsNow = append(bandsNow, [2]int{b, from})
 			}
 		}
-		if size := sizeFor(round, alive); alive <= size {
+		if size := sizeFor(blockRound, alive); alive <= size {
 			seats := rankSources(flattenBrackets(brackets))
 			plan.bouts = append(plan.bouts, deBout{losses: 0, sources: seats})
-			plan.rounds = append(plan.rounds, []int{len(plan.bouts) - 1})
+			plan.blockRounds = append(plan.blockRounds, []int{len(plan.bouts) - 1})
 			plan.alive = append(plan.alive, aliveNow)
 			plan.aliveBands = append(plan.aliveBands, bandsNow)
 			last := len(plan.bouts) - 1
@@ -263,7 +264,7 @@ func planLivesDrawn(entrants, lives, winning, proceeding int, sizeFor func(round
 			return plan, nil
 		}
 
-		var roundBouts []int
+		var blockRoundBouts []int
 		next := make([][]deSource, lives)
 		rankBase := 0
 		played := false
@@ -275,13 +276,13 @@ func planLivesDrawn(entrants, lives, winning, proceeding int, sizeFor func(round
 				next[b] = append(next[b], members...)
 				continue
 			}
-			size, err := bracketBoutSize(len(members), winning, sizeFor(round, len(members)))
+			size, err := bracketBoutSize(len(members), winning, sizeFor(blockRound, len(members)))
 			if err != nil {
-				return nil, fmt.Errorf("%s", s.Structure.Elimination.RoundBracket(strconv.Itoa(round), strconv.Itoa(b+1), err.Error()))
+				return nil, fmt.Errorf("%s", s.Structure.Elimination.BlockRoundBracket(strconv.Itoa(blockRound), strconv.Itoa(b+1), err.Error()))
 			}
 			count := len(members) / size
 			chunks := snakeChunks(len(members), count)
-			if round == 1 && b == 0 {
+			if blockRound == 1 && b == 0 {
 				chunks = opening(len(members), count)
 			}
 			played = true
@@ -294,7 +295,7 @@ func planLivesDrawn(entrants, lives, winning, proceeding int, sizeFor func(round
 				}
 				plan.bouts = append(plan.bouts, deBout{losses: b, sources: seats})
 				index := len(plan.bouts) - 1
-				roundBouts = append(roundBouts, index)
+				blockRoundBouts = append(blockRoundBouts, index)
 				for place := 1; place <= size; place++ {
 					who := deSource{bout: index, place: place}
 					if place <= winning {
@@ -315,12 +316,12 @@ func planLivesDrawn(entrants, lives, winning, proceeding int, sizeFor func(round
 			plan.survivor = flattenBrackets(brackets)
 			return plan, nil
 		}
-		plan.rounds = append(plan.rounds, roundBouts)
+		plan.blockRounds = append(plan.blockRounds, blockRoundBouts)
 		plan.alive = append(plan.alive, aliveNow)
 		plan.aliveBands = append(plan.aliveBands, bandsNow)
 		brackets = next
-		if round > 64 {
-			return nil, fmt.Errorf("%s", s.Structure.Elimination.TooManyRounds())
+		if blockRound > 64 {
+			return nil, fmt.Errorf("%s", s.Structure.Elimination.TooManyBlockRounds())
 		}
 	}
 }
@@ -363,7 +364,7 @@ func rankSources(sources []deSource) []deSource {
 // the later round of elimination first and, within it, fewer total Losses
 // first — a placement Match (the bronze) adds a Loss to the one it places lower.
 // Equal keys share a place; a survivor has no place until the Block is played
-// out, since the Matches that decide it are still ahead. MatchOutcome.Round
+// out, since the Matches that decide it are still ahead. MatchOutcome.BlockRound
 // says when a Loss fell; a Match seats any number, and a shared (fractional)
 // place is no Loss.
 func eliminationStandings(lives, winningPlaces int, results []MatchOutcome) []RankedEntry {
@@ -400,14 +401,14 @@ func eliminationStandings(lives, winningPlaces int, results []MatchOutcome) []Ra
 			losses[slot.Participant]++
 			if losses[slot.Participant] == lives {
 				if _, out := eliminated[slot.Participant]; !out {
-					eliminated[slot.Participant] = match.Round
+					eliminated[slot.Participant] = match.BlockRound
 				}
 			}
 		}
 	}
 	key := func(id int64) int {
-		if round, out := eliminated[id]; out {
-			return 1000*(1000-round) + losses[id]
+		if blockRound, out := eliminated[id]; out {
+			return 1000*(1000-blockRound) + losses[id]
 		}
 		return losses[id] - 1000
 	}

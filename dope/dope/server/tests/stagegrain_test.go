@@ -13,12 +13,12 @@ import (
 // address a бой at all.
 
 type stageRow struct {
-	code   string
-	block  string
-	wave   int
-	group  string
-	rounds []int
-	waves  []int
+	code        string
+	block       string
+	wave        int
+	group       string
+	blockRounds []int
+	waves       []int
 }
 
 func stageRows(t *testing.T, db *sql.DB, gameID int64) []stageRow {
@@ -49,12 +49,12 @@ where s.game_id = ? and s.code = ? order by m.position`, gameID, out[i].code)
 			t.Fatalf("matches of %s: %v", out[i].code, err)
 		}
 		for matchRows.Next() {
-			var round, wave int
-			if err := matchRows.Scan(&round, &wave); err != nil {
+			var blockRound, wave int
+			if err := matchRows.Scan(&blockRound, &wave); err != nil {
 				matchRows.Close()
 				t.Fatal(err)
 			}
-			out[i].rounds = append(out[i].rounds, round)
+			out[i].blockRounds = append(out[i].blockRounds, blockRound)
 			out[i].waves = append(out[i].waves, wave)
 		}
 		matchRows.Close()
@@ -87,12 +87,12 @@ func TestStageGrainOfGroups(t *testing.T) {
 			t.Errorf("%s: заход %d, want 1", stage.code, stage.wave)
 		}
 		want := []int{1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4}
-		if len(stage.rounds) != len(want) {
-			t.Fatalf("%s: боёв = %d, want %d", stage.code, len(stage.rounds), len(want))
+		if len(stage.blockRounds) != len(want) {
+			t.Fatalf("%s: боёв = %d, want %d", stage.code, len(stage.blockRounds), len(want))
 		}
-		for k, round := range want {
-			if stage.rounds[k] != round {
-				t.Fatalf("%s: круги = %v, want %v", stage.code, stage.rounds, want)
+		for k, blockRound := range want {
+			if stage.blockRounds[k] != blockRound {
+				t.Fatalf("%s: круги = %v, want %v", stage.code, stage.blockRounds, want)
 			}
 		}
 		// A Group holds one стол, so the three бои of a круг are played one
@@ -119,7 +119,7 @@ func TestStageGrainOfWaves(t *testing.T) {
 	stages := stageRows(t, srv.Eng().DB, gameID)
 	// Четыре боя на двух столах — два захода; потом два боя в один; потом финал.
 	want := []struct {
-		wave, round, bouts int
+		wave, blockRound, bouts int
 	}{{1, 1, 2}, {2, 1, 2}, {1, 2, 2}, {1, 3, 1}}
 	if len(stages) != len(want) {
 		t.Fatalf("этапов = %d (%v), want %d", len(stages), stages, len(want))
@@ -132,12 +132,12 @@ func TestStageGrainOfWaves(t *testing.T) {
 		if stage.wave != w.wave {
 			t.Errorf("%s: заход %d, want %d", stage.code, stage.wave, w.wave)
 		}
-		if len(stage.rounds) != w.bouts {
-			t.Fatalf("%s: боёв = %d, want %d", stage.code, len(stage.rounds), w.bouts)
+		if len(stage.blockRounds) != w.bouts {
+			t.Fatalf("%s: боёв = %d, want %d", stage.code, len(stage.blockRounds), w.bouts)
 		}
-		for _, round := range stage.rounds {
-			if round != w.round {
-				t.Errorf("%s: круг боя %d, want %d", stage.code, round, w.round)
+		for _, blockRound := range stage.blockRounds {
+			if blockRound != w.blockRound {
+				t.Errorf("%s: круг боя %d, want %d", stage.code, blockRound, w.blockRound)
 			}
 		}
 	}
