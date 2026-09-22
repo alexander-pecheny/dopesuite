@@ -15,6 +15,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"pecheny.me/dopecore/authcred"
@@ -81,6 +82,12 @@ type server struct {
 	// pages holds the compiled .dopeui-authored shells (see pages.go).
 	pages     *kit.PageSet
 	pagesOnce sync.Once
+
+	// botPolling is set once the login bot has claimed the token and is
+	// polling (bot.go). The login page asks about it through
+	// /api/auth/methods, so an instance without a bot offers no way in by
+	// telegram instead of a modal that would wait forever.
+	botPolling atomic.Bool
 
 	// apiTable is the /api/fest route table (routes_api.go), built on first use;
 	// hostPages holds the /host table the same way.

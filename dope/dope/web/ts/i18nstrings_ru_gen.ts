@@ -32,6 +32,7 @@ export const RU: Strings = {
       passwordWrong: () => "неверный пароль",
       systemUser: () => "системная учётная запись не входит",
       telegramLinked: () => "этот телеграм уже привязан",
+      tgNotConfigured: () => "вход через Telegram на этом сервере не настроен",
       usernameInvalid: () => "недопустимое имя пользователя",
     },
     password: {

@@ -38,7 +38,10 @@ var RU = Strings{
 			PasswordWrong:      func() string { return "неверный пароль" },
 			SystemUser:         func() string { return "системная учётная запись не входит" },
 			TelegramLinked:     func() string { return "этот телеграм уже привязан" },
-			UsernameInvalid:    func() string { return "недопустимое имя пользователя" },
+			TgNotConfigured: func() string {
+				return "вход через Telegram на этом сервере не настроен"
+			},
+			UsernameInvalid: func() string { return "недопустимое имя пользователя" },
 		},
 		Password: AuthPasswordStrings{
 			CurrentWrong: func() string { return "текущий пароль неверен" },

@@ -27,6 +27,9 @@ import (
 
 func newAuthTestServer(t *testing.T) *dopeserver.Server {
 	t.Helper()
+	// The handshake tests play the bot's side themselves; the token only has
+	// to exist for the server to mint codes at all.
+	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "auth.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -651,6 +654,50 @@ func TestHiddenAttributeCSSOverridesLayoutClasses(t *testing.T) {
 	body := string(css)
 	if !strings.Contains(body, "[hidden]") || !strings.Contains(body, "display: none !important") {
 		t.Fatalf("styles.css must force [hidden] to display none so layout classes do not reveal hidden sections")
+	}
+}
+
+func TestLoginMethodsFollowBotConfig(t *testing.T) {
+	srv := newAuthTestServer(t)
+	for _, c := range []struct {
+		name    string
+		token   string
+		polling bool
+		want    string
+	}{
+		{"a polling bot", "test-token", true, "ok"},
+		{"no token on this instance, which is staging", "", false, "misconfigured"},
+		{"a token nobody is polling", "test-token", false, "unreachable"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("TELEGRAM_BOT_TOKEN", c.token)
+			srv.SetBotPolling(c.polling)
+			w := httptest.NewRecorder()
+			srv.HandleAuthMethods(w, httptest.NewRequest(http.MethodGet, "/api/auth/methods", nil))
+			var got struct {
+				Telegram bool   `json:"telegram"`
+				Status   string `json:"telegram_status"`
+			}
+			if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if got.Status != c.want {
+				t.Errorf("telegram_status = %q, want %q", got.Status, c.want)
+			}
+			if want := c.want == "ok"; got.Telegram != want {
+				t.Errorf("telegram = %v, want %v", got.Telegram, want)
+			}
+		})
+	}
+}
+
+func TestTgStartRefusedWithoutToken(t *testing.T) {
+	srv := newAuthTestServer(t)
+	t.Setenv("TELEGRAM_BOT_TOKEN", "")
+	w := httptest.NewRecorder()
+	srv.HandleAuthTgStart(w, httptest.NewRequest(http.MethodPost, "/api/auth/tg/start", nil))
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want %d: %s", w.Code, http.StatusServiceUnavailable, w.Body.String())
 	}
 }
 

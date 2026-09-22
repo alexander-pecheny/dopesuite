@@ -76,6 +76,7 @@ func (s *server) inWriteTx(ctx context.Context, fn func(tx *sql.Tx) error) error
 // dispatcher writes it. The exported HandleAuth* names in testapi.go reach
 // the same handlers.
 func (s *server) authRoutes(t *route.Table) {
+	t.Handle("GET /api/auth/methods", route.Public, s.authLoginMethods)
 	t.Handle("POST /api/auth/tg/start", route.Public, s.authTgStart)
 	t.Handle("GET /api/auth/tg/status", route.Public, s.authTgStatus)
 	t.Handle("POST /api/auth/tg/claim", route.Public, s.authTgClaim)
@@ -108,7 +109,40 @@ func (s *server) handleAuthPassword(w http.ResponseWriter, r *http.Request) {
 	s.api().Serve(route.Session, s.authPassword)(w, r)
 }
 
+// The /api/auth/methods contract the kit's login page reads (login-model.ts):
+// `telegram` is the bare on/off an older page understands, `telegram_status`
+// says which kind of no it is, so the page can name the problem.
+const (
+	tgStatusOK            = "ok"
+	tgStatusMisconfigured = "misconfigured"
+	tgStatusUnreachable   = "unreachable"
+)
+
+// telegramStatus is whether this instance can log somebody in by telegram.
+// No token means it was never meant to (staging); a token nobody is polling
+// means the bot failed to start or another process holds it.
+func (s *server) telegramStatus() string {
+	if strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN")) == "" {
+		return tgStatusMisconfigured
+	}
+	if !s.botPolling.Load() {
+		return tgStatusUnreachable
+	}
+	return tgStatusOK
+}
+
+func (s *server) authLoginMethods(w http.ResponseWriter, _ *http.Request, _ route.Scope) error {
+	st := s.telegramStatus()
+	return route.JSON(w, map[string]any{"telegram": st == tgStatusOK, "telegram_status": st})
+}
+
 func (s *server) authTgStart(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
+	// An instance with no token has no bot to answer the code, so minting one
+	// would only leave the visitor polling. The bot not polling right now is
+	// different: the code keeps, and the bot may be back before it expires.
+	if s.telegramStatus() == tgStatusMisconfigured {
+		return &route.Status{Code: http.StatusServiceUnavailable, Msg: dopestrings.Default.Auth.Login.TgNotConfigured()}
+	}
 	var res tglogin.StartResult
 	err := s.inWriteTx(r.Context(), func(tx *sql.Tx) (err error) {
 		res, err = s.handshake().Start(r.Context(), tx, time.Now())

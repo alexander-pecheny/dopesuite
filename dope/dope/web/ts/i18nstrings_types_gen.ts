@@ -31,6 +31,7 @@ export type Strings = {
       passwordWrong: () => string;
       systemUser: () => string;
       telegramLinked: () => string;
+      tgNotConfigured: () => string;
       usernameInvalid: () => string;
     };
     password: {

@@ -46,8 +46,10 @@ func (s *server) startBot(ctx context.Context) {
 		AllowedUpdates: []string{"message"},
 	})
 	log.Printf("telegram bot %s polling (token %s)", buildinfo.Version(), tgbot.TokenHash(token))
+	s.botPolling.Store(true)
 	go func() {
 		defer release()
+		defer s.botPolling.Store(false)
 		_ = client.Run(ctx, recovering(tgbot.LoginHandler(botRegistrar{s}, botTexts)))
 	}()
 }

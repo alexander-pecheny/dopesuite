@@ -24,6 +24,7 @@ import (
 	"dope/dope/web/assets"
 	"dope/dope/web/hostpages"
 	"dope/dope/web/pages"
+	"dope/dope/web/route"
 	"dope/dope/web/telegrambridge"
 )
 
@@ -143,6 +144,13 @@ func (s *Server) HandleAuthLoginPassword(w http.ResponseWriter, r *http.Request)
 func (s *Server) HandleAuthMe(w http.ResponseWriter, r *http.Request) { s.handleAuthMe(w, r) }
 func (s *Server) HandleAuthPassword(w http.ResponseWriter, r *http.Request) {
 	s.handleAuthPassword(w, r)
+}
+
+// SetBotPolling stands in for the bot claiming, or losing, the token.
+func (s *Server) SetBotPolling(on bool) { s.botPolling.Store(on) }
+
+func (s *Server) HandleAuthMethods(w http.ResponseWriter, r *http.Request) {
+	s.api().Serve(route.Public, s.authLoginMethods)(w, r)
 }
 func (s *Server) HandleAuthTgStart(w http.ResponseWriter, r *http.Request) {
 	s.handleAuthTgStart(w, r)
