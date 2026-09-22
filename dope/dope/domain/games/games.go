@@ -26,6 +26,7 @@ const (
 	Brain  = "brain"  // brain-ring — head-to-head buzzer matches
 	Multi  = "multi"  // multi — several minigames in one sitting
 	Troika = "troika" // troika — a match of two troikas over themes of three questions
+	Hamsa  = "hamsa"  // hamsa — four-seat bouts of five game rounds, the last one played on a bet
 )
 
 // Default is the game type assumed when a game has none recorded.
@@ -92,6 +93,9 @@ var registry = map[string]Definition{
 	// Troika plays a bracket of matches, as brain does, and boots the same
 	// payload: its page fetches the matches itself and draws them its own way.
 	Troika: {Code: Troika, Label: dopestrings.Default.Games.Troika.Label(), Page: "static/troika.html"},
+	// Hamsa plays a bracket of four-seat bouts and boots the bracket payload,
+	// as Troika does: the page fetches its matches and draws them its own way.
+	Hamsa: {Code: Hamsa, Label: dopestrings.Default.Games.Hamsa.Label(), Page: "static/hamsa.html"},
 }
 
 // Label returns the short display label for a game type, falling back to the

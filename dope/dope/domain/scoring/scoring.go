@@ -30,7 +30,9 @@ func RecalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, match store.DBMa
 	if !ok {
 		return fmt.Errorf("scoring: no protocol %q", protocolCode)
 	}
-	outcomes, err := p.Score(json.RawMessage(schemeJSON), match.ProtocolState())
+	// A Protocol whose document is keyed by Participant is told who sits where;
+	// every other one answers in slot order out of the document alone.
+	outcomes, err := protocol.ScoreSeats(p, json.RawMessage(schemeJSON), match.ProtocolState(), match.ParticipantIDs)
 	if err != nil {
 		return err
 	}

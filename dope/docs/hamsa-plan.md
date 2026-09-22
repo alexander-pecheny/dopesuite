@@ -45,6 +45,12 @@ Files: `dope/domain/games/hamsa.go` (state + pure scoring, with tests),
 Тройка writes `theme_values` — what a question was worth is a fact about the
 бой that played it. Do **not** touch `store.QuestionValues`.
 
+**Built:** the document is the Protocol's own, not ЭК's team blob. The blob was
+the closer fit — it is already `participants: {id: {themes: [{player,
+answers[5]}], pin}}` — but it has no room for a Ставка or for the per-round
+номиналы, and `MatchBlob` drops what it does not declare, so both would be lost
+on the first write.
+
 ### State (JSON, one document per бой, participants keyed by id)
 
 ```
@@ -65,6 +71,14 @@ The marks language is ЭК's (`right`/`wrong`/empty; the cursor's `parseMark`
 already reads +/−, 1/0, й/ц …). A question may carry several `wrong` and one
 `right` across teams; nothing validates that.
 
+**Built:** a document keyed by Participant cannot answer `Score` in slot order,
+and a seat that entered nothing still took a place, so the seats have to reach
+the scorer. The smallest seam that fits is one optional interface,
+`protocol.SeatedScorer` (`ScoreSeated(cfg, state, seats)`), asked for by
+`protocol.ScoreSeats`, which `scoring.RecalculateMatchResultsTx` now calls;
+every other Protocol answers in slot order as before. The outcome carries its
+`Participant`, which is what the rest of the model already means by that field.
+
 ### Scoring
 
 - Theme i of a participant is worth `Σ ±values[q]` for its marks, values from
@@ -78,6 +92,21 @@ already reads +/−, 1/0, й/ц …). A question may carry several `wrong` and o
 - Places are **computed**, ties share the mean place (`si.go`'s `placesBySum`
   is the precedent), by `total`, then `shootoutTotal`, then `plus`; a host
   Pin still wins. `Started` is real: any mark, bet or player set.
+
+**Built**, where the plan left a choice:
+
+- `plus` counts what the темы took and leaves the Ставка out. Σ+ measures what
+  a team knew, not what it gambled.
+- `first` is 1 for every team **nobody finished ahead of**, so two teams
+  sharing 1.5 have each taken a первое место. Reading it as «place == 1» would
+  have counted neither.
+- `correct_<v>` / `wrong_<v>` are named after the **base** номиналы, which are
+  the first game round's values in the document; a 300 taken in the Тёмный
+  round counts as a 300.
+- A перестрелка тема's вопросы are worth the **last** game round's номиналы —
+  the tiebreak is another Персональный round.
+- A Pin is applied after the places are computed, exactly as `si.go` does it,
+  so the seats around a pinned one keep the places the marks gave them.
 
 ### Metric for the КСИ place
 

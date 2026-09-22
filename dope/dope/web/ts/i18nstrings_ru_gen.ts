@@ -367,6 +367,9 @@ export const RU: Strings = {
     ek: {
       label: () => "ЭК",
     },
+    hamsa: {
+      label: () => "Хамса",
+    },
     ksi: {
       label: () => "КСИ",
     },

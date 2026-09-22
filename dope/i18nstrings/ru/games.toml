@@ -41,6 +41,10 @@ metric_unknown = '{{.metric}} не считается — есть {{.known}}'
 # The kind's display name (the games registry Label).
 label = "Тройка"
 
+[hamsa]
+# The kind's display name (the games registry Label).
+label = "Хамса"
+
 [brain]
 # The kind's display name (the games registry Label).
 label = "Брейн"

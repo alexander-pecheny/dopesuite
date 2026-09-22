@@ -413,6 +413,9 @@ var RU = Strings{
 		Ek: GamesEkStrings{
 			Label: func() string { return "ЭК" },
 		},
+		Hamsa: GamesHamsaStrings{
+			Label: func() string { return "Хамса" },
+		},
 		Ksi: GamesKsiStrings{
 			Label: func() string { return "КСИ" },
 		},

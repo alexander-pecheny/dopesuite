@@ -139,6 +139,25 @@ func Get(code string) (Protocol, bool) {
 	return p, ok
 }
 
+// SeatedScorer is implemented by a Protocol whose document is keyed by
+// Participant rather than by slot — Hamsa's is, so that a re-seat can never
+// move one team's marks onto another. Score cannot answer in slot order out of
+// such a document, so the scorer hands over the seats it holds; a seat that
+// entered nothing still took a place, which is why the seating decides the
+// rows and the document does not.
+type SeatedScorer interface {
+	ScoreSeated(cfg, state json.RawMessage, seats []int64) ([]structure.SlotOutcome, error)
+}
+
+// ScoreSeats scores a match through its Protocol, telling a SeatedScorer who
+// is sitting at it. Every other Protocol answers in slot order already.
+func ScoreSeats(p Protocol, cfg, state json.RawMessage, seats []int64) ([]structure.SlotOutcome, error) {
+	if seated, ok := p.(SeatedScorer); ok {
+		return seated.ScoreSeated(cfg, state, seats)
+	}
+	return p.Score(cfg, state)
+}
+
 // SeatsPlayers is implemented by a Protocol whose matches field named
 // players — Troika records which of a team's three sat in which chair — so
 // each seat wants its roster on the view. A team-blob Protocol already gets

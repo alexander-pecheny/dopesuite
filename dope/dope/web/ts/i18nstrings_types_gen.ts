@@ -366,6 +366,9 @@ export type Strings = {
     ek: {
       label: () => string;
     };
+    hamsa: {
+      label: () => string;
+    };
     ksi: {
       label: () => string;
     };

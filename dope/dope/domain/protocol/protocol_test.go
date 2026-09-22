@@ -50,6 +50,7 @@ func TestEveryProtocolDeclaresWhatItWrites(t *testing.T) {
 		"brain": `{"teams":[{"rows":[{"mark":"right"}]},{"rows":[{"mark":""}]}]}`,
 		"ksi":   `{"participants":[{"name":"A","themes":[{"answers":["right","","","",""]}]}]}`,
 		"od":    `{"teams":[{"name":"A","answers":[[true]]}]}`,
+		"hamsa": `{"participants":{"1":{"themes":[{"answers":["right","","","",""]}],"bet":{"amount":100,"answer":"right"}}}}`,
 	}
 	for code, state := range states {
 		p, ok := Get(code)
@@ -307,5 +308,56 @@ func TestSIShootoutBreaksTies(t *testing.T) {
 	}
 	if outcomes[1].Metrics["shootoutTotal"] != 20 || outcomes[0].Metrics["shootoutTotal"] != 0 {
 		t.Errorf("перестрелка = %v и %v, want 20 и 0", outcomes[1].Metrics["shootoutTotal"], outcomes[0].Metrics["shootoutTotal"])
+	}
+}
+
+// Хамса's document is keyed by Participant, so the scorer hands it the seats:
+// a team that entered nothing still took a place, and the outcome says whose
+// it is.
+func TestHamsaScoreSeats(t *testing.T) {
+	p, ok := Get("hamsa")
+	if !ok {
+		t.Fatal("hamsa protocol not registered")
+	}
+	state := json.RawMessage(`{"participants":{
+		"7":{"themes":[{"player":3,"answers":["right","","","","wrong"]}],"bet":{"amount":100,"answer":"right"}},
+		"8":{"themes":[{"answers":["right","","","",""]}]}
+	}}`)
+	// 7: 100 − 500 + 100 = −300; 8: 100; the empty seat 9 is 0.
+	outcomes, err := ScoreSeats(p, nil, state, []int64{9, 7, 8})
+	if err != nil {
+		t.Fatalf("ScoreSeats: %v", err)
+	}
+	if len(outcomes) != 3 {
+		t.Fatalf("outcomes = %d, want one per seat", len(outcomes))
+	}
+	if outcomes[0].Participant != 9 || outcomes[1].Participant != 7 || outcomes[2].Participant != 8 {
+		t.Fatalf("outcomes name %v %v %v", outcomes[0].Participant, outcomes[1].Participant, outcomes[2].Participant)
+	}
+	if outcomes[1].Metrics["total"] != -300 || outcomes[2].Metrics["total"] != 100 {
+		t.Fatalf("totals = %v %v", outcomes[1].Metrics["total"], outcomes[2].Metrics["total"])
+	}
+	if outcomes[2].Place != 1 || outcomes[0].Place != 2 || outcomes[1].Place != 3 {
+		t.Fatalf("places = %v %v %v", outcomes[0].Place, outcomes[1].Place, outcomes[2].Place)
+	}
+	if outcomes[2].Metrics["first"] != 1 || outcomes[0].Metrics["first"] != 0 {
+		t.Fatalf("first = %v %v", outcomes[2].Metrics["first"], outcomes[0].Metrics["first"])
+	}
+
+	empty, err := p.EmptyState(json.RawMessage(`{"gameRounds":[5,5,5,1],"multipliers":[1,2,3,4],"values":[100,200,300,400,500]}`))
+	if err != nil {
+		t.Fatalf("EmptyState: %v", err)
+	}
+	var parsed struct {
+		Rounds []struct {
+			Themes int   `json:"themes"`
+			Values []int `json:"values"`
+		} `json:"rounds"`
+	}
+	if err := json.Unmarshal(empty, &parsed); err != nil {
+		t.Fatalf("parse empty state: %v", err)
+	}
+	if len(parsed.Rounds) != 4 || parsed.Rounds[3].Themes != 1 || parsed.Rounds[3].Values[0] != 400 {
+		t.Fatalf("empty state = %s", empty)
 	}
 }
