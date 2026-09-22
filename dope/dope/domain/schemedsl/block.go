@@ -182,7 +182,7 @@ func (b *blockHandle) Emit(s structure.Stage) ([]string, error) {
 	if s.Waves {
 		return b.c.appendSEBlockRound(b.blk, s.Code, s.Title, s.BlockRounds, s.Lanes.Restricted, where, s.Matches), nil
 	}
-	b.c.appendDrawnStage(s.Kind, s.Config, b.blk, s.Code, s.Title, s.BlockRounds, where, s.Matches)
+	b.c.appendDrawnStage(s.Kind, s.Config, b.blk, s.Code, s.Title, s.BlockRounds, where, s.Matches, s.Sources...)
 	return []string{s.Code}, nil
 }
 

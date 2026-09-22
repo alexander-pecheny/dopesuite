@@ -1,0 +1,521 @@
+{
+ "schemaVersion": 2,
+ "slug": "hamsa",
+ "title": "hamsa",
+ "gameType": "hamsa",
+ "questionValues": null,
+ "regularThemeCount": 0,
+ "venues": [
+  {
+   "number": 1,
+   "title": "А"
+  },
+  {
+   "number": 2,
+   "title": "Б"
+  },
+  {
+   "number": 3,
+   "title": "В"
+  }
+ ],
+ "stages": [
+  {
+   "code": "s1-r1",
+   "title": "Групповой этап. Игра №1",
+   "stage_type": "matches",
+   "kind": "matches",
+   "position": 1,
+   "grain": {
+    "block": "s1",
+    "wave": 1
+   },
+   "matches": [
+    {
+     "code": "s1-r1-m1",
+     "title": "Бой 1",
+     "letter": "A",
+     "venue": 1,
+     "round": 1,
+     "participantCount": 4,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 1
+       },
+       "label": "Посев 1"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 2
+       },
+       "label": "Посев 2"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 3
+       },
+       "label": "Посев 3"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 4
+       },
+       "label": "Посев 4"
+      }
+     ]
+    },
+    {
+     "code": "s1-r1-m2",
+     "title": "Бой 2",
+     "letter": "B",
+     "venue": 2,
+     "round": 1,
+     "participantCount": 4,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 5
+       },
+       "label": "Посев 5"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 6
+       },
+       "label": "Посев 6"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 7
+       },
+       "label": "Посев 7"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 8
+       },
+       "label": "Посев 8"
+      }
+     ]
+    },
+    {
+     "code": "s1-r1-m3",
+     "title": "Бой 3",
+     "letter": "C",
+     "venue": 3,
+     "round": 1,
+     "participantCount": 4,
+     "slots": [
+      {
+       "seed": {
+        "basket": 1,
+        "position": 9
+       },
+       "label": "Посев 9"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 10
+       },
+       "label": "Посев 10"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 11
+       },
+       "label": "Посев 11"
+      },
+      {
+       "seed": {
+        "basket": 1,
+        "position": 12
+       },
+       "label": "Посев 12"
+      }
+     ]
+    }
+   ],
+   "teams": null,
+   "sources": null,
+   "sort": null,
+   "config": {},
+   "layout": null
+  },
+  {
+   "code": "s1-r2",
+   "title": "Групповой этап. Игра №2",
+   "stage_type": "matches",
+   "kind": "matches",
+   "position": 2,
+   "grain": {
+    "block": "s1",
+    "wave": 1
+   },
+   "matches": [
+    {
+     "code": "s1-r2-m1",
+     "title": "Бой 1",
+     "letter": "D",
+     "venue": 1,
+     "round": 2,
+     "participantCount": 4,
+     "slots": [
+      {
+       "fromMatch": {
+        "match": "s1-r1-m1",
+        "place": 1
+       },
+       "label": "Бой 1, м. 1"
+      },
+      {
+       "fromMatch": {
+        "match": "s1-r1-m2",
+        "place": 1
+       },
+       "label": "Бой 2, м. 1"
+      },
+      {
+       "fromMatch": {
+        "match": "s1-r1-m3",
+        "place": 1
+       },
+       "label": "Бой 3, м. 1"
+      },
+      {
+       "draw": {
+        "code": "s1-r2-m1-d1",
+        "candidates": [
+         {
+          "match": "s1-r1-m1",
+          "place": 4
+         },
+         {
+          "match": "s1-r1-m2",
+          "place": 4
+         },
+         {
+          "match": "s1-r1-m3",
+          "place": 4
+         }
+        ]
+       },
+       "label": "Жребий"
+      }
+     ]
+    },
+    {
+     "code": "s1-r2-m2",
+     "title": "Бой 2",
+     "letter": "E",
+     "venue": 2,
+     "round": 2,
+     "participantCount": 4,
+     "slots": [
+      {
+       "fromMatch": {
+        "match": "s1-r1-m1",
+        "place": 2
+       },
+       "label": "Бой 1, м. 2"
+      },
+      {
+       "fromMatch": {
+        "match": "s1-r1-m2",
+        "place": 2
+       },
+       "label": "Бой 2, м. 2"
+      },
+      {
+       "fromMatch": {
+        "match": "s1-r1-m3",
+        "place": 2
+       },
+       "label": "Бой 3, м. 2"
+      },
+      {
+       "draw": {
+        "code": "s1-r2-m2-d1",
+        "candidates": [
+         {
+          "match": "s1-r1-m1",
+          "place": 4
+         },
+         {
+          "match": "s1-r1-m2",
+          "place": 4
+         },
+         {
+          "match": "s1-r1-m3",
+          "place": 4
+         }
+        ]
+       },
+       "label": "Жребий"
+      }
+     ]
+    },
+    {
+     "code": "s1-r2-m3",
+     "title": "Бой 3",
+     "letter": "F",
+     "venue": 3,
+     "round": 2,
+     "participantCount": 4,
+     "slots": [
+      {
+       "fromMatch": {
+        "match": "s1-r1-m1",
+        "place": 3
+       },
+       "label": "Бой 1, м. 3"
+      },
+      {
+       "fromMatch": {
+        "match": "s1-r1-m2",
+        "place": 3
+       },
+       "label": "Бой 2, м. 3"
+      },
+      {
+       "fromMatch": {
+        "match": "s1-r1-m3",
+        "place": 3
+       },
+       "label": "Бой 3, м. 3"
+      },
+      {
+       "draw": {
+        "code": "s1-r2-m3-d1",
+        "candidates": [
+         {
+          "match": "s1-r1-m1",
+          "place": 4
+         },
+         {
+          "match": "s1-r1-m2",
+          "place": 4
+         },
+         {
+          "match": "s1-r1-m3",
+          "place": 4
+         }
+        ]
+       },
+       "label": "Жребий"
+      }
+     ]
+    }
+   ],
+   "teams": null,
+   "sources": null,
+   "sort": null,
+   "config": {},
+   "layout": null
+  },
+  {
+   "code": "s1-total",
+   "title": "Групповой этап. Общий зачёт",
+   "stage_type": "matches",
+   "kind": "placement",
+   "position": 3,
+   "grain": {
+    "block": "s1",
+    "wave": 1
+   },
+   "matches": [],
+   "teams": null,
+   "sources": [
+    "s1-r1",
+    "s1-r2"
+   ],
+   "sort": null,
+   "config": {
+    "code": "s1-total",
+    "matchSize": 4,
+    "order": [
+     "place_sum",
+     "total",
+     "first",
+     "seed"
+    ]
+   },
+   "layout": null
+  },
+  {
+   "code": "s2-reseed",
+   "title": "Пересев",
+   "stage_type": "reseed",
+   "kind": "reseed",
+   "position": 4,
+   "grain": {
+    "block": "s2",
+    "wave": 1
+   },
+   "matches": null,
+   "teams": [
+    {
+     "reseed": {
+      "stage": "s1-total",
+      "rank": 1
+     },
+     "label": "Групповой этап. Общий зачёт-1"
+    },
+    {
+     "reseed": {
+      "stage": "s1-total",
+      "rank": 2
+     },
+     "label": "Групповой этап. Общий зачёт-2"
+    },
+    {
+     "reseed": {
+      "stage": "s1-total",
+      "rank": 3
+     },
+     "label": "Групповой этап. Общий зачёт-3"
+    },
+    {
+     "reseed": {
+      "stage": "s1-total",
+      "rank": 4
+     },
+     "label": "Групповой этап. Общий зачёт-4"
+    }
+   ],
+   "sources": [
+    "s1-r1",
+    "s1-r2"
+   ],
+   "sort": [
+    {
+     "metric": "place_sum",
+     "dir": "asc"
+    },
+    {
+     "metric": "total",
+     "dir": "desc"
+    },
+    {
+     "metric": "first",
+     "dir": "desc"
+    },
+    {
+     "metric": "seed",
+     "dir": "asc"
+    },
+    {
+     "metric": "draw",
+     "dir": "asc"
+    }
+   ],
+   "config": null,
+   "layout": null
+  },
+  {
+   "code": "s2",
+   "title": "Финал",
+   "stage_type": "matches",
+   "kind": "flat",
+   "position": 5,
+   "grain": {
+    "block": "s2",
+    "wave": 1
+   },
+   "matches": [
+    {
+     "code": "s2-m1",
+     "title": "Финал",
+     "letter": "G",
+     "venue": 1,
+     "round": 1,
+     "participantCount": 4,
+     "slots": [
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 1
+       },
+       "label": "Пересев-1"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 2
+       },
+       "label": "Пересев-2"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 3
+       },
+       "label": "Пересев-3"
+      },
+      {
+       "reseed": {
+        "stage": "s2-reseed",
+        "rank": 4
+       },
+       "label": "Пересев-4"
+      }
+     ]
+    }
+   ],
+   "teams": null,
+   "sources": null,
+   "sort": null,
+   "config": {
+    "code": "s2",
+    "entrants": [
+     {
+      "label": "Пересев-1",
+      "reseed": {
+       "rank": 1,
+       "stage": "s2-reseed"
+      }
+     },
+     {
+      "label": "Пересев-2",
+      "reseed": {
+       "rank": 2,
+       "stage": "s2-reseed"
+      }
+     },
+     {
+      "label": "Пересев-3",
+      "reseed": {
+       "rank": 3,
+       "stage": "s2-reseed"
+      }
+     },
+     {
+      "label": "Пересев-4",
+      "reseed": {
+       "rank": 4,
+       "stage": "s2-reseed"
+      }
+     }
+    ],
+    "shootout": true,
+    "title": "Финал",
+    "venue": 1
+   },
+   "layout": null
+  }
+ ],
+ "teams": null,
+ "seeding": {
+  "source": "ksi-1"
+ }
+}

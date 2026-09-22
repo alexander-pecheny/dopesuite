@@ -7,16 +7,18 @@ import (
 	"testing"
 )
 
-// The championship's five schemes compile to exactly what they compiled to:
-// a бой's code is its identity (state, journal, SSE scopes hang on it), so a
-// change to the compiler that moves one is a change to every running game.
+// The committed schemes compile to exactly what they compiled to: a бой's code
+// is its identity (state, journal, SSE scopes hang on it), so a change to the
+// compiler that moves one is a change to every running game.
 // DOPE_UPDATE_GOLDEN=1 rewrites the pins when a change is meant.
 func TestStudchrSchemesCompileAsPinned(t *testing.T) {
-	for _, c := range []struct{ name, gameType string }{
-		{"ek", "ek"}, {"brain", "brain"}, {"si", "si"}, {"tpsh", "si"}, {"od", "od"},
+	for _, c := range []struct{ dir, name, gameType string }{
+		{"studchr", "ek", "ek"}, {"studchr", "brain", "brain"}, {"studchr", "si", "si"},
+		{"studchr", "tpsh", "si"}, {"studchr", "od", "od"},
+		{"hamsa", "hamsa", "hamsa"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			src, err := os.ReadFile(filepath.Join("..", "..", "..", "scripts", "studchr", c.name+".dsl"))
+			src, err := os.ReadFile(filepath.Join("..", "..", "..", "scripts", c.dir, c.name+".dsl"))
 			if err != nil {
 				t.Fatal(err)
 			}

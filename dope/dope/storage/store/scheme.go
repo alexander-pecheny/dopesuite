@@ -125,9 +125,20 @@ type SchemeSlot struct {
 	Seed        *SchemeSeedRef      `json:"seed,omitempty"`
 	FromMatch   *SchemeFromMatchRef `json:"fromMatch,omitempty"`
 	Reseed      *SchemeReseedRef    `json:"reseed,omitempty"`
+	Draw        *SchemeDraw         `json:"draw,omitempty"`
 	Team        *SchemeTeamRef      `json:"team,omitempty"`
 	Placeholder string              `json:"placeholder,omitempty"`
 	Label       string              `json:"label,omitempty"`
+}
+
+// SchemeDraw is a Slot no result implies: the host seats it on the day, out of
+// the places the Kind names as its candidates (CONTEXT.md, «Draw»). The
+// resolver never fills it — that is the whole distinction between a Draw and a
+// derived seating — so it is stored as a placeholder whose ref carries this,
+// and the host's draw is written straight onto the slot.
+type SchemeDraw struct {
+	Code       string               `json:"code"`
+	Candidates []SchemeFromMatchRef `json:"candidates,omitempty"`
 }
 
 type SchemeSeedRef struct {

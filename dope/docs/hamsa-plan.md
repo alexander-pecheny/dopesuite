@@ -142,6 +142,35 @@ Golden test in `schemedsl/testdata/golden/hamsa.json`; a unit test of the
 expansion for 12/4/2 and for a second shape (e.g. 8/4/3) so it is not
 hard-wired to this Fest.
 
+**Built**, where the plan left a choice:
+
+- The Block is **one ranking scope**, because «наименьшая сумма мест… в обеих
+  играх ГЭ» cannot be read off a table per Round. So the Kind emits a `matches`
+  stage per Round — the бои the Сетка draws — plus one `placement` stage that
+  holds no Matches of its own and names the Rounds as its `sources`. The
+  resolver already ranked a reseed that way; it now does the same for a Kind
+  stage that declares sources, and a rank ref into such a stage waits on those
+  Rounds' бои instead of resolving on day one.
+- `match_size` must be at least the number of tables, since place k of every
+  table has to have a table k to go to. Twelve teams two to a table is refused
+  rather than compiled.
+- **A Draw Slot is a `placeholder` whose ref carries `draw`** — the code and the
+  candidate places. That needed no migration, and it is honest: a placeholder is
+  already «a seat no rule derives», which is exactly a Draw, and the resolver
+  leaves placeholders alone. The host's draw is written onto the slot with
+  `locked = 1`.
+- `seed` reaches a Ranker through a new `structure.Inputs.Seeds`, which the
+  resolver loads from `game_assignments` — basket 1's number is the rank the
+  seed import dealt, which for Хамса is the place in the КСИ отбор. Both the
+  reseed and `placement` write it onto their rows, and `Ascending` knows it
+  reads better the smaller.
+- `flat` now ignores its own `sorting` when the Block has an incoming reseed,
+  the way `roundrobin` already did: there the key describes the Edge, and the
+  Финал's `[place_sum, total, first, seed]` is not something a single бой's
+  table can rank by.
+- `[init] seed:` names the source Game's **code**, so the scheme says
+  `seed: ksi-1` — the code a fest's first КСИ game is given.
+
 ## 3. The Draw (server + Сетка)
 
 - Resolver: a Draw Slot is filled only from a stored draw (`match_slots` row
@@ -149,9 +178,17 @@ hard-wired to this Fest.
   `[init]` uses and extend it); the resolver never derives it. A candidate
   must be one of the slot's candidate refs' current occupants; the server
   refuses anything else with a User error.
-- API row in `routes_api.go`: `PUT /api/fest/{fest}/game/{game}/draw` with
+- API row in `routes_api.go`: `PUT /api/fest/{fest}/games/{game}/draw` with
   `{slot: code, participant: id}`; Manager access, numbered guard; broadcast
-  like a reseed.
+  like a reseed. **Built:** it shares the reseed's write-and-reload
+  (`writeAndReloadFest`), so both answer the fest view, the бои whose seats
+  moved and the revision. A participant of 0 clears the seat; a candidate the
+  slot does not name, or one already drawn into another table of the same
+  Round, is a User error.
+- The candidates reach the page resolved: `MatchParticipantSummary.Draw`
+  carries the slot's code, who is seated and the Participants it may be filled
+  from, because a match summary carries names alone and the panel has to send
+  an id back. They stay empty until the source бои are finished.
 - Сетка (`fest-grid.ts`): under a Round that has Draw Slots, a panel titled
   from the Catalog («Жеребьёвка») with one select per empty Draw Slot,
   options = the candidates not yet seated. Shown only to hosts, only once all

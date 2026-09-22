@@ -1035,6 +1035,10 @@ export const RU: Strings = {
     },
   },
   resolver: {
+    draw: {
+      alreadySeated: () => "эта команда уже посажена в этом раунде",
+      notACandidate: () => "эту команду нельзя посадить на это место",
+    },
     reseed: {
       notReady: () => "пересев можно рассчитать после завершения всех исходных боёв",
       pending: (n: number, codes: string) => `${plural("ru", n, "Бой", "Бои", "Бои")} ${codes} ${plural("ru", n, "не закончен", "не закончены", "не закончены")}`,
@@ -1293,6 +1297,15 @@ export const RU: Strings = {
       reseedRank: (n: string) => `Пересев-${n}`,
       seatFromBout: (bout: string, place: string) => `${bout}, м. ${place}`,
       unrankableMetric: (metric: string, known: string) => `sorting: ${metric} не считается — ни протокол, ни правила подсчёта такой метрики не дают (есть ${known})`,
+    },
+    placement: {
+      blockRoundsMin: () => "rounds: хотя бы один раунд",
+      drawSeat: () => "Жребий",
+      matchSizeMissing: () => "placement: нужен match_size хотя бы 2",
+      notDivisible: (participants: string, size: string) => `placement: ${participants} участников не делятся на столы по ${size}`,
+      participantsMissing: () => "placement: нужен participants",
+      table: () => "Общий зачёт",
+      tooManyTables: (tables: string, size: string) => `placement: ${tables} столов не рассадить по ${size} мест — столов не должно быть больше, чем мест за столом`,
     },
     rr: {
       groupFeed: (n: string) => `Гр. ${n}`,

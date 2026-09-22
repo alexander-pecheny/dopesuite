@@ -84,8 +84,12 @@ type Stage struct {
 	At                      At
 	Config                  any
 	Matches                 []store.SchemeMatch
-	Waves                   bool
-	Lanes                   Lanes
+	// Sources are the stages a Kind ranks over when its ranking scope is wider
+	// than its own Matches — Хамса's групповой этап ranks both its Игры
+	// together, so its table holds no Matches and names them instead.
+	Sources []string
+	Waves   bool
+	Lanes   Lanes
 }
 
 // At is where a stage sits in its Block: which Round its Matches play (0 for a

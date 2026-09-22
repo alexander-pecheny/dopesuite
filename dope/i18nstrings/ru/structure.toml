@@ -107,6 +107,25 @@ game = "Игра"
 # The schedule ran with nobody seated.
 no_entrants = "flat: за столом никого"
 
+[placement]
+# The placement block — Хамса's групповой этап: rounds of multi-seat bouts
+# where the places, not the survivors, are what carries forward.
+# The block's own table, which ranks every round together.
+table = "Общий зачёт"
+# The label of a seat the host draws, while it is still empty.
+draw_seat = "Жребий"
+# A block without the participants key and nothing seeded.
+participants_missing = "placement: нужен participants"
+# No match_size, or one below two.
+match_size_missing = "placement: нужен match_size хотя бы 2"
+# A headcount that does not split evenly into tables.
+not_divisible = 'placement: {{.participants}} участников не делятся на столы по {{.size}}'
+# More tables than a table has seats: there is nowhere to seat place k of
+# every table when k runs past the seats.
+too_many_tables = 'placement: {{.tables}} столов не рассадить по {{.size}} мест — столов не должно быть больше, чем мест за столом'
+# A rounds value below one.
+block_rounds_min = "rounds: хотя бы один раунд"
+
 [macro]
 # Helpers every kind shares: seating labels and the sorting complaint.
 # The label of a seat fed from a bout: "<bout label>, м. <place>".

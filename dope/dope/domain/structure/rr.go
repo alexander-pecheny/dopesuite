@@ -339,7 +339,9 @@ func circleBlockRounds(n int) [][][]int {
 // multiSeatStandings ranks a group whose Matches seat more than two. There is
 // no head-to-head — a Match of three is not a duel — and no diff, so points
 // come from the block's scoring rule and every Protocol metric simply sums.
-func multiSeatStandings(conf RRConfig, results []MatchOutcome) ([]RankedEntry, error) {
+// Seeds, where the caller has them, put each Participant's seed rank on its
+// row before the order is applied, so a scheme may close its chain with it.
+func multiSeatStandings(conf RRConfig, results []MatchOutcome, seeds map[int64]float64) ([]RankedEntry, error) {
 	rules, err := compileRules(conf.Rules)
 	if err != nil {
 		return nil, err
@@ -363,6 +365,9 @@ func multiSeatStandings(conf RRConfig, results []MatchOutcome) ([]RankedEntry, e
 			entry, ok := byParticipant[slot.Participant]
 			if !ok {
 				entry = &RankedEntry{Participant: slot.Participant, Metrics: map[string]float64{}}
+				if rank, ok := seeds[slot.Participant]; ok {
+					entry.Metrics["seed"] = rank
+				}
 				byParticipant[slot.Participant] = entry
 				appearance = append(appearance, slot.Participant)
 			}
@@ -461,7 +466,7 @@ func (roundRobin) Standings(cfg json.RawMessage, results []MatchOutcome, _ Input
 		return nil, fmt.Errorf("rr standings config: %w", err)
 	}
 	if conf.MatchSize > 2 {
-		return multiSeatStandings(conf, results)
+		return multiSeatStandings(conf, results, nil)
 	}
 	return duelStandings(Duel{Points: conf.Points, Metric: conf.Metric, Order: rrOrder(conf), Rules: conf.Rules}, results)
 }

@@ -1383,6 +1383,10 @@ var RU = Strings{
 		},
 	},
 	Resolver: ResolverStrings{
+		Draw: ResolverDrawStrings{
+			AlreadySeated: func() string { return "эта команда уже посажена в этом раунде" },
+			NotACandidate: func() string { return "эту команду нельзя посадить на это место" },
+		},
 		Reseed: ResolverReseedStrings{
 			NotReady: func() string {
 				return "пересев можно рассчитать после завершения всех исходных боёв"
@@ -1760,6 +1764,19 @@ var RU = Strings{
 			SeatFromBout: func(bout string, place string) string { return fmt.Sprintf("%s, м. %s", bout, place) },
 			UnrankableMetric: func(metric string, known string) string {
 				return fmt.Sprintf("sorting: %s не считается — ни протокол, ни правила подсчёта такой метрики не дают (есть %s)", metric, known)
+			},
+		},
+		Placement: StructurePlacementStrings{
+			BlockRoundsMin:   func() string { return "rounds: хотя бы один раунд" },
+			DrawSeat:         func() string { return "Жребий" },
+			MatchSizeMissing: func() string { return "placement: нужен match_size хотя бы 2" },
+			NotDivisible: func(participants string, size string) string {
+				return fmt.Sprintf("placement: %s участников не делятся на столы по %s", participants, size)
+			},
+			ParticipantsMissing: func() string { return "placement: нужен participants" },
+			Table:               func() string { return "Общий зачёт" },
+			TooManyTables: func(tables string, size string) string {
+				return fmt.Sprintf("placement: %s столов не рассадить по %s мест — столов не должно быть больше, чем мест за столом", tables, size)
 			},
 		},
 		Rr: StructureRrStrings{

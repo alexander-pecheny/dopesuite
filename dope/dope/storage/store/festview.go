@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"strings"
 )
 
@@ -99,15 +100,22 @@ order by m.position, m.id`, stageID)
 // slot index, resolving each slot's source label. The score is what the sheet
 // prints as the match's score, and that is not the same column in every game:
 // brain counts the questions a side took, everything else scores points.
+//
+// A Draw Slot also carries who may be seated in it. The Сетка's panel needs
+// Participant ids to send back, and a match summary carries names alone, so
+// the candidates are resolved here rather than on the page.
 func LoadMatchSummaries(ctx context.Context, q Queryer, matchID int64, gameType string) ([]MatchParticipantSummary, error) {
 	score := "coalesce(r.total, 0)"
 	if gameType == "brain" {
 		score = "coalesce(cast(r.metrics_json ->> '$.taken' as integer), 0)"
 	}
-	return CollectRows(ctx, q, `
-select t.name, ms.source_type, ms.source_ref_json, coalesce(r.place, 0), `+score+`,
-       coalesce(r.plus, 0), coalesce(r.tiebreak, 0)
+	var gameID int64
+	draws := map[int]*SchemeDraw{}
+	teams, err := CollectRows(ctx, q, `
+select t.name, coalesce(ms.participant_id, 0), m.game_id, ms.slot_index, ms.source_type, ms.source_ref_json,
+       coalesce(r.place, 0), `+score+`, coalesce(r.plus, 0), coalesce(r.tiebreak, 0)
 from match_slots ms
+join matches m on m.id = ms.match_id
 left join participants t on t.id = ms.participant_id
 left join match_results r on r.match_id = ms.match_id and r.participant_id = ms.participant_id
 where ms.match_id = ?
@@ -115,17 +123,91 @@ order by ms.slot_index`, []any{matchID}, func(rows *sql.Rows) (MatchParticipantS
 		var team MatchParticipantSummary
 		var name sql.NullString
 		var sourceRef string
-		if err := rows.Scan(&name, &team.SourceType, &sourceRef, &team.Place, &team.Total, &team.Plus, &team.Tiebreak); err != nil {
+		var seated int64
+		var slotIndex int
+		if err := rows.Scan(&name, &seated, &gameID, &slotIndex, &team.SourceType, &sourceRef,
+			&team.Place, &team.Total, &team.Plus, &team.Tiebreak); err != nil {
 			return team, err
 		}
-		team.Source = ParseSlotRef(team.SourceType, sourceRef).DisplayLabel()
+		ref := ParseSlotRef(team.SourceType, sourceRef)
+		team.Source = ref.DisplayLabel()
 		if name.Valid && name.String != "" {
 			team.Name = name.String
 		} else {
 			team.Name = team.Source
 		}
+		if ref.Draw != nil {
+			team.Draw = &DrawSlotView{Code: ref.Draw.Code, Seated: seated}
+			draws[slotIndex] = ref.Draw
+		}
 		return team, nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	for index, draw := range draws {
+		if index >= len(teams) {
+			continue
+		}
+		candidates, err := LoadDrawCandidates(ctx, q, gameID, draw)
+		if err != nil {
+			return nil, err
+		}
+		teams[index].Draw.Candidates = candidates
+	}
+	return teams, nil
+}
+
+// LoadDrawCandidates resolves a Draw Slot's candidate places to whoever holds
+// them now. A place in a бой that is not finished resolves to nobody, so the
+// panel offers a choice only once the Round it draws from is played out —
+// the same gate every other advancing seat waits on.
+func LoadDrawCandidates(ctx context.Context, q Queryer, gameID int64, draw *SchemeDraw) ([]DrawCandidateView, error) {
+	if draw == nil || len(draw.Candidates) == 0 {
+		return nil, nil
+	}
+	codes := map[string]bool{}
+	args := []any{gameID}
+	for _, candidate := range draw.Candidates {
+		if !codes[candidate.Match] {
+			codes[candidate.Match] = true
+			args = append(args, candidate.Match)
+		}
+	}
+	type held struct {
+		Code  string
+		Place float64
+		ID    int64
+		Name  string
+	}
+	rows, err := CollectRows(ctx, q, `
+select m.code, mr.place, mr.participant_id, coalesce(p.name, '')
+from match_results mr
+join matches m on m.id = mr.match_id
+join participants p on p.id = mr.participant_id
+where m.game_id = ? and m.status = 'finished' and m.code in (`+placeholders(len(args)-1)+`)`,
+		args, func(rows *sql.Rows) (held, error) {
+			var h held
+			return h, rows.Scan(&h.Code, &h.Place, &h.ID, &h.Name)
+		})
+	if err != nil {
+		return nil, err
+	}
+	byPlace := map[string]held{}
+	for _, row := range rows {
+		byPlace[fmt.Sprintf("%s:%g", row.Code, row.Place)] = row
+	}
+	var out []DrawCandidateView
+	seen := map[int64]bool{}
+	for _, candidate := range draw.Candidates {
+		row, ok := byPlace[fmt.Sprintf("%s:%d", candidate.Match, candidate.Place)]
+		if !ok || seen[row.ID] {
+			continue
+		}
+		seen[row.ID] = true
+		out = append(out, DrawCandidateView{ID: row.ID, Name: row.Name})
+	}
+	return out, nil
 }
 
 // NonEmptyJSON returns "{}" for a blank string, else the trimmed value.

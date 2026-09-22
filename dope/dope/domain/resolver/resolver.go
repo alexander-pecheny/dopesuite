@@ -175,13 +175,16 @@ func isRankedKind(kind string) bool {
 }
 
 // recomputeKindStandingsTx ranks a kind stage from its matches' current
-// results and replaces its stage_standings rows.
+// results and replaces its stage_standings rows. A Kind whose ranking scope is
+// wider than one stage — Хамса's групповой этап ranks both its Игры together —
+// holds no Matches of its own and names the stages it sums over, exactly as a
+// reseed does.
 func recomputeKindStandingsTx(ctx context.Context, tx *sql.Tx, stage resolverStage, gameID int64) error {
 	ranker, ok := structure.RankerFor(stage.kind)
 	if !ok {
 		return nil
 	}
-	outcomes, _, err := stageMatchOutcomesTx(ctx, tx, stage.id)
+	outcomes, err := kindOutcomesTx(ctx, tx, stage, gameID)
 	if err != nil {
 		return err
 	}
@@ -189,11 +192,34 @@ func recomputeKindStandingsTx(ctx context.Context, tx *sql.Tx, stage resolverSta
 	if err != nil {
 		return err
 	}
-	ranked, err := ranker.Standings(KindConfig(stage.config), outcomes, structure.Inputs{Seed: seed})
+	seeds, err := gameSeedRanks(ctx, tx, gameID)
+	if err != nil {
+		return err
+	}
+	ranked, err := ranker.Standings(KindConfig(stage.config), outcomes, structure.Inputs{Seed: seed, Seeds: seeds})
 	if err != nil {
 		return fmt.Errorf("stage %s standings: %w", stage.code, err)
 	}
 	return store.WriteStandings(ctx, tx, stage.id, ranked)
+}
+
+// kindOutcomesTx is a ranked stage's scope: the stages its config names, else
+// its own Matches.
+func kindOutcomesTx(ctx context.Context, tx *sql.Tx, stage resolverStage, gameID int64) ([]structure.MatchOutcome, error) {
+	cfg := store.ParseStageConfig(string(stage.config))
+	if len(cfg.Sources) == 0 {
+		outcomes, _, err := stageMatchOutcomesTx(ctx, tx, stage.id)
+		return outcomes, err
+	}
+	bouts, err := sourceStageBouts(ctx, tx, gameID, cfg.Sources)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]int64, len(bouts))
+	for i, bout := range bouts {
+		ids[i] = bout.ID
+	}
+	return store.LoadMatchOutcomes(ctx, tx, ids)
 }
 
 // KindConfig is a stage's config as its Kind reads it (store.StageConfig).
@@ -400,12 +426,38 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 	if err != nil {
 		return err
 	}
+	seeds, err := gameSeedRanks(ctx, tx, gameID)
+	if err != nil {
+		return err
+	}
 	ranker, _ := structure.RankerFor("reseed")
-	ranked, err := ranker.Standings(KindConfig(config), outcomes, structure.Inputs{Seed: seed, Contenders: who})
+	ranked, err := ranker.Standings(KindConfig(config), outcomes, structure.Inputs{Seed: seed, Seeds: seeds, Contenders: who})
 	if err != nil {
 		return err
 	}
 	return store.WriteStandings(ctx, tx, stageID, ranked)
+}
+
+// gameSeedRanks is what the seed import dealt: each Participant's rank in this
+// Game, which a scheme may rank on (`sorting: [..., seed]`).
+func gameSeedRanks(ctx context.Context, q store.Queryer, gameID int64) (map[int64]float64, error) {
+	rows, err := q.QueryContext(ctx, `
+select participant_id, number from game_assignments
+where game_id = ? and basket = 1 and participant_id is not null`, gameID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	seeds := map[int64]float64{}
+	for rows.Next() {
+		var participantID int64
+		var number int
+		if err := rows.Scan(&participantID, &number); err != nil {
+			return nil, err
+		}
+		seeds[participantID] = float64(number)
+	}
+	return seeds, rows.Err()
 }
 
 // gameRandomSeed returns the game's fixed random seed (the basis for deterministic
@@ -423,6 +475,23 @@ func gameRandomSeed(ctx context.Context, q store.Queryer, gameID int64) (string,
 	return fmt.Sprintf("game-%d", gameID), nil
 }
 
+// sourceStageBouts returns every Match of the named stages, in schedule order.
+func sourceStageBouts(ctx context.Context, q store.Queryer, gameID int64, sources []string) ([]Bout, error) {
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(sources)), ",")
+	args := []any{gameID}
+	for _, code := range sources {
+		args = append(args, code)
+	}
+	return store.CollectRows(ctx, q, fmt.Sprintf(`
+select m.id, m.code, m.status from matches m
+join stages s on s.id = m.stage_id
+where m.game_id = ? and s.code in (%s)
+order by s.position, m.position, m.id`, placeholders), args, func(rows *sql.Rows) (Bout, error) {
+		var b Bout
+		return b, rows.Scan(&b.ID, &b.Code, &b.Status)
+	})
+}
+
 // reseedSourceBouts returns the Matches that contribute to a reseed: the `sources`
 // stages' Matches when named, else the Match each team advances from.
 func reseedSourceBouts(ctx context.Context, q store.Queryer, gameID int64, cfg store.StageConfig) ([]Bout, error) {
@@ -431,16 +500,7 @@ func reseedSourceBouts(ctx context.Context, q store.Queryer, gameID int64, cfg s
 		return b, rows.Scan(&b.ID, &b.Code, &b.Status)
 	}
 	if len(cfg.Sources) > 0 {
-		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(cfg.Sources)), ",")
-		args := []any{gameID}
-		for _, code := range cfg.Sources {
-			args = append(args, code)
-		}
-		return store.CollectRows(ctx, q, fmt.Sprintf(`
-select m.id, m.code, m.status from matches m
-join stages s on s.id = m.stage_id
-where m.game_id = ? and s.code in (%s)
-order by s.position, m.position, m.id`, placeholders), args, scan)
+		return sourceStageBouts(ctx, q, gameID, cfg.Sources)
 	}
 	codes := make(map[string]struct{})
 	for _, slot := range cfg.Teams {

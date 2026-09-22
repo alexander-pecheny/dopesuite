@@ -29,7 +29,7 @@ func reseedOrder(conf ReseedConfig) []SortRule {
 }
 
 func (reseed) Metrics() []string {
-	return []string{"place_sum", "points_share", "taken_share", "taken_base", "diff", "draw"}
+	return []string{"place_sum", "points_share", "taken_share", "taken_base", "diff", "draw", "seed"}
 }
 
 func (reseed) Order(cfg json.RawMessage) []SortRule {
@@ -65,6 +65,9 @@ func (reseed) Standings(cfg json.RawMessage, results []MatchOutcome, in Inputs) 
 			return e
 		}
 		e := &RankedEntry{Participant: id, Metrics: map[string]float64{}}
+		if rank, ok := in.Seeds[id]; ok {
+			e.Metrics["seed"] = rank
+		}
 		byParticipant[id] = e
 		scratch[id] = map[string]float64{}
 		if !restricted {

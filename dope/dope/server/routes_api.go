@@ -55,6 +55,7 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("GET "+game+"/stages/matches", route.Read, s.scopedAllStageMatches)
 	t.Handle("GET "+game+"/stages/{stage}/matches", route.Read, s.scopedStageMatches)
 	t.Handle("POST "+game+"/stages/{stage}/reseed", route.Editor.Numbered(), s.scopedReseed)
+	t.Handle("PUT "+game+"/draw", route.Manager.Numbered(), s.scopedDraw)
 	t.Handle("GET "+game+"/state", route.Read, s.scopedGameState)
 	t.Handle("PUT "+game+"/state", route.Editor.Numbered(), s.scopedGameStatePut)
 	t.Handle("PATCH "+game+"/state", route.Editor.Numbered(), s.scopedGameStatePatch)
@@ -310,6 +311,28 @@ func (s *server) scopedReseed(w http.ResponseWriter, r *http.Request, sc route.S
 		return route.NotFound
 	case errors.Is(err, resolver.ErrReseedNotReady):
 		return route.BadUser(err)
+	case err != nil:
+		return err
+	}
+	s.broadcastMatchCascade(sc.FestID, sc.GameID, cascaded)
+	s.eng.BroadcastState(sc.FestID, festViewScopeKey(sc.Fest()), revision, data)
+	return route.JSONBytes(w, data)
+}
+
+// scopedDraw seats a Draw Slot: Хамса's три четвёртых места are drawn by lot
+// before Игра №2, and until the host enters the draw those seats stand empty.
+func (s *server) scopedDraw(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	var req struct {
+		Slot        string `json:"slot"`
+		Participant int64  `json:"participant"`
+	}
+	if err := route.DecodeJSON(r, &req); err != nil {
+		return err
+	}
+	data, cascaded, revision, err := s.applyScopedDraw(r.Context(), sc.Fest(), req.Slot, req.Participant)
+	switch {
+	case errors.Is(err, resolver.ErrDrawSlotNotFound):
+		return route.NotFound
 	case err != nil:
 		return err
 	}

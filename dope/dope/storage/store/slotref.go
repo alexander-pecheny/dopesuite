@@ -26,7 +26,12 @@ type SlotRef struct {
 	Rank  int    `json:"rank,omitempty"`
 	// placeholder: free text; Label is what any kind shows instead of its default.
 	Placeholder string `json:"placeholder,omitempty"`
-	Label       string `json:"label,omitempty"`
+	// draw: a seat the host fills by lot, and the places it may be filled from.
+	// It rides on the placeholder source type because that is exactly what a
+	// Draw Slot is — a seat no rule derives — and the resolver leaves those
+	// alone.
+	Draw  *SchemeDraw `json:"draw,omitempty"`
+	Label string      `json:"label,omitempty"`
 }
 
 const (
@@ -59,6 +64,8 @@ func SlotRefOf(slot SchemeSlot) SlotRef {
 		return SlotRef{Type: SlotFromMatch, Match: slot.FromMatch.Match, Place: slot.FromMatch.Place, Label: slot.Label}
 	case slot.Reseed != nil:
 		return SlotRef{Type: SlotReseed, Stage: slot.Reseed.Stage, Rank: slot.Reseed.Rank, Label: slot.Label}
+	case slot.Draw != nil:
+		return SlotRef{Type: SlotPlaceholder, Draw: slot.Draw, Label: slot.Label}
 	default:
 		return SlotRef{Type: SlotPlaceholder, Placeholder: slot.Placeholder, Label: slot.Label}
 	}
@@ -100,11 +107,14 @@ func (r SlotRef) JSON() string {
 	case SlotReseed:
 		v = map[string]any{"stage": r.Stage, "rank": r.Rank, "label": r.Label}
 	default:
-		m := map[string]string{}
+		m := map[string]any{}
 		if r.Placeholder != "" {
 			m["placeholder"] = r.Placeholder
 		}
-		if r.Label != "" || r.Placeholder != "" {
+		if r.Draw != nil {
+			m["draw"] = r.Draw
+		}
+		if r.Label != "" || r.Placeholder != "" || r.Draw != nil {
 			m["label"] = r.Label
 		}
 		v = m
@@ -123,6 +133,9 @@ func (r SlotRef) Identity() string {
 		return fmt.Sprintf("from_match:%s:%d", r.Match, r.Place)
 	case SlotReseed:
 		return fmt.Sprintf("reseed:%s:%d", r.Stage, r.Rank)
+	}
+	if r.Draw != nil {
+		return "draw:" + r.Draw.Code
 	}
 	return r.Type
 }

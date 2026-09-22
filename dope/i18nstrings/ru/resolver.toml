@@ -7,3 +7,11 @@ not_ready = "пересев можно рассчитать после заве�
 # The readiness message naming the pending bouts: n of them, codes
 # comma-joined at the call site.
 pending = '{{plural .n "Бой" "Бои" "Бои"}} {{.codes}} {{plural .n "не закончен" "не закончены" "не закончены"}}'
+
+[draw]
+# The mid-game Draw (dope/dope/domain/resolver/draw.go): what a host reads when
+# a seat is drawn for somebody who cannot take it.
+# A team the slot does not name as a candidate.
+not_a_candidate = "эту команду нельзя посадить на это место"
+# A team already drawn into another table of the same round.
+already_seated = "эта команда уже посажена в этом раунде"

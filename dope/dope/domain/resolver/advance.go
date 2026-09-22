@@ -139,6 +139,39 @@ func contenders(src Sources, cfg store.StageConfig) (_ []structure.Contender, ok
 	return out, len(out) > 0, nil
 }
 
+// stagePlayedOut reports whether every Match a ranked stage ranks is finished.
+// That is its own Matches, or — for a Kind whose table spans several stages,
+// as Хамса's групповой этап does — the stages its config names, since a table
+// with no Matches of its own would otherwise read as played out on day one.
+func (d dbSources) stagePlayedOut(stageID int64) (bool, error) {
+	var config string
+	if err := d.q.QueryRowContext(d.ctx, `select coalesce(config_json, '') from stages where id = ?`, stageID).Scan(&config); err != nil {
+		return false, err
+	}
+	var total, unfinished int
+	if err := d.q.QueryRowContext(d.ctx, `
+select count(*), coalesce(sum(status != 'finished'), 0) from matches where stage_id = ?`, stageID).Scan(&total, &unfinished); err != nil {
+		return false, err
+	}
+	if total > 0 {
+		return unfinished == 0, nil
+	}
+	sources := store.ParseStageConfig(config).Sources
+	if len(sources) == 0 {
+		return true, nil
+	}
+	bouts, err := sourceStageBouts(d.ctx, d.q, d.gameID, sources)
+	if err != nil {
+		return false, err
+	}
+	for _, bout := range bouts {
+		if bout.Status != "finished" {
+			return false, nil
+		}
+	}
+	return len(bouts) > 0, nil
+}
+
 // dbSources is Sources over the game's tables.
 type dbSources struct {
 	ctx    context.Context
@@ -187,13 +220,9 @@ select id, kind from stages where game_id = ? and code = ?`, d.gameID, stageCode
 		return 0, err
 	}
 	if isRankedKind(kind) {
-		var unfinished int
-		if err := d.q.QueryRowContext(d.ctx, `
-select count(*) from matches where stage_id = ? and status != 'finished'`, stageID).Scan(&unfinished); err != nil {
+		ready, err := d.stagePlayedOut(stageID)
+		if err != nil || !ready {
 			return 0, err
-		}
-		if unfinished > 0 {
-			return 0, nil
 		}
 	}
 	var teamID int64

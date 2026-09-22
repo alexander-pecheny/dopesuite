@@ -71,6 +71,11 @@ type Ranker interface {
 type Inputs struct {
 	Seed       string
 	Contenders []Contender
+	// Seeds is each Participant's seed rank in the Game — the number the seed
+	// import dealt it, which for Хамса is its place in the КСИ отбор. It is a
+	// comparator a scheme may name (`sorting: [..., seed]`) and the one thing
+	// no бой can measure.
+	Seeds map[int64]float64
 }
 
 // Contender is one Participant a reseed ranks and the band (Losses so far)
@@ -135,6 +140,16 @@ type ReseedConfig struct {
 	Sort []SortRule `json:"sort,omitempty"`
 }
 
+// PlacementConfig is Хамса's групповой этап as its table reads it back: the
+// seats a Match holds, the comparators the Block ranks by, and its scoring
+// rules.
+type PlacementConfig struct {
+	Code      string   `json:"code,omitempty"`
+	MatchSize int      `json:"matchSize,omitempty"`
+	Order     []string `json:"order,omitempty"`
+	Rules     *Rules   `json:"rules,omitempty"`
+}
+
 type ManualConfig struct {
 	Matches []store.SchemeMatch `json:"matches"`
 }
@@ -188,7 +203,7 @@ func Register(kind interface{ Code() string }) {
 // cannot sort one way in a Group and the other in a series.
 func Ascending(metric string) bool {
 	switch metric {
-	case "place", "place_sum", "losses", "draw":
+	case "place", "place_sum", "losses", "draw", "seed":
 		return true
 	}
 	return false

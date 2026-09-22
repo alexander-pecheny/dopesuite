@@ -246,16 +246,40 @@ func (s *server) loadMatchViews(ctx context.Context, scope festScope, stageCode 
 	return views, nil
 }
 
+// applyScopedDraw writes one Draw and answers the same three things a reseed
+// calculation does: the fest view, the бои whose seats moved, and the revision.
+func (s *server) applyScopedDraw(ctx context.Context, scope festScope, code string, participant int64) ([]byte, []store.MatchView, int64, error) {
+	return s.writeAndReloadFest(ctx, scope, "draw", "draw:set", map[string]any{
+		"gameID":      scope.GameID,
+		"slot":        code,
+		"participant": participant,
+	}, func(txCtx context.Context, tx *sql.Tx) ([]int64, error) {
+		return resolver.SetDrawTx(txCtx, tx, scope.GameID, code, participant)
+	})
+}
+
 func (s *server) calculateScopedReseed(ctx context.Context, scope festScope, stageCode string) ([]byte, []store.MatchView, int64, error) {
+	return s.writeAndReloadFest(ctx, scope, "reseed-calc", "reseed:calculate", map[string]any{
+		"gameID": scope.GameID,
+		"stage":  stageCode,
+	}, func(txCtx context.Context, tx *sql.Tx) ([]int64, error) {
+		return resolver.CalculateReseedStageSlotsTx(txCtx, tx, scope.GameID, stageCode)
+	})
+}
+
+// writeAndReloadFest runs one structural write in its own transaction and
+// reloads what every caller of it needs afterwards: the fest view, the бои
+// whose seats the write moved, and the revision it bumped.
+func (s *server) writeAndReloadFest(ctx context.Context, scope festScope, label, event string, payload map[string]any, write func(context.Context, *sql.Tx) ([]int64, error)) ([]byte, []store.MatchView, int64, error) {
 	txCtx, cancel := festwrite.AuditDetachedContext(ctx, scope.FestID)
 	defer cancel()
-	conn, err := s.eng.AcquireWriteConn(txCtx, "reseed-calc")
+	conn, err := s.eng.AcquireWriteConn(txCtx, label)
 	if err != nil {
 		return nil, nil, 0, err
 	}
 	defer conn.Close()
 
-	defer s.eng.LockWrite("reseed-calc")()
+	defer s.eng.LockWrite(label)()
 
 	tx, err := s.eng.BeginWriteTxConn(txCtx, conn)
 	if err != nil {
@@ -263,14 +287,11 @@ func (s *server) calculateScopedReseed(ctx context.Context, scope festScope, sta
 	}
 	defer tx.Rollback()
 
-	affected, err := resolver.CalculateReseedStageSlotsTx(txCtx, tx, scope.GameID, stageCode)
+	affected, err := write(txCtx, tx)
 	if err != nil {
 		return nil, nil, 0, err
 	}
-	revision, err := festwrite.BumpFestRevisionTx(txCtx, tx, scope.FestID, "reseed:calculate", util.MustJSON(map[string]any{
-		"gameID": scope.GameID,
-		"stage":  stageCode,
-	}))
+	revision, err := festwrite.BumpFestRevisionTx(txCtx, tx, scope.FestID, event, util.MustJSON(payload))
 	if err != nil {
 		return nil, nil, 0, err
 	}

@@ -819,7 +819,9 @@ func (c *compiler) expandBlock(index int) error {
 	}
 	var emitted []string
 	for _, stage := range c.scheme.Stages[firstStage:] {
-		if stage.StageType == "matches" {
+		// A stage with no бои of its own — a Block's own table, which ranks the
+		// Rounds beside it — contributes nothing to a reseed's statistics.
+		if stage.StageType == "matches" && len(stage.Matches) > 0 {
 			emitted = append(emitted, stage.Code)
 		}
 	}
@@ -918,7 +920,7 @@ func (c *compiler) appendManualStage(blk Section, code, title string, blockRound
 	c.appendDrawnStage("matches", nil, blk, code, title, blockRounds, where, matches)
 }
 
-func (c *compiler) appendDrawnStage(kind string, cfg any, blk Section, code, title string, blockRounds []string, where at, matches []store.SchemeMatch) {
+func (c *compiler) appendDrawnStage(kind string, cfg any, blk Section, code, title string, blockRounds []string, where at, matches []store.SchemeMatch, sources ...string) {
 	configJSON, _ := c.stageConfig(cfg, blk, blockRounds)
 	if where.blockRound > 0 {
 		for i := range matches {
@@ -936,6 +938,7 @@ func (c *compiler) appendDrawnStage(kind string, cfg any, blk Section, code, tit
 		Position:  c.position,
 		Grain:     where.grain(),
 		Matches:   matches,
+		Sources:   sources,
 		Config:    configJSON,
 	})
 }

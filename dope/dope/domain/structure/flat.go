@@ -49,9 +49,13 @@ func (flat) Expand(b Block) (Outputs, error) {
 	}
 	code, title := b.Code(), b.Title(s.Structure.Flat.Game())
 	cfg := FlatConfig{Code: code, Entrants: entrants[0], Title: title, Venue: lanes.Pick(1), Rules: b.Rules()}
+	// On a block with an incoming reseed the sorting key describes the Edge,
+	// not this table: the Match here ranks by its own places, as it always
+	// did (docs/scheme-dsl.md, `sorting`).
+	incoming, _ := b.Reseed()
 	if order, ok, err := b.Sorting(); err != nil {
 		return Outputs{}, err
-	} else if ok {
+	} else if ok && !incoming {
 		known := b.Rankable("flat")
 		for _, rule := range order {
 			if !known[rule.Metric] {

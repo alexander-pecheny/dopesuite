@@ -1034,6 +1034,10 @@ export type Strings = {
     };
   };
   resolver: {
+    draw: {
+      alreadySeated: () => string;
+      notACandidate: () => string;
+    };
     reseed: {
       notReady: () => string;
       pending: (n: number, codes: string) => string;
@@ -1292,6 +1296,15 @@ export type Strings = {
       reseedRank: (n: string) => string;
       seatFromBout: (bout: string, place: string) => string;
       unrankableMetric: (metric: string, known: string) => string;
+    };
+    placement: {
+      blockRoundsMin: () => string;
+      drawSeat: () => string;
+      matchSizeMissing: () => string;
+      notDivisible: (participants: string, size: string) => string;
+      participantsMissing: () => string;
+      table: () => string;
+      tooManyTables: (tables: string, size: string) => string;
     };
     rr: {
       groupFeed: (n: string) => string;

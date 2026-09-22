@@ -185,6 +185,24 @@ type MatchParticipantSummary struct {
 	Total      int     `json:"total"`
 	Plus       int     `json:"plus"`
 	Tiebreak   int     `json:"tiebreak"`
+	// Draw is set on a seat the host fills by lot: who may be seated there,
+	// and who already is. The candidates are resolved here rather than on the
+	// page, because the page has no Participant ids to send back (ADR-0011).
+	Draw *DrawSlotView `json:"draw,omitempty"`
+}
+
+// DrawSlotView is a Draw Slot as the Сетка's panel reads it: the slot's own
+// code, the Participants it may be filled from — empty until every source бой
+// is finished — and the one sitting in it now.
+type DrawSlotView struct {
+	Code       string              `json:"code"`
+	Seated     int64               `json:"seated,omitempty"`
+	Candidates []DrawCandidateView `json:"candidates,omitempty"`
+}
+
+type DrawCandidateView struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
 }
 
 // MatchView is the scored, client-facing projection of a match.
