@@ -723,12 +723,28 @@ var RU = Strings{
 			UsernameFallback:           func() string { return "Профиль" },
 		},
 		Roster: HostRosterStrings{
-			AddOverrideBtn:        func() string { return "Добавить оверрайд для игры" },
-			CancelBtn:             func() string { return "Отмена" },
-			ColCity:               func() string { return "Город" },
-			ColFromTeam:           func() string { return "Из команды" },
-			ColPlayers:            func() string { return "Игроков" },
-			ColToTeam:             func() string { return "В команду" },
+			AddOverrideBtn:      func() string { return "Добавить оверрайд для игры" },
+			CancelBtn:           func() string { return "Отмена" },
+			ColCity:             func() string { return "Город" },
+			ColFromTeam:         func() string { return "Из команды" },
+			ColPlayers:          func() string { return "Игроков" },
+			ColToTeam:           func() string { return "В команду" },
+			ConflictCancel:      func() string { return "Отменить импорт" },
+			ConflictChoiceDrop:  func() string { return "Удалить команду вместе с результатами" },
+			ConflictChoiceLabel: func() string { return "Что с ней сделать" },
+			ConflictChoiceMerge: func(id string, team string) string {
+				return fmt.Sprintf("Это она, новый ID %s: %s", id, team)
+			},
+			ConflictGames: func(games string) string { return fmt.Sprintf("Результаты есть: %s", games) },
+			ConflictHint: func() string {
+				return "Этих команд больше нет в рейтинге под тем же ID, а результаты у них уже есть. Если команде просто сменили ID, выберите её в списке новых команд — номер и результаты останутся. Если команда действительно снялась, выберите удаление."
+			},
+			ConflictNoCandidates: func() string {
+				return "В новом списке нет команд, которых ещё нет в фесте, — слить не с чем."
+			},
+			ConflictSubmit:        func() string { return "Продолжить импорт" },
+			ConflictTeam:          func(number string, team string) string { return fmt.Sprintf("№%s %s", number, team) },
+			ConflictTitle:         func() string { return "Команды с результатами уходят из списка" },
 			DeleteBtn:             func() string { return "Удалить" },
 			DeleteOverrideConfirm: func() string { return "Удалить оверрайд?" },
 			EditOverrideLabel:     func() string { return "Редактировать оверрайд" },
@@ -742,7 +758,10 @@ var RU = Strings{
 				return fmt.Sprintf("Загружено команд: %s, игроков: %s. Обновлено игр ЧГК: %s, КСИ: %s.", teams, players, od, ksi)
 			},
 			ImportDoneNotice: func() string { return "Импорт выполнен." },
-			ImportSubmit:     func() string { return "Загрузить команды и игроков" },
+			ImportMergedNotice: func(n string) string {
+				return fmt.Sprintf("Сохранены под новым ID, вместе с номером и результатами: %s.", n)
+			},
+			ImportSubmit: func() string { return "Загрузить команды и игроков" },
 			ImportUnchangedNotice: func(teams string, players string) string {
 				return fmt.Sprintf("Списки уже совпадают с рейтингом — изменений нет. Команд: %s, игроков: %s.", teams, players)
 			},
@@ -783,11 +802,17 @@ var RU = Strings{
 		},
 		Rating: ImportsRatingStrings{
 			ApiError: func(detail string) string { return fmt.Sprintf("рейтинг вернул ошибку: %s", detail) },
+			ConflictError: func(n string) string {
+				return fmt.Sprintf("Импорт остановлен: из списка уходят команды, у которых уже есть результаты (%s).", n)
+			},
 			DecodeFailed: func(err string) string {
 				return fmt.Sprintf("не удалось разобрать ответ рейтинга: %s", err)
 			},
 			FetchFailed: func(err string) string {
 				return fmt.Sprintf("не удалось запросить рейтинг: %s", err)
+			},
+			MergeStale: func() string {
+				return "Список команд изменился, пока вы отвечали. Запустите импорт ещё раз."
 			},
 			NoTeams: func() string { return "рейтинг не вернул команды" },
 			SquadTooBig: func(name string) string {

@@ -65,13 +65,55 @@ type ratingPlayer struct {
 	Surname string `json:"surname"`
 }
 
-func FetchAndImportRatingRoster(eng *core.Engine, ctx context.Context, festID, ratingID int64) (RatingRosterImportResult, error) {
+func FetchAndImportRatingRoster(eng *core.Engine, ctx context.Context, festID, ratingID int64, choice RosterChoice) (RatingRosterImportResult, error) {
 	teams, err := fetchRatingFestRoster(ctx, ratingID)
 	if err != nil {
 		return RatingRosterImportResult{}, err
 	}
 	resolveTeamCountries(ctx, eng, teams)
-	return ImportFestRoster(eng, ctx, festID, ratingID, teams)
+	return ImportFestRoster(eng, ctx, festID, ratingID, teams, choice)
+}
+
+// DroppedTeam is a team the fest has, that the incoming roster no longer
+// lists, and that already carries results. Games names the games those results
+// are in, so the host is told what would be lost.
+type DroppedTeam struct {
+	TeamID   int64
+	RatingID int64
+	Number   int64
+	Name     string
+	City     string
+	Games    []string
+}
+
+// AddedTeam is a team the incoming roster brings that the fest does not have
+// yet — one of these is what a DroppedTeam may really be, under a new id.
+type AddedTeam struct {
+	RatingID int64
+	Name     string
+	City     string
+}
+
+// RosterConflict is what an import stops on instead of silently throwing
+// results away. A team whose id changed on rating.chgk.info looks like one
+// team leaving and another arriving, and the import cannot tell that apart
+// from a team that really withdrew — so it asks, listing both sides.
+type RosterConflict struct {
+	Dropped []DroppedTeam
+	Added   []AddedTeam
+}
+
+func (c *RosterConflict) Error() string {
+	return dopestrings.Default.Imports.Rating.ConflictError(strconv.Itoa(len(c.Dropped)))
+}
+
+// RosterChoice is the host's answer to a RosterConflict. Merge says a team the
+// fest already has (by fest team id) is the same team as an incoming one (by
+// the rating id the site now gives it); Drop says a team may lose its results.
+// The zero value answers nothing, so an import that finds a conflict stops.
+type RosterChoice struct {
+	Merge map[int64]int64
+	Drop  map[int64]bool
 }
 
 // resolveTeamCountries fills in the country each team's town is in, before the
@@ -177,7 +219,7 @@ func ratingTownID(town *ratingTown) int64 {
 	return town.ID
 }
 
-func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID int64, teams []roster.FestRosterImportTeam) (RatingRosterImportResult, error) {
+func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID int64, teams []roster.FestRosterImportTeam, choice RosterChoice) (RatingRosterImportResult, error) {
 	if eng.DB == nil {
 		return RatingRosterImportResult{}, errors.New("sqlite is not enabled")
 	}
@@ -213,11 +255,30 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 			return RatingRosterImportResult{}, sql.ErrNoRows
 		}
 
-		existingByRating, maxSeenNumber, err := loadFestExistingTeams(ctx, conn, festID)
+		existingTeams, err := loadFestExistingTeams(ctx, conn, festID)
 		if err != nil {
 			return RatingRosterImportResult{}, err
 		}
-		assignFestNumbersForImport(teams, existingByRating, maxSeenNumber)
+		// A team whose id changed on the site is one row the fest already has,
+		// under an id the incoming roster no longer carries. Merging re-keys that
+		// row onto the new id, here and (below) in the database, so everything
+		// underneath — the row, its number, and every result scored under that
+		// number — stays where it is and only the id changes.
+		if err := validateRosterMerges(existingTeams, teams, choice.Merge); err != nil {
+			return RatingRosterImportResult{}, err
+		}
+		existingTeams = applyRosterMerges(existingTeams, choice.Merge)
+		existingByRating := byRatingID(existingTeams)
+
+		conflict, err := rosterConflict(ctx, conn, festID, teams, existingTeams, choice)
+		if err != nil {
+			return RatingRosterImportResult{}, err
+		}
+		if conflict != nil {
+			return RatingRosterImportResult{}, conflict
+		}
+
+		assignFestNumbersForImport(teams, existingByRating, maxTeamNumber(existingTeams))
 
 		// Fast path: if the incoming roster is identical to the fest's current
 		// active roster (same teams, numbers, and players in canonical order), the
@@ -259,7 +320,7 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 		// (FK fest_players.id ON DELETE CASCADE) survive without a preserve/restore
 		// dance; a player who left the roster is deleted and its override cascades
 		// away. See applyFestRosterDiffTx.
-		if err := applyFestRosterDiffTx(ctx, tx, festID, teams, existingByRating); err != nil {
+		if err := applyFestRosterDiffTx(ctx, tx, festID, teams, existingByRating, choice.Merge); err != nil {
 			return RatingRosterImportResult{}, err
 		}
 		playerCount := distinctPlayerCount(teams)
@@ -331,43 +392,156 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 }
 
 type existingFestTeam struct {
-	ID     int64
-	Number int64
+	ID       int64
+	RatingID int64
+	Number   int64
+	Name     string
+	City     string
+	Deleted  bool
 }
 
-// loadFestExistingTeams returns the rating_id → row mapping for every fest_team
-// in this fest (including soft-deleted ones, so that previously archived
-// numbers can be restored when a team is re-added). maxSeenNumber is the
-// largest number ever assigned in this fest — new teams introduced by a
-// re-sync always receive numbers strictly greater than this, so already-printed
-// answer sheets keep referring to the right team.
-func loadFestExistingTeams(ctx context.Context, tx store.Queryer, festID int64) (map[int64]existingFestTeam, int64, error) {
-	rows, err := tx.QueryContext(ctx, `
-select id, coalesce(rating_id, 0), coalesce(number, 0)
+// loadFestExistingTeams returns every fest_team row of this fest, including the
+// soft-deleted ones, so that a previously archived number can be restored when
+// the team is re-added.
+func loadFestExistingTeams(ctx context.Context, q store.Queryer, festID int64) ([]existingFestTeam, error) {
+	return store.CollectRows(ctx, q, `
+select id, coalesce(rating_id, 0), coalesce(number, 0), name, coalesce(city, ''), deleted
 from fest_teams
-where fest_id = ?`, festID)
+where fest_id = ?
+order by position, id`, []any{festID}, func(rows *sql.Rows) (existingFestTeam, error) {
+		var team existingFestTeam
+		return team, rows.Scan(&team.ID, &team.RatingID, &team.Number, &team.Name, &team.City, &team.Deleted)
+	})
+}
+
+// byRatingID keys the rows that carry a rating id by that id — the only handle
+// the import can match an incoming team to an existing row with.
+func byRatingID(rows []existingFestTeam) map[int64]existingFestTeam {
+	out := make(map[int64]existingFestTeam, len(rows))
+	for _, row := range rows {
+		if row.RatingID > 0 {
+			out[row.RatingID] = row
+		}
+	}
+	return out
+}
+
+// maxTeamNumber is the largest number ever assigned in this fest, soft-deleted
+// rows included. New teams introduced by a re-sync always receive numbers
+// strictly greater than this, so already-printed answer sheets keep referring
+// to the right team.
+func maxTeamNumber(rows []existingFestTeam) int64 {
+	var max int64
+	for _, row := range rows {
+		if row.Number > max {
+			max = row.Number
+		}
+	}
+	return max
+}
+
+// applyRosterMerges re-keys the rows the host merged onto the rating id the
+// site now gives them, so every rule below sees them as teams that stayed.
+func applyRosterMerges(rows []existingFestTeam, merge map[int64]int64) []existingFestTeam {
+	if len(merge) == 0 {
+		return rows
+	}
+	out := append([]existingFestTeam(nil), rows...)
+	for i := range out {
+		if ratingID, ok := merge[out[i].ID]; ok && ratingID > 0 {
+			out[i].RatingID = ratingID
+		}
+	}
+	return out
+}
+
+// validateRosterMerges rejects a merge the import could not honour: onto an id
+// the incoming roster does not carry, or onto one another team of this fest
+// already holds. Both mean the form the host answered has gone stale, and
+// going ahead would drop exactly the results the question was asked about.
+func validateRosterMerges(rows []existingFestTeam, teams []roster.FestRosterImportTeam, merge map[int64]int64) error {
+	if len(merge) == 0 {
+		return nil
+	}
+	incoming := make(map[int64]struct{}, len(teams))
+	for _, team := range teams {
+		if team.RatingID > 0 {
+			incoming[team.RatingID] = struct{}{}
+		}
+	}
+	taken := make(map[int64]bool, len(rows))
+	for _, row := range rows {
+		if _, merged := merge[row.ID]; merged {
+			continue
+		}
+		if row.RatingID > 0 {
+			taken[row.RatingID] = true
+		}
+	}
+	seen := make(map[int64]bool, len(merge))
+	for _, ratingID := range merge {
+		if _, ok := incoming[ratingID]; !ok || taken[ratingID] || seen[ratingID] {
+			return corei18n.User(dopestrings.Default.Imports.Rating.MergeStale())
+		}
+		seen[ratingID] = true
+	}
+	return nil
+}
+
+// rosterConflict reports the teams this import would take off the roster while
+// they still carry results, or nil when there is nothing to ask about. A team
+// the host has already merged is not leaving, and one the host has agreed to
+// drop has been asked about already.
+func rosterConflict(ctx context.Context, q store.Queryer, festID int64, teams []roster.FestRosterImportTeam, rows []existingFestTeam, choice RosterChoice) (*RosterConflict, error) {
+	incoming := make(map[int64]struct{}, len(teams))
+	for _, team := range teams {
+		if team.RatingID > 0 {
+			incoming[team.RatingID] = struct{}{}
+		}
+	}
+	var leaving []existingFestTeam
+	for _, row := range rows {
+		if row.Deleted || choice.Drop[row.ID] {
+			continue
+		}
+		if _, stays := incoming[row.RatingID]; stays && row.RatingID > 0 {
+			continue
+		}
+		leaving = append(leaving, row)
+	}
+	if len(leaving) == 0 {
+		return nil, nil
+	}
+	scored, err := roster.ScoredNumbers(ctx, q, festID)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
-	defer rows.Close()
-	byRating := make(map[int64]existingFestTeam)
-	var maxNum int64
-	for rows.Next() {
-		var id, ratingID, number int64
-		if err := rows.Scan(&id, &ratingID, &number); err != nil {
-			return nil, 0, err
+	var dropped []DroppedTeam
+	for _, row := range leaving {
+		games := scored[row.Number]
+		if row.Number <= 0 || len(games) == 0 {
+			continue
 		}
-		if ratingID > 0 {
-			byRating[ratingID] = existingFestTeam{ID: id, Number: number}
-		}
-		if number > maxNum {
-			maxNum = number
-		}
+		dropped = append(dropped, DroppedTeam{
+			TeamID: row.ID, RatingID: row.RatingID, Number: row.Number,
+			Name: row.Name, City: row.City, Games: games,
+		})
 	}
-	if err := rows.Err(); err != nil {
-		return nil, 0, err
+	if len(dropped) == 0 {
+		return nil, nil
 	}
-	return byRating, maxNum, nil
+	var added []AddedTeam
+	existing := byRatingID(rows)
+	for _, team := range teams {
+		if team.RatingID <= 0 {
+			continue
+		}
+		if _, have := existing[team.RatingID]; have {
+			continue
+		}
+		added = append(added, AddedTeam{RatingID: team.RatingID, Name: team.Name, City: team.City})
+	}
+	return &RosterConflict{Dropped: dropped, Added: added}, nil
 }
 
 // loadFestActiveRoster loads the fest's current ACTIVE (non-deleted) teams and
@@ -484,7 +658,17 @@ func teamLevelEqual(a, b []roster.FestRosterImportTeam) bool {
 // dropped from the roster is deleted, and its override correctly cascades away.
 // `teams` must be sorted and numbered (assignFestNumbersForImport). Produces the
 // same end state as the former wipe-and-rebuild.
-func applyFestRosterDiffTx(ctx context.Context, tx *sql.Tx, festID int64, teams []roster.FestRosterImportTeam, existingByRating map[int64]existingFestTeam) error {
+func applyFestRosterDiffTx(ctx context.Context, tx *sql.Tx, festID int64, teams []roster.FestRosterImportTeam, existingByRating map[int64]existingFestTeam, merges map[int64]int64) error {
+	// Write the merges first. A team the host merged keeps its row, its number
+	// and everything scored under it, and only changes the id the site knows it
+	// by — so both rules below, the soft-delete of teams that left and the
+	// hard-delete of rows with no id at all, see it as a team that stayed.
+	for teamID, ratingID := range merges {
+		if _, err := tx.ExecContext(ctx, `update fest_teams set rating_id = ? where id = ? and fest_id = ?`, ratingID, teamID, festID); err != nil {
+			return err
+		}
+	}
+
 	// --- Teams ---
 	incomingRatingIDs := make(map[int64]struct{}, len(teams))
 	for _, team := range teams {

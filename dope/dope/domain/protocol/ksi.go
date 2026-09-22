@@ -65,6 +65,49 @@ func (ksi) Seats(stateJSON json.RawMessage) []Seat {
 	return seats
 }
 
+// EnteredSeats: a KSI sheet is one row per team, so a team carries something
+// entered when any of its answer cells is filled, when it has chosen a sticker,
+// or when the host has marked it as having refused to play on.
+func (ksi) EnteredSeats(stateJSON json.RawMessage) []bool {
+	var state struct {
+		Participants json.RawMessage `json:"participants"`
+		Declined     map[string]bool `json:"declined"`
+		Stickers     [][]string      `json:"stickers"`
+		Themes       []struct {
+			Answers [][]string `json:"answers"`
+		} `json:"themes"`
+	}
+	_ = json.Unmarshal(stateJSON, &state)
+	participants := games.ParseKSIParticipants(state.Participants)
+	out := make([]bool, len(participants))
+	for i, p := range participants {
+		out[i] = games.KSIParticipantDeclined(state.Declined, p)
+	}
+	markRow := func(row int, filled bool) {
+		if filled && row < len(out) {
+			out[row] = true
+		}
+	}
+	for _, theme := range state.Themes {
+		for row, answers := range theme.Answers {
+			markRow(row, anyFilled(answers))
+		}
+	}
+	for row, stickers := range state.Stickers {
+		markRow(row, anyFilled(stickers))
+	}
+	return out
+}
+
+func anyFilled(cells []string) bool {
+	for _, cell := range cells {
+		if cell != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func (ksi) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error) {
 	var state games.KSIState
 	if err := json.Unmarshal(stateJSON, &state); err != nil {

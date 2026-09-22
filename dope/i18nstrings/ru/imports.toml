@@ -83,6 +83,13 @@ decode_failed = 'не удалось разобрать ответ рейтин�
 squad_too_big = 'состав "{{.name}}" больше 9 игроков'
 # An import run on an empty roster.
 no_teams = "рейтинг не вернул команды"
+# The import stopped because teams with results would leave the roster. Shown
+# only if the host page does not catch the conflict and ask; {{.n}} is how many
+# such teams there are.
+conflict_error = 'Импорт остановлен: из списка уходят команды, у которых уже есть результаты ({{.n}}).'
+# A merge the import cannot honour: the answered form no longer matches the
+# roster the site returns.
+merge_stale = "Список команд изменился, пока вы отвечали. Запустите импорт ещё раз."
 
 [ek_restore]
 # The one-shot `dope import-ek-results` CLI prints the standings after the

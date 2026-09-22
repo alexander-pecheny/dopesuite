@@ -78,6 +78,30 @@ func Seats(code string, state json.RawMessage) ([]Seat, bool) {
 	return seater.Seats(state), true
 }
 
+// Entered is a Seater that can also say, seat by seat, whether a host has
+// entered anything against that seat. Started answers the same question for a
+// whole document; this one answers it per team, which is what a roster
+// re-import needs before it takes a team off the roster and its column with
+// it.
+type Entered interface {
+	EnteredSeats(state json.RawMessage) []bool
+}
+
+// EnteredSeats reports, aligned with Seats, which seats of a flat document
+// already carry something a host entered. ok is false for a Protocol that does
+// not answer.
+func EnteredSeats(code string, state json.RawMessage) ([]bool, bool) {
+	p, found := Get(code)
+	if !found {
+		return nil, false
+	}
+	entered, ok := p.(Entered)
+	if !ok {
+		return nil, false
+	}
+	return entered.EnteredSeats(state), true
+}
+
 // Param is one DSL key a Protocol accepts and the stage-config field it
 // compiles to: true/false when Bool, a bracketed list of counts when List,
 // else a count, written as Default when the scheme is silent and Default is

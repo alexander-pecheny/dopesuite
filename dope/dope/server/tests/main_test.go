@@ -576,7 +576,7 @@ func TestImportFestRosterPropagatesToChGKAndKSI(t *testing.T) {
 				{RatingID: 1003, FirstName: "Вера", LastName: "Третья"},
 			},
 		},
-	})
+	}, imports.RosterChoice{})
 	if err != nil {
 		t.Fatalf("import roster: %v", err)
 	}
@@ -709,7 +709,7 @@ func TestImportFestRosterNoOpWhenUnchanged(t *testing.T) {
 	}
 
 	// First import does the real work and bumps the fest revision.
-	first, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster)
+	first, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster, imports.RosterChoice{})
 	if err != nil {
 		t.Fatalf("first import: %v", err)
 	}
@@ -723,7 +723,7 @@ func TestImportFestRosterNoOpWhenUnchanged(t *testing.T) {
 
 	// Re-importing the identical roster must short-circuit: Unchanged, accurate
 	// counts, and crucially NO revision bump (proving no write tx ran).
-	second, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster)
+	second, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster, imports.RosterChoice{})
 	if err != nil {
 		t.Fatalf("second import: %v", err)
 	}
@@ -746,7 +746,7 @@ func TestImportFestRosterNoOpWhenUnchanged(t *testing.T) {
 
 	// A real change (added player) must fall through to the full rebuild again.
 	roster[1].Players = append(roster[1].Players, rosterpkg.FestRosterImportPlayer{RatingID: 1004, FirstName: "Глеб", LastName: "Четвёртый"})
-	third, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster)
+	third, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster, imports.RosterChoice{})
 	if err != nil {
 		t.Fatalf("third import: %v", err)
 	}
@@ -807,7 +807,7 @@ order by ftp.roster_order`, []any{festID, rating}, func(rows *sql.Rows) (string,
 			{RatingID: 1003, FirstName: "Вера", LastName: "Третья"},
 		}},
 	}
-	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster); err != nil {
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster, imports.RosterChoice{}); err != nil {
 		t.Fatalf("initial import: %v", err)
 	}
 	id1001, _ := playerID(1001)
@@ -817,7 +817,7 @@ order by ftp.roster_order`, []any{festID, rating}, func(rows *sql.Rows) (string,
 
 	// Add a player to team 102; everyone else's row id must be untouched.
 	roster[1].Players = append(roster[1].Players, rosterpkg.FestRosterImportPlayer{RatingID: 1004, FirstName: "Глеб", LastName: "Четвёртый"})
-	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster); err != nil {
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster, imports.RosterChoice{}); err != nil {
 		t.Fatalf("add-player import: %v", err)
 	}
 	if got, _ := playerID(1001); got != id1001 {
@@ -836,7 +836,7 @@ order by ftp.roster_order`, []any{festID, rating}, func(rows *sql.Rows) (string,
 	// Remove a player from team 101; their fest_players row must be gone, the
 	// other kept stable, the team row id unchanged.
 	roster[0].Players = roster[0].Players[:1] // drop "Анна" (1001) — leaves "Борис" (1002)
-	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster); err != nil {
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster, imports.RosterChoice{}); err != nil {
 		t.Fatalf("remove-player import: %v", err)
 	}
 	if _, ok := playerID(1001); ok {
@@ -851,7 +851,7 @@ order by ftp.roster_order`, []any{festID, rating}, func(rows *sql.Rows) (string,
 
 	// Rename team 101; same fest_teams row id, new name.
 	roster[0].Name = "Первая-2"
-	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster); err != nil {
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster, imports.RosterChoice{}); err != nil {
 		t.Fatalf("rename import: %v", err)
 	}
 	if got, _ := festTeamID(t, db, festID, 101); got != team101ID {
@@ -867,7 +867,7 @@ order by ftp.roster_order`, []any{festID, rating}, func(rows *sql.Rows) (string,
 
 	// Drop team 102 entirely: soft-deleted, roster links cleared.
 	roster = roster[:1]
-	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster); err != nil {
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster, imports.RosterChoice{}); err != nil {
 		t.Fatalf("drop-team import: %v", err)
 	}
 	var deleted102, links102 int
@@ -928,7 +928,7 @@ func TestImportFestRosterPreservesPlayerTeamOverrides(t *testing.T) {
 			},
 		},
 	}
-	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster); err != nil {
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster, imports.RosterChoice{}); err != nil {
 		t.Fatalf("initial import roster: %v", err)
 	}
 
@@ -943,7 +943,7 @@ func TestImportFestRosterPreservesPlayerTeamOverrides(t *testing.T) {
 		t.Fatalf("save override: %v", err)
 	}
 
-	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster); err != nil {
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster, imports.RosterChoice{}); err != nil {
 		t.Fatalf("second import roster: %v", err)
 	}
 
@@ -985,7 +985,7 @@ func TestHostPlayerOverrideRowsGroupGames(t *testing.T) {
 		},
 		{RatingID: 102, Name: "Бета", City: "Москва"},
 	}
-	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster); err != nil {
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster, imports.RosterChoice{}); err != nil {
 		t.Fatalf("import roster: %v", err)
 	}
 	if _, err := db.Exec(`update games set title = 'КСИ' where id = ?`, ksiGameID); err != nil {
@@ -1082,7 +1082,7 @@ func TestFestNumbersFlow(t *testing.T) {
 		{RatingID: 11, Name: "Алёша", City: "А"},
 		{RatingID: 12, Name: "Боря", City: "Б"},
 		{RatingID: 13, Name: "Витя", City: "В"},
-	}); err != nil {
+	}, imports.RosterChoice{}); err != nil {
 		t.Fatalf("import roster: %v", err)
 	}
 
@@ -1182,7 +1182,7 @@ func TestHostFestNumbersPage(t *testing.T) {
 	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 1, []rosterpkg.FestRosterImportTeam{
 		{RatingID: 11, Name: "Алёша"},
 		{RatingID: 12, Name: "Боря"},
-	}); err != nil {
+	}, imports.RosterChoice{}); err != nil {
 		t.Fatalf("import roster: %v", err)
 	}
 
@@ -1337,7 +1337,7 @@ func TestFestNumbersRemapEntries(t *testing.T) {
 		{RatingID: 11, Name: "Алёша"},
 		{RatingID: 12, Name: "Боря"},
 		{RatingID: 13, Name: "Витя"},
-	}); err != nil {
+	}, imports.RosterChoice{}); err != nil {
 		t.Fatalf("import roster: %v", err)
 	}
 	teams, err := numbering.LoadFestTeams(t.Context(), db, festID)
@@ -1434,7 +1434,7 @@ func TestFestNumbersPropagateToKSI(t *testing.T) {
 		{RatingID: 11, Name: "Алёша"},
 		{RatingID: 12, Name: "Боря"},
 		{RatingID: 13, Name: "Витя"},
-	}); err != nil {
+	}, imports.RosterChoice{}); err != nil {
 		t.Fatalf("import roster: %v", err)
 	}
 
@@ -1519,7 +1519,7 @@ func TestFestNumbersStableAcrossResync(t *testing.T) {
 		{RatingID: 14, Name: "Гена", City: "Г"},
 		{RatingID: 15, Name: "Дима", City: "Д"},
 	}
-	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 999, initial); err != nil {
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 999, initial, imports.RosterChoice{}); err != nil {
 		t.Fatalf("initial import: %v", err)
 	}
 	teams, err := numbering.LoadFestTeams(t.Context(), db, festID)
@@ -1580,7 +1580,7 @@ func TestFestNumbersStableAcrossResync(t *testing.T) {
 		{RatingID: 13, Name: "Витя", City: "В"},
 		{RatingID: 15, Name: "Дима", City: "Д"},
 	}
-	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 999, without14); err != nil {
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 999, without14, imports.RosterChoice{}); err != nil {
 		t.Fatalf("resync without 14: %v", err)
 	}
 	checkNumbers("after Гена leaves", map[int64]int64{11: 1, 12: 2, 13: 3, 15: 5})
@@ -1596,7 +1596,7 @@ func TestFestNumbersStableAcrossResync(t *testing.T) {
 		{RatingID: 16, Name: "Егор", City: "Е"},
 		{RatingID: 17, Name: "Жора", City: "Ж"},
 	}
-	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 999, withNewcomers); err != nil {
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 999, withNewcomers, imports.RosterChoice{}); err != nil {
 		t.Fatalf("resync with newcomers: %v", err)
 	}
 	checkNumbers("after newcomers join", map[int64]int64{11: 1, 12: 2, 13: 3, 15: 5, 16: 6, 17: 7})
@@ -1612,7 +1612,7 @@ func TestFestNumbersStableAcrossResync(t *testing.T) {
 		{RatingID: 16, Name: "Егор", City: "Е"},
 		{RatingID: 17, Name: "Жора", City: "Ж"},
 	}
-	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 999, withGenaBack); err != nil {
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 999, withGenaBack, imports.RosterChoice{}); err != nil {
 		t.Fatalf("resync with Гена back: %v", err)
 	}
 	checkNumbers("after Гена returns", map[int64]int64{11: 1, 12: 2, 13: 3, 14: 4, 15: 5, 16: 6, 17: 7})
@@ -1650,7 +1650,7 @@ func TestFestNumbersFreshImport(t *testing.T) {
 	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 999, []rosterpkg.FestRosterImportTeam{
 		{RatingID: 11, Name: "Алёша"},
 		{RatingID: 12, Name: "Боря"},
-	}); err != nil {
+	}, imports.RosterChoice{}); err != nil {
 		t.Fatalf("first import: %v", err)
 	}
 	allSet, total, err := numbering.AllNumbered(t.Context(), db, festID)
@@ -1669,7 +1669,7 @@ func TestFestNumbersFreshImport(t *testing.T) {
 		{RatingID: 11, Name: "Алёша"},
 		{RatingID: 12, Name: "Боря"},
 		{RatingID: 13, Name: "Витя"},
-	}); err != nil {
+	}, imports.RosterChoice{}); err != nil {
 		t.Fatalf("second import: %v", err)
 	}
 	allSet, total, err = numbering.AllNumbered(t.Context(), db, festID)

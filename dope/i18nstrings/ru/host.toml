@@ -177,6 +177,28 @@ rating_import_note = "Импорт заменит списки команд и �
 import_submit = "Загрузить команды и игроков"
 # Shown (as note and as error) when the fest has no rating id yet.
 need_rating_note = "Сначала сохраните rating.chgk.info ID в свойствах феста."
+# The dialog the import opens instead of dropping a team that already has
+# results (hostRatingImportDoc, the RosterConflict branch).
+conflict_title = "Команды с результатами уходят из списка"
+# Hint under the dialog title, explaining why the import is asking.
+conflict_hint = "Этих команд больше нет в рейтинге под тем же ID, а результаты у них уже есть. Если команде просто сменили ID, выберите её в списке новых команд — номер и результаты останутся. Если команда действительно снялась, выберите удаление."
+# One conflicted team's heading; {{.team}} is "Название (Город)".
+conflict_team = '№{{.number}} {{.team}}'
+# The line naming where that team already has results.
+conflict_games = 'Результаты есть: {{.games}}'
+# Label of one team's choice picker in the dialog.
+conflict_choice_label = "Что с ней сделать"
+# The choice that throws the team and its results away.
+conflict_choice_drop = "Удалить команду вместе с результатами"
+# One merge option: the incoming team this one is really the same team as.
+conflict_choice_merge = 'Это она, новый ID {{.id}}: {{.team}}'
+# Shown in place of the picker when the roster brings no new team to merge into.
+conflict_no_candidates = "В новом списке нет команд, которых ещё нет в фесте, — слить не с чем."
+# The dialog's buttons.
+conflict_submit = "Продолжить импорт"
+conflict_cancel = "Отменить импорт"
+# Notice after an import that merged teams; {{.n}} is how many.
+import_merged_notice = 'Сохранены под новым ID, вместе с номером и результатами: {{.n}}.'
 # Scheme import page title and crumb: "<fest title> · импорт схемы".
 scheme_import_title = '{{.title}} · импорт схемы'
 scheme_import_crumb = "Импорт схемы"

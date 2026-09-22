@@ -7,6 +7,9 @@
 //     selects, which saved on change via an inline onchange before).
 //   - [data-dialog-open="id"] on a button: showModal() that <dialog>.
 //   - [data-dialog-close] on a button inside a <dialog>: close it.
+//   - [data-dialog-auto] on a <dialog>: showModal() it as the page loads. This
+//     is for the dialog a server-rendered page opens with, because asking it is
+//     why the page was rendered — the roster import's reconcile is one.
 
 type SelectableField = HTMLElement & { select?: () => void };
 type FormControl = HTMLElement & {
@@ -64,5 +67,18 @@ document.addEventListener("click", (event) => {
     }
   }
 });
+
+function openAutoDialogs(): void {
+  for (const el of document.querySelectorAll("dialog[data-dialog-auto]")) {
+    const dialog: DialogLike = el as DialogLike;
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+  }
+}
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", openAutoDialogs);
+} else {
+  openAutoDialogs();
+}
 
 export {};
