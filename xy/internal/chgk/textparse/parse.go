@@ -943,6 +943,33 @@ func (p *parser) postprocessQuestion(q *fsource.Question) {
 		gap := p.rx.handoutBefore.FindStringSubmatch(qs)[1]
 		q.Set("question", replaceDeep(q.Get("question"), m, "["+p.rx.handoutLabel+":"+gap))
 	}
+	liftLeadingImages(q)
+}
+
+// reLeadingImages matches the (img …) lines a question opens with, and the text
+// that has to follow them.
+var reLeadingImages = regexp.MustCompile(`(?s)\A((?:[ \t]*\(img [^)\n]*\)[ \t]*\n)+)(.*\S.*)\z`)
+
+// liftLeadingImages makes the handout out of the pictures a question opens with.
+// A picture on its own line above the question text is what the teams are given
+// to look at, and in a Word document nobody had to type «Handout:» above it for
+// that to be true — so an imported question kept the (img …) at the head of its
+// text and its handout field stayed empty (#80). A question that is nothing but
+// a picture is left alone: it would be left with no text at all.
+func liftLeadingImages(q *fsource.Question) {
+	if q.Has("handout") {
+		return
+	}
+	text, ok := q.Get("question").(string)
+	if !ok {
+		return
+	}
+	m := reLeadingImages.FindStringSubmatch(text)
+	if m == nil {
+		return
+	}
+	q.Set("handout", strings.TrimSpace(m[1]))
+	q.Set("question", strings.TrimSpace(m[2]))
 }
 
 // tryExtractField ports _try_extract_field: a field that never got its own line
