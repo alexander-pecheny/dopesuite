@@ -71,6 +71,15 @@ function withExt(name: string, ext: string): string {
   return `${base || S.attachments.name.defaultStem()}.${ext}`;
 }
 
+// nameStemEnd is where the name ends and its extension begins — what a rename
+// box should have selected, so that typing over the suggestion keeps the ".png"
+// (#83). A name that is all extension (".gitignore") has no stem to spare, and
+// one with no dot at all is a stem throughout: both select whole.
+export function nameStemEnd(name: string): number {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? dot : name.length;
+}
+
 // The card editor's static elements the kernel writes to and listens on.
 export interface AttachmentsUI {
   message: HTMLElement;
@@ -373,7 +382,7 @@ document.addEventListener("paste", (e) => {
   ui.pasteCompress.checked = false;
   pasteModal.open({ onClose: () => { pastedFile = null; } });
   nameInput.focus();
-  nameInput.select();
+  nameInput.setSelectionRange(0, nameStemEnd(nameInput.value));
 });
 
 ui.pasteForm.addEventListener("submit", async (e) => {

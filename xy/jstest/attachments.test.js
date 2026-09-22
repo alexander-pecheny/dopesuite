@@ -25,7 +25,7 @@ globalThis.fetch = async (url) => { fetched.push(url); return { ok: true, arrayB
 let urls = 0;
 globalThis.URL = { createObjectURL: () => `blob:${++urls}`, revokeObjectURL() {} };
 globalThis.Blob = class { constructor(parts, opts) { this.parts = parts; this.type = opts?.type; } };
-const { create, extFromMime, gatherTargets, humanSize, withExt } = await import("../web/assets/static/dist/attachments.js");
+const { create, extFromMime, gatherTargets, humanSize, nameStemEnd, withExt } = await import("../web/assets/static/dist/attachments.js");
 
 test("gatherTargets picks the first attachment per wanted name, in card order", () => {
   const lists = [
@@ -55,6 +55,19 @@ test("withExt replaces any typed extension with the stored format's", () => {
   assert.equal(withExt("схема.jpeg", "webp"), "схема.webp");
   assert.equal(withExt("noext", "png"), "noext.png");
   assert.equal(withExt("  ", "webp"), "вставка.webp");
+});
+
+// What the paste box preselects: the name without the ".png", so that typing
+// over the suggestion keeps the extension.
+test("nameStemEnd stops before the extension", () => {
+  assert.equal("вставка.png".slice(0, nameStemEnd("вставка.png")), "вставка");
+  assert.equal("photo.tar.gz".slice(0, nameStemEnd("photo.tar.gz")), "photo.tar");
+});
+
+test("nameStemEnd selects the whole name when there is no stem to spare", () => {
+  assert.equal(nameStemEnd("noext"), "noext".length);
+  assert.equal(nameStemEnd(".gitignore"), ".gitignore".length);
+  assert.equal(nameStemEnd(""), 0);
 });
 
 
