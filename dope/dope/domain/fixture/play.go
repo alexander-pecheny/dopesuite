@@ -29,6 +29,10 @@ var multiSpec string
 // played and scored, and the resolver seats whoever that sends on — which is
 // the only way the later rounds get anybody in them.
 func playBracket(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string) error {
+	base, err := entrantBase(ctx, tx, festID)
+	if err != nil {
+		return err
+	}
 	for pass := 0; ; pass++ {
 		if _, err := resolver.ResolveGameSlotsAndReseedsTx(ctx, tx, gameID); err != nil {
 			return err
@@ -47,7 +51,7 @@ func playBracket(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType
 			if match.Status == "finished" || !seated(match) {
 				continue
 			}
-			if err := playMatch(ctx, tx, festID, match); err != nil {
+			if err := playMatch(ctx, tx, festID, base, match); err != nil {
 				return fmt.Errorf("%s: %w", match.Code, err)
 			}
 			played++
@@ -102,8 +106,8 @@ func seated(match store.DBMatchState) bool {
 // playMatch writes one match's document, marks it finished and scores it. A
 // finished match is what a Block ranks and a reseed reads, so a fixture of
 // active matches would show empty standings everywhere.
-func playMatch(ctx context.Context, tx *sql.Tx, festID int64, match store.DBMatchState) error {
-	state, err := matchDocument(match)
+func playMatch(ctx context.Context, tx *sql.Tx, festID, base int64, match store.DBMatchState) error {
+	state, err := matchDocument(match, base)
 	if err != nil {
 		return err
 	}
@@ -184,17 +188,35 @@ func pinnedPlaces(match store.DBMatchState) (string, error) {
 // gives every group the same winner with the same score — and four winners tied
 // on every metric are separated by a random draw (structure), which is exactly
 // what a golden cannot survive.
-func matchDocument(match store.DBMatchState) (string, error) {
+func matchDocument(match store.DBMatchState, base int64) (string, error) {
 	switch match.GameType {
 	case games.Brain:
 		return brainDocument(match)
 	case games.Troika:
 		return troikaDocument(match)
 	case games.Hamsa:
-		return hamsaDocument(match)
+		return hamsaDocument(match, base)
 	default:
-		return blobDocument(match)
+		return blobDocument(match, base)
 	}
+}
+
+// entrantBase is the fest's lowest participant id. The mark pattern keys on
+// a small entrant number, counted from that base, because the pattern's
+// ceiling is a few dozen and a participant id on a database that already
+// holds other fests runs into the hundreds: keyed on the raw id, every
+// answer came out right.
+func entrantBase(ctx context.Context, tx *sql.Tx, festID int64) (int64, error) {
+	var base sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `select min(id) from participants where fest_id = ?`, festID).Scan(&base); err != nil {
+		return 0, err
+	}
+	return base.Int64, nil
+}
+
+// entrant is a participant's small number within the fixture, one and up.
+func entrant(participantID, base int64) int {
+	return int(participantID-base) + 1
 }
 
 // defaultBlobThemes is what a blob match whose stage named no theme count
@@ -203,7 +225,7 @@ const defaultBlobThemes = 4
 
 // blobDocument fills the team-keyed blob (EK and individual SI): a section per
 // Participant, themes of five answers each.
-func blobDocument(match store.DBMatchState) (string, error) {
+func blobDocument(match store.DBMatchState, base int64) (string, error) {
 	blob, err := store.ParseMatchBlob(match.RawState)
 	if err != nil {
 		return "", err
@@ -218,7 +240,7 @@ func blobDocument(match store.DBMatchState) (string, error) {
 		}
 		for theme := 0; theme < themes; theme++ {
 			for answer := range store.QuestionValues {
-				if m := mark(int(participantID), int(participantID), theme, answer); m != "" {
+				if m := mark(entrant(participantID, base), entrant(participantID, base), theme, answer); m != "" {
 					blob.SetAnswer(participantID, "themes", theme, answer, m)
 				}
 			}
@@ -231,7 +253,7 @@ func blobDocument(match store.DBMatchState) (string, error) {
 // of five answers with the player who sat for each, and the team round's bet.
 // The bet moves with the Participant so the fifth round is not the same
 // wherever it is read, and a lost one shows the sheet taking points away.
-func hamsaDocument(match store.DBMatchState) (string, error) {
+func hamsaDocument(match store.DBMatchState, base int64) (string, error) {
 	state, err := games.ParseHamsaState(match.RawState)
 	if err != nil {
 		return "", err
@@ -255,13 +277,13 @@ func hamsaDocument(match store.DBMatchState) (string, error) {
 				row.Player = roster[theme%len(roster)].ID
 			}
 			for answer := range row.Answers {
-				row.Answers[answer] = mark(int(participantID), int(participantID), theme, answer)
+				row.Answers[answer] = mark(entrant(participantID, base), entrant(participantID, base), theme, answer)
 			}
 			section.Themes = append(section.Themes, row)
 		}
-		amount := hamsaBetStep * (int(participantID)%hamsaBetSpread + 1)
+		amount := hamsaBetStep * (entrant(participantID, base)%hamsaBetSpread + 1)
 		answer := games.HamsaBetRight
-		if int(participantID)%hamsaBetLost == 0 {
+		if entrant(participantID, base)%hamsaBetLost == 0 {
 			answer = games.HamsaBetWrong
 		}
 		section.Bet = &games.HamsaBet{Amount: &amount, Answer: answer}
