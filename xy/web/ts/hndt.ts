@@ -48,9 +48,9 @@ function handoutForCard(desc: string | null | undefined): Handout | null {
 
 // unbracketedHandout is the handout of a question that opens with the label,
 // or carries a picture, without the bracket. A parsed .docx usually arrives
-// like this, «Раздаточный материал.» on a line of its own and the picture or
-// the text under it. The label goes, a picture is the handout, and otherwise
-// the whole text is offered for the author to cut down in the .hndt.
+// like this: the handout label on a line of its own, and the picture or the
+// text under it. The label goes, a picture is the handout, and otherwise the
+// whole text is offered for the author to cut down in the .hndt.
 const HANDOUT_LABEL = new RegExp(`^${S.chgk.label.handout()}[.:]?\\s*`, "i");
 function unbracketedHandout(q: string): Handout | null {
   const name = imgInText(q);

@@ -56,9 +56,10 @@ func (s *Store) TownCountries(ctx context.Context, names []string) map[string]st
 	if !s.Enabled() || len(names) == 0 {
 		return nil
 	}
-	// SQLite's lower() folds ASCII only, so «цюрих» would never meet «Цюрих» in
-	// a comparison it makes. Each name is therefore asked for as typed and as
-	// the rating site spells it, and folded back in Go when the answer lands.
+	// SQLite's lower() folds ASCII only, so a Cyrillic name typed in lowercase
+	// would never meet the capitalised one in a comparison it makes. Each name is
+	// therefore asked for as typed and as the rating site spells it, and folded
+	// back in Go when the answer lands.
 	args := make([]any, 0, 2*len(names))
 	holes := make([]string, 0, 2*len(names))
 	for _, name := range names {
