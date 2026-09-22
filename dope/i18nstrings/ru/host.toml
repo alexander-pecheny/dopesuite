@@ -26,6 +26,7 @@ type_ek = "ЭК"
 type_si = "Личная СИ"
 type_multi = "Мультиигры"
 type_troika = "Тройка"
+type_hamsa = "Хамса"
 # The OD settings fields; also the field names their out-of-range errors name.
 od_tours_label = "Количество туров"
 od_questions_label = "Количество вопросов в туре"
@@ -64,6 +65,33 @@ multi_sorting_label = "Что решает при равном итоге (не�
 multi_sorting_hint = "Через запятую: total — итог, plus — сумма положительных, game1, game2… — подытоги мини-игр по порядку. Пусто — команды с равным итогом делят место."
 # Hint under the troika scheme editor.
 troika_hint = "Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50."
+# The scheme the hamsa creation form prefills: the tournament's own shape at
+# its smallest, with n the participants the fest can seat four to a table. It
+# is text a host reads and edits, so it lives here rather than in the form.
+hamsa_scheme = """[defaults]
+venues: [А, Б, В]
+
+[scheme]
+title: Групповой этап
+kind: placement
+participants: {{.n}}
+match_size: 4
+rounds: 2
+title.r1: Игра №1
+title.r2: Игра №2
+proceeding_participants: 4
+sorting: [place_sum, total, first, seed]
+---
+title: Финал
+kind: flat
+participants: 4
+reseed: true
+stats_from: [s1]
+sorting: [place_sum, total, first, seed]
+shootout: true
+"""
+# Hint under the hamsa scheme editor.
+hamsa_hint = "Тот же язык схем. kind: placement — групповой этап, где команды не вылетают, а везут места дальше: раунд 1 сеет полосами посева, каждый следующий сажает за стол k места k всех столов, а остатки разыгрываются жребием на Сетке. Письменный отбор играется отдельной игрой КСИ; чтобы посеять отсюда, добавьте [init] seed: <код той игры>."
 # Hint under the EK scheme editor (before the pasted-JSON field).
 ek_hint = "Либо схемой, либо готовым JSON ниже — что заполнено, то и используется."
 # Label of the EK pasted-JSON editor.

@@ -61,6 +61,7 @@ var pageSources = map[string]string{
 	"static/brain.html":  "ui/brain.dopeui",
 	"static/multi.html":  "ui/multi.dopeui",
 	"static/troika.html": "ui/troika.dopeui",
+	"static/hamsa.html":  "ui/hamsa.dopeui",
 	// The gallery renders every shared table and the Grid from fixtures —
 	// the skin sheet the verify matrix shoots. Dev mode only (see main.go).
 	"static/gallery.html": "ui/gallery.dopeui",

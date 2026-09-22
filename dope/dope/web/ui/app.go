@@ -81,6 +81,8 @@ func mustApp() *base.App {
 				// like brain. Both take the same frame every score sheet does.
 				"multi":  {Body: []string{"host", "host-compact", "multi-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
 				"troika": {Body: []string{"host", "host-compact", "troika-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
+				// Hamsa is a wall of bouts like Troika, on the same sheet frame.
+				"hamsa": {Body: []string{"host", "host-compact", "hamsa-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
 			},
 			HeadHook: headHook,
 		}),

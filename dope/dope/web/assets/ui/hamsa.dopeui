@@ -1,0 +1,3 @@
+page title=@gallery.hamsa.title kind="hamsa" init="__GAME_INIT__" classicscripts="dist/hamsa.js"
+  gametopbar tabsid="hamsaTabs" tabshidden
+  mount kind="table-host" id="hamsaTable"

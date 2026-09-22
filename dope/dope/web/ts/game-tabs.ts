@@ -4,7 +4,7 @@ import S from "./i18nstrings.js";
 // Which tabs a Game page shows is Block / Round / Group knowledge, held here
 // once; pages render the array and derive nothing of their own.
 
-export type GameKind = "ek" | "si" | "brain" | "ksi" | "od" | "troika";
+export type GameKind = "ek" | "si" | "brain" | "ksi" | "od" | "troika" | "hamsa";
 
 export type TabKind =
   | "grid" | "block" | "pods" | "round" | "protocol" | "reseed" | "stage"
@@ -44,6 +44,10 @@ export function gameTabs(stages: StageRef[], options: GameTabsOptions): GameTab[
   // reseed, and the per-player statistics its three chairs make interesting.
   case "troika":
     return brainTabs(stages, host && Boolean(options.seeded), S.screen.tabs.stats());
+  // Хамса's stages read straight across: the бои of each Игра, the Block's own
+  // table, the пересев and the Финал, in the order the scheme wrote them.
+  case "hamsa":
+    return hamsaTabs(stages, host && Boolean(options.seeded));
   case "ksi":
     return fixedTabs(["detailed", S.screen.tabs.detailed()], ["results", S.screen.tabs.results()], ...when(host, ["refusals", S.screen.tabs.refusals()]), ["roster", S.screen.tabs.roster()]);
   case "od":
@@ -184,6 +188,35 @@ function brainTabs(stages: StageRef[], seeded: boolean, statsLabel: string): Gam
   if (reseeds.length) tabs.push({key: "reseed", label: S.screen.tabs.reseed(), kind: "reseed", stages: reseeds});
   tabs.push(...fixedTabs(["stats", statsLabel], ["roster", S.screen.tabs.roster()], ...when(seeded, ["seed", S.screen.tabs.seed()])));
   return tabs;
+}
+
+// Хамса has no Groups and no bracket: every stage is a tab of its own — the
+// бои of a Round, or a Block's table where the stage holds none. A stage title
+// carries its Block's name in front ("Групповой этап. Игра №1"), which the tab
+// bar has no room for and the crumb trail says anyway.
+function hamsaTabs(stages: StageRef[], seeded: boolean): GameTab[] {
+  const tabs = fixedTabs(["grid", S.screen.tabs.grid()]);
+  const reseeds: string[] = [];
+  for (const stage of stages) {
+    if (isReseed(stage)) {
+      reseeds.push(stage.code);
+      continue;
+    }
+    const label = shortStageTitle(stage);
+    const kind: TabKind = (stage.matches || []).length ? "protocol" : "block";
+    tabs.push({key: `${kind}:${stage.code}`, label, kind, stages: [stage.code], stage});
+  }
+  if (reseeds.length) tabs.push({key: "reseed", label: S.screen.tabs.reseed(), kind: "reseed", stages: reseeds});
+  tabs.push(...fixedTabs(["stats", S.screen.tabs.stats()], ["roster", S.screen.tabs.roster()], ...when(seeded, ["seed", S.screen.tabs.seed()])));
+  return tabs;
+}
+
+// shortStageTitle drops the Block's name from a stage title: the tab bar shows
+// "Игра №1", not "Групповой этап. Игра №1".
+function shortStageTitle(stage: StageRef): string {
+  const title = String(stage.title || stage.code || "");
+  const parts = title.split(". ");
+  return parts.length > 1 ? parts[parts.length - 1] : title;
 }
 
 // A Block is a run of stages sharing a grain.block; a reseed ends the run.

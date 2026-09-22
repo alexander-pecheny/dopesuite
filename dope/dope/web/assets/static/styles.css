@@ -14,6 +14,12 @@
   --theme-radius: var(--cell-radius);
   --team-col: 180px;
   --troika-cross-col: 46px;
+  /* Хамса's бой sheet: sixteen темы, a ставка and a перестрелка across it,
+     so a sheet off the screen is sized rather than laid out until it scrolls
+     in. */
+  --hamsa-bout-w: 4400px;
+  --hamsa-bout-h: 200px;
+  --hamsa-bet-col: 72px;
   --total-col: 38px;
   --place-col: 42px;
   --place-gap: 14px;
@@ -4773,4 +4779,61 @@ body.is-fullscreen.od-page .match-main {
 .troika-sheet .troika-side-gap th {
   height: var(--space-2);
   border: 0;
+}
+
+/* ── Хамса ─────────────────────────────────────────────────────────────── */
+
+/* A tab holds three бои, each a sheet wider than any screen. Sizing one
+   without laying it out is what keeps the tab's first paint quick, the way
+   Тройка's wall of бои does. */
+.hamsa-bout {
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--hamsa-bout-w) var(--hamsa-bout-h);
+}
+
+/* The раунды stand over their темы in a header row of their own: one cell per
+   game round, spanning every column its темы take. The leading cell covers the
+   sheet's own sticky columns and carries no words — the бой names itself in the
+   row below. */
+.hamsa-sheet .hamsa-round-row th {
+  border-bottom: 0;
+  background: var(--structure);
+  font-size: var(--text-xs-plus);
+  font-weight: var(--fw-semibold);
+  color: var(--muted);
+}
+
+.hamsa-sheet .hamsa-round-head {
+  padding-bottom: var(--space-1);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.hamsa-sheet .hamsa-round-lead {
+  background: var(--structure);
+}
+
+/* The Командный раунд is one column: what the captain wrote, over the mark
+   the answer earned. */
+.hamsa-sheet .hamsa-bet-input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.hamsa-sheet .hamsa-player-select {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.hamsa-sheet .hamsa-player-select:disabled {
+  color: var(--muted);
 }

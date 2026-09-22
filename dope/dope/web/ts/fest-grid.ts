@@ -67,6 +67,7 @@ export interface FestGridStage {
   kind?: string;
   grain?: {block?: string; group?: string; wave?: number};
   standings?: ReseedEntry[];
+  reseedReady?: boolean;
   // sort is the Ranker's order, from the server: the columns a table shows.
   sort?: SortRule[] | null;
   layout?: { columns?: number };

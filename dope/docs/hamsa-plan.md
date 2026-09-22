@@ -263,6 +263,30 @@ Files, mirroring Тройка (commit `73f98ea1` is the checklist):
 - Styles: reuse ЭК's sheet classes; anything new goes in `styles.css` from
   variables only. Run `design-review` and `verify` at both screen sizes.
 
+**Built**, where the plan left a choice:
+
+- The page is Тройка's shape, **not `stage-cache.ts`**. A Хамса Game is seven
+  бои in three stages; the pane cache's prefetching and per-pane lifecycle were
+  written for ЭК's twenty-five over five, and Тройка already proved the simpler
+  shape — one `/stages/matches` fetch, a Map, one SSE scope per бой — for a
+  page of many бои.
+- The player select is Тройка's `chairPicker`, not ЭК's
+  `buildPlayerSelectCell`: the document keeps a player **id**, while ЭК's cell
+  is a name select wired to ЭК's own edit queue. Nothing was lifted.
+- The **Ставка is a column group like a тема**, so `buildTwoRowScoreTable`
+  gives it the input over the mark for nothing, with the signed contribution as
+  its score cell. The перестрелка is another column group the same way, and its
+  score cell **is** the П the plan asked for, so there is no separate column.
+- The five raunds are named in a **header row above the тема heads**, inserted
+  into the table the builder made; a round's cell spans its own темы.
+- `ek-stats.ts` was generalised only over the **value scale its tables print**.
+  The fold itself is Хамса's own (`hamsa-stats.ts`): ЭК reads a projection that
+  names players by name, and Хамса reads a document keyed by Participant that
+  names them by id.
+- The tabs are one per stage, in scheme order — Игра №1, Игра №2, Общий зачёт,
+  Пересев, Финал — plus the Сетка, the Статистика and the Составы. A stage's
+  title carries its Block's name in front, which the tab bar drops.
+
 ## 6. Strings
 
 `i18nstrings/ru/hamsa.toml` (+ label in `games.toml`): game-round names,

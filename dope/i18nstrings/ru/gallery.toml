@@ -1,7 +1,7 @@
 # The dev-only /gallery page (web/assets/ui/gallery.dopeui +
 # web/ts/gallery.ts) — the skin sheet every shared table is judged on —
 # plus the static page titles of the game-kind .dopeui shells
-# (ek, od, si, multi, troika, brain).
+# (ek, od, si, multi, troika, hamsa, brain).
 
 [page]
 # The <title> of the dev-only /gallery page.
@@ -54,6 +54,10 @@ title = "Ведущий · Мультиигры"
 [troika]
 # The <title> of the Тройка page's host shell (static/troika.html).
 title = "Ведущий · Тройка"
+
+[hamsa]
+# The <title> of the Хамса page's host shell (static/hamsa.html).
+title = "Ведущий · Хамса"
 
 [brain]
 # The <title> of the Брейн page's host shell (static/brain.html).

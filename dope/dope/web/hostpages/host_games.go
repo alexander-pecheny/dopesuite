@@ -46,6 +46,7 @@ type hostGameCreateData struct {
 	BrainDSL     string
 	SIDSL        string
 	TroikaDSL    string
+	HamsaDSL     string
 	EKDSL        string
 	// Entrants is the fest's registry offered as this Game's entrant list.
 	// A Game numbers whom it seats from 1 (ADR-0009), so a fest of 65 can hold
@@ -146,6 +147,7 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 			gameTypeRadio("si", s.Host.Games.TypeSi(), sel),
 			gameTypeRadio("multi", s.Host.Games.TypeMulti(), sel),
 			gameTypeRadio("troika", s.Host.Games.TypeTroika(), sel),
+			gameTypeRadio("hamsa", s.Host.Games.TypeHamsa(), sel),
 		),
 		gameSettings("od", sel,
 			dopeui.Field(dopeui.Label(s.Host.Games.OdToursLabel()), dopeui.Textfield(dopeui.Name("od_tours"), dopeui.Inputmode("numeric"), dopeui.Value("3"))),
@@ -191,6 +193,11 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 				dopeui.Editor(dopeui.Name("troika_dsl"), dopeui.Rows("16"), dopeui.Spellcheck("false"), dopeui.Text(data.TroikaDSL))),
 			dopeui.Hint(dopeui.Text(s.Host.Games.TroikaHint())),
 		),
+		gameSettings("hamsa", sel,
+			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
+				dopeui.Editor(dopeui.Name("hamsa_dsl"), dopeui.Rows("18"), dopeui.Spellcheck("false"), dopeui.Text(data.HamsaDSL))),
+			dopeui.Hint(dopeui.Text(s.Host.Games.HamsaHint())),
+		),
 		gameSettings("ek", sel,
 			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
 				dopeui.Editor(dopeui.Name("ek_dsl"), dopeui.Rows("10"), dopeui.Spellcheck("false"), dopeui.Text(data.EKDSL), dopeui.Placeholder("[scheme]\nkind: single_elimination\nparticipants: 48\nmatch_size: 4\nwinning_places: 2"))),
@@ -209,7 +216,7 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 // whole fest roster under the fest's own numbers and marks who did not play on
 // its refusals tab, so it is not offered the picker at all and refuses a chosen
 // list rather than dropping it (gamebuild.Create).
-var entrantFormats = []string{games.Brain, games.SI, games.Troika, games.EK}
+var entrantFormats = []string{games.Brain, games.SI, games.Troika, games.Hamsa, games.EK}
 
 // SeatsChosenEntrants reports whether a format seats the entrant list a host
 // picked, rather than the whole fest roster.
@@ -496,6 +503,7 @@ func (s *Server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request
 			BrainDSL:  kept("brain_dsl", gamebuild.DefaultBrainDSL(teamCount, 5)),
 			SIDSL:     kept("si_dsl", defaultSIDSL(teamCount)),
 			TroikaDSL: kept("troika_dsl", defaultTroikaDSL(teamCount)),
+			HamsaDSL:  kept("hamsa_dsl", defaultHamsaDSL(teamCount)),
 			EKDSL:     kept("ek_dsl", ""),
 			Entrants:  entrants,
 		}), nil
@@ -558,6 +566,7 @@ var dslField = map[string]string{
 	games.Brain:  "brain_dsl",
 	games.SI:     "si_dsl",
 	games.Troika: "troika_dsl",
+	games.Hamsa:  "hamsa_dsl",
 	games.EK:     "ek_dsl",
 }
 
@@ -598,6 +607,8 @@ func gameSpecFromForm(festID int64, gameType string, form url.Values) (gamebuild
 		}
 	case games.Troika:
 		spec.Label = s.Host.Games.TypeTroika()
+	case games.Hamsa:
+		spec.Label = s.Host.Games.TypeHamsa()
 	case games.Brain:
 		spec.Label = s.Host.Games.TypeBrain()
 	case games.SI:
@@ -682,6 +693,19 @@ func defaultTroikaDSL(participants int) string {
 		participants = 2
 	}
 	return fmt.Sprintf("[scheme]\nkind: roundrobin\ngroup_size: %d\nthemes: 6\nmetric: total\npoints: [1, 0.5, 0]\nstandings.rating: points + taken / 50\nsorting: [rating, h2h, taken, diff]\n", participants)
+}
+
+// defaultHamsaDSL is the tournament's own shape at its smallest: a group stage
+// of two Games four to a table, then a final of the four best. The scheme
+// itself is in the Catalog — it is text a host reads and edits — and carries
+// no `[init]` line naming the KSI qualifier, since a fest that has not played
+// one yet would not compile it.
+func defaultHamsaDSL(participants int) string {
+	if participants < 4 {
+		participants = 4
+	}
+	participants -= participants % 4
+	return dopestrings.Default.Host.Games.HamsaScheme(strconv.Itoa(participants))
 }
 
 // ksiStickersGameType is the creation-form value for the "KSI with stickers"

@@ -318,6 +318,9 @@ var RU = Strings{
 		Ek: GalleryEkStrings{
 			Title: func() string { return "ЭК · Фест" },
 		},
+		Hamsa: GalleryHamsaStrings{
+			Title: func() string { return "Ведущий · Хамса" },
+		},
 		Multi: GalleryMultiStrings{
 			Title: func() string { return "Ведущий · Мультиигры" },
 		},
@@ -467,6 +470,50 @@ var RU = Strings{
 			Label: func() string { return "Тройка" },
 		},
 	},
+	Hamsa: HamsaStrings{
+		Draw: HamsaDrawStrings{
+			None: func() string { return "—" },
+		},
+		Protocol: HamsaProtocolStrings{
+			AnswerTitle: func(team string, theme string, value string) string {
+				return fmt.Sprintf("%s, тема %s, %s", team, theme, value)
+			},
+			Bet:           func() string { return "Ставка" },
+			BetAnswer:     func() string { return "Ответ" },
+			BetTitle:      func(team string) string { return fmt.Sprintf("%s: ставка", team) },
+			Finished:      func() string { return "Закончен" },
+			Plus:          func() string { return "Σ+" },
+			Seat:          func(n string) string { return fmt.Sprintf("Место %s", n) },
+			ShootoutTheme: func(values string) string { return fmt.Sprintf("Тема · %s", values) },
+			Theme:         func(n string, values string) string { return fmt.Sprintf("Тема %s · %s", n, values) },
+			Unseated:      func() string { return "Мест ещё нет" },
+		},
+		Round: HamsaRoundStrings{
+			Dark:     func() string { return "Тёмный" },
+			HalfDark: func() string { return "Полутёмный" },
+			Head:     func(n string, name string) string { return fmt.Sprintf("Раунд %s · %s", n, name) },
+			HeadMultiplied: func(n string, name string, multiplier string) string {
+				return fmt.Sprintf("Раунд %s · %s ×%s", n, name, multiplier)
+			},
+			Light:    func() string { return "Светлый" },
+			Personal: func() string { return "Персональный" },
+			Shootout: func() string { return "Перестрелка" },
+			Team:     func() string { return "Командный" },
+		},
+		Table: HamsaTableStrings{
+			Bouts: func() string { return "Игр" },
+			Empty: func() string {
+				return "Таблица появится, когда сыграют первый бой."
+			},
+			First:    func() string { return "Первых мест" },
+			Place:    func() string { return "Место" },
+			PlaceSum: func() string { return "Сумма мест" },
+			Seed:     func() string { return "КСИ" },
+			Team:     func() string { return "Команда" },
+			Total:    func() string { return "Очки" },
+		},
+		Title: func() string { return "Хамса" },
+	},
 	Host: HostStrings{
 		Dash: HostDashStrings{
 			AccessSavedNotice: func() string { return "Доступ сохранён." },
@@ -554,6 +601,12 @@ var RU = Strings{
 			ErrorSlugTaken:     func() string { return "Slug уже занят в этом фесте." },
 			ErrorTitleRequired: func() string { return "Название обязательно." },
 			ErrorTypeMissing:   func() string { return "выберите тип игры" },
+			HamsaHint: func() string {
+				return "Тот же язык схем. kind: placement — групповой этап, где команды не вылетают, а везут места дальше: раунд 1 сеет полосами посева, каждый следующий сажает за стол k места k всех столов, а остатки разыгрываются жребием на Сетке. Письменный отбор играется отдельной игрой КСИ; чтобы посеять отсюда, добавьте [init] seed: <код той игры>."
+			},
+			HamsaScheme: func(n string) string {
+				return fmt.Sprintf("[defaults]\nvenues: [А, Б, В]\n\n[scheme]\ntitle: Групповой этап\nkind: placement\nparticipants: %s\nmatch_size: 4\nrounds: 2\ntitle.r1: Игра №1\ntitle.r2: Игра №2\nproceeding_participants: 4\nsorting: [place_sum, total, first, seed]\n---\ntitle: Финал\nkind: flat\nparticipants: 4\nreseed: true\nstats_from: [s1]\nsorting: [place_sum, total, first, seed]\nshootout: true\n", n)
+			},
 			MinigamesHint: func() string {
 				return "По строке на мини-игру: «Название: {значения}xN». {0,1} — задание на 0 или 1 балл, {-1,0,1} — со штрафом, {0-12} — любое целое от 0 до 12. Несколько описаний в строке идут подряд: «{0,3}x2 {0,5}» — три задания на 3, 3 и 5 баллов. «|» закрывает блок листа: «{0,1}x10 | {0,1}x10» — два блока по десять, с зазором и сквозной нумерацией."
 			},
@@ -599,6 +652,7 @@ var RU = Strings{
 			},
 			TypeBrain:       func() string { return "Брейн" },
 			TypeEk:          func() string { return "ЭК" },
+			TypeHamsa:       func() string { return "Хамса" },
 			TypeKsi:         func() string { return "КСИ" },
 			TypeKsiStickers: func() string { return "КСИ со стикерами" },
 			TypeLabel:       func() string { return "Тип игры" },

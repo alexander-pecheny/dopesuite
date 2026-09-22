@@ -82,6 +82,7 @@ func TestBracketGamesAreServedTheirOwnPage(t *testing.T) {
 		{games.Troika, "[scheme]\nkind: roundrobin\ngroup_size: 8\nthemes: 6\n", "dist/troika.js"},
 		{games.Brain, "[scheme]\nkind: roundrobin\ngroup_size: 8\nquestions: 5\n", "dist/brain.js"},
 		{games.EK, "[scheme]\nkind: single_elimination\nparticipants: 8\nthemes: 6\n", "dist/ek.js"},
+		{games.Hamsa, "[scheme]\nkind: placement\nparticipants: 8\nmatch_size: 4\nrounds: 2\n", "dist/hamsa.js"},
 	} {
 		gameID := createSchemeGameFor(t, db, festID, c.gameType, c.gameType, c.dsl, ids)
 		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/fest/%d/game/%d/", festID, gameID), nil)

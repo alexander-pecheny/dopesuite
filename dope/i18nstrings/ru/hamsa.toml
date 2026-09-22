@@ -1,0 +1,63 @@
+# The Хамса screen (dope/dope/web/ts/hamsa.ts): the бой sheet with its five
+# game rounds, the общий зачёт table, the Жеребьёвка panel on the Сетка
+# (dope/dope/web/ts/fest-grid.ts) and the per-player statistics
+# (dope/dope/web/ts/hamsa-stats.ts).
+
+# The page title when neither the fest view nor the scheme names the game.
+title = "Хамса"
+
+[round]
+# The five раунды боя, as the регламент names them. The first four play темы;
+# the fifth is one вопрос on a ставка.
+light = "Светлый"
+half_dark = "Полутёмный"
+dark = "Тёмный"
+personal = "Персональный"
+team = "Командный"
+# A game round's header over its темы: its number and its name.
+head = 'Раунд {{.n}} · {{.name}}'
+# The same, where the round pays a multiple of the base номиналы.
+head_multiplied = 'Раунд {{.n}} · {{.name}} ×{{.multiplier}}'
+# The перестрелка's own column group — an extra Персональный раунд on a
+# reserve тема, played only where the блок allows it.
+shootout = "Перестрелка"
+
+[protocol]
+# The бой sheet.
+# A тема's own header: its number and what its вопросы are worth.
+theme = 'Тема {{.n}} · {{.values}}'
+# A перестрелка тема's header.
+shootout_theme = 'Тема · {{.values}}'
+# The ставка cell, and what a reader hears on it.
+bet = "Ставка"
+bet_title = '{{.team}}: ставка'
+# The answer to the Командный вопрос: the cell beside the ставка.
+bet_answer = "Ответ"
+# The tooltip of one answer cell: the team, the тема and the вопрос's номинал.
+answer_title = '{{.team}}, тема {{.theme}}, {{.value}}'
+# The «Закончен» checkbox in a бой's head.
+finished = "Закончен"
+# The Σ+ column, after the темы.
+plus = "Σ+"
+# A бой nobody has been seated in yet.
+unseated = "Мест ещё нет"
+# The placeholder of a seat the Structure has not filled.
+seat = 'Место {{.n}}'
+
+[table]
+# The Общий зачёт tab: a Block's own standings.
+place = "Место"
+team = "Команда"
+# The columns the Block ranks by, named as the регламент names them.
+place_sum = "Сумма мест"
+total = "Очки"
+first = "Первых мест"
+seed = "КСИ"
+bouts = "Игр"
+# A table the Ranker has not written yet.
+empty = "Таблица появится, когда сыграют первый бой."
+
+[draw]
+# The empty option of a seat's select, on the бой sheet and in the Жеребьёвка
+# panel alike.
+none = "—"

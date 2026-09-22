@@ -34,7 +34,7 @@ export interface EKPlayerStatsRow {
 // positive players' Σ); players with Σ <= 0 are 0 (see the share loop below).
 // Returns rows sorted by Σ descending (then Σ+, then name).
 export function computeEKPlayerStats(stages: EKStage[] | null | undefined): EKPlayerStatsRow[] {
-  const values = [10, 20, 30, 40, 50]; // answer index → nominal value
+  const values = EK_VALUES; // answer index → nominal value
   const players = new Map<string, EKPlayerStatsRow>();   // key → stat row
   const battleSeen = new Map<string, Set<string>>(); // key → Set of battle ids (for the matches count)
   for (const stage of stages || []) {
@@ -120,7 +120,7 @@ export interface IndividualStatsRow {
 // only, finished matches only — a seeded but unplayed match is not a match played —
 // sorted by Σ.
 export function computeIndividualPlayerStats(stages: EKStage[] | null | undefined): IndividualStatsRow[] {
-  const values = [10, 20, 30, 40, 50];
+  const values = EK_VALUES;
   const players = new Map<string, IndividualStatsRow>();
   for (const stage of stages || []) {
     for (const match of stage.matches || []) {
@@ -153,14 +153,24 @@ export function computeIndividualPlayerStats(stages: EKStage[] | null | undefine
   return rows;
 }
 
-// The EK nominals, high to low — the order the stats tables list them; the
-// stat rows count them by answer position, 10 first.
-const EK_VALUES = [50, 40, 30, 20, 10];
-const byNominal = (counts: number[]) => EK_VALUES.map((value) => counts[value / 10 - 1] || 0);
+// The EK nominals, low to high — the scale the stat rows count by position,
+// which the tables then list high to low. A format whose questions are worth
+// something else (Hamsa's 100..500, multiplied per round) passes its own.
+export const EK_VALUES = [10, 20, 30, 40, 50];
+
+// nominalOrder is the answer positions high value first — the order the stats
+// tables list their columns in.
+function nominalOrder(values: number[]): number[] {
+  return values.map((_, index) => values.length - 1 - index);
+}
+
+function byNominal(counts: number[], values: number[]): number[] {
+  return nominalOrder(values).map((index) => counts[index] || 0);
+}
 
 // buildIndividualStatsTable renders computeIndividualPlayerStats rows — the
 // source's stats columns: player, score, Σ+, matches, takens per value.
-export function buildIndividualStatsTable(rows: IndividualStatsRow[] | null | undefined): HTMLElement {
+export function buildIndividualStatsTable(rows: IndividualStatsRow[] | null | undefined, values: number[] = EK_VALUES): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "results-wrapper ek-stats-wrapper";
   if (!rows || rows.length === 0) {
@@ -177,9 +187,9 @@ export function buildIndividualStatsTable(rows: IndividualStatsRow[] | null | un
       {label: "Σ", kind: "num", className: "ek-stats-sum"},
       {label: "Σ+", kind: "num"},
       {label: S.ek.stats.battles(), kind: "num"},
-      ...EK_VALUES.map((value) => ({label: `+${value}`, kind: "num" as const, className: "narrow"})),
+      ...nominalOrder(values).map((index) => ({label: `+${values[index]}`, kind: "num" as const, className: "narrow"})),
     ],
-    rows: rows.map((row) => [row.player, row.sum, row.plus, row.battles, ...byNominal(row.right)]),
+    rows: rows.map((row) => [row.player, row.sum, row.plus, row.battles, ...byNominal(row.right, values)]),
   }));
   return wrapper;
 }
@@ -190,7 +200,7 @@ export function buildIndividualStatsTable(rows: IndividualStatsRow[] | null | un
 // plain positive count), and the team-share percentage. Counts are always
 // shown (including 0). Name cells reuse the results-team truncate+fade+popover
 // structure so long names behave like everywhere else. Shared host/viewer.
-export function buildEKStatsTable(rows: EKPlayerStatsRow[] | null | undefined): HTMLElement {
+export function buildEKStatsTable(rows: EKPlayerStatsRow[] | null | undefined, values: number[] = EK_VALUES): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "results-wrapper ek-stats-wrapper";
   if (!rows || rows.length === 0) {
@@ -209,8 +219,8 @@ export function buildEKStatsTable(rows: EKPlayerStatsRow[] | null | undefined): 
       {label: "Σ", kind: "num", className: "ek-stats-sum"},
       {label: "Σ+", kind: "num"},
       {label: S.ek.stats.battles(), kind: "num"},
-      ...EK_VALUES.map((value) => ({label: value, kind: "num" as const, className: "narrow"})),
-      ...EK_VALUES.map((value) => ({label: `-${value}`, kind: "num" as const, className: "narrow ek-stats-wrong"})),
+      ...nominalOrder(values).map((index) => ({label: values[index], kind: "num" as const, className: "narrow"})),
+      ...nominalOrder(values).map((index) => ({label: `-${values[index]}`, kind: "num" as const, className: "narrow ek-stats-wrong"})),
       {label: S.ek.stats.share(), kind: "num", className: "ek-stats-share"},
     ],
     rows: rows.map((row) => [
@@ -219,8 +229,8 @@ export function buildEKStatsTable(rows: EKPlayerStatsRow[] | null | undefined): 
       row.sum,
       row.plus,
       row.battles,
-      ...byNominal(row.right),
-      ...byNominal(row.wrong),
+      ...byNominal(row.right, values),
+      ...byNominal(row.wrong, values),
       `${Math.round(row.share * 100)}%`,
     ]),
   }));

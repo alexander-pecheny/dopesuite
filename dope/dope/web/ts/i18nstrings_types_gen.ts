@@ -297,6 +297,9 @@ export type Strings = {
     ek: {
       title: () => string;
     };
+    hamsa: {
+      title: () => string;
+    };
     multi: {
       title: () => string;
     };
@@ -398,6 +401,44 @@ export type Strings = {
       label: () => string;
     };
   };
+  hamsa: {
+    draw: {
+      none: () => string;
+    };
+    protocol: {
+      answerTitle: (team: string, theme: string, value: string) => string;
+      bet: () => string;
+      betAnswer: () => string;
+      betTitle: (team: string) => string;
+      finished: () => string;
+      plus: () => string;
+      seat: (n: string) => string;
+      shootoutTheme: (values: string) => string;
+      theme: (n: string, values: string) => string;
+      unseated: () => string;
+    };
+    round: {
+      dark: () => string;
+      halfDark: () => string;
+      head: (n: string, name: string) => string;
+      headMultiplied: (n: string, name: string, multiplier: string) => string;
+      light: () => string;
+      personal: () => string;
+      shootout: () => string;
+      team: () => string;
+    };
+    table: {
+      bouts: () => string;
+      empty: () => string;
+      first: () => string;
+      place: () => string;
+      placeSum: () => string;
+      seed: () => string;
+      team: () => string;
+      total: () => string;
+    };
+    title: () => string;
+  };
   host: {
     dash: {
       accessSavedNotice: () => string;
@@ -465,6 +506,8 @@ export type Strings = {
       errorSlugTaken: () => string;
       errorTitleRequired: () => string;
       errorTypeMissing: () => string;
+      hamsaHint: () => string;
+      hamsaScheme: (n: string) => string;
       minigamesHint: () => string;
       minigamesLabel: () => string;
       minigamesPlaceholder: () => string;
@@ -492,6 +535,7 @@ export type Strings = {
       troikaHint: () => string;
       typeBrain: () => string;
       typeEk: () => string;
+      typeHamsa: () => string;
       typeKsi: () => string;
       typeKsiStickers: () => string;
       typeLabel: () => string;

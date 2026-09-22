@@ -17,7 +17,7 @@ func TestRealPages(t *testing.T) {
 		Compile:   Compile,
 		PagesDir:  "../assets/ui",
 		StaticDir: "../assets/static",
-		Pages:     7,
+		Pages:     8,
 		Provided:  map[string][]byte{"login": kit.LoginPage("Вход · Фест", "/host")},
 		LoadBearing: map[string][]string{
 			"":       {"host-actions"},
@@ -28,6 +28,7 @@ func TestRealPages(t *testing.T) {
 			"brain":  {"game-host-top", "sheet-frame", "table-host"},
 			"multi":  {"game-host-top", "sheet-frame", "table-host"},
 			"troika": {"game-host-top", "sheet-frame", "table-host"},
+			"hamsa":  {"game-host-top", "sheet-frame", "table-host"},
 		},
 	}.Run(t)
 }

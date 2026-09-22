@@ -298,6 +298,9 @@ export const RU: Strings = {
     ek: {
       title: () => "ЭК · Фест",
     },
+    hamsa: {
+      title: () => "Ведущий · Хамса",
+    },
     multi: {
       title: () => "Ведущий · Мультиигры",
     },
@@ -399,6 +402,44 @@ export const RU: Strings = {
       label: () => "Тройка",
     },
   },
+  hamsa: {
+    draw: {
+      none: () => "—",
+    },
+    protocol: {
+      answerTitle: (team: string, theme: string, value: string) => `${team}, тема ${theme}, ${value}`,
+      bet: () => "Ставка",
+      betAnswer: () => "Ответ",
+      betTitle: (team: string) => `${team}: ставка`,
+      finished: () => "Закончен",
+      plus: () => "Σ+",
+      seat: (n: string) => `Место ${n}`,
+      shootoutTheme: (values: string) => `Тема · ${values}`,
+      theme: (n: string, values: string) => `Тема ${n} · ${values}`,
+      unseated: () => "Мест ещё нет",
+    },
+    round: {
+      dark: () => "Тёмный",
+      halfDark: () => "Полутёмный",
+      head: (n: string, name: string) => `Раунд ${n} · ${name}`,
+      headMultiplied: (n: string, name: string, multiplier: string) => `Раунд ${n} · ${name} ×${multiplier}`,
+      light: () => "Светлый",
+      personal: () => "Персональный",
+      shootout: () => "Перестрелка",
+      team: () => "Командный",
+    },
+    table: {
+      bouts: () => "Игр",
+      empty: () => "Таблица появится, когда сыграют первый бой.",
+      first: () => "Первых мест",
+      place: () => "Место",
+      placeSum: () => "Сумма мест",
+      seed: () => "КСИ",
+      team: () => "Команда",
+      total: () => "Очки",
+    },
+    title: () => "Хамса",
+  },
   host: {
     dash: {
       accessSavedNotice: () => "Доступ сохранён.",
@@ -466,6 +507,29 @@ export const RU: Strings = {
       errorSlugTaken: () => "Slug уже занят в этом фесте.",
       errorTitleRequired: () => "Название обязательно.",
       errorTypeMissing: () => "выберите тип игры",
+      hamsaHint: () => "Тот же язык схем. kind: placement — групповой этап, где команды не вылетают, а везут места дальше: раунд 1 сеет полосами посева, каждый следующий сажает за стол k места k всех столов, а остатки разыгрываются жребием на Сетке. Письменный отбор играется отдельной игрой КСИ; чтобы посеять отсюда, добавьте [init] seed: <код той игры>.",
+      hamsaScheme: (n: string) => `[defaults]
+venues: [А, Б, В]
+
+[scheme]
+title: Групповой этап
+kind: placement
+participants: ${n}
+match_size: 4
+rounds: 2
+title.r1: Игра №1
+title.r2: Игра №2
+proceeding_participants: 4
+sorting: [place_sum, total, first, seed]
+---
+title: Финал
+kind: flat
+participants: 4
+reseed: true
+stats_from: [s1]
+sorting: [place_sum, total, first, seed]
+shootout: true
+`,
       minigamesHint: () => "По строке на мини-игру: «Название: {значения}xN». {0,1} — задание на 0 или 1 балл, {-1,0,1} — со штрафом, {0-12} — любое целое от 0 до 12. Несколько описаний в строке идут подряд: «{0,3}x2 {0,5}» — три задания на 3, 3 и 5 баллов. «|» закрывает блок листа: «{0,1}x10 | {0,1}x10» — два блока по десять, с зазором и сквозной нумерацией.",
       minigamesLabel: () => "Мини-игры",
       minigamesPlaceholder: () => "Фоторяд: {0,1}x10\nЛогика: {0,3}x2 {0,5}\nШтрафной: {-1,0,1}x10\nПесни →0..100: {0,1}x72",
@@ -493,6 +557,7 @@ export const RU: Strings = {
       troikaHint: () => "Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50.",
       typeBrain: () => "Брейн",
       typeEk: () => "ЭК",
+      typeHamsa: () => "Хамса",
       typeKsi: () => "КСИ",
       typeKsiStickers: () => "КСИ со стикерами",
       typeLabel: () => "Тип игры",
