@@ -101,7 +101,7 @@ order by m.position, m.id`, stageID)
 // prints as the match's score, and that is not the same column in every game:
 // brain counts the questions a side took, everything else scores points.
 //
-// A Draw Slot also carries who may be seated in it. The Сетка's panel needs
+// A Draw Slot also carries who may be seated in it. The grid's panel needs
 // Participant ids to send back, and a match summary carries names alone, so
 // the candidates are resolved here rather than on the page.
 func LoadMatchSummaries(ctx context.Context, q Queryer, matchID int64, gameType string) ([]MatchParticipantSummary, error) {
@@ -159,7 +159,7 @@ order by ms.slot_index`, []any{matchID}, func(rows *sql.Rows) (MatchParticipantS
 }
 
 // LoadDrawCandidates resolves a Draw Slot's candidate places to whoever holds
-// them now. A place in a бой that is not finished resolves to nobody, so the
+// them now. A place in a Match that is not finished resolves to nobody, so the
 // panel offers a choice only once the Round it draws from is played out —
 // the same gate every other advancing seat waits on.
 func LoadDrawCandidates(ctx context.Context, q Queryer, gameID int64, draw *SchemeDraw) ([]DrawCandidateView, error) {

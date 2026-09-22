@@ -13,7 +13,7 @@ import (
 
 func init() { Register(placement{}) }
 
-// placement is Хамса's групповой этап: Rounds of multi-seat Matches where
+// placement is Hamsa's group stage: Rounds of multi-seat Matches where
 // nobody is eliminated and what is carried forward is the place each
 // Participant took.
 //
@@ -25,9 +25,9 @@ func init() { Register(placement{}) }
 // the host enters on the day, and until then those seats stand empty rather
 // than guessed (CONTEXT.md, «Draw»).
 //
-// The Block is one ranking scope, not one per Round: «главным критерием
-// является наименьшая сумма мест, занятых командами в обеих играх ГЭ». So it
-// emits a Round of Matches per Round and one table over all of them.
+// The Block is one ranking scope, not one per Round: the regulations rank on
+// the smallest sum of the places a team took over both Games of the stage. So
+// it emits a Round of Matches per Round and one table over all of them.
 type placement struct{}
 
 func (placement) Code() string { return "placement" }
@@ -37,7 +37,7 @@ func (placement) Keys() []Key {
 }
 
 // placementCanonOrder is what a Block ranks by when the scheme names nothing:
-// the сумма мест, then the points scored, then the first places taken.
+// the sum of places, then the points scored, then the first places taken.
 var placementCanonOrder = []string{"place_sum", "total", "first"}
 
 // Expand lays out the Block: `rounds` Rounds of `participants / match_size`
@@ -146,7 +146,7 @@ func (placement) Expand(b Block) (Outputs, error) {
 	}
 
 	// The Block's own table. It holds no Matches of its own — it ranks the
-	// Rounds together, which is the only ranking the регламент asks for — so it
+	// Rounds together, which is the only ranking the regulations ask for — so it
 	// names them as its sources, exactly as a reseed does.
 	tableCode := blockCode + "-total"
 	tableTitle := b.BlockRoundTitle(nil, s.Structure.Placement.Table())
@@ -222,10 +222,10 @@ func placementConf(cfg json.RawMessage) (PlacementConfig, error) {
 	return conf, nil
 }
 
-// Metrics: the сумма мест and the бои it was summed over, as every multi-seat
-// table counts them, plus the seed rank — «более высокое место, занятое
-// командой на этапе КСИ», the last comparator the регламент names and the one
-// thing no бой can measure.
+// Metrics: the sum of places and the Matches it was summed over, as every
+// multi-seat table counts them, plus the seed rank — the higher place a team
+// took in the KSI qualifier, the last comparator the regulations name and the
+// one thing no Match can measure.
 func (placement) Metrics() []string { return []string{"place_sum", "bouts", "seed"} }
 
 func (placement) Order(cfg json.RawMessage) []SortRule {

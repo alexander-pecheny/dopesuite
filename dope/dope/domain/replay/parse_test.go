@@ -393,3 +393,78 @@ func TestParseShootoutStrictness(t *testing.T) {
 		}
 	}
 }
+
+// A Хамса seat carries the Командный round's Ставка after its themes, and a
+// `жребий` line inside the бой draws one seat while the rest of the table
+// stays asserted.
+func TestParseHamsaBetAndDrawnSeat(t *testing.T) {
+	script, err := Parse(`[game]
+type: hamsa
+
+[roster]
+1 | А
+2 | Б
+
+[s1/r2/w1/m1]
+жребий Б
+А | ----R ----- ставка +300 | 800 | 1
+Б | ----- --R-- ставка -100 | 500 | 2
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bout := script.Bouts[0]
+	if len(bout.Drawn) != 1 || bout.Drawn[0] != "Б" {
+		t.Fatalf("жребий = %v", bout.Drawn)
+	}
+	if bout.Draw {
+		t.Error("одно место по жребию — это не жребий на весь стол")
+	}
+	if len(bout.Seats[0].Marks) != 2 {
+		t.Fatalf("темы = %d, ставка не должна читаться как тема", len(bout.Seats[0].Marks))
+	}
+	if bout.Seats[0].Bet == nil || *bout.Seats[0].Bet != 300 {
+		t.Fatalf("ставка А = %v", bout.Seats[0].Bet)
+	}
+	if bout.Seats[1].Bet == nil || *bout.Seats[1].Bet != -100 {
+		t.Fatalf("ставка Б = %v", bout.Seats[1].Bet)
+	}
+}
+
+// A lot that seated somebody who is not at the table is a typo, and a silent
+// one would leave the seat empty and blame the resolver.
+func TestParseRefusesADrawnSeatNobodyPlayed(t *testing.T) {
+	_, err := Parse(`[game]
+type: hamsa
+
+[roster]
+1 | А
+2 | Б
+
+[s1/r2/w1/m1]
+жребий В
+А | ----R | 500 | 1
+Б | ----- |   0 | 2
+`)
+	if err == nil {
+		t.Fatal("жребий назвал команду не из-за стола, и это прошло")
+	}
+}
+
+// A ставка in a game whose бой has no Командный round is a misread sheet.
+func TestParseRefusesABetWhereThereIsNone(t *testing.T) {
+	_, err := Parse(`[game]
+type: ek
+
+[roster]
+1 | А
+2 | Б
+
+[s1/r1/w1/m1]
+А | ----R ставка +300 | 500 | 1
+Б | ----- |   0 | 2
+`)
+	if err == nil {
+		t.Fatal("ставка в ЭК прошла")
+	}
+}

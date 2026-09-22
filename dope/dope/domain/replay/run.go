@@ -49,6 +49,13 @@ type StatsReader interface {
 	PlayerStats() ([]Stat, error)
 }
 
+// Drawer is the half of Game a transcript needs where a lot seats part of a
+// table: Hamsa draws the three fourth places of Game 1 into Game 2, and the
+// nine seats around them are the resolver's. Optional, like LineupWriter.
+type Drawer interface {
+	Draw(at Coord, names []string) error
+}
+
 // StandingsReader is the half of Game a transcript with [standings] (tablitsa) needs: the
 // table dope ranked for a Block, or a Group in it, as rows of the place it
 // shows (shared when level) and who holds it. Optional, like StatsReader.
@@ -68,6 +75,8 @@ type Play struct {
 	Counts    [][]int
 	// Shootout is the net shootout points, zero for a seat that played none.
 	Shootout int
+	// Bet is the team round's bet, signed; nil where there was none.
+	Bet *int
 }
 
 // Finding is one disagreement between the sheet and dope. It always shows both
@@ -139,6 +148,15 @@ func Run(script Script, game Game) ([]Finding, error) {
 		for i, seat := range bout.Seats {
 			names[i] = seat.Name
 		}
+		if len(bout.Drawn) > 0 {
+			drawer, ok := game.(Drawer)
+			if !ok {
+				return findings, corei18n.User(s.Replay.Run.DrawUnwritable())
+			}
+			if err := drawer.Draw(bout.At, bout.Drawn); err != nil {
+				return findings, corei18n.User(s.Replay.Run.SeatDrawWrap(fmt.Sprint(bout.At), err.Error()))
+			}
+		}
 		if bout.Draw {
 			if err := game.Seat(bout.At, names); err != nil {
 				return findings, corei18n.User(s.Replay.Run.SeatDrawWrap(fmt.Sprint(bout.At), err.Error()))
@@ -159,7 +177,7 @@ func Run(script Script, game Game) ([]Finding, error) {
 			}
 		}
 		for _, seat := range bout.Seats {
-			if err := game.Play(bout.At, seat.Name, Play{Themes: seat.Marks, Players: seat.Players, Questions: seat.Questions, Counts: seat.Counts, Shootout: seat.Shootout}); err != nil {
+			if err := game.Play(bout.At, seat.Name, Play{Themes: seat.Marks, Players: seat.Players, Questions: seat.Questions, Counts: seat.Counts, Shootout: seat.Shootout, Bet: seat.Bet}); err != nil {
 				return findings, corei18n.User(s.Replay.Run.PlayWrap(fmt.Sprint(bout.At), seat.Name, err.Error()))
 			}
 		}

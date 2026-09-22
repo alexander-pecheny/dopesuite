@@ -928,6 +928,9 @@ export const RU: Strings = {
       statWrong: () => "неверно",
     },
     parse: {
+      betExpected: (name: string) => `${name}: «ставка ±N» пишется после всех тем и последней`,
+      betNotHere: (name: string) => `${name}: в этой игре нет ставок`,
+      betNotNumber: (name: string, value: string) => `${name}: ставка «${value}» — жду ±N`,
       boutHeaderExtra: (rest: string) => `после координаты можно писать только «жребий», а не "${rest}"`,
       boutNoSeats: (at: string) => `бой ${at} без единого места — оборванная стенограмма прошла бы молча`,
       coordExpected: (raw: string) => `координата — это блок[/группа]/круг/заход/бой, например s1/r1/w1/m1 или s1/g3/r1/w1/m1, а не "${raw}"`,
@@ -936,6 +939,8 @@ export const RU: Strings = {
       coordTaken: (at: string, n: string) => `${at} уже есть на строке ${n} — на одной координате одна запись, иначе одна из них молча пропадёт`,
       countsDigit: (name: string, raw: string) => `у ${name} в теме "${raw}" — жду 0..3 или «.», сколько из троих ответили верно`,
       countsThemeSize: (name: string, n: string, raw: string) => `у ${name} тема из ${n} вопросов, а написано "${raw}"`,
+      drawnExpected: (text: string) => `жду «жребий Команда», а не «${text}»`,
+      drawnUnknown: (at: string, name: string) => `${at}: по жребию посажена ${name}, но её нет за столом`,
       entrantExpected: (raw: string) => `участник — «номер | название | город», а не "${raw}"`,
       entrantNoName: () => "участник без названия",
       entrantNumber: (raw: string) => `номер участника — целое от 1, а не "${raw}"`,
@@ -1009,6 +1014,7 @@ export const RU: Strings = {
     },
     run: {
       allAgreed: () => "здесь всё сошлось",
+      drawUnwritable: () => "эта игра не умеет жеребьёвку",
       fieldExtra: () => "лишний участник",
       fieldOutcome: () => "итог",
       fieldPlace: () => "место",

@@ -1156,6 +1156,13 @@ var RU = Strings{
 			StatWrong:    func() string { return "неверно" },
 		},
 		Parse: ReplayParseStrings{
+			BetExpected: func(name string) string {
+				return fmt.Sprintf("%s: «ставка ±N» пишется после всех тем и последней", name)
+			},
+			BetNotHere: func(name string) string { return fmt.Sprintf("%s: в этой игре нет ставок", name) },
+			BetNotNumber: func(name string, value string) string {
+				return fmt.Sprintf("%s: ставка «%s» — жду ±N", name, value)
+			},
 			BoutHeaderExtra: func(rest string) string {
 				return fmt.Sprintf("после координаты можно писать только «жребий», а не \"%s\"", rest)
 			},
@@ -1175,6 +1182,12 @@ var RU = Strings{
 			},
 			CountsThemeSize: func(name string, n string, raw string) string {
 				return fmt.Sprintf("у %s тема из %s вопросов, а написано \"%s\"", name, n, raw)
+			},
+			DrawnExpected: func(text string) string {
+				return fmt.Sprintf("жду «жребий Команда», а не «%s»", text)
+			},
+			DrawnUnknown: func(at string, name string) string {
+				return fmt.Sprintf("%s: по жребию посажена %s, но её нет за столом", at, name)
 			},
 			EntrantExpected: func(raw string) string {
 				return fmt.Sprintf("участник — «номер | название | город», а не \"%s\"", raw)
@@ -1342,14 +1355,15 @@ var RU = Strings{
 			WhoAll: func() string { return "весь бой" },
 		},
 		Run: ReplayRunStrings{
-			AllAgreed:     func() string { return "здесь всё сошлось" },
-			FieldExtra:    func() string { return "лишний участник" },
-			FieldOutcome:  func() string { return "итог" },
-			FieldPlace:    func() string { return "место" },
-			FieldSeating:  func() string { return "посадка" },
-			FieldStats:    func() string { return "статистика" },
-			FieldTable:    func() string { return "таблица" },
-			FieldUnneeded: func() string { return "лишнее расхождение" },
+			AllAgreed:      func() string { return "здесь всё сошлось" },
+			DrawUnwritable: func() string { return "эта игра не умеет жеребьёвку" },
+			FieldExtra:     func() string { return "лишний участник" },
+			FieldOutcome:   func() string { return "итог" },
+			FieldPlace:     func() string { return "место" },
+			FieldSeating:   func() string { return "посадка" },
+			FieldStats:     func() string { return "статистика" },
+			FieldTable:     func() string { return "таблица" },
+			FieldUnneeded:  func() string { return "лишнее расхождение" },
 			Finding: func(at string, who string, field string, sheet string, ours string) string {
 				return fmt.Sprintf("%s%s: %s — лист %s, у нас %s", at, who, field, sheet, ours)
 			},

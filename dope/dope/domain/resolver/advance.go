@@ -141,7 +141,7 @@ func contenders(src Sources, cfg store.StageConfig) (_ []structure.Contender, ok
 
 // stagePlayedOut reports whether every Match a ranked stage ranks is finished.
 // That is its own Matches, or — for a Kind whose table spans several stages,
-// as Хамса's групповой этап does — the stages its config names, since a table
+// as Hamsa's group stage does — the stages its config names, since a table
 // with no Matches of its own would otherwise read as played out on day one.
 func (d dbSources) stagePlayedOut(stageID int64) (bool, error) {
 	var config string

@@ -319,8 +319,8 @@ func (s *server) scopedReseed(w http.ResponseWriter, r *http.Request, sc route.S
 	return route.JSONBytes(w, data)
 }
 
-// scopedDraw seats a Draw Slot: Хамса's три четвёртых места are drawn by lot
-// before Игра №2, and until the host enters the draw those seats stand empty.
+// scopedDraw seats a Draw Slot: Hamsa's three fourth places are drawn by lot
+// before Game 2, and until the host enters the draw those seats stand empty.
 func (s *server) scopedDraw(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	var req struct {
 		Slot        string `json:"slot"`

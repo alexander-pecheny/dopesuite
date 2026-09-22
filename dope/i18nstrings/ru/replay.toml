@@ -135,10 +135,22 @@ question_mark = 'вопрос у {{.name}} начинается с R, W или -
 # A брейн seat whose question list is empty.
 question_none = 'у {{.name}} нет ни одного вопроса'
 
+# A `жребий` line inside a бой with no team named after it.
+drawn_expected = 'жду «жребий Команда», а не «{{.text}}»'
+# A `жребий` line naming somebody who is not at that table.
+drawn_unknown = '{{.at}}: по жребию посажена {{.name}}, но её нет за столом'
+# A `ставка ±N` token that is not the last thing in the grid.
+bet_expected = '{{.name}}: «ставка ±N» пишется после всех тем и последней'
+# A ставка whose amount is not a non-zero number.
+bet_not_number = '{{.name}}: ставка «{{.value}}» — жду ±N'
+# A ставка in a game whose бой has no Командный round.
+bet_not_here = '{{.name}}: в этой игре нет ставок'
 [run]
 # One disagreement as the host reads it: the coordinate, the field, and both
 # sides — what the sheet claims and what dope computed.
 finding = '{{.at}}{{.who}}: {{.field}} — лист {{.sheet}}, у нас {{.ours}}'
+# A transcript with a `жребий` line played against a Game that cannot take one.
+draw_unwritable = "эта игра не умеет жеребьёвку"
 # A transcript with [составы] against a Game that cannot register lineups.
 lineups_unwritable = "в стенограмме есть составы, а игра не умеет их записывать"
 # Wrapper for an error returned while writing the lineups.

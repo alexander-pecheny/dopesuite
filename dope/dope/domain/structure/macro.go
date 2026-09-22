@@ -85,7 +85,7 @@ type Stage struct {
 	Config                  any
 	Matches                 []store.SchemeMatch
 	// Sources are the stages a Kind ranks over when its ranking scope is wider
-	// than its own Matches — Хамса's групповой этап ranks both its Игры
+	// than its own Matches — Hamsa's group stage ranks both its Games
 	// together, so its table holds no Matches and names them instead.
 	Sources []string
 	Waves   bool

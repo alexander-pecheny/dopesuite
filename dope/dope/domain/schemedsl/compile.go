@@ -819,8 +819,8 @@ func (c *compiler) expandBlock(index int) error {
 	}
 	var emitted []string
 	for _, stage := range c.scheme.Stages[firstStage:] {
-		// A stage with no бои of its own — a Block's own table, which ranks the
-		// Rounds beside it — contributes nothing to a reseed's statistics.
+		// A stage with no Matches of its own — a Block's own table, which ranks
+		// the Rounds beside it — contributes nothing to a reseed's statistics.
 		if stage.StageType == "matches" && len(stage.Matches) > 0 {
 			emitted = append(emitted, stage.Code)
 		}

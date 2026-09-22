@@ -9,51 +9,52 @@ import (
 
 // Hamsa pure domain logic.
 //
-// A бой is five game rounds. The first four play темы of five вопросы each —
-// five темы in rounds 1..3 and a single тема in round 4 — and each round
-// multiplies the base номиналы (×1, ×2, ×3, ×4). The fifth round is one
-// вопрос played on a Ставка: a secret bet the team writes down, added to its
-// score when it answers and subtracted when it does not. A тема also records
-// which of the team's six played it, because who sat for a тема is the whole
-// of what the regulations ask a captain to decide.
+// A bout is five game rounds. The first four play themes of five questions
+// each — five themes in rounds 1..3 and a single theme in round 4 — and each
+// round multiplies the base nominal values (x1, x2, x3, x4). The fifth round
+// is one question played on a bet: a secret sum the team writes down, added to
+// its score when it answers and subtracted when it does not. A theme also
+// records which of the team's six played it, because who sat for a theme is
+// the whole of what the regulations ask a captain to decide.
 //
 // The document is keyed by Participant id, as EK's blob is, so a re-seat can
-// never move one team's marks onto another. What a вопрос was worth is written
-// into the document when the бой is built: it is a fact about the бой that
-// played it, not about the scheme as it stands today.
+// never move one team's marks onto another. What a question was worth is
+// written into the document when the bout is built: it is a fact about the
+// bout that played it, not about the scheme as it stands today.
 
 const (
-	// HamsaQuestions is a тема's вопросы, one per номинал.
+	// HamsaQuestions is a theme's questions, one per nominal value.
 	HamsaQuestions = 5
-	// HamsaBetRight and HamsaBetWrong are the two answers a Ставка can take;
+	// HamsaBetRight and HamsaBetWrong are the two answers a bet can take;
 	// an empty answer is a round nobody has played yet.
 	HamsaBetRight = "right"
 	HamsaBetWrong = "wrong"
 )
 
-// The shape of a бой when the scheme says nothing: three rounds of five темы,
-// a fourth of one, the base номиналы, and the multiplier each round pays at.
+// The shape of a bout when the scheme says nothing: three rounds of five
+// themes, a fourth of one, the base nominal values, and the multiplier each
+// round pays at.
 var (
 	HamsaThemes      = []int{5, 5, 5, 1}
 	HamsaMultipliers = []int{1, 2, 3, 4}
 	HamsaValues      = []int{100, 200, 300, 400, 500}
 )
 
-// HamsaGameRound is one game round as the document records it: how many темы
-// it played and what each of a тема's five вопросы was worth.
+// HamsaGameRound is one game round as the document records it: how many themes
+// it played and what each of a theme's five questions was worth.
 type HamsaGameRound struct {
 	Themes int   `json:"themes"`
 	Values []int `json:"values"`
 }
 
-// HamsaTheme is one тема on one team: who played it and the five marks —
-// "right", "wrong" or "" for a вопрос nobody answered.
+// HamsaTheme is one theme on one team: who played it and the five marks —
+// "right", "wrong" or "" for a question nobody answered.
 type HamsaTheme struct {
 	Player  int64    `json:"player,omitempty"`
 	Answers []string `json:"answers,omitempty"`
 }
 
-// HamsaBet is the Командный round: the points a team wrote down and whether
+// HamsaBet is the team round: the points a team wrote down and whether
 // the answer was accepted. The amount is stored exactly as the host typed it —
 // the regulations cap it at the team's balance, and dope records rather than
 // polices (docs/hamsa-plan.md, decision 5).
@@ -62,9 +63,9 @@ type HamsaBet struct {
 	Answer string `json:"answer,omitempty"`
 }
 
-// HamsaParticipant is one team's side of the document: its темы in game-round
-// order, its Ставка, the перестрелка темы a Блок that allows them may add, and
-// the host's Pin.
+// HamsaParticipant is one team's side of the document: its themes in
+// game-round order, its bet, the shootout themes a Block that allows them may
+// add, and the host's Pin.
 type HamsaParticipant struct {
 	Themes   []HamsaTheme `json:"themes,omitempty"`
 	Bet      *HamsaBet    `json:"bet,omitempty"`
@@ -78,9 +79,9 @@ type HamsaState struct {
 	Participants map[string]*HamsaParticipant `json:"participants,omitempty"`
 }
 
-// HamsaGameRounds resolves a бой's game rounds from its stage config: how many
-// темы each round plays, what the base номиналы are, and the multiplier each
-// round pays at. A list the scheme left short is padded from the defaults, so
+// HamsaGameRounds resolves a bout's game rounds from its stage config: how
+// many themes each round plays, what the base nominal values are, and the
+// multiplier each round pays at. A list the scheme left short is padded from the defaults, so
 // `multipliers: [1, 2]` still describes four rounds.
 func HamsaGameRounds(themes, multipliers, values []int) []HamsaGameRound {
 	base := make([]int, HamsaQuestions)
@@ -122,7 +123,7 @@ func HamsaGameRounds(themes, multipliers, values []int) []HamsaGameRound {
 	return rounds
 }
 
-// HamsaThemeCount is how many темы a бой of these rounds plays in all.
+// HamsaThemeCount is how many themes a bout of these rounds plays in all.
 func HamsaThemeCount(rounds []HamsaGameRound) int {
 	total := 0
 	for _, round := range rounds {
@@ -131,8 +132,8 @@ func HamsaThemeCount(rounds []HamsaGameRound) int {
 	return total
 }
 
-// HamsaBaseValues is the scale the per-номинал counts are named after: what a
-// вопрос is worth in the first game round, which is the base номинал itself.
+// HamsaBaseValues is the scale the per-value counts are named after: what a
+// question is worth in the first game round, which is the base value itself.
 func HamsaBaseValues(rounds []HamsaGameRound) []int {
 	if len(rounds) > 0 && len(rounds[0].Values) == HamsaQuestions {
 		return rounds[0].Values
@@ -140,8 +141,8 @@ func HamsaBaseValues(rounds []HamsaGameRound) []int {
 	return HamsaValues
 }
 
-// HamsaShootoutValues is what a перестрелка тема's вопросы are worth: the last
-// game round's номиналы, since the tiebreak is another Персональный round.
+// HamsaShootoutValues is what a shootout theme's questions are worth: the last
+// game round's values, since the tiebreak is another personal round.
 func HamsaShootoutValues(rounds []HamsaGameRound) []int {
 	if len(rounds) > 0 {
 		return rounds[len(rounds)-1].Values
@@ -149,15 +150,15 @@ func HamsaShootoutValues(rounds []HamsaGameRound) []int {
 	return HamsaValues
 }
 
-// HamsaEmptyStateJSON is the pristine document of one бой: the rounds it
-// plays, and no participants — a бой's seats come from its Slots and its marks
+// HamsaEmptyStateJSON is the pristine document of one bout: the rounds it
+// plays, and no participants — a bout's seats come from its Slots and its marks
 // arrive as edits, so nothing is written for a team that has not played yet.
 func HamsaEmptyStateJSON(rounds []HamsaGameRound) []byte {
 	return []byte(mustJSON(HamsaState{Rounds: rounds}))
 }
 
 // HamsaStateStarted reports whether a host has entered anything — a mark, a
-// player, a Ставка or a Pin. A started бой is one a scheme recompile must not
+// player, a bet or a Pin. A started bout is one a scheme recompile must not
 // reseat.
 func HamsaStateStarted(stateJSON string) bool {
 	state, err := ParseHamsaState(stateJSON)
@@ -190,7 +191,7 @@ func HamsaStateStarted(stateJSON string) bool {
 	return false
 }
 
-// ParseHamsaState decodes a бой's document; the empty string is the pristine one.
+// ParseHamsaState decodes a bout's document; the empty string is the pristine one.
 func ParseHamsaState(stateJSON string) (HamsaState, error) {
 	var state HamsaState
 	if stateJSON == "" {
@@ -202,35 +203,36 @@ func ParseHamsaState(stateJSON string) (HamsaState, error) {
 	return state, nil
 }
 
-// HamsaResult is one team's computed outcome of a бой.
+// HamsaResult is one team's computed outcome of a bout.
 type HamsaResult struct {
 	Participant int64
-	// Total is the whole score: the темы plus or minus the Ставка.
+	// Total is the whole score: the themes plus or minus the bet.
 	Total int
-	// Plus is what the темы paid without their penalties — Σ+ as EK counts it.
-	// The Ставка stays out: it measures a gamble, not what the team took.
+	// Plus is what the themes paid without their penalties — the plus column as
+	// EK counts it. The bet stays out: it measures a gamble, not what the team
+	// took.
 	Plus int
-	// Bet is the Ставка's signed contribution to Total.
+	// Bet is the bet's signed contribution to Total.
 	Bet int
-	// ShootoutTotal is the перестрелка темы, held outside Total and ranked on
+	// ShootoutTotal is the shootout themes, held outside Total and ranked on
 	// after it.
 	ShootoutTotal int
-	// First is 1 for every team nobody finished ahead of — «первое место» as
-	// the regulations count them, a shared top place counting for each team
-	// that shares it.
+	// First is 1 for every team nobody finished ahead of — a first place as the
+	// regulations count them, a shared top place counting for each team that
+	// shares it.
 	First float64
-	// Place is what the бой came to, the host's Pin standing instead of the
+	// Place is what the bout came to, the host's Pin standing instead of the
 	// computed place where there is one.
 	Place   float64
 	Pin     float64
 	Pinned  bool
-	Correct map[int]int // base номинал → вопросы taken at it
-	Wrong   map[int]int // base номинал → вопросы lost at it
+	Correct map[int]int // base value → questions taken at it
+	Wrong   map[int]int // base value → questions lost at it
 }
 
-// hamsaValues is the номиналы of the тема at index i, walking the rounds in
-// order. A тема past the rounds the document declares falls back to the last
-// round's номиналы, so a бой built before the scheme grew a тема still scores.
+// hamsaValues is the values of the theme at index i, walking the rounds in
+// order. A theme past the rounds the document declares falls back to the last
+// round's values, so a bout built before the scheme grew a theme still scores.
 func hamsaValues(rounds []HamsaGameRound, theme int) []int {
 	seen := 0
 	for _, round := range rounds {
@@ -245,7 +247,7 @@ func hamsaValues(rounds []HamsaGameRound, theme int) []int {
 	return HamsaValues
 }
 
-// ComputeHamsaResults scores a бой. Seats are the Participants sitting at it,
+// ComputeHamsaResults scores a bout. Seats are the Participants sitting at it,
 // in slot order: a team that entered nothing still took a place, so the seats
 // decide the rows rather than the document does. With no seats given — a unit
 // test, an export — the document's own teams are scored, lowest id first.
@@ -336,19 +338,20 @@ func hamsaDocumentSeats(state HamsaState) []int64 {
 	return ids
 }
 
-// hamsaPlaces ranks a бой by total, then by the перестрелка, then by Σ+.
-// Teams level on all three share the mean of the places they cover — «команды,
-// набравшие равное количество игровых очков, считаются разделившими
-// соответствующие места» — and a host's Pin stands instead of the place it
-// computed. First is then read off the places: every team nobody finished
-// ahead of took a первое место.
+// hamsaPlaces ranks a bout by total, and then by the shootout alone. Teams
+// level on the score share the places they cover, and nothing else splits
+// them: the only tiebreak the regulations give a bout is an extra personal
+// round, and that is the shootout. The plus column is measured all the same —
+// a Block's own table may rank on it — but it decides no place here. A host's
+// Pin stands instead of the place computed. First is then read off the places:
+// every team nobody finished ahead of took a first place.
 func hamsaPlaces(results []HamsaResult) {
 	order := make([]int, 0, len(results))
 	for i := range results {
 		order = append(order, i)
 	}
-	key := func(i int) [3]int {
-		return [3]int{results[i].Total, results[i].ShootoutTotal, results[i].Plus}
+	key := func(i int) [2]int {
+		return [2]int{results[i].Total, results[i].ShootoutTotal}
 	}
 	sort.SliceStable(order, func(a, b int) bool {
 		ka, kb := key(order[a]), key(order[b])

@@ -247,7 +247,8 @@ func (s *server) loadMatchViews(ctx context.Context, scope festScope, stageCode 
 }
 
 // applyScopedDraw writes one Draw and answers the same three things a reseed
-// calculation does: the fest view, the бои whose seats moved, and the revision.
+// calculation does: the fest view, the Matches whose seats moved, and the
+// revision.
 func (s *server) applyScopedDraw(ctx context.Context, scope festScope, code string, participant int64) ([]byte, []store.MatchView, int64, error) {
 	return s.writeAndReloadFest(ctx, scope, "draw", "draw:set", map[string]any{
 		"gameID":      scope.GameID,
@@ -268,8 +269,8 @@ func (s *server) calculateScopedReseed(ctx context.Context, scope festScope, sta
 }
 
 // writeAndReloadFest runs one structural write in its own transaction and
-// reloads what every caller of it needs afterwards: the fest view, the бои
-// whose seats the write moved, and the revision it bumped.
+// reloads what every caller of it needs afterwards: the fest view, the
+// Matches whose seats the write moved, and the revision it bumped.
 func (s *server) writeAndReloadFest(ctx context.Context, scope festScope, label, event string, payload map[string]any, write func(context.Context, *sql.Tx) ([]int64, error)) ([]byte, []store.MatchView, int64, error) {
 	txCtx, cancel := festwrite.AuditDetachedContext(ctx, scope.FestID)
 	defer cancel()

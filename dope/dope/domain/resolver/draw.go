@@ -10,8 +10,8 @@ import (
 	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
-// The Draw a host makes in the middle of a Game: Хамса seats the three
-// fourth-place teams of Игра №1 by a blind draw before Игра №2. The Slot is
+// The Draw a host makes in the middle of a Game: Hamsa seats the three
+// fourth-place teams of Game 1 by a blind draw before Game 2. The Slot is
 // declared as drawn by the Kind, the resolver never fills it, and the host's
 // choice is written straight onto the Slot — that is the whole distinction
 // between a Draw and a derived seating (CONTEXT.md, «Draw»).
@@ -68,7 +68,7 @@ func SetDrawTx(ctx context.Context, tx *sql.Tx, gameID int64, code string, parti
 	if slot.occupant == participant {
 		return nil, nil
 	}
-	// A бой whose seats changed is reopened, exactly as a resolved seat does
+	// A Match whose seats changed is reopened, exactly as a resolved seat does
 	// it, so its standings are reviewed rather than left over from whoever sat
 	// there before.
 	if slot.occupant != 0 {

@@ -10,10 +10,10 @@ import (
 
 func init() { Register(hamsa{}) }
 
-// hamsa wraps games.ComputeHamsaResults. A бой's shape — how many темы each
-// game round plays, what a вопрос is worth there, whether the Блок allows a
-// перестрелка — comes from its stage config at build time and is recorded in
-// the document, because what a вопрос paid is a fact about the бой that played
+// hamsa wraps games.ComputeHamsaResults. A bout's shape — how many themes each
+// game round plays, what a question is worth there, whether the Block allows a
+// shootout — comes from its stage config at build time and is recorded in the
+// document, because what a question paid is a fact about the bout that played
 // it.
 type hamsa struct{}
 
@@ -30,7 +30,7 @@ func (hamsa) Params() []Param {
 
 func (hamsa) TeamBlob() bool { return false }
 
-// A тема records the player who sat for it, so a бой's seats carry their rosters.
+// A theme records the player who sat for it, so a bout's seats carry rosters.
 func (hamsa) SeatsPlayers() bool { return true }
 
 func (hamsa) Started(state json.RawMessage) bool { return games.HamsaStateStarted(string(state)) }
@@ -54,9 +54,9 @@ func readHamsaConfig(cfg json.RawMessage) (hamsaConfig, error) {
 	return conf, nil
 }
 
-// Metrics: the score, Σ+, the перестрелка, the first places a бой hands out,
-// and how many вопросы each номинал was taken and lost at — the columns the
-// regulations' tiebreaks and the statistics tab are written in.
+// Metrics: the score, the plus column, the shootout, the first places a bout
+// hands out, and how many questions each value was taken and lost at — the
+// columns the regulations' tiebreaks and the statistics tab are written in.
 func (hamsa) Metrics(cfg json.RawMessage) []string {
 	conf, err := readHamsaConfig(cfg)
 	if err != nil {
@@ -69,8 +69,8 @@ func (hamsa) Metrics(cfg json.RawMessage) []string {
 	return names
 }
 
-// EmptyState writes the effective per-тема номиналы into the document and
-// nothing else: a бой's seats come from its Slots and its marks arrive as
+// EmptyState writes the effective per-theme values into the document and
+// nothing else: a bout's seats come from its Slots and its marks arrive as
 // edits.
 func (hamsa) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 	conf, err := readHamsaConfig(cfg)
@@ -84,7 +84,7 @@ func (hamsa) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, err
 	return hamsa{}.ScoreSeated(cfg, stateJSON, nil)
 }
 
-// ScoreSeated scores the бой's seats, in slot order: the document is keyed by
+// ScoreSeated scores the bout's seats, in slot order: the document is keyed by
 // Participant, so the scorer hands over who is sitting there.
 func (hamsa) ScoreSeated(_ json.RawMessage, stateJSON json.RawMessage, seats []int64) ([]structure.SlotOutcome, error) {
 	results, err := games.ComputeHamsaResults(string(stateJSON), seats)

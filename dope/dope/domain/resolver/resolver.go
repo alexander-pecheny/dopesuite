@@ -176,7 +176,7 @@ func isRankedKind(kind string) bool {
 
 // recomputeKindStandingsTx ranks a kind stage from its matches' current
 // results and replaces its stage_standings rows. A Kind whose ranking scope is
-// wider than one stage — Хамса's групповой этап ranks both its Игры together —
+// wider than one stage — Hamsa's group stage ranks both its Games together —
 // holds no Matches of its own and names the stages it sums over, exactly as a
 // reseed does.
 func recomputeKindStandingsTx(ctx context.Context, tx *sql.Tx, stage resolverStage, gameID int64) error {

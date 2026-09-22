@@ -72,9 +72,9 @@ type Inputs struct {
 	Seed       string
 	Contenders []Contender
 	// Seeds is each Participant's seed rank in the Game — the number the seed
-	// import dealt it, which for Хамса is its place in the КСИ отбор. It is a
-	// comparator a scheme may name (`sorting: [..., seed]`) and the one thing
-	// no бой can measure.
+	// import dealt it, which for Hamsa is its place in the KSI qualifier. It is
+	// a comparator a scheme may name (`sorting: [..., seed]`) and the one thing
+	// no Match can measure.
 	Seeds map[int64]float64
 }
 
@@ -140,7 +140,7 @@ type ReseedConfig struct {
 	Sort []SortRule `json:"sort,omitempty"`
 }
 
-// PlacementConfig is Хамса's групповой этап as its table reads it back: the
+// PlacementConfig is Hamsa's group stage as its table reads it back: the
 // seats a Match holds, the comparators the Block ranks by, and its scoring
 // rules.
 type PlacementConfig struct {

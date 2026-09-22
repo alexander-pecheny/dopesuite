@@ -90,7 +90,7 @@ every other Protocol answers in slot order as before. The outcome carries its
   ranker, it is «количество первых мест».
 - `correct_<v>` / `wrong_<v>` per base value (for stats and the xlsx).
 - Places are **computed**, ties share the mean place (`si.go`'s `placesBySum`
-  is the precedent), by `total`, then `shootoutTotal`, then `plus`; a host
+  is the precedent), by `total`, then `shootoutTotal`; a host
   Pin still wins. `Started` is real: any mark, bet or player set.
 
 **Built**, where the plan left a choice:
@@ -105,6 +105,12 @@ every other Protocol answers in slot order as before. The outcome carries its
   round counts as a 300.
 - A перестрелка тема's вопросы are worth the **last** game round's номиналы —
   the tiebreak is another Персональный round.
+- **Σ+ does not split a place.** The plan had `total`, then `shootoutTotal`,
+  then `plus`; the регламент has «команды, набравшие равное количество игровых
+  очков по итогам конкретного боя, считаются разделившими соответствующие
+  места», and the only tiebreak it gives a бой is the extra Персональный round,
+  which is the перестрелка. Σ+ is measured all the same — a Block's table may
+  rank on it — but it decides no place inside a бой.
 - A Pin is applied after the places are computed, exactly as `si.go` does it,
   so the seats around a pinned one keep the places the marks gave them.
 
@@ -269,13 +275,30 @@ Files, mirroring Тройка (commit `73f98ea1` is the checklist):
   game-round Σ, ставка, П, Σ, место. `export/gameexport` JSON as for the others.
 - `domain/replay/codec.go`: a `hamsa` entry; `parse.go` seat form gains an
   optional `ставка ±N` token after the 16 theme groups. Transcript
-  `testdata/hamsa2026/hamsa.txt` with 12 invented teams: КСИ отбор as its own
-  `[game]` (or a pre-seeded roster if the harness cannot chain games —
-  check `studchr_test.go`), Игра №1, the Draw tagged `жребий` on Игра №2's
-  fourth seats, Игра №2, `[таблица s1]`, the Финал with a перестрелка, final
-  `[таблица s2]`. Expected standings worked out by hand in the file, so the
-  replay is an oracle. Wire into `studchr_test.go` (direct transport on
-  `just test`, HTTP twin on `just test-full`).
+  `testdata/hamsa2026/hamsa.transcript` with 12 invented teams: Игра №1, the
+  Draw on Игра №2's fourth seats, Игра №2, `[таблица s1]`, the Финал with a
+  перестрелка, final `[таблица s2]`. Expected standings worked out by hand in
+  the file, so the replay is an oracle. Direct transport on `just test`, HTTP
+  twin on `just test-full`.
+
+  **Built**, where the plan left a choice:
+
+  - A transcript describes **one Game**, not a chain of them, so the КСИ отбор
+    is not in the file: the roster order is the seed it produced. The fest the
+    test builds still creates a КСИ Game, because `[init] seed: ksi-1` names it.
+  - `жребий` on a бой header already means «the whole table was set by a
+    person», and Игра №2 has three derived seats beside the drawn one — so a
+    `жребий Команда` **line inside** the бой draws one seat and leaves the rest
+    asserted. `replay.Drawer` is the seam; the driver presses the same endpoint
+    the Сетка's panel does.
+  - The codec says where a перестрелка's themes sit (`shootout`) and what they
+    are worth (the last game round's номиналы), so the driver stayed free of
+    game names.
+  - No `[статистика]`: the Статистика tab reads the players a team fielded, and
+    an invented sheet asserting invented aggregates would be a tautology. The
+    `[составы]` check at the door already holds every named player to his team.
+  - A Block may now hold its own table and the пересев feeding the next Block,
+    so `[таблица s2]` reads the Block's own and leaves the пересев out.
 - `domain/fixture`: `data/hamsa.dsl` and a `hamsaDocument` in `play.go` so
   `seed-fixture`, the gallery and `just matrix` cover the page. Bless new
   goldens with `just matrix --bless` and commit them.

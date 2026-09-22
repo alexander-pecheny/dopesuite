@@ -191,9 +191,9 @@ type MatchParticipantSummary struct {
 	Draw *DrawSlotView `json:"draw,omitempty"`
 }
 
-// DrawSlotView is a Draw Slot as the Сетка's panel reads it: the slot's own
-// code, the Participants it may be filled from — empty until every source бой
-// is finished — and the one sitting in it now.
+// DrawSlotView is a Draw Slot as the grid's panel reads it: the slot's own
+// code, the Participants it may be filled from — empty until every source
+// Match is finished — and the one sitting in it now.
 type DrawSlotView struct {
 	Code       string              `json:"code"`
 	Seated     int64               `json:"seated,omitempty"`

@@ -71,7 +71,10 @@ the бой coordinate, because an aggregate holds the whole game.
 ## Таблица
 
 `[таблица s1/g3]` is the sheet's standings of one Group — or of a Block,
-`[таблица s1]`, where the Block has one table: a flat отбор, a пересев — one
+`[таблица s1]`, where the Block has one table: a flat отбор, a пересев, a
+Хамса групповой этап. A Block that holds both its own table and the пересев
+feeding the next one is read as its own: the пересев is a rule on an Edge, and
+the table the sheet prints is the Block's. One
 `место | участник` line per row, asserted after the last бой the way
 статистика is: dope ranks the Block itself and has to agree, both ways. The
 место is the one the sheet printed, or the row where it printed none — so a
@@ -101,13 +104,24 @@ no-show. That seating is input, and the replayer writes it into the Edges before
 play. Without `жребий` the seating is the resolver's, and the replayer asserts it
 seated exactly these participants.
 
+A `жребий Команда` **line inside** the бой draws one seat instead of the whole
+table: Хамса seats nine of its twelve by place and draws the three fourth
+places into Игра №2, so the other three seats of each table are still asserted.
+The Kind declares which seats are drawn; the line only says who goes into them,
+in order, and the server refuses anyone the seat may not take.
+
 Then one line per seat: `who | marks | Σ | место`, with an optional fifth
-field in ЭК naming who played each theme — comma-separated, aligned with the
+field in ЭК and Хамса naming who played each theme — comma-separated, aligned with the
 marks, `-` where the sheet named nobody. Each named player must be in his
 team's `[составы]`.
 
 - **marks** — five characters per theme, themes separated by spaces. `R` taken,
   `W` lost, `-` never played. `---R-` is «взял сороковку».
+- **ставка ±N** closes a Хамса seat's grid, after its sixteen themes: the
+  Командный round has no номинал, so what the sheet records is the bet itself
+  and whether it was won. A seat with no `ставка` played none, which is what
+  happens to a team on a zero balance. It is input, like a перестрелка, and the
+  Σ beside it is still asserted.
 - **counts** — Троечка's form: one digit per вопрос, вопросы grouped by тема,
   `.` for a вопрос nobody took. `131 ..1` is «первый вопрос взял один, второй
   все трое, третий один; в следующей теме только третий». All three players

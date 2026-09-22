@@ -14,6 +14,7 @@ import (
 	"dope/dope/domain/replay"
 	"dope/dope/domain/resolver"
 	dopeserver "dope/dope/server"
+	"dope/dope/storage/store"
 	"dope/dope/web/editbatch"
 )
 
@@ -43,6 +44,7 @@ type transport interface {
 	patch(matchID int64, code string, ops []map[string]any) error
 	finish(matchID int64, code string) error
 	reseeds() error
+	draw(slot string, participantID int64) error
 }
 
 type httpTransport struct{ g *serverGame }
@@ -91,6 +93,17 @@ func (h httpTransport) reseeds() error {
 	return nil
 }
 
+func (h httpTransport) draw(slot string, participantID int64) error {
+	g := h.g
+	resp := scopedAPIRequest(g.t, g.srv, http.MethodPut,
+		fmt.Sprintf("/api/fest/%d/games/%d/draw", g.festID, g.gameID),
+		map[string]any{"slot": slot, "participant": participantID}, g.token)
+	if resp.Code != http.StatusOK {
+		return fmt.Errorf("жребий %s: %d %s", slot, resp.Code, resp.Body.String())
+	}
+	return nil
+}
+
 // directTransport applies each patch in its own transaction and scores the
 // бой once, when it closes — the same engine the batcher runs per window,
 // without a window per seat.
@@ -129,6 +142,13 @@ func (d directTransport) finish(matchID int64, code string) error {
 			return fmt.Errorf("закрытие %s: %w", code, err)
 		}
 		_, err := resolver.ResolveGameSlotsTx(ctx, tx, d.g.gameID)
+		return err
+	})
+}
+
+func (d directTransport) draw(slot string, participantID int64) error {
+	return d.tx(func(ctx context.Context, tx *sql.Tx) error {
+		_, err := resolver.SetDrawTx(ctx, tx, d.g.gameID, slot, participantID)
 		return err
 	})
 }
@@ -215,6 +235,51 @@ where match_id = ? and slot_index = ?`, participantID, matchID, index)
 		}
 	}
 	return g.resolve()
+}
+
+// Draw seats the Participants a lot put into this бой. The Draw Slots are the
+// Kind's — the seats nothing derives — so the driver only says who goes where,
+// in the order the transcript names them, and the server holds the choice to
+// the candidates the Slot allows.
+func (g *serverGame) Draw(at replay.Coord, names []string) error {
+	matchID, code, err := g.matchAt(at)
+	if err != nil {
+		return err
+	}
+	slots, err := g.db().Query(`
+select source_ref_json from match_slots
+where match_id = ? and source_type = 'placeholder' order by slot_index`, matchID)
+	if err != nil {
+		return err
+	}
+	var codes []string
+	for slots.Next() {
+		var ref string
+		if err := slots.Scan(&ref); err != nil {
+			slots.Close()
+			return err
+		}
+		if draw := store.ParseSlotRef(store.SlotPlaceholder, ref).Draw; draw != nil {
+			codes = append(codes, draw.Code)
+		}
+	}
+	slots.Close()
+	if err := slots.Err(); err != nil {
+		return err
+	}
+	if len(codes) < len(names) {
+		return fmt.Errorf("в бою %s %d жеребьёвочных мест, а жребий назвал %d", code, len(codes), len(names))
+	}
+	for i, name := range names {
+		participantID, err := g.participantID(name)
+		if err != nil {
+			return err
+		}
+		if err := g.via.draw(codes[i], participantID); err != nil {
+			return fmt.Errorf("жребий %s: %w", name, err)
+		}
+	}
+	return nil
 }
 
 // stageIsGroup reports whether this бой belongs to a round-robin группа, whose
@@ -332,6 +397,15 @@ func (g *serverGame) Play(at replay.Coord, name string, play replay.Play) error 
 			})
 		}
 	}
+	if play.Bet != nil {
+		amount, answer := *play.Bet, "right"
+		if amount < 0 {
+			amount, answer = -amount, "wrong"
+		}
+		ops = append(ops,
+			map[string]any{"path": []any{"participants", fmt.Sprint(participantID), "bet", "amount"}, "value": amount},
+			map[string]any{"path": []any{"participants", fmt.Sprint(participantID), "bet", "answer"}, "value": answer})
+	}
 	if play.Shootout != 0 {
 		shootout, err := g.shootoutOps(at, participantID, play.Shootout)
 		if err != nil {
@@ -361,22 +435,31 @@ func (g *serverGame) shootoutOps(at replay.Coord, participantID int64, net int) 
 select coalesce(state_json, '{}') from matches where id = ?`, matchID).Scan(&state); err != nil {
 		return nil, err
 	}
+	codec, _ := replay.CodecFor(g.gameType)
+	key := codec.ShootoutKey
+	if key == "" {
+		key = "shootoutThemes"
+	}
+	values := []int{10, 20, 30, 40, 50}
+	if codec.ShootoutValues != nil {
+		if scale := codec.ShootoutValues(state); len(scale) > 0 {
+			values = scale
+		}
+	}
 	var blob struct {
-		Participants map[string]struct {
-			ShootoutThemes []any `json:"shootoutThemes"`
-		} `json:"participants"`
+		Participants map[string]map[string][]any `json:"participants"`
 	}
 	if err := json.Unmarshal([]byte(state), &blob); err != nil {
 		return nil, err
 	}
-	themes := shootoutMarks(net)
+	themes := shootoutMarks(net, values)
 	check := 0
 	for _, theme := range themes {
 		for index, mark := range theme {
 			if mark == "right" {
-				check += (index + 1) * 10
+				check += values[index]
 			} else if mark == "wrong" {
-				check -= (index + 1) * 10
+				check -= values[index]
 			}
 		}
 	}
@@ -395,10 +478,10 @@ select participant_id from match_slots where match_id = ? and participant_id is 
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		have := len(blob.Participants[fmt.Sprint(id)].ShootoutThemes)
+		have := len(blob.Participants[fmt.Sprint(id)][key])
 		for t := have; t < len(themes); t++ {
 			ops = append(ops, map[string]any{
-				"path":  []any{"participants", fmt.Sprint(id), "shootoutThemes", t},
+				"path":  []any{"participants", fmt.Sprint(id), key, t},
 				"value": map[string]any{"answers": []any{"", "", "", "", ""}},
 			})
 		}
@@ -412,7 +495,7 @@ select participant_id from match_slots where match_id = ? and participant_id is 
 				continue
 			}
 			ops = append(ops, map[string]any{
-				"path":  []any{"participants", fmt.Sprint(participantID), "shootoutThemes", t, "answers", index},
+				"path":  []any{"participants", fmt.Sprint(participantID), key, t, "answers", index},
 				"value": mark,
 			})
 		}
@@ -420,10 +503,10 @@ select participant_id from match_slots where match_id = ? and participant_id is 
 	return ops, nil
 }
 
-// shootoutMarks decomposes a net total into theme marks on the 10..50 scale:
-// one right (or, negative, wrong) per nominal, highest first, a further theme
-// if ±150 per theme is not enough.
-func shootoutMarks(net int) [][5]string {
+// shootoutMarks decomposes a net total into theme marks on the game's own
+// scale: one right (or, negative, wrong) per nominal, highest first, a further
+// theme if one is not enough.
+func shootoutMarks(net int, values []int) [][5]string {
 	sign, remaining := "right", net
 	if net < 0 {
 		sign, remaining = "wrong", -net
@@ -431,11 +514,10 @@ func shootoutMarks(net int) [][5]string {
 	var themes [][5]string
 	for remaining > 0 {
 		var theme [5]string
-		for index := 4; index >= 0; index-- {
-			value := (index + 1) * 10
-			if remaining >= value {
+		for index := len(values) - 1; index >= 0; index-- {
+			if remaining >= values[index] {
 				theme[index] = sign
-				remaining -= value
+				remaining -= values[index]
 			}
 		}
 		if theme == ([5]string{}) {
@@ -579,11 +661,19 @@ select id from participants where fest_id = ? and name = ?`, g.festID, name).Sca
 // Standings reads the stage_standings of a Block's (or Group's) one ranking
 // stage, in seat order, with the shared место the Kind shows.
 func (g *serverGame) Standings(at replay.Coord) ([]replay.TableRow, error) {
+	// A Block may hold its own table and the пересев that feeds the next one.
+	// The table the sheet prints is the Block's own, so the пересев is left
+	// out wherever there is one beside it.
 	rows, err := g.db().Query(`
 select s.code, ss.metrics_json, p.name from stages s
 join stage_standings ss on ss.stage_id = s.id
 join participants p on p.id = ss.participant_id
 where s.game_id = ? and s.block_code = ? and s.group_code = ?
+  and (s.stage_type != 'reseed' or not exists (
+        select 1 from stages other
+        join stage_standings on stage_standings.stage_id = other.id
+        where other.game_id = s.game_id and other.block_code = s.block_code
+          and other.group_code = s.group_code and other.stage_type != 'reseed'))
 order by s.position, ss.rank`, g.gameID, at.Block, at.Group)
 	if err != nil {
 		return nil, err

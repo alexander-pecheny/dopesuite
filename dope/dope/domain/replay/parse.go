@@ -176,12 +176,22 @@ type Seat struct {
 	// extra material the theme grid never holds, written as its own line inside
 	// the Match. It is input, like a Draw: dope replays it and ranks with it.
 	Shootout int
-	Line     int
+	// Bet is the Командный round's Ставка, signed: what the team wrote down,
+	// positive when the answer was accepted. Nil where the seat played none —
+	// a team on a zero balance is not admitted to that round.
+	Bet  *int
+	Line int
 }
 
 type Bout struct {
-	At    Coord
-	Draw  bool
+	At   Coord
+	Draw bool
+	// Drawn are the Participants a lot seated in this бой while the rest of
+	// the table was derived — Хамса draws the three fourth places of Игра №1
+	// into Игра №2, and the nine seats around them are the resolver's. A
+	// `жребий` on the header marks the whole seating as input; a `жребий` line
+	// inside marks one seat, and the table is still asserted.
+	Drawn []string
 	Seats []Seat
 	Line  int
 }
@@ -338,6 +348,12 @@ func Parse(src string) (Script, error) {
 			}
 			table := &script.Tables[len(script.Tables)-1]
 			table.Rows = append(table.Rows, row)
+		case section == "бой" && strings.HasPrefix(text, "жребий "):
+			name := strings.TrimSpace(strings.TrimPrefix(text, "жребий "))
+			if name == "" {
+				return Script{}, errAt(line, s.Replay.Parse.DrawnExpected(text))
+			}
+			bout.Drawn = append(bout.Drawn, name)
 		case section == "бой" && strings.HasPrefix(text, "перестрелка "):
 			if err := parseShootout(text, line, bout); err != nil {
 				return Script{}, err
@@ -363,10 +379,27 @@ func Parse(src string) (Script, error) {
 	if err := checkTables(script); err != nil {
 		return Script{}, err
 	}
+	if err := checkDraws(script); err != nil {
+		return Script{}, err
+	}
 	if err := checkRoster(script); err != nil {
 		return Script{}, err
 	}
 	return script, nil
+}
+
+// checkDraws holds a `жребий` line to the бой it sits in: a lot that seated
+// somebody who is not at the table is a typo, and a silent one would leave the
+// seat empty and blame the resolver.
+func checkDraws(script Script) error {
+	for _, bout := range script.Bouts {
+		for _, name := range bout.Drawn {
+			if !hasSeat(bout.Seats, name) {
+				return errAt(bout.Line, s.Replay.Parse.DrawnUnknown(fmt.Sprint(bout.At), name))
+			}
+		}
+	}
+	return nil
 }
 
 // checkTables refuses a table with no rows (it would assert nothing and pass)
@@ -662,6 +695,7 @@ func parseSeat(text string, line int, codec Codec) (Seat, error) {
 	if seat.Name == "" {
 		return Seat{}, errAt(line, s.Replay.Parse.SeatNoName())
 	}
+	var bet *int
 	if codec.Questions {
 		questions, err := parseQuestions(fields[1], seat.Name, line)
 		if err != nil {
@@ -678,8 +712,22 @@ func parseSeat(text string, line int, codec Codec) (Seat, error) {
 		if strings.Contains(fields[1], ",") {
 			return Seat{}, errAt(line, s.Replay.Parse.SeatCommaNotBrain(seat.Name))
 		}
-		for _, theme := range strings.Fields(fields[1]) {
-			marks, err := parseTheme(theme, line)
+		groups := strings.Fields(fields[1])
+		for i := 0; i < len(groups); i++ {
+			// `ставка ±N` closes the grid: the Командный round has no номинал,
+			// so what the sheet records is the bet itself.
+			if groups[i] == "ставка" {
+				if i+1 != len(groups)-1 {
+					return Seat{}, errAt(line, s.Replay.Parse.BetExpected(seat.Name))
+				}
+				value, err := strconv.Atoi(strings.TrimPrefix(groups[i+1], "+"))
+				if err != nil || value == 0 {
+					return Seat{}, errAt(line, s.Replay.Parse.BetNotNumber(seat.Name, groups[i+1]))
+				}
+				bet = &value
+				break
+			}
+			marks, err := parseTheme(groups[i], line)
 			if err != nil {
 				return Seat{}, err
 			}
@@ -687,6 +735,12 @@ func parseSeat(text string, line int, codec Codec) (Seat, error) {
 		}
 		if len(seat.Marks) == 0 {
 			return Seat{}, errAt(line, s.Replay.Parse.SeatNoThemes(seat.Name))
+		}
+		if bet != nil {
+			if !codec.Bet {
+				return Seat{}, errAt(line, s.Replay.Parse.BetNotHere(seat.Name))
+			}
+			seat.Bet = bet
 		}
 		if len(fields) == 5 {
 			for _, name := range strings.Split(fields[4], ",") {

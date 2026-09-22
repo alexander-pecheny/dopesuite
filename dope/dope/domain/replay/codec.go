@@ -26,6 +26,15 @@ type Codec struct {
 	Counts bool
 	// ThemeSize is how many questions a theme holds when a Count grid is read.
 	ThemeSize int
+	// Bet: the seat's marks may be followed by a bet token, the team
+	// round's secret bet — Hamsa's fifth round has no nominal value, so the
+	// amount is the only thing a sheet can record.
+	Bet bool
+	// ShootoutKey names where a shootout's themes sit in the document, and
+	// ShootoutValues what its questions are worth there. Empty is EK's blob:
+	// `shootoutThemes` on the 10..50 scale.
+	ShootoutKey    string
+	ShootoutValues func(state string) []int
 	// ScoreMetric names the Protocol metric the sheet prints as the Match's Σ
 	// when it is not the total column (brain counts the questions taken).
 	ScoreMetric string
@@ -51,6 +60,24 @@ var codecs = map[string]Codec{
 	// Troika's sheet keeps no per-player row — it never records which seat
 	// answered — so there is no stats section to hold dope to.
 	"troika": {Counts: true, ThemeSize: 3, ScoreMetric: "total"},
+	// Hamsa reads like EK — a grid of themes and the player who sat for each —
+	// with the team round's bet after them. Its shootout is another personal
+	// round, so its questions are worth what that round paid.
+	"hamsa": {Bet: true, ShootoutKey: "shootout", ShootoutValues: hamsaShootoutValues},
+}
+
+// hamsaShootoutValues reads the nominal values of a Hamsa bout's last game
+// round out of its document — the scale a shootout theme is played on.
+func hamsaShootoutValues(state string) []int {
+	var doc struct {
+		Rounds []struct {
+			Values []int `json:"values"`
+		} `json:"rounds"`
+	}
+	if err := json.Unmarshal([]byte(state), &doc); err != nil || len(doc.Rounds) == 0 {
+		return nil
+	}
+	return doc.Rounds[len(doc.Rounds)-1].Values
 }
 
 // CodecFor is the codec of a game type; a game with none has no transcript form.

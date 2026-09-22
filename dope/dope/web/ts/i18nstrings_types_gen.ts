@@ -927,6 +927,9 @@ export type Strings = {
       statWrong: () => string;
     };
     parse: {
+      betExpected: (name: string) => string;
+      betNotHere: (name: string) => string;
+      betNotNumber: (name: string, value: string) => string;
       boutHeaderExtra: (rest: string) => string;
       boutNoSeats: (at: string) => string;
       coordExpected: (raw: string) => string;
@@ -935,6 +938,8 @@ export type Strings = {
       coordTaken: (at: string, n: string) => string;
       countsDigit: (name: string, raw: string) => string;
       countsThemeSize: (name: string, n: string, raw: string) => string;
+      drawnExpected: (text: string) => string;
+      drawnUnknown: (at: string, name: string) => string;
       entrantExpected: (raw: string) => string;
       entrantNoName: () => string;
       entrantNumber: (raw: string) => string;
@@ -1008,6 +1013,7 @@ export type Strings = {
     };
     run: {
       allAgreed: () => string;
+      drawUnwritable: () => string;
       fieldExtra: () => string;
       fieldOutcome: () => string;
       fieldPlace: () => string;
