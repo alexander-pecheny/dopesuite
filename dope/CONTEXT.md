@@ -22,7 +22,7 @@ One element of a scheme: one Kind, plus the configuration for it. This is the un
 _Avoid_: Stage. That is the retired term, and it is still the name in the database. It was ambiguous: half its uses meant Block and half meant Round.
 
 **Kind**:
-A registered macro-expansion algorithm. It turns a Block's configuration into Rounds of Matches, and it also defines how the Participants in that Block are ranked. The Kinds are `flat`, `roundrobin`, `single_elimination`, `double_elimination` and `swiss`. There is one more, `manual`, which exists only below the DSL: it is hand-enumerated pairings, and it is what an imported or hand-written scheme compiles into, such as chr2026's EK bracket. It is never a word you can write in the DSL.
+A registered macro-expansion algorithm. It turns a Block's configuration into Rounds of Matches, and it also defines how the Participants in that Block are ranked. The Kinds are `flat`, `roundrobin`, `single_elimination`, `double_elimination`, `swiss` and `placement`. A `placement` Block is rounds of multi-seat Matches where the first Round is dealt in straight bands of the seed (1–4, 5–8, 9–12) and every later Round's table k seats place k of each table before it; the places left over are a Draw the host enters on the day. It is Хамса's групповой этап. There is one more, `manual`, which exists only below the DSL: it is hand-enumerated pairings, and it is what an imported or hand-written scheme compiles into, such as chr2026's EK bracket. It is never a word you can write in the DSL.
 
 The only difference between the two elimination Kinds is how many Losses end a Participant's tournament: one, or two. Neither of them implies that a Match has two seats, nor that there is a single survivor. ЭК plays its bracket four to a table with two of them going through, and личная СИ's entire play-off is a double elimination of бои with four seats. Where two Participants in a Block never played each other, the Block ranks them by how far they got and how they placed on the way out.
 
@@ -37,6 +37,7 @@ A rule that connects an outcome to a future seat. There are two grains. At Match
 
 **Round (Этап)**:
 One dependency layer of a Block's expansion: a set of Matches that do not depend on each other and can therefore be played in any order among themselves. A single elimination of 48 expands into five Rounds. A round-robin's circle-rounds are Rounds too, though they collapse to one when a Group sits at a single table.
+_Avoid_: using Round for a part of a бой. Хамса's five «раунды» inside one бой are [[Game round]]s; in code the two are `BlockRound` and `GameRound`, and only the screen says «раунд» for both.
 
 **Wave (Заход)**:
 What a Round becomes once the number of venues is taken into account: a set of Lanes running at the same time. If a Round has more Matches than there are venues, it is split into several Waves. In Russian, «заход» is only said out loud when there is more than one.
@@ -52,6 +53,8 @@ _Avoid_: treating a pod as a separate concept. It is just the double-elimination
 
 **Draw (Жеребьёвка)**:
 A seating that no result implies: the initial deal into Groups, ЭК's hand-drawn bracket, or a table swapped on the day because somebody did not turn up. A Draw is an *input* to a Structure, and it is written into the Edges that fill those Slots. Derived seating is the opposite: the Structure works it out from earlier results and recalculates it whenever they change. A seat that somebody placed by hand but that the Structure derives is not a Draw; it is a seat the Structure will overwrite, and it is right to do so.
+
+A Draw can also be made in the middle of a Game: Хамса's Игра №2 seats the three fourth-place teams by a blind draw the organiser runs after Игра №1. The Slot is declared as drawn, the host enters who sits where, and until then the seat is empty rather than guessed.
 _Avoid_: recording a seating you have observed without deciding which of the two it is. If the Structure should have produced it, then a mismatch is a bug. If nothing could have produced it, then it is a Draw.
 
 **Scheme**:
@@ -120,6 +123,13 @@ A team refusing to play a Game or a мини-игра. The team keeps its row, s
 
 **Перестрелка**:
 A tiebreak continuation. Every format has one: EK's shootout themes, ОД's shootout rounds, and brain's "П" questions. It takes two forms. Either extra material is added to the Match itself until the tie is broken, or a separate replay Match is played between the Participants who are exactly level. Whether a Block's Matches allow the first form is part of that Block's rules, because the regulations differ from tournament to tournament.
+
+**Game round (Раунд боя)**:
+One of the five parts of a Хамса бой: Светлый, Полутёмный, Тёмный, Персональный and Командный. The first three each hold five темы of five вопросы, the fourth holds one тема, and the fifth is a single вопрос played on a [[Ставка]]. A game round is what multiplies the base номиналы (×1, ×2, ×3, ×4), and it is where a тема's player is chosen. It is not a [[Round]]: the Structure never sees it, and a бой has all of them.
+_Avoid_: Round, Этап, Part.
+
+**Ставка**:
+The secret bet a team writes before the Командный round's вопрос is read: any number of points from one up to its balance after four game rounds. A correct answer adds it, a wrong one subtracts it. A team on zero or below is not admitted, but dope records whatever the host types and does not police the limit.
 
 **Личная встреча**:
 The head-to-head comparator used when ranking a group. Among Participants who are level on очки, it compares the points they took in the Matches they played against each other. When exactly two are level, that is simply whoever won their Match. Which comparators are used, and in what order, is decided per Block.
