@@ -45,6 +45,18 @@ chgksuite-gui/
   `vps-he`, dope runs on `vps2day-ee`. Each app's `just deploy` calls the script
   with its own targets. If you are already logged in to the production host you
   are deploying to, do **not** `ssh` to it again — just run the commands.
+- **One staging site per branch.** `just deploy-branch <name>` (in `dope/`)
+  gives a branch its own dope at `<name>.dopetest.pecheny.me`: its own systemd
+  unit, port, database and Caddy route, all provisioned on the first run. Two
+  branches can be up at once, which the single `dopetest` target cannot do.
+  `just branches` lists them, `just drop-branch <name>` removes one for good.
+  A new instance's database is the fixture fest by default, or a fresh backup
+  of production with `--seed prod`; a redeploy never touches the database, so
+  what you were testing with survives. The branch sites run on `vps-he`, not on
+  dope's 960MB production box, and they carry no Telegram token, so their bot
+  cannot poll the one production owns. `dopetest.pecheny.me` itself stays what
+  it always was: the rehearsal against prod's own hardware, which is still
+  where a schema or migration change goes first.
 - **Only deploy to production from `main`, and only when `main` is pushed.
   NEVER deploy a branch to production.** Merge the branch, run `git push origin
   main`, then deploy from `main`. If you want to test a feature live, deploy the

@@ -58,6 +58,25 @@ deploy *args: build-web
 deploy-staging *args: build-web
     python3 ../deploy.py --target dopetest {{args}}
 
+# Put a branch on a staging site of its own, at <name>.dopetest.pecheny.me.
+# The first run provisions everything (unit, port, database, Caddy route); a
+# later run just replaces the binary and keeps the data. Use this to show a
+# branch to somebody, or to have two of them side by side — dopetest above is
+# a single instance and the branches would take turns on it.
+#
+#   just deploy-branch hamsa                 # fixture fest, the one `just matrix` uses
+#   just deploy-branch hamsa --seed prod     # a fresh backup of prod's database
+#   just branches                            # what is running
+#   just drop-branch hamsa                   # unit, route, binary and database
+deploy-branch name *args: build-web
+    python3 ../deploy.py --target branch --instance {{name}} {{args}}
+
+branches:
+    python3 ../deploy.py --target branch --list
+
+drop-branch name:
+    python3 ../deploy.py --target branch --instance {{name}} --remove
+
 # The verify skill's hand-over matrix: every page × phone/desktop × light/dark,
 # pixel-diffed against the goldens in scripts/matrix-goldens. It seeds its own
 # fixture fest (`dope-server seed-fixture`), so it needs nothing but this
