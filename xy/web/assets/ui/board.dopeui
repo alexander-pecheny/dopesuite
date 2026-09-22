@@ -183,6 +183,11 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
       button small id="moveBtn" @board.actions.move
 
     label @board.card.feed_label (unreaddot id="commentsUnreadDot" title=@board.unread.comments)
+    -- the composer comes first: during a test a comment is what the reader came
+    -- here to write, and below the feed it was a scroll to the bottom of the card
+    form id="commentForm" dir="col"
+      editor id="commentInput" kind="comment" placeholder=@board.feed.comment_placeholder spellcheck="false"
+      button small submit @board.feed.submit
     -- show narrows the feed to one kind of entry, only until the card
     -- closes; the edit-view select governs how a desc_edit renders, so it goes away in the
     -- modes that show none.
@@ -203,9 +208,6 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
       -- the two labelled selects, and the words live on in title/aria-label
       button small kind="ghost" icon="maximize-2" id="feedExpand" title=@board.feed.expand_title aria-label=@board.feed.expand_label
     mount id="timeline" kind="timeline"
-    form id="commentForm" dir="col"
-      editor id="commentInput" kind="comment" placeholder=@board.feed.comment_placeholder spellcheck="false"
-      button small submit @board.feed.submit
 
   -- list preview overlay (docx-style render, JS-only)
   docoverlay id="previewOverlay" kind="doc" label=@board.preview.list
