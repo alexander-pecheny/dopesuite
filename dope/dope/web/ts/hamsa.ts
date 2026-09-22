@@ -829,7 +829,26 @@ function buildGrid(): HTMLElement {
     matchTitleLink: false,
     letters: boutLetters,
     editable: !viewer,
+    onDraw: (slot, participant) => void applyDraw(slot, participant),
   });
+}
+
+// applyDraw seats a Draw Slot. The server holds the choice to the seat's own
+// candidates, so a refusal is a refusal and the page simply reloads what it
+// answered.
+async function applyDraw(slot: string, participant: number): Promise<void> {
+  const response = await fetch(`${route.apiBase}/draw`, {
+    method: "PUT",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({slot, participant}),
+  });
+  if (!response.ok) {
+    indicator.fail();
+    return;
+  }
+  const view = await response.json() as FestInfo;
+  for (const stage of view.stages || []) if (stage?.code) festStages.set(stage.code, stage);
+  await fetchMatches();
 }
 
 function buildTab(tab: GameTab | undefined): HTMLElement {

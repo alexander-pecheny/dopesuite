@@ -230,6 +230,14 @@ var RU = Strings{
 		},
 	},
 	Fest: FestStrings{
+		Draw: FestDrawStrings{
+			None: func() string { return "—" },
+			Pending: func() string {
+				return "Жребий откроется, когда закончатся бои предыдущего раунда."
+			},
+			Seat:  func(bout string) string { return fmt.Sprintf("Бой %s", bout) },
+			Title: func() string { return "Жеребьёвка" },
+		},
 		Grid: FestGridStrings{
 			ColPlace:         func() string { return "М" },
 			MatchDefault:     func(code string) string { return fmt.Sprintf("Бой %s", code) },

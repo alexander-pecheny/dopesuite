@@ -214,6 +214,12 @@ export const RU: Strings = {
     },
   },
   fest: {
+    draw: {
+      none: () => "—",
+      pending: () => "Жребий откроется, когда закончатся бои предыдущего раунда.",
+      seat: (bout: string) => `Бой ${bout}`,
+      title: () => "Жеребьёвка",
+    },
     grid: {
       colPlace: () => "М",
       matchDefault: (code: string) => `Бой ${code}`,

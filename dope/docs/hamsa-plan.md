@@ -201,6 +201,13 @@ hard-wired to this Fest.
   source Matches are finished; viewers see the seats as «—» with a note.
   Reuse the reseed panel's markup and classes.
 
+  **Built:** a viewer gets **no panel and no note** — the seat in the бой box
+  already reads «Жребий», which says the same thing in the place a reader is
+  looking. The panel is shown to a host only, under the Round's бои, and it
+  says «Жребий откроется…» until the server resolves candidates, which it does
+  only once the Round it draws from is finished. A team already drawn is off
+  the other seats' lists.
+
 ## 4. The scheme for this Fest
 
 `scripts/hamsa/hamsa.dsl` (and the fixture copy):

@@ -20,6 +20,8 @@
   --hamsa-bout-w: 4400px;
   --hamsa-bout-h: 200px;
   --hamsa-bet-col: 72px;
+  /* The seat column of the Жеребьёвка panel on the Сетка. */
+  --draw-seat-col: 64px;
   --total-col: 38px;
   --place-col: 42px;
   --place-gap: 14px;
@@ -2487,6 +2489,35 @@ body:not(.embedded-match) .grid-match {
   --results-team-col: 320px;
   width: max-content;
   min-width: 720px;
+}
+
+/* The Жеребьёвка panel stands under a Round's бои, where a reseed's calculate
+   button stands: the seats above it are empty until a person fills them, and
+   the panel is the only thing on the Сетка that is an input. */
+.draw-panel {
+  margin-top: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-tint);
+}
+
+.draw-panel-head {
+  margin: var(--space-0);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-strong);
+}
+
+.draw-panel-seat {
+  min-width: var(--draw-seat-col);
+  font-size: var(--text-xs-plus);
+  color: var(--muted);
+}
+
+.draw-panel-select {
+  flex: 1;
+  min-width: var(--space-0);
+  font-size: var(--text-xs-plus);
 }
 
 .ek-stats-wrapper {

@@ -213,6 +213,12 @@ export type Strings = {
     };
   };
   fest: {
+    draw: {
+      none: () => string;
+      pending: () => string;
+      seat: (bout: string) => string;
+      title: () => string;
+    };
     grid: {
       colPlace: () => string;
       matchDefault: (code: string) => string;

@@ -29,6 +29,10 @@ function node(tag) {
       self.children.push(child);
       return child;
     },
+    listeners: {},
+    addEventListener(name, handler) {
+      self.listeners[name] = handler;
+    },
   };
   return self;
 }
@@ -406,4 +410,53 @@ test("two grids keep their own rows and letters", () => {
   assert.deepEqual(texts(wide, "grid-match-title"), ["Группа 1", "Бой Z"]);
   assert.deepEqual(texts(board, "grid-match-title"), ["Бой s2-m1"]);
   assert.equal(texts(wide, "grid-slot-team-name")[4], "Бой A, м. 1");
+});
+
+// Хамса draws the three fourth places of Игра №1 into Игра №2. Those seats
+// fill from no result, so the Round gets a panel under its бои — where a
+// пересев's «Рассчитать» stands — with a select per seat.
+test("a Round with drawn seats gets a Жеребьёвка panel under its бои", () => {
+  const drawn = (code, seated) => ({
+    name: "", draw: {code, seated, candidates: [{id: 7, name: "Ктулху"}, {id: 8, name: "ВШЭстером"}]},
+  });
+  const stage = {
+    code: "s1-r2", title: "Игра №2", stage_type: "matches",
+    matches: [
+      {code: "s1-r2-m1", participantCount: 2, slots: [{label: "А1"}, {label: "Жребий"}],
+        participants: [{name: "Мыслители"}, drawn("s1-r2-m1-d1", 7)]},
+      {code: "s1-r2-m2", participantCount: 2, slots: [{label: "А2"}, {label: "Жребий"}],
+        participants: [{name: "Постпопс"}, drawn("s1-r2-m2-d1", 0)]},
+    ],
+  };
+  const chosen = [];
+  const grid = buildFestGrid({stages: [stage]},
+    {stageHeaderLink: false, editable: true, onDraw: (slot, id) => chosen.push([slot, id])});
+
+  assert.equal(withClass(grid, "draw-panel").length, 1, "панель одна на раунд");
+  const selects = walk(grid).filter((n) => n.tag === "select");
+  assert.equal(selects.length, 2, "по селекту на жеребьёвочное место");
+  // The team already drawn is off the other seat's list: it plays one table
+  // per раунд.
+  assert.deepEqual(selects[1].children.map((o) => o.textContent), ["—", "ВШЭстером"]);
+  selects[1].value = "8";
+  selects[1].listeners.change();
+  assert.deepEqual(chosen, [["s1-r2-m2-d1", 8]]);
+
+  // A viewer reads the seats off the боя boxes — «Жребий» — and gets no panel.
+  const viewerGrid = buildFestGrid({stages: [stage]}, {stageHeaderLink: false});
+  assert.equal(withClass(viewerGrid, "draw-panel").length, 0);
+});
+
+// Until the раунд it draws from is played out the server resolves no
+// candidates, so the panel says so rather than offering an empty list.
+test("the Жеребьёвка panel waits for the раунд it draws from", () => {
+  const grid = buildFestGrid({
+    stages: [{
+      code: "s1-r2", title: "Игра №2", stage_type: "matches",
+      matches: [{code: "s1-r2-m1", participantCount: 2, slots: [{label: "А1"}, {label: "Жребий"}],
+        participants: [{name: "Мыслители"}, {name: "", draw: {code: "s1-r2-m1-d1"}}]}],
+    }],
+  }, {stageHeaderLink: false, editable: true, onDraw: () => {}});
+  assert.equal(walk(grid).filter((n) => n.tag === "select").length, 0);
+  assert.equal(texts(grid, "empty").length, 1);
 });

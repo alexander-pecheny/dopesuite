@@ -23,6 +23,17 @@ col_match = "Бой"
 # The panel's empty state before the first calculation.
 empty = "Пересев пока не рассчитан."
 
+[draw]
+# The Жеребьёвка panel on the Сетка (dope/dope/web/ts/fest-grid.ts): the seats
+# of a раунд that no result fills, which the organiser draws by lot.
+title = "Жеребьёвка"
+# One row of the panel: the бой the drawn seat is in.
+seat = 'Бой {{.bout}}'
+# The empty option of a seat's select.
+none = "—"
+# What the panel says while the раунд it draws from is still being played.
+pending = "Жребий откроется, когда закончатся бои предыдущего раунда."
+
 [grid]
 # The place column head of a bout box or group table.
 col_place = "М"

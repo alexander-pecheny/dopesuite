@@ -31,6 +31,16 @@ export interface FestGridLiveParticipant {
   source?: string;
   total?: unknown;
   place?: number;
+  // draw is set on a seat a lot fills: the slot's own code, who is sitting in
+  // it, and whom it may be filled from once the round it draws from is played
+  // out. The server resolves the candidates (ADR-0011).
+  draw?: DrawSlot;
+}
+
+export interface DrawSlot {
+  code: string;
+  seated?: number;
+  candidates?: Array<{id: number; name: string}>;
 }
 
 export interface FestGridMatch {
@@ -93,6 +103,9 @@ export interface FestGridOptions {
   canCalculate?: boolean;
   blockedMessage?: string;
   onCalculate?: () => void;
+  // onDraw seats a Draw Slot, or clears it with a participant of 0. A grid
+  // without it draws the panel read-only.
+  onDraw?: (slot: string, participant: number) => void;
   stageHeaderLink?: boolean;
   matchTitleLink?: boolean;
   // letters is the whole game's letter map — a caller drawing a slice of the
@@ -609,7 +622,63 @@ function buildMatchesStage(section: GridBoxes, ctx: PaintContext): HTMLElement {
   const column = stageColumn(stage, stage.layout?.columns || preferredColumns(stage.matches?.length || 1));
   column.appendChild(stageHead(stage, stage.title, ctx));
   column.appendChild(buildMatchBoxes(section, ctx));
+  const draw = buildDrawPanel(section, ctx);
+  if (draw) column.appendChild(draw);
   return column;
+}
+
+// buildDrawPanel is the Draw a host makes on the day: a Round whose seats no
+// result fills — Hamsa's three fourth places before its second Game — gets a
+// select per seat under its boxes, offering whoever is still to be drawn. It
+// stands where a reseed's calculate button does, and for the same reason: the
+// seats above it stay empty until somebody presses it.
+function buildDrawPanel(section: GridBoxes, ctx: PaintContext): HTMLElement | null {
+  const seats: Array<{match: FestGridMatch; draw: DrawSlot}> = [];
+  const liveMatches = new Map((section.live.matches || []).map((match) => [match.code, match]));
+  for (const {match} of section.boxes) {
+    const live = liveMatches.get(match.code) || match;
+    for (const participant of live.participants || []) {
+      if (participant.draw?.code) seats.push({match: live, draw: participant.draw});
+    }
+  }
+  if (!seats.length || !ctx.options.editable) return null;
+
+  const panel = document.createElement("section");
+  panel.className = "draw-panel u-col u-gap-xs";
+  panel.appendChild(el("h3", "draw-panel-head", S.fest.draw.title()));
+
+  const ready = seats.some((seat) => (seat.draw.candidates || []).length > 0);
+  if (!ready) {
+    panel.appendChild(el("p", "empty", S.fest.draw.pending()));
+    return panel;
+  }
+  // A team already drawn into another seat of this Round is off the list: it
+  // plays one table per Round, and offering it twice would leave one short.
+  const taken = new Set(seats.map((seat) => seat.draw.seated || 0).filter(Boolean));
+  for (const seat of seats) {
+    const row = el("label", "draw-panel-row u-row u-gap-xs u-align-center", "");
+    row.appendChild(el("span", "draw-panel-seat",
+      S.fest.draw.seat(ctx.letters?.get(seat.match.code || "") || seat.match.title || seat.match.code || "")));
+    const select = document.createElement("select");
+    select.className = "draw-panel-select";
+    const none = document.createElement("option");
+    none.value = "0";
+    none.textContent = S.fest.draw.none();
+    select.appendChild(none);
+    for (const candidate of seat.draw.candidates || []) {
+      if (taken.has(candidate.id) && candidate.id !== seat.draw.seated) continue;
+      const item = document.createElement("option");
+      item.value = String(candidate.id);
+      item.textContent = candidate.name;
+      item.selected = candidate.id === seat.draw.seated;
+      select.appendChild(item);
+    }
+    select.value = String(seat.draw.seated || 0);
+    select.addEventListener("change", () => ctx.options.onDraw?.(seat.draw.code, Number(select.value) || 0));
+    row.appendChild(select);
+    panel.appendChild(row);
+  }
+  return panel;
 }
 
 function buildMatchBoxes({live, boxes}: GridBoxes, ctx: PaintContext): HTMLElement {
