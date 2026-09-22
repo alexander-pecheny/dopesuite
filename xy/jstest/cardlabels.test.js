@@ -41,20 +41,22 @@ test("the pickers show the author's labels, each Playing with its scoped labels,
   assert.equal(p.node("cardSeen").hidden, false);
   const seen = p.node("cardSeen").querySelector(".seen-names").textContent;
   assert.ok(seen.includes("Вера") && !seen.includes("Аня"), `only the extra tester is named: ${seen}`);
+  // One person per line (#72).
+  assert.deepEqual(p.node("cardSeen").querySelector(".seen-names").kids.map((n) => n.textContent), ["Вера"]);
   assert.ok(p.node("cardSeen").querySelector(".seen-label").textContent.startsWith("Видели вопрос, кроме общих"));
 });
 
 test("«Показать всех тестеров» brings the common ones back dimmed, and the copy follows the line", async () => {
   labels.render(card);
-  const cb = p.node("cardSeen").querySelector(".seen-all").querySelector("input");
+  const cb = p.node("cardSeen").querySelector("input");
   assert.equal(cb.checked, false);
   cb.checked = true;
   cb.fire("change");
   const seen = p.node("cardSeen").querySelector(".seen-names");
-  assert.equal(seen.textContent, "Аня, Боря, Вера");
+  assert.deepEqual(seen.kids.map((n) => n.textContent), ["Аня", "Боря", "Вера"]);
   assert.deepEqual(seen.querySelectorAll(".seen-common").map((n) => n.textContent), ["Аня", "Боря"]);
   assert.equal(p.node("cardSeen").querySelector(".seen-label").textContent, "Видели: ");
-  p.node("cardSeen").querySelector(".seen-copy").fire("click");
+  p.node("cardSeen").querySelector("button").fire("click");
   await new Promise((r) => setTimeout(r, 5));
   assert.equal(copied.at(-1), "Видели: Аня, Боря, Вера");
   // A peek, not a preference: the next card opened starts folded again.

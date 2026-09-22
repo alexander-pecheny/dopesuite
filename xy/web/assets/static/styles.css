@@ -1818,14 +1818,16 @@ body {
 }
 .kcard-versions .ico-lead { margin-right: 0; }
 
-/* «Видели»: derived from the sessions a card is tagged with, stored nowhere. */
-#cardSeen { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
+/* «Видели»: derived from the sessions a card is tagged with, stored nowhere.
+   A head row of controls over a column of names — one person per line, which is
+   how a list of four is read rather than skimmed. */
+#cardSeen { display: flex; flex-direction: column; gap: var(--space-2); }
 .seen-label { color: var(--muted); font-size: var(--text-sm); }
-.seen-names { flex: 1 1 12rem; }
+/* A name is a line, and a long one breaks rather than widening the card. */
+.seen-names { overflow-wrap: anywhere; }
 /* The tour already names these people in its preamble; «Показать всех
    тестеров» brings them back dimmed so the extras still read first. */
 .seen-common { color: var(--muted); }
-.seen-all, .seen-copy { flex: 0 0 auto; }
 
 /* A tester row is seg + name + ×. The name SHRINKS rather than claiming a line
    of its own — giving it 100% pushed the × onto a third line at every width, not

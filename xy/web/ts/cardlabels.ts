@@ -157,14 +157,22 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
     const names = hiding ? everyone.filter((n) => !common.has(n)) : everyone;
     const label = hiding ? S.card.seen.labelExceptCommon() : S.card.seen.label();
 
-    const parts: Array<HTMLElement | string> = [];
+    // The label and the two controls are a head row of their own, and the names
+    // a column under it. Both come from one complaint (#72): everything used to
+    // sit on a single wrapping line, so ticking the checkbox grew the list of
+    // names and slid the checkbox across the card, and four people in a row read
+    // as one long string. The head row is the same width whatever is below it.
+    const controls: HTMLElement[] = [];
+    // The copy button goes FIRST so that the checkbox, which is the thing being
+    // clicked, is the last item in a right-aligned group and therefore does not
+    // move when the click makes a copy button appear beside it.
     if (names.length) {
-      const spans: Array<HTMLElement | string> = [];
-      for (const n of names) {
-        if (spans.length) spans.push(", ");
-        spans.push(common.has(n) ? el("span", { class: "seen-common", title: S.card.seen.commonTesterTitle(), text: n }) : n);
-      }
-      parts.push(el("span", { class: "seen-label", text: label }), el("span", { class: "seen-names" }, ...spans));
+      controls.push(el("button", {
+        class: "input", type: "button",
+        title: S.card.seen.copyTitle(),
+        // The copy is a line to paste into a chat, so it stays one line.
+        onclick: () => { void deps.copyPlain(label + names.join(", ")); },
+      }, icon("clipboard")));
     }
     if (common.size) {
       const cb = el("input", { type: "checkbox" }) as HTMLInputElement;
@@ -173,17 +181,17 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
         seenAllFor = cb.checked ? card.id : null;
         renderSeen(card);
       });
-      parts.push(el("label", { class: "checkbox seen-all" }, cb, el("span", { text: S.card.seen.showAll() })));
+      controls.push(el("label", { class: "checkbox" }, cb, el("span", { text: S.card.seen.showAll() })));
     }
-    if (names.length) {
-      parts.push(el("button", {
-        class: "input seen-copy", type: "button",
-        title: S.card.seen.copyTitle(),
-        onclick: () => { void deps.copyPlain(label + names.join(", ")); },
-      }, icon("clipboard")));
-    }
+    const head = el("div", { class: "u-row u-gap-sm u-align-center u-justify-between u-wrap" },
+      el("span", { class: "seen-label", text: label }),
+      controls.length ? el("div", { class: "u-row u-gap-sm u-align-center" }, ...controls) : null);
+    const namesCol = el("div", { class: "seen-names u-col u-gap-xs" },
+      ...names.map((n) => (common.has(n)
+        ? el("div", { class: "seen-common", title: S.card.seen.commonTesterTitle(), text: n })
+        : el("div", { text: n }))));
     node.hidden = false;
-    node.replaceChildren(...parts);
+    node.replaceChildren(head, ...(names.length ? [namesCol] : []));
   }
 
   function closeLabelAddPopup(): void {
