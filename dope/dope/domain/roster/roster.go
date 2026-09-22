@@ -8,6 +8,7 @@ package roster
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -89,6 +90,58 @@ where id = ? and fest_id = ?`, string(schemeJSON), util.UtcNow(), doc.GameID, fe
 		updates = append(updates, GameStateBroadcast{GameID: doc.GameID, GameType: doc.GameType, StateJSON: stateJSON})
 	}
 	return updates, nil
+}
+
+// ScoredNumbers reports which team numbers already carry something a host
+// entered, and in which of the fest's games: number → the titles of those
+// games, in the order the fest lists them.
+//
+// It looks only at the flat documents PropagateRosterTx rewrites, because those
+// are the ones a roster change can empty: a flat Game seats the whole fest
+// roster under the fest's numbers, so a team that leaves the roster takes its
+// row with it. A Game that seats its entrants itself (EK, brain, troika) keeps
+// them through a re-import and is not asked.
+func ScoredNumbers(ctx context.Context, q store.Queryer, festID int64) (map[int64][]string, error) {
+	docs, err := store.LoadGameDocs(ctx, q, festID)
+	if err != nil {
+		return nil, err
+	}
+	titles, err := gameTitles(ctx, q, festID)
+	if err != nil {
+		return nil, err
+	}
+	scored := make(map[int64][]string)
+	for _, doc := range docs {
+		entered, ok := protocol.EnteredSeats(doc.GameType, json.RawMessage(doc.State))
+		if !ok {
+			continue
+		}
+		seats, _ := protocol.Seats(doc.GameType, json.RawMessage(doc.State))
+		for i, seat := range seats {
+			if i < len(entered) && entered[i] && seat.Number > 0 {
+				scored[seat.Number] = append(scored[seat.Number], titles[doc.GameID])
+			}
+		}
+	}
+	return scored, nil
+}
+
+func gameTitles(ctx context.Context, q store.Queryer, festID int64) (map[int64]string, error) {
+	rows, err := q.QueryContext(ctx, `select id, title from games where fest_id = ?`, festID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	titles := make(map[int64]string)
+	for rows.Next() {
+		var id int64
+		var title string
+		if err := rows.Scan(&id, &title); err != nil {
+			return nil, err
+		}
+		titles[id] = title
+	}
+	return titles, rows.Err()
 }
 
 // RosterTeams is the roster as a flat Protocol folds it.

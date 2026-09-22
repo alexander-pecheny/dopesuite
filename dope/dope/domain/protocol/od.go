@@ -44,6 +44,39 @@ func (od) Seats(stateJSON json.RawMessage) []Seat {
 	return seats
 }
 
+// EnteredSeats: an OD sheet records, per question, the numbers of the teams
+// that took it, so a team carries something entered as soon as its number is
+// written anywhere — on a question of the tours, or in a shootout round.
+func (od) EnteredSeats(stateJSON json.RawMessage) []bool {
+	var state struct {
+		Teams    []ChgkTeamJSON          `json:"teams"`
+		Entries  [][]int64               `json:"entries"`
+		Shootout []chgkShootoutRoundJSON `json:"shootoutRounds"`
+	}
+	_ = json.Unmarshal(stateJSON, &state)
+	written := make(map[int64]bool)
+	for _, question := range state.Entries {
+		for _, number := range question {
+			written[number] = true
+		}
+	}
+	for _, round := range state.Shootout {
+		for _, number := range round.Teams {
+			written[int64(number)] = true
+		}
+		for _, question := range round.Entries {
+			for _, number := range question {
+				written[int64(number)] = true
+			}
+		}
+	}
+	out := make([]bool, len(state.Teams))
+	for i, team := range state.Teams {
+		out[i] = team.Number > 0 && written[team.Number]
+	}
+	return out
+}
+
 func (od) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error) {
 	results, err := games.ComputeODResults(string(cfg), string(stateJSON))
 	if err != nil {

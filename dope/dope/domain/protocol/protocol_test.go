@@ -309,3 +309,72 @@ func TestSIShootoutBreaksTies(t *testing.T) {
 		t.Errorf("перестрелка = %v и %v, want 20 и 0", outcomes[1].Metrics["shootoutTotal"], outcomes[0].Metrics["shootoutTotal"])
 	}
 }
+
+// TestEnteredSeats: what a re-import has to know before it takes a team off
+// the roster — whether that team's row of the document holds anything a host
+// entered. A seat is measured by its own cells only, never by the game's.
+func TestEnteredSeats(t *testing.T) {
+	cases := []struct {
+		name  string
+		code  string
+		state string
+		want  []bool
+	}{{
+		// ОД writes, per question, the numbers of the teams that took it, so
+		// #7 has something entered and #8 does not.
+		name:  "od question taken",
+		code:  "od",
+		state: `{"teams":[{"name":"A","number":7},{"name":"B","number":8}],"entries":[[7],[],[7]]}`,
+		want:  []bool{true, false},
+	}, {
+		// A shootout counts the same: being seated in one is host-entered.
+		name:  "od shootout only",
+		code:  "od",
+		state: `{"teams":[{"name":"A","number":7},{"name":"B","number":8}],"entries":[[],[]],"shootoutRounds":[{"teams":[8],"entries":[[8]],"answers":[[""]]}]}`,
+		want:  []bool{false, true},
+	}, {
+		name:  "od empty sheet",
+		code:  "od",
+		state: `{"teams":[{"name":"A","number":7}],"entries":[[],[],[]]}`,
+		want:  []bool{false},
+	}, {
+		// КСИ is a row per team across the themes.
+		name:  "ksi answer in a later theme",
+		code:  "ksi",
+		state: `{"participants":[{"number":1,"name":"A"},{"number":2,"name":"B"}],"themes":[{"answers":[["","","","",""],["","","","",""]]},{"answers":[["","","","",""],["","","right","",""]]}]}`,
+		want:  []bool{false, true},
+	}, {
+		// A refusal is something the host entered about that team too.
+		name:  "ksi declined",
+		code:  "ksi",
+		state: `{"participants":[{"number":1,"name":"A"},{"number":2,"name":"B"}],"declined":{"n1":true},"themes":[{"answers":[["","","","",""],["","","","",""]]}]}`,
+		want:  []bool{true, false},
+	}, {
+		// Мультиигры: a non-zero cell in any мини-игра.
+		name:  "multi cell",
+		code:  "multi",
+		state: `{"participants":[{"number":1,"name":"A"},{"number":2,"name":"B"}],"games":[{"cells":[[0,0],[0,-1]]}]}`,
+		want:  []bool{false, true},
+	}}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, ok := EnteredSeats(c.code, json.RawMessage(c.state))
+			if !ok {
+				t.Fatalf("%s does not answer EnteredSeats", c.code)
+			}
+			if len(got) != len(c.want) {
+				t.Fatalf("got %v, want %v", got, c.want)
+			}
+			for i := range c.want {
+				if got[i] != c.want[i] {
+					t.Fatalf("got %v, want %v", got, c.want)
+				}
+			}
+		})
+	}
+	// ЭК seats its own entrants and keeps them through a re-import, so it is
+	// never asked about the fest roster.
+	if _, ok := EnteredSeats("ek", json.RawMessage(`{}`)); ok {
+		t.Error("ek should not answer EnteredSeats")
+	}
+}

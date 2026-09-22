@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"dope/dope/domain/imports"
+	"dope/dope/domain/numbering"
 	"dope/dope/domain/overrides"
 	"dope/dope/domain/view"
 	"dope/dope/platform/util"
@@ -15,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -52,6 +54,9 @@ type hostFestImportData struct {
 	RatingID int64
 	Error    string
 	Notice   string
+	// Conflict is set when the import stopped to ask what to do with teams that
+	// are leaving the roster while they still carry results.
+	Conflict *imports.RosterConflict
 }
 
 // hostTeamsDoc builds the fest's teams table (or an empty note).
@@ -225,11 +230,13 @@ func hostOverrideEditDialog(data hostFestRosterData, ref string, o overrides.Hos
 
 // hostRatingImportDoc builds the rating.chgk.info roster-import page: when the
 // fest has a rating id, a confirm-and-import form; otherwise a note to set one.
+// A stopped import adds the reconcile dialog, which the page opens on load.
 func hostRatingImportDoc(data hostFestImportData) *dopeui.Doc {
 	s := dopestrings.Default
 	festRef := data.Fest.Ref()
 	page := []dopeui.Item{
 		dopeui.Title(s.Host.Roster.RatingImportTitle(data.Fest.Title)), dopeui.PagePublic,
+		dopeui.Classicscripts("dist/pageforms.js"),
 		dopeui.Publictopbar(pages.Trail(pages.FestCrumbs(festRef, data.Fest.Title), s.Host.Roster.RatingImportCrumb())),
 	}
 	page = append(page, importMessages(data.Error, data.Notice)...)
@@ -247,7 +254,109 @@ func hostRatingImportDoc(data hostFestImportData) *dopeui.Doc {
 		sect = []dopeui.Item{dopeui.Empty(dopeui.Text(s.Host.Roster.NeedRatingNote()))}
 	}
 	page = append(page, dopeui.Section(sect...))
+	if data.Conflict != nil {
+		page = append(page, hostRosterConflictDialog(data.Conflict, festRef))
+	}
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
+}
+
+// hostRosterConflictDialog asks, per team that is leaving the roster with
+// results on it, whether it is one of the teams the roster brings (a changed
+// id, which keeps the number and everything scored under it) or a team that
+// really withdrew (which loses both). Nothing is preselected except the
+// incoming team of the same name, which is what a changed id looks like.
+func hostRosterConflictDialog(conflict *imports.RosterConflict, festRef string) *dopeui.Element {
+	s := dopestrings.Default
+	form := []dopeui.Item{
+		dopeui.DirCol, dopeui.SpaceMD, dopeui.Method("post"), dopeui.Action("/host/fest/" + festRef + "/rating/import"), dopeui.Autocomplete("off"),
+		dopeui.Subhead(dopeui.Text(s.Host.Roster.ConflictTitle())),
+		dopeui.Note(dopeui.Text(s.Host.Roster.ConflictHint())),
+	}
+	for _, team := range conflict.Dropped {
+		form = append(form, hostRosterConflictTeam(team, conflict.Added))
+	}
+	form = append(form, dopeui.Row(
+		dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Roster.ConflictSubmit())),
+		dopeui.Button(dopeui.Data("dialog-close", ""), dopeui.Text(s.Host.Roster.ConflictCancel())),
+	))
+	return dopeui.Dialog(dopeui.ID("rosterConflictDialog"), dopeui.Data("dialog-auto", ""), dopeui.Form(form...))
+}
+
+func hostRosterConflictTeam(team imports.DroppedTeam, added []imports.AddedTeam) *dopeui.Element {
+	s := dopestrings.Default
+	field := rosterChoiceField(team.TeamID)
+	card := []dopeui.Item{
+		dopeui.DirCol, dopeui.SpaceSM,
+		dopeui.Strong(dopeui.Text(s.Host.Roster.ConflictTeam(strconv.FormatInt(team.Number, 10), teamDisplayName(team.Name, team.City)))),
+		dopeui.Muted(dopeui.Text(s.Host.Roster.ConflictGames(strings.Join(team.Games, ", ")))),
+	}
+	if len(added) == 0 {
+		return dopeui.Card(append(card,
+			dopeui.Note(dopeui.Text(s.Host.Roster.ConflictNoCandidates())),
+			dopeui.Checkbox(dopeui.Name(field), dopeui.Value(rosterChoiceDrop), dopeui.Text(s.Host.Roster.ConflictChoiceDrop())),
+		)...)
+	}
+	choices := []dopeui.Item{dopeui.SpaceSM}
+	for _, candidate := range added {
+		items := []dopeui.Item{dopeui.Name(field), dopeui.Value(rosterChoiceMerge(candidate.RatingID)),
+			dopeui.Text(s.Host.Roster.ConflictChoiceMerge(strconv.FormatInt(candidate.RatingID, 10), teamDisplayName(candidate.Name, candidate.City)))}
+		// Nothing is preselected but the incoming team of the same name: a team
+		// whose id changed keeps its name, which is the case this dialog exists for.
+		if candidate.Name == team.Name {
+			items = append(items, dopeui.Checked())
+		}
+		choices = append(choices, dopeui.Radio(items...))
+	}
+	choices = append(choices, dopeui.Radio(dopeui.Name(field), dopeui.Value(rosterChoiceDrop), dopeui.Text(s.Host.Roster.ConflictChoiceDrop())))
+	return dopeui.Card(append(card,
+		dopeui.Pickgroup(dopeui.Label(s.Host.Roster.ConflictChoiceLabel()), dopeui.Col(choices...)),
+	)...)
+}
+
+// teamDisplayName is the fest's way of naming a team to a person, its name
+// with its city in brackets, which the numbering page already uses.
+func teamDisplayName(name, city string) string {
+	return numbering.DisplayName(numbering.Team{Name: name, City: city})
+}
+
+// The reconcile form names one field per conflicted team, carrying either the
+// rating id it is merged into or the word that agrees to lose it.
+const rosterChoiceDrop = "drop"
+
+func rosterChoiceField(teamID int64) string {
+	return "team_" + strconv.FormatInt(teamID, 10)
+}
+
+func rosterChoiceMerge(ratingID int64) string {
+	return "merge:" + strconv.FormatInt(ratingID, 10)
+}
+
+// parseRosterChoice reads the reconcile form back into the answer the import
+// takes. An unanswered team is simply absent, and the import asks again.
+func parseRosterChoice(form url.Values) imports.RosterChoice {
+	choice := imports.RosterChoice{Merge: map[int64]int64{}, Drop: map[int64]bool{}}
+	for key, values := range form {
+		teamText, ok := strings.CutPrefix(key, "team_")
+		if !ok || len(values) == 0 {
+			continue
+		}
+		teamID, err := strconv.ParseInt(teamText, 10, 64)
+		if err != nil || teamID <= 0 {
+			continue
+		}
+		if values[0] == rosterChoiceDrop {
+			choice.Drop[teamID] = true
+			continue
+		}
+		ratingText, ok := strings.CutPrefix(values[0], "merge:")
+		if !ok {
+			continue
+		}
+		if ratingID, err := strconv.ParseInt(ratingText, 10, 64); err == nil && ratingID > 0 {
+			choice.Merge[teamID] = ratingID
+		}
+	}
+	return choice
 }
 
 // hostSchemeImportDoc builds the JSON-scheme import page: a paste-and-import form.
@@ -390,12 +499,16 @@ func (s *Server) handleHostEditPlayerOverride(w http.ResponseWriter, r *http.Req
 }
 
 func (s *Server) renderHostRatingImportPage(w http.ResponseWriter, r *http.Request, festID int64, errMsg, notice string) {
+	s.renderHostRatingImport(w, r, festID, errMsg, notice, nil)
+}
+
+func (s *Server) renderHostRatingImport(w http.ResponseWriter, r *http.Request, festID int64, errMsg, notice string, conflict *imports.RosterConflict) {
 	s.festPage(w, r, festID, func(fest view.HostFest) (*dopeui.Doc, error) {
 		ratingID, err := s.loadFestRatingID(r.Context(), festID)
 		if err != nil {
 			return nil, err
 		}
-		return hostRatingImportDoc(hostFestImportData{Fest: fest, RatingID: ratingID, Error: errMsg, Notice: notice}), nil
+		return hostRatingImportDoc(hostFestImportData{Fest: fest, RatingID: ratingID, Error: errMsg, Notice: notice, Conflict: conflict}), nil
 	})
 }
 
@@ -508,7 +621,13 @@ func (s *Server) handleHostImportRatingRoster(w http.ResponseWriter, r *http.Req
 		s.renderHostRatingImportPage(w, r, festID, dopestrings.Default.Host.Roster.NeedRatingNote(), "")
 		return
 	}
-	result, err := imports.FetchAndImportRatingRoster(s.h.Engine(), r.Context(), festID, ratingID)
+	choice := parseRosterChoice(r.Form)
+	result, err := imports.FetchAndImportRatingRoster(s.h.Engine(), r.Context(), festID, ratingID, choice)
+	var conflict *imports.RosterConflict
+	if errors.As(err, &conflict) {
+		s.renderHostRatingImport(w, r, festID, "", "", conflict)
+		return
+	}
 	if err != nil {
 		s.renderHostRatingImportPage(w, r, festID, err.Error(), "")
 		return
@@ -518,6 +637,9 @@ func (s *Server) handleHostImportRatingRoster(w http.ResponseWriter, r *http.Req
 		msg = dopestrings.Default.Host.Roster.ImportUnchangedNotice(strconv.Itoa(result.TeamCount), strconv.Itoa(result.PlayerCount))
 	} else {
 		msg = dopestrings.Default.Host.Roster.ImportDoneCounts(strconv.Itoa(result.TeamCount), strconv.Itoa(result.PlayerCount), strconv.Itoa(result.ODGameCount), strconv.Itoa(result.KSIGameCount))
+	}
+	if len(choice.Merge) > 0 {
+		msg += " " + dopestrings.Default.Host.Roster.ImportMergedNotice(strconv.Itoa(len(choice.Merge)))
 	}
 	s.renderHostRatingImportPage(w, r, festID, "", msg)
 }

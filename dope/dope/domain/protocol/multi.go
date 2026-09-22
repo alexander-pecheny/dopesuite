@@ -58,6 +58,33 @@ func (multi) Seats(stateJSON json.RawMessage) []Seat {
 	return seats
 }
 
+// EnteredSeats: every minigame is a grid of one row per team, so a team
+// carries something entered when any of its cells is non-zero, or when the host
+// has marked it as having refused to play on. A row of nothing but zeroes reads
+// as untouched, which is what an empty sheet of a {0,1} minigame is.
+func (multi) EnteredSeats(stateJSON json.RawMessage) []bool {
+	var state games.MultiState
+	_ = json.Unmarshal(stateJSON, &state)
+	out := make([]bool, len(state.Participants))
+	for i, p := range state.Participants {
+		out[i] = games.KSIParticipantDeclined(state.Declined, p)
+	}
+	for _, game := range state.Games {
+		for row, cells := range game.Cells {
+			if row >= len(out) {
+				break
+			}
+			for _, cell := range cells {
+				if cell != 0 {
+					out[row] = true
+					break
+				}
+			}
+		}
+	}
+	return out
+}
+
 func (multi) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error) {
 	var state games.MultiState
 	if err := json.Unmarshal(stateJSON, &state); err != nil {

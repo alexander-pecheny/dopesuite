@@ -11,6 +11,7 @@ import (
 	"dope/dope/platform/util"
 	dopeserver "dope/dope/server"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"testing"
 )
@@ -119,7 +120,7 @@ func TestImportRatingRosterRemapsKSIScoresByTeam(t *testing.T) {
 		{RatingID: 3, Name: "Гамма"},
 		{RatingID: 5, Name: "Эхо"},
 	}
-	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, initial); err != nil {
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, initial, imports.RosterChoice{}); err != nil {
 		t.Fatalf("initial import: %v", err)
 	}
 
@@ -146,7 +147,7 @@ func TestImportRatingRosterRemapsKSIScoresByTeam(t *testing.T) {
 		{RatingID: 5, Name: "Эхо"},
 		{RatingID: 9, Name: "Яков"},
 	}
-	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, next); err != nil {
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, next, imports.RosterChoice{}); err != nil {
 		t.Fatalf("re-import: %v", err)
 	}
 
@@ -194,4 +195,171 @@ func nameIndex(participants []games.KSIParticipant) map[string]int {
 		idx[p.Name] = i
 	}
 	return idx
+}
+
+// TestImportRatingRosterStopsOnTeamWithResults is the tournament incident of
+// 2026-09-20: a team's id changed on rating.chgk.info while its name stayed,
+// so the re-import saw one team leave and another arrive, gave the arrival a
+// fresh number, and the results entered under the old number vanished. The
+// import must stop and ask instead, and the two answers must do what they say.
+func TestImportRatingRosterStopsOnTeamWithResults(t *testing.T) {
+	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, _, ksiGameID := createRosterPropagationFixture(t, db)
+	srv := dopeserver.NewTestServer(func(e *core.Engine) {
+		e.DB = db
+		e.RT = realtime.NewManager()
+	})
+
+	initial := []roster.FestRosterImportTeam{
+		{RatingID: 2, Name: "Бета"},
+		{RatingID: 3, Name: "Эта-ноль"},
+	}
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, initial, imports.RosterChoice{}); err != nil {
+		t.Fatalf("initial import: %v", err)
+	}
+	seedKSIAnswer(t, db, ksiGameID, "Эта-ноль")
+	teamID, number := festTeamByRatingID(t, db, festID, 3)
+
+	// The same team, under the id the site now gives it.
+	renumbered := []roster.FestRosterImportTeam{
+		{RatingID: 2, Name: "Бета"},
+		{RatingID: 93587, Name: "Эта-ноль"},
+	}
+
+	_, err = imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, renumbered, imports.RosterChoice{})
+	var conflict *imports.RosterConflict
+	if !errors.As(err, &conflict) {
+		t.Fatalf("import should stop on a team with results, got %v", err)
+	}
+	if len(conflict.Dropped) != 1 || conflict.Dropped[0].TeamID != teamID || conflict.Dropped[0].Name != "Эта-ноль" {
+		t.Fatalf("dropped = %#v, want the one team with results", conflict.Dropped)
+	}
+	if len(conflict.Dropped[0].Games) != 1 || conflict.Dropped[0].Games[0] != "КСИ fixture" {
+		t.Fatalf("dropped games = %v, want the КСИ game it has results in", conflict.Dropped[0].Games)
+	}
+	if len(conflict.Added) != 1 || conflict.Added[0].RatingID != 93587 {
+		t.Fatalf("added = %#v, want the incoming team under its new id", conflict.Added)
+	}
+	// Nothing was written: the roster still holds the team under its old id.
+	if _, stillThere := festTeamByRatingID(t, db, festID, 3); stillThere != number {
+		t.Fatalf("a stopped import must not renumber anything")
+	}
+
+	// Merging: the row stays, keeps its number and its answers, and only the
+	// id the site knows it by changes.
+	choice := imports.RosterChoice{Merge: map[int64]int64{teamID: 93587}}
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, renumbered, choice); err != nil {
+		t.Fatalf("merging import: %v", err)
+	}
+	mergedID, mergedNumber := festTeamByRatingID(t, db, festID, 93587)
+	if mergedID != teamID || mergedNumber != number {
+		t.Fatalf("merged team = id %d number %d, want the original id %d number %d", mergedID, mergedNumber, teamID, number)
+	}
+	after := loadKSIState(t, db, ksiGameID)
+	if got := after.Themes[0].Answers[nameIndex(after.Participants)["Эта-ноль"]][2]; got != "right" {
+		t.Fatalf("merged team should keep its answer, got %q", got)
+	}
+}
+
+// TestImportRatingRosterDropsWhenTheHostSaysSo: the other answer. A team that
+// really withdrew goes, results and all, once the host has said as much.
+func TestImportRatingRosterDropsWhenTheHostSaysSo(t *testing.T) {
+	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, _, ksiGameID := createRosterPropagationFixture(t, db)
+	srv := dopeserver.NewTestServer(func(e *core.Engine) {
+		e.DB = db
+		e.RT = realtime.NewManager()
+	})
+
+	initial := []roster.FestRosterImportTeam{
+		{RatingID: 2, Name: "Бета"},
+		{RatingID: 3, Name: "Гамма"},
+	}
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, initial, imports.RosterChoice{}); err != nil {
+		t.Fatalf("initial import: %v", err)
+	}
+	seedKSIAnswer(t, db, ksiGameID, "Гамма")
+	teamID, _ := festTeamByRatingID(t, db, festID, 3)
+
+	withoutGamma := []roster.FestRosterImportTeam{{RatingID: 2, Name: "Бета"}}
+	choice := imports.RosterChoice{Drop: map[int64]bool{teamID: true}}
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, withoutGamma, choice); err != nil {
+		t.Fatalf("dropping import: %v", err)
+	}
+	after := loadKSIState(t, db, ksiGameID)
+	if _, stillSeated := nameIndex(after.Participants)["Гамма"]; stillSeated {
+		t.Fatalf("Гамма should have left the game, participants = %v", after.Participants)
+	}
+}
+
+// TestImportRatingRosterAsksNothingAboutAnEmptyTeam: a team that leaves with
+// nothing entered against it is not worth a question, and goes as it always did.
+func TestImportRatingRosterAsksNothingAboutAnEmptyTeam(t *testing.T) {
+	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, _, _ := createRosterPropagationFixture(t, db)
+	srv := dopeserver.NewTestServer(func(e *core.Engine) {
+		e.DB = db
+		e.RT = realtime.NewManager()
+	})
+
+	initial := []roster.FestRosterImportTeam{
+		{RatingID: 2, Name: "Бета"},
+		{RatingID: 3, Name: "Гамма"},
+	}
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, initial, imports.RosterChoice{}); err != nil {
+		t.Fatalf("initial import: %v", err)
+	}
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533,
+		[]roster.FestRosterImportTeam{{RatingID: 2, Name: "Бета"}}, imports.RosterChoice{}); err != nil {
+		t.Fatalf("re-import without Гамма: %v", err)
+	}
+}
+
+// seedKSIAnswer writes one right answer for a team into the КСИ game's document,
+// at the row that team currently occupies.
+func seedKSIAnswer(t *testing.T, db *sql.DB, gameID int64, team string) {
+	t.Helper()
+	before := loadKSIState(t, db, gameID)
+	grid := make([][]string, len(before.Participants))
+	for i := range grid {
+		grid[i] = []string{"", "", "", "", ""}
+	}
+	row, ok := nameIndex(before.Participants)[team]
+	if !ok {
+		t.Fatalf("team %q is not seated: %v", team, before.Participants)
+	}
+	grid[row][2] = "right"
+	if _, err := db.Exec(`update matches set state_json = ? where game_id = ? and code = 'main'`, util.MustJSON(map[string]any{
+		"participants": before.Participants,
+		"themes":       []map[string]any{{"answers": grid}},
+		"finished":     false,
+	}), gameID); err != nil {
+		t.Fatalf("seed ksi answer: %v", err)
+	}
+}
+
+// festTeamByRatingID returns a fest team's row id and number, by the rating id
+// it is currently known under.
+func festTeamByRatingID(t *testing.T, db *sql.DB, festID, ratingID int64) (int64, int64) {
+	t.Helper()
+	var id, number int64
+	if err := db.QueryRow(`select id, coalesce(number, 0) from fest_teams where fest_id = ? and rating_id = ?`, festID, ratingID).Scan(&id, &number); err != nil {
+		t.Fatalf("team with rating id %d: %v", ratingID, err)
+	}
+	return id, number
 }

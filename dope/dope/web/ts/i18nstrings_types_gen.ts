@@ -544,6 +544,16 @@ export type Strings = {
       colFromTeam: () => string;
       colPlayers: () => string;
       colToTeam: () => string;
+      conflictCancel: () => string;
+      conflictChoiceDrop: () => string;
+      conflictChoiceLabel: () => string;
+      conflictChoiceMerge: (id: string, team: string) => string;
+      conflictGames: (games: string) => string;
+      conflictHint: () => string;
+      conflictNoCandidates: () => string;
+      conflictSubmit: () => string;
+      conflictTeam: (number: string, team: string) => string;
+      conflictTitle: () => string;
       deleteBtn: () => string;
       deleteOverrideConfirm: () => string;
       editOverrideLabel: () => string;
@@ -555,6 +565,7 @@ export type Strings = {
       gamesLabel: () => string;
       importDoneCounts: (teams: string, players: string, od: string, ksi: string) => string;
       importDoneNotice: () => string;
+      importMergedNotice: (n: string) => string;
       importSubmit: () => string;
       importUnchangedNotice: (teams: string, players: string) => string;
       needRatingNote: () => string;
@@ -588,8 +599,10 @@ export type Strings = {
     };
     rating: {
       apiError: (detail: string) => string;
+      conflictError: (n: string) => string;
       decodeFailed: (err: string) => string;
       fetchFailed: (err: string) => string;
+      mergeStale: () => string;
       noTeams: () => string;
       squadTooBig: (name: string) => string;
     };
