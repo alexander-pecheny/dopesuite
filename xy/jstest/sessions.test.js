@@ -82,6 +82,46 @@ test("the invite line converts from the anchor zone, not from UTC", () => {
   assert.equal(inviteLine(m), "20 июля, 18:00 (Берлин) / 19:00 (Москва) / 21:00 (Алматы)");
 });
 
+// #74: adding a city «just in case» should not cost the line a second 19:00.
+test("cities showing the same clock are named together, alphabetically", () => {
+  const m = {
+    ...base,
+    time: "19:00",
+    cities: [
+      { zone: "Europe/Moscow", name: "Москва" },
+      { zone: "Asia/Yekaterinburg", name: "Ижевск" },
+      { zone: "Europe/Minsk", name: "Минск" },
+    ],
+  };
+  assert.equal(inviteLine(m), "20 июля, 19:00 (Минск, Москва) / 21:00 (Ижевск)");
+});
+
+test("a group takes the place of its first city", () => {
+  const m = {
+    ...base,
+    time: "19:00",
+    cities: [
+      { zone: "Asia/Almaty", name: "Алматы" },
+      { zone: "Europe/Moscow", name: "Москва" },
+      { zone: "Europe/Minsk", name: "Минск" },
+    ],
+  };
+  assert.equal(inviteLine(m), "20 июля, 21:00 (Алматы) / 19:00 (Минск, Москва)");
+});
+
+test("the same clock on two days stays two entries", () => {
+  const m = {
+    ...base,
+    time: "22:00",
+    cities: [
+      { zone: "Europe/Moscow", name: "Москва" },
+      { zone: "Asia/Vladivostok", name: "Владивосток" },
+      { zone: "Europe/Minsk", name: "Минск" },
+    ],
+  };
+  assert.equal(inviteLine(m), "20 июля, 22:00 (Минск, Москва) / 05:00 (Владивосток) — 21 июля");
+});
+
 test("a city whose local date differs carries its own", () => {
   const m = {
     ...base,

@@ -374,7 +374,10 @@ function zonedParts(at: Date, zone: string): Parts {
 //   20 July, 19:00 (Berlin) / 21:00 (Moscow) / 23:00 (Almaty)
 //
 // A city whose local date differs from the anchor's carries its own — 23:00
-// Almaty can be tomorrow.
+// Almaty can be tomorrow. Cities showing the same clock are named together:
+// «19:00 (Минск, Москва)» rather than the same 19:00 twice (#74). An editor
+// adds a city for the sake of whoever might be reading from there, so a long
+// list of them is the normal case, not the odd one.
 export function inviteLine(m: SessionMeta): string {
   const head = humanDate(m.date);
   if (!m.time) return head;
@@ -385,11 +388,29 @@ export function inviteLine(m: SessionMeta): string {
     ? m.cities
     : [{ zone: m.tz || "UTC", name: m.tz || "" }];
   const anchorDay = m.date;
-  const parts = cities.map((c) => {
+  // Grouped by the clock they actually show, not by the zone: Europe/Minsk and
+  // Europe/Moscow are two zones and one time, which is exactly the pair a reader
+  // does not want to see written out twice. The group takes the place of its
+  // first city, so the order the editor put the cities in still shows through,
+  // and the names inside it are alphabetical.
+  const order: string[] = [];
+  const groups = new Map<string, { clock: string; day: string; names: string[] }>();
+  for (const c of cities) {
     const p = zonedParts(at, c.zone);
     const day = `${p.y}-${pad(p.mo)}-${pad(p.d)}`;
     const clock = `${pad(p.hh)}:${pad(p.mm)}`;
-    const where = c.name ? ` (${c.name})` : "";
+    const key = `${day} ${clock}`;
+    let g = groups.get(key);
+    if (!g) {
+      g = { clock, day, names: [] };
+      groups.set(key, g);
+      order.push(key);
+    }
+    if (c.name && !g.names.includes(c.name)) g.names.push(c.name);
+  }
+  const parts = order.map((key) => {
+    const { clock, day, names } = groups.get(key)!;
+    const where = names.length ? ` (${[...names].sort((a, b) => a.localeCompare(b, "ru")).join(", ")})` : "";
     return day === anchorDay ? `${clock}${where}` : `${clock}${where} — ${humanDate(day)}`;
   });
   return head ? `${head}, ${parts.join(" / ")}` : parts.join(" / ");
