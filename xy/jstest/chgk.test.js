@@ -173,6 +173,25 @@ test("parse4sElem tags the inline directives", () => {
   assert.deepEqual(screenRun[1], { for_print: "p", for_screen: "s" });
 });
 
+// A link is one thing, whether or not it spells out its protocol: the
+// underscores in a wiki path are part of the address, not italic markers, and an
+// imported source is full of links somebody pasted without the https:// (#82).
+test("a link without its protocol keeps its underscores instead of going italic", () => {
+  const src = "Источник: en.wikipedia.org/wiki/Dawes_Road_Cemetery";
+  const runs = parse4sElem(src);
+  assert.equal(runs.filter((r) => r[0] === "").map((r) => r[1]).join(""), src);
+  assert.equal(runs.filter((r) => r[0] === "italic").length, 0);
+});
+
+test("the gluing leaves a protocol-less link alone and picks up after it", () => {
+  assert.equal(xyChgk.replaceNoBreak("www.example.com/a-b_c и что-то ещё"), "www.example.com/a-b_c и\u00a0что\u2011то ещё");
+});
+
+test("italic still parses beside a link", () => {
+  const runs = parse4sElem("_курсив_ рядом с en.wikipedia.org/wiki/A_B");
+  assert.ok(runs.some((r) => r[0] === "italic" && r[1] === "курсив"));
+});
+
 test("printRuns keeps host-only square brackets and accents (print mode)", () => {
   const runs = xyChgk.printRuns("текст [реплика ведущего] сл`ово");
   const flat = runs.map((r) => (typeof r[1] === "string" ? r[1] : "")).join("");

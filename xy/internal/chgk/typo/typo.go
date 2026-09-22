@@ -81,6 +81,19 @@ func httpURLSpans(s string) []span {
 // which is what lets the pptx wrapper break a long link mid-token.
 func HasURL(s string) bool { return len(urlSpans(s)) > 0 }
 
+// URLSpans is iter_url_spans for callers outside this package: the [start, end)
+// byte offsets of every link in the text, protocol or no protocol. The inline
+// layer leaves those spans out of the italic markers and the nbsp gluing, the
+// way composer_common and replace_no_break do.
+func URLSpans(s string) [][2]int {
+	spans := urlSpans(s)
+	out := make([][2]int, len(spans))
+	for i, sp := range spans {
+		out[i] = [2]int{sp.start, sp.end}
+	}
+	return out
+}
+
 // urlSpans ports iter_url_spans: the http scan merged with the reURL matches.
 func urlSpans(s string) []span {
 	spans := httpURLSpans(s)

@@ -3,6 +3,8 @@ package inline
 import (
 	"regexp"
 	"strings"
+
+	"xy/internal/chgk/typo"
 )
 
 // Non-breaking-space gluing, ported from chgk.js replaceNoBreak/nbSegment (itself
@@ -115,22 +117,24 @@ func nbSegment(s string, nb NoBreak) string {
 	return s
 }
 
+// A link is left alone whole: gluing inside one would put a non-breaking hyphen
+// in a path, and the address would no longer be the address. That covers a link
+// written without its protocol too (typo.URLSpans, as replace_no_break does).
 func ReplaceNoBreak(text string, nb NoBreak) string {
-	spans := HTTPURLSpans(text)
+	spans := typo.URLSpans(text)
 	if len(spans) == 0 {
 		return nbSegment(text, nb)
 	}
-	r := []rune(text)
 	var b strings.Builder
 	pos := 0
 	for _, sp := range spans {
 		if sp[0] < pos {
 			continue
 		}
-		b.WriteString(nbSegment(string(r[pos:sp[0]]), nb))
-		b.WriteString(string(r[sp[0]:sp[1]]))
+		b.WriteString(nbSegment(text[pos:sp[0]], nb))
+		b.WriteString(text[sp[0]:sp[1]])
 		pos = sp[1]
 	}
-	b.WriteString(nbSegment(string(r[pos:]), nb))
+	b.WriteString(nbSegment(text[pos:], nb))
 	return b.String()
 }

@@ -1,6 +1,7 @@
 {
   "idempotent": [
-    "? В романе \"Мастер и Маргарита\" ОН - кот, что-то знавший о нём.\n! Бегемот"
+    "? В романе \"Мастер и Маргарита\" ОН - кот, что-то знавший о нём.\n! Бегемот",
+    "^ en.wikipedia.org/wiki/Dawes_Road_Cemetery"
   ],
   "pass": [
     {
@@ -42,6 +43,16 @@
       "in": "? раз- два",
       "name": "NEL counts as whitespace around a dash",
       "want": "? раз— два"
+    },
+    {
+      "in": "^ en.wikipedia.org/wiki/Dawes_Road_Cemetery",
+      "name": "a link written without its protocol is left alone, underscores and all",
+      "want": "^ en.wikipedia.org/wiki/Dawes_Road_Cemetery"
+    },
+    {
+      "in": "^ Источник: www.example.com/a-b_c и ещё что-то",
+      "name": "the gluing stops at a www link and picks up after it",
+      "want": "^ Источник: www.example.com/a-b_c и ещё что‑то"
     }
   ],
   "passAccents": [

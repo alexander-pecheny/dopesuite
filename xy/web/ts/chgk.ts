@@ -346,6 +346,31 @@ function* iterHttpUrlSpans(s: string): Generator<[number, number]> {
   }
 }
 
+// RE_URL is chgksuite's re_url (typotools), as internal/chgk/typo spells it: a
+// scheme, a www host, or a bare domain with a path — what a link looks like
+// when nobody typed the "https://". A source pasted out of somebody else's
+// document is full of those.
+const RE_URL = /(?:[a-z][\w-]+:(?:\/{1,3}|[a-z0-9%])|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}\/)[^\s()<>]*/g;
+
+// urlSpans ports iter_url_spans: the http scan merged with the RE_URL matches,
+// sorted and overlapping ones welded together. Everything that treats a link as
+// one indivisible thing — the italic markers, the nbsp gluing — reads this, so
+// that en.wikipedia.org/wiki/Dawes_Road_Cemetery keeps its underscores instead
+// of turning the middle word italic (#82).
+function urlSpans(s: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = [...iterHttpUrlSpans(s)];
+  for (const m of s.matchAll(RE_URL)) spans.push([m.index, m.index + m[0].length]);
+  spans.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const merged: Array<[number, number]> = [];
+  for (const [start, end] of spans) {
+    if (start >= end) continue;
+    const last = merged[merged.length - 1];
+    if (last && start <= last[1]) last[1] = Math.max(last[1], end);
+    else merged.push([start, end]);
+  }
+  return merged;
+}
+
 // findMatchingClosingBracket: index of the ")" closing the bracket at `index`.
 function findMatchingClosingBracket(s: string, index: number): number | null {
   const ob = s[index];
@@ -484,10 +509,11 @@ function parse4sElem(s: string): Run[] {
 function parse4sElemKeep(s: string): Run[] {
   s = s.replace(/\\_/g, UNDERSCORE_PLACEHOLDER).replace(/\\~/g, TILDE_PLACEHOLDER);
 
-  // protect underscores/tildes inside URLs
+  // protect underscores/tildes inside URLs — every URL, not only the ones that
+  // spell out http:// (chgksuite's iter_url_spans)
   {
     let res = "", last = 0;
-    for (const [start, end] of iterHttpUrlSpans(s)) {
+    for (const [start, end] of urlSpans(s)) {
       res += s.slice(last, start);
       res += s.slice(start, end).replace(/_/g, UNDERSCORE_PLACEHOLDER).replace(/~/g, TILDE_PLACEHOLDER);
       last = end;
@@ -677,10 +703,12 @@ function nbSegment(s: string): string {
   return s;
 }
 
-// replaceNoBreak applies nbSegment to every non-URL span of the text.
+// replaceNoBreak applies nbSegment to every non-URL span of the text. A link is
+// left alone whole — gluing inside one would put a non-breaking hyphen in a
+// path — and that holds for a link written without its protocol too.
 function replaceNoBreak(text: string | null | undefined): string {
   const s = text || "";
-  const spans = [...iterHttpUrlSpans(s)];
+  const spans = urlSpans(s);
   if (!spans.length) return nbSegment(s);
   let out = "", pos = 0;
   for (const [start, end] of spans) {

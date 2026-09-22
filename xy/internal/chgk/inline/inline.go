@@ -16,6 +16,8 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
+	"xy/internal/chgk/typo"
 )
 
 // run is one inline element of 4s markup (port of chgksuite _parse_4s_elem /
@@ -61,35 +63,6 @@ func BacktickReplace(s string) string {
 
 func isCyrillic(r rune) bool {
 	return (r >= 'а' && r <= 'я') || r == 'ё' || (r >= 'А' && r <= 'Я') || r == 'Ё'
-}
-
-func HTTPURLSpans(s string) [][2]int {
-	var spans [][2]int
-	r := []rune(s)
-	i := 0
-	for i < len(r) {
-		if hasPrefixAt(r, i, "http://") || hasPrefixAt(r, i, "https://") {
-			j := i + 1
-			bracket := 0
-			for j < len(r) && !(isSpace(r[j]) || (r[j] == ')' && bracket == 0)) {
-				if r[j] == '(' {
-					bracket++
-				} else if r[j] == ')' && bracket > 0 {
-					bracket--
-				}
-				j++
-			}
-			end := j
-			if j-1 >= 0 && (r[j-1] == ',' || r[j-1] == '.' || r[j-1] == ';') {
-				end = j - 1
-			}
-			spans = append(spans, [2]int{i, end})
-			i = j
-		} else {
-			i++
-		}
-	}
-	return spans
 }
 
 func isSpace(r rune) bool {
@@ -208,20 +181,20 @@ func tokenize(s string) []Run {
 	s = strings.ReplaceAll(s, "\\_", underscorePlaceholder)
 	s = strings.ReplaceAll(s, "\\~", tildePlaceholder)
 
-	// protect underscores/tildes inside URLs
+	// protect underscores/tildes inside URLs — every URL, not only the ones that
+	// spell out http:// (typo.URLSpans, as composer_common does)
 	{
-		r := []rune(s)
 		var b strings.Builder
 		last := 0
-		for _, sp := range HTTPURLSpans(s) {
-			b.WriteString(string(r[last:sp[0]]))
-			seg := string(r[sp[0]:sp[1]])
+		for _, sp := range typo.URLSpans(s) {
+			b.WriteString(s[last:sp[0]])
+			seg := s[sp[0]:sp[1]]
 			seg = strings.ReplaceAll(seg, "_", underscorePlaceholder)
 			seg = strings.ReplaceAll(seg, "~", tildePlaceholder)
 			b.WriteString(seg)
 			last = sp[1]
 		}
-		b.WriteString(string(r[last:]))
+		b.WriteString(s[last:])
 		s = b.String()
 	}
 
