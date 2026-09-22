@@ -4,11 +4,13 @@
 // nodes as a ui record (TimelineUI); its rendering is exercised in the browser.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { fakeNode } from "./dom.js";
 import {
   eventAuthor, replyCountsOf, orderThreadReplies, orderFeedEvents,
   feedOrderOf, diffViewOf, excerptComments, fullDiffSides,
   feedFilterOf, feedFilterKeeps, readBucketsOf, linkSegments,
   resolveMentions, encodeCommentPayload, decodeCommentPayload, aggregateReactions,
+  onSubmitOnce,
 } from "../web/assets/static/dist/timeline.js";
 
 const me = { user_id: 1, username: "ya" };
@@ -273,4 +275,51 @@ test("a reaction anchored to a comment is neither counted nor listed as a reply"
   ];
   assert.equal(replyCountsOf(events).get(2), 1);
   assert.deepEqual(orderThreadReplies(events, 2).map((e) => e.id), [4]);
+});
+
+// ---- one comment per press ----
+// Both composers — the card's and the reply modal's — post through the network
+// and then reload the card, which is long enough to press the button twice (#85).
+
+function composer() {
+  const form = fakeNode("form");
+  const button = fakeNode("button", { attrs: { type: "submit" } });
+  form.kids.push(button);
+  button.parentElement = form;
+  return { form, button };
+}
+
+test("a second press while the first comment is still going posts nothing", async () => {
+  const { form, button } = composer();
+  let posted = 0;
+  let release;
+  onSubmitOnce(form, async () => { posted++; await new Promise((r) => { release = r; }); });
+
+  form.fire("submit");
+  await Promise.resolve();
+  assert.equal(button.disabled, true);
+  form.fire("submit");
+  form.fire("submit"); // and Cmd+Enter, which does not look at the button
+  assert.equal(posted, 1);
+
+  release();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(button.disabled, false);
+});
+
+test("the button comes back after a failed send, so the comment can be tried again", async () => {
+  const { form, button } = composer();
+  let tries = 0;
+  onSubmitOnce(form, async () => { tries++; throw new Error("нет сети"); });
+  const loud = console.error;
+  console.error = () => {}; // the net logs it; the test is about the button
+
+  form.fire("submit");
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(button.disabled, false);
+
+  form.fire("submit");
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(tries, 2);
+  console.error = loud;
 });

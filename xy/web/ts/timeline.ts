@@ -30,6 +30,33 @@ function submitOnCmdEnter(input: HTMLElement, form: HTMLFormElement): void {
   onCmdEnter(input, () => form.requestSubmit());
 }
 
+// onSubmitOnce wires a form's submit to an async handler that runs one at a
+// time. Posting a comment waits for the round trip — encrypt, send, reload the
+// card — which on a slow link is long enough to press the button again, and
+// the server has no way to tell the second comment from the first (#85). The
+// button goes dead for the duration, and the flag covers Cmd+Enter as well,
+// since requestSubmit() submits whatever the button's state is.
+export function onSubmitOnce(form: HTMLFormElement, handler: () => Promise<void>): void {
+  const button = form.querySelector<HTMLButtonElement>("button[type=submit]");
+  let sending = false;
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (sending) return;
+    sending = true;
+    if (button) button.disabled = true;
+    try {
+      await handler();
+    } catch (err) {
+      // Both handlers put their own failure next to the composer; this is only
+      // the net that still gives the button back if something else throws.
+      console.error(err);
+    } finally {
+      sending = false;
+      if (button) button.disabled = false;
+    }
+  });
+}
+
 // A timeline event as this module reads it: the synced/pending DTO plus the
 // comment-specific flags the server adds and the client-recomputed reply_count.
 export interface CardEvent extends TimelineEvent {
@@ -910,8 +937,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   }
 
   submitOnCmdEnter(ui.threadInput, ui.threadForm);
-  ui.threadForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
+  onSubmitOnce(ui.threadForm, async () => {
     const input = ui.threadInput;
     const text = input.value.trim();
     const oc = deps.card.openCardId();
@@ -1103,10 +1129,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   }
 
   submitOnCmdEnter(ui.commentInput, ui.commentForm);
-  ui.commentForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-    void postComment();
-  });
+  onSubmitOnce(ui.commentForm, async () => { await postComment(); });
 
   // ---- @-mentions typing help ----
   // A dropdown of member names once the caret sits in an @-token. Picking
