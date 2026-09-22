@@ -422,10 +422,10 @@ export type Strings = {
     protocol: {
       answerTitle: (team: string, theme: string, value: string) => string;
       bet: () => string;
-      betAnswer: () => string;
       betTitle: (team: string) => string;
       finished: () => string;
       plus: () => string;
+      questionCount: (n: string) => string;
       seat: (n: string) => string;
       theme: (n: string) => string;
       unseated: () => string;

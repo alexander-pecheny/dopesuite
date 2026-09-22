@@ -7,7 +7,7 @@
 // side-effect module bundled by pages/hamsa.ts.
 
 import {cssEscape, option, questionNumberNode, td, th} from "./cells.js";
-import type {CellContent} from "./cells.js";
+import type {CellContent, CellSpec} from "./cells.js";
 import {festLetters, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
 import {buildRosterView} from "./fest-roster.js";
@@ -15,7 +15,7 @@ import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReloa
 import {mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameInitLike} from "./game-page.js";
-import {createFloatingPopover, markNameOverflow, renderTabBar} from "./widgets.js";
+import {bindScrollEdges, createFloatingPopover, fitScrollFade, markNameOverflow, renderTabBar} from "./widgets.js";
 import {createSheetCursor, parseMark} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {buildTwoRowScoreTable} from "./score-table.js";
@@ -156,6 +156,13 @@ window.addEventListener("hashchange", () => {
     activeTab = next;
     render();
   }
+});
+
+fitScrollFade(root.closest(".sheet-frame"));
+// Once a sheet is scrolled sideways, the frozen columns' right edge shades what
+// slides under it — the same cue EK's stage sheet draws, from the same class.
+const sheetScroll = bindScrollEdges(root.closest(".sheet-frame"), ({left}, frame) => {
+  frame.classList.toggle("stage-scroll-left", left && tabs().find((tab) => tab.key === activeTab)?.kind === "protocol");
 });
 
 // === the document ===
@@ -346,11 +353,13 @@ function themeGroups(bout: BoutEntry): ThemeGroup[] {
 
 // A group's own head is narrow — it stands over the theme's score, one column
 // wide — so it names the theme and nothing else; what the questions are worth
-// is written across their own headers.
-function groupLabelOf(group: ThemeGroup): string {
+// is written across their own headers. The team round's score is a theme head
+// too, numbered after the sixteen: its column holds a number like the others,
+// and the bet column is headed by the word for a stake, where the host types it.
+function groupLabelOf(group: ThemeGroup, themes: number): string {
   switch (group.kind) {
   case "bet":
-    return S.hamsa.protocol.bet();
+    return S.hamsa.protocol.theme(String(themes + 1));
   case "shootout":
     return S.hamsa.round.shootout();
   default:
@@ -375,11 +384,24 @@ function columnGroup(groups: ThemeGroup[]): HTMLElement {
   col("hamsa-col-place-gap");
   for (const group of groups) {
     for (let q = 0; q < group.questions; q++) col(group.kind === "bet" ? "hamsa-col-bet" : "hamsa-col-q");
-    col(group.kind === "bet" ? "hamsa-col-bet-score" : "hamsa-col-score");
+    col("hamsa-col-score");
     col("hamsa-col-gap");
   }
   col("hamsa-col-total");
+  for (let q = 0; q < hamsa.QUESTIONS; q++) col("hamsa-col-narrow");
   return cols;
+}
+
+// The trailing columns are EK's: Σ+, then one narrow count per question of a
+// theme, hardest first. A Hamsa question is worth a different nominal in every
+// round, so they are named by position — Q5 is the fifth question of a theme,
+// counted over all sixteen.
+function trailingHeaders(): CellSpec[] {
+  const heads: CellSpec[] = [{content: S.hamsa.protocol.plus(), className: "number plus-head"}];
+  for (let q = hamsa.QUESTIONS; q > 0; q--) {
+    heads.push({content: S.hamsa.protocol.questionCount(String(q)), className: "number narrow"});
+  }
+  return heads;
 }
 
 // buildBout is one bout: the wide sheet, two rows per team.
@@ -392,32 +414,35 @@ function buildBout(bout: BoutEntry): HTMLElement {
 
   const box = document.createElement("section");
   box.className = "hamsa-bout u-col u-gap-sm";
-  const head = document.createElement("h3");
-  head.className = "hamsa-bout-head";
-  const letter = boutLetters.get(bout.code);
-  head.textContent = [letter, bout.view.title || bout.code].filter(Boolean).join(". ");
-  box.appendChild(head);
 
   const table = buildTwoRowScoreTable({
     className: "match-table hamsa-sheet",
     attrs: {dataset: {match: bout.code}},
     nameHeader: boutHeader(bout),
     themes: groups.map((group) => ({
-      label: groupLabelOf(group),
-      // The bet's head is a word rather than a theme number, so its column is
-      // wider than a score column and says so.
-      labelClassName: group.kind === "bet" ? "theme-head hamsa-bet-score-head" : undefined,
+      label: groupLabelOf(group, hamsa.themeCount(state)),
       questionLabels: group.kind === "bet"
-        ? [S.hamsa.protocol.betAnswer()]
+        ? [S.hamsa.protocol.bet()]
         : group.values.map((value) => questionNumberNode(value)),
+      // The bet's head is a word over a column the width of a score, so it is
+      // written a step smaller, the way a three-figure question number is.
+      questionClassName: group.kind === "bet" ? "question-head hamsa-bet-head" : undefined,
     })),
-    afterThemeHeaders: [{content: S.hamsa.protocol.plus(), className: "number plus-head"}],
+    afterThemeHeaders: trailingHeaders(),
     rows: seats.map((id, seat) => ({
       nameCell: {content: seatName(bout.view, seat), className: "sticky sticky-name team-name"},
       totalCell: {content: rows[seat].total, className: "sticky sticky-total number total-cell", dataset: {total: `${bout.code}-${seat}`}},
       placeCell: {content: placeText(rows[seat].place), className: "sticky sticky-place number place-cell", dataset: {place: `${bout.code}-${seat}`}},
       themes: groups.map((group) => themeRow(bout, id, seat, group, editable)),
-      afterThemeCells: [{content: rows[seat].plus, className: "number plus-cell", attrs: {rowSpan: 2}, dataset: {plus: `${bout.code}-${seat}`}}],
+      afterThemeCells: [
+        {content: rows[seat].plus, className: "number plus-cell", attrs: {rowSpan: 2}, dataset: {plus: `${bout.code}-${seat}`}},
+        ...rows[seat].correct.slice().reverse().map((count, index) => ({
+          content: count,
+          className: "number narrow correct-count-cell",
+          attrs: {rowSpan: 2},
+          dataset: {count: `${bout.code}-${seat}-${hamsa.QUESTIONS - 1 - index}`},
+        })),
+      ],
     })),
   });
   table.classList.toggle("match-finished", Boolean(bout.view.finished));
@@ -450,7 +475,7 @@ function roundHeaderRow(bout: BoutEntry, groups: ThemeGroup[]): HTMLElement {
     row.appendChild(th(label, "hamsa-round-head", {colSpan: cells}));
     index += span;
   }
-  row.appendChild(th("", "hamsa-round-lead"));
+  row.appendChild(th("", "hamsa-round-tail", {colSpan: 1 + hamsa.QUESTIONS}));
   return row;
 }
 
@@ -463,7 +488,9 @@ function themeRow(bout: BoutEntry, id: number, seat: number, group: ThemeGroup, 
   const state = stateOf(bout.code);
   if (group.kind === "bet") {
     return {
-      playerCell: {content: betInput(bout, id, seat, editable), className: "player-cell theme-block theme-block-top-left"},
+      // Not a player-cell: that one is sized to hold a name, and a bet is a
+      // number in a column the width of a score.
+      playerCell: {content: betInput(bout, id, seat, editable), className: "hamsa-bet-cell theme-block theme-block-top-left"},
       scoreCell: {content: hamsa.betScore(state, id), className: "number theme-score theme-block theme-block-score",
         attrs: {rowSpan: 2}, dataset: {bet: `${bout.code}-${seat}`}},
       answers: [markCell(bout, id, seat, 0, 0, "bet")],
@@ -557,7 +584,7 @@ function markCell(bout: BoutEntry, id: number, seat: number, theme: number, q: n
   if (q === 0) cell.classList.add("theme-block-bottom-left");
   if (!viewer) cell.tabIndex = bout.view.finished ? -1 : 0;
   cell.title = kind === "bet"
-    ? S.hamsa.protocol.betAnswer()
+    ? S.hamsa.protocol.betTitle(seatName(bout.view, seat))
     : S.hamsa.protocol.answerTitle(seatName(bout.view, seat), String(theme + 1), String(hamsa.themeValues(state, theme)[q] || 0));
   paintMark(cell, mark);
   return cell;
@@ -580,28 +607,46 @@ function paintMark(cell: HTMLElement, mark: Mark): void {
   cell.classList.toggle("wrong", mark === "wrong");
 }
 
-// boutHeader is the sheet's name column head: the finished tick alone. The
-// bout names itself in the heading above the sheet, because the name column is
-// 90px on a phone and a title squeezed in beside a checkbox reads as neither.
+// boutHeader is the sheet's name column head, and it is EK's: the bout's name
+// beside the finished tick, in the one cell that stays frozen while the themes
+// scroll under it. A title above the sheet left that cell empty, and the
+// question headers showed through it.
 // A finished bout is read-only until the host unticks it.
 function boutHeader(bout: BoutEntry): CellContent {
+  const node = th("", "sticky sticky-name battle");
+  const layout = document.createElement("span");
+  layout.className = "battle-layout";
+  const title = document.createElement("span");
+  title.className = "battle-title";
+  title.textContent = [boutLetters.get(bout.code), bout.view.title || bout.code].filter(Boolean).join(". ");
+  layout.appendChild(title);
+
+  // A spectator gets the name alone, as on EK: the tick is the host's control.
+  if (viewer) {
+    node.appendChild(layout);
+    return node;
+  }
+
   const label = document.createElement("label");
   label.className = "finish-control";
   const checkbox = document.createElement("input");
   checkbox.type = "checkbox";
   checkbox.className = "finish-toggle";
   checkbox.checked = Boolean(bout.view.finished);
-  checkbox.disabled = viewer;
   checkbox.dataset.match = bout.code;
   checkbox.addEventListener("change", () => {
     void writer.send(matchScope(bout.code),
       {url: `${route.apiBase}/matches/${encodeURIComponent(bout.code)}/finish`, body: {finished: checkbox.checked}},
       {path: ["finished"], value: checkbox.checked});
   });
-  const text = document.createElement("span");
-  text.textContent = S.hamsa.protocol.finished();
-  label.append(checkbox, text);
-  return label;
+  // The tick alone, with the word in the tooltip: EK's, because the name column
+  // is 90px on a phone and the bout's name has to fit beside it.
+  label.title = S.hamsa.protocol.finished();
+  label.setAttribute("aria-label", S.hamsa.protocol.finished());
+  label.append(checkbox);
+  layout.appendChild(label);
+  node.appendChild(layout);
+  return node;
 }
 
 // === the cursor ===
@@ -730,6 +775,7 @@ function refreshTotals(code: string): void {
   hamsa.rows(state, seats).forEach((row, seat) => {
     setCell(`[data-total="${cssEscape(`${code}-${seat}`)}"]`, String(row.total));
     setCell(`[data-plus="${cssEscape(`${code}-${seat}`)}"]`, String(row.plus));
+    row.correct.forEach((count, q) => setCell(`[data-count="${cssEscape(`${code}-${seat}-${q}`)}"]`, String(count)));
     setCell(`[data-place="${cssEscape(`${code}-${seat}`)}"]`, placeText(row.place));
     setCell(`[data-bet="${cssEscape(`${code}-${seat}`)}"]:not(input)`, String(hamsa.betScore(state, row.id)));
     if (!bout) return;
@@ -923,6 +969,7 @@ function render(): void {
   root.classList.toggle("fits-frame", tab?.kind !== "grid" && tab?.kind !== "protocol");
   root.classList.toggle("grid-host", Boolean(node.querySelector(".fest-grid")) || node.matches(".fest-grid"));
   scheduleNameOverflow();
+  sheetScroll.refresh();
   cursor.refresh();
 }
 

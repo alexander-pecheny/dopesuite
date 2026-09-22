@@ -19,13 +19,12 @@
      in. */
   --hamsa-bout-w: 4400px;
   --hamsa-bout-h: 200px;
-  --hamsa-bet-col: 72px;
-  /* A Хамса вопрос is worth four figures in the last раунд and a бой's Σ five,
-     so the sheet's own columns are wider than the 10..50 ones. */
-  --hamsa-question-col: 46px;
+  /* A Хамса бой is scored in thousands, so the columns that hold a number are
+     wider than the 10..50 ones: Σ takes five figures and a тема's score four.
+     The mark cells are ЭК's, because a mark is a mark — the sheet's colgroup
+     reads the same --question-col the answer cells do. */
   --hamsa-total-col: 58px;
   --hamsa-theme-score-col: 50px;
-  --hamsa-bet-score-col: 62px;
   --hamsa-table-min: 720px;
   /* A Хамса бой is scored in thousands, so its Сетка's number column holds a
      figure more than every other game's. */
@@ -1563,6 +1562,14 @@ body:not(.embedded-match) .grid-match {
     min-width: 22px;
   }
 
+  /* Хамса's sheet says its widths on the colgroup, because its first row spans
+     columns. So the phone's mark and count sizes have to be tokens it can
+     read, and they are the ones the cells above are given. */
+  .match-table.hamsa-sheet {
+    --question-col: 22px;
+    --narrow-col: 20px;
+  }
+
   .match-table .theme-head,
   .match-table .theme-score {
     width: 30px;
@@ -2721,8 +2728,12 @@ body:not(.embedded-match) .grid-match {
 /* EK stage tables get the same scrolled-under fade as OD/KSI, drawn off the
    right edge of the place-gap (the rightmost frozen column) once the score
    columns have been scrolled. .stage-scroll-left is toggled on the scroll
-   frame by ek.js. */
-.sheet-frame.stage-scroll-left .match-table.ek-stage-table .sticky-place-gap::after {
+   frame by ek.js, and by hamsa.js for the same cue on its бой sheet — there the
+   раунд row's leading cell spans the frozen columns, so it draws the fade for
+   the row it is in. */
+.sheet-frame.stage-scroll-left .match-table.ek-stage-table .sticky-place-gap::after,
+.sheet-frame.stage-scroll-left .match-table.hamsa-sheet .sticky-place-gap::after,
+.sheet-frame.stage-scroll-left .match-table.hamsa-sheet .hamsa-round-lead::after {
   content: "";
   position: absolute;
   top: 0;
@@ -4853,19 +4864,10 @@ body.is-fullscreen.od-page .match-main {
   contain-intrinsic-size: auto var(--hamsa-bout-w) var(--hamsa-bout-h);
 }
 
-/* The bout names itself above its sheet, as Troika's does: the sheet's own
-   name column is 90px on a phone and holds the finished tick. */
-.hamsa-bout-head {
-  margin: var(--space-0);
-  font-size: var(--text-md);
-  font-weight: var(--fw-semibold);
-  color: var(--text-strong);
-}
-
 /* The раунды stand over their темы in a header row of their own: one cell per
    game round, spanning every column its темы take. The leading cell covers the
-   sheet's own sticky columns and carries no words — the бой names itself in the
-   row below. */
+   sheet's own frozen columns and carries no words — the бой names itself in the
+   row below, beside its «Закончен» tick. */
 .hamsa-sheet .hamsa-round-row th {
   border-bottom: 0;
   background: var(--structure);
@@ -4880,14 +4882,18 @@ body.is-fullscreen.od-page .match-main {
   white-space: nowrap;
 }
 
-.hamsa-sheet .hamsa-round-lead {
+.hamsa-sheet .hamsa-round-lead,
+.hamsa-sheet .hamsa-round-tail {
   background: var(--structure);
 }
 
-/* The Командный раунд is one column: what the captain wrote, over the mark
-   the answer earned. */
+/* The Командный раунд is one column: what the captain wrote, over the mark the
+   answer earned. The number is four or five figures in a cell the width of a
+   тема's score, so the spinner is dropped — it would take the room the digits
+   need, and the host types the figure anyway. */
 .hamsa-sheet .hamsa-bet-input {
   width: 100%;
+  padding: var(--space-0);
   border: 0;
   outline: 0;
   background: transparent;
@@ -4895,6 +4901,25 @@ body.is-fullscreen.od-page .match-main {
   font: inherit;
   text-align: center;
   font-variant-numeric: tabular-nums;
+  appearance: textfield;
+}
+
+.hamsa-sheet .hamsa-bet-input::-webkit-outer-spin-button,
+.hamsa-sheet .hamsa-bet-input::-webkit-inner-spin-button {
+  margin: var(--space-0);
+  appearance: none;
+}
+
+/* «Ставка» is a word standing over a column the width of a score, so it is
+   written at the size a three-figure номинал is (see .q-num-wide). */
+.hamsa-sheet .hamsa-bet-head {
+  font-size: var(--text-xs);
+}
+
+/* The ставка's own cell, over the mark: a number cell, so it takes the column
+   the colgroup gives it instead of the room a name select asks for. */
+.hamsa-sheet .hamsa-bet-cell {
+  padding: var(--space-0);
 }
 
 .hamsa-sheet .hamsa-player-select {
@@ -4929,32 +4954,29 @@ body.is-fullscreen.od-page .match-main {
   width: var(--place-gap);
 }
 
+/* A mark is a mark, so the mark columns are ЭК's — the token the answer cells
+   read, at whichever size the screen gives it. */
 .hamsa-col-q {
-  width: var(--hamsa-question-col);
+  width: var(--question-col);
 }
 
+/* The ставка holds a number, so its column is a score column and not a text
+   field. */
 .hamsa-col-bet {
-  width: var(--hamsa-bet-col);
+  width: var(--hamsa-theme-score-col);
 }
 
 .hamsa-col-score {
   width: var(--hamsa-theme-score-col);
 }
 
-/* The bet's column is headed by a word, not a theme number. */
-.hamsa-col-bet-score {
-  width: var(--hamsa-bet-score-col);
-}
-
-.hamsa-sheet .hamsa-bet-score-head,
-.hamsa-sheet .hamsa-bet-score-head + .gap-head {
-  width: auto;
-  min-width: var(--hamsa-bet-score-col);
-  max-width: none;
-}
-
 .hamsa-col-gap {
   width: var(--theme-gap-col);
+}
+
+/* The trailing counts are ЭК's narrow columns. */
+.hamsa-col-narrow {
+  width: var(--narrow-col);
 }
 
 /* The sticky columns hold the sheet's own widths, so their offsets follow. */
@@ -4979,8 +5001,3 @@ body.is-fullscreen.od-page .match-main {
   max-width: var(--hamsa-theme-score-col);
 }
 
-.hamsa-sheet .question-head,
-.hamsa-sheet .answer-cell {
-  width: var(--hamsa-question-col);
-  min-width: var(--hamsa-question-col);
-}

@@ -496,14 +496,14 @@ var RU = Strings{
 			AnswerTitle: func(team string, theme string, value string) string {
 				return fmt.Sprintf("%s, тема %s, %s", team, theme, value)
 			},
-			Bet:       func() string { return "Ставка" },
-			BetAnswer: func() string { return "Ответ" },
-			BetTitle:  func(team string) string { return fmt.Sprintf("%s: ставка", team) },
-			Finished:  func() string { return "Закончен" },
-			Plus:      func() string { return "Σ+" },
-			Seat:      func(n string) string { return fmt.Sprintf("Место %s", n) },
-			Theme:     func(n string) string { return fmt.Sprintf("Т%s", n) },
-			Unseated:  func() string { return "Мест ещё нет" },
+			Bet:           func() string { return "Ставка" },
+			BetTitle:      func(team string) string { return fmt.Sprintf("%s: ставка", team) },
+			Finished:      func() string { return "Закончен" },
+			Plus:          func() string { return "Σ+" },
+			QuestionCount: func(n string) string { return fmt.Sprintf("Q%s", n) },
+			Seat:          func(n string) string { return fmt.Sprintf("Место %s", n) },
+			Theme:         func(n string) string { return fmt.Sprintf("Т%s", n) },
+			Unseated:      func() string { return "Мест ещё нет" },
 		},
 		Round: HamsaRoundStrings{
 			Dark:     func() string { return "Тёмный" },

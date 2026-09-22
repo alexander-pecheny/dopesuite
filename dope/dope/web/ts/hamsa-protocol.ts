@@ -198,12 +198,28 @@ export function plus(state: HamsaState, id: number): number {
   return score;
 }
 
+// correctCounts is how many questions the team took at each position of a
+// theme, over the sixteen themes — the trailing columns of the sheet. The
+// shootout and the bet stay out, as EK leaves its shootout out. It is the
+// client's copy of the server's correct_<base value> metrics: the base values
+// are the first round's, so position q is the same column on both sides.
+export function correctCounts(state: HamsaState, id: number): number[] {
+  const counts = new Array<number>(QUESTIONS).fill(0);
+  sectionOf(state, id)?.themes.forEach((theme) => {
+    theme.answers.forEach((mark, q) => {
+      if (mark === "right" && q < counts.length) counts[q]++;
+    });
+  });
+  return counts;
+}
+
 export interface Row {
   id: number;
   total: number;
   plus: number;
   shootout: number;
   place: number;
+  correct: number[];
 }
 
 // placesFor ranks the seats by score, then by the shootout alone — teams level
@@ -247,6 +263,7 @@ export function rows(state: HamsaState, seats: number[]): Row[] {
     plus: plus(state, id),
     shootout: shootoutTotal(state, id),
     place: places[index],
+    correct: correctCounts(state, id),
   }));
 }
 

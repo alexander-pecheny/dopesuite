@@ -28,17 +28,21 @@ shootout = "Перестрелка"
 # names the тема and nothing else — what the вопросы are worth is written
 # across their own headers.
 theme = 'Т{{.n}}'
-# The ставка cell, and what a reader hears on it.
+# The ставка cell, and what a reader hears on it. The Командный раунд's column
+# is headed by the word: the host types the number there and marks the answer
+# under it.
 bet = "Ставка"
 bet_title = '{{.team}}: ставка'
-# The answer to the Командный вопрос: the cell beside the ставка.
-bet_answer = "Ответ"
 # The tooltip of one answer cell: the team, the тема and the вопрос's номинал.
 answer_title = '{{.team}}, тема {{.theme}}, {{.value}}'
 # The «Закончен» checkbox in a бой's head.
 finished = "Закончен"
 # The Σ+ column, after the темы.
 plus = "Σ+"
+# The trailing count columns, as on ЭК's sheet: how many вопросы the team took
+# at each position of a тема. A Хамса вопрос is worth a different номинал in
+# every раунд, so the columns are named by position and not by value.
+question_count = 'Q{{.n}}'
 # A бой nobody has been seated in yet.
 unseated = "Мест ещё нет"
 # The placeholder of a seat the Structure has not filled.

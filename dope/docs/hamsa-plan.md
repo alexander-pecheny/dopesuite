@@ -380,15 +380,24 @@ or the Сетка:
   spans columns cannot take its widths from that row — fixed layout divides a
   spanning width over the columns it covers. So the sheet declares its columns.
 - **Хамса counts in thousands.** Σ is five figures and a тема's score four, so
-  the sheet's own total, score and question columns are wider than the 10..50
-  ones, and the Сетка takes a wider number column on a `.hamsa-page`.
+  the sheet's own total and score columns are wider than the 10..50 ones, and
+  the Сетка takes a wider number column on a `.hamsa-page`. **The mark cells are
+  not**: a mark is a mark, and the author, holding the two sheets side by side,
+  found Хамса's plainly bigger than ЭК's. The colgroup reads ЭК's own
+  `--question-col`, and `--narrow-col` for the counts.
 - A тема's head is «Т1», not «Тема 1 · 100–500»: it stands over one column.
   What the вопросы are worth is written across their own headers, and the
   round's multiplier in the round head above them.
-- The **Ставка**'s head is a word, so its column is wider than a score column.
-- The **бой names itself above its sheet**, as Тройка's does. The sheet's name
-  column is 90px on a phone and holds the finished tick; a title squeezed in
-  beside a checkbox read as neither.
+- The **Ставка** is headed by the word, over the number the host types, and the
+  round's score cell is «Т17» — numbered after the sixteen темы, `themes + 1`.
+  Both columns are a score column wide; the number input drops its spinner, and
+  the word is written at `--text-xs`, the size a three-figure номинал is.
+- The **бой names itself in the sheet's own frozen head**, as ЭК's does: the
+  title beside the «Закончен» tick, in the cell that stays put while the темы
+  scroll under it. It was tried above the sheet, as Тройка's is, and that left
+  the frozen cell empty — so the тема headers showed through it and a scrolled
+  sheet read «100» to the left of Σ. A spectator gets the name alone, and the
+  fade off the frozen columns is ЭК's `.stage-scroll-left`.
 - The **Пересев tab keeps its place in the chain** rather than being folded to
   the end: it is played between the групповой этап and the Финал.
 - A **flat Block ranked on the бой's own place shows no metric column** — the
@@ -396,6 +405,11 @@ or the Сетка:
   twice in the Финал's table.
 - The **Общий зачёт table is as wide as its columns need**, like a пересев's,
   rather than stretched across the screen.
+- The **sheet ends as ЭК's does**: Σ+, then one narrow column per position of a
+  тема, «Q5»…«Q1». A Хамса вопрос is worth a different номинал in every раунд,
+  so they are named by position rather than by value; they count the sixteen
+  темы and leave the ставка and the перестрелка out, and they are the client's
+  reading of the same marks the server's `correct_<номинал>` metrics count.
 - A **перестрелка тема is written the first time somebody marks it.** A бой
   starts without one — most Блоки never play one — so the page created one and
   patched it whole rather than dropping the edit on the floor, which is what it

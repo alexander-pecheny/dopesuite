@@ -423,10 +423,10 @@ export const RU: Strings = {
     protocol: {
       answerTitle: (team: string, theme: string, value: string) => `${team}, тема ${theme}, ${value}`,
       bet: () => "Ставка",
-      betAnswer: () => "Ответ",
       betTitle: (team: string) => `${team}: ставка`,
       finished: () => "Закончен",
       plus: () => "Σ+",
+      questionCount: (n: string) => `Q${n}`,
       seat: (n: string) => `Место ${n}`,
       theme: (n: string) => `Т${n}`,
       unseated: () => "Мест ещё нет",

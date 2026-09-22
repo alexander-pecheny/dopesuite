@@ -112,3 +112,16 @@ Deno.test("статистика считает игрока по темам, к�
   assertEquals(rows[0].right, [0, 0, 1, 0, 0]);
   assertEquals(rows[1].wrong, [0, 0, 0, 0, 1]);
 });
+
+Deno.test("счётчики по вопросам считают взятое по позиции, без ставки и перестрелки", () => {
+  const state = hamsa.parseState(doc({
+    3: {
+      themes: themes([1, "R---R"], [6, "R-R--"], [16, "----R"]),
+      bet: {amount: 1000, answer: "right"},
+      shootout: [theme("RRRRR")],
+    },
+  }), [3]);
+  // Позиция 1: темы 1 и 6. Позиция 3: тема 6. Позиция 5: темы 1 и 16.
+  assertEquals(hamsa.correctCounts(state, 3), [2, 0, 1, 0, 2]);
+  assertEquals(hamsa.rows(state, [3])[0].correct, [2, 0, 1, 0, 2]);
+});
