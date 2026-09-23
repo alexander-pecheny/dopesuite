@@ -217,6 +217,15 @@ function uniformNominal(game: MultiRules["minigames"][number]): boolean {
   return game.columns.every((column) => maxOf(column.values) === first);
 }
 
+// samePriceEverywhere is whether every task of every minigame pays the same
+// top value, as in a song round of two points a question. The price then tells no
+// minigame from another, so a head does not repeat it.
+function samePriceEverywhere(): boolean {
+  const first = maxOf(rules.minigames[0]?.columns[0]?.values || []);
+  return rules.minigames.length > 1 &&
+    rules.minigames.every((game) => uniformNominal(game) && maxOf(game.columns[0]?.values || []) === first);
+}
+
 function gapCount(game: MultiRules["minigames"][number]): number {
   let gaps = 0;
   for (let c = 1; c < game.columns.length; c++) {
@@ -231,7 +240,7 @@ function gapCount(game: MultiRules["minigames"][number]): number {
 function gameHead(game: MultiRules["minigames"][number]): CellContent {
   const span = document.createElement("span");
   span.className = "multi-game-name";
-  span.textContent = uniformNominal(game)
+  span.textContent = uniformNominal(game) && !samePriceEverywhere()
     ? S.multi.game.uniformPrice(game.name, String(maxOf(game.columns[0]?.values || [])))
     : game.name;
   span.style.left = "calc(var(--sheet-corner-col) + var(--team-col) + var(--total-col) + var(--space-5)" +
