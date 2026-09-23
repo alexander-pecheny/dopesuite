@@ -844,9 +844,12 @@ function buildProtocols(stages: SchemeStage[]): HTMLElement {
 function buildGroups(stages: SchemeStage[]): HTMLElement {
   const swiss = stages.filter((stage) => stageKind(stage) === "swiss");
   if (swiss.length) {
-    const wrap = buildSwissTables(swiss);
-    wrap.appendChild(buildGridOf(stages.filter((stage) => stageKind(stage) !== "swiss")));
-    return wrap;
+    // The table and the rounds side by side: who stands where, and how each
+    // round got them there, read across one line.
+    const row = document.createElement("div");
+    row.className = "u-row u-gap-lg u-align-start";
+    row.append(buildSwissTables(swiss), buildGridOf(stages.filter((stage) => stageKind(stage) !== "swiss")));
+    return row;
   }
   return buildCrosstables({
     className: "troika-groups",
@@ -979,7 +982,7 @@ function render(): void {
   const node = buildTab(tab);
   root.replaceChildren(node);
   // Groups and bouts wrap into the frame's width rather than pushing the page sideways.
-  root.classList.toggle("fits-frame", tab?.kind !== "grid");
+  root.classList.toggle("fits-frame", tab?.kind !== "grid" && !node.querySelector(".fest-grid"));
   root.classList.toggle("grid-host", Boolean(node.querySelector(".fest-grid")) || node.matches(".fest-grid"));
   scheduleNameOverflow();
   cursor.refresh();
