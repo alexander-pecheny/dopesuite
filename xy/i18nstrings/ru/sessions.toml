@@ -75,6 +75,8 @@ name_placeholder = "имя…"
 remove_row = "Удалить строку"
 # Button appending one more empty tester row.
 add = "+ тестер"
+# Button in the test editor copying the «Вопросы тестировали: …» line.
+copy = "Скопировать список тестеров"
 
 [feed]
 # Label above the debrief feed of the test editor.

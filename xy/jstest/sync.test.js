@@ -112,3 +112,14 @@ test("end-to-end: a queued card op remaps after its list create resolves", () =>
   assert.equal(_substitutePath(cardOp.path, idmapStr), "/api/lists/10/cards");
   assert.deepEqual(_substituteValue(cardOp.body, idmap), { description_enc: "D", rank: "a0", kind: "normal" });
 });
+
+test("applyOpToSnapshot: a card's Seen and a tour's Declaration reach the mirror", () => {
+  const snap = { lists: [], cards: [{ id: 5, list_id: 1, kind: "question", description_enc: "D", rank: "a0" }], labels: [] };
+  _applyOpToSnapshot(snap, { kind: "patchCard", path: "/api/cards/5", body: { seen_enc: "S" } });
+  assert.equal(snap.cards[0].seen_enc, "S");
+  _applyOpToSnapshot(snap, { kind: "patchCard", path: "/api/cards/5", body: { seen_enc: "" } });
+  assert.equal("seen_enc" in snap.cards[0], false);
+  _applyOpToSnapshot(snap, { kind: "setTourDeclaration", path: "/api/boards/1/tour-declaration", body: { list_id: 1, group_id: null, names_enc: "N1" } });
+  _applyOpToSnapshot(snap, { kind: "setTourDeclaration", path: "/api/boards/1/tour-declaration", body: { list_id: 1, group_id: null, names_enc: "N2" } });
+  assert.deepEqual(snap.tour_declarations, [{ list_id: 1, group_id: null, names_enc: "N2" }]);
+});

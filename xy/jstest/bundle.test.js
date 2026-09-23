@@ -181,3 +181,18 @@ test("slicing every list is the whole board minus what nothing reaches", () => {
   assert.deepEqual(s.labels, b.labels);
   assert.deepEqual(s.sessions.map((x) => x.id).sort(), [30, 31, 32]);
 });
+
+test("a Declaration by names is optional, checked like tour_testers, and sliced with its tour", () => {
+  const b = board();
+  b.tour_declarations = [
+    { list_id: null, group_id: 7, names: [{ text: "Аня", type: "player" }] },
+    { list_id: 1, group_id: null, names: [] },
+  ];
+  b.cards[0].seen = '{"extra":[{"text":"Гоша","type":"player"}]}';
+  assert.ok(parseBundle(JSON.stringify(b)));
+  assert.ok(contentBytes(b) > contentBytes({ ...b, cards: b.cards.map((c) => ({ ...c, seen: null })) }));
+  const s = sliceBundle(b, [2, 3]);
+  assert.deepEqual(s.tour_declarations, [b.tour_declarations[0]]);
+  const bad = { ...b, tour_declarations: [{ list_id: 99, group_id: null, names: [] }] };
+  assert.throws(() => parseBundle(JSON.stringify(bad)), /tour_declarations\.list_id/);
+});

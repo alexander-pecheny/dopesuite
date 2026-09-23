@@ -748,3 +748,86 @@ func TestBoardComments(t *testing.T) {
 		t.Fatalf("comments after delete = %d, want 0", len(got))
 	}
 }
+
+// TestCardSeenRoundTrip covers cards.seen_enc (schema v26): a card's hand
+// corrections to who saw it. Same create/patch/clear contract as alias_enc.
+func TestCardSeenRoundTrip(t *testing.T) {
+	c, boardID, listID := boardWithList(t)
+
+	resp := c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{
+		"description_enc": enc("? q"), "rank": "m", "kind": "question",
+		"seen_enc": enc(`{"extra":[{"text":"Вера","type":"player"}]}`),
+	})
+	mustStatus(t, resp, 200)
+	var card struct {
+		ID int64 `json:"id"`
+	}
+	c.decode(resp, &card)
+	cardID := itoa(card.ID)
+
+	snap := getSnapshotFor(t, c, boardID)
+	if snap.Cards[0].SeenEnc == nil || *snap.Cards[0].SeenEnc != enc(`{"extra":[{"text":"Вера","type":"player"}]}`) {
+		t.Fatalf("seen not persisted on create: %+v", snap.Cards[0])
+	}
+	resp = c.do("PATCH", "/api/cards/"+cardID, map[string]string{"seen_enc": ""})
+	mustStatus(t, resp, 204)
+	snap = getSnapshotFor(t, c, boardID)
+	if snap.Cards[0].SeenEnc != nil {
+		t.Fatalf("seen not cleared: %+v", snap.Cards[0])
+	}
+}
+
+// TestTourDeclarationReplacesTourTesters covers tour_declarations (schema v26).
+// A Declaration by names clears the tour's session rows, a Declaration by
+// sessions from an older client clears the names, and regrouping the list drops
+// both.
+func TestTourDeclarationReplacesTourTesters(t *testing.T) {
+	c, boardID, listID := boardWithList(t)
+	resp := c.do("POST", "/api/boards/"+boardID+"/sessions", map[string]string{"meta_enc": enc("{}")})
+	mustStatus(t, resp, 200)
+	var sess struct {
+		ID int64 `json:"id"`
+	}
+	c.decode(resp, &sess)
+	lid := mustAtoi(t, listID)
+
+	resp = c.do("PUT", "/api/boards/"+boardID+"/tour-testers", map[string]any{"list_id": lid, "session_ids": []int64{sess.ID}})
+	mustStatus(t, resp, 204)
+	resp = c.do("PUT", "/api/boards/"+boardID+"/tour-declaration", map[string]any{"list_id": lid, "names_enc": enc(`[{"text":"Аня","type":"player"}]`)})
+	mustStatus(t, resp, 204)
+	snap := getSnapshotFor(t, c, boardID)
+	if len(snap.TourTesters) != 0 || len(snap.TourDeclarations) != 1 || *snap.TourDeclarations[0].ListID != lid {
+		t.Fatalf("names should replace sessions: testers %+v, declarations %+v", snap.TourTesters, snap.TourDeclarations)
+	}
+	// Declaring again replaces rather than adds.
+	resp = c.do("PUT", "/api/boards/"+boardID+"/tour-declaration", map[string]any{"list_id": lid, "names_enc": enc(`[]`)})
+	mustStatus(t, resp, 204)
+	snap = getSnapshotFor(t, c, boardID)
+	if len(snap.TourDeclarations) != 1 || snap.TourDeclarations[0].NamesEnc != enc(`[]`) {
+		t.Fatalf("second declaration should replace the first: %+v", snap.TourDeclarations)
+	}
+	resp = c.do("PUT", "/api/boards/"+boardID+"/tour-declaration", map[string]any{"names_enc": enc(`[]`)})
+	mustStatus(t, resp, 400)
+
+	resp = c.do("PUT", "/api/boards/"+boardID+"/tour-testers", map[string]any{"list_id": lid, "session_ids": []int64{sess.ID}})
+	mustStatus(t, resp, 204)
+	snap = getSnapshotFor(t, c, boardID)
+	if len(snap.TourTesters) != 1 || len(snap.TourDeclarations) != 0 {
+		t.Fatalf("sessions should replace names: testers %+v, declarations %+v", snap.TourTesters, snap.TourDeclarations)
+	}
+
+	resp = c.do("PUT", "/api/boards/"+boardID+"/tour-declaration", map[string]any{"list_id": lid, "names_enc": enc(`[]`)})
+	mustStatus(t, resp, 204)
+	resp = c.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title_enc": enc("L2"), "rank": "n"})
+	mustStatus(t, resp, 200)
+	var l2 struct {
+		ID int64 `json:"id"`
+	}
+	c.decode(resp, &l2)
+	resp = c.do("POST", "/api/boards/"+boardID+"/list-groups", map[string]any{"name_enc": enc("G"), "list_ids": []int64{lid, l2.ID}})
+	mustStatus(t, resp, 200)
+	snap = getSnapshotFor(t, c, boardID)
+	if len(snap.TourDeclarations) != 0 {
+		t.Fatalf("grouping the list should drop its declaration: %+v", snap.TourDeclarations)
+	}
+}

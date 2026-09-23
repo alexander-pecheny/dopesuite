@@ -54,15 +54,19 @@ _Avoid_: тест-список, test list, test card
 A record that a question was played at a Test Session. It is a Card's own link to a Session. «Видели» reads it, and a Label can be scoped to it.
 _Avoid_: mark, test mark, session tag
 
+**Seen (Видели)**:
+Who saw a question. It starts as everyone at every Session the Card has a Playing with, and the Card corrects it by hand in two ways (ADR-0019). A person can be added who saw the question outside any Session, for example in another pool before it moved here. A tester of a Session can be marked absent from this one question, for example because they came late and missed questions 1–3. Both corrections are stored on the Card. The Tester List, the Common Testers and the partial «видели вопросы …» line all read Seen, never the Sessions directly.
+_Avoid_: viewers, override, exception
+
 **Author Share (Доля)**:
 An author's 1/n part of a question written by several people, added up over the questions of a tour up to a chosen number and shown as a percentage of them. It is what a fee gets divided by. It sits next to the plain count, which is one per question an author is on, and the two only differ where a question has more than one author. Two spellings of a name count as one author when they fold together the way a search folds them, which covers stress marks, spaces, case, and ё against е. Нулевые are left out unless you ask for them: they are played, but they are usually not paid for.
 _Avoid_: counting a co-authored question once for each author and calling the result a share.
 
 **Tester List**:
-The «Вопросы тестировали: …» line that a tour carries in its preamble. By ЧГК custom it names the people who tested most of the tour and who therefore should not play it. Somebody who saw only one or two questions may still play, skipping the ones they already know. The list is compiled per tour — a List, or a whole List Group — from the Playings on its questions, not from the Board's Sessions in general.
+The «Вопросы тестировали: …» line that a tour carries in its preamble. By ЧГК custom it names the people who tested most of the tour and who therefore should not play it. Somebody who saw only one or two questions may still play, skipping the ones they already know. The list is compiled per tour — a List, or a whole List Group — from Seen on its questions, not from the Board's Sessions in general. It is counted per person: somebody at two sittings that each played half the tour saw all of it.
 
 **Declaration**:
-Which Sessions a tour's Tester List names. This is Board data rather than a per-reader preference, because the preamble belongs to the tour and ships with the package, so two editors preparing it must see the same answer. If a tour has no Declaration, it falls back to the custom: everyone who saw more than half of its questions.
+Which people a tour's Tester List names. Before schema v26 it named Sessions, and such a Declaration still reads as everyone who was at them until the tour is declared again. This is Board data rather than a per-reader preference, because the preamble belongs to the tour and ships with the package, so two editors preparing it must see the same answer. If a tour has no Declaration, it falls back to the custom: everyone who saw more than half of its questions.
 _Avoid_: tick state, selection, pick
 
 **Common Tester (общий тестер списка)**:

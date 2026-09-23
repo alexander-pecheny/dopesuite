@@ -8,8 +8,10 @@ import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { sortLabels } from "./labelsedit.js";
 import { colorField, LABEL_COLORS } from "./colorpick.js";
-import { testerNames } from "./sessions.js";
-import type { SessionMeta, Tester } from "./sessions.js";
+import { type Tester, testerNames, testersFromList } from "./sessions.js";
+import { type CardSeen, nameOf, parseCardSeen, type SeenPerson, seenPeople, sessionRef, withoutSeen, withSeen } from "./seen.js";
+import { autocomplete } from "./kit/suggest.js";
+import * as people from "./people.js";
 import { icon } from "./icons_gen.js";
 import S from "./i18nstrings.js";
 import type { Board } from "./panels.js";
@@ -26,6 +28,7 @@ export interface CardLabelsUI {
   addBtn: HTMLElement;
   playingAddRow: HTMLElement;
   playingAddBtn: HTMLElement;
+  seenAddBtn: HTMLElement;
   // The "create a new label" form is authored in board.dopeui but does not
   // belong in the card body; it is detached at boot and mounted at the foot of
   // the add-label popup, where creating a label belongs.
@@ -39,8 +42,8 @@ export interface CardLabelsDeps {
   mustDK(): DataKey;
   openCardId(): number | null;
   copyPlain(text: string): Promise<void>;
-  // The Sessions the card's tour names in its Tester List — the seen section shows the extras.
-  tourPicked(list: BoardList): Set<number>;
+  // The people the card's tour names in its Tester List — the seen section shows the extras.
+  tourPicked(list: BoardList): Set<string>;
   createLabel(name: string, color: string): Promise<BoardLabel>;
   loadTimeline(cardId: number): Promise<void>;
   paintLabels(): void;
@@ -134,27 +137,48 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
   // The show-all-testers checkbox dims them back in instead. A peek, not a preference:
   // keyed to the open card, so a label write mid-peek does not collapse the list
   // and the next card starts folded again.
+  //
+  // Each name can be taken off, and a person can be added by hand (#90). Both
+  // are corrections to the Playings, stored on the card (seen.ts). A tester who
+  // missed the question stays listed, struck out, so the absence can be undone.
   let seenAllFor: number | null = null;
 
-  function seenNames(testers: ReadonlyArray<Tester>): string[] {
-    const { players, teams } = testerNames(testers);
-    return [...players, ...teams];
+  function ordered(people: SeenPerson[]): SeenPerson[] {
+    const { players, teams } = testerNames(people.map((p) => p.tester));
+    const byName = new Map(people.map((p) => [nameOf(p.tester), p]));
+    return [...players, ...teams].map((n) => byName.get(n)).filter((p): p is SeenPerson => p != null);
   }
 
   function renderSeen(card: BoardCard): void {
     const node = ui.seen;
-    const mine = board.playingsOf(card.id).map((sid) => board.sessionMeta(sid)).filter((m): m is SessionMeta => m != null);
-    const everyone = seenNames(mine.flatMap((m) => m.testers || []));
-    if (!everyone.length) { node.hidden = true; return; }
+    const people = seenPeople(board.seenPlayings(card.id), parseCardSeen(card.seen));
+    // People who saw it at a test come first, then the ones added by hand, then
+    // the absent ones. A test is the stronger record, and it is what the tour's
+    // Tester List is mostly made of.
+    const everyone = [
+      ...ordered(people.filter((p) => !p.absent && p.at.length)),
+      ...ordered(people.filter((p) => !p.absent && !p.at.length)),
+    ];
+    const missed = ordered(people.filter((p) => p.absent));
+    // Which test each person is listed for: where they saw it, or, for an
+    // absent one, the test whose question they missed.
+    const seen = parseCardSeen(card.seen);
+    const testName = new Map(board.playingsOf(card.id).map((sid) => [sessionRef(sid, board.sessionMeta(sid)), board.sessionName(sid)]));
+    const testsOf = (p: SeenPerson): string => {
+      const refs = p.absent
+        ? Object.keys(seen.absent).filter((ref) => testName.has(ref) && seen.absent[ref].includes(nameOf(p.tester)))
+        : p.at;
+      return refs.map((ref) => testName.get(ref)).filter(Boolean).join(", ");
+    };
+    const adding = addingFor === card.id;
+    if (!everyone.length && !missed.length && !adding) { node.hidden = true; return; }
 
     const list = board.state.lists.find((l) => l.id === card.listId);
-    const common = new Set<string>();
-    for (const sid of list ? deps.tourPicked(list) : []) {
-      const m = board.sessionMeta(sid);
-      for (const t of (m && m.testers) || []) common.add((t.text || "").trim());
-    }
-    const hiding = common.size > 0 && seenAllFor !== card.id;
-    const names = hiding ? everyone.filter((n) => !common.has(n)) : everyone;
+    const common = list ? deps.tourPicked(list) : new Set<string>();
+    const isCommon = (p: SeenPerson): boolean => common.has(nameOf(p.tester));
+    const hiding = everyone.some(isCommon) && seenAllFor !== card.id;
+    const shown = hiding ? everyone.filter((p) => !isCommon(p)) : everyone;
+    const names = shown.map((p) => nameOf(p.tester));
     const label = hiding ? S.card.seen.labelExceptCommon() : S.card.seen.label();
 
     // The label and the two controls are a head row of their own, and the names
@@ -174,7 +198,7 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
         onclick: () => { void deps.copyPlain(label + names.join(", ")); },
       }, icon("clipboard")));
     }
-    if (common.size) {
+    if (everyone.some(isCommon)) {
       const cb = el("input", { type: "checkbox" }) as HTMLInputElement;
       cb.checked = !hiding;
       cb.addEventListener("change", () => {
@@ -186,12 +210,109 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
     const head = el("div", { class: "u-row u-gap-sm u-align-center u-justify-between u-wrap" },
       el("span", { class: "seen-label", text: label }),
       controls.length ? el("div", { class: "u-row u-gap-sm u-align-center" }, ...controls) : null);
-    const namesCol = el("div", { class: "seen-names u-col u-gap-xs" },
-      ...names.map((n) => (common.has(n)
-        ? el("div", { class: "seen-common", title: S.card.seen.commonTesterTitle(), text: n })
-        : el("div", { text: n }))));
+
+    const row = (p: SeenPerson): HTMLElement => {
+      const name = nameOf(p.tester);
+      const cls = p.absent ? "seen-absent" : isCommon(p) ? "seen-common" : "";
+      const title = p.absent ? S.card.seen.absentTitle() : isCommon(p) ? S.card.seen.commonTesterTitle() : "";
+      const act = p.absent
+        ? el("button", {
+          class: "label-pick-x", type: "button", text: "↺",
+          title: S.card.seen.restoreTitle(), "aria-label": S.card.seen.restoreAria(name),
+          onclick: () => { void saveSeen(card, withSeen(parseCardSeen(card.seen), [p.tester], board.seenPlayings(card.id))); },
+        })
+        : el("button", {
+          class: "label-pick-x", type: "button", text: "×",
+          title: S.card.seen.removeTitle(), "aria-label": S.card.seen.removeAria(name),
+          onclick: () => { void saveSeen(card, withoutSeen(parseCardSeen(card.seen), [name], board.seenPlayings(card.id))); },
+        });
+      return el("div", { class: "u-row u-gap-sm u-align-center" },
+        el("span", { class: cls, title, text: name }),
+        testsOf(p) ? el("span", { class: "seen-label", text: testsOf(p) }) : null,
+        act);
+    };
+    const rows = [...shown, ...missed].map(row);
     node.hidden = false;
-    node.replaceChildren(head, ...(names.length ? [namesCol] : []));
+    node.replaceChildren(head,
+      ...(rows.length ? [el("div", { class: "seen-names u-col u-gap-xs" }, ...rows)] : []),
+      ...(adding ? [addField.box] : []));
+  }
+
+  async function saveSeen(card: BoardCard, next: CardSeen): Promise<void> {
+    try {
+      await board.writeSeen(card, next);
+      renderSeen(card);
+      board.render();
+    } catch (err) { ui.message.textContent = errMsg(err); }
+  }
+
+  // The field that adds people by hand: a name from the Person Directory, a
+  // name nobody has typed before, or a pasted list. It sits at the foot of the
+  // Seen list rather than in a dropdown, so each name lands in plain view
+  // above it, and it stays open, because the usual case is several people. One
+  // node for the page, re-mounted by every render, so a save does not take the
+  // focus away mid-list.
+  let addingFor: number | null = null;
+  const addField = (() => {
+    const inp = el("input", {
+      class: "input", type: "text",
+      placeholder: S.card.seen.addPlaceholder(), autocomplete: "off",
+      "aria-label": S.board.card.seenAdd(),
+    }) as HTMLInputElement;
+    const add = (testers: Tester[]): void => {
+      const card = board.state.cards.find((c) => c.id === addingFor);
+      if (!card || !testers.length) return;
+      inp.value = "";
+      void saveSeen(card, withSeen(parseCardSeen(card.seen), testers, board.seenPlayings(card.id))).then(() => inp.focus());
+    };
+    autocomplete(inp, (q) => q.trim()
+      ? people.suggest(board.id, q).map((s) => ({ value: s.text, label: s.text, hint: s.board }))
+      : [], (choice) => {
+      const hit = people.suggest(board.id, choice.value).find((s) => s.text === choice.value);
+      add([{ text: choice.value, type: hit ? hit.type : "player" }]);
+    });
+    inp.addEventListener("keydown", (e) => {
+      const k = e as KeyboardEvent;
+      if (k.defaultPrevented || k.isComposing) return;
+      if (k.key === "Escape") {
+        e.stopPropagation();
+        closeSeenAdd();
+        return;
+      }
+      if (k.key !== "Enter" || k.ctrlKey || k.metaKey) return;
+      e.preventDefault();
+      add(testersFromList(inp.value));
+    });
+    inp.addEventListener("paste", (e) => {
+      const text = (e as ClipboardEvent).clipboardData?.getData("text/plain") || "";
+      if (!text.includes("\n")) return;
+      e.preventDefault();
+      add(testersFromList(text));
+    });
+    const done = el("button", {
+      class: "label-pick-x", type: "button", text: "×",
+      title: S.card.seen.addClose(), "aria-label": S.card.seen.addClose(),
+      onclick: () => closeSeenAdd(),
+    });
+    const box = el("div", { class: "u-col u-gap-xs" },
+      el("div", { class: "u-row u-gap-sm u-align-center" }, inp, done),
+      el("p", { class: "hint", text: S.card.seen.addHint() }));
+    return { box, inp };
+  })();
+
+  function closeSeenAdd(): void {
+    const card = board.state.cards.find((c) => c.id === addingFor);
+    addingFor = null;
+    if (card) renderSeen(card);
+  }
+
+  function openSeenAdd(): void {
+    const card = board.state.cards.find((c) => c.id === deps.openCardId());
+    if (!card) return;
+    if (addingFor === card.id) { closeSeenAdd(); return; }
+    addingFor = card.id;
+    renderSeen(card);
+    addField.inp.focus();
   }
 
   function closeLabelAddPopup(): void {
@@ -251,11 +372,45 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
     } catch (err) { ui.message.textContent = errMsg(err); }
   }
 
-  // filteredPopup is the one dropdown shape this card uses three ways: a filter
-  // field over a scrollable list, dismissed by Escape, an outside click, or a
-  // second click on its trigger. A native <select> can host neither the filter nor
-  // the swatches, hence the hand-rolled popup (it shares .menu-dropdown with the
-  // list ⋯ menu).
+  // anchoredPopup is the dropdown shell every popup on this card shares:
+  // mounted in its anchor, dismissed by Escape, an outside click, or a second
+  // click on its trigger. It returns the close, or null when this click closed
+  // an open one.
+  function anchoredPopup(anchor: HTMLElement, kids: HTMLElement[]): (() => void) | null {
+    const already = anchor.querySelector(".label-add-popup");
+    closeLabelAddPopup();
+    if (already) return null; // a second click on the trigger closes it
+    const popup = el("div", { class: "menu-dropdown label-add-popup", role: "menu" }, ...kids);
+    function close(): void {
+      popup.remove();
+      document.removeEventListener("pointerdown", onOutside, true);
+      document.removeEventListener("keydown", onKey, true);
+    }
+    // A popup opened FROM this one (the colour palette, a name suggestion) is
+    // body-mounted to escape our scroll clipping, so it is not inside `anchor` —
+    // untreated, picking from it read as an outside click and took this popup
+    // down with it.
+    const above = (): Element | null => document.querySelector(".menu-fixed, .suggest-pop");
+    function onOutside(e: PointerEvent): void {
+      if (!(e.target instanceof Node) || anchor.contains(e.target)) return;
+      if (e.target instanceof Element && e.target.closest(".menu-fixed, .suggest-pop")) return;
+      close();
+    }
+    function onKey(e: KeyboardEvent): void {
+      if (e.key !== "Escape" || above()) return;
+      e.stopImmediatePropagation();
+      close();
+    }
+    anchor.append(popup);
+    document.addEventListener("pointerdown", onOutside, true);
+    document.addEventListener("keydown", onKey, true);
+    return close;
+  }
+
+  // filteredPopup is the label and test pickers: a filter field over a
+  // scrollable list. A native <select> can host neither the filter
+  // nor the swatches, hence the hand-rolled popup (it shares .menu-dropdown with
+  // the list ⋯ menu).
   interface PopupItem { id: number; name: string; color?: string }
 
   function filteredPopup(opts: {
@@ -266,17 +421,13 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
     extra?: HTMLElement;
     onPick(item: PopupItem): void;
   }): void {
-    const already = opts.anchor.querySelector(".label-add-popup");
-    closeLabelAddPopup();
-    if (already) return; // a second click on the trigger closes it
-
     const filter = el("input", {
       class: "input label-add-filter", type: "text",
       placeholder: opts.placeholder, autocomplete: "off",
     }) as HTMLInputElement;
     const listBox = el("div", { class: "label-add-list" });
-    const kids = opts.extra ? [filter, listBox, opts.extra] : [filter, listBox];
-    const popup = el("div", { class: "menu-dropdown label-add-popup", role: "menu" }, ...kids);
+    const close = anchoredPopup(opts.anchor, opts.extra ? [filter, listBox, opts.extra] : [filter, listBox]);
+    if (!close) return;
 
     function fill(): void {
       const q = filter.value.trim().toLowerCase();
@@ -289,7 +440,7 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
       for (const item of shown) {
         listBox.append(el("button", {
           class: "menu-item label-add-item", type: "button", role: "menuitem",
-          onclick: () => { close(); opts.onPick(item); },
+          onclick: () => { close!(); opts.onPick(item); },
         },
           item.color ? el("span", { class: "label-swatch", dataset: { c: item.color } }) : el("span"),
           el("span", { class: "label-add-name", text: item.name }),
@@ -297,30 +448,8 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
       }
       deps.paintLabels();
     }
-    function close(): void {
-      popup.remove();
-      document.removeEventListener("pointerdown", onOutside, true);
-      document.removeEventListener("keydown", onKey, true);
-    }
-    // A popup opened FROM this one (the colour palette) is body-mounted to escape
-    // our scroll clipping, so it is not inside `anchor` — untreated, picking a
-    // colour read as an outside click and took this popup and its form down.
-    const above = (): Element | null => document.querySelector(".menu-fixed");
-    function onOutside(e: PointerEvent): void {
-      if (!(e.target instanceof Node) || opts.anchor.contains(e.target)) return;
-      if (e.target instanceof Element && e.target.closest(".menu-fixed")) return;
-      close();
-    }
-    function onKey(e: KeyboardEvent): void {
-      if (e.key !== "Escape" || above()) return;
-      e.stopImmediatePropagation();
-      close();
-    }
 
     filter.addEventListener("input", fill);
-    opts.anchor.append(popup);
-    document.addEventListener("pointerdown", onOutside, true);
-    document.addEventListener("keydown", onKey, true);
     fill();
     filter.focus();
   }
@@ -385,6 +514,7 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
 
   ui.addBtn.addEventListener("click", () => openLabelAddPopup(null));
   ui.playingAddBtn.addEventListener("click", openPlayingAddPopup);
+  ui.seenAddBtn.addEventListener("click", openSeenAdd);
 
   return { render: renderLabelPicker, closePopup: closeLabelAddPopup, ensurePlaying: addPlaying };
 }

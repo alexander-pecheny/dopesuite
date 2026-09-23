@@ -142,6 +142,7 @@ function applyOpToSnapshot(
         description_enc: body.description_enc, rank: body.rank,
         ...(body.handout_meta_enc ? { handout_meta_enc: body.handout_meta_enc } : {}),
         ...(body.alias_enc ? { alias_enc: body.alias_enc } : {}),
+        ...(body.seen_enc ? { seen_enc: body.seen_enc } : {}),
       });
       break;
     case "patchCard": {
@@ -158,6 +159,10 @@ function applyOpToSnapshot(
         if (body.alias_enc != null) {
           if (body.alias_enc === "") delete c.alias_enc;
           else c.alias_enc = body.alias_enc;
+        }
+        if (body.seen_enc != null) {
+          if (body.seen_enc === "") delete c.seen_enc;
+          else c.seen_enc = body.seen_enc;
         }
       }
       break;
@@ -198,6 +203,15 @@ function applyOpToSnapshot(
       // read, so the mirror drops it the way the server does.
       snap.card_labels = cardLabels.filter((a) =>
         a.card_id !== cid || a.session_id == null || keep.has(a.session_id));
+      break;
+    }
+    case "setTourDeclaration": {
+      // The board id is in the path, the tour in the body; one row per tour.
+      const decls = (Array.isArray(snap.tour_declarations) ? snap.tour_declarations : []) as Array<Record<string, unknown>>;
+      const listId = body.list_id ?? null, groupId = body.group_id ?? null;
+      snap.tour_declarations = decls
+        .filter((d) => (d.list_id ?? null) !== listId || (d.group_id ?? null) !== groupId)
+        .concat([{ list_id: listId, group_id: groupId, names_enc: body.names_enc }]);
       break;
     }
     case "patchBoard":

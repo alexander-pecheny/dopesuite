@@ -61,8 +61,9 @@ export function runSummary(ok: number, failed: number): string {
 }
 
 // The actions the bar offers. `needs` says what the dialog must ask for before
-// it can run: nothing (delete), a destination (move/copy), a label, or a test.
-export type MassNeed = "none" | "target" | "label" | "session";
+// it can run: nothing (delete), a destination (move/copy), a label, a test,
+// names to add as having seen the questions, or the people to take off.
+export type MassNeed = "none" | "target" | "label" | "session" | "people" | "seen";
 export interface MassAction {
   key: string;
   label: string;
@@ -80,6 +81,8 @@ export const MASS_ACTIONS: MassAction[] = [
   { key: "label-del", label: S.board.mass.labelDelLabel(), title: S.board.mass.labelDelTitle(), needs: "label", verb: S.board.mass.labelDelVerb() },
   { key: "session-add", label: S.board.mass.sessionAddLabel(), title: S.board.mass.sessionAddTitle(), needs: "session", verb: S.board.mass.sessionAddVerb() },
   { key: "session-del", label: S.board.mass.sessionDelLabel(), title: S.board.mass.sessionDelTitle(), needs: "session", verb: S.board.mass.sessionDelVerb() },
+  { key: "seen-add", label: S.board.mass.seenAddLabel(), title: S.board.mass.seenAddTitle(), needs: "people", verb: S.board.mass.seenAddVerb() },
+  { key: "seen-del", label: S.board.mass.seenDelLabel(), title: S.board.mass.seenDelTitle(), needs: "seen", verb: S.board.mass.seenDelVerb() },
   { key: "delete", label: S.board.mass.deleteLabel(), title: S.board.mass.deleteTitle(), needs: "none", danger: true, verb: S.board.mass.deleteLabel() },
 ];
 

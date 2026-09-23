@@ -16,7 +16,7 @@ import { TOWNS } from "./towns.js";
 import { autocomplete, type Choice } from "./kit/suggest.js";
 import { townChoices, zoneChoices } from "./suggest.js";
 import type { BoardSession } from "./unlock.js";
-import type { Tester } from "./sessions.js";
+import { type Tester, testersFromList } from "./sessions.js";
 import * as people from "./people.js";
 import { icon, iconed } from "./icons_gen.js";
 import { commentBody, decodeCommentPayload } from "./timeline.js";
@@ -244,7 +244,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     // Testers: one row each, name + player/team toggle, suggested from every board
     // this device has unlocked.
     const rows = el("div", { class: "fld-rows" });
-    const addRow = (t: Tester | null): HTMLInputElement => {
+    const addRow = (t: Tester | null, after?: HTMLElement): HTMLInputElement => {
       const seg = el("div", { class: "seg tester-seg" });
       const bP = el("button", { class: "seg-btn", type: "button", text: S.sessions.testers.player() });
       const bT = el("button", { class: "seg-btn", type: "button", text: S.sessions.testers.team() });
@@ -259,7 +259,40 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       const row = el("div", { class: "fld-row tester-row" }, seg, inp, rm);
       rm.addEventListener("click", () => row.remove());
       (row as TesterRow)._read = () => ({ text: inp.value, type });
-      rows.append(row);
+      // Enter opens the next row, so a list of testers can be typed without the
+      // mouse (#90). The picker has already taken an Enter that chose a
+      // suggestion, and Ctrl-Enter still closes the form.
+      inp.addEventListener("keydown", (e) => {
+        const k = e as KeyboardEvent;
+        if (k.key !== "Enter" || k.defaultPrevented || k.ctrlKey || k.metaKey || k.isComposing) return;
+        e.preventDefault();
+        if (inp.value.trim()) addRow({ text: "", type: "player" }, row).focus();
+      });
+      // A pasted list becomes one row per line (#90). A single line pastes as usual.
+      inp.addEventListener("paste", (e) => {
+        const text = (e as ClipboardEvent).clipboardData?.getData("text/plain") || "";
+        if (!text.includes("\n")) return;
+        const pasted = testersFromList(text);
+        if (!pasted.length) return;
+        e.preventDefault();
+        const [first, ...rest] = pasted;
+        if (!inp.value.trim()) {
+          inp.value = first.text;
+          type = first.type;
+          sync();
+        } else {
+          rest.unshift(first);
+        }
+        let at: HTMLElement = row;
+        let last = inp;
+        for (const t of rest) {
+          last = addRow(t, at);
+          at = last.parentElement as HTMLElement;
+        }
+        last.focus();
+      });
+      if (after) after.after(row);
+      else rows.append(row);
       return inp;
     };
     (m.testers.length ? m.testers : [{ text: "", type: "player" as const }]).forEach((t) => addRow(t));
@@ -277,7 +310,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
         const line = summaryLine(testerRows ? testerRows() : []);
         if (line) void deps.copyText(line);
       },
-    });
+    }, ...iconed("clipboard", S.sessions.testers.copy()));
     const drop = el("button", { class: "btn btn-danger", type: "button" }, ...iconed("trash-2", S.sessions.delete.label()));
     drop.addEventListener("click", () => { void removeSession(); });
     box.append(el("div", { class: "sess-actions" }, summary, drop));

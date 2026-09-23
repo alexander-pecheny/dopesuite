@@ -140,8 +140,9 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
     row gap="sm" align="center" wrap
       mount id="playingAddRow" kind="label-add-row"
         button kind="ghost" icon="plus" id="playingAddBtn" @board.card.mark_test
-    -- Seen: every tester from every session this card is tagged with, derived
-    -- and stored nowhere. Hidden until there is one.
+        button kind="ghost" icon="user-plus" id="seenAddBtn" @board.card.seen_add
+    -- Seen: every tester from every session this card is tagged with, corrected
+    -- by hand on the card (seen.ts). Hidden until there is one.
     mount id="cardSeen" kind="card-seen" hidden
 
     form id="newLabelForm" dir="row" gap="sm"
