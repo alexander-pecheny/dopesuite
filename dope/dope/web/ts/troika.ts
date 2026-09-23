@@ -22,7 +22,7 @@ import {createSheetCursor, parseMark} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {buildCrosstables, CANON_COLUMNS, crossSlot, standingsByParticipant} from "./crosstable.js";
 import type {SchemeSlotRef} from "./crosstable.js";
-import {buildFestGrid} from "./fest-grid.js";
+import {buildFestGrid, parseScheme} from "./fest-grid.js";
 import type {FestGridStage} from "./fest-grid.js";
 import {gameTabs, groupLabel} from "./game-tabs.js";
 import type {GameTab} from "./game-tabs.js";
@@ -832,7 +832,11 @@ function buildProtocols(stages: SchemeStage[]): HTMLElement {
 // canon columns the crosstable already draws.
 function buildGroups(stages: SchemeStage[]): HTMLElement {
   const swiss = stages.filter((stage) => stageKind(stage) === "swiss");
-  if (swiss.length) return buildSwissTables(swiss);
+  if (swiss.length) {
+    const wrap = buildSwissTables(swiss);
+    wrap.appendChild(buildGridOf(stages.filter((stage) => stageKind(stage) !== "swiss")));
+    return wrap;
+  }
   return buildCrosstables({
     className: "troika-groups",
     columns: [{label: S.troika.groups.rating(), metric: "rating"}, ...CANON_COLUMNS],
@@ -916,6 +920,21 @@ function buildGrid(): HTMLElement {
     if (stage?.code) stages.push(festStages.get(stage.code) || stage);
   }
   return buildFestGrid({schemaJson: fest?.schemaJson, stages},
+    {stageHeaderLink: false, matchTitleLink: false, letters: boutLetters});
+}
+
+// buildGridOf is the grid cut down to some stages: a Block's rounds, each a
+// column of its bouts with who sat there, their Σ and place — the pairings
+// at a glance, the marks left to the protocols tab.
+function buildGridOf(only: SchemeStage[]): HTMLElement {
+  const codes = new Set(only.map((stage) => stage.code || ""));
+  const scheme = parseScheme(fest?.schemaJson);
+  const schemeStages = (scheme?.stages || []).filter((stage) => codes.has(stage.code || ""));
+  const live: FestGridStage[] = [];
+  for (const stage of fest?.stages || []) {
+    if (stage?.code && codes.has(stage.code)) live.push(festStages.get(stage.code) || stage);
+  }
+  return buildFestGrid({schemaJson: JSON.stringify({stages: schemeStages}), stages: live},
     {stageHeaderLink: false, matchTitleLink: false, letters: boutLetters});
 }
 
