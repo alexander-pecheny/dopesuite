@@ -164,7 +164,40 @@ func (fromScheme) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope)
 		return FromPlayers(declared.Players, declared.Sort).resolve(ctx, tx, scope)
 	}
 	gameID, candidates, err := standingsCandidates(ctx, tx, scope.FestID, declared.Source, declared.Sort)
+	if err == nil && declared.Division != "" {
+		candidates, err = inDivision(ctx, tx, scope.FestID, declared.Division, candidates)
+	}
 	return seeding{source: declared.Source, label: declared.Source, sourceGameID: gameID, candidates: candidates}, err
+}
+
+// inDivision keeps the candidates of one Division, ranked afresh inside it: the
+// teams carrying the Flag, or with a leading minus the teams not carrying it.
+// A candidate is a fest team by its number, which is where its Flags are.
+func inDivision(ctx context.Context, q store.Queryer, festID int64, division string, candidates []seedCandidate) ([]seedCandidate, error) {
+	flag, exclude := strings.CutPrefix(division, "-")
+	flag = strings.TrimSpace(flag)
+	carriers, err := store.CollectRows(ctx, q, `
+select t.number from fest_teams t join fest_team_flags f on f.team_id = t.id
+where t.fest_id = ? and t.deleted = 0 and t.number is not null and f.short = ?`, []any{festID, flag},
+		func(rows *sql.Rows) (int, error) {
+			var n int
+			return n, rows.Scan(&n)
+		})
+	if err != nil {
+		return nil, err
+	}
+	carries := make(map[int]bool, len(carriers))
+	for _, n := range carriers {
+		carries[n] = true
+	}
+	var out []seedCandidate
+	for _, c := range candidates {
+		if carries[c.Number] != exclude {
+			c.SourceRank = len(out) + 1
+			out = append(out, c)
+		}
+	}
+	return out, nil
 }
 
 type fromXLSX struct{ file io.Reader }

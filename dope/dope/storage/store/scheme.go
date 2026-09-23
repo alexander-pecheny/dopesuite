@@ -37,6 +37,9 @@ type SchemeSeeding struct {
 	Source  string            `json:"source"`
 	Sort    []SchemeSortRule  `json:"sort,omitempty"`
 	Players *SchemePlayerSeed `json:"players,omitempty"`
+	// Division keeps the seed to the teams carrying this Flag, or, with a
+	// leading minus, to the teams not carrying it (ADR-0020).
+	Division string `json:"division,omitempty"`
 }
 
 // SchemePlayerSeed is a seed composed over a Participant's players rather

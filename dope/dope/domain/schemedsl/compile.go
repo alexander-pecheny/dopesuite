@@ -206,7 +206,7 @@ var commonKeys = []string{"kind", "title", "venues", "sorting", "reseed", "stats
 var dottedKeys = []string{"venues", "title", "bout", "standings"}
 
 var defaultsKeys = map[string]bool{"venues": true, "sorting": true}
-var initKeys = map[string]bool{"seed": true, "sorting": true, "games": true, "player": true}
+var initKeys = map[string]bool{"seed": true, "sorting": true, "games": true, "player": true, "division": true}
 
 func keySet(lists ...[]string) map[string]bool {
 	set := map[string]bool{}
@@ -333,6 +333,12 @@ func (c *compiler) readInit() error {
 		for _, rule := range rules {
 			seeding.Sort = append(seeding.Sort, store.SchemeSortRule{Metric: rule.Metric, Dir: sortDir(rule)})
 		}
+	}
+	// division keeps the seed to one Division's teams: those carrying a Flag,
+	// or, written with a leading minus, those not carrying it. The student and
+	// the adult Erudit-Sextet seed from one OD table this way.
+	if division, ok := c.doc.Init.Str("division"); ok {
+		seeding.Division = strings.TrimSpace(division)
 	}
 	c.scheme.Seeding = seeding
 	return nil

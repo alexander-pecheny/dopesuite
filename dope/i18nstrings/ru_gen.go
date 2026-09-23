@@ -1956,6 +1956,7 @@ var RU = Strings{
 		},
 		Placement: StructurePlacementStrings{
 			BlockRoundsMin:   func() string { return "rounds: хотя бы один раунд" },
+			DealUnknown:      func(deal string) string { return fmt.Sprintf("deal: %s — бывает straight или snake", deal) },
 			DrawSeat:         func() string { return "Жребий" },
 			MatchSizeMissing: func() string { return "placement: нужен match_size хотя бы 2" },
 			NotDivisible: func(participants string, size string) string {

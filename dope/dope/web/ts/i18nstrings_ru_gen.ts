@@ -1451,6 +1451,7 @@ shootout: true
     },
     placement: {
       blockRoundsMin: () => "rounds: хотя бы один раунд",
+      dealUnknown: (deal: string) => `deal: ${deal} — бывает straight или snake`,
       drawSeat: () => "Жребий",
       matchSizeMissing: () => "placement: нужен match_size хотя бы 2",
       notDivisible: (participants: string, size: string) => `placement: ${participants} участников не делятся на столы по ${size}`,

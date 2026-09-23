@@ -125,6 +125,8 @@ not_divisible = 'placement: {{.participants}} участников не деля
 too_many_tables = 'placement: {{.tables}} столов не рассадить по {{.size}} мест — столов не должно быть больше, чем мест за столом'
 # A rounds value below one.
 block_rounds_min = "rounds: хотя бы один раунд"
+# A deal the block does not know: straight bands or the snake.
+deal_unknown = 'deal: {{.deal}} — бывает straight или snake'
 
 [swiss]
 # The swiss block: rounds that pair troikas with the same record of wins and

@@ -538,7 +538,7 @@ where fest_id = ? order by roster desc, assembled, coalesce(nullif(number, 0), 1
 				option.Label += " (" + city + ")"
 			}
 			// A troika reads apart from the teams it is drawn from: the picker
-			// lists both, and a Тройка Game seats troikas.
+			// lists both, and a Troika Game seats troikas.
 			if assembled {
 				option.Label = dopestrings.Default.Host.Games.EntrantTroika(option.Label)
 			}

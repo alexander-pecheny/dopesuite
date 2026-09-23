@@ -33,7 +33,7 @@ type placement struct{}
 func (placement) Code() string { return "placement" }
 func (placement) Word() string { return "placement" }
 func (placement) Keys() []Key {
-	return []Key{{Name: "participants"}, {Name: "match_size"}, {Name: "rounds"}}
+	return []Key{{Name: "participants"}, {Name: "match_size"}, {Name: "rounds"}, {Name: "deal"}, {Name: "rotation"}}
 }
 
 // placementCanonOrder is what a Block ranks by when the scheme names nothing:
@@ -60,7 +60,8 @@ func (placement) Expand(b Block) (Outputs, error) {
 			strconv.Itoa(participants), strconv.Itoa(matchSize)))
 	}
 	tables := participants / matchSize
-	if tables > matchSize {
+	rotation, _ := b.Bool("rotation")
+	if tables > matchSize && !rotation {
 		return Outputs{}, Keyf("match_size", "%s", s.Structure.Placement.TooManyTables(
 			strconv.Itoa(tables), strconv.Itoa(matchSize)))
 	}
@@ -89,7 +90,19 @@ func (placement) Expand(b Block) (Outputs, error) {
 	if err != nil {
 		return Outputs{}, err
 	}
+	// The first Round deals the seed in straight bands (Hamsa: 1–4, 5–8,
+	// 9–12), or by the snake, which balances the tables the way a group draw
+	// does (Erudit-Sextet: 1-8-9-16, 2-7-10-15, …).
 	bands := straightChunks(participants, tables)
+	if deal, ok := b.Str("deal"); ok {
+		switch deal {
+		case "snake":
+			bands = snakeChunks(participants, tables)
+		case "straight":
+		default:
+			return Outputs{}, Keyf("deal", "%s", s.Structure.Placement.DealUnknown(deal))
+		}
+	}
 
 	var sources []string
 	var prev []string
@@ -109,6 +122,15 @@ func (placement) Expand(b Block) (Outputs, error) {
 			if r == 1 {
 				for _, rank := range bands[i-1] {
 					slots = append(slots, seeds[rank-1])
+				}
+			} else if rotation {
+				// The tables rotate (Erudit-Sextet's regulations V.2.3): the
+				// winner of a table stays at it, the second moves one table on,
+				// the third two, and so on round the tables. So table i takes
+				// place p from the table p − 1 before it.
+				for place := 1; place <= matchSize; place++ {
+					from := ((i-place)%tables + tables) % tables
+					slots = append(slots, LabelledFromMatch(prev[from], s.Structure.Titles.Bout(strconv.Itoa(from+1)), place))
 				}
 			} else {
 				// Place i of every table of the Round before: the winners meet
@@ -226,7 +248,7 @@ func placementConf(cfg json.RawMessage) (PlacementConfig, error) {
 // multi-seat table counts them, plus the seed rank — the higher place a team
 // took in the KSI qualifier, the last comparator the regulations name and the
 // one thing no Match can measure.
-func (placement) Metrics() []string { return []string{"place_sum", "bouts", "seed"} }
+func (placement) Metrics() []string { return []string{"place_sum", "bouts", "seed", "draw"} }
 
 func (placement) Order(cfg json.RawMessage) []SortRule {
 	conf, err := placementConf(cfg)
@@ -245,10 +267,20 @@ func (placement) Standings(cfg json.RawMessage, results []MatchOutcome, in Input
 	if err != nil {
 		return nil, err
 	}
-	return multiSeatStandings(RRConfig{
+	ranked, err := multiSeatStandings(RRConfig{
 		Code:      conf.Code,
 		MatchSize: conf.MatchSize,
 		Order:     conf.Order,
 		Rules:     conf.Rules,
 	}, results, in.Seeds)
+	if err != nil {
+		return nil, err
+	}
+	// A lot closes the chain where the regulations toss for it
+	// (Erudit-Sextet V.2.5): only the Participants still level draw one.
+	if drawLots(ranked, conf.Order, in.Seed) {
+		sortByOrder(ranked, conf.Order)
+		shareRanks(ranked, conf.Order)
+	}
+	return ranked, nil
 }

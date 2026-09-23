@@ -18,7 +18,7 @@ import (
 )
 
 // The fest's troikas (CONTEXT.md, Assembled team): Participants assembled out of
-// fest players for Тройка, not drawn from the rating roster. The page lists
+// fest players for Troika, not drawn from the rating roster. The page lists
 // them with their people and the team each is credited to, adds many at once
 // from pasted lines, and edits one in a dialog — which is how a substitution
 // between bouts is made.

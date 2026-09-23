@@ -1429,6 +1429,7 @@ export type Strings = {
     };
     placement: {
       blockRoundsMin: () => string;
+      dealUnknown: (deal: string) => string;
       drawSeat: () => string;
       matchSizeMissing: () => string;
       notDivisible: (participants: string, size: string) => string;

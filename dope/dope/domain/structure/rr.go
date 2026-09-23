@@ -392,6 +392,14 @@ func multiSeatStandings(conf RRConfig, results []MatchOutcome, seeds map[int64]f
 		}
 		ranked = append(ranked, *entry)
 	}
+	sortByOrder(ranked, order)
+	shareRanks(ranked, order)
+	return ranked, nil
+}
+
+// sortByOrder sorts a table by its comparator chain, each metric in its own
+// direction, the Participant id breaking what nothing else does.
+func sortByOrder(ranked []RankedEntry, order []string) {
 	sort.SliceStable(ranked, func(i, j int) bool {
 		for _, key := range order {
 			a, b := ranked[i].Metrics[key], ranked[j].Metrics[key]
@@ -405,8 +413,6 @@ func multiSeatStandings(conf RRConfig, results []MatchOutcome, seeds map[int64]f
 		}
 		return ranked[i].Participant < ranked[j].Participant
 	})
-	shareRanks(ranked, order)
-	return ranked, nil
 }
 
 // shareRanks numbers a sorted table, giving seats level on every key one
