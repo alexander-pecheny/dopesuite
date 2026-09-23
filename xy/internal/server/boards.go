@@ -94,6 +94,9 @@ type boardSummary struct {
 	// UnreadMentions: some unread comment mentions the caller (or replies to
 	// them) — the red rung of the same ladder.
 	UnreadMentions bool `json:"unread_mentions"`
+	// Creator is who made the board, and is set only when that is somebody else:
+	// it is what tells a board shared with the caller from one of their own.
+	Creator string `json:"creator,omitempty"`
 }
 
 func (s *server) handleListBoards(w http.ResponseWriter, r *http.Request) {
@@ -106,9 +109,11 @@ func (s *server) handleListBoards(w http.ResponseWriter, r *http.Request) {
 	// predicate (see the board snapshot / activity feed) across the whole board.
 	rows, err := s.db.QueryContext(r.Context(), `
 select b.id, b.name, b.name_enc, b.schema_version, m.role, b.created_at, b.updated_at, m.last_visited_at,
+  case when b.owner_user_id = m.user_id then '' else coalesce(o.username, o.telegram_username, '') end as creator,
   exists(select 1 `+sqlEventsOfOthers+` and e.board_id = b.id and `+sqlUnread+`) as unread,
   exists(select 1 `+sqlEventsOfOthers+` and e.board_id = b.id and `+sqlUnreadComment+` and `+sqlMention("m.user_id")+`) as unread_mentions
 from boards b join board_members m on m.board_id = b.id
+left join users o on o.id = b.owner_user_id
 where m.user_id = ? and b.deleted_at is null
 order by m.last_visited_at is null, m.last_visited_at desc, b.updated_at desc`, u.UserID, u.UserID, u.UserID, u.UserID, u.UserID)
 	if handleErr(w, err) {
@@ -122,7 +127,7 @@ order by m.last_visited_at is null, m.last_visited_at desc, b.updated_at desc`, 
 		var nameEnc []byte
 		var lastVisited sql.NullString
 		var unread, unreadMentions int
-		if err := rows.Scan(&b.ID, &name, &nameEnc, &b.SchemaVersion, &b.Role, &b.CreatedAt, &b.UpdatedAt, &lastVisited, &unread, &unreadMentions); handleErr(w, err) {
+		if err := rows.Scan(&b.ID, &name, &nameEnc, &b.SchemaVersion, &b.Role, &b.CreatedAt, &b.UpdatedAt, &lastVisited, &b.Creator, &unread, &unreadMentions); handleErr(w, err) {
 			return
 		}
 		b.Name = name.String

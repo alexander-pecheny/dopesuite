@@ -437,14 +437,16 @@ var RU = Strings{
 			GroupTitle: func() string {
 				return "Список входит в группу — сквозная нумерация и общий экспорт"
 			},
-			MenuTitle:   func() string { return "Меню списка" },
-			TypeChange:  func() string { return "Тип списка…" },
-			TypeChgk:    func() string { return "Вопросы ОД" },
-			TypeConfirm: func(to string, hint string) string { return fmt.Sprintf("Список станет: %s. %s", to, hint) },
-			TypeHint:    func() string { return "На уже созданные карточки не влияет." },
-			TypeLabel:   func() string { return "Что в списке" },
-			TypeSi:      func() string { return "Темы СИ" },
-			Untitled:    func() string { return "(без названия)" },
+			MenuTitle:  func() string { return "Меню списка" },
+			TypeChange: func() string { return "Тип списка…" },
+			TypeChgk:   func() string { return "Вопросы ОД" },
+			TypeHint: func() string {
+				return "Тип решает, какую карточку создаёт кнопка «Добавить карточку». На уже созданные карточки не влияет."
+			},
+			TypeLabel: func() string { return "Что в списке" },
+			TypeSi:    func() string { return "Темы СИ" },
+			TypeTitle: func() string { return "Тип списка" },
+			Untitled:  func() string { return "(без названия)" },
 		},
 		Listsmanage: BoardListsmanageStrings{
 			Drag:          func() string { return "Перетащить" },
@@ -1091,6 +1093,7 @@ var RU = Strings{
 			CreateOffline:   func() string { return "Создание доски доступно только онлайн." },
 			CreateSubmit:    func() string { return "Создать" },
 			CreateTitle:     func() string { return "Новая доска" },
+			Creator:         func(name string) string { return fmt.Sprintf("Создатель: %s", name) },
 			EmptyAll:        func() string { return "Пока нет досок. Нажмите + чтобы создать." },
 			EmptyNamed:      func() string { return "Досок с таким названием нет." },
 			ImportLabel:     func() string { return "Импорт из Trello" },

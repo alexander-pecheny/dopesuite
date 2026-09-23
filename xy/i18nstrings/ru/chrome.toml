@@ -47,6 +47,8 @@ board_locked_name = 'доска #{{.id}}'
 # The role line under a board card's name.
 role_owner = "владелец"
 role_editor = "редактор"
+# The line under the role on a board somebody else created; name is their login.
+creator = 'Создатель: {{.name}}'
 # Tooltip of the unread dot on a board card, plain and mention variants.
 unread_title = "Есть непрочитанные изменения"
 unread_mention_title = "Вас упомянули"

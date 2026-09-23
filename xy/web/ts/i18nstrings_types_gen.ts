@@ -357,10 +357,10 @@ export type Strings = {
       menuTitle: () => string;
       typeChange: () => string;
       typeChgk: () => string;
-      typeConfirm: (to: string, hint: string) => string;
       typeHint: () => string;
       typeLabel: () => string;
       typeSi: () => string;
+      typeTitle: () => string;
       untitled: () => string;
     };
     listsmanage: {
@@ -882,6 +882,7 @@ export type Strings = {
       createOffline: () => string;
       createSubmit: () => string;
       createTitle: () => string;
+      creator: (name: string) => string;
       emptyAll: () => string;
       emptyNamed: () => string;
       importLabel: () => string;

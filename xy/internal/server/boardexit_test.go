@@ -68,3 +68,23 @@ func TestLeaveBoard(t *testing.T) {
 	mustStatus(t, owner.do("DELETE", "/api/boards/"+bid+"/membership", nil), 403)
 	mustStatus(t, owner.do("GET", "/api/boards/"+bid, nil), 200)
 }
+
+// TestBoardListCreator: a board somebody shared with you names its creator in the
+// board list; your own board names nobody.
+func TestBoardListCreator(t *testing.T) {
+	ts, srv := newTestServer(t)
+	owner := registerUser(t, srv, ts, 991201, "creatorowner")
+	editor := registerUser(t, srv, ts, 991202, "creatoreditor")
+	bid := newBoard(t, owner, "общая")
+	addBoardMember(t, srv, mustAtoi(t, bid), meUserID(t, editor))
+
+	var boards []boardSummary
+	owner.decode(owner.do("GET", "/api/boards", nil), &boards)
+	if len(boards) != 1 || boards[0].Creator != "" {
+		t.Fatalf("owner's list = %+v, want their board with no creator", boards)
+	}
+	editor.decode(editor.do("GET", "/api/boards", nil), &boards)
+	if len(boards) != 1 || boards[0].Creator != "creatorowner" {
+		t.Fatalf("editor's list = %+v, want creator creatorowner", boards)
+	}
+}
