@@ -770,6 +770,17 @@ const writtenCursor = createSheetCursor({
   // A click steps 0 → 1 → 2 → 3 → 0; a digit is typed straight in.
   cycle: (cell: Element) => String(((Number(cell.textContent || 0) || 0) + 1) % (troika.CHAIRS + 1)),
   applyValues: applyCounts,
+  // A typed digit is the count itself, written at once, and the cursor moves
+  // on to the next question — the way a sheet of numbers is keyed in. Enter
+  // steps the count as a tap does.
+  onEdit: (cell, text) => {
+    const value = text === null
+      ? String(((Number(cell.textContent || 0) || 0) + 1) % (troika.CHAIRS + 1))
+      : text.trim();
+    if (!/^[0-3]$/.test(value)) return;
+    applyCounts([{cell, value}]);
+    if (text !== null) writtenCursor.moveBy(0, 1);
+  },
 });
 
 function applyCounts(edits: CellEdit[]): void {

@@ -310,7 +310,38 @@ const sheet = createSheetCursor({
     return String(values[(at + 1) % values.length]);
   },
   applyValues: applyCellEdits,
+  onEdit: typeIntoCell,
 });
+
+// typeIntoCell is the keyboard's way into a cell. Where every value the cell
+// may hold is one character (0, 1, 2), a keystroke is the value, written at
+// once, and the cursor moves on. Where it is wider, keystrokes in quick
+// succession build the number and the cursor stays. Enter steps the value
+// the way a tap does. A value outside the cell's domain is refused, as a
+// paste's is.
+let typed = {cell: null as HTMLElement | null, text: "", at: 0};
+const TYPING_PAUSE_MS = 1200;
+
+function typeIntoCell(cell: HTMLElement, text: string | null): void {
+  const values = domainOf(Number(cell.dataset.game), Number(cell.dataset.column));
+  if (text === null) {
+    if (values.length > CYCLE_LIMIT) return;
+    const current = Number(cell.textContent || 0) || 0;
+    applyCellEdits([{cell, value: String(values[(values.indexOf(current) + 1) % values.length])}]);
+    return;
+  }
+  if (!/^[0-9\-−]$/.test(text)) return;
+  const single = values.every((value) => String(value).length === 1);
+  if (single) {
+    applyCellEdits([{cell, value: text}]);
+    if (values.includes(Number(text))) sheet.moveBy(0, 1);
+    return;
+  }
+  const now = Date.now();
+  const text2 = typed.cell === cell && now - typed.at < TYPING_PAUSE_MS ? typed.text + text : text;
+  typed = {cell, text: text2, at: now};
+  applyCellEdits([{cell, value: text2}]);
+}
 
 function flatColumn(game: number, column: number): number {
   let base = 0;
