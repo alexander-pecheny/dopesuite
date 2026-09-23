@@ -40,7 +40,8 @@ import { createChangePass } from "./changepass.js";
 import { createPassCheck, passCheckStore } from "./passcheck.js";
 import { createNameOverflow } from "./nameoverflow.js";
 import { createTransfer } from "./transfer.js";
-import { type AnnounceCity, parseSession, type SessionMeta, sessionLabel, type TitleMode, whoSaw } from "./sessions.js";
+import { type AnnounceCity, newKey, parseSession, type SessionMeta, serializeSession, sessionLabel, type Tester, testerNames, type TitleMode, whoSaw } from "./sessions.js";
+import { type CardSeen, parseCardSeen, seenBy, type SeenPlaying, sessionRef, serializeCardSeen } from "./seen.js";
 import * as people from "./people.js";
 import { createSessionsPanel } from "./sessionspanel.js";
 import { colorField, labelFill, labelInk, LABEL_COLORS } from "./colorpick.js";
@@ -98,7 +99,7 @@ const titleNode = byId("boardTitle");
 // members roster boardmembers.js merges onto it.
 type LiveState = BoardState & MembersState;
 
-const state: LiveState = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], sessions: [], cardLabels: [], cardSessions: [], tourTesters: [], members: [], memberNames: {}, me: null, unread: {}, sizes: { ...xySizes.DEFAULT }, defaultAuthor: "", cardTitle: "question", feedDefault: "all", timezone: "", announceCities: null, sessionTitleMode: "" };
+const state: LiveState = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], sessions: [], cardLabels: [], cardSessions: [], tourTesters: [], tourDeclarations: [], members: [], memberNames: {}, me: null, unread: {}, sizes: { ...xySizes.DEFAULT }, defaultAuthor: "", cardTitle: "question", feedDefault: "all", timezone: "", announceCities: null, sessionTitleMode: "" };
 let dk: DataKey | null = null;
 // Whether that key came out of the cache rather than off the unlock overlay —
 // the Passphrase Check's one question (passcheck.ts).
@@ -158,7 +159,7 @@ const unlock = createUnlock({
     refreshBoardMenu(); // the role came with the snapshot; delete-board wants it
     // Feed the person directory. The tester names are plaintext in hand at this
     // moment, so this costs a pass over a handful of sessions and no decryption.
-    people.remember(boardId, state.name, state.sessions.flatMap((s) => parseSession(s.meta).testers));
+    rememberPeople();
     render();
     renderNotifBadge();
     // best-effort, online only: the author-name map for timelines, and the
@@ -321,6 +322,55 @@ function playingsOf(cardId: number): number[] {
   return ids;
 }
 
+// The card's Playings as the Seen fold reads them (seen.ts).
+function seenPlayings(cardId: number): SeenPlaying[] {
+  return playingsOf(cardId).map((sid) => {
+    const m = sessionMeta(sid);
+    return { ref: sessionRef(sid, m), testers: (m && m.testers) || [] };
+  });
+}
+
+function seenOf(cardId: number): Tester[] {
+  const card = state.cards.find((c) => c.id === cardId);
+  return seenBy(seenPlayings(cardId), parseCardSeen(card && card.seen));
+}
+
+async function patchSessionMeta(id: number, meta: string): Promise<void> {
+  await patch("patchSession", `/api/sessions/${id}`, { meta_enc: await xyCrypto.encField(mustDK(), meta) });
+  const s = state.sessions.find((x) => x.id === id);
+  if (s) s.meta = meta;
+  sessionMetaCache.delete(id);
+}
+
+// writeSeen stores a card's hand corrections. An absence is keyed by the
+// Session's key, so a Session from before keys existed gets one first:
+// otherwise the absence would name a row id that means nothing after a
+// Transfer.
+async function writeSeen(card: BoardCard, next: CardSeen): Promise<void> {
+  for (const sid of playingsOf(card.id)) {
+    const m = sessionMeta(sid);
+    const ref = sessionRef(sid, m);
+    if (!m || m.key || !next.absent[ref]) continue;
+    const keyed = { ...m, key: newKey() };
+    await patchSessionMeta(sid, serializeSession(keyed));
+    next.absent[sessionRef(sid, keyed)] = next.absent[ref];
+    delete next.absent[ref];
+  }
+  const raw = serializeCardSeen(next);
+  await patch("patchCard", `/api/cards/${card.id}`, { seen_enc: raw ? await xyCrypto.encField(mustDK(), raw) : "" });
+  card.seen = raw || null;
+  rememberPeople();
+}
+
+// Feed the Person Directory: every name this board knows, from its Sessions and
+// from the people added to questions by hand.
+function rememberPeople(): void {
+  people.remember(boardId, state.name, [
+    ...state.sessions.flatMap((s) => parseSession(s.meta).testers),
+    ...state.cards.flatMap((c) => parseCardSeen(c.seen).extra),
+  ]);
+}
+
 function assignmentsOf(cardId: number, sessionId: number | null | undefined): CardLabel[] {
   return state.cardLabels.filter((a) =>
     a.cardId === cardId && (sessionId === undefined || a.sessionId === sessionId));
@@ -353,6 +403,9 @@ const board: Board = {
   groupById,
   assignmentsOf,
   playingsOf,
+  seenPlayings,
+  seenOf,
+  writeSeen,
   sessionMeta,
   sessionName,
   verbs: { create, post, patch, put, del },
@@ -867,6 +920,14 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
     }
     labelRow.append(test);
   }
+  // People who saw it outside any test (#90) have no flask to show them, so
+  // they get a badge of their own in the same slot.
+  const byHand = parseCardSeen(card.seen).extra;
+  if (byHand.length) {
+    const { players, teams } = testerNames(byHand);
+    labelRow.append(el("span", { class: "kcard-test", title: S.board.card.seenByHandTitle([...players, ...teams].join(", ")) },
+      el("span", { class: "kcard-test-icon" }, icon("user-plus"))));
+  }
   if (labelRow.children.length) node.append(labelRow);
   node.append(renderCardTitle(card, number));
   const u = state.unread[card.id];
@@ -1360,7 +1421,7 @@ timeline = createTimeline({
 const cardLabels = createCardLabels(board, {
   picker: byId("labelPicker"), playings: byId("cardPlayings"), seen: byId("cardSeen"),
   addRow: byId("labelAddRow"), addBtn: byId("labelAddBtn"),
-  playingAddRow: byId("playingAddRow"), playingAddBtn: byId("playingAddBtn"),
+  playingAddRow: byId("playingAddRow"), playingAddBtn: byId("playingAddBtn"), seenAddBtn: byId("seenAddBtn"),
   newLabelForm: byId<HTMLFormElement>("newLabelForm"), newLabelName: byId<HTMLInputElement>("newLabelName"), newLabelColor: byId("newLabelColor"),
   message: byId("cardMessage"),
 }, {
@@ -1401,12 +1462,7 @@ const sessionsPanel = createSessionsPanel({
     sessionMetaCache.delete(id);
     return id;
   },
-  patchSession: async (id, meta) => {
-    await patch("patchSession", `/api/sessions/${id}`, { meta_enc: await xyCrypto.encField(mustDK(), meta) });
-    const s = state.sessions.find((x) => x.id === id);
-    if (s) s.meta = meta;
-    sessionMetaCache.delete(id);
-  },
+  patchSession: patchSessionMeta,
   deleteSession: async (id) => {
     await del("deleteSession", `/api/sessions/${id}`);
     state.sessions = state.sessions.filter((s) => s.id !== id);

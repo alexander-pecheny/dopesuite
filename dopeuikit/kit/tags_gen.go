@@ -559,6 +559,7 @@ var IconTimer = Attr{Name: "icon", Value: "timer"}
 var IconTrash2 = Attr{Name: "icon", Value: "trash-2"}
 var IconUnlink = Attr{Name: "icon", Value: "unlink"}
 var IconUser = Attr{Name: "icon", Value: "user"}
+var IconUserPlus = Attr{Name: "icon", Value: "user-plus"}
 var IconUsers = Attr{Name: "icon", Value: "users"}
 var IconWandSparkles = Attr{Name: "icon", Value: "wand-sparkles"}
 var IconX = Attr{Name: "icon", Value: "x"}

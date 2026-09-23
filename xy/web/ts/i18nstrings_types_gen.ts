@@ -154,6 +154,8 @@ export type Strings = {
       previewDblclick: () => string;
       screenLabel: () => string;
       screenTitle: () => string;
+      seenAdd: () => string;
+      seenByHandTitle: (names: string) => string;
       stressLabel: () => string;
       stressTitle: () => string;
       tabFields: () => string;
@@ -224,6 +226,7 @@ export type Strings = {
       noKey: () => string;
       noLabel: () => string;
       noList: () => string;
+      noPeople: () => string;
       noTest: () => string;
     };
     excerpts: {
@@ -413,6 +416,15 @@ export type Strings = {
       pickTest: () => string;
       progress: (done: string, total: string) => string;
       run: () => string;
+      seenAddHint: () => string;
+      seenAddLabel: () => string;
+      seenAddTitle: () => string;
+      seenAddVerb: () => string;
+      seenDelHint: () => string;
+      seenDelLabel: () => string;
+      seenDelTitle: () => string;
+      seenDelVerb: () => string;
+      seenNone: () => string;
       selectCard: () => string;
       selectList: () => string;
       selectedCount: (count: string) => string;
@@ -720,10 +732,19 @@ export type Strings = {
       saved: () => string;
     };
     seen: {
+      absentTitle: () => string;
+      addClose: () => string;
+      addHint: () => string;
+      addPlaceholder: () => string;
+      byHand: () => string;
       commonTesterTitle: () => string;
       copyTitle: () => string;
       label: () => string;
       labelExceptCommon: () => string;
+      removeAria: (name: string) => string;
+      removeTitle: () => string;
+      restoreAria: (name: string) => string;
+      restoreTitle: () => string;
       showAll: () => string;
     };
     slot: {

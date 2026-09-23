@@ -123,13 +123,14 @@ export async function buildBundle(
     groups: state.groups.map((g) => ({ id: g.id, name: g.name })),
     cards: state.cards.map((c) => ({
       id: c.id, list_id: c.listId, kind: c.kind, description: c.desc, rank: c.rank,
-      handout_meta: c.handoutMeta, alias: c.alias, created_at: c.createdAt,
+      handout_meta: c.handoutMeta, alias: c.alias, seen: c.seen ?? null, created_at: c.createdAt,
     })),
     labels: state.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
     sessions: state.sessions.map((s) => ({ id: s.id, meta: s.meta, created_at: s.createdAt })),
     card_labels: state.cardLabels.map((a) => ({ card_id: a.cardId, label_id: a.labelId, session_id: a.sessionId })),
     card_sessions: state.cardSessions.map((p) => ({ card_id: p.cardId, session_id: p.sessionId })),
     tour_testers: state.tourTesters.map((t) => ({ list_id: t.listId, group_id: t.groupId, session_id: t.sessionId })),
+    tour_declarations: state.tourDeclarations.map((t) => ({ list_id: t.listId, group_id: t.groupId, names: t.names })),
     timeline,
     attachments,
   };

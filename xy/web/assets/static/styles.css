@@ -1828,6 +1828,9 @@ body {
 /* The tour already names these people in its preamble; «Показать всех
    тестеров» brings them back dimmed so the extras still read first. */
 .seen-common { color: var(--muted); }
+/* A tester of one of the card's tests who missed this question. Still listed,
+   so the absence can be taken back. */
+.seen-absent { color: var(--muted); text-decoration: line-through; }
 
 /* A tester row is seg + name + ×. The name SHRINKS rather than claiming a line
    of its own — giving it 100% pushed the × onto a third line at every width, not
@@ -1873,7 +1876,11 @@ body {
 #cardPlayings { display: flex; flex-direction: column; }
 /* The add-label button inside a playing sits among chips, so it matches them. */
 .playing-add { padding: var(--space-0-5) var(--space-2); font-size: var(--text-xs); }
-#playingAddRow { position: relative; display: flex; gap: var(--space-2); align-items: center; }
+/* Two buttons since «Видели вне тестов…» (#90). On a phone they do not fit side
+   by side, and each squeezed its label onto two lines; wrapping keeps each one
+   a single line. */
+#playingAddRow { position: relative; display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+#playingAddRow > .btn, #playingAddRow > button { white-space: nowrap; }
 /* The popup is anchored to a chip row, which is narrow; keep it readable. */
 .label-add-popup { min-width: 16rem; max-width: min(24rem, 90vw); }
 

@@ -1,14 +1,16 @@
 // testerlist.ts — "Tester list" ("Questions tested by" for one tour). The
 // test list used to BE this list, one per tour. A board-level Tests panel can
-// only say who tested at all, so a tour compiles its own: each session with how
-// many of the tour's questions it saw. The ChGK custom names those who tested MOST
+// only say who tested at all, so a tour compiles its own: each person with how
+// many of the tour's questions they saw. The ChGK custom names those who tested MOST
 // of a tour (they should not play it); someone who saw one or two questions still
 // may, skipping what they know — so a flat list cannot serve. tourPicked is that
 // rule, shared with the card's "except common testers" line.
 
 import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
-import { partialSeen, type SeenQuestion, type SessionMeta, whoSaw } from "./sessions.js";
+import { partialSeen, type SeenQuestion, type SessionMeta, testerNames, whoSaw } from "./sessions.js";
+import { nameOf, serializeDeclaration } from "./seen.js";
+import { xyCrypto } from "./crypto.js";
 import { iconed } from "./icons_gen.js";
 import { type Board, type ListPanel, listScope, type PanelShell } from "./panels.js";
 import type { BoardCard, BoardList } from "./unlock.js";
@@ -17,63 +19,74 @@ import type { Tester } from "./sessions.js";
 const { el, errMsg } = xyApp;
 
 export interface TesterList {
-  // Undeclared, a tour falls back to the custom: everyone who saw MORE than
-  // half its questions.
-  tourPicked(list: BoardList): Set<number>;
+  // The names of the people the tour's Tester List names. Undeclared, a tour
+  // falls back to the custom: everyone who saw MORE than half its questions.
+  tourPicked(list: BoardList): Set<string>;
   panel: ListPanel;
 }
 
 export function createTesterList(board: Board, shell: PanelShell, deps: { copyPlain(text: string): Promise<void> }): TesterList {
-  interface TourTester { id: number; name: string; seen: number }
+  // One person and how many of the tour's questions they saw. Counted per
+  // person, not per Session (#90): somebody at two sittings that each played
+  // half the tour saw all of it, and somebody added to a question by hand saw
+  // it without any Session at all.
+  interface TourTester { tester: Tester; seen: number }
 
   function tourCoverage(list: BoardList): { cards: BoardCard[]; rows: TourTester[] } {
     const cards = listScope(board, list).cards.filter((c) => c.kind === "question");
-    const seen = new Map<number, number>();
+    const seen = new Map<string, TourTester>();
     for (const c of cards) {
-      for (const sid of board.playingsOf(c.id)) seen.set(sid, (seen.get(sid) || 0) + 1);
+      for (const t of board.seenOf(c.id)) {
+        const row = seen.get(nameOf(t));
+        if (row) row.seen++;
+        else seen.set(nameOf(t), { tester: t, seen: 1 });
+      }
     }
-    const rows = [...seen.entries()]
-      .map(([id, n]): TourTester => ({ id, name: board.sessionName(id), seen: n }))
-      .sort((a, b) => b.seen - a.seen || a.name.localeCompare(b.name, "ru"));
-    return { cards, rows };
+    return { cards, rows: sortRows([...seen.values()]) };
   }
 
-  // Which sessions were ticked last time, per tour. A personal working state on
-  // the way to a document, so it lives beside the other display prefs rather than
-  // on the server.
+  function sortRows(rows: TourTester[]): TourTester[] {
+    const { players, teams } = testerNames(rows.map((r) => r.tester));
+    const order = new Map([...players, ...teams].map((n, i) => [n, i]));
+    return rows.sort((a, b) => b.seen - a.seen || (order.get(nameOf(a.tester)) ?? 0) - (order.get(nameOf(b.tester)) ?? 0));
+  }
+
   // A tour's Declaration lives on the board, not in this browser: the preamble
-  // ships with the package, so two editors preparing it see one answer. The ticks
-  // used to sit in localStorage, where they outlived the sessions they named.
+  // ships with the package, so two editors preparing it see one answer.
   function tourScope(list: BoardList): { listId: number | null; groupId: number | null } {
     return list.groupId != null ? { listId: null, groupId: list.groupId } : { listId: list.id, groupId: null };
   }
 
   // null = this tour has no Declaration and falls back to the custom. An empty
-  // array = it declared, and names nobody.
-  function declaredFor(list: BoardList): number[] | null {
+  // array = it declared, and names nobody. A tour declared before schema v26
+  // named Sessions; it reads as everyone who was at them.
+  function declaredFor(list: BoardList): Tester[] | null {
     const s = tourScope(list);
+    const decl = board.state.tourDeclarations.find((d) => d.listId === s.listId && d.groupId === s.groupId);
+    if (decl) return decl.names;
     const rows = board.state.tourTesters.filter((d) => d.listId === s.listId && d.groupId === s.groupId);
     if (!rows.length) return null;
-    return rows.filter((d) => d.sessionId != null).map((d) => d.sessionId as number);
+    return rows.flatMap((d) => d.sessionId != null ? (board.sessionMeta(d.sessionId) || { testers: [] }).testers : []);
   }
 
-  async function declare(list: BoardList, ids: number[]): Promise<void> {
+  async function declare(list: BoardList, names: Tester[]): Promise<void> {
     const s = tourScope(list);
-    await board.verbs.put("setTourTesters", `/api/boards/${board.id}/tour-testers`, {
-      list_id: s.listId, group_id: s.groupId, session_ids: ids,
+    await board.verbs.put("setTourDeclaration", `/api/boards/${board.id}/tour-declaration`, {
+      list_id: s.listId, group_id: s.groupId,
+      names_enc: await xyCrypto.encField(board.dk(), serializeDeclaration(names)),
     });
-    const rest = board.state.tourTesters.filter((d) => d.listId !== s.listId || d.groupId !== s.groupId);
-    board.state.tourTesters = ids.length
-      ? rest.concat(ids.map((sessionId) => ({ ...s, sessionId })))
-      : rest.concat([{ ...s, sessionId: null }]);
+    const other = (d: { listId: number | null; groupId: number | null }): boolean => d.listId !== s.listId || d.groupId !== s.groupId;
+    board.state.tourTesters = board.state.tourTesters.filter(other);
+    board.state.tourDeclarations = board.state.tourDeclarations.filter(other).concat([{ ...s, names }]);
   }
 
   // Undeclared, a tour falls back to the custom: everyone who saw MORE than half
   // its questions. Shared with the card's "except common testers" line.
-  function tourPicked(list: BoardList): Set<number> {
-    const { cards, rows } = tourCoverage(list);
+  function tourPicked(list: BoardList): Set<string> {
     const declared = declaredFor(list);
-    return new Set(declared ?? rows.filter((r) => r.seen * 2 > cards.length).map((r) => r.id));
+    if (declared) return new Set(declared.map(nameOf).filter(Boolean));
+    const { cards, rows } = tourCoverage(list);
+    return new Set(rows.filter((r) => r.seen * 2 > cards.length).map((r) => nameOf(r.tester)));
   }
 
   // Numbering runs over the whole export scope (a group numbers across its member
@@ -84,7 +97,7 @@ export function createTesterList(board: Board, shell: PanelShell, deps: { copyPl
     cards.forEach((card, i) => {
       const num = numbers[i];
       if (!num) return;
-      const testers = board.playingsOf(card.id).flatMap((sid) => (board.sessionMeta(sid) || { testers: [] }).testers || []);
+      const testers = board.seenOf(card.id);
       if (testers.length) out.push({ num, testers });
     });
     return out;
@@ -95,36 +108,38 @@ export function createTesterList(board: Board, shell: PanelShell, deps: { copyPl
     const { cards, rows } = tourCoverage(list);
     const total = cards.length;
     const picked = tourPicked(list);
+    // A declared person who no longer saw anything still gets a row, so the tick
+    // can be taken off.
+    for (const t of declaredFor(list) || []) {
+      if (!rows.some((r) => nameOf(r.tester) === nameOf(t))) rows.push({ tester: t, seen: 0 });
+    }
 
     const line = el("p", { class: "sess-invite" });
     const partial = el("p", { class: "sess-invite" });
+    const pickedTesters = (): Tester[] => rows.filter((r) => picked.has(nameOf(r.tester))).map((r) => r.tester);
     const redraw = (): void => {
-      const testers: Tester[] = [];
-      for (const r of rows) {
-        if (!picked.has(r.id)) continue;
-        const m = board.sessionMeta(r.id);
-        if (m) testers.push(...m.testers);
-      }
+      const testers = pickedTesters();
       const names = whoSaw(testers.length ? [{ testers } as SessionMeta] : []);
       line.textContent = names ? S.board.testerlist.summary(names) : S.board.testerlist.summaryEmpty();
-      partial.textContent = partialSeen(seenQuestions(list), new Set(testers.map((t) => (t.text || "").trim())));
+      partial.textContent = partialSeen(seenQuestions(list), picked);
       partial.hidden = !partial.textContent;
     };
 
     box.replaceChildren();
     if (!rows.length) box.append(el("p", { class: "label-empty", text: S.board.testerlist.empty() }));
     for (const r of rows) {
+      const name = nameOf(r.tester);
       const cb = el("input", { class: "input", type: "checkbox" }) as HTMLInputElement;
-      cb.checked = picked.has(r.id);
+      cb.checked = picked.has(name);
       cb.addEventListener("change", () => {
-        if (cb.checked) picked.add(r.id); else picked.delete(r.id);
-        void declare(list, [...picked]).catch((err) => {
+        if (cb.checked) picked.add(name); else picked.delete(name);
+        void declare(list, pickedTesters()).catch((err) => {
           shell.message(errMsg(err));
         });
         redraw();
       });
       box.append(el("label", { class: "sess-row" },
-        el("div", { class: "sess-head" }, cb, el("span", { class: "sess-title", text: r.name })),
+        el("div", { class: "sess-head" }, cb, el("span", { class: "sess-title", text: name })),
         el("span", { class: "sess-meta", text: S.board.testerlist.seen(String(r.seen), String(total)) })));
     }
     const copy = el("button", {

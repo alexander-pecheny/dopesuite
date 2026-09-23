@@ -229,8 +229,11 @@ type boardSnapshot struct {
 	CardSessions []cardSessionDTO `json:"card_sessions"`
 	// TourTesters is each tour's Declaration: which sessions its questions-tested
 	// line names. A tour with none falls back to the custom.
-	TourTesters []tourTesterDTO      `json:"tour_testers"`
-	Unread      map[string]unreadDTO `json:"unread"`
+	TourTesters []tourTesterDTO `json:"tour_testers"`
+	// TourDeclarations is the same thing since v26, naming people rather than
+	// sessions. A tour with a row here ignores its tour_testers rows.
+	TourDeclarations []tourDeclarationDTO `json:"tour_declarations"`
+	Unread           map[string]unreadDTO `json:"unread"`
 	// Sizes is the CALLER's display layout ({boardW,listW,cardLines}) — a per-user,
 	// all-boards preference (users.sizes, plaintext JSON; see schema v9), delivered
 	// here alongside the snapshot's other caller-specific fields (role, unread) so
@@ -276,7 +279,7 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	snap := boardSnapshot{ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, Sessions: []sessionDTO{}, CardLabels: []cardLabelDTO{}, CardSessions: []cardSessionDTO{}, TourTesters: []tourTesterDTO{}, Unread: map[string]unreadDTO{}}
+	snap := boardSnapshot{ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, Sessions: []sessionDTO{}, CardLabels: []cardLabelDTO{}, CardSessions: []cardSessionDTO{}, TourTesters: []tourTesterDTO{}, TourDeclarations: []tourDeclarationDTO{}, Unread: map[string]unreadDTO{}}
 
 	var name sql.NullString
 	var nameEnc []byte
@@ -377,6 +380,29 @@ where c.board_id = ? and c.deleted_at is null`, bid)
 			d.GroupID = &groupID.Int64
 		}
 		snap.TourTesters = append(snap.TourTesters, d)
+	}
+
+	tdRows, err := s.db.QueryContext(ctx,
+		`select list_id, group_id, names_enc from tour_declarations where board_id = ?`, bid)
+	if handleErr(w, err) {
+		return
+	}
+	defer tdRows.Close()
+	for tdRows.Next() {
+		var d tourDeclarationDTO
+		var listID, groupID sql.NullInt64
+		var namesEnc []byte
+		if err := tdRows.Scan(&listID, &groupID, &namesEnc); handleErr(w, err) {
+			return
+		}
+		d.NamesEnc = b64(namesEnc)
+		if listID.Valid {
+			d.ListID = &listID.Int64
+		}
+		if groupID.Valid {
+			d.GroupID = &groupID.Int64
+		}
+		snap.TourDeclarations = append(snap.TourDeclarations, d)
 	}
 
 	csRows, err := s.db.QueryContext(ctx, `

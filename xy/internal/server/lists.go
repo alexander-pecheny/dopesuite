@@ -235,6 +235,9 @@ func (s *server) handleCreateListGroup(w http.ResponseWriter, r *http.Request) {
 			if _, err := tx.ExecContext(ctx, `delete from tour_testers where list_id = ?`, lid); err != nil {
 				return err
 			}
+			if _, err := tx.ExecContext(ctx, `delete from tour_declarations where list_id = ?`, lid); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -286,6 +289,9 @@ func (s *server) handleDeleteListGroup(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `delete from tour_testers where group_id = ?`, groupID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `delete from tour_declarations where group_id = ?`, groupID); err != nil {
 			return err
 		}
 		return tombstone(ctx, tx, "list_groups", "id = ?", groupID)

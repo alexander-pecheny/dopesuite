@@ -9,6 +9,8 @@ import { xySizes } from "./app.js";
 import type { AuthMe, Sizes } from "./app.js";
 import type { SyncStatus } from "./sync.js";
 import S from "./i18nstrings.js";
+import { parseDeclaration } from "./seen.js";
+import type { Tester } from "./sessions.js";
 
 // Structural mirrors of crypto.ts's DataKey/BoardKeymeta. Deliberately not
 // imported: crypto.ts pulls the vendored scrypt, and this module's whole point
@@ -54,6 +56,9 @@ export interface BoardCard {
   desc: string;
   handoutMeta: string | null;
   alias: string | null;
+  // The decrypted cards.seen_enc: hand corrections to who saw it (seen.ts).
+  // Absent or null means none.
+  seen?: string | null;
   createdAt: string | null;
 }
 export interface BoardLabel {
@@ -88,6 +93,15 @@ export interface TourTester {
   sessionId: number | null;
 }
 
+// One tour's Declaration since schema v26: the people its Tester List names.
+// An empty list still declares. A tour with one of these ignores its
+// TourTester rows, which only a client from before v26 writes now.
+export interface TourDeclaration {
+  listId: number | null;
+  groupId: number | null;
+  names: Tester[];
+}
+
 // A Test Session as the board holds it: the decrypted meta_enc, parsed lazily by
 // whoever needs it (sessions.ts#parseSession).
 export interface BoardSession {
@@ -113,6 +127,7 @@ export interface BoardState {
   cardLabels: CardLabel[];
   cardSessions: Playing[];
   tourTesters: TourTester[];
+  tourDeclarations: TourDeclaration[];
   unread: Record<string, UnreadFlags>;
   sizes: Sizes;
   defaultAuthor: string;
@@ -143,11 +158,13 @@ export interface Snapshot {
   groups?: Array<{ id: number; name_enc: string }>;
   cards?: Array<{
     id: number; list_id: number; kind: string; rank: string;
-    description_enc: string; handout_meta_enc?: string | null; alias_enc?: string | null; created_at?: string | null;
+    description_enc: string; handout_meta_enc?: string | null; alias_enc?: string | null; seen_enc?: string | null;
+    created_at?: string | null;
   }>;
   labels?: Array<{ id: number; name_enc: string; color_enc: string }>;
   card_sessions?: Array<{ card_id: number; session_id: number }>;
   tour_testers?: Array<{ list_id?: number | null; group_id?: number | null; session_id: number | null }>;
+  tour_declarations?: Array<{ list_id?: number | null; group_id?: number | null; names_enc: string }>;
   sessions?: Array<{ id: number; meta_enc: string; created_at?: string | null }>;
   timezone?: string;
   announce_cities?: unknown;
@@ -259,6 +276,10 @@ export async function decryptSnapshot(
     tourTesters: (snap.tour_testers || []).map((d) => ({
       listId: d.list_id ?? null, groupId: d.group_id ?? null, sessionId: d.session_id ?? null,
     })),
+    tourDeclarations: await Promise.all((snap.tour_declarations || []).map(async (d) => ({
+      listId: d.list_id ?? null, groupId: d.group_id ?? null,
+      names: parseDeclaration(await crypto.decField(key, d.names_enc)),
+    }))),
     unread: snap.unread || {},
     sizes: xySizes.sanitize(snap.sizes),
     defaultAuthor: snap.default_author || "",
@@ -279,6 +300,7 @@ export async function decryptSnapshot(
       desc: await crypto.decField(key, c.description_enc),
       handoutMeta: c.handout_meta_enc ? await crypto.decField(key, c.handout_meta_enc) : null,
       alias: c.alias_enc ? await crypto.decField(key, c.alias_enc) : null,
+      seen: c.seen_enc ? await crypto.decField(key, c.seen_enc) : null,
       createdAt: c.created_at || null,
     }))),
     labels: await Promise.all((snap.labels || []).map(async (l) => ({

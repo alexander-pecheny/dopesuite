@@ -156,10 +156,15 @@ versions_title = 'Версий: {{.n}}'
 # exist, the mid fragment followed by the comma-joined verdict names.
 test_lead = "Тест: "
 test_mid = " — "
+# Tooltip of the badge on a kanban card that some people saw it outside any
+# test: the names, comma-joined.
+seen_by_hand_title = 'Видели вне тестов: {{.names}}'
 # Section heading above the card's test playings.
 playings_label = "Тесты"
 # Add-playing button.
 mark_test = "Отметить тестом…"
+# Button adding people who saw the question outside any test.
+seen_add = "Видели вне тестов…"
 # Section heading of the feed strip (trailing space keeps the dot apart).
 feed_label = "Лента "
 
@@ -463,6 +468,12 @@ session_add_verb = "Отметить"
 session_del_label = "Снять тест"
 session_del_title = "Убрать отметку о тесте со всех отмеченных карточек"
 session_del_verb = "Снять"
+seen_add_label = "Добавить видевших"
+seen_add_title = "Отметить, что эти люди видели все выбранные вопросы, даже если не на тесте"
+seen_add_verb = "Добавить"
+seen_del_label = "Не видели"
+seen_del_title = "Отметить, что эти люди не видели выбранные вопросы, хотя были на тесте"
+seen_del_verb = "Отметить"
 delete_label = "Удалить"
 delete_title = "Удалить отмеченные карточки"
 # Hint shown in the delete dialog (no pickers needed).
@@ -470,6 +481,11 @@ delete_hint = "Карточки будут удалены. Их можно во�
 # Empty-state lines of the label and test pickers.
 no_labels = "На доске нет меток."
 no_tests = "На доске нет тестов."
+# The two Видели pickers: a list of names to add, and the people who saw any
+# of the ticked questions, to tick the ones who did not.
+seen_add_hint = "По одному имени в строке. Команду отметьте так: -T Название."
+seen_del_hint = "Отметьте тех, кто эти вопросы не видел."
+seen_none = "Эти вопросы никто не видел."
 # Placeholder option of the test picker.
 pick_test = "— выберите тест —"
 # Placeholder option when the target board's key is not known.
@@ -768,6 +784,7 @@ cancelled = "отменено"
 # a pick is made).
 no_label = "не выбрана метка"
 no_test = "не выбран тест"
+no_people = "не выбран ни один человек"
 no_list = "не выбран список"
 
 [transfer]

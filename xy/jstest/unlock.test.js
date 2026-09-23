@@ -17,7 +17,8 @@ const SNAP = {
   unread: { 2: { comments: true } },
   lists: [{ id: 1, type: "normal", rank: "a", group_id: 5, title_enc: "e:list" }],
   groups: [{ id: 5, name_enc: "e:group" }],
-  cards: [{ id: 2, list_id: 1, kind: "question", rank: "b", description_enc: "e:desc", handout_meta_enc: "e:meta", alias_enc: null, created_at: "2026-01-01" }],
+  cards: [{ id: 2, list_id: 1, kind: "question", rank: "b", description_enc: "e:desc", handout_meta_enc: "e:meta", alias_enc: null, seen_enc: "e:seen", created_at: "2026-01-01" }],
+  tour_declarations: [{ list_id: 1, names_enc: "e:names" }],
   labels: [{ id: 3, name_enc: "e:lname", color_enc: "e:lcolor" }],
   sessions: [{ id: 9, meta_enc: "e:smeta" }],
 };
@@ -129,8 +130,10 @@ test("cached-DK fast path: no overlay, onDK + decrypted onState, mirror written,
   assert.deepEqual(state.groups, [{ id: 5, name: "d:e:group" }]);
   assert.deepEqual(state.cards, [{
     id: 2, listId: 1, kind: "question", rank: "b",
-    desc: "d:e:desc", handoutMeta: "d:e:meta", alias: null, createdAt: "2026-01-01",
+    desc: "d:e:desc", handoutMeta: "d:e:meta", alias: null, seen: "d:e:seen", createdAt: "2026-01-01",
   }]);
+  // The fake key does not decrypt to JSON, which reads as a tour that names nobody.
+  assert.deepEqual(state.tourDeclarations, [{ listId: 1, groupId: null, names: [] }]);
   assert.deepEqual(state.labels, [{ id: 3, name: "d:e:lname", color: "d:e:lcolor" }]);
   // sizes: null in the snapshot → sanitized defaults, applied before render
   assert.equal(state.sizes.boardW, 1512);

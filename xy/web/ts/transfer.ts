@@ -139,13 +139,16 @@ export function createTransfer(deps: TransferDeps): Transfer {
 
   // cardCopyBody builds the create-card payload for a copy: it re-encrypts the
   // description and — when set — the handout-generation settings (field #10,
-  // handout_meta_enc) and the alias under `key` (the destination board's data key).
+  // handout_meta_enc), the alias and the hand corrections to Seen under `key` (the destination board's data key).
   // kind carries over verbatim. Keeping these here (not in copyCardExtras) means
   // they copy offline too, like the description.
   async function cardCopyBody(src: BoardCard, rank: string, key: DataKey): Promise<OpBody> {
     const body: OpBody = { description_enc: await xyCrypto.encField(key, src.desc), rank, kind: src.kind };
     if (src.handoutMeta) body.handout_meta_enc = await xyCrypto.encField(key, src.handoutMeta);
     if (src.alias) body.alias_enc = await xyCrypto.encField(key, src.alias);
+    // Who saw it by hand travels too. Its absences name Sessions by key, and the
+    // Playings are reconciled by the same key, so they still match there.
+    if (src.seen) body.seen_enc = await xyCrypto.encField(key, src.seen);
     return body;
   }
 
@@ -294,7 +297,7 @@ export function createTransfer(deps: TransferDeps): Transfer {
       const dk = mustDK();
       const res = (await jpost(`/api/lists/${targetListId}/cards`, await cardCopyBody(card, rank, dk))) as { id: number };
       newId = res.id;
-      st().cards.push({ id: res.id, listId: targetListId, kind: card.kind, rank, desc: card.desc, handoutMeta: card.handoutMeta || null, alias: card.alias || null, createdAt: nowStamp() });
+      st().cards.push({ id: res.id, listId: targetListId, kind: card.kind, rank, desc: card.desc, handoutMeta: card.handoutMeta || null, alias: card.alias || null, seen: card.seen || null, createdAt: nowStamp() });
       const own = st().cardLabels.filter((a) => a.cardId === card.id);
       const plays = st().cardSessions.filter((p) => p.cardId === card.id).map((p) => p.sessionId);
       if (plays.length) {

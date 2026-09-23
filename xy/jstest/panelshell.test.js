@@ -10,6 +10,8 @@ const title = fakeNode("h2", { className: "appearance-modal-title" });
 const dialog = fakeNode("div", { attrs: { role: "dialog" } });
 dialog.append(title);
 p.node("panelOverlay").append(dialog);
+const { xyCrypto } = await import("../web/assets/static/dist/crypto.js");
+xyCrypto.encField = async (_k, s) => "enc:" + s;
 const { createModal } = await import("../web/assets/static/dist/modal.js");
 const { createPanelShell } = await import("../web/assets/static/dist/panels.js");
 const { createAuthorCountPanel } = await import("../web/assets/static/dist/authorcount.js");
@@ -51,29 +53,50 @@ test("the author count renders one row per author with the 1/n share, into the s
   assert.equal(copied[0], "Иван Иванов\t1\t100%\t1\nВсего\t1\t100%\t");
 });
 
-test("the tester list names those who saw more than half a tour, unless the tour declared", async () => {
+test("the tester list names the people who saw more than half a tour, unless the tour declared", async () => {
   const board = fakeBoard({
     lists: [scope.list],
-    cards,
+    cards: cards.map((c) => ({ ...c })),
     sessions: [
-      { id: 9, meta: JSON.stringify({ title: "Тест А", testers: [{ text: "Аня" }, { text: "Боря" }] }) },
-      { id: 8, meta: JSON.stringify({ title: "Тест Б", testers: [{ text: "Вера" }] }) },
+      { id: 9, meta: JSON.stringify({ key: "a", title: "Тест А", testers: [{ text: "Аня" }, { text: "Боря" }] }) },
+      { id: 8, meta: JSON.stringify({ key: "b", title: "Тест Б", testers: [{ text: "Вера" }, { text: "Аня" }] }) },
     ],
     cardSessions: [{ cardId: 1, sessionId: 9 }, { cardId: 2, sessionId: 9 }, { cardId: 3, sessionId: 8 }],
   });
+  // Боря came late to Тест А and missed question 2; Гоша saw question 3 in
+  // another pool and was added to it by hand.
+  board.state.cards[1].seen = JSON.stringify({ absent: { a: ["Боря"] } });
+  board.state.cards[2].seen = JSON.stringify({ extra: [{ text: "Гоша", type: "player" }] });
   const tl = createTesterList(board, shell, { copyPlain });
-  assert.deepEqual([...tl.tourPicked(scope.list)], [9], "Тест А saw 2 of 3; Тест Б only 1");
+  // Counted per person: Аня was at both tests and saw all three.
+  assert.deepEqual([...tl.tourPicked(scope.list)], ["Аня"], "Аня 3 of 3; Боря, Вера, Гоша 1 each");
   tl.panel.open(scope);
   assert.equal(title.text, "Список тестеров");
+  const names = p.node("panelBody").querySelectorAll(".sess-title").map((n) => n.text);
+  assert.deepEqual(names, ["Аня", "Боря", "Вера", "Гоша"]);
+  assert.deepEqual(p.node("panelBody").querySelectorAll(".sess-meta").map((n) => n.text), ["3 из 3", "1 из 3", "1 из 3", "1 из 3"]);
   const boxes = p.node("panelBody").querySelectorAll("input[type=checkbox]");
-  assert.deepEqual(boxes.map((b) => b.checked), [true, false]);
+  assert.deepEqual(boxes.map((b) => b.checked), [true, false, false, false]);
   const line = p.node("panelBody").querySelector(".sess-invite");
-  assert.equal(line.text, "Вопросы тестировали: Аня, Боря.");
-  // Ticking Тест Б declares the pair for this tour, on the board.
-  boxes[1].checked = true;
-  boxes[1].fire("change");
+  assert.equal(line.text, "Вопросы тестировали: Аня.");
+  // Ticking Гоша, who never sat a test, declares by name.
+  boxes[3].checked = true;
+  boxes[3].fire("change");
   await new Promise((r) => setTimeout(r, 0));
-  assert.deepEqual(board.writes.map((w) => [w[1], w[2], w[3].session_ids]), [["setTourTesters", "/api/boards/7/tour-testers", [9, 8]]]);
-  assert.deepEqual([...tl.tourPicked(scope.list)].sort(), [8, 9], "declared beats the custom");
-  assert.equal(line.text, "Вопросы тестировали: Аня, Боря, Вера.");
+  assert.deepEqual(board.writes.map((w) => [w[1], w[2], w[3].list_id]), [["setTourDeclaration", "/api/boards/7/tour-declaration", 1]]);
+  assert.deepEqual(board.state.tourDeclarations[0].names.map((t) => t.text), ["Аня", "Гоша"]);
+  assert.deepEqual([...tl.tourPicked(scope.list)].sort(), ["Аня", "Гоша"], "declared beats the custom");
+  assert.equal(line.text, "Вопросы тестировали: Аня, Гоша.");
+});
+
+test("a tour declared by sessions before v26 reads as everyone who was at them", () => {
+  const board = fakeBoard({
+    lists: [scope.list],
+    cards,
+    sessions: [{ id: 8, meta: JSON.stringify({ key: "b", title: "Тест Б", testers: [{ text: "Вера" }] }) }],
+    cardSessions: [{ cardId: 3, sessionId: 8 }],
+    tourTesters: [{ listId: 1, groupId: null, sessionId: 8 }],
+  });
+  const tl = createTesterList(board, shell, { copyPlain });
+  assert.deepEqual([...tl.tourPicked(scope.list)], ["Вера"]);
 });

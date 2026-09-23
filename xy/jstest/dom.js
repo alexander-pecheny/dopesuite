@@ -1,3 +1,4 @@
+import * as xySeen from "../web/assets/static/dist/seen.js";
 // dom.js — the jstest fake DOM: enough of an Element for modules that build
 // with el(), toggle hidden, set text and listen for events. No layout, no
 // selectors beyond ids. Every test that needs a page builds one with page().
@@ -172,7 +173,7 @@ export function installDOM(ids = []) {
 export function fakeBoard(state = {}) {
   const st = {
     role: "owner", name: "Доска", lists: [], groups: [], cards: [], labels: [], sessions: [],
-    cardLabels: [], cardSessions: [], tourTesters: [], unread: {}, sizes: {}, defaultAuthor: "",
+    cardLabels: [], cardSessions: [], tourTesters: [], tourDeclarations: [], unread: {}, sizes: {}, defaultAuthor: "",
     cardTitle: "question", feedDefault: "all", timezone: "", announceCities: null, sessionTitleMode: "",
     ...state,
   };
@@ -189,6 +190,17 @@ export function fakeBoard(state = {}) {
     assignmentsOf: (cardId, sid) => st.cardLabels.filter((a) => a.cardId === cardId && (sid === undefined || a.sessionId === sid)),
     playingsOf: (cardId) => st.cardSessions.filter((p) => p.cardId === cardId).map((p) => p.sessionId),
     sessionMeta: (id) => { const s = st.sessions.find((x) => x.id === id); return s ? JSON.parse(s.meta) : null; },
+    // The Seen fold is the real one (seen.ts); only the write is recorded.
+    seenPlayings: (cardId) => board.playingsOf(cardId).map((sid) => {
+      const m = board.sessionMeta(sid);
+      return { ref: xySeen.sessionRef(sid, m), testers: (m && m.testers) || [] };
+    }),
+    seenOf: (cardId) => xySeen.seenBy(board.seenPlayings(cardId), xySeen.parseCardSeen((st.cards.find((c) => c.id === cardId) || {}).seen)),
+    async writeSeen(card, next) {
+      const raw = xySeen.serializeCardSeen(next);
+      writes.push(["patch", "patchCard", `/api/cards/${card.id}`, { seen: raw }]);
+      card.seen = raw || null;
+    },
     sessionName: (id) => { const s = st.sessions.find((x) => x.id === id); return s ? JSON.parse(s.meta).title || "тест" : "тест"; },
     verbs: { create: verb("create"), post: verb("post"), patch: verb("patch"), put: verb("put"), del: verb("del") },
     renders: 0,

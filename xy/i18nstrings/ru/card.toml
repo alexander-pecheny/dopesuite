@@ -218,6 +218,21 @@ common_tester_title = "Общий тестер списка"
 show_all = "Показать всех тестеров"
 # Tooltip of the clipboard button copying the whole line.
 copy_title = "Скопировать"
+# The × after a name: this person did not see this question.
+remove_title = "Не видел этот вопрос"
+remove_aria = '{{.name}} не видел этот вопрос'
+# A tester of one of the card's tests who missed this question: shown struck
+# out, with a button that takes the absence back.
+absent_title = "Был на тесте, но пропустил этот вопрос"
+restore_title = "Всё-таки видел"
+restore_aria = '{{.name}} всё-таки видел этот вопрос'
+# After a name added by hand rather than through a test.
+by_hand = "вручную"
+# The field that adds people who saw the question outside any test.
+add_placeholder = "Имя…"
+add_hint = "Enter добавляет. Можно вставить список, по одному имени в строке."
+# The × that closes that field.
+add_close = "Закрыть"
 
 [add]
 # The two add-popups (labels / tests) over one filtered dropdown.

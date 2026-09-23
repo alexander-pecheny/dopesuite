@@ -17,6 +17,7 @@ import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xyRank } from "./rank.js";
 import { parseSession, serializeSession } from "./sessions.js";
+import { parseDeclaration, serializeDeclaration } from "./seen.js";
 import { bundleUnits } from "./bundle.js";
 import type { Bundle, BundleAttachment, BundleEvent, BundleUnit } from "./bundle.js";
 import type { DataKey } from "./crypto.js";
@@ -260,6 +261,7 @@ export async function applyBundle(
         const body: Record<string, unknown> = { description_enc: await enc(c.description), rank: c.rank, kind: c.kind };
         if (c.handout_meta) body.handout_meta_enc = await enc(c.handout_meta);
         if (c.alias) body.alias_enc = await enc(c.alias);
+        if (c.seen) body.seen_enc = await enc(c.seen);
         const res = (await jpost(`/api/lists/${listMap.get(c.list_id)}/cards`, body)) as { id: number };
         cardMap.set(c.id, res.id);
         if (++done % 20 === 0) log(S.import.apply.cards(unit.title, String(done), String(cards.length)));
@@ -319,7 +321,23 @@ export async function applyBundle(
         }
         if (t.session_id != null) tours.get(key)!.session_ids.push(await session(t.session_id));
       }
-      for (const tour of tours.values()) {
+      // A Declaration by names wins over the session rows of the same tour, as
+      // it does on the board it came from.
+      const named = new Set<string>();
+      for (const t of bundle.tour_declarations || []) {
+        const mine = t.list_id != null ? unit.listIds.includes(t.list_id) : t.group_id === lists[0]?.group_id;
+        if (!mine) continue;
+        const key = t.list_id != null ? `l${t.list_id}` : `g${t.group_id}`;
+        const list_id = t.list_id == null ? null : listMap.get(t.list_id)!;
+        const group_id = t.list_id == null ? groupId : null;
+        if (list_id == null && group_id == null) continue; // its group was skipped
+        named.add(key);
+        await jput(`/api/boards/${boardId}/tour-declaration`, {
+          list_id, group_id, names_enc: await enc(serializeDeclaration(parseDeclaration(JSON.stringify(t.names)))),
+        });
+      }
+      for (const [key, tour] of tours) {
+        if (named.has(key)) continue;
         if (tour.list_id == null && tour.group_id == null) continue; // its group was skipped
         await jput(`/api/boards/${boardId}/tour-testers`, tour);
       }
