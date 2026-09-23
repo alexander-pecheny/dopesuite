@@ -100,17 +100,22 @@ export function computeTroikaPlayerStats(bouts: ReadonlyArray<TroikaBout>): Troi
   return out;
 }
 
+// buildTroikaStatsTable wears the per-player stats skin EK, Hamsa and solo SI
+// share: flush left, the two name columns as wide as their names up to a cap,
+// and a longer name fading out with its popover.
 export function buildTroikaStatsTable(rows: ReadonlyArray<TroikaPlayerStatsRow>): HTMLElement {
-  return standingsTable({
-    className: "troika-stats",
+  const wrapper = document.createElement("div");
+  wrapper.className = "results-wrapper ek-stats-wrapper";
+  wrapper.appendChild(standingsTable({
+    className: "ek-stats-table",
     columns: [
-      {label: S.troika.stats.player(), kind: "name"},
-      {label: S.troika.stats.team(), kind: "name"},
+      {label: S.troika.stats.player(), kind: "name", className: "ek-stats-name ek-stats-player"},
+      {label: S.troika.stats.team(), kind: "name", className: "ek-stats-name"},
       {label: S.troika.stats.bouts(), kind: "num"},
       {label: S.troika.stats.first(), kind: "num"},
       {label: S.troika.stats.repeat(), kind: "num"},
       {label: S.troika.stats.repeatRate(), kind: "num"},
-      {label: S.troika.stats.points(), kind: "num"},
+      {label: S.troika.stats.points(), kind: "num", className: "ek-stats-sum"},
     ],
     rows: rows.map((row) => [
       row.player,
@@ -121,5 +126,6 @@ export function buildTroikaStatsTable(rows: ReadonlyArray<TroikaPlayerStatsRow>)
       row.repeatChances > 0 ? `${Math.round(row.repeatRate * 100)}%` : "—",
       String(row.points),
     ]),
-  });
+  }));
+  return wrapper;
 }
