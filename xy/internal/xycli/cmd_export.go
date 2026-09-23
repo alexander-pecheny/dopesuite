@@ -35,19 +35,11 @@ func cmdSource(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	source := ExportSource(descsOf(cards))
+	source := ExportSource(cards)
 	return a.emit(map[string]any{"list_id": *list, "title": title, "source": source}, func() {
 		a.printf("%s", source)
 		a.note("%s", s.Cli.Source.Note(title, strconv.Itoa(len(cards))))
 	})
-}
-
-func descsOf(cards []Card) []string {
-	out := make([]string, len(cards))
-	for i, c := range cards {
-		out[i] = c.Desc
-	}
-	return out
 }
 
 func cmdExport(a *app, args []string) error {
@@ -72,12 +64,12 @@ func cmdExport(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	source := ExportSource(descsOf(cards))
+	source := ExportSource(cards)
 	images, err := gatherImages(c, b, cards, source)
 	if err != nil {
 		return err
 	}
-	data, filename, err := c.ExportPack(source, safeName(title), *formats, images)
+	data, filename, err := c.ExportPack(source, safeName(title), *formats, ExportGame(cards), images)
 	if err != nil {
 		return err
 	}

@@ -46,12 +46,25 @@ const cases = [
   { name: "card with no marker at all", cards: [
     "Просто текст без маркера",
   ]},
+  { name: "plain heading and meta cards take their kind's marker", cards: [
+    { kind: "meta", desc: "Редакторы: Пётр.\n\nРедакторы благодарят Марию." },
+    { kind: "heading", desc: "Светлый раунд" },
+    { kind: "heading", desc: "### Уже с маркером" },
+  ]},
+  { name: "questions written with no marker take their ?", cards: [
+    { kind: "theme", desc: "#T Ночная\n\n@ Автор\n\n№ 100\nПо словам Херман\n\n! горшок\n\n№ 200\n? С маркером\n! Б" },
+    { kind: "question", desc: "№ 5\nВопрос без маркера\n! А" },
+  ]},
+  { name: "theme ladder separated by blank lines", cards: [
+    { kind: "theme", desc: "#T Тема\n\n@ Автор\n\n№ 10\n? Раз\n! А\n\n№ 20\n? Два\n! Б" },
+  ]},
 ];
 
+const asCard = (c) => typeof c === "string" ? { kind: "question", desc: c } : c;
 const out = cases.map((c) => ({
   name: c.name,
-  cards: c.cards,
-  source: exportSource(c.cards.map((desc) => ({ desc }))),
+  cards: c.cards.map(asCard),
+  source: exportSource(c.cards.map(asCard)),
 }));
 
 const path = new URL("../internal/xycli/testdata/exportsource.json", import.meta.url);

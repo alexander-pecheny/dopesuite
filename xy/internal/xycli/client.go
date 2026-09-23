@@ -399,9 +399,9 @@ func (c *Client) UploadAttachment(cardID int64, meta map[string]any, blob []byte
 
 // ExportPack renders a 4s source into the requested formats server-side; the
 // answer is the bare file when one format was asked for, a zip when several.
-func (c *Client) ExportPack(source, name, formats string, images map[string][]byte) ([]byte, string, error) {
+func (c *Client) ExportPack(source, name, formats, game string, images map[string][]byte) ([]byte, string, error) {
 	return c.postForm("/api/export/pack", func(mw *multipart.Writer) error {
-		for _, field := range [][2]string{{"source", source}, {"filename", name}, {"formats", formats}} {
+		for _, field := range [][2]string{{"source", source}, {"filename", name}, {"formats", formats}, {"game", game}} {
 			if err := mw.WriteField(field[0], field[1]); err != nil {
 				return err
 			}

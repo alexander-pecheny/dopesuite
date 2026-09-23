@@ -34,6 +34,14 @@ test("a group numbers its questions as one run; listNumbers is a list's slice of
   assert.deepEqual(listNumbers(board, lists[2]), ["1", null]);
 });
 
+// Board 272 kept its Темы in lists typed ЧГК, and the docx came back without a
+// single theme name: the game used to follow the List Type.
+test("a scope with a theme in it exports as SI, whatever its lists are typed", () => {
+  assert.equal(listScope(board, lists[2]).game, "chgk");
+  const themed = { ...board, cardsOf: (id) => [{ id: 1, listId: id, kind: "theme", desc: "#T Тема" }] };
+  assert.equal(listScope(themed, { ...lists[2], type: "normal" }).game, "si");
+});
+
 test("the menus render the registry as data, in registration order, gated by offered()", () => {
   resetPanels();
   const log = [];

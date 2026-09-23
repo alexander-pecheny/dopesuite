@@ -33,6 +33,17 @@ test("exportSource is the cards' 4s in order, blank-line separated, empty cards 
   assert.equal(exportSource(cards), "? Раз\n! А\n\n? Два (img pic.png)\n! Б\n");
 });
 
+// A heading or meta card may be plain text; 4s would drop it, so the kind lends
+// it a marker. A card that already has one keeps it.
+test("a plain heading or meta card gets its kind's marker", () => {
+  const c = [
+    { id: 1, listId: 1, kind: "meta", rank: "a", desc: "Редакторы: Пётр." },
+    { id: 2, listId: 1, kind: "heading", rank: "b", desc: "Светлый раунд" },
+    { id: 3, listId: 1, kind: "heading", rank: "c", desc: "## Тур 2" },
+  ];
+  assert.equal(exportSource(c), "# Редакторы: Пётр.\n\n## Светлый раунд\n\n## Тур 2\n");
+});
+
 // 4s ends an element at a blank line and drops what follows; xy's editor lets one
 // stand inside a question. See fsource.TestBlankLineEndsElement for the parser side.
 test("a blank line inside a field becomes (LINEBREAK), so the rest of it survives 4s", () => {

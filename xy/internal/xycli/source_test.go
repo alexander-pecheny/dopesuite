@@ -15,9 +15,9 @@ func TestExportSourceParity(t *testing.T) {
 		t.Fatal(err)
 	}
 	var cases []struct {
-		Name   string   `json:"name"`
-		Cards  []string `json:"cards"`
-		Source string   `json:"source"`
+		Name   string `json:"name"`
+		Cards  []Card `json:"cards"`
+		Source string `json:"source"`
 	}
 	if err := json.Unmarshal(raw, &cases); err != nil {
 		t.Fatal(err)

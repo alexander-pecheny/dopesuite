@@ -509,7 +509,12 @@ func foldBlankLines(desc string) string {
 			continue
 		}
 		if blanks > 0 && len(out) > 0 {
-			if _, _, isMarker := matchMarker(line); !isMarker {
+			kind, _, isMarker := matchMarker(line)
+			switch {
+			case kind == "number" || kind == "setcounter":
+				// a theme's ladder: the blank line is what ends each rung
+				out = append(out, "")
+			case !isMarker:
 				out[len(out)-1] += strings.Repeat("(LINEBREAK)", blanks)
 			}
 		}
@@ -521,12 +526,89 @@ func foldBlankLines(desc string) string {
 
 // ExportSource is the 4s document a List exports as: its cards' descriptions in
 // board order, versions folded back into one question each, blank-line separated.
-func ExportSource(descs []string) string {
+func ExportSource(cards []Card) string {
 	var parts []string
-	for _, desc := range descs {
-		if s := foldBlankLines(strings.TrimSpace(ComposeVersions(desc))); s != "" {
+	for _, c := range cards {
+		if s := foldBlankLines(withQuestionMarker(c.Kind, withKindMarker(c.Kind, strings.TrimSpace(ComposeVersions(c.Desc))))); s != "" {
 			parts = append(parts, s)
 		}
 	}
 	return strings.Join(parts, "\n\n") + "\n"
+}
+
+// kindMarker is the marker a plain-text heading or meta card stands
+// for: 4s drops a line with no marker that follows nothing.
+var kindMarker = map[string]string{"heading": "##", "meta": "#"}
+
+func withKindMarker(kind, desc string) string {
+	marker, ok := kindMarker[kind]
+	if !ok || desc == "" {
+		return desc
+	}
+	if _, _, isMarker := matchMarker(strings.SplitN(desc, "\n", 2)[0]); isMarker {
+		return desc
+	}
+	return marker + " " + desc
+}
+
+// withQuestionMarker gives a question written with no marker its `?`: the card
+// reads such text at the top of a question, or right under a theme's `№`, as the
+// question itself, while 4s continues the element above it with it — the
+// question then never closes and swallows everything up to the next theme.
+func withQuestionMarker(kind, desc string) string {
+	if kind != "question" && kind != "theme" {
+		return desc
+	}
+	lines := strings.Split(desc, "\n")
+	typeOf := func(l string) string {
+		if strings.TrimSpace(l) == "" {
+			return ""
+		}
+		if k, _, ok := matchMarker(l); ok {
+			return k
+		}
+		return "pre"
+	}
+	// Each part is one question: the lines under a `№`, or for a question card
+	// also the lines above the first one. A theme's head is not a question.
+	var starts []int
+	if kind == "question" {
+		starts = append(starts, 0)
+	}
+	for i, l := range lines {
+		if typeOf(l) == "number" {
+			starts = append(starts, i+1)
+		}
+	}
+	for k, start := range starts {
+		end := len(lines)
+		if k+1 < len(starts) {
+			end = starts[k+1] - 1
+		}
+		first, hasQuestion := -1, false
+		for i := start; i < end; i++ {
+			t := typeOf(lines[i])
+			if t == "question" {
+				hasQuestion = true
+			}
+			if first < 0 && t != "" {
+				first = i
+			}
+		}
+		if !hasQuestion && first >= 0 && typeOf(lines[first]) == "pre" {
+			lines[first] = "? " + lines[first]
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// ExportGame is the game a scope exports as: one theme makes it SI, whatever
+// the List Type says (export.ts's listScope).
+func ExportGame(cards []Card) string {
+	for _, c := range cards {
+		if c.Kind == "theme" {
+			return "si"
+		}
+	}
+	return "chgk"
 }

@@ -24,8 +24,44 @@ const { byId, errMsg, downloadBlob } = xyApp;
 // board order, blank-line separated. Every format is rendered from this one
 // string, which is why the versions are folded back into one question block here
 // and nowhere else — a versioned card is still one numbered question.
-export function exportSource(cards: ReadonlyArray<BoardCard>): string {
-  return cards.map((c) => foldBlankLines(xyVersions.composeVersions(c.desc).trim())).filter(Boolean).join("\n\n") + "\n";
+export function exportSource(cards: ReadonlyArray<Pick<BoardCard, "desc"> & { kind?: string }>): string {
+  return cards.map((c) => foldBlankLines(withQuestionMarker(c.kind, withKindMarker(c.kind, xyVersions.composeVersions(c.desc).trim())))).filter(Boolean).join("\n\n") + "\n";
+}
+
+// The card reads text with no marker at the top of a question, or right under a
+// theme's `№`, as the question itself (splitFields). 4s does not: there it
+// continues the element above it, so the question has no `?`, never closes, and
+// swallows everything after it up to the next theme. Such text gets its `?`.
+function withQuestionMarker(kind: string | undefined, desc: string): string {
+  if (kind !== "question" && kind !== "theme") return desc;
+  const lines = desc.split("\n");
+  const typeOf = (l: string): string | undefined => xyChgk.parseBlocks(l)[0]?.type;
+  // Each part is one question: the lines under a `№`, or for a question card
+  // also the lines above the first one. A theme's head is not a question.
+  const starts = lines.flatMap((l, i) => (typeOf(l) === "number" ? [i + 1] : []));
+  if (kind === "question") starts.unshift(0);
+  for (let k = 0; k < starts.length; k++) {
+    const end = k + 1 < starts.length ? starts[k + 1] - 1 : lines.length;
+    const part = lines.slice(starts[k], end);
+    if (part.some((l) => typeOf(l) === "question")) continue;
+    const first = part.findIndex((l) => l.trim() !== "");
+    if (first < 0 || typeOf(part[first]) !== "pre") continue;
+    lines[starts[k] + first] = "? " + part[first];
+  }
+  return lines.join("\n");
+}
+
+// A heading or meta card may be plain text: the board shows it by its
+// kind, so nobody has to type a `###` or a `#`. 4s, though, drops a line that has
+// no marker and follows nothing, so such a card gives its first line the marker
+// its kind stands for. A heading becomes a `##` section: that is what restarts
+// the theme count in SI, as the board's numbering does after a heading.
+const KIND_MARKER: Record<string, string> = { heading: "##", meta: "#" };
+
+function withKindMarker(kind: string | undefined, desc: string): string {
+  const marker = kind ? KIND_MARKER[kind] : undefined;
+  if (!marker || !desc || xyChgk.startsBlock(desc.split("\n")[0])) return desc;
+  return `${marker} ${desc}`;
 }
 
 // A blank line inside a card is xy's own liberty: to 4s it ends the element, so

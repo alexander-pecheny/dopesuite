@@ -65,9 +65,11 @@ export function listScope(board: Board, list: BoardList): ListScope {
     if (group && group.name) title = group.name;
   }
   const cards = lists.flatMap((l) => board.cardsOf(l.id));
-  // A group is one tour and exports as one document, so one list typed SI makes
-  // the whole scope SI — a mixed group would otherwise lose its theme headings.
-  const game = lists.some((l) => l.type === "si") ? "si" : "chgk";
+  // The game follows what the cards are, not the List Type: that type only picks
+  // what the add-card button makes, and a list typed ChGK may well hold themes.
+  // One theme makes the whole scope SI, or the ChGK layout would drop every
+  // theme's name and author.
+  const game = cards.some((c) => c.kind === "theme") ? "si" : "chgk";
   return { list, grouped: list.groupId != null, group, lists, cards, numbers: xyChgk.numberQuestionCards(cards), title, game };
 }
 
