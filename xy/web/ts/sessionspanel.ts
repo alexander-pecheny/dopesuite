@@ -16,7 +16,7 @@ import { TOWNS } from "./towns.js";
 import { autocomplete, type Choice } from "./kit/suggest.js";
 import { townChoices, zoneChoices } from "./suggest.js";
 import type { BoardSession } from "./unlock.js";
-import { type Tester, testersFromList } from "./sessions.js";
+import { type Tester, testersFromList, unbroken } from "./sessions.js";
 import * as people from "./people.js";
 import { icon, iconed } from "./icons_gen.js";
 import { commentBody, decodeCommentPayload } from "./timeline.js";
@@ -391,7 +391,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
   function summaryLine(testers: Tester[]): string {
     const parts = testers.map((t) => ({ text: (t.text || "").trim(), type: t.type })).filter((t) => t.text);
     if (!parts.length) return "";
-    const players = parts.filter((t) => t.type === "player").map((t) => t.text);
+    const players = parts.filter((t) => t.type === "player").map((t) => unbroken(t.text));
     const teams = parts.filter((t) => t.type === "team").map((t) => t.text);
     let s = "";
     if (players.length) s = S.sessions.summary.players(players.join(", "));

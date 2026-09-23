@@ -146,7 +146,7 @@ test("humanDate leaves an unparseable date alone", () => {
 test("whoSaw unions testers across sessions and dedupes", () => {
   const a = { ...base, testers: [{ text: "Иванов Иван", type: "player" }] };
   const b = { ...base, testers: [{ text: "Иванов Иван", type: "player" }, { text: "Петров Пётр", type: "player" }] };
-  assert.equal(whoSaw([a, b]), "Иванов Иван, Петров Пётр");
+  assert.equal(whoSaw([a, b]), "Иванов\u00a0Иван, Петров\u00a0Пётр");
 });
 
 // ---- the inverse: who to warn about which questions ----
@@ -162,7 +162,7 @@ test("partialSeen groups question numbers under each tester", () => {
   ];
   assert.equal(
     partialSeen(qs, new Set()),
-    "Видели отдельные вопросы: Александр Иванов: 3, 5; Анна Петрова: 1, 2.",
+    "Видели отдельные вопросы: Александр\u00a0Иванов: 3, 5; Анна\u00a0Петрова: 1, 2.",
   );
 });
 
@@ -171,18 +171,18 @@ test("partialSeen drops whoever the preamble already names", () => {
     { num: "1", testers: [saw("Сидоров Пётр"), saw("Анна Петрова")] },
     { num: "2", testers: [saw("Сидоров Пётр")] },
   ];
-  assert.equal(partialSeen(qs, new Set(["Сидоров Пётр"])), "Видели отдельные вопросы: Анна Петрова: 1.");
+  assert.equal(partialSeen(qs, new Set(["Сидоров Пётр"])), "Видели отдельные вопросы: Анна\u00a0Петрова: 1.");
   assert.equal(partialSeen(qs, new Set(["Сидоров Пётр", "Анна Петрова"])), "");
 });
 
 test("partialSeen dedupes a tester who saw one question at two tests", () => {
   const qs = [{ num: "7", testers: [saw("Анна Петрова"), saw("Анна Петрова")] }];
-  assert.equal(partialSeen(qs, new Set()), "Видели отдельные вопросы: Анна Петрова: 7.");
+  assert.equal(partialSeen(qs, new Set()), "Видели отдельные вопросы: Анна\u00a0Петрова: 7.");
 });
 
 test("partialSeen keeps the caller's numbering, not a 1..n count", () => {
   const qs = [{ num: "12", testers: [saw("Анна Петрова")] }, { num: "3", testers: [saw("Анна Петрова")] }];
-  assert.equal(partialSeen(qs, new Set()), "Видели отдельные вопросы: Анна Петрова: 12, 3.");
+  assert.equal(partialSeen(qs, new Set()), "Видели отдельные вопросы: Анна\u00a0Петрова: 12, 3.");
 });
 
 test("partialSeen ignores blank tester names", () => {
@@ -353,15 +353,23 @@ test("testerCopyText sorts players by surname then given, teams alphabetically",
     { text: "Авангард", type: "team" },
   ];
   assert.equal(testerCopyText(testers),
-    "Вопросы тестировали: Яна Архипова, Александр Иванов, Борис Иванов" +
+    "Вопросы тестировали: Яна\u00a0Архипова, Александр\u00a0Иванов, Борис\u00a0Иванов" +
     ", а также команды: Авангард, Ромашка");
 });
 
 test("testerCopyText dedupes and handles players-only / teams-only / empty", () => {
   assert.equal(testerCopyText([
     { text: "Иван Иванов", type: "player" }, { text: "Иван Иванов", type: "player" }]),
-    "Вопросы тестировали: Иван Иванов");
+    "Вопросы тестировали: Иван\u00a0Иванов");
   assert.equal(testerCopyText([{ text: "Альфа", type: "team" }]),
     "Вопросы тестировали команды: Альфа");
   assert.equal(testerCopyText([]), "");
+});
+
+test("a copied line keeps a player's name on one line, and lets a team name wrap (#90)", () => {
+  assert.equal(testerCopyText([
+    { text: "Анна  Мария Петрова", type: "player" }, { text: "Команда мечты", type: "team" }]),
+    "Вопросы тестировали: Анна\u00a0Мария\u00a0Петрова, а также команды: Команда мечты");
+  assert.equal(partialSeen([{ num: "4", testers: [saw("Анна Петрова"), { text: "Команда мечты", type: "team" }] }], new Set()),
+    "Видели отдельные вопросы: Анна\u00a0Петрова: 4; Команда мечты: 4.");
 });

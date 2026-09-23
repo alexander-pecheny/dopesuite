@@ -123,11 +123,26 @@ export function testerNames(testers: ReadonlyArray<TesterLike> | null | undefine
   return { players, teams };
 }
 
+// unbroken joins the words of a player's name with non-breaking spaces (#90), so
+// a line of testers pasted into a tour's preamble never breaks between a first
+// name and a surname. Only the copies get it: the stored name keeps ordinary
+// spaces, which is what search, the Person Directory and dedupe compare. A team
+// name stays breakable, because it can be as long as a line.
+export function unbroken(name: string): string {
+  return name.trim().split(/\s+/).join("\u00a0");
+}
+
+// copyName is a tester as a copied line spells them.
+export function copyName(t: TesterLike): string {
+  const text = (t.text || "").trim();
+  return t.type === "team" ? text : unbroken(text);
+}
+
 // testerCopyText flattens testers into the shareable line. "" when there are none.
 export function testerCopyText(testers: ReadonlyArray<TesterLike> | null | undefined): string {
   const { players, teams } = testerNames(testers);
   let s = "";
-  if (players.length) s = S.sessions.summary.players(players.join(", "));
+  if (players.length) s = S.sessions.summary.players(players.map(unbroken).join(", "));
   if (teams.length) s += (s ? S.sessions.summary.teamsAlso(teams.join(", ")) : S.sessions.summary.teamsOnly(teams.join(", ")));
   return s;
 }
@@ -432,7 +447,7 @@ export function whoSaw(sessions: ReadonlyArray<SessionMeta>): string {
   const all: Tester[] = [];
   for (const s of sessions) all.push(...(s.testers || []));
   const { players, teams } = testerNames(all);
-  return [...players, ...teams].join(", ");
+  return [...players.map(unbroken), ...teams].join(", ");
 }
 
 export interface SeenQuestion {
@@ -445,6 +460,7 @@ export interface SeenQuestion {
 // which questions, because those have to be warned one question at a time.
 export function partialSeen(questions: ReadonlyArray<SeenQuestion>, named: ReadonlySet<string>): string {
   const byName = new Map<string, string[]>();
+  const spelled = new Map<string, string>();
   for (const q of questions) {
     for (const t of q.testers) {
       const name = (t.text || "").trim();
@@ -452,10 +468,11 @@ export function partialSeen(questions: ReadonlyArray<SeenQuestion>, named: Reado
       const nums = byName.get(name) || [];
       if (!nums.includes(q.num)) nums.push(q.num);
       byName.set(name, nums);
+      spelled.set(name, copyName(t));
     }
   }
   const parts = [...byName.entries()]
     .sort((a, b) => a[0].localeCompare(b[0], "ru"))
-    .map(([name, nums]) => `${name}: ${nums.join(", ")}`);
+    .map(([name, nums]) => `${spelled.get(name)}: ${nums.join(", ")}`);
   return parts.length ? S.sessions.seen.partial(parts.join("; ")) : "";
 }
