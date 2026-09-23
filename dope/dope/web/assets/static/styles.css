@@ -4849,6 +4849,19 @@ body.is-fullscreen.od-page .match-main {
   vertical-align: bottom;
 }
 
+/* Two header rows, both frozen: the мини-игры's names on top, the вопрос
+   numbers below them, stuck where the first row ends rather than on top of
+   it. The numbers read at the bottom line too, level with Команда and Итог. */
+.multi-table thead tr:first-child th {
+  top: 0;
+  height: var(--question-size);
+}
+
+.multi-table thead tr:nth-child(2) th {
+  top: var(--question-size);
+  vertical-align: bottom;
+}
+
 /* The мини-игра's name follows a scrolled sheet until its block runs out. */
 .multi-game-name {
   position: sticky;
