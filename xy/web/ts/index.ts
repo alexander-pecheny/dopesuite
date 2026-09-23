@@ -258,9 +258,9 @@ async function renderBoards(boards: BoardListItem[]): Promise<void> {
     const card = el("a", { class: "board-card", href: `/board/${b.id}` },
       el("span", { class: "board-card-name-wrap" },
         el("span", { class: "board-card-name" }, ...(locked[i] ? iconed("lock", name) : [name]))),
-      el("span", { class: "board-card-role", text: b.role === "owner" ? S.chrome.home.roleOwner() : S.chrome.home.roleEditor() }),
     );
-    if (b.creator) card.append(el("span", { class: "board-card-role", text: S.chrome.home.creator(b.creator) }));
+    // Only a board somebody else created says whose it is; your own says nothing.
+    if (b.creator) card.append(el("span", { class: "board-card-creator", text: S.chrome.home.creator(b.creator) }));
     if (b.unread) {
       const mention = b.unread_mentions ? " unread-dot-mention" : "";
       const title = b.unread_mentions ? S.chrome.home.unreadMentionTitle() : S.chrome.home.unreadTitle();

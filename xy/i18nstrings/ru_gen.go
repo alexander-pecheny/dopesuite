@@ -1110,8 +1110,6 @@ var RU = Strings{
 			PassWarning: func() string {
 				return "Сохраните этот пароль прямо сейчас — восстановить его будет невозможно."
 			},
-			RoleEditor:         func() string { return "редактор" },
-			RoleOwner:          func() string { return "владелец" },
 			SearchLabel:        func() string { return "Поиск" },
 			SearchPlaceholder:  func() string { return "Поиск по доскам, вопросам и комментариям" },
 			Title:              func() string { return "Доски" },
