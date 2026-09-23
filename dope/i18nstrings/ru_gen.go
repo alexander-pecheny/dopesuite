@@ -2090,10 +2090,10 @@ var RU = Strings{
 		},
 		Stats: TroikaStatsStrings{
 			Bouts:      func() string { return "Бои" },
-			First:      func() string { return "Взял первым" },
+			First:      func() string { return "Первые ответы" },
 			Player:     func() string { return "Игрок" },
 			Points:     func() string { return "Очки" },
-			Repeat:     func() string { return "Повторил" },
+			Repeat:     func() string { return "Повторы" },
 			RepeatRate: func() string { return "Удачные повторы" },
 			Team:       func() string { return "Команда" },
 		},
