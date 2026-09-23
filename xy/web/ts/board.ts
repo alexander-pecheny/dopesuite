@@ -1240,6 +1240,7 @@ const cardDetail = createCardDetail({
   boardId,
   transfer,
   ui: {
+    addSlot: byId<HTMLButtonElement>("cardAddSlot"),
     addVersion: byId("cardAddVersion"),
     alias: byId<HTMLInputElement>("cardAlias"),
     close: byId<HTMLButtonElement>("cardClose"),

@@ -133,6 +133,7 @@ export interface CardDetailUI {
   copy: HTMLElement;
   copyBtn: HTMLElement;
   copyMsg: HTMLElement;
+  addSlot: HTMLButtonElement;
   del: HTMLElement;
   desc: HTMLTextAreaElement;
   descLabel: HTMLElement;
@@ -323,6 +324,9 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // A theme reads back as one closure over its whole ladder rather than a field
   // record: its shape is the 4s's own, not a fixed set of slots.
   let themeReader: (() => string) | null = null;
+  // The «+ question» button beside Save appends a rung through this, since only
+  // renderThemeFields can read the ladder back first.
+  let themeAddSlot: (() => void) | null = null;
   // Blocks the fields editor doesn't render but must not eat: the pre-question
   // markup (№/№№ and friends) and anything else unmodelled. Both are captured at
   // render time and re-emitted verbatim on recompose; the text view edits them.
@@ -529,6 +533,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // needs the raw 4s editor it types into.
     ui.editTools.hidden = view === "preview";
     ui.addVersion.hidden = !fieldsAvailable() || isTheme();
+    ui.addSlot.hidden = view !== "fields" || !isTheme();
     renderVersionTabs();
     ui.typo.hidden = false;
     ui.to4s.hidden = view !== "text" || !fieldsAvailable() || isTheme();
@@ -865,14 +870,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       box.append(el("div", { class: "card-fields fld-wide" }, ...R.nodes));
     });
 
-    const addBtn = (label: string, title: string, reserve: boolean): HTMLElement => {
-      const b = el("button", { class: "fld-add", type: "button", text: label, title });
-      b.addEventListener("click", () => redraw(withSlot(current(), reserve)));
-      return b;
-    };
-    box.append(el("div", { class: "fld-wide u-row u-gap-sm" },
-      addBtn(S.card.slot.add(), S.card.slot.addTitle(), false),
-      addBtn(S.card.slot.addReserve(), S.card.slot.addReserveTitle(), true)));
+    themeAddSlot = (): void => redraw(withSlot(current()));
 
     for (const ta of box.querySelectorAll("textarea")) fitTextarea(ta);
     themeReader = (): string => composeTheme(current());
@@ -1637,6 +1635,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   cardOverlay.addEventListener("pointerdown", (e) => { if (e.target === cardOverlay) closeCard(); });
 
   cardSaveBtn.addEventListener("click", () => { void saveCard(); });
+  ui.addSlot.addEventListener("click", () => themeAddSlot?.());
 
   // saveCard persists the open card's 4s content, reporting whether the write
   // landed so the unsaved-changes prompt knows not to leave on a failure.

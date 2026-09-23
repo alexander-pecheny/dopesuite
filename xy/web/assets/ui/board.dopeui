@@ -119,6 +119,7 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
 
     row gap="sm" wrap
       button id="cardSave" @board.actions.save
+      button id="cardAddSlot" title=@card.slot.add_title hidden @card.slot.add
       button kind="danger" id="cardDelete" @board.card.delete
     message id="cardMessage"
 

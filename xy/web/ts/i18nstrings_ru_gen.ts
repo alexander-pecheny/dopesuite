@@ -729,9 +729,7 @@ export const RU: Strings = {
     },
     slot: {
       add: () => "+ вопрос",
-      addReserve: () => "+ запас",
-      addReserveTitle: () => "Добавить запасной вопрос — сверх пяти основных",
-      addTitle: () => "Добавить вопрос на следующую стоимость",
+      addTitle: () => "Добавить вопрос на следующую стоимость, а после пятого — запасной",
       copyQuestion: (points: string, text: string) => `${points}. ${text}`,
       copyTheme: () => "Тема",
       copyWhole: () => "Тема целиком",

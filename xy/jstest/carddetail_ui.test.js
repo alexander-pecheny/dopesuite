@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { fakeNode, installDOM } from "./dom.js";
 
 const ids = ["cardOverlay", "cardDetailTitle", "cardKind", "cardLink", "cardCopy", "cardCopyMsg", "cardSave", "cardDelete", "cardClose", "cardMessage",
-  "cardAlias", "cardAddVersion", "cardVersions", "cardInsStress", "cardTypo", "cardTo4s", "cardEditTools", "cardViewTabs", "cardViewText", "cardViewPreview",
+  "cardAlias", "cardAddVersion", "cardAddSlot", "cardVersions", "cardInsStress", "cardTypo", "cardTo4s", "cardEditTools", "cardViewTabs", "cardViewText", "cardViewPreview",
   "cardViewFields", "cardFields", "cardDesc", "cardDescLabel", "cardPreviewScreen", "cardPreviewBody", "copyBtn", "contentUnreadDot", "commentsUnreadDot",
   "timeline", "cardTabPreview", "cardTabFields", "cardTabText", "dirtyOverlay", "dirtyMessage", "dirtySave", "dirtyDiscard", "dirtyCancel",
   "moveBoard", "moveList", "movePos", "moveBtn", "previewOverlay", "previewBody"];
@@ -27,7 +27,7 @@ function ui() {
   const detail = fakeNode("div", { className: "card-detail" });
   return {
     overlay: n("cardOverlay"), detail, title: n("cardDetailTitle"), kind: n("cardKind"), link: n("cardLink"), copy: n("cardCopy"), copyMsg: n("cardCopyMsg"),
-    save: n("cardSave"), del: n("cardDelete"), close: n("cardClose"), message: n("cardMessage"), alias: n("cardAlias"), addVersion: n("cardAddVersion"),
+    save: n("cardSave"), del: n("cardDelete"), close: n("cardClose"), message: n("cardMessage"), alias: n("cardAlias"), addVersion: n("cardAddVersion"), addSlot: n("cardAddSlot"),
     versions: n("cardVersions"), insStress: n("cardInsStress"), typo: n("cardTypo"), to4s: n("cardTo4s"), editTools: n("cardEditTools"), viewTabs: n("cardViewTabs"),
     viewText: n("cardViewText"), viewPreview: n("cardViewPreview"), viewFields: n("cardViewFields"), fields: n("cardFields"), desc: n("cardDesc"), descLabel: n("cardDescLabel"),
     previewScreen: n("cardPreviewScreen"), previewBody: n("cardPreviewBody"), copyBtn: n("copyBtn"), contentUnreadDot: n("contentUnreadDot"), commentsUnreadDot: n("commentsUnreadDot"),

@@ -728,8 +728,6 @@ export type Strings = {
     };
     slot: {
       add: () => string;
-      addReserve: () => string;
-      addReserveTitle: () => string;
       addTitle: () => string;
       copyQuestion: (points: string, text: string) => string;
       copyTheme: () => string;

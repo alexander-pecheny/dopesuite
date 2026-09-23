@@ -138,24 +138,22 @@ function marked(marker: string, value: string): string {
   return v ? `${marker} ${v}` : marker;
 }
 
-// nextNumber is what «+ question» and «+ reserve» append: the first unused rung of
-// the standard ladder, then reserve1, reserve2… Never renumbers what is already there.
-export function nextNumber(slots: ReadonlyArray<ThemeSlot>, reserve: boolean): string {
+// nextNumber is what «+ question» appends: the first unused rung of the standard
+// ladder, then reserve1, reserve2… Never renumbers what is already there.
+export function nextNumber(slots: ReadonlyArray<ThemeSlot>): string {
   const taken = new Set(slots.map((s) => s.number.trim()));
-  if (!reserve) {
-    for (const n of SI_LADDER) if (!taken.has(n)) return n;
-  }
+  for (const n of SI_LADDER) if (!taken.has(n)) return n;
   for (let i = 1; ; i++) {
     const n = S.fsource.theme.reserveNumber(String(i));
     if (!taken.has(n)) return n;
   }
 }
 
-// withSlot appends a rung: «+ question» takes the next free point value, «+ reserve»
-// the next reserve. A new slot is blank but real — bare `?` and `!` hold its
+// withSlot appends a rung: the next free point value, or the next reserve once
+// the ladder is full. A new slot is blank but real — bare `?` and `!` hold its
 // place in the ladder, so the 50 can be written before the 10.
-export function withSlot(t: Theme, reserve: boolean): Theme {
-  return { ...t, slots: [...t.slots, { number: nextNumber(t.slots, reserve), fields: splitFields("?\n!") }] };
+export function withSlot(t: Theme): Theme {
+  return { ...t, slots: [...t.slots, { number: nextNumber(t.slots), fields: splitFields("?\n!") }] };
 }
 
 // blankTheme is what the add-card button makes in a list typed SI: a nameless
@@ -164,7 +162,7 @@ export function withSlot(t: Theme, reserve: boolean): Theme {
 // reload, and what an export ships as the visibly unfinished theme it is.
 export function blankTheme(author: string | null): string {
   let t: Theme = { name: "", author, comment: null, headExtra: null, slots: [] };
-  for (let i = 0; i < SI_LADDER.length; i++) t = withSlot(t, false);
+  for (let i = 0; i < SI_LADDER.length; i++) t = withSlot(t);
   return composeTheme(t);
 }
 
