@@ -79,7 +79,7 @@ REFERENCE = OUT / "noto-sans-var.woff2"
 # fonts-fixing (code.pecheny.me/pecheny/fonts-fixing) holds the fixes and the two
 # models, and its fonts/ holds the one face here that is already built variable.
 FIXING_URL = "https://code.pecheny.me/pecheny/fonts-fixing.git"
-FIXING_COMMIT = "bdc9db137b3646f1d1f57e0a3496e39635755d33"
+FIXING_COMMIT = "989635233b1e4abee12e94f8afa51038ac73dc15"
 
 PINS = {
     # rsms/inter's release zip: InterVariable.ttf + InterVariable-Italic.ttf.
