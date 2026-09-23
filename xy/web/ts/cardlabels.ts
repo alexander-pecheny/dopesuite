@@ -9,7 +9,7 @@ import { xyCrypto } from "./crypto.js";
 import { sortLabels } from "./labelsedit.js";
 import { colorField, LABEL_COLORS } from "./colorpick.js";
 import { type Tester, testerNames, testersFromList } from "./sessions.js";
-import { type CardSeen, nameOf, parseCardSeen, type SeenPerson, seenPeople, withoutSeen, withSeen } from "./seen.js";
+import { type CardSeen, nameOf, parseCardSeen, type SeenPerson, seenPeople, sessionRef, withoutSeen, withSeen } from "./seen.js";
 import { autocomplete } from "./kit/suggest.js";
 import * as people from "./people.js";
 import { icon } from "./icons_gen.js";
@@ -152,8 +152,24 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
   function renderSeen(card: BoardCard): void {
     const node = ui.seen;
     const people = seenPeople(board.seenPlayings(card.id), parseCardSeen(card.seen));
-    const everyone = ordered(people.filter((p) => !p.absent));
+    // People who saw it at a test come first, then the ones added by hand, then
+    // the absent ones. A test is the stronger record, and it is what the tour's
+    // Tester List is mostly made of.
+    const everyone = [
+      ...ordered(people.filter((p) => !p.absent && p.at.length)),
+      ...ordered(people.filter((p) => !p.absent && !p.at.length)),
+    ];
     const missed = ordered(people.filter((p) => p.absent));
+    // Which test each person is listed for: where they saw it, or, for an
+    // absent one, the test whose question they missed.
+    const seen = parseCardSeen(card.seen);
+    const testName = new Map(board.playingsOf(card.id).map((sid) => [sessionRef(sid, board.sessionMeta(sid)), board.sessionName(sid)]));
+    const testsOf = (p: SeenPerson): string => {
+      const refs = p.absent
+        ? Object.keys(seen.absent).filter((ref) => testName.has(ref) && seen.absent[ref].includes(nameOf(p.tester)))
+        : p.at;
+      return refs.map((ref) => testName.get(ref)).filter(Boolean).join(", ");
+    };
     const adding = addingFor === card.id;
     if (!everyone.length && !missed.length && !adding) { node.hidden = true; return; }
 
@@ -212,7 +228,7 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
         });
       return el("div", { class: "u-row u-gap-sm u-align-center" },
         el("span", { class: cls, title, text: name }),
-        p.byHand ? el("span", { class: "seen-label", text: S.card.seen.byHand() }) : null,
+        testsOf(p) ? el("span", { class: "seen-label", text: testsOf(p) }) : null,
         act);
     };
     const rows = [...shown, ...missed].map(row);

@@ -115,7 +115,7 @@ test("× on a tester marks them absent from that test, and ↺ takes the absence
   assert.deepEqual(seenNames(), ["Вера"]);
 });
 
-test("the add field takes a name on Enter and a pasted list, and says who was added by hand", async () => {
+test("the add field takes a name on Enter and a pasted list, and names each tester's test", async () => {
   folded();
   p.node("seenAddBtn").fire("click");
   // The field sits at the foot of «Видели», under the names it adds to.
@@ -130,7 +130,17 @@ test("the add field takes a name on Enter and a pasted list, and says who was ad
   // Аня already saw it at Тест А, so she is not added a second time.
   assert.deepEqual(JSON.parse(card.seen).extra.map((t) => t.text), ["Гоша", "Дина"]);
   assert.deepEqual(seenNames(), ["Вера", "Гоша", "Дина"]);
-  assert.equal(seenRow("Гоша").kids[1].textContent, "вручную");
+  // Testers first even when a hand-added name sorts before them.
+  inp.value = "Алла";
+  inp.fire("keydown", { key: "Enter" });
+  await new Promise((r) => setTimeout(r, 5));
+  assert.deepEqual(seenNames(), ["Вера", "Алла", "Гоша", "Дина"]);
+  seenRow("Алла").querySelector("button").fire("click");
+  await new Promise((r) => setTimeout(r, 5));
+  // A tester is named with the test they saw it at; a person added by hand has
+  // no test to name, and is listed after the testers.
+  assert.equal(seenRow("Вера").kids[1].textContent, "Тест Б");
+  assert.equal(seenRow("Гоша").kids[1].tag, "button");
   // × on a hand-added person takes them off rather than marking an absence.
   seenRow("Гоша").querySelector("button").fire("click");
   await new Promise((r) => setTimeout(r, 5));

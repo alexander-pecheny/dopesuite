@@ -226,8 +226,6 @@ remove_aria = '{{.name}} не видел этот вопрос'
 absent_title = "Был на тесте, но пропустил этот вопрос"
 restore_title = "Всё-таки видел"
 restore_aria = '{{.name}} всё-таки видел этот вопрос'
-# After a name added by hand rather than through a test.
-by_hand = "вручную"
 # The field that adds people who saw the question outside any test.
 add_placeholder = "Имя…"
 add_hint = "Enter добавляет. Можно вставить список, по одному имени в строке."

@@ -736,7 +736,6 @@ export type Strings = {
       addClose: () => string;
       addHint: () => string;
       addPlaceholder: () => string;
-      byHand: () => string;
       commonTesterTitle: () => string;
       copyTitle: () => string;
       label: () => string;

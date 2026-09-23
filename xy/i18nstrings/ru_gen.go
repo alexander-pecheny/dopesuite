@@ -917,7 +917,6 @@ var RU = Strings{
 				return "Enter добавляет. Можно вставить список, по одному имени в строке."
 			},
 			AddPlaceholder:    func() string { return "Имя…" },
-			ByHand:            func() string { return "вручную" },
 			CommonTesterTitle: func() string { return "Общий тестер списка" },
 			CopyTitle:         func() string { return "Скопировать" },
 			Label:             func() string { return "Видели: " },

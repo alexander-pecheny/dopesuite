@@ -737,7 +737,6 @@ export const RU: Strings = {
       addClose: () => "Закрыть",
       addHint: () => "Enter добавляет. Можно вставить список, по одному имени в строке.",
       addPlaceholder: () => "Имя…",
-      byHand: () => "вручную",
       commonTesterTitle: () => "Общий тестер списка",
       copyTitle: () => "Скопировать",
       label: () => "Видели: ",
