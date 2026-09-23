@@ -2477,6 +2477,7 @@ var RU = Strings{
 		},
 		Testers: SessionsTestersStrings{
 			Add:             func() string { return "+ тестер" },
+			Copy:            func() string { return "Скопировать список тестеров" },
 			Label:           func() string { return "Тестировали" },
 			NamePlaceholder: func() string { return "имя…" },
 			Player:          func() string { return "игрок" },

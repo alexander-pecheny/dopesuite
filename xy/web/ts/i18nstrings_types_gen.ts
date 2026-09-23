@@ -1894,6 +1894,7 @@ export type Strings = {
     };
     testers: {
       add: () => string;
+      copy: () => string;
       label: () => string;
       namePlaceholder: () => string;
       player: () => string;

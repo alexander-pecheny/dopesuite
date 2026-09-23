@@ -52,6 +52,7 @@ export class FakeNode {
   prepend(...n) { this.kids.unshift(...n.map((x) => this._adopt(x))); }
   replaceChildren(...n) { this._text = ""; this.kids = n.flat().filter((x) => x != null).map((x) => this._adopt(x)); }
   replaceWith(n) { const p = this.parentElement; if (p) p.kids = p.kids.map((k) => (k === this ? p._adopt(n) : k)); }
+  after(...n) { const p = this.parentElement; if (!p) return; const i = p.kids.indexOf(this); p.kids.splice(i + 1, 0, ...n.map((x) => p._adopt(x))); }
   remove() { const p = this.parentElement; if (p) p.kids = p.kids.filter((k) => k !== this); }
   focus() { this.focused = (this.focused || 0) + 1; }
   blur() {}

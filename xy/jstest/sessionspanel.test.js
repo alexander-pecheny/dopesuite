@@ -86,6 +86,34 @@ test("leaving an untouched form sends nothing; a retitled one is patched and the
   assert.deepEqual(log[1], ["render"]);
 });
 
+test("Enter in a tester's name opens the next row under it, and a pasted list fills one row per line", async () => {
+  log.length = 0;
+  panel.openSession(1);
+  const names = () => p.node("sessionForm").querySelectorAll(".fld-row-input");
+  names()[0].fire("keydown", { key: "Enter" });
+  assert.equal(names().length, 2);
+  assert.equal(names()[1].focused, 1);
+  // An empty row does not spawn another.
+  names()[1].fire("keydown", { key: "Enter" });
+  assert.equal(names().length, 2);
+  names()[1].fire("paste", { clipboardData: { getData: () => "1. Вера Смирнова\n2) Глеб\n\n-T Сборная" } });
+  assert.deepEqual(names().map((n) => n.value), ["Аня", "Вера Смирнова", "Глеб", "Сборная"]);
+  // A single line pastes as the browser would.
+  const one = names()[3].fire("paste", { clipboardData: { getData: () => "Дима" }, preventDefault() { throw new Error("prevented"); } });
+  assert.ok(one);
+  await leave();
+  assert.deepEqual(parseSession(log[0][2]).testers, [
+    { text: "Аня", type: "player" }, { text: "Вера Смирнова", type: "player" },
+    { text: "Глеб", type: "player" }, { text: "Сборная", type: "team" },
+  ]);
+});
+
+test("the copy button next to «Удалить тест» says what it copies", () => {
+  panel.openSession(1);
+  const actions = p.node("sessionForm").querySelector(".sess-actions");
+  assert.equal(actions.kids[0].textContent.trim(), "Скопировать список тестеров");
+});
+
 test("«Удалить тест» asks, deletes and closes the form without a save", async () => {
   log.length = 0;
   panel.openSession(2);
