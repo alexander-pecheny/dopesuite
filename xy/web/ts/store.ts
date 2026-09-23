@@ -23,6 +23,7 @@ export interface OpBody {
   description_enc?: string;
   handout_meta_enc?: string;
   alias_enc?: string;
+  seen_enc?: string;
   list_id?: number | null;
   group_id?: number | null;
   name_enc?: string;
@@ -71,6 +72,7 @@ export interface SnapshotCard {
   rank?: string;
   handout_meta_enc?: string | null;
   alias_enc?: string | null;
+  seen_enc?: string | null;
   [key: string]: unknown;
 }
 export interface SnapshotLabel {

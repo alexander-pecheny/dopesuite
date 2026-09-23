@@ -703,6 +703,27 @@ pragma foreign_keys=on;`)},
 	// reconciles against.
 	{Version: 25, Name: "users.ui_font", Up: schema.Exec(`
 alter table users add column ui_font text;`)},
+	// v26 lets a card's Seen differ from its Playings (#90). cards.seen_enc holds
+	// the people who saw the question outside any Session and the testers of a
+	// Session who missed it. tour_declarations replaces tour_testers: once a
+	// person can see a question without a Session, a Declaration has to name
+	// people, and names are encrypted, so one blob per tour. The old rows stay
+	// until the tour is next declared: only the client can turn a session id into
+	// names.
+	{Version: 26, Name: "cards.seen_enc and tour_declarations", Up: schema.Exec(`
+alter table cards add column seen_enc blob;
+create table if not exists tour_declarations(
+  board_id integer not null references boards(id) on delete cascade,
+  list_id integer references lists(id) on delete cascade,
+  group_id integer references list_groups(id) on delete cascade,
+  names_enc blob not null,
+  check ((list_id is null) <> (group_id is null))
+);
+create unique index if not exists idx_tour_declarations_list
+  on tour_declarations(list_id) where list_id is not null;
+create unique index if not exists idx_tour_declarations_group
+  on tour_declarations(group_id) where group_id is not null;
+create index if not exists idx_tour_declarations_board on tour_declarations(board_id);`)},
 }
 
 func migrate(db *sql.DB) error { return schema.Apply(db, migrations) }

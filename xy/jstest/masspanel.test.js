@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { fakeBoard, fakeNode, installDOM } from "./dom.js";
 
 const p = installDOM(["massOverlay", "massBar", "massRun", "massBody", "massMessage", "massClose"]);
+p.node("massOverlay").append(fakeNode("h2", { className: "appearance-modal-title" }));
 const { createMassPanel } = await import("../web/assets/static/dist/masspanel.js");
 
 function setup() {
@@ -61,4 +62,41 @@ test("the bar names the count and offers the actions only once something is tick
   mass.setMode(false);
   mass.renderBar();
   assert.equal(bar.hidden, true);
+});
+
+test("«Добавить видевших» adds a pasted list to every ticked card, and «Не видели» takes people off", async () => {
+  const { board, mass } = setup();
+  board.state.sessions = [{ id: 7, meta: JSON.stringify({ key: "t", title: "Тест", testers: [{ text: "Аня" }] }) }];
+  board.state.cardSessions = [{ cardId: 10, sessionId: 7 }];
+  mass.setMode(true);
+  mass.toggle(10);
+  mass.toggle(11);
+  const act = (label) => p.node("massBar").kids[1].kids.find((b) => b.text === label);
+  act("Добавить видевших").fire("click");
+  await new Promise((r) => setTimeout(r, 0));
+  const area = p.node("massBody").querySelector("textarea");
+  assert.equal(p.node("massRun").disabled, true);
+  area.value = "1. Гоша\n2. Аня";
+  area.fire("input");
+  assert.equal(p.node("massRun").disabled, false);
+  p.node("massRun").fire("click");
+  await new Promise((r) => setTimeout(r, 5));
+  const card = (id) => board.state.cards.find((c) => c.id === id);
+  // Аня was already at the test that played card 10.
+  assert.deepEqual(JSON.parse(card(10).seen).extra.map((t) => t.text), ["Гоша"]);
+  assert.deepEqual(JSON.parse(card(11).seen).extra.map((t) => t.text), ["Гоша", "Аня"]);
+
+  // A finished run leaves nothing ticked.
+  assert.equal(mass.selected.size, 0);
+  mass.toggle(10);
+  act("Не видели").fire("click");
+  await new Promise((r) => setTimeout(r, 0));
+  const offered = p.node("massBody").querySelectorAll("label").map((l) => l.text);
+  assert.deepEqual(offered, ["Аня", "Гоша"], "exactly the people who saw a ticked question");
+  const cb = p.node("massBody").querySelectorAll("input").find((i) => i.parentElement.text === "Аня");
+  cb.checked = true;
+  cb.fire("change");
+  p.node("massRun").fire("click");
+  await new Promise((r) => setTimeout(r, 5));
+  assert.deepEqual(JSON.parse(card(10).seen), { extra: [{ text: "Гоша", type: "player" }], absent: { t: ["Аня"] } });
 });

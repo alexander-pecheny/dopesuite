@@ -210,6 +210,7 @@ func routes(srv *server) *http.ServeMux {
 	mux.HandleFunc("PUT /api/cards/{id}/labels", srv.handleSetCardLabels)
 	mux.HandleFunc("PUT /api/cards/{id}/sessions", srv.handleSetCardSessions)
 	mux.HandleFunc("PUT /api/boards/{id}/tour-testers", srv.handleSetTourTesters)
+	mux.HandleFunc("PUT /api/boards/{id}/tour-declaration", srv.handleSetTourDeclaration)
 	mux.HandleFunc("GET /api/cards/{id}/timeline", srv.handleGetTimeline)
 	mux.HandleFunc("GET /api/boards/{id}/comments", srv.handleGetBoardComments)
 

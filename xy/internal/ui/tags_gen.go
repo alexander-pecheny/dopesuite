@@ -213,6 +213,7 @@ var IconTimer = base.IconTimer
 var IconTrash2 = base.IconTrash2
 var IconUnlink = base.IconUnlink
 var IconUser = base.IconUser
+var IconUserPlus = base.IconUserPlus
 var IconUsers = base.IconUsers
 var IconWandSparkles = base.IconWandSparkles
 var IconX = base.IconX

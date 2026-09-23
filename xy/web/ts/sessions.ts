@@ -82,6 +82,15 @@ export function testersFromText(text: string | null | undefined): Tester[] {
   return out;
 }
 
+// testersFromList reads a list somebody pasted or typed, one tester per line.
+// It accepts what testersFromText does, and it also drops the markers a list
+// copied from a chat or a document tends to carry: "1.", "2)", "•", "*".
+export function testersFromList(text: string | null | undefined): Tester[] {
+  const lines = String(text == null ? "" : text).split(/\r?\n/)
+    .map((l) => l.trim().replace(/^(?:\d+[.)]|[•*·])\s*/, ""));
+  return testersFromText(lines.join("\n"));
+}
+
 // testerSortKey returns the [surname, given] comparison key for a player name:
 // the last whitespace-separated word is the surname, the rest the given name(s),
 // so "Alexander Ivanov" sorts under "Ivanov", then "Alexander".

@@ -173,7 +173,9 @@ var RU = Strings{
 			ScreenTitle: func() string {
 				return "Экранный режим: убрать пометки ведущему [в скобках] и ударения"
 			},
-			StressLabel: func() string { return "◌́ ударение" },
+			SeenAdd:         func() string { return "Видели вне тестов…" },
+			SeenByHandTitle: func(names string) string { return fmt.Sprintf("Видели вне тестов: %s", names) },
+			StressLabel:     func() string { return "◌́ ударение" },
 			StressTitle: func() string {
 				return "Вставить знак ударения (ставится на гласную слева от курсора)"
 			},
@@ -273,6 +275,7 @@ var RU = Strings{
 			NoKey:     func() string { return "нет ключа доски" },
 			NoLabel:   func() string { return "не выбрана метка" },
 			NoList:    func() string { return "не выбран список" },
+			NoPeople:  func() string { return "не выбран ни один человек" },
 			NoTest:    func() string { return "не выбран тест" },
 		},
 		Excerpts: BoardExcerptsStrings{
@@ -518,12 +521,27 @@ var RU = Strings{
 			MoveTitle: func() string {
 				return "Перенести отмеченные карточки в другой список или на другую доску"
 			},
-			Name:            func() string { return "Массовое действие" },
-			NoLabels:        func() string { return "На доске нет меток." },
-			NoTests:         func() string { return "На доске нет тестов." },
-			PickTest:        func() string { return "— выберите тест —" },
-			Progress:        func(done string, total string) string { return fmt.Sprintf("%s из %s…", done, total) },
-			Run:             func() string { return "Выполнить" },
+			Name:     func() string { return "Массовое действие" },
+			NoLabels: func() string { return "На доске нет меток." },
+			NoTests:  func() string { return "На доске нет тестов." },
+			PickTest: func() string { return "— выберите тест —" },
+			Progress: func(done string, total string) string { return fmt.Sprintf("%s из %s…", done, total) },
+			Run:      func() string { return "Выполнить" },
+			SeenAddHint: func() string {
+				return "По одному имени в строке. Команду отметьте так: -T Название."
+			},
+			SeenAddLabel: func() string { return "Добавить видевших" },
+			SeenAddTitle: func() string {
+				return "Отметить, что эти люди видели все выбранные вопросы, даже если не на тесте"
+			},
+			SeenAddVerb:  func() string { return "Добавить" },
+			SeenDelHint:  func() string { return "Отметьте тех, кто эти вопросы не видел." },
+			SeenDelLabel: func() string { return "Не видели" },
+			SeenDelTitle: func() string {
+				return "Отметить, что эти люди не видели выбранные вопросы, хотя были на тесте"
+			},
+			SeenDelVerb:     func() string { return "Отметить" },
+			SeenNone:        func() string { return "Эти вопросы никто не видел." },
 			SelectCard:      func() string { return "Отметить карточку" },
 			SelectList:      func() string { return "Отметить весь список" },
 			SelectedCount:   func(count string) string { return fmt.Sprintf("Выбрано: %s", count) },
@@ -893,13 +911,25 @@ var RU = Strings{
 			Saved: func() string { return "Карточка сохранена." },
 		},
 		Seen: CardSeenStrings{
+			AbsentTitle: func() string { return "Был на тесте, но пропустил этот вопрос" },
+			AddClose:    func() string { return "Закрыть" },
+			AddHint: func() string {
+				return "Enter добавляет. Можно вставить список, по одному имени в строке."
+			},
+			AddPlaceholder:    func() string { return "Имя…" },
 			CommonTesterTitle: func() string { return "Общий тестер списка" },
 			CopyTitle:         func() string { return "Скопировать" },
 			Label:             func() string { return "Видели: " },
 			LabelExceptCommon: func() string {
 				return "Видели вопрос, кроме общих тестеров списка: "
 			},
-			ShowAll: func() string { return "Показать всех тестеров" },
+			RemoveAria:  func(name string) string { return fmt.Sprintf("%s не видел этот вопрос", name) },
+			RemoveTitle: func() string { return "Не видел этот вопрос" },
+			RestoreAria: func(name string) string {
+				return fmt.Sprintf("%s всё-таки видел этот вопрос", name)
+			},
+			RestoreTitle: func() string { return "Всё-таки видел" },
+			ShowAll:      func() string { return "Показать всех тестеров" },
 		},
 		Slot: CardSlotStrings{
 			Add: func() string { return "+ вопрос" },
@@ -2477,6 +2507,7 @@ var RU = Strings{
 		},
 		Testers: SessionsTestersStrings{
 			Add:             func() string { return "+ тестер" },
+			Copy:            func() string { return "Скопировать список тестеров" },
 			Label:           func() string { return "Тестировали" },
 			NamePlaceholder: func() string { return "имя…" },
 			Player:          func() string { return "игрок" },

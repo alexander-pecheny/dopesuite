@@ -32,7 +32,7 @@ select
             join boards b on b.id = a.board_id and b.deleted_at is null
             join cards ac on ac.id = a.card_id and ac.deleted_at is null
             where b.owner_user_id = ? and a.deleted_at is null), 0)
-+ coalesce((select sum(length(c.description_enc) + coalesce(length(c.alias_enc), 0)) from cards c
++ coalesce((select sum(length(c.description_enc) + coalesce(length(c.alias_enc), 0) + coalesce(length(c.seen_enc), 0)) from cards c
             join boards b on b.id = c.board_id and b.deleted_at is null
             where b.owner_user_id = ? and c.deleted_at is null), 0)
 + coalesce((select sum(length(l.title_enc)) from lists l

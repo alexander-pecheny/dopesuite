@@ -13,6 +13,8 @@ import type { Transfer } from "./transfer.js";
 import type { Board, BoardPanel } from "./panels.js";
 import type { BoardCard } from "./unlock.js";
 import S from "./i18nstrings.js";
+import { type Tester, testerNames, testersFromList } from "./sessions.js";
+import { nameOf, parseCardSeen, serializeCardSeen, withoutSeen, withSeen } from "./seen.js";
 
 const { jput, el, byId } = xyApp;
 
@@ -128,13 +130,16 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
   const massModal = modal("mass");
   let massTarget: { listId: number; ctx: MoveCtx } | null = null;
   let massPick: number | null = null;
+  // The people a Seen action adds, or the names it takes off.
+  let massPeople: Tester[] = [];
 
-  function hideMass(): void { massAction = null; massTarget = null; massPick = null; }
+  function hideMass(): void { massAction = null; massTarget = null; massPick = null; massPeople = []; }
 
   async function openMass(action: MassAction): Promise<void> {
     massAction = action;
     massPick = null;
     massTarget = null;
+    massPeople = [];
     const n = massSelected.size;
     massModal.el.querySelector<HTMLElement>(".appearance-modal-title")!.textContent = `${action.label}: ${xyMass.cardCount(n)}`;
     const run = byId<HTMLButtonElement>("massRun");
@@ -146,6 +151,8 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
     if (action.needs === "label") buildMassLabelPick(body, run);
     else if (action.needs === "session") buildMassSessionPick(body, run);
     else if (action.needs === "target") await buildMassTargetPick(body, run);
+    else if (action.needs === "people") buildMassPeopleAdd(body, run);
+    else if (action.needs === "seen") buildMassSeenPick(body, run);
     else body.append(el("p", { class: "label-empty", text: S.board.mass.deleteHint() }));
     massModal.open({ onClose: hideMass });
   }
@@ -176,6 +183,38 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
     for (const s of board.state.sessions) sel.append(el("option", { value: String(s.id), text: board.sessionName(s.id) }));
     sel.addEventListener("change", () => { massPick = Number(sel.value) || null; run.disabled = !massPick; });
     body.append(sel);
+  }
+
+  // The names to add are typed or pasted, one per line, like the list they
+  // usually come from.
+  function buildMassPeopleAdd(body: HTMLElement, run: HTMLButtonElement): void {
+    const area = el("textarea", { class: "input", rows: "6", spellcheck: "false" }) as HTMLTextAreaElement;
+    area.addEventListener("input", () => {
+      massPeople = testersFromList(area.value);
+      run.disabled = !massPeople.length;
+    });
+    body.append(el("p", { class: "hint", text: S.board.mass.seenAddHint() }), area);
+    area.focus();
+  }
+
+  // Taking people off offers exactly the people who saw any of the ticked
+  // questions: nobody else could be taken off.
+  function buildMassSeenPick(body: HTMLElement, run: HTMLButtonElement): void {
+    const all = new Map<string, Tester>();
+    for (const card of massCards()) for (const t of board.seenOf(card.id)) all.set(nameOf(t), t);
+    if (!all.size) { body.append(el("p", { class: "label-empty", text: S.board.mass.seenNone() })); return; }
+    const { players, teams } = testerNames([...all.values()]);
+    const picked = new Set<string>();
+    const rows = [...players, ...teams].map((name) => {
+      const cb = el("input", { type: "checkbox" }) as HTMLInputElement;
+      cb.addEventListener("change", () => {
+        if (cb.checked) picked.add(name); else picked.delete(name);
+        massPeople = [...picked].map((n) => all.get(n)!);
+        run.disabled = !massPeople.length;
+      });
+      return el("label", { class: "checkbox" }, cb, el("span", { text: name }));
+    });
+    body.append(el("p", { class: "hint", text: S.board.mass.seenDelHint() }), el("div", { class: "u-col u-gap-xs" }, ...rows));
   }
 
   // Move/copy reuses the card's own destination machinery (loadMoveBoard →
@@ -274,6 +313,17 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
         if (action.key === "session-del") {
           board.state.cardLabels = board.state.cardLabels.filter((a) => !(a.cardId === card.id && a.sessionId === massPick));
         }
+        return;
+      }
+      case "seen-add":
+      case "seen-del": {
+        if (!massPeople.length) throw new Error(S.board.error.noPeople());
+        const now = parseCardSeen(card.seen);
+        const plays = board.seenPlayings(card.id);
+        const next = action.key === "seen-add"
+          ? withSeen(now, massPeople, plays)
+          : withoutSeen(now, massPeople.map(nameOf), plays);
+        if (serializeCardSeen(next) !== serializeCardSeen(now)) await board.writeSeen(card, next);
         return;
       }
       case "move":

@@ -27,6 +27,9 @@ export interface BundleCard {
   rank: string;
   handout_meta: string | null;
   alias: string | null;
+  // Hand corrections to who saw it (seen.ts). Missing from bundles made before
+  // they existed.
+  seen?: string | null;
   created_at: string | null;
 }
 export interface BundleLabel {
@@ -52,6 +55,13 @@ export interface BundleTourTester {
   list_id: number | null;
   group_id: number | null;
   session_id: number | null;
+}
+// A tour's Declaration by names (schema v26). A tour with one ignores its
+// tour_testers rows, which only bundles from before v26 fill.
+export interface BundleTourDeclaration {
+  list_id: number | null;
+  group_id: number | null;
+  names: Array<{ text: string; type: string }>;
 }
 export interface BundleEvent {
   id: number;
@@ -93,6 +103,7 @@ export interface Bundle {
   card_labels: BundleCardLabel[];
   card_sessions: BundlePlaying[];
   tour_testers: BundleTourTester[];
+  tour_declarations?: BundleTourDeclaration[];
   timeline: BundleEvent[];
   attachments: BundleAttachment[];
 }
@@ -173,6 +184,13 @@ export function parseBundle(text: string): Bundle {
     ref(t.group_id, groupIds, "tour_testers.group_id");
     ref(t.session_id, sessionIds, "tour_testers.session_id");
   }
+  if (b.tour_declarations != null && !Array.isArray(b.tour_declarations)) throw new Error(S.import.bundle.notArray("tour_declarations"));
+  for (const t of b.tour_declarations || []) {
+    if ((t.list_id == null) === (t.group_id == null)) throw new Error(S.import.bundle.testerScope());
+    ref(t.list_id, listIds, "tour_declarations.list_id");
+    ref(t.group_id, groupIds, "tour_declarations.group_id");
+    if (!Array.isArray(t.names)) throw new Error(S.import.bundle.notArray("tour_declarations.names"));
+  }
   for (const e of b.timeline) {
     if (!EVENT_TYPES.has(e.type)) throw new Error(S.import.bundle.eventType(String(e.type)));
     if (e.card_id == null && e.session_id == null) throw new Error(S.import.bundle.eventOrphan());
@@ -202,7 +220,7 @@ export function contentBytes(b: Bundle): number {
   const utf8 = (s: string | null): number => s ? new TextEncoder().encode(s).length : 0;
   let n = attachmentsTotal(b);
   for (const l of b.lists) n += utf8(l.title);
-  for (const c of b.cards) n += utf8(c.description) + utf8(c.alias) + utf8(c.handout_meta);
+  for (const c of b.cards) n += utf8(c.description) + utf8(c.alias) + utf8(c.handout_meta) + utf8(c.seen ?? null);
   for (const l of b.labels) n += utf8(l.name) + utf8(l.color);
   for (const s of b.sessions) n += utf8(s.meta);
   for (const e of b.timeline) n += utf8(e.payload);
@@ -268,9 +286,9 @@ export function sliceBundle(b: Bundle, listIds: number[]): Bundle {
 
   const cardLabels = b.card_labels.filter((a) => keptCards.has(a.card_id));
   const cardSessions = b.card_sessions.filter((p) => keptCards.has(p.card_id));
-  const tourTesters = b.tour_testers.filter((t) =>
-    t.list_id != null ? keptLists.has(t.list_id) : t.group_id != null && keptGroups.has(t.group_id)
-  );
+  const keptTour = (t: { list_id: number | null; group_id: number | null }): boolean =>
+    t.list_id != null ? keptLists.has(t.list_id) : t.group_id != null && keptGroups.has(t.group_id);
+  const tourTesters = b.tour_testers.filter(keptTour);
 
   // A Session is reached by a Playing, by a Playing-scoped Label assignment, or
   // by a tour's Declaration — a Declaration that named a Session we dropped
@@ -292,6 +310,7 @@ export function sliceBundle(b: Bundle, listIds: number[]): Bundle {
     card_labels: cardLabels,
     card_sessions: cardSessions,
     tour_testers: tourTesters,
+    ...(b.tour_declarations ? { tour_declarations: b.tour_declarations.filter(keptTour) } : {}),
     timeline: b.timeline.filter((e) =>
       (e.card_id != null && keptCards.has(e.card_id)) ||
       (e.card_id == null && e.session_id != null && keptSessions.has(e.session_id))

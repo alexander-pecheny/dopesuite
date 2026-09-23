@@ -9,7 +9,8 @@
 // own dependency, so the board seam stays what every panel needs and no more.
 
 import type { BoardCard, BoardGroup, BoardList, BoardState, CardLabel } from "./unlock.js";
-import type { SessionMeta } from "./sessions.js";
+import type { SessionMeta, Tester } from "./sessions.js";
+import type { CardSeen, SeenPlaying } from "./seen.js";
 import type { MembersState } from "./boardmembers.js";
 import type { MutationVerbs } from "./carddetail.js";
 import type { DataKey } from "./crypto.js";
@@ -29,6 +30,10 @@ export interface Board {
   groupById(groupId: number): BoardGroup | undefined;
   assignmentsOf(cardId: number, sessionId: number | null | undefined): CardLabel[];
   playingsOf(cardId: number): number[];
+  // Who saw a question: its Playings corrected by hand (seen.ts).
+  seenPlayings(cardId: number): SeenPlaying[];
+  seenOf(cardId: number): Tester[];
+  writeSeen(card: BoardCard, next: CardSeen): Promise<void>;
   sessionMeta(id: number): SessionMeta | null;
   sessionName(id: number): string;
   verbs: MutationVerbs & { post(kind: string, path: string, body: OpBody): Promise<unknown> };
