@@ -25,8 +25,9 @@ func TestHeaderSafeName(t *testing.T) {
 func TestContentDisposition(t *testing.T) {
 	cases := map[string]string{
 		"normal.docx": `attachment; filename="normal.docx"`,
-		"Запас.docx":  `attachment; filename="_____.docx"; filename*=UTF-8''%D0%97%D0%B0%D0%BF%D0%B0%D1%81.docx`,
-		"Тур 1.pdf":   `attachment; filename="___ 1.pdf"; filename*=UTF-8''%D0%A2%D1%83%D1%80%201.pdf`,
+		"Запас.docx":  `attachment; filename="Zapas.docx"; filename*=UTF-8''%D0%97%D0%B0%D0%BF%D0%B0%D1%81.docx`,
+		"Тур 1.pdf":   `attachment; filename="Tur 1.pdf"; filename*=UTF-8''%D0%A2%D1%83%D1%80%201.pdf`,
+		"Шах.docx":    `attachment; filename="Shakh.docx"; filename*=UTF-8''%D0%A8%D0%B0%D1%85.docx`,
 	}
 	for in, want := range cases {
 		if got := contentDisposition(in); got != want {
@@ -50,4 +51,22 @@ func containsSep(s string) bool {
 		}
 	}
 	return false
+}
+
+func TestTranslit(t *testing.T) {
+	cases := map[string]string{
+		"Первый бой":     "Pervyy boy",
+		"Раунд «Хамса»":  "Raund Khamsa",
+		"ТЗ":             "TZ",
+		"ЩИ и Щи":        "SHCHI i Shchi",
+		"Платки́":        "Platki",
+		"Тур 1 — финал":  "Tur 1 - final",
+		"Ёлка, Жук, Юла": "Yolka, Zhuk, Yula",
+		"tour 😀":         "tour _",
+	}
+	for in, want := range cases {
+		if got := translit(in); got != want {
+			t.Errorf("translit(%q) = %q, want %q", in, got, want)
+		}
+	}
 }

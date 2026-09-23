@@ -139,17 +139,12 @@ func attrChar(r rune) bool {
 // contentDisposition builds the attachment header for a download name. A
 // quoted-string filename is latin-1, so a Cyrillic list name sent that way
 // arrives as mojibake (issue #43); RFC 6266's filename* carries the real name in
-// UTF-8, with the ASCII-folded filename= left behind for anything that ignores it.
+// UTF-8, with the transliterated filename= left behind for anything that ignores
+// it — which includes our own client, since export.ts reads filename=.
 func contentDisposition(name string) string {
-	var ascii, ext strings.Builder
+	var ext strings.Builder
 	needsExt := false
 	for _, r := range name {
-		if r < 0x80 {
-			ascii.WriteRune(r)
-		} else {
-			ascii.WriteByte('_')
-			needsExt = true
-		}
 		if attrChar(r) {
 			ext.WriteRune(r)
 			continue
@@ -159,7 +154,7 @@ func contentDisposition(name string) string {
 			fmt.Fprintf(&ext, "%%%02X", b)
 		}
 	}
-	h := `attachment; filename="` + ascii.String() + `"`
+	h := `attachment; filename="` + headerSafeName(translit(name)) + `"`
 	if needsExt {
 		h += "; filename*=UTF-8''" + ext.String()
 	}
