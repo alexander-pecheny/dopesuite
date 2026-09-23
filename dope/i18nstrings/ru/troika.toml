@@ -45,6 +45,8 @@ first = "Первые ответы"
 repeat = "Повторы"
 repeat_rate = "Удачные повторы"
 points = "Очки"
+# The tab before anybody sat in a кресло and answered.
+empty = "Пока нет данных: ни одного ответа не отмечено."
 
 [shootout]
 # The button in a бой's head that adds a перестрелка тема while the sides are

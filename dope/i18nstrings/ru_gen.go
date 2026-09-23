@@ -2089,7 +2089,10 @@ var RU = Strings{
 			Head: func(n string) string { return fmt.Sprintf("Перестрелка %s", n) },
 		},
 		Stats: TroikaStatsStrings{
-			Bouts:      func() string { return "Бои" },
+			Bouts: func() string { return "Бои" },
+			Empty: func() string {
+				return "Пока нет данных: ни одного ответа не отмечено."
+			},
 			First:      func() string { return "Первые ответы" },
 			Player:     func() string { return "Игрок" },
 			Points:     func() string { return "Очки" },

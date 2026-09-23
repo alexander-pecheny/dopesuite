@@ -1517,6 +1517,7 @@ export type Strings = {
     };
     stats: {
       bouts: () => string;
+      empty: () => string;
       first: () => string;
       player: () => string;
       points: () => string;

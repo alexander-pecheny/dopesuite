@@ -106,6 +106,13 @@ export function computeTroikaPlayerStats(bouts: ReadonlyArray<TroikaBout>): Troi
 export function buildTroikaStatsTable(rows: ReadonlyArray<TroikaPlayerStatsRow>): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "results-wrapper ek-stats-wrapper";
+  if (rows.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = S.troika.stats.empty();
+    wrapper.appendChild(empty);
+    return wrapper;
+  }
   wrapper.appendChild(standingsTable({
     className: "ek-stats-table",
     columns: [
