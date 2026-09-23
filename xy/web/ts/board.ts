@@ -675,21 +675,33 @@ async function renameList(list: BoardList): Promise<void> {
   } catch (err) { setStatus("error"); alert(S.board.rename.failed(errMsg(err))); }
 }
 
-// retypeList swaps what the list holds — OD questions or SI themes. It reaches the
-// next card the add-card button makes and nothing else: the cards already in the
-// list keep their kinds, and both kinds stay offered on every one of them.
-async function retypeList(list: BoardList): Promise<void> {
-  const next = list.type === "si" ? "normal" : "si";
-  const to = next === "si" ? S.board.list.typeSi() : S.board.list.typeChgk();
-  if (!confirm(S.board.list.typeConfirm(to, S.board.list.typeHint()))) return;
+// retypeList opens the choice of what the list holds — OD questions or SI themes.
+// It reaches the next card the add-card button makes and nothing else: the cards
+// already in the list keep their kinds, and both kinds stay offered on every one.
+let retyping: BoardList | null = null;
+const listTypeModal = modal("listType");
+
+function retypeList(list: BoardList): void {
+  retyping = list;
+  byId<HTMLSelectElement>("listTypeSelect").value = list.type === "si" ? "si" : "normal";
+  listTypeModal.open({ onClose: () => { retyping = null; } });
+}
+
+byId("listTypeForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const list = retyping;
+  if (!list) return;
+  const next = byId<HTMLSelectElement>("listTypeSelect").value;
+  if (next === (list.type === "si" ? "si" : "normal")) { listTypeModal.close(); return; }
   setStatus("saving");
   try {
     await patch("patchList", `/api/lists/${list.id}`, { type: next });
     list.type = next;
     setStatus("saved");
+    listTypeModal.close();
     render();
-  } catch (err) { setStatus("error"); alert(S.board.rename.failed(errMsg(err))); }
-}
+  } catch (err) { setStatus("error"); listTypeModal.message(S.board.rename.failed(errMsg(err))); }
+});
 
 // deleteList soft-deletes the list and its cards (server cascades the cards),
 // offline-capable via the sync outbox.
@@ -1557,7 +1569,7 @@ registerPanel(
 
   // The list itself
   starts({ id: "rename-list", menu: "list", icon: "pencil", label: S.board.rename.listLabel(), open: (s) => { void renameList(s.list); } }),
-  { id: "retype-list", menu: "list", icon: "list", label: S.board.list.typeChange(), open: (s) => { void retypeList(s.list); } },
+  { id: "retype-list", menu: "list", icon: "list", label: S.board.list.typeChange(), open: (s) => retypeList(s.list) },
   createMoveListPanel(board, transfer),
   { id: "delete-list", menu: "list", icon: "trash-2", label: S.board.delete.listLabel(), open: (s) => { void deleteList(s.list); } },
 );

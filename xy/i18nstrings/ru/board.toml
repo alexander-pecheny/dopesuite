@@ -742,9 +742,10 @@ type_label = "Что в списке"
 type_chgk = "Вопросы ОД"
 type_si = "Темы СИ"
 type_change = "Тип списка…"
-# Confirm before the swap; .hint is type_hint below.
-type_confirm = 'Список станет: {{.to}}. {{.hint}}'
-type_hint = "На уже созданные карточки не влияет."
+# Title of the modal the ⋯ entry opens; the hint under its choice says what
+# changing it does and does not do.
+type_title = "Тип списка"
+type_hint = "Тип решает, какую карточку создаёт кнопка «Добавить карточку». На уже созданные карточки не влияет."
 
 [count]
 # Question count under a list head ("5 вопросов").

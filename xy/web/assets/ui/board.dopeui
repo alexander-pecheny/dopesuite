@@ -359,6 +359,18 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
           button small download id="handoutsDownload" hidden @board.handouts.download
         mount id="handoutsPdf" kind="handouts-pdf"
 
+  -- the ⋯ list-type entry: what the list holds, picked from every type there is
+  modal id="listTypeOverlay" label=@board.list.type_title title=@board.list.type_title
+    form id="listTypeForm" dir="col"
+      selectfield id="listTypeSelect" title=@board.list.type_label
+        option value="normal" @board.list.type_chgk
+        option value="si" @board.list.type_si
+      hint @board.list.type_hint
+      message id="listTypeMessage"
+      row gap="sm" wrap
+        button submit @board.actions.save
+        button kind="ghost" id="listTypeCancel" @board.actions.cancel
+
   -- move / copy list overlay (within board → re-rank; other board →
   -- client-side re-encryption of the list + its cards)
   modal id="moveListOverlay" label=@board.movelist.title title=@board.movelist.title done=@board.actions.close doneid="moveListClose"
