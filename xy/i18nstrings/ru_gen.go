@@ -902,12 +902,10 @@ var RU = Strings{
 			ShowAll: func() string { return "Показать всех тестеров" },
 		},
 		Slot: CardSlotStrings{
-			Add:        func() string { return "+ вопрос" },
-			AddReserve: func() string { return "+ запас" },
-			AddReserveTitle: func() string {
-				return "Добавить запасной вопрос — сверх пяти основных"
+			Add: func() string { return "+ вопрос" },
+			AddTitle: func() string {
+				return "Добавить вопрос на следующую стоимость, а после пятого — запасной"
 			},
-			AddTitle:     func() string { return "Добавить вопрос на следующую стоимость" },
 			CopyQuestion: func(points string, text string) string { return fmt.Sprintf("%s. %s", points, text) },
 			CopyTheme:    func() string { return "Тема" },
 			CopyWhole:    func() string { return "Тема целиком" },

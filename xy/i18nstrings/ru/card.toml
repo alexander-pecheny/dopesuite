@@ -91,11 +91,9 @@ down_title = "Опустить ниже — вопросы поменяются 
 down_aria = "Опустить вопрос"
 remove_title = "Удалить этот вопрос из темы"
 remove_aria = "Удалить вопрос"
-# The two buttons at the foot of the ladder.
+# The button beside Save that appends a rung: the next free value, then reserves.
 add = "+ вопрос"
-add_reserve = "+ запас"
-add_title = "Добавить вопрос на следующую стоимость"
-add_reserve_title = "Добавить запасной вопрос — сверх пяти основных"
+add_title = "Добавить вопрос на следующую стоимость, а после пятого — запасной"
 # «3/5» on a theme card: how many of its questions are written.
 progress = '{{.filled}}/{{.total}}'
 progress_title = "Сколько вопросов темы уже написано"
