@@ -1432,6 +1432,15 @@ export type Strings = {
       templateGroups: () => string;
       templateSize: (size: string) => string;
     };
+    swiss: {
+      bout: (n: string, wins: string, losses: string) => string;
+      needsRanking: () => string;
+      participantsUnsupported: (participants: string, known: string) => string;
+      planMismatch: (participants: string, wins: string, losses: string) => string;
+      pool: (wins: string, losses: string) => string;
+      poolRank: (wins: string, losses: string, n: string) => string;
+      table: () => string;
+    };
     titles: {
       blockRound: (n: string) => string;
       bout: (n: string) => string;
@@ -1464,6 +1473,11 @@ export type Strings = {
       seating: () => string;
       team: () => string;
     };
+    shootout: {
+      add: () => string;
+      drop: () => string;
+      head: (n: string) => string;
+    };
     stats: {
       bouts: () => string;
       first: () => string;
@@ -1472,6 +1486,12 @@ export type Strings = {
       repeat: () => string;
       repeatRate: () => string;
       team: () => string;
+    };
+    swiss: {
+      losses: () => string;
+      place: () => string;
+      seed: () => string;
+      wins: () => string;
     };
     team: {
       fallback: (n: string) => string;
@@ -1482,6 +1502,13 @@ export type Strings = {
       unseat: (n: string) => string;
     };
     title: () => string;
+    written: {
+      place: () => string;
+      threes: () => string;
+      threesHint: () => string;
+      twos: () => string;
+      twosHint: () => string;
+    };
   };
   ui: {
     crumbs: {

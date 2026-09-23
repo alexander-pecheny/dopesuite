@@ -46,17 +46,29 @@ type TroikaTheme struct {
 	Answers [][]string `json:"answers,omitempty"`
 }
 
-// TroikaSide is one team's half of the protocol.
+// TroikaSide is one team's part of the protocol. A written bout keeps Counts
+// instead of Themes: per theme and question, how many of the troika's answers
+// were right, 0 to 3.
 type TroikaSide struct {
 	Themes []TroikaTheme `json:"themes,omitempty"`
+	Counts [][]int       `json:"counts,omitempty"`
 }
 
 // TroikaState mirrors matches.state_json. Values is each theme's nominal
 // value, written when the match is built: what a question was worth is a fact
 // about the match that played it, not about the scheme as it stands today.
+//
+// Shootout is how many of the last themes are shootout themes, added by the
+// host to a bout whose sides are level (regulations IV.2.4). They count into the
+// total like any other theme. Pin is a place per side that a host set by hand;
+// a zero leaves that side's place to the sheet. Written marks the qualifier, which
+// is one sitting of every troika on paper: its sides carry Counts.
 type TroikaState struct {
-	Values []int        `json:"values,omitempty"`
-	Sides  []TroikaSide `json:"sides,omitempty"`
+	Values   []int        `json:"values,omitempty"`
+	Sides    []TroikaSide `json:"sides,omitempty"`
+	Shootout int          `json:"shootout,omitempty"`
+	Pin      []float64    `json:"pin,omitempty"`
+	Written  bool         `json:"written,omitempty"`
 }
 
 // TroikaThemeValues resolves a match's per-theme nominals from its stage
@@ -77,33 +89,62 @@ func TroikaThemeValues(themes int, authored []int) []int {
 	return values
 }
 
-// TroikaEmptyStateJSON builds the pristine document for one match: two sides
-// of themes, each a grid of three questions by three chairs, with the
-// match's nominals recorded alongside.
-func TroikaEmptyStateJSON(values []int) []byte {
-	state := TroikaState{Values: values, Sides: make([]TroikaSide, 2)}
+// TroikaEmptyStateJSON builds the pristine document for one match: a side per
+// seat (two at the least), each of themes of three questions by three chairs,
+// with the match's nominals recorded alongside. A written match has a grid of
+// counts per side instead.
+func TroikaEmptyStateJSON(values []int, seats int, written bool) []byte {
+	if seats < 2 {
+		seats = 2
+	}
+	state := TroikaState{Values: values, Sides: make([]TroikaSide, seats), Written: written}
 	for s := range state.Sides {
+		if written {
+			counts := make([][]int, len(values))
+			for t := range counts {
+				counts[t] = make([]int, TroikaThemeQuestions)
+			}
+			state.Sides[s] = TroikaSide{Counts: counts}
+			continue
+		}
 		themes := make([]TroikaTheme, len(values))
 		for t := range themes {
-			answers := make([][]string, TroikaThemeQuestions)
-			for q := range answers {
-				answers[q] = make([]string, TroikaChairs)
-			}
-			themes[t] = TroikaTheme{Order: make([]int64, TroikaChairs), Answers: answers}
+			themes[t] = emptyTroikaTheme()
 		}
 		state.Sides[s] = TroikaSide{Themes: themes}
 	}
 	return []byte(mustJSON(state))
 }
 
-// TroikaStateStarted reports whether a host has entered anything — a mark or
-// a seated player. A started match is one a scheme recompile must not reseat.
+func emptyTroikaTheme() TroikaTheme {
+	answers := make([][]string, TroikaThemeQuestions)
+	for q := range answers {
+		answers[q] = make([]string, TroikaChairs)
+	}
+	return TroikaTheme{Order: make([]int64, TroikaChairs), Answers: answers}
+}
+
+// TroikaStateStarted reports whether a host has entered anything — a mark,
+// a count or a seated player. A started match is one a scheme recompile must
+// not reseat.
 func TroikaStateStarted(stateJSON string) bool {
 	var state TroikaState
 	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
 		return true // unreadable state is data, not pristine
 	}
+	for _, pin := range state.Pin {
+		if pin != 0 {
+			return true
+		}
+	}
 	for _, side := range state.Sides {
+		for _, theme := range side.Counts {
+			for _, count := range theme {
+				if count != 0 {
+					return true
+				}
+			}
+		}
 		for _, theme := range side.Themes {
 			for _, player := range theme.Order {
 				if player != 0 {
@@ -135,12 +176,17 @@ func troikaValue(state TroikaState, theme int) int {
 type TroikaResultsSide struct {
 	Total   int     `json:"total"`   // game points
 	Correct int     `json:"correct"` // correct answers, not counting the nominal
-	Place   float64 `json:"place"`   // 1 / 2, 1.5 shared on a tie
+	Place   float64 `json:"place"`   // 1 / 2 / …, the mean of the places a tie shares
+	// Threes and Twos are the questions of a written bout a troika answered
+	// three and two times right — the qualifier's tiebreak (regulations IV.2.3).
+	Threes int `json:"threes"`
+	Twos   int `json:"twos"`
 }
 
 // ComputeTroikaResults scores a match from its state JSON, sides in slot
 // order. Every correct answer pays its question's nominal on its own, so a
-// question three players all took pays three times over.
+// question three players all took pays three times over. Sides rank by total
+// and share the mean place when level; a pinned place wins over the sheet.
 func ComputeTroikaResults(stateJSON string) ([]TroikaResultsSide, error) {
 	var state TroikaState
 	if stateJSON != "" {
@@ -150,6 +196,25 @@ func ComputeTroikaResults(stateJSON string) ([]TroikaResultsSide, error) {
 	}
 	results := make([]TroikaResultsSide, len(state.Sides))
 	for i, side := range state.Sides {
+		for t, theme := range side.Counts {
+			value := troikaValue(state, t)
+			for _, count := range theme {
+				if count < 0 {
+					count = 0
+				}
+				if count > TroikaChairs {
+					count = TroikaChairs
+				}
+				results[i].Total += count * value
+				results[i].Correct += count
+				switch count {
+				case 3:
+					results[i].Threes++
+				case 2:
+					results[i].Twos++
+				}
+			}
+		}
 		for t, theme := range side.Themes {
 			value := troikaValue(state, t)
 			for _, question := range theme.Answers {
@@ -162,15 +227,20 @@ func ComputeTroikaResults(stateJSON string) ([]TroikaResultsSide, error) {
 			}
 		}
 	}
-	if len(results) == 2 {
-		a, b := &results[0], &results[1]
-		switch {
-		case a.Total > b.Total:
-			a.Place, b.Place = 1, 2
-		case a.Total < b.Total:
-			a.Place, b.Place = 2, 1
-		default:
-			a.Place, b.Place = 1.5, 1.5
+	for i := range results {
+		above, level := 0, 0
+		for j := range results {
+			switch {
+			case results[j].Total > results[i].Total:
+				above++
+			case results[j].Total == results[i].Total:
+				level++
+			}
+		}
+		// Places above+1 … above+level, shared: their mean.
+		results[i].Place = float64(above) + float64(level+1)/2
+		if i < len(state.Pin) && state.Pin[i] > 0 {
+			results[i].Place = state.Pin[i]
 		}
 	}
 	return results, nil

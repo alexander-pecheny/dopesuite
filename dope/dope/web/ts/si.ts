@@ -271,7 +271,7 @@ function render(options: {preserveScroll?: boolean} = {}): void {
   const node = team ? teamTabNode() : buildTable();
   renderedTable = !team || activeTab === "detailed" ? node : null;
   if (team && activeTab !== "detailed") resetTableIndex();
-  // A зачёт chip row heads the two team tables that rank.
+  // A division chip row heads the two team tables that rank.
   const chips = team && (activeTab === "results" || activeTab === "detailed") ? divisionChips() : null;
   siRoot.replaceChildren(...(chips ? [chips, node] : [node]));
 

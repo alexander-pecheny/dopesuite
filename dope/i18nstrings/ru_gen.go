@@ -1963,6 +1963,25 @@ var RU = Strings{
 				return fmt.Sprintf("нет шаблона рассадки в бои по %s из предыдущего блока — добавьте reseed: true", size)
 			},
 		},
+		Swiss: StructureSwissStrings{
+			Bout: func(n string, wins string, losses string) string {
+				return fmt.Sprintf("Бой %s (%s–%s)", n, wins, losses)
+			},
+			NeedsRanking: func() string {
+				return "swiss: блок рассаживает по местам предыдущего блока — поставьте перед ним блок с таблицей"
+			},
+			ParticipantsUnsupported: func(participants string, known string) string {
+				return fmt.Sprintf("swiss: нет плана на %s участников (есть %s)", participants, known)
+			},
+			PlanMismatch: func(participants string, wins string, losses string) string {
+				return fmt.Sprintf("swiss: план на %s участников играется до %s побед и %s поражений", participants, wins, losses)
+			},
+			Pool: func(wins string, losses string) string { return fmt.Sprintf("Пул %s–%s", wins, losses) },
+			PoolRank: func(wins string, losses string, n string) string {
+				return fmt.Sprintf("Пул %s–%s, %s-й", wins, losses, n)
+			},
+			Table: func() string { return "Швейцарка" },
+		},
 		Titles: StructureTitlesStrings{
 			BlockRound: func(n string) string { return fmt.Sprintf("Раунд %s", n) },
 			Bout:       func(n string) string { return fmt.Sprintf("Бой %s", n) },
@@ -2009,6 +2028,11 @@ var RU = Strings{
 			Seating: func() string { return "Рассадка" },
 			Team:    func() string { return "Команда" },
 		},
+		Shootout: TroikaShootoutStrings{
+			Add:  func() string { return "Перестрелка" },
+			Drop: func() string { return "Убрать тему перестрелки" },
+			Head: func(n string) string { return fmt.Sprintf("Перестрелка %s", n) },
+		},
 		Stats: TroikaStatsStrings{
 			Bouts:      func() string { return "Бои" },
 			First:      func() string { return "Взял первым" },
@@ -2017,6 +2041,12 @@ var RU = Strings{
 			Repeat:     func() string { return "Повторил" },
 			RepeatRate: func() string { return "Удачные повторы" },
 			Team:       func() string { return "Команда" },
+		},
+		Swiss: TroikaSwissStrings{
+			Losses: func() string { return "Поражения" },
+			Place:  func() string { return "М" },
+			Seed:   func() string { return "Отбор" },
+			Wins:   func() string { return "Победы" },
 		},
 		Team: TroikaTeamStrings{
 			Fallback: func(n string) string { return fmt.Sprintf("Команда %s", n) },
@@ -2029,6 +2059,13 @@ var RU = Strings{
 			},
 		},
 		Title: func() string { return "Тройка" },
+		Written: TroikaWrittenStrings{
+			Place:      func() string { return "Место" },
+			Threes:     func() string { return "3" },
+			ThreesHint: func() string { return "Вопросов с тремя правильными ответами" },
+			Twos:       func() string { return "2" },
+			TwosHint:   func() string { return "Вопросов с двумя правильными ответами" },
+		},
 	},
 	Ui: UiStrings{
 		Crumbs: UiCrumbsStrings{

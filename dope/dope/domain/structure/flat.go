@@ -113,7 +113,7 @@ func (flat) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 
 // Standings ranks by the Protocol's own places — a flat game's Match already
 // ranked everyone — with any scoring rules the scheme added on top.
-func (flat) Standings(cfg json.RawMessage, results []MatchOutcome, _ Inputs) ([]RankedEntry, error) {
+func (flat) Standings(cfg json.RawMessage, results []MatchOutcome, in Inputs) ([]RankedEntry, error) {
 	var conf FlatConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil, fmt.Errorf("flat standings config: %w", err)
@@ -144,7 +144,7 @@ func (flat) Standings(cfg json.RawMessage, results []MatchOutcome, _ Inputs) ([]
 		}
 	}
 	order := flatOrder(conf)
-	sort.SliceStable(ranked, func(i, j int) bool {
+	less := func(i, j int) bool {
 		for _, key := range order {
 			a, b := ranked[i].Metrics[key], ranked[j].Metrics[key]
 			if a == b {
@@ -155,10 +155,21 @@ func (flat) Standings(cfg json.RawMessage, results []MatchOutcome, _ Inputs) ([]
 				// a Match not scored — ranks after everyone it did place.
 				return (a != 0 && a < b) || b == 0
 			}
+			if Ascending(key) {
+				return a < b
+			}
 			return a > b
 		}
 		return ranked[i].Participant < ranked[j].Participant
-	})
+	}
+	sort.SliceStable(ranked, less)
+	// The lot is the last word a regulation has on a tie — Troika's qualifier
+	// tosses a coin (regulations IV.2.3). Only seats level on every other key
+	// draw one, from the game's fixed seed, so every recompute tosses the
+	// same way and nobody else carries a number that means nothing.
+	if drawLots(ranked, order, in.Seed) {
+		sort.SliceStable(ranked, less)
+	}
 	shareRanks(ranked, order)
 	// A table sorted by its own keys shows the rank they give; one that only
 	// keeps the Match's order shows the Match's own place, mean of a tie and all.
@@ -170,6 +181,40 @@ func (flat) Standings(cfg json.RawMessage, results []MatchOutcome, _ Inputs) ([]
 	return ranked, nil
 }
 
+// drawLots gives a lot to every seat in a run level on all of order's keys but
+// the draw, and reports whether order names a draw at all.
+func drawLots(ranked []RankedEntry, order []string, seed string) bool {
+	drawn := false
+	for _, key := range order {
+		drawn = drawn || key == "draw"
+	}
+	if !drawn {
+		return false
+	}
+	level := func(a, b RankedEntry) bool {
+		for _, key := range order {
+			if key != "draw" && a.Metrics[key] != b.Metrics[key] {
+				return false
+			}
+		}
+		return true
+	}
+	for i := 0; i < len(ranked); {
+		j := i + 1
+		for j < len(ranked) && level(ranked[i], ranked[j]) {
+			j++
+		}
+		for k := i; k < j; k++ {
+			ranked[k].Metrics["draw"] = 0
+			if j-i >= 2 {
+				ranked[k].Metrics["draw"] = float64(deterministicLot(seed, ranked[k].Participant))
+			}
+		}
+		i = j
+	}
+	return true
+}
+
 func flatOrder(conf FlatConfig) []string {
 	if conf.Order == nil {
 		return []string{"place"}
@@ -177,7 +222,7 @@ func flatOrder(conf FlatConfig) []string {
 	return conf.Order
 }
 
-func (flat) Metrics() []string { return []string{"place"} }
+func (flat) Metrics() []string { return []string{"place", "draw"} }
 
 // Order names the columns a table of these standings shows. A Block that ranks
 // by the Match's own place alone shows none: the place column is already

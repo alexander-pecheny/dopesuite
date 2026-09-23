@@ -934,6 +934,9 @@ func writeTroikaMatch(f *excelize.File, sheet string, row int, match store.Match
 		return row, err
 	}
 	row++
+	if state.Written {
+		return writeTroikaWritten(f, sheet, row, match, state)
+	}
 
 	header := []interface{}{s.Export.Col.Team(), s.Export.Col.Chair()}
 	for t := range state.Values {
@@ -970,6 +973,47 @@ func writeTroikaMatch(f *excelize.File, sheet string, row int, match store.Match
 			}
 			row++
 		}
+	}
+	return row, nil
+}
+
+// writeTroikaWritten is the written qualifier: a row per troika, per question the
+// count of right answers, then Σ and the questions taken three and two times.
+func writeTroikaWritten(f *excelize.File, sheet string, row int, match store.MatchView, state games.TroikaState) (int, error) {
+	s := dopestrings.Default
+	header := []interface{}{s.Export.Col.Team()}
+	for t := range state.Values {
+		for q := 1; q <= games.TroikaThemeQuestions; q++ {
+			header = append(header, s.Export.Col.ThemeQuestion(strconv.Itoa(t+1), strconv.Itoa(q)))
+		}
+	}
+	header = append(header, "Σ", s.Troika.Written.Threes(), s.Troika.Written.Twos())
+	if err := setRow(f, sheet, row, header); err != nil {
+		return row, err
+	}
+	row++
+	results, err := games.ComputeTroikaResults(string(match.State))
+	if err != nil {
+		return row, err
+	}
+	for side := range state.Sides {
+		cells := []interface{}{troikaSideName(match, side)}
+		for t := range state.Values {
+			for q := 0; q < games.TroikaThemeQuestions; q++ {
+				count := 0
+				if t < len(state.Sides[side].Counts) && q < len(state.Sides[side].Counts[t]) {
+					count = state.Sides[side].Counts[t][q]
+				}
+				cells = append(cells, count)
+			}
+		}
+		if side < len(results) {
+			cells = append(cells, results[side].Total, results[side].Threes, results[side].Twos)
+		}
+		if err := setRow(f, sheet, row, cells); err != nil {
+			return row, err
+		}
+		row++
 	}
 	return row, nil
 }

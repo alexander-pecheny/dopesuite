@@ -16,6 +16,10 @@ type StageConfig struct {
 	Sort    json.RawMessage `json:"sort,omitempty"`
 	Config  json.RawMessage `json:"config,omitempty"`
 	Layout  json.RawMessage `json:"layout,omitempty"`
+	// Auto and SeedFrom are SchemeStage's: a reseed the resolver calculates on
+	// its own, and the stage whose ranks are this stage's seeds.
+	Auto     bool   `json:"auto,omitempty"`
+	SeedFrom string `json:"seedFrom,omitempty"`
 	// Questions at the top level is the legacy spelling of Config.questions.
 	LegacyQuestions int `json:"questions,omitempty"`
 
@@ -24,7 +28,7 @@ type StageConfig struct {
 
 // StageConfigOf is the envelope a scheme stage writes.
 func StageConfigOf(stage SchemeStage) StageConfig {
-	c := StageConfig{Teams: stage.Teams, Bands: stage.Bands, Sources: stage.Sources}
+	c := StageConfig{Teams: stage.Teams, Bands: stage.Bands, Sources: stage.Sources, Auto: stage.Auto, SeedFrom: stage.SeedFrom}
 	if len(stage.Sort) > 0 {
 		c.Sort = stage.Sort
 	}

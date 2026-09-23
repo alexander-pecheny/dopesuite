@@ -118,6 +118,11 @@ from stages where game_id = ? order by position, id`,
 			case mode == reseedCalculateOne && stage.code == targetStageCode:
 				foundTarget = true
 				err = calculateRequiredReseedEntriesTx(ctx, tx, stage, gameID)
+			case store.ParseStageConfig(string(stage.config)).Auto:
+				// A Swiss pool: its order is the seed, so there is nothing
+				// for a host to confirm, and it is calculated as soon as the
+				// bouts it gathers from are finished.
+				err = calculateReadyReseedEntriesTx(ctx, tx, stage, gameID)
 			default:
 				err = syncReseedReadinessTx(ctx, tx, stage, gameID)
 			}
@@ -192,7 +197,7 @@ func recomputeKindStandingsTx(ctx context.Context, tx *sql.Tx, stage resolverSta
 	if err != nil {
 		return err
 	}
-	seeds, err := gameSeedRanks(ctx, tx, gameID)
+	seeds, err := stageSeedRanks(ctx, tx, gameID, store.ParseStageConfig(string(stage.config)))
 	if err != nil {
 		return err
 	}
@@ -426,7 +431,7 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 	if err != nil {
 		return err
 	}
-	seeds, err := gameSeedRanks(ctx, tx, gameID)
+	seeds, err := stageSeedRanks(ctx, tx, gameID, cfg)
 	if err != nil {
 		return err
 	}
@@ -436,6 +441,33 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 		return err
 	}
 	return store.WriteStandings(ctx, tx, stageID, ranked)
+}
+
+// stageSeedRanks is the seed a stage ranks by: the ranks of the stage its
+// config names in SeedFrom — a Swiss Block's entry order, which is the
+// qualifier's table — else the Game's own seed numbers.
+func stageSeedRanks(ctx context.Context, q store.Queryer, gameID int64, cfg store.StageConfig) (map[int64]float64, error) {
+	if cfg.SeedFrom == "" {
+		return gameSeedRanks(ctx, q, gameID)
+	}
+	rows, err := q.QueryContext(ctx, `
+select st.participant_id, st.rank from stage_standings st
+join stages s on s.id = st.stage_id
+where s.game_id = ? and s.code = ? and st.rank > 0`, gameID, cfg.SeedFrom)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	seeds := map[int64]float64{}
+	for rows.Next() {
+		var participantID int64
+		var rank int
+		if err := rows.Scan(&participantID, &rank); err != nil {
+			return nil, err
+		}
+		seeds[participantID] = float64(rank)
+	}
+	return seeds, rows.Err()
 }
 
 // gameSeedRanks is what the seed import dealt: each Participant's rank in this

@@ -420,6 +420,23 @@ func seFirstBlockRound(b Block, opening elimBlockRound, winning int) ([][]store.
 		// seDirectBronze takes the places below them.
 		return [][]store.SchemeSlot{{prev.Groups[0].Place(1), prev.Groups[1].Place(1)}}, nil
 	}
+	if len(prev.Groups) == 1 {
+		// One ranked table before it — a Swiss stage, a group stage ranked as
+		// one — hands the bracket its ranks, and the snake deals them: six into
+		// three bouts of two is 1–6, 2–5, 3–4, eight into two of four is
+		// 1-4-5-8 and 2-3-6-7.
+		if prev.Proceeding != participants {
+			return nil, errors.New(s.Structure.Se.TemplateGroups())
+		}
+		feed := prev.Groups[0]
+		first := make([][]store.SchemeSlot, count)
+		for i, chunk := range snakeChunks(participants, count) {
+			for _, rank := range chunk {
+				first[i] = append(first[i], feed.Place(rank))
+			}
+		}
+		return first, nil
+	}
 	if opening.size != 2 || winning != 1 {
 		return nil, fmt.Errorf("%s", s.Structure.Se.TemplateSize(strconv.Itoa(opening.size)))
 	}

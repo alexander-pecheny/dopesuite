@@ -82,6 +82,14 @@ type SchemeStage struct {
 	Sort      json.RawMessage `json:"sort"`
 	Config    json.RawMessage `json:"config"`
 	Layout    json.RawMessage `json:"layout"`
+	// Auto marks a reseed the resolver calculates on its own as soon as its
+	// source Matches are finished: a Swiss pool, whose order is the seed and
+	// leaves the host nothing to judge.
+	Auto bool `json:"auto,omitempty"`
+	// SeedFrom names the stage whose standings rank stands for a
+	// Participant's seed when this stage ranks: a Swiss Block's entry order is
+	// the qualifier's table, not the Game's entrant numbers.
+	SeedFrom string `json:"seedFrom,omitempty"`
 }
 
 // SchemeGrain says where a stage sits in its Game. A stage row is a Wave — the

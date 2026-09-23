@@ -20,6 +20,9 @@ export interface StageRef {
   matches?: StageRefMatch[];
   // members names the server stages a displayed stage is assembled from.
   members?: string[];
+  // auto marks a reseed the server calculates on its own, a Swiss pool: it
+  // is a step inside its Block, not a пересев between two.
+  auto?: boolean;
 }
 
 export interface StageRefMatch {

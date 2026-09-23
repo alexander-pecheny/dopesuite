@@ -116,11 +116,14 @@ compile error that names the sizes there are.
 - A pool played as several бои is a **pool**: a reseed stage that ranks its
   members by the seed they entered with, and that the resolver calculates on
   its own as soon as its source бои are finished (`auto`), since there is no
-  judgement in it for the host to make. Two-seat бои pair 1 with n, 2 with
-  n − 1; three-seat бои deal alternately (1, 3, 5 / 2, 4, 6), which is the
-  picture's 1-1 pool. The picture's 2-1 pool pairs differently (1, 3, 4 /
-  2, 5, 6); the organisers drew it by hand, and alternating is the rule dope
-  keeps.
+  judgement in it for the host to make. The pool is dealt by the snake, dope's
+  one dealing rule: two-seat бои pair 1 with n, 2 with n − 1; six into two бои
+  of three is 1, 4, 5 / 2, 3, 6. The picture pairs its three-seat pools by hand
+  (1, 3, 5 / 2, 4, 6 in 1-1 and 1, 3, 4 / 2, 5, 6 in 2-1); the snake balances
+  the seeds better than either and is what dope keeps.
+  **Built:** a pool is `EmitPool`, a reseed stage with `auto` and `seedFrom`
+  (the отбор's stage), sorted by `seed`; the resolver ranks a stage that names
+  `seedFrom` by that stage's ranks.
 - The Block's table ranks by record: proceeded first by fewer losses, then
   the rest by more wins and fewer losses, then by entry seed. Ranks are
   distinct, so the play-off can seat by them.

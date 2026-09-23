@@ -21,6 +21,9 @@ func (troika) Params() []Param {
 	return []Param{
 		{Key: "themes", Config: "themes", Default: games.TroikaThemeCount},
 		{Key: "theme_values", Config: "themeValues", List: true},
+		// written makes the Block's bout the qualifier: one sitting of every troika,
+		// a count of right answers per question instead of chairs and marks.
+		{Key: "written", Config: "written", Bool: true},
 	}
 }
 
@@ -33,20 +36,25 @@ func (troika) Started(state json.RawMessage) bool { return games.TroikaStateStar
 
 // Metrics: game points and correct answers without the nominal. A group sums
 // points into scored/conceded with `metric: total`, and the regulations'
-// rating score is a scoring rule over them.
-func (troika) Metrics(json.RawMessage) []string { return []string{"total", "correct"} }
+// rating score is a scoring rule over them. threes and twos are the written
+// qualifier's tiebreak; an oral bout leaves them at zero.
+func (troika) Metrics(json.RawMessage) []string {
+	return []string{"total", "correct", "threes", "twos"}
+}
 
 func (troika) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 	var conf struct {
-		Themes      int   `json:"themes"`
-		ThemeValues []int `json:"themeValues"`
+		Themes       int   `json:"themes"`
+		ThemeValues  []int `json:"themeValues"`
+		Participants int   `json:"participants"`
+		Written      bool  `json:"written"`
 	}
 	if len(cfg) > 0 {
 		if err := json.Unmarshal(cfg, &conf); err != nil {
 			return nil, fmt.Errorf("troika config: %w", err)
 		}
 	}
-	return games.TroikaEmptyStateJSON(games.TroikaThemeValues(conf.Themes, conf.ThemeValues)), nil
+	return games.TroikaEmptyStateJSON(games.TroikaThemeValues(conf.Themes, conf.ThemeValues), conf.Participants, conf.Written), nil
 }
 
 func (troika) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error) {
@@ -61,6 +69,8 @@ func (troika) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, er
 			Metrics: map[string]float64{
 				"total":   float64(side.Total),
 				"correct": float64(side.Correct),
+				"threes":  float64(side.Threes),
+				"twos":    float64(side.Twos),
 			},
 		}
 	}

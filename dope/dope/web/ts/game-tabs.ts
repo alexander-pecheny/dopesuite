@@ -95,6 +95,12 @@ function isReseed(stage: StageRef): boolean {
   return stageType(stage) === "reseed";
 }
 
+// A Swiss pool is a reseed the server calculates on its own between two
+// rounds of one Block; it neither ends the Block nor earns a tab.
+function isPool(stage: StageRef): boolean {
+  return isReseed(stage) && Boolean(stage.auto);
+}
+
 function stageTab(stage: StageRef, kind: TabKind, label = stage.title || stage.code): GameTab {
   return {
     key: `stage:${stage.code}`,
@@ -175,7 +181,7 @@ function brainTabs(stages: StageRef[], seeded: boolean, statsLabel: string): Gam
   for (const block of blocks(stages)) {
     const codes = block.stages.map((stage) => stage.code);
     const label = blockLabel(block.stages);
-    const ranks = block.stages.some((stage) => stage.kind === "rr");
+    const ranks = block.stages.some((stage) => stage.kind === "rr" || stage.kind === "swiss");
     if (ranks) {
       tabs.push({key: `block:${block.code}`, label, kind: "block", stages: codes, legacy: table});
       table = undefined;
@@ -185,7 +191,7 @@ function brainTabs(stages: StageRef[], seeded: boolean, statsLabel: string): Gam
     tabs.push({key: `protocol:${block.code}`, label: S.screen.tabs.protocol(label), kind: "protocol", stages: codes, legacy: protocol});
     protocol = undefined;
   }
-  const reseeds = stages.filter(isReseed).map((stage) => stage.code);
+  const reseeds = stages.filter((stage) => isReseed(stage) && !isPool(stage)).map((stage) => stage.code);
   if (reseeds.length) tabs.push({key: "reseed", label: S.screen.tabs.reseed(), kind: "reseed", stages: reseeds});
   tabs.push(...fixedTabs(["stats", statsLabel], ["roster", S.screen.tabs.roster()], ...when(seeded, ["seed", S.screen.tabs.seed()])));
   return tabs;
@@ -225,6 +231,7 @@ function shortStageTitle(stage: StageRef): string {
 function blocks(stages: StageRef[]): Array<{code: string; stages: StageRef[]}> {
   const out: Array<{code: string; stages: StageRef[]}> = [];
   for (const stage of stages) {
+    if (isPool(stage)) continue;
     const code = stage.grain?.block || "";
     const last = out[out.length - 1];
     if (isReseed(stage)) out.push({code: "", stages: []});

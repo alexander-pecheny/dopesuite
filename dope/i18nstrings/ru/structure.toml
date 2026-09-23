@@ -126,6 +126,27 @@ too_many_tables = 'placement: {{.tables}} столов не рассадить �
 # A rounds value below one.
 block_rounds_min = "rounds: хотя бы один раунд"
 
+[swiss]
+# The swiss block: rounds that pair troikas with the same record of wins and
+# losses, until each has won `wins` times (it goes on) or lost `losses` times
+# (it is out). The block's own table, ranked by that record.
+table = "Швейцарка"
+# A бой's title: its number in the round and the record its seats share,
+# wins before losses («Бой 2 (1–0)»).
+bout = 'Бой {{.n}} ({{.wins}}–{{.losses}})'
+# The title of a pool: the troikas that share one record in a round, ranked
+# by their seed before they are dealt into бои.
+pool = 'Пул {{.wins}}–{{.losses}}'
+# The label of a seat dealt from a pool while it is still empty.
+pool_rank = 'Пул {{.wins}}–{{.losses}}, {{.n}}-й'
+# A participants value the block has no plan for; the plans come from the
+# regulations the format was built for.
+participants_unsupported = 'swiss: нет плана на {{.participants}} участников (есть {{.known}})'
+# wins or losses other than the plan's.
+plan_mismatch = 'swiss: план на {{.participants}} участников играется до {{.wins}} побед и {{.losses}} поражений'
+# The block was not seeded from a ranked table: its first round pairs ranks.
+needs_ranking = "swiss: блок рассаживает по местам предыдущего блока — поставьте перед ним блок с таблицей"
+
 [macro]
 # Helpers every kind shares: seating labels and the sorting complaint.
 # The label of a seat fed from a bout: "<bout label>, м. <place>".

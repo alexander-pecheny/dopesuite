@@ -45,3 +45,29 @@ first = "Взял первым"
 repeat = "Повторил"
 repeat_rate = "Удачные повторы"
 points = "Очки"
+
+[shootout]
+# The button in a бой's head that adds a перестрелка тема while the sides are
+# level (регламент: one тема, then темы until the first right answer).
+add = "Перестрелка"
+# The head of the n-th перестрелка тема.
+head = 'Перестрелка {{.n}}'
+# The × on the last перестрелка тема while nothing is entered in it.
+drop = "Убрать тему перестрелки"
+
+[written]
+# The written отбор's sheet: the columns after Σ. «3» and «2» count the
+# вопросы a troika answered three and two times right, the отбор's tiebreak.
+threes = "3"
+threes_hint = "Вопросов с тремя правильными ответами"
+twos = "2"
+twos_hint = "Вопросов с двумя правильными ответами"
+place = "Место"
+
+[swiss]
+# The Swiss Block's table: its column heads. «Отбор» is the place a troika
+# took in the written отбор, the seed that settles a tie in record.
+place = "М"
+wins = "Победы"
+losses = "Поражения"
+seed = "Отбор"

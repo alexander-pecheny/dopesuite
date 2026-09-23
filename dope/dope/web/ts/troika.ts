@@ -1,5 +1,6 @@
-// The Troika page (ADR-0001): a bracket of head-to-head bouts between threes.
-// The protocols tab draws each bout as two blocks of three chair rows across
+// The Troika page (ADR-0001): a bracket of bouts between threes, two or three
+// to a bout, opened by a written qualifier of every troika at once.
+// The protocols tab draws each bout as a block of three chair rows per side across
 // themes of three questions, with a seating column before every theme a side
 // turned round at; the group tabs are crosstable.ts's table with the
 // regulations' rating ball in front of the canon columns. Edits go per
@@ -9,7 +10,7 @@
 import {cssEscape, option, sameArray, td, th} from "./cells.js";
 import type {CellContent} from "./cells.js";
 import {icon} from "./icons_gen.js";
-import {festLetters} from "./standings.js";
+import {festLetters, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
 import {buildRosterView} from "./fest-roster.js";
 import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
@@ -105,9 +106,10 @@ const shell = mountGamePage({
   chrome: () => ({festTitle: fest?.title || "", gameTitle: fest?.gameName || scheme.title || S.troika.title()}),
   cursorKinds: {
     answer: {selector: ".troika-cell", keys: ["match", "side", "theme", "q", "chair"]},
+    count: {selector: ".troika-count", keys: ["match", "side", "theme", "q"]},
     finish: {selector: ".finish-toggle", keys: ["match"]},
   },
-  activeCursorElement: () => cursor.activeCell,
+  activeCursorElement: () => cursor.activeCell || writtenCursor.activeCell,
 });
 const {viewer, staticMode, scopeGameID, indicator, viewerCounter} = shell;
 // Long team names fade at their column and carry a popover, in the group
@@ -174,7 +176,7 @@ function adoptMatchView(view: TroikaMatchView | null | undefined): boolean {
   if (cached && Number(view.seq || 0) < Number(cached.seq || 0)) return false;
   view = writer.overlay(matchScope(code), view) as TroikaMatchView;
   matches.set(code, view);
-  states.set(code, troika.parseState(view.state));
+  states.set(code, troika.parseState(view.state, view.participants?.length || 2));
   return true;
 }
 
@@ -295,14 +297,10 @@ function boutRoster(view: TroikaMatchView, side: number): Array<{id: number; nam
 // where a side turned round.
 function buildBout(bout: BoutEntry): HTMLElement {
   const state = stateOf(bout.code);
+  if (state.written) return buildWrittenBout(bout);
   const box = document.createElement("section");
   box.className = "troika-bout";
-
-  const head = document.createElement("h3");
-  head.className = "troika-bout-head";
-  const letter = boutLetters.get(bout.code);
-  head.textContent = [letter, bout.planned.title || bout.view.title || bout.code].filter(Boolean).join(". ");
-  box.appendChild(head);
+  box.appendChild(boutHead(bout));
 
   const table = document.createElement("table");
   table.className = "match-table troika-sheet";
@@ -318,7 +316,8 @@ function buildBout(bout: BoutEntry): HTMLElement {
     // against the theme it seats.
     if (t > 0) themeRow.appendChild(th("", "gap-head"));
     if (seatsAt.has(t)) themeRow.appendChild(th(S.troika.protocol.seating(), "player-cell"));
-    themeRow.appendChild(th(themeHead(bout, t, value, seatsAt.has(t)), "theme-block",
+    themeRow.appendChild(th(themeHead(bout, t, value, seatsAt.has(t)),
+      troika.isShootoutTheme(state, t) ? "theme-block troika-shootout-head" : "theme-block",
       {colSpan: troika.THEME_QUESTIONS}));
   });
   themeRow.appendChild(th("Σ", "troika-total"));
@@ -327,7 +326,8 @@ function buildBout(bout: BoutEntry): HTMLElement {
   table.appendChild(thead);
 
   const body = document.createElement("tbody");
-  for (let side = 0; side < 2; side++) {
+  const sides = state.sides.length;
+  for (let side = 0; side < sides; side++) {
     const roster = boutRoster(bout.view, side);
     for (let chair = 0; chair < troika.CHAIRS; chair++) {
       const tr = document.createElement("tr");
@@ -344,7 +344,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
       }
       body.appendChild(tr);
     }
-    if (side === 0) {
+    if (side < sides - 1) {
       const spacer = document.createElement("tr");
       spacer.className = "troika-side-gap";
       body.appendChild(spacer);
@@ -353,6 +353,71 @@ function buildBout(bout: BoutEntry): HTMLElement {
   table.appendChild(body);
   box.appendChild(table);
   return box;
+}
+
+// boutHead names the bout by its letter and title. On a host's open bout whose
+// sides are level it carries the shootout button: one more theme worth 1,
+// and then another until somebody answers first (regulations IV.2.4).
+function boutHead(bout: BoutEntry): HTMLElement {
+  const head = document.createElement("h3");
+  head.className = "troika-bout-head u-row u-gap-sm u-align-center";
+  const letter = boutLetters.get(bout.code);
+  const title = document.createElement("span");
+  title.textContent = [letter, bout.planned.title || bout.view.title || bout.code].filter(Boolean).join(". ");
+  head.appendChild(title);
+  const state = stateOf(bout.code);
+  if (!viewer && !bout.view.finished && !state.written && troika.started(state) && troika.level(state)) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn btn-xs";
+    button.replaceChildren(icon("plus"), document.createTextNode(S.troika.shootout.add()));
+    button.addEventListener("click", () => addShootoutTheme(bout));
+    head.appendChild(button);
+  }
+  return head;
+}
+
+// addShootoutTheme appends a shootout theme to every side, seated as each
+// side sat for the last theme.
+function addShootoutTheme(bout: BoutEntry): void {
+  const state = stateOf(bout.code);
+  state.values.push(troika.SHOOTOUT_VALUE);
+  state.shootout++;
+  for (const side of state.sides) {
+    const last = side.themes[side.themes.length - 1];
+    side.themes.push({
+      order: last ? last.order.slice() : new Array(troika.CHAIRS).fill(0),
+      answers: Array.from({length: troika.THEME_QUESTIONS}, () => new Array<Mark>(troika.CHAIRS).fill("")),
+    });
+  }
+  saveThemes(bout.code, state);
+}
+
+// dropShootoutTheme takes the last shootout theme back off, which the head
+// offers only while nothing is entered in it.
+function dropShootoutTheme(bout: BoutEntry): void {
+  const state = stateOf(bout.code);
+  if (state.shootout <= 0) return;
+  state.values.pop();
+  state.shootout--;
+  for (const side of state.sides) side.themes.pop();
+  saveThemes(bout.code, state);
+}
+
+// saveThemes writes a change to the bout's shape: the values, the count of
+// shootout themes and every side's themes, each whole.
+function saveThemes(code: string, state: TroikaState): void {
+  patch(code, ["values"], state.values.slice());
+  patch(code, ["shootout"], state.shootout);
+  state.sides.forEach((side, s) => patch(code, ["sides", s, "themes"], side.themes.map((theme) => ({
+    order: theme.order.slice(),
+    answers: theme.answers.map((row) => row.slice()),
+  }))));
+  render();
+}
+
+function shootoutThemeEmpty(state: TroikaState, t: number): boolean {
+  return state.sides.every((side) => (side.themes[t]?.answers || []).every((row) => row.every((mark) => mark === "")));
 }
 
 // The finished tick: a finished bout's sheet is read-only until the host
@@ -394,6 +459,21 @@ function seatColumns(bout: BoutEntry): Set<number> {
 // the same spot is the × that undoes the change. No quiet toggling — a column
 // is exactly where the seating changes, and removing one is an edit.
 function themeHead(bout: BoutEntry, t: number, value: number, has: boolean): CellContent {
+  const state = stateOf(bout.code);
+  if (troika.isShootoutTheme(state, t)) {
+    const number = t - (state.values.length - state.shootout) + 1;
+    const label = S.troika.shootout.head(String(number));
+    const last = t === state.values.length - 1;
+    if (viewer || bout.view.finished || !last || !shootoutThemeEmpty(state, t)) return label;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn btn-xs troika-seat-button";
+    button.title = S.troika.shootout.drop();
+    button.setAttribute("aria-label", button.title);
+    button.replaceChildren(icon("x"));
+    button.addEventListener("click", () => dropShootoutTheme(bout));
+    return [button, label];
+  }
   const label = S.troika.theme.head(String(t + 1), String(value));
   if (viewer || bout.view.finished || t === 0) return label;
   const button = document.createElement("button");
@@ -428,7 +508,7 @@ function orderAt(state: TroikaState, side: number, t: number): number[] {
 // change is left exactly as it was played.
 function deleteTurn(bout: BoutEntry, t: number): void {
   const state = stateOf(bout.code);
-  for (let side = 0; side < 2; side++) {
+  for (let side = 0; side < state.sides.length; side++) {
     const prev = orderAt(state, side, t - 1);
     const cur = orderAt(state, side, t);
     if (sameArray(prev, cur)) continue;
@@ -495,13 +575,13 @@ function paintMark(cell: HTMLElement, mark: Mark): void {
 function sheetBouts(): BoutEntry[] {
   const tab = tabs().find((entry) => entry.key === activeTab);
   if (!tab || tab.kind !== "protocol") return [];
-  return tabStages(tab).flatMap(stageBouts);
+  return tabStages(tab).flatMap(stageBouts).filter((bout) => !stateOf(bout.code).written);
 }
 
 function sheetRows(): Array<{code: string; side: number; chair: number}> {
   const rows: Array<{code: string; side: number; chair: number}> = [];
   for (const bout of sheetBouts()) {
-    for (let side = 0; side < 2; side++) {
+    for (let side = 0; side < stateOf(bout.code).sides.length; side++) {
       for (let chair = 0; chair < troika.CHAIRS; chair++) rows.push({code: bout.code, side, chair});
     }
   }
@@ -513,7 +593,7 @@ const cursor = createSheetCursor({
   cellSelector: ".troika-cell",
   values: "marks",
   readonly: () => viewer,
-  active: () => tabs().find((tab) => tab.key === activeTab)?.kind === "protocol",
+  active: () => sheetBouts().length > 0,
   rows: () => sheetRows().length,
   cols: (row: number) => {
     const at = sheetRows()[row];
@@ -569,9 +649,158 @@ function applyMarks(edits: CellEdit[]): void {
 // edit does not move the cursor out from under the host.
 function refreshTotals(code: string): void {
   const state = stateOf(code);
-  for (let side = 0; side < 2; side++) {
+  for (let side = 0; side < state.sides.length; side++) {
     const node = root.querySelector<HTMLElement>(`[data-total="${cssEscape(`${code}-${side}`)}"]`);
     if (node) node.textContent = String(troika.sideTotal(state, side));
+  }
+}
+
+// === the written qualifier ===
+
+// The written bout is the qualifier: every troika at once, on paper. A row per
+// troika, a column per question under its theme, and in each cell how many of
+// the troika's three answers were right. Σ pays each of them at the theme's
+// value; «3» and «2» count the questions answered three and two times right,
+// which is what separates troikas level on Σ (regulations IV.2.3). The place is
+// the Block's own, lot and all, as the server ranked it.
+function buildWrittenBout(bout: BoutEntry): HTMLElement {
+  const state = stateOf(bout.code);
+  const box = document.createElement("section");
+  box.className = "troika-bout";
+  box.appendChild(boutHead(bout));
+
+  const table = document.createElement("table");
+  table.className = "match-table troika-sheet troika-written-sheet";
+  table.classList.toggle("match-finished", Boolean(bout.view.finished));
+  const thead = document.createElement("thead");
+  const themeRow = document.createElement("tr");
+  themeRow.appendChild(th(S.troika.protocol.team(), "troika-team-head"));
+  state.values.forEach((value, t) => {
+    if (t > 0) themeRow.appendChild(th("", "gap-head"));
+    themeRow.appendChild(th(S.troika.theme.head(String(t + 1), String(value)), "theme-block",
+      {colSpan: troika.THEME_QUESTIONS}));
+  });
+  themeRow.appendChild(th("Σ", "troika-total"));
+  themeRow.appendChild(th(S.troika.written.threes(), "troika-total", {title: S.troika.written.threesHint()}));
+  themeRow.appendChild(th(S.troika.written.twos(), "troika-total", {title: S.troika.written.twosHint()}));
+  themeRow.appendChild(th(S.troika.written.place(), "troika-total"));
+  themeRow.appendChild(th(finishToggle(bout), "troika-finish-head"));
+  thead.appendChild(themeRow);
+  table.appendChild(thead);
+
+  const ranks = new Map<number, number>();
+  for (const entry of festStages.get(bout.stage.code || "")?.standings || []) {
+    if (entry.participantID && entry.rank) ranks.set(Number(entry.participantID), Number(entry.rank));
+  }
+  const body = document.createElement("tbody");
+  state.sides.forEach((_side, side) => {
+    const tr = document.createElement("tr");
+    tr.appendChild(td(seatName(bout.view, side), "troika-team"));
+    state.values.forEach((_value, t) => {
+      if (t > 0) tr.appendChild(td("", "gap"));
+      for (let q = 0; q < troika.THEME_QUESTIONS; q++) {
+        const count = troika.countAt(state, side, t, q);
+        tr.appendChild(td(count ? String(count) : "", "troika-count answer-cell",
+          {dataset: {match: bout.code, side, theme: t, q}}));
+      }
+    });
+    const totals = writtenTotals(state, side);
+    tr.appendChild(td(String(totals.total), "number troika-total", {dataset: {total: `${bout.code}-${side}`}}));
+    tr.appendChild(td(String(totals.threes), "number troika-total", {dataset: {threes: `${bout.code}-${side}`}}));
+    tr.appendChild(td(String(totals.twos), "number troika-total", {dataset: {twos: `${bout.code}-${side}`}}));
+    const id = Number(bout.view.participants?.[side]?.id || 0);
+    tr.appendChild(td(ranks.has(id) ? String(ranks.get(id)) : "", "number troika-total"));
+    tr.appendChild(td("", "troika-finish-gap"));
+    body.appendChild(tr);
+  });
+  table.appendChild(body);
+  box.appendChild(table);
+  return box;
+}
+
+function writtenTotals(state: TroikaState, side: number): {total: number; threes: number; twos: number} {
+  let threes = 0;
+  let twos = 0;
+  for (const row of state.sides[side]?.counts || []) {
+    for (const count of row) {
+      if (count === 3) threes++;
+      if (count === 2) twos++;
+    }
+  }
+  return {total: troika.sideTotal(state, side), threes, twos};
+}
+
+function writtenBout(): BoutEntry | null {
+  const tab = tabs().find((entry) => entry.key === activeTab);
+  if (!tab || tab.kind !== "protocol") return null;
+  return tabStages(tab).flatMap(stageBouts).find((bout) => stateOf(bout.code).written) || null;
+}
+
+const writtenCursor = createSheetCursor({
+  root,
+  cellSelector: ".troika-count",
+  values: "text",
+  readonly: () => viewer || Boolean(writtenBout()?.view.finished),
+  active: () => writtenBout() !== null,
+  rows: () => {
+    const bout = writtenBout();
+    return bout ? stateOf(bout.code).sides.length : 0;
+  },
+  cols: () => {
+    const bout = writtenBout();
+    return bout ? stateOf(bout.code).values.length * troika.THEME_QUESTIONS : 0;
+  },
+  coordOf: (cell) => {
+    const node = cell as HTMLElement;
+    const side = Number(node.dataset.side);
+    const theme = Number(node.dataset.theme);
+    const q = Number(node.dataset.q);
+    if (!Number.isInteger(side) || !Number.isInteger(theme) || !Number.isInteger(q)) return null;
+    return {row: side, col: theme * troika.THEME_QUESTIONS + q};
+  },
+  cellAt: (coord: CellCoord) => {
+    const bout = writtenBout();
+    if (!bout) return null;
+    const theme = Math.floor(coord.col / troika.THEME_QUESTIONS);
+    const q = coord.col % troika.THEME_QUESTIONS;
+    return root.querySelector<HTMLElement>(
+      `.troika-count[data-match="${cssEscape(bout.code)}"][data-side="${cssEscape(String(coord.row))}"]` +
+      `[data-theme="${cssEscape(String(theme))}"][data-q="${cssEscape(String(q))}"]`);
+  },
+  // A click steps 0 → 1 → 2 → 3 → 0; a digit is typed straight in.
+  cycle: (cell: Element) => String(((Number(cell.textContent || 0) || 0) + 1) % (troika.CHAIRS + 1)),
+  applyValues: applyCounts,
+});
+
+function applyCounts(edits: CellEdit[]): void {
+  const touched = new Set<string>();
+  for (const edit of edits) {
+    const cell = edit.cell as HTMLElement;
+    const code = cell.dataset.match || "";
+    const side = Number(cell.dataset.side);
+    const theme = Number(cell.dataset.theme);
+    const q = Number(cell.dataset.q);
+    const state = states.get(code);
+    if (!state || matches.get(code)?.finished) continue;
+    const text = String(edit.value ?? "").trim();
+    const count = text === "" ? 0 : Number(text);
+    if (!Number.isInteger(count) || count < 0 || count > troika.CHAIRS) continue;
+    const row = state.sides[side]?.counts[theme];
+    if (!row || row[q] === count) continue;
+    row[q] = count;
+    cell.textContent = count ? String(count) : "";
+    patch(code, ["sides", side, "counts", theme, q], count);
+    touched.add(code);
+  }
+  for (const code of touched) {
+    const state = stateOf(code);
+    state.sides.forEach((_side, side) => {
+      const totals = writtenTotals(state, side);
+      for (const [key, value] of Object.entries(totals)) {
+        const node = root.querySelector<HTMLElement>(`[data-${key}="${cssEscape(`${code}-${side}`)}"]`);
+        if (node) node.textContent = String(value);
+      }
+    });
   }
 }
 
@@ -602,6 +831,8 @@ function buildProtocols(stages: SchemeStage[]): HTMLElement {
 // comparator, taken and the difference — so its table shows the ball in front of the
 // canon columns the crosstable already draws.
 function buildGroups(stages: SchemeStage[]): HTMLElement {
+  const swiss = stages.filter((stage) => stageKind(stage) === "swiss");
+  if (swiss.length) return buildSwissTables(swiss);
   return buildCrosstables({
     className: "troika-groups",
     columns: [{label: S.troika.groups.rating(), metric: "rating"}, ...CANON_COLUMNS],
@@ -628,13 +859,48 @@ function buildGroups(stages: SchemeStage[]): HTMLElement {
   });
 }
 
+// A Swiss Block's table: who went on (the wins reached) and who is out (the
+// losses reached), by record, then by the seed the qualifier gave them — the
+// order the play-off seats by.
+function buildSwissTables(stages: SchemeStage[]): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "troika-protocol";
+  for (const stage of stages) {
+    const entries = festStages.get(stage.code || "")?.standings || [];
+    const head = document.createElement("h2");
+    head.className = "troika-stage-head";
+    head.textContent = stage.title || stage.code || "";
+    wrap.appendChild(head);
+    const number = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? String(value) : "");
+    wrap.appendChild(standingsTable({
+      columns: [
+        {label: S.troika.swiss.place(), kind: "place"},
+        {label: S.troika.protocol.team(), kind: "name"},
+        {label: S.troika.swiss.wins(), kind: "num"},
+        {label: S.troika.swiss.losses(), kind: "num"},
+        {label: S.troika.swiss.seed(), kind: "num"},
+      ],
+      rows: entries.map((entry) => [
+        number(entry.rank),
+        entry.name || "",
+        number(entry.metrics?.wins),
+        number(entry.metrics?.losses),
+        number(entry.metrics?.seed),
+      ]),
+    }));
+  }
+  return wrap;
+}
+
 function buildStats(): HTMLElement {
   const bouts: TroikaBout[] = [];
   for (const stage of protocolStages()) {
     for (const entry of stageBouts(stage)) {
+      const state = stateOf(entry.code);
+      if (state.written) continue;
       bouts.push({
-        state: stateOf(entry.code),
-        sides: [0, 1].map((side) => ({
+        state,
+        sides: state.sides.map((_, side) => ({
           team: seatName(entry.view, side),
           players: new Map(boutRoster(entry.view, side).map((player) => [player.id, player.name])),
         })),
@@ -687,8 +953,10 @@ function render(): void {
   root.classList.toggle("grid-host", Boolean(node.querySelector(".fest-grid")) || node.matches(".fest-grid"));
   scheduleNameOverflow();
   cursor.refresh();
+  writtenCursor.refresh();
 }
 
 cursor.bind();
+writtenCursor.bind();
 live.connect();
 fetchMatches().catch(() => indicator.fail());

@@ -71,6 +71,10 @@ type Block interface {
 
 	Emit(s Stage) ([]string, error)
 	EmitReseed(code string, at At, contenders []store.SchemeSlot, bands []int, sources []string) (string, error)
+	// EmitPool is a reseed the resolver calculates on its own: it ranks its
+	// contenders by seed alone — the ranks of the seedFrom stage, else the
+	// Game's seed — the moment the bouts they come from are finished.
+	EmitPool(code, title string, at At, contenders []store.SchemeSlot, seedFrom string) (string, error)
 }
 
 // Stage is one stage a Kind emits: a scheduled one (Kind rr or flat, its typed
@@ -88,8 +92,11 @@ type Stage struct {
 	// than its own Matches — Hamsa's group stage ranks both its Games
 	// together, so its table holds no Matches and names them instead.
 	Sources []string
-	Waves   bool
-	Lanes   Lanes
+	// SeedFrom names the stage whose ranks stand for the seed when this
+	// stage ranks — a Swiss Block's entry order.
+	SeedFrom string
+	Waves    bool
+	Lanes    Lanes
 }
 
 // At is where a stage sits in its Block: which Round its Matches play (0 for a

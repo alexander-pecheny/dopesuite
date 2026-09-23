@@ -103,3 +103,50 @@ Deno.test("turnedAt is where either side sits differently from the тема befo
   troika.swapFrom(state, 1, 1, [5, 4, 6]);
   assertEquals([0, 1, 2].map((t) => troika.turnedAt(state, t)), [false, true, true]);
 });
+
+Deno.test("a бой of three ranks all three and shares a tie's mean place", () => {
+  const one = {themes: [theme([1, 2, 3], ["right", "", ""], none, none)]};
+  const two = {themes: [theme([4, 5, 6], ["right", "right", ""], none, none)]};
+  const state = troika.parseState({values: [1], sides: [one, two, structuredClone(one)]}, 3);
+  assertEquals(state.sides.length, 3);
+  assertEquals(troika.places(state), [2.5, 1, 2.5]);
+  assertEquals(troika.level(state), true);
+});
+
+Deno.test("parseState pads to the seats the бой has", () => {
+  const state = troika.parseState({values: [1]}, 3);
+  assertEquals(state.sides.length, 3);
+  assertEquals(state.sides[2].themes[0].answers, [none, none, none]);
+});
+
+Deno.test("a перестрелка тема counts and is told apart from the бой's own", () => {
+  const side = (mark) => ({themes: [
+    theme([1, 2, 3], ["right", "", ""], none, none),
+    theme([1, 2, 3], [mark, "", ""], none, none),
+  ]});
+  const state = troika.parseState({values: [1, 1], shootout: 1, sides: [side("right"), side("")]});
+  assertEquals(troika.isShootoutTheme(state, 0), false);
+  assertEquals(troika.isShootoutTheme(state, 1), true);
+  assertEquals(troika.places(state), [1, 2]);
+  assertEquals(troika.level(state), false);
+});
+
+Deno.test("a pinned place wins over the sheet", () => {
+  const one = {themes: [theme([1, 2, 3], ["right", "", ""], none, none)]};
+  const state = troika.parseState({values: [1], sides: [one, structuredClone(one)], pin: [2, 1]});
+  assertEquals(troika.places(state), [2, 1]);
+});
+
+Deno.test("a written бой counts right answers per вопрос at the тема's value", () => {
+  const state = troika.parseState({
+    values: [1, 3], written: true,
+    sides: [{counts: [[3, 2, 0], [0, 0, 1]]}, {counts: [[1, 1, 1], [9, -1, "x"]]}],
+  }, 2);
+  assertEquals(state.written, true);
+  assertEquals(state.sides[0].themes, []);
+  // A count is 0..3: nine is three, the rest nothing.
+  assertEquals(state.sides[1].counts[1], [3, 0, 0]);
+  assertEquals(troika.sideTotal(state, 0), 5 + 3);
+  assertEquals(troika.sideTotal(state, 1), 3 + 9);
+  assertEquals(troika.started(state), true);
+});

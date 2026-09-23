@@ -1,12 +1,14 @@
 package schemedsl
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
 	"dope/dope/domain/structure"
+	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 )
@@ -183,6 +185,9 @@ func (b *blockHandle) Emit(s structure.Stage) ([]string, error) {
 		return b.c.appendSEBlockRound(b.blk, s.Code, s.Title, s.BlockRounds, s.Lanes.Restricted, where, s.Matches), nil
 	}
 	b.c.appendDrawnStage(s.Kind, s.Config, b.blk, s.Code, s.Title, s.BlockRounds, where, s.Matches, s.Sources...)
+	if s.SeedFrom != "" {
+		b.c.scheme.Stages[len(b.c.scheme.Stages)-1].SeedFrom = s.SeedFrom
+	}
 	return []string{s.Code}, nil
 }
 
@@ -191,6 +196,26 @@ func (b *blockHandle) EmitReseed(code string, where structure.At, contenders []s
 		return "", fmt.Errorf("reseed %s outside block %s", code, b.Code())
 	}
 	return b.c.reseedStageBanded(code, b.at(where), b.blk, sources, contenders, bands)
+}
+
+func (b *blockHandle) EmitPool(code, title string, where structure.At, contenders []store.SchemeSlot, seedFrom string) (string, error) {
+	if !strings.HasPrefix(code, b.Code()+"-") {
+		return "", fmt.Errorf("pool %s outside block %s", code, b.Code())
+	}
+	b.c.position++
+	b.c.scheme.Stages = append(b.c.scheme.Stages, store.SchemeStage{
+		Code:      code,
+		Title:     title,
+		StageType: "reseed",
+		Kind:      "reseed",
+		Position:  b.c.position,
+		Grain:     b.at(where).grain(),
+		Teams:     contenders,
+		Sort:      json.RawMessage(util.MustJSON([]store.SortRule{{Metric: "seed", Dir: "asc"}})),
+		Auto:      true,
+		SeedFrom:  seedFrom,
+	})
+	return code, nil
 }
 
 func (b *blockHandle) at(where structure.At) at {

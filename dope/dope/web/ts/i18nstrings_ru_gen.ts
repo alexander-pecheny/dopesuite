@@ -1454,6 +1454,15 @@ shootout: true
       templateGroups: () => "нет шаблона рассадки из этих групп — добавьте reseed: true",
       templateSize: (size: string) => `нет шаблона рассадки в бои по ${size} из предыдущего блока — добавьте reseed: true`,
     },
+    swiss: {
+      bout: (n: string, wins: string, losses: string) => `Бой ${n} (${wins}–${losses})`,
+      needsRanking: () => "swiss: блок рассаживает по местам предыдущего блока — поставьте перед ним блок с таблицей",
+      participantsUnsupported: (participants: string, known: string) => `swiss: нет плана на ${participants} участников (есть ${known})`,
+      planMismatch: (participants: string, wins: string, losses: string) => `swiss: план на ${participants} участников играется до ${wins} побед и ${losses} поражений`,
+      pool: (wins: string, losses: string) => `Пул ${wins}–${losses}`,
+      poolRank: (wins: string, losses: string, n: string) => `Пул ${wins}–${losses}, ${n}-й`,
+      table: () => "Швейцарка",
+    },
     titles: {
       blockRound: (n: string) => `Раунд ${n}`,
       bout: (n: string) => `Бой ${n}`,
@@ -1486,6 +1495,11 @@ shootout: true
       seating: () => "Рассадка",
       team: () => "Команда",
     },
+    shootout: {
+      add: () => "Перестрелка",
+      drop: () => "Убрать тему перестрелки",
+      head: (n: string) => `Перестрелка ${n}`,
+    },
     stats: {
       bouts: () => "Бои",
       first: () => "Взял первым",
@@ -1494,6 +1508,12 @@ shootout: true
       repeat: () => "Повторил",
       repeatRate: () => "Удачные повторы",
       team: () => "Команда",
+    },
+    swiss: {
+      losses: () => "Поражения",
+      place: () => "М",
+      seed: () => "Отбор",
+      wins: () => "Победы",
     },
     team: {
       fallback: (n: string) => `Команда ${n}`,
@@ -1504,6 +1524,13 @@ shootout: true
       unseat: (n: string) => `Убрать смену рассадки перед темой ${n}`,
     },
     title: () => "Тройка",
+    written: {
+      place: () => "Место",
+      threes: () => "3",
+      threesHint: () => "Вопросов с тремя правильными ответами",
+      twos: () => "2",
+      twosHint: () => "Вопросов с двумя правильными ответами",
+    },
   },
   ui: {
     crumbs: {

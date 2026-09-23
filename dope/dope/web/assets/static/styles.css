@@ -4946,6 +4946,24 @@ body.is-fullscreen.od-page .match-main {
   font-variant-numeric: tabular-nums;
 }
 
+/* A перестрелка тема is played only to break a tie, so its head reads apart
+   from the бой's own темы. */
+.troika-sheet th.troika-shootout-head {
+  font-style: italic;
+  color: var(--muted);
+}
+
+/* The written отбор's cells hold a count of right answers, 0 to 3: the
+   answer-cell skin, a number in it, the way a Мультиигры cell is drawn. */
+.troika-written-sheet .troika-count {
+  width: var(--question-col);
+  min-width: var(--question-col);
+  text-align: center;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
 /* The бои of the two sides are one table, so a blank row parts them. */
 .troika-sheet .troika-side-gap td,
 .troika-sheet .troika-side-gap th {

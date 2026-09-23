@@ -33,3 +33,35 @@ func TestFlatSharesRankOnlyOnEqualKeys(t *testing.T) {
 		t.Fatalf("plain flat: place %v rank %d, want 1.5 and a shared rank 1", plain[0].Metrics["place"], plain[1].Rank)
 	}
 }
+
+// Тройка's отбор breaks a tie on Σ by the questions answered three times
+// right, then twice, then by a coin (регламент IV.2.3). The coin is the game's
+// lot: only the seats still level draw one, the same one every time.
+func TestFlatDrawsALotOnlyForTheLevel(t *testing.T) {
+	cfg := mustJSON(t, FlatConfig{Order: []string{"total", "threes", "twos", "draw"}})
+	results := []MatchOutcome{{Code: "s1-m1", Finished: true, Slots: []SlotOutcome{
+		{Participant: 1, Place: 2, Metrics: map[string]float64{"total": 30, "threes": 2, "twos": 1}},
+		{Participant: 2, Place: 2, Metrics: map[string]float64{"total": 30, "threes": 2, "twos": 1}},
+		{Participant: 3, Place: 2, Metrics: map[string]float64{"total": 30, "threes": 3, "twos": 0}},
+		{Participant: 4, Place: 4, Metrics: map[string]float64{"total": 12, "threes": 0, "twos": 0}},
+	}}}
+	first, err := flat{}.Standings(cfg, results, Inputs{Seed: "bug-major"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first[0].Participant != 3 || first[3].Participant != 4 {
+		t.Fatalf("order = %d … %d, want 3 first on the threes and 4 last", first[0].Participant, first[3].Participant)
+	}
+	ranks := []int{first[0].Rank, first[1].Rank, first[2].Rank, first[3].Rank}
+	if ranks[0] != 1 || ranks[1] != 2 || ranks[2] != 3 || ranks[3] != 4 {
+		t.Fatalf("ranks = %v, want distinct 1..4", ranks)
+	}
+	if first[0].Metrics["draw"] != 0 || first[3].Metrics["draw"] != 0 || first[1].Metrics["draw"] == 0 {
+		t.Fatalf("lots = %v %v %v %v, want one only for the two level seats",
+			first[0].Metrics["draw"], first[1].Metrics["draw"], first[2].Metrics["draw"], first[3].Metrics["draw"])
+	}
+	again, _ := flat{}.Standings(cfg, results, Inputs{Seed: "bug-major"})
+	if again[1].Participant != first[1].Participant {
+		t.Fatal("the coin fell differently on a recompute")
+	}
+}
