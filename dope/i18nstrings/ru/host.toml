@@ -4,6 +4,8 @@
 # profile and public viewer pages ([pages]).
 
 [games]
+# A troika in the new game's entrant picker, set apart from the teams.
+entrant_troika = '{{.name}} · тройка'
 # The create-game form (hostGameCreateDoc) and the game settings page
 # (hostGameSettingsDoc), plus the validation errors both render above the form.
 # Page title of the create-game page: "<fest title> · новая игра".
@@ -229,6 +231,47 @@ error_obj_player = "игрока"
 error_obj_team = "команду"
 error_obj_source_team = "исходную команду"
 
+[troikas]
+# The troikas page (hostTroikasDoc): troikas are teams put together for Тройка
+# out of the fest's players, not the rating roster's teams.
+# Page title and crumb: "<fest title> · тройки".
+title = '{{.title}} · тройки'
+crumb = "Тройки"
+# The note at the top of the page.
+hint = "Тройка — это 2–4 игрока, заявленные на Тройку. Команды из рейтинга здесь ни при чём: тройку можно собрать из игроков разных команд. В игре «Тройка» тройки выбираются участниками при её создании. Заменить игрока можно здесь в любой момент между боями — в следующей теме его можно будет посадить в кресло."
+# The table's column heads, and the edit dialog's name field.
+col_name = "Тройка"
+col_players = "Игроки"
+# The team a troika's places count for in the кубок: the one that has at least
+# two of its players.
+col_team = "За команду"
+# Empty state of the table.
+empty = "Троек пока нет."
+# The pencil button opening a troika's edit dialog.
+edit_label = "Изменить тройку"
+# The n-th player field of the edit dialog.
+player_n = 'Игрок {{.n}}'
+# The delete button's confirm.
+delete_confirm = 'Удалить тройку «{{.name}}»?'
+# The bulk form: its head, field, placeholder, hint and button.
+add_subhead = "Добавить тройки"
+lines_label = "По одной тройке в строке"
+lines_placeholder = "Бобры: Иван Петров, Анна Сидорова, Олег Кузнецов"
+lines_hint = "Название, двоеточие и игроки через запятую — сначала имя, потом фамилия, как в составах феста. В тройке от двух до четырёх игроков."
+add_submit = "Добавить"
+# The notices after a save.
+added_notice = 'Добавлено: {{plural .n "тройка" "тройки" "троек"}}.'
+saved_notice = "Тройка сохранена."
+deleted_notice = "Тройка удалена."
+# The errors a host reads. line_no_name names the pasted line with no name
+# before a colon.
+line_no_name = 'Строка {{.n}}: нужно название и двоеточие перед игроками.'
+name_missing = "У тройки нет названия."
+player_twice = 'В тройке «{{.team}}» дважды записан игрок {{.player}}.'
+roster_size = 'В тройке «{{.team}}» {{plural .n "игрок" "игрока" "игроков"}}, а нужно от двух до четырёх.'
+name_taken = 'Название «{{.name}}» уже занято — у троек и команд феста названия не должны совпадать.'
+delete_seated = "Эта тройка уже играет в игре, удалить её нельзя."
+
 [dash]
 # The fest dashboard (hostFestDashDoc): the fest-edit form, the games list, the
 # access section, the participants links and the delete section.
@@ -275,6 +318,8 @@ add_btn = "Добавить"
 roster_subhead = "Участники"
 roster_teams_link = "Команды"
 roster_players_link = "Игроки"
+# The dashboard link to the troikas page (hostTroikasDoc).
+roster_troikas_link = "Тройки"
 numbers_link = "Номера команд"
 # The team-numbers row's status note.
 numbers_status_unset = "не выставлены"

@@ -808,6 +808,14 @@ create index if not exists fest_team_flags_team_idx on fest_team_flags(team_id, 
 		}
 		return nil
 	}},
+	{Version: 29, Name: "participants.assembled", Up: func(db *sql.DB) error {
+		// v29: a Participant assembled for one format out of fest players — a
+		// troika — rather than drawn from the rating roster (CONTEXT.md,
+		// «Сборная»). Nothing to backfill: no fest has had one.
+		return store.AddColumnsIfMissing(db, "participants", []store.ColumnSpec{
+			{Name: "assembled", Type: "INTEGER NOT NULL DEFAULT 0"},
+		})
+	}},
 }
 
 func migrateDB(db *sql.DB) error { return schema.Apply(db, migrations) }

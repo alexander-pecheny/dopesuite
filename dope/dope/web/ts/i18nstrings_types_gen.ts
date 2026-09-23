@@ -505,6 +505,7 @@ export type Strings = {
       rosterPlayersLink: () => string;
       rosterSubhead: () => string;
       rosterTeamsLink: () => string;
+      rosterTroikasLink: () => string;
       saveSubmit: () => string;
       settingsBtn: () => string;
       slugLabel: () => string;
@@ -518,6 +519,7 @@ export type Strings = {
       createTitle: (title: string) => string;
       ekHint: () => string;
       ekJsonLabel: () => string;
+      entrantTroika: (name: string) => string;
       entrantsHint: () => string;
       entrantsSummary: () => string;
       errorEkSchemeMissing: () => string;
@@ -666,6 +668,32 @@ export type Strings = {
       teamsCrumb: () => string;
       teamsEmpty: () => string;
       teamsTitle: (title: string) => string;
+    };
+    troikas: {
+      addSubhead: () => string;
+      addSubmit: () => string;
+      addedNotice: (n: number) => string;
+      colName: () => string;
+      colPlayers: () => string;
+      colTeam: () => string;
+      crumb: () => string;
+      deleteConfirm: (name: string) => string;
+      deleteSeated: () => string;
+      deletedNotice: () => string;
+      editLabel: () => string;
+      empty: () => string;
+      hint: () => string;
+      lineNoName: (n: string) => string;
+      linesHint: () => string;
+      linesLabel: () => string;
+      linesPlaceholder: () => string;
+      nameMissing: () => string;
+      nameTaken: (name: string) => string;
+      playerN: (n: string) => string;
+      playerTwice: (team: string, player: string) => string;
+      rosterSize: (team: string, n: number) => string;
+      savedNotice: () => string;
+      title: (title: string) => string;
     };
   };
   imports: {

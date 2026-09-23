@@ -594,6 +594,7 @@ var RU = Strings{
 			RosterPlayersLink:    func() string { return "Игроки" },
 			RosterSubhead:        func() string { return "Участники" },
 			RosterTeamsLink:      func() string { return "Команды" },
+			RosterTroikasLink:    func() string { return "Тройки" },
 			SaveSubmit:           func() string { return "Сохранить" },
 			SettingsBtn:          func() string { return "Свойства" },
 			SlugLabel: func() string {
@@ -612,7 +613,8 @@ var RU = Strings{
 			EkHint: func() string {
 				return "Либо схемой, либо готовым JSON ниже — что заполнено, то и используется."
 			},
-			EkJsonLabel: func() string { return "JSON-схема" },
+			EkJsonLabel:   func() string { return "JSON-схема" },
+			EntrantTroika: func(name string) string { return fmt.Sprintf("%s · тройка", name) },
 			EntrantsHint: func() string {
 				return "Отметьте, кто играет в этой игре. Если никого не отметить, играют все. Номера эта игра раздаёт свои, начиная с единицы, поэтому одна и та же команда может быть второй в ЭК и четвёртой в брейне. Командная игра сажает за стол команды, личная — игроков: сначала идут команды, потом игроки."
 			},
@@ -813,6 +815,50 @@ var RU = Strings{
 			TeamsCrumb:         func() string { return "Команды" },
 			TeamsEmpty:         func() string { return "Команды пока не загружены." },
 			TeamsTitle:         func(title string) string { return fmt.Sprintf("%s · команды", title) },
+		},
+		Troikas: HostTroikasStrings{
+			AddSubhead: func() string { return "Добавить тройки" },
+			AddSubmit:  func() string { return "Добавить" },
+			AddedNotice: func(n int) string {
+				return fmt.Sprintf("Добавлено: %s.", core.Plural("ru", n, "тройка", "тройки", "троек"))
+			},
+			ColName:       func() string { return "Тройка" },
+			ColPlayers:    func() string { return "Игроки" },
+			ColTeam:       func() string { return "За команду" },
+			Crumb:         func() string { return "Тройки" },
+			DeleteConfirm: func(name string) string { return fmt.Sprintf("Удалить тройку «%s»?", name) },
+			DeleteSeated: func() string {
+				return "Эта тройка уже играет в игре, удалить её нельзя."
+			},
+			DeletedNotice: func() string { return "Тройка удалена." },
+			EditLabel:     func() string { return "Изменить тройку" },
+			Empty:         func() string { return "Троек пока нет." },
+			Hint: func() string {
+				return "Тройка — это 2–4 игрока, заявленные на Тройку. Команды из рейтинга здесь ни при чём: тройку можно собрать из игроков разных команд. В игре «Тройка» тройки выбираются участниками при её создании. Заменить игрока можно здесь в любой момент между боями — в следующей теме его можно будет посадить в кресло."
+			},
+			LineNoName: func(n string) string {
+				return fmt.Sprintf("Строка %s: нужно название и двоеточие перед игроками.", n)
+			},
+			LinesHint: func() string {
+				return "Название, двоеточие и игроки через запятую — сначала имя, потом фамилия, как в составах феста. В тройке от двух до четырёх игроков."
+			},
+			LinesLabel: func() string { return "По одной тройке в строке" },
+			LinesPlaceholder: func() string {
+				return "Бобры: Иван Петров, Анна Сидорова, Олег Кузнецов"
+			},
+			NameMissing: func() string { return "У тройки нет названия." },
+			NameTaken: func(name string) string {
+				return fmt.Sprintf("Название «%s» уже занято — у троек и команд феста названия не должны совпадать.", name)
+			},
+			PlayerN: func(n string) string { return fmt.Sprintf("Игрок %s", n) },
+			PlayerTwice: func(team string, player string) string {
+				return fmt.Sprintf("В тройке «%s» дважды записан игрок %s.", team, player)
+			},
+			RosterSize: func(team string, n int) string {
+				return fmt.Sprintf("В тройке «%s» %s, а нужно от двух до четырёх.", team, core.Plural("ru", n, "игрок", "игрока", "игроков"))
+			},
+			SavedNotice: func() string { return "Тройка сохранена." },
+			Title:       func(title string) string { return fmt.Sprintf("%s · тройки", title) },
 		},
 	},
 	Imports: ImportsStrings{

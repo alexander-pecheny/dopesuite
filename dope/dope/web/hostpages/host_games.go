@@ -525,16 +525,22 @@ func (s *Server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request
 // offers both rather than guessing before the type is chosen.
 func festEntrantOptions(ctx context.Context, db *sql.DB, festID int64) ([]gameEntrantOption, error) {
 	return store.CollectRows(ctx, db, `
-select id, name, coalesce(city, ''), roster from participants
-where fest_id = ? order by roster desc, coalesce(nullif(number, 0), 1 << 30), id`,
+select id, name, coalesce(city, ''), roster, assembled from participants
+where fest_id = ? order by roster desc, assembled, coalesce(nullif(number, 0), 1 << 30), name, id`,
 		[]any{festID}, func(rows *sql.Rows) (gameEntrantOption, error) {
 			var option gameEntrantOption
 			var city, roster string
-			if err := rows.Scan(&option.ID, &option.Label, &city, &roster); err != nil {
+			var assembled bool
+			if err := rows.Scan(&option.ID, &option.Label, &city, &roster, &assembled); err != nil {
 				return option, err
 			}
 			if city != "" {
 				option.Label += " (" + city + ")"
+			}
+			// A troika reads apart from the teams it is drawn from: the picker
+			// lists both, and a Тройка Game seats troikas.
+			if assembled {
+				option.Label = dopestrings.Default.Host.Games.EntrantTroika(option.Label)
 			}
 			return option, nil
 		})

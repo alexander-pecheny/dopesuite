@@ -35,6 +35,7 @@ type hostFestDashData struct {
 	Access          []festaccess.HostAccessMember
 	TeamCount       int
 	PlayerCount     int
+	TroikaCount     int
 	NumbersAssigned int
 	NumbersAllSet   bool
 	CurrentRole     string
@@ -243,6 +244,7 @@ func hostDashRosterSection(data hostFestDashData, ref string) *dopeui.Element {
 	rows := []dopeui.Item{
 		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/teams"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterTeamsLink())), dopeui.Muted(dopeui.Text(strconv.Itoa(data.TeamCount)))),
 		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/players"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterPlayersLink())), dopeui.Muted(dopeui.Text(strconv.Itoa(data.PlayerCount)))),
+		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/troikas"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterTroikasLink())), dopeui.Muted(dopeui.Text(strconv.Itoa(data.TroikaCount)))),
 	}
 	if data.TeamCount > 0 {
 		status := s.Host.Dash.NumbersStatusUnset()
@@ -478,7 +480,7 @@ from fests where id = ?`, festID).Scan(&title, &slug, &description, &startDate, 
 			URL:   fmt.Sprintf("/host/fest/%s/game/%s/", festRef, g.Ref()),
 		}
 	}
-	teamCount, playerCount, err := s.loadHostFestRosterCounts(r.Context(), festID)
+	teamCount, playerCount, troikaCount, err := s.loadHostFestRosterCounts(r.Context(), festID)
 	if err != nil {
 		route.WriteError(w, r, err)
 		return
@@ -526,6 +528,7 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigne
 		Access:          access,
 		TeamCount:       teamCount,
 		PlayerCount:     playerCount,
+		TroikaCount:     troikaCount,
 		NumbersAssigned: numbersAssigned,
 		NumbersAllSet:   teamCount > 0 && numbersAssigned == teamCount,
 		CurrentRole:     currentRole,
@@ -548,15 +551,18 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigne
 	pages.RenderDoc(w, s.h.Engine().AssetETags, hostFestDashDoc(data))
 }
 
-func (s *Server) loadHostFestRosterCounts(ctx context.Context, festID int64) (int, int, error) {
-	var teamCount, playerCount int
+func (s *Server) loadHostFestRosterCounts(ctx context.Context, festID int64) (int, int, int, error) {
+	var teamCount, playerCount, troikaCount int
 	if err := s.h.Engine().DB.QueryRowContext(ctx, `select count(*) from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&teamCount); err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	if err := s.h.Engine().DB.QueryRowContext(ctx, `select count(*) from fest_players where fest_id = ?`, festID).Scan(&playerCount); err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
-	return teamCount, playerCount, nil
+	if err := s.h.Engine().DB.QueryRowContext(ctx, `select count(*) from participants where fest_id = ? and assembled = 1`, festID).Scan(&troikaCount); err != nil {
+		return 0, 0, 0, err
+	}
+	return teamCount, playerCount, troikaCount, nil
 }
 
 func (s *Server) loadFestRatingID(ctx context.Context, festID int64) (int64, error) {

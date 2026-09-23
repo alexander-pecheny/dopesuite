@@ -115,6 +115,10 @@ One of the three seats at a Троечка table, numbered in the order the ве
 **Выход на тему (Seating)**:
 The players a team sends to play one theme of an ЭК-family бой. In ЭК it is one player. In **Эрудит-Секстет** it is up to three, and that cap is a rule of the game rather than of the format (Полифест-2025 says «от одного до трёх»). The seated players answer together and the theme's marks belong to the team. In a player's own statistics the theme's points are split equally among the seated players, while a taken or missed question counts in full for each of them, since a third of a question means nothing. The order in which the seated players are listed means nothing either. Эрудит-Секстет is a game type of its own in the app, as личная СИ is, and in every other rule it is ЭК: twelve themes of five questions, the same values and the same перестрелка.
 
+**Сборная (Assembled team)**:
+A Participant put together for one format out of the fest's players rather than drawn from the rating roster: a troika of Тройка, two to four people, often from different teams. It is a Participant of the fest like a team, so a bracket Game seats it and its people fill the кресла; it is not a fest team, so the flat games, which seat the fest roster, never see it. Changing its people is how a substitution between бои is made. The fest team holding at least two of its people is the one it plays for in a кубок.
+_Avoid_: calling a troika a team of the fest. It never appears on the rating roster, in ОД or in the numbering.
+
 **Рассадка**:
 The order of a side's three кресла for one тема: who is first пристяжной, who is second, and who is коренной. A side's рассадка stays in force from the тема where it is set until it is set again. A тема whose рассадка differs from the one before it is where that side turned round.
 
