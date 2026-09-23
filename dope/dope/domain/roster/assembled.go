@@ -61,6 +61,7 @@ order by p.name collate nocase, p.id`, []any{festID}, func(rows *sql.Rows) (Asse
 	if err != nil {
 		return nil, err
 	}
+	sort.SliceStable(teams, func(i, j int) bool { return util.CompareNatural(teams[i].Name, teams[j].Name) < 0 })
 	type member struct {
 		team        int64
 		first, last string

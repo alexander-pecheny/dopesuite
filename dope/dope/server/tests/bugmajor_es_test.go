@@ -5,35 +5,16 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"testing"
 
 	dopeserver "dope/dope/server"
 )
 
-// bugMajorESDSL is Bug Major III's Эрудит-секстет for the student зачёт,
-// seeded from the ОД named by its code.
-func bugMajorESDSL(odCode string) string {
-	return fmt.Sprintf(`[init]
-seed: %s
-division: Студ
-
-[scheme]
-kind: placement
-title: Групповой этап
-participants: 12
-match_size: 4
-deal: snake
-rotation: true
-bout.stage: total + 200 - 50 * place
-sorting: [stage, plus, correct_50, draw]
-proceeding_participants: 8
----
-kind: single_elimination
-title: Плей-офф
-participants: 8
-match_size: 4
-winning_places: 2
-`, odCode)
+// bugMajorESDSL is the tournament's student Эрудит-секстет, seeded from the
+// ОД named by its code.
+func bugMajorESDSL(t *testing.T, odCode string) string {
+	return strings.Replace(readFile(t, "../../../scripts/bugmajor/es-students.dsl"), "seed: od\n", "seed: "+odCode+"\n", 1)
 }
 
 // The student Эрудит-секстет: the twelve best student teams of the ОД, dealt
@@ -78,7 +59,7 @@ select id, 0, 'Студ', 'Студенческая команда' from fest_te
 		t.Fatal(err)
 	}
 
-	esID := createSchemeGame(t, db, festID, "es", "ЭС студенты", bugMajorESDSL(odCode))
+	esID := createSchemeGame(t, db, festID, "es", "ЭС студенты", bugMajorESDSL(t, odCode))
 	if resp := scopedAPIRequest(t, srv, http.MethodPost,
 		fmt.Sprintf("/api/fest/%d/games/%d/seed-import/run", festID, esID), nil, token); resp.Code != http.StatusOK {
 		t.Fatalf("seed-import: %d %s", resp.Code, resp.Body.String())

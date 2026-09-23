@@ -805,7 +805,7 @@ export function parseScheme(raw: unknown): FestScheme | null {
   }
 }
 
-function reseedMetricHeader(metric: string, sortRules: SortRule[]): string {
+export function reseedMetricHeader(metric: string, sortRules: SortRule[]): string {
   const rule = sortRules.find((item) => item.metric === metric);
   const direction = rule?.dir === "asc" ? "↑" : rule?.dir === "desc" ? "↓" : "";
   return direction ? `${reseedMetricLabel(metric)} ${direction}` : reseedMetricLabel(metric);
@@ -841,11 +841,15 @@ function reseedMetricLabel(metric: string): string {
     taken: S.fest.metric.taken(),
     bouts: S.fest.metric.bouts(),
     draw: S.fest.metric.draw(),
+    stage: S.fest.metric.stage(),
+    wins: S.fest.metric.wins(),
+    losses: S.fest.metric.losses(),
+    seed: S.fest.metric.seed(),
   };
   return labels[metric] || metric;
 }
 
-function reseedMetricValue(metric: string, value: unknown): string {
+export function reseedMetricValue(metric: string, value: unknown): string {
   if (value === null || value === undefined || value === "") return "";
   const number = Number(value);
   if (!Number.isFinite(number) || String(value).trim() === "") return String(value);

@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"pecheny.me/dopecore/sqlitex"
 )
@@ -120,6 +121,55 @@ func CompareAlpha(a, b string) int {
 		return 1
 	}
 	return 0
+}
+
+// CompareNatural orders two names the way a person reads them: runs of digits
+// compare as numbers, so «Тройка 2» comes before «Тройка 10», and everything
+// else as CompareAlpha does.
+func CompareNatural(a, b string) int {
+	ar, br := []rune(AlphaKey(a)), []rune(AlphaKey(b))
+	i, j := 0, 0
+	for i < len(ar) && j < len(br) {
+		if unicode.IsDigit(ar[i]) && unicode.IsDigit(br[j]) {
+			si, sj := i, j
+			for i < len(ar) && unicode.IsDigit(ar[i]) {
+				i++
+			}
+			for j < len(br) && unicode.IsDigit(br[j]) {
+				j++
+			}
+			na := strings.TrimLeft(string(ar[si:i]), "0")
+			nb := strings.TrimLeft(string(br[sj:j]), "0")
+			if len(na) != len(nb) {
+				if len(na) < len(nb) {
+					return -1
+				}
+				return 1
+			}
+			if na != nb {
+				if na < nb {
+					return -1
+				}
+				return 1
+			}
+			continue
+		}
+		if ar[i] != br[j] {
+			if ar[i] < br[j] {
+				return -1
+			}
+			return 1
+		}
+		i++
+		j++
+	}
+	switch {
+	case i < len(ar):
+		return 1
+	case j < len(br):
+		return -1
+	}
+	return CompareAlpha(a, b)
 }
 
 // BoolToInt maps false→0, true→1 (for SQLite integer-boolean columns).

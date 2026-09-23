@@ -187,6 +187,10 @@ var RU = Strings{
 			Share:           func() string { return "% от команды" },
 			Team:            func() string { return "Команда" },
 		},
+		Table: EkTableStrings{
+			Place: func() string { return "М" },
+			Team:  func() string { return "Команда" },
+		},
 		Theme: EkThemeStrings{
 			Column: func(n string) string { return fmt.Sprintf("Т%s", n) },
 		},
@@ -263,14 +267,18 @@ var RU = Strings{
 		Metric: FestMetricStrings{
 			Bouts:       func() string { return "Боёв" },
 			Draw:        func() string { return "Жребий" },
+			Losses:      func() string { return "Поражения" },
 			PlaceSum:    func() string { return "Σ мест" },
 			Points:      func() string { return "Очки" },
 			PointsShare: func() string { return "% очков" },
 			Rating:      func() string { return "Р" },
+			Seed:        func() string { return "Посев" },
+			Stage:       func() string { return "Баллы" },
 			Taken:       func() string { return "Взятые" },
 			TakenBase:   func() string { return "Взятые б/п" },
 			TakenShare:  func() string { return "% взятых" },
 			Tiebreak:    func() string { return "П" },
+			Wins:        func() string { return "Победы" },
 		},
 		MetricShort: FestMetricShortStrings{
 			Bouts:    func() string { return "Б" },
@@ -2027,7 +2035,7 @@ var RU = Strings{
 			PoolRank: func(wins string, losses string, n string) string {
 				return fmt.Sprintf("Пул %s–%s, %s-й", wins, losses, n)
 			},
-			Table: func() string { return "Швейцарка" },
+			Table: func() string { return "Итоги" },
 		},
 		Titles: StructureTitlesStrings{
 			BlockRound: func(n string) string { return fmt.Sprintf("Раунд %s", n) },

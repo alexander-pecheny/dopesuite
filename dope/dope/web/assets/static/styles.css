@@ -2581,9 +2581,11 @@ body:not(.embedded-match) .grid-match {
   min-width: 720px;
 }
 
-/* The Block's own table: the same shape a пересев's is, and as wide as its
-   columns need rather than as wide as the screen. */
-.hamsa-table {
+/* The Block's own table — Хамса's, and Эрудит-секстет's group stage on the
+   ЭК page: the same shape a пересев's is, and as wide as its columns need
+   rather than as wide as the screen. */
+.hamsa-table,
+.stage-standings-table {
   --results-place-col: 72px;
   --results-team-col: 320px;
   width: max-content;
@@ -2738,6 +2740,8 @@ body:not(.embedded-match) .grid-match {
 .reseed-results-table .results-team,
 .hamsa-table thead th.results-team-head,
 .hamsa-table .results-team,
+.stage-standings-table thead th.results-team-head,
+.stage-standings-table .results-team,
 .group-standings-table thead th.results-team-head,
 .group-standings-table .results-team {
   width: var(--results-team-col);

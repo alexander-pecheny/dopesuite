@@ -12,6 +12,12 @@ venues = "Площадки"
 stats = "Статистика"
 seed_import = "Импорт команд"
 
+[table]
+# A Block's own table on the stage tab (Эрудит-секстет's group stage): the
+# place and team column heads; the metric columns take the Сетка's names.
+place = "М"
+team = "Команда"
+
 [stage]
 # The empty message of a stage pane with no bouts at all.
 empty = "В этом этапе нет боёв."

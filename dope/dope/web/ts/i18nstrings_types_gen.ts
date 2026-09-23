@@ -170,6 +170,10 @@ export type Strings = {
       share: () => string;
       team: () => string;
     };
+    table: {
+      place: () => string;
+      team: () => string;
+    };
     theme: {
       column: (n: string) => string;
     };
@@ -242,14 +246,18 @@ export type Strings = {
     metric: {
       bouts: () => string;
       draw: () => string;
+      losses: () => string;
       placeSum: () => string;
       points: () => string;
       pointsShare: () => string;
       rating: () => string;
+      seed: () => string;
+      stage: () => string;
       taken: () => string;
       takenBase: () => string;
       takenShare: () => string;
       tiebreak: () => string;
+      wins: () => string;
     };
     metricShort: {
       bouts: () => string;

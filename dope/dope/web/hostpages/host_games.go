@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -58,6 +59,8 @@ type hostGameCreateData struct {
 type gameEntrantOption struct {
 	ID    int64
 	Label string
+	// assembled marks a troika, which the picker lists after the teams.
+	assembled bool
 }
 
 // stickerPaletteColors is the fixed set of colours an organizer may assign to a
@@ -524,7 +527,7 @@ func (s *Server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request
 // players alike — which kind a Game wants depends on its format, and the picker
 // offers both rather than guessing before the type is chosen.
 func festEntrantOptions(ctx context.Context, db *sql.DB, festID int64) ([]gameEntrantOption, error) {
-	return store.CollectRows(ctx, db, `
+	options, err := store.CollectRows(ctx, db, `
 select id, name, coalesce(city, ''), roster, assembled from participants
 where fest_id = ? order by roster desc, assembled, coalesce(nullif(number, 0), 1 << 30), name, id`,
 		[]any{festID}, func(rows *sql.Rows) (gameEntrantOption, error) {
@@ -541,9 +544,25 @@ where fest_id = ? order by roster desc, assembled, coalesce(nullif(number, 0), 1
 			// lists both, and a Troika Game seats troikas.
 			if assembled {
 				option.Label = dopestrings.Default.Host.Games.EntrantTroika(option.Label)
+				option.assembled = true
 			}
 			return option, nil
 		})
+	if err != nil {
+		return nil, err
+	}
+	// Troikas come last and have no number to order by, so they go by name as
+	// a person reads it: 2 before 10.
+	first := len(options)
+	for i, option := range options {
+		if option.assembled {
+			first = i
+			break
+		}
+	}
+	troikas := options[first:]
+	sort.SliceStable(troikas, func(i, j int) bool { return util.CompareNatural(troikas[i].Label, troikas[j].Label) < 0 })
+	return options, nil
 }
 
 // chosenEntrantIDs reads the picker: whom this Game seats, in the fest's order.

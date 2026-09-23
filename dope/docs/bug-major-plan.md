@@ -213,7 +213,7 @@ match_size: 4
 winning_places: 2
 ```
 
-These become the defaults the game form offers for Тройка and ЭС.
+**Built:** the schemes live in `dope/scripts/bugmajor/` (`troika.dsl`, `es-students.dsl`, `es-adults.dsl`) rather than as the form's defaults, which other fests still use. Paste one into the game form; for ЭС, put the ОД Game's code after `seed:`. `TestBugMajorDemoFest` (with `DOPE_BUGMAJOR_DEMO=<new db>`) builds a demo fest to look at; log in as demo / demopass123.
 
 ## 8. Order of work
 

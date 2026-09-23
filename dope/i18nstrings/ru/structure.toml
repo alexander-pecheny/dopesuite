@@ -132,7 +132,7 @@ deal_unknown = 'deal: {{.deal}} — бывает straight или snake'
 # The swiss block: rounds that pair troikas with the same record of wins and
 # losses, until each has won `wins` times (it goes on) or lost `losses` times
 # (it is out). The block's own table, ranked by that record.
-table = "Швейцарка"
+table = "Итоги"
 # A бой's title: its number in the round and the record its seats share,
 # wins before losses («Бой 2 (1–0)»).
 bout = 'Бой {{.n}} ({{.wins}}–{{.losses}})'

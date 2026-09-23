@@ -8,7 +8,7 @@ import {seatedNames} from "./ek-seating.js";
 import type {NodeIndex, ParticipantView, ThemeView} from "./score-table.js";
 import {buildVenuesTable, formatBattleVenue, formatBattleVenueShort, formatVenue} from "./venue.js";
 import type {Venue} from "./venue.js";
-import {buildGroupStandingsView, festLetters, letteredTitle, resultsTeamCell, stageType} from "./standings.js";
+import {buildGroupStandingsView, festLetters, letteredTitle, resultsTeamCell, stageType, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
 import {buildRosterView} from "./fest-roster.js";
 import {buildEKStatsTable, buildIndividualStatsTable, computeEKPlayerStats, computeIndividualPlayerStats} from "./ek-stats.js";
@@ -23,11 +23,11 @@ import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import { createStageCache } from "./stage-cache.js";
 import type { MatchDescriptor, MatchView as CachedMatchView, StageData } from "./stage-cache.js";
 import { create as createStatsSync } from "./stats-sync.js";
-import { buildFestGrid, buildReseedStagePanel, parseScheme } from "./fest-grid.js";
+import { buildFestGrid, buildReseedStagePanel, parseScheme, reseedMetricHeader, reseedMetricValue } from "./fest-grid.js";
 import { computeGroupBlockRounds } from "./group-stats.js";
 import { gameTabs, canonicalKey, groupLabel, RESEED_TAB_CODE } from "./game-tabs.js";
 import type { GameTab, TabKind } from "./game-tabs.js";
-import type { ReseedEntry } from "./fest-grid.js";
+import type { ReseedEntry, SortRule } from "./fest-grid.js";
 import { icon } from "./icons_gen.js";
 import S from "./i18nstrings.js";
 
@@ -97,6 +97,10 @@ type HostStage = {
   grain?: {block?: string; wave?: number; group?: string};
   reseedReady?: boolean;
   reseedEntries?: ReseedEntry[];
+  // standings and sort are a ranked stage's table and the order it was ranked
+  // by, from the server (ADR-0011).
+  standings?: ReseedEntry[];
+  sort?: SortRule[] | null;
   matches?: HostStageMatch[];
   // members names the server stages a round-robin round is assembled from; empty on an
   // ordinary stage, which is its own.
@@ -283,6 +287,13 @@ const stageCache = createStageCache({
     }
     if (stageType(stage as StageRef) === "standings") {
       pane.appendChild(buildGroupStandingsPane(stage as HostStage));
+      return;
+    }
+    // A Block's own table with no бои of its own — Эрудит-секстет's group
+    // stage ranks both its games together — is drawn as that table.
+    const live = findLiveStage(fest, stageCode);
+    if (!(live?.matches || []).length && (live?.standings || []).length) {
+      pane.appendChild(buildRankedStageTable(live!));
       return;
     }
     pane.appendChild(buildStageTableStack(data));
@@ -1569,6 +1580,29 @@ async function setSeedDeclined(teamID: number | undefined, declined: boolean): P
   if (sent.ok) seedImport = sent.response as SeedImportView;
   else seedImportNotice = S.ek.seed.error(sent.error || S.ek.seed.declineFailed());
   renderSeedImport();
+}
+
+// buildRankedStageTable draws a ranked stage's table: place, team, and the
+// metrics the server ranked by, in its order.
+function buildRankedStageTable(stage: HostStage): HTMLElement {
+  const wrapper = document.createElement("div");
+  wrapper.className = "results-wrapper";
+  const sort = (stage.sort || []) as SortRule[];
+  const metrics = sort.map((rule) => rule.metric).filter((metric) => metric !== "draw");
+  wrapper.appendChild(standingsTable({
+    className: "stage-standings-table",
+    columns: [
+      {label: S.ek.table.place(), kind: "place"},
+      {label: S.ek.table.team(), kind: "name"},
+      ...metrics.map((metric) => ({label: reseedMetricHeader(metric, []), kind: "num" as const})),
+    ],
+    rows: (stage.standings || []).map((entry, index) => [
+      String(entry.rank || index + 1),
+      entry.name || "",
+      ...metrics.map((metric) => reseedMetricValue(metric, entry.metrics?.[metric])),
+    ]),
+  }));
+  return wrapper;
 }
 
 function buildStageTableStack(data: StageData | undefined): HTMLElement {

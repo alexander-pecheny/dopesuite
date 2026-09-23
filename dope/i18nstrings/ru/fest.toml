@@ -71,6 +71,12 @@ rating = "Р"
 taken = "Взятые"
 # The bouts played.
 bouts = "Боёв"
+# Эрудит-секстет's stage score: Σ + 200 − 50 × место, summed over the games.
+stage = "Баллы"
+# A Swiss stage's record, and the seed a troika entered it with.
+wins = "Победы"
+losses = "Поражения"
+seed = "Посев"
 # The draw metric.
 draw = "Жребий"
 

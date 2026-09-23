@@ -11,32 +11,6 @@ import (
 	dopeserver "dope/dope/server"
 )
 
-// bugMajorTroikaDSL is Bug Major III's Тройка for one зачёт.
-const bugMajorTroikaDSL = `[scheme]
-kind: flat
-title: Отбор
-written: true
-themes: 9
-theme_values: [1, 1, 1, 2, 2, 2, 3, 3, 3]
-letters: false
-sorting: [total, threes, twos, draw]
-proceeding_participants: 12
----
-kind: swiss
-title: Швейцарка
-participants: 12
-wins: 3
-losses: 3
----
-kind: single_elimination
-title: Плей-офф
-participants: 6
-themes: 8
-match_size.r2: 3
-themes.r2: 9
-theme_values.r2: [1, 1, 1, 2, 2, 2, 3, 3, 3]
-`
-
 // The whole of Bug Major's Тройка through the server: fourteen troikas write
 // the отбор, the best twelve play the Swiss stage — its pools ranked and dealt
 // by the server as the бои finish — and the six who reach three wins meet
@@ -47,7 +21,7 @@ func TestBugMajorTroikaPlaysThrough(t *testing.T) {
 	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))
 	db := srv.Eng().DB
 	troikas := seedParticipants(t, db, festID, 14)
-	gameID := createSchemeGameFor(t, db, festID, "troika", "Тройка", bugMajorTroikaDSL, troikas)
+	gameID := createSchemeGameFor(t, db, festID, "troika", "Тройка", readFile(t, "../../../scripts/bugmajor/troika.dsl"), troikas)
 
 	// The отбор: the troika seated k-th writes k right answers fewer than the
 	// one before it on the first тема за 3, so it ranks k-th. Troikas 13 and 14

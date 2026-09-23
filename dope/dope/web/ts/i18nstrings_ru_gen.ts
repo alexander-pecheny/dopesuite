@@ -171,6 +171,10 @@ export const RU: Strings = {
       share: () => "% от команды",
       team: () => "Команда",
     },
+    table: {
+      place: () => "М",
+      team: () => "Команда",
+    },
     theme: {
       column: (n: string) => `Т${n}`,
     },
@@ -243,14 +247,18 @@ export const RU: Strings = {
     metric: {
       bouts: () => "Боёв",
       draw: () => "Жребий",
+      losses: () => "Поражения",
       placeSum: () => "Σ мест",
       points: () => "Очки",
       pointsShare: () => "% очков",
       rating: () => "Р",
+      seed: () => "Посев",
+      stage: () => "Баллы",
       taken: () => "Взятые",
       takenBase: () => "Взятые б/п",
       takenShare: () => "% взятых",
       tiebreak: () => "П",
+      wins: () => "Победы",
     },
     metricShort: {
       bouts: () => "Б",
@@ -1490,7 +1498,7 @@ shootout: true
       planMismatch: (participants: string, wins: string, losses: string) => `swiss: план на ${participants} участников играется до ${wins} побед и ${losses} поражений`,
       pool: (wins: string, losses: string) => `Пул ${wins}–${losses}`,
       poolRank: (wins: string, losses: string, n: string) => `Пул ${wins}–${losses}, ${n}-й`,
-      table: () => "Швейцарка",
+      table: () => "Итоги",
     },
     titles: {
       blockRound: (n: string) => `Раунд ${n}`,

@@ -1,6 +1,10 @@
 package util
 
-import "testing"
+import (
+	"sort"
+	"strings"
+	"testing"
+)
 
 func TestHumanizeFestDates(t *testing.T) {
 	cases := []struct {
@@ -26,5 +30,13 @@ func TestHumanizeFestDates(t *testing.T) {
 				t.Errorf("HumanizeFestDates(%q, %q, %d) = %q, want %q", c.start, c.end, c.currentYear, got, c.want)
 			}
 		})
+	}
+}
+
+func TestCompareNatural(t *testing.T) {
+	names := []string{"Тройка 10", "тройка 2", "Тройка 1", "Бобры", "Тройка 02b"}
+	sort.SliceStable(names, func(i, j int) bool { return CompareNatural(names[i], names[j]) < 0 })
+	if got := strings.Join(names, " | "); got != "Бобры | Тройка 1 | тройка 2 | Тройка 02b | Тройка 10" {
+		t.Fatalf("order = %s", got)
 	}
 }
