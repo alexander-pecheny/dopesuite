@@ -786,6 +786,28 @@ where kind = 'rr' and block_code = '' and code glob 's[0-9]*-g[0-9]*'`); err != 
 			{Name: "country", Type: "TEXT"},
 		})
 	}},
+	{Version: 28, Name: "fest_team_flags", Up: func(db *sql.DB) error {
+		// v28: a fest team carries its Flags — the rating site's «Школьная
+		// команда», «Европа» — and every distinct Flag among a fest's teams offers
+		// a Division to look at (ADR-0020). One row per Flag per team, in the order
+		// the source listed them; rating_flag_id is null for a hand-typed one.
+		// Nothing to backfill: no fest has ever had a Flag.
+		if _, err := db.Exec(`
+create table if not exists fest_team_flags(
+  id integer primary key,
+  team_id integer not null references fest_teams(id) on delete cascade,
+  position integer not null,
+  rating_flag_id integer,
+  short text not null,
+  full text not null,
+  unique(team_id, short)
+);
+create index if not exists fest_team_flags_team_idx on fest_team_flags(team_id, position);
+`); err != nil {
+			return err
+		}
+		return nil
+	}},
 }
 
 func migrateDB(db *sql.DB) error { return schema.Apply(db, migrations) }

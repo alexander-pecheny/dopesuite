@@ -1,3 +1,6 @@
+-- index fest_team_flags_team_idx
+CREATE INDEX fest_team_flags_team_idx on fest_team_flags(team_id, position);
+
 -- index fest_teams_fest_number_idx
 CREATE UNIQUE INDEX fest_teams_fest_number_idx on fest_teams(fest_id, number) where number is not null;
 
@@ -42,6 +45,17 @@ CREATE TABLE fest_players(
   rating_id integer,
   first_name text not null,
   last_name text not null default ''
+);
+
+-- table fest_team_flags
+CREATE TABLE fest_team_flags(
+  id integer primary key,
+  team_id integer not null references fest_teams(id) on delete cascade,
+  position integer not null,
+  rating_flag_id integer,
+  short text not null,
+  full text not null,
+  unique(team_id, short)
 );
 
 -- table fest_team_players

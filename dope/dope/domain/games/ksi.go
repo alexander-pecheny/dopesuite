@@ -20,6 +20,9 @@ import (
 type KSIParticipant struct {
 	Number int    `json:"number"`
 	Name   string `json:"name"`
+	// Flags are the team's Divisions by short name, propagated with the roster
+	// (ADR-0020). The page filters and re-ranks on them; nothing here does.
+	Flags []string `json:"flags,omitempty"`
 }
 
 // KSIDeclinedKey is the key under which a participant's "declined to play" flag

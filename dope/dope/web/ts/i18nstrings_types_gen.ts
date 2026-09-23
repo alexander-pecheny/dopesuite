@@ -127,6 +127,10 @@ export type Strings = {
       stats: () => string;
       venues: () => string;
     };
+    seats: {
+      empty: () => string;
+      label: () => string;
+    };
     seed: {
       declineFailed: () => string;
       declinedAria: (name: string) => string;
@@ -325,6 +329,7 @@ export type Strings = {
     };
     section: {
       chips: () => string;
+      divisions: () => string;
       ekStats: () => string;
       festGrid: () => string;
       groupStandings: () => string;
@@ -382,6 +387,10 @@ export type Strings = {
     };
     ek: {
       label: () => string;
+    };
+    es: {
+      label: () => string;
+      short: () => string;
     };
     hamsa: {
       label: () => string;
@@ -519,6 +528,7 @@ export type Strings = {
       errorSlugTaken: () => string;
       errorTitleRequired: () => string;
       errorTypeMissing: () => string;
+      esHint: () => string;
       hamsaHint: () => string;
       hamsaScheme: (n: string) => string;
       minigamesHint: () => string;
@@ -548,6 +558,7 @@ export type Strings = {
       troikaHint: () => string;
       typeBrain: () => string;
       typeEk: () => string;
+      typeEs: () => string;
       typeHamsa: () => string;
       typeKsi: () => string;
       typeKsiStickers: () => string;
@@ -601,6 +612,7 @@ export type Strings = {
       addOverrideBtn: () => string;
       cancelBtn: () => string;
       colCity: () => string;
+      colFlags: () => string;
       colFromTeam: () => string;
       colPlayers: () => string;
       colToTeam: () => string;
@@ -622,6 +634,9 @@ export type Strings = {
       errorObjPlayer: () => string;
       errorObjSourceTeam: () => string;
       errorObjTeam: () => string;
+      flagsHint: () => string;
+      flagsPlaceholder: () => string;
+      flagsSavedNotice: () => string;
       gamesLabel: () => string;
       importDoneCounts: (teams: string, players: string, od: string, ksi: string) => string;
       importDoneNotice: () => string;
@@ -785,6 +800,13 @@ export type Strings = {
   markdown: {
     details: {
       defaultSummary: () => string;
+    };
+  };
+  matchops: {
+    seating: {
+      notInRoster: () => string;
+      repeated: () => string;
+      tooMany: (n: number) => string;
     };
   };
   multi: {
@@ -1222,6 +1244,10 @@ export type Strings = {
     banner: {
       assign: () => string;
       unassignedLead: () => string;
+    };
+    division: {
+      all: () => string;
+      label: () => string;
     };
     downloads: {
       archive: () => string;

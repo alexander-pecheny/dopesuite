@@ -9,6 +9,11 @@ export interface ODTeam {
   name: string;
   city: string;
   number?: number;
+  // The Divisions the team carries, by short name, propagated with the roster
+  // (ADR-0020). The page filters and re-ranks on them; the arithmetic below
+  // never looks at them, because what a question is worth is reckoned over
+  // everyone who played it.
+  flags?: string[];
 }
 
 export type ShootoutMark = "right" | "";
@@ -342,10 +347,11 @@ export function compareShootoutTiebreaks(a: number[], b: number[]): number {
 // rankedTeamOrder sorts team rows into standings order: by game total, then
 // the shootout tiebreak, then the row as a stable fallback. The results sheet and
 // screen board share it so their rows agree; the place labels come from
-// placesFor.
-export function rankedTeamOrder(state: ODState, totals: number[], tiebreaks: number[][]): RankKey[] {
-  return state.teams
-    .map((_, index) => ({index, total: totals[index], tiebreak: tiebreaks[index]}))
+// placesFor. members narrows it to a Division's rows (ADR-0020); undefined is
+// the whole field.
+export function rankedTeamOrder(state: ODState, totals: number[], tiebreaks: number[][], members?: readonly number[]): RankKey[] {
+  return (members ? members.slice() : state.teams.map((_, index) => index))
+    .map((index) => ({index, total: totals[index], tiebreak: tiebreaks[index]}))
     .sort((a, b) => {
       if (b.total !== a.total) return b.total - a.total;
       const cmp = compareShootoutTiebreaks(a.tiebreak, b.tiebreak);
@@ -373,18 +379,27 @@ export function anyQuestionCompleted(stats: QuestionStat[]): boolean {
 
 // placesFor ranks on game total, breaking ties on the shootout. Before any
 // question or shootout is marked there is nothing to rank and the places stay
-// blank.
-export function placesFor(state: ODState, stats: QuestionStat[], totals: number[]): string[] {
-  if (!anyQuestionCompleted(stats) && !anyShootoutMarked(state)) return new Array<string>(totals.length).fill("");
-  const tiebreaks = state.teams.map((_, index) => shootoutTiebreakForTeam(state, index));
-  return computePlaces(totals, {
-    tiebreaks,
+// blank. Given a Division's members it deals places afresh among those rows
+// alone and leaves every other row blank — a Division is ranked within itself
+// (ADR-0020).
+export function placesFor(state: ODState, stats: QuestionStat[], totals: number[], members?: readonly number[]): string[] {
+  const places = new Array<string>(totals.length).fill("");
+  if (!anyQuestionCompleted(stats) && !anyShootoutMarked(state)) return places;
+  const rows = members ? members.slice() : state.teams.map((_, index) => index);
+  const dealt = computePlaces(rows.map((index) => totals[index]), {
+    tiebreaks: rows.map((index) => shootoutTiebreakForTeam(state, index)),
     compareTiebreak: (a, b) => compareShootoutTiebreaks(a as number[], b as number[]),
   });
+  rows.forEach((index, rank) => {
+    places[index] = dealt[rank];
+  });
+  return places;
 }
 
 // rows is the whole standings sheet from one document: totals, tour sums,
-// ratings, places and the row order.
+// ratings, places and the row order — narrowed to a Division's members when
+// given. The rating stays reckoned over the whole field: everyone played the
+// question, whatever Division they are in.
 export interface ODRow {
   index: number;
   total: number;
@@ -393,13 +408,13 @@ export interface ODRow {
   place: string;
 }
 
-export function rows(state: ODState, tourLengths: number[]): ODRow[] {
+export function rows(state: ODState, tourLengths: number[], members?: readonly number[]): ODRow[] {
   const total = tourLengths.reduce((acc, n) => acc + n, 0);
   const stats = questionStats(state, total);
   const totals = state.teams.map((_, i) => sumRow(stats, i));
   const tiebreaks = state.teams.map((_, i) => shootoutTiebreakForTeam(state, i));
-  const places = placesFor(state, stats, totals);
-  return rankedTeamOrder(state, totals, tiebreaks).map(({index}) => ({
+  const places = placesFor(state, stats, totals, members);
+  return rankedTeamOrder(state, totals, tiebreaks, members).map(({index}) => ({
     index,
     total: totals[index],
     tourSums: tourSumsForTeam(stats, index, tourLengths),

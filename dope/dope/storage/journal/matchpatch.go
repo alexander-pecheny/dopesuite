@@ -91,6 +91,7 @@ where m.id = ?`, matchID)
 			doc = applyBlobOp(doc, renameBlobOpPath(op))
 		}
 		pruneEmptyParticipants(doc)
+		normalizeThemeSeats(doc)
 		if encoded, err = json.Marshal(doc); err != nil {
 			return err
 		}
@@ -422,6 +423,67 @@ func renameBlobOpPath(op store.BlobOp) store.BlobOp {
 		op.Path = "/participants/" + strings.TrimPrefix(op.Path, "/teams/")
 	}
 	return op
+}
+
+// normalizeThemeSeats rewrites a theme's seating to the one shape a live write
+// stores: `players`, a list. The singular `player` is what every row and every
+// journal record written before Erudit-Sextet says, and the live path
+// converts it on the first mutation of a match (store.BlobTheme reads both and
+// writes one) — so replay owes the same conversion, or a replayed match would
+// differ from the same match written live.
+func normalizeThemeSeats(doc any) {
+	obj, ok := doc.(map[string]any)
+	if !ok {
+		return
+	}
+	teams, ok := obj["participants"].(map[string]any)
+	if !ok {
+		return
+	}
+	for _, section := range teams {
+		sec, ok := section.(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, key := range []string{"themes", "shootoutThemes"} {
+			list, ok := sec[key].([]any)
+			if !ok {
+				continue
+			}
+			for _, entry := range list {
+				theme, ok := entry.(map[string]any)
+				if !ok {
+					continue
+				}
+				player, had := theme["player"]
+				if !had {
+					continue
+				}
+				delete(theme, "player")
+				if seated, ok := theme["players"].([]any); ok && len(seated) > 0 {
+					continue
+				}
+				if isZeroNumber(player) {
+					continue
+				}
+				theme["players"] = []any{player}
+			}
+		}
+	}
+}
+
+// isZeroNumber reports whether a decoded JSON number is zero — the cleared
+// seat the singular spelling wrote as `player: 0`.
+func isZeroNumber(value any) bool {
+	switch n := value.(type) {
+	case json.Number:
+		return n.String() == "0"
+	case float64:
+		return n == 0
+	case nil:
+		return true
+	}
+	return false
 }
 
 // pruneEmptyParticipants drops Participant sections that carry nothing — no

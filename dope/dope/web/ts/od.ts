@@ -4,7 +4,8 @@
 import {cssEscape, questionNumberNode, td, th} from "./cells.js";
 import {buildFlatScoreTable, computePlaces} from "./score-table.js";
 import type {ScoreTableRow, ScoreTableTheme, ScoreTableThemeRow} from "./score-table.js";
-import {resultsTeamCell} from "./standings.js";
+import {resultsTeamCell, teamFlagBadges} from "./standings.js";
+import {ALL_DIVISIONS, divisionChipRow, divisionFromURL, divisionsOf, inDivision, setDivisionInURL} from "./divisions.js";
 import {buildRosterView} from "./fest-roster.js";
 import type {PatchPath} from "./state-sync.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
@@ -20,6 +21,7 @@ import * as od from "./od-protocol.js";
 import type {ODScheme, ODState, ODTeam, QuestionStat, RankKey, ShootoutMark, ShootoutRound} from "./od-protocol.js";
 import {SCREEN_DEFAULTS, normalizeScreenSettings, planScreen, readCityCountry, teamFlag} from "./screen-board.js";
 import type {ScreenSettings} from "./screen-board.js";
+import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
 import S from "./i18nstrings.js";
 
 interface ODPageGlobals {
@@ -152,22 +154,65 @@ const YINYANG_SVG = '<svg viewBox="0 0 100 100" aria-hidden="true" focusable="fa
   + '</svg>';
 const UNDO_LIMIT = 100;
 
-// Screen (the projector board) is a host-only tab; tabFromHash() filters against
+// Screen (the projector board) is a host-only tab; tabFromHash filters against
 // TABS, so a viewer can't reach it by hash either.
 const TABS = gameTabs([], {game: "od", viewer});
 
-function tabFromHash(): string | null {
-  const key = (window.location.hash || "").replace(/^#/, "");
-  return TABS.some((t) => t.key === key) ? key : null;
-}
-let activeTab = tabFromHash() || (viewer ? "results" : "input");
-window.addEventListener("hashchange", () => {
-  const next = tabFromHash();
-  if (next && next !== activeTab) {
-    activeTab = next;
-    render();
+let activeTab = tabFromHash(TABS) || (viewer ? "results" : "input");
+// The Division the viewer is looking at (ADR-0020): «All» until the URL says
+// otherwise, and the URL is read again whenever the browser moves it.
+let activeDivision = ALL_DIVISIONS;
+onNavigate(() => {
+  const next = tabFromHash(TABS);
+  const division = divisionFromURL(divisions());
+  const tabMoved = Boolean(next && next !== activeTab);
+  const divisionMoved = division !== activeDivision;
+  if (!tabMoved && !divisionMoved) return;
+  if (divisionMoved) {
+    activeDivision = division;
+    invalidateDivisionCaches();
   }
+  if (next && tabMoved) activeTab = next;
+  render();
 });
+
+// divisions is every Division this game's teams carry, in first-seen order.
+function divisions(): string[] {
+  return divisionsOf((state?.teams || []).map((team) => team.flags));
+}
+
+// divisionMembers is the team rows the chosen Division takes — what the results
+// sheet, the detailed sheet and the screen board rank among. Undefined for
+// «All», so the whole field is ranked as it was before Divisions existed.
+function divisionMembers(): number[] | undefined {
+  if (activeDivision === ALL_DIVISIONS) return undefined;
+  const members: number[] = [];
+  state.teams.forEach((team, index) => {
+    if (inDivision(team.flags, activeDivision)) members.push(index);
+  });
+  return members;
+}
+
+function invalidateDivisionCaches(): void {
+  invalidateTabCache("results", "detailed", "screen");
+}
+
+function pickDivision(division: string): void {
+  if (division === activeDivision) return;
+  activeDivision = division;
+  setDivisionInURL(division);
+  invalidateDivisionCaches();
+  render();
+}
+
+// divisionChips is the chip row a Division-carrying game puts above its
+// results and detailed sheets; null when no team carries a Flag, and never on
+// the entry sheet — the host types into the whole field.
+function divisionChips(): HTMLElement | null {
+  const offered = divisions();
+  if (!offered.length) return null;
+  return divisionChipRow(offered, activeDivision, pickDivision);
+}
 
 window.addEventListener("resize", () => {
   if (renderedTab === "detailed" || renderedTab === "results") teamNameOverflow.schedule();
@@ -234,6 +279,16 @@ function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest
 }
 
 
+// adoptDivision re-reads the URL's choice against the Divisions the document
+// now offers: a roster change can add one or take the chosen one away.
+function adoptDivision(): void {
+  const next = divisionFromURL(divisions());
+  if (next !== activeDivision) {
+    activeDivision = next;
+    invalidateDivisionCaches();
+  }
+}
+
 function initFromScheme(): void {
   tourLengths = od.tourLengthsOf(scheme);
   totalQuestions = tourLengths.reduce((acc, n) => acc + n, 0);
@@ -241,7 +296,10 @@ function initFromScheme(): void {
 
 // The Protocol's arithmetic lives in od-protocol.ts; these read the page's
 // state and cache the question fold between renders.
-function ensureState(): void { state = od.parseState(state, scheme, totalQuestions); }
+function ensureState(): void {
+  state = od.parseState(state, scheme, totalQuestions);
+  adoptDivision();
+}
 const normalizeShootoutMark = od.normalizeShootoutMark;
 const syncShootoutAnswersFromEntries = od.syncShootoutAnswersFromEntries;
 function teamNumber(teamIndex: number): number { return od.teamNumber(state, teamIndex); }
@@ -264,9 +322,9 @@ function sumRow(teamIndex: number, stats: QuestionStat[] = questionStats()): num
 function tourSumsForTeam(teamIndex: number, stats: QuestionStat[] = questionStats()): number[] { return od.tourSumsForTeam(stats, teamIndex, tourLengths); }
 function ratingForTeam(teamIndex: number, stats: QuestionStat[] = questionStats()): number { return od.ratingForTeam(state, stats, teamIndex); }
 function shootoutTiebreakForTeam(teamIndex: number): number[] { return od.shootoutTiebreakForTeam(state, teamIndex); }
-function rankedTeamOrder(totals: number[], tiebreaks: number[][]): RankKey[] { return od.rankedTeamOrder(state, totals, tiebreaks); }
+function rankedTeamOrder(totals: number[], tiebreaks: number[][], members?: readonly number[]): RankKey[] { return od.rankedTeamOrder(state, totals, tiebreaks, members); }
 function shootoutRoundTotalForTeam(teamIndex: number, roundIndex: number): number | null { return od.shootoutRoundTotalForTeam(state, teamIndex, roundIndex); }
-function placesFor(totals: number[]): string[] { return od.placesFor(state, questionStats(), totals); }
+function placesFor(totals: number[], members?: readonly number[]): string[] { return od.placesFor(state, questionStats(), totals, members); }
 function shootoutQuestionCompleted(roundIndex: number, questionIndex: number): boolean { return od.shootoutQuestionCompleted(state, roundIndex, questionIndex); }
 
 
@@ -355,6 +413,10 @@ function getTabPane(tab: string): HTMLElement {
   const pane = document.createElement("div");
   pane.className = "od-pane";
   pane.dataset.tab = tab;
+  if (tab === "results" || tab === "detailed") {
+    const chips = divisionChips();
+    if (chips) pane.appendChild(chips);
+  }
   pane.appendChild(node);
   tabCache.set(tab, pane);
   return pane;
@@ -413,9 +475,7 @@ function updateHeaderProgress(): void {
 function renderTabs(): void {
   renderTabBar(odTabsRoot, TABS, activeTab, (key) => {
     activeTab = key;
-    if (window.location.hash.replace(/^#/, "") !== key) {
-      history.replaceState(null, "", `#${key}`);
-    }
+    setHashTab(key);
     render();
   });
 }
@@ -709,9 +769,7 @@ function performUndo(): boolean {
     saveState(["entries", qIndex], restored);
     if (activeTab !== "input") {
       activeTab = "input";
-      if (window.location.hash.replace(/^#/, "") !== "input") {
-        history.replaceState(null, "", "#input");
-      }
+      setHashTab("input");
     }
     render();
     sheet.select({row: 0, col: qIndex}, {row: Math.max(0, state.teams.length - 1), col: qIndex}, {focus: true});
@@ -1895,8 +1953,9 @@ function buildDetailedScoreTable(): HTMLTableElement {
   themes.push(...shootoutThemeHeaders());
 
   const totals = state.teams.map((_, i) => sumRow(i, stats));
-  const placeMap = placesFor(totals);
-  const rows = detailedTeamOrder().map((teamIndex): ScoreTableRow => {
+  const members = divisionMembers();
+  const placeMap = placesFor(totals, members);
+  const rows = detailedTeamOrder(members).map((teamIndex): ScoreTableRow => {
     const team = state.teams[teamIndex];
     let qIndex = 0;
     return {
@@ -1991,9 +2050,8 @@ function shootoutAnswerCell(teamIndex: number, roundIndex: number, questionIndex
   return cell;
 }
 
-function detailedTeamOrder(): number[] {
-  return state.teams
-    .map((_, index) => index)
+function detailedTeamOrder(members?: readonly number[]): number[] {
+  return (members ? members.slice() : state.teams.map((_, index) => index))
     .sort((a, b) => {
       const aNumber = teamNumber(a);
       const bNumber = teamNumber(b);
@@ -2031,6 +2089,10 @@ function nameCell(teamIndex: number): HTMLTableCellElement {
   name.setAttribute("aria-label", label);
   nameWrap.appendChild(name);
   layout.appendChild(nameWrap);
+  // The badges are the layout grid's third column — beside the name, outside
+  // the pill it clips and fades inside.
+  const badges = teamFlagBadges(teamBadges(teamIndex));
+  if (badges) layout.appendChild(badges);
   cell.appendChild(layout);
 
   const fullName = document.createElement("span");
@@ -2039,6 +2101,14 @@ function nameCell(teamIndex: number): HTMLTableCellElement {
   cell.appendChild(fullName);
 
   return cell;
+}
+
+// teamBadges are the Divisions shown after a team's name — only while the whole
+// field is on screen. Inside one Division every row carries the same badge,
+// which says nothing (ADR-0020).
+function teamBadges(teamIndex: number): string[] | undefined {
+  if (activeDivision !== ALL_DIVISIONS) return undefined;
+  return state.teams[teamIndex]?.flags;
 }
 
 function detailedNameHeader(): HTMLElement {
@@ -2157,9 +2227,7 @@ function createShootoutRound(numbers: number[]): void {
   invalidateShootoutCaches();
   saveState(["shootoutRounds"], state.shootoutRounds);
   activeTab = "input";
-  if (window.location.hash.replace(/^#/, "") !== "input") {
-    history.replaceState(null, "", "#input");
-  }
+  setHashTab("input");
   render();
   focusShootoutInput(state.shootoutRounds.length - 1, 0, 0);
 }
@@ -2471,7 +2539,8 @@ function populateScreenRows(wrapper: ScreenWrapper): void {
   const cols = wrapper.querySelector<HTMLElement>(".screen-cols")!;
   applyScreenColors(wrapper);
 
-  if (!state.teams.length) {
+  const members = divisionMembers();
+  if (!state.teams.length || (members && !members.length)) {
     const empty = document.createElement("div");
     empty.className = "screen-empty";
     empty.textContent = S.od.screen.noTeams();
@@ -2487,9 +2556,9 @@ function populateScreenRows(wrapper: ScreenWrapper): void {
   const tourIndex = currentTourIndex();
   const tourStarted = tourIndex >= 0 && tourHasStarted(tourIndex);
 
-  const sortKeys = rankedTeamOrder(totals, tiebreaks);
+  const sortKeys = rankedTeamOrder(totals, tiebreaks, members);
 
-  const placeMap = placesFor(totals);
+  const placeMap = placesFor(totals, members);
 
   // Group consecutive teams that share a place, like buildResultsTableInner.
   const placeGroups: Array<{placeText: string; keys: RankKey[]}> = [];
@@ -2514,6 +2583,7 @@ function populateScreenRows(wrapper: ScreenWrapper): void {
       tr.appendChild(resultsTeamCell(teamLabel(index), {
         city: screenSettings.showCity ? state.teams[index].city : "",
         flag: screenSettings.showCountry ? teamFlagEmoji(index) : "",
+        badges: teamBadges(index),
       }));
       tr.appendChild(td(total, "results-num total-cell results-total"));
       const tourValue = tourStarted ? tourTotals[index][tourIndex] : "·";
@@ -2621,9 +2691,10 @@ function buildResultsTableInner(): HTMLTableElement {
   const tourStarted = tourLengths.map((_, tourIndex) => tourHasStarted(tourIndex));
   const shootoutRoundCount = state.shootoutRounds.length;
 
-  const sortKeys = rankedTeamOrder(totals, tiebreaks);
+  const members = divisionMembers();
+  const sortKeys = rankedTeamOrder(totals, tiebreaks, members);
 
-  const placeMap = placesFor(totals);
+  const placeMap = placesFor(totals, members);
 
   const table = document.createElement("table");
   table.className = "results-table od-results-table";
@@ -2679,7 +2750,7 @@ function buildResultsTableInner(): HTMLTableElement {
       if (rowIdx === group.rows.length - 1) classes.push("results-group-last");
       tr.className = classes.join(" ");
       tr.appendChild(td(group.placeText, "results-place"));
-      tr.appendChild(resultsTeamCell(teamLabel(index), {city: state.teams[index].city}));
+      tr.appendChild(resultsTeamCell(teamLabel(index), {city: state.teams[index].city, badges: teamBadges(index)}));
       tr.appendChild(td(total, "results-num total-cell results-total"));
       for (let t = 0; t < tourLengths.length; t++) {
         if (tourStarted[t]) tr.appendChild(td(tourTotals[index][t], "results-tour"));

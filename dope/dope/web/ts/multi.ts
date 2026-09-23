@@ -16,6 +16,7 @@ import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
 import {bindScrollEdges, createTeamNameOverflowController, fitScrollFade, renderTabBar} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
+import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
 import * as multi from "./multi-protocol.js";
 import {CYCLE_LIMIT} from "./multi-protocol.js";
 import S from "./i18nstrings.js";
@@ -83,15 +84,10 @@ const TABS = [
   ...(viewer ? [] : [{key: "refusals", label: S.multi.tabs.refusals()}]),
   {key: "roster", label: S.multi.tabs.roster()},
 ];
-let activeTab = tabFromHash() || "detailed";
+let activeTab = tabFromHash(TABS) || "detailed";
 
-function tabFromHash(): string | null {
-  const key = (window.location.hash || "").replace(/^#/, "");
-  return TABS.some((t) => t.key === key) ? key : null;
-}
-
-window.addEventListener("hashchange", () => {
-  const next = tabFromHash();
+onNavigate(() => {
+  const next = tabFromHash(TABS);
   if (next && next !== activeTab) {
     activeTab = next;
     render();
@@ -436,7 +432,7 @@ function render(): void {
   if (!TABS.some((t) => t.key === activeTab)) activeTab = "detailed";
   if (tabsRoot) renderTabBar(tabsRoot, TABS, activeTab, (key) => {
     activeTab = key;
-    window.location.hash = key;
+    setHashTab(key);
     render();
   });
   const node = activeTab === "results"

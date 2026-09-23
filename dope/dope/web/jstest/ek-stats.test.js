@@ -7,18 +7,18 @@ test("computeEKPlayerStats aggregates per player across battles, regular themes 
     {code: "r16", matches: [
       {code: "A", participants: [
         {name: "Alpha", themes: [
-          {player: "Ann", answers: ["right", "wrong", "", "", "right"]},
-          {player: "Bob", answers: ["", "", "right", "", ""]},
-          {player: "", answers: ["right", "right", "right", "right", "right"]},
+          {players: ["Ann"], answers: ["right", "wrong", "", "", "right"]},
+          {players: ["Bob"], answers: ["", "", "right", "", ""]},
+          {players: [""], answers: ["right", "right", "right", "right", "right"]},
         ], shootoutThemes: [
-          {player: "Ann", answers: ["right", "right", "right", "right", "right"]},
+          {players: ["Ann"], answers: ["right", "right", "right", "right", "right"]},
         ]},
       ]},
     ]},
     {code: "r8", matches: [
       {code: "M", participants: [
         {name: "Alpha", themes: [
-          {player: "Ann", answers: ["right", "", "", "", ""]},
+          {players: ["Ann"], answers: ["right", "", "", "", ""]},
         ]},
       ]},
     ]},
@@ -45,14 +45,14 @@ test("computeEKPlayerStats keys by (team, player) — concatenation collisions s
   const stages = [
     {code: "r16", matches: [
       {code: "A", participants: [
-        {name: "Альфа", themes: [{player: "Бета", answers: ["right", "", "", "", ""]}]},
-        {name: "АльфаБ", themes: [{player: "ета", answers: ["", "right", "", "", ""]}]},
+        {name: "Альфа", themes: [{players: ["Бета"], answers: ["right", "", "", "", ""]}]},
+        {name: "АльфаБ", themes: [{players: ["ета"], answers: ["", "right", "", "", ""]}]},
       ]},
       // battle-id collision: (stage "r16", match "8") vs (stage "r168", match "")
-      {code: "8", participants: [{name: "Альфа", themes: [{player: "Бета", answers: ["right", "", "", "", ""]}]}]},
+      {code: "8", participants: [{name: "Альфа", themes: [{players: ["Бета"], answers: ["right", "", "", "", ""]}]}]},
     ]},
     {code: "r168", matches: [
-      {code: "", participants: [{name: "Альфа", themes: [{player: "Бета", answers: ["", "", "right", "", ""]}]}]},
+      {code: "", participants: [{name: "Альфа", themes: [{players: ["Бета"], answers: ["", "", "right", "", ""]}]}]},
     ]},
   ];
   const rows = T.computeEKPlayerStats(stages);
@@ -67,14 +67,14 @@ test("computeEKPlayerStats team-share zeroes out non-helpers", () => {
       {code: "A", participants: [
         // Share is over POSITIVE contributors only; negatives are 0.
         {name: "Plus", themes: [
-          {player: "Up", answers: ["right", "right", "", "", ""]},   // +30
-          {player: "Down", answers: ["wrong", "", "", "", ""]},      // -10
+          {players: ["Up"], answers: ["right", "right", "", "", ""]},   // +30
+          {players: ["Down"], answers: ["wrong", "", "", "", ""]},      // -10
         ]},
         // Net-negative team: the positive player still gets a share (its slice
         // of the team's positive points), the negative player is 0.
         {name: "Minus", themes: [
-          {player: "Good", answers: ["right", "", "", "", ""]},      // +10
-          {player: "Bad", answers: ["", "", "", "", "wrong"]},       // -50
+          {players: ["Good"], answers: ["right", "", "", "", ""]},      // +10
+          {players: ["Bad"], answers: ["", "", "", "", "wrong"]},       // -50
         ]},
       ]},
     ]},

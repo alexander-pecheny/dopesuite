@@ -140,6 +140,10 @@ var RU = Strings{
 			Stats:      func() string { return "Статистика" },
 			Venues:     func() string { return "Площадки" },
 		},
+		Seats: EkSeatsStrings{
+			Empty: func() string { return "Состав команды не заполнен" },
+			Label: func() string { return "Кто выходит на тему" },
+		},
 		Seed: EkSeedStrings{
 			DeclineFailed: func() string { return "Не удалось сохранить отказ" },
 			DeclinedAria:  func(name string) string { return fmt.Sprintf("Отказалась: %s", name) },
@@ -350,6 +354,7 @@ var RU = Strings{
 		},
 		Section: GallerySectionStrings{
 			Chips:           func() string { return "Значки, суммы, карточки" },
+			Divisions:       func() string { return "Зачёты" },
 			EkStats:         func() string { return "Статистика ЭК" },
 			FestGrid:        func() string { return "Сетка" },
 			GroupStandings:  func() string { return "Групповой этап" },
@@ -433,6 +438,10 @@ var RU = Strings{
 		},
 		Ek: GamesEkStrings{
 			Label: func() string { return "ЭК" },
+		},
+		Es: GamesEsStrings{
+			Label: func() string { return "Эрудит-Секстет" },
+			Short: func() string { return "ЭС" },
 		},
 		Hamsa: GamesHamsaStrings{
 			Label: func() string { return "Хамса" },
@@ -618,6 +627,9 @@ var RU = Strings{
 			ErrorSlugTaken:     func() string { return "Slug уже занят в этом фесте." },
 			ErrorTitleRequired: func() string { return "Название обязательно." },
 			ErrorTypeMissing:   func() string { return "выберите тип игры" },
+			EsHint: func() string {
+				return "Тот же язык схем, что у ЭК. players — сколько игроков команда выводит на тему (по умолчанию 3, можно по раундам: players.r3: 2)."
+			},
 			HamsaHint: func() string {
 				return "Тот же язык схем. kind: placement — групповой этап, где команды не вылетают, а везут места дальше: раунд 1 сеет полосами посева, каждый следующий сажает за стол k места k всех столов, а остатки разыгрываются жребием на Сетке. Письменный отбор играется отдельной игрой КСИ; чтобы посеять отсюда, добавьте [init] seed: <код той игры>."
 			},
@@ -669,6 +681,7 @@ var RU = Strings{
 			},
 			TypeBrain:       func() string { return "Брейн" },
 			TypeEk:          func() string { return "ЭК" },
+			TypeEs:          func() string { return "Эрудит-Секстет" },
 			TypeHamsa:       func() string { return "Хамса" },
 			TypeKsi:         func() string { return "КСИ" },
 			TypeKsiStickers: func() string { return "КСИ со стикерами" },
@@ -726,6 +739,7 @@ var RU = Strings{
 			AddOverrideBtn:      func() string { return "Добавить оверрайд для игры" },
 			CancelBtn:           func() string { return "Отмена" },
 			ColCity:             func() string { return "Город" },
+			ColFlags:            func() string { return "Зачёты" },
 			ColFromTeam:         func() string { return "Из команды" },
 			ColPlayers:          func() string { return "Игроков" },
 			ColToTeam:           func() string { return "В команду" },
@@ -753,7 +767,12 @@ var RU = Strings{
 			ErrorObjPlayer:        func() string { return "игрока" },
 			ErrorObjSourceTeam:    func() string { return "исходную команду" },
 			ErrorObjTeam:          func() string { return "команду" },
-			GamesLabel:            func() string { return "Игры" },
+			FlagsHint: func() string {
+				return "Зачёты команды — через запятую: «Школ, Студ». Их видно на страницах ОД и КСИ, где по зачёту можно отфильтровать таблицу. Импорт из rating.chgk.info перезаписывает их."
+			},
+			FlagsPlaceholder: func() string { return "Школ, Студ" },
+			FlagsSavedNotice: func() string { return "Зачёты сохранены." },
+			GamesLabel:       func() string { return "Игры" },
 			ImportDoneCounts: func(teams string, players string, od string, ksi string) string {
 				return fmt.Sprintf("Загружено команд: %s, игроков: %s. Обновлено игр ЧГК: %s, КСИ: %s.", teams, players, od, ksi)
 			},
@@ -990,6 +1009,15 @@ var RU = Strings{
 	Markdown: MarkdownStrings{
 		Details: MarkdownDetailsStrings{
 			DefaultSummary: func() string { return "Подробнее" },
+		},
+	},
+	Matchops: MatchopsStrings{
+		Seating: MatchopsSeatingStrings{
+			NotInRoster: func() string { return "Этого игрока нет в составе команды." },
+			Repeated:    func() string { return "Игрок выходит на тему один раз." },
+			TooMany: func(n int) string {
+				return fmt.Sprintf("На тему выходит не больше %d %s.", n, core.Plural("ru", n, "игрока", "игроков", "игроков"))
+			},
 		},
 	},
 	Multi: MultiStrings{
@@ -1701,6 +1729,10 @@ var RU = Strings{
 			UnassignedLead: func() string {
 				return "Командам не присвоены номера — редактирование результатов заблокировано. "
 			},
+		},
+		Division: ScreenDivisionStrings{
+			All:   func() string { return "Все" },
+			Label: func() string { return "Зачёт" },
 		},
 		Downloads: ScreenDownloadsStrings{
 			Archive: func() string { return "Скачать .json.gz" },

@@ -1,0 +1,11 @@
+# The match-blob patch layer (dope/dope/domain/matchops): what a host reads
+# when an edit to a бой's protocol names a seating the игра does not allow.
+
+[seating]
+# More players sent to one theme than the game seats (ЭК one, Эрудит-Секстет
+# three unless the scheme says otherwise); n is the cap.
+too_many = 'На тему выходит не больше {{.n}} {{plural .n "игрока" "игроков" "игроков"}}.'
+# The same player named twice in one theme's seating.
+repeated = "Игрок выходит на тему один раз."
+# A player who is not in the team's состав.
+not_in_roster = "Этого игрока нет в составе команды."

@@ -363,3 +363,90 @@ func festTeamByRatingID(t *testing.T, db *sql.DB, festID, ratingID int64) (int64
 	}
 	return id, number
 }
+
+// A team's Flags reach both flat documents through the roster, and a Flag that
+// changed is a change: the import's "unchanged → no-op" short-circuit must not
+// swallow it, or the pages would keep offering yesterday's Divisions.
+func TestImportRatingRosterPropagatesFlags(t *testing.T) {
+	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, odGameID, ksiGameID := createRosterPropagationFixture(t, db)
+	srv := dopeserver.NewTestServer(func(e *core.Engine) {
+		e.DB = db
+		e.RT = realtime.NewManager()
+	})
+
+	flagged := func(short ...string) []roster.FestRosterFlag {
+		var out []roster.FestRosterFlag
+		for _, s := range short {
+			out = append(out, roster.FestRosterFlag{Short: s, Full: s})
+		}
+		return out
+	}
+	teams := []roster.FestRosterImportTeam{
+		{RatingID: 2, Name: "Бета", Flags: flagged("Школ", "Е")},
+		{RatingID: 3, Name: "Гамма"},
+	}
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, teams, imports.RosterChoice{}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+
+	od := loadODStateFlags(t, db, odGameID)
+	if got := od["Бета"]; len(got) != 2 || got[0] != "Школ" || got[1] != "Е" {
+		t.Fatalf("od flags %v", got)
+	}
+	if got := od["Гамма"]; len(got) != 0 {
+		t.Fatalf("unflagged od team carries %v", got)
+	}
+	ksi := loadKSIState(t, db, ksiGameID)
+	for _, p := range ksi.Participants {
+		if p.Name == "Бета" && (len(p.Flags) != 2 || p.Flags[0] != "Школ") {
+			t.Fatalf("ksi flags %v", p.Flags)
+		}
+	}
+
+	// Re-importing the same roster with a different Flag is not a no-op.
+	teams[1].Flags = flagged("Студ")
+	result, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, teams, imports.RosterChoice{})
+	if err != nil {
+		t.Fatalf("re-import: %v", err)
+	}
+	if result.Unchanged {
+		t.Fatal("a changed Flag was reported as unchanged")
+	}
+	if got := loadODStateFlags(t, db, odGameID)["Гамма"]; len(got) != 1 || got[0] != "Студ" {
+		t.Fatalf("re-imported od flags %v", got)
+	}
+
+	// And the very same roster twice over still short-circuits.
+	result, err = imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, teams, imports.RosterChoice{})
+	if err != nil {
+		t.Fatalf("third import: %v", err)
+	}
+	if !result.Unchanged {
+		t.Fatal("an identical roster was not reported as unchanged")
+	}
+}
+
+func loadODStateFlags(t *testing.T, db *sql.DB, gameID int64) map[string][]string {
+	t.Helper()
+	var raw string
+	if err := db.QueryRow(`select coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), '{}') from games where id = ?`, gameID).Scan(&raw); err != nil {
+		t.Fatalf("load od state: %v", err)
+	}
+	var st struct {
+		Teams []games.ODTeam `json:"teams"`
+	}
+	if err := json.Unmarshal([]byte(raw), &st); err != nil {
+		t.Fatalf("unmarshal od state: %v", err)
+	}
+	out := make(map[string][]string, len(st.Teams))
+	for _, team := range st.Teams {
+		out[team.Name] = team.Flags
+	}
+	return out
+}

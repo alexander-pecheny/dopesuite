@@ -60,7 +60,7 @@ func HandleScopedGameExport(s Host, w http.ResponseWriter, r *http.Request, fest
 		if stages, err = s.LoadAllStageMatchViews(r.Context(), festID, gameID); err == nil {
 			err = xlsxexport.BuildHamsaSheets(f, stages)
 		}
-	case "ek":
+	case "ek", "es":
 		var stages []store.StageMatches
 		if stages, err = s.LoadAllStageMatchViews(r.Context(), festID, gameID); err == nil {
 			err = xlsxexport.BuildEKSheets(f, stages)

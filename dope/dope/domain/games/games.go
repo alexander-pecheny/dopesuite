@@ -20,6 +20,7 @@ import (
 // Canonical game_type codes as stored in the games.game_type column.
 const (
 	EK     = "ek"     // erudit-quartet (bracket of small matches)
+	ES     = "es"     // erudit-sextet — EK's bout with up to three players on a theme
 	OD     = "od"     // ChGK — team quiz with one-minute rounds
 	KSI    = "ksi"    // team jeopardy
 	SI     = "si"     // individual jeopardy — players at the table, not teams
@@ -75,6 +76,12 @@ func Known(code string) bool {
 	return ok
 }
 
+// EKShaped reports whether a format plays EK's bout — twelve themes of five
+// questions at 10..50, scored by store.BuildView and edited on EK's page. EK
+// and Erudit-Sextet differ in one thing only, how many players a team seats on
+// a theme, so the generic code that used to name EK alone asks this.
+func EKShaped(code string) bool { return code == EK || code == ES }
+
 // IsIndividual reports whether the format seats players rather than teams.
 func IsIndividual(code string) bool {
 	d, ok := registry[code]
@@ -84,10 +91,14 @@ func IsIndividual(code string) bool {
 // registry is the single source of truth for known game types. Iteration order
 // is never relied upon; look-ups go through the helpers below.
 var registry = map[string]Definition{
-	EK:    {Code: EK, Label: dopestrings.Default.Games.Ek.Label(), Page: "static/ek.html", Init: InitEK},
-	OD:    {Code: OD, Label: dopestrings.Default.Games.Od.Label(), Page: "static/od.html"},
-	KSI:   {Code: KSI, Label: dopestrings.Default.Games.Ksi.Label(), Page: "static/si.html"},
-	SI:    {Code: SI, Label: dopestrings.Default.Games.Si.Label(), Individual: true, Page: "static/ek.html", Init: InitEK},
+	EK:  {Code: EK, Label: dopestrings.Default.Games.Ek.Label(), Page: "static/ek.html", Init: InitEK},
+	OD:  {Code: OD, Label: dopestrings.Default.Games.Od.Label(), Page: "static/od.html"},
+	KSI: {Code: KSI, Label: dopestrings.Default.Games.Ksi.Label(), Page: "static/si.html"},
+	SI:  {Code: SI, Label: dopestrings.Default.Games.Si.Label(), Individual: true, Page: "static/ek.html", Init: InitEK},
+	// Erudit-Sextet rides EK's page and EK's scoring — twelve themes of five,
+	// the same shootout — and differs only in seating up to three players on a
+	// theme, which is a Protocol param, not a renderer of its own.
+	ES:    {Code: ES, Label: dopestrings.Default.Games.Es.Label(), Page: "static/ek.html", Init: InitEK},
 	Brain: {Code: Brain, Label: dopestrings.Default.Games.Brain.Label(), Page: "static/brain.html"},
 	Multi: {Code: Multi, Label: dopestrings.Default.Games.Multi.Label(), Page: "static/multi.html"},
 	// Troika plays a bracket of matches, as brain does, and boots the same

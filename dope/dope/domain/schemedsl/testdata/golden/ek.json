@@ -275,7 +275,9 @@
    "teams": null,
    "sources": null,
    "sort": null,
-   "config": {},
+   "config": {
+    "players": 1
+   },
    "layout": null
   },
   {
@@ -521,7 +523,9 @@
    "teams": null,
    "sources": null,
    "sort": null,
-   "config": {},
+   "config": {
+    "players": 1
+   },
    "layout": null
   },
   {
@@ -767,7 +771,9 @@
    "teams": null,
    "sources": null,
    "sort": null,
-   "config": {},
+   "config": {
+    "players": 1
+   },
    "layout": null
   },
   {
@@ -1036,7 +1042,9 @@
    "teams": null,
    "sources": null,
    "sort": null,
-   "config": {},
+   "config": {
+    "players": 1
+   },
    "layout": null
   },
   {
@@ -1130,7 +1138,9 @@
    "teams": null,
    "sources": null,
    "sort": null,
-   "config": {},
+   "config": {
+    "players": 1
+   },
    "layout": null
   },
   {
@@ -1186,7 +1196,9 @@
    "teams": null,
    "sources": null,
    "sort": null,
-   "config": {},
+   "config": {
+    "players": 1
+   },
    "layout": null
   }
  ],

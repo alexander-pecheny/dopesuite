@@ -23,6 +23,7 @@ type_ksi = "КСИ"
 type_ksi_stickers = "КСИ со стикерами"
 type_brain = "Брейн"
 type_ek = "ЭК"
+type_es = "Эрудит-Секстет"
 type_si = "Личная СИ"
 type_multi = "Мультиигры"
 type_troika = "Тройка"
@@ -94,6 +95,9 @@ shootout: true
 hamsa_hint = "Тот же язык схем. kind: placement — групповой этап, где команды не вылетают, а везут места дальше: раунд 1 сеет полосами посева, каждый следующий сажает за стол k места k всех столов, а остатки разыгрываются жребием на Сетке. Письменный отбор играется отдельной игрой КСИ; чтобы посеять отсюда, добавьте [init] seed: <код той игры>."
 # Hint under the EK scheme editor (before the pasted-JSON field).
 ek_hint = "Либо схемой, либо готовым JSON ниже — что заполнено, то и используется."
+# Hint under the Эрудит-Секстет scheme editor: the same language, plus the
+# per-theme seat cap the format adds.
+es_hint = "Тот же язык схем, что у ЭК. players — сколько игроков команда выводит на тему (по умолчанию 3, можно по раундам: players.r3: 2)."
 # Label of the EK pasted-JSON editor.
 ek_json_label = "JSON-схема"
 # Hint at the top of the entrant picker. Shown only for the formats described by
@@ -134,6 +138,12 @@ col_city = "Город"
 col_players = "Игроков"
 # Empty state of the teams table.
 teams_empty = "Команды пока не загружены."
+# The зачёты column of the teams table: its header, the hint above the form and
+# the notice after a save.
+col_flags = "Зачёты"
+flags_hint = "Зачёты команды — через запятую: «Школ, Студ». Их видно на страницах ОД и КСИ, где по зачёту можно отфильтровать таблицу. Импорт из rating.chgk.info перезаписывает их."
+flags_placeholder = "Школ, Студ"
+flags_saved_notice = "Зачёты сохранены."
 # Players page title and crumb: "<fest title> · игроки".
 players_title = '{{.title}} · игроки'
 players_crumb = "Игроки"

@@ -13,6 +13,7 @@ package xlsxexport
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -455,7 +456,9 @@ func writeEKMatchBlock(f *excelize.File, sheet string, startRow int, mv store.Ma
 				}
 				player := ""
 				if tv != nil {
-					player = tv.Player
+					// One name in EK, up to three in Erudit-Sextet: the cell
+					// holds the whole seating, comma-separated.
+					player = strings.Join(tv.Players, ", ")
 				}
 				nameCells = append(nameCells, player)
 				for i := 1; i < nv; i++ {
@@ -503,12 +506,35 @@ func writeEKMatchBlock(f *excelize.File, sheet string, startRow int, mv store.Ma
 type ekPlayerStat struct {
 	Player  string
 	Team    string
-	Sum     int     // Σ: signed point total
-	Plus    int     // Σ+: points from correct answers only
+	Sum     float64 // Σ: signed point total, a theme's points split among its seated
+	Plus    float64 // Σ+: points from correct answers only, split the same way
 	Battles int     // distinct matches the player appeared in
 	Right   [5]int  // correct counts by value index (0→10 … 4→50)
 	Wrong   [5]int  // wrong counts by value index
 	Share   float64 // 0..1 share among the team's positive contributors
+}
+
+// seatedNames is a theme's seating with blanks dropped and the names trimmed —
+// what the stats count as having played it.
+func seatedNames(players []string) []string {
+	out := make([]string, 0, len(players))
+	for _, name := range players {
+		if trimmed := strings.TrimSpace(name); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
+}
+
+// roundedStat is a divided Σ as a sheet cell: a whole number where the split
+// came out whole, one decimal otherwise — the same shape the page's stats tab
+// prints.
+func roundedStat(value float64) interface{} {
+	rounded := math.Round(value*10) / 10
+	if rounded == math.Trunc(rounded) {
+		return int(rounded)
+	}
+	return rounded
 }
 
 // computeEKPlayerStats aggregates per-player stats across all stages/matches,
@@ -527,34 +553,41 @@ func computeEKPlayerStats(stages []store.StageMatches) []ekPlayerStat {
 			battleID := stage.Code + match.Code
 			for _, team := range match.Participants {
 				for _, theme := range team.Themes {
-					player := strings.TrimSpace(theme.Player)
-					if player == "" {
+					seated := seatedNames(theme.Players)
+					if len(seated) == 0 {
 						continue
 					}
-					key := team.Name + "\x00" + player
-					a := byKey[key]
-					if a == nil {
-						a = &agg{stat: ekPlayerStat{Player: player, Team: team.Name}, battles: map[string]bool{}}
-						byKey[key] = a
-						order = append(order, key)
-					}
-					if !a.battles[battleID] {
-						a.battles[battleID] = true
-						a.stat.Battles++
-					}
-					for i, mark := range theme.Answers {
-						v := 0
-						if i < len(values) {
-							v = values[i]
+					// A theme's points are the team's, so they divide equally
+					// among whoever sat it; a question taken or missed is
+					// counted whole for each of them — a third of a question
+					// is nonsense.
+					share := 1 / float64(len(seated))
+					for _, player := range seated {
+						key := team.Name + "\x00" + player
+						a := byKey[key]
+						if a == nil {
+							a = &agg{stat: ekPlayerStat{Player: player, Team: team.Name}, battles: map[string]bool{}}
+							byKey[key] = a
+							order = append(order, key)
 						}
-						switch store.NormalizeMark(mark) {
-						case "right":
-							a.stat.Sum += v
-							a.stat.Plus += v
-							a.stat.Right[i]++
-						case "wrong":
-							a.stat.Sum -= v
-							a.stat.Wrong[i]++
+						if !a.battles[battleID] {
+							a.battles[battleID] = true
+							a.stat.Battles++
+						}
+						for i, mark := range theme.Answers {
+							v := 0
+							if i < len(values) {
+								v = values[i]
+							}
+							switch store.NormalizeMark(mark) {
+							case "right":
+								a.stat.Sum += float64(v) * share
+								a.stat.Plus += float64(v) * share
+								a.stat.Right[i]++
+							case "wrong":
+								a.stat.Sum -= float64(v) * share
+								a.stat.Wrong[i]++
+							}
 						}
 					}
 				}
@@ -563,7 +596,7 @@ func computeEKPlayerStats(stages []store.StageMatches) []ekPlayerStat {
 	}
 	// The team-share column: a positive player's share among their team's
 	// positive contributors, so a team's positive players' shares sum to 100%.
-	teamPositive := map[string]int{}
+	teamPositive := map[string]float64{}
 	rows := make([]ekPlayerStat, 0, len(order))
 	for _, key := range order {
 		st := byKey[key].stat
@@ -574,7 +607,7 @@ func computeEKPlayerStats(stages []store.StageMatches) []ekPlayerStat {
 	}
 	for i := range rows {
 		if total := teamPositive[rows[i].Team]; rows[i].Sum > 0 && total > 0 {
-			rows[i].Share = float64(rows[i].Sum) / float64(total)
+			rows[i].Share = rows[i].Sum / total
 		}
 	}
 	sort.SliceStable(rows, func(a, b int) bool {
@@ -615,7 +648,7 @@ func buildEKStatsSheet(f *excelize.File, stages []store.StageMatches) error {
 		return err
 	}
 	for i, r := range rows {
-		cells := []interface{}{r.Player, r.Team, r.Sum, r.Plus, r.Battles}
+		cells := []interface{}{r.Player, r.Team, roundedStat(r.Sum), roundedStat(r.Plus), r.Battles}
 		for v := 4; v >= 0; v-- {
 			cells = append(cells, r.Right[v])
 		}

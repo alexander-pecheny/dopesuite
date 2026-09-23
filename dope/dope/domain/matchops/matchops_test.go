@@ -43,8 +43,8 @@ func TestApplyPaths(t *testing.T) {
 	if got := blob.Participants["11"].Themes[2].Answers[4]; got != "right" {
 		t.Fatalf("answer = %q", got)
 	}
-	if got := blob.Participants["11"].Themes[2].Player; got != 101 {
-		t.Fatalf("player = %d", got)
+	if got := blob.Participants["11"].Themes[2].Players; len(got) != 1 || got[0] != 101 {
+		t.Fatalf("players = %v", got)
 	}
 	if got := blob.Pin(22); got == nil || *got != 1.5 {
 		t.Fatalf("pin = %v", got)
@@ -63,7 +63,7 @@ func TestApplyRemove(t *testing.T) {
 	blob := store.MatchBlob{}
 	place := 2.0
 	blob.SetPin(11, &place)
-	blob.SetPlayer(11, "regular", 0, 101)
+	blob.SetPlayers(11, "regular", 0, []int64{101})
 	blob.EnsureTheme(11, "shootout", 0)
 	if err := Apply(&blob, testMatch(), []edit.PatchOp{
 		op("remove", ``, "teams", "11", "pin"),
@@ -72,7 +72,7 @@ func TestApplyRemove(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if blob.Pin(11) != nil || blob.Participants["11"].Themes[0].Player != 0 {
+	if blob.Pin(11) != nil || len(blob.Participants["11"].Themes[0].Players) != 0 {
 		t.Fatalf("removes did not clear: %+v", blob.Participants["11"])
 	}
 	if len(blob.Participants["11"].ShootoutThemes) != 0 {

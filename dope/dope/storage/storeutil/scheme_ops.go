@@ -25,8 +25,10 @@ func ValidateScheme(scheme store.FestScheme) error {
 		return corei18n.User(dopestrings.Default.Scheme.Validate.TitleRequired())
 	}
 	gameType := scheme.GameType
-	// EK is the default game type when none is recorded.
-	if (gameType == "" || gameType == "ek") && len(scheme.Stages) == 0 {
+	// EK is the default game type when none is recorded, and Erudit-Sextet
+	// plays EK's bracket; storage is below domain/games, so the codes are
+	// spelled out here rather than asked of the registry.
+	if (gameType == "" || gameType == "ek" || gameType == "es") && len(scheme.Stages) == 0 {
 		return corei18n.User(dopestrings.Default.Scheme.Validate.StagesRequired())
 	}
 	stageCodes := make(map[string]struct{}, len(scheme.Stages))

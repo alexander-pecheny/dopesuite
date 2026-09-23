@@ -45,6 +45,10 @@ type DBMatchState struct {
 	// Themes is how many regular themes this match plays, from its stage. Zero
 	// means the default — a match whose stage never said.
 	Themes int
+	// Players is how many of a team may sit on one theme of this match — one
+	// in EK, up to three in Erudit-Sextet — from its stage, falling back to
+	// the Protocol's own default. Never zero once loaded.
+	Players int
 }
 
 // teamBlobProtocols are the Protocols whose match state is the team-keyed
@@ -69,6 +73,22 @@ func RegisterSeatRoster(code string) { seatRosterProtocols[code] = true }
 // seats, and therefore wants their roster on the view.
 func SeatsPlayers(gameType string) bool {
 	return TeamBlobShaped(gameType) || seatRosterProtocols[gameType]
+}
+
+// seatCaps is how many players each Protocol seats on a theme when no Block
+// config says — one for EK, three for Erudit-Sextet. Each registers its own
+// (protocol.Register), the store being a leaf that cannot ask.
+var seatCaps = map[string]int{}
+
+func RegisterSeatCap(code string, players int) { seatCaps[code] = players }
+
+// SeatCap is a game type's default seats per theme; a format with no notion of
+// it (and the legacy typeless EK fixture) seats one.
+func SeatCap(gameType string) int {
+	if n := seatCaps[gameType]; n > 0 {
+		return n
+	}
+	return 1
 }
 
 // ProtocolState is the document the match's Protocol scores: the projected
@@ -108,6 +128,7 @@ func MatchViewFrom(match DBMatchState) MatchView {
 		}
 	}
 	view := BuildView(match.State)
+	view.Players = match.Players
 	view.Code = match.Code
 	view.StageCode = match.StageCode
 	view.StageTitle = match.StageTitle
@@ -283,6 +304,7 @@ order by s.position, s.id, m.position, m.id`, args...)
 			return nil, err
 		}
 		match.Themes = stageThemeCount(stageConfig)
+		match.Players = stageSeatCount(stageConfig, match.GameType)
 		match.RawState = stateJSON
 		if TeamBlobShaped(match.GameType) {
 			blob, err := ParseMatchBlob(stateJSON)
@@ -486,20 +508,26 @@ order by gtp.participant_id, gtp.roster_order`
 
 func stageThemeCount(configJSON string) int { return ParseStageConfig(configJSON).Themes() }
 
+// stageSeatCount is how many players a theme of this match seats: what the
+// Block said, else the Protocol's default.
+func stageSeatCount(configJSON, gameType string) int {
+	if n := ParseStageConfig(configJSON).Players(); n > 0 {
+		return n
+	}
+	return SeatCap(gameType)
+}
+
 // blobPlayerNames resolves every player id the matches' blobs mention to a
 // display name, in one statement.
 func blobPlayerNames(ctx context.Context, q Queryer, matches []DBMatchState) (func(int64) string, error) {
 	ids := map[int64]bool{}
 	for _, match := range matches {
 		for _, section := range match.Blob.Participants {
-			for _, theme := range section.Themes {
-				if theme.Player != 0 {
-					ids[theme.Player] = true
-				}
-			}
-			for _, theme := range section.ShootoutThemes {
-				if theme.Player != 0 {
-					ids[theme.Player] = true
+			for _, theme := range append(append([]BlobTheme(nil), section.Themes...), section.ShootoutThemes...) {
+				for _, id := range theme.Players {
+					if id != 0 {
+						ids[id] = true
+					}
 				}
 			}
 		}

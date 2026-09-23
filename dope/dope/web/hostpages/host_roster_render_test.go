@@ -114,3 +114,41 @@ func TestParseRosterChoiceReadsTheForm(t *testing.T) {
 		t.Errorf("drop = %v, want team 43 only", choice.Drop)
 	}
 }
+
+// TestHostTeamsDocRendersFlagEditor builds the teams page and confirms the
+// зачёты column is a saveable form field per team, named for that team's id.
+func TestHostTeamsDocRendersFlagEditor(t *testing.T) {
+	data := hostFestRosterData{
+		Fest: view.HostFest{ID: 5, Title: "Кубок"},
+		Teams: []hostFestTeam{
+			{ID: 7, RatingID: 3, Name: "Альфа", City: "Ереван", Players: 6, Flags: "Школ, Е"},
+			{ID: 8, Name: "Бета", City: "Тбилиси", Players: 5},
+		},
+	}
+	html, err := dopeui.Render(hostTeamsDoc(data))
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	body := string(html)
+	for _, want := range []string{
+		`action="/host/fest/5/teams"`, `method="post"`,
+		`name="flags_7"`, `value="Школ, Е"`, `name="flags_8"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("teams page missing %q", want)
+		}
+	}
+}
+
+func TestParseTypedFlags(t *testing.T) {
+	got := parseTypedFlags(" Школ , , Студ ,Школ")
+	if len(got) != 2 {
+		t.Fatalf("got %#v", got)
+	}
+	if got[0].Short != "Школ" || got[0].Full != "Школ" || got[1].Short != "Студ" {
+		t.Fatalf("got %#v", got)
+	}
+	if len(parseTypedFlags("   ")) != 0 {
+		t.Fatal("a blank field should clear the зачёты")
+	}
+}

@@ -93,7 +93,7 @@ test("patchScoreTable syncs the per-round player name in place", () => {
   const player0 = idx.register("playerText", {team: 0, shootout: "0", theme: 0});
   const player1 = idx.register("playerText", {team: 0, shootout: "0", theme: 1});
   const state = {participants: [{total: 0, plus: 0, correctCounts: [], shootoutThemes: [],
-    themes: [{score: 0, answers: [], player: "Alice"}, {score: 0, answers: [], player: "Bob"}]}]};
+    themes: [{score: 0, answers: [], players: ["Alice"]}, {score: 0, answers: [], players: ["Bob"]}]}]};
   T.patchScoreTable(idx, state, {formatNumber: String});
   assert.equal(player0.textContent, "Alice", "player text patched from MatchView, not just marks");
   assert.equal(player1.textContent, "Bob");
@@ -104,7 +104,7 @@ test("patchScoreTable syncs the per-round player name in place", () => {
 test("scoreCellSpecs declares a sync for every live cell, incl. the player", () => {
   const synced = T.scoreCellSpecs(SCORE_OPTS).filter((s) => s.sync).map((s) => s.name);
   for (const name of ["answer", "themeScore", "total", "plus", "tiebreak", "correctCount",
-    "playerText", "playerSelect"]) {
+    "playerText", "playerSelect", "playerSeats"]) {
     assert.ok(synced.includes(name), `${name} must sync in place`);
   }
 });

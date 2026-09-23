@@ -62,20 +62,23 @@ func stateOfMatch(t *testing.T, db *sql.DB, matchID int64) string {
 
 // Set ops create intermediate containers (objects for named segments, arrays
 // padded for numeric ones); remove splices arrays and prunes emptied team
-// sections; a path through missing containers is a tolerated no-op.
+// sections; a path through missing containers is a tolerated no-op. A record
+// written before Эрудит-Секстет names one player where the blob now keeps a
+// list, and replay stores the list — the live path converts on the same edit,
+// and the two must not diverge.
 func TestMatchPatchApply(t *testing.T) {
 	db := patchDB(t)
 	applyPatch(t, db, `{"m":5,"ops":[
 		{"k":"set","p":"/participants/7/themes/1/answers/4","v":"right"},
 		{"k":"set","p":"/participants/7/themes/1/player","v":55}
 	]}`)
-	want := `{"participants":{"7":{"themes":[{"answers":["","","","",""]},{"answers":["","","","","right"],"player":55}]}}}`
+	want := `{"participants":{"7":{"themes":[{"answers":["","","","",""]},{"answers":["","","","","right"],"players":[55]}]}}}`
 	if got := stateOf(t, db); got != want {
 		t.Fatalf("state = %s\nwant   %s", got, want)
 	}
 
 	applyPatch(t, db, `{"m":5,"ops":[{"k":"remove","p":"/participants/7/themes/0"}]}`)
-	want = `{"participants":{"7":{"themes":[{"answers":["","","","","right"],"player":55}]}}}`
+	want = `{"participants":{"7":{"themes":[{"answers":["","","","","right"],"players":[55]}]}}}`
 	if got := stateOf(t, db); got != want {
 		t.Fatalf("after splice = %s\nwant %s", got, want)
 	}

@@ -128,6 +128,10 @@ export const RU: Strings = {
       stats: () => "Статистика",
       venues: () => "Площадки",
     },
+    seats: {
+      empty: () => "Состав команды не заполнен",
+      label: () => "Кто выходит на тему",
+    },
     seed: {
       declineFailed: () => "Не удалось сохранить отказ",
       declinedAria: (name: string) => `Отказалась: ${name}`,
@@ -326,6 +330,7 @@ export const RU: Strings = {
     },
     section: {
       chips: () => "Значки, суммы, карточки",
+      divisions: () => "Зачёты",
       ekStats: () => "Статистика ЭК",
       festGrid: () => "Сетка",
       groupStandings: () => "Групповой этап",
@@ -383,6 +388,10 @@ export const RU: Strings = {
     },
     ek: {
       label: () => "ЭК",
+    },
+    es: {
+      label: () => "Эрудит-Секстет",
+      short: () => "ЭС",
     },
     hamsa: {
       label: () => "Хамса",
@@ -520,6 +529,7 @@ export const RU: Strings = {
       errorSlugTaken: () => "Slug уже занят в этом фесте.",
       errorTitleRequired: () => "Название обязательно.",
       errorTypeMissing: () => "выберите тип игры",
+      esHint: () => "Тот же язык схем, что у ЭК. players — сколько игроков команда выводит на тему (по умолчанию 3, можно по раундам: players.r3: 2).",
       hamsaHint: () => "Тот же язык схем. kind: placement — групповой этап, где команды не вылетают, а везут места дальше: раунд 1 сеет полосами посева, каждый следующий сажает за стол k места k всех столов, а остатки разыгрываются жребием на Сетке. Письменный отбор играется отдельной игрой КСИ; чтобы посеять отсюда, добавьте [init] seed: <код той игры>.",
       hamsaScheme: (n: string) => `[defaults]
 venues: [А, Б, В]
@@ -570,6 +580,7 @@ shootout: true
       troikaHint: () => "Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50.",
       typeBrain: () => "Брейн",
       typeEk: () => "ЭК",
+      typeEs: () => "Эрудит-Секстет",
       typeHamsa: () => "Хамса",
       typeKsi: () => "КСИ",
       typeKsiStickers: () => "КСИ со стикерами",
@@ -623,6 +634,7 @@ shootout: true
       addOverrideBtn: () => "Добавить оверрайд для игры",
       cancelBtn: () => "Отмена",
       colCity: () => "Город",
+      colFlags: () => "Зачёты",
       colFromTeam: () => "Из команды",
       colPlayers: () => "Игроков",
       colToTeam: () => "В команду",
@@ -644,6 +656,9 @@ shootout: true
       errorObjPlayer: () => "игрока",
       errorObjSourceTeam: () => "исходную команду",
       errorObjTeam: () => "команду",
+      flagsHint: () => "Зачёты команды — через запятую: «Школ, Студ». Их видно на страницах ОД и КСИ, где по зачёту можно отфильтровать таблицу. Импорт из rating.chgk.info перезаписывает их.",
+      flagsPlaceholder: () => "Школ, Студ",
+      flagsSavedNotice: () => "Зачёты сохранены.",
       gamesLabel: () => "Игры",
       importDoneCounts: (teams: string, players: string, od: string, ksi: string) => `Загружено команд: ${teams}, игроков: ${players}. Обновлено игр ЧГК: ${od}, КСИ: ${ksi}.`,
       importDoneNotice: () => "Импорт выполнен.",
@@ -807,6 +822,13 @@ shootout: true
   markdown: {
     details: {
       defaultSummary: () => "Подробнее",
+    },
+  },
+  matchops: {
+    seating: {
+      notInRoster: () => "Этого игрока нет в составе команды.",
+      repeated: () => "Игрок выходит на тему один раз.",
+      tooMany: (n: number) => `На тему выходит не больше ${n} ${plural("ru", n, "игрока", "игроков", "игроков")}.`,
     },
   },
   multi: {
@@ -1244,6 +1266,10 @@ shootout: true
     banner: {
       assign: () => "Присвоить номера",
       unassignedLead: () => "Командам не присвоены номера — редактирование результатов заблокировано. ",
+    },
+    division: {
+      all: () => "Все",
+      label: () => "Зачёт",
     },
     downloads: {
       archive: () => "Скачать .json.gz",

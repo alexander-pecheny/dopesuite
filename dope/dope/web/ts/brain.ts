@@ -26,6 +26,7 @@ import type {BrainMatchState, BrainRow} from "./brain-protocol.js";
 import {buildFestGrid, buildReseedStagePanel} from "./fest-grid.js";
 import type {FestGridStage, ReseedEntry} from "./fest-grid.js";
 import {gameTabs, canonicalKey, groupLabel} from "./game-tabs.js";
+import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
 import type {GameTab} from "./game-tabs.js";
 import S from "./i18nstrings.js";
 
@@ -177,7 +178,7 @@ const {viewer, staticMode, scopeGameID, indicator, viewerCounter} = shell;
 const matches = new Map<string, BrainMatchView>();
 let festRoster: RosterTeam[] = [];
 let rosterView: HTMLElement | null = null;
-let activeTab = tabFromHash() || "grid";
+let activeTab = activeTabFromHash() || "grid";
 let resyncScheduled = false;
 
 function tabs(): GameTab[] {
@@ -236,14 +237,12 @@ function onProtocolTab(): boolean {
   return tabs().find((t) => t.key === activeTab)?.kind === "protocol";
 }
 
-function tabFromHash(): string | null {
-  const all = tabs();
-  const key = canonicalKey(all, (window.location.hash || "").replace(/^#/, ""));
-  return all.some((t) => t.key === key) ? key : null;
+function activeTabFromHash(): string | null {
+  return tabFromHash(tabs(), {canonical: canonicalKey});
 }
 
-window.addEventListener("hashchange", () => {
-  const next = tabFromHash();
+onNavigate(() => {
+  const next = activeTabFromHash();
   if (next && next !== activeTab) {
     activeTab = next;
     render();
@@ -455,9 +454,7 @@ function renderTabs(): void {
   brainTabsRoot.hidden = false;
   renderTabBar(brainTabsRoot, tabs(), activeTab, (key) => {
     activeTab = key;
-    if (window.location.hash.replace(/^#/, "") !== key) {
-      history.replaceState(null, "", `#${key}`);
-    }
+    setHashTab(key);
     render();
   });
 }

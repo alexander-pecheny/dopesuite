@@ -24,6 +24,48 @@ func TestFoldRosterThroughTheRegistry(t *testing.T) {
 	}
 }
 
+// A team's Flags ride with its name and city into both flat documents, so the
+// ОД and КСИ pages can offer a Division without a second fetch (ADR-0020).
+func TestFoldRosterCarriesFlagsIntoBothDocuments(t *testing.T) {
+	teams := []RosterTeam{
+		{Name: "A", Number: 1, Flags: []string{"Школ", "Е"}},
+		{Name: "B", Number: 2},
+	}
+	_, state, _, err := FoldRoster("od", `{}`, `{}`, teams, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var od struct {
+		Teams []games.ODTeam `json:"teams"`
+	}
+	if err := json.Unmarshal(state, &od); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(od.Teams[0].Flags, []string{"Школ", "Е"}) {
+		t.Fatalf("od flags %v", od.Teams[0].Flags)
+	}
+	if len(od.Teams[1].Flags) != 0 {
+		t.Fatalf("unflagged od team carries %v", od.Teams[1].Flags)
+	}
+
+	_, state, _, err = FoldRoster("ksi", `{"themes":3}`, `{}`, teams, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ksi struct {
+		Participants []games.KSIParticipant `json:"participants"`
+	}
+	if err := json.Unmarshal(state, &ksi); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(ksi.Participants[0].Flags, []string{"Школ", "Е"}) {
+		t.Fatalf("ksi flags %v", ksi.Participants[0].Flags)
+	}
+	if len(ksi.Participants[1].Flags) != 0 {
+		t.Fatalf("unflagged ksi participant carries %v", ksi.Participants[1].Flags)
+	}
+}
+
 func TestApplyRosterToChGKStateResizesAndRemapsEntries(t *testing.T) {
 	state := `{"teams":[{"name":"old"}],"entries":[[1,2,3]],"answers":[["x"]],"finished":true,"shootoutRounds":[{"teams":[1,3],"entries":[[1,3]],"answers":[]}]}`
 	teams := []RosterTeam{team("A", 1), team("C", 3)}

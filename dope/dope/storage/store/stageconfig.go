@@ -72,6 +72,7 @@ func (c StageConfig) KindConfig() json.RawMessage {
 type protocolConfig struct {
 	Questions int `json:"questions"`
 	Themes    int `json:"themes"`
+	Players   int `json:"players"`
 }
 
 func (c StageConfig) protocol() protocolConfig {
@@ -93,3 +94,7 @@ func (c StageConfig) Questions() int {
 
 // Themes is how many themes the Block's matches play; 0 means the Protocol's default.
 func (c StageConfig) Themes() int { return c.protocol().Themes }
+
+// Players is how many players a team seats on one theme of the Block's
+// matches — the seating; 0 means the Protocol's default.
+func (c StageConfig) Players() int { return c.protocol().Players }

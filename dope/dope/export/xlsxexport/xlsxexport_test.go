@@ -287,7 +287,7 @@ func TestBuildEKSheets(t *testing.T) {
 				Total: 40,
 				Place: 1,
 				Themes: []store.ThemeView{
-					{Player: "Аня", Answers: [5]string{"right", "", "right", "", ""}, Score: 40},
+					{Players: []string{"Аня"}, Answers: [5]string{"right", "", "right", "", ""}, Score: 40},
 				},
 			},
 			{
@@ -295,7 +295,7 @@ func TestBuildEKSheets(t *testing.T) {
 				Total: -20,
 				Place: 2,
 				Themes: []store.ThemeView{
-					{Player: "Боря", Answers: [5]string{"", "wrong", "", "", ""}, Score: -20},
+					{Players: []string{"Боря"}, Answers: [5]string{"", "wrong", "", "", ""}, Score: -20},
 				},
 			},
 		},

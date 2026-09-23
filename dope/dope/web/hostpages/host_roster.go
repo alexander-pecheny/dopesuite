@@ -3,11 +3,14 @@ package hostpages
 import (
 	"context"
 	"database/sql"
+	"dope/dope/domain/core"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/numbering"
 	"dope/dope/domain/overrides"
+	"dope/dope/domain/roster"
 	"dope/dope/domain/view"
 	"dope/dope/platform/util"
+	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
 	"dope/dope/web/pages"
 	dopeui "dope/dope/web/ui"
@@ -25,10 +28,14 @@ import (
 )
 
 type hostFestTeam struct {
+	ID       int64
 	RatingID int64
 	Name     string
 	City     string
 	Players  int
+	// Flags is the team's Divisions as the editor types them: short names,
+	// comma separated (ADR-0020).
+	Flags string
 }
 
 type hostFestPlayer struct {
@@ -59,17 +66,27 @@ type hostFestImportData struct {
 	Conflict *imports.RosterConflict
 }
 
-// hostTeamsDoc builds the fest's teams table (or an empty note).
+// hostTeamsDoc builds the fest's teams table (or an empty note). The Divisions
+// column is editable: the whole table is one form, so an organizer types the
+// Flags of a fest the rating site does not carry and saves them in one go.
 func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
 	s := dopestrings.Default
+	ref := data.Fest.Ref()
 	page := []dopeui.Item{
 		dopeui.Title(s.Host.Roster.TeamsTitle(data.Fest.Title)), dopeui.PagePublic,
-		dopeui.Publictopbar(pages.Trail(pages.FestCrumbs(data.Fest.Ref(), data.Fest.Title), s.Host.Roster.TeamsCrumb())),
+		dopeui.Publictopbar(pages.Trail(pages.FestCrumbs(ref, data.Fest.Title), s.Host.Roster.TeamsCrumb())),
+	}
+	if data.Error != "" {
+		page = append(page, dopeui.Empty(dopeui.Text(data.Error)))
+	}
+	if data.Notice != "" {
+		page = append(page, dopeui.Note(dopeui.Text(data.Notice)))
 	}
 	if len(data.Teams) > 0 {
 		rows := []dopeui.Item{dopeui.Trow(
 			dopeui.Hcell(dopeui.Text("ID")), dopeui.Hcell(dopeui.Text(s.Host.Roster.TeamLabel())),
 			dopeui.Hcell(dopeui.Text(s.Host.Roster.ColCity())), dopeui.Hcell(dopeui.Text(s.Host.Roster.ColPlayers())),
+			dopeui.Hcell(dopeui.Text(s.Host.Roster.ColFlags())),
 		)}
 		for _, t := range data.Teams {
 			rows = append(rows, dopeui.Trow(
@@ -77,13 +94,27 @@ func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
 				dopeui.Cell(dopeui.Text(t.Name)),
 				dopeui.Cell(dopeui.Text(t.City)),
 				dopeui.Cell(dopeui.Text(strconv.Itoa(t.Players))),
+				dopeui.Cell(dopeui.Textfield(
+					dopeui.Name(teamFlagsField(t.ID)), dopeui.Value(t.Flags),
+					dopeui.Placeholder(s.Host.Roster.FlagsPlaceholder()), dopeui.Autocomplete("off"),
+				)),
 			))
 		}
-		page = append(page, dopeui.Table(append([]dopeui.Item{dopeui.Scroll()}, rows...)...))
+		page = append(page, dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/teams"), dopeui.Autocomplete("off"),
+			dopeui.Note(dopeui.Text(s.Host.Roster.FlagsHint())),
+			dopeui.Table(append([]dopeui.Item{dopeui.Scroll()}, rows...)...),
+			dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Roster.SaveSubmit()))),
+		))
 	} else {
 		page = append(page, dopeui.Empty(dopeui.Text(s.Host.Roster.TeamsEmpty())))
 	}
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
+}
+
+// teamFlagsField names one team's Flags input; the save handler reads the id
+// back off the name, so the form needs no parallel list of team ids.
+func teamFlagsField(teamID int64) string {
+	return "flags_" + strconv.FormatInt(teamID, 10)
 }
 
 // optionalID renders a rating id, or "" when it is 0 (matching {{if .RatingID}}).
@@ -392,13 +423,83 @@ func importMessages(errMsg, notice string) []dopeui.Item {
 }
 
 func (s *Server) renderHostFestTeams(w http.ResponseWriter, r *http.Request, festID int64) {
+	s.renderHostFestTeamsWithMessage(w, r, festID, "", "")
+}
+
+func (s *Server) renderHostFestTeamsWithMessage(w http.ResponseWriter, r *http.Request, festID int64, errMsg, notice string) {
 	s.festPage(w, r, festID, func(fest view.HostFest) (*dopeui.Doc, error) {
 		teams, err := s.loadHostFestTeams(r.Context(), festID)
 		if err != nil {
 			return nil, err
 		}
-		return hostTeamsDoc(hostFestRosterData{Fest: fest, Teams: teams}), nil
+		return hostTeamsDoc(hostFestRosterData{Fest: fest, Teams: teams, Error: errMsg, Notice: notice}), nil
 	})
+}
+
+// handleHostSaveFestTeamFlags saves the Flags typed on the teams page. It goes
+// down the same road a rating import does — rewrite the fest's Flags, fold the
+// roster into every flat Protocol's document, bump the revision, broadcast —
+// so a Division appears on the game pages without a reload.
+func (s *Server) handleHostSaveFestTeamFlags(w http.ResponseWriter, r *http.Request, festID int64) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	teams, err := s.loadHostFestTeams(r.Context(), festID)
+	if err != nil {
+		route.WriteError(w, r, err)
+		return
+	}
+	typed := make(map[int64][]roster.FestRosterFlag, len(teams))
+	for _, team := range teams {
+		typed[team.ID] = parseTypedFlags(r.Form.Get(teamFlagsField(team.ID)))
+	}
+	if err := s.saveFestTeamFlags(r.Context(), festID, typed); err != nil {
+		s.renderHostFestTeamsWithMessage(w, r, festID, err.Error(), "")
+		return
+	}
+	s.renderHostFestTeamsWithMessage(w, r, festID, "", dopestrings.Default.Host.Roster.FlagsSavedNotice())
+}
+
+// parseTypedFlags reads one team's Flags as an organizer types them: short
+// names separated by commas. A hand-typed Flag has no rating id and no separate
+// full name — the short name is all there is, so it is both.
+func parseTypedFlags(value string) []roster.FestRosterFlag {
+	var flags []roster.FestRosterFlag
+	for _, part := range strings.Split(value, ",") {
+		flags = append(flags, roster.FestRosterFlag{Short: part, Full: part})
+	}
+	return roster.NormalizeFlags(flags)
+}
+
+func (s *Server) saveFestTeamFlags(reqCtx context.Context, festID int64, flagsByTeam map[int64][]roster.FestRosterFlag) error {
+	var updates []roster.GameStateBroadcast
+	var revision int64
+	err := s.h.Engine().WithWriteTx(reqCtx, festID, "fest-team-flags", func(ctx context.Context, tx *sql.Tx) error {
+		for teamID, flags := range flagsByTeam {
+			if err := roster.ReplaceTeamFlagsTx(ctx, tx, teamID, flags); err != nil {
+				return err
+			}
+		}
+		teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
+		if err != nil {
+			return err
+		}
+		if updates, err = roster.PropagateRosterTx(ctx, tx, festID, teams, nil); err != nil {
+			return err
+		}
+		revision, err = festwrite.BumpFestRevisionTx(ctx, tx, festID, "fest:team-flags", util.MustJSON(map[string]any{
+			"teams": len(flagsByTeam),
+		}))
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	for _, update := range updates {
+		s.h.Engine().BroadcastState(festID, core.GameStateScope(update.GameID), revision, update.StateJSON)
+	}
+	return nil
 }
 
 func (s *Server) renderHostFestPlayers(w http.ResponseWriter, r *http.Request, festID int64) {
@@ -520,20 +621,27 @@ func (s *Server) renderHostSchemeImportPage(w http.ResponseWriter, r *http.Reque
 
 func (s *Server) loadHostFestTeams(ctx context.Context, festID int64) ([]hostFestTeam, error) {
 	teams, err := store.CollectRows(ctx, s.h.Engine().DB, `
-select coalesce(tt.rating_id, 0), tt.name, tt.city, count(ttp.player_id)
+select tt.id, coalesce(tt.rating_id, 0), tt.name, tt.city, count(ttp.player_id)
 from fest_teams tt
 left join fest_team_players ttp on ttp.team_id = tt.id
 where tt.fest_id = ? and tt.deleted = 0
 group by tt.id
 order by tt.position, tt.id`, []any{festID}, func(rows *sql.Rows) (hostFestTeam, error) {
 		var team hostFestTeam
-		if err := rows.Scan(&team.RatingID, &team.Name, &team.City, &team.Players); err != nil {
+		if err := rows.Scan(&team.ID, &team.RatingID, &team.Name, &team.City, &team.Players); err != nil {
 			return team, err
 		}
 		return team, nil
 	})
 	if err != nil {
 		return nil, err
+	}
+	flags, err := roster.LoadFestTeamFlags(ctx, s.h.Engine().DB, festID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range teams {
+		teams[i].Flags = strings.Join(roster.FlagShortNames(flags[teams[i].ID]), ", ")
 	}
 	sort.SliceStable(teams, func(i, j int) bool {
 		if cmp := util.CompareAlpha(teams[i].Name, teams[j].Name); cmp != 0 {

@@ -491,7 +491,7 @@ func foldCheckpointThemes(cp *journal.GameCheckpoint) bool {
 		}
 		blob.EnsureTheme(teamID, kind, int(themeIndex))
 		if player, ok := asInt(th["player_id"]); ok && player != 0 {
-			blob.SetPlayer(teamID, kind, int(themeIndex), player)
+			blob.SetPlayers(teamID, kind, int(themeIndex), []int64{player})
 		}
 		if themeID, ok := asInt(th["id"]); ok {
 			for _, a := range answersByTheme[themeID] {
@@ -577,7 +577,7 @@ func convertOneMatch(ctx context.Context, db *sql.DB, matchID int64) error {
 	blob := store.MatchBlob{}
 	for _, theme := range themes {
 		if theme.player != 0 {
-			blob.SetPlayer(theme.teamID, theme.kind, theme.index, theme.player)
+			blob.SetPlayers(theme.teamID, theme.kind, theme.index, []int64{theme.player})
 		}
 		type answerRow struct {
 			index int

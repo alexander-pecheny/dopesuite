@@ -346,7 +346,7 @@ on conflict(fest_id, game_id, player_id) do update set
 			if _, err := loadFestRosterWithGameOverrides(ctx, tx, festID, gameID); err != nil {
 				return err
 			}
-			if gameType != "ek" {
+			if !games.EKShaped(gameType) {
 				continue
 			}
 			if err := MaterializeGameRosterOverridesTx(ctx, tx, festID, gameID); err != nil {
@@ -448,7 +448,7 @@ values(?, ?, ?, ?, ?, ?, ?)`,
 			if _, err := loadFestRosterWithGameOverrides(ctx, tx, festID, gameID); err != nil {
 				return err
 			}
-			if gameType != "ek" {
+			if !games.EKShaped(gameType) {
 				continue
 			}
 			if err := MaterializeGameRosterOverridesTx(ctx, tx, festID, gameID); err != nil {
@@ -711,7 +711,7 @@ on conflict(fest_id, game_id, player_id) do update set
 			festID, override.GameID, playerID, sourceTeamID, overrideTeamID, now, now); err != nil {
 			return nil, err
 		}
-		if gameType == "ek" {
+		if games.EKShaped(gameType) {
 			ekGames[override.GameID] = struct{}{}
 		}
 	}

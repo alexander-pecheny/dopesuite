@@ -34,6 +34,9 @@ roster = "Составы"
 # The section drawing the kit's suggestfield — the filtered dropdown a list too
 # long for a native <select> goes in.
 suggest = "Поле с подсказками"
+# The section drawing the зачёт chips over a results table whose teams wear
+# their зачёты as badges.
+divisions = "Зачёты"
 
 [ek]
 # The <title> of the ЭК game page (static/ek.html), host and spectator alike.

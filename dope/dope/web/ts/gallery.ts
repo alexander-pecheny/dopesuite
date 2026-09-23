@@ -5,7 +5,8 @@
 // /gallery in dev mode only.
 import {buildVenuesTable} from "./venue.js";
 import type {Venue} from "./venue.js";
-import {buildGroupStandingsView} from "./standings.js";
+import {buildGroupStandingsView, resultsTeamCell, standingsTable} from "./standings.js";
+import {divisionChipRow} from "./divisions.js";
 import type {GroupStandingsGroup} from "./standings.js";
 import {buildRosterTable} from "./fest-roster.js";
 import type {RosterTeam} from "./fest-roster.js";
@@ -173,6 +174,33 @@ function suggestField(): HTMLElement {
   return anchor;
 }
 
+// A Division chosen (ADR-0020): the chip row above a results table whose teams
+// wear their Flags. Both are new pieces of a game page's skin, so they are
+// judged here with everything else rather than on a seeded fest.
+function divisionsDemo(): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "u-col u-gap-sm";
+  wrap.appendChild(divisionChipRow(["Школ", "Студ", "Е"], "", () => {}));
+  const teams: Array<[string, string, string[], number]> = [
+    ["Детективы для элит", "Санкт-Петербург", ["Школ"], 34],
+    [LONG, "Москва", ["Студ", "Е"], 31],
+    ["Bikes for Peace", "", [], 30],
+  ];
+  wrap.appendChild(standingsTable({
+    columns: [
+      {label: S.od.head.place(), kind: "place"},
+      {label: S.od.head.team(), kind: "name"},
+      {label: "\u03a3", kind: "num"},
+    ],
+    rows: teams.map(([name, city, badges, total], index) => [
+      String(index + 1),
+      resultsTeamCell(name, {city, badges}),
+      String(total),
+    ]),
+  }));
+  return wrap;
+}
+
 function section(title: string, host: string, node: HTMLElement): HTMLElement {
   const wrap = document.createElement("section");
   wrap.className = "gallery-section";
@@ -203,6 +231,7 @@ function render(root: HTMLElement): void {
     section(S.gallery.section.roster(), "table-host fits-frame", buildRosterTable(roster)),
     section(S.gallery.section.chips(), "fits-frame", chips()),
     section(S.gallery.section.suggest(), "fits-frame", suggestField()),
+    section(S.gallery.section.divisions(), "table-host fits-frame", divisionsDemo()),
   );
   requestAnimationFrame(() => markNameOverflow(root, {
     cellSelector: ".results-team",
