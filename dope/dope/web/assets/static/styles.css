@@ -4837,9 +4837,11 @@ body.is-fullscreen.od-page .match-main {
   background: var(--surface-tint);
 }
 
+/* A мини-игра's name starts where its first column does, flush with the
+   cells below it. */
 .multi-table .theme-block {
   text-align: left;
-  padding-left: var(--space-2);
+  padding-left: 0;
 }
 
 /* The sticky heads span both header rows and read at the numbers' line. */

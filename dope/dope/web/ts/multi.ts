@@ -134,6 +134,8 @@ function buildTable(): HTMLElement {
   gamesRow.appendChild(th(S.multi.sheet.total(), "sticky sticky-total number", {rowSpan: 2}));
   if (rules.signed) gamesRow.appendChild(th("Σ+", "sticky sticky-place number", {rowSpan: 2}));
   rules.minigames.forEach((game, g) => {
+    // A gap column parts one minigame from the next, as KSI parts its themes.
+    if (g > 0) gamesRow.appendChild(th("", "gap-head", {rowSpan: 2}));
     gamesRow.appendChild(th(gameHead(game), "theme-block",
       {colSpan: game.columns.length + gapCount(game) + 1, dataset: {game: g}}));
   });
@@ -163,6 +165,7 @@ function buildTable(): HTMLElement {
       tr.appendChild(td(String(sheetRows[p].plus), "sticky sticky-place number", {dataset: {plus: p}}));
     }
     rules.minigames.forEach((game, g) => {
+      if (g > 0) tr.appendChild(td("", "gap"));
       game.columns.forEach((column, c) => {
         if (c > 0 && column.block !== game.columns[c - 1].block) tr.appendChild(td("", "gap"));
         tr.appendChild(cellNode(p, g, c));
@@ -232,7 +235,7 @@ function gameHead(game: MultiRules["minigames"][number]): CellContent {
     ? S.multi.game.uniformPrice(game.name, String(maxOf(game.columns[0]?.values || [])))
     : game.name;
   span.style.left = "calc(var(--sheet-corner-col) + var(--team-col) + var(--total-col) + var(--space-5)" +
-    (rules.signed ? " + var(--place-col)" : "") + " + var(--space-2))";
+    (rules.signed ? " + var(--place-col)" : "") + ")";
   return span;
 }
 
