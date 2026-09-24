@@ -1720,6 +1720,16 @@ body {
   padding: var(--space-2) 0; border-bottom: 1px solid var(--border-soft);
 }
 .sess-row:last-child { border-bottom: 0; }
+/* Список тестеров: the people of one test, under its row. The names are the
+   summary, closed, and open to one checkbox each; they take the row's whole
+   width, and the per-person rows sit indented under the test they belong to. */
+.testerlist-members { flex: 1 0 100%; min-width: 0; }
+.testerlist-members > summary { cursor: pointer; overflow-wrap: anywhere; }
+.testerlist-members > .u-col { padding-left: var(--space-5); }
+/* A person's row is a name and a count, both short: .sess-head's 16rem basis
+   is for a test's title and its buttons, and here it put every count on a line
+   of its own on a phone. */
+.testerlist-members .sess-head { flex-basis: auto; }
 .sess-head { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; min-width: 0; flex: 1 1 16rem; }
 .sess-title { font-weight: var(--fw-semibold); }
 .sess-meta { color: var(--muted); font-size: var(--text-sm); }
@@ -1841,8 +1851,11 @@ body {
 
 /* These modals hold more than a screenful, so their BODY scrolls — the shape
    .lists-manage-rows already uses, which keeps the title and the «Готово»
-   button pinned either side of the scrolling part. */
-#sessionForm, #sessionsList, #labelsEditor, #marksEditor {
+   button pinned either side of the scrolling part. #panelBody is the shared
+   body of the list and board panels (Список тестеров, Счётчик авторов, the
+   bundle export and import, Клонировать доску): a tour with many testers
+   grew the modal past the screen, with nothing to scroll (#90). */
+#sessionForm, #sessionsList, #labelsEditor, #marksEditor, #panelBody {
   max-height: 65vh;
   overflow-y: auto;
   padding-right: var(--space-1);

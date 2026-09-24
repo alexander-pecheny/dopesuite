@@ -538,6 +538,7 @@ export const RU: Strings = {
       empty: () => "Вопросы этого тура никто не тестировал.",
       hint: () => "По умолчанию отмечены те, кто видел больше половины вопросов из списка.",
       name: () => "Список тестеров",
+      outside: () => "Видели вне тестов",
       seen: (seen: string, total: string) => `${seen} из ${total}`,
       summary: (names: string) => `Вопросы тестировали: ${names}.`,
       summaryEmpty: () => "Никто не отмечен.",

@@ -8,7 +8,7 @@ import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { sortLabels } from "./labelsedit.js";
 import { colorField, LABEL_COLORS } from "./colorpick.js";
-import { type Tester, testerNames, testersFromList } from "./sessions.js";
+import { copyName, type Tester, testerNames, testersFromList } from "./sessions.js";
 import { type CardSeen, nameOf, parseCardSeen, type SeenPerson, seenPeople, sessionRef, withoutSeen, withSeen } from "./seen.js";
 import { autocomplete } from "./kit/suggest.js";
 import * as people from "./people.js";
@@ -179,6 +179,8 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
     const hiding = everyone.some(isCommon) && seenAllFor !== card.id;
     const shown = hiding ? everyone.filter((p) => !isCommon(p)) : everyone;
     const names = shown.map((p) => nameOf(p.tester));
+    // The copy spells a player's name unbroken, like every copied tester line.
+    const copied = shown.map((p) => copyName(p.tester));
     const label = hiding ? S.card.seen.labelExceptCommon() : S.card.seen.label();
 
     // The label and the two controls are a head row of their own, and the names
@@ -195,7 +197,7 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
         class: "input", type: "button",
         title: S.card.seen.copyTitle(),
         // The copy is a line to paste into a chat, so it stays one line.
-        onclick: () => { void deps.copyPlain(label + names.join(", ")); },
+        onclick: () => { void deps.copyPlain(label + copied.join(", ")); },
       }, icon("clipboard")));
     }
     if (everyone.some(isCommon)) {

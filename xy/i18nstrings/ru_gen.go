@@ -686,6 +686,7 @@ var RU = Strings{
 				return "По умолчанию отмечены те, кто видел больше половины вопросов из списка."
 			},
 			Name:         func() string { return "Список тестеров" },
+			Outside:      func() string { return "Видели вне тестов" },
 			Seen:         func(seen string, total string) string { return fmt.Sprintf("%s из %s", seen, total) },
 			Summary:      func(names string) string { return fmt.Sprintf("Вопросы тестировали: %s.", names) },
 			SummaryEmpty: func() string { return "Никто не отмечен." },

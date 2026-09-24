@@ -537,6 +537,7 @@ export type Strings = {
       empty: () => string;
       hint: () => string;
       name: () => string;
+      outside: () => string;
       seen: (seen: string, total: string) => string;
       summary: (names: string) => string;
       summaryEmpty: () => string;
