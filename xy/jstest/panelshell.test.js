@@ -72,21 +72,39 @@ test("the tester list names the people who saw more than half a tour, unless the
   assert.deepEqual([...tl.tourPicked(scope.list)], ["Аня"], "Аня 3 of 3; Боря, Вера, Гоша 1 each");
   tl.panel.open(scope);
   assert.equal(title.text, "Список тестеров");
-  const names = p.node("panelBody").querySelectorAll(".sess-title").map((n) => n.text);
-  assert.deepEqual(names, ["Аня", "Боря", "Вера", "Гоша"]);
-  assert.deepEqual(p.node("panelBody").querySelectorAll(".sess-meta").map((n) => n.text), ["3 из 3", "1 из 3", "1 из 3", "1 из 3"]);
-  const boxes = p.node("panelBody").querySelectorAll("input[type=checkbox]");
-  assert.deepEqual(boxes.map((b) => b.checked), [true, false, false, false]);
+  // One row per test, most questions first, each with its people under it; the
+  // people who were at no test come after, one by one.
+  const titles = p.node("panelBody").querySelectorAll(".sess-title").map((n) => n.text);
+  assert.deepEqual(titles, ["Тест А", "Аня", "Боря", "Тест Б", "Аня", "Вера", "Гоша"]);
+  assert.deepEqual(p.node("panelBody").querySelectorAll("summary").map((n) => n.text), ["Аня, Боря", "Аня, Вера"]);
+  assert.equal(p.node("panelBody").querySelector(".section-label").text, "Видели вне тестов");
+  const metas = p.node("panelBody").querySelectorAll(".sess-meta").filter((n) => n.tag !== "summary").map((n) => n.text);
+  assert.deepEqual(metas, ["2 из 3", "3 из 3", "1 из 3", "1 из 3", "3 из 3", "1 из 3", "1 из 3"]);
+  const boxes = () => p.node("panelBody").querySelectorAll("input[type=checkbox]");
+  // Only Аня saw more than half, so both tests are partly ticked.
+  assert.deepEqual(boxes().map((b) => b.checked), [false, true, false, false, true, false, false]);
+  assert.deepEqual(boxes().map((b) => !!b.indeterminate), [true, false, false, true, false, false, false]);
   const line = p.node("panelBody").querySelector(".sess-invite");
   assert.equal(line.text, "Вопросы тестировали: Аня.");
-  // Ticking Гоша, who never sat a test, declares by name.
-  boxes[3].checked = true;
-  boxes[3].fire("change");
+  // Ticking a test ticks everyone who was there, by name.
+  boxes()[3].checked = true;
+  boxes()[3].fire("change");
   await new Promise((r) => setTimeout(r, 0));
   assert.deepEqual(board.writes.map((w) => [w[1], w[2], w[3].list_id]), [["setTourDeclaration", "/api/boards/7/tour-declaration", 1]]);
-  assert.deepEqual(board.state.tourDeclarations[0].names.map((t) => t.text), ["Аня", "Гоша"]);
-  assert.deepEqual([...tl.tourPicked(scope.list)].sort(), ["Аня", "Гоша"], "declared beats the custom");
-  assert.equal(line.text, "Вопросы тестировали: Аня, Гоша.");
+  assert.deepEqual(board.state.tourDeclarations[0].names.map((t) => t.text), ["Аня", "Вера"]);
+  assert.deepEqual(boxes().map((b) => b.checked), [false, true, false, true, true, true, false]);
+  // Ticking Гоша, who never sat a test, declares by name too.
+  boxes()[6].checked = true;
+  boxes()[6].fire("change");
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual([...tl.tourPicked(scope.list)].sort(), ["Аня", "Вера", "Гоша"], "declared beats the custom");
+  assert.equal(line.text, "Вопросы тестировали: Аня, Вера, Гоша.");
+  // Unticking a test takes off everyone who was there, even one also at another test.
+  boxes()[0].checked = false;
+  boxes()[0].fire("change");
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual([...tl.tourPicked(scope.list)].sort(), ["Вера", "Гоша"]);
+  assert.deepEqual(boxes().map((b) => !!b.indeterminate)[3], true, "Тест Б is now partly ticked");
 });
 
 test("a tour declared by sessions before v26 reads as everyone who was at them", () => {

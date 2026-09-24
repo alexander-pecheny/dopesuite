@@ -8,7 +8,7 @@
 
 import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
-import { partialSeen, type SeenQuestion, type SessionMeta, testerNames, whoSaw } from "./sessions.js";
+import { copyName, partialSeen, type SeenQuestion, type SessionMeta, testerNames, whoSaw } from "./sessions.js";
 import { nameOf, serializeDeclaration } from "./seen.js";
 import { xyCrypto } from "./crypto.js";
 import { iconed } from "./icons_gen.js";
@@ -49,6 +49,24 @@ export function createTesterList(board: Board, shell: PanelShell, deps: { copyPl
     const { players, teams } = testerNames(rows.map((r) => r.tester));
     const order = new Map([...players, ...teams].map((n, i) => [n, i]));
     return rows.sort((a, b) => b.seen - a.seen || (order.get(nameOf(a.tester)) ?? 0) - (order.get(nameOf(b.tester)) ?? 0));
+  }
+
+  // The tests the tour's questions were played at, most questions first, each
+  // with how many of them it played.
+  function tourSessions(list: BoardList): Array<{ id: number; played: number; testers: Tester[] }> {
+    const cards = listScope(board, list).cards.filter((c) => c.kind === "question");
+    const played = new Map<number, number>();
+    for (const c of cards) for (const sid of board.playingsOf(c.id)) played.set(sid, (played.get(sid) || 0) + 1);
+    return [...played.entries()]
+      .map(([id, n]) => ({ id, played: n, testers: (board.sessionMeta(id) || { testers: [] }).testers || [] }))
+      .sort((a, b) => b.played - a.played || a.id - b.id);
+  }
+
+  // orderedRows is the order people are read in: surname, then given name.
+  function orderedRows(rows: TourTester[]): TourTester[] {
+    const { players, teams } = testerNames(rows.map((r) => r.tester));
+    const order = new Map([...players, ...teams].map((n, i) => [n, i]));
+    return [...rows].sort((a, b) => (order.get(nameOf(a.tester)) ?? 0) - (order.get(nameOf(b.tester)) ?? 0));
   }
 
   // A tour's Declaration lives on the board, not in this browser: the preamble
@@ -127,21 +145,58 @@ export function createTesterList(board: Board, shell: PanelShell, deps: { copyPl
 
     box.replaceChildren();
     if (!rows.length) box.append(el("p", { class: "label-empty", text: S.board.testerlist.empty() }));
-    for (const r of rows) {
-      const name = nameOf(r.tester);
-      const cb = el("input", { class: "input", type: "checkbox" }) as HTMLInputElement;
-      cb.checked = picked.has(name);
-      cb.addEventListener("change", () => {
-        if (cb.checked) picked.add(name); else picked.delete(name);
-        void declare(list, pickedTesters()).catch((err) => {
-          shell.message(errMsg(err));
-        });
-        redraw();
+
+    // Most people saw a tour at a test, and a test is ticked or not as a whole,
+    // so the rows are the tests: one checkbox for everyone who was there, and
+    // the names under it open to a checkbox each for the exceptions. People who
+    // saw the tour only outside any test are listed one by one after them. A
+    // person at two tests is under both, and the two boxes stay in step.
+    const byName = new Map(rows.map((r) => [nameOf(r.tester), r]));
+    const boxes: Array<{ cb: HTMLInputElement; names: string[] }> = [];
+    const sync = (): void => {
+      for (const b of boxes) {
+        const on = b.names.filter((n) => picked.has(n)).length;
+        b.cb.checked = on > 0 && on === b.names.length;
+        b.cb.indeterminate = on > 0 && on < b.names.length;
+      }
+    };
+    const pick = (names: string[], on: boolean): void => {
+      for (const n of names) if (on) picked.add(n); else picked.delete(n);
+      sync();
+      void declare(list, pickedTesters()).catch((err) => {
+        shell.message(errMsg(err));
       });
-      box.append(el("label", { class: "sess-row" },
-        el("div", { class: "sess-head" }, cb, el("span", { class: "sess-title", text: name })),
-        el("span", { class: "sess-meta", text: S.board.testerlist.seen(String(r.seen), String(total)) })));
+      redraw();
+    };
+    const checkbox = (names: string[]): HTMLInputElement => {
+      const cb = el("input", { type: "checkbox" }) as HTMLInputElement;
+      cb.addEventListener("change", () => pick(names, cb.checked));
+      boxes.push({ cb, names });
+      return cb;
+    };
+    const personRow = (r: TourTester): HTMLElement => el("label", { class: "sess-row" },
+      el("div", { class: "sess-head" }, checkbox([nameOf(r.tester)]), el("span", { class: "sess-title", text: nameOf(r.tester) })),
+      el("span", { class: "sess-meta", text: S.board.testerlist.seen(String(r.seen), String(total)) }));
+
+    const inATest = new Set<string>();
+    for (const g of tourSessions(list)) {
+      const members = orderedRows(g.testers.map((t) => byName.get(nameOf(t))).filter((r): r is TourTester => r != null));
+      if (!members.length) continue;
+      const names = members.map((r) => nameOf(r.tester));
+      names.forEach((n) => inATest.add(n));
+      box.append(el("div", { class: "sess-row" },
+        el("label", { class: "sess-head" }, checkbox(names), el("span", { class: "sess-title", text: board.sessionName(g.id) })),
+        el("span", { class: "sess-meta", text: S.board.testerlist.seen(String(g.played), String(total)) }),
+        el("details", { class: "testerlist-members" },
+          el("summary", { class: "sess-meta", text: members.map((r) => copyName(r.tester)).join(", ") }),
+          el("div", { class: "u-col" }, ...members.map(personRow)))));
     }
+    const alone = rows.filter((r) => !inATest.has(nameOf(r.tester)));
+    if (alone.length) {
+      if (inATest.size) box.append(el("p", { class: "section-label", text: S.board.testerlist.outside() }));
+      for (const r of alone) box.append(personRow(r));
+    }
+    sync();
     const copy = el("button", {
       class: "input", type: "button",
       onclick: () => {

@@ -536,6 +536,8 @@ summary_empty = "Никто не отмечен."
 empty = "Вопросы этого тура никто не тестировал."
 # How much of the list one tester saw.
 seen = '{{.seen}} из {{.total}}'
+# Heading over the people who saw the tour only outside any test.
+outside = "Видели вне тестов"
 
 [listsmanage]
 # Title of the lists-management dialog.

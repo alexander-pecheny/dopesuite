@@ -1007,6 +1007,19 @@ input[type="radio"]:checked {
 input[type="checkbox"]:checked::before,
 input[type="radio"]:checked::before { transform: scale(1); }
 
+/* Partly ticked: a box that stands for several others, some of them on. The
+   same fill as a tick, with a bar in place of it. */
+input[type="checkbox"]:indeterminate {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+input[type="checkbox"]:indeterminate::before {
+  height: 2px;
+  transform: scale(1);
+  clip-path: none;
+}
+
 input[type="checkbox"]:disabled,
 input[type="radio"]:disabled {
   background: var(--action-disabled-bg);
