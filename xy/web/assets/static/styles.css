@@ -1841,8 +1841,11 @@ body {
 
 /* These modals hold more than a screenful, so their BODY scrolls — the shape
    .lists-manage-rows already uses, which keeps the title and the «Готово»
-   button pinned either side of the scrolling part. */
-#sessionForm, #sessionsList, #labelsEditor, #marksEditor {
+   button pinned either side of the scrolling part. #panelBody is the shared
+   body of the list and board panels (Список тестеров, Счётчик авторов, the
+   bundle export and import, Клонировать доску): a tour with many testers
+   grew the modal past the screen, with nothing to scroll (#90). */
+#sessionForm, #sessionsList, #labelsEditor, #marksEditor, #panelBody {
   max-height: 65vh;
   overflow-y: auto;
   padding-right: var(--space-1);
