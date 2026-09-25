@@ -17,6 +17,7 @@ import (
 	"pecheny.me/dopecore/session"
 	"pecheny.me/dopecore/tglogin"
 
+	"dope/dope/storage/store"
 	"dope/dope/web/route"
 	dopestrings "dope/i18nstrings"
 	"strconv"
@@ -224,7 +225,15 @@ func (dopeUsers) ByTelegram(ctx context.Context, tx tglogin.Tx, tg int64) (tglog
 }
 
 func (dopeUsers) ByUsername(ctx context.Context, tx tglogin.Tx, username string) (tglogin.Account, bool, error) {
-	return scanAccount(tx.QueryRowContext(ctx, `select id, username, password_hash, password_salt from users where username = ? and is_system = 0`, username))
+	id, err := store.UserIDByName(ctx, tx, username)
+	if errors.Is(err, sql.ErrNoRows) {
+		return tglogin.Account{}, false, nil
+	}
+	if err != nil {
+		return tglogin.Account{}, false, err
+	}
+	return scanAccount(tx.QueryRowContext(ctx, `
+select id, username, password_hash, password_salt from users where id = ? and is_system = 0`, id))
 }
 
 func scanAccount(row *sql.Row) (tglogin.Account, bool, error) {
@@ -270,14 +279,15 @@ func (s *server) authLoginPassword(w http.ResponseWriter, r *http.Request, _ rou
 	err := s.inWriteTx(r.Context(), func(tx *sql.Tx) error {
 		ctx := r.Context()
 		var (
-			userID   int64
 			hash     sql.NullString
 			salt     sql.NullString
 			isSystem int
 		)
-		err := tx.QueryRowContext(ctx, `
-select id, password_hash, password_salt, is_system from users where username = ?`, username).Scan(
-			&userID, &hash, &salt, &isSystem)
+		userID, err := store.UserIDByName(ctx, tx, username)
+		if err == nil {
+			err = tx.QueryRowContext(ctx, `
+select password_hash, password_salt, is_system from users where id = ?`, userID).Scan(&hash, &salt, &isSystem)
+		}
 		if errors.Is(err, sql.ErrNoRows) || (err == nil && !hash.Valid) {
 			return route.Unauthorized(dopestrings.Default.Auth.Login.CredentialsInvalid())
 		}

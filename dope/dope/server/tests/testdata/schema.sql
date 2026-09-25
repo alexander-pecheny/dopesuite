@@ -20,6 +20,12 @@ CREATE INDEX journal_request_id on journal(request_id);
 CREATE UNIQUE INDEX participants_fest_roster_number_idx
   on participants(fest_id, roster, number) where number is not null;
 
+-- index password_resets_user_idx
+CREATE INDEX password_resets_user_idx on password_resets(user_id);
+
+-- index users_username_nocase
+CREATE UNIQUE INDEX users_username_nocase on users(username collate nocase);
+
 -- table audit_ctx
 CREATE TABLE audit_ctx(
   id integer primary key check(id = 1),
@@ -271,6 +277,17 @@ CREATE TABLE participants(
   fest_team_id integer references fest_teams(id),
   fest_player_id integer references fest_players(id)
 , number INTEGER, assembled INTEGER NOT NULL DEFAULT 0);
+
+-- table password_resets
+CREATE TABLE password_resets(
+  id integer primary key,
+  token_hash text not null unique,
+  user_id integer not null references users(id) on delete cascade,
+  created_by integer references users(id) on delete set null,
+  created_at text not null,
+  expires_at text not null,
+  used_at text
+);
 
 -- table players
 CREATE TABLE players(

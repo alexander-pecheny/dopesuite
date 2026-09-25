@@ -40,3 +40,29 @@ func InsertReturningID(ctx context.Context, tx *sql.Tx, query string, args ...an
 	}
 	return result.LastInsertId()
 }
+
+// RowQueryer is the single-row read surface of *sql.DB, *sql.Tx and the
+// handshake's transaction.
+type RowQueryer interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+// UserIDByName finds the account whose username is name, ignoring case; the
+// users_username_nocase index keeps that to one. sql.ErrNoRows when there is
+// none.
+func UserIDByName(ctx context.Context, q RowQueryer, name string) (int64, error) {
+	var id int64
+	err := q.QueryRowContext(ctx, `select id from users where username = ? collate nocase`, name).Scan(&id)
+	return id, err
+}
+
+// UserIDByTelegramName is UserIDByName for the Telegram handle. Handles are
+// not unique here, so where two differ only by case the exact spelling wins,
+// then the older account.
+func UserIDByTelegramName(ctx context.Context, q RowQueryer, name string) (int64, error) {
+	var id int64
+	err := q.QueryRowContext(ctx, `
+select id from users where telegram_username = ? collate nocase
+order by telegram_username = ? desc, id limit 1`, name, name).Scan(&id)
+	return id, err
+}

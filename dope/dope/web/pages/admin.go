@@ -5,12 +5,14 @@ import (
 	"context"
 	"database/sql"
 	"dope/dope/platform/util"
+	"dope/dope/storage/festaccess"
 	"dope/dope/storage/store"
 	"dope/dope/web/route"
 	ui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"
 	"errors"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 
@@ -19,10 +21,8 @@ import (
 	kit "pecheny.me/dopeuikit/kit"
 )
 
-const adminUserEnv = "DOPE_ADMIN_USER"
-
 func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (session.User, bool) {
-	return adminusers.RequireAdmin(w, r, adminUserEnv, func() (session.User, bool) {
+	return adminusers.RequireAdmin(w, r, festaccess.SiteAdminEnv, func() (session.User, bool) {
 		return s.h.Engine().LookupSession(r)
 	})
 }
@@ -36,6 +36,7 @@ func adminIndexDoc() *ui.Doc {
 			ui.List(
 				ui.Listrow(ui.Href("/admin/create_users"), ui.Listtitle(ui.Text(s.Admin.CreateUsers.Name()))),
 				ui.Listrow(ui.Href("/admin/users"), ui.Listtitle(ui.Text(s.Admin.Users.Name()))),
+				ui.Listrow(ui.Href("/admin/password_reset"), ui.Listtitle(ui.Text(s.Admin.PasswordReset.Name()))),
 			),
 		),
 	}}
@@ -91,11 +92,17 @@ func adminUsersDoc(data adminUsersData) *ui.Doc {
 		rows := []ui.Item{ui.Scroll(), ui.Trow(
 			ui.Hcell(ui.Text("ID")), ui.Hcell(ui.Text(s.Admin.Users.ColLogin())), ui.Hcell(ui.Text("Telegram")),
 			kit.SortHeader("last", s.Admin.Users.ColActivity(), data.Sort), ui.Hcell(ui.Text(s.Admin.Users.ColCreated())),
+			ui.Hcell(ui.Text(s.Admin.PasswordReset.ColPassword())),
 		)}
 		for _, u := range data.Users {
 			nameCell := ui.Cell(ui.Text(u.Username))
 			if u.IsSystem {
 				nameCell = ui.Cell(ui.Inline(ui.Text(u.Username+" "), ui.Muted(ui.Text(s.Admin.Users.SystemTag()))))
+			}
+			resetCell := ui.Cell()
+			if !u.IsSystem && u.Username != "" {
+				resetCell = ui.Cell(ui.Button(ui.Small(), ui.Href("/admin/password_reset?username="+url.QueryEscape(u.Username)),
+					ui.Text(s.Admin.PasswordReset.ResetLink())))
 			}
 			rows = append(rows, ui.Trow(
 				ui.Cell(ui.Text(strconv.FormatInt(u.ID, 10))),
@@ -103,6 +110,7 @@ func adminUsersDoc(data adminUsersData) *ui.Doc {
 				ui.Cell(ui.Text(u.Telegram)),
 				ui.Cell(ui.Text(kit.AdminTime(u.LastSeenAt))),
 				ui.Cell(ui.Text(u.CreatedAt)),
+				resetCell,
 			))
 		}
 		body = ui.Section(ui.Table(rows...))
@@ -212,8 +220,7 @@ type adminUserStore struct {
 }
 
 func (st adminUserStore) UserExists(ctx context.Context, username string) (bool, error) {
-	var id int64
-	err := st.tx.QueryRowContext(ctx, `select id from users where username = ?`, username).Scan(&id)
+	_, err := store.UserIDByName(ctx, st.tx, username)
 	switch {
 	case err == nil:
 		return true, nil

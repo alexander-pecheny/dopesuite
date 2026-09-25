@@ -163,7 +163,7 @@ func (s *Server) renderHostLanding(w http.ResponseWriter, r *http.Request, errMs
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	fests, err := s.loadHostFests(r.Context(), user.UserID)
+	fests, err := s.loadHostFests(r.Context(), user)
 	if err != nil {
 		route.WriteError(w, r, err)
 		return

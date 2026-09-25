@@ -13,6 +13,19 @@ export const RU: Strings = {
     page: {
       title: () => "Админка",
     },
+    passwordReset: {
+      colPassword: () => "Пароль",
+      lead: () => "Ссылка позволяет задать новый пароль. Она работает один раз и в течение трёх суток. Старые ссылки этого пользователя перестают работать.",
+      linkLabel: () => "Ссылка",
+      linkLead: (username: string) => `Ссылка для ${username}. Отправьте её этому человеку.`,
+      name: () => "Сброс пароля",
+      noSuchUser: (username: string) => `Пользователя ${username} нет.`,
+      resetLink: () => "Сбросить",
+      submit: () => "Создать ссылку",
+      systemUser: () => "Нельзя сбросить пароль системного пользователя.",
+      title: () => "Сброс пароля · Админка",
+      usernameLabel: () => "Логин",
+    },
     users: {
       colActivity: () => "Активность",
       colCreated: () => "Создан",
@@ -39,6 +52,15 @@ export const RU: Strings = {
       currentWrong: () => "текущий пароль неверен",
       tooLong: (n: string) => `пароль длиннее ${n} символов`,
       tooShort: (n: string) => `пароль короче ${n} символов`,
+    },
+    reset: {
+      confirmPlaceholder: () => "Повторите новый пароль",
+      lead: (username: string) => `Новый пароль для ${username}.`,
+      linkInvalid: () => "Ссылка не работает. Возможно, она уже использована или устарела. Попросите администратора прислать новую.",
+      mismatch: () => "Пароли не совпадают.",
+      newPlaceholder: () => "Новый пароль",
+      submit: () => "Сохранить пароль",
+      title: () => "Новый пароль",
     },
     username: {
       alreadySet: () => "имя пользователя уже задано",

@@ -959,7 +959,9 @@ values(?, ?, null, 0, ?, ?)`, tg, "tg", now, now); err != nil {
 		t.Fatalf("user A username: %d %s", respA.Code, respA.Body.String())
 	}
 
-	reqB := httptest.NewRequest(http.MethodPost, "/api/auth/username", bytes.NewReader(body))
+	// B asks for the same name in capitals, which counts as the same name.
+	bodyB, _ := json.Marshal(dopeserver.UsernameRequest{Username: "SHARED"})
+	reqB := httptest.NewRequest(http.MethodPost, "/api/auth/username", bytes.NewReader(bodyB))
 	reqB.AddCookie(&http.Cookie{Name: session.CookieName, Value: tokB})
 	respB := httptest.NewRecorder()
 	srv.HandleAuthUsername(respB, reqB)

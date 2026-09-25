@@ -12,6 +12,19 @@ export type Strings = {
     page: {
       title: () => string;
     };
+    passwordReset: {
+      colPassword: () => string;
+      lead: () => string;
+      linkLabel: () => string;
+      linkLead: (username: string) => string;
+      name: () => string;
+      noSuchUser: (username: string) => string;
+      resetLink: () => string;
+      submit: () => string;
+      systemUser: () => string;
+      title: () => string;
+      usernameLabel: () => string;
+    };
     users: {
       colActivity: () => string;
       colCreated: () => string;
@@ -38,6 +51,15 @@ export type Strings = {
       currentWrong: () => string;
       tooLong: (n: string) => string;
       tooShort: (n: string) => string;
+    };
+    reset: {
+      confirmPlaceholder: () => string;
+      lead: (username: string) => string;
+      linkInvalid: () => string;
+      mismatch: () => string;
+      newPlaceholder: () => string;
+      submit: () => string;
+      title: () => string;
     };
     username: {
       alreadySet: () => string;

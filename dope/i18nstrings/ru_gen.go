@@ -19,6 +19,25 @@ var RU = Strings{
 		Page: AdminPageStrings{
 			Title: func() string { return "Админка" },
 		},
+		PasswordReset: AdminPasswordResetStrings{
+			ColPassword: func() string { return "Пароль" },
+			Lead: func() string {
+				return "Ссылка позволяет задать новый пароль. Она работает один раз и в течение трёх суток. Старые ссылки этого пользователя перестают работать."
+			},
+			LinkLabel: func() string { return "Ссылка" },
+			LinkLead: func(username string) string {
+				return fmt.Sprintf("Ссылка для %s. Отправьте её этому человеку.", username)
+			},
+			Name:       func() string { return "Сброс пароля" },
+			NoSuchUser: func(username string) string { return fmt.Sprintf("Пользователя %s нет.", username) },
+			ResetLink:  func() string { return "Сбросить" },
+			Submit:     func() string { return "Создать ссылку" },
+			SystemUser: func() string {
+				return "Нельзя сбросить пароль системного пользователя."
+			},
+			Title:         func() string { return "Сброс пароля · Админка" },
+			UsernameLabel: func() string { return "Логин" },
+		},
 		Users: AdminUsersStrings{
 			ColActivity: func() string { return "Активность" },
 			ColCreated:  func() string { return "Создан" },
@@ -47,6 +66,17 @@ var RU = Strings{
 			CurrentWrong: func() string { return "текущий пароль неверен" },
 			TooLong:      func(n string) string { return fmt.Sprintf("пароль длиннее %s символов", n) },
 			TooShort:     func(n string) string { return fmt.Sprintf("пароль короче %s символов", n) },
+		},
+		Reset: AuthResetStrings{
+			ConfirmPlaceholder: func() string { return "Повторите новый пароль" },
+			Lead:               func(username string) string { return fmt.Sprintf("Новый пароль для %s.", username) },
+			LinkInvalid: func() string {
+				return "Ссылка не работает. Возможно, она уже использована или устарела. Попросите администратора прислать новую."
+			},
+			Mismatch:       func() string { return "Пароли не совпадают." },
+			NewPlaceholder: func() string { return "Новый пароль" },
+			Submit:         func() string { return "Сохранить пароль" },
+			Title:          func() string { return "Новый пароль" },
 		},
 		Username: AuthUsernameStrings{
 			AlreadySet: func() string { return "имя пользователя уже задано" },

@@ -15,8 +15,17 @@ import (
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
+	"pecheny.me/dopecore/adminusers"
 	corei18n "pecheny.me/dopecore/i18nstrings"
 )
+
+// SiteAdminEnv names the one account that runs /admin (default "pecheny").
+const SiteAdminEnv = "DOPE_ADMIN_USER"
+
+// IsSiteAdmin says whether username is the site admin's.
+func IsSiteAdmin(username string) bool {
+	return username != "" && username == adminusers.AdminUsername(SiteAdminEnv)
+}
 
 type HostAccessMember struct {
 	UserID    int64
@@ -74,12 +83,13 @@ func FestUserRoleFromQuery(ctx context.Context, q store.Queryer, festID, userID 
 	var (
 		createdBy sql.NullInt64
 		role      sql.NullString
+		username  sql.NullString
 	)
 	err := q.QueryRowContext(ctx, `
-select f.created_by, o.role
+select f.created_by, o.role, (select u.username from users u where u.id = ?)
 from fests f
 left join fest_organizers o on o.fest_id = f.id and o.user_id = ?
-where f.id = ?`, userID, festID).Scan(&createdBy, &role)
+where f.id = ?`, userID, userID, festID).Scan(&createdBy, &role, &username)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
@@ -90,6 +100,11 @@ where f.id = ?`, userID, festID).Scan(&createdBy, &role)
 		return roles.Creator, nil
 	}
 	if !role.Valid {
+		// The site admin helps on every fest without being added to it, with
+		// the rights of a fest admin: everything except deleting the fest.
+		if username.Valid && IsSiteAdmin(username.String) {
+			return roles.Admin, nil
+		}
 		return "", nil
 	}
 	normalized := roles.Normalize(role.String)
@@ -349,14 +364,9 @@ on conflict(fest_id, user_id) do update set role = 'creator'`,
 
 func lookupUserIDByNicknameTx(ctx context.Context, tx *sql.Tx, nickname string) (int64, error) {
 	nickname = strings.TrimSpace(strings.TrimPrefix(nickname, "@"))
-	var userID int64
-	err := tx.QueryRowContext(ctx, `select id from users where username = ?`, nickname).Scan(&userID)
-	if err == nil {
-		return userID, nil
-	}
+	userID, err := store.UserIDByName(ctx, tx, nickname)
 	if !errors.Is(err, sql.ErrNoRows) {
-		return 0, err
+		return userID, err
 	}
-	err = tx.QueryRowContext(ctx, `select id from users where telegram_username = ?`, nickname).Scan(&userID)
-	return userID, err
+	return store.UserIDByTelegramName(ctx, tx, nickname)
 }

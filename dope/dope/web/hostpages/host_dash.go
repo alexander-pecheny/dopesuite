@@ -576,15 +576,17 @@ func (s *Server) loadFestRatingID(ctx context.Context, festID int64) (int64, err
 	return ratingID.Int64, nil
 }
 
-func (s *Server) loadHostFests(ctx context.Context, userID int64) ([]view.HostFest, error) {
+// loadHostFests lists the fests the user organises. The site admin gets every
+// fest, since festaccess gives them a role on each.
+func (s *Server) loadHostFests(ctx context.Context, user session.User) ([]view.HostFest, error) {
+	all := user.Username.Valid && festaccess.IsSiteAdmin(user.Username.String)
 	return store.CollectRows(ctx, s.h.Engine().DB, `
 select t.id, coalesce(t.slug, ''), t.title, coalesce(t.start_date, ''), coalesce(t.end_date, ''), t.is_public
 from fests t
-join fest_organizers o on o.fest_id = t.id
-where o.user_id = ?
+where ? or exists(select 1 from fest_organizers o where o.fest_id = t.id and o.user_id = ?)
 order by case when t.start_date is null or t.start_date = '' then 1 else 0 end,
          t.start_date desc,
-         t.id desc`, []any{userID}, func(rows *sql.Rows) (view.HostFest, error) {
+         t.id desc`, []any{all, user.UserID}, func(rows *sql.Rows) (view.HostFest, error) {
 		var t view.HostFest
 		var pub int
 		if err := rows.Scan(&t.ID, &t.Slug, &t.Title, &t.StartDate, &t.EndDate, &pub); err != nil {

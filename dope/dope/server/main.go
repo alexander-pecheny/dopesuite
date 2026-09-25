@@ -196,6 +196,8 @@ func Main() {
 	mux.HandleFunc("/admin", srv.pageServer().HandleAdminLanding)
 	mux.HandleFunc("/admin/create_users", srv.pageServer().HandleAdminCreateUsers)
 	mux.HandleFunc("/admin/users", srv.pageServer().HandleAdminUsers)
+	mux.HandleFunc("/admin/password_reset", srv.pageServer().HandleAdminPasswordReset)
+	mux.HandleFunc("/reset_password", srv.pageServer().HandleResetPassword)
 	mux.Handle("/api/fest/", srv.api().Mux)
 	srv.authRoutes(srv.api())
 	mux.Handle("/api/auth/", srv.api().Mux)

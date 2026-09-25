@@ -39,3 +39,16 @@ too_short = 'пароль короче {{.n}} символов'
 too_long = 'пароль длиннее {{.n}} символов'
 # Changing a password proves the current one first, and this one was wrong.
 current_wrong = "текущий пароль неверен"
+
+[reset]
+# The /reset_password page that an admin's link opens.
+title = "Новый пароль"
+# Whose password is being set.
+lead = 'Новый пароль для {{.username}}.'
+new_placeholder = "Новый пароль"
+confirm_placeholder = "Повторите новый пароль"
+submit = "Сохранить пароль"
+# The link is unknown, already used or expired.
+link_invalid = "Ссылка не работает. Возможно, она уже использована или устарела. Попросите администратора прислать новую."
+# The two passwords differ.
+mismatch = "Пароли не совпадают."

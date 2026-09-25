@@ -29,3 +29,24 @@ empty = "Пользователей нет."
 # The reason beside a username this app's rules rejected, handed to
 # adminusers.Creator — dopecore has no Catalog of its own (root docs/adr/0004).
 invalid_username = "недопустимый логин"
+
+[password_reset]
+# The password-reset tool's name: the landing list row and the trail leaf.
+name = "Сброс пароля"
+# The password-reset page's title.
+title = "Сброс пароля · Админка"
+# What the tool does, above the form.
+lead = "Ссылка позволяет задать новый пароль. Она работает один раз и в течение трёх суток. Старые ссылки этого пользователя перестают работать."
+# The username field's label and the submit button.
+username_label = "Логин"
+submit = "Создать ссылку"
+# The result: whose link it is, and the link itself in a field to copy.
+link_lead = 'Ссылка для {{.username}}. Отправьте её этому человеку.'
+link_label = "Ссылка"
+# Errors on the form.
+no_such_user = 'Пользователя {{.username}} нет.'
+system_user = "Нельзя сбросить пароль системного пользователя."
+# The users table: the password column's header, and the button in it that
+# opens this tool for that account.
+col_password = "Пароль"
+reset_link = "Сбросить"

@@ -816,6 +816,97 @@ create index if not exists fest_team_flags_team_idx on fest_team_flags(team_id, 
 			{Name: "assembled", Type: "INTEGER NOT NULL DEFAULT 0"},
 		})
 	}},
+	{Version: 30, Name: "password_resets", Up: func(db *sql.DB) error {
+		// v30: a link the admin makes on /admin/password_reset so somebody who
+		// forgot their password can set a new one. Only the sha256 of the token
+		// is kept, like a session's. A link works once and until expires_at.
+		_, err := db.Exec(`
+create table if not exists password_resets(
+  id integer primary key,
+  token_hash text not null unique,
+  user_id integer not null references users(id) on delete cascade,
+  created_by integer references users(id) on delete set null,
+  created_at text not null,
+  expires_at text not null,
+  used_at text
+);
+create index if not exists password_resets_user_idx on password_resets(user_id);
+`)
+		return err
+	}},
+	{Version: 31, Name: "merge the two Disamone accounts", Up: mergeDisamoneAccounts},
+	{Version: 32, Name: "usernames unique ignoring case", Up: usernamesUniqueIgnoringCase},
+}
+
+// usernamesUniqueIgnoringCase makes the database refuse a username that differs
+// from an existing one only by case. Prod had two such pairs. v31 merged the
+// Disamone pair, and here oleg (Telegram @ohhhleeeeg) takes his Telegram handle
+// as his username, which he chose himself, so Oleg (@osmiheev) keeps "Oleg".
+// Any other pair left in a database stops the migration and is named, because
+// the index cannot be built over it.
+func usernamesUniqueIgnoringCase(db *sql.DB) error {
+	if _, err := db.Exec(`
+update users set username = 'ohhhleeeeg'
+where username = 'oleg' and telegram_username = 'ohhhleeeeg'
+  and exists(select 1 from users o where o.username = 'Oleg')
+  and not exists(select 1 from users o where o.username = 'ohhhleeeeg' collate nocase)`); err != nil {
+		return err
+	}
+	var clashes sql.NullString
+	if err := db.QueryRow(`
+select group_concat(names, '; ') from (
+  select group_concat(username, ', ') as names from users
+  where username is not null group by lower(username) having count(*) > 1)`).Scan(&clashes); err != nil {
+		return err
+	}
+	if clashes.Valid {
+		return fmt.Errorf("usernames that differ only by case must be renamed first: %s", clashes.String)
+	}
+	_, err := db.Exec(`create unique index if not exists users_username_nocase on users(username collate nocase)`)
+	return err
+}
+
+// mergeDisamoneAccounts folds the admin-made password account "disamone" into
+// "Disamone", the Telegram account the same person signed up with later and
+// actually uses. Her fest roles and anything else that names the old account
+// move over, and so does the password if the kept account has none. Logins
+// ignore case now, so either spelling finds her. On a database without both
+// accounts (a fresh one, a fixture) this does nothing.
+func mergeDisamoneAccounts(db *sql.DB) error {
+	var fromID, toID sql.NullInt64
+	if err := db.QueryRow(`
+select (select id from users where username = 'disamone' and telegram_user_id is null),
+       (select id from users where username = 'Disamone' and telegram_user_id is not null)`).Scan(&fromID, &toID); err != nil {
+		return err
+	}
+	if !fromID.Valid || !toID.Valid {
+		return nil
+	}
+	from, to := fromID.Int64, toID.Int64
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, q := range []string{
+		`insert or ignore into fest_organizers(fest_id, user_id, role, added_at)
+		 select fest_id, ?2, role, added_at from fest_organizers where user_id = ?1`,
+		`delete from fest_organizers where user_id = ?1`,
+		`update fests set created_by = ?2 where created_by = ?1`,
+		`update invites set created_by = ?2 where created_by = ?1`,
+		`update invites set used_by = ?2 where used_by = ?1`,
+		`update telegram_login_codes set user_id = ?2 where user_id = ?1`,
+		`update journal set actor_user_id = ?2 where actor_user_id = ?1`,
+		`update users set password_hash = (select password_hash from users where id = ?1),
+		                  password_salt = (select password_salt from users where id = ?1)
+		 where id = ?2 and password_hash is null`,
+		`delete from users where id = ?1`,
+	} {
+		if _, err := tx.Exec(q, from, to); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func migrateDB(db *sql.DB) error { return schema.Apply(db, migrations) }
