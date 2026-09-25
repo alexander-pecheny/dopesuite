@@ -1119,11 +1119,26 @@
   font-size: var(--text-lg);
   font-weight: var(--fw-semibold);
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
+}
+/* A list's name that does not fit gets the list head's fade, and nameoverflow.ts
+   floats the whole name on hover. */
+.preview-title-truncated {
+  -webkit-mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
+  mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
 }
 .preview-head-actions { display: flex; align-items: center; gap: var(--space-3); flex: none; }
 .preview-screen-toggle { white-space: nowrap; cursor: var(--cursor-action); }
+/* On a phone the list preview's Экспорт and Вёрстка раздаток leave the title no
+   room. The title keeps the first line, the × stays in the top-right corner, and
+   the rest of the controls wrap onto the lines below. */
+@media (max-width: 560px) {
+  #previewOverlay .preview-head { position: relative; flex-wrap: wrap; padding-right: 64px; }
+  #previewOverlay .preview-title { flex: 1 1 100%; }
+  #previewOverlay .preview-head-actions { flex: 1 1 100%; flex-wrap: wrap; gap: var(--space-2); }
+  #previewClose { position: absolute; top: var(--space-3); right: var(--space-4); margin: 0; }
+}
 .preview-body {
   flex: 1;
   overflow-y: auto;
@@ -1590,6 +1605,64 @@ textarea.fld-src {
 /* pane splitter — a structural rule, so --grid (like the table cell grids) */
 .handouts-src { border-right: 1px solid var(--grid); }
 .handouts-textarea { flex: 1; min-height: 320px; width: 100%; }
+/* Поля: one box per handout, set off like a card on the board. */
+.hndt-block {
+  padding: var(--space-3);
+  border: 1px solid var(--grid);
+  border-radius: var(--radius-md);
+}
+/* A handout is a line or two, not a question: the editor's floor is too tall. */
+.hndt-block .card-desc { min-height: 0; }
+/* A number field in the small control height, its right end two chevrons in
+   place of the browser's spinner. The box is drawn on the wrapper, so the
+   input and the arrows sit inside one field and focus lights all of it. */
+.hndt-num {
+  display: inline-flex;
+  width: 3.25rem;
+  height: var(--control-h-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--field-bg);
+  overflow: hidden;
+}
+.hndt-num:focus-within { border-color: var(--blue); }
+.hndt-num-wide { width: 4rem; }
+.hndt-num-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 var(--space-1-5);
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  outline: 0;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.hndt-num-input::-webkit-inner-spin-button,
+.hndt-num-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+/* The arrows' column is the field's own colour shifted toward the text, so it
+   reads as a separate strip in every theme without a rule between them. */
+.hndt-num-steps {
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in oklch, var(--field-bg), var(--text) 8%);
+}
+.hndt-num-step {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: var(--cursor-action);
+}
+.hndt-num-step:hover { background: color-mix(in oklch, var(--field-bg), var(--text) 16%); color: var(--text); }
+.hndt-num-step .ico { --ico-size: 12px; }
 /* The two panes are mirrored columns: header row, then the big area, spaced by
    the pane's gap (not by per-widget margins, which is what glued the label /
    buttons to the textarea). The section-label's own margins are for flowing

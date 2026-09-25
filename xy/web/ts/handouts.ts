@@ -4,7 +4,8 @@
 // (handout_meta) with its live handout text. "Generate PDF" posts the
 // source + referenced images to the server, which typesets and streams an
 // ephemeral PDF. On close the per-question settings (everything but the handout
-// text) are persisted back.
+// text) are persisted back. The .hndt is edited either as it is or through
+// the fields view, a form over the same text (hndt.ts parseHndtForm/composeHndtForm).
 
 import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
@@ -15,14 +16,16 @@ import { xyHndt } from "./hndt.js";
 import { xyHandoutSession } from "./handoutsession.js";
 import { namedUrl, revokeNamedUrl } from "./namedurl.js";
 import { modal } from "./modal.js";
+import { icon } from "./icons_gen.js";
 import type { Attachments } from "./attachments.js";
+import type { HndtFormBlock } from "./hndt.js";
 import type { Board, ListPanel, ListScope } from "./panels.js";
 import type { BoardCard } from "./unlock.js";
 import type { OpBody } from "./store.js";
 
 const { el, byId, errMsg, downloadBlob, onCmdEnter } = xyApp;
 
-export function createHandoutsPanel(board: Board, attachments: Pick<Attachments, "appendImages">): ListPanel {
+export function createHandoutsPanel(board: Board, attachments: Pick<Attachments, "appendImages" | "cardAttachments">): ListPanel {
   const handoutsModal = modal("handouts");
   let handoutsCtx: { cards: BoardCard[]; numbers: Array<string | null>; title: string } | null = null;
   let handoutsPdfUrl: string | null = null;
@@ -38,11 +41,144 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     byId<HTMLTextAreaElement>("handoutsSource").value = source;
     clearHandoutsPdf();
     handoutsModal.open({ onClose: hideHandouts });
+    // After the modal is shown: the form measures its text boxes as it draws.
+    setView("fields");
     // Pre-stage the referenced images now (in the background) so the first PDF /
     // split_fit generation doesn't pay the gather+upload, and start heartbeating.
     handoutSession.ensure(source).catch(() => {});
     handoutSession.startHeartbeat();
   }
+
+  // ---- the fields view: the .hndt as a form ----
+  // The textarea stays the one document: every edit in the form is composed
+  // straight back into it, and switching to the fields re-reads it, so an edit made
+  // in the text shows up in the form and nothing is kept on the side.
+  const sourceEl = byId<HTMLTextAreaElement>("handoutsSource");
+  const fieldsEl = byId("handoutsFields");
+  const VIEWS = { fields: byId("handoutsTabFields"), text: byId("handoutsTabText") };
+  type View = keyof typeof VIEWS;
+
+  function setView(view: View): void {
+    for (const v of Object.keys(VIEWS) as View[]) VIEWS[v].classList.toggle("active", v === view);
+    fieldsEl.hidden = view !== "fields";
+    sourceEl.hidden = view !== "text";
+    if (view === "fields") renderFields();
+  }
+
+  function renderFields(): void {
+    const blocks = xyHndt.parseHndtForm(sourceEl.value);
+    const write = (): void => { sourceEl.value = xyHndt.composeHndtForm(blocks); };
+    const shown = blocks.filter((b) => !b.blank);
+    if (!shown.length) {
+      fieldsEl.replaceChildren(el("p", { class: "hint", text: S.board.handouts.fieldsEmpty() }));
+      return;
+    }
+    fieldsEl.replaceChildren(el("div", { class: "u-col u-gap-md" }, ...shown.map((b) => handoutBox(b, write))));
+  }
+
+  // number builds one labelled number field over a setting; empty removes it.
+  // The browser's spinner is swapped for two chevrons that fill the right end
+  // of the field, which are bigger to hit and follow the theme.
+  function number(b: HndtFormBlock, key: string, label: string, write: () => void, title?: string, wide = false): HTMLElement {
+    const input = el("input", { class: "hndt-num-input", type: "number", min: "1", inputmode: "numeric" }) as HTMLInputElement;
+    input.value = xyHndt.hndtGet(b, key) ?? "";
+    input.addEventListener("input", () => { xyHndt.hndtSet(b, key, input.value.trim() || null); write(); });
+    const step = (by: number): void => {
+      input.value = String(Math.max(1, (parseInt(input.value, 10) || 0) + by));
+      input.dispatchEvent(new Event("input"));
+    };
+    const btn = (glyph: "chevron-up" | "chevron-down", aria: string, by: number): HTMLElement => {
+      // Out of the tab order: the arrow keys already step a focused field.
+      const node = el("button", { class: "hndt-num-step", type: "button", tabindex: "-1", "aria-label": aria }, icon(glyph));
+      node.addEventListener("click", () => step(by));
+      return node;
+    };
+    const field = el("span", { class: wide ? "hndt-num hndt-num-wide" : "hndt-num" }, input,
+      el("span", { class: "hndt-num-steps" }, btn("chevron-up", S.board.handouts.stepUp(), 1), btn("chevron-down", S.board.handouts.stepDown(), -1)));
+    return el("label", { class: "u-row u-gap-xs u-align-center", title: title || "" }, el("span", { class: "fld-label", text: label }), field);
+  }
+
+  // seg builds a two-way switch; `on` says which side is lit.
+  function seg(labels: [string, string], on: () => 0 | 1, pick: (i: 0 | 1) => void): HTMLElement {
+    const btns = labels.map((text) => el("button", { class: "seg-btn", type: "button", text }) as HTMLButtonElement);
+    const sync = (): void => btns.forEach((btn, i) => btn.classList.toggle("active", i === on()));
+    btns.forEach((btn, i) => btn.addEventListener("click", () => { pick(i as 0 | 1); sync(); }));
+    sync();
+    return el("div", { class: "seg" }, ...btns);
+  }
+
+  function fitArea(ta: HTMLTextAreaElement): void {
+    ta.style.height = "";
+    if (ta.scrollHeight > ta.clientHeight) ta.style.height = `${ta.scrollHeight + ta.offsetHeight - ta.clientHeight}px`;
+  }
+  // The monospace face is fetched the first time a box uses it, after the
+  // boxes were measured in the fallback, so they are measured again then.
+  document.fonts?.addEventListener("loadingdone", () => {
+    for (const ta of fieldsEl.querySelectorAll("textarea")) fitArea(ta);
+  });
+
+  // cardFor is the card a block's for_question points at, for its pictures.
+  function cardFor(b: HndtFormBlock): BoardCard | null {
+    if (!handoutsCtx) return null;
+    const i = handoutsCtx.numbers.findIndex((n) => n != null && n === xyHndt.hndtGet(b, "for_question"));
+    return i >= 0 ? handoutsCtx.cards[i] : null;
+  }
+
+  function handoutBox(b: HndtFormBlock, write: () => void): HTMLElement {
+    const inside = el("input", { type: "checkbox" }) as HTMLInputElement;
+    inside.checked = xyHndt.hndtGet(b, "question_label") === "inside";
+    inside.addEventListener("change", () => { xyHndt.hndtSet(b, "question_label", inside.checked ? "inside" : null); write(); });
+    // One line on a desktop pane. Two groups, so a phone breaks the line
+    // between them and not inside either.
+    const settings = el("div", { class: "u-row u-gap-sm u-align-center u-wrap" },
+      el("div", { class: "u-row u-gap-sm u-align-center" },
+        // A pack runs past a hundred questions; the count of columns never does.
+        number(b, "for_question", S.board.handouts.fieldQuestion(), write, undefined, true),
+        el("label", { class: "attach-lossless", title: S.board.handouts.fieldInsideTitle() }, inside, " " + S.board.handouts.fieldInside())),
+      el("div", { class: "u-row u-gap-sm u-align-center" },
+        number(b, "columns", S.board.handouts.fieldColumns(), write),
+        number(b, "rows", S.board.handouts.fieldRows(), write, S.board.handouts.fieldRowsTitle())));
+
+    const ta = el("textarea", { class: "card-desc", spellcheck: "false", rows: "3" }) as HTMLTextAreaElement;
+    ta.value = b.text;
+    // It grows with the handout, like the card editor's fields, instead of
+    // scrolling inside a box of its own.
+    ta.style.overflowY = "hidden";
+    ta.addEventListener("input", () => { b.text = ta.value; write(); fitArea(ta); });
+    requestAnimationFrame(() => fitArea(ta));
+    // The picker offers the pictures attached to the question the block is for,
+    // and keeps the one it names even when that is attached elsewhere.
+    const sel = el("select", { class: "input", "aria-label": S.board.handouts.fieldImageLabel() }) as HTMLSelectElement;
+    const options = (names: string[]): void => {
+      const all = !b.image || names.includes(b.image) ? names : [b.image, ...names];
+      sel.replaceChildren(...all.map((n) => el("option", { value: n, text: n })));
+      sel.value = b.image;
+    };
+    const loadOptions = async (): Promise<void> => {
+      const card = cardFor(b);
+      const atts = card ? await attachments.cardAttachments(card.id) : [];
+      options(atts.filter((a) => a.mime.startsWith("image/")).map((a) => a.name));
+    };
+    options([]);
+    void loadOptions();
+    sel.addEventListener("focus", () => { void loadOptions(); });
+    sel.addEventListener("change", () => { b.image = sel.value; write(); });
+    const syncKind = (): void => { ta.hidden = b.kind !== "text"; sel.hidden = b.kind !== "image"; };
+    const switches = el("div", { class: "u-row u-gap-sm u-align-center u-wrap" },
+      seg([S.card.handout.modeText(), S.card.handout.modeImage()], () => (b.kind === "image" ? 1 : 0), (i) => {
+        b.kind = i ? "image" : "text";
+        if (b.kind === "image" && !b.image && sel.value) b.image = sel.value;
+        syncKind(); write();
+      }),
+      seg([S.board.handouts.alignCenter(), S.board.handouts.alignLeft()], () => (Number(xyHndt.hndtGet(b, "no_center")) ? 1 : 0), (i) => {
+        xyHndt.hndtSet(b, "no_center", i ? "1" : null); write();
+      }));
+    syncKind();
+    return el("div", { class: "hndt-block u-col u-gap-sm" }, settings, switches, ta, sel);
+  }
+
+  VIEWS.fields.addEventListener("click", () => setView("fields"));
+  VIEWS.text.addEventListener("click", () => setView("text"));
 
   // WebKit won't render a PDF inside an <iframe> in a standalone web app (macOS
   // Dock app / iOS home-screen PWA — the preview pane comes up blank), and on
@@ -247,6 +383,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
   // Edit the .hndt, regenerate, look: Cmd/Ctrl-Enter is that loop without the trip
   // to the button.
   onCmdEnter(byId("handoutsSource"), () => byId("handoutsGenerate").click());
+  onCmdEnter(byId("handoutsFields"), () => byId("handoutsGenerate").click());
   byId("handoutsSplitFit").addEventListener("click", () => { void generateSplitFitZip(); });
 
 

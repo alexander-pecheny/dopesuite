@@ -509,7 +509,10 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        group, then the NDJSON stream rendered as a log. What was typed is kept
                        in IndexedDB (store.ts «meta»): the bot per device, the target per board,
                        and beside it the ids Telegram resolved
-    handouts.ts        «Генерация раздаток»: hndtOf (hndt.ts) → editable .hndt →
+    handouts.ts        «Вёрстка раздаток»: hndtOf (hndt.ts) → editable .hndt, as Поля (a
+                       form per handout: question, внутри, columns/rows, text or picture,
+                       alignment — parseHndtForm/composeHndtForm, written straight back
+                       into the text) or as the .hndt itself →
                        /api/handouts/{pdf,split_fit}; images staged once per open
                        (handoutsession.ts); per-question layout settings persisted to
                        handout_meta on close

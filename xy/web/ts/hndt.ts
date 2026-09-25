@@ -151,4 +151,69 @@ function hndtOf(cards: ReadonlyArray<ChgkCard & { id: number; handoutMeta?: stri
   return { numbers, source: generateHndt(cards, numbers, metas) };
 }
 
-export const xyHndt = { generateHndt, hndtOf, handoutForCard, parseHndtMetaByQuestion, HNDT_DEFAULT_META };
+// ---- the fields view's model ----
+// One .hndt block as the form edits it: the settings lines in their own order
+// (every reserved key but image, including the ones the form has no control
+// for, which it passes through untouched), and the one handout it prints —
+// text or a picture. A block with nothing in it is the page break chgksuite
+// reads it as; the form shows none of those and gives them back as they were.
+export interface HndtFormBlock {
+  head: Array<[string, string]>;
+  kind: "text" | "image";
+  text: string;
+  image: string;
+  blank: boolean;
+}
+
+// parseHndtForm reads a .hndt document block by block, the way the Go
+// generator does: a line is a setting only when what stands before its first
+// colon is exactly a reserved key; every other line is handout text.
+function parseHndtForm(source: string | null | undefined): HndtFormBlock[] {
+  return splitHndtBlocks(source).map((raw) => {
+    const head: Array<[string, string]> = [];
+    const text: string[] = [];
+    let image: string | null = null;
+    for (const line of raw.split("\n")) {
+      const i = line.indexOf(":");
+      const key = i >= 0 ? line.slice(0, i) : "";
+      if (i >= 0 && HNDT_RESERVED.has(key)) {
+        const val = line.slice(i + 1).trim();
+        if (key === "image") image = val;
+        else head.push([key, val]);
+      } else {
+        text.push(line.trim());
+      }
+    }
+    const body = text.join("\n").trim();
+    return {
+      head, kind: image !== null ? "image" : "text", text: body, image: image ?? "",
+      blank: !head.length && image === null && !body,
+    };
+  });
+}
+
+// hndtGet and hndtSet read and write one setting of a form block. Setting a
+// key that is not there yet adds it after the others; null removes it.
+function hndtGet(b: HndtFormBlock, key: string): string | null {
+  const hit = b.head.find(([k]) => k === key);
+  return hit ? hit[1] : null;
+}
+function hndtSet(b: HndtFormBlock, key: string, val: string | null): void {
+  const i = b.head.findIndex(([k]) => k === key);
+  if (val === null) { if (i >= 0) b.head.splice(i, 1); return; }
+  if (i >= 0) b.head[i] = [key, val];
+  else b.head.push([key, val]);
+}
+
+// composeHndtForm writes the form back as the document generateHndt would
+// have written: settings, a blank line, then the handout.
+function composeHndtForm(blocks: ReadonlyArray<HndtFormBlock>): string {
+  return blocks.map((b) => {
+    if (b.blank) return "";
+    const head = b.head.map(([k, v]) => `${k}: ${v}`).join("\n");
+    const content = b.kind === "image" ? (b.image ? `image: ${b.image}` : "") : b.text;
+    return [head, content].filter(Boolean).join("\n\n");
+  }).join("\n---\n");
+}
+
+export const xyHndt = { generateHndt, hndtOf, handoutForCard, parseHndtMetaByQuestion, parseHndtForm, composeHndtForm, hndtGet, hndtSet, HNDT_DEFAULT_META };

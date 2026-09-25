@@ -13,7 +13,8 @@ export interface NameOverflowOptions {
   // The container the items live in; its rebuilds are what measure() re-reads.
   root: HTMLElement;
   // The element that carries the flag and answers the hover — the card, the
-  // list head. `name` is the one-line text inside it.
+  // list head. `name` is the one-line text inside it, or the item itself when
+  // it matches (a heading that is its own name).
   item: string;
   name: string;
   truncatedClass: string;
@@ -29,7 +30,7 @@ export function createNameOverflow({ root, item, name, truncatedClass }: NameOve
   let tipFor: Element | null = null;
 
   function nameOf(node: Element): Element | null {
-    return node.querySelector(name);
+    return node.matches(name) ? node : node.querySelector(name);
   }
 
   function show(node: HTMLElement): void {
