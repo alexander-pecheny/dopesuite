@@ -359,8 +359,23 @@ src_label = "Исходник 4s"
 # and the ⋯ row that opens it — a grouped list generates the whole group's.
 title = "Вёрстка раздаток"
 menu_group = "Вёрстка раздаток (вся группа)"
-# Label above the .hndt source editor.
+# aria-label of the .hndt source editor.
 src_label = "Источник (.hndt)"
+# The switch over the left pane: the handouts as a form, or the .hndt itself.
+tab_fields = "Поля"
+tab_text = "Формат .hndt"
+# The form, one box per handout.
+field_question = "Номер вопроса"
+field_inside = "внутри"
+field_inside_title = "Печатать номер вопроса на каждой раздатке, чтобы он остался на разрезанных листках"
+field_columns = "Столбцов"
+field_rows = "Строк"
+field_rows_title = "Если пусто, одна строка. Split-fit подбирает число строк сам."
+align_center = "по центру"
+align_left = "по левому краю"
+field_image_label = "Картинка"
+# The form when the .hndt has no handouts in it.
+fields_empty = "Раздаток нет. Добавить их можно в формате .hndt."
 # Generate button.
 generate = "Сгенерировать PDF"
 # Split-fit button tooltip.

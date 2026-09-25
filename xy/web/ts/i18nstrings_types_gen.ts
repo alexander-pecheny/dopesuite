@@ -304,7 +304,17 @@ export type Strings = {
       title: () => string;
     };
     handouts: {
+      alignCenter: () => string;
+      alignLeft: () => string;
       download: () => string;
+      fieldColumns: () => string;
+      fieldImageLabel: () => string;
+      fieldInside: () => string;
+      fieldInsideTitle: () => string;
+      fieldQuestion: () => string;
+      fieldRows: () => string;
+      fieldRowsTitle: () => string;
+      fieldsEmpty: () => string;
       generate: () => string;
       generateFailed: (reason: string) => string;
       generated: () => string;
@@ -320,6 +330,8 @@ export type Strings = {
       splitfitTitle: () => string;
       splitfitting: () => string;
       srcLabel: () => string;
+      tabFields: () => string;
+      tabText: () => string;
       title: () => string;
     };
     importpick: {

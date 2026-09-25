@@ -1605,6 +1605,14 @@ textarea.fld-src {
 /* pane splitter — a structural rule, so --grid (like the table cell grids) */
 .handouts-src { border-right: 1px solid var(--grid); }
 .handouts-textarea { flex: 1; min-height: 320px; width: 100%; }
+/* Поля: one box per handout, set off like a card on the board. */
+.hndt-block {
+  padding: var(--space-3);
+  border: 1px solid var(--grid);
+  border-radius: var(--radius-md);
+}
+/* A handout is a line or two, not a question: the editor's floor is too tall. */
+.hndt-block .card-desc { min-height: 0; }
 /* The two panes are mirrored columns: header row, then the big area, spaced by
    the pane's gap (not by per-widget margins, which is what glued the label /
    buttons to the textarea). The section-label's own margins are for flowing

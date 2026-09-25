@@ -352,9 +352,13 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
       pane kind="src"
         -- both panes open with the same header row, so the two labels (and the
         -- textarea / pdf area under them) sit on one line across the splitter
-        row gap="sm" align="center" justify="between"
-          label @board.handouts.src_label
-        editor id="handoutsSource" kind="handouts" spellcheck="false"
+        tabs id="handoutsViewTabs"
+          tab id="handoutsTabFields" view="fields" @board.handouts.tab_fields
+          tab id="handoutsTabText" view="text" @board.handouts.tab_text
+        -- The form writes into the .hndt below it, so the text is always the
+        -- document that is generated and saved, whichever view is showing.
+        mount id="handoutsFields" kind="handouts-fields"
+        editor id="handoutsSource" kind="handouts" spellcheck="false" aria-label=@board.handouts.src_label
         row gap="sm" align="center" wrap
           button small id="handoutsGenerate" @board.handouts.generate
           button small kind="ghost" id="handoutsSplitFit" title=@board.handouts.splitfit_title "Split-fit"

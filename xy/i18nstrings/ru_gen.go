@@ -365,7 +365,23 @@ var RU = Strings{
 			Title: func() string { return "Забыть пароль доски на этом устройстве" },
 		},
 		Handouts: BoardHandoutsStrings{
-			Download: func() string { return "Скачать" },
+			AlignCenter:     func() string { return "по центру" },
+			AlignLeft:       func() string { return "по левому краю" },
+			Download:        func() string { return "Скачать" },
+			FieldColumns:    func() string { return "Столбцов" },
+			FieldImageLabel: func() string { return "Картинка" },
+			FieldInside:     func() string { return "внутри" },
+			FieldInsideTitle: func() string {
+				return "Печатать номер вопроса на каждой раздатке, чтобы он остался на разрезанных листках"
+			},
+			FieldQuestion: func() string { return "Номер вопроса" },
+			FieldRows:     func() string { return "Строк" },
+			FieldRowsTitle: func() string {
+				return "Если пусто, одна строка. Split-fit подбирает число строк сам."
+			},
+			FieldsEmpty: func() string {
+				return "Раздаток нет. Добавить их можно в формате .hndt."
+			},
 			Generate: func() string { return "Сгенерировать PDF" },
 			GenerateFailed: func(reason string) string {
 				return fmt.Sprintf("Не удалось сгенерировать: %s", reason)
@@ -386,8 +402,10 @@ var RU = Strings{
 			Splitfitting: func() string {
 				return "Split-fit… (подбор раскладки может занять время)"
 			},
-			SrcLabel: func() string { return "Источник (.hndt)" },
-			Title:    func() string { return "Вёрстка раздаток" },
+			SrcLabel:  func() string { return "Источник (.hndt)" },
+			TabFields: func() string { return "Поля" },
+			TabText:   func() string { return "Формат .hndt" },
+			Title:     func() string { return "Вёрстка раздаток" },
 		},
 		Importpick: BoardImportpickStrings{
 			Hint: func() string {

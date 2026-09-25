@@ -289,6 +289,7 @@ var MountCardFields = Attr{Name: "kind", Value: "card-fields"}
 var MountPreviewBody = Attr{Name: "kind", Value: "preview-body"}
 var MountCardPreviewBody = Attr{Name: "kind", Value: "card-preview-body"}
 var MountHandoutsPdf = Attr{Name: "kind", Value: "handouts-pdf"}
+var MountHandoutsFields = Attr{Name: "kind", Value: "handouts-fields"}
 var MountImportPreview = Attr{Name: "kind", Value: "import-preview"}
 var MountListsManageRows = Attr{Name: "kind", Value: "lists-manage-rows"}
 var MountMembersList = Attr{Name: "kind", Value: "members-list"}
