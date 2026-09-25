@@ -79,7 +79,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
   // number builds one labelled number field over a setting; empty removes it.
   // The browser's spinner is swapped for two chevrons that fill the right end
   // of the field, which are bigger to hit and follow the theme.
-  function number(b: HndtFormBlock, key: string, label: string, write: () => void, title?: string): HTMLElement {
+  function number(b: HndtFormBlock, key: string, label: string, write: () => void, title?: string, wide = false): HTMLElement {
     const input = el("input", { class: "hndt-num-input", type: "number", min: "1", inputmode: "numeric" }) as HTMLInputElement;
     input.value = xyHndt.hndtGet(b, key) ?? "";
     input.addEventListener("input", () => { xyHndt.hndtSet(b, key, input.value.trim() || null); write(); });
@@ -93,7 +93,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
       node.addEventListener("click", () => step(by));
       return node;
     };
-    const field = el("span", { class: "hndt-num" }, input,
+    const field = el("span", { class: wide ? "hndt-num hndt-num-wide" : "hndt-num" }, input,
       el("span", { class: "hndt-num-steps" }, btn("chevron-up", S.board.handouts.stepUp(), 1), btn("chevron-down", S.board.handouts.stepDown(), -1)));
     return el("label", { class: "u-row u-gap-xs u-align-center", title: title || "" }, el("span", { class: "fld-label", text: label }), field);
   }
@@ -132,7 +132,8 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     // between them and not inside either.
     const settings = el("div", { class: "u-row u-gap-sm u-align-center u-wrap" },
       el("div", { class: "u-row u-gap-sm u-align-center" },
-        number(b, "for_question", S.board.handouts.fieldQuestion(), write),
+        // A pack runs past a hundred questions; the count of columns never does.
+        number(b, "for_question", S.board.handouts.fieldQuestion(), write, undefined, true),
         el("label", { class: "attach-lossless", title: S.board.handouts.fieldInsideTitle() }, inside, " " + S.board.handouts.fieldInside())),
       el("div", { class: "u-row u-gap-sm u-align-center" },
         number(b, "columns", S.board.handouts.fieldColumns(), write),

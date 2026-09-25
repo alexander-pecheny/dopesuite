@@ -365,7 +365,7 @@ src_label = "Источник (.hndt)"
 tab_fields = "Поля"
 tab_text = "Формат .hndt"
 # The form, one box per handout.
-field_question = "Номер вопроса"
+field_question = "Вопрос"
 field_inside = "внутри"
 field_inside_title = "Печатать номер вопроса на каждой раздатке, чтобы он остался на разрезанных листках"
 field_columns = "Столбцов"

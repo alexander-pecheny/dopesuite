@@ -374,7 +374,7 @@ var RU = Strings{
 			FieldInsideTitle: func() string {
 				return "Печатать номер вопроса на каждой раздатке, чтобы он остался на разрезанных листках"
 			},
-			FieldQuestion: func() string { return "Номер вопроса" },
+			FieldQuestion: func() string { return "Вопрос" },
 			FieldRows:     func() string { return "Строк" },
 			FieldRowsTitle: func() string {
 				return "Если пусто, одна строка. Split-fit подбирает число строк сам."

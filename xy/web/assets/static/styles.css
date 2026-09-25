@@ -1626,6 +1626,7 @@ textarea.fld-src {
   overflow: hidden;
 }
 .hndt-num:focus-within { border-color: var(--blue); }
+.hndt-num-wide { width: 4rem; }
 .hndt-num-input {
   flex: 1 1 auto;
   min-width: 0;
