@@ -16,6 +16,7 @@ import { xyHndt } from "./hndt.js";
 import { xyHandoutSession } from "./handoutsession.js";
 import { namedUrl, revokeNamedUrl } from "./namedurl.js";
 import { modal } from "./modal.js";
+import { icon } from "./icons_gen.js";
 import type { Attachments } from "./attachments.js";
 import type { HndtFormBlock } from "./hndt.js";
 import type { Board, ListPanel, ListScope } from "./panels.js";
@@ -38,9 +39,10 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     const { numbers, source } = xyHndt.hndtOf(cards);
     handoutsCtx = { cards, numbers, title: scope.title };
     byId<HTMLTextAreaElement>("handoutsSource").value = source;
-    setView("fields");
     clearHandoutsPdf();
     handoutsModal.open({ onClose: hideHandouts });
+    // After the modal is shown: the form measures its text boxes as it draws.
+    setView("fields");
     // Pre-stage the referenced images now (in the background) so the first PDF /
     // split_fit generation doesn't pay the gather+upload, and start heartbeating.
     handoutSession.ensure(source).catch(() => {});
@@ -75,11 +77,25 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
   }
 
   // number builds one labelled number field over a setting; empty removes it.
+  // The browser's spinner is swapped for two chevrons that fill the right end
+  // of the field, which are bigger to hit and follow the theme.
   function number(b: HndtFormBlock, key: string, label: string, write: () => void, title?: string): HTMLElement {
-    const input = el("input", { class: "input input-narrow", type: "number", min: "1", inputmode: "numeric" }) as HTMLInputElement;
+    const input = el("input", { class: "hndt-num-input", type: "number", min: "1", inputmode: "numeric" }) as HTMLInputElement;
     input.value = xyHndt.hndtGet(b, key) ?? "";
     input.addEventListener("input", () => { xyHndt.hndtSet(b, key, input.value.trim() || null); write(); });
-    return el("label", { class: "u-row u-gap-xs u-align-center", title: title || "" }, el("span", { class: "fld-label", text: label }), input);
+    const step = (by: number): void => {
+      input.value = String(Math.max(1, (parseInt(input.value, 10) || 0) + by));
+      input.dispatchEvent(new Event("input"));
+    };
+    const btn = (glyph: "chevron-up" | "chevron-down", aria: string, by: number): HTMLElement => {
+      // Out of the tab order: the arrow keys already step a focused field.
+      const node = el("button", { class: "hndt-num-step", type: "button", tabindex: "-1", "aria-label": aria }, icon(glyph));
+      node.addEventListener("click", () => step(by));
+      return node;
+    };
+    const field = el("span", { class: "hndt-num" }, input,
+      el("span", { class: "hndt-num-steps" }, btn("chevron-up", S.board.handouts.stepUp(), 1), btn("chevron-down", S.board.handouts.stepDown(), -1)));
+    return el("label", { class: "u-row u-gap-xs u-align-center", title: title || "" }, el("span", { class: "fld-label", text: label }), field);
   }
 
   // seg builds a two-way switch; `on` says which side is lit.
@@ -90,6 +106,16 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     sync();
     return el("div", { class: "seg" }, ...btns);
   }
+
+  function fitArea(ta: HTMLTextAreaElement): void {
+    ta.style.height = "";
+    if (ta.scrollHeight > ta.clientHeight) ta.style.height = `${ta.scrollHeight + ta.offsetHeight - ta.clientHeight}px`;
+  }
+  // The monospace face is fetched the first time a box uses it, after the
+  // boxes were measured in the fallback, so they are measured again then.
+  document.fonts?.addEventListener("loadingdone", () => {
+    for (const ta of fieldsEl.querySelectorAll("textarea")) fitArea(ta);
+  });
 
   // cardFor is the card a block's for_question points at, for its pictures.
   function cardFor(b: HndtFormBlock): BoardCard | null {
@@ -102,12 +128,13 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     const inside = el("input", { type: "checkbox" }) as HTMLInputElement;
     inside.checked = xyHndt.hndtGet(b, "question_label") === "inside";
     inside.addEventListener("change", () => { xyHndt.hndtSet(b, "question_label", inside.checked ? "inside" : null); write(); });
-    // Two groups, so a narrow pane breaks the line between them and not inside.
-    const settings = el("div", { class: "u-row u-gap-md u-align-center u-wrap" },
+    // One line on a desktop pane. Two groups, so a phone breaks the line
+    // between them and not inside either.
+    const settings = el("div", { class: "u-row u-gap-sm u-align-center u-wrap" },
       el("div", { class: "u-row u-gap-sm u-align-center" },
         number(b, "for_question", S.board.handouts.fieldQuestion(), write),
         el("label", { class: "attach-lossless", title: S.board.handouts.fieldInsideTitle() }, inside, " " + S.board.handouts.fieldInside())),
-      el("div", { class: "u-row u-gap-md u-align-center" },
+      el("div", { class: "u-row u-gap-sm u-align-center" },
         number(b, "columns", S.board.handouts.fieldColumns(), write),
         number(b, "rows", S.board.handouts.fieldRows(), write, S.board.handouts.fieldRowsTitle())));
 
@@ -116,12 +143,8 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     // It grows with the handout, like the card editor's fields, instead of
     // scrolling inside a box of its own.
     ta.style.overflowY = "hidden";
-    const fit = (): void => {
-      ta.style.height = "";
-      if (ta.scrollHeight > ta.clientHeight) ta.style.height = `${ta.scrollHeight + ta.offsetHeight - ta.clientHeight}px`;
-    };
-    ta.addEventListener("input", () => { b.text = ta.value; write(); fit(); });
-    requestAnimationFrame(fit);
+    ta.addEventListener("input", () => { b.text = ta.value; write(); fitArea(ta); });
+    requestAnimationFrame(() => fitArea(ta));
     // The picker offers the pictures attached to the question the block is for,
     // and keeps the one it names even when that is attached elsewhere.
     const sel = el("select", { class: "input", "aria-label": S.board.handouts.fieldImageLabel() }) as HTMLSelectElement;

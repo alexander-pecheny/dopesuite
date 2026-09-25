@@ -403,6 +403,8 @@ var RU = Strings{
 				return "Split-fit… (подбор раскладки может занять время)"
 			},
 			SrcLabel:  func() string { return "Источник (.hndt)" },
+			StepDown:  func() string { return "Меньше" },
+			StepUp:    func() string { return "Больше" },
 			TabFields: func() string { return "Поля" },
 			TabText:   func() string { return "Формат .hndt" },
 			Title:     func() string { return "Вёрстка раздаток" },

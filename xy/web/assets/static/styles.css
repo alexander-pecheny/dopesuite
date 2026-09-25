@@ -1613,6 +1613,49 @@ textarea.fld-src {
 }
 /* A handout is a line or two, not a question: the editor's floor is too tall. */
 .hndt-block .card-desc { min-height: 0; }
+/* A number field in the small control height, its right end two chevrons in
+   place of the browser's spinner. The box is drawn on the wrapper, so the
+   input and the arrows sit inside one field and focus lights all of it. */
+.hndt-num {
+  display: inline-flex;
+  width: 3.25rem;
+  height: var(--control-h-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--field-bg);
+  overflow: hidden;
+}
+.hndt-num:focus-within { border-color: var(--blue); }
+.hndt-num-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 var(--space-1-5);
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  outline: 0;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.hndt-num-input::-webkit-inner-spin-button,
+.hndt-num-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.hndt-num-steps { display: flex; flex-direction: column; border-left: 1px solid var(--grid); }
+.hndt-num-step {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: var(--cursor-action);
+}
+.hndt-num-step:hover { background: var(--action-bg); color: var(--text); }
+.hndt-num-step .ico { --ico-size: 12px; }
 /* The two panes are mirrored columns: header row, then the big area, spaced by
    the pane's gap (not by per-widget margins, which is what glued the label /
    buttons to the textarea). The section-label's own margins are for flowing

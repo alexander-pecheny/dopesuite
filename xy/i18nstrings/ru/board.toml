@@ -371,6 +371,9 @@ field_inside_title = "Печатать номер вопроса на каждо
 field_columns = "Столбцов"
 field_rows = "Строк"
 field_rows_title = "Если пусто, одна строка. Split-fit подбирает число строк сам."
+# aria-labels of the arrows beside each number.
+step_up = "Больше"
+step_down = "Меньше"
 align_center = "по центру"
 align_left = "по левому краю"
 field_image_label = "Картинка"
