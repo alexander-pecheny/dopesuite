@@ -3,8 +3,8 @@
 # the import surface's [export] table, not this one.)
 
 [menu]
-# The list-menu item; the grouped variant is shown when the list sits inside
-# a group.
+# The list-menu item, also the list preview's button into the panel; the
+# grouped variant is shown in the menu when the list sits inside a group.
 label = "Экспорт"
 label_grouped = "Экспорт группы"
 

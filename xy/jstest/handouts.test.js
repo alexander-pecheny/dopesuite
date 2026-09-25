@@ -44,6 +44,6 @@ test("a list without handouts is not offered the panel", () => {
   const panel = createHandoutsPanel(fakeBoard(), { appendImages: async () => new Set() });
   assert.equal(panel.offered({ ...scope, cards: [cards[1]] }), false);
   assert.equal(panel.offered(scope), true);
-  assert.equal(panel.label(scope), "Генерация раздаток");
-  assert.equal(panel.label({ ...scope, grouped: true }), "Генерация раздаток (вся группа)");
+  assert.equal(panel.label(scope), "Вёрстка раздаток");
+  assert.equal(panel.label({ ...scope, grouped: true }), "Вёрстка раздаток (вся группа)");
 });

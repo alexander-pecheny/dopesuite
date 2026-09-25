@@ -355,10 +355,10 @@ title = "Проверка импорта"
 src_label = "Исходник 4s"
 
 [handouts]
-# Title of the handouts-generation overlay, and the ⋯ row that opens it —
-# a grouped list generates the whole group's.
-title = "Генерация раздаток"
-menu_group = "Генерация раздаток (вся группа)"
+# Title of the handouts-generation overlay, the list preview's button into it,
+# and the ⋯ row that opens it — a grouped list generates the whole group's.
+title = "Вёрстка раздаток"
+menu_group = "Вёрстка раздаток (вся группа)"
 # Label above the .hndt source editor.
 src_label = "Источник (.hndt)"
 # Generate button.

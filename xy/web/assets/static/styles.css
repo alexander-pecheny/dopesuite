@@ -1124,6 +1124,15 @@
 }
 .preview-head-actions { display: flex; align-items: center; gap: var(--space-3); flex: none; }
 .preview-screen-toggle { white-space: nowrap; cursor: var(--cursor-action); }
+/* On a phone the list preview's Экспорт and Вёрстка раздаток leave the title no
+   room. The title keeps the first line, the × stays in the top-right corner, and
+   the rest of the controls wrap onto the lines below. */
+@media (max-width: 560px) {
+  #previewOverlay .preview-head { position: relative; flex-wrap: wrap; padding-right: 64px; }
+  #previewOverlay .preview-title { flex: 1 1 100%; }
+  #previewOverlay .preview-head-actions { flex: 1 1 100%; flex-wrap: wrap; gap: var(--space-2); }
+  #previewClose { position: absolute; top: var(--space-3); right: var(--space-4); margin: 0; }
+}
 .preview-body {
   flex: 1;
   overflow-y: auto;

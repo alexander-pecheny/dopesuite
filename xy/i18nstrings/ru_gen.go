@@ -372,7 +372,7 @@ var RU = Strings{
 			},
 			Generated:       func() string { return "Готово." },
 			Generating:      func() string { return "Генерация…" },
-			MenuGroup:       func() string { return "Генерация раздаток (вся группа)" },
+			MenuGroup:       func() string { return "Вёрстка раздаток (вся группа)" },
 			OpenPdf:         func() string { return "Открыть PDF" },
 			PdfOffline:      func() string { return "Генерация PDF доступна только онлайн." },
 			SafariNote:      func() string { return "Safari не показывает PDF внутри приложения." },
@@ -387,7 +387,7 @@ var RU = Strings{
 				return "Split-fit… (подбор раскладки может занять время)"
 			},
 			SrcLabel: func() string { return "Источник (.hndt)" },
-			Title:    func() string { return "Генерация раздаток" },
+			Title:    func() string { return "Вёрстка раздаток" },
 		},
 		Importpick: BoardImportpickStrings{
 			Hint: func() string {

@@ -216,6 +216,10 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
     headrow
       previewtitle id="previewTitle" @board.preview.title
       headactions
+        -- What a list preview is usually opened on the way to: the two outputs,
+        -- here so they are never behind the list's ⋯.
+        button small kind="ghost" icon="file-down" id="previewExport" @export.menu.label
+        button small kind="ghost" icon="file-text" id="previewHandouts" hidden @board.handouts.title
         checkbox id="previewScreen" kind="preview" title=@board.card.screen_title @board.card.screen_label
         iconbtn id="previewClose" icon="x" label=@board.actions.close
     mount id="previewBody" kind="preview-body"

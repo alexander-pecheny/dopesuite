@@ -2,7 +2,7 @@
 // drag-reorder with fractional ranks, card detail + timeline + labels.
 import { overlayStack } from "./overlaystack.js";
 import { modal } from "./modal.js";
-import { type Board, boardMenu, createPanelShell, listMenu, listNumbers, listScope, openPanel, type Panel, registerPanel } from "./panels.js";
+import { type Board, boardMenu, createPanelShell, listMenu, listNumbers, listScope, type ListScope, openPanel, type Panel, registerPanel } from "./panels.js";
 import { createRewrites } from "./rewrites.js";
 import { createReplacePanel } from "./replace.js";
 import { createMoveListPanel } from "./movelist.js";
@@ -614,6 +614,10 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
     popupMenu(menuWrap, items);
   });
   menuWrap.append(menuBtn);
+  // The preview is the other thing people open a list for. Always this one
+  // list: the whole group stays a ⋯ row.
+  const previewBtn = el("button", { class: "kadd", title: S.board.preview.title(), "aria-label": S.board.preview.title() }, icon("eye"));
+  previewBtn.addEventListener("click", () => { void previewList(list); });
   const cards = cardsOf(list.id);
   const headMain = el("div", { class: "klist-headmain" },
     el("span", { class: "klist-title", text: list.title || S.board.list.untitled() }));
@@ -645,7 +649,7 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
     all.addEventListener("change", () => mass.toggleAll(ids));
     headKids.push(el("label", { class: "klist-check" }, all));
   }
-  col.append(el("div", { class: "klist-head" }, ...headKids, headMain, addCardBtn, menuWrap));
+  col.append(el("div", { class: "klist-head" }, ...headKids, headMain, addCardBtn, previewBtn, menuWrap));
   if (list.groupId != null) {
     const g = groupById(list.groupId);
     col.append(el("div", { class: "klist-group-tag", title: S.board.list.groupTitle() }, ...iconed("link", (g && g.name) || S.board.list.groupFallback())));
@@ -1204,6 +1208,7 @@ async function previewList(list: BoardList, wholeGroup = false): Promise<void> {
   previewListRef = list;
   previewGroupMode = !!group;
   q(".preview-screen-toggle").hidden = false;
+  showPreviewOutputs(listScope(board, list));
   previewOverlay.hidden = false;
   overlayStack.open({ el: previewOverlay, close: hidePreview });
   if (!cards.length) {
@@ -1226,6 +1231,19 @@ async function previewList(list: BoardList, wholeGroup = false): Promise<void> {
     if (previewCtx === ctx && !previewOverlay.hidden) fillPreviewImages(body, imgMap);
   });
 }
+
+// The header's export and handouts buttons open the same panels as the list's
+// ⋯ rows, over the preview, and for the same scope: the group when there is one.
+const previewExport = byId<HTMLButtonElement>("previewExport");
+const previewHandouts = byId<HTMLButtonElement>("previewHandouts");
+let previewScope: ListScope | null = null;
+function showPreviewOutputs(scope: ListScope): void {
+  previewScope = scope;
+  previewExport.hidden = !(exportPanel.offered?.(scope) ?? true);
+  previewHandouts.hidden = !(handoutsPanel.offered?.(scope) ?? true);
+}
+previewExport.addEventListener("click", () => { if (previewScope) exportPanel.open(previewScope); });
+previewHandouts.addEventListener("click", () => { if (previewScope) handoutsPanel.open(previewScope); });
 
 byId("previewScreen").addEventListener("change", (e) => renderPreviewBody((e.target as HTMLInputElement).checked));
 byId("previewClose").addEventListener("click", closePreview);
@@ -1570,6 +1588,8 @@ const copyBoard = createCopyBoardPanel(board, shell);
 // sit next to.
 const starts = <P extends Panel>(p: P): P => ({ ...p, divider: true });
 
+const exportPanel = createExportPanel(board, attachments);
+const handoutsPanel = createHandoutsPanel(board, attachments);
 registerPanel(
   // What is on the board
   listsManage.panel,
@@ -1621,8 +1641,8 @@ registerPanel(
   createAuthorCountPanel(shell, cardDetail),
 
   // What comes out of it
-  starts(createExportPanel(board, attachments)),
-  createHandoutsPanel(board, attachments),
+  starts(exportPanel),
+  handoutsPanel,
 
   // The list itself
   starts({ id: "rename-list", menu: "list", icon: "pencil", label: S.board.rename.listLabel(), open: (s) => { void renameList(s.list); } }),

@@ -310,7 +310,7 @@ export const RU: Strings = {
       generateFailed: (reason: string) => `Не удалось сгенерировать: ${reason}`,
       generated: () => "Готово.",
       generating: () => "Генерация…",
-      menuGroup: () => "Генерация раздаток (вся группа)",
+      menuGroup: () => "Вёрстка раздаток (вся группа)",
       openPdf: () => "Открыть PDF",
       pdfOffline: () => "Генерация PDF доступна только онлайн.",
       safariNote: () => "Safari не показывает PDF внутри приложения.",
@@ -321,7 +321,7 @@ export const RU: Strings = {
       splitfitTitle: () => "Подобрать раскладку (split-fit) и скачать zip со всеми PDF",
       splitfitting: () => "Split-fit… (подбор раскладки может занять время)",
       srcLabel: () => "Источник (.hndt)",
-      title: () => "Генерация раздаток",
+      title: () => "Вёрстка раздаток",
     },
     importpick: {
       hint: () => "Пакет вопросов (.4s, .docx) или архив xy (.zip) — что именно, разберёмся сами.",
