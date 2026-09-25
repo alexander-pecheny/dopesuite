@@ -1138,6 +1138,14 @@ function popupMenu(anchor: HTMLElement, items: MenuItem[]): void {
 // The card shape the preview renders: a persisted board card, the card detail's
 // transient draft card, or an import-verify block (which has no list yet).
 const previewOverlay = byId("previewOverlay");
+// A long list name fades out at the edge and shows whole on hover, as in the
+// list head.
+const previewNames = createNameOverflow({
+  root: previewOverlay,
+  item: ".preview-title",
+  name: ".preview-title",
+  truncatedClass: "preview-title-truncated",
+});
 
 // pvEditBtn builds the small inline ✏️ button rendered just before each preview
 // block's leading label (e.g. "✏️Question 1."): it hides the preview and drops
@@ -1178,6 +1186,7 @@ function renderPreviewBody(screen: boolean): void {
 function closePreview(): void { overlayStack.pop(); }
 
 function hidePreview(): void {
+  previewNames.hide();
   previewOverlay.hidden = true;
   previewCtx = null;
   previewListRef = null;
@@ -1211,6 +1220,7 @@ async function previewList(list: BoardList, wholeGroup = false): Promise<void> {
   showPreviewOutputs(listScope(board, list));
   previewOverlay.hidden = false;
   overlayStack.open({ el: previewOverlay, close: hidePreview });
+  previewNames.measure();
   if (!cards.length) {
     body.append(el("p", { class: "pv-empty", text: S.board.preview.empty() }));
     return;

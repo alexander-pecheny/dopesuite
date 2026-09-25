@@ -1119,8 +1119,14 @@
   font-size: var(--text-lg);
   font-weight: var(--fw-semibold);
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
+}
+/* A list's name that does not fit gets the list head's fade, and nameoverflow.ts
+   floats the whole name on hover. */
+.preview-title-truncated {
+  -webkit-mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
+  mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
 }
 .preview-head-actions { display: flex; align-items: center; gap: var(--space-3); flex: none; }
 .preview-screen-toggle { white-space: nowrap; cursor: var(--cursor-action); }
