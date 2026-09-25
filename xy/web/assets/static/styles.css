@@ -1641,7 +1641,13 @@ textarea.fld-src {
 }
 .hndt-num-input::-webkit-inner-spin-button,
 .hndt-num-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-.hndt-num-steps { display: flex; flex-direction: column; border-left: 1px solid var(--grid); }
+/* The arrows' column is the field's own colour shifted toward the text, so it
+   reads as a separate strip in every theme without a rule between them. */
+.hndt-num-steps {
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in oklch, var(--field-bg), var(--text) 8%);
+}
 .hndt-num-step {
   flex: 1 1 0;
   display: flex;
@@ -1654,7 +1660,7 @@ textarea.fld-src {
   color: var(--muted);
   cursor: var(--cursor-action);
 }
-.hndt-num-step:hover { background: var(--action-bg); color: var(--text); }
+.hndt-num-step:hover { background: color-mix(in oklch, var(--field-bg), var(--text) 16%); color: var(--text); }
 .hndt-num-step .ico { --ico-size: 12px; }
 /* The two panes are mirrored columns: header row, then the big area, spaced by
    the pane's gap (not by per-widget margins, which is what glued the label /
