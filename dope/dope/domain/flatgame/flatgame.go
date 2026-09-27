@@ -112,14 +112,21 @@ select g.game_type, m.state_json from matches m join games g on g.id = m.game_id
 
 // seatTx makes the Match's slots the document's team list: seat i is the
 // Participant playing under the i-th team's number, minted or renamed as the
-// document says; a team without a number sits in an empty seat. The Game's
+// document says; a team without a number, or a guest team, sits in an empty
+// seat. The Game's
 // entrant list follows when every seat is numbered, and is dropped otherwise
 // so the numbering guard falls back to the fest's registry.
 func seatTx(ctx context.Context, tx *sql.Tx, festID, gameID, matchID int64, seats []protocol.Seat) error {
 	wanted := make([]int64, len(seats))
 	numbered := true
 	for i, seat := range seats {
-		if seat.Number <= 0 || seat.Name == "" {
+		if seat.Number < 0 {
+			// A Multi guest team (games.MultiGuest) lives in the document
+			// alone: no fest Participant is minted for it, and it does not
+			// stop the numbered teams from being the Game's entrant list.
+			continue
+		}
+		if seat.Number == 0 || seat.Name == "" {
 			numbered = false
 			continue
 		}

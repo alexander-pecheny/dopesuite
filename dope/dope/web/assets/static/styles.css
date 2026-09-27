@@ -4911,6 +4911,16 @@ body.is-fullscreen.od-page .match-main {
   font-weight: var(--fw-semibold);
 }
 
+/* A guest team's rename and remove sit in a row of the teams table, so they
+   fit inside the row's height (less the cell's padding) rather than a form
+   control's. */
+.multi-guest-actions .action-icon {
+  width: calc(var(--question-size) - var(--space-2));
+  height: calc(var(--question-size) - var(--space-2));
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
 /* Тройка: бои side by side, each two blocks of three chair rows; the группа
    tables flow at their own width and wrap, compact enough for two abreast. */
 .group-standings.troika-groups {

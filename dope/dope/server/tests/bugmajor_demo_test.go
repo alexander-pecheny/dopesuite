@@ -124,14 +124,27 @@ func TestBugMajorDemoFest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Мелотрек: five темы of five вопросы, two points each, all teams played.
+	// Мелотрек: twelve темы of five вопросы, two points each, every fest team
+	// and two guest teams played.
+	melotrekThemes := []string{"Вокруг транспорта", "Цвета", "Города", "Животные", "Еда", "Погода",
+		"Имена", "Числа", "Кино", "Танцы", "Зима", "Дорога"}
+	var melotrekSpec []string
+	for _, theme := range melotrekThemes {
+		melotrekSpec = append(melotrekSpec, theme+": {0,1,2}x5")
+	}
 	melotrekID := createGameThroughForm(t, srv, festID, token, map[string]string{"game_type": "multi",
-		"multi_games": "Вокруг транспорта: {0,1,2}x5\nЦвета: {0,1,2}x5\nГорода: {0,1,2}x5\nЖивотные: {0,1,2}x5\nЕда: {0,1,2}x5"})
+		"multi_games": strings.Join(melotrekSpec, "\n")})
+	for _, guest := range []string{"Сборная оргкомитета", "Гости из Пинска"} {
+		if resp := scopedAPIRequest(t, srv, http.MethodPost, fmt.Sprintf("/api/fest/%d/games/%d/guests", festID, melotrekID),
+			map[string]any{"name": guest}, token); resp.Code != http.StatusOK {
+			t.Fatalf("мелотрек guest: %d %s", resp.Code, resp.Body.String())
+		}
+	}
 	var cellOps []map[string]any
-	for g := 0; g < 5; g++ {
-		for p := 0; p < teams; p++ {
+	for g := range melotrekThemes {
+		for p := 0; p < teams+2; p++ {
 			for c := 0; c < 5; c++ {
-				if v := (g*3 + p*5 + c*7) % 5; v > 0 && v <= 2 {
+				if v := (g*3 + p*p + c*c) % 5; v > 0 && v <= 2 {
 					cellOps = append(cellOps, map[string]any{"path": []any{"games", g, "cells", p, c}, "value": v})
 				}
 			}

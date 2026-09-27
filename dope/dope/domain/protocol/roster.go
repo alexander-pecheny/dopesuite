@@ -297,7 +297,8 @@ func resizeIntSlice(values []int, size int) []int {
 // across roster reorders, additions, and removals. Teams are matched by NUMBER
 // (the universal, unique identity) — so two teams sharing a name keep distinct
 // scores — falling back to name only when the old participant has no number
-// (legacy state captured before numbers were stored). New teams get an empty
+// (legacy state captured before numbers were stored). A Multi guest team's
+// number, below zero, matches the same way. New teams get an empty
 // row; teams that dropped out lose their row. Each old row is claimed at most
 // once. With no old participants at all, a plain positional resize is used.
 func RemapAnswerMatrix[T any](values [][]T, oldParts, newParts []games.KSIParticipant, cols int) [][]T {
@@ -317,7 +318,7 @@ func RemapAnswerMatrix[T any](values [][]T, oldParts, newParts []games.KSIPartic
 	out := make([][]T, len(newParts))
 	for j, p := range newParts {
 		idx := -1
-		if p.Number > 0 {
+		if p.Number != 0 {
 			num := p.Number
 			idx = claim(func(o games.KSIParticipant) bool { return o.Number == num })
 		}
@@ -384,9 +385,21 @@ func resizeRow[T any](values []T, size int) []T {
 
 // Multi carries its roster the way KSI does — the participants list plus
 // one cell grid per minigame, each row a team — so the fold is the same:
-// rewrite the list, and follow every team's row across the reorder.
+// rewrite the list, and follow every team's row across the reorder. The
+// game's guest teams are not on the roster, so they stay, after the fest's.
 func (multi) FoldRoster(schemeJSON, stateJSON string, teams []RosterTeam, _ map[int]int) ([]byte, []byte, error) {
-	participants := teamParticipantsFromRoster(teams)
+	state, err := RawJSONObject(stateJSON)
+	if err != nil {
+		return nil, nil, err
+	}
+	oldParticipants := games.ParseKSIParticipants(state["participants"])
+	participants := append(teamParticipantsFromRoster(teams), games.MultiGuests(oldParticipants)...)
+	return rewriteMultiParticipants(schemeJSON, state, oldParticipants, participants)
+}
+
+// rewriteMultiParticipants writes a new team list into a Multi document, in
+// the scheme and in the state, and moves every team's cells to its new row.
+func rewriteMultiParticipants(schemeJSON string, state map[string]json.RawMessage, oldParticipants, participants []games.KSIParticipant) ([]byte, []byte, error) {
 	scheme, err := RawJSONObject(schemeJSON)
 	if err != nil {
 		return nil, nil, err
@@ -406,11 +419,6 @@ func (multi) FoldRoster(schemeJSON, stateJSON string, teams []RosterTeam, _ map[
 	}
 	_ = json.Unmarshal(schemeOut, &minigames)
 
-	state, err := RawJSONObject(stateJSON)
-	if err != nil {
-		return nil, nil, err
-	}
-	oldParticipants := games.ParseKSIParticipants(state["participants"])
 	state["participants"] = participantsJSON
 
 	var grids []map[string]json.RawMessage

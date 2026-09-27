@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"dope/dope/domain/games"
+	"dope/dope/domain/protocol"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	dopestrings "dope/i18nstrings"
@@ -113,6 +114,9 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 		var state []byte
 		emptyScheme, emptyState := games.MultiEmptyGameJSON(meta.Slug, meta.Title, sc.Minigames, sc.Sorting)
 		if newScheme, state, err = pristineFlatTx(ctx, tx, festID, games.Multi, emptyScheme, emptyState); err != nil {
+			return "", err
+		}
+		if newScheme, state, err = protocol.KeepMultiGuests(schemeJSON, newScheme, state); err != nil {
 			return "", err
 		}
 		if err := insertFlatMatchTx(ctx, tx, festID, gameID, title, string(state), now); err != nil {

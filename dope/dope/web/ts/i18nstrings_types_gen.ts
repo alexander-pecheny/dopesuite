@@ -483,6 +483,13 @@ export type Strings = {
       repeatCount: (spec: string) => string;
       specExpected: (spec: string) => string;
     };
+    multiGuest: {
+      entered: (name: string) => string;
+      nameMissing: () => string;
+      nameTaken: (name: string) => string;
+      notFound: () => string;
+      wrongGame: () => string;
+    };
     od: {
       label: () => string;
     };
@@ -928,6 +935,15 @@ export type Strings = {
   multi: {
     game: {
       uniformPrice: (name: string, n: string) => string;
+    };
+    guests: {
+      add: () => string;
+      failed: (error: string) => string;
+      hint: () => string;
+      namePlaceholder: () => string;
+      removeConfirm: (name: string) => string;
+      removeLabel: () => string;
+      renameLabel: () => string;
     };
     refusals: {
       declined: () => string;

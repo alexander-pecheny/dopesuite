@@ -1,6 +1,6 @@
 # The Мультиигры screen (dope/dope/web/ts/multi.ts): the sheet of мини-игры
 # column blocks with their subtotals and Итог, the ranked «Итог» table, the
-# refusals tab and the tab bar.
+# teams tab (refusals and the game's guest teams) and the tab bar.
 
 # The page title when neither the fest view nor the scheme names the game.
 title = "Мультиигры"
@@ -9,7 +9,7 @@ title = "Мультиигры"
 # The tab bar labels.
 detailed = "Подробно"
 results = "Итог"
-refusals = "Отказы"
+refusals = "Команды"
 roster = "Составы"
 
 [sheet]
@@ -29,6 +29,23 @@ team = "Команда"
 total = "Итог"
 
 [refusals]
-# The «Отказы» tab: the team and refused-to-play column headers.
+# The «Команды» tab: the team and refused-to-play column headers.
 team = "Команда"
 declined = "Отказ"
+
+[guests]
+# The «Команды» tab's guest teams: teams the host adds to this one game by
+# name alone. The hint under the add form.
+hint = "Разовая команда играет только в этой игре. В рейтинге и в других играх феста её нет. Убрать её можно, пока у неё нет баллов и отказа."
+# The add form's name field.
+name_placeholder = "Название разовой команды"
+# The add form's button.
+add = "Добавить команду"
+# The pencil button on a guest team's row, and its name field's label.
+rename_label = "Переименовать"
+# The bin button on a guest team's row.
+remove_label = "Убрать из игры"
+# The confirmation before a guest team is removed.
+remove_confirm = 'Убрать команду «{{.name}}» из игры?'
+# A guest-team edit the server refused; error is its reason.
+failed = 'Не получилось: {{.error}}'

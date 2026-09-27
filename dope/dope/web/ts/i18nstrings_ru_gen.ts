@@ -484,6 +484,13 @@ export const RU: Strings = {
       repeatCount: (spec: string) => `"${spec}" — повтор xN считается от 1`,
       specExpected: (spec: string) => `"${spec}" — жду {значения} или {a-b}, можно с xN`,
     },
+    multiGuest: {
+      entered: (name: string) => `У команды «${name}» уже есть баллы или отказ. Чтобы убрать её, сначала сотрите баллы и снимите отказ.`,
+      nameMissing: () => "Напишите название команды.",
+      nameTaken: (name: string) => `В игре уже есть команда «${name}».`,
+      notFound: () => "Такой разовой команды в игре нет.",
+      wrongGame: () => "Разовые команды бывают только в мультииграх.",
+    },
     od: {
       label: () => "ЧГК",
     },
@@ -951,6 +958,15 @@ shootout: true
     game: {
       uniformPrice: (name: string, n: string) => `${name} (по ${n})`,
     },
+    guests: {
+      add: () => "Добавить команду",
+      failed: (error: string) => `Не получилось: ${error}`,
+      hint: () => "Разовая команда играет только в этой игре. В рейтинге и в других играх феста её нет. Убрать её можно, пока у неё нет баллов и отказа.",
+      namePlaceholder: () => "Название разовой команды",
+      removeConfirm: (name: string) => `Убрать команду «${name}» из игры?`,
+      removeLabel: () => "Убрать из игры",
+      renameLabel: () => "Переименовать",
+    },
     refusals: {
       declined: () => "Отказ",
       team: () => "Команда",
@@ -966,7 +982,7 @@ shootout: true
     },
     tabs: {
       detailed: () => "Подробно",
-      refusals: () => "Отказы",
+      refusals: () => "Команды",
       results: () => "Итог",
       roster: () => "Составы",
     },

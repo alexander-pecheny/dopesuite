@@ -586,6 +586,19 @@ var RU = Strings{
 				return fmt.Sprintf("\"%s\" — жду {значения} или {a-b}, можно с xN", spec)
 			},
 		},
+		MultiGuest: GamesMultiGuestStrings{
+			Entered: func(name string) string {
+				return fmt.Sprintf("У команды «%s» уже есть баллы или отказ. Чтобы убрать её, сначала сотрите баллы и снимите отказ.", name)
+			},
+			NameMissing: func() string { return "Напишите название команды." },
+			NameTaken: func(name string) string {
+				return fmt.Sprintf("В игре уже есть команда «%s».", name)
+			},
+			NotFound: func() string { return "Такой разовой команды в игре нет." },
+			WrongGame: func() string {
+				return "Разовые команды бывают только в мультииграх."
+			},
+		},
 		Od: GamesOdStrings{
 			Label: func() string { return "ЧГК" },
 		},
@@ -1198,6 +1211,19 @@ var RU = Strings{
 		Game: MultiGameStrings{
 			UniformPrice: func(name string, n string) string { return fmt.Sprintf("%s (по %s)", name, n) },
 		},
+		Guests: MultiGuestsStrings{
+			Add:    func() string { return "Добавить команду" },
+			Failed: func(error string) string { return fmt.Sprintf("Не получилось: %s", error) },
+			Hint: func() string {
+				return "Разовая команда играет только в этой игре. В рейтинге и в других играх феста её нет. Убрать её можно, пока у неё нет баллов и отказа."
+			},
+			NamePlaceholder: func() string { return "Название разовой команды" },
+			RemoveConfirm: func(name string) string {
+				return fmt.Sprintf("Убрать команду «%s» из игры?", name)
+			},
+			RemoveLabel: func() string { return "Убрать из игры" },
+			RenameLabel: func() string { return "Переименовать" },
+		},
 		Refusals: MultiRefusalsStrings{
 			Declined: func() string { return "Отказ" },
 			Team:     func() string { return "Команда" },
@@ -1213,7 +1239,7 @@ var RU = Strings{
 		},
 		Tabs: MultiTabsStrings{
 			Detailed: func() string { return "Подробно" },
-			Refusals: func() string { return "Отказы" },
+			Refusals: func() string { return "Команды" },
 			Results:  func() string { return "Итог" },
 			Roster:   func() string { return "Составы" },
 		},

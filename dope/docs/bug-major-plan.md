@@ -15,7 +15,7 @@ the `swiss` Kind, the pool, and the written бой of Тройка.
 | ОД | 84 questions, 7 tours. Student and общий зачёт | nothing once зачёты are merged |
 | Тройка | Troikas of 2–4 players, not teams. A written отбор, then a Swiss stage of 12, then a play-off of 6. Student and adult brackets are separate games | the troika registry, the written бой, 3-seat бои, a перестрелка, the Swiss Kind, a single-group play-off feed |
 | Эрудит-секстет | Student and adult games are separate. Two group games of 4 seeded from ОД after 3 tours, rotation between halls, then semifinals of 4 and a final of 4 | the branch (now merged), a snake first deal and a rotation in `placement`, a seed restricted to a зачёт, a lot as the last tiebreak |
-| Мелотрек | Written, 5 questions a theme, 2 points each | nothing: Мультиигры |
+| Мелотрек | Written, 12 темы of 5 questions, 2 points each; teams of any make-up, some under one-off names | Мультиигры, plus guest teams (Разовые команды) added on the game page |
 | Кубок | Sum of places across games | deferred: the organisers add it up from exports |
 
 ## Decisions taken
