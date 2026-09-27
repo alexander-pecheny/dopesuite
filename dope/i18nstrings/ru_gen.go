@@ -898,7 +898,7 @@ var RU = Strings{
 			ErrorObjSourceTeam:    func() string { return "исходную команду" },
 			ErrorObjTeam:          func() string { return "команду" },
 			FlagsHint: func() string {
-				return "Зачёты команды — через запятую: «Школ, Студ». Их видно на страницах ОД и КСИ, где по зачёту можно отфильтровать таблицу. Импорт из rating.chgk.info перезаписывает их."
+				return "Зачёты команды пишутся через запятую: «Школ, Студ». На страницах ОД и КСИ по зачёту можно отфильтровать таблицу, а ЭС может брать в посев из ОД только команды одного зачёта. Импорт из rating.chgk.info перезаписывает зачёты."
 			},
 			FlagsPlaceholder: func() string { return "Школ, Студ" },
 			FlagsSavedNotice: func() string { return "Зачёты сохранены." },
@@ -918,7 +918,7 @@ var RU = Strings{
 				return "Сначала сохраните rating.chgk.info ID в свойствах феста."
 			},
 			NewTeamLabel:      func() string { return "Новая команда" },
-			NoOverrideGames:   func() string { return "В фесте пока нет игр КСИ или ЭК." },
+			NoOverrideGames:   func() string { return "В фесте пока нет игр КСИ, ЭК или ЭС." },
 			OverrideTitle:     func() string { return "Оверрайд игрока" },
 			OverridesSubhead:  func() string { return "Оверрайды" },
 			PlayerLabel:       func() string { return "Игрок" },
@@ -927,7 +927,7 @@ var RU = Strings{
 			PlayersTitle:      func(title string) string { return fmt.Sprintf("%s · игроки", title) },
 			RatingImportCrumb: func() string { return "Импорт участников" },
 			RatingImportNote: func() string {
-				return "Импорт заменит списки команд и игроков феста и обновит список команд в играх ЧГК и КСИ."
+				return "Импорт заменит списки команд и игроков феста и обновит список команд в ЧГК, КСИ и Мультииграх. В ЭК и ЭС команды приходят из посева, поэтому их составы обновятся, когда вы снова импортируете посев. Оверрайды игроков сохранятся."
 			},
 			RatingImportTitle: func(title string) string { return fmt.Sprintf("%s · импорт участников", title) },
 			RatingSource:      func(id string) string { return fmt.Sprintf("Источник: rating.chgk.info ID %s", id) },

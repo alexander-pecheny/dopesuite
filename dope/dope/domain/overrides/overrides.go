@@ -113,7 +113,7 @@ func LoadHostPlayerOverrideGameOptions(ctx context.Context, q store.Queryer, fes
 	return store.CollectRows(ctx, q, `
 select id, title, game_type
 from games
-where fest_id = ? and game_type in ('ksi', 'ek')
+where fest_id = ? and game_type in ('ksi', 'ek', 'es')
 order by position, id`, []any{festID}, func(rows *sql.Rows) (HostGameOverrideOption, error) {
 		var row HostGameOverrideOption
 		var title, gameType string
@@ -269,7 +269,7 @@ select id from fest_teams where id = ? and fest_id = ? and deleted = 0`, teamID,
 func overrideGameType(ctx context.Context, q store.Queryer, festID, gameID int64) (string, error) {
 	var gameType string
 	err := q.QueryRowContext(ctx, `
-select game_type from games where id = ? and fest_id = ? and game_type in ('ksi', 'ek')`, gameID, festID).Scan(&gameType)
+select game_type from games where id = ? and fest_id = ? and game_type in ('ksi', 'ek', 'es')`, gameID, festID).Scan(&gameType)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", core.User(dopestrings.Default.Override.Entry.GameTypeWrong())
 	}
@@ -649,7 +649,7 @@ from game_player_team_overrides o
 join fest_players p on p.id = o.player_id
 join fest_teams target on target.id = o.override_team_id
 join games g on g.id = o.game_id
-where o.fest_id = ? and g.game_type in ('ksi', 'ek')
+where o.fest_id = ? and g.game_type in ('ksi', 'ek', 'es')
 order by o.game_id, o.player_id`, festID)
 	if err != nil {
 		return nil, err

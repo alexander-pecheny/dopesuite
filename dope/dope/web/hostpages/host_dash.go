@@ -187,7 +187,7 @@ func hostDashAccessSection(data hostFestDashData, ref string) *dopeui.Element {
 				dopeui.Field(dopeui.Label(s.Host.Dash.BulkDataLabel()),
 					dopeui.Editor(dopeui.Name("bulk_access_lines"), dopeui.Rows("8"),
 						dopeui.Placeholder("username1:host\nusername2:host\nusername3:admin\nusername4:remove"), dopeui.Required())),
-				dopeui.Row(
+				dopeui.Row(dopeui.SpaceSM, dopeui.Wrap(),
 					dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Dash.BulkApply())),
 					dopeui.Button(dopeui.Data("dialog-close", ""), dopeui.Text(s.Host.Dash.CancelBtn())),
 				),

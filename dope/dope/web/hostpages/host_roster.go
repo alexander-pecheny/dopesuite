@@ -195,7 +195,7 @@ func hostAddOverrideDialog(data hostFestRosterData, ref string) *dopeui.Element 
 				dopeui.Textfield(dopeui.Name("team_label"), dopeui.InputList("playerOverrideTeams"), dopeui.Required(), dopeui.Data("player-override-team", ""))),
 			dopeui.Datalist(append([]dopeui.Item{dopeui.ID("playerOverrideTeams")}, teamOpts...)...),
 			dopeui.Pickgroup(dopeui.Label(s.Host.Roster.GamesLabel()), gamePicker),
-			dopeui.Row(
+			dopeui.Row(dopeui.SpaceSM, dopeui.Wrap(),
 				dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Roster.SaveSubmit())),
 				dopeui.Button(dopeui.Data("dialog-close", ""), dopeui.Text(s.Host.Roster.CancelBtn())),
 			),
@@ -251,7 +251,7 @@ func hostOverrideEditDialog(data hostFestRosterData, ref string, o overrides.Hos
 			dopeui.Hiddenfield(dopeui.Name("team_id"), dopeui.Value(strconv.FormatInt(o.OverrideTeamID, 10))),
 			summary,
 			dopeui.Pickgroup(append([]dopeui.Item{dopeui.Label(s.Host.Roster.GamesLabel())}, dopeui.Col(append([]dopeui.Item{dopeui.SpaceSM}, boxes...)...))...),
-			dopeui.Row(
+			dopeui.Row(dopeui.SpaceSM, dopeui.Wrap(),
 				dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Roster.SaveSubmit())),
 				dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Name("delete"), dopeui.Value("1"), dopeui.Formnovalidate(),
 					dopeui.Data("confirm", s.Host.Roster.DeleteOverrideConfirm()), dopeui.Text(s.Host.Roster.DeleteBtn())),
@@ -308,7 +308,7 @@ func hostRosterConflictDialog(conflict *imports.RosterConflict, festRef string) 
 	for _, team := range conflict.Dropped {
 		form = append(form, hostRosterConflictTeam(team, conflict.Added))
 	}
-	form = append(form, dopeui.Row(
+	form = append(form, dopeui.Row(dopeui.SpaceSM, dopeui.Wrap(),
 		dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Roster.ConflictSubmit())),
 		dopeui.Button(dopeui.Data("dialog-close", ""), dopeui.Text(s.Host.Roster.ConflictCancel())),
 	))
