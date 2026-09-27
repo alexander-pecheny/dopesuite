@@ -64,6 +64,19 @@ Deno.test("a declined team keeps its row and leaves the ranking", () => {
   assertEquals(rows[0].placeText, "1");
 });
 
+Deno.test("a guest team ranks like any team and its Отказ is keyed on its own number", () => {
+  const rules = multi.rulesOf(scheme);
+  const state = multi.parseState({
+    participants: [{number: 1, name: "А"}, {number: -1, name: "Гости"}, {number: -2, name: "Жюри"}],
+    games: [{cells: [[1, 0, 0], [1, 1, 0], [1, 1, 1]]}, {cells: [[0, 0], [0, 0], [0, 0]]}],
+    declined: {"n-2": true},
+  }, rules, []);
+  assertEquals([0, 1, 2].map((i) => multi.participantGuest(state, i)), [false, true, true]);
+  assertEquals(multi.declinedKey(state, 1), "n-1");
+  const rows = multi.rankedResultRows(state, rules, (i) => multi.participantName(state, i));
+  assertEquals(rows.map((row) => row.name), ["Гости", "А"]);
+});
+
 Deno.test("a normalised мини-игра pays a share of the best in it, floored at zero", () => {
   const scheme = {
     minigames: [
