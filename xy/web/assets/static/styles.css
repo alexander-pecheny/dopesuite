@@ -665,22 +665,6 @@
   background: var(--surface);
   box-shadow: var(--shadow-modal);
 }
-/* The card and the list preview are read up close, so their type runs 2pt above
-   the rest of the board; list views keep the kit sizes. */
-.card-detail, #previewOverlay .preview-doc {
-  --text-2xs: calc(10px + 2pt);
-  --text-xs-tight: calc(11px + 2pt);
-  --text-xs: calc(12px + 2pt);
-  --text-xs-plus: calc(13px + 2pt);
-  --text-sm: calc(14px + 2pt);
-  --text-base: calc(15px + 2pt);
-  --text-md: calc(16px + 2pt);
-  --text-lg: calc(18px + 2pt);
-  --text-lg-xl: calc(21px + 2pt);
-  --text-xl: calc(22px + 2pt);
-  --text-xl-plus: calc(24px + 2pt);
-  --text-2xl: calc(30px + 2pt);
-}
 /* The detail is a fixed-height scrolling flex column; pin every child at its
    natural size (flex: none) so nothing is compressed — iOS WebKit otherwise
    shrinks native <select>s below their min-height and clips the value text. */
@@ -1396,6 +1380,12 @@
    bottom margin (.pv-q) is just a trailing gap — drop it; the container's own
    padding already gives symmetric top/bottom breathing room. */
 .card-preview-body .pv-q { margin-bottom: 0; }
+/* The question itself reads 2pt larger in the card and the list preview; their
+   controls keep the board's sizes. */
+.card-preview-body, #previewOverlay .preview-body { font-size: calc(var(--text-base) + 2pt); }
+@media (max-width: 760px) {
+  .card-preview-body, #previewOverlay .preview-body { font-size: calc(var(--text-sm) + 2pt); }
+}
 
 /* ── structured fields (Поля) ─────────────────────────────────────────────── */
 /* Density (user request): absent fields are pills that FLOW TOGETHER on shared
