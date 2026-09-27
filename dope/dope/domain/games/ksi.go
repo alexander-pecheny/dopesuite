@@ -28,9 +28,10 @@ type KSIParticipant struct {
 }
 
 // KSIDeclinedKey is the key under which a participant's "declined to play" flag
-// is stored: by number when numbered, else by lowercased name.
+// is stored: by number when numbered, else by lowercased name. A Multi game's
+// guest team is numbered below zero and is keyed by that number too.
 func KSIDeclinedKey(number int, name string) string {
-	if number > 0 {
+	if number != 0 {
 		return fmt.Sprintf("n%d", number)
 	}
 	name = strings.ToLower(strings.TrimSpace(name))

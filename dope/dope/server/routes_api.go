@@ -15,6 +15,7 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/edit"
 	"dope/dope/domain/imports"
+	"dope/dope/domain/protocol"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/roster"
 	"dope/dope/export/gameexport"
@@ -62,6 +63,9 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("GET "+game+"/state", route.Read, s.scopedGameState)
 	t.Handle("PUT "+game+"/state", route.Editor.Numbered(), s.scopedGameStatePut)
 	t.Handle("PATCH "+game+"/state", route.Editor.Numbered(), s.scopedGameStatePatch)
+	t.Handle("POST "+game+"/guests", route.Editor.Numbered(), s.scopedMultiGuestAdd)
+	t.Handle("PUT "+game+"/guests/{n}", route.Editor.Numbered(), s.scopedMultiGuestRename)
+	t.Handle("DELETE "+game+"/guests/{n}", route.Editor.Numbered(), s.scopedMultiGuestRemove)
 	t.Handle("GET "+game+"/scheme", route.Read, s.scopedGameScheme)
 	t.Handle("GET "+game+"/screen-settings", route.Read, s.scopedScreenSettings)
 	t.Handle("PUT "+game+"/screen-settings", route.Editor, s.scopedScreenSettingsPut)
@@ -420,6 +424,65 @@ func (s *server) scopedGameStatePatch(w http.ResponseWriter, r *http.Request, sc
 		s.metrics.RecordEdit(sample)
 	}
 	return nil
+}
+
+// A Multi game's guest teams (protocol.AddMultiGuest): the host adds one by
+// name, renames it, or removes it while nothing is entered for it. Each call
+// returns the new state, which also goes out on the game-state scope.
+type multiGuestRequest struct {
+	Name string `json:"name"`
+}
+
+func (s *server) scopedMultiGuestAdd(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	var req multiGuestRequest
+	if err := route.DecodeJSON(r, &req); err != nil {
+		return err
+	}
+	return s.editMultiGuests(w, r, sc, func(scheme, state string) ([]byte, []byte, error) {
+		return protocol.AddMultiGuest(scheme, state, req.Name)
+	})
+}
+
+func (s *server) scopedMultiGuestRename(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	number, err := multiGuestNumber(r)
+	if err != nil {
+		return err
+	}
+	var req multiGuestRequest
+	if err := route.DecodeJSON(r, &req); err != nil {
+		return err
+	}
+	return s.editMultiGuests(w, r, sc, func(scheme, state string) ([]byte, []byte, error) {
+		return protocol.RenameMultiGuest(scheme, state, number, req.Name)
+	})
+}
+
+func (s *server) scopedMultiGuestRemove(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	number, err := multiGuestNumber(r)
+	if err != nil {
+		return err
+	}
+	return s.editMultiGuests(w, r, sc, func(scheme, state string) ([]byte, []byte, error) {
+		return protocol.RemoveMultiGuest(scheme, state, number)
+	})
+}
+
+// multiGuestNumber reads the {n} of a guest team's URL: its Number, below zero.
+func multiGuestNumber(r *http.Request) (int, error) {
+	number, err := strconv.Atoi(r.PathValue("n"))
+	if err != nil || number >= 0 {
+		return 0, route.BadRequest("bad guest number")
+	}
+	return number, nil
+}
+
+func (s *server) editMultiGuests(w http.ResponseWriter, r *http.Request, sc route.Scope, apply func(scheme, state string) ([]byte, []byte, error)) error {
+	state, revision, err := s.rewriteMultiGuests(r.Context(), sc.Fest(), apply)
+	if err != nil {
+		return route.BadUser(err)
+	}
+	s.eng.BroadcastState(sc.FestID, gameStateScopeKey(sc.GameID), revision, state)
+	return route.JSONBytes(w, state)
 }
 
 func (s *server) scopedGameScheme(w http.ResponseWriter, r *http.Request, sc route.Scope) error {

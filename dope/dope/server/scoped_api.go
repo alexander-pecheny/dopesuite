@@ -12,12 +12,16 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/edit"
 	"dope/dope/domain/flatgame"
+	"dope/dope/domain/games"
 	"dope/dope/domain/protocol"
 	"dope/dope/domain/resolver"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
 	"dope/dope/web/editbatch"
+	dopestrings "dope/i18nstrings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // festScope is a local alias for core.FestScope so the existing dopeserver code
@@ -130,6 +134,41 @@ func (s *server) replaceGameState(reqCtx context.Context, scope festScope, raw [
 		return bumpErr
 	})
 	return revision, err
+}
+
+// rewriteMultiGuests applies a guest-team edit to a Multi game's document —
+// the one write that may change its team list besides a roster fold — and
+// stores the scheme and the state it produced, settling the game.
+func (s *server) rewriteMultiGuests(reqCtx context.Context, scope festScope, apply func(scheme, state string) ([]byte, []byte, error)) ([]byte, int64, error) {
+	var stateOut []byte
+	var revision int64
+	err := s.eng.WithWriteTx(reqCtx, scope.FestID, "multi-guests", func(ctx context.Context, tx *sql.Tx) error {
+		doc, err := store.LoadGameDoc(ctx, tx, scope.FestID, scope.GameID)
+		if err != nil {
+			return err
+		}
+		if doc.GameType != games.Multi {
+			return corei18n.User(dopestrings.Default.Games.MultiGuest.WrongGame())
+		}
+		schemeJSON, stateJSON, err := apply(doc.SchemeJSON, doc.State)
+		if err != nil {
+			return err
+		}
+		if canon, err := core.CanonicalJSON(stateJSON); err == nil {
+			stateJSON = canon
+		}
+		if _, err := tx.ExecContext(ctx, `
+update games set scheme_json = ?, updated_at = ? where fest_id = ? and id = ?`, string(schemeJSON), util.UtcNow(), scope.FestID, scope.GameID); err != nil {
+			return err
+		}
+		if err := flatgame.SaveDocumentTx(ctx, tx, scope.FestID, scope.GameID, doc.MatchID, string(stateJSON), nil); err != nil {
+			return err
+		}
+		stateOut = stateJSON
+		revision, err = festwrite.BumpFestRevisionTx(ctx, tx, scope.FestID, "game:guests", string(stateJSON))
+		return err
+	})
+	return stateOut, revision, err
 }
 
 func validateImmutableRatingRosterState(gameType string, previousRaw, nextRaw []byte) error {
