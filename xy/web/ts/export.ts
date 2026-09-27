@@ -23,9 +23,10 @@ const { byId, errMsg, downloadBlob } = xyApp;
 // exportSource is the 4s document a list exports as: its cards' descriptions in
 // board order, blank-line separated. Every format is rendered from this one
 // string, which is why the versions are folded back into one question block here
-// and nowhere else — a versioned card is still one numbered question.
+// and nowhere else — a versioned card is still one numbered question. A handouts
+// preamble is for the handouts panel alone.
 export function exportSource(cards: ReadonlyArray<Pick<BoardCard, "desc"> & { kind?: string }>): string {
-  return cards.map((c) => foldBlankLines(withQuestionMarker(c.kind, withKindMarker(c.kind, xyVersions.composeVersions(c.desc).trim())))).filter(Boolean).join("\n\n") + "\n";
+  return cards.filter((c) => c.kind !== xyHndt.PREAMBLE_KIND).map((c) => foldBlankLines(withQuestionMarker(c.kind, withKindMarker(c.kind, xyVersions.composeVersions(c.desc).trim())))).filter(Boolean).join("\n\n") + "\n";
 }
 
 // The card reads text with no marker at the top of a question, or right under a

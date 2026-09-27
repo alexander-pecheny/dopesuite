@@ -1,0 +1,40 @@
+[
+ {
+  "name": "source",
+  "in": "///preamble\n/// house style for the whole pack\nfont_size: 16\nquestion_label: inside\n---\nfor_question: 1\ncolumns: 3\n\nПервая раздатка\n/// a note to the editor\n---\nfor_question: 2\ncolumns: 2\nfont_size: 12\nquestion_label: above\n\nВторая\n---\n---\nfor_question: 3\ncolumns: 1\n\nТретья",
+  "ignore": [],
+  "want": "font_size: 16\nquestion_label: inside\nfor_question: 1\ncolumns: 3\n\nПервая раздатка\n---\nfor_question: 2\ncolumns: 2\nfont_size: 12\nquestion_label: above\n\nВторая\n---\n\n---\nfont_size: 16\nquestion_label: inside\nfor_question: 3\ncolumns: 1\n\nТретья"
+ },
+ {
+  "name": "source, --font_size given",
+  "in": "///preamble\n/// house style for the whole pack\nfont_size: 16\nquestion_label: inside\n---\nfor_question: 1\ncolumns: 3\n\nПервая раздатка\n/// a note to the editor\n---\nfor_question: 2\ncolumns: 2\nfont_size: 12\nquestion_label: above\n\nВторая\n---\n---\nfor_question: 3\ncolumns: 1\n\nТретья",
+  "ignore": [
+   "font_size"
+  ],
+  "want": "question_label: inside\nfor_question: 1\ncolumns: 3\n\nПервая раздатка\n---\nfor_question: 2\ncolumns: 2\nfont_size: 12\nquestion_label: above\n\nВторая\n---\n\n---\nquestion_label: inside\nfor_question: 3\ncolumns: 1\n\nТретья"
+ },
+ {
+  "name": "no comments",
+  "in": "for_question: 1\ncolumns: 3\n\nтекст //не комментарий",
+  "ignore": [],
+  "want": "for_question: 1\ncolumns: 3\n\nтекст //не комментарий"
+ },
+ {
+  "name": "comment only",
+  "in": "  /// один комментарий\nfor_question: 2\ncolumns: 3\n\nтекст",
+  "ignore": [],
+  "want": "for_question: 2\ncolumns: 3\n\nтекст"
+ },
+ {
+  "name": "preamble not first",
+  "in": "for_question: 1\ncolumns: 3\n\nтекст\n---\n///preamble\nfont_size: 16",
+  "ignore": [],
+  "want": "for_question: 1\ncolumns: 3\n\nтекст\n---\nfont_size: 16"
+ },
+ {
+  "name": "leading separator",
+  "in": "---\n///preamble\nfont_family: PT Serif\nfont_size: 10\nfont_size: 12\n---\nfor_question: 1\ncolumns: 3\n\nа",
+  "ignore": [],
+  "want": "font_family: PT Serif\nfont_size: 12\nfor_question: 1\ncolumns: 3\n\nа"
+ }
+]

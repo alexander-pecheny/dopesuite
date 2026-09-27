@@ -104,7 +104,7 @@ type createCardRequest struct {
 // cards.kind CHECK constraint).
 func validCardKind(kind string) bool {
 	switch kind {
-	case "normal", "question", "test", "meta", "heading", "other", "theme":
+	case "normal", "question", "test", "meta", "heading", "other", "theme", "handouts_preamble":
 		return true
 	}
 	return false

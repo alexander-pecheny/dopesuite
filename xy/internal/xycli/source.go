@@ -526,9 +526,13 @@ func foldBlankLines(desc string) string {
 
 // ExportSource is the 4s document a List exports as: its cards' descriptions in
 // board order, versions folded back into one question each, blank-line separated.
+// A handouts preamble is for the handouts panel alone.
 func ExportSource(cards []Card) string {
 	var parts []string
 	for _, c := range cards {
+		if c.Kind == "handouts_preamble" {
+			continue
+		}
 		if s := foldBlankLines(withQuestionMarker(c.Kind, withKindMarker(c.Kind, strings.TrimSpace(ComposeVersions(c.Desc))))); s != "" {
 			parts = append(parts, s)
 		}

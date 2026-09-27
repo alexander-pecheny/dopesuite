@@ -141,14 +141,30 @@ function parseHndtMetaByQuestion(text: string | null | undefined): Record<string
 }
 
 
+// A tour's ///preamble block lives in a card of its own kind, whose description
+// is the block itself.
+const PREAMBLE_KIND = "handouts_preamble";
+const PREAMBLE_MARKER = "///preamble";
+
+function isPreambleBlock(block: string): boolean {
+  return block.split("\n").find((l) => l.trim())?.trim() === PREAMBLE_MARKER;
+}
+
+// preambleOf is the document's ///preamble block, or null when it opens with none.
+function preambleOf(source: string | null | undefined): string | null {
+  const first = splitHndtBlocks(source).find((b) => b.trim());
+  return first && isPreambleBlock(first) ? first.trim() : null;
+}
+
 // hndtOf is what a list's cards generate: their display numbers and the .hndt
-// document with each card's saved settings — export and the Generate-handouts
-// both start here.
+// document with each card's saved settings, under the tour's preamble — export
+// and the handouts panel both start here.
 function hndtOf(cards: ReadonlyArray<ChgkCard & { id: number; handoutMeta?: string | null }>): { numbers: Array<string | null>; source: string } {
   const numbers = numberQuestionCards(cards);
   const metas: Record<number, string> = {};
   for (const c of cards) if (c.handoutMeta) metas[c.id] = c.handoutMeta;
-  return { numbers, source: generateHndt(cards, numbers, metas) };
+  const preamble = cards.find((c) => c.kind === PREAMBLE_KIND)?.desc.trim();
+  return { numbers, source: [preamble, generateHndt(cards, numbers, metas)].filter(Boolean).join("\n---\n") };
 }
 
 // ---- the fields view's model ----
@@ -159,6 +175,8 @@ function hndtOf(cards: ReadonlyArray<ChgkCard & { id: number; handoutMeta?: stri
 // reads it as; the form shows none of those and gives them back as they were.
 export interface HndtFormBlock {
   head: Array<[string, string]>;
+  // The ///preamble block: its text holds its comment lines, and it has no handout.
+  preamble: boolean;
   kind: "text" | "image";
   text: string;
   image: string;
@@ -169,7 +187,10 @@ export interface HndtFormBlock {
 // generator does: a line is a setting only when what stands before its first
 // colon is exactly a reserved key; every other line is handout text.
 function parseHndtForm(source: string | null | undefined): HndtFormBlock[] {
+  let seen = false;
   return splitHndtBlocks(source).map((raw) => {
+    const preamble = !seen && isPreambleBlock(raw);
+    if (raw.trim()) seen = true;
     const head: Array<[string, string]> = [];
     const text: string[] = [];
     let image: string | null = null;
@@ -180,14 +201,14 @@ function parseHndtForm(source: string | null | undefined): HndtFormBlock[] {
         const val = line.slice(i + 1).trim();
         if (key === "image") image = val;
         else head.push([key, val]);
-      } else {
+      } else if (!preamble || line.trim() !== PREAMBLE_MARKER) {
         text.push(line.trim());
       }
     }
     const body = text.join("\n").trim();
     return {
-      head, kind: image !== null ? "image" : "text", text: body, image: image ?? "",
-      blank: !head.length && image === null && !body,
+      head, preamble, kind: image !== null ? "image" : "text", text: body, image: image ?? "",
+      blank: !preamble && !head.length && image === null && !body,
     };
   });
 }
@@ -210,10 +231,11 @@ function hndtSet(b: HndtFormBlock, key: string, val: string | null): void {
 function composeHndtForm(blocks: ReadonlyArray<HndtFormBlock>): string {
   return blocks.map((b) => {
     if (b.blank) return "";
+    if (b.preamble) return [PREAMBLE_MARKER, b.text, ...b.head.map(([k, v]) => `${k}: ${v}`)].filter(Boolean).join("\n");
     const head = b.head.map(([k, v]) => `${k}: ${v}`).join("\n");
     const content = b.kind === "image" ? (b.image ? `image: ${b.image}` : "") : b.text;
     return [head, content].filter(Boolean).join("\n\n");
   }).join("\n---\n");
 }
 
-export const xyHndt = { generateHndt, hndtOf, handoutForCard, parseHndtMetaByQuestion, parseHndtForm, composeHndtForm, hndtGet, hndtSet, HNDT_DEFAULT_META };
+export const xyHndt = { PREAMBLE_KIND, PREAMBLE_MARKER, preambleOf, generateHndt, hndtOf, handoutForCard, parseHndtMetaByQuestion, parseHndtForm, composeHndtForm, hndtGet, hndtSet, HNDT_DEFAULT_META };

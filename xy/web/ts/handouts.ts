@@ -18,6 +18,7 @@ import { namedUrl, revokeNamedUrl } from "./namedurl.js";
 import { modal } from "./modal.js";
 import { icon } from "./icons_gen.js";
 import { anchorPopup } from "./popup.js";
+import { xyRank } from "./rank.js";
 import type { Attachments } from "./attachments.js";
 import type { HndtFormBlock } from "./hndt.js";
 import type { Board, ListPanel, ListScope } from "./panels.js";
@@ -28,7 +29,7 @@ const { el, byId, errMsg, downloadBlob, onCmdEnter } = xyApp;
 
 export function createHandoutsPanel(board: Board, attachments: Pick<Attachments, "appendImages" | "cardAttachments">): ListPanel {
   const handoutsModal = modal("handouts");
-  let handoutsCtx: { cards: BoardCard[]; numbers: Array<string | null>; title: string } | null = null;
+  let handoutsCtx: { cards: BoardCard[]; numbers: Array<string | null>; title: string; listId: number } | null = null;
   let handoutsPdfUrl: string | null = null;
   let handoutsDlUrl: string | null = null;
 
@@ -38,7 +39,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     // concatenated cards), matching the board + docx export.
     const cards = scope.cards;
     const { numbers, source } = xyHndt.hndtOf(cards);
-    handoutsCtx = { cards, numbers, title: scope.title };
+    handoutsCtx = { cards, numbers, title: scope.title, listId: scope.lists[0].id };
     byId<HTMLTextAreaElement>("handoutsSource").value = source;
     clearHandoutsPdf();
     handoutsModal.open({ onClose: hideHandouts });
@@ -70,12 +71,31 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
   function renderFields(): void {
     const blocks = xyHndt.parseHndtForm(sourceEl.value);
     const write = (): void => { sourceEl.value = xyHndt.composeHndtForm(blocks); schedulePreview(); };
-    const shown = blocks.filter((b) => !b.blank);
+    const shown = blocks.filter((b) => !b.blank && !b.preamble);
     if (!shown.length) {
       fieldsEl.replaceChildren(el("p", { class: "hint", text: S.board.handouts.fieldsEmpty() }));
       return;
     }
-    fieldsEl.replaceChildren(el("div", { class: "u-col u-gap-md" }, ...shown.map((b) => handoutBox(b, write))));
+    const preamble = blocks.find((b) => b.preamble);
+    let head: HTMLElement;
+    if (preamble) {
+      const rm = el("button", { class: "fld-rm", type: "button", text: "×", title: S.board.handouts.preambleRemove() });
+      rm.addEventListener("click", () => { blocks.splice(blocks.indexOf(preamble), 1); write(); renderFields(); });
+      const extras = extrasOf(preamble, write);
+      head = el("div", { class: "hndt-block u-col u-gap-sm" },
+        el("div", { class: "u-row u-gap-sm u-align-center u-justify-between" },
+          el("span", { class: "section-label", text: S.board.handouts.preambleTitle() }),
+          el("div", { class: "u-row u-gap-sm u-align-center" }, extras.more, rm)),
+        extras.rows);
+    } else {
+      head = el("button", { class: "btn btn-ghost btn-small", type: "button", title: S.board.handouts.preambleAddTitle(), text: S.board.handouts.preambleAdd() });
+      head.addEventListener("click", () => {
+        blocks.unshift({ head: [], preamble: true, kind: "text", text: "", image: "", blank: false });
+        write();
+        renderFields();
+      });
+    }
+    fieldsEl.replaceChildren(el("div", { class: "u-col u-gap-md" }, head, ...shown.map((b) => handoutBox(b, write))));
   }
 
   // number builds one labelled number field over a setting; empty removes it.
@@ -129,6 +149,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
   // The settings the form has no control of its own for, offered by the block's
   // ⋯ button. A value is typed as it goes into the .hndt; `options` makes it a pick.
   const EXTRAS: Array<{ key: string; label: () => string; options?: Array<[string, () => string]> }> = [
+    { key: "question_label", label: S.board.handouts.extraQuestionLabel, options: [["inside", S.board.handouts.labelInside], ["above", S.board.handouts.labelAbove]] },
     { key: "font_size", label: S.board.handouts.extraFontSize },
     { key: "font_family", label: S.board.handouts.extraFontFamily },
     { key: "resize_image", label: S.board.handouts.extraResizeImage },
@@ -184,16 +205,12 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
 
   function handoutBox(b: HndtFormBlock, write: () => void): HTMLElement {
     const extras = extrasOf(b, write);
-    const inside = el("input", { type: "checkbox" }) as HTMLInputElement;
-    inside.checked = xyHndt.hndtGet(b, "question_label") === "inside";
-    inside.addEventListener("change", () => { xyHndt.hndtSet(b, "question_label", inside.checked ? "inside" : null); write(); });
     // One line on a desktop pane. Two groups, so a phone breaks the line
     // between them and not inside either.
     const settings = el("div", { class: "u-row u-gap-sm u-align-center u-wrap" },
       el("div", { class: "u-row u-gap-sm u-align-center" },
         // A pack runs past a hundred questions; the count of columns never does.
-        number(b, "for_question", S.board.handouts.fieldQuestion(), write, undefined, true),
-        el("label", { class: "attach-lossless", title: S.board.handouts.fieldInsideTitle() }, inside, " " + S.board.handouts.fieldInside())),
+        number(b, "for_question", S.board.handouts.fieldQuestion(), write, undefined, true)),
       el("div", { class: "u-row u-gap-sm u-align-center" },
         number(b, "columns", S.board.handouts.fieldColumns(), write),
         number(b, "rows", S.board.handouts.fieldRows(), write, S.board.handouts.fieldRowsTitle())));
@@ -305,10 +322,38 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     }
   }
 
+  // persistPreamble keeps the tour's preamble card in step with the document's
+  // ///preamble block: made on top of the first list when one appears, rewritten
+  // when it changes, deleted when it goes. A bare marker is no preamble.
+  async function persistPreamble(): Promise<void> {
+    if (!handoutsCtx) return;
+    const block = xyHndt.preambleOf(byId<HTMLTextAreaElement>("handoutsSource").value);
+    const text = block && block !== xyHndt.PREAMBLE_MARKER ? block : null;
+    const card = handoutsCtx.cards.find((c) => c.kind === xyHndt.PREAMBLE_KIND);
+    try {
+      if (card && !text) {
+        await board.verbs.del("deleteCard", `/api/cards/${card.id}`);
+        board.state.cards.splice(board.state.cards.indexOf(card), 1);
+      } else if (card && text && text !== card.desc.trim()) {
+        await board.verbs.patch("patchCard", `/api/cards/${card.id}`, { description_enc: await xyCrypto.encField(board.dk(), text) });
+        card.desc = text;
+      } else if (!card && text) {
+        const listId = handoutsCtx.listId;
+        const first = board.cardsOf(listId)[0];
+        const rank = xyRank.keyBetween(null, first ? first.rank : null);
+        const kind = xyHndt.PREAMBLE_KIND;
+        const res = await board.verbs.create("createCard", `/api/lists/${listId}/cards`, { description_enc: await xyCrypto.encField(board.dk(), text), rank, kind });
+        board.state.cards.push({ id: res.id as number, listId, kind, rank, desc: text, handoutMeta: null, alias: null, createdAt: new Date().toISOString() });
+      } else return;
+      board.render();
+    } catch (_) { /* best-effort, like the per-question settings */ }
+  }
+
   async function hideHandouts(): Promise<void> {
     if (previewTimer) clearTimeout(previewTimer);
     void handoutSession.close(); // stop heartbeat + delete the staged images server-side
     await persistHandoutMeta();
+    await persistPreamble();
     clearHandoutsPdf();
     handoutsCtx = null;
   }
