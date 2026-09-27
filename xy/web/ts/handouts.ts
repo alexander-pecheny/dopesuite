@@ -183,8 +183,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
   // WebKit won't render a PDF inside an <iframe> in a standalone web app (macOS
   // Dock app / iOS home-screen PWA — the preview pane comes up blank), and on
   // iOS even the in-browser iframe shows at most a flat first page. No Safari
-  // setting changes this; the working path there is a top-level navigation, so
-  // those contexts get an "Open PDF" button instead of the inline preview.
+  // setting changes this, so those contexts get the pages typeset as SVGs.
   function pdfInlinePreviewBroken(): boolean {
     const ua = navigator.userAgent;
     const ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -193,11 +192,14 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     return ios || (webkitOnly && standalone);
   }
 
-  function pdfPreviewNode(url: string): HTMLElement {
-    if (!pdfInlinePreviewBroken()) return el("iframe", { class: "handouts-pdf-frame", src: url, title: "PDF" });
-    return el("div", { class: "handouts-pdf-fallback" },
-      el("div", { class: "handouts-pdf-note", text: S.board.handouts.safariNote() }),
-      el("a", { class: "btn", href: url, target: "_blank", rel: "noopener", text: S.board.handouts.openPdf() }));
+  async function svgPreviewNode(source: string): Promise<HTMLElement> {
+    const fd = await handoutsBody(source);
+    fd.append("format", "svg");
+    const res = await fetch("/api/handouts/pdf", { method: "POST", credentials: "same-origin", body: fd });
+    if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
+    const { pages } = await res.json() as { pages: string[] };
+    return el("div", { class: "handouts-pdf-pages" }, ...pages.map((svg) =>
+      el("img", { class: "handouts-pdf-page", alt: "", src: "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg) })));
   }
 
   function clearHandoutsPdf(): void {
@@ -262,12 +264,15 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     clearHandoutsPdf();
     try {
       const fd = await handoutsBody(source);
-      const res = await fetch("/api/handouts/pdf", { method: "POST", credentials: "same-origin", body: fd });
+      const [res, pagesNode] = await Promise.all([
+        fetch("/api/handouts/pdf", { method: "POST", credentials: "same-origin", body: fd }),
+        pdfInlinePreviewBroken() ? svgPreviewNode(source) : null,
+      ]);
       if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
       const name = handoutFileBase() + ".pdf";
       const blob = await res.blob();
       handoutsPdfUrl = await namedUrl(blob, name);
-      byId("handoutsPdf").replaceChildren(pdfPreviewNode(handoutsPdfUrl));
+      byId("handoutsPdf").replaceChildren(pagesNode || el("iframe", { class: "handouts-pdf-frame", src: handoutsPdfUrl, title: "PDF" }));
       // Only the preview needs /dl/ (the viewer's Save name); Chromium re-issues a
       // download outside the worker, where that path 404s — so the button gets a blob.
       handoutsDlUrl = URL.createObjectURL(blob);

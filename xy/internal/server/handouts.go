@@ -66,6 +66,21 @@ func (s *server) handleHandoutsPDF(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), handoutTimeout)
 	defer cancel()
+	if svgTS, ok := ts.(handout.SVGTypesetter); ok && form.Value("format") == "svg" {
+		pages, err := handout.RenderSVG(ctx, source, images, handout.DefaultArgs(), svgTS)
+		if err != nil {
+			log.Printf("handout svg render failed: %v", err)
+			httpError(w, http.StatusInternalServerError, xystrings.Default.Server.Internal())
+			return
+		}
+		out := make([]string, len(pages))
+		for i, p := range pages {
+			out[i] = string(p)
+		}
+		w.Header().Set("Cache-Control", "private, no-store")
+		writeJSON(w, map[string][]string{"pages": out})
+		return
+	}
 	pdf, err := handout.Render(ctx, source, images, handout.DefaultArgs(), ts)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {

@@ -23,6 +23,7 @@ crate-type = ["cdylib"]
 [dependencies]
 typst = "0.15"
 typst-pdf = "0.15"
+typst-svg = "0.15"
 typst-layout = "0.15"
 
 [profile.release]

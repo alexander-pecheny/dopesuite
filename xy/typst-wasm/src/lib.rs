@@ -7,11 +7,11 @@
 //!   add_font(ptr, len)                    call once per process; a file may hold several faces
 //!   add_file(name_ptr, name_len, ptr, len)  an image the source reads; once per generation
 //!   reset_files()                         drop the images, keep the fonts
-//!   compile(src_ptr, src_len, want_pdf) -> u64   (ptr << 32) | len of the result buffer
+//!   compile(src_ptr, src_len, want) -> u64   (ptr << 32) | len of the result buffer; want: 0 page count, 1 PDF, 2 SVGs
 //!   measure(src_ptr, src_len) -> u64      the same, with the payload "<y_mm>"
 //!
 //! Result buffer: [0] = 1 on success / 0 on failure, [1..5] = page count (u32 LE),
-//! [5..] = the PDF bytes on success, a UTF-8 error message on failure. No base64,
+//! [5..] = the PDF (or the SVGs) on success, a UTF-8 error message on failure. No base64,
 //! no JSON: the payload is already bytes, and split_fit calls this in a loop.
 //! measure's payload is instead the y position in millimetres, as decimal text.
 
@@ -232,7 +232,7 @@ pub unsafe extern "C" fn measure(src_ptr: u32, src_len: u32) -> u64 {
 /// # Safety
 /// src_ptr/src_len must describe the .typ source in guest memory.
 #[no_mangle]
-pub unsafe extern "C" fn compile(src_ptr: u32, src_len: u32, want_pdf: u32) -> u64 {
+pub unsafe extern "C" fn compile(src_ptr: u32, src_len: u32, want: u32) -> u64 {
     let src = String::from_utf8_lossy(slice(src_ptr, src_len)).into_owned();
     let out = with_state(|state| {
         if state.fonts.is_empty() {
@@ -260,9 +260,16 @@ pub unsafe extern "C" fn compile(src_ptr: u32, src_len: u32, want_pdf: u32) -> u
             }
         };
         let pages = doc.pages().len() as u32;
-        if want_pdf == 0 {
+        if want == 0 {
             // split_fit's binary search only needs the page count; skip the PDF.
             return result_buf(true, pages, &[]);
+        }
+        if want == 2 {
+            // One SVG per page, NUL-separated: the preview for browsers that
+            // cannot show a PDF inline.
+            let opts = typst_svg::SvgOptions::default();
+            let svgs: Vec<String> = doc.pages().iter().map(|p| typst_svg::svg(p, &opts)).collect();
+            return result_buf(true, pages, svgs.join("\0").as_bytes());
         }
         match typst_pdf::pdf(&doc, &typst_pdf::PdfOptions::default()) {
             Ok(pdf) => result_buf(true, pages, &pdf),

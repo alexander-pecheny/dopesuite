@@ -53,19 +53,47 @@ func bundledFontDir() (string, error) {
 // ts decides where typst runs: the server passes the in-memory wasm typesetter, so
 // the decrypted questions never reach a filesystem.
 func Render(ctx context.Context, hndt string, images map[string][]byte, a Args, ts Typesetter) ([]byte, error) {
-	hndt, images, err := ApplyRotation(hndt, images)
+	typ, err := prepare(ctx, hndt, images, a, ts)
 	if err != nil {
 		return nil, err
 	}
-	hndt, images = flattenImagePaths(hndt, images)
-	if err := ts.SetImages(ctx, images); err != nil {
-		return nil, err
-	}
-	pdf, _, err := ts.Compile(ctx, GenerateTyp(hndt, a), true)
+	pdf, _, err := ts.Compile(ctx, typ, true)
 	if err != nil {
 		return nil, fmt.Errorf("typst compile failed: %w", err)
 	}
 	return pdf, nil
+}
+
+// SVGTypesetter is a Typesetter that can also typeset to one SVG per page.
+type SVGTypesetter interface {
+	Typesetter
+	SVG(ctx context.Context, typ string) ([][]byte, error)
+}
+
+// RenderSVG is Render with the pages as SVGs, for a browser that cannot show
+// the PDF inline.
+func RenderSVG(ctx context.Context, hndt string, images map[string][]byte, a Args, ts SVGTypesetter) ([][]byte, error) {
+	typ, err := prepare(ctx, hndt, images, a, ts)
+	if err != nil {
+		return nil, err
+	}
+	pages, err := ts.SVG(ctx, typ)
+	if err != nil {
+		return nil, fmt.Errorf("typst compile failed: %w", err)
+	}
+	return pages, nil
+}
+
+func prepare(ctx context.Context, hndt string, images map[string][]byte, a Args, ts Typesetter) (string, error) {
+	hndt, images, err := ApplyRotation(hndt, images)
+	if err != nil {
+		return "", err
+	}
+	hndt, images = flattenImagePaths(hndt, images)
+	if err := ts.SetImages(ctx, images); err != nil {
+		return "", err
+	}
+	return GenerateTyp(hndt, a), nil
 }
 
 // BundledFonts returns the embedded Noto Sans faces as bytes. The wasm typst

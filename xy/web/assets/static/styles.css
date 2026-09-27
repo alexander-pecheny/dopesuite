@@ -1676,15 +1676,16 @@ textarea.fld-src {
    height so «Скачать» appearing doesn't push the PDF down out of line. */
 .handouts-doc .handouts-pane { gap: var(--space-3); }
 .handouts-doc .section-label { margin: 0; }
+#handoutsActions { position: sticky; bottom: 0; z-index: 1; background: var(--surface); padding-block: var(--space-2); }
 .handouts-doc .handouts-pane > .u-row:first-child { min-height: var(--control-h-sm); }
 /* The frame fills its box via absolute inset, not flex + height:100% — a
    percentage height inside a flex-sized box resolves against an indefinite
    height in some engines, which cropped the preview to a fraction of the box. */
 .handouts-pdf { flex: 1; background: var(--field-bg); border-radius: var(--radius-md); min-height: 320px; position: relative; }
 .handouts-pdf-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: none; border-radius: var(--radius-md); }
-/* Safari-standalone/iOS fallback: no inline PDF there, offer a real navigation */
-.handouts-pdf-fallback { position: absolute; inset: 0; display: flex; flex-direction: column; gap: var(--space-3); align-items: center; justify-content: center; padding: var(--space-4); text-align: center; }
-.handouts-pdf-note { font-size: var(--text-xs); color: var(--muted); }
+/* iOS and standalone Safari show no inline PDF, so the pages come as SVGs */
+.handouts-pdf-pages { position: absolute; inset: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3); }
+.handouts-pdf-page { width: 100%; height: auto; background: var(--uchu-yang); box-shadow: var(--shadow-sm); }
 
 @media (max-width: 760px) {
   .handouts-body { flex-direction: column; }

@@ -400,9 +400,6 @@ generate_failed = 'Не удалось сгенерировать: {{.reason}}'
 splitfitting = "Split-fit… (подбор раскладки может занять время)"
 splitfit_done = "Готово — zip со всеми PDF скачан."
 splitfit_failed = 'Split-fit не удался: {{.reason}}'
-# The preview pane where the browser will not show a PDF inline.
-safari_note = "Safari не показывает PDF внутри приложения."
-open_pdf = "Открыть PDF"
 
 [movelist]
 # Title of the move/copy-list dialog, and the ⋯ row that opens it.

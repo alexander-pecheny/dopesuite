@@ -17,6 +17,7 @@
 package typstwasm
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/binary"
@@ -185,7 +186,27 @@ func (p *Pool) Compile(ctx context.Context, typ string, wantPDF bool) ([]byte, i
 		return nil, 0, ctx.Err()
 	}
 	defer func() { p.free <- in }()
-	return in.compileOn(ctx, typ, wantPDF)
+	want := wantCount
+	if wantPDF {
+		want = wantPDFBytes
+	}
+	return in.compileOn(ctx, typ, want)
+}
+
+// SVG completes handout.SVGTypesetter: typ typeset as one SVG per page.
+func (p *Pool) SVG(ctx context.Context, typ string) ([][]byte, error) {
+	var in *instance
+	select {
+	case in = <-p.free:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	defer func() { p.free <- in }()
+	out, _, err := in.compileOn(ctx, typ, wantSVG)
+	if err != nil {
+		return nil, err
+	}
+	return bytes.Split(out, []byte{0}), nil
 }
 
 // Measure is handout.Measurer: where the document's content ends, as the page
@@ -284,17 +305,20 @@ func (in *instance) readResult(ctx context.Context, packed uint64) ([]byte, erro
 	return buf, nil
 }
 
-func (in *instance) compileOn(ctx context.Context, typ string, wantPDF bool) ([]byte, int, error) {
+// What the guest's compile returns besides the page count.
+const (
+	wantCount uint64 = iota
+	wantPDFBytes
+	wantSVG
+)
+
+func (in *instance) compileOn(ctx context.Context, typ string, want uint64) ([]byte, int, error) {
 	src, err := in.write(ctx, []byte(typ))
 	if err != nil {
 		return nil, 0, err
 	}
 	defer in.free(ctx, src, uint32(len(typ)))
 
-	var want uint64
-	if wantPDF {
-		want = 1
-	}
 	res, err := in.compile.Call(ctx, uint64(src), uint64(len(typ)), want)
 	if err != nil {
 		return nil, 0, fmt.Errorf("compile: %w", err)

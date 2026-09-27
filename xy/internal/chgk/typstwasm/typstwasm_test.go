@@ -66,6 +66,27 @@ func TestCompilesInMemory(t *testing.T) {
 	t.Logf("in-memory render: %d pages, %d bytes of PDF", pages, len(pdf))
 }
 
+func TestSVGIsOnePerPage(t *testing.T) {
+	p := pool(t, 1)
+	typ := handout.GenerateTyp(sampleHndt, handout.DefaultArgs())
+	_, pages, err := p.Compile(context.Background(), typ, false)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	svgs, err := p.SVG(context.Background(), typ)
+	if err != nil {
+		t.Fatalf("svg: %v", err)
+	}
+	if len(svgs) != pages {
+		t.Fatalf("%d SVGs for %d pages", len(svgs), pages)
+	}
+	for i, svg := range svgs {
+		if !strings.HasPrefix(string(svg), "<svg") {
+			t.Fatalf("page %d is not an SVG: %.40q", i+1, svg)
+		}
+	}
+}
+
 // TestPoolIsConcurrent checks the pool actually lets renders overlap — split_fit
 // fits its blocks in parallel, and a single serialised instance would undo that.
 func TestPoolIsConcurrent(t *testing.T) {
