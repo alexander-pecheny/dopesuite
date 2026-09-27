@@ -1658,7 +1658,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
 
   cardCloseBtn.addEventListener("click", closeCard);
   ui.link.addEventListener("click", () => { void copyCardLink(); });
-  // Like each field's tab in Поля, it shows only while the editor holds the
+  // Like each field's tab in the fields view, it shows only while the editor holds the
   // caret or the pointer, so pressing it must not take the focus away.
   ui.copy4s.addEventListener("mousedown", (e) => { e.preventDefault(); });
   ui.copy4s.addEventListener("click", async () => {
