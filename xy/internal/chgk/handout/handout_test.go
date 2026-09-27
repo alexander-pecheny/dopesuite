@@ -63,7 +63,7 @@ func TestQuestionLabelInside(t *testing.T) {
 	}
 	// Pinned to the cell's corner, not carried by its content, so the number sits
 	// at the same height whatever the content does.
-	if !strings.Contains(got, "place(top + left, lbl)") {
+	if !strings.Contains(got, "place(top + left, dx: 0.5mm - pad, dy: 0.3mm - pad, lbl)") {
 		t.Error("the in-cell label must be placed at the cell's corner")
 	}
 }

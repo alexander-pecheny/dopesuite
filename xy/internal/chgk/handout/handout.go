@@ -34,7 +34,7 @@ const (
 	defaultTikzMM   = 2.0 // DEFAULT_TIKZ_MM (int 2 in Python)
 	space           = 1.5 // SPACE (mm, between teams)
 	labelAbove      = 2.0 // LABEL_ABOVE
-	labelBelow      = 0.6 // LABEL_BELOW
+	labelBelow      = 0.9 // LABEL_BELOW
 	strutEM         = 1.2 // STRUT_EM
 )
 
