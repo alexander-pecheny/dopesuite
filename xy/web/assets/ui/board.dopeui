@@ -114,7 +114,7 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
 
     -- Text: raw 4s editor
     tabpanel id="cardViewText"
-      row gap="sm" align="center" justify="between"
+      row gap="sm" align="end" justify="between"
         label id="cardDescLabel" @board.card.desc_label
         button small kind="ghost" id="cardCopy4s" icon="clipboard" title=@board.card.copy_4s_title @board.card.copy_4s_label
       editor id="cardDesc" spellcheck="false"

@@ -44,6 +44,10 @@ add = '+ {{.field}}'
 add_title = "Добавить поле"
 # Tooltip of the "×" that returns a present field to absent.
 remove_title = "Убрать поле"
+# The small tab on a text field's top right edge that copies what the field
+# holds, and its tooltip.
+copy = "Скопировать"
+copy_title = "Скопировать текст поля"
 # The button adding one more source row to the Источник field.
 add_row = "+ строка"
 # Tooltip of a source row's "×".
