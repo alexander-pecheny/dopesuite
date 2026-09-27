@@ -720,6 +720,9 @@
   resize: vertical;
 }
 .card-desc:focus { border-color: var(--blue); }
+/* The caret is drawn in the text's colour: iOS paints it in the blue accent,
+   which is hard to find on the grey field. */
+.card-detail :is(textarea, input) { caret-color: var(--text); }
 /* five lines: a comment on a question is a paragraph, and two lines of visible
    text made you write it through a slot. Padding is on top of the five. */
 .comment-input {
@@ -1248,6 +1251,10 @@
   .preview-head { padding: var(--space-3) var(--space-4); }
   .preview-body { padding: var(--space-4) var(--space-4); font-size: var(--text-sm); }
   .card-desc { font-size: var(--text-xs-plus); min-height: 200px; }
+  /* the card's editors (4s and every Поля field) read 2pt larger on a phone, as
+     its Просмотр does; a source keeps its smaller size (a URL) */
+  .card-detail .card-desc:not(.fld-src),
+  .card-detail .fld-input { font-size: calc(var(--text-xs-plus) + 2pt); }
   .section-label { margin-top: var(--space-2); }
   .tl-comment { font-size: var(--text-xs-plus); }
   .label-pick { font-size: var(--text-2xs); }
