@@ -119,6 +119,10 @@ The players a team sends to play one theme of an ЭК-family бой. In ЭК it 
 A Participant put together for one format out of the fest's players rather than drawn from the rating roster: a troika of Тройка, two to four people, often from different teams. It is a Participant of the fest like a team, so a bracket Game seats it and its people fill the кресла; it is not a fest team, so the flat games, which seat the fest roster, never see it. Changing its people is how a substitution between бои is made. The fest team holding at least two of its people is the one it plays for in a кубок.
 _Avoid_: calling a troika a team of the fest. It never appears on the rating roster, in ОД or in the numbering.
 
+**Разовая команда (Guest team)**:
+A team a host adds to one Мультиигры Game by name alone, on that Game's page: the people at a Мелотрек who sit down together under a one-off name and belong to no rating team. It lives only in that Game's document. It is not in the Fest registry, so no other Game seats it, a roster import leaves it alone, and no Participant is minted for it. It plays, ranks and refuses ([[Отказ]]) like any team. Its Number is below zero, which no fest team's can be, and that is what tells it apart; the page prints no number for it. It can be removed only while nothing is entered for it.
+_Avoid_: calling it a Сборная. A Сборная is made of fest players and is a Participant of the whole fest; a guest team has no players at all.
+
 **Рассадка**:
 The order of a side's three кресла for one тема: who is first пристяжной, who is second, and who is коренной. A side's рассадка stays in force from the тема where it is set until it is set again. A тема whose рассадка differs from the one before it is where that side turned round.
 

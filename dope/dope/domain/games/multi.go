@@ -227,6 +227,24 @@ type MultiState struct {
 	Finished bool `json:"finished"`
 }
 
+// A guest team (CONTEXT.md, Guest team) is a team the host added to one
+// Multi game by name alone: it is not on the fest roster, so no other Game
+// sees it and no roster import touches it. Its Number is below zero, which no
+// fest team's can be, so it is told apart by that alone and keeps its cells
+// and its refusal through every fold of the roster.
+func MultiGuest(p KSIParticipant) bool { return p.Number < 0 }
+
+// MultiGuests is the guest teams among a game's participants, in their order.
+func MultiGuests(participants []KSIParticipant) []KSIParticipant {
+	var out []KSIParticipant
+	for _, p := range participants {
+		if MultiGuest(p) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // MultiEmptyGameJSON builds the pristine scheme/state for a Multi game.
 func MultiEmptyGameJSON(slug, title string, games []MultiGame, sorting []string) ([]byte, []byte) {
 	scheme := map[string]any{

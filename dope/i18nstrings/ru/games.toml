@@ -37,6 +37,19 @@ not_a_number = '{{.domain}} — "{{.item}}" не число'
 # the comma-joined list of countable names.
 metric_unknown = '{{.metric}} не считается — есть {{.known}}'
 
+[multi_guest]
+# A team the host adds to one Мультиигры game by name alone (a guest team).
+# The host left the name empty.
+name_missing = "Напишите название команды."
+# Another team of this game already goes by that name.
+name_taken = 'В игре уже есть команда «{{.name}}».'
+# The team the request names is not one of this game's guest teams.
+not_found = "Такой разовой команды в игре нет."
+# Removing a team that already has points or an Отказ entered.
+entered = 'У команды «{{.name}}» уже есть баллы или отказ. Чтобы убрать её, сначала сотрите баллы и снимите отказ.'
+# Adding a team to a game that is not a Мультиигры.
+wrong_game = "Разовые команды бывают только в мультииграх."
+
 [troika]
 # The kind's display name (the games registry Label).
 label = "Тройка"

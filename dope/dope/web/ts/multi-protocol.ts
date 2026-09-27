@@ -127,11 +127,18 @@ export function participantNumber(state: MultiState, index: number): number {
   return 0;
 }
 
-// declinedKey mirrors games.KSIDeclinedKey: by number when numbered, else by
-// lowercased name, so a refusal survives a roster re-import.
+// A guest team (games.MultiGuest) is one the host added to this game by name
+// alone. It is not on the fest roster, and its Number is below zero, which no
+// fest team's can be; the page prints no number for it.
+export function participantGuest(state: MultiState, index: number): boolean {
+  return participantNumber(state, index) < 0;
+}
+
+// declinedKey mirrors games.KSIDeclinedKey: by number when numbered (a guest
+// team's too), else by lowercased name, so a refusal survives a roster re-import.
 export function declinedKey(state: MultiState, index: number): string {
   const number = participantNumber(state, index);
-  if (number > 0) return `n${number}`;
+  if (number !== 0) return `n${number}`;
   const name = participantName(state, index).trim().toLowerCase();
   return name ? `s${name}` : "";
 }

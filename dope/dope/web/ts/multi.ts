@@ -14,6 +14,9 @@ import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
 import {bindScrollEdges, createTeamNameOverflowController, fitScrollFade, renderTabBar} from "./widgets.js";
+import {icon, iconed} from "./icons_gen.js";
+import type {IconName} from "./icons_gen.js";
+import type {WriteRequest} from "./state-sync.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
@@ -184,7 +187,7 @@ function buildTable(): HTMLElement {
 // scores beside it.
 function teamCell(p: number): HTMLElement {
   const number = multi.participantNumber(state!, p);
-  const labelText = `${number ? number + ". " : ""}${multi.participantName(state!, p)}`;
+  const labelText = `${number > 0 ? number + ". " : ""}${multi.participantName(state!, p)}`;
   const cell = td("", "sticky sticky-name team-name ek-team-cell", {dataset: {multiTeamCell: ""}});
   const layout = document.createElement("span");
   layout.className = "od-detailed-team-layout";
@@ -432,9 +435,29 @@ function buildResultsTable(): HTMLElement {
   });
 }
 
-// The refusals tab is the host's: a team that refused to play keeps its row on
+// The teams tab is the host's. A team that refused to play keeps its row on
 // the sheet and leaves the ranking, so the numbers of the rest do not shift.
-function buildRefusalsTable(): HTMLElement {
+// Below the fest's teams come the game's guest teams, which the host adds here
+// by name, renames, and removes while nothing is entered for them.
+function buildTeamsPanel(): HTMLElement {
+  const panel = document.createElement("div");
+  panel.className = "u-col u-gap-md";
+  panel.appendChild(buildTeamsTable());
+  if (guestNotice) {
+    const notice = document.createElement("p");
+    notice.className = "hint hint-danger";
+    notice.textContent = guestNotice;
+    panel.appendChild(notice);
+  }
+  panel.appendChild(buildGuestAddForm());
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent = S.multi.guests.hint();
+  panel.appendChild(hint);
+  return panel;
+}
+
+function buildTeamsTable(): HTMLElement {
   const table = document.createElement("table");
   table.className = "match-table";
   const head = document.createElement("thead");
@@ -442,13 +465,18 @@ function buildRefusalsTable(): HTMLElement {
   headRow.appendChild(th("№"));
   headRow.appendChild(th(S.multi.refusals.team(), "results-team-head"));
   headRow.appendChild(th(S.multi.refusals.declined()));
+  headRow.appendChild(th(""));
   head.appendChild(headRow);
   table.appendChild(head);
   const body = document.createElement("tbody");
   state!.participants.forEach((_, index) => {
+    const guest = multi.participantGuest(state!, index);
+    const number = multi.participantNumber(state!, index);
     const tr = document.createElement("tr");
-    tr.appendChild(td(String(multi.participantNumber(state!, index) || "")));
-    tr.appendChild(td(multi.participantName(state!, index), "results-team"));
+    tr.appendChild(td(number > 0 ? String(number) : ""));
+    tr.appendChild(guest && renaming === number
+      ? td(guestRenameField(number, multi.participantName(state!, index)))
+      : td(multi.participantName(state!, index), "results-team"));
     const box = document.createElement("input");
     box.type = "checkbox";
     box.checked = multi.participantDeclined(state!, index);
@@ -461,10 +489,115 @@ function buildRefusalsTable(): HTMLElement {
       render();
     });
     tr.appendChild(td(box));
+    tr.appendChild(td(guest ? guestActions(number, multi.participantName(state!, index)) : ""));
     body.appendChild(tr);
   });
   table.appendChild(body);
   return table;
+}
+
+// === guest teams ===
+
+// renaming is the guest team whose name is an input just now (0: none);
+// guestNotice is what the last guest write said when it failed.
+let renaming = 0;
+let guestNotice = "";
+
+function guestActions(number: number, name: string): HTMLElement {
+  const actions = document.createElement("span");
+  actions.className = "multi-guest-actions u-row u-gap-xs";
+  const rename = iconButton("pencil", S.multi.guests.renameLabel());
+  rename.addEventListener("click", () => {
+    renaming = number;
+    guestNotice = "";
+    render();
+    root.querySelector<HTMLInputElement>("[data-guest-rename]")?.focus();
+  });
+  const remove = iconButton("trash-2", S.multi.guests.removeLabel());
+  remove.addEventListener("click", () => {
+    if (!window.confirm(S.multi.guests.removeConfirm(name))) return;
+    void guestWrite({url: `${route.apiBase}/guests/${number}`, method: "DELETE"});
+  });
+  actions.append(rename, remove);
+  return actions;
+}
+
+function iconButton(name: IconName, label: string): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "action-icon";
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  button.appendChild(icon(name));
+  return button;
+}
+
+// guestRenameField is a guest team's name as an input: Enter or leaving the
+// field saves it, Escape keeps the old one.
+function guestRenameField(number: number, name: string): HTMLElement {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "input";
+  input.value = name;
+  input.dataset.guestRename = "";
+  input.setAttribute("aria-label", S.multi.guests.renameLabel());
+  let done = false;
+  const finish = (save: boolean) => {
+    if (done) return;
+    done = true;
+    renaming = 0;
+    const next = input.value.trim();
+    if (save && next && next !== name) {
+      void guestWrite({url: `${route.apiBase}/guests/${number}`, method: "PUT", body: {name: next}});
+    } else {
+      render();
+    }
+  };
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") finish(true);
+    else if (event.key === "Escape") finish(false);
+  });
+  input.addEventListener("blur", () => finish(true));
+  return input;
+}
+
+function buildGuestAddForm(): HTMLElement {
+  const form = document.createElement("form");
+  form.className = "u-row u-wrap u-gap-sm u-align-center";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "input";
+  input.placeholder = S.multi.guests.namePlaceholder();
+  input.dataset.guestAdd = "";
+  input.size = 32;
+  input.setAttribute("aria-label", S.multi.guests.namePlaceholder());
+  const add = document.createElement("button");
+  add.type = "submit";
+  add.className = "btn";
+  add.append(...iconed("plus", S.multi.guests.add()));
+  form.append(input, add);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const name = input.value.trim();
+    if (!name) {
+      input.focus();
+      return;
+    }
+    void guestWrite({url: `${route.apiBase}/guests`, method: "POST", body: {name}}).then((ok) => {
+      if (ok) root.querySelector<HTMLInputElement>("[data-guest-add]")?.focus();
+    });
+  });
+  return form;
+}
+
+// guestWrite sends one guest-team edit. The server answers with the new state,
+// which the writer adopts like any broadcast; a refusal is shown under the table.
+async function guestWrite(request: WriteRequest): Promise<boolean> {
+  guestNotice = "";
+  const sent = await doc.sync().writer.send(doc.scope, request);
+  if (!sent.ok) guestNotice = S.multi.guests.failed(sent.error || "");
+  render();
+  return sent.ok;
 }
 
 // === render ===
@@ -481,12 +614,12 @@ function render(): void {
   const node = activeTab === "results"
     ? buildResultsTable()
     : activeTab === "refusals"
-      ? buildRefusalsTable()
+      ? buildTeamsPanel()
       : activeTab === "roster"
         ? rosterView()
         : buildTable();
   root.replaceChildren(node);
-  root.classList.toggle("fits-frame", activeTab === "roster");
+  root.classList.toggle("fits-frame", activeTab === "roster" || activeTab === "refusals");
   teamNameOverflow.schedule();
   sheetScroll.refresh();
   if (activeTab === "detailed") sheet.refresh();
