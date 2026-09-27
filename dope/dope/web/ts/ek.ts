@@ -16,7 +16,7 @@ import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReloa
 import type {PendingOp, WireOp} from "./state-sync.js";
 import {mountGamePage} from "./game-shell.js";
 import {createLocalCache, notifyEmbeddedResize} from "./game-page.js";
-import {bindScrollEdges, clamp, createFloatingPopover, fitEKStageTeamName, fitScrollFade, installCellNavBar, isClipped, markNameOverflow} from "./widgets.js";
+import {bindScrollEdges, bindTabStripWheel, clamp, createFloatingPopover, fitEKStageTeamName, fitScrollFade, installCellNavBar, isClipped, markNameOverflow} from "./widgets.js";
 import type {CellNavBar, ScrollEdgeBinding} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
@@ -128,6 +128,8 @@ type SeedImportRow = {
 };
 
 type SeedImportView = {
+  declared?: string;
+  declaredTitle?: string;
   rows?: SeedImportRow[];
   activeCount?: number;
   drawSize?: number;
@@ -368,14 +370,6 @@ const floatingPopoverSpecs = [
     trigger: ".player-select-truncated",
     popover: ".player-select-popover",
     anchor: "[data-player-select], [data-player-seats]",
-  },
-  // A seating printed as cut surnames always owes the full names, whether or
-  // not it also overflows its cell — the cut is the point, not an accident of
-  // width. Host and spectator alike carry the class.
-  {
-    trigger: ".player-seats-abbreviated",
-    popover: ".player-select-popover, .readonly-player-popover",
-    anchor: "[data-player-seats], .readonly-player-text-wrap",
   },
 ];
 
@@ -1155,6 +1149,8 @@ function gameSubnavItems(): Array<{href: string; label: string; key: string}> {
   }));
 }
 
+let revealedTabKey = "";
+
 function renderEKTabs(): void {
   if (!ekTabsRoot || embedded) return;
   ekTabsRoot.replaceChildren();
@@ -1171,7 +1167,12 @@ function renderEKTabs(): void {
     ekTabsRoot.appendChild(link);
   }
   bindEKTabsScrollFade();
-  scrollActiveTabIntoView(activeLink);
+  // Reveal the active tab only when it changed: a live update redraws the
+  // strip, and must not yank it away from wherever the user scrolled it.
+  if (active !== revealedTabKey) {
+    revealedTabKey = active;
+    scrollActiveTabIntoView(activeLink);
+  }
 }
 
 function scrollActiveTabIntoView(activeLink: HTMLAnchorElement | null): void {
@@ -1180,7 +1181,11 @@ function scrollActiveTabIntoView(activeLink: HTMLAnchorElement | null): void {
     const margin = 8;
     const currentLeft = ekTabsRoot.scrollLeft;
     const currentRight = currentLeft + ekTabsRoot.clientWidth;
-    const activeLeft = activeLink.offsetLeft;
+    // Where the tab sits inside the strip's scrolled content. offsetLeft would
+    // count from the header instead, which put the strip's own distance from the
+    // page edge into every reveal: a tab to the left scrolled the strip further
+    // right, so the first tabs could not be brought back.
+    const activeLeft = activeLink.getBoundingClientRect().left - ekTabsRoot.getBoundingClientRect().left + currentLeft;
     const activeRight = activeLeft + activeLink.offsetWidth;
     const maxScroll = Math.max(0, ekTabsRoot.scrollWidth - ekTabsRoot.clientWidth);
     let target = currentLeft;
@@ -1201,6 +1206,7 @@ function bindEKTabsScrollFade(): void {
       tabs.classList.toggle("tabs-scroll-left", left);
       tabs.classList.toggle("tabs-scroll-right", right);
     });
+    bindTabStripWheel(ekTabsRoot);
     return;
   }
   ekTabsScroll.refresh();
@@ -1365,9 +1371,7 @@ function updateEKTeamNameOverflow(root: ParentNode = ekRoot): void {
 // updatePlayerSelectOverflow marks the seat cells whose text is wider than the
 // cell, which is what turns on the fade and the popover. A cell holds either a
 // native <select> (one seat) or the seat picker's button (more), and both are
-// measured the same way — their own box against their own text. A seating
-// already cut to surnames keeps its popover through .player-seats-abbreviated,
-// which the builders set; this only adds the ones that also overflow.
+// measured the same way — their own box against their own text.
 function updatePlayerSelectOverflow(root: ParentNode = ekRoot): void {
   const wraps = root.querySelectorAll<HTMLElement>(".player-select-wrap");
   const measurements: Array<{wrap: HTMLElement; popover: HTMLElement | null; label: string; truncated: boolean}> = [];
@@ -1480,8 +1484,13 @@ function buildSeedImportPanel(): HTMLElement {
   const importButton = document.createElement("button");
   importButton.type = "button";
   importButton.className = "btn";
-  importButton.textContent = S.ek.seed.import();
-  importButton.addEventListener("click", importSeedsFromKSI);
+  const declared = seedImport?.declared || "";
+  const fromScheme = declared !== "" && declared !== "xlsx";
+  if (!fromScheme) importButton.textContent = S.ek.seed.import();
+  else if (declared === "random") importButton.textContent = S.ek.seed.draw();
+  else if (declared === "players") importButton.textContent = S.ek.seed.importPlayers();
+  else importButton.textContent = S.ek.seed.importFrom(seedImport?.declaredTitle || declared);
+  importButton.addEventListener("click", () => void importSeeds(fromScheme ? "run" : "ksi"));
   actions.appendChild(importButton);
   panel.appendChild(actions);
 
@@ -1562,9 +1571,11 @@ function buildSeedImportPanel(): HTMLElement {
   return panel;
 }
 
-async function importSeedsFromKSI(): Promise<void> {
+// importSeeds runs the seeding the Game's [init] declares ("run"), or, when it
+// declares none, the fest's first КСИ ("ksi").
+async function importSeeds(source: "run" | "ksi"): Promise<void> {
   seedImportNotice = "";
-  const sent = await writer.send("seed-import", {url: `${route.apiBase}/seed-import/ksi`});
+  const sent = await writer.send("seed-import", {url: `${route.apiBase}/seed-import/${source}`});
   if (sent.ok) {
     seedImport = sent.response as SeedImportView;
     seedImportNotice = S.ek.seed.imported(String(seedImport.rows?.length || 0));
@@ -2402,9 +2413,7 @@ function readonlyPlayerCell(team: HostParticipantView, teamIndex: number, theme:
   playerCell.colSpan = state!.questionValues.length;
   playerCell.className = "readonly-player theme-block theme-block-top-left";
   const seated = seatedNames(theme.players);
-  const playerLabel = seatingText(theme, team, state!);
-  // A cut seating owes its full names to a hover, however wide the cell is.
-  if (playerLabel !== seated.join(" ")) playerCell.classList.add("player-seats-abbreviated");
+  const playerLabel = seatingText(theme, state!);
   const playerWrap = document.createElement("span");
   playerWrap.className = "readonly-player-text-wrap";
   const playerText = document.createElement("span");
@@ -2470,7 +2479,6 @@ function buildPlayerSelectCell(team: HostParticipantView, teamIndex: number, the
   // is unusable on a touch screen.
   if (seatCap() > 1) {
     const seated = seatedNames(theme.players);
-    if (seatingText(theme, team, state!) !== seated.join(" ")) selectWrap.classList.add("player-seats-abbreviated");
     selectWrap.appendChild(seatsTrigger(team, teamIndex, theme, themeIndex, isShootout, matchCode));
     const seatsPopover = document.createElement("span");
     seatsPopover.className = "popover popover-inline player-select-popover";
@@ -2540,7 +2548,7 @@ function seatsTrigger(team: HostParticipantView, teamIndex: number, theme: HostT
   trigger.setAttribute("aria-label", S.ek.seats.label());
   const text = document.createElement("span");
   text.className = "player-seats-text";
-  text.textContent = seatingText(theme, team, state!);
+  text.textContent = seatingText(theme, state!);
   trigger.appendChild(text);
   trigger.addEventListener("click", (event) => {
     event.preventDefault();
@@ -2695,20 +2703,18 @@ function seatPlayers(matchCode: string, teamIndex: number, themeIndex: number, i
   const theme = themes?.[themeIndex];
   if (theme) theme.players = names;
   queueEKEdits(matchCode, [payload]);
-  if (seatsPanelTrigger && theme && team && matchState) refreshSeatsTrigger(seatsPanelTrigger, theme, team, matchState);
+  if (seatsPanelTrigger && theme && matchState) refreshSeatsTrigger(seatsPanelTrigger, theme, matchState);
 }
 
 // refreshSeatsTrigger repaints one closed seating: its line, its popover and
-// whether it owes one at all.
-function refreshSeatsTrigger(trigger: HTMLElement, theme: HostThemeView, team: HostParticipantView, matchState: HostMatchView): void {
+// whether the line overflows the cell.
+function refreshSeatsTrigger(trigger: HTMLElement, theme: HostThemeView, matchState: HostMatchView): void {
   const seated = seatedNames(theme.players);
-  const label = seatingText(theme, team, matchState);
   const text = trigger.querySelector<HTMLElement>(".player-seats-text");
-  if (text) text.textContent = label;
+  if (text) text.textContent = seatingText(theme, matchState);
   const wrap = trigger.closest(".player-select-wrap");
   const popover = wrap?.querySelector(".player-select-popover");
   if (popover) popover.textContent = seated.join("\n");
-  wrap?.classList.toggle("player-seats-abbreviated", label !== seated.join(" "));
   updatePlayerSelectOverflow(wrap || ekRoot);
 }
 

@@ -190,3 +190,67 @@ func seedsAt(t *testing.T, db *sql.DB, gameID int64, code string, seedOf map[int
 	sort.Ints(seeds)
 	return fmt.Sprint(seeds)
 }
+
+// esSeedView is the part of the seed-import view the division test reads.
+type esSeedView struct {
+	Declared      string `json:"declared"`
+	DeclaredTitle string `json:"declaredTitle"`
+	Rows          []struct {
+		TeamID int64 `json:"teamID"`
+	} `json:"rows"`
+}
+
+// The ЭС import tab offers the seeding the scheme declares, naming the ОД it
+// reads, and each зачёт's Game takes only its own teams: the student Game the
+// teams carrying Студ, the adult Game (division: -Студ) the rest.
+func TestBugMajorESSeedKeepsToItsDivision(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	token := createTestSession(t, srv, systemUserID(t, db))
+	seedFestTeams(t, db, festID, 20)
+	for n := 1; n <= 10; n++ {
+		if _, err := db.Exec(`
+insert into fest_team_flags(team_id, position, short, full)
+select id, 0, 'Студ', 'Студенческая команда' from fest_teams where fest_id = ? and number = ?`, festID, n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	odID := createGameThroughForm(t, srv, festID, token, map[string]string{"game_type": "od", "od_tours": "1", "od_questions": "20"})
+	var odCode, odTitle string
+	if err := db.QueryRow(`select code, title from games where id = ?`, odID).Scan(&odCode, &odTitle); err != nil {
+		t.Fatal(err)
+	}
+	adultDSL := strings.Replace(readFile(t, "../../../scripts/bugmajor/es-adults.dsl"), "seed: od\n", "seed: "+odCode+"\n", 1)
+	numberOf := teamNumbers(t, db, festID)
+	for _, game := range []struct {
+		title, dsl string
+		student    bool
+	}{
+		{"ЭС студенты", bugMajorESDSL(t, odCode), true},
+		{"ЭС взрослые", adultDSL, false},
+	} {
+		esID := createSchemeGame(t, db, festID, "es", game.title, game.dsl)
+		resp := scopedAPIRequest(t, srv, http.MethodGet, fmt.Sprintf("/api/fest/%d/games/%d/seed-import", festID, esID), nil, token)
+		before := decodeJSON[esSeedView](t, resp)
+		if before.Declared != odCode || before.DeclaredTitle != odTitle {
+			t.Fatalf("%s: declared %q %q, want %q %q", game.title, before.Declared, before.DeclaredTitle, odCode, odTitle)
+		}
+		resp = scopedAPIRequest(t, srv, http.MethodPost, fmt.Sprintf("/api/fest/%d/games/%d/seed-import/run", festID, esID), nil, token)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("%s: seed-import %d %s", game.title, resp.Code, resp.Body.String())
+		}
+		view := decodeJSON[esSeedView](t, resp)
+		if view.DeclaredTitle != odTitle {
+			t.Fatalf("%s: import answered without the source title", game.title)
+		}
+		if len(view.Rows) != 10 {
+			t.Fatalf("%s: imported %d teams, want 10", game.title, len(view.Rows))
+		}
+		for _, row := range view.Rows {
+			if student := numberOf[row.TeamID] <= 10; student != game.student {
+				t.Fatalf("%s: team %d imported", game.title, numberOf[row.TeamID])
+			}
+		}
+	}
+}

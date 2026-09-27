@@ -397,12 +397,12 @@ function scoreTeamOf(node: HTMLElement, matchState: MatchView): ParticipantView 
 }
 
 // seatingText is a theme's seating as a cell prints it: the one player's whole
-// name where a theme seats one (EK, and personal SI on its borrowed page), and the cut
-// surnames where it seats more — three full names never fit five columns.
-export function seatingText(theme: ThemeView, team: ParticipantView | null, matchState: MatchView): string {
+// name where a theme seats one (EK, and personal SI on its borrowed page), and
+// the surnames where it seats more — three full names never fit five columns.
+export function seatingText(theme: ThemeView, matchState: MatchView): string {
   const seated = seatedNames(theme.players);
   if ((matchState.players || 1) <= 1) return seated[0] || "";
-  return seatingLabel(seated, (team?.roster || []).map((member) => member?.name || ""));
+  return seatingLabel(seated);
 }
 
 function scoreThemeOf(node: HTMLElement, matchState: MatchView): ThemeView | null {
@@ -444,8 +444,7 @@ export function scoreCellSpecs(options: ScoreCellSpecsOptions = {}): NodeIndexSp
       sync: (node, ms) => {
         const theme = scoreThemeOf(node, ms);
         if (!theme) return;
-        const team = scoreTeamOf(node, ms);
-        setNodeText(node, seatingText(theme, team, ms));
+        setNodeText(node, seatingText(theme, ms));
         const popover = node.closest(".readonly-player")?.querySelector(".readonly-player-popover");
         if (popover) setNodeText(popover, seatedNames(theme.players).join("\n"));
       }},
@@ -468,14 +467,9 @@ export function scoreCellSpecs(options: ScoreCellSpecsOptions = {}): NodeIndexSp
       sync: (node, ms, o) => {
         const theme = scoreThemeOf(node, ms);
         if (!theme) return;
-        const team = scoreTeamOf(node, ms);
-        const seated = seatedNames(theme.players);
-        const label = seatingText(theme, team, ms);
-        setNodeText(node.querySelector(".player-seats-text") || node, label);
-        const wrap = node.closest(".player-select-wrap");
-        const popover = wrap?.querySelector(".player-select-popover");
-        if (popover) setNodeText(popover, seated.join("\n"));
-        wrap?.classList.toggle("player-seats-abbreviated", label !== seated.join(" "));
+        setNodeText(node.querySelector(".player-seats-text") || node, seatingText(theme, ms));
+        const popover = node.closest(".player-select-wrap")?.querySelector(".player-select-popover");
+        if (popover) setNodeText(popover, seatedNames(theme.players).join("\n"));
         o.onPlayerSelectSynced?.(node);
       }},
     {name: "total", selector: ".total-cell", keys: teamKeys,

@@ -58,8 +58,15 @@ save = "Сохранить"
 title = '{{.team}}, {{.theme}}, {{.q}}'
 
 [seed]
-# The seed-import tab's import button.
+# The seed-import tab's import button when the scheme declares no seeding.
 import = "Импортировать из КСИ"
+# The import button naming the Game the scheme's [init] seeds from.
+import_from = 'Импортировать из {{.source}}'
+# The import button when the scheme's seeding is a lot.
+draw = "Провести жребий"
+# The import button when the scheme composes the seeding from the players'
+# results in other games.
+import_players = "Посчитать посев по игрокам"
 # The panel before any import has run.
 empty = "Команды ещё не импортированы."
 # The counts line above the table: the teams in the main draw out of the draw

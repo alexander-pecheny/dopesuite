@@ -195,11 +195,14 @@ export type Strings = {
     seed: {
       declineFailed: () => string;
       declinedAria: (name: string) => string;
+      draw: () => string;
       empty: () => string;
       error: (reason: string) => string;
       errorPrefix: () => string;
       import: () => string;
       importFailed: () => string;
+      importFrom: (source: string) => string;
+      importPlayers: () => string;
       imported: (n: string) => string;
       summary: (active: string, size: string, total: string) => string;
       teamPlaceholder: () => string;
