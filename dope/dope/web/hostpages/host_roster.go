@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"dope/dope/domain/core"
+	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/numbering"
 	"dope/dope/domain/overrides"
@@ -511,6 +512,11 @@ func (s *Server) saveFestTeamFlags(reqCtx context.Context, festID int64, flagsBy
 		if updates, err = roster.PropagateRosterTx(ctx, tx, festID, teams, nil); err != nil {
 			return err
 		}
+		// A troika follows its team's division, so a Troika that takes one may
+		// have gained or lost troikas.
+		if _, err := gamebuild.SyncDivisionEntrantsTx(ctx, tx, festID, 0); err != nil {
+			return err
+		}
 		revision, err = festwrite.BumpFestRevisionTx(ctx, tx, festID, "fest:team-flags", util.MustJSON(map[string]any{
 			"teams": len(flagsByTeam),
 		}))
@@ -522,6 +528,7 @@ func (s *Server) saveFestTeamFlags(reqCtx context.Context, festID int64, flagsBy
 	for _, update := range updates {
 		s.h.Engine().BroadcastState(festID, core.GameStateScope(update.GameID), revision, update.StateJSON)
 	}
+	s.broadcastTroikaGames(reqCtx, festID, revision)
 	return nil
 }
 

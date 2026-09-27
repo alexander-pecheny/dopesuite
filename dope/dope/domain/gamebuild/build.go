@@ -236,6 +236,16 @@ func createSchemeGame(ctx context.Context, tx *sql.Tx, festID int64, gameType, l
 	if err != nil {
 		return 0, err
 	}
+	// A Тройка that takes a зачёт seats that зачёт's troikas, whatever was
+	// ticked on the form.
+	if division, ok := entrantDivision(dsl); ok && gameType == games.Troika {
+		if entrants, err = divisionEntrantsTx(ctx, tx, festID, division, 0); err != nil {
+			return 0, err
+		}
+		if len(entrants) == 0 {
+			return 0, corei18n.User(dopestrings.Default.Gamebuild.Division.NoTroikas(division))
+		}
+	}
 	scheme, err := schemeForEntrantsTx(ctx, tx, festID, gameType, identity.Code, identity.Title, dsl, entrants)
 	if err != nil {
 		return 0, err

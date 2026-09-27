@@ -10,16 +10,18 @@ import (
 )
 
 // The troikas page renders its table, a dialog per troika with four player
-// fields on the fest's player list, and the bulk form; a troika a Game seats
-// has no delete button.
+// fields on the fest's player list, its team and its зачёт, and the bulk form;
+// a troika a Game seats has no delete button.
 func TestHostTroikasDocRenders(t *testing.T) {
+	none := ""
 	data := hostTroikasData{
 		Fest: view.HostFest{ID: 5, Title: "Bug Major"},
 		Troikas: []roster.Assembled{
-			{ID: 11, Name: "Бобры", Players: []string{"Иван Петров", "Анна Сидорова"}, Team: "Альфа"},
-			{ID: 12, Name: "Ежи", Players: []string{"Олег Кузнецов", "Ия Ли", "Ян Ким"}, Seated: true},
+			{ID: 11, Name: "Бобры", Players: []string{"Иван Петров", "Анна Сидорова"}, HeadTeamID: 7, HeadTeam: "Альфа", Flags: []string{"Студ"}},
+			{ID: 12, Name: "Ежи", Players: []string{"Олег Кузнецов", "Ия Ли", "Ян Ким"}, Division: &none, Seated: true},
 		},
 		Players: []roster.FestPlayerChoice{{Name: "Иван Петров", Team: "Альфа"}},
+		Teams:   []roster.FestTeamChoice{{ID: 7, Name: "Альфа", Flags: []string{"Студ"}}, {ID: 8, Name: "Бета"}},
 	}
 	html, err := dopeui.Render(hostTroikasDoc(data))
 	if err != nil {
@@ -30,6 +32,8 @@ func TestHostTroikasDocRenders(t *testing.T) {
 		`id="troikaPlayers"`, `value="Иван Петров (Альфа)"`,
 		`id="troika-11"`, `id="troika-12"`, `list="troikaPlayers"`,
 		`name="mode" value="lines"`, `name="lines"`, "Альфа",
+		`name="head_team"`, `<option value="7" selected>Альфа</option>`,
+		`name="division"`, `<option value="@team" selected>`, `<option value="@none" selected>`, `<option value="Студ">Студ</option>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("troikas page missing %q", want)

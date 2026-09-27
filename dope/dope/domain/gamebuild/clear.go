@@ -22,6 +22,13 @@ import (
 // players and the audit log stay. Returns the code of the first Match, for
 // the host's cursor.
 func Clear(ctx context.Context, tx *sql.Tx, festID, gameID int64) (string, error) {
+	return clearGame(ctx, tx, festID, gameID, nil, "game:clear")
+}
+
+// clearGame is Clear, seating the entrants given instead of the Game's own
+// when there are any, and recorded under the event given: a Troika Game that
+// takes a division is re-seated this way when its troikas change.
+func clearGame(ctx context.Context, tx *sql.Tx, festID, gameID int64, seat []int64, event string) (string, error) {
 	var gameType, title, schemeJSON, dsl string
 	if err := tx.QueryRowContext(ctx, `
 select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') from games where id = ? and fest_id = ?`,
@@ -43,6 +50,9 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 	entrants, err := gameEntrantsTx(ctx, tx, gameID)
 	if err != nil {
 		return "", err
+	}
+	if len(seat) > 0 {
+		entrants = seat
 	}
 	// matches/stages cascade to their slots, results and standings (FKs are on).
 	for _, q := range []string{
@@ -137,7 +147,7 @@ where id = ? and fest_id = ?`, string(newScheme), status, now, gameID, festID); 
 select code from matches where game_id = ? order by position, id limit 1`, gameID).Scan(&first); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return "", err
 	}
-	_, err = festwrite.BumpFestRevisionTx(ctx, tx, festID, "game:clear", util.MustJSON(map[string]any{
+	_, err = festwrite.BumpFestRevisionTx(ctx, tx, festID, event, util.MustJSON(map[string]any{
 		"gameID": gameID,
 		"title":  title,
 	}))

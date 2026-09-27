@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"dope/dope/domain/expr"
+	"dope/dope/domain/games"
 	"dope/dope/domain/protocol"
 	"dope/dope/domain/structure"
 	"dope/dope/platform/util"
@@ -317,6 +318,14 @@ func (c *compiler) readPlayerSeed() (*store.SchemePlayerSeed, error) {
 func (c *compiler) readInit() error {
 	seed, ok := c.doc.Init.Str("seed")
 	if !ok {
+		// division without a seed names who plays rather than how they are
+		// ranked: a Troika Game's entrants are the troikas in that division.
+		if division, ok := c.doc.Init.Str("division"); ok {
+			if c.in.GameType != games.Troika {
+				return errAt(c.doc.Init.Values["division"].Line, "%s", dopestrings.Default.Scheme.Seed.DivisionTroikaOnly())
+			}
+			c.scheme.Division = strings.TrimSpace(division)
+		}
 		return nil
 	}
 	seeding := &store.SchemeSeeding{Source: seed}

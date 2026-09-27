@@ -102,3 +102,7 @@ load_failed = "Не удалось загрузить составы."
 col_team = "Команда"
 # The roster table's players column.
 col_players = "Игроки"
+# A Тройка game's roster: the troika column, and under a troika's name the
+# team it counts for (its зачёт follows after a dot).
+col_troika = "Тройка"
+for_team = 'за {{.team}}'

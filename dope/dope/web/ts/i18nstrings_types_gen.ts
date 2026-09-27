@@ -340,7 +340,9 @@ export type Strings = {
     roster: {
       colPlayers: () => string;
       colTeam: () => string;
+      colTroika: () => string;
       empty: () => string;
+      forTeam: (team: string) => string;
       loadFailed: () => string;
       loading: () => string;
     };
@@ -432,6 +434,9 @@ export type Strings = {
       schemeRequired: () => string;
       seedUnknown: (seed: string) => string;
       wholeRoster: (name: string) => string;
+    };
+    division: {
+      noTroikas: (division: string) => string;
     };
     recompile: {
       startedBouts: (names: string) => string;
@@ -761,6 +766,7 @@ export type Strings = {
       addSubhead: () => string;
       addSubmit: () => string;
       addedNotice: (n: number) => string;
+      colDivision: () => string;
       colName: () => string;
       colPlayers: () => string;
       colTeam: () => string;
@@ -768,8 +774,17 @@ export type Strings = {
       deleteConfirm: (name: string) => string;
       deleteSeated: () => string;
       deletedNotice: () => string;
+      divisionCarrying: (flag: string) => string;
+      divisionFollow: () => string;
+      divisionNone: () => string;
+      divisionNotCarrying: (flag: string) => string;
       editLabel: () => string;
       empty: () => string;
+      gameFollows: (game: string, division: string, n: string) => string;
+      gameFrozen: (game: string) => string;
+      gameProblem: (game: string, problem: string) => string;
+      gamesHint: () => string;
+      headTeamUnknown: () => string;
       hint: () => string;
       lineNoName: (n: string) => string;
       linesHint: () => string;
@@ -781,6 +796,8 @@ export type Strings = {
       playerTwice: (team: string, player: string) => string;
       rosterSize: (team: string, n: number) => string;
       savedNotice: () => string;
+      teamHint: () => string;
+      teamNone: () => string;
       title: (title: string) => string;
     };
   };
@@ -1308,6 +1325,7 @@ export type Strings = {
       statsFromNeedsReseed: () => string;
     };
     seed: {
+      divisionTroikaOnly: () => string;
       playersNeedGames: () => string;
       playersNeedSeed: () => string;
     };

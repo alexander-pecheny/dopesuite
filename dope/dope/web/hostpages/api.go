@@ -546,12 +546,18 @@ func (s *Server) apiDeleteOverride(w http.ResponseWriter, r *http.Request, sc ro
 	return s.apiPlayers(w, r, sc)
 }
 
+// apiTroika is one troika: team is its head team's name, headTeamID 0 for
+// none; division is the host's choice (null while it follows the team) and
+// flags the division it plays in.
 type apiTroika struct {
-	ID      int64    `json:"id"`
-	Name    string   `json:"name"`
-	Players []string `json:"players"`
-	Team    string   `json:"team"`
-	Seated  bool     `json:"seated"`
+	ID         int64    `json:"id"`
+	Name       string   `json:"name"`
+	Players    []string `json:"players"`
+	Team       string   `json:"team"`
+	HeadTeamID int64    `json:"headTeamID"`
+	Division   *string  `json:"division"`
+	Flags      []string `json:"flags"`
+	Seated     bool     `json:"seated"`
 }
 
 func (s *Server) apiTroikas(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
@@ -565,7 +571,12 @@ func (s *Server) apiTroikas(w http.ResponseWriter, r *http.Request, sc route.Sco
 		if players == nil {
 			players = []string{}
 		}
-		out[i] = apiTroika{ID: t.ID, Name: t.Name, Players: players, Team: t.Team, Seated: t.Seated}
+		flags := t.Flags
+		if flags == nil {
+			flags = []string{}
+		}
+		out[i] = apiTroika{ID: t.ID, Name: t.Name, Players: players, Team: t.HeadTeam, HeadTeamID: t.HeadTeamID,
+			Division: t.Division, Flags: flags, Seated: t.Seated}
 	}
 	return route.JSON(w, out)
 }
@@ -579,7 +590,7 @@ func (s *Server) apiAddTroikas(w http.ResponseWriter, r *http.Request, sc route.
 	if err := route.DecodeJSON(r, &req); err != nil {
 		return err
 	}
-	if _, err := s.AddTroikas(r.Context(), sc.FestID, req.Lines); err != nil {
+	if _, _, err := s.AddTroikas(r.Context(), sc.FestID, req.Lines); err != nil {
 		return err
 	}
 	return s.apiTroikas(w, r, sc)
@@ -598,14 +609,25 @@ func (s *Server) apiSaveTroika(w http.ResponseWriter, r *http.Request, sc route.
 	if err != nil {
 		return err
 	}
+	// headTeamID, when given, sets the head team (0 for none) and with it the
+	// division: division absent or null follows the team, "" is no division.
 	var req struct {
-		Name    string   `json:"name"`
-		Players []string `json:"players"`
+		Name       string   `json:"name"`
+		Players    []string `json:"players"`
+		HeadTeamID *int64   `json:"headTeamID"`
+		Division   *string  `json:"division"`
 	}
 	if err := route.DecodeJSON(r, &req); err != nil {
 		return err
 	}
-	if err := s.SaveTroika(r.Context(), sc.FestID, id, roster.AssembledInput{Name: req.Name, Players: req.Players}); err != nil {
+	in := roster.AssembledInput{Name: req.Name, Players: req.Players}
+	if req.HeadTeamID != nil {
+		if *req.HeadTeamID < 0 {
+			return route.BadRequest("bad head team")
+		}
+		in.Placement = &roster.AssembledPlacement{HeadTeamID: *req.HeadTeamID, Division: req.Division}
+	}
+	if _, err := s.SaveTroika(r.Context(), sc.FestID, id, in); err != nil {
 		return err
 	}
 	return s.apiTroikas(w, r, sc)
@@ -616,7 +638,7 @@ func (s *Server) apiDeleteTroika(w http.ResponseWriter, r *http.Request, sc rout
 	if err != nil {
 		return err
 	}
-	if err := s.DeleteTroika(r.Context(), sc.FestID, id); err != nil {
+	if _, err := s.DeleteTroika(r.Context(), sc.FestID, id); err != nil {
 		return err
 	}
 	return s.apiTroikas(w, r, sc)
