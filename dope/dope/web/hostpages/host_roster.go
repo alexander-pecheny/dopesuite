@@ -718,6 +718,25 @@ func (s *Server) handleHostImportScheme(w http.ResponseWriter, r *http.Request, 
 	s.renderHostSchemeImportPage(w, r, festID, "", dopestrings.Default.Host.Roster.ImportDoneNotice())
 }
 
+// syncDivisionGamesAfterImport re-seats the Troika Games that take a division
+// after a rating import, and tells their open pages.
+func (s *Server) syncDivisionGamesAfterImport(reqCtx context.Context, festID int64) error {
+	var revision int64
+	err := s.h.Engine().WithWriteTx(reqCtx, festID, "fest-division-entrants", func(ctx context.Context, tx *sql.Tx) error {
+		if _, err := gamebuild.SyncDivisionEntrantsTx(ctx, tx, festID, 0); err != nil {
+			return err
+		}
+		var err error
+		revision, err = festwrite.BumpFestRevisionTx(ctx, tx, festID, "fest:division-entrants", "{}")
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	s.broadcastTroikaGames(reqCtx, festID, revision)
+	return nil
+}
+
 func (s *Server) handleHostImportRatingRoster(w http.ResponseWriter, r *http.Request, festID int64) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
@@ -746,6 +765,16 @@ func (s *Server) handleHostImportRatingRoster(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		s.renderHostRatingImportPage(w, r, festID, err.Error(), "")
 		return
+	}
+	if !result.Unchanged {
+		// The import rewrites the teams' Flags, and a troika follows its team's
+		// division, so a Troika that takes one may have gained or lost troikas.
+		// imports cannot call gamebuild (gamebuild imports imports), so the
+		// re-seat runs here, in its own transaction.
+		if err := s.syncDivisionGamesAfterImport(r.Context(), festID); err != nil {
+			s.renderHostRatingImportPage(w, r, festID, err.Error(), "")
+			return
+		}
 	}
 	var msg string
 	if result.Unchanged {

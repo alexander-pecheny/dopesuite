@@ -104,7 +104,9 @@ func TestBugMajorDemoFest(t *testing.T) {
 	// ОД: seven tours of twelve, the first three played.
 	odID := createGameThroughForm(t, srv, festID, token, map[string]string{"game_type": "od", "od_tours": "7", "od_questions": "12"})
 	entries := make([][]int, 84)
+	completed := make([]bool, 84)
 	for q := 0; q < 36; q++ {
+		completed[q] = true
 		entries[q] = []int{}
 		for n := 1; n <= teams; n++ {
 			if (q*13+n*7)%41 < 40-n {
@@ -116,7 +118,7 @@ func TestBugMajorDemoFest(t *testing.T) {
 		entries[q] = []int{}
 	}
 	if resp := scopedAPIRequest(t, srv, http.MethodPatch, fmt.Sprintf("/api/fest/%d/games/%d/state", festID, odID),
-		map[string]any{"ops": []map[string]any{{"path": []any{"entries"}, "value": entries}}}, token); resp.Code != http.StatusOK {
+		map[string]any{"ops": []map[string]any{{"path": []any{"entries"}, "value": entries}, {"path": []any{"completed"}, "value": completed}}}, token); resp.Code != http.StatusOK {
 		t.Fatalf("od: %d %s", resp.Code, resp.Body.String())
 	}
 	var odCode string
