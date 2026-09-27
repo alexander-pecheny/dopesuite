@@ -46,11 +46,16 @@ type seedImportStateRow struct {
 }
 
 type SeedImportView struct {
-	Source       string              `json:"source,omitempty"`
-	SourceGameID int64               `json:"sourceGameID,omitempty"`
-	DrawSize     int                 `json:"drawSize"`
-	ActiveCount  int                 `json:"activeCount"`
-	Rows         []SeedImportViewRow `json:"rows"`
+	// Declared is the source the Game's [init] names ("" when it names none):
+	// random, players, xlsx or a Game's code. DeclaredTitle is that Game's
+	// title, for the page's import button.
+	Declared      string              `json:"declared,omitempty"`
+	DeclaredTitle string              `json:"declaredTitle,omitempty"`
+	Source        string              `json:"source,omitempty"`
+	SourceGameID  int64               `json:"sourceGameID,omitempty"`
+	DrawSize      int                 `json:"drawSize"`
+	ActiveCount   int                 `json:"activeCount"`
+	Rows          []SeedImportViewRow `json:"rows"`
 }
 
 type SeedImportViewRow struct {
@@ -88,7 +93,29 @@ func LoadSeedImportView(eng *core.Engine, ctx context.Context, scope core.FestSc
 	if err != nil {
 		return SeedImportView{}, err
 	}
-	return buildSeedImportView(state, drawSize), nil
+	view := buildSeedImportView(state, drawSize)
+	return view, declareSeeding(ctx, eng.DB, scope, &view)
+}
+
+// declareSeeding tells the view where the Game's [init] says its seeding comes
+// from, with the source Game's title when it names one.
+func declareSeeding(ctx context.Context, q store.Queryer, scope core.FestScope, view *SeedImportView) error {
+	declared, err := loadSchemeSeeding(ctx, q, scope)
+	if err != nil {
+		return err
+	}
+	view.Declared, view.DeclaredTitle = declared.Source, ""
+	switch declared.Source {
+	case "", "random", "players", "xlsx":
+		return nil
+	}
+	err = q.QueryRowContext(ctx, `
+select title from games where fest_id = ? and code = ?`, scope.FestID, declared.Source).Scan(&view.DeclaredTitle)
+	if errors.Is(err, sql.ErrNoRows) {
+		view.DeclaredTitle = declared.Source
+		return nil
+	}
+	return err
 }
 
 // seedCandidate is one row of a seed source's current standings, whatever the
@@ -228,7 +255,10 @@ func ImportSeeds(eng *core.Engine, ctx context.Context, scope core.FestScope, sr
 			return err
 		}
 		view, revision, stateJSON, err = importCandidatesTx(ctx, tx, scope, gameType, rawState, resolved.source, resolved.label, resolved.sourceGameID, resolved.candidates)
-		return err
+		if err != nil {
+			return err
+		}
+		return declareSeeding(ctx, tx, scope, &view)
 	})
 	if err != nil {
 		return SeedImportView{}, 0, nil, err
@@ -450,6 +480,9 @@ func SetSeedImportDeclined(eng *core.Engine, ctx context.Context, scope core.Fes
 
 	view, revision, stateJSON, err := saveSeedImportState(ctx, tx, scope, gameType, rawState, state, "seed-import:decline")
 	if err != nil {
+		return SeedImportView{}, 0, nil, err
+	}
+	if err := declareSeeding(ctx, tx, scope, &view); err != nil {
 		return SeedImportView{}, 0, nil, err
 	}
 	if err := tx.Commit(); err != nil {
