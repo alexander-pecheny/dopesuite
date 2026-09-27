@@ -763,7 +763,10 @@ func (s *Server) handleHostImportScheme(w http.ResponseWriter, r *http.Request, 
 
 // ImportRatingRoster pulls the fest's roster from rating.chgk.info. A
 // *imports.RosterConflict means teams with results would be lost, and the
-// caller answers it with a choice and calls again.
+// caller answers it with a choice and calls again. The import rewrites the
+// teams' Flags, and a troika follows its team's division, so a Troika that
+// takes one may have gained or lost troikas: it is re-seated afterwards, in a
+// transaction of its own, since imports cannot call gamebuild.
 func (s *Server) ImportRatingRoster(ctx context.Context, festID int64, choice imports.RosterChoice) (imports.RatingRosterImportResult, error) {
 	ratingID, err := s.loadFestRatingID(ctx, festID)
 	if err != nil {
@@ -772,7 +775,30 @@ func (s *Server) ImportRatingRoster(ctx context.Context, festID int64, choice im
 	if ratingID <= 0 {
 		return imports.RatingRosterImportResult{}, corei18n.User(dopestrings.Default.Host.Roster.NeedRatingNote())
 	}
-	return imports.FetchAndImportRatingRoster(s.h.Engine(), ctx, festID, ratingID, choice)
+	result, err := imports.FetchAndImportRatingRoster(s.h.Engine(), ctx, festID, ratingID, choice)
+	if err != nil || result.Unchanged {
+		return result, err
+	}
+	return result, s.syncDivisionGamesAfterImport(ctx, festID)
+}
+
+// syncDivisionGamesAfterImport re-seats the Troika Games that take a division
+// after a rating import, and tells their open pages.
+func (s *Server) syncDivisionGamesAfterImport(reqCtx context.Context, festID int64) error {
+	var revision int64
+	err := s.h.Engine().WithWriteTx(reqCtx, festID, "fest-division-entrants", func(ctx context.Context, tx *sql.Tx) error {
+		if _, err := gamebuild.SyncDivisionEntrantsTx(ctx, tx, festID, 0); err != nil {
+			return err
+		}
+		var err error
+		revision, err = festwrite.BumpFestRevisionTx(ctx, tx, festID, "fest:division-entrants", "{}")
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	s.broadcastTroikaGames(reqCtx, festID, revision)
+	return nil
 }
 
 func (s *Server) handleHostImportRatingRoster(w http.ResponseWriter, r *http.Request, festID int64) {
