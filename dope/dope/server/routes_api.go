@@ -52,6 +52,7 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("PUT "+fest+"/venues/{n}", route.Editor, s.scopedVenuePut)
 	t.Handle("GET "+fest+"/roster", route.Read, s.scopedFestRoster)
 	t.Handle("GET "+game, route.Read, s.scopedGame)
+	t.Handle("GET "+game+"/roster", route.Read, s.scopedGameRoster)
 	t.Handle("GET "+game+"/matches/{code}", route.Read, s.scopedMatch)
 	t.Handle("PATCH "+game+"/matches/{code}/state", route.Editor.Numbered(), s.scopedMatchPatch)
 	t.Handle("POST "+game+"/matches/{code}/finish", route.Editor.Numbered(), s.scopedMatchFinish)
@@ -124,6 +125,20 @@ func (s *server) scopedFestRoster(w http.ResponseWriter, r *http.Request, sc rou
 		teams = []roster.FestRosterTeamView{}
 	}
 	return route.JSON(w, map[string]any{"teams": teams})
+}
+
+// scopedGameRoster serves who a Game seats, for a Troika page's roster tab:
+// its troikas with their people, head team and division. A Game that never named
+// its entrants seats the fest roster, and gets that.
+func (s *server) scopedGameRoster(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	entrants, err := roster.LoadGameEntrantsView(r.Context(), s.eng.DB, sc.FestID, sc.GameID)
+	if err != nil {
+		return err
+	}
+	if len(entrants) > 0 {
+		return route.JSON(w, map[string]any{"teams": entrants, "entrants": true})
+	}
+	return s.scopedFestRoster(w, r, sc)
 }
 
 func (s *server) hostPresence(w http.ResponseWriter, r *http.Request, sc route.Scope) error {

@@ -374,7 +374,12 @@ select coalesce(scheme_dsl, '') from games where id = ?`, gameID).Scan(&stored);
 		if strings.TrimSpace(stored) == strings.TrimSpace(g.SchemeDSL) {
 			return nil
 		}
-		return gamebuild.Recompile(ctx, tx, festID, gameID, g.SchemeDSL)
+		if err := gamebuild.Recompile(ctx, tx, festID, gameID, g.SchemeDSL); err != nil {
+			return err
+		}
+		// A Troika that now takes a division, or another one, seats its troikas.
+		_, err := gamebuild.SyncDivisionEntrantsTx(ctx, tx, festID, 0)
+		return err
 	})
 	if err != nil {
 		return err

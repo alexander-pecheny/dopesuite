@@ -45,6 +45,11 @@ unnumbered = "перед созданием игры пронумеруйте у
 # An individual game seeded from a fest with fewer than three players.
 need_players = "для личной игры нужны игроки в ростере феста"
 
+[division]
+# A Тройка game that takes its troikas from a зачёт, while the зачёт holds no
+# troika: at creation, and on the troikas page when the last one leaves.
+no_troikas = 'В зачёте «{{.division}}» пока нет ни одной тройки. Заведите тройки на странице «Тройки».'
+
 [recompile]
 # A recompile that would change bouts already started; the bout codes follow.
 started_bouts = 'нельзя менять начатые бои: {{.names}} — уберите их изменения или снимите отметку «Закончен» и очистите протокол'

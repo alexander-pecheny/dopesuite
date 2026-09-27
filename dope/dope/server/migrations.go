@@ -854,6 +854,44 @@ create index if not exists api_tokens_user_idx on api_tokens(user_id);
 `)
 		return err
 	}},
+	{Version: 34, Name: "a troika's head team and division", Up: assembledHeadTeamAndDivision},
+}
+
+// assembledHeadTeamAndDivision gives an assembled team (a troika) a stored head
+// team, the fest team its places count for, and a stored division. Until now the
+// head team was worked out from the players on every read, and a troika
+// assembled from three teams had none. division is NULL while the troika
+// follows its head team's Flags, and holds the host's choice otherwise, ” for
+// no division. Each troika that has one derived team gets it as its head team.
+// Only assembled rows are read, a fest at a time.
+func assembledHeadTeamAndDivision(db *sql.DB) error {
+	if err := store.AddColumnsIfMissing(db, "participants", []store.ColumnSpec{
+		{Name: "head_team_id", Type: "INTEGER"},
+		{Name: "division", Type: "TEXT"},
+	}); err != nil {
+		return err
+	}
+	fests, err := store.CollectRows(context.Background(), db, `
+select distinct fest_id from participants where assembled = 1 and head_team_id is null`, nil,
+		func(rows *sql.Rows) (int64, error) {
+			var id int64
+			return id, rows.Scan(&id)
+		})
+	if err != nil {
+		return err
+	}
+	for _, festID := range fests {
+		derived, err := roster.DerivedHeadTeams(context.Background(), db, festID)
+		if err != nil {
+			return err
+		}
+		for participantID, teamID := range derived {
+			if _, err := db.Exec(`update participants set head_team_id = ? where id = ? and head_team_id is null`, teamID, participantID); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // usernamesUniqueIgnoringCase makes the database refuse a username that differs

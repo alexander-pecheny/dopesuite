@@ -394,7 +394,9 @@ var RU = Strings{
 		Roster: FestRosterStrings{
 			ColPlayers: func() string { return "Игроки" },
 			ColTeam:    func() string { return "Команда" },
+			ColTroika:  func() string { return "Тройка" },
 			Empty:      func() string { return "Составы пока не заданы." },
+			ForTeam:    func(team string) string { return fmt.Sprintf("за %s", team) },
 			LoadFailed: func() string { return "Не удалось загрузить составы." },
 			Loading:    func() string { return "Загрузка составов…" },
 		},
@@ -503,6 +505,11 @@ var RU = Strings{
 			},
 			WholeRoster: func(name string) string {
 				return fmt.Sprintf("В игре «%s» играют все команды феста, под теми же номерами. Снимите отметки в «Составе игры», а тех, кто не играет, отметьте во вкладке «Отказы» на странице игры.", name)
+			},
+		},
+		Division: GamebuildDivisionStrings{
+			NoTroikas: func(division string) string {
+				return fmt.Sprintf("В зачёте «%s» пока нет ни одной тройки. Заведите тройки на странице «Тройки».", division)
 			},
 		},
 		Recompile: GamebuildRecompileStrings{
@@ -798,7 +805,7 @@ var RU = Strings{
 			ThemesLabel: func() string { return "Количество тем" },
 			TitleLabel:  func() string { return "Название" },
 			TroikaHint: func() string {
-				return "Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50."
+				return "Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50. Если в [init] написать division: Студ, игра сама возьмёт тройки зачёта «Студ» со страницы «Тройки», и отмечать участников ниже не нужно."
 			},
 			TypeBrain:       func() string { return "Брейн" },
 			TypeEk:          func() string { return "ЭК" },
@@ -966,6 +973,7 @@ var RU = Strings{
 			AddedNotice: func(n int) string {
 				return fmt.Sprintf("Добавлено: %s.", core.Plural("ru", n, "тройка", "тройки", "троек"))
 			},
+			ColDivision:   func() string { return "Зачёт" },
 			ColName:       func() string { return "Тройка" },
 			ColPlayers:    func() string { return "Игроки" },
 			ColTeam:       func() string { return "За команду" },
@@ -974,11 +982,30 @@ var RU = Strings{
 			DeleteSeated: func() string {
 				return "Эта тройка уже играет в игре, удалить её нельзя."
 			},
-			DeletedNotice: func() string { return "Тройка удалена." },
-			EditLabel:     func() string { return "Изменить тройку" },
-			Empty:         func() string { return "Троек пока нет." },
+			DeletedNotice:    func() string { return "Тройка удалена." },
+			DivisionCarrying: func(flag string) string { return fmt.Sprintf("тройки зачёта «%s»", flag) },
+			DivisionFollow:   func() string { return "Как у команды" },
+			DivisionNone:     func() string { return "Без зачёта" },
+			DivisionNotCarrying: func(flag string) string {
+				return fmt.Sprintf("все тройки не из зачёта «%s»", flag)
+			},
+			EditLabel: func() string { return "Изменить тройку" },
+			Empty:     func() string { return "Троек пока нет." },
+			GameFollows: func(game string, division string, n string) string {
+				return fmt.Sprintf("«%s» берёт %s. Сейчас их %s.", game, division, n)
+			},
+			GameFrozen: func(game string) string {
+				return fmt.Sprintf("В «%s» уже есть результаты, поэтому состав её участников больше не меняется. Замены игроков внутри тройки по-прежнему делаются здесь.", game)
+			},
+			GameProblem: func(game string, problem string) string {
+				return fmt.Sprintf("Участников «%s» не удалось обновить: %s", game, problem)
+			},
+			GamesHint: func() string {
+				return "Игра «Тройка», в схеме которой есть строка division, сама берёт тройки своего зачёта: division: Студ — тройки зачёта «Студ», division: -Студ — все остальные. Пока в игре ничего не внесено, её участники меняются вместе с тройками на этой странице."
+			},
+			HeadTeamUnknown: func() string { return "Такой команды нет в фесте." },
 			Hint: func() string {
-				return "Тройка — это 2–4 игрока, заявленные на Тройку. Команды из рейтинга здесь ни при чём: тройку можно собрать из игроков разных команд. В игре «Тройка» тройки выбираются участниками при её создании. Заменить игрока можно здесь в любой момент между боями — в следующей теме его можно будет посадить в кресло."
+				return "Тройка — это 2–4 игрока, заявленные на Тройку. Команды из рейтинга здесь ни при чём: тройку можно собрать из игроков разных команд. Заменить игрока можно здесь в любой момент между боями — в следующей теме его можно будет посадить в кресло."
 			},
 			LineNoName: func(n string) string {
 				return fmt.Sprintf("Строка %s: нужно название и двоеточие перед игроками.", n)
@@ -1002,7 +1029,11 @@ var RU = Strings{
 				return fmt.Sprintf("В тройке «%s» %s, а нужно от двух до четырёх.", team, core.Plural("ru", n, "игрок", "игрока", "игроков"))
 			},
 			SavedNotice: func() string { return "Тройка сохранена." },
-			Title:       func(title string) string { return fmt.Sprintf("%s · тройки", title) },
+			TeamHint: func() string {
+				return "Сначала здесь стоит команда, в которой играют хотя бы двое из тройки."
+			},
+			TeamNone: func() string { return "Ни за какую" },
+			Title:    func(title string) string { return fmt.Sprintf("%s · тройки", title) },
 		},
 	},
 	Imports: ImportsStrings{
@@ -1834,6 +1865,9 @@ var RU = Strings{
 			StatsFromNeedsReseed: func() string { return "stats_from работает только вместе с reseed" },
 		},
 		Seed: SchemeSeedStrings{
+			DivisionTroikaOnly: func() string {
+				return "division без seed бывает только у Тройки: так игра берёт тройки своего зачёта. В других играх division пишется вместе с seed."
+			},
 			PlayersNeedGames: func() string {
 				return "seed: players — нужен games: [игра, игра], откуда берутся места игроков"
 			},

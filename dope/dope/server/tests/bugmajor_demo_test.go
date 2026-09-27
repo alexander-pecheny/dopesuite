@@ -159,9 +159,17 @@ func TestBugMajorDemoFest(t *testing.T) {
 	}
 
 	// Troikas: fourteen per зачёт, three players of one team, every fourth
-	// one mixed from two teams of its зачёт.
-	makeTroikas := func(label string, from, count int) []int64 {
-		var ids []int64
+	// one mixed from two teams of its зачёт. A mixed one has two players of
+	// each team, so nothing picks its team for it: the host names the first.
+	teamIDs := map[int]int64{}
+	for n := 1; n <= teams; n++ {
+		var id int64
+		if err := db.QueryRow(`select id from fest_teams where fest_id = ? and number = ?`, festID, n).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		teamIDs[n-1] = id
+	}
+	makeTroikas := func(label string, from, count int) {
 		tx, err := db.Begin()
 		if err != nil {
 			t.Fatal(err)
@@ -169,30 +177,32 @@ func TestBugMajorDemoFest(t *testing.T) {
 		for i := 0; i < count; i++ {
 			team := players[from+i]
 			who := []string{team[0].first + " " + team[0].last, team[1].first + " " + team[1].last, team[2].first + " " + team[2].last}
+			var placement *roster.AssembledPlacement
 			if i%4 == 3 {
 				other := players[from+(i+1)%count]
 				who[2] = other[3].first + " " + other[3].last
 				who = append(who, other[4].first+" "+other[4].last)
+				placement = &roster.AssembledPlacement{HeadTeamID: teamIDs[from+i]}
 			}
-			id, err := roster.SaveAssembledTx(context.Background(), tx, festID, 0,
-				roster.AssembledInput{Name: fmt.Sprintf("%s %d", label, i+1), Players: who})
-			if err != nil {
+			if _, err := roster.SaveAssembledTx(context.Background(), tx, festID, 0,
+				roster.AssembledInput{Name: fmt.Sprintf("%s %d", label, i+1), Players: who, Placement: placement}); err != nil {
 				t.Fatal(err)
 			}
-			ids = append(ids, id)
 		}
 		if err := tx.Commit(); err != nil {
 			t.Fatal(err)
 		}
-		return ids
 	}
-	studentTroikas := makeTroikas("Тройка С", 0, 14)
-	adultTroikas := makeTroikas("Тройка В", students, 14)
+	makeTroikas("Тройка С", 0, 14)
+	makeTroikas("Тройка В", students, 14)
 
-	// Тройка: the отбор written; the students' Swiss stage two rounds in, the
-	// adults' first round half played.
-	playTroika := func(title string, entrants []int64, rounds, lastRoundBouts int, salt int) int64 {
-		gameID := createSchemeGameFor(t, db, festID, "troika", title, readFile(t, "../../../scripts/bugmajor/troika.dsl"), entrants)
+	// Тройка: each Game takes its зачёт's troikas; the отбор written; the
+	// students' Swiss stage two rounds in, the adults' first round half played.
+	playTroika := func(title, file string, rounds, lastRoundBouts int, salt int) int64 {
+		gameID := createSchemeGameFor(t, db, festID, "troika", title, readFile(t, "../../../scripts/bugmajor/"+file), nil)
+		if got := len(matchSeatIDs(t, db, gameID, "s1-m1")); got != 14 {
+			t.Fatalf("%s seats %d troikas, want its зачёт's fourteen", title, got)
+		}
 		seats := matchSeatIDs(t, db, gameID, "s1-m1")
 		var ops []map[string]any
 		for side := range seats {
@@ -221,8 +231,8 @@ func TestBugMajorDemoFest(t *testing.T) {
 		}
 		return gameID
 	}
-	troikaS := playTroika("Тройка — студенты", studentTroikas, 2, 99, 0)
-	troikaA := playTroika("Тройка — взрослые", adultTroikas, 1, 3, 1)
+	troikaS := playTroika("Тройка — студенты", "troika-students.dsl", 2, 99, 0)
+	troikaA := playTroika("Тройка — взрослые", "troika-adults.dsl", 1, 3, 1)
 
 	// Эрудит-секстет: both seeded from the ОД by зачёт; the students' first
 	// game played, the adults' group stage done and their semifinals seated.

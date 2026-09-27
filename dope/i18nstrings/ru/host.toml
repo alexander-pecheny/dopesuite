@@ -67,7 +67,7 @@ minigames_share_hint = "«Название →0..100: …» — мини-игр�
 multi_sorting_label = "Что решает при равном итоге (необязательно)"
 multi_sorting_hint = "Через запятую: total — итог, plus — сумма положительных, game1, game2… — подытоги мини-игр по порядку. Пусто — команды с равным итогом делят место."
 # Hint under the troika scheme editor.
-troika_hint = "Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50."
+troika_hint = "Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50. Если в [init] написать division: Студ, игра сама возьмёт тройки зачёта «Студ» со страницы «Тройки», и отмечать участников ниже не нужно."
 # The scheme the hamsa creation form prefills: the tournament's own shape at
 # its smallest, with n the participants the fest can seat four to a table. It
 # is text a host reads and edits, so it lives here rather than in the form.
@@ -243,13 +243,34 @@ error_obj_source_team = "исходную команду"
 title = '{{.title}} · тройки'
 crumb = "Тройки"
 # The note at the top of the page.
-hint = "Тройка — это 2–4 игрока, заявленные на Тройку. Команды из рейтинга здесь ни при чём: тройку можно собрать из игроков разных команд. В игре «Тройка» тройки выбираются участниками при её создании. Заменить игрока можно здесь в любой момент между боями — в следующей теме его можно будет посадить в кресло."
+hint = "Тройка — это 2–4 игрока, заявленные на Тройку. Команды из рейтинга здесь ни при чём: тройку можно собрать из игроков разных команд. Заменить игрока можно здесь в любой момент между боями — в следующей теме его можно будет посадить в кресло."
+# The note on how troikas reach a Тройка game, shown under the hint.
+games_hint = "Игра «Тройка», в схеме которой есть строка division, сама берёт тройки своего зачёта: division: Студ — тройки зачёта «Студ», division: -Студ — все остальные. Пока в игре ничего не внесено, её участники меняются вместе с тройками на этой странице."
 # The table's column heads, and the edit dialog's name field.
 col_name = "Тройка"
 col_players = "Игроки"
-# The team a troika's places count for in the кубок: the one that has at least
-# two of its players.
+# The team a troika's places count for in the кубок. A new troika gets the team
+# that has at least two of its players; the host can pick another one.
 col_team = "За команду"
+# The troika's зачёт: its team's зачёты, or the one the host chose.
+col_division = "Зачёт"
+# The edit dialog's team select: its hint and the option for no team.
+team_hint = "Сначала здесь стоит команда, в которой играют хотя бы двое из тройки."
+team_none = "Ни за какую"
+# The edit dialog's зачёт select: follow the team, no зачёт, or one of the
+# fest's зачёты.
+division_follow = "Как у команды"
+division_none = "Без зачёта"
+# A зачёт a Тройка game takes, in the notes below: one Flag, or everyone
+# without it (division: -Студ).
+division_carrying = 'тройки зачёта «{{.flag}}»'
+division_not_carrying = 'все тройки не из зачёта «{{.flag}}»'
+# One note per Тройка game that takes its troikas from a зачёт.
+game_follows = '«{{.game}}» берёт {{.division}}. Сейчас их {{.n}}.'
+game_frozen = 'В «{{.game}}» уже есть результаты, поэтому состав её участников больше не меняется. Замены игроков внутри тройки по-прежнему делаются здесь.'
+game_problem = 'Участников «{{.game}}» не удалось обновить: {{.problem}}'
+# A head team that is not one of the fest's teams.
+head_team_unknown = "Такой команды нет в фесте."
 # Empty state of the table.
 empty = "Троек пока нет."
 # The pencil button opening a troika's edit dialog.

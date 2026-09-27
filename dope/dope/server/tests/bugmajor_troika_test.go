@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"testing"
 
 	dopeserver "dope/dope/server"
@@ -21,7 +22,10 @@ func TestBugMajorTroikaPlaysThrough(t *testing.T) {
 	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))
 	db := srv.Eng().DB
 	troikas := seedParticipants(t, db, festID, 14)
-	gameID := createSchemeGameFor(t, db, festID, "troika", "Тройка", readFile(t, "../../../scripts/bugmajor/troika.dsl"), troikas)
+	// The fest's troikas here are plain Participants with no зачёт, so the
+	// Game seats them as chosen rather than by the scheme's division.
+	dsl := strings.Replace(readFile(t, "../../../scripts/bugmajor/troika-students.dsl"), "[init]\ndivision: Студ\n", "", 1)
+	gameID := createSchemeGameFor(t, db, festID, "troika", "Тройка", dsl, troikas)
 
 	// The отбор: the troika seated k-th writes k right answers fewer than the
 	// one before it on the first тема за 3, so it ranks k-th. Troikas 13 and 14

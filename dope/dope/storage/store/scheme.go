@@ -28,6 +28,11 @@ type FestScheme struct {
 	Participants      []string        `json:"participants,omitempty"`
 	Stickers          json.RawMessage `json:"stickers,omitempty"`
 	Seeding           *SchemeSeeding  `json:"seeding,omitempty"`
+	// Division, declared in [init] without a seed, makes the Game's entrants
+	// the fest's troikas in that division: a Flag they carry, or with a leading
+	// minus one they do not. They follow the troikas page until the Game has
+	// anything entered.
+	Division string `json:"division,omitempty"`
 }
 
 // SchemeSeeding is the [init] declaration compiled from the scheme DSL: where

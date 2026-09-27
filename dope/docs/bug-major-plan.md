@@ -42,8 +42,16 @@ lists it in the entrant picker.
 - Migration v29: `participants.assembled integer not null default 0`.
 - Its players are `participant_players` rows, exactly as the Тройка page's seat
   picker already reads them (`store.loadRosters`, roster source `fest`).
-- The team it plays for is derived and shown, never stored: the fest team that
-  holds at least two of its players (регламент VII.2.1), found by name.
+- ~~The team it plays for is derived and shown, never stored.~~ **Changed 27
+  Sep 2026** after the organisers' test: a troika of three teams had no team
+  and joined no Game. Migration v34 stores `participants.head_team_id` and
+  `participants.division`. A new troika takes the fest team that holds at least
+  two of its players (регламент VII.2.1) and follows that team's Flags
+  (`division` NULL); the dialog picks another team or none, and sets the зачёт
+  apart from the team's ('' for none). A Тройка Game whose scheme says
+  `[init] division: Студ` (no `seed:`) seats that зачёт's troikas and is
+  re-seated on every troikas-page save, scheme edit and Flags edit, until
+  anything is entered in it (`gamebuild.SyncDivisionEntrantsTx`).
 - Host page `/host/fest/{fest}/troikas` («Тройки»): the table of Сборные with
   their players and derived team; an add/edit dialog built on the venues
   branch's roster editor, suggesting fest players; a bulk paste, one troika a
@@ -161,9 +169,13 @@ anybody unticking teams by hand.
 
 ## 7. The schemes for this Fest
 
-Тройка (one Game per зачёт, entrants the зачёт's troikas):
+Тройка (one Game per зачёт, entrants the зачёт's troikas; the adults' Game
+says `division: -Студ`):
 
 ```
+[init]
+division: Студ
+
 [defaults]
 themes: 6
 
@@ -213,7 +225,7 @@ match_size: 4
 winning_places: 2
 ```
 
-**Built:** the schemes live in `dope/scripts/bugmajor/` (`troika.dsl`, `es-students.dsl`, `es-adults.dsl`) rather than as the form's defaults, which other fests still use. Paste one into the game form; for ЭС, put the ОД Game's code after `seed:`. `TestBugMajorDemoFest` (with `DOPE_BUGMAJOR_DEMO=<new db>`) builds a demo fest to look at; log in as demo / demopass123.
+**Built:** the schemes live in `dope/scripts/bugmajor/` (`troika-students.dsl`, `troika-adults.dsl`, `es-students.dsl`, `es-adults.dsl`) rather than as the form's defaults, which other fests still use. Paste one into the game form; for ЭС, put the ОД Game's code after `seed:`. `TestBugMajorDemoFest` (with `DOPE_BUGMAJOR_DEMO=<new db>`) builds a demo fest to look at; log in as demo / demopass123.
 
 ## 8. Order of work
 
