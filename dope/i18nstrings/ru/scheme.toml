@@ -75,6 +75,8 @@ empty = '{{.key}}: пустой список столов'
 players_need_games = "seed: players — нужен games: [игра, игра], откуда берутся места игроков"
 # seed: players without a single seed.<metric> rule.
 players_need_seed = "seed: players — нужен хотя бы один seed.<метрика>: mean(<метрика игрока>)"
+# division without seed: outside a Тройка game.
+division_troika_only = "division без seed бывает только у Тройки: так игра берёт тройки своего зачёта. В других играх division пишется вместе с seed."
 
 [entrants]
 # The scheme's entrant count disagrees with the seeded entrant list.

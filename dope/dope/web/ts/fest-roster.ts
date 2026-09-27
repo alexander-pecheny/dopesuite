@@ -17,6 +17,15 @@ export interface RosterTeam {
   number?: number;
   ratingID?: number;
   players?: Array<RosterPlayer | string>;
+  // A troika's head team and division, on a Troika game's roster.
+  headTeam?: string;
+  flags?: string[];
+}
+
+export interface RosterTableOptions {
+  // The Troika game's roster: the troika column, the team each troika counts
+  // for and its division.
+  troikas?: boolean;
 }
 
 // Roster — the fest-level team→players list, shared by every game
@@ -63,7 +72,7 @@ function nonBreakingName(name: string | undefined): string {
 // buildRosterTable renders the team→players table using the shared results-table
 // design-system styling. One row per team: number, name (+ city), player list.
 // Team and player names become rating.chgk.info links when a rating id exists.
-export function buildRosterTable(teams: RosterTeam[] | null | undefined): HTMLElement {
+export function buildRosterTable(teams: RosterTeam[] | null | undefined, options: RosterTableOptions = {}): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "results-wrapper roster-results-wrapper";
   const list = teams || [];
@@ -98,18 +107,22 @@ export function buildRosterTable(teams: RosterTeam[] | null | undefined): HTMLEl
     }
     return cell;
   };
+  const troikas = Boolean(options.troikas);
   wrapper.appendChild(standingsTable({
     className: "roster-results-table",
     columns: [
       ...(hasNumbers ? [{label: "№", kind: "place" as const}] : []),
-      {label: S.fest.roster.colTeam(), kind: "name"},
+      {label: troikas ? S.fest.roster.colTroika() : S.fest.roster.colTeam(), kind: "name"},
       {label: S.fest.roster.colPlayers(), className: "roster-players"},
     ],
     rows: list.map((team) => [
       ...(hasNumbers ? [Number(team.number) > 0 ? team.number : ""] : []),
       resultsTeamCell(team.name || "", {
         href: Number(team.ratingID) > 0 ? `${RATING_TEAM_URL}${team.ratingID}` : "",
-        city: team.city,
+        // A troika has no city: the line under its name says whom it plays
+        // for and in which division, which keeps the table to three columns on a
+        // phone.
+        city: troikas ? troikaLine(team) : team.city,
       }),
       players(team),
     ]),
@@ -117,20 +130,50 @@ export function buildRosterTable(teams: RosterTeam[] | null | undefined): HTMLEl
   return wrapper;
 }
 
+function troikaLine(team: RosterTeam): string {
+  return [team.headTeam ? S.fest.roster.forTeam(team.headTeam) : "", (team.flags || []).join(", ")]
+    .filter(Boolean).join(" · ");
+}
+
 // buildRosterView returns a container node for the roster tab that fills
 // itself asynchronously: it shows a loading line, fetches the fest roster, then
 // swaps in the table (or an error line on failure). Safe to drop straight into
 // a tab pane by any page — no roster data needs to be threaded through.
 export function buildRosterView(festID: string | number | null | undefined): HTMLElement {
+  return rosterView(fetchFestRoster(festID), {});
+}
+
+// buildGameRosterView is a Troika game's roster tab: who that Game seats —
+// its troikas, with the team each counts for and its division — rather than the
+// fest's teams. It is fetched afresh each time, since the troikas page changes
+// it while the game page is open.
+export function buildGameRosterView(apiBase: string): HTMLElement {
+  // The server says whether these are the Game's own entrants; a Game that
+  // never named them sends the fest's teams, drawn as the fest roster.
+  let troikas = false;
+  const teams = fetch(`${apiBase}/roster`)
+    .then((response) => {
+      if (!response.ok) throw new Error(`roster ${response.status}`);
+      return response.json();
+    })
+    .then((data: unknown) => {
+      const parsed = data as {teams?: unknown; entrants?: unknown} | null;
+      troikas = Boolean(parsed?.entrants);
+      return parsed && Array.isArray(parsed.teams) ? (parsed.teams as RosterTeam[]) : [];
+    });
+  return rosterView(teams, () => ({troikas}));
+}
+
+function rosterView(teams: Promise<RosterTeam[]>, options: RosterTableOptions | (() => RosterTableOptions)): HTMLElement {
   const container = document.createElement("div");
   const loading = document.createElement("p");
   loading.className = "roster-empty";
   loading.textContent = S.fest.roster.loading();
   container.appendChild(loading);
 
-  fetchFestRoster(festID)
+  teams
     .then((teams) => {
-      container.replaceChildren(buildRosterTable(teams));
+      container.replaceChildren(buildRosterTable(teams, typeof options === "function" ? options() : options));
       // Flag clipped team names so the shared fade + popover kick in, and
       // re-check whenever the container's width changes (tab switch, resize).
       // The popover itself is already handled: the CSS-only variant on OD/KSI,

@@ -12,7 +12,7 @@ import type {CellContent} from "./cells.js";
 import {icon} from "./icons_gen.js";
 import {festLetters, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
-import {buildRosterView} from "./fest-roster.js";
+import {buildGameRosterView} from "./fest-roster.js";
 import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
 import {mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
@@ -212,6 +212,11 @@ const live = createLiveEvents({
       const fresh = view.data as FestInfo | null;
       if (!fresh?.stages) return;
       for (const stage of fresh.stages) if (stage?.code) festStages.set(stage.code, stage);
+      // The troikas page broadcasts here when a troika's people or the
+      // Game's entrants change: the bouts carry the seat rosters, and the
+      // roster tab is drawn from them too.
+      rosterView = null;
+      scheduleResync();
       render();
     },
   }, {
@@ -955,7 +960,7 @@ function buildGridOf(only: SchemeStage[]): HTMLElement {
 function buildTab(tab: GameTab | undefined): HTMLElement {
   switch (tab?.kind) {
   case "roster":
-    return (rosterView ||= buildRosterView(route.festID));
+    return (rosterView ||= buildGameRosterView(route.apiBase || ""));
   case "stats":
     return buildStats();
   case "block":

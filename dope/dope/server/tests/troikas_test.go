@@ -3,9 +3,11 @@ package tests
 import (
 	"context"
 	"database/sql"
+	"slices"
 	"strings"
 	"testing"
 
+	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/roster"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
@@ -43,11 +45,11 @@ func TestTroikasAreAssembledFromFestPlayers(t *testing.T) {
 		t.Fatalf("troikas = %+v", troikas)
 	}
 	bobry, ezhi := troikas[0], troikas[1]
-	if bobry.Name != "Бобры" || strings.Join(bobry.Players, ", ") != "Иван Петров, Анна Сидорова, Ия Ли" || bobry.Team != "Альфа" {
+	if bobry.Name != "Бобры" || strings.Join(bobry.Players, ", ") != "Иван Петров, Анна Сидорова, Ия Ли" || bobry.HeadTeam != "Альфа" {
 		t.Fatalf("Бобры = %+v", bobry)
 	}
-	if ezhi.Team != "" {
-		t.Fatalf("Ежи have one Альфа player and count for nobody, got %q", ezhi.Team)
+	if ezhi.HeadTeam != "" {
+		t.Fatalf("Ежи have one Альфа player and count for nobody, got %q", ezhi.HeadTeam)
 	}
 
 	// The rules a host is told about.
@@ -136,4 +138,171 @@ func saveErr(t *testing.T, db *sql.DB, festID, id int64, in roster.AssembledInpu
 	defer tx.Rollback()
 	_, err = roster.SaveAssembledTx(t.Context(), tx, festID, id, in)
 	return err
+}
+
+// A troika's head team and зачёт are stored: a new troika takes the team that
+// holds two of its players and follows that team's зачёт, and the host can
+// pick another team or set the зачёт apart from it.
+func TestTroikaHeadTeamAndDivision(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	alpha := festTeamWithPlayers(t, db, festID, "Альфа", [][2]string{{"Иван", "Петров"}, {"Анна", "Сидорова"}})
+	beta := festTeamWithPlayers(t, db, festID, "Бета", [][2]string{{"Олег", "Кузнецов"}, {"Ян", "Ким"}})
+	festTeamFlag(t, db, alpha, "Студ")
+
+	var id int64
+	withTx(t, db, func(ctx context.Context, tx *sql.Tx) (err error) {
+		id, err = roster.SaveAssembledTx(ctx, tx, festID, 0, roster.AssembledInput{Name: "Смесь", Players: []string{"Иван Петров", "Анна Сидорова", "Ян Ким"}})
+		return err
+	})
+	troika := assembledByID(t, db, festID, id)
+	if troika.HeadTeamID != alpha || !troika.FollowsTeam() || strings.Join(troika.Flags, ",") != "Студ" {
+		t.Fatalf("new troika = %+v, want Альфа and its Студ", troika)
+	}
+
+	// The host moves it to Бета: it follows Бета's зачёт, which is none.
+	save := func(placement roster.AssembledPlacement) {
+		withTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+			_, err := roster.SaveAssembledTx(ctx, tx, festID, id, roster.AssembledInput{Name: "Смесь", Players: troika.Players, Placement: &placement})
+			return err
+		})
+	}
+	save(roster.AssembledPlacement{HeadTeamID: beta})
+	if troika = assembledByID(t, db, festID, id); troika.HeadTeam != "Бета" || len(troika.Flags) != 0 {
+		t.Fatalf("moved to Бета = %+v", troika)
+	}
+	// No team, but the student зачёт by the host's word.
+	stud := "Студ"
+	save(roster.AssembledPlacement{Division: &stud})
+	if troika = assembledByID(t, db, festID, id); troika.HeadTeamID != 0 || troika.FollowsTeam() || strings.Join(troika.Flags, ",") != "Студ" {
+		t.Fatalf("no team, Студ = %+v", troika)
+	}
+	// Pasted lines never touch what the dialog set.
+	withTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := roster.SaveAssembledTx(ctx, tx, festID, id, roster.AssembledInput{Name: "Смесь", Players: troika.Players})
+		return err
+	})
+	if troika = assembledByID(t, db, festID, id); troika.FollowsTeam() || strings.Join(troika.Flags, ",") != "Студ" {
+		t.Fatalf("after a plain save = %+v", troika)
+	}
+	if err := saveErr(t, db, festID, id, roster.AssembledInput{Name: "Смесь", Players: troika.Players, Placement: &roster.AssembledPlacement{HeadTeamID: 999}}); err == nil {
+		t.Fatal("a head team the fest does not have was accepted")
+	}
+}
+
+// A Тройка Game that declares a зачёт seats that зачёт's troikas and follows
+// them as they are added, moved or deleted, until something is entered in it.
+func TestTroikaGameFollowsItsDivision(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	alpha := festTeamWithPlayers(t, db, festID, "Альфа", [][2]string{{"А", "Один"}, {"А", "Два"}, {"А", "Три"}, {"А", "Четыре"}, {"А", "Пять"}, {"А", "Шесть"}, {"А", "Семь"}, {"А", "Восемь"}})
+	festTeamWithPlayers(t, db, festID, "Бета", [][2]string{{"Б", "Один"}, {"Б", "Два"}, {"Б", "Три"}, {"Б", "Четыре"}})
+	festTeamFlag(t, db, alpha, "Студ")
+
+	add := func(name string, players ...string) int64 {
+		var id int64
+		withTx(t, db, func(ctx context.Context, tx *sql.Tx) (err error) {
+			if id, err = roster.SaveAssembledTx(ctx, tx, festID, 0, roster.AssembledInput{Name: name, Players: players}); err != nil {
+				return err
+			}
+			_, err = gamebuild.SyncDivisionEntrantsTx(ctx, tx, festID, 0)
+			return err
+		})
+		return id
+	}
+	s1 := add("С1", "А Один", "А Два")
+	s2 := add("С2", "А Три", "А Четыре")
+	a1 := add("В1", "Б Один", "Б Два")
+	a2 := add("В2", "Б Три", "Б Четыре")
+
+	const scheme = "\n[scheme]\nkind: flat\nwritten: true\nthemes: 1\nletters: false\n"
+	// The picker's choice does not matter: the зачёт decides.
+	students := createSchemeGameFor(t, db, festID, "troika", "Тройка — студенты", "[init]\ndivision: Студ\n"+scheme, []int64{a1})
+	adults := createSchemeGameFor(t, db, festID, "troika", "Тройка — взрослые", "[init]\ndivision: -Студ\n"+scheme, nil)
+	expectEntrants := func(gameID int64, want ...int64) {
+		t.Helper()
+		if got := gameEntrants(t, db, gameID); !slices.Equal(got, want) {
+			t.Fatalf("game %d entrants = %v, want %v", gameID, got, want)
+		}
+		if got := matchSeatIDs(t, db, gameID, "s1-m1"); !slices.Equal(got, want) {
+			t.Fatalf("game %d отбор seats = %v, want %v", gameID, got, want)
+		}
+	}
+	expectEntrants(students, s1, s2)
+	expectEntrants(adults, a1, a2)
+
+	// A new student troika joins the student game.
+	s3 := add("С3", "А Пять", "А Шесть")
+	expectEntrants(students, s1, s2, s3)
+
+	// Out of the зачёт by the host's word: it moves to the adults.
+	none := ""
+	withTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+		if _, err := roster.SaveAssembledTx(ctx, tx, festID, s3, roster.AssembledInput{Name: "С3", Players: []string{"А Пять", "А Шесть"},
+			Placement: &roster.AssembledPlacement{HeadTeamID: alpha, Division: &none}}); err != nil {
+			return err
+		}
+		_, err := gamebuild.SyncDivisionEntrantsTx(ctx, tx, festID, 0)
+		return err
+	})
+	expectEntrants(students, s1, s2)
+	expectEntrants(adults, a1, a2, s3)
+
+	// A troika only a following game seats can still be deleted.
+	withTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+		if _, err := gamebuild.SyncDivisionEntrantsTx(ctx, tx, festID, s3); err != nil {
+			return err
+		}
+		return roster.DeleteAssembledTx(ctx, tx, festID, s3)
+	})
+	expectEntrants(adults, a1, a2)
+
+	// Once the отбор has results the student game stays as it is.
+	if _, err := db.Exec(`update matches set status = 'finished' where game_id = ?`, students); err != nil {
+		t.Fatal(err)
+	}
+	add("С4", "А Семь", "А Восемь")
+	expectEntrants(students, s1, s2)
+	divisionGames, err := gamebuild.LoadDivisionGames(t.Context(), db, festID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(divisionGames) != 2 || !divisionGames[0].Frozen || divisionGames[0].Current || len(divisionGames[0].Troikas) != 3 || !divisionGames[1].Current {
+		t.Fatalf("division games = %+v", divisionGames)
+	}
+
+	// A зачёт without a troika cannot make a game.
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	_, err = gamebuild.Create(t.Context(), tx, gamebuild.Spec{FestID: festID, Type: "troika", Label: "Тройка — школьники", DSL: "[init]\ndivision: Школ\n" + scheme})
+	if _, user := corei18n.AsUser(err); !user {
+		t.Fatalf("a game of an empty зачёт: %v", err)
+	}
+}
+
+func festTeamFlag(t *testing.T, db *sql.DB, teamID int64, short string) {
+	t.Helper()
+	if _, err := db.Exec(`insert into fest_team_flags(team_id, position, short, full) values(?, 1, ?, ?)`, teamID, short, short); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assembledByID(t *testing.T, db *sql.DB, festID, id int64) roster.Assembled {
+	t.Helper()
+	all, err := roster.LoadAssembled(t.Context(), db, festID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range all {
+		if a.ID == id {
+			return a
+		}
+	}
+	t.Fatalf("no troika %d", id)
+	return roster.Assembled{}
 }
