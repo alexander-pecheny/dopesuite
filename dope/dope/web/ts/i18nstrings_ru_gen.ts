@@ -1421,6 +1421,7 @@ shootout: true
     },
     sticker: {
       title: (name: string, n: string) => `${name}, Т${n}: стикер`,
+      x2Mark: () => "×2",
     },
     theme: {
       label: (n: string) => `Т${n}`,

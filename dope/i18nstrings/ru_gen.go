@@ -1915,7 +1915,8 @@ var RU = Strings{
 			Team:         func() string { return "Команда" },
 		},
 		Sticker: SiStickerStrings{
-			Title: func(name string, n string) string { return fmt.Sprintf("%s, Т%s: стикер", name, n) },
+			Title:  func(name string, n string) string { return fmt.Sprintf("%s, Т%s: стикер", name, n) },
+			X2Mark: func() string { return "×2" },
 		},
 		Theme: SiThemeStrings{
 			Label: func(n string) string { return fmt.Sprintf("Т%s", n) },

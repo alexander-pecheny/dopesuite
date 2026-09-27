@@ -54,6 +54,8 @@ const teamNameOverflow = createTeamNameOverflowController({
     cellSelector: ".results-team",
     nameSelector: ".results-team-name",
     truncatedClass: "results-team-truncated",
+    citySelector: ".results-team-city",
+    cityTruncatedClass: "results-team-city-truncated",
   },
 });
 // Antu accessories-notes SVG: tick removed, solid fills (no gradient IDs so
@@ -535,7 +537,7 @@ function buildResultsTableInner(): HTMLTableElement {
     if (rowIdx === rows.length - 1) classes.push("results-group-last");
     tr.className = classes.join(" ");
     tr.appendChild(td(row.placeText, "results-place"));
-    tr.appendChild(resultsTeamCell(row.name, {badges: teamBadges(row.index)}));
+    tr.appendChild(resultsTeamCell(row.name, {city: ksi.participantCity(state!, row.index), badges: teamBadges(row.index)}));
     tr.appendChild(td(row.metrics.total, "results-num total-cell results-total"));
     tr.appendChild(td(row.metrics.plus, "results-num"));
     for (const value of RESULT_VALUES) {
@@ -745,6 +747,9 @@ function stickerSelectCell(playerIndex: number, themeIndex: number): HTMLElement
   icon.innerHTML = STICKER_ICON_SVG;
   icon.hidden = true;
 
+  const mark = document.createElement("span");
+  mark.className = "ksi-sticker-mark";
+
   const select = document.createElement("select");
   select.className = "ksi-sticker-select";
   select.dataset.player = String(playerIndex);
@@ -766,6 +771,7 @@ function stickerSelectCell(playerIndex: number, themeIndex: number): HTMLElement
   const current = stickerValue(playerIndex, themeIndex);
   select.value = current;
   wrap.appendChild(icon);
+  wrap.appendChild(mark);
   wrap.appendChild(select);
   cell.appendChild(wrap);
   applyStickerColor(select, current);
@@ -777,6 +783,8 @@ function applyStickerColor(select: HTMLSelectElement, stickerId: string): void {
   const wrap = select.closest(".ksi-sticker-wrap");
   const icon = wrap?.querySelector<HTMLElement>(".ksi-sticker-icon");
   const svg = icon?.querySelector("svg");
+  const mark = wrap?.querySelector<HTMLElement>(".ksi-sticker-mark");
+  if (mark) mark.textContent = type && stickerId === "x2" ? S.si.sticker.x2Mark() : "";
   if (type && type.color) {
     if (svg) {
       // Main face = exact picked colour; peel corner = a shade darker.

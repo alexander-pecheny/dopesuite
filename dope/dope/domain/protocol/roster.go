@@ -276,7 +276,7 @@ func chgkTeamsFromRoster(teams []RosterTeam) []ChgkTeamJSON {
 func teamParticipantsFromRoster(teams []RosterTeam) []games.KSIParticipant {
 	out := make([]games.KSIParticipant, 0, len(teams))
 	for _, team := range teams {
-		out = append(out, games.KSIParticipant{Number: int(team.Number), Name: team.Name, Flags: team.Flags})
+		out = append(out, games.KSIParticipant{Number: int(team.Number), Name: team.Name, City: team.City, Flags: team.Flags})
 	}
 	return out
 }

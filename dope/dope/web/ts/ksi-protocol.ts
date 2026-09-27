@@ -34,7 +34,7 @@ export interface KSIScheme {
 // Participants are {number, name} objects in team mode — the Number is the
 // universal team identity — and bare name strings in player mode and legacy
 // states. Every reader takes either shape.
-export type ParticipantEntry = string | {number?: unknown; name?: unknown; flags?: unknown} | null | undefined;
+export type ParticipantEntry = string | {number?: unknown; name?: unknown; city?: unknown; flags?: unknown} | null | undefined;
 
 export interface KSIState {
   participants: ParticipantEntry[];
@@ -147,6 +147,13 @@ export function participantName(state: KSIState, index: number): string {
 export function participantNumber(state: KSIState, index: number): number {
   const p = state.participants?.[index];
   return p && typeof p === "object" ? Number(p.number) || 0 : 0;
+}
+
+// participantCity is a team's town, "" for a player-mode game and for a
+// participant stored before towns were.
+export function participantCity(state: KSIState, index: number): string {
+  const p = state.participants?.[index];
+  return p && typeof p === "object" && typeof p.city === "string" ? p.city : "";
 }
 
 // participantFlags is the Divisions a team carries, by short name (ADR-0020).
