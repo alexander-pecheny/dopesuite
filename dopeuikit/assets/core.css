@@ -57,6 +57,8 @@
   unicode-range: U+231A-231B, U+23E9-23EA, U+23ED-23EF, U+23F1-23F3, U+23F8-23FA, U+25B6, U+25C0, U+2713-2714, U+2716-2717;
 }
 
+/* calt is stripped from this file: its // and || ligatures overhang their cell,
+   and Chromium on Windows clipped the earlier characters out of sight (xy #92). */
 @font-face {
   font-family: "JetBrains Mono";
   font-style: normal;
