@@ -1399,6 +1399,7 @@ export type Strings = {
     };
     sticker: {
       title: (name: string, n: string) => string;
+      x2Mark: () => string;
     };
     theme: {
       label: (n: string) => string;

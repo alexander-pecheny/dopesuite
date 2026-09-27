@@ -31,6 +31,9 @@ answer_title = '{{.name}}, Т{{.n}}, {{.value}}'
 [sticker]
 # The sticker dropdown's tooltip on the «Подробно» sheet: the team, the theme.
 title = '{{.name}}, Т{{.n}}: стикер'
+# Printed on the ×2 sticker itself. The other stickers carry no mark: their
+# colour says which one it is.
+x2_mark = "×2"
 
 [battle]
 # The solo sheet: the battle title when the scheme does not name it, and the

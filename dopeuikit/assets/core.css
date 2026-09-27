@@ -1364,15 +1364,12 @@ input[type="radio"]:focus-visible {
   color: var(--muted);
 }
 
-/* Ancestors are the first to give up room; the current page keeps its share. */
+/* Phones: the trail runs at the body size. Ancestors still give up room first
+   (flex-shrink above), but only when the line is actually full. */
 @media (max-width: 640px) {
   .crumbs {
     font-size: var(--text-base);
     gap: var(--space-1-5);
-  }
-
-  .crumbs .crumb:not(.crumb-current):not(.crumb-home) {
-    max-width: 6ch;
   }
 }
 
