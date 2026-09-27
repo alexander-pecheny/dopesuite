@@ -1519,19 +1519,23 @@
    label IS the control. Styled as the label it replaces — a select that looks
    like a heading until you reach for it. */
 select.fld-label-select {
+  /* the native select keeps an inner padding no rule can remove, which set the
+     caption a few pixels right of every other label; drawn by hand, it starts
+     where they do, and the chevron sits right after the text */
+  appearance: none;
+  -webkit-appearance: none;
+  field-sizing: content;
   font: inherit;
   font-size: var(--text-sm);
   font-weight: var(--fw-semibold);
   color: var(--muted);
-  background: none;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  padding: 0 var(--space-1);
+  border: 0;
+  margin: 0;
+  padding: 0 1.1em 0 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%238a8f98' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E") no-repeat right center / 0.85em;
   cursor: var(--cursor-action);
 }
-/* its padding and border would indent the caption past the other labels */
-.fld-head > select.fld-label-select { padding-left: 0; margin-left: -1px; }
-select.fld-label-select:hover, select.fld-label-select:focus { border-color: var(--border); color: var(--text); }
+select.fld-label-select:hover, select.fld-label-select:focus-visible { color: var(--text); }
 .fld-rm, .fld-row-rm, .fld-tag-rm {
   border: none; background: transparent; color: var(--muted);
   font-size: var(--text-base); line-height: 1; cursor: var(--cursor-action);
