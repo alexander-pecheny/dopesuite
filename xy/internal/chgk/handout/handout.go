@@ -25,16 +25,17 @@ var headerTemplate string
 
 const (
 	greytextTmpl  = "#qlabel[<GREYTEXT>]"
-	celllabelTmpl = "clabel[<CELLLABEL>]"
+	celllabelTmpl = ", label: [<CELLLABEL>]"
 	qgapTmpl      = "#qgap()"
 	imgTmpl       = `image("<IMGPATH>", width: <IMGWIDTH>)`
 
-	defaultFont   = "Noto Sans"
-	defaultTikzMM = 2.0 // DEFAULT_TIKZ_MM (int 2 in Python)
-	space         = 1.5 // SPACE (mm, between teams)
-	labelAbove    = 2.0 // LABEL_ABOVE
-	labelBelow    = 0.6 // LABEL_BELOW
-	strutEM       = 1.2 // STRUT_EM
+	defaultFont     = "Noto Sans"
+	defaultFontSize = 14
+	defaultTikzMM   = 2.0 // DEFAULT_TIKZ_MM (int 2 in Python)
+	space           = 1.5 // SPACE (mm, between teams)
+	labelAbove      = 2.0 // LABEL_ABOVE
+	labelBelow      = 0.9 // LABEL_BELOW
+	strutEM         = 1.2 // STRUT_EM
 )
 
 // Args mirrors the chgksuite handout CLI flags xy relies on (ru defaults).
@@ -46,7 +47,7 @@ type Args struct {
 	MarginLeft   int
 	MarginRight  int
 	Font         string   // "" → defaultFont
-	FontSize     int      // 14
+	FontSize     int      // 0 → 14, unless the preamble or the handout sets one
 	BoxWidth     *float64 // nil → computed
 	TikzMM       *float64 // nil → defaultTikzMM (int 2)
 	// Resize governs split_fit's image-shrink pass; it is read there only.
@@ -75,7 +76,6 @@ func DefaultArgs() Args {
 	return Args{
 		PaperWidth: 210, PaperHeight: 297,
 		MarginTop: 5, MarginBottom: 5, MarginLeft: 5, MarginRight: 5,
-		FontSize: 14,
 		Resize: ResizeConfig{
 			BottomSpaceRowRatio: 0.6, ShrinkPercent: 2, MinResizeImage: 0.6,
 			RefineIterations: 8,
@@ -245,6 +245,13 @@ func (a Args) font() string {
 	return defaultFont
 }
 
+func (a Args) fontSize() int {
+	if a.FontSize == 0 {
+		return defaultFontSize
+	}
+	return a.FontSize
+}
+
 func (a Args) header() string {
 	r := strings.NewReplacer(
 		"<PAPERWIDTH>", strconv.Itoa(a.PaperWidth),
@@ -254,7 +261,7 @@ func (a Args) header() string {
 		"<MARGIN_TOP>", strconv.Itoa(a.MarginTop),
 		"<MARGIN_BOTTOM>", strconv.Itoa(a.MarginBottom),
 		"<FONT>", a.font(),
-		"<FONTSIZE>", strconv.Itoa(a.FontSize),
+		"<FONTSIZE>", strconv.Itoa(a.fontSize()),
 		"<LABEL_ABOVE>", pyFloat(labelAbove),
 		"<LABEL_BELOW>", pyFloat(labelBelow),
 	)
@@ -329,7 +336,7 @@ func (a Args) generateForQuestion(num string) string {
 func (a Args) labels() i18n.Labels { return i18n.LabelsForOrDefault(a.Language, a.LabelsFile) }
 
 func (a Args) buildCellBody(b block) string {
-	fs := pynum{float64(a.FontSize), true}
+	fs := pynum{float64(a.fontSize()), true}
 	if f, ok := b.floatVal("font_size"); ok {
 		fs = pynum{f, false}
 	}
@@ -371,9 +378,6 @@ func (a Args) buildCellBody(b block) string {
 	default:
 		body = wrapText("")
 	}
-	if label := a.insideLabel(b); label != "" {
-		return fmt.Sprintf("stack(dir: ttb, spacing: 1mm, %s, %s)", label, body)
-	}
 	return body
 }
 
@@ -387,7 +391,7 @@ func (a Args) insideLabel(b block) string {
 	if !ok || num == "" {
 		return ""
 	}
-	return strings.Replace(celllabelTmpl, "<CELLLABEL>", a.labels().Field("question")+" "+num, 1)
+	return a.labels().Field("question") + " " + num
 }
 
 func (a Args) generateRegularBlock(b block) string {
@@ -428,7 +432,7 @@ func (a Args) generateRegularBlock(b block) string {
 		cellw = pynum{round3((availableWidth - float64(nTeamCols-1)*gap.f) / float64(columns)), false}
 	}
 	pad := a.effectiveTikzMM(b)
-	fsf := float64(a.FontSize)
+	fsf := float64(a.fontSize())
 	if f, ok := b.floatVal("font_size"); ok {
 		fsf = f
 	}
@@ -438,9 +442,13 @@ func (a Args) generateRegularBlock(b block) string {
 	if nc, ok := b.intVal("no_center"); ok && nc != 0 {
 		centered = "false"
 	}
-	return fmt.Sprintf("#handout(%d, %d, %d, %d, %smm, %smm, %smm, %smm, %s, %s, %s)",
+	label := a.insideLabel(b)
+	if label != "" {
+		label = strings.Replace(celllabelTmpl, "<CELLLABEL>", label, 1)
+	}
+	return fmt.Sprintf("#handout(%d, %d, %d, %d, %smm, %smm, %smm, %smm, %s, %s, %s%s)",
 		columns, numRows, teamCols, teamRows, gap, cellw, pad, strut,
-		strconv.FormatBool(teamed), centered, cellbody)
+		strconv.FormatBool(teamed), centered, cellbody, label)
 }
 
 // GenerateTyp parses a .hndt source and returns the full .typ document, matching

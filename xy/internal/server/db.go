@@ -724,6 +724,32 @@ create unique index if not exists idx_tour_declarations_list
 create unique index if not exists idx_tour_declarations_group
   on tour_declarations(group_id) where group_id is not null;
 create index if not exists idx_tour_declarations_board on tour_declarations(board_id);`)},
+	// v27 admits the handouts_preamble card: a tour's ///preamble block for
+	// the handouts panel, kept as a card so it travels with its list. Rebuilt the
+	// way v24 widened the same CHECK.
+	{Version: 27, Name: "cards.kind handouts_preamble", Up: schema.Exec(`
+pragma foreign_keys=off;
+create table cards_v27(
+  id integer primary key,
+  board_id integer not null references boards(id) on delete cascade,
+  list_id integer not null references lists(id) on delete cascade,
+  kind text not null check (kind in ('normal','question','test','meta','heading','other','theme','handouts_preamble')) default 'normal',
+  description_enc blob not null,
+  rank text not null,
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text,
+  handout_meta_enc blob,
+  alias_enc blob,
+  seen_enc blob
+);
+insert into cards_v27(id, board_id, list_id, kind, description_enc, rank, created_at, updated_at, deleted_at, handout_meta_enc, alias_enc, seen_enc)
+  select id, board_id, list_id, kind, description_enc, rank, created_at, updated_at, deleted_at, handout_meta_enc, alias_enc, seen_enc from cards;
+drop table cards;
+alter table cards_v27 rename to cards;
+create index if not exists idx_cards_list on cards(list_id);
+create index if not exists idx_cards_board on cards(board_id);
+pragma foreign_keys=on;`)},
 }
 
 func migrate(db *sql.DB) error { return schema.Apply(db, migrations) }

@@ -319,14 +319,13 @@ export type Strings = {
       extraMaxWidth: () => string;
       extraPadding: () => string;
       extraPerTeam: () => string;
+      extraQuestionLabel: () => string;
       extraRemove: () => string;
       extraResizeImage: () => string;
       extraRotate: () => string;
       extraVspace: () => string;
       fieldColumns: () => string;
       fieldImageLabel: () => string;
-      fieldInside: () => string;
-      fieldInsideTitle: () => string;
       fieldQuestion: () => string;
       fieldRows: () => string;
       fieldRowsTitle: () => string;
@@ -334,9 +333,15 @@ export type Strings = {
       generateFailed: (reason: string) => string;
       groupingHorizontal: () => string;
       groupingVertical: () => string;
+      labelAbove: () => string;
+      labelInside: () => string;
       menuGroup: () => string;
       moreTitle: () => string;
       pdfOffline: () => string;
+      preambleAdd: () => string;
+      preambleAddTitle: () => string;
+      preambleRemove: () => string;
+      preambleTitle: () => string;
       rotateLeft: () => string;
       rotateRight: () => string;
       sourceEmpty: () => string;
@@ -731,6 +736,7 @@ export type Strings = {
     };
     kind: {
       changed: () => string;
+      handoutsPreamble: () => string;
     };
     labels: {
       empty: () => string;
@@ -1248,6 +1254,7 @@ export type Strings = {
       packMultiple: () => string;
       packNoGrid: () => string;
       packNone: () => string;
+      preambleSetting: (line: string) => string;
       rotateImageMissing: (name: string) => string;
     };
     handoutList: {

@@ -20,6 +20,7 @@ import { xyTypo } from "./typo.js";
 import { parseSession, serializeSession } from "./sessions.js";
 import { normalizeAlias, xyCardDraft } from "./carddraft.js";
 import { xyRank } from "./rank.js";
+import { xyHndt } from "./hndt.js";
 import { byRank, rankForSlot } from "./dragrank.js";
 import type { BoardKeymeta, DataKey } from "./crypto.js";
 import type { CardFields, CopyTarget, Handout } from "./chgk.js";
@@ -403,6 +404,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // Both card kinds that hold question fields get the Fields tab; a theme fills it
   // with a ladder of them instead of one.
   function fieldsAvailable(): boolean { return draftKind() === "question" || isTheme(); }
+  // A handouts preamble is .hndt, not 4s: it has only its text, and no preview.
+  function isPreamble(): boolean { return draftKind() === xyHndt.PREAMBLE_KIND; }
 
   // boardAuthors / boardSources collect the author names and source lines already
   // used across the board's question cards (deduped, sorted) — the autocomplete
@@ -516,6 +519,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     captureDraft();
     // A non-question card has no fields view, so it falls back to the text view.
     if (view === "fields" && !fieldsAvailable()) view = "text";
+    if (view === "preview" && isPreamble()) view = "text";
     cardView = view;
     if (view !== "preview") lastEditView = view;
     ui.viewPreview.hidden = view !== "preview";
@@ -527,12 +531,12 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // Nothing to preview until the card has content; the tab appears as soon as
     // it does, so the flag needs no clearing.
     tabBtn("preview").hidden = freshCard && !draft.desc.trim();
-    ui.viewTabs.hidden = false;
+    ui.viewTabs.hidden = isPreamble();
     // (the save button's visibility is refreshSaveState's alone — see the end of
     // this function — because it depends on more than the view)
     // The tools edit text, so they follow the two edit views. →.4s additionally
     // needs the raw 4s editor it types into.
-    ui.editTools.hidden = view === "preview";
+    ui.editTools.hidden = view === "preview" || isPreamble();
     ui.addVersion.hidden = !fieldsAvailable() || isTheme();
     ui.addSlot.hidden = view !== "fields" || !isTheme();
     renderVersionTabs();
@@ -1177,9 +1181,10 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     cardAliasEl.value = openAlias || "";
     cardDescEl.value = xyVersions.versionBody(card.desc, 0);
     cardMessageEl.textContent = "";
-    cardKindEl.hidden = false;
     cardKindEl.value = card.kind || "question";
-    ui.title.hidden = true;
+    cardKindEl.hidden = isPreamble();
+    ui.title.hidden = !isPreamble();
+    ui.title.textContent = isPreamble() ? S.card.kind.handoutsPreamble() : "";
     // The "copy for testing" action only makes sense for question cards (it shares
     // the numbered, screen-mode question text); hide it otherwise.
     ui.copy.hidden = card.kind !== "question" && card.kind !== "theme";

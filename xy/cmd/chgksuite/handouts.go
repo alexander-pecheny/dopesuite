@@ -94,7 +94,7 @@ func handoutArgs(fs *flagSet) func() (handout.Args, string, error) {
 		"which labels the printed captions use: "+strings.Join(i18n.Languages(), ", "))
 	labelsFile := fs.String("labels_file", "", "a labels TOML of your own, in place of the language's")
 	font := fs.String("font", override("font", ""), "font family; empty is the bundled Noto Sans")
-	fs.IntVar(&a.FontSize, "font_size", a.FontSize, "font size, pt")
+	fs.IntVar(&a.FontSize, "font_size", 0, "font size, pt (14 unless the preamble or the handout sets one)")
 	fs.IntVar(&a.PaperWidth, "paperwidth", a.PaperWidth, "paper width, mm")
 	fs.IntVar(&a.PaperHeight, "paperheight", a.PaperHeight, "paper height, mm")
 	fs.IntVar(&a.MarginTop, "margin_top", a.MarginTop, "top margin, mm")

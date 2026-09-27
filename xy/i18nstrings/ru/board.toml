@@ -369,8 +369,6 @@ tab_fields = "Поля"
 tab_text = "Формат .hndt"
 # The form, one box per handout.
 field_question = "Вопрос"
-field_inside = "внутри"
-field_inside_title = "Печатать номер вопроса на каждой раздатке, чтобы он остался на разрезанных листках"
 field_columns = "Столбцов"
 field_rows = "Строк"
 field_rows_title = "Если пусто, одна строка. Split-fit подбирает число строк сам."
@@ -383,6 +381,9 @@ field_image_label = "Картинка"
 # The ⋯ button of a handout box and the settings it adds, one row each.
 more_title = "Ещё настройки"
 extra_remove = "Убрать настройку"
+extra_question_label = "Номер вопроса"
+label_inside = "на каждой раздатке"
+label_above = "над раздатками"
 extra_font_size = "Размер шрифта, пт"
 extra_font_family = "Шрифт"
 extra_resize_image = "Масштаб картинки"
@@ -400,6 +401,12 @@ color_no = "нет"
 extra_padding = "Отступ в ячейке, мм"
 extra_hspace = "Промежуток по горизонтали, мм"
 extra_vspace = "Промежуток по вертикали, мм"
+# The preamble: defaults for every handout of the tour, kept as a card on top
+# of its list.
+preamble_title = "Общие настройки"
+preamble_add = "+ Общие настройки"
+preamble_add_title = "Настройки по умолчанию для всех раздаток тура"
+preamble_remove = "Убрать общие настройки"
 # The form when the .hndt has no handouts in it.
 fields_empty = "Раздаток нет. Добавить их можно в формате .hndt."
 # Split-fit button tooltip.

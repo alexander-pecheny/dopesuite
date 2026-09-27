@@ -85,7 +85,11 @@ func RenderSVG(ctx context.Context, hndt string, images map[string][]byte, a Arg
 }
 
 func prepare(ctx context.Context, hndt string, images map[string][]byte, a Args, ts Typesetter) (string, error) {
-	hndt, images, err := ApplyRotation(hndt, images)
+	hndt, err := ApplyPreamble(hndt, a)
+	if err != nil {
+		return "", err
+	}
+	hndt, images, err = ApplyRotation(hndt, images)
 	if err != nil {
 		return "", err
 	}

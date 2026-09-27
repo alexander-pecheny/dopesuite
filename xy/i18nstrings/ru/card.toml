@@ -145,6 +145,8 @@ copied = "Скопировано."
 [kind]
 # Message line after the kind <select> changes the card's kind.
 changed = "Тип изменён."
+# What the board and the card editor call a tour's handouts preamble card.
+handouts_preamble = "Преамбула раздаток"
 
 [save]
 # Message line after a successful save; the dirty-state check clears it by

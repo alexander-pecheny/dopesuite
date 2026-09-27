@@ -59,12 +59,32 @@
 // fixes the shared row height to max(content height, strut) + padding. `pad`
 // (cell inset) and `strut` (single-line floor) scale per block. `teamed` is
 // false when the sheet can't be cut into teams, giving an all-dashed block.
-#let handout(ncols, nrows, tcols, trows, gap, cellw, pad, strut, teamed, centered, cellbody) = context {
+//
+// `label` is the grey «Вопрос N» of `question_label: inside`, so a handout
+// carries its question number after it is cut out. It is small and pinned into
+// the cell's top-left corner, over the cell's own padding, whatever the cell
+// does with its content, so it sits at the same place in every block and costs
+// little room. A centred body that leaves that corner free shares the top line
+// with it; any other body starts below it.
+#let handout(ncols, nrows, tcols, trows, gap, cellw, pad, strut, teamed, centered, cellbody, label: none) = context {
   let ntc = int(ncols / tcols)
   let ntr = int(nrows / trows)
   let border = if teamed { _solid } else { _dashed }
-  let rowh = calc.max(measure(box(width: cellw - 2 * pad, cellbody)).height, strut) + 2 * pad
-  let cell = move(dy: -_ink_shift(cellbody, cellw - 2 * pad), cellbody)
+  let w = cellw - 2 * pad
+  let lbl = if label != none { text(fill: gray, size: 7pt, label) }
+  let body = if lbl == none { cellbody } else {
+    let b = measure(cellbody, width: w)
+    let l = measure(lbl)
+    let beside = centered and b.width + 2 * l.width + 2mm <= w
+    if beside { cellbody } else {
+      block(width: 100%, inset: (top: calc.max(0pt, l.height + 1.2mm - pad)), cellbody)
+    }
+  }
+  let rowh = calc.max(measure(box(width: w, body)).height, strut) + 2 * pad
+  let cell = {
+    if lbl != none { place(top + left, dx: 0.5mm - pad, dy: 0.3mm - pad, lbl) }
+    move(dy: -_ink_shift(body, w), body)
+  }
   let one = _team(border, tcols, trows, cellw, rowh, pad, centered, (cell,) * (tcols * trows))
   // Left-aligned so the block's left edge lines up with the grey label above it;
   // gaps separate the teams (cells within a team stay flush).
@@ -78,15 +98,8 @@
 
 // Small grey caption sitting just above (and left-aligned with) its block; it is
 // sticky so a page break never orphans it from the handout beneath it.
-#let qlabel(body) = block(above: 2.0mm, below: 0.6mm,
-  sticky: true, text(fill: gray, size: 9pt, body))
-
-// The same caption printed inside each cell instead (`question_label: inside`),
-// so a handout carries its question number after it is cut out. It is left in
-// its cell whatever the handout does: the cell centres its content when the
-// block is centred, and a centred «Вопрос N» reads as part of the раздатка
-// rather than as the label of it. Full width, so align has something to bite.
-#let clabel(body) = block(width: 100%, align(left, text(fill: gray, size: 9pt, body)))
+#let qlabel(body) = block(above: 2.0mm, below: 0.9mm,
+  sticky: true, text(fill: gray, size: 7pt, body))
 
 // A block with its number inside prints no caption above it, so nothing would
 // keep it off the block before it; this leaves the caption's air instead, and

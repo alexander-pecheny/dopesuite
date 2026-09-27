@@ -21,6 +21,9 @@ pack_none = "в файле нет раздаток"
 pack_no_grid = "нет columns или rows: pack берёт только файлы после split_fit"
 # The `rotate:` block key (handout/rotate.go): the picture to turn is missing.
 rotate_image_missing = 'rotate: нет картинки "{{.name}}"'
+# A line in the ///preamble block that is not a setting it may hold
+# (handout/preamble.go).
+preamble_setting = 'в преамбуле может быть только настройка, кроме for_question, image, columns и rows: "{{.line}}"'
 
 [handout_list]
 # The _handouts_list.txt report `handouts generate` writes when asked to list

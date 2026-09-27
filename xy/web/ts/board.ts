@@ -797,6 +797,7 @@ function forgetCardLabels(deletedCards: BoardCard[]): void {
 // to identify this card at a glance, so it beats any derivation from the text.
 // state.cardTitle is the reader's fallback preference — question text or answer.
 const cardBody = (card: BoardCard): string =>
+  card.kind === xyHndt.PREAMBLE_KIND ? S.card.kind.handoutsPreamble() :
   aliasOf(card) || deriveTitle(xyChgk.previewText(card.kind, card.desc, state.cardTitle), Infinity);
 
 // aliasOf normalizes a card's alias to a non-empty string or "" (absent cards,
@@ -1206,7 +1207,7 @@ async function previewList(list: BoardList, wholeGroup = false): Promise<void> {
   // the way exportSource folds it — every wording page-broken under one number.
   // (The card editor's Preview is the other thing: there you are reading ONE
   // version, so it renders the body it is handed.)
-  const cards = scopeLists.flatMap((l) => cardsOf(l.id))
+  const cards = scopeLists.flatMap((l) => cardsOf(l.id)).filter((c) => c.kind !== xyHndt.PREAMBLE_KIND)
     .map((c) => (xyVersions.versionCount(c.desc) > 1 ? { ...c, desc: xyVersions.composeVersions(c.desc) } : c));
   const title = byId("previewTitle");
   if (group) title.replaceChildren(...iconed("link", group.name || S.board.list.groupFallback()));
