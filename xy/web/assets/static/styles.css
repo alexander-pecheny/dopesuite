@@ -1676,6 +1676,7 @@ textarea.fld-src {
    height so «Скачать» appearing doesn't push the PDF down out of line. */
 .handouts-doc .handouts-pane { gap: var(--space-3); }
 .handouts-doc .section-label { margin: 0; }
+.handouts-src { padding-bottom: 0; }
 #handoutsActions { position: sticky; bottom: 0; z-index: 1; background: var(--surface); padding-block: var(--space-2); }
 .handouts-doc .handouts-pane > .u-row:first-child { min-height: var(--control-h-sm); }
 /* The frame fills its box via absolute inset, not flex + height:100% — a

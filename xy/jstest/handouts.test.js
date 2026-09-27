@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fakeBoard, installDOM } from "./dom.js";
 
-const p = installDOM(["handoutsOverlay", "handoutsSource", "handoutsFields", "handoutsTabFields", "handoutsTabText", "handoutsMessage", "handoutsGenerate", "handoutsSplitFit", "handoutsPdf", "handoutsDownload", "handoutsClose"]);
+const p = installDOM(["handoutsOverlay", "handoutsSource", "handoutsFields", "handoutsTabFields", "handoutsTabText", "handoutsMessage", "handoutsSplitFit", "handoutsPdf", "handoutsDownload", "handoutsClose"]);
 p.node("handoutsOverlay").hidden = true;
 p.node("handoutsSource").tag = "textarea";
 const requests = [];
@@ -20,7 +20,7 @@ const cards = [
 ];
 const scope = { list: { id: 1, title: "Тур 1", rank: "a", groupId: null }, grouped: false, group: null, lists: [], cards, title: "Тур 1" };
 
-test("opening writes the .hndt of the scope into the editor and pre-stages its images; closing persists edited settings", async () => {
+test("opening writes the .hndt of the scope into the editor, stages its images once and renders the preview; closing persists edited settings", async () => {
   const board = fakeBoard({ name: "Доска", cards });
   const panel = createHandoutsPanel(board, { appendImages: async (fd, _cards, wanted) => new Set(wanted), cardAttachments: async () => [] });
   panel.open(scope);
@@ -28,7 +28,7 @@ test("opening writes the .hndt of the scope into the editor and pre-stages its i
   assert.equal(p.node("handoutsSource").value, "for_question: 1\ncolumns: 3\n\nimage: pic.png\n---\nfor_question: 3\ncolumns: 2\n\nтекст");
   assert.equal(p.node("handoutsMessage").textContent, "");
   await new Promise((r) => setTimeout(r, 0));
-  assert.deepEqual(requests.map((r) => r[0]), ["/api/handouts/stage"], "the referenced image is staged once on open");
+  assert.deepEqual(requests.map((r) => r[0]), ["/api/handouts/stage", "/api/handouts/pdf"], "the image is staged once and the preview renders on open");
   // The editor changes question 3's layout; leaving writes it to the card — and
   // the default it filled in for question 1, which had none, becomes that card's.
   p.node("handoutsSource").value = p.node("handoutsSource").value.replace("columns: 2", "columns: 4\nfont_size: 12");

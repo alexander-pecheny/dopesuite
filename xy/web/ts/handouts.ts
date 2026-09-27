@@ -47,6 +47,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     // split_fit generation doesn't pay the gather+upload, and start heartbeating.
     handoutSession.ensure(source).catch(() => {});
     handoutSession.startHeartbeat();
+    void refreshPreview();
   }
 
   // ---- the fields view: the .hndt as a form ----
@@ -67,7 +68,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
 
   function renderFields(): void {
     const blocks = xyHndt.parseHndtForm(sourceEl.value);
-    const write = (): void => { sourceEl.value = xyHndt.composeHndtForm(blocks); };
+    const write = (): void => { sourceEl.value = xyHndt.composeHndtForm(blocks); schedulePreview(); };
     const shown = blocks.filter((b) => !b.blank);
     if (!shown.length) {
       fieldsEl.replaceChildren(el("p", { class: "hint", text: S.board.handouts.fieldsEmpty() }));
@@ -246,10 +247,30 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
   }
 
   async function hideHandouts(): Promise<void> {
+    if (previewTimer) clearTimeout(previewTimer);
     void handoutSession.close(); // stop heartbeat + delete the staged images server-side
     await persistHandoutMeta();
     clearHandoutsPdf();
     handoutsCtx = null;
+  }
+
+  // The preview follows the text: two seconds after the last edit it is typeset
+  // again, and an edit made while a render runs queues exactly one more.
+  let previewTimer: ReturnType<typeof setTimeout> | null = null;
+  let rendering = false;
+  let renderAgain = false;
+
+  function schedulePreview(): void {
+    if (previewTimer) clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => { void refreshPreview(); }, 2000);
+  }
+
+  async function refreshPreview(): Promise<void> {
+    if (previewTimer) { clearTimeout(previewTimer); previewTimer = null; }
+    if (rendering) { renderAgain = true; return; }
+    rendering = true;
+    try { await generateHandoutsPdf(); } finally { rendering = false; }
+    if (renderAgain) { renderAgain = false; void refreshPreview(); }
   }
 
   async function generateHandoutsPdf(): Promise<void> {
@@ -257,11 +278,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     if (!xySync.requireOnline(S.board.handouts.pdfOffline(), byId("handoutsMessage"))) return;
     const source = byId<HTMLTextAreaElement>("handoutsSource").value;
     const msg = byId("handoutsMessage");
-    if (!source.trim()) { msg.textContent = S.board.handouts.sourceEmpty(); return; }
-    const btn = byId<HTMLButtonElement>("handoutsGenerate");
-    btn.disabled = true;
-    msg.textContent = S.board.handouts.generating();
-    clearHandoutsPdf();
+    if (!source.trim()) { clearHandoutsPdf(); msg.textContent = S.board.handouts.sourceEmpty(); return; }
     try {
       const fd = await handoutsBody(source);
       const [res, pagesNode] = await Promise.all([
@@ -271,6 +288,8 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
       if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
       const name = handoutFileBase() + ".pdf";
       const blob = await res.blob();
+      if (!handoutsCtx) return; // closed while it rendered
+      clearHandoutsPdf();
       handoutsPdfUrl = await namedUrl(blob, name);
       byId("handoutsPdf").replaceChildren(pagesNode || el("iframe", { class: "handouts-pdf-frame", src: handoutsPdfUrl, title: "PDF" }));
       // Only the preview needs /dl/ (the viewer's Save name); Chromium re-issues a
@@ -280,11 +299,9 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
       dl.href = handoutsDlUrl;
       dl.setAttribute("download", name);
       dl.hidden = false;
-      msg.textContent = S.board.handouts.generated();
+      msg.textContent = "";
     } catch (err) {
       msg.textContent = S.board.handouts.generateFailed(errMsg(err));
-    } finally {
-      btn.disabled = false;
     }
   }
 
@@ -384,11 +401,10 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     }
   }
 
-  byId("handoutsGenerate").addEventListener("click", () => { void generateHandoutsPdf(); });
-  // Edit the .hndt, regenerate, look: Cmd/Ctrl-Enter is that loop without the trip
-  // to the button.
-  onCmdEnter(byId("handoutsSource"), () => byId("handoutsGenerate").click());
-  onCmdEnter(byId("handoutsFields"), () => byId("handoutsGenerate").click());
+  sourceEl.addEventListener("input", schedulePreview);
+  // Cmd/Ctrl-Enter skips the wait.
+  onCmdEnter(sourceEl, () => { void refreshPreview(); });
+  onCmdEnter(fieldsEl, () => { void refreshPreview(); });
   byId("handoutsSplitFit").addEventListener("click", () => { void generateSplitFitZip(); });
 
 

@@ -384,12 +384,9 @@ var RU = Strings{
 			FieldsEmpty: func() string {
 				return "Раздаток нет. Добавить их можно в формате .hndt."
 			},
-			Generate: func() string { return "Сгенерировать PDF" },
 			GenerateFailed: func(reason string) string {
 				return fmt.Sprintf("Не удалось сгенерировать: %s", reason)
 			},
-			Generated:       func() string { return "Готово." },
-			Generating:      func() string { return "Генерация…" },
 			MenuGroup:       func() string { return "Вёрстка раздаток (вся группа)" },
 			PdfOffline:      func() string { return "Генерация PDF доступна только онлайн." },
 			SourceEmpty:     func() string { return "Пустой источник." },

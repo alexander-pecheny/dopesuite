@@ -363,7 +363,6 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
         editor id="handoutsSource" kind="handouts" spellcheck="false" aria-label=@board.handouts.src_label
         -- pinned to the pane's bottom edge: a long form must not scroll them away
         row id="handoutsActions" gap="sm" align="center" wrap
-          button small id="handoutsGenerate" @board.handouts.generate
           button small kind="ghost" id="handoutsSplitFit" title=@board.handouts.splitfit_title "Split-fit"
           message id="handoutsMessage"
       pane kind="preview"
