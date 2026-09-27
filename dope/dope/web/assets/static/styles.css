@@ -140,13 +140,7 @@
 .match-table .ek-team-cell.od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
 .match-table .ek-team-cell.od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover,
 .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:hover .readonly-player-popover,
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:focus-within .readonly-player-popover,
-/* A seating cut to surnames owes its full names whether or not it also
-   overflows — the cut is the point, not an accident of width. */
-.player-seats-abbreviated:hover .player-select-popover,
-.player-seats-abbreviated:focus-within .player-select-popover,
-.player-seats-abbreviated:hover .readonly-player-popover,
-.player-seats-abbreviated:focus-within .readonly-player-popover {
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:focus-within .readonly-player-popover {
   display: block;
 }
 
@@ -167,11 +161,7 @@
 .floating-popovers-enabled .readonly-player-cell-truncated:hover .readonly-player-popover,
 .floating-popovers-enabled .readonly-player-cell-truncated:focus-within .readonly-player-popover,
 .ek-page .readonly-player-cell-truncated:hover .readonly-player-popover,
-.ek-page .readonly-player-cell-truncated:focus-within .readonly-player-popover,
-.floating-popovers-enabled .player-seats-abbreviated:hover .player-select-popover,
-.floating-popovers-enabled .player-seats-abbreviated:focus-within .player-select-popover,
-.floating-popovers-enabled .player-seats-abbreviated:hover .readonly-player-popover,
-.floating-popovers-enabled .player-seats-abbreviated:focus-within .readonly-player-popover {
+.ek-page .readonly-player-cell-truncated:focus-within .readonly-player-popover {
   display: none;
 }
 
@@ -834,8 +824,13 @@
   cursor: var(--cursor-action);
 }
 
+/* The seating line takes the cell's width and never sets it: width 0 keeps
+   three whole surnames from widening the theme's columns, and min-width
+   stretches it back to the button. What does not fit fades (.player-select-truncated). */
 .player-seats-text {
   display: block;
+  width: 0;
+  min-width: 100%;
   overflow: hidden;
   white-space: nowrap;
 }
@@ -1848,6 +1843,14 @@ body:not(.embedded-match) .grid-match {
   overscroll-behavior-x: contain;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
+}
+
+/* A sideways touchpad swipe on a game page is a scroll — of the tabs, of a
+   wide sheet — never the browser's back or forward. The ЭК page keeps each tab
+   in the history, so a swipe that missed the strip went back through the tabs
+   and looked like the strip scrolling the wrong way round. */
+html:has(.game-host-top) {
+  overscroll-behavior-x: none;
 }
 
 .ek-page .ek-tabs::-webkit-scrollbar,

@@ -434,6 +434,33 @@ export interface ScrollEdgeBinding {
   dispose(): void;
 }
 
+// wheelDeltaPixels turns a wheel step into pixels: a mouse in line mode
+// reports lines, and a page is the scroller's own width.
+function wheelDeltaPixels(delta: number, mode: number, page: number): number {
+  if (mode === 1) return delta * 16;
+  if (mode === 2) return delta * page;
+  return delta;
+}
+
+// bindTabStripWheel lets a plain mouse wheel scroll a tab strip, which only
+// ever scrolls sideways. Chrome and Firefox scroll an overflow-x box only on a
+// sideways wheel (or shift+wheel), so a mouse user saw the first tabs vanish
+// and had no way to bring them back. A mostly vertical step is turned into a
+// horizontal one; a touchpad's sideways swipe is left to the browser.
+export function bindTabStripWheel(el: HTMLElement): void {
+  el.addEventListener("wheel", (event) => {
+    if (event.ctrlKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    const max = el.scrollWidth - el.clientWidth;
+    if (max <= 1) return;
+    const step = wheelDeltaPixels(event.deltaY, event.deltaMode, el.clientWidth);
+    const next = Math.min(max, Math.max(0, el.scrollLeft + step));
+    // At an end the page takes the wheel back, so it still scrolls vertically.
+    if (next === el.scrollLeft) return;
+    event.preventDefault();
+    el.scrollLeft = next;
+  }, {passive: false});
+}
+
 // bindScrollEdges keeps a scroller's edge classes in sync with where it is
 // scrolled to: `update` runs once now and on every scroll, coalesced to a frame.
 // Seven pages used to hand-roll this, each repeating the same epsilon and two of
@@ -591,6 +618,7 @@ export function renderTabBar(
       bar.classList.toggle("tabs-scroll-right", right);
     });
     tabBarScrollBindings.set(root, binding);
+    bindTabStripWheel(root);
   } else {
     binding.refresh();
   }

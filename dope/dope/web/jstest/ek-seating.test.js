@@ -3,36 +3,13 @@ import assert from "node:assert/strict";
 import * as T from "./dist/ek-seating.js";
 import * as Stats from "./dist/ek-stats.js";
 
-// Выход на тему: three names never fit a cell five questions wide, so each is
-// cut to the shortest surname prefix — at least three letters — that no other
-// player on the team's roster shares. Roster names read «Имя Фамилия», so the
-// surname is the last word.
-const ROSTER = ["Иван Иванов", "Мария Иванова", "Пётр Петров", "Павел Петренко", "Игорь Ким"];
-
-test("a seating is cut to the shortest telling surname prefix", () => {
-  // Иванов is a prefix of Ивановой: no cut tells them apart, so both print whole.
-  assert.equal(T.seatName("Иван Иванов", ROSTER), "Иванов");
-  assert.equal(T.seatName("Мария Иванова", ROSTER), "Иванова");
-  // Петров and Петренко part at the fifth letter, which is where the cut goes.
-  assert.equal(T.seatName("Пётр Петров", ROSTER), "Петро..");
-  assert.equal(T.seatName("Павел Петренко", ROSTER), "Петре..");
-  // Nobody else starts with «Ким», and three letters is the shortest cut we
-  // allow — so a surname that short prints whole.
-  assert.equal(T.seatName("Игорь Ким", ROSTER), "Ким");
-});
-
-test("a lone name on a roster is cut to three letters, and a one-word name is all there is", () => {
-  assert.equal(T.seatName("Иван Иванов", ["Иван Иванов"]), "Ива..");
-  assert.equal(T.seatName("Дуремар", ["Дуремар", "Мальвина"]), "Дур..");
-  assert.equal(T.seatName("", ROSTER), "");
-});
-
-test("seatingLabel joins the seating in the order it is given", () => {
-  assert.equal(
-    T.seatingLabel(["Иван Иванов", "Мария Иванова", "Пётр Петров"], ROSTER),
-    "Иванов Иванова Петро..",
-  );
-  assert.equal(T.seatingLabel([], ROSTER), "");
+// Выход на тему: a seating prints its players' surnames in full, one line,
+// in the order the state lists them. Roster names read «Имя Фамилия», so the
+// surname is the last word; a one-word name is all there is.
+test("seatingLabel prints the seated players' whole surnames", () => {
+  assert.equal(T.seatingLabel(["Анна Климович", "Анна Лис"]), "Климович, Лис");
+  assert.equal(T.seatingLabel(["Иван Иванов", "Мария Иванова", "Дуремар"]), "Иванов, Иванова, Дуремар");
+  assert.equal(T.seatingLabel([]), "");
 });
 
 test("seatedNames drops the blanks a cleared seat leaves", () => {

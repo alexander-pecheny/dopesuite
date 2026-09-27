@@ -238,11 +238,14 @@ var RU = Strings{
 		Seed: EkSeedStrings{
 			DeclineFailed: func() string { return "Не удалось сохранить отказ" },
 			DeclinedAria:  func(name string) string { return fmt.Sprintf("Отказалась: %s", name) },
+			Draw:          func() string { return "Провести жребий" },
 			Empty:         func() string { return "Команды ещё не импортированы." },
 			Error:         func(reason string) string { return fmt.Sprintf("Ошибка: %s", reason) },
 			ErrorPrefix:   func() string { return "Ошибка:" },
 			Import:        func() string { return "Импортировать из КСИ" },
 			ImportFailed:  func() string { return "Не удалось импортировать команды" },
+			ImportFrom:    func(source string) string { return fmt.Sprintf("Импортировать из %s", source) },
+			ImportPlayers: func() string { return "Посчитать посев по игрокам" },
 			Imported:      func(n string) string { return fmt.Sprintf("Импортировано команд: %s.", n) },
 			Summary: func(active string, size string, total string) string {
 				return fmt.Sprintf("В основном посеве: %s из %s. Всего активных команд: %s.", active, size, total)
