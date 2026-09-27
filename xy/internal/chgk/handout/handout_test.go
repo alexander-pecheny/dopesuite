@@ -55,15 +55,15 @@ func TestQuestionLabelInside(t *testing.T) {
 	if strings.Contains(got, "#qlabel[") {
 		t.Error("the caption above the block should be gone")
 	}
-	if !strings.Contains(got, "clabelled(true, [Вопрос 110], text(size: 14pt)[текст])") {
+	if !strings.Contains(got, "text(size: 14pt)[текст], label: [Вопрос 110])") {
 		t.Errorf("no in-cell label:\n%s", got)
 	}
 	if !strings.Contains(got, "#qgap()") {
 		t.Error("a block with no caption still needs the caption's air above it")
 	}
-	// A centred block centres everything in its cells, and a centred «Вопрос N»
-	// reads as part of the раздатка rather than as the label of it.
-	if !strings.Contains(got, "#let clabel(body) = block(width: 100%, align(left, text(fill: gray, size: 9pt, body)))") {
-		t.Error("the in-cell label must stay left whatever the block's alignment")
+	// Pinned to the cell's corner, not carried by its content, so the number sits
+	// at the same height whatever the content does.
+	if !strings.Contains(got, "place(top + left, lbl)") {
+		t.Error("the in-cell label must be placed at the cell's corner")
 	}
 }

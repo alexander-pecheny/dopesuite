@@ -25,7 +25,7 @@ var headerTemplate string
 
 const (
 	greytextTmpl  = "#qlabel[<GREYTEXT>]"
-	celllabelTmpl = "clabelled(<CENTERED>, [<CELLLABEL>], <BODY>)"
+	celllabelTmpl = ", label: [<CELLLABEL>]"
 	qgapTmpl      = "#qgap()"
 	imgTmpl       = `image("<IMGPATH>", width: <IMGWIDTH>)`
 
@@ -378,13 +378,6 @@ func (a Args) buildCellBody(b block) string {
 	default:
 		body = wrapText("")
 	}
-	if label := a.insideLabel(b); label != "" {
-		centered := "true"
-		if nc, ok := b.intVal("no_center"); ok && nc != 0 {
-			centered = "false"
-		}
-		return strings.NewReplacer("<CENTERED>", centered, "<CELLLABEL>", label, "<BODY>", body).Replace(celllabelTmpl)
-	}
 	return body
 }
 
@@ -449,9 +442,13 @@ func (a Args) generateRegularBlock(b block) string {
 	if nc, ok := b.intVal("no_center"); ok && nc != 0 {
 		centered = "false"
 	}
-	return fmt.Sprintf("#handout(%d, %d, %d, %d, %smm, %smm, %smm, %smm, %s, %s, %s)",
+	label := a.insideLabel(b)
+	if label != "" {
+		label = strings.Replace(celllabelTmpl, "<CELLLABEL>", label, 1)
+	}
+	return fmt.Sprintf("#handout(%d, %d, %d, %d, %smm, %smm, %smm, %smm, %s, %s, %s%s)",
 		columns, numRows, teamCols, teamRows, gap, cellw, pad, strut,
-		strconv.FormatBool(teamed), centered, cellbody)
+		strconv.FormatBool(teamed), centered, cellbody, label)
 }
 
 // GenerateTyp parses a .hndt source and returns the full .typ document, matching
