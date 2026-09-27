@@ -4247,6 +4247,14 @@ html:has(.game-host-top) {
   font: inherit;
 }
 
+/* The select itself is see-through so the cell shows, but its open list
+   takes the options' own colours: without them Chrome draws the theme's pale
+   text on the browser's white list. */
+.troika-chair-select option {
+  background: var(--field-bg);
+  color: var(--text);
+}
+
 .match-table.brain-detailed .brain-tiebreak-marker {
   font-style: italic;
 }

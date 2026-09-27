@@ -121,6 +121,15 @@ dealing key. The same snake deals reseed ranks into a block's groups.
 - `seed: random` — every rank is a lot.
 - `seed: xlsx` — an uploaded sheet carrying either an exact seeding column or a
   basket column.
+- `division: Студ` beside a `seed:` keeps the seed to the teams carrying that
+  Flag, and `division: -Студ` to those not carrying it (ADR-0020). The student
+  and the adult Эрудит-секстет seed from one ОД table this way.
+- `division:` with no `seed:` is Тройка's alone: the Game's entrants are the
+  fest's troikas in that зачёт (a troika's зачёт is its head team's Flags, or
+  the one the host set on the troikas page). They are seated at creation,
+  whatever the entrant picker says, and re-seated whenever the troikas page,
+  the teams' Flags or the scheme change, until anything is entered in the
+  Game. After that its entrants stay as they are.
 
 The DSL only *declares* the source. Resolution is the host pressing the
 import button on the game's Посев tab, which snapshots the source's current
