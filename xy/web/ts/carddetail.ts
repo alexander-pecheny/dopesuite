@@ -570,7 +570,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const wrap = el("div", { class: "fld" + (opts.muted ? " fld-muted" : "") });
     const addBtn = el("button", { class: "fld-add", type: "button", text: S.card.field.add(label), title: S.card.field.addTitle() });
     const rmBtn = el("button", { class: "fld-rm", type: "button", text: "×", title: S.card.field.removeTitle() });
-    const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: label }), rmBtn);
+    const copyBtn = el("button", { class: "btn btn-ghost btn-small fld-copy", type: "button", title: S.card.field.copyTitle() }, ...iconed("clipboard", S.card.field.copy()));
+    const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: label }), rmBtn, copyBtn);
     const input = (kind === "area"
       ? el("textarea", { class: "card-desc fld-input", spellcheck: "false", rows: String(opts.rows || 1) })
       : el("input", { class: "input fld-input", type: "text" })) as HTMLTextAreaElement | HTMLInputElement;
@@ -587,6 +588,13 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const sync = (): void => { addBtn.hidden = present; head.hidden = !present; body.hidden = !present; wrap.classList.toggle("fld-present", present); if (present && kind === "area") fitTextarea(input as HTMLTextAreaElement); };
     addBtn.addEventListener("click", () => { present = true; sync(); input.focus(); });
     rmBtn.addEventListener("click", () => { present = false; sync(); });
+    // The tab shows only while its field holds the caret (or the pointer), so
+    // pressing it must not take the focus away and hide it before the click.
+    copyBtn.addEventListener("mousedown", (e) => { e.preventDefault(); });
+    copyBtn.addEventListener("click", async () => {
+      try { await copyText(input.value); showCopyMsg(S.card.copy.done(label.toLowerCase()), false); }
+      catch (err) { showCopyMsg(S.card.copy.failed(errMsg(err)), true); }
+    });
     wrap.append(addBtn, head, body);
     sync();
     return { node: wrap, read: () => (present ? (autoOpened && input.value === "" ? null : input.value) : null) };
@@ -1650,6 +1658,9 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
 
   cardCloseBtn.addEventListener("click", closeCard);
   ui.link.addEventListener("click", () => { void copyCardLink(); });
+  // Like each field's tab in Поля, it shows only while the editor holds the
+  // caret or the pointer, so pressing it must not take the focus away.
+  ui.copy4s.addEventListener("mousedown", (e) => { e.preventDefault(); });
   ui.copy4s.addEventListener("click", async () => {
     try { await copyText(cardDescEl.value); showCopyMsg(S.card.copy.text4s(), false); }
     catch (err) { showCopyMsg(S.card.copy.failed(errMsg(err)), true); }

@@ -897,6 +897,8 @@ var RU = Strings{
 			AddTitle:       func() string { return "Добавить поле" },
 			Answer:         func() string { return "Ответ" },
 			Comment:        func() string { return "Комментарий" },
+			Copy:           func() string { return "Скопировать" },
+			CopyTitle:      func() string { return "Скопировать текст поля" },
 			Handout:        func() string { return "Раздаточный материал" },
 			Hndt:           func() string { return "Доп. разметка для генерации раздаток" },
 			Nezachet:       func() string { return "Незачёт" },

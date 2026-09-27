@@ -1380,6 +1380,29 @@
   cursor: text;
 }
 .card-preview-body > * { max-width: none; }
+/* The copy tab: a small folder tab on a text field's top right edge, in the
+   field's fill with no bottom border, and the field gives up that corner's
+   rounding so the two read as one shape. It stays lower than the label beside
+   it. The 4s view has one over its editor, Поля one over each text field, and
+   both behave alike: only the field under the pointer or holding the caret
+   shows its tab. It is hidden, not removed, so nothing below it jumps. */
+#cardCopy4s, .fld-copy {
+  min-height: 0;
+  height: 20px;
+  padding: 0 var(--space-2);
+  border-bottom: 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: var(--field-bg);
+  font-size: var(--text-xs);
+  visibility: hidden;
+}
+#cardCopy4s:hover, .fld-copy:hover { background: var(--action-ghost-hover-bg); }
+#cardCopy4s .ico, .fld-copy .ico { --ico-size: 1em; }
+.fld-copy { margin-left: auto; align-self: flex-end; }
+#cardViewText:is(:hover, :focus-within) #cardCopy4s,
+.fld-present:is(:hover, :focus-within) .fld-copy { visibility: visible; }
+#cardViewText:is(:hover, :focus-within) #cardDesc,
+.fld-present:is(:hover, :focus-within) > .fld-body .fld-input { border-top-right-radius: 0; }
 /* The card-detail preview shows a single question, so the inter-question
    bottom margin (.pv-q) is just a trailing gap — drop it; the container's own
    padding already gives symmetric top/bottom breathing room. */
@@ -1392,31 +1415,12 @@
 }
 
 /* ── structured fields (Поля) ─────────────────────────────────────────────── */
-/* Density (user request): absent fields are pills that FLOW TOGETHER on shared
-   wrap rows, and a present field spans the full row with its label BESIDE the
-   control, not above it — the stacked label/input made any filled card scroll. */
+/* Absent fields are pills that flow together on shared wrap rows. A present
+   field spans the full row, with its label above the control, as Описание sits
+   above the 4s editor, so a copy tab fits on the control's top right edge. */
 .card-fields { display: flex; flex-flow: row wrap; gap: var(--space-2); }
 .fld { display: flex; flex-direction: column; }
 .fld-wide, .fld-present { flex: 1 1 100%; }
-.fld-present {
-  display: grid;
-  /* Three tracks: the label, the ×, the control. The label column is as narrow
-     as the longest unbreakable label («Комментарий» at text-xs) allows, so
-     multi-word labels wrap instead of widening it — and the × has a track of
-     its own, sized to the × (issue #65). Sharing the label's track, it had
-     nowhere to go and crept over the input. */
-  grid-template-columns: 5.5em auto 1fr;
-  column-gap: var(--space-2);
-  align-items: start;
-}
-/* The head is only a wrapper for the two of them; contents drops it so label
-   and × land in their own tracks. Its children are always exactly (label, ×). */
-.fld-present > .fld-head { display: contents; }
-/* label dropped onto the input's first text line, × alongside it */
-.fld-present > .fld-head > * { padding-top: 7px; }
-.fld-present .fld-label { font-size: var(--text-xs); }
-.fld-present .fld-rm { padding: 0 2px; }
-.fld-present > .fld-body { margin-top: 0; }
 /* the dashed ring is this button's whole identity ("add a field") — --grid-dark,
    not the transparent --border */
 .fld-add {
@@ -1433,7 +1437,9 @@
 }
 .fld-add:hover { color: var(--text); border-color: var(--muted); }
 .fld-muted .fld-add { opacity: 0.75; }
-.fld-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+/* baseline, so the × sits on the label's text line; the copy tab alone drops
+   to the bottom edge, onto the control */
+.fld-head { display: flex; align-items: baseline; gap: var(--space-1); }
 /* массовое действие — the bar is a row of .board-main, below the board rather
    than over it. It was fixed to the viewport, and the board reserved a guessed
    72px for it; the bar wraps to two and three rows on a narrow window, and the
@@ -1514,8 +1520,9 @@ select.fld-label-select {
   padding: 0 var(--space-1);
   cursor: var(--cursor-action);
 }
+/* its padding and border would indent the caption past the other labels */
+.fld-head > select.fld-label-select { padding-left: 0; margin-left: -1px; }
 select.fld-label-select:hover, select.fld-label-select:focus { border-color: var(--border); color: var(--text); }
-.fld-present select.fld-label-select { font-size: var(--text-xs); }
 .fld-rm, .fld-row-rm, .fld-tag-rm {
   border: none; background: transparent; color: var(--muted);
   font-size: var(--text-base); line-height: 1; cursor: var(--cursor-action);
@@ -1523,6 +1530,8 @@ select.fld-label-select:hover, select.fld-label-select:focus { border-color: var
 }
 .fld-rm:hover, .fld-row-rm:hover, .fld-tag-rm:hover { color: var(--red); }
 .fld-body { margin-top: var(--space-1); }
+/* the tab sits flush on the control below it */
+.fld-head:has(.fld-copy:not([hidden])) + .fld-body { margin-top: 0; }
 .fld-input { width: 100%; }
 /* Every control in Поля holds the same 4s text, so they all wear the same face —
    half the form in mono and half in sans read as two different editors. */
@@ -1538,17 +1547,6 @@ textarea.fld-input { min-height: 0; padding-block: var(--space-2); }
 @media (min-width: 761px) {
   .card-fields .input { min-height: 32px; padding-block: 5px; }
   .card-fields select.input { height: 32px; }
-}
-/* phones have no width to spare for a label column — stack label above input
-   again (this block must FOLLOW the .fld-present grid rules to win the tie) */
-@media (max-width: 760px) {
-  /* align-items too: the grid rule's `start` would shrink the stacked children
-     to content width */
-  .fld-present { display: flex; flex-direction: column; align-items: stretch; }
-  /* the head is a row again here, so it gets its box back */
-  .fld-present > .fld-head { display: flex; justify-content: space-between; }
-  .fld-present > .fld-head > * { padding-top: 0; }
-  .fld-present > .fld-body { margin-top: var(--space-1); }
 }
 .fld-rows { display: flex; flex-direction: column; gap: var(--space-1); }
 .fld-row { display: flex; align-items: center; gap: var(--space-1); }
