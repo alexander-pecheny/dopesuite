@@ -17,6 +17,7 @@ import { xyHandoutSession } from "./handoutsession.js";
 import { namedUrl, revokeNamedUrl } from "./namedurl.js";
 import { modal } from "./modal.js";
 import { icon } from "./icons_gen.js";
+import { anchorPopup } from "./popup.js";
 import type { Attachments } from "./attachments.js";
 import type { HndtFormBlock } from "./hndt.js";
 import type { Board, ListPanel, ListScope } from "./panels.js";
@@ -125,7 +126,64 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     return i >= 0 ? handoutsCtx.cards[i] : null;
   }
 
+  // The settings the form has no control of its own for, offered by the block's
+  // ⋯ button. A value is typed as it goes into the .hndt; `options` makes it a pick.
+  const EXTRAS: Array<{ key: string; label: () => string; options?: Array<[string, () => string]> }> = [
+    { key: "font_size", label: S.board.handouts.extraFontSize },
+    { key: "font_family", label: S.board.handouts.extraFontFamily },
+    { key: "resize_image", label: S.board.handouts.extraResizeImage },
+    { key: "rotate", label: S.board.handouts.extraRotate, options: [["r", S.board.handouts.rotateRight], ["l", S.board.handouts.rotateLeft]] },
+    { key: "max_width", label: S.board.handouts.extraMaxWidth },
+    { key: "handouts_per_team", label: S.board.handouts.extraPerTeam },
+    { key: "grouping", label: S.board.handouts.extraGrouping, options: [["horizontal", S.board.handouts.groupingHorizontal], ["vertical", S.board.handouts.groupingVertical]] },
+    { key: "color", label: S.board.handouts.extraColor, options: [["1", S.board.handouts.colorYes], ["0", S.board.handouts.colorNo]] },
+    { key: "tikz_mm", label: S.board.handouts.extraPadding },
+    { key: "hspace", label: S.board.handouts.extraHspace },
+    { key: "vspace", label: S.board.handouts.extraVspace },
+  ];
+
+  function extrasOf(b: HndtFormBlock, write: () => void): { rows: HTMLElement; more: HTMLElement } {
+    const rows = el("div", { class: "hndt-extras" });
+    const added = new Set<string>();
+    const draw = (focus?: string): void => {
+      rows.replaceChildren(...EXTRAS.filter((x) => added.has(x.key) || xyHndt.hndtGet(b, x.key) !== null).map((x) => {
+        const val = xyHndt.hndtGet(b, x.key) ?? "";
+        let control: HTMLInputElement | HTMLSelectElement;
+        if (x.options) {
+          control = el("select", { class: "input hndt-extra-input" }, ...x.options.map(([v, text]) => el("option", { value: v, text: text() }))) as HTMLSelectElement;
+          control.value = val || x.options[0][0];
+          if (!val) xyHndt.hndtSet(b, x.key, control.value);
+        } else {
+          control = el("input", { class: "input hndt-extra-input", type: "text", value: val }) as HTMLInputElement;
+        }
+        control.addEventListener(x.options ? "change" : "input", () => { xyHndt.hndtSet(b, x.key, control.value.trim() || null); write(); });
+        const rm = el("button", { class: "fld-rm", type: "button", text: "×", title: S.board.handouts.extraRemove() });
+        rm.addEventListener("click", () => { added.delete(x.key); xyHndt.hndtSet(b, x.key, null); write(); draw(); });
+        if (x.key === focus) requestAnimationFrame(() => control.focus());
+        return [el("label", { class: "fld-label", text: x.label() }), control, rm];
+      }).flat());
+    };
+    const more = el("button", { class: "btn btn-ghost btn-small", type: "button", title: S.board.handouts.moreTitle(), "aria-label": S.board.handouts.moreTitle() }, icon("ellipsis"));
+    let popup: { close(): void } | null = null;
+    more.addEventListener("click", () => {
+      if (popup) { popup.close(); return; }
+      const menu = el("div", { class: "menu-dropdown menu-fixed", role: "menu" });
+      for (const x of EXTRAS) {
+        if (added.has(x.key) || xyHndt.hndtGet(b, x.key) !== null) continue;
+        menu.append(el("button", {
+          class: "menu-item", type: "button", role: "menuitem", text: x.label(),
+          onclick: () => { popup?.close(); added.add(x.key); draw(x.key); if (x.options) write(); },
+        }));
+      }
+      if (!menu.childElementCount) return;
+      popup = anchorPopup(menu, more, { anchor: more, onClose: () => { popup = null; } });
+    });
+    draw();
+    return { rows, more };
+  }
+
   function handoutBox(b: HndtFormBlock, write: () => void): HTMLElement {
+    const extras = extrasOf(b, write);
     const inside = el("input", { type: "checkbox" }) as HTMLInputElement;
     inside.checked = xyHndt.hndtGet(b, "question_label") === "inside";
     inside.addEventListener("change", () => { xyHndt.hndtSet(b, "question_label", inside.checked ? "inside" : null); write(); });
@@ -173,9 +231,10 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
       }),
       seg([S.board.handouts.alignCenter(), S.board.handouts.alignLeft()], () => (Number(xyHndt.hndtGet(b, "no_center")) ? 1 : 0), (i) => {
         xyHndt.hndtSet(b, "no_center", i ? "1" : null); write();
-      }));
+      }),
+      extras.more);
     syncKind();
-    return el("div", { class: "hndt-block u-col u-gap-sm" }, settings, switches, ta, sel);
+    return el("div", { class: "hndt-block u-col u-gap-sm" }, settings, switches, extras.rows, ta, sel);
   }
 
   VIEWS.fields.addEventListener("click", () => setView("fields"));
