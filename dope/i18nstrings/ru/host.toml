@@ -146,7 +146,7 @@ teams_empty = "Команды пока не загружены."
 # The зачёты column of the teams table: its header, the hint above the form and
 # the notice after a save.
 col_flags = "Зачёты"
-flags_hint = "Зачёты команды — через запятую: «Школ, Студ». Их видно на страницах ОД и КСИ, где по зачёту можно отфильтровать таблицу. Импорт из rating.chgk.info перезаписывает их."
+flags_hint = "Зачёты команды пишутся через запятую: «Школ, Студ». На страницах ОД и КСИ по зачёту можно отфильтровать таблицу, а ЭС может брать в посев из ОД только команды одного зачёта. Импорт из rating.chgk.info перезаписывает зачёты."
 flags_placeholder = "Школ, Студ"
 flags_saved_notice = "Зачёты сохранены."
 # Flags were sent for a team id this fest does not have.
@@ -174,8 +174,8 @@ cancel_btn = "Отмена"
 # The from/to team labels: overrides table columns and the edit dialog summary.
 col_from_team = "Из команды"
 col_to_team = "В команду"
-# The add-override dialog when the fest has no KSI/EK games to pick.
-no_override_games = "В фесте пока нет игр КСИ или ЭК."
+# The add-override dialog when the fest has no KSI/EK/ES games to pick.
+no_override_games = "В фесте пока нет игр КСИ, ЭК или ЭС."
 # Icon-button label opening one override's edit dialog.
 edit_override_label = "Редактировать оверрайд"
 # Subhead of the overrides table section.
@@ -189,7 +189,7 @@ rating_import_crumb = "Импорт участников"
 # The source line above the import form: which rating id the roster comes from.
 rating_source = 'Источник: rating.chgk.info ID {{.id}}'
 # Note above the rating-import form.
-rating_import_note = "Импорт заменит списки команд и игроков феста и обновит список команд в играх ЧГК и КСИ."
+rating_import_note = "Импорт заменит списки команд и игроков феста и обновит список команд в ЧГК, КСИ и Мультииграх. В ЭК и ЭС команды приходят из посева, поэтому их составы обновятся, когда вы снова импортируете посев. Оверрайды игроков сохранятся."
 # Submit button of the rating-import form.
 import_submit = "Загрузить команды и игроков"
 # Shown (as note and as error) when the fest has no rating id yet.

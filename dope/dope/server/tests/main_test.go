@@ -962,6 +962,101 @@ where o.fest_id = ? and o.game_id = ?`, festID, ksiGameID).Scan(&count, &restore
 	}
 }
 
+// An Erudit-Sextet Game takes overrides as EK does: the override page offers
+// it, saving one moves the player into the game's own roster, and a rating
+// re-import keeps both.
+func TestPlayerOverrideCoversES(t *testing.T) {
+	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, _, _ := createRosterPropagationFixture(t, db)
+	srv := dopeserver.NewTestServer(func(e *core.Engine) {
+		e.DB = db
+		e.RT = realtime.NewManager()
+	})
+	roster := []rosterpkg.FestRosterImportTeam{
+		{RatingID: 101, Name: "Альфа", City: "Москва", Players: []rosterpkg.FestRosterImportPlayer{
+			{RatingID: 1001, FirstName: "Мария", LastName: "Сидорова"},
+		}},
+		{RatingID: 102, Name: "Бета", City: "Москва", Players: []rosterpkg.FestRosterImportPlayer{
+			{RatingID: 1002, FirstName: "Олег", LastName: "Петров"},
+		}},
+	}
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster, imports.RosterChoice{}); err != nil {
+		t.Fatalf("import roster: %v", err)
+	}
+	now := util.UtcNow()
+	res, err := db.Exec(`
+insert into games(fest_id, code, title, game_type, position, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
+values(?, 'es', 'ЭС', 'es', 3, '{}', '{}', 'pending', 'fest', 'fest', 1, ?, ?)`, festID, now, now)
+	if err != nil {
+		t.Fatalf("insert es game: %v", err)
+	}
+	esGameID, err := res.LastInsertId()
+	if err != nil {
+		t.Fatalf("es game id: %v", err)
+	}
+
+	options, err := overrides.LoadHostPlayerOverrideGameOptions(t.Context(), db, festID)
+	if err != nil {
+		t.Fatalf("load game options: %v", err)
+	}
+	offered := false
+	for _, o := range options {
+		offered = offered || o.ID == esGameID
+	}
+	if !offered {
+		t.Fatalf("game options %#v do not offer the ЭС game %d", options, esGameID)
+	}
+
+	var playerID, targetID int64
+	if err := db.QueryRow(`select id from fest_players where fest_id = ? and rating_id = 1001`, festID).Scan(&playerID); err != nil {
+		t.Fatalf("load player: %v", err)
+	}
+	if err := db.QueryRow(`select id from fest_teams where fest_id = ? and rating_id = 102`, festID).Scan(&targetID); err != nil {
+		t.Fatalf("load target: %v", err)
+	}
+	_, materialised, err := overrides.SavePlayerTeamOverride(srv.Eng(), t.Context(), festID, playerID, targetID, []int64{esGameID})
+	if err != nil {
+		t.Fatalf("save override: %v", err)
+	}
+	if len(materialised) != 1 || materialised[0] != esGameID {
+		t.Fatalf("materialised games = %v, want [%d]", materialised, esGameID)
+	}
+
+	check := func(when string) {
+		t.Helper()
+		var source, team string
+		if err := db.QueryRow(`
+select g.roster_source, p.name
+from game_team_players gtp
+join participants p on p.id = gtp.participant_id
+join players pl on pl.id = gtp.player_id
+join games g on g.id = gtp.game_id
+where gtp.game_id = ? and pl.last_name = 'Сидорова'`, esGameID).Scan(&source, &team); err != nil {
+			t.Fatalf("%s: load ЭС roster row: %v", when, err)
+		}
+		if source != "game" || team != "Бета" {
+			t.Fatalf("%s: ЭС roster = source %q team %q, want game / Бета", when, source, team)
+		}
+	}
+	check("after save")
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster, imports.RosterChoice{}); err != nil {
+		t.Fatalf("re-import roster: %v", err)
+	}
+	var count int
+	if err := db.QueryRow(`select count(*) from game_player_team_overrides where fest_id = ? and game_id = ?`, festID, esGameID).Scan(&count); err != nil {
+		t.Fatalf("count overrides: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("ЭС overrides after re-import = %d, want 1", count)
+	}
+	check("after re-import")
+}
+
 func TestHostPlayerOverrideRowsGroupGames(t *testing.T) {
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
