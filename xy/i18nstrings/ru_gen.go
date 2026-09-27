@@ -148,6 +148,8 @@ var RU = Strings{
 			},
 			AttachmentsLabel:    func() string { return "Вложения" },
 			Compress:            func() string { return " сжать (WebP)" },
+			Copy4sLabel:         func() string { return "Скопировать" },
+			Copy4sTitle:         func() string { return "Скопировать текст в формате 4s" },
 			CopyTitle:           func() string { return "Скопировать вопрос или раздатку" },
 			Delete:              func() string { return "Удалить карточку" },
 			DescLabel:           func() string { return "Описание" },
@@ -844,6 +846,7 @@ var RU = Strings{
 			CommentLink: func() string { return "Ссылка на комментарий скопирована" },
 			Done:        func(what string) string { return fmt.Sprintf("Скопировано: %s", what) },
 			Failed:      func(error string) string { return fmt.Sprintf("Не удалось скопировать: %s", error) },
+			Text4s:      func() string { return "Текст в формате 4s скопирован" },
 		},
 		Create: CardCreateStrings{
 			Failed: func(error string) string {

@@ -133,6 +133,7 @@ export interface CardDetailUI {
   copy: HTMLElement;
   copyBtn: HTMLElement;
   copyMsg: HTMLElement;
+  copy4s: HTMLElement;
   addSlot: HTMLButtonElement;
   del: HTMLElement;
   desc: HTMLTextAreaElement;
@@ -945,6 +946,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       const name = xyVersions.versionName(draft.desc, i);
       const btn = el("button", { class: "seg-btn" + (i === versionIdx ? " active" : ""), type: "button", role: "tab", text: name || S.card.version.fallbackName(String(i + 1)) });
       btn.addEventListener("click", () => { captureDraft(); selectVersion(i); });
+      btn.addEventListener("dblclick", () => renameVersion(i));
       nodes.push(btn);
       if (i !== versionIdx) continue;
       if (i > 0) {
@@ -953,17 +955,21 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
         nodes.push(up);
       }
       const ren = el("button", { class: "vtab-act", type: "button", title: S.card.version.renameTitle(), "aria-label": S.card.version.renameAria() }, icon("pencil"));
-      ren.addEventListener("click", () => {
-        const typed = prompt(S.card.version.renamePrompt(), name || "");
-        if (typed === null) return;
-        applyVersions((d) => ({ desc: xyVersions.setVersionName(d, i, typed), index: i }));
-      });
+      ren.addEventListener("click", () => renameVersion(i));
       nodes.push(ren);
       const rm = el("button", { class: "vtab-act", type: "button", title: S.card.version.removeTitle(), "aria-label": S.card.version.removeAria() }, icon("trash-2"));
       rm.addEventListener("click", () => applyVersions((d) => xyVersions.removeVersion(d, i)));
       nodes.push(rm);
     }
     box.replaceChildren(...nodes);
+  }
+
+  function renameVersion(i: number): void {
+    const name = xyVersions.versionName(draft.desc, i);
+    const shown = name || S.card.version.fallbackName(String(i + 1));
+    const typed = prompt(S.card.version.renamePrompt(), shown);
+    if (typed === null || typed === shown) return;
+    applyVersions((d) => ({ desc: xyVersions.setVersionName(d, i, typed), index: i }));
   }
 
   ui.addVersion.addEventListener("click", () => {
@@ -1622,6 +1628,13 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     await openCard(next, { returnTo: cardReturn });
   }
 
+  // e.code, not e.key: on a non-Latin layout the key is not "s".
+  document.addEventListener("keydown", (e) => {
+    if (cardOverlay.hidden || dirtyAnswer || e.code !== "KeyS" || !(e.metaKey || e.ctrlKey)) return;
+    e.preventDefault();
+    if (!cardSaveBtn.hidden && !cardSaveBtn.disabled) cardSaveBtn.click();
+  });
+
   document.addEventListener("keydown", (e) => {
     if (cardOverlay.hidden || dirtyAnswer) return;
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
@@ -1632,6 +1645,10 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
 
   cardCloseBtn.addEventListener("click", closeCard);
   ui.link.addEventListener("click", () => { void copyCardLink(); });
+  ui.copy4s.addEventListener("click", async () => {
+    try { await copyText(cardDescEl.value); showCopyMsg(S.card.copy.text4s(), false); }
+    catch (err) { showCopyMsg(S.card.copy.failed(errMsg(err)), true); }
+  });
   cardOverlay.addEventListener("pointerdown", (e) => { if (e.target === cardOverlay) closeCard(); });
 
   cardSaveBtn.addEventListener("click", () => { void saveCard(); });

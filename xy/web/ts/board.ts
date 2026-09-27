@@ -1341,6 +1341,7 @@ const cardDetail = createCardDetail({
     del: byId("cardDelete"),
     desc: byId<HTMLTextAreaElement>("cardDesc"),
     descLabel: byId("cardDescLabel"),
+    copy4s: byId("cardCopy4s"),
     editTools: byId("cardEditTools"),
     fields: byId("cardFields"),
     insStress: byId("cardInsStress"),

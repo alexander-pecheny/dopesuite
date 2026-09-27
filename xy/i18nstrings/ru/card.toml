@@ -113,6 +113,7 @@ failed = 'Не удалось разобрать текст: {{.error}}'
 # Flash messages under the direct-link and copy buttons (showCopyMsg).
 card_link = "Ссылка на карточку скопирована"
 comment_link = "Ссылка на комментарий скопирована"
+text_4s = "Текст в формате 4s скопирован"
 # Success flash after copying a question piece; .what is the copy target's
 # name, lowercased by the call site (the labels live in chgk.toml [copy]).
 done = 'Скопировано: {{.what}}'

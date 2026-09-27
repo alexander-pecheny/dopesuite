@@ -129,6 +129,9 @@ screen_label = " для экрана"
 preview_dblclick = "Двойной клик — редактировать"
 # Label above the raw-text editor.
 desc_label = "Описание"
+# The button beside it that copies the editor's 4s text.
+copy_4s_title = "Скопировать текст в формате 4s"
+copy_4s_label = "Скопировать"
 # Danger button deleting the card.
 delete = "Удалить карточку"
 # Label section: add button and the new-label form.

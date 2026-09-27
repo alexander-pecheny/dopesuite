@@ -131,6 +131,8 @@ export type Strings = {
       aliasPlaceholder: () => string;
       attachmentsLabel: () => string;
       compress: () => string;
+      copy4sLabel: () => string;
+      copy4sTitle: () => string;
       copyTitle: () => string;
       delete: () => string;
       descLabel: () => string;
@@ -669,6 +671,7 @@ export type Strings = {
       commentLink: () => string;
       done: (what: string) => string;
       failed: (error: string) => string;
+      text4s: () => string;
     };
     create: {
       failed: (error: string) => string;

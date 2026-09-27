@@ -132,6 +132,8 @@ export const RU: Strings = {
       aliasPlaceholder: () => "короткое имя карточки — показывается в списке вместо текста",
       attachmentsLabel: () => "Вложения",
       compress: () => " сжать (WebP)",
+      copy4sLabel: () => "Скопировать",
+      copy4sTitle: () => "Скопировать текст в формате 4s",
       copyTitle: () => "Скопировать вопрос или раздатку",
       delete: () => "Удалить карточку",
       descLabel: () => "Описание",
@@ -670,6 +672,7 @@ export const RU: Strings = {
       commentLink: () => "Ссылка на комментарий скопирована",
       done: (what: string) => `Скопировано: ${what}`,
       failed: (error: string) => `Не удалось скопировать: ${error}`,
+      text4s: () => "Текст в формате 4s скопирован",
     },
     create: {
       failed: (error: string) => `Не удалось создать карточку: ${error}`,
