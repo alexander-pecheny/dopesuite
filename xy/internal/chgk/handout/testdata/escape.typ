@@ -88,6 +88,19 @@
 // rather than as the label of it. Full width, so align has something to bite.
 #let clabel(body) = block(width: 100%, align(left, text(fill: gray, size: 9pt, body)))
 
+// The caption takes a line of its own only when it has to: a centred body that
+// leaves the cell's top-left corner free shares its top line with the caption.
+#let clabelled(centered, label, body) = layout(size => {
+  let lbl = text(fill: gray, size: 9pt, label)
+  let bs = measure(body, width: size.width)
+  let ls = measure(lbl)
+  if centered and bs.width + 2 * ls.width + 2mm <= size.width and ls.height <= bs.height {
+    block(width: 100%, { place(top + left, lbl); body })
+  } else {
+    stack(dir: ttb, spacing: 1mm, clabel(label), body)
+  }
+})
+
 // A block with its number inside prints no caption above it, so nothing would
 // keep it off the block before it; this leaves the caption's air instead, and
 // drops away at the top of a page like the caption's own spacing.

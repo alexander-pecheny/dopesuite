@@ -25,7 +25,7 @@ var headerTemplate string
 
 const (
 	greytextTmpl  = "#qlabel[<GREYTEXT>]"
-	celllabelTmpl = "clabel[<CELLLABEL>]"
+	celllabelTmpl = "clabelled(<CENTERED>, [<CELLLABEL>], <BODY>)"
 	qgapTmpl      = "#qgap()"
 	imgTmpl       = `image("<IMGPATH>", width: <IMGWIDTH>)`
 
@@ -379,7 +379,11 @@ func (a Args) buildCellBody(b block) string {
 		body = wrapText("")
 	}
 	if label := a.insideLabel(b); label != "" {
-		return fmt.Sprintf("stack(dir: ttb, spacing: 1mm, %s, %s)", label, body)
+		centered := "true"
+		if nc, ok := b.intVal("no_center"); ok && nc != 0 {
+			centered = "false"
+		}
+		return strings.NewReplacer("<CENTERED>", centered, "<CELLLABEL>", label, "<BODY>", body).Replace(celllabelTmpl)
 	}
 	return body
 }
@@ -394,7 +398,7 @@ func (a Args) insideLabel(b block) string {
 	if !ok || num == "" {
 		return ""
 	}
-	return strings.Replace(celllabelTmpl, "<CELLLABEL>", a.labels().Field("question")+" "+num, 1)
+	return a.labels().Field("question") + " " + num
 }
 
 func (a Args) generateRegularBlock(b block) string {
