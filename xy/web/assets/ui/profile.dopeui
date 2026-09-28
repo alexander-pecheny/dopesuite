@@ -17,14 +17,61 @@ page title=@profile.title kind="sheet" scripts="dist/profile.js"
       button submit @profile.save
     message id="usernameMessage"
 
+  -- The settings sit on the page with their current values showing. Each one
+  -- saves as soon as it changes; its message line says so, or says why not.
+  section
+    field label=@profile.font.name
+      selectfield id="uiFont"
+        option value="noto" @profile.font.noto
+        option value="inter-fix-ra" @profile.font.inter
+        option value="ibm-plex-sans-fix" @profile.font.plex_sans
+        option value="literata-fix" @profile.font.literata
+        option value="ibm-plex-serif-fix" @profile.font.plex_serif
+        option value="stix-two-text-fix" @profile.font.stix
+    hint @profile.font.face_hint
+    message id="fontMessage"
+
+  section
+    field label=@profile.card_title.name
+      selectfield id="cardTitle"
+        option value="question" @profile.card_title.question
+        option value="answer" @profile.card_title.answer
+    hint @profile.card_title.hint
+    message id="cardTitleMessage"
+
+  section
+    field label=@profile.feed.name
+      selectfield id="feedDefault"
+        option value="all" @profile.feed.all
+        option value="comments" @profile.feed.comments
+        option value="edits" @profile.feed.edits
+        option value="meta" @profile.feed.meta
+    hint @profile.feed.hint
+    message id="feedDefaultMessage"
+
+  section
+    field label=@profile.author.name
+      textfield id="authorValue" placeholder=@profile.author.placeholder autocomplete="off" maxlength="200"
+    hint @profile.author.hint
+    message id="authorMessage"
+
+  section
+    field label=@profile.tz.tz_label
+      textfield id="tzValue" placeholder="Europe/Moscow" autocomplete="off" maxlength="64"
+    hint @profile.tz.hint
+    field label=@profile.tz.cities_label
+      textfield id="tzCities" placeholder=@profile.tz.cities_placeholder autocomplete="off"
+    hint @profile.tz.cities_hint
+    field label=@profile.tz.title_mode_label
+      selectfield id="tzTitleMode"
+        option value="date-title" @profile.tz.mode_date_title
+        option value="title" @profile.tz.mode_title
+        option value="date" @profile.tz.mode_date
+    message id="tzMessage"
+
   section
     button kind="ghost" id="passwordBtn" @profile.password.name
     button kind="ghost" id="sizesBtn" @profile.sizes.name
-    button kind="ghost" id="fontBtn" @profile.font.name
-    button kind="ghost" id="authorBtn" @profile.author.name
-    button kind="ghost" id="cardTitleBtn" @profile.card_title.name
-    button kind="ghost" id="feedDefaultBtn" @profile.feed.name
-    button kind="ghost" id="tzBtn" @profile.tz.name
     button kind="ghost" href="/profile/tokens" @profile.account.tokens
     button kind="ghost" id="logoutBtn" @profile.account.logout
 
@@ -50,73 +97,3 @@ page title=@profile.title kind="sheet" scripts="dist/profile.js"
     row gap="sm" align="center" justify="between"
       button small kind="ghost" id="sizesReset" @profile.sizes.reset
       button id="sizesClose" @profile.sizes.close
-
-  -- interface-font dialog: which face the whole site is set in (users.ui_font).
-  -- No submit button: picking applies to the page at once and saves behind it,
-  -- so the only thing the form can still say is that the saving failed.
-  modal id="fontOverlay" label=@profile.font.name title=@profile.font.name done=@profile.font.close doneid="fontClose"
-    fieldset
-      radio name="uiFont" value="noto" @profile.font.noto
-      radio name="uiFont" value="inter-fix-ra" @profile.font.inter
-      radio name="uiFont" value="ibm-plex-sans-fix" @profile.font.plex_sans
-      radio name="uiFont" value="literata-fix" @profile.font.literata
-      radio name="uiFont" value="ibm-plex-serif-fix" @profile.font.plex_serif
-      radio name="uiFont" value="stix-two-text-fix" @profile.font.stix
-    hint @profile.font.face_hint
-    hint @profile.font.hint
-    message id="fontMessage"
-
-  -- default-author dialog: pre-filled into new question cards
-  modal id="authorOverlay" label=@profile.author.name title=@profile.author.name
-    form id="authorForm" dir="col"
-      textfield id="authorValue" placeholder=@profile.author.placeholder autocomplete="off" maxlength="200"
-      hint @profile.author.hint
-      row gap="sm" wrap
-        button submit @profile.save
-        button kind="ghost" id="authorCancel" @profile.cancel
-    message id="authorMessage"
-
-  -- timezone + the default announce set: the anchor a new test session is
-  -- written in, and the cities its invite line is written for
-  modal id="tzOverlay" label=@profile.tz.name title=@profile.tz.name
-    form id="tzForm" dir="col"
-      textfield id="tzValue" placeholder="Europe/Moscow" autocomplete="off" maxlength="64"
-      hint @profile.tz.hint
-      label for="tzCities" @profile.tz.cities_label
-      textfield id="tzCities" placeholder=@profile.tz.cities_placeholder autocomplete="off"
-      hint @profile.tz.cities_hint
-      label for="tzTitleMode" @profile.tz.title_mode_label
-      selectfield id="tzTitleMode" title=@profile.tz.title_mode_label
-        option value="date-title" @profile.tz.mode_date_title
-        option value="title" @profile.tz.mode_title
-        option value="date" @profile.tz.mode_date
-      row gap="sm" wrap
-        button submit @profile.save
-        button kind="ghost" id="tzCancel" @profile.cancel
-    message id="tzMessage"
-
-  -- feed dialog: which kind of entry an opened card's feed shows
-  modal id="feedDefaultOverlay" label=@profile.feed.name title=@profile.feed.name
-    form id="feedDefaultForm" dir="col"
-      fieldset
-        radio name="feedDefault" value="all" @profile.feed.all
-        radio name="feedDefault" value="comments" @profile.feed.comments
-        radio name="feedDefault" value="edits" @profile.feed.edits
-        radio name="feedDefault" value="meta" @profile.feed.meta
-      hint @profile.feed.hint
-      row gap="sm" wrap
-        button submit @profile.save
-        button kind="ghost" id="feedDefaultCancel" @profile.cancel
-    message id="feedDefaultMessage"
-
-  -- card-title dialog: which field a card shows in the board list
-  modal id="cardTitleOverlay" label=@profile.card_title.name title=@profile.card_title.name
-    form id="cardTitleForm" dir="col"
-      fieldset
-        radio name="cardTitle" value="question" @profile.card_title.question
-        radio name="cardTitle" value="answer" @profile.card_title.answer
-      hint @profile.card_title.hint
-      row gap="sm" wrap
-        button submit @profile.save
-        button kind="ghost" id="cardTitleCancel" @profile.cancel
-    message id="cardTitleMessage"

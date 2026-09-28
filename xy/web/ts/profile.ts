@@ -1,7 +1,7 @@
-// profile.ts — username management, logout, and the settings dialogs: change
-// password, board sizes (with a pseudo-board preview), interface font, default
-// author, card title, timezone, and which kind of entry an opened card's feed
-// shows.
+// profile.ts — username management, logout, the settings shown on the page
+// (interface font, card title, which kind of entry an opened card's feed
+// shows, default author, timezone and invite cities), and the two dialogs:
+// change password and board sizes (with a pseudo-board preview).
 import S from "./i18nstrings.js";
 import { xyApp, xySizes } from "./app.js";
 import { type Modal, modal } from "./modal.js";
@@ -213,79 +213,84 @@ wireModal("sizes", "sizesBtn", async () => {
   syncSizesUI();
 });
 
-// ---- interface font ----
-// Two halves, and they are not the same thing: users.ui_font is where the choice
-// LIVES (it is the reader's answer wherever they sign in, like the feed default
-// beside it), and the kit's chrome is what APPLIES it — on <html> before first
-// paint, from its own cached copy, on every page of the site. So a pick does
-// both: the chrome at once, because a font wants no preview but the page itself,
-// and the POST behind it. The second face is fetched by that same click and
-// never before it.
-const fontRadios = () => byId("fontOverlay").querySelectorAll<HTMLInputElement>('input[name="uiFont"]');
-const fontMessage = byId("fontMessage");
-wireModal("font", "fontBtn", async () => {
-  await booted;
-  for (const r of fontRadios()) r.checked = r.value === uiFont;
-  setText(fontMessage, "");
-});
-
-for (const radio of fontRadios()) {
-  radio.addEventListener("change", async () => {
-    if (!radio.checked) return;
-    const previous = uiFont;
-    uiFont = radio.value;
-    window.dopeMenu?.setFont(uiFont);
-    setText(fontMessage, "");
-    try {
-      await jpost("/api/auth/ui-font", { ui_font: uiFont });
-    } catch (err) {
-      // The face is already on the page; what failed is the part that makes it
-      // follow the reader, so say so and put the radios back where the account
-      // still stands.
-      uiFont = previous;
-      window.dopeMenu?.setFont(uiFont);
-      for (const r of fontRadios()) r.checked = r.value === uiFont;
-      setText(fontMessage, errMsg(err));
-    }
-  });
+// ---- the settings shown on the page ----
+// Each control shows the account's current value and saves when it changes.
+// Its message line says it saved, or why the save failed; a text field also
+// saves while you pause typing, since a suggestion picked from its list fires
+// no change event.
+function flash(node: HTMLElement, text: string): void {
+  setText(node, text);
+  if (!text) return;
+  const shown = text;
+  setTimeout(() => { if (node.textContent === shown) setText(node, ""); }, 2000);
 }
 
-// ---- default author ----
-const authorForm = byId<HTMLFormElement>("authorForm");
-const authorMessage = byId("authorMessage");
-const authorModal = wireModal("author", "authorBtn", async () => {
-  await booted;
-  byId<HTMLInputElement>("authorValue").value = defaultAuthor;
-  setText(authorMessage, "");
-});
-
-authorForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  setText(authorMessage, "");
-  const v = byId<HTMLInputElement>("authorValue").value.trim();
-  try {
-    await jpost("/api/auth/default-author", { default_author: v });
-    defaultAuthor = v;
-    authorModal.close();
-  } catch (err) {
-    setText(authorMessage, errMsg(err));
+// saveOn wires one control: `save` posts it and throws on failure, `revert`
+// puts the control back to what the account still holds.
+function saveOn(controls: HTMLElement[], message: HTMLElement, save: () => Promise<void>, revert: () => void, typing = false): void {
+  let timer: number | null = null;
+  const run = async (): Promise<void> => {
+    if (timer) { clearTimeout(timer); timer = null; }
+    setText(message, "");
+    try {
+      await save();
+      flash(message, S.profile.saved());
+    } catch (err) {
+      revert();
+      setText(message, errMsg(err));
+    }
+  };
+  for (const c of controls) {
+    c.addEventListener("change", () => { void run(); });
+    if (typing) c.addEventListener("input", () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { void run(); }, 800);
+    });
   }
+}
+
+// Interface font. Two halves, and they are not the same thing: users.ui_font is
+// where the choice LIVES (it follows the reader to any device), and the kit's
+// chrome is what APPLIES it, on <html> before first paint, on every page. So a
+// pick does both: the chrome at once, since the page itself is the preview, and
+// the POST behind it. The face is only downloaded once it is picked.
+const fontSelect = byId<HTMLSelectElement>("uiFont");
+saveOn([fontSelect], byId("fontMessage"), async () => {
+  window.dopeMenu?.setFont(fontSelect.value);
+  await jpost("/api/auth/ui-font", { ui_font: fontSelect.value });
+  uiFont = fontSelect.value;
+}, () => {
+  fontSelect.value = uiFont;
+  window.dopeMenu?.setFont(uiFont);
 });
 
-// ---- timezone, announce cities, session label naming ----
-// The timezone does two jobs and neither is rendering: it is the zone a new test
-// session's time is written in, and the first city of its announce set. The
-// cities are only the seed — a session keeps its own copy, because who is
-// invited changes from test to test.
-const tzForm = byId<HTMLFormElement>("tzForm");
-const tzMessage = byId("tzMessage");
-const tzModal = wireModal("tz", "tzBtn", async () => {
-  await booted;
-  byId<HTMLInputElement>("tzValue").value = timezone || guessZone();
-  byId<HTMLInputElement>("tzCities").value = announceCities.map((c) => c.name).join(", ");
-  byId<HTMLSelectElement>("tzTitleMode").value = sessionTitleMode;
-  setText(tzMessage, "");
-});
+const cardTitleSelect = byId<HTMLSelectElement>("cardTitle");
+saveOn([cardTitleSelect], byId("cardTitleMessage"), async () => {
+  await jpost("/api/auth/card-title", { card_title: cardTitleSelect.value });
+  cardTitle = cardTitleSelect.value;
+}, () => { cardTitleSelect.value = cardTitle; });
+
+const feedSelect = byId<HTMLSelectElement>("feedDefault");
+saveOn([feedSelect], byId("feedDefaultMessage"), async () => {
+  await jpost("/api/auth/feed-default", { feed_default: feedSelect.value });
+  feedDefault = feedSelect.value;
+}, () => { feedSelect.value = feedDefault; });
+
+const authorInput = byId<HTMLInputElement>("authorValue");
+saveOn([authorInput], byId("authorMessage"), async () => {
+  const v = authorInput.value.trim();
+  if (v === defaultAuthor) return;
+  await jpost("/api/auth/default-author", { default_author: v });
+  defaultAuthor = v;
+}, () => { authorInput.value = defaultAuthor; }, true);
+
+// Timezone, announce cities, session label naming. The timezone does two jobs
+// and neither is rendering: it is the zone a new test session's time is written
+// in, and the first city of its announce set. The cities are only the seed — a
+// session keeps its own copy, because who is invited changes from test to test.
+const tzInput = byId<HTMLInputElement>("tzValue");
+const citiesInput = byId<HTMLInputElement>("tzCities");
+const titleModeSelect = byId<HTMLSelectElement>("tzTitleMode");
 
 // citiesFromNames resolves typed names against the built-in table; an unknown one
 // is kept with the caller's own zone, so the invite line still names it.
@@ -298,8 +303,8 @@ function citiesFromNames(raw: string, ownZone: string): Array<{ zone: string; na
 
 // The same pickers the session form uses: a bare box here meant typing an IANA
 // id from memory, and "almaty" finding nothing.
-autocomplete(byId<HTMLInputElement>("tzValue"), zoneChoices);
-autocomplete(byId<HTMLInputElement>("tzCities"), (q) => {
+autocomplete(tzInput, zoneChoices);
+autocomplete(citiesInput, (q) => {
   // The field is a comma-separated list, so complete only its LAST entry.
   const head = q.slice(0, q.lastIndexOf(",") + 1);
   const tail = q.slice(q.lastIndexOf(",") + 1).trim();
@@ -307,70 +312,33 @@ autocomplete(byId<HTMLInputElement>("tzCities"), (q) => {
   return townChoices(tail).map((c) => ({ ...c, value: head + (head ? " " : "") + c.value }));
 });
 
-tzForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  setText(tzMessage, "");
-  const tz = byId<HTMLInputElement>("tzValue").value.trim();
-  const mode = byId<HTMLSelectElement>("tzTitleMode").value;
-  const cities = citiesFromNames(byId<HTMLInputElement>("tzCities").value, tz || guessZone());
-  try {
-    await jpost("/api/auth/profile-defaults", { timezone: tz, session_title_mode: mode });
-    await jpost("/api/auth/announce-cities", { announce_cities: cities });
-    timezone = tz;
-    sessionTitleMode = mode;
-    announceCities = cities;
-    tzModal.close();
-  } catch (err) {
-    setText(tzMessage, errMsg(err));
-  }
-});
+const cityNames = (cities: Array<{ name: string }>): string => cities.map((c) => c.name).join(", ");
 
-// ---- card title (question text vs answer) ----
-const cardTitleForm = byId<HTMLFormElement>("cardTitleForm");
-const cardTitleMessage = byId("cardTitleMessage");
-const cardTitleRadios = () => cardTitleForm.querySelectorAll<HTMLInputElement>('input[name="cardTitle"]');
-const cardTitleModal = wireModal("cardTitle", "cardTitleBtn", async () => {
-  await booted;
-  for (const r of cardTitleRadios()) r.checked = r.value === cardTitle;
-  setText(cardTitleMessage, "");
-});
+saveOn([tzInput, citiesInput, titleModeSelect], byId("tzMessage"), async () => {
+  const tz = tzInput.value.trim();
+  const mode = titleModeSelect.value;
+  const cities = citiesFromNames(citiesInput.value, tz || guessZone());
+  if (tz === timezone && mode === sessionTitleMode && cityNames(cities) === cityNames(announceCities)) return;
+  await jpost("/api/auth/profile-defaults", { timezone: tz, session_title_mode: mode });
+  await jpost("/api/auth/announce-cities", { announce_cities: cities });
+  timezone = tz;
+  sessionTitleMode = mode;
+  announceCities = cities;
+}, () => {
+  tzInput.value = timezone;
+  citiesInput.value = cityNames(announceCities);
+  titleModeSelect.value = sessionTitleMode;
+}, true);
 
-cardTitleForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  setText(cardTitleMessage, "");
-  const picked = [...cardTitleRadios()].find((r) => r.checked);
-  const v = picked ? picked.value : "question";
-  try {
-    await jpost("/api/auth/card-title", { card_title: v });
-    cardTitle = v;
-    cardTitleModal.close();
-  } catch (err) {
-    setText(cardTitleMessage, errMsg(err));
-  }
-});
-
-// ---- feed (which kind of entry an opened card's feed shows) ----
-const feedDefaultForm = byId<HTMLFormElement>("feedDefaultForm");
-const feedDefaultMessage = byId("feedDefaultMessage");
-const feedDefaultRadios = () => feedDefaultForm.querySelectorAll<HTMLInputElement>('input[name="feedDefault"]');
-const feedDefaultModal = wireModal("feedDefault", "feedDefaultBtn", async () => {
-  await booted;
-  for (const r of feedDefaultRadios()) r.checked = r.value === feedDefault;
-  setText(feedDefaultMessage, "");
-});
-
-feedDefaultForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  setText(feedDefaultMessage, "");
-  const picked = [...feedDefaultRadios()].find((r) => r.checked);
-  const v = picked ? picked.value : "all";
-  try {
-    await jpost("/api/auth/feed-default", { feed_default: v });
-    feedDefault = v;
-    feedDefaultModal.close();
-  } catch (err) {
-    setText(feedDefaultMessage, errMsg(err));
-  }
+// Show what the account holds, once /api/auth/me has answered.
+void booted.then(() => {
+  fontSelect.value = uiFont;
+  cardTitleSelect.value = cardTitle;
+  feedSelect.value = feedDefault;
+  authorInput.value = defaultAuthor;
+  tzInput.value = timezone || guessZone();
+  citiesInput.value = cityNames(announceCities);
+  titleModeSelect.value = sessionTitleMode;
 });
 
 byId("logoutBtn").addEventListener("click", async () => {

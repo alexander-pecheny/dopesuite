@@ -1741,9 +1741,7 @@ export type Strings = {
       tzLabel: () => string;
     };
     font: {
-      close: () => string;
       faceHint: () => string;
-      hint: () => string;
       inter: () => string;
       literata: () => string;
       name: () => string;
@@ -1764,6 +1762,7 @@ export type Strings = {
       submit: () => string;
     };
     save: () => string;
+    saved: () => string;
     sizes: {
       boardW: () => string;
       boardWHint: () => string;
@@ -1797,8 +1796,8 @@ export type Strings = {
       modeDate: () => string;
       modeDateTitle: () => string;
       modeTitle: () => string;
-      name: () => string;
       titleModeLabel: () => string;
+      tzLabel: () => string;
     };
     username: {
       hint: () => string;

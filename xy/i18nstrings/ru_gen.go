@@ -2302,12 +2302,8 @@ var RU = Strings{
 			TzLabel: func() string { return "Часовой пояс" },
 		},
 		Font: ProfileFontStrings{
-			Close: func() string { return "Готово" },
 			FaceHint: func() string {
 				return "Первые три — без засечек, остальные — с засечками. Всё, кроме Noto Sans, — версии с починенными ударениями и перекерненной кириллицей."
-			},
-			Hint: func() string {
-				return "Применяется сразу ко всему сайту — эта страница и есть образец — и сохраняется в профиле, так что на другом устройстве будет тот же. Сам шрифт скачивается, только когда выбран."
 			},
 			Inter:     func() string { return "Inter Fix RA" },
 			Literata:  func() string { return "Literata Fix" },
@@ -2328,7 +2324,8 @@ var RU = Strings{
 			Saved:    func() string { return "Пароль сохранён." },
 			Submit:   func() string { return "Сохранить пароль" },
 		},
-		Save: func() string { return "Сохранить" },
+		Save:  func() string { return "Сохранить" },
+		Saved: func() string { return "Сохранено." },
 		Sizes: ProfileSizesStrings{
 			BoardW: func() string { return "Ширина рабочей области" },
 			BoardWHint: func() string {
@@ -2374,8 +2371,8 @@ var RU = Strings{
 			ModeDate:       func() string { return "только дата" },
 			ModeDateTitle:  func() string { return "дата и название" },
 			ModeTitle:      func() string { return "только название" },
-			Name:           func() string { return "Часовой пояс и города" },
 			TitleModeLabel: func() string { return "Названия меток тестов" },
+			TzLabel:        func() string { return "Часовой пояс" },
 		},
 		Username: ProfileUsernameStrings{
 			Hint:        func() string { return "Задайте логин (один раз)." },

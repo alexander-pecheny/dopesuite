@@ -1,6 +1,6 @@
-# The /profile page (profile.dopeui): account info, the ghost-button actions,
-# and the settings dialogs those buttons open. A dialog's name is one id,
-# shared by its opener button and the modal's label/title.
+# The /profile page (profile.dopeui): account info, the settings shown on the
+# page with their values, and the two dialogs (password, board sizes) that
+# the ghost buttons under them open.
 
 # Browser-tab title of /profile (page title attribute).
 title = "Профиль · xy"
@@ -8,11 +8,12 @@ title = "Профиль · xy"
 name = "Профиль"
 # The "all boards" home crumb back to /.
 home = "Все доски"
-# Submit button shared by the page's settings forms: username, default author,
-# timezone, default feed, card title.
+# Submit button of the one-time username form.
 save = "Сохранить"
-# Cancel button shared by every settings dialog.
+# Cancel button of the change-password dialog.
 cancel = "Отмена"
+# The message line under a setting once its change is saved.
+saved = "Сохранено."
 
 [whoami]
 # "Вы вошли как <strong>login</strong>." under the topbar — split around the
@@ -87,27 +88,22 @@ card_h_max = "весь текст"
 card_lines = '{{.n}} {{plural .n "строка" "строки" "строк"}}'
 
 [font]
-# Interface-font dialog (fontOverlay): which face the whole site is set in.
-# Named for the interface because [sizes].font next to it is the card's font
-# SIZE, and the two buttons stand in the same column. The opener reuses name.
+# Interface font: which face the whole site is set in. Named for the interface
+# because [sizes].font is the card's font SIZE. Label of the select.
 name = "Шрифт интерфейса"
-# Radio option: the default face.
+# Option: the default face.
 noto = "Noto Sans (по умолчанию)"
-# Radio options: the five alternatives, sans first, then serif.
+# Options: the five alternatives, sans first, then serif.
 inter = "Inter Fix RA"
 plex_sans = "IBM Plex Sans Fix"
 literata = "Literata Fix"
 plex_serif = "IBM Plex Serif Fix"
 stix = "STIX Two Text Fix"
-# What those alternatives are, under the radios.
+# What those alternatives are, under the select.
 face_hint = "Первые три — без засечек, остальные — с засечками. Всё, кроме Noto Sans, — версии с починенными ударениями и перекерненной кириллицей."
-# How the choice behaves, under that.
-hint = "Применяется сразу ко всему сайту — эта страница и есть образец — и сохраняется в профиле, так что на другом устройстве будет тот же. Сам шрифт скачивается, только когда выбран."
-# Button closing the dialog.
-close = "Готово"
 
 [author]
-# Default-author dialog (authorOverlay); the opener button reuses name.
+# Default author: label of the field.
 name = "Автор по умолчанию"
 # Placeholder of the author-name field.
 placeholder = "Имя автора"
@@ -134,8 +130,8 @@ save = "Сохранить"
 later = "Потом"
 
 [tz]
-# Timezone-and-cities dialog (tzOverlay); the opener button reuses name.
-name = "Часовой пояс и города"
+# Timezone, invite cities and test-label naming. Label of the timezone field.
+tz_label = "Часовой пояс"
 # Hint under the timezone field.
 hint = "Часовой пояс, в котором записывается время новых тестов."
 # Label above the cities field.
@@ -144,7 +140,7 @@ cities_label = "Города для приглашения"
 cities_placeholder = "Москва, Берлин, Алматы"
 # Hint under the cities field.
 cities_hint = "Через запятую. Строка со временем начала выглядит так: 20 июля, 19:00 (Москва) / 18:00 (Берлин)."
-# Label and select title of the session-title-mode picker.
+# Label of the session-title-mode select.
 title_mode_label = "Названия меток тестов"
 # Option: session titles carry date and title.
 mode_date_title = "дата и название"
@@ -154,27 +150,25 @@ mode_title = "только название"
 mode_date = "только дата"
 
 [feed]
-# Default-feed dialog (feedDefaultOverlay): which kind of entry an opened
-# card's feed starts on; the opener button reuses name.
+# Which kind of entry an opened card's feed starts on. Label of the select.
 name = "Лента"
-# Radio option: every kind of entry.
+# Option: every kind of entry.
 all = "Всё"
-# Radio option: comments.
+# Option: comments.
 comments = "Комментарии"
-# Radio option: edit history.
+# Option: edit history.
 edits = "Правки"
-# Radio option: labels and attachments.
+# Option: labels and attachments.
 meta = "Метки и вложения"
-# Hint under the radios.
+# Hint under the select.
 hint = "С чего начинается лента открытой карточки. В самой карточке это можно переключить — до её закрытия."
 
 [card_title]
-# Card-title dialog (cardTitleOverlay): what a board list shows on a card; the
-# opener button reuses name.
+# What a board list shows on a card. Label of the select.
 name = "Заголовок карточки"
-# Radio option: the question text.
+# Option: the question text.
 question = "Текст вопроса"
-# Radio option: the answer.
+# Option: the answer.
 answer = "Ответ"
-# Hint under the radios.
+# Hint under the select.
 hint = "По ответу вопрос часто узнаётся быстрее, чем по началу текста. Если у карточки задан алиас, показывается он — в любом режиме."
