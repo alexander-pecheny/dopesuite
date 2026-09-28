@@ -146,7 +146,35 @@ function answerText(desc: string | null | undefined): string {
 // the faster way to recognize it. An answerless question falls back to its text —
 // a blank card is worse than the old default.
 function previewText(kind: string, desc: string | null | undefined, mode: string | null | undefined): string {
-  return dropHidden(titleSource(kind, desc, mode));
+  const text = dropHidden(titleSource(kind, desc, mode));
+  if (kind !== "question" || (mode === "answer" && answerText(desc) !== "")) return text;
+  return skipLead(text);
+}
+
+// A question's lead-in: «Внимание» as a word, in any letter case.
+const ATTENTION_LEAD = /^внимание(?![а-яё])/i;
+
+// skipLead drops what opens a question before the question itself: a handout
+// bracket and a «Внимание, …» sentence (a replacement notice, a blitz
+// announcement), in either order and as many as there are, so the card's
+// preview starts with the question's own words (issue #98). A question that is
+// nothing but its lead keeps it: some text beats an empty card.
+function skipLead(text: string): string {
+  let t = text.trim();
+  for (;;) {
+    let next = t;
+    if (t.startsWith("[")) {
+      const end = findMatchingBracket(t, 0);
+      if (end !== -1 && isHandoutBody(t.slice(1, end))) next = t.slice(end + 1).trim();
+    } else if (ATTENTION_LEAD.test(t)) {
+      // the sentence ends at its first . ! ? or …, or at the end of its line
+      const m = /[.!?…](?=\s|$)|\n/.exec(t);
+      next = m ? t.slice(m.index + 1).trim() : "";
+    }
+    if (next === t) return t;
+    if (next === "") return text.trim();
+    t = next;
+  }
 }
 
 function titleSource(kind: string, desc: string | null | undefined, mode: string | null | undefined): string {

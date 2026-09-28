@@ -422,6 +422,30 @@ test("answer mode does not touch non-question cards", () => {
   assert.equal(xyChgk.previewText("meta", "# Дата", "answer"), "Дата");
 });
 
+// ---- the auto-preview starts at the question itself (issue #98) ----
+
+test("a question previews past a leading Внимание sentence", () => {
+  assert.equal(xyChgk.previewText("question", "? Внимание, в вопросе есть замены. Икс сделал Игрек."), "Икс сделал Игрек.");
+  assert.equal(xyChgk.previewText("question", "? ВНИМАНИЕ! Вопрос в двух частях.\nПервая часть."), "Вопрос в двух частях.\nПервая часть.");
+  // a Внимание line with no full stop ends at its line
+  assert.equal(xyChgk.previewText("question", "? Внимание, блиц\nПервый вопрос."), "Первый вопрос.");
+});
+
+test("a question previews past a leading handout bracket", () => {
+  assert.equal(xyChgk.previewText("question", "? [Раздаточный материал: (img foto.jpg)]\nНа фото Икс."), "На фото Икс.");
+  assert.equal(xyChgk.previewText("question", "? [Раздаточный материал:\nстрока один\nстрока два]\nВнимание, замена.\nЭто Икс."), "Это Икс.");
+});
+
+test("only the lead is skipped, and a question that is nothing but a lead keeps it", () => {
+  assert.equal(xyChgk.previewText("question", "? Он сказал: «Внимание, мотор!». Кто он?"), "Он сказал: «Внимание, мотор!». Кто он?");
+  assert.equal(xyChgk.previewText("question", "? Икс. [Раздаточный материал: текст] Кто?"), "Икс. [Раздаточный материал: текст] Кто?");
+  assert.equal(xyChgk.previewText("question", "? Внимание, замена."), "Внимание, замена.");
+  // «Вниманием» is a word, not the lead-in
+  assert.equal(xyChgk.previewText("question", "? Вниманием публики владел Икс."), "Вниманием публики владел Икс.");
+  // answer mode shows the answer as before
+  assert.equal(xyChgk.previewText("question", "? Внимание, замена. Кто?\n! Икс", "answer"), "Икс");
+});
+
 // ---- what a card offers to copy (issue #45) ----
 const { copyTargets } = xyChgk;
 
