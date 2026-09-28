@@ -1707,6 +1707,10 @@ textarea.fld-src {
 /* iOS and standalone Safari show no inline PDF, so the pages come as SVGs */
 .handouts-pdf-pages { position: absolute; inset: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3); }
 .handouts-pdf-page { width: 100%; height: auto; background: var(--uchu-yang); box-shadow: var(--shadow-sm); }
+/* A render that takes a while: the spinner sits over the previous preview. */
+.handouts-pdf[aria-busy="true"]::after { content: ""; position: absolute; top: 50%; left: 50%; width: 32px; height: 32px; margin: -16px 0 0 -16px; border-radius: 50%; border: 3px solid color-mix(in srgb, var(--muted) 25%, transparent); border-top-color: var(--muted); background: var(--surface); box-shadow: 0 0 0 var(--space-2) var(--surface), var(--shadow-sm); animation: handouts-spin 0.8s linear infinite; }
+@keyframes handouts-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .handouts-pdf[aria-busy="true"]::after { animation-duration: 2.4s; } }
 
 @media (max-width: 760px) {
   .handouts-body { flex-direction: column; }

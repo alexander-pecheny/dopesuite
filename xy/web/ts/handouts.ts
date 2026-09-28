@@ -358,7 +358,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     handoutsCtx = null;
   }
 
-  // The preview follows the text: two seconds after the last edit it is typeset
+  // The preview follows the text: 300ms after the last edit it is typeset
   // again, and an edit made while a render runs queues exactly one more.
   let previewTimer: ReturnType<typeof setTimeout> | null = null;
   let rendering = false;
@@ -366,15 +366,20 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
 
   function schedulePreview(): void {
     if (previewTimer) clearTimeout(previewTimer);
-    previewTimer = setTimeout(() => { void refreshPreview(); }, 2000);
+    previewTimer = setTimeout(() => { void refreshPreview(); }, 300);
   }
 
   async function refreshPreview(): Promise<void> {
     if (previewTimer) { clearTimeout(previewTimer); previewTimer = null; }
     if (rendering) { renderAgain = true; return; }
     rendering = true;
+    // A render that is quick shows no spinner. One that waits on big images or
+    // a long typeset marks the pane busy, so the old preview does not look final.
+    const busy = setTimeout(() => byId("handoutsPdf").setAttribute("aria-busy", "true"), 200);
     try { await generateHandoutsPdf(); } finally { rendering = false; }
-    if (renderAgain) { renderAgain = false; void refreshPreview(); }
+    if (renderAgain) { renderAgain = false; clearTimeout(busy); void refreshPreview(); return; }
+    clearTimeout(busy);
+    byId("handoutsPdf").removeAttribute("aria-busy");
   }
 
   async function generateHandoutsPdf(): Promise<void> {

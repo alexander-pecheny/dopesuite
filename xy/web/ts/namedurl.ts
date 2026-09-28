@@ -18,12 +18,20 @@ function controller(): ServiceWorker | null {
   return ("serviceWorker" in navigator && navigator.serviceWorker.controller) || null;
 }
 
+// A worker that is up answers in a few milliseconds, and one woken from idle
+// in a few hundred. Some browsers never answer at all: in a Firefox profile of
+// the handouts preview the reply never came, and the PDF waited out the whole
+// timeout (3s back then) before it was shown. So the wait is short, and after
+// one miss the page stops asking and uses blob: URLs for the rest of its life.
+const REPLY_TIMEOUT_MS = 500;
+let unresponsive = false;
+
 // ask posts a message to the worker and resolves with its reply, or null if the
 // worker never answers (it may have been killed between the check and the post).
 function ask(sw: ServiceWorker, msg: Record<string, unknown>, transferBlob?: Blob): Promise<unknown> {
   return new Promise((resolve) => {
     const ch = new MessageChannel();
-    const timer = setTimeout(() => resolve(null), 3000);
+    const timer = setTimeout(() => { unresponsive = true; resolve(null); }, REPLY_TIMEOUT_MS);
     ch.port1.onmessage = (e) => { clearTimeout(timer); resolve(e.data); };
     sw.postMessage({ ...msg, blob: transferBlob }, [ch.port2]);
   });
@@ -35,7 +43,7 @@ function ask(sw: ServiceWorker, msg: Record<string, unknown>, transferBlob?: Blo
 // the old behaviour, uuid name and all.
 export async function namedUrl(blob: Blob, filename: string): Promise<string> {
   const sw = controller();
-  if (!sw) return URL.createObjectURL(blob);
+  if (!sw || unresponsive) return URL.createObjectURL(blob);
   const path = DL_PREFIX + encodeURIComponent(filename);
   const ok = await ask(sw, { type: "xy-dl-put", path, filename }, blob);
   return ok ? path : URL.createObjectURL(blob);
