@@ -1709,14 +1709,12 @@ export type Strings = {
       tokens: () => string;
     };
     author: {
-      hint: () => string;
       name: () => string;
       placeholder: () => string;
     };
     cancel: () => string;
     cardTitle: {
       answer: () => string;
-      hint: () => string;
       name: () => string;
       question: () => string;
     };
@@ -1724,7 +1722,6 @@ export type Strings = {
       all: () => string;
       comments: () => string;
       edits: () => string;
-      hint: () => string;
       meta: () => string;
       name: () => string;
     };
@@ -1741,7 +1738,6 @@ export type Strings = {
       tzLabel: () => string;
     };
     font: {
-      faceHint: () => string;
       inter: () => string;
       literata: () => string;
       name: () => string;
@@ -1789,10 +1785,8 @@ export type Strings = {
     };
     title: () => string;
     tz: {
-      citiesHint: () => string;
       citiesLabel: () => string;
       citiesPlaceholder: () => string;
-      hint: () => string;
       modeDate: () => string;
       modeDateTitle: () => string;
       modeTitle: () => string;

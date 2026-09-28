@@ -99,16 +99,12 @@ plex_sans = "IBM Plex Sans Fix"
 literata = "Literata Fix"
 plex_serif = "IBM Plex Serif Fix"
 stix = "STIX Two Text Fix"
-# What those alternatives are, under the select.
-face_hint = "Первые три — без засечек, остальные — с засечками. Всё, кроме Noto Sans, — версии с починенными ударениями и перекерненной кириллицей."
 
 [author]
 # Default author: label of the field.
 name = "Автор по умолчанию"
 # Placeholder of the author-name field.
 placeholder = "Имя автора"
-# Hint under the field.
-hint = "Подставляется в новые карточки-вопросы (поле Автор и строка «@» в Тексте). Пустое — не подставлять."
 
 [firstrun]
 # First-run onboarding dialog (firstrun.ts): the two questions every account
@@ -132,14 +128,10 @@ later = "Потом"
 [tz]
 # Timezone, invite cities and test-label naming. Label of the timezone field.
 tz_label = "Часовой пояс"
-# Hint under the timezone field.
-hint = "Часовой пояс, в котором записывается время новых тестов."
 # Label above the cities field.
 cities_label = "Города для приглашения"
 # Placeholder of the cities field.
 cities_placeholder = "Москва, Берлин, Алматы"
-# Hint under the cities field.
-cities_hint = "Через запятую. Строка со временем начала выглядит так: 20 июля, 19:00 (Москва) / 18:00 (Берлин)."
 # Label of the session-title-mode select.
 title_mode_label = "Названия меток тестов"
 # Option: session titles carry date and title.
@@ -160,8 +152,6 @@ comments = "Комментарии"
 edits = "Правки"
 # Option: labels and attachments.
 meta = "Метки и вложения"
-# Hint under the select.
-hint = "С чего начинается лента открытой карточки. В самой карточке это можно переключить — до её закрытия."
 
 [card_title]
 # What a board list shows on a card. Label of the select.
@@ -170,5 +160,3 @@ name = "Заголовок карточки"
 question = "Текст вопроса"
 # Option: the answer.
 answer = "Ответ"
-# Hint under the select.
-hint = "По ответу вопрос часто узнаётся быстрее, чем по началу текста. Если у карточки задан алиас, показывается он — в любом режиме."

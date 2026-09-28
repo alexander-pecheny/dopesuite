@@ -28,7 +28,6 @@ page title=@profile.title kind="sheet" scripts="dist/profile.js"
         option value="literata-fix" @profile.font.literata
         option value="ibm-plex-serif-fix" @profile.font.plex_serif
         option value="stix-two-text-fix" @profile.font.stix
-    hint @profile.font.face_hint
     message id="fontMessage"
 
   section
@@ -36,7 +35,6 @@ page title=@profile.title kind="sheet" scripts="dist/profile.js"
       selectfield id="cardTitle"
         option value="question" @profile.card_title.question
         option value="answer" @profile.card_title.answer
-    hint @profile.card_title.hint
     message id="cardTitleMessage"
 
   section
@@ -46,22 +44,18 @@ page title=@profile.title kind="sheet" scripts="dist/profile.js"
         option value="comments" @profile.feed.comments
         option value="edits" @profile.feed.edits
         option value="meta" @profile.feed.meta
-    hint @profile.feed.hint
     message id="feedDefaultMessage"
 
   section
     field label=@profile.author.name
       textfield id="authorValue" placeholder=@profile.author.placeholder autocomplete="off" maxlength="200"
-    hint @profile.author.hint
     message id="authorMessage"
 
   section
     field label=@profile.tz.tz_label
       textfield id="tzValue" placeholder="Europe/Moscow" autocomplete="off" maxlength="64"
-    hint @profile.tz.hint
     field label=@profile.tz.cities_label
       textfield id="tzCities" placeholder=@profile.tz.cities_placeholder autocomplete="off"
-    hint @profile.tz.cities_hint
     field label=@profile.tz.title_mode_label
       selectfield id="tzTitleMode"
         option value="date-title" @profile.tz.mode_date_title

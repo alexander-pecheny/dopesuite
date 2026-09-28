@@ -2260,18 +2260,12 @@ var RU = Strings{
 			Tokens: func() string { return "API-токены" },
 		},
 		Author: ProfileAuthorStrings{
-			Hint: func() string {
-				return "Подставляется в новые карточки-вопросы (поле Автор и строка «@» в Тексте). Пустое — не подставлять."
-			},
 			Name:        func() string { return "Автор по умолчанию" },
 			Placeholder: func() string { return "Имя автора" },
 		},
 		Cancel: func() string { return "Отмена" },
 		CardTitle: ProfileCardTitleStrings{
-			Answer: func() string { return "Ответ" },
-			Hint: func() string {
-				return "По ответу вопрос часто узнаётся быстрее, чем по началу текста. Если у карточки задан алиас, показывается он — в любом режиме."
-			},
+			Answer:   func() string { return "Ответ" },
 			Name:     func() string { return "Заголовок карточки" },
 			Question: func() string { return "Текст вопроса" },
 		},
@@ -2279,11 +2273,8 @@ var RU = Strings{
 			All:      func() string { return "Всё" },
 			Comments: func() string { return "Комментарии" },
 			Edits:    func() string { return "Правки" },
-			Hint: func() string {
-				return "С чего начинается лента открытой карточки. В самой карточке это можно переключить — до её закрытия."
-			},
-			Meta: func() string { return "Метки и вложения" },
-			Name: func() string { return "Лента" },
+			Meta:     func() string { return "Метки и вложения" },
+			Name:     func() string { return "Лента" },
 		},
 		Firstrun: ProfileFirstrunStrings{
 			AuthorHint: func() string {
@@ -2302,9 +2293,6 @@ var RU = Strings{
 			TzLabel: func() string { return "Часовой пояс" },
 		},
 		Font: ProfileFontStrings{
-			FaceHint: func() string {
-				return "Первые три — без засечек, остальные — с засечками. Всё, кроме Noto Sans, — версии с починенными ударениями и перекерненной кириллицей."
-			},
 			Inter:     func() string { return "Inter Fix RA" },
 			Literata:  func() string { return "Literata Fix" },
 			Name:      func() string { return "Шрифт интерфейса" },
@@ -2360,19 +2348,13 @@ var RU = Strings{
 		},
 		Title: func() string { return "Профиль · xy" },
 		Tz: ProfileTzStrings{
-			CitiesHint: func() string {
-				return "Через запятую. Строка со временем начала выглядит так: 20 июля, 19:00 (Москва) / 18:00 (Берлин)."
-			},
 			CitiesLabel:       func() string { return "Города для приглашения" },
 			CitiesPlaceholder: func() string { return "Москва, Берлин, Алматы" },
-			Hint: func() string {
-				return "Часовой пояс, в котором записывается время новых тестов."
-			},
-			ModeDate:       func() string { return "только дата" },
-			ModeDateTitle:  func() string { return "дата и название" },
-			ModeTitle:      func() string { return "только название" },
-			TitleModeLabel: func() string { return "Названия меток тестов" },
-			TzLabel:        func() string { return "Часовой пояс" },
+			ModeDate:          func() string { return "только дата" },
+			ModeDateTitle:     func() string { return "дата и название" },
+			ModeTitle:         func() string { return "только название" },
+			TitleModeLabel:    func() string { return "Названия меток тестов" },
+			TzLabel:           func() string { return "Часовой пояс" },
 		},
 		Username: ProfileUsernameStrings{
 			Hint:        func() string { return "Задайте логин (один раз)." },
