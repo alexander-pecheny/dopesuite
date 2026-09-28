@@ -1395,7 +1395,9 @@
    it. The 4s view has one over its editor, Поля one over each text field, and
    both behave alike: only the field under the pointer or holding the caret
    shows its tab. It is hidden, not removed, so nothing below it jumps. */
-#cardCopy4s, .fld-copy {
+/* .btn.fld-copy, not .fld-copy: the kit's .btn.btn-ghost would otherwise win
+   and paint the Поля tabs in the ghost fill while the 4s one had the field's */
+#cardCopy4s, .btn.fld-copy {
   min-height: 0;
   height: 20px;
   padding: 0 var(--space-2);
@@ -1405,7 +1407,7 @@
   font-size: var(--text-xs);
   visibility: hidden;
 }
-#cardCopy4s:hover, .fld-copy:hover { background: var(--action-ghost-hover-bg); }
+#cardCopy4s:hover, .btn.fld-copy:hover { background: var(--action-ghost-hover-bg); }
 #cardCopy4s .ico, .fld-copy .ico { --ico-size: 1em; }
 .fld-copy { margin-left: auto; align-self: flex-end; }
 #cardViewText:is(:hover, :focus-within) #cardCopy4s,
