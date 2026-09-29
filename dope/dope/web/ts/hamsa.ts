@@ -10,7 +10,7 @@ import {cssEscape, option, questionNumberNode, td, th} from "./cells.js";
 import type {CellContent, CellSpec} from "./cells.js";
 import {festLetters, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
-import {buildRosterView} from "./fest-roster.js";
+import {buildGameRosterView} from "./fest-roster.js";
 import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
 import {mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
@@ -239,6 +239,17 @@ const live = createLiveEvents({
       render();
     },
     gap: () => scheduleResync(),
+  }, {
+    // A team's roster in this game changed (the roster tab, a player
+    // override): the bouts carry the seat rosters, so they are fetched again,
+    // and the roster tab with them.
+    prefix: `game-roster:${scopeGameID}`,
+    adopt: (scope) => {
+      if (scope !== `game-roster:${scopeGameID}`) return;
+      rosterView = null;
+      scheduleResync();
+      render();
+    },
   }],
   indicator,
   onViewers: (count) => viewerCounter.setCount(count),
@@ -939,7 +950,7 @@ async function applyDraw(slot: string, participant: number): Promise<void> {
 function buildTab(tab: GameTab | undefined): HTMLElement {
   switch (tab?.kind) {
   case "roster":
-    return (rosterView ||= buildRosterView(route.festID));
+    return (rosterView ||= buildGameRosterView(route.apiBase || "", {editable: !viewer}));
   case "stats":
     return buildStats();
   case "block":

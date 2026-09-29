@@ -462,48 +462,102 @@ func loadRosters(ctx context.Context, q Queryer, matches []DBMatchState, slots m
 		}
 	}
 	for gameID, ids := range teams {
-		args := make([]any, 0, len(ids)+1)
-		query := `
-select tp.participant_id, p.id, p.first_name, p.last_name
-from participant_players tp
-join players p on p.id = tp.player_id
-where tp.participant_id in (` + placeholders(len(ids)) + `)
-order by tp.participant_id, tp.roster_order`
-		if byGame[gameID].RosterSource == "game" {
-			query = `
-select gtp.participant_id, p.id, p.first_name, p.last_name
-from game_team_players gtp
-join players p on p.id = gtp.player_id
-where gtp.game_id = ? and gtp.participant_id in (` + placeholders(len(ids)) + `)
-order by gtp.participant_id, gtp.roster_order`
-			args = append(args, gameID)
-		}
+		list := make([]int64, 0, len(ids))
 		for id := range ids {
-			args = append(args, id)
+			list = append(list, id)
 		}
-		rows, err := q.QueryContext(ctx, query, args...)
+		game, err := GameRosters(ctx, q, gameID, byGame[gameID].RosterSource, list)
 		if err != nil {
 			return nil, err
 		}
-		for rows.Next() {
-			var participantID int64
-			var member RosterMember
-			var firstName, lastName string
-			if err := rows.Scan(&participantID, &member.ID, &firstName, &lastName); err != nil {
-				rows.Close()
-				return nil, err
-			}
-			member.Name = JoinPlayerName(firstName, lastName)
-			key := rosterKey{gameID, participantID}
-			rosters[key] = append(rosters[key], member)
+		for participantID, roster := range game {
+			rosters[rosterKey{gameID, participantID}] = roster.Players
 		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		rows.Close()
 	}
 	return rosters, nil
+}
+
+// GameRoster is the roster one team plays a Game with, and whether the host
+// wrote it by hand on the Game's roster tab.
+type GameRoster struct {
+	Players []RosterMember
+	Hand    bool
+}
+
+// GameRosters reads the roster each of the given Participants plays a Game
+// with. A roster the host kept by hand (game_team_players rows with hand = 1)
+// wins over everything. Otherwise a Game whose player overrides materialised
+// its own rosters (roster_source 'game') reads those, and any other Game reads
+// the Participant's roster, which a seed import copies from the fest's.
+func GameRosters(ctx context.Context, q Queryer, gameID int64, rosterSource string, ids []int64) (map[int64]GameRoster, error) {
+	out := make(map[int64]GameRoster, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	args := make([]any, 0, len(ids)+1)
+	args = append(args, gameID)
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	type row struct {
+		participant int64
+		member      RosterMember
+		hand        bool
+	}
+	scan := func(rows *sql.Rows) (row, error) {
+		var r row
+		var first, last string
+		if err := rows.Scan(&r.participant, &r.member.ID, &first, &last, &r.hand); err != nil {
+			return r, err
+		}
+		r.member.Name = JoinPlayerName(first, last)
+		return r, nil
+	}
+	own, err := CollectRows(ctx, q, `
+select gtp.participant_id, p.id, p.first_name, p.last_name, gtp.hand
+from game_team_players gtp
+join players p on p.id = gtp.player_id
+where gtp.game_id = ? and gtp.participant_id in (`+placeholders(len(ids))+`)
+order by gtp.participant_id, gtp.roster_order`, args, scan)
+	if err != nil {
+		return nil, err
+	}
+	hand := map[int64]bool{}
+	for _, r := range own {
+		if r.hand {
+			hand[r.participant] = true
+		}
+	}
+	for _, r := range own {
+		if hand[r.participant] != r.hand || (!r.hand && rosterSource != "game") {
+			continue
+		}
+		roster := out[r.participant]
+		roster.Players = append(roster.Players, r.member)
+		roster.Hand = r.hand
+		out[r.participant] = roster
+	}
+	if rosterSource == "game" && len(hand) == len(ids) {
+		return out, nil
+	}
+	fest, err := CollectRows(ctx, q, `
+select tp.participant_id, p.id, p.first_name, p.last_name, 0
+from participant_players tp
+join players p on p.id = tp.player_id
+where tp.participant_id in (`+placeholders(len(ids))+`)
+order by tp.participant_id, tp.roster_order`, args[1:], scan)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range fest {
+		if hand[r.participant] || rosterSource == "game" {
+			continue
+		}
+		roster := out[r.participant]
+		roster.Players = append(roster.Players, r.member)
+		out[r.participant] = roster
+	}
+	return out, nil
 }
 
 func stageThemeCount(configJSON string) int { return ParseStageConfig(configJSON).Themes() }

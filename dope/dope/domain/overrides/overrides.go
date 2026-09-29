@@ -50,6 +50,10 @@ type HostPlayerOverrideRow struct {
 	Games          string
 	GameIDs        []int64
 	games          []string
+	// Shadowed names the games where the override does nothing, because the
+	// host keeps the roster of its source or target team there by hand.
+	Shadowed string
+	shadowed []string
 }
 
 func (r HostPlayerOverrideRow) HasGame(gameID int64) bool {
@@ -127,7 +131,9 @@ order by position, id`, []any{festID}, func(rows *sql.Rows) (HostGameOverrideOpt
 
 func LoadHostPlayerOverrideRows(ctx context.Context, q store.Queryer, festID int64) ([]HostPlayerOverrideRow, error) {
 	rows, err := q.QueryContext(ctx, `
-select p.id, p.first_name, p.last_name, source.id, source.name, target.id, target.name, g.id, g.title, g.game_type
+select p.id, p.first_name, p.last_name, source.id, source.name, target.id, target.name, g.id, g.title, g.game_type,
+       exists(select 1 from game_team_players gtp join participants pa on pa.id = gtp.participant_id
+              where gtp.game_id = g.id and gtp.hand = 1 and pa.fest_id = o.fest_id and pa.name in (source.name, target.name))
 from game_player_team_overrides o
 join fest_players p on p.id = o.player_id
 join fest_teams source on source.id = o.source_team_id
@@ -150,8 +156,9 @@ order by p.last_name, p.first_name, source.name, target.name, g.position, g.id`,
 		var firstName, lastName, gameType string
 		var playerID, sourceID, targetID, rowGameID int64
 		var gameTitle string
+		var shadowed bool
 		var row HostPlayerOverrideRow
-		if err := rows.Scan(&playerID, &firstName, &lastName, &sourceID, &row.SourceTeam, &targetID, &row.OverrideTeam, &rowGameID, &gameTitle, &gameType); err != nil {
+		if err := rows.Scan(&playerID, &firstName, &lastName, &sourceID, &row.SourceTeam, &targetID, &row.OverrideTeam, &rowGameID, &gameTitle, &gameType, &shadowed); err != nil {
 			return nil, err
 		}
 		row.Player = store.JoinPlayerName(firstName, lastName)
@@ -166,8 +173,17 @@ order by p.last_name, p.first_name, source.name, target.name, g.position, g.id`,
 			out = append(out, row)
 		}
 		label := overrideGameLabel(gameTitle, gameType)
-		if !containsString(out[i].games, label) {
-			out[i].games = append(out[i].games, label)
+		if shadowed && !containsString(out[i].shadowed, label) {
+			out[i].shadowed = append(out[i].shadowed, label)
+			out[i].Shadowed = strings.Join(out[i].shadowed, ", ")
+		}
+		// A game where the override does nothing says so beside its name.
+		shown := label
+		if shadowed {
+			shown = dopestrings.Default.Host.Roster.OverrideShadowed(label)
+		}
+		if !containsString(out[i].games, shown) {
+			out[i].games = append(out[i].games, shown)
 			out[i].Games = strings.Join(out[i].games, ", ")
 		}
 		if !containsInt64(out[i].GameIDs, rowGameID) {
@@ -618,13 +634,23 @@ func MaterializeGameRosterOverridesTx(ctx context.Context, tx *sql.Tx, festID, g
 	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `delete from game_team_players where game_id = ?`, gameID); err != nil {
+	// A team whose roster the host keeps by hand in this Game (roster.
+	// SaveGameRosterTx) is out of the overrides' reach: its rows stay as they
+	// are, and an override naming it does nothing here.
+	hand, err := roster.HandRosterTeams(ctx, tx, gameID)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `delete from game_team_players where game_id = ? and hand = 0`, gameID); err != nil {
 		return err
 	}
 	for _, team := range teams {
 		teamID, _, err := roster.EnsureSeedTeam(ctx, tx, festID, team.Name, team.City, nil)
 		if err != nil {
 			return err
+		}
+		if hand[teamID] {
+			continue
 		}
 		for rosterOrder, player := range team.Players {
 			playerID, err := roster.EnsureSeedPlayer(ctx, tx, festID, strings.TrimSpace(player.FirstName), strings.TrimSpace(player.LastName))
