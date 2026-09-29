@@ -847,6 +847,16 @@ create index if not exists password_resets_user_idx on password_resets(user_id);
 			{Name: "game_id", Type: "INTEGER REFERENCES games(id) ON DELETE CASCADE"},
 		})
 	}},
+	{Version: 35, Name: "a game roster the host kept by hand", Up: func(db *sql.DB) error {
+		// v35: game_team_players rows the host wrote on the game's roster tab.
+		// A team whose rows carry hand = 1 plays this Game with exactly those
+		// players, whatever the fest roster, a seed import or a player override
+		// says. The other rows stay what overrides materialise. (v34 belongs to
+		// the entrant list, built alongside.)
+		return store.AddColumnsIfMissing(db, "game_team_players", []store.ColumnSpec{
+			{Name: "hand", Type: "INTEGER NOT NULL DEFAULT 0"},
+		})
+	}},
 }
 
 // assembledHeadTeamAndDivision gives an assembled team (a troika) a stored head

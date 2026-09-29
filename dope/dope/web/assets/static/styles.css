@@ -4602,6 +4602,48 @@ body.is-fullscreen.od-page .match-main {
   padding: var(--space-3);
 }
 
+/* The host's pencil on a team's row: a small icon button in a column exactly
+   as wide as it, so the fixed layout leaves the rest to the players column. As
+   wide as a form control, it took a share of the row equal to the players'
+   and broke a long name in two on a phone. */
+.roster-results-table .roster-edit {
+  width: calc(var(--question-size) + 2 * var(--space-2));
+  padding-inline: var(--space-2);
+}
+
+/* "Состав изменён для этой игры" under a team's players: the kit's .hint is
+   sized for a page, and the roster table sets smaller type on a phone. */
+.roster-results-table .roster-players .hint {
+  font-size: var(--text-xs);
+}
+
+/* The roster dialog's list: each player's cross, and the lock of a player who
+   has played, take one square of the same size, so a row is as tall with
+   either and the list does not jump. */
+.roster-dialog .action-icon,
+.roster-dialog-mark {
+  width: var(--question-size);
+  height: var(--question-size);
+}
+
+.roster-dialog .action-icon {
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+.roster-dialog-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.roster-results-table .roster-edit .action-icon {
+  width: var(--question-size);
+  height: var(--question-size);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
 /* KSI-with-stickers: the per-(team, theme) sticker dropdown lives in the theme's
    spacer column, so that gap widens to hold the control. */
 .match-table.ksi-detailed .ksi-sticker-cell {

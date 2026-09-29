@@ -972,7 +972,8 @@ function buildTab(tab: GameTab | undefined): HTMLElement {
   case "entrants":
     return entrantsTab.element();
   case "roster":
-    return (rosterView ||= buildGameRosterView(route.apiBase || ""));
+    return (rosterView ||= buildGameRosterView(route.apiBase || "",
+      {troikasHref: viewer || !route.festID ? "" : `/host/fest/${route.festID}/troikas`}));
   case "stats":
     return buildStats();
   case "block":
