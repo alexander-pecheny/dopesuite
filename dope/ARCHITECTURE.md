@@ -109,8 +109,12 @@ here when it needs type metadata.
   `PatchStateTx`, and both of them seat the бой from the team list, score it and
   rank its Block, so `stage_standings` stays up to date for flat games too.
 - `overrides` — player-name overrides. `imports` — EK/seed/rating bulk import;
-  a seed source is `ImportSeeds(FromKSI()|FromScheme()|FromXLSX())`, and the
-  `game` source reads the source Game's one table.
+  a seed source is `FromGame|FromFest|FromTroikas|FromRandom|FromXLSX|…`, and
+  `entrants.go` holds a Game's entrant list and how it fills the Structure's
+  seed numbers (ADR-0022).
+- `entrants` — the Участники tab of a buzzer Game: its view, its sources and
+  the host's hand edits, with their refusals. It calls `gamebuild.ApplyListTx`,
+  which rebuilds a Game sized by its entrants before `imports` seats the list.
 - `numbering` — team-number assignment. `edit` — match-edit value types.
 - `towns` — which country a town is in, as the ISO code the screen draws a flag
   from: buff answers for every town it has mirrored, and one it has not is asked
