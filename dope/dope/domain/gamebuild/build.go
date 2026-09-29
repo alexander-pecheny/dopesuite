@@ -297,16 +297,39 @@ func schemeForEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType
 			return store.FestScheme{}, err
 		}
 		input.Entrants = entrants
-	} else if seed != "random" && seed != "xlsx" {
-		var known int
-		if err := tx.QueryRowContext(ctx, `select count(*) from games where fest_id = ? and code = ?`, festID, seed).Scan(&known); err != nil {
+	} else if seed == "players" {
+		// A seed composed over players (Troika rules §4.4.2) reads the standings of
+		// the Games its `games:` names: each must be a Game of this fest, or the
+		// import would fail later, at the host's button, rather than here.
+		sources, _, err := doc.Init.List("games")
+		if err != nil {
 			return store.FestScheme{}, err
 		}
-		if known == 0 {
+		for _, code := range sources {
+			known, err := festHasGameTx(ctx, tx, festID, code)
+			if err != nil {
+				return store.FestScheme{}, err
+			}
+			if !known {
+				return store.FestScheme{}, corei18n.User(dopestrings.Default.Imports.Seed.GameMissing(code))
+			}
+		}
+	} else if seed != "random" && seed != "xlsx" {
+		known, err := festHasGameTx(ctx, tx, festID, seed)
+		if err != nil {
+			return store.FestScheme{}, err
+		}
+		if !known {
 			return store.FestScheme{}, corei18n.User(dopestrings.Default.Gamebuild.Create.SeedUnknown(seed))
 		}
 	}
 	return schemedsl.Compile(doc, input)
+}
+
+func festHasGameTx(ctx context.Context, tx *sql.Tx, festID int64, code string) (bool, error) {
+	var known int
+	err := tx.QueryRowContext(ctx, `select count(*) from games where fest_id = ? and code = ?`, festID, code).Scan(&known)
+	return known > 0, err
 }
 
 // stageEmptyState builds a match's pristine Protocol document for a stage of a

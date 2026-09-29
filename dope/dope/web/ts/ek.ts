@@ -1245,9 +1245,23 @@ function buildGroupStandingsPane(stage: HostStage): HTMLElement {
     const blockRoundCount = Math.max(1, ...planned.map((m) => Number(m.round || 1)));
     const matches = planned.map((m) => {
       const view = stageCache.matchState(m.code || "") as HostMatchView | null;
-      return {blockRound: m.round, finished: Boolean(view?.finished), participants: view?.participants};
+      return {blockRound: m.round, finished: Boolean(view?.finished), questionValues: view?.questionValues, participants: view?.participants};
     });
     const rows = computeGroupBlockRounds({matches, pointsRule: config.rules?.bout?.points, blockRoundCount});
+    // The group's own standings are the server's: its order is the ranking
+    // (head-to-head and all), and its points the rule as the server read it.
+    // The client keeps only the split by block round, which the server has no column
+    // for; a row the standings do not know yet keeps the client's sum.
+    const standings = mergedStage(fest, code).standings || [];
+    if (standings.length) {
+      const byName = new Map(standings.map((entry) => [String(entry.name || "").trim(), entry]));
+      for (const row of rows) {
+        const points = Number(byName.get(row.name)?.metrics?.points);
+        if (Number.isFinite(points)) row.points = points;
+      }
+      const rank = (name: string) => Number(byName.get(name)?.rank) || Number.MAX_SAFE_INTEGER;
+      rows.sort((a, b) => rank(a.name) - rank(b.name) || b.points - a.points || a.name.localeCompare(b.name, "ru"));
+    }
     if (!rows.length) {
       for (const entrant of config.entrants || []) {
         if (entrant.label) rows.push({name: entrant.label, points: 0, blockRounds: new Array<number>(blockRoundCount).fill(0)});

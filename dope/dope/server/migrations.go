@@ -875,6 +875,22 @@ create index if not exists api_tokens_user_idx on api_tokens(user_id);
 			{Name: "hand", Type: "INTEGER NOT NULL DEFAULT 0"},
 		})
 	}},
+	{Version: 37, Name: "fest_game_hosts", Up: func(db *sql.DB) error {
+		// v37: which Games a host may run. A host with no rows here runs every
+		// Game of the fest, as every host did before; one with rows runs only
+		// those, and sees the rest as a viewer. Admins and the creator are never
+		// restricted. Nothing to backfill: no host has been restricted yet.
+		_, err := db.Exec(`
+create table if not exists fest_game_hosts(
+  fest_id integer not null references fests(id) on delete cascade,
+  game_id integer not null references games(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  primary key(game_id, user_id)
+);
+create index if not exists fest_game_hosts_user_idx on fest_game_hosts(fest_id, user_id);
+`)
+		return err
+	}},
 }
 
 // assembledHeadTeamAndDivision gives an assembled team (a troika) a stored head

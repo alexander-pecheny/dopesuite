@@ -63,7 +63,7 @@ in the game has a number.
 
 | | |
 |---|---|
-| `GET …/entrants` A | whom a game may seat, ids for `entrants` |
+| `GET …/entrants` A | whom a game may seat: `id` for `entrants`, `ref` for `entrant_refs` (a rating player not seated anywhere yet has only a ref) |
 | `POST …/games` A | `{game_type, entrants?, …}`, see below → the game |
 | `GET\|PATCH …/games/<game>/settings` A | `{title, slug, scheme_dsl}`; `scheme_dsl` only for brain |
 | `POST …/games/<game>/clear` A | back to just-created, keeps the id and the URLs |

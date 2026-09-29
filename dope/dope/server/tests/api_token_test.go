@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -327,7 +328,11 @@ func TestAPITokenRoster(t *testing.T) {
 	wantStatus(t, resp, http.StatusOK, "entrants")
 	if got := decodeInto[[]struct {
 		Troika bool `json:"troika"`
-	}](t, resp); len(got) == 0 || !got[len(got)-1].Troika {
+	}](t, resp); !slices.ContainsFunc(got, func(e struct {
+		Troika bool `json:"troika"`
+	}) bool {
+		return e.Troika
+	}) {
 		t.Fatalf("entrants = %+v", got)
 	}
 	wantStatus(t, bearerRequest(t, srv, http.MethodDelete, fmt.Sprintf("%s/troikas/%d", fest, troikas[0].ID), nil, token), http.StatusOK, "delete troika")

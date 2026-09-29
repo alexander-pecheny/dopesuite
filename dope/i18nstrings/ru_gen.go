@@ -591,7 +591,7 @@ var RU = Strings{
 			},
 			SchemeRequired: func() string { return "опишите схему игры" },
 			SeedUnknown: func(seed string) string {
-				return fmt.Sprintf("seed: %s — не random, не xlsx и не код игры этого феста", seed)
+				return fmt.Sprintf("seed: %s — не random, не xlsx, не players и не код игры этого феста", seed)
 			},
 			WholeRoster: func(name string) string {
 				return fmt.Sprintf("В игре «%s» играют все команды феста, под теми же номерами. Снимите отметки в «Составе игры», а тех, кто не играет, отметьте во вкладке «Отказы» на странице игры.", name)
@@ -777,6 +777,7 @@ var RU = Strings{
 			ClearConfirm: func() string {
 				return "Очистить игру? Все результаты, импортированные команды и посев будут удалены, игра вернётся в исходное состояние. Настройки и ссылка сохранятся."
 			},
+			ColGames:            func() string { return "Игры" },
 			ColNickname:         func() string { return "Никнейм" },
 			ColRole:             func() string { return "Роль" },
 			DeleteAccessConfirm: func(name string) string { return fmt.Sprintf("Удалить доступ для %s?", name) },
@@ -799,6 +800,8 @@ var RU = Strings{
 			ErrorSlugTaken:         func() string { return "Slug уже занят." },
 			ErrorTitleRequired:     func() string { return "Название обязательно." },
 			GamesEmpty:             func() string { return "Игр пока нет." },
+			GamesEvery:             func() string { return "все игры" },
+			GamesNoneHint:          func() string { return "ничего не отмечено — ведёт все игры" },
 			GamesSubhead:           func() string { return "Игры" },
 			JumpLabel:              func() string { return "Страница зрителя" },
 			JumpTitle:              func() string { return "Открыть зрительскую страницу" },
@@ -1121,7 +1124,7 @@ var RU = Strings{
 			},
 			NameMissing: func() string { return "У тройки нет названия." },
 			NameTaken: func(name string) string {
-				return fmt.Sprintf("Название «%s» уже занято — у троек и команд феста названия не должны совпадать.", name)
+				return fmt.Sprintf("Тройка «%s» уже есть — у двух троек названия не должны совпадать.", name)
 			},
 			PlayerN: func(n string) string { return fmt.Sprintf("Игрок %s", n) },
 			PlayerTwice: func(team string, player string) string {
@@ -2233,7 +2236,10 @@ var RU = Strings{
 			BracketNotDivisible: func(entrants string, size string, winning string) string {
 				return fmt.Sprintf("%s участников не делятся на бои не больше чем по %s, из которых выходит %s", entrants, size, winning)
 			},
-			LivesMin:     func() string { return "нужна хотя бы одна жизнь" },
+			LivesMin: func() string { return "нужна хотя бы одна жизнь" },
+			LowerEntrants: func(lower string, entrants string) string {
+				return fmt.Sprintf("lower_entrants: %s из %s — в нижнюю сетку можно посадить от 0 до %s−1 участников, и только когда жизней две", lower, entrants, entrants)
+			},
 			MatchSizeMin: func() string { return "match_size должен быть хотя бы 2" },
 			TooManyBlockRounds: func() string {
 				return "слишком много раундов — проверьте match_size и winning_places"

@@ -26,7 +26,7 @@ type pod struct{}
 func (pod) Code() string { return "de" }
 func (pod) Word() string { return "double_elimination" }
 func (pod) Keys() []Key {
-	return []Key{{Name: "groups"}, {Name: "group_size"}, {Name: "participants"}, {Name: "match_size"}, {Name: "winning_places"}}
+	return []Key{{Name: "groups"}, {Name: "group_size"}, {Name: "participants"}, {Name: "match_size"}, {Name: "winning_places"}, {Name: "lower_entrants"}}
 }
 
 // Expand is an elimination where two Losses end a tournament —
@@ -84,7 +84,12 @@ func (pod) Expand(b Block) (Outputs, error) {
 	if reseeded, _ := b.Reseed(); !b.First() && !reseeded {
 		opening = straightChunks
 	}
-	plan, err := planLivesDrawn(perGroup, 2, winning, proceeding,
+	// lower_entrants: the last so many of each bracket's entrants start one
+	// Loss down — the ranking's tail, which a reseed by place_sum makes the
+	// previous block's lower places (Octobearfest personal SI, appendix 3: 3rd and
+	// 4th of every group go straight to the lower bracket).
+	lower, _ := b.Int("lower_entrants")
+	plan, err := planLivesEntered(perGroup, lower, 2, winning, proceeding,
 		func(blockRound, members int) int { return size }, opening)
 	if err != nil {
 		return Outputs{}, fmt.Errorf("double_elimination: %s", err)

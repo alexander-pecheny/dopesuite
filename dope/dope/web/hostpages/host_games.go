@@ -61,6 +61,19 @@ type gameEntrantOption struct {
 	Label string
 	// assembled marks a troika, which the picker lists after the teams.
 	assembled bool
+	// player marks a person; festPlayer, a person of the rating roster no
+	// individual Game has seated yet — no Participant exists for them, so the
+	// box posts "fp<fest player id>" and the Participant is minted on create.
+	player     bool
+	festPlayer int64
+}
+
+// value is what the option's box posts.
+func (o gameEntrantOption) value() string {
+	if o.festPlayer > 0 {
+		return gamebuild.FestPlayerEntrantRef(o.festPlayer)
+	}
+	return strconv.FormatInt(o.ID, 10)
 }
 
 // stickerPaletteColors is the fixed set of colours an organizer may assign to a
@@ -251,7 +264,7 @@ func entrantPicker(data hostGameCreateData) dopeui.Item {
 		dopeui.Hint(dopeui.Text(s.Host.Games.EntrantsHint())))
 	for _, entrant := range data.Entrants {
 		boxes = append(boxes, dopeui.Checkbox(dopeui.Name("entrant_id"),
-			dopeui.Value(strconv.FormatInt(entrant.ID, 10)), dopeui.Text(entrant.Label)))
+			dopeui.Value(entrant.value()), dopeui.Text(entrant.Label)))
 	}
 	items := []dopeui.Item{dopeui.Data("game-entrants", strings.Join(entrantFormats, " "))}
 	if !SeatsChosenEntrants(data.SelectedType) {
@@ -558,6 +571,7 @@ where fest_id = ? and game_id is null order by roster desc, assembled, coalesce(
 			if err := rows.Scan(&option.ID, &option.Label, &city, &roster, &assembled); err != nil {
 				return option, err
 			}
+			option.player = roster == "player"
 			if city != "" {
 				option.Label += " (" + city + ")"
 			}
@@ -572,28 +586,56 @@ where fest_id = ? and game_id is null order by roster desc, assembled, coalesce(
 	if err != nil {
 		return nil, err
 	}
-	// Troikas come last and have no number to order by, so they go by name as
-	// a person reads it: 2 before 10.
-	first := len(options)
-	for i, option := range options {
-		if option.assembled {
-			first = i
-			break
+	// An individual Game seats people, and a person becomes a Participant only
+	// once some individual Game seated the whole rating roster — so a fest's
+	// first personal SI could not pick its entrants at all. Every rating player
+	// with no Participant yet is offered too; creating the Game mints them.
+	festPlayers, err := store.CollectRows(ctx, db, `
+select fp.id, trim(fp.first_name || ' ' || fp.last_name) from fest_players fp
+where fp.fest_id = ? and not exists (
+  select 1 from participants p
+  where p.fest_id = fp.fest_id and p.roster = 'player' and p.fest_player_id = fp.id)
+order by fp.id`, []any{festID}, func(rows *sql.Rows) (gameEntrantOption, error) {
+		var option gameEntrantOption
+		err := rows.Scan(&option.festPlayer, &option.Label)
+		option.player = true
+		return option, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Teams by number, then troikas, then people — the last two have no
+	// number to order by, so they go by name as a person reads it: 2 before
+	// 10. Troikas and people used to share one sort and read interleaved.
+	var teams, troikas, people []gameEntrantOption
+	for _, option := range options {
+		switch {
+		case option.assembled:
+			troikas = append(troikas, option)
+		case option.player:
+			people = append(people, option)
+		default:
+			teams = append(teams, option)
 		}
 	}
-	troikas := options[first:]
-	sort.SliceStable(troikas, func(i, j int) bool { return util.CompareNatural(troikas[i].Label, troikas[j].Label) < 0 })
-	return options, nil
+	people = append(people, festPlayers...)
+	byName := func(list []gameEntrantOption) {
+		sort.SliceStable(list, func(i, j int) bool { return util.CompareNatural(list[i].Label, list[j].Label) < 0 })
+	}
+	byName(troikas)
+	byName(people)
+	return append(append(teams, troikas...), people...), nil
 }
 
-// chosenEntrantIDs reads the picker: whom this Game seats, in the fest's order.
+// chosenEntrantRefs reads the picker: whom this Game seats, in the order
+// posted — a Participant id, or "fp<id>" for a rating player not yet one.
 // Nothing ticked means everyone, which is what every Game did before Games
 // could name their own.
-func chosenEntrantIDs(form url.Values) []int64 {
-	var out []int64
+func chosenEntrantRefs(form url.Values) []string {
+	var out []string
 	for _, raw := range form["entrant_id"] {
-		if id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64); err == nil && id > 0 {
-			out = append(out, id)
+		if raw = strings.TrimSpace(raw); raw != "" {
+			out = append(out, raw)
 		}
 	}
 	return out
@@ -606,6 +648,9 @@ type GameCreateRequest struct {
 	// GameType is a games.* type, or "ksi_stickers" for KSI with stickers.
 	GameType string  `json:"game_type"`
 	Entrants []int64 `json:"entrants"`
+	// EntrantRefs are more entrants by the ref GET …/entrants gives, which
+	// also names a rating player who is not a Participant yet ("fp<id>").
+	EntrantRefs []string `json:"entrant_refs"`
 	// DSL is the format's scheme in the scheme language (brain, si, troika,
 	// hamsa, ek, es). Scheme is a pasted JSON scheme, for ek and es only.
 	DSL          string          `json:"dsl"`
@@ -627,6 +672,9 @@ func (req GameCreateRequest) form() url.Values {
 	form := url.Values{}
 	for _, id := range req.Entrants {
 		form.Add("entrant_id", strconv.FormatInt(id, 10))
+	}
+	for _, ref := range req.EntrantRefs {
+		form.Add("entrant_id", ref)
 	}
 	if field, ok := dslField[req.GameType]; ok {
 		form.Set(field, req.DSL)
@@ -695,10 +743,13 @@ var schemeJSONField = map[string]string{
 // gameSpecFromForm reads the creation form into what gamebuild needs: the
 // format's label and DSL, the entrants ticked, and for the three pre-DSL
 // formats their own knobs.
-func gameSpecFromForm(festID int64, gameType string, form url.Values) (gamebuild.Spec, error) {
-	spec := gamebuild.Spec{FestID: festID, Type: gameType, Entrants: chosenEntrantIDs(form), DSL: strings.TrimSpace(form.Get(dslField[gameType]))}
+func gameSpecFromForm(ctx context.Context, tx *sql.Tx, festID int64, gameType string, form url.Values) (gamebuild.Spec, error) {
+	entrants, err := gamebuild.ResolveEntrantRefsTx(ctx, tx, festID, chosenEntrantRefs(form))
+	if err != nil {
+		return gamebuild.Spec{}, err
+	}
+	spec := gamebuild.Spec{FestID: festID, Type: gameType, Entrants: entrants, DSL: strings.TrimSpace(form.Get(dslField[gameType]))}
 	s := dopestrings.Default
-	var err error
 	switch gameType {
 	case games.OD:
 		if spec.ODTours, err = parsePositiveFormInt(form, "od_tours", s.Host.Games.OdToursLabel(), 1, 20); err != nil {
@@ -778,7 +829,7 @@ func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType s
 			return sql.ErrNoRows
 		}
 
-		spec, err := gameSpecFromForm(festID, gameType, form)
+		spec, err := gameSpecFromForm(ctx, tx, festID, gameType, form)
 		if err != nil {
 			return err
 		}

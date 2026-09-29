@@ -301,7 +301,7 @@ line_no_name = 'Строка {{.n}}: нужно название и двоето
 name_missing = "У тройки нет названия."
 player_twice = 'В тройке «{{.team}}» дважды записан игрок {{.player}}.'
 roster_size = 'В тройке «{{.team}}» {{plural .n "игрок" "игрока" "игроков"}}, а нужно от двух до четырёх.'
-name_taken = 'Название «{{.name}}» уже занято — у троек и команд феста названия не должны совпадать.'
+name_taken = 'Тройка «{{.name}}» уже есть — у двух троек названия не должны совпадать.'
 delete_seated = "Эта тройка уже играет в игре, удалить её нельзя."
 
 [dash]
@@ -344,6 +344,12 @@ cancel_btn = "Отмена"
 # The access roster table.
 col_nickname = "Никнейм"
 col_role = "Роль"
+# Access table column: the Games a host may run.
+col_games = "Игры"
+# An admin's or the creator's Games cell: they run every Game.
+games_every = "все игры"
+# Under a host's Game boxes: what ticking none means.
+games_none_hint = "ничего не отмечено — ведёт все игры"
 delete_access_confirm = 'Удалить доступ для {{.name}}?'
 add_btn = "Добавить"
 # The participants links: subhead and list rows.

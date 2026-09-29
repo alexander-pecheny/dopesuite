@@ -9,6 +9,7 @@ import (
 	"errors"
 	"sort"
 	"strconv"
+	"strings"
 
 	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
@@ -362,4 +363,82 @@ order by p.id`, festID)
 		}
 	}
 	return nil
+}
+
+// festPlayerRefPrefix marks an entrant ref naming a rating player rather than
+// a Participant: the picker offers people no individual Game has seated yet.
+const festPlayerRefPrefix = "fp"
+
+// FestPlayerEntrantRef is the picker value for a rating player who is not a
+// Participant yet.
+func FestPlayerEntrantRef(festPlayerID int64) string {
+	return festPlayerRefPrefix + strconv.FormatInt(festPlayerID, 10)
+}
+
+// ResolveEntrantRefsTx turns the picker's refs into Participant ids, in the
+// order given. A Participant id passes through; "fp<id>" is a rating player,
+// whose player Participant is found or minted here — under the number the
+// whole-roster seating would give them (their rank among the fest's players),
+// so a later Game seating everyone finds the same Participant, or under the
+// next free number when that one belongs to someone else. Unparseable refs
+// are skipped, as before.
+func ResolveEntrantRefsTx(ctx context.Context, tx *sql.Tx, festID int64, refs []string) ([]int64, error) {
+	var out []int64
+	for _, ref := range refs {
+		if raw, ok := strings.CutPrefix(ref, festPlayerRefPrefix); ok {
+			festPlayerID, err := strconv.ParseInt(raw, 10, 64)
+			if err != nil || festPlayerID <= 0 {
+				continue
+			}
+			id, err := festPlayerParticipantTx(ctx, tx, festID, festPlayerID)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, id)
+			continue
+		}
+		if id, err := strconv.ParseInt(ref, 10, 64); err == nil && id > 0 {
+			out = append(out, id)
+		}
+	}
+	return out, nil
+}
+
+func festPlayerParticipantTx(ctx context.Context, tx *sql.Tx, festID, festPlayerID int64) (int64, error) {
+	var id int64
+	err := tx.QueryRowContext(ctx, `
+select id from participants where fest_id = ? and roster = 'player' and fest_player_id = ? limit 1`,
+		festID, festPlayerID).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return 0, err
+	}
+	var name string
+	var rank int64
+	if err := tx.QueryRowContext(ctx, `
+select trim(fp.first_name || ' ' || fp.last_name),
+       (select count(*) from fest_players o where o.fest_id = fp.fest_id and o.id <= fp.id)
+from fest_players fp where fp.fest_id = ? and fp.id = ?`, festID, festPlayerID).Scan(&name, &rank); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, corei18n.User(dopestrings.Default.Gamebuild.Seating.UnknownParticipant(FestPlayerEntrantRef(festPlayerID)))
+		}
+		return 0, err
+	}
+	number := rank
+	var taken int
+	if err := tx.QueryRowContext(ctx, `
+select count(*) from participants where fest_id = ? and roster = 'player' and number = ?`, festID, number).Scan(&taken); err != nil {
+		return 0, err
+	}
+	if taken > 0 {
+		// EnsureSeedPlayerByNumber would take over — and rename — whoever holds
+		// the number, so a held number is left alone and the next free one used.
+		if err := tx.QueryRowContext(ctx, `
+select coalesce(max(number), 0) + 1 from participants where fest_id = ? and roster = 'player'`, festID).Scan(&number); err != nil {
+			return 0, err
+		}
+	}
+	return imports.EnsureSeedPlayerByNumber(ctx, tx, festID, number, name, festPlayerID)
 }

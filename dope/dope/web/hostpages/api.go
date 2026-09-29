@@ -296,9 +296,14 @@ type apiEntrant struct {
 	Label string `json:"label"`
 	// Troika marks a team assembled from fest players.
 	Troika bool `json:"troika"`
+	// Player marks a person. A rating player no individual Game has seated
+	// yet has id 0 and only a ref, which `entrant_refs` takes.
+	Player bool   `json:"player,omitempty"`
+	Ref    string `json:"ref"`
 }
 
-// apiEntrants lists whom a new game may seat: the ids its `entrants` takes.
+// apiEntrants lists whom a new game may seat: the ids its `entrants` takes,
+// and the refs its `entrant_refs` takes.
 func (s *Server) apiEntrants(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	options, err := festEntrantOptions(r.Context(), s.h.Engine().DB, sc.FestID)
 	if err != nil {
@@ -306,7 +311,7 @@ func (s *Server) apiEntrants(w http.ResponseWriter, r *http.Request, sc route.Sc
 	}
 	out := make([]apiEntrant, len(options))
 	for i, o := range options {
-		out[i] = apiEntrant{ID: o.ID, Label: o.Label, Troika: o.assembled}
+		out[i] = apiEntrant{ID: o.ID, Label: o.Label, Troika: o.assembled, Player: o.player, Ref: o.value()}
 	}
 	return route.JSON(w, out)
 }

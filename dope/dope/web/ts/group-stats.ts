@@ -50,10 +50,75 @@ export function evalScoringRule(expr: string, vars: Record<string, number>): num
   }
 }
 
+export interface GroupBlockRoundsSeat {
+  name?: string;
+  place?: number;
+  // The seat's Protocol metrics as the match view carries them. A rule may
+  // read them the way the server's does (ADR-0008) — the rules of
+  // Octobearfest's personal SI pay (4 - place) + sum/1000.
+  total?: number | string | null;
+  plus?: number | string | null;
+  shootoutTotal?: number | string | null;
+  correctCounts?: number[];
+}
+
 export interface GroupBlockRoundsMatch {
   blockRound?: number;
   finished?: boolean;
-  participants?: Array<{name?: string; place?: number} | null> | null;
+  questionValues?: unknown[];
+  participants?: Array<GroupBlockRoundsSeat | null> | null;
+}
+
+// seatMetrics is one seat's Protocol metrics under the names the server gives
+// them: total, plus, shootoutTotal, and takenN — the correct answers on the
+// questions worth N.
+function seatMetrics(seat: GroupBlockRoundsSeat, questionValues: unknown[] | undefined): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const key of ["total", "plus", "shootoutTotal"] as const) {
+    const value = Number(seat[key]);
+    if (seat[key] !== undefined && seat[key] !== null && seat[key] !== "" && Number.isFinite(value)) out[key] = value;
+  }
+  (seat.correctCounts || []).forEach((count, k) => {
+    const value = Number(questionValues?.[k]);
+    if (Number.isFinite(value) && value > 0) out[`taken${value}`] = Number(count) || 0;
+  });
+  return out;
+}
+
+// boutScope is the client mirror of the server's (structure/rules.go): the
+// seat's place, the table's size, whether it tied, its own metrics, and the
+// other seats' — oppN_, and the opp_, opp_max_ and opp_min_ aggregates. A rule
+// that reads a name this mirror lacks evaluates to 0, as before.
+export function boutScope(match: GroupBlockRoundsMatch, seatIndex: number): Record<string, number> {
+  const seats = (match.participants || []);
+  const mine = seats[seatIndex] || {};
+  const place = Number(mine.place || 0);
+  const scope: Record<string, number> = {
+    place,
+    seats: seats.length,
+    finished: match.finished ? 1 : 0,
+    tied: seats.filter((other, i) => i !== seatIndex && other && Number(other.place || 0) === place).length,
+    ...seatMetrics(mine, match.questionValues),
+  };
+  const sums: Record<string, number> = {}, maxes: Record<string, number> = {}, mins: Record<string, number> = {};
+  let index = 0;
+  seats.forEach((other, i) => {
+    if (i === seatIndex || !other) return;
+    index++;
+    scope[`opp${index}_place`] = Number(other.place || 0);
+    for (const [key, value] of Object.entries(seatMetrics(other, match.questionValues))) {
+      scope[`opp${index}_${key}`] = value;
+      sums[key] = (sums[key] || 0) + value;
+      maxes[key] = key in maxes ? Math.max(maxes[key], value) : value;
+      mins[key] = key in mins ? Math.min(mins[key], value) : value;
+    }
+  });
+  for (const key of Object.keys(sums)) {
+    scope[`opp_${key}`] = sums[key];
+    scope[`opp_max_${key}`] = maxes[key];
+    scope[`opp_min_${key}`] = mins[key];
+  }
+  return scope;
 }
 
 export interface GroupBlockRoundsRow {
@@ -73,8 +138,7 @@ export function computeGroupBlockRounds(opts: {
   const rule = opts.pointsRule || "seats + 1 - place";
   const rows = new Map<string, GroupBlockRoundsRow>();
   for (const match of opts.matches) {
-    const seats = (match.participants || []).length;
-    for (const seat of match.participants || []) {
+    for (const [seatIndex, seat] of (match.participants || []).entries()) {
       const name = (seat?.name || "").trim();
       if (!name) continue;
       let row = rows.get(name);
@@ -83,7 +147,7 @@ export function computeGroupBlockRounds(opts: {
         rows.set(name, row);
       }
       if (!match.finished || !seat?.place) continue;
-      const points = evalScoringRule(rule, {seats, place: seat.place});
+      const points = evalScoringRule(rule, boutScope(match, seatIndex));
       row.points += points;
       const blockRound = Number(match.blockRound || 1) - 1;
       if (blockRound >= 0 && blockRound < row.blockRounds.length) row.blockRounds[blockRound] += points;

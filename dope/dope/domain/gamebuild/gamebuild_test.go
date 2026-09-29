@@ -182,3 +182,39 @@ func TestClearKeepsAGamesEntrants(t *testing.T) {
 		t.Errorf("after clear: %d entrants, %d seated; want 3 and 3", entrants, seated)
 	}
 }
+
+// Троечка's посев is composed over players (§4.4.2): `seed: players` is a
+// reserved word like random and xlsx, not a game code, and saving the scheme
+// used to refuse it before the compiler — which reads it — ever saw it. The
+// Games its `games:` names are checked at the save instead of at the import.
+func TestCreateAcceptsAPlayersSeed(t *testing.T) {
+	db, festID := newFest(t, 4)
+	var odCode string
+	inTx(t, db, func(tx *sql.Tx) error {
+		odID, err := gamebuild.Create(context.Background(), tx, gamebuild.Spec{FestID: festID, Type: "od", ODTours: 1, ODQuestions: 12})
+		if err != nil {
+			return err
+		}
+		return tx.QueryRow(`select code from games where id = ?`, odID).Scan(&odCode)
+	})
+	scheme := func(games string) string {
+		return "[init]\nseed: players\ngames: [" + games + "]\nplayer.place_sum: place1\n" +
+			"seed.mean: mean(place_sum)\nsorting: [mean asc]\n\n" +
+			"[scheme]\nkind: roundrobin\ngroups: 1\ngroup_size: 4\nthemes: 6\n"
+	}
+
+	inTx(t, db, func(tx *sql.Tx) error {
+		_, err := gamebuild.Create(context.Background(), tx, gamebuild.Spec{FestID: festID, Type: "troika", Label: "Тройка", DSL: scheme(odCode)})
+		return err
+	})
+
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	_, err = gamebuild.Create(context.Background(), tx, gamebuild.Spec{FestID: festID, Type: "troika", Label: "Тройка", DSL: scheme("nosuchgame")})
+	if err == nil || !strings.Contains(err.Error(), "nosuchgame") {
+		t.Fatalf("games: [nosuchgame] saved (err = %v); want it refused, naming the code", err)
+	}
+}

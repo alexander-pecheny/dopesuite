@@ -11,6 +11,7 @@ import (
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/expr"
+	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 	corei18n "pecheny.me/dopecore/i18nstrings"
@@ -95,9 +96,10 @@ func (f fromPlayers) resolve(ctx context.Context, tx *sql.Tx, scope core.FestSco
 	}
 
 	type scored struct {
-		name    string
-		number  int
-		metrics map[string]float64
+		participant int64
+		name        string
+		number      int
+		metrics     map[string]float64
 	}
 	table := make([]scored, 0, len(entries))
 	for _, entry := range entries {
@@ -124,7 +126,7 @@ func (f fromPlayers) resolve(ctx context.Context, tx *sql.Tx, scope core.FestSco
 			}
 			metrics[name] = agg.fold(values)
 		}
-		table = append(table, scored{name: entry.name, number: entry.number, metrics: metrics})
+		table = append(table, scored{participant: entry.participant, name: entry.name, number: entry.number, metrics: metrics})
 	}
 
 	rules := f.sort
@@ -143,7 +145,9 @@ func (f fromPlayers) resolve(ctx context.Context, tx *sql.Tx, scope core.FestSco
 	})
 	candidates := make([]seedCandidate, len(table))
 	for i, row := range table {
-		candidates[i] = seedCandidate{SourceRank: i + 1, Name: row.name, Number: row.number}
+		// Number is the Participant's number inside this Game, not a fest
+		// number: the Participant id is what names it to the import.
+		candidates[i] = seedCandidate{SourceRank: i + 1, Name: row.name, Number: row.number, ParticipantID: row.participant}
 	}
 	return seeding{source: "players", label: dopestrings.Default.Imports.SeedSource.Players(), candidates: candidates}, nil
 }
@@ -280,14 +284,24 @@ func loadSeedSourceGame(ctx context.Context, q store.Queryer, festID int64, code
 	return seedSourceGame{places: places, roster: roster}, nil
 }
 
+// participantFestTeam is the rating team a Participant plays as: the link a
+// migration once wrote, else the fest team under the Participant's number —
+// the number is a team Participant's identity (ADR-0009), and nothing writes
+// the link for a Participant minted since, so every source Game of a newer
+// fest read as having no table at all. A troika is no fest team: null.
+const participantFestTeam = `coalesce(p.fest_team_id, (
+  select ft.id from fest_teams ft
+  where ft.fest_id = p.fest_id and ft.deleted = 0 and ft.number = p.number
+    and p.roster = 'team' and p.assembled = 0 limit 1))`
+
 func teamPlacesByFestTeam(ctx context.Context, q store.Queryer, festID int64, code string) (map[int64]float64, error) {
 	rows, err := store.CollectRows(ctx, q, `
-select p.fest_team_id, st.rank
+select `+participantFestTeam+`, st.rank
 from stage_standings st
 join participants p on p.id = st.participant_id
 join stages s on s.id = st.stage_id
 join games g on g.id = s.game_id
-where g.fest_id = ? and g.code = ? and p.fest_team_id is not null
+where g.fest_id = ? and g.code = ? and `+participantFestTeam+` is not null
 order by st.rank`, []any{festID, code}, func(rs *sql.Rows) ([2]int64, error) {
 		var pair [2]int64
 		return pair, rs.Scan(&pair[0], &pair[1])
@@ -316,9 +330,10 @@ order by st.rank`, []any{festID, code}, func(rs *sql.Rows) ([2]int64, error) {
 }
 
 type seedEntry struct {
-	name    string
-	number  int
-	players []seedPlayer
+	participant int64
+	name        string
+	number      int
+	players     []seedPlayer
 }
 
 // gameRoster is who played a Game and for whom: fest team by player, the
@@ -330,7 +345,7 @@ func gameRoster(ctx context.Context, q store.Queryer, festID, gameID int64) (map
 	teamOf, err := store.CollectRows(ctx, q, `
 select ftp.player_id, ftp.team_id
 from fest_team_players ftp
-join participants p on p.fest_team_id = ftp.team_id and p.fest_id = ?
+join participants p on `+participantFestTeam+` = ftp.team_id and p.fest_id = ?
 join game_assignments ga on ga.participant_id = p.id and ga.game_id = ?`,
 		[]any{festID, gameID}, func(rs *sql.Rows) ([2]int64, error) {
 			var pair [2]int64
@@ -370,20 +385,25 @@ func seedParticipantPlayers(ctx context.Context, q store.Queryer, scope core.Fes
 		return nil, err
 	}
 	type participant struct {
-		id     int64
-		team   int64
-		name   string
-		number int
+		id        int64
+		team      int64
+		name      string
+		number    int
+		assembled bool
 	}
 	participants, err := store.CollectRows(ctx, q, `
-select p.id, coalesce(p.fest_team_id, 0), p.name, coalesce(ga.number, 0)
+select p.id, coalesce(`+participantFestTeam+`, 0), p.name, coalesce(ga.number, 0), p.assembled
 from participants p
 join game_assignments ga on ga.participant_id = p.id and ga.game_id = ?
 where p.fest_id = ?
 order by ga.number, p.id`, []any{scope.GameID, scope.FestID}, func(rs *sql.Rows) (participant, error) {
 		var row participant
-		return row, rs.Scan(&row.id, &row.team, &row.name, &row.number)
+		return row, rs.Scan(&row.id, &row.team, &row.name, &row.number, &row.assembled)
 	})
+	if err != nil {
+		return nil, err
+	}
+	members, err := assembledFestPlayers(ctx, q, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -398,8 +418,15 @@ order by ga.number, p.id`, []any{scope.GameID, scope.FestID}, func(rs *sql.Rows)
 
 	entries := make([]seedEntry, 0, len(participants))
 	for _, row := range participants {
-		entry := seedEntry{name: row.name, number: row.number}
-		for _, playerID := range byTeam[row.team] {
+		entry := seedEntry{participant: row.id, name: row.name, number: row.number}
+		people := byTeam[row.team]
+		if row.assembled {
+			// A troika's people are its own roster (the fest's troikas page), not a
+			// fest team's: the rating roster names them, and the name is the
+			// link — the same one the troikas page's credited-team column reads.
+			people = members[row.id]
+		}
+		for _, playerID := range people {
 			player := seedPlayer{id: playerID, places: make([]float64, len(sources))}
 			for i, source := range sources {
 				player.places[i] = source.places[source.roster[playerID]]
@@ -419,4 +446,61 @@ order by ga.number, p.id`, []any{scope.GameID, scope.FestID}, func(rs *sql.Rows)
 type seedSourceGame struct {
 	places map[int64]float64
 	roster map[int64]int64
+}
+
+// assembledFestPlayers maps each troika seated in this Game to its people as
+// fest players — the rating roster's rows, whose teams the source Games
+// ranked. A troika's roster lives in players, the fest roster in fest_players,
+// and the two meet on the name only; a person the rating roster does not know
+// is left out (their places are unknown), and a namesake resolves to the
+// first fest player of that name.
+func assembledFestPlayers(ctx context.Context, q store.Queryer, scope core.FestScope) (map[int64][]int64, error) {
+	festPlayers, err := store.CollectRows(ctx, q, `
+select id, first_name, last_name from fest_players where fest_id = ? order by id`,
+		[]any{scope.FestID}, func(rs *sql.Rows) (struct {
+			id          int64
+			first, last string
+		}, error) {
+			var row struct {
+				id          int64
+				first, last string
+			}
+			return row, rs.Scan(&row.id, &row.first, &row.last)
+		})
+	if err != nil {
+		return nil, err
+	}
+	byName := map[string]int64{}
+	for _, fp := range festPlayers {
+		key := util.AlphaKey(store.JoinPlayerName(fp.first, fp.last))
+		if _, seen := byName[key]; !seen {
+			byName[key] = fp.id
+		}
+	}
+	rows, err := store.CollectRows(ctx, q, `
+select pp.participant_id, pl.first_name, pl.last_name
+from participant_players pp
+join players pl on pl.id = pp.player_id
+join participants p on p.id = pp.participant_id and p.assembled = 1
+join game_assignments ga on ga.participant_id = p.id and ga.game_id = ?
+order by pp.participant_id, pp.roster_order`, []any{scope.GameID}, func(rs *sql.Rows) (struct {
+		team        int64
+		first, last string
+	}, error) {
+		var row struct {
+			team        int64
+			first, last string
+		}
+		return row, rs.Scan(&row.team, &row.first, &row.last)
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := map[int64][]int64{}
+	for _, row := range rows {
+		if id, ok := byName[util.AlphaKey(store.JoinPlayerName(row.first, row.last))]; ok {
+			out[row.team] = append(out[row.team], id)
+		}
+	}
+	return out, nil
 }

@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {computeGroupBlockRounds, evalScoringRule} from "./dist/group-stats.js";
+import {boutScope, computeGroupBlockRounds, evalScoringRule} from "./dist/group-stats.js";
 
 // The client mirror of a per-бой scoring rule (ADR-0008): arithmetic over the
 // бой's outcome. «seats + 1 - place» is what личная СИ pays очки by.
@@ -34,4 +34,42 @@ test("computeGroupBlockRounds folds a группа's бои into очки per к
     {name: "Алексей Погорелов", points: 3, blockRounds: [3, 0, 0]},
     {name: "Николай Зотов", points: 2, blockRounds: [1, 1, 0]},
   ]);
+});
+
+// Octobearfest's личная СИ pays «(4 − место) + сумма/1000». The client mirror
+// knew only seats and place, so the rule read an unknown name, evaluated to 0,
+// and the группа tab showed every player at zero while the Сетка — the
+// server's reading — had their очки. The mirror now sees what the server's
+// scope does: the seat's metrics and the other seats'.
+test("computeGroupBlockRounds reads the seat's metrics like the server", () => {
+  const rows = computeGroupBlockRounds({
+    matches: [
+      {blockRound: 1, finished: true, questionValues: [10, 20, 30, 40, 50], participants: [
+        {name: "Ольга Бурлакова", place: 1, total: 20, plus: 20, correctCounts: [0, 1, 0, 0, 0]},
+        {name: "Артем Икунин", place: 2, total: 0, plus: 30, correctCounts: [0, 0, 1, 0, 0]},
+        {name: "Клевер Яценко", place: 3, total: -40, plus: 0, correctCounts: [0, 0, 0, 0, 0]},
+      ]},
+    ],
+    pointsRule: "seats + 1 - place + total / 1000",
+    blockRoundCount: 4,
+  });
+  assert.deepEqual(rows.map((row) => [row.name, row.points]), [
+    ["Ольга Бурлакова", 3.02],
+    ["Артем Икунин", 2],
+    ["Клевер Яценко", 0.96],
+  ]);
+});
+
+test("boutScope mirrors the server's names", () => {
+  const scope = boutScope({finished: true, questionValues: [10, 20], participants: [
+    {name: "A", place: 1, total: 30, plus: 30, correctCounts: [1, 1]},
+    {name: "B", place: 1, total: 30, plus: 40, correctCounts: [0, 2]},
+    {name: "C", place: 3, total: -10, plus: 0, correctCounts: [0, 0]},
+  ]}, 0);
+  assert.equal(scope.seats, 3);
+  assert.equal(scope.tied, 1);
+  assert.equal(scope.taken20, 1);
+  assert.equal(scope.opp_total, 20);
+  assert.equal(scope.opp_max_plus, 40);
+  assert.equal(scope.opp2_place, 3);
 });

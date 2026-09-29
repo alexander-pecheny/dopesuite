@@ -98,29 +98,47 @@ func duelStandings(conf Duel, results []MatchOutcome) ([]RankedEntry, error) {
 	}
 
 	// Head-to-head needs each finished Match's point split, not just totals.
-	type duel struct {
-		a, b   int64
-		pa, pb float64
-	}
-	var duels []duel
+	var duels []h2hDuel
 	for _, match := range results {
 		if !match.Finished || len(match.Slots) != 2 {
 			continue
 		}
-		a, b := match.Slots[0], match.Slots[1]
-		if a.Participant == 0 || b.Participant == 0 {
-			continue
-		}
-		switch {
-		case a.Place < b.Place:
-			duels = append(duels, duel{a.Participant, b.Participant, win, loss})
-		case a.Place > b.Place:
-			duels = append(duels, duel{a.Participant, b.Participant, loss, win})
-		default:
-			duels = append(duels, duel{a.Participant, b.Participant, draw, draw})
+		duels = appendDuels(duels, match, win, draw, loss)
+	}
+	return rankWithHeadToHead(ranked, order, duels), nil
+}
+
+// h2hDuel is one meeting of two Participants and what each took from it.
+type h2hDuel struct {
+	a, b   int64
+	pa, pb float64
+}
+
+// appendDuels adds every pair of seats of a finished Match as a meeting: the
+// better place wins it. A Match of two is one meeting; a Match of three (personal
+// SI's group stage) is three, so head-to-head reads the same at any table.
+func appendDuels(duels []h2hDuel, match MatchOutcome, win, draw, loss float64) []h2hDuel {
+	for i := 0; i < len(match.Slots); i++ {
+		for j := i + 1; j < len(match.Slots); j++ {
+			a, b := match.Slots[i], match.Slots[j]
+			if a.Participant == 0 || b.Participant == 0 {
+				continue
+			}
+			switch {
+			case a.Place < b.Place:
+				duels = append(duels, h2hDuel{a.Participant, b.Participant, win, loss})
+			case a.Place > b.Place:
+				duels = append(duels, h2hDuel{a.Participant, b.Participant, loss, win})
+			default:
+				duels = append(duels, h2hDuel{a.Participant, b.Participant, draw, draw})
+			}
 		}
 	}
+	return duels
+}
 
+// rankWithHeadToHead orders a table by its comparators and numbers it.
+func rankWithHeadToHead(ranked []RankedEntry, order []string, duels []h2hDuel) []RankedEntry {
 	// Each key partitions the still-tied group; "h2h" is relative to that
 	// group — the points the tied teams took in their Matches against each other.
 	// Keys are consumed in order and never re-applied to later sub-ties, so a
@@ -181,5 +199,5 @@ func duelStandings(conf Duel, results []MatchOutcome) ([]RankedEntry, error) {
 			out[pos].Rank = pos + 1
 		}
 	}
-	return out, nil
+	return out
 }

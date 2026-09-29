@@ -6,6 +6,7 @@ import (
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
+	"dope/dope/storage/festaccess"
 	"dope/dope/web/route"
 )
 
@@ -113,6 +114,15 @@ func (s *Server) serveHostGamePage(w http.ResponseWriter, r *http.Request, sc ro
 	var gameType string
 	if err := s.h.Engine().DB.QueryRowContext(r.Context(), `select game_type from games where id = ? and fest_id = ?`, gameID, sc.FestID).Scan(&gameType); err != nil {
 		return err
+	}
+	// A host an admin limited to other Games watches this one as a viewer: the
+	// same page under /fest, where nothing is editable, rather than an editor
+	// whose every write would be refused.
+	if may, err := festaccess.MayRunGame(r.Context(), s.h.Engine().DB, sc.FestID, gameID, sc.User.UserID, sc.Role); err != nil {
+		return err
+	} else if !may {
+		http.Redirect(w, r, "/fest/"+r.PathValue("fest")+"/"+strings.Join(parts, "/"), http.StatusSeeOther)
+		return nil
 	}
 	scope := core.FestScope{FestID: sc.FestID, GameID: gameID}
 	if def := games.Get(gameType); def.Init == games.InitEK {

@@ -186,6 +186,31 @@ func SaveFestAccess(eng *core.Engine, ctx context.Context, festID, actorID int64
 		}
 	}
 
+	// A host's Games: the row posts games_present_<uid> with a box per Game,
+	// so ticking none — every Game — is told apart from a form without them.
+	for userID, currentRole := range current {
+		uid := strconv.FormatInt(userID, 10)
+		if form.Get("games_present_"+uid) != "1" {
+			continue
+		}
+		nextRole := roles.Normalize(form.Get("role_" + uid))
+		if nextRole == "" {
+			nextRole = currentRole
+		}
+		if nextRole != roles.Host || form.Get("delete_"+uid) == "1" {
+			continue
+		}
+		var gameIDs []int64
+		for _, raw := range form["games_"+uid] {
+			if id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64); err == nil && id > 0 {
+				gameIDs = append(gameIDs, id)
+			}
+		}
+		if err := setHostGamesTx(ctx, tx, festID, userID, gameIDs); err != nil {
+			return err
+		}
+	}
+
 	addClicked := form.Get("add_access") == "1"
 	nickname := strings.TrimSpace(form.Get("new_nickname"))
 	if addClicked && nickname == "" {
@@ -317,6 +342,10 @@ update fest_organizers set role = 'creator' where fest_id = ? and user_id = ?`, 
 		return err
 	}
 	if deleteMember {
+		if _, err := tx.ExecContext(ctx, `
+delete from fest_game_hosts where fest_id = ? and user_id = ?`, festID, userID); err != nil {
+			return err
+		}
 		_, err := tx.ExecContext(ctx, `
 delete from fest_organizers where fest_id = ? and user_id = ?`, festID, userID)
 		return err
@@ -369,4 +398,59 @@ func lookupUserIDByNicknameTx(ctx context.Context, tx *sql.Tx, nickname string) 
 		return userID, err
 	}
 	return store.UserIDByTelegramName(ctx, tx, nickname)
+}
+
+// setHostGamesTx replaces the Games a host may run with gameIDs; none is every
+// Game. An id that is not a Game of this fest is ignored.
+func setHostGamesTx(ctx context.Context, tx *sql.Tx, festID, userID int64, gameIDs []int64) error {
+	if _, err := tx.ExecContext(ctx, `delete from fest_game_hosts where fest_id = ? and user_id = ?`, festID, userID); err != nil {
+		return err
+	}
+	for _, gameID := range gameIDs {
+		if _, err := tx.ExecContext(ctx, `
+insert or ignore into fest_game_hosts(fest_id, game_id, user_id)
+select fest_id, id, ? from games where id = ? and fest_id = ?`, userID, gameID, festID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// HostGamesByUser lists, per host of the fest, the Games they are limited to.
+// A host missing from the map runs every Game.
+func HostGamesByUser(ctx context.Context, q store.Queryer, festID int64) (map[int64][]int64, error) {
+	rows, err := store.CollectRows(ctx, q, `
+select user_id, game_id from fest_game_hosts where fest_id = ? order by user_id, game_id`,
+		[]any{festID}, func(rs *sql.Rows) ([2]int64, error) {
+			var pair [2]int64
+			return pair, rs.Scan(&pair[0], &pair[1])
+		})
+	if err != nil {
+		return nil, err
+	}
+	out := map[int64][]int64{}
+	for _, pair := range rows {
+		out[pair[0]] = append(out[pair[0]], pair[1])
+	}
+	return out, nil
+}
+
+// MayRunGame says whether a user with this role on the fest may edit this
+// Game's tables. An admin or the creator may run every Game; a host may run
+// every Game unless an admin limited them to some, and then only those.
+func MayRunGame(ctx context.Context, q store.Queryer, festID, gameID, userID int64, role string) (bool, error) {
+	if !roles.CanEditGameTables(role) {
+		return false, nil
+	}
+	if roles.Normalize(role) != roles.Host || gameID <= 0 {
+		return true, nil
+	}
+	var limited, here int
+	err := q.QueryRowContext(ctx, `
+select count(*), coalesce(sum(game_id = ?), 0) from fest_game_hosts where fest_id = ? and user_id = ?`,
+		gameID, festID, userID).Scan(&limited, &here)
+	if err != nil {
+		return false, err
+	}
+	return limited == 0 || here > 0, nil
 }

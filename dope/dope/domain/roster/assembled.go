@@ -448,9 +448,12 @@ func ParseAssembledLines(text string) ([]AssembledInput, error) {
 // SaveAssembledTx creates an assembled team (id 0) or rewrites one: its name,
 // its people in the order given and, when the input carries a placement, its
 // head team and division. A new team without a placement takes its derived head
-// team and follows it. A name another Participant already goes by is refused —
-// the fest's other lookups find Participants by name — and so is a roster
-// outside two to four people, or a head team the fest does not have.
+// team and follows it. A name another troika already goes by is refused, and so
+// is a roster outside two to four people, or a head team the fest does not
+// have. A rating team of the same name is not a clash: a troika and the team
+// most of its people play for are often named alike (Octobearfest had one name
+// twice), and the lookups that find a team by name (EnsureSeedTeam) look among
+// rating teams only.
 func SaveAssembledTx(ctx context.Context, tx *sql.Tx, festID, id int64, in AssembledInput) (int64, error) {
 	s := dopestrings.Default
 	name := strings.TrimSpace(in.Name)
@@ -476,7 +479,7 @@ func SaveAssembledTx(ctx context.Context, tx *sql.Tx, festID, id int64, in Assem
 	}
 	var clash int64
 	err := tx.QueryRowContext(ctx, `
-select id from participants where fest_id = ? and name = ? and id != ? and game_id is null limit 1`, festID, name, id).Scan(&clash)
+select id from participants where fest_id = ? and name = ? and id != ? and assembled = 1 and game_id is null limit 1`, festID, name, id).Scan(&clash)
 	switch {
 	case err == nil:
 		return 0, corei18n.User(s.Host.Troikas.NameTaken(name))

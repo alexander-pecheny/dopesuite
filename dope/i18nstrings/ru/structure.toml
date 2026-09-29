@@ -68,6 +68,9 @@ too_many_block_rounds = "слишком много раундов — прове
 lives_min = "нужна хотя бы одна жизнь"
 # A complaint of one bracket of a lives elimination, pinned to its round.
 block_round_bracket = 'раунд {{.round}}, сетка {{.bracket}}: {{.err}}'
+# lower_entrants out of range: negative, the whole field, or a bracket with
+# one life, which has no lower bracket to start in.
+lower_entrants = 'lower_entrants: {{.lower}} из {{.entrants}} — в нижнюю сетку можно посадить от 0 до {{.entrants}}−1 участников, и только когда жизней две'
 # A bracket whose members do not split evenly into bouts of the asked size.
 bracket_not_divisible = '{{.entrants}} участников не делятся на бои не больше чем по {{.size}}, из которых выходит {{.winning}}'
 
