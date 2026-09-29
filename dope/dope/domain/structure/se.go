@@ -460,7 +460,7 @@ func seFirstBlockRound(b Block, opening elimBlockRound, winning int) ([][]store.
 }
 
 // seDrawnFirstBlockRound seats the opening Round by a draw the host makes on
-// the day (Троечка §5.3): each bout pairs a group winner with a runner-up, both
+// the day (the Troika rules §5.3): each bout pairs a group winner with a runner-up, both
 // drawn, and the two may not come out of the same group. The seats stay empty
 // until the host fills them; the groups only say who may be drawn.
 func seDrawnFirstBlockRound(b Block, prev Outputs, opening elimBlockRound, winning int) ([][]store.SchemeSlot, error) {

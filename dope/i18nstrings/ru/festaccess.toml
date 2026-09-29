@@ -31,3 +31,10 @@ line_prefix = 'строка {{.n}}: {{.msg}}'
 creator_protected = "создателя нельзя удалить или изменить"
 # A member row's new role is not admin or host.
 role_invalid = "роль должна быть admin или host"
+
+[games]
+# The API's per-host Game limits (POST …/access with games).
+# A user named in games who is not a host of the fest: only a host is limited.
+not_host = 'у {{.name}} роль не «ведущий» — ограничить по играм можно только ведущего'
+# A Game named in games that this fest does not have (by id, code or slug).
+unknown = 'в фесте нет игры «{{.game}}»'

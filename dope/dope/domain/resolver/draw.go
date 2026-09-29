@@ -127,7 +127,7 @@ update match_slots set participant_id = ?, locked = ? where id = ?`,
 }
 
 // drawnFromSource reports whether another drawn seat of the slot's Match
-// already holds a Participant out of source (Троечка §5.3: a group's winner
+// already holds a Participant out of source (the Troika rules §5.3: a group's winner
 // never meets a runner-up of its own group).
 func drawnFromSource(ctx context.Context, q store.Queryer, gameID int64, slots []drawSlotRow, slot drawSlotRow, source string) (bool, error) {
 	if source == "" {

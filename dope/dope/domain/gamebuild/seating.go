@@ -405,40 +405,14 @@ func ResolveEntrantRefsTx(ctx context.Context, tx *sql.Tx, festID int64, refs []
 }
 
 func festPlayerParticipantTx(ctx context.Context, tx *sql.Tx, festID, festPlayerID int64) (int64, error) {
-	var id int64
-	err := tx.QueryRowContext(ctx, `
-select id from participants where fest_id = ? and roster = 'player' and fest_player_id = ? limit 1`,
-		festID, festPlayerID).Scan(&id)
-	if err == nil {
-		return id, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	var known int
+	if err := tx.QueryRowContext(ctx, `select count(*) from fest_players where fest_id = ? and id = ?`, festID, festPlayerID).Scan(&known); err != nil {
 		return 0, err
 	}
-	var name string
-	var rank int64
-	if err := tx.QueryRowContext(ctx, `
-select trim(fp.first_name || ' ' || fp.last_name),
-       (select count(*) from fest_players o where o.fest_id = fp.fest_id and o.id <= fp.id)
-from fest_players fp where fp.fest_id = ? and fp.id = ?`, festID, festPlayerID).Scan(&name, &rank); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return 0, corei18n.User(dopestrings.Default.Gamebuild.Seating.UnknownParticipant(FestPlayerEntrantRef(festPlayerID)))
-		}
-		return 0, err
+	if known == 0 {
+		return 0, corei18n.User(dopestrings.Default.Gamebuild.Seating.UnknownParticipant(FestPlayerEntrantRef(festPlayerID)))
 	}
-	number := rank
-	var taken int
-	if err := tx.QueryRowContext(ctx, `
-select count(*) from participants where fest_id = ? and roster = 'player' and number = ?`, festID, number).Scan(&taken); err != nil {
-		return 0, err
-	}
-	if taken > 0 {
-		// EnsureSeedPlayerByNumber would take over — and rename — whoever holds
-		// the number, so a held number is left alone and the next free one used.
-		if err := tx.QueryRowContext(ctx, `
-select coalesce(max(number), 0) + 1 from participants where fest_id = ? and roster = 'player'`, festID).Scan(&number); err != nil {
-			return 0, err
-		}
-	}
-	return imports.EnsureSeedPlayerByNumber(ctx, tx, festID, number, name, festPlayerID)
+	// The same Participant a whole-roster seating finds or makes: the player's
+	// own if they have one, else under their rank, never another person's.
+	return imports.EnsurePlayerParticipantTx(ctx, tx, festID, festPlayerID)
 }

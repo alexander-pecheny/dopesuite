@@ -1254,17 +1254,21 @@ function buildGroupStandingsPane(stage: HostStage): HTMLElement {
     // for; a row the standings do not know yet keeps the client's sum.
     const standings = mergedStage(fest, code).standings || [];
     if (standings.length) {
+      // Matched by Participant id, and by name only for a row without one:
+      // two players may share a name.
+      const byID = new Map(standings.filter((entry) => entry.participantID).map((entry) => [Number(entry.participantID), entry]));
       const byName = new Map(standings.map((entry) => [String(entry.name || "").trim(), entry]));
+      const entryOf = (row: {id: number; name: string}) => row.id ? byID.get(row.id) : byName.get(row.name);
       for (const row of rows) {
-        const points = Number(byName.get(row.name)?.metrics?.points);
+        const points = Number(entryOf(row)?.metrics?.points);
         if (Number.isFinite(points)) row.points = points;
       }
-      const rank = (name: string) => Number(byName.get(name)?.rank) || Number.MAX_SAFE_INTEGER;
-      rows.sort((a, b) => rank(a.name) - rank(b.name) || b.points - a.points || a.name.localeCompare(b.name, "ru"));
+      const rank = (row: {id: number; name: string}) => Number(entryOf(row)?.rank) || Number.MAX_SAFE_INTEGER;
+      rows.sort((a, b) => rank(a) - rank(b) || b.points - a.points || a.name.localeCompare(b.name, "ru"));
     }
     if (!rows.length) {
       for (const entrant of config.entrants || []) {
-        if (entrant.label) rows.push({name: entrant.label, points: 0, blockRounds: new Array<number>(blockRoundCount).fill(0)});
+        if (entrant.label) rows.push({id: 0, name: entrant.label, points: 0, blockRounds: new Array<number>(blockRoundCount).fill(0)});
       }
     }
     const title = schemeStage ? groupLabel(schemeStage as StageRef) : code;

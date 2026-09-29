@@ -413,6 +413,10 @@ export type Strings = {
       linePrefix: (n: string, msg: string) => string;
       userNotFound: (n: string, name: string) => string;
     };
+    games: {
+      notHost: (name: string) => string;
+      unknown: (game: string) => string;
+    };
     manage: {
       denied: () => string;
     };

@@ -508,6 +508,12 @@ var RU = Strings{
 				return fmt.Sprintf("строка %s: пользователь \"%s\" не найден", n, name)
 			},
 		},
+		Games: FestaccessGamesStrings{
+			NotHost: func(name string) string {
+				return fmt.Sprintf("у %s роль не «ведущий» — ограничить по играм можно только ведущего", name)
+			},
+			Unknown: func(game string) string { return fmt.Sprintf("в фесте нет игры «%s»", game) },
+		},
 		Manage: FestaccessManageStrings{
 			Denied: func() string { return "нет прав менять доступ" },
 		},

@@ -30,9 +30,9 @@ test("computeGroupBlockRounds folds a группа's бои into очки per к
     blockRoundCount: 3,
   });
   assert.deepEqual(rows, [
-    {name: "Виктор Вега", points: 4, blockRounds: [2, 2, 0]},
-    {name: "Алексей Погорелов", points: 3, blockRounds: [3, 0, 0]},
-    {name: "Николай Зотов", points: 2, blockRounds: [1, 1, 0]},
+    {id: 0, name: "Виктор Вега", points: 4, blockRounds: [2, 2, 0]},
+    {id: 0, name: "Алексей Погорелов", points: 3, blockRounds: [3, 0, 0]},
+    {id: 0, name: "Николай Зотов", points: 2, blockRounds: [1, 1, 0]},
   ]);
 });
 
@@ -72,4 +72,14 @@ test("boutScope mirrors the server's names", () => {
   assert.equal(scope.opp_total, 20);
   assert.equal(scope.opp_max_plus, 40);
   assert.equal(scope.opp2_place, 3);
+});
+
+test("computeGroupBlockRounds keeps two players of one name apart by id", () => {
+  const rows = computeGroupBlockRounds({
+    blockRoundCount: 1,
+    matches: [{blockRound: 1, finished: true, participants: [
+      {id: 1, name: "Иван Петров", place: 1}, {id: 2, name: "Иван Петров", place: 2}, {id: 3, name: "Анна", place: 3},
+    ]}],
+  });
+  assert.deepEqual(rows.map((row) => [row.id, row.points]), [[1, 3], [2, 2], [3, 1]]);
 });

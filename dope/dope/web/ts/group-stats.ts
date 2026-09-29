@@ -51,6 +51,8 @@ export function evalScoringRule(expr: string, vars: Record<string, number>): num
 }
 
 export interface GroupBlockRoundsSeat {
+  // id is the seat's Participant; two players may share a name.
+  id?: number;
   name?: string;
   place?: number;
   // The seat's Protocol metrics as the match view carries them. A rule may
@@ -122,6 +124,8 @@ export function boutScope(match: GroupBlockRoundsMatch, seatIndex: number): Reco
 }
 
 export interface GroupBlockRoundsRow {
+  // id is the Participant when the seats named one, 0 otherwise.
+  id: number;
   name: string;
   points: number;
   blockRounds: number[];
@@ -141,10 +145,14 @@ export function computeGroupBlockRounds(opts: {
     for (const [seatIndex, seat] of (match.participants || []).entries()) {
       const name = (seat?.name || "").trim();
       if (!name) continue;
-      let row = rows.get(name);
+      // A row is a Participant, keyed by id where the seat has one: two
+      // players of one name are two rows.
+      const id = Number(seat?.id) || 0;
+      const key = id ? `id:${id}` : `name:${name}`;
+      let row = rows.get(key);
       if (!row) {
-        row = {name, points: 0, blockRounds: new Array<number>(opts.blockRoundCount).fill(0)};
-        rows.set(name, row);
+        row = {id, name, points: 0, blockRounds: new Array<number>(opts.blockRoundCount).fill(0)};
+        rows.set(key, row);
       }
       if (!match.finished || !seat?.place) continue;
       const points = evalScoringRule(rule, boutScope(match, seatIndex));

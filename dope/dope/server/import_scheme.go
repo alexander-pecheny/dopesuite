@@ -82,11 +82,36 @@ func (s *server) importSchemeIntoFest(ctx context.Context, festID int64, scheme 
 	if err := festwrite.SuppressAuditTx(ctx, tx); err != nil {
 		return err
 	}
+	// A host's Game limits name Games the wipe deletes, and a host left with
+	// none would silently run every Game. They are carried over to the new
+	// Games by slug, or by code where a Game has no slug; a limit whose Game
+	// the scheme no longer has is dropped.
+	type hostGame struct {
+		user       int64
+		slug, code string
+	}
+	limits, err := store.CollectRows(ctx, tx, `
+select h.user_id, coalesce(g.slug, ''), g.code from fest_game_hosts h join games g on g.id = h.game_id
+where h.fest_id = ?`, []any{festID}, func(rows *sql.Rows) (hostGame, error) {
+		var h hostGame
+		return h, rows.Scan(&h.user, &h.slug, &h.code)
+	})
+	if err != nil {
+		return err
+	}
 	if err := clearFestImportData(ctx, tx, festID); err != nil {
 		return err
 	}
 	if _, err := gamebuild.Materialise(ctx, tx, festID, scheme); err != nil {
 		return err
+	}
+	for _, limit := range limits {
+		if _, err := tx.ExecContext(ctx, `
+insert or ignore into fest_game_hosts(fest_id, game_id, user_id)
+select fest_id, id, ? from games
+where fest_id = ? and case when ? != '' then slug = ? else code = ? end`, limit.user, festID, limit.slug, limit.slug, limit.code); err != nil {
+			return err
+		}
 	}
 	schemaJSON, err := json.Marshal(scheme)
 	if err != nil {

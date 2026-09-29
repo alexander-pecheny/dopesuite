@@ -160,7 +160,7 @@ type SchemeDraw struct {
 	// out.
 	Ranks []SchemeReseedRef `json:"ranks,omitempty"`
 	// Apart means two drawn seats of one Match may not hold Participants who
-	// come from the same source stage. Троечка §5.3 pairs a group's winner
+	// come from the same source stage. The Troika rules (§5.3) pair a group's winner
 	// with the runner-up of another group.
 	Apart bool `json:"apart,omitempty"`
 }

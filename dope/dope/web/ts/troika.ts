@@ -202,6 +202,11 @@ function shapeOf(code: string): string {
     order: state.sides.map((side) => side.themes.map((theme) => theme.order)),
     finished: Boolean(view.finished), title: view.title,
     seats: (view.participants || []).map((seat) => [seat?.id, seat?.name, (seat?.roster || []).map((p) => p.id)]),
+    // What the heads draw from the marks: the add-shootout button waits on a
+    // started, level bout, and a shootout theme's × on the theme being empty.
+    // A mark that flips one of these must rebuild the heads, not repaint cells.
+    started: troika.started(state), level: troika.level(state),
+    emptyShootout: state.values.map((_, t) => t >= state.values.length - state.shootout && shootoutThemeEmpty(state, t)),
   });
 }
 
@@ -211,11 +216,17 @@ function shapeOf(code: string): string {
 // stand, the way the personal SI sheet patches its table: the whole tab used to
 // be rebuilt on every answer, which on a group stage's worth of bouts is a
 // visible stall after each mark and a cursor that jumps under the host.
+// drawnShape is each bout's shape as the page last drew it. A repaint is safe
+// only against what is on screen: the host's own marks are already in the
+// state before the server answers them, so the state just before an answer
+// can match it while the heads on screen are stale.
+const drawnShape = new Map<string, string>();
+
 function showMatchView(view: TroikaMatchView | null | undefined): void {
   const code = view?.code || "";
-  const before = shapeOf(code);
   if (!adoptMatchView(view)) return;
   const tab = tabs().find((entry) => entry.key === activeTab);
+  const before = drawnShape.get(code);
   if (before && before === shapeOf(code) && tab?.kind === "protocol") {
     repaintBout(code);
     return;
@@ -469,7 +480,9 @@ function addShootoutTheme(bout: BoutEntry): void {
 // offers only while nothing is entered in it.
 function dropShootoutTheme(bout: BoutEntry): void {
   const state = stateOf(bout.code);
-  if (state.shootout <= 0) return;
+  // The × is drawn only on an empty theme, but a head can be stale for a
+  // moment: never drop a theme somebody has marked.
+  if (state.shootout <= 0 || !shootoutThemeEmpty(state, state.values.length - 1)) return;
   state.values.pop();
   state.shootout--;
   for (const side of state.sides) side.themes.pop();
@@ -1014,7 +1027,7 @@ function buildGrid(): HTMLElement {
   });
 }
 
-// applyDraw seats a drawn play-off seat (Троечка §5.3), as Хамса does. The
+// applyDraw seats a drawn play-off seat (the Troika rules §5.3), as Hamsa does. The
 // server holds the choice to the seat's candidates and to the group-apart
 // rule, so a refusal is a refusal and the page reloads what it answered.
 async function applyDraw(slot: string, participant: number): Promise<void> {
@@ -1119,6 +1132,8 @@ function render(): void {
   const tab = tabs().find((entry) => entry.key === activeTab);
   const node = buildTab(tab);
   root.replaceChildren(node);
+  drawnShape.clear();
+  for (const code of matches.keys()) drawnShape.set(code, shapeOf(code));
   // Groups and bouts wrap into the frame's width rather than pushing the page sideways.
   root.classList.toggle("fits-frame", tab?.kind !== "grid" && !node.querySelector(".fest-grid"));
   root.classList.toggle("grid-host", Boolean(node.querySelector(".fest-grid")) || node.matches(".fest-grid"));

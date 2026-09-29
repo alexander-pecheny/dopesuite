@@ -965,10 +965,35 @@ func EnsureSeedPlayerByNumber(ctx context.Context, tx *sql.Tx, festID, number in
 	if name == "" {
 		return 0, errors.New("empty player name")
 	}
-	var participantID int64
-	err := tx.QueryRowContext(ctx, `
+	var participantID, holder int64
+	// A player who already has a Participant keeps it, whatever number the
+	// roster gives them now: a re-import can shift the ranks.
+	if festPlayerID > 0 {
+		err := tx.QueryRowContext(ctx, `
 select id from participants
-where fest_id = ? and roster = 'player' and number = ? limit 1`, festID, number).Scan(&participantID)
+where fest_id = ? and roster = 'player' and fest_player_id = ? and game_id is null
+order by id limit 1`, festID, festPlayerID).Scan(&participantID)
+		if err == nil {
+			_, err = tx.ExecContext(ctx, `update participants set name = ? where id = ?`, name, participantID)
+			return participantID, err
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return 0, err
+		}
+	}
+	err := tx.QueryRowContext(ctx, `
+select id, coalesce(fest_player_id, 0) from participants
+where fest_id = ? and roster = 'player' and number = ? and game_id is null limit 1`, festID, number).Scan(&participantID, &holder)
+	if err == nil && holder != 0 && holder != festPlayerID && festPlayerID > 0 {
+		// The number belongs to another person, whose results sit on that
+		// Participant: taking it over would hand them to this player. This one
+		// gets the next free number instead.
+		if err := tx.QueryRowContext(ctx, `
+select coalesce(max(number), 0) + 1 from participants where fest_id = ? and roster = 'player'`, festID).Scan(&number); err != nil {
+			return 0, err
+		}
+		err = sql.ErrNoRows
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return store.InsertReturningID(ctx, tx, `
 insert into participants(fest_id, roster, name, city, number, fest_player_id)

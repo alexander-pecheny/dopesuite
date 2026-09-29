@@ -414,6 +414,10 @@ export const RU: Strings = {
       linePrefix: (n: string, msg: string) => `строка ${n}: ${msg}`,
       userNotFound: (n: string, name: string) => `строка ${n}: пользователь "${name}" не найден`,
     },
+    games: {
+      notHost: (name: string) => `у ${name} роль не «ведущий» — ограничить по играм можно только ведущего`,
+      unknown: (game: string) => `в фесте нет игры «${game}»`,
+    },
     manage: {
       denied: () => "нет прав менять доступ",
     },

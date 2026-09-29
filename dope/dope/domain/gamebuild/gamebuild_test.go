@@ -10,6 +10,7 @@ import (
 
 	"dope/dope/domain/festview"
 	"dope/dope/domain/gamebuild"
+	"dope/dope/domain/imports"
 	dopeserver "dope/dope/server"
 	"dope/dope/storage/store"
 )
@@ -216,5 +217,56 @@ func TestCreateAcceptsAPlayersSeed(t *testing.T) {
 	_, err = gamebuild.Create(context.Background(), tx, gamebuild.Spec{FestID: festID, Type: "troika", Label: "Тройка", DSL: scheme("nosuchgame")})
 	if err == nil || !strings.Contains(err.Error(), "nosuchgame") {
 		t.Fatalf("games: [nosuchgame] saved (err = %v); want it refused, naming the code", err)
+	}
+}
+
+// A player's Participant stays theirs. Seating a rating player by rank must not
+// take over a Participant another person holds under that number: their
+// results sit on it, and before this the newcomer was renamed onto it.
+func TestAPlayersParticipantIsNeverHandedToAnother(t *testing.T) {
+	db, festID := newFest(t, 0)
+	var anna, boris, holder int64
+	inTx(t, db, func(tx *sql.Tx) error {
+		var err error
+		if anna, err = store.InsertReturningID(context.Background(), tx,
+			`insert into fest_players(fest_id, first_name, last_name) values(?, 'Анна', 'Иванова')`, festID); err != nil {
+			return err
+		}
+		if boris, err = store.InsertReturningID(context.Background(), tx,
+			`insert into fest_players(fest_id, first_name, last_name) values(?, 'Борис', 'Петров')`, festID); err != nil {
+			return err
+		}
+		// Boris sits under number 1, which is Anna's rank: a roster
+		// re-import shifted the ranks after he was seated.
+		holder, err = store.InsertReturningID(context.Background(), tx,
+			`insert into participants(fest_id, roster, name, number, fest_player_id) values(?, 'player', 'Борис Петров', 1, ?)`, festID, boris)
+		return err
+	})
+	var got []int64
+	inTx(t, db, func(tx *sql.Tx) error {
+		var err error
+		got, err = gamebuild.ResolveEntrantRefsTx(context.Background(), tx, festID,
+			[]string{gamebuild.FestPlayerEntrantRef(anna), gamebuild.FestPlayerEntrantRef(boris)})
+		return err
+	})
+	if len(got) != 2 || got[0] == holder || got[1] != holder {
+		t.Fatalf("Anna → %d, Boris → %d; want Anna a new Participant and Boris his own %d", got[0], got[1], holder)
+	}
+	// The whole-roster seating (a fest-wide seed) finds people the same way.
+	var seated int64
+	inTx(t, db, func(tx *sql.Tx) error {
+		if _, err := tx.Exec(`delete from participants where id = ?`, got[0]); err != nil {
+			return err
+		}
+		var err error
+		seated, err = imports.EnsurePlayerParticipantTx(context.Background(), tx, festID, anna)
+		return err
+	})
+	if seated == holder {
+		t.Fatalf("the fest-wide seating gave Anna Boris's Participant %d", holder)
+	}
+	var name string
+	if err := db.QueryRow(`select name from participants where id = ?`, holder).Scan(&name); err != nil || name != "Борис Петров" {
+		t.Fatalf("Boris's Participant is now %q (%v)", name, err)
 	}
 }

@@ -400,6 +400,68 @@ func lookupUserIDByNicknameTx(ctx context.Context, tx *sql.Tx, nickname string) 
 	return store.UserIDByTelegramName(ctx, tx, nickname)
 }
 
+// SetHostGames sets, per host nickname, the Games that host may run, each named
+// by its id, code or slug in this fest; an empty list is every Game. It is the
+// API's twin of the Games boxes under a host on the dashboard, and like them
+// only an admin or the creator may use it, and only on a host.
+func SetHostGames(eng *core.Engine, ctx context.Context, festID, actorID int64, games map[string][]string) error {
+	s := dopestrings.Default
+	tx, err := eng.BeginWriteTx(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	actorRole, err := FestUserRoleFromQuery(ctx, tx, festID, actorID)
+	if err != nil {
+		return err
+	}
+	if !roles.CanManageAccess(actorRole) {
+		return corei18n.User(s.Festaccess.Manage.Denied())
+	}
+	creatorID, err := syncFestCreatorAccessTx(ctx, tx, festID)
+	if err != nil {
+		return err
+	}
+	current, err := loadFestAccessRoleMapTx(ctx, tx, festID, creatorID)
+	if err != nil {
+		return err
+	}
+	for nickname, refs := range games {
+		userID, err := lookupUserIDByNicknameTx(ctx, tx, nickname)
+		if errors.Is(err, sql.ErrNoRows) {
+			return corei18n.User(s.Festaccess.Add.UserNotFound(nickname))
+		}
+		if err != nil {
+			return err
+		}
+		if current[userID] != roles.Host {
+			return corei18n.User(s.Festaccess.Games.NotHost(nickname))
+		}
+		gameIDs := make([]int64, 0, len(refs))
+		for _, ref := range refs {
+			ref = strings.TrimSpace(ref)
+			var gameID int64
+			err := tx.QueryRowContext(ctx, `
+select id from games where fest_id = ? and (cast(id as text) = ? or code = ? or slug = ?) limit 1`,
+				festID, ref, ref, ref).Scan(&gameID)
+			if errors.Is(err, sql.ErrNoRows) {
+				return corei18n.User(s.Festaccess.Games.Unknown(ref))
+			}
+			if err != nil {
+				return err
+			}
+			gameIDs = append(gameIDs, gameID)
+		}
+		if err := setHostGamesTx(ctx, tx, festID, userID, gameIDs); err != nil {
+			return err
+		}
+	}
+	if _, err := festwrite.BumpFestRevisionTx(ctx, tx, festID, "fest:access", "{}"); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // setHostGamesTx replaces the Games a host may run with gameIDs; none is every
 // Game. An id that is not a Game of this fest is ignored.
 func setHostGamesTx(ctx context.Context, tx *sql.Tx, festID, userID int64, gameIDs []int64) error {

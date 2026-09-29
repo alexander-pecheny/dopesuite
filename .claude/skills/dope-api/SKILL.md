@@ -56,8 +56,8 @@ in the game has a number.
 | `GET …/settings` M | header, your `role`, `games`, roster counts |
 | `PATCH …/settings` A | any header fields; those left out keep their value |
 | `DELETE /api/fest/<fest>` C | deletes the fest and everything in it |
-| `GET …/access` A | members and roles |
-| `POST …/access` A | `{changes: [{user, role: "admin"\|"host"}, {user, remove: true}]}` or `{lines: "user:role\n…"}` |
+| `GET …/access` A | members and roles; a host limited to some Games carries their ids in `games` |
+| `POST …/access` A | `{changes: [{user, role: "admin"\|"host"}, {user, remove: true}]}` or `{lines: "user:role\n…"}`. A change may carry `games: [<id\|code\|slug>, …]` to limit a host to those Games (`[]` lifts it), with or without a role |
 
 **Games**
 

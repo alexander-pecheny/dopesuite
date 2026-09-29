@@ -246,6 +246,9 @@ type apiMember struct {
 	UserID   int64  `json:"user_id"`
 	Nickname string `json:"nickname"`
 	Role     string `json:"role"`
+	// Games are the ids of the Games a host is limited to; absent, the host
+	// runs every Game.
+	Games []int64 `json:"games,omitempty"`
 }
 
 func (s *Server) apiAccess(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
@@ -253,38 +256,61 @@ func (s *Server) apiAccess(w http.ResponseWriter, r *http.Request, sc route.Scop
 	if err != nil {
 		return err
 	}
+	limits, err := festaccess.HostGamesByUser(r.Context(), s.h.Engine().DB, sc.FestID)
+	if err != nil {
+		return err
+	}
 	out := make([]apiMember, len(members))
 	for i, m := range members {
 		out[i] = apiMember{UserID: m.UserID, Nickname: m.Nickname, Role: m.Role}
+		if m.Role == "host" {
+			out[i].Games = limits[m.UserID]
+		}
 	}
 	return route.JSON(w, out)
 }
 
 // apiSaveAccess grants, changes and removes roles. It takes the dashboard's
 // bulk grammar as `lines` ("username:role", "username:remove"), or the same
-// as a list of `changes`.
+// as a list of `changes`. A change that carries `games` (ids, codes or slugs)
+// also limits that host to those Games, and `games: []` lifts the limit; a
+// change may carry games alone, without a role.
 func (s *Server) apiSaveAccess(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	var req struct {
 		Lines   string `json:"lines"`
 		Changes []struct {
-			User   string `json:"user"`
-			Role   string `json:"role"`
-			Remove bool   `json:"remove"`
+			User   string    `json:"user"`
+			Role   string    `json:"role"`
+			Remove bool      `json:"remove"`
+			Games  *[]string `json:"games"`
 		} `json:"changes"`
 	}
 	if err := route.DecodeJSON(r, &req); err != nil {
 		return err
 	}
 	lines := req.Lines
+	games := map[string][]string{}
 	for _, c := range req.Changes {
+		if c.Games != nil {
+			games[c.User] = *c.Games
+		}
 		role := c.Role
 		if c.Remove {
 			role = "remove"
 		}
-		lines += "\n" + c.User + ":" + role
+		if role != "" {
+			lines += "\n" + c.User + ":" + role
+		}
 	}
-	if _, err := festaccess.SaveFestAccessBulk(s.h.Engine(), r.Context(), sc.FestID, sc.User.UserID, lines); err != nil {
-		return err
+	if strings.TrimSpace(lines) != "" || len(games) == 0 {
+		if _, err := festaccess.SaveFestAccessBulk(s.h.Engine(), r.Context(), sc.FestID, sc.User.UserID, lines); err != nil {
+			return err
+		}
+	}
+	if len(games) > 0 {
+		if err := festaccess.SetHostGames(s.h.Engine(), r.Context(), sc.FestID, sc.User.UserID, games); err != nil {
+			return err
+		}
 	}
 	return s.apiAccess(w, r, sc)
 }
