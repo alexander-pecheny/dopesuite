@@ -102,6 +102,8 @@ func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
 	// each row's team off its pencil (ADR-0024).
 	page = append(page, dopeui.Row(dopeui.SpaceSM, dopeui.Wrap(),
 		dopeui.Button(dopeui.Data("team-add", "/api/fest/"+ref), dopeui.Text(s.Host.Roster.AddTeamBtn())),
+		dopeui.Button(dopeui.Href("/api/fest/"+ref+"/teams/export.xlsx"), dopeui.Download(), dopeui.Text(s.Host.Roster.ExportXlsxBtn())),
+		dopeui.Button(dopeui.Data("team-xlsx", ""), dopeui.Text(s.Host.Roster.ImportXlsxBtn())),
 	))
 	if len(data.Teams) > 0 {
 		rows := []dopeui.Item{dopeui.Trow(

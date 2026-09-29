@@ -145,6 +145,9 @@ col_players = "Игроков"
 teams_empty = "Команд пока нет. Загрузите их из rating.chgk.info или добавьте вручную."
 # The teams page's add button, and a row's edit pencil (ADR-0024).
 add_team_btn = "Добавить команду"
+# The roster as a spreadsheet: download it, and load one back.
+export_xlsx_btn = "Скачать xlsx"
+import_xlsx_btn = "Загрузить из xlsx"
 edit_team_label = 'Изменить команду «{{.team}}»'
 # A team the host made on the site, and a rating team the host changed.
 badge_hand = "вручную"

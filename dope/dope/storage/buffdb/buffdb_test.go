@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func fixture(t *testing.T) *Store {
@@ -111,5 +112,76 @@ func TestOpenMissingFileIsDisabled(t *testing.T) {
 	}
 	if store.Enabled() {
 		t.Error("a missing mirror opened as enabled")
+	}
+}
+
+func peopleFixture(t *testing.T) *Store {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "buff.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+create table players(id integer primary key, name text, patronymic text, surname text);
+create table player_games(player_id integer primary key, games integer not null default 0);
+create table teams(id integer primary key, name text not null, name_fold text not null default '', town text not null default '', last_tournament_id integer, town_id integer);
+create table seasons(id integer primary key, date_start text, date_end text);
+create table team_seasons(team_id integer, season_id integer, player_id integer, date_added text, date_removed text, player_number integer, primary key (team_id, season_id, player_id));
+
+insert into players values (1, 'Илья', 'Сергеевич', 'Кобзев'), (2, 'Илья', '', 'Кобзев'), (3, 'Анна', '', 'Кобзарева'), (4, 'Борис', '', 'Жук');
+insert into player_games values (1, 12), (2, 300), (3, 40);
+insert into teams values (10, 'Bikes for Peace', 'bikes for peace', 'Москва', 900, 1), (11, 'Мирные байки', 'мирные байки', 'Минск', 100, 2);
+insert into seasons values (60, '2025-09-01T00:00:00+00:00', '2026-08-28T00:00:00+00:00'), (61, '2026-08-28T00:00:00+00:00', '2027-08-27T00:00:00+00:00');
+insert into team_seasons values (10, 60, 4, '2025-09-05', null, 0), (10, 61, 1, '2026-08-28', null, 1), (10, 61, 3, '2026-08-28', '2026-09-10T00:00:00+00:00', 2), (10, 61, 2, '2026-08-28', null, 0);
+`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	store, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	return store
+}
+
+// A host types a surname's start, or a surname and a name in either order,
+// in any case; the most played namesake comes first.
+func TestSearchPlayersFindsByTheStartOfTheNames(t *testing.T) {
+	store := peopleFixture(t)
+	got := store.SearchPlayers(t.Context(), "кобз", 10)
+	if len(got) != 3 || got[0].ID != 2 || got[1].ID != 3 {
+		t.Fatalf("кобз = %+v", got)
+	}
+	if got := store.SearchPlayers(t.Context(), "Ил Кобзев", 10); len(got) != 2 || got[0].ID != 2 {
+		t.Fatalf("Ил Кобзев = %+v", got)
+	}
+	if got := store.SearchPlayers(t.Context(), "кобзев анна", 10); len(got) != 0 {
+		t.Fatalf("кобзев анна = %+v", got)
+	}
+}
+
+func TestSearchTeamsFindsAWordsStart(t *testing.T) {
+	store := peopleFixture(t)
+	if got := store.SearchTeams(t.Context(), "Peace", 10); len(got) != 1 || got[0].ID != 10 || got[0].Town != "Москва" {
+		t.Fatalf("Peace = %+v", got)
+	}
+	if got := store.SearchTeams(t.Context(), "байк", 10); len(got) != 1 || got[0].ID != 11 {
+		t.Fatalf("байк = %+v", got)
+	}
+}
+
+// The base roster is the season running on the day, without the people who
+// left it before then.
+func TestBaseRosterIsTheSeasonOfTheDay(t *testing.T) {
+	store := peopleFixture(t)
+	day := time.Date(2026, 10, 3, 0, 0, 0, 0, time.UTC)
+	got := store.BaseRoster(t.Context(), 10, day)
+	if len(got) != 2 || got[0].ID != 2 || got[1].ID != 1 {
+		t.Fatalf("base roster = %+v", got)
+	}
+	if got := store.BaseRoster(t.Context(), 11, day); len(got) != 0 {
+		t.Fatalf("an unmirrored team = %+v", got)
 	}
 }

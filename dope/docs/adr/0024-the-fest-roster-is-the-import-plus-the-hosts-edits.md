@@ -46,6 +46,18 @@ them again.
   import does not have the edits made after it, so putting it back would lose
   them. Undo is for the import just made.
 
+- **Anybody the site knows.** The editor suggests people from the whole
+  rating site, not only the fest's, and a new team can be picked from the
+  site's teams and still play under a one-off name (разовое название). Such a
+  team is made by hand but carries its rating id, so when the site later lists
+  it, the import finds the same row and keeps the host's name. «Добавить БС»
+  puts the team's current base roster in the list to start from. buff's mirror
+  answers these when dope can read it (ADR-0020); otherwise the site's API does.
+- **A spreadsheet.** The roster downloads as an xlsx, a row per person, and a
+  sheet in that layout loads back as the host's edits: every team it names is
+  set to the people it lists, a team it does not name is left alone, and the
+  page previews it first.
+
 One function applies a roster, whether it came from an import, a hand edit or
 a snapshot. It writes only the rows that changed, keeps player ids stable,
 refreshes the flat games and the overrides, and re-seats the Тройка games that

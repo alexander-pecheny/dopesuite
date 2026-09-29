@@ -230,6 +230,12 @@ func MergeHand(incoming []FestRosterImportTeam, state HandState, acceptSite map[
 		}
 		if known {
 			out.LocalID = row.ID
+			// A team the host made under a rating id that the site now lists
+			// is the same team: it takes the site's people, and keeps the name
+			// and city the host gave it.
+			if row.Hand {
+				out.Name, out.City = row.Name, row.City
+			}
 			if row.HandName != nil {
 				out.Name = *row.HandName
 				result.Kept.Renamed++
@@ -245,13 +251,20 @@ func MergeHand(incoming []FestRosterImportTeam, state HandState, acceptSite map[
 		}
 		result.Desired = append(result.Desired, out)
 	}
+	listed := map[int64]bool{}
+	for _, team := range incoming {
+		listed[team.RatingID] = true
+	}
 	for _, row := range state.Teams {
 		if !row.Hand || row.Deleted {
 			continue
 		}
 		result.Kept.HandTeams++
+		if row.RatingID > 0 && listed[row.RatingID] {
+			continue
+		}
 		result.Desired = append(result.Desired, FestRosterImportTeam{
-			LocalID: row.ID, Name: row.Name, City: row.City, Country: row.Country,
+			LocalID: row.ID, RatingID: row.RatingID, Name: row.Name, City: row.City, Country: row.Country,
 			Number: row.Number, Flags: row.Flags, Players: withAdds(row.ID, nil),
 		})
 	}

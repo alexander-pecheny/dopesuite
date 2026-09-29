@@ -151,7 +151,23 @@ title = 'Команда «{{.team}}»'
 hint_rating = "Правки сохранятся при повторном импорте из rating.chgk.info."
 hint_hand = "Эта команда добавлена вручную, импорт её не трогает."
 name = "Название"
+# Under the name: a team may play this fest under a one-off name.
+name_hint = "Можно указать разовое название — оно будет только в этом фесте."
 city = "Город"
+# A new team: the rating site's team it is, found by name as the host types.
+rating_team = "Команда из рейтинга"
+rating_team_placeholder = "Начните вводить название"
+rating_team_hint = "Необязательно. Если команды нет в рейтинге, просто заполните название ниже."
+# The picked rating team, and the button that unpicks it.
+rating_team_picked = '{{.team}}, ID {{.id}}'
+rating_team_unpick = "Не из рейтинга"
+# Adds the team's base roster from the rating site to the list.
+base_roster = "Добавить БС"
+base_roster_failed = "Не удалось получить базовый состав с rating.chgk.info."
+# Beside a suggested rating player: how many games the site counts, and the id.
+games = '{{.n}} {{plural .n "игра" "игры" "игр"}}'
+rating_id = 'ID {{.id}}'
+
 # The field that adds a player, and its button.
 add_placeholder = "Имя и фамилия"
 add = "Добавить"
@@ -166,3 +182,17 @@ delete = "Убрать команду"
 delete_confirm = 'Убрать команду «{{.team}}» из составов феста? Если у неё уже есть результаты, убрать её не получится.'
 player_twice = '{{.player}} уже есть в составе.'
 failed = "Не удалось сохранить команду."
+
+[roster_sheet]
+# Loading the fest roster from an xlsx on the teams page (fest-teams.ts):
+# the preview dialog of what the file changes, then the confirm.
+title = "Что изменит файл"
+hint = "Команды из файла получат указанные в нём составы. Команды, которых нет в файле, останутся как есть."
+nothing = "Файл ничего не изменит."
+added_teams = 'Новые команды: {{.teams}}'
+renamed = 'Переименуется: «{{.from}}» → «{{.to}}»'
+players_added = 'придут: {{.players}}'
+players_removed = 'уйдут: {{.players}}'
+confirm = "Загрузить"
+cancel = "Отмена"
+failed = "Не удалось загрузить файл."

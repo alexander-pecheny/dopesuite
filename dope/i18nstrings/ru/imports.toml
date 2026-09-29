@@ -113,9 +113,32 @@ name_missing = "У команды нет названия."
 player_twice = '{{.name}} записан в команду дважды.'
 # Another team on the roster already has this name and city.
 name_taken = 'Команда «{{.name}}» уже есть в составах феста.'
+# A new team picked from the rating site that the fest already has.
+rating_team_taken = "Эта команда рейтинга уже есть в составах феста."
 # The team is not on the fest roster (removed, or of another fest).
 team_unknown = "Такой команды нет в составах феста."
 # Removing a team that already has results.
 team_scored = 'Команду «{{.team}}» нельзя убрать: у неё есть результаты в играх {{.games}}.'
+# The rating site did not answer for a team's base roster.
+base_roster_failed = "Не удалось получить базовый состав с rating.chgk.info."
 # «Отменить импорт» with no import saved to go back to.
 nothing_to_undo = "Отменять нечего: импортов с сохранённым составом не было."
+
+[roster_xlsx]
+# The fest roster as a spreadsheet (dope/dope/domain/imports/rosterxlsx.go):
+# the columns, as the export writes them and the import finds them.
+col_number = "№"
+col_team = "Команда"
+col_city = "Город"
+col_team_id = "ID команды"
+col_flags = "Зачёты"
+col_player = "Игрок"
+col_player_id = "ID игрока"
+# A file that is not a workbook, or has nothing in it.
+open = 'Не удалось открыть файл: {{.err}}'
+empty = "В файле нет листов."
+no_header = 'В файле не нашлась строка заголовков со столбцом «{{.column}}».'
+no_teams = "В файле нет ни одной команды."
+# One team of the file could not be saved, and why.
+team_failed = 'Команда «{{.team}}»: {{.err}}'
+unknown = "не удалось сохранить"

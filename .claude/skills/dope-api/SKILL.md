@@ -89,6 +89,9 @@ of `dsl`. Leaving `entrants` out seats everyone.
 | `GET …/teams/{id}` · `GET …/teams/new` A | one team with its `players` and every fest person to suggest (`choices`) |
 | `POST …/teams` · `PUT …/teams/{id}` A | `{name, city, players: [{rating_id, first_name, last_name}]}`: make a team by hand, or set a team's name, city and people. A rating id of 0 is a person the site does not know. Adding someone who plays for another team moves them. A re-import keeps these edits (ADR-0024) |
 | `DELETE …/teams/{id}` A | takes a team without results off the roster; a rating team stays off through imports |
+| `GET …/rating/players?q=` · `GET …/rating/teams?q=` A | the rating site's people and teams for a name's start (buff's mirror, else the site's API). `POST …/teams` takes a `rating_id` to add a site team, under a one-off `name` if wanted |
+| `GET …/rating/teams/{id}/base` A | a site team's current base roster: `{team, players}` |
+| `GET …/teams/export.xlsx` · `POST …/teams/xlsx` A | the roster as a sheet, a row per person; a sheet loads back (multipart `file`, `?preview=1` first) and sets every team it names, leaving the rest |
 | `PATCH …/teams/flags` A | `{flags: {"<team id>": "МЮ, Студ"}}`; teams left out keep theirs |
 | `GET …/players` A | players, overrides, and the ids an override takes |
 | `POST …/players/overrides` A | `{player_id, team_id, game_ids}`: the player plays for `team_id` in those games (КСИ and ЭК games only; at least one) |

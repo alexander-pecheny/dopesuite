@@ -3,6 +3,7 @@ package hostpages
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -15,6 +16,9 @@ import (
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
 	"dope/dope/web/route"
+	dopestrings "dope/i18nstrings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // The host's edits to the fest roster (ADR-0024): a team added, edited or
@@ -153,13 +157,15 @@ func editedTeams(state roster.HandState) map[int64]bool {
 }
 
 type teamRequest struct {
-	Name    string           `json:"name"`
-	City    string           `json:"city"`
-	Players []festTeamPlayer `json:"players"`
+	// RatingID, for a new team, is the rating site's team it is.
+	RatingID int64            `json:"rating_id"`
+	Name     string           `json:"name"`
+	City     string           `json:"city"`
+	Players  []festTeamPlayer `json:"players"`
 }
 
 func (req teamRequest) input() imports.TeamInput {
-	in := imports.TeamInput{Name: req.Name, City: req.City}
+	in := imports.TeamInput{RatingID: req.RatingID, Name: req.Name, City: req.City}
 	for _, p := range req.Players {
 		in.Players = append(in.Players, roster.FestRosterImportPlayer{RatingID: p.RatingID, FirstName: p.FirstName, LastName: p.LastName})
 	}
@@ -309,4 +315,83 @@ func nonNil(list []string) []string {
 // conflictField names one conflict's checkbox on the import page.
 func conflictField(key string) string {
 	return fmt.Sprintf("accept_%s", key)
+}
+
+// apiRatingPlayers suggests the rating site's people for what the host typed.
+func (s *Server) apiRatingPlayers(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	return route.JSON(w, imports.SearchRatingPlayers(r.Context(), s.h.Engine().Buff, r.URL.Query().Get("q")))
+}
+
+// apiRatingTeams suggests the rating site's teams for what the host typed.
+func (s *Server) apiRatingTeams(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	return route.JSON(w, imports.SearchRatingTeams(r.Context(), s.h.Engine().Buff, r.URL.Query().Get("q")))
+}
+
+// apiRatingBaseRoster is a rating team's base roster now.
+func (s *Server) apiRatingBaseRoster(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	id, err := teamPathID(r)
+	if err != nil {
+		return err
+	}
+	team, people, err := imports.RatingBaseRoster(r.Context(), s.h.Engine().Buff, id)
+	if err != nil {
+		return route.BadUser(corei18n.User(dopestrings.Default.Imports.HandRoster.BaseRosterFailed()))
+	}
+	return route.JSON(w, map[string]any{"team": team, "players": people})
+}
+
+// errRosterPreview rolls back the transaction a preview ran the sheet in.
+var errRosterPreview = errors.New("roster preview")
+
+// apiTeamsXLSX is the fest roster as a workbook, a row per person.
+func (s *Server) apiTeamsXLSX(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	book, err := imports.BuildRosterXLSX(r.Context(), s.h.Engine().DB, sc.FestID)
+	if err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", `attachment; filename="roster.xlsx"`)
+	_, err = w.Write(book)
+	return err
+}
+
+// apiImportTeamsXLSX reads a roster sheet (field "file") and sets the teams it
+// names. With ?preview=1 it runs in a transaction it rolls back, and answers
+// only what it would change.
+func (s *Server) apiImportTeamsXLSX(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	if err := r.ParseMultipartForm(4 << 20); err != nil {
+		return route.BadRequest("bad form")
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		return route.BadRequest("no file")
+	}
+	defer file.Close()
+	teams, err := imports.ParseRosterXLSX(file)
+	if err != nil {
+		return route.BadUser(err)
+	}
+	var plan imports.ImportPlan
+	if r.URL.Query().Get("preview") == "1" {
+		err = s.h.Engine().WithWriteTx(r.Context(), sc.FestID, "fest:roster-xlsx-preview", func(ctx context.Context, tx *sql.Tx) error {
+			var err error
+			if plan, _, err = imports.ApplyRosterSheetTx(ctx, tx, sc.FestID, teams); err != nil {
+				return err
+			}
+			return errRosterPreview
+		})
+		if err != nil && !errors.Is(err, errRosterPreview) {
+			return route.BadUser(err)
+		}
+		return route.JSON(w, map[string]any{"preview": true, "plan": planJSON(&plan)})
+	}
+	err = s.editFestRoster(r.Context(), sc.FestID, "fest:roster-xlsx", func(ctx context.Context, tx *sql.Tx) (imports.RosterWrite, error) {
+		p, written, err := imports.ApplyRosterSheetTx(ctx, tx, sc.FestID, teams)
+		plan = p
+		return written, err
+	})
+	if err != nil {
+		return route.BadUser(err)
+	}
+	return route.JSON(w, map[string]any{"preview": false, "plan": planJSON(&plan)})
 }

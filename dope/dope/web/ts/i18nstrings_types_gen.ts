@@ -400,19 +400,41 @@ export type Strings = {
       title: (team: string) => string;
       wrongFormat: () => string;
     };
+    rosterSheet: {
+      addedTeams: (teams: string) => string;
+      cancel: () => string;
+      confirm: () => string;
+      failed: () => string;
+      hint: () => string;
+      nothing: () => string;
+      playersAdded: (players: string) => string;
+      playersRemoved: (players: string) => string;
+      renamed: (from: string, to: string) => string;
+      title: () => string;
+    };
     teamEdit: {
       add: () => string;
       addPlaceholder: () => string;
+      baseRoster: () => string;
+      baseRosterFailed: () => string;
       cancel: () => string;
       city: () => string;
       delete: () => string;
       deleteConfirm: (team: string) => string;
       failed: () => string;
+      games: (n: number) => string;
       hintHand: () => string;
       hintRating: () => string;
       movesFrom: (team: string) => string;
       name: () => string;
+      nameHint: () => string;
       playerTwice: (player: string) => string;
+      ratingId: (id: string) => string;
+      ratingTeam: () => string;
+      ratingTeamHint: () => string;
+      ratingTeamPicked: (team: string, id: string) => string;
+      ratingTeamPlaceholder: () => string;
+      ratingTeamUnpick: () => string;
       remove: (player: string) => string;
       save: () => string;
       title: (team: string) => string;
@@ -828,6 +850,7 @@ export type Strings = {
       errorObjPlayer: () => string;
       errorObjSourceTeam: () => string;
       errorObjTeam: () => string;
+      exportXlsxBtn: () => string;
       flagsHint: () => string;
       flagsPlaceholder: () => string;
       flagsSavedNotice: () => string;
@@ -837,6 +860,7 @@ export type Strings = {
       importMergedNotice: (n: string) => string;
       importSubmit: () => string;
       importUnchangedNotice: (teams: string, players: string) => string;
+      importXlsxBtn: () => string;
       keptAdded: (n: string) => string;
       keptFlags: (n: string) => string;
       keptHandTeams: (n: number) => string;
@@ -926,10 +950,12 @@ export type Strings = {
       matchHeader: (code: string, status: string) => string;
     };
     handRoster: {
+      baseRosterFailed: () => string;
       nameMissing: () => string;
       nameTaken: (name: string) => string;
       nothingToUndo: () => string;
       playerTwice: (name: string) => string;
+      ratingTeamTaken: () => string;
       teamScored: (team: string, games: string) => string;
       teamUnknown: () => string;
     };
@@ -941,6 +967,21 @@ export type Strings = {
       mergeStale: () => string;
       noTeams: () => string;
       squadTooBig: (name: string) => string;
+    };
+    rosterXlsx: {
+      colCity: () => string;
+      colFlags: () => string;
+      colNumber: () => string;
+      colPlayer: () => string;
+      colPlayerId: () => string;
+      colTeam: () => string;
+      colTeamId: () => string;
+      empty: () => string;
+      noHeader: (column: string) => string;
+      noTeams: () => string;
+      open: (err: string) => string;
+      teamFailed: (team: string, err: string) => string;
+      unknown: () => string;
     };
     seed: {
       gameMissing: (code: string) => string;

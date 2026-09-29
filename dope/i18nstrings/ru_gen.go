@@ -491,29 +491,63 @@ var RU = Strings{
 			},
 			WrongFormat: func() string { return "В этой игре составы команд не меняются." },
 		},
+		RosterSheet: FestRosterSheetStrings{
+			AddedTeams: func(teams string) string { return fmt.Sprintf("Новые команды: %s", teams) },
+			Cancel:     func() string { return "Отмена" },
+			Confirm:    func() string { return "Загрузить" },
+			Failed:     func() string { return "Не удалось загрузить файл." },
+			Hint: func() string {
+				return "Команды из файла получат указанные в нём составы. Команды, которых нет в файле, останутся как есть."
+			},
+			Nothing:        func() string { return "Файл ничего не изменит." },
+			PlayersAdded:   func(players string) string { return fmt.Sprintf("придут: %s", players) },
+			PlayersRemoved: func(players string) string { return fmt.Sprintf("уйдут: %s", players) },
+			Renamed: func(from string, to string) string {
+				return fmt.Sprintf("Переименуется: «%s» → «%s»", from, to)
+			},
+			Title: func() string { return "Что изменит файл" },
+		},
 		TeamEdit: FestTeamEditStrings{
 			Add:            func() string { return "Добавить" },
 			AddPlaceholder: func() string { return "Имя и фамилия" },
-			Cancel:         func() string { return "Отмена" },
-			City:           func() string { return "Город" },
-			Delete:         func() string { return "Убрать команду" },
+			BaseRoster:     func() string { return "Добавить БС" },
+			BaseRosterFailed: func() string {
+				return "Не удалось получить базовый состав с rating.chgk.info."
+			},
+			Cancel: func() string { return "Отмена" },
+			City:   func() string { return "Город" },
+			Delete: func() string { return "Убрать команду" },
 			DeleteConfirm: func(team string) string {
 				return fmt.Sprintf("Убрать команду «%s» из составов феста? Если у неё уже есть результаты, убрать её не получится.", team)
 			},
 			Failed: func() string { return "Не удалось сохранить команду." },
+			Games: func(n int) string {
+				return fmt.Sprintf("%d %s", n, core.Plural("ru", n, "игра", "игры", "игр"))
+			},
 			HintHand: func() string {
 				return "Эта команда добавлена вручную, импорт её не трогает."
 			},
 			HintRating: func() string {
 				return "Правки сохранятся при повторном импорте из rating.chgk.info."
 			},
-			MovesFrom:   func(team string) string { return fmt.Sprintf("сейчас в «%s»", team) },
-			Name:        func() string { return "Название" },
+			MovesFrom: func(team string) string { return fmt.Sprintf("сейчас в «%s»", team) },
+			Name:      func() string { return "Название" },
+			NameHint: func() string {
+				return "Можно указать разовое название — оно будет только в этом фесте."
+			},
 			PlayerTwice: func(player string) string { return fmt.Sprintf("%s уже есть в составе.", player) },
-			Remove:      func(player string) string { return fmt.Sprintf("Убрать: %s", player) },
-			Save:        func() string { return "Сохранить" },
-			Title:       func(team string) string { return fmt.Sprintf("Команда «%s»", team) },
-			TitleNew:    func() string { return "Новая команда" },
+			RatingId:    func(id string) string { return fmt.Sprintf("ID %s", id) },
+			RatingTeam:  func() string { return "Команда из рейтинга" },
+			RatingTeamHint: func() string {
+				return "Необязательно. Если команды нет в рейтинге, просто заполните название ниже."
+			},
+			RatingTeamPicked:      func(team string, id string) string { return fmt.Sprintf("%s, ID %s", team, id) },
+			RatingTeamPlaceholder: func() string { return "Начните вводить название" },
+			RatingTeamUnpick:      func() string { return "Не из рейтинга" },
+			Remove:                func(player string) string { return fmt.Sprintf("Убрать: %s", player) },
+			Save:                  func() string { return "Сохранить" },
+			Title:                 func(team string) string { return fmt.Sprintf("Команда «%s»", team) },
+			TitleNew:              func() string { return "Новая команда" },
 		},
 	},
 	Festaccess: FestaccessStrings{
@@ -1063,6 +1097,7 @@ var RU = Strings{
 			ErrorObjPlayer:        func() string { return "игрока" },
 			ErrorObjSourceTeam:    func() string { return "исходную команду" },
 			ErrorObjTeam:          func() string { return "команду" },
+			ExportXlsxBtn:         func() string { return "Скачать xlsx" },
 			FlagsHint: func() string {
 				return "Зачёты команды пишутся через запятую: «Школ, Студ». На страницах ОД и КСИ по зачёту можно отфильтровать таблицу, а ЭС может брать в посев из ОД только команды одного зачёта. Зачёты, которые вы поменяли здесь, повторный импорт из rating.chgk.info не трогает."
 			},
@@ -1080,8 +1115,9 @@ var RU = Strings{
 			ImportUnchangedNotice: func(teams string, players string) string {
 				return fmt.Sprintf("Списки уже совпадают с рейтингом — изменений нет. Команд: %s, игроков: %s.", teams, players)
 			},
-			KeptAdded: func(n string) string { return fmt.Sprintf("добавленных игроков: %s", n) },
-			KeptFlags: func(n string) string { return fmt.Sprintf("команд со своими зачётами: %s", n) },
+			ImportXlsxBtn: func() string { return "Загрузить из xlsx" },
+			KeptAdded:     func(n string) string { return fmt.Sprintf("добавленных игроков: %s", n) },
+			KeptFlags:     func(n string) string { return fmt.Sprintf("команд со своими зачётами: %s", n) },
 			KeptHandTeams: func(n int) string {
 				return fmt.Sprintf("%s вручную: %d", core.Plural("ru", n, "команда добавлена", "команды добавлены", "команд добавлено"), n)
 			},
@@ -1223,6 +1259,9 @@ var RU = Strings{
 			MatchHeader: func(code string, status string) string { return fmt.Sprintf("-- Бой %s [%s]", code, status) },
 		},
 		HandRoster: ImportsHandRosterStrings{
+			BaseRosterFailed: func() string {
+				return "Не удалось получить базовый состав с rating.chgk.info."
+			},
 			NameMissing: func() string { return "У команды нет названия." },
 			NameTaken: func(name string) string {
 				return fmt.Sprintf("Команда «%s» уже есть в составах феста.", name)
@@ -1232,6 +1271,9 @@ var RU = Strings{
 			},
 			PlayerTwice: func(name string) string {
 				return fmt.Sprintf("%s записан в команду дважды.", name)
+			},
+			RatingTeamTaken: func() string {
+				return "Эта команда рейтинга уже есть в составах феста."
 			},
 			TeamScored: func(team string, games string) string {
 				return fmt.Sprintf("Команду «%s» нельзя убрать: у неё есть результаты в играх %s.", team, games)
@@ -1256,6 +1298,23 @@ var RU = Strings{
 			SquadTooBig: func(name string) string {
 				return fmt.Sprintf("состав \"%s\" больше 9 игроков", name)
 			},
+		},
+		RosterXlsx: ImportsRosterXlsxStrings{
+			ColCity:     func() string { return "Город" },
+			ColFlags:    func() string { return "Зачёты" },
+			ColNumber:   func() string { return "№" },
+			ColPlayer:   func() string { return "Игрок" },
+			ColPlayerId: func() string { return "ID игрока" },
+			ColTeam:     func() string { return "Команда" },
+			ColTeamId:   func() string { return "ID команды" },
+			Empty:       func() string { return "В файле нет листов." },
+			NoHeader: func(column string) string {
+				return fmt.Sprintf("В файле не нашлась строка заголовков со столбцом «%s».", column)
+			},
+			NoTeams:    func() string { return "В файле нет ни одной команды." },
+			Open:       func(err string) string { return fmt.Sprintf("Не удалось открыть файл: %s", err) },
+			TeamFailed: func(team string, err string) string { return fmt.Sprintf("Команда «%s»: %s", team, err) },
+			Unknown:    func() string { return "не удалось сохранить" },
 		},
 		Seed: ImportsSeedStrings{
 			GameMissing: func(code string) string { return fmt.Sprintf("в фесте нет игры с кодом %s", code) },

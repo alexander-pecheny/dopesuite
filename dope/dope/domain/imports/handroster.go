@@ -122,9 +122,12 @@ func rewriteFromHandTx(ctx context.Context, tx *sql.Tx, festID int64) (RosterWri
 // order. A person with a rating id is that rating player; one without is a
 // person the site does not know, named as typed.
 type TeamInput struct {
-	Name    string
-	City    string
-	Players []roster.FestRosterImportPlayer
+	// RatingID, for a new team, is the rating site's team it is: its name
+	// may still be a one-off for this fest.
+	RatingID int64
+	Name     string
+	City     string
+	Players  []roster.FestRosterImportPlayer
 }
 
 func (in TeamInput) normalized() (TeamInput, error) {
@@ -184,9 +187,19 @@ func CreateHandTeamTx(ctx context.Context, tx *sql.Tx, festID int64, in TeamInpu
 select coalesce(max(number), 0) + 1, coalesce(max(position), 0) + 1 from fest_teams where fest_id = ?`, festID).Scan(&number, &position); err != nil {
 		return 0, RosterWrite{}, err
 	}
+	if in.RatingID > 0 {
+		var already int
+		if err := tx.QueryRowContext(ctx, `select count(*) from fest_teams where fest_id = ? and rating_id = ? and deleted = 0`,
+			festID, in.RatingID).Scan(&already); err != nil {
+			return 0, RosterWrite{}, err
+		}
+		if already > 0 {
+			return 0, RosterWrite{}, corei18n.User(dopestrings.Default.Imports.HandRoster.RatingTeamTaken())
+		}
+	}
 	teamID, err := store.InsertReturningID(ctx, tx, `
-insert into fest_teams(fest_id, name, city, position, number, deleted, hand) values(?, ?, ?, ?, ?, 0, 1)`,
-		festID, in.Name, in.City, position, number)
+insert into fest_teams(fest_id, rating_id, name, city, position, number, deleted, hand) values(?, ?, ?, ?, ?, ?, 0, 1)`,
+		festID, util.NullableInt64(in.RatingID), in.Name, in.City, position, number)
 	if err != nil {
 		return 0, RosterWrite{}, err
 	}

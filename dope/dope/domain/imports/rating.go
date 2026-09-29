@@ -655,7 +655,8 @@ func applyFestRosterDiffTx(ctx context.Context, tx *sql.Tx, festID int64, teams 
 	// number stays so they reappear if the team returns), and clear their roster
 	// links so a soft-deleted team carries no stale players.
 	for ratingID, existing := range existingByRating {
-		if _, stays := incomingRatingIDs[ratingID]; stays {
+		// A team the host made keeps its row whether the site lists it or not.
+		if _, stays := incomingRatingIDs[ratingID]; stays || existing.Hand {
 			continue
 		}
 		if _, err := tx.ExecContext(ctx, `update fest_teams set deleted = 1 where id = ? and deleted = 0`, existing.ID); err != nil {
