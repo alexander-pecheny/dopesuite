@@ -2667,6 +2667,12 @@ html:has(.game-host-top) {
   font-size: var(--grid-cell-text);
 }
 
+/* The note that the draw waits on the round before: the kit's empty line,
+   in the grid's type like the rest of the panel. */
+.grid-draw-panel > .empty {
+  font-size: var(--grid-cell-text);
+}
+
 .grid-draw-row > select {
   min-height: var(--control-h-sm);
   padding: var(--space-1) var(--space-2);
