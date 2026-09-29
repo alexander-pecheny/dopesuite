@@ -452,8 +452,43 @@ var RU = Strings{
 			ColTroika:  func() string { return "Тройка" },
 			Empty:      func() string { return "Составы пока не заданы." },
 			ForTeam:    func(team string) string { return fmt.Sprintf("за %s", team) },
+			HandNote:   func() string { return "Состав изменён для этой игры" },
 			LoadFailed: func() string { return "Не удалось загрузить составы." },
 			Loading:    func() string { return "Загрузка составов…" },
+			TroikasLink: func() string {
+				return "Составы троек меняются на странице «Тройки»"
+			},
+		},
+		RosterEdit: FestRosterEditStrings{
+			Add:            func() string { return "Добавить" },
+			AddPlaceholder: func() string { return "Имя и фамилия" },
+			Cancel:         func() string { return "Отмена" },
+			Empty:          func() string { return "В составе должен быть хотя бы один игрок." },
+			Failed:         func() string { return "Не удалось сохранить состав." },
+			Hint: func() string {
+				return "Изменения касаются только этой игры. Составы в фесте и в других играх остаются прежними."
+			},
+			Label: func(team string) string {
+				return fmt.Sprintf("Изменить состав команды «%s»", team)
+			},
+			Locked: func() string {
+				return "Уже играл в этой игре, поэтому убрать нельзя"
+			},
+			PlayerHasResults: func(player string) string {
+				return fmt.Sprintf("%s уже играл в этой игре, поэтому из состава его не убрать.", player)
+			},
+			PlayerTwice: func(player string) string { return fmt.Sprintf("%s уже есть в составе.", player) },
+			Remove:      func(player string) string { return fmt.Sprintf("Убрать: %s", player) },
+			Reset:       func() string { return "Вернуть состав из феста" },
+			ResetConfirm: func(team string) string {
+				return fmt.Sprintf("Вернуть команде «%s» состав из феста? Изменения, сделанные в этой игре, пропадут.", team)
+			},
+			Save:          func() string { return "Сохранить" },
+			TeamNotInGame: func() string { return "Этой команды нет в игре." },
+			Title: func(team string) string {
+				return fmt.Sprintf("Состав команды «%s» в этой игре", team)
+			},
+			WrongFormat: func() string { return "В этой игре составы команд не меняются." },
 		},
 	},
 	Festaccess: FestaccessStrings{
@@ -1001,8 +1036,11 @@ var RU = Strings{
 			NeedRatingNote: func() string {
 				return "Сначала сохраните rating.chgk.info ID в свойствах феста."
 			},
-			NewTeamLabel:      func() string { return "Новая команда" },
-			NoOverrideGames:   func() string { return "В фесте пока нет игр КСИ, ЭК или ЭС." },
+			NewTeamLabel:    func() string { return "Новая команда" },
+			NoOverrideGames: func() string { return "В фесте пока нет игр КСИ, ЭК или ЭС." },
+			OverrideShadowed: func(game string) string {
+				return fmt.Sprintf("%s (не действует: состав команды в этой игре изменён вручную)", game)
+			},
 			OverrideTitle:     func() string { return "Оверрайд игрока" },
 			OverridesSubhead:  func() string { return "Оверрайды" },
 			PlayerLabel:       func() string { return "Игрок" },

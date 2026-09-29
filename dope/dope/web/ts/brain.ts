@@ -10,7 +10,7 @@ import {cssEscape, formatDisplayText, td} from "./cells.js";
 import {festLetters, standingsTable} from "./standings.js";
 import {buildCrosstables, crossSlot, slotKey, standingsByParticipant} from "./crosstable.js";
 import type {StageRef} from "./standings.js";
-import {buildRosterView, fetchFestRoster} from "./fest-roster.js";
+import {buildGameRosterView, fetchGameRoster} from "./fest-roster.js";
 import type {RosterTeam} from "./fest-roster.js";
 import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
 import {mountGamePage} from "./game-shell.js";
@@ -161,7 +161,7 @@ const shell = mountGamePage({
 });
 const {viewer, staticMode, scopeGameID, indicator, viewerCounter} = shell;
 const matches = new Map<string, BrainMatchView>();
-let festRoster: RosterTeam[] = [];
+let teamRosters: RosterTeam[] = [];
 let rosterView: HTMLElement | null = null;
 // The Участники tab: the list this Game seats (entrants.ts). After a change
 // the бои are fetched again, since seats moved; a rebuilt Structure reloads.
@@ -284,10 +284,13 @@ function scheduleResync(): void {
   }, 250);
 }
 
-function loadFestRoster(): void {
-  fetchFestRoster(route.festID)
-    .then((teams) => {
-      festRoster = teams;
+// loadTeamRosters reads the roster each team plays this game with, which is
+// what a bout's player picker offers: the fest roster until the host changes a
+// team's roster for this game on the roster tab.
+function loadTeamRosters(): void {
+  fetchGameRoster(route.apiBase || "")
+    .then((data) => {
+      teamRosters = data.teams;
       if (onProtocolTab()) render({preserveScroll: true});
     })
     .catch(() => {});
@@ -324,6 +327,16 @@ const live = createLiveEvents({
       render({preserveScroll: true});
     },
     gap: () => scheduleResync(),
+  }, {
+    // A team's roster in this game changed (the roster tab, a player
+    // override): the pickers and the roster tab read it afresh.
+    prefix: `game-roster:${scopeGameID}`,
+    adopt: (scope) => {
+      if (scope !== `game-roster:${scopeGameID}`) return;
+      rosterView = null;
+      loadTeamRosters();
+      render({preserveScroll: true});
+    },
   }],
   indicator,
   onViewers: (count) => viewerCounter.setCount(count),
@@ -377,7 +390,7 @@ function rowLabel(index: number, base: number): string {
 
 function rosterFor(name: string): string[] {
   const wanted = name.trim().toLowerCase();
-  const team = festRoster.find((t) => (t.name || "").trim().toLowerCase() === wanted);
+  const team = teamRosters.find((t) => (t.name || "").trim().toLowerCase() === wanted);
   return (team?.players || [])
     .map((p) => (typeof p === "string" ? p : p.name || ""))
     .filter(Boolean);
@@ -425,7 +438,7 @@ function render(options: {preserveScroll?: boolean} = {}): void {
 function buildTab(tab: GameTab | undefined): HTMLElement {
   switch (tab?.kind) {
   case "roster":
-    return (rosterView ||= buildRosterView(route.festID));
+    return (rosterView ||= buildGameRosterView(route.apiBase || "", {editable: !viewer}));
   case "entrants":
     return entrantsTab.element();
   case "stats":
@@ -988,7 +1001,7 @@ function restoreSelection(): void {
 
 render();
 fitScrollFade(brainRoot.closest(".sheet-frame"));
-loadFestRoster();
+loadTeamRosters();
 fetchMatches()
   .then(() => {
     indicator.touch();

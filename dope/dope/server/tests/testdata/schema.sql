@@ -150,7 +150,7 @@ CREATE TABLE game_team_players(
   game_id integer not null references games(id) on delete cascade,
   participant_id integer not null references participants(id) on delete cascade,
   player_id integer not null references players(id) on delete cascade,
-  roster_order integer not null,
+  roster_order integer not null, hand INTEGER NOT NULL DEFAULT 0,
   primary key(game_id, participant_id, player_id)
 );
 
@@ -497,14 +497,14 @@ end;
 CREATE TRIGGER journal_game_team_players_insert after insert on game_team_players
 begin
   insert into journal(fest_id, game_id, seq, ts, actor_user_id, request_id, op, payload, created_at)
-  select (select fest_id from games where id = new.game_id), new.game_id, coalesce((select revision from fests where id = (select fest_id from games where id = new.game_id)), 0), strftime('%Y-%m-%dT%H:%M:%fZ','now'), (select actor_user_id from audit_ctx where id = 1), (select request_id from audit_ctx where id = 1), 1, json_object('t', 'game_team_players', 'r', json_object('game_id', new."game_id", 'participant_id', new."participant_id", 'player_id', new."player_id", 'roster_order', new."roster_order")), strftime('%Y-%m-%dT%H:%M:%fZ','now');
+  select (select fest_id from games where id = new.game_id), new.game_id, coalesce((select revision from fests where id = (select fest_id from games where id = new.game_id)), 0), strftime('%Y-%m-%dT%H:%M:%fZ','now'), (select actor_user_id from audit_ctx where id = 1), (select request_id from audit_ctx where id = 1), 1, json_object('t', 'game_team_players', 'r', json_object('game_id', new."game_id", 'participant_id', new."participant_id", 'player_id', new."player_id", 'roster_order', new."roster_order", 'hand', new."hand")), strftime('%Y-%m-%dT%H:%M:%fZ','now');
 end;
 
 -- trigger journal_game_team_players_update
 CREATE TRIGGER journal_game_team_players_update after update on game_team_players
 begin
   insert into journal(fest_id, game_id, seq, ts, actor_user_id, request_id, op, payload, created_at)
-  select (select fest_id from games where id = new.game_id), new.game_id, coalesce((select revision from fests where id = (select fest_id from games where id = new.game_id)), 0), strftime('%Y-%m-%dT%H:%M:%fZ','now'), (select actor_user_id from audit_ctx where id = 1), (select request_id from audit_ctx where id = 1), 2, json_object('t', 'game_team_players', 'r', json_remove(json_object('game_id', new."game_id", 'participant_id', new."participant_id", 'player_id', new."player_id", 'roster_order', new."roster_order"), case when old."roster_order" is new."roster_order" then '$."roster_order"' else '$."__dope_keep__"' end)), strftime('%Y-%m-%dT%H:%M:%fZ','now');
+  select (select fest_id from games where id = new.game_id), new.game_id, coalesce((select revision from fests where id = (select fest_id from games where id = new.game_id)), 0), strftime('%Y-%m-%dT%H:%M:%fZ','now'), (select actor_user_id from audit_ctx where id = 1), (select request_id from audit_ctx where id = 1), 2, json_object('t', 'game_team_players', 'r', json_remove(json_object('game_id', new."game_id", 'participant_id', new."participant_id", 'player_id', new."player_id", 'roster_order', new."roster_order", 'hand', new."hand"), case when old."roster_order" is new."roster_order" then '$."roster_order"' else '$."__dope_keep__"' end, case when old."hand" is new."hand" then '$."hand"' else '$."__dope_keep__"' end)), strftime('%Y-%m-%dT%H:%M:%fZ','now');
 end;
 
 -- trigger journal_games_delete

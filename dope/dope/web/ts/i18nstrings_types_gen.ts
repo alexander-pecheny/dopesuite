@@ -375,8 +375,29 @@ export type Strings = {
       colTroika: () => string;
       empty: () => string;
       forTeam: (team: string) => string;
+      handNote: () => string;
       loadFailed: () => string;
       loading: () => string;
+      troikasLink: () => string;
+    };
+    rosterEdit: {
+      add: () => string;
+      addPlaceholder: () => string;
+      cancel: () => string;
+      empty: () => string;
+      failed: () => string;
+      hint: () => string;
+      label: (team: string) => string;
+      locked: () => string;
+      playerHasResults: (player: string) => string;
+      playerTwice: (player: string) => string;
+      remove: (player: string) => string;
+      reset: () => string;
+      resetConfirm: (team: string) => string;
+      save: () => string;
+      teamNotInGame: () => string;
+      title: (team: string) => string;
+      wrongFormat: () => string;
     };
   };
   festaccess: {
@@ -784,6 +805,7 @@ export type Strings = {
       needRatingNote: () => string;
       newTeamLabel: () => string;
       noOverrideGames: () => string;
+      overrideShadowed: (game: string) => string;
       overrideTitle: () => string;
       overridesSubhead: () => string;
       playerLabel: () => string;
