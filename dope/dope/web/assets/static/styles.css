@@ -1112,8 +1112,16 @@
   min-width: var(--narrow-col);
 }
 
+/* The Участники tab keeps to the frame's width; its table, wider than a phone,
+   scrolls in its own .table-scroll rather than widening the notes above it. */
 .seed-import-panel {
   align-items: flex-start;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.seed-import-panel > .table-scroll {
+  max-width: 100%;
 }
 
 .seed-import-table {

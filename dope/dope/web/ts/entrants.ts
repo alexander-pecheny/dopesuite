@@ -271,7 +271,7 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
 
   function table(rows: EntrantRow[]): HTMLElement {
     const wrap = document.createElement("div");
-    wrap.className = "results-wrapper";
+    wrap.className = "table-scroll";
     const node = document.createElement("table");
     node.className = "results-table seed-import-table";
     const head = document.createElement("thead");

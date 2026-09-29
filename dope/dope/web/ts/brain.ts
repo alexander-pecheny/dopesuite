@@ -427,7 +427,7 @@ function render(options: {preserveScroll?: boolean} = {}): void {
   const scrollTop = frame?.scrollTop || 0;
   const node = buildTab(tabs().find((tab) => tab.key === activeTab));
   brainRoot.replaceChildren(node);
-  brainRoot.classList.toggle("fits-frame", activeTab === "roster");
+  brainRoot.classList.toggle("fits-frame", activeTab === "roster" || activeTab === "entrants");
   // A grid fits the frame's width like EK's, so its columns measure the same.
   brainRoot.classList.toggle("grid-host", node.matches(".fest-grid") || Boolean(node.querySelector(".fest-grid")));
   scheduleBrainNameOverflowUpdate();
