@@ -19,10 +19,10 @@ import (
 )
 
 // A Game's Entrant list (CONTEXT.md) is who a buzzer Game seats, in seed
-// order: ЭК, ЭС, брейн, Тройка, Хамса and личная СИ all keep one. It is stored
+// order: EK, ES, Brain, Troika, Hamsa and individual SI all keep one. It is stored
 // under the seedImport key of games.state_json, and the Structure reads it
 // through game_assignments: the list's active entrants take the Structure's
-// seed numbers in order. A бой that has begun keeps whoever sits in it, so an
+// seed numbers in order. A bout that has begun keeps whoever sits in it, so an
 // entrant seated there holds its number however the list changes (a pinned
 // seat), and the others fill the numbers that are left. An entrant with no
 // number left is on the waiting list.
@@ -196,7 +196,7 @@ where m.game_id = ? and ms.source_type = 'seed'`, []any{gameID}, func(rows *sql.
 	return out, nil
 }
 
-// startedMatch is one of the Game's бои as the seating reads it.
+// startedMatch is one of the Game's bouts as the seating reads it.
 type startedMatch struct {
 	id     int64
 	status string
@@ -216,7 +216,7 @@ select id, status, coalesce(state_json, '{}') from matches where game_id = ?`, [
 		})
 }
 
-// GameEntered reports whether anything has been entered in a Game: a бой
+// GameEntered reports whether anything has been entered in a Game: a bout
 // finished, or one with marks on it.
 func GameEntered(ctx context.Context, q store.Queryer, gameID int64, gameType string) (bool, error) {
 	matches, err := gameMatchesTx(ctx, q, gameID)
@@ -231,8 +231,8 @@ func GameEntered(ctx context.Context, q store.Queryer, gameID int64, gameType st
 	return false, nil
 }
 
-// PlayedParticipants is who sits in a бой of the Game that has begun, with the
-// seed number such a seat was dealt under (0 for a seat filled from a бой or a
+// PlayedParticipants is who sits in a bout of the Game that has begun, with the
+// seed number such a seat was dealt under (0 for a seat filled from a bout or a
 // reseed). They have results, so they can be neither removed nor renamed, and
 // a seed seat among them no longer moves.
 func PlayedParticipants(ctx context.Context, q store.Queryer, gameID int64, gameType string) (map[int64]int, error) {
@@ -291,7 +291,7 @@ func EntrantSized(dsl string) bool {
 }
 
 // seatListTx gives the list's entrants their seed numbers and reseats every
-// seed slot nobody has started. An entrant seated in a бой that has begun
+// seed slot nobody has started. An entrant seated in a bout that has begun
 // keeps its number, unless it has declined; the other active entrants take
 // the numbers left, in list order, and those beyond the Structure's seats are
 // numbered on past them — the waiting list. The Game's entrant record (game_participants) follows
@@ -309,7 +309,7 @@ func seatListTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, gameType 
 	for _, n := range numbers {
 		seats[n] = true
 	}
-	// A declined entrant keeps its place in the бои it has played, which the
+	// A declined entrant keeps its place in the bouts it has played, which the
 	// seating never touches, and gives its seat up in the rest.
 	declined := map[int64]bool{}
 	for _, row := range rows {
@@ -403,7 +403,7 @@ insert into game_participants(game_id, participant_id, position, number) values(
 	return nil
 }
 
-// LoadListView is the Game's Entrant list as the Участники tab shows it: each
+// LoadListView is the Game's Entrant list as the entrants tab shows it: each
 // entrant with its seat, whether it is on the waiting list, whether it has
 // results and whether it is a one-off, and where the Game's [init] says the
 // list comes from.
@@ -607,7 +607,7 @@ func (f fromFest) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope)
 }
 
 // FromTroikas is the fest's troikas by name, kept to one Division when one is
-// given: what a Тройка Game that takes a division follows.
+// given: what a Troika Game that takes a division follows.
 func FromTroikas(division string) SeedSource {
 	return fromTroikas{division: strings.TrimSpace(division)}
 }

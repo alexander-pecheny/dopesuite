@@ -137,8 +137,8 @@ for (const stage of fest?.stages || []) {
   if (stage?.code) festStages.set(stage.code, stage);
 }
 let rosterView: HTMLElement | null = null;
-// The Участники tab: the list this Game seats (entrants.ts). After a change
-// the бои are fetched again, since seats moved; a rebuilt Structure reloads.
+// The entrants tab: the list this Game seats (entrants.ts). After a change
+// the bouts are fetched again, since seats moved; a rebuilt Structure reloads.
 const entrantsTab = createEntrantsTab({
   apiBase: route.apiBase || "",
   onRender: () => scheduleNameOverflow(),

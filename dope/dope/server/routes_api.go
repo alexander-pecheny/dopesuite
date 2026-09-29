@@ -76,7 +76,7 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("GET "+game+"/results", route.Read, s.gameexportRoute(gameexport.HandleScopedGameResults))
 	t.Handle("GET "+game+"/export.xlsx", route.Read, s.gameexportRoute(gameexport.HandleScopedGameExport))
 	t.Handle("GET "+game+"/export.json.gz", route.Editor, s.gameexportRoute(gameexport.HandleScopedGameArchive))
-	// The Участники tab (entrants): the list, its import, the hand edits.
+	// The entrants tab (entrants): the list, its import, the hand edits.
 	t.Handle("GET "+game+"/entrants", route.Editor, s.scopedEntrants)
 	t.Handle("POST "+game+"/entrants/import", route.Editor.Numbered(), s.scopedEntrantsImport)
 	t.Handle("POST "+game+"/entrants", route.Editor.Numbered(), s.scopedEntrantAdd)
@@ -543,7 +543,7 @@ func (s *server) scopedScreenSettingsPut(w http.ResponseWriter, r *http.Request,
 	return route.JSONBytes(w, raw)
 }
 
-// ---- the Участники tab (entrants) ----
+// ---- the entrants tab (entrants) ----
 
 func (s *server) scopedEntrants(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	view, err := entrants.Load(r.Context(), s.eng.DB, sc.Fest())
@@ -555,8 +555,8 @@ func (s *server) scopedEntrants(w http.ResponseWriter, r *http.Request, sc route
 
 // answerEntrants tells everybody what a write to the list changed — the game
 // document with the list in it, and the fest view whose seats moved — and
-// answers the tab afresh. A rebuilt Structure also tells a Тройка page, which
-// resyncs its бои on a fest event.
+// answers the tab afresh. A rebuilt Structure also tells a Troika page, which
+// resyncs its bouts on a fest event.
 func (s *server) answerEntrants(w http.ResponseWriter, sc route.Scope, result entrants.Result, err error) error {
 	if err != nil {
 		return route.BadUser(err)
