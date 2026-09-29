@@ -111,23 +111,6 @@ var RU = Strings{
 			Tiebreak:  func() string { return "П" },
 			TiebreakN: func(n string) string { return fmt.Sprintf("П%s", n) },
 		},
-		Seed: BrainSeedStrings{
-			Draw:  func() string { return "Провести жребий" },
-			Empty: func() string { return "Посев ещё не импортирован." },
-			ImportFrom: func(source string) string {
-				return fmt.Sprintf("Импортировать посев из %s", source)
-			},
-			NoFile:   func() string { return "Выберите файл" },
-			Upload:   func() string { return "Загрузить посев из xlsx" },
-			Waitlist: func() string { return "запас" },
-		},
-		SeedHead: BrainSeedHeadStrings{
-			City:     func() string { return "Город" },
-			Declined: func() string { return "Отказ" },
-			Rank:     func() string { return "Место в источнике" },
-			Seed:     func() string { return "Посев" },
-			Team:     func() string { return "Команда" },
-		},
 		Stats: BrainStatsStrings{
 			Attempts: func() string { return "Попытки" },
 			Empty:    func() string { return "Пока никто не жал на кнопку." },
@@ -227,36 +210,12 @@ var RU = Strings{
 			Finished: func() string { return "Закончен" },
 		},
 		Crumb: EkCrumbStrings{
-			SeedImport: func() string { return "Импорт команд" },
-			Stats:      func() string { return "Статистика" },
-			Venues:     func() string { return "Площадки" },
+			Stats:  func() string { return "Статистика" },
+			Venues: func() string { return "Площадки" },
 		},
 		Seats: EkSeatsStrings{
 			Empty: func() string { return "Состав команды не заполнен" },
 			Label: func() string { return "Кто выходит на тему" },
-		},
-		Seed: EkSeedStrings{
-			DeclineFailed: func() string { return "Не удалось сохранить отказ" },
-			DeclinedAria:  func(name string) string { return fmt.Sprintf("Отказалась: %s", name) },
-			Draw:          func() string { return "Провести жребий" },
-			Empty:         func() string { return "Команды ещё не импортированы." },
-			Error:         func(reason string) string { return fmt.Sprintf("Ошибка: %s", reason) },
-			ErrorPrefix:   func() string { return "Ошибка:" },
-			Import:        func() string { return "Импортировать из КСИ" },
-			ImportFailed:  func() string { return "Не удалось импортировать команды" },
-			ImportFrom:    func(source string) string { return fmt.Sprintf("Импортировать из %s", source) },
-			ImportPlayers: func() string { return "Посчитать посев по игрокам" },
-			Imported:      func(n string) string { return fmt.Sprintf("Импортировано команд: %s.", n) },
-			Summary: func(active string, size string, total string) string {
-				return fmt.Sprintf("В основном посеве: %s из %s. Всего активных команд: %s.", active, size, total)
-			},
-			TeamPlaceholder: func() string { return "команда" },
-			Waitlist:        func() string { return "Лист ожидания" },
-		},
-		SeedHead: EkSeedHeadStrings{
-			Declined: func() string { return "Отказалась" },
-			Seed:     func() string { return "Посев" },
-			Team:     func() string { return "Команда" },
 		},
 		Shootout: EkShootoutStrings{
 			Add:           func() string { return "Добавить тему перестрелки" },
@@ -294,6 +253,102 @@ var RU = Strings{
 			Edit:   func() string { return "Изменить площадку" },
 			Save:   func() string { return "Сохранить" },
 		},
+	},
+	Entrants: EntrantsStrings{
+		Add: EntrantsAddStrings{
+			Hint: func() string {
+				return "Новый участник встаёт в конец списка. Если свободных мест нет, он ждёт в листе ожидания, пока кто-то не откажется."
+			},
+			HintTroika: func() string {
+				return "Новые тройки заводятся на странице «Тройки»."
+			},
+			Pick:       func() string { return "Выберите из феста или впишите название" },
+			PickTroika: func() string { return "Выберите тройку" },
+			Submit:     func() string { return "Добавить" },
+		},
+		Error: EntrantsErrorStrings{
+			AlreadyIn:   func(name string) string { return fmt.Sprintf("«%s» уже в списке.", name) },
+			NameMissing: func() string { return "Впишите название." },
+			NameTaken:   func(name string) string { return fmt.Sprintf("В списке уже есть «%s».", name) },
+			OneOffTroika: func() string {
+				return "Тройку нельзя вписать названием: заведите её на странице «Тройки»."
+			},
+			PickSomebody: func() string {
+				return "Выберите участника из списка или впишите название."
+			},
+			Played: func(name string) string {
+				return fmt.Sprintf("«%s» уже играет в этой игре, поэтому его нельзя убрать, переименовать или передвинуть.", name)
+			},
+			RenameFest: func() string {
+				return "Переименовать здесь можно только разового участника. Команду феста переименуйте в списке команд феста, тройку на странице «Тройки»."
+			},
+			SourceMissing: func() string { return "Выберите, откуда взять список." },
+		},
+		Filter: EntrantsFilterStrings{
+			All:         func() string { return "Все зачёты" },
+			Carrying:    func(flag string) string { return fmt.Sprintf("Зачёт «%s»", flag) },
+			NotCarrying: func(flag string) string { return fmt.Sprintf("Не из зачёта «%s»", flag) },
+		},
+		Head: EntrantsHeadStrings{
+			Declined: func() string { return "Отказ" },
+			Name:     func() string { return "Участник" },
+			Seed:     func() string { return "Посев" },
+		},
+		Import: EntrantsImportStrings{
+			ConfirmEdited: func() string {
+				return "Список правили вручную. Взять его заново из источника и потерять эти правки?"
+			},
+			Done: func(n int) string {
+				return fmt.Sprintf("В списке %d %s.", n, core.Plural("ru", n, "участник", "участника", "участников"))
+			},
+			File:  func() string { return "Файл" },
+			Label: func() string { return "Откуда взять список" },
+			Run:   func() string { return "Взять список" },
+		},
+		Row: EntrantsRowStrings{
+			DeclinedLabel: func(name string) string { return fmt.Sprintf("Отказ: %s", name) },
+			Down:          func() string { return "Ниже" },
+			OneOff:        func() string { return "разовый" },
+			Played: func() string {
+				return "Уже играет: убрать, переименовать или передвинуть нельзя"
+			},
+			Remove: func() string { return "Убрать из списка" },
+			RemoveConfirm: func(name string) string {
+				return fmt.Sprintf("Убрать «%s» из списка участников?", name)
+			},
+			Rename:    func() string { return "Переименовать" },
+			SeedLabel: func(name string) string { return fmt.Sprintf("Место в посеве для «%s»", name) },
+			Up:        func() string { return "Выше" },
+			Waitlist:  func() string { return "Лист ожидания" },
+		},
+		Source: EntrantsSourceStrings{
+			FestPlayers: func() string { return "Все игроки феста" },
+			FestTeams:   func() string { return "Все команды феста" },
+			Game:        func(game string) string { return fmt.Sprintf("Таблица игры «%s»", game) },
+			Players:     func() string { return "Посев по игрокам" },
+			Random:      func() string { return "Жребий" },
+			Troikas:     func() string { return "Тройки феста" },
+			Xlsx:        func() string { return "Файл xlsx" },
+		},
+		State: EntrantsStateStrings{
+			Empty: func() string {
+				return "В списке пока никого нет. Возьмите его из источника или добавьте участников по одному."
+			},
+			Failed: func(err string) string { return fmt.Sprintf("Не получилось: %s", err) },
+			Fixed: func() string {
+				return "В игре уже есть результаты, поэтому сетка больше не меняется. Изменения списка затрагивают только бои, которые ещё не начались."
+			},
+			Kept: func(reason string) string {
+				return fmt.Sprintf("Сетка осталась прежней: %s", reason)
+			},
+			Resizes: func() string {
+				return "Пока в игре нет результатов, сетка строится заново под список, если схема это позволяет. Если нет, сетка остаётся прежней, а лишние участники ждут в листе ожидания."
+			},
+			Summary: func(size string, seated string, active string) string {
+				return fmt.Sprintf("Мест в сетке: %s, занято %s. Всего в списке без отказавшихся: %s.", size, seated, active)
+			},
+		},
+		Tab: func() string { return "Участники" },
 	},
 	Export: ExportStrings{
 		Col: ExportColStrings{
@@ -510,6 +565,12 @@ var RU = Strings{
 		Division: GamebuildDivisionStrings{
 			NoTroikas: func(division string) string {
 				return fmt.Sprintf("В зачёте «%s» пока нет ни одной тройки. Заведите тройки на странице «Тройки».", division)
+			},
+		},
+		Entrants: GamebuildEntrantsStrings{
+			NoneLeft: func() string { return "в списке не осталось ни одного участника." },
+			SchemeRefuses: func(n int, err string) string {
+				return fmt.Sprintf("схема игры не подходит для %d %s (%s).", n, core.Plural("ru", n, "участника", "участников", "участников"), err)
 			},
 		},
 		Recompile: GamebuildRecompileStrings{
@@ -995,7 +1056,10 @@ var RU = Strings{
 				return fmt.Sprintf("«%s» берёт %s. Сейчас их %s.", game, division, n)
 			},
 			GameFrozen: func(game string) string {
-				return fmt.Sprintf("В «%s» уже есть результаты, поэтому состав её участников больше не меняется. Замены игроков внутри тройки по-прежнему делаются здесь.", game)
+				return fmt.Sprintf("В «%s» уже есть результаты, поэтому новые тройки сами в неё не попадают. Добавить тройку можно на вкладке «Участники» этой игры. Замены игроков внутри тройки по-прежнему делаются здесь.", game)
+			},
+			GameManual: func(game string) string {
+				return fmt.Sprintf("Участников «%s» правили на вкладке «Участники», поэтому новые тройки сами в неё не попадают.", game)
 			},
 			GameProblem: func(game string, problem string) string {
 				return fmt.Sprintf("Участников «%s» не удалось обновить: %s", game, problem)
@@ -1070,13 +1134,17 @@ var RU = Strings{
 			},
 			NoNumberedTeams: func() string { return "в фесте нет пронумерованных команд" },
 			NoStandings:     func(code string) string { return fmt.Sprintf("у игры %s ещё нет таблицы", code) },
-			NothingImported: func() string { return "сначала импортируйте посев" },
-			SchemeMissing:   func() string { return "схема игры не объявляет посев ([init] seed)" },
+			NoTroikas:       func() string { return "В фесте нет троек в этом зачёте." },
+			NothingImported: func() string { return "В списке участников пока никого нет." },
+			PlayersUndeclared: func() string {
+				return "Посев по игрокам работает, только если схема игры его описывает ([init] seed: players)."
+			},
+			SchemeMissing: func() string { return "схема игры не объявляет посев ([init] seed)" },
 			SchemeXlsx: func() string {
 				return "посев из xlsx: загрузите файл на вкладке посева"
 			},
 			SourceNoTeams: func() string { return "в игре-источнике нет команд" },
-			TeamNotFound:  func() string { return "команда не найдена в импорте посева" },
+			TeamNotFound:  func() string { return "Этого участника нет в списке." },
 			TeamTwice: func(source string, name string, first string) string {
 				return fmt.Sprintf("%s содержит команду \"%s\" больше одного раза (первое имя: \"%s\")", source, name, first)
 			},
@@ -1123,9 +1191,11 @@ var RU = Strings{
 			},
 		},
 		SeedSource: ImportsSeedSourceStrings{
+			Fest:    func() string { return "список феста" },
 			Ksi:     func() string { return "КСИ" },
 			Players: func() string { return "по игрокам" },
 			Random:  func() string { return "жребий" },
+			Troikas: func() string { return "тройки феста" },
 		},
 	},
 	Journal: JournalStrings{
@@ -2001,8 +2071,6 @@ var RU = Strings{
 			Results:         func() string { return "Итог" },
 			Roster:          func() string { return "Составы" },
 			Screen:          func() string { return "Экран" },
-			Seed:            func() string { return "Посев" },
-			SeedImport:      func() string { return "Импорт команд" },
 			Stats:           func() string { return "Статистика" },
 			Venues:          func() string { return "Площадки" },
 		},

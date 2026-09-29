@@ -1165,7 +1165,11 @@
   background: var(--structure);
 }
 
-.venue-input {
+/* A value typed straight into a table cell: the cell is the field, so the
+   input shows no box until it has focus. The Участники tab's seed number is
+   one, right-aligned like the numbers around it. */
+.venue-input,
+.seed-number-input {
   width: 100%;
   min-height: 28px;
   padding: 3px 6px;
@@ -1175,7 +1179,15 @@
   outline: 0;
 }
 
-.venue-input:focus {
+.seed-number-input {
+  color: inherit;
+  text-align: right;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.venue-input:focus,
+.seed-number-input:focus {
   border-color: var(--blue);
   background: var(--paper);
 }
@@ -4103,32 +4115,9 @@ html:has(.game-host-top) {
   font-style: italic;
 }
 
-.brain-seed-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.brain-seed-file {
-  max-width: calc(var(--team-col) + var(--space-8));
-}
-
 .brain-seed-error {
   margin: var(--space-0);
   color: var(--red);
-}
-
-.match-table.brain-seed-table td {
-  padding: var(--space-1) var(--space-2);
-}
-
-.brain-seed-waitlist {
-  color: var(--muted);
-}
-
-.brain-seed-declined .brain-seed-name {
-  color: var(--muted);
-  text-decoration: line-through;
 }
 
 .brain-bout {
@@ -4924,8 +4913,9 @@ body.is-fullscreen.od-page .match-main {
 
 /* A guest team's rename and remove sit in a row of the teams table, so they
    fit inside the row's height (less the cell's padding) rather than a form
-   control's. */
-.multi-guest-actions .action-icon {
+   control's; so do an entrant's on the Участники tab. */
+.multi-guest-actions .action-icon,
+.entrant-actions .action-icon {
   width: calc(var(--question-size) - var(--space-2));
   height: calc(var(--question-size) - var(--space-2));
   border-radius: var(--radius-sm);

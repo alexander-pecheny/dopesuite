@@ -1,0 +1,96 @@
+# A buzzer Game's Участники tab (dope/dope/domain/entrants, web/ts/entrants.ts):
+# who the Game seats, where the list comes from, and the host's hand edits.
+# ЭК, ЭС, брейн, Тройка, Хамса and личная СИ share it.
+
+# The tab's name in the tab bar and the crumb trail.
+tab = "Участники"
+
+[source]
+# The choices of the source picker. The fest's teams in their own order.
+fest_teams = "Все команды феста"
+# The fest's players in the order they registered, for личная СИ.
+fest_players = "Все игроки феста"
+# The fest's troikas, for a Тройка.
+troikas = "Тройки феста"
+# Another Game's current table; {{.game}} is its title.
+game = 'Таблица игры «{{.game}}»'
+random = "Жребий"
+xlsx = "Файл xlsx"
+# The by-players seeding a scheme declares ([init] seed: players).
+players = "Посев по игрокам"
+
+[filter]
+# The зачёт filter beside the source picker: everybody, one Flag, or
+# everybody without it.
+all = "Все зачёты"
+carrying = 'Зачёт «{{.flag}}»'
+not_carrying = 'Не из зачёта «{{.flag}}»'
+
+[import]
+# The picker's label, and the button that runs it.
+label = "Откуда взять список"
+run = "Взять список"
+# Confirm before a re-import throws away hand edits.
+confirm_edited = "Список правили вручную. Взять его заново из источника и потерять эти правки?"
+# The file field of the xlsx source.
+file = "Файл"
+# The notice after an import.
+done = 'В списке {{.n}} {{plural .n "участник" "участника" "участников"}}.'
+
+[head]
+# The table's columns.
+seed = "Посев"
+name = "Участник"
+declined = "Отказ"
+
+[row]
+# The waiting-list divider: entrants beyond the Structure's seats.
+waitlist = "Лист ожидания"
+# Row actions, as tooltips and aria labels.
+up = "Выше"
+down = "Ниже"
+rename = "Переименовать"
+remove = "Убрать из списка"
+remove_confirm = 'Убрать «{{.name}}» из списка участников?'
+# The seed field: typing a number moves the entrant there.
+seed_label = 'Место в посеве для «{{.name}}»'
+declined_label = 'Отказ: {{.name}}'
+# Shown on an entrant that sits in a бой that has begun.
+played = "Уже играет: убрать, переименовать или передвинуть нельзя"
+# The mark of an entrant typed in for this Game alone.
+one_off = "разовый"
+
+[add]
+# The add form under the table: pick a fest team (troika, player), or type a
+# one-off name.
+pick ="Выберите из феста или впишите название"
+pick_troika = "Выберите тройку"
+submit = "Добавить"
+# The hint under the form.
+hint = "Новый участник встаёт в конец списка. Если свободных мест нет, он ждёт в листе ожидания, пока кто-то не откажется."
+hint_troika = "Новые тройки заводятся на странице «Тройки»."
+
+[state]
+# The notes over the table. The Structure follows the list while nothing is
+# entered in a Game built for its entrants.
+resizes = "Пока в игре нет результатов, сетка строится заново под список, если схема это позволяет. Если нет, сетка остаётся прежней, а лишние участники ждут в листе ожидания."
+# The last write kept the Structure: the scheme takes no other count.
+# {{.reason}} is the scheme's message.
+kept = 'Сетка осталась прежней: {{.reason}}'
+# Once something is entered the Structure stays as it is.
+fixed = "В игре уже есть результаты, поэтому сетка больше не меняется. Изменения списка затрагивают только бои, которые ещё не начались."
+empty = "В списке пока никого нет. Возьмите его из источника или добавьте участников по одному."
+# The summary line: seated out of the seats, then everybody active.
+summary = 'Мест в сетке: {{.size}}, занято {{.seated}}. Всего в списке без отказавшихся: {{.active}}.'
+# A write that failed; {{.err}} is the server's message.
+failed = 'Не получилось: {{.err}}'
+
+[error]
+source_missing = "Выберите, откуда взять список."
+pick_somebody = "Выберите участника из списка или впишите название."
+already_in = '«{{.name}}» уже в списке.'
+name_taken = 'В списке уже есть «{{.name}}».'
+name_missing = "Впишите название."
+one_off_troika = "Тройку нельзя вписать названием: заведите её на странице «Тройки»."
+played = '«{{.name}}» уже играет в этой игре, поэтому его нельзя убрать, переименовать или передвинуть.'
+rename_fest = "Переименовать здесь можно только разового участника. Команду феста переименуйте в списке команд феста, тройку на странице «Тройки»."

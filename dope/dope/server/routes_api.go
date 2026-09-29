@@ -14,6 +14,7 @@ import (
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/edit"
+	"dope/dope/domain/entrants"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/protocol"
 	"dope/dope/domain/resolver"
@@ -73,7 +74,15 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("GET "+game+"/results", route.Read, s.gameexportRoute(gameexport.HandleScopedGameResults))
 	t.Handle("GET "+game+"/export.xlsx", route.Read, s.gameexportRoute(gameexport.HandleScopedGameExport))
 	t.Handle("GET "+game+"/export.json.gz", route.Editor, s.gameexportRoute(gameexport.HandleScopedGameArchive))
-	t.Handle("GET "+game+"/seed-import", route.Editor, s.scopedSeedImportView)
+	// The Участники tab (entrants): the list, its import, the hand edits.
+	t.Handle("GET "+game+"/entrants", route.Editor, s.scopedEntrants)
+	t.Handle("POST "+game+"/entrants/import", route.Editor.Numbered(), s.scopedEntrantsImport)
+	t.Handle("POST "+game+"/entrants", route.Editor.Numbered(), s.scopedEntrantAdd)
+	t.Handle("PATCH "+game+"/entrants/{participant}", route.Editor.Numbered(), s.scopedEntrantEdit)
+	t.Handle("DELETE "+game+"/entrants/{participant}", route.Editor.Numbered(), s.scopedEntrantRemove)
+	// The seed tab's routes from before, kept for the tests and any old page:
+	// they answer the same view and run through the same list.
+	t.Handle("GET "+game+"/seed-import", route.Editor, s.scopedEntrants)
 	t.Handle("POST "+game+"/seed-import/ksi", route.Editor.Numbered(), s.seedImportRoute(func(*http.Request) (imports.SeedSource, error) { return imports.FromKSI(), nil }))
 	t.Handle("POST "+game+"/seed-import/run", route.Editor.Numbered(), s.seedImportRoute(func(*http.Request) (imports.SeedSource, error) { return imports.FromScheme(), nil }))
 	t.Handle("POST "+game+"/seed-import/xlsx", route.Editor.Numbered(), s.seedImportRoute(seedXLSXSource))
@@ -546,31 +555,113 @@ func (s *server) scopedScreenSettingsPut(w http.ResponseWriter, r *http.Request,
 	return route.JSONBytes(w, raw)
 }
 
-// ---- seed import ----
+// ---- the Участники tab (entrants) ----
 
-func (s *server) scopedSeedImportView(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	view, err := imports.LoadSeedImportView(&s.eng, r.Context(), sc.Fest())
+func (s *server) scopedEntrants(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	view, err := entrants.Load(r.Context(), s.eng.DB, sc.Fest())
 	if err != nil {
 		return err
 	}
 	return route.JSON(w, view)
 }
 
-// seedImportRoute runs one seed source through imports.ImportSeeds and
-// broadcasts the new document; the three POST verbs differ only in the source.
+// answerEntrants tells everybody what a write to the list changed — the game
+// document with the list in it, and the fest view whose seats moved — and
+// answers the tab afresh. A rebuilt Structure also tells a Тройка page, which
+// resyncs its бои on a fest event.
+func (s *server) answerEntrants(w http.ResponseWriter, sc route.Scope, result entrants.Result, err error) error {
+	if err != nil {
+		return route.BadUser(err)
+	}
+	s.eng.InvalidateFestViewCache(sc.FestID)
+	s.eng.BroadcastState(sc.FestID, gameStateScopeKey(sc.GameID), result.Revision, result.StateJSON)
+	s.broadcastFestView(festScope{FestID: sc.FestID, GameID: sc.GameID}, result.Revision)
+	return route.JSON(w, struct {
+		entrants.View
+		Rebuilt bool `json:"rebuilt,omitempty"`
+	}{result.View, result.Rebuilt})
+}
+
+// scopedEntrantsImport takes the source as JSON, or, for an uploaded sheet, as
+// a multipart form with the file under "file".
+func (s *server) scopedEntrantsImport(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	var source entrants.Source
+	var file io.Reader
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
+		if err := r.ParseMultipartForm(4 << 20); err != nil {
+			return route.BadRequest("bad form")
+		}
+		source = entrants.Source{Kind: entrants.SourceXLSX}
+		if upload, _, err := r.FormFile("file"); err == nil {
+			defer upload.Close()
+			file = upload
+		}
+	} else if err := route.DecodeJSON(r, &source); err != nil {
+		return err
+	}
+	result, err := entrants.Import(&s.eng, r.Context(), sc.Fest(), source, file)
+	return s.answerEntrants(w, sc, result, err)
+}
+
+func (s *server) scopedEntrantAdd(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	var req entrants.AddRequest
+	if err := route.DecodeJSON(r, &req); err != nil {
+		return err
+	}
+	result, err := entrants.Add(&s.eng, r.Context(), sc.Fest(), req)
+	return s.answerEntrants(w, sc, result, err)
+}
+
+// entrantEdit is one change to an entrant: a new place in the list, a decline
+// set or taken back, or a one-off's new name.
+type entrantEdit struct {
+	Position *int    `json:"position,omitempty"`
+	Declined *bool   `json:"declined,omitempty"`
+	Name     *string `json:"name,omitempty"`
+}
+
+func (s *server) scopedEntrantEdit(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	participantID, err := strconv.ParseInt(r.PathValue("participant"), 10, 64)
+	if err != nil || participantID <= 0 {
+		return route.BadRequest("bad participant")
+	}
+	var req entrantEdit
+	if err := route.DecodeJSON(r, &req); err != nil {
+		return err
+	}
+	var result entrants.Result
+	switch {
+	case req.Position != nil:
+		result, err = entrants.Move(&s.eng, r.Context(), sc.Fest(), participantID, *req.Position)
+	case req.Declined != nil:
+		result, err = entrants.Decline(&s.eng, r.Context(), sc.Fest(), participantID, *req.Declined)
+	case req.Name != nil:
+		result, err = entrants.Rename(&s.eng, r.Context(), sc.Fest(), participantID, *req.Name)
+	default:
+		return route.BadRequest("nothing to change")
+	}
+	return s.answerEntrants(w, sc, result, err)
+}
+
+func (s *server) scopedEntrantRemove(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	participantID, err := strconv.ParseInt(r.PathValue("participant"), 10, 64)
+	if err != nil || participantID <= 0 {
+		return route.BadRequest("bad participant")
+	}
+	result, err := entrants.Remove(&s.eng, r.Context(), sc.Fest(), participantID)
+	return s.answerEntrants(w, sc, result, err)
+}
+
+// seedImportRoute runs one of the seed tab's old sources through the list;
+// the three POST verbs differ only in the source.
 func (s *server) seedImportRoute(source func(*http.Request) (imports.SeedSource, error)) route.Handler {
 	return func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 		src, err := source(r)
 		if err != nil {
 			return err
 		}
-		view, revision, stateJSON, err := imports.ImportSeeds(&s.eng, r.Context(), sc.Fest(), src)
-		if err != nil {
-			return route.BadUser(err)
-		}
-		s.eng.InvalidateFestViewCache(sc.FestID)
-		s.eng.BroadcastState(sc.FestID, gameStateScopeKey(sc.GameID), revision, stateJSON)
-		return route.JSON(w, view)
+		result, err := entrants.ImportLegacy(&s.eng, r.Context(), sc.Fest(), src)
+		return s.answerEntrants(w, sc, result, err)
 	}
 }
 
@@ -590,10 +681,9 @@ func (s *server) scopedSeedDecline(w http.ResponseWriter, r *http.Request, sc ro
 	if err := route.DecodeJSON(r, &req); err != nil {
 		return err
 	}
-	view, revision, stateJSON, err := imports.SetSeedImportDeclined(&s.eng, r.Context(), sc.Fest(), req)
-	if err != nil {
-		return route.BadUser(err)
+	if req.TeamID <= 0 {
+		return route.BadRequest("bad team id")
 	}
-	s.eng.BroadcastState(sc.FestID, gameStateScopeKey(sc.GameID), revision, stateJSON)
-	return route.JSON(w, view)
+	result, err := entrants.Decline(&s.eng, r.Context(), sc.Fest(), req.TeamID, req.Declined)
+	return s.answerEntrants(w, sc, result, err)
 }

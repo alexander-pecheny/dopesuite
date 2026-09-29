@@ -476,7 +476,7 @@ func SaveAssembledTx(ctx context.Context, tx *sql.Tx, festID, id int64, in Assem
 	}
 	var clash int64
 	err := tx.QueryRowContext(ctx, `
-select id from participants where fest_id = ? and name = ? and id != ? limit 1`, festID, name, id).Scan(&clash)
+select id from participants where fest_id = ? and name = ? and id != ? and game_id is null limit 1`, festID, name, id).Scan(&clash)
 	switch {
 	case err == nil:
 		return 0, corei18n.User(s.Host.Troikas.NameTaken(name))

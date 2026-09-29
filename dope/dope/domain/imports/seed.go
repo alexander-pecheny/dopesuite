@@ -31,12 +31,22 @@ const (
 	seedSourceKSI      = "ksi"
 )
 
+// seedImportState is a Game's Entrant list (CONTEXT.md) as it is stored: under
+// the seedImport key of games.state_json, whatever the format. Its name is the
+// ladder's from before the list could be edited by hand.
 type seedImportState struct {
-	Source       string               `json:"source,omitempty"`
-	SourceGameID int64                `json:"sourceGameID,omitempty"`
-	Rows         []seedImportStateRow `json:"rows,omitempty"`
+	Source       string `json:"source,omitempty"`
+	SourceGameID int64  `json:"sourceGameID,omitempty"`
+	// Division keeps the import to one зачёт (ADR-0020); a re-import repeats it.
+	Division string `json:"division,omitempty"`
+	// Edited says the host has added, removed, moved or renamed an entrant
+	// since the last import, which a re-import would throw away.
+	Edited bool                 `json:"edited,omitempty"`
+	Rows   []seedImportStateRow `json:"rows,omitempty"`
 }
 
+// seedImportStateRow is one entrant. TeamID is the Participant, whatever it
+// is in this format: a team, a troika or a player.
 type seedImportStateRow struct {
 	SourceRank int    `json:"sourceRank"`
 	TeamID     int64  `json:"teamID"`
@@ -53,11 +63,18 @@ type SeedImportView struct {
 	DeclaredTitle string              `json:"declaredTitle,omitempty"`
 	Source        string              `json:"source,omitempty"`
 	SourceGameID  int64               `json:"sourceGameID,omitempty"`
+	Division      string              `json:"division,omitempty"`
+	Edited        bool                `json:"edited,omitempty"`
 	DrawSize      int                 `json:"drawSize"`
 	ActiveCount   int                 `json:"activeCount"`
 	Rows          []SeedImportViewRow `json:"rows"`
 }
 
+// SeedImportViewRow is one entrant as the Участники tab shows it. SeedNumber
+// is the seat it holds in the Structure (0: none — declined, or on the waiting
+// list). Played says it sits in a бой that has begun, so it can be neither
+// removed nor renamed and its seat no longer moves; OneOff says the host typed
+// it in for this Game alone.
 type SeedImportViewRow struct {
 	SourceRank int    `json:"sourceRank"`
 	SeedNumber int    `json:"seedNumber,omitempty"`
@@ -66,6 +83,8 @@ type SeedImportViewRow struct {
 	City       string `json:"city,omitempty"`
 	Declined   bool   `json:"declined"`
 	Waitlist   bool   `json:"waitlist"`
+	Played     bool   `json:"played,omitempty"`
+	OneOff     bool   `json:"oneOff,omitempty"`
 }
 
 type SeedDeclineRequest struct {
@@ -81,20 +100,7 @@ type seedRosterTeam struct {
 }
 
 func LoadSeedImportView(eng *core.Engine, ctx context.Context, scope core.FestScope) (SeedImportView, error) {
-	_, rawState, err := loadSeedImportGame(ctx, eng.DB, scope)
-	if err != nil {
-		return SeedImportView{}, err
-	}
-	state, err := seedImportStateFromRaw(rawState)
-	if err != nil {
-		return SeedImportView{}, err
-	}
-	drawSize, err := maxSeedNumber(ctx, eng.DB, scope.GameID)
-	if err != nil {
-		return SeedImportView{}, err
-	}
-	view := buildSeedImportView(state, drawSize)
-	return view, declareSeeding(ctx, eng.DB, scope, &view)
+	return LoadListView(ctx, eng.DB, scope)
 }
 
 // declareSeeding tells the view where the Game's [init] says its seeding comes
@@ -125,6 +131,9 @@ type seedCandidate struct {
 	Name       string
 	Number     int
 	Declined   bool
+	// ParticipantID names the Participant itself when the source knows it
+	// and a fest number would not find it: a troika, a player, a one-off.
+	ParticipantID int64
 }
 
 // A SeedSource ranks the fest's Participants for a Game's seeding: the
@@ -141,6 +150,7 @@ type SeedSource interface {
 type seeding struct {
 	source, label string
 	sourceGameID  int64
+	division      string
 	candidates    []seedCandidate
 }
 
@@ -190,11 +200,7 @@ func (fromScheme) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope)
 	case "players":
 		return FromPlayers(declared.Players, declared.Sort).resolve(ctx, tx, scope)
 	}
-	gameID, candidates, err := standingsCandidates(ctx, tx, scope.FestID, declared.Source, declared.Sort)
-	if err == nil && declared.Division != "" {
-		candidates, err = inDivision(ctx, tx, scope.FestID, declared.Division, candidates)
-	}
-	return seeding{source: declared.Source, label: declared.Source, sourceGameID: gameID, candidates: candidates}, err
+	return fromGame{code: declared.Source, division: declared.Division, sort: declared.Sort}.resolve(ctx, tx, scope)
 }
 
 // inDivision keeps the candidates of one Division, ranked afresh inside it: the
@@ -239,31 +245,45 @@ func (f fromXLSX) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope)
 }
 
 // ImportSeeds seeds the Game from the source: the source's current order is
-// snapshotted into the seed ladder (partial results mid-fest are a normal
-// source), previous declines survive, and every seed slot is reseated.
+// snapshotted into the Entrant list (partial results mid-fest are a normal
+// source), previous declines survive, and every seed slot nobody has started
+// is reseated. A Game whose Structure is sized by its entrants is reshaped by
+// the entrants package, which calls ResolveListTx and SaveListTx itself.
 func ImportSeeds(eng *core.Engine, ctx context.Context, scope core.FestScope, src SeedSource) (SeedImportView, int64, []byte, error) {
 	var view SeedImportView
 	var revision int64
 	var stateJSON []byte
 	err := eng.WithWriteTx(ctx, scope.FestID, "seed-import", func(ctx context.Context, tx *sql.Tx) error {
-		gameType, rawState, err := loadSeedImportGame(ctx, tx, scope)
+		list, err := LoadListTx(ctx, tx, scope)
 		if err != nil {
 			return err
 		}
-		resolved, err := src.resolve(ctx, tx, scope)
+		next, event, err := ResolveListTx(ctx, tx, scope, list, src)
 		if err != nil {
 			return err
 		}
-		view, revision, stateJSON, err = importCandidatesTx(ctx, tx, scope, gameType, rawState, resolved.source, resolved.label, resolved.sourceGameID, resolved.candidates)
-		if err != nil {
-			return err
-		}
-		return declareSeeding(ctx, tx, scope, &view)
+		view, revision, stateJSON, err = SaveListTx(ctx, tx, scope, list, next, event)
+		return err
 	})
 	if err != nil {
 		return SeedImportView{}, 0, nil, err
 	}
 	return view, revision, stateJSON, nil
+}
+
+// ResolveListTx runs a source and returns the Entrant list it makes, merged
+// with the list there is (its declines survive), and the event to record it
+// under.
+func ResolveListTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, current List, src SeedSource) (List, string, error) {
+	resolved, err := src.resolve(ctx, tx, scope)
+	if err != nil {
+		return List{}, "", err
+	}
+	next, err := listFromSeedingTx(ctx, tx, scope, current.State, resolved)
+	if err != nil {
+		return List{}, "", err
+	}
+	return current.with(next), "seed-import:" + resolved.source, nil
 }
 
 func parseSeedXLSX(file io.Reader, gameID int64, roster []seedRosterTeam) ([]seedCandidate, error) {
@@ -357,19 +377,17 @@ func seedLot(gameID, number int64) uint64 {
 	return h.Sum64()
 }
 
-// importCandidatesTx runs the shared ladder update: dedupe candidates against
-// the numbered roster, union declines with the previous import, persist the
-// rows and reseat every seed slot.
-func importCandidatesTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, gameType, rawState, source, sourceLabel string, sourceGameID int64, candidates []seedCandidate) (SeedImportView, int64, []byte, error) {
-	previous, err := seedImportStateFromRaw(rawState)
-	if err != nil {
-		return SeedImportView{}, 0, nil, err
-	}
+// listFromSeedingTx turns what a source resolved to into the Game's new
+// Entrant list: each candidate becomes its Participant (a fest team by its
+// number, recovered by name for a legacy number-less source; the Participant
+// itself when the source names it), a Participant listed twice is refused,
+// and every decline of the previous list is kept.
+func listFromSeedingTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, previous seedImportState, resolved seeding) (seedImportState, error) {
 	previousDeclinesByTeam, previousDeclinesByName := previousSeedDeclines(previous)
 
 	roster, err := loadSeedRosterTeams(ctx, tx, scope.FestID)
 	if err != nil {
-		return SeedImportView{}, 0, nil, err
+		return seedImportState{}, err
 	}
 
 	// Index the roster by number (the identity) and by name (to recover a number
@@ -389,31 +407,38 @@ func importCandidatesTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, g
 		}
 	}
 
-	rows := make([]seedImportStateRow, 0, len(candidates))
-	seenTeams := make(map[int64]string, len(candidates))
-	for _, candidate := range candidates {
-		// Prefer the source's own number; for a legacy number-less source
-		// recover it from the numbered fest roster by name when unambiguous.
-		number := int64(candidate.Number)
-		rt := rosterByNumber[number]
-		if number <= 0 {
-			if m, ok := rosterByName[rosterpkg.SeedTeamNameKey(candidate.Name)]; ok {
-				rt = m
-				number = m.Number
-			}
-		}
+	rows := make([]seedImportStateRow, 0, len(resolved.candidates))
+	seenTeams := make(map[int64]string, len(resolved.candidates))
+	for _, candidate := range resolved.candidates {
 		var teamID int64
 		var city string
-		if number > 0 {
-			teamID, city, err = EnsureSeedTeamByNumber(ctx, tx, scope.FestID, number, candidate.Name, rt.City, rt.Players)
+		if candidate.ParticipantID > 0 {
+			teamID = candidate.ParticipantID
+			if err := tx.QueryRowContext(ctx, `select city from participants where id = ?`, teamID).Scan(&city); err != nil {
+				return seedImportState{}, err
+			}
 		} else {
-			teamID, city, err = rosterpkg.EnsureSeedTeam(ctx, tx, scope.FestID, candidate.Name, rt.City, rt.Players)
-		}
-		if err != nil {
-			return SeedImportView{}, 0, nil, err
+			// Prefer the source's own number; for a legacy number-less source
+			// recover it from the numbered fest roster by name when unambiguous.
+			number := int64(candidate.Number)
+			rt := rosterByNumber[number]
+			if number <= 0 {
+				if m, ok := rosterByName[rosterpkg.SeedTeamNameKey(candidate.Name)]; ok {
+					rt = m
+					number = m.Number
+				}
+			}
+			if number > 0 {
+				teamID, city, err = EnsureSeedTeamByNumber(ctx, tx, scope.FestID, number, candidate.Name, rt.City, rt.Players)
+			} else {
+				teamID, city, err = rosterpkg.EnsureSeedTeam(ctx, tx, scope.FestID, candidate.Name, rt.City, rt.Players)
+			}
+			if err != nil {
+				return seedImportState{}, err
+			}
 		}
 		if previous, exists := seenTeams[teamID]; exists {
-			return SeedImportView{}, 0, nil, corei18n.User(dopestrings.Default.Imports.Seed.TeamTwice(sourceLabel, candidate.Name, previous))
+			return seedImportState{}, corei18n.User(dopestrings.Default.Imports.Seed.TeamTwice(resolved.label, candidate.Name, previous))
 		}
 		seenTeams[teamID] = candidate.Name
 		// A team that refused to play at the source lands pre-declined on the
@@ -432,60 +457,37 @@ func importCandidatesTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, g
 		})
 	}
 
-	nextState := seedImportState{
-		Source:       source,
-		SourceGameID: sourceGameID,
+	return seedImportState{
+		Source:       resolved.source,
+		SourceGameID: resolved.sourceGameID,
+		Division:     resolved.division,
 		Rows:         rows,
-	}
-	return saveSeedImportState(ctx, tx, scope, gameType, rawState, nextState, "seed-import:"+source)
+	}, nil
 }
 
+// SetSeedImportDeclined marks an entrant as having refused to play, or takes
+// the mark back. The next entrant moves up into the seat, in every бой nobody
+// has started.
 func SetSeedImportDeclined(eng *core.Engine, ctx context.Context, scope core.FestScope, req SeedDeclineRequest) (SeedImportView, int64, []byte, error) {
 	if req.TeamID <= 0 {
 		return SeedImportView{}, 0, nil, errors.New("bad team id")
 	}
-
-	eng.Mu.Lock()
-	defer eng.Mu.Unlock()
-
-	tx, err := eng.BeginWriteTx(ctx)
-	if err != nil {
-		return SeedImportView{}, 0, nil, err
-	}
-	defer tx.Rollback()
-
-	gameType, rawState, err := loadSeedImportGame(ctx, tx, scope)
-	if err != nil {
-		return SeedImportView{}, 0, nil, err
-	}
-	state, err := seedImportStateFromRaw(rawState)
-	if err != nil {
-		return SeedImportView{}, 0, nil, err
-	}
-	if len(state.Rows) == 0 {
-		return SeedImportView{}, 0, nil, corei18n.User(dopestrings.Default.Imports.Seed.NothingImported())
-	}
-	found := false
-	for i := range state.Rows {
-		if state.Rows[i].TeamID != req.TeamID {
-			continue
+	var view SeedImportView
+	var revision int64
+	var stateJSON []byte
+	err := eng.WithWriteTx(ctx, scope.FestID, "seed-import-decline", func(ctx context.Context, tx *sql.Tx) error {
+		list, err := LoadListTx(ctx, tx, scope)
+		if err != nil {
+			return err
 		}
-		state.Rows[i].Declined = req.Declined
-		found = true
-		break
-	}
-	if !found {
-		return SeedImportView{}, 0, nil, corei18n.User(dopestrings.Default.Imports.Seed.TeamNotFound())
-	}
-
-	view, revision, stateJSON, err := saveSeedImportState(ctx, tx, scope, gameType, rawState, state, "seed-import:decline")
+		next, err := list.Decline(req.TeamID, req.Declined)
+		if err != nil {
+			return err
+		}
+		view, revision, stateJSON, err = SaveListTx(ctx, tx, scope, list, next, "seed-import:decline")
+		return err
+	})
 	if err != nil {
-		return SeedImportView{}, 0, nil, err
-	}
-	if err := declareSeeding(ctx, tx, scope, &view); err != nil {
-		return SeedImportView{}, 0, nil, err
-	}
-	if err := tx.Commit(); err != nil {
 		return SeedImportView{}, 0, nil, err
 	}
 	return view, revision, stateJSON, nil
@@ -521,8 +523,12 @@ select coalesce(scheme_json, '{}') from games where fest_id = ? and id = ?`,
 	return *scheme.Seeding, nil
 }
 
-func saveSeedImportState(ctx context.Context, tx *sql.Tx, scope core.FestScope, gameType, previousRaw string, state seedImportState, eventType string) (SeedImportView, int64, []byte, error) {
-	stateJSON, err := putSeedImportState(previousRaw, state)
+// SaveListTx writes the Game's Entrant list and seats it (seatListTx), records
+// the event and returns the list as the Участники tab shows it, with the
+// document the game-state scope broadcasts. current is the list as it was
+// loaded, whose state blob the new list is written into.
+func SaveListTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, current, next List, eventType string) (SeedImportView, int64, []byte, error) {
+	stateJSON, err := putSeedImportState(current.Raw, next.State)
 	if err != nil {
 		return SeedImportView{}, 0, nil, err
 	}
@@ -531,11 +537,7 @@ update games set state_json = ?, updated_at = ?
 where fest_id = ? and id = ?`, string(stateJSON), util.UtcNow(), scope.FestID, scope.GameID); err != nil {
 		return SeedImportView{}, 0, nil, err
 	}
-	assignments, err := replaceSeedAssignments(ctx, tx, scope.GameID, state.Rows)
-	if err != nil {
-		return SeedImportView{}, 0, nil, err
-	}
-	if err := resolveSeedSlots(ctx, tx, scope.GameID, gameType, assignments); err != nil {
+	if err := seatListTx(ctx, tx, scope, current.GameType, next.State.Rows); err != nil {
 		return SeedImportView{}, 0, nil, err
 	}
 	hasRosterOverrides, err := overrides.GameHasPlayerOverridesTx(ctx, tx, scope.FestID, scope.GameID)
@@ -547,20 +549,17 @@ where fest_id = ? and id = ?`, string(stateJSON), util.UtcNow(), scope.FestID, s
 			return SeedImportView{}, 0, nil, err
 		}
 	}
-	drawSize, err := maxSeedNumber(ctx, tx, scope.GameID)
-	if err != nil {
-		return SeedImportView{}, 0, nil, err
-	}
 	revision, err := festwrite.BumpFestRevisionTx(ctx, tx, scope.FestID, eventType, util.MustJSON(map[string]any{
 		"gameID":       scope.GameID,
-		"source":       state.Source,
-		"sourceGameID": state.SourceGameID,
-		"rows":         len(state.Rows),
+		"source":       next.State.Source,
+		"sourceGameID": next.State.SourceGameID,
+		"rows":         len(next.State.Rows),
 	}))
 	if err != nil {
 		return SeedImportView{}, 0, nil, err
 	}
-	return buildSeedImportView(state, drawSize), revision, stateJSON, nil
+	view, err := LoadListView(ctx, tx, scope)
+	return view, revision, stateJSON, err
 }
 
 func seedImportStateFromRaw(raw string) (seedImportState, error) {
@@ -607,57 +606,6 @@ func previousSeedDeclines(state seedImportState) (map[int64]bool, map[string]boo
 		}
 	}
 	return byTeam, byName
-}
-
-func buildSeedImportView(state seedImportState, drawSize int) SeedImportView {
-	view := SeedImportView{
-		Source:       state.Source,
-		SourceGameID: state.SourceGameID,
-		DrawSize:     drawSize,
-		Rows:         make([]SeedImportViewRow, 0, len(state.Rows)),
-	}
-	active := 0
-	for _, row := range state.Rows {
-		waitlist := drawSize > 0 && active >= drawSize
-		seedNumber := 0
-		if !row.Declined {
-			active++
-			seedNumber = active
-			waitlist = drawSize > 0 && seedNumber > drawSize
-		}
-		view.Rows = append(view.Rows, SeedImportViewRow{
-			SourceRank: row.SourceRank,
-			SeedNumber: seedNumber,
-			TeamID:     row.TeamID,
-			Name:       row.Name,
-			City:       row.City,
-			Declined:   row.Declined,
-			Waitlist:   waitlist,
-		})
-	}
-	view.ActiveCount = active
-	return view
-}
-
-func replaceSeedAssignments(ctx context.Context, tx *sql.Tx, gameID int64, rows []seedImportStateRow) (map[[2]int]int64, error) {
-	if _, err := tx.ExecContext(ctx, `delete from game_assignments where game_id = ?`, gameID); err != nil {
-		return nil, err
-	}
-	assignments := make(map[[2]int]int64, len(rows))
-	seedNumber := 0
-	for _, row := range rows {
-		if row.Declined || row.TeamID <= 0 {
-			continue
-		}
-		seedNumber++
-		if _, err := tx.ExecContext(ctx, `
-insert into game_assignments(game_id, basket, number, participant_id)
-values(?, 1, ?, ?)`, gameID, seedNumber, row.TeamID); err != nil {
-			return nil, err
-		}
-		assignments[[2]int{1, seedNumber}] = row.TeamID
-	}
-	return assignments, nil
 }
 
 func resolveSeedSlots(ctx context.Context, tx *sql.Tx, gameID int64, gameType string, assignments map[[2]int]int64) error {
@@ -747,30 +695,6 @@ select participant_id from match_slots where match_id = ? and participant_id is 
 	})
 }
 
-func maxSeedNumber(ctx context.Context, q store.Queryer, gameID int64) (int, error) {
-	rows, err := q.QueryContext(ctx, `
-select ms.source_ref_json
-from match_slots ms
-join matches m on m.id = ms.match_id
-where m.game_id = ? and ms.source_type = 'seed'`, gameID)
-	if err != nil {
-		return 0, err
-	}
-	defer rows.Close()
-	maxNumber := 0
-	for rows.Next() {
-		var sourceRef string
-		if err := rows.Scan(&sourceRef); err != nil {
-			return 0, err
-		}
-		_, number := seedRefKey(sourceRef)
-		if number > maxNumber {
-			maxNumber = number
-		}
-	}
-	return maxNumber, rows.Err()
-}
-
 func seedRefKey(sourceRef string) (int, int) {
 	ref := store.ParseSlotRef(store.SlotSeed, sourceRef)
 	return ref.Basket, ref.Number
@@ -808,17 +732,19 @@ select distinct stage_id from stage_standings st join stages s on s.id = st.stag
 		return 0, nil, corei18n.User(dopestrings.Default.Imports.Seed.MultipleStandings(gameCode, len(stages)))
 	}
 	type row struct {
+		id     int64
 		name   string
 		number int
+		player bool
 		entry  structure.RankedEntry
 	}
 	rows, err := store.CollectRows(ctx, q, `
-select st.rank, p.name, coalesce(p.number, 0), st.metrics_json
+select st.rank, p.id, p.name, coalesce(p.number, 0), p.roster = 'player', st.metrics_json
 from stage_standings st join participants p on p.id = st.participant_id
 where st.stage_id = ? order by st.rank`, []any{stages[0]}, func(rs *sql.Rows) (row, error) {
 		var r row
 		var metrics string
-		if err := rs.Scan(&r.entry.Rank, &r.name, &r.number, &metrics); err != nil {
+		if err := rs.Scan(&r.entry.Rank, &r.id, &r.name, &r.number, &r.player, &metrics); err != nil {
 			return r, err
 		}
 		_ = json.Unmarshal([]byte(metrics), &r.entry.Metrics)
@@ -870,6 +796,11 @@ where st.stage_id = ? order by st.rank`, []any{stages[0]}, func(rs *sql.Rows) (r
 	candidates := make([]seedCandidate, len(rows))
 	for i, r := range rows {
 		candidates[i] = seedCandidate{SourceRank: i + 1, Name: r.name, Number: r.number, Declined: declined[int64(r.number)]}
+		// A fest team is found again by its number, which also refreshes its
+		// people from the roster; a player comes as itself.
+		if r.player {
+			candidates[i].ParticipantID = r.id
+		}
 	}
 	return gameID, candidates, nil
 }

@@ -27,7 +27,7 @@ func EnsureSeedTeam(ctx context.Context, tx *sql.Tx, festID int64, name, city st
 	err := tx.QueryRowContext(ctx, `
 select id, city
 from participants
-where fest_id = ? and name = ?
+where fest_id = ? and name = ? and game_id is null
 order by case when city = ? then 0 when city = '' then 1 else 2 end, id
 limit 1`, festID, name, city).Scan(&teamID, &existingCity)
 	if errors.Is(err, sql.ErrNoRows) {

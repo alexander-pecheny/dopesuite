@@ -545,8 +545,11 @@ values(?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
 				return err
 			}
 		}
-		emptyState := string(games.BrainEmptyStateJSON(stageQuestions(stage, scheme.Questions)))
 		for matchIndex, match := range stage.Matches {
+			// The Protocol owns a pristine бой's shape, as it does when the
+			// Structure is first written: a Тройка or a Хамса бой is not a
+			// брейн's row of questions.
+			emptyState := stageEmptyState(gameType, stage, len(match.Slots), scheme.Questions)
 			existing, ok := existingMatches[match.Code]
 			if ok {
 				delete(existingMatches, match.Code)

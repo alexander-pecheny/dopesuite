@@ -340,7 +340,7 @@ func GamePagePath(parts []string, host bool) bool {
 	switch parts[2] {
 	case "venues", "stats", "roster":
 		return len(parts) == 3
-	case "seed-import":
+	case "entrants", "seed-import":
 		return host && len(parts) == 3
 	case "matches", "stage":
 		return len(parts) == 4 && parts[3] != ""

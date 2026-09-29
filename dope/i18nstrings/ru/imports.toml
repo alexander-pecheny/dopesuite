@@ -13,6 +13,10 @@ ksi = "КСИ"
 random = "жребий"
 # The scheme's seed: players — the composing seeding from source games.
 players = "по игрокам"
+# The fest's whole roster in its own order (FromFest).
+fest = "список феста"
+# The fest's troikas, for a Тройка (FromTroikas).
+troikas = "тройки феста"
 
 [seed]
 # Importing the seed when the fest has no КСИ game to rank.
@@ -37,8 +41,12 @@ xlsx_basket_missing = 'команда "{{.name}}" без корзины, а ли
 team_twice = '{{.source}} содержит команду "{{.name}}" больше одного раза (первое имя: "{{.first}}")'
 # SetSeedImportDeclined on the seed tab before any import ran, or for a team
 # the import does not hold.
-nothing_imported = "сначала импортируйте посев"
-team_not_found = "команда не найдена в импорте посева"
+nothing_imported = "В списке участников пока никого нет."
+team_not_found = "Этого участника нет в списке."
+# The by-players seeding picked on a Game whose [init] does not declare it.
+players_undeclared = "Посев по игрокам работает, только если схема игры его описывает ([init] seed: players)."
+# The troikas source over a division that holds none.
+no_troikas = "В фесте нет троек в этом зачёте."
 # standingsCandidates and loadSeedSourceGame: the source game lookup.
 game_missing = 'в фесте нет игры с кодом {{.code}}'
 # A source game with no, or more than one, ranked table to seed from.

@@ -550,7 +550,7 @@ func (s *Server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request
 func festEntrantOptions(ctx context.Context, db *sql.DB, festID int64) ([]gameEntrantOption, error) {
 	options, err := store.CollectRows(ctx, db, `
 select id, name, coalesce(city, ''), roster, assembled from participants
-where fest_id = ? order by roster desc, assembled, coalesce(nullif(number, 0), 1 << 30), name, id`,
+where fest_id = ? and game_id is null order by roster desc, assembled, coalesce(nullif(number, 0), 1 << 30), name, id`,
 		[]any{festID}, func(rows *sql.Rows) (gameEntrantOption, error) {
 			var option gameEntrantOption
 			var city, roster string

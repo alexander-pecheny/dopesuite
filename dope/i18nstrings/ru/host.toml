@@ -267,7 +267,10 @@ division_carrying = 'тройки зачёта «{{.flag}}»'
 division_not_carrying = 'все тройки не из зачёта «{{.flag}}»'
 # One note per Тройка game that takes its troikas from a зачёт.
 game_follows = '«{{.game}}» берёт {{.division}}. Сейчас их {{.n}}.'
-game_frozen = 'В «{{.game}}» уже есть результаты, поэтому состав её участников больше не меняется. Замены игроков внутри тройки по-прежнему делаются здесь.'
+game_frozen = 'В «{{.game}}» уже есть результаты, поэтому новые тройки сами в неё не попадают. Добавить тройку можно на вкладке «Участники» этой игры. Замены игроков внутри тройки по-прежнему делаются здесь.'
+# The Game's list was edited by hand on its Участники tab, or imported from
+# another source, so it no longer follows the зачёт.
+game_manual = 'Участников «{{.game}}» правили на вкладке «Участники», поэтому новые тройки сами в неё не попадают.'
 game_problem = 'Участников «{{.game}}» не удалось обновить: {{.problem}}'
 # A head team that is not one of the fest's teams.
 head_team_unknown = "Такой команды нет в фесте."

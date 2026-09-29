@@ -50,6 +50,14 @@ need_players = "для личной игры нужны игроки в рост
 # troika: at creation, and on the troikas page when the last one leaves.
 no_troikas = 'В зачёте «{{.division}}» пока нет ни одной тройки. Заведите тройки на странице «Тройки».'
 
+[entrants]
+# Why a Game built for its entrants kept its Structure after an edit of the
+# Участники tab; the tab shows it after «Сетка осталась прежней:». Nobody left
+# to seat:
+none_left = "в списке не осталось ни одного участника."
+# The scheme refusing the new number of entrants; {{.err}} is its own message.
+scheme_refuses = 'схема игры не подходит для {{.n}} {{plural .n "участника" "участников" "участников"}} ({{.err}}).'
+
 [recompile]
 # A recompile that would change bouts already started; the bout codes follow.
 started_bouts = 'нельзя менять начатые бои: {{.names}} — уберите их изменения или снимите отметку «Закончен» и очистите протокол'

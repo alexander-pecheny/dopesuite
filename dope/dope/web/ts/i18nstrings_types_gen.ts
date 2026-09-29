@@ -92,21 +92,6 @@ export type Strings = {
       tiebreak: () => string;
       tiebreakN: (n: string) => string;
     };
-    seed: {
-      draw: () => string;
-      empty: () => string;
-      importFrom: (source: string) => string;
-      noFile: () => string;
-      upload: () => string;
-      waitlist: () => string;
-    };
-    seedHead: {
-      city: () => string;
-      declined: () => string;
-      rank: () => string;
-      seed: () => string;
-      team: () => string;
-    };
     stats: {
       attempts: () => string;
       empty: () => string;
@@ -184,34 +169,12 @@ export type Strings = {
       finished: () => string;
     };
     crumb: {
-      seedImport: () => string;
       stats: () => string;
       venues: () => string;
     };
     seats: {
       empty: () => string;
       label: () => string;
-    };
-    seed: {
-      declineFailed: () => string;
-      declinedAria: (name: string) => string;
-      draw: () => string;
-      empty: () => string;
-      error: (reason: string) => string;
-      errorPrefix: () => string;
-      import: () => string;
-      importFailed: () => string;
-      importFrom: (source: string) => string;
-      importPlayers: () => string;
-      imported: (n: string) => string;
-      summary: (active: string, size: string, total: string) => string;
-      teamPlaceholder: () => string;
-      waitlist: () => string;
-    };
-    seedHead: {
-      declined: () => string;
-      seed: () => string;
-      team: () => string;
     };
     shootout: {
       add: () => string;
@@ -247,6 +210,72 @@ export type Strings = {
       edit: () => string;
       save: () => string;
     };
+  };
+  entrants: {
+    add: {
+      hint: () => string;
+      hintTroika: () => string;
+      pick: () => string;
+      pickTroika: () => string;
+      submit: () => string;
+    };
+    error: {
+      alreadyIn: (name: string) => string;
+      nameMissing: () => string;
+      nameTaken: (name: string) => string;
+      oneOffTroika: () => string;
+      pickSomebody: () => string;
+      played: (name: string) => string;
+      renameFest: () => string;
+      sourceMissing: () => string;
+    };
+    filter: {
+      all: () => string;
+      carrying: (flag: string) => string;
+      notCarrying: (flag: string) => string;
+    };
+    head: {
+      declined: () => string;
+      name: () => string;
+      seed: () => string;
+    };
+    import: {
+      confirmEdited: () => string;
+      done: (n: number) => string;
+      file: () => string;
+      label: () => string;
+      run: () => string;
+    };
+    row: {
+      declinedLabel: (name: string) => string;
+      down: () => string;
+      oneOff: () => string;
+      played: () => string;
+      remove: () => string;
+      removeConfirm: (name: string) => string;
+      rename: () => string;
+      seedLabel: (name: string) => string;
+      up: () => string;
+      waitlist: () => string;
+    };
+    source: {
+      festPlayers: () => string;
+      festTeams: () => string;
+      game: (game: string) => string;
+      players: () => string;
+      random: () => string;
+      troikas: () => string;
+      xlsx: () => string;
+    };
+    state: {
+      empty: () => string;
+      failed: (err: string) => string;
+      fixed: () => string;
+      kept: (reason: string) => string;
+      resizes: () => string;
+      summary: (size: string, seated: string, active: string) => string;
+    };
+    tab: () => string;
   };
   export: {
     col: {
@@ -440,6 +469,10 @@ export type Strings = {
     };
     division: {
       noTroikas: (division: string) => string;
+    };
+    entrants: {
+      noneLeft: () => string;
+      schemeRefuses: (n: number, err: string) => string;
     };
     recompile: {
       startedBouts: (names: string) => string;
@@ -792,6 +825,7 @@ export type Strings = {
       empty: () => string;
       gameFollows: (game: string, division: string, n: string) => string;
       gameFrozen: (game: string) => string;
+      gameManual: (game: string) => string;
       gameProblem: (game: string, problem: string) => string;
       gamesHint: () => string;
       headTeamUnknown: () => string;
@@ -831,7 +865,9 @@ export type Strings = {
       multipleStandings: (code: string, n: number) => string;
       noNumberedTeams: () => string;
       noStandings: (code: string) => string;
+      noTroikas: () => string;
       nothingImported: () => string;
+      playersUndeclared: () => string;
       schemeMissing: () => string;
       schemeXlsx: () => string;
       sourceNoTeams: () => string;
@@ -856,9 +892,11 @@ export type Strings = {
       selfReference: (grain: string, name: string) => string;
     };
     seedSource: {
+      fest: () => string;
       ksi: () => string;
       players: () => string;
       random: () => string;
+      troikas: () => string;
     };
   };
   journal: {
@@ -1430,8 +1468,6 @@ export type Strings = {
       results: () => string;
       roster: () => string;
       screen: () => string;
-      seed: () => string;
-      seedImport: () => string;
       stats: () => string;
       venues: () => string;
     };
