@@ -28,8 +28,8 @@ whole_roster = 'В игре «{{.name}}» играют все команды ф�
 json_type_mismatch = 'JSON-схема описывает игру {{.described}}, а создаётся {{.created}}'
 # A pasted JSON scheme that carries teams, which travel by seed import.
 pasted_teams = "команды загружаются отдельным импортом посева; уберите teams из JSON-схемы"
-# A seed: source that is neither random, xlsx nor this fest's game code.
-seed_unknown = 'seed: {{.seed}} — не random, не xlsx и не код игры этого феста'
+# A seed: source that is neither random, xlsx, players nor this fest's game code.
+seed_unknown = 'seed: {{.seed}} — не random, не xlsx, не players и не код игры этого феста'
 
 [seating]
 # A chosen participant whose id is not in this fest.

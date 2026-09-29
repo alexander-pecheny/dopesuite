@@ -435,7 +435,7 @@ var RU = Strings{
 			},
 			SchemeRequired: func() string { return "опишите схему игры" },
 			SeedUnknown: func(seed string) string {
-				return fmt.Sprintf("seed: %s — не random, не xlsx и не код игры этого феста", seed)
+				return fmt.Sprintf("seed: %s — не random, не xlsx, не players и не код игры этого феста", seed)
 			},
 			WholeRoster: func(name string) string {
 				return fmt.Sprintf("В игре «%s» играют все команды феста, под теми же номерами. Снимите отметки в «Составе игры», а тех, кто не играет, отметьте во вкладке «Отказы» на странице игры.", name)

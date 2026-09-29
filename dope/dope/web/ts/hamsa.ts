@@ -11,6 +11,7 @@ import type {CellContent, CellSpec} from "./cells.js";
 import {festLetters, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
 import {buildRosterView} from "./fest-roster.js";
+import {createSeedView} from "./seed-view.js";
 import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
 import {mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
@@ -130,6 +131,17 @@ for (const stage of fest?.stages || []) {
   if (stage?.code) festStages.set(stage.code, stage);
 }
 let rosterView: HTMLElement | null = null;
+// The Посев tab — the one brain draws (seed-view.ts), offered whenever the
+// scheme declares an [init] seed.
+const seedView = createSeedView({
+  apiBase: route.apiBase,
+  source: () => scheme.seeding?.source || "",
+  rerender: () => render(),
+  afterChange: async (view) => {
+    for (const stage of view?.stages || []) if (stage?.code) festStages.set(stage.code, stage as FestGridStage);
+    await fetchMatches();
+  },
+});
 let resyncScheduled = false;
 
 const boutLetters = festLetters(fest?.stages as StageRef[] | undefined);
@@ -940,6 +952,8 @@ function buildTab(tab: GameTab | undefined): HTMLElement {
   switch (tab?.kind) {
   case "roster":
     return (rosterView ||= buildRosterView(route.festID));
+  case "seed":
+    return seedView.build();
   case "stats":
     return buildStats();
   case "block":

@@ -392,7 +392,7 @@ export const RU: Strings = {
       multiFromScheme: () => "Мультиигры описываются списком мини-игр, а не схемой",
       pastedTeams: () => "команды загружаются отдельным импортом посева; уберите teams из JSON-схемы",
       schemeRequired: () => "опишите схему игры",
-      seedUnknown: (seed: string) => `seed: ${seed} — не random, не xlsx и не код игры этого феста`,
+      seedUnknown: (seed: string) => `seed: ${seed} — не random, не xlsx, не players и не код игры этого феста`,
       wholeRoster: (name: string) => `В игре «${name}» играют все команды феста, под теми же номерами. Снимите отметки в «Составе игры», а тех, кто не играет, отметьте во вкладке «Отказы» на странице игры.`,
     },
     recompile: {

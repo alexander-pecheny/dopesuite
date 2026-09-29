@@ -13,6 +13,7 @@ import {icon} from "./icons_gen.js";
 import {festLetters, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
 import {buildRosterView} from "./fest-roster.js";
+import {createSeedView} from "./seed-view.js";
 import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
 import {mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
@@ -137,6 +138,17 @@ for (const stage of fest?.stages || []) {
 }
 let rosterView: HTMLElement | null = null;
 let resyncScheduled = false;
+// The Посев tab — the one brain draws: the declared source, its import, the
+// ladder. It is offered whenever the scheme declares an [init] seed.
+const seedView = createSeedView({
+  apiBase: route.apiBase,
+  source: () => scheme.seeding?.source || "",
+  rerender: render,
+  afterChange: async (view) => {
+    for (const stage of view?.stages || []) if (stage?.code) festStages.set(stage.code, stage as FestGridStage);
+    await fetchMatches();
+  },
+});
 
 const boutLetters = festLetters(fest?.stages as StageRef[] | undefined);
 
@@ -956,6 +968,8 @@ function buildTab(tab: GameTab | undefined): HTMLElement {
   switch (tab?.kind) {
   case "roster":
     return (rosterView ||= buildRosterView(route.festID));
+  case "seed":
+    return seedView.build();
   case "stats":
     return buildStats();
   case "block":
