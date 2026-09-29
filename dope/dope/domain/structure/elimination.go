@@ -216,7 +216,19 @@ func planLives(entrants, lives, winning, proceeding int, sizeFor func(blockRound
 // previous block's template takes its entrants in the order that template
 // already balanced them.
 func planLivesDrawn(entrants, lives, winning, proceeding int, sizeFor func(blockRound, members int) int, opening func(n, bouts int) [][]int) (*dePlan, error) {
+	return planLivesEntered(entrants, 0, lives, winning, proceeding, sizeFor, opening)
+}
+
+// planLivesEntered is planLivesDrawn where the last `lower` entrants of the
+// ranking start one Loss down, in the bracket below. Octobearfest's personal SI
+// (rules, appendix 3) sends a group's 1st and 2nd places to the upper
+// bracket and its 3rd and 4th straight to the lower one; the rest of the
+// bracket — who drops where, how big each Match is — is the same planner.
+func planLivesEntered(entrants, lower, lives, winning, proceeding int, sizeFor func(blockRound, members int) int, opening func(n, bouts int) [][]int) (*dePlan, error) {
 	s := dopestrings.Default
+	if lower < 0 || lower >= entrants || (lower > 0 && lives < 2) {
+		return nil, fmt.Errorf("%s", s.Structure.Elimination.LowerEntrants(strconv.Itoa(lower), strconv.Itoa(entrants)))
+	}
 	if lives < 1 {
 		return nil, fmt.Errorf("%s", s.Structure.Elimination.LivesMin())
 	}
@@ -229,7 +241,11 @@ func planLivesDrawn(entrants, lives, winning, proceeding int, sizeFor func(block
 	plan := &dePlan{lives: lives, winning: winning}
 	brackets := make([][]deSource, lives)
 	for rank := 1; rank <= entrants; rank++ {
-		brackets[0] = append(brackets[0], deSource{entrant: rank})
+		bracket := 0
+		if rank > entrants-lower {
+			bracket = 1
+		}
+		brackets[bracket] = append(brackets[bracket], deSource{entrant: rank})
 	}
 	for blockRound := 1; ; blockRound++ {
 		alive := 0
@@ -282,7 +298,9 @@ func planLivesDrawn(entrants, lives, winning, proceeding int, sizeFor func(block
 			}
 			count := len(members) / size
 			chunks := snakeChunks(len(members), count)
-			if blockRound == 1 && b == 0 {
+			// The opening round deals whoever entered the bracket — the upper
+			// one always, the lower one too when the block seats some there.
+			if blockRound == 1 {
 				chunks = opening(len(members), count)
 			}
 			played = true

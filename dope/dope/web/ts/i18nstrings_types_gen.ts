@@ -1444,6 +1444,7 @@ export type Strings = {
       boutCannotOutput: (size: string, winning: string) => string;
       bracketNotDivisible: (entrants: string, size: string, winning: string) => string;
       livesMin: () => string;
+      lowerEntrants: (lower: string, entrants: string) => string;
       matchSizeMin: () => string;
       tooManyBlockRounds: () => string;
       winningPlacesMin: () => string;

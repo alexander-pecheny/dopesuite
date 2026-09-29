@@ -563,6 +563,27 @@ export function createViewerCounter(statusNode: HTMLElement | null | undefined):
 const tabBarScrollBindings = new WeakMap<HTMLElement, ScrollEdgeBinding>();
 const tabBarActiveKeys = new WeakMap<HTMLElement, string>();
 
+// bindWheelScroll lets a mouse wheel move a horizontal strip — the game
+// pages' tab bars, whose tabs overflow at any width. A wheel scrolls
+// vertically, so without this the bar moved only by trackpad, drag or the
+// keyboard. The page keeps the wheel whenever the strip has nowhere to go that
+// way, so scrolling past the bar still scrolls the page. Bound once per element.
+const wheelBound = new WeakSet<Element>();
+export function bindWheelScroll(el: HTMLElement | null | undefined): void {
+  if (!el || wheelBound.has(el)) return;
+  wheelBound.add(el);
+  el.addEventListener("wheel", (event: WheelEvent) => {
+    if (event.ctrlKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return; // pinch, or already horizontal
+    const max = el.scrollWidth - el.clientWidth;
+    if (max <= 1) return;
+    const step = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaMode === 2 ? event.deltaY * el.clientWidth : event.deltaY;
+    const next = Math.max(0, Math.min(max, el.scrollLeft + step));
+    if (next === el.scrollLeft) return;
+    event.preventDefault();
+    el.scrollLeft = next;
+  }, {passive: false});
+}
+
 export function renderTabBar(
   root: HTMLElement,
   tabs: Array<{key: string; label: string}>,
@@ -591,6 +612,7 @@ export function renderTabBar(
       bar.classList.toggle("tabs-scroll-right", right);
     });
     tabBarScrollBindings.set(root, binding);
+    bindWheelScroll(root);
   } else {
     binding.refresh();
   }

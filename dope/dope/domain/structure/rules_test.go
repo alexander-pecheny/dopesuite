@@ -281,3 +281,53 @@ func TestTwoSeatBoutRuleSumsAcrossTheGroup(t *testing.T) {
 		t.Errorf("101 rating = %v, want 1.46", got)
 	}
 }
+
+// Octobearfest's личная СИ ranks a group on турнирные очки, then личная
+// встреча. At a table of three a pair meets once, in the Match they shared, and
+// whoever finished ahead there wins the meeting. 1 and 2 tie on points here;
+// 2 beat 1 at their one shared table, so 2 ranks first. h2h used to be a key no
+// row carried, and the tie fell through to participant id.
+func TestMultiSeatHeadToHead(t *testing.T) {
+	kind, _ := RankerFor("rr")
+	cfg := json.RawMessage(`{"matchSize": 3, "order": ["points", "h2h"]}`)
+	seat := func(id int64, place float64) SlotOutcome {
+		return SlotOutcome{Participant: id, Place: place, Metrics: map[string]float64{}}
+	}
+	ranked, err := kind.Standings(cfg, []MatchOutcome{
+		{Code: "g-1", Finished: true, Slots: []SlotOutcome{seat(1, 1), seat(3, 2), seat(4, 3)}},
+		{Code: "g-2", Finished: true, Slots: []SlotOutcome{seat(2, 1), seat(5, 2), seat(6, 3)}},
+		{Code: "g-3", Finished: true, Slots: []SlotOutcome{seat(2, 2), seat(1, 3), seat(7, 1)}},
+		{Code: "g-4", Finished: true, Slots: []SlotOutcome{seat(1, 1), seat(8, 2), seat(9, 3)}},
+		{Code: "g-5", Finished: true, Slots: []SlotOutcome{seat(2, 2), seat(8, 1), seat(9, 3)}},
+	}, Inputs{})
+	if err != nil {
+		t.Fatalf("Standings: %v", err)
+	}
+	// 1: 3 + 1 + 3 = 7; 2: 3 + 2 + 2 = 7.
+	if ranked[0].Participant != 2 || ranked[1].Participant != 1 {
+		t.Fatalf("order = %d, %d; want 2 (won the meeting), then 1", ranked[0].Participant, ranked[1].Participant)
+	}
+	if ranked[0].Rank != 1 || ranked[1].Rank != 2 {
+		t.Errorf("ranks = %d, %d; want 1, 2", ranked[0].Rank, ranked[1].Rank)
+	}
+}
+
+// Without h2h a multi-seat group ranks as it always did.
+func TestMultiSeatWithoutHeadToHeadUnchanged(t *testing.T) {
+	kind, _ := RankerFor("rr")
+	cfg := json.RawMessage(`{"matchSize": 3, "order": ["points"]}`)
+	seat := func(id int64, place float64) SlotOutcome {
+		return SlotOutcome{Participant: id, Place: place, Metrics: map[string]float64{}}
+	}
+	ranked, err := kind.Standings(cfg, []MatchOutcome{
+		{Code: "g-1", Finished: true, Slots: []SlotOutcome{seat(2, 1), seat(1, 2), seat(3, 3)}},
+		{Code: "g-2", Finished: true, Slots: []SlotOutcome{seat(1, 1), seat(2, 2), seat(3, 3)}},
+	}, Inputs{})
+	if err != nil {
+		t.Fatalf("Standings: %v", err)
+	}
+	// 1 and 2 level on 5: shared rank, participant id orders them.
+	if ranked[0].Participant != 1 || ranked[0].Rank != 1 || ranked[1].Rank != 1 {
+		t.Errorf("got %d/%d, %d/%d; want 1/1, 2/1", ranked[0].Participant, ranked[0].Rank, ranked[1].Participant, ranked[1].Rank)
+	}
+}

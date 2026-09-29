@@ -867,7 +867,7 @@ function buildCrosstable(stages: BrainSchemeStage[]): HTMLElement {
   });
 }
 
-// The Посев tab: the declared source, its import, the ladder (seed-view.ts).
+// The seed tab: the declared source, its import, the ladder (seed-view.ts).
 const seedView = createSeedView({
   apiBase: route.apiBase,
   source: () => scheme.seeding?.source || "",

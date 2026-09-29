@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 
@@ -337,8 +338,9 @@ func circleBlockRounds(n int) [][][]int {
 }
 
 // multiSeatStandings ranks a group whose Matches seat more than two. There is
-// no head-to-head — a Match of three is not a duel — and no diff, so points
-// come from the block's scoring rule and every Protocol metric simply sums.
+// no diff, so points come from the block's scoring rule and every Protocol
+// metric simply sums; head-to-head, when the scheme asks for it, is each pair's
+// places in the Match they shared.
 // Seeds, where the caller has them, put each Participant's seed rank on its
 // row before the order is applied, so a scheme may close its chain with it.
 func multiSeatStandings(conf RRConfig, results []MatchOutcome, seeds map[int64]float64) ([]RankedEntry, error) {
@@ -391,6 +393,20 @@ func multiSeatStandings(conf RRConfig, results []MatchOutcome, seeds map[int64]f
 			return nil, err
 		}
 		ranked = append(ranked, *entry)
+	}
+	// Head-to-head at a table of three: among the tied, who finished ahead
+	// of whom in the Matches they shared — one meeting per pair of seats. It
+	// used to be a key no row carried, so a scheme writing it ranked on
+	// nothing there and fell through to the next key.
+	if slices.Contains(order, "h2h") {
+		sortByOrder(ranked, nil) // participant id: the order the tied keep
+		var duels []h2hDuel
+		for _, match := range results {
+			if match.Finished {
+				duels = appendDuels(duels, match, 1, 0.5, 0)
+			}
+		}
+		return rankWithHeadToHead(ranked, order, duels), nil
 	}
 	sortByOrder(ranked, order)
 	shareRanks(ranked, order)

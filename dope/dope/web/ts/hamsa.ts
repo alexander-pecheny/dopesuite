@@ -131,7 +131,7 @@ for (const stage of fest?.stages || []) {
   if (stage?.code) festStages.set(stage.code, stage);
 }
 let rosterView: HTMLElement | null = null;
-// The Посев tab — the one brain draws (seed-view.ts), offered whenever the
+// The seed tab — the one brain draws (seed-view.ts), offered whenever the
 // scheme declares an [init] seed.
 const seedView = createSeedView({
   apiBase: route.apiBase,

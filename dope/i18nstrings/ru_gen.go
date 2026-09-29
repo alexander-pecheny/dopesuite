@@ -886,7 +886,7 @@ var RU = Strings{
 			},
 			NameMissing: func() string { return "У тройки нет названия." },
 			NameTaken: func(name string) string {
-				return fmt.Sprintf("Название «%s» уже занято — у троек и команд феста названия не должны совпадать.", name)
+				return fmt.Sprintf("Тройка «%s» уже есть — у двух троек названия не должны совпадать.", name)
 			},
 			PlayerN: func(n string) string { return fmt.Sprintf("Игрок %s", n) },
 			PlayerTwice: func(team string, player string) string {
@@ -1974,7 +1974,10 @@ var RU = Strings{
 			BracketNotDivisible: func(entrants string, size string, winning string) string {
 				return fmt.Sprintf("%s участников не делятся на бои не больше чем по %s, из которых выходит %s", entrants, size, winning)
 			},
-			LivesMin:     func() string { return "нужна хотя бы одна жизнь" },
+			LivesMin: func() string { return "нужна хотя бы одна жизнь" },
+			LowerEntrants: func(lower string, entrants string) string {
+				return fmt.Sprintf("lower_entrants: %s из %s — в нижнюю сетку можно посадить от 0 до %s−1 участников, и только когда жизней две", lower, entrants, entrants)
+			},
 			MatchSizeMin: func() string { return "match_size должен быть хотя бы 2" },
 			TooManyBlockRounds: func() string {
 				return "слишком много раундов — проверьте match_size и winning_places"

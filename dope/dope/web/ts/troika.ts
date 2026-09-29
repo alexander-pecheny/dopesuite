@@ -23,7 +23,7 @@ import {createSheetCursor, parseMark} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {buildCrosstables, CANON_COLUMNS, crossSlot, standingsByParticipant} from "./crosstable.js";
 import type {SchemeSlotRef} from "./crosstable.js";
-import {buildFestGrid, parseScheme} from "./fest-grid.js";
+import {buildFestGrid, buildReseedStagePanel, parseScheme} from "./fest-grid.js";
 import type {FestGridStage} from "./fest-grid.js";
 import {gameTabs, groupLabel} from "./game-tabs.js";
 import type {GameTab} from "./game-tabs.js";
@@ -138,7 +138,7 @@ for (const stage of fest?.stages || []) {
 }
 let rosterView: HTMLElement | null = null;
 let resyncScheduled = false;
-// The Посев tab — the one brain draws: the declared source, its import, the
+// The seed tab — the one brain draws: the declared source, its import, the
 // ladder. It is offered whenever the scheme declares an [init] seed.
 const seedView = createSeedView({
   apiBase: route.apiBase,
@@ -192,6 +192,67 @@ function adoptMatchView(view: TroikaMatchView | null | undefined): boolean {
   return true;
 }
 
+// shapeOf is everything of a bout the protocol sheet is built from except its
+// marks: the themes and their values, the shootout, the chair order, who sits
+// where, the pinned places, whether it is finished. Two views of one shape
+// differ only in marks and counts, which the sheet can repaint in place.
+function shapeOf(code: string): string {
+  const view = matches.get(code);
+  const state = states.get(code);
+  if (!view || !state) return "";
+  return JSON.stringify({
+    values: state.values, shootout: state.shootout, pin: state.pin, written: state.written,
+    order: state.sides.map((side) => side.themes.map((theme) => theme.order)),
+    finished: Boolean(view.finished), title: view.title,
+    seats: (view.participants || []).map((seat) => [seat?.id, seat?.name, (seat?.roster || []).map((p) => p.id)]),
+  });
+}
+
+// showMatchView adopts a bout's view — the server's answer to an edit, or
+// another host's edit arriving live — and shows it. When only marks changed and
+// the protocols tab is up, the bout's cells and Σ are repainted where they
+// stand, the way the personal SI sheet patches its table: the whole tab used to
+// be rebuilt on every answer, which on a group stage's worth of bouts is a
+// visible stall after each mark and a cursor that jumps under the host.
+function showMatchView(view: TroikaMatchView | null | undefined): void {
+  const code = view?.code || "";
+  const before = shapeOf(code);
+  if (!adoptMatchView(view)) return;
+  const tab = tabs().find((entry) => entry.key === activeTab);
+  if (before && before === shapeOf(code) && tab?.kind === "protocol") {
+    repaintBout(code);
+    return;
+  }
+  render();
+}
+
+// repaintBout brings one bout's cells, counts and totals in line with its
+// state without rebuilding anything around them.
+function repaintBout(code: string): void {
+  const state = stateOf(code);
+  const match = `[data-match="${cssEscape(code)}"]`;
+  for (const cell of root.querySelectorAll<HTMLElement>(`.troika-cell${match}`)) {
+    const side = Number(cell.dataset.side);
+    const theme = Number(cell.dataset.theme);
+    const q = Number(cell.dataset.q);
+    const chair = Number(cell.dataset.chair);
+    paintMark(cell, troika.markAt(state, side, theme, q, chair));
+  }
+  for (const cell of root.querySelectorAll<HTMLElement>(`.troika-count${match}`)) {
+    const count = troika.countAt(state, Number(cell.dataset.side), Number(cell.dataset.theme), Number(cell.dataset.q));
+    cell.textContent = count ? String(count) : "";
+  }
+  state.sides.forEach((_side, side) => {
+    const totals = state.written ? writtenTotals(state, side) : {total: troika.sideTotal(state, side)};
+    for (const [key, value] of Object.entries(totals)) {
+      const node = root.querySelector<HTMLElement>(`[data-${key}="${cssEscape(`${code}-${side}`)}"]`);
+      if (node) node.textContent = String(value);
+    }
+  });
+  cursor.refresh();
+  writtenCursor.refresh();
+}
+
 function stateOf(code: string): TroikaState {
   return states.get(code) || troika.parseState(null);
 }
@@ -239,8 +300,7 @@ const live = createLiveEvents({
         return;
       }
       next.seq = view.seq;
-      adoptMatchView(next);
-      render();
+      showMatchView(next);
     },
     gap: () => scheduleResync(),
   }],
@@ -255,10 +315,7 @@ const writer = createScopedWriter({
   readonly: viewer,
   urlOf: (scope) => `${route.apiBase}/matches/${encodeURIComponent(scope.slice(`match:${scopeGameID}:`.length))}/state`,
   docPath: ["state"],
-  adopt: (_scope, response) => {
-    adoptMatchView(response as TroikaMatchView);
-    render();
-  },
+  adopt: (_scope, response) => showMatchView(response as TroikaMatchView),
   indicator,
   onRejected: () => scheduleResync(),
 });
@@ -964,12 +1021,46 @@ function buildGridOf(only: SchemeStage[]): HTMLElement {
     {stageHeaderLink: false, matchTitleLink: false, letters: boutLetters});
 }
 
+// buildReseeds is the reseed tab — Hamsa's: each reseed's ranking and its
+// one button. The tab was listed but fell through to the grid, so a Troika
+// whose play-off is drawn (reseed: true, sorting: [place_sum, draw]) had no
+// way to calculate it.
+function buildReseeds(stages: SchemeStage[]): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "u-col u-gap-lg";
+  for (const stage of stages) {
+    const live = festStages.get(stage.code || "");
+    wrap.appendChild(buildReseedStagePanel(live, {
+      editable: !viewer,
+      canCalculate: Boolean(live?.reseedReady),
+      letters: boutLetters,
+      onCalculate: () => void calculateReseed(stage.code || ""),
+    }));
+  }
+  return wrap;
+}
+
+async function calculateReseed(code: string): Promise<void> {
+  const response = await fetch(`${route.apiBase}/stages/${encodeURIComponent(code)}/reseed`, {
+    method: "POST", headers: {"Content-Type": "application/json"},
+  });
+  if (!response.ok) {
+    indicator.fail();
+    return;
+  }
+  const view = await response.json() as FestInfo;
+  for (const stage of view.stages || []) if (stage?.code) festStages.set(stage.code, stage);
+  await fetchMatches();
+}
+
 function buildTab(tab: GameTab | undefined): HTMLElement {
   switch (tab?.kind) {
   case "roster":
     return (rosterView ||= buildRosterView(route.festID));
   case "seed":
     return seedView.build();
+  case "reseed":
+    return buildReseeds(tabStages(tab));
   case "stats":
     return buildStats();
   case "block":

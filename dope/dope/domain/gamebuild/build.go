@@ -288,7 +288,7 @@ func schemeForEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType
 		}
 		input.Entrants = entrants
 	} else if seed == "players" {
-		// A посев composed over players (Троечка §4.4.2) reads the standings of
+		// A seed composed over players (Troika rules §4.4.2) reads the standings of
 		// the Games its `games:` names: each must be a Game of this fest, or the
 		// import would fail later, at the host's button, rather than here.
 		sources, _, err := doc.Init.List("games")

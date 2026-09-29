@@ -1,9 +1,9 @@
 import S from "./i18nstrings.js";
 
-// The Посев tab a seeded Game shows its host: the declared source, the one
+// The seed tab a seeded Game shows its host: the declared source, the one
 // import button (or the xlsx upload), and the ladder — active seeds, declines,
 // waitlist. The server side is one for every Game (the /seed-import routes);
-// brain, Троечка and Хамса draw the same tab, so it lives here once.
+// brain, Troika and Hamsa draw the same tab, so it lives here once.
 
 interface SeedImportRow {
   sourceRank?: number;
@@ -29,8 +29,8 @@ export interface SeedViewOptions {
   // Redraw the page, keeping its scroll: the tab is rebuilt from state.
   rerender: () => void;
   // An import reseats every Slot. The page gets the fest view fetched afresh
-  // (null if that failed) — the Сетка reads its names from it, not from the
-  // бои — and refetches what it shows of the бои itself.
+  // (null if that failed) — the grid reads its names from it, not from the
+  // bouts — and refetches what it shows of the bouts itself.
   afterChange: (fest: SeedFestView | null) => Promise<void>;
 }
 
