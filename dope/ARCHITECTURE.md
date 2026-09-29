@@ -111,7 +111,7 @@ here when it needs type metadata.
 - `overrides` — player-name overrides. `imports` — EK/seed/rating bulk import;
   a seed source is `FromGame|FromFest|FromTroikas|FromRandom|FromXLSX|…`, and
   `entrants.go` holds a Game's entrant list and how it fills the Structure's
-  seed numbers (ADR-0022).
+  seed numbers (ADR-0023).
 - `entrants` — the Участники tab of a buzzer Game: its view, its sources and
   the host's hand edits, with their refusals. It calls `gamebuild.ApplyListTx`,
   which rebuilds a Game sized by its entrants before `imports` seats the list.

@@ -40,7 +40,7 @@ ladder was, and one tab edits it for all six formats (`domain/entrants`,
   page until the host edits it (or imports from another source), or until
   anything is entered.
 - **One-off entrants** are Participants with `participants.game_id` set
-  (migration v34): every fest-wide lookup and picker leaves them out, and
+  (migration v35): every fest-wide lookup and picker leaves them out, and
   the Game's deletion takes them with it.
 - **Refusals.** An entrant that sits in a бой that has begun can be neither
   removed, renamed nor moved. Only a one-off is renamed in a Game.
