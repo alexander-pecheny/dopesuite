@@ -211,9 +211,10 @@ func hostOverridesSection(data hostFestRosterData, ref string) *dopeui.Element {
 		dopeui.Hcell(dopeui.Text(s.Host.Roster.ColToTeam())), dopeui.Hcell(dopeui.Text(s.Host.Roster.GamesLabel())), dopeui.Hcell(),
 	)}
 	for _, o := range data.Overrides {
+		games := dopeui.Cell(dopeui.Text(o.Games))
 		rows = append(rows, dopeui.Trow(
 			dopeui.Cell(dopeui.Text(o.Player)), dopeui.Cell(dopeui.Text(o.SourceTeam)),
-			dopeui.Cell(dopeui.Text(o.OverrideTeam)), dopeui.Cell(dopeui.Text(o.Games)),
+			dopeui.Cell(dopeui.Text(o.OverrideTeam)), games,
 			dopeui.Cell(dopeui.Iconbtn(dopeui.IconPencil, dopeui.Label(s.Host.Roster.EditOverrideLabel()), dopeui.Data("dialog-open", o.DialogID()))),
 		))
 	}

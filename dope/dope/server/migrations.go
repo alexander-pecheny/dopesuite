@@ -855,6 +855,16 @@ create index if not exists api_tokens_user_idx on api_tokens(user_id);
 		return err
 	}},
 	{Version: 34, Name: "a troika's head team and division", Up: assembledHeadTeamAndDivision},
+	{Version: 36, Name: "a game roster the host kept by hand", Up: func(db *sql.DB) error {
+		// v36: game_team_players rows the host wrote on the game's roster tab.
+		// A team whose rows carry hand = 1 plays this Game with exactly those
+		// players, whatever the fest roster, a seed import or a player override
+		// says. The other rows stay what overrides materialise. (v35 belongs to
+		// the entrant list, built alongside.)
+		return store.AddColumnsIfMissing(db, "game_team_players", []store.ColumnSpec{
+			{Name: "hand", Type: "INTEGER NOT NULL DEFAULT 0"},
+		})
+	}},
 }
 
 // assembledHeadTeamAndDivision gives an assembled team (a troika) a stored head
