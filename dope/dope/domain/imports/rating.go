@@ -13,8 +13,6 @@ import (
 	"time"
 
 	"dope/dope/domain/core"
-	"dope/dope/domain/games"
-	"dope/dope/domain/overrides"
 	"dope/dope/domain/roster"
 	"dope/dope/domain/towns"
 	"dope/dope/platform/util"
@@ -36,6 +34,9 @@ type RatingRosterImportResult struct {
 	// propagation, no broadcasts). TeamCount/PlayerCount still report the roster
 	// size; the game counts stay zero because nothing was rewritten.
 	Unchanged bool
+	// Plan is what the import did, or with RosterChoice.Preview what it would
+	// do: set on every import that reached the merge (ADR-0024).
+	Plan *ImportPlan
 }
 
 type ratingFestResult struct {
@@ -124,6 +125,11 @@ func (c *RosterConflict) Error() string {
 type RosterChoice struct {
 	Merge map[int64]int64
 	Drop  map[int64]bool
+	// AcceptSite names the player conflicts (roster.ConflictKey) where the
+	// host takes the site's placement; every other conflict keeps the host's.
+	AcceptSite map[string]bool
+	// Preview computes the plan and writes nothing.
+	Preview bool
 }
 
 // resolveTeamCountries fills in the country each team's town is in, before the
@@ -296,26 +302,39 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 			return RatingRosterImportResult{}, conflict
 		}
 
-		assignFestNumbersForImport(teams, existingByRating, maxTeamNumber(existingTeams))
-
-		// Fast path: if the incoming roster is identical to the fest's current
-		// active roster (same teams, numbers, and players in canonical order), the
-		// rebuild below would rewrite every row to its current value and re-derive
-		// identical game state — all no-ops. Skip the whole write tx, propagation,
-		// and broadcasts, so a "refresh" that changed nothing is near-instant and
-		// adds zero churn during a live tournament. These reads run on conn outside
-		// any tx (we hold eng.Mu, so no writer can race them).
-		current, err := loadFestActiveRoster(ctx, conn, festID)
+		// The host's edits go over the incoming roster (ADR-0024): what the
+		// fest ends up with is the merge, not the site's list.
+		state, err := roster.LoadHandState(ctx, conn, festID)
 		if err != nil {
 			return RatingRosterImportResult{}, err
 		}
-		sortedCurrent := roster.SortedFestRosterImportTeams(current)
-		if festRostersEqual(sortedCurrent, teams) {
-			return RatingRosterImportResult{
-				TeamCount:   len(teams),
-				PlayerCount: distinctPlayerCount(teams),
-				Unchanged:   true,
-			}, nil
+		// What the fest holds now is read before the merges re-key its rows,
+		// so a merge alone is a change.
+		current := activeRoster(state)
+		for i := range state.Teams {
+			if ratingID, ok := choice.Merge[state.Teams[i].ID]; ok && ratingID > 0 {
+				state.Teams[i].RatingID = ratingID
+			}
+		}
+		merged := roster.MergeHand(teams, state, choice.AcceptSite)
+		desired := roster.SortedFestRosterImportTeams(merged.Desired)
+		assignFestNumbersForImport(desired, existingByRating, maxTeamNumber(existingTeams))
+		plan := planRoster(current, desired, merged)
+		result := RatingRosterImportResult{TeamCount: len(desired), PlayerCount: distinctPlayerCount(desired), Plan: &plan}
+		if choice.Preview {
+			return result, nil
+		}
+
+		// Fast path: if the merged roster is the fest's current one and no
+		// answer to a conflict has to be written down, the rebuild below would
+		// rewrite every row to its current value and re-derive identical game
+		// state — all no-ops. Skip the whole write tx, propagation and
+		// broadcasts, so a "refresh" that changed nothing is near-instant and
+		// adds zero churn during a live tournament.
+		sortedCurrent := roster.SortedFestRosterImportTeams(stripLocal(current))
+		if festRostersEqual(sortedCurrent, stripLocal(desired)) && len(merged.Settle)+len(merged.Drop) == 0 {
+			result.Unchanged = true
+			return result, nil
 		}
 
 		tx, err := eng.BeginWriteTxConn(ctx, conn)
@@ -326,61 +345,34 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 
 		// A rating.chgk.info roster import is a bulk machine sync; suppress per-row
 		// audit capture (its churn has no incremental-undo value and is recorded as
-		// the single 'rating:roster-import' event below). Manual host roster edits
-		// run in their own un-suppressed tx and stay audited.
+		// the single 'rating:roster-import' event below). Its undo is the roster
+		// snapshot saved first.
 		if err := festwrite.SuppressAuditTx(ctx, tx); err != nil {
 			return RatingRosterImportResult{}, err
 		}
-
-		// Bring the canonical roster (fest_teams/fest_players/fest_team_players) to
-		// match the incoming teams by writing ONLY what changed. Crucially this keeps
-		// fest_players ids stable for players that stay, so game_player_team_overrides
-		// (FK fest_players.id ON DELETE CASCADE) survive without a preserve/restore
-		// dance; a player who left the roster is deleted and its override cascades
-		// away. See applyFestRosterDiffTx.
-		if err := applyFestRosterDiffTx(ctx, tx, festID, teams, existingByRating, choice.Merge); err != nil {
+		if err := saveRosterSnapshotTx(ctx, tx, festID, "rating-import", state); err != nil {
 			return RatingRosterImportResult{}, err
 		}
-		playerCount := distinctPlayerCount(teams)
-
-		// OD/KSI game state is a pure function of the TEAM list, so only re-propagate
-		// when teams actually changed — a player-only change leaves it identical.
-		if !teamLevelEqual(sortedCurrent, teams) {
-			if updates, err = roster.PropagateRosterTx(ctx, tx, festID, teams, nil); err != nil {
+		now := util.UtcNow()
+		for _, edit := range append(merged.Settle, removeOf(merged.Drop)...) {
+			if err := roster.SaveHandEditTx(ctx, tx, festID, edit, now); err != nil {
 				return RatingRosterImportResult{}, err
 			}
 		}
-		odGames, ksiGames := 0, 0
-		for _, u := range updates {
-			switch u.GameType {
-			case games.OD:
-				odGames++
-			case games.KSI:
-				ksiGames++
-			}
-		}
-
-		// Refresh EK override game rosters. With fest_players ids stable the surviving
-		// overrides still point at the right rows (orphaned ones cascaded away with
-		// their deleted player); re-resolving them re-points any moved source team and
-		// re-materializes the affected EK game_team_players caches.
-		currentOverrides, err := overrides.LoadRatingPlayerTeamOverrides(ctx, tx, festID)
+		written, err := writeRosterTx(ctx, tx, festID, desired, existingByRating, choice.Merge, !teamLevelEqual(sortedCurrent, stripLocal(desired)))
 		if err != nil {
 			return RatingRosterImportResult{}, err
 		}
-		ekOverrideGameIDs, err = overrides.RestoreRatingPlayerTeamOverridesTx(ctx, tx, festID, currentOverrides)
-		if err != nil {
-			return RatingRosterImportResult{}, err
-		}
+		updates, ekOverrideGameIDs = written.Updates, written.EKGameIDs
 		if _, err := tx.ExecContext(ctx, `update fests set rating_id = ?, updated_at = ? where id = ?`, ratingID, util.UtcNow(), festID); err != nil {
 			return RatingRosterImportResult{}, err
 		}
 		revision, err = festwrite.BumpFestRevisionTx(ctx, tx, festID, "rating:roster-import", util.MustJSON(map[string]any{
 			"ratingID": ratingID,
-			"teams":    len(teams),
-			"players":  playerCount,
-			"odGames":  odGames,
-			"ksiGames": ksiGames,
+			"teams":    result.TeamCount,
+			"players":  result.PlayerCount,
+			"odGames":  written.odGames,
+			"ksiGames": written.ksiGames,
 		}))
 		if err != nil {
 			return RatingRosterImportResult{}, err
@@ -388,13 +380,8 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 		if err := tx.Commit(); err != nil {
 			return RatingRosterImportResult{}, err
 		}
-
-		return RatingRosterImportResult{
-			TeamCount:    len(teams),
-			PlayerCount:  playerCount,
-			ODGameCount:  odGames,
-			KSIGameCount: ksiGames,
-		}, nil
+		result.ODGameCount, result.KSIGameCount = written.odGames, written.ksiGames
+		return result, nil
 	}()
 	if err != nil {
 		return RatingRosterImportResult{}, err
@@ -416,6 +403,10 @@ type existingFestTeam struct {
 	Name     string
 	City     string
 	Deleted  bool
+	// Hand and HandRemoved are the host's (ADR-0024): a team made by hand is
+	// not the site's to drop, and one the host took off has left already.
+	Hand        bool
+	HandRemoved bool
 }
 
 // loadFestExistingTeams returns every fest_team row of this fest, including the
@@ -423,12 +414,12 @@ type existingFestTeam struct {
 // the team is re-added.
 func loadFestExistingTeams(ctx context.Context, q store.Queryer, festID int64) ([]existingFestTeam, error) {
 	return store.CollectRows(ctx, q, `
-select id, coalesce(rating_id, 0), coalesce(number, 0), name, coalesce(city, ''), deleted
+select id, coalesce(rating_id, 0), coalesce(number, 0), name, coalesce(city, ''), deleted, hand, hand_removed
 from fest_teams
 where fest_id = ?
 order by position, id`, []any{festID}, func(rows *sql.Rows) (existingFestTeam, error) {
 		var team existingFestTeam
-		return team, rows.Scan(&team.ID, &team.RatingID, &team.Number, &team.Name, &team.City, &team.Deleted)
+		return team, rows.Scan(&team.ID, &team.RatingID, &team.Number, &team.Name, &team.City, &team.Deleted, &team.Hand, &team.HandRemoved)
 	})
 }
 
@@ -519,7 +510,7 @@ func rosterConflict(ctx context.Context, q store.Queryer, festID int64, teams []
 	}
 	var leaving []existingFestTeam
 	for _, row := range rows {
-		if row.Deleted || choice.Drop[row.ID] {
+		if row.Deleted || row.Hand || row.HandRemoved || choice.Drop[row.ID] {
 			continue
 		}
 		if _, stays := incoming[row.RatingID]; stays && row.RatingID > 0 {
@@ -560,60 +551,6 @@ func rosterConflict(ctx context.Context, q store.Queryer, festID int64, teams []
 		added = append(added, AddedTeam{RatingID: team.RatingID, Name: team.Name, City: team.City})
 	}
 	return &RosterConflict{Dropped: dropped, Added: added}, nil
-}
-
-// loadFestActiveRoster loads the fest's current ACTIVE (non-deleted) teams and
-// their players in the same roster.FestRosterImportTeam shape as an incoming rating
-// roster, so the two can be diffed to detect a no-op re-import. Soft-deleted
-// teams are excluded: a re-import that re-adds one would flip its deleted flag,
-// which is a real change and must not be mistaken for "unchanged".
-func loadFestActiveRoster(ctx context.Context, q store.Queryer, festID int64) ([]roster.FestRosterImportTeam, error) {
-	type teamRow struct {
-		id       int64
-		ratingID int64
-		name     string
-		city     string
-		number   int64
-	}
-	teamRows, err := store.CollectRows(ctx, q, `
-select id, coalesce(rating_id, 0), name, coalesce(city, ''), coalesce(number, 0)
-from fest_teams
-where fest_id = ? and deleted = 0
-order by position, id`, []any{festID}, func(rows *sql.Rows) (teamRow, error) {
-		var t teamRow
-		return t, rows.Scan(&t.id, &t.ratingID, &t.name, &t.city, &t.number)
-	})
-	if err != nil {
-		return nil, err
-	}
-	flagsByTeam, err := roster.LoadFestTeamFlags(ctx, q, festID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]roster.FestRosterImportTeam, 0, len(teamRows))
-	for _, t := range teamRows {
-		players, err := store.CollectRows(ctx, q, `
-select coalesce(p.rating_id, 0), p.first_name, p.last_name
-from fest_team_players ftp
-join fest_players p on p.id = ftp.player_id
-where ftp.team_id = ?
-order by ftp.roster_order, p.id`, []any{t.id}, func(rows *sql.Rows) (roster.FestRosterImportPlayer, error) {
-			var p roster.FestRosterImportPlayer
-			return p, rows.Scan(&p.RatingID, &p.FirstName, &p.LastName)
-		})
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, roster.FestRosterImportTeam{
-			RatingID: t.ratingID,
-			Name:     t.name,
-			City:     t.city,
-			Number:   t.number,
-			Players:  players,
-			Flags:    flagsByTeam[t.id],
-		})
-	}
-	return out, nil
 }
 
 // festRostersEqual reports whether two rosters are identical after canonical
@@ -728,9 +665,10 @@ func applyFestRosterDiffTx(ctx context.Context, tx *sql.Tx, festID int64, teams 
 			return err
 		}
 	}
-	// Hard-delete rating_id-less rows — they can't be matched across syncs (their
-	// fest_team_players cascade away with them).
-	if _, err := tx.ExecContext(ctx, `delete from fest_teams where fest_id = ? and rating_id is null`, festID); err != nil {
+	// Hard-delete rating_id-less rows the host did not make — they can't be
+	// matched across syncs (their fest_team_players cascade away with them). A
+	// team made by hand has no rating id either, and is found by its row.
+	if _, err := tx.ExecContext(ctx, `delete from fest_teams where fest_id = ? and rating_id is null and hand = 0`, festID); err != nil {
 		return err
 	}
 
@@ -743,7 +681,14 @@ func applyFestRosterDiffTx(ctx context.Context, tx *sql.Tx, festID int64, teams 
 		if team.Number > 0 {
 			numberParam = team.Number
 		}
-		if existing, ok := existingByRating[team.RatingID]; ok && team.RatingID > 0 {
+		if team.LocalID > 0 {
+			if _, err := tx.ExecContext(ctx, `
+update fest_teams set name = ?, city = ?, country = ?, position = ?, number = ?, deleted = 0
+ where id = ? and fest_id = ?`, team.Name, team.City, team.Country, importOrder, numberParam, team.LocalID, festID); err != nil {
+				return err
+			}
+			teamIDs[i] = team.LocalID
+		} else if existing, ok := existingByRating[team.RatingID]; ok && team.RatingID > 0 {
 			if _, err := tx.ExecContext(ctx, `
 update fest_teams set name = ?, city = ?, country = ?, position = ?, number = ?, deleted = 0
  where id = ?`, team.Name, team.City, team.Country, importOrder, numberParam, existing.ID); err != nil {
@@ -892,6 +837,10 @@ select player_id, roster_order from fest_team_players where team_id = ?`, []any{
 // (which counts soft-deleted rows too, so a returning team can't collide).
 func assignFestNumbersForImport(teams []roster.FestRosterImportTeam, existing map[int64]existingFestTeam, maxSeen int64) {
 	for i := range teams {
+		// A team made by hand keeps the number it was given.
+		if teams[i].RatingID <= 0 && teams[i].LocalID > 0 {
+			continue
+		}
 		teams[i].Number = 0
 		if teams[i].RatingID > 0 {
 			if e, ok := existing[teams[i].RatingID]; ok {
@@ -909,8 +858,5 @@ func assignFestNumbersForImport(teams []roster.FestRosterImportTeam, existing ma
 }
 
 func rosterPlayerKey(player roster.FestRosterImportPlayer) string {
-	if player.RatingID > 0 {
-		return "rating:" + strconv.FormatInt(player.RatingID, 10)
-	}
-	return "name:" + strings.ToLower(store.JoinPlayerName(player.FirstName, player.LastName))
+	return roster.PlayerKey(player)
 }

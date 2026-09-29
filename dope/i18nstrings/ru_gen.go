@@ -1152,6 +1152,22 @@ var RU = Strings{
 		EkRestore: ImportsEkRestoreStrings{
 			MatchHeader: func(code string, status string) string { return fmt.Sprintf("-- Бой %s [%s]", code, status) },
 		},
+		HandRoster: ImportsHandRosterStrings{
+			NameMissing: func() string { return "У команды нет названия." },
+			NameTaken: func(name string) string {
+				return fmt.Sprintf("Команда «%s» уже есть в составах феста.", name)
+			},
+			NothingToUndo: func() string {
+				return "Отменять нечего: импортов с сохранённым составом не было."
+			},
+			PlayerTwice: func(name string) string {
+				return fmt.Sprintf("%s записан в команду дважды.", name)
+			},
+			TeamScored: func(team string, games string) string {
+				return fmt.Sprintf("Команду «%s» нельзя убрать: у неё есть результаты в играх %s.", team, games)
+			},
+			TeamUnknown: func() string { return "Такой команды нет в составах феста." },
+		},
 		Rating: ImportsRatingStrings{
 			ApiError: func(detail string) string { return fmt.Sprintf("рейтинг вернул ошибку: %s", detail) },
 			ConflictError: func(n string) string {

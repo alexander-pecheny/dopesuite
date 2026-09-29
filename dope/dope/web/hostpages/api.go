@@ -77,6 +77,10 @@ func (s *Server) APIRoutes(t *route.Table) {
 
 	t.Handle("GET "+fest+"/teams", route.Manager, s.apiTeams)
 	t.Handle("PATCH "+fest+"/teams/flags", route.Manager, s.apiTeamFlags)
+	t.Handle("POST "+fest+"/teams", route.Manager, s.apiCreateTeam)
+	t.Handle("GET "+fest+"/teams/{id}", route.Manager, s.apiTeam)
+	t.Handle("PUT "+fest+"/teams/{id}", route.Manager, s.apiSaveTeam)
+	t.Handle("DELETE "+fest+"/teams/{id}", route.Manager, s.apiRemoveTeam)
 	t.Handle("GET "+fest+"/players", route.Manager, s.apiPlayers)
 	t.Handle("POST "+fest+"/players/overrides", route.Manager, s.apiAddOverride)
 	t.Handle("PUT "+fest+"/players/overrides", route.Manager, s.apiReplaceOverride)
@@ -86,6 +90,7 @@ func (s *Server) APIRoutes(t *route.Table) {
 	t.Handle("PUT "+fest+"/troikas/{id}", route.Manager, s.apiSaveTroika)
 	t.Handle("DELETE "+fest+"/troikas/{id}", route.Manager, s.apiDeleteTroika)
 	t.Handle("POST "+fest+"/rating-import", route.Manager, s.apiRatingImport)
+	t.Handle("POST "+fest+"/rating-import/undo", route.Manager, s.apiUndoRatingImport)
 
 	t.Handle("GET "+fest+"/numbers", route.Manager, s.apiNumbers)
 	t.Handle("POST "+fest+"/numbers/assign", route.Manager, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
@@ -431,6 +436,10 @@ type apiTeam struct {
 	City     string `json:"city"`
 	Players  int    `json:"players"`
 	Flags    string `json:"flags"`
+	// Hand marks a team the host made; Edited, one the host changed by hand in
+	// any way (ADR-0024), which an import keeps.
+	Hand   bool `json:"hand"`
+	Edited bool `json:"edited"`
 }
 
 func (s *Server) apiTeams(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
@@ -440,7 +449,7 @@ func (s *Server) apiTeams(w http.ResponseWriter, r *http.Request, sc route.Scope
 	}
 	out := make([]apiTeam, len(teams))
 	for i, t := range teams {
-		out[i] = apiTeam{ID: t.ID, RatingID: t.RatingID, Name: t.Name, City: t.City, Players: t.Players, Flags: t.Flags}
+		out[i] = apiTeam{ID: t.ID, RatingID: t.RatingID, Name: t.Name, City: t.City, Players: t.Players, Flags: t.Flags, Hand: t.Hand, Edited: t.Edited}
 	}
 	return route.JSON(w, out)
 }
@@ -683,6 +692,11 @@ func (s *Server) apiRatingImport(w http.ResponseWriter, r *http.Request, sc rout
 	var req struct {
 		Merge map[string]int64 `json:"merge"`
 		Drop  []int64          `json:"drop"`
+		// Preview answers what the import would do and writes nothing.
+		Preview bool `json:"preview"`
+		// AcceptSite names the player conflicts where the site's placement
+		// wins; every other conflict keeps the host's (ADR-0024).
+		AcceptSite []string `json:"accept_site"`
 	}
 	// No body at all is the plain import, which asks nothing.
 	raw, err := io.ReadAll(r.Body)
@@ -694,7 +708,10 @@ func (s *Server) apiRatingImport(w http.ResponseWriter, r *http.Request, sc rout
 			return route.BadRequest("bad json")
 		}
 	}
-	choice := imports.RosterChoice{Merge: map[int64]int64{}, Drop: map[int64]bool{}}
+	choice := imports.RosterChoice{Merge: map[int64]int64{}, Drop: map[int64]bool{}, AcceptSite: map[string]bool{}, Preview: req.Preview}
+	for _, key := range req.AcceptSite {
+		choice.AcceptSite[key] = true
+	}
 	for key, ratingID := range req.Merge {
 		teamID, err := strconv.ParseInt(key, 10, 64)
 		if err != nil || teamID <= 0 {
@@ -740,7 +757,7 @@ func (s *Server) apiRatingImport(w http.ResponseWriter, r *http.Request, sc rout
 	return route.JSON(w, map[string]any{
 		"teams": result.TeamCount, "players": result.PlayerCount,
 		"od_games": result.ODGameCount, "ksi_games": result.KSIGameCount,
-		"unchanged": result.Unchanged,
+		"unchanged": result.Unchanged, "preview": req.Preview, "plan": planJSON(result.Plan),
 	})
 }
 

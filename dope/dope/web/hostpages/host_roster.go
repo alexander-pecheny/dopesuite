@@ -39,6 +39,10 @@ type hostFestTeam struct {
 	// Flags is the team's Divisions as the editor types them: short names,
 	// comma separated (ADR-0020).
 	Flags string
+	// Hand marks a team the host made; Edited, one the host changed by hand
+	// (ADR-0024).
+	Hand   bool
+	Edited bool
 }
 
 type hostFestPlayer struct {
@@ -501,10 +505,26 @@ func (s *Server) saveFestTeamFlags(reqCtx context.Context, festID int64, flagsBy
 	var updates []roster.GameStateBroadcast
 	var revision int64
 	err := s.h.Engine().WithWriteTx(reqCtx, festID, "fest-team-flags", func(ctx context.Context, tx *sql.Tx) error {
+		before, err := roster.LoadFestTeamFlags(ctx, tx, festID)
+		if err != nil {
+			return err
+		}
 		for teamID, flags := range flagsByTeam {
+			// Flags the host typed are the host's: an import leaves them alone
+			// (ADR-0024). Only a team whose Flags this save changes is marked,
+			// since the page posts every team's.
+			if strings.Join(roster.FlagShortNames(before[teamID]), ",") == strings.Join(roster.FlagShortNames(flags), ",") {
+				continue
+			}
 			if err := roster.ReplaceTeamFlagsTx(ctx, tx, teamID, flags); err != nil {
 				return err
 			}
+			if _, err := tx.ExecContext(ctx, `update fest_teams set hand_flags = 1 where id = ? and fest_id = ?`, teamID, festID); err != nil {
+				return err
+			}
+		}
+		if err := imports.ForgetRosterSnapshotsTx(ctx, tx, festID); err != nil {
+			return err
 		}
 		teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
 		if err != nil {
@@ -691,8 +711,18 @@ order by tt.position, tt.id`, []any{festID}, func(rows *sql.Rows) (hostFestTeam,
 	if err != nil {
 		return nil, err
 	}
+	state, err := roster.LoadHandState(ctx, s.h.Engine().DB, festID)
+	if err != nil {
+		return nil, err
+	}
+	edited := editedTeams(state)
+	hand := map[int64]bool{}
+	for _, team := range state.Teams {
+		hand[team.ID] = team.Hand
+	}
 	for i := range teams {
 		teams[i].Flags = strings.Join(roster.FlagShortNames(flags[teams[i].ID]), ", ")
+		teams[i].Hand, teams[i].Edited = hand[teams[i].ID], edited[teams[i].ID]
 	}
 	sort.SliceStable(teams, func(i, j int) bool {
 		if cmp := util.CompareAlpha(teams[i].Name, teams[j].Name); cmp != 0 {

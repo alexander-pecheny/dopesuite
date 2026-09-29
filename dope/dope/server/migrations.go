@@ -891,6 +891,45 @@ create index if not exists fest_game_hosts_user_idx on fest_game_hosts(fest_id, 
 `)
 		return err
 	}},
+	{Version: 38, Name: "the host's edits to the fest roster", Up: func(db *sql.DB) error {
+		// v38: the fest roster is the rating import with the host's edits on top
+		// (ADR-0024). A team made by hand, a name, city or Flags the host set, and
+		// a rating team the host took off are marked on fest_teams; a player added
+		// to or taken off a team is a row of fest_roster_edits, which an import
+		// applies again; and every import saves the roster first, for its undo.
+		// Every existing row is a rating row, so nothing needs a backfill.
+		if err := store.AddColumnsIfMissing(db, "fest_teams", []store.ColumnSpec{
+			{Name: "hand", Type: "INTEGER NOT NULL DEFAULT 0"},
+			{Name: "hand_name", Type: "TEXT"},
+			{Name: "hand_city", Type: "TEXT"},
+			{Name: "hand_flags", Type: "INTEGER NOT NULL DEFAULT 0"},
+			{Name: "hand_removed", Type: "INTEGER NOT NULL DEFAULT 0"},
+		}); err != nil {
+			return err
+		}
+		_, err := db.Exec(`
+create table if not exists fest_roster_edits(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  team_id integer not null references fest_teams(id) on delete cascade,
+  player_rating_id integer,
+  first_name text not null,
+  last_name text not null default '',
+  action text not null check (action in ('add', 'remove')),
+  created_at text not null
+);
+create index if not exists fest_roster_edits_team_idx on fest_roster_edits(team_id);
+create table if not exists fest_roster_snapshots(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  reason text not null,
+  roster_json text not null,
+  created_at text not null
+);
+create index if not exists fest_roster_snapshots_fest_idx on fest_roster_snapshots(fest_id, id);
+`)
+		return err
+	}},
 }
 
 // assembledHeadTeamAndDivision gives an assembled team (a troika) a stored head

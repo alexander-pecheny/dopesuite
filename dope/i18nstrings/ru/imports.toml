@@ -104,3 +104,18 @@ merge_stale = "Список команд изменился, пока вы от�
 # replay; this header opens each match's block. {{.status}} is the match's
 # status code ("pending"/"active"/"finished").
 match_header = '-- Бой {{.code}} [{{.status}}]'
+
+[hand_roster]
+# The host's edits to the fest roster (dope/dope/domain/imports/handroster.go).
+# A team saved without a name.
+name_missing = "У команды нет названия."
+# The same person twice in one team's list.
+player_twice = '{{.name}} записан в команду дважды.'
+# Another team on the roster already has this name and city.
+name_taken = 'Команда «{{.name}}» уже есть в составах феста.'
+# The team is not on the fest roster (removed, or of another fest).
+team_unknown = "Такой команды нет в составах феста."
+# Removing a team that already has results.
+team_scored = 'Команду «{{.team}}» нельзя убрать: у неё есть результаты в играх {{.games}}.'
+# «Отменить импорт» with no import saved to go back to.
+nothing_to_undo = "Отменять нечего: импортов с сохранённым составом не было."

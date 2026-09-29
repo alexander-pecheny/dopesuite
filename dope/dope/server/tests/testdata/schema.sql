@@ -4,6 +4,12 @@ CREATE INDEX api_tokens_user_idx on api_tokens(user_id);
 -- index fest_game_hosts_user_idx
 CREATE INDEX fest_game_hosts_user_idx on fest_game_hosts(fest_id, user_id);
 
+-- index fest_roster_edits_team_idx
+CREATE INDEX fest_roster_edits_team_idx on fest_roster_edits(team_id);
+
+-- index fest_roster_snapshots_fest_idx
+CREATE INDEX fest_roster_snapshots_fest_idx on fest_roster_snapshots(fest_id, id);
+
 -- index fest_team_flags_team_idx
 CREATE INDEX fest_team_flags_team_idx on fest_team_flags(team_id, position);
 
@@ -79,6 +85,27 @@ CREATE TABLE fest_players(
   last_name text not null default ''
 );
 
+-- table fest_roster_edits
+CREATE TABLE fest_roster_edits(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  team_id integer not null references fest_teams(id) on delete cascade,
+  player_rating_id integer,
+  first_name text not null,
+  last_name text not null default '',
+  action text not null check (action in ('add', 'remove')),
+  created_at text not null
+);
+
+-- table fest_roster_snapshots
+CREATE TABLE fest_roster_snapshots(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  reason text not null,
+  roster_json text not null,
+  created_at text not null
+);
+
 -- table fest_team_flags
 CREATE TABLE fest_team_flags(
   id integer primary key,
@@ -108,7 +135,7 @@ CREATE TABLE fest_teams(
   position real not null,
   number integer,
   deleted integer not null default 0
-, country TEXT);
+, country TEXT, hand INTEGER NOT NULL DEFAULT 0, hand_name TEXT, hand_city TEXT, hand_flags INTEGER NOT NULL DEFAULT 0, hand_removed INTEGER NOT NULL DEFAULT 0);
 
 -- table fests
 CREATE TABLE fests(

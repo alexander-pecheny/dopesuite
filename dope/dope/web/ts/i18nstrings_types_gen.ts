@@ -879,6 +879,14 @@ export type Strings = {
     ekRestore: {
       matchHeader: (code: string, status: string) => string;
     };
+    handRoster: {
+      nameMissing: () => string;
+      nameTaken: (name: string) => string;
+      nothingToUndo: () => string;
+      playerTwice: (name: string) => string;
+      teamScored: (team: string, games: string) => string;
+      teamUnknown: () => string;
+    };
     rating: {
       apiError: (detail: string) => string;
       conflictError: (n: string) => string;

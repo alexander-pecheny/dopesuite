@@ -20,6 +20,9 @@ import (
 )
 
 type FestRosterImportTeam struct {
+	// LocalID is the fest_teams row this entry is, when it already has one: a
+	// team made by hand has no rating id, so the writer finds it by this.
+	LocalID  int64
 	RatingID int64
 	Name     string
 	City     string

@@ -901,6 +901,14 @@ shootout: true
     ekRestore: {
       matchHeader: (code: string, status: string) => `-- Бой ${code} [${status}]`,
     },
+    handRoster: {
+      nameMissing: () => "У команды нет названия.",
+      nameTaken: (name: string) => `Команда «${name}» уже есть в составах феста.`,
+      nothingToUndo: () => "Отменять нечего: импортов с сохранённым составом не было.",
+      playerTwice: (name: string) => `${name} записан в команду дважды.`,
+      teamScored: (team: string, games: string) => `Команду «${team}» нельзя убрать: у неё есть результаты в играх ${games}.`,
+      teamUnknown: () => "Такой команды нет в составах феста.",
+    },
     rating: {
       apiError: (detail: string) => `рейтинг вернул ошибку: ${detail}`,
       conflictError: (n: string) => `Импорт остановлен: из списка уходят команды, у которых уже есть результаты (${n}).`,
