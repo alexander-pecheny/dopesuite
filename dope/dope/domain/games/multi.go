@@ -286,8 +286,8 @@ type MultiResultsTeam struct {
 	Raw   []int
 	// Places is the team's place in each minigame by what it contributed,
 	// shared places averaged, and PlaceSum their sum: what a fest ranks on
-	// when it names place_sum (Ассортишечка: «наименьшая сумма мест в разрезе
-	// каждого задания»).
+	// when it names place_sum (the Assortishechka rules: the least sum of
+	// places across the tasks wins).
 	Places   []float64
 	PlaceSum float64
 }

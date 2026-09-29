@@ -653,6 +653,9 @@ function render(): void {
   if (!scheme || !state) return;
   shell.renderChrome();
   if (!TABS.some((t) => t.key === activeTab)) activeTab = "detailed";
+  // The strip is served hidden until the page has a document to switch
+  // between, as on the KSI and Troika pages; nothing here ever showed it.
+  if (tabsRoot) tabsRoot.hidden = false;
   if (tabsRoot) renderTabBar(tabsRoot, TABS, activeTab, (key) => {
     activeTab = key;
     setHashTab(key);
