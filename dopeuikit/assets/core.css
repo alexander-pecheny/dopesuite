@@ -1234,6 +1234,17 @@ input[type="radio"]:focus-visible {
 
 .action-icon:hover { background: var(--action-hover-bg); }
 
+/* A disabled icon button reads as one, like a disabled .btn: a row action the
+   row does not allow just now (an entrant that has already played). */
+.action-icon:disabled,
+.action-icon:disabled:hover {
+  border-color: var(--action-disabled-border);
+  background: var(--action-disabled-bg);
+  color: var(--action-disabled-fg);
+  opacity: var(--action-disabled-opacity);
+  cursor: var(--cursor-disabled);
+}
+
 .disclosure > summary {
   width: max-content;
   list-style: none;
