@@ -330,7 +330,7 @@ func RemoveTeamTx(ctx context.Context, tx *sql.Tx, festID, teamID int64) (Roster
 }
 
 // saveRosterSnapshotTx keeps the roster as it was before an import, with the
-// host's edits, for «Отменить импорт». The last ten are kept.
+// host's edits, for the undo on the import page. The last ten are kept.
 func saveRosterSnapshotTx(ctx context.Context, tx *sql.Tx, festID int64, reason string, state roster.HandState) error {
 	raw, err := json.Marshal(state)
 	if err != nil {

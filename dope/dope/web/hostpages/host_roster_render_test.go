@@ -7,6 +7,7 @@ import (
 
 	"dope/dope/domain/imports"
 	"dope/dope/domain/overrides"
+	"dope/dope/domain/roster"
 	"dope/dope/domain/view"
 	dopeui "dope/dope/web/ui"
 )
@@ -150,5 +151,33 @@ func TestParseTypedFlags(t *testing.T) {
 	}
 	if len(parseTypedFlags("   ")) != 0 {
 		t.Fatal("a blank field should clear the зачёты")
+	}
+}
+
+// The import preview (ADR-0024) lists what the import changes and the edits it
+// keeps, gives each player conflict a box, carries the team answers on, and
+// confirms with the same form; a second read of that form gives the answers.
+func TestHostRatingImportPreviewRenders(t *testing.T) {
+	plan := imports.ImportPlan{
+		AddedTeams: []string{"Совы (Брест)"},
+		Players:    []imports.TeamPlayers{{Team: "Бобры (Брест)", Added: []string{"Ева"}}},
+		Kept:       roster.HandKept{HandTeams: 1, Added: 2},
+		Conflicts: []roster.PlayerConflict{{Key: "40|rating:102", Player: roster.FestRosterImportPlayer{FirstName: "Борис"},
+			HandTeam: "Зубры", SiteTeam: "Совы"}},
+	}
+	choice := imports.RosterChoice{Merge: map[int64]int64{7: 93587}}
+	html, err := dopeui.Render(hostRatingImportDoc(hostFestImportData{Fest: view.HostFest{ID: 5, Title: "Кубок"}, RatingID: 13711, Plan: &plan, Choice: choice}))
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	body := string(html)
+	for _, want := range []string{"Совы (Брест)", "Ева", `name="accept_40|rating:102"`, `name="team_7"`, `value="merge:93587"`, "Борис: у вас в «Зубры», на сайте в «Совы»"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("preview is missing %s", want)
+		}
+	}
+	got := parseRosterChoice(url.Values{"accept_40|rating:102": {"1"}, "team_7": {"merge:93587"}})
+	if !got.AcceptSite["40|rating:102"] || got.Merge[7] != 93587 {
+		t.Fatalf("choice = %+v", got)
 	}
 }

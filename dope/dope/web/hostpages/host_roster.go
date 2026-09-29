@@ -71,6 +71,13 @@ type hostFestImportData struct {
 	// Conflict is set when the import stopped to ask what to do with teams that
 	// are leaving the roster while they still carry results.
 	Conflict *imports.RosterConflict
+	// Plan is the preview of an import (ADR-0024), and Choice the answers it
+	// was previewed with, which the confirm form carries on.
+	Plan   *imports.ImportPlan
+	Choice imports.RosterChoice
+	// UndoAt is when the roster was saved before the last import, "" when
+	// there is no import to undo.
+	UndoAt string
 }
 
 // hostTeamsDoc builds the fest's teams table (or an empty note). The Divisions
@@ -81,6 +88,7 @@ func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
 	ref := data.Fest.Ref()
 	page := []dopeui.Item{
 		dopeui.Title(s.Host.Roster.TeamsTitle(data.Fest.Title)), dopeui.PagePublic,
+		dopeui.Classicscripts("dist/pageforms.js dist/fest-teams.js"),
 		dopeui.Publictopbar(pages.Trail(pages.FestCrumbs(ref, data.Fest.Title), s.Host.Roster.TeamsCrumb())),
 	}
 	if data.Error != "" {
@@ -89,25 +97,40 @@ func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
 	if data.Notice != "" {
 		page = append(page, dopeui.Note(dopeui.Text(data.Notice)))
 	}
+	// The editor (fest-teams.ts) reads the fest's API off the add button, and
+	// each row's team off its pencil (ADR-0024).
+	page = append(page, dopeui.Row(dopeui.SpaceSM, dopeui.Wrap(),
+		dopeui.Button(dopeui.Data("team-add", "/api/fest/"+ref), dopeui.Text(s.Host.Roster.AddTeamBtn())),
+	))
 	if len(data.Teams) > 0 {
 		rows := []dopeui.Item{dopeui.Trow(
 			dopeui.Hcell(dopeui.Text("ID")), dopeui.Hcell(dopeui.Text(s.Host.Roster.TeamLabel())),
 			dopeui.Hcell(dopeui.Text(s.Host.Roster.ColCity())), dopeui.Hcell(dopeui.Text(s.Host.Roster.ColPlayers())),
-			dopeui.Hcell(dopeui.Text(s.Host.Roster.ColFlags())),
+			dopeui.Hcell(dopeui.Text(s.Host.Roster.ColFlags())), dopeui.Hcell(),
 		)}
 		for _, t := range data.Teams {
+			name := []dopeui.Item{dopeui.Text(t.Name)}
+			switch {
+			case t.Hand:
+				name = []dopeui.Item{dopeui.Row(dopeui.SpaceSM, dopeui.Wrap(), dopeui.Text(t.Name), dopeui.Badge(dopeui.Text(s.Host.Roster.BadgeHand())))}
+			case t.Edited:
+				name = []dopeui.Item{dopeui.Row(dopeui.SpaceSM, dopeui.Wrap(), dopeui.Text(t.Name), dopeui.Badge(dopeui.Text(s.Host.Roster.BadgeEdited())))}
+			}
 			rows = append(rows, dopeui.Trow(
 				dopeui.Cell(dopeui.Text(optionalID(t.RatingID))),
-				dopeui.Cell(dopeui.Text(t.Name)),
+				dopeui.Cell(name...),
 				dopeui.Cell(dopeui.Text(t.City)),
 				dopeui.Cell(dopeui.Text(strconv.Itoa(t.Players))),
 				dopeui.Cell(dopeui.Textfield(
 					dopeui.Name(teamFlagsField(t.ID)), dopeui.Value(t.Flags),
 					dopeui.Placeholder(s.Host.Roster.FlagsPlaceholder()), dopeui.Autocomplete("off"),
 				)),
+				dopeui.Cell(dopeui.Iconbtn(dopeui.IconPencil, dopeui.Label(s.Host.Roster.EditTeamLabel(t.Name)),
+					dopeui.Data("team-edit", strconv.FormatInt(t.ID, 10)))),
 			))
 		}
 		page = append(page, dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/teams"), dopeui.Autocomplete("off"),
+			dopeui.Note(dopeui.Text(s.Host.Roster.TeamsEditHint())),
 			dopeui.Note(dopeui.Text(s.Host.Roster.FlagsHint())),
 			dopeui.Table(append([]dopeui.Item{dopeui.Scroll()}, rows...)...),
 			dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Roster.SaveSubmit()))),
@@ -286,6 +309,7 @@ func hostRatingImportDoc(data hostFestImportData) *dopeui.Doc {
 			dopeui.Note(dopeui.Text(s.Host.Roster.RatingSource(strconv.FormatInt(data.RatingID, 10)))),
 			dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+festRef+"/rating/import"), dopeui.Autocomplete("off"),
 				dopeui.Note(dopeui.Text(s.Host.Roster.RatingImportNote())),
+				dopeui.Hiddenfield(dopeui.Name("preview"), dopeui.Value("1")),
 				dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Roster.ImportSubmit()))),
 			),
 		}
@@ -293,10 +317,102 @@ func hostRatingImportDoc(data hostFestImportData) *dopeui.Doc {
 		sect = []dopeui.Item{dopeui.Empty(dopeui.Text(s.Host.Roster.NeedRatingNote()))}
 	}
 	page = append(page, dopeui.Section(sect...))
+	if data.Plan != nil {
+		page = append(page, hostImportPlanSection(*data.Plan, data.Choice, festRef))
+	}
+	if data.UndoAt != "" && data.Plan == nil {
+		page = append(page, dopeui.Section(
+			dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+festRef+"/rating/undo"), dopeui.Autocomplete("off"),
+				dopeui.Note(dopeui.Text(s.Host.Roster.UndoNote(data.UndoAt))),
+				dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Roster.UndoSubmit()))),
+			),
+		))
+	}
 	if data.Conflict != nil {
 		page = append(page, hostRosterConflictDialog(data.Conflict, festRef))
 	}
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
+}
+
+// hostImportPlanSection is the preview of an import: what it adds, drops and
+// renames, whose people come and go, which of the host's edits it keeps, and
+// the players the site moved away from where the host put them, each with a
+// box to take the site's placement. Its form confirms the import with the
+// same answers.
+func hostImportPlanSection(plan imports.ImportPlan, choice imports.RosterChoice, festRef string) *dopeui.Element {
+	s := dopestrings.Default
+	items := []dopeui.Item{dopeui.Subhead(dopeui.Text(s.Host.Roster.PreviewTitle()))}
+	if plan.Empty() {
+		items = append(items, dopeui.Note(dopeui.Text(s.Host.Roster.PreviewNothing())))
+	}
+	if len(plan.AddedTeams) > 0 {
+		items = append(items, dopeui.Note(dopeui.Text(s.Host.Roster.PlanAddedTeams(strings.Join(plan.AddedTeams, ", ")))))
+	}
+	if len(plan.DroppedTeams) > 0 {
+		items = append(items, dopeui.Note(dopeui.Text(s.Host.Roster.PlanDroppedTeams(strings.Join(plan.DroppedTeams, ", ")))))
+	}
+	for _, r := range plan.Renamed {
+		items = append(items, dopeui.Note(dopeui.Text(s.Host.Roster.PlanRenamed(r.From, r.To))))
+	}
+	for _, team := range plan.Players {
+		card := []dopeui.Item{dopeui.SpaceNone, dopeui.Strong(dopeui.Text(s.Host.Roster.PlanPlayers(team.Team)))}
+		if len(team.Added) > 0 {
+			card = append(card, dopeui.Muted(dopeui.Text(s.Host.Roster.PlanPlayersAdded(strings.Join(team.Added, ", ")))))
+		}
+		if len(team.Removed) > 0 {
+			card = append(card, dopeui.Muted(dopeui.Text(s.Host.Roster.PlanPlayersRemoved(strings.Join(team.Removed, ", ")))))
+		}
+		items = append(items, dopeui.Col(card...))
+	}
+	var kept []string
+	for _, line := range []struct {
+		n    int
+		text func(int) string
+	}{
+		{plan.Kept.HandTeams, s.Host.Roster.KeptHandTeams},
+		{plan.Kept.Renamed, func(n int) string { return s.Host.Roster.KeptRenamed(strconv.Itoa(n)) }},
+		{plan.Kept.Flags, func(n int) string { return s.Host.Roster.KeptFlags(strconv.Itoa(n)) }},
+		{plan.Kept.RemovedTeams, func(n int) string { return s.Host.Roster.KeptRemovedTeams(strconv.Itoa(n)) }},
+		{plan.Kept.Added, func(n int) string { return s.Host.Roster.KeptAdded(strconv.Itoa(n)) }},
+		{plan.Kept.Removed, func(n int) string { return s.Host.Roster.KeptRemoved(strconv.Itoa(n)) }},
+	} {
+		if line.n > 0 {
+			kept = append(kept, line.text(line.n))
+		}
+	}
+	if len(kept) > 0 {
+		items = append(items, dopeui.Col(dopeui.SpaceNone,
+			dopeui.Strong(dopeui.Text(s.Host.Roster.PlanKeptTitle())),
+			dopeui.Muted(dopeui.Text(strings.Join(kept, "; ")))))
+	}
+	form := []dopeui.Item{dopeui.DirCol, dopeui.SpaceMD, dopeui.Method("post"), dopeui.Action("/host/fest/" + festRef + "/rating/import"), dopeui.Autocomplete("off")}
+	for teamID, ratingID := range choice.Merge {
+		form = append(form, dopeui.Hiddenfield(dopeui.Name(rosterChoiceField(teamID)), dopeui.Value(rosterChoiceMerge(ratingID))))
+	}
+	for teamID := range choice.Drop {
+		form = append(form, dopeui.Hiddenfield(dopeui.Name(rosterChoiceField(teamID)), dopeui.Value(rosterChoiceDrop)))
+	}
+	if len(plan.Conflicts) > 0 {
+		boxes := []dopeui.Item{dopeui.SpaceSM}
+		for _, c := range plan.Conflicts {
+			player := store.JoinPlayerName(c.Player.FirstName, c.Player.LastName)
+			box := []dopeui.Item{dopeui.Name(conflictField(c.Key)), dopeui.Value("1"),
+				dopeui.Text(s.Host.Roster.ConflictPlayer(player, c.HandTeam, c.SiteTeam) + " · " + s.Host.Roster.ConflictTakeSite())}
+			if choice.AcceptSite[c.Key] {
+				box = append(box, dopeui.Checked())
+			}
+			boxes = append(boxes, dopeui.Checkbox(box...))
+		}
+		form = append(form,
+			dopeui.Strong(dopeui.Text(s.Host.Roster.ConflictsTitle())),
+			dopeui.Note(dopeui.Text(s.Host.Roster.ConflictsHint())),
+			dopeui.Col(boxes...))
+	}
+	if !plan.Empty() {
+		form = append(form, dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Roster.ConfirmSubmit()))))
+		items = append(items, dopeui.Form(form...))
+	}
+	return dopeui.Section(items...)
 }
 
 // hostRosterConflictDialog asks, per team that is leaving the roster with
@@ -310,6 +426,8 @@ func hostRosterConflictDialog(conflict *imports.RosterConflict, festRef string) 
 		dopeui.DirCol, dopeui.SpaceMD, dopeui.Method("post"), dopeui.Action("/host/fest/" + festRef + "/rating/import"), dopeui.Autocomplete("off"),
 		dopeui.Subhead(dopeui.Text(s.Host.Roster.ConflictTitle())),
 		dopeui.Note(dopeui.Text(s.Host.Roster.ConflictHint())),
+		// Answered, the import is previewed first, like any other.
+		dopeui.Hiddenfield(dopeui.Name("preview"), dopeui.Value("1")),
 	}
 	for _, team := range conflict.Dropped {
 		form = append(form, hostRosterConflictTeam(team, conflict.Added))
@@ -373,8 +491,12 @@ func rosterChoiceMerge(ratingID int64) string {
 // parseRosterChoice reads the reconcile form back into the answer the import
 // takes. An unanswered team is simply absent, and the import asks again.
 func parseRosterChoice(form url.Values) imports.RosterChoice {
-	choice := imports.RosterChoice{Merge: map[int64]int64{}, Drop: map[int64]bool{}}
+	choice := imports.RosterChoice{Merge: map[int64]int64{}, Drop: map[int64]bool{}, AcceptSite: map[string]bool{}}
 	for key, values := range form {
+		if conflict, ok := strings.CutPrefix(key, "accept_"); ok && len(values) > 0 && values[0] == "1" {
+			choice.AcceptSite[conflict] = true
+			continue
+		}
 		teamText, ok := strings.CutPrefix(key, "team_")
 		if !ok || len(values) == 0 {
 			continue
@@ -680,7 +802,11 @@ func (s *Server) renderHostRatingImport(w http.ResponseWriter, r *http.Request, 
 		if err != nil {
 			return nil, err
 		}
-		return hostRatingImportDoc(hostFestImportData{Fest: fest, RatingID: ratingID, Error: errMsg, Notice: notice, Conflict: conflict}), nil
+		undoAt, err := imports.LastRosterSnapshot(r.Context(), s.h.Engine().DB, festID)
+		if err != nil {
+			return nil, err
+		}
+		return hostRatingImportDoc(hostFestImportData{Fest: fest, RatingID: ratingID, Error: errMsg, Notice: notice, Conflict: conflict, UndoAt: undoAt}), nil
 	})
 }
 
@@ -851,6 +977,7 @@ func (s *Server) handleHostImportRatingRoster(w http.ResponseWriter, r *http.Req
 		return
 	}
 	choice := parseRosterChoice(r.Form)
+	choice.Preview = r.Form.Get("preview") == "1"
 	result, err := s.ImportRatingRoster(r.Context(), festID, choice)
 	var conflict *imports.RosterConflict
 	if errors.As(err, &conflict) {
@@ -859,6 +986,12 @@ func (s *Server) handleHostImportRatingRoster(w http.ResponseWriter, r *http.Req
 	}
 	if err != nil {
 		s.renderHostRatingImportPage(w, r, festID, err.Error(), "")
+		return
+	}
+	if choice.Preview {
+		s.festPage(w, r, festID, func(fest view.HostFest) (*dopeui.Doc, error) {
+			return hostRatingImportDoc(hostFestImportData{Fest: fest, RatingID: ratingID, Plan: result.Plan, Choice: choice}), nil
+		})
 		return
 	}
 	var msg string
@@ -871,4 +1004,14 @@ func (s *Server) handleHostImportRatingRoster(w http.ResponseWriter, r *http.Req
 		msg += " " + dopestrings.Default.Host.Roster.ImportMergedNotice(strconv.Itoa(len(choice.Merge)))
 	}
 	s.renderHostRatingImportPage(w, r, festID, "", msg)
+}
+
+// handleHostUndoRatingImport puts the roster back as it was before the last
+// import (ADR-0024).
+func (s *Server) handleHostUndoRatingImport(w http.ResponseWriter, r *http.Request, festID int64) {
+	if err := s.UndoRosterImport(r.Context(), festID); err != nil {
+		s.renderHostRatingImportPage(w, r, festID, err.Error(), "")
+		return
+	}
+	s.renderHostRatingImportPage(w, r, festID, "", dopestrings.Default.Host.Roster.UndoDoneNotice())
 }

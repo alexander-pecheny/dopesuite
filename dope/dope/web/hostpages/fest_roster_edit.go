@@ -22,7 +22,7 @@ import (
 // same writer an import uses, and then tells the open pages.
 
 // editFestRoster runs one roster edit in a write transaction: the edit, the
-// Тройка games that follow a зачёт, the fest revision, then the broadcasts.
+// Troika games that follow a division, the fest revision, then the broadcasts.
 func (s *Server) editFestRoster(reqCtx context.Context, festID int64, label string, edit func(ctx context.Context, tx *sql.Tx) (imports.RosterWrite, error)) error {
 	var written imports.RosterWrite
 	var revision int64
@@ -126,7 +126,8 @@ func (s *Server) loadFestTeamDetail(ctx context.Context, festID, teamID int64) (
 			out.Players = append(out.Players, festTeamPlayer{RatingID: p.RatingID, FirstName: p.FirstName, LastName: p.LastName})
 		}
 	}
-	if !found {
+	// Team 0 is a team about to be made: no people yet, the suggestions only.
+	if !found && teamID != 0 {
 		return festTeamDetail{}, route.NotFound
 	}
 	sort.SliceStable(out.Choices, func(i, j int) bool {
@@ -173,6 +174,16 @@ func (s *Server) apiTeam(w http.ResponseWriter, r *http.Request, sc route.Scope)
 		return err
 	}
 	detail, err := s.loadFestTeamDetail(r.Context(), sc.FestID, id)
+	if err != nil {
+		return err
+	}
+	return route.JSON(w, detail)
+}
+
+// apiNewTeam is what the editor opens a new team with: the fest's people to
+// suggest.
+func (s *Server) apiNewTeam(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	detail, err := s.loadFestTeamDetail(r.Context(), sc.FestID, 0)
 	if err != nil {
 		return err
 	}

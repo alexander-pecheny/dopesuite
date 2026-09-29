@@ -491,6 +491,30 @@ var RU = Strings{
 			},
 			WrongFormat: func() string { return "В этой игре составы команд не меняются." },
 		},
+		TeamEdit: FestTeamEditStrings{
+			Add:            func() string { return "Добавить" },
+			AddPlaceholder: func() string { return "Имя и фамилия" },
+			Cancel:         func() string { return "Отмена" },
+			City:           func() string { return "Город" },
+			Delete:         func() string { return "Убрать команду" },
+			DeleteConfirm: func(team string) string {
+				return fmt.Sprintf("Убрать команду «%s» из составов феста? Если у неё уже есть результаты, убрать её не получится.", team)
+			},
+			Failed: func() string { return "Не удалось сохранить команду." },
+			HintHand: func() string {
+				return "Эта команда добавлена вручную, импорт её не трогает."
+			},
+			HintRating: func() string {
+				return "Правки сохранятся при повторном импорте из rating.chgk.info."
+			},
+			MovesFrom:   func(team string) string { return fmt.Sprintf("сейчас в «%s»", team) },
+			Name:        func() string { return "Название" },
+			PlayerTwice: func(player string) string { return fmt.Sprintf("%s уже есть в составе.", player) },
+			Remove:      func(player string) string { return fmt.Sprintf("Убрать: %s", player) },
+			Save:        func() string { return "Сохранить" },
+			Title:       func(team string) string { return fmt.Sprintf("Команда «%s»", team) },
+			TitleNew:    func() string { return "Новая команда" },
+		},
 	},
 	Festaccess: FestaccessStrings{
 		Add: FestaccessAddStrings{
@@ -995,12 +1019,16 @@ var RU = Strings{
 		},
 		Roster: HostRosterStrings{
 			AddOverrideBtn:      func() string { return "Добавить оверрайд для игры" },
+			AddTeamBtn:          func() string { return "Добавить команду" },
+			BadgeEdited:         func() string { return "изменена" },
+			BadgeHand:           func() string { return "вручную" },
 			CancelBtn:           func() string { return "Отмена" },
 			ColCity:             func() string { return "Город" },
 			ColFlags:            func() string { return "Зачёты" },
 			ColFromTeam:         func() string { return "Из команды" },
 			ColPlayers:          func() string { return "Игроков" },
 			ColToTeam:           func() string { return "В команду" },
+			ConfirmSubmit:       func() string { return "Импортировать" },
 			ConflictCancel:      func() string { return "Отменить импорт" },
 			ConflictChoiceDrop:  func() string { return "Удалить команду вместе с результатами" },
 			ConflictChoiceLabel: func() string { return "Что с ней сделать" },
@@ -1014,12 +1042,21 @@ var RU = Strings{
 			ConflictNoCandidates: func() string {
 				return "В новом списке нет команд, которых ещё нет в фесте, — слить не с чем."
 			},
-			ConflictSubmit:        func() string { return "Продолжить импорт" },
-			ConflictTeam:          func(number string, team string) string { return fmt.Sprintf("№%s %s", number, team) },
-			ConflictTitle:         func() string { return "Команды с результатами уходят из списка" },
+			ConflictPlayer: func(player string, hand string, site string) string {
+				return fmt.Sprintf("%s: у вас в «%s», на сайте в «%s»", player, hand, site)
+			},
+			ConflictSubmit:   func() string { return "Продолжить импорт" },
+			ConflictTakeSite: func() string { return "Взять с сайта" },
+			ConflictTeam:     func(number string, team string) string { return fmt.Sprintf("№%s %s", number, team) },
+			ConflictTitle:    func() string { return "Команды с результатами уходят из списка" },
+			ConflictsHint: func() string {
+				return "На rating.chgk.info эти игроки теперь в других командах, а вы ставили их сами. Отмеченные перейдут в команду с сайта. Остальные останутся там, куда их поставили вы."
+			},
+			ConflictsTitle:        func() string { return "Спорные игроки" },
 			DeleteBtn:             func() string { return "Удалить" },
 			DeleteOverrideConfirm: func() string { return "Удалить оверрайд?" },
 			EditOverrideLabel:     func() string { return "Редактировать оверрайд" },
+			EditTeamLabel:         func(team string) string { return fmt.Sprintf("Изменить команду «%s»", team) },
 			ErrorFlagsForeignTeam: func(id string) string { return fmt.Sprintf("Команды %s нет в этом фесте.", id) },
 			ErrorJsonEmpty:        func() string { return "Вставьте JSON схемы." },
 			ErrorJsonParse:        func(err string) string { return fmt.Sprintf("Не удалось разобрать JSON: %s", err) },
@@ -1027,7 +1064,7 @@ var RU = Strings{
 			ErrorObjSourceTeam:    func() string { return "исходную команду" },
 			ErrorObjTeam:          func() string { return "команду" },
 			FlagsHint: func() string {
-				return "Зачёты команды пишутся через запятую: «Школ, Студ». На страницах ОД и КСИ по зачёту можно отфильтровать таблицу, а ЭС может брать в посев из ОД только команды одного зачёта. Импорт из rating.chgk.info перезаписывает зачёты."
+				return "Зачёты команды пишутся через запятую: «Школ, Студ». На страницах ОД и КСИ по зачёту можно отфильтровать таблицу, а ЭС может брать в посев из ОД только команды одного зачёта. Зачёты, которые вы поменяли здесь, повторный импорт из rating.chgk.info не трогает."
 			},
 			FlagsPlaceholder: func() string { return "Школ, Студ" },
 			FlagsSavedNotice: func() string { return "Зачёты сохранены." },
@@ -1039,10 +1076,18 @@ var RU = Strings{
 			ImportMergedNotice: func(n string) string {
 				return fmt.Sprintf("Сохранены под новым ID, вместе с номером и результатами: %s.", n)
 			},
-			ImportSubmit: func() string { return "Загрузить команды и игроков" },
+			ImportSubmit: func() string { return "Показать, что изменится" },
 			ImportUnchangedNotice: func(teams string, players string) string {
 				return fmt.Sprintf("Списки уже совпадают с рейтингом — изменений нет. Команд: %s, игроков: %s.", teams, players)
 			},
+			KeptAdded: func(n string) string { return fmt.Sprintf("добавленных игроков: %s", n) },
+			KeptFlags: func(n string) string { return fmt.Sprintf("команд со своими зачётами: %s", n) },
+			KeptHandTeams: func(n int) string {
+				return fmt.Sprintf("%s вручную: %d", core.Plural("ru", n, "команда добавлена", "команды добавлены", "команд добавлено"), n)
+			},
+			KeptRemoved:      func(n string) string { return fmt.Sprintf("убранных игроков: %s", n) },
+			KeptRemovedTeams: func(n string) string { return fmt.Sprintf("убранных команд: %s", n) },
+			KeptRenamed:      func(n string) string { return fmt.Sprintf("переименований: %s", n) },
 			NeedRatingNote: func() string {
 				return "Сначала сохраните rating.chgk.info ID в свойствах феста."
 			},
@@ -1051,15 +1096,28 @@ var RU = Strings{
 			OverrideShadowed: func(game string) string {
 				return fmt.Sprintf("%s (не действует: состав команды в этой игре изменён вручную)", game)
 			},
-			OverrideTitle:     func() string { return "Оверрайд игрока" },
-			OverridesSubhead:  func() string { return "Оверрайды" },
-			PlayerLabel:       func() string { return "Игрок" },
-			PlayersCrumb:      func() string { return "Игроки" },
-			PlayersEmpty:      func() string { return "Игроки пока не загружены." },
-			PlayersTitle:      func(title string) string { return fmt.Sprintf("%s · игроки", title) },
+			OverrideTitle:      func() string { return "Оверрайд игрока" },
+			OverridesSubhead:   func() string { return "Оверрайды" },
+			PlanAddedTeams:     func(teams string) string { return fmt.Sprintf("Новые команды: %s", teams) },
+			PlanDroppedTeams:   func(teams string) string { return fmt.Sprintf("Уйдут из составов: %s", teams) },
+			PlanKeptTitle:      func() string { return "Ваши правки, которые импорт сохранит" },
+			PlanPlayers:        func(team string) string { return fmt.Sprintf("%s", team) },
+			PlanPlayersAdded:   func(players string) string { return fmt.Sprintf("придут: %s", players) },
+			PlanPlayersRemoved: func(players string) string { return fmt.Sprintf("уйдут: %s", players) },
+			PlanRenamed: func(from string, to string) string {
+				return fmt.Sprintf("Переименуется: «%s» → «%s»", from, to)
+			},
+			PlayerLabel:  func() string { return "Игрок" },
+			PlayersCrumb: func() string { return "Игроки" },
+			PlayersEmpty: func() string { return "Игроки пока не загружены." },
+			PlayersTitle: func(title string) string { return fmt.Sprintf("%s · игроки", title) },
+			PreviewNothing: func() string {
+				return "Импорт ничего не изменит: составы уже совпадают с рейтингом и вашими правками."
+			},
+			PreviewTitle:      func() string { return "Что изменит импорт" },
 			RatingImportCrumb: func() string { return "Импорт участников" },
 			RatingImportNote: func() string {
-				return "Импорт заменит списки команд и игроков феста и обновит список команд в ЧГК, КСИ и Мультииграх. В ЭК и ЭС команды приходят из посева, поэтому их составы обновятся, когда вы снова импортируете посев. Оверрайды игроков сохранятся."
+				return "Импорт обновит списки команд и игроков феста и список команд в ЧГК, КСИ и Мультииграх. Правки, которые вы сделали на странице команд, сохранятся. Сначала импорт покажет, что изменится, и только потом запишет. В ЭК и ЭС команды приходят из посева, поэтому их составы обновятся, когда вы снова импортируете посев. Оверрайды игроков сохранятся."
 			},
 			RatingImportTitle: func(title string) string { return fmt.Sprintf("%s · импорт участников", title) },
 			RatingSource:      func(id string) string { return fmt.Sprintf("Источник: rating.chgk.info ID %s", id) },
@@ -1073,8 +1131,20 @@ var RU = Strings{
 			SchemeJsonLabel:    func() string { return "JSON-схема" },
 			TeamLabel:          func() string { return "Команда" },
 			TeamsCrumb:         func() string { return "Команды" },
-			TeamsEmpty:         func() string { return "Команды пока не загружены." },
-			TeamsTitle:         func(title string) string { return fmt.Sprintf("%s · команды", title) },
+			TeamsEditHint: func() string {
+				return "Команду можно добавить, переименовать и поменять её состав прямо здесь. Повторный импорт из rating.chgk.info эти правки сохранит и перед записью покажет, что изменится."
+			},
+			TeamsEmpty: func() string {
+				return "Команд пока нет. Загрузите их из rating.chgk.info или добавьте вручную."
+			},
+			TeamsTitle: func(title string) string { return fmt.Sprintf("%s · команды", title) },
+			UndoDoneNotice: func() string {
+				return "Импорт отменён: составы такие же, как до него."
+			},
+			UndoNote: func(at string) string {
+				return fmt.Sprintf("Последний импорт можно отменить, пока составы не правили вручную. Сохранено: %s.", at)
+			},
+			UndoSubmit: func() string { return "Отменить последний импорт" },
 		},
 		Troikas: HostTroikasStrings{
 			AddSubhead: func() string { return "Добавить тройки" },

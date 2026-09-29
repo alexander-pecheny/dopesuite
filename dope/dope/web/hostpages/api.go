@@ -78,6 +78,7 @@ func (s *Server) APIRoutes(t *route.Table) {
 	t.Handle("GET "+fest+"/teams", route.Manager, s.apiTeams)
 	t.Handle("PATCH "+fest+"/teams/flags", route.Manager, s.apiTeamFlags)
 	t.Handle("POST "+fest+"/teams", route.Manager, s.apiCreateTeam)
+	t.Handle("GET "+fest+"/teams/new", route.Manager, s.apiNewTeam)
 	t.Handle("GET "+fest+"/teams/{id}", route.Manager, s.apiTeam)
 	t.Handle("PUT "+fest+"/teams/{id}", route.Manager, s.apiSaveTeam)
 	t.Handle("DELETE "+fest+"/teams/{id}", route.Manager, s.apiRemoveTeam)

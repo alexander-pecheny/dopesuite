@@ -400,6 +400,24 @@ export type Strings = {
       title: (team: string) => string;
       wrongFormat: () => string;
     };
+    teamEdit: {
+      add: () => string;
+      addPlaceholder: () => string;
+      cancel: () => string;
+      city: () => string;
+      delete: () => string;
+      deleteConfirm: (team: string) => string;
+      failed: () => string;
+      hintHand: () => string;
+      hintRating: () => string;
+      movesFrom: (team: string) => string;
+      name: () => string;
+      playerTwice: (player: string) => string;
+      remove: (player: string) => string;
+      save: () => string;
+      title: (team: string) => string;
+      titleNew: () => string;
+    };
   };
   festaccess: {
     add: {
@@ -776,12 +794,16 @@ export type Strings = {
     };
     roster: {
       addOverrideBtn: () => string;
+      addTeamBtn: () => string;
+      badgeEdited: () => string;
+      badgeHand: () => string;
       cancelBtn: () => string;
       colCity: () => string;
       colFlags: () => string;
       colFromTeam: () => string;
       colPlayers: () => string;
       colToTeam: () => string;
+      confirmSubmit: () => string;
       conflictCancel: () => string;
       conflictChoiceDrop: () => string;
       conflictChoiceLabel: () => string;
@@ -789,12 +811,17 @@ export type Strings = {
       conflictGames: (games: string) => string;
       conflictHint: () => string;
       conflictNoCandidates: () => string;
+      conflictPlayer: (player: string, hand: string, site: string) => string;
       conflictSubmit: () => string;
+      conflictTakeSite: () => string;
       conflictTeam: (number: string, team: string) => string;
       conflictTitle: () => string;
+      conflictsHint: () => string;
+      conflictsTitle: () => string;
       deleteBtn: () => string;
       deleteOverrideConfirm: () => string;
       editOverrideLabel: () => string;
+      editTeamLabel: (team: string) => string;
       errorFlagsForeignTeam: (id: string) => string;
       errorJsonEmpty: () => string;
       errorJsonParse: (err: string) => string;
@@ -810,16 +837,31 @@ export type Strings = {
       importMergedNotice: (n: string) => string;
       importSubmit: () => string;
       importUnchangedNotice: (teams: string, players: string) => string;
+      keptAdded: (n: string) => string;
+      keptFlags: (n: string) => string;
+      keptHandTeams: (n: number) => string;
+      keptRemoved: (n: string) => string;
+      keptRemovedTeams: (n: string) => string;
+      keptRenamed: (n: string) => string;
       needRatingNote: () => string;
       newTeamLabel: () => string;
       noOverrideGames: () => string;
       overrideShadowed: (game: string) => string;
       overrideTitle: () => string;
       overridesSubhead: () => string;
+      planAddedTeams: (teams: string) => string;
+      planDroppedTeams: (teams: string) => string;
+      planKeptTitle: () => string;
+      planPlayers: (team: string) => string;
+      planPlayersAdded: (players: string) => string;
+      planPlayersRemoved: (players: string) => string;
+      planRenamed: (from: string, to: string) => string;
       playerLabel: () => string;
       playersCrumb: () => string;
       playersEmpty: () => string;
       playersTitle: (title: string) => string;
+      previewNothing: () => string;
+      previewTitle: () => string;
       ratingImportCrumb: () => string;
       ratingImportNote: () => string;
       ratingImportTitle: (title: string) => string;
@@ -832,8 +874,12 @@ export type Strings = {
       schemeJsonLabel: () => string;
       teamLabel: () => string;
       teamsCrumb: () => string;
+      teamsEditHint: () => string;
       teamsEmpty: () => string;
       teamsTitle: (title: string) => string;
+      undoDoneNotice: () => string;
+      undoNote: (at: string) => string;
+      undoSubmit: () => string;
     };
     troikas: {
       addSubhead: () => string;

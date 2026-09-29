@@ -141,3 +141,28 @@ empty = "В составе должен быть хотя бы один игро
 player_twice = '{{.player}} уже есть в составе.'
 player_has_results = '{{.player}} уже играл в этой игре, поэтому из состава его не убрать.'
 failed = "Не удалось сохранить состав."
+
+[team_edit]
+# The team editor on the teams page (dope/dope/web/ts/fest-teams.ts), ADR-0024.
+# The dialog's heading for a new team and for an existing one.
+title_new = "Новая команда"
+title = 'Команда «{{.team}}»'
+# What the dialog says about a rating team's edits and an import.
+hint_rating = "Правки сохранятся при повторном импорте из rating.chgk.info."
+hint_hand = "Эта команда добавлена вручную, импорт её не трогает."
+name = "Название"
+city = "Город"
+# The field that adds a player, and its button.
+add_placeholder = "Имя и фамилия"
+add = "Добавить"
+# Beside a suggested player who plays for another team: adding moves them.
+moves_from = 'сейчас в «{{.team}}»'
+# The cross beside a player.
+remove = 'Убрать: {{.player}}'
+save = "Сохранить"
+cancel = "Отмена"
+# Takes the team off the fest roster, and asks first.
+delete = "Убрать команду"
+delete_confirm = 'Убрать команду «{{.team}}» из составов феста? Если у неё уже есть результаты, убрать её не получится.'
+player_twice = '{{.player}} уже есть в составе.'
+failed = "Не удалось сохранить команду."

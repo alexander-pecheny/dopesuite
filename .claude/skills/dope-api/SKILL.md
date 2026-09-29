@@ -83,8 +83,12 @@ of `dsl`. Leaving `entrants` out seats everyone.
 
 | | |
 |---|---|
-| `POST …/rating-import` A | pulls the roster from rating.chgk.info (the fest needs `rating_id`). A 409 lists `dropped` and `added` teams: repeat with `{merge: {"<fest team id>": <new rating id>}, drop: [<fest team id>]}` after **asking the user** |
-| `GET …/teams` A | teams with their `flags` |
+| `POST …/rating-import` A | pulls the roster from rating.chgk.info (the fest needs `rating_id`) and merges the host's edits over it. `{preview: true}` answers the `plan` (teams added, dropped, renamed, players per team, edits kept, `conflicts`) and writes nothing: **preview first, and show the user**. A conflict is a player the site moved away from where the host put them; the host's placement stays unless its `key` is in `accept_site`. A 409 lists `dropped` and `added` teams: repeat with `{merge: {"<fest team id>": <new rating id>}, drop: [<fest team id>]}` after **asking the user** |
+| `POST …/rating-import/undo` A | puts the roster back as it was before the last import; refused once the roster was edited by hand since |
+| `GET …/teams` A | teams with their `flags`, and `hand` / `edited` for teams the host made or changed |
+| `GET …/teams/{id}` · `GET …/teams/new` A | one team with its `players` and every fest person to suggest (`choices`) |
+| `POST …/teams` · `PUT …/teams/{id}` A | `{name, city, players: [{rating_id, first_name, last_name}]}`: make a team by hand, or set a team's name, city and people. A rating id of 0 is a person the site does not know. Adding someone who plays for another team moves them. A re-import keeps these edits (ADR-0024) |
+| `DELETE …/teams/{id}` A | takes a team without results off the roster; a rating team stays off through imports |
 | `PATCH …/teams/flags` A | `{flags: {"<team id>": "МЮ, Студ"}}`; teams left out keep theirs |
 | `GET …/players` A | players, overrides, and the ids an override takes |
 | `POST …/players/overrides` A | `{player_id, team_id, game_ids}`: the player plays for `team_id` in those games (КСИ and ЭК games only; at least one) |
@@ -123,8 +127,9 @@ of `dsl`. Leaving `entrants` out seats everyone.
   undo it, and it also undoes everything after it, including other people's
   edits. So check the journal for later entries before you revert.
 - **Ask before anything destructive**: deleting a fest or a game, `clear`,
-  `scheme-import`, a `revert` over someone else's edits, `drop` in a rating
-  import, `numbers/clear` or `numbers/auto` on a numbered fest.
+  `scheme-import`, a rating import whose preview drops teams or players, a
+  `revert` over someone else's edits, `drop` in a rating import,
+  `numbers/clear` or `numbers/auto` on a numbered fest.
 - **The token cannot change the password, the username or reach /admin.** If
   the token stops working (the CLI says «токен не принят»), it expired, was
   revoked, or the password changed. The user makes a new one.

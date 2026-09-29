@@ -142,11 +142,19 @@ team_label = "Команда"
 col_city = "Город"
 col_players = "Игроков"
 # Empty state of the teams table.
-teams_empty = "Команды пока не загружены."
+teams_empty = "Команд пока нет. Загрузите их из rating.chgk.info или добавьте вручную."
+# The teams page's add button, and a row's edit pencil (ADR-0024).
+add_team_btn = "Добавить команду"
+edit_team_label = 'Изменить команду «{{.team}}»'
+# A team the host made on the site, and a rating team the host changed.
+badge_hand = "вручную"
+badge_edited = "изменена"
+# Above the teams table: what the host's edits do to an import.
+teams_edit_hint = "Команду можно добавить, переименовать и поменять её состав прямо здесь. Повторный импорт из rating.chgk.info эти правки сохранит и перед записью покажет, что изменится."
 # The зачёты column of the teams table: its header, the hint above the form and
 # the notice after a save.
 col_flags = "Зачёты"
-flags_hint = "Зачёты команды пишутся через запятую: «Школ, Студ». На страницах ОД и КСИ по зачёту можно отфильтровать таблицу, а ЭС может брать в посев из ОД только команды одного зачёта. Импорт из rating.chgk.info перезаписывает зачёты."
+flags_hint = "Зачёты команды пишутся через запятую: «Школ, Студ». На страницах ОД и КСИ по зачёту можно отфильтровать таблицу, а ЭС может брать в посев из ОД только команды одного зачёта. Зачёты, которые вы поменяли здесь, повторный импорт из rating.chgk.info не трогает."
 flags_placeholder = "Школ, Студ"
 flags_saved_notice = "Зачёты сохранены."
 # Flags were sent for a team id this fest does not have.
@@ -192,9 +200,36 @@ rating_import_crumb = "Импорт участников"
 # The source line above the import form: which rating id the roster comes from.
 rating_source = 'Источник: rating.chgk.info ID {{.id}}'
 # Note above the rating-import form.
-rating_import_note = "Импорт заменит списки команд и игроков феста и обновит список команд в ЧГК, КСИ и Мультииграх. В ЭК и ЭС команды приходят из посева, поэтому их составы обновятся, когда вы снова импортируете посев. Оверрайды игроков сохранятся."
+rating_import_note = "Импорт обновит списки команд и игроков феста и список команд в ЧГК, КСИ и Мультииграх. Правки, которые вы сделали на странице команд, сохранятся. Сначала импорт покажет, что изменится, и только потом запишет. В ЭК и ЭС команды приходят из посева, поэтому их составы обновятся, когда вы снова импортируете посев. Оверрайды игроков сохранятся."
 # Submit button of the rating-import form.
-import_submit = "Загрузить команды и игроков"
+import_submit = "Показать, что изменится"
+# The preview of an import (ADR-0024): what it would change, before it writes.
+preview_title = "Что изменит импорт"
+preview_nothing = "Импорт ничего не изменит: составы уже совпадают с рейтингом и вашими правками."
+plan_added_teams = 'Новые команды: {{.teams}}'
+plan_dropped_teams = 'Уйдут из составов: {{.teams}}'
+plan_renamed = 'Переименуется: «{{.from}}» → «{{.to}}»'
+plan_players = '{{.team}}'
+plan_players_added = 'придут: {{.players}}'
+plan_players_removed = 'уйдут: {{.players}}'
+# The host's edits the import keeps, one line per kind that has any.
+plan_kept_title = "Ваши правки, которые импорт сохранит"
+kept_hand_teams = '{{plural .n "команда добавлена" "команды добавлены" "команд добавлено"}} вручную: {{.n}}'
+kept_renamed = 'переименований: {{.n}}'
+kept_flags = 'команд со своими зачётами: {{.n}}'
+kept_removed_teams = 'убранных команд: {{.n}}'
+kept_added = 'добавленных игроков: {{.n}}'
+kept_removed = 'убранных игроков: {{.n}}'
+# A player the site now puts on another team than the host did.
+conflicts_title = "Спорные игроки"
+conflicts_hint = "На rating.chgk.info эти игроки теперь в других командах, а вы ставили их сами. Отмеченные перейдут в команду с сайта. Остальные останутся там, куда их поставили вы."
+conflict_player = '{{.player}}: у вас в «{{.hand}}», на сайте в «{{.site}}»'
+conflict_take_site = "Взять с сайта"
+confirm_submit = "Импортировать"
+# Undo of the last import, while no hand edit has been made since.
+undo_note = 'Последний импорт можно отменить, пока составы не правили вручную. Сохранено: {{.at}}.'
+undo_submit = "Отменить последний импорт"
+undo_done_notice = "Импорт отменён: составы такие же, как до него."
 # Shown (as note and as error) when the fest has no rating id yet.
 need_rating_note = "Сначала сохраните rating.chgk.info ID в свойствах феста."
 # The dialog the import opens instead of dropping a team that already has
