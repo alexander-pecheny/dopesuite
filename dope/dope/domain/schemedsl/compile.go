@@ -12,6 +12,8 @@ import (
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // Input is what the DSL cannot know by itself: the game's identity and,
@@ -55,11 +57,11 @@ func uniqueSlugs(scheme store.FestScheme) error {
 			continue
 		}
 		if codes[stage.Slug] {
-			return fmt.Errorf("%s", dopestrings.Default.Scheme.Structure.SlugIsStageCode(stage.Slug))
+			return corei18n.User(dopestrings.Default.Scheme.Structure.SlugIsStageCode(stage.Slug))
 		}
 		block := stage.Grain.Block
 		if held, taken := owner[stage.Slug]; taken && held != block {
-			return fmt.Errorf("%s", dopestrings.Default.Scheme.Structure.SlugTwoBlocks(stage.Slug))
+			return corei18n.User(dopestrings.Default.Scheme.Structure.SlugTwoBlocks(stage.Slug))
 		}
 		owner[stage.Slug] = block
 	}
@@ -74,12 +76,12 @@ func uniqueCodes(scheme store.FestScheme) error {
 	matches := map[string]string{}
 	for _, stage := range scheme.Stages {
 		if stages[stage.Code] {
-			return fmt.Errorf("%s", dopestrings.Default.Scheme.Structure.StageCodeDup(stage.Code))
+			return corei18n.User(dopestrings.Default.Scheme.Structure.StageCodeDup(stage.Code))
 		}
 		stages[stage.Code] = true
 		for _, match := range stage.Matches {
 			if where, taken := matches[match.Code]; taken {
-				return fmt.Errorf("%s", dopestrings.Default.Scheme.Structure.MatchCodeDup(match.Code, where, stage.Code))
+				return corei18n.User(dopestrings.Default.Scheme.Structure.MatchCodeDup(match.Code, where, stage.Code))
 			}
 			matches[match.Code] = stage.Code
 		}

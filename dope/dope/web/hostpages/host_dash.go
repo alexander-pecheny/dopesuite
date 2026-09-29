@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	dopeui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"
 
+	corei18n "pecheny.me/dopecore/i18nstrings"
 	"pecheny.me/dopecore/session"
 
 	"dope/dope/web/route"
@@ -270,49 +272,137 @@ func hostDashRosterSection(data hostFestDashData, ref string) *dopeui.Element {
 	return dopeui.Section(sect...)
 }
 
+// FestSettings is a fest's editable header, the same fields the landing's
+// create form and the dashboard's settings form post. RatingID 0 means none.
+type FestSettings struct {
+	Title       string `json:"title"`
+	Slug        string `json:"slug"`
+	Description string `json:"description"`
+	StartDate   string `json:"start_date"`
+	EndDate     string `json:"end_date"`
+	RatingID    int64  `json:"rating_id"`
+	IsPublic    bool   `json:"is_public"`
+}
+
+func festSettingsFromForm(form url.Values) FestSettings {
+	rating, _ := util.ParseOptionalInt64(form.Get("rating_id")).(int64)
+	return FestSettings{
+		Title:       strings.TrimSpace(form.Get("title")),
+		Slug:        strings.TrimSpace(form.Get("slug")),
+		Description: form.Get("description"),
+		StartDate:   strings.TrimSpace(form.Get("start_date")),
+		EndDate:     strings.TrimSpace(form.Get("end_date")),
+		RatingID:    rating,
+		IsPublic:    form.Get("is_public") == "1",
+	}
+}
+
+func (f FestSettings) ratingValue() any {
+	if f.RatingID > 0 {
+		return f.RatingID
+	}
+	return nil
+}
+
+// CreateFest makes a fest with the user as its creator and returns its id.
+// The landing's form sends no slug, and such a fest goes by its id until the
+// dashboard gives it one; the API may name one at once.
+func (s *Server) CreateFest(reqCtx context.Context, userID int64, f FestSettings) (int64, error) {
+	f.Title = strings.TrimSpace(f.Title)
+	if f.Title == "" {
+		return 0, corei18n.User(dopestrings.Default.Host.Dash.ErrorTitleRequired())
+	}
+	var slugValue any
+	if slug := strings.TrimSpace(f.Slug); slug != "" {
+		if err := s.checkFestSlug(reqCtx, slug, 0); err != nil {
+			return 0, err
+		}
+		slugValue = slug
+	}
+	now := util.UtcNow()
+	tx, err := s.h.Engine().BeginWriteTx(reqCtx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	festID, err := store.InsertReturningID(reqCtx, tx, `
+insert into fests(slug, title, description, rating_id, created_by, revision, created_at, updated_at, start_date, end_date, is_public)
+values(?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+		slugValue, f.Title, f.Description, f.ratingValue(), userID, now, now,
+		util.NullableString(strings.TrimSpace(f.StartDate)), util.NullableString(strings.TrimSpace(f.EndDate)), util.BoolToInt(f.IsPublic))
+	if util.IsUniqueViolation(err) {
+		// Another fest took the slug between the check and the insert.
+		return 0, corei18n.User(dopestrings.Default.Host.Dash.ErrorSlugTaken())
+	}
+	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(reqCtx, `
+insert into fest_organizers(fest_id, user_id, role, added_at)
+values(?, ?, 'creator', ?)`, festID, userID, now); err != nil {
+		return 0, err
+	}
+	return festID, tx.Commit()
+}
+
 func (s *Server) handleHostCreateFest(w http.ResponseWriter, r *http.Request, user session.User) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	title := strings.TrimSpace(r.Form.Get("title"))
-	if title == "" {
-		s.renderHostLanding(w, r, dopestrings.Default.Host.Dash.ErrorTitleRequired())
+	festID, err := s.CreateFest(r.Context(), user.UserID, festSettingsFromForm(r.Form))
+	if msg, ok := corei18n.AsUser(err); ok {
+		s.renderHostLanding(w, r, msg)
 		return
 	}
-	description := r.Form.Get("description")
-	startDate := strings.TrimSpace(r.Form.Get("start_date"))
-	endDate := strings.TrimSpace(r.Form.Get("end_date"))
-	ratingID := util.ParseOptionalInt64(r.Form.Get("rating_id"))
-	isPublic := r.Form.Get("is_public") == "1"
-
-	now := util.UtcNow()
-	tx, err := s.h.Engine().BeginWriteTx(r.Context())
 	if err != nil {
-		route.WriteError(w, r, err)
-		return
-	}
-	defer tx.Rollback()
-	festID, err := store.InsertReturningID(r.Context(), tx, `
-insert into fests(slug, title, description, rating_id, created_by, revision, created_at, updated_at, start_date, end_date, is_public)
-values(?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
-		nil, title, description, ratingID, user.UserID, now, now,
-		util.NullableString(startDate), util.NullableString(endDate), util.BoolToInt(isPublic))
-	if err != nil {
-		route.WriteError(w, r, err)
-		return
-	}
-	if _, err := tx.ExecContext(r.Context(), `
-insert into fest_organizers(fest_id, user_id, role, added_at)
-values(?, ?, 'creator', ?)`, festID, user.UserID, now); err != nil {
-		route.WriteError(w, r, err)
-		return
-	}
-	if err := tx.Commit(); err != nil {
 		route.WriteError(w, r, err)
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/host/fest/%d", festID), http.StatusSeeOther)
+}
+
+// LoadFestSettings reads a fest's header as the settings form shows it.
+func (s *Server) LoadFestSettings(ctx context.Context, festID int64) (FestSettings, error) {
+	var (
+		f         FestSettings
+		startDate sql.NullString
+		endDate   sql.NullString
+		ratingID  sql.NullInt64
+		isPublic  int
+	)
+	err := s.h.Engine().DB.QueryRowContext(ctx, `
+select title, coalesce(slug, ''), description, start_date, end_date, rating_id, is_public
+from fests where id = ?`, festID).Scan(&f.Title, &f.Slug, &f.Description, &startDate, &endDate, &ratingID, &isPublic)
+	f.StartDate, f.EndDate, f.RatingID, f.IsPublic = startDate.String, endDate.String, ratingID.Int64, isPublic == 1
+	return f, err
+}
+
+// UpdateFest writes a fest's whole header. An empty slug clears it.
+func (s *Server) UpdateFest(reqCtx context.Context, festID int64, f FestSettings) error {
+	f.Title = strings.TrimSpace(f.Title)
+	if f.Title == "" {
+		return corei18n.User(dopestrings.Default.Host.Dash.ErrorTitleRequired())
+	}
+	slug := strings.TrimSpace(f.Slug)
+	var slugValue any
+	if slug != "" {
+		if err := s.checkFestSlug(reqCtx, slug, festID); err != nil {
+			return err
+		}
+		slugValue = slug
+	}
+	if _, err := s.h.Engine().WriteExec(reqCtx, `
+update fests
+set title = ?, slug = ?, description = ?, rating_id = ?, start_date = ?, end_date = ?, is_public = ?, updated_at = ?
+where id = ?`,
+		f.Title, slugValue, f.Description, f.ratingValue(),
+		util.NullableString(strings.TrimSpace(f.StartDate)), util.NullableString(strings.TrimSpace(f.EndDate)), util.BoolToInt(f.IsPublic),
+		util.UtcNow(), festID); err != nil {
+		return err
+	}
+	s.h.Engine().InvalidateFestViewCache(festID)
+	return nil
 }
 
 func (s *Server) handleHostUpdateFest(w http.ResponseWriter, r *http.Request, festID int64) {
@@ -320,45 +410,17 @@ func (s *Server) handleHostUpdateFest(w http.ResponseWriter, r *http.Request, fe
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	title := strings.TrimSpace(r.Form.Get("title"))
-	if title == "" {
-		s.renderHostFestDashboard(w, r, festID, hostDashMessages{FormError: dopestrings.Default.Host.Dash.ErrorTitleRequired()})
+	f := festSettingsFromForm(r.Form)
+	err := s.UpdateFest(r.Context(), festID, f)
+	if msg, ok := corei18n.AsUser(err); ok {
+		s.renderHostFestDashboard(w, r, festID, hostDashMessages{FormError: msg})
 		return
 	}
-	description := r.Form.Get("description")
-	startDate := strings.TrimSpace(r.Form.Get("start_date"))
-	endDate := strings.TrimSpace(r.Form.Get("end_date"))
-	ratingID := util.ParseOptionalInt64(r.Form.Get("rating_id"))
-	isPublic := r.Form.Get("is_public") == "1"
-	slug := strings.TrimSpace(r.Form.Get("slug"))
-	var slugValue any
-	if slug != "" {
-		if err := util.ValidateSlug(slug); err != nil {
-			s.renderHostFestDashboard(w, r, festID, hostDashMessages{FormError: dopestrings.Default.Host.Dash.ErrorSlugInvalid(err.Error())})
-			return
-		}
-		if taken, err := s.slugTakenByOtherFest(r.Context(), slug, festID); err != nil {
-			route.WriteError(w, r, err)
-			return
-		} else if taken {
-			s.renderHostFestDashboard(w, r, festID, hostDashMessages{FormError: dopestrings.Default.Host.Dash.ErrorSlugTaken()})
-			return
-		}
-		slugValue = slug
-	}
-
-	if _, err := s.h.Engine().WriteExec(r.Context(), `
-update fests
-set title = ?, slug = ?, description = ?, rating_id = ?, start_date = ?, end_date = ?, is_public = ?, updated_at = ?
-where id = ?`,
-		title, slugValue, description, ratingID,
-		util.NullableString(startDate), util.NullableString(endDate), util.BoolToInt(isPublic),
-		util.UtcNow(), festID); err != nil {
+	if err != nil {
 		route.WriteError(w, r, err)
 		return
 	}
-	s.h.Engine().InvalidateFestViewCache(festID)
-	redirectRef := slug
+	redirectRef := f.Slug
 	if redirectRef == "" {
 		redirectRef = fmt.Sprintf("%d", festID)
 	}
@@ -386,6 +448,19 @@ func (s *Server) handleHostSaveAccess(w http.ResponseWriter, r *http.Request, fe
 	s.renderHostFestDashboard(w, r, festID, hostDashMessages{AccessNotice: dopestrings.Default.Host.Dash.AccessSavedNotice()})
 }
 
+// checkFestSlug refuses a slug that is malformed or that another fest holds.
+func (s *Server) checkFestSlug(ctx context.Context, slug string, festID int64) error {
+	if err := util.ValidateSlug(slug); err != nil {
+		return corei18n.User(dopestrings.Default.Host.Dash.ErrorSlugInvalid(err.Error()))
+	}
+	if taken, err := s.slugTakenByOtherFest(ctx, slug, festID); err != nil {
+		return err
+	} else if taken {
+		return corei18n.User(dopestrings.Default.Host.Dash.ErrorSlugTaken())
+	}
+	return nil
+}
+
 func (s *Server) slugTakenByOtherFest(ctx context.Context, slug string, festID int64) (bool, error) {
 	var count int
 	if err := s.h.Engine().DB.QueryRowContext(ctx, `select count(*) from fests where slug = ? and id <> ?`, slug, festID).Scan(&count); err != nil {
@@ -410,32 +485,37 @@ func (s *Server) gameRefOrID(ctx context.Context, gameID int64) string {
 	return fmt.Sprintf("%d", gameID)
 }
 
-func (s *Server) handleHostDeleteFest(w http.ResponseWriter, r *http.Request, festID, userID int64) {
-	creator, err := s.isFestCreator(r.Context(), festID, userID)
+// DeleteFest deletes the fest and everything in it; only its creator may.
+func (s *Server) DeleteFest(ctx context.Context, festID, userID int64) error {
+	creator, err := s.isFestCreator(ctx, festID, userID)
 	if err != nil {
-		route.WriteError(w, r, err)
-		return
+		return err
 	}
 	if !creator {
-		http.Error(w, "only fest creator can delete fest", http.StatusForbidden)
-		return
+		return route.Forbid(dopestrings.Default.Host.Dash.ErrorDeleteCreatorOnly())
 	}
-	s.h.Engine().Mu.Lock()
-	defer s.h.Engine().Mu.Unlock()
-	result, err := s.h.Engine().WriteExec(r.Context(), `delete from fests where id = ? and created_by = ?`, festID, userID)
+	eng := s.h.Engine()
+	eng.Mu.Lock()
+	defer eng.Mu.Unlock()
+	result, err := eng.WriteExec(ctx, `delete from fests where id = ? and created_by = ?`, festID, userID)
 	if err != nil {
+		return err
+	}
+	if affected, _ := result.RowsAffected(); affected == 0 {
+		return sql.ErrNoRows
+	}
+	if eng.FestID == festID {
+		eng.FestID = 0
+		eng.ActiveGameID = 0
+		eng.ActiveMatchCode = ""
+	}
+	return nil
+}
+
+func (s *Server) handleHostDeleteFest(w http.ResponseWriter, r *http.Request, festID, userID int64) {
+	if err := s.DeleteFest(r.Context(), festID, userID); err != nil {
 		route.WriteError(w, r, err)
 		return
-	}
-	affected, _ := result.RowsAffected()
-	if affected == 0 {
-		http.NotFound(w, r)
-		return
-	}
-	if s.h.Engine().FestID == festID {
-		s.h.Engine().FestID = 0
-		s.h.Engine().ActiveGameID = 0
-		s.h.Engine().ActiveMatchCode = ""
 	}
 	http.Redirect(w, r, "/host", http.StatusSeeOther)
 }

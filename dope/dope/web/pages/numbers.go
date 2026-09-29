@@ -19,6 +19,8 @@ import (
 	"strings"
 
 	"dope/dope/web/route"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 type hostFestNumberRow struct {
@@ -302,19 +304,19 @@ func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 	s.RenderHostFestNumbers(w, r, festID, "", notice, nil)
 }
 
-func (s *Server) HandleHostAutoFestNumbers(w http.ResponseWriter, r *http.Request, festID int64) {
-	if err := s.purgeFestSoftDeletedTeams(r.Context(), festID); err != nil {
-		s.RenderHostFestNumbers(w, r, festID, err.Error(), "", nil)
-		return
+// AutoFestNumbers numbers every team 1…n in alphabetical order, after
+// dropping the teams that left the roster, whose archived numbers would
+// otherwise block reuse.
+func (s *Server) AutoFestNumbers(ctx context.Context, festID int64) error {
+	if err := s.purgeFestSoftDeletedTeams(ctx, festID); err != nil {
+		return err
 	}
-	teams, err := numbering.LoadFestTeams(r.Context(), s.h.Engine().DB, festID)
+	teams, err := numbering.LoadFestTeams(ctx, s.h.Engine().DB, festID)
 	if err != nil {
-		route.WriteError(w, r, err)
-		return
+		return err
 	}
 	if len(teams) == 0 {
-		s.RenderHostFestNumbers(w, r, festID, dopestrings.Default.Numbers.Page.NoTeams(), "", nil)
-		return
+		return corei18n.User(dopestrings.Default.Numbers.Page.NoTeams())
 	}
 	sorted := append([]numbering.Team(nil), teams...)
 	sort.SliceStable(sorted, func(i, j int) bool {
@@ -330,7 +332,19 @@ func (s *Server) HandleHostAutoFestNumbers(w http.ResponseWriter, r *http.Reques
 	for i, team := range sorted {
 		assignments[team.ID] = i + 1
 	}
-	if err := s.SaveFestNumbers(r.Context(), festID, assignments); err != nil {
+	return s.SaveFestNumbers(ctx, festID, assignments)
+}
+
+// ClearFestNumbers takes every team's number away.
+func (s *Server) ClearFestNumbers(ctx context.Context, festID int64) error {
+	if err := s.purgeFestSoftDeletedTeams(ctx, festID); err != nil {
+		return err
+	}
+	return s.SaveFestNumbers(ctx, festID, nil)
+}
+
+func (s *Server) HandleHostAutoFestNumbers(w http.ResponseWriter, r *http.Request, festID int64) {
+	if err := s.AutoFestNumbers(r.Context(), festID); err != nil {
 		s.RenderHostFestNumbers(w, r, festID, err.Error(), "", nil)
 		return
 	}
@@ -338,11 +352,7 @@ func (s *Server) HandleHostAutoFestNumbers(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) HandleHostClearFestNumbers(w http.ResponseWriter, r *http.Request, festID int64) {
-	if err := s.purgeFestSoftDeletedTeams(r.Context(), festID); err != nil {
-		s.RenderHostFestNumbers(w, r, festID, err.Error(), "", nil)
-		return
-	}
-	if err := s.SaveFestNumbers(r.Context(), festID, nil); err != nil {
+	if err := s.ClearFestNumbers(r.Context(), festID); err != nil {
 		s.RenderHostFestNumbers(w, r, festID, err.Error(), "", nil)
 		return
 	}

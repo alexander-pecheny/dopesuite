@@ -366,6 +366,16 @@ func Unauthorized(msg string) error { return &Status{Code: http.StatusUnauthoriz
 func Conflict(msg string) error     { return &Status{Code: http.StatusConflict, Msg: msg} }
 func Forbid(msg string) error       { return &Status{Code: http.StatusForbidden, Msg: msg} }
 
+// JSONStatus is a refusal that answers with a JSON body under its own status,
+// for a caller that has to act on the details: the rating import's conflict
+// lists the teams to merge or drop.
+type JSONStatus struct {
+	Code int
+	Body any
+}
+
+func (e *JSONStatus) Error() string { return http.StatusText(e.Code) }
+
 // NotFound is the handler's 404; sql.ErrNoRows from a lookup reads the same.
 var NotFound = &Status{Code: http.StatusNotFound, Msg: "not found"}
 
@@ -375,7 +385,17 @@ var NotFound = &Status{Code: http.StatusNotFound, Msg: "not found"}
 // the edge shows only what a person may read).
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	var st *Status
+	var js *JSONStatus
 	switch {
+	case errors.As(err, &js):
+		data, merr := json.Marshal(js.Body)
+		if merr != nil {
+			http.Error(w, dopestrings.Default.Server.Error.Internal(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(js.Code)
+		_, _ = w.Write(data)
 	case errors.As(err, &st):
 		if st.Code == http.StatusNotFound {
 			http.NotFound(w, r)

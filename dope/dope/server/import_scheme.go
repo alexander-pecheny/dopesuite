@@ -31,6 +31,16 @@ func (s *server) importScheme(w http.ResponseWriter, r *http.Request, _ route.Sc
 	if _, ok := s.api().Admit(w, r, route.Manager, festID, 0); !ok {
 		return nil
 	}
+	return s.importSchemeAndAnswer(w, r, festID)
+}
+
+// scopedSchemeImport is the same import with the fest in the path, beside the
+// rest of the fest's API.
+func (s *server) scopedSchemeImport(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	return s.importSchemeAndAnswer(w, r, sc.FestID)
+}
+
+func (s *server) importSchemeAndAnswer(w http.ResponseWriter, r *http.Request, festID int64) error {
 	var scheme store.FestScheme
 	if err := route.DecodeJSON(r, &scheme); err != nil {
 		return err

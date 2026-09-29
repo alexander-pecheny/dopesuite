@@ -152,6 +152,46 @@ func (s *Server) renderHostFestTroikasWith(w http.ResponseWriter, r *http.Reques
 	})
 }
 
+// AddTroikas adds troikas from pasted lines, the troikas page's grammar, and
+// says how many it added.
+func (s *Server) AddTroikas(ctx context.Context, festID int64, lines string) (int, error) {
+	inputs, err := roster.ParseAssembledLines(lines)
+	if err != nil {
+		return 0, err
+	}
+	return len(inputs), s.troikaWrite(ctx, festID, "troikas-add", func(ctx context.Context, tx *sql.Tx) error {
+		for _, in := range inputs {
+			if _, err := roster.SaveAssembledTx(ctx, tx, festID, 0, in); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// SaveTroika renames one troika and sets its players.
+func (s *Server) SaveTroika(ctx context.Context, festID, id int64, in roster.AssembledInput) error {
+	return s.troikaWrite(ctx, festID, "troika-edit", func(ctx context.Context, tx *sql.Tx) error {
+		_, err := roster.SaveAssembledTx(ctx, tx, festID, id, in)
+		return err
+	})
+}
+
+// DeleteTroika deletes a troika no game seats.
+func (s *Server) DeleteTroika(ctx context.Context, festID, id int64) error {
+	return s.troikaWrite(ctx, festID, "troika-delete", func(ctx context.Context, tx *sql.Tx) error {
+		return roster.DeleteAssembledTx(ctx, tx, festID, id)
+	})
+}
+
+func (s *Server) troikaWrite(ctx context.Context, festID int64, label string, fn func(ctx context.Context, tx *sql.Tx) error) error {
+	err := s.h.Engine().WithWriteTx(ctx, festID, label, fn)
+	if err == nil {
+		s.h.Engine().InvalidateFestViewCache(festID)
+	}
+	return err
+}
+
 // handleHostSaveTroikas takes the page's three forms: pasted lines, one
 // troika's edit, and its delete.
 func (s *Server) handleHostSaveTroikas(w http.ResponseWriter, r *http.Request, festID int64) {
@@ -168,33 +208,15 @@ func (s *Server) handleHostSaveTroikas(w http.ResponseWriter, r *http.Request, f
 		}
 		s.renderHostFestTroikasWith(w, r, festID, hostTroikasData{Error: message, Lines: lines})
 	}
-	write := func(label string, fn func(ctx context.Context, tx *sql.Tx) error) error {
-		err := s.h.Engine().WithWriteTx(r.Context(), festID, label, fn)
-		if err == nil {
-			s.h.Engine().InvalidateFestViewCache(festID)
-		}
-		return err
-	}
 	switch r.Form.Get("mode") {
 	case "lines":
 		lines := r.Form.Get("lines")
-		inputs, err := roster.ParseAssembledLines(lines)
+		added, err := s.AddTroikas(r.Context(), festID, lines)
 		if err != nil {
 			fail(err, lines)
 			return
 		}
-		if err := write("troikas-add", func(ctx context.Context, tx *sql.Tx) error {
-			for _, in := range inputs {
-				if _, err := roster.SaveAssembledTx(ctx, tx, festID, 0, in); err != nil {
-					return err
-				}
-			}
-			return nil
-		}); err != nil {
-			fail(err, lines)
-			return
-		}
-		s.renderHostFestTroikasWith(w, r, festID, hostTroikasData{Notice: str.Host.Troikas.AddedNotice(len(inputs))})
+		s.renderHostFestTroikasWith(w, r, festID, hostTroikasData{Notice: str.Host.Troikas.AddedNotice(added)})
 	case "edit":
 		id, err := strconv.ParseInt(r.Form.Get("id"), 10, 64)
 		if err != nil || id <= 0 {
@@ -202,9 +224,7 @@ func (s *Server) handleHostSaveTroikas(w http.ResponseWriter, r *http.Request, f
 			return
 		}
 		if r.Form.Get("delete") != "" {
-			if err := write("troika-delete", func(ctx context.Context, tx *sql.Tx) error {
-				return roster.DeleteAssembledTx(ctx, tx, festID, id)
-			}); err != nil {
+			if err := s.DeleteTroika(r.Context(), festID, id); err != nil {
 				fail(err, "")
 				return
 			}
@@ -212,10 +232,7 @@ func (s *Server) handleHostSaveTroikas(w http.ResponseWriter, r *http.Request, f
 			return
 		}
 		in := roster.AssembledInput{Name: r.Form.Get("name"), Players: r.Form["player"]}
-		if err := write("troika-edit", func(ctx context.Context, tx *sql.Tx) error {
-			_, err := roster.SaveAssembledTx(ctx, tx, festID, id, in)
-			return err
-		}); err != nil {
+		if err := s.SaveTroika(r.Context(), festID, id, in); err != nil {
 			fail(err, "")
 			return
 		}

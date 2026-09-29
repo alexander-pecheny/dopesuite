@@ -19,11 +19,22 @@ var dopeSessions = authcred.Sessions{
 	},
 }
 
-// LookupSession resolves the request's session cookie to a session.User. The
-// second return is false when there is no valid session; an expired one is
-// deleted, a live one slides at most once a minute (NeedsRefresh), so most
-// authenticated requests are one SELECT.
+// LookupSession resolves the request to a session.User: an API token when the
+// request carries `Authorization: Bearer …`, the session cookie otherwise. A
+// token is the user (ADR-0021) on every route but the few that call
+// LookupCookieSession.
 func (e *Engine) LookupSession(r *http.Request) (session.User, bool) {
+	if raw := BearerToken(r); raw != "" {
+		return e.lookupAPIToken(r.Context(), raw)
+	}
+	return e.LookupCookieSession(r)
+}
+
+// LookupCookieSession resolves the request's session cookie to a
+// session.User. The second return is false when there is no valid session; an
+// expired one is deleted, a live one slides at most once a minute
+// (NeedsRefresh), so most authenticated requests are one SELECT.
+func (e *Engine) LookupCookieSession(r *http.Request) (session.User, bool) {
 	if e.DB == nil {
 		return session.User{}, false
 	}

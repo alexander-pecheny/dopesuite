@@ -1,3 +1,6 @@
+-- index api_tokens_user_idx
+CREATE INDEX api_tokens_user_idx on api_tokens(user_id);
+
 -- index fest_team_flags_team_idx
 CREATE INDEX fest_team_flags_team_idx on fest_team_flags(team_id, position);
 
@@ -25,6 +28,18 @@ CREATE INDEX password_resets_user_idx on password_resets(user_id);
 
 -- index users_username_nocase
 CREATE UNIQUE INDEX users_username_nocase on users(username collate nocase);
+
+-- table api_tokens
+CREATE TABLE api_tokens(
+  id integer primary key,
+  user_id integer not null references users(id) on delete cascade,
+  token_hash text not null unique,
+  label text,
+  created_at text not null,
+  expires_at text not null,
+  revoked_at text,
+  last_used_at text
+);
 
 -- table audit_ctx
 CREATE TABLE audit_ctx(

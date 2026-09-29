@@ -3,6 +3,7 @@ package dopeserver
 import (
 	"context"
 	"database/sql"
+	"dope/dope/domain/core"
 	"dope/dope/platform/util"
 	"errors"
 	"fmt"
@@ -345,6 +346,9 @@ func (s *server) logoutSession(r *http.Request) {
 }
 
 func (s *server) authUsername(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	if core.BearerToken(r) != "" {
+		return route.Forbid(dopestrings.Default.Auth.Token.Forbidden())
+	}
 	user := sc.User
 	if user.Username.Valid {
 		return route.Conflict(dopestrings.Default.Auth.Username.AlreadySet())
@@ -375,7 +379,14 @@ update users set username = ?, updated_at = ? where id = ? and username is null`
 
 // authPassword sets a password for the logged-in user, or changes an existing
 // one — then the caller proves the current password first.
+//
+// Changing the password is the kill switch (ADR-0021): it revokes every API
+// token of the account and ends every other session, which is why a token may
+// not call it.
 func (s *server) authPassword(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	if core.BearerToken(r) != "" {
+		return route.Forbid(dopestrings.Default.Auth.Token.Forbidden())
+	}
 	var req passwordRequest
 	if err := route.DecodeJSON(r, &req); err != nil {
 		return err
@@ -406,9 +417,15 @@ select password_hash, password_salt from users where id = ?`, sc.User.UserID).Sc
 		if err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `
+		if _, err := tx.ExecContext(ctx, `
 update users set password_hash = ?, password_salt = null, updated_at = ? where id = ?`,
-			hashed, util.UtcNow(), sc.User.UserID)
+			hashed, util.UtcNow(), sc.User.UserID); err != nil {
+			return err
+		}
+		if err := core.RevokeAllAPITokensTx(ctx, tx, sc.User.UserID); err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `delete from sessions where user_id = ? and id <> ?`, sc.User.UserID, sc.User.SessionID)
 		return err
 	})
 	if err != nil {

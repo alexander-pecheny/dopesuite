@@ -61,6 +61,9 @@ export type Strings = {
       submit: () => string;
       title: () => string;
     };
+    token: {
+      forbidden: () => string;
+    };
     username: {
       alreadySet: () => string;
       invalid: () => string;
@@ -123,6 +126,42 @@ export type Strings = {
       removeHint: () => string;
     };
     title: () => string;
+  };
+  cli: {
+    login: {
+      done: (user: string, url: string, path: string) => string;
+      emptyToken: () => string;
+      needUrl: () => string;
+      rejected: (err: string) => string;
+      tokenPrompt: () => string;
+    };
+    logout: {
+      done: () => string;
+    };
+    run: {
+      apiArgs: () => string;
+      needRef: () => string;
+      notLoggedIn: () => string;
+      stateUnreadable: (err: string) => string;
+      tokenRejected: () => string;
+      unknownCommand: (name: string) => string;
+    };
+    usage: {
+      api: () => string;
+      commandsHead: () => string;
+      env: () => string;
+      fest: () => string;
+      fests: () => string;
+      flagFile: () => string;
+      flagOut: () => string;
+      flagsHead: () => string;
+      login: () => string;
+      logout: () => string;
+      startHead: () => string;
+      startLogin: () => string;
+      title: () => string;
+      whoami: () => string;
+    };
   };
   crosstable: {
     columns: {
@@ -517,6 +556,7 @@ export type Strings = {
       deleteSubmit: () => string;
       descriptionLabel: () => string;
       endDateLabel: () => string;
+      errorDeleteCreatorOnly: () => string;
       errorSlugInvalid: (err: string) => string;
       errorSlugTaken: () => string;
       errorTitleRequired: () => string;
@@ -556,6 +596,7 @@ export type Strings = {
       errorJsonParse: (err: string) => string;
       errorMinigames: (err: string) => string;
       errorMultiSorting: (err: string) => string;
+      errorSchemeNotEditable: (kind: string) => string;
       errorSlugInvalid: (err: string) => string;
       errorSlugTaken: () => string;
       errorTitleRequired: () => string;
@@ -638,6 +679,22 @@ export type Strings = {
       ratingIdLabel: () => string;
       startDateLabel: () => string;
       titleLabel: () => string;
+      tokenCreateSubmit: () => string;
+      tokenExpired: () => string;
+      tokenLabelLabel: () => string;
+      tokenLabelPlaceholder: () => string;
+      tokenMeta: (created: string, expires: string, used: string) => string;
+      tokenNeverUsed: () => string;
+      tokenNewHint: () => string;
+      tokenNewLabel: () => string;
+      tokenRevoke: () => string;
+      tokenRevokeConfirm: () => string;
+      tokenRevoked: (at: string) => string;
+      tokenUnnamed: () => string;
+      tokenUsed: (at: string) => string;
+      tokensEmpty: () => string;
+      tokensLead: () => string;
+      tokensSubhead: () => string;
       usernameFallback: () => string;
     };
     roster: {
@@ -661,6 +718,7 @@ export type Strings = {
       deleteBtn: () => string;
       deleteOverrideConfirm: () => string;
       editOverrideLabel: () => string;
+      errorFlagsForeignTeam: (id: string) => string;
       errorJsonEmpty: () => string;
       errorJsonParse: (err: string) => string;
       errorObjPlayer: () => string;

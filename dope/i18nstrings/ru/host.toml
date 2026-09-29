@@ -121,6 +121,9 @@ sticker_max_field = "Максимум стикеров"
 error_title_required = "Название обязательно."
 error_slug_invalid = 'Slug: {{.err}}'
 error_slug_taken = "Slug уже занят в этом фесте."
+# The API was asked to change the scheme of a game whose settings page does
+# not offer it: only a brain game's scheme is edited in place.
+error_scheme_not_editable = 'Схему игры типа {{.kind}} здесь поменять нельзя. Удалите игру и создайте её заново.'
 error_minigames = 'Мини-игры: {{.err}}'
 error_multi_sorting = 'Что решает при равном итоге: {{.err}}'
 error_ek_scheme_missing = "Вставьте JSON-схему ЭК или опишите её схемой"
@@ -146,6 +149,8 @@ col_flags = "Зачёты"
 flags_hint = "Зачёты команды — через запятую: «Школ, Студ». Их видно на страницах ОД и КСИ, где по зачёту можно отфильтровать таблицу. Импорт из rating.chgk.info перезаписывает их."
 flags_placeholder = "Школ, Студ"
 flags_saved_notice = "Зачёты сохранены."
+# Flags were sent for a team id this fest does not have.
+error_flags_foreign_team = 'Команды {{.id}} нет в этом фесте.'
 # Players page title and crumb: "<fest title> · игроки".
 players_title = '{{.title}} · игроки'
 players_crumb = "Игроки"
@@ -335,6 +340,8 @@ audit_muted = "откат состояния"
 error_title_required = "Название обязательно."
 error_slug_invalid = 'Slug: {{.err}}'
 error_slug_taken = "Slug уже занят."
+# Only the fest's creator may delete it.
+error_delete_creator_only = "Удалить фест может только его создатель."
 bulk_done_notice = 'Массовое действие выполнено: {{.n}}.'
 access_saved_notice = "Доступ сохранён."
 
@@ -383,6 +390,26 @@ profile_crumb = "Профиль"
 username_fallback = "Профиль"
 # Logout button.
 logout_submit = "Разлогиниться"
+# The API tokens section of /profile: tokens a script or an agent uses to act
+# as this account (ADR-0021).
+tokens_subhead = "API-токены"
+tokens_lead = "Токен даёт программе или агенту те же права, что у вас: читать и менять ваши фесты через API. Он действует 30 дней. Смена пароля отзывает все токены."
+tokens_empty = "Токенов пока нет."
+token_label_label = "Для чего токен"
+token_label_placeholder = "например, агент на ноутбуке"
+token_create_submit = "Создать токен"
+# Shown once, right after the token is made.
+token_new_label = "Новый токен"
+token_new_hint = "Скопируйте токен сейчас. Потом его нельзя будет посмотреть, только отозвать и создать новый."
+token_unnamed = "Без названия"
+# One token's line: when it was made, until when it works, when it was last used.
+token_meta = 'создан {{.created}}, действует до {{.expires}}, {{.used}}'
+token_used = 'последний раз использован {{.at}}'
+token_never_used = "ещё не использовался"
+token_revoked = 'отозван {{.at}}'
+token_expired = "срок истёк"
+token_revoke = "Отозвать"
+token_revoke_confirm = "Отозвать токен? Программа, которая им пользуется, потеряет доступ."
 # The out-of-range error parsePositiveFormInt/parseNonNegativeFormInt build:
 # "<field> должно быть от <min> до <max>".
 error_int_range = '{{.field}} должно быть от {{.min}} до {{.max}}'

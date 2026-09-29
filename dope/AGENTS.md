@@ -54,6 +54,8 @@ directly. Each of its files covers one concern:
 |------|-------|---------|
 | `server/main.go` | ~830 | Entry point, mux wiring, HTTP server, SSE event handlers |
 | `server/routes_api.go` | ~500 | The **route table** for `/api/fest/` and `/api/auth/` (ADR-0016). Each endpoint is one row: the mux pattern, its `route.Access` level (Read, Editor, Manager and so on, with `.Numbered()` to add the numbering guard), and the handler. The handlers are in the same file and all look like `func(w, r, route.Scope) error`. A handler never checks the method, never checks a guard and never calls `http.Error`: the dispatcher in `web/route` resolves `{fest}` and `{game}`, the session and the role, and writes out whatever error the handler returns |
+| `server/routes_api_tokens.go` | ~50 | `/api/auth/tokens`: the caller's API tokens (ADR-0021). The tokens themselves live in `domain/core/apitoken.go`, and `Engine.LookupSession` reads `Authorization: Bearer …` before the cookie |
+| `web/hostpages/api.go` | ~710 | **The host pages' JSON twins** (ADR-0021), registered into the `/api` table by `APIRoutes`: fests, access, games and their settings, teams and Flags, player overrides, troikas, rating import, numbers, the history and revert. Each route calls the same function its form does (`CreateFest`, `UpdateGameSettings`, `AssignFestNumbers`, `RevertGame`…). A new host form is not finished until its twin is here |
 | `server/routes_fest.go` | ~105 | The `/fest/` viewer table: the public fest page, the game pages (with the `/static` snapshot handle and the xlsx download) |
 | `server/scoped_api.go` | ~310 | What the scoped endpoints share below HTTP: match scope resolution, broadcasts, the state PUT, screen settings, match-view loaders, reseed |
 | `web/hostpages/routes.go` | ~120 | The `/host/` table (`Server.routes()`), with the host denial policy: no session or no role → back to `/host`, the wrong role → 403 |
@@ -63,7 +65,7 @@ directly. Each of its files covers one concern:
 | `server/migrations.go` | ~1400 | The schema, written as a list of `[]schema.Migration`, plus the backfill functions they call. `dopecore/schema` applies each one exactly once, in order. A new step gets the next number and goes at the end. `server/tests/testdata/schema.sql` records what the list produces from an empty file; regenerate it with `DOPE_UPDATE_SCHEMA=1`. To rehearse the migrations against a copy of production, run with `DOPE_REHEARSE_DB=<snapshot>` |
 | `server/auth.go` | ~600 | Sessions, password login, and dope's adapter for the Telegram handshake. The state machine itself is in `dopecore/tglogin`; dope supplies the write transaction, its own users table with an `is_system` column, and its own error text |
 | `server/matchview.go` | ~815 | Fest/match view loading + match-update application |
-| `server/import_scheme.go` | ~110 | The pasted-scheme importer (`/api/import`, the host form): clears the fest, calls `gamebuild.Materialise` |
+| `server/import_scheme.go` | ~120 | The pasted-scheme importer (`/api/import`, `/api/fest/{fest}/scheme-import`, the host form): clears the fest, calls `gamebuild.Materialise` |
 | `server/static_mode.go` | ~440 | The "DDoS lockdown". `staticGovernor.step` is the pure hysteresis logic, `lockdownServes` decides per request whether to serve the static copy, `spliceInit` is the one place the init payload is spliced in, and there is a snapshot cache |
 | `server/serve_html.go` | ~360 | Builds the HTML init payloads for the host, viewer and game pages, and versions the assets. `canEdit` is the only place where the init payload looks at the role |
 | `server/host_accessors.go` | ~190 | Dependency-inversion adapter (`*server` → leaf `Host` interfaces) |
@@ -136,6 +138,7 @@ just fmt              # gofmt
 just vet              # go vet
 just check            # this module: fmt + vet + tidy-check + test-full
 just pre-commit       # the whole repo, via the root justfile. Run before committing.
+just cli              # build dope-cli into ~/.local/bin (the dope-api skill)
 just deploy           # SSH deploy to VPS
 just invite [days]    # Generate invite code
 ```
@@ -148,7 +151,7 @@ Server listens on port **9672** by default (override with `$PORT`). Database def
 
 **Audit log**: every mutation is written to the `audit_log` table by `storage/auditmw`. Undo and redo are in `domain/core/revert.go`. Old log entries are compressed by `storage/sqlitez/audit_compress.go` and then pruned by age and by disk size. The code that converts audit and history data lives in `storage/migrate`.
 
-**Auth**: sessions are kept in HTTP-only cookies. The roles are ordered `system → organizer → host → viewer`. API tokens are scoped to one fest. The Telegram bot talks to the server through endpoints protected by a shared secret.
+**Auth**: sessions are kept in HTTP-only cookies. The roles are ordered `system → organizer → host → viewer`. An API token (ADR-0021), made on `/profile`, acts as its user on every route except changing the password or the username and `/admin`; changing the password revokes them all. Agents use it through `dope-cli` and the `dope-api` skill. The Telegram bot talks to the server through endpoints protected by a shared secret.
 
 **Assets**: the `web/assets` package embeds them with `//go:embed static`, and `server` serves them. ETags are content hashes, which is what busts the cache. In dev mode the files are read from `dope/web/assets/static` on disk instead, so they reload without a rebuild.
 

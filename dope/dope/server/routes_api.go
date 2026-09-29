@@ -41,6 +41,9 @@ func (s *server) handleScopedAPI(w http.ResponseWriter, r *http.Request) { s.api
 // whatever error the handler returns.
 func (s *server) apiRoutes() *route.Table {
 	t := route.New(&s.eng, route.DenyAPI)
+	t.Handle("GET /api/auth/tokens", route.Session, s.apiTokensList)
+	t.Handle("POST /api/auth/tokens", route.Session, s.apiTokensCreate)
+	t.Handle("DELETE /api/auth/tokens/{id}", route.Session, s.apiTokensRevoke)
 	const fest, game = "/api/fest/{fest}", "/api/fest/{fest}/games/{game}"
 	t.Handle("GET "+fest, route.Read, s.scopedFest)
 	t.Handle("POST "+fest+"/presence", route.Editor, s.hostPresence)
@@ -70,6 +73,9 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("POST "+game+"/seed-import/run", route.Editor.Numbered(), s.seedImportRoute(func(*http.Request) (imports.SeedSource, error) { return imports.FromScheme(), nil }))
 	t.Handle("POST "+game+"/seed-import/xlsx", route.Editor.Numbered(), s.seedImportRoute(seedXLSXSource))
 	t.Handle("POST "+game+"/seed-import/decline", route.Editor, s.scopedSeedDecline)
+	t.Handle("POST "+fest+"/scheme-import", route.Manager, s.scopedSchemeImport)
+	// The host pages' forms, as JSON (ADR-0021).
+	s.hostPageServer().APIRoutes(t)
 	return t
 }
 

@@ -9,6 +9,8 @@ import (
 	dopestrings "dope/i18nstrings"
 
 	"dope/dope/storage/store"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // Macro is a Kind's compile-time role at Block grain — CONTEXT.md's own word
@@ -217,5 +219,5 @@ func SortedNames(set map[string]bool) []string {
 // UnrankableMetric is the complaint every Kind makes about a sorting key
 // nothing measures.
 func UnrankableMetric(metric string, known map[string]bool) error {
-	return fmt.Errorf("%s", dopestrings.Default.Structure.Macro.UnrankableMetric(metric, strings.Join(SortedNames(known), ", ")))
+	return corei18n.User(dopestrings.Default.Structure.Macro.UnrankableMetric(metric, strings.Join(SortedNames(known), ", ")))
 }

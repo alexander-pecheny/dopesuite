@@ -3,6 +3,7 @@ package pages
 import (
 	"context"
 	"database/sql"
+	"dope/dope/domain/core"
 	"errors"
 	"net/http"
 	"net/url"
@@ -273,6 +274,9 @@ update password_resets set used_at = ? where token_hash = ?`, now.Format(time.RF
 		}
 		// Whoever knew the old password is logged out everywhere.
 		if _, err := tx.ExecContext(ctx, `delete from sessions where user_id = ?`, userID); err != nil {
+			return err
+		}
+		if err := core.RevokeAllAPITokensTx(ctx, tx, userID); err != nil {
 			return err
 		}
 		var err error

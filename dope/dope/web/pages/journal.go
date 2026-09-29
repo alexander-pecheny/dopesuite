@@ -15,6 +15,8 @@ import (
 	ui "dope/dope/web/ui"
 
 	"dope/dope/web/route"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // The per-game journal page lists a game's edits newest-first, each rendered as
@@ -32,12 +34,26 @@ const (
 	journalMaxLines   = 16
 )
 
-type journalChange struct {
-	When     string
-	Actor    string
-	Lines    []string
-	More     int
-	RevertTo int64
+// JournalChange is one entry of a game's history as the history page shows
+// it: who changed what, when, and the journal id to revert to in order to
+// undo it and everything after it.
+type JournalChange struct {
+	When     string   `json:"when"`
+	Actor    string   `json:"actor"`
+	Lines    []string `json:"lines"`
+	More     int      `json:"more"`
+	RevertTo int64    `json:"revert_to"`
+}
+
+// RevertGame rolls the game back to the journal entry target, as the history
+// page's revert button does, and tells every open page.
+func (s *Server) RevertGame(ctx context.Context, festID, gameID, target int64) error {
+	revision, err := s.h.RevertGameToPoint(ctx, festID, gameID, target)
+	if err != nil {
+		return corei18n.User(dopestrings.Default.Journal.Page.RevertFailed(err.Error()))
+	}
+	s.h.BroadcastFestView(festID, gameID, revision)
+	return nil
 }
 
 type journalOpRow struct {
@@ -45,7 +61,9 @@ type journalOpRow struct {
 	payload []byte
 }
 
-func (s *Server) loadGameJournalGroups(ctx context.Context, festID, gameID int64) ([]journalChange, error) {
+// LoadGameJournal returns the game's history, newest first, at most the page's
+// worth of entries.
+func (s *Server) LoadGameJournal(ctx context.Context, festID, gameID int64) ([]JournalChange, error) {
 	doc, _ := store.LoadGameDoc(ctx, s.h.Engine().DB, festID, gameID)
 	gameType, stateJSON := doc.GameType, doc.State
 
@@ -112,7 +130,7 @@ order by j.id`, gameID)
 		res.prepareEK(ctx, s.h.Engine().DB, allOps)
 	}
 
-	out := make([]journalChange, 0, len(order))
+	out := make([]JournalChange, 0, len(order))
 	// Newest-first: iterate the ascending-built order in reverse.
 	for i := len(order) - 1; i >= 0; i-- {
 		g := groups[order[i]]
@@ -125,7 +143,7 @@ order by j.id`, gameID)
 			more = len(lines) - journalMaxLines
 			lines = lines[:journalMaxLines]
 		}
-		out = append(out, journalChange{
+		out = append(out, JournalChange{
 			When:     formatJournalTime(g.when),
 			Actor:    g.actor,
 			Lines:    lines,
@@ -735,7 +753,7 @@ func formatJournalTime(ts string) string {
 // per host action (when / who / the change descriptions) and a per-row
 // revert-to-here form. The revert confirm is a data-confirm attribute wired by
 // pageforms.js (no inline on* handler).
-func journalDoc(festID, gameID int64, title, festTitle, errMsg, notice string, groups []journalChange) *ui.Doc {
+func journalDoc(festID, gameID int64, title, festTitle, errMsg, notice string, groups []JournalChange) *ui.Doc {
 	var main []ui.Item
 	s := dopestrings.Default
 	if errMsg != "" {
@@ -766,7 +784,7 @@ func journalDoc(festID, gameID int64, title, festTitle, errMsg, notice string, g
 	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
 }
 
-func journalRow(festID, gameID int64, g journalChange) *ui.Element {
+func journalRow(festID, gameID int64, g JournalChange) *ui.Element {
 	s := dopestrings.Default
 	actor := ui.Cell(ui.Muted(ui.Text("—")))
 	if g.Actor != "" {
@@ -794,7 +812,7 @@ func (s *Server) RenderGameJournal(w http.ResponseWriter, r *http.Request, festI
 	if title == "" {
 		title = dopestrings.Default.Journal.Page.DefaultTitle(strconv.FormatInt(gameID, 10))
 	}
-	groups, err := s.loadGameJournalGroups(r.Context(), festID, gameID)
+	groups, err := s.LoadGameJournal(r.Context(), festID, gameID)
 	if err != nil {
 		route.WriteError(w, r, fmt.Errorf("journal: %w", err))
 		return
@@ -812,11 +830,9 @@ func (s *Server) HandleGameRevert(w http.ResponseWriter, r *http.Request, festID
 		s.RenderGameJournal(w, r, festID, gameID, "bad target", "")
 		return
 	}
-	revision, err := s.h.RevertGameToPoint(r.Context(), festID, gameID, target)
-	if err != nil {
-		s.RenderGameJournal(w, r, festID, gameID, dopestrings.Default.Journal.Page.RevertFailed(err.Error()), "")
+	if err := s.RevertGame(r.Context(), festID, gameID, target); err != nil {
+		s.RenderGameJournal(w, r, festID, gameID, err.Error(), "")
 		return
 	}
-	s.h.BroadcastFestView(festID, gameID, revision)
 	s.RenderGameJournal(w, r, festID, gameID, "", dopestrings.Default.Journal.Page.RevertDone())
 }

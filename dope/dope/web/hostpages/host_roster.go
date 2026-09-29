@@ -25,6 +25,8 @@ import (
 	"strings"
 
 	"dope/dope/web/route"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 type hostFestTeam struct {
@@ -472,6 +474,27 @@ func parseTypedFlags(value string) []roster.FestRosterFlag {
 	return roster.NormalizeFlags(flags)
 }
 
+// SaveTeamFlags sets the Flags of the named teams, each typed as the teams
+// page takes them: short names separated by commas. Teams left out keep theirs.
+func (s *Server) SaveTeamFlags(ctx context.Context, festID int64, typed map[int64]string) error {
+	teams, err := s.loadHostFestTeams(ctx, festID)
+	if err != nil {
+		return err
+	}
+	known := make(map[int64]bool, len(teams))
+	for _, team := range teams {
+		known[team.ID] = true
+	}
+	flags := make(map[int64][]roster.FestRosterFlag, len(typed))
+	for teamID, value := range typed {
+		if !known[teamID] {
+			return corei18n.User(dopestrings.Default.Host.Roster.ErrorFlagsForeignTeam(strconv.FormatInt(teamID, 10)))
+		}
+		flags[teamID] = parseTypedFlags(value)
+	}
+	return s.saveFestTeamFlags(ctx, festID, flags)
+}
+
 func (s *Server) saveFestTeamFlags(reqCtx context.Context, festID int64, flagsByTeam map[int64][]roster.FestRosterFlag) error {
 	var updates []roster.GameStateBroadcast
 	var revision int64
@@ -529,6 +552,34 @@ func (s *Server) renderHostFestPlayersWithMessage(w http.ResponseWriter, r *http
 	})
 }
 
+// AddPlayerOverride moves a player to another team for the given games (none
+// means every game) and tells the bracket pages their rosters changed.
+func (s *Server) AddPlayerOverride(ctx context.Context, festID, playerID, teamID int64, gameIDs []int64) error {
+	revision, ekGameIDs, err := overrides.SavePlayerTeamOverride(s.h.Engine(), ctx, festID, playerID, teamID, gameIDs)
+	if err != nil {
+		return err
+	}
+	s.broadcastRosterOverride(festID, revision, ekGameIDs)
+	return nil
+}
+
+// ReplacePlayerOverride rewrites the override that moved playerID from
+// sourceTeamID. A nil gameIDs deletes it.
+func (s *Server) ReplacePlayerOverride(ctx context.Context, festID, playerID, sourceTeamID, teamID int64, gameIDs []int64) error {
+	revision, ekGameIDs, err := overrides.ReplacePlayerTeamOverride(s.h.Engine(), ctx, festID, playerID, sourceTeamID, teamID, gameIDs)
+	if err != nil {
+		return err
+	}
+	s.broadcastRosterOverride(festID, revision, ekGameIDs)
+	return nil
+}
+
+func (s *Server) broadcastRosterOverride(festID, revision int64, ekGameIDs []int64) {
+	for _, gameID := range ekGameIDs {
+		s.h.Engine().BroadcastState(festID, fmt.Sprintf("game-roster:%d", gameID), revision, []byte(`{}`))
+	}
+}
+
 func (s *Server) handleHostAddPlayerOverride(w http.ResponseWriter, r *http.Request, festID int64) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
@@ -553,13 +604,9 @@ func (s *Server) handleHostAddPlayerOverride(w http.ResponseWriter, r *http.Requ
 		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
 		return
 	}
-	revision, ekGameIDs, err := overrides.SavePlayerTeamOverride(s.h.Engine(), r.Context(), festID, playerID, teamID, gameIDs)
-	if err != nil {
+	if err := s.AddPlayerOverride(r.Context(), festID, playerID, teamID, gameIDs); err != nil {
 		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
 		return
-	}
-	for _, gameID := range ekGameIDs {
-		s.h.Engine().BroadcastState(festID, fmt.Sprintf("game-roster:%d", gameID), revision, []byte(`{}`))
 	}
 	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s/players#overrides", s.festRefOrID(r.Context(), festID)), http.StatusSeeOther)
 }
@@ -588,13 +635,9 @@ func (s *Server) handleHostEditPlayerOverride(w http.ResponseWriter, r *http.Req
 			return
 		}
 	}
-	revision, ekGameIDs, err := overrides.ReplacePlayerTeamOverride(s.h.Engine(), r.Context(), festID, playerID, sourceTeamID, teamID, gameIDs)
-	if err != nil {
+	if err := s.ReplacePlayerOverride(r.Context(), festID, playerID, sourceTeamID, teamID, gameIDs); err != nil {
 		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
 		return
-	}
-	for _, gameID := range ekGameIDs {
-		s.h.Engine().BroadcastState(festID, fmt.Sprintf("game-roster:%d", gameID), revision, []byte(`{}`))
 	}
 	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s/players#overrides", s.festRefOrID(r.Context(), festID)), http.StatusSeeOther)
 }
@@ -711,6 +754,20 @@ func (s *Server) handleHostImportScheme(w http.ResponseWriter, r *http.Request, 
 	s.renderHostSchemeImportPage(w, r, festID, "", dopestrings.Default.Host.Roster.ImportDoneNotice())
 }
 
+// ImportRatingRoster pulls the fest's roster from rating.chgk.info. A
+// *imports.RosterConflict means teams with results would be lost, and the
+// caller answers it with a choice and calls again.
+func (s *Server) ImportRatingRoster(ctx context.Context, festID int64, choice imports.RosterChoice) (imports.RatingRosterImportResult, error) {
+	ratingID, err := s.loadFestRatingID(ctx, festID)
+	if err != nil {
+		return imports.RatingRosterImportResult{}, err
+	}
+	if ratingID <= 0 {
+		return imports.RatingRosterImportResult{}, corei18n.User(dopestrings.Default.Host.Roster.NeedRatingNote())
+	}
+	return imports.FetchAndImportRatingRoster(s.h.Engine(), ctx, festID, ratingID, choice)
+}
+
 func (s *Server) handleHostImportRatingRoster(w http.ResponseWriter, r *http.Request, festID int64) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
@@ -730,7 +787,7 @@ func (s *Server) handleHostImportRatingRoster(w http.ResponseWriter, r *http.Req
 		return
 	}
 	choice := parseRosterChoice(r.Form)
-	result, err := imports.FetchAndImportRatingRoster(s.h.Engine(), r.Context(), festID, ratingID, choice)
+	result, err := s.ImportRatingRoster(r.Context(), festID, choice)
 	var conflict *imports.RosterConflict
 	if errors.As(err, &conflict) {
 		s.renderHostRatingImport(w, r, festID, "", "", conflict)

@@ -2,8 +2,10 @@ package route
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -168,5 +170,17 @@ func TestGamePagePath(t *testing.T) {
 		if got := GamePagePath(c.parts, c.host); got != c.want {
 			t.Errorf("%v host=%v: %v", c.parts, c.host, got)
 		}
+	}
+}
+
+// A JSONStatus refusal carries its body as JSON under its own status, so the
+// caller can act on the details.
+func TestWriteErrorJSONStatus(t *testing.T) {
+	rec := httptest.NewRecorder()
+	WriteError(rec, httptest.NewRequest(http.MethodPost, "/", nil),
+		fmt.Errorf("wrapped: %w", &JSONStatus{Code: http.StatusConflict, Body: map[string]int{"dropped": 2}}))
+	if rec.Code != http.StatusConflict || rec.Body.String() != `{"dropped":2}` ||
+		!strings.HasPrefix(rec.Header().Get("Content-Type"), "application/json") {
+		t.Fatalf("got %d %q %q", rec.Code, rec.Header().Get("Content-Type"), rec.Body.String())
 	}
 }

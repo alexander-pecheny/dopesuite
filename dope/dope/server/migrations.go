@@ -836,6 +836,24 @@ create index if not exists password_resets_user_idx on password_resets(user_id);
 	}},
 	{Version: 31, Name: "merge the two Disamone accounts", Up: mergeDisamoneAccounts},
 	{Version: 32, Name: "usernames unique ignoring case", Up: usernamesUniqueIgnoringCase},
+	{Version: 33, Name: "api_tokens", Up: func(db *sql.DB) error {
+		// v33: month-lived bearer tokens, minted on /profile, that act as the
+		// user on the API — xy's model (ADR-0021). Only the sha256 is kept.
+		_, err := db.Exec(`
+create table if not exists api_tokens(
+  id integer primary key,
+  user_id integer not null references users(id) on delete cascade,
+  token_hash text not null unique,
+  label text,
+  created_at text not null,
+  expires_at text not null,
+  revoked_at text,
+  last_used_at text
+);
+create index if not exists api_tokens_user_idx on api_tokens(user_id);
+`)
+		return err
+	}},
 }
 
 // usernamesUniqueIgnoringCase makes the database refuse a username that differs

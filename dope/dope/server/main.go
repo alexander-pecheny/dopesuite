@@ -190,6 +190,8 @@ func Main() {
 	}
 	mux.HandleFunc("/profile", srv.hostPageServer().HandleProfilePage)
 	mux.HandleFunc("/profile/logout", srv.hostPageServer().HandleProfileLogout)
+	mux.HandleFunc("/profile/tokens", srv.hostPageServer().HandleProfileTokens)
+	mux.HandleFunc("/profile/tokens/", srv.hostPageServer().HandleProfileTokens)
 	mux.HandleFunc("/api/import", srv.handleImport)
 	mux.HandleFunc("/host", srv.hostPageServer().HandleHostLanding)
 	mux.HandleFunc("/host/", srv.hostPageServer().HandleHostRouter)
@@ -199,6 +201,7 @@ func Main() {
 	mux.HandleFunc("/admin/password_reset", srv.pageServer().HandleAdminPasswordReset)
 	mux.HandleFunc("/reset_password", srv.pageServer().HandleResetPassword)
 	mux.Handle("/api/fest/", srv.api().Mux)
+	mux.Handle("/api/fests", srv.api().Mux)
 	srv.authRoutes(srv.api())
 	mux.Handle("/api/auth/", srv.api().Mux)
 	mux.HandleFunc("/events", srv.handleEvents)

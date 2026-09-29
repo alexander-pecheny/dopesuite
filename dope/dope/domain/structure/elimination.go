@@ -6,6 +6,8 @@ import (
 	"strconv"
 
 	dopestrings "dope/i18nstrings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // The elimination rounds, for both Kinds.
@@ -339,7 +341,7 @@ func bracketBoutSize(members, winning, want int) (int, error) {
 			return size, nil
 		}
 	}
-	return 0, fmt.Errorf("%s", dopestrings.Default.Structure.Elimination.BracketNotDivisible(strconv.Itoa(members), strconv.Itoa(want), strconv.Itoa(winning)))
+	return 0, corei18n.User(dopestrings.Default.Structure.Elimination.BracketNotDivisible(strconv.Itoa(members), strconv.Itoa(want), strconv.Itoa(winning)))
 }
 
 func flattenBrackets(brackets [][]deSource) []deSource {

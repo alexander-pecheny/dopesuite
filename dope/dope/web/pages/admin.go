@@ -23,7 +23,9 @@ import (
 
 func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (session.User, bool) {
 	return adminusers.RequireAdmin(w, r, festaccess.SiteAdminEnv, func() (session.User, bool) {
-		return s.h.Engine().LookupSession(r)
+		// /admin creates accounts and resets passwords: a browser session
+		// only, never an API token (ADR-0021).
+		return s.h.Engine().LookupCookieSession(r)
 	})
 }
 

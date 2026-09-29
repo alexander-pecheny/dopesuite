@@ -2,10 +2,13 @@ package hostpages
 
 import (
 	"database/sql"
+	"dope/dope/domain/core"
 	"dope/dope/web/pages"
 	"dope/dope/web/route"
 	ui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -85,6 +88,9 @@ type profileData struct {
 	HasPassword bool
 	Username    string
 	Telegram    string
+	Tokens      []core.APIToken
+	// NewToken is the raw token just made, shown this once.
+	NewToken string
 }
 
 // identitySection renders who you are logged in as. Either identity can be
@@ -124,7 +130,7 @@ func profileDoc(data profileData) *ui.Doc {
 			ui.Placeholder(s.Host.Pages.PasswordConfirmPlaceholder()), ui.Autocomplete("new-password"), ui.Required()),
 		ui.Button(ui.Submit(), ui.Text(action)),
 	)
-	page := []ui.Item{ui.Title(s.Host.Pages.ProfileTitle()), ui.PagePublic, ui.Classicscripts("dist/profile.js"),
+	page := []ui.Item{ui.Title(s.Host.Pages.ProfileTitle()), ui.PagePublic, ui.Classicscripts("dist/profile.js dist/pageforms.js"),
 		ui.Publictopbar(pages.Trail(pages.HostCrumbs(), s.Host.Pages.ProfileCrumb())),
 	}
 	if lines := identitySection(data); len(lines) > 0 {
@@ -136,6 +142,7 @@ func profileDoc(data profileData) *ui.Doc {
 			ui.Form(form...),
 			ui.Message(ui.ID("passwordMessage")),
 		),
+		tokensSection(data),
 		ui.Form(ui.Method("post"), ui.Action("/profile/logout"),
 			ui.Button(ui.Submit(), ui.Text(s.Host.Pages.LogoutSubmit())),
 		),
@@ -183,6 +190,130 @@ func (s *Server) renderHostLanding(w http.ResponseWriter, r *http.Request, errMs
 	}))
 }
 
+// tokensSection lists the account's API tokens (ADR-0021) with a revoke
+// button on each live one, and the form that makes a new one. A token just
+// made is shown above the list, the only time it can be read.
+func tokensSection(data profileData) *ui.Element {
+	s := dopestrings.Default
+	sect := []ui.Item{ui.ID("tokens"), ui.Subhead(ui.Text(s.Host.Pages.TokensSubhead())), ui.Hint(ui.Text(s.Host.Pages.TokensLead()))}
+	if data.NewToken != "" {
+		sect = append(sect, ui.Field(ui.Label(s.Host.Pages.TokenNewLabel()),
+			ui.Editor(ui.Rows("2"), ui.Readonly(), ui.Data("select-all", ""), ui.Text(data.NewToken)),
+		), ui.Hint(ui.HintDanger, ui.Text(s.Host.Pages.TokenNewHint())))
+	}
+	if len(data.Tokens) > 0 {
+		rows := make([]ui.Item, 0, len(data.Tokens))
+		for _, t := range data.Tokens {
+			label := t.Label
+			if label == "" {
+				label = s.Host.Pages.TokenUnnamed()
+			}
+			var state string
+			switch {
+			case t.RevokedAt != nil:
+				state = s.Host.Pages.TokenRevoked(tokenDate(*t.RevokedAt))
+			case !t.Active:
+				state = s.Host.Pages.TokenExpired()
+			case t.LastUsedAt != nil:
+				state = s.Host.Pages.TokenUsed(tokenDate(*t.LastUsedAt))
+			default:
+				state = s.Host.Pages.TokenNeverUsed()
+			}
+			row := []ui.Item{ui.Col(
+				ui.Listtitle(ui.Text(label)),
+				ui.Muted(ui.Text(s.Host.Pages.TokenMeta(tokenDate(t.CreatedAt), tokenDate(t.ExpiresAt), state))),
+			)}
+			if t.Active {
+				row = append(row, ui.Form(ui.Method("post"), ui.Action(fmt.Sprintf("/profile/tokens/%d/revoke", t.ID)),
+					ui.Data("confirm", s.Host.Pages.TokenRevokeConfirm()),
+					ui.Button(ui.Danger, ui.Submit(), ui.Text(s.Host.Pages.TokenRevoke()))))
+			}
+			rows = append(rows, ui.Listrow(row...))
+		}
+		sect = append(sect, ui.List(rows...))
+	} else {
+		sect = append(sect, ui.Empty(ui.Text(s.Host.Pages.TokensEmpty())))
+	}
+	sect = append(sect, ui.Form(ui.DirCol, ui.Method("post"), ui.Action("/profile/tokens"), ui.Autocomplete("off"),
+		ui.Field(ui.Label(s.Host.Pages.TokenLabelLabel()),
+			ui.Textfield(ui.Name("label"), ui.Maxlength(strconv.Itoa(core.APITokenLabelMax)), ui.Placeholder(s.Host.Pages.TokenLabelPlaceholder()))),
+		ui.Row(ui.Button(ui.Submit(), ui.Text(s.Host.Pages.TokenCreateSubmit()))),
+	))
+	return ui.Section(sect...)
+}
+
+// tokenDate shows an RFC 3339 stamp as the day it names.
+func tokenDate(ts string) string {
+	if t, err := time.Parse(time.RFC3339, ts); err == nil {
+		return t.Format("2006-01-02")
+	}
+	return ts
+}
+
+func (s *Server) renderProfile(w http.ResponseWriter, r *http.Request, user session.User, newToken string) {
+	var hash, username, telegram sql.NullString
+	if err := s.h.Engine().DB.QueryRowContext(r.Context(),
+		`select password_hash, username, telegram_username from users where id = ?`,
+		user.UserID).Scan(&hash, &username, &telegram); err != nil {
+		route.WriteError(w, r, err)
+		return
+	}
+	tokens, err := s.h.Engine().ListAPITokens(r.Context(), user.UserID)
+	if err != nil {
+		route.WriteError(w, r, err)
+		return
+	}
+	pages.RenderDoc(w, s.h.Engine().AssetETags, profileDoc(profileData{
+		HasPassword: hash.Valid && hash.String != "",
+		Username:    username.String,
+		Telegram:    strings.TrimPrefix(telegram.String, "@"),
+		Tokens:      tokens,
+		NewToken:    newToken,
+	}))
+}
+
+// HandleProfileTokens serves POST /profile/tokens, which makes a token and
+// shows it once, and POST /profile/tokens/{id}/revoke.
+func (s *Server) HandleProfileTokens(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !route.SameOriginUnsafe(w, r) {
+		return
+	}
+	user, ok := s.h.Engine().LookupCookieSession(r)
+	if !ok {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	if r.URL.Path == "/profile/tokens" {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "bad form", http.StatusBadRequest)
+			return
+		}
+		created, err := s.h.Engine().CreateAPIToken(r.Context(), user.UserID, r.Form.Get("label"))
+		if err != nil {
+			route.WriteError(w, r, err)
+			return
+		}
+		s.renderProfile(w, r, user, created.Token)
+		return
+	}
+	idText, found := strings.CutPrefix(r.URL.Path, "/profile/tokens/")
+	idText, isRevoke := strings.CutSuffix(idText, "/revoke")
+	id, err := strconv.ParseInt(idText, 10, 64)
+	if !found || !isRevoke || err != nil || id <= 0 {
+		http.NotFound(w, r)
+		return
+	}
+	if err := s.h.Engine().RevokeAPIToken(r.Context(), user.UserID, id); err != nil && !errors.Is(err, core.ErrNoAPIToken) {
+		route.WriteError(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/profile#tokens", http.StatusSeeOther)
+}
+
 func (s *Server) HandleProfilePage(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/profile" {
 		http.NotFound(w, r)
@@ -195,18 +326,7 @@ func (s *Server) HandleProfilePage(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
 		}
-		var hash, username, telegram sql.NullString
-		if err := s.h.Engine().DB.QueryRowContext(r.Context(),
-			`select password_hash, username, telegram_username from users where id = ?`,
-			user.UserID).Scan(&hash, &username, &telegram); err != nil {
-			route.WriteError(w, r, err)
-			return
-		}
-		pages.RenderDoc(w, s.h.Engine().AssetETags, profileDoc(profileData{
-			HasPassword: hash.Valid && hash.String != "",
-			Username:    username.String,
-			Telegram:    strings.TrimPrefix(telegram.String, "@"),
-		}))
+		s.renderProfile(w, r, user, "")
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}

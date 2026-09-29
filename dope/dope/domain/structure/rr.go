@@ -10,6 +10,8 @@ import (
 	dopestrings "dope/i18nstrings"
 
 	"dope/dope/storage/store"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 func init() { Register(roundRobin{}) }
@@ -257,7 +259,7 @@ func rrBlockRounds(n, size int, conf RRConfig) ([][][]int, error) {
 	}
 	blockRounds, ok := affineBlockRounds(n, size)
 	if !ok {
-		return nil, fmt.Errorf("%s", dopestrings.Default.Structure.Rr.NoSchedule(strconv.Itoa(n), strconv.Itoa(size)))
+		return nil, corei18n.User(dopestrings.Default.Structure.Rr.NoSchedule(strconv.Itoa(n), strconv.Itoa(size)))
 	}
 	return blockRounds, nil
 }

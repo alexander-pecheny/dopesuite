@@ -324,45 +324,46 @@ select code, title, game_type, slug, coalesce(scheme_dsl, '') from games where i
 	})
 }
 
-func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad form", http.StatusBadRequest)
-		return
-	}
-	title := strings.TrimSpace(r.Form.Get("title"))
+// GameSettings is what a game's settings page edits: its title, its slug,
+// and for a game built from the scheme language its scheme. An empty
+// SchemeDSL leaves the scheme as it is.
+type GameSettings struct {
+	Title     string `json:"title"`
+	Slug      string `json:"slug"`
+	SchemeDSL string `json:"scheme_dsl"`
+}
+
+// UpdateGameSettings saves a game's settings. A changed scheme recompiles the
+// game, in the same transaction as the rename, so a refused recompile leaves
+// nothing half-applied.
+func (s *Server) UpdateGameSettings(reqCtx context.Context, festID, gameID int64, g GameSettings) error {
+	title := strings.TrimSpace(g.Title)
 	if title == "" {
-		s.renderHostGameSettings(w, r, festID, gameID, dopestrings.Default.Host.Games.ErrorTitleRequired())
-		return
+		return corei18n.User(dopestrings.Default.Host.Games.ErrorTitleRequired())
 	}
-	slug := strings.TrimSpace(r.Form.Get("slug"))
+	slug := strings.TrimSpace(g.Slug)
 	var slugValue any
 	if slug != "" {
 		if err := util.ValidateSlug(slug); err != nil {
-			s.renderHostGameSettings(w, r, festID, gameID, dopestrings.Default.Host.Games.ErrorSlugInvalid(err.Error()))
-			return
+			return corei18n.User(dopestrings.Default.Host.Games.ErrorSlugInvalid(err.Error()))
 		}
 		var count int
-		if err := s.h.Engine().DB.QueryRowContext(r.Context(), `
+		if err := s.h.Engine().DB.QueryRowContext(reqCtx, `
 select count(*) from games where fest_id = ? and slug = ? and id <> ?`, festID, slug, gameID).Scan(&count); err != nil {
-			route.WriteError(w, r, err)
-			return
+			return err
 		}
 		if count > 0 {
-			s.renderHostGameSettings(w, r, festID, gameID, dopestrings.Default.Host.Games.ErrorSlugTaken())
-			return
+			return corei18n.User(dopestrings.Default.Host.Games.ErrorSlugTaken())
 		}
 		slugValue = slug
 	}
-	// One transaction for the whole save: a refused recompile must not leave a
-	// half-applied rename behind.
-	err := s.h.Engine().WithWriteTx(r.Context(), festID, "game-settings", func(ctx context.Context, tx *sql.Tx) error {
+	err := s.h.Engine().WithWriteTx(reqCtx, festID, "game-settings", func(ctx context.Context, tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `
 update games set title = ?, slug = ?, updated_at = ? where id = ? and fest_id = ?`,
 			title, slugValue, util.UtcNow(), gameID, festID); err != nil {
 			return err
 		}
-		dsl := r.Form.Get("brain_dsl")
-		if strings.TrimSpace(dsl) == "" {
+		if strings.TrimSpace(g.SchemeDSL) == "" {
 			return nil
 		}
 		var stored string
@@ -370,59 +371,65 @@ update games set title = ?, slug = ?, updated_at = ? where id = ? and fest_id = 
 select coalesce(scheme_dsl, '') from games where id = ?`, gameID).Scan(&stored); err != nil {
 			return err
 		}
-		if strings.TrimSpace(stored) == strings.TrimSpace(dsl) {
+		if strings.TrimSpace(stored) == strings.TrimSpace(g.SchemeDSL) {
 			return nil
 		}
-		return gamebuild.Recompile(ctx, tx, festID, gameID, dsl)
+		return gamebuild.Recompile(ctx, tx, festID, gameID, g.SchemeDSL)
 	})
 	if err != nil {
+		return err
+	}
+	s.h.Engine().InvalidateFestViewCache(festID)
+	return nil
+}
+
+func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	g := GameSettings{Title: r.Form.Get("title"), Slug: r.Form.Get("slug"), SchemeDSL: r.Form.Get("brain_dsl")}
+	if err := s.UpdateGameSettings(r.Context(), festID, gameID, g); err != nil {
 		s.renderHostGameSettings(w, r, festID, gameID, err.Error())
 		return
 	}
-	s.h.Engine().InvalidateFestViewCache(festID)
-	gameRef := slug
+	gameRef := strings.TrimSpace(g.Slug)
 	if gameRef == "" {
 		gameRef = fmt.Sprintf("%d", gameID)
 	}
 	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s/game/%s/settings", s.festRefOrID(r.Context(), festID), gameRef), http.StatusSeeOther)
 }
 
-func (s *Server) handleHostDeleteGame(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
+// DeleteGame deletes one game of the fest and moves the active-game pointer
+// off it.
+func (s *Server) DeleteGame(reqCtx context.Context, festID, gameID int64) error {
 	// Acquire the pooled connection BEFORE the write lock and bound the whole
 	// write with festwrite.WriteTxTimeout, so a starved pool can never pin s.h.Engine().Mu (the
 	// 2026-06-13 freeze). The lock is held across the post-commit active-game
 	// pointer update, which is why this uses the lower-level trio rather than
 	// withWriteTx.
-	ctx, cancel := festwrite.AuditDetachedContext(r.Context(), festID)
+	ctx, cancel := festwrite.AuditDetachedContext(reqCtx, festID)
 	defer cancel()
 	conn, err := s.h.Engine().AcquireWriteConn(ctx, "game-delete")
 	if err != nil {
-		route.WriteError(w, r, err)
-		return
+		return err
 	}
 	defer conn.Close()
 	defer s.h.Engine().LockWrite("game-delete")()
 
 	tx, err := s.h.Engine().BeginWriteTxConn(ctx, conn)
 	if err != nil {
-		route.WriteError(w, r, err)
-		return
+		return err
 	}
 	defer tx.Rollback()
 
 	var title string
 	if err := tx.QueryRowContext(ctx, `
 select title from games where id = ? and fest_id = ?`, gameID, festID).Scan(&title); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			http.NotFound(w, r)
-			return
-		}
-		route.WriteError(w, r, err)
-		return
+		return err
 	}
 	if _, err := tx.ExecContext(ctx, `delete from games where id = ? and fest_id = ?`, gameID, festID); err != nil {
-		route.WriteError(w, r, err)
-		return
+		return err
 	}
 	var nextGameID sql.NullInt64
 	var nextMatchCode sql.NullString
@@ -434,19 +441,16 @@ from games g
 where g.fest_id = ?
 order by g.position, g.id
 limit 1`, festID).Scan(&nextGameID, &nextMatchCode); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		route.WriteError(w, r, err)
-		return
+		return err
 	}
 	if _, err := festwrite.BumpFestRevisionTx(ctx, tx, festID, "game:delete", util.MustJSON(map[string]any{
 		"gameID": gameID,
 		"title":  title,
 	})); err != nil {
-		route.WriteError(w, r, err)
-		return
+		return err
 	}
 	if err := tx.Commit(); err != nil {
-		route.WriteError(w, r, err)
-		return
+		return err
 	}
 	if s.h.Engine().FestID == festID && s.h.Engine().ActiveGameID == gameID {
 		if nextGameID.Valid {
@@ -457,42 +461,54 @@ limit 1`, festID).Scan(&nextGameID, &nextMatchCode); err != nil && !errors.Is(er
 			s.h.Engine().ActiveMatchCode = ""
 		}
 	}
+	return nil
+}
+
+func (s *Server) handleHostDeleteGame(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
+	if err := s.DeleteGame(r.Context(), festID, gameID); err != nil {
+		route.WriteError(w, r, err)
+		return
+	}
 	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s", s.festRefOrID(r.Context(), festID)), http.StatusSeeOther)
 }
 
-// handleHostClearGame resets a game to its just-created state: it drops every
+// ClearGame resets a game to its just-created state: it drops every
 // game-scoped derived row (results, imported seeds/rosters, EK bracket
 // resolution) and regenerates the pristine scheme/state — the same content a
 // fresh game of this type would have — while keeping the game's id, code, slug
 // and title so its URLs stay valid. Fest-scoped teams/players and the audit log
 // are left intact (the latter is fest-scoped, like the delete path leaves it).
-func (s *Server) handleHostClearGame(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
+func (s *Server) ClearGame(ctx context.Context, festID, gameID int64) error {
 	s.h.Engine().Mu.Lock()
 	defer s.h.Engine().Mu.Unlock()
 
-	tx, err := s.h.Engine().BeginWriteTx(r.Context())
+	tx, err := s.h.Engine().BeginWriteTx(ctx)
 	if err != nil {
-		route.WriteError(w, r, err)
-		return
+		return err
 	}
 	defer tx.Rollback()
-	firstMatchCode, err := gamebuild.Clear(r.Context(), tx, festID, gameID)
+	firstMatchCode, err := gamebuild.Clear(ctx, tx, festID, gameID)
 	if errors.Is(err, sql.ErrNoRows) {
-		http.NotFound(w, r)
-		return
+		return err
 	}
 	if err != nil {
-		route.WriteError(w, r, route.BadUser(err))
-		return
+		return route.BadUser(err)
 	}
 	if err := tx.Commit(); err != nil {
-		route.WriteError(w, r, err)
-		return
+		return err
 	}
 	if s.h.Engine().FestID == festID && s.h.Engine().ActiveGameID == gameID {
 		s.h.Engine().ActiveMatchCode = firstMatchCode
 	}
 	s.h.Engine().InvalidateFestViewCache(festID)
+	return nil
+}
+
+func (s *Server) handleHostClearGame(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
+	if err := s.ClearGame(r.Context(), festID, gameID); err != nil {
+		route.WriteError(w, r, err)
+		return
+	}
 	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s", s.festRefOrID(r.Context(), festID)), http.StatusSeeOther)
 }
 
@@ -576,6 +592,64 @@ func chosenEntrantIDs(form url.Values) []int64 {
 		}
 	}
 	return out
+}
+
+// GameCreateRequest is the creation form as JSON: the format, whom it seats,
+// and the format's own knobs. It is read into the form's own fields, so both
+// ways of creating a game go through one reader and one set of refusals.
+type GameCreateRequest struct {
+	// GameType is a games.* type, or "ksi_stickers" for KSI with stickers.
+	GameType string  `json:"game_type"`
+	Entrants []int64 `json:"entrants"`
+	// DSL is the format's scheme in the scheme language (brain, si, troika,
+	// hamsa, ek, es). Scheme is a pasted JSON scheme, for ek and es only.
+	DSL          string          `json:"dsl"`
+	Scheme       json.RawMessage `json:"scheme"`
+	ODTours      int             `json:"od_tours"`
+	ODQuestions  int             `json:"od_questions"`
+	KSIThemes    int             `json:"ksi_themes"`
+	MultiGames   string          `json:"multi_games"`
+	MultiSorting string          `json:"multi_sorting"`
+	// Stickers maps a sticker id (neutral, x2, nowrong, emptywrong) to its
+	// colour and how many each team holds; 0 or absent means none.
+	Stickers map[string]struct {
+		Color string `json:"color"`
+		Max   int    `json:"max"`
+	} `json:"stickers"`
+}
+
+func (req GameCreateRequest) form() url.Values {
+	form := url.Values{}
+	for _, id := range req.Entrants {
+		form.Add("entrant_id", strconv.FormatInt(id, 10))
+	}
+	if field, ok := dslField[req.GameType]; ok {
+		form.Set(field, req.DSL)
+	}
+	if field, ok := schemeJSONField[req.GameType]; ok && len(req.Scheme) > 0 {
+		form.Set(field, string(req.Scheme))
+	}
+	setIfGiven := func(key string, v int) {
+		if v != 0 {
+			form.Set(key, strconv.Itoa(v))
+		}
+	}
+	setIfGiven("od_tours", req.ODTours)
+	setIfGiven("od_questions", req.ODQuestions)
+	setIfGiven("ksi_themes", req.KSIThemes)
+	setIfGiven("ksis_themes", req.KSIThemes)
+	form.Set("multi_games", req.MultiGames)
+	form.Set("multi_sorting", req.MultiSorting)
+	for id, sticker := range req.Stickers {
+		form.Set("ksis_"+id+"_color", sticker.Color)
+		form.Set("ksis_"+id+"_max", strconv.Itoa(sticker.Max))
+	}
+	return form
+}
+
+// CreateGame creates a game in the fest from a JSON request and returns its id.
+func (s *Server) CreateGame(ctx context.Context, festID int64, req GameCreateRequest) (int64, error) {
+	return s.createHostGame(ctx, festID, req.GameType, req.form())
 }
 
 func (s *Server) handleHostCreateGame(w http.ResponseWriter, r *http.Request, festID int64) {

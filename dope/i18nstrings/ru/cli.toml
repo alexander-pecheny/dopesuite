@@ -1,0 +1,40 @@
+# dope — dope-cli (dope/dope/cmd/dope-cli): every line the command prints to a
+# person. The API's answers themselves are printed as they come.
+
+[usage]
+# The help text, a line a key, printed in this order.
+title = "dope-cli: dope через API, для агента и скриптов."
+start_head = "Сначала:"
+start_login = "  dope-cli login --url https://dope.pecheny.me   (токен создаётся на /profile)"
+commands_head = "Команды:"
+login = "  login     запомнить сервер и API-токен"
+logout = "  logout    забыть токен"
+whoami = "  whoami    под кем работает токен"
+fests = "  fests     мои фесты"
+fest = "  fest      фест целиком: настройки, игры, ростер (dope-cli fest <id|slug>)"
+api = "  api       любой запрос к API: dope-cli api METHOD /api/… [JSON | @файл | -]"
+flags_head = "Флаги api:"
+flag_file = "  --file путь   отправить файл формой (поле file), для xlsx-импорта"
+flag_out = "  --out путь    записать ответ в файл, а не на экран"
+env = "Сервер можно подменить переменной DOPE_URL, токен можно подменить переменной DOPE_TOKEN."
+
+[login]
+need_url = "укажите сервер: dope-cli login --url https://dope.pecheny.me"
+token_prompt = "API-токен (создайте его на /profile): "
+empty_token = "токен пустой"
+# The server refused the token while logging in.
+rejected = 'сервер не принял токен: {{.err}}'
+done = 'вошли как {{.user}} на {{.url}}; токен сохранён в {{.path}}'
+
+[logout]
+done = "токен забыт"
+
+[run]
+unknown_command = 'неизвестная команда {{.name}}, см. dope-cli help'
+state_unreadable = 'не читается файл состояния: {{.err}}'
+# No token was stored and none came in DOPE_TOKEN.
+not_logged_in = "сначала dope-cli login"
+# The server answered 401: the token expired, was revoked or the password changed.
+token_rejected = "токен не принят: он истёк, отозван или пароль сменили. Создайте новый на /profile и снова выполните dope-cli login"
+need_ref = "укажите фест: dope-cli fest <id|slug>"
+api_args = "нужно: dope-cli api METHOD /api/… [JSON | @файл | -]"

@@ -37,6 +37,11 @@ test-full: build-web
     go test ./...
     deno test --parallel dope/web/jstest/
 
+# dope-cli: the API from the shell, for an agent (ADR-0021, the dope-api skill).
+cli:
+    go build -o ~/.local/bin/dope-cli ./dope/cmd/dope-cli
+    @echo "built: ~/.local/bin/dope-cli"
+
 # Frontend unit tests only (runs against the built dist — see build-web).
 test-js:
     deno test --parallel dope/web/jstest/

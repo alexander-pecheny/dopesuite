@@ -78,6 +78,11 @@ var RU = Strings{
 			Submit:         func() string { return "Сохранить пароль" },
 			Title:          func() string { return "Новый пароль" },
 		},
+		Token: AuthTokenStrings{
+			Forbidden: func() string {
+				return "API-токен не может менять пароль и имя пользователя. Войдите в браузере."
+			},
+		},
 		Username: AuthUsernameStrings{
 			AlreadySet: func() string { return "имя пользователя уже задано" },
 			Invalid:    func() string { return "недопустимое имя пользователя" },
@@ -142,6 +147,62 @@ var RU = Strings{
 			RemoveHint: func() string { return "Убрать пустой вопрос перестрелки" },
 		},
 		Title: func() string { return "Брейн" },
+	},
+	Cli: CliStrings{
+		Login: CliLoginStrings{
+			Done: func(user string, url string, path string) string {
+				return fmt.Sprintf("вошли как %s на %s; токен сохранён в %s", user, url, path)
+			},
+			EmptyToken:  func() string { return "токен пустой" },
+			NeedUrl:     func() string { return "укажите сервер: dope-cli login --url https://dope.pecheny.me" },
+			Rejected:    func(err string) string { return fmt.Sprintf("сервер не принял токен: %s", err) },
+			TokenPrompt: func() string { return "API-токен (создайте его на /profile): " },
+		},
+		Logout: CliLogoutStrings{
+			Done: func() string { return "токен забыт" },
+		},
+		Run: CliRunStrings{
+			ApiArgs:     func() string { return "нужно: dope-cli api METHOD /api/… [JSON | @файл | -]" },
+			NeedRef:     func() string { return "укажите фест: dope-cli fest <id|slug>" },
+			NotLoggedIn: func() string { return "сначала dope-cli login" },
+			StateUnreadable: func(err string) string {
+				return fmt.Sprintf("не читается файл состояния: %s", err)
+			},
+			TokenRejected: func() string {
+				return "токен не принят: он истёк, отозван или пароль сменили. Создайте новый на /profile и снова выполните dope-cli login"
+			},
+			UnknownCommand: func(name string) string {
+				return fmt.Sprintf("неизвестная команда %s, см. dope-cli help", name)
+			},
+		},
+		Usage: CliUsageStrings{
+			Api: func() string {
+				return "  api       любой запрос к API: dope-cli api METHOD /api/… [JSON | @файл | -]"
+			},
+			CommandsHead: func() string { return "Команды:" },
+			Env: func() string {
+				return "Сервер можно подменить переменной DOPE_URL, токен можно подменить переменной DOPE_TOKEN."
+			},
+			Fest: func() string {
+				return "  fest      фест целиком: настройки, игры, ростер (dope-cli fest <id|slug>)"
+			},
+			Fests: func() string { return "  fests     мои фесты" },
+			FlagFile: func() string {
+				return "  --file путь   отправить файл формой (поле file), для xlsx-импорта"
+			},
+			FlagOut: func() string {
+				return "  --out путь    записать ответ в файл, а не на экран"
+			},
+			FlagsHead: func() string { return "Флаги api:" },
+			Login:     func() string { return "  login     запомнить сервер и API-токен" },
+			Logout:    func() string { return "  logout    забыть токен" },
+			StartHead: func() string { return "Сначала:" },
+			StartLogin: func() string {
+				return "  dope-cli login --url https://dope.pecheny.me   (токен создаётся на /profile)"
+			},
+			Title:  func() string { return "dope-cli: dope через API, для агента и скриптов." },
+			Whoami: func() string { return "  whoami    под кем работает токен" },
+		},
 	},
 	Crosstable: CrosstableStrings{
 		Columns: CrosstableColumnsStrings{
@@ -610,31 +671,32 @@ var RU = Strings{
 			DeleteNote: func() string {
 				return "Удаление убирает фест со всеми играми, командами и результатами."
 			},
-			DeleteSubhead:        func() string { return "Удаление" },
-			DeleteSubmit:         func() string { return "Удалить фест" },
-			DescriptionLabel:     func() string { return "Описание (markdown)" },
-			EndDateLabel:         func() string { return "Дата окончания" },
-			ErrorSlugInvalid:     func(err string) string { return fmt.Sprintf("Slug: %s", err) },
-			ErrorSlugTaken:       func() string { return "Slug уже занят." },
-			ErrorTitleRequired:   func() string { return "Название обязательно." },
-			GamesEmpty:           func() string { return "Игр пока нет." },
-			GamesSubhead:         func() string { return "Игры" },
-			JumpLabel:            func() string { return "Страница зрителя" },
-			JumpTitle:            func() string { return "Открыть зрительскую страницу" },
-			NumbersLink:          func() string { return "Номера команд" },
-			NumbersStatusDone:    func() string { return "готово" },
-			NumbersStatusPartial: func(done string, total string) string { return fmt.Sprintf("%s из %s", done, total) },
-			NumbersStatusUnset:   func() string { return "не выставлены" },
-			PageTitle:            func(title string) string { return fmt.Sprintf("%s · ведущий", title) },
-			PublicLabel:          func() string { return "Публичный" },
-			RatingStatusNone:     func() string { return "нет rating ID" },
-			RosterImportLink:     func() string { return "Загрузить команды и игроков" },
-			RosterPlayersLink:    func() string { return "Игроки" },
-			RosterSubhead:        func() string { return "Участники" },
-			RosterTeamsLink:      func() string { return "Команды" },
-			RosterTroikasLink:    func() string { return "Тройки" },
-			SaveSubmit:           func() string { return "Сохранить" },
-			SettingsBtn:          func() string { return "Свойства" },
+			DeleteSubhead:          func() string { return "Удаление" },
+			DeleteSubmit:           func() string { return "Удалить фест" },
+			DescriptionLabel:       func() string { return "Описание (markdown)" },
+			EndDateLabel:           func() string { return "Дата окончания" },
+			ErrorDeleteCreatorOnly: func() string { return "Удалить фест может только его создатель." },
+			ErrorSlugInvalid:       func(err string) string { return fmt.Sprintf("Slug: %s", err) },
+			ErrorSlugTaken:         func() string { return "Slug уже занят." },
+			ErrorTitleRequired:     func() string { return "Название обязательно." },
+			GamesEmpty:             func() string { return "Игр пока нет." },
+			GamesSubhead:           func() string { return "Игры" },
+			JumpLabel:              func() string { return "Страница зрителя" },
+			JumpTitle:              func() string { return "Открыть зрительскую страницу" },
+			NumbersLink:            func() string { return "Номера команд" },
+			NumbersStatusDone:      func() string { return "готово" },
+			NumbersStatusPartial:   func(done string, total string) string { return fmt.Sprintf("%s из %s", done, total) },
+			NumbersStatusUnset:     func() string { return "не выставлены" },
+			PageTitle:              func(title string) string { return fmt.Sprintf("%s · ведущий", title) },
+			PublicLabel:            func() string { return "Публичный" },
+			RatingStatusNone:       func() string { return "нет rating ID" },
+			RosterImportLink:       func() string { return "Загрузить команды и игроков" },
+			RosterPlayersLink:      func() string { return "Игроки" },
+			RosterSubhead:          func() string { return "Участники" },
+			RosterTeamsLink:        func() string { return "Команды" },
+			RosterTroikasLink:      func() string { return "Тройки" },
+			SaveSubmit:             func() string { return "Сохранить" },
+			SettingsBtn:            func() string { return "Свойства" },
 			SlugLabel: func() string {
 				return "Slug (необязательно; задайте, чтобы получить URL вида /fest/{slug})"
 			},
@@ -662,6 +724,9 @@ var RU = Strings{
 			ErrorMinigames:       func(err string) string { return fmt.Sprintf("Мини-игры: %s", err) },
 			ErrorMultiSorting: func(err string) string {
 				return fmt.Sprintf("Что решает при равном итоге: %s", err)
+			},
+			ErrorSchemeNotEditable: func(kind string) string {
+				return fmt.Sprintf("Схему игры типа %s здесь поменять нельзя. Удалите игру и создайте её заново.", kind)
 			},
 			ErrorSlugInvalid:   func(err string) string { return fmt.Sprintf("Slug: %s", err) },
 			ErrorSlugTaken:     func() string { return "Slug уже занят в этом фесте." },
@@ -773,7 +838,31 @@ var RU = Strings{
 			RatingIdLabel:              func() string { return "rating.chgk.info ID (опционально)" },
 			StartDateLabel:             func() string { return "Дата начала (YYYY-MM-DD)" },
 			TitleLabel:                 func() string { return "Название" },
-			UsernameFallback:           func() string { return "Профиль" },
+			TokenCreateSubmit:          func() string { return "Создать токен" },
+			TokenExpired:               func() string { return "срок истёк" },
+			TokenLabelLabel:            func() string { return "Для чего токен" },
+			TokenLabelPlaceholder:      func() string { return "например, агент на ноутбуке" },
+			TokenMeta: func(created string, expires string, used string) string {
+				return fmt.Sprintf("создан %s, действует до %s, %s", created, expires, used)
+			},
+			TokenNeverUsed: func() string { return "ещё не использовался" },
+			TokenNewHint: func() string {
+				return "Скопируйте токен сейчас. Потом его нельзя будет посмотреть, только отозвать и создать новый."
+			},
+			TokenNewLabel: func() string { return "Новый токен" },
+			TokenRevoke:   func() string { return "Отозвать" },
+			TokenRevokeConfirm: func() string {
+				return "Отозвать токен? Программа, которая им пользуется, потеряет доступ."
+			},
+			TokenRevoked: func(at string) string { return fmt.Sprintf("отозван %s", at) },
+			TokenUnnamed: func() string { return "Без названия" },
+			TokenUsed:    func(at string) string { return fmt.Sprintf("последний раз использован %s", at) },
+			TokensEmpty:  func() string { return "Токенов пока нет." },
+			TokensLead: func() string {
+				return "Токен даёт программе или агенту те же права, что у вас: читать и менять ваши фесты через API. Он действует 30 дней. Смена пароля отзывает все токены."
+			},
+			TokensSubhead:    func() string { return "API-токены" },
+			UsernameFallback: func() string { return "Профиль" },
 		},
 		Roster: HostRosterStrings{
 			AddOverrideBtn:      func() string { return "Добавить оверрайд для игры" },
@@ -802,6 +891,7 @@ var RU = Strings{
 			DeleteBtn:             func() string { return "Удалить" },
 			DeleteOverrideConfirm: func() string { return "Удалить оверрайд?" },
 			EditOverrideLabel:     func() string { return "Редактировать оверрайд" },
+			ErrorFlagsForeignTeam: func(id string) string { return fmt.Sprintf("Команды %s нет в этом фесте.", id) },
 			ErrorJsonEmpty:        func() string { return "Вставьте JSON схемы." },
 			ErrorJsonParse:        func(err string) string { return fmt.Sprintf("Не удалось разобрать JSON: %s", err) },
 			ErrorObjPlayer:        func() string { return "игрока" },

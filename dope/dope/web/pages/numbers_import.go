@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"sort"
@@ -11,6 +12,8 @@ import (
 	"dope/dope/platform/util"
 	"dope/dope/web/route"
 	dopestrings "dope/i18nstrings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // Mass import of team numbers from an external source (e.g. printed answer
@@ -37,7 +40,9 @@ type importMatch struct {
 	Exact    bool   `json:"exact"`
 }
 
-type importMatchResponse struct {
+// NumbersMatch is the proposed pairing of pasted `<number>\t<team>` lines to
+// the fest's teams, for a person (or an agent) to confirm before applying.
+type NumbersMatch struct {
 	Teams   []importTeamOption `json:"teams"`
 	Matches []importMatch      `json:"matches"`
 	Errors  []string           `json:"errors"`
@@ -206,17 +211,13 @@ func matchNumberImport(entries []importEntry, teams []numbering.Team) []importMa
 	return matches
 }
 
-func (s *Server) HandleHostFestNumbersImportMatch(w http.ResponseWriter, r *http.Request, festID int64) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad form", http.StatusBadRequest)
-		return
-	}
-	teams, err := numbering.LoadFestTeams(r.Context(), s.h.Engine().DB, festID)
+// MatchFestNumbers pairs pasted lines with the fest's teams. Nothing is saved.
+func (s *Server) MatchFestNumbers(ctx context.Context, festID int64, text string) (NumbersMatch, error) {
+	teams, err := numbering.LoadFestTeams(ctx, s.h.Engine().DB, festID)
 	if err != nil {
-		route.WriteError(w, r, err)
-		return
+		return NumbersMatch{}, err
 	}
-	entries, errs := parseNumberImport(r.Form.Get("text"))
+	entries, errs := parseNumberImport(text)
 	matches := matchNumberImport(entries, teams)
 
 	options := make([]importTeamOption, 0, len(teams))
@@ -236,22 +237,84 @@ func (s *Server) HandleHostFestNumbersImportMatch(w http.ResponseWriter, r *http
 	if errs == nil {
 		errs = []string{}
 	}
-	if err := route.JSON(w, importMatchResponse{Teams: options, Matches: matches, Errors: errs}); err != nil {
+	return NumbersMatch{Teams: options, Matches: matches, Errors: errs}, nil
+}
+
+func (s *Server) HandleHostFestNumbersImportMatch(w http.ResponseWriter, r *http.Request, festID int64) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	match, err := s.MatchFestNumbers(r.Context(), festID, r.Form.Get("text"))
+	if err != nil {
+		route.WriteError(w, r, err)
+		return
+	}
+	if err := route.JSON(w, match); err != nil {
 		route.WriteError(w, r, err)
 	}
 }
 
+// NumberAssignment gives one team one number; 0 takes its number away, as a
+// blank field does on the numbers page.
+type NumberAssignment struct {
+	TeamID int64 `json:"teamId"`
+	Number int   `json:"number"`
+}
+
 type importApplyRequest struct {
-	Assignments []struct {
-		TeamID int64 `json:"teamId"`
-		Number int   `json:"number"`
-	} `json:"assignments"`
+	Assignments []NumberAssignment `json:"assignments"`
 }
 
 type importApplyResponse struct {
 	OK       bool   `json:"ok"`
 	Error    string `json:"error,omitempty"`
 	Assigned int    `json:"assigned,omitempty"`
+}
+
+// AssignFestNumbers gives the named teams their numbers and leaves every other
+// team's as it is, except that a number moved onto a team is taken from
+// whoever held it. The assignments are the authority, as printed blanks are.
+func (s *Server) AssignFestNumbers(ctx context.Context, festID int64, assignments []NumberAssignment) error {
+	str := dopestrings.Default
+	teams, err := numbering.LoadFestTeams(ctx, s.h.Engine().DB, festID)
+	if err != nil {
+		return err
+	}
+	final := make(map[int64]int, len(teams))
+	validIDs := make(map[int64]bool, len(teams))
+	for _, t := range teams {
+		validIDs[t.ID] = true
+		if t.Number > 0 {
+			final[t.ID] = t.Number
+		}
+	}
+	seenTeam := make(map[int64]bool, len(assignments))
+	for _, a := range assignments {
+		if !validIDs[a.TeamID] {
+			return corei18n.User(str.Numbers.Apply.ForeignTeam())
+		}
+		if a.Number < 0 || a.Number > numbering.MaxNumber {
+			return corei18n.User(str.Numbers.Apply.NumberRange(strconv.Itoa(numbering.MaxNumber)))
+		}
+		if seenTeam[a.TeamID] {
+			return corei18n.User(str.Numbers.Apply.TeamRepeated())
+		}
+		seenTeam[a.TeamID] = true
+	}
+	for _, a := range assignments {
+		if a.Number == 0 {
+			delete(final, a.TeamID)
+			continue
+		}
+		for tid, n := range final {
+			if n == a.Number && tid != a.TeamID {
+				delete(final, tid)
+			}
+		}
+		final[a.TeamID] = a.Number
+	}
+	return s.SaveFestNumbers(ctx, festID, final)
 }
 
 func (s *Server) HandleHostFestNumbersImportApply(w http.ResponseWriter, r *http.Request, festID int64) {
@@ -262,55 +325,9 @@ func (s *Server) HandleHostFestNumbersImportApply(w http.ResponseWriter, r *http
 		}
 		return
 	}
-	teams, err := numbering.LoadFestTeams(r.Context(), s.h.Engine().DB, festID)
-	if err != nil {
-		route.WriteError(w, r, err)
-		return
-	}
-	// Start from the teams' current numbers so a partial import keeps the rest
-	// intact, then let each confirmed assignment overwrite. Import is the
-	// authoritative source (printed blanks), so a number being moved onto a
-	// team is stripped from whoever else currently holds it.
-	final := make(map[int64]int, len(teams))
-	validIDs := make(map[int64]bool, len(teams))
-	for _, t := range teams {
-		validIDs[t.ID] = true
-		if t.Number > 0 {
-			final[t.ID] = t.Number
-		}
-	}
-	seenTeam := make(map[int64]bool, len(req.Assignments))
-	for _, a := range req.Assignments {
-		if !validIDs[a.TeamID] {
-			if err := route.JSON(w, importApplyResponse{Error: dopestrings.Default.Numbers.Apply.ForeignTeam()}); err != nil {
-				route.WriteError(w, r, err)
-			}
-			return
-		}
-		if a.Number <= 0 || a.Number > numbering.MaxNumber {
-			if err := route.JSON(w, importApplyResponse{Error: dopestrings.Default.Numbers.Apply.NumberRange(strconv.Itoa(numbering.MaxNumber))}); err != nil {
-				route.WriteError(w, r, err)
-			}
-			return
-		}
-		if seenTeam[a.TeamID] {
-			if err := route.JSON(w, importApplyResponse{Error: dopestrings.Default.Numbers.Apply.TeamRepeated()}); err != nil {
-				route.WriteError(w, r, err)
-			}
-			return
-		}
-		seenTeam[a.TeamID] = true
-	}
-	for _, a := range req.Assignments {
-		for tid, n := range final {
-			if n == a.Number && tid != a.TeamID {
-				delete(final, tid)
-			}
-		}
-		final[a.TeamID] = a.Number
-	}
-	if err := s.SaveFestNumbers(r.Context(), festID, final); err != nil {
-		if err := route.JSON(w, importApplyResponse{Error: err.Error()}); err != nil {
+	if err := s.AssignFestNumbers(r.Context(), festID, req.Assignments); err != nil {
+		msg, _ := corei18n.Reveal(err, dopestrings.Default.Server.Error.Internal())
+		if err := route.JSON(w, importApplyResponse{Error: msg}); err != nil {
 			route.WriteError(w, r, err)
 		}
 		return
