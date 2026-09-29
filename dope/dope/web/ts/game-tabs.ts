@@ -8,7 +8,7 @@ export type GameKind = "ek" | "es" | "si" | "brain" | "ksi" | "od" | "troika" | 
 
 export type TabKind =
   | "grid" | "block" | "pods" | "round" | "protocol" | "reseed" | "stage"
-  | "stats" | "roster" | "venues" | "seed" | "seedImport"
+  | "stats" | "roster" | "venues" | "entrants" | "seedImport"
   | "results" | "detailed" | "input" | "screen" | "refusals";
 
 export interface GameTab {
@@ -23,7 +23,6 @@ export interface GameTab {
 export interface GameTabsOptions {
   game: GameKind;
   viewer: boolean;
-  seeded?: boolean;
 }
 
 export const RESEED_TAB_CODE = "reseeds";
@@ -35,20 +34,20 @@ export function gameTabs(stages: StageRef[], options: GameTabsOptions): GameTab[
   case "es":
   case "si":
     return [
-      ...fixedTabs(["grid", S.screen.tabs.grid()], ["venues", S.screen.tabs.venues()], ...when(host, ["seedImport", S.screen.tabs.seedImport()])),
+      ...fixedTabs(["grid", S.screen.tabs.grid()], ["venues", S.screen.tabs.venues()], ...when(host, ["seedImport", S.entrants.tab()])),
       ...foldReseeds(stages.flatMap((stage) => blockRoundTabs(stage, stages))),
       ...fixedTabs(["stats", S.screen.tabs.stats()], ...when(options.game !== "si", ["roster", S.screen.tabs.roster()])),
     ];
   case "brain":
-    return brainTabs(stages, host && Boolean(options.seeded), S.screen.tabs.individualStats());
+    return brainTabs(stages, host, S.screen.tabs.individualStats());
   // Troika's tabs are brain's: a crosstab, a table and protocols per Block, the
   // reseed, and the per-player statistics its three chairs make interesting.
   case "troika":
-    return brainTabs(stages, host && Boolean(options.seeded), S.screen.tabs.stats());
+    return brainTabs(stages, host, S.screen.tabs.stats());
   // Хамса's stages read straight across: the бои of each Игра, the Block's own
   // table, the пересев and the Финал, in the order the scheme wrote them.
   case "hamsa":
-    return hamsaTabs(stages, host && Boolean(options.seeded));
+    return hamsaTabs(stages, host);
   case "ksi":
     return fixedTabs(["detailed", S.screen.tabs.detailed()], ["results", S.screen.tabs.results()], ...when(host, ["refusals", S.screen.tabs.refusals()]), ["roster", S.screen.tabs.roster()]);
   case "od":
@@ -89,6 +88,12 @@ function fixedTabs(...tabs: Fixed[]): GameTab[] {
 
 function when(cond: boolean, tab: Fixed): Fixed[] {
   return cond ? [tab] : [];
+}
+
+// entrantsTab is the host's Участники tab (entrants.ts) on a page that keeps
+// its tab in the hash; "#seed" is the old name of the seed tab it replaced.
+function entrantsTab(host: boolean): GameTab[] {
+  return host ? [{key: "entrants", label: S.entrants.tab(), kind: "entrants", stages: [], legacy: "seed"}] : [];
 }
 
 function isReseed(stage: StageRef): boolean {
@@ -174,7 +179,7 @@ function stageTabLabel(stage: StageRef): string {
 
 // Per Block its crosstab (or pod board) and protocols, as the source workbook
 // had them; "table" / "protocol" are the pre-Block hashes.
-function brainTabs(stages: StageRef[], seeded: boolean, statsLabel: string): GameTab[] {
+function brainTabs(stages: StageRef[], host: boolean, statsLabel: string): GameTab[] {
   const tabs = fixedTabs(["grid", S.screen.tabs.grid()]);
   let table: string | undefined = "table";
   let protocol: string | undefined = "protocol";
@@ -193,7 +198,7 @@ function brainTabs(stages: StageRef[], seeded: boolean, statsLabel: string): Gam
   }
   const reseeds = stages.filter((stage) => isReseed(stage) && !isPool(stage)).map((stage) => stage.code);
   if (reseeds.length) tabs.push({key: "reseed", label: S.screen.tabs.reseed(), kind: "reseed", stages: reseeds});
-  tabs.push(...fixedTabs(["stats", statsLabel], ["roster", S.screen.tabs.roster()], ...when(seeded, ["seed", S.screen.tabs.seed()])));
+  tabs.push(...fixedTabs(["stats", statsLabel], ["roster", S.screen.tabs.roster()]), ...entrantsTab(host));
   return tabs;
 }
 
@@ -201,7 +206,7 @@ function brainTabs(stages: StageRef[], seeded: boolean, statsLabel: string): Gam
 // бои of a Round, or a Block's table where the stage holds none. A stage title
 // carries its Block's name in front ("Групповой этап. Игра №1"), which the tab
 // bar has no room for and the crumb trail says anyway.
-function hamsaTabs(stages: StageRef[], seeded: boolean): GameTab[] {
+function hamsaTabs(stages: StageRef[], host: boolean): GameTab[] {
   const tabs = fixedTabs(["grid", S.screen.tabs.grid()]);
   for (const stage of stages) {
     // A пересев keeps its place in the chain rather than being folded to the
@@ -215,7 +220,7 @@ function hamsaTabs(stages: StageRef[], seeded: boolean): GameTab[] {
     const kind: TabKind = (stage.matches || []).length ? "protocol" : "block";
     tabs.push({key: `${kind}:${stage.code}`, label, kind, stages: [stage.code], stage});
   }
-  tabs.push(...fixedTabs(["stats", S.screen.tabs.stats()], ["roster", S.screen.tabs.roster()], ...when(seeded, ["seed", S.screen.tabs.seed()])));
+  tabs.push(...fixedTabs(["stats", S.screen.tabs.stats()], ["roster", S.screen.tabs.roster()]), ...entrantsTab(host));
   return tabs;
 }
 

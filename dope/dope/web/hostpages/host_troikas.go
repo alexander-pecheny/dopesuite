@@ -73,6 +73,8 @@ func hostTroikasDoc(data hostTroikasData) *dopeui.Doc {
 		case game.Current:
 		case game.Frozen:
 			games = append(games, dopeui.Hint(dopeui.Text(s.Host.Troikas.GameFrozen(game.Title))))
+		case game.Manual:
+			games = append(games, dopeui.Hint(dopeui.Text(s.Host.Troikas.GameManual(game.Title))))
 		case game.Problem != "":
 			games = append(games, dopeui.Empty(dopeui.Text(s.Host.Troikas.GameProblem(game.Title, game.Problem))))
 		case len(game.Troikas) == 0:

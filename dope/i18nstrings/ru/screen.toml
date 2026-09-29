@@ -18,8 +18,6 @@ game = "Игра"
 grid = "Сетка"
 # The ЭК tab listing the scheme's venues (tables).
 venues = "Площадки"
-# The ЭК host-only tab for importing team seeds.
-seed_import = "Импорт команд"
 # The statistics tab (ЭК; also the троечка's stats tab).
 stats = "Статистика"
 # The брейн per-player statistics tab.
@@ -36,8 +34,6 @@ refusals = "Отказы"
 input = "Ввод"
 # The ОД host-only projector-screen tab.
 screen = "Экран"
-# The брейн seeded-entrants tab.
-seed = "Посев"
 # The label of a multi-stage group block whose title reduces to nothing.
 block_group = "Групповой этап"
 # The label of a multi-stage play-off block whose stages share no title prefix.

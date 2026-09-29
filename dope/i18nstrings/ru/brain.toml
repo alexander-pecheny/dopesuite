@@ -58,25 +58,3 @@ right = "Верно"
 wrong = "Неверно"
 share = "% верных"
 empty = "Пока никто не жал на кнопку."
-
-[seed]
-# The seeding tab: the import controls and their messages.
-upload = "Загрузить посев из xlsx"
-# The xlsx upload clicked with no file chosen.
-no_file = "Выберите файл"
-# The import button when the scheme's seeding source is random.
-draw = "Провести жребий"
-# The import button naming any other source the scheme declares.
-import_from = 'Импортировать посев из {{.source}}'
-# The ladder before any import has run.
-empty = "Посев ещё не импортирован."
-# The seed cell of a waitlisted team.
-waitlist = "запас"
-
-[seed_head]
-# The seeding ladder's column headers.
-seed = "Посев"
-team = "Команда"
-city = "Город"
-rank = "Место в источнике"
-declined = "Отказ"

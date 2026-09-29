@@ -837,6 +837,16 @@ create index if not exists password_resets_user_idx on password_resets(user_id);
 	{Version: 31, Name: "merge the two Disamone accounts", Up: mergeDisamoneAccounts},
 	{Version: 32, Name: "usernames unique ignoring case", Up: usernamesUniqueIgnoringCase},
 	{Version: 33, Name: "a troika's head team and division", Up: assembledHeadTeamAndDivision},
+	{Version: 34, Name: "participants.game_id", Up: func(db *sql.DB) error {
+		// v34: a one-off entrant (CONTEXT.md) belongs to one Game: the host typed
+		// its name on that Game's Участники tab. It is not in the fest roster,
+		// no other Game offers it, and a fest-wide lookup by name never finds
+		// it. Every Participant there was before stays NULL, so there is
+		// nothing to backfill.
+		return store.AddColumnsIfMissing(db, "participants", []store.ColumnSpec{
+			{Name: "game_id", Type: "INTEGER REFERENCES games(id) ON DELETE CASCADE"},
+		})
+	}},
 }
 
 // assembledHeadTeamAndDivision gives an assembled team (a troika) a stored head

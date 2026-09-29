@@ -30,6 +30,8 @@ import type { GameTab, TabKind } from "./game-tabs.js";
 import type { ReseedEntry, SortRule } from "./fest-grid.js";
 import { icon } from "./icons_gen.js";
 import S from "./i18nstrings.js";
+import {createEntrantsTab} from "./entrants.js";
+import type {EntrantsView} from "./entrants.js";
 
 type EKMode = "grid" | "venues" | "roster" | "stats" | "seedImport" | "match" | "stage" | "missing";
 
@@ -118,28 +120,11 @@ type HostFestView = {
   stages?: HostStage[];
 };
 
-type SeedImportRow = {
-  teamID?: number;
-  seedNumber?: number;
-  name?: string;
-  city?: string;
-  declined?: boolean;
-  waitlist?: boolean;
-};
-
-type SeedImportView = {
-  declared?: string;
-  declaredTitle?: string;
-  rows?: SeedImportRow[];
-  activeCount?: number;
-  drawSize?: number;
-};
-
 interface EKInitPayload {
   route?: {mode?: string; matchCode?: string; stageCode?: string; gameID?: unknown};
   fest?: HostFestView | null;
   match?: HostMatchView | null;
-  seedImport?: SeedImportView | null;
+  seedImport?: EntrantsView | null;
   teamsUnnumbered?: boolean;
   canEdit?: boolean;
   static?: boolean;
@@ -330,8 +315,14 @@ const undoStack: UndoEntry[] = [];
 const UNDO_LIMIT = 200;
 let undoStackContext: UndoContext | null = null;
 let undoApplying = false;
-let seedImport: SeedImportView | null = null;
-let seedImportNotice = "";
+// The Участники tab: the list this Game seats (entrants.ts). The grid follows
+// the fest view the server broadcasts after a change; a rebuilt Structure
+// reloads the page.
+const entrantsTab = createEntrantsTab({
+  apiBase: () => route.apiBase || "",
+  onRender: () => scheduleResultsTeamNameOverflowUpdate(),
+  onRebuilt: () => window.location.reload(),
+});
 let gridNameOverflowFrame = 0;
 let ekTeamNameOverflowFrame = 0;
 let resultsTeamNameOverflowFrame = 0;
@@ -479,7 +470,7 @@ function consumeInit(): boolean {
   }
   if (route.mode === "seedImport") {
     if (!init.seedImport) return false;
-    seedImport = init.seedImport;
+    entrantsTab.adopt(init.seedImport);
     renderSeedImport();
     return true;
   }
@@ -618,15 +609,10 @@ async function loadVenuesPage(): Promise<void> {
 }
 
 async function loadSeedImportPage(): Promise<void> {
-  // Seed-import payload is small and not cached separately.
+  // The tab fetches its own list; the page only needs the fest for its chrome.
   hydrateFestFromCache();
-  const [seedResponse, festResponse] = await Promise.all([
-    fetch(`${route.apiBase}/seed-import`),
-    fetch(route.apiBase),
-  ]);
-  if (!seedResponse.ok) throw new Error(await seedResponse.text());
+  const festResponse = await fetch(route.apiBase);
   if (!festResponse.ok) throw new Error(await festResponse.text());
-  seedImport = await seedResponse.json() as SeedImportView;
   adoptFestView(await festResponse.json() as HostFestView);
   writeFestCache(fest);
   renderSeedImport();
@@ -724,6 +710,7 @@ function applyFestViewEvent(view: HostFestView): void {
   } else if (route.mode === "venues") {
     renderVenues();
   } else if (route.mode === "seedImport") {
+    entrantsTab.refresh();
     renderSeedImport();
   } else if (route.mode !== "match" && route.mode !== "stats") {
     renderFest();
@@ -1099,7 +1086,7 @@ function renderSeedImport(): void {
   setPageMode("grid");
   shell.renderChrome();
   renderEKTabs();
-  ekRoot.replaceChildren(buildSeedImportPanel());
+  ekRoot.replaceChildren(entrantsTab.element());
   scheduleResultsTeamNameOverflowUpdate();
   shell.presence.refresh();
 }
@@ -1139,7 +1126,7 @@ function render(): void {
   focusActiveCell({preventScroll: true});
 }
 
-const TAB_PATHS: Partial<Record<TabKind, string>> = {grid: "/", venues: "/venues", seedImport: "/seed-import", stats: "/stats", roster: "/roster"};
+const TAB_PATHS: Partial<Record<TabKind, string>> = {grid: "/", venues: "/venues", seedImport: "/entrants", stats: "/stats", roster: "/roster"};
 
 function gameSubnavItems(): Array<{href: string; label: string; key: string}> {
   return ekTabs().map((tab) => ({
@@ -1473,124 +1460,6 @@ function updateResultsTeamNameOverflow(root: ParentNode = ekRoot): void {
     nameSelector: ".results-team-name",
     truncatedClass: "results-team-truncated",
   });
-}
-
-function buildSeedImportPanel(): HTMLElement {
-  const panel = document.createElement("section");
-  panel.className = "results-wrapper seed-import-panel";
-
-  const actions = document.createElement("div");
-  actions.className = "cluster";
-  const importButton = document.createElement("button");
-  importButton.type = "button";
-  importButton.className = "btn";
-  const declared = seedImport?.declared || "";
-  const fromScheme = declared !== "" && declared !== "xlsx";
-  if (!fromScheme) importButton.textContent = S.ek.seed.import();
-  else if (declared === "random") importButton.textContent = S.ek.seed.draw();
-  else if (declared === "players") importButton.textContent = S.ek.seed.importPlayers();
-  else importButton.textContent = S.ek.seed.importFrom(seedImport?.declaredTitle || declared);
-  importButton.addEventListener("click", () => void importSeeds(fromScheme ? "run" : "ksi"));
-  actions.appendChild(importButton);
-  panel.appendChild(actions);
-
-  if (seedImportNotice) {
-    const notice = document.createElement("p");
-    notice.className = seedImportNotice.startsWith(S.ek.seed.errorPrefix()) ? "empty" : "muted";
-    notice.textContent = seedImportNotice;
-    panel.appendChild(notice);
-  }
-
-  const rows = seedImport?.rows || [];
-  if (rows.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "empty";
-    empty.textContent = S.ek.seed.empty();
-    panel.appendChild(empty);
-    return panel;
-  }
-
-  const meta = document.createElement("p");
-  meta.className = "muted";
-  meta.textContent = S.ek.seed.summary(String(Math.min(seedImport!.activeCount || 0, seedImport!.drawSize || 0)), String(seedImport!.drawSize || 0), String(seedImport!.activeCount || 0));
-  panel.appendChild(meta);
-
-  const table = document.createElement("table");
-  table.className = "results-table seed-import-table";
-  const thead = document.createElement("thead");
-  const head = document.createElement("tr");
-  head.appendChild(th(S.ek.seedHead.seed(), "results-place-head seed-number-head"));
-  head.appendChild(th(S.ek.seedHead.team(), "results-team-head seed-team-head"));
-  head.appendChild(th(S.ek.seedHead.declined(), "seed-declined-head"));
-  thead.appendChild(head);
-  table.appendChild(thead);
-
-  const tbody = document.createElement("tbody");
-  let waitlistInserted = false;
-  rows.forEach((row, index) => {
-    if (row.waitlist && !waitlistInserted) {
-      waitlistInserted = true;
-      const divider = document.createElement("tr");
-      divider.appendChild(td(S.ek.seed.waitlist(), "seed-waitlist-cell", {colSpan: 3}));
-      tbody.appendChild(divider);
-    }
-
-    const tr = document.createElement("tr");
-    const classes = ["results-row"];
-    const previousRow = rows[index - 1];
-    const nextRow = rows[index + 1];
-    if (!previousRow || Boolean(previousRow.waitlist) !== Boolean(row.waitlist)) {
-      classes.push("results-group-first");
-    }
-    if (!nextRow || Boolean(nextRow.waitlist) !== Boolean(row.waitlist)) {
-      classes.push("results-group-last");
-    }
-    if (row.declined) classes.push("seed-declined-row");
-    tr.className = classes.join(" ");
-    tr.appendChild(td(row.seedNumber || "", "results-place seed-number-cell"));
-
-    tr.appendChild(resultsTeamCell(row.name || "", {city: row.city}));
-
-    const declinedCell = document.createElement("td");
-    declinedCell.className = "results-num seed-declined-cell";
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = Boolean(row.declined);
-    checkbox.setAttribute("aria-label", S.ek.seed.declinedAria(row.name || S.ek.seed.teamPlaceholder()));
-    checkbox.addEventListener("change", () => {
-      setSeedDeclined(row.teamID, checkbox.checked).catch(() => {
-        checkbox.checked = !checkbox.checked;
-      });
-    });
-    declinedCell.appendChild(checkbox);
-    tr.appendChild(declinedCell);
-    tbody.appendChild(tr);
-  });
-  table.appendChild(tbody);
-  panel.appendChild(table);
-  return panel;
-}
-
-// importSeeds runs the seeding the Game's [init] declares ("run"), or, when it
-// declares none, the fest's first КСИ ("ksi").
-async function importSeeds(source: "run" | "ksi"): Promise<void> {
-  seedImportNotice = "";
-  const sent = await writer.send("seed-import", {url: `${route.apiBase}/seed-import/${source}`});
-  if (sent.ok) {
-    seedImport = sent.response as SeedImportView;
-    seedImportNotice = S.ek.seed.imported(String(seedImport.rows?.length || 0));
-  } else {
-    seedImportNotice = S.ek.seed.error(sent.error || S.ek.seed.importFailed());
-  }
-  renderSeedImport();
-}
-
-async function setSeedDeclined(teamID: number | undefined, declined: boolean): Promise<void> {
-  seedImportNotice = "";
-  const sent = await writer.send("seed-import", {url: `${route.apiBase}/seed-import/decline`, body: {teamID, declined}});
-  if (sent.ok) seedImport = sent.response as SeedImportView;
-  else seedImportNotice = S.ek.seed.error(sent.error || S.ek.seed.declineFailed());
-  renderSeedImport();
 }
 
 // buildRankedStageTable draws a ranked stage's table: place, team, and the
@@ -3092,7 +2961,7 @@ function currentRoute(): EKRoute {
   if (rest === "/venues") return {mode: "venues", ...at};
   if (rest === "/roster") return {mode: "roster", ...at};
   if (rest === "/stats") return {mode: "stats", ...at};
-  if (rest === "/seed-import" && host) return {mode: "seedImport", ...at};
+  if ((rest === "/entrants" || rest === "/seed-import") && host) return {mode: "seedImport", ...at};
   const match = rest.match(/^\/matches\/([^/]+)$/);
   if (match) return {mode: "match", matchCode: decodeURIComponent(match[1]), ...at};
   const stage = rest.match(/^\/stage\/([^/]+)$/);
@@ -3125,7 +2994,7 @@ function breadcrumbCurrentTitle(gameTitle: string): string {
   if (route.mode === "grid") return "";
   if (route.mode === "venues") return S.ek.crumb.venues();
   if (route.mode === "stats") return S.ek.crumb.stats();
-  if (route.mode === "seedImport") return S.ek.crumb.seedImport();
+  if (route.mode === "seedImport") return S.entrants.tab();
   if (route.mode === "match") return state?.title || route.matchCode || "";
   if (route.mode === "stage") {
     // The displayed tabs first: a synthetic stage (standings, round-robin) exists

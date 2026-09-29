@@ -30,6 +30,7 @@ import type {HamsaState, Mark} from "./hamsa-protocol.js";
 import {computeHamsaPlayerStats} from "./hamsa-stats.js";
 import type {HamsaBout} from "./hamsa-stats.js";
 import S from "./i18nstrings.js";
+import {createEntrantsTab} from "./entrants.js";
 
 interface PageGlobals {
   __GAME_INIT__?: GameInitLike | null;
@@ -130,13 +131,21 @@ for (const stage of fest?.stages || []) {
   if (stage?.code) festStages.set(stage.code, stage);
 }
 let rosterView: HTMLElement | null = null;
+// The Участники tab: the list this Game seats (entrants.ts). After a change
+// the бои are fetched again, since seats moved; a rebuilt Structure reloads.
+const entrantsTab = createEntrantsTab({
+  apiBase: route.apiBase || "",
+  onRender: () => scheduleNameOverflow(),
+  onChanged: () => scheduleResync(),
+  onRebuilt: () => window.location.reload(),
+});
 let resyncScheduled = false;
 
 const boutLetters = festLetters(fest?.stages as StageRef[] | undefined);
 
 function tabs(): GameTab[] {
   return gameTabs((scheme.stages || []) as StageRef[],
-    {game: "hamsa", viewer, seeded: Boolean(scheme.seeding?.source)});
+    {game: "hamsa", viewer});
 }
 
 function tabStages(tab: GameTab): SchemeStage[] {
@@ -219,6 +228,7 @@ const live = createLiveEvents({
     adopt: (_scope, view) => {
       const fresh = view.data as FestInfo | null;
       if (!fresh?.stages) return;
+      entrantsTab.refresh();
       for (const stage of fresh.stages) if (stage?.code) festStages.set(stage.code, stage);
       render();
     },
@@ -938,6 +948,8 @@ async function applyDraw(slot: string, participant: number): Promise<void> {
 
 function buildTab(tab: GameTab | undefined): HTMLElement {
   switch (tab?.kind) {
+  case "entrants":
+    return entrantsTab.element();
   case "roster":
     return (rosterView ||= buildRosterView(route.festID));
   case "stats":

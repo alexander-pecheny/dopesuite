@@ -71,9 +71,11 @@ test("ЭК: N reseeds fold into one Пересев, one keeps its tab", () => {
   assert.deepEqual(lone[3].stages, ["s2-reseed"]);
 });
 
-test("ЭК: the host gets «Импорт команд», an individual game has no составы", () => {
+test("ЭК: the host gets «Участники», an individual game has no составы", () => {
   assert.deepEqual(keys(gameTabs([], {game: "ek", viewer: false})), ["grid", "venues", "seedImport", "stats", "roster"]);
+  assert.deepEqual(labels(gameTabs([], {game: "ek", viewer: false}))[2], "Участники");
   assert.deepEqual(keys(gameTabs([], {game: "si", viewer: false})), ["grid", "venues", "seedImport", "stats"]);
+  assert.deepEqual(keys(gameTabs([], {game: "ek", viewer: true})), ["grid", "venues", "stats", "roster"]);
 });
 
 test("ЭК: a legacy `@` bookmark canonicalises to the tab it meant", () => {
@@ -107,10 +109,16 @@ test("брейн: pods get a block tab and a протоколы tab; a bare brac
   assert.equal(tabs[1].kind, "pods");
 });
 
-test("брейн: the host gets «Посев» only for a seeded scheme", () => {
-  assert.deepEqual(keys(gameTabs([], {game: "brain", viewer: false, seeded: true})), ["grid", "stats", "roster", "seed"]);
-  assert.deepEqual(keys(gameTabs([], {game: "brain", viewer: false})), ["grid", "stats", "roster"]);
-  assert.deepEqual(keys(gameTabs([], {game: "brain", viewer: true, seeded: true})), ["grid", "stats", "roster"]);
+// Every buzzer Game has its entrant list, seeded or not: the host always gets
+// «Участники», and the old «Посев» hash lands there.
+test("брейн, Тройка, Хамса: the host gets «Участники»", () => {
+  for (const game of ["brain", "troika", "hamsa"]) {
+    const host = gameTabs([], {game, viewer: false});
+    assert.deepEqual(keys(host), ["grid", "stats", "roster", "entrants"]);
+    assert.equal(host[3].label, "Участники");
+    assert.equal(canonicalKey(host, "seed"), "entrants");
+    assert.deepEqual(keys(gameTabs([], {game, viewer: true})), ["grid", "stats", "roster"]);
+  }
 });
 
 // The pre-Block hashes: one crosstable, one протоколы. Old bookmarks land on

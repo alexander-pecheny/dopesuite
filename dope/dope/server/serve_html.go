@@ -3,7 +3,7 @@ package dopeserver
 import (
 	"context"
 	"dope/dope/domain/core"
-	"dope/dope/domain/imports"
+	"dope/dope/domain/entrants"
 	"dope/dope/domain/numbering"
 	"dope/dope/domain/towns"
 	"dope/dope/platform/roles"
@@ -30,10 +30,10 @@ const (
 // ekInitPayload seeds the EK page — the host's /host/fest/… and the spectator's
 // /fest/… alike; the page tells the two apart by its URL.
 type ekInitPayload struct {
-	Route      ekInitRoute             `json:"route"`
-	Fest       json.RawMessage         `json:"fest,omitempty"`
-	Match      *store.MatchView        `json:"match,omitempty"`
-	SeedImport *imports.SeedImportView `json:"seedImport,omitempty"`
+	Route      ekInitRoute      `json:"route"`
+	Fest       json.RawMessage  `json:"fest,omitempty"`
+	Match      *store.MatchView `json:"match,omitempty"`
+	SeedImport *entrants.View   `json:"seedImport,omitempty"`
 	// TeamsUnnumbered mirrors gameInitPayload.TeamsUnnumbered for the EK host
 	// surface: editing is blocked server-side until every team has a number.
 	TeamsUnnumbered bool `json:"teamsUnnumbered,omitempty"`
@@ -220,7 +220,7 @@ func parseEKInitRoute(parts []string, scope festScope) ekInitRoute {
 	switch parts[2] {
 	case "venues":
 		route.Mode = "venues"
-	case "seed-import":
+	case "entrants", "seed-import":
 		route.Mode = "seedImport"
 	case "matches":
 		if len(parts) >= 4 {
@@ -260,7 +260,7 @@ func (s *server) buildEKInit(ctx context.Context, route ekInitRoute) (ekInitPayl
 		}
 		payload.Match = &match
 	case "seedImport":
-		view, err := imports.LoadSeedImportView(&s.eng, ctx, festScope{FestID: route.FestID, GameID: route.GameID})
+		view, err := entrants.Load(ctx, s.eng.DB, festScope{FestID: route.FestID, GameID: route.GameID})
 		if err != nil {
 			return payload, nil
 		}
