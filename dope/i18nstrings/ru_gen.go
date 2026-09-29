@@ -875,7 +875,7 @@ var RU = Strings{
 				return "«Название →0..100: …» — мини-игра идёт в итог не своими баллами, а долей от лучшего результата в ней, из ста. Так мини-игры разного масштаба весят в итоге поровну; ушедшим в минус засчитывается ноль."
 			},
 			MultiSortingHint: func() string {
-				return "Через запятую: total — итог, plus — сумма положительных, game1, game2… — подытоги мини-игр по порядку. Пусто — команды с равным итогом делят место."
+				return "Через запятую: total — итог, plus — сумма положительных, place_sum — сумма мест по мини-играм (меньше — лучше), game1, game2… — подытоги мини-игр по порядку. Пусто — команды с равным итогом делят место."
 			},
 			MultiSortingLabel: func() string {
 				return "Что решает при равном итоге (необязательно)"
@@ -1375,9 +1375,11 @@ var RU = Strings{
 			Team:     func() string { return "Команда" },
 		},
 		Results: MultiResultsStrings{
-			Place: func() string { return "М" },
-			Team:  func() string { return "Команда" },
-			Total: func() string { return "Итог" },
+			Place:         func() string { return "М" },
+			PlaceSum:      func() string { return "Сумма мест" },
+			ScoreAndPlace: func(score string, place string) string { return fmt.Sprintf("%s (%s)", score, place) },
+			Team:          func() string { return "Команда" },
+			Total:         func() string { return "Итог" },
 		},
 		Sheet: MultiSheetStrings{
 			Team:  func() string { return "Команда" },

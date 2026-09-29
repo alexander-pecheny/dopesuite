@@ -100,8 +100,9 @@ func (multi) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, err
 	}
 	for _, team := range ranked {
 		metrics := map[string]float64{
-			"total": float64(team.Total),
-			"plus":  float64(team.Plus),
+			"total":             float64(team.Total),
+			"plus":              float64(team.Plus),
+			games.MultiPlaceSum: team.PlaceSum,
 		}
 		for g, subtotal := range team.Games {
 			metrics[fmt.Sprintf("game%d", g+1)] = float64(subtotal)

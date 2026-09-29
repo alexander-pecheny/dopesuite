@@ -27,6 +27,12 @@ uniform_price = '{{.name}} (по {{.n}})'
 place = "М"
 team = "Команда"
 total = "Итог"
+# The column of a team's places summed across the мини-игры, shown when the
+# fest ranks on it (place_sum).
+place_sum = "Сумма мест"
+# A мини-игра's cell when the fest ranks on places: the score and, in
+# brackets, the place it earned in that мини-игра.
+score_and_place = '{{.score}} ({{.place}})'
 
 [refusals]
 # The «Команды» tab: the team and refused-to-play column headers.

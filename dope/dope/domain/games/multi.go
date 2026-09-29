@@ -66,6 +66,10 @@ type MultiGame struct {
 	Normalized bool `json:"normalized,omitempty"`
 }
 
+// MultiPlaceSum is the metric that ranks a team on the sum of its places in
+// the minigames. It is the one Multi metric where less is better.
+const MultiPlaceSum = "place_sum"
+
 // MultiNormalMax is what the best result in a normalised minigame is worth.
 const MultiNormalMax = 100.0
 
@@ -280,6 +284,12 @@ type MultiResultsTeam struct {
 	Plus  int
 	Games []float64
 	Raw   []int
+	// Places is the team's place in each minigame by what it contributed,
+	// shared places averaged, and PlaceSum their sum: what a fest ranks on
+	// when it names place_sum (Ассортишечка: «наименьшая сумма мест в разрезе
+	// каждого задания»).
+	Places   []float64
+	PlaceSum float64
 }
 
 // ParseMultiSorting reads the comparators a fest breaks a tie on the total
@@ -306,10 +316,11 @@ func ParseMultiSorting(minigames []MultiGame, raw string) ([]string, error) {
 	return order, nil
 }
 
-// MultiMetricNames is what a scheme may rank a Multi game on: the total, Σ+
-// and one name per minigame, numbered from 1 in the order they are played.
+// MultiMetricNames is what a scheme may rank a Multi game on: the total, Σ+,
+// the sum of a team's places across the minigames, and one name per minigame,
+// numbered from 1 in the order they are played.
 func MultiMetricNames(games []MultiGame) []string {
-	names := []string{"total", "plus"}
+	names := []string{"total", "plus", MultiPlaceSum}
 	for i := range games {
 		names = append(names, fmt.Sprintf("game%d", i+1))
 	}
@@ -394,6 +405,17 @@ func ComputeMultiResults(schemeJSON, stateJSON string) ([]MultiResultsTeam, erro
 		}
 	}
 
+	for g := range scheme.Minigames {
+		places := sharedPlaces(len(ranked), func(i int) float64 { return ranked[i].Games[g] })
+		for i := range ranked {
+			if ranked[i].Places == nil {
+				ranked[i].Places = make([]float64, len(scheme.Minigames))
+			}
+			ranked[i].Places[g] = places[i]
+			ranked[i].PlaceSum += places[i]
+		}
+	}
+
 	order, err := ParseMultiSorting(scheme.Minigames, strings.Join(scheme.Sorting, ","))
 	if err != nil {
 		return nil, err
@@ -407,6 +429,8 @@ func ComputeMultiResults(schemeJSON, stateJSON string) ([]MultiResultsTeam, erro
 			return team.Total
 		case "plus":
 			return float64(team.Plus)
+		case MultiPlaceSum:
+			return team.PlaceSum
 		}
 		index, _ := strconv.Atoi(strings.TrimPrefix(name, "game"))
 		return team.Games[index-1]
@@ -423,6 +447,9 @@ func ComputeMultiResults(schemeJSON, stateJSON string) ([]MultiResultsTeam, erro
 		for _, name := range order {
 			av, bv := metric(ranked[i], name), metric(ranked[j], name)
 			if av != bv {
+				if name == MultiPlaceSum {
+					return av < bv
+				}
 				return av > bv
 			}
 		}
@@ -443,4 +470,26 @@ func ComputeMultiResults(schemeJSON, stateJSON string) ([]MultiResultsTeam, erro
 		start = end
 	}
 	return ranked, nil
+}
+
+// sharedPlaces places n values, the highest first, a tie sharing the mean of
+// the places it covers: two teams level for third both take 3.5.
+func sharedPlaces(n int, value func(i int) float64) []float64 {
+	order := make([]int, n)
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(a, b int) bool { return value(order[a]) > value(order[b]) })
+	places := make([]float64, n)
+	for start := 0; start < n; {
+		end := start + 1
+		for end < n && value(order[end]) == value(order[start]) {
+			end++
+		}
+		for k := start; k < end; k++ {
+			places[order[k]] = float64(start+end+1) / 2
+		}
+		start = end
+	}
+	return places
 }

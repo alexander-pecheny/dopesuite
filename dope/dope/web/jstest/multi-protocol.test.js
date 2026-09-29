@@ -116,3 +116,20 @@ Deno.test("formatScore keeps a whole Итог whole and a normalised one to two 
   assertEquals(multi.formatScore(200), "200");
   assertEquals(multi.formatScore(186.7346), "186.73");
 });
+
+Deno.test("rankedResultRows ranks on the sum of places, as the server does", () => {
+  // The Go test's fixture (TestComputeMultiResultsRanksOnTheSumOfPlaces).
+  const values = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const rules = multi.rulesOf({
+    sorting: ["place_sum", "total"],
+    minigames: [{name: "Фоторяд", columns: [{values}]}, {name: "Песни", columns: [{values}]}],
+  });
+  const state = multi.parseState({
+    participants: ["А", "Б", "В", "Г"].map((name, i) => ({number: i + 1, name})),
+    games: [{cells: [[10], [5], [0], [5]]}, {cells: [[0], [6], [6], [1]]}],
+  }, rules, []);
+  const ranked = multi.rankedResultRows(state, rules, (i) => ["А", "Б", "В", "Г"][i]);
+  assertEquals(ranked.map((row) => [row.name, row.placeSum, row.placeText]),
+    [["Б", 4, "1"], ["А", 5, "2"], ["В", 5.5, "3–4"], ["Г", 5.5, "3–4"]]);
+  assertEquals(ranked[0].places, [2.5, 1.5]);
+});

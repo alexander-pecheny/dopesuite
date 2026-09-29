@@ -35,7 +35,7 @@ export interface MultiScheme {
   [key: string]: unknown;
 }
 
-export type ParticipantEntry = string | {number?: unknown; name?: unknown} | null | undefined;
+export type ParticipantEntry = string | {number?: unknown; name?: unknown; flags?: unknown} | null | undefined;
 
 export interface MultiState {
   participants: ParticipantEntry[];
@@ -119,6 +119,14 @@ export function participantName(state: MultiState, index: number): string {
   if (typeof entry === "string") return entry;
   if (entry && typeof entry === "object" && typeof entry.name === "string") return entry.name;
   return "";
+}
+
+// participantFlags is a team's Divisions by short name (ADR-0020); a guest
+// team and a legacy name-only entry have none.
+export function participantFlags(state: MultiState, index: number): string[] {
+  const p = state.participants[index];
+  if (!p || typeof p !== "object" || !Array.isArray(p.flags)) return [];
+  return (p.flags as unknown[]).filter((flag): flag is string => typeof flag === "string" && flag !== "");
 }
 
 export function participantNumber(state: MultiState, index: number): number {
@@ -222,13 +230,22 @@ export interface ResultRow {
   raw: number[];
   total: number;
   plus: number;
+  // places is the team's place in each minigame, shared places averaged, and
+  // placeSum their sum: what a fest ranks on when it names place_sum.
+  places: number[];
+  placeSum: number;
 }
 
-// metricOf reads one of the names a scheme may rank on: total, plus, or
-// game1..gameN by the order the minigames are played.
-export function metricOf(row: {games: number[]; total: number; plus: number}, name: string): number {
+// PLACE_SUM is the metric that ranks on the sum of places, the one Multi metric
+// where less is better (games.MultiPlaceSum).
+export const PLACE_SUM = "place_sum";
+
+// metricOf reads one of the names a scheme may rank on: total, plus,
+// place_sum, or game1..gameN by the order the minigames are played.
+export function metricOf(row: {games: number[]; total: number; plus: number; placeSum?: number}, name: string): number {
   if (name === "total") return row.total;
   if (name === "plus") return row.plus;
+  if (name === PLACE_SUM) return row.placeSum || 0;
   const index = Number(name.replace(/^game/, ""));
   if (name.startsWith("game") && Number.isInteger(index) && index >= 1 && index <= row.games.length) {
     return row.games[index - 1];
@@ -240,21 +257,33 @@ export function metricOf(row: {games: number[]; total: number; plus: number}, na
 // play, ranked by the scheme's comparators — the total alone unless a fest named
 // more — with a shared place label ("2–3") where every one of them ties. A
 // declined team takes no place and shifts nobody.
+//
+// members, when given, is a Division's teams (ADR-0020): the table ranks them
+// alone, their places in each minigame included.
 export function rankedResultRows(
   state: MultiState,
   rules: MultiRules,
   label: (index: number) => string,
+  members?: readonly number[],
 ): ResultRow[] {
   const sheet = scoreSheet(state, rules);
+  const taken = members ? new Set(members) : null;
   const rows: ResultRow[] = [];
   state.participants.forEach((_, index) => {
-    if (participantDeclined(state, index)) return;
-    rows.push({index, placeText: "", name: label(index), ...sheet[index]});
+    if (participantDeclined(state, index) || (taken && !taken.has(index))) return;
+    rows.push({index, placeText: "", name: label(index), ...sheet[index], places: [], placeSum: 0});
+  });
+  rules.minigames.forEach((_game, g) => {
+    const places = sharedPlaces(rows.map((row) => row.games[g]));
+    rows.forEach((row, i) => {
+      row.places.push(places[i]);
+      row.placeSum += places[i];
+    });
   });
   const level = (a: ResultRow, b: ResultRow) => rules.sorting.every((name) => metricOf(a, name) === metricOf(b, name));
   rows.sort((a, b) => {
     for (const name of rules.sorting) {
-      const diff = metricOf(b, name) - metricOf(a, name);
+      const diff = name === PLACE_SUM ? metricOf(a, name) - metricOf(b, name) : metricOf(b, name) - metricOf(a, name);
       if (diff !== 0) return diff;
     }
     return a.index - b.index;
@@ -268,4 +297,18 @@ export function rankedResultRows(
     i = j + 1;
   }
   return rows;
+}
+
+// sharedPlaces places values, the highest first, a tie sharing the mean of the
+// places it covers: two teams level for third both take 3.5.
+export function sharedPlaces(values: number[]): number[] {
+  const order = values.map((_, i) => i).sort((a, b) => values[b] - values[a] || a - b);
+  const places = new Array<number>(values.length).fill(0);
+  for (let start = 0; start < order.length;) {
+    let end = start + 1;
+    while (end < order.length && values[order[end]] === values[order[start]]) end++;
+    for (let k = start; k < end; k++) places[order[k]] = (start + end + 1) / 2;
+    start = end;
+  }
+  return places;
 }

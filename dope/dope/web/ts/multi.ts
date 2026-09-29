@@ -20,6 +20,7 @@ import type {WriteRequest} from "./state-sync.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
+import {ALL_DIVISIONS, divisionChipRow, divisionFromURL, divisionsOf, inDivision, setDivisionInURL} from "./divisions.js";
 import * as multi from "./multi-protocol.js";
 import {CYCLE_LIMIT} from "./multi-protocol.js";
 import S from "./i18nstrings.js";
@@ -89,13 +90,46 @@ const TABS = [
 ];
 let activeTab = tabFromHash(TABS) || "detailed";
 
+// The Division the viewer is looking at (ADR-0020): «All» until the URL says so.
+let activeDivision = ALL_DIVISIONS;
+
 onNavigate(() => {
   const next = tabFromHash(TABS);
-  if (next && next !== activeTab) {
-    activeTab = next;
-    render();
-  }
+  const division = state ? divisionFromURL(divisions()) : activeDivision;
+  const tabMoved = Boolean(next && next !== activeTab);
+  if (!tabMoved && division === activeDivision) return;
+  activeDivision = division;
+  if (next && tabMoved) activeTab = next;
+  render();
 });
+
+// divisions is every Division this game's teams carry, in first-seen order.
+function divisions(): string[] {
+  if (!state) return [];
+  return divisionsOf(state.participants.map((_, index) => multi.participantFlags(state!, index)));
+}
+
+// divisionMembers is the rows the chosen Division takes; undefined for «All».
+function divisionMembers(): number[] | undefined {
+  if (activeDivision === ALL_DIVISIONS) return undefined;
+  const members: number[] = [];
+  state!.participants.forEach((_, index) => {
+    if (inDivision(multi.participantFlags(state!, index), activeDivision)) members.push(index);
+  });
+  return members;
+}
+
+// divisionChips heads the results table when any team carries a Flag.
+function divisionChips(): HTMLElement | null {
+  const offered = divisions();
+  if (!offered.length) return null;
+  return divisionChipRow(offered, activeDivision, (division) => {
+    if (division === activeDivision) return;
+    activeDivision = division;
+    setDivisionInURL(division);
+    render();
+  });
+}
 
 const doc = mountGameDocument({
   route,
@@ -416,23 +450,36 @@ function refreshTotals(): void {
 // === the other tabs ===
 
 function buildResultsTable(): HTMLElement {
-  const rows = multi.rankedResultRows(state!, rules, (index) => multi.participantName(state!, index));
+  const rows = multi.rankedResultRows(state!, rules, (index) => multi.participantName(state!, index), divisionMembers());
+  // A fest that ranks on the sum of places reads each minigame's place beside
+  // its score, and the sum in a column of its own.
+  const byPlaces = rules.sorting.includes(multi.PLACE_SUM);
   return standingsTable({
     columns: [
       {label: S.multi.results.place(), kind: "place"},
       {label: S.multi.results.team(), kind: "name"},
       ...rules.minigames.map((game) => ({label: game.name, kind: "num" as const})),
+      ...(byPlaces ? [{label: S.multi.results.placeSum(), kind: "num" as const, className: "total-col"}] : []),
       {label: S.multi.results.total(), kind: "num" as const, className: "total-col"},
       ...(rules.signed ? [{label: "Σ+", kind: "num" as const, className: "total-col"}] : []),
     ],
     rows: rows.map((row) => [
       row.placeText,
       resultsTeamCell(row.name),
-      ...row.games.map(multi.formatScore),
+      ...row.games.map((score, g) => byPlaces
+        ? S.multi.results.scoreAndPlace(multi.formatScore(score), formatPlace(row.places[g]))
+        : multi.formatScore(score)),
+      ...(byPlaces ? [formatPlace(row.placeSum)] : []),
       multi.formatScore(row.total),
       ...(rules.signed ? [String(row.plus)] : []),
     ]),
   });
+}
+
+// formatPlace prints a place or a sum of places, which a shared place makes
+// fractional: 3.5, not 3.50.
+function formatPlace(value: number): string {
+  return String(Math.round(value * 100) / 100);
 }
 
 // The teams tab is the host's. A team that refused to play keeps its row on
@@ -611,6 +658,8 @@ function render(): void {
     setHashTab(key);
     render();
   });
+  // A roster change can add a Division or take the chosen one away.
+  activeDivision = divisionFromURL(divisions());
   const node = activeTab === "results"
     ? buildResultsTable()
     : activeTab === "refusals"
@@ -618,7 +667,8 @@ function render(): void {
       : activeTab === "roster"
         ? rosterView()
         : buildTable();
-  root.replaceChildren(node);
+  const chips = activeTab === "results" ? divisionChips() : null;
+  root.replaceChildren(...(chips ? [chips, node] : [node]));
   root.classList.toggle("fits-frame", activeTab === "roster" || activeTab === "refusals");
   teamNameOverflow.schedule();
   sheetScroll.refresh();

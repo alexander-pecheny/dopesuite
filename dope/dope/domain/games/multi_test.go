@@ -1,7 +1,9 @@
 package games
 
 import (
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -236,5 +238,35 @@ func TestComputeMultiResultsSurvivesAnUnplayedMinigame(t *testing.T) {
 	}
 	if ranked[0].Total != 0 || ranked[0].Games[0] != 0 {
 		t.Fatalf("row = %+v", ranked[0])
+	}
+}
+
+// Ассортишечка ranks on the sum of a team's places across the мини-игры, least
+// first, and breaks a tie on the total. A tie inside one мини-игра shares the
+// mean of its places.
+func TestComputeMultiResultsRanksOnTheSumOfPlaces(t *testing.T) {
+	scheme := `{"sorting":["place_sum","total"],"minigames":[
+		{"name":"Фоторяд","columns":[{"values":[0,1,2,3,4,5,6,7,8,9,10]}]},
+		{"name":"Песни","columns":[{"values":[0,1,2,3,4,5,6,7,8,9,10]}]}
+	]}`
+	// Фоторяд: А 10, Б 5, В 0, Г 5 → 1, 2.5, 4, 2.5.
+	// Песни:   А 0,  Б 6, В 6, Г 1 → 4, 1.5, 1.5, 3.
+	// Sums: А 5, Б 4, В 5.5, Г 5.5. Totals: А 10, Б 11, В 6, Г 6.
+	state := `{"participants":[{"number":1,"name":"А"},{"number":2,"name":"Б"},{"number":3,"name":"В"},{"number":4,"name":"Г"}],
+		"games":[{"cells":[[10],[5],[0],[5]]},{"cells":[[0],[6],[6],[1]]}]}`
+	ranked, err := ComputeMultiResults(scheme, state)
+	if err != nil {
+		t.Fatalf("ComputeMultiResults: %v", err)
+	}
+	var got []string
+	for _, team := range ranked {
+		got = append(got, fmt.Sprintf("%d:%g:%g", team.Index, team.PlaceSum, team.Place))
+	}
+	want := []string{"1:4:1", "0:5:2", "2:5.5:3.5", "3:5.5:3.5"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("ranked = %v, want %v", got, want)
+	}
+	if b := ranked[0]; b.Places[0] != 2.5 || b.Places[1] != 1.5 {
+		t.Fatalf("Б's places = %v, want [2.5 1.5]", b.Places)
 	}
 }

@@ -65,7 +65,7 @@ minigames_hint = "По строке на мини-игру: «Название: 
 minigames_share_hint = "«Название →0..100: …» — мини-игра идёт в итог не своими баллами, а долей от лучшего результата в ней, из ста. Так мини-игры разного масштаба весят в итоге поровну; ушедшим в минус засчитывается ноль."
 # The tie-break field of the multi create form and its hint.
 multi_sorting_label = "Что решает при равном итоге (необязательно)"
-multi_sorting_hint = "Через запятую: total — итог, plus — сумма положительных, game1, game2… — подытоги мини-игр по порядку. Пусто — команды с равным итогом делят место."
+multi_sorting_hint = "Через запятую: total — итог, plus — сумма положительных, place_sum — сумма мест по мини-играм (меньше — лучше), game1, game2… — подытоги мини-игр по порядку. Пусто — команды с равным итогом делят место."
 # Hint under the troika scheme editor.
 troika_hint = "Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50. Если в [init] написать division: Студ, игра сама возьмёт тройки зачёта «Студ» со страницы «Тройки», и отмечать участников ниже не нужно."
 # The scheme the hamsa creation form prefills: the tournament's own shape at

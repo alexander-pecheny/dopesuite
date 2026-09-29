@@ -1035,6 +1035,8 @@ export type Strings = {
     };
     results: {
       place: () => string;
+      placeSum: () => string;
+      scoreAndPlace: (score: string, place: string) => string;
       team: () => string;
       total: () => string;
     };
