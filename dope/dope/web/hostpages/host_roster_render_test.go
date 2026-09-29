@@ -181,3 +181,20 @@ func TestHostRatingImportPreviewRenders(t *testing.T) {
 		t.Fatalf("choice = %+v", got)
 	}
 }
+
+// A team the host made or changed shows its name beside the badge: text of
+// the row itself is dropped once the row has children.
+func TestHostTeamsDocShowsBadgedNames(t *testing.T) {
+	data := hostFestRosterData{Fest: view.HostFest{ID: 5, Title: "Кубок"}, Teams: []hostFestTeam{
+		{ID: 1, Name: "Сборная", Hand: true}, {ID: 2, RatingID: 9, Name: "Бобры", Edited: true},
+	}}
+	html, err := dopeui.Render(hostTeamsDoc(data))
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	for _, want := range []string{">Сборная<", ">Бобры<", "вручную", "изменена", `data-team-edit="2"`, `data-team-add="/api/fest/5"`} {
+		if !strings.Contains(string(html), want) {
+			t.Errorf("teams page is missing %s", want)
+		}
+	}
+}

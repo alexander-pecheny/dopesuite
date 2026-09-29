@@ -751,7 +751,7 @@ from fest_players where fest_id = ?`, []any{festID}, func(rows *sql.Rows) (curPl
 		if _, keep := desired[key]; keep {
 			continue
 		}
-		// A person who plays as themselves (личная СИ seats players) stays in
+		// A person who plays as themselves (the personal SI seats players) stays in
 		// the fest when they leave every team: their Participant points at
 		// them, and so do their results. They are just on no team now.
 		var seated int

@@ -24,6 +24,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"dope/dope/web/route"
 
@@ -112,9 +113,9 @@ func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
 			name := []dopeui.Item{dopeui.Text(t.Name)}
 			switch {
 			case t.Hand:
-				name = []dopeui.Item{dopeui.Row(dopeui.SpaceSM, dopeui.Wrap(), dopeui.Text(t.Name), dopeui.Badge(dopeui.Text(s.Host.Roster.BadgeHand())))}
+				name = []dopeui.Item{dopeui.Row(dopeui.SpaceSM, dopeui.Wrap(), dopeui.Paragraph(dopeui.Text(t.Name)), dopeui.Badge(dopeui.Text(s.Host.Roster.BadgeHand())))}
 			case t.Edited:
-				name = []dopeui.Item{dopeui.Row(dopeui.SpaceSM, dopeui.Wrap(), dopeui.Text(t.Name), dopeui.Badge(dopeui.Text(s.Host.Roster.BadgeEdited())))}
+				name = []dopeui.Item{dopeui.Row(dopeui.SpaceSM, dopeui.Wrap(), dopeui.Paragraph(dopeui.Text(t.Name)), dopeui.Badge(dopeui.Text(s.Host.Roster.BadgeEdited())))}
 			}
 			rows = append(rows, dopeui.Trow(
 				dopeui.Cell(dopeui.Text(optionalID(t.RatingID))),
@@ -323,7 +324,7 @@ func hostRatingImportDoc(data hostFestImportData) *dopeui.Doc {
 	if data.UndoAt != "" && data.Plan == nil {
 		page = append(page, dopeui.Section(
 			dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+festRef+"/rating/undo"), dopeui.Autocomplete("off"),
-				dopeui.Note(dopeui.Text(s.Host.Roster.UndoNote(data.UndoAt))),
+				dopeui.Note(dopeui.Text(s.Host.Roster.UndoNote(snapshotTime(data.UndoAt)))),
 				dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Roster.UndoSubmit()))),
 			),
 		))
@@ -341,18 +342,20 @@ func hostRatingImportDoc(data hostFestImportData) *dopeui.Doc {
 // same answers.
 func hostImportPlanSection(plan imports.ImportPlan, choice imports.RosterChoice, festRef string) *dopeui.Element {
 	s := dopestrings.Default
-	items := []dopeui.Item{dopeui.Subhead(dopeui.Text(s.Host.Roster.PreviewTitle()))}
+	// The plan's lines stand in one column with one gap between them, so a
+	// note and a team's block read as items of the same list.
+	var items []dopeui.Item
 	if plan.Empty() {
-		items = append(items, dopeui.Note(dopeui.Text(s.Host.Roster.PreviewNothing())))
+		items = append(items, dopeui.Muted(dopeui.Text(s.Host.Roster.PreviewNothing())))
 	}
 	if len(plan.AddedTeams) > 0 {
-		items = append(items, dopeui.Note(dopeui.Text(s.Host.Roster.PlanAddedTeams(strings.Join(plan.AddedTeams, ", ")))))
+		items = append(items, dopeui.Muted(dopeui.Text(s.Host.Roster.PlanAddedTeams(strings.Join(plan.AddedTeams, ", ")))))
 	}
 	if len(plan.DroppedTeams) > 0 {
-		items = append(items, dopeui.Note(dopeui.Text(s.Host.Roster.PlanDroppedTeams(strings.Join(plan.DroppedTeams, ", ")))))
+		items = append(items, dopeui.Muted(dopeui.Text(s.Host.Roster.PlanDroppedTeams(strings.Join(plan.DroppedTeams, ", ")))))
 	}
 	for _, r := range plan.Renamed {
-		items = append(items, dopeui.Note(dopeui.Text(s.Host.Roster.PlanRenamed(r.From, r.To))))
+		items = append(items, dopeui.Muted(dopeui.Text(s.Host.Roster.PlanRenamed(r.From, r.To))))
 	}
 	for _, team := range plan.Players {
 		card := []dopeui.Item{dopeui.SpaceNone, dopeui.Strong(dopeui.Text(s.Host.Roster.PlanPlayers(team.Team)))}
@@ -385,6 +388,7 @@ func hostImportPlanSection(plan imports.ImportPlan, choice imports.RosterChoice,
 			dopeui.Strong(dopeui.Text(s.Host.Roster.PlanKeptTitle())),
 			dopeui.Muted(dopeui.Text(strings.Join(kept, "; ")))))
 	}
+	section := []dopeui.Item{dopeui.Subhead(dopeui.Text(s.Host.Roster.PreviewTitle())), dopeui.Col(append([]dopeui.Item{dopeui.SpaceSM}, items...)...)}
 	form := []dopeui.Item{dopeui.DirCol, dopeui.SpaceMD, dopeui.Method("post"), dopeui.Action("/host/fest/" + festRef + "/rating/import"), dopeui.Autocomplete("off")}
 	for teamID, ratingID := range choice.Merge {
 		form = append(form, dopeui.Hiddenfield(dopeui.Name(rosterChoiceField(teamID)), dopeui.Value(rosterChoiceMerge(ratingID))))
@@ -410,9 +414,9 @@ func hostImportPlanSection(plan imports.ImportPlan, choice imports.RosterChoice,
 	}
 	if !plan.Empty() {
 		form = append(form, dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Roster.ConfirmSubmit()))))
-		items = append(items, dopeui.Form(form...))
+		section = append(section, dopeui.Form(form...))
 	}
-	return dopeui.Section(items...)
+	return dopeui.Section(section...)
 }
 
 // hostRosterConflictDialog asks, per team that is leaving the roster with
@@ -1014,4 +1018,14 @@ func (s *Server) handleHostUndoRatingImport(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	s.renderHostRatingImportPage(w, r, festID, "", dopestrings.Default.Host.Roster.UndoDoneNotice())
+}
+
+// snapshotTime prints when a roster was saved as a person reads it,
+// «29.09 23:03 UTC», falling back to what is stored.
+func snapshotTime(at string) string {
+	t, err := time.Parse(time.RFC3339, at)
+	if err != nil {
+		return at
+	}
+	return t.UTC().Format("02.01 15:04") + " UTC"
 }
