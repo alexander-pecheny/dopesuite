@@ -232,7 +232,15 @@ func (t *Table) admit(r *http.Request, access Access, sc *Scope) (Denial, error)
 		if sc.Role, err = festaccess.FestUserRoleFromQuery(ctx, t.Eng.DB, sc.FestID, sc.User.UserID); err != nil {
 			return 0, err
 		}
-		if !allowed(access.level, sc.Role) {
+		allow := allowed(access.level, sc.Role)
+		// A Game's tables are its hosts': a host an admin limited to other
+		// Games may look at this one but not write to it.
+		if allow && access.level == levelEditor && sc.GameID > 0 {
+			if allow, err = festaccess.MayRunGame(ctx, t.Eng.DB, sc.FestID, sc.GameID, sc.User.UserID, sc.Role); err != nil {
+				return 0, err
+			}
+		}
+		if !allow {
 			exists, _, err := festVisibility(ctx, t.Eng.DB, sc.FestID)
 			if err != nil {
 				return 0, err

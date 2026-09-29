@@ -27,12 +27,14 @@ import (
 )
 
 type hostFestDashData struct {
-	Fest            view.HostFest
-	Description     string
-	Slug            string
-	RatingID        int64
-	Games           []PublicFestGame
-	Access          []festaccess.HostAccessMember
+	Fest        view.HostFest
+	Description string
+	Slug        string
+	RatingID    int64
+	Games       []PublicFestGame
+	Access      []festaccess.HostAccessMember
+	// HostGames lists, per limited host, the Games they may run.
+	HostGames       map[int64][]int64
 	TeamCount       int
 	PlayerCount     int
 	TroikaCount     int
@@ -208,7 +210,9 @@ func hostDashAccessSection(data hostFestDashData, ref string) *dopeui.Element {
 			actionCell = dopeui.Cell(dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Name("delete_"+uid), dopeui.Value("1"),
 				dopeui.Data("confirm", s.Host.Dash.DeleteAccessConfirm(m.Nickname)), dopeui.Text(s.Host.Dash.DeleteBtn())))
 		}
-		rows = append(rows, dopeui.Trow(dopeui.Cell(dopeui.Text(m.Nickname)), roleCell, actionCell))
+		// A member's Games sit under their name rather than in a column of
+		// their own: a fourth column squeezed the role select on a phone.
+		rows = append(rows, dopeui.Trow(dopeui.Cell(dopeui.Col(dopeui.Paragraph(dopeui.Text(m.Nickname)), hostGames(data, m))), roleCell, actionCell))
 	}
 	rows = append(rows, dopeui.Trow(
 		dopeui.Cell(dopeui.Textfield(dopeui.Name("new_nickname"), dopeui.Placeholder("nickname"))),
@@ -223,6 +227,42 @@ func hostDashAccessSection(data hostFestDashData, ref string) *dopeui.Element {
 		),
 	)
 	return dopeui.Section(sect...)
+}
+
+// hostGames is a member's Games: an admin or the creator runs all of them;
+// a host gets a box per Game — ticking some limits them to those, ticking none
+// leaves them every Game.
+func hostGames(data hostFestDashData, m festaccess.HostAccessMember) *dopeui.Element {
+	s := dopestrings.Default
+	if m.Role != roles.Host || len(data.Games) == 0 {
+		return dopeui.Col()
+	}
+	uid := strconv.FormatInt(m.UserID, 10)
+	limited := map[int64]bool{}
+	for _, id := range data.HostGames[m.UserID] {
+		limited[id] = true
+	}
+	boxes := []dopeui.Item{dopeui.Hiddenfield(dopeui.Name("games_present_"+uid), dopeui.Value("1"))}
+	var chosen []string
+	for _, game := range data.Games {
+		items := []dopeui.Item{dopeui.Name("games_" + uid), dopeui.Value(strconv.FormatInt(game.ID, 10)), dopeui.Text(game.Title)}
+		if limited[game.ID] {
+			items = append(items, dopeui.Checked())
+			chosen = append(chosen, game.Title)
+		}
+		boxes = append(boxes, dopeui.Checkbox(items...))
+	}
+	summary := s.Host.Dash.ColGames() + ": " + s.Host.Dash.GamesEvery()
+	if len(chosen) > 0 {
+		summary = s.Host.Dash.ColGames() + ": " + strings.Join(chosen, ", ")
+	} else {
+		boxes = append(boxes, dopeui.Hint(dopeui.Text(s.Host.Dash.GamesNoneHint())))
+	}
+	// Folded to what the host runs, so the boxes do not squeeze the role
+	// beside them on a phone; opened, a box per Game and one save for all
+	// the boxes ticked.
+	boxes = append(boxes, dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Dash.SaveSubmit()))))
+	return dopeui.Details(dopeui.Summary(dopeui.Text(summary)), dopeui.Col(boxes...))
 }
 
 func roleOption(value, current string) *dopeui.Element {
@@ -505,9 +545,14 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigne
 	canDeleteFest := roles.CanDeleteFest(currentRole)
 	canManageGames := canManageFest
 	var access []festaccess.HostAccessMember
+	var hostGameIDs map[int64][]int64
 	if canManageAccess {
 		access, err = festaccess.LoadFestAccessMembers(s.h.Engine(), r.Context(), festID)
 		if err != nil {
+			route.WriteError(w, r, err)
+			return
+		}
+		if hostGameIDs, err = festaccess.HostGamesByUser(r.Context(), s.h.Engine().DB, festID); err != nil {
 			route.WriteError(w, r, err)
 			return
 		}
@@ -526,6 +571,7 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigne
 		Slug:            slug,
 		Games:           hostGames,
 		Access:          access,
+		HostGames:       hostGameIDs,
 		TeamCount:       teamCount,
 		PlayerCount:     playerCount,
 		TroikaCount:     troikaCount,

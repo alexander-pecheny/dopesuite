@@ -597,6 +597,7 @@ var RU = Strings{
 			ClearConfirm: func() string {
 				return "Очистить игру? Все результаты, импортированные команды и посев будут удалены, игра вернётся в исходное состояние. Настройки и ссылка сохранятся."
 			},
+			ColGames:            func() string { return "Игры" },
 			ColNickname:         func() string { return "Никнейм" },
 			ColRole:             func() string { return "Роль" },
 			DeleteAccessConfirm: func(name string) string { return fmt.Sprintf("Удалить доступ для %s?", name) },
@@ -618,6 +619,8 @@ var RU = Strings{
 			ErrorSlugTaken:       func() string { return "Slug уже занят." },
 			ErrorTitleRequired:   func() string { return "Название обязательно." },
 			GamesEmpty:           func() string { return "Игр пока нет." },
+			GamesEvery:           func() string { return "все игры" },
+			GamesNoneHint:        func() string { return "ничего не отмечено — ведёт все игры" },
 			GamesSubhead:         func() string { return "Игры" },
 			JumpLabel:            func() string { return "Страница зрителя" },
 			JumpTitle:            func() string { return "Открыть зрительскую страницу" },

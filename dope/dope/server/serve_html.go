@@ -6,7 +6,6 @@ import (
 	"dope/dope/domain/imports"
 	"dope/dope/domain/numbering"
 	"dope/dope/domain/towns"
-	"dope/dope/platform/roles"
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/store"
 	"encoding/json"
@@ -107,7 +106,7 @@ func (s *server) serveEKHTMLWithInit(w http.ResponseWriter, r *http.Request, sco
 		s.serveEKHTML(w, r, page)
 		return
 	}
-	payload.CanEdit = s.canEdit(r, scope.FestID)
+	payload.CanEdit = s.canEdit(r, scope.FestID, scope.GameID)
 	data, err := json.Marshal(payload)
 	if err != nil {
 		s.serveEKHTML(w, r, page)
@@ -116,15 +115,20 @@ func (s *server) serveEKHTMLWithInit(w http.ResponseWriter, r *http.Request, sco
 	s.serveInjectedHTML(w, r, page, ekInitMarker, data)
 }
 
-// canEdit says whether the request's session holds the table-editor role on
-// the fest — what the init payload tells the page about its controls.
-func (s *server) canEdit(r *http.Request, festID int64) bool {
+// canEdit says whether the request's session may edit this Game's tables —
+// what the init payload tells the page about its controls. A host an admin
+// limited to other Games may not.
+func (s *server) canEdit(r *http.Request, festID, gameID int64) bool {
 	user, ok := s.eng.LookupSession(r)
 	if !ok {
 		return false
 	}
 	role, err := festaccess.FestUserRoleFromQuery(r.Context(), s.eng.DB, festID, user.UserID)
-	return err == nil && roles.CanEditGameTables(role)
+	if err != nil {
+		return false
+	}
+	may, err := festaccess.MayRunGame(r.Context(), s.eng.DB, festID, gameID, user.UserID, role)
+	return err == nil && may
 }
 
 // serveGameHTMLWithInit serves od.html or si.html with window.__GAME_INIT__
@@ -140,7 +144,7 @@ func (s *server) serveGameHTMLWithInit(w http.ResponseWriter, r *http.Request, h
 		s.serveAppHTML(w, r, htmlPath)
 		return
 	}
-	payload.CanEdit = s.canEdit(r, scope.FestID)
+	payload.CanEdit = s.canEdit(r, scope.FestID, scope.GameID)
 	data, err := json.Marshal(payload)
 	if err != nil {
 		s.serveAppHTML(w, r, htmlPath)

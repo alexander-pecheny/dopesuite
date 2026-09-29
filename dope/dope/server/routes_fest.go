@@ -56,7 +56,9 @@ func (s *server) viewerGamePage(w http.ResponseWriter, r *http.Request, sc route
 	if !route.GamePagePath(parts, false) {
 		return route.NotFound
 	}
-	if _, ok := s.fest().Admit(w, r, route.PublicFest, sc.FestID, 0); !ok {
+	// A public fest's pages are anyone's; a private fest's, its organizers' —
+	// a host an admin limited to other Games watches the rest from here.
+	if _, ok := s.fest().Admit(w, r, route.Read, sc.FestID, 0); !ok {
 		return nil
 	}
 	gameID, err := resolveGameID(r.Context(), s.eng.DB, sc.FestID, parts[1])
@@ -76,6 +78,24 @@ func (s *server) viewerGamePage(w http.ResponseWriter, r *http.Request, sc route
 		// A page on the flat game init renders the whole game regardless of
 		// sub-route, so collapse to one snapshot cache key.
 		initRoute = ekInitRoute{Mode: "grid", FestID: sc.FestID, GameID: gameID}
+	}
+	// A static snapshot is served Cache-Control: public — an edge may keep it
+	// for anyone. A private fest's page reaches only its organizers, so it is
+	// always the live one (no-cache), never a snapshot.
+	var isPublic int
+	if err := s.eng.DB.QueryRowContext(r.Context(), `select is_public from fests where id = ?`, sc.FestID).Scan(&isPublic); err != nil {
+		return err
+	}
+	if isPublic == 0 {
+		if forceStatic {
+			return route.NotFound
+		}
+		if def.Init == games.InitEK {
+			s.serveEKHTMLWithInit(w, r, scope, parts, def.Page)
+		} else {
+			s.serveGameHTMLWithInit(w, r, def.Page, scope)
+		}
+		return nil
 	}
 	serveStatic, release := lockdownServes(forceStatic, s.eng.StaticMode.Load(), session.HasCookie(r), &s.eng.LiveFallthrough)
 	defer release()

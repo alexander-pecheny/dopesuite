@@ -312,6 +312,12 @@ cancel_btn = "Отмена"
 # The access roster table.
 col_nickname = "Никнейм"
 col_role = "Роль"
+# Access table column: the Games a host may run.
+col_games = "Игры"
+# An admin's or the creator's Games cell: they run every Game.
+games_every = "все игры"
+# Under a host's Game boxes: what ticking none means.
+games_none_hint = "ничего не отмечено — ведёт все игры"
 delete_access_confirm = 'Удалить доступ для {{.name}}?'
 add_btn = "Добавить"
 # The participants links: subhead and list rows.

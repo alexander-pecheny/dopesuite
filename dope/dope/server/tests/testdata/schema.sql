@@ -1,3 +1,6 @@
+-- index fest_game_hosts_user_idx
+CREATE INDEX fest_game_hosts_user_idx on fest_game_hosts(fest_id, user_id);
+
 -- index fest_team_flags_team_idx
 CREATE INDEX fest_team_flags_team_idx on fest_team_flags(team_id, position);
 
@@ -33,6 +36,14 @@ CREATE TABLE audit_ctx(
   request_id text,
   fest_id integer,
   suppress integer not null default 0
+);
+
+-- table fest_game_hosts
+CREATE TABLE fest_game_hosts(
+  fest_id integer not null references fests(id) on delete cascade,
+  game_id integer not null references games(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  primary key(game_id, user_id)
 );
 
 -- table fest_organizers
