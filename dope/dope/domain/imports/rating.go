@@ -751,6 +751,19 @@ from fest_players where fest_id = ?`, []any{festID}, func(rows *sql.Rows) (curPl
 		if _, keep := desired[key]; keep {
 			continue
 		}
+		// A person who plays as themselves (личная СИ seats players) stays in
+		// the fest when they leave every team: their Participant points at
+		// them, and so do their results. They are just on no team now.
+		var seated int
+		if err := tx.QueryRowContext(ctx, `select count(*) from participants where fest_player_id = ?`, c.id).Scan(&seated); err != nil {
+			return err
+		}
+		if seated > 0 {
+			if _, err := tx.ExecContext(ctx, `delete from fest_team_players where player_id = ?`, c.id); err != nil {
+				return err
+			}
+			continue
+		}
 		if _, err := tx.ExecContext(ctx, `delete from fest_players where id = ?`, c.id); err != nil {
 			return err
 		}

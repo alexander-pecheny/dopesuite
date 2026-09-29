@@ -255,3 +255,40 @@ func TestReimportAsksWhenTheSiteMovesAHostsPlayer(t *testing.T) {
 		t.Fatalf("site's placement: %v", got)
 	}
 }
+
+// A person who plays личная СИ as themselves stays in the fest when the host
+// takes them off their team: their Participant, and its results, point at
+// them. Before, the roster writer deleted them and the save failed on the
+// foreign key.
+func TestTakingAnIndividualPlayerOffATeamKeepsThem(t *testing.T) {
+	srv := newAuthTestServer(t)
+	srv.SetEditBatchWindow(time.Millisecond)
+	db := srv.Eng().DB
+	token := createTestSession(t, srv, systemUserID(t, db))
+	festID := newFest(t, db, "si", "Фест", systemUserID(t, db))
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 1, siteTeams(map[int64][]string{1: {"Аня", "Борис"}}), imports.RosterChoice{}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	var teamID, anya int64
+	if err := db.QueryRow(`select id from fest_teams where fest_id = ? and rating_id = 1`, festID).Scan(&teamID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`select id from fest_players where fest_id = ? and rating_id = 101`, festID).Scan(&anya); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`insert into participants(fest_id, roster, name, number, fest_player_id) values(?, 'player', 'Аня', 1, ?)`, festID, anya); err != nil {
+		t.Fatal(err)
+	}
+	resp := scopedAPIRequest(t, srv, http.MethodPut, fmt.Sprintf("/api/fest/%d/teams/%d", festID, teamID),
+		map[string]any{"name": "Бобры", "city": "Брест", "players": []editPlayer{{102, "Борис", ""}}}, token)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("take Аня off: %d %s", resp.Code, resp.Body.String())
+	}
+	var still int
+	if err := db.QueryRow(`select count(*) from fest_players where id = ?`, anya).Scan(&still); err != nil || still != 1 {
+		t.Fatalf("Аня is gone from the fest (%d, %v)", still, err)
+	}
+	if got := festRosterNow(t, &serverGame{t: t, srv: srv, festID: festID}); !reflect.DeepEqual(got, []string{"Бобры: Борис"}) {
+		t.Fatalf("roster = %v", got)
+	}
+}
