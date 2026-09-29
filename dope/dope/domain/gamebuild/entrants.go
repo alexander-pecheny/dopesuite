@@ -29,11 +29,11 @@ type Applied struct {
 // ApplyListTx saves a Game's Entrant list (CONTEXT.md) and seats it. A Game
 // whose Structure is compiled against its entrants (imports.EntrantSized) is
 // recompiled for the list's active entrants first, as long as nothing has been
-// entered in it: then a troika added to a Тройка gets a row in the отбор. A
+// entered in it: then a troika added to a Troika gets a row in the written qualifier. A
 // scheme of a fixed size (a roundrobin of groups of four) refuses another
 // count; the Structure then stays, and the list fills its seats, the rest
 // waiting. Once anything is entered the Structure stays as it is, and the list
-// only moves entrants between the seats of бои nobody has started.
+// only moves entrants between the seats of bouts nobody has started.
 func ApplyListTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, current, next imports.List, event string) (Applied, error) {
 	var applied Applied
 	var dsl string

@@ -37,7 +37,7 @@ const (
 type seedImportState struct {
 	Source       string `json:"source,omitempty"`
 	SourceGameID int64  `json:"sourceGameID,omitempty"`
-	// Division keeps the import to one зачёт (ADR-0020); a re-import repeats it.
+	// Division keeps the import to one division (ADR-0020); a re-import repeats it.
 	Division string `json:"division,omitempty"`
 	// Edited says the host has added, removed, moved or renamed an entrant
 	// since the last import, which a re-import would throw away.
@@ -70,9 +70,9 @@ type SeedImportView struct {
 	Rows          []SeedImportViewRow `json:"rows"`
 }
 
-// SeedImportViewRow is one entrant as the Участники tab shows it. SeedNumber
+// SeedImportViewRow is one entrant as the entrants tab shows it. SeedNumber
 // is the seat it holds in the Structure (0: none — declined, or on the waiting
-// list). Played says it sits in a бой that has begun, so it can be neither
+// list). Played says it sits in a bout that has begun, so it can be neither
 // removed nor renamed and its seat no longer moves; OneOff says the host typed
 // it in for this Game alone.
 type SeedImportViewRow struct {
@@ -466,7 +466,7 @@ func listFromSeedingTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, pr
 }
 
 // SetSeedImportDeclined marks an entrant as having refused to play, or takes
-// the mark back. The next entrant moves up into the seat, in every бой nobody
+// the mark back. The next entrant moves up into the seat, in every bout nobody
 // has started.
 func SetSeedImportDeclined(eng *core.Engine, ctx context.Context, scope core.FestScope, req SeedDeclineRequest) (SeedImportView, int64, []byte, error) {
 	if req.TeamID <= 0 {
@@ -524,7 +524,7 @@ select coalesce(scheme_json, '{}') from games where fest_id = ? and id = ?`,
 }
 
 // SaveListTx writes the Game's Entrant list and seats it (seatListTx), records
-// the event and returns the list as the Участники tab shows it, with the
+// the event and returns the list as the entrants tab shows it, with the
 // document the game-state scope broadcasts. current is the list as it was
 // loaded, whose state blob the new list is written into.
 func SaveListTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, current, next List, eventType string) (SeedImportView, int64, []byte, error) {

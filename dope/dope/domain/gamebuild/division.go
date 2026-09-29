@@ -18,9 +18,9 @@ import (
 // A Troika Game whose scheme declares a division in [init] without a seed seats
 // the fest's troikas in that division (store.FestScheme.Division). Its Entrant
 // list follows the troikas page: a troika added, moved to another division or
-// deleted there changes the list, and so the Game's отбор, until the Game has
+// deleted there changes the list, and so the Game's written qualifier, until the Game has
 // anything entered. After that the list is the host's to edit on the Game's
-// Участники tab, and so it is once the host has edited it there or imported it
+// entrants tab, and so it is once the host has edited it there or imported it
 // from another source.
 
 // DivisionGame is one such Game as the troikas page reports it: which division it
@@ -36,7 +36,7 @@ type DivisionGame struct {
 	Current bool
 	// Frozen says the Game has something entered, so its list no longer follows.
 	Frozen bool
-	// Manual says the host has edited the list on the Game's Участники tab or
+	// Manual says the host has edited the list on the Game's entrants tab or
 	// imported it from somewhere else, so it no longer follows.
 	Manual bool
 	// Problem is why a re-seat was refused, for the host to read.
@@ -174,7 +174,7 @@ func SyncDivisionEntrantsTx(ctx context.Context, tx *sql.Tx, festID, exclude int
 		if err != nil {
 			return nil, err
 		}
-		// A scheme that takes no other count keeps its отбор; the troikas it
+		// A scheme that takes no other count keeps its written qualifier; the troikas it
 		// has no row for wait on the list, and the page says why.
 		game.Current = true
 		game.Problem = applied.Kept

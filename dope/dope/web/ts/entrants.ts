@@ -1,6 +1,6 @@
-// The Участники tab of a buzzer Game (CONTEXT.md, Entrant list): who the Game
+// The entrants tab of a buzzer Game (CONTEXT.md, Entrant list): who the Game
 // seats, in seed order, where that list comes from, and the host's hand edits.
-// ЭК, ЭС, личная СИ, брейн, Тройка and Хамса mount this one module; each page
+// EK, ES, individual SI, Brain, Troika and Hamsa mount this one module; each page
 // asks for the element when the tab is open and calls refresh() when a fest
 // event says the list may have changed. The server does every rule — who may
 // be removed, which seats move — and answers the tab afresh after each write.
@@ -51,12 +51,12 @@ export interface EntrantsView {
 }
 
 export interface EntrantsTabOptions {
-  // The Game's API base (/api/fest/{fest}/games/{game}). The ЭК page moves
+  // The Game's API base (/api/fest/{fest}/games/{game}). The EK page moves
   // between Games without a reload, so it passes a function.
   apiBase: string | (() => string);
   // The tab drew something new: the page may want to re-measure name fades.
   onRender?: () => void;
-  // A write moved entrants between seats: the page's бои may show others now.
+  // A write moved entrants between seats: the page's bouts may show others now.
   onChanged?: () => void;
   // The Game's Structure was rebuilt for the list: the page's bouts are stale.
   onRebuilt?: () => void;

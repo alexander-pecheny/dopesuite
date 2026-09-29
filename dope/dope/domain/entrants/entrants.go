@@ -1,6 +1,6 @@
-// Package entrants is a buzzer Game's Участники tab (CONTEXT.md, Entrant
+// Package entrants is a buzzer Game's entrants tab (CONTEXT.md, Entrant
 // list): who the Game seats, where that list comes from, and the host's hand
-// edits to it. ЭК, ЭС, брейн, Тройка, Хамса and личная СИ share it. The list
+// edits to it. EK, ES, Brain, Troika, Hamsa and individual SI share it. The list
 // itself — how it is stored and how it fills the Structure's seats — is
 // imports'; a Game whose Structure is built for its entrants is recompiled by
 // gamebuild. This package decides what the host may do and says why not.
@@ -46,7 +46,7 @@ func kindOf(gameType string) string {
 }
 
 // Formats reports whether a Game type keeps an Entrant list: the buzzer
-// formats, where a few entrants meet in each бой.
+// formats, where a few entrants meet in each bout.
 func Formats(gameType string) bool {
 	switch gameType {
 	case games.EK, games.ES, games.SI, games.Brain, games.Troika, games.Hamsa:
@@ -57,7 +57,7 @@ func Formats(gameType string) bool {
 
 // Source is where a list comes from: a Game's table (Game is its code), the
 // fest's own roster, the fest's troikas, a lot, an uploaded sheet or the
-// by-players seeding a scheme declares. Division keeps it to one зачёт.
+// by-players seeding a scheme declares. Division keeps it to one division.
 type Source struct {
 	Kind     string `json:"kind"`
 	Game     string `json:"game,omitempty"`
@@ -75,7 +75,7 @@ const (
 )
 
 // SourceOption is one choice of the tab's source picker. Divided says the
-// зачёт filter applies to it.
+// division filter applies to it.
 type SourceOption struct {
 	Source
 	Label   string `json:"label"`
@@ -89,8 +89,8 @@ type Candidate struct {
 	Label string `json:"label"`
 }
 
-// View is the Участники tab: the list, the source picker with its preselected
-// choice, the зачёты to filter by, who can be added, and whether the Game's
+// View is the entrants tab: the list, the source picker with its preselected
+// choice, the divisions to filter by, who can be added, and whether the Game's
 // Structure still follows the list (Resizes: nothing entered in a Game built
 // for its entrants).
 type View struct {
@@ -212,7 +212,7 @@ select code, title, game_type from games where fest_id = ? and id != ? order by 
 }
 
 // sourceOfStored reads a source as the list stores it: a keyword, the legacy
-// "ksi" (the fest's first КСИ), or a Game's code.
+// "ksi" (the fest's first KSI), or a Game's code.
 func sourceOfStored(ctx context.Context, q store.Queryer, festID int64, stored, division string) Source {
 	switch stored {
 	case "":
@@ -230,7 +230,7 @@ select code from games where fest_id = ? and game_type = 'ksi' order by position
 	return Source{Kind: SourceGame, Game: stored, Division: division}
 }
 
-// schemeDivision is the зачёт the Game's [init] keeps its seeding to.
+// schemeDivision is the division the Game's [init] keeps its seeding to.
 func schemeDivision(ctx context.Context, q store.Queryer, gameID int64) (string, error) {
 	var division string
 	err := q.QueryRowContext(ctx, `
@@ -427,8 +427,8 @@ func Import(h Host, ctx context.Context, scope core.FestScope, source Source, fi
 }
 
 // ImportLegacy runs a seed source as the seed tab's old routes name it: the
-// fest's first КСИ, or what the scheme's [init] declares. A one-off the new
-// list leaves out goes, unless a бой has seated it.
+// fest's first KSI, or what the scheme's [init] declares. A one-off the new
+// list leaves out goes, unless a bout has seated it.
 func ImportLegacy(h Host, ctx context.Context, scope core.FestScope, src imports.SeedSource) (Result, error) {
 	var kept []int64
 	return edit(h, ctx, scope, "import", func(ctx context.Context, tx *sql.Tx, list imports.List) (imports.List, error) {
@@ -443,7 +443,7 @@ func ImportLegacy(h Host, ctx context.Context, scope core.FestScope, src imports
 }
 
 // dropUnlistedOneOffsTx deletes the Game's one-off entrants that are neither in
-// its list nor sitting in any of its бои.
+// its list nor sitting in any of its bouts.
 func dropUnlistedOneOffsTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, listed []int64) error {
 	oneOffs, err := store.CollectRows(ctx, tx, `
 select p.id from participants p
@@ -648,7 +648,7 @@ select game_id is not null from participants where id = ?`, participantID).Scan(
 }
 
 // Move puts an entrant at a place in the list (1 is the top). One that sits
-// in a бой that has begun keeps its seat, so it cannot be moved.
+// in a bout that has begun keeps its seat, so it cannot be moved.
 func Move(h Host, ctx context.Context, scope core.FestScope, participantID int64, position int) (Result, error) {
 	return edit(h, ctx, scope, "move", func(ctx context.Context, tx *sql.Tx, list imports.List) (imports.List, error) {
 		i, err := rowOf(list, participantID)
@@ -705,7 +705,7 @@ select game_id is not null from participants where id = ?`, participantID).Scan(
 }
 
 // Decline marks an entrant as having refused to play, or takes that back. The
-// next entrant moves up into its seat in every бой nobody has started.
+// next entrant moves up into its seat in every bout nobody has started.
 func Decline(h Host, ctx context.Context, scope core.FestScope, participantID int64, declined bool) (Result, error) {
 	return edit(h, ctx, scope, "decline", func(ctx context.Context, tx *sql.Tx, list imports.List) (imports.List, error) {
 		return list.Decline(participantID, declined)
