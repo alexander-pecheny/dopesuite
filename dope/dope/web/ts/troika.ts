@@ -1005,8 +1005,32 @@ function buildGrid(): HTMLElement {
   for (const stage of fest?.stages || []) {
     if (stage?.code) stages.push(festStages.get(stage.code) || stage);
   }
-  return buildFestGrid({schemaJson: fest?.schemaJson, stages},
-    {stageHeaderLink: false, matchTitleLink: false, letters: boutLetters});
+  return buildFestGrid({schemaJson: fest?.schemaJson, stages}, {
+    stageHeaderLink: false,
+    matchTitleLink: false,
+    letters: boutLetters,
+    editable: !viewer,
+    onDraw: (slot, participant) => void applyDraw(slot, participant),
+  });
+}
+
+// applyDraw seats a drawn play-off seat (Троечка §5.3), as Хамса does. The
+// server holds the choice to the seat's candidates and to the group-apart
+// rule, so a refusal is a refusal and the page reloads what it answered.
+async function applyDraw(slot: string, participant: number): Promise<void> {
+  const response = await fetch(`${route.apiBase}/draw`, {
+    method: "PUT",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({slot, participant}),
+  });
+  if (!response.ok) {
+    indicator.fail();
+    await fetchMatches();
+    return;
+  }
+  const view = await response.json() as FestInfo;
+  for (const stage of view.stages || []) if (stage?.code) festStages.set(stage.code, stage);
+  await fetchMatches();
 }
 
 // buildGridOf is the grid cut down to some stages: a Block's rounds, each a
@@ -1020,8 +1044,13 @@ function buildGridOf(only: SchemeStage[]): HTMLElement {
   for (const stage of fest?.stages || []) {
     if (stage?.code && codes.has(stage.code)) live.push(festStages.get(stage.code) || stage);
   }
-  return buildFestGrid({schemaJson: JSON.stringify({stages: schemeStages}), stages: live},
-    {stageHeaderLink: false, matchTitleLink: false, letters: boutLetters});
+  return buildFestGrid({schemaJson: JSON.stringify({stages: schemeStages}), stages: live}, {
+    stageHeaderLink: false,
+    matchTitleLink: false,
+    letters: boutLetters,
+    editable: !viewer,
+    onDraw: (slot, participant) => void applyDraw(slot, participant),
+  });
 }
 
 // buildReseeds is the reseed tab — Hamsa's: each reseed's ranking and its

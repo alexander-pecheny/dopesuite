@@ -21,7 +21,7 @@ type singleElim struct{}
 func (singleElim) Code() string { return "se" }
 func (singleElim) Word() string { return "single_elimination" }
 func (singleElim) Keys() []Key {
-	return []Key{{Name: "participants"}, {Name: "match_size", BlockRound: true}, {Name: "winning_places"}, {Name: "rounds"}, {Name: "bronze"}, {Name: "best_of", BlockRound: true}, {Name: "rollout", BlockRound: true}, {Name: "points", Cascade: true}, {Name: "metric"}}
+	return []Key{{Name: "participants"}, {Name: "match_size", BlockRound: true}, {Name: "winning_places"}, {Name: "rounds"}, {Name: "bronze"}, {Name: "best_of", BlockRound: true}, {Name: "rollout", BlockRound: true}, {Name: "points", Cascade: true}, {Name: "metric"}, {Name: "draw"}}
 }
 
 func seBlockRoundTitle(remaining int) string {
@@ -405,6 +405,9 @@ func seFirstBlockRound(b Block, opening elimBlockRound, winning int) ([][]store.
 	if prev.Proceeding <= 0 {
 		return nil, errors.New(s.Structure.Se.ProceedingMissing())
 	}
+	if drawn, _ := b.Bool("draw"); drawn {
+		return seDrawnFirstBlockRound(b, prev, opening, winning)
+	}
 	// A reseed makes the Match's size irrelevant: it hands over a ranking, and
 	// the snake deals that ranking into Matches of any size — TPSH opens on
 	// four seats. Only the template below needs Matches of two.
@@ -452,6 +455,43 @@ func seFirstBlockRound(b Block, opening elimBlockRound, winning int) ([][]store.
 		a, b := prev.Groups[2*p], prev.Groups[2*p+1]
 		first[p] = []store.SchemeSlot{a.Place(1), b.Place(2)}
 		first[half+p] = []store.SchemeSlot{b.Place(1), a.Place(2)}
+	}
+	return first, nil
+}
+
+// seDrawnFirstBlockRound seats the opening Round by a draw the host makes on
+// the day (Троечка §5.3): each bout pairs a group winner with a runner-up, both
+// drawn, and the two may not come out of the same group. The seats stay empty
+// until the host fills them; the groups only say who may be drawn.
+func seDrawnFirstBlockRound(b Block, prev Outputs, opening elimBlockRound, winning int) ([][]store.SchemeSlot, error) {
+	s := dopestrings.Default
+	if incoming, _ := b.Reseed(); incoming || opening.size != 2 || winning != 1 || prev.Proceeding != 2 ||
+		len(prev.Groups) < 2 || len(prev.Groups)*2 != opening.entering {
+		return nil, Keyf("draw", "%s", s.Structure.Se.DrawTemplate())
+	}
+	pool := func(place int) []store.SchemeReseedRef {
+		var ranks []store.SchemeReseedRef
+		for _, group := range prev.Groups {
+			slot := group.Place(place)
+			if slot.Reseed == nil {
+				return nil
+			}
+			ranks = append(ranks, *slot.Reseed)
+		}
+		return ranks
+	}
+	winners, runnersUp := pool(1), pool(2)
+	if winners == nil || runnersUp == nil {
+		return nil, Keyf("draw", "%s", s.Structure.Se.DrawTemplate())
+	}
+	first := make([][]store.SchemeSlot, opening.bouts)
+	for i := range first {
+		for place, ranks := range [][]store.SchemeReseedRef{winners, runnersUp} {
+			first[i] = append(first[i], store.SchemeSlot{
+				Draw:  &store.SchemeDraw{Code: fmt.Sprintf("%s-draw-%d-%d", b.Code(), i+1, place+1), Ranks: ranks, Apart: true},
+				Label: s.Structure.Se.DrawSeat(strconv.Itoa(place + 1)),
+			})
+		}
 	}
 	return first, nil
 }

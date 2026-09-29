@@ -137,7 +137,7 @@ order by ms.slot_index`, []any{matchID}, func(rows *sql.Rows) (MatchParticipantS
 			team.Name = team.Source
 		}
 		if ref.Draw != nil {
-			team.Draw = &DrawSlotView{Code: ref.Draw.Code, Seated: seated}
+			team.Draw = &DrawSlotView{Code: ref.Draw.Code, Seated: seated, Apart: ref.Draw.Apart}
 			draws[slotIndex] = ref.Draw
 		}
 		return team, nil
@@ -163,49 +163,97 @@ order by ms.slot_index`, []any{matchID}, func(rows *sql.Rows) (MatchParticipantS
 // panel offers a choice only once the Round it draws from is played out —
 // the same gate every other advancing seat waits on.
 func LoadDrawCandidates(ctx context.Context, q Queryer, gameID int64, draw *SchemeDraw) ([]DrawCandidateView, error) {
-	if draw == nil || len(draw.Candidates) == 0 {
+	if draw == nil || len(draw.Candidates)+len(draw.Ranks) == 0 {
 		return nil, nil
 	}
-	codes := map[string]bool{}
-	args := []any{gameID}
-	for _, candidate := range draw.Candidates {
-		if !codes[candidate.Match] {
-			codes[candidate.Match] = true
-			args = append(args, candidate.Match)
+	var out []DrawCandidateView
+	seen := map[int64]bool{}
+	add := func(row DrawCandidateView) {
+		if !seen[row.ID] {
+			seen[row.ID] = true
+			out = append(out, row)
 		}
 	}
-	type held struct {
-		Code  string
-		Place float64
-		ID    int64
-		Name  string
-	}
-	rows, err := CollectRows(ctx, q, `
+	if len(draw.Candidates) > 0 {
+		codes := map[string]bool{}
+		args := []any{gameID}
+		for _, candidate := range draw.Candidates {
+			if !codes[candidate.Match] {
+				codes[candidate.Match] = true
+				args = append(args, candidate.Match)
+			}
+		}
+		type held struct {
+			Code  string
+			Place float64
+			ID    int64
+			Name  string
+		}
+		rows, err := CollectRows(ctx, q, `
 select m.code, mr.place, mr.participant_id, coalesce(p.name, '')
 from match_results mr
 join matches m on m.id = mr.match_id
 join participants p on p.id = mr.participant_id
 where m.game_id = ? and m.status = 'finished' and m.code in (`+placeholders(len(args)-1)+`)`,
-		args, func(rows *sql.Rows) (held, error) {
-			var h held
-			return h, rows.Scan(&h.Code, &h.Place, &h.ID, &h.Name)
-		})
-	if err != nil {
-		return nil, err
-	}
-	byPlace := map[string]held{}
-	for _, row := range rows {
-		byPlace[fmt.Sprintf("%s:%g", row.Code, row.Place)] = row
-	}
-	var out []DrawCandidateView
-	seen := map[int64]bool{}
-	for _, candidate := range draw.Candidates {
-		row, ok := byPlace[fmt.Sprintf("%s:%d", candidate.Match, candidate.Place)]
-		if !ok || seen[row.ID] {
-			continue
+			args, func(rows *sql.Rows) (held, error) {
+				var h held
+				return h, rows.Scan(&h.Code, &h.Place, &h.ID, &h.Name)
+			})
+		if err != nil {
+			return nil, err
 		}
-		seen[row.ID] = true
-		out = append(out, DrawCandidateView{ID: row.ID, Name: row.Name})
+		byPlace := map[string]held{}
+		for _, row := range rows {
+			byPlace[fmt.Sprintf("%s:%g", row.Code, row.Place)] = row
+		}
+		for _, candidate := range draw.Candidates {
+			if row, ok := byPlace[fmt.Sprintf("%s:%d", candidate.Match, candidate.Place)]; ok {
+				add(DrawCandidateView{ID: row.ID, Name: row.Name, Source: row.Code})
+			}
+		}
+	}
+	if len(draw.Ranks) > 0 {
+		codes := map[string]bool{}
+		args := []any{gameID}
+		for _, rank := range draw.Ranks {
+			if !codes[rank.Stage] {
+				codes[rank.Stage] = true
+				args = append(args, rank.Stage)
+			}
+		}
+		type ranked struct {
+			Code string
+			Rank int
+			ID   int64
+			Name string
+		}
+		// A table is final only once every Match in it is finished: until
+		// then its ranks are provisional and must not be drawn from, the same
+		// gate a seat resolved from a rank waits on.
+		rows, err := CollectRows(ctx, q, `
+select s.code, ss.rank, ss.participant_id, coalesce(p.name, '')
+from stage_standings ss
+join stages s on s.id = ss.stage_id
+join participants p on p.id = ss.participant_id
+where s.game_id = ? and s.code in (`+placeholders(len(args)-1)+`)
+  and exists (select 1 from matches m where m.stage_id = s.id)
+  and not exists (select 1 from matches m where m.stage_id = s.id and m.status != 'finished')`,
+			args, func(rows *sql.Rows) (ranked, error) {
+				var r ranked
+				return r, rows.Scan(&r.Code, &r.Rank, &r.ID, &r.Name)
+			})
+		if err != nil {
+			return nil, err
+		}
+		byRank := map[string]ranked{}
+		for _, row := range rows {
+			byRank[fmt.Sprintf("%s:%d", row.Code, row.Rank)] = row
+		}
+		for _, rank := range draw.Ranks {
+			if row, ok := byRank[fmt.Sprintf("%s:%d", rank.Stage, rank.Rank)]; ok {
+				add(DrawCandidateView{ID: row.ID, Name: row.Name, Source: row.Code})
+			}
+		}
 	}
 	return out, nil
 }

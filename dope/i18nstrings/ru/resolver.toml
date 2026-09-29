@@ -15,3 +15,5 @@ pending = '{{plural .n "Бой" "Бои" "Бои"}} {{.codes}} {{plural .n "не
 not_a_candidate = "эту команду нельзя посадить на это место"
 # A team already drawn into another table of the same round.
 already_seated = "эта команда уже посажена в этом раунде"
+# A drawn seat whose bout already holds a team out of the same group.
+same_source = "в этом бою уже сидит команда из той же группы"

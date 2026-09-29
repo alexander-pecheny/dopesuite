@@ -200,12 +200,16 @@ type MatchParticipantSummary struct {
 type DrawSlotView struct {
 	Code       string              `json:"code"`
 	Seated     int64               `json:"seated,omitempty"`
+	Apart      bool                `json:"apart,omitempty"`
 	Candidates []DrawCandidateView `json:"candidates,omitempty"`
 }
 
 type DrawCandidateView struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
+	// Source is the stage or Match the candidate's place is in: what a draw
+	// with Apart set keeps out of one Match.
+	Source string `json:"source,omitempty"`
 }
 
 // MatchView is the scored, client-facing projection of a match.

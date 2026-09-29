@@ -401,8 +401,9 @@ var RU = Strings{
 			Pending: func() string {
 				return "Жребий откроется, когда закончатся бои предыдущего раунда."
 			},
-			Seat:  func(bout string) string { return fmt.Sprintf("Бой %s", bout) },
-			Title: func() string { return "Жеребьёвка" },
+			Seat:   func(bout string) string { return fmt.Sprintf("Бой %s", bout) },
+			SeatOf: func(bout string, seat string) string { return fmt.Sprintf("Бой %s. %s", bout, seat) },
+			Title:  func() string { return "Жеребьёвка" },
 		},
 		Grid: FestGridStrings{
 			ColPlace:         func() string { return "М" },
@@ -1869,6 +1870,9 @@ var RU = Strings{
 		Draw: ResolverDrawStrings{
 			AlreadySeated: func() string { return "эта команда уже посажена в этом раунде" },
 			NotACandidate: func() string { return "эту команду нельзя посадить на это место" },
+			SameSource: func() string {
+				return "в этом бою уже сидит команда из той же группы"
+			},
 		},
 		Reseed: ResolverReseedStrings{
 			NotReady: func() string {
@@ -2294,10 +2298,14 @@ var RU = Strings{
 			BlockRoundSemifinals: func() string { return "Полуфиналы" },
 			Bronze:               func() string { return "Матч за 3-е место" },
 			BronzeBout:           func(n string) string { return fmt.Sprintf("Матч за 3-е место. Бой %s", n) },
-			FinalBout:            func(n string) string { return fmt.Sprintf("Финал. Бой %s", n) },
-			MatchNthBlockRound:   func(n string, index string) string { return fmt.Sprintf("1/%s финала %s", n, index) },
-			MatchSemifinal:       func(index string) string { return fmt.Sprintf("Полуфинал %s", index) },
-			ParticipantsMissing:  func() string { return "single_elimination: нужен participants" },
+			DrawSeat:             func(place string) string { return fmt.Sprintf("Жребий: %s-е место группы", place) },
+			DrawTemplate: func() string {
+				return "draw: жеребьёвка сажает победителей групп против вторых мест, поэтому нужны группы с proceeding_participants: 2, бои на двоих и participants, равный удвоенному числу групп"
+			},
+			FinalBout:           func(n string) string { return fmt.Sprintf("Финал. Бой %s", n) },
+			MatchNthBlockRound:  func(n string, index string) string { return fmt.Sprintf("1/%s финала %s", n, index) },
+			MatchSemifinal:      func(index string) string { return fmt.Sprintf("Полуфинал %s", index) },
+			ParticipantsMissing: func() string { return "single_elimination: нужен participants" },
 			ProceedingMissing: func() string {
 				return "предыдущему блоку нужен proceeding_participants, чтобы продолжить схему"
 			},

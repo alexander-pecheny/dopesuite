@@ -44,6 +44,11 @@ best_of_parity = "best_of: серия играется до большинств
 best_of_final_only = "best_of: серия возможна только в финале или матче за 3-е место"
 # The block follows one that declared no proceeding_participants.
 proceeding_missing = "предыдущему блоку нужен proceeding_participants, чтобы продолжить схему"
+# draw: true on a bracket that does not follow groups sending two places each
+# into bouts of two.
+draw_template = "draw: жеребьёвка сажает победителей групп против вторых мест, поэтому нужны группы с proceeding_participants: 2, бои на двоих и participants, равный удвоенному числу групп"
+# The label of a drawn seat while it is empty: which place of a group it takes.
+draw_seat = 'Жребий: {{.place}}-е место группы'
 # The previous block's seating template does not fit bouts of this size.
 template_size = 'нет шаблона рассадки в бои по {{.size}} из предыдущего блока — добавьте reseed: true'
 # The previous block's groups do not pair into a bracket template.

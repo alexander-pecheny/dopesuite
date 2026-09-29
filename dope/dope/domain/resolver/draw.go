@@ -79,12 +79,23 @@ func SetDrawTx(ctx context.Context, tx *sql.Tx, gameID int64, code string, parti
 		if err != nil {
 			return nil, err
 		}
-		eligible := false
+		source, eligible := "", false
 		for _, candidate := range candidates {
-			eligible = eligible || candidate.ID == participant
+			if candidate.ID == participant {
+				source, eligible = candidate.Source, true
+			}
 		}
 		if !eligible {
 			return nil, corei18n.User(s.Resolver.Draw.NotACandidate())
+		}
+		if slot.draw.Apart {
+			clash, err := drawnFromSource(ctx, tx, gameID, slots, slot, source)
+			if err != nil {
+				return nil, err
+			}
+			if clash {
+				return nil, corei18n.User(s.Resolver.Draw.SameSource())
+			}
 		}
 		for _, other := range slots {
 			if other.slotID != slot.slotID && other.stageID == slot.stageID && other.occupant == participant {
@@ -113,6 +124,30 @@ update match_slots set participant_id = ?, locked = ? where id = ?`,
 		return nil, err
 	}
 	return append([]int64{slot.matchID}, affected...), nil
+}
+
+// drawnFromSource reports whether another drawn seat of the slot's Match
+// already holds a Participant out of source (Троечка §5.3: a group's winner
+// never meets a runner-up of its own group).
+func drawnFromSource(ctx context.Context, q store.Queryer, gameID int64, slots []drawSlotRow, slot drawSlotRow, source string) (bool, error) {
+	if source == "" {
+		return false, nil
+	}
+	for _, other := range slots {
+		if other.matchID != slot.matchID || other.slotID == slot.slotID || other.occupant == 0 {
+			continue
+		}
+		candidates, err := store.LoadDrawCandidates(ctx, q, gameID, other.draw)
+		if err != nil {
+			return false, err
+		}
+		for _, candidate := range candidates {
+			if candidate.ID == other.occupant && candidate.Source == source {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 // drawSlotsTx reads the Game's Draw Slots. They are stored as placeholders —

@@ -326,6 +326,7 @@ export const RU: Strings = {
       none: () => "—",
       pending: () => "Жребий откроется, когда закончатся бои предыдущего раунда.",
       seat: (bout: string) => `Бой ${bout}`,
+      seatOf: (bout: string, seat: string) => `Бой ${bout}. ${seat}`,
       title: () => "Жеребьёвка",
     },
     grid: {
@@ -1372,6 +1373,7 @@ shootout: true
     draw: {
       alreadySeated: () => "эта команда уже посажена в этом раунде",
       notACandidate: () => "эту команду нельзя посадить на это место",
+      sameSource: () => "в этом бою уже сидит команда из той же группы",
     },
     reseed: {
       notReady: () => "пересев можно рассчитать после завершения всех исходных боёв",
@@ -1661,6 +1663,8 @@ shootout: true
       blockRoundSemifinals: () => "Полуфиналы",
       bronze: () => "Матч за 3-е место",
       bronzeBout: (n: string) => `Матч за 3-е место. Бой ${n}`,
+      drawSeat: (place: string) => `Жребий: ${place}-е место группы`,
+      drawTemplate: () => "draw: жеребьёвка сажает победителей групп против вторых мест, поэтому нужны группы с proceeding_participants: 2, бои на двоих и participants, равный удвоенному числу групп",
       finalBout: (n: string) => `Финал. Бой ${n}`,
       matchNthBlockRound: (n: string, index: string) => `1/${n} финала ${index}`,
       matchSemifinal: (index: string) => `Полуфинал ${index}`,

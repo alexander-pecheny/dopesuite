@@ -155,6 +155,14 @@ type SchemeSlot struct {
 type SchemeDraw struct {
 	Code       string               `json:"code"`
 	Candidates []SchemeFromMatchRef `json:"candidates,omitempty"`
+	// Ranks are candidates by their rank in a ranked stage's table, such as
+	// every group's first place. They are offered once that stage is played
+	// out.
+	Ranks []SchemeReseedRef `json:"ranks,omitempty"`
+	// Apart means two drawn seats of one Match may not hold Participants who
+	// come from the same source stage. Троечка §5.3 pairs a group's winner
+	// with the runner-up of another group.
+	Apart bool `json:"apart,omitempty"`
 }
 
 type SchemeSeedRef struct {

@@ -29,6 +29,9 @@ empty = "Пересев пока не рассчитан."
 title = "Жеребьёвка"
 # One row of the panel: the бой the drawn seat is in.
 seat = 'Бой {{.bout}}'
+# A row of a бой with several drawn seats: the бой and which seat, as the
+# seat's label names it («Жребий: 1-е место группы»).
+seat_of = 'Бой {{.bout}}. {{.seat}}'
 # The empty option of a seat's select.
 none = "—"
 # What the panel says while the раунд it draws from is still being played.

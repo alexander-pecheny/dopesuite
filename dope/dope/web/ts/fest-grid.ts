@@ -40,7 +40,10 @@ export interface FestGridLiveParticipant {
 export interface DrawSlot {
   code: string;
   seated?: number;
-  candidates?: Array<{id: number; name: string}>;
+  // apart: the other drawn seats of this Match may not hold anyone from the
+  // same source (a group), which each candidate names.
+  apart?: boolean;
+  candidates?: Array<{id: number; name: string; source?: string}>;
 }
 
 export interface FestGridMatch {
@@ -634,12 +637,12 @@ function buildMatchesStage(section: GridBoxes, ctx: PaintContext): HTMLElement {
 // stands where a reseed's calculate button does, and for the same reason: the
 // seats above it stay empty until somebody presses it.
 function buildDrawPanel(section: GridBoxes, ctx: PaintContext): HTMLElement | null {
-  const seats: Array<{match: FestGridMatch; draw: DrawSlot}> = [];
+  const seats: Array<{match: FestGridMatch; draw: DrawSlot; label: string}> = [];
   const liveMatches = new Map((section.live.matches || []).map((match) => [match.code, match]));
   for (const {match} of section.boxes) {
     const live = liveMatches.get(match.code) || match;
     for (const participant of live.participants || []) {
-      if (participant.draw?.code) seats.push({match: live, draw: participant.draw});
+      if (participant.draw?.code) seats.push({match: live, draw: participant.draw, label: participant.source || ""});
     }
   }
   if (!seats.length || !ctx.options.editable) return null;
@@ -660,8 +663,18 @@ function buildDrawPanel(section: GridBoxes, ctx: PaintContext): HTMLElement | nu
     // The kit's field: the label over the control, which is what a column
     // 200px wide has room for.
     const row = el("label", "field grid-draw-row", "");
-    row.appendChild(el("span", "",
-      S.fest.draw.seat(ctx.letters?.get(seat.match.code || "") || seat.match.title || seat.match.code || "")));
+    const bout = ctx.letters?.get(seat.match.code || "") || seat.match.title || seat.match.code || "";
+    const partners = seats.filter((other) => other.match === seat.match && other !== seat);
+    row.appendChild(el("span", "", partners.length && seat.label ? S.fest.draw.seatOf(bout, seat.label) : S.fest.draw.seat(bout)));
+    // An apart seat hides whoever comes from the group a partner seat already
+    // drew from; the server refuses that pairing anyway.
+    const blocked = new Set<string>();
+    if (seat.draw.apart) {
+      for (const other of partners) {
+        const source = (other.draw.candidates || []).find((candidate) => candidate.id === other.draw.seated)?.source;
+        if (source) blocked.add(source);
+      }
+    }
     const select = document.createElement("select");
     const none = document.createElement("option");
     none.value = "0";
@@ -669,6 +682,7 @@ function buildDrawPanel(section: GridBoxes, ctx: PaintContext): HTMLElement | nu
     select.appendChild(none);
     for (const candidate of seat.draw.candidates || []) {
       if (taken.has(candidate.id) && candidate.id !== seat.draw.seated) continue;
+      if (candidate.source && blocked.has(candidate.source) && candidate.id !== seat.draw.seated) continue;
       const item = document.createElement("option");
       item.value = String(candidate.id);
       item.textContent = candidate.name;

@@ -325,6 +325,7 @@ export type Strings = {
       none: () => string;
       pending: () => string;
       seat: (bout: string) => string;
+      seatOf: (bout: string, seat: string) => string;
       title: () => string;
     };
     grid: {
@@ -1350,6 +1351,7 @@ export type Strings = {
     draw: {
       alreadySeated: () => string;
       notACandidate: () => string;
+      sameSource: () => string;
     };
     reseed: {
       notReady: () => string;
@@ -1639,6 +1641,8 @@ export type Strings = {
       blockRoundSemifinals: () => string;
       bronze: () => string;
       bronzeBout: (n: string) => string;
+      drawSeat: (place: string) => string;
+      drawTemplate: () => string;
       finalBout: (n: string) => string;
       matchNthBlockRound: (n: string, index: string) => string;
       matchSemifinal: (index: string) => string;
