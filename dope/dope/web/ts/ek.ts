@@ -10,7 +10,7 @@ import {buildVenuesTable, formatBattleVenue, formatBattleVenueShort, formatVenue
 import type {Venue} from "./venue.js";
 import {buildGroupStandingsView, festLetters, letteredTitle, resultsTeamCell, stageType, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
-import {buildRosterView} from "./fest-roster.js";
+import {buildGameRosterView} from "./fest-roster.js";
 import {buildEKStatsTable, buildIndividualStatsTable, computeEKPlayerStats, computeIndividualPlayerStats} from "./ek-stats.js";
 import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
 import type {PendingOp, WireOp} from "./state-sync.js";
@@ -1067,7 +1067,7 @@ function renderRoster(): void {
   setPageMode("grid");
   shell.renderChrome();
   renderEKTabs();
-  ekRoot.replaceChildren(buildRosterView(route.festID));
+  ekRoot.replaceChildren(buildGameRosterView(route.apiBase || "", {editable: !viewer}));
   shell.presence.refresh();
 }
 

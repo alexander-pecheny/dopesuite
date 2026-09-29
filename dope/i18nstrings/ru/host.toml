@@ -180,6 +180,9 @@ no_override_games = "В фесте пока нет игр КСИ, ЭК или Э
 edit_override_label = "Редактировать оверрайд"
 # Subhead of the overrides table section.
 overrides_subhead = "Оверрайды"
+# One of an override's games where it does nothing, because the host changed
+# the roster of one of its two teams by hand on that game's Составы tab.
+override_shadowed = '{{.game}} (не действует: состав команды в этой игре изменён вручную)'
 # The edit dialog's delete button and its confirm.
 delete_override_confirm = "Удалить оверрайд?"
 delete_btn = "Удалить"
