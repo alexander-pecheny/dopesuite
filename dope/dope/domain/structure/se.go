@@ -21,7 +21,66 @@ type singleElim struct{}
 func (singleElim) Code() string { return "se" }
 func (singleElim) Word() string { return "single_elimination" }
 func (singleElim) Keys() []Key {
-	return []Key{{Name: "participants"}, {Name: "match_size", BlockRound: true}, {Name: "winning_places"}, {Name: "rounds"}, {Name: "bronze"}, {Name: "best_of", BlockRound: true}, {Name: "rollout", BlockRound: true}, {Name: "points", Cascade: true}, {Name: "metric"}, {Name: "draw"}}
+	return []Key{{Name: "participants"}, {Name: "match_size", BlockRound: true}, {Name: "winning_places"}, {Name: "rounds"}, {Name: "bronze"}, {Name: "best_of", BlockRound: true}, {Name: "rollout", BlockRound: true}, {Name: "points", Cascade: true}, {Name: "metric"}, {Name: "draw"}, {Name: "pairing", BlockRound: true}}
+}
+
+// The pairings a round may take its bouts' winners in.
+const (
+	// pairingAdjacent: bout 1's winners meet bout 2's, 3's meet 4's — the
+	// bracket's own order, the default.
+	pairingAdjacent = "adjacent"
+	// pairingHalves: bout 1 meets bout N/2+1, 2 meets N/2+2 — the troika
+	// regulations' 1/8 (R1 = Q1–Q9, R2 = Q2–Q10), where each pair has one
+	// bout of either wave.
+	pairingHalves = "halves"
+)
+
+// sePairing is how a round takes the previous round's bouts: `pairing` for
+// every round, `pairing.<round>` for one.
+// A plain `pairing: halves` leaves alone the rounds it cannot apply to (the
+// opening one, one seated by a reseed); `pairing.<round>` naming such a round
+// is refused.
+func sePairing(b Block, names []string, pairable bool) (string, error) {
+	s := dopestrings.Default
+	value, key := pairingAdjacent, ""
+	if v, ok := b.Str("pairing"); ok {
+		value, key = v, "pairing"
+	}
+	for _, name := range names {
+		if v, ok := b.Str("pairing." + name); ok {
+			value, key = v, "pairing."+name
+		}
+	}
+	switch value {
+	case pairingAdjacent:
+		return value, nil
+	case pairingHalves:
+		if pairable {
+			return value, nil
+		}
+		if key != "pairing" {
+			return "", Keyf(key, "%s", s.Structure.Se.PairingHalvesNeedsBouts(names[0]))
+		}
+		return pairingAdjacent, nil
+	}
+	return "", Keyf(key, "%s", s.Structure.Se.PairingUnknown(value))
+}
+
+// pairedOrder is the previous round's bouts in the order a round takes them:
+// as they are, or halves interleaved (1, N/2+1, 2, N/2+2, …).
+func pairedOrder(pairing string, bouts int) []int {
+	order := make([]int, bouts)
+	for i := range order {
+		order[i] = i
+	}
+	if pairing != pairingHalves || bouts%2 != 0 {
+		return order
+	}
+	half := bouts / 2
+	for i := 0; i < half; i++ {
+		order[2*i], order[2*i+1] = i, half+i
+	}
+	return order
 }
 
 func seBlockRoundTitle(remaining int) string {
@@ -163,6 +222,11 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 		// bracket template carries each Match's winners forward in Match order.
 		drawn := elimDraw(remaining, count, size, winning)
 		template := straightChunks(remaining, count)
+		pairing, err := sePairing(b, names, roundIndex > 0 && reseedCode == "" && len(prevCodes)%2 == 0)
+		if err != nil {
+			return Outputs{}, err
+		}
+		taken := pairedOrder(pairing, len(prevCodes))
 		for i := 1; i <= count; i++ {
 			code := fmt.Sprintf("%s-m%d", stageCode, i)
 			codes[i-1] = code
@@ -176,7 +240,7 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 				slots = first[i-1]
 			default:
 				for _, rank := range template[i-1] {
-					from, place := (rank-1)/winning, (rank-1)%winning+1
+					from, place := taken[(rank-1)/winning], (rank-1)%winning+1
 					slots = append(slots, LabelledFromMatch(prevCodes[from], s.Structure.Titles.Bout(strconv.Itoa(from+1)), place))
 				}
 			}

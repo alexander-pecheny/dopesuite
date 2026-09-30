@@ -34,6 +34,12 @@ bronze = "Матч за 3-е место"
 bronze_bout = 'Матч за 3-е место. Бой {{.n}}'
 # A block without the participants key.
 participants_missing = "single_elimination: нужен participants"
+# pairing: a value other than adjacent or halves.
+pairing_unknown = 'pairing: {{.value}} — бывает adjacent (соседние бои, как по умолчанию) или halves (бой 1 с боем N/2+1, 2 с N/2+2…)'
+# pairing: halves on a round that has no previous round of an even number of
+# bouts to pair: the opening round, or a round seated by a reseed.
+pairing_halves_needs_bouts = 'pairing: halves в раунде {{.round}} — ему нужен предыдущий раунд с чётным числом боёв, без пересева'
+
 # A reseed naming a round the block does not have.
 reseed_block_round_unknown = 'reseed: в этом блоке нет раунда {{.round}}'
 # A reseed naming the opening round, which needs reseed: true instead.

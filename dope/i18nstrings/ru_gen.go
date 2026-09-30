@@ -2558,9 +2558,15 @@ var RU = Strings{
 			DrawTemplate: func() string {
 				return "draw: жеребьёвка сажает победителей групп против вторых мест, поэтому нужны группы с proceeding_participants: 2, бои на двоих и participants, равный удвоенному числу групп"
 			},
-			FinalBout:           func(n string) string { return fmt.Sprintf("Финал. Бой %s", n) },
-			MatchNthBlockRound:  func(n string, index string) string { return fmt.Sprintf("1/%s финала %s", n, index) },
-			MatchSemifinal:      func(index string) string { return fmt.Sprintf("Полуфинал %s", index) },
+			FinalBout:          func(n string) string { return fmt.Sprintf("Финал. Бой %s", n) },
+			MatchNthBlockRound: func(n string, index string) string { return fmt.Sprintf("1/%s финала %s", n, index) },
+			MatchSemifinal:     func(index string) string { return fmt.Sprintf("Полуфинал %s", index) },
+			PairingHalvesNeedsBouts: func(round string) string {
+				return fmt.Sprintf("pairing: halves в раунде %s — ему нужен предыдущий раунд с чётным числом боёв, без пересева", round)
+			},
+			PairingUnknown: func(value string) string {
+				return fmt.Sprintf("pairing: %s — бывает adjacent (соседние бои, как по умолчанию) или halves (бой 1 с боем N/2+1, 2 с N/2+2…)", value)
+			},
 			ParticipantsMissing: func() string { return "single_elimination: нужен participants" },
 			ProceedingMissing: func() string {
 				return "предыдущему блоку нужен proceeding_participants, чтобы продолжить схему"

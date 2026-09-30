@@ -1832,6 +1832,8 @@ shootout: true
       finalBout: (n: string) => `Финал. Бой ${n}`,
       matchNthBlockRound: (n: string, index: string) => `1/${n} финала ${index}`,
       matchSemifinal: (index: string) => `Полуфинал ${index}`,
+      pairingHalvesNeedsBouts: (round: string) => `pairing: halves в раунде ${round} — ему нужен предыдущий раунд с чётным числом боёв, без пересева`,
+      pairingUnknown: (value: string) => `pairing: ${value} — бывает adjacent (соседние бои, как по умолчанию) или halves (бой 1 с боем N/2+1, 2 с N/2+2…)`,
       participantsMissing: () => "single_elimination: нужен participants",
       proceedingMissing: () => "предыдущему блоку нужен proceeding_participants, чтобы продолжить схему",
       reseedBlockRoundUnknown: (round: string) => `reseed: в этом блоке нет раунда ${round}`,
