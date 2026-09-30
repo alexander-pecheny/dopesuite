@@ -49,7 +49,7 @@ func TestTroikaRosterTabListsTroikasBeforeTheSeed(t *testing.T) {
 	}
 
 	// No entrant list yet: every troika of the fest.
-	if troikas, names := tab(); !troikas || !slices.Equal(names, []string{"Василёк", "Лютик", "По коням", "Ромашка"}) {
+	if troikas, names := tab(); !troikas || !slices.Equal(names, []string{"Ромашка", "Лютик", "Василёк", "По коням"}) {
 		t.Fatalf("before the list: troikas=%v %v", troikas, names)
 	}
 

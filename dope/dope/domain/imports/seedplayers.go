@@ -112,6 +112,7 @@ func (f fromPlayers) resolve(ctx context.Context, tx *sql.Tx, scope core.FestSco
 		participant int64
 		name        string
 		number      int
+		applied     int
 		metrics     map[string]float64
 	}
 	table := make([]scored, 0, len(entries))
@@ -139,7 +140,7 @@ func (f fromPlayers) resolve(ctx context.Context, tx *sql.Tx, scope core.FestSco
 			}
 			metrics[name] = agg.fold(values)
 		}
-		table = append(table, scored{participant: entry.participant, name: entry.name, number: entry.number, metrics: metrics})
+		table = append(table, scored{participant: entry.participant, name: entry.name, number: entry.number, applied: entry.applied, metrics: metrics})
 	}
 
 	rules := f.sort
@@ -153,6 +154,11 @@ func (f fromPlayers) resolve(ctx context.Context, tx *sql.Tx, scope core.FestSco
 				return a < b
 			}
 			return a > b
+		}
+		// Equal on every metric: the earlier application seeds first (the
+		// troika regulations' last tie-break), then the Game's own order.
+		if x, y := table[i].applied, table[j].applied; x > 0 && y > 0 && x != y {
+			return x < y
 		}
 		return table[i].number < table[j].number
 	})
@@ -393,7 +399,9 @@ type seedEntry struct {
 	participant int64
 	name        string
 	number      int
-	players     []seedPlayer
+	// applied is a troika's place in the order of applications (0: none kept).
+	applied int
+	players []seedPlayer
 }
 
 // gameRoster is who played a Game and for whom: fest team by player, the
@@ -449,16 +457,17 @@ func seedParticipantPlayers(ctx context.Context, q store.Queryer, scope core.Fes
 		team      int64
 		name      string
 		number    int
+		applied   int
 		assembled bool
 	}
 	participants, err := store.CollectRows(ctx, q, `
-select p.id, coalesce(`+participantFestTeam+`, 0), p.name, coalesce(ga.number, 0), p.assembled
+select p.id, coalesce(`+participantFestTeam+`, 0), p.name, coalesce(ga.number, 0), coalesce(p.applied, 0), p.assembled
 from participants p
 join game_assignments ga on ga.participant_id = p.id and ga.game_id = ?
 where p.fest_id = ?
 order by ga.number, p.id`, []any{scope.GameID, scope.FestID}, func(rs *sql.Rows) (participant, error) {
 		var row participant
-		return row, rs.Scan(&row.id, &row.team, &row.name, &row.number, &row.assembled)
+		return row, rs.Scan(&row.id, &row.team, &row.name, &row.number, &row.applied, &row.assembled)
 	})
 	if err != nil {
 		return nil, err
@@ -478,7 +487,7 @@ order by ga.number, p.id`, []any{scope.GameID, scope.FestID}, func(rs *sql.Rows)
 
 	entries := make([]seedEntry, 0, len(participants))
 	for _, row := range participants {
-		entry := seedEntry{participant: row.id, name: row.name, number: row.number}
+		entry := seedEntry{participant: row.id, name: row.name, number: row.number, applied: row.applied}
 		people := byTeam[row.team]
 		if row.assembled {
 			// A troika's people are its own roster (the fest's troikas page), not a

@@ -37,8 +37,13 @@ const (
 
 // Assembled is one assembled team as the host page lists it.
 type Assembled struct {
-	ID      int64
-	Name    string
+	ID   int64
+	Name string
+	// Applied is the troika's place in the order applications came in, 1
+	// first: the troika regulations' last seeding tie-break, and the order a
+	// list taken from the troikas follows. 0 for a troika from before it was
+	// kept.
+	Applied int
 	Players []string
 	// HeadTeamID and HeadTeam are the fest team the troika's places count for
 	// (regulations VII.2.1), 0 and "" for none.
@@ -65,6 +70,10 @@ type AssembledInput struct {
 	// Placement is nil from the pasted lines: a new troika then takes its
 	// derived head team and follows that team's division, and an edit keeps both.
 	Placement *AssembledPlacement
+	// Applied moves the troika to that place in the order of applications,
+	// the others making room; 0 leaves it where it is, and a new troika comes
+	// last.
+	Applied int
 }
 
 // AssembledPlacement is what the edit dialog says about the troika's standing:
@@ -79,7 +88,7 @@ type AssembledPlacement struct {
 // in roster order, its head team, its division and whether a Game seats it.
 func LoadAssembled(ctx context.Context, q store.Queryer, festID int64) ([]Assembled, error) {
 	teams, err := store.CollectRows(ctx, q, `
-select p.id, p.name, coalesce(t.id, 0), coalesce(t.name, ''), p.division,
+select p.id, p.name, coalesce(p.applied, 0), coalesce(t.id, 0), coalesce(t.name, ''), p.division,
   exists(select 1 from game_participants gp where gp.participant_id = p.id)
     or exists(select 1 from match_slots ms where ms.participant_id = p.id)
 from participants p
@@ -88,7 +97,7 @@ where p.fest_id = ? and p.assembled = 1
 order by p.name collate nocase, p.id`, []any{festID}, func(rows *sql.Rows) (Assembled, error) {
 		var team Assembled
 		var division sql.NullString
-		if err := rows.Scan(&team.ID, &team.Name, &team.HeadTeamID, &team.HeadTeam, &division, &team.Seated); err != nil {
+		if err := rows.Scan(&team.ID, &team.Name, &team.Applied, &team.HeadTeamID, &team.HeadTeam, &division, &team.Seated); err != nil {
 			return team, err
 		}
 		if division.Valid {
@@ -99,7 +108,18 @@ order by p.name collate nocase, p.id`, []any{festID}, func(rows *sql.Rows) (Asse
 	if err != nil {
 		return nil, err
 	}
-	sort.SliceStable(teams, func(i, j int) bool { return util.CompareNatural(teams[i].Name, teams[j].Name) < 0 })
+	// In the order applications came in; one from before that order was kept
+	// (0) goes after, by name.
+	sort.SliceStable(teams, func(i, j int) bool {
+		a, b := teams[i].Applied, teams[j].Applied
+		if (a > 0) != (b > 0) {
+			return a > 0
+		}
+		if a != b {
+			return a < b
+		}
+		return util.CompareNatural(teams[i].Name, teams[j].Name) < 0
+	})
 	members, err := assembledMembers(ctx, q, festID)
 	if err != nil {
 		return nil, err
@@ -559,8 +579,10 @@ select id from fest_teams where id = ? and fest_id = ? and deleted = 0`, placeme
 	switch {
 	case id == 0:
 		if id, err = store.InsertReturningID(ctx, tx, `
-insert into participants(fest_id, roster, name, city, assembled, head_team_id, division) values(?, 'team', ?, '', 1, ?, ?)`,
-			festID, name, headTeam, division); err != nil {
+insert into participants(fest_id, roster, name, city, assembled, head_team_id, division, applied)
+values(?, 'team', ?, '', 1, ?, ?, (
+  select coalesce(max(applied), 0) + 1 from participants where fest_id = ? and assembled = 1 and game_id is null))`,
+			festID, name, headTeam, division, festID); err != nil {
 			return 0, err
 		}
 	default:
@@ -579,11 +601,40 @@ update participants set name = ?, head_team_id = ?, division = ? where id = ? an
 			return 0, sql.ErrNoRows
 		}
 	}
+	if in.Applied > 0 {
+		if err := moveApplicationTx(ctx, tx, festID, id, in.Applied); err != nil {
+			return 0, err
+		}
+	}
 	seed := make([]SeedRosterPlayer, len(players))
 	for i, p := range players {
 		seed[i] = SeedRosterPlayer{FirstName: p[0], LastName: p[1]}
 	}
 	return id, ReplaceSeedTeamRoster(ctx, tx, festID, id, seed)
+}
+
+// moveApplicationTx puts a troika at that place in the order of
+// applications and numbers the fest's troikas 1…n again, the others keeping
+// their order around it. A place past the last is the last.
+func moveApplicationTx(ctx context.Context, tx *sql.Tx, festID, id int64, place int) error {
+	others, err := store.CollectRows(ctx, tx, `
+select id from participants
+where fest_id = ? and assembled = 1 and game_id is null and id != ?
+order by coalesce(applied, 1000000000), id`, []any{festID, id}, func(rows *sql.Rows) (int64, error) {
+		var other int64
+		return other, rows.Scan(&other)
+	})
+	if err != nil {
+		return err
+	}
+	at := min(max(place, 1), len(others)+1) - 1
+	order := slices.Insert(others, at, id)
+	for i, troika := range order {
+		if _, err := tx.ExecContext(ctx, `update participants set applied = ? where id = ?`, i+1, troika); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // DeleteAssembledTx removes an assembled team no Game seats.

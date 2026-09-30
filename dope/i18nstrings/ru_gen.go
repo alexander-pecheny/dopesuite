@@ -1226,12 +1226,18 @@ var RU = Strings{
 			AddedNotice: func(n int) string {
 				return fmt.Sprintf("Добавлено: %s.", core.Plural("ru", n, "тройка", "тройки", "троек"))
 			},
-			ColDivision:   func() string { return "Зачёт" },
-			ColName:       func() string { return "Тройка" },
-			ColPlayers:    func() string { return "Игроки" },
-			ColTeam:       func() string { return "За команду" },
-			Crumb:         func() string { return "Тройки" },
-			DeleteConfirm: func(name string) string { return fmt.Sprintf("Удалить тройку «%s»?", name) },
+			AppliedHint: func() string {
+				return "Порядок подачи заявок: при равенстве средних и лучших сумм мест выше посев у тройки, подавшей заявку раньше. Новые тройки встают в конец в том порядке, в каком их добавили. Если этот номер занят другой тройкой, остальные сдвинутся."
+			},
+			AppliedInvalid: func() string { return "Номер заявки — целое число от 1." },
+			AppliedLabel:   func() string { return "Номер заявки" },
+			ColApplied:     func() string { return "№ заявки" },
+			ColDivision:    func() string { return "Зачёт" },
+			ColName:        func() string { return "Тройка" },
+			ColPlayers:     func() string { return "Игроки" },
+			ColTeam:        func() string { return "За команду" },
+			Crumb:          func() string { return "Тройки" },
+			DeleteConfirm:  func(name string) string { return fmt.Sprintf("Удалить тройку «%s»?", name) },
 			DeleteSeated: func() string {
 				return "Эта тройка уже играет в игре, удалить её нельзя."
 			},
@@ -1267,7 +1273,7 @@ var RU = Strings{
 				return fmt.Sprintf("Строка %s: нужно название и двоеточие перед игроками.", n)
 			},
 			LinesHint: func() string {
-				return "Название, двоеточие и игроки через запятую — сначала имя, потом фамилия, как в составах феста. В тройке от двух до четырёх игроков."
+				return "Название, двоеточие и игроки через запятую — сначала имя, потом фамилия, как в составах феста. В тройке от двух до четырёх игроков. Добавляйте тройки в порядке подачи заявок: он решает при равенстве в посеве."
 			},
 			LinesLabel: func() string { return "По одной тройке в строке" },
 			LinesPlaceholder: func() string {

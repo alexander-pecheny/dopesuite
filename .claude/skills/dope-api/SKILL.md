@@ -101,7 +101,7 @@ of `dsl`. Leaving `entrants` out seats everyone.
 | `PUT …/players/overrides` A | `{player_id, source_team_id, team_id, game_ids}`: the three ids name an existing override, `game_ids` becomes its new list (not empty). To move the player to another team, delete and add |
 | `DELETE …/players/overrides?player_id=&source_team_id=&team_id=` A | |
 | `GET\|POST …/troikas` A | list / add `{lines: "Имя: Игрок, Игрок, Игрок\n…"}` |
-| `PUT\|DELETE …/troikas/<id>` A | `{name, players: [...]}` |
+| `PUT\|DELETE …/troikas/<id>` A | `{name, players: [...], applied?}`; `applied` moves the troika to that place in the order of applications (the list's `applied`), which a troikas list follows and `seed: players` breaks its last tie by |
 | `GET …/numbers` A | teams with numbers |
 | `POST …/numbers/assign` A | `{assignments: [{team_id, number}]}`; others keep theirs, a moved number leaves its old holder, `number: 0` takes a team's number away |
 | `POST …/numbers/match` A | `{text: "<n>\t<team>\n…"}` proposes pairs, saves nothing |

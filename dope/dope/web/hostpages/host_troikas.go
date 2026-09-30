@@ -96,6 +96,7 @@ func hostTroikasDoc(data hostTroikasData) *dopeui.Doc {
 
 	if len(data.Troikas) > 0 {
 		rows := []dopeui.Item{dopeui.Trow(
+			dopeui.Hcell(dopeui.Text(s.Host.Troikas.ColApplied())),
 			dopeui.Hcell(dopeui.Text(s.Host.Troikas.ColName())),
 			dopeui.Hcell(dopeui.Text(s.Host.Troikas.ColPlayers())),
 			dopeui.Hcell(dopeui.Text(s.Host.Troikas.ColTeam())),
@@ -103,7 +104,12 @@ func hostTroikasDoc(data hostTroikasData) *dopeui.Doc {
 			dopeui.Hcell(),
 		)}
 		for _, t := range data.Troikas {
+			applied := ""
+			if t.Applied > 0 {
+				applied = strconv.Itoa(t.Applied)
+			}
 			rows = append(rows, dopeui.Trow(
+				dopeui.Cell(dopeui.Text(applied)),
 				dopeui.Cell(dopeui.Text(t.Name)),
 				dopeui.Cell(dopeui.Text(strings.Join(t.Players, ", "))),
 				dopeui.Cell(dopeui.Text(t.HeadTeam)),
@@ -172,6 +178,14 @@ func hostTroikaDialog(ref string, t roster.Assembled, teams []roster.FestTeamCho
 		dopeui.Field(dopeui.Label(s.Host.Troikas.ColName()),
 			dopeui.Textfield(dopeui.Name("name"), dopeui.Value(t.Name), dopeui.Required())),
 	}
+	applied := ""
+	if t.Applied > 0 {
+		applied = strconv.Itoa(t.Applied)
+	}
+	fields = append(fields,
+		dopeui.Field(dopeui.Label(s.Host.Troikas.AppliedLabel()),
+			dopeui.Textfield(dopeui.Name("applied"), dopeui.Value(applied), dopeui.Inputmode("numeric"))),
+		dopeui.Hint(dopeui.Text(s.Host.Troikas.AppliedHint())))
 	for i := 0; i < troikaPlayerFields; i++ {
 		value := ""
 		if i < len(t.Players) {
@@ -398,6 +412,14 @@ func (s *Server) handleHostSaveTroikas(w http.ResponseWriter, r *http.Request, f
 			return
 		}
 		in := roster.AssembledInput{Name: r.Form.Get("name"), Players: r.Form["player"], Placement: placement}
+		if raw := strings.TrimSpace(r.Form.Get("applied")); raw != "" {
+			applied, err := strconv.Atoi(raw)
+			if err != nil || applied < 1 {
+				fail(corei18n.User(str.Host.Troikas.AppliedInvalid()), "")
+				return
+			}
+			in.Applied = applied
+		}
 		synced, err := s.SaveTroika(r.Context(), festID, id, in)
 		if err != nil {
 			fail(err, "")

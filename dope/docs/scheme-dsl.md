@@ -123,6 +123,9 @@ printed table instead writes it out in `deal:` (below).
   A Participant none of whose people is on the fest roster (stand-ins filling
   the draw) has nothing to add up: it is seeded last, in its order in the
   Game, and the Участники tab names it.
+  Participants equal on every `sorting` metric seed by their troikas' order
+  of applications (the troikas page's № заявки), then by their order in the
+  Game.
 - `seed: random` — every rank is a lot.
 - `seed: xlsx` — an uploaded sheet carrying either an exact seeding column or a
   basket column.

@@ -596,7 +596,9 @@ func (s *Server) apiDeleteOverride(w http.ResponseWriter, r *http.Request, sc ro
 // none; division is the host's choice (null while it follows the team) and
 // flags the division it plays in.
 type apiTroika struct {
-	ID         int64    `json:"id"`
+	ID int64 `json:"id"`
+	// Applied is the troika's place in the order applications came in.
+	Applied    int      `json:"applied"`
 	Name       string   `json:"name"`
 	Players    []string `json:"players"`
 	Team       string   `json:"team"`
@@ -621,7 +623,7 @@ func (s *Server) apiTroikas(w http.ResponseWriter, r *http.Request, sc route.Sco
 		if flags == nil {
 			flags = []string{}
 		}
-		out[i] = apiTroika{ID: t.ID, Name: t.Name, Players: players, Team: t.HeadTeam, HeadTeamID: t.HeadTeamID,
+		out[i] = apiTroika{ID: t.ID, Applied: t.Applied, Name: t.Name, Players: players, Team: t.HeadTeam, HeadTeamID: t.HeadTeamID,
 			Division: t.Division, Flags: flags, Seated: t.Seated}
 	}
 	return route.JSON(w, out)
@@ -662,11 +664,17 @@ func (s *Server) apiSaveTroika(w http.ResponseWriter, r *http.Request, sc route.
 		Players    []string `json:"players"`
 		HeadTeamID *int64   `json:"headTeamID"`
 		Division   *string  `json:"division"`
+		// Applied, when given, moves the troika to that place in the order of
+		// applications.
+		Applied int `json:"applied"`
 	}
 	if err := route.DecodeJSON(r, &req); err != nil {
 		return err
 	}
-	in := roster.AssembledInput{Name: req.Name, Players: req.Players}
+	if req.Applied < 0 {
+		return route.BadRequest("bad applied")
+	}
+	in := roster.AssembledInput{Name: req.Name, Players: req.Players, Applied: req.Applied}
 	if req.HeadTeamID != nil {
 		if *req.HeadTeamID < 0 {
 			return route.BadRequest("bad head team")
