@@ -80,6 +80,14 @@ resizes = "Пока в игре нет результатов, сетка стр
 # The last write kept the Structure: the scheme takes no other count.
 # {{.reason}} is the scheme's message.
 kept = 'Сетка осталась прежней: {{.reason}}'
+# An import from another source than the list's kept the host's additions and
+# removals but not the moves: a place in one source's order means nothing in
+# another's. {{.n}} is how many moves.
+moves_dropped = 'Список взят из другого источника, поэтому ручные перестановки ({{.n}}) не применены. Добавленные и убранные вручную участники учтены.'
+# The import had nothing to rank these entrants by: nobody in them is on the
+# fest roster. They were seeded last, in their order in the Game.
+# {{.names}} is the list, comma-separated.
+unranked = 'Посеяны последними, потому что никого из их игроков нет в составах фестиваля: {{.names}}.'
 # Once something is entered the Structure stays as it is.
 fixed = "В игре уже есть результаты, поэтому сетка больше не меняется. Изменения списка затрагивают только бои, которые ещё не начались."
 empty = "В списке пока никого нет. Возьмите его из источника или добавьте участников по одному."

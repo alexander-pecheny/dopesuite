@@ -17,8 +17,9 @@ import (
 // results.go exposes a computed "results" view for a game: the same total
 // and per-tour standings the #results page renders client-side, but computed
 // server-side so callers (bots, exports, integrations) don't have to replicate
-// the scoring. Currently only OD games are supported; the scoring itself lives
-// in the games package (games.ComputeODResults), shared with the xlsx export.
+// the scoring. OD games are supported, and a friendship cup answers its
+// personal standings; the scoring itself lives in the games package
+// (games.ComputeODResults, games.ComputeKDResults), shared with the xlsx export.
 
 // HandleScopedGameResults serves GET /api/fest/{fid}/games/{gid}/results.
 func HandleScopedGameResults(s Host, w http.ResponseWriter, r *http.Request, festID, gameID int64) {
@@ -35,11 +36,18 @@ func HandleScopedGameResults(s Host, w http.ResponseWriter, r *http.Request, fes
 		route.WriteError(w, r, err)
 		return
 	}
-	if gameType != games.OD {
+	var results any
+	switch gameType {
+	case games.OD:
+		results, err = games.ComputeODResults(schemeJSON, stateJSON)
+	case games.KD:
+		// A friendship cup answers its personal standings; the tables'
+		// own totals are the OD sheet's, read from the state.
+		results, err = games.ComputeKDResults(schemeJSON, stateJSON)
+	default:
 		http.Error(w, fmt.Sprintf("results view not available for game type %q", gameType), http.StatusBadRequest)
 		return
 	}
-	results, err := games.ComputeODResults(schemeJSON, stateJSON)
 	if err != nil {
 		route.WriteError(w, r, err)
 		return

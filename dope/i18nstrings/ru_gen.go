@@ -347,11 +347,17 @@ var RU = Strings{
 			Kept: func(reason string) string {
 				return fmt.Sprintf("Сетка осталась прежней: %s", reason)
 			},
+			MovesDropped: func(n string) string {
+				return fmt.Sprintf("Список взят из другого источника, поэтому ручные перестановки (%s) не применены. Добавленные и убранные вручную участники учтены.", n)
+			},
 			Resizes: func() string {
 				return "Пока в игре нет результатов, сетка строится заново под список, если схема это позволяет. Если нет, сетка остаётся прежней, а лишние участники ждут в листе ожидания."
 			},
 			Summary: func(size string, seated string, active string) string {
 				return fmt.Sprintf("Мест в сетке: %s, занято %s. Всего в списке без отказавшихся: %s.", size, seated, active)
+			},
+			Unranked: func(names string) string {
+				return fmt.Sprintf("Посеяны последними, потому что никого из их игроков нет в составах фестиваля: %s.", names)
 			},
 		},
 		Tab: func() string { return "Участники" },
@@ -655,6 +661,12 @@ var RU = Strings{
 			JsonTypeMismatch: func(described string, created string) string {
 				return fmt.Sprintf("JSON-схема описывает игру %s, а создаётся %s", described, created)
 			},
+			KdTablesPrime: func(n string) string {
+				return fmt.Sprintf("Число столов Кубка Дружбы должно быть простым (7, 11, 13, 17, 19, 23, 29…), а не %s", n)
+			},
+			KdToursTables: func(tours string, tables string) string {
+				return fmt.Sprintf("Туров %s, а столов %s. Столов должно быть не меньше, чем туров, иначе двое игроков встретятся за одним столом дважды", tours, tables)
+			},
 			MultiFromScheme: func() string {
 				return "Мультиигры описываются списком мини-игр, а не схемой"
 			},
@@ -680,6 +692,9 @@ var RU = Strings{
 				return fmt.Sprintf("схема игры не подходит для %d %s (%s).", n, core.Plural("ru", n, "участника", "участников", "участников"), err)
 			},
 		},
+		Kd: GamebuildKdStrings{
+			Table: func(n string) string { return fmt.Sprintf("Стол %s", n) },
+		},
 		Recompile: GamebuildRecompileStrings{
 			StartedBouts: func(names string) string {
 				return fmt.Sprintf("нельзя менять начатые бои: %s — уберите их изменения или снимите отметку «Закончен» и очистите протокол", names)
@@ -704,6 +719,7 @@ var RU = Strings{
 			},
 		},
 		Titles: GamebuildTitlesStrings{
+			Kd:    func() string { return "Кубок Дружбы" },
 			Ksi:   func() string { return "КСИ" },
 			Multi: func() string { return "Мультиигры" },
 			Od:    func() string { return "ОД" },
@@ -722,6 +738,23 @@ var RU = Strings{
 		},
 		Hamsa: GamesHamsaStrings{
 			Label: func() string { return "Хамса" },
+		},
+		Kd: GamesKdStrings{
+			CardDuplicate: func(card string) string { return fmt.Sprintf("Лист № %s записан дважды.", card) },
+			CardInvalid: func(card string) string {
+				return fmt.Sprintf("Номер листа должен быть целым числом от 1, а не «%s».", card)
+			},
+			CardTaken: func(card string, name string) string {
+				return fmt.Sprintf("Лист № %s уже выдан: %s. Выберите другой номер.", card, name)
+			},
+			CardTooHigh: func(n string, max string, card string) string {
+				return fmt.Sprintf("Столов %s, поэтому листов не больше %s. Листа № %s нет.", n, max, card)
+			},
+			Label:     func() string { return "Кубок Дружбы" },
+			Malformed: func() string { return "Список игроков записан неверно." },
+			NameMissing: func(card string) string {
+				return fmt.Sprintf("У листа № %s не указано имя игрока.", card)
+			},
 		},
 		Ksi: GamesKsiStrings{
 			Label: func() string { return "КСИ" },
@@ -945,6 +978,10 @@ var RU = Strings{
 			HamsaScheme: func(n string) string {
 				return fmt.Sprintf("[defaults]\nvenues: [А, Б, В]\n\n[scheme]\ntitle: Групповой этап\nkind: placement\nparticipants: %s\nmatch_size: 4\nrounds: 2\ntitle.r1: Игра №1\ntitle.r2: Игра №2\nproceeding_participants: 4\nsorting: [place_sum, total, first, seed]\n---\ntitle: Финал\nkind: flat\nparticipants: 4\nreseed: true\nstats_from: [s1]\nsorting: [place_sum, total, first, seed]\nshootout: true\n", n)
 			},
+			KdHint: func() string {
+				return "Столы играют как команды ОД, а игроки пересаживаются по маршрутным листам. Число столов — простое (7, 11, 13, 17, 19, 23, 29…) и не меньше числа туров, иначе двое игроков встретятся за одним столом дважды. Игроков регистрируют после создания, на вкладке «Игроки»."
+			},
+			KdTablesLabel: func() string { return "Количество столов" },
 			MinigamesHint: func() string {
 				return "По строке на мини-игру: «Название: {значения}xN». {0,1} — задание на 0 или 1 балл, {-1,0,1} — со штрафом, {0-12} — любое целое от 0 до 12. Несколько описаний в строке идут подряд: «{0,3}x2 {0,5}» — три задания на 3, 3 и 5 баллов. «|» закрывает блок листа: «{0,1}x10 | {0,1}x10» — два блока по десять, с зазором и сквозной нумерацией."
 			},
@@ -992,6 +1029,7 @@ var RU = Strings{
 			TypeEk:          func() string { return "ЭК" },
 			TypeEs:          func() string { return "Эрудит-Секстет" },
 			TypeHamsa:       func() string { return "Хамса" },
+			TypeKd:          func() string { return "Кубок Дружбы" },
 			TypeKsi:         func() string { return "КСИ" },
 			TypeKsiStickers: func() string { return "КСИ со стикерами" },
 			TypeLabel:       func() string { return "Тип игры" },
@@ -1205,12 +1243,18 @@ var RU = Strings{
 			AddedNotice: func(n int) string {
 				return fmt.Sprintf("Добавлено: %s.", core.Plural("ru", n, "тройка", "тройки", "троек"))
 			},
-			ColDivision:   func() string { return "Зачёт" },
-			ColName:       func() string { return "Тройка" },
-			ColPlayers:    func() string { return "Игроки" },
-			ColTeam:       func() string { return "За команду" },
-			Crumb:         func() string { return "Тройки" },
-			DeleteConfirm: func(name string) string { return fmt.Sprintf("Удалить тройку «%s»?", name) },
+			AppliedHint: func() string {
+				return "Порядок подачи заявок: при равенстве средних и лучших сумм мест выше посев у тройки, подавшей заявку раньше. Новые тройки встают в конец в том порядке, в каком их добавили. Если этот номер занят другой тройкой, остальные сдвинутся."
+			},
+			AppliedInvalid: func() string { return "Номер заявки — целое число от 1." },
+			AppliedLabel:   func() string { return "Номер заявки" },
+			ColApplied:     func() string { return "№ заявки" },
+			ColDivision:    func() string { return "Зачёт" },
+			ColName:        func() string { return "Тройка" },
+			ColPlayers:     func() string { return "Игроки" },
+			ColTeam:        func() string { return "За команду" },
+			Crumb:          func() string { return "Тройки" },
+			DeleteConfirm:  func(name string) string { return fmt.Sprintf("Удалить тройку «%s»?", name) },
 			DeleteSeated: func() string {
 				return "Эта тройка уже играет в игре, удалить её нельзя."
 			},
@@ -1246,7 +1290,7 @@ var RU = Strings{
 				return fmt.Sprintf("Строка %s: нужно название и двоеточие перед игроками.", n)
 			},
 			LinesHint: func() string {
-				return "Название, двоеточие и игроки через запятую — сначала имя, потом фамилия, как в составах феста. В тройке от двух до четырёх игроков."
+				return "Название, двоеточие и игроки через запятую — сначала имя, потом фамилия, как в составах феста. В тройке от двух до четырёх игроков. Добавляйте тройки в порядке подачи заявок: он решает при равенстве в посеве."
 			},
 			LinesLabel: func() string { return "По одной тройке в строке" },
 			LinesPlaceholder: func() string {
@@ -1387,9 +1431,6 @@ var RU = Strings{
 			NoGames: func() string {
 				return "посев по игрокам: схема не называет игры-источники"
 			},
-			NoRoster: func(name string) string {
-				return fmt.Sprintf("посев по игрокам: у команды %s нет состава", name)
-			},
 			NoRosters: func() string {
 				return "посев по игрокам: у команд этой игры нет составов"
 			},
@@ -1398,6 +1439,9 @@ var RU = Strings{
 			},
 			SelfReference: func(grain string, name string) string {
 				return fmt.Sprintf("%s.%s: правило зависит от самого себя", grain, name)
+			},
+			ToursOd: func(game string) string {
+				return fmt.Sprintf("посев по игрокам: tours.%s — туры есть только у ОД", game)
 			},
 		},
 		SeedSource: ImportsSeedSourceStrings{
@@ -1474,8 +1518,11 @@ var RU = Strings{
 			AnswerSet: func(question string, team string) string {
 				return fmt.Sprintf("вопрос %s: засчитана %s", question, team)
 			},
-			EntriesChanged: func() string { return "ответы изменены" },
-			EntryChanged:   func(question string) string { return fmt.Sprintf("вопрос %s изменён", question) },
+			EntriesChanged:   func() string { return "ответы изменены" },
+			EntryChanged:     func(question string) string { return fmt.Sprintf("вопрос %s изменён", question) },
+			KdPlayerAdded:    func(card string, name string) string { return fmt.Sprintf("лист № %s: %s", card, name) },
+			KdPlayerRemoved:  func(card string) string { return fmt.Sprintf("лист № %s освобождён", card) },
+			KdPlayersChanged: func() string { return "список игроков изменён" },
 			Readiness: func(question string, value string) string {
 				return fmt.Sprintf("вопрос %s: готовность → %s", question, value)
 			},
@@ -1705,9 +1752,48 @@ var RU = Strings{
 			Place:      func() string { return "Место" },
 			PlaceShort: func() string { return "М" },
 			Team:       func() string { return "Команда" },
+			Total:      func() string { return "Σ" },
 		},
 		Invert: OdInvertStrings{
 			Label: func() string { return "Инвертировать" },
+		},
+		Kd: OdKdStrings{
+			Add:         func() string { return "Добавить" },
+			AtTable:     func(n string) string { return fmt.Sprintf("Стол %s", n) },
+			BlankCount:  func() string { return "Сколько пустых листов напечатать" },
+			Card:        func() string { return "Лист" },
+			CardInvalid: func() string { return "Номер листа — целое число от 1." },
+			CardJoker: func(n string) string {
+				return fmt.Sprintf("Джокер: весь турнир за столом %s. Собирает команду, назначает капитана, следит за бланками.", n)
+			},
+			CardNameLine: func() string { return "Фамилия, имя: ______________________" },
+			CardPoints:   func() string { return "Баллы" },
+			CardTable:    func() string { return "Стол" },
+			CardTaken: func(n string, name string) string {
+				return fmt.Sprintf("Лист № %s уже выдан: %s.", n, name)
+			},
+			CardTitle: func(n string) string { return fmt.Sprintf("Маршрутный лист № %s", n) },
+			CardTooHigh: func(n string, max string) string {
+				return fmt.Sprintf("Столов %s, поэтому листов не больше %s.", n, max)
+			},
+			CardTour:        func() string { return "Тур" },
+			Empty:           func() string { return "Игроков пока нет." },
+			NamePlaceholder: func() string { return "Фамилия Имя" },
+			NameRequired:    func() string { return "Нужны имя и фамилия игрока." },
+			Place:           func() string { return "Место" },
+			Player:          func() string { return "Игрок" },
+			Print:           func() string { return "Печать маршрутных листов" },
+			PrintBlank:      func() string { return "Печать пустых листов" },
+			Remove:          func(name string) string { return fmt.Sprintf("Убрать: %s", name) },
+			TablesNote: func(n string) string {
+				return fmt.Sprintf("Столов: %s. Листы 1–%s — джокеры.", n, n)
+			},
+			Team:            func() string { return "Команда" },
+			TeamPlaceholder: func() string { return "Команда на фестивале" },
+			ToursTook:       func(n string) string { return fmt.Sprintf("по %s", n) },
+			ToursTookHint: func(n string) string {
+				return fmt.Sprintf("Туров, в которых стол игрока взял %s", n)
+			},
 		},
 		Progress: OdProgressStrings{
 			Entered:    func(n string) string { return fmt.Sprintf("Введён вопрос %s", n) },
@@ -2073,6 +2159,31 @@ var RU = Strings{
 			CountMismatch: func(need string, have string) string {
 				return fmt.Sprintf("схеме нужно %s участников, а посеяно %s", need, have)
 			},
+			DealGroups: func(need string, have string) string {
+				return fmt.Sprintf("в deal нужно %s групп через запятую, а указано %s", need, have)
+			},
+			DealRanks: func(total string, rank string) string {
+				return fmt.Sprintf("в deal каждое место от 1 до %s должно встретиться ровно один раз: %s", total, rank)
+			},
+			DealSize: func(group string, need string, have string) string {
+				return fmt.Sprintf("в deal у группы %s нужно %s мест, а указано %s", group, need, have)
+			},
+			DealSource: func() string {
+				return "deal раздаёт места одного общего рейтинга. После первого блока такой рейтинг есть только с reseed: true, поэтому добавьте его или уберите deal"
+			},
+			OpeningBoutSize: func(bout string, need string, have string) string {
+				return fmt.Sprintf("в opening у боя %s нужно %s мест, а указано %s", bout, need, have)
+			},
+			OpeningBouts: func(need string, have string) string {
+				return fmt.Sprintf("в opening нужно %s боёв через запятую, а указано %s", need, have)
+			},
+			OpeningFirst: func() string {
+				return "opening рассаживает по местам в группах предыдущего блока, поэтому в первом блоке его быть не может"
+			},
+			OpeningSeat: func(seat string, last string, places string) string {
+				return fmt.Sprintf("opening: не понял %s. Место записывается буквой группы и местом в ней, от A1 до %s%s.", seat, last, places)
+			},
+			OpeningTwice: func(seat string) string { return fmt.Sprintf("opening: %s записан дважды", seat) },
 			ProceedingMissing: func() string {
 				return "предыдущему блоку нужен proceeding_participants, чтобы продолжить схему"
 			},
@@ -2158,6 +2269,12 @@ var RU = Strings{
 			},
 			PlayersNeedSeed: func() string {
 				return "seed: players — нужен хотя бы один seed.<метрика>: mean(<метрика игрока>)"
+			},
+			ToursGame: func(game string, games string) string {
+				return fmt.Sprintf("tours.%s: такой игры нет в games — там %s", game, games)
+			},
+			ToursValue: func(game string, value string) string {
+				return fmt.Sprintf("tours.%s: %s — нужны номера туров: 2 (первые два), 1-2 или [1, 3]", game, value)
 			},
 		},
 		Structure: SchemeStructureStrings{
@@ -2279,6 +2396,8 @@ var RU = Strings{
 			GroupN:          func(n string) string { return fmt.Sprintf("Группа %s", n) },
 			IndividualStats: func() string { return "Индивидуальная статистика" },
 			Input:           func() string { return "Ввод" },
+			Personal:        func() string { return "Личный зачёт" },
+			Players:         func() string { return "Игроки" },
 			Playoff:         func() string { return "Плей-офф" },
 			Protocol:        func(block string) string { return fmt.Sprintf("%s (протоколы)", block) },
 			Refusals:        func() string { return "Отказы" },
@@ -2472,9 +2591,15 @@ var RU = Strings{
 			DrawTemplate: func() string {
 				return "draw: жеребьёвка сажает победителей групп против вторых мест, поэтому нужны группы с proceeding_participants: 2, бои на двоих и participants, равный удвоенному числу групп"
 			},
-			FinalBout:           func(n string) string { return fmt.Sprintf("Финал. Бой %s", n) },
-			MatchNthBlockRound:  func(n string, index string) string { return fmt.Sprintf("1/%s финала %s", n, index) },
-			MatchSemifinal:      func(index string) string { return fmt.Sprintf("Полуфинал %s", index) },
+			FinalBout:          func(n string) string { return fmt.Sprintf("Финал. Бой %s", n) },
+			MatchNthBlockRound: func(n string, index string) string { return fmt.Sprintf("1/%s финала %s", n, index) },
+			MatchSemifinal:     func(index string) string { return fmt.Sprintf("Полуфинал %s", index) },
+			PairingHalvesNeedsBouts: func(round string) string {
+				return fmt.Sprintf("pairing: halves в раунде %s не подходит. Нужно, чтобы каждый бой раунда получал участников ровно из двух боёв предыдущего раунда и чтобы между раундами не было пересева.", round)
+			},
+			PairingUnknown: func(value string) string {
+				return fmt.Sprintf("pairing: не понял %s. Бывает adjacent (соседние бои, как по умолчанию) или halves (бой 1 с боем N/2+1, 2 с N/2+2…).", value)
+			},
 			ParticipantsMissing: func() string { return "single_elimination: нужен participants" },
 			ProceedingMissing: func() string {
 				return "предыдущему блоку нужен proceeding_participants, чтобы продолжить схему"

@@ -12,6 +12,7 @@ func TestPageOfEveryGameType(t *testing.T) {
 	}{
 		{EK, "static/ek.html", InitEK},
 		{OD, "static/od.html", InitGame},
+		{KD, "static/od.html", InitGame},
 		{KSI, "static/si.html", InitGame},
 		{Brain, "static/brain.html", InitGame},
 		// Личная СИ borrows ЭК's page for its bracket, not КСИ's blank.

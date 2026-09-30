@@ -30,9 +30,14 @@ type_si = "Личная СИ"
 type_multi = "Мультиигры"
 type_troika = "Тройка"
 type_hamsa = "Хамса"
+type_kd = "Кубок Дружбы"
 # The OD settings fields; also the field names their out-of-range errors name.
 od_tours_label = "Количество туров"
 od_questions_label = "Количество вопросов в туре"
+# The friendship cup's tables field; also the field its errors name.
+kd_tables_label = "Количество столов"
+# Under the friendship cup's fields: what the tables are and how many to take.
+kd_hint = "Столы играют как команды ОД, а игроки пересаживаются по маршрутным листам. Число столов — простое (7, 11, 13, 17, 19, 23, 29…) и не меньше числа туров, иначе двое игроков встретятся за одним столом дважды. Игроков регистрируют после создания, на вкладке «Игроки»."
 # The KSI themes field (plain and stickers KSI); also its error name.
 themes_label = "Количество тем"
 # Hint above the sticker rows of the stickers-KSI section.
@@ -288,7 +293,14 @@ hint = "Тройка — это 2–4 игрока, заявленные на Т
 # The note on how troikas reach a Тройка game, shown under the hint.
 games_hint = "Игра «Тройка», в схеме которой есть строка division, сама берёт тройки своего зачёта: division: Студ — тройки зачёта «Студ», division: -Студ — все остальные. Пока в игре ничего не внесено, её участники меняются вместе с тройками на этой странице."
 # The table's column heads, and the edit dialog's name field.
+# col_applied heads the troika's place in the order applications came in.
+col_applied = "№ заявки"
 col_name = "Тройка"
+# The edit dialog's field for that place, and what it does.
+applied_label = "Номер заявки"
+# A number that is not a whole number from 1.
+applied_invalid = "Номер заявки — целое число от 1."
+applied_hint = "Порядок подачи заявок: при равенстве средних и лучших сумм мест выше посев у тройки, подавшей заявку раньше. Новые тройки встают в конец в том порядке, в каком их добавили. Если этот номер занят другой тройкой, остальные сдвинутся."
 col_players = "Игроки"
 # The team a troika's places count for in the кубок. A new troika gets the team
 # that has at least two of its players; the host can pick another one.
@@ -327,7 +339,7 @@ delete_confirm = 'Удалить тройку «{{.name}}»?'
 add_subhead = "Добавить тройки"
 lines_label = "По одной тройке в строке"
 lines_placeholder = "Бобры: Иван Петров, Анна Сидорова, Олег Кузнецов"
-lines_hint = "Название, двоеточие и игроки через запятую — сначала имя, потом фамилия, как в составах феста. В тройке от двух до четырёх игроков."
+lines_hint = "Название, двоеточие и игроки через запятую — сначала имя, потом фамилия, как в составах феста. В тройке от двух до четырёх игроков. Добавляйте тройки в порядке подачи заявок: он решает при равенстве в посеве."
 add_submit = "Добавить"
 # The notices after a save.
 added_notice = 'Добавлено: {{plural .n "тройка" "тройки" "троек"}}.'

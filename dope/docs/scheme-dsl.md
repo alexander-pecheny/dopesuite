@@ -103,8 +103,9 @@ does take.
 in this fest (unknown slug = compile error). Every source yields, per team,
 either an exact rank or a basket; baskets resolve to ranks by the deterministic
 Жребий lot. Dealing is always the snake: bands of G ranks, odd bands reversed
-(the reference generate_kinsbf.py's PF_GROUPS pattern) — there is no separate
-dealing key. The same snake deals reseed ranks into a block's groups.
+(the reference generate_kinsbf.py's PF_GROUPS pattern). The same snake deals
+reseed ranks into a block's groups. A roundrobin block that must follow a
+printed table instead writes it out in `deal:` (below).
 
 - `seed: {game}` — that game's standings as metrics, ordered by `[init]`
   `sorting` (roster rating available as a metric).
@@ -118,6 +119,17 @@ dealing key. The same snake deals reseed ranks into a block's groups.
   is each source Game's own roster with its overrides applied, so three people
   from three teams are one Троечка team here and their own teams' entries
   there; a player whose team sat a Game out counts one place behind its last.
+  `tours.<game>: 1-2` keeps a source ОД to those tours (`2` is the first two,
+  `1-2` a range, `[1, 3]` a list): its places are the table after them alone,
+  a tie shared at the mean of the places it covers. The Троечка regulations
+  seed on the Вопросики after their first two tours: `tours.od-1: 1-2`.
+  Teams that share a place share it: two teams at «3–4» are 3.5 each.
+  A Participant none of whose people is on the fest roster (stand-ins filling
+  the draw) has nothing to add up: it is seeded last, in its order in the
+  Game, and the Участники tab names it.
+  Participants equal on every `sorting` metric seed by their troikas' order
+  of applications (the troikas page's № заявки), then by their order in the
+  Game.
 - `seed: random` — every rank is a lot.
 - `seed: xlsx` — an uploaded sheet carrying either an exact seeding column or a
   basket column.
@@ -156,6 +168,7 @@ Kind does not read is a compile error, so nothing is dropped on the floor:
 | `reseed` | opt-in re-rank: `true` for the block's incoming Edge (on a DE, between every round too), a round name (`r3`, `semifinal`) for a boundary inside an se block — that round then seats from the re-rank of every place the previous round sent on, bracket-ordered — or `every` for both, the incoming Edge and every se round after it (ТПШ) |
 | `stats_from` | with a reseed only: which blocks' bouts the re-rank metrics are summed over (`stats_from: [s1, s2]`); default is the previous block, or the previous round for a boundary reseed. Naming the block itself at a boundary sums its own rounds so far (СтудЧР's ЭК ranked its пересев перед 1/4 by сумма мест over 1/16 and 1/8 together). Eligibility is independent of the stats scope: the previous block's proceeding places, or every place the previous round sent on |
 | `proceeding_participants` | block-grain Edge: how many advance per Group (rr, de) or overall (flat); an se sends its last round's winners on |
+| `deal` | roundrobin only: which ranks each group takes, when the regulations print a table no snake makes — one item per group, its ranks separated by spaces, every rank of the block once. Своячок's Приложение 1: `deal: [1 12 13 24 28 31 42 43 54, 2 11 14 23 25 32 41 44 53, …]`. Ranks are the seed's on the first block and the reseed's after `reseed: true` |
 | `letters` | `letters: false` keeps the block's бои out of the буква deal — the письменный отбор is one sitting for everyone and is not called a бой |
 | `bout.<metric>`, `standings.<metric>` | scoring rules (ADR-0008): an expression per бой summed into the standings, or one over the sums, defining a metric the block may sort by |
 | flat: `participants` | how many the one бой seats (defaults to the game's entrants) |
@@ -167,10 +180,12 @@ Kind does not read is a compile error, so nothing is dropped on the floor:
 | se: `rounds` | play this many Rounds and stop short of a final (ТПШ's six winners); the last round's winners are the block's proceeding count |
 | se: `bronze` | add the 3rd-place бой from the semifinal losers (a halving bracket that reaches its semifinal). With `participants: 2` there is no semifinal to lose: the block is seeded straight into its final, takes four out of the previous block's two Groups, and the матч за 3-е место seats the place below the finalists — Троечка's «победители групп в финал, вторые места в матч за 3-е место» |
 | se: `best_of` | the final and the бронза (`best_of.final: 3`, `best_of.bronze: 3`, odd ≥ 3): that Round becomes a series of identical бои at one стол. A series is a ranking scope like a группа — it ranks through the block's `points`, scoring rules and `sorting`, so the default очки sorted on points is «до большинства побед» and Троечка writes its own rule instead. No block can follow a series |
+| se: `pairing` | how a Round takes the previous Round's бои: `adjacent` (default) pairs бой 1 with 2, 3 with 4; `halves` pairs бой 1 with N/2+1, 2 with N/2+2 — the Троечка regulations' 1/8 (R1 = Q1–Q9, R2 = Q2–Q10), one бой of either заход. `pairing.r2: halves` for one Round; a plain `pairing: halves` pairs every Round that has a previous one without a reseed |
 | se: `rollout` | draw a series as its бои rather than rank it: `rollout: true` for the block, `rollout.final` / `rollout.bronze` for one Round. The Сетка then shows the three boxes it showed before, and nothing computes who won the series — which is what a tournament that reads its финал off the бои themselves wants (СтудЧР's брейн) |
-| se: `draw` | `draw: true` makes the host draw the opening round on the day (Троечка §5.3). The bracket must follow groups sending two places each into bouts of two, with `participants` twice the number of groups. Each bout then has two Draw Slots: one offers every group's first place, the other every group's second place, both once the groups are played out. The host fills them on the Сетка's Жеребьёвка panel, and dope refuses to put a winner and a runner-up of the same group in one bout. The rounds after it pair bout 1 with bout 2, 3 with 4, and so on |
+| se: `draw` | `draw: true` makes the host draw the opening round on the day (Троечка §5.3). The bracket must follow groups sending two places each into bouts of two, with `participants` twice the number of groups. Each bout then has two Draw Slots: one offers every group's first place, the other every group's second place, both once the groups are played out. The host fills them on the Сетка's Жеребьёвка panel, and dope refuses to put a winner and a runner-up of the same group in one bout. The rounds after it pair bout 1 with bout 2, 3 with 4, and so on, unless `pairing` says otherwise |
 | de: `groups`, `group_size`, `participants`, `match_size`, `winning_places` | pods of the given size (`participants` ÷ 4 may stand in for `groups`), each a ranking scope on two lives; `match_size` and `winning_places` as for se (личная СИ's play-off is one DE of four-seat бои with two winners) |
-| de: `lower_entrants` | how many of the bracket's entrants — the ranking's tail — start one Loss down, in the lower bracket. Octobearfest's личная СИ (Приложение 3) seats a group's 1st and 2nd places above and its 3rd and 4th below: `participants: 24`, `reseed: true` with `sorting: [place_sum, …]`, `lower_entrants: 12` plays 6 + 5 + 3 + 2 + 1 + 1 бои, the upper bracket's second round and the lower semifinal three to a table. Default 0: everyone starts with two lives |
+| de: `lower_entrants` | how many of the bracket's entrants — the ranking's tail — start one Loss down, in the lower bracket. Octobearfest's личная СИ (Приложение 3) seats a group's 1st and 2nd places above and its 3rd and 4th below: `participants: 24`, `lower_entrants: 12` and the `opening:` table below play 6 + 5 + 3 + 2 + 1 + 1 бои, the upper bracket's second round and the lower semifinal three to a table. A re-rank of all 24 (`reseed: true` alone) cannot make that split: it ranks by the sorting over every group's bouts, and a strong group's 3rd place can outrank another group's 2nd. Default 0: everyone starts with two lives |
+| de: `opening` | the opening round's bouts as the regulations print them, instead of a re-rank of the previous block: one item per bout, its seats as the previous block's group letter (A is the first group) and place — Приложение 3: `opening: [A1 A2 D1 D2, B1 B2 E1 E2, C1 C2 F1 F2, A3 A4 D3 D4, B3 B4 E3 E4, C3 C4 F3 F4]`. The upper bracket's bouts come first, then the lower's (`lower_entrants`). Every place the previous block sends on is named once. `reseed: true` beside it re-ranks between the later rounds only |
 | protocol keys | any registered param for the game's protocol |
 
 Advancement between and inside blocks is deterministic by the Kind's canonical

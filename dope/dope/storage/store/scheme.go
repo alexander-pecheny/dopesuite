@@ -57,6 +57,11 @@ type SchemePlayerSeed struct {
 	Games  []string          `json:"games"`
 	Player map[string]string `json:"player,omitempty"`
 	Seed   map[string]string `json:"seed,omitempty"`
+	// Tours keeps a source OD to those tours (1 first): its places are the
+	// table after them alone. The troika regulations seed on the OD after
+	// its first two tours (tours.od-1: 1-2). A source not named here counts
+	// whole.
+	Tours map[string][]int `json:"tours,omitempty"`
 }
 
 // SchemeSortRule is a SortRule as a scheme writes it — the same key.

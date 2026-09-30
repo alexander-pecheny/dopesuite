@@ -7,6 +7,10 @@ import type {ScoreTableRow, ScoreTableTheme, ScoreTableThemeRow} from "./score-t
 import {resultsTeamCell, teamFlagBadges} from "./standings.js";
 import {ALL_DIVISIONS, divisionChipRow, divisionFromURL, divisionsOf, inDivision, setDivisionInURL} from "./divisions.js";
 import {buildRosterView} from "./fest-roster.js";
+import {buildPersonalView, buildPlayersView, captureDraft, restoreDraft, showRefusal, tablesOf} from "./kd-view.js";
+import type {PlayersDraft} from "./kd-view.js";
+import {keyedPlayers as kdKeyedPlayers, players as kdPlayers} from "./kd-protocol.js";
+import type {KDSeat, KDState} from "./kd-protocol.js";
 import type {PatchPath} from "./state-sync.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
@@ -132,6 +136,9 @@ let questionStatsCache: QuestionStat[] | null = null;
 let activeEntryEditor: {cell: HTMLElement; input: HTMLInputElement} | null = null;
 let activeEntryRows: Element[] = [];
 const tabCache = new Map<string, HTMLElement>();
+// playersDraft is what the host had typed into a friendship cup's add row
+// when a redraw took the row away; render puts it back once the tab is drawn.
+let playersDraft: PlayersDraft | null = null;
 const tabScroll = new Map<string, {top: number; left: number}>();
 const resultsExpandedTours = new Set<number>();
 const resultsExpandedShootouts = new Set<number>();
@@ -156,9 +163,12 @@ const UNDO_LIMIT = 100;
 
 // Screen (the projector board) is a host-only tab; tabFromHash filters against
 // TABS, so a viewer can't reach it by hash either.
-const TABS = gameTabs([], {game: "od", viewer});
+// A friendship cup (ADR-0026) rides this page: its document is an OD one whose
+// teams are the tables, and it adds the personal standings and its players.
+const kdGame = (gameInit?.scheme as {gameType?: unknown} | null | undefined)?.gameType === "kd";
+const TABS = gameTabs([], {game: kdGame ? "kd" : "od", viewer});
 
-let activeTab = tabFromHash(TABS) || (viewer ? "results" : "input");
+let activeTab = tabFromHash(TABS) || (viewer ? (kdGame ? "personal" : "results") : "input");
 // The Division the viewer is looking at (ADR-0020): «All» until the URL says
 // otherwise, and the URL is read again whenever the browser moves it.
 let activeDivision = ALL_DIVISIONS;
@@ -264,6 +274,14 @@ const doc = mountGameDocument({
   adopt: adoptGameSnapshot,
   apply: applyRemoteState,
   current: () => ({scheme, state, fest}),
+  // A friendship cup's registration can be refused (another host took the
+  // card a moment ago): the players tab says why, and the document is fetched
+  // again, which takes back the player the page already showed.
+  onRejected: kdGame ? (message) => {
+    showRefusal(message);
+    invalidateTabCache("players");
+    if (activeTab === "players") render();
+  } : undefined,
 });
 
 // adoptGameSnapshot takes a fresh document — the first snapshot, or a
@@ -346,7 +364,40 @@ function invalidateAllCaches(): void {
 
 function invalidateScoreCaches(): void {
   questionStatsCache = null;
-  invalidateTabCache("detailed", "results", "screen");
+  invalidateTabCache("detailed", "results", "screen", "personal");
+}
+
+// === the friendship cup ===
+
+function kdContext() {
+  return {state, tourLengths, tables: tablesOf(scheme as {kdTables?: unknown}, state)};
+}
+
+// writePlayerSeat registers a player under his card (seat) or frees the card
+// (null), each as a patch of that card's key alone, so two hosts registering
+// at once never overwrite each other. A document still holding the old list
+// is rewritten whole, once, in the keyed shape.
+function writePlayerSeat(card: number, seat: KDSeat | null): void {
+  const cup = state as KDState;
+  const key = String(card);
+  if (cup.players && !Array.isArray(cup.players)) {
+    cup.players[key] = seat;
+    saveState(["players", key], seat);
+  } else {
+    const keyed: Record<string, KDSeat | null> = kdKeyedPlayers(kdPlayers(cup));
+    keyed[key] = seat;
+    cup.players = keyed;
+    saveState(["players"], keyed);
+  }
+  // A registration clears the add row for the next player; taking a player
+  // off keeps whatever the host had started typing there.
+  if (seat === null) playersDraft = captureDraft(odRoot);
+  refreshPlayers();
+}
+
+function refreshPlayers(): void {
+  invalidateTabCache("players", "personal");
+  render();
 }
 
 function invalidateShootoutCaches(): void {
@@ -388,11 +439,17 @@ function render(): void {
   // The Screen tab is a projection surface: hide the page-global diagnostic
   // "download log" chip (and anything else corner-pinned) while it is showing.
   document.body.classList.toggle("od-screen-active", activeTab === "screen");
-  // The roster, and the numbering guard's message, fit the frame and wrap instead
+  // The roster, the numbering guard's message and a friendship cup's players
+  // (whose wide table scrolls in its own box) fit the frame and wrap instead
   // of scrolling sideways like a score board, so the host drops its max-content
   // sizing — the same class-toggle the grid uses, rather than a :has() the
   // layout silently depends on.
-  odRoot.classList.toggle("fits-frame", activeTab === "roster" || (activeTab === "input" && !allTeamsNumbered()));
+  odRoot.classList.toggle("fits-frame", activeTab === "roster" || activeTab === "players" ||
+    (activeTab === "input" && !allTeamsNumbered()));
+  if (activeTab === "players" && playersDraft) {
+    restoreDraft(activePane, playersDraft);
+    playersDraft = null;
+  }
   restoreTabScroll(activeTab);
   updateResultsScrollState();
   if (activeTab === "detailed" || activeTab === "results") teamNameOverflow.schedule(activePane);
@@ -409,6 +466,14 @@ function getTabPane(tab: string): HTMLElement {
   else if (tab === "detailed") node = buildDetailedTable();
   else if (tab === "roster") node = buildRosterView(route.festID);
   else if (tab === "screen") node = buildScreenView();
+  else if (tab === "personal") node = buildPersonalView(kdContext());
+  else if (tab === "players") {
+    node = buildPlayersView({
+      ...kdContext(), viewer, festID: route.festID, current: () => state as KDState, refresh: refreshPlayers,
+      register: (player) => writePlayerSeat(player.card, {name: player.name, team: player.team || ""}),
+      unregister: (card) => writePlayerSeat(card, null),
+    });
+  }
   else node = buildResultsTable();
   const pane = document.createElement("div");
   pane.className = "od-pane";
@@ -1448,7 +1513,7 @@ function handleEntryInput(event: Event): void {
     }
     if (!setShootoutEntryValue(roundIndex, questionIndex, rowIndex, parsed.value)) return;
     closeEntrySuggest();
-    invalidateTabCache("detailed", "results", "screen");
+    invalidateTabCache("detailed", "results", "screen", "personal");
     updateShootoutInputValidity(roundIndex, questionIndex);
     saveState(["shootoutRounds"], state.shootoutRounds);
     return;
@@ -1837,7 +1902,7 @@ function handleEntryChange(event: Event): void {
     const round = state.shootoutRounds[roundIndex];
     const value = shootoutCheckbox.checked ? round?.teams?.[rowIndex] || 0 : 0;
     if (!setShootoutEntryValue(roundIndex, questionIndex, rowIndex, value)) return;
-    invalidateTabCache("detailed", "results", "screen");
+    invalidateTabCache("detailed", "results", "screen", "personal");
     updateShootoutInputValidity(roundIndex, questionIndex);
     saveState(["shootoutRounds"], state.shootoutRounds);
     return;
@@ -1850,7 +1915,7 @@ function handleEntryChange(event: Event): void {
     const round = state.shootoutRounds[roundIndex];
     if (!round?.completed || !Number.isInteger(questionIndex)) return;
     round.completed[questionIndex] = cb.checked;
-    invalidateTabCache("detailed", "results", "screen");
+    invalidateTabCache("detailed", "results", "screen", "personal");
     saveState(["shootoutRounds"], state.shootoutRounds);
     return;
   }
@@ -2512,7 +2577,7 @@ function makeScreenColumn(tourLabel: string | undefined, rowItems: ScreenRowItem
   const headRow = document.createElement("tr");
   headRow.appendChild(th(S.od.head.placeShort(), "results-place-head"));
   headRow.appendChild(th(S.od.head.team(), "results-team-head"));
-  headRow.appendChild(th("Σ", "results-num-head results-total-head"));
+  headRow.appendChild(th(S.od.head.total(), "results-num-head results-total-head"));
   headRow.appendChild(th(tourLabel, "results-num-head results-tour-head"));
   thead.appendChild(headRow);
   table.appendChild(thead);
@@ -2703,7 +2768,7 @@ function buildResultsTableInner(): HTMLTableElement {
   const head = document.createElement("tr");
   head.appendChild(th(S.od.head.place(), "results-place-head"));
   head.appendChild(th(S.od.head.team(), "results-team-head"));
-  head.appendChild(th("Σ", "results-num-head results-total-head"));
+  head.appendChild(th(S.od.head.total(), "results-num-head results-total-head"));
   for (let t = 0; t < tourLengths.length; t++) {
     head.appendChild(resultsTourHeader(t));
     if (resultsExpandedTours.has(t)) {
@@ -2952,10 +3017,15 @@ function applyRemoteState(nextState: unknown): void {
   if (editingInput || editingShootout || focusedLockCol) {
     questionStatsCache = null;
     numberToIndexCache = null;
-    invalidateTabCache("detailed", "results", "screen");
+    // The players tab draws from the state too, and its buttons read the
+    // document through a getter, so it is drawn again when next shown.
+    invalidateTabCache("detailed", "results", "screen", "personal", "players");
     refreshPendingMarkers();
     return;
   }
+  // A remote update redraws every tab, and the echo of the host's own save is
+  // one: what he is typing into the players' add row is carried across.
+  if (kdGame) playersDraft = captureDraft(odRoot) || playersDraft;
   invalidateAllCaches();
   render();
   refreshPendingMarkers();

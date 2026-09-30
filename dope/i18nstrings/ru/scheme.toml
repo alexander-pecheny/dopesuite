@@ -75,6 +75,10 @@ empty = '{{.key}}: пустой список столов'
 players_need_games = "seed: players — нужен games: [игра, игра], откуда берутся места игроков"
 # seed: players without a single seed.<metric> rule.
 players_need_seed = "seed: players — нужен хотя бы один seed.<метрика>: mean(<метрика игрока>)"
+# tours.<game> naming a game that is not in games: [...].
+tours_game = 'tours.{{.game}}: такой игры нет в games — там {{.games}}'
+# tours.<game> with a value that is not a count, a range or a list of tours.
+tours_value = 'tours.{{.game}}: {{.value}} — нужны номера туров: 2 (первые два), 1-2 или [1, 3]'
 # division without seed: outside a Тройка game.
 division_troika_only = "division без seed бывает только у Тройки: так игра берёт тройки своего зачёта. В других играх division пишется вместе с seed."
 
@@ -85,6 +89,25 @@ count_mismatch = 'схеме нужно {{.need}} участников, а по�
 proceeding_missing = "предыдущему блоку нужен proceeding_participants, чтобы продолжить схему"
 # The previous block supplies a different headcount than the block needs.
 supply_mismatch = 'из предыдущего блока выходят {{.have}} участников, а блоку нужно {{.need}}'
+# deal: lists a group per item; the count of items is not the block's groups.
+deal_groups = 'в deal нужно {{.need}} групп через запятую, а указано {{.have}}'
+# deal: one group's item has the wrong number of ranks.
+deal_size = 'в deal у группы {{.group}} нужно {{.need}} мест, а указано {{.have}}'
+# deal: every rank from 1 to the block's entrant count, once each.
+deal_ranks = 'в deal каждое место от 1 до {{.total}} должно встретиться ровно один раз: {{.rank}}'
+# opening: a seat that is not a group letter and a place the previous block sends on.
+opening_seat = 'opening: не понял {{.seat}}. Место записывается буквой группы и местом в ней, от A1 до {{.last}}{{.places}}.'
+# opening: a seat written twice.
+opening_twice = 'opening: {{.seat}} записан дважды'
+# opening: the table names a different number of bouts than the round has.
+opening_bouts = 'в opening нужно {{.need}} боёв через запятую, а указано {{.have}}'
+# opening: one bout of the table seats a different number than a bout holds.
+opening_bout_size = 'в opening у боя {{.bout}} нужно {{.need}} мест, а указано {{.have}}'
+# opening: on the first block, which has no previous block to name.
+opening_first = 'opening рассаживает по местам в группах предыдущего блока, поэтому в первом блоке его быть не может'
+# deal: on a block after the first without reseed: true. The table names
+# places of one ranking, and only a reseed makes one.
+deal_source = 'deal раздаёт места одного общего рейтинга. После первого блока такой рейтинг есть только с reseed: true, поэтому добавьте его или уберите deal'
 
 [reseed]
 # A stats_from block reference past the last stage.

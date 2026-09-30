@@ -41,6 +41,9 @@ type List struct {
 	Raw         string
 	State       ListState
 	Synthesized bool
+	// Unranked names who the import that made the list seeded last for want
+	// of anything to rank them by. It is not stored: the tab says it once.
+	Unranked []string
 }
 
 func (l List) with(state ListState) List {

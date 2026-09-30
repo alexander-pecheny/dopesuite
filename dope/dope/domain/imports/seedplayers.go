@@ -3,14 +3,17 @@ package imports
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/expr"
+	"dope/dope/domain/games"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
@@ -82,14 +85,26 @@ func (f fromPlayers) resolve(ctx context.Context, tx *sql.Tx, scope core.FestSco
 	}
 	sources := make([]seedSourceGame, len(f.spec.Games))
 	for i, code := range f.spec.Games {
-		if sources[i], err = loadSeedSourceGame(ctx, tx, scope.FestID, code); err != nil {
+		if sources[i], err = loadSeedSourceGame(ctx, tx, scope.FestID, code, f.spec.Tours[code]); err != nil {
 			return seeding{}, err
 		}
 	}
 
-	entries, err := seedParticipantPlayers(ctx, tx, scope, sources)
+	all, err := seedParticipantPlayers(ctx, tx, scope, sources)
 	if err != nil {
 		return seeding{}, err
+	}
+	// An entrant whose people the fest roster does not know (a stand-in troika
+	// of stand-ins, a team typed in for this Game) has no places to add up. It
+	// used to stop the whole import; it is seeded last instead, in its order in
+	// the Game, and named to the host.
+	var entries, unranked []seedEntry
+	for _, entry := range all {
+		if len(entry.players) == 0 {
+			unranked = append(unranked, entry)
+			continue
+		}
+		entries = append(entries, entry)
 	}
 	if len(entries) == 0 {
 		return seeding{}, corei18n.User(dopestrings.Default.Imports.SeedPlayers.NoRosters())
@@ -99,6 +114,7 @@ func (f fromPlayers) resolve(ctx context.Context, tx *sql.Tx, scope core.FestSco
 		participant int64
 		name        string
 		number      int
+		applied     int
 		metrics     map[string]float64
 	}
 	table := make([]scored, 0, len(entries))
@@ -126,7 +142,7 @@ func (f fromPlayers) resolve(ctx context.Context, tx *sql.Tx, scope core.FestSco
 			}
 			metrics[name] = agg.fold(values)
 		}
-		table = append(table, scored{participant: entry.participant, name: entry.name, number: entry.number, metrics: metrics})
+		table = append(table, scored{participant: entry.participant, name: entry.name, number: entry.number, applied: entry.applied, metrics: metrics})
 	}
 
 	rules := f.sort
@@ -141,15 +157,25 @@ func (f fromPlayers) resolve(ctx context.Context, tx *sql.Tx, scope core.FestSco
 			}
 			return a > b
 		}
+		// Equal on every metric: the earlier application seeds first (the
+		// troika regulations' last tie-break), then the Game's own order.
+		if x, y := table[i].applied, table[j].applied; x > 0 && y > 0 && x != y {
+			return x < y
+		}
 		return table[i].number < table[j].number
 	})
-	candidates := make([]seedCandidate, len(table))
+	candidates := make([]seedCandidate, 0, len(table)+len(unranked))
 	for i, row := range table {
 		// Number is the Participant's number inside this Game, not a fest
 		// number: the Participant id is what names it to the import.
-		candidates[i] = seedCandidate{SourceRank: i + 1, Name: row.name, Number: row.number, ParticipantID: row.participant}
+		candidates = append(candidates, seedCandidate{SourceRank: i + 1, Name: row.name, Number: row.number, ParticipantID: row.participant})
 	}
-	return seeding{source: "players", label: dopestrings.Default.Imports.SeedSource.Players(), candidates: candidates}, nil
+	var names []string
+	for _, entry := range unranked {
+		candidates = append(candidates, seedCandidate{SourceRank: len(candidates) + 1, Name: entry.name, Number: entry.number, ParticipantID: entry.participant})
+		names = append(names, entry.name)
+	}
+	return seeding{source: "players", label: dopestrings.Default.Imports.SeedSource.Players(), candidates: candidates, unranked: names}, nil
 }
 
 type namedExpr struct {
@@ -265,15 +291,25 @@ func sortedKeys[T any](m map[string]T) []string {
 // teamPlacesByFestTeam is a Game's table as places against fest teams — what a
 // player's own team took there. A Game with several tables has no single
 // place, so it is refused rather than guessed at.
-func loadSeedSourceGame(ctx context.Context, q store.Queryer, festID int64, code string) (seedSourceGame, error) {
-	var gameID int64
-	if err := q.QueryRowContext(ctx, `select id from games where fest_id = ? and code = ?`, festID, code).Scan(&gameID); err != nil {
+func loadSeedSourceGame(ctx context.Context, q store.Queryer, festID int64, code string, tours []int) (seedSourceGame, error) {
+	// The document lives on the Game's 'main' match once it has one.
+	doc, err := store.LoadGameDocByCode(ctx, q, festID, code)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return seedSourceGame{}, corei18n.User(dopestrings.Default.Imports.Seed.GameMissing(code))
 		}
 		return seedSourceGame{}, err
 	}
-	places, err := teamPlacesByFestTeam(ctx, q, festID, code)
+	gameID := doc.GameID
+	var places map[int64]float64
+	if len(tours) > 0 {
+		if doc.GameType != games.OD {
+			return seedSourceGame{}, corei18n.User(dopestrings.Default.Imports.SeedPlayers.ToursOd(code))
+		}
+		places, err = odPlacesAfterTours(ctx, q, festID, code, doc.SchemeJSON, doc.State, tours)
+	} else {
+		places, err = teamPlacesByFestTeam(ctx, q, festID, code)
+	}
 	if err != nil {
 		return seedSourceGame{}, err
 	}
@@ -295,16 +331,24 @@ const participantFestTeam = `coalesce(p.fest_team_id, (
     and p.roster = 'team' and p.assembled = 0 limit 1))`
 
 func teamPlacesByFestTeam(ctx context.Context, q store.Queryer, festID int64, code string) (map[int64]float64, error) {
+	type row struct {
+		team    int64
+		stage   int64
+		rank    int64
+		metrics sql.NullString
+	}
+	// Ordered by stage first: a source with a table per group ranks each from
+	// 1, and only rows of one table can share a place.
 	rows, err := store.CollectRows(ctx, q, `
-select `+participantFestTeam+`, st.rank
+select `+participantFestTeam+`, st.stage_id, st.rank, st.metrics_json
 from stage_standings st
 join participants p on p.id = st.participant_id
 join stages s on s.id = st.stage_id
 join games g on g.id = s.game_id
 where g.fest_id = ? and g.code = ? and `+participantFestTeam+` is not null
-order by st.rank`, []any{festID, code}, func(rs *sql.Rows) ([2]int64, error) {
-		var pair [2]int64
-		return pair, rs.Scan(&pair[0], &pair[1])
+order by st.stage_id, st.rank`, []any{festID, code}, func(rs *sql.Rows) (row, error) {
+		var r row
+		return r, rs.Scan(&r.team, &r.stage, &r.rank, &r.metrics)
 	})
 	if err != nil {
 		return nil, err
@@ -312,16 +356,32 @@ order by st.rank`, []any{festID, code}, func(rs *sql.Rows) ([2]int64, error) {
 	if len(rows) == 0 {
 		return nil, corei18n.User(dopestrings.Default.Imports.Seed.NoStandings(code))
 	}
+	// The regulations add up places, and teams that share a place share it:
+	// «3–4» is 3.5 to both, whichever of them the table happens to list
+	// first. A row's rank is its line in the table, which breaks the tie
+	// arbitrarily, so the teams whose place metric is the same are one group
+	// and each gets the mean of the ranks the group covers.
+	shared := make([]float64, len(rows))
+	for i := 0; i < len(rows); {
+		j := i
+		for j+1 < len(rows) && rows[j+1].stage == rows[i].stage && samePlace(rows[i].metrics, rows[j+1].metrics) {
+			j++
+		}
+		mean := float64(rows[i].rank+rows[j].rank) / 2
+		for k := i; k <= j; k++ {
+			shared[k] = mean
+		}
+		i = j + 1
+	}
 	places := make(map[int64]float64, len(rows))
 	worst := 0.0
-	for _, pair := range rows {
-		place := float64(pair[1])
-		if _, seen := places[pair[0]]; seen {
+	for i, r := range rows {
+		if _, seen := places[r.team]; seen {
 			return nil, corei18n.User(dopestrings.Default.Imports.SeedPlayers.MultipleStandings(code))
 		}
-		places[pair[0]] = place
-		if place > worst {
-			worst = place
+		places[r.team] = shared[i]
+		if float64(r.rank) > worst {
+			worst = float64(r.rank)
 		}
 	}
 	// A team that did not play stands one place behind the last that did.
@@ -329,11 +389,121 @@ order by st.rank`, []any{festID, code}, func(rs *sql.Rows) ([2]int64, error) {
 	return places, nil
 }
 
+// odPlacesAfterTours is an OD's table after the given tours alone, as places
+// against fest teams: the questions of the other tours are left out, the rest
+// counted as the OD counts them (by total, a tie shared at the mean of the
+// places it covers). The troika regulations seed on the question-game after its
+// first two tours, whatever has been played since.
+func odPlacesAfterTours(ctx context.Context, q store.Queryer, festID int64, code, schemeJSON, stateJSON string, tours []int) (map[int64]float64, error) {
+	var state games.ODState
+	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
+		return nil, fmt.Errorf("parse OD state: %w", err)
+	}
+	comp := games.ParseTourComp(schemeJSON)
+	counted := make([]bool, len(state.Entries))
+	base := 0
+	for t, size := range comp {
+		if slices.Contains(tours, t+1) {
+			for i := base; i < base+size && i < len(counted); i++ {
+				counted[i] = true
+			}
+		}
+		base += size
+	}
+	// The OD counts a question with no completion flag as completed, so a
+	// short list would let the later tours back in. Pad it before masking.
+	for len(state.Completed) < len(state.Entries) {
+		state.Completed = append(state.Completed, true)
+	}
+	played := 0
+	for i := range state.Completed {
+		state.Completed[i] = state.Completed[i] && i < len(counted) && counted[i]
+		if state.Completed[i] {
+			played++
+		}
+	}
+	if played == 0 {
+		return nil, corei18n.User(dopestrings.Default.Imports.Seed.NoStandings(code))
+	}
+	partial, err := json.Marshal(state)
+	if err != nil {
+		return nil, err
+	}
+	results, err := games.ComputeODResults(schemeJSON, string(partial))
+	if err != nil {
+		return nil, err
+	}
+	teamOf, err := festTeamsByNumber(ctx, q, festID)
+	if err != nil {
+		return nil, err
+	}
+	places := map[int64]float64{}
+	ranked := results.Teams
+	for i := 0; i < len(ranked); {
+		j := i
+		for j+1 < len(ranked) && ranked[j+1].Total == ranked[i].Total {
+			j++
+		}
+		mean := float64(i+1+j+1) / 2
+		for k := i; k <= j; k++ {
+			if team, ok := teamOf[ranked[k].Number]; ok {
+				places[team] = mean
+			}
+		}
+		i = j + 1
+	}
+	// A team that did not play stands one place behind the last that did.
+	places[0] = float64(len(ranked) + 1)
+	return places, nil
+}
+
+// festTeamsByNumber maps the fest's team numbers to its teams: an OD's
+// document names its teams by number.
+func festTeamsByNumber(ctx context.Context, q store.Queryer, festID int64) (map[int64]int64, error) {
+	rows, err := store.CollectRows(ctx, q, `
+select number, id from fest_teams where fest_id = ? and deleted = 0 and number is not null`, []any{festID},
+		func(rs *sql.Rows) ([2]int64, error) {
+			var pair [2]int64
+			return pair, rs.Scan(&pair[0], &pair[1])
+		})
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[int64]int64, len(rows))
+	for _, pair := range rows {
+		out[pair[0]] = pair[1]
+	}
+	return out, nil
+}
+
+// samePlace reports whether two standings rows share a place: both carry
+// the same place metric. A row without one shares nothing.
+func samePlace(a, b sql.NullString) bool {
+	pa, okA := placeMetric(a)
+	pb, okB := placeMetric(b)
+	return okA && okB && pa == pb
+}
+
+func placeMetric(raw sql.NullString) (float64, bool) {
+	if !raw.Valid || raw.String == "" {
+		return 0, false
+	}
+	var metrics struct {
+		Place *float64 `json:"place"`
+	}
+	if err := json.Unmarshal([]byte(raw.String), &metrics); err != nil || metrics.Place == nil {
+		return 0, false
+	}
+	return *metrics.Place, *metrics.Place > 0
+}
+
 type seedEntry struct {
 	participant int64
 	name        string
 	number      int
-	players     []seedPlayer
+	// applied is a troika's place in the order of applications (0: none kept).
+	applied int
+	players []seedPlayer
 }
 
 // gameRoster is who played a Game and for whom: fest team by player, the
@@ -389,16 +559,17 @@ func seedParticipantPlayers(ctx context.Context, q store.Queryer, scope core.Fes
 		team      int64
 		name      string
 		number    int
+		applied   int
 		assembled bool
 	}
 	participants, err := store.CollectRows(ctx, q, `
-select p.id, coalesce(`+participantFestTeam+`, 0), p.name, coalesce(ga.number, 0), p.assembled
+select p.id, coalesce(`+participantFestTeam+`, 0), p.name, coalesce(ga.number, 0), coalesce(p.applied, 0), p.assembled
 from participants p
 join game_assignments ga on ga.participant_id = p.id and ga.game_id = ?
 where p.fest_id = ?
 order by ga.number, p.id`, []any{scope.GameID, scope.FestID}, func(rs *sql.Rows) (participant, error) {
 		var row participant
-		return row, rs.Scan(&row.id, &row.team, &row.name, &row.number, &row.assembled)
+		return row, rs.Scan(&row.id, &row.team, &row.name, &row.number, &row.applied, &row.assembled)
 	})
 	if err != nil {
 		return nil, err
@@ -418,7 +589,7 @@ order by ga.number, p.id`, []any{scope.GameID, scope.FestID}, func(rs *sql.Rows)
 
 	entries := make([]seedEntry, 0, len(participants))
 	for _, row := range participants {
-		entry := seedEntry{participant: row.id, name: row.name, number: row.number}
+		entry := seedEntry{participant: row.id, name: row.name, number: row.number, applied: row.applied}
 		people := byTeam[row.team]
 		if row.assembled {
 			// A troika's people are its own roster (the fest's troikas page), not a
@@ -433,9 +604,8 @@ order by ga.number, p.id`, []any{scope.GameID, scope.FestID}, func(rs *sql.Rows)
 			}
 			entry.players = append(entry.players, player)
 		}
-		if len(entry.players) == 0 {
-			return nil, corei18n.User(dopestrings.Default.Imports.SeedPlayers.NoRoster(row.name))
-		}
+		// Nobody the fest roster knows: no place to add up. The entrant is
+		// still seeded, behind everyone who has one (resolve says so).
 		entries = append(entries, entry)
 	}
 	return entries, nil

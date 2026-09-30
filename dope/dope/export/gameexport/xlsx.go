@@ -46,6 +46,10 @@ func HandleScopedGameExport(s Host, w http.ResponseWriter, r *http.Request, fest
 		if err == nil {
 			err = xlsxexport.BuildODSheet(f, schemeJSON, stateJSON, ratingByNumber)
 		}
+	case "kd":
+		// A friendship cup's tables are an OD sheet; no rating ids, since a
+		// table is no rating team.
+		err = xlsxexport.BuildODSheet(f, schemeJSON, stateJSON, nil)
 	case "ksi", "si":
 		err = xlsxexport.BuildKSISheets(f, schemeJSON, stateJSON)
 	case "multi":

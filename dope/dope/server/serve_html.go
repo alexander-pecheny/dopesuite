@@ -70,10 +70,10 @@ type gameInitPayload struct {
 	// (seq reset) and resync instead of silently dropping post-restart deltas.
 	Epoch   string `json:"epoch,omitempty"`
 	CanEdit bool   `json:"canEdit,omitempty"`
-	// TeamsUnnumbered is true when the fest has active teams that lack a number.
-	// Team number is the universal team identity, so editing is blocked server-
-	// side (see requireNumberedTeams); the client uses this to show a banner
-	// pointing the host at the numbers page.
+	// TeamsUnnumbered is true when the numbering guard blocks this game: the
+	// teams it seats lack a number (numbering.GameHasUnnumbered). Team number
+	// is the universal team identity, so editing is blocked server-side; the
+	// client uses this to show a banner pointing the host at the numbers page.
 	TeamsUnnumbered bool `json:"teamsUnnumbered,omitempty"`
 	// Static marks a snapshot served in static (lockdown) mode: the client skips
 	// the SSE connection and self-reloads on a jitter instead. See static_mode.go.
@@ -209,7 +209,7 @@ func (s *server) buildGameInit(ctx context.Context, scope festScope) (gameInitPa
 	if festBytes, err := s.festViewBytes(scope.FestID, scope.GameID); err == nil {
 		payload.Fest = festBytes
 	}
-	if unnumbered, err := numbering.HasUnnumbered(ctx, s.eng.DB, scope.FestID); err == nil {
+	if unnumbered, err := numbering.GameHasUnnumbered(ctx, s.eng.DB, scope.FestID, scope.GameID); err == nil {
 		payload.TeamsUnnumbered = unnumbered
 	}
 	payload.CityCountry = towns.FestCityCountries(ctx, s.eng.DB, s.eng.Buff, scope.FestID)

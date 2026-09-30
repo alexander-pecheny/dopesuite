@@ -66,6 +66,25 @@ label = "Брейн"
 # The kind's display name (the games registry Label).
 label = "ЧГК"
 
+[kd]
+# The kind's display name (the games registry Label): an ОД whose tables
+# reshuffle their players every tour, with a personal standings.
+label = "Кубок Дружбы"
+# Refusals of an edit of the players (games.ValidateKDPlayersEdit). A card
+# number that is not a whole number from 1:
+card_invalid = 'Номер листа должен быть целым числом от 1, а не «{{.card}}».'
+# A card past what the tables tell apart: with n tables there are n² routes.
+card_too_high = 'Столов {{.n}}, поэтому листов не больше {{.max}}. Листа № {{.card}} нет.'
+# A player with no name.
+name_missing = 'У листа № {{.card}} не указано имя игрока.'
+# The same card twice in a list.
+card_duplicate = 'Лист № {{.card}} записан дважды.'
+# A card somebody already holds, usually because another host registered him
+# a moment ago.
+card_taken = 'Лист № {{.card}} уже выдан: {{.name}}. Выберите другой номер.'
+# The players are not a list the page can read.
+malformed = "Список игроков записан неверно."
+
 [ek]
 # The kind's display name (the games registry Label).
 label = "ЭК"

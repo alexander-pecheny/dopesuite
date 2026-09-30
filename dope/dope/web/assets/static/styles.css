@@ -3934,6 +3934,10 @@ html:has(.game-host-top) {
     grid-column: 2;
     grid-row: 1;
     justify-self: start;
+    /* The crumbs come first: the progress takes what they leave and clips
+       there. Without the cap a long game title («Кубок Дружбы») left its
+       column 0px wide and the progress ran past the screen's edge. */
+    max-width: 100%;
     font-size: var(--text-xs);
   }
 
@@ -5282,3 +5286,52 @@ body.is-fullscreen.od-page .match-main {
   max-width: var(--hamsa-theme-score-col);
 }
 
+
+/* Кубок Дружбы (ADR-0026): the players' remove buttons fit the row as the
+   guest teams' do, and the route cards print one per player. The sheet lives
+   under <body> only while the print dialog is open; everything else hides. */
+.kd-players-table .action-icon {
+  width: calc(var(--question-size) - var(--space-2));
+  height: calc(var(--question-size) - var(--space-2));
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+.kd-players-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.kd-print {
+  display: none;
+}
+
+.kd-card-table {
+  border-collapse: collapse;
+}
+
+.kd-card-table th,
+.kd-card-table td {
+  min-width: var(--question-size);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--structure);
+  text-align: center;
+}
+
+@media print {
+  body.kd-printing > :not(.kd-print) {
+    display: none !important;
+  }
+
+  body.kd-printing .kd-print {
+    display: block;
+    color: var(--text);
+    background: var(--paper);
+  }
+
+  .kd-card {
+    padding: var(--space-3) 0;
+    border-bottom: 1px dashed var(--structure);
+    break-inside: avoid;
+  }
+}

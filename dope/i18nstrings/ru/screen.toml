@@ -34,6 +34,10 @@ refusals = "Отказы"
 input = "Ввод"
 # The ОД host-only projector-screen tab.
 screen = "Экран"
+# The friendship cup's personal standings tab.
+personal = "Личный зачёт"
+# The friendship cup's tab of registered players and their route cards.
+players = "Игроки"
 # The label of a multi-stage group block whose title reduces to nothing.
 block_group = "Групповой этап"
 # The label of a multi-stage play-off block whose stages share no title prefix.

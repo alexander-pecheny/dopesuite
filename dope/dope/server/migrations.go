@@ -930,6 +930,27 @@ create index if not exists fest_roster_snapshots_fest_idx on fest_roster_snapsho
 `)
 		return err
 	}},
+	{Version: 39, Name: "a troika's place in the order of applications", Up: troikaApplicationOrder},
+}
+
+// troikaApplicationOrder gives every troika its place in the order its
+// application came in (participants.applied, 1 first). The troika
+// regulations break the last seeding tie by it («подавшей заявку ранее»), and
+// a list taken from the troikas follows it. Troikas were only ever added in
+// the order their lines were pasted, so a fest's troikas are numbered by id.
+func troikaApplicationOrder(db *sql.DB) error {
+	if err := store.AddColumnsIfMissing(db, "participants", []store.ColumnSpec{
+		{Name: "applied", Type: "INTEGER"},
+	}); err != nil {
+		return err
+	}
+	_, err := db.Exec(`
+update participants set applied = (
+  select count(*) from participants other
+  where other.fest_id = participants.fest_id and other.assembled = 1 and other.game_id is null
+    and other.id <= participants.id)
+where assembled = 1 and game_id is null and applied is null`)
+	return err
 }
 
 // assembledHeadTeamAndDivision gives an assembled team (a troika) a stored head

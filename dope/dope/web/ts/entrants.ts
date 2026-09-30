@@ -52,6 +52,10 @@ export interface EntrantsView {
   resizes?: boolean;
   rebuilt?: boolean;
   kept?: string;
+  // movesDropped: the hand moves an import from another source left behind.
+  movesDropped?: number;
+  // unranked: whom the last import seeded last, having nothing to rank them by.
+  unranked?: string[];
 }
 
 export interface EntrantsTabOptions {
@@ -156,6 +160,8 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
       nodes.push(sourceBar(view));
       if (notice) nodes.push(hint(notice, noticeError));
       if (view.kept) nodes.push(hint(S.entrants.state.kept(view.kept)));
+      if (view.movesDropped) nodes.push(hint(S.entrants.state.movesDropped(String(view.movesDropped))));
+      if (view.unranked?.length) nodes.push(hint(S.entrants.state.unranked(view.unranked.join(", "))));
       const rows = view.rows || [];
       if (view.resizes) nodes.push(hint(S.entrants.state.resizes()));
       else if (view.entered) nodes.push(hint(S.entrants.state.fixed()));

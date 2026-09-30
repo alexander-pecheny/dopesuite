@@ -1,7 +1,9 @@
 package schemedsl
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"dope/dope/storage/store"
@@ -42,6 +44,7 @@ participants: 24
 match_size: 4
 winning_places: 2
 lower_entrants: 12
+opening: [A1 A2 D1 D2, B1 B2 E1 E2, C1 C2 F1 F2, A3 A4 D3 D4, B3 B4 E3 E4, C3 C4 F3 F4]
 themes: 8
 themes.r6: 12
 reseed: true
@@ -55,11 +58,7 @@ title.r6: Гранд-финал
 `
 
 func TestOctobearfestSIFollowsAppendix3(t *testing.T) {
-	in := Input{Slug: "si", GameType: "si"}
-	for i := 0; i < 58; i++ {
-		in.Entrants = append(in.Entrants, store.SchemeSlot{Seed: &store.SchemeSeedRef{Basket: 1, Number: i + 1}, Label: fmt.Sprint("P", i+1)})
-	}
-	scheme := compileSrc(t, octobearfestSISrc, in)
+	scheme := compileSrc(t, octobearfestSISrc, octobearfestSIInput())
 	stages := matchStages(scheme)
 	// Письменный отбор, шесть групп, шесть кругов DE.
 	if len(stages) != 1+6+6 {
@@ -81,13 +80,81 @@ func TestOctobearfestSIFollowsAppendix3(t *testing.T) {
 	if got := themeCount(t, de[5]); got != 12 {
 		t.Errorf("тем в гранд-финале = %d, want 12", got)
 	}
-	// Верхняя сетка открывается пересевом 1–12, нижняя — 13–24: 1-е и 2-е места
-	// групп против 3-х и 4-х не встречаются до второго круга.
-	if got := slotLabels(de[0].Matches[0]); got != "Пересев-1 Пересев-6 Пересев-7 Пересев-12" {
-		t.Errorf("первый бой верхней сетки: %s", got)
+	// 1-й круг — таблица Приложения 3, а не пересев всех 24: WA = WA1-WA2-WD1-WD2
+	// (1-е и 2-е места групп A и D), LA = LA3-LA4-LD3-LD4.
+	wantOpening := [][][2]int{
+		{{1, 1}, {1, 2}, {4, 1}, {4, 2}}, {{2, 1}, {2, 2}, {5, 1}, {5, 2}}, {{3, 1}, {3, 2}, {6, 1}, {6, 2}},
+		{{1, 3}, {1, 4}, {4, 3}, {4, 4}}, {{2, 3}, {2, 4}, {5, 3}, {5, 4}}, {{3, 3}, {3, 4}, {6, 3}, {6, 4}},
 	}
-	if got := slotLabels(de[0].Matches[3]); got != "Пересев-13 Пересев-18 Пересев-19 Пересев-24" {
-		t.Errorf("первый бой нижней сетки: %s", got)
+	for i, seats := range wantOpening {
+		if got, want := groupPlaces(t, scheme, de[0].Matches[i]), fmt.Sprint(seats); got != want {
+			t.Errorf("1-й круг, бой %d: %s, want %s", i+1, got, want)
+		}
+	}
+	// Входного пересева больше нет, а между кругами он остаётся: 2-й круг — это
+	// W1-W4-W5 и W2-W3-W6 по итогам 1-го.
+	for _, stage := range scheme.Stages {
+		if stage.Code == "s3-reseed" {
+			t.Error("1-й круг по таблице, а входной пересев всё ещё строится")
+		}
+	}
+	if got := slotLabels(de[1].Matches[0]); got != "Пересев-1 Пересев-4 Пересев-5" {
+		t.Errorf("первый бой 2-го круга: %s", got)
+	}
+}
+
+// octobearfestSIInput seeds 58 заявившихся into the письменный отбор.
+func octobearfestSIInput() Input {
+	in := Input{Slug: "si", GameType: "si"}
+	for i := 0; i < 58; i++ {
+		in.Entrants = append(in.Entrants, store.SchemeSlot{Seed: &store.SchemeSeedRef{Basket: 1, Number: i + 1}, Label: fmt.Sprint("P", i+1)})
+	}
+	return in
+}
+
+// groupPlaces is who a бой seats as [group, place] pairs of the stage before:
+// group n is the n-th group stage (s2-gn).
+func groupPlaces(t *testing.T, scheme store.FestScheme, match store.SchemeMatch) string {
+	t.Helper()
+	var out [][2]int
+	for _, slot := range match.Slots {
+		ref := slot.Reseed
+		if ref == nil {
+			t.Fatalf("место %+v не из группы", slot)
+		}
+		var group int
+		if _, err := fmt.Sscanf(ref.Stage, "s2-g%d", &group); err != nil {
+			t.Fatalf("место из %q, want из группы: %+v", ref.Stage, ref)
+		}
+		out = append(out, [2]int{group, ref.Rank})
+	}
+	return fmt.Sprint(out)
+}
+
+// The table must name every place the groups send on, once, and only those.
+func TestDEOpeningRefusesABadTable(t *testing.T) {
+	good := "[A1 A2 D1 D2, B1 B2 E1 E2, C1 C2 F1 F2, A3 A4 D3 D4, B3 B4 E3 E4, C3 C4 F3 F4]"
+	for name, table := range map[string]string{
+		"место дважды":         strings.Replace(good, "F4", "F3", 1),
+		"нет такой группы":     strings.Replace(good, "F4", "G4", 1),
+		"место не проходит":    strings.Replace(good, "F4", "F5", 1),
+		"не хватает места":     strings.Replace(good, " F4", "", 1),
+		"не буква и не место":  strings.Replace(good, "F4", "4F", 1),
+		"то же место иначе":    strings.Replace(good, "F4", "A01", 1),
+		"граница боя сдвинута": strings.Replace(good, "D1 D2, B1", "D1, D2 B1", 1),
+		"один бой на всех":     strings.ReplaceAll(good, ",", ""),
+	} {
+		src := strings.Replace(octobearfestSISrc, "opening: "+good, "opening: "+table, 1)
+		if src == octobearfestSISrc {
+			t.Fatal("таблица в схеме не найдена")
+		}
+		doc, err := Parse(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Compile(doc, octobearfestSIInput()); err == nil || !strings.Contains(err.Error(), "opening") {
+			t.Errorf("%s: %v, want ошибку про opening", name, err)
+		}
 	}
 }
 
@@ -113,5 +180,81 @@ func TestDELowerEntrantsRefusesTheWholeField(t *testing.T) {
 	}
 	if _, err := Compile(doc, in); err == nil {
 		t.Fatal("lower_entrants: 8 из 8 скомпилировался; want ошибку")
+	}
+}
+
+// Приложение 1 deals the письменный отбор's places into the groups by a snake
+// that starts again after places 25–30, which are drawn by lot. No rule makes
+// that table, so the scheme writes it out in deal:, and the group stage seats
+// the reseed's ranks exactly as written.
+func TestOctobearfestSIGroupsFollowAppendix1(t *testing.T) {
+	appendix1 := "deal: [1 12 13 24 28 31 42 43 54, 2 11 14 23 25 32 41 44 53, 3 10 15 22 26 33 40 45 52, " +
+		"4 9 16 21 30 34 39 46 51, 5 8 17 20 27 35 38 47 50, 6 7 18 19 29 36 37 48 49]\n"
+	src := strings.Replace(octobearfestSISrc, "slug: group-stage\n", "slug: group-stage\n"+appendix1, 1)
+	in := Input{Slug: "si", GameType: "si"}
+	for i := 0; i < 61; i++ {
+		in.Entrants = append(in.Entrants, store.SchemeSlot{Seed: &store.SchemeSeedRef{Basket: 1, Number: i + 1}, Label: fmt.Sprint("P", i+1)})
+	}
+	scheme := compileSrc(t, src, in)
+	var groupA []int
+	for _, stage := range scheme.Stages {
+		if stage.Code != "s2-g1" {
+			continue
+		}
+		var cfg struct {
+			Entrants []store.SchemeSlot `json:"entrants"`
+		}
+		if err := json.Unmarshal(stage.Config, &cfg); err != nil {
+			t.Fatal(err)
+		}
+		for _, slot := range cfg.Entrants {
+			groupA = append(groupA, slot.Reseed.Rank)
+		}
+	}
+	if fmt.Sprint(groupA) != "[1 12 13 24 28 31 42 43 54]" {
+		t.Fatalf("группа A = %v, want Приложение 1's 1 12 13 24 28 31 42 43 54", groupA)
+	}
+
+	for _, bad := range []string{
+		"deal: [1 12 13 24 28 31 42 43 54]\n",                         // one group of six
+		"deal: [1 12 13, 2 11 14, 3 10 15, 4 9 16, 5 8 17, 6 7 18]\n", // groups of three
+		strings.Replace(appendix1, "54,", "53,", 1),                   // 53 twice, 54 never
+	} {
+		doc, err := Parse(strings.Replace(octobearfestSISrc, "slug: group-stage\n", "slug: group-stage\n"+bad, 1))
+		if err == nil {
+			_, err = Compile(doc, in)
+		}
+		if err == nil {
+			t.Errorf("deal %q compiled", strings.TrimSpace(bad))
+		}
+	}
+}
+
+// opening: seats a block from the previous block's groups. On a first block
+// there is no previous block, and the table would have been dropped without a
+// word.
+func TestDEOpeningNeedsAPreviousBlock(t *testing.T) {
+	src := "[scheme]\nkind: double_elimination\nparticipants: 8\nmatch_size: 4\nwinning_places: 2\nopening: [A1 A2 A3 A4, A5 A6 A7 A8]\n"
+	doc, err := Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Compile(doc, Input{Slug: "si", GameType: "si"}); err == nil || !strings.Contains(err.Error(), "opening") {
+		t.Fatalf("opening на первом блоке: %v, want ошибку про opening", err)
+	}
+}
+
+// deal: names places of one ranking. A later block without reseed: true
+// deals from the previous block's groups, where no such ranking exists, and
+// the table would have been dropped without a word.
+func TestRRDealNeedsARanking(t *testing.T) {
+	src := "[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 4\nproceeding_participants: 2\n---\nkind: roundrobin\ngroups: 2\ngroup_size: 2\ndeal: [1 4, 2 3]\n"
+	doc, err := Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := Input{Slug: "rr", GameType: "brain"}
+	if _, err := Compile(doc, in); err == nil || !strings.Contains(err.Error(), "deal") {
+		t.Fatalf("deal на блоке без reseed: %v, want ошибку про deal", err)
 	}
 }

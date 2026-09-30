@@ -161,6 +161,9 @@ type seeding struct {
 	sourceGameID  int64
 	division      string
 	candidates    []seedCandidate
+	// unranked names the candidates the source had nothing to rank by and put
+	// last: a troika whose people the fest roster does not know.
+	unranked []string
 }
 
 // FromKSI is the EK page's "Import from KSI" button: the fest's first KSI, ranked.
@@ -292,7 +295,9 @@ func ResolveListTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, curren
 	if err != nil {
 		return List{}, "", err
 	}
-	return current.with(next), "seed-import:" + resolved.source, nil
+	list := current.with(next)
+	list.Unranked = resolved.unranked
+	return list, "seed-import:" + resolved.source, nil
 }
 
 func parseSeedXLSX(file io.Reader, gameID int64, roster []seedRosterTeam) ([]seedCandidate, error) {

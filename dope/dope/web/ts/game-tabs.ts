@@ -4,12 +4,13 @@ import S from "./i18nstrings.js";
 // Which tabs a Game page shows is Block / Round / Group knowledge, held here
 // once; pages render the array and derive nothing of their own.
 
-export type GameKind = "ek" | "es" | "si" | "brain" | "ksi" | "od" | "troika" | "hamsa";
+export type GameKind = "ek" | "es" | "si" | "brain" | "ksi" | "od" | "kd" | "troika" | "hamsa";
 
 export type TabKind =
   | "grid" | "block" | "pods" | "round" | "protocol" | "reseed" | "stage"
   | "stats" | "roster" | "venues" | "entrants" | "seedImport"
-  | "results" | "detailed" | "input" | "screen" | "refusals";
+  | "results" | "detailed" | "input" | "screen" | "refusals"
+  | "personal" | "players";
 
 export interface GameTab {
   key: string;
@@ -52,6 +53,11 @@ export function gameTabs(stages: StageRef[], options: GameTabsOptions): GameTab[
     return fixedTabs(["detailed", S.screen.tabs.detailed()], ["results", S.screen.tabs.results()], ...when(host, ["refusals", S.screen.tabs.refusals()]), ["roster", S.screen.tabs.roster()]);
   case "od":
     return fixedTabs(["results", S.screen.tabs.results()], ["detailed", S.screen.tabs.detailed()], ["input", S.screen.tabs.input()], ...when(host, ["screen", S.screen.tabs.screen()]), ["roster", S.screen.tabs.roster()]);
+  // The friendship cup is OD's sheet over tables: the personal standings come
+  // first, the tables' own results next, and its players replace the fest
+  // roster, which it does not seat (ADR-0026).
+  case "kd":
+    return fixedTabs(["personal", S.screen.tabs.personal()], ["results", S.screen.tabs.results()], ["detailed", S.screen.tabs.detailed()], ["input", S.screen.tabs.input()], ...when(host, ["screen", S.screen.tabs.screen()]), ["players", S.screen.tabs.players()]);
   }
 }
 

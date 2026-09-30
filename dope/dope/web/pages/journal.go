@@ -184,7 +184,7 @@ func (s *Server) newNameResolver(ctx context.Context, gameType, stateJSON string
 	switch gameType {
 	case "ksi":
 		r.names = ksiParticipantNames(stateJSON)
-	case "od":
+	case "od", "kd":
 		r.names, r.odNum = odTeamNames(stateJSON)
 	case "ek":
 		r.ekAnswer = map[int64]ekCell{}
@@ -376,7 +376,7 @@ func (r *nameResolver) describeGroup(ops []journalOpRow) []string {
 	switch r.gameType {
 	case "ek":
 		return r.describeEK(ops)
-	case "od":
+	case "od", "kd":
 		return r.describeStatePatchGroup(ops, r.odPatchLine)
 	case "ksi":
 		return r.describeStatePatchGroup(ops, r.ksiPatchLine)
@@ -466,6 +466,18 @@ func (r *nameResolver) odPatchLine(op edit.PatchOp) string {
 		return s.Journal.Od.Readiness(strconv.Itoa(segs[1].n+1), val)
 	case len(segs) >= 1 && segs[0].s == "shootoutRounds":
 		return s.Journal.Od.Shootout()
+	case len(segs) == 2 && segs[0].s == "players":
+		// A friendship cup registers a player under his card, and takes him
+		// off by writing null there.
+		var seat struct {
+			Name string `json:"name"`
+		}
+		if json.Unmarshal(op.Value, &seat) != nil || strings.TrimSpace(seat.Name) == "" {
+			return s.Journal.Od.KdPlayerRemoved(segs[1].s)
+		}
+		return s.Journal.Od.KdPlayerAdded(segs[1].s, seat.Name)
+	case len(segs) == 1 && segs[0].s == "players":
+		return s.Journal.Od.KdPlayersChanged()
 	default:
 		return genericPatchLine(op)
 	}

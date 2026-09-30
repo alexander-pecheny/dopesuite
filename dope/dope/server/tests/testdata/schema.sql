@@ -329,7 +329,7 @@ CREATE TABLE participants(
   city text not null default '',
   fest_team_id integer references fest_teams(id),
   fest_player_id integer references fest_players(id)
-, number INTEGER, assembled INTEGER NOT NULL DEFAULT 0, head_team_id INTEGER, division TEXT, game_id INTEGER REFERENCES games(id) ON DELETE CASCADE);
+, number INTEGER, assembled INTEGER NOT NULL DEFAULT 0, head_team_id INTEGER, division TEXT, game_id INTEGER REFERENCES games(id) ON DELETE CASCADE, applied INTEGER);
 
 -- table password_resets
 CREATE TABLE password_resets(

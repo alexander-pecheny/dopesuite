@@ -3,6 +3,7 @@ package schemedsl
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -209,7 +210,7 @@ var commonKeys = []string{"kind", "title", "venues", "sorting", "reseed", "stats
 var dottedKeys = []string{"venues", "title", "bout", "standings"}
 
 var defaultsKeys = map[string]bool{"venues": true, "sorting": true}
-var initKeys = map[string]bool{"seed": true, "sorting": true, "games": true, "player": true, "division": true}
+var initKeys = map[string]bool{"seed": true, "sorting": true, "games": true, "player": true, "division": true, "tours": true}
 
 func keySet(lists ...[]string) map[string]bool {
 	set := map[string]bool{}
@@ -307,12 +308,67 @@ func (c *compiler) readPlayerSeed() (*store.SchemePlayerSeed, error) {
 				continue
 			}
 			out.Seed[name] = v.Raw
+		case "tours":
+			if !slices.Contains(games, name) {
+				return nil, errAt(v.Line, "%s", dopestrings.Default.Scheme.Seed.ToursGame(name, strings.Join(games, ", ")))
+			}
+			tours, ok := parseTours(v.Raw)
+			if !ok {
+				return nil, errAt(v.Line, "%s", dopestrings.Default.Scheme.Seed.ToursValue(name, v.Raw))
+			}
+			if out.Tours == nil {
+				out.Tours = map[string][]int{}
+			}
+			out.Tours[name] = tours
 		}
 	}
 	if len(out.Seed) == 0 {
 		return nil, errAt(line, "%s", dopestrings.Default.Scheme.Seed.PlayersNeedSeed())
 	}
 	return out, nil
+}
+
+// parseTours reads which tours of a source OD count: «2» is the first two,
+// «1-2» a range, «[1, 3]» a list. Tours number from 1, each once.
+func parseTours(raw string) ([]int, bool) {
+	raw = strings.TrimSpace(raw)
+	var tours []int
+	switch {
+	case strings.HasPrefix(raw, "[") && strings.HasSuffix(raw, "]"):
+		for _, part := range strings.Split(raw[1:len(raw)-1], ",") {
+			n, err := strconv.Atoi(strings.TrimSpace(part))
+			if err != nil {
+				return nil, false
+			}
+			tours = append(tours, n)
+		}
+	case strings.Contains(raw, "-"):
+		from, to, _ := strings.Cut(raw, "-")
+		a, errA := strconv.Atoi(strings.TrimSpace(from))
+		b, errB := strconv.Atoi(strings.TrimSpace(to))
+		if errA != nil || errB != nil || a > b {
+			return nil, false
+		}
+		for n := a; n <= b; n++ {
+			tours = append(tours, n)
+		}
+	default:
+		n, err := strconv.Atoi(raw)
+		if err != nil {
+			return nil, false
+		}
+		for i := 1; i <= n; i++ {
+			tours = append(tours, i)
+		}
+	}
+	seen := map[int]bool{}
+	for _, n := range tours {
+		if n < 1 || seen[n] {
+			return nil, false
+		}
+		seen[n] = true
+	}
+	return tours, len(tours) > 0
 }
 
 func (c *compiler) readInit() error {
@@ -600,10 +656,15 @@ func (c *compiler) seedSlot(rank int) store.SchemeSlot {
 func (c *compiler) blockEntrants(index int, blk Section, groups, size int) ([][]store.SchemeSlot, error) {
 	total := groups * size
 	if index == 0 {
+		// opening: names the previous block's groups; the first block has none,
+		// and its table would be dropped without a word.
+		if value, written := blk.Values["opening"]; written {
+			return nil, errAt(value.Line, "%s", dopestrings.Default.Scheme.Entrants.OpeningFirst())
+		}
 		if len(c.in.Entrants) > 0 && len(c.in.Entrants) != total {
 			return nil, errAt(blk.Line, "%s", dopestrings.Default.Scheme.Entrants.CountMismatch(strconv.Itoa(total), strconv.Itoa(len(c.in.Entrants))))
 		}
-		return c.dealSeeds(groups, size), nil
+		return c.dealSeeds(blk, groups, size)
 	}
 	prev := c.prev
 	if prev.Proceeding <= 0 {
@@ -613,11 +674,93 @@ func (c *compiler) blockEntrants(index int, blk Section, groups, size int) ([][]
 	if supply != total {
 		return nil, errAt(blk.Line, "%s", dopestrings.Default.Scheme.Entrants.SupplyMismatch(strconv.Itoa(supply), strconv.Itoa(total)))
 	}
+	if _, written := blk.Values["opening"]; written {
+		return c.dealOpening(blk, groups, size)
+	}
 	if incoming, _ := blockReseedSpec(blk); incoming {
 		return c.dealReseed(index, blk, groups, size)
 	}
+	// deal: names places of one ranking. Without a reseed the block is seated
+	// from the previous block's groups, where there is none to name.
+	if value, written := blk.Values["deal"]; written {
+		return nil, errAt(value.Line, "%s", dopestrings.Default.Scheme.Entrants.DealSource())
+	}
 	return c.dealDeterministic(blk, groups, size)
 }
+
+// dealOpening seats a double elimination's opening round from the table the
+// regulations print, rather than from a re-rank of the previous block:
+// `opening: [A1 A2 D1 D2, B1 B2 E1 E2, …]` names each opening bout's seats as
+// the previous block's group (A is its first) and place, and the round takes
+// them in that order. Octobearfest's individual SI (appendix 3) opens with
+// WA = WA1-WA2-WD1-WD2: two groups' first and second places together, which
+// no ranking of all 24 reproduces. Every proceeding place is named once. A
+// `reseed: true` beside it still re-ranks between the later rounds.
+func (c *compiler) dealOpening(blk Section, groups, size int) ([][]store.SchemeSlot, error) {
+	items, _, err := blk.List("opening")
+	if err != nil {
+		return nil, err
+	}
+	line := blk.Values["opening"].Line
+	prev := c.prev
+	// One item per opening bout, each that bout's seats: the table is the
+	// round as printed, so a seat on the wrong side of a comma is a mistake to
+	// name, not something to re-slice. The block hands its entrants over as
+	// groups × size, which for an elimination is one list of the whole field.
+	total := groups * size
+	// A double elimination's bouts are two seats unless match_size says
+	// otherwise, as structure's Kind reads it.
+	perBout := 2
+	if v, ok := blk.Int("match_size"); ok && v > 0 {
+		perBout = v
+	}
+	if total%perBout != 0 {
+		perBout = total
+	}
+	if len(items) != total/perBout {
+		return nil, errAt(line, "%s", dopestrings.Default.Scheme.Entrants.OpeningBouts(strconv.Itoa(total/perBout), strconv.Itoa(len(items))))
+	}
+	type seat struct{ group, place int }
+	seen := map[seat]bool{}
+	flat := make([]store.SchemeSlot, 0, total)
+	for b, item := range items {
+		tokens := strings.Fields(item)
+		if len(tokens) != perBout {
+			return nil, errAt(line, "%s", dopestrings.Default.Scheme.Entrants.OpeningBoutSize(strconv.Itoa(b+1), strconv.Itoa(perBout), strconv.Itoa(len(tokens))))
+		}
+		for _, token := range tokens {
+			group, place, ok := openingSeat(token)
+			if !ok || group >= len(prev.Groups) || place > prev.Proceeding {
+				return nil, errAt(line, "%s", dopestrings.Default.Scheme.Entrants.OpeningSeat(token, openingLetter(len(prev.Groups)-1), strconv.Itoa(prev.Proceeding)))
+			}
+			// A1 and A01 are one seat: the check is on what the token means.
+			if seen[seat{group, place}] {
+				return nil, errAt(line, "%s", dopestrings.Default.Scheme.Entrants.OpeningTwice(token))
+			}
+			seen[seat{group, place}] = true
+			flat = append(flat, prev.Groups[group].Place(place))
+		}
+	}
+	out := make([][]store.SchemeSlot, groups)
+	for g := range out {
+		out[g] = flat[g*size : (g+1)*size]
+	}
+	return out, nil
+}
+
+// openingSeat reads «A1»: group A (0-based index 0), place 1.
+func openingSeat(token string) (group, place int, ok bool) {
+	if len(token) < 2 || token[0] < 'A' || token[0] > 'Z' {
+		return 0, 0, false
+	}
+	place, err := strconv.Atoi(token[1:])
+	if err != nil || place < 1 {
+		return 0, 0, false
+	}
+	return int(token[0] - 'A'), place, true
+}
+
+func openingLetter(group int) string { return string(rune('A' + group)) }
 
 // blockReseedSpec parses the reseed key: `true` re-ranks the incoming Edge, a
 // round code re-ranks at that boundary inside the block (se only), and `every`
@@ -658,15 +801,53 @@ func (c *compiler) reseedSortRules(blk Section) ([]store.SchemeSortRule, error) 
 	return append(rules, store.SchemeSortRule{Metric: "draw", Dir: "asc"}), nil
 }
 
-func (c *compiler) dealSeeds(groups, size int) [][]store.SchemeSlot {
-	dealt := snakeDeal(groups, size)
+func (c *compiler) dealSeeds(blk Section, groups, size int) ([][]store.SchemeSlot, error) {
+	dealt, err := dealOf(blk, groups, size)
+	if err != nil {
+		return nil, err
+	}
 	out := make([][]store.SchemeSlot, groups)
 	for g, ranks := range dealt {
 		for _, rank := range ranks {
 			out[g] = append(out[g], c.seedSlot(rank))
 		}
 	}
-	return out
+	return out, nil
+}
+
+// dealOf is which ranks each group takes: the snake, or the table a block
+// writes out in `deal:` — one item per group, its ranks separated by spaces,
+// every rank once. Octobearfest's individual SI regulations deal the written
+// qualifier's places 1-24 and 31-54 by a snake that starts again after a band
+// drawn by lot, and print the table; no rule reproduces it, so the scheme
+// copies it.
+func dealOf(blk Section, groups, size int) ([][]int, error) {
+	items, ok, err := blk.List("deal")
+	if err != nil || !ok {
+		return snakeDeal(groups, size), err
+	}
+	line := blk.Values["deal"].Line
+	if len(items) != groups {
+		return nil, errAt(line, "%s", dopestrings.Default.Scheme.Entrants.DealGroups(strconv.Itoa(groups), strconv.Itoa(len(items))))
+	}
+	total := groups * size
+	seen := make(map[int]bool, total)
+	out := make([][]int, groups)
+	for g, item := range items {
+		fields := strings.Fields(item)
+		if len(fields) != size {
+			return nil, errAt(line, "%s", dopestrings.Default.Scheme.Entrants.DealSize(strconv.Itoa(g+1), strconv.Itoa(size), strconv.Itoa(len(fields))))
+		}
+		for _, field := range fields {
+			rank, err := strconv.Atoi(field)
+			if err != nil || rank < 1 || rank > total || seen[rank] {
+				return nil, errAt(line, "%s", dopestrings.Default.Scheme.Entrants.DealRanks(strconv.Itoa(total), field))
+			}
+			seen[rank] = true
+			out[g] = append(out[g], rank)
+		}
+	}
+	return out, nil
 }
 
 // reseedStageBanded materialises one reseed Edge: teams is who is re-ranked
@@ -761,8 +942,12 @@ func (c *compiler) dealReseed(index int, blk Section, groups, size int) ([][]sto
 	if err != nil {
 		return nil, err
 	}
+	dealt, err := dealOf(blk, groups, size)
+	if err != nil {
+		return nil, err
+	}
 	out := make([][]store.SchemeSlot, groups)
-	for g, ranks := range snakeDeal(groups, size) {
+	for g, ranks := range dealt {
 		for _, rank := range ranks {
 			out[g] = append(out[g], structure.ReseedRank(code, rank))
 		}
