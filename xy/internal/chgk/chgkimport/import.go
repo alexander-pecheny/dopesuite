@@ -65,7 +65,7 @@ func Parse(filename string, data []byte, game string) (*Result, error) {
 		res := &Result{Name: base, Source: normalizeNewlines(string(data))}
 		return res, validate(res, game)
 	case ".docx":
-		return parseDocx(base, data, game)
+		return parseDocx(base, data, game, "")
 	case ".zip":
 		res, err := parseZip(base, data)
 		if err != nil {
@@ -80,8 +80,28 @@ func Parse(filename string, data []byte, game string) (*Result, error) {
 // pipeline (plain text → structure → 4s) minus the .docx reader. It is what the
 // card editor's →.4s button runs a pasted, unmarked-up question through.
 func ParseText(text string) string {
-	doc := textparse.Parse(normalizeNewlines(text), textparse.Options{})
+	return ParseTextIn(text, "")
+}
+
+// ParseTextIn is ParseText with the field markers of another language (the
+// --language codes: "ua" reads the Ukrainian question and answer labels); "" is
+// Russian.
+func ParseTextIn(text, language string) string {
+	doc := textparse.Parse(normalizeNewlines(text), textparse.Options{Language: language})
 	return strings.TrimSpace(fsource.Compose(doc, fsource.NumbersDefault))
+}
+
+// DocxText is the plain text of a .docx, as the import pipeline reads it — for
+// looking at the packet (its language) before choosing how to parse it.
+func DocxText(data []byte) (string, error) {
+	text, _, err := docxread.ToText(data, docxread.Options{})
+	return text, err
+}
+
+// ParseDocxIn imports a .docx reading its field markers in the given language.
+func ParseDocxIn(filename string, data []byte, language string) (*Result, error) {
+	base := strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename))
+	return parseDocx(base, data, "chgk", language)
 }
 
 // validate runs a .4s through the 4s parser so a file that isn't really 4s
@@ -108,7 +128,7 @@ func gameOrDefault(game string) string {
 // document's outline, so the reader marks headings and keeps a numbered list's
 // own start (the point values), and every number is written out (NumbersAll)
 // because a SI question's number IS its point value.
-func parseDocx(base string, data []byte, game string) (*Result, error) {
+func parseDocx(base string, data []byte, game, language string) (*Result, error) {
 	// chgksuite prefixes extracted image names with the source's basename, so the
 	// (img …) directives and the image names below agree.
 	prefix := strings.ReplaceAll(base, " ", "_") + "_"
@@ -121,7 +141,7 @@ func parseDocx(base string, data []byte, game string) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read docx: %w", err)
 	}
-	source := fsource.Compose(textparse.Parse(text, textparse.Options{}), fsource.NumbersDefault)
+	source := fsource.Compose(textparse.Parse(text, textparse.Options{Language: language}), fsource.NumbersDefault)
 	if si {
 		source = fsource.Compose(textparse.ParseSI(text, textparse.SIOptions{}), fsource.NumbersAll)
 	}

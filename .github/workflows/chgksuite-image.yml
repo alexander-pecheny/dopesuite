@@ -1,0 +1,72 @@
+name: chgksuite image
+
+# Publishes the chgksuite CLI as ghcr.io/<owner>/chgksuite:<version>, a public
+# image holding the static binary and nothing else. The rating site copies the
+# binary out of it (`chgksuite credits` reads tour editors and testers from
+# packets) and pins it by tag and digest, so an upgrade there is a one-line PR.
+#
+# Cut by pushing a CalVer tag, e.g. `chgksuite/2026.09.24` (`.2` for a second
+# one the same day), like xy's releases (docs/adr/0003). No GitHub release is
+# created: the image is the artifact.
+on:
+  push:
+    tags: ["chgksuite/*"]
+  # Rebuild without moving the tag; pick the tag as the ref.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: xy/go.mod
+
+      # Only what the binary is built from; the full xy suite belongs to xy's
+      # own releases, and it needs the typst.wasm build this image does without.
+      - name: Test
+        run: go -C xy test ./cmd/chgksuite/ ./internal/chgk/credits/ ./internal/chgk/chgkimport/ ./internal/chgk/fsource/ ./internal/chgk/textparse/ ./internal/chgk/docxread/
+
+      - name: Build
+        run: |
+          VERSION="${GITHUB_REF_NAME#chgksuite/}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go -C xy build \
+              -trimpath -ldflags "-s -w" \
+              -o "../dist/chgksuite-linux-$arch" ./cmd/chgksuite
+          done
+          cp LICENSE NOTICE dist/
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/chgksuite" >> "$GITHUB_ENV"
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: dist
+          file: xy/cmd/chgksuite/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ env.VERSION }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.title=chgksuite
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.licenses=AGPL-3.0-only

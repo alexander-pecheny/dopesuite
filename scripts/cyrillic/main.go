@@ -20,9 +20,10 @@ var roots = []string{"dopecore", "dopeuikit", "xy", "dope", "spliff", "scripts"}
 
 // Skipped wholesale: generated files carry what a Catalog put there, tests
 // name a string to assert on it, the chgksuite parity labels mirror upstream,
-// and towns.ts is data (Russian town names), not copy.
+// towns.ts is data (Russian town names), not copy, and third_party holds
+// vendored upstream code (xy's trimmed lingua-go, whose alphabets are Cyrillic).
 var skipDirs = map[string]bool{
-	".git": true, "node_modules": true, "dist": true, "testdata": true, "jstest": true,
+	".git": true, "node_modules": true, "dist": true, "testdata": true, "jstest": true, "third_party": true,
 }
 
 func skipPath(rel string) bool {

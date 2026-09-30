@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"path"
@@ -189,6 +190,12 @@ func openPkg(data []byte) (*pkg, error) {
 		}
 		b, err := io.ReadAll(io.LimitReader(rc, budget+1))
 		rc.Close()
+		// Word opens a file whose picture fails its CRC, and so do we: a
+		// damaged image is not worth losing the text over. XML parts still
+		// have to be intact.
+		if errors.Is(err, zip.ErrChecksum) && !strings.HasSuffix(f.Name, ".xml") && !strings.HasSuffix(f.Name, ".rels") {
+			err = nil
+		}
 		if err != nil {
 			return nil, err
 		}
