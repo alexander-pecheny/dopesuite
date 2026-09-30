@@ -198,6 +198,10 @@ export interface GameDocumentSpec {
   apply: (state: unknown) => void;
   // What the page holds now — the revalidation's baseline, the live base.
   current: () => GameDataSnapshot;
+  // The server refused a patch (a 4xx) with this message. When given, the
+  // page is told and the document is fetched again, so the edit the page
+  // already shows is taken back.
+  onRejected?: (message: string) => void;
   // Test seam: the stream constructor the engine opens (an EventSource).
   newEventSource?: (url: string) => EventSource;
 }
@@ -253,7 +257,12 @@ export function mountGameDocument(spec: GameDocumentSpec): GameDocument {
       adopt: (_scope, response) => spec.apply(overlay(response)),
       indicator: shell.indicator,
       recorder: () => shell.recorder,
-      onRejected: (info) => shell.recorder?.event("write-rejected", info),
+      onRejected: (info) => {
+        shell.recorder?.event("write-rejected", info);
+        if (!spec.onRejected) return;
+        spec.onRejected(info.error);
+        void live?.resync(scope);
+      },
     });
     live = createLiveEvents({
       eventsURL: () => gameEventsURL(route.festID!, route.gameID),

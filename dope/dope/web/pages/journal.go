@@ -466,6 +466,18 @@ func (r *nameResolver) odPatchLine(op edit.PatchOp) string {
 		return s.Journal.Od.Readiness(strconv.Itoa(segs[1].n+1), val)
 	case len(segs) >= 1 && segs[0].s == "shootoutRounds":
 		return s.Journal.Od.Shootout()
+	case len(segs) == 2 && segs[0].s == "players":
+		// A friendship cup registers a player under his card, and takes him
+		// off by writing null there.
+		var seat struct {
+			Name string `json:"name"`
+		}
+		if json.Unmarshal(op.Value, &seat) != nil || strings.TrimSpace(seat.Name) == "" {
+			return s.Journal.Od.KdPlayerRemoved(segs[1].s)
+		}
+		return s.Journal.Od.KdPlayerAdded(segs[1].s, seat.Name)
+	case len(segs) == 1 && segs[0].s == "players":
+		return s.Journal.Od.KdPlayersChanged()
 	default:
 		return genericPatchLine(op)
 	}

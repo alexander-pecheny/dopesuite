@@ -237,6 +237,51 @@ type RatingRosterOwner interface {
 	RatingRosterStateKey() string
 }
 
+// FestNumbering is implemented by a Protocol that can say its document never
+// refers to a fest team by its number. The numbering guard exists because a
+// flat document finds a Participant by number. A Protocol whose seats are
+// nobody on the fest roster (a friendship cup's tables) has nothing the guard
+// protects, so an unnumbered fest team must not stop its entry.
+type FestNumbering interface {
+	UsesFestNumbers() bool
+}
+
+// UsesFestNumbers reports whether a game type's document depends on the fest
+// teams' numbers. It is true unless the Protocol says otherwise, and for an
+// unknown type.
+func UsesFestNumbers(code string) bool {
+	p, ok := Get(code)
+	if !ok {
+		return true
+	}
+	if n, ok := p.(FestNumbering); ok {
+		return n.UsesFestNumbers()
+	}
+	return true
+}
+
+// EditValidator is implemented by a Protocol whose document holds entries a
+// host types in free form, which the scorer cannot take as they come (a
+// friendship cup's players). ValidateEdit sees the document before and after
+// one edit and refuses the edit, in the host's words, when it leaves the
+// document wrong. Nothing of a refused edit is written.
+type EditValidator interface {
+	ValidateEdit(prev, next []byte) error
+}
+
+// ValidateEdit asks a game type's Protocol whether an edit of its document
+// may stand. A Protocol that does not validate accepts every edit.
+func ValidateEdit(code string, prev, next []byte) error {
+	p, ok := Get(code)
+	if !ok {
+		return nil
+	}
+	if v, ok := p.(EditValidator); ok {
+		return v.ValidateEdit(prev, next)
+	}
+	return nil
+}
+
 // RatingRosterStateKey returns the protocol's immutable rating-roster state
 // key, if the protocol declares one.
 func RatingRosterStateKey(code string) (string, bool) {

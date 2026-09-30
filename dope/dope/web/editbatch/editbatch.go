@@ -795,6 +795,9 @@ func applyStateOps(gameType, stateJSON string, ops []edit.PatchOp, sample *metri
 	if metricsOn {
 		sample.Marshal = time.Since(tMarshal)
 	}
+	if err := protocol.ValidateEdit(gameType, []byte(stateJSON), next); err != nil {
+		return nil, nil, err
+	}
 	return next, blobOps, nil
 }
 

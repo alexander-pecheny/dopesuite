@@ -8,8 +8,10 @@ package numbering
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
+	"dope/dope/domain/protocol"
 	"dope/dope/storage/store"
 )
 
@@ -83,8 +85,19 @@ func HasUnnumbered(ctx context.Context, q store.Queryer, festID int64) (bool, er
 //
 // A Game with no entrant list of its own falls back to the fest's registry,
 // which is what every Game did before Games could differ.
+//
+// A Game whose Protocol refers to no fest team by number (a friendship cup,
+// whose tables are nobody on the roster) is never blocked either.
 func GameHasUnnumbered(ctx context.Context, q store.Queryer, festID, gameID int64) (bool, error) {
 	if gameID > 0 {
+		var gameType string
+		err := q.QueryRowContext(ctx, `select game_type from games where fest_id = ? and id = ?`, festID, gameID).Scan(&gameType)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return false, err
+		}
+		if err == nil && !protocol.UsesFestNumbers(gameType) {
+			return false, nil
+		}
 		var entrants, unnumbered int
 		if err := q.QueryRowContext(ctx, `
 select count(*), coalesce(sum(case when number > 0 then 0 else 1 end), 0)

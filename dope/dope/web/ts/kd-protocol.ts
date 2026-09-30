@@ -13,8 +13,20 @@ export interface KDPlayer {
   team?: string;
 }
 
+// KDSeat is what the document holds under a card's key.
+export interface KDSeat {
+  name: string;
+  team?: string;
+}
+
+// The players are keyed by card, {"<card>": {name, team}}, so registering one
+// is a patch of its own key and two hosts at the desk never overwrite each
+// other; taking one off writes null there. A document written before that
+// holds a list, [{card, name, team}], and still reads.
+export type KDPlayers = Record<string, KDSeat | null> | KDPlayer[];
+
 export interface KDState extends ODState {
-  players?: KDPlayer[];
+  players?: KDPlayers;
 }
 
 export interface KDRow {
@@ -58,12 +70,54 @@ export function toursStarted(state: KDState, tourLengths: number[]): boolean[] {
   });
 }
 
-// players is the document's player list, cleaned: cards are positive whole
-// numbers, names trimmed.
-export function players(state: KDState): KDPlayer[] {
-  return (Array.isArray(state.players) ? state.players : [])
-    .map((p) => ({card: Math.trunc(Number(p?.card) || 0), name: String(p?.name || "").trim(), team: String(p?.team || "").trim()}))
-    .filter((p) => p.card > 0);
+// maxCard is the highest card n tables tell apart: card c and card c+n² follow
+// the same route, so a card past n² would repeat one already dealt.
+export function maxCard(n: number): number {
+  return n * n;
+}
+
+// isJoker says card c never leaves its table: its route moves ⌊(c−1)/n⌋
+// tables a tour, which is no move when that is a multiple of n.
+export function isJoker(card: number, n: number): boolean {
+  return card >= 1 && n >= 1 && Math.floor((card - 1) / n) % n === 0;
+}
+
+const CARD_KEY = /^[1-9][0-9]*$/;
+
+// players is the document's player list in card order, cleaned the way the
+// server's games.KDPlayers cleans it: an entry whose card is not a whole
+// number from 1 (or past maxCard(n), when n is given), a second holder of a
+// card and a nameless entry are left out.
+export function players(state: KDState, n = 0): KDPlayer[] {
+  const raw = state.players;
+  const entries: Array<{card: unknown; seat: unknown}> = [];
+  if (Array.isArray(raw)) {
+    for (const p of raw) entries.push({card: p?.card, seat: p});
+  } else if (raw && typeof raw === "object") {
+    for (const [key, seat] of Object.entries(raw)) entries.push({card: CARD_KEY.test(key) ? Number(key) : NaN, seat});
+  }
+  const seen = new Set<number>();
+  const out: KDPlayer[] = [];
+  for (const {card, seat} of entries) {
+    if (!seat || typeof seat !== "object") continue;
+    if (typeof card !== "number" || !Number.isInteger(card) || card < 1) continue;
+    if (n > 0 && card > maxCard(n)) continue;
+    const s = seat as {name?: unknown; team?: unknown};
+    const name = typeof s.name === "string" ? s.name.trim() : "";
+    if (!name || seen.has(card)) continue;
+    seen.add(card);
+    out.push({card, name, team: typeof s.team === "string" ? s.team.trim() : ""});
+  }
+  return out.sort((a, b) => a.card - b.card);
+}
+
+// keyedPlayers is the list as the keyed document holds it, for a document
+// still in the old list shape: the page writes it once, whole, before it
+// patches a single card.
+export function keyedPlayers(list: readonly KDPlayer[]): Record<string, KDSeat> {
+  const out: Record<string, KDSeat> = {};
+  for (const p of list) out[String(p.card)] = {name: p.name, team: p.team || ""};
+  return out;
 }
 
 // nextFreeCard is the lowest card number nobody holds — what the next player
@@ -93,7 +147,7 @@ export function standings(state: KDState, tourLengths: number[], n: number): KDR
   const byTable = new Map<number, number[]>();
   for (const [number, row] of index) byTable.set(number, tourSumsForTeam(stats, row, tourLengths));
   const started = stats.some((stat) => stat.completed);
-  const rows: KDRow[] = players(state).map((player) => {
+  const rows: KDRow[] = players(state, n).map((player) => {
     const tables = tourLengths.map((_, t) => kdTable(player.card, t + 1, n));
     const tours = tables.map((table, t) => byTable.get(table)?.[t] || 0);
     const best = new Array<number>(TIEBREAKS).fill(0);

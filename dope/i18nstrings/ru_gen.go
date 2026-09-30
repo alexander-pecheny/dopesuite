@@ -664,6 +664,9 @@ var RU = Strings{
 			KdTablesPrime: func(n string) string {
 				return fmt.Sprintf("Число столов Кубка Дружбы должно быть простым (7, 11, 13, 17, 19, 23, 29…), а не %s", n)
 			},
+			KdToursTables: func(tours string, tables string) string {
+				return fmt.Sprintf("Туров %s, а столов %s. Столов должно быть не меньше, чем туров, иначе двое игроков встретятся за одним столом дважды", tours, tables)
+			},
 			MultiFromScheme: func() string {
 				return "Мультиигры описываются списком мини-игр, а не схемой"
 			},
@@ -737,7 +740,21 @@ var RU = Strings{
 			Label: func() string { return "Хамса" },
 		},
 		Kd: GamesKdStrings{
-			Label: func() string { return "Кубок Дружбы" },
+			CardDuplicate: func(card string) string { return fmt.Sprintf("Лист № %s записан дважды.", card) },
+			CardInvalid: func(card string) string {
+				return fmt.Sprintf("Номер листа должен быть целым числом от 1, а не «%s».", card)
+			},
+			CardTaken: func(card string, name string) string {
+				return fmt.Sprintf("Лист № %s уже выдан: %s. Выберите другой номер.", card, name)
+			},
+			CardTooHigh: func(n string, max string, card string) string {
+				return fmt.Sprintf("Столов %s, поэтому листов не больше %s. Листа № %s нет.", n, max, card)
+			},
+			Label:     func() string { return "Кубок Дружбы" },
+			Malformed: func() string { return "Список игроков записан неверно." },
+			NameMissing: func(card string) string {
+				return fmt.Sprintf("У листа № %s не указано имя игрока.", card)
+			},
 		},
 		Ksi: GamesKsiStrings{
 			Label: func() string { return "КСИ" },
@@ -1501,8 +1518,11 @@ var RU = Strings{
 			AnswerSet: func(question string, team string) string {
 				return fmt.Sprintf("вопрос %s: засчитана %s", question, team)
 			},
-			EntriesChanged: func() string { return "ответы изменены" },
-			EntryChanged:   func(question string) string { return fmt.Sprintf("вопрос %s изменён", question) },
+			EntriesChanged:   func() string { return "ответы изменены" },
+			EntryChanged:     func(question string) string { return fmt.Sprintf("вопрос %s изменён", question) },
+			KdPlayerAdded:    func(card string, name string) string { return fmt.Sprintf("лист № %s: %s", card, name) },
+			KdPlayerRemoved:  func(card string) string { return fmt.Sprintf("лист № %s освобождён", card) },
+			KdPlayersChanged: func() string { return "список игроков изменён" },
 			Readiness: func(question string, value string) string {
 				return fmt.Sprintf("вопрос %s: готовность → %s", question, value)
 			},
@@ -1732,6 +1752,7 @@ var RU = Strings{
 			Place:      func() string { return "Место" },
 			PlaceShort: func() string { return "М" },
 			Team:       func() string { return "Команда" },
+			Total:      func() string { return "Σ" },
 		},
 		Invert: OdInvertStrings{
 			Label: func() string { return "Инвертировать" },
@@ -1751,7 +1772,10 @@ var RU = Strings{
 			CardTaken: func(n string, name string) string {
 				return fmt.Sprintf("Лист № %s уже выдан: %s.", n, name)
 			},
-			CardTitle:       func(n string) string { return fmt.Sprintf("Маршрутный лист № %s", n) },
+			CardTitle: func(n string) string { return fmt.Sprintf("Маршрутный лист № %s", n) },
+			CardTooHigh: func(n string, max string) string {
+				return fmt.Sprintf("Столов %s, поэтому листов не больше %s.", n, max)
+			},
 			CardTour:        func() string { return "Тур" },
 			Empty:           func() string { return "Игроков пока нет." },
 			NamePlaceholder: func() string { return "Фамилия Имя" },

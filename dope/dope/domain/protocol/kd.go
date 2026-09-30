@@ -45,6 +45,19 @@ func (kd) Seats(stateJSON json.RawMessage) []Seat {
 	return seats
 }
 
+// UsesFestNumbers is false: the tables seat under negative numbers and no
+// fest team is looked up by number, so the numbering guard does not apply to
+// a friendship cup (ADR-0026).
+func (kd) UsesFestNumbers() bool { return false }
+
+// ValidateEdit refuses an edit that leaves the players wrong: a card that is
+// not a whole number from 1, a card past what the tables tell apart, a card
+// passed to somebody else while its holder is still registered, a player
+// with no name.
+func (kd) ValidateEdit(prev, next []byte) error {
+	return games.ValidateKDPlayersEdit(prev, next)
+}
+
 func (kd) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error) {
 	return od{}.Score(cfg, stateJSON)
 }

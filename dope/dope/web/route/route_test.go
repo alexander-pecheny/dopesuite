@@ -34,7 +34,7 @@ create table sessions(id integer primary key, user_id integer, token_hash text u
 create table fests(id integer primary key, slug text unique, is_public integer default 0, created_by integer);
 create table fest_organizers(fest_id integer, user_id integer, role text, added_at text);
 create table fest_game_hosts(fest_id integer, game_id integer, user_id integer);
-create table games(id integer primary key, fest_id integer, slug text);
+create table games(id integer primary key, fest_id integer, slug text, game_type text default 'od');
 create table fest_teams(id integer primary key, fest_id integer, name text, city text default '', position real, number integer, deleted integer default 0);
 create table game_participants(game_id integer, participant_id integer, position integer, number integer default 0);
 insert into users(id, username) values (1,'creator'),(2,'admin'),(3,'host'),(4,'outsider');

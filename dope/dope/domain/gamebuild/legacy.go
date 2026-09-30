@@ -55,6 +55,11 @@ func createKDGameTx(ctx context.Context, tx *sql.Tx, festID int64, label string,
 	if !games.IsPrime(tables) {
 		return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.KdTablesPrime(strconv.Itoa(tables)))
 	}
+	// Two cards share a table at most once only while the tours are no more
+	// than the tables: in tour n+1 every card is back at its first table.
+	if tours > tables {
+		return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.KdToursTables(strconv.Itoa(tours), strconv.Itoa(tables)))
+	}
 	identity, err := nextGameIdentityTx(ctx, tx, festID, games.KD, titleOr(label, dopestrings.Default.Gamebuild.Titles.Kd()))
 	if err != nil {
 		return 0, err
