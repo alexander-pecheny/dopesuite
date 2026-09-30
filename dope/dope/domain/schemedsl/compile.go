@@ -613,11 +613,68 @@ func (c *compiler) blockEntrants(index int, blk Section, groups, size int) ([][]
 	if supply != total {
 		return nil, errAt(blk.Line, "%s", dopestrings.Default.Scheme.Entrants.SupplyMismatch(strconv.Itoa(supply), strconv.Itoa(total)))
 	}
+	if _, written := blk.Values["opening"]; written {
+		return c.dealOpening(blk, groups, size)
+	}
 	if incoming, _ := blockReseedSpec(blk); incoming {
 		return c.dealReseed(index, blk, groups, size)
 	}
 	return c.dealDeterministic(blk, groups, size)
 }
+
+// dealOpening seats a double elimination's opening round from the table the
+// regulations print, rather than from a re-rank of the previous block:
+// `opening: [A1 A2 D1 D2, B1 B2 E1 E2, …]` names each opening bout's seats as
+// the previous block's group (A is its first) and place, and the round takes
+// them in that order. Octobearfest's individual SI (appendix 3) opens with
+// WA = WA1-WA2-WD1-WD2: two groups' first and second places together, which
+// no ranking of all 24 reproduces. Every proceeding place is named once. A
+// `reseed: true` beside it still re-ranks between the later rounds.
+func (c *compiler) dealOpening(blk Section, groups, size int) ([][]store.SchemeSlot, error) {
+	items, _, err := blk.List("opening")
+	if err != nil {
+		return nil, err
+	}
+	line := blk.Values["opening"].Line
+	prev := c.prev
+	var flat []store.SchemeSlot
+	seen := map[string]bool{}
+	for _, item := range items {
+		for _, token := range strings.Fields(item) {
+			group, place, ok := openingSeat(token)
+			if !ok || group >= len(prev.Groups) || place > prev.Proceeding {
+				return nil, errAt(line, "%s", dopestrings.Default.Scheme.Entrants.OpeningSeat(token, openingLetter(len(prev.Groups)-1), strconv.Itoa(prev.Proceeding)))
+			}
+			if seen[token] {
+				return nil, errAt(line, "%s", dopestrings.Default.Scheme.Entrants.OpeningTwice(token))
+			}
+			seen[token] = true
+			flat = append(flat, prev.Groups[group].Place(place))
+		}
+	}
+	if len(flat) != groups*size {
+		return nil, errAt(line, "%s", dopestrings.Default.Scheme.Entrants.OpeningCount(strconv.Itoa(len(flat)), strconv.Itoa(groups*size)))
+	}
+	out := make([][]store.SchemeSlot, groups)
+	for g := range out {
+		out[g] = flat[g*size : (g+1)*size]
+	}
+	return out, nil
+}
+
+// openingSeat reads «A1»: group A (0-based index 0), place 1.
+func openingSeat(token string) (group, place int, ok bool) {
+	if len(token) < 2 || token[0] < 'A' || token[0] > 'Z' {
+		return 0, 0, false
+	}
+	place, err := strconv.Atoi(token[1:])
+	if err != nil || place < 1 {
+		return 0, 0, false
+	}
+	return int(token[0] - 'A'), place, true
+}
+
+func openingLetter(group int) string { return string(rune('A' + group)) }
 
 // blockReseedSpec parses the reseed key: `true` re-ranks the incoming Edge, a
 // round code re-ranks at that boundary inside the block (se only), and `every`

@@ -26,7 +26,7 @@ type pod struct{}
 func (pod) Code() string { return "de" }
 func (pod) Word() string { return "double_elimination" }
 func (pod) Keys() []Key {
-	return []Key{{Name: "groups"}, {Name: "group_size"}, {Name: "participants"}, {Name: "match_size"}, {Name: "winning_places"}, {Name: "lower_entrants"}}
+	return []Key{{Name: "groups"}, {Name: "group_size"}, {Name: "participants"}, {Name: "match_size"}, {Name: "winning_places"}, {Name: "lower_entrants"}, {Name: "opening"}}
 }
 
 // Expand is an elimination where two Losses end a tournament —
@@ -82,6 +82,11 @@ func (pod) Expand(b Block) (Outputs, error) {
 	// template arrives pre-balanced, and slicing it in order is the point.
 	opening := snakeChunks
 	if reseeded, _ := b.Reseed(); !b.First() && !reseeded {
+		opening = straightChunks
+	}
+	// A table the scheme wrote out (`opening:`) is already the round's bouts,
+	// in order: slice it, do not deal it again.
+	if _, written := b.Str("opening"); written {
 		opening = straightChunks
 	}
 	// lower_entrants: the last so many of each bracket's entrants start one

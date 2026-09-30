@@ -91,6 +91,12 @@ deal_groups = 'в deal нужно {{.need}} групп через запятую
 deal_size = 'в deal у группы {{.group}} нужно {{.need}} мест, а указано {{.have}}'
 # deal: every rank from 1 to the block's entrant count, once each.
 deal_ranks = 'в deal каждое место от 1 до {{.total}} должно встретиться ровно один раз: {{.rank}}'
+# opening: a seat that is not a group letter and a place the previous block sends on.
+opening_seat = 'opening: {{.seat}} — место записывается буквой группы и местом в ней, от A1 до {{.last}}{{.places}}'
+# opening: a seat written twice.
+opening_twice = 'opening: {{.seat}} записан дважды'
+# opening: the table seats a different number than the round needs.
+opening_count = 'opening: в таблице {{.have}} мест, а в первом круге их {{.need}}'
 
 [reseed]
 # A stats_from block reference past the last stage.

@@ -2132,6 +2132,13 @@ var RU = Strings{
 			DealSize: func(group string, need string, have string) string {
 				return fmt.Sprintf("в deal у группы %s нужно %s мест, а указано %s", group, need, have)
 			},
+			OpeningCount: func(have string, need string) string {
+				return fmt.Sprintf("opening: в таблице %s мест, а в первом круге их %s", have, need)
+			},
+			OpeningSeat: func(seat string, last string, places string) string {
+				return fmt.Sprintf("opening: %s — место записывается буквой группы и местом в ней, от A1 до %s%s", seat, last, places)
+			},
+			OpeningTwice: func(seat string) string { return fmt.Sprintf("opening: %s записан дважды", seat) },
 			ProceedingMissing: func() string {
 				return "предыдущему блоку нужен proceeding_participants, чтобы продолжить схему"
 			},

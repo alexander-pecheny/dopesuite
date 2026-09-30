@@ -1523,6 +1523,9 @@ export type Strings = {
       dealGroups: (need: string, have: string) => string;
       dealRanks: (total: string, rank: string) => string;
       dealSize: (group: string, need: string, have: string) => string;
+      openingCount: (have: string, need: string) => string;
+      openingSeat: (seat: string, last: string, places: string) => string;
+      openingTwice: (seat: string) => string;
       proceedingMissing: () => string;
       supplyMismatch: (have: string, need: string) => string;
     };
