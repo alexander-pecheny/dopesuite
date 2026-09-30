@@ -2123,6 +2123,15 @@ var RU = Strings{
 			CountMismatch: func(need string, have string) string {
 				return fmt.Sprintf("схеме нужно %s участников, а посеяно %s", need, have)
 			},
+			DealGroups: func(need string, have string) string {
+				return fmt.Sprintf("в deal нужно %s групп через запятую, а указано %s", need, have)
+			},
+			DealRanks: func(total string, rank string) string {
+				return fmt.Sprintf("в deal каждое место от 1 до %s должно встретиться ровно один раз: %s", total, rank)
+			},
+			DealSize: func(group string, need string, have string) string {
+				return fmt.Sprintf("в deal у группы %s нужно %s мест, а указано %s", group, need, have)
+			},
 			ProceedingMissing: func() string {
 				return "предыдущему блоку нужен proceeding_participants, чтобы продолжить схему"
 			},

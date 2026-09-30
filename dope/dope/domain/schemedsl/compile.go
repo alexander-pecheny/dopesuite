@@ -603,7 +603,7 @@ func (c *compiler) blockEntrants(index int, blk Section, groups, size int) ([][]
 		if len(c.in.Entrants) > 0 && len(c.in.Entrants) != total {
 			return nil, errAt(blk.Line, "%s", dopestrings.Default.Scheme.Entrants.CountMismatch(strconv.Itoa(total), strconv.Itoa(len(c.in.Entrants))))
 		}
-		return c.dealSeeds(groups, size), nil
+		return c.dealSeeds(blk, groups, size)
 	}
 	prev := c.prev
 	if prev.Proceeding <= 0 {
@@ -658,15 +658,53 @@ func (c *compiler) reseedSortRules(blk Section) ([]store.SchemeSortRule, error) 
 	return append(rules, store.SchemeSortRule{Metric: "draw", Dir: "asc"}), nil
 }
 
-func (c *compiler) dealSeeds(groups, size int) [][]store.SchemeSlot {
-	dealt := snakeDeal(groups, size)
+func (c *compiler) dealSeeds(blk Section, groups, size int) ([][]store.SchemeSlot, error) {
+	dealt, err := dealOf(blk, groups, size)
+	if err != nil {
+		return nil, err
+	}
 	out := make([][]store.SchemeSlot, groups)
 	for g, ranks := range dealt {
 		for _, rank := range ranks {
 			out[g] = append(out[g], c.seedSlot(rank))
 		}
 	}
-	return out
+	return out, nil
+}
+
+// dealOf is which ranks each group takes: the snake, or the table a block
+// writes out in `deal:` — one item per group, its ranks separated by spaces,
+// every rank once. Octobearfest's individual SI regulations deal the written
+// qualifier's places 1-24 and 31-54 by a snake that starts again after a band
+// drawn by lot, and print the table; no rule reproduces it, so the scheme
+// copies it.
+func dealOf(blk Section, groups, size int) ([][]int, error) {
+	items, ok, err := blk.List("deal")
+	if err != nil || !ok {
+		return snakeDeal(groups, size), err
+	}
+	line := blk.Values["deal"].Line
+	if len(items) != groups {
+		return nil, errAt(line, "%s", dopestrings.Default.Scheme.Entrants.DealGroups(strconv.Itoa(groups), strconv.Itoa(len(items))))
+	}
+	total := groups * size
+	seen := make(map[int]bool, total)
+	out := make([][]int, groups)
+	for g, item := range items {
+		fields := strings.Fields(item)
+		if len(fields) != size {
+			return nil, errAt(line, "%s", dopestrings.Default.Scheme.Entrants.DealSize(strconv.Itoa(g+1), strconv.Itoa(size), strconv.Itoa(len(fields))))
+		}
+		for _, field := range fields {
+			rank, err := strconv.Atoi(field)
+			if err != nil || rank < 1 || rank > total || seen[rank] {
+				return nil, errAt(line, "%s", dopestrings.Default.Scheme.Entrants.DealRanks(strconv.Itoa(total), field))
+			}
+			seen[rank] = true
+			out[g] = append(out[g], rank)
+		}
+	}
+	return out, nil
 }
 
 // reseedStageBanded materialises one reseed Edge: teams is who is re-ranked
@@ -761,8 +799,12 @@ func (c *compiler) dealReseed(index int, blk Section, groups, size int) ([][]sto
 	if err != nil {
 		return nil, err
 	}
+	dealt, err := dealOf(blk, groups, size)
+	if err != nil {
+		return nil, err
+	}
 	out := make([][]store.SchemeSlot, groups)
-	for g, ranks := range snakeDeal(groups, size) {
+	for g, ranks := range dealt {
 		for _, rank := range ranks {
 			out[g] = append(out[g], structure.ReseedRank(code, rank))
 		}

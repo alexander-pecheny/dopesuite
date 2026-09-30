@@ -85,6 +85,12 @@ count_mismatch = 'схеме нужно {{.need}} участников, а по�
 proceeding_missing = "предыдущему блоку нужен proceeding_participants, чтобы продолжить схему"
 # The previous block supplies a different headcount than the block needs.
 supply_mismatch = 'из предыдущего блока выходят {{.have}} участников, а блоку нужно {{.need}}'
+# deal: lists a group per item; the count of items is not the block's groups.
+deal_groups = 'в deal нужно {{.need}} групп через запятую, а указано {{.have}}'
+# deal: one group's item has the wrong number of ranks.
+deal_size = 'в deal у группы {{.group}} нужно {{.need}} мест, а указано {{.have}}'
+# deal: every rank from 1 to the block's entrant count, once each.
+deal_ranks = 'в deal каждое место от 1 до {{.total}} должно встретиться ровно один раз: {{.rank}}'
 
 [reseed]
 # A stats_from block reference past the last stage.

@@ -103,8 +103,9 @@ does take.
 in this fest (unknown slug = compile error). Every source yields, per team,
 either an exact rank or a basket; baskets resolve to ranks by the deterministic
 Жребий lot. Dealing is always the snake: bands of G ranks, odd bands reversed
-(the reference generate_kinsbf.py's PF_GROUPS pattern) — there is no separate
-dealing key. The same snake deals reseed ranks into a block's groups.
+(the reference generate_kinsbf.py's PF_GROUPS pattern). The same snake deals
+reseed ranks into a block's groups. A roundrobin block that must follow a
+printed table instead writes it out in `deal:` (below).
 
 - `seed: {game}` — that game's standings as metrics, ordered by `[init]`
   `sorting` (roster rating available as a metric).
@@ -157,6 +158,7 @@ Kind does not read is a compile error, so nothing is dropped on the floor:
 | `reseed` | opt-in re-rank: `true` for the block's incoming Edge (on a DE, between every round too), a round name (`r3`, `semifinal`) for a boundary inside an se block — that round then seats from the re-rank of every place the previous round sent on, bracket-ordered — or `every` for both, the incoming Edge and every se round after it (ТПШ) |
 | `stats_from` | with a reseed only: which blocks' bouts the re-rank metrics are summed over (`stats_from: [s1, s2]`); default is the previous block, or the previous round for a boundary reseed. Naming the block itself at a boundary sums its own rounds so far (СтудЧР's ЭК ranked its пересев перед 1/4 by сумма мест over 1/16 and 1/8 together). Eligibility is independent of the stats scope: the previous block's proceeding places, or every place the previous round sent on |
 | `proceeding_participants` | block-grain Edge: how many advance per Group (rr, de) or overall (flat); an se sends its last round's winners on |
+| `deal` | roundrobin only: which ranks each group takes, when the regulations print a table no snake makes — one item per group, its ranks separated by spaces, every rank of the block once. Своячок's Приложение 1: `deal: [1 12 13 24 28 31 42 43 54, 2 11 14 23 25 32 41 44 53, …]`. Ranks are the seed's on the first block and the reseed's after `reseed: true` |
 | `letters` | `letters: false` keeps the block's бои out of the буква deal — the письменный отбор is one sitting for everyone and is not called a бой |
 | `bout.<metric>`, `standings.<metric>` | scoring rules (ADR-0008): an expression per бой summed into the standings, or one over the sums, defining a metric the block may sort by |
 | flat: `participants` | how many the one бой seats (defaults to the game's entrants) |

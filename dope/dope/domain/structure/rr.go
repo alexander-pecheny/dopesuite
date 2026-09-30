@@ -25,7 +25,7 @@ type roundRobin struct{}
 func (roundRobin) Code() string { return "rr" }
 func (roundRobin) Word() string { return "roundrobin" }
 func (roundRobin) Keys() []Key {
-	return []Key{{Name: "groups"}, {Name: "group_size"}, {Name: "match_size"}, {Name: "rounds"}, {Name: "points", Cascade: true}, {Name: "metric"}, {Name: "slug"}}
+	return []Key{{Name: "groups"}, {Name: "group_size"}, {Name: "match_size"}, {Name: "rounds"}, {Name: "points", Cascade: true}, {Name: "metric"}, {Name: "slug"}, {Name: "deal"}}
 }
 
 // canonOrder is the round-robin comparator chain when a scheme names none:

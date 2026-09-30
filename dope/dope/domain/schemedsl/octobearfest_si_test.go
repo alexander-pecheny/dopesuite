@@ -1,7 +1,9 @@
 package schemedsl
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"dope/dope/storage/store"
@@ -113,5 +115,52 @@ func TestDELowerEntrantsRefusesTheWholeField(t *testing.T) {
 	}
 	if _, err := Compile(doc, in); err == nil {
 		t.Fatal("lower_entrants: 8 из 8 скомпилировался; want ошибку")
+	}
+}
+
+// Приложение 1 deals the письменный отбор's places into the groups by a snake
+// that starts again after places 25–30, which are drawn by lot. No rule makes
+// that table, so the scheme writes it out in deal:, and the group stage seats
+// the reseed's ranks exactly as written.
+func TestOctobearfestSIGroupsFollowAppendix1(t *testing.T) {
+	appendix1 := "deal: [1 12 13 24 28 31 42 43 54, 2 11 14 23 25 32 41 44 53, 3 10 15 22 26 33 40 45 52, " +
+		"4 9 16 21 30 34 39 46 51, 5 8 17 20 27 35 38 47 50, 6 7 18 19 29 36 37 48 49]\n"
+	src := strings.Replace(octobearfestSISrc, "slug: group-stage\n", "slug: group-stage\n"+appendix1, 1)
+	in := Input{Slug: "si", GameType: "si"}
+	for i := 0; i < 61; i++ {
+		in.Entrants = append(in.Entrants, store.SchemeSlot{Seed: &store.SchemeSeedRef{Basket: 1, Number: i + 1}, Label: fmt.Sprint("P", i+1)})
+	}
+	scheme := compileSrc(t, src, in)
+	var groupA []int
+	for _, stage := range scheme.Stages {
+		if stage.Code != "s2-g1" {
+			continue
+		}
+		var cfg struct {
+			Entrants []store.SchemeSlot `json:"entrants"`
+		}
+		if err := json.Unmarshal(stage.Config, &cfg); err != nil {
+			t.Fatal(err)
+		}
+		for _, slot := range cfg.Entrants {
+			groupA = append(groupA, slot.Reseed.Rank)
+		}
+	}
+	if fmt.Sprint(groupA) != "[1 12 13 24 28 31 42 43 54]" {
+		t.Fatalf("группа A = %v, want Приложение 1's 1 12 13 24 28 31 42 43 54", groupA)
+	}
+
+	for _, bad := range []string{
+		"deal: [1 12 13 24 28 31 42 43 54]\n",                         // one group of six
+		"deal: [1 12 13, 2 11 14, 3 10 15, 4 9 16, 5 8 17, 6 7 18]\n", // groups of three
+		strings.Replace(appendix1, "54,", "53,", 1),                   // 53 twice, 54 never
+	} {
+		doc, err := Parse(strings.Replace(octobearfestSISrc, "slug: group-stage\n", "slug: group-stage\n"+bad, 1))
+		if err == nil {
+			_, err = Compile(doc, in)
+		}
+		if err == nil {
+			t.Errorf("deal %q compiled", strings.TrimSpace(bad))
+		}
 	}
 }

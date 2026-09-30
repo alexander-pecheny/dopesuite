@@ -1520,6 +1520,9 @@ export type Strings = {
   scheme: {
     entrants: {
       countMismatch: (need: string, have: string) => string;
+      dealGroups: (need: string, have: string) => string;
+      dealRanks: (total: string, rank: string) => string;
+      dealSize: (group: string, need: string, have: string) => string;
       proceedingMissing: () => string;
       supplyMismatch: (have: string, need: string) => string;
     };

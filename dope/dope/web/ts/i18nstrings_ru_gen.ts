@@ -1542,6 +1542,9 @@ shootout: true
   scheme: {
     entrants: {
       countMismatch: (need: string, have: string) => `схеме нужно ${need} участников, а посеяно ${have}`,
+      dealGroups: (need: string, have: string) => `в deal нужно ${need} групп через запятую, а указано ${have}`,
+      dealRanks: (total: string, rank: string) => `в deal каждое место от 1 до ${total} должно встретиться ровно один раз: ${rank}`,
+      dealSize: (group: string, need: string, have: string) => `в deal у группы ${group} нужно ${need} мест, а указано ${have}`,
       proceedingMissing: () => "предыдущему блоку нужен proceeding_participants, чтобы продолжить схему",
       supplyMismatch: (have: string, need: string) => `из предыдущего блока выходят ${have} участников, а блоку нужно ${need}`,
     },
