@@ -62,6 +62,25 @@ test("equal on the sum and every tie-break, players share a place", () => {
   assert.deepEqual(kd.standings(fresh, [1], 2).map((r) => r.place), ["", ""]);
 });
 
+// The server's games.KDPlayers reads the same entries the same way.
+test("players reads both shapes and leaves out what is no player", () => {
+  const keyed = {players: {"5": {name: " Boris ", team: "B"}, "1": {name: "Anna"}, "2": null, "07": {name: "Zero-led"}, "x": {name: "X"}, "10": {name: "Past"}, "3": {name: ""}}};
+  assert.deepEqual(kd.players(keyed, 3), [{card: 1, name: "Anna", team: ""}, {card: 5, name: "Boris", team: "B"}]);
+  const list = {players: [{card: "2", name: "String"}, {card: 0, name: "Zero"}, {card: 4, name: "Good"}, {card: 4, name: "Twice"}, {card: 1.5, name: "Half"}, {card: 1, name: "Joker"}]};
+  assert.deepEqual(kd.players(list, 3).map((p) => p.name), ["Joker", "Good"]);
+  assert.deepEqual(kd.keyedPlayers(kd.players(list, 3)), {"1": {name: "Joker", team: ""}, "4": {name: "Good", team: ""}});
+});
+
+test("isJoker is every card that stays at one table", () => {
+  const n = 3;
+  for (let card = 1; card <= 3 * n * n; card++) {
+    let stays = true;
+    for (let t = 2; t <= n; t++) stays &&= kd.kdTable(card, t, n) === kd.kdTable(card, 1, n);
+    assert.equal(kd.isJoker(card, n), stays, `card ${card}`);
+  }
+  assert.equal(kd.maxCard(11), 121);
+});
+
 test("nextFreeCard and isPrime", () => {
   assert.equal(kd.nextFreeCard([{card: 1, name: ""}, {card: 2, name: ""}, {card: 4, name: ""}]), 3);
   assert.equal(kd.nextFreeCard([]), 1);

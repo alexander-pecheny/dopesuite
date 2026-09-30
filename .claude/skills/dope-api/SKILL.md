@@ -73,9 +73,10 @@ in the game has a number.
 | `POST …/scheme-import` A | a pasted JSON scheme; **replaces every game of the fest** |
 
 `game_type` is `od` (`od_tours`, `od_questions`), `kd` — Кубок Дружбы
-(`od_tours`, `od_questions`, `kd_tables`, a prime; players go into the state's
-`players: [{card, name, team}]` by PATCH, and `GET …/results` answers the
-personal standings), `ksi` (`ksi_themes`),
+(`od_tours`, `od_questions`, `kd_tables`, a prime no smaller than the tours;
+register a player with one PATCH op per card, path `["players", "<card>"]`,
+value `{name, team}`, and free a card with value `null`; cards run 1…tables²;
+`GET …/results` answers the personal standings), `ksi` (`ksi_themes`),
 `ksi_stickers` (`ksi_themes`, `stickers: {neutral|x2|nowrong|emptywrong: {color,
 max}}`), `multi` (`multi_games`, `multi_sorting`, in the creation form's
 grammar), or `brain`, `si`, `troika`, `hamsa`, `ek`, `es` with `dsl` in the scheme

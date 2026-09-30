@@ -22,6 +22,8 @@ table = 'Стол {{.n}}'
 [create]
 # A friendship cup's table count that is not a prime; the route cards need one.
 kd_tables_prime = 'Число столов Кубка Дружбы должно быть простым (7, 11, 13, 17, 19, 23, 29…), а не {{.n}}'
+# More tours than tables: two players would share a table twice.
+kd_tours_tables = 'Туров {{.tours}}, а столов {{.tables}}. Столов должно быть не меньше, чем туров, иначе двое игроков встретятся за одним столом дважды'
 # Creating Мультиигры from a scheme DSL: they have no scheme shape.
 multi_from_scheme = "Мультиигры описываются списком мини-игр, а не схемой"
 # Creating ЭК with neither a pasted JSON scheme nor a DSL.

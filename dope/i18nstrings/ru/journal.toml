@@ -110,6 +110,11 @@ entries_changed = "ответы изменены"
 readiness = 'вопрос {{.question}}: готовность → {{.value}}'
 # A shootout round edit.
 shootout = "перестрелка"
+# A friendship cup's registration: a player given a card, a card freed, and
+# the whole list written at once.
+kd_player_added = 'лист № {{.card}}: {{.name}}'
+kd_player_removed = 'лист № {{.card}} освобождён'
+kd_players_changed = "список игроков изменён"
 # A team identified by its printed number, name known.
 team_named = '«{{.name}}» (№{{.n}})'
 # A team identified by its printed number, name unknown.

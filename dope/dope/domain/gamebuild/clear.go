@@ -58,11 +58,18 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 	}
 	// A friendship cup keeps its players through a clear; they live in the
 	// document the deletes below take away.
-	var kept games.KDState
+	// A load or parse that fails stops the clear: going on would drop them.
+	var keptPlayers json.RawMessage
 	if gameType == games.KD {
-		if doc, err := store.LoadGameDoc(ctx, tx, festID, gameID); err == nil {
-			_ = json.Unmarshal([]byte(doc.State), &kept)
+		doc, err := store.LoadGameDoc(ctx, tx, festID, gameID)
+		if err != nil {
+			return "", fmt.Errorf("load friendship cup players: %w", err)
 		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(doc.State), &fields); err != nil {
+			return "", fmt.Errorf("read friendship cup players: %w", err)
+		}
+		keptPlayers = fields["players"]
 	}
 	// matches/stages cascade to their slots, results and standings (FKs are on).
 	for _, q := range []string{
@@ -114,11 +121,15 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 		tables := games.KDTables(schemeJSON)
 		var state []byte
 		newScheme, state = games.KDEmptyGameJSON(meta.Slug, meta.Title, tourComp, tables, kdTableName)
-		if len(kept.Players) > 0 {
-			var doc map[string]any
-			_ = json.Unmarshal(state, &doc)
-			doc["players"] = kept.Players
-			state, _ = json.Marshal(doc)
+		if len(keptPlayers) > 0 {
+			var doc map[string]json.RawMessage
+			if err := json.Unmarshal(state, &doc); err != nil {
+				return "", err
+			}
+			doc["players"] = keptPlayers
+			if state, err = json.Marshal(doc); err != nil {
+				return "", err
+			}
 		}
 		if err := insertFlatMatchTx(ctx, tx, festID, gameID, title, string(state), now); err != nil {
 			return "", err

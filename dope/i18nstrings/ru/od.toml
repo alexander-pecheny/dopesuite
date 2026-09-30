@@ -35,6 +35,8 @@ team = "Команда"
 place = "Место"
 # The screen board's short place column header.
 place_short = "М"
+# The total column's header: the results, the screen and the personal standings.
+total = "Σ"
 
 [detailed]
 # The tour column's label in the detailed table: Т1, Т2, …
@@ -120,12 +122,14 @@ card_name_line = "Фамилия, имя: ______________________"
 name_required = "Нужны имя и фамилия игрока."
 card_taken = 'Лист № {{.n}} уже выдан: {{.name}}.'
 card_invalid = "Номер листа — целое число от 1."
+# A card past what the tables tell apart: with n tables there are n² routes.
+card_too_high = 'Столов {{.n}}, поэтому листов не больше {{.max}}.'
 # The route cards, one per player, printed from the players tab.
 card_title = 'Маршрутный лист № {{.n}}'
 card_tour = "Тур"
 card_table = "Стол"
 card_points = "Баллы"
-# A card that never leaves its table (cards 1…n).
+# A card that never leaves its table (kd-protocol isJoker); .n is the table.
 card_joker = 'Джокер: весь турнир за столом {{.n}}. Собирает команду, назначает капитана, следит за бланками.'
 # How many tables play, above the players table.
 tables_note = 'Столов: {{.n}}. Листы 1–{{.n}} — джокеры.'

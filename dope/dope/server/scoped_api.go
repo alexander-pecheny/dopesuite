@@ -126,6 +126,9 @@ func (s *server) replaceGameState(reqCtx context.Context, scope festScope, raw [
 		if err := validateImmutableRatingRosterState(doc.GameType, []byte(doc.State), raw); err != nil {
 			return err
 		}
+		if err := protocol.ValidateEdit(doc.GameType, []byte(doc.State), raw); err != nil {
+			return err
+		}
 		if err := flatgame.SaveDocumentTx(ctx, tx, scope.FestID, scope.GameID, doc.MatchID, string(raw), nil); err != nil {
 			return err
 		}

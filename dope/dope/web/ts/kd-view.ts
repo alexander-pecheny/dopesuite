@@ -31,8 +31,8 @@ export function buildPersonalView(ctx: KDViewContext): HTMLElement {
   const table = document.createElement("table");
   table.className = "results-table";
   const head = document.createElement("tr");
-  head.append(th(S.od.kd.place(), "results-place-head"), th(S.od.kd.player(), "results-team-head"), th(S.od.kd.team()), th("Σ", "results-num-head results-total-head"));
-  ctx.tourLengths.forEach((_, t) => head.appendChild(th(`T${t + 1}`, "results-tour-head")));
+  head.append(th(S.od.kd.place(), "results-place-head"), th(S.od.kd.player(), "results-team-head"), th(S.od.kd.team()), th(S.od.head.total(), "results-num-head results-total-head"));
+  ctx.tourLengths.forEach((_, t) => head.appendChild(th(S.od.detailed.tour(String(t + 1)), "results-tour-head")));
   for (let k = 0; k < kd.TIEBREAKS && size - k > 0; k++) {
     head.appendChild(th(S.od.kd.toursTook(String(size - k)), "results-num-head", {title: S.od.kd.toursTookHint(String(size - k))}));
   }
@@ -68,8 +68,13 @@ function emptyNote(): HTMLElement {
 export interface KDPlayersOptions extends KDViewContext {
   viewer: boolean;
   festID: string | number | null | undefined;
-  // save writes the whole player list; the page re-renders from its state.
-  save: (players: KDPlayer[]) => void;
+  // current is the document the page holds now. A click reads it, not the
+  // state the tab was drawn from, which a remote update may have replaced.
+  current: () => KDState;
+  // register writes one player under his card, unregister frees a card; each
+  // is a patch of its own, and the page re-renders from its state.
+  register: (player: KDPlayer) => void;
+  unregister: (card: number) => void;
   // refresh draws the tab again without writing, to show a refusal.
   refresh: () => void;
 }
@@ -78,6 +83,12 @@ export interface KDPlayersOptions extends KDViewContext {
 // next attempt.
 let notice = "";
 
+// showRefusal puts the server's refusal of a registration above the add row,
+// for the page to draw.
+export function showRefusal(message: string): void {
+  notice = message;
+}
+
 export function buildPlayersView(opts: KDPlayersOptions): HTMLElement {
   const panel = document.createElement("div");
   panel.className = "u-col u-gap-md";
@@ -85,7 +96,7 @@ export function buildPlayersView(opts: KDPlayersOptions): HTMLElement {
   note.className = "hint";
   note.textContent = S.od.kd.tablesNote(String(opts.tables));
   panel.appendChild(note);
-  const list = kd.players(opts.state).sort((a, b) => a.card - b.card);
+  const list = kd.players(opts.state, opts.tables);
   if (!opts.viewer) {
     if (notice) {
       const refused = document.createElement("p");
@@ -134,6 +145,11 @@ function printRow(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
   blank.addEventListener("click", () => {
     const n = Number(count.value.trim());
     if (!Number.isInteger(n) || n < 1) return;
+    if (n > kd.maxCard(opts.tables)) {
+      notice = S.od.kd.cardTooHigh(String(opts.tables), String(kd.maxCard(opts.tables)));
+      opts.refresh();
+      return;
+    }
     printCards(opts, Array.from({length: n}, (_, i) => ({card: i + 1, name: "", team: ""})));
   });
   row.append(count, blank);
@@ -141,9 +157,10 @@ function printRow(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
 }
 
 // blankCardCount is how many blank cards to offer: six a table, as last
-// year's sheet sat them, and never fewer than the highest card given out.
+// year's sheet sat them, never fewer than the highest card given out, and
+// never more than the tables tell apart.
 function blankCardCount(opts: KDPlayersOptions, list: KDPlayer[]): number {
-  return Math.max(opts.tables * 6, ...list.map((p) => p.card));
+  return Math.min(kd.maxCard(opts.tables), Math.max(opts.tables * 6, ...list.map((p) => p.card)));
 }
 
 function playersTable(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
@@ -151,7 +168,7 @@ function playersTable(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
   table.className = "match-table kd-players-table";
   const head = document.createElement("tr");
   head.append(th(S.od.kd.card()), th(S.od.kd.player(), "results-team-head"), th(S.od.kd.team()));
-  opts.tourLengths.forEach((_, t) => head.appendChild(th(`T${t + 1}`)));
+  opts.tourLengths.forEach((_, t) => head.appendChild(th(S.od.detailed.tour(String(t + 1)))));
   if (!opts.viewer) head.appendChild(th(""));
   const thead = document.createElement("thead");
   thead.appendChild(head);
@@ -170,7 +187,7 @@ function playersTable(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
       remove.appendChild(icon("trash-2"));
       remove.addEventListener("click", () => {
         notice = "";
-        opts.save(kd.players(opts.state).filter((p) => p.card !== player.card));
+        opts.unregister(player.card);
       });
       tr.appendChild(td(remove));
     }
@@ -185,6 +202,7 @@ function playersTable(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
 function addForm(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
   const form = document.createElement("form");
   form.className = "u-row u-wrap u-gap-sm u-align-center";
+  form.dataset.kdAddForm = "";
   const card = document.createElement("input");
   card.type = "text";
   card.inputMode = "numeric";
@@ -192,6 +210,10 @@ function addForm(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
   card.size = 4;
   card.value = String(kd.nextFreeCard(list));
   card.setAttribute("aria-label", S.od.kd.card());
+  card.dataset.kdField = "card";
+  // The offered card follows the list until the host types his own.
+  card.dataset.kdAuto = "";
+  card.addEventListener("input", () => delete card.dataset.kdAuto);
   const name = document.createElement("input");
   name.type = "text";
   name.className = "input";
@@ -199,12 +221,14 @@ function addForm(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
   name.placeholder = S.od.kd.namePlaceholder();
   name.setAttribute("aria-label", S.od.kd.namePlaceholder());
   name.dataset.kdName = "";
+  name.dataset.kdField = "name";
   const team = document.createElement("input");
   team.type = "text";
   team.className = "input";
   team.size = 24;
   team.placeholder = S.od.kd.teamPlaceholder();
   team.setAttribute("aria-label", S.od.kd.teamPlaceholder());
+  team.dataset.kdField = "team";
   const suggestions = document.createElement("datalist");
   suggestions.id = "kd-fest-players";
   name.setAttribute("list", suggestions.id);
@@ -231,20 +255,72 @@ function addForm(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
     event.preventDefault();
     const number = Number(card.value.trim());
     const who = name.value.trim();
-    const current = kd.players(opts.state);
-    const holder = current.find((p) => p.card === number);
+    const holder = kd.players(opts.current()).find((p) => p.card === number);
     if (!Number.isInteger(number) || number < 1) notice = S.od.kd.cardInvalid();
+    else if (number > kd.maxCard(opts.tables)) notice = S.od.kd.cardTooHigh(String(opts.tables), String(kd.maxCard(opts.tables)));
     else if (!who) notice = S.od.kd.nameRequired();
     else if (holder) notice = S.od.kd.cardTaken(String(number), holder.name);
     else notice = "";
     if (notice) {
+      // The refusal redraws the tab; what the host typed stays for him to fix.
+      const draft = captureDraft(form.ownerDocument);
       opts.refresh();
+      restoreDraft(form.ownerDocument, draft);
       return;
     }
-    opts.save([...current, {card: number, name: who, team: team.value.trim()}]);
+    opts.register({card: number, name: who, team: team.value.trim()});
     document.querySelector<HTMLInputElement>("[data-kd-name]")?.focus();
   });
   return form;
+}
+
+// PlayersDraft is what the host has typed into the add row and not sent yet,
+// and where his cursor is. A remote update redraws the players tab, and the
+// echo of every save is one, so the page carries the draft across the redraw.
+export interface PlayersDraft {
+  values: Record<string, string>;
+  auto: boolean;
+  focused: string | null;
+  selection: [number, number] | null;
+}
+
+export function captureDraft(root: ParentNode): PlayersDraft | null {
+  const form = root.querySelector<HTMLFormElement>("[data-kd-add-form]");
+  if (!form) return null;
+  const draft: PlayersDraft = {values: {}, auto: false, focused: null, selection: null};
+  const active = form.ownerDocument.activeElement;
+  for (const input of form.querySelectorAll<HTMLInputElement>("[data-kd-field]")) {
+    const field = input.dataset.kdField || "";
+    draft.values[field] = input.value;
+    if (field === "card") draft.auto = input.dataset.kdAuto !== undefined;
+    if (input === active) {
+      draft.focused = field;
+      draft.selection = input.selectionStart === null ? null : [input.selectionStart, input.selectionEnd ?? input.selectionStart];
+    }
+  }
+  return draft;
+}
+
+// restoreDraft puts a draft back into a freshly drawn add row. An offered
+// card the host never touched is not restored: the redraw offers the card
+// that is free now.
+export function restoreDraft(root: ParentNode, draft: PlayersDraft | null): void {
+  if (!draft) return;
+  const form = root.querySelector<HTMLFormElement>("[data-kd-add-form]");
+  if (!form) return;
+  for (const input of form.querySelectorAll<HTMLInputElement>("[data-kd-field]")) {
+    const field = input.dataset.kdField || "";
+    if (field === "card" && draft.auto) continue;
+    if (field in draft.values) input.value = draft.values[field];
+    if (field === "card") delete input.dataset.kdAuto;
+  }
+  if (draft.focused) {
+    const input = form.querySelector<HTMLInputElement>(`[data-kd-field="${draft.focused}"]`);
+    if (input) {
+      input.focus();
+      if (draft.selection) input.setSelectionRange(draft.selection[0], draft.selection[1]);
+    }
+  }
 }
 
 interface FestPerson {
@@ -314,10 +390,10 @@ function routeCard(opts: KDPlayersOptions, player: KDPlayer): HTMLElement {
   });
   table.append(tours, seats, points);
   card.appendChild(table);
-  if (player.card <= opts.tables) {
+  if (kd.isJoker(player.card, opts.tables)) {
     const joker = document.createElement("p");
     joker.className = "hint";
-    joker.textContent = S.od.kd.cardJoker(String(player.card));
+    joker.textContent = S.od.kd.cardJoker(String(kd.kdTable(player.card, 1, opts.tables)));
     card.appendChild(joker);
   }
   return card;

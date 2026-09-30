@@ -23,10 +23,11 @@ type KDPlayer struct {
 	Team string `json:"team,omitempty"`
 }
 
-// KDState is the Friendship Cup document: an OD state with its players.
+// KDState is the Friendship Cup document: an OD state with its players, read
+// through KDPlayers (kd_players.go), which knows both of their shapes.
 type KDState struct {
 	ODState
-	Players []KDPlayer `json:"players"`
+	Players json.RawMessage `json:"players,omitempty"`
 }
 
 // KDTables reads how many tables the scheme seats.
@@ -95,7 +96,7 @@ func KDEmptyGameJSON(slug, title string, tourComp []int, n int, tableName func(i
 		"entries":        entries,
 		"completed":      make([]bool, totalQuestions),
 		"shootoutRounds": []any{},
-		"players":        []any{},
+		"players":        map[string]any{},
 	}))
 	return schemeJSON, stateJSON
 }
@@ -152,8 +153,10 @@ func ComputeKDResults(schemeJSON, stateJSON string) (KDResults, error) {
 		byNumber[table.Number] = table.TourTotals
 		anyPlace = anyPlace || table.Place != ""
 	}
-	out := KDResults{TourComp: tables.TourComp, Tables: n, Players: make([]KDResultsPlayer, 0, len(state.Players))}
-	for _, player := range state.Players {
+	// An entry the page would not show is not ranked either.
+	players := KDPlayers(state.Players, n)
+	out := KDResults{TourComp: tables.TourComp, Tables: n, Players: make([]KDResultsPlayer, 0, len(players))}
+	for _, player := range players {
 		row := KDResultsPlayer{Card: player.Card, Name: player.Name, Team: player.Team,
 			Tables: make([]int, len(tables.TourComp)), Tours: make([]int, len(tables.TourComp)), Best: make([]int, kdTiebreaks)}
 		for t, size := range tables.TourComp {

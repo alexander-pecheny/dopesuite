@@ -81,6 +81,38 @@ func TestComputeKDResultsSharesAPlaceOnlyWhenEverythingIsEqual(t *testing.T) {
 	}
 }
 
+// The players read in both shapes, and an entry the page would not show is
+// left out: a card that is no whole number from 1, one past n², a second
+// holder, an empty name, a freed card.
+func TestKDPlayersReadsBothShapesAndSkipsBadEntries(t *testing.T) {
+	keyed := json.RawMessage(`{"5":{"name":" Boris ","team":"B"},"1":{"name":"Anna"},"2":null,"07":{"name":"Zero-led"},"x":{"name":"X"},"10":{"name":"Past"},"3":{"name":""}}`)
+	if got, want := KDPlayers(keyed, 3), []KDPlayer{{Card: 1, Name: "Anna"}, {Card: 5, Name: "Boris", Team: "B"}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("keyed = %+v, want %+v", got, want)
+	}
+	list := json.RawMessage(`[{"card":"2","name":"String"},{"card":0,"name":"Zero"},{"card":4,"name":"Good"},{"card":4,"name":"Twice"},{"card":1.5,"name":"Half"},{"card":1,"name":"Joker"}]`)
+	if got, want := KDPlayers(list, 3), []KDPlayer{{Card: 1, Name: "Joker"}, {Card: 4, Name: "Good"}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("list = %+v, want %+v", got, want)
+	}
+	if got := KDPlayers(json.RawMessage(`"nonsense"`), 3); len(got) != 0 {
+		t.Fatalf("nonsense = %+v", got)
+	}
+}
+
+// A joker is a card whose route never moves: cards 1…n, and the n cards
+// after every n² that repeat them.
+func TestKDJokerIsEveryCardThatStaysAtOneTable(t *testing.T) {
+	const n = 3
+	for card := 1; card <= 3*n*n; card++ {
+		stays := true
+		for tour := 2; tour <= n; tour++ {
+			stays = stays && KDTable(card, tour, n) == KDTable(card, 1, n)
+		}
+		if KDJoker(card, n) != stays {
+			t.Errorf("card %d: joker %v, stays %v", card, KDJoker(card, n), stays)
+		}
+	}
+}
+
 func TestIsPrime(t *testing.T) {
 	for n, want := range map[int]bool{0: false, 1: false, 2: true, 9: false, 11: true, 13: true, 25: false, 29: true} {
 		if IsPrime(n) != want {

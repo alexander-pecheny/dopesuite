@@ -406,6 +406,7 @@ test("a 4xx drops the ops loudly instead of retrying forever", async () => {
   assert.equal(calls.length, 1);
   assert.equal(rejected.length, 1);
   assert.equal(rejected[0].scope, "game-state:1");
+  assert.equal(rejected[0].error, "nope");
   assert.equal(statuses.at(-1), "error");
   assert.equal(w.hasPending(), false);
 });

@@ -535,6 +535,7 @@ export type Strings = {
       ekNoScheme: () => string;
       jsonTypeMismatch: (described: string, created: string) => string;
       kdTablesPrime: (n: string) => string;
+      kdToursTables: (tours: string, tables: string) => string;
       multiFromScheme: () => string;
       pastedTeams: () => string;
       schemeRequired: () => string;
@@ -584,7 +585,13 @@ export type Strings = {
       label: () => string;
     };
     kd: {
+      cardDuplicate: (card: string) => string;
+      cardInvalid: (card: string) => string;
+      cardTaken: (card: string, name: string) => string;
+      cardTooHigh: (n: string, max: string, card: string) => string;
       label: () => string;
+      malformed: () => string;
+      nameMissing: (card: string) => string;
     };
     ksi: {
       label: () => string;
@@ -1102,6 +1109,9 @@ export type Strings = {
       answerSet: (question: string, team: string) => string;
       entriesChanged: () => string;
       entryChanged: (question: string) => string;
+      kdPlayerAdded: (card: string, name: string) => string;
+      kdPlayerRemoved: (card: string) => string;
+      kdPlayersChanged: () => string;
       readiness: (question: string, value: string) => string;
       shootout: () => string;
       teamNamed: (name: string, n: string) => string;
@@ -1279,6 +1289,7 @@ export type Strings = {
       place: () => string;
       placeShort: () => string;
       team: () => string;
+      total: () => string;
     };
     invert: {
       label: () => string;
@@ -1295,6 +1306,7 @@ export type Strings = {
       cardTable: () => string;
       cardTaken: (n: string, name: string) => string;
       cardTitle: (n: string) => string;
+      cardTooHigh: (n: string, max: string) => string;
       cardTour: () => string;
       empty: () => string;
       namePlaceholder: () => string;

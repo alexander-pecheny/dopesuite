@@ -17,8 +17,16 @@ fest's teams, and the regulations' personal standings had nowhere to live.
 ## Decision
 
 A new game type, `kd`. Its document is an ОД document. Its teams are the
-tables («Стол 1» … «Стол n»), and a `players` list sits beside them:
-`{card, name, team}`. The ОД page serves it (`static/od.html`). Entry, the
+tables («Стол 1» … «Стол n»), and the players sit beside them, keyed by
+card: `players: {"<card>": {name, team}}`. Registering a player is a patch of
+his card's key alone and taking him off writes null there, so two hosts at the
+registration desk never overwrite each other. A card somebody holds is not
+given to anybody else: the second host's patch is refused, and his page says
+who has the card. An edit that leaves a bad entry (a card that is not a whole
+number from 1, a card past n², a player with no name) is refused too, and the
+scorer and the page both leave out any such entry an older document holds. A
+document from before the keyed shape holds a list, `[{card, name, team}]`,
+and still reads. The ОД page serves it (`static/od.html`). Entry, the
 detailed sheet, the tables' results and the Экран work on the tables
 unchanged. The page adds a «Личный зачёт» tab, and an «Игроки» tab where the
 host registers players and prints their cards: blank ones numbered 1…N for
@@ -31,8 +39,9 @@ sits at `((c−1) mod n + ⌊(c−1)/n⌋·(t−1)) mod n + 1` in tour t. Cards 
 never move: they are the regulations' джокеры. For a prime n two cards meet
 at most once in n tours, and every tour seats as many players at each table
 as at any other, give or take one. So the host sets n when creating the game,
-and it must be a prime. The hint asks for one no smaller than the number of
-tours.
+and it must be a prime no smaller than the number of tours; creation refuses
+anything else. Card c and card c+n² follow the same route, so the cards run
+1…n².
 
 A table is nobody on the fest roster. Its Protocol seats it under a negative
 number, as Мультиигры seat a guest team, so no Participant is minted for it.
@@ -52,7 +61,9 @@ is just as good. The team is shown for reference and ranks nothing.
 - A Кубок Дружбы seats no Participant, so the fest pages that read
   `stage_standings` show no table for it. Its standings are on its own page
   and in `GET …/results`.
-- Numbering guards still follow the fest: while a fest team has no number,
-  entry is refused here as in every other game.
+- The numbering guard does not apply. It exists because a flat document finds
+  a Participant by number, and a Кубок Дружбы finds none: its Protocol says
+  so (`protocol.FestNumbering`), and a fest team without a number stops
+  neither the registration desk nor the answers.
 - The xlsx export has the tables' ОД sheet only. The personal standings are
   not in it yet.

@@ -546,7 +546,8 @@ export function createScopedWriter(options: ScopedWriterOptions): ScopedWriter {
         e.ops.requeue(ops);
       } else {
         console.error("dropped rejected patch ops", {scope, error: String(error), ops});
-        options.onRejected?.({scope, ops, error: String(error)});
+        // The server's refusal as it wrote it: a page may show it to the host.
+        options.onRejected?.({scope, ops, error: error instanceof Error ? error.message.trim() : String(error)});
       }
       indicator.fail();
     } finally {
