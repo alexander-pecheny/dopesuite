@@ -460,3 +460,18 @@ test("the Жеребьёвка panel waits for the раунд it draws from", ()
   assert.equal(walk(grid).filter((n) => n.tag === "select").length, 0);
   assert.equal(texts(grid, "empty").length, 1);
 });
+
+// A Block's table over its Rounds (Хамса's Общий зачёт) has no Matches of its
+// own and no standings before the first бой. It lists the seats of its first
+// Round, placeless, instead of drawing a heading over an empty column.
+test("planGrid draws a table over other stages before anything is played", () => {
+  const round = {
+    code: "s1-r1", title: "Игра №1", kind: "placement", grain: {block: "s1", wave: 1},
+    matches: [{code: "s1-r1-m1", participants: [{name: "Альфа"}, {name: "Бета"}]}, {code: "s1-r1-m2", participants: [{name: "Гамма"}]}],
+  };
+  const total = {code: "s1-total", title: "Общий зачёт", kind: "placement", grain: {block: "s1", wave: 1}, sources: ["s1-r1"], matches: []};
+  const plan = planGrid([round, total]);
+  const table = plan.sections[1];
+  assert.equal(table.kind, "standings");
+  assert.deepEqual(table.entries.map((entry) => entry.name), ["Альфа", "Бета", "Гамма"]);
+});

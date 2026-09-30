@@ -84,6 +84,9 @@ export interface FestGridStage {
   // sort is the Ranker's order, from the server: the columns a table shows.
   sort?: SortRule[] | null;
   layout?: { columns?: number };
+  // sources names the stages a table with no Matches of its own ranks — a
+  // Block's table over its Rounds, as Hamsa's group stage has.
+  sources?: string[] | null;
   matches?: FestGridMatch[];
   reseedEntries?: ReseedEntry[];
   reseedBlockedMessage?: string;
@@ -253,8 +256,16 @@ export function planGrid(stages: FestGridStage[], liveStages: Map<string | undef
     const order = blockOf(stage) !== "" ? stageSlotOrder(stage, live) : [];
     const standings = live.standings || stage.standings || [];
     let ranked: Pick<GridTable, "entries" | "sort">;
+    // A table over other stages holds whoever sits in the first of them, so
+    // before a Match is played it lists those seats, placeless, rather than
+    // drawing a heading over nothing.
+    const source = stage.sources?.length && !(stage.matches || []).length
+      ? stages.find((other) => other.code === stage.sources?.[0])
+      : undefined;
+    const sourceOrder = source ? stageSlotOrder(source, liveOf(source)) : [];
     if (standings.length) ranked = {entries: standings, sort: live.sort || stage.sort};
     else if (stage.grain?.group && order.length && stage.kind) ranked = {entries: order.map((name) => ({name, metrics: {}}))};
+    else if (sourceOrder.length) ranked = {entries: sourceOrder.map((name) => ({name, metrics: {}})), sort: live.sort || stage.sort};
     else return null;
     const item = {rows: 1 + ranked.entries.length, units: 1};
     items.push(item);
