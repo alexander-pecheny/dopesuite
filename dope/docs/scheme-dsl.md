@@ -118,6 +118,7 @@ dealing key. The same snake deals reseed ranks into a block's groups.
   is each source Game's own roster with its overrides applied, so three people
   from three teams are one Троечка team here and their own teams' entries
   there; a player whose team sat a Game out counts one place behind its last.
+  Teams that share a place share it: two teams at «3–4» are 3.5 each.
 - `seed: random` — every rank is a lot.
 - `seed: xlsx` — an uploaded sheet carrying either an exact seeding column or a
   basket column.

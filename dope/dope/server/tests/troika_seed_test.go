@@ -305,3 +305,66 @@ where m.game_id = ? and p.assembled = 1`, brainID).Scan(&troikaSeats)
 		t.Fatalf("the troika took %d of the brain's seats", troikaSeats)
 	}
 }
+
+// The regulations add up places, and teams that share a place share it. In an
+// ОД where Астра and Берёза tie for first, a troika of Астра's players and a
+// troika of Берёза's both stand at 1.5, and the earlier application seeds
+// first. The seed used to read the table's line numbers instead, so Астра —
+// listed first on the tie — was 1 and Берёза 2 whatever the order of
+// applications.
+func TestTroikaPlayersSeedSharesTiedPlaces(t *testing.T) {
+	srv, festID, token, createGame := troikaSeedFest(t)
+	db := srv.Eng().DB
+	people := map[string][2]string{
+		"Астра": {"Иван Иванов", "Пётр Петров"}, "Берёза": {"Сидор Сидоров", "Фома Фомин"},
+		"Вяз": {"Лука Лукин", "Марк Марков"}, "По коням": {"Олег Олегов", "Глеб Глебов"},
+	}
+	for team, pair := range people {
+		var teamID int64
+		if err := db.QueryRow(`select id from fest_teams where fest_id = ? and name = ?`, festID, team).Scan(&teamID); err != nil {
+			t.Fatal(err)
+		}
+		for i, full := range pair {
+			first, last, _ := strings.Cut(full, " ")
+			res, err := db.Exec(`insert into fest_players(fest_id, first_name, last_name) values(?, ?, ?)`, festID, first, last)
+			if err != nil {
+				t.Fatal(err)
+			}
+			playerID, _ := res.LastInsertId()
+			if _, err := db.Exec(`insert into fest_team_players(team_id, player_id, roster_order) values(?, ?, ?)`, teamID, playerID, i); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	odID := createGame(url.Values{"game_type": {"od"}, "od_tours": {"1"}, "od_questions": {"3"}})
+	var odCode string
+	if err := db.QueryRow(`select code from games where id = ?`, odID).Scan(&odCode); err != nil {
+		t.Fatal(err)
+	}
+	// Астра (1) and Берёза (2) take two each, Вяз (3) one, По коням (4) none.
+	if resp := scopedAPIRequest(t, srv, http.MethodPatch, fmt.Sprintf("/api/fest/%d/games/%d/state", festID, odID),
+		map[string]any{"ops": []map[string]any{
+			{"path": []any{"entries"}, "value": [][]int{{1, 2, 3}, {1, 2}, {}}},
+			{"path": []any{"completed"}, "value": []bool{true, true, true}},
+		}}, token); resp.Code != http.StatusOK {
+		t.Fatalf("od state: %d %s", resp.Code, resp.Body.String())
+	}
+	troika := func(name string) string {
+		var id int64
+		if err := db.QueryRow(`select id from participants where fest_id = ? and assembled = 1 and name = ?`, festID, name).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return fmt.Sprint(id)
+	}
+	// Лютик (Берёза's players) applied before Ромашка (Астра's).
+	entrants := []string{troika("Лютик"), troika("Ромашка"), troika("Василёк"), troika("По коням")}
+	dsl := fmt.Sprintf("[init]\nseed: players\ngames: [%s]\nplayer.p: place1\nseed.mean: mean(p)\nsorting: [mean asc]\n\n"+
+		"[scheme]\nkind: roundrobin\ngroup_size: 4\nthemes: 6\nmetric: total\npoints: [1, 0.5, 0]\n", odCode)
+	gameID := createGame(url.Values{"game_type": {"troika"}, "troika_dsl": {dsl}, "entrant_id": entrants})
+	if resp := scopedAPIRequest(t, srv, http.MethodPost, fmt.Sprintf("/api/fest/%d/games/%d/seed-import/run", festID, gameID), nil, token); resp.Code != http.StatusOK {
+		t.Fatalf("seed-import/run = %d, body %s", resp.Code, resp.Body.String())
+	}
+	if a, b := troikaSeatName(t, srv, gameID, "s1-g1-1", 0), troikaSeatName(t, srv, gameID, "s1-g1-1", 1); a != "Лютик" || b != "Ромашка" {
+		t.Fatalf("seeds 1 and 2 = %s, %s; want Лютик, Ромашка (tied at 1.5, Лютик applied first)", a, b)
+	}
+}

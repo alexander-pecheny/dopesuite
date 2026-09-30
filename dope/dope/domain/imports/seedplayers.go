@@ -3,6 +3,7 @@ package imports
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -295,16 +296,21 @@ const participantFestTeam = `coalesce(p.fest_team_id, (
     and p.roster = 'team' and p.assembled = 0 limit 1))`
 
 func teamPlacesByFestTeam(ctx context.Context, q store.Queryer, festID int64, code string) (map[int64]float64, error) {
+	type row struct {
+		team    int64
+		rank    int64
+		metrics sql.NullString
+	}
 	rows, err := store.CollectRows(ctx, q, `
-select `+participantFestTeam+`, st.rank
+select `+participantFestTeam+`, st.rank, st.metrics_json
 from stage_standings st
 join participants p on p.id = st.participant_id
 join stages s on s.id = st.stage_id
 join games g on g.id = s.game_id
 where g.fest_id = ? and g.code = ? and `+participantFestTeam+` is not null
-order by st.rank`, []any{festID, code}, func(rs *sql.Rows) ([2]int64, error) {
-		var pair [2]int64
-		return pair, rs.Scan(&pair[0], &pair[1])
+order by st.rank`, []any{festID, code}, func(rs *sql.Rows) (row, error) {
+		var r row
+		return r, rs.Scan(&r.team, &r.rank, &r.metrics)
 	})
 	if err != nil {
 		return nil, err
@@ -312,21 +318,58 @@ order by st.rank`, []any{festID, code}, func(rs *sql.Rows) ([2]int64, error) {
 	if len(rows) == 0 {
 		return nil, corei18n.User(dopestrings.Default.Imports.Seed.NoStandings(code))
 	}
+	// The regulations add up places, and teams that share a place share it:
+	// «3–4» is 3.5 to both, whichever of them the table happens to list
+	// first. A row's rank is its line in the table, which breaks the tie
+	// arbitrarily, so the teams whose place metric is the same are one group
+	// and each gets the mean of the ranks the group covers.
+	shared := make([]float64, len(rows))
+	for i := 0; i < len(rows); {
+		j := i
+		for j+1 < len(rows) && samePlace(rows[i].metrics, rows[j+1].metrics) {
+			j++
+		}
+		mean := float64(rows[i].rank+rows[j].rank) / 2
+		for k := i; k <= j; k++ {
+			shared[k] = mean
+		}
+		i = j + 1
+	}
 	places := make(map[int64]float64, len(rows))
 	worst := 0.0
-	for _, pair := range rows {
-		place := float64(pair[1])
-		if _, seen := places[pair[0]]; seen {
+	for i, r := range rows {
+		if _, seen := places[r.team]; seen {
 			return nil, corei18n.User(dopestrings.Default.Imports.SeedPlayers.MultipleStandings(code))
 		}
-		places[pair[0]] = place
-		if place > worst {
-			worst = place
+		places[r.team] = shared[i]
+		if float64(r.rank) > worst {
+			worst = float64(r.rank)
 		}
 	}
 	// A team that did not play stands one place behind the last that did.
 	places[0] = worst + 1
 	return places, nil
+}
+
+// samePlace reports whether two standings rows share a place: both carry
+// the same place metric. A row without one shares nothing.
+func samePlace(a, b sql.NullString) bool {
+	pa, okA := placeMetric(a)
+	pb, okB := placeMetric(b)
+	return okA && okB && pa == pb
+}
+
+func placeMetric(raw sql.NullString) (float64, bool) {
+	if !raw.Valid || raw.String == "" {
+		return 0, false
+	}
+	var metrics struct {
+		Place *float64 `json:"place"`
+	}
+	if err := json.Unmarshal([]byte(raw.String), &metrics); err != nil || metrics.Place == nil {
+		return 0, false
+	}
+	return *metrics.Place, *metrics.Place > 0
 }
 
 type seedEntry struct {
