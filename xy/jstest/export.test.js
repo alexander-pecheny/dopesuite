@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fakeBoard, installDOM } from "./dom.js";
 
-const ids = ["exportOverlay", "exportForm", "exportModeOne", "exportModeMany", "exportOneFormat", "exportFormats", "exportFmt4s", "exportFmtDocx", "exportFmtDocxSpoilers", "exportFmtPdf", "exportFmtPdfMobile", "exportFmtPptx", "exportFmtOpenquiz", "exportFmtHandouts", "exportToggleAll", "exportRun", "exportCancel", "exportMessage",
+const ids = ["exportOverlay", "exportForm", "exportModeOne", "exportModeMany", "exportOneFormat", "exportFormats", "exportFmt4s", "exportFmtDocx", "exportFmtDocxScreen", "exportFmtDocxSpoilers", "exportFmtPdf", "exportFmtPdfMobile", "exportFmtPptx", "exportFmtOpenquiz", "exportFmtHandouts", "exportToggleAll", "exportRun", "exportCancel", "exportMessage",
   // the telegram dialog the panel hands over to (tgexport.test.js drives it)
   "tgExportOverlay", "tgExportForm", "tgExportToken", "tgExportChannel", "tgExportChat", "tgExportRun", "tgExportCancel", "tgExportMessage"];
 const p = installDOM(ids);
@@ -11,7 +11,7 @@ p.node("exportFmt4s").checked = true;
 p.node("exportModeOne").checked = true;
 // The dropdown the "one format" mode reads, as board.dopeui declares it.
 const one = p.node("exportOneFormat");
-one.options = ["4s", "docx", "docx_spoilers", "pdf", "pdf_mobile", "pptx", "openquiz", "handouts"].map((value) => ({ value, disabled: false }));
+one.options = ["4s", "docx", "docx_screen", "docx_spoilers", "pdf", "pdf_mobile", "pptx", "openquiz", "handouts"].map((value) => ({ value, disabled: false }));
 one.value = "docx";
 // The panel binds these at import, so they are swapped before it loads.
 const { xyApp } = await import("../web/assets/static/dist/app.js");
@@ -108,7 +108,7 @@ test("the tick boxes belong to the zip: hidden under «один формат», 
   p.node("exportModeMany").fire("change");
   assert.equal(p.node("exportFormats").hidden, false);
 
-  for (const id of ["exportFmt4s", "exportFmtDocx", "exportFmtDocxSpoilers", "exportFmtPdf", "exportFmtPdfMobile", "exportFmtPptx", "exportFmtOpenquiz", "exportFmtHandouts"]) p.node(id).checked = false;
+  for (const id of ["exportFmt4s", "exportFmtDocx", "exportFmtDocxScreen", "exportFmtDocxSpoilers", "exportFmtPdf", "exportFmtPdfMobile", "exportFmtPptx", "exportFmtOpenquiz", "exportFmtHandouts"]) p.node(id).checked = false;
   p.node("exportFmt4s").fire("change");
   assert.equal(p.node("exportRun").disabled, true, "nothing ticked is nothing to do");
 

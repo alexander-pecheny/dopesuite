@@ -193,7 +193,7 @@ internal/server/       package server — the whole HTTP server
                        include the images; no Python is involved. The PDF goes through the shared
                        typst wasm pool (typst.go), so it writes nothing to disk either
   exportpack.go        POST /api/export/pack, which is what the export modal calls. It takes one 4s
-                       source and several formats (4s, docx, docx_spoilers, pdf, pdf_mobile, pptx,
+                       source and several formats (4s, docx, docx_screen, docx_spoilers, pdf, pdf_mobile, pptx,
                        openquiz, handouts), renders them by composing the functions above with
                        handout.SplitFit, and returns a bare file if one format was asked for or a
                        zip if several were. The images are sent separately only for the .4s, since
@@ -308,7 +308,7 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        typst.wasm is //go:embed-ed but NOT in git (30 MB): `just build-wasm` compiles
                        typst-wasm/ (Rust) into it — once per clone, then only on a typst bump. Every Go
                        recipe (build/dev/test) depends on a guard that says so if the file is missing.
-  docx/                parsed structure → .docx (OOXML), reusing chgksuite's template.docx; byte-parity tested (document.xml body + rels: spacing, run boundaries, hyperlinks) vs chgksuite, for every `compose docx` switch (docx.Options: spoilers, screen mode, noanswers/noparagraph/only_question_number). xy passes Options{} for the host's copy and screen mode + spoilers=dots for the written-testing one; the rest of the switches are the CLI's; regenerate the oracles with scripts/gen_docx_oracles.sh.
+  docx/                parsed structure → .docx (OOXML), reusing chgksuite's template.docx; byte-parity tested (document.xml body + rels: spacing, run boundaries, hyperlinks) vs chgksuite, for every `compose docx` switch (docx.Options: spoilers, screen mode, noanswers/noparagraph/only_question_number). xy passes Options{} for the host's copy, screen mode for the screen copy, and screen mode + spoilers=dots for the written-testing one; the rest of the switches are the CLI's; regenerate the oracles with scripts/gen_docx_oracles.sh.
                        (img …) images go through imgconv.ForExport like the PDF's — see below (images.go)
   typstdoc/            parsed structure → .typ → PDF via typst (the same wasm pool handouts use): the docx
                        export in the other format. template.docx's page setup transcribed into the preamble

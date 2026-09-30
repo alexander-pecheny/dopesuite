@@ -37,7 +37,7 @@ type packFile struct {
 
 // packFormats is the set of formats one pack request asks for.
 type packFormats struct {
-	fourS, docx, docxSpoilers, pdf, pdfMobile, pptx, openquiz, handouts bool
+	fourS, docx, docxScreen, docxSpoilers, pdf, pdfMobile, pptx, openquiz, handouts bool
 }
 
 func parsePackFormats(v string) packFormats {
@@ -48,6 +48,8 @@ func parsePackFormats(v string) packFormats {
 			f.fourS = true
 		case "docx":
 			f.docx = true
+		case "docx_screen":
+			f.docxScreen = true
 		case "docx_spoilers":
 			f.docxSpoilers = true
 		case "pdf":
@@ -66,7 +68,7 @@ func parsePackFormats(v string) packFormats {
 }
 
 func (f packFormats) empty() bool {
-	return !f.fourS && !f.docx && !f.docxSpoilers && !f.pdf && !f.pdfMobile && !f.pptx && !f.openquiz && !f.handouts
+	return !f.fourS && !f.docx && !f.docxScreen && !f.docxSpoilers && !f.pdf && !f.pdfMobile && !f.pptx && !f.openquiz && !f.handouts
 }
 
 // needsTypst reports whether any selected format goes through the typst pool,
@@ -157,14 +159,16 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 			files = append(files, packFile{name, data})
 		}
 	}
-	// The written-testing copy: the screen's text (no stress marks, no reading
-	// notes) with the answers pushed behind dots. The suffix is chgksuite's own.
+	// The screen copy is the screen's text (no stress marks, no reading notes);
+	// the written-testing copy is that text with the answers pushed behind dots.
+	// The suffixes are chgksuite's own.
 	for _, v := range []struct {
 		want   bool
 		opts   docx.Options
 		suffix string
 	}{
 		{formats.docx, docx.Options{Game: req.game}, ".docx"},
+		{formats.docxScreen, docx.Options{Game: req.game, ScreenMode: docx.ScreenReplaceAll}, "_screen.docx"},
 		{formats.docxSpoilers, docx.Options{Game: req.game, ScreenMode: docx.ScreenReplaceAll, Spoilers: docx.SpoilersDots}, "_screen_spoilers.docx"},
 	} {
 		if !v.want {

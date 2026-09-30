@@ -248,6 +248,9 @@ mode_many = "Несколько форматов в .zip"
 one_title = "Что скачать"
 # Tooltip of the .4s checkbox.
 fmt4s_title = "Исходник chgksuite; изображения кладутся рядом в архив"
+# The screen copy: tooltip and label.
+docx_screen_title = "Экранный текст: без пометок ведущему [в скобках] и ударений"
+docx_screen_label = ".docx для экрана"
 # The written-testing copy: tooltip and label.
 docx_spoilers_title = "Экранный текст, ответы за точками — для письменного тура"
 docx_spoilers_label = ".docx со спойлерами"

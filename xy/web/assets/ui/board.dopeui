@@ -236,6 +236,7 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
         selectfield id="exportOneFormat" compact title=@board.export.one_title
           option value="4s" ".4s"
           option value="docx" selected ".docx"
+          option value="docx_screen" @board.export.docx_screen_label
           option value="docx_spoilers" @board.export.docx_spoilers_label
           option value="pdf" ".pdf"
           option value="pdf_mobile" @board.export.pdf_mobile_label
@@ -247,6 +248,7 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
       col id="exportFormats" gap="xs" hidden
         checkbox id="exportFmt4s" checked title=@board.export.fmt4s_title ".4s"
         checkbox id="exportFmtDocx" ".docx"
+        checkbox id="exportFmtDocxScreen" title=@board.export.docx_screen_title @board.export.docx_screen_label
         checkbox id="exportFmtDocxSpoilers" title=@board.export.docx_spoilers_title @board.export.docx_spoilers_label
         checkbox id="exportFmtPdf" ".pdf"
         checkbox id="exportFmtPdfMobile" title=@board.export.pdf_mobile_title @board.export.pdf_mobile_label
