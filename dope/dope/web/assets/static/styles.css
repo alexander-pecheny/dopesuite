@@ -3934,6 +3934,10 @@ html:has(.game-host-top) {
     grid-column: 2;
     grid-row: 1;
     justify-self: start;
+    /* The crumbs come first: the progress takes what they leave and clips
+       there. Without the cap a long game title («Кубок Дружбы») left its
+       column 0px wide and the progress ran past the screen's edge. */
+    max-width: 100%;
     font-size: var(--text-xs);
   }
 
