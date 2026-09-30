@@ -1087,3 +1087,27 @@ sorting: [place_sum, total, plus]
 		t.Fatalf("1/4 m1 = %+v, want reseed ranks 1, 8, 9", quarter.Matches[0].Slots)
 	}
 }
+
+// tours.<game> keeps a source ОД of seed: players to some tours: a count, a
+// range or a list, of a game the seed reads.
+func TestSeedPlayersTours(t *testing.T) {
+	src := func(tours string) string {
+		return "[init]\nseed: players\ngames: [od-1, ksi-2]\n" + tours + "\nplayer.p: place1 + place2\nseed.mean: mean(p)\nsorting: [mean asc]\n\n" +
+			"[scheme]\nkind: roundrobin\ngroup_size: 4\nthemes: 6\nmetric: total\npoints: [1, 0.5, 0]\n"
+	}
+	for value, want := range map[string]string{"2": "[1 2]", "1-2": "[1 2]", "[1, 3]": "[1 3]", "2-3": "[2 3]"} {
+		scheme := compileSrc(t, src("tours.od-1: "+value), Input{Slug: "t", GameType: "troika"})
+		if got := fmt.Sprint(scheme.Seeding.Players.Tours["od-1"]); got != want {
+			t.Errorf("tours.od-1: %s → %s, want %s", value, got, want)
+		}
+	}
+	for _, bad := range []string{"tours.od-9: 2", "tours.od-1: 0", "tours.od-1: 2-1", "tours.od-1: [1, 1]", "tours.od-1: два"} {
+		doc, err := Parse(src(bad))
+		if err == nil {
+			_, err = Compile(doc, Input{Slug: "t", GameType: "troika"})
+		}
+		if err == nil || !strings.Contains(err.Error(), "tours.") {
+			t.Errorf("%s: %v, want a tours error", bad, err)
+		}
+	}
+}

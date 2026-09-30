@@ -75,6 +75,10 @@ empty = '{{.key}}: пустой список столов'
 players_need_games = "seed: players — нужен games: [игра, игра], откуда берутся места игроков"
 # seed: players without a single seed.<metric> rule.
 players_need_seed = "seed: players — нужен хотя бы один seed.<метрика>: mean(<метрика игрока>)"
+# tours.<game> naming a game that is not in games: [...].
+tours_game = 'tours.{{.game}}: такой игры нет в games — там {{.games}}'
+# tours.<game> with a value that is not a count, a range or a list of tours.
+tours_value = 'tours.{{.game}}: {{.value}} — нужны номера туров: 2 (первые два), 1-2 или [1, 3]'
 # division without seed: outside a Тройка game.
 division_troika_only = "division без seed бывает только у Тройки: так игра берёт тройки своего зачёта. В других играх division пишется вместе с seed."
 

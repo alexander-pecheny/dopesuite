@@ -1040,6 +1040,7 @@ export type Strings = {
       noRosters: () => string;
       noSorting: () => string;
       selfReference: (grain: string, name: string) => string;
+      toursOd: (game: string) => string;
     };
     seedSource: {
       fest: () => string;
@@ -1571,6 +1572,8 @@ export type Strings = {
       divisionTroikaOnly: () => string;
       playersNeedGames: () => string;
       playersNeedSeed: () => string;
+      toursGame: (game: string, games: string) => string;
+      toursValue: (game: string, value: string) => string;
     };
     structure: {
       kindMissing: () => string;

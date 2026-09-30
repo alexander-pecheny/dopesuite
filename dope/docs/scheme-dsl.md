@@ -119,6 +119,10 @@ printed table instead writes it out in `deal:` (below).
   is each source Game's own roster with its overrides applied, so three people
   from three teams are one Троечка team here and their own teams' entries
   there; a player whose team sat a Game out counts one place behind its last.
+  `tours.<game>: 1-2` keeps a source ОД to those tours (`2` is the first two,
+  `1-2` a range, `[1, 3]` a list): its places are the table after them alone,
+  a tie shared at the mean of the places it covers. The Троечка regulations
+  seed on the Вопросики after their first two tours: `tours.od-1: 1-2`.
   Teams that share a place share it: two teams at «3–4» are 3.5 each.
   A Participant none of whose people is on the fest roster (stand-ins filling
   the draw) has nothing to add up: it is seeded last, in its order in the

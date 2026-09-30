@@ -67,6 +67,9 @@ no_sorting = "посев по игрокам: схема не говорит, ч
 # lists the ones they do.
 metric_unknown = 'sorting: {{.metric}} не считается — есть {{.known}}'
 no_rosters = "посев по игрокам: у команд этой игры нет составов"
+# tours.<game> in the scheme names a game that is not an ОД: only an ОД has tours.
+tours_od = 'посев по игрокам: tours.{{.game}} — туры есть только у ОД'
+
 # A seed.<metric> rule aggregating a player metric no rule defines; {{.over}}
 # is that metric's name.
 metric_missing = 'seed.{{.name}}: {{.over}} — такой метрики игрока нет'

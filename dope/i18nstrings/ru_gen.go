@@ -1423,6 +1423,9 @@ var RU = Strings{
 			SelfReference: func(grain string, name string) string {
 				return fmt.Sprintf("%s.%s: правило зависит от самого себя", grain, name)
 			},
+			ToursOd: func(game string) string {
+				return fmt.Sprintf("посев по игрокам: tours.%s — туры есть только у ОД", game)
+			},
 		},
 		SeedSource: ImportsSeedSourceStrings{
 			Fest:    func() string { return "список феста" },
@@ -2233,6 +2236,12 @@ var RU = Strings{
 			},
 			PlayersNeedSeed: func() string {
 				return "seed: players — нужен хотя бы один seed.<метрика>: mean(<метрика игрока>)"
+			},
+			ToursGame: func(game string, games string) string {
+				return fmt.Sprintf("tours.%s: такой игры нет в games — там %s", game, games)
+			},
+			ToursValue: func(game string, value string) string {
+				return fmt.Sprintf("tours.%s: %s — нужны номера туров: 2 (первые два), 1-2 или [1, 3]", game, value)
 			},
 		},
 		Structure: SchemeStructureStrings{

@@ -3,6 +3,7 @@ package schemedsl
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -209,7 +210,7 @@ var commonKeys = []string{"kind", "title", "venues", "sorting", "reseed", "stats
 var dottedKeys = []string{"venues", "title", "bout", "standings"}
 
 var defaultsKeys = map[string]bool{"venues": true, "sorting": true}
-var initKeys = map[string]bool{"seed": true, "sorting": true, "games": true, "player": true, "division": true}
+var initKeys = map[string]bool{"seed": true, "sorting": true, "games": true, "player": true, "division": true, "tours": true}
 
 func keySet(lists ...[]string) map[string]bool {
 	set := map[string]bool{}
@@ -307,12 +308,67 @@ func (c *compiler) readPlayerSeed() (*store.SchemePlayerSeed, error) {
 				continue
 			}
 			out.Seed[name] = v.Raw
+		case "tours":
+			if !slices.Contains(games, name) {
+				return nil, errAt(v.Line, "%s", dopestrings.Default.Scheme.Seed.ToursGame(name, strings.Join(games, ", ")))
+			}
+			tours, ok := parseTours(v.Raw)
+			if !ok {
+				return nil, errAt(v.Line, "%s", dopestrings.Default.Scheme.Seed.ToursValue(name, v.Raw))
+			}
+			if out.Tours == nil {
+				out.Tours = map[string][]int{}
+			}
+			out.Tours[name] = tours
 		}
 	}
 	if len(out.Seed) == 0 {
 		return nil, errAt(line, "%s", dopestrings.Default.Scheme.Seed.PlayersNeedSeed())
 	}
 	return out, nil
+}
+
+// parseTours reads which tours of a source OD count: «2» is the first two,
+// «1-2» a range, «[1, 3]» a list. Tours number from 1, each once.
+func parseTours(raw string) ([]int, bool) {
+	raw = strings.TrimSpace(raw)
+	var tours []int
+	switch {
+	case strings.HasPrefix(raw, "[") && strings.HasSuffix(raw, "]"):
+		for _, part := range strings.Split(raw[1:len(raw)-1], ",") {
+			n, err := strconv.Atoi(strings.TrimSpace(part))
+			if err != nil {
+				return nil, false
+			}
+			tours = append(tours, n)
+		}
+	case strings.Contains(raw, "-"):
+		from, to, _ := strings.Cut(raw, "-")
+		a, errA := strconv.Atoi(strings.TrimSpace(from))
+		b, errB := strconv.Atoi(strings.TrimSpace(to))
+		if errA != nil || errB != nil || a > b {
+			return nil, false
+		}
+		for n := a; n <= b; n++ {
+			tours = append(tours, n)
+		}
+	default:
+		n, err := strconv.Atoi(raw)
+		if err != nil {
+			return nil, false
+		}
+		for i := 1; i <= n; i++ {
+			tours = append(tours, i)
+		}
+	}
+	seen := map[int]bool{}
+	for _, n := range tours {
+		if n < 1 || seen[n] {
+			return nil, false
+		}
+		seen[n] = true
+	}
+	return tours, len(tours) > 0
 }
 
 func (c *compiler) readInit() error {

@@ -1062,6 +1062,7 @@ shootout: true
       noRosters: () => "посев по игрокам: у команд этой игры нет составов",
       noSorting: () => "посев по игрокам: схема не говорит, чем сортировать ([init] sorting)",
       selfReference: (grain: string, name: string) => `${grain}.${name}: правило зависит от самого себя`,
+      toursOd: (game: string) => `посев по игрокам: tours.${game} — туры есть только у ОД`,
     },
     seedSource: {
       fest: () => "список феста",
@@ -1593,6 +1594,8 @@ shootout: true
       divisionTroikaOnly: () => "division без seed бывает только у Тройки: так игра берёт тройки своего зачёта. В других играх division пишется вместе с seed.",
       playersNeedGames: () => "seed: players — нужен games: [игра, игра], откуда берутся места игроков",
       playersNeedSeed: () => "seed: players — нужен хотя бы один seed.<метрика>: mean(<метрика игрока>)",
+      toursGame: (game: string, games: string) => `tours.${game}: такой игры нет в games — там ${games}`,
+      toursValue: (game: string, value: string) => `tours.${game}: ${value} — нужны номера туров: 2 (первые два), 1-2 или [1, 3]`,
     },
     structure: {
       kindMissing: () => "блоку нужен kind",
