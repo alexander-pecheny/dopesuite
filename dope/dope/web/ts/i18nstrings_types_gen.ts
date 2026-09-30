@@ -276,6 +276,7 @@ export type Strings = {
       failed: (err: string) => string;
       fixed: () => string;
       kept: (reason: string) => string;
+      movesDropped: (n: string) => string;
       resizes: () => string;
       summary: (size: string, seated: string, active: string) => string;
     };

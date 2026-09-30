@@ -106,6 +106,9 @@ type View struct {
 	OneOffs    bool           `json:"oneOffs"`
 	Entered    bool           `json:"entered"`
 	Resizes    bool           `json:"resizes"`
+	// MovesDropped counts the hand moves an import from another source did not
+	// apply again: a place in one source's order means nothing in another's.
+	MovesDropped int `json:"movesDropped,omitempty"`
 	// Kept is why the last write left the Structure as it was, when the scheme
 	// turned the new number of entrants down.
 	Kept string `json:"kept,omitempty"`
@@ -443,14 +446,23 @@ func ImportLegacy(h Host, ctx context.Context, scope core.FestScope, src imports
 // has seated it.
 func importList(h Host, ctx context.Context, scope core.FestScope, src imports.SeedSource, fresh bool) (Result, error) {
 	var kept []int64
-	return edit(h, ctx, scope, "import", func(ctx context.Context, tx *sql.Tx, list imports.List) (imports.List, error) {
+	dropped := 0
+	result, err := edit(h, ctx, scope, "import", func(ctx context.Context, tx *sql.Tx, list imports.List) (imports.List, error) {
 		next, _, err := imports.ResolveListTx(ctx, tx, scope, list, src)
 		if err != nil {
 			return imports.List{}, err
 		}
-		if !fresh && len(list.State.Edits) > 0 {
+		edits := list.State.Edits
+		// A move keeps a place in the order the source gave (ADR-0025). Another
+		// source orders by something else — a troika game's troikas by application,
+		// then by the players' places — and replaying «third» there would undo
+		// the new seeding without a word. So only who plays carries over.
+		if !fresh && len(edits) > 0 && sourceChanged(list.State, next.State) {
+			edits, dropped = withoutMoves(edits)
+		}
+		if !fresh && len(edits) > 0 {
 			state := next.State
-			state.Rows = imports.Replay(state.Rows, list.State.Edits)
+			state.Rows = imports.Replay(state.Rows, edits)
 			// An entrant the host added keeps its decline, which the source,
 			// not knowing it, could not carry.
 			for i, row := range state.Rows {
@@ -458,7 +470,7 @@ func importList(h Host, ctx context.Context, scope core.FestScope, src imports.S
 					state.Rows[i].Declined = true
 				}
 			}
-			state.Edits, state.Edited = list.State.Edits, true
+			state.Edits, state.Edited = edits, true
 			next = next.With(state)
 		}
 		for _, row := range next.State.Rows {
@@ -468,6 +480,29 @@ func importList(h Host, ctx context.Context, scope core.FestScope, src imports.S
 	}, func(ctx context.Context, tx *sql.Tx) error {
 		return dropUnlistedOneOffsTx(ctx, tx, scope, kept)
 	})
+	result.View.MovesDropped = dropped
+	return result, err
+}
+
+// sourceChanged reports whether an import reads another source than the one
+// the list came from: another kind, another Game or another division. A list
+// no source ever made (the host's own, or the Structure's seats) has none.
+func sourceChanged(was, now imports.ListState) bool {
+	if was.Source == "" {
+		return false
+	}
+	return was.Source != now.Source || was.SourceGameID != now.SourceGameID || was.Division != now.Division
+}
+
+// withoutMoves is the edits less the moves, and how many moves there were.
+func withoutMoves(edits []imports.ListEdit) ([]imports.ListEdit, int) {
+	out := make([]imports.ListEdit, 0, len(edits))
+	for _, e := range edits {
+		if e.Op != imports.ListEditMove {
+			out = append(out, e)
+		}
+	}
+	return out, len(edits) - len(out)
 }
 
 // dropUnlistedOneOffsTx deletes the Game's one-off entrants that are neither in

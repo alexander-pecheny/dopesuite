@@ -52,6 +52,8 @@ export interface EntrantsView {
   resizes?: boolean;
   rebuilt?: boolean;
   kept?: string;
+  // movesDropped: the hand moves an import from another source left behind.
+  movesDropped?: number;
 }
 
 export interface EntrantsTabOptions {
@@ -156,6 +158,7 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
       nodes.push(sourceBar(view));
       if (notice) nodes.push(hint(notice, noticeError));
       if (view.kept) nodes.push(hint(S.entrants.state.kept(view.kept)));
+      if (view.movesDropped) nodes.push(hint(S.entrants.state.movesDropped(String(view.movesDropped))));
       const rows = view.rows || [];
       if (view.resizes) nodes.push(hint(S.entrants.state.resizes()));
       else if (view.entered) nodes.push(hint(S.entrants.state.fixed()));

@@ -575,3 +575,39 @@ func TestReimportAppliesTheHandEditsToTheNewOrder(t *testing.T) {
 		t.Fatalf("after a fresh import: %v, %d edits", got, view.Edits)
 	}
 }
+
+// A move is a place in one source's order. An import from another source
+// (the fest's table after a sheet, a Троечка's seeding after its troikas)
+// keeps who plays but not the places: replaying them would undo the new
+// order without a word. The view says how many moves it left behind.
+func TestImportFromAnotherSourceDropsTheMoves(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	seedFestTeams(t, db, festID, 6)
+	gameID := createSchemeGame(t, db, festID, "brain", "Брейн",
+		"[defaults]\nquestions: 3\n\n[init]\nseed: xlsx\n\n[scheme]\nkind: roundrobin\ngroup_size: 6\n")
+	scope := core.FestScope{FestID: festID, GameID: gameID}
+	eng, ctx := srv.Eng(), t.Context()
+	xlsx := entrants.Source{Kind: entrants.SourceXLSX}
+
+	view := mustEntrants(t)(entrants.Import(eng, ctx, scope, xlsx, sheetOf(t, 6, 5, 4, 3, 2, 1)))
+	two, five := rowByName(t, view, "Участник 2"), rowByName(t, view, "Участник 5")
+	mustEntrants(t)(entrants.Remove(eng, ctx, scope, two.TeamID))
+	mustEntrants(t)(entrants.Move(eng, ctx, scope, five.TeamID, 1))
+
+	view = mustEntrants(t)(entrants.Import(eng, ctx, scope, entrants.Source{Kind: entrants.SourceFest}, nil))
+	want := []string{"Участник 1", "Участник 3", "Участник 4", "Участник 5", "Участник 6"}
+	if got := rowNames(view); !slices.Equal(got, want) {
+		t.Fatalf("after the fest import: %v, want %v (the removal kept, the move not)", got, want)
+	}
+	if view.MovesDropped != 1 || view.Edits != 1 {
+		t.Fatalf("moves dropped %d, edits %d; want 1 and 1", view.MovesDropped, view.Edits)
+	}
+
+	// The same source again: nothing to drop, the removal still applies.
+	view = mustEntrants(t)(entrants.Import(eng, ctx, scope, entrants.Source{Kind: entrants.SourceFest}, nil))
+	if got := rowNames(view); !slices.Equal(got, want) || view.MovesDropped != 0 {
+		t.Fatalf("after a second fest import: %v, %d dropped", got, view.MovesDropped)
+	}
+}

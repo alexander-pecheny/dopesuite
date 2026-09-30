@@ -39,3 +39,14 @@ The source is right about the order, and the host is right about who plays.
 Replaying the host's edits keeps both. A move is kept as a place in the list
 («третьим»), not as «above this team», because that is how a host says it and
 it stays meaningful whatever the source's order becomes.
+
+## Amendment: an import from another source keeps no moves
+
+A move is a place in the order one source gave. An import from another
+source — another kind, another Game or another division — orders by
+something else: a Троечка's list is taken from its troikas in application
+order and then from `seed: players`. Replaying «third» there undid the
+seeding without a word (the Octobearfest rehearsal). Such an import now
+replays the additions and removals and leaves the moves out; the tab says how
+many (`movesDropped`). A re-import from the same source replays everything as
+before.
