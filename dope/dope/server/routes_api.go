@@ -579,7 +579,7 @@ func (s *server) scopedEntrantsImport(w http.ResponseWriter, r *http.Request, sc
 		if err := r.ParseMultipartForm(4 << 20); err != nil {
 			return route.BadRequest("bad form")
 		}
-		source = entrants.Source{Kind: entrants.SourceXLSX}
+		source = entrants.Source{Kind: entrants.SourceXLSX, Fresh: r.FormValue("fresh") == "1"}
 		if upload, _, err := r.FormFile("file"); err == nil {
 			defer upload.Close()
 			file = upload

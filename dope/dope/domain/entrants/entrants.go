@@ -59,6 +59,9 @@ func Formats(gameType string) bool {
 // fest's own roster, the fest's troikas, a lot, an uploaded sheet or the
 // by-players seeding a scheme declares. Division keeps it to one division.
 type Source struct {
+	// Fresh takes the source's list alone, dropping the host's hand edits
+	// that an import otherwise applies again (ADR-0025).
+	Fresh    bool   `json:"fresh,omitempty"`
 	Kind     string `json:"kind"`
 	Game     string `json:"game,omitempty"`
 	Division string `json:"division,omitempty"`
@@ -416,27 +419,52 @@ func edit(h Host, reqCtx context.Context, scope core.FestScope, event string,
 	return result, err
 }
 
-// Import replaces the list with what a source makes of it now. Declines of
-// the list there was survive. file is the uploaded sheet of an xlsx source.
+// Import replaces the list with what a source makes of it now, and applies
+// the host's hand edits to it again (ADR-0025) unless source.Fresh asks for
+// the source's list alone. Declines of the list there was survive. file is the
+// uploaded sheet of an xlsx source.
 func Import(h Host, ctx context.Context, scope core.FestScope, source Source, file io.Reader) (Result, error) {
 	src, err := seedSource(source, file)
 	if err != nil {
 		return Result{}, err
 	}
-	return ImportLegacy(h, ctx, scope, src)
+	return importList(h, ctx, scope, src, source.Fresh)
 }
 
 // ImportLegacy runs a seed source as the seed tab's old routes name it: the
-// fest's first KSI, or what the scheme's [init] declares. A one-off the new
-// list leaves out goes, unless a bout has seated it.
+// fest's first KSI, or what the scheme's [init] declares. The hand edits are
+// applied again, as by Import.
 func ImportLegacy(h Host, ctx context.Context, scope core.FestScope, src imports.SeedSource) (Result, error) {
+	return importList(h, ctx, scope, src, false)
+}
+
+// importList replaces the list with the source's, then replays the host's
+// edits unless fresh. A one-off the new list leaves out goes, unless a bout
+// has seated it.
+func importList(h Host, ctx context.Context, scope core.FestScope, src imports.SeedSource, fresh bool) (Result, error) {
 	var kept []int64
 	return edit(h, ctx, scope, "import", func(ctx context.Context, tx *sql.Tx, list imports.List) (imports.List, error) {
 		next, _, err := imports.ResolveListTx(ctx, tx, scope, list, src)
+		if err != nil {
+			return imports.List{}, err
+		}
+		if !fresh && len(list.State.Edits) > 0 {
+			state := next.State
+			state.Rows = imports.Replay(state.Rows, list.State.Edits)
+			// An entrant the host added keeps its decline, which the source,
+			// not knowing it, could not carry.
+			for i, row := range state.Rows {
+				if j := list.Index(row.TeamID); j >= 0 && list.State.Rows[j].Declined {
+					state.Rows[i].Declined = true
+				}
+			}
+			state.Edits, state.Edited = list.State.Edits, true
+			next = next.With(state)
+		}
 		for _, row := range next.State.Rows {
 			kept = append(kept, row.TeamID)
 		}
-		return next, err
+		return next, nil
 	}, func(ctx context.Context, tx *sql.Tx) error {
 		return dropUnlistedOneOffsTx(ctx, tx, scope, kept)
 	})
@@ -511,7 +539,7 @@ func Add(h Host, ctx context.Context, scope core.FestScope, req AddRequest) (Res
 			return imports.List{}, corei18n.User(dopestrings.Default.Entrants.Error.AlreadyIn(name))
 		}
 		rows := append(slices.Clone(list.State.Rows), imports.ListRow{TeamID: id, Name: name, City: city})
-		return list.Edit(rows), nil
+		return list.Edit(rows, imports.ListEdit{Op: imports.ListEditAdd, TeamID: id, Name: name, City: city}), nil
 	}, nil)
 }
 
@@ -637,7 +665,7 @@ func Remove(h Host, ctx context.Context, scope core.FestScope, participantID int
 select game_id is not null from participants where id = ?`, participantID).Scan(&oneOff); err != nil {
 			return imports.List{}, err
 		}
-		return list.Edit(slices.Delete(slices.Clone(list.State.Rows), i, i+1)), nil
+		return list.Edit(slices.Delete(slices.Clone(list.State.Rows), i, i+1), imports.ListEdit{Op: imports.ListEditRemove, TeamID: participantID}), nil
 	}, func(ctx context.Context, tx *sql.Tx) error {
 		if !oneOff {
 			return nil
@@ -663,7 +691,7 @@ func Move(h Host, ctx context.Context, scope core.FestScope, participantID int64
 		rows = slices.Delete(rows, i, i+1)
 		to := min(max(position, 1), len(rows)+1) - 1
 		rows = slices.Insert(rows, to, row)
-		return list.Edit(rows), nil
+		return list.Edit(rows, imports.ListEdit{Op: imports.ListEditMove, TeamID: participantID, Position: to + 1}), nil
 	}, nil)
 }
 
@@ -700,7 +728,11 @@ select game_id is not null from participants where id = ?`, participantID).Scan(
 		}
 		rows := slices.Clone(list.State.Rows)
 		rows[i].Name = name
-		return list.Edit(rows), nil
+		// The one-off itself is renamed, so there is nothing to replay: the
+		// list only shows the new name.
+		state := list.State
+		state.Rows = rows
+		return list.With(state), nil
 	}, nil)
 }
 

@@ -240,9 +240,10 @@ export type Strings = {
       seed: () => string;
     };
     import: {
-      confirmEdited: () => string;
+      confirmFresh: () => string;
       done: (n: number) => string;
       file: () => string;
+      keepEdits: (n: string) => string;
       label: () => string;
       run: () => string;
     };

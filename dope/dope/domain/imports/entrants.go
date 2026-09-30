@@ -91,13 +91,96 @@ func (l List) clone() ListState {
 	return state
 }
 
-// Edit is the list after a hand edit: its rows as given, marked Edited so a
-// re-import asks before throwing them away.
-func (l List) Edit(rows []ListRow) List {
-	state := l.State
+// Edit is the list after a hand edit: its rows as given, marked Edited, with
+// the edit logged so a re-import can apply it again (ADR-0025).
+func (l List) Edit(rows []ListRow, edit ListEdit) List {
+	state := l.clone()
 	state.Rows = rows
 	state.Edited = true
+	state.Edits = logListEdit(state.Edits, edit)
 	return l.with(state)
+}
+
+// ListEdit is one hand edit of an entrant list: an entrant added (at the end),
+// taken out, or moved to a place (1 is the top). Name and City say who an
+// added entrant is, for a list the source rebuilt without them.
+type ListEdit struct {
+	Op       string `json:"op"`
+	TeamID   int64  `json:"teamID"`
+	Name     string `json:"name,omitempty"`
+	City     string `json:"city,omitempty"`
+	Position int    `json:"position,omitempty"`
+}
+
+const (
+	ListEditAdd    = "add"
+	ListEditRemove = "remove"
+	ListEditMove   = "move"
+)
+
+// logListEdit appends an edit, folding what it undoes: taking out an entrant
+// the host had added forgets both, and a move replaces an earlier move.
+func logListEdit(log []ListEdit, edit ListEdit) []ListEdit {
+	out := make([]ListEdit, 0, len(log)+1)
+	added := false
+	for _, e := range log {
+		if e.TeamID != edit.TeamID {
+			out = append(out, e)
+			continue
+		}
+		switch {
+		case e.Op == ListEditAdd && edit.Op == ListEditRemove:
+			added = true
+		case e.Op == ListEditMove && edit.Op != ListEditAdd:
+		case e.Op == ListEditRemove && edit.Op == ListEditAdd:
+			added = true
+		default:
+			out = append(out, e)
+		}
+	}
+	// An add that cancels a remove, or a remove that cancels an add, leaves
+	// nothing to replay: the entrant is where the source put it.
+	if added && edit.Op != ListEditMove {
+		return out
+	}
+	return append(out, edit)
+}
+
+// Replay applies the host's edits to rows a source has just made: the
+// entrants added come back at the end, those taken out stay out, and the ones
+// moved go to their places. An edit about an entrant the rows no longer have,
+// or already have, changes nothing.
+func Replay(rows []ListRow, edits []ListEdit) []ListRow {
+	rows = slices.Clone(rows)
+	index := func(id int64) int {
+		for i, row := range rows {
+			if row.TeamID == id {
+				return i
+			}
+		}
+		return -1
+	}
+	for _, e := range edits {
+		i := index(e.TeamID)
+		switch e.Op {
+		case ListEditAdd:
+			if i < 0 {
+				rows = append(rows, ListRow{TeamID: e.TeamID, Name: e.Name, City: e.City})
+			}
+		case ListEditRemove:
+			if i >= 0 {
+				rows = slices.Delete(rows, i, i+1)
+			}
+		case ListEditMove:
+			if i >= 0 {
+				row := rows[i]
+				rows = slices.Delete(rows, i, i+1)
+				to := min(max(e.Position, 1), len(rows)+1) - 1
+				rows = slices.Insert(rows, to, row)
+			}
+		}
+	}
+	return rows
 }
 
 // LoadListTx reads the Game's Entrant list. A Game that has none stored reads
@@ -470,6 +553,7 @@ select id, name, city, game_id is not null from participants where fest_id = ?`,
 		SourceGameID: list.State.SourceGameID,
 		Division:     list.State.Division,
 		Edited:       list.State.Edited,
+		Edits:        len(list.State.Edits),
 		DrawSize:     len(numbers),
 		Rows:         make([]SeedImportViewRow, 0, len(list.State.Rows)),
 	}

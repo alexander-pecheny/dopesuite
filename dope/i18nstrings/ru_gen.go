@@ -295,15 +295,16 @@ var RU = Strings{
 			Seed:     func() string { return "Посев" },
 		},
 		Import: EntrantsImportStrings{
-			ConfirmEdited: func() string {
-				return "Список правили вручную. Взять его заново из источника и потерять эти правки?"
+			ConfirmFresh: func() string {
+				return "Взять список заново из источника без ваших правок? Правки пропадут."
 			},
 			Done: func(n int) string {
 				return fmt.Sprintf("В списке %d %s.", n, core.Plural("ru", n, "участник", "участника", "участников"))
 			},
-			File:  func() string { return "Файл" },
-			Label: func() string { return "Откуда взять список" },
-			Run:   func() string { return "Взять список" },
+			File:      func() string { return "Файл" },
+			KeepEdits: func(n string) string { return fmt.Sprintf("Сохранить мои правки (%s)", n) },
+			Label:     func() string { return "Откуда взять список" },
+			Run:       func() string { return "Взять список" },
 		},
 		Row: EntrantsRowStrings{
 			DeclinedLabel: func(name string) string { return fmt.Sprintf("Отказ: %s", name) },

@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"dope/dope/domain/imports"
 	"dope/dope/domain/roster"
 
+	"github.com/xuri/excelize/v2"
 	corei18n "pecheny.me/dopecore/i18nstrings"
 	"pecheny.me/dopecore/session"
 )
@@ -221,13 +223,24 @@ func TestEntrantListImportsAndEditsByHand(t *testing.T) {
 	_, err = entrants.Add(eng, ctx, scope, entrants.AddRequest{Key: "troika:1"})
 	refused(t, err, "")
 
-	// A re-import from the source replaces the hand edits, keeping declines.
+	// A re-import from the source applies the hand edits again (ADR-0025):
+	// the entrant moved to the top is at the top, declines are kept. The
+	// one-off added and removed again left nothing to replay.
+	top := view.Rows[0]
 	view = mustEntrants(t)(entrants.Import(eng, ctx, scope, entrants.Source{Kind: entrants.SourceRandom}, nil))
-	if view.Edited {
-		t.Fatal("an import left the list marked as edited")
+	if !view.Edited || view.Rows[0].TeamID != top.TeamID {
+		t.Fatalf("a re-import lost the hand edits: edited %v, top %+v, want %+v", view.Edited, view.Rows[0], top)
 	}
 	if !rowByName(t, view, second.Name).Declined {
 		t.Fatal("the import forgot a decline")
+	}
+	// A fresh import takes the source's list alone.
+	view = mustEntrants(t)(entrants.Import(eng, ctx, scope, entrants.Source{Kind: entrants.SourceRandom, Fresh: true}, nil))
+	if view.Edited {
+		t.Fatal("a fresh import left the list marked as edited")
+	}
+	if !rowByName(t, view, second.Name).Declined {
+		t.Fatal("the fresh import forgot a decline")
 	}
 }
 
@@ -375,8 +388,13 @@ func TestTroikaListFollowsTheDivisionUntilEdited(t *testing.T) {
 		t.Fatal("a troika joined a list the host had edited")
 	}
 
-	// An import from the зачёт follows again, and takes the new troika in.
+	// An import from the зачёт applies the hand edit again, so the list
+	// stays the host's; a fresh one follows again, and takes the new troika in.
 	view = mustEntrants(t)(entrants.Import(eng, ctx, scope, entrants.Source{Kind: entrants.SourceTroikas, Division: "Студ"}, nil))
+	if !view.Edited || len(view.Rows) != 4 || view.Rows[0].Name != "С3" {
+		t.Fatalf("after the import: edited %v, rows %v", view.Edited, rowNames(view))
+	}
+	view = mustEntrants(t)(entrants.Import(eng, ctx, scope, entrants.Source{Kind: entrants.SourceTroikas, Division: "Студ", Fresh: true}, nil))
 	if view.Edited || len(view.Rows) != 4 {
 		t.Fatalf("after the import: edited %v, rows %v", view.Edited, rowNames(view))
 	}
@@ -494,13 +512,66 @@ func TestPersonalSIListSeatsPlayers(t *testing.T) {
 	if err := db.QueryRow(`select roster from participants where id = ?`, guest.TeamID).Scan(&kind); err != nil || kind != "player" {
 		t.Fatalf("the one-off is a %q, %v", kind, err)
 	}
-	// The fest's import leaves the guest out, and its Participant goes.
+	// The fest's import brings the guest back, the host having added them;
+	// a fresh one leaves the guest out, and its Participant goes.
 	view = mustEntrants(t)(entrants.Import(eng, ctx, scope, entrants.Source{Kind: entrants.SourceFest}, nil))
+	if !slices.Contains(rowNames(view), "Гость Издалека") {
+		t.Fatal("the import lost the one-off the host added")
+	}
+	view = mustEntrants(t)(entrants.Import(eng, ctx, scope, entrants.Source{Kind: entrants.SourceFest, Fresh: true}, nil))
 	if slices.Contains(rowNames(view), "Гость Издалека") {
-		t.Fatal("the import kept the one-off")
+		t.Fatal("a fresh import kept the one-off")
 	}
 	var left int
 	if err := db.QueryRow(`select count(*) from participants where id = ?`, guest.TeamID).Scan(&left); err != nil || left != 0 {
 		t.Fatalf("the dropped one-off's Participant stayed: %d, %v", left, err)
+	}
+}
+
+// sheetOf is a seed sheet: the fest numbers in the order given.
+func sheetOf(t *testing.T, numbers ...int) *bytes.Reader {
+	t.Helper()
+	book := excelize.NewFile()
+	for i, n := range numbers {
+		book.SetCellValue(book.GetSheetName(0), fmt.Sprintf("A%d", i+1), n)
+	}
+	var out bytes.Buffer
+	if err := book.Write(&out); err != nil {
+		t.Fatal(err)
+	}
+	return bytes.NewReader(out.Bytes())
+}
+
+// The host seeds a Game from a source, fixes the list by hand, and the source
+// changes (the ОД's results move on): a re-import takes the new order and
+// applies the fixes to it again (ADR-0025), instead of losing them.
+func TestReimportAppliesTheHandEditsToTheNewOrder(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	seedFestTeams(t, db, festID, 6)
+	gameID := createSchemeGame(t, db, festID, "brain", "Брейн",
+		"[defaults]\nquestions: 3\n\n[init]\nseed: xlsx\n\n[scheme]\nkind: roundrobin\ngroup_size: 6\n")
+	scope := core.FestScope{FestID: festID, GameID: gameID}
+	eng, ctx := srv.Eng(), t.Context()
+	xlsx := entrants.Source{Kind: entrants.SourceXLSX}
+
+	view := mustEntrants(t)(entrants.Import(eng, ctx, scope, xlsx, sheetOf(t, 1, 2, 3, 4, 5, 6)))
+	two, five := rowByName(t, view, "Участник 2"), rowByName(t, view, "Участник 5")
+	mustEntrants(t)(entrants.Remove(eng, ctx, scope, two.TeamID))
+	view = mustEntrants(t)(entrants.Move(eng, ctx, scope, five.TeamID, 1))
+	if view.Edits != 2 {
+		t.Fatalf("edits = %d, want 2", view.Edits)
+	}
+
+	view = mustEntrants(t)(entrants.Import(eng, ctx, scope, xlsx, sheetOf(t, 6, 5, 4, 3, 2, 1)))
+	want := []string{"Участник 5", "Участник 6", "Участник 4", "Участник 3", "Участник 1"}
+	if got := rowNames(view); !slices.Equal(got, want) {
+		t.Fatalf("after the re-import: %v, want %v", got, want)
+	}
+
+	view = mustEntrants(t)(entrants.Import(eng, ctx, scope, entrants.Source{Kind: entrants.SourceXLSX, Fresh: true}, sheetOf(t, 6, 5, 4, 3, 2, 1)))
+	if got := rowNames(view); len(got) != 6 || got[0] != "Участник 6" || view.Edits != 0 {
+		t.Fatalf("after a fresh import: %v, %d edits", got, view.Edits)
 	}
 }

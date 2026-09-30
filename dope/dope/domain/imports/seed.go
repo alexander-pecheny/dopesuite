@@ -44,6 +44,9 @@ type seedImportState struct {
 	// since the last import, which a re-import would throw away.
 	Edited bool                 `json:"edited,omitempty"`
 	Rows   []seedImportStateRow `json:"rows,omitempty"`
+	// Edits are the host's hand edits since the last import, in order, which
+	// a re-import from the source applies again (ADR-0025).
+	Edits []ListEdit `json:"edits,omitempty"`
 }
 
 // seedImportStateRow is one entrant. TeamID is the Participant, whatever it
@@ -60,15 +63,17 @@ type SeedImportView struct {
 	// Declared is the source the Game's [init] names ("" when it names none):
 	// random, players, xlsx or a Game's code. DeclaredTitle is that Game's
 	// title, for the page's import button.
-	Declared      string              `json:"declared,omitempty"`
-	DeclaredTitle string              `json:"declaredTitle,omitempty"`
-	Source        string              `json:"source,omitempty"`
-	SourceGameID  int64               `json:"sourceGameID,omitempty"`
-	Division      string              `json:"division,omitempty"`
-	Edited        bool                `json:"edited,omitempty"`
-	DrawSize      int                 `json:"drawSize"`
-	ActiveCount   int                 `json:"activeCount"`
-	Rows          []SeedImportViewRow `json:"rows"`
+	Declared      string `json:"declared,omitempty"`
+	DeclaredTitle string `json:"declaredTitle,omitempty"`
+	Source        string `json:"source,omitempty"`
+	SourceGameID  int64  `json:"sourceGameID,omitempty"`
+	Division      string `json:"division,omitempty"`
+	Edited        bool   `json:"edited,omitempty"`
+	// Edits counts the hand edits a re-import would apply again.
+	Edits       int                 `json:"edits,omitempty"`
+	DrawSize    int                 `json:"drawSize"`
+	ActiveCount int                 `json:"activeCount"`
+	Rows        []SeedImportViewRow `json:"rows"`
 }
 
 // SeedImportViewRow is one entrant as the entrants tab shows it. SeedNumber

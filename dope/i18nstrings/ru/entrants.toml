@@ -30,8 +30,11 @@ not_carrying = 'Не из зачёта «{{.flag}}»'
 # The picker's label, and the button that runs it.
 label = "Откуда взять список"
 run = "Взять список"
-# Confirm before a re-import throws away hand edits.
-confirm_edited = "Список правили вручную. Взять его заново из источника и потерять эти правки?"
+# Beside the import button when the list was edited by hand: a re-import
+# applies those edits again unless the box is cleared (ADR-0025).
+keep_edits = 'Сохранить мои правки ({{.n}})'
+# Confirm before an import that drops the hand edits.
+confirm_fresh = "Взять список заново из источника без ваших правок? Правки пропадут."
 # The file field of the xlsx source.
 file = "Файл"
 # The notice after an import.

@@ -15,6 +15,8 @@ export interface EntrantSource {
   kind: string;
   game?: string;
   division?: string;
+  // fresh takes the source's list alone, without the host's hand edits.
+  fresh?: boolean;
 }
 
 interface SourceOption extends EntrantSource {
@@ -39,6 +41,8 @@ export interface EntrantsView {
   drawSize?: number;
   activeCount?: number;
   edited?: boolean;
+  // edits counts the hand edits a re-import applies again (ADR-0025).
+  edits?: number;
   sources?: SourceOption[];
   preselect?: EntrantSource;
   divisions?: string[];
@@ -235,6 +239,20 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
       bar.appendChild(file);
     }
 
+    // A re-import applies the host's hand edits again (ADR-0025); the box
+    // lets the host take the source's list alone instead.
+    let keep: HTMLInputElement | null = null;
+    const edits = current.edits || 0;
+    if (edits > 0 && (current.rows || []).length) {
+      const label = document.createElement("label");
+      label.className = "u-row u-gap-xs u-align-center";
+      keep = document.createElement("input");
+      keep.type = "checkbox";
+      keep.checked = true;
+      label.append(keep, S.entrants.import.keepEdits(String(edits)));
+      bar.appendChild(label);
+    }
+
     const run = document.createElement("button");
     run.type = "button";
     run.className = "btn";
@@ -242,8 +260,9 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
     run.disabled = busy || !option;
     run.addEventListener("click", () => {
       if (!option) return;
-      if (current.edited && (current.rows || []).length && !window.confirm(S.entrants.import.confirmEdited())) return;
-      const source: EntrantSource = {kind: option.kind, game: option.game, division: option.divided ? division?.value || "" : ""};
+      const fresh = keep ? !keep.checked : false;
+      if (fresh && !window.confirm(S.entrants.import.confirmFresh())) return;
+      const source: EntrantSource = {kind: option.kind, game: option.game, division: option.divided ? division?.value || "" : "", fresh};
       const done = () => {
         picked = null;
         if (view) setNotice(S.entrants.import.done(view.rows?.length || 0));
@@ -258,6 +277,7 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
         }
         const body = new FormData();
         body.append("file", chosen);
+        if (fresh) body.append("fresh", "1");
         void write(`${base()}/entrants/import`, {method: "POST", body}).then((ok) => ok && done());
         return;
       }
