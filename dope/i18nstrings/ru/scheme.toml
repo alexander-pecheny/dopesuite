@@ -96,11 +96,18 @@ deal_size = 'в deal у группы {{.group}} нужно {{.need}} мест, �
 # deal: every rank from 1 to the block's entrant count, once each.
 deal_ranks = 'в deal каждое место от 1 до {{.total}} должно встретиться ровно один раз: {{.rank}}'
 # opening: a seat that is not a group letter and a place the previous block sends on.
-opening_seat = 'opening: {{.seat}} — место записывается буквой группы и местом в ней, от A1 до {{.last}}{{.places}}'
+opening_seat = 'opening: не понял {{.seat}}. Место записывается буквой группы и местом в ней, от A1 до {{.last}}{{.places}}.'
 # opening: a seat written twice.
 opening_twice = 'opening: {{.seat}} записан дважды'
-# opening: the table seats a different number than the round needs.
-opening_count = 'opening: в таблице {{.have}} мест, а в первом круге их {{.need}}'
+# opening: the table names a different number of bouts than the round has.
+opening_bouts = 'в opening нужно {{.need}} боёв через запятую, а указано {{.have}}'
+# opening: one bout of the table seats a different number than a bout holds.
+opening_bout_size = 'в opening у боя {{.bout}} нужно {{.need}} мест, а указано {{.have}}'
+# opening: on the first block, which has no previous block to name.
+opening_first = 'opening рассаживает по местам в группах предыдущего блока, поэтому в первом блоке его быть не может'
+# deal: on a block after the first without reseed: true. The table names
+# places of one ranking, and only a reseed makes one.
+deal_source = 'deal раздаёт места одного общего рейтинга. После первого блока такой рейтинг есть только с reseed: true, поэтому добавьте его или уберите deal'
 
 [reseed]
 # A stats_from block reference past the last stage.

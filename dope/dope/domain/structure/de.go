@@ -89,10 +89,12 @@ func (pod) Expand(b Block) (Outputs, error) {
 	if _, written := b.Str("opening"); written {
 		opening = straightChunks
 	}
-	// lower_entrants: the last so many of each bracket's entrants start one
-	// Loss down — the ranking's tail, which a reseed by place_sum makes the
-	// previous block's lower places (Octobearfest personal SI, appendix 3: 3rd and
-	// 4th of every group go straight to the lower bracket).
+	// lower_entrants: the last so many of the entrants start one Loss down —
+	// the tail of the order they arrive in. A reseed by place_sum re-ranks the
+	// whole field, so its tail is not the previous block's lower places; an
+	// `opening:` table that lists the upper bracket's bouts first is
+	// (Octobearfest personal SI, appendix 3: 3rd and 4th of every group go
+	// straight to the lower bracket).
 	lower, _ := b.Int("lower_entrants")
 	plan, err := planLivesEntered(perGroup, lower, 2, winning, proceeding,
 		func(blockRound, members int) int { return size }, opening)

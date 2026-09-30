@@ -2144,11 +2144,20 @@ var RU = Strings{
 			DealSize: func(group string, need string, have string) string {
 				return fmt.Sprintf("в deal у группы %s нужно %s мест, а указано %s", group, need, have)
 			},
-			OpeningCount: func(have string, need string) string {
-				return fmt.Sprintf("opening: в таблице %s мест, а в первом круге их %s", have, need)
+			DealSource: func() string {
+				return "deal раздаёт места одного общего рейтинга. После первого блока такой рейтинг есть только с reseed: true, поэтому добавьте его или уберите deal"
+			},
+			OpeningBoutSize: func(bout string, need string, have string) string {
+				return fmt.Sprintf("в opening у боя %s нужно %s мест, а указано %s", bout, need, have)
+			},
+			OpeningBouts: func(need string, have string) string {
+				return fmt.Sprintf("в opening нужно %s боёв через запятую, а указано %s", need, have)
+			},
+			OpeningFirst: func() string {
+				return "opening рассаживает по местам в группах предыдущего блока, поэтому в первом блоке его быть не может"
 			},
 			OpeningSeat: func(seat string, last string, places string) string {
-				return fmt.Sprintf("opening: %s — место записывается буквой группы и местом в ней, от A1 до %s%s", seat, last, places)
+				return fmt.Sprintf("opening: не понял %s. Место записывается буквой группы и местом в ней, от A1 до %s%s.", seat, last, places)
 			},
 			OpeningTwice: func(seat string) string { return fmt.Sprintf("opening: %s записан дважды", seat) },
 			ProceedingMissing: func() string {
@@ -2562,10 +2571,10 @@ var RU = Strings{
 			MatchNthBlockRound: func(n string, index string) string { return fmt.Sprintf("1/%s финала %s", n, index) },
 			MatchSemifinal:     func(index string) string { return fmt.Sprintf("Полуфинал %s", index) },
 			PairingHalvesNeedsBouts: func(round string) string {
-				return fmt.Sprintf("pairing: halves в раунде %s — ему нужен предыдущий раунд с чётным числом боёв, без пересева", round)
+				return fmt.Sprintf("pairing: halves в раунде %s не подходит. Нужно, чтобы каждый бой раунда получал участников ровно из двух боёв предыдущего раунда и чтобы между раундами не было пересева.", round)
 			},
 			PairingUnknown: func(value string) string {
-				return fmt.Sprintf("pairing: %s — бывает adjacent (соседние бои, как по умолчанию) или halves (бой 1 с боем N/2+1, 2 с N/2+2…)", value)
+				return fmt.Sprintf("pairing: не понял %s. Бывает adjacent (соседние бои, как по умолчанию) или halves (бой 1 с боем N/2+1, 2 с N/2+2…).", value)
 			},
 			ParticipantsMissing: func() string { return "single_elimination: нужен participants" },
 			ProceedingMissing: func() string {

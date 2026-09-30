@@ -102,3 +102,21 @@ func TestSingleEliminationPairingHalves(t *testing.T) {
 		}
 	}
 }
+
+// Halves pair bouts two by two. At three to a table a bout of the next round
+// takes one and a half bouts of this one, which is neither halves nor
+// neighbours, so naming halves for such a round is refused.
+func TestSingleEliminationPairingHalvesNeedsTwoBoutsEach(t *testing.T) {
+	src := "[scheme]\nkind: single_elimination\nparticipants: 24\nmatch_size: 4\nwinning_places: 2\nmatch_size.r2: 3\npairing.r2: halves\n"
+	doc, err := Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := Input{Slug: "si", GameType: "si"}
+	for i := 0; i < 24; i++ {
+		in.Entrants = append(in.Entrants, store.SchemeSlot{Seed: &store.SchemeSeedRef{Basket: 1, Number: i + 1}})
+	}
+	if _, err := Compile(doc, in); err == nil || !strings.Contains(err.Error(), "pairing") {
+		t.Fatalf("halves at three to a table: %v, want a pairing error", err)
+	}
+}

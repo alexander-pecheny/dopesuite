@@ -135,11 +135,14 @@ func groupPlaces(t *testing.T, scheme store.FestScheme, match store.SchemeMatch)
 func TestDEOpeningRefusesABadTable(t *testing.T) {
 	good := "[A1 A2 D1 D2, B1 B2 E1 E2, C1 C2 F1 F2, A3 A4 D3 D4, B3 B4 E3 E4, C3 C4 F3 F4]"
 	for name, table := range map[string]string{
-		"место дважды":        strings.Replace(good, "F4", "F3", 1),
-		"нет такой группы":    strings.Replace(good, "F4", "G4", 1),
-		"место не проходит":   strings.Replace(good, "F4", "F5", 1),
-		"не хватает места":    strings.Replace(good, " F4", "", 1),
-		"не буква и не место": strings.Replace(good, "F4", "4F", 1),
+		"место дважды":         strings.Replace(good, "F4", "F3", 1),
+		"нет такой группы":     strings.Replace(good, "F4", "G4", 1),
+		"место не проходит":    strings.Replace(good, "F4", "F5", 1),
+		"не хватает места":     strings.Replace(good, " F4", "", 1),
+		"не буква и не место":  strings.Replace(good, "F4", "4F", 1),
+		"то же место иначе":    strings.Replace(good, "F4", "A01", 1),
+		"граница боя сдвинута": strings.Replace(good, "D1 D2, B1", "D1, D2 B1", 1),
+		"один бой на всех":     strings.ReplaceAll(good, ",", ""),
 	} {
 		src := strings.Replace(octobearfestSISrc, "opening: "+good, "opening: "+table, 1)
 		if src == octobearfestSISrc {
@@ -224,5 +227,34 @@ func TestOctobearfestSIGroupsFollowAppendix1(t *testing.T) {
 		if err == nil {
 			t.Errorf("deal %q compiled", strings.TrimSpace(bad))
 		}
+	}
+}
+
+// opening: seats a block from the previous block's groups. On a first block
+// there is no previous block, and the table would have been dropped without a
+// word.
+func TestDEOpeningNeedsAPreviousBlock(t *testing.T) {
+	src := "[scheme]\nkind: double_elimination\nparticipants: 8\nmatch_size: 4\nwinning_places: 2\nopening: [A1 A2 A3 A4, A5 A6 A7 A8]\n"
+	doc, err := Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Compile(doc, Input{Slug: "si", GameType: "si"}); err == nil || !strings.Contains(err.Error(), "opening") {
+		t.Fatalf("opening на первом блоке: %v, want ошибку про opening", err)
+	}
+}
+
+// deal: names places of one ranking. A later block without reseed: true
+// deals from the previous block's groups, where no such ranking exists, and
+// the table would have been dropped without a word.
+func TestRRDealNeedsARanking(t *testing.T) {
+	src := "[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 4\nproceeding_participants: 2\n---\nkind: roundrobin\ngroups: 2\ngroup_size: 2\ndeal: [1 4, 2 3]\n"
+	doc, err := Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := Input{Slug: "rr", GameType: "brain"}
+	if _, err := Compile(doc, in); err == nil || !strings.Contains(err.Error(), "deal") {
+		t.Fatalf("deal на блоке без reseed: %v, want ошибку про deal", err)
 	}
 }

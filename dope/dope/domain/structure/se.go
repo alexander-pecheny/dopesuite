@@ -222,7 +222,9 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 		// bracket template carries each Match's winners forward in Match order.
 		drawn := elimDraw(remaining, count, size, winning)
 		template := straightChunks(remaining, count)
-		pairing, err := sePairing(b, names, roundIndex > 0 && reseedCode == "" && len(prevCodes)%2 == 0)
+		// Halves pair bouts two by two, so a round can take them only where each
+		// of its bouts is fed by exactly two of the previous round's.
+		pairing, err := sePairing(b, names, roundIndex > 0 && reseedCode == "" && len(prevCodes)%2 == 0 && 2*count == len(prevCodes))
 		if err != nil {
 			return Outputs{}, err
 		}

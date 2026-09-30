@@ -656,6 +656,11 @@ func (c *compiler) seedSlot(rank int) store.SchemeSlot {
 func (c *compiler) blockEntrants(index int, blk Section, groups, size int) ([][]store.SchemeSlot, error) {
 	total := groups * size
 	if index == 0 {
+		// opening: names the previous block's groups; the first block has none,
+		// and its table would be dropped without a word.
+		if value, written := blk.Values["opening"]; written {
+			return nil, errAt(value.Line, "%s", dopestrings.Default.Scheme.Entrants.OpeningFirst())
+		}
 		if len(c.in.Entrants) > 0 && len(c.in.Entrants) != total {
 			return nil, errAt(blk.Line, "%s", dopestrings.Default.Scheme.Entrants.CountMismatch(strconv.Itoa(total), strconv.Itoa(len(c.in.Entrants))))
 		}
@@ -675,6 +680,11 @@ func (c *compiler) blockEntrants(index int, blk Section, groups, size int) ([][]
 	if incoming, _ := blockReseedSpec(blk); incoming {
 		return c.dealReseed(index, blk, groups, size)
 	}
+	// deal: names places of one ranking. Without a reseed the block is seated
+	// from the previous block's groups, where there is none to name.
+	if value, written := blk.Values["deal"]; written {
+		return nil, errAt(value.Line, "%s", dopestrings.Default.Scheme.Entrants.DealSource())
+	}
 	return c.dealDeterministic(blk, groups, size)
 }
 
@@ -693,23 +703,43 @@ func (c *compiler) dealOpening(blk Section, groups, size int) ([][]store.SchemeS
 	}
 	line := blk.Values["opening"].Line
 	prev := c.prev
-	var flat []store.SchemeSlot
-	seen := map[string]bool{}
-	for _, item := range items {
-		for _, token := range strings.Fields(item) {
+	// One item per opening bout, each that bout's seats: the table is the
+	// round as printed, so a seat on the wrong side of a comma is a mistake to
+	// name, not something to re-slice. The block hands its entrants over as
+	// groups × size, which for an elimination is one list of the whole field.
+	total := groups * size
+	// A double elimination's bouts are two seats unless match_size says
+	// otherwise, as structure's Kind reads it.
+	perBout := 2
+	if v, ok := blk.Int("match_size"); ok && v > 0 {
+		perBout = v
+	}
+	if total%perBout != 0 {
+		perBout = total
+	}
+	if len(items) != total/perBout {
+		return nil, errAt(line, "%s", dopestrings.Default.Scheme.Entrants.OpeningBouts(strconv.Itoa(total/perBout), strconv.Itoa(len(items))))
+	}
+	type seat struct{ group, place int }
+	seen := map[seat]bool{}
+	flat := make([]store.SchemeSlot, 0, total)
+	for b, item := range items {
+		tokens := strings.Fields(item)
+		if len(tokens) != perBout {
+			return nil, errAt(line, "%s", dopestrings.Default.Scheme.Entrants.OpeningBoutSize(strconv.Itoa(b+1), strconv.Itoa(perBout), strconv.Itoa(len(tokens))))
+		}
+		for _, token := range tokens {
 			group, place, ok := openingSeat(token)
 			if !ok || group >= len(prev.Groups) || place > prev.Proceeding {
 				return nil, errAt(line, "%s", dopestrings.Default.Scheme.Entrants.OpeningSeat(token, openingLetter(len(prev.Groups)-1), strconv.Itoa(prev.Proceeding)))
 			}
-			if seen[token] {
+			// A1 and A01 are one seat: the check is on what the token means.
+			if seen[seat{group, place}] {
 				return nil, errAt(line, "%s", dopestrings.Default.Scheme.Entrants.OpeningTwice(token))
 			}
-			seen[token] = true
+			seen[seat{group, place}] = true
 			flat = append(flat, prev.Groups[group].Place(place))
 		}
-	}
-	if len(flat) != groups*size {
-		return nil, errAt(line, "%s", dopestrings.Default.Scheme.Entrants.OpeningCount(strconv.Itoa(len(flat)), strconv.Itoa(groups*size)))
 	}
 	out := make([][]store.SchemeSlot, groups)
 	for g := range out {
