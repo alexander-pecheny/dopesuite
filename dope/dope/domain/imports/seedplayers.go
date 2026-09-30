@@ -333,19 +333,22 @@ const participantFestTeam = `coalesce(p.fest_team_id, (
 func teamPlacesByFestTeam(ctx context.Context, q store.Queryer, festID int64, code string) (map[int64]float64, error) {
 	type row struct {
 		team    int64
+		stage   int64
 		rank    int64
 		metrics sql.NullString
 	}
+	// Ordered by stage first: a source with a table per group ranks each from
+	// 1, and only rows of one table can share a place.
 	rows, err := store.CollectRows(ctx, q, `
-select `+participantFestTeam+`, st.rank, st.metrics_json
+select `+participantFestTeam+`, st.stage_id, st.rank, st.metrics_json
 from stage_standings st
 join participants p on p.id = st.participant_id
 join stages s on s.id = st.stage_id
 join games g on g.id = s.game_id
 where g.fest_id = ? and g.code = ? and `+participantFestTeam+` is not null
-order by st.rank`, []any{festID, code}, func(rs *sql.Rows) (row, error) {
+order by st.stage_id, st.rank`, []any{festID, code}, func(rs *sql.Rows) (row, error) {
 		var r row
-		return r, rs.Scan(&r.team, &r.rank, &r.metrics)
+		return r, rs.Scan(&r.team, &r.stage, &r.rank, &r.metrics)
 	})
 	if err != nil {
 		return nil, err
@@ -361,7 +364,7 @@ order by st.rank`, []any{festID, code}, func(rs *sql.Rows) (row, error) {
 	shared := make([]float64, len(rows))
 	for i := 0; i < len(rows); {
 		j := i
-		for j+1 < len(rows) && samePlace(rows[i].metrics, rows[j+1].metrics) {
+		for j+1 < len(rows) && rows[j+1].stage == rows[i].stage && samePlace(rows[i].metrics, rows[j+1].metrics) {
 			j++
 		}
 		mean := float64(rows[i].rank+rows[j].rank) / 2
@@ -406,6 +409,11 @@ func odPlacesAfterTours(ctx context.Context, q store.Queryer, festID int64, code
 			}
 		}
 		base += size
+	}
+	// The OD counts a question with no completion flag as completed, so a
+	// short list would let the later tours back in. Pad it before masking.
+	for len(state.Completed) < len(state.Entries) {
+		state.Completed = append(state.Completed, true)
 	}
 	played := 0
 	for i := range state.Completed {
