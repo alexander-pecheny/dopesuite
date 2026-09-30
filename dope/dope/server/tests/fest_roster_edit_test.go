@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -290,5 +291,79 @@ func TestTakingAnIndividualPlayerOffATeamKeepsThem(t *testing.T) {
 	}
 	if got := festRosterNow(t, &serverGame{t: t, srv: srv, festID: festID}); !reflect.DeepEqual(got, []string{"Бобры: Борис"}) {
 		t.Fatalf("roster = %v", got)
+	}
+}
+
+// A team the host makes, renames or takes off by hand reaches the flat games
+// at once: a КСИ played before the roster was complete seats the late team.
+func TestHandRosterEditsReachTheFlatGames(t *testing.T) {
+	srv := newAuthTestServer(t)
+	srv.SetEditBatchWindow(time.Millisecond)
+	db := srv.Eng().DB
+	token := createTestSession(t, srv, systemUserID(t, db))
+	festID := newFest(t, db, "flat", "Фест", systemUserID(t, db))
+	api := func(method, path string, body any) (int, string) {
+		t.Helper()
+		resp := scopedAPIRequest(t, srv, method, fmt.Sprintf("/api/fest/%d%s", festID, path), body, token)
+		return resp.Code, resp.Body.String()
+	}
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 1, siteTeams(map[int64][]string{1: {"Аня"}, 2: {"Вера"}}), imports.RosterChoice{}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if code, body := api(http.MethodPost, "/games", map[string]any{"game_type": "ksi", "ksi_themes": 2}); code != http.StatusOK {
+		t.Fatalf("create ksi: %d %s", code, body)
+	}
+	ksiTeams := func() []string {
+		t.Helper()
+		var raw string
+		if err := db.QueryRow(`
+select m.state_json from matches m join games g on g.id = m.game_id
+where g.fest_id = ? and g.game_type = 'ksi' and m.code = 'main'`, festID).Scan(&raw); err != nil {
+			t.Fatal(err)
+		}
+		var state struct {
+			Participants []struct {
+				Name string `json:"name"`
+			} `json:"participants"`
+		}
+		if err := json.Unmarshal([]byte(raw), &state); err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, p := range state.Participants {
+			out = append(out, p.Name)
+		}
+		sort.Strings(out)
+		return out
+	}
+	if got := ksiTeams(); !reflect.DeepEqual(got, []string{"Бобры", "Зубры"}) {
+		t.Fatalf("КСИ after the import: %v", got)
+	}
+
+	code, body := api(http.MethodPost, "/teams", map[string]any{"name": "Сборная", "players": []editPlayer{{0, "Жора", ""}}})
+	if code != http.StatusOK {
+		t.Fatalf("new team: %d %s", code, body)
+	}
+	if got := ksiTeams(); !reflect.DeepEqual(got, []string{"Бобры", "Зубры", "Сборная"}) {
+		t.Fatalf("КСИ after a hand team: %v", got)
+	}
+
+	var zubry int64
+	if err := db.QueryRow(`select id from fest_teams where fest_id = ? and name = 'Зубры'`, festID).Scan(&zubry); err != nil {
+		t.Fatal(err)
+	}
+	if code, body := api(http.MethodPut, fmt.Sprintf("/teams/%d", zubry), map[string]any{"name": "Зубры-2", "city": "Брест",
+		"players": []editPlayer{{201, "Вера", ""}}}); code != http.StatusOK {
+		t.Fatalf("rename: %d %s", code, body)
+	}
+	if got := ksiTeams(); !reflect.DeepEqual(got, []string{"Бобры", "Зубры-2", "Сборная"}) {
+		t.Fatalf("КСИ after a rename: %v", got)
+	}
+
+	if code, body := api(http.MethodDelete, fmt.Sprintf("/teams/%d", zubry), nil); code != http.StatusOK {
+		t.Fatalf("remove: %d %s", code, body)
+	}
+	if got := ksiTeams(); !reflect.DeepEqual(got, []string{"Бобры", "Сборная"}) {
+		t.Fatalf("КСИ after a removal: %v", got)
 	}
 }

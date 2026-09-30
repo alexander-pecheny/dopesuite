@@ -230,7 +230,7 @@ func ApplyRosterSheetTx(ctx context.Context, tx *sql.Tx, festID int64, teams []S
 				if err := setSheetFlagsTx(ctx, tx, festID, id, team.Flags); err != nil {
 					return ImportPlan{}, RosterWrite{}, err
 				}
-				if written, err = rewriteFromHandTx(ctx, tx, festID); err != nil {
+				if written, err = rewriteFromHandTx(ctx, tx, festID, state); err != nil {
 					return ImportPlan{}, RosterWrite{}, err
 				}
 			}

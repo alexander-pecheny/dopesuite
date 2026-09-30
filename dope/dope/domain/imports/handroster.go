@@ -99,8 +99,11 @@ func writeRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []roster
 
 // rewriteFromHandTx writes the fest roster anew from its rows and edits: the
 // site's last roster, worked back from them, with the edits merged over it.
-// A hand edit records its edit and calls this.
-func rewriteFromHandTx(ctx context.Context, tx *sql.Tx, festID int64) (RosterWrite, error) {
+// A hand edit loads the roster before it writes anything, records its edit
+// and calls this with what it loaded: the flat games are rewritten when the
+// teams differ from that, and comparing with the rows the edit already wrote
+// would find nothing changed.
+func rewriteFromHandTx(ctx context.Context, tx *sql.Tx, festID int64, before roster.HandState) (RosterWrite, error) {
 	if err := ForgetRosterSnapshotsTx(ctx, tx, festID); err != nil {
 		return RosterWrite{}, err
 	}
@@ -114,7 +117,7 @@ func rewriteFromHandTx(ctx context.Context, tx *sql.Tx, festID int64) (RosterWri
 	}
 	desired := roster.SortedFestRosterImportTeams(roster.MergeHand(roster.Baseline(state), state, nil).Desired)
 	assignFestNumbersForImport(desired, byRatingID(existing), maxTeamNumber(existing))
-	current := roster.SortedFestRosterImportTeams(stripLocal(activeRoster(state)))
+	current := roster.SortedFestRosterImportTeams(stripLocal(activeRoster(before)))
 	return writeRosterTx(ctx, tx, festID, desired, byRatingID(existing), nil, !teamLevelEqual(current, stripLocal(desired)))
 }
 
@@ -181,6 +184,10 @@ func CreateHandTeamTx(ctx context.Context, tx *sql.Tx, festID int64, in TeamInpu
 	if err := checkNameFree(ctx, tx, festID, 0, in.Name, in.City); err != nil {
 		return 0, RosterWrite{}, err
 	}
+	before, err := roster.LoadHandState(ctx, tx, festID)
+	if err != nil {
+		return 0, RosterWrite{}, err
+	}
 	var number int64
 	var position float64
 	if err := tx.QueryRowContext(ctx, `
@@ -206,7 +213,7 @@ insert into fest_teams(fest_id, rating_id, name, city, position, number, deleted
 	if err := saveTeamPlayersTx(ctx, tx, festID, teamID, nil, in.Players); err != nil {
 		return 0, RosterWrite{}, err
 	}
-	written, err := rewriteFromHandTx(ctx, tx, festID)
+	written, err := rewriteFromHandTx(ctx, tx, festID, before)
 	return teamID, written, err
 }
 
@@ -281,7 +288,7 @@ func SaveHandTeamTx(ctx context.Context, tx *sql.Tx, festID, teamID int64, in Te
 	if err := saveTeamPlayersTx(ctx, tx, festID, teamID, row.Players, in.Players); err != nil {
 		return RosterWrite{}, err
 	}
-	return rewriteFromHandTx(ctx, tx, festID)
+	return rewriteFromHandTx(ctx, tx, festID, state)
 }
 
 // saveTeamPlayersTx records the edits that take a team from its people now to
@@ -333,13 +340,17 @@ func RemoveTeamTx(ctx context.Context, tx *sql.Tx, festID, teamID int64) (Roster
 	if titles := scored[number]; number > 0 && len(titles) > 0 {
 		return RosterWrite{}, corei18n.User(s.Imports.HandRoster.TeamScored(name, strings.Join(titles, ", ")))
 	}
+	before, err := roster.LoadHandState(ctx, tx, festID)
+	if err != nil {
+		return RosterWrite{}, err
+	}
 	if _, err := tx.ExecContext(ctx, `update fest_teams set deleted = 1, hand_removed = 1 where id = ?`, teamID); err != nil {
 		return RosterWrite{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `delete from fest_team_players where team_id = ?`, teamID); err != nil {
 		return RosterWrite{}, err
 	}
-	return rewriteFromHandTx(ctx, tx, festID)
+	return rewriteFromHandTx(ctx, tx, festID, before)
 }
 
 // saveRosterSnapshotTx keeps the roster as it was before an import, with the
@@ -396,6 +407,10 @@ func UndoRosterImportTx(ctx context.Context, tx *sql.Tx, festID int64) (RosterWr
 	if err := json.Unmarshal([]byte(raw), &snap); err != nil {
 		return RosterWrite{}, err
 	}
+	before, err := roster.LoadHandState(ctx, tx, festID)
+	if err != nil {
+		return RosterWrite{}, err
+	}
 	inSnapshot := map[int64]bool{}
 	for _, t := range snap.Teams {
 		inSnapshot[t.ID] = true
@@ -425,12 +440,8 @@ where id = ? and fest_id = ?`, util.NullableInt64(t.RatingID), t.Hand, t.HandNam
 			return RosterWrite{}, err
 		}
 	}
-	state, err := roster.LoadHandState(ctx, tx, festID)
-	if err != nil {
-		return RosterWrite{}, err
-	}
 	desired := roster.SortedFestRosterImportTeams(activeRoster(snap))
-	current := roster.SortedFestRosterImportTeams(stripLocal(activeRoster(state)))
+	current := roster.SortedFestRosterImportTeams(stripLocal(activeRoster(before)))
 	existing, err = loadFestExistingTeams(ctx, tx, festID)
 	if err != nil {
 		return RosterWrite{}, err
