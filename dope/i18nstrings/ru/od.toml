@@ -88,3 +88,44 @@ tour_expand = "Показать вопросы тура"
 # The shootout toggle's tooltip.
 shootout_collapse = "Свернуть перестрелку"
 shootout_expand = "Показать вопросы перестрелки"
+
+[kd]
+# The friendship cup's own tabs on the ОД page (od.ts): the personal
+# standings and the players with their route cards.
+# The column heads of the personal standings.
+place = "Место"
+player = "Игрок"
+team = "Команда"
+card = "Лист"
+# The tie-break columns, short in the head: tours in which the player's table
+# took this many; the tooltip says it in full.
+tours_took = 'по {{.n}}'
+tours_took_hint = 'Туров, в которых стол игрока взял {{.n}}'
+# A tour's cell tooltip: the table the card sent the player to.
+at_table = 'Стол {{.n}}'
+# Nobody registered yet.
+empty = "Игроков пока нет."
+# The players tab: the add row, its fields and buttons.
+name_placeholder = "Фамилия Имя"
+team_placeholder = "Команда на фестивале"
+add = "Добавить"
+remove = 'Убрать: {{.name}}'
+print = "Печать маршрутных листов"
+# Blank cards numbered 1…N for the vases at the door; the field is N.
+print_blank = "Печать пустых листов"
+blank_count = "Сколько пустых листов напечатать"
+# The name line on a blank card, filled in by hand.
+card_name_line = "Фамилия, имя: ______________________"
+# Refusals of the add row.
+name_required = "Нужны имя и фамилия игрока."
+card_taken = 'Лист № {{.n}} уже выдан: {{.name}}.'
+card_invalid = "Номер листа — целое число от 1."
+# The route cards, one per player, printed from the players tab.
+card_title = 'Маршрутный лист № {{.n}}'
+card_tour = "Тур"
+card_table = "Стол"
+card_points = "Баллы"
+# A card that never leaves its table (cards 1…n).
+card_joker = 'Джокер: весь турнир за столом {{.n}}. Собирает команду, назначает капитана, следит за бланками.'
+# How many tables play, above the players table.
+tables_note = 'Столов: {{.n}}. Листы 1–{{.n}} — джокеры.'

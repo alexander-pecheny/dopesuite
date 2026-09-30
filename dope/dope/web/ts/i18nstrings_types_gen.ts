@@ -532,6 +532,7 @@ export type Strings = {
     create: {
       ekNoScheme: () => string;
       jsonTypeMismatch: (described: string, created: string) => string;
+      kdTablesPrime: (n: string) => string;
       multiFromScheme: () => string;
       pastedTeams: () => string;
       schemeRequired: () => string;
@@ -545,6 +546,9 @@ export type Strings = {
       noneLeft: () => string;
       schemeRefuses: (n: number, err: string) => string;
     };
+    kd: {
+      table: (n: string) => string;
+    };
     recompile: {
       startedBouts: (names: string) => string;
     };
@@ -557,6 +561,7 @@ export type Strings = {
       unnumbered: () => string;
     };
     titles: {
+      kd: () => string;
       ksi: () => string;
       multi: () => string;
       od: () => string;
@@ -574,6 +579,9 @@ export type Strings = {
       short: () => string;
     };
     hamsa: {
+      label: () => string;
+    };
+    kd: {
       label: () => string;
     };
     ksi: {
@@ -730,6 +738,8 @@ export type Strings = {
       esHint: () => string;
       hamsaHint: () => string;
       hamsaScheme: (n: string) => string;
+      kdHint: () => string;
+      kdTablesLabel: () => string;
       minigamesHint: () => string;
       minigamesLabel: () => string;
       minigamesPlaceholder: () => string;
@@ -759,6 +769,7 @@ export type Strings = {
       typeEk: () => string;
       typeEs: () => string;
       typeHamsa: () => string;
+      typeKd: () => string;
       typeKsi: () => string;
       typeKsiStickers: () => string;
       typeLabel: () => string;
@@ -1266,6 +1277,33 @@ export type Strings = {
     invert: {
       label: () => string;
     };
+    kd: {
+      add: () => string;
+      atTable: (n: string) => string;
+      blankCount: () => string;
+      card: () => string;
+      cardInvalid: () => string;
+      cardJoker: (n: string) => string;
+      cardNameLine: () => string;
+      cardPoints: () => string;
+      cardTable: () => string;
+      cardTaken: (n: string, name: string) => string;
+      cardTitle: (n: string) => string;
+      cardTour: () => string;
+      empty: () => string;
+      namePlaceholder: () => string;
+      nameRequired: () => string;
+      place: () => string;
+      player: () => string;
+      print: () => string;
+      printBlank: () => string;
+      remove: (name: string) => string;
+      tablesNote: (n: string) => string;
+      team: () => string;
+      teamPlaceholder: () => string;
+      toursTook: (n: string) => string;
+      toursTookHint: (n: string) => string;
+    };
     progress: {
       entered: (n: string) => string;
       notStarted: () => string;
@@ -1598,6 +1636,8 @@ export type Strings = {
       groupN: (n: string) => string;
       individualStats: () => string;
       input: () => string;
+      personal: () => string;
+      players: () => string;
       playoff: () => string;
       protocol: (block: string) => string;
       refusals: () => string;

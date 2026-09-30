@@ -184,7 +184,7 @@ func (s *Server) newNameResolver(ctx context.Context, gameType, stateJSON string
 	switch gameType {
 	case "ksi":
 		r.names = ksiParticipantNames(stateJSON)
-	case "od":
+	case "od", "kd":
 		r.names, r.odNum = odTeamNames(stateJSON)
 	case "ek":
 		r.ekAnswer = map[int64]ekCell{}
@@ -376,7 +376,7 @@ func (r *nameResolver) describeGroup(ops []journalOpRow) []string {
 	switch r.gameType {
 	case "ek":
 		return r.describeEK(ops)
-	case "od":
+	case "od", "kd":
 		return r.describeStatePatchGroup(ops, r.odPatchLine)
 	case "ksi":
 		return r.describeStatePatchGroup(ops, r.ksiPatchLine)

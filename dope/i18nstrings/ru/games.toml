@@ -66,6 +66,11 @@ label = "Брейн"
 # The kind's display name (the games registry Label).
 label = "ЧГК"
 
+[kd]
+# The kind's display name (the games registry Label): an ОД whose tables
+# reshuffle their players every tour, with a personal standings.
+label = "Кубок Дружбы"
+
 [ek]
 # The kind's display name (the games registry Label).
 label = "ЭК"

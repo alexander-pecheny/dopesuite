@@ -655,6 +655,9 @@ var RU = Strings{
 			JsonTypeMismatch: func(described string, created string) string {
 				return fmt.Sprintf("JSON-схема описывает игру %s, а создаётся %s", described, created)
 			},
+			KdTablesPrime: func(n string) string {
+				return fmt.Sprintf("Число столов Кубка Дружбы должно быть простым (7, 11, 13, 17, 19, 23, 29…), а не %s", n)
+			},
 			MultiFromScheme: func() string {
 				return "Мультиигры описываются списком мини-игр, а не схемой"
 			},
@@ -680,6 +683,9 @@ var RU = Strings{
 				return fmt.Sprintf("схема игры не подходит для %d %s (%s).", n, core.Plural("ru", n, "участника", "участников", "участников"), err)
 			},
 		},
+		Kd: GamebuildKdStrings{
+			Table: func(n string) string { return fmt.Sprintf("Стол %s", n) },
+		},
 		Recompile: GamebuildRecompileStrings{
 			StartedBouts: func(names string) string {
 				return fmt.Sprintf("нельзя менять начатые бои: %s — уберите их изменения или снимите отметку «Закончен» и очистите протокол", names)
@@ -704,6 +710,7 @@ var RU = Strings{
 			},
 		},
 		Titles: GamebuildTitlesStrings{
+			Kd:    func() string { return "Кубок Дружбы" },
 			Ksi:   func() string { return "КСИ" },
 			Multi: func() string { return "Мультиигры" },
 			Od:    func() string { return "ОД" },
@@ -722,6 +729,9 @@ var RU = Strings{
 		},
 		Hamsa: GamesHamsaStrings{
 			Label: func() string { return "Хамса" },
+		},
+		Kd: GamesKdStrings{
+			Label: func() string { return "Кубок Дружбы" },
 		},
 		Ksi: GamesKsiStrings{
 			Label: func() string { return "КСИ" },
@@ -945,6 +955,10 @@ var RU = Strings{
 			HamsaScheme: func(n string) string {
 				return fmt.Sprintf("[defaults]\nvenues: [А, Б, В]\n\n[scheme]\ntitle: Групповой этап\nkind: placement\nparticipants: %s\nmatch_size: 4\nrounds: 2\ntitle.r1: Игра №1\ntitle.r2: Игра №2\nproceeding_participants: 4\nsorting: [place_sum, total, first, seed]\n---\ntitle: Финал\nkind: flat\nparticipants: 4\nreseed: true\nstats_from: [s1]\nsorting: [place_sum, total, first, seed]\nshootout: true\n", n)
 			},
+			KdHint: func() string {
+				return "Столы играют как команды ОД, а игроки пересаживаются по маршрутным листам. Число столов — простое (7, 11, 13, 17, 19, 23, 29…) и не меньше числа туров, иначе двое игроков встретятся за одним столом дважды. Игроков регистрируют после создания, на вкладке «Игроки»."
+			},
+			KdTablesLabel: func() string { return "Количество столов" },
 			MinigamesHint: func() string {
 				return "По строке на мини-игру: «Название: {значения}xN». {0,1} — задание на 0 или 1 балл, {-1,0,1} — со штрафом, {0-12} — любое целое от 0 до 12. Несколько описаний в строке идут подряд: «{0,3}x2 {0,5}» — три задания на 3, 3 и 5 баллов. «|» закрывает блок листа: «{0,1}x10 | {0,1}x10» — два блока по десять, с зазором и сквозной нумерацией."
 			},
@@ -992,6 +1006,7 @@ var RU = Strings{
 			TypeEk:          func() string { return "ЭК" },
 			TypeEs:          func() string { return "Эрудит-Секстет" },
 			TypeHamsa:       func() string { return "Хамса" },
+			TypeKd:          func() string { return "Кубок Дружбы" },
 			TypeKsi:         func() string { return "КСИ" },
 			TypeKsiStickers: func() string { return "КСИ со стикерами" },
 			TypeLabel:       func() string { return "Тип игры" },
@@ -1709,6 +1724,41 @@ var RU = Strings{
 		Invert: OdInvertStrings{
 			Label: func() string { return "Инвертировать" },
 		},
+		Kd: OdKdStrings{
+			Add:         func() string { return "Добавить" },
+			AtTable:     func(n string) string { return fmt.Sprintf("Стол %s", n) },
+			BlankCount:  func() string { return "Сколько пустых листов напечатать" },
+			Card:        func() string { return "Лист" },
+			CardInvalid: func() string { return "Номер листа — целое число от 1." },
+			CardJoker: func(n string) string {
+				return fmt.Sprintf("Джокер: весь турнир за столом %s. Собирает команду, назначает капитана, следит за бланками.", n)
+			},
+			CardNameLine: func() string { return "Фамилия, имя: ______________________" },
+			CardPoints:   func() string { return "Баллы" },
+			CardTable:    func() string { return "Стол" },
+			CardTaken: func(n string, name string) string {
+				return fmt.Sprintf("Лист № %s уже выдан: %s.", n, name)
+			},
+			CardTitle:       func(n string) string { return fmt.Sprintf("Маршрутный лист № %s", n) },
+			CardTour:        func() string { return "Тур" },
+			Empty:           func() string { return "Игроков пока нет." },
+			NamePlaceholder: func() string { return "Фамилия Имя" },
+			NameRequired:    func() string { return "Нужны имя и фамилия игрока." },
+			Place:           func() string { return "Место" },
+			Player:          func() string { return "Игрок" },
+			Print:           func() string { return "Печать маршрутных листов" },
+			PrintBlank:      func() string { return "Печать пустых листов" },
+			Remove:          func(name string) string { return fmt.Sprintf("Убрать: %s", name) },
+			TablesNote: func(n string) string {
+				return fmt.Sprintf("Столов: %s. Листы 1–%s — джокеры.", n, n)
+			},
+			Team:            func() string { return "Команда" },
+			TeamPlaceholder: func() string { return "Команда на фестивале" },
+			ToursTook:       func(n string) string { return fmt.Sprintf("по %s", n) },
+			ToursTookHint: func(n string) string {
+				return fmt.Sprintf("Туров, в которых стол игрока взял %s", n)
+			},
+		},
 		Progress: OdProgressStrings{
 			Entered:    func(n string) string { return fmt.Sprintf("Введён вопрос %s", n) },
 			NotStarted: func() string { return "Игра не началась" },
@@ -2279,6 +2329,8 @@ var RU = Strings{
 			GroupN:          func(n string) string { return fmt.Sprintf("Группа %s", n) },
 			IndividualStats: func() string { return "Индивидуальная статистика" },
 			Input:           func() string { return "Ввод" },
+			Personal:        func() string { return "Личный зачёт" },
+			Players:         func() string { return "Игроки" },
 			Playoff:         func() string { return "Плей-офф" },
 			Protocol:        func(block string) string { return fmt.Sprintf("%s (протоколы)", block) },
 			Refusals:        func() string { return "Отказы" },

@@ -7,6 +7,8 @@ import type {ScoreTableRow, ScoreTableTheme, ScoreTableThemeRow} from "./score-t
 import {resultsTeamCell, teamFlagBadges} from "./standings.js";
 import {ALL_DIVISIONS, divisionChipRow, divisionFromURL, divisionsOf, inDivision, setDivisionInURL} from "./divisions.js";
 import {buildRosterView} from "./fest-roster.js";
+import {buildPersonalView, buildPlayersView, tablesOf} from "./kd-view.js";
+import type {KDPlayer} from "./kd-protocol.js";
 import type {PatchPath} from "./state-sync.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
@@ -156,9 +158,12 @@ const UNDO_LIMIT = 100;
 
 // Screen (the projector board) is a host-only tab; tabFromHash filters against
 // TABS, so a viewer can't reach it by hash either.
-const TABS = gameTabs([], {game: "od", viewer});
+// A friendship cup (ADR-0026) rides this page: its document is an OD one whose
+// teams are the tables, and it adds the personal standings and its players.
+const kdGame = (gameInit?.scheme as {gameType?: unknown} | null | undefined)?.gameType === "kd";
+const TABS = gameTabs([], {game: kdGame ? "kd" : "od", viewer});
 
-let activeTab = tabFromHash(TABS) || (viewer ? "results" : "input");
+let activeTab = tabFromHash(TABS) || (viewer ? (kdGame ? "personal" : "results") : "input");
 // The Division the viewer is looking at (ADR-0020): «All» until the URL says
 // otherwise, and the URL is read again whenever the browser moves it.
 let activeDivision = ALL_DIVISIONS;
@@ -346,7 +351,26 @@ function invalidateAllCaches(): void {
 
 function invalidateScoreCaches(): void {
   questionStatsCache = null;
-  invalidateTabCache("detailed", "results", "screen");
+  invalidateTabCache("detailed", "results", "screen", "personal");
+}
+
+// === the friendship cup ===
+
+function kdContext() {
+  return {state, tourLengths, tables: tablesOf(scheme as {kdTables?: unknown}, state)};
+}
+
+// savePlayers writes a friendship cup's whole player list and draws the two
+// tabs that read it.
+function savePlayers(players: KDPlayer[]): void {
+  (state as {players?: KDPlayer[]}).players = players;
+  saveState(["players"], players);
+  refreshPlayers();
+}
+
+function refreshPlayers(): void {
+  invalidateTabCache("players", "personal");
+  render();
 }
 
 function invalidateShootoutCaches(): void {
@@ -388,11 +412,13 @@ function render(): void {
   // The Screen tab is a projection surface: hide the page-global diagnostic
   // "download log" chip (and anything else corner-pinned) while it is showing.
   document.body.classList.toggle("od-screen-active", activeTab === "screen");
-  // The roster, and the numbering guard's message, fit the frame and wrap instead
+  // The roster, the numbering guard's message and a friendship cup's players
+  // (whose wide table scrolls in its own box) fit the frame and wrap instead
   // of scrolling sideways like a score board, so the host drops its max-content
   // sizing — the same class-toggle the grid uses, rather than a :has() the
   // layout silently depends on.
-  odRoot.classList.toggle("fits-frame", activeTab === "roster" || (activeTab === "input" && !allTeamsNumbered()));
+  odRoot.classList.toggle("fits-frame", activeTab === "roster" || activeTab === "players" ||
+    (activeTab === "input" && !allTeamsNumbered()));
   restoreTabScroll(activeTab);
   updateResultsScrollState();
   if (activeTab === "detailed" || activeTab === "results") teamNameOverflow.schedule(activePane);
@@ -409,6 +435,8 @@ function getTabPane(tab: string): HTMLElement {
   else if (tab === "detailed") node = buildDetailedTable();
   else if (tab === "roster") node = buildRosterView(route.festID);
   else if (tab === "screen") node = buildScreenView();
+  else if (tab === "personal") node = buildPersonalView(kdContext());
+  else if (tab === "players") node = buildPlayersView({...kdContext(), viewer, festID: route.festID, save: savePlayers, refresh: refreshPlayers});
   else node = buildResultsTable();
   const pane = document.createElement("div");
   pane.className = "od-pane";
@@ -1448,7 +1476,7 @@ function handleEntryInput(event: Event): void {
     }
     if (!setShootoutEntryValue(roundIndex, questionIndex, rowIndex, parsed.value)) return;
     closeEntrySuggest();
-    invalidateTabCache("detailed", "results", "screen");
+    invalidateTabCache("detailed", "results", "screen", "personal");
     updateShootoutInputValidity(roundIndex, questionIndex);
     saveState(["shootoutRounds"], state.shootoutRounds);
     return;
@@ -1837,7 +1865,7 @@ function handleEntryChange(event: Event): void {
     const round = state.shootoutRounds[roundIndex];
     const value = shootoutCheckbox.checked ? round?.teams?.[rowIndex] || 0 : 0;
     if (!setShootoutEntryValue(roundIndex, questionIndex, rowIndex, value)) return;
-    invalidateTabCache("detailed", "results", "screen");
+    invalidateTabCache("detailed", "results", "screen", "personal");
     updateShootoutInputValidity(roundIndex, questionIndex);
     saveState(["shootoutRounds"], state.shootoutRounds);
     return;
@@ -1850,7 +1878,7 @@ function handleEntryChange(event: Event): void {
     const round = state.shootoutRounds[roundIndex];
     if (!round?.completed || !Number.isInteger(questionIndex)) return;
     round.completed[questionIndex] = cb.checked;
-    invalidateTabCache("detailed", "results", "screen");
+    invalidateTabCache("detailed", "results", "screen", "personal");
     saveState(["shootoutRounds"], state.shootoutRounds);
     return;
   }
@@ -2952,7 +2980,7 @@ function applyRemoteState(nextState: unknown): void {
   if (editingInput || editingShootout || focusedLockCol) {
     questionStatsCache = null;
     numberToIndexCache = null;
-    invalidateTabCache("detailed", "results", "screen");
+    invalidateTabCache("detailed", "results", "screen", "personal");
     refreshPendingMarkers();
     return;
   }

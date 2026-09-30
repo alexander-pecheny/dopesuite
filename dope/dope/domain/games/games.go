@@ -28,6 +28,7 @@ const (
 	Multi  = "multi"  // multi — several minigames in one sitting
 	Troika = "troika" // troika — a match of two troikas over themes of three questions
 	Hamsa  = "hamsa"  // hamsa — four-seat bouts of five game rounds, the last one played on a bet
+	KD     = "kd"     // friendship cup — an OD whose tables reshuffle their players every tour
 )
 
 // Default is the game type assumed when a game has none recorded.
@@ -107,6 +108,10 @@ var registry = map[string]Definition{
 	// Hamsa plays a bracket of four-seat bouts and boots the bracket payload,
 	// as Troika does: the page fetches its matches and draws them its own way.
 	Hamsa: {Code: Hamsa, Label: dopestrings.Default.Games.Hamsa.Label(), Page: "static/hamsa.html"},
+	// The friendship cup is an OD document whose teams are the tables, and
+	// rides OD's page: the entry, the detailed sheet and the screen board
+	// work on tables unchanged, and the page adds the personal standings.
+	KD: {Code: KD, Label: dopestrings.Default.Games.Kd.Label(), Page: "static/od.html"},
 }
 
 // Label returns the short display label for a game type, falling back to the

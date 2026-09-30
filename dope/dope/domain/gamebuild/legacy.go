@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"dope/dope/domain/flatgame"
@@ -15,6 +16,8 @@ import (
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // titleOr is the Label the Spec asked for, else the format's own title. A flat
@@ -43,6 +46,31 @@ func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, label string,
 		return 0, err
 	}
 	return insertJSONGameTx(ctx, tx, festID, identity, "od", schemeJSON, stateJSON)
+}
+
+// createKDGameTx makes a friendship cup: an OD document seating n tables
+// in place of the fest's teams, with no players yet (ADR-0026). The roster
+// is not folded in — a table is nobody on it.
+func createKDGameTx(ctx context.Context, tx *sql.Tx, festID int64, label string, tours, questions, tables int) (int64, error) {
+	if !games.IsPrime(tables) {
+		return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.KdTablesPrime(strconv.Itoa(tables)))
+	}
+	identity, err := nextGameIdentityTx(ctx, tx, festID, games.KD, titleOr(label, dopestrings.Default.Gamebuild.Titles.Kd()))
+	if err != nil {
+		return 0, err
+	}
+	schemeJSON, stateJSON := games.KDEmptyGameJSON(identity.Code, identity.Title, sameTours(tours, questions), tables, kdTableName)
+	return insertJSONGameTx(ctx, tx, festID, identity, games.KD, schemeJSON, stateJSON)
+}
+
+func kdTableName(n int) string { return dopestrings.Default.Gamebuild.Kd.Table(strconv.Itoa(n)) }
+
+func sameTours(tours, questions int) []int {
+	tourComp := make([]int, tours)
+	for i := range tourComp {
+		tourComp[i] = questions
+	}
+	return tourComp
 }
 
 func createKSIGameTx(ctx context.Context, tx *sql.Tx, festID int64, label string, themesCount int, stickers json.RawMessage) (int64, error) {

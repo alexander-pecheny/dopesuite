@@ -166,11 +166,18 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 			gameTypeRadio("multi", s.Host.Games.TypeMulti(), sel),
 			gameTypeRadio("troika", s.Host.Games.TypeTroika(), sel),
 			gameTypeRadio("hamsa", s.Host.Games.TypeHamsa(), sel),
+			gameTypeRadio("kd", s.Host.Games.TypeKd(), sel),
 		),
 		gameSettings("od", sel,
 			dopeui.Field(dopeui.Label(s.Host.Games.OdToursLabel()), dopeui.Textfield(dopeui.Name("od_tours"), dopeui.Inputmode("numeric"), dopeui.Value("3"))),
 			dopeui.Field(dopeui.Label(s.Host.Games.OdQuestionsLabel()), dopeui.Textfield(dopeui.Name("od_questions"), dopeui.Inputmode("numeric"), dopeui.Value("15"))),
 			dopeui.Hint(dopeui.Text(s.Host.Games.WholeRosterHint())),
+		),
+		gameSettings("kd", sel,
+			dopeui.Field(dopeui.Label(s.Host.Games.OdToursLabel()), dopeui.Textfield(dopeui.Name("kd_tours"), dopeui.Inputmode("numeric"), dopeui.Value("9"))),
+			dopeui.Field(dopeui.Label(s.Host.Games.OdQuestionsLabel()), dopeui.Textfield(dopeui.Name("kd_questions"), dopeui.Inputmode("numeric"), dopeui.Value("4"))),
+			dopeui.Field(dopeui.Label(s.Host.Games.KdTablesLabel()), dopeui.Textfield(dopeui.Name("kd_tables"), dopeui.Inputmode("numeric"), dopeui.Value("11"))),
+			dopeui.Hint(dopeui.Text(s.Host.Games.KdHint())),
 		),
 		gameSettings("ksi", sel,
 			dopeui.Field(dopeui.Label(s.Host.Games.ThemesLabel()), dopeui.Textfield(dopeui.Name("ksi_themes"), dopeui.Inputmode("numeric"), dopeui.Value("20"))),
@@ -653,13 +660,16 @@ type GameCreateRequest struct {
 	EntrantRefs []string `json:"entrant_refs"`
 	// DSL is the format's scheme in the scheme language (brain, si, troika,
 	// hamsa, ek, es). Scheme is a pasted JSON scheme, for ek and es only.
-	DSL          string          `json:"dsl"`
-	Scheme       json.RawMessage `json:"scheme"`
-	ODTours      int             `json:"od_tours"`
-	ODQuestions  int             `json:"od_questions"`
-	KSIThemes    int             `json:"ksi_themes"`
-	MultiGames   string          `json:"multi_games"`
-	MultiSorting string          `json:"multi_sorting"`
+	DSL         string          `json:"dsl"`
+	Scheme      json.RawMessage `json:"scheme"`
+	ODTours     int             `json:"od_tours"`
+	ODQuestions int             `json:"od_questions"`
+	// KDTables is how many tables a friendship cup seats; its tours and
+	// questions come in od_tours and od_questions.
+	KDTables     int    `json:"kd_tables"`
+	KSIThemes    int    `json:"ksi_themes"`
+	MultiGames   string `json:"multi_games"`
+	MultiSorting string `json:"multi_sorting"`
 	// Stickers maps a sticker id (neutral, x2, nowrong, emptywrong) to its
 	// colour and how many each team holds; 0 or absent means none.
 	Stickers map[string]struct {
@@ -689,6 +699,9 @@ func (req GameCreateRequest) form() url.Values {
 	}
 	setIfGiven("od_tours", req.ODTours)
 	setIfGiven("od_questions", req.ODQuestions)
+	setIfGiven("kd_tours", req.ODTours)
+	setIfGiven("kd_questions", req.ODQuestions)
+	setIfGiven("kd_tables", req.KDTables)
 	setIfGiven("ksi_themes", req.KSIThemes)
 	setIfGiven("ksis_themes", req.KSIThemes)
 	form.Set("multi_games", req.MultiGames)
@@ -756,6 +769,16 @@ func gameSpecFromForm(ctx context.Context, tx *sql.Tx, festID int64, gameType st
 			return spec, err
 		}
 		if spec.ODQuestions, err = parsePositiveFormInt(form, "od_questions", s.Host.Games.OdQuestionsLabel(), 1, 100); err != nil {
+			return spec, err
+		}
+	case games.KD:
+		if spec.ODTours, err = parsePositiveFormInt(form, "kd_tours", s.Host.Games.OdToursLabel(), 1, 20); err != nil {
+			return spec, err
+		}
+		if spec.ODQuestions, err = parsePositiveFormInt(form, "kd_questions", s.Host.Games.OdQuestionsLabel(), 1, 100); err != nil {
+			return spec, err
+		}
+		if spec.KDTables, err = parsePositiveFormInt(form, "kd_tables", s.Host.Games.KdTablesLabel(), 2, 199); err != nil {
 			return spec, err
 		}
 	case games.KSI:

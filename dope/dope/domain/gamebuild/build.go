@@ -85,8 +85,11 @@ type Spec struct {
 	// optional stickers block; EK: a pasted detailed scheme — the ADR-0006
 	// escape hatch, and the one road to the manual Kind.
 	ODTours, ODQuestions int
-	KSIThemes            int
-	KSIStickers          json.RawMessage
+	// KDTables is how many tables a friendship cup seats (a prime); its
+	// tours and questions ride ODTours and ODQuestions.
+	KDTables    int
+	KSIThemes   int
+	KSIStickers json.RawMessage
 	// Multi: the minigames as the host wrote them, and the comparators that
 	// break a tie on the total (empty: equal totals share a place).
 	Minigames    []games.MultiGame
@@ -120,7 +123,7 @@ func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 		return Materialise(ctx, tx, spec.FestID, scheme)
 	}
 	switch spec.Type {
-	case games.OD, games.KSI, games.Multi:
+	case games.OD, games.KSI, games.Multi, games.KD:
 		// A flat format is one Match seating the whole fest roster under the
 		// fest's own numbers, and who did not play is marked on its refusals
 		// tab. It has no way to seat a chosen few, so a chosen list is refused
@@ -132,6 +135,8 @@ func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 	switch spec.Type {
 	case games.OD:
 		return createODGameTx(ctx, tx, spec.FestID, spec.Label, spec.ODTours, spec.ODQuestions)
+	case games.KD:
+		return createKDGameTx(ctx, tx, spec.FestID, spec.Label, spec.ODTours, spec.ODQuestions, spec.KDTables)
 	case games.KSI:
 		return createKSIGameTx(ctx, tx, spec.FestID, spec.Label, spec.KSIThemes, spec.KSIStickers)
 	case games.Multi:

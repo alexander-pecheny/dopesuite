@@ -30,9 +30,14 @@ type_si = "Личная СИ"
 type_multi = "Мультиигры"
 type_troika = "Тройка"
 type_hamsa = "Хамса"
+type_kd = "Кубок Дружбы"
 # The OD settings fields; also the field names their out-of-range errors name.
 od_tours_label = "Количество туров"
 od_questions_label = "Количество вопросов в туре"
+# The friendship cup's tables field; also the field its errors name.
+kd_tables_label = "Количество столов"
+# Under the friendship cup's fields: what the tables are and how many to take.
+kd_hint = "Столы играют как команды ОД, а игроки пересаживаются по маршрутным листам. Число столов — простое (7, 11, 13, 17, 19, 23, 29…) и не меньше числа туров, иначе двое игроков встретятся за одним столом дважды. Игроков регистрируют после создания, на вкладке «Игроки»."
 # The KSI themes field (plain and stickers KSI); also its error name.
 themes_label = "Количество тем"
 # Hint above the sticker rows of the stickers-KSI section.

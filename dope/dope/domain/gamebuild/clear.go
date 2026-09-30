@@ -12,6 +12,7 @@ import (
 	"dope/dope/domain/protocol"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
+	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 	corei18n "pecheny.me/dopecore/i18nstrings"
 )
@@ -55,6 +56,14 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 	if len(seat) > 0 {
 		entrants = seat
 	}
+	// A friendship cup keeps its players through a clear; they live in the
+	// document the deletes below take away.
+	var kept games.KDState
+	if gameType == games.KD {
+		if doc, err := store.LoadGameDoc(ctx, tx, festID, gameID); err == nil {
+			_ = json.Unmarshal([]byte(doc.State), &kept)
+		}
+	}
 	// matches/stages cascade to their slots, results and standings (FKs are on).
 	for _, q := range []string{
 		`delete from matches where game_id = ?`,
@@ -94,6 +103,22 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 		emptyScheme, emptyState := games.ODEmptyGameJSON(meta.Slug, meta.Title, tourComp)
 		if newScheme, state, err = pristineFlatTx(ctx, tx, festID, games.OD, emptyScheme, emptyState); err != nil {
 			return "", err
+		}
+		if err := insertFlatMatchTx(ctx, tx, festID, gameID, title, string(state), now); err != nil {
+			return "", err
+		}
+	case gameType == games.KD:
+		// The tables and the players stay: clearing a friendship cup wipes
+		// the answers, not the registration desk's work.
+		tourComp := games.ParseTourComp(schemeJSON)
+		tables := games.KDTables(schemeJSON)
+		var state []byte
+		newScheme, state = games.KDEmptyGameJSON(meta.Slug, meta.Title, tourComp, tables, kdTableName)
+		if len(kept.Players) > 0 {
+			var doc map[string]any
+			_ = json.Unmarshal(state, &doc)
+			doc["players"] = kept.Players
+			state, _ = json.Marshal(doc)
 		}
 		if err := insertFlatMatchTx(ctx, tx, festID, gameID, title, string(state), now); err != nil {
 			return "", err

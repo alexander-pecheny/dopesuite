@@ -12,8 +12,16 @@ ksi = "КСИ"
 # The default title under which each pre-DSL flat format is created (a
 # colliding title gets a numeric suffix at creation).
 multi = "Мультиигры"
+# The default title a friendship cup is created under.
+kd = "Кубок Дружбы"
+
+[kd]
+# The name of a friendship cup's table, as a team of the ОД sheet: Стол 3.
+table = 'Стол {{.n}}'
 
 [create]
+# A friendship cup's table count that is not a prime; the route cards need one.
+kd_tables_prime = 'Число столов Кубка Дружбы должно быть простым (7, 11, 13, 17, 19, 23, 29…), а не {{.n}}'
 # Creating Мультиигры from a scheme DSL: they have no scheme shape.
 multi_from_scheme = "Мультиигры описываются списком мини-игр, а не схемой"
 # Creating ЭК with neither a pasted JSON scheme nor a DSL.
