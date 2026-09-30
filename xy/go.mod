@@ -5,6 +5,7 @@ go 1.26.4
 require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/pdfcpu/pdfcpu v0.13.0
+	github.com/pemistahl/lingua-go v1.4.0
 	github.com/tetratelabs/wazero v1.12.0
 	github.com/ulikunitz/xz v0.5.16
 	golang.org/x/crypto v0.52.0
@@ -23,9 +24,12 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/shopspring/decimal v1.3.1 // indirect
 	github.com/tdewolff/minify/v2 v2.24.17 // indirect
 	github.com/tdewolff/parse/v2 v2.8.16 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
+	golang.org/x/exp v0.0.0-20221106115401-f9659909a136 // indirect
+	google.golang.org/protobuf v1.31.0 // indirect
 )
 
 require (
@@ -52,3 +56,5 @@ require (
 replace pecheny.me/dopeuikit => ../dopeuikit
 
 replace pecheny.me/dopecore => ../dopecore
+
+replace github.com/pemistahl/lingua-go => ./third_party/lingua-go

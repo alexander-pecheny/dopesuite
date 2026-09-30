@@ -57,6 +57,8 @@ func main() {
 		err = boardCmd(os.Args[2:])
 	case "spec":
 		err = specCmd()
+	case "credits":
+		err = creditsCmd(os.Args[2:])
 	case "-h", "--help", "help":
 		usage()
 		return

@@ -27,6 +27,7 @@ scripts/classcheck/cssgeom.go
 scripts/classcheck/main.go
 xy/cmd/chgksuite/stats.go
 xy/internal/chgk/board/download.go
+xy/internal/chgk/credits/credits.go
 xy/internal/chgk/dbtext/date.go
 xy/internal/chgk/dbtext/dbtext.go
 xy/internal/chgk/docxread/docxread.go
