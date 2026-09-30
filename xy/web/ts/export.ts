@@ -94,7 +94,7 @@ function foldBlankLines(desc: string): string {
 
 export function createExportPanel(board: Board, attachments: Pick<Attachments, "appendImages">): ListPanel {
 
-  // The export modal's eight formats, in the order they are offered — the same
+  // The export modal's formats, in the order they are offered — the same
   // order in the one-format dropdown and in the zip's tick boxes. `server` marks
   // the ones that need the server to render, so offline can disable exactly those.
   // `si: false` marks a format that cannot yet set a SI package: its composer
@@ -104,6 +104,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
   const EXPORT_FORMATS = [
     { key: "4s", box: "exportFmt4s", server: false, si: true },
     { key: "docx", box: "exportFmtDocx", server: true, si: true },
+    { key: "docx_screen", box: "exportFmtDocxScreen", server: true, si: true },
     { key: "docx_spoilers", box: "exportFmtDocxSpoilers", server: true, si: true },
     { key: "pdf", box: "exportFmtPdf", server: true, si: true },
     { key: "pdf_mobile", box: "exportFmtPdfMobile", server: true, si: true },
