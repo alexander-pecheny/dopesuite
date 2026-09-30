@@ -356,6 +356,9 @@ var RU = Strings{
 			Summary: func(size string, seated string, active string) string {
 				return fmt.Sprintf("Мест в сетке: %s, занято %s. Всего в списке без отказавшихся: %s.", size, seated, active)
 			},
+			Unranked: func(names string) string {
+				return fmt.Sprintf("Посеяны последними, потому что никого из их игроков нет в составах фестиваля: %s.", names)
+			},
 		},
 		Tab: func() string { return "Участники" },
 	},
@@ -1404,9 +1407,6 @@ var RU = Strings{
 			},
 			NoGames: func() string {
 				return "посев по игрокам: схема не называет игры-источники"
-			},
-			NoRoster: func(name string) string {
-				return fmt.Sprintf("посев по игрокам: у команды %s нет состава", name)
 			},
 			NoRosters: func() string {
 				return "посев по игрокам: у команд этой игры нет составов"

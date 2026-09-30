@@ -279,6 +279,7 @@ export type Strings = {
       movesDropped: (n: string) => string;
       resizes: () => string;
       summary: (size: string, seated: string, active: string) => string;
+      unranked: (names: string) => string;
     };
     tab: () => string;
   };
@@ -1032,7 +1033,6 @@ export type Strings = {
       metricUnknown: (metric: string, known: string) => string;
       multipleStandings: (code: string) => string;
       noGames: () => string;
-      noRoster: (name: string) => string;
       noRosters: () => string;
       noSorting: () => string;
       selfReference: (grain: string, name: string) => string;

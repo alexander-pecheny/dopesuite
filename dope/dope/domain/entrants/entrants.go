@@ -109,6 +109,9 @@ type View struct {
 	// MovesDropped counts the hand moves an import from another source did not
 	// apply again: a place in one source's order means nothing in another's.
 	MovesDropped int `json:"movesDropped,omitempty"`
+	// Unranked names the entrants the last import seeded last because it had
+	// nothing to rank them by: nobody in them is on the fest roster.
+	Unranked []string `json:"unranked,omitempty"`
 	// Kept is why the last write left the Structure as it was, when the scheme
 	// turned the new number of entrants down.
 	Kept string `json:"kept,omitempty"`
@@ -447,11 +450,13 @@ func ImportLegacy(h Host, ctx context.Context, scope core.FestScope, src imports
 func importList(h Host, ctx context.Context, scope core.FestScope, src imports.SeedSource, fresh bool) (Result, error) {
 	var kept []int64
 	dropped := 0
+	var unranked []string
 	result, err := edit(h, ctx, scope, "import", func(ctx context.Context, tx *sql.Tx, list imports.List) (imports.List, error) {
 		next, _, err := imports.ResolveListTx(ctx, tx, scope, list, src)
 		if err != nil {
 			return imports.List{}, err
 		}
+		unranked = next.Unranked
 		edits := list.State.Edits
 		// A move keeps a place in the order the source gave (ADR-0025). Another
 		// source orders by something else — a troika game's troikas by application,
@@ -480,6 +485,7 @@ func importList(h Host, ctx context.Context, scope core.FestScope, src imports.S
 	}, func(ctx context.Context, tx *sql.Tx) error {
 		return dropUnlistedOneOffsTx(ctx, tx, scope, kept)
 	})
+	result.View.Unranked = unranked
 	result.View.MovesDropped = dropped
 	return result, err
 }

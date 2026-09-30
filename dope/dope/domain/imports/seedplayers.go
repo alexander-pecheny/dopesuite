@@ -88,9 +88,21 @@ func (f fromPlayers) resolve(ctx context.Context, tx *sql.Tx, scope core.FestSco
 		}
 	}
 
-	entries, err := seedParticipantPlayers(ctx, tx, scope, sources)
+	all, err := seedParticipantPlayers(ctx, tx, scope, sources)
 	if err != nil {
 		return seeding{}, err
+	}
+	// An entrant whose people the fest roster does not know (a stand-in troika
+	// of stand-ins, a team typed in for this Game) has no places to add up. It
+	// used to stop the whole import; it is seeded last instead, in its order in
+	// the Game, and named to the host.
+	var entries, unranked []seedEntry
+	for _, entry := range all {
+		if len(entry.players) == 0 {
+			unranked = append(unranked, entry)
+			continue
+		}
+		entries = append(entries, entry)
 	}
 	if len(entries) == 0 {
 		return seeding{}, corei18n.User(dopestrings.Default.Imports.SeedPlayers.NoRosters())
@@ -144,13 +156,18 @@ func (f fromPlayers) resolve(ctx context.Context, tx *sql.Tx, scope core.FestSco
 		}
 		return table[i].number < table[j].number
 	})
-	candidates := make([]seedCandidate, len(table))
+	candidates := make([]seedCandidate, 0, len(table)+len(unranked))
 	for i, row := range table {
 		// Number is the Participant's number inside this Game, not a fest
 		// number: the Participant id is what names it to the import.
-		candidates[i] = seedCandidate{SourceRank: i + 1, Name: row.name, Number: row.number, ParticipantID: row.participant}
+		candidates = append(candidates, seedCandidate{SourceRank: i + 1, Name: row.name, Number: row.number, ParticipantID: row.participant})
 	}
-	return seeding{source: "players", label: dopestrings.Default.Imports.SeedSource.Players(), candidates: candidates}, nil
+	var names []string
+	for _, entry := range unranked {
+		candidates = append(candidates, seedCandidate{SourceRank: len(candidates) + 1, Name: entry.name, Number: entry.number, ParticipantID: entry.participant})
+		names = append(names, entry.name)
+	}
+	return seeding{source: "players", label: dopestrings.Default.Imports.SeedSource.Players(), candidates: candidates, unranked: names}, nil
 }
 
 type namedExpr struct {
@@ -476,9 +493,8 @@ order by ga.number, p.id`, []any{scope.GameID, scope.FestID}, func(rs *sql.Rows)
 			}
 			entry.players = append(entry.players, player)
 		}
-		if len(entry.players) == 0 {
-			return nil, corei18n.User(dopestrings.Default.Imports.SeedPlayers.NoRoster(row.name))
-		}
+		// Nobody the fest roster knows: no place to add up. The entrant is
+		// still seeded, behind everyone who has one (resolve says so).
 		entries = append(entries, entry)
 	}
 	return entries, nil

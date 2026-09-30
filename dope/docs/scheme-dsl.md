@@ -120,6 +120,9 @@ printed table instead writes it out in `deal:` (below).
   from three teams are one Троечка team here and their own teams' entries
   there; a player whose team sat a Game out counts one place behind its last.
   Teams that share a place share it: two teams at «3–4» are 3.5 each.
+  A Participant none of whose people is on the fest roster (stand-ins filling
+  the draw) has nothing to add up: it is seeded last, in its order in the
+  Game, and the Участники tab names it.
 - `seed: random` — every rank is a lot.
 - `seed: xlsx` — an uploaded sheet carrying either an exact seeding column or a
   basket column.

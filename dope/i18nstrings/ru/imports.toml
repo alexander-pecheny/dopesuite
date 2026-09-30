@@ -77,8 +77,6 @@ self_reference = '{{.grain}}.{{.name}}: правило зависит от са�
 aggregate_expected = 'seed.{{.name}}: жду mean(метрика), min, max, sum или count'
 # A source game with more than one ranked table: no single place per team.
 multiple_standings = 'у игры {{.code}} несколько таблиц — посев по игрокам берётся из игры с одной'
-# A participant whose team shows no players in this game.
-no_roster = 'посев по игрокам: у команды {{.name}} нет состава'
 
 [rating]
 # The roster import button's request to rating.chgk.net.
