@@ -126,15 +126,16 @@ func TestExportPackMobileIsItsOwnFile(t *testing.T) {
 	}
 }
 
-// TestExportPackSpoilersDocxIsItsOwnFile: the written-testing copy is a second
-// .docx, named as chgksuite names it, so it can be asked for beside the host's.
+// TestExportPackSpoilersDocxIsItsOwnFile: the screen copy and the
+// written-testing copy are further .docx files, named as chgksuite names them,
+// so they can be asked for beside the host's.
 func TestExportPackSpoilersDocxIsItsOwnFile(t *testing.T) {
 	ts, srv := newTestServer(t)
 	c := registerUser(t, srv, ts, 770215, "packspoil")
 
-	b, _ := postPack(t, ts, c, "docx,docx_spoilers", true)
+	b, _ := postPack(t, ts, c, "docx,docx_screen,docx_spoilers", true)
 	got := zipNames(t, b)
-	want := []string{"Тур 1.docx", "Тур 1_screen_spoilers.docx"}
+	want := []string{"Тур 1.docx", "Тур 1_screen.docx", "Тур 1_screen_spoilers.docx"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("zip entries = %v, want %v", got, want)
 	}

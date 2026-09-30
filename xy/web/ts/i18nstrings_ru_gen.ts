@@ -236,6 +236,8 @@ export const RU: Strings = {
       title: () => "Выписки",
     },
     export: {
+      docxScreenLabel: () => ".docx для экрана",
+      docxScreenTitle: () => "Экранный текст: без пометок ведущему [в скобках] и ударений",
       docxSpoilersLabel: () => ".docx со спойлерами",
       docxSpoilersTitle: () => "Экранный текст, ответы за точками — для письменного тура",
       fmt4sTitle: () => "Исходник chgksuite; изображения кладутся рядом в архив",

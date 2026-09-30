@@ -235,6 +235,8 @@ export type Strings = {
       title: () => string;
     };
     export: {
+      docxScreenLabel: () => string;
+      docxScreenTitle: () => string;
       docxSpoilersLabel: () => string;
       docxSpoilersTitle: () => string;
       fmt4sTitle: () => string;

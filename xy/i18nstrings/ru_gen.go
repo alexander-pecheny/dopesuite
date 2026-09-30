@@ -284,6 +284,10 @@ var RU = Strings{
 			Title: func() string { return "Выписки" },
 		},
 		Export: BoardExportStrings{
+			DocxScreenLabel: func() string { return ".docx для экрана" },
+			DocxScreenTitle: func() string {
+				return "Экранный текст: без пометок ведущему [в скобках] и ударений"
+			},
 			DocxSpoilersLabel: func() string { return ".docx со спойлерами" },
 			DocxSpoilersTitle: func() string {
 				return "Экранный текст, ответы за точками — для письменного тура"
