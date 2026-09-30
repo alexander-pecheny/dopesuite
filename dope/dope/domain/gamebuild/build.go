@@ -384,7 +384,42 @@ func writeCompiledStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID in
 	if err != nil {
 		return err
 	}
-	return writeStructureTx(ctx, tx, festID, gameID, gameType, scheme, nil, seat)
+	venues, err := schemeVenuesTx(ctx, tx, festID, scheme.Venues)
+	if err != nil {
+		return err
+	}
+	return writeStructureTx(ctx, tx, festID, gameID, gameType, scheme, venues, seat)
+}
+
+// schemeVenuesTx gives the fest the venues a compiled scheme titles — Hamsa's
+// `venues: [А, Б, В]` are the regulations' venues — and returns every venue
+// the scheme names that the fest has, by number, so each bout is seated at its
+// own. The fest's venues are shared by its Games and the host retitles them,
+// so a title already there stays; and a table the compiler only numbered
+// (`venues: 3`, or none given) carries the default title, which says nothing
+// the number does not, so it writes no row.
+func schemeVenuesTx(ctx context.Context, tx *sql.Tx, festID int64, venues []store.SchemeVenue) (map[int]int64, error) {
+	now := util.UtcNow()
+	ids := map[int]int64{}
+	for _, venue := range venues {
+		if title := strings.TrimSpace(venue.Title); title != "" && title != dopestrings.Default.Scheme.Titles.Venue(fmt.Sprint(venue.Number)) {
+			if _, err := tx.ExecContext(ctx, `
+insert into venues(fest_id, number, title, created_at, updated_at) values(?, ?, ?, ?, ?)
+on conflict(fest_id, number) do nothing`, festID, venue.Number, title, now, now); err != nil {
+				return nil, err
+			}
+		}
+		var id int64
+		err := tx.QueryRowContext(ctx, `select id from venues where fest_id = ? and number = ?`, festID, venue.Number).Scan(&id)
+		if err == sql.ErrNoRows {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		ids[venue.Number] = id
+	}
+	return ids, nil
 }
 
 // writeStructureTx is the one writer of a Game's stages, matches and slots —

@@ -65,12 +65,17 @@ type HamsaBet struct {
 
 // HamsaParticipant is one team's side of the document: its themes in
 // game-round order, its bet, the shootout themes a Block that allows them may
-// add, and the host's Pin.
+// add, the host's Pin, and the host's Lot.
 type HamsaParticipant struct {
 	Themes   []HamsaTheme `json:"themes,omitempty"`
 	Bet      *HamsaBet    `json:"bet,omitempty"`
 	Shootout []HamsaTheme `json:"shootout,omitempty"`
 	Pin      *float64     `json:"pin,omitempty"`
+	// Lot is the host's lot among teams that share a place: 1 goes forward
+	// first. It orders them for the next game and leaves the shared place as
+	// it is, since that place is what the sum of places counts (regulations
+	// 4.8). A team whose place nobody shares needs none.
+	Lot *int `json:"lot,omitempty"`
 }
 
 // HamsaState mirrors matches.state_json.
@@ -175,7 +180,7 @@ func HamsaStateStarted(stateJSON string) bool {
 		if section == nil {
 			continue
 		}
-		if section.Pin != nil {
+		if section.Pin != nil || section.Lot != nil {
 			return true
 		}
 		if section.Bet != nil && (section.Bet.Amount != nil || section.Bet.Answer != "") {
@@ -229,9 +234,16 @@ type HamsaResult struct {
 	First float64
 	// Place is what the bout came to, the host's Pin standing instead of the
 	// computed place where there is one.
-	Place   float64
-	Pin     float64
-	Pinned  bool
+	Place  float64
+	Pin    float64
+	Pinned bool
+	// Order is the place the team goes forward from: its Place where nobody
+	// shares it, and within a shared place the position the host's Lot gives
+	// it. It is 0 while a shared place is not drawn yet, so nothing downstream
+	// takes a team the host has not placed.
+	Order   float64
+	Lot     int
+	HasLot  bool
 	Correct map[int]int // base value → questions taken at it
 	Wrong   map[int]int // base value → questions lost at it
 }
@@ -322,6 +334,9 @@ func ComputeHamsaResults(stateJSON string, seats []int64) ([]HamsaResult, error)
 			if section.Pin != nil {
 				result.Pin, result.Pinned = *section.Pin, true
 			}
+			if section.Lot != nil {
+				result.Lot, result.HasLot = *section.Lot, true
+			}
 		}
 		results[i] = result
 	}
@@ -384,6 +399,7 @@ func hamsaPlaces(results []HamsaResult) {
 			results[i].Place = results[i].Pin
 		}
 	}
+	hamsaOrders(results)
 	best := 0.0
 	for _, result := range results {
 		if result.Place > 0 && (best == 0 || result.Place < best) {
@@ -393,6 +409,47 @@ func hamsaPlaces(results []HamsaResult) {
 	for i := range results {
 		if best > 0 && results[i].Place == best {
 			results[i].First = 1
+		}
+	}
+}
+
+// hamsaOrders gives every team the place it goes forward from. A place nobody
+// shares is its own. Teams that share one cover the places around it — two at
+// 2.5 cover 2 and 3 — and the host's Lot deals those out, 1 first; until every
+// one of them has a Lot of its own, none of them goes anywhere.
+func hamsaOrders(results []HamsaResult) {
+	groups := map[float64][]int{}
+	for i, result := range results {
+		if result.Place > 0 {
+			groups[result.Place] = append(groups[result.Place], i)
+		}
+	}
+	for place, members := range groups {
+		if len(members) == 1 {
+			if place == float64(int(place)) {
+				results[members[0]].Order = place
+			}
+			continue
+		}
+		first := place - float64(len(members)-1)/2
+		if first != float64(int(first)) {
+			continue
+		}
+		lots := map[int]bool{}
+		drawn := true
+		for _, i := range members {
+			if !results[i].HasLot || results[i].Lot < 1 || lots[results[i].Lot] {
+				drawn = false
+				break
+			}
+			lots[results[i].Lot] = true
+		}
+		if !drawn {
+			continue
+		}
+		sort.Slice(members, func(a, b int) bool { return results[members[a]].Lot < results[members[b]].Lot })
+		for k, i := range members {
+			results[i].Order = first + float64(k)
 		}
 	}
 }

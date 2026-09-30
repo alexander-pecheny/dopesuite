@@ -46,6 +46,7 @@ import (
 	"dope/dope/domain/edit"
 	"dope/dope/domain/flatgame"
 	"dope/dope/domain/matchops"
+	"dope/dope/domain/protocol"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/scoring"
 	"dope/dope/platform/metrics"
@@ -53,6 +54,8 @@ import (
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // pointerFromSegments renders a parsed patch path as the JSON pointer an
@@ -590,7 +593,13 @@ func PatchMatchTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, matchID
 		return err
 	}
 	if match.State.Finished {
-		return errors.New("match is finished")
+		paths := make([][]json.RawMessage, len(ops))
+		for i, op := range ops {
+			paths[i] = op.Path
+		}
+		if !protocol.EditableWhenFinished(match.GameType, paths) {
+			return corei18n.User(dopestrings.Default.Edit.Match.Finished())
+		}
 	}
 	if !store.TeamBlobShaped(match.GameType) {
 		next, blobOps, err := applyStateOps(match.GameType, match.RawState, ops, nil, false)

@@ -196,6 +196,11 @@ var RU = Strings{
 		Empty: func() string { return "В этой схеме нет групповых таблиц." },
 	},
 	Edit: EditStrings{
+		Match: EditMatchStrings{
+			Finished: func() string {
+				return "Бой закончен. Чтобы его исправить, снимите отметку «Закончен»."
+			},
+		},
 		Roster: EditRosterStrings{
 			Immutable: func() string {
 				return "команды загружаются из rating.chgk.info; чтобы изменить список, переимпортируйте участников"
@@ -418,6 +423,7 @@ var RU = Strings{
 		Metric: FestMetricStrings{
 			Bouts:       func() string { return "Боёв" },
 			Draw:        func() string { return "Жребий" },
+			First:       func() string { return "Первых мест" },
 			Losses:      func() string { return "Поражения" },
 			PlaceSum:    func() string { return "Σ мест" },
 			Points:      func() string { return "Очки" },
@@ -789,12 +795,22 @@ var RU = Strings{
 			AnswerTitle: func(team string, theme string, value string) string {
 				return fmt.Sprintf("%s, тема %s, %s", team, theme, value)
 			},
-			Bet:           func() string { return "Ставка" },
-			BetTitle:      func(team string) string { return fmt.Sprintf("%s: ставка", team) },
-			Finished:      func() string { return "Закончен" },
+			Bet:      func() string { return "Ставка" },
+			BetTitle: func(team string) string { return fmt.Sprintf("%s: ставка", team) },
+			Finished: func() string { return "Закончен" },
+			LotMissing: func(team string) string {
+				return fmt.Sprintf("%s делит место с другими командами. Пока не выбран жребий, эти команды не попадут в следующую игру.", team)
+			},
+			LotTitle: func(team string) string {
+				return fmt.Sprintf("%s делит место с другими командами. Выберите жребий: команда с номером 1 пойдёт в следующую игру с более высокого места.", team)
+			},
 			Plus:          func() string { return "Σ+" },
 			QuestionCount: func(n string) string { return fmt.Sprintf("Q%s", n) },
 			Seat:          func(n string) string { return fmt.Sprintf("Место %s", n) },
+			ShootoutAnswerTitle: func(team string, value string) string {
+				return fmt.Sprintf("%s, перестрелка, %s", team, value)
+			},
+			ShootoutTheme: func() string { return "П" },
 			Theme:         func(n string) string { return fmt.Sprintf("Т%s", n) },
 			Unseated:      func() string { return "Мест ещё нет" },
 		},
@@ -818,7 +834,7 @@ var RU = Strings{
 			First:    func() string { return "Первых мест" },
 			Place:    func() string { return "Место" },
 			PlaceSum: func() string { return "Сумма мест" },
-			Seed:     func() string { return "КСИ" },
+			Seed:     func() string { return "Посев" },
 			Team:     func() string { return "Команда" },
 			Total:    func() string { return "Очки" },
 		},

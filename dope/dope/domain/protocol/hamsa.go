@@ -33,6 +33,17 @@ func (hamsa) TeamBlob() bool { return false }
 // A theme records the player who sat for it, so a bout's seats carry rosters.
 func (hamsa) SeatsPlayers() bool { return true }
 
+// The lot among teams that share a place is drawn once the bout is over,
+// so it is the one entry a finished bout takes: ["participants", <id>, "lot"].
+func (hamsa) EditableWhenFinished(path []json.RawMessage) bool {
+	if len(path) != 3 {
+		return false
+	}
+	var head, tail string
+	return json.Unmarshal(path[0], &head) == nil && head == "participants" &&
+		json.Unmarshal(path[2], &tail) == nil && tail == "lot"
+}
+
 func (hamsa) Started(state json.RawMessage) bool { return games.HamsaStateStarted(string(state)) }
 
 // hamsaConfig is the stage config the compiler writes from the DSL params.
@@ -57,12 +68,15 @@ func readHamsaConfig(cfg json.RawMessage) (hamsaConfig, error) {
 // Metrics: the score, the plus column, the shootout, the first places a bout
 // hands out, and how many questions each value was taken and lost at — the
 // columns the regulations' tiebreaks and the statistics tab are written in.
+// advance_place is the place a team goes forward from: a place nobody shares,
+// or the one the host's lot gives it within a shared place, and 0 while
+// that is not drawn. The resolver reads it before the place itself.
 func (hamsa) Metrics(cfg json.RawMessage) []string {
 	conf, err := readHamsaConfig(cfg)
 	if err != nil {
 		conf = hamsaConfig{}
 	}
-	names := []string{"total", "plus", "shootoutTotal", "first"}
+	names := []string{"total", "plus", "shootoutTotal", "first", "advance_place"}
 	for _, value := range games.HamsaBaseValues(games.HamsaGameRounds(conf.GameRounds, conf.Multipliers, conf.Values)) {
 		names = append(names, fmt.Sprintf("correct_%d", value), fmt.Sprintf("wrong_%d", value))
 	}
@@ -98,6 +112,7 @@ func (hamsa) ScoreSeated(_ json.RawMessage, stateJSON json.RawMessage, seats []i
 			"plus":          float64(result.Plus),
 			"shootoutTotal": float64(result.ShootoutTotal),
 			"first":         result.First,
+			"advance_place": result.Order,
 		}
 		for value, count := range result.Correct {
 			metrics[fmt.Sprintf("correct_%d", value)] = float64(count)

@@ -80,6 +80,8 @@ stage = "Баллы"
 wins = "Победы"
 losses = "Поражения"
 seed = "Посев"
+# Хамса's count of first places a team took in its бои.
+first = "Первых мест"
 # The draw metric.
 draw = "Жребий"
 

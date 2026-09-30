@@ -157,6 +157,9 @@ export type Strings = {
     empty: () => string;
   };
   edit: {
+    match: {
+      finished: () => string;
+    };
     roster: {
       immutable: () => string;
     };
@@ -341,6 +344,7 @@ export type Strings = {
     metric: {
       bouts: () => string;
       draw: () => string;
+      first: () => string;
       losses: () => string;
       placeSum: () => string;
       points: () => string;
@@ -617,9 +621,13 @@ export type Strings = {
       bet: () => string;
       betTitle: (team: string) => string;
       finished: () => string;
+      lotMissing: (team: string) => string;
+      lotTitle: (team: string) => string;
       plus: () => string;
       questionCount: (n: string) => string;
       seat: (n: string) => string;
+      shootoutAnswerTitle: (team: string, value: string) => string;
+      shootoutTheme: () => string;
       theme: (n: string) => string;
       unseated: () => string;
     };

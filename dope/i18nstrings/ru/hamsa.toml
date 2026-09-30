@@ -35,6 +35,12 @@ bet = "Ставка"
 bet_title = '{{.team}}: ставка'
 # The tooltip of one answer cell: the team, the тема and the вопрос's номинал.
 answer_title = '{{.team}}, тема {{.theme}}, {{.value}}'
+# The same on a перестрелка cell, whose вопросы pay the Персональный раунд's
+# номиналы.
+shootout_answer_title = '{{.team}}, перестрелка, {{.value}}'
+# The перестрелка's head over its score column, one column wide like «Т1».
+# The round row above it already says «Перестрелка».
+shootout_theme = "П"
 # The «Закончен» checkbox in a бой's head.
 finished = "Закончен"
 # The Σ+ column, after the темы.
@@ -43,6 +49,13 @@ plus = "Σ+"
 # at each position of a тема. A Хамса вопрос is worth a different номинал in
 # every раунд, so the columns are named by position and not by value.
 question_count = 'Q{{.n}}'
+# The жребий in the place cell of teams that ended a бой level on the score.
+# They share the place in the сумма мест; the жребий says which of them goes
+# to the next game from the higher place. The host picks 1 for the higher one.
+lot_title = '{{.team}} делит место с другими командами. Выберите жребий: команда с номером 1 пойдёт в следующую игру с более высокого места.'
+# The same, when the бой is finished and the жребий is still missing, so the
+# next game cannot seat these teams yet.
+lot_missing = '{{.team}} делит место с другими командами. Пока не выбран жребий, эти команды не попадут в следующую игру.'
 # A бой nobody has been seated in yet.
 unseated = "Мест ещё нет"
 # The placeholder of a seat the Structure has not filled.
@@ -56,7 +69,9 @@ team = "Команда"
 place_sum = "Сумма мест"
 total = "Очки"
 first = "Первых мест"
-seed = "КСИ"
+# The seed is the place in the письменный отбор, counted again after the
+# teams that declined, so a team that moved up reads its new number here.
+seed = "Посев"
 bouts = "Игр"
 # A table the Ranker has not written yet.
 empty = "Таблица появится, когда сыграют первый бой."

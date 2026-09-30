@@ -432,9 +432,12 @@ export function buildReseedStagePanel(
   }
 
   // The columns are the Ranker's sort rules, one each, as the server sent them.
+  // The lot is the last of them and is drawn only for teams level on all the
+  // rest, so where nobody needed one its column is all zeros and goes.
   const sortRules = stage?.sort || [];
   const metricColumns = sortRules.map((rule) => rule.metric)
-    .filter((metric, index, values) => values.indexOf(metric) === index);
+    .filter((metric, index, values) => values.indexOf(metric) === index)
+    .filter((metric) => metric !== "draw" || entries.some((entry) => Number(entry.metrics?.draw) > 0));
   // The source Matches speak in letters; a column that reads the same in
   // every row — the qualifier seats everyone from one Match — says nothing
   // and goes.
@@ -859,6 +862,7 @@ function reseedMetricLabel(metric: string): string {
     wins: S.fest.metric.wins(),
     losses: S.fest.metric.losses(),
     seed: S.fest.metric.seed(),
+    first: S.fest.metric.first(),
   };
   return labels[metric] || metric;
 }

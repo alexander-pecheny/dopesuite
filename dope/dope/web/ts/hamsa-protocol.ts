@@ -36,6 +36,9 @@ export interface Participant {
   bet: Bet;
   shootout: Theme[];
   pin: number | null;
+  // The host's lot among teams that share a place: 1 goes forward first.
+  // It orders them for the next game and leaves the shared place as it is.
+  lot: number | null;
 }
 
 export interface HamsaState {
@@ -96,7 +99,8 @@ export function parseState(raw: unknown, seats: number[]): HamsaState {
     const rawBet = (section.bet && typeof section.bet === "object" ? section.bet : {}) as Partial<Bet>;
     const amount = typeof rawBet.amount === "number" && Number.isFinite(rawBet.amount) ? rawBet.amount : null;
     const pin = typeof section.pin === "number" && Number.isFinite(section.pin) ? section.pin : null;
-    participants[key] = {themes, bet: {amount, answer: markOf(rawBet.answer)}, shootout, pin};
+    const lot = typeof section.lot === "number" && Number.isInteger(section.lot) && section.lot > 0 ? section.lot : null;
+    participants[key] = {themes, bet: {amount, answer: markOf(rawBet.answer)}, shootout, pin, lot};
   }
   return {rounds, participants};
 }
@@ -219,6 +223,9 @@ export interface Row {
   plus: number;
   shootout: number;
   place: number;
+  // How many teams share this place, this one included.
+  tie: number;
+  lot: number | null;
   correct: number[];
 }
 
@@ -254,22 +261,33 @@ export function placesFor(state: HamsaState, seats: number[]): number[] {
   return places;
 }
 
+// tieSizes is, per seat, how many teams share its place: 1 for a place of its
+// own. A seat in a group of two or more is one the host's lot orders.
+export function tieSizes(places: number[]): number[] {
+  return places.map((place) => (place ? places.filter((other) => other === place).length : 1));
+}
+
 // rows is what the sheet's leading columns show, one per seat in seating order.
+// A bout nobody has entered anything in has no places yet: four teams on zero
+// would otherwise read as four teams sharing 2.5.
 export function rows(state: HamsaState, seats: number[]): Row[] {
-  const places = placesFor(state, seats);
+  const places = started(state) ? placesFor(state, seats) : seats.map(() => 0);
+  const ties = tieSizes(places);
   return seats.map((id, index) => ({
     id,
     total: total(state, id),
     plus: plus(state, id),
     shootout: shootoutTotal(state, id),
     place: places[index],
+    tie: ties[index],
+    lot: sectionOf(state, id)?.lot ?? null,
     correct: correctCounts(state, id),
   }));
 }
 
 export function started(state: HamsaState): boolean {
   for (const section of Object.values(state.participants)) {
-    if (section.pin !== null) return true;
+    if (section.pin !== null || section.lot !== null) return true;
     if (section.bet.amount !== null || section.bet.answer !== "") return true;
     for (const theme of [...section.themes, ...section.shootout]) {
       if (theme.player !== 0) return true;

@@ -19,9 +19,12 @@ import (
 	"time"
 
 	"pecheny.me/dopecore/authcred"
+	corei18n "pecheny.me/dopecore/i18nstrings"
 
 	"pecheny.me/dopecore/webassets"
 	kit "pecheny.me/dopeuikit/kit"
+
+	dopestrings "dope/i18nstrings"
 
 	"dope/dope/web/hostpages"
 	"dope/dope/web/route"
@@ -538,7 +541,7 @@ func (s *server) applyLegacyUpdate(req updateRequest) (store.MatchView, []byte, 
 		return s.commitLocked()
 	}
 	if s.eng.State.Finished {
-		return store.MatchView{}, nil, errors.New("match is finished")
+		return store.MatchView{}, nil, corei18n.User(dopestrings.Default.Edit.Match.Finished())
 	}
 
 	if req.Action != "" {

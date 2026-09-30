@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -288,5 +289,122 @@ where s.game_id = ? and s.code = 's2' order by ms.slot_index`,
 	}
 	if len(seated) != 4 || seated[0] != names[0] {
 		t.Fatalf("финал сел так: %v", seated)
+	}
+}
+
+// Teams level on the score share their place (regulations 4.8), so a bout of
+// Game 1 with a tie has no second or third place for Game 2 to seat. The
+// host draws a lot among the tied teams, on the finished bout: it seats
+// them, and leaves the shared place in the sum of places as it was.
+func TestHamsaLotSeatsATieOfIgra1(t *testing.T) {
+	game, _, _ := hamsaFest(t)
+	playHamsaBlockRound(t, game, 1)
+
+	var boutID int64
+	if err := game.db().QueryRow(`select id from matches where game_id = ? and code = 's1-r1-m1'`, game.gameID).Scan(&boutID); err != nil {
+		t.Fatal(err)
+	}
+	seats, err := store.CollectRows(t.Context(), game.db(), `
+select participant_id from match_slots where match_id = ? order by slot_index`,
+		[]any{boutID}, func(rows *sql.Rows) (int64, error) {
+			var id int64
+			return id, rows.Scan(&id)
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	api := func(method, path string, body any) (int, string) {
+		t.Helper()
+		resp := scopedAPIRequest(t, game.srv, method, fmt.Sprintf("/api/fest/%d/games/%d%s", game.festID, game.gameID, path), body, game.token)
+		return resp.Code, resp.Body.String()
+	}
+	patch := func(ops ...map[string]any) (int, string) {
+		t.Helper()
+		return api(http.MethodPatch, "/matches/s1-r1-m1/state", map[string]any{"ops": ops})
+	}
+	set := func(path []any, value any) map[string]any {
+		return map[string]any{"op": "set", "path": path, "value": value}
+	}
+
+	// A mark on a finished bout is refused, and the refusal says why.
+	if code, body := patch(set([]any{"participants", fmt.Sprint(seats[1]), "themes", 0, "answers", 2}, "")); code != http.StatusBadRequest || !strings.Contains(body, "Закончен") {
+		t.Fatalf("a mark on a finished бой: %d %s", code, body)
+	}
+
+	// Seats 2 and 3 end level: 300 each, a shared 2.5.
+	if code, body := api(http.MethodPost, "/matches/s1-r1-m1/finish", map[string]any{"finished": false}); code != http.StatusOK {
+		t.Fatalf("unfinish: %d %s", code, body)
+	}
+	if code, body := patch(set([]any{"participants", fmt.Sprint(seats[1]), "themes", 0, "answers", 2}, "")); code != http.StatusOK {
+		t.Fatalf("tie: %d %s", code, body)
+	}
+	if code, body := api(http.MethodPost, "/matches/s1-r1-m1/finish", map[string]any{"finished": true}); code != http.StatusOK {
+		t.Fatalf("finish: %d %s", code, body)
+	}
+	seatedInIgra2 := func() map[int64]bool {
+		t.Helper()
+		ids, err := store.CollectRows(t.Context(), game.db(), `
+select ms.participant_id from match_slots ms join matches m on m.id = ms.match_id join stages s on s.id = m.stage_id
+where s.game_id = ? and s.code = 's1-r2' and ms.participant_id is not null`,
+			[]any{game.gameID}, func(rows *sql.Rows) (int64, error) {
+				var id int64
+				return id, rows.Scan(&id)
+			})
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[int64]bool{}
+		for _, id := range ids {
+			out[id] = true
+		}
+		return out
+	}
+	secondOfIgra2 := func() int64 {
+		t.Helper()
+		var id int64
+		if err := game.db().QueryRow(`
+select coalesce(ms.participant_id, 0) from match_slots ms join matches m on m.id = ms.match_id
+where m.game_id = ? and m.code = 's1-r2-m2' and ms.slot_index = 0`, game.gameID).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	// The tie decides nothing by itself: the seat keeps the team it held.
+	if got := secondOfIgra2(); got != seats[1] {
+		t.Fatalf("a tie moved the table of second places to %d", got)
+	}
+
+	// The lot goes in on the finished bout: seat 3 ahead of seat 2.
+	if code, body := patch(
+		set([]any{"participants", fmt.Sprint(seats[2]), "lot"}, 1),
+		set([]any{"participants", fmt.Sprint(seats[1]), "lot"}, 2),
+	); code != http.StatusOK {
+		t.Fatalf("lot: %d %s", code, body)
+	}
+	if got := seatedInIgra2(); len(got) != 9 || !got[seats[1]] || !got[seats[2]] {
+		t.Fatalf("after the lot Игра №2 seats %d teams, want 9: %v", len(got), got)
+	}
+	if second := secondOfIgra2(); second != seats[2] {
+		t.Fatalf("the table of second places took %d, want the team the lot put ahead, %d", second, seats[2])
+	}
+	var place float64
+	if err := game.db().QueryRow(`select place from match_results where match_id = ? and participant_id = ?`, boutID, seats[2]).Scan(&place); err != nil || place != 2.5 {
+		t.Fatalf("the lot moved the shared place: %v (%v)", place, err)
+	}
+
+	// The bout read through the API carries the scores the sheet shows.
+	code, body := api(http.MethodGet, "/matches/s1-r1-m1", nil)
+	var view struct {
+		Participants []struct {
+			ID    int64   `json:"id"`
+			Total int     `json:"total"`
+			Place float64 `json:"place"`
+		} `json:"participants"`
+	}
+	if code != http.StatusOK || json.Unmarshal([]byte(body), &view) != nil || len(view.Participants) != 4 {
+		t.Fatalf("бой: %d %s", code, body)
+	}
+	if view.Participants[0].Total != 1000 || view.Participants[1].Total != 300 || view.Participants[1].Place != 2.5 {
+		t.Fatalf("бой through the API: %+v", view.Participants)
 	}
 }

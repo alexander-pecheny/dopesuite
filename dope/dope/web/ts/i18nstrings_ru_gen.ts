@@ -158,6 +158,9 @@ export const RU: Strings = {
     empty: () => "В этой схеме нет групповых таблиц.",
   },
   edit: {
+    match: {
+      finished: () => "Бой закончен. Чтобы его исправить, снимите отметку «Закончен».",
+    },
     roster: {
       immutable: () => "команды загружаются из rating.chgk.info; чтобы изменить список, переимпортируйте участников",
     },
@@ -342,6 +345,7 @@ export const RU: Strings = {
     metric: {
       bouts: () => "Боёв",
       draw: () => "Жребий",
+      first: () => "Первых мест",
       losses: () => "Поражения",
       placeSum: () => "Σ мест",
       points: () => "Очки",
@@ -618,9 +622,13 @@ export const RU: Strings = {
       bet: () => "Ставка",
       betTitle: (team: string) => `${team}: ставка`,
       finished: () => "Закончен",
+      lotMissing: (team: string) => `${team} делит место с другими командами. Пока не выбран жребий, эти команды не попадут в следующую игру.`,
+      lotTitle: (team: string) => `${team} делит место с другими командами. Выберите жребий: команда с номером 1 пойдёт в следующую игру с более высокого места.`,
       plus: () => "Σ+",
       questionCount: (n: string) => `Q${n}`,
       seat: (n: string) => `Место ${n}`,
+      shootoutAnswerTitle: (team: string, value: string) => `${team}, перестрелка, ${value}`,
+      shootoutTheme: () => "П",
       theme: (n: string) => `Т${n}`,
       unseated: () => "Мест ещё нет",
     },
@@ -640,7 +648,7 @@ export const RU: Strings = {
       first: () => "Первых мест",
       place: () => "Место",
       placeSum: () => "Сумма мест",
-      seed: () => "КСИ",
+      seed: () => "Посев",
       team: () => "Команда",
       total: () => "Очки",
     },

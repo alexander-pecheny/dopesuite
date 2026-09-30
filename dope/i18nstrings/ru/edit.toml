@@ -5,3 +5,8 @@
 # The team list is owned by a rating.chgk.info import; only a re-import
 # changes it.
 immutable = "команды загружаются из rating.chgk.info; чтобы изменить список, переимпортируйте участников"
+
+[match]
+# A host edits a бой that is marked «Закончен». The edit is refused, and this
+# says what to do instead.
+finished = "Бой закончен. Чтобы его исправить, снимите отметку «Закончен»."

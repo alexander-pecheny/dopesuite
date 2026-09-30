@@ -181,22 +181,27 @@ type dbSources struct {
 
 // TeamAtMatchPlace returns the team that took the given place in a bout, but
 // only once that bout is finished — provisional standings must not leak
-// downstream. Returns 0 when unresolved.
+// downstream. The place is the one the team goes forward from
+// (store.AdvancePlaceSQL), so a place teams share waits for the host's lot.
+// Returns 0 when unresolved, and when more than one team holds the place: the
+// resolver never picks between them itself.
 func (d dbSources) TeamAtMatchPlace(matchCode string, place int) (int64, error) {
 	if matchCode == "" || place <= 0 {
 		return 0, nil
 	}
-	var teamID int64
-	err := d.q.QueryRowContext(d.ctx, `
+	teams, err := store.CollectRows(d.ctx, d.q, `
 select mr.participant_id
 from match_results mr
 join matches m on m.id = mr.match_id
-where m.game_id = ? and m.code = ? and m.status = 'finished' and mr.place = ?`,
-		d.gameID, matchCode, float64(place)).Scan(&teamID)
-	if err == sql.ErrNoRows {
-		return 0, nil
+where m.game_id = ? and m.code = ? and m.status = 'finished' and `+store.AdvancePlaceSQL+` = ?`,
+		[]any{d.gameID, matchCode, float64(place)}, func(rows *sql.Rows) (int64, error) {
+			var id int64
+			return id, rows.Scan(&id)
+		})
+	if err != nil || len(teams) != 1 {
+		return 0, err
 	}
-	return teamID, err
+	return teams[0], nil
 }
 
 // TeamAtReseedRank returns the team at a source stage's rank, or 0 when the

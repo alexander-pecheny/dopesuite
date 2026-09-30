@@ -125,3 +125,22 @@ Deno.test("счётчики по вопросам считают взятое п
   assertEquals(hamsa.correctCounts(state, 3), [2, 0, 1, 0, 2]);
   assertEquals(hamsa.rows(state, [3])[0].correct, [2, 0, 1, 0, 2]);
 });
+
+Deno.test("жребий среди равных читается из документа и места не меняет", () => {
+  const state = hamsa.parseState(doc({
+    1: {themes: themes([1, "R----"])},
+    2: {themes: themes(), lot: 2},
+    3: {themes: themes(), lot: 1},
+    4: {themes: themes([1, "W----"]), lot: 0},
+  }), [1, 2, 3, 4]);
+  const rows = hamsa.rows(state, [1, 2, 3, 4]);
+  assertEquals(rows.map((row) => row.place), [1, 2.5, 2.5, 4]);
+  assertEquals(rows.map((row) => row.tie), [1, 2, 2, 1]);
+  assertEquals(rows.map((row) => row.lot), [null, 2, 1, null]);
+  assertEquals(hamsa.started(hamsa.parseState(doc({1: {lot: 1}}), [1])), true);
+});
+
+Deno.test("у несыгранного боя мест ещё нет", () => {
+  const state = hamsa.parseState(doc({}), [1, 2, 3, 4]);
+  assertEquals(hamsa.rows(state, [1, 2, 3, 4]).map((row) => row.place), [0, 0, 0, 0]);
+});

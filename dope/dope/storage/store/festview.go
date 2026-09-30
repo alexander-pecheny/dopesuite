@@ -158,6 +158,13 @@ order by ms.slot_index`, []any{matchID}, func(rows *sql.Rows) (MatchParticipantS
 	return teams, nil
 }
 
+// AdvancePlaceSQL is the place a match_results row (mr) goes forward from: the
+// Protocol's advance_place where it writes one — Hamsa's, where teams level on
+// the score share a place and the host's lot orders them — and the place
+// itself for every other Protocol. A 0 is a shared place nobody has drawn yet,
+// which matches no seat.
+const AdvancePlaceSQL = `coalesce(json_extract(mr.metrics_json, '$.advance_place'), mr.place)`
+
 // LoadDrawCandidates resolves a Draw Slot's candidate places to whoever holds
 // them now. A place in a Match that is not finished resolves to nobody, so the
 // panel offers a choice only once the Round it draws from is played out —
@@ -190,7 +197,7 @@ func LoadDrawCandidates(ctx context.Context, q Queryer, gameID int64, draw *Sche
 			Name  string
 		}
 		rows, err := CollectRows(ctx, q, `
-select m.code, mr.place, mr.participant_id, coalesce(p.name, '')
+select m.code, `+AdvancePlaceSQL+`, mr.participant_id, coalesce(p.name, '')
 from match_results mr
 join matches m on m.id = mr.match_id
 join participants p on p.id = mr.participant_id

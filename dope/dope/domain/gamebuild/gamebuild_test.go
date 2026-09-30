@@ -270,3 +270,47 @@ func TestAPlayersParticipantIsNeverHandedToAnother(t *testing.T) {
 		t.Fatalf("Boris's Participant is now %q (%v)", name, err)
 	}
 }
+
+// A scheme that names its tables — Hamsa's `venues: [А, Б, В]`, the regulations'
+// venues — gives the fest those venues and seats each bout at its own, so
+// the grid and the bout say "venue 1 (A)". A venue the host already titled keeps
+// the host's title, and a scheme that only counts its tables writes no titles.
+func TestCreateWritesTheVenuesASchemeNames(t *testing.T) {
+	db, festID := newFest(t, 4)
+	inTx(t, db, func(tx *sql.Tx) error {
+		_, err := tx.Exec(`insert into venues(fest_id, number, title, created_at, updated_at) values(?, 3, 'Малый зал', '', '')`, festID)
+		return err
+	})
+	var gameID int64
+	inTx(t, db, func(tx *sql.Tx) (err error) {
+		gameID, err = gamebuild.Create(context.Background(), tx, gamebuild.Spec{FestID: festID, Type: "brain", Label: "Брейн",
+			DSL: "[defaults]\nvenues: [А, Б, В]\n\n[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 2\n"})
+		return err
+	})
+	titles, err := store.CollectRows(context.Background(), db, `select number || ':' || title from venues where fest_id = ? order by number`,
+		[]any{festID}, func(rows *sql.Rows) (string, error) {
+			var s string
+			return s, rows.Scan(&s)
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(titles) != "[1:А 2:Б 3:Малый зал]" {
+		t.Fatalf("venues = %v", titles)
+	}
+	var unseated int
+	if err := db.QueryRow(`select count(*) from matches where game_id = ? and venue_id is null`, gameID).Scan(&unseated); err != nil || unseated != 0 {
+		t.Fatalf("%d бои without a venue (%v)", unseated, err)
+	}
+
+	db, festID = newFest(t, 4)
+	inTx(t, db, func(tx *sql.Tx) error {
+		_, err := gamebuild.Create(context.Background(), tx, gamebuild.Spec{FestID: festID, Type: "brain", Label: "Брейн",
+			DSL: "[defaults]\nvenues: 2\n\n[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 2\n"})
+		return err
+	})
+	var count int
+	if err := db.QueryRow(`select count(*) from venues where fest_id = ?`, festID).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("a counted venues list wrote %d titles (%v)", count, err)
+	}
+}

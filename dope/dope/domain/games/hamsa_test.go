@@ -239,6 +239,7 @@ func TestHamsaStartedSeesEveryEntry(t *testing.T) {
 		"player": {Themes: []HamsaTheme{{Player: 7}}},
 		"bet":    {Bet: hamsaBet(300, "")},
 		"pin":    {Pin: &pin},
+		"lot":    hamsaLot(&HamsaParticipant{}, 1),
 	} {
 		state := HamsaState{Rounds: defaultRounds(), Participants: map[string]*HamsaParticipant{"1": section}}
 		if !HamsaStateStarted(hamsaJSON(t, state)) {
@@ -263,5 +264,56 @@ func TestComputeHamsaResultsWithoutSeatsReadsTheDocument(t *testing.T) {
 	}
 	if strconv.FormatInt(results[1].Participant, 10) != "12" || results[1].Place != 1 {
 		t.Fatalf("12 = %+v", results[1])
+	}
+}
+
+func hamsaLot(side *HamsaParticipant, lot int) *HamsaParticipant {
+	side.Lot = &lot
+	return side
+}
+
+// Teams level on the score share their place (regulations 4.8), and the next
+// game still needs one team in each seat. The host's lot orders the teams
+// that share a place: it gives each the place it goes forward from, and leaves
+// the shared place, which is what the sum of places counts, as it was.
+func TestComputeHamsaResultsOrdersASharedPlaceByTheHostsLot(t *testing.T) {
+	state := HamsaState{
+		Rounds: defaultRounds(),
+		Participants: map[string]*HamsaParticipant{
+			"1": hamsaSide("R----"),
+			"2": hamsaSide("-----"),
+			"3": hamsaSide("-----"),
+			"4": hamsaSide("W----"),
+		},
+	}
+	results, err := ComputeHamsaResults(hamsaJSON(t, state), []int64{1, 2, 3, 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := [4]float64{results[0].Order, results[1].Order, results[2].Order, results[3].Order}; got != [4]float64{1, 0, 0, 4} {
+		t.Fatalf("before the lot: orders = %v, want 1 0 0 4 — a shared place goes nowhere until it is drawn", got)
+	}
+
+	state.Participants["2"] = hamsaLot(state.Participants["2"], 2)
+	state.Participants["3"] = hamsaLot(state.Participants["3"], 1)
+	results, err = ComputeHamsaResults(hamsaJSON(t, state), []int64{1, 2, 3, 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if results[1].Place != 2.5 || results[2].Place != 2.5 {
+		t.Fatalf("the lot changed the shared place: %v %v", results[1].Place, results[2].Place)
+	}
+	if results[1].Order != 3 || results[2].Order != 2 {
+		t.Fatalf("orders = %v %v, want 3 and 2", results[1].Order, results[2].Order)
+	}
+
+	// Half a lot decides nothing: both teams need their number.
+	state.Participants["3"].Lot = nil
+	results, err = ComputeHamsaResults(hamsaJSON(t, state), []int64{1, 2, 3, 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if results[1].Order != 0 || results[2].Order != 0 {
+		t.Fatalf("one lot of two: orders = %v %v, want 0 0", results[1].Order, results[2].Order)
 	}
 }

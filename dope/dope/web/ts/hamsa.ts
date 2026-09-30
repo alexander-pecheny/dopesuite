@@ -8,7 +8,7 @@
 
 import {cssEscape, option, questionNumberNode, td, th} from "./cells.js";
 import type {CellContent, CellSpec} from "./cells.js";
-import {festLetters, standingsTable} from "./standings.js";
+import {festLetters, letteredTitle, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
 import {buildGameRosterView} from "./fest-roster.js";
 import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
@@ -382,7 +382,7 @@ function groupLabelOf(group: ThemeGroup, themes: number): string {
   case "bet":
     return S.hamsa.protocol.theme(String(themes + 1));
   case "shootout":
-    return S.hamsa.round.shootout();
+    return S.hamsa.protocol.shootoutTheme();
   default:
     return S.hamsa.protocol.theme(String(group.theme + 1));
   }
@@ -453,7 +453,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
     rows: seats.map((id, seat) => ({
       nameCell: {content: seatName(bout.view, seat), className: "sticky sticky-name team-name"},
       totalCell: {content: rows[seat].total, className: "sticky sticky-total number total-cell", dataset: {total: `${bout.code}-${seat}`}},
-      placeCell: {content: placeText(rows[seat].place), className: "sticky sticky-place number place-cell", dataset: {place: `${bout.code}-${seat}`}},
+      placeCell: {content: placeContent(bout, seat, rows[seat]), className: "sticky sticky-place number place-cell", dataset: {place: `${bout.code}-${seat}`}},
       themes: groups.map((group) => themeRow(bout, id, seat, group, editable)),
       afterThemeCells: [
         {content: rows[seat].plus, className: "number plus-cell", attrs: {rowSpan: 2}, dataset: {plus: `${bout.code}-${seat}`}},
@@ -503,6 +503,39 @@ function roundHeaderRow(bout: BoutEntry, groups: ThemeGroup[]): HTMLElement {
 function placeText(place: number): string {
   if (!place) return "";
   return Number.isInteger(place) ? String(place) : place.toFixed(1);
+}
+
+// placeContent is the place cell: the place, and for a host, under a place
+// the team shares, the lot that says which of them goes forward first. The
+// shared place stays what the sum of places counts; the lot only seats the
+// next game. It stays open on a finished bout, because a tie is only known once
+// the bout is over, and the server takes it there.
+function placeContent(bout: BoutEntry, seat: number, row: hamsa.Row): CellContent {
+  const text = placeText(row.place);
+  const id = seatsOf(bout.view)[seat];
+  if (viewer || !id || row.tie < 2) return text;
+  const select = document.createElement("select");
+  select.className = "hamsa-lot-select";
+  const missing = Boolean(bout.view.finished) && row.lot === null;
+  select.classList.toggle("needs-lot", missing);
+  select.title = missing ? S.hamsa.protocol.lotMissing(seatName(bout.view, seat)) : S.hamsa.protocol.lotTitle(seatName(bout.view, seat));
+  select.setAttribute("aria-label", select.title);
+  select.appendChild(option(0, S.hamsa.draw.none()));
+  for (let lot = 1; lot <= row.tie; lot++) select.appendChild(option(lot, lot));
+  select.value = String(row.lot ?? 0);
+  select.addEventListener("change", () => {
+    const value = Number(select.value) || null;
+    const section = hamsa.sectionOf(stateOf(bout.code), id);
+    if (section) section.lot = value;
+    patch(bout.code, ["participants", String(id), "lot"], value);
+    refreshTotals(bout.code);
+  });
+  const label = document.createElement("span");
+  label.textContent = text;
+  const wrap = document.createElement("span");
+  wrap.className = "u-col u-align-center";
+  wrap.append(label, select);
+  return wrap;
 }
 
 function themeRow(bout: BoutEntry, id: number, seat: number, group: ThemeGroup, editable: boolean): ScoreTableThemeRow {
@@ -606,7 +639,9 @@ function markCell(bout: BoutEntry, id: number, seat: number, theme: number, q: n
   if (!viewer) cell.tabIndex = bout.view.finished ? -1 : 0;
   cell.title = kind === "bet"
     ? S.hamsa.protocol.betTitle(seatName(bout.view, seat))
-    : S.hamsa.protocol.answerTitle(seatName(bout.view, seat), String(theme + 1), String(hamsa.themeValues(state, theme)[q] || 0));
+    : kind === "shootout"
+      ? S.hamsa.protocol.shootoutAnswerTitle(seatName(bout.view, seat), String(hamsa.shootoutValues(state)[q] || 0))
+      : S.hamsa.protocol.answerTitle(seatName(bout.view, seat), String(theme + 1), String(hamsa.themeValues(state, theme)[q] || 0));
   paintMark(cell, mark);
   return cell;
 }
@@ -639,7 +674,9 @@ function boutHeader(bout: BoutEntry): CellContent {
   layout.className = "battle-layout";
   const title = document.createElement("span");
   title.className = "battle-title";
-  title.textContent = [boutLetters.get(bout.code), bout.view.title || bout.code].filter(Boolean).join(". ");
+  // Named as the grid names it — "Match A", the letter in place of the number —
+  // so a host reading the sheet and a player reading the grid say the same.
+  title.textContent = letteredTitle(bout.view.title || bout.code, boutLetters.get(bout.code));
   layout.appendChild(title);
 
   // A spectator gets the name alone, as on EK: the tick is the host's control.
@@ -797,7 +834,12 @@ function refreshTotals(code: string): void {
     setCell(`[data-total="${cssEscape(`${code}-${seat}`)}"]`, String(row.total));
     setCell(`[data-plus="${cssEscape(`${code}-${seat}`)}"]`, String(row.plus));
     row.correct.forEach((count, q) => setCell(`[data-count="${cssEscape(`${code}-${seat}-${q}`)}"]`, String(count)));
-    setCell(`[data-place="${cssEscape(`${code}-${seat}`)}"]`, placeText(row.place));
+    const place = root.querySelector<HTMLElement>(`[data-place="${cssEscape(`${code}-${seat}`)}"]`);
+    if (place && bout) {
+      const content = placeContent(bout, seat, row);
+      if (content instanceof Node) place.replaceChildren(content);
+      else place.textContent = String(content ?? "");
+    }
     setCell(`[data-bet="${cssEscape(`${code}-${seat}`)}"]:not(input)`, String(hamsa.betScore(state, row.id)));
     if (!bout) return;
     for (const group of themeGroups(bout)) {

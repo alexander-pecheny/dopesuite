@@ -55,6 +55,11 @@ type ParticipantState struct {
 	ShootoutThemes []ThemeEntry   `json:"shootoutThemes,omitempty"`
 	Tiebreak       int            `json:"tiebreak"`
 	Place          float64        `json:"place"`
+	// Total and Plus are what the scorer wrote to match_results for a
+	// Protocol that keeps its own document: read for the view, never stored
+	// here, since that document is the record.
+	Total int `json:"-"`
+	Plus  int `json:"-"`
 }
 
 // MatchState is the persisted state of a single match.

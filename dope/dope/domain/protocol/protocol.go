@@ -195,6 +195,33 @@ func ScoreSeats(p Protocol, cfg, state json.RawMessage, seats []int64) ([]struct
 	return p.Score(cfg, state)
 }
 
+// LateEditor is implemented by a Protocol whose document keeps an entry a
+// host makes after a bout is finished: Hamsa's lot among teams that share a
+// place, which is only known once the bout is over. Every other path stays
+// closed on a finished bout.
+type LateEditor interface {
+	EditableWhenFinished(path []json.RawMessage) bool
+}
+
+// EditableWhenFinished reports whether every one of these paths may be written
+// on a finished bout of the Protocol.
+func EditableWhenFinished(code string, paths [][]json.RawMessage) bool {
+	p, ok := Get(code)
+	if !ok {
+		return false
+	}
+	late, ok := p.(LateEditor)
+	if !ok || len(paths) == 0 {
+		return false
+	}
+	for _, path := range paths {
+		if !late.EditableWhenFinished(path) {
+			return false
+		}
+	}
+	return true
+}
+
 // SeatsPlayers is implemented by a Protocol whose matches field named
 // players — Troika records which of a team's three sat in which chair — so
 // each seat wants its roster on the view. A team-blob Protocol already gets

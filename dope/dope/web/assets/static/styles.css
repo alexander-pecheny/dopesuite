@@ -5185,6 +5185,36 @@ body.is-fullscreen.od-page .match-main {
   color: var(--muted);
 }
 
+/* The жребий under a place teams share: a narrow select in the place column,
+   drawn like the player select. It stays live on a finished бой, where every
+   other control greys out, because a tie is only known once the бой is over;
+   missing there, it is marked, since the next game cannot seat the teams. */
+.hamsa-sheet .hamsa-lot-select {
+  width: 100%;
+  padding: var(--space-0);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--text-xs);
+  text-align: center;
+  text-align-last: center;
+  text-decoration: underline dotted;
+  appearance: none;
+  cursor: pointer;
+}
+
+.match-finished .hamsa-lot-select {
+  color: inherit;
+  cursor: pointer;
+}
+
+.hamsa-sheet .hamsa-lot-select.needs-lot {
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
+
 /* The sheet's geometry, stated on the columns because its first row spans
    them: fixed layout divides a spanning width over the columns it covers, so
    the round names above the тема heads would flatten every column to the same
