@@ -288,20 +288,60 @@ type GameEntrantView struct {
 // roster instead.
 func LoadGameEntrantsView(ctx context.Context, q store.Queryer, festID, gameID int64) ([]GameEntrantView, error) {
 	type entrant struct {
-		id   int64
-		view GameEntrantView
+		id     int64
+		number int64
 	}
 	entrants, err := store.CollectRows(ctx, q, `
-select p.id, coalesce(gp.number, 0), p.name, coalesce(p.city, '')
+select gp.participant_id, coalesce(gp.number, 0)
 from game_participants gp
 join participants p on p.id = gp.participant_id and p.fest_id = ?
 where gp.game_id = ?
 order by gp.position`, []any{festID, gameID}, func(rows *sql.Rows) (entrant, error) {
 		var e entrant
-		return e, rows.Scan(&e.id, &e.view.Number, &e.view.Name, &e.view.City)
+		return e, rows.Scan(&e.id, &e.number)
 	})
 	if err != nil || len(entrants) == 0 {
 		return nil, err
+	}
+	ids := make([]int64, len(entrants))
+	for i, e := range entrants {
+		ids[i] = e.id
+	}
+	out, err := LoadParticipantsView(ctx, q, festID, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		out[i].Number = entrants[i].number
+	}
+	return out, nil
+}
+
+// LoadParticipantsView draws the fest's Participants with these ids, in this
+// order, as a Game's roster tab lists them: name, people, and for a troika the
+// team it counts for and its division. An id the fest does not know is left
+// out. A Troika whose scheme seats nobody until its seed is known (seed:
+// players) names its troikas only in its entrant list, and its roster tab
+// draws them from there.
+func LoadParticipantsView(ctx context.Context, q store.Queryer, festID int64, ids []int64) ([]GameEntrantView, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	type participant struct {
+		id   int64
+		view GameEntrantView
+	}
+	all, err := store.CollectRows(ctx, q, `
+select id, name, coalesce(city, '') from participants where fest_id = ?`, []any{festID}, func(rows *sql.Rows) (participant, error) {
+		var p participant
+		return p, rows.Scan(&p.id, &p.view.Name, &p.view.City)
+	})
+	if err != nil {
+		return nil, err
+	}
+	known := make(map[int64]GameEntrantView, len(all))
+	for _, p := range all {
+		known[p.id] = p.view
 	}
 	type member struct {
 		participant int64
@@ -310,9 +350,9 @@ order by gp.position`, []any{festID, gameID}, func(rows *sql.Rows) (entrant, err
 	members, err := store.CollectRows(ctx, q, `
 select pp.participant_id, pl.first_name, pl.last_name
 from participant_players pp
+join participants p on p.id = pp.participant_id and p.fest_id = ?
 join players pl on pl.id = pp.player_id
-where pp.participant_id in (select participant_id from game_participants where game_id = ?)
-order by pp.participant_id, pp.roster_order`, []any{gameID}, func(rows *sql.Rows) (member, error) {
+order by pp.participant_id, pp.roster_order`, []any{festID}, func(rows *sql.Rows) (member, error) {
 		var m member
 		return m, rows.Scan(&m.participant, &m.first, &m.last)
 	})
@@ -331,17 +371,20 @@ order by pp.participant_id, pp.roster_order`, []any{gameID}, func(rows *sql.Rows
 	for _, a := range assembled {
 		troikas[a.ID] = a
 	}
-	out := make([]GameEntrantView, len(entrants))
-	for i, e := range entrants {
-		view := e.view
-		view.Players = people[e.id]
+	out := make([]GameEntrantView, 0, len(ids))
+	for _, id := range ids {
+		view, ok := known[id]
+		if !ok {
+			continue
+		}
+		view.Players = people[id]
 		if view.Players == nil {
 			view.Players = []FestRosterPlayerView{}
 		}
-		if troika, ok := troikas[e.id]; ok {
+		if troika, ok := troikas[id]; ok {
 			view.HeadTeam, view.Flags = troika.HeadTeam, troika.Flags
 		}
-		out[i] = view
+		out = append(out, view)
 	}
 	return out, nil
 }

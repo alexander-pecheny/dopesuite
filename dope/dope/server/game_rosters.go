@@ -8,7 +8,9 @@ import (
 	"slices"
 	"strconv"
 
+	"dope/dope/domain/core"
 	"dope/dope/domain/games"
+	"dope/dope/domain/imports"
 	"dope/dope/domain/overrides"
 	"dope/dope/domain/roster"
 	"dope/dope/platform/util"
@@ -23,7 +25,8 @@ import (
 // scopedGameRoster serves the Game's roster tab. A Troika gets its troikas with
 // their people, head team and division. A team buzzer format gets its teams
 // with the rosters they play it with, and with ?choices=1 the fest's players to
-// suggest. A Game with no teams of its own yet gets the fest roster.
+// suggest. A Game with no teams of its own yet gets the fest roster, except a
+// Troika, which lists troikas even before it seats them.
 func (s *server) scopedGameRoster(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	ctx := r.Context()
 	var gameType string
@@ -54,14 +57,40 @@ func (s *server) scopedGameRoster(w http.ResponseWriter, r *http.Request, sc rou
 	if gameType != games.Troika {
 		return s.scopedFestRoster(w, r, sc)
 	}
-	entrants, err := roster.LoadGameEntrantsView(ctx, s.eng.DB, sc.FestID, sc.GameID)
+	entrants, err := s.troikaRoster(ctx, sc)
 	if err != nil {
 		return err
 	}
-	if len(entrants) > 0 {
-		return route.JSON(w, map[string]any{"teams": entrants, "entrants": true})
+	if entrants == nil {
+		entrants = []roster.GameEntrantView{}
 	}
-	return s.scopedFestRoster(w, r, sc)
+	return route.JSON(w, map[string]any{"teams": entrants, "entrants": true})
+}
+
+// troikaRoster is who a Troika's roster tab lists: the troikas it seats; while
+// it seats nobody yet (a seed: players scheme seats them only once the seed is
+// known), the troikas its entrant list names; with no list either, every
+// troika of the fest. Never the fest's teams: a Troika plays troikas.
+func (s *server) troikaRoster(ctx context.Context, sc route.Scope) ([]roster.GameEntrantView, error) {
+	seated, err := roster.LoadGameEntrantsView(ctx, s.eng.DB, sc.FestID, sc.GameID)
+	if err != nil || len(seated) > 0 {
+		return seated, err
+	}
+	list, err := imports.LoadListTx(ctx, s.eng.DB, core.FestScope{FestID: sc.FestID, GameID: sc.GameID})
+	if err != nil {
+		return nil, err
+	}
+	ids := list.Active()
+	if len(ids) == 0 {
+		all, err := roster.LoadAssembled(ctx, s.eng.DB, sc.FestID)
+		if err != nil {
+			return nil, err
+		}
+		for _, a := range all {
+			ids = append(ids, a.ID)
+		}
+	}
+	return roster.LoadParticipantsView(ctx, s.eng.DB, sc.FestID, ids)
 }
 
 type gameRosterRequest struct {
