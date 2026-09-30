@@ -369,7 +369,11 @@ func TestScopedGameStatePatchBroadcastsDelta(t *testing.T) {
 				t.Fatalf("decode envelope: %v (raw %s)", err, ev.Data)
 			}
 			return env
-		default:
+		// Under the full suite's load the coalescing window's timer can fire
+		// first and send the delta from its own goroutine; FlushDelta then
+		// finds nothing buffered, and the event lands a moment later. A bare
+		// default lost that race now and then.
+		case <-time.After(2 * time.Second):
 			t.Fatal("expected a broadcast event, got none")
 			return envelope{}
 		}
@@ -445,7 +449,11 @@ func TestScopedMatchUpdateResponseCarriesBroadcastSeq(t *testing.T) {
 				t.Fatalf("decode envelope: %v (raw %s)", err, ev.Data)
 			}
 			return env
-		default:
+		// Under the full suite's load the coalescing window's timer can fire
+		// first and send the delta from its own goroutine; FlushDelta then
+		// finds nothing buffered, and the event lands a moment later. A bare
+		// default lost that race now and then.
+		case <-time.After(2 * time.Second):
 			t.Fatal("expected a broadcast event, got none")
 			return envelope{}
 		}
