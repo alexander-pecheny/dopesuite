@@ -296,16 +296,20 @@ update matches set status = 'finished', state_json = json_set(state_json, '$.sid
 		t.Fatalf("division games = %+v", divisionGames)
 	}
 
-	// A зачёт without a troika cannot make a game.
-	tx, err = db.Begin()
-	if err != nil {
-		t.Fatal(err)
+	// A зачёт without a troika yet still makes a game: its отбор waits with
+	// empty seats, and the troikas take them as they are entered.
+	school := createSchemeGameFor(t, db, festID, "troika", "Тройка — школьники", "[init]\ndivision: Школ\n"+scheme, nil)
+	var slots, seated int
+	if err := db.QueryRow(`
+select count(*), count(ms.participant_id) from match_slots ms join matches m on m.id = ms.match_id
+where m.game_id = ?`, school).Scan(&slots, &seated); err != nil || slots == 0 || seated != 0 {
+		t.Fatalf("the empty зачёт's отбор: %d seats, %d taken (%v), want empty seats", slots, seated, err)
 	}
-	defer tx.Rollback()
-	_, err = gamebuild.Create(t.Context(), tx, gamebuild.Spec{FestID: festID, Type: "troika", Label: "Тройка — школьники", DSL: "[init]\ndivision: Школ\n" + scheme})
-	if _, user := corei18n.AsUser(err); !user {
-		t.Fatalf("a game of an empty зачёт: %v", err)
-	}
+	gamma := festTeamWithPlayers(t, db, festID, "Гамма", [][2]string{{"Г", "Один"}, {"Г", "Два"}, {"Г", "Три"}, {"Г", "Четыре"}})
+	festTeamFlag(t, db, gamma, "Школ")
+	k1 := add("Ш1", "Г Один", "Г Два")
+	k2 := add("Ш2", "Г Три", "Г Четыре")
+	expectEntrants(school, k1, k2)
 }
 
 func festTeamFlag(t *testing.T, db *sql.DB, teamID int64, short string) {

@@ -242,20 +242,23 @@ func createSchemeGame(ctx context.Context, tx *sql.Tx, festID int64, gameType, l
 		return 0, err
 	}
 	// A Тройка that takes a зачёт seats that зачёт's troikas, whatever was
-	// ticked on the form.
+	// ticked on the form. A зачёт with none yet still gets its game: the
+	// Structure is built for as many empty seats as its first stage sends on,
+	// and the troikas fill it as they are entered (SyncDivisionEntrantsTx).
+	var placeholders int
 	if division, ok := entrantDivision(dsl); ok && gameType == games.Troika {
 		if entrants, err = divisionEntrantsTx(ctx, tx, festID, division, 0); err != nil {
 			return 0, err
 		}
 		if len(entrants) == 0 {
-			return 0, corei18n.User(dopestrings.Default.Gamebuild.Division.NoTroikas(division))
+			placeholders = placeholderSeats(dsl)
 		}
 	}
 	// A Тройка seats troikas. Created with none ticked and no seed declared,
 	// it takes every troika of the fest in the order of applications — not
 	// the fest's teams, which is what «none ticked» means for a team game and
 	// which a Тройка never seats.
-	if gameType == games.Troika && len(entrants) == 0 && !declaresSeed(dsl) {
+	if gameType == games.Troika && len(entrants) == 0 && placeholders == 0 && !declaresSeed(dsl) {
 		if entrants, err = festTroikasTx(ctx, tx, festID); err != nil {
 			return 0, err
 		}
@@ -263,7 +266,12 @@ func createSchemeGame(ctx context.Context, tx *sql.Tx, festID int64, gameType, l
 			return 0, corei18n.User(dopestrings.Default.Gamebuild.Seating.NeedTroikas())
 		}
 	}
-	scheme, err := schemeForEntrantsTx(ctx, tx, festID, gameType, identity.Code, identity.Title, dsl, entrants)
+	var scheme store.FestScheme
+	if placeholders > 0 {
+		scheme, err = schemeForEmptySeats(gameType, identity.Code, identity.Title, dsl, placeholders)
+	} else {
+		scheme, err = schemeForEntrantsTx(ctx, tx, festID, gameType, identity.Code, identity.Title, dsl, entrants)
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -289,6 +297,18 @@ values(?, ?, ?, ?, ?, ?, ?, ?, '{}', 'active', 'fest', 'fest', 1, ?, ?)`,
 		if err := seatChosenTx(ctx, tx, gameID, entrants); err != nil {
 			return 0, err
 		}
+	}
+	if placeholders > 0 {
+		// Empty seats stay empty: not the fest's teams, which a Game that named
+		// no entrants would otherwise seat by their numbers.
+		venues, err := schemeVenuesTx(ctx, tx, festID, gameID, scheme.Venues, nil)
+		if err != nil {
+			return 0, err
+		}
+		if err := writeStructureTx(ctx, tx, festID, gameID, gameType, scheme, venues, unseated); err != nil {
+			return 0, err
+		}
+		return gameID, nil
 	}
 	if err := writeCompiledStructureTx(ctx, tx, festID, gameID, gameType, scheme, nil); err != nil {
 		return 0, err
@@ -339,6 +359,37 @@ func schemeForEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType
 		if !known {
 			return store.FestScheme{}, corei18n.User(dopestrings.Default.Gamebuild.Create.SeedUnknown(seed))
 		}
+	}
+	return schemedsl.Compile(doc, input)
+}
+
+// placeholderSeats is how many empty seats a game is built with before it
+// has an entrant: as many as its first stage sends on, the least its scheme
+// can take, and two when it does not say.
+func placeholderSeats(dsl string) int {
+	doc, err := schemedsl.Parse(dsl)
+	if err != nil || len(doc.Blocks) == 0 {
+		return 2
+	}
+	if n, ok := doc.Blocks[0].Int("proceeding_participants"); ok && n > 1 {
+		return n
+	}
+	if n, ok := doc.Blocks[0].Int("participants"); ok && n > 1 {
+		return n
+	}
+	return 2
+}
+
+// schemeForEmptySeats compiles a scheme for seats nobody sits in yet,
+// numbered 1… like the seeds an entrant list deals.
+func schemeForEmptySeats(gameType, slug, title, dsl string, seats int) (store.FestScheme, error) {
+	doc, err := schemedsl.Parse(dsl)
+	if err != nil {
+		return store.FestScheme{}, err
+	}
+	input := schemedsl.Input{Slug: slug, Title: title, GameType: gameType}
+	for i := 1; i <= seats; i++ {
+		input.Entrants = append(input.Entrants, store.SchemeSlot{Seed: &store.SchemeSeedRef{Basket: 1, Number: i}})
 	}
 	return schemedsl.Compile(doc, input)
 }
