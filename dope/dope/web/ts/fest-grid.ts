@@ -1,6 +1,6 @@
 import {festLetters, letteredTitle, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
-import {normalizeVenue} from "./venue.js";
+import {markVenueOverflow, normalizeVenue, venueLabel} from "./venue.js";
 import type {Venue} from "./venue.js";
 import { markNameOverflow } from "./widgets.js";
 import { blockLabel, groupLabel } from "./game-tabs.js";
@@ -809,8 +809,9 @@ function headLayout(title: HTMLElement, venue: Venue | null): HTMLElement {
   const layout = document.createElement("span");
   layout.className = "grid-match-head-layout";
   layout.appendChild(title);
-  const venueLabel = venueText(venue);
-  if (venueLabel) layout.appendChild(el("span", "grid-match-venue", venueLabel));
+  // The venue clips where the head ends; its whole title is a popover away.
+  const label = venueLabel(venue, "grid-match-venue", venueText(venue));
+  if (label) layout.appendChild(label);
   return layout;
 }
 
@@ -943,6 +944,7 @@ function scheduleFestGridUpdate(grid: Grid): void {
 }
 
 function updateFestGridNameOverflow(root: HTMLElement): void {
+  markVenueOverflow(root);
   markNameOverflow(root, {
     cellSelector: ".grid-slot-team",
     nameSelector: ".grid-slot-team-name",

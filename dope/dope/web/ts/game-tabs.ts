@@ -43,8 +43,13 @@ export function gameTabs(stages: StageRef[], options: GameTabsOptions): GameTab[
     return brainTabs(stages, host, S.screen.tabs.individualStats());
   // Troika's tabs are brain's: a crosstab, a table and protocols per Block, the
   // reseed, and the per-player statistics its three chairs make interesting.
-  case "troika":
-    return brainTabs(stages, host, S.screen.tabs.stats());
+  // Its bouts are played at the fest's venues like a personal SI's, so it lists
+  // them beside the grid.
+  case "troika": {
+    const tabs = brainTabs(stages, host, S.screen.tabs.stats());
+    tabs.splice(1, 0, ...fixedTabs(["venues", S.screen.tabs.venues()]));
+    return tabs;
+  }
   // Хамса's stages read straight across: the бои of each Игра, the Block's own
   // table, the пересев and the Финал, in the order the scheme wrote them.
   case "hamsa":

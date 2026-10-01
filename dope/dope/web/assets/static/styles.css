@@ -479,6 +479,61 @@
   text-overflow: clip;
 }
 
+/* A bout's venue in a head — the Своячок's sheet, a Тройка bout, a Сетка box:
+   one muted line that fades where its column ends; a clipped one floats its
+   whole title on hover (venue.ts, VENUE_POPOVER_SPEC). */
+.venue-label {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.venue-label-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-weight: var(--fw-regular);
+  white-space: nowrap;
+}
+
+.venue-label-truncated .venue-label-name {
+  -webkit-mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
+  mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
+}
+
+.venue-label-popover {
+  display: none;
+}
+
+/* The host's sheet head with its venue: the frozen name column is too narrow
+   for both on one line, so the venue goes under the title, the pencil and
+   the finish toggle beside the two. */
+.battle-layout:has(> .battle-venue) {
+  grid-template-rows: auto auto;
+  row-gap: 0;
+}
+
+.battle-layout > .battle-venue {
+  grid-column: 1;
+  grid-row: 2;
+  font-size: var(--text-xs-tight);
+  line-height: var(--leading-tight);
+}
+
+.battle-layout:has(> .battle-venue) > .venue-edit-button,
+.battle-layout:has(> .battle-venue) > .finish-control {
+  grid-row: 1 / span 2;
+}
+
+.troika-bout-head {
+  min-width: 0;
+}
+
+.troika-bout-venue {
+  flex: 0 1 auto;
+  font-size: var(--text-sm);
+}
+
 .btn-xs.venue-edit-button {
   width: 23px;
   height: 22px;
@@ -3804,6 +3859,15 @@ html:has(.game-host-top) {
 
 .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-name {
   flex: 0 0 auto;
+}
+
+/* With its venue's whole title the head is two lines: the bout, then where
+   it is played, fading at the column's end (the head's popover has it all). */
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-title:has(.readonly-battle-venue) {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  line-height: var(--leading-tight);
 }
 
 .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-venue {

@@ -31,6 +31,8 @@ import * as troika from "./troika-protocol.js";
 import type {Mark, TroikaState} from "./troika-protocol.js";
 import {buildTroikaStatsTable, computeTroikaPlayerStats} from "./troika-stats.js";
 import type {TroikaBout} from "./troika-stats.js";
+import {buildVenuesTable, markVenueOverflow, openVenueDialog, VENUE_POPOVER_SPEC, venueLabel} from "./venue.js";
+import type {Venue} from "./venue.js";
 import S from "./i18nstrings.js";
 import {createEntrantsTab} from "./entrants.js";
 
@@ -78,6 +80,7 @@ interface MatchSeat {
 interface TroikaMatchView {
   code?: string;
   title?: string;
+  venue?: Venue | null;
   finished?: boolean;
   seq?: number;
   state?: unknown;
@@ -116,6 +119,7 @@ const {viewer, staticMode, scopeGameID, indicator, viewerCounter} = shell;
 // Long team names fade at their column and carry a popover, in the group
 // tables and the fest grid's boxes alike.
 createFloatingPopover({root, specs: [
+  VENUE_POPOVER_SPEC,
   {trigger: ".results-team-truncated", popover: ".results-team-name-popover", anchor: ".results-team-name"},
   {trigger: ".grid-slot-team-truncated", popover: ".grid-slot-team-popover", anchor: ".grid-slot-team-name"},
 ]}).bind();
@@ -126,6 +130,7 @@ function scheduleNameOverflow(): void {
   nameOverflowFrame = requestAnimationFrame(() => {
     nameOverflowFrame = 0;
     markNameOverflow(root, {cellSelector: ".results-team", nameSelector: ".results-team-name", truncatedClass: "results-team-truncated"});
+    markVenueOverflow(root);
   });
 }
 window.addEventListener("resize", scheduleNameOverflow);
@@ -137,6 +142,31 @@ for (const stage of fest?.stages || []) {
   if (stage?.code) festStages.set(stage.code, stage);
 }
 let rosterView: HTMLElement | null = null;
+// The fest's venues: the venues tab lists them, and a bout's head says
+// which it is played at.
+let venues: Venue[] = [];
+const festAPI = `/api/fest/${encodeURIComponent(String(route.festID || ""))}`;
+
+// refreshFest reads the fest view again: the grid's heads carry each
+// bout's venue from it, and a venue moved or renamed leaves them stale.
+let festRefresh = 0;
+function refreshFest(): void {
+  clearTimeout(festRefresh);
+  festRefresh = window.setTimeout(async () => {
+    const response = await fetch(route.apiBase || "");
+    if (!response.ok) return;
+    const view = await response.json() as FestInfo;
+    for (const stage of view.stages || []) if (stage?.code) festStages.set(stage.code, stage);
+    render();
+  }, 250);
+}
+
+async function fetchVenues(): Promise<void> {
+  const response = await fetch(`${festAPI}/venues`);
+  if (!response.ok) throw new Error(`venues ${response.status}`);
+  const fresh = await response.json();
+  venues = Array.isArray(fresh) ? fresh as Venue[] : [];
+}
 // The entrants tab: the list this Game seats (entrants.ts). After a change
 // the bouts are fetched again, since seats moved; a rebuilt Structure reloads.
 const entrantsTab = createEntrantsTab({
@@ -184,6 +214,7 @@ function adoptMatchView(view: TroikaMatchView | null | undefined): boolean {
   const cached = matches.get(code);
   if (cached && Number(view.seq || 0) < Number(cached.seq || 0)) return false;
   view = writer.overlay(matchScope(code), view) as TroikaMatchView;
+  if (cached && (cached.venue?.number || 0) !== (view.venue?.number || 0)) refreshFest();
   matches.set(code, view);
   states.set(code, troika.parseState(view.state, view.participants?.length || 2));
   return true;
@@ -201,6 +232,7 @@ function shapeOf(code: string): string {
     values: state.values, shootout: state.shootout, pin: state.pin, written: state.written,
     order: state.sides.map((side) => side.themes.map((theme) => theme.order)),
     finished: Boolean(view.finished), title: view.title,
+    venue: view.venue ? [view.venue.number, view.venue.title] : null,
     seats: (view.participants || []).map((seat) => [seat?.id, seat?.name, (seat?.roster || []).map((p) => p.id)]),
     // What the heads draw from the marks: the add-shootout button waits on a
     // started, level bout, and a shootout theme's × on the theme being empty.
@@ -299,6 +331,16 @@ const live = createLiveEvents({
       // roster tab is drawn from them too.
       rosterView = null;
       scheduleResync();
+      render();
+    },
+  }, {
+    // A host renamed a venue: the venues tab and the bouts' heads say the new title.
+    prefix: `venues:${route.festID}`,
+    adopt: (_scope, view) => {
+      if (!Array.isArray(view.data)) return;
+      venues = view.data as Venue[];
+      scheduleResync();
+      refreshFest();
       render();
     },
   }, {
@@ -448,6 +490,25 @@ function boutHead(bout: BoutEntry): HTMLElement {
   const title = document.createElement("span");
   title.textContent = [letter, bout.planned.title || bout.view.title || bout.code].filter(Boolean).join(". ");
   head.appendChild(title);
+  // Where the bout is played, for the host and the spectator alike; the
+  // host's pencil moves it to another of the fest's venues.
+  const venue = venueLabel(bout.view.venue, "troika-bout-venue");
+  if (venue) head.appendChild(venue);
+  if (!viewer && venues.length > 0) {
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "btn btn-xs venue-edit-button";
+    edit.title = S.ek.venue.edit();
+    edit.setAttribute("aria-label", S.ek.venue.edit());
+    edit.replaceChildren(icon("pencil"));
+    edit.addEventListener("click", () => openVenueDialog({
+      title: title.textContent || "",
+      venues,
+      current: bout.view.venue?.number || 0,
+      onPick: (number) => void writer.send(matchScope(bout.code), {url: `${route.apiBase}/matches/${encodeURIComponent(bout.code)}/venue`, body: {number}}),
+    }));
+    head.appendChild(edit);
+  }
   const state = stateOf(bout.code);
   if (!viewer && !bout.view.finished && !state.written && troika.started(state) && troika.level(state)) {
     const button = document.createElement("button");
@@ -1085,6 +1146,16 @@ function buildReseeds(stages: SchemeStage[]): HTMLElement {
   return wrap;
 }
 
+// renameVenue retitles one of the fest's venues — shared by its Games, so
+// the other Games' bouts read the new title too.
+async function renameVenue(number: number, title: string): Promise<void> {
+  const sent = await writer.send(`venues:${route.festID}`, {url: `${festAPI}/venues/${encodeURIComponent(number)}`, method: "PUT", body: {title}});
+  if (!sent.ok || !Array.isArray(sent.response)) return;
+  venues = sent.response as Venue[];
+  refreshFest();
+  render();
+}
+
 async function calculateReseed(code: string): Promise<void> {
   const response = await fetch(`${route.apiBase}/stages/${encodeURIComponent(code)}/reseed`, {
     method: "POST", headers: {"Content-Type": "application/json"},
@@ -1102,6 +1173,8 @@ function buildTab(tab: GameTab | undefined): HTMLElement {
   switch (tab?.kind) {
   case "entrants":
     return entrantsTab.element();
+  case "venues":
+    return buildVenuesTable(venues, {editable: !viewer, onTitleChange: (number, title) => void renameVenue(number, title)});
   case "roster":
     return (rosterView ||= buildGameRosterView(route.apiBase || "",
       {troikasHref: viewer || !route.festID ? "" : `/host/fest/${route.festID}/troikas`}));
@@ -1146,3 +1219,4 @@ cursor.bind();
 writtenCursor.bind();
 live.connect();
 fetchMatches().catch(() => indicator.fail());
+fetchVenues().then(() => render()).catch(() => indicator.fail());

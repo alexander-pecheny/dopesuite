@@ -256,7 +256,7 @@ test("every бой names its venue, however the previous column read", () => {
     matches: [{code: `${code}-m1`, venue: 1, participantCount: 2, slots: [{label: "А"}, {label: "Б"}]}],
   });
   const grid = buildFestGrid({stages: [blockRound("s1-r1"), blockRound("s1-r2")]}, {stageHeaderLink: false});
-  const venues = withClass(grid, "grid-match-venue").map((n) => n.textContent);
+  const venues = withClass(grid, "grid-match-venue").map((n) => texts(n, "venue-label-name")[0]);
   assert.deepEqual(venues, ["пл. 1", "пл. 1"]);
 });
 
@@ -276,8 +276,9 @@ test("a Group's table head names the группа and its table", () => {
   assert.equal(withClass(grid, "grid-stage-subhead").length, 0, "подзаголовков больше нет");
   const heads = withClass(grid, "grid-standings").map((table) => {
     const head = withClass(table, "grid-match-head-cell")[0];
-    return walk(head).filter((n) => n.tag === "span" && n.textContent).map((n) => n.textContent);
+    return walk(head).filter((n) => n.tag === "span" && n.textContent && !String(n.className).includes("popover")).map((n) => n.textContent);
   });
+  // The venue's popover repeats it whole for when the head clips it.
   assert.deepEqual(heads, [["Группа 1", "пл. 3"], ["Группа 2", "пл. 4"]]);
 });
 
