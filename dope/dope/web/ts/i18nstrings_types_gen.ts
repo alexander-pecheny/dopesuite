@@ -1710,6 +1710,12 @@ export type Strings = {
     seedImport: {
       fileMissing: () => string;
     };
+    venue: {
+      inUse: (n: string) => string;
+      numberTaken: (n: string) => string;
+      titleEmpty: () => string;
+      unknown: (n: string) => string;
+    };
   };
   si: {
     battle: {
@@ -1971,8 +1977,12 @@ export type Strings = {
       saving: () => string;
     };
     venue: {
+      add: () => string;
+      addNumber: () => string;
+      addTitle: () => string;
       battle: (n: string, name: string) => string;
       battleShort: (n: string) => string;
+      delete: () => string;
       nameColumn: () => string;
     };
     viewers: {

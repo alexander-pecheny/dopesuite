@@ -1732,6 +1732,12 @@ shootout: true
     seedImport: {
       fileMissing: () => "нет файла",
     },
+    venue: {
+      inUse: (n: string) => `На площадке ${n} есть бои. Сначала перенесите их на другую площадку.`,
+      numberTaken: (n: string) => `Площадка ${n} уже есть.`,
+      titleEmpty: () => "Укажите название площадки.",
+      unknown: (n: string) => `Площадки ${n} нет.`,
+    },
   },
   si: {
     battle: {
@@ -1993,8 +1999,12 @@ shootout: true
       saving: () => "Синхронизация",
     },
     venue: {
+      add: () => "Добавить",
+      addNumber: () => "Номер площадки",
+      addTitle: () => "Новая площадка",
       battle: (n: string, name: string) => `пл. ${n} (${name})`,
       battleShort: (n: string) => `пл. ${n}`,
+      delete: () => "Удалить площадку",
       nameColumn: () => "Название",
     },
     viewers: {

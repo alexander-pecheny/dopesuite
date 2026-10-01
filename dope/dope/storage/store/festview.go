@@ -15,11 +15,11 @@ import (
 // LoadVenues returns a fest's venues ordered by number.
 func LoadVenues(ctx context.Context, q Queryer, festID int64) ([]VenueView, error) {
 	return CollectRows(ctx, q, `
-select number, title from venues
-where fest_id = ?
-order by number`, []any{festID}, func(rows *sql.Rows) (VenueView, error) {
+select v.number, v.title, (select count(*) from matches m where m.venue_id = v.id) from venues v
+where v.fest_id = ?
+order by v.number`, []any{festID}, func(rows *sql.Rows) (VenueView, error) {
 		var venue VenueView
-		if err := rows.Scan(&venue.Number, &venue.Title); err != nil {
+		if err := rows.Scan(&venue.Number, &venue.Title, &venue.Bouts); err != nil {
 			return venue, err
 		}
 		return venue, nil

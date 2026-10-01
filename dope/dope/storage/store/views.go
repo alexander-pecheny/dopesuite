@@ -104,10 +104,13 @@ type StandingView struct {
 	Tiebreak int     `json:"tiebreak"`
 }
 
-// VenueView is a match's venue (number + title).
+// VenueView is a match's venue (number + title). In the fest's venue list
+// (LoadVenues) it also says how many bouts play at it, which is what lets a
+// host delete only an unused one.
 type VenueView struct {
 	Number int    `json:"number"`
 	Title  string `json:"title"`
+	Bouts  int    `json:"bouts,omitempty"`
 }
 
 // StageMatches is one stage's full match views (the bulk all-stages response
