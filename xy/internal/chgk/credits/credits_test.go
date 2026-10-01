@@ -207,6 +207,31 @@ func TestZipPrefersRussian(t *testing.T) {
 	}
 }
 
+// A member that can't be unpacked (here an unknown compression method, as a
+// PDF packed by an odd archiver) does not hide the packet beside it.
+func TestZipSkipsBrokenMember(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, err := zw.CreateRaw(&zip.FileHeader{Name: "broken.pdf", Method: 99, CompressedSize64: 3, UncompressedSize64: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Write([]byte("xyz"))
+	w, err = zw.Create("packet.4s")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Write([]byte("## Tour 1\n\n" + questions(12)))
+	zw.Close()
+	got, err := Read("packet.zip", buf.Bytes(), Options{Questions: 12})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got.Sources, []string{"packet.4s"}) {
+		t.Fatalf("sources %v", got.Sources)
+	}
+}
+
 // The same packet twice in an archive is read once.
 func TestZipDuplicatePacket(t *testing.T) {
 	body := "## Тур 1\n\n#EDITOR Редактор — А\n\n" + questions(12)

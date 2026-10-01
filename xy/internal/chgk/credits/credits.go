@@ -12,6 +12,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -93,8 +94,8 @@ const maxInflated = 150 << 20
 
 // Read extracts the credits of one uploaded file. The name's extension picks the
 // format: .docx, .4s, .pdf, or a .zip holding any number of those (images and
-// everything else in an archive are ignored). A zip member that fails to parse
-// is skipped; an error means nothing at all could be read.
+// everything else in an archive are ignored). A zip member that can't be
+// unpacked or parsed is skipped; an error means nothing at all could be read.
 func Read(name string, data []byte, opt Options) (*Credits, error) {
 	switch strings.ToLower(path.Ext(name)) {
 	case ".zip":
@@ -217,8 +218,14 @@ func readZip(data []byte, opt Options) (*Credits, error) {
 			continue
 		}
 		body, err := readEntry(zf, &budget)
-		if err != nil {
+		if errors.Is(err, errTooLarge) {
 			return nil, err
+		}
+		if err != nil {
+			// A member the archive can't give back (an unknown compression
+			// method, a corrupt stream) is skipped like an unparsable one: the
+			// packet is often another file beside it.
+			continue
 		}
 		f, err := readOne(base, body, opt)
 		if err != nil || f.questions == 0 {
@@ -382,6 +389,9 @@ func unwrap(text string) string {
 	return strings.Join(out, "\n")
 }
 
+// errTooLarge stops reading an archive whose documents inflate past maxInflated.
+var errTooLarge = errors.New("archive too large")
+
 func readEntry(f *zip.File, budget *int64) ([]byte, error) {
 	rc, err := f.Open()
 	if err != nil {
@@ -393,7 +403,7 @@ func readEntry(f *zip.File, budget *int64) ([]byte, error) {
 		return nil, fmt.Errorf("read %s: %w", f.Name, err)
 	}
 	if int64(len(body)) > *budget {
-		return nil, fmt.Errorf("archive too large")
+		return nil, errTooLarge
 	}
 	*budget -= int64(len(body))
 	return body, nil
