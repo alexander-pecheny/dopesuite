@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {createLiveEvents, createScopedWriter, createSyncIndicator, applyDeltaOps, createPendingOps, createClientRecorder, createEpochTracker, gameEventsURL} from "./dist/state-sync.js";
+import {createLiveEvents, createScopedWriter, createSyncIndicator, applyDeltaOps, createPendingOps, createClientRecorder, createEpochTracker, gameEventsURL, siblingGameScope} from "./dist/state-sync.js";
 
 // The engine reads window/document lazily. By default sub-second waits (the
 // resync jitter, the write debounce) fire straight away so no test ever waits,
@@ -649,4 +649,16 @@ test("createEpochTracker baselines the first epoch and flags real changes", () =
   assert.equal(tracker.changed({epoch: "a"}), false, "same epoch is not a change");
   assert.equal(tracker.changed({}), false, "missing epoch ignored");
   assert.equal(tracker.changed({epoch: "b"}), true, "new epoch is a change");
+});
+
+test("another game's fest view and document are a sibling's, the page's own are not", () => {
+  assert.equal(siblingGameScope("fest:1:2", "1"), true);
+  assert.equal(siblingGameScope("fest:1:1", "1"), false);
+  assert.equal(siblingGameScope("fest:1:10", "1"), true);
+  assert.equal(siblingGameScope("game-state:2", 1), true);
+  assert.equal(siblingGameScope("game-state:1", 1), false);
+  assert.equal(siblingGameScope("match:2:a", "1"), false);
+  assert.equal(siblingGameScope("venues:1", "1"), false);
+  assert.equal(siblingGameScope("fest:1:2", null), false);
+  assert.equal(siblingGameScope("fest:1:2", "ek-slug"), false);
 });
