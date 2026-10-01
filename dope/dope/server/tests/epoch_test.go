@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 )
 
 // TestScopedGameStateCarriesEpoch guards the seq-reset divergence fix: every
@@ -46,7 +47,9 @@ func TestScopedGameStateCarriesEpoch(t *testing.T) {
 		if len(env.Ops) == 0 {
 			t.Fatalf("expected a delta with ops, got %s", ev.Data)
 		}
-	default:
+	// Under the full suite's load the coalescing window's timer can send the
+	// delta from its own goroutine a moment later, as in api_authz_test.
+	case <-time.After(2 * time.Second):
 		t.Fatal("expected a broadcast event, got none")
 	}
 
