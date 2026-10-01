@@ -29,7 +29,11 @@ export interface TroikaPlayerStatsRow {
   player: string;
   team: string;
   bouts: number;
+  // chairs counts the themes played in each chair: the two side chairs, then the anchor.
+  chairs: [number, number, number];
   questions: number;
+  correct: number;
+  correctRate: number;
   first: number;
   repeat: number;
   repeatChances: number;
@@ -38,16 +42,45 @@ export interface TroikaPlayerStatsRow {
 }
 
 // computeTroikaPlayerStats folds every bout into one row per (team, player) —
-// keyed by both, so namesakes on different teams stay apart.
+// keyed by both, so namesakes on different teams stay apart. A theme counts
+// for a chair once the side has a mark in it: who sat where in a theme nobody
+// played says nothing.
 export function computeTroikaPlayerStats(bouts: ReadonlyArray<TroikaBout>): TroikaPlayerStatsRow[] {
   const rows = new Map<string, TroikaPlayerStatsRow>();
   const seen = new Map<string, Set<number>>();
+  const rowOf = (team: string, name: string, boutIndex: number): TroikaPlayerStatsRow => {
+    const key = `${team}\u0000${name}`;
+    let row = rows.get(key);
+    if (!row) {
+      row = {
+        player: name, team, bouts: 0, chairs: [0, 0, 0], questions: 0, correct: 0, correctRate: 0,
+        first: 0, repeat: 0, repeatChances: 0, repeatRate: 0, points: 0,
+      };
+      rows.set(key, row);
+      seen.set(key, new Set());
+    }
+    const bag = seen.get(key)!;
+    if (!bag.has(boutIndex)) {
+      bag.add(boutIndex);
+      row.bouts++;
+    }
+    return row;
+  };
 
   bouts.forEach((bout, boutIndex) => {
     const state = bout.state;
     bout.sides.forEach((side, s) => {
       for (let t = 0; t < state.values.length; t++) {
         const value = troika.themeValue(state, t);
+        let played = false;
+        for (let q = 0; q < troika.THEME_QUESTIONS && !played; q++) {
+          for (let c = 0; c < troika.CHAIRS; c++) if (troika.markAt(state, s, t, q, c) !== "") played = true;
+        }
+        if (!played) continue;
+        for (let c = 0; c < troika.CHAIRS; c++) {
+          const name = side.players.get(troika.chairAt(state, s, t, c)) || "";
+          if (name) rowOf(side.team, name, boutIndex).chairs[c]++;
+        }
         for (let q = 0; q < troika.THEME_QUESTIONS; q++) {
           // Walk the chairs in the order the host asked them, so "already
           // on the table" is a fact about what this player had heard.
@@ -55,37 +88,23 @@ export function computeTroikaPlayerStats(bouts: ReadonlyArray<TroikaBout>): Troi
           for (let c = 0; c < troika.CHAIRS; c++) {
             const mark = troika.markAt(state, s, t, q, c);
             if (mark === "") continue;
-            const id = troika.chairAt(state, s, t, c);
-            const name = side.players.get(id) || "";
+            const name = side.players.get(troika.chairAt(state, s, t, c)) || "";
             // An unseated chair still put its answer on the table, so it is
             // what the next player heard, even though no row can be credited.
             if (!name) {
               if (mark === "right") correctSoFar++;
               continue;
             }
-            const key = `${side.team}${name}`;
-            let row = rows.get(key);
-            if (!row) {
-              row = {
-                player: name, team: side.team, bouts: 0, questions: 0,
-                first: 0, repeat: 0, repeatChances: 0, repeatRate: 0, points: 0,
-              };
-              rows.set(key, row);
-              seen.set(key, new Set());
-            }
-            const bag = seen.get(key)!;
-            if (!bag.has(boutIndex)) {
-              bag.add(boutIndex);
-              row.bouts++;
-            }
+            const row = rowOf(side.team, name, boutIndex);
             row.questions++;
             if (correctSoFar > 0) row.repeatChances++;
             if (mark === "right") {
+              row.correct++;
               row.points += value;
               if (correctSoFar > 0) row.repeat++;
               else row.first++;
+              correctSoFar++;
             }
-            if (mark === "right") correctSoFar++;
           }
         }
       }
@@ -94,11 +113,17 @@ export function computeTroikaPlayerStats(bouts: ReadonlyArray<TroikaBout>): Troi
 
   const out = [...rows.values()];
   for (const row of out) {
+    row.correctRate = row.questions > 0 ? row.correct / row.questions : 0;
     row.repeatRate = row.repeatChances > 0 ? row.repeat / row.repeatChances : 0;
   }
-  out.sort((a, b) => b.first - a.first || b.repeat - a.repeat || a.player.localeCompare(b.player, "ru"));
+  // By points: every right answer pays, the first and the repeat alike. The
+  // anchor answers last and repeats most, so first answers alone would rank
+  // the chairs rather than the players.
+  out.sort((a, b) => b.points - a.points || b.correct - a.correct || b.first - a.first || a.player.localeCompare(b.player, "ru"));
   return out;
 }
+
+const percent = (share: number) => `${Math.round(share * 100)}%`;
 
 // buildTroikaStatsTable wears the per-player stats skin EK, Hamsa and solo SI
 // share: flush left, the two name columns as wide as their names up to a cap,
@@ -119,6 +144,10 @@ export function buildTroikaStatsTable(rows: ReadonlyArray<TroikaPlayerStatsRow>)
       {label: S.troika.stats.player(), kind: "name", className: "ek-stats-name ek-stats-player"},
       {label: S.troika.stats.team(), kind: "name", className: "ek-stats-name"},
       {label: S.troika.stats.bouts(), kind: "num"},
+      {label: S.troika.stats.chairs(), kind: "num"},
+      {label: S.troika.stats.questions(), kind: "num"},
+      {label: S.troika.stats.correct(), kind: "num"},
+      {label: S.troika.stats.correctRate(), kind: "num"},
       {label: S.troika.stats.first(), kind: "num"},
       {label: S.troika.stats.repeat(), kind: "num"},
       {label: S.troika.stats.repeatRate(), kind: "num"},
@@ -128,9 +157,13 @@ export function buildTroikaStatsTable(rows: ReadonlyArray<TroikaPlayerStatsRow>)
       row.player,
       row.team,
       String(row.bouts),
+      row.chairs.join(" / "),
+      String(row.questions),
+      String(row.correct),
+      row.questions > 0 ? percent(row.correctRate) : "—",
       String(row.first),
       String(row.repeat),
-      row.repeatChances > 0 ? `${Math.round(row.repeatRate * 100)}%` : "—",
+      row.repeatChances > 0 ? percent(row.repeatRate) : "—",
       String(row.points),
     ]),
   }));

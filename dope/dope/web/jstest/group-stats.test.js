@@ -16,23 +16,25 @@ test("evalScoringRule computes a бой's очки from its outcome", () => {
 test("computeGroupBlockRounds folds a группа's бои into очки per круг", () => {
   const rows = computeGroupBlockRounds({
     matches: [
-      {blockRound: 1, finished: true, participants: [
+      {code: "g1-1", blockRound: 1, finished: true, participants: [
         {name: "Виктор Вега", place: 2}, {name: "Алексей Погорелов", place: 1}, {name: "Николай Зотов", place: 3},
       ]},
-      {blockRound: 2, finished: true, participants: [
+      {code: "g1-2", blockRound: 2, finished: true, participants: [
         {name: "Виктор Вега", place: 1}, {name: "Николай Зотов", place: 2},
       ]},
-      {blockRound: 3, finished: false, participants: [
+      {code: "g1-3", blockRound: 3, finished: false, participants: [
         {name: "Виктор Вега", place: 1},
       ]},
     ],
     pointsRule: "seats + 1 - place",
     blockRoundCount: 3,
   });
+  // bouts is the бой each круг seats him at, played or not: the groups tab
+  // links a круг to it.
   assert.deepEqual(rows, [
-    {id: 0, name: "Виктор Вега", points: 4, blockRounds: [2, 2, 0]},
-    {id: 0, name: "Алексей Погорелов", points: 3, blockRounds: [3, 0, 0]},
-    {id: 0, name: "Николай Зотов", points: 2, blockRounds: [1, 1, 0]},
+    {id: 0, name: "Виктор Вега", points: 4, blockRounds: [2, 2, 0], bouts: ["g1-1", "g1-2", "g1-3"]},
+    {id: 0, name: "Алексей Погорелов", points: 3, blockRounds: [3, 0, 0], bouts: ["g1-1", "", ""]},
+    {id: 0, name: "Николай Зотов", points: 2, blockRounds: [1, 1, 0], bouts: ["g1-1", "g1-2", ""]},
   ]);
 });
 

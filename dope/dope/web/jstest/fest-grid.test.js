@@ -256,7 +256,7 @@ test("every бой names its venue, however the previous column read", () => {
     matches: [{code: `${code}-m1`, venue: 1, participantCount: 2, slots: [{label: "А"}, {label: "Б"}]}],
   });
   const grid = buildFestGrid({stages: [blockRound("s1-r1"), blockRound("s1-r2")]}, {stageHeaderLink: false});
-  const venues = withClass(grid, "grid-match-venue").map((n) => n.textContent);
+  const venues = withClass(grid, "grid-match-venue").map((n) => texts(n, "venue-label-name")[0]);
   assert.deepEqual(venues, ["пл. 1", "пл. 1"]);
 });
 
@@ -276,8 +276,9 @@ test("a Group's table head names the группа and its table", () => {
   assert.equal(withClass(grid, "grid-stage-subhead").length, 0, "подзаголовков больше нет");
   const heads = withClass(grid, "grid-standings").map((table) => {
     const head = withClass(table, "grid-match-head-cell")[0];
-    return walk(head).filter((n) => n.tag === "span" && n.textContent).map((n) => n.textContent);
+    return walk(head).filter((n) => n.tag === "span" && n.textContent && !String(n.className).includes("popover")).map((n) => n.textContent);
   });
+  // The venue's popover repeats it whole for when the head clips it.
   assert.deepEqual(heads, [["Группа 1", "пл. 3"], ["Группа 2", "пл. 4"]]);
 });
 
@@ -474,4 +475,24 @@ test("planGrid draws a table over other stages before anything is played", () =>
   const table = plan.sections[1];
   assert.equal(table.kind, "standings");
   assert.deepEqual(table.entries.map((entry) => entry.name), ["Альфа", "Бета", "Гамма"]);
+});
+
+// A page that keeps its бои on a tab of its own (a Тройка's протоколы) says
+// where a бой's title and a группа's head lead; the grid links them there.
+test("matchHref and groupHref make the titles links", () => {
+  const group = {
+    code: "s1-g1", title: "Групповой этап. Группа 1", stage_type: "matches",
+    grain: {block: "s1", group: "1"},
+    standings: [{rank: 1, name: "Лидер", metrics: {place: 1, points: 1}}],
+    matches: [{code: "s1-g1-1", slots: [], participants: [{name: "Лидер"}]}],
+  };
+  const final = {code: "s2-r1", title: "Финал", stage_type: "matches",
+    matches: [{code: "s2-r1-m1", participantCount: 2, slots: [{label: "А"}, {label: "Б"}]}]};
+  const grid = buildFestGrid({stages: [group, final]}, {
+    stageHeaderLink: false, matchTitleLink: false,
+    matchHref: (code) => `#protocol:s2@${code}`,
+    groupHref: (stage) => `#block:${stage.grain.block}`,
+  });
+  const links = walk(grid).filter((n) => n.tag === "a").map((n) => [n.textContent, n.href]);
+  assert.deepEqual(links, [["Группа 1", "#block:s1"], ["Бой s2-r1-m1", "#protocol:s2@s2-r1-m1"]]);
 });

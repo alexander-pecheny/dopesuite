@@ -4,6 +4,7 @@
 // it wants rather than restating the table.
 
 import {formatDisplayText, td} from "./cells.js";
+import type {CellContent} from "./cells.js";
 import {standingsTable} from "./standings.js";
 import S from "./i18nstrings.js";
 
@@ -56,6 +57,9 @@ export interface CrossBout {
   sides: Array<{name: string; id: number; score: number}>;
   finished: boolean;
   started: boolean;
+  // href is the bout's own page, where the page has one: the cell links
+  // there, played or not.
+  href?: string;
 }
 
 export interface CrossGroup {
@@ -128,6 +132,7 @@ function buildCrosstable(group: CrossGroup, columns: CrossColumn[]): HTMLElement
   rows.forEach((row, i) => indexByKey.set(row.key, i));
   const cellText: string[][] = rows.map(() => rows.map(() => ""));
   const live: boolean[][] = rows.map(() => rows.map(() => false));
+  const hrefs: string[][] = rows.map(() => rows.map(() => ""));
 
   for (const bout of group.bouts) {
     const a = indexByKey.get(bout.slots[0]?.key || "");
@@ -138,6 +143,7 @@ function buildCrosstable(group: CrossGroup, columns: CrossColumn[]): HTMLElement
       if (seat?.name) rows[index].name = seat.name;
       if (seat?.id) rows[index].id = seat.id;
     });
+    if (bout.href) hrefs[a][b] = hrefs[b][a] = bout.href;
     if (!bout.finished && !bout.started) continue;
     const sa = bout.sides[0]?.score ?? 0;
     const sb = bout.sides[1]?.score ?? 0;
@@ -151,8 +157,18 @@ function buildCrosstable(group: CrossGroup, columns: CrossColumn[]): HTMLElement
     return typeof value === "number" ? formatDisplayText(round(value)) : "";
   };
 
+  // A bout's cell links to the bout; one not started yet shows a dot to click.
+  const content = (i: number, j: number): CellContent => {
+    if (i === j) return "×";
+    if (!hrefs[i][j]) return cellText[i][j];
+    const link = document.createElement("a");
+    link.className = cellText[i][j] ? "cross-link" : "cross-link cross-pending";
+    link.href = hrefs[i][j];
+    link.textContent = cellText[i][j] || "·";
+    return link;
+  };
   const cross = (i: number, j: number) => {
-    const cell = td(i === j ? "×" : cellText[i][j]);
+    const cell = td(content(i, j));
     if (i === j) cell.classList.add("cross-diag");
     else cell.classList.toggle("cross-live", live[i][j]);
     return cell;

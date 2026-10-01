@@ -28,6 +28,7 @@ import type {FestGridStage, ReseedEntry} from "./fest-grid.js";
 import {gameTabs, canonicalKey, groupLabel} from "./game-tabs.js";
 import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
 import type {GameTab} from "./game-tabs.js";
+import {VENUE_POPOVER_SPEC} from "./venue.js";
 import S from "./i18nstrings.js";
 import {createEntrantsTab} from "./entrants.js";
 
@@ -112,6 +113,7 @@ const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 // Long team names fade at their fixed width and carry a popover — the same
 // treatment the EK tables give theirs.
 const floatingPopover = createFloatingPopover({root: brainRoot, specs: [
+  VENUE_POPOVER_SPEC,
   {trigger: ".brain-name-head.brain-name-truncated", popover: ".brain-name-popover", anchor: ".brain-name-wrap"},
   {trigger: ".results-team-truncated", popover: ".results-team-name-popover", anchor: ".results-team-name"},
 ]});

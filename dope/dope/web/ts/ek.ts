@@ -6,7 +6,7 @@ import {cssEscape, formatNumber, formatPlace, isFormControl, option, td, th} fro
 import {buildFlatScoreTable, buildTwoRowScoreTable, canPatchScoreShape, createScoreTableIndex, patchScoreTable, seatingText, setMarkClass} from "./score-table.js";
 import {seatedNames} from "./ek-seating.js";
 import type {NodeIndex, ParticipantView, ThemeView} from "./score-table.js";
-import {buildVenuesTable, formatBattleVenue, formatBattleVenueShort, formatVenue} from "./venue.js";
+import {buildVenuesTable, formatBattleVenue, formatVenue, markVenueOverflow, openVenueDialog as openVenuePicker, VENUE_POPOVER_SPEC, venueLabel} from "./venue.js";
 import type {Venue} from "./venue.js";
 import {buildGroupStandingsView, festLetters, letteredTitle, resultsTeamCell, stageType, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
@@ -332,6 +332,7 @@ let ekTabsScroll: ScrollEdgeBinding | null = null;
 let playerSelectMeasureContext: CanvasRenderingContext2D | null = null;
 
 const floatingPopoverSpecs = [
+  VENUE_POPOVER_SPEC,
   {
     trigger: ".readonly-battle-head.readonly-battle-with-popover",
     popover: ".readonly-battle-popover",
@@ -1015,7 +1016,7 @@ function renderFest(): void {
   setPageMode("grid");
   shell.renderChrome();
   renderEKTabs();
-  ekRoot.replaceChildren(buildFestGrid(fest, {viewer, basePath: route.base}));
+  ekRoot.replaceChildren(buildFestGrid(fest, {viewer, basePath: route.base, groupHref: groupStandingsHref}));
   scheduleGridNameOverflowUpdate();
   shell.presence.refresh();
 }
@@ -1234,6 +1235,13 @@ function canonicalStageCode(code: string): string {
   return canonicalKey(ekTabs(), `stage:${code}`).replace(/^stage:/, "");
 }
 
+// groupStandingsHref is where a group's table on the grid leads: the Block's
+// groups tab, which links every player's round to its bout.
+function groupStandingsHref(stage: {code?: string}): string {
+  const tab = ekTabs().find((entry) => entry.kind === "block" && entry.stages.includes(stage.code || ""));
+  return tab?.stage ? `${route.base}/stage/${encodeURIComponent(tab.stage.code)}` : "";
+}
+
 // buildGroupStandingsPane is the sheets' groups view: every group of the
 // Block on one tab — a player, his points, and the split by round-robin
 // block round, computed from the cached matches by the Block's own scoring rule.
@@ -1245,7 +1253,7 @@ function buildGroupStandingsPane(stage: HostStage): HTMLElement {
     const blockRoundCount = Math.max(1, ...planned.map((m) => Number(m.round || 1)));
     const matches = planned.map((m) => {
       const view = stageCache.matchState(m.code || "") as HostMatchView | null;
-      return {blockRound: m.round, finished: Boolean(view?.finished), questionValues: view?.questionValues, participants: view?.participants};
+      return {code: m.code, blockRound: m.round, finished: Boolean(view?.finished), questionValues: view?.questionValues, participants: view?.participants};
     });
     const rows = computeGroupBlockRounds({matches, pointsRule: config.rules?.bout?.points, blockRoundCount});
     // The group's own standings are the server's: its order is the ranking
@@ -1268,13 +1276,15 @@ function buildGroupStandingsPane(stage: HostStage): HTMLElement {
     }
     if (!rows.length) {
       for (const entrant of config.entrants || []) {
-        if (entrant.label) rows.push({id: 0, name: entrant.label, points: 0, blockRounds: new Array<number>(blockRoundCount).fill(0)});
+        if (entrant.label) rows.push({id: 0, name: entrant.label, points: 0, blockRounds: new Array<number>(blockRoundCount).fill(0), bouts: []});
       }
     }
     const title = schemeStage ? groupLabel(schemeStage as StageRef) : code;
     return {title, blockRoundCount, rows};
   });
-  return buildGroupStandingsView(groups);
+  // A player's round leads to the bout he played it in: the grid draws a
+  // group as a table, so this is where a spectator finds the group's bouts.
+  return buildGroupStandingsView(groups, {boutHref: (code) => `${route.base}/matches/${encodeURIComponent(letterMap().get(code) || code)}`});
 }
 
 // buildReseedPanes fills a reseed pane: the folded reseed tab stacks every
@@ -1343,6 +1353,7 @@ function scheduleEKTeamNameOverflowUpdate(root: ParentNode = ekRoot): void {
 
 function updateEKTeamNameOverflow(root: ParentNode = ekRoot): void {
   updatePlayerSelectOverflow(root);
+  markVenueOverflow(root);
   markNameOverflow(root, {
     cellSelector: ".readonly-player",
     nameSelector: ".readonly-player-text",
@@ -2335,11 +2346,14 @@ function readonlyBattleHeader(): HTMLElement {
   battle.textContent = letteredBoutTitle(currentMatchCode(), state!.title || "");
   title.appendChild(battle);
 
-  const venueLabel = state!.venue ? formatBattleVenueShort(state!.venue) : "";
-  if (venueLabel) {
+  // The venue's whole title, not only its number, which tells a spectator
+  // nothing about which room. A long one fades, and the head's popover holds
+  // the rest.
+  const venueText = state!.venue ? formatBattleVenue(state!.venue) : "";
+  if (venueText) {
     const venue = document.createElement("span");
     venue.className = "readonly-battle-venue";
-    venue.textContent = venueLabel;
+    venue.textContent = venueText;
     title.appendChild(venue);
   }
 
@@ -2638,6 +2652,11 @@ function battleHeader(): HTMLElement {
   title.textContent = letteredBoutTitle(matchCode, state!.title || matchTitle());
   layout.appendChild(title);
 
+  // Where the bout is played, on the host's sheet too: the pencil beside it
+  // changes it.
+  const venue = venueLabel(state!.venue, "battle-venue");
+  if (venue) layout.appendChild(venue);
+
   if (venues.length > 0) {
     const venueButton = document.createElement("button");
     venueButton.type = "button";
@@ -2672,51 +2691,15 @@ function battleHeader(): HTMLElement {
 function openVenueDialog(matchCode: string): void {
   const matchState = matchStateFor(matchCode);
   if (!matchState) return;
-  const dialog = document.createElement("dialog");
-  dialog.className = "modal-dialog venue-dialog";
-  const form = document.createElement("form");
-  form.className = "venue-dialog-form";
-
-  const title = document.createElement("h2");
-  title.textContent = matchState.title || matchTitle(matchState);
-  form.appendChild(title);
-
-  const select = document.createElement("select");
-  select.className = "venue-dialog-select";
-  venues.forEach((venue) => {
-    select.appendChild(option(String(venue.number), `${venue.number}: ${venue.title}`));
+  openVenuePicker({
+    title: matchState.title || matchTitle(matchState),
+    venues,
+    current: matchState.venue?.number || 0,
+    onPick: (number) => {
+      const current = matchStateFor(matchCode) || matchState;
+      if (number !== current.venue?.number) sendVenueChange(number, matchCode);
+    },
   });
-  select.value = matchState.venue ? String(matchState.venue.number) : "";
-  form.appendChild(select);
-
-  const actions = document.createElement("div");
-  actions.className = "modal-actions";
-  const cancel = document.createElement("button");
-  cancel.type = "button";
-  cancel.className = "btn";
-  cancel.textContent = S.ek.venue.cancel();
-  cancel.addEventListener("click", () => dialog.close());
-  const save = document.createElement("button");
-  save.type = "submit";
-  save.className = "btn";
-  save.textContent = S.ek.venue.save();
-  actions.append(cancel, save);
-  form.appendChild(actions);
-
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const number = Number(select.value);
-    dialog.close();
-    const current = matchStateFor(matchCode) || matchState;
-    if (number > 0 && number !== current.venue?.number) {
-      sendVenueChange(number, matchCode);
-    }
-  });
-  dialog.addEventListener("close", () => dialog.remove());
-  dialog.appendChild(form);
-  document.body.appendChild(dialog);
-  dialog.showModal();
-  select.focus();
 }
 
 function shootoutControlsHeader(): HTMLElement {

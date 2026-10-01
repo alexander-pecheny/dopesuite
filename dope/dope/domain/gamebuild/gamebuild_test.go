@@ -314,3 +314,38 @@ func TestCreateWritesTheVenuesASchemeNames(t *testing.T) {
 		t.Fatalf("a counted venues list wrote %d titles (%v)", count, err)
 	}
 }
+
+// A room the host renamed stays the game's through a clear, even when another
+// game plays there too: the scheme's title no longer names it, but it is
+// where this game's bouts already were.
+func TestClearKeepsARenamedRoomAnotherGameShares(t *testing.T) {
+	db, festID := newFest(t, 4)
+	var titled int64
+	inTx(t, db, func(tx *sql.Tx) (err error) {
+		titled, err = gamebuild.Create(context.Background(), tx, gamebuild.Spec{FestID: festID, Type: "brain", Label: "Брейн",
+			DSL: "[defaults]\nvenues: [А, Б, В]\n\n[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 2\n"})
+		if err != nil {
+			return err
+		}
+		_, err = gamebuild.Create(context.Background(), tx, gamebuild.Spec{FestID: festID, Type: "brain", Label: "Второй",
+			DSL: "[defaults]\nvenues: 2\n\n[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 2\n"})
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(`update venues set title = 'Зал 1' where fest_id = ? and number = 1`, festID)
+		return err
+	})
+	inTx(t, db, func(tx *sql.Tx) error {
+		_, err := gamebuild.Clear(context.Background(), tx, festID, titled)
+		return err
+	})
+	var rooms int
+	if err := db.QueryRow(`select count(*) from venues where fest_id = ?`, festID).Scan(&rooms); err != nil || rooms != 3 {
+		t.Fatalf("the clear left %d rooms (%v), want the 3 there were", rooms, err)
+	}
+	var onFirst int
+	if err := db.QueryRow(`
+select count(*) from matches m join venues v on v.id = m.venue_id where m.game_id = ? and v.number = 1`, titled).Scan(&onFirst); err != nil || onFirst == 0 {
+		t.Fatalf("no bout of the cleared game on the renamed room 1 (%v)", err)
+	}
+}

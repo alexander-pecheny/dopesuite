@@ -263,7 +263,13 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 			case hasDirect:
 				pair = directBronze
 			case len(semifinalCodes) == 2:
-				pair = []store.SchemeSlot{FromMatch(semifinalCodes[0], 2), FromMatch(semifinalCodes[1], 2)}
+				// Labelled like every other seat a bout feeds, so the grid
+				// names the semifinal and the place before the semifinals are
+				// played rather than the internal Match code.
+				pair = []store.SchemeSlot{
+					LabelledFromMatch(semifinalCodes[0], s.Structure.Titles.Bout("1"), 2),
+					LabelledFromMatch(semifinalCodes[1], s.Structure.Titles.Bout("2"), 2),
+				}
 			}
 			if pair != nil {
 				if err := appendBronze(b, pair, roundIndex+1); err != nil {

@@ -137,7 +137,10 @@ export function buildRosterTable(teams: RosterTeam[] | null | undefined, options
   const troikas = Boolean(options.troikas);
   const onEdit = options.onEdit;
   wrapper.appendChild(standingsTable({
-    className: "roster-results-table",
+    // Without a № column (troikas, a fest not numbered yet) the frozen name
+    // column must start at the edge: the shared rule offsets it by a № column
+    // that is not there, and it slid over the players' names.
+    className: hasNumbers ? "roster-results-table" : "roster-results-table roster-unnumbered",
     columns: [
       ...(hasNumbers ? [{label: "№", kind: "place" as const}] : []),
       {label: troikas ? S.fest.roster.colTroika() : S.fest.roster.colTeam(), kind: "name"},

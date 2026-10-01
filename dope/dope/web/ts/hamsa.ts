@@ -29,6 +29,7 @@ import * as hamsa from "./hamsa-protocol.js";
 import type {HamsaState, Mark} from "./hamsa-protocol.js";
 import {computeHamsaPlayerStats} from "./hamsa-stats.js";
 import type {HamsaBout} from "./hamsa-stats.js";
+import {VENUE_POPOVER_SPEC} from "./venue.js";
 import S from "./i18nstrings.js";
 import {createEntrantsTab} from "./entrants.js";
 
@@ -110,6 +111,7 @@ const shell = mountGamePage({
 });
 const {viewer, staticMode, scopeGameID, indicator, viewerCounter} = shell;
 createFloatingPopover({root, specs: [
+  VENUE_POPOVER_SPEC,
   {trigger: ".results-team-truncated", popover: ".results-team-name-popover", anchor: ".results-team-name"},
   {trigger: ".grid-slot-team-truncated", popover: ".grid-slot-team-popover", anchor: ".grid-slot-team-name"},
 ]}).bind();

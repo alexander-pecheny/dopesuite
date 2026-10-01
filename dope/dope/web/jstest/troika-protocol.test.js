@@ -58,7 +58,7 @@ Deno.test("swapFrom rewrites the seating from a тема on, leaving the played 
 
 // The three answer in turn and hear each other, so a correct answer is either
 // the first on that вопрос or a repeat of one already on the table.
-Deno.test("stats tell a first answer from a repeat, and rate the repeats", () => {
+Deno.test("stats tell a first answer from a repeat, rate both, and sit the кресла", () => {
   const state = troika.parseState({
     values: [1],
     sides: [{themes: [theme([1, 2, 3],
@@ -86,7 +86,15 @@ Deno.test("stats tell a first answer from a repeat, and rate the repeats", () =>
   assertEquals(by["Вера"].repeat, 1);
   assertEquals(by["Вера"].repeatChances, 2);
   assertEquals(by["Вера"].repeatRate, 0.5);
-  // Sorted on first answers, then on repeats.
+  // Every answer counts: Боря answered three, two of them right.
+  assertEquals(by["Боря"].questions, 3);
+  assertEquals(by["Боря"].correct, 2);
+  assertEquals(by["Боря"].correctRate, 2 / 3);
+  // The кресла each sat in for the тема the side played; the other side
+  // played nothing and has no rows.
+  assertEquals(by["Вера"].chairs, [0, 0, 1]);
+  assertEquals(by["Г"], undefined);
+  // Sorted on points, then right answers, then first answers.
   assertEquals(rows.map((row) => row.player), ["Боря", "Аня", "Вера"]);
   assertEquals(by["Аня"].bouts, 1);
 });

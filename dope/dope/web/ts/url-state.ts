@@ -22,7 +22,26 @@ export interface HashTabOptions<T extends TabLike> {
 // rawHash is the hash as the address bar spells it, undecoded — a tab key is
 // ASCII, and every page has always compared it this way.
 function rawHash(): string {
-  return (window.location.hash || "").replace(/^#/, "");
+  return (window.location.hash || "").replace(/^#/, "").split("@")[0];
+}
+
+// hashAnchor is what follows the tab in the hash after an «@»: one thing on
+// the tab to scroll to (a bout's letter on a protocols tab), "" for none.
+export function hashAnchor(): string {
+  const hash = (window.location.hash || "").replace(/^#/, "");
+  const at = hash.indexOf("@");
+  if (at < 0) return "";
+  // A hash typed by hand may not decode; it then names nothing on the page.
+  try {
+    return decodeURIComponent(hash.slice(at + 1));
+  } catch {
+    return "";
+  }
+}
+
+// tabHref is the in-page link to a tab, and to one thing on it.
+export function tabHref(key: string, anchor = ""): string {
+  return anchor ? `#${key}@${encodeURIComponent(anchor)}` : `#${key}`;
 }
 
 // tabFromHash is the tab the hash names, or null when it names none of them —

@@ -442,6 +442,14 @@ func TestTroikaPlayersSeedPutsUnknownPeopleLast(t *testing.T) {
 	if !slices.Equal(result.View.Unranked, []string{"Болваны"}) {
 		t.Fatalf("unranked = %v, want [Болваны]", result.View.Unranked)
 	}
+	// Read back, as the fest broadcast does the moment the import lands.
+	read, err := entrants.Load(t.Context(), srv.Eng().DB, scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(read.Unranked, []string{"Болваны"}) {
+		t.Fatalf("read back: unranked = %v, want [Болваны]", read.Unranked)
+	}
 }
 
 // The Троечка regulations' last seeding tie-break is the earlier

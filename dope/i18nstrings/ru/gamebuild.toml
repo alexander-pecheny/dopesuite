@@ -54,6 +54,9 @@ need_two = "для схемы нужны хотя бы два участника
 unnumbered = "перед созданием игры пронумеруйте участников феста"
 # An individual game seeded from a fest with fewer than three players.
 need_players = "для личной игры нужны игроки в ростере феста"
+# A Тройка created with no troika ticked, while the fest has fewer than two
+# troikas to seat instead.
+need_troikas = "для Тройки нужны хотя бы две тройки — заведите их на странице «Тройки»"
 
 [division]
 # A Тройка game that takes its troikas from a зачёт, while the зачёт holds no

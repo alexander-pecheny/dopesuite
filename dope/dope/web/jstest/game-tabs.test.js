@@ -113,11 +113,13 @@ test("брейн: pods get a block tab and a протоколы tab; a bare brac
 // «Участники», and the old «Посев» hash lands there.
 test("брейн, Тройка, Хамса: the host gets «Участники»", () => {
   for (const game of ["brain", "troika", "hamsa"]) {
+    // A Тройка's bouts are played at the fest's venues: «Площадки» beside the grid.
+    const venues = game === "troika" ? ["venues"] : [];
     const host = gameTabs([], {game, viewer: false});
-    assert.deepEqual(keys(host), ["grid", "stats", "roster", "entrants"]);
-    assert.equal(host[3].label, "Участники");
+    assert.deepEqual(keys(host), ["grid", ...venues, "stats", "roster", "entrants"]);
+    assert.equal(host.at(-1).label, "Участники");
     assert.equal(canonicalKey(host, "seed"), "entrants");
-    assert.deepEqual(keys(gameTabs([], {game, viewer: true})), ["grid", "stats", "roster"]);
+    assert.deepEqual(keys(gameTabs([], {game, viewer: true})), ["grid", ...venues, "stats", "roster"]);
   }
 });
 

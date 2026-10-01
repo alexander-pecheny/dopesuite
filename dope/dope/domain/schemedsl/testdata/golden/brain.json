@@ -4595,13 +4595,15 @@
        "fromMatch": {
         "match": "s5-semifinal-m1",
         "place": 2
-       }
+       },
+       "label": "Бой 1, м. 2"
       },
       {
        "fromMatch": {
         "match": "s5-semifinal-m2",
         "place": 2
-       }
+       },
+       "label": "Бой 2, м. 2"
       }
      ]
     }

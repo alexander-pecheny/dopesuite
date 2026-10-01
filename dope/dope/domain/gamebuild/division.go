@@ -58,6 +58,30 @@ func entrantDivision(dsl string) (string, bool) {
 	return division, ok && division != ""
 }
 
+// declaresSeed reports whether a scheme's [init] names a seed source, which
+// then decides the entrants instead of the form.
+func declaresSeed(dsl string) bool {
+	doc, err := schemedsl.Parse(dsl)
+	if err != nil {
+		return false
+	}
+	_, seeded := doc.Init.Str("seed")
+	return seeded
+}
+
+// festTroikasTx is every troika of the fest, in the order of applications.
+func festTroikasTx(ctx context.Context, q store.Queryer, festID int64) ([]int64, error) {
+	troikas, err := roster.LoadAssembled(ctx, q, festID)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]int64, len(troikas))
+	for i, t := range troikas {
+		ids[i] = t.ID
+	}
+	return ids, nil
+}
+
 // EntrantDivision is the division a Game's scheme takes its troikas from, and
 // whether it takes one.
 func EntrantDivision(dsl string) (string, bool) { return entrantDivision(dsl) }

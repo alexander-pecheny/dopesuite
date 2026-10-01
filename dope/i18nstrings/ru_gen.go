@@ -710,6 +710,9 @@ var RU = Strings{
 			NeedPlayers: func() string {
 				return "для личной игры нужны игроки в ростере феста"
 			},
+			NeedTroikas: func() string {
+				return "для Тройки нужны хотя бы две тройки — заведите их на странице «Тройки»"
+			},
 			NeedTwo: func() string {
 				return "для схемы нужны хотя бы два участника в фесте"
 			},
@@ -2688,13 +2691,17 @@ var RU = Strings{
 			Head: func(n string) string { return fmt.Sprintf("Перестрелка %s", n) },
 		},
 		Stats: TroikaStatsStrings{
-			Bouts: func() string { return "Бои" },
+			Bouts:       func() string { return "Бои" },
+			Chairs:      func() string { return "П1 / П2 / К" },
+			Correct:     func() string { return "Верных" },
+			CorrectRate: func() string { return "% верных" },
 			Empty: func() string {
 				return "Пока нет данных: ни одного ответа не отмечено."
 			},
 			First:      func() string { return "Первые ответы" },
 			Player:     func() string { return "Игрок" },
 			Points:     func() string { return "Очки" },
+			Questions:  func() string { return "Вопросов" },
 			Repeat:     func() string { return "Повторы" },
 			RepeatRate: func() string { return "Удачные повторы" },
 			Team:       func() string { return "Команда" },

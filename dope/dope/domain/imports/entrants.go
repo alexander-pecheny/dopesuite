@@ -42,7 +42,8 @@ type List struct {
 	State       ListState
 	Synthesized bool
 	// Unranked names who the import that made the list seeded last for want
-	// of anything to rank them by. It is not stored: the tab says it once.
+	// of anything to rank them by. The import keeps it in State as well, for
+	// the tab to say again when it is read back.
 	Unranked []string
 }
 

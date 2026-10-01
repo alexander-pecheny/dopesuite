@@ -559,6 +559,7 @@ export type Strings = {
       kindPlayer: (name: string) => string;
       kindTeam: (name: string) => string;
       needPlayers: () => string;
+      needTroikas: () => string;
       needTwo: () => string;
       unknownParticipant: (n: string) => string;
       unnumbered: () => string;
@@ -1882,10 +1883,14 @@ export type Strings = {
     };
     stats: {
       bouts: () => string;
+      chairs: () => string;
+      correct: () => string;
+      correctRate: () => string;
       empty: () => string;
       first: () => string;
       player: () => string;
       points: () => string;
+      questions: () => string;
       repeat: () => string;
       repeatRate: () => string;
       team: () => string;
