@@ -559,6 +559,7 @@ export type Strings = {
       kindPlayer: (name: string) => string;
       kindTeam: (name: string) => string;
       needPlayers: () => string;
+      needTroikas: () => string;
       needTwo: () => string;
       unknownParticipant: (n: string) => string;
       unnumbered: () => string;

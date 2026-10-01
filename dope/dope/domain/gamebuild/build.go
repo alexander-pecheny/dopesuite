@@ -251,6 +251,18 @@ func createSchemeGame(ctx context.Context, tx *sql.Tx, festID int64, gameType, l
 			return 0, corei18n.User(dopestrings.Default.Gamebuild.Division.NoTroikas(division))
 		}
 	}
+	// A Тройка seats troikas. Created with none ticked and no seed declared,
+	// it takes every troika of the fest in the order of applications — not
+	// the fest's teams, which is what «none ticked» means for a team game and
+	// which a Тройка never seats.
+	if gameType == games.Troika && len(entrants) == 0 && !declaresSeed(dsl) {
+		if entrants, err = festTroikasTx(ctx, tx, festID); err != nil {
+			return 0, err
+		}
+		if len(entrants) < 2 {
+			return 0, corei18n.User(dopestrings.Default.Gamebuild.Seating.NeedTroikas())
+		}
+	}
 	scheme, err := schemeForEntrantsTx(ctx, tx, festID, gameType, identity.Code, identity.Title, dsl, entrants)
 	if err != nil {
 		return 0, err

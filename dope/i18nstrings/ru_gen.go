@@ -710,6 +710,9 @@ var RU = Strings{
 			NeedPlayers: func() string {
 				return "для личной игры нужны игроки в ростере феста"
 			},
+			NeedTroikas: func() string {
+				return "для Тройки нужны хотя бы две тройки — заведите их на странице «Тройки»"
+			},
 			NeedTwo: func() string {
 				return "для схемы нужны хотя бы два участника в фесте"
 			},
