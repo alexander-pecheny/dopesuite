@@ -1600,8 +1600,10 @@ var RU = Strings{
 			Total:         func() string { return "Итог" },
 		},
 		Sheet: MultiSheetStrings{
-			Team:  func() string { return "Команда" },
-			Total: func() string { return "Итог" },
+			SortByName:   func() string { return "Сортировать по названию" },
+			SortByNumber: func() string { return "Сортировать по номеру" },
+			Team:         func() string { return "Команда" },
+			Total:        func() string { return "Итог" },
 		},
 		Tabs: MultiTabsStrings{
 			Detailed: func() string { return "Подробно" },

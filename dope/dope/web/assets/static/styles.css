@@ -3360,6 +3360,57 @@ html:has(.game-host-top) {
   max-height: none;
 }
 
+/* Мультиигры «Подробно»: the team number in a column of its own before the
+   name, and the head's «№» and «Команда» buttons that order the rows. */
+.match-table.multi-table {
+  --multi-number-col: calc(3ch + var(--space-1) + var(--space-0-5));
+}
+
+.match-table.multi-table .ek-team-cell .od-detailed-team-layout,
+.match-table.multi-table .multi-team-head-layout {
+  grid-template-columns: var(--multi-number-col) minmax(0, 1fr);
+}
+
+.match-table.multi-table .multi-team-head-layout {
+  display: grid;
+  align-items: center;
+  width: 100%;
+}
+
+.match-table.multi-table .multi-team-number {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  padding: 0 var(--space-1) 0 var(--space-0-5);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--fw-semibold);
+}
+
+.match-table.multi-table .multi-team-head-label {
+  justify-self: start;
+  padding: 0 var(--space-1);
+}
+
+.match-table.multi-table .multi-sort-head {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+}
+
+.match-table.multi-table .multi-sort-head:hover,
+.match-table.multi-table .multi-sort-head.multi-sort-active {
+  color: var(--text);
+  text-decoration: underline;
+}
+
 .match-table .ek-team-cell .od-detailed-team-name-popover {
   left: 4px;
 }

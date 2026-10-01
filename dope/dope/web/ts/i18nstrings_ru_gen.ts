@@ -1199,6 +1199,8 @@ shootout: true
       total: () => "Итог",
     },
     sheet: {
+      sortByName: () => "Сортировать по названию",
+      sortByNumber: () => "Сортировать по номеру",
       team: () => "Команда",
       total: () => "Итог",
     },

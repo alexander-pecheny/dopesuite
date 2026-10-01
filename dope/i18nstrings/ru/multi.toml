@@ -16,6 +16,9 @@ roster = "Составы"
 # The «Подробно» sheet: the team and total column headers.
 team = "Команда"
 total = "Итог"
+# The titles of the team column's two sort buttons, «№» and «Команда».
+sort_by_number = "Сортировать по номеру"
+sort_by_name = "Сортировать по названию"
 
 [game]
 # A мини-игра column block's head when its tasks all pay the same:

@@ -1177,6 +1177,8 @@ export type Strings = {
       total: () => string;
     };
     sheet: {
+      sortByName: () => string;
+      sortByNumber: () => string;
       team: () => string;
       total: () => string;
     };

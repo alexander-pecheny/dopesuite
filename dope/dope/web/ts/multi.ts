@@ -167,7 +167,7 @@ function buildTable(): HTMLElement {
 
   const head = document.createElement("thead");
   const gamesRow = document.createElement("tr");
-  gamesRow.appendChild(th(S.multi.sheet.team(), "sticky sticky-name", {rowSpan: 2}));
+  gamesRow.appendChild(th(teamHead(), "sticky sticky-name", {rowSpan: 2}));
   gamesRow.appendChild(th(S.multi.sheet.total(), "sticky sticky-total number", {rowSpan: 2}));
   if (rules.signed) gamesRow.appendChild(th("Σ+", "sticky sticky-place number", {rowSpan: 2}));
   rules.minigames.forEach((game, g) => {
@@ -221,15 +221,22 @@ function buildTable(): HTMLElement {
 // scores beside it.
 function teamCell(p: number): HTMLElement {
   const number = multi.participantNumber(state!, p);
-  const labelText = `${number > 0 ? number + ". " : ""}${multi.participantName(state!, p)}`;
+  const name = multi.participantName(state!, p);
+  const labelText = `${number > 0 ? number + ". " : ""}${name}`;
   const cell = td("", "sticky sticky-name team-name ek-team-cell", {dataset: {multiTeamCell: ""}});
   const layout = document.createElement("span");
   layout.className = "od-detailed-team-layout";
+  // The number stands in a column of its own, so the rows read down it as
+  // they do in KSI's sheet.
+  const numberNode = document.createElement("span");
+  numberNode.className = "multi-team-number";
+  numberNode.textContent = number > 0 ? String(number) : "";
+  layout.appendChild(numberNode);
   const nameWrap = document.createElement("span");
   nameWrap.className = "od-detailed-team-name-wrap";
   const label = document.createElement("span");
   label.className = "od-detailed-team-name";
-  label.textContent = labelText;
+  label.textContent = name;
   label.tabIndex = 0;
   label.setAttribute("aria-label", labelText);
   nameWrap.appendChild(label);
@@ -311,8 +318,54 @@ function cellNode(participant: number, game: number, column: number): HTMLElemen
   return cell;
 }
 
+// The sheet's row order is the host's own: by name, as the sheet has always
+// listed the teams, or by number — the order the answer slips and the
+// checkers' table come in, so a column pasted from there lands team by team.
+// Local to this page, never synced.
+let detailedSort: "name" | "number" = "name";
+const nameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
+
 function rowOrder(): number[] {
-  return state!.participants.map((_, index) => index);
+  const order = state!.participants.map((_, index) => index);
+  const byName = (a: number, b: number) =>
+    nameCollator.compare(multi.participantName(state!, a), multi.participantName(state!, b)) || a - b;
+  if (detailedSort === "name") return order.sort(byName);
+  // A guest team has no number (it is below zero) and a legacy entry none at
+  // all: they follow the numbered teams, by name.
+  const numberOf = (index: number) => {
+    const number = multi.participantNumber(state!, index);
+    return number > 0 ? number : Infinity;
+  };
+  return order.sort((a, b) => numberOf(a) - numberOf(b) || byName(a, b));
+}
+
+function setDetailedSort(key: "name" | "number"): void {
+  if (detailedSort === key) return;
+  detailedSort = key;
+  render();
+}
+
+// The team column's head: the number and the team, each a button that orders the
+// rows by it, as the KSI sheet's head does.
+function teamHead(): HTMLElement {
+  const layout = document.createElement("span");
+  layout.className = "od-detailed-team-layout multi-team-head-layout";
+  const sortButton = (text: string, title: string, key: "name" | "number", className: string) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `${className} multi-sort-head`;
+    button.textContent = text;
+    button.title = title;
+    button.setAttribute("aria-label", title);
+    button.classList.toggle("multi-sort-active", detailedSort === key);
+    button.addEventListener("click", () => setDetailedSort(key));
+    return button;
+  };
+  layout.append(
+    sortButton("№", S.multi.sheet.sortByNumber(), "number", "multi-team-number"),
+    sortButton(S.multi.sheet.team(), S.multi.sheet.sortByName(), "name", "multi-team-head-label"),
+  );
+  return layout;
 }
 
 // === editing ===
