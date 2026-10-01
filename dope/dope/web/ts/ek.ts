@@ -1276,7 +1276,13 @@ function groupAnchorID(code: string): string {
 // result) does not yank the page back to it.
 let shownHash = "";
 function showHashTarget(): void {
-  const id = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+  let id = "";
+  // A hash typed by hand may not decode; it then names nothing on the page.
+  try {
+    id = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+  } catch {
+    return;
+  }
   if (!id || id === shownHash) return;
   const node = document.getElementById(id);
   if (!node) return;

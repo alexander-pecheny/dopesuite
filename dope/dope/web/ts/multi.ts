@@ -329,7 +329,10 @@ function rowOrder(): number[] {
   const order = state!.participants.map((_, index) => index);
   const byName = (a: number, b: number) =>
     nameCollator.compare(multi.participantName(state!, a), multi.participantName(state!, b)) || a - b;
-  if (detailedSort === "name") return order.sort(byName);
+  // By name is the order the server lists the teams in, which is by name
+  // already with the guest teams after them: the sheet the hosts know, kept
+  // exactly as it was.
+  if (detailedSort === "name") return order;
   // A guest team has no number (it is below zero) and a legacy entry none at
   // all: they follow the numbered teams, by name.
   const numberOf = (index: number) => {
