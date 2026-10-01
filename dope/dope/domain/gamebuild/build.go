@@ -290,7 +290,7 @@ values(?, ?, ?, ?, ?, ?, ?, ?, '{}', 'active', 'fest', 'fest', 1, ?, ?)`,
 			return 0, err
 		}
 	}
-	if err := writeCompiledStructureTx(ctx, tx, festID, gameID, gameType, scheme); err != nil {
+	if err := writeCompiledStructureTx(ctx, tx, festID, gameID, gameType, scheme, nil); err != nil {
 		return 0, err
 	}
 	if err := recordGameEntrantsTx(ctx, tx, gameID); err != nil {
@@ -387,7 +387,9 @@ func stageEmptyState(gameType string, stage store.SchemeStage, seats, fallbackQu
 // writes game_assignments by seed rank, so creation must not pre-fill them by
 // number — or the Game already named its entrants: seating the registry on
 // top would add the teams this Game does not play.
-func writeCompiledStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string, scheme store.FestScheme) error {
+// own is the venues this Game's bouts sat at before a clear deleted them, nil
+// for a Game being created.
+func writeCompiledStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string, scheme store.FestScheme, own map[int64]bool) error {
 	seated, err := hasAssignmentsTx(ctx, tx, gameID)
 	if err != nil {
 		return err
@@ -401,7 +403,7 @@ func writeCompiledStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID in
 	if err != nil {
 		return err
 	}
-	venues, err := schemeVenuesTx(ctx, tx, festID, gameID, scheme.Venues)
+	venues, err := schemeVenuesTx(ctx, tx, festID, gameID, scheme.Venues, own)
 	if err != nil {
 		return err
 	}
@@ -422,7 +424,11 @@ func writeCompiledStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID in
 // numbered (`venues: 3`, or none given) carries the default title, which
 // says nothing the number does not: it is the fest's venue of that number,
 // and writes no row.
-func schemeVenuesTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, venues []store.SchemeVenue) (map[int]int64, error) {
+//
+// A clear deletes the Game's bouts before it writes them again, so it hands
+// over the rooms they sat at (own): a room there that the host renamed is
+// still the Game's, even when another Game plays there too.
+func schemeVenuesTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, venues []store.SchemeVenue, own map[int64]bool) (map[int]int64, error) {
 	type festVenue struct {
 		id     int64
 		number int
@@ -472,7 +478,7 @@ func schemeVenuesTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, venue
 select exists(select 1 from matches where venue_id = ? and game_id != ?)`, id, gameID).Scan(&elsewhere); err != nil {
 				return nil, err
 			}
-			if !elsewhere {
+			if !elsewhere || own[id] {
 				ids[venue.Number], claimed[id] = id, true
 				continue
 			}
@@ -801,7 +807,7 @@ func uniqueSchemeSlug(base string) string {
 // holds — its DSL, compiled against its own entrants and seating them again,
 // or its pasted scheme with its venues — and returns the scheme it built.
 // Clear deletes the old rows first and calls this.
-func rebuildTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType, dsl, schemeJSON string, entrants []int64) ([]byte, error) {
+func rebuildTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType, dsl, schemeJSON string, entrants []int64, own map[int64]bool) ([]byte, error) {
 	if strings.TrimSpace(dsl) != "" {
 		var meta struct {
 			Slug  string `json:"slug"`
@@ -817,7 +823,7 @@ func rebuildTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType, 
 				return nil, err
 			}
 		}
-		if err := writeCompiledStructureTx(ctx, tx, festID, gameID, gameType, scheme); err != nil {
+		if err := writeCompiledStructureTx(ctx, tx, festID, gameID, gameType, scheme, own); err != nil {
 			return nil, err
 		}
 		if err := recordGameEntrantsTx(ctx, tx, gameID); err != nil {
@@ -838,4 +844,21 @@ func rebuildTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType, 
 		return nil, err
 	}
 	return json.Marshal(scheme)
+}
+
+// gameVenueIDsTx is the venues a Game's bouts sit at now.
+func gameVenueIDsTx(ctx context.Context, tx *sql.Tx, gameID int64) (map[int64]bool, error) {
+	ids, err := store.CollectRows(ctx, tx, `select distinct venue_id from matches where game_id = ? and venue_id is not null`,
+		[]any{gameID}, func(rows *sql.Rows) (int64, error) {
+			var id int64
+			return id, rows.Scan(&id)
+		})
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[int64]bool, len(ids))
+	for _, id := range ids {
+		out[id] = true
+	}
+	return out, nil
 }

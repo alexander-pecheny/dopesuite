@@ -30,7 +30,13 @@ function rawHash(): string {
 export function hashAnchor(): string {
   const hash = (window.location.hash || "").replace(/^#/, "");
   const at = hash.indexOf("@");
-  return at < 0 ? "" : decodeURIComponent(hash.slice(at + 1));
+  if (at < 0) return "";
+  // A hash typed by hand may not decode; it then names nothing on the page.
+  try {
+    return decodeURIComponent(hash.slice(at + 1));
+  } catch {
+    return "";
+  }
 }
 
 // tabHref is the in-page link to a tab, and to one thing on it.

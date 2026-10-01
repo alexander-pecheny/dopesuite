@@ -4296,7 +4296,6 @@ html:has(.game-host-top) {
 .crosstable .cross-link:hover,
 .crosstable .cross-link:focus {
   color: var(--blue);
-  outline: 0;
 }
 
 /* A player's round in the groups tab leads to the bout he played it in. */
@@ -4309,7 +4308,6 @@ html:has(.game-host-top) {
 .group-standings-table .group-round-link:hover,
 .group-standings-table .group-round-link:focus {
   color: var(--blue);
-  outline: 0;
 }
 
 .crosstable .cross-pending {

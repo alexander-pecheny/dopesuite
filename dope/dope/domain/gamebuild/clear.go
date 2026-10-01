@@ -71,6 +71,12 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 		}
 		keptPlayers = fields["players"]
 	}
+	// The rooms the bouts sit at, before the deletes take the bouts away: a
+	// rebuild keeps a room the host renamed (schemeVenuesTx).
+	own, err := gameVenueIDsTx(ctx, tx, gameID)
+	if err != nil {
+		return "", err
+	}
 	// matches/stages cascade to their slots, results and standings (FKs are on).
 	for _, q := range []string{
 		`delete from matches where game_id = ?`,
@@ -98,7 +104,7 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 	var newScheme []byte
 	switch {
 	case strings.TrimSpace(dsl) != "":
-		if newScheme, err = rebuildTx(ctx, tx, festID, gameID, gameType, dsl, schemeJSON, entrants); err != nil {
+		if newScheme, err = rebuildTx(ctx, tx, festID, gameID, gameType, dsl, schemeJSON, entrants, own); err != nil {
 			return "", err
 		}
 	case gameType == games.OD:
@@ -170,7 +176,7 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 		}
 	case games.EKShaped(gameType):
 		status = "pending"
-		if newScheme, err = rebuildTx(ctx, tx, festID, gameID, gameType, "", schemeJSON, nil); err != nil {
+		if newScheme, err = rebuildTx(ctx, tx, festID, gameID, gameType, "", schemeJSON, nil, own); err != nil {
 			return "", err
 		}
 	default:

@@ -848,6 +848,8 @@ function buildWrittenBout(bout: BoutEntry): HTMLElement {
   const state = stateOf(bout.code);
   const box = document.createElement("section");
   box.className = "troika-bout";
+  // The same anchor a sheet bout has, so a link from the grid lands here too.
+  box.id = boutAnchorID(bout.code);
   box.appendChild(boutHead(bout));
 
   const table = document.createElement("table");
