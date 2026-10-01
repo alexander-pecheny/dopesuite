@@ -239,7 +239,20 @@ function showAnchor(): void {
   if (!node) return;
   shownAnchor = key;
   node.scrollIntoView({block: "start"});
+  flashTarget(node);
+}
+
+// flashTarget marks the node a link landed on for a moment: the mark fades
+// out by itself and goes at the host's first click, so it never stays on.
+function flashTarget(node: HTMLElement): void {
   node.classList.add("bout-target");
+  const clear = () => {
+    node.classList.remove("bout-target");
+    window.clearTimeout(timer);
+    document.removeEventListener("pointerdown", clear, true);
+  };
+  const timer = window.setTimeout(clear, 2500);
+  document.addEventListener("pointerdown", clear, true);
 }
 
 // === the document ===

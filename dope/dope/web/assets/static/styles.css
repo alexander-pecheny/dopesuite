@@ -4374,10 +4374,25 @@ html:has(.game-host-top) {
   scroll-margin-top: var(--space-8);
 }
 
-.troika-bout.bout-target {
+/* The bout (or group) a link landed on: a frame drawn inside its edge, so the
+   sheet frame's own edge does not clip it, that fades after a moment. The page
+   takes the class off when the fade is over, or at the host's first click. */
+.bout-target {
   outline: 2px solid var(--blue);
-  outline-offset: var(--space-1);
+  outline-offset: -2px;
   border-radius: var(--radius-sm);
+  animation: bout-target-fade 2.4s ease-in forwards;
+}
+
+@keyframes bout-target-fade {
+  0%,
+  60% {
+    outline-color: var(--blue);
+  }
+
+  100% {
+    outline-color: transparent;
+  }
 }
 
 .match-table.brain-detailed .brain-finish-head,
