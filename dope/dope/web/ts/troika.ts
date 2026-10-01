@@ -656,7 +656,9 @@ function themeHead(bout: BoutEntry, t: number, value: number, has: boolean): Cel
     return [button, label];
   }
   const label = S.troika.theme.head(String(t + 1), String(value));
-  if (viewer || bout.view.finished || t === 0) return label;
+  // The turn in the middle of the bout is the scheme's, not the host's: its
+  // seating column is there by itself and is not undone from the head.
+  if (viewer || bout.view.finished || t === 0 || t === state.swap) return label;
   const button = document.createElement("button");
   button.type = "button";
   button.className = "btn btn-xs troika-seat-button";
@@ -693,9 +695,13 @@ function deleteTurn(bout: BoutEntry, t: number): void {
     const prev = orderAt(state, side, t - 1);
     const cur = orderAt(state, side, t);
     if (sameArray(prev, cur)) continue;
-    for (let tt = t; tt < state.values.length && sameArray(orderAt(state, side, tt), cur); tt++) {
-      state.sides[side].themes[tt].order = prev.slice();
-      patch(bout.code, ["sides", side, "themes", tt, "order"], prev);
+    // A theme still holds the change while it sits as the change would seat
+    // it — turned at the middle of a turning bout — and goes back to what the
+    // theme before would seat there.
+    for (let tt = t; tt < state.values.length && sameArray(orderAt(state, side, tt), troika.orderFor(state, t, tt, cur)); tt++) {
+      const back = troika.orderFor(state, t - 1, tt, prev);
+      state.sides[side].themes[tt].order = back;
+      patch(bout.code, ["sides", side, "themes", tt, "order"], back);
     }
   }
   seatOpen.get(bout.code)?.delete(t);
@@ -726,7 +732,7 @@ function chairPicker(bout: BoutEntry, side: number, from: number, chair: number,
     }
     troika.swapFrom(state, side, from, order);
     for (let t = from; t < state.values.length; t++) {
-      patch(bout.code, ["sides", side, "themes", t, "order"], order);
+      patch(bout.code, ["sides", side, "themes", t, "order"], orderAt(state, side, t));
     }
     render();
   });

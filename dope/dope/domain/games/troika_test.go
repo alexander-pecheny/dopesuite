@@ -66,7 +66,7 @@ func TestComputeTroikaResultsSharesAPlaceOnADraw(t *testing.T) {
 }
 
 func TestTroikaEmptyStateIsSizedAndPristine(t *testing.T) {
-	raw := TroikaEmptyStateJSON(TroikaThemeValues(6, []int{1, 1, 1, 2, 2, 3}), 2, false)
+	raw := TroikaEmptyStateJSON(TroikaThemeValues(6, []int{1, 1, 1, 2, 2, 3}), 2, false, false)
 	if TroikaStateStarted(string(raw)) {
 		t.Error("a pristine бой is not started")
 	}
@@ -148,7 +148,7 @@ func TestTroikaShootoutThemeBreaksTheTie(t *testing.T) {
 // The written отбор: a count of right answers per вопрос, each paid at the
 // тема's value, with the вопросы taken three and two times counted apart.
 func TestComputeTroikaResultsWritten(t *testing.T) {
-	raw := TroikaEmptyStateJSON(TroikaThemeValues(3, []int{1, 2, 3}), 3, true)
+	raw := TroikaEmptyStateJSON(TroikaThemeValues(3, []int{1, 2, 3}), 3, true, true)
 	var state TroikaState
 	if err := json.Unmarshal(raw, &state); err != nil {
 		t.Fatal(err)
@@ -176,5 +176,31 @@ func TestComputeTroikaResultsWritten(t *testing.T) {
 	}
 	if !TroikaStateStarted(troikaJSON(t, state)) {
 		t.Fatal("a written бой with counts is started")
+	}
+}
+
+// A scheme that turns the asking order writes the middle of the bout into it:
+// the fourth of six themes, the fifth of eight. Without the option, or for the
+// written qualifier, there is no turn.
+func TestTroikaEmptyStateRecordsTheOutridersSwap(t *testing.T) {
+	for _, tc := range []struct {
+		themes  int
+		swap    bool
+		written bool
+		want    int
+	}{
+		{6, true, false, 3},
+		{8, true, false, 4},
+		{6, false, false, 0},
+		{6, true, true, 0},
+		{1, true, false, 0},
+	} {
+		var state TroikaState
+		if err := json.Unmarshal(TroikaEmptyStateJSON(TroikaThemeValues(tc.themes, nil), 2, tc.written, tc.swap), &state); err != nil {
+			t.Fatal(err)
+		}
+		if state.Swap != tc.want {
+			t.Errorf("themes %d swap %v written %v: Swap = %d, want %d", tc.themes, tc.swap, tc.written, state.Swap, tc.want)
+		}
 	}
 }

@@ -158,3 +158,27 @@ Deno.test("a written бой counts right answers per вопрос at the тем�
   assertEquals(troika.sideTotal(state, 1), 3 + 9);
   assertEquals(troika.started(state), true);
 });
+
+Deno.test("a turning бой seats its second half with the пристяжные changed over", () => {
+  const state = troika.parseState({values: [1, 1, 1, 1, 1, 1], swap: 3});
+  assertEquals(state.swap, 3);
+  troika.swapFrom(state, 0, 0, [7, 8, 9]);
+  assertEquals(state.sides[0].themes.map((t) => t.order), [
+    [7, 8, 9], [7, 8, 9], [7, 8, 9], [8, 7, 9], [8, 7, 9], [8, 7, 9],
+  ]);
+  // A замена before the turn is turned with the rest of the half.
+  troika.swapFrom(state, 0, 1, [7, 5, 9]);
+  assertEquals(state.sides[0].themes[2].order, [7, 5, 9]);
+  assertEquals(state.sides[0].themes[3].order, [5, 7, 9]);
+  // One set at or after the turn is already the second half's.
+  troika.swapFrom(state, 0, 4, [1, 2, 3]);
+  assertEquals(state.sides[0].themes[3].order, [5, 7, 9]);
+  assertEquals(state.sides[0].themes[5].order, [1, 2, 3]);
+  assertEquals(troika.turnedAt(state, 3), true);
+});
+
+Deno.test("parseState keeps no turn outside the бой", () => {
+  assertEquals(troika.parseState({values: [1, 1], swap: 2}).swap, 0);
+  assertEquals(troika.parseState({values: [1, 1], swap: 1, written: true}).swap, 0);
+  assertEquals(troika.parseState({values: [1, 1]}).swap, 0);
+});

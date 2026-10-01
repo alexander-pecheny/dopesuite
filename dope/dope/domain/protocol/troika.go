@@ -24,6 +24,10 @@ func (troika) Params() []Param {
 		// written makes the Block's bout the qualifier: one sitting of every troika,
 		// a count of right answers per question instead of chairs and marks.
 		{Key: "written", Config: "written", Bool: true},
+		// swap_outriders turns the asking order in the middle of every bout:
+		// from the second half on, the first and second outriders change chairs.
+		// The host seats a troika once; the sheet seats the second half.
+		{Key: "swap_outriders", Config: "swapOutriders", Bool: true},
 	}
 }
 
@@ -48,13 +52,14 @@ func (troika) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 		ThemeValues  []int `json:"themeValues"`
 		Participants int   `json:"participants"`
 		Written      bool  `json:"written"`
+		Swap         bool  `json:"swapOutriders"`
 	}
 	if len(cfg) > 0 {
 		if err := json.Unmarshal(cfg, &conf); err != nil {
 			return nil, fmt.Errorf("troika config: %w", err)
 		}
 	}
-	return games.TroikaEmptyStateJSON(games.TroikaThemeValues(conf.Themes, conf.ThemeValues), conf.Participants, conf.Written), nil
+	return games.TroikaEmptyStateJSON(games.TroikaThemeValues(conf.Themes, conf.ThemeValues), conf.Participants, conf.Written, conf.Swap), nil
 }
 
 func (troika) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error) {

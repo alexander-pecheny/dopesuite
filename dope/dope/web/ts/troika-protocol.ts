@@ -37,6 +37,9 @@ export interface TroikaState {
   pin: number[];
   // The written qualifier: one sitting of every troika, counts instead of chairs.
   written: boolean;
+  // The theme from which the two outriders change chairs, when the scheme
+  // turns the asking order in the middle of a bout; 0 is no turn.
+  swap: number;
   [key: string]: unknown;
 }
 
@@ -93,8 +96,10 @@ export function parseState(raw: unknown, seats = 2): TroikaState {
   }
   const shootout = Number(doc.shootout);
   const pin = (Array.isArray(doc.pin) ? doc.pin : []).map((p) => (typeof p === "number" && p > 0 ? p : 0));
+  const swap = Number(doc.swap);
   return {
     values, sides, written,
+    swap: !written && Number.isInteger(swap) && swap > 0 && swap < themes ? swap : 0,
     shootout: Number.isInteger(shootout) && shootout > 0 ? Math.min(shootout, themes) : 0,
     pin: sides.map((_, i) => pin[i] || 0),
   };
@@ -171,14 +176,30 @@ export function chairAt(state: TroikaState, side: number, theme: number, chair: 
   return state.sides[side]?.themes[theme]?.order[chair] ?? 0;
 }
 
+// swapOutriders is a seating with the first two chairs changed over: the
+// order the second half of a turning bout asks in. The lead keeps his chair.
+export function swapOutriders(order: number[]): number[] {
+  const out = order.slice(0, CHAIRS);
+  [out[0], out[1]] = [out[1], out[0]];
+  return out;
+}
+
+// orderFor is the seating theme t takes from one set before theme `from`: the
+// same order, turned once the bout passes its middle if it was set before it.
+// A seating set at or after the turn is already the second half's.
+export function orderFor(state: TroikaState, from: number, t: number, order: number[]): number[] {
+  return state.swap > 0 && from < state.swap && t >= state.swap ? swapOutriders(order) : order.slice(0, CHAIRS);
+}
+
 // swapFrom rewrites the seating from theme t onward — what the host's swap
 // button does. Seats are a fact per theme, so a swap is
-// simply the new order written into every theme after it; an earlier one is
-// left exactly as it was played.
+// simply the new order written into every theme after it (turned for the
+// second half when the bout turns); an earlier one is left exactly as it was
+// played.
 export function swapFrom(state: TroikaState, side: number, from: number, order: number[]): void {
   for (let t = from; t < state.values.length; t++) {
     const theme = state.sides[side]?.themes[t];
-    if (theme) theme.order = order.slice(0, CHAIRS);
+    if (theme) theme.order = orderFor(state, from, t, order);
   }
 }
 

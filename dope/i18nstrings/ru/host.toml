@@ -72,7 +72,7 @@ minigames_share_hint = "«Название →0..100: …» — мини-игр�
 multi_sorting_label = "Что решает при равном итоге (необязательно)"
 multi_sorting_hint = "Через запятую: total — итог, plus — сумма положительных, place_sum — сумма мест по мини-играм (меньше — лучше), game1, game2… — подытоги мини-игр по порядку. Пусто — команды с равным итогом делят место."
 # Hint under the troika scheme editor.
-troika_hint = "Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50. Если в [init] написать division: Студ, игра сама возьмёт тройки зачёта «Студ» со страницы «Тройки», и отмечать участников ниже не нужно."
+troika_hint = "Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. swap_outriders: true — порядок опроса меняется в середине боя: рассадку вводят один раз, а со второй половины тем (с 4-й из 6, с 5-й из 8) Пристяжной 1 и Пристяжной 2 меняются местами сами. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50. Если в [init] написать division: Студ, игра сама возьмёт тройки зачёта «Студ» со страницы «Тройки», и отмечать участников ниже не нужно."
 # The scheme the hamsa creation form prefills: the tournament's own shape at
 # its smallest, with n the participants the fest can seat four to a table. It
 # is text a host reads and edits, so it lives here rather than in the form.

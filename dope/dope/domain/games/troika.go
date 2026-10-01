@@ -63,12 +63,18 @@ type TroikaSide struct {
 // total like any other theme. Pin is a place per side that a host set by hand;
 // a zero leaves that side's place to the sheet. Written marks the qualifier, which
 // is one sitting of every troika on paper: its sides carry Counts.
+//
+// Swap is the theme (0-based) from which the two outriders change chairs, when
+// the scheme says the asking order turns in the middle of a bout: the host
+// seats a troika once and the sheet seats the second half itself. Zero is no
+// turn. Like Values it is written when the match is built.
 type TroikaState struct {
 	Values   []int        `json:"values,omitempty"`
 	Sides    []TroikaSide `json:"sides,omitempty"`
 	Shootout int          `json:"shootout,omitempty"`
 	Pin      []float64    `json:"pin,omitempty"`
 	Written  bool         `json:"written,omitempty"`
+	Swap     int          `json:"swap,omitempty"`
 }
 
 // TroikaThemeValues resolves a match's per-theme nominals from its stage
@@ -92,12 +98,16 @@ func TroikaThemeValues(themes int, authored []int) []int {
 // TroikaEmptyStateJSON builds the pristine document for one match: a side per
 // seat (two at the least), each of themes of three questions by three chairs,
 // with the match's nominals recorded alongside. A written match has a grid of
-// counts per side instead.
-func TroikaEmptyStateJSON(values []int, seats int, written bool) []byte {
+// counts per side instead. swapOutriders turns the outriders' chairs at the
+// middle of the bout's own themes; a written match has no chairs to turn.
+func TroikaEmptyStateJSON(values []int, seats int, written, swapOutriders bool) []byte {
 	if seats < 2 {
 		seats = 2
 	}
 	state := TroikaState{Values: values, Sides: make([]TroikaSide, seats), Written: written}
+	if swapOutriders && !written {
+		state.Swap = TroikaSwapTheme(len(values))
+	}
 	for s := range state.Sides {
 		if written {
 			counts := make([][]int, len(values))
@@ -114,6 +124,15 @@ func TroikaEmptyStateJSON(values []int, seats int, written bool) []byte {
 		state.Sides[s] = TroikaSide{Themes: themes}
 	}
 	return []byte(mustJSON(state))
+}
+
+// TroikaSwapTheme is where the second half of a bout of themes starts: the
+// fourth of six, the fifth of eight. A bout of one theme has no middle.
+func TroikaSwapTheme(themes int) int {
+	if themes < 2 {
+		return 0
+	}
+	return themes / 2
 }
 
 func emptyTroikaTheme() TroikaTheme {
