@@ -604,10 +604,22 @@ func TestImportFromAnotherSourceDropsTheMoves(t *testing.T) {
 	if view.MovesDropped != 1 || view.Edits != 1 {
 		t.Fatalf("moves dropped %d, edits %d; want 1 and 1", view.MovesDropped, view.Edits)
 	}
+	// The tab is read back the moment the import lands (the fest broadcast
+	// refreshes it): it still says so.
+	read, err := entrants.Load(ctx, db, scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read.MovesDropped != 1 {
+		t.Fatalf("read back: moves dropped %d, want 1", read.MovesDropped)
+	}
 
 	// The same source again: nothing to drop, the removal still applies.
 	view = mustEntrants(t)(entrants.Import(eng, ctx, scope, entrants.Source{Kind: entrants.SourceFest}, nil))
 	if got := rowNames(view); !slices.Equal(got, want) || view.MovesDropped != 0 {
 		t.Fatalf("after a second fest import: %v, %d dropped", got, view.MovesDropped)
+	}
+	if read, err := entrants.Load(ctx, db, scope); err != nil || read.MovesDropped != 0 {
+		t.Fatalf("read back after the second import: %d dropped (%v), want 0", read.MovesDropped, err)
 	}
 }

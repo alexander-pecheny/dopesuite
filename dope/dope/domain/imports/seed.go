@@ -47,6 +47,12 @@ type seedImportState struct {
 	// Edits are the host's hand edits since the last import, in order, which
 	// a re-import from the source applies again (ADR-0025).
 	Edits []ListEdit `json:"edits,omitempty"`
+	// Unranked and MovesDropped are what the last import has to tell the host:
+	// whom it seeded last for want of anything to rank them by, and how many
+	// hand moves it did not apply because it read another source. They stand
+	// until the next import, so the tab can say them however often it is read.
+	Unranked     []string `json:"unranked,omitempty"`
+	MovesDropped int      `json:"movesDropped,omitempty"`
 }
 
 // seedImportStateRow is one entrant. TeamID is the Participant, whatever it

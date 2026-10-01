@@ -143,6 +143,7 @@ func Load(ctx context.Context, q store.Queryer, scope core.FestScope) (View, err
 func describe(ctx context.Context, q store.Queryer, scope core.FestScope, list imports.List, base imports.SeedImportView) (View, error) {
 	s := dopestrings.Default
 	view := View{SeedImportView: base, Kind: kindOf(list.GameType)}
+	view.Unranked, view.MovesDropped = list.State.Unranked, list.State.MovesDropped
 	view.OneOffs = view.Kind != KindTroika
 	var dsl string
 	if err := q.QueryRowContext(ctx, `select coalesce(scheme_dsl, '') from games where id = ?`, scope.GameID).Scan(&dsl); err != nil {
@@ -478,6 +479,10 @@ func importList(h Host, ctx context.Context, scope core.FestScope, src imports.S
 			state.Edits, state.Edited = edits, true
 			next = next.With(state)
 		}
+		// What the import has to tell the host stays with the list, so the
+		// tab still says it when it is read back: a fest broadcast re-reads it
+		// the moment the import lands, and a rebuilt Game reloads the page.
+		next.State.Unranked, next.State.MovesDropped = unranked, dropped
 		for _, row := range next.State.Rows {
 			kept = append(kept, row.TeamID)
 		}
