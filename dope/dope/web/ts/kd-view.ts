@@ -80,13 +80,21 @@ export interface KDPlayersOptions extends KDViewContext {
 }
 
 // notice is what the last refused add said, shown above the add row until the
-// next attempt.
+// host types again or tries again.
 let notice = "";
 
+// sent is the registration the page wrote last, and returned is what the add
+// row gets back after the server refused it: the name and team the host typed,
+// so he fixes the card instead of typing the person again.
+let sent: KDPlayer | null = null;
+let returned: KDPlayer | null = null;
+
 // showRefusal puts the server's refusal of a registration above the add row,
-// for the page to draw.
+// for the page to draw, and hands the refused person back to the add row.
 export function showRefusal(message: string): void {
   notice = message;
+  returned = sent;
+  sent = null;
 }
 
 export function buildPlayersView(opts: KDPlayersOptions): HTMLElement {
@@ -98,13 +106,22 @@ export function buildPlayersView(opts: KDPlayersOptions): HTMLElement {
   panel.appendChild(note);
   const list = kd.players(opts.state, opts.tables);
   if (!opts.viewer) {
+    let refused: HTMLElement | null = null;
     if (notice) {
-      const refused = document.createElement("p");
+      refused = document.createElement("p");
       refused.className = "hint hint-danger";
       refused.textContent = notice;
       panel.appendChild(refused);
     }
-    panel.appendChild(addForm(opts, list));
+    const form = addForm(opts, list);
+    // The refusal is about what was typed; once the host types again it has
+    // been read, and it goes.
+    form.addEventListener("input", () => {
+      notice = "";
+      refused?.remove();
+      refused = null;
+    });
+    panel.appendChild(form);
   }
   // Nine tours of tables are wider than a phone: the table scrolls on its
   // own rather than pushing the page sideways.
@@ -187,6 +204,7 @@ function playersTable(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
       remove.appendChild(icon("trash-2"));
       remove.addEventListener("click", () => {
         notice = "";
+        sent = null;
         opts.unregister(player.card);
       });
       tr.appendChild(td(remove));
@@ -251,6 +269,13 @@ function addForm(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
   add.className = "btn";
   add.append(...iconed("plus", S.od.kd.add()));
   form.append(card, name, team, suggestions, add);
+  // A registration the server refused comes back into the row once; the card
+  // stays the offered free one, since the refused card is the one taken.
+  if (returned) {
+    name.value = returned.name;
+    team.value = returned.team || "";
+    returned = null;
+  }
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     const number = Number(card.value.trim());
@@ -268,7 +293,8 @@ function addForm(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
       restoreDraft(form.ownerDocument, draft);
       return;
     }
-    opts.register({card: number, name: who, team: team.value.trim()});
+    sent = {card: number, name: who, team: team.value.trim()};
+    opts.register(sent);
     document.querySelector<HTMLInputElement>("[data-kd-name]")?.focus();
   });
   return form;
