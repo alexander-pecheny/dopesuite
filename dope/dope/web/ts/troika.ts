@@ -213,24 +213,29 @@ function boutHref(code: string): string {
 }
 
 // groupHref is the link a group table's head in the grid gives: the Block's
-// tab with the groups' tables.
+// tab with the groups' tables, scrolled to this group's.
 function groupHref(stage: FestGridStage): string {
   const tab = tabs().find((entry) => entry.kind === "block" && entry.stages.includes(stage.code || ""));
-  return tab ? tabHref(tab.key) : "";
+  return tab ? tabHref(tab.key, stage.code || "") : "";
+}
+
+function groupAnchorID(code: string): string {
+  return `group-${code}`;
 }
 
 function boutAnchorID(code: string): string {
   return `bout-${boutLetters.get(code) || code}`;
 }
 
-// showAnchor scrolls to the bout the hash names, once per hash: a later
+// showAnchor scrolls to the bout or group the hash names, once per hash: a later
 // redraw (another host's mark) must not yank the page back to it.
 let shownAnchor = "";
 function showAnchor(): void {
   const anchor = hashAnchor();
   const key = `${activeTab}@${anchor}`;
   if (!anchor || key === shownAnchor) return;
-  const node = document.getElementById(`bout-${anchor}`);
+  // A bout's letter, or a group's stage code: they never look alike.
+  const node = document.getElementById(`bout-${anchor}`) || document.getElementById(groupAnchorID(anchor));
   if (!node) return;
   shownAnchor = key;
   node.scrollIntoView({block: "start"});
@@ -1046,6 +1051,7 @@ function buildGroups(stages: SchemeStage[]): HTMLElement {
     columns: [{label: S.troika.groups.rating(), metric: "rating"}, ...CANON_COLUMNS],
     groups: stages.filter((stage) => stageKind(stage) === "rr").map((stage) => ({
       title: groupLabel(stage as StageRef),
+      anchor: groupAnchorID(stage.code || ""),
       entrants: (stage.config?.entrants || []).map(crossSlot),
       bouts: (stage.matches || []).flatMap((planned) => {
         const view = matches.get(planned.code || "");

@@ -37,6 +37,8 @@ export interface StageRefMatch {
 // Groups view draws — a player, his points, and the split by block round.
 export interface GroupStandingsGroup {
   title: string;
+  // The id the group's table carries, so a link can land on it.
+  anchor?: string;
   blockRoundCount: number;
   rows: Array<{name: string; points: number; blockRounds: number[]; bouts?: string[]}>;
 }
@@ -183,6 +185,7 @@ export function buildGroupStandingsView(groups: GroupStandingsGroup[], options: 
   for (const group of groups) {
     const item = document.createElement("section");
     item.className = "group-standings-item";
+    if (group.anchor) item.id = group.anchor;
     const head = document.createElement("h3");
     head.className = "group-standings-head";
     head.textContent = group.title;

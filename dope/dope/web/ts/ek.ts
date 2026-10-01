@@ -1056,6 +1056,7 @@ function renderStage(): void {
   } else if (stageType(stage) === "standings") {
     pane?.replaceChildren(buildGroupStandingsPane(stage));
     scheduleResultsTeamNameOverflowUpdate();
+    showHashTarget();
   }
   shell.presence.refresh();
 }
@@ -1263,7 +1264,24 @@ function canonicalStageCode(code: string): string {
 // groups tab, which links every player's round to its bout.
 function groupStandingsHref(stage: {code?: string}): string {
   const tab = ekTabs().find((entry) => entry.kind === "block" && entry.stages.includes(stage.code || ""));
-  return tab?.stage ? `${route.base}/stage/${encodeURIComponent(tab.stage.code)}` : "";
+  return tab?.stage ? `${route.base}/stage/${encodeURIComponent(tab.stage.code)}#${groupAnchorID(stage.code || "")}` : "";
+}
+
+function groupAnchorID(code: string): string {
+  return `group-${code}`;
+}
+
+// showHashTarget scrolls to the group the URL's hash names — where a group's
+// table on the grid leads — once per hash, so a later redraw (another host's
+// result) does not yank the page back to it.
+let shownHash = "";
+function showHashTarget(): void {
+  const id = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+  if (!id || id === shownHash) return;
+  const node = document.getElementById(id);
+  if (!node) return;
+  shownHash = id;
+  node.scrollIntoView({block: "start"});
 }
 
 // buildGroupStandingsPane is the sheets' groups view: every group of the
@@ -1304,7 +1322,7 @@ function buildGroupStandingsPane(stage: HostStage): HTMLElement {
       }
     }
     const title = schemeStage ? groupLabel(schemeStage as StageRef) : code;
-    return {title, blockRoundCount, rows};
+    return {title, anchor: groupAnchorID(code), blockRoundCount, rows};
   });
   // A player's round leads to the bout he played it in: the grid draws a
   // group as a table, so this is where a spectator finds the group's bouts.

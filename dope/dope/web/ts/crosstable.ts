@@ -64,6 +64,8 @@ export interface CrossBout {
 
 export interface CrossGroup {
   title: string;
+  // The id the group's table carries, so a link can land on it.
+  anchor?: string;
   entrants: CrossSlot[];
   bouts: CrossBout[];
   // The block's standings for this group, by Participant id — whatever the
@@ -113,6 +115,7 @@ export function buildCrosstables(spec: CrosstableSpec): HTMLElement {
   for (const group of spec.groups) {
     const item = document.createElement("section");
     item.className = "group-standings-item";
+    if (group.anchor) item.id = group.anchor;
     const head = document.createElement("h3");
     head.className = "group-standings-head";
     head.textContent = group.title;

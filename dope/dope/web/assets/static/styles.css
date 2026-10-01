@@ -1324,6 +1324,9 @@
 
 .group-standings-item {
   min-width: 0;
+  /* A link from the grid lands on a group's table: keep its head clear of
+     the frame's top edge. */
+  scroll-margin-top: var(--space-8);
 }
 
 .group-standings-head {
