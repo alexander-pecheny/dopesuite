@@ -956,8 +956,9 @@ export interface ScopeSpec<T = unknown> {
 export interface LiveEventsOptions {
   eventsURL: () => string;
   scopes: ScopeSpec[];
-  // The engine's own game: game-state events of sibling games sharing the fest
-  // stream are dropped, everything else unregistered goes to onUnhandled.
+  // The engine's own game: the game-state and fest-view events of sibling
+  // games sharing the fest stream are dropped (siblingGameScope), everything
+  // else unregistered goes to onUnhandled.
   gameID?: string | number | null;
   onUnhandled?: (message: ScopedEventMessage) => void;
   // The server epoch the page rendered under, so a restart between render and
@@ -975,6 +976,20 @@ export interface LiveEventsOptions {
   staticMode?: () => boolean;
   recorder?: () => ClientRecorder | null | undefined;
   newEventSource?: (url: string) => EventSource;
+}
+
+// siblingGameScope says whether an event on the fest stream belongs to another
+// Game of the fest: its whole document (game-state:<game>) or its fest view
+// (fest:<fest>:<game>). A page that took another Game's fest view would draw
+// that Game's stages in place of its own.
+export function siblingGameScope(scope: string, gameID: string | number | null | undefined): boolean {
+  if (gameID == null || gameID === "") return false;
+  const own = String(gameID);
+  if (scope.startsWith("game-state:")) return scope !== `game-state:${own}`;
+  // The fest view's scope names the Game by its id; a page that knows its Game
+  // only by a slug cannot tell, and keeps every fest view as before.
+  const festView = /^fest:[^:]+:(\d+)$/.exec(scope);
+  return festView !== null && /^\d+$/.test(own) && festView[1] !== own;
 }
 
 export interface LiveEvents {
@@ -1015,10 +1030,10 @@ export function createLiveEvents(options: LiveEventsOptions): LiveEvents {
 
   function dispatch(message: ScopedEventMessage): void {
     const scope = message.scope;
+    if (siblingGameScope(scope, options.gameID)) return;
     const spec = specFor(scope);
     if (!spec) {
-      const sibling = scope.startsWith("game-state:") && options.gameID != null && scope !== `game-state:${options.gameID}`;
-      if (!sibling) options.onUnhandled?.(message);
+      options.onUnhandled?.(message);
       return;
     }
     if (resyncing.has(scope)) return;

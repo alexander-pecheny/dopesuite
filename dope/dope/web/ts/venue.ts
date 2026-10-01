@@ -3,6 +3,8 @@
 import {option, td} from "./cells.js";
 import {markNameOverflow} from "./widgets.js";
 import {standingsTable} from "./standings.js";
+import type {StandingsColumn} from "./standings.js";
+import {icon, iconed} from "./icons_gen.js";
 import S from "./i18nstrings.js";
 
 export type VenueLike = number | string | {number?: unknown; Number?: unknown; title?: unknown; Title?: unknown} | null | undefined;
@@ -10,6 +12,8 @@ export type VenueLike = number | string | {number?: unknown; Number?: unknown; t
 export interface Venue {
   number: number;
   title: string;
+  // bouts is how many bouts play at it, in the fest's venue list.
+  bouts?: number;
 }
 
 export function normalizeVenue(venue: VenueLike): Venue | null {
@@ -46,13 +50,38 @@ export function formatBattleVenueShort(venue: VenueLike): string {
 export interface VenuesTableOptions {
   editable?: boolean;
   onTitleChange?: (number: number, title: string) => void;
+  // onAdd adds a venue. number is 0 when the host left it empty, and then
+  // the server takes the next free one. It and onDelete resolve to why the
+  // server refused, or to an empty string; the table shows the refusal.
+  onAdd?: (title: string, number: number) => Promise<string>;
+  onDelete?: (number: number) => Promise<string>;
+}
+
+// nextVenueNumber is the number a new venue takes when the host gives none:
+// the one after the fest's highest, as the server picks it.
+export function nextVenueNumber(venues: readonly Venue[] | null | undefined): number {
+  return (venues || []).reduce((top, venue) => Math.max(top, Number(venue.number) || 0), 0) + 1;
+}
+
+// venueDeletable says whether a venue can be deleted: no bout plays at it.
+export function venueDeletable(venue: Venue): boolean {
+  return !(Number(venue.bouts) > 0);
 }
 
 export function buildVenuesTable(venues: Venue[] | null | undefined, options: VenuesTableOptions = {}): HTMLElement {
   const editable = Boolean(options.editable);
   const onTitleChange = typeof options.onTitleChange === "function" ? options.onTitleChange : null;
+  const onDelete = editable && typeof options.onDelete === "function" ? options.onDelete : null;
+  const onAdd = editable && typeof options.onAdd === "function" ? options.onAdd : null;
   const wrapper = document.createElement("div");
   wrapper.className = "results-wrapper venues-results-wrapper";
+  const notice = document.createElement("p");
+  notice.className = "hint hint-danger";
+  notice.hidden = true;
+  const refused = (error: string) => {
+    notice.textContent = error;
+    notice.hidden = !error;
+  };
 
   const title = (venue: Venue) => {
     if (!editable || !onTitleChange) return venue.title;
@@ -72,12 +101,69 @@ export function buildVenuesTable(venues: Venue[] | null | undefined, options: Ve
     });
     return td(input);
   };
+  const actions = (venue: Venue) => {
+    const box = document.createElement("span");
+    box.className = "venue-actions u-row u-gap-xs u-justify-end";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "action-icon";
+    remove.title = S.widgets.venue.delete();
+    remove.setAttribute("aria-label", S.widgets.venue.delete());
+    remove.appendChild(icon("trash-2"));
+    remove.disabled = !venueDeletable(venue);
+    remove.addEventListener("click", () => void onDelete?.(venue.number).then(refused));
+    box.appendChild(remove);
+    return td(box);
+  };
+  const columns: StandingsColumn[] = [{label: "№", kind: "place"}, {label: S.widgets.venue.nameColumn(), kind: "name"}];
+  if (onDelete) columns.push({label: ""});
   wrapper.appendChild(standingsTable({
     className: "venues-results-table",
-    columns: [{label: "№", kind: "place"}, {label: S.widgets.venue.nameColumn(), kind: "name"}],
-    rows: (venues || []).map((venue) => [venue.number, title(venue)]),
+    columns,
+    rows: (venues || []).map((venue) => onDelete ? [venue.number, title(venue), actions(venue)] : [venue.number, title(venue)]),
   }));
+  if (onAdd) wrapper.appendChild(venueAddForm(nextVenueNumber(venues), (title, number) => void onAdd(title, number).then(refused)));
+  if (onAdd || onDelete) wrapper.appendChild(notice);
   return wrapper;
+}
+
+// venueAddForm is the row under the host's venues table that adds a venue:
+// a number, which may stay empty for the next free one, and a title.
+function venueAddForm(next: number, onAdd: (title: string, number: number) => void): HTMLElement {
+  const form = document.createElement("form");
+  form.className = "u-row u-wrap u-gap-sm u-align-center";
+  const number = document.createElement("input");
+  number.type = "number";
+  number.min = "1";
+  number.step = "1";
+  number.inputMode = "numeric";
+  number.className = "input input-narrow";
+  number.placeholder = String(next);
+  number.title = S.widgets.venue.addNumber();
+  number.setAttribute("aria-label", S.widgets.venue.addNumber());
+  const title = document.createElement("input");
+  title.type = "text";
+  title.className = "input";
+  title.size = 24;
+  title.placeholder = S.widgets.venue.addTitle();
+  title.setAttribute("aria-label", S.widgets.venue.addTitle());
+  title.dataset.venueAdd = "";
+  const add = document.createElement("button");
+  add.type = "submit";
+  add.className = "btn";
+  add.append(...iconed("plus", S.widgets.venue.add()));
+  form.append(number, title, add);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const name = title.value.trim();
+    if (!name) {
+      title.focus();
+      return;
+    }
+    const wanted = Math.trunc(Number(number.value));
+    onAdd(name, Number.isFinite(wanted) && wanted > 0 ? wanted : 0);
+  });
+  return form;
 }
 
 // venueLabel is a bout's venue as a header shows it, number and title,

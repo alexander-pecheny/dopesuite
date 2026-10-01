@@ -256,7 +256,14 @@ where game_id = ? and basket = 1 and participant_id is not null`, gameID)
 }
 
 func insertMatchSlots(ctx context.Context, tx *sql.Tx, matchID int64, slots []store.SchemeSlot, seat func(store.SchemeSlot) any) error {
-	for slotIndex, slot := range slots {
+	return insertMatchSlotsFrom(ctx, tx, matchID, slots, 0, seat)
+}
+
+// insertMatchSlotsFrom writes the slots from index from on: a bout that grows
+// keeps the seats it has and takes the rest.
+func insertMatchSlotsFrom(ctx context.Context, tx *sql.Tx, matchID int64, slots []store.SchemeSlot, from int, seat func(store.SchemeSlot) any) error {
+	for slotIndex := from; slotIndex < len(slots); slotIndex++ {
+		slot := slots[slotIndex]
 		ref := store.SlotRefOf(slot)
 		if _, err := tx.ExecContext(ctx, `
 insert into match_slots(match_id, slot_index, source_type, source_ref_json, participant_id, locked)

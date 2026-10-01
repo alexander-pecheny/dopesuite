@@ -102,7 +102,7 @@ const individualStats: IndividualStatsRow[] = [
   {player: LONG, sum: 90, plus: 120, battles: 4, right: [1, 1, 0, 1, 1]},
 ];
 
-const venues: Venue[] = [{number: 1, title: "Рим, Алиенора"}, {number: 2, title: ""}, {number: 3, title: LONG}];
+const venues: Venue[] = [{number: 1, title: "Рим, Алиенора", bouts: 4}, {number: 2, title: ""}, {number: 3, title: LONG, bouts: 2}];
 
 const roster: RosterTeam[] = [
   {number: 1, name: "Детективы для элит", city: "Санкт-Петербург", ratingID: 1, players: [{name: "Дмитрий Яшин", ratingID: 1}, {name: "Анастасия Банникова"}, {name: "Даниил Чеченин"}, {name: "Денис Потехин"}]},
@@ -227,7 +227,7 @@ function render(root: HTMLElement): void {
     section(S.gallery.section.ekStats(), "table-host", buildEKStatsTable(ekStats)),
     section(S.gallery.section.individualStats(), "table-host", buildIndividualStatsTable(individualStats)),
     section(S.gallery.section.venues(), "table-host", buildVenuesTable(venues)),
-    section(S.gallery.section.venuesHost(), "table-host", buildVenuesTable(venues, {editable: true, onTitleChange: () => {}})),
+    section(S.gallery.section.venuesHost(), "table-host", buildVenuesTable(venues, {editable: true, onTitleChange: () => {}, onAdd: () => Promise.resolve(""), onDelete: () => Promise.resolve("")})),
     section(S.gallery.section.roster(), "table-host fits-frame", buildRosterTable(roster)),
     section(S.gallery.section.chips(), "fits-frame", chips()),
     section(S.gallery.section.suggest(), "fits-frame", suggestField()),

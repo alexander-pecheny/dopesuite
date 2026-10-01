@@ -46,6 +46,14 @@ name_column = "Название"
 battle = 'пл. {{.n}} ({{.name}})'
 # A bout's venue without a title, and the short form.
 battle_short = 'пл. {{.n}}'
+# The add row under the host's venues table: the title field's placeholder,
+# the number field's label (left empty, the venue takes the next free
+# number, which the field shows as its placeholder) and the button.
+add_title = "Новая площадка"
+add_number = "Номер площадки"
+add = "Добавить"
+# The button that deletes a venue no bout plays at.
+delete = "Удалить площадку"
 
 [profile]
 # The host profile page's password form messages.

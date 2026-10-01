@@ -637,17 +637,25 @@ order by coalesce(applied, 1000000000), id`, []any{festID, id}, func(rows *sql.R
 	return nil
 }
 
-// DeleteAssembledTx removes an assembled team no Game seats.
+// DeleteAssembledTx removes an assembled team no bout seats. A seed number it
+// still holds past a Game's seats (the waiting list) goes with it; the Games'
+// lists let go of it first (gamebuild.DropTroikaFromListsTx).
 func DeleteAssembledTx(ctx context.Context, tx *sql.Tx, festID, id int64) error {
 	var seated bool
 	if err := tx.QueryRowContext(ctx, `
-select exists(select 1 from game_participants where participant_id = ?)
-    or exists(select 1 from match_slots where participant_id = ?)
-    or exists(select 1 from game_assignments where participant_id = ?)`, id, id, id).Scan(&seated); err != nil {
+select exists(select 1 from match_slots where participant_id = ?)`, id).Scan(&seated); err != nil {
 		return err
 	}
 	if seated {
 		return corei18n.User(dopestrings.Default.Host.Troikas.DeleteSeated())
+	}
+	for _, q := range []string{
+		`delete from game_assignments where participant_id = ?`,
+		`delete from game_participants where participant_id = ?`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, id); err != nil {
+			return err
+		}
 	}
 	if _, err := tx.ExecContext(ctx, `delete from participant_players where participant_id = ?`, id); err != nil {
 		return err

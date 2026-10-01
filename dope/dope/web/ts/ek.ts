@@ -992,6 +992,25 @@ async function updateVenueTitle(number: number, title: string): Promise<void> {
   renderVenues();
 }
 
+// addVenue adds a venue to the fest; the server seats there the bouts the
+// scheme puts at its number, and broadcasts them.
+async function addVenue(title: string, number: number): Promise<string> {
+  const sent = await writer.send(`venues:${route.festID}`, {url: `${route.festApi}/venues`, method: "POST", body: number > 0 ? {title, number} : {title}});
+  if (!sent.ok) return sent.error || "";
+  venues = sent.response as Venue[];
+  renderVenues();
+  ekRoot.querySelector<HTMLInputElement>("[data-venue-add]")?.focus();
+  return "";
+}
+
+async function deleteVenue(number: number): Promise<string> {
+  const sent = await writer.send(`venues:${route.festID}`, {url: `${route.festApi}/venues/${encodeURIComponent(number)}`, method: "DELETE"});
+  if (!sent.ok) return sent.error || "";
+  venues = sent.response as Venue[];
+  renderVenues();
+  return "";
+}
+
 async function calculateReseed(stageCode: string | undefined): Promise<void> {
   if (!stageCode) return;
   const sent = await writer.send(`stage:${stageCode}`, {url: `${route.apiBase}/stages/${encodeURIComponent(stageCode)}/reseed`});
@@ -1046,7 +1065,12 @@ function renderVenues(): void {
   setPageMode("grid");
   shell.renderChrome();
   renderEKTabs();
-  ekRoot.replaceChildren(buildVenuesTable(venues, {editable: !viewer, onTitleChange: updateVenueTitle}));
+  ekRoot.replaceChildren(buildVenuesTable(venues, {
+    editable: !viewer,
+    onTitleChange: updateVenueTitle,
+    onAdd: addVenue,
+    onDelete: deleteVenue,
+  }));
   shell.presence.refresh();
 }
 

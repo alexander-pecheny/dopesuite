@@ -399,8 +399,8 @@ func TestTroikaListFollowsTheDivisionUntilEdited(t *testing.T) {
 		t.Fatalf("after the import: edited %v, rows %v", view.Edited, rowNames(view))
 	}
 
-	// The отбор gets results: the Structure stays, a troika added by hand
-	// waits for a seat, and one declining hands it on.
+	// The отбор gets results, and a troika added by hand after that still
+	// writes it: the written отбор grows a row for it.
 	if _, err := db.Exec(`update matches set status = 'finished' where game_id = ?`, gameID); err != nil {
 		t.Fatal(err)
 	}
@@ -414,11 +414,11 @@ func TestTroikaListFollowsTheDivisionUntilEdited(t *testing.T) {
 	}
 	result, err := entrants.Add(eng, ctx, scope, entrants.AddRequest{Key: fmt.Sprintf("troika:%d", s5)})
 	view = mustEntrants(t)(result, err)
-	if result.Rebuilt || view.Resizes || !view.Entered {
-		t.Fatalf("a Тройка with results was rebuilt: %v / %v / %v", result.Rebuilt, view.Resizes, view.Entered)
+	if !result.Rebuilt || view.Resizes || !view.Entered {
+		t.Fatalf("the written отбор did not grow for a late troika: %v / %v / %v", result.Rebuilt, view.Resizes, view.Entered)
 	}
-	if got := rowByName(t, view, "С5"); !got.Waitlist {
-		t.Fatalf("the late troika is not waiting: %+v", got)
+	if got := rowByName(t, view, "С5"); got.Waitlist {
+		t.Fatalf("the late troika waits instead of writing the отбор: %+v", got)
 	}
 	_, err = entrants.Add(eng, ctx, scope, entrants.AddRequest{Name: "Разовая тройка"})
 	refused(t, err, "Тройки")

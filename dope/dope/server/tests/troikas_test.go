@@ -259,22 +259,45 @@ func TestTroikaGameFollowsItsDivision(t *testing.T) {
 	})
 	expectEntrants(adults, a1, a2)
 
-	// Once the отбор has results the student game stays as it is.
-	if _, err := db.Exec(`update matches set status = 'finished' where game_id = ?`, students); err != nil {
+	// The отбор has results, and a late troika still writes it: it gets an
+	// empty row of its own, and the rows there keep what they hold.
+	if _, err := db.Exec(`
+update matches set status = 'finished', state_json = json_set(state_json, '$.sides[0].counts[0][0]', 2) where game_id = ?`, students); err != nil {
 		t.Fatal(err)
 	}
-	add("С4", "А Семь", "А Восемь")
-	expectEntrants(students, s1, s2)
+	s4 := add("С4", "А Семь", "А Восемь")
+	expectEntrants(students, s1, s2, s4)
+	var counts string
+	if err := db.QueryRow(`select json_extract(state_json, '$.sides') from matches where game_id = ? and code = 's1-m1'`, students).Scan(&counts); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(counts, `[{"counts":[[2,0,0]]}`) || strings.Count(counts, `"counts"`) != 3 {
+		t.Fatalf("отбор rows after a late troika = %s, want the first row's 2 kept and three rows", counts)
+	}
+	// It has a row in an отбор that has results now, so it cannot be deleted.
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := gamebuild.DropTroikaFromListsTx(t.Context(), tx, festID, s4); err != nil {
+		t.Fatal(err)
+	}
+	if _, user := corei18n.AsUser(roster.DeleteAssembledTx(t.Context(), tx, festID, s4)); !user {
+		t.Fatal("a troika with a row in a started отбор was deleted")
+	}
+	tx.Rollback()
+
+	expectEntrants(students, s1, s2, s4)
 	divisionGames, err := gamebuild.LoadDivisionGames(t.Context(), db, festID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(divisionGames) != 2 || !divisionGames[0].Frozen || divisionGames[0].Current || len(divisionGames[0].Troikas) != 3 || !divisionGames[1].Current {
+	if len(divisionGames) != 2 || !divisionGames[0].Frozen || !divisionGames[0].Current || !divisionGames[1].Current {
 		t.Fatalf("division games = %+v", divisionGames)
 	}
 
 	// A зачёт without a troika cannot make a game.
-	tx, err := db.Begin()
+	tx, err = db.Begin()
 	if err != nil {
 		t.Fatal(err)
 	}

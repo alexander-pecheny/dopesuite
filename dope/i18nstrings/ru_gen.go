@@ -2447,6 +2447,14 @@ var RU = Strings{
 		SeedImport: ServerSeedImportStrings{
 			FileMissing: func() string { return "нет файла" },
 		},
+		Venue: ServerVenueStrings{
+			InUse: func(n string) string {
+				return fmt.Sprintf("На площадке %s есть бои. Сначала перенесите их на другую площадку.", n)
+			},
+			NumberTaken: func(n string) string { return fmt.Sprintf("Площадка %s уже есть.", n) },
+			TitleEmpty:  func() string { return "Укажите название площадки." },
+			Unknown:     func(n string) string { return fmt.Sprintf("Площадки %s нет.", n) },
+		},
 	},
 	Si: SiStrings{
 		Battle: SiBattleStrings{
@@ -2786,8 +2794,12 @@ var RU = Strings{
 			Saving:       func() string { return "Синхронизация" },
 		},
 		Venue: WidgetsVenueStrings{
+			Add:         func() string { return "Добавить" },
+			AddNumber:   func() string { return "Номер площадки" },
+			AddTitle:    func() string { return "Новая площадка" },
 			Battle:      func(n string, name string) string { return fmt.Sprintf("пл. %s (%s)", n, name) },
 			BattleShort: func(n string) string { return fmt.Sprintf("пл. %s", n) },
+			Delete:      func() string { return "Удалить площадку" },
 			NameColumn:  func() string { return "Название" },
 		},
 		Viewers: WidgetsViewersStrings{

@@ -174,8 +174,18 @@ func SyncDivisionEntrantsTx(ctx context.Context, tx *sql.Tx, festID, exclude int
 	s := dopestrings.Default
 	for i := range found {
 		game, list := &found[i], lists[i]
-		if game.Current || game.Frozen || game.Manual {
+		if game.Current || game.Manual {
 			continue
+		}
+		// A Game with results takes only troikas added after the ones it has:
+		// its written qualifier grows a row for them while nothing after it is
+		// played (ApplyListTx). A troika that left the division stays where its
+		// results are.
+		if game.Frozen {
+			active := list.Active()
+			if len(game.Troikas) <= len(active) || !slices.Equal(game.Troikas[:len(active)], active) {
+				continue
+			}
 		}
 		if len(game.Troikas) == 0 {
 			game.Problem = s.Gamebuild.Division.NoTroikas(game.Division)
@@ -204,4 +214,40 @@ func SyncDivisionEntrantsTx(ctx context.Context, tx *sql.Tx, festID, exclude int
 		game.Problem = applied.Kept
 	}
 	return found, nil
+}
+
+// DropTroikaFromListsTx takes a troika about to be deleted off the Entrant list
+// of every Troika Game that lists it without seating it — on a waiting list,
+// say, or in a list the host built by hand. A troika that sits in a bout keeps
+// its place, and the delete refuses it.
+func DropTroikaFromListsTx(ctx context.Context, tx *sql.Tx, festID, troikaID int64) error {
+	ids, err := TroikaGameIDs(ctx, tx, festID)
+	if err != nil {
+		return err
+	}
+	for _, gameID := range ids {
+		scope := core.FestScope{FestID: festID, GameID: gameID}
+		list, err := imports.LoadListTx(ctx, tx, scope)
+		if err != nil {
+			return err
+		}
+		i := list.Index(troikaID)
+		if i < 0 {
+			continue
+		}
+		var seated bool
+		if err := tx.QueryRowContext(ctx, `
+select exists(select 1 from match_slots ms join matches m on m.id = ms.match_id where m.game_id = ? and ms.participant_id = ?)`,
+			gameID, troikaID).Scan(&seated); err != nil {
+			return err
+		}
+		if seated {
+			continue
+		}
+		next := list.Edit(slices.Delete(slices.Clone(list.State.Rows), i, i+1), imports.ListEdit{Op: imports.ListEditRemove, TeamID: troikaID})
+		if _, err := ApplyListTx(ctx, tx, scope, list, next, "troikas:delete"); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -126,6 +126,34 @@ func TroikaEmptyStateJSON(values []int, seats int, written, swapOutriders bool) 
 	return []byte(mustJSON(state))
 }
 
+// GrowTroikaWritten gives a written qualifier more rows: a troika that joins
+// after some results are entered writes the same paper and gets an empty row
+// of counts, while the rows there keep theirs. ok is false for a document
+// that is not a written qualifier, or that already has as many rows or more:
+// a bout with chairs cannot take another side.
+func GrowTroikaWritten(stateJSON string, seats int) ([]byte, bool, error) {
+	var state TroikaState
+	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
+		return nil, false, fmt.Errorf("parse troika state: %w", err)
+	}
+	if !state.Written || seats <= len(state.Sides) {
+		return nil, false, nil
+	}
+	for len(state.Sides) < seats {
+		counts := make([][]int, len(state.Values))
+		for t := range counts {
+			counts[t] = make([]int, TroikaThemeQuestions)
+		}
+		state.Sides = append(state.Sides, TroikaSide{Counts: counts})
+	}
+	if len(state.Pin) > 0 {
+		for len(state.Pin) < seats {
+			state.Pin = append(state.Pin, 0)
+		}
+	}
+	return []byte(mustJSON(state)), true, nil
+}
+
 // TroikaSwapTheme is where the second half of a bout of themes starts: the
 // fourth of six, the fifth of eight. A bout of one theme has no middle.
 func TroikaSwapTheme(themes int) int {

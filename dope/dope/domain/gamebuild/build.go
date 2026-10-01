@@ -641,13 +641,37 @@ select id, stage_id, code, status, coalesce(state_json, '{}') from matches where
 			planned[match.Code] = match
 		}
 	}
+	// A started bout keeps its seats. The one exception is a bout that only
+	// grows: the same seats first, more after them, a document that can take
+	// them (a troika game's written qualifier), and nothing else in the Game
+	// started — a late troika then gets a row, and no result that decides a
+	// later seat has been played yet.
 	var blocked []string
+	grown := map[string]json.RawMessage{}
+	othersStarted := false
 	for code, m := range existingMatches {
 		if m.Status != "finished" && !protocol.Started(gameType, m.State) {
 			continue
 		}
 		match, survives := planned[code]
-		if !survives || !sameSlotIdentities(ctx, tx, m.ID, match.Slots) {
+		if survives && sameSlotIdentities(ctx, tx, m.ID, match.Slots) {
+			othersStarted = true
+			continue
+		}
+		if survives && slotIdentitiesExtend(ctx, tx, m.ID, match.Slots) {
+			state, ok, err := protocol.GrowSeats(gameType, json.RawMessage(m.State), len(match.Slots))
+			if err != nil {
+				return err
+			}
+			if ok {
+				grown[code] = state
+				continue
+			}
+		}
+		blocked = append(blocked, code)
+	}
+	if othersStarted {
+		for code := range grown {
 			blocked = append(blocked, code)
 		}
 	}
@@ -696,6 +720,23 @@ values(?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
 			existing, ok := existingMatches[match.Code]
 			if ok {
 				delete(existingMatches, match.Code)
+				if state, grows := grown[match.Code]; grows {
+					// The seats it had stay where they are, results and all; the new
+					// ones are added after them.
+					if _, err := tx.ExecContext(ctx, `
+update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ?, participant_count = ?, state_json = ? where id = ?`,
+						stageID, match.Title, match.Letter, matchIndex+1, match.BlockRound, match.Wave, len(match.Slots), string(state), existing.ID); err != nil {
+						return err
+					}
+					var have int
+					if err := tx.QueryRowContext(ctx, `select count(*) from match_slots where match_id = ?`, existing.ID).Scan(&have); err != nil {
+						return err
+					}
+					if err := insertMatchSlotsFrom(ctx, tx, existing.ID, match.Slots, have, seat); err != nil {
+						return err
+					}
+					continue
+				}
 				if existing.Status == "finished" || protocol.Started(gameType, existing.State) {
 					if _, err := tx.ExecContext(ctx, `
 update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ? where id = ?`,
@@ -781,6 +822,29 @@ select source_type, source_ref_json from match_slots where match_id = ? order by
 	}
 	for i, slot := range planned {
 		if store.SlotRefOf(slot).Identity() != current[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// slotIdentitiesExtend reports whether a match's seats are the first of the
+// planned ones and the plan only adds seats after them.
+func slotIdentitiesExtend(ctx context.Context, tx *sql.Tx, matchID int64, planned []store.SchemeSlot) bool {
+	current, err := store.CollectRows(ctx, tx, `
+select source_type, source_ref_json from match_slots where match_id = ? order by slot_index`, []any{matchID},
+		func(rows *sql.Rows) (string, error) {
+			var sourceType, refJSON string
+			if err := rows.Scan(&sourceType, &refJSON); err != nil {
+				return "", err
+			}
+			return store.ParseSlotRef(sourceType, refJSON).Identity(), nil
+		})
+	if err != nil || len(current) >= len(planned) {
+		return false
+	}
+	for i, identity := range current {
+		if store.SlotRefOf(planned[i]).Identity() != identity {
 			return false
 		}
 	}

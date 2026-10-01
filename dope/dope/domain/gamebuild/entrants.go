@@ -8,6 +8,7 @@ import (
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/imports"
+	"dope/dope/domain/protocol"
 	"dope/dope/domain/schemedsl"
 	dopestrings "dope/i18nstrings"
 
@@ -32,8 +33,9 @@ type Applied struct {
 // entered in it: then a troika added to a Troika gets a row in the written qualifier. A
 // scheme of a fixed size (a roundrobin of groups of four) refuses another
 // count; the Structure then stays, and the list fills its seats, the rest
-// waiting. Once anything is entered the Structure stays as it is, and the list
-// only moves entrants between the seats of bouts nobody has started.
+// waiting. Once anything is entered the Structure stays as it is, except that
+// a written qualifier grows for a troika added after it, and the list only
+// moves entrants between the seats of bouts nobody has started.
 func ApplyListTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, current, next imports.List, event string) (Applied, error) {
 	var applied Applied
 	var dsl string
@@ -46,9 +48,25 @@ select coalesce(scheme_dsl, '') from games where id = ? and fest_id = ?`, scope.
 		if err != nil {
 			return applied, err
 		}
-		if !entered {
+		// Once something is entered, the Structure changes only by growing: a
+		// late troika takes a row of a written qualifier that has results, as
+		// long as nothing after it is played (Recompile says when). Anything
+		// else leaves the Structure as it is, and the list waits, quietly: the
+		// tab already says results fix the seats.
+		switch {
+		case !entered:
 			if applied.Rebuilt, applied.Kept, err = tryReseatTx(ctx, tx, scope, dsl, next.Active()); err != nil {
 				return applied, err
+			}
+		case protocol.CanGrow(current.GameType):
+			seated, err := gameEntrantsTx(ctx, tx, scope.GameID)
+			if err != nil {
+				return applied, err
+			}
+			if active := next.Active(); len(active) > len(seated) && slices.Equal(active[:len(seated)], seated) {
+				if applied.Rebuilt, _, err = tryReseatTx(ctx, tx, scope, dsl, active); err != nil {
+					return applied, err
+				}
 			}
 		}
 	}
