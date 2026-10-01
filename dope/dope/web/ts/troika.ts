@@ -27,6 +27,7 @@ import type {FestGridStage} from "./fest-grid.js";
 import {gameTabs, groupLabel} from "./game-tabs.js";
 import type {GameTab} from "./game-tabs.js";
 import {hashAnchor, onNavigate, setHashTab, tabFromHash, tabHref} from "./url-state.js";
+import {redrawSteady} from "./steady-redraw.js";
 import * as troika from "./troika-protocol.js";
 import type {Mark, TroikaState} from "./troika-protocol.js";
 import {buildTroikaStatsTable, computeTroikaPlayerStats} from "./troika-stats.js";
@@ -1268,6 +1269,9 @@ function buildTab(tab: GameTab | undefined): HTMLElement {
   }
 }
 
+// drawnTab is the tab the page last drew: a redraw of it keeps the view.
+let drawnTab = "";
+
 function render(): void {
   shell.renderChrome();
   if (tabsRoot) {
@@ -1280,7 +1284,10 @@ function render(): void {
   }
   const tab = tabs().find((entry) => entry.key === activeTab);
   const node = buildTab(tab);
-  root.replaceChildren(node);
+  // Every mark another host saves redraws the tab; the bouts keep their sizes
+  // and the one in view stays put, so the sheet does not jump under the cursor.
+  redrawSteady(root, ".troika-bout", () => root.replaceChildren(node), drawnTab === activeTab);
+  drawnTab = activeTab;
   drawnShape.clear();
   for (const code of matches.keys()) drawnShape.set(code, shapeOf(code));
   // Groups and bouts wrap into the frame's width rather than pushing the page sideways.

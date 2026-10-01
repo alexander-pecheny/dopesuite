@@ -6,6 +6,7 @@
 // (PATCH /matches/{code}/state) and sync over match: scopes. A self-booting
 // side-effect module bundled by pages/hamsa.ts.
 
+import {redrawSteady} from "./steady-redraw.js";
 import {cssEscape, option, questionNumberNode, td, th} from "./cells.js";
 import type {CellContent, CellSpec} from "./cells.js";
 import {festLetters, letteredTitle, standingsTable} from "./standings.js";
@@ -437,6 +438,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
 
   const box = document.createElement("section");
   box.className = "hamsa-bout u-col u-gap-sm";
+  box.id = `hamsa-bout-${bout.code}`;
 
   const table = buildTwoRowScoreTable({
     className: "match-table hamsa-sheet",
@@ -1020,6 +1022,9 @@ function buildTab(tab: GameTab | undefined): HTMLElement {
   }
 }
 
+// drawnTab is the tab the page last drew: a redraw of it keeps the view.
+let drawnTab = "";
+
 function render(): void {
   shell.renderChrome();
   if (tabsRoot) {
@@ -1032,7 +1037,9 @@ function render(): void {
   }
   const tab = tabs().find((entry) => entry.key === activeTab);
   const node = buildTab(tab);
-  root.replaceChildren(node);
+  // A redraw keeps each bout's size and the view, as Troika's does.
+  redrawSteady(root, ".hamsa-bout", () => root.replaceChildren(node), drawnTab === activeTab);
+  drawnTab = activeTab;
   root.classList.toggle("fits-frame", tab?.kind !== "grid" && tab?.kind !== "protocol");
   root.classList.toggle("grid-host", Boolean(node.querySelector(".fest-grid")) || node.matches(".fest-grid"));
   scheduleNameOverflow();
