@@ -401,7 +401,7 @@ func writeCompiledStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID in
 	if err != nil {
 		return err
 	}
-	venues, err := schemeVenuesTx(ctx, tx, festID, scheme.Venues)
+	venues, err := schemeVenuesTx(ctx, tx, festID, gameID, scheme.Venues)
 	if err != nil {
 		return err
 	}
@@ -409,34 +409,96 @@ func writeCompiledStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID in
 }
 
 // schemeVenuesTx gives the fest the venues a compiled scheme titles — Hamsa's
-// `venues: [А, Б, В]` are the regulations' venues — and returns every venue
-// the scheme names that the fest has, by number, so each bout is seated at its
-// own. The fest's venues are shared by its Games and the host retitles them,
-// so a title already there stays; and a table the compiler only numbered
-// (`venues: 3`, or none given) carries the default title, which says nothing
-// the number does not, so it writes no row.
-func schemeVenuesTx(ctx context.Context, tx *sql.Tx, festID int64, venues []store.SchemeVenue) (map[int]int64, error) {
-	now := util.UtcNow()
-	ids := map[int]int64{}
-	for _, venue := range venues {
-		if title := strings.TrimSpace(venue.Title); title != "" && title != dopestrings.Default.Scheme.Titles.Venue(fmt.Sprint(venue.Number)) {
-			if _, err := tx.ExecContext(ctx, `
-insert into venues(fest_id, number, title, created_at, updated_at) values(?, ?, ?, ?, ?)
-on conflict(fest_id, number) do nothing`, festID, venue.Number, title, now, now); err != nil {
-				return nil, err
+// `venues: [А, Б, В]` are the regulations' venues — and returns, by the
+// scheme's own number, the fest venue each bout is seated at. The fest's
+// venues are shared by its Games and the host retitles them, so a titled
+// venue is found by its title wherever the fest numbers it: Octobearfest's
+// Троечка and Своячок list the same rooms in different orders, and matching
+// by number seated the Своячок's «Актовый зал» bouts in the Троечка's «Фойе».
+// A title the fest does not have yet takes the scheme's number when no other
+// Game seats a bout there — free, or this Game's own room the host retitled
+// («Малый зал» for the scheme's «В»), which stays — and the next free number
+// when another Game plays there. A table the compiler only
+// numbered (`venues: 3`, or none given) carries the default title, which
+// says nothing the number does not: it is the fest's venue of that number,
+// and writes no row.
+func schemeVenuesTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, venues []store.SchemeVenue) (map[int]int64, error) {
+	type festVenue struct {
+		id     int64
+		number int
+		title  string
+	}
+	existing, err := store.CollectRows(ctx, tx, `select id, number, title from venues where fest_id = ? order by number`,
+		[]any{festID}, func(rows *sql.Rows) (festVenue, error) {
+			var v festVenue
+			return v, rows.Scan(&v.id, &v.number, &v.title)
+		})
+	if err != nil {
+		return nil, err
+	}
+	byTitle := map[string]int64{}
+	byNumber := map[int]int64{}
+	maxNumber := 0
+	for _, v := range existing {
+		if key := venueKey(v.title); key != "" {
+			if _, seen := byTitle[key]; !seen {
+				byTitle[key] = v.id
 			}
 		}
-		var id int64
-		err := tx.QueryRowContext(ctx, `select id from venues where fest_id = ? and number = ?`, festID, venue.Number).Scan(&id)
-		if err == sql.ErrNoRows {
+		byNumber[v.number] = v.id
+		maxNumber = max(maxNumber, v.number)
+	}
+	now := util.UtcNow()
+	ids := map[int]int64{}
+	// claimed is what this scheme already seats a room at: a venue it named
+	// one line up is not free for the next title.
+	claimed := map[int64]bool{}
+	for _, venue := range venues {
+		title := strings.TrimSpace(venue.Title)
+		if title == "" || title == dopestrings.Default.Scheme.Titles.Venue(fmt.Sprint(venue.Number)) {
+			if id, ok := byNumber[venue.Number]; ok {
+				ids[venue.Number] = id
+			}
 			continue
 		}
+		if id, ok := byTitle[venueKey(title)]; ok {
+			ids[venue.Number], claimed[id] = id, true
+			continue
+		}
+		number := venue.Number
+		if id, taken := byNumber[number]; taken && number > 0 && !claimed[id] {
+			var elsewhere bool
+			if err := tx.QueryRowContext(ctx, `
+select exists(select 1 from matches where venue_id = ? and game_id != ?)`, id, gameID).Scan(&elsewhere); err != nil {
+				return nil, err
+			}
+			if !elsewhere {
+				ids[venue.Number], claimed[id] = id, true
+				continue
+			}
+		}
+		if _, taken := byNumber[number]; taken || number <= 0 {
+			maxNumber++
+			number = maxNumber
+		}
+		id, err := store.InsertReturningID(ctx, tx, `
+insert into venues(fest_id, number, title, created_at, updated_at) values(?, ?, ?, ?, ?)`, festID, number, title, now, now)
 		if err != nil {
 			return nil, err
 		}
-		ids[venue.Number] = id
+		byNumber[number] = id
+		byTitle[venueKey(title)] = id
+		maxNumber = max(maxNumber, number)
+		ids[venue.Number], claimed[id] = id, true
 	}
 	return ids, nil
+}
+
+// venueKey is a venue title as two spellings of one room compare: case and
+// spacing aside, ё as е.
+func venueKey(title string) string {
+	key := strings.ToLower(strings.Join(strings.Fields(title), " "))
+	return strings.ReplaceAll(key, "ё", "е")
 }
 
 // writeStructureTx is the one writer of a Game's stages, matches and slots —
