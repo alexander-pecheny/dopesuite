@@ -1204,6 +1204,29 @@ async function renameVenue(number: number, title: string): Promise<void> {
   render();
 }
 
+// addVenue adds a venue to the fest; the server seats there the bouts the
+// schemes put at its number, so the bouts are read again.
+async function addVenue(title: string, number: number): Promise<string> {
+  const sent = await writer.send(`venues:${route.festID}`, {url: `${festAPI}/venues`, method: "POST", body: number > 0 ? {title, number} : {title}});
+  if (!sent.ok) return sent.error || "";
+  if (!Array.isArray(sent.response)) return "";
+  venues = sent.response as Venue[];
+  scheduleResync();
+  refreshFest();
+  render();
+  return "";
+}
+
+async function deleteVenue(number: number): Promise<string> {
+  const sent = await writer.send(`venues:${route.festID}`, {url: `${festAPI}/venues/${encodeURIComponent(number)}`, method: "DELETE"});
+  if (!sent.ok) return sent.error || "";
+  if (!Array.isArray(sent.response)) return "";
+  venues = sent.response as Venue[];
+  refreshFest();
+  render();
+  return "";
+}
+
 async function calculateReseed(code: string): Promise<void> {
   const response = await fetch(`${route.apiBase}/stages/${encodeURIComponent(code)}/reseed`, {
     method: "POST", headers: {"Content-Type": "application/json"},
@@ -1222,7 +1245,12 @@ function buildTab(tab: GameTab | undefined): HTMLElement {
   case "entrants":
     return entrantsTab.element();
   case "venues":
-    return buildVenuesTable(venues, {editable: !viewer, onTitleChange: (number, title) => void renameVenue(number, title)});
+    return buildVenuesTable(venues, {
+      editable: !viewer,
+      onTitleChange: (number, title) => void renameVenue(number, title),
+      onAdd: addVenue,
+      onDelete: deleteVenue,
+    });
   case "roster":
     return (rosterView ||= buildGameRosterView(route.apiBase || "",
       {troikasHref: viewer || !route.festID ? "" : `/host/fest/${route.festID}/troikas`}));

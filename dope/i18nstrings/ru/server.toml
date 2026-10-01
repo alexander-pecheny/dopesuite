@@ -29,6 +29,14 @@ bad_request = "Некорректный запрос."
 # seedXLSXSource); the HTTP edge shows it to the host verbatim.
 file_missing = "нет файла"
 
+[venue]
+# Why the venues tab refused to add, rename or delete a venue (venues.go).
+# The host reads these as they are.
+title_empty = "Укажите название площадки."
+number_taken = 'Площадка {{.n}} уже есть.'
+unknown = 'Площадки {{.n}} нет.'
+in_use = 'На площадке {{.n}} есть бои. Сначала перенесите их на другую площадку.'
+
 [bot]
 # The login bot's /start reply: how to sign in through Telegram (bot.go).
 help = "Этот бот подтверждает вход на dope.pecheny.me.\n\nОткройте https://dope.pecheny.me/login, нажмите «Войти через телеграм» и пришлите мне код, который покажет сайт."

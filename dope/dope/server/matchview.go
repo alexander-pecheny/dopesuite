@@ -6,13 +6,10 @@ import (
 	"dope/dope/domain/festview"
 	"dope/dope/domain/scoring"
 	"dope/dope/platform/metrics"
-	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
 	"encoding/json"
-	"errors"
 	"log"
-	"strings"
 	"time"
 )
 
@@ -146,55 +143,6 @@ func recalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, festID int64, co
 		return err
 	}
 	return scoring.RecalculateMatchResultsTx(ctx, tx, match)
-}
-
-func (s *server) updateVenue(reqCtx context.Context, festID int64, number int, title string) ([]store.VenueView, int64, error) {
-	title = strings.TrimSpace(title)
-	if title == "" {
-		return nil, 0, errors.New("empty venue title")
-	}
-
-	ctx, cancel := festwrite.AuditDetachedContext(reqCtx, festID)
-	defer cancel()
-	conn, err := s.eng.AcquireWriteConn(ctx, "venue-rename")
-	if err != nil {
-		return nil, 0, err
-	}
-	defer conn.Close()
-
-	defer s.eng.LockWrite("venue-rename")()
-
-	tx, err := s.eng.BeginWriteTxConn(ctx, conn)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer tx.Rollback()
-
-	result, err := tx.ExecContext(ctx, `
-update venues set title = ?, updated_at = ?
-where fest_id = ? and number = ?`, title, util.UtcNow(), festID, number)
-	if err != nil {
-		return nil, 0, err
-	}
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return nil, 0, err
-	}
-	if affected == 0 {
-		return nil, 0, errors.New("unknown venue")
-	}
-	revision, err := festwrite.BumpFestRevisionTx(ctx, tx, festID, "venues:update", util.MustJSON(map[string]any{"number": number, "title": title}))
-	if err != nil {
-		return nil, 0, err
-	}
-	venues, err := store.LoadVenues(ctx, tx, festID)
-	if err != nil {
-		return nil, 0, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, 0, err
-	}
-	return venues, revision, nil
 }
 
 // broadcastMatchView fans out a match-scope update as a minimal delta when ops

@@ -121,7 +121,9 @@ of `dsl`. Leaving `entrants` out seats everyone.
 | `POST …/matches/<code>/venue` M | `{number}` |
 | `POST …/stages/<stage>/reseed` M ⓝ · `PUT …/draw` A ⓝ | reseed a stage / seat a drawn slot `{slot, participant}` |
 | `GET …/seed-import` M · `POST …/seed-import/{ksi,run,xlsx,decline}` M | seeds |
-| `GET\|PUT …/games/<game>/screen-settings` · `GET …/venues` · `PUT …/venues/<n>` | the projector board, venues |
+| `GET\|PUT …/games/<game>/screen-settings` | the projector board |
+| `GET /api/fest/<fest>/venues` R | the fest's venues, shared by its games: `number`, `title`, and `bouts` played at each |
+| `POST …/venues` M · `PUT …/venues/<n>` M · `DELETE …/venues/<n>` M | add `{title, number?}` (no number takes the next free one), rename `{title}`, delete one no bout plays at. Adding venue N seats at it every bout a game's scheme puts at table N that has no venue yet. Each answers with the venues |
 | `GET …/results` · `…/export.xlsx` R · `…/export.json.gz` M | results |
 
 ## Rules that matter

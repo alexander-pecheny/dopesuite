@@ -5086,9 +5086,11 @@ body.is-fullscreen.od-page .match-main {
 
 /* A guest team's rename and remove sit in a row of the teams table, so they
    fit inside the row's height (less the cell's padding) rather than a form
-   control's; so do an entrant's on the Участники tab. */
+   control's; so do an entrant's on the Участники tab, and a venue's delete
+   on the venues tab. */
 .multi-guest-actions .action-icon,
-.entrant-actions .action-icon {
+.entrant-actions .action-icon,
+.venue-actions .action-icon {
   width: calc(var(--question-size) - var(--space-2));
   height: calc(var(--question-size) - var(--space-2));
   border-radius: var(--radius-sm);

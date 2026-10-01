@@ -50,7 +50,9 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("GET "+fest, route.Read, s.scopedFest)
 	t.Handle("POST "+fest+"/presence", route.Editor, s.hostPresence)
 	t.Handle("GET "+fest+"/venues", route.Read, s.scopedVenues)
+	t.Handle("POST "+fest+"/venues", route.Editor, s.scopedVenueCreate)
 	t.Handle("PUT "+fest+"/venues/{n}", route.Editor, s.scopedVenuePut)
+	t.Handle("DELETE "+fest+"/venues/{n}", route.Editor, s.scopedVenueDelete)
 	t.Handle("GET "+fest+"/roster", route.Read, s.scopedFestRoster)
 	t.Handle("GET "+game, route.Read, s.scopedGame)
 	t.Handle("GET "+game+"/roster", route.Read, s.scopedGameRoster)
@@ -194,9 +196,38 @@ func (s *server) scopedVenuePut(w http.ResponseWriter, r *http.Request, sc route
 	if err != nil {
 		return route.BadUser(err)
 	}
-	data, _ := json.Marshal(venues)
-	s.eng.BroadcastState(sc.FestID, fmt.Sprintf("venues:%d", sc.FestID), revision, data)
-	return route.JSONBytes(w, data)
+	return route.JSONBytes(w, s.broadcastVenues(sc.FestID, venueChange{Venues: venues, Revision: revision}))
+}
+
+// scopedVenueCreate adds a venue to the fest and seats there the bouts the
+// Games' schemes put at its number. It answers with the fest's venues.
+func (s *server) scopedVenueCreate(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	var req venueCreateRequest
+	if err := route.DecodeJSON(r, &req); err != nil {
+		return err
+	}
+	if req.Number < 0 {
+		return route.BadRequest("bad venue number")
+	}
+	change, err := s.createVenue(r.Context(), sc.FestID, req.Number, req.Title)
+	if err != nil {
+		return route.BadUser(err)
+	}
+	return route.JSONBytes(w, s.broadcastVenues(sc.FestID, change))
+}
+
+// scopedVenueDelete removes a venue no bout plays at, and answers with the
+// fest's venues.
+func (s *server) scopedVenueDelete(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	number, err := strconv.Atoi(r.PathValue("n"))
+	if err != nil || number <= 0 {
+		return route.BadRequest("bad venue number")
+	}
+	change, err := s.deleteVenue(r.Context(), sc.FestID, number)
+	if err != nil {
+		return route.BadUser(err)
+	}
+	return route.JSONBytes(w, s.broadcastVenues(sc.FestID, change))
 }
 
 // ---- matches ----
