@@ -61,8 +61,12 @@ type Author struct {
 
 // Credits is what a packet says about its people. Questions counts the
 // numbered questions (warm-up ones are not numbered). Sources are the files
-// read — inside a zip, the ones picked as the packet.
+// read — inside a zip, the ones picked as the packet. Language is the packet's
+// language as chgksuite's --language code, "ru" for Russian: a site holding the
+// same packet in several languages credits from the Russian one, whose names
+// match its players best.
 type Credits struct {
+	Language   string      `json:"language"`
 	Questions  int         `json:"questions"`
 	Tours      []Tour      `json:"tours"`
 	Paragraphs []Paragraph `json:"paragraphs"`
@@ -110,6 +114,7 @@ func Read(name string, data []byte, opt Options) (*Credits, error) {
 type file struct {
 	name       string
 	format     string // docx, 4s or pdf
+	language   string // chgksuite's --language code, "" for Russian
 	questions  int
 	tours      []Tour
 	paragraphs []Paragraph
@@ -126,7 +131,7 @@ func readOne(name string, data []byte, opt Options) (file, error) {
 		}
 		source = res.Source
 		f := dropLeadingWarmup(fromDoc(fsource.Parse(source, "chgk")), opt.Questions)
-		f.name, f.format = name, format
+		f.name, f.format, f.language = name, format, language(source)
 		return f, nil
 	}
 	var text string
@@ -156,7 +161,7 @@ func readOne(name string, data []byte, opt Options) (file, error) {
 		source = res.Source
 	}
 	f := dropLeadingWarmup(fromDoc(fsource.Parse(source, "chgk")), opt.Questions)
-	f.name, f.format = name, format
+	f.name, f.format, f.language = name, format, lang
 	return f, nil
 }
 
@@ -233,36 +238,53 @@ func readZip(data []byte, opt Options) (*Credits, error) {
 // file, a 4s is already structured, a PDF is text recovered from a layout.
 var formats = []string{"docx", "4s", "pdf"}
 
-// pick chooses which of an archive's files are the packet. With the question
-// count known, format by format: one file holding exactly that many questions,
-// else all files of the format if together they hold it (one file per tour).
-// Otherwise the most trusted format present: its biggest file alone when it has
-// at least twice the questions of the next (the packet beside spare questions),
-// else all of them.
+// pick chooses which of an archive's files are the packet. Files are grouped by
+// format and language, the most trusted format first and, within it, Russian
+// first: an archive with the packet in Russian and in Ukrainian credits from the
+// Russian one, whose names match the site's players. With the question count
+// known, group by group: one file holding exactly that many questions, else all
+// files of the group if together they hold it (one file per tour). Otherwise
+// the first group: its biggest file alone when it has at least twice the
+// questions of the next (the packet beside spare questions), else all of them.
 func pick(files []file, questions int) []file {
-	groups := map[string][]file{}
+	type key struct{ format, language string }
+	groups := map[key][]file{}
 	for _, f := range dedupe(files) {
-		groups[f.format] = append(groups[f.format], f)
+		k := key{f.format, f.language}
+		groups[k] = append(groups[k], f)
+	}
+	var order []key
+	for _, format := range formats {
+		var langs []string
+		for k := range groups {
+			if k.format == format {
+				langs = append(langs, k.language)
+			}
+		}
+		sort.Strings(langs) // "" (Russian) sorts first
+		for _, l := range langs {
+			order = append(order, key{format, l})
+		}
 	}
 	for _, g := range groups {
 		sort.SliceStable(g, func(i, j int) bool { return naturalLess(g[i].name, g[j].name) })
 	}
 	if questions > 0 {
-		for _, format := range formats {
+		for _, k := range order {
 			sum := 0
-			for _, f := range groups[format] {
+			for _, f := range groups[k] {
 				if f.questions == questions {
 					return []file{f}
 				}
 				sum += f.questions
 			}
 			if sum == questions {
-				return groups[format]
+				return groups[k]
 			}
 		}
 	}
-	for _, format := range formats {
-		g := groups[format]
+	for _, k := range order {
+		g := groups[k]
 		if len(g) == 0 {
 			continue
 		}
@@ -278,7 +300,8 @@ func pick(files []file, questions int) []file {
 
 // dedupe drops a file that repeats another of its format — the same packet
 // twice in one archive («пакет.docx» and «пакет для ведущих.docx»): same
-// question count and same tour headings. The copy with more credits
+// language, question count and tour headings (a translation keeps «Тур 1», so
+// the language tells it from a copy). The copy with more credits
 // paragraphs stays.
 func dedupe(files []file) []file {
 	type sig struct {
@@ -292,7 +315,7 @@ func dedupe(files []file) []file {
 		for i, t := range f.tours {
 			labels[i] = t.Label
 		}
-		k := sig{f.format, fmt.Sprint(f.questions, labels)}
+		k := sig{f.format, fmt.Sprint(f.language, f.questions, labels)}
 		if i, ok := best[k]; ok {
 			if len(f.paragraphs) > len(out[i].paragraphs) {
 				out[i] = f
@@ -494,7 +517,10 @@ func merge(files []file) *Credits {
 		}
 		return naturalLess(files[i].name, files[j].name)
 	})
-	out := &Credits{Tours: []Tour{}, Paragraphs: []Paragraph{}, Authors: []Author{}, Sources: []string{}}
+	out := &Credits{Language: "ru", Tours: []Tour{}, Paragraphs: []Paragraph{}, Authors: []Author{}, Sources: []string{}}
+	if len(files) > 0 && files[0].language != "" {
+		out.Language = files[0].language
+	}
 	shift := func(n, by int) int {
 		if n == 0 {
 			return 0
