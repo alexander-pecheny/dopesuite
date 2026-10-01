@@ -4576,6 +4576,14 @@ body.is-fullscreen.od-page .match-main {
   width: var(--results-team-col);
 }
 
+/* A roster without a № column (troikas; a fest not numbered yet): the name
+   column is frozen at the left edge, not one № column in, or it covers the
+   start of the players' names. Doubled class to outweigh the phone override
+   of the same variable on .results-table. */
+.roster-results-table.roster-unnumbered {
+  --results-place-col: 0px;
+}
+
 /* The team name is the shared name cell (clip + fade + popover); the roster
    only adds its bold weight on top. */
 .roster-results-table .results-team-name {
