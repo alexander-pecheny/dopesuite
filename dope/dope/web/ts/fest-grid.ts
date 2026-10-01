@@ -967,7 +967,13 @@ function slotLabel(slot: FestGridSlot, live: FestGridLiveParticipant = {}, lette
     if (slot.seed.basket) return S.fest.grid.slotBasket(String(slot.seed.basket), String(number));
     return number ? `seed-${number}` : "seed";
   }
-  if (slot.fromMatch) return `${slot.fromMatch.match}${slot.fromMatch.place}`;
+  if (slot.fromMatch) {
+    // A seat compiled without a label (the bronze Match of a scheme compiled
+    // before it had one) still names its bout by letter where the grid knows it.
+    const letter = letters?.get(String(slot.fromMatch.match || ""));
+    if (letter) return S.structure.macro.seatFromBout(letteredTitle(S.structure.titles.bout("1"), letter), String(slot.fromMatch.place || ""));
+    return `${slot.fromMatch.match}${slot.fromMatch.place}`;
+  }
   if (slot.reseed) return reseedLabel(slot.reseed);
   if (slot.team) return slot.team.name || slot.team.label || slot.team.id || "";
   if (slot.placeholder) return slot.placeholder;
