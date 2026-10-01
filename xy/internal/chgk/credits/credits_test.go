@@ -54,6 +54,7 @@ func read(t *testing.T, name, src string) *Credits {
 func TestShape(t *testing.T) {
 	got := read(t, "p.4s", packet)
 	want := &Credits{
+		Language:  "ru",
 		Questions: 2,
 		Tours:     []Tour{{Label: "Тур 1", First: 1, Last: 1}, {Label: "Тур 2", First: 2, Last: 2}},
 		Paragraphs: []Paragraph{
@@ -176,6 +177,33 @@ func TestPickPacketFromZip(t *testing.T) {
 	}
 	if len(got.Sources) != 3 {
 		t.Fatalf("per-tour: %+v", got)
+	}
+}
+
+// The same packet in Ukrainian and in Russian: the Russian one is read, though
+// the Ukrainian file comes first and has the same tours; the output says so.
+func TestZipPrefersRussian(t *testing.T) {
+	ua := "# Редактори пакета дякують усім, хто допомагав готувати ці запитання, і особливо тестувальникам за їхню роботу та терпіння.\n\n"
+	ru := "# Редакторы пакета благодарят всех, кто помогал готовить эти вопросы, и особенно тестировщиков за их работу и терпение.\n\n"
+	data := zipOf(t, map[string]string{
+		"1 пакет укр.4s": "## Тур 1\n\n" + strings.Repeat(ua, 3) + "#EDITOR Редактор — Петро Петренко\n\n" + questions(12),
+		"2 пакет рус.4s": "## Тур 1\n\n" + strings.Repeat(ru, 3) + "#EDITOR Редактор — Пётр Петренко\n\n" + questions(12),
+	})
+	for _, n := range []int{12, 0} {
+		got, err := Read("packet.zip", data, Options{Questions: n})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got.Sources, []string{"2 пакет рус.4s"}) || got.Language != "ru" {
+			t.Fatalf("questions=%d: sources %v, language %q", n, got.Sources, got.Language)
+		}
+	}
+	only, err := Read("p.4s", []byte("## Тур 1\n\n"+strings.Repeat(ua, 3)+questions(12)), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if only.Language != "ua" {
+		t.Fatalf("ukrainian file: language %q", only.Language)
 	}
 }
 
