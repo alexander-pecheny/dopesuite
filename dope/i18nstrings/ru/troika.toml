@@ -41,6 +41,13 @@ rating = "Р"
 player = "Игрок"
 team = "Команда"
 bouts = "Бои"
+# In how many темы the player sat in each кресло: первый пристяжной, второй
+# пристяжной, коренной.
+chairs = "П1 / П2 / К"
+# How many вопросы the player answered, how many of them right, and the share.
+questions = "Вопросов"
+correct = "Верных"
+correct_rate = "% верных"
 first = "Первые ответы"
 repeat = "Повторы"
 repeat_rate = "Удачные повторы"

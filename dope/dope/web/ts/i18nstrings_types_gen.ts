@@ -1883,10 +1883,14 @@ export type Strings = {
     };
     stats: {
       bouts: () => string;
+      chairs: () => string;
+      correct: () => string;
+      correctRate: () => string;
       empty: () => string;
       first: () => string;
       player: () => string;
       points: () => string;
+      questions: () => string;
       repeat: () => string;
       repeatRate: () => string;
       team: () => string;
