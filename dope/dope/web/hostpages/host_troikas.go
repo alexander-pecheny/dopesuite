@@ -337,6 +337,9 @@ func (s *Server) DeleteTroika(ctx context.Context, festID, id int64) ([]gamebuil
 		if _, err := gamebuild.SyncDivisionEntrantsTx(ctx, tx, festID, id); err != nil {
 			return err
 		}
+		if err := gamebuild.DropTroikaFromListsTx(ctx, tx, festID, id); err != nil {
+			return err
+		}
 		return roster.DeleteAssembledTx(ctx, tx, festID, id)
 	})
 }

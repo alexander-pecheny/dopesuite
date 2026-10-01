@@ -62,6 +62,13 @@ func (troika) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 	return games.TroikaEmptyStateJSON(games.TroikaThemeValues(conf.Themes, conf.ThemeValues), conf.Participants, conf.Written, conf.Swap), nil
 }
 
+// A written qualifier takes a late troika as one more row; a bout with chairs
+// takes no other side.
+func (troika) GrowSeats(state json.RawMessage, seats int) (json.RawMessage, bool, error) {
+	grown, ok, err := games.GrowTroikaWritten(string(state), seats)
+	return grown, ok, err
+}
+
 func (troika) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error) {
 	results, err := games.ComputeTroikaResults(string(stateJSON))
 	if err != nil {

@@ -195,6 +195,36 @@ func ScoreSeats(p Protocol, cfg, state json.RawMessage, seats []int64) ([]struct
 	return p.Score(cfg, state)
 }
 
+// Grower is implemented by a Protocol whose started bout can take more seats
+// and keep what it holds: a troika game's written qualifier, where a late troika
+// writes the same paper. ok is false when this document cannot grow.
+type Grower interface {
+	GrowSeats(state json.RawMessage, seats int) (json.RawMessage, bool, error)
+}
+
+// CanGrow reports whether a Protocol has bouts that may grow once started.
+func CanGrow(code string) bool {
+	p, ok := Get(code)
+	if !ok {
+		return false
+	}
+	_, ok = p.(Grower)
+	return ok
+}
+
+// GrowSeats asks a Protocol to give a started bout's document more seats.
+func GrowSeats(code string, state json.RawMessage, seats int) (json.RawMessage, bool, error) {
+	p, ok := Get(code)
+	if !ok {
+		return nil, false, nil
+	}
+	grower, ok := p.(Grower)
+	if !ok {
+		return nil, false, nil
+	}
+	return grower.GrowSeats(state, seats)
+}
+
 // LateEditor is implemented by a Protocol whose document keeps an entry a
 // host makes after a bout is finished: Hamsa's lot among teams that share a
 // place, which is only known once the bout is over. Every other path stays
