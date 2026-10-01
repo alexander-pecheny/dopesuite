@@ -26,7 +26,7 @@ import {buildFestGrid, buildReseedStagePanel, parseScheme} from "./fest-grid.js"
 import type {FestGridStage} from "./fest-grid.js";
 import {gameTabs, groupLabel} from "./game-tabs.js";
 import type {GameTab} from "./game-tabs.js";
-import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
+import {hashAnchor, onNavigate, setHashTab, tabFromHash, tabHref} from "./url-state.js";
 import * as troika from "./troika-protocol.js";
 import type {Mark, TroikaState} from "./troika-protocol.js";
 import {buildTroikaStatsTable, computeTroikaPlayerStats} from "./troika-stats.js";
@@ -200,7 +200,41 @@ onNavigate(() => {
     activeTab = next;
     render();
   }
+  showAnchor();
 });
+
+// boutHref is the link to a bout: its protocols tab, scrolled to it — what a
+// bout's title in the grid and its cell in a group's table lead to.
+function boutHref(code: string): string {
+  const stage = (scheme.stages || []).find((entry) => (entry.matches || []).some((match) => match.code === code));
+  const tab = tabs().find((entry) => entry.kind === "protocol" && entry.stages.includes(stage?.code || ""));
+  return tab ? tabHref(tab.key, boutLetters.get(code) || code) : "";
+}
+
+// groupHref is the link a group table's head in the grid gives: the Block's
+// tab with the groups' tables.
+function groupHref(stage: FestGridStage): string {
+  const tab = tabs().find((entry) => entry.kind === "block" && entry.stages.includes(stage.code || ""));
+  return tab ? tabHref(tab.key) : "";
+}
+
+function boutAnchorID(code: string): string {
+  return `bout-${boutLetters.get(code) || code}`;
+}
+
+// showAnchor scrolls to the bout the hash names, once per hash: a later
+// redraw (another host's mark) must not yank the page back to it.
+let shownAnchor = "";
+function showAnchor(): void {
+  const anchor = hashAnchor();
+  const key = `${activeTab}@${anchor}`;
+  if (!anchor || key === shownAnchor) return;
+  const node = document.getElementById(`bout-${anchor}`);
+  if (!node) return;
+  shownAnchor = key;
+  node.scrollIntoView({block: "start"});
+  node.classList.add("bout-target");
+}
 
 // === the document ===
 
@@ -425,6 +459,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
   if (state.written) return buildWrittenBout(bout);
   const box = document.createElement("section");
   box.className = "troika-bout";
+  box.id = boutAnchorID(bout.code);
   box.appendChild(boutHead(bout));
 
   const table = document.createElement("table");
@@ -1016,6 +1051,7 @@ function buildGroups(stages: SchemeStage[]): HTMLElement {
           })),
           finished: Boolean(view.finished),
           started: troika.started(state),
+          href: boutHref(planned.code || ""),
         }];
       }),
       standings: standingsByParticipant(festStages.get(stage.code || "")),
@@ -1082,6 +1118,8 @@ function buildGrid(): HTMLElement {
   return buildFestGrid({schemaJson: fest?.schemaJson, stages}, {
     stageHeaderLink: false,
     matchTitleLink: false,
+    matchHref: boutHref,
+    groupHref,
     letters: boutLetters,
     editable: !viewer,
     onDraw: (slot, participant) => void applyDraw(slot, participant),
@@ -1121,6 +1159,8 @@ function buildGridOf(only: SchemeStage[]): HTMLElement {
   return buildFestGrid({schemaJson: JSON.stringify({stages: schemeStages}), stages: live}, {
     stageHeaderLink: false,
     matchTitleLink: false,
+    matchHref: boutHref,
+    groupHref,
     letters: boutLetters,
     editable: !viewer,
     onDraw: (slot, participant) => void applyDraw(slot, participant),
@@ -1213,6 +1253,7 @@ function render(): void {
   scheduleNameOverflow();
   cursor.refresh();
   writtenCursor.refresh();
+  showAnchor();
 }
 
 cursor.bind();

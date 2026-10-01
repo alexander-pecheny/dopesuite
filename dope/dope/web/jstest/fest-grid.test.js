@@ -476,3 +476,23 @@ test("planGrid draws a table over other stages before anything is played", () =>
   assert.equal(table.kind, "standings");
   assert.deepEqual(table.entries.map((entry) => entry.name), ["Альфа", "Бета", "Гамма"]);
 });
+
+// A page that keeps its бои on a tab of its own (a Тройка's протоколы) says
+// where a бой's title and a группа's head lead; the grid links them there.
+test("matchHref and groupHref make the titles links", () => {
+  const group = {
+    code: "s1-g1", title: "Групповой этап. Группа 1", stage_type: "matches",
+    grain: {block: "s1", group: "1"},
+    standings: [{rank: 1, name: "Лидер", metrics: {place: 1, points: 1}}],
+    matches: [{code: "s1-g1-1", slots: [], participants: [{name: "Лидер"}]}],
+  };
+  const final = {code: "s2-r1", title: "Финал", stage_type: "matches",
+    matches: [{code: "s2-r1-m1", participantCount: 2, slots: [{label: "А"}, {label: "Б"}]}]};
+  const grid = buildFestGrid({stages: [group, final]}, {
+    stageHeaderLink: false, matchTitleLink: false,
+    matchHref: (code) => `#protocol:s2@${code}`,
+    groupHref: (stage) => `#block:${stage.grain.block}`,
+  });
+  const links = walk(grid).filter((n) => n.tag === "a").map((n) => [n.textContent, n.href]);
+  assert.deepEqual(links, [["Группа 1", "#block:s1"], ["Бой s2-r1-m1", "#protocol:s2@s2-r1-m1"]]);
+});

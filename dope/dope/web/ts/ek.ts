@@ -1016,7 +1016,7 @@ function renderFest(): void {
   setPageMode("grid");
   shell.renderChrome();
   renderEKTabs();
-  ekRoot.replaceChildren(buildFestGrid(fest, {viewer, basePath: route.base}));
+  ekRoot.replaceChildren(buildFestGrid(fest, {viewer, basePath: route.base, groupHref: groupStandingsHref}));
   scheduleGridNameOverflowUpdate();
   shell.presence.refresh();
 }
@@ -1235,6 +1235,13 @@ function canonicalStageCode(code: string): string {
   return canonicalKey(ekTabs(), `stage:${code}`).replace(/^stage:/, "");
 }
 
+// groupStandingsHref is where a group's table on the grid leads: the Block's
+// groups tab, which links every player's round to its bout.
+function groupStandingsHref(stage: {code?: string}): string {
+  const tab = ekTabs().find((entry) => entry.kind === "block" && entry.stages.includes(stage.code || ""));
+  return tab?.stage ? `${route.base}/stage/${encodeURIComponent(tab.stage.code)}` : "";
+}
+
 // buildGroupStandingsPane is the sheets' groups view: every group of the
 // Block on one tab — a player, his points, and the split by round-robin
 // block round, computed from the cached matches by the Block's own scoring rule.
@@ -1246,7 +1253,7 @@ function buildGroupStandingsPane(stage: HostStage): HTMLElement {
     const blockRoundCount = Math.max(1, ...planned.map((m) => Number(m.round || 1)));
     const matches = planned.map((m) => {
       const view = stageCache.matchState(m.code || "") as HostMatchView | null;
-      return {blockRound: m.round, finished: Boolean(view?.finished), questionValues: view?.questionValues, participants: view?.participants};
+      return {code: m.code, blockRound: m.round, finished: Boolean(view?.finished), questionValues: view?.questionValues, participants: view?.participants};
     });
     const rows = computeGroupBlockRounds({matches, pointsRule: config.rules?.bout?.points, blockRoundCount});
     // The group's own standings are the server's: its order is the ranking
@@ -1269,13 +1276,15 @@ function buildGroupStandingsPane(stage: HostStage): HTMLElement {
     }
     if (!rows.length) {
       for (const entrant of config.entrants || []) {
-        if (entrant.label) rows.push({id: 0, name: entrant.label, points: 0, blockRounds: new Array<number>(blockRoundCount).fill(0)});
+        if (entrant.label) rows.push({id: 0, name: entrant.label, points: 0, blockRounds: new Array<number>(blockRoundCount).fill(0), bouts: []});
       }
     }
     const title = schemeStage ? groupLabel(schemeStage as StageRef) : code;
     return {title, blockRoundCount, rows};
   });
-  return buildGroupStandingsView(groups);
+  // A player's round leads to the bout he played it in: the grid draws a
+  // group as a table, so this is where a spectator finds the group's bouts.
+  return buildGroupStandingsView(groups, {boutHref: (code) => `${route.base}/matches/${encodeURIComponent(letterMap().get(code) || code)}`});
 }
 
 // buildReseedPanes fills a reseed pane: the folded reseed tab stacks every

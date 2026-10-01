@@ -65,6 +65,8 @@ export interface GroupBlockRoundsSeat {
 }
 
 export interface GroupBlockRoundsMatch {
+  // code is the bout's, for a link to it from the player's round.
+  code?: string;
   blockRound?: number;
   finished?: boolean;
   questionValues?: unknown[];
@@ -129,6 +131,9 @@ export interface GroupBlockRoundsRow {
   name: string;
   points: number;
   blockRounds: number[];
+  // bouts is the bout the player sits in each block round, by its code: ""
+  // where the block round seats him nowhere.
+  bouts: string[];
 }
 
 // computeGroupBlockRounds folds one group's matches into points per block round
@@ -151,9 +156,11 @@ export function computeGroupBlockRounds(opts: {
       const key = id ? `id:${id}` : `name:${name}`;
       let row = rows.get(key);
       if (!row) {
-        row = {id, name, points: 0, blockRounds: new Array<number>(opts.blockRoundCount).fill(0)};
+        row = {id, name, points: 0, blockRounds: new Array<number>(opts.blockRoundCount).fill(0), bouts: new Array<string>(opts.blockRoundCount).fill("")};
         rows.set(key, row);
       }
+      const seated = Number(match.blockRound || 1) - 1;
+      if (match.code && seated >= 0 && seated < row.bouts.length) row.bouts[seated] = match.code;
       if (!match.finished || !seat?.place) continue;
       const points = evalScoringRule(rule, boutScope(match, seatIndex));
       row.points += points;

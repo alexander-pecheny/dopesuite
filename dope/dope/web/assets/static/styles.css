@@ -4285,6 +4285,49 @@ html:has(.game-host-top) {
   color: var(--muted);
 }
 
+/* A bout's cell leads to the bout: the score itself is the link, and a bout
+   not started yet a dot, so every pairing can be opened. */
+.crosstable .cross-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.crosstable .cross-link:hover,
+.crosstable .cross-link:focus {
+  color: var(--blue);
+  outline: 0;
+}
+
+/* A player's round in the groups tab leads to the bout he played it in. */
+.group-standings-table .group-round-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.group-standings-table .group-round-link:hover,
+.group-standings-table .group-round-link:focus {
+  color: var(--blue);
+  outline: 0;
+}
+
+.crosstable .cross-pending {
+  color: var(--muted-light);
+}
+
+/* The bout a link opened: below the page's bars when scrolled to, and
+   outlined until the next redraw. */
+.troika-bout {
+  scroll-margin-top: var(--space-8);
+}
+
+.troika-bout.bout-target {
+  outline: 2px solid var(--blue);
+  outline-offset: var(--space-1);
+  border-radius: var(--radius-sm);
+}
+
 .match-table.brain-detailed .brain-finish-head,
 .match-table.brain-detailed .brain-finish-gap,
 .troika-sheet .troika-finish-head,

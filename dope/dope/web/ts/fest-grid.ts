@@ -114,6 +114,12 @@ export interface FestGridOptions {
   onDraw?: (slot: string, participant: number) => void;
   stageHeaderLink?: boolean;
   matchTitleLink?: boolean;
+  // matchHref is where a bout's title leads on a page that keeps its bouts
+  // somewhere else than /matches/ (a troika's protocols tab); "" for none.
+  matchHref?: (code: string) => string;
+  // groupHref is where a group table's head leads: the tab with the group's
+  // bouts or its table; "" or absent for none.
+  groupHref?: (stage: FestGridStage) => string;
   // letters is the whole game's letter map — a caller drawing a slice of the
   // scheme passes it, so a slot that names a Match outside the slice still
   // reads its default "Match BU" label.
@@ -387,7 +393,7 @@ function buildBlockColumn(section: GridBlock, grid: Grid, ctx: PaintContext): HT
   const stack = document.createElement("div");
   stack.className = "grid-block-stack";
   for (const entry of section.entries) {
-    stack.appendChild("item" in entry ? buildStandingsTable(entry) : buildMatchBoxes(entry, ctx));
+    stack.appendChild("item" in entry ? buildStandingsTable(entry, ctx.options) : buildMatchBoxes(entry, ctx));
   }
   setBlockShape(column, section.rows, section.cols);
   grid.blocks.push({section: column, stack, units: blockUnits(section.entries)});
@@ -510,7 +516,7 @@ function buildStandingsStage(section: GridTable, ctx: PaintContext): HTMLElement
   column.appendChild(stageHead(stage, stage.grain?.group ? blockLabel([stage as StageRef]) : stage.title, ctx));
   const body = document.createElement("div");
   body.className = "grid-matches";
-  body.appendChild(buildStandingsTable(section));
+  body.appendChild(buildStandingsTable(section, ctx.options));
   column.appendChild(body);
   return column;
 }
@@ -589,13 +595,13 @@ function stageSlotOrder(stage: FestGridStage, liveStage: FestGridStage): string[
 // seating order; the columns are the name, the place, and the one number the
 // Block ranks by first — a second number costs forty pixels the names need,
 // and everything else belongs on the stage's own page.
-function buildStandingsTable({stage, live, entries, order, sort, item}: GridTable): HTMLElement {
+function buildStandingsTable({stage, live, entries, order, sort, item}: GridTable, options: FestGridOptions = {}): HTMLElement {
   const metric = sort?.[0]?.metric;
   const head = tableHead(stage, live);
   const box = el("article", `grid-box grid-standings${metric ? "" : " grid-standings-bare"}`, "");
   const grid = el("div", "grid-slot-grid", "");
   const title = gridCell("grid-slot-head grid-match-head-cell", "");
-  title.appendChild(headLayout(el("span", "grid-match-title", head.title), head.venue));
+  title.appendChild(headLayout(groupTitleNode(stage, head.title, options), head.venue));
   grid.appendChild(title);
   if (metric) grid.appendChild(gridHeadCell("slot-total-head", standingsMetricLabel(metric)));
   grid.appendChild(gridHeadCell("slot-place-head", S.fest.grid.colPlace()));
@@ -815,8 +821,24 @@ function headLayout(title: HTMLElement, venue: Venue | null): HTMLElement {
   return layout;
 }
 
+// groupTitleNode is a group table's name, a link where the page says where
+// the group's bouts are.
+function groupTitleNode(stage: FestGridStage, title: string, options: FestGridOptions): HTMLElement {
+  const href = options.groupHref?.(stage) || "";
+  if (!href) return el("span", "grid-match-title", title);
+  const link = el("a", "grid-match-title grid-match-title-link", title);
+  link.href = href;
+  return link;
+}
+
 function matchTitleNode(match: FestGridMatch, ctx: PaintContext): HTMLElement {
   const label = matchLabel(match, ctx.letters);
+  const own = ctx.options.matchHref?.(String(match.code || "")) || "";
+  if (own) {
+    const link = el("a", "grid-match-title grid-match-title-link", label);
+    link.href = own;
+    return link;
+  }
   if (!ctx.options.basePath || ctx.options.matchTitleLink === false) {
     return el("span", "grid-match-title", label);
   }

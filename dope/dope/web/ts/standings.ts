@@ -38,7 +38,12 @@ export interface StageRefMatch {
 export interface GroupStandingsGroup {
   title: string;
   blockRoundCount: number;
-  rows: Array<{name: string; points: number; blockRounds: number[]}>;
+  rows: Array<{name: string; points: number; blockRounds: number[]; bouts?: string[]}>;
+}
+
+export interface GroupStandingsOptions {
+  // boutHref links a player's block round to the bout he played it in.
+  boutHref?: (code: string) => string;
 }
 
 export interface TeamCellOptions {
@@ -167,7 +172,7 @@ function classNames(...names: Array<string | false | null | undefined>): string 
 // buildGroupStandingsView is the sheets' Groups view: all groups on one tab,
 // each a table of Player | Points | Round 1..N, two abreast where the screen
 // fits them.
-export function buildGroupStandingsView(groups: GroupStandingsGroup[]): HTMLElement {
+export function buildGroupStandingsView(groups: GroupStandingsGroup[], options: GroupStandingsOptions = {}): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "group-standings";
   // Up to three decimals, trailing zeros dropped: a rule like Octobearfest's
@@ -196,13 +201,25 @@ export function buildGroupStandingsView(groups: GroupStandingsGroup[]): HTMLElem
         index + 1,
         row.name,
         score(row.points),
-        ...blockRounds(group).map((blockRound) => score(row.blockRounds[blockRound] || 0)),
+        ...blockRounds(group).map((blockRound) => roundCell(score(row.blockRounds[blockRound] || 0), row.bouts?.[blockRound] || "", options)),
       ]),
     }));
     item.appendChild(wrapper);
     wrap.appendChild(item);
   }
   return wrap;
+}
+
+// roundCell is a player's points in one block round, a link to the bout he
+// played it in where the page has one.
+function roundCell(text: string, code: string, options: GroupStandingsOptions): CellContentItem {
+  const href = code ? options.boutHref?.(code) || "" : "";
+  if (!href) return text;
+  const link = document.createElement("a");
+  link.className = "group-round-link";
+  link.href = href;
+  link.textContent = text;
+  return td(link);
 }
 
 // festLetters is every match's letter by code, read off the fest view: the
