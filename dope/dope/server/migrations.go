@@ -931,6 +931,12 @@ create index if not exists fest_roster_snapshots_fest_idx on fest_roster_snapsho
 		return err
 	}},
 	{Version: 39, Name: "a troika's place in the order of applications", Up: troikaApplicationOrder},
+	// The зачёты a game does not show: the short names of the Flags whose
+	// Divisions mean nothing there (ЧР in a КСИ), as a JSON list. Empty, the
+	// game shows every Flag its teams carry.
+	{Version: 40, Name: "a game's hidden divisions", Up: func(db *sql.DB) error {
+		return store.AddColumnsIfMissing(db, "games", []store.ColumnSpec{{Name: "hidden_divisions", Type: "TEXT"}})
+	}},
 }
 
 // troikaApplicationOrder gives every troika its place in the order its

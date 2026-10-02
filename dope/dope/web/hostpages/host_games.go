@@ -38,6 +38,10 @@ type hostGameSettingsData struct {
 	Error     string
 	SchemeDSL string
 	HasDSL    bool
+	// Divisions is every division the game's teams offer, Hidden the ones it
+	// does not show; nil Divisions draws no divisions field.
+	Divisions []string
+	Hidden    []string
 }
 
 type hostGameCreateData struct {
@@ -299,6 +303,24 @@ func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
 		dopeui.Field(dopeui.Label(s.Host.Games.TitleLabel()), dopeui.Textfield(dopeui.Name("title"), dopeui.Value(data.Game.Title), dopeui.Required())),
 		dopeui.Field(dopeui.Label(s.Host.Games.SlugLabel()), dopeui.Textfield(dopeui.Name("slug"), dopeui.Value(data.Slug), dopeui.Pattern("[a-z0-9-]+"))),
 	}
+	if len(data.Divisions) > 0 {
+		hidden := map[string]bool{}
+		for _, d := range data.Hidden {
+			hidden[d] = true
+		}
+		boxes := []dopeui.Item{dopeui.Hiddenfield(dopeui.Name("divisions_present"), dopeui.Value("1"))}
+		for _, d := range data.Divisions {
+			items := []dopeui.Item{dopeui.Name("division_shown"), dopeui.Value(d), dopeui.Text(d)}
+			if !hidden[d] {
+				items = append(items, dopeui.Checked())
+			}
+			boxes = append(boxes, dopeui.Checkbox(items...))
+		}
+		form = append(form,
+			dopeui.Field(dopeui.Label(s.Host.Games.DivisionsLabel()), dopeui.Row(append([]dopeui.Item{dopeui.SpaceMD}, boxes...)...)),
+			dopeui.Hint(dopeui.Text(s.Host.Games.DivisionsHint())),
+		)
+	}
 	if data.HasDSL {
 		form = append(form,
 			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
@@ -319,10 +341,18 @@ func (s *Server) renderHostGameSettings(w http.ResponseWriter, r *http.Request, 
 			gameType  string
 			slug      sql.NullString
 			schemeDSL string
+			hidden    string
 		)
 		if err := s.h.Engine().DB.QueryRowContext(r.Context(), `
-select code, title, game_type, slug, coalesce(scheme_dsl, '') from games where id = ? and fest_id = ?`, gameID, festID).Scan(&code, &title, &gameType, &slug, &schemeDSL); err != nil {
+select code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_divisions, '') from games where id = ? and fest_id = ?`, gameID, festID).Scan(&code, &title, &gameType, &slug, &schemeDSL, &hidden); err != nil {
 			return nil, err
+		}
+		var divisions []string
+		if divisionsGame(gameType) {
+			var err error
+			if divisions, err = festDivisions(r.Context(), s.h.Engine().DB, festID); err != nil {
+				return nil, err
+			}
 		}
 		if submitted := strings.TrimSpace(r.Form.Get("brain_dsl")); submitted != "" && errMsg != "" {
 			schemeDSL = r.Form.Get("brain_dsl")
@@ -340,6 +370,8 @@ select code, title, game_type, slug, coalesce(scheme_dsl, '') from games where i
 			Error:     errMsg,
 			SchemeDSL: schemeDSL,
 			HasDSL:    gameType == games.Brain && schemeDSL != "",
+			Divisions: divisions,
+			Hidden:    store.ParseHiddenDivisions(hidden),
 		}), nil
 	})
 }
@@ -351,6 +383,9 @@ type GameSettings struct {
 	Title     string `json:"title"`
 	Slug      string `json:"slug"`
 	SchemeDSL string `json:"scheme_dsl"`
+	// HiddenDivisions are the Flags whose divisions the game does not show; nil
+	// leaves them as they are.
+	HiddenDivisions *[]string `json:"hidden_divisions"`
 }
 
 // UpdateGameSettings saves a game's settings. A changed scheme recompiles the
@@ -383,6 +418,15 @@ update games set title = ?, slug = ?, updated_at = ? where id = ? and fest_id = 
 			title, slugValue, util.UtcNow(), gameID, festID); err != nil {
 			return err
 		}
+		if g.HiddenDivisions != nil {
+			var hidden any
+			if cleaned := cleanDivisions(*g.HiddenDivisions); len(cleaned) > 0 {
+				hidden = util.MustJSON(cleaned)
+			}
+			if _, err := tx.ExecContext(ctx, `update games set hidden_divisions = ? where id = ? and fest_id = ?`, hidden, gameID, festID); err != nil {
+				return err
+			}
+		}
 		if strings.TrimSpace(g.SchemeDSL) == "" {
 			return nil
 		}
@@ -408,12 +452,93 @@ select coalesce(scheme_dsl, '') from games where id = ?`, gameID).Scan(&stored);
 	return nil
 }
 
+// hiddenFromForm is the hidden divisions the settings form means: every offered
+// one not ticked, and every one hidden before that is not offered now.
+func (s *Server) hiddenFromForm(ctx context.Context, festID, gameID int64, shown []string) ([]string, error) {
+	offered, err := festDivisions(ctx, s.h.Engine().DB, festID)
+	if err != nil {
+		return nil, err
+	}
+	var stored string
+	if err := s.h.Engine().DB.QueryRowContext(ctx, `select coalesce(hidden_divisions, '') from games where id = ? and fest_id = ?`, gameID, festID).Scan(&stored); err != nil {
+		return nil, err
+	}
+	ticked := map[string]bool{}
+	for _, d := range shown {
+		ticked[strings.TrimSpace(d)] = true
+	}
+	isOffered := map[string]bool{}
+	var hidden []string
+	for _, d := range offered {
+		isOffered[d] = true
+		if !ticked[d] {
+			hidden = append(hidden, d)
+		}
+	}
+	for _, d := range store.ParseHiddenDivisions(stored) {
+		if !isOffered[d] {
+			hidden = append(hidden, d)
+		}
+	}
+	return cleanDivisions(hidden), nil
+}
+
+// cleanDivisions is a list of Flag short names trimmed, without blanks or
+// repeats, in the order given.
+func cleanDivisions(in []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, d := range in {
+		d = strings.TrimSpace(d)
+		if d == "" || seen[d] {
+			continue
+		}
+		seen[d] = true
+		out = append(out, d)
+	}
+	return out
+}
+
+// festDivisions is every Flag the fest's teams carry, by short name, in the
+// order the roster lists the teams and each team its Flags: the divisions a game
+// that seats the fest's teams can offer.
+func festDivisions(ctx context.Context, q store.Queryer, festID int64) ([]string, error) {
+	flags, err := store.CollectRows(ctx, q, `
+select f.short from fest_team_flags f join fest_teams t on t.id = f.team_id
+where t.fest_id = ? and t.deleted = 0 and trim(f.short) != ''
+order by t.position, t.id, f.position`, []any{festID}, func(rows *sql.Rows) (string, error) {
+		var short string
+		return short, rows.Scan(&short)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return cleanDivisions(flags), nil
+}
+
+// divisionsGame reports whether a game type shows divisions to choose among: the
+// flat games, whose results tabs and screen carry the chips.
+func divisionsGame(gameType string) bool {
+	return gameType == games.OD || gameType == games.KSI || gameType == games.Multi
+}
+
 func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
 	g := GameSettings{Title: r.Form.Get("title"), Slug: r.Form.Get("slug"), SchemeDSL: r.Form.Get("brain_dsl")}
+	if r.Form.Get("divisions_present") != "" {
+		// The boxes say which offered divisions are shown; the rest of the offered
+		// ones are hidden, and one hidden before that no team carries now
+		// stays hidden.
+		hidden, err := s.hiddenFromForm(r.Context(), festID, gameID, r.Form["division_shown"])
+		if err != nil {
+			s.renderHostGameSettings(w, r, festID, gameID, err.Error())
+			return
+		}
+		g.HiddenDivisions = &hidden
+	}
 	if err := s.UpdateGameSettings(r.Context(), festID, gameID, g); err != nil {
 		s.renderHostGameSettings(w, r, festID, gameID, err.Error())
 		return

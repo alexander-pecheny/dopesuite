@@ -40,3 +40,16 @@ without a rating id, and is one function over rows the page already has.
 If a регламент ever advances a team by its place within a Division, that is
 the day a Division becomes a Ranking scope: add the partition to the flat
 Block's standings then, and keep this filter as the way to look at it.
+
+## Amendment (2 Oct 2026): a game hides the зачёты that mean nothing there
+
+Every Flag among a game's teams used to offer a зачёт on its pages. On a fest
+where ЧР matters in the ОД and not in the КСИ, that offered a ЧР table nobody
+wanted. A game now keeps the Flags it does not offer (`games.hidden_divisions`,
+set on its «Свойства» page and through `hidden_divisions` in the settings API).
+It is a list of the hidden ones, so a Flag that appears later is offered by
+default. Hiding only changes what this game's own pages offer to look at: the
+chips, `?division=` and the ОД Экран. The Flag badges stay, a Тройка's
+`[init] division:` still picks who plays, and another game can still seed from
+this one's table kept to a зачёт. When ОД and КСИ get a scheme DSL, it becomes
+the place to write this, and it fills the same column.

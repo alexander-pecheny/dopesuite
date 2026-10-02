@@ -135,6 +135,8 @@ type FestView struct {
 	RegularThemeCount int         `json:"regularThemeCount"`
 	Venues            []VenueView `json:"venues"`
 	Stages            []StageView `json:"stages"`
+	// HiddenDivisions are the Flags whose divisions this game does not show.
+	HiddenDivisions []string `json:"hiddenDivisions,omitempty"`
 }
 
 type StageView struct {
@@ -247,4 +249,14 @@ type MatchView struct {
 	// receive over SSE and chain onto subsequent deltas. It is never set on
 	// broadcast payloads themselves (so the delta diff ignores it).
 	Seq uint64 `json:"seq,omitempty"`
+}
+
+// ParseHiddenDivisions reads games.hidden_divisions: a JSON list of Flag short
+// names, empty or unreadable as none.
+func ParseHiddenDivisions(raw string) []string {
+	var out []string
+	if raw == "" || json.Unmarshal([]byte(raw), &out) != nil {
+		return nil
+	}
+	return out
 }

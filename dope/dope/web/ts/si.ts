@@ -32,6 +32,8 @@ const pageWindow = window as Window & PageGlobals;
 interface FestInfo {
   title?: string;
   gameName?: string;
+  // The divisions this game does not offer (games.hidden_divisions).
+  hiddenDivisions?: string[];
   [key: string]: unknown;
 }
 
@@ -145,7 +147,7 @@ onNavigate(() => {
 // player-mode game has none, so it never shows a chip.
 function divisions(): string[] {
   if (!state || !isTeamMode()) return [];
-  return divisionsOf(state.participants.map((_, index) => ksi.participantFlags(state!, index)));
+  return divisionsOf(state.participants.map((_, index) => ksi.participantFlags(state!, index)), fest?.hiddenDivisions);
 }
 
 // divisionMembers is the participant rows the chosen Division takes. Undefined

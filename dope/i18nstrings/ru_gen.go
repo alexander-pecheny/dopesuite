@@ -950,6 +950,10 @@ var RU = Strings{
 			CreateCrumb:  func() string { return "Добавить игру" },
 			CreateSubmit: func() string { return "Создать" },
 			CreateTitle:  func(title string) string { return fmt.Sprintf("%s · новая игра", title) },
+			DivisionsHint: func() string {
+				return "Отмеченные зачёты можно выбрать на страницах этой игры. Снимите отметку с зачёта, который в этой игре не нужен."
+			},
+			DivisionsLabel: func() string { return "Зачёты" },
 			EkHint: func() string {
 				return "Либо схемой, либо готовым JSON ниже — что заполнено, то и используется."
 			},

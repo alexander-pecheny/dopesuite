@@ -17,10 +17,12 @@ export const DIVISION_PARAM = "division";
 export const ALL_DIVISIONS = "";
 
 // divisionsOf is every distinct Flag among a game's teams, in first-seen order
-// — the order the chips are offered in. A game whose teams carry no Flag offers
-// no Divisions, and the page shows no chips.
-export function divisionsOf(flagLists: ReadonlyArray<readonly string[] | undefined>): string[] {
-  const seen = new Set<string>();
+// — the order the chips are offered in — less the ones the game hides: a
+// division that means nothing in this game is not offered there. A
+// game whose teams carry no Flag offers no Divisions, and the page shows no
+// chips.
+export function divisionsOf(flagLists: ReadonlyArray<readonly string[] | undefined>, hidden: readonly string[] = []): string[] {
+  const seen = new Set<string>(hidden);
   const out: string[] = [];
   for (const flags of flagLists) {
     for (const flag of flags || []) {

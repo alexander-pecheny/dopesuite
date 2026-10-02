@@ -35,6 +35,8 @@ interface ODPageGlobals {
 interface FestInfo {
   title?: string;
   gameName?: string;
+  // The divisions this game does not offer (games.hidden_divisions).
+  hiddenDivisions?: string[];
 }
 
 interface EntrySuggestOption {
@@ -188,7 +190,7 @@ onNavigate(() => {
 
 // divisions is every Division this game's teams carry, in first-seen order.
 function divisions(): string[] {
-  return divisionsOf((state?.teams || []).map((team) => team.flags));
+  return divisionsOf((state?.teams || []).map((team) => team.flags), fest?.hiddenDivisions);
 }
 
 // divisionMembers is the team rows the chosen Division takes — what the results

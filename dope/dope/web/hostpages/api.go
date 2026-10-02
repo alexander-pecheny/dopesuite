@@ -18,6 +18,7 @@ import (
 	"dope/dope/domain/roster"
 	"dope/dope/platform/roles"
 	"dope/dope/storage/festaccess"
+	"dope/dope/storage/store"
 	"dope/dope/web/pages"
 	"dope/dope/web/route"
 	dopestrings "dope/i18nstrings"
@@ -373,20 +374,39 @@ type apiGameSettings struct {
 	Title     string `json:"title"`
 	Slug      string `json:"slug"`
 	SchemeDSL string `json:"scheme_dsl"`
+	// Divisions is every division the game's teams offer (read only), and
+	// HiddenDivisions the ones the game does not show.
+	Divisions       []string `json:"divisions"`
+	HiddenDivisions []string `json:"hidden_divisions"`
 }
 
 func (g apiGameSettings) settings() GameSettings {
-	return GameSettings{Title: g.Title, Slug: g.Slug, SchemeDSL: g.SchemeDSL}
+	hidden := append([]string{}, g.HiddenDivisions...)
+	return GameSettings{Title: g.Title, Slug: g.Slug, SchemeDSL: g.SchemeDSL, HiddenDivisions: &hidden}
 }
 
 func (s *Server) loadGameSettings(ctx context.Context, festID, gameID int64) (apiGameSettings, error) {
 	var g apiGameSettings
 	var slug sql.NullString
+	var hidden string
 	err := s.h.Engine().DB.QueryRowContext(ctx, `
-select id, code, title, game_type, slug, coalesce(scheme_dsl, '') from games where id = ? and fest_id = ?`, gameID, festID).
-		Scan(&g.ID, &g.Code, &g.Title, &g.Type, &slug, &g.SchemeDSL)
+select id, code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_divisions, '') from games where id = ? and fest_id = ?`, gameID, festID).
+		Scan(&g.ID, &g.Code, &g.Title, &g.Type, &slug, &g.SchemeDSL, &hidden)
+	if err != nil {
+		return g, err
+	}
 	g.Slug = slug.String
-	return g, err
+	g.HiddenDivisions = store.ParseHiddenDivisions(hidden)
+	if g.HiddenDivisions == nil {
+		g.HiddenDivisions = []string{}
+	}
+	g.Divisions = []string{}
+	if divisionsGame(g.Type) {
+		if g.Divisions, err = festDivisions(ctx, s.h.Engine().DB, festID); err != nil {
+			return g, err
+		}
+	}
+	return g, nil
 }
 
 func (s *Server) apiGameSettings(w http.ResponseWriter, r *http.Request, sc route.Scope) error {

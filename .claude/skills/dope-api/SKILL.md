@@ -65,7 +65,7 @@ in the game has a number.
 |---|---|
 | `GET …/entrants` A | whom a game may seat: `id` for `entrants`, `ref` for `entrant_refs` (a rating player not seated anywhere yet has only a ref) |
 | `POST …/games` A | `{game_type, entrants?, …}`, see below → the game |
-| `GET\|PATCH …/games/<game>/settings` A | `{title, slug, scheme_dsl}`; `scheme_dsl` only for brain |
+| `GET\|PATCH …/games/<game>/settings` A | `{title, slug, scheme_dsl, hidden_divisions}`; `scheme_dsl` only for brain; `hidden_divisions` lists the зачёты (Flag short names) the game does not offer, out of the read-only `divisions` its teams carry (ОД, КСИ, Мультиигры) |
 | `POST …/games/<game>/clear` A | back to just-created, keeps the id and the URLs |
 | `DELETE …/games/<game>` A | |
 | `GET …/games/<game>/journal` A | history, newest first; each entry has `revert_to` |

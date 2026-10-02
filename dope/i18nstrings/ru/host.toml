@@ -4,6 +4,10 @@
 # profile and public viewer pages ([pages]).
 
 [games]
+# The game settings page's зачёты field: one box per Flag the fest's teams
+# carry. A ticked one is a зачёт this game's results can be looked at in.
+divisions_label = "Зачёты"
+divisions_hint = "Отмеченные зачёты можно выбрать на страницах этой игры. Снимите отметку с зачёта, который в этой игре не нужен."
 # A troika in the new game's entrant picker, set apart from the teams.
 entrant_troika = '{{.name}} · тройка'
 # The create-game form (hostGameCreateDoc) and the game settings page

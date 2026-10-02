@@ -128,3 +128,8 @@ test("the badges hang off a team name; a team with no зачёт adds no node", 
   const plain = walk(resultsTeamCell("Команда", {city: "Ереван"}));
   assert.equal(plain.filter((n) => n.className.includes("u-row")).length, 0);
 });
+
+test("divisionsOf leaves out the зачёты the game hides", () => {
+  assert.deepEqual(divisions.divisionsOf([["ЧР", "Студ"], ["ЧР"]], ["ЧР"]), ["Студ"]);
+  assert.deepEqual(divisions.divisionsOf([["ЧР"]], ["ЧР"]), []);
+});

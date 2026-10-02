@@ -34,6 +34,8 @@ const pageWindow = window as Window & PageGlobals;
 interface FestInfo {
   title?: string;
   gameName?: string;
+  // The divisions this game does not offer (games.hidden_divisions).
+  hiddenDivisions?: string[];
   [key: string]: unknown;
 }
 
@@ -106,7 +108,7 @@ onNavigate(() => {
 // divisions is every Division this game's teams carry, in first-seen order.
 function divisions(): string[] {
   if (!state) return [];
-  return divisionsOf(state.participants.map((_, index) => multi.participantFlags(state!, index)));
+  return divisionsOf(state.participants.map((_, index) => multi.participantFlags(state!, index)), fest?.hiddenDivisions);
 }
 
 // divisionMembers is the rows the chosen Division takes; undefined for «All».
