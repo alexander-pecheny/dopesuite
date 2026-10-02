@@ -796,9 +796,17 @@ update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?,
 					}
 					continue
 				}
+				// A team-blob бой keys its marks by Participant, and its Protocol calls
+				// it unstarted until it is finished. Its marks stay through the reseat:
+				// those of an entrant still seated show again, the others wait unseen.
+				// A late entrant added to a written qualifier mid-entry used to wipe it.
+				state := emptyState
+				if store.TeamBlobShaped(gameType) {
+					state = existing.State
+				}
 				if _, err := tx.ExecContext(ctx, `
 update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ?, participant_count = ?, status = 'active', state_json = ? where id = ?`,
-					stageID, match.Title, match.Letter, matchIndex+1, match.BlockRound, match.Wave, len(match.Slots), emptyState, existing.ID); err != nil {
+					stageID, match.Title, match.Letter, matchIndex+1, match.BlockRound, match.Wave, len(match.Slots), state, existing.ID); err != nil {
 					return err
 				}
 				if _, err := tx.ExecContext(ctx, `delete from match_slots where match_id = ?`, existing.ID); err != nil {

@@ -16,6 +16,7 @@ import (
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/roster"
+	"dope/dope/storage/store"
 
 	"github.com/xuri/excelize/v2"
 	corei18n "pecheny.me/dopecore/i18nstrings"
@@ -525,6 +526,59 @@ func TestPersonalSIListSeatsPlayers(t *testing.T) {
 	var left int
 	if err := db.QueryRow(`select count(*) from participants where id = ?`, guest.TeamID).Scan(&left); err != nil || left != 0 {
 		t.Fatalf("the dropped one-off's Participant stayed: %d, %v", left, err)
+	}
+}
+
+// A late entrant added to a written qualifier that is already being entered
+// gets a seat, and the marks entered so far stay. Octobearfest 2026 lost the
+// Своячок qualifier twice this way: an EK-shaped бой reports itself unstarted,
+// so the rebuild for the new entrant wrote it a fresh, empty state.
+func TestLateEntrantKeepsTheMarksOfAnUnfinishedBout(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	eng := srv.Eng()
+	ctx := t.Context()
+	seedFestPlayers(t, db, festID, 4)
+	gameID := createSchemeGame(t, db, festID, "si", "Своячок", "[scheme]\nkind: flat\nthemes: 2\n")
+	scope := core.FestScope{FestID: festID, GameID: gameID}
+	mustEntrants(t)(entrants.Import(eng, ctx, scope, entrants.Source{Kind: entrants.SourceFest}, nil))
+
+	var matchID, first int64
+	if err := db.QueryRow(`
+select ms.match_id, ms.participant_id from match_slots ms join matches m on m.id = ms.match_id
+where m.game_id = ? and ms.participant_id is not null order by ms.slot_index limit 1`, gameID).Scan(&matchID, &first); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.MutateMatchBlobTx(ctx, tx, matchID, func(blob *store.MatchBlob) error {
+		blob.EnsureTheme(first, "regular", 0)
+		blob.SetAnswer(first, "regular", 0, 1, "right")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	view := mustEntrants(t)(entrants.Add(eng, ctx, scope, entrants.AddRequest{Name: "Гость Издалека"}))
+	if guest := rowByName(t, view, "Гость Издалека"); guest.Waitlist {
+		t.Fatalf("the late entrant waits instead of taking a seat: %+v", view.Rows)
+	}
+	var seats int
+	var state string
+	if err := db.QueryRow(`select participant_count, state_json from matches where id = ?`, matchID).Scan(&seats, &state); err != nil {
+		t.Fatalf("the бой is gone after the add: %v", err)
+	}
+	if seats != 5 {
+		t.Fatalf("the бой seats %d, want 5", seats)
+	}
+	if !strings.Contains(state, `"right"`) {
+		t.Fatalf("the marks entered before the add are lost: %s", state)
 	}
 }
 
