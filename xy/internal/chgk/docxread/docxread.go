@@ -103,12 +103,15 @@ func ToText(docx []byte, opts Options) (string, []Image, error) {
 		listCounters: map[[2]string]int{},
 		imgCounters:  map[string]int{},
 	}
-	txt := c.convert(body)
+	return Tidy(c.convert(body)), c.images, nil
+}
 
-	// docx_to_text's common tail. The "\\-"/"\\." replacements are pandoc
-	// leftovers, kept because they run for every engine. They are applied one
-	// full pass at a time, as in Python — a single simultaneous pass would not
-	// be identical.
+// Tidy is docx_to_text's common tail, which every engine's plain text goes
+// through: docread's .doc text as well as this package's.
+func Tidy(txt string) string {
+	// The "\\-"/"\\." replacements are pandoc leftovers, kept because they
+	// run for every engine. They are applied one full pass at a time, as in
+	// Python — a single simultaneous pass would not be identical.
 	for _, rep := range [...][2]string{
 		{"\\-", ""}, {"\\.", "."},
 		{"( ", "("}, {"[ ", "["}, {" )", ")"}, {" ]", "]"}, {" :", ":"},
@@ -117,7 +120,7 @@ func ToText(docx []byte, opts Options) (string, []Image, error) {
 		txt = strings.ReplaceAll(txt, rep[0], rep[1])
 	}
 	txt = reBadItalic.ReplaceAllString(txt, "") // fix bad italic from Word
-	return normalizeDocxSpacing(txt), c.images, nil
+	return normalizeDocxSpacing(txt)
 }
 
 var reBadItalic = regexp.MustCompile(`_ +_`)

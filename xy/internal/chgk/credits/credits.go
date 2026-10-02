@@ -30,6 +30,7 @@ import (
 	"github.com/pemistahl/lingua-go"
 
 	"xy/internal/chgk/chgkimport"
+	"xy/internal/chgk/docread"
 	"xy/internal/chgk/fsource"
 )
 
@@ -93,14 +94,14 @@ type Options struct {
 const maxInflated = 150 << 20
 
 // Read extracts the credits of one uploaded file. The name's extension picks the
-// format: .docx, .4s, .pdf, or a .zip holding any number of those (images and
+// format: .docx, .doc, .4s, .pdf, or a .zip holding any number of those (images and
 // everything else in an archive are ignored). A zip member that can't be
 // unpacked or parsed is skipped; an error means nothing at all could be read.
 func Read(name string, data []byte, opt Options) (*Credits, error) {
 	switch strings.ToLower(path.Ext(name)) {
 	case ".zip":
 		return readZip(data, opt)
-	case ".docx", ".4s", ".pdf":
+	case ".docx", ".doc", ".4s", ".pdf":
 		f, err := readOne(name, data, opt)
 		if err != nil {
 			return nil, err
@@ -114,7 +115,7 @@ func Read(name string, data []byte, opt Options) (*Credits, error) {
 // before merging.
 type file struct {
 	name       string
-	format     string // docx, 4s or pdf
+	format     string // docx, doc, 4s or pdf
 	language   string // chgksuite's --language code, "" for Russian
 	questions  int
 	tours      []Tour
@@ -136,23 +137,34 @@ func readOne(name string, data []byte, opt Options) (file, error) {
 		return f, nil
 	}
 	var text string
-	if format == "pdf" {
+	switch format {
+	case "pdf":
 		t, err := pdfText(data, opt.PDFToText)
 		if err != nil {
 			return file{}, err
 		}
 		text = unwrap(t)
-	} else {
+	case "doc":
+		t, err := docread.ToText(data)
+		if err != nil {
+			return file{}, err
+		}
+		text = t
+	default:
 		t, err := chgkimport.DocxText(data)
 		if err != nil {
 			return file{}, err
 		}
 		text = t
 	}
+	if isSI(text) {
+		// Not a ЧГК packet: it credits nobody and, in a zip, is not picked.
+		return file{name: name, format: format}, nil
+	}
 	// Field markers differ by language («Вопрос» / «Запитання» / «Пытанне»):
 	// parse in the language the packet is written in.
 	lang := language(text)
-	if format == "pdf" {
+	if format == "pdf" || format == "doc" {
 		source = chgkimport.ParseTextIn(text, lang)
 	} else {
 		res, err := chgkimport.ParseDocxIn(name, data, lang)
@@ -164,6 +176,36 @@ func readOne(name string, data []byte, opt Options) (file, error) {
 	f := dropLeadingWarmup(fromDoc(fsource.Parse(source, "chgk")), opt.Questions)
 	f.name, f.format, f.language = name, format, lang
 	return f, nil
+}
+
+// reNumberedLine is a line opening with a question number.
+var reNumberedLine = regexp.MustCompile(`^\s*(\d{1,3})\s*[.)]`)
+
+// isSI tells a Своя игра file, which tournaments attach beside the packet:
+// themes of five questions numbered by points, 10 to 50. Read as ЧГК, its
+// questions count as the packet's and its theme list as credits. Two whole
+// themes — numbered lines 10, 20, 30, 40, 50 in a row with no other number
+// between them — are enough; a ЧГК packet's 10 is followed by 11.
+func isSI(text string) bool {
+	themes, want := 0, 10
+	for _, line := range strings.Split(text, "\n") {
+		m := reNumberedLine.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		n, _ := strconv.Atoi(m[1])
+		switch {
+		case n == want && n == 50:
+			themes, want = themes+1, 10
+		case n == want:
+			want += 10
+		case n == 10:
+			want = 20
+		default:
+			want = 10
+		}
+	}
+	return themes >= 2
 }
 
 // detector is built once: a model over the languages chgksuite reads.
@@ -214,7 +256,7 @@ func readZip(data []byte, opt Options) (*Credits, error) {
 		base := path.Base(zf.Name)
 		ext := strings.ToLower(path.Ext(base))
 		if zf.FileInfo().IsDir() || strings.HasPrefix(base, ".") || strings.HasPrefix(base, "~$") ||
-			strings.HasPrefix(zf.Name, "__MACOSX/") || (ext != ".docx" && ext != ".4s" && ext != ".pdf") {
+			strings.HasPrefix(zf.Name, "__MACOSX/") || (ext != ".docx" && ext != ".doc" && ext != ".4s" && ext != ".pdf") {
 			continue
 		}
 		body, err := readEntry(zf, &budget)
@@ -236,14 +278,15 @@ func readZip(data []byte, opt Options) (*Credits, error) {
 		files = append(files, f)
 	}
 	if len(files) == 0 {
-		return nil, fmt.Errorf("no packet in the archive: no .docx, .4s or .pdf with questions")
+		return nil, fmt.Errorf("no packet in the archive: no .docx, .doc, .4s or .pdf with questions")
 	}
 	return merge(pick(files, opt.Questions)), nil
 }
 
 // formats is the order formats are trusted in: a docx is the organizer's own
-// file, a 4s is already structured, a PDF is text recovered from a layout.
-var formats = []string{"docx", "4s", "pdf"}
+// file, a doc too but read without its list numbers, a 4s is already
+// structured, a PDF is text recovered from a layout.
+var formats = []string{"docx", "doc", "4s", "pdf"}
 
 // pick chooses which of an archive's files are the packet. Files are grouped by
 // format and language, the most trusted format first and, within it, Russian

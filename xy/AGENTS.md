@@ -255,6 +255,9 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        both test suites read testdata/pass_cases.json
   docxread/            .docx → plain text — a hand-rolled python-docx (zip/OPC, runs,
                        hyperlinks, numbering, tables, image extraction, in memory, no fs)
+  docread/             Word 97–2003 .doc → the same plain text, minus images, list numbers
+                       and formatting: OLE container, FIB, piece table. Only `chgksuite
+                       credits` uses it; doctest/ writes minimal .doc files for tests
   textparse/           parser.py's parsers: plain text → structure. Literal ports, quirks
                        included (see the comments). parse.go is ChgkParser (chgk and brain);
                        si.go + troika.go are SiParser and TroikaParser, which read the

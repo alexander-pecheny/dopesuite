@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"xy/internal/chgk/chgkimport"
+	"xy/internal/chgk/docread/doctest"
 	"xy/internal/chgk/fsource"
 )
 
@@ -89,6 +90,88 @@ func TestBlocksWarmupAuthors(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got.Authors, []Author{{Question: 1, Text: "Иван Иванов (Москва)"}}) {
 		t.Fatalf("authors %+v", got.Authors)
+	}
+}
+
+// An old Word .doc packet is read like a .docx, alone or in a zip, and its
+// question fields stay out as they do for every format.
+func TestDoc(t *testing.T) {
+	doc := doctest.Doc("Кубок чего-то\r\rТур 1\rРедактор — Иван Иванов (Москва)\r" +
+		"Благодарим за тестирование Петра Петрова.\r\r" +
+		"Вопрос 1. СЕКРЕТ-вопрос-1\rОтвет: СЕКРЕТ-ответ-1\rКомментарий: СЕКРЕТ-комментарий-1\rАвтор: Пётр Петров\r\r" +
+		"Тур 2\rРедактор — Анна Аннина\r\r" +
+		"Вопрос 2. СЕКРЕТ-вопрос-2\rОтвет: СЕКРЕТ-ответ-2\r")
+	for name, data := range map[string][]byte{
+		"packet.doc": doc,
+		"packet.zip": zipOf(t, map[string]string{"old/packet.doc": string(doc), "handouts.doc": "not a doc"}),
+	} {
+		got, err := Read(name, data, Options{})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		var labels []string
+		for _, tr := range got.Tours {
+			labels = append(labels, fmt.Sprintf("%s:%d-%d", tr.Label, tr.First, tr.Last))
+		}
+		if want := []string{"Тур 1:1-1", "Тур 2:2-2"}; got.Questions != 2 || !reflect.DeepEqual(labels, want) {
+			t.Fatalf("%s: %d questions, tours %v", name, got.Questions, labels)
+		}
+		var editors []string
+		for _, p := range got.Paragraphs {
+			if p.Editor {
+				editors = append(editors, p.Text)
+			}
+		}
+		if want := []string{"Редактор — Иван Иванов (Москва)", "Редактор — Анна Аннина"}; !reflect.DeepEqual(editors, want) {
+			t.Fatalf("%s: editors %v", name, editors)
+		}
+		if !reflect.DeepEqual(got.Authors, []Author{{Question: 1, Text: "Пётр Петров"}}) {
+			t.Fatalf("%s: authors %+v", name, got.Authors)
+		}
+		if b, _ := json.Marshal(got); strings.Contains(string(b), "СЕКРЕТ") {
+			t.Fatalf("%s: question text leaked: %s", name, b)
+		}
+	}
+}
+
+// A Своя игра file beside the packet (themes of questions numbered 10 to 50)
+// credits nobody and is not picked from a zip; a ЧГК packet numbering its
+// questions straight through 10, 20 … is still read.
+func TestSkipsSI(t *testing.T) {
+	theme := func(name string) string {
+		out := name + "\r"
+		for _, n := range []int{10, 20, 30, 40, 50} {
+			out += fmt.Sprintf("%d. СЕКРЕТ-вопрос\rОтвет: СЕКРЕТ\r", n)
+		}
+		return out
+	}
+	si := doctest.Doc("Командная своя игра\rАвтор всех тем: Анна Аннина\rБлагодарим за тестирование Петра Петрова.\r" + theme("1. Яблочная") + theme("2. Пауки"))
+	got, err := Read("ksi.doc", si, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Questions != 0 || len(got.Paragraphs) != 0 {
+		t.Fatalf("Своя игра read as a packet: %+v", got)
+	}
+	var plain strings.Builder
+	for n := 1; n <= 12; n++ {
+		fmt.Fprintf(&plain, "Вопрос %d. в\rОтвет: о\r", n)
+	}
+	packet := doctest.Doc("Тур 1\rРедактор — Иван Иванов\r" + plain.String())
+	z, err := Read("all.zip", zipOf(t, map[string]string{"ksi.doc": string(si), "packet.doc": string(packet)}), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(z.Sources, []string{"packet.doc"}) {
+		t.Fatalf("sources %v", z.Sources)
+	}
+	var chgk strings.Builder
+	chgk.WriteString("Тур 1\rРедактор — Иван Иванов\r")
+	for n := 1; n <= 60; n++ {
+		fmt.Fprintf(&chgk, "%d. Вопрос\rОтвет: ответ\r", n)
+	}
+	if c, err := Read("p.doc", doctest.Doc(chgk.String()), Options{}); err != nil || c.Questions != 60 {
+		t.Fatalf("numbered ЧГК packet: %v %+v", err, c)
 	}
 }
 

@@ -31,7 +31,7 @@ jobs:
       # Only what the binary is built from; the full xy suite belongs to xy's
       # own releases, and it needs the typst.wasm build this image does without.
       - name: Test
-        run: go -C xy test ./cmd/chgksuite/ ./internal/chgk/credits/ ./internal/chgk/chgkimport/ ./internal/chgk/fsource/ ./internal/chgk/textparse/ ./internal/chgk/docxread/
+        run: go -C xy test ./cmd/chgksuite/ ./internal/chgk/credits/ ./internal/chgk/chgkimport/ ./internal/chgk/fsource/ ./internal/chgk/textparse/ ./internal/chgk/docxread/ ./internal/chgk/docread/...
 
       - name: Build
         run: |
