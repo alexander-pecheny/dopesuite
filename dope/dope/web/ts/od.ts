@@ -2175,7 +2175,9 @@ function nameCell(teamIndex: number): HTMLTableCellElement {
 // which says nothing (ADR-0020).
 function teamBadges(teamIndex: number): string[] | undefined {
   if (activeDivision !== ALL_DIVISIONS) return undefined;
-  return state.teams[teamIndex]?.flags;
+  // A division the game hides is not a fact worth a badge here either.
+  const hidden = fest?.hiddenDivisions || [];
+  return (state.teams[teamIndex]?.flags || []).filter((flag) => !hidden.includes(flag));
 }
 
 function detailedNameHeader(): HTMLElement {

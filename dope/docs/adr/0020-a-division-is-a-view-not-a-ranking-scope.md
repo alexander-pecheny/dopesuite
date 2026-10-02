@@ -48,8 +48,9 @@ where ЧР matters in the ОД and not in the КСИ, that offered a ЧР table 
 wanted. A game now keeps the Flags it does not offer (`games.hidden_divisions`,
 set on its «Свойства» page and through `hidden_divisions` in the settings API).
 It is a list of the hidden ones, so a Flag that appears later is offered by
-default. Hiding only changes what this game's own pages offer to look at: the
-chips, `?division=` and the ОД Экран. The Flag badges stay, a Тройка's
+default. Hiding only changes this game's own pages: the chips, `?division=`,
+the ОД Экран, and the Flag's badge after a team's name there, which in a game
+that ignores the зачёт is noise. A Тройка's
 `[init] division:` still picks who plays, and another game can still seed from
 this one's table kept to a зачёт. When ОД and КСИ get a scheme DSL, it becomes
 the place to write this, and it fills the same column.

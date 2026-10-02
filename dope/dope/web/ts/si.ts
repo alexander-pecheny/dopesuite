@@ -183,7 +183,9 @@ function pickDivision(division: string): void {
 // which says nothing (ADR-0020).
 function teamBadges(index: number): string[] | undefined {
   if (activeDivision !== ALL_DIVISIONS) return undefined;
-  return ksi.participantFlags(state!, index);
+  // A division the game hides is not a fact worth a badge here either.
+  const hidden = fest?.hiddenDivisions || [];
+  return (ksi.participantFlags(state!, index) || []).filter((flag) => !hidden.includes(flag));
 }
 
 window.addEventListener("resize", () => {
