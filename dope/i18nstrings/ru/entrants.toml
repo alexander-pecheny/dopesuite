@@ -55,11 +55,20 @@ down = "Ниже"
 rename = "Переименовать"
 remove = "Убрать из списка"
 remove_confirm = 'Убрать «{{.name}}» из списка участников?'
+# Puts another entrant in this one's place, with its seed and its bouts.
+replace = "Заменить"
+# The field that opens in the row: who plays instead. The placeholder is short
+# to fit the name column; the label names the entrant being replaced.
+replace_placeholder = "Кто играет вместо"
+replace_pick = 'Кто играет вместо «{{.name}}»'
+# How an entrant already in the list shows among the choices: it swaps places.
+# {{.name}} is its name, {{.place}} its place in the list.
+replace_listed = '{{.name}} (место {{.place}} в списке)'
 # The seed field: typing a number moves the entrant there.
 seed_label = 'Место в посеве для «{{.name}}»'
 declined_label = 'Отказ: {{.name}}'
 # Shown on an entrant that sits in a бой that has begun.
-played = "Уже играет: убрать, переименовать или передвинуть нельзя"
+played = "Уже играет: убрать, заменить, переименовать или передвинуть нельзя"
 # The mark of an entrant typed in for this Game alone.
 one_off = "разовый"
 
@@ -72,6 +81,8 @@ submit = "Добавить"
 # The hint under the form.
 hint = "Новый участник встаёт в конец списка. Если свободных мест нет, он ждёт в листе ожидания, пока кто-то не откажется."
 hint_troika = "Новые тройки заводятся на странице «Тройки»."
+# The hint under the table: how to put somebody in another's place.
+replace_hint = "Если участник снялся, нажмите «Заменить» в его строке. Замена займёт его место в посеве и в боях, остальные участники останутся на своих местах. Если отметить отказ, все участники ниже сдвинутся на одно место вверх."
 
 [state]
 # The notes over the table. The Structure follows the list while nothing is
@@ -103,5 +114,6 @@ already_in = '«{{.name}}» уже в списке.'
 name_taken = 'В списке уже есть «{{.name}}».'
 name_missing = "Впишите название."
 one_off_troika = "Тройку нельзя вписать названием: заведите её на странице «Тройки»."
-played = '«{{.name}}» уже играет в этой игре, поэтому его нельзя убрать, переименовать или передвинуть.'
+played = '«{{.name}}» уже играет в этой игре, поэтому его нельзя убрать, заменить, переименовать или передвинуть.'
+replace_self = "Участника нельзя заменить им самим."
 rename_fest = "Переименовать здесь можно только разового участника. Команду феста переименуйте в списке команд феста, тройку на странице «Тройки»."

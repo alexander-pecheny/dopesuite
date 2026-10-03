@@ -677,3 +677,88 @@ func TestImportFromAnotherSourceDropsTheMoves(t *testing.T) {
 		t.Fatalf("read back after the second import: %d dropped (%v), want 0", read.MovesDropped, err)
 	}
 }
+
+// A team pulls out and another plays instead (the Октоберфест Троечка): the
+// replacement takes the seed and the bouts of the one it replaces, and
+// nobody else moves. A decline would move everybody below up a seat.
+func TestReplaceKeepsEverybodyElseInTheirSeats(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	seedFestTeams(t, db, festID, 7)
+	// Four seats, six in the list: two wait.
+	gameID := createSchemeGame(t, db, festID, "brain", "Брейн",
+		"[defaults]\nquestions: 3\n\n[init]\nseed: xlsx\n\n[scheme]\nkind: roundrobin\ngroup_size: 4\n")
+	scope := core.FestScope{FestID: festID, GameID: gameID}
+	eng, ctx := srv.Eng(), t.Context()
+	xlsx := entrants.Source{Kind: entrants.SourceXLSX}
+
+	view := mustEntrants(t)(entrants.Import(eng, ctx, scope, xlsx, sheetOf(t, 1, 2, 3, 4, 5, 6)))
+	seats := func() []int64 {
+		var out []int64
+		for n := 1; n <= 4; n++ {
+			out = append(out, seatOf(t, db, gameID, n))
+		}
+		return out
+	}
+	two, five := rowByName(t, view, "Участник 2"), rowByName(t, view, "Участник 5")
+	if !five.Waitlist {
+		t.Fatalf("Участник 5 is not waiting: %+v", five)
+	}
+	before := seats()
+
+	// The host declined Участник 2 first, which moved 3 and 4 up; replacing
+	// it puts them back where they were.
+	mustEntrants(t)(entrants.Decline(eng, ctx, scope, two.TeamID, true))
+	view = mustEntrants(t)(entrants.Replace(eng, ctx, scope, two.TeamID, entrants.AddRequest{Key: fmt.Sprintf("entrant:%d", five.TeamID)}))
+	want := slices.Clone(before)
+	want[1] = five.TeamID
+	if got := seats(); !slices.Equal(got, want) {
+		t.Fatalf("seats after the swap: %v, want %v", got, want)
+	}
+	if _, sitting := matchOfSeed(t, db, gameID, 2); sitting != five.TeamID {
+		t.Fatalf("seed 2's бой seats %d, want %d", sitting, five.TeamID)
+	}
+	if got := rowNames(view); !slices.Equal(got, []string{"Участник 1", "Участник 5", "Участник 3", "Участник 4", "Участник 2", "Участник 6"}) {
+		t.Fatalf("the list after the swap: %v", got)
+	}
+
+	// A fest team from outside the list takes the row, and the one replaced
+	// leaves the list.
+	var key string
+	for _, candidate := range view.Candidates {
+		if strings.HasPrefix(candidate.Label, "Участник 7") {
+			key = candidate.Key
+		}
+	}
+	if key == "" {
+		t.Fatalf("Участник 7 is not a candidate: %+v", view.Candidates)
+	}
+	three := rowByName(t, view, "Участник 3")
+	view = mustEntrants(t)(entrants.Replace(eng, ctx, scope, three.TeamID, entrants.AddRequest{Key: key}))
+	seven := rowByName(t, view, "Участник 7")
+	want[2] = seven.TeamID
+	if got := seats(); !slices.Equal(got, want) {
+		t.Fatalf("seats after the outside replacement: %v, want %v", got, want)
+	}
+	if slices.Contains(rowNames(view), "Участник 3") {
+		t.Fatalf("Участник 3 is still in the list: %v", rowNames(view))
+	}
+
+	// A re-import from the same source applies the replacements again.
+	view = mustEntrants(t)(entrants.Import(eng, ctx, scope, xlsx, sheetOf(t, 1, 2, 3, 4, 5, 6)))
+	if got := seats(); !slices.Equal(got, want) {
+		t.Fatalf("seats after the re-import: %v, want %v (list %v)", got, want, rowNames(view))
+	}
+
+	// Nobody replaces themselves, and nobody replaces an entrant whose бой has begun.
+	_, err := entrants.Replace(eng, ctx, scope, seven.TeamID, entrants.AddRequest{Key: fmt.Sprintf("entrant:%d", seven.TeamID)})
+	refused(t, err, "самим")
+	matchID, _ := matchOfSeed(t, db, gameID, 1)
+	if _, err := db.Exec(`update matches set status = 'finished' where id = ?`, matchID); err != nil {
+		t.Fatal(err)
+	}
+	one := rowByName(t, view, "Участник 1")
+	_, err = entrants.Replace(eng, ctx, scope, one.TeamID, entrants.AddRequest{Key: fmt.Sprintf("entrant:%d", two.TeamID)})
+	refused(t, err, "Участник 1")
+}

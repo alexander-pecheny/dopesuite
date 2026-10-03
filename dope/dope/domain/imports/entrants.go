@@ -96,12 +96,15 @@ func (l List) clone() ListState {
 }
 
 // Edit is the list after a hand edit: its rows as given, marked Edited, with
-// the edit logged so a re-import can apply it again (ADR-0025).
-func (l List) Edit(rows []ListRow, edit ListEdit) List {
+// the edits that make it logged so a re-import can apply them again
+// (ADR-0025).
+func (l List) Edit(rows []ListRow, edits ...ListEdit) List {
 	state := l.clone()
 	state.Rows = rows
 	state.Edited = true
-	state.Edits = logListEdit(state.Edits, edit)
+	for _, edit := range edits {
+		state.Edits = logListEdit(state.Edits, edit)
+	}
 	return l.with(state)
 }
 

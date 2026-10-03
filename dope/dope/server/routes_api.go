@@ -632,11 +632,12 @@ func (s *server) scopedEntrantAdd(w http.ResponseWriter, r *http.Request, sc rou
 }
 
 // entrantEdit is one change to an entrant: a new place in the list, a decline
-// set or taken back, or a one-off's new name.
+// set or taken back, a one-off's new name, or another entrant in its place.
 type entrantEdit struct {
-	Position *int    `json:"position,omitempty"`
-	Declined *bool   `json:"declined,omitempty"`
-	Name     *string `json:"name,omitempty"`
+	Position    *int                 `json:"position,omitempty"`
+	Declined    *bool                `json:"declined,omitempty"`
+	Name        *string              `json:"name,omitempty"`
+	ReplaceWith *entrants.AddRequest `json:"replaceWith,omitempty"`
 }
 
 func (s *server) scopedEntrantEdit(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
@@ -656,6 +657,8 @@ func (s *server) scopedEntrantEdit(w http.ResponseWriter, r *http.Request, sc ro
 		result, err = entrants.Decline(&s.eng, r.Context(), sc.Fest(), participantID, *req.Declined)
 	case req.Name != nil:
 		result, err = entrants.Rename(&s.eng, r.Context(), sc.Fest(), participantID, *req.Name)
+	case req.ReplaceWith != nil:
+		result, err = entrants.Replace(&s.eng, r.Context(), sc.Fest(), participantID, *req.ReplaceWith)
 	default:
 		return route.BadRequest("nothing to change")
 	}

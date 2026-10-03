@@ -269,7 +269,10 @@ var RU = Strings{
 			},
 			Pick:       func() string { return "Выберите из феста или впишите название" },
 			PickTroika: func() string { return "Выберите тройку" },
-			Submit:     func() string { return "Добавить" },
+			ReplaceHint: func() string {
+				return "Если участник снялся, нажмите «Заменить» в его строке. Замена займёт его место в посеве и в боях, остальные участники останутся на своих местах. Если отметить отказ, все участники ниже сдвинутся на одно место вверх."
+			},
+			Submit: func() string { return "Добавить" },
 		},
 		Error: EntrantsErrorStrings{
 			AlreadyIn:   func(name string) string { return fmt.Sprintf("«%s» уже в списке.", name) },
@@ -282,11 +285,12 @@ var RU = Strings{
 				return "Выберите участника из списка или впишите название."
 			},
 			Played: func(name string) string {
-				return fmt.Sprintf("«%s» уже играет в этой игре, поэтому его нельзя убрать, переименовать или передвинуть.", name)
+				return fmt.Sprintf("«%s» уже играет в этой игре, поэтому его нельзя убрать, заменить, переименовать или передвинуть.", name)
 			},
 			RenameFest: func() string {
 				return "Переименовать здесь можно только разового участника. Команду феста переименуйте в списке команд феста, тройку на странице «Тройки»."
 			},
+			ReplaceSelf:   func() string { return "Участника нельзя заменить им самим." },
 			SourceMissing: func() string { return "Выберите, откуда взять список." },
 		},
 		Filter: EntrantsFilterStrings{
@@ -316,16 +320,22 @@ var RU = Strings{
 			Down:          func() string { return "Ниже" },
 			OneOff:        func() string { return "разовый" },
 			Played: func() string {
-				return "Уже играет: убрать, переименовать или передвинуть нельзя"
+				return "Уже играет: убрать, заменить, переименовать или передвинуть нельзя"
 			},
 			Remove: func() string { return "Убрать из списка" },
 			RemoveConfirm: func(name string) string {
 				return fmt.Sprintf("Убрать «%s» из списка участников?", name)
 			},
-			Rename:    func() string { return "Переименовать" },
-			SeedLabel: func(name string) string { return fmt.Sprintf("Место в посеве для «%s»", name) },
-			Up:        func() string { return "Выше" },
-			Waitlist:  func() string { return "Лист ожидания" },
+			Rename:  func() string { return "Переименовать" },
+			Replace: func() string { return "Заменить" },
+			ReplaceListed: func(name string, place string) string {
+				return fmt.Sprintf("%s (место %s в списке)", name, place)
+			},
+			ReplacePick:        func(name string) string { return fmt.Sprintf("Кто играет вместо «%s»", name) },
+			ReplacePlaceholder: func() string { return "Кто играет вместо" },
+			SeedLabel:          func(name string) string { return fmt.Sprintf("Место в посеве для «%s»", name) },
+			Up:                 func() string { return "Выше" },
+			Waitlist:           func() string { return "Лист ожидания" },
 		},
 		Source: EntrantsSourceStrings{
 			FestPlayers: func() string { return "Все игроки феста" },

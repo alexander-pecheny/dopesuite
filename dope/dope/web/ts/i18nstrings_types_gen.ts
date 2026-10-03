@@ -220,6 +220,7 @@ export type Strings = {
       hintTroika: () => string;
       pick: () => string;
       pickTroika: () => string;
+      replaceHint: () => string;
       submit: () => string;
     };
     error: {
@@ -230,6 +231,7 @@ export type Strings = {
       pickSomebody: () => string;
       played: (name: string) => string;
       renameFest: () => string;
+      replaceSelf: () => string;
       sourceMissing: () => string;
     };
     filter: {
@@ -258,6 +260,10 @@ export type Strings = {
       remove: () => string;
       removeConfirm: (name: string) => string;
       rename: () => string;
+      replace: () => string;
+      replaceListed: (name: string, place: string) => string;
+      replacePick: (name: string) => string;
+      replacePlaceholder: () => string;
       seedLabel: (name: string) => string;
       up: () => string;
       waitlist: () => string;

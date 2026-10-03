@@ -741,6 +741,83 @@ func Move(h Host, ctx context.Context, scope core.FestScope, participantID int64
 	}, nil)
 }
 
+// Replace puts another entrant in an entrant's place: it takes that place in
+// the list, and with it the seed number and every seat nobody has started,
+// so nobody else moves. That is what a host wants when a team pulls out and
+// another plays instead, where a decline would move everybody below up a
+// seat. One already in the list swaps places with the entrant it replaces,
+// so one on the waiting list simply changes places with it; one from outside
+// takes its row, and the entrant replaced leaves the list. Refused when
+// either of them already sits in a bout that has begun.
+func Replace(h Host, ctx context.Context, scope core.FestScope, participantID int64, req AddRequest) (Result, error) {
+	var oneOff bool
+	return edit(h, ctx, scope, "replace", func(ctx context.Context, tx *sql.Tx, list imports.List) (imports.List, error) {
+		i, err := rowOf(list, participantID)
+		if err != nil {
+			return imports.List{}, err
+		}
+		out := list.State.Rows[i]
+		if err := played(ctx, tx, scope, list.GameType, participantID, out.Name); err != nil {
+			return imports.List{}, err
+		}
+		id, name, city, err := replacementFor(ctx, tx, scope, list, req)
+		if err != nil {
+			return imports.List{}, err
+		}
+		if id == participantID {
+			return imports.List{}, corei18n.User(dopestrings.Default.Entrants.Error.ReplaceSelf())
+		}
+		rows := slices.Clone(list.State.Rows)
+		if j := list.Index(id); j >= 0 {
+			if err := played(ctx, tx, scope, list.GameType, id, rows[j].Name); err != nil {
+				return imports.List{}, err
+			}
+			// The two swap places. Each keeps its own decline, except that the
+			// one coming in plays: that is why it was picked.
+			rows[i], rows[j] = rows[j], rows[i]
+			rows[i].Declined = false
+			return list.Edit(rows,
+				imports.ListEdit{Op: imports.ListEditMove, TeamID: id, Position: i + 1},
+				imports.ListEdit{Op: imports.ListEditMove, TeamID: participantID, Position: j + 1}), nil
+		}
+		if err := tx.QueryRowContext(ctx, `
+select game_id is not null from participants where id = ?`, participantID).Scan(&oneOff); err != nil {
+			return imports.List{}, err
+		}
+		rows[i] = imports.ListRow{TeamID: id, Name: name, City: city}
+		return list.Edit(rows,
+			imports.ListEdit{Op: imports.ListEditAdd, TeamID: id, Name: name, City: city},
+			imports.ListEdit{Op: imports.ListEditMove, TeamID: id, Position: i + 1},
+			imports.ListEdit{Op: imports.ListEditRemove, TeamID: participantID}), nil
+	}, func(ctx context.Context, tx *sql.Tx) error {
+		// A one-off replaced from outside the list goes, as a removed one does.
+		if !oneOff {
+			return nil
+		}
+		_, err := tx.ExecContext(ctx, `
+delete from participants where id = ? and game_id = ?
+  and not exists (select 1 from match_slots where participant_id = ?)`, participantID, scope.GameID, participantID)
+		return err
+	})
+}
+
+// replacementFor is the entrant a replace request names: one of the list by
+// its key (entrant:<id>), or anybody an add could bring in.
+func replacementFor(ctx context.Context, tx *sql.Tx, scope core.FestScope, list imports.List, req AddRequest) (int64, string, string, error) {
+	if raw, ok := strings.CutPrefix(req.Key, keyEntrant+":"); ok {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || list.Index(id) < 0 {
+			return 0, "", "", corei18n.User(dopestrings.Default.Entrants.Error.PickSomebody())
+		}
+		row := list.State.Rows[list.Index(id)]
+		return id, row.Name, row.City, nil
+	}
+	return participantFor(ctx, tx, scope, list, req)
+}
+
+// keyEntrant is the key kind of an entrant already in the list.
+const keyEntrant = "entrant"
+
 // Rename changes a one-off entrant's name — a fest team is renamed on the
 // fest's roster page, a troika on the troikas page — and is refused once it
 // has results here.

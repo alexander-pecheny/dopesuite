@@ -93,6 +93,8 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
   let notice = "";
   let noticeError = false;
   let renaming = 0;
+  // The entrant whose row asks who plays instead.
+  let replacing = 0;
   // What the host picked, until an import settles it.
   let picked: EntrantSource | null = null;
   // The Game the view was read for.
@@ -177,7 +179,7 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
       nodes.push(hint(notice, noticeError));
     }
     root.replaceChildren(...nodes);
-    root.querySelector<HTMLInputElement>("[data-entrant-rename]")?.focus();
+    root.querySelector<HTMLInputElement>("[data-entrant-rename], [data-entrant-replace]")?.focus();
     options.onRender?.();
   }
 
@@ -363,6 +365,8 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
 
     if (renaming === row.teamID) {
       tr.appendChild(td(renameField(row)));
+    } else if (replacing === row.teamID) {
+      tr.appendChild(td(replaceField(rows, row)));
     } else {
       tr.appendChild(resultsTeamCell(name, {city: row.city, badges: row.oneOff ? [S.entrants.row.oneOff()] : undefined}));
     }
@@ -390,6 +394,11 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
         render();
       }));
     }
+    actions.appendChild(actionButton("replace", S.entrants.row.replace(), fixed, () => {
+      replacing = row.teamID;
+      renaming = 0;
+      render();
+    }));
     actions.appendChild(actionButton("trash-2", S.entrants.row.remove(), fixed, () => {
       if (!window.confirm(S.entrants.row.removeConfirm(name))) return;
       void send(entrantURL(row.teamID), "DELETE");
@@ -422,6 +431,69 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
     });
     input.addEventListener("blur", () => finish(true));
     return input;
+  }
+
+  // replaceField asks who plays instead of an entrant: a fest team (troika,
+  // player) from outside the list, an entrant of the list, who swaps places
+  // with it, or, where the format allows, a one-off name. Enter sends it,
+  // Escape or leaving the field empty keeps the row as it was.
+  function replaceField(rows: EntrantRow[], row: EntrantRow): HTMLElement {
+    const choices = new Map<string, string>();
+    for (const candidate of view?.candidates || []) choices.set(candidate.label, candidate.key);
+    rows.forEach((other, index) => {
+      if (other.teamID === row.teamID || other.played) return;
+      choices.set(S.entrants.row.replaceListed(other.name || "", String(index + 1)), `entrant:${other.teamID}`);
+    });
+    const listID = "entrant-replace-choices";
+    const list = document.createElement("datalist");
+    list.id = listID;
+    for (const label of choices.keys()) {
+      const option = document.createElement("option");
+      option.value = label;
+      list.appendChild(option);
+    }
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "input";
+    input.setAttribute("list", listID);
+    input.placeholder = S.entrants.row.replacePlaceholder();
+    input.setAttribute("aria-label", S.entrants.row.replacePick(row.name || ""));
+    input.dataset.entrantReplace = "";
+    let done = false;
+    const finish = (save: boolean) => {
+      if (done) return;
+      const typed = input.value.trim();
+      if (save && typed) {
+        const key = choices.get(typed);
+        if (!key && !view?.oneOffs) {
+          setNotice(S.entrants.error.pickSomebody(), true);
+          done = true;
+          replacing = 0;
+          render();
+          return;
+        }
+        done = true;
+        replacing = 0;
+        void send(entrantURL(row.teamID), "PATCH", {replaceWith: key ? {key} : {name: typed}});
+        return;
+      }
+      done = true;
+      replacing = 0;
+      render();
+    };
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") finish(true);
+      else if (event.key === "Escape") finish(false);
+    });
+    // Picking from the list is the choice itself: no Enter needed.
+    input.addEventListener("change", () => {
+      if (choices.has(input.value.trim())) finish(true);
+    });
+    input.addEventListener("blur", () => finish(false));
+    const wrap = document.createElement("span");
+    wrap.className = "u-row u-gap-xs u-align-center";
+    wrap.append(list, input);
+    return wrap;
   }
 
   function actionButton(name: IconName, label: string, disabled: boolean, onClick: () => void): HTMLButtonElement {
@@ -486,6 +558,7 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
     });
     wrap.appendChild(form);
     wrap.appendChild(hint(troika ? S.entrants.add.hintTroika() : S.entrants.add.hint()));
+    if ((current.rows || []).length) wrap.appendChild(hint(S.entrants.add.replaceHint()));
     return wrap;
   }
 
@@ -496,6 +569,7 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
           view = null;
           picked = null;
           renaming = 0;
+          replacing = 0;
           setNotice("");
           root.replaceChildren();
         }
