@@ -8,13 +8,18 @@ page title=@page.group.title kind="wide" scripts="dist/group.js"
     iconbtn id="settingsBtn" icon="settings" label=@page.group.settings
 
   -- Balances and the Debt graph come first: at the table, "what do I owe" is
-  -- the whole question, and the feed is the evidence for the answer.
+  -- the whole question, and the feed is the evidence for the answer. The two
+  -- sit side by side, balances on the left and who pays whom on the right, and
+  -- stack on a phone.
   section
-    subhead @page.group.balances
-    mount id="balances" kind="group-balances"
-    subhead @page.group.debts
-    mount id="transfers" kind="group-transfers"
-    empty id="settledNote" hidden @page.group.settled
+    mount kind="group-summary"
+      col gap="sm"
+        subhead @page.group.balances
+        mount id="balances" kind="group-balances"
+      col gap="sm"
+        subhead @page.group.debts
+        mount id="transfers" kind="group-transfers"
+        empty id="settledNote" hidden @page.group.settled
     hint id="ratesNote" hidden @page.group.no_rates
     row gap="sm" wrap
       button kind="primary" id="addBtn" icon="plus" @page.group.add

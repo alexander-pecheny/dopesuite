@@ -140,12 +140,18 @@ export type Strings = {
       edited: () => string;
       fieldDay: (before: string, after: string) => string;
       fieldDescription: (before: string, after: string) => string;
+      fieldPaid: (name: string, before: string, after: string) => string;
+      fieldShare: (name: string, before: string, after: string) => string;
       fieldTotal: (before: string, after: string) => string;
       fieldUnclaimed: (before: string, after: string) => string;
+      nothing: () => string;
+      paidBy: (list: string) => string;
       photoAdded: () => string;
       photoRemoved: () => string;
       restored: () => string;
+      sharesOf: (list: string) => string;
       somebody: () => string;
+      total: (amount: string) => string;
     };
     index: {
       createSubmit: () => string;

@@ -24,6 +24,31 @@
   white-space: nowrap;
 }
 
+/* The Group's two summaries, Balances and Who pays whom, as two equal halves.
+   The basis is what decides when they stack: two 17rem halves and the gap fit
+   the 44rem reading measure, and a phone has room for one. */
+.summary-pair > * {
+  flex: 1 1 17rem;
+  min-width: 0;
+}
+
+/* A summary row is a figure to glance at, not a card to read, so it is set a
+   size down with tighter padding. Six people then take half the height. */
+.summary-list {
+  gap: var(--space-1);
+}
+
+.summary-list > .list-row {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+}
+
+/* When a History entry happened. The lines beside it may run long, and the
+   time is the part that must stay on one line. */
+.history-stamp {
+  white-space: nowrap;
+}
+
 /* One line of the Transaction editor's two tables: who, in what, how much, and
    the × that takes the line away. It is the kit's .card laid out with the kit's
    row utilities, and its cells are the kit's controls — the select takes

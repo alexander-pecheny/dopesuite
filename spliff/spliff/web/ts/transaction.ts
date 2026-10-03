@@ -18,6 +18,7 @@ import {
 import { icon } from "../../../../dopeuikit/assets/ts/icons_gen.js";
 import { bindCurrency, bindCurrencyCell } from "./currency-field";
 import { byId, clear, el, group as rowGroup, maybe, setText, show, stamp } from "./dom";
+import { describeHistory, historyVerb } from "./history";
 import { formatMinor, parseAmount } from "./money";
 import {
   buildDraft,
@@ -516,90 +517,19 @@ async function removePhoto(id: number): Promise<void> {
 
 function renderHistory(entries: HistoryDTO[]): void {
   clear(historyList);
+  const names = new Map(members.map((m) => [m.id, m.name]));
   for (const entry of entries) {
     const row = el("li", "list-row");
-    const left = rowGroup(true);
-    left.append(el("span", "list-row-title split-name", entry.actor || S.page.history.somebody()));
-    left.append(el("span", "muted", historyVerb(entry.kind)));
-    // What changed, when there is something to say: the two JSON snapshots
-    // History keeps, read as the fields that differ.
-    const diff = describe(entry);
-    if (diff) left.append(el("span", "muted", diff));
-    row.append(left, el("span", "muted", stamp(entry.at)));
+    const body = el("span", "u-col u-gap-xs u-grow");
+    const head = rowGroup();
+    head.append(el("span", "list-row-title split-name", entry.actor || S.page.history.somebody()));
+    head.append(el("span", "muted", historyVerb(entry.kind)));
+    body.append(head);
+    // What changed, one line per thing: the two JSON snapshots History keeps,
+    // read as the fields and the people whose amounts differ.
+    for (const line of describeHistory(entry, names)) body.append(el("span", "muted", line));
+    row.append(body, el("span", "muted history-stamp", stamp(entry.at)));
     historyList.append(row);
-  }
-}
-
-function historyVerb(kind: string): string {
-  switch (kind) {
-    case "created":
-      return S.page.history.created();
-    case "edited":
-      return S.page.history.edited();
-    case "deleted":
-      return S.page.history.deleted();
-    case "restored":
-      return S.page.history.restored();
-    case "photo_added":
-      return S.page.history.photoAdded();
-    case "photo_removed":
-      return S.page.history.photoRemoved();
-    default:
-      return kind;
-  }
-}
-
-interface Snapshot {
-  description: string;
-  day: string;
-  currency: string;
-  total_minor: number;
-  shares: Array<{ member_id: number; minor: number }>;
-}
-
-// describe says what changed, in the words of the fields that changed. It reads
-// the two JSON snapshots History keeps rather than a schema of its own, so a
-// field added to a Transaction shows up here the moment it is stored.
-function describe(entry: HistoryDTO): string {
-  const before = parse(entry.before);
-  const after = parse(entry.after);
-  if (!before || !after) return "";
-  const parts: string[] = [];
-  if (before.description !== after.description) {
-    parts.push(S.page.history.fieldDescription(before.description, after.description));
-  }
-  if (before.day !== after.day) parts.push(S.page.history.fieldDay(before.day, after.day));
-  if (before.total_minor !== after.total_minor || before.currency !== after.currency) {
-    parts.push(S.page.history.fieldTotal(
-      `${formatMinor(before.total_minor, before.currency)} ${before.currency}`,
-      `${formatMinor(after.total_minor, after.currency)} ${after.currency}`,
-    ));
-  }
-  // A Claim changes no field a person typed into the header — it changes what
-  // is left for the others, which is the number they came to see.
-  const was = left(before);
-  const now = left(after);
-  if (was !== now) {
-    parts.push(S.page.history.fieldUnclaimed(
-      `${formatMinor(was, before.currency)} ${before.currency}`,
-      `${formatMinor(now, after.currency)} ${after.currency}`,
-    ));
-  }
-  return parts.join("; ");
-}
-
-function left(snapshot: Snapshot): number {
-  const claimed = (snapshot.shares ?? []).reduce(
-    (sum, e) => sum + (Number.isFinite(e?.minor) ? e.minor : 0), 0);
-  return Math.max(0, snapshot.total_minor - claimed);
-}
-
-function parse(raw: string): Snapshot | null {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as Snapshot;
-  } catch {
-    return null;
   }
 }
 

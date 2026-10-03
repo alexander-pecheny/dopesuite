@@ -161,12 +161,22 @@ var EN = Strings{
 			Edited:           func() string { return "changed it" },
 			FieldDay:         func(before string, after string) string { return fmt.Sprintf("date: %s → %s", before, after) },
 			FieldDescription: func(before string, after string) string { return fmt.Sprintf("what for: %s → %s", before, after) },
-			FieldTotal:       func(before string, after string) string { return fmt.Sprintf("total: %s → %s", before, after) },
-			FieldUnclaimed:   func(before string, after string) string { return fmt.Sprintf("unclaimed: %s → %s", before, after) },
-			PhotoAdded:       func() string { return "attached a photo" },
-			PhotoRemoved:     func() string { return "removed a photo" },
-			Restored:         func() string { return "restored it" },
-			Somebody:         func() string { return "Somebody" },
+			FieldPaid: func(name string, before string, after string) string {
+				return fmt.Sprintf("%s paid: %s → %s", name, before, after)
+			},
+			FieldShare: func(name string, before string, after string) string {
+				return fmt.Sprintf("%s's share: %s → %s", name, before, after)
+			},
+			FieldTotal:     func(before string, after string) string { return fmt.Sprintf("total: %s → %s", before, after) },
+			FieldUnclaimed: func(before string, after string) string { return fmt.Sprintf("unclaimed: %s → %s", before, after) },
+			Nothing:        func() string { return "nothing" },
+			PaidBy:         func(list string) string { return fmt.Sprintf("paid: %s", list) },
+			PhotoAdded:     func() string { return "attached a photo" },
+			PhotoRemoved:   func() string { return "removed a photo" },
+			Restored:       func() string { return "restored it" },
+			SharesOf:       func(list string) string { return fmt.Sprintf("for: %s", list) },
+			Somebody:       func() string { return "Somebody" },
+			Total:          func(amount string) string { return fmt.Sprintf("total %s", amount) },
 		},
 		Index: PageIndexStrings{
 			CreateSubmit:    func() string { return "Create" },

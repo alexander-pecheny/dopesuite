@@ -13,6 +13,7 @@ import {
   type TransactionDTO,
 } from "./api";
 import { bindCurrency } from "./currency-field";
+import { describeHistory, historyVerb } from "./history";
 import { amountNode, amountPlain, badge, byId, clear, el, group as rowGroup, maybe, setText, show, stamp } from "./dom";
 
 const groupID = Number(window.location.pathname.split("/")[2] ?? 0);
@@ -230,7 +231,7 @@ function render(g: GroupDTO): void {
 
   renderMembers(g);
   show(phantomControls, g.is_owner);
-  renderHistory(groupHistory, g.history);
+  renderHistory(groupHistory, g.history, g);
   show(inviteSection, g.is_owner);
 }
 
@@ -285,37 +286,25 @@ function renderMembers(g: GroupDTO): void {
   }
 }
 
-function renderHistory(into: HTMLElement, entries: HistoryDTO[]): void {
+// A History row names the Transaction, who did what to it, and when; under
+// that, one line per thing that changed, so nobody has to open the bill to see
+// which sum moved.
+function renderHistory(into: HTMLElement, entries: HistoryDTO[], g: GroupDTO): void {
   clear(into);
+  const names = new Map(g.members.map((m) => [m.id, m.name]));
   for (const entry of entries) {
     const item = el("li");
     const row = el("a", "list-row");
     row.href = `/transaction/${entry.transaction_id}`;
-    const left = rowGroup(true);
-    left.append(el("span", "list-row-title split-name", entry.description || entry.actor));
-    left.append(el("span", "muted", `${entry.actor} ${historyVerb(entry.kind)}`));
-    row.append(left, el("span", "muted", stamp(entry.at)));
+    const body = el("span", "u-col u-gap-xs u-grow");
+    const head = rowGroup();
+    head.append(el("span", "list-row-title split-name", entry.description || entry.actor));
+    head.append(el("span", "muted", `${entry.actor || S.page.history.somebody()} ${historyVerb(entry.kind)}`));
+    body.append(head);
+    for (const line of describeHistory(entry, names)) body.append(el("span", "muted", line));
+    row.append(body, el("span", "muted history-stamp", stamp(entry.at)));
     item.append(row);
     into.append(item);
-  }
-}
-
-export function historyVerb(kind: string): string {
-  switch (kind) {
-    case "created":
-      return S.page.history.created();
-    case "edited":
-      return S.page.history.edited();
-    case "deleted":
-      return S.page.history.deleted();
-    case "restored":
-      return S.page.history.restored();
-    case "photo_added":
-      return S.page.history.photoAdded();
-    case "photo_removed":
-      return S.page.history.photoRemoved();
-    default:
-      return kind;
   }
 }
 

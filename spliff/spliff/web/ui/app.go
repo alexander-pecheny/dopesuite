@@ -59,9 +59,12 @@ func mustApp() *base.App {
 // class="list"> and the page's script fills it with .list-row children. Only the
 // two shapes the design system has no name for carry a class of Spliff's own.
 var mounts = map[string]base.MountSpec{
-	"groups-list":         {Tag: "ul", Classes: []string{"list"}},
-	"group-balances":      {Tag: "ul", Classes: []string{"list"}},
-	"group-transfers":     {Tag: "ul", Classes: []string{"list"}},
+	"groups-list": {Tag: "ul", Classes: []string{"list"}},
+	// Balances and the Debt graph, side by side: two halves that stack when
+	// the screen is too narrow for both, each a compact list.
+	"group-summary":       {Tag: "div", Classes: []string{"u-row", "u-wrap", "u-gap-lg", "u-align-start", "summary-pair"}},
+	"group-balances":      {Tag: "ul", Classes: []string{"list", "summary-list"}},
+	"group-transfers":     {Tag: "ul", Classes: []string{"list", "summary-list"}},
 	"group-feed":          {Tag: "ul", Classes: []string{"list"}},
 	"group-members":       {Tag: "ul", Classes: []string{"list"}},
 	"group-invites":       {Tag: "ul", Classes: []string{"list"}},

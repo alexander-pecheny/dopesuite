@@ -4,6 +4,7 @@
       "prefix": "Mount",
       "values": [
         "groups-list",
+        "group-summary",
         "group-balances",
         "group-transfers",
         "group-feed",
