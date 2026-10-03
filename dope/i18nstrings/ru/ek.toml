@@ -47,7 +47,7 @@ finished = "Закончен"
 
 [venue]
 # The pencil button opening the venue dialog, then the dialog's buttons.
-edit = "Изменить площадку"
+edit = "Площадка и время начала"
 cancel = "Отмена"
 save = "Сохранить"
 # The start time field of the dialog, its hint, and the box that gives the

@@ -30,7 +30,8 @@ import * as hamsa from "./hamsa-protocol.js";
 import type {HamsaState, Mark} from "./hamsa-protocol.js";
 import {computeHamsaPlayerStats} from "./hamsa-stats.js";
 import type {HamsaBout} from "./hamsa-stats.js";
-import {VENUE_POPOVER_SPEC} from "./venue.js";
+import {boutWhereWhen, VENUE_POPOVER_SPEC} from "./venue.js";
+import type {Venue} from "./venue.js";
 import S from "./i18nstrings.js";
 import {createEntrantsTab} from "./entrants.js";
 
@@ -77,6 +78,9 @@ interface MatchSeat {
 interface HamsaMatchView {
   code?: string;
   title?: string;
+  venue?: Venue | null;
+  // startsAt: when the bout starts, as the host typed it; absent, no time.
+  startsAt?: string;
   finished?: boolean;
   seq?: number;
   state?: unknown;
@@ -116,6 +120,18 @@ createFloatingPopover({root, specs: [
   {trigger: ".results-team-truncated", popover: ".results-team-name-popover", anchor: ".results-team-name"},
   {trigger: ".grid-slot-team-truncated", popover: ".grid-slot-team-popover", anchor: ".grid-slot-team-name"},
 ]}).bind();
+
+// The fest's venues, for the host's pencil on a bout: it moves the bout to
+// another venue and gives it a start time. Filled in place once fetched.
+const venues: Venue[] = [];
+if (!viewer) {
+  void fetch(`/api/fest/${encodeURIComponent(String(route.festID || ""))}/venues`)
+    .then((response) => response.ok ? response.json() : [])
+    .then((fresh: unknown) => {
+      if (Array.isArray(fresh)) venues.splice(0, venues.length, ...(fresh as Venue[]));
+    })
+    .catch(() => {});
+}
 
 let nameOverflowFrame = 0;
 function scheduleNameOverflow(): void {
@@ -682,6 +698,19 @@ function boutHeader(bout: BoutEntry): CellContent {
   // so a host reading the sheet and a player reading the grid say the same.
   title.textContent = letteredTitle(bout.view.title || bout.code, boutLetters.get(bout.code));
   layout.appendChild(title);
+  // When the bout starts, once the host gave it a time, with its venue.
+  layout.append(...boutWhereWhen({
+    title: title.textContent || "",
+    venue: bout.view.venue,
+    startsAt: bout.view.startsAt,
+    venueAlways: false,
+    className: "battle-venue",
+    host: viewer ? undefined : {
+      venues,
+      pickVenue: (number) => void writer.send(matchScope(bout.code), {url: `${route.apiBase}/matches/${encodeURIComponent(bout.code)}/venue`, body: {number}}),
+      saveStartsAt: (time, wave) => void writer.send(matchScope(bout.code), {url: `${route.apiBase}/matches/${encodeURIComponent(bout.code)}/starts-at`, body: {time, wave}}),
+    },
+  }));
 
   // A spectator gets the name alone, as on EK: the tick is the host's control.
   if (viewer) {

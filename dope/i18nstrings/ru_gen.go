@@ -255,7 +255,7 @@ var RU = Strings{
 		Title: func() string { return "ЭК" },
 		Venue: EkVenueStrings{
 			Cancel: func() string { return "Отмена" },
-			Edit:   func() string { return "Изменить площадку" },
+			Edit:   func() string { return "Площадка и время начала" },
 			Save:   func() string { return "Сохранить" },
 			Time:   func() string { return "Время начала" },
 			TimeHint: func() string {

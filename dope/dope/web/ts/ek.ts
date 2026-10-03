@@ -6,7 +6,7 @@ import {cssEscape, formatNumber, formatPlace, isFormControl, option, td, th} fro
 import {buildFlatScoreTable, buildTwoRowScoreTable, canPatchScoreShape, createScoreTableIndex, patchScoreTable, seatingText, setMarkClass} from "./score-table.js";
 import {seatedNames} from "./ek-seating.js";
 import type {NodeIndex, ParticipantView, ThemeView} from "./score-table.js";
-import {buildVenuesTable, formatBattleVenue, formatVenue, markVenueOverflow, openVenueDialog as openVenuePicker, VENUE_POPOVER_SPEC, venueLabel} from "./venue.js";
+import {boutWhereWhen, buildVenuesTable, formatBattleVenue, formatVenue, markVenueOverflow, VENUE_POPOVER_SPEC, withStartsAt} from "./venue.js";
 import type {Venue} from "./venue.js";
 import {buildGroupStandingsView, festLetters, letteredTitle, resultsTeamCell, stageType, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
@@ -76,6 +76,8 @@ interface HostMatchView extends CachedMatchView {
   revision?: number;
   stageCode?: string;
   venue?: {number: number; title?: string} | null;
+  // startsAt: when the bout starts, as the host typed it; absent, no time.
+  startsAt?: string;
   questionValues: number[];
   participants: HostParticipantView[];
 }
@@ -1781,6 +1783,7 @@ function canPatchMatchShape(previous: HostMatchView | null | undefined, next: Ho
   if (!previous || !next) return false;
   if (previous.title !== next.title) return false;
   if (formatVenue(previous.venue) !== formatVenue(next.venue)) return false;
+  if ((previous.startsAt || "") !== (next.startsAt || "")) return false;
   // The host's place is an input the patch fills; the spectator's is text.
   if (viewer && next.participants.some((team, i) => formatPlace(team.place) !== formatPlace(previous.participants[i]?.place))) return false;
   return canPatchScoreShape(previous, next);
@@ -2397,7 +2400,7 @@ function readonlyBattleHeader(): HTMLElement {
   // The venue's whole title, not only its number, which tells a spectator
   // nothing about which room. A long one fades, and the head's popover holds
   // the rest.
-  const venueText = state!.venue ? formatBattleVenue(state!.venue) : "";
+  const venueText = withStartsAt(state!.venue ? formatBattleVenue(state!.venue) : "", state!.startsAt);
   if (venueText) {
     const venue = document.createElement("span");
     venue.className = "readonly-battle-venue";
@@ -2702,20 +2705,23 @@ function battleHeader(): HTMLElement {
 
   // Where the bout is played, on the host's sheet too: the pencil beside it
   // changes it.
-  const venue = venueLabel(state!.venue, "battle-venue");
-  if (venue) layout.appendChild(venue);
-
-  if (venues.length > 0) {
-    const venueButton = document.createElement("button");
-    venueButton.type = "button";
-    venueButton.className = "btn btn-xs venue-edit-button";
-    venueButton.dataset.matchCode = matchCode;
-    venueButton.replaceChildren(icon("pencil"));
-    venueButton.title = S.ek.venue.edit();
-    venueButton.setAttribute("aria-label", S.ek.venue.edit());
-    venueButton.addEventListener("click", () => openVenueDialog(matchCode));
-    layout.appendChild(venueButton);
-  }
+  layout.append(...boutWhereWhen({
+    title: state!.title || matchTitle(),
+    venue: state!.venue,
+    startsAt: state!.startsAt,
+    venueAlways: true,
+    className: "battle-venue",
+    host: {
+      venues,
+      pickVenue: (number) => {
+        if (number !== matchStateFor(matchCode)?.venue?.number) sendVenueChange(number, matchCode);
+      },
+      saveStartsAt: (time, wave) => void writer.send(matchScopeFor(matchCode), {url: matchURL(matchCode, "starts-at"), body: {time, wave}}),
+    },
+  }));
+  // Host presence points at the pencil by its bout.
+  const pencil = layout.querySelector<HTMLElement>(".venue-edit-button");
+  if (pencil) pencil.dataset.matchCode = matchCode;
 
   const label = document.createElement("label");
   label.className = "finish-control";
@@ -2734,20 +2740,6 @@ function battleHeader(): HTMLElement {
   layout.appendChild(label);
   node.appendChild(layout);
   return node;
-}
-
-function openVenueDialog(matchCode: string): void {
-  const matchState = matchStateFor(matchCode);
-  if (!matchState) return;
-  openVenuePicker({
-    title: matchState.title || matchTitle(matchState),
-    venues,
-    current: matchState.venue?.number || 0,
-    onPick: (number) => {
-      const current = matchStateFor(matchCode) || matchState;
-      if (number !== current.venue?.number) sendVenueChange(number, matchCode);
-    },
-  });
 }
 
 function shootoutControlsHeader(): HTMLElement {

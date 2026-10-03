@@ -32,7 +32,7 @@ import * as troika from "./troika-protocol.js";
 import type {Mark, TroikaState} from "./troika-protocol.js";
 import {buildTroikaStatsTable, computeTroikaPlayerStats} from "./troika-stats.js";
 import type {TroikaBout} from "./troika-stats.js";
-import {buildVenuesTable, formatBattleVenue, markVenueOverflow, openVenueDialog, VENUE_POPOVER_SPEC, venueLabel, withStartsAt} from "./venue.js";
+import {boutWhereWhen, buildVenuesTable, markVenueOverflow, VENUE_POPOVER_SPEC} from "./venue.js";
 import type {Venue} from "./venue.js";
 import S from "./i18nstrings.js";
 import {createEntrantsTab} from "./entrants.js";
@@ -549,27 +549,18 @@ function boutHead(bout: BoutEntry): HTMLElement {
   head.appendChild(title);
   // Where the bout is played, for the host and the spectator alike; the
   // host's pencil moves it to another of the fest's venues.
-  const venue = venueLabel(bout.view.venue, "troika-bout-venue", withStartsAt(formatBattleVenue(bout.view.venue), bout.view.startsAt));
-  if (venue) head.appendChild(venue);
-  if (!viewer && venues.length > 0) {
-    const edit = document.createElement("button");
-    edit.type = "button";
-    edit.className = "btn btn-xs venue-edit-button";
-    edit.title = S.ek.venue.edit();
-    edit.setAttribute("aria-label", S.ek.venue.edit());
-    edit.replaceChildren(icon("pencil"));
-    edit.addEventListener("click", () => openVenueDialog({
-      title: title.textContent || "",
+  head.append(...boutWhereWhen({
+    title: title.textContent || "",
+    venue: bout.view.venue,
+    startsAt: bout.view.startsAt,
+    venueAlways: true,
+    className: "troika-bout-venue",
+    host: viewer ? undefined : {
       venues,
-      current: bout.view.venue?.number || 0,
-      onPick: (number) => void writer.send(matchScope(bout.code), {url: `${route.apiBase}/matches/${encodeURIComponent(bout.code)}/venue`, body: {number}}),
-      startsAt: {
-        current: bout.view.startsAt || "",
-        onSave: (time, wave) => void writer.send(matchScope(bout.code), {url: `${route.apiBase}/matches/${encodeURIComponent(bout.code)}/starts-at`, body: {time, wave}}),
-      },
-    }));
-    head.appendChild(edit);
-  }
+      pickVenue: (number) => void writer.send(matchScope(bout.code), {url: `${route.apiBase}/matches/${encodeURIComponent(bout.code)}/venue`, body: {number}}),
+      saveStartsAt: (time, wave) => void writer.send(matchScope(bout.code), {url: `${route.apiBase}/matches/${encodeURIComponent(bout.code)}/starts-at`, body: {time, wave}}),
+    },
+  }));
   const state = stateOf(bout.code);
   if (!viewer && !bout.view.finished && !state.written && troika.started(state) && troika.level(state)) {
     const button = document.createElement("button");

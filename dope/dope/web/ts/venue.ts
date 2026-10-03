@@ -204,6 +204,55 @@ export function markVenueOverflow(root: ParentNode | null | undefined): void {
   markNameOverflow(root, {cellSelector: ".venue-label", nameSelector: ".venue-label-name", truncatedClass: "venue-label-truncated"});
 }
 
+export interface BoutWhereWhenOptions {
+  // title names the bout in the dialog.
+  title: string;
+  venue: VenueLike;
+  startsAt?: string;
+  // venueAlways: the page shows the venue even when the bout has no start
+  // time. A page that never showed venues (brain, hamsa) shows the label only
+  // once a time is set, so it looks as it did until somebody types one.
+  venueAlways: boolean;
+  className: string;
+  // host is the pencil's side: the fest's venues and the two writes. A
+  // spectator gets the label alone.
+  host?: {
+    venues: Venue[];
+    pickVenue: (number: number) => void;
+    saveStartsAt: (time: string, wave: boolean) => void;
+  };
+}
+
+// boutWhereWhen is where and when a bout is played as its head shows it: the
+// start time before the venue, then, for a host, the pencil that changes
+// both. Every bout page uses it, so a time set on any format reads the same.
+export function boutWhereWhen(options: BoutWhereWhenOptions): HTMLElement[] {
+  const nodes: HTMLElement[] = [];
+  const startsAt = (options.startsAt || "").trim();
+  if (startsAt || options.venueAlways) {
+    const label = venueLabel(options.venue, options.className, withStartsAt(formatBattleVenue(options.venue), startsAt));
+    if (label) nodes.push(label);
+  }
+  const host = options.host;
+  if (host) {
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "btn btn-xs venue-edit-button";
+    edit.title = S.ek.venue.edit();
+    edit.setAttribute("aria-label", S.ek.venue.edit());
+    edit.replaceChildren(icon("pencil"));
+    edit.addEventListener("click", () => openVenueDialog({
+      title: options.title,
+      venues: host.venues,
+      current: normalizeVenue(options.venue)?.number || 0,
+      onPick: host.pickVenue,
+      startsAt: {current: startsAt, onSave: host.saveStartsAt},
+    }));
+    nodes.push(edit);
+  }
+  return nodes;
+}
+
 export interface VenueDialogOptions {
   title: string;
   venues: Venue[];
@@ -224,13 +273,14 @@ export function openVenueDialog(options: VenueDialogOptions): void {
   const title = document.createElement("h2");
   title.textContent = options.title;
   form.appendChild(title);
+  // A fest with no venues has only the start time to set.
   const select = document.createElement("select");
   select.className = "venue-dialog-select";
   for (const venue of options.venues) {
     select.appendChild(option(String(venue.number), venue.title ? `${venue.number}: ${venue.title}` : String(venue.number)));
   }
   select.value = options.current > 0 ? String(options.current) : "";
-  form.appendChild(select);
+  if (options.venues.length > 0) form.appendChild(select);
   let time: HTMLInputElement | null = null;
   let wave: HTMLInputElement | null = null;
   if (options.startsAt) {
@@ -282,5 +332,5 @@ export function openVenueDialog(options: VenueDialogOptions): void {
   dialog.appendChild(form);
   document.body.appendChild(dialog);
   dialog.showModal();
-  select.focus();
+  (options.venues.length > 0 ? select : time)?.focus();
 }

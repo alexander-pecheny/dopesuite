@@ -28,7 +28,8 @@ import type {FestGridStage, ReseedEntry} from "./fest-grid.js";
 import {gameTabs, canonicalKey, groupLabel} from "./game-tabs.js";
 import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
 import type {GameTab} from "./game-tabs.js";
-import {VENUE_POPOVER_SPEC} from "./venue.js";
+import {boutWhereWhen, VENUE_POPOVER_SPEC} from "./venue.js";
+import type {Venue} from "./venue.js";
 import S from "./i18nstrings.js";
 import {createEntrantsTab} from "./entrants.js";
 
@@ -46,6 +47,9 @@ interface BrainSlotTeam {
 interface BrainMatchView {
   code?: string;
   title?: string;
+  venue?: Venue | null;
+  // startsAt: when the bout starts, as the host typed it; absent, no time.
+  startsAt?: string;
   finished?: boolean;
   revision?: number;
   state?: BrainMatchState | null;
@@ -162,6 +166,18 @@ const shell = mountGamePage({
   activeCursorElement: () => cursor.activeCell,
 });
 const {viewer, staticMode, scopeGameID, indicator, viewerCounter} = shell;
+
+// The fest's venues, for the host's pencil on a bout: it moves the bout to
+// another venue and gives it a start time. Filled in place once fetched.
+const venues: Venue[] = [];
+if (!viewer) {
+  void fetch(`/api/fest/${encodeURIComponent(String(route.festID || ""))}/venues`)
+    .then((response) => response.ok ? response.json() : [])
+    .then((fresh: unknown) => {
+      if (Array.isArray(fresh)) venues.splice(0, venues.length, ...(fresh as Venue[]));
+    })
+    .catch(() => {});
+}
 const matches = new Map<string, BrainMatchView>();
 let teamRosters: RosterTeam[] = [];
 let rosterView: HTMLElement | null = null;
@@ -685,6 +701,33 @@ function buildBout({code, view, planned}: BoutEntry): HTMLElement {
   table.classList.toggle("match-finished", Boolean(view.finished));
   table.dataset.match = code;
 
+  // When the bout starts, once the host gave it a time, with its venue, and
+  // the host's pencil that sets both.
+  const whereWhen = boutWhereWhen({
+    title: view.title || code,
+    venue: view.venue,
+    startsAt: view.startsAt,
+    venueAlways: false,
+    className: "battle-venue",
+    host: viewer ? undefined : {
+      venues,
+      pickVenue: (number) => void writer.send(matchScope(code), {url: `${route.apiBase}/matches/${encodeURIComponent(code)}/venue`, body: {number}}),
+      saveStartsAt: (time, wave) => void writer.send(matchScope(code), {url: `${route.apiBase}/matches/${encodeURIComponent(code)}/starts-at`, body: {time, wave}}),
+    },
+  });
+  // The time goes over the table; the pencil sits by the finished tick, so a
+  // bout with no time keeps the one head row it always had.
+  const pencil = whereWhen.find((node) => node.classList.contains("venue-edit-button"));
+  const shown = whereWhen.filter((node) => node !== pencil);
+  if (shown.length) {
+    const caption = document.createElement("caption");
+    const line = document.createElement("span");
+    line.className = "u-row u-gap-sm u-align-center";
+    line.append(...shown);
+    caption.appendChild(line);
+    table.appendChild(caption);
+  }
+
   // One head row, everything on one line: the match's letter, a team over its
   // player column, the score over the two mark columns, the other team, and
   // the finished tick. A name wider than its column fades to a popover.
@@ -702,7 +745,9 @@ function buildBout({code, view, planned}: BoutEntry): HTMLElement {
   score.textContent = `${taken(view, 0)} : ${taken(view, 1)}`;
   head.appendChild(score);
   head.appendChild(nameHead(view, 1, planned));
-  head.appendChild(finishHead(code, view));
+  const finish = finishHead(code, view);
+  if (pencil) finish.prepend(pencil);
+  head.appendChild(finish);
   thead.appendChild(head);
   table.appendChild(thead);
 
