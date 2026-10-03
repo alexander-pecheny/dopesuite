@@ -50,6 +50,11 @@ finished = "Закончен"
 edit = "Изменить площадку"
 cancel = "Отмена"
 save = "Сохранить"
+# The start time field of the dialog, its hint, and the box that gives the
+# time to every bout of the same тур.
+time = "Время начала"
+time_hint = "Например, 10:30. Если оставить пустым, время не показывается."
+time_wave = "Для всех боёв этого тура"
 
 [answer]
 # An answer cell's hover tooltip: the team's name, the theme column's label

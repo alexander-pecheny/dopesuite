@@ -257,6 +257,11 @@ var RU = Strings{
 			Cancel: func() string { return "Отмена" },
 			Edit:   func() string { return "Изменить площадку" },
 			Save:   func() string { return "Сохранить" },
+			Time:   func() string { return "Время начала" },
+			TimeHint: func() string {
+				return "Например, 10:30. Если оставить пустым, время не показывается."
+			},
+			TimeWave: func() string { return "Для всех боёв этого тура" },
 		},
 	},
 	Entrants: EntrantsStrings{
@@ -2465,6 +2470,11 @@ var RU = Strings{
 		SeedImport: ServerSeedImportStrings{
 			FileMissing: func() string { return "нет файла" },
 		},
+		StartsAt: ServerStartsAtStrings{
+			Bad: func(time string) string {
+				return fmt.Sprintf("Время «%s» не подходит. Напишите его так: 10:30.", time)
+			},
+		},
 		Venue: ServerVenueStrings{
 			InUse: func(n string) string {
 				return fmt.Sprintf("На площадке %s есть бои. Сначала перенесите их на другую площадку.", n)
@@ -2819,6 +2829,7 @@ var RU = Strings{
 			BattleShort: func(n string) string { return fmt.Sprintf("пл. %s", n) },
 			Delete:      func() string { return "Удалить площадку" },
 			NameColumn:  func() string { return "Название" },
+			WithTime:    func(time string, venue string) string { return fmt.Sprintf("%s %s", time, venue) },
 		},
 		Viewers: WidgetsViewersStrings{
 			Label: func() string { return "Зрителей онлайн" },

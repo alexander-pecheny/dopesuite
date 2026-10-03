@@ -937,6 +937,11 @@ create index if not exists fest_roster_snapshots_fest_idx on fest_roster_snapsho
 	{Version: 40, Name: "a game's hidden divisions", Up: func(db *sql.DB) error {
 		return store.AddColumnsIfMissing(db, "games", []store.ColumnSpec{{Name: "hidden_divisions", Type: "TEXT"}})
 	}},
+	// When a bout starts, as the host types it ("10:30"): a schedule note shown
+	// beside its venue. Empty, the bout shows no time.
+	{Version: 41, Name: "a bout's start time", Up: func(db *sql.DB) error {
+		return store.AddColumnsIfMissing(db, "matches", []store.ColumnSpec{{Name: "starts_at", Type: "TEXT"}})
+	}},
 }
 
 // troikaApplicationOrder gives every troika its place in the order its

@@ -46,6 +46,9 @@ name_column = "Название"
 battle = 'пл. {{.n}} ({{.name}})'
 # A bout's venue without a title, and the short form.
 battle_short = 'пл. {{.n}}'
+# A bout's venue with the start time the host gave it, the time first.
+# {{.venue}} is the venue as above, and may be empty.
+with_time = '{{.time}} {{.venue}}'
 # The add row under the host's venues table: the title field's placeholder,
 # the number field's label (left empty, the venue takes the next free
 # number, which the field shows as its placeholder) and the button.

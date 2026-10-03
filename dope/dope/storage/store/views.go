@@ -179,15 +179,17 @@ type ReseedEntryView struct {
 }
 
 type FestMatchView struct {
-	Code             string                    `json:"code"`
-	Title            string                    `json:"title"`
-	Letter           string                    `json:"letter,omitempty"`
-	Position         int                       `json:"position"`
-	ParticipantCount int                       `json:"participantCount"`
-	Status           string                    `json:"status"`
-	Revision         int64                     `json:"revision"`
-	Venue            *VenueView                `json:"venue,omitempty"`
-	Participants     []MatchParticipantSummary `json:"participants"`
+	Code             string     `json:"code"`
+	Title            string     `json:"title"`
+	Letter           string     `json:"letter,omitempty"`
+	Position         int        `json:"position"`
+	ParticipantCount int        `json:"participantCount"`
+	Status           string     `json:"status"`
+	Revision         int64      `json:"revision"`
+	Venue            *VenueView `json:"venue,omitempty"`
+	// StartsAt is when the bout starts, as the host typed it ("10:30"), or "".
+	StartsAt     string                    `json:"startsAt,omitempty"`
+	Participants []MatchParticipantSummary `json:"participants"`
 }
 
 type MatchParticipantSummary struct {
@@ -233,6 +235,7 @@ type MatchView struct {
 	StageCode      string     `json:"stageCode,omitempty"`
 	StageTitle     string     `json:"stageTitle,omitempty"`
 	Venue          *VenueView `json:"venue,omitempty"`
+	StartsAt       string     `json:"startsAt,omitempty"`
 	Finished       bool       `json:"finished"`
 	Revision       int64      `json:"revision"`
 	UpdatedAt      string     `json:"updatedAt"`

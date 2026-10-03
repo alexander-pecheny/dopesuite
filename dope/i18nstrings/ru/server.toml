@@ -37,6 +37,11 @@ number_taken = 'Площадка {{.n}} уже есть.'
 unknown = 'Площадки {{.n}} нет.'
 in_use = 'На площадке {{.n}} есть бои. Сначала перенесите их на другую площадку.'
 
+[starts_at]
+# Why a bout's start time was refused (starttimes.go). {{.time}} is what the
+# host typed.
+bad = 'Время «{{.time}}» не подходит. Напишите его так: 10:30.'
+
 [bot]
 # The login bot's /start reply: how to sign in through Telegram (bot.go).
 help = "Этот бот подтверждает вход на dope.pecheny.me.\n\nОткройте https://dope.pecheny.me/login, нажмите «Войти через телеграм» и пришлите мне код, который покажет сайт."

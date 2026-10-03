@@ -62,6 +62,7 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("PATCH "+game+"/matches/{code}/state", route.Editor.Numbered(), s.scopedMatchPatch)
 	t.Handle("POST "+game+"/matches/{code}/finish", route.Editor.Numbered(), s.scopedMatchFinish)
 	t.Handle("POST "+game+"/matches/{code}/venue", route.Editor, s.scopedMatchVenue)
+	t.Handle("POST "+game+"/matches/{code}/starts-at", route.Editor, s.scopedMatchStartsAt)
 	t.Handle("GET "+game+"/stages/matches", route.Read, s.scopedAllStageMatches)
 	t.Handle("GET "+game+"/stages/{stage}/matches", route.Read, s.scopedStageMatches)
 	t.Handle("POST "+game+"/stages/{stage}/reseed", route.Editor.Numbered(), s.scopedReseed)

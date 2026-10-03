@@ -50,7 +50,7 @@ order by re.rank`, []any{stageID}, func(rows *sql.Rows) (ReseedEntryView, error)
 func LoadFestMatches(ctx context.Context, q Queryer, stageID int64, gameType string) ([]FestMatchView, error) {
 	rows, err := q.QueryContext(ctx, `
 select m.id, m.code, m.title, m.letter, m.position, m.participant_count, m.status, m.revision,
-       v.number, v.title
+       v.number, v.title, coalesce(m.starts_at, '')
 from matches m
 left join venues v on v.id = m.venue_id
 where m.stage_id = ?
@@ -70,7 +70,7 @@ order by m.position, m.id`, stageID)
 		var match FestMatchView
 		var venueNumber sql.NullInt64
 		var venueTitle sql.NullString
-		if err := rows.Scan(&matchID, &match.Code, &match.Title, &match.Letter, &match.Position, &match.ParticipantCount, &match.Status, &match.Revision, &venueNumber, &venueTitle); err != nil {
+		if err := rows.Scan(&matchID, &match.Code, &match.Title, &match.Letter, &match.Position, &match.ParticipantCount, &match.Status, &match.Revision, &venueNumber, &venueTitle, &match.StartsAt); err != nil {
 			return nil, err
 		}
 		if venueNumber.Valid {

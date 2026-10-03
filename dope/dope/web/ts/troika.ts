@@ -32,7 +32,7 @@ import * as troika from "./troika-protocol.js";
 import type {Mark, TroikaState} from "./troika-protocol.js";
 import {buildTroikaStatsTable, computeTroikaPlayerStats} from "./troika-stats.js";
 import type {TroikaBout} from "./troika-stats.js";
-import {buildVenuesTable, markVenueOverflow, openVenueDialog, VENUE_POPOVER_SPEC, venueLabel} from "./venue.js";
+import {buildVenuesTable, formatBattleVenue, markVenueOverflow, openVenueDialog, VENUE_POPOVER_SPEC, venueLabel, withStartsAt} from "./venue.js";
 import type {Venue} from "./venue.js";
 import S from "./i18nstrings.js";
 import {createEntrantsTab} from "./entrants.js";
@@ -82,6 +82,8 @@ interface TroikaMatchView {
   code?: string;
   title?: string;
   venue?: Venue | null;
+  // startsAt: when the bout starts, as the host typed it; absent, no time.
+  startsAt?: string;
   finished?: boolean;
   seq?: number;
   state?: unknown;
@@ -267,7 +269,7 @@ function adoptMatchView(view: TroikaMatchView | null | undefined): boolean {
   const cached = matches.get(code);
   if (cached && Number(view.seq || 0) < Number(cached.seq || 0)) return false;
   view = writer.overlay(matchScope(code), view) as TroikaMatchView;
-  if (cached && (cached.venue?.number || 0) !== (view.venue?.number || 0)) refreshFest();
+  if (cached && ((cached.venue?.number || 0) !== (view.venue?.number || 0) || (cached.startsAt || "") !== (view.startsAt || ""))) refreshFest();
   matches.set(code, view);
   states.set(code, troika.parseState(view.state, view.participants?.length || 2));
   return true;
@@ -286,6 +288,7 @@ function shapeOf(code: string): string {
     order: state.sides.map((side) => side.themes.map((theme) => theme.order)),
     finished: Boolean(view.finished), title: view.title,
     venue: view.venue ? [view.venue.number, view.venue.title] : null,
+    startsAt: view.startsAt || "",
     seats: (view.participants || []).map((seat) => [seat?.id, seat?.name, (seat?.roster || []).map((p) => p.id)]),
     // What the heads draw from the marks: the add-shootout button waits on a
     // started, level bout, and a shootout theme's × on the theme being empty.
@@ -546,7 +549,7 @@ function boutHead(bout: BoutEntry): HTMLElement {
   head.appendChild(title);
   // Where the bout is played, for the host and the spectator alike; the
   // host's pencil moves it to another of the fest's venues.
-  const venue = venueLabel(bout.view.venue, "troika-bout-venue");
+  const venue = venueLabel(bout.view.venue, "troika-bout-venue", withStartsAt(formatBattleVenue(bout.view.venue), bout.view.startsAt));
   if (venue) head.appendChild(venue);
   if (!viewer && venues.length > 0) {
     const edit = document.createElement("button");
@@ -560,6 +563,10 @@ function boutHead(bout: BoutEntry): HTMLElement {
       venues,
       current: bout.view.venue?.number || 0,
       onPick: (number) => void writer.send(matchScope(bout.code), {url: `${route.apiBase}/matches/${encodeURIComponent(bout.code)}/venue`, body: {number}}),
+      startsAt: {
+        current: bout.view.startsAt || "",
+        onSave: (time, wave) => void writer.send(matchScope(bout.code), {url: `${route.apiBase}/matches/${encodeURIComponent(bout.code)}/starts-at`, body: {time, wave}}),
+      },
     }));
     head.appendChild(edit);
   }

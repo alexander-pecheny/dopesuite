@@ -213,6 +213,9 @@ export const RU: Strings = {
       cancel: () => "Отмена",
       edit: () => "Изменить площадку",
       save: () => "Сохранить",
+      time: () => "Время начала",
+      timeHint: () => "Например, 10:30. Если оставить пустым, время не показывается.",
+      timeWave: () => "Для всех боёв этого тура",
     },
   },
   entrants: {
@@ -1744,6 +1747,9 @@ shootout: true
     seedImport: {
       fileMissing: () => "нет файла",
     },
+    startsAt: {
+      bad: (time: string) => `Время «${time}» не подходит. Напишите его так: 10:30.`,
+    },
     venue: {
       inUse: (n: string) => `На площадке ${n} есть бои. Сначала перенесите их на другую площадку.`,
       numberTaken: (n: string) => `Площадка ${n} уже есть.`,
@@ -2018,6 +2024,7 @@ shootout: true
       battleShort: (n: string) => `пл. ${n}`,
       delete: () => "Удалить площадку",
       nameColumn: () => "Название",
+      withTime: (time: string, venue: string) => `${time} ${venue}`,
     },
     viewers: {
       label: () => "Зрителей онлайн",

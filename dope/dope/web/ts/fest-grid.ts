@@ -1,6 +1,6 @@
 import {festLetters, letteredTitle, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
-import {markVenueOverflow, normalizeVenue, venueLabel} from "./venue.js";
+import {markVenueOverflow, normalizeVenue, venueLabel, withStartsAt} from "./venue.js";
 import type {Venue} from "./venue.js";
 import { markNameOverflow } from "./widgets.js";
 import { blockLabel, groupLabel } from "./game-tabs.js";
@@ -56,6 +56,8 @@ export interface FestGridMatch {
   status?: string;
   letter?: string;
   venue?: FestGridVenue;
+  // startsAt: when the bout starts, as the host typed it; absent, no time.
+  startsAt?: string;
   slots?: FestGridSlot[];
   participants?: FestGridLiveParticipant[];
   participantCount?: number | string;
@@ -765,7 +767,7 @@ function buildMatchBox(match: FestGridMatch, liveMatch: FestGridMatch | undefine
   const venue = firstVenue(liveMatch?.venue, match.venue);
   const grid = document.createElement("div");
   grid.className = "grid-slot-grid";
-  grid.appendChild(matchHeadCell(match, venue, ctx));
+  grid.appendChild(matchHeadCell(match, venue, ctx, liveMatch?.startsAt ?? match.startsAt));
   grid.appendChild(gridHeadCell("slot-total-head", "Σ"));
   grid.appendChild(gridHeadCell("slot-place-head", S.fest.grid.colPlace()));
   const liveTeams = liveMatch?.participants || [];
@@ -830,18 +832,19 @@ function decorateGridSlotRows(rows: HTMLElement[][]): void {
   last[last.length - 1].classList.add("grid-slot-bottom-right");
 }
 
-function matchHeadCell(match: FestGridMatch, venue: Venue | null, ctx: PaintContext): HTMLElement {
+function matchHeadCell(match: FestGridMatch, venue: Venue | null, ctx: PaintContext, startsAt?: string): HTMLElement {
   const cell = gridCell("grid-slot-head grid-match-head-cell", "");
-  cell.appendChild(headLayout(matchTitleNode(match, ctx), venue));
+  cell.appendChild(headLayout(matchTitleNode(match, ctx), venue, startsAt));
   return cell;
 }
 
-function headLayout(title: HTMLElement, venue: Venue | null): HTMLElement {
+function headLayout(title: HTMLElement, venue: Venue | null, startsAt?: string): HTMLElement {
   const layout = document.createElement("span");
   layout.className = "grid-match-head-layout";
   layout.appendChild(title);
   // The venue clips where the head ends; its whole title is a popover away.
-  const label = venueLabel(venue, "grid-match-venue", venueText(venue));
+  // A start time the host gave the bout stands before it.
+  const label = venueLabel(venue, "grid-match-venue", withStartsAt(venueText(venue), startsAt));
   if (label) layout.appendChild(label);
   return layout;
 }

@@ -166,6 +166,13 @@ function venueAddForm(next: number, onAdd: (title: string, number: number) => vo
   return form;
 }
 
+// withStartsAt puts a bout's start time before its venue's wording. A bout
+// with no time keeps the wording as it was.
+export function withStartsAt(text: string, startsAt: string | undefined): string {
+  const time = (startsAt || "").trim();
+  return time ? S.widgets.venue.withTime(time, text).trim() : text;
+}
+
 // venueLabel is a bout's venue as a header shows it, number and title,
 // clipped where its column ends, the whole of it in a popover when
 // it is. text overrides the wording (the grid says it its own way).
@@ -202,6 +209,10 @@ export interface VenueDialogOptions {
   venues: Venue[];
   current: number;
   onPick: (number: number) => void;
+  // startsAt, when given, adds the bout's start time to the dialog: the
+  // time it has now, and what to do with a changed one (wave: every bout of
+  // the same round).
+  startsAt?: {current: string; onSave: (time: string, wave: boolean) => void};
 }
 
 // openVenueDialog asks which of the fest's venues a bout is played at.
@@ -220,6 +231,30 @@ export function openVenueDialog(options: VenueDialogOptions): void {
   }
   select.value = options.current > 0 ? String(options.current) : "";
   form.appendChild(select);
+  let time: HTMLInputElement | null = null;
+  let wave: HTMLInputElement | null = null;
+  if (options.startsAt) {
+    const field = document.createElement("label");
+    field.className = "field";
+    const name = document.createElement("span");
+    name.textContent = S.ek.venue.time();
+    time = document.createElement("input");
+    time.type = "text";
+    time.inputMode = "numeric";
+    time.className = "input input-narrow";
+    time.placeholder = "10:30";
+    time.value = options.startsAt.current;
+    const hint = document.createElement("span");
+    hint.className = "hint";
+    hint.textContent = S.ek.venue.timeHint();
+    field.append(name, time, hint);
+    const all = document.createElement("label");
+    all.className = "u-row u-gap-xs u-align-center";
+    wave = document.createElement("input");
+    wave.type = "checkbox";
+    all.append(wave, S.ek.venue.timeWave());
+    form.append(field, all);
+  }
   const actions = document.createElement("div");
   actions.className = "modal-actions";
   const cancel = document.createElement("button");
@@ -238,6 +273,10 @@ export function openVenueDialog(options: VenueDialogOptions): void {
     const number = Number(select.value);
     dialog.close();
     if (number > 0 && number !== options.current) options.onPick(number);
+    if (options.startsAt && time) {
+      const typed = time.value.trim();
+      if (typed !== options.startsAt.current || wave?.checked) options.startsAt.onSave(typed, Boolean(wave?.checked));
+    }
   });
   dialog.addEventListener("close", () => dialog.remove());
   dialog.appendChild(form);

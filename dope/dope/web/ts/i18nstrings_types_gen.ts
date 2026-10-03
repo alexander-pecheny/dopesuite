@@ -212,6 +212,9 @@ export type Strings = {
       cancel: () => string;
       edit: () => string;
       save: () => string;
+      time: () => string;
+      timeHint: () => string;
+      timeWave: () => string;
     };
   };
   entrants: {
@@ -1722,6 +1725,9 @@ export type Strings = {
     seedImport: {
       fileMissing: () => string;
     };
+    startsAt: {
+      bad: (time: string) => string;
+    };
     venue: {
       inUse: (n: string) => string;
       numberTaken: (n: string) => string;
@@ -1996,6 +2002,7 @@ export type Strings = {
       battleShort: (n: string) => string;
       delete: () => string;
       nameColumn: () => string;
+      withTime: (time: string, venue: string) => string;
     };
     viewers: {
       label: () => string;

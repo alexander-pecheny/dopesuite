@@ -37,6 +37,7 @@ type DBMatchState struct {
 	StageCode      string
 	StageTitle     string
 	Venue          *VenueView
+	StartsAt       string
 	State          MatchState
 	Blob           MatchBlob
 	RawState       string // verbatim matches.state_json — the Protocol document for non-EK games
@@ -120,6 +121,7 @@ func MatchViewFrom(match DBMatchState) MatchView {
 			StageCode:    match.StageCode,
 			StageTitle:   match.StageTitle,
 			Venue:        match.Venue,
+			StartsAt:     match.StartsAt,
 			Finished:     match.Status == "finished",
 			Revision:     match.Revision,
 			UpdatedAt:    match.UpdatedAt.Format(time.RFC3339),
@@ -133,6 +135,7 @@ func MatchViewFrom(match DBMatchState) MatchView {
 	view.StageCode = match.StageCode
 	view.StageTitle = match.StageTitle
 	view.Venue = match.Venue
+	view.StartsAt = match.StartsAt
 	return view
 }
 
@@ -280,7 +283,7 @@ func LoadMatchStates(ctx context.Context, q Queryer, sel MatchSelector) ([]DBMat
 	rows, err := q.QueryContext(ctx, `
 select m.id, m.game_id, g.game_type, m.code, m.title, m.status, m.revision, m.state_json,
        t.revision, t.updated_at, s.code, s.title, v.number, v.title, g.roster_source,
-       coalesce(s.config_json, '')
+       coalesce(s.config_json, ''), coalesce(m.starts_at, '')
 from matches m
 join fests t on t.id = m.fest_id
 join games g on g.id = m.game_id
@@ -299,7 +302,7 @@ order by s.position, s.id, m.position, m.id`, args...)
 		var venueTitle sql.NullString
 		if err := rows.Scan(&match.MatchID, &match.GameID, &match.GameType, &match.Code, &match.Title, &match.Status, &match.Revision, &stateJSON,
 			&match.FestRevision, &updatedAt, &match.StageCode, &match.StageTitle, &venueNumber, &venueTitle, &match.RosterSource,
-			&stageConfig); err != nil {
+			&stageConfig, &match.StartsAt); err != nil {
 			rows.Close()
 			return nil, err
 		}
