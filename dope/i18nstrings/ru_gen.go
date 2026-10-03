@@ -423,9 +423,11 @@ var RU = Strings{
 			Pending: func() string {
 				return "Жребий откроется, когда закончатся бои предыдущего раунда."
 			},
-			Seat:   func(bout string) string { return fmt.Sprintf("Бой %s", bout) },
-			SeatOf: func(bout string, seat string) string { return fmt.Sprintf("Бой %s. %s", bout, seat) },
-			Title:  func() string { return "Жеребьёвка" },
+			Seat:        func(bout string) string { return fmt.Sprintf("Бой %s", bout) },
+			SeatOf:      func(bout string, seat string) string { return fmt.Sprintf("Бой %s. %s", bout, seat) },
+			Substituted: func() string { return "Замена: команда не из жребия" },
+			Substitutes: func() string { return "Замена (не прошли дальше)" },
+			Title:       func() string { return "Жеребьёвка" },
 		},
 		Grid: FestGridStrings{
 			ColPlace:         func() string { return "М" },

@@ -339,6 +339,8 @@ export const RU: Strings = {
       pending: () => "Жребий откроется, когда закончатся бои предыдущего раунда.",
       seat: (bout: string) => `Бой ${bout}`,
       seatOf: (bout: string, seat: string) => `Бой ${bout}. ${seat}`,
+      substituted: () => "Замена: команда не из жребия",
+      substitutes: () => "Замена (не прошли дальше)",
       title: () => "Жеребьёвка",
     },
     grid: {

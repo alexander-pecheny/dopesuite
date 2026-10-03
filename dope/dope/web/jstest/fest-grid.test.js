@@ -448,6 +448,35 @@ test("a Round with drawn seats gets a Жеребьёвка panel under its бо�
   assert.equal(withClass(viewerGrid, "grid-draw-panel").length, 0);
 });
 
+// A drawn team that drops out is replaced by one that went through on no
+// place: the server lists those apart, and the panel offers them under their
+// own heading, notes the seat that holds one, and keeps the apart rule — a
+// substitute of the group the partner seat drew from is not offered.
+test("the Жеребьёвка panel offers substitutes under their own heading", () => {
+  const winner = {code: "s2-r1-m1-d1", seated: 1, apart: true,
+    candidates: [{id: 1, name: "Победитель А", source: "s1-g1"}]};
+  const runnerUp = {code: "s2-r1-m1-d2", seated: 9, apart: true,
+    candidates: [{id: 2, name: "Второй Б", source: "s1-g2"}],
+    substitutes: [{id: 8, name: "Третий А", source: "s1-g1"}, {id: 9, name: "Третий Б", source: "s1-g2"}]};
+  const grid = buildFestGrid({
+    stages: [{
+      code: "s2-r1", title: "1/16", stage_type: "matches",
+      matches: [{code: "s2-r1-m1", participantCount: 2,
+        slots: [{label: "1-е место"}, {label: "2-е место"}],
+        participants: [{name: "Победитель А", source: "1-е место", draw: winner},
+          {name: "Третий Б", source: "2-е место", draw: runnerUp}]}],
+    }],
+  }, {stageHeaderLink: false, editable: true, onDraw: () => {}});
+  const selects = walk(grid).filter((n) => n.tag === "select");
+  const second = selects[1];
+  assert.deepEqual(second.children.map((o) => o.tag), ["option", "option", "optgroup"]);
+  const group = second.children[2];
+  assert.equal(group.label, "Замена (не прошли дальше)");
+  assert.deepEqual(group.children.map((o) => o.textContent), ["Третий Б"], "замена из группы соперника не предлагается");
+  assert.equal(second.value, "9");
+  assert.deepEqual(texts(grid, "hint"), ["Замена: команда не из жребия"]);
+});
+
 // Until the раунд it draws from is played out the server resolves no
 // candidates, so the panel says so rather than offering an empty list.
 test("the Жеребьёвка panel waits for the раунд it draws from", () => {

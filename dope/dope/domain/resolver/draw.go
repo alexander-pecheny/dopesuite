@@ -55,7 +55,8 @@ func Draws(ctx context.Context, q store.Queryer, gameID int64) ([]Draw, error) {
 }
 
 // SetDrawTx seats a Participant in a Draw Slot, or clears it when participant
-// is zero. It refuses anyone the Slot does not name as a candidate, and anyone
+// is zero. It refuses anyone the Slot does not name as a candidate or a
+// substitute, and anyone
 // already drawn into another Slot of the same stage: a team plays one table
 // per Round, and a draw that seated it twice would leave a table short.
 func SetDrawTx(ctx context.Context, tx *sql.Tx, gameID int64, code string, participant int64) ([]int64, error) {
@@ -75,7 +76,7 @@ func SetDrawTx(ctx context.Context, tx *sql.Tx, gameID int64, code string, parti
 		return nil, ErrDrawSlotNotFound
 	}
 	if participant != 0 {
-		candidates, err := store.LoadDrawCandidates(ctx, tx, gameID, slot.draw)
+		candidates, err := slotOptions(ctx, tx, gameID, slot)
 		if err != nil {
 			return nil, err
 		}
@@ -126,6 +127,22 @@ update match_slots set participant_id = ?, locked = ? where id = ?`,
 	return append([]int64{slot.matchID}, affected...), nil
 }
 
+// slotOptions is everyone a Slot may be filled with: its candidates and, once
+// they are known, the substitutes an admin seats when a drawn team drops out.
+// A substitute keeps its table as its source, so a Slot set Apart refuses one
+// from the table of the team it would meet just as it refuses a candidate.
+func slotOptions(ctx context.Context, q store.Queryer, gameID int64, slot drawSlotRow) ([]store.DrawCandidateView, error) {
+	candidates, err := store.LoadDrawCandidates(ctx, q, gameID, slot.draw)
+	if err != nil || len(candidates) == 0 {
+		return candidates, err
+	}
+	substitutes, err := store.LoadDrawSubstitutes(ctx, q, gameID, slot.matchID, slot.draw)
+	if err != nil {
+		return nil, err
+	}
+	return append(candidates, substitutes...), nil
+}
+
 // drawnFromSource reports whether another drawn seat of the slot's Match
 // already holds a Participant out of source (the Troika rules §5.3: a group's winner
 // never meets a runner-up of its own group).
@@ -137,7 +154,7 @@ func drawnFromSource(ctx context.Context, q store.Queryer, gameID int64, slots [
 		if other.matchID != slot.matchID || other.slotID == slot.slotID || other.occupant == 0 {
 			continue
 		}
-		candidates, err := store.LoadDrawCandidates(ctx, q, gameID, other.draw)
+		candidates, err := slotOptions(ctx, q, gameID, other)
 		if err != nil {
 			return false, err
 		}

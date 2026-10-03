@@ -2737,6 +2737,12 @@ html:has(.game-host-top) {
   font-size: var(--grid-cell-text);
 }
 
+/* The note under a seat an admin filled with a substitute: the kit's hint,
+   in the grid's type. */
+.grid-draw-row > .hint {
+  font-size: var(--grid-cell-text);
+}
+
 .ek-stats-wrapper {
   align-items: flex-start;
 }

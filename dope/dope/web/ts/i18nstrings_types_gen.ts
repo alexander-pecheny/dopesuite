@@ -338,6 +338,8 @@ export type Strings = {
       pending: () => string;
       seat: (bout: string) => string;
       seatOf: (bout: string, seat: string) => string;
+      substituted: () => string;
+      substitutes: () => string;
       title: () => string;
     };
     grid: {

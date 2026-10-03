@@ -36,6 +36,11 @@ seat_of = 'Бой {{.bout}}. {{.seat}}'
 none = "—"
 # What the panel says while the раунд it draws from is still being played.
 pending = "Жребий откроется, когда закончатся бои предыдущего раунда."
+# The heading of a seat's select over the teams an admin may seat in place
+# of a drawn team that drops out: those that went through on no place.
+substitutes = "Замена (не прошли дальше)"
+# The note under a seat whose team is such a замена.
+substituted = "Замена: команда не из жребия"
 
 [grid]
 # The place column head of a bout box or group table.

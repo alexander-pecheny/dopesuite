@@ -212,6 +212,10 @@ type DrawSlotView struct {
 	Seated     int64               `json:"seated,omitempty"`
 	Apart      bool                `json:"apart,omitempty"`
 	Candidates []DrawCandidateView `json:"candidates,omitempty"`
+	// Substitutes are whom an admin may seat instead when a drawn team drops
+	// out: the teams of the same tables that went through on no place. They
+	// are listed only once Candidates are.
+	Substitutes []DrawCandidateView `json:"substitutes,omitempty"`
 }
 
 type DrawCandidateView struct {

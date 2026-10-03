@@ -3,6 +3,7 @@ package tests
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"testing"
 	"time"
 
@@ -151,5 +152,49 @@ where m.game_id = ? and m.code = 's2-r1-m1' and ms.slot_index = 1`, gameID).Scan
 	}
 	if seated != other.ID {
 		t.Fatalf("bout 1 seats %d as the runner-up, want %d", seated, other.ID)
+	}
+
+	// A drawn team drops out: an admin seats instead a team of the same
+	// groups that went through on no place, under the same apart rule.
+	slots = drawSlotsOf(t, game, "s2-r1")
+	substitutes := slots[1].Substitutes
+	if len(substitutes) != 8 {
+		t.Fatalf("substitutes: %d, want the 8 third and fourth places", len(substitutes))
+	}
+	through := map[int64]bool{}
+	for _, candidate := range append(append([]store.DrawCandidateView{}, winners...), runnersUp...) {
+		through[candidate.ID] = true
+	}
+	var ownSub, otherSub store.DrawCandidateView
+	for _, substitute := range substitutes {
+		if through[substitute.ID] {
+			t.Fatalf("%s goes through on its place and is offered as a substitute", substitute.Name)
+		}
+		if substitute.Source == winners[0].Source && ownSub.ID == 0 {
+			ownSub = substitute
+		} else if substitute.Source != winners[0].Source && otherSub.ID == 0 {
+			otherSub = substitute
+		}
+	}
+	if code := draw(slots[1].Code, ownSub.ID); code != http.StatusBadRequest {
+		t.Fatalf("a substitute against its own group's winner: %d, want 400", code)
+	}
+	if code := draw(slots[1].Code, otherSub.ID); code != http.StatusOK {
+		t.Fatalf("a substitute of another group: %d", code)
+	}
+	if err := db.QueryRow(`
+select ms.participant_id from match_slots ms join matches m on m.id = ms.match_id
+where m.game_id = ? and m.code = 's2-r1-m1' and ms.slot_index = 1`, gameID).Scan(&seated); err != nil {
+		t.Fatal(err)
+	}
+	if seated != otherSub.ID {
+		t.Fatalf("bout 1 seats %d after the substitution, want %d", seated, otherSub.ID)
+	}
+	if code := draw(slots[5].Code, otherSub.ID); code != http.StatusBadRequest {
+		t.Fatalf("a substitute drawn into a second seat: %d, want 400", code)
+	}
+	slots = drawSlotsOf(t, game, "s2-r1")
+	if !slices.ContainsFunc(slots[1].Substitutes, func(c store.DrawCandidateView) bool { return c.ID == otherSub.ID }) {
+		t.Fatalf("the seated substitute left its own seat's list: %+v", slots[1].Substitutes)
 	}
 }

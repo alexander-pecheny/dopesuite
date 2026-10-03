@@ -44,6 +44,10 @@ export interface DrawSlot {
   // same source (a group), which each candidate names.
   apart?: boolean;
   candidates?: Array<{id: number; name: string; source?: string}>;
+  // substitutes: whom an admin may seat instead of a drawn team that drops
+  // out — the teams of the same tables that went through on no place. The
+  // server lists them only once the candidates are known.
+  substitutes?: Array<{id: number; name: string; source?: string}>;
 }
 
 export interface FestGridMatch {
@@ -691,7 +695,7 @@ function buildDrawPanel(section: GridBoxes, ctx: PaintContext): HTMLElement | nu
     const blocked = new Set<string>();
     if (seat.draw.apart) {
       for (const other of partners) {
-        const source = (other.draw.candidates || []).find((candidate) => candidate.id === other.draw.seated)?.source;
+        const source = drawOptions(other.draw).find((candidate) => candidate.id === other.draw.seated)?.source;
         if (source) blocked.add(source);
       }
     }
@@ -700,21 +704,42 @@ function buildDrawPanel(section: GridBoxes, ctx: PaintContext): HTMLElement | nu
     none.value = "0";
     none.textContent = S.fest.draw.none();
     select.appendChild(none);
-    for (const candidate of seat.draw.candidates || []) {
-      if (taken.has(candidate.id) && candidate.id !== seat.draw.seated) continue;
-      if (candidate.source && blocked.has(candidate.source) && candidate.id !== seat.draw.seated) continue;
-      const item = document.createElement("option");
-      item.value = String(candidate.id);
-      item.textContent = candidate.name;
-      item.selected = candidate.id === seat.draw.seated;
-      select.appendChild(item);
+    const offer = (parent: HTMLElement, list: Array<{id: number; name: string; source?: string}>) => {
+      for (const candidate of list) {
+        if (taken.has(candidate.id) && candidate.id !== seat.draw.seated) continue;
+        if (candidate.source && blocked.has(candidate.source) && candidate.id !== seat.draw.seated) continue;
+        const item = document.createElement("option");
+        item.value = String(candidate.id);
+        item.textContent = candidate.name;
+        item.selected = candidate.id === seat.draw.seated;
+        parent.appendChild(item);
+      }
+    };
+    offer(select, seat.draw.candidates || []);
+    // A team that drops out is replaced by one that went through on no
+    // place; they stand apart under their own heading so nobody draws one by
+    // mistake.
+    if ((seat.draw.substitutes || []).length) {
+      const group = document.createElement("optgroup");
+      group.label = S.fest.draw.substitutes();
+      offer(group, seat.draw.substitutes || []);
+      if (group.children.length) select.appendChild(group);
     }
     select.value = String(seat.draw.seated || 0);
     select.addEventListener("change", () => ctx.options.onDraw?.(seat.draw.code, Number(select.value) || 0));
     row.appendChild(select);
+    if ((seat.draw.substitutes || []).some((candidate) => candidate.id === seat.draw.seated)) {
+      row.appendChild(el("span", "hint", S.fest.draw.substituted()));
+    }
     panel.appendChild(row);
   }
   return panel;
+}
+
+// drawOptions is everyone a drawn seat may hold: its candidates, then the
+// substitutes.
+function drawOptions(draw: DrawSlot): Array<{id: number; name: string; source?: string}> {
+  return [...(draw.candidates || []), ...(draw.substitutes || [])];
 }
 
 function buildMatchBoxes({live, boxes}: GridBoxes, ctx: PaintContext): HTMLElement {

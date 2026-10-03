@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -154,8 +155,102 @@ order by ms.slot_index`, []any{matchID}, func(rows *sql.Rows) (MatchParticipantS
 			return nil, err
 		}
 		teams[index].Draw.Candidates = candidates
+		if len(candidates) == 0 {
+			continue
+		}
+		substitutes, err := LoadDrawSubstitutes(ctx, q, gameID, matchID, draw)
+		if err != nil {
+			return nil, err
+		}
+		teams[index].Draw.Substitutes = substitutes
 	}
 	return teams, nil
+}
+
+// LoadDrawSubstitutes lists whom an admin may seat in a Draw Slot in place of
+// a team that drops out: the rest of the tables the Slot draws ranks from —
+// everyone ranked below every rank a Draw of this Game takes from that table,
+// so nobody who goes through on their own place — less anyone a seat of the
+// Slot's stage already holds without a draw. They are offered once the Slot's
+// tables are played out, the same gate its candidates wait on, and a Draw by
+// Match places (Hamsa's lot) has none.
+func LoadDrawSubstitutes(ctx context.Context, q Queryer, gameID, matchID int64, draw *SchemeDraw) ([]DrawCandidateView, error) {
+	if draw == nil || len(draw.Ranks) == 0 {
+		return nil, nil
+	}
+	drawn, err := drawnRanks(ctx, q, gameID)
+	if err != nil {
+		return nil, err
+	}
+	var stages []string
+	args := []any{gameID}
+	for _, rank := range draw.Ranks {
+		if !slices.Contains(stages, rank.Stage) {
+			stages = append(stages, rank.Stage)
+			args = append(args, rank.Stage)
+		}
+	}
+	args = append(args, matchID, SlotPlaceholder)
+	type ranked struct {
+		Code string
+		Rank int
+		ID   int64
+		Name string
+	}
+	rows, err := CollectRows(ctx, q, `
+select s.code, ss.rank, ss.participant_id, coalesce(p.name, '')
+from stage_standings ss
+join stages s on s.id = ss.stage_id
+join participants p on p.id = ss.participant_id
+where s.game_id = ? and s.code in (`+placeholders(len(stages))+`)
+  and exists (select 1 from matches m where m.stage_id = s.id)
+  and not exists (select 1 from matches m where m.stage_id = s.id and m.status != 'finished')
+  and ss.participant_id not in (
+    select ms.participant_id from match_slots ms join matches m on m.id = ms.match_id
+    where m.stage_id = (select stage_id from matches where id = ?)
+      and ms.participant_id is not null and ms.source_type != ?)
+order by ss.rank`,
+		args, func(rows *sql.Rows) (ranked, error) {
+			var r ranked
+			return r, rows.Scan(&r.Code, &r.Rank, &r.ID, &r.Name)
+		})
+	if err != nil {
+		return nil, err
+	}
+	var out []DrawCandidateView
+	for _, stage := range stages {
+		for _, row := range rows {
+			if row.Code == stage && row.Rank > drawn[stage] {
+				out = append(out, DrawCandidateView{ID: row.ID, Name: row.Name, Source: row.Code})
+			}
+		}
+	}
+	return out, nil
+}
+
+// drawnRanks is, per ranked table, the lowest rank any Draw of the Game takes
+// from it: whoever is ranked below that goes through on no draw.
+func drawnRanks(ctx context.Context, q Queryer, gameID int64) (map[string]int, error) {
+	refs, err := CollectRows(ctx, q, `
+select ms.source_ref_json from match_slots ms join matches m on m.id = ms.match_id
+where m.game_id = ? and ms.source_type = ?`, []any{gameID, SlotPlaceholder}, func(rows *sql.Rows) (string, error) {
+		var ref string
+		return ref, rows.Scan(&ref)
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]int{}
+	for _, ref := range refs {
+		draw := ParseSlotRef(SlotPlaceholder, ref).Draw
+		if draw == nil {
+			continue
+		}
+		for _, rank := range draw.Ranks {
+			out[rank.Stage] = max(out[rank.Stage], rank.Rank)
+		}
+	}
+	return out, nil
 }
 
 // AdvancePlaceSQL is the place a match_results row (mr) goes forward from: the
