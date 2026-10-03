@@ -99,7 +99,7 @@ func SetDrawTx(ctx context.Context, tx *sql.Tx, gameID int64, code string, parti
 			}
 		}
 		for _, other := range slots {
-			if other.slotID != slot.slotID && other.stageID == slot.stageID && other.occupant == participant {
+			if other.slotID != slot.slotID && other.occupant == participant && sameRound(other, slot) {
 				return nil, corei18n.User(s.Resolver.Draw.AlreadySeated())
 			}
 		}
@@ -125,6 +125,32 @@ update match_slots set participant_id = ?, locked = ? where id = ?`,
 		return nil, err
 	}
 	return append([]int64{slot.matchID}, affected...), nil
+}
+
+// sameRound reports whether two Draw Slots seat the same Round: they stand in
+// one stage, or they draw from the same tables or bouts. A Round played in
+// waves (the Octobearfest troika game's 1/16 in s2-r1-w1 and s2-r1-w2) is two
+// stages, yet every seat of both draws from the same groups, and a team that
+// sat in both would leave a table short.
+func sameRound(a, b drawSlotRow) bool {
+	if a.stageID == b.stageID {
+		return true
+	}
+	for _, x := range a.draw.Ranks {
+		for _, y := range b.draw.Ranks {
+			if x.Stage == y.Stage {
+				return true
+			}
+		}
+	}
+	for _, x := range a.draw.Candidates {
+		for _, y := range b.draw.Candidates {
+			if x.Match == y.Match {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // slotOptions is everyone a Slot may be filled with: its candidates and, once

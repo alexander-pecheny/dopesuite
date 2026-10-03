@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -193,6 +194,38 @@ where m.game_id = ? and m.code = 's2-r1-m1' and ms.slot_index = 1`, gameID).Scan
 	if code := draw(slots[5].Code, otherSub.ID); code != http.StatusBadRequest {
 		t.Fatalf("a substitute drawn into a second seat: %d, want 400", code)
 	}
+	// The Round played in two waves, as the Октоберфест Троечка's 1/16 is:
+	// the second half of its bouts in a stage of their own. A team seated in
+	// the first wave is still refused a seat in the second.
+	res, err := db.Exec(`
+insert into stages(fest_id, game_id, code, title, stage_type, position)
+select fest_id, game_id, 's2-r1-w2', title, stage_type, position from stages where game_id = ? and code = 's2-r1'`, gameID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wave, _ := res.LastInsertId()
+	if _, err := db.Exec(`
+update matches set stage_id = ? where game_id = ? and code in ('s2-r1-m3', 's2-r1-m4')`, wave, gameID); err != nil {
+		t.Fatal(err)
+	}
+	seatedTwice := func(slot string, participant int64) {
+		t.Helper()
+		resp := scopedAPIRequest(t, srv, http.MethodPut,
+			fmt.Sprintf("/api/fest/%d/games/%d/draw", festID, gameID),
+			map[string]any{"slot": slot, "participant": participant}, token)
+		if resp.Code != http.StatusBadRequest || !strings.Contains(resp.Body.String(), "уже посажена") {
+			t.Fatalf("seated in the second wave too: %d %s", resp.Code, resp.Body.String())
+		}
+	}
+	// Clear bout 3 first, so no apart rule can be what refuses them.
+	for _, slot := range slots[4:6] {
+		if code := draw(slot.Code, 0); code != http.StatusOK {
+			t.Fatalf("clear %s: %d", slot.Code, code)
+		}
+	}
+	seatedTwice(slots[5].Code, otherSub.ID)
+	seatedTwice(slots[4].Code, winners[0].ID)
+
 	slots = drawSlotsOf(t, game, "s2-r1")
 	if !slices.ContainsFunc(slots[1].Substitutes, func(c store.DrawCandidateView) bool { return c.ID == otherSub.ID }) {
 		t.Fatalf("the seated substitute left its own seat's list: %+v", slots[1].Substitutes)
