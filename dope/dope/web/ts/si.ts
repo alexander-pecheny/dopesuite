@@ -694,7 +694,7 @@ function nameCell(name: string, playerIndex: number): HTMLElement {
     cell.appendChild(layout);
 
     const fullName = document.createElement("span");
-    fullName.className = "popover popover-inline od-detailed-team-name-popover";
+    fullName.className = "popover popover-inline";
     fullName.textContent = baseName;
     cell.appendChild(fullName);
     return cell;

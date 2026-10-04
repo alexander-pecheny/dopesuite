@@ -115,7 +115,7 @@ export function createBoardMembers(state: MembersState, boardId: number | string
     invites.render();
     for (const m of members) {
       const row = el("div", { class: "member-row" },
-        el("span", { class: "member-name", text: memberName(m) }),
+        el("span", { class: "member-name u-clip-fade", text: memberName(m) }),
         el("span", { class: "member-role", text: roleLabel(m.role) }),
       );
       if (isOwner && m.role !== "owner") {

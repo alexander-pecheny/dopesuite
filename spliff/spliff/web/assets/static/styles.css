@@ -20,7 +20,6 @@
 /* The name a row is about: it may be long, and it is the part that gives way. */
 .split-name {
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

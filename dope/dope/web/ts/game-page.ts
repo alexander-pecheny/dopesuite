@@ -79,7 +79,7 @@ export function renderGameBreadcrumbs(root: HTMLElement | null | undefined, opti
     if (i > 0) root.appendChild(breadcrumbSeparator());
     const last = i === trail.length - 1;
     const node = document.createElement(crumb.href && !last ? "a" : "span");
-    node.className = "crumb" + (crumb.home ? " crumb-home" : "") + (last ? " crumb-current" : "");
+    node.className = "crumb" + (crumb.home ? " crumb-home" : " u-clip-fade") + (last ? " crumb-current" : "");
     // The home crumb is a glyph with no words; the rest say what they are.
     if (crumb.home) {
       node.appendChild(icon("house"));

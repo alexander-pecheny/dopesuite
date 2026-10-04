@@ -121,7 +121,7 @@ test("the badges hang off a team name; a team with no зачёт adds no node", 
   assert.deepEqual(nodes.filter((n) => n.className === "team-flag").map((n) => n.textContent), ["Школ"]);
   // The name and its popover say nothing of the зачёт.
   assert.equal(nodes.find((n) => n.className === "results-team-name").textContent, "Команда");
-  assert.equal(nodes.find((n) => n.className.includes("results-team-name-popover")).textContent, "Команда");
+  assert.equal(nodes.find((n) => n.className.includes("popover-inline")).textContent, "Команда");
   // The city is still there, on the same line as the badges.
   assert.equal(nodes.filter((n) => n.className === "results-team-city").length, 1);
   // And a cell with no зачёт is built exactly as it always was.

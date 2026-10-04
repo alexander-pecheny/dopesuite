@@ -154,8 +154,9 @@ bout = 'Бой {{.n}} ({{.wins}}–{{.losses}})'
 # The title of a pool: the troikas that share one record in a round, ranked
 # by their seed before they are dealt into бои.
 pool = 'Пул {{.wins}}–{{.losses}}'
-# The label of a seat dealt from a pool while it is still empty.
-pool_rank = 'Пул {{.wins}}–{{.losses}}, {{.n}}-й'
+# The label of a seat dealt from a pool while it is still empty, worded like
+# seat_from_bout so every seat source reads «…, м. N».
+pool_rank = 'Пул {{.wins}}–{{.losses}}, м. {{.n}}'
 # A participants value the block has no plan for; the plans come from the
 # regulations the format was built for.
 participants_unsupported = 'swiss: нет плана на {{.participants}} участников (есть {{.known}})'

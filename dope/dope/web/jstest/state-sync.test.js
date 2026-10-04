@@ -651,13 +651,17 @@ test("createEpochTracker baselines the first epoch and flags real changes", () =
   assert.equal(tracker.changed({epoch: "b"}), true, "new epoch is a change");
 });
 
-test("another game's fest view and document are a sibling's, the page's own are not", () => {
+test("another game's bouts, document, roster and fest view are a sibling's, the page's own are not", () => {
   assert.equal(siblingGameScope("fest:1:2", "1"), true);
   assert.equal(siblingGameScope("fest:1:1", "1"), false);
   assert.equal(siblingGameScope("fest:1:10", "1"), true);
   assert.equal(siblingGameScope("game-state:2", 1), true);
   assert.equal(siblingGameScope("game-state:1", 1), false);
-  assert.equal(siblingGameScope("match:2:a", "1"), false);
+  assert.equal(siblingGameScope("match:2:a", "1"), true);
+  assert.equal(siblingGameScope("match:1:a", "1"), false);
+  assert.equal(siblingGameScope("match:12:a", "1"), true);
+  assert.equal(siblingGameScope("game-roster:2", "1"), true);
+  assert.equal(siblingGameScope("game-roster:1", 1), false);
   assert.equal(siblingGameScope("venues:1", "1"), false);
   assert.equal(siblingGameScope("fest:1:2", null), false);
   assert.equal(siblingGameScope("fest:1:2", "ek-slug"), false);

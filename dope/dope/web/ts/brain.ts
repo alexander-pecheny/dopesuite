@@ -16,7 +16,7 @@ import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReloa
 import {mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameInitLike} from "./game-page.js";
-import {createFloatingPopover, fitScrollFade, markNameOverflow, renderTabBar} from "./widgets.js";
+import {fitScrollFade, markNameOverflow, renderTabBar} from "./widgets.js";
 import {createSheetCursor, parseMark} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {computeBrainPlayerStats} from "./brain-stats.js";
@@ -28,7 +28,7 @@ import type {FestGridStage, ReseedEntry} from "./fest-grid.js";
 import {gameTabs, canonicalKey, groupLabel} from "./game-tabs.js";
 import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
 import type {GameTab} from "./game-tabs.js";
-import {boutWhereWhen, VENUE_POPOVER_SPEC} from "./venue.js";
+import {boutWhereWhen} from "./venue.js";
 import type {Venue} from "./venue.js";
 import S from "./i18nstrings.js";
 import {createEntrantsTab} from "./entrants.js";
@@ -113,15 +113,6 @@ const brainTabsRoot = document.getElementById("brainTabs");
 const statusNode = document.getElementById("status");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
-
-// Long team names fade at their fixed width and carry a popover — the same
-// treatment the EK tables give theirs.
-const floatingPopover = createFloatingPopover({root: brainRoot, specs: [
-  VENUE_POPOVER_SPEC,
-  {trigger: ".brain-name-head.brain-name-truncated", popover: ".brain-name-popover", anchor: ".brain-name-wrap"},
-  {trigger: ".results-team-truncated", popover: ".results-team-name-popover", anchor: ".results-team-name"},
-]});
-floatingPopover.bind();
 
 let brainNameOverflowFrame = 0;
 function scheduleBrainNameOverflowUpdate(): void {
@@ -796,7 +787,7 @@ function nameHead(view: BrainMatchView, side: number, planned: BrainSchemeMatch)
   wrap.appendChild(name);
   th.appendChild(wrap);
   const popover = document.createElement("span");
-  popover.className = "popover popover-inline brain-name-popover";
+  popover.className = "popover popover-inline";
   popover.textContent = label;
   th.appendChild(popover);
   return th;

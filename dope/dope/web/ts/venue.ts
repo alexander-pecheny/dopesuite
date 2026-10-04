@@ -194,10 +194,8 @@ export function venueLabel(venue: VenueLike, className = "", text = ""): HTMLEle
   return wrap;
 }
 
-// VENUE_POPOVER_SPEC is the floating popover a page binds for its venue
-// labels: a clipped one shows its whole title on hover or focus, the way a
-// team's name does.
-export const VENUE_POPOVER_SPEC = {trigger: ".venue-label-truncated", popover: ".venue-label-popover", anchor: ".venue-label-name"};
+// A clipped venue label shows its whole title on hover or focus, the way a
+// team's name does: widgets.ts's VENUE_POPOVER_SPEC, bound on every game page.
 
 // markVenueOverflow flags the venue labels their column clips.
 export function markVenueOverflow(root: ParentNode | null | undefined): void {

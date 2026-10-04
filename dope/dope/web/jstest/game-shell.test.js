@@ -52,9 +52,9 @@ function mount(viewer, chrome) {
 
 test("the host trail carries Мои фесты, the viewer's does not, and both end on the game", () => {
   const host = mount(false, {festTitle: "Кубок", gameTitle: "Брейн"});
-  assert.deepEqual(host.trail, ["crumb crumb-home: → /", "crumb:Мои фесты → /host", "crumb:Кубок → /host/fest/12", "crumb crumb-current:Брейн"]);
+  assert.deepEqual(host.trail, ["crumb crumb-home: → /", "crumb u-clip-fade:Мои фесты → /host", "crumb u-clip-fade:Кубок → /host/fest/12", "crumb u-clip-fade crumb-current:Брейн"]);
   const viewer = mount(true, {festTitle: "Кубок", gameTitle: "Брейн"});
-  assert.deepEqual(viewer.trail, ["crumb crumb-home: → /", "crumb:Кубок → /fest/12", "crumb crumb-current:Брейн"]);
+  assert.deepEqual(viewer.trail, ["crumb crumb-home: → /", "crumb u-clip-fade:Кубок → /fest/12", "crumb u-clip-fade crumb-current:Брейн"]);
 });
 
 test("the title is «game · fest», or the section below the game", () => {
@@ -62,7 +62,7 @@ test("the title is «game · fest», or the section below the game", () => {
   assert.equal(document.title, "ЭК · Кубок");
   const {trail} = mount(false, {festTitle: "Кубок", gameTitle: "ЭК", gameHref: "/host/fest/12/game/3/", currentTitle: "Площадки"});
   assert.equal(document.title, "Площадки · Кубок");
-  assert.deepEqual(trail.slice(-2), ["crumb:ЭК → /host/fest/12/game/3/", "crumb crumb-current:Площадки"]);
+  assert.deepEqual(trail.slice(-2), ["crumb u-clip-fade:ЭК → /host/fest/12/game/3/", "crumb u-clip-fade crumb-current:Площадки"]);
   mount(true, {festTitle: "", gameTitle: "ОД"});
   assert.equal(document.title, "ОД");
 });

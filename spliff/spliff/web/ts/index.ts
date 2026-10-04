@@ -66,7 +66,7 @@ function render(groups: GroupSummaryDTO[]): void {
     const row = el("a", "list-row");
     row.href = `/group/${group.id}`;
     const left = rowGroup(true);
-    left.append(el("span", "list-row-title split-name", group.name));
+    left.append(el("span", "list-row-title split-name u-clip-fade", group.name));
     if (group.is_owner) left.append(badge(S.page.group.ownerTag()));
     row.append(left);
     if (group.balance_minor === 0) {

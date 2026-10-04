@@ -17,7 +17,7 @@ import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReloa
 import {mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameInitLike} from "./game-page.js";
-import {createFloatingPopover, markNameOverflow, renderTabBar} from "./widgets.js";
+import {controlTextOverflows, markNameOverflow, renderTabBar} from "./widgets.js";
 import {createSheetCursor, parseMark} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {buildCrosstables, CANON_COLUMNS, crossSlot, standingsByParticipant} from "./crosstable.js";
@@ -32,7 +32,7 @@ import * as troika from "./troika-protocol.js";
 import type {Mark, TroikaState} from "./troika-protocol.js";
 import {buildTroikaStatsTable, computeTroikaPlayerStats} from "./troika-stats.js";
 import type {TroikaBout} from "./troika-stats.js";
-import {boutWhereWhen, buildVenuesTable, markVenueOverflow, VENUE_POPOVER_SPEC} from "./venue.js";
+import {boutWhereWhen, buildVenuesTable, markVenueOverflow} from "./venue.js";
 import type {Venue} from "./venue.js";
 import S from "./i18nstrings.js";
 import {createEntrantsTab} from "./entrants.js";
@@ -119,13 +119,6 @@ const shell = mountGamePage({
   activeCursorElement: () => cursor.activeCell || writtenCursor.activeCell,
 });
 const {viewer, staticMode, scopeGameID, indicator, viewerCounter} = shell;
-// Long team names fade at their column and carry a popover, in the group
-// tables and the fest grid's boxes alike.
-createFloatingPopover({root, specs: [
-  VENUE_POPOVER_SPEC,
-  {trigger: ".results-team-truncated", popover: ".results-team-name-popover", anchor: ".results-team-name"},
-  {trigger: ".grid-slot-team-truncated", popover: ".grid-slot-team-popover", anchor: ".grid-slot-team-name"},
-]}).bind();
 
 let nameOverflowFrame = 0;
 function scheduleNameOverflow(): void {
@@ -133,6 +126,8 @@ function scheduleNameOverflow(): void {
   nameOverflowFrame = requestAnimationFrame(() => {
     nameOverflowFrame = 0;
     markNameOverflow(root, {cellSelector: ".results-team", nameSelector: ".results-team-name", truncatedClass: "results-team-truncated"});
+    markNameOverflow(root, {cellSelector: ".troika-team", nameSelector: ".od-detailed-team-name", truncatedClass: "od-detailed-team-cell-truncated"});
+    markChairOverflow(root);
     markVenueOverflow(root);
   });
 }
@@ -492,7 +487,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
 
   const thead = document.createElement("thead");
   const themeRow = document.createElement("tr");
-  themeRow.appendChild(th(S.troika.protocol.team(), "troika-team-head"));
+  themeRow.appendChild(th(S.troika.protocol.team(), "sticky sticky-name troika-team-head"));
   state.values.forEach((value, t) => {
     // The gap parts themes BEFORE any seating column, which sits flush
     // against the theme it seats.
@@ -513,7 +508,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
     const roster = boutRoster(bout.view, side);
     for (let chair = 0; chair < troika.CHAIRS; chair++) {
       const tr = document.createElement("tr");
-      if (chair === 0) tr.appendChild(td(seatName(bout.view, side), "troika-team", {rowSpan: troika.CHAIRS}));
+      if (chair === 0) tr.appendChild(sideNameCell(seatName(bout.view, side)));
       state.values.forEach((_value, t) => {
         if (t > 0) tr.appendChild(td("", "gap"));
         if (seatsAt.has(t)) tr.appendChild(td(chairPicker(bout, side, t, chair, roster, editable), "player-cell"));
@@ -535,6 +530,45 @@ function buildBout(bout: BoutEntry): HTMLElement {
   table.appendChild(body);
   box.appendChild(table);
   return box;
+}
+
+// sideNameCell is a side's name, pinned at the sheet's left edge while the
+// themes scroll under it. It is EK's cell: a long name fades at the column's edge
+// and shows whole in the page's popover, never an ellipsis.
+function sideNameCell(name: string, rowSpan = troika.CHAIRS): HTMLElement {
+  const cell = td("", "sticky sticky-name ek-team-cell troika-team", {rowSpan});
+  const layout = document.createElement("span");
+  layout.className = "od-detailed-team-layout";
+  const wrap = document.createElement("span");
+  wrap.className = "od-detailed-team-name-wrap";
+  const label = document.createElement("span");
+  label.className = "od-detailed-team-name";
+  label.textContent = name;
+  label.tabIndex = 0;
+  wrap.appendChild(label);
+  layout.appendChild(wrap);
+  cell.appendChild(layout);
+  const popover = document.createElement("span");
+  popover.className = "popover popover-inline";
+  popover.textContent = name;
+  cell.appendChild(popover);
+  return cell;
+}
+
+// markChairOverflow fades the seating cells whose player's name does not fit,
+// and gives their popover the name, as EK's seating cells do.
+function markChairOverflow(scope: ParentNode): void {
+  const wraps = [...scope.querySelectorAll<HTMLElement>(".troika-sheet .player-select-wrap")];
+  const readings = wraps.map((wrap) => {
+    const select = wrap.querySelector<HTMLSelectElement>("select");
+    const label = select && select.value !== "0" ? select.selectedOptions[0]?.textContent || "" : "";
+    return {label, clipped: controlTextOverflows(select, label)};
+  });
+  wraps.forEach((wrap, i) => {
+    const popover = wrap.querySelector(".popover-inline");
+    if (popover) popover.textContent = readings[i].label;
+    wrap.classList.toggle("player-select-truncated", readings[i].clipped);
+  });
 }
 
 // boutHead names the bout by its letter and title. On a host's open bout whose
@@ -731,8 +765,11 @@ function deleteTurn(bout: BoutEntry, t: number): void {
 function chairPicker(bout: BoutEntry, side: number, from: number, chair: number,
   roster: Array<{id: number; name: string}>, editable: boolean): HTMLElement {
   const state = stateOf(bout.code);
+  const wrap = document.createElement("span");
+  wrap.className = "player-select-wrap";
   const select = document.createElement("select");
   select.className = "troika-chair-select";
+  select.dataset.playerSelect = "";
   select.disabled = !editable;
   select.title = chair === troika.CHAIRS - 1 ? S.troika.chair.lead() : S.troika.chair.outrider(String(chair + 1));
   const current = troika.chairAt(state, side, from, chair);
@@ -753,7 +790,10 @@ function chairPicker(bout: BoutEntry, side: number, from: number, chair: number,
     }
     render();
   });
-  return select;
+  const popover = document.createElement("span");
+  popover.className = "popover popover-inline";
+  wrap.append(select, popover);
+  return wrap;
 }
 
 function markCell(code: string, side: number, theme: number, q: number, chair: number,
@@ -880,7 +920,7 @@ function buildWrittenBout(bout: BoutEntry): HTMLElement {
   table.classList.toggle("match-finished", Boolean(bout.view.finished));
   const thead = document.createElement("thead");
   const themeRow = document.createElement("tr");
-  themeRow.appendChild(th(S.troika.protocol.team(), "troika-team-head"));
+  themeRow.appendChild(th(S.troika.protocol.team(), "sticky sticky-name troika-team-head"));
   state.values.forEach((value, t) => {
     if (t > 0) themeRow.appendChild(th("", "gap-head"));
     themeRow.appendChild(th(S.troika.theme.head(String(t + 1), String(value)), "theme-block",
@@ -901,7 +941,7 @@ function buildWrittenBout(bout: BoutEntry): HTMLElement {
   const body = document.createElement("tbody");
   state.sides.forEach((_side, side) => {
     const tr = document.createElement("tr");
-    tr.appendChild(td(seatName(bout.view, side), "troika-team"));
+    tr.appendChild(sideNameCell(seatName(bout.view, side), 1));
     state.values.forEach((_value, t) => {
       if (t > 0) tr.appendChild(td("", "gap"));
       for (let q = 0; q < troika.THEME_QUESTIONS; q++) {
@@ -1098,7 +1138,10 @@ function buildSwissTables(stages: SchemeStage[]): HTMLElement {
     head.textContent = stage.title || stage.code || "";
     wrap.appendChild(head);
     const number = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? String(value) : "");
+    // The name column has the width every results table's has (narrower on a
+    // phone), so the table fits the screen and a long name fades into its popover.
     wrap.appendChild(standingsTable({
+      className: "troika-swiss-table",
       columns: [
         {label: S.troika.swiss.place(), kind: "place"},
         {label: S.troika.protocol.team(), kind: "name"},

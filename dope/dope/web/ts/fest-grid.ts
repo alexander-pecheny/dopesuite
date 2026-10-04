@@ -978,7 +978,7 @@ function slotTeamCell(label: string): HTMLElement {
   name.setAttribute("aria-label", label);
   cell.appendChild(name);
   const fullName = document.createElement("span");
-  fullName.className = "popover popover-inline grid-slot-team-popover";
+  fullName.className = "popover popover-inline";
   fullName.textContent = label;
   cell.appendChild(fullName);
   return cell;

@@ -75,7 +75,7 @@ test("standingsTable draws the results-table skin from columns and rows", () => 
   assert.deepEqual(rows[0].children.map((c) => c.textContent), ["1", "", "9", "−3"], "a leading minus is typographic");
   // The name column is the fading name cell, not a bare td.
   assert.equal(withClass(rows[0].children[1], "results-team-name")[0].textContent, "Ктулху");
-  assert.equal(withClass(rows[0].children[1], "results-team-name-popover")[0].textContent, "Ктулху");
+  assert.equal(withClass(rows[0].children[1], "popover-inline")[0].textContent, "Ктулху");
 });
 
 // A caller that needs more than text — an input, a link, a per-cell class —
@@ -104,7 +104,7 @@ test("resultsTeamCell carries the city, the flag and the link", () => {
   assert.equal(name.attributes["aria-label"], "Ктулху", "the flag is decoration");
   assert.deepEqual(classes(name), ["results-team-name", "quiet-link"]);
   assert.equal(withClass(cell, "results-team-city")[0].textContent, "Москва");
-  assert.equal(withClass(cell, "results-team-name-popover")[0].textContent, "🇷🇺 Ктулху");
+  assert.equal(withClass(cell, "popover-inline")[0].textContent, "🇷🇺 Ктулху");
   const plain = resultsTeamCell("Ктулху");
   assert.equal(withClass(plain, "results-team-name")[0].tag, "span");
   assert.equal(withClass(plain, "results-team-city").length, 0);

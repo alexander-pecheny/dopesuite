@@ -467,7 +467,7 @@ function updateTestBadge(): void {
   const name = sessionName(sid);
   testBadge.title = S.board.testmode.badge(name);
   testBadge.setAttribute("aria-label", testBadge.title);
-  testBadge.replaceChildren(icon("flask-conical"), el("span", { class: "testmode-badge-name", text: name }));
+  testBadge.replaceChildren(icon("flask-conical"), el("span", { class: "testmode-badge-name u-clip-fade", text: name }));
 }
 
 // The timer a backgrounded tab throttles is only a wake-up call; coming back
@@ -652,7 +652,7 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   col.append(el("div", { class: "klist-head" }, ...headKids, headMain, addCardBtn, previewBtn, menuWrap));
   if (list.groupId != null) {
     const g = groupById(list.groupId);
-    col.append(el("div", { class: "klist-group-tag", title: S.board.list.groupTitle() }, ...iconed("link", (g && g.name) || S.board.list.groupFallback())));
+    col.append(el("div", { class: "klist-group-tag u-clip-fade", title: S.board.list.groupTitle() }, ...iconed("link", (g && g.name) || S.board.list.groupFallback())));
   }
   const body = el("div", { class: "kcards", dataset: { listId: list.id } });
   // Grouped lists carry continuous numbering computed across the whole group;

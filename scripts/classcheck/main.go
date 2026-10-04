@@ -86,7 +86,7 @@ func main() {
 	}
 
 	styled := sites{}
-	geometry, layout := 0, 0
+	geometry, layout, stacking := 0, 0, 0
 	layoutBaseline, err := readAllow("scripts/classcheck/layout-baseline.txt")
 	if err != nil {
 		fatal("%v", err)
@@ -101,6 +101,7 @@ func main() {
 		}
 		geometry += reportGridLiterals(sheet, string(src))
 		layout += reportLayoutClasses(sheet, string(src), layoutBaseline)
+		stacking += reportStacking(sheet, string(src))
 	}
 
 	literals := sites{} // generous: any class-shaped token inside a string literal
@@ -171,12 +172,12 @@ func main() {
 			strings.Join(emitted.files(name), ", "), name)
 	}
 
-	if n := len(orphans) + len(dead) + geometry + layout; n > 0 {
+	if n := len(orphans) + len(dead) + geometry + layout + stacking; n > 0 {
 		fmt.Fprintf(os.Stderr, "\nclasscheck: %d orphan rule(s), %d dead name(s), %d Сетка geometry literal(s), "+
-			"%d re-invented layout class(es).\n"+
+			"%d re-invented layout class(es), %d ellipsis or hover z-index rule(s).\n"+
 			"Delete them, or record the exception in scripts/classcheck/allow.txt "+
-			"(layout-baseline.txt for the last kind) with a reason.\n",
-			len(orphans), len(dead), geometry, layout)
+			"(layout-baseline.txt for re-invented layout). The last kind has no exceptions.\n",
+			len(orphans), len(dead), geometry, layout, stacking)
 		os.Exit(1)
 	}
 	// The exemption is the check's one blind spot, so it is reported every run

@@ -445,7 +445,7 @@ export function scoreCellSpecs(options: ScoreCellSpecsOptions = {}): NodeIndexSp
         const theme = scoreThemeOf(node, ms);
         if (!theme) return;
         setNodeText(node, seatingText(theme, ms));
-        const popover = node.closest(".readonly-player")?.querySelector(".readonly-player-popover");
+        const popover = node.closest(".readonly-player")?.querySelector(".popover-inline");
         if (popover) setNodeText(popover, seatedNames(theme.players).join("\n"));
       }},
     {name: "playerSelect", selector: "[data-player-select]", keys: themeKeys,
@@ -468,7 +468,7 @@ export function scoreCellSpecs(options: ScoreCellSpecsOptions = {}): NodeIndexSp
         const theme = scoreThemeOf(node, ms);
         if (!theme) return;
         setNodeText(node.querySelector(".player-seats-text") || node, seatingText(theme, ms));
-        const popover = node.closest(".player-select-wrap")?.querySelector(".player-select-popover");
+        const popover = node.closest(".player-select-wrap")?.querySelector(".popover-inline");
         if (popover) setNodeText(popover, seatedNames(theme.players).join("\n"));
         o.onPlayerSelectSynced?.(node);
       }},

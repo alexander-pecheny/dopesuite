@@ -2671,7 +2671,7 @@ var RU = Strings{
 			},
 			Pool: func(wins string, losses string) string { return fmt.Sprintf("Пул %s–%s", wins, losses) },
 			PoolRank: func(wins string, losses string, n string) string {
-				return fmt.Sprintf("Пул %s–%s, %s-й", wins, losses, n)
+				return fmt.Sprintf("Пул %s–%s, м. %s", wins, losses, n)
 			},
 			Table: func() string { return "Итоги" },
 		},

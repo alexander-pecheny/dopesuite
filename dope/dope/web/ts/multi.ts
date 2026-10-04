@@ -245,7 +245,7 @@ function teamCell(p: number): HTMLElement {
   layout.appendChild(nameWrap);
   cell.appendChild(layout);
   const fullName = document.createElement("span");
-  fullName.className = "popover popover-inline od-detailed-team-name-popover";
+  fullName.className = "popover popover-inline";
   fullName.textContent = labelText;
   cell.appendChild(fullName);
   return cell;

@@ -12,7 +12,7 @@ import {buildRosterTable} from "./fest-roster.js";
 import type {RosterTeam} from "./fest-roster.js";
 import {buildEKStatsTable, buildIndividualStatsTable} from "./ek-stats.js";
 import type {EKPlayerStatsRow, IndividualStatsRow} from "./ek-stats.js";
-import {markNameOverflow} from "./widgets.js";
+import {floatingPopover, markNameOverflow} from "./widgets.js";
 import { buildFestGrid, buildReseedStagePanel } from "./fest-grid.js";
 import { autocomplete } from "../../../../dopeuikit/assets/ts/suggest.js";
 import type { FestGridMatch, FestGridStage } from "./fest-grid.js";
@@ -233,6 +233,7 @@ function render(root: HTMLElement): void {
     section(S.gallery.section.suggest(), "fits-frame", suggestField()),
     section(S.gallery.section.divisions(), "table-host fits-frame", divisionsDemo()),
   );
+  floatingPopover();
   requestAnimationFrame(() => markNameOverflow(root, {
     cellSelector: ".results-team",
     nameSelector: ".results-team-name",

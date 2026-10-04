@@ -10,7 +10,7 @@
 import {createLiveEvents, createScopedWriter, createSyncIndicator, createHostPresence, gameEventsURL, installClientRecorder, scheduleStaticReload} from "./state-sync.js";
 import S from "./i18nstrings.js";
 import type {ClientRecorder, HostPresence, LiveEvents, PatchPath, ScopedWriter, SyncIndicator} from "./state-sync.js";
-import {createStatusReporter, createViewerCounter} from "./widgets.js";
+import {createStatusReporter, createViewerCounter, floatingPopover} from "./widgets.js";
 import {createGameDataLoader, fetchGameData, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, renderGameBreadcrumbs} from "./game-page.js";
 import type {GameDataSnapshot, GameRoute} from "./game-page.js";
 import {cssEscape} from "./cells.js";
@@ -79,6 +79,9 @@ export function mountGamePage(spec: GameShellSpec): GameShell {
   const scopeGameID = spec.init?.gameID != null ? String(spec.init.gameID) : spec.gameID || "";
   const embedded = Boolean(spec.embedded);
   document.body.classList.toggle("viewer-readonly", viewer);
+  // Every clipped name on every game page shows whole in the one popover on
+  // <body>; no cell draws its own (widgets.ts floatingPopover).
+  floatingPopover();
 
   let jumpLink: {refresh(): void} | null = null;
   if (!embedded) {

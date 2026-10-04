@@ -16,7 +16,7 @@ import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReloa
 import {mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameInitLike} from "./game-page.js";
-import {bindScrollEdges, createFloatingPopover, fitScrollFade, markNameOverflow, renderTabBar} from "./widgets.js";
+import {bindScrollEdges, fitScrollFade, markNameOverflow, renderTabBar} from "./widgets.js";
 import {createSheetCursor, parseMark} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {buildTwoRowScoreTable} from "./score-table.js";
@@ -30,7 +30,7 @@ import * as hamsa from "./hamsa-protocol.js";
 import type {HamsaState, Mark} from "./hamsa-protocol.js";
 import {computeHamsaPlayerStats} from "./hamsa-stats.js";
 import type {HamsaBout} from "./hamsa-stats.js";
-import {boutWhereWhen, VENUE_POPOVER_SPEC} from "./venue.js";
+import {boutWhereWhen} from "./venue.js";
 import type {Venue} from "./venue.js";
 import S from "./i18nstrings.js";
 import {createEntrantsTab} from "./entrants.js";
@@ -115,11 +115,6 @@ const shell = mountGamePage({
   activeCursorElement: () => cursor.activeCell,
 });
 const {viewer, staticMode, scopeGameID, indicator, viewerCounter} = shell;
-createFloatingPopover({root, specs: [
-  VENUE_POPOVER_SPEC,
-  {trigger: ".results-team-truncated", popover: ".results-team-name-popover", anchor: ".results-team-name"},
-  {trigger: ".grid-slot-team-truncated", popover: ".grid-slot-team-popover", anchor: ".grid-slot-team-name"},
-]}).bind();
 
 // The fest's venues, for the host's pencil on a bout: it moves the bout to
 // another venue and gives it a start time. Filled in place once fetched.

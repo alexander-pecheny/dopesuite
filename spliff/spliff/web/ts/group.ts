@@ -207,7 +207,7 @@ function render(g: GroupDTO): void {
   for (const member of g.members) {
     const row = el("li", "list-row");
     const left = rowGroup(true);
-    left.append(el("span", "list-row-title split-name", member.name));
+    left.append(el("span", "list-row-title split-name u-clip-fade", member.name));
     if (member.is_owner) left.append(badge(S.page.group.ownerTag()));
     if (member.id === g.me) left.append(badge(S.page.group.you(), "emphasis"));
     row.append(left, amountNode(`${member.balance} ${g.base_currency}`, member.balance_minor));
@@ -246,7 +246,7 @@ function renderFeed(into: HTMLElement, list: TransactionDTO[], g: GroupDTO): voi
     row.href = `/transaction/${tx.id}`;
 
     const left = rowGroup(true);
-    left.append(el("span", "list-row-title split-name", tx.description));
+    left.append(el("span", "list-row-title split-name u-clip-fade", tx.description));
     left.append(el("span", "muted", tx.day));
     if (tx.unclaimed_minor > 0) {
       left.append(badge(S.page.group.unclaimed(`${tx.unclaimed} ${tx.currency}`), "negative"));
@@ -269,7 +269,7 @@ function renderMembers(g: GroupDTO): void {
   for (const member of g.members) {
     const row = el("li", "list-row");
     const left = rowGroup(true);
-    left.append(el("span", "list-row-title split-name", member.name));
+    left.append(el("span", "list-row-title split-name u-clip-fade", member.name));
     if (member.is_owner) left.append(badge(S.page.group.ownerTag()));
     if (member.is_phantom) left.append(badge(S.page.group.phantomTag()));
     row.append(left);
@@ -298,7 +298,7 @@ function renderHistory(into: HTMLElement, entries: HistoryDTO[], g: GroupDTO): v
     row.href = `/transaction/${entry.transaction_id}`;
     const body = el("span", "u-col u-gap-xs u-grow");
     const head = rowGroup();
-    head.append(el("span", "list-row-title split-name", entry.description || entry.actor));
+    head.append(el("span", "list-row-title split-name u-clip-fade", entry.description || entry.actor));
     head.append(el("span", "muted", `${entry.actor || S.page.history.somebody()} ${historyVerb(entry.kind)}`));
     body.append(head);
     for (const line of describeHistory(entry, names)) body.append(el("span", "muted", line));
@@ -322,7 +322,7 @@ function renderInvites(invites: InviteDTO[]): void {
   for (const invite of invites) {
     const row = el("li", "list-row u-wrap");
     const left = rowGroup(true);
-    left.append(el("span", "list-row-title split-name", invite.label || invite.code));
+    left.append(el("span", "list-row-title split-name u-clip-fade", invite.label || invite.code));
     left.append(badge(inviteState(invite.state), invite.state === "active" ? "positive" : "negative"));
     left.append(el("code", "invite-code muted", invite.url));
     row.append(left);

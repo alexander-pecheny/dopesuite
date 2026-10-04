@@ -92,7 +92,7 @@ test("a Group renders as a table of place against team", () => {
   // and the rows sit in seating order, not place order: a live группа must
   // not reshuffle under the reader with every закрытый бой.
   assert.deepEqual(texts(grid, "grid-slot-team-name"), ["ВШЭстером", "Ктулху"]);
-  assert.deepEqual(texts(grid, "grid-slot-team-popover"), ["ВШЭстером", "Ктулху"]);
+  assert.deepEqual(texts(grid, "popover-inline"), ["ВШЭстером", "Ктулху"]);
   // One metric column, then М last — команда, очки, место: the first of the
   // Ranker's sort rules the server sent, never guessed from the numbers.
   assert.deepEqual(column(grid, "total"), ["О", "6", "9"], "колонка — то, по чему блок ранжирует первым");

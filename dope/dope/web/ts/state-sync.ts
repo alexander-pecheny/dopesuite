@@ -979,13 +979,18 @@ export interface LiveEventsOptions {
 }
 
 // siblingGameScope says whether an event on the fest stream belongs to another
-// Game of the fest: its whole document (game-state:<game>) or its fest view
-// (fest:<fest>:<game>). A page that took another Game's fest view would draw
-// that Game's stages in place of its own.
+// Game of the fest. Every Game of a fest shares one stream, so a page hears
+// each other Game's bouts (match:<game>:<code>), its whole document
+// (game-state:<game>), its roster (game-roster:<game>) and its fest view
+// (fest:<fest>:<game>). Taking any of them as its own either draws another
+// Game's stages or, on a page that reloads for what it does not know, spins the
+// status dot and refetches the page every time a mark lands in another Game.
+const GAME_KEYED_SCOPE = /^(?:match|game-state|game-roster):([^:]+)(?::|$)/;
 export function siblingGameScope(scope: string, gameID: string | number | null | undefined): boolean {
   if (gameID == null || gameID === "") return false;
   const own = String(gameID);
-  if (scope.startsWith("game-state:")) return scope !== `game-state:${own}`;
+  const keyed = GAME_KEYED_SCOPE.exec(scope);
+  if (keyed) return keyed[1] !== own;
   // The fest view's scope names the Game by its id; a page that knows its Game
   // only by a slug cannot tell, and keeps every fest view as before.
   const festView = /^fest:[^:]+:(\d+)$/.exec(scope);
