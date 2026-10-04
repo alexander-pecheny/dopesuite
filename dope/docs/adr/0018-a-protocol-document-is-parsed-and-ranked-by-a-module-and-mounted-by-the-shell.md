@@ -50,3 +50,16 @@ out in ОД and КСИ byte for byte (`sync()` was 38 identical lines).
 - `od.ts` 3474 → ≈3050 lines, `si.ts` 1468 → ≈1150; the pages are page
   scripts plus wrappers, and a page-private function that reads state is now
   the smell to look for.
+
+## Amendment, 4 Oct 2026: the bout page
+
+Брейн, Хамса and Тройка each kept a copy of the same бой lifecycle, and the
+copies drifted: Хамса and Тройка never connected host presence, none of the
+three re-sent the edits a reload left un-acked, Тройка had no `game-roster:`
+scope, брейн and Хамса had no `venues:` scope, and Хамса read its tab without
+`url-state.ts`. `bout-page.ts`'s `mountBoutPage(spec)` is now that lifecycle,
+built on `mountGamePage` the way `mountGameDocument` is. The page gives it a
+parse step, its tabs and a few format options; the бой cache this ADR left in
+брейн lives there now, for all three. The cache is still views keyed by бой,
+not `stage-cache.ts` panes, for the reason given above. ЭК keeps its own
+router and stage cache, and borrows only the finish tick and the venue edits.

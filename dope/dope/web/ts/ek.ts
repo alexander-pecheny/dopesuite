@@ -13,6 +13,7 @@ import type {StageRef} from "./standings.js";
 import {buildGameRosterView} from "./fest-roster.js";
 import {buildEKStatsTable, buildIndividualStatsTable, computeEKPlayerStats, computeIndividualPlayerStats} from "./ek-stats.js";
 import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
+import {finishControl, venueEditor} from "./bout-page.js";
 import type {PendingOp, WireOp} from "./state-sync.js";
 import {mountGamePage} from "./game-shell.js";
 import {createLocalCache, notifyEmbeddedResize} from "./game-page.js";
@@ -959,31 +960,19 @@ function sendVenueChange(number: number, matchCode: string = currentMatchCode())
   void writer.send(matchScopeFor(matchCode), {url: matchURL(matchCode, "venue"), body: {number}});
 }
 
-async function updateVenueTitle(number: number, title: string): Promise<void> {
-  const sent = await writer.send(`venues:${route.festID}`, {url: `${route.festApi}/venues/${encodeURIComponent(number)}`, method: "PUT", body: {title}});
-  if (!sent.ok) return;
-  venues = sent.response as Venue[];
-  renderVenues();
-}
-
-// addVenue adds a venue to the fest; the server seats there the bouts the
-// scheme puts at its number, and broadcasts them.
-async function addVenue(title: string, number: number): Promise<string> {
-  const sent = await writer.send(`venues:${route.festID}`, {url: `${route.festApi}/venues`, method: "POST", body: number > 0 ? {title, number} : {title}});
-  if (!sent.ok) return sent.error || "";
-  venues = sent.response as Venue[];
-  renderVenues();
-  ekRoot.querySelector<HTMLInputElement>("[data-venue-add]")?.focus();
-  return "";
-}
-
-async function deleteVenue(number: number): Promise<string> {
-  const sent = await writer.send(`venues:${route.festID}`, {url: `${route.festApi}/venues/${encodeURIComponent(number)}`, method: "DELETE"});
-  if (!sent.ok) return sent.error || "";
-  venues = sent.response as Venue[];
-  renderVenues();
-  return "";
-}
+// The host's edits to the fest's venues (bout-page.ts). Adding one seats
+// there the bouts the scheme puts at its number, and the server broadcasts
+// them; the add row keeps the focus for the next venue.
+const venueEdits = venueEditor({
+  writer,
+  festID: String(route.festID || ""),
+  festAPI: route.festApi,
+  adopt: (fresh, change) => {
+    venues = fresh;
+    renderVenues();
+    if (change === "add") ekRoot.querySelector<HTMLInputElement>("[data-venue-add]")?.focus();
+  },
+});
 
 async function calculateReseed(stageCode: string | undefined): Promise<void> {
   if (!stageCode) return;
@@ -1042,9 +1031,9 @@ function renderVenues(): void {
   renderEKTabs();
   ekRoot.replaceChildren(buildVenuesTable(venues, {
     editable: !viewer,
-    onTitleChange: updateVenueTitle,
-    onAdd: addVenue,
-    onDelete: deleteVenue,
+    onTitleChange: (number, title) => void venueEdits.rename(number, title),
+    onAdd: venueEdits.add,
+    onDelete: venueEdits.remove,
   }));
   shell.presence.refresh();
 }
@@ -2678,21 +2667,13 @@ function battleHeader(): HTMLElement {
   const pencil = layout.querySelector<HTMLElement>(".venue-edit-button");
   if (pencil) pencil.dataset.matchCode = matchCode;
 
-  const label = document.createElement("label");
-  label.className = "finish-control";
-  label.title = S.ek.bout.finished();
-  label.setAttribute("aria-label", S.ek.bout.finished());
-
-  const checkbox = document.createElement("input");
-  checkbox.type = "checkbox";
-  checkbox.className = "finish-toggle";
-  checkbox.dataset.matchCode = matchCode;
-  checkbox.checked = Boolean(state!.finished);
-  checkbox.addEventListener("change", () => {
-    setMatchFinished(matchCode, checkbox.checked);
-  });
-  label.append(checkbox);
-  layout.appendChild(label);
+  layout.appendChild(finishControl({
+    code: matchCode,
+    finished: Boolean(state!.finished),
+    title: S.ek.bout.finished(),
+    dataKey: "matchCode",
+    onChange: (finished) => setMatchFinished(matchCode, finished),
+  }));
   node.appendChild(layout);
   return node;
 }

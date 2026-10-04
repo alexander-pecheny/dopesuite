@@ -4,38 +4,35 @@
 // themes of three questions, with a seating column before every theme a side
 // turned round at; the group tabs are crosstable.ts's table with the
 // regulations' rating ball in front of the canon columns. Edits go per
-// bout (PATCH /matches/{code}/state) and sync over match: scopes. A self-booting side-effect module bundled by
+// bout (PATCH /matches/{code}/state) and sync over match: scopes, through the
+// bout page (bout-page.ts). A self-booting side-effect module bundled by
 // pages/troika.ts.
 
 import {cssEscape, option, sameArray, td, th} from "./cells.js";
 import type {CellContent} from "./cells.js";
 import {icon} from "./icons_gen.js";
-import {festLetters, standingsTable} from "./standings.js";
+import {standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
 import {buildGameRosterView} from "./fest-roster.js";
-import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
-import {mountGamePage} from "./game-shell.js";
-import {parseGameRoute} from "./game-page.js";
+import {mountBoutPage} from "./bout-page.js";
+import type {BoutPage, BoutView} from "./bout-page.js";
 import type {GameInitLike} from "./game-page.js";
-import {controlTextOverflows, markNameOverflow, renderTabBar} from "./widgets.js";
+import {controlTextOverflows, markNameOverflow} from "./widgets.js";
 import {createSheetCursor, parseMark} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {buildCrosstables, CANON_COLUMNS, crossSlot, standingsByParticipant} from "./crosstable.js";
 import type {SchemeSlotRef} from "./crosstable.js";
 import {buildFestGrid, buildReseedStagePanel, parseScheme} from "./fest-grid.js";
 import type {FestGridStage} from "./fest-grid.js";
-import {gameTabs, groupLabel} from "./game-tabs.js";
+import {groupLabel} from "./game-tabs.js";
 import type {GameTab} from "./game-tabs.js";
-import {hashAnchor, onNavigate, setHashTab, tabFromHash, tabHref} from "./url-state.js";
-import {redrawSteady} from "./steady-redraw.js";
+import {hashAnchor, tabHref} from "./url-state.js";
 import * as troika from "./troika-protocol.js";
 import type {Mark, TroikaState} from "./troika-protocol.js";
 import {buildTroikaStatsTable, computeTroikaPlayerStats} from "./troika-stats.js";
 import type {TroikaBout} from "./troika-stats.js";
-import {boutWhereWhen, buildVenuesTable, markVenueOverflow} from "./venue.js";
-import type {Venue} from "./venue.js";
+import {markVenueOverflow} from "./venue.js";
 import S from "./i18nstrings.js";
-import {createEntrantsTab} from "./entrants.js";
 
 interface PageGlobals {
   __GAME_INIT__?: GameInitLike | null;
@@ -78,109 +75,68 @@ interface MatchSeat {
   roster?: Array<{id?: number; name?: string}>;
 }
 
-interface TroikaMatchView {
-  code?: string;
-  title?: string;
-  venue?: Venue | null;
-  // startsAt: when the bout starts, as the host typed it; absent, no time.
-  startsAt?: string;
-  finished?: boolean;
-  seq?: number;
-  state?: unknown;
+interface TroikaMatchView extends BoutView {
   participants?: MatchSeat[];
 }
 
 const root = document.getElementById("troikaTable")!;
-const tabsRoot = document.getElementById("troikaTabs");
-const statusNode = document.getElementById("status");
-const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
-const route = parseGameRoute();
 const init = pageWindow.__GAME_INIT__ || null;
 const scheme = (init?.scheme || {}) as TroikaScheme;
 const fest = (init?.fest || null) as FestInfo | null;
-const shell = mountGamePage({
+const page: BoutPage<TroikaMatchView, TroikaState> = mountBoutPage({
   app: "troika",
   root,
-  statusNode,
-  breadcrumbsNode,
-  festID: route.festID,
-  gameID: route.gameID,
-  viewer: Boolean(route.viewer),
-  apiBase: route.apiBase,
+  tabsRoot: document.getElementById("troikaTabs"),
   init,
-  downloads: false,
-  chrome: () => ({festTitle: fest?.title || "", gameTitle: fest?.gameName || scheme.title || S.troika.title()}),
+  scheme,
+  fest,
+  title: () => S.troika.title(),
+  parse: (view) => troika.parseState(view.state, view.participants?.length || 2),
+  blank: () => troika.parseState(null),
+  buildTab,
+  buildRoster: (): HTMLElement => buildGameRosterView(page.route.apiBase || "",
+    {troikasHref: page.viewer || !page.route.festID ? "" : `/host/fest/${page.route.festID}/troikas`}),
+  // Groups and bouts wrap into the frame's width rather than pushing the page sideways.
+  fitsFrame: (tab, node) => tab?.kind !== "grid" && !node.querySelector(".fest-grid"),
+  boutSelector: ".troika-bout",
   cursorKinds: {
     answer: {selector: ".troika-cell", keys: ["match", "side", "theme", "q", "chair"]},
     count: {selector: ".troika-count", keys: ["match", "side", "theme", "q"]},
     finish: {selector: ".finish-toggle", keys: ["match"]},
   },
   activeCursorElement: () => cursor.activeCell || writtenCursor.activeCell,
+  cursors: () => [cursor, writtenCursor],
+  nameOverflow: (sheet) => {
+    markNameOverflow(sheet, {cellSelector: ".troika-team", nameSelector: ".od-detailed-team-name", truncatedClass: "od-detailed-team-cell-truncated"});
+    markChairOverflow(sheet);
+    markVenueOverflow(sheet);
+  },
+  afterRender: () => {
+    drawnShape.clear();
+    for (const code of page.codes()) drawnShape.set(code, shapeOf(code));
+    showAnchor();
+  },
+  repaint: (code) => {
+    // When only marks changed and the protocols tab is up, the bout's cells
+    // and Σ are repainted where they stand.
+    const before = drawnShape.get(code);
+    if (!before || before !== shapeOf(code) || page.tab()?.kind !== "protocol") return false;
+    repaintBout(code);
+    return true;
+  },
+  onNavigate: () => showAnchor(),
+  // The troikas page broadcasts the fest view when a troika's people or the
+  // Game's entrants change: the bouts carry the seat rosters, and the roster
+  // tab is drawn from them too.
+  onFest: () => {
+    page.invalidateRoster();
+    page.resync();
+  },
 });
-const {viewer, staticMode, scopeGameID, indicator, viewerCounter} = shell;
+const {viewer} = page;
 
-let nameOverflowFrame = 0;
-function scheduleNameOverflow(): void {
-  cancelAnimationFrame(nameOverflowFrame);
-  nameOverflowFrame = requestAnimationFrame(() => {
-    nameOverflowFrame = 0;
-    markNameOverflow(root, {cellSelector: ".results-team", nameSelector: ".results-team-name", truncatedClass: "results-team-truncated"});
-    markNameOverflow(root, {cellSelector: ".troika-team", nameSelector: ".od-detailed-team-name", truncatedClass: "od-detailed-team-cell-truncated"});
-    markChairOverflow(root);
-    markVenueOverflow(root);
-  });
-}
-window.addEventListener("resize", scheduleNameOverflow);
-
-const matches = new Map<string, TroikaMatchView>();
-const states = new Map<string, TroikaState>();
-const festStages = new Map<string, FestGridStage>();
-for (const stage of fest?.stages || []) {
-  if (stage?.code) festStages.set(stage.code, stage);
-}
-let rosterView: HTMLElement | null = null;
-// The fest's venues: the venues tab lists them, and a bout's head says
-// which it is played at.
-let venues: Venue[] = [];
-const festAPI = `/api/fest/${encodeURIComponent(String(route.festID || ""))}`;
-
-// refreshFest reads the fest view again: the grid's heads carry each
-// bout's venue from it, and a venue moved or renamed leaves them stale.
-let festRefresh = 0;
-function refreshFest(): void {
-  clearTimeout(festRefresh);
-  festRefresh = window.setTimeout(async () => {
-    const response = await fetch(route.apiBase || "");
-    if (!response.ok) return;
-    const view = await response.json() as FestInfo;
-    for (const stage of view.stages || []) if (stage?.code) festStages.set(stage.code, stage);
-    render();
-  }, 250);
-}
-
-async function fetchVenues(): Promise<void> {
-  const response = await fetch(`${festAPI}/venues`);
-  if (!response.ok) throw new Error(`venues ${response.status}`);
-  const fresh = await response.json();
-  venues = Array.isArray(fresh) ? fresh as Venue[] : [];
-}
-// The entrants tab: the list this Game seats (entrants.ts). After a change
-// the bouts are fetched again, since seats moved; a rebuilt Structure reloads.
-const entrantsTab = createEntrantsTab({
-  apiBase: route.apiBase || "",
-  onRender: () => scheduleNameOverflow(),
-  onChanged: () => scheduleResync(),
-  onRebuilt: () => window.location.reload(),
-});
-let resyncScheduled = false;
-
-const boutLetters = festLetters(fest?.stages as StageRef[] | undefined);
-
-function tabs(): GameTab[] {
-  return gameTabs((scheme.stages || []) as StageRef[],
-    {game: "troika", viewer});
-}
+const boutLetters = page.letters;
 
 function tabStages(tab: GameTab): SchemeStage[] {
   return (scheme.stages || []).filter((stage) => tab.stages.includes(stage.code || ""));
@@ -190,29 +146,18 @@ function stageKind(stage: SchemeStage): string {
   return stage.kind || stage.stage_type || "";
 }
 
-let activeTab = tabFromHash(tabs()) || "grid";
-
-onNavigate(() => {
-  const next = tabFromHash(tabs());
-  if (next && next !== activeTab) {
-    activeTab = next;
-    render();
-  }
-  showAnchor();
-});
-
 // boutHref is the link to a bout: its protocols tab, scrolled to it — what a
 // bout's title in the grid and its cell in a group's table lead to.
 function boutHref(code: string): string {
   const stage = (scheme.stages || []).find((entry) => (entry.matches || []).some((match) => match.code === code));
-  const tab = tabs().find((entry) => entry.kind === "protocol" && entry.stages.includes(stage?.code || ""));
+  const tab = page.tabs().find((entry) => entry.kind === "protocol" && entry.stages.includes(stage?.code || ""));
   return tab ? tabHref(tab.key, boutLetters.get(code) || code) : "";
 }
 
 // groupHref is the link a group table's head in the grid gives: the Block's
 // tab with the groups' tables, scrolled to this group's.
 function groupHref(stage: FestGridStage): string {
-  const tab = tabs().find((entry) => entry.kind === "block" && entry.stages.includes(stage.code || ""));
+  const tab = page.tabs().find((entry) => entry.kind === "block" && entry.stages.includes(stage.code || ""));
   return tab ? tabHref(tab.key, stage.code || "") : "";
 }
 
@@ -229,7 +174,7 @@ function boutAnchorID(code: string): string {
 let shownAnchor = "";
 function showAnchor(): void {
   const anchor = hashAnchor();
-  const key = `${activeTab}@${anchor}`;
+  const key = `${page.tab()?.key || ""}@${anchor}`;
   if (!anchor || key === shownAnchor) return;
   // A bout's letter, or a group's stage code: they never look alike.
   const node = document.getElementById(`bout-${anchor}`) || document.getElementById(groupAnchorID(anchor));
@@ -254,30 +199,14 @@ function flashTarget(node: HTMLElement): void {
 
 // === the document ===
 
-function matchScope(code: string): string {
-  return `match:${scopeGameID}:${code}`;
-}
-
-function adoptMatchView(view: TroikaMatchView | null | undefined): boolean {
-  const code = view?.code;
-  if (!view || !code) return false;
-  const cached = matches.get(code);
-  if (cached && Number(view.seq || 0) < Number(cached.seq || 0)) return false;
-  view = writer.overlay(matchScope(code), view) as TroikaMatchView;
-  if (cached && ((cached.venue?.number || 0) !== (view.venue?.number || 0) || (cached.startsAt || "") !== (view.startsAt || ""))) refreshFest();
-  matches.set(code, view);
-  states.set(code, troika.parseState(view.state, view.participants?.length || 2));
-  return true;
-}
-
 // shapeOf is everything of a bout the protocol sheet is built from except its
 // marks: the themes and their values, the shootout, the chair order, who sits
 // where, the pinned places, whether it is finished. Two views of one shape
 // differ only in marks and counts, which the sheet can repaint in place.
 function shapeOf(code: string): string {
-  const view = matches.get(code);
-  const state = states.get(code);
-  if (!view || !state) return "";
+  const view = page.view(code);
+  if (!view) return "";
+  const state = page.stateOf(code);
   return JSON.stringify({
     values: state.values, shootout: state.shootout, pin: state.pin, written: state.written,
     order: state.sides.map((side) => side.themes.map((theme) => theme.order)),
@@ -293,29 +222,17 @@ function shapeOf(code: string): string {
   });
 }
 
-// showMatchView adopts a bout's view — the server's answer to an edit, or
-// another host's edit arriving live — and shows it. When only marks changed and
-// the protocols tab is up, the bout's cells and Σ are repainted where they
-// stand, the way the personal SI sheet patches its table: the whole tab used to
-// be rebuilt on every answer, which on a group stage's worth of bouts is a
-// visible stall after each mark and a cursor that jumps under the host.
+// A bout's view — the server's answer to an edit, or another host's edit
+// arriving live — is shown by repainting it in place when only marks changed
+// and the protocols tab is up, the way the personal SI sheet patches its table:
+// the whole tab used to be rebuilt on every answer, which on a group stage's
+// worth of bouts is a visible stall after each mark and a cursor that jumps
+// under the host.
 // drawnShape is each bout's shape as the page last drew it. A repaint is safe
 // only against what is on screen: the host's own marks are already in the
 // state before the server answers them, so the state just before an answer
 // can match it while the heads on screen are stale.
 const drawnShape = new Map<string, string>();
-
-function showMatchView(view: TroikaMatchView | null | undefined): void {
-  const code = view?.code || "";
-  if (!adoptMatchView(view)) return;
-  const tab = tabs().find((entry) => entry.key === activeTab);
-  const before = drawnShape.get(code);
-  if (before && before === shapeOf(code) && tab?.kind === "protocol") {
-    repaintBout(code);
-    return;
-  }
-  render();
-}
 
 // repaintBout brings one bout's cells, counts and totals in line with its
 // state without rebuilding anything around them.
@@ -345,90 +262,11 @@ function repaintBout(code: string): void {
 }
 
 function stateOf(code: string): TroikaState {
-  return states.get(code) || troika.parseState(null);
+  return page.stateOf(code);
 }
-
-async function fetchMatches(): Promise<void> {
-  const response = await fetch(`${route.apiBase}/stages/matches`);
-  if (!response.ok) throw new Error(`stages/matches ${response.status}`);
-  const stages = await response.json() as Array<{code?: string; matches?: TroikaMatchView[]}>;
-  for (const stage of stages || []) {
-    for (const view of stage.matches || []) adoptMatchView(view);
-  }
-  render();
-}
-
-function scheduleResync(): void {
-  if (resyncScheduled) return;
-  resyncScheduled = true;
-  setTimeout(() => {
-    resyncScheduled = false;
-    fetchMatches().catch(() => indicator.fail());
-  }, 250);
-}
-
-const live = createLiveEvents({
-  eventsURL: () => gameEventsURL(route.festID!, route.gameID),
-  gameID: scopeGameID,
-  scopes: [{
-    prefix: "fest:",
-    adopt: (_scope, view) => {
-      const fresh = view.data as FestInfo | null;
-      if (!fresh?.stages) return;
-      entrantsTab.refresh();
-      for (const stage of fresh.stages) if (stage?.code) festStages.set(stage.code, stage);
-      // The troikas page broadcasts here when a troika's people or the
-      // Game's entrants change: the bouts carry the seat rosters, and the
-      // roster tab is drawn from them too.
-      rosterView = null;
-      scheduleResync();
-      render();
-    },
-  }, {
-    // A host renamed a venue: the venues tab and the bouts' heads say the new title.
-    prefix: `venues:${route.festID}`,
-    adopt: (_scope, view) => {
-      if (!Array.isArray(view.data)) return;
-      venues = view.data as Venue[];
-      scheduleResync();
-      refreshFest();
-      render();
-    },
-  }, {
-    prefix: `match:${scopeGameID}:`,
-    base: (scope) => {
-      const cached = matches.get(scope.slice(`match:${scopeGameID}:`.length));
-      return cached ? {data: cached, seq: Number(cached.seq || 0)} : null;
-    },
-    adopt: (_scope, view) => {
-      const next = view.data as TroikaMatchView | null;
-      if (!next?.code) {
-        scheduleResync();
-        return;
-      }
-      next.seq = view.seq;
-      showMatchView(next);
-    },
-    gap: () => scheduleResync(),
-  }],
-  indicator,
-  onViewers: (count) => viewerCounter.setCount(count),
-  onLockdown: scheduleStaticReload,
-  reload: fetchMatches,
-  staticMode: () => staticMode,
-});
-
-const writer = createScopedWriter({
-  readonly: viewer,
-  urlOf: (scope) => `${route.apiBase}/matches/${encodeURIComponent(scope.slice(`match:${scopeGameID}:`.length))}/state`,
-  docPath: ["state"],
-  adopt: (_scope, response) => showMatchView(response as TroikaMatchView),
-  indicator,
-  onRejected: () => scheduleResync(),
-});
 
 function patch(code: string, path: Array<string | number>, value: unknown): void {
-  writer.patch(matchScope(code), path, value);
+  page.patch(code, path, value);
 }
 // === the protocol sheet ===
 
@@ -447,7 +285,7 @@ function stageBouts(stage: SchemeStage): BoutEntry[] {
   const out: BoutEntry[] = [];
   for (const planned of stage.matches || []) {
     const code = planned.code || "";
-    const view = matches.get(code);
+    const view = page.view(code);
     if (view) out.push({code, view, planned, stage});
   }
   return out;
@@ -583,18 +421,7 @@ function boutHead(bout: BoutEntry): HTMLElement {
   head.appendChild(title);
   // Where the bout is played, for the host and the spectator alike; the
   // host's pencil moves it to another of the fest's venues.
-  head.append(...boutWhereWhen({
-    title: title.textContent || "",
-    venue: bout.view.venue,
-    startsAt: bout.view.startsAt,
-    venueAlways: true,
-    className: "troika-bout-venue",
-    host: viewer ? undefined : {
-      venues,
-      pickVenue: (number) => void writer.send(matchScope(bout.code), {url: `${route.apiBase}/matches/${encodeURIComponent(bout.code)}/venue`, body: {number}}),
-      saveStartsAt: (time, wave) => void writer.send(matchScope(bout.code), {url: `${route.apiBase}/matches/${encodeURIComponent(bout.code)}/starts-at`, body: {time, wave}}),
-    },
-  }));
+  head.append(...page.whereWhen(bout.code, {title: title.textContent || "", venueAlways: true, className: "troika-bout-venue"}));
   const state = stateOf(bout.code);
   if (!viewer && !bout.view.finished && !state.written && troika.started(state) && troika.level(state)) {
     const button = document.createElement("button");
@@ -645,7 +472,7 @@ function saveThemes(code: string, state: TroikaState): void {
     order: theme.order.slice(),
     answers: theme.answers.map((row) => row.slice()),
   }))));
-  render();
+  page.render();
 }
 
 function shootoutThemeEmpty(state: TroikaState, t: number): boolean {
@@ -655,23 +482,7 @@ function shootoutThemeEmpty(state: TroikaState, t: number): boolean {
 // The finished tick: a finished bout's sheet is read-only until the host
 // unticks it — the server rejects edits to a finished bout.
 function finishToggle(bout: BoutEntry): CellContent {
-  const label = document.createElement("label");
-  label.className = "finish-control";
-  const checkbox = document.createElement("input");
-  checkbox.type = "checkbox";
-  checkbox.className = "finish-toggle";
-  checkbox.checked = Boolean(bout.view.finished);
-  checkbox.disabled = viewer;
-  checkbox.dataset.match = bout.code;
-  checkbox.addEventListener("change", () => {
-    void writer.send(matchScope(bout.code),
-      {url: `${route.apiBase}/matches/${encodeURIComponent(bout.code)}/finish`, body: {finished: checkbox.checked}},
-      {path: ["finished"], value: checkbox.checked});
-  });
-  const text = document.createElement("span");
-  text.textContent = S.troika.bout.finished();
-  label.append(checkbox, text);
-  return label;
+  return page.finishToggle(bout.code, {text: S.troika.bout.finished()});
 }
 
 // seatOpen is the themes a host has opened a seating column at without yet
@@ -724,7 +535,7 @@ function themeHead(bout: BoutEntry, t: number, value: number, has: boolean): Cel
       const opened = seatOpen.get(bout.code) || new Set<number>();
       opened.add(t);
       seatOpen.set(bout.code, opened);
-      render();
+      page.render();
     });
   }
   button.setAttribute("aria-label", button.title);
@@ -756,7 +567,7 @@ function deleteTurn(bout: BoutEntry, t: number): void {
     }
   }
   seatOpen.get(bout.code)?.delete(t);
-  render();
+  page.render();
 }
 
 // The chair cell names who is sitting there from the theme its column stands
@@ -788,7 +599,7 @@ function chairPicker(bout: BoutEntry, side: number, from: number, chair: number,
     for (let t = from; t < state.values.length; t++) {
       patch(bout.code, ["sides", side, "themes", t, "order"], orderAt(state, side, t));
     }
-    render();
+    page.render();
   });
   const popover = document.createElement("span");
   popover.className = "popover popover-inline";
@@ -817,7 +628,7 @@ function paintMark(cell: HTMLElement, mark: Mark): void {
 // within a bout and may differ between them, which is what the ragged geometry
 // is for.
 function sheetBouts(): BoutEntry[] {
-  const tab = tabs().find((entry) => entry.key === activeTab);
+  const tab = page.tab();
   if (!tab || tab.kind !== "protocol") return [];
   return tabStages(tab).flatMap(stageBouts).filter((bout) => !stateOf(bout.code).written);
 }
@@ -876,8 +687,9 @@ function applyMarks(edits: CellEdit[]): void {
     const theme = Number(cell.dataset.theme);
     const q = Number(cell.dataset.q);
     const chair = Number(cell.dataset.chair);
-    const state = states.get(code);
-    if (!state || matches.get(code)?.finished) continue;
+    const view = page.view(code);
+    if (!view || view.finished) continue;
+    const state = stateOf(code);
     const mark = parseMark(edit.value);
     const row = state.sides[side]?.themes[theme]?.answers[q];
     if (!row || row[chair] === mark) continue;
@@ -935,7 +747,7 @@ function buildWrittenBout(bout: BoutEntry): HTMLElement {
   table.appendChild(thead);
 
   const ranks = new Map<number, number>();
-  for (const entry of festStages.get(bout.stage.code || "")?.standings || []) {
+  for (const entry of page.festStage(bout.stage.code || "")?.standings || []) {
     if (entry.participantID && entry.rank) ranks.set(Number(entry.participantID), Number(entry.rank));
   }
   const body = document.createElement("tbody");
@@ -977,7 +789,7 @@ function writtenTotals(state: TroikaState, side: number): {total: number; threes
 }
 
 function writtenBout(): BoutEntry | null {
-  const tab = tabs().find((entry) => entry.key === activeTab);
+  const tab = page.tab();
   if (!tab || tab.kind !== "protocol") return null;
   return tabStages(tab).flatMap(stageBouts).find((bout) => stateOf(bout.code).written) || null;
 }
@@ -1037,8 +849,9 @@ function applyCounts(edits: CellEdit[]): void {
     const side = Number(cell.dataset.side);
     const theme = Number(cell.dataset.theme);
     const q = Number(cell.dataset.q);
-    const state = states.get(code);
-    if (!state || matches.get(code)?.finished) continue;
+    const view = page.view(code);
+    if (!view || view.finished) continue;
+    const state = stateOf(code);
     const text = String(edit.value ?? "").trim();
     const count = text === "" ? 0 : Number(text);
     if (!Number.isInteger(count) || count < 0 || count > troika.CHAIRS) continue;
@@ -1105,7 +918,7 @@ function buildGroups(stages: SchemeStage[]): HTMLElement {
       anchor: groupAnchorID(stage.code || ""),
       entrants: (stage.config?.entrants || []).map(crossSlot),
       bouts: (stage.matches || []).flatMap((planned) => {
-        const view = matches.get(planned.code || "");
+        const view = page.view(planned.code || "");
         if (!view) return [];
         const state = stateOf(planned.code || "");
         return [{
@@ -1120,7 +933,7 @@ function buildGroups(stages: SchemeStage[]): HTMLElement {
           href: boutHref(planned.code || ""),
         }];
       }),
-      standings: standingsByParticipant(festStages.get(stage.code || "")),
+      standings: standingsByParticipant(page.festStage(stage.code || "")),
     })),
   });
 }
@@ -1132,7 +945,7 @@ function buildSwissTables(stages: SchemeStage[]): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "troika-protocol";
   for (const stage of stages) {
-    const entries = festStages.get(stage.code || "")?.standings || [];
+    const entries = page.festStage(stage.code || "")?.standings || [];
     const head = document.createElement("h2");
     head.className = "troika-stage-head";
     head.textContent = stage.title || stage.code || "";
@@ -1180,38 +993,15 @@ function buildStats(): HTMLElement {
 }
 
 function buildGrid(): HTMLElement {
-  const stages: FestGridStage[] = [];
-  for (const stage of fest?.stages || []) {
-    if (stage?.code) stages.push(festStages.get(stage.code) || stage);
-  }
-  return buildFestGrid({schemaJson: fest?.schemaJson, stages}, {
+  return buildFestGrid({schemaJson: fest?.schemaJson, stages: page.gridStages()}, {
     stageHeaderLink: false,
     matchTitleLink: false,
     matchHref: boutHref,
     groupHref,
     letters: boutLetters,
     editable: !viewer,
-    onDraw: (slot, participant) => void applyDraw(slot, participant),
+    onDraw: (slot, participant) => void page.draw(slot, participant),
   });
-}
-
-// applyDraw seats a drawn play-off seat (the Troika rules §5.3), as Hamsa does. The
-// server holds the choice to the seat's candidates and to the group-apart
-// rule, so a refusal is a refusal and the page reloads what it answered.
-async function applyDraw(slot: string, participant: number): Promise<void> {
-  const response = await fetch(`${route.apiBase}/draw`, {
-    method: "PUT",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({slot, participant}),
-  });
-  if (!response.ok) {
-    indicator.fail();
-    await fetchMatches();
-    return;
-  }
-  const view = await response.json() as FestInfo;
-  for (const stage of view.stages || []) if (stage?.code) festStages.set(stage.code, stage);
-  await fetchMatches();
 }
 
 // buildGridOf is the grid cut down to some stages: a Block's rounds, each a
@@ -1223,7 +1013,7 @@ function buildGridOf(only: SchemeStage[]): HTMLElement {
   const schemeStages = (scheme?.stages || []).filter((stage) => codes.has(stage.code || ""));
   const live: FestGridStage[] = [];
   for (const stage of fest?.stages || []) {
-    if (stage?.code && codes.has(stage.code)) live.push(festStages.get(stage.code) || stage);
+    if (stage?.code && codes.has(stage.code)) live.push(page.festStage(stage.code) || stage);
   }
   return buildFestGrid({schemaJson: JSON.stringify({stages: schemeStages}), stages: live}, {
     stageHeaderLink: false,
@@ -1232,7 +1022,7 @@ function buildGridOf(only: SchemeStage[]): HTMLElement {
     groupHref,
     letters: boutLetters,
     editable: !viewer,
-    onDraw: (slot, participant) => void applyDraw(slot, participant),
+    onDraw: (slot, participant) => void page.draw(slot, participant),
   });
 }
 
@@ -1244,77 +1034,19 @@ function buildReseeds(stages: SchemeStage[]): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "u-col u-gap-lg";
   for (const stage of stages) {
-    const live = festStages.get(stage.code || "");
+    const live = page.festStage(stage.code || "");
     wrap.appendChild(buildReseedStagePanel(live, {
       editable: !viewer,
       canCalculate: Boolean(live?.reseedReady),
       letters: boutLetters,
-      onCalculate: () => void calculateReseed(stage.code || ""),
+      onCalculate: () => void page.reseed(stage.code || ""),
     }));
   }
   return wrap;
 }
 
-// renameVenue retitles one of the fest's venues — shared by its Games, so
-// the other Games' bouts read the new title too.
-async function renameVenue(number: number, title: string): Promise<void> {
-  const sent = await writer.send(`venues:${route.festID}`, {url: `${festAPI}/venues/${encodeURIComponent(number)}`, method: "PUT", body: {title}});
-  if (!sent.ok || !Array.isArray(sent.response)) return;
-  venues = sent.response as Venue[];
-  refreshFest();
-  render();
-}
-
-// addVenue adds a venue to the fest; the server seats there the bouts the
-// schemes put at its number, so the bouts are read again.
-async function addVenue(title: string, number: number): Promise<string> {
-  const sent = await writer.send(`venues:${route.festID}`, {url: `${festAPI}/venues`, method: "POST", body: number > 0 ? {title, number} : {title}});
-  if (!sent.ok) return sent.error || "";
-  if (!Array.isArray(sent.response)) return "";
-  venues = sent.response as Venue[];
-  scheduleResync();
-  refreshFest();
-  render();
-  return "";
-}
-
-async function deleteVenue(number: number): Promise<string> {
-  const sent = await writer.send(`venues:${route.festID}`, {url: `${festAPI}/venues/${encodeURIComponent(number)}`, method: "DELETE"});
-  if (!sent.ok) return sent.error || "";
-  if (!Array.isArray(sent.response)) return "";
-  venues = sent.response as Venue[];
-  refreshFest();
-  render();
-  return "";
-}
-
-async function calculateReseed(code: string): Promise<void> {
-  const response = await fetch(`${route.apiBase}/stages/${encodeURIComponent(code)}/reseed`, {
-    method: "POST", headers: {"Content-Type": "application/json"},
-  });
-  if (!response.ok) {
-    indicator.fail();
-    return;
-  }
-  const view = await response.json() as FestInfo;
-  for (const stage of view.stages || []) if (stage?.code) festStages.set(stage.code, stage);
-  await fetchMatches();
-}
-
 function buildTab(tab: GameTab | undefined): HTMLElement {
   switch (tab?.kind) {
-  case "entrants":
-    return entrantsTab.element();
-  case "venues":
-    return buildVenuesTable(venues, {
-      editable: !viewer,
-      onTitleChange: (number, title) => void renameVenue(number, title),
-      onAdd: addVenue,
-      onDelete: deleteVenue,
-    });
-  case "roster":
-    return (rosterView ||= buildGameRosterView(route.apiBase || "",
-      {troikasHref: viewer || !route.festID ? "" : `/host/fest/${route.festID}/troikas`}));
   case "reseed":
     return buildReseeds(tabStages(tab));
   case "stats":
@@ -1329,38 +1061,4 @@ function buildTab(tab: GameTab | undefined): HTMLElement {
   }
 }
 
-// drawnTab is the tab the page last drew: a redraw of it keeps the view.
-let drawnTab = "";
-
-function render(): void {
-  shell.renderChrome();
-  if (tabsRoot) {
-    tabsRoot.hidden = false;
-    renderTabBar(tabsRoot, tabs(), activeTab, (key) => {
-      activeTab = key;
-      setHashTab(key);
-      render();
-    });
-  }
-  const tab = tabs().find((entry) => entry.key === activeTab);
-  const node = buildTab(tab);
-  // Every mark another host saves redraws the tab; the bouts keep their sizes
-  // and the one in view stays put, so the sheet does not jump under the cursor.
-  redrawSteady(root, ".troika-bout", () => root.replaceChildren(node), drawnTab === activeTab);
-  drawnTab = activeTab;
-  drawnShape.clear();
-  for (const code of matches.keys()) drawnShape.set(code, shapeOf(code));
-  // Groups and bouts wrap into the frame's width rather than pushing the page sideways.
-  root.classList.toggle("fits-frame", tab?.kind !== "grid" && !node.querySelector(".fest-grid"));
-  root.classList.toggle("grid-host", Boolean(node.querySelector(".fest-grid")) || node.matches(".fest-grid"));
-  scheduleNameOverflow();
-  cursor.refresh();
-  writtenCursor.refresh();
-  showAnchor();
-}
-
-cursor.bind();
-writtenCursor.bind();
-live.connect();
-fetchMatches().catch(() => indicator.fail());
-fetchVenues().then(() => render()).catch(() => indicator.fail());
+page.start();

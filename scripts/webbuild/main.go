@@ -201,6 +201,8 @@ func targets() []target {
 					EntryPointsAdvanced: entries("dope/dope/web/ts/",
 						"entry-model", "sheet-cursor", "game-shell", "cells", "score-table", "venue", "standings", "fest-roster", "ek-stats", "ek-seating", "state-sync", "game-page", "widgets", "stage-cache", "stats-sync", "fest-grid", "brain-stats", "group-stats", "game-tabs", "multi-protocol", "troika-protocol", "troika-stats", "crosstable", "hamsa-protocol", "hamsa-stats",
 						"od-protocol", "kd-protocol", "ksi-protocol", "brain-protocol", "screen-board", "url-state", "divisions",
+						// the bout page and what it mounts
+						"bout-page", "entrants", "steady-redraw",
 						// game-page draws the 🏠 crumb through it
 						"icons_gen",
 						// the TS Catalog: the screens import i18nstrings, it the rest

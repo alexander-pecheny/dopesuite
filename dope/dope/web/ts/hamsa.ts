@@ -3,37 +3,31 @@
 // theme over the five marks he answered — with the rounds named across the top
 // and the team round's bet standing where a theme would. The grid, the block's
 // own table and the statistics are the other tabs. Edits go per bout
-// (PATCH /matches/{code}/state) and sync over match: scopes. A self-booting
-// side-effect module bundled by pages/hamsa.ts.
+// (PATCH /matches/{code}/state) and sync over match: scopes, through the bout
+// page (bout-page.ts). A self-booting side-effect module bundled by
+// pages/hamsa.ts.
 
-import {redrawSteady} from "./steady-redraw.js";
 import {cssEscape, option, questionNumberNode, td, th} from "./cells.js";
 import type {CellContent, CellSpec} from "./cells.js";
-import {festLetters, letteredTitle, standingsTable} from "./standings.js";
-import type {StageRef} from "./standings.js";
+import {letteredTitle, standingsTable} from "./standings.js";
 import {buildGameRosterView} from "./fest-roster.js";
-import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
-import {mountGamePage} from "./game-shell.js";
-import {parseGameRoute} from "./game-page.js";
+import {mountBoutPage} from "./bout-page.js";
+import type {BoutPage, BoutView} from "./bout-page.js";
 import type {GameInitLike} from "./game-page.js";
-import {bindScrollEdges, fitScrollFade, markNameOverflow, renderTabBar} from "./widgets.js";
+import {bindScrollEdges} from "./widgets.js";
 import {createSheetCursor, parseMark} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {buildTwoRowScoreTable} from "./score-table.js";
 import type {ScoreTableThemeRow} from "./score-table.js";
 import {buildFestGrid, buildReseedStagePanel} from "./fest-grid.js";
 import type {FestGridStage} from "./fest-grid.js";
-import {gameTabs} from "./game-tabs.js";
 import type {GameTab} from "./game-tabs.js";
 import {buildEKStatsTable} from "./ek-stats.js";
 import * as hamsa from "./hamsa-protocol.js";
 import type {HamsaState, Mark} from "./hamsa-protocol.js";
 import {computeHamsaPlayerStats} from "./hamsa-stats.js";
 import type {HamsaBout} from "./hamsa-stats.js";
-import {boutWhereWhen} from "./venue.js";
-import type {Venue} from "./venue.js";
 import S from "./i18nstrings.js";
-import {createEntrantsTab} from "./entrants.js";
 
 interface PageGlobals {
   __GAME_INIT__?: GameInitLike | null;
@@ -75,124 +69,52 @@ interface MatchSeat {
   roster?: Array<{id?: number; name?: string}>;
 }
 
-interface HamsaMatchView {
-  code?: string;
-  title?: string;
-  venue?: Venue | null;
-  // startsAt: when the bout starts, as the host typed it; absent, no time.
-  startsAt?: string;
-  finished?: boolean;
-  seq?: number;
-  state?: unknown;
+interface HamsaMatchView extends BoutView {
   participants?: MatchSeat[];
 }
 
 const root = document.getElementById("hamsaTable")!;
-const tabsRoot = document.getElementById("hamsaTabs");
-const statusNode = document.getElementById("status");
-const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
-const route = parseGameRoute();
 const init = pageWindow.__GAME_INIT__ || null;
 const scheme = (init?.scheme || {}) as HamsaScheme;
 const fest = (init?.fest || null) as FestInfo | null;
-const shell = mountGamePage({
+const page: BoutPage<HamsaMatchView, HamsaState> = mountBoutPage({
   app: "hamsa",
   root,
-  statusNode,
-  breadcrumbsNode,
-  festID: route.festID,
-  gameID: route.gameID,
-  viewer: Boolean(route.viewer),
-  apiBase: route.apiBase,
+  tabsRoot: document.getElementById("hamsaTabs"),
   init,
-  downloads: false,
-  chrome: () => ({festTitle: fest?.title || "", gameTitle: fest?.gameName || scheme.title || S.hamsa.title()}),
+  scheme,
+  fest,
+  title: () => S.hamsa.title(),
+  parse: (view) => hamsa.parseState(view.state, seatsOf(view)),
+  blank: () => hamsa.parseState(null, []),
+  buildTab,
+  buildRoster: (): HTMLElement => buildGameRosterView(page.route.apiBase || "", {editable: !page.viewer}),
+  fitsFrame: (tab) => tab?.kind !== "grid" && tab?.kind !== "protocol",
+  boutSelector: ".hamsa-bout",
   cursorKinds: {
     answer: {selector: ".hamsa-cell", keys: ["match", "seat", "theme", "q", "shootout"]},
     finish: {selector: ".finish-toggle", keys: ["match"]},
   },
   activeCursorElement: () => cursor.activeCell,
+  cursors: () => [cursor],
+  afterRender: () => sheetScroll.refresh(),
 });
-const {viewer, staticMode, scopeGameID, indicator, viewerCounter} = shell;
+const {viewer} = page;
 
-// The fest's venues, for the host's pencil on a bout: it moves the bout to
-// another venue and gives it a start time. Filled in place once fetched.
-const venues: Venue[] = [];
-if (!viewer) {
-  void fetch(`/api/fest/${encodeURIComponent(String(route.festID || ""))}/venues`)
-    .then((response) => response.ok ? response.json() : [])
-    .then((fresh: unknown) => {
-      if (Array.isArray(fresh)) venues.splice(0, venues.length, ...(fresh as Venue[]));
-    })
-    .catch(() => {});
-}
-
-let nameOverflowFrame = 0;
-function scheduleNameOverflow(): void {
-  cancelAnimationFrame(nameOverflowFrame);
-  nameOverflowFrame = requestAnimationFrame(() => {
-    nameOverflowFrame = 0;
-    markNameOverflow(root, {cellSelector: ".results-team", nameSelector: ".results-team-name", truncatedClass: "results-team-truncated"});
-  });
-}
-window.addEventListener("resize", scheduleNameOverflow);
-
-const matches = new Map<string, HamsaMatchView>();
-const states = new Map<string, HamsaState>();
-const festStages = new Map<string, FestGridStage>();
-for (const stage of fest?.stages || []) {
-  if (stage?.code) festStages.set(stage.code, stage);
-}
-let rosterView: HTMLElement | null = null;
-// The entrants tab: the list this Game seats (entrants.ts). After a change
-// the bouts are fetched again, since seats moved; a rebuilt Structure reloads.
-const entrantsTab = createEntrantsTab({
-  apiBase: route.apiBase || "",
-  onRender: () => scheduleNameOverflow(),
-  onChanged: () => scheduleResync(),
-  onRebuilt: () => window.location.reload(),
-});
-let resyncScheduled = false;
-
-const boutLetters = festLetters(fest?.stages as StageRef[] | undefined);
-
-function tabs(): GameTab[] {
-  return gameTabs((scheme.stages || []) as StageRef[],
-    {game: "hamsa", viewer});
-}
+const boutLetters = page.letters;
 
 function tabStages(tab: GameTab): SchemeStage[] {
   return (scheme.stages || []).filter((stage) => tab.stages.includes(stage.code || ""));
 }
 
-function tabFromHash(): string | null {
-  const key = (window.location.hash || "").replace(/^#/, "");
-  return tabs().some((tab) => tab.key === key) ? key : null;
-}
-
-let activeTab = tabFromHash() || "grid";
-
-window.addEventListener("hashchange", () => {
-  const next = tabFromHash();
-  if (next && next !== activeTab) {
-    activeTab = next;
-    render();
-  }
-});
-
-fitScrollFade(root.closest(".sheet-frame"));
 // Once a sheet is scrolled sideways, the frozen columns' right edge shades what
 // slides under it — the same cue EK's stage sheet draws, from the same class.
 const sheetScroll = bindScrollEdges(root.closest(".sheet-frame"), ({left}, frame) => {
-  frame.classList.toggle("stage-scroll-left", left && tabs().find((tab) => tab.key === activeTab)?.kind === "protocol");
+  frame.classList.toggle("stage-scroll-left", left && page.tab()?.kind === "protocol");
 });
 
 // === the document ===
-
-function matchScope(code: string): string {
-  return `match:${scopeGameID}:${code}`;
-}
 
 // seatsOf is who is sitting at a bout, in slot order. An empty seat keeps its
 // place in the order, so a sheet drawn before the draw still has its rows.
@@ -200,102 +122,12 @@ function seatsOf(view: HamsaMatchView | undefined): number[] {
   return (view?.participants || []).map((seat) => Number(seat?.id || 0));
 }
 
-function adoptMatchView(view: HamsaMatchView | null | undefined): boolean {
-  const code = view?.code;
-  if (!view || !code) return false;
-  const cached = matches.get(code);
-  if (cached && Number(view.seq || 0) < Number(cached.seq || 0)) return false;
-  view = writer.overlay(matchScope(code), view) as HamsaMatchView;
-  matches.set(code, view);
-  states.set(code, hamsa.parseState(view.state, seatsOf(view)));
-  return true;
-}
-
 function stateOf(code: string): HamsaState {
-  return states.get(code) || hamsa.parseState(null, []);
+  return page.stateOf(code);
 }
-
-async function fetchMatches(): Promise<void> {
-  const response = await fetch(`${route.apiBase}/stages/matches`);
-  if (!response.ok) throw new Error(`stages/matches ${response.status}`);
-  const stages = await response.json() as Array<{code?: string; matches?: HamsaMatchView[]}>;
-  for (const stage of stages || []) {
-    for (const view of stage.matches || []) adoptMatchView(view);
-  }
-  render();
-}
-
-function scheduleResync(): void {
-  if (resyncScheduled) return;
-  resyncScheduled = true;
-  setTimeout(() => {
-    resyncScheduled = false;
-    fetchMatches().catch(() => indicator.fail());
-  }, 250);
-}
-
-const live = createLiveEvents({
-  eventsURL: () => gameEventsURL(route.festID!, route.gameID),
-  gameID: scopeGameID,
-  scopes: [{
-    prefix: "fest:",
-    adopt: (_scope, view) => {
-      const fresh = view.data as FestInfo | null;
-      if (!fresh?.stages) return;
-      entrantsTab.refresh();
-      for (const stage of fresh.stages) if (stage?.code) festStages.set(stage.code, stage);
-      render();
-    },
-  }, {
-    prefix: `match:${scopeGameID}:`,
-    base: (scope) => {
-      const cached = matches.get(scope.slice(`match:${scopeGameID}:`.length));
-      return cached ? {data: cached, seq: Number(cached.seq || 0)} : null;
-    },
-    adopt: (_scope, view) => {
-      const next = view.data as HamsaMatchView | null;
-      if (!next?.code) {
-        scheduleResync();
-        return;
-      }
-      next.seq = view.seq;
-      adoptMatchView(next);
-      render();
-    },
-    gap: () => scheduleResync(),
-  }, {
-    // A team's roster in this game changed (the roster tab, a player
-    // override): the bouts carry the seat rosters, so they are fetched again,
-    // and the roster tab with them.
-    prefix: `game-roster:${scopeGameID}`,
-    adopt: (scope) => {
-      if (scope !== `game-roster:${scopeGameID}`) return;
-      rosterView = null;
-      scheduleResync();
-      render();
-    },
-  }],
-  indicator,
-  onViewers: (count) => viewerCounter.setCount(count),
-  onLockdown: scheduleStaticReload,
-  reload: fetchMatches,
-  staticMode: () => staticMode,
-});
-
-const writer = createScopedWriter({
-  readonly: viewer,
-  urlOf: (scope) => `${route.apiBase}/matches/${encodeURIComponent(scope.slice(`match:${scopeGameID}:`.length))}/state`,
-  docPath: ["state"],
-  adopt: (_scope, response) => {
-    adoptMatchView(response as HamsaMatchView);
-    render();
-  },
-  indicator,
-  onRejected: () => scheduleResync(),
-});
 
 function patch(code: string, path: Array<string | number>, value: unknown): void {
-  writer.patch(matchScope(code), path, value);
+  page.patch(code, path, value);
 }
 
 // === the bout sheet ===
@@ -310,7 +142,7 @@ function stageBouts(stage: SchemeStage): BoutEntry[] {
   const out: BoutEntry[] = [];
   for (const planned of stage.matches || []) {
     const code = planned.code || "";
-    const view = matches.get(code);
+    const view = page.view(code);
     if (view) out.push({code, view, stage});
   }
   return out;
@@ -694,18 +526,7 @@ function boutHeader(bout: BoutEntry): CellContent {
   title.textContent = letteredTitle(bout.view.title || bout.code, boutLetters.get(bout.code));
   layout.appendChild(title);
   // When the bout starts, once the host gave it a time, with its venue.
-  layout.append(...boutWhereWhen({
-    title: title.textContent || "",
-    venue: bout.view.venue,
-    startsAt: bout.view.startsAt,
-    venueAlways: false,
-    className: "battle-venue",
-    host: viewer ? undefined : {
-      venues,
-      pickVenue: (number) => void writer.send(matchScope(bout.code), {url: `${route.apiBase}/matches/${encodeURIComponent(bout.code)}/venue`, body: {number}}),
-      saveStartsAt: (time, wave) => void writer.send(matchScope(bout.code), {url: `${route.apiBase}/matches/${encodeURIComponent(bout.code)}/starts-at`, body: {time, wave}}),
-    },
-  }));
+  layout.append(...page.whereWhen(bout.code, {title: title.textContent || "", venueAlways: false, className: "battle-venue"}));
 
   // A spectator gets the name alone, as on EK: the tick is the host's control.
   if (viewer) {
@@ -713,24 +534,9 @@ function boutHeader(bout: BoutEntry): CellContent {
     return node;
   }
 
-  const label = document.createElement("label");
-  label.className = "finish-control";
-  const checkbox = document.createElement("input");
-  checkbox.type = "checkbox";
-  checkbox.className = "finish-toggle";
-  checkbox.checked = Boolean(bout.view.finished);
-  checkbox.dataset.match = bout.code;
-  checkbox.addEventListener("change", () => {
-    void writer.send(matchScope(bout.code),
-      {url: `${route.apiBase}/matches/${encodeURIComponent(bout.code)}/finish`, body: {finished: checkbox.checked}},
-      {path: ["finished"], value: checkbox.checked});
-  });
   // The tick alone, with the word in the tooltip: EK's, because the name column
   // is 90px on a phone and the bout's name has to fit beside it.
-  label.title = S.hamsa.protocol.finished();
-  label.setAttribute("aria-label", S.hamsa.protocol.finished());
-  label.append(checkbox);
-  layout.appendChild(label);
+  layout.appendChild(page.finishToggle(bout.code, {title: S.hamsa.protocol.finished()}));
   node.appendChild(layout);
   return node;
 }
@@ -738,7 +544,7 @@ function boutHeader(bout: BoutEntry): CellContent {
 // === the cursor ===
 
 function sheetBouts(): BoutEntry[] {
-  const tab = tabs().find((entry) => entry.key === activeTab);
+  const tab = page.tab();
   if (!tab || tab.kind !== "protocol") return [];
   return tabStages(tab).flatMap(stageBouts);
 }
@@ -777,7 +583,7 @@ const cursor = createSheetCursor({
   cellSelector: ".hamsa-cell",
   values: "marks",
   readonly: () => viewer,
-  active: () => tabs().find((tab) => tab.key === activeTab)?.kind === "protocol",
+  active: () => page.tab()?.kind === "protocol",
   rows: () => sheetRows().length,
   cols: (row: number) => {
     const at = sheetRows()[row];
@@ -820,9 +626,9 @@ function applyMarks(edits: CellEdit[]): void {
     const seat = Number(cell.dataset.seat);
     const theme = Number(cell.dataset.theme);
     const q = Number(cell.dataset.q);
-    const state = states.get(code);
-    const view = matches.get(code);
-    if (!state || view?.finished) continue;
+    const view = page.view(code);
+    if (!view || view.finished) continue;
+    const state = stateOf(code);
     const id = seatsOf(view)[seat];
     if (!id) continue;
     const section = hamsa.sectionOf(state, id);
@@ -854,7 +660,7 @@ function applyMarks(edits: CellEdit[]): void {
 // refreshTotals repaints what an edit feeds rather than the sheet, so the
 // cursor does not move out from under the host.
 function refreshTotals(code: string): void {
-  const view = matches.get(code);
+  const view = page.view(code);
   const state = stateOf(code);
   const seats = seatsOf(view);
   const bout = boutOf(code);
@@ -916,7 +722,7 @@ const TABLE_COLUMNS: Array<{metric: string; label: () => string}> = [
 function buildBlockTable(stages: SchemeStage[]): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "results-wrapper";
-  const entries = stages.flatMap((stage) => festStages.get(stage.code || "")?.standings || []);
+  const entries = stages.flatMap((stage) => page.festStage(stage.code || "")?.standings || []);
   if (!entries.length) {
     const empty = document.createElement("p");
     empty.className = "empty";
@@ -951,28 +757,15 @@ function buildReseeds(stages: SchemeStage[]): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "u-col u-gap-lg";
   for (const stage of stages) {
-    const live = festStages.get(stage.code || "");
+    const live = page.festStage(stage.code || "");
     wrap.appendChild(buildReseedStagePanel(live, {
       editable: !viewer,
       canCalculate: Boolean(live?.reseedReady),
       letters: boutLetters,
-      onCalculate: () => void calculateReseed(stage.code || ""),
+      onCalculate: () => void page.reseed(stage.code || ""),
     }));
   }
   return wrap;
-}
-
-async function calculateReseed(code: string): Promise<void> {
-  const response = await fetch(`${route.apiBase}/stages/${encodeURIComponent(code)}/reseed`, {
-    method: "POST", headers: {"Content-Type": "application/json"},
-  });
-  if (!response.ok) {
-    indicator.fail();
-    return;
-  }
-  const view = await response.json() as FestInfo;
-  for (const stage of view.stages || []) if (stage?.code) festStages.set(stage.code, stage);
-  await fetchMatches();
 }
 
 function buildStats(): HTMLElement {
@@ -996,43 +789,17 @@ function buildStats(): HTMLElement {
 }
 
 function buildGrid(): HTMLElement {
-  const stages: FestGridStage[] = [];
-  for (const stage of fest?.stages || []) {
-    if (stage?.code) stages.push(festStages.get(stage.code) || stage);
-  }
-  return buildFestGrid({schemaJson: fest?.schemaJson, stages}, {
+  return buildFestGrid({schemaJson: fest?.schemaJson, stages: page.gridStages()}, {
     stageHeaderLink: false,
     matchTitleLink: false,
     letters: boutLetters,
     editable: !viewer,
-    onDraw: (slot, participant) => void applyDraw(slot, participant),
+    onDraw: (slot, participant) => void page.draw(slot, participant),
   });
-}
-
-// applyDraw seats a Draw Slot. The server holds the choice to the seat's own
-// candidates, so a refusal is a refusal and the page simply reloads what it
-// answered.
-async function applyDraw(slot: string, participant: number): Promise<void> {
-  const response = await fetch(`${route.apiBase}/draw`, {
-    method: "PUT",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({slot, participant}),
-  });
-  if (!response.ok) {
-    indicator.fail();
-    return;
-  }
-  const view = await response.json() as FestInfo;
-  for (const stage of view.stages || []) if (stage?.code) festStages.set(stage.code, stage);
-  await fetchMatches();
 }
 
 function buildTab(tab: GameTab | undefined): HTMLElement {
   switch (tab?.kind) {
-  case "entrants":
-    return entrantsTab.element();
-  case "roster":
-    return (rosterView ||= buildGameRosterView(route.apiBase || "", {editable: !viewer}));
   case "stats":
     return buildStats();
   case "block":
@@ -1046,31 +813,4 @@ function buildTab(tab: GameTab | undefined): HTMLElement {
   }
 }
 
-// drawnTab is the tab the page last drew: a redraw of it keeps the view.
-let drawnTab = "";
-
-function render(): void {
-  shell.renderChrome();
-  if (tabsRoot) {
-    tabsRoot.hidden = false;
-    renderTabBar(tabsRoot, tabs(), activeTab, (key) => {
-      activeTab = key;
-      if (window.location.hash.replace(/^#/, "") !== key) history.replaceState(null, "", `#${key}`);
-      render();
-    });
-  }
-  const tab = tabs().find((entry) => entry.key === activeTab);
-  const node = buildTab(tab);
-  // A redraw keeps each bout's size and the view, as Troika's does.
-  redrawSteady(root, ".hamsa-bout", () => root.replaceChildren(node), drawnTab === activeTab);
-  drawnTab = activeTab;
-  root.classList.toggle("fits-frame", tab?.kind !== "grid" && tab?.kind !== "protocol");
-  root.classList.toggle("grid-host", Boolean(node.querySelector(".fest-grid")) || node.matches(".fest-grid"));
-  scheduleNameOverflow();
-  sheetScroll.refresh();
-  cursor.refresh();
-}
-
-cursor.bind();
-live.connect();
-fetchMatches().catch(() => indicator.fail());
+page.start();
