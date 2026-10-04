@@ -22,6 +22,7 @@ import {
 } from "./menu-model";
 import { type IconName, icon } from "./icons_gen.js";
 import S from "./i18nstrings.js";
+import { bindClipFade } from "./clipfade.js";
 
 const THEME_KEY = "dope-theme";
 const CONTRAST_KEY = "dope-contrast";
@@ -256,7 +257,7 @@ function build(): void {
     if (item.kind === "appearance") {
       const appearance = document.createElement("button");
       appearance.type = "button";
-      appearance.className = "menu-item";
+      appearance.className = "menu-item u-clip-fade";
       appearance.setAttribute("role", "menuitem");
       appearance.append(leadGlyph(item.icon), S.menu.appearance.title());
       appearance.addEventListener("click", () => {
@@ -268,7 +269,7 @@ function build(): void {
     if (item.kind === "action") {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "menu-item";
+      button.className = "menu-item u-clip-fade";
       button.setAttribute("role", "menuitem");
       if (item.icon) button.append(leadGlyph(item.icon));
       button.append(item.label);
@@ -280,7 +281,7 @@ function build(): void {
       return button;
     }
     const link = document.createElement("a");
-    link.className = "menu-item";
+    link.className = "menu-item u-clip-fade";
     link.setAttribute("role", "menuitem");
     link.href = item.href;
     if (item.icon) link.append(leadGlyph(item.icon));
@@ -457,6 +458,8 @@ function build(): void {
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", build);
+  document.addEventListener("DOMContentLoaded", bindClipFade);
 } else {
   build();
+  bindClipFade();
 }

@@ -109,7 +109,7 @@ export function createListsManage(board: Board): ListsManage {
         manageCheckbox(unit),
         el("span", { class: "lm-pos", text: "#" + pos }),
         el("span", { class: "lm-handle", text: "≡", title: S.board.listsmanage.drag() }),
-        el("span", { class: "lm-title lm-group-title" }, ...iconed("link", (g && g.name) || S.board.listsmanage.groupFallback())),
+        el("span", { class: "lm-title lm-group-title u-clip-fade" }, ...iconed("link", (g && g.name) || S.board.listsmanage.groupFallback())),
         el("button", { class: "lm-icon", type: "button", title: S.board.listsmanage.renameGroup(), onclick: () => { void renameGroup(unit.id); } }, icon("pencil")),
         el("button", { class: "lm-icon", type: "button", title: S.board.listsmanage.unlinkGroup(), onclick: () => { void unlinkGroup(unit.id); } }, icon("unlink")),
         manageMoveControl(unit),
@@ -121,7 +121,7 @@ export function createListsManage(board: Board): ListsManage {
       for (const l of unit.lists) {
         const row = el("div", { class: "lm-member", draggable: "true", dataset: { listId: l.id } },
           el("span", { class: "lm-handle", text: "≡", title: S.board.listsmanage.dragInGroup() }),
-          el("span", { class: "lm-title", text: manageTitle(l) }));
+          el("span", { class: "lm-title u-clip-fade", text: manageTitle(l) }));
         row.addEventListener("dragstart", (e) => {
           e.stopPropagation(); // the unit node is draggable too — don't start both
           memberDragGid = unit.id;
@@ -164,7 +164,7 @@ export function createListsManage(board: Board): ListsManage {
         manageCheckbox(unit),
         el("span", { class: "lm-pos", text: "#" + pos }),
         el("span", { class: "lm-handle", text: "≡", title: S.board.listsmanage.drag() }),
-        el("span", { class: "lm-title", text: manageTitle(unit.lists[0]) }),
+        el("span", { class: "lm-title u-clip-fade", text: manageTitle(unit.lists[0]) }),
         manageMoveControl(unit),
       ));
     }

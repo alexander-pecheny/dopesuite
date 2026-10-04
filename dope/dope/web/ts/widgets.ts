@@ -208,24 +208,48 @@ export interface FloatingPopoverSpec {
   anchor: string;
 }
 
-export interface FloatingPopoverOptions {
-  root?: Element | Document | null;
-  specs?: FloatingPopoverSpec[];
-}
-
 export interface FloatingPopover {
-  bind(): void;
   hide(): void;
   position(): void;
 }
 
-export function createFloatingPopover(options: FloatingPopoverOptions): FloatingPopover {
-  const root = options.root;
-  const specs = options.specs || [];
-  if (!root || specs.length === 0) {
-    return {bind: () => {}, hide: () => {}, position: () => {}};
-  }
+// NAME_POPOVER_SPECS is every clipped-name family the pages draw: the cell a
+// page marks truncated, the hidden span holding the whole text, and what the
+// popover lines up under. Every game page binds them all (mountGamePage), so a
+// family a page starts drawing has its popover already.
+export const VENUE_POPOVER_SPEC: FloatingPopoverSpec = {trigger: ".venue-label-truncated", popover: ".venue-label-popover", anchor: ".venue-label-name"};
+export const NAME_POPOVER_SPECS: readonly FloatingPopoverSpec[] = [
+  VENUE_POPOVER_SPEC,
+  {trigger: ".results-team-truncated", popover: ".popover-inline", anchor: ".results-team-name"},
+  {trigger: ".grid-slot-team-truncated", popover: ".popover-inline", anchor: ".grid-slot-team-name"},
+  {trigger: ".od-detailed-team-cell-truncated", popover: ".popover-inline", anchor: ".od-detailed-team-name-wrap"},
+  {trigger: ".readonly-player.readonly-player-cell-truncated", popover: ".popover-inline", anchor: ".readonly-player-text-wrap"},
+  {trigger: ".player-select-truncated", popover: ".popover-inline", anchor: "[data-player-select], [data-player-seats]"},
+  {trigger: ".brain-name-head.brain-name-truncated", popover: ".popover-inline", anchor: ".brain-name-wrap"},
+];
 
+let sharedPopover: {specs: FloatingPopoverSpec[]; handle: FloatingPopover} | null = null;
+
+// floatingPopover is the page's one name popover: a node on <body> that shows
+// the whole of a clipped name on hover, tap or focus. It is never drawn inside
+// the cell, because a cell lifted over its neighbours would also climb over
+// the sheet's sticky header. The first call binds it for every family in
+// NAME_POPOVER_SPECS; a page with a family of its own passes it in, and every
+// call returns the same popover.
+export function floatingPopover(extra: readonly FloatingPopoverSpec[] = []): FloatingPopover {
+  if (!sharedPopover) {
+    const specs = [...NAME_POPOVER_SPECS];
+    sharedPopover = {specs, handle: createFloatingPopover(specs)};
+  }
+  for (const spec of extra) {
+    if (!sharedPopover.specs.some((known) => known.trigger === spec.trigger)) sharedPopover.specs.push(spec);
+  }
+  return sharedPopover.handle;
+}
+
+// createFloatingPopover binds the listeners once; specs is read live, so a
+// family added later is picked up by the next hover.
+function createFloatingPopover(specs: FloatingPopoverSpec[]): FloatingPopover {
   let popoverNode: HTMLElement | null = null;
   let active: {trigger: Element; spec: FloatingPopoverSpec} | null = null;
 
@@ -233,7 +257,7 @@ export function createFloatingPopover(options: FloatingPopoverOptions): Floating
     if (!(target instanceof Element)) return null;
     for (const spec of specs) {
       const trigger = target.closest(spec.trigger);
-      if (trigger && root!.contains(trigger)) return trigger;
+      if (trigger) return trigger;
     }
     return null;
   }
@@ -378,19 +402,17 @@ export function createFloatingPopover(options: FloatingPopoverOptions): Floating
     hide();
   }
 
-  function bind(): void {
-    document.documentElement.classList.add("floating-popovers-enabled");
-    document.addEventListener("pointerover", onPointerOver);
-    document.addEventListener("pointerout", onPointerOut);
-    document.addEventListener("focusin", onFocusIn);
-    document.addEventListener("focusout", onFocusOut);
-    document.addEventListener("pointerdown", onPointerDownOutside, true);
-    document.addEventListener("pointerdown", onTapStart, true);
-    document.addEventListener("pointerup", onTapEnd, true);
-    window.addEventListener("scroll", schedulePosition, {capture: true, passive: true});
-  }
+  document.addEventListener("pointerover", onPointerOver);
+  document.addEventListener("pointerout", onPointerOut);
+  document.addEventListener("focusin", onFocusIn);
+  document.addEventListener("focusout", onFocusOut);
+  document.addEventListener("pointerdown", onPointerDownOutside, true);
+  document.addEventListener("pointerdown", onTapStart, true);
+  document.addEventListener("pointerup", onTapEnd, true);
+  window.addEventListener("scroll", schedulePosition, {capture: true, passive: true});
+  window.addEventListener("resize", schedulePosition);
 
-  return {bind, hide, position};
+  return {hide, position};
 }
 
 const SYNC_STATUS_LABELS: Record<string, string> = {
@@ -400,14 +422,54 @@ const SYNC_STATUS_LABELS: Record<string, string> = {
   error: S.widgets.status.error(),
 };
 
+// The status dot shows what the engine says, but on a human's clock. A save or
+// a reload that settles in a few dozen milliseconds would flash the spinner and
+// snap back to the tick, which reads as a twitch rather than as work. So a busy
+// state only shows once it has lasted SPINNER_DELAY_MS, and a spinner that did
+// show stays up for SPINNER_MIN_MS. An error shows at once.
+const SPINNER_DELAY_MS = 300;
+const SPINNER_MIN_MS = 600;
+
 export function createStatusReporter(statusNode: HTMLElement | null | undefined): (state: string) => void {
   const node = statusNode;
   if (!node) return () => {};
-  return function setStatus(state: string) {
-    node.dataset.state = state;
+  let wanted = node.dataset.state || "saved";
+  let shownSince = 0;
+  let timer = 0;
+  function paint(state: string): void {
+    if (state !== "saved" && node!.dataset.state === "saved") shownSince = performance.now();
+    node!.dataset.state = state;
     const label = SYNC_STATUS_LABELS[state] || SYNC_STATUS_LABELS.saving;
-    node.setAttribute("aria-label", label);
-    node.title = label;
+    node!.setAttribute("aria-label", label);
+    node!.title = label;
+  }
+  function settle(): void {
+    timer = 0;
+    const shown = node!.dataset.state || "saved";
+    if (wanted === shown) return;
+    if (wanted === "error" || shown === "error") {
+      paint(wanted);
+      return;
+    }
+    if (shown === "saved") {
+      // Busy: wait to see whether it is over before anybody notices.
+      timer = window.setTimeout(() => { timer = 0; if (wanted !== "saved") paint(wanted); }, SPINNER_DELAY_MS);
+      return;
+    }
+    const left = shownSince + SPINNER_MIN_MS - performance.now();
+    if (wanted === "saved" && left > 0) {
+      timer = window.setTimeout(settle, left);
+      return;
+    }
+    paint(wanted);
+  }
+  return function setStatus(state: string) {
+    wanted = state;
+    if (timer && state === "error") {
+      window.clearTimeout(timer);
+      timer = 0;
+    }
+    if (!timer) settle();
   };
 }
 
@@ -499,6 +561,21 @@ export function bindScrollEdges(
 // stage font-shrink — asks this question, so it gets asked in one place.
 export function isClipped(el: Element | null | undefined): boolean {
   return Boolean(el && el.scrollWidth > el.clientWidth + 1);
+}
+
+// controlTextOverflows says whether a form control's text is wider than the
+// room inside its padding. A <select> or a button cannot report its own
+// scrollWidth, so the text is measured in the control's font instead.
+let controlMeasureContext: CanvasRenderingContext2D | null = null;
+export function controlTextOverflows(control: HTMLElement | null, label: string): boolean {
+  if (!control || !label) return false;
+  const style = getComputedStyle(control);
+  const available = control.clientWidth - parseFloat(style.paddingLeft || "0") - parseFloat(style.paddingRight || "0");
+  if (available <= 0) return false;
+  controlMeasureContext ||= document.createElement("canvas").getContext("2d");
+  if (!controlMeasureContext) return false;
+  controlMeasureContext.font = style.font;
+  return controlMeasureContext.measureText(label).width > available + 1;
 }
 
 // markNameOverflow flags every cell under `root` whose inner name (and optional

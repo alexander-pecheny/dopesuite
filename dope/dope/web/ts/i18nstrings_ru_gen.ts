@@ -1887,7 +1887,7 @@ shootout: true
       participantsUnsupported: (participants: string, known: string) => `swiss: нет плана на ${participants} участников (есть ${known})`,
       planMismatch: (participants: string, wins: string, losses: string) => `swiss: план на ${participants} участников играется до ${wins} побед и ${losses} поражений`,
       pool: (wins: string, losses: string) => `Пул ${wins}–${losses}`,
-      poolRank: (wins: string, losses: string, n: string) => `Пул ${wins}–${losses}, ${n}-й`,
+      poolRank: (wins: string, losses: string, n: string) => `Пул ${wins}–${losses}, м. ${n}`,
       table: () => "Итоги",
     },
     titles: {

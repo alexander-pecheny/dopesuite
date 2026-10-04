@@ -132,6 +132,8 @@ func crumbNode(ctx *ExpandCtx, c *Element, last bool) Node {
 	classes := []string{"crumb"}
 	if Flag(c, "home") {
 		classes = append(classes, "crumb-home")
+	} else {
+		classes = append(classes, "u-clip-fade")
 	}
 	if last {
 		classes = append(classes, "crumb-current")

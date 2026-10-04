@@ -118,7 +118,7 @@ export function createBell(board: Board, ui: BellUI, deps: BellDeps): Bell {
         let preview = "";
         try { preview = await xyCrypto.decField(deps.mustDK(), ev.payload_enc || ""); } catch (_) {}
         if (ev.type === "comment") preview = decodeCommentPayload(preview).text;
-        bodyWrap.append(el("div", { class: "notif-row-preview", text: deriveTitle(preview, 120) }));
+        bodyWrap.append(el("div", { class: "notif-row-preview u-clip-fade", text: deriveTitle(preview, 120) }));
       }
       row.append(bodyWrap);
       row.addEventListener("click", () => {

@@ -120,7 +120,7 @@ export function autocomplete(
     pop.className = "menu-dropdown suggest-pop";
     for (const hit of hits) {
       const row = document.createElement("button");
-      row.className = "menu-item";
+      row.className = "menu-item u-clip-fade";
       row.type = "button";
       const label = document.createElement(hit.strong ? "strong" : "span");
       label.textContent = hit.label;

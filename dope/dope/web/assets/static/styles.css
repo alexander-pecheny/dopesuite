@@ -73,12 +73,19 @@
   --results-team-city-size-mobile: 9px;
 }
 
-/* ── popovers ─────────────────────────────────────────────
-   The surface (paper + hairline + shadow) is the kit's .popover base — every
-   JS emitter adds that class. The block below holds only what a hover-revealed
-   NAME popover adds: measure, type, and pointer transparency. Individual rules
-   further down only set positioning + display behavior. */
-.popover-inline,
+/* ── name popovers ─────────────────────────────────────────
+   A name its cell clips fades out at the cell's edge, and its whole text floats
+   over the page on hover, tap or focus. That popover is one node on <body>
+   (createFloatingPopover in widgets.ts, bound by every game page), placed
+   against the cell. The span a cell carries (.popover-inline, and the venue and
+   bout-head ones) is only where it reads the text from, and is never shown in
+   place: a popover drawn inside a cell needs the cell lifted over its
+   neighbours, and a lifted cell climbs over the sheet's sticky header.
+   classcheck refuses a z-index on :hover or :focus for that reason. */
+.popover-inline {
+  display: none;
+}
+
 .floating-name-popover {
   max-width: min(420px, calc(100vw - 32px));
   padding: var(--space-1) var(--space-2);
@@ -92,28 +99,6 @@
   pointer-events: none;
 }
 
-/* One inline popover: parked under its anchor, hidden until the page toggles
-   the truncation class that reveals it. Families differ only in how far in from
-   the cell edge they sit, so that is the one thing they override. */
-.popover-inline {
-  position: absolute;
-  top: calc(100% - 2px);
-  left: var(--inline-popover-left, var(--space-1-5));
-  z-index: var(--z-dropdown);
-  display: none;
-}
-
-.results-team-name-popover { --inline-popover-left: var(--space-3); }
-
-.match-table.od-detailed .od-detailed-team-name-popover {
-  --inline-popover-left: calc(var(--od-detailed-number-col) + var(--space-1));
-}
-
-.match-table .ek-team-cell .od-detailed-team-name-popover,
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player-popover {
-  --inline-popover-left: var(--space-1);
-}
-
 /* One-line chrome text — headers, badges, previews — soft-clips: the mask
    bites only when the content reaches the edge, so long text fades where an
    «…» used to sit. Table names get the full fade+popover treatment instead. */
@@ -124,45 +109,6 @@
 .public-top h1 {
   -webkit-mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
   mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
-}
-
-/* Revealed on hover/focus of whichever cell the page marked truncated… */
-.player-select-truncated:hover .player-select-popover,
-.player-select-truncated:focus-within .player-select-popover,
-.grid-slot-team-truncated:hover .grid-slot-team-popover,
-.grid-slot-team-truncated:focus-within .grid-slot-team-popover,
-.results-team-truncated:hover .results-team-name-popover,
-.results-team-truncated:focus-within .results-team-name-popover,
-.brain-name-truncated:hover .brain-name-popover,
-.brain-name-truncated:focus-within .brain-name-popover,
-.match-table.od-detailed .od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
-.match-table.od-detailed .od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover,
-.match-table .ek-team-cell.od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
-.match-table .ek-team-cell.od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover,
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:hover .readonly-player-popover,
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:focus-within .readonly-player-popover {
-  display: block;
-}
-
-/* …except where createFloatingPopover is driving a body-level popover instead,
-   which is every page on .ek-page and any page that opted in. */
-.floating-popovers-enabled .player-select-truncated:hover .player-select-popover,
-.floating-popovers-enabled .player-select-truncated:focus-within .player-select-popover,
-.floating-popovers-enabled .grid-slot-team-truncated:hover .grid-slot-team-popover,
-.floating-popovers-enabled .grid-slot-team-truncated:focus-within .grid-slot-team-popover,
-.floating-popovers-enabled .results-team-truncated:hover .results-team-name-popover,
-.floating-popovers-enabled .results-team-truncated:focus-within .results-team-name-popover,
-.ek-page .results-team-truncated:hover .results-team-name-popover,
-.ek-page .results-team-truncated:focus-within .results-team-name-popover,
-.floating-popovers-enabled .od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
-.floating-popovers-enabled .od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover,
-.ek-page .od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
-.ek-page .od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover,
-.floating-popovers-enabled .readonly-player-cell-truncated:hover .readonly-player-popover,
-.floating-popovers-enabled .readonly-player-cell-truncated:focus-within .readonly-player-popover,
-.ek-page .readonly-player-cell-truncated:hover .readonly-player-popover,
-.ek-page .readonly-player-cell-truncated:focus-within .readonly-player-popover {
-  display: none;
 }
 
 .list-action-row {
@@ -446,9 +392,16 @@
   vertical-align: middle;
 }
 
+/* The header row is pinned whatever else a header cell is. A head borrows its
+   column's class for the column's width (Тройка's «Рассадка» is .player-cell),
+   and a body-cell rule that positions the cell (.player-cell is relative, for
+   its select's chevron) outranks this selector: the head came unpinned, scrolled
+   away, and the column's cells slid over the rest of the header. It happened
+   on two sheets before this rule said !important; it is the one place in the
+   sheets that does, because pinning the head is not a choice a column makes. */
 .match-table thead th {
   --cell-fill: var(--structure);
-  position: sticky;
+  position: sticky !important;
   top: 0;
   z-index: 4;
   height: var(--question-size);
@@ -846,11 +799,6 @@
 
 .player-select-wrap.player-select-truncated::before {
   display: block;
-}
-
-.player-cell:hover,
-.player-cell:focus-within {
-  z-index: var(--z-popover);
 }
 
 /* The seat control: a <select> where a theme seats one player (ЭК), a button
@@ -1500,7 +1448,6 @@ body:not(.embedded-match) .grid-match {
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .grid-head-metric {
@@ -1538,12 +1485,6 @@ body:not(.embedded-match) .grid-match {
   overflow: hidden;
   text-overflow: clip;
   white-space: nowrap;
-}
-
-.grid-slot-team:hover,
-.grid-slot-team:focus-within {
-  overflow: visible;
-  z-index: 10;
 }
 
 .grid-slot-team-name {
@@ -2655,7 +2596,8 @@ html:has(.game-host-top) {
 }
 
 .od-results-table,
-.ksi-results-table {
+.ksi-results-table,
+.troika-swiss-table {
   width: max-content;
 }
 
@@ -2810,8 +2752,9 @@ html:has(.game-host-top) {
   white-space: nowrap;
 }
 
+/* Pinned whatever else the head is, for the reason .match-table's head is. */
 .results-table thead th {
-  position: sticky;
+  position: sticky !important;
   top: 0;
   z-index: 2;
   background: var(--structure);
@@ -2855,7 +2798,9 @@ html:has(.game-host-top) {
 .stage-standings-table thead th.results-team-head,
 .stage-standings-table .results-team,
 .group-standings-table thead th.results-team-head,
-.group-standings-table .results-team {
+.group-standings-table .results-team,
+.troika-swiss-table thead th.results-team-head,
+.troika-swiss-table .results-team {
   width: var(--results-team-col);
   min-width: var(--results-team-col);
   max-width: var(--results-team-col);
@@ -2971,11 +2916,6 @@ html:has(.game-host-top) {
   text-align: left;
   padding-left: var(--results-team-pad);
   overflow: visible;
-}
-
-.results-team:hover,
-.results-team:focus-within {
-  z-index: var(--z-popover);
 }
 
 .results-team-name-wrap {
@@ -3325,13 +3265,6 @@ html:has(.game-host-top) {
   white-space: nowrap;
 }
 
-.match-table.od-detailed .od-detailed-team-cell:hover,
-.match-table.od-detailed .od-detailed-team-cell:focus-within,
-.match-table .ek-team-cell:hover,
-.match-table .ek-team-cell:focus-within {
-  z-index: var(--z-popover);
-}
-
 .match-table.od-detailed .od-detailed-team-layout,
 .match-table .ek-team-cell .od-detailed-team-layout {
   display: grid;
@@ -3418,10 +3351,6 @@ html:has(.game-host-top) {
 .match-table.multi-table .multi-sort-head.multi-sort-active {
   color: var(--text);
   text-decoration: underline;
-}
-
-.match-table .ek-team-cell .od-detailed-team-name-popover {
-  left: 4px;
 }
 
 .match-table.od-detailed .od-detailed-team-number {
@@ -5234,22 +5163,28 @@ body.is-fullscreen.od-page .match-main {
   color: var(--text-strong);
 }
 
+/* The side's name is pinned (.sticky-name, its left edge) and is
+   ЭК's fading cell. «длинная Гриша в подготовке к дизастеру» is a real team
+   name, and a бой seats two of them beside a column of кресла. */
 .troika-sheet .troika-team,
 .troika-sheet .troika-team-head {
   width: var(--team-col);
   min-width: var(--team-col);
   max-width: var(--team-col);
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-/* «длинная Гриша в подготовке к дизастеру» is a real team name, and a бой
-   seats two of them beside a column of кресла. */
+.troika-sheet .troika-team-head {
+  text-align: left;
+}
+
 .troika-sheet .troika-team {
   font-weight: var(--fw-semibold);
   color: var(--text-strong);
+}
+
+/* The written бой has a row a side, not three. */
+.match-table.troika-written-sheet .ek-team-cell .od-detailed-team-layout {
+  min-height: calc(var(--question-size) - var(--cell-gap) * 2);
 }
 
 .troika-sheet .troika-seat-button {

@@ -124,7 +124,7 @@ function build(): void {
 
     section(S.gallery.listRows.title(), S.gallery.listRows.note(),
       el("div", { class: "u-col u-gap-xs" },
-        row("member-row", el("span", { class: "member-name", text: S.gallery.listRows.memberName() }), el("span", { class: "member-role", text: S.gallery.listRows.memberRole() }), el("button", { class: "attach-del member-del", type: "button", text: "×" })),
+        row("member-row", el("span", { class: "member-name u-clip-fade", text: S.gallery.listRows.memberName() }), el("span", { class: "member-role", text: S.gallery.listRows.memberRole() }), el("button", { class: "attach-del member-del", type: "button", text: "×" })),
         row("attach-row", el("button", { class: "attach-name", type: "button" }, icon("paperclip")), el("span", { class: "attach-size", text: "1.2 MB" })))),
 
     section(S.gallery.bars.title(), S.gallery.bars.note(),

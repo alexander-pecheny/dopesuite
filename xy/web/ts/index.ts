@@ -198,7 +198,7 @@ function renderHits(into: HTMLElement, hits: Hit[]): void {
     if (h.more) snip.append(el("span", { class: "hit-more", text: ` +${h.more}` }));
     return el("a", { class: "board-card hit-card", href },
       el("span", { class: "hit-title", text: h.title }),
-      el("span", { class: "hit-where" }, ...(h.comment ? iconed("message-circle", where) : [where])),
+      el("span", { class: "hit-where u-clip-fade" }, ...(h.comment ? iconed("message-circle", where) : [where])),
       snip);
   }));
 }

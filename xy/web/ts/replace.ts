@@ -104,7 +104,7 @@ export function createReplacePanel(board: Board, rewrites: Pick<Rewrites, "apply
           renderReplace();
         });
         rows.push(el("label", { class: "replace-card" }, head,
-          el("span", { class: "replace-card-name", text: xySearchIndex.cardTitle(o.card, board.state.cardTitle, S.board.replace.cardUntitled()) }),
+          el("span", { class: "replace-card-name u-clip-fade", text: xySearchIndex.cardTitle(o.card, board.state.cardTitle, S.board.replace.cardUntitled()) }),
           el("span", { class: "replace-card-count", text: `${ids.length}` })));
       }
       const snip = xyFind.snippet(o.card.desc, [o.span], 60);

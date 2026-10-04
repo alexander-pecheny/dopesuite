@@ -1296,8 +1296,9 @@ input[type="radio"]:focus-visible {
 
 /* Breadcrumbs — the shared header path (🏠 / фест / игра). Every crumb is a
    navigable prefix of the URL; the last is the page you are on, so it is plain
-   text. The trail is one line that ellipsises rather than wrapping: the header
-   is a fixed height, and a second row would push the content down. */
+   text. The trail is one line that clips and fades (.u-clip-fade) rather than
+   wrapping: the header is a fixed height, and a second row would push the
+   content down. */
 .host-brand {
   display: flex;
   flex: 1 1 auto;
@@ -1323,8 +1324,7 @@ input[type="radio"]:focus-visible {
   overflow: hidden;
   color: var(--muted);
   text-decoration: none;
-  text-overflow: ellipsis;
-  /* The overflow:hidden that yields the ellipsis clips at the padding edge, so
+  /* The overflow:hidden that clips the crumb cuts at the padding edge, so
      a line-height bump alone still shaved bold Cyrillic descenders (у, щ, р).
      Give the clip box explicit bottom room so descenders survive. */
   padding-bottom: 0.2em;
@@ -1334,7 +1334,7 @@ input[type="radio"]:focus-visible {
   text-decoration: underline;
 }
 
-/* The home crumb is an icon: it should not shrink, ellipsise, or dim. */
+/* The home crumb is an icon: it should not shrink, clip, or dim. */
 .crumb-home {
   flex: 0 0 auto;
   overflow: visible;
@@ -1352,9 +1352,9 @@ input[type="radio"]:focus-visible {
 
 /* The page you are on is the one that should read as the title: its
    ancestors give up room first, down to a few letters each, and only then
-   does it ellipsise. Its shrink is tiny rather than zero: zero would clip it
-   without an ellipsis once its ancestors hit their floor, and one would take
-   a sub-pixel share of the squeeze and ellipsise a name that fits. */
+   does it fade. Its shrink is tiny rather than zero: zero would cut it off
+   once its ancestors hit their floor, and one would take a sub-pixel share of
+   the squeeze and fade a name that fits. */
 .crumb:not(.crumb-current):not(.crumb-home) {
   flex-shrink: 1000;
   min-width: 5ch;
@@ -1837,7 +1837,7 @@ input[type="radio"]:focus-visible {
    forcing every label to wrap inside a fixed 184px column — menu labels are
    single actions and must each read on ONE line. min-width keeps short menus
    from collapsing to a sliver; max-width keeps a long label from running off a
-   narrow screen (it ellipsises there rather than wrapping). */
+   narrow screen (it clips and fades there rather than wrapping). */
 .menu-dropdown {
   position: absolute;
   top: calc(100% + var(--space-1));
@@ -1866,9 +1866,6 @@ input[type="radio"]:focus-visible {
   font: inherit;
   font-size: var(--text-base);
   line-height: var(--leading-snug);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   text-decoration: none;
   cursor: var(--cursor-action);
 }
@@ -1980,6 +1977,22 @@ input[type="radio"]:focus-visible {
 
 /* The second half of a row: what the code MEANS, after the code itself. */
 .suggest-hint { color: var(--muted); font-size: var(--text-sm); margin-left: var(--space-2); }
+
+/* ── One-line clip ──────────────────────────────────────────
+   Chrome text that must stay on one line is cut at its edge, and when it is
+   really cut (menu.js's clipfade marks it .is-clipped) its last letters fade
+   out. There is no ellipsis anywhere in the suite: classcheck refuses
+   text-overflow: ellipsis. A name a person needs to read whole gets the page's
+   fade + popover instead. */
+.u-clip-fade {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.u-clip-fade.is-clipped {
+  -webkit-mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
+  mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
+}
 
 /* === ui layout utilities (internal/ui render.go) ============================
    The closed set of flex utilities the v2 UI primitives (col/row/spacer)

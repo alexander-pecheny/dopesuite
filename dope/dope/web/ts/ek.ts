@@ -6,7 +6,7 @@ import {cssEscape, formatNumber, formatPlace, isFormControl, option, td, th} fro
 import {buildFlatScoreTable, buildTwoRowScoreTable, canPatchScoreShape, createScoreTableIndex, patchScoreTable, seatingText, setMarkClass} from "./score-table.js";
 import {seatedNames} from "./ek-seating.js";
 import type {NodeIndex, ParticipantView, ThemeView} from "./score-table.js";
-import {boutWhereWhen, buildVenuesTable, formatBattleVenue, formatVenue, markVenueOverflow, VENUE_POPOVER_SPEC, withStartsAt} from "./venue.js";
+import {boutWhereWhen, buildVenuesTable, formatBattleVenue, formatVenue, markVenueOverflow, withStartsAt} from "./venue.js";
 import type {Venue} from "./venue.js";
 import {buildGroupStandingsView, festLetters, letteredTitle, resultsTeamCell, stageType, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
@@ -16,7 +16,7 @@ import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReloa
 import type {PendingOp, WireOp} from "./state-sync.js";
 import {mountGamePage} from "./game-shell.js";
 import {createLocalCache, notifyEmbeddedResize} from "./game-page.js";
-import {bindScrollEdges, bindTabStripWheel, clamp, createFloatingPopover, fitEKStageTeamName, fitScrollFade, installCellNavBar, isClipped, markNameOverflow} from "./widgets.js";
+import {bindScrollEdges, bindTabStripWheel, clamp, controlTextOverflows, fitEKStageTeamName, floatingPopover, fitScrollFade, installCellNavBar, isClipped, markNameOverflow} from "./widgets.js";
 import type {CellNavBar, ScrollEdgeBinding} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
@@ -331,51 +331,23 @@ let resultsTeamNameOverflowFrame = 0;
 let stageOverflowScrollFrame: Element | null = null;
 let stageScroll: ScrollEdgeBinding | null = null;
 let ekTabsScroll: ScrollEdgeBinding | null = null;
-let playerSelectMeasureContext: CanvasRenderingContext2D | null = null;
 
-const floatingPopoverSpecs = [
-  VENUE_POPOVER_SPEC,
-  {
-    trigger: ".readonly-battle-head.readonly-battle-with-popover",
-    popover: ".readonly-battle-popover",
-    anchor: ".readonly-battle-title",
-  },
-  {
-    trigger: ".readonly-player.readonly-player-cell-truncated",
-    popover: ".readonly-player-popover",
-    anchor: ".readonly-player-text-wrap",
-  },
-  {
-    trigger: ".od-detailed-team-cell-truncated",
-    popover: ".od-detailed-team-name-popover",
-    anchor: ".od-detailed-team-name-wrap",
-  },
-  {
-    trigger: ".grid-slot-team-truncated",
-    popover: ".grid-slot-team-popover",
-    anchor: ".grid-slot-team-name",
-  },
-  {
-    trigger: ".results-team-truncated",
-    popover: ".results-team-name-popover",
-    anchor: ".results-team-name",
-  },
-  {
-    trigger: ".player-select-truncated",
-    popover: ".player-select-popover",
-    anchor: "[data-player-select], [data-player-seats]",
-  },
-];
+// The bout head's popover is the EK page's own; every name family is the page's
+// shared one (widgets.ts NAME_POPOVER_SPECS).
+const floatingPopoverSpecs = [{
+  trigger: ".readonly-battle-head.readonly-battle-with-popover",
+  popover: ".readonly-battle-popover",
+  anchor: ".readonly-battle-title",
+}];
 
 document.body.classList.toggle("embedded-match", embedded);
 if (!viewer) document.addEventListener("keydown", handleGlobalKeydown);
-const floatingPopover = createFloatingPopover({root: ekRoot, specs: floatingPopoverSpecs});
-floatingPopover.bind();
+const namePopover = floatingPopover(floatingPopoverSpecs);
 window.addEventListener("resize", () => {
   if (route.mode === "grid") scheduleGridNameOverflowUpdate();
   if (route.mode === "match" || route.mode === "stage") scheduleEKTeamNameOverflowUpdate();
   if (route.mode === "seedImport" || route.mode === "stats") scheduleResultsTeamNameOverflowUpdate();
-  floatingPopover.position();
+  namePopover.position();
   ekTabsScroll?.refresh();
 });
 
@@ -1445,7 +1417,7 @@ function updatePlayerSelectOverflow(root: ParentNode = ekRoot): void {
     if (wrap.closest(".ek-stage-table") && !isVisibleInScrollFrame(wrap)) continue;
     const seats = wrap.querySelector<HTMLElement>("[data-player-seats]");
     const select = wrap.querySelector<HTMLSelectElement>("[data-player-select]");
-    const popover = wrap.querySelector<HTMLElement>(".player-select-popover");
+    const popover = wrap.querySelector<HTMLElement>(".popover-inline");
     const label = seats ? seats.textContent || "" : selectedPlayerLabel(select);
     measurements.push({
       wrap,
@@ -1453,7 +1425,7 @@ function updatePlayerSelectOverflow(root: ParentNode = ekRoot): void {
       // business, not the measurement's.
       popover: seats ? null : popover,
       label,
-      truncated: Boolean(label && playerSelectTextOverflows(seats || select, label)),
+      truncated: Boolean(label && controlTextOverflows(seats || select, label)),
     });
   }
   for (const m of measurements) {
@@ -1465,23 +1437,6 @@ function updatePlayerSelectOverflow(root: ParentNode = ekRoot): void {
 function selectedPlayerLabel(select: HTMLSelectElement | null): string {
   if (!select) return "";
   return select.selectedOptions?.[0]?.textContent || select.value || "";
-}
-
-function playerSelectTextOverflows(select: HTMLElement | null, label: string): boolean {
-  if (!select || !label) return false;
-  const style = getComputedStyle(select);
-  const available = select.clientWidth - parseFloat(style.paddingLeft || "0") - parseFloat(style.paddingRight || "0");
-  if (available <= 0) return false;
-  const context = playerTextMeasureContext();
-  context.font = style.font;
-  return context.measureText(label).width > available + 1;
-}
-
-function playerTextMeasureContext(): CanvasRenderingContext2D {
-  if (!playerSelectMeasureContext) {
-    playerSelectMeasureContext = document.createElement("canvas").getContext("2d");
-  }
-  return playerSelectMeasureContext!;
 }
 
 function bindStageOverflowScroll(): void {
@@ -2253,7 +2208,7 @@ function teamNameCell(team: HostParticipantView, teamIndex: number): HTMLElement
   cell.appendChild(layout);
 
   const fullName = document.createElement("span");
-  fullName.className = "popover popover-inline od-detailed-team-name-popover";
+  fullName.className = "popover popover-inline";
   fullName.textContent = labelText;
   cell.appendChild(fullName);
   return cell;
@@ -2374,7 +2329,7 @@ function readonlyPlayerCell(team: HostParticipantView, teamIndex: number, theme:
   playerWrap.appendChild(playerText);
   playerCell.appendChild(playerWrap);
   const playerPopover = document.createElement("span");
-  playerPopover.className = "popover popover-inline readonly-player-popover";
+  playerPopover.className = "popover popover-inline";
   playerPopover.textContent = seated.join("\n");
   playerCell.appendChild(playerPopover);
   return playerCell;
@@ -2433,7 +2388,7 @@ function buildPlayerSelectCell(team: HostParticipantView, teamIndex: number, the
     const seated = seatedNames(theme.players);
     selectWrap.appendChild(seatsTrigger(team, teamIndex, theme, themeIndex, isShootout, matchCode));
     const seatsPopover = document.createElement("span");
-    seatsPopover.className = "popover popover-inline player-select-popover";
+    seatsPopover.className = "popover popover-inline";
     seatsPopover.textContent = seated.join("\n");
     selectWrap.appendChild(seatsPopover);
     editor.appendChild(selectWrap);
@@ -2467,7 +2422,7 @@ function buildPlayerSelectCell(team: HostParticipantView, teamIndex: number, the
   });
   selectWrap.appendChild(select);
   const playerPopover = document.createElement("span");
-  playerPopover.className = "popover popover-inline player-select-popover";
+  playerPopover.className = "popover popover-inline";
   playerPopover.textContent = selectedPlayerLabel(select);
   selectWrap.appendChild(playerPopover);
   editor.appendChild(selectWrap);
@@ -2579,7 +2534,7 @@ function openSeatsPanel(trigger: HTMLElement): void {
   // The hover popovers stand down while a panel is open: two floating surfaces
   // over one cell is one too many.
   document.documentElement.classList.add("seats-panel-open");
-  floatingPopover.hide();
+  namePopover.hide();
   positionSeatsPanel();
   boxes[0]?.focus();
   document.addEventListener("pointerdown", onSeatsPointerDown, true);
@@ -2665,7 +2620,7 @@ function refreshSeatsTrigger(trigger: HTMLElement, theme: HostThemeView, matchSt
   const text = trigger.querySelector<HTMLElement>(".player-seats-text");
   if (text) text.textContent = seatingText(theme, matchState);
   const wrap = trigger.closest(".player-select-wrap");
-  const popover = wrap?.querySelector(".player-select-popover");
+  const popover = wrap?.querySelector(".popover-inline");
   if (popover) popover.textContent = seated.join("\n");
   updatePlayerSelectOverflow(wrap || ekRoot);
 }

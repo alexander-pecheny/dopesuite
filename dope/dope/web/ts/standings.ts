@@ -86,7 +86,7 @@ export function resultsTeamCell(name: string, options: TeamCellOptions = {}): HT
   }
   cell.appendChild(wrap);
   const popover = document.createElement("span");
-  popover.className = "popover popover-inline results-team-name-popover";
+  popover.className = "popover popover-inline";
   popover.textContent = label;
   cell.appendChild(popover);
   return cell;

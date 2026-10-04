@@ -445,7 +445,7 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
           onclick: () => { close!(); opts.onPick(item); },
         },
           item.color ? el("span", { class: "label-swatch", dataset: { c: item.color } }) : el("span"),
-          el("span", { class: "label-add-name", text: item.name }),
+          el("span", { class: "label-add-name u-clip-fade", text: item.name }),
         ));
       }
       deps.paintLabels();

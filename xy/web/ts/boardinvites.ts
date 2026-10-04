@@ -117,7 +117,7 @@ export function createBoardInvites(deps: InvitesDeps) {
     const waiting = invites.flatMap((inv) => inv.pending.map((p) => ({ inv, p })));
     section.hidden = waiting.length === 0;
     box.replaceChildren(...waiting.map(({ inv, p }) => el("div", { class: "member-row" },
-      el("span", { class: "member-name", text: personName(p) }),
+      el("span", { class: "member-name u-clip-fade", text: personName(p) }),
       el("span", { class: "member-role", text: inv.label || inv.code }),
       el("button", {
         class: "btn btn-ghost btn-small", type: "button", text: S.invite.request.approve(),

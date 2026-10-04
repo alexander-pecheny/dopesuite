@@ -25,7 +25,7 @@ func TestPublicIndexDocTrail(t *testing.T) {
 	for _, want := range []string{
 		`<nav class="crumbs"`,
 		`<span class="crumb crumb-home"`, // home is not a link on the page that IS home
-		`<span class="crumb crumb-current" aria-current="page">Фесты</span>`,
+		`<span class="crumb u-clip-fade crumb-current" aria-current="page">Фесты</span>`,
 		`href="/fest/kubok"`,
 		`Кубок Города`,
 		`15–17 мая`,
@@ -53,7 +53,7 @@ func TestPublicFestDocTrail(t *testing.T) {
 	body := renderPublic(t, PublicFestDetailFixture())
 	for _, want := range []string{
 		`<a class="crumb crumb-home" href="/"`,
-		`<span class="crumb crumb-current" aria-current="page">Кубок Города</span>`,
+		`<span class="crumb u-clip-fade crumb-current" aria-current="page">Кубок Города</span>`,
 		`<section class="public-description">`,
 		`<p>Привет <b>мир</b></p>`,
 		`href="/fest/kubok/game/od"`,

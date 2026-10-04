@@ -462,7 +462,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       items = values.filter((v) => v.toLowerCase().includes(q2) && v !== input.value.trim()).slice(0, 8);
       if (!items.length) { close(); return; }
       menu.replaceChildren(...items.map((v) => {
-        const b = el("button", { class: "suggest-item", type: "button", text: v });
+        const b = el("button", { class: "suggest-item u-clip-fade", type: "button", text: v });
         // pointerdown + preventDefault, not click: picking must not blur the input
         // (blur closes the menu before a click would land).
         b.addEventListener("pointerdown", (e) => { e.preventDefault(); pick(v); });

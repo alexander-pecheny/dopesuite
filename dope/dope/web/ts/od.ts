@@ -2163,7 +2163,7 @@ function nameCell(teamIndex: number): HTMLTableCellElement {
   cell.appendChild(layout);
 
   const fullName = document.createElement("span");
-  fullName.className = "popover popover-inline od-detailed-team-name-popover";
+  fullName.className = "popover popover-inline";
   fullName.textContent = label;
   cell.appendChild(fullName);
 
